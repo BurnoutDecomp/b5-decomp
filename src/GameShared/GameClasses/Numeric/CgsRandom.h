@@ -31,9 +31,24 @@ namespace CgsNumeric
 // DWARF CgsRandom.h:34. The default LCG seed Construct installs.
 const u64 KU_RANDOM_DEFAULT_SEED = 0xC87CD8C91AD0891Bull;
 
-// The 64-bit LCG multiplier the X360 refill block multiplies the seed by each draw
-// (asm: 0x5851F42D low / 0x4C957F2D high). PCG-family constant.
-const u64 KU_RANDOM_MULTIPLIER = 0x4C957F2D5851F42Dull;
+// The 64-bit LCG multiplier the X360 refill block multiplies the seed by each draw.
+//
+// ⚠️⚠️ CORRECTED 2026-08-02 -- THE TWO HALVES WERE THE WRONG WAY ROUND, and the old comment
+// ("0x5851F42D low / 0x4C957F2D high", value 0x4C957F2D5851F42D) described the mistake rather
+// than the asm. Every X360 site builds it the same way, and the insert is what settles it:
+//     lis  r11, 0x4C95 ; ori r11, r11, 0x7F2D     -> r11 = 0x4C957F2D
+//     lis  r9,  0x5851 ; ori r9,  r9,  0xF42D     -> r9  = 0x5851F42D
+//     insrdi r11, r9, 32, 0
+// `insrdi RA,RS,n,b` inserts the n RIGHTMOST bits of RS at big-endian bit position b, so
+// b == 0 puts r9 in the HIGH half:  r11 = 0x5851F42D_4C957F2D.
+// Two independent witnesses, both then `mulld` by that register:
+//   BehaviourGameplayExternal::UpdateJumping        @0x8220EB74..0x8220EB9C
+//   BrnEffects::Utils::Vector3Randomiser::RandomiseXYZ @0x82277ED0..0x82277F08
+// And the corrected value is the canonical Knuth MMIX / PCG64 multiplier
+// 6364136223846793005; the old one is not a known constant at all.
+// ⇒ every draw in the tree (the ring refill below, the three effects randomisers,
+// PropCollisions, BrnEffectsUtils) was stepping a DIFFERENT LCG from the console's.
+const u64 KU_RANDOM_MULTIPLIER = 0x5851F42D4C957F2Dull;
 
 // IEEE-754 1.0f bit pattern; each draw ORs the high seed bits (>>9) into the
 // mantissa to make a float in [1, 2).
@@ -92,12 +107,33 @@ public:
         muOldestBufferIndex = (muOldestBufferIndex + 1) & (KU_FLOAT_BUFFER_SIZE - 1);
     }
 
+    // ADDITIVE 2026-08-02 -- BODIED (it was in the declared-only list below).
+    // The console INLINES it, which is why it is inline here rather than in the TU:
+    // BehaviourGameplayExternal::UpdateJumping @0x8220EB94..0x8220EBBC is
+    //     lwz r11, 0x5D4(r4)        ; the shared info's mpRandom
+    //     ld  r10, 0x20(r11)        ; muSeed  (the OLD value)
+    //     mulld r9, r10, r9         ; * KU_RANDOM_MULTIPLIER
+    //     addi  r9, r9, 1
+    //     srdi  r8, r10, 32         ; the OLD seed's high word ...
+    //     std   r9, 0x20(r11)       ; ... store the new seed
+    //     clrlwi r11, r8, 31        ; ... and test its bit 0  == old muSeed bit 32
+    // ⚠️ IT DOES NOT TOUCH THE RING BUFFER. Unlike AddRandomFloatToBuffer below, a bool draw
+    // only steps the LCG; muOldestBufferIndex and mauIntegerBuffer are untouched (the asm
+    // makes no store other than the seed). And the returned bit comes from the seed BEFORE
+    // the step, not after. The DecFIGS PS3 build attributes the same block to
+    // CgsRandom.h:273/:284, i.e. it is a header inline there too.
+    bool RandomBool()
+    {
+        const u64 luOldSeed = muSeed;
+        muSeed = luOldSeed * KU_RANDOM_MULTIPLIER + 1;
+        return ((luOldSeed >> 32) & 1u) != 0u;
+    }
+
     // ---- declared-only DWARF surface (bodies land with the full CgsRandom TU) ----
     void SetSeed(u64 lu64Seed);
     u32  RandomUInt();
     u32  RandomUInt(u32 luMin, u32 luMax);
     s32  RandomInt(s32 liMin, s32 liMax);
-    bool RandomBool();
     f32  RandomFloat();
     f32  RandomFloat(f32 lfMin, f32 lfMax);
     f32  RandomSignedFloat();

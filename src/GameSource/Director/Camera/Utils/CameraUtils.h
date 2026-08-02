@@ -142,6 +142,25 @@ namespace Utils
     // the body lands with CameraUtils.cpp's own TU).
     f32 GetSmallestDifferenceBetweenDegsAngles(f32 lfFromDegs, f32 lfToDegs);
 
+    // @0x821F8988 / PS3 @0x37EA4 -- the RADIANS sibling of the above: the signed smallest
+    // angular delta from lfFromRads to lfToRads, wrapped into [-PI, PI].
+    //
+    // ⭐ ADDED 2026-08-02. This was the ONE link dependency of
+    // BehaviourGameplayExternal::Update that lives OUTSIDE that file: Update calls the
+    // Vector3 overload at BehaviourGameplayExternal.cpp:337 and NEITHER overload was
+    // declared anywhere in the tree -- only the degrees scalar above. Verified by grep, and
+    // now closed at the seam the console draws it at.
+    f32 GetSmallestDifferenceBetweenRadAngles(f32 lfFromRads, f32 lfToRads);
+
+    // PS3 @0x382E0 -- the per-component Vector3 overload (the one Update calls). The console
+    // body is literally three calls to the scalar overload above, one per X/Y/Z lane,
+    // permuted back into a vector; the W lane is NEVER written (the console `lvx`es the
+    // uninitialised return buffer and only vperms lanes 0/1/2 into it).
+    // ⚠️ NO X360 ADDRESS: this overload does not appear in the X360 ARTIST export at all --
+    // it is fully inlined into its callers there. The PS3 build (which carries the DWARF)
+    // keeps it out of line, so the shape below is read off @0x382E0 store-for-store.
+    Vector3 GetSmallestDifferenceBetweenRadAngles(Vector3 lFromRads, Vector3 lToRads);
+
     // @0x822183E0. Rotate a look-at frame about a world pivot by a pitch angle (radians).
     // Used by CollisionPolicyAttachedToVehicle::GenerateSceneQueries.
     // FLAG (declaration-only): the console body is an inline VMX Sin/Cos minimax whose

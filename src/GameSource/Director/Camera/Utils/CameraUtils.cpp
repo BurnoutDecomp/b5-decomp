@@ -532,6 +532,102 @@ f32 GetSmallestDifferenceBetweenDegsAngles(f32 lfFromDegs, f32 lfToDegs)
 }
 
 // ----------------------------------------------------------------------------
+// GetSmallestDifferenceBetweenRadAngles(f32, f32) @0x821F8988 / PS3 @0x37EA4  (75 asm lines)
+//
+// ⭐⭐ ADDED 2026-08-02 (chase-camera helper wave). This was named by the predecessor wave as
+// THE one link dependency of BehaviourGameplayExternal::Update that does not live in that
+// file -- Update calls the Vector3 overload at BehaviourGameplayExternal.cpp:337 and neither
+// overload was declared anywhere in the tree. The only sibling that existed was the DEGREES
+// scalar above.
+//
+// It is that sibling, term for term, with 2*PI where it has 360 and PI where it has 180 --
+// which is itself the cross-check, since the two were transcribed from different asm four
+// days apart and land on the same shape:
+//   0x821F89B8  fsubs f31, f29, f30                      -- the raw delta, TO minus FROM
+//   0x821F89BC  the |delta| >= 2*PI gate (>= flt_82001C94 == +6.2831855, or
+//               <= flt_82004980 == -6.2831855)
+//   0x821F89D8  `* flt_82001C90` (== 0.15915494 == 1/(2*PI)) then fctiwz/fcfid/frsp -- a
+//               TRUNCATION toward zero, not a round -- then
+//               `fnmsubs f31, f13, f0, f31` == delta - trunc(delta/2PI) * 2PI
+//   0x821F8A00  the first assert, CameraUtils.cpp:578 (0x242). ⚠️ ITS TEXT IS NOT A LITERAL:
+//               the console STREAMS it ("Angle: " << angle << " From: " << from << " To: "
+//               << to << "\n") through gpcMessageBuffer and passes the built buffer to
+//               FireAssert. The condition is the strict band, exactly as in the degs sibling.
+//   0x821F8B04  if (delta >  PI /*flt_8200174C*/) delta -= 2PI;
+//               else if (delta < -PI /*flt_82004964*/) delta += 2PI;
+//   0x821F8B30  assert "(lrAngle <= rw::math::PI) && (lrAngle >= -rw::math::PI)"
+//               CameraUtils.cpp:589 (0x24D) -- this one IS a literal, and it names the
+//               constant, which is how we know flt_8200174C is rw::math::PI and not a
+//               coincidental 3.14159.
+// Every constant above was read out of the image with scratchpad\afw_id1b.py, not inferred.
+//
+// ⚠️ THE TWO ASSERTS ARE NOT THE SAME TEST (same trap as the degs sibling): the first is
+// STRICT on both ends, the second INCLUSIVE. Reproduced exactly. Both non-gating.
+// ----------------------------------------------------------------------------
+f32 GetSmallestDifferenceBetweenRadAngles(f32 lfFromRads, f32 lfToRads)
+{
+    const f32 KF_FULL_TURN_RADS     =  6.2831855f;    // flt_82001C94 == 2*PI
+    const f32 KF_NEG_FULL_TURN_RADS = -6.2831855f;    // flt_82004980
+    const f32 KF_RECIP_FULL_TURN    =  0.15915494f;   // flt_82001C90 == 1/(2*PI)
+    const f32 KF_PI                 =  3.1415927f;    // flt_8200174C == rw::math::PI
+    const f32 KF_NEG_PI             = -3.1415927f;    // flt_82004964
+
+    f32 lfAngle = lfToRads - lfFromRads;
+
+    if (lfAngle >= KF_FULL_TURN_RADS || lfAngle <= KF_NEG_FULL_TURN_RADS)
+    {
+        // `fctiwz` truncates toward zero, so this is the sign-preserving remainder.
+        const f32 lfTurns = static_cast<f32>(static_cast<s32>(lfAngle * KF_RECIP_FULL_TURN));
+        lfAngle -= lfTurns * KF_FULL_TURN_RADS;
+    }
+
+    // .cpp:578 -- streamed message, strict band. Non-gating (the console's next instruction
+    // reads lfAngle regardless).
+    CGS_ASSERT(lfAngle < KF_FULL_TURN_RADS && lfAngle > KF_NEG_FULL_TURN_RADS, "Angle");
+
+    if (lfAngle > KF_PI)
+    {
+        lfAngle -= KF_FULL_TURN_RADS;
+    }
+    else if (lfAngle < KF_NEG_PI)
+    {
+        lfAngle += KF_FULL_TURN_RADS;
+    }
+
+    CGS_ASSERT(lfAngle <= KF_PI && lfAngle >= KF_NEG_PI,
+               "(lrAngle <= rw::math::PI) && (lrAngle >= -rw::math::PI)");   // .cpp:589
+
+    return lfAngle;
+}
+
+// ----------------------------------------------------------------------------
+// GetSmallestDifferenceBetweenRadAngles(Vector3, Vector3) PS3 @0x382E0   (60 asm lines)
+//
+// Three calls to the scalar overload, one per lane, permuted back into a vector.
+// Store-for-store from the PS3 asm (this overload is fully inlined away in the X360 build,
+// so DecFIGS is the only witness -- and it is an unambiguous one, because every one of the
+// three `bl`s targets the scalar overload by name):
+//   0x38348..0x38378  lane X: f1 = lFromRads.x, f2 = lToRads.x  -> call
+//   0x38384..0x383EC  lane Y: same pair, vperm'd into result lane 1
+//                             (VectorPermuteConstant<4,1,2,3> then <0,4,2,3>)
+//   0x383F8..0x38464  lane Z: same pair, vperm'd into result lane 2
+//                             (VectorPermuteConstant<0,1,4,3>)
+//
+// ⚠️ THE W LANE IS NEVER WRITTEN. The console `lvx v31, 0, r29` loads the (uninitialised)
+// sret buffer and only ever vperms lanes 0/1/2 into it -- the three permute constants above
+// each keep source lane 3. Reproduced by leaving lResult.w alone rather than zeroing it,
+// which would be an invention. (Every caller in this cluster consumes X/Y/Z only.)
+// ----------------------------------------------------------------------------
+Vector3 GetSmallestDifferenceBetweenRadAngles(Vector3 lFromRads, Vector3 lToRads)
+{
+    Vector3 lResult;
+    lResult.x = GetSmallestDifferenceBetweenRadAngles(lFromRads.x, lToRads.x);
+    lResult.y = GetSmallestDifferenceBetweenRadAngles(lFromRads.y, lToRads.y);
+    lResult.z = GetSmallestDifferenceBetweenRadAngles(lFromRads.z, lToRads.z);
+    return lResult;
+}
+
+// ----------------------------------------------------------------------------
 // GetSizeOnScreen @0x82221918   (360 asm lines)
 //
 // The on-screen footprint of an oriented AABB, in NORMALISED SCREEN FRACTIONS: project all
