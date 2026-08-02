@@ -4,8 +4,11 @@
 // Compilation home for the BrnDirector::Camera::BehaviourGameplayExternal::Parameters slice
 // this TU owns:
 //   - BehaviourGameplayExternal::Parameters::Set @0x821F9228  (defined here)
-//   - BehaviourGameplayExternal::UpdateJumping   @0x8220EAD0  (added 2026-08-02; the fourth
-//     of the eight helpers Update drives -- see its own banner below)
+//   - BehaviourGameplayExternal::ModifyTargetAngles @0x82225580 (added 2026-08-02, helper 1/8)
+//   - BehaviourGameplayExternal::CalcSpringCoeffs   @0x8220E5D0 (added 2026-08-02, helper 2/8)
+//   - BehaviourGameplayExternal::UpdateJumping      @0x8220EAD0 (added 2026-08-02, helper 4/8)
+// (each has its own banner below; none has a caller yet -- Update is the only one, and
+//  Update cannot link until all eight exist. See the header's FLAG for the running count.)
 //
 // Parameters::Set is the seeding step the main director runs (ProcessNewVehicleEvents /
 // UpdateAttribSys) and the replay director runs (PreSceneQueryUpdate) to populate an
@@ -18,6 +21,9 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"   // CgsNumeric::Random::RandomBool
                                                         //   (Behaviour.h only forward-declares it;
                                                         //    UpdateJumping needs the complete type)
+#include "rw/math/fpu/scalar_operation.h"               // Clamp / Min / Abs / IsValid --
+                                                        //   the console's fsel / fabs / fcmpu
+                                                        //   self-compare idioms
 
 // ----------------------------------------------------------------------------
 // NOTE -- BehaviourGameplayExternal::Parameters::Serialise<S> (the versioned field-walk visitor:
@@ -350,6 +356,123 @@ void BehaviourGameplayExternal::Parameters::Construct()
     mfDropFactor = 0.5f;                   // stfs flt_82001DA0, 0xA8
 
     mbIsValid = false;                     // stb r30(=0), 0xAC
+}
+
+// ============================================================================
+// BehaviourGameplayExternal::ModifyTargetAngles @0x82225580 / PS3 @0x18E24 (.cpp:622..:634)
+//
+// Helper 1 of the 8. Clamp the target pitch (X) and roll (Z) into an authored band, then
+// scale the roll by its coefficient. 43 X360 asm lines, no calls, no asserts -- the whole
+// function is two Clamps and a multiply, so it is settled by inspection.
+//
+// The VMX, statement for statement (r4 == lrCameraAttribs, r5 == lrTargetAngles):
+//   0x82225584  lfs f13, 0x2C(r4)                 -- mrPitchLimit
+//   0x8222559C  lfs f0,  flt_8200174C (3.1415927) -- rw::math::PI (the SAME constant
+//               GetSmallestDifferenceBetweenRadAngles' second assert names by text, which
+//               is how it is known to be PI and not a coincidental 3.14159)
+//   0x822255A4  fdivs f13, f0, f13                -- PI / mrPitchLimit
+//   0x8222558C/A0  vspltisw v13,-1 ; vslw v9,v13,v13  -- 0x80000000 in every lane, i.e. the
+//               SIGN MASK: the negative bound is built by `vxor`, not by a second divide
+//   0x822255DC  vmaxfp v13, v9(-bound), v10(angles.x)
+//   0x822255E0  vminfp v13, v12(+bound), v13
+//   0x822255E4  vrlimi128 v0, v13, 8, 0           -- write lane X only
+//   ... the identical pair for lane Z against 0x30(r4) == mrRollLimit, mask 2
+//   0x82225600  lfs f0, 0x38(r4)                  -- mrRollCoeff
+//   0x82225620  vmulfp128 v0, v0, v12             -- all lanes multiplied ...
+//   0x82225624  vrlimi128 v13, v0, 2, 0           -- ... but only lane Z written back
+//
+// ⚠️ THE TUNABLE IS A DIVISOR, NOT A BOUND. `PI / mrPitchLimit` with the authored default
+// 8.0f is +/- 0.3927 rad == +/- 22.5 degrees. Reading mrPitchLimit as the bound itself
+// would open the band to +/- 458 degrees.
+// ⚠️ mrRollCoeff's authored default is 0.0f (Parameters::Set stores flt_82001CC0 there),
+// so on a stock car this function kills roll entirely -- worth knowing before reading a
+// "the camera never rolls" symptom as a bug.
+// ============================================================================
+void BehaviourGameplayExternal::ModifyTargetAngles(const Parameters& lrCameraAttribs,
+                                                   Vector3& lrTargetAngles)
+{
+    const f32 KF_PI = 3.1415927f;                                  // flt_8200174C
+
+    const f32 lfPitchBound = KF_PI / lrCameraAttribs.mrPitchLimit;
+    const f32 lfRollBound  = KF_PI / lrCameraAttribs.mrRollLimit;
+
+    // .cpp:625 / :626 -- Min(+bound, Max(-bound, v)), in that order on both builds.
+    lrTargetAngles.x = rw::math::fpu::Clamp(lrTargetAngles.x, -lfPitchBound, lfPitchBound);
+    lrTargetAngles.z = rw::math::fpu::Clamp(lrTargetAngles.z, -lfRollBound,  lfRollBound);
+
+    // A separate statement AFTER both clamps (the X360 stores the clamped vector, then
+    // multiplies and stores lane Z again). Its DecFIGS line is absorbed into the inlined
+    // VecFloat spans -- the own-line set for this function is {625, 626, 634}, and 634 is
+    // the closing brace -- so no .cpp:NNN is claimed for it.
+    lrTargetAngles.z *= lrCameraAttribs.mrRollCoeff;
+}
+
+// ============================================================================
+// BehaviourGameplayExternal::CalcSpringCoeffs @0x8220E5D0 / PS3 @0x3A37C (.cpp:644..:665)
+//
+// Helper 2 of the 8. Turn two per-frame spring RATES into the pair of blend vectors the
+// chase rig lerps with: one holding the rate (clamped, and speed-scaled on X) and one
+// holding its complement.
+//
+// 153 X360 asm lines, ~110 of which are the two NaN tripwires. The arithmetic tail
+// (0x8220E7A0..0x8220E824) is 35 instructions and every one of them lands:
+//   0x8220E7B0  fabs  f11, f29                       -- |lfSpeedMPH|
+//   0x8220E7D8  fmuls f11, f11, flt_82005574 (0.02)  -- saturates at 50 MPH
+//   0x8220E7F8  fsel  f11, f11-1, 1.0, f11           -- Min(that, 1.0)  == lfSpeedFactor
+//   0x8220E7C8  fsel  f13, -x, 0.0, x                -- Max(lfXSpringCoeff, 0)
+//   0x8220E7E8  fsel  f13, 1-f13, f13, 1.0           -- Min(that, 1.0)
+//   0x8220E7F4  fsubs f13, 1.0, f13                  -- 1 - Clamp(x, 0, 1)
+//   0x8220E804  fmuls f0,  f13, f11                  -- ... times lfSpeedFactor  -> lane X
+//   (the same Max/Min pair on lfYSpringCoeff, WITHOUT the speed scale)             -> lane Y
+//   0x8220E7C0  stfs  0.0f -> lane Z ; 0x8220E80C stw 0 -> lane W
+//   0x8220E818  vsubfp v13, 1.0, v0                  -- the complement, all four lanes
+//   0x8220E81C  stvx128 v0,  r0, r19  (== r8, the FIFTH argument)
+//   0x8220E820  stvx128 v13, r0, r20  (== r7, the FOURTH argument)
+//
+// ⚠️⚠️ THE OUTPUTS ARE REVERSED RELATIVE TO THE DWARF'S OWN ARGUMENT NAMES -- the 4th
+// parameter is named `lSpring` and receives `1 - v`; the 5th is named `lInverseSpring` and
+// receives `v`. That is not a transcription slip, it is what `mr r20, r7` / `mr r19, r8`
+// plus the two stores above say, and DecFIGS' parameter names are what let it be stated at
+// all. Update's only call site feeds (speedMPH, lfTimeStepMod * mfZVelocity,
+// lfTimeStepMod * mfYawDrift).
+//
+// ⚠️ THE W LANE IS WRITTEN ON BOTH OUTPUTS: 0 on the fifth argument, 1.0 on the fourth
+// (the `vsubfp` is a full 4-lane subtract from a splatted 1.0f). Reproduced, since these
+// are Vector3s with a live w lane in this tree.
+//
+// ⚠️ BOTH ASSERTS STREAM THE SAME MESSAGE. An earlier note said the first streams
+// "lfXSpringCoeff: " and the second " lfYSpringCoeff: "; the asm says both build the full
+// "lfXSpringCoeff: <x> lfYSpringCoeff: <y>\n" buffer and differ ONLY in the line they cite
+// (X360 0x2D0 == 720 and 0x2D1 == 721; DecFIGS :646 / :647 -- the two builds' line numbers
+// for this file differ, and the DecFIGS ones are what the rest of this cluster quotes).
+// Both non-gating.
+// ============================================================================
+void BehaviourGameplayExternal::CalcSpringCoeffs(f32 lfSpeedMPH,
+                                                 f32 lfXSpringCoeff,
+                                                 f32 lfYSpringCoeff,
+                                                 Vector3& lSpring,
+                                                 Vector3& lInverseSpring)
+{
+    // .cpp:646 / :647 -- the console's `fcmpu fN, fN` NaN self-compare, which is exactly
+    // rw::math::fpu::IsValid. Streamed message; the text below names both operands as the
+    // console's buffer does.
+    CGS_ASSERT(rw::math::fpu::IsValid(lfXSpringCoeff), "lfXSpringCoeff / lfYSpringCoeff");
+    CGS_ASSERT(rw::math::fpu::IsValid(lfYSpringCoeff), "lfXSpringCoeff / lfYSpringCoeff");
+
+    // .cpp:653 -- flt_82005574 == 0.02f, flt_82001C98 == 1.0f.
+    const f32 lfSpeedFactor =
+        rw::math::fpu::Min(rw::math::fpu::Abs(lfSpeedMPH) * 0.019999999f, 1.0f);
+
+    lInverseSpring.x = (1.0f - rw::math::fpu::Clamp(lfXSpringCoeff, 0.0f, 1.0f)) * lfSpeedFactor;
+    lInverseSpring.y = (1.0f - rw::math::fpu::Clamp(lfYSpringCoeff, 0.0f, 1.0f));
+    lInverseSpring.z = 0.0f;
+    lInverseSpring.w = 0.0f;
+
+    // .cpp:664 -- one `vsubfp` against a splatted 1.0f, so all four lanes.
+    lSpring.x = 1.0f - lInverseSpring.x;
+    lSpring.y = 1.0f - lInverseSpring.y;
+    lSpring.z = 1.0f - lInverseSpring.z;
+    lSpring.w = 1.0f - lInverseSpring.w;
 }
 
 // ============================================================================
