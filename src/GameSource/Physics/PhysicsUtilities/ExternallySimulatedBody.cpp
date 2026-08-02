@@ -28,6 +28,59 @@
 
 namespace BrnPhysics
 {
+    // -------------------------------------------------------------------------------------
+    // Construct @0x8259CF28 / Destruct @0x8259CFF8 / Prepare @0x8259D0C0 / Release @0x8259D190
+    //
+    // FIDELITY: CLEAN, and recovered store-for-store. All four X360 bodies are the same 50-51
+    // instructions with the same stores; Prepare alone also sets r3 = 1 (its return value).
+    // Each builds the identity affine on the stack from flt_82001C98 (== 1.0f, already
+    // rodata-verified by ReadPropertiesFromRenderware) and flt_82001CC0 (== 0.0f) --
+    //     row0 {1,0,0,0}  row1 {0,1,0,0}  row2 {0,0,1,0}  row3 {0,0,0,0}
+    // note row3.w is ZERO, which is exactly what Matrix44Affine::SetIdentity() writes -- then:
+    //     stvx128 zero, this+0x40      -> mLinearVelocity  = 0
+    //     stvx128 zero, this+0x50      -> mAngularVelocity = 0
+    //     stb     0,    this+0x60      -> mbFrozen         = false
+    //     the four identity rows       -> mTransform (this+0x00/0x10/0x20/0x30)
+    // (the byte store to +0x60 and the two register stores to +0x40/+0x50 are what pin this
+    // class's own frame -- see the LAYOUT note in the header).
+    //
+    // There is NO destructor-like teardown in Destruct and no allocation in Construct: on the
+    // console these four are literally interchangeable resets. They are written out separately
+    // rather than delegated so each keeps its own X360 address in the ledger.
+    // -------------------------------------------------------------------------------------
+    void ExternallySimulatedBody::Construct()
+    {
+        mTransform.SetIdentity();
+        mLinearVelocity.SetZero();
+        mAngularVelocity.SetZero();
+        mbFrozen = false;
+    }
+
+    void ExternallySimulatedBody::Destruct()
+    {
+        mTransform.SetIdentity();
+        mLinearVelocity.SetZero();
+        mAngularVelocity.SetZero();
+        mbFrozen = false;
+    }
+
+    bool ExternallySimulatedBody::Prepare()
+    {
+        mTransform.SetIdentity();
+        mLinearVelocity.SetZero();
+        mAngularVelocity.SetZero();
+        mbFrozen = false;
+        return true;   // asm: `li r3, 1` (the X360 always returns 1)
+    }
+
+    void ExternallySimulatedBody::Release()
+    {
+        mTransform.SetIdentity();
+        mLinearVelocity.SetZero();
+        mAngularVelocity.SetZero();
+        mbFrozen = false;
+    }
+
     void ExternallySimulatedBody::ReadFromRenderware(const rw::physics::RigidBody* lpRigidBody)
     {
         if (mbFrozen)

@@ -98,26 +98,67 @@ namespace BrnPhysics
         // Vector3 force arg); the X360 Hex-Rays dropped the arg list.
         void AddLocalSpaceForce(Vector3 lvForce);
 
-        // ADDITIVE GROW (PhysicalBodyPart::UpdateRW caller): DECLARE-ONLY. Integrate the
-        // accumulated forces/torques/impulses into the body's linear/angular velocity for this
-        // step (the "base integrate checkpoint" the suspension and detached-part RW push run at
-        // the end of their force accumulation -- ExternalPhysicsBody::CalculateNewVelocity,
-        // @ the asm `bl BrnPhysics__ExternalPhysicsBody__CalculateNewVelocity` with `this` in r3).
-        // PhysicalBodyPart::UpdateRW calls it BY NAME on the embedded body before reading the new
-        // velocity back out to push into RenderWare. Its body lives in a separate (not-yet-homed)
-        // TU, so only the declaration is needed for the per-TU `cl /c` gate. FLAG: void/void
-        // signature recovered from the call site (the X360 Hex-Rays rendered it `_DWORD*(_DWORD*)`,
-        // the result being the `this`/`mLinearVelocity` row it returns; modelled as void here).
-        void CalculateNewVelocity();
+        // ⭐ THE INTEGRATOR -- the two functions the whole vehicle force model integrates through.
+        // Both are now BODIED in ExternalPhysicsBody.cpp (they were declare-only/absent).
 
-        // ADDITIVE GROW (Deformation PhysicalBodyPart family): DECLARE-ONLY; bodies owned by
-        // ExternalPhysicsBody's own TU. The deformation PhysicalBodyPart lifecycle (Construct
-        // @0x825B4178, Prepare @0x82626700) and per-frame Update @0x825E78C8 invoke these by name:
-        // Construct zero-inits the body, Prepare finalises it, and ReadPropertiesFromRenderware
-        // mirrors the RW rigid-body's mass/inertia properties back in. Only declarations are needed
-        // for the per-TU `cl /c` gate. FLAG: signatures from the X360 call sites.
+        // @0x825A1B10. Turn the four accumulators into a velocity change for this step, then
+        // clear them:
+        //     v += (F*dt + J) / m ;   omega += I_world^-1 * (T*dt + L)
+        // ⚠️ SIGNATURE CORRECTION (2026-08-02): this was declared `void CalculateNewVelocity()`
+        // behind a FLAG reading "void/void signature recovered from the call site". That was the
+        // DROPPED-ARGUMENT STUB trap again. The X360 body multiplies mTotalLinearForce and
+        // mTotalTorque by the incoming vector register v1 before adding the impulses -- v1 is the
+        // timestep -- and the caller proves it: PhysicalBodyPart::UpdateRW @0x825E7998 stashes its
+        // own v1 in v127 on entry and replays `vmr128 v1,v127` in the instruction PAIR immediately
+        // before `bl CalculateNewVelocity`. A dt-less integrator silently integrates nothing.
+        void CalculateNewVelocity(VecFloat lvfDeltaTime);
+
+        // @0x825A7930. Advance the pose by the current velocities and re-orthonormalise:
+        //     mTransform.wAxis += mLinearVelocity * dt
+        //     each rotation row -= row x (mAngularVelocity * dt)      (the small-angle spin)
+        //     mTransform = OrthoNormalize3x3(mTransform)
+        //     CalculateWorldIntertia()
+        // dt again arrives in the vector register v1 (`vmulfp128 v0, omega, v1`).
+        void IntegrateTransform(VecFloat lvfDeltaTime);
+
+        // @0x825A1E30. Rotate the LOCAL inverse-inertia tensor into world space:
+        //     mWorldInverseInertia = R * mLocalInverseInertia * R^T,   R = mTransform's 3x3.
+        // Run from Prepare, IntegrateTransform, ReadPropertiesFromChangeInertiaEvent and the two
+        // VehiclePhysics update spines.
+        void CalculateWorldIntertia();
+
+        // @0x825A1670 / @0x825A1878. Accumulate a force / an impulse applied AT A POINT, with each
+        // of the two vectors independently tagged WORLD_SPACE or BODY_SPACE.
+        //   force/impulse: BODY_SPACE -> rotated into world by the transform's 3x3
+        //   position:      WORLD_SPACE -> made relative to the centre of mass (pos - mTransform.wAxis)
+        //                  BODY_SPACE  -> rotated into a world-space offset by the 3x3
+        // then linear accumulator += v, angular accumulator += r x v.
+        // ⚠️ NOTE for the VehiclePhysics re-parenting: VehiclePhysics.h currently declares its own
+        // TWO-argument AddLocalForce/AddLocalImpulse on the flat struct. Those drop both InputSpace
+        // tags. When VehiclePhysics is re-parented onto this chain those local declarations must be
+        // deleted, not left to shadow these.
+        void AddLocalForce(Vector3 lForce, rw::physics::InputSpace leForceSpace,
+                           Vector3 lPosition, rw::physics::InputSpace lePositionSpace);
+        void AddLocalImpulse(Vector3 lImpulse, rw::physics::InputSpace leImpulseSpace,
+                             Vector3 lPosition, rw::physics::InputSpace lePositionSpace);
+
+        // @0x825A1A80. The same space-resolution + `r x v` split as AddLocalImpulse, but the two
+        // results are written out instead of accumulated (the caller shapes them before banking).
+        void GetImpulsesFromLocalImpulse(Vector3 lImpulse, rw::physics::InputSpace leImpulseSpace,
+                                         Vector3 lPosition, rw::physics::InputSpace lePositionSpace,
+                                         Vector3* lpLinearImpulseOut,
+                                         Vector3* lpAngularImpulseOut) const;
+
+        // The lifecycle quartet -- @0x825A1598 / @0x825A15E0 / @0x825A78D0 / @0x825A1628. Each
+        // chains to the ExternallySimulatedBody function of the same name and then zeroes the four
+        // accumulators; Prepare additionally runs CalculateWorldIntertia and returns 1. (The `bl`
+        // to the base's same-named function at the head of each is the console's own confirmation
+        // that this class really derives from ExternallySimulatedBody.)
         void Construct();
-        void Prepare();
+        void Destruct();
+        bool Prepare();
+        void Release();
+
         void ReadPropertiesFromRenderware(const rw::physics::RigidBody* lpRigidBody);
 
         // ADDITIVE GROW (Deformation PhysicalBodyPart::Construct caller): DECLARE-ONLY. Set the body's

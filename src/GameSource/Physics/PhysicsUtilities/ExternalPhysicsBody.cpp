@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu::{IsValid, operator+, Dot, Cross, Mult, ...}
+#include "rw/math/vpu/matrix44affine_operation.h"           // rw::math::vpu::OrthoNormalize3x3
 
 #include <cmath>   // std::pow (models the VMX exp2/log2 pow-curve in the damp funcs)
 
@@ -14,6 +15,55 @@
 // recovered store-for-store; the collision-impulse solver and the two angular-velocity dampers
 // are reconstructed from their recovered DATA FLOW (the VMX poly-approximation internals -- the
 // exp2/log2 pow curve and the per-lane select machinery -- are MODELLED, see the flags below).
+
+// The console frame of ExternalPhysicsBody. Every offset below was read out of the X360 asm of
+// a DIFFERENT function than the one next to it, so they corroborate rather than repeat:
+//   +0x70  mLocalInverseInertia   ReadPropertiesFromRenderware @0x825A2280 / CalculateWorldIntertia
+//   +0xA0  mWorldInverseInertia   CalculateNewVelocity's `addi r11,this,0xA0` + its three row loads
+//   +0xD0  mfMass                 CalculateNewVelocity's `li r11,0xD0` -> the vrefp reciprocal
+//   +0xE0  mTotalLinearForce      AddWorldSpaceForce / AddLocalForce / Construct
+//   +0xF0  mTotalTorque           AddWorldSpaceTorque / AddLocalForce / Construct
+//   +0x100 mTotalLinearImpulse    AddWorldSpaceImpulse / AddLocalImpulse / Construct
+//   +0x110 mTotalAngularImpulse   AddWorldSpaceAngularImpulse / AddLocalImpulse / Construct
+// This whole base chain is pointer-free (see the ExternallySimulatedBody LAYOUT note), so the
+// console offsets reproduce exactly on x64.
+// (the members are protected, so the offsets are taken through an empty derived probe, which
+// adds nothing and therefore shares the class's frame exactly).
+#include <cstddef>   // offsetof
+
+static_assert(sizeof(BrnPhysics::ExternalPhysicsBody) == 0x120,
+              "sizeof == 0x120 (the four 16-byte accumulators end the class)");
+
+namespace
+{
+    struct EpbLayoutProbe : public BrnPhysics::ExternalPhysicsBody
+    {
+        using BrnPhysics::ExternalPhysicsBody::mLocalInverseInertia;
+        using BrnPhysics::ExternalPhysicsBody::mWorldInverseInertia;
+        using BrnPhysics::ExternalPhysicsBody::mfMass;
+        using BrnPhysics::ExternalPhysicsBody::mTotalLinearForce;
+        using BrnPhysics::ExternalPhysicsBody::mTotalTorque;
+        using BrnPhysics::ExternalPhysicsBody::mTotalLinearImpulse;
+        using BrnPhysics::ExternalPhysicsBody::mTotalAngularImpulse;
+    };
+
+    static_assert(sizeof(EpbLayoutProbe) == sizeof(BrnPhysics::ExternalPhysicsBody),
+                  "the probe adds nothing, so it shares the class's frame");
+    static_assert(offsetof(EpbLayoutProbe, mLocalInverseInertia) == 0x70,
+                  "mLocalInverseInertia @ +0x70");
+    static_assert(offsetof(EpbLayoutProbe, mWorldInverseInertia) == 0xA0,
+                  "mWorldInverseInertia @ +0xA0");
+    static_assert(offsetof(EpbLayoutProbe, mfMass)               == 0xD0,
+                  "mfMass @ +0xD0");
+    static_assert(offsetof(EpbLayoutProbe, mTotalLinearForce)    == 0xE0,
+                  "mTotalLinearForce @ +0xE0");
+    static_assert(offsetof(EpbLayoutProbe, mTotalTorque)         == 0xF0,
+                  "mTotalTorque @ +0xF0");
+    static_assert(offsetof(EpbLayoutProbe, mTotalLinearImpulse)  == 0x100,
+                  "mTotalLinearImpulse @ +0x100");
+    static_assert(offsetof(EpbLayoutProbe, mTotalAngularImpulse) == 0x110,
+                  "mTotalAngularImpulse @ +0x110");
+}
 
 namespace BrnPhysics
 {
@@ -52,6 +102,320 @@ namespace BrnPhysics
     {
         CGS_ASSERT(vpu::IsValid(lvImpulse), "Bad angular impulse added ");
         mTotalAngularImpulse = vpu::Add(mTotalAngularImpulse, lvImpulse);
+    }
+
+    // =======================================================================================
+    // ⭐ THE INTEGRATOR
+    //
+    // Everything below this banner was ABSENT from the tree. `IntegrateTransform` and
+    // `CalculateNewVelocity` are the two functions every force leaf in VehiclePhysics
+    // ultimately pushes into: the leaves fill the four accumulators, CalculateNewVelocity turns
+    // them into a velocity change and clears them, IntegrateTransform advances the pose.
+    //
+    // ⚠️ Both take the timestep in the incoming VECTOR register v1, not an FPU register --
+    // recovered from the ASM, not from a PC declaration (see the header note on the dropped
+    // `dt` argument). The de-SIMD convention is the file's existing one: the VMX128 lane
+    // machinery is lowered to named scalar/Vector3 math, no __asm, stores in the asm's order.
+    // =======================================================================================
+
+    // ---------------------------------------------------------------------------------------
+    // CalculateNewVelocity  @0x825A1B10
+    //
+    //     invMass = 1 / mfMass
+    //     mLinearVelocity  += (mTotalLinearForce * dt + mTotalLinearImpulse) * invMass
+    //     mAngularVelocity += mWorldInverseInertia * (mTotalTorque * dt + mTotalAngularImpulse)
+    //     mTotalLinearImpulse = mTotalAngularImpulse = mTotalLinearForce = mTotalTorque = 0
+    //
+    // FIDELITY: CLEAN on the data flow, the store set and the store ORDER (the asm writes the
+    // new linear velocity to this+0x40 before it touches the angular register at this+0x50, and
+    // clears the four accumulators last, in the order +0x100, +0x110, +0xE0, +0xF0).
+    //
+    // The four dev asserts are reproduced with their console text and in the console's order --
+    // they are the same non-gating `rw::math::IsValid` tripwires used elsewhere in this file,
+    // fired BEFORE the integrate (ExternalPhysicsBody.cpp:279/280 == asm 0x117/0x118) and again
+    // AFTER it (:291/:292 == 0x123/0x124). They pin the two velocity members by NAME: the asm
+    // fires "rw::math::IsValid(mAngularVelocity)" on the register at this+0x50 and
+    // "rw::math::IsValid(mLinearVelocity)" on this+0x40.
+    //
+    // FLAG (modelled, not bit-verified): 1/mfMass is the VMX `vrefp` reciprocal estimate plus TWO
+    // Newton-Raphson refinement steps (vnmsubfp/vmaddfp/vmaddcfp128 against a vcfsx-materialised
+    // 1.0). It is written as a plain divide here, the same modelling the two collision solvers
+    // below already use. Deliberately NOT guarded against a zero mass: the console does not guard
+    // either, and a guarded 0 would silently freeze a mass-less body instead of tripping the two
+    // trailing IsValid asserts that exist precisely to catch it.
+    // ---------------------------------------------------------------------------------------
+    void ExternalPhysicsBody::CalculateNewVelocity(VecFloat lvfDeltaTime)
+    {
+        const f32 lfDt      = lvfDeltaTime.x;   // broadcast VecFloat -> scalar (de-modelled lane)
+        const f32 lfInvMass = 1.0f / mfMass.x;
+
+        CGS_ASSERT(vpu::IsValid(mAngularVelocity), "rw::math::IsValid(mAngularVelocity)");
+        CGS_ASSERT(vpu::IsValid(mLinearVelocity),  "rw::math::IsValid(mLinearVelocity)");
+
+        // Linear: the force accumulator becomes an impulse over the step, joins the impulse
+        // accumulator, and divides by mass.
+        const Vector3 lvLinearImpulse =
+            vpu::Add(vpu::Mult(mTotalLinearForce, lfDt), mTotalLinearImpulse);
+        mLinearVelocity = vpu::Add(mLinearVelocity, vpu::Mult(lvLinearImpulse, lfInvMass));
+
+        // Angular: same shape, but through the world inverse-inertia tensor rather than 1/m.
+        // (asm: splat the three lanes of the angular impulse and combine the three tensor rows.)
+        const Vector3 lvAngularImpulse =
+            vpu::Add(vpu::Mult(mTotalTorque, lfDt), mTotalAngularImpulse);
+        const Vector3 lvDeltaOmega = vpu::Add(
+            vpu::Add(vpu::Mult(mWorldInverseInertia.xAxis, lvAngularImpulse.x),
+                     vpu::Mult(mWorldInverseInertia.yAxis, lvAngularImpulse.y)),
+            vpu::Mult(mWorldInverseInertia.zAxis, lvAngularImpulse.z));
+        mAngularVelocity = vpu::Add(mAngularVelocity, lvDeltaOmega);
+
+        CGS_ASSERT(vpu::IsValid(mAngularVelocity), "rw::math::IsValid(mAngularVelocity)");
+        CGS_ASSERT(vpu::IsValid(mLinearVelocity),  "rw::math::IsValid(mLinearVelocity)");
+
+        // Consume the accumulators (asm store order: +0x100, +0x110, +0xE0, +0xF0).
+        mTotalLinearImpulse.SetZero();
+        mTotalAngularImpulse.SetZero();
+        mTotalLinearForce.SetZero();
+        mTotalTorque.SetZero();
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // IntegrateTransform  @0x825A7930   (63 asm instructions -- the literal integrator)
+    //
+    //     mTransform.wAxis += mLinearVelocity * dt
+    //     for each rotation row r:  r -= cross(r, mAngularVelocity * dt)      [ == r + omega x r ]
+    //     mTransform = OrthoNormalize3x3(mTransform)
+    //     CalculateWorldIntertia()
+    //
+    // FIDELITY: CLEAN, recovered instruction by instruction.
+    //   * `vmaddfp v0, v0(this+0x40), v13(this+0x30), v1` -> wAxis = linearVelocity*dt + wAxis.
+    //   * `vmulfp128 v0, v0(this+0x50), v1` -> the spin vector omega*dt, then, per row, the VMX
+    //     shifted-cross idiom `row*permwi(w,0x63) - permwi(row,0x63)*w` followed by one more
+    //     permwi -- permwi mask 0x63 is the lane rotation {y,z,x,w}, and the pair of rotations
+    //     around the products is exactly cross(row, w). The row order in the asm is zAxis,
+    //     yAxis, xAxis; each row is computed from the ORIGINAL rows, so the order is cosmetic.
+    //   * `bl rw__math__vpu__OrthoNormalize3x3(&temp, this)` then four `lvx128/stvx128` pairs
+    //     copying temp's rows back over this+0x00/0x10/0x20/0x30 -- all FOUR rows, position
+    //     included, which is why the position update above has to happen first.
+    //   * `bl BrnPhysics__ExternalPhysicsBody__CalculateWorldIntertia` with this in r3.
+    //
+    // The first-order `r + (omega x r) dt` step is the console's own approximation, not a
+    // simplification introduced here -- there is no quaternion, no matrix exponential and no
+    // sub-stepping in this function; the re-orthonormalisation is what keeps it stable.
+    // ---------------------------------------------------------------------------------------
+    void ExternalPhysicsBody::IntegrateTransform(VecFloat lvfDeltaTime)
+    {
+        const f32 lfDt = lvfDeltaTime.x;
+
+        // Position: p += v * dt.
+        mTransform.wAxis = vpu::Add(vpu::Mult(mLinearVelocity, lfDt), mTransform.wAxis);
+
+        // Orientation: spin each basis row by omega*dt (first order).
+        const Vector3 lvSpin = vpu::Mult(mAngularVelocity, lfDt);
+        mTransform.zAxis = vpu::Subtract(mTransform.zAxis, vpu::Cross(mTransform.zAxis, lvSpin));
+        mTransform.yAxis = vpu::Subtract(mTransform.yAxis, vpu::Cross(mTransform.yAxis, lvSpin));
+        mTransform.xAxis = vpu::Subtract(mTransform.xAxis, vpu::Cross(mTransform.xAxis, lvSpin));
+
+        // Re-orthonormalise the 3x3 (the position row rides through untouched).
+        mTransform = vpu::OrthoNormalize3x3(mTransform);
+
+        // The inertia tensor follows the new orientation.
+        CalculateWorldIntertia();
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // CalculateWorldIntertia  @0x825A1E30
+    //
+    //     mWorldInverseInertia = R^T * mLocalInverseInertia * R,   R = mTransform's 3x3
+    //
+    // (row-vector convention: a world vector is taken into body space by R^T, scaled by the
+    // local inverse inertia, and returned to world space by R.)
+    //
+    // FIDELITY: CLEAN on the data flow and on the two-stage structure. The X360 builds R^T with
+    // the classic vmrghw/vmrglw lane-merge transpose (against a zero register for the missing
+    // fourth row), computes T = R^T * L, STORES T into mWorldInverseInertia (+0xA0/+0xB0/+0xC0),
+    // reloads it and computes W = T * R into the same three rows -- the intermediate store is
+    // reproduced faithfully below rather than folded away, because it is observable.
+    // Two dev asserts bracket it: the transform is checked on entry (ExternalPhysicsBody.cpp:353
+    // == asm 0x161) and the produced tensor on exit (:367 == 0x16F).
+    // ---------------------------------------------------------------------------------------
+    void ExternalPhysicsBody::CalculateWorldIntertia()
+    {
+        const Vector3& lR0 = mTransform.xAxis;
+        const Vector3& lR1 = mTransform.yAxis;
+        const Vector3& lR2 = mTransform.zAxis;
+
+        CGS_ASSERT(vpu::IsValid(lR0) && vpu::IsValid(lR1) && vpu::IsValid(lR2),
+                   "rw::math::IsValid(mTransform)");
+
+        // R^T (the vmrghw/vmrglw transpose; the fourth lane merges against zero).
+        const Vector3 lRt0{ lR0.x, lR1.x, lR2.x, 0.0f };
+        const Vector3 lRt1{ lR0.y, lR1.y, lR2.y, 0.0f };
+        const Vector3 lRt2{ lR0.z, lR1.z, lR2.z, 0.0f };
+
+        const Vector3& lL0 = mLocalInverseInertia.xAxis;
+        const Vector3& lL1 = mLocalInverseInertia.yAxis;
+        const Vector3& lL2 = mLocalInverseInertia.zAxis;
+
+        // Stage 1: T = R^T * L, written straight into the destination rows (the asm's stores).
+        mWorldInverseInertia.xAxis = vpu::Add(vpu::Add(vpu::Mult(lL0, lRt0.x), vpu::Mult(lL1, lRt0.y)),
+                                              vpu::Mult(lL2, lRt0.z));
+        mWorldInverseInertia.yAxis = vpu::Add(vpu::Add(vpu::Mult(lL0, lRt1.x), vpu::Mult(lL1, lRt1.y)),
+                                              vpu::Mult(lL2, lRt1.z));
+        mWorldInverseInertia.zAxis = vpu::Add(vpu::Add(vpu::Mult(lL0, lRt2.x), vpu::Mult(lL1, lRt2.y)),
+                                              vpu::Mult(lL2, lRt2.z));
+
+        // Stage 2: W = T * R, over the rows just stored (the asm reloads them).
+        const Vector3 lT0 = mWorldInverseInertia.xAxis;
+        const Vector3 lT1 = mWorldInverseInertia.yAxis;
+        const Vector3 lT2 = mWorldInverseInertia.zAxis;
+
+        mWorldInverseInertia.zAxis = vpu::Add(vpu::Add(vpu::Mult(lR0, lT2.x), vpu::Mult(lR1, lT2.y)),
+                                              vpu::Mult(lR2, lT2.z));
+        mWorldInverseInertia.yAxis = vpu::Add(vpu::Add(vpu::Mult(lR0, lT1.x), vpu::Mult(lR1, lT1.y)),
+                                              vpu::Mult(lR2, lT1.z));
+        mWorldInverseInertia.xAxis = vpu::Add(vpu::Add(vpu::Mult(lR0, lT0.x), vpu::Mult(lR1, lT0.y)),
+                                              vpu::Mult(lR2, lT0.z));
+
+        CGS_ASSERT(vpu::IsValid(mWorldInverseInertia.xAxis) &&
+                   vpu::IsValid(mWorldInverseInertia.yAxis) &&
+                   vpu::IsValid(mWorldInverseInertia.zAxis),
+                   "rw::math::IsValid(mWorldInverseInertia)");
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // The three space-resolving helpers: AddLocalForce @0x825A1670, AddLocalImpulse @0x825A1878
+    // and GetImpulsesFromLocalImpulse @0x825A1A80.
+    //
+    // All three share ONE body shape, verified against GetImpulsesFromLocalImpulse (whose 36
+    // instructions are the shape with no assert noise around it):
+    //
+    //   if (vectorSpace == BODY_SPACE)      v = R0*v.x + R1*v.y + R2*v.z      // rotate to world
+    //   if (positionSpace == WORLD_SPACE)   r = position - mTransform.wAxis   // relative to COM
+    //   else                                r = R0*p.x + R1*p.y + R2*p.z      // rotate the offset
+    //   linear  += v                        (or *lpLinearImpulseOut  = v)
+    //   angular += cross(r, v)              (or *lpAngularImpulseOut = cross(r, v))
+    //
+    // (rw::physics::InputSpace is DWARF-authoritative: WORLD_SPACE = 0, BODY_SPACE = 1, and the
+    // asm's two compares are `cmpwi r4,1` for the vector and `cmpwi r5,0` for the position --
+    // i.e. the two tags are tested against OPPOSITE values, which is why a two-argument
+    // stand-in that drops them cannot be right for both.)
+    //
+    // The cross product is the same shifted-permwi idiom decoded in IntegrateTransform.
+    // FIDELITY: CLEAN. AddLocalForce's two dev asserts are ExternalPhysicsBody.cpp:134/135
+    // ("Bad positioned force added" / "Force applied at a bad position") and AddLocalImpulse's
+    // are :184/:185 ("Bad positioned impulse added" / "Impulse applied at a bad position"), both
+    // non-gating -- the accumulate runs regardless, exactly as in the four AddWorldSpace* funcs.
+    // ---------------------------------------------------------------------------------------
+    namespace
+    {
+        // Rotate a body-space vector into world space by the transform's 3x3 (row-vector form).
+        inline Vector3 RotateToWorld(const Matrix44Affine& lrTransform, Vector3 lVector)
+        {
+            return vpu::Add(vpu::Add(vpu::Mult(lrTransform.xAxis, lVector.x),
+                                     vpu::Mult(lrTransform.yAxis, lVector.y)),
+                            vpu::Mult(lrTransform.zAxis, lVector.z));
+        }
+    }
+
+    void ExternalPhysicsBody::AddLocalForce(Vector3 lForce, rw::physics::InputSpace leForceSpace,
+                                            Vector3 lPosition, rw::physics::InputSpace lePositionSpace)
+    {
+        CGS_ASSERT(vpu::IsValid(lForce),    "Bad positioned force added");
+        CGS_ASSERT(vpu::IsValid(lPosition), "Force applied at a bad position");
+
+        const Vector3 lvForce = (leForceSpace == rw::physics::BODY_SPACE)
+                              ? RotateToWorld(mTransform, lForce) : lForce;
+        const Vector3 lvArm   = (lePositionSpace == rw::physics::WORLD_SPACE)
+                              ? vpu::Subtract(lPosition, mTransform.wAxis)
+                              : RotateToWorld(mTransform, lPosition);
+
+        mTotalLinearForce = vpu::Add(mTotalLinearForce, lvForce);
+        mTotalTorque      = vpu::Add(mTotalTorque, vpu::Cross(lvArm, lvForce));
+    }
+
+    void ExternalPhysicsBody::AddLocalImpulse(Vector3 lImpulse, rw::physics::InputSpace leImpulseSpace,
+                                              Vector3 lPosition, rw::physics::InputSpace lePositionSpace)
+    {
+        CGS_ASSERT(vpu::IsValid(lImpulse),  "Bad positioned impulse added");
+        CGS_ASSERT(vpu::IsValid(lPosition), "Impulse applied at a bad position");
+
+        const Vector3 lvImpulse = (leImpulseSpace == rw::physics::BODY_SPACE)
+                                ? RotateToWorld(mTransform, lImpulse) : lImpulse;
+        const Vector3 lvArm     = (lePositionSpace == rw::physics::WORLD_SPACE)
+                                ? vpu::Subtract(lPosition, mTransform.wAxis)
+                                : RotateToWorld(mTransform, lPosition);
+
+        mTotalLinearImpulse  = vpu::Add(mTotalLinearImpulse, lvImpulse);
+        mTotalAngularImpulse = vpu::Add(mTotalAngularImpulse, vpu::Cross(lvArm, lvImpulse));
+    }
+
+    void ExternalPhysicsBody::GetImpulsesFromLocalImpulse(
+        Vector3 lImpulse, rw::physics::InputSpace leImpulseSpace,
+        Vector3 lPosition, rw::physics::InputSpace lePositionSpace,
+        Vector3* lpLinearImpulseOut, Vector3* lpAngularImpulseOut) const
+    {
+        const Vector3 lvImpulse = (leImpulseSpace == rw::physics::BODY_SPACE)
+                                ? RotateToWorld(mTransform, lImpulse) : lImpulse;
+        const Vector3 lvArm     = (lePositionSpace == rw::physics::WORLD_SPACE)
+                                ? vpu::Subtract(lPosition, mTransform.wAxis)
+                                : RotateToWorld(mTransform, lPosition);
+
+        // (the X360 stores the linear result BEFORE it computes the cross product)
+        *lpLinearImpulseOut  = lvImpulse;
+        *lpAngularImpulseOut = vpu::Cross(lvArm, lvImpulse);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // The lifecycle quartet -- Construct @0x825A1598, Destruct @0x825A15E0, Release @0x825A1628,
+    // Prepare @0x825A78D0.
+    //
+    // FIDELITY: CLEAN, store-for-store. Each is 17 instructions (Prepare 23): a `bl` to the
+    // ExternallySimulatedBody function of the same name, then `stvx128 zero` into the four
+    // accumulators (asm offset order: +0x100, +0x110, +0xE0, +0xF0). Prepare additionally calls
+    // CalculateWorldIntertia and returns 1.
+    //
+    // Note what these do NOT do: none of them touches mLocalInverseInertia, mWorldInverseInertia
+    // or mfMass. A freshly Constructed body has a zero mass and a zero inertia tensor until
+    // SetMass / ReadPropertiesFromRenderware / ReadPropertiesFromChangeInertiaEvent fills them
+    // in -- which is exactly why Prepare's CalculateWorldIntertia is the last step of bring-up
+    // and not the first.
+    // ---------------------------------------------------------------------------------------
+    void ExternalPhysicsBody::Construct()
+    {
+        ExternallySimulatedBody::Construct();
+        mTotalLinearImpulse.SetZero();
+        mTotalAngularImpulse.SetZero();
+        mTotalLinearForce.SetZero();
+        mTotalTorque.SetZero();
+    }
+
+    void ExternalPhysicsBody::Destruct()
+    {
+        ExternallySimulatedBody::Destruct();
+        mTotalLinearImpulse.SetZero();
+        mTotalAngularImpulse.SetZero();
+        mTotalLinearForce.SetZero();
+        mTotalTorque.SetZero();
+    }
+
+    void ExternalPhysicsBody::Release()
+    {
+        ExternallySimulatedBody::Release();
+        mTotalLinearImpulse.SetZero();
+        mTotalAngularImpulse.SetZero();
+        mTotalLinearForce.SetZero();
+        mTotalTorque.SetZero();
+    }
+
+    bool ExternalPhysicsBody::Prepare()
+    {
+        ExternallySimulatedBody::Prepare();
+        mTotalLinearImpulse.SetZero();
+        mTotalAngularImpulse.SetZero();
+        mTotalLinearForce.SetZero();
+        mTotalTorque.SetZero();
+        CalculateWorldIntertia();
+        return true;   // asm: `li r3, 1`
     }
 
     // ---------------------------------------------------------------------------------------

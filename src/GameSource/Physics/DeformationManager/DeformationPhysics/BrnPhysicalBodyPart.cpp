@@ -1112,7 +1112,12 @@ namespace Deformation
 
         // Integrate the accumulated forces/torques/impulses into the body velocity (the asm's
         // `mr r3,r30 ; bl CalculateNewVelocity` -- this==&mRwBody since mRwBody is the first member).
-        mRwBody.CalculateNewVelocity();
+        // ⚠️ The TIMESTEP was being dropped here. The X360 stashes this function's own v1 into
+        // v127 on entry (0x825E79B0) and replays `vmr128 v1,v127` in the instruction immediately
+        // before the branch (0x825E79D4 / 0x825E79DC), so the same dt this function received is
+        // what the integrator receives. CalculateNewVelocity's signature has been corrected to
+        // take it; without it the body's forces integrated over a zero step.
+        mRwBody.CalculateNewVelocity(lvfTimeStep);
 
         // Assemble the InUpdateExternalBody event blob (the stacked &v110.. slots). 16-byte-aligned
         // POD matching the asm's stvx128 store layout: id qword, then the 4 transform rows, then the
