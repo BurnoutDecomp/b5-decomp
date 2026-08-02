@@ -178,20 +178,33 @@ namespace Utils
     //       build matches BY NAMED MEMBER, so only the PROVENANCE was wrong. FIX IT WITH
     //       ::Update, and re-check Construct @0x8223EBF0 against the same offsets.
     //
-    // (2) THE ICE ARM IS FULLY GATED AT THE TOP, and the procedural bump is NOT. ::Update
-    //     computes the procedural value FIRST (0x8223EEE4..0x8223F010: one Random draw, an
-    //     integrate-and-clamp into mfBumpValue, scaled by flt_82CDAD48/4C and by lfMagnitude,
-    //     broadcast into lane 0 of the output), and only then tests THREE conditions in a row,
-    //     each of which jumps straight to the epilogue:
+    // (2) THE ICE ARM IS A SELF-CONTAINED EARLY-OUT, and the procedural value is its INPUT --
+    //     NOT, as the banner above says, a fallback that gets published on its own.
+    //     ⚠️ THAT CORRECTION MATTERS, and I got it wrong on the first read before checking
+    //     where the value goes. ::Update computes the procedural bump FIRST
+    //     (0x8223EEE4..0x8223F010: one Random draw off the ring below, an integrate-and-clamp
+    //     into mfBumpValue, scaled by flt_82CDAD48/4C and by lfMagnitude, broadcast into
+    //     lane 0 of v118), and v118's only consumer is INSIDE the arm --
+    //     `vaddfp128 v1, v1, v118` @0x8223F6C8. Nothing publishes it by itself.
+    //     Then three conditions are tested in a row, each jumping STRAIGHT to the epilogue
+    //     (0x8223F7F0, which is nothing but the register restore):
     //         lfMagnitude == 0.0f                                   (0x8223F014)
     //         lu8ActiveShake == 0                                   (0x8223F020)
     //         lu8ActiveShake > Attrib::Gen::shotgroup::Num_ShotList (0x8223F034)
-    //     ⇒ a wave that needs this to LINK can body the procedural head + the three gates
-    //       honestly and FLAG the authored-take arm, because the arm is a self-contained
-    //       early-out -- but that is a real decision with a real behavioural consequence
-    //       (no authored boost shake), and it must be a DOCUMENTED partial, never a silent
-    //       drop. Update .cpp:445 passes ln8ShakeType == 2, i.e. non-zero, so the arm WOULD
-    //       be taken whenever the vehicle's shotgroup resolves.
+    //     ⇒ WHEN ANY GATE TRIPS THE CONSOLE PUBLISHES NOTHING: `r27 == this+0x30` is not even
+    //       formed until 0x8223F624, inside the arm, so mMatrix keeps its previous value and
+    //       even mu8ActiveShake (stored at 0x8223F7E0) is left alone. Before the gates the
+    //       function writes ONLY mfShotRunningTime, mfBumpValue and the Random ring.
+    //     ⇒ so a wave that needs this to LINK can body the head + the three gates and FLAG
+    //       the arm, and that partial is BEHAVIOURALLY IDENTICAL to the console on every
+    //       frame a gate trips -- it differs only when an authored take actually resolves.
+    //       That is a defensible documented partial; it is NOT a silent drop, and it must be
+    //       written as such. ⚠️ Update .cpp:445 passes ln8ShakeType == 2, i.e. non-zero, so
+    //       the arm WOULD be taken whenever the vehicle's shotgroup resolves.
+    //     ⭐ AND ::GetMatrix IS REALLY CONSUMED: Update inlines it as four `lvx128` off
+    //       mBoostShake immediately after the call (0x82241C70..0x82241C8C) and multiplies
+    //       the result into the camera transform. It is a one-line `return mMatrix;` and it
+    //       is a hard link dependency exactly like ::Update.
     // ------------------------------------------------------------------------
     struct CameraShakeICEController
     {
