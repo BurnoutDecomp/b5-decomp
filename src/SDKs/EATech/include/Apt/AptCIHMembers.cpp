@@ -139,6 +139,7 @@ extern AptValue* gpAptNativeFn_8324E43C;   // gotoAndStop
 extern AptValue* gpAptNativeFn_8324E448;   // loadMovie
 extern AptValue* gpAptNativeFn_8324E47C;   // loadVariables
 extern AptValue* gpAptNativeFn_8324E484;   // play
+extern AptValue* gpAptNativeFn_8324E480;   // stop
 extern AptValue* gpAptNativeFn_8324E490;   // getBytesTotal
 extern AptValue* gpAptNativeFn_8324E488;   // nextFrame
 extern AptValue* gpAptNativeFn_8324E45C;   // createTextField
@@ -486,6 +487,8 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
                       reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_play));                   // @0x82B0E94C
         case 109: return LookupMethodSingleton(gpAptNativeFn_8324E454,
                       reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_removeMovieClip));        // @0x82B0EBD0
+        case 110: return LookupMethodSingleton(gpAptNativeFn_8324E480,
+                      reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_stop));                   // @0x82B0E9A8
         case 112: return LookupMethodSingleton(gpAptNativeFn_8324E490,
                       reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_getBytesTotal));          // @0x82B0EABC
         case 113: return LookupMethodSingleton(gpAptNativeFn_8324E488,
@@ -521,10 +524,14 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
         // reconstructed in AptCIHNativeFunctionHelper.cpp; a null return continues the
         // findChild resolution, so the member reads `undefined` until they land):
         //   108 "prevFrame"      @0x82B0EA04 (off_8324E48C)
-        //   110 "stop"           @0x82B0E9A8 (off_8324E480)
         //   111 "getBytesLoaded" @0x82B0EB18 (off_8324E494)
         //   121 "unloadMovie"    @0x82B0EC88 (off_8324E44C)
-        case 108: case 110: case 111: case 121:
+        // ⚠️ "nothing calls it yet" is a claim with an expiry date -- 110 "stop" sat in
+        // this list and WAS live (B5ComplexBar.Done calls this.stop(); dropping it made
+        // every GUI bar oscillate forever and storm BrnComplexBar.cpp:67). Verified
+        // 2026-08-02 that no shipped AS in build\game\GUIAPT\*.bundle mentions
+        // "prevFrame", "getBytesLoaded" or "unloadMovie" -- re-check before assuming.
+        case 108: case 111: case 121:
             return nullptr;
 
         case 131: // "_renderflags" @0x82B0E484 -- the render item's render-data hook name

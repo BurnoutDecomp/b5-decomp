@@ -55,5 +55,6 @@ public:
     static AptValue* sMethod_setMask(AptValue* pContext, int nArgCount);                // @0x82AF8EE0
     static AptValue* sMethod_setTextFormat(AptValue* pContext, int nArgCount);          // @0x82AED470
     static AptValue* sMethod_startDrag(AptValue* pContext, int nArgCount);              // @0x82AD6F80
+    static AptValue* sMethod_stop(AptValue* pContext, int nArgCount);                   // PS3 @0x7EE5D4
     static AptValue* sMethod_swapDepths(AptValue* pContext, int nArgCount);             // @0x82AFBE10
 };
