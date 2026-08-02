@@ -157,6 +157,41 @@ namespace Utils
     // three trailing members mfDampenedAcceleration/+0x824, mfLastSpeed/+0x820 and the
     // 16-byte-aligned Vector3 mLastCameraAngles/+0x810; the controller therefore spans
     // +0x30..+0x80F).
+    //
+    // ⭐⭐ SCOUTED 2026-08-02 (final-camera wave) FROM ::Update's OWN ASM @0x8223EEC8, which
+    // is the first time anything has read INSIDE this type. Two things came out of it:
+    //
+    // (1) THE INTERNAL SPLIT IN THIS HEADER IS WRONG, and the tail is where it is wrong.
+    //     ::Update touches, by X360 offset off `this`:
+    //       +0x798  `stb r23, 0x798(r30)`        -> mu8ActiveShake  (the last statement)
+    //       +0x7A0  `addi r11, r30, 0x7A0` then `lfsx/stwx r8,r11` (idx*4), `ld/std 0x20(r11)`
+    //               (a u64 multiplied by 0x5851F42D4C957F2D and incremented) and
+    //               `lwz 0x28(r11); addi 1; clrlwi ...,29` (index &= 7)
+    //               -> mRandom: EIGHT floats +0x7A0..+0x7BF, u64 seed +0x7C0, u32 index +0x7C8.
+    //               That is exactly CgsNumeric::Random's eight-slot ring, the same shape the
+    //               rotate-helper wave pinned from Random::Construct/RandomFloat.
+    //       +0x7D0  `lfs/fadds/stfs` with the timestep  -> mfShotRunningTime
+    //       +0x7D4  the integrated procedural bump      -> mfBumpValue
+    //     ⇒ mShakeTake is +0x060..+0x797 (0x738), NOT 0x770, and the tail is 0x48 bytes, not
+    //       0x10. The two still sum to 0x7E0 (0x798 +1, pad to 8 for the u64 seed, +0x30
+    //       Random, +4 +4, pad to 16 for mMatrix), which is why nothing has noticed: this
+    //       build matches BY NAMED MEMBER, so only the PROVENANCE was wrong. FIX IT WITH
+    //       ::Update, and re-check Construct @0x8223EBF0 against the same offsets.
+    //
+    // (2) THE ICE ARM IS FULLY GATED AT THE TOP, and the procedural bump is NOT. ::Update
+    //     computes the procedural value FIRST (0x8223EEE4..0x8223F010: one Random draw, an
+    //     integrate-and-clamp into mfBumpValue, scaled by flt_82CDAD48/4C and by lfMagnitude,
+    //     broadcast into lane 0 of the output), and only then tests THREE conditions in a row,
+    //     each of which jumps straight to the epilogue:
+    //         lfMagnitude == 0.0f                                   (0x8223F014)
+    //         lu8ActiveShake == 0                                   (0x8223F020)
+    //         lu8ActiveShake > Attrib::Gen::shotgroup::Num_ShotList (0x8223F034)
+    //     ⇒ a wave that needs this to LINK can body the procedural head + the three gates
+    //       honestly and FLAG the authored-take arm, because the arm is a self-contained
+    //       early-out -- but that is a real decision with a real behavioural consequence
+    //       (no authored boost shake), and it must be a DOCUMENTED partial, never a silent
+    //       drop. Update .cpp:445 passes ln8ShakeType == 2, i.e. non-zero, so the arm WOULD
+    //       be taken whenever the vehicle's shotgroup resolves.
     // ------------------------------------------------------------------------
     struct CameraShakeICEController
     {
