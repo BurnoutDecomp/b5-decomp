@@ -30,9 +30,13 @@ namespace CgsDev
 
     // The page a monitor is grouped under in the overlay (X360 CgsPerfMonCpu.h:47, E_PMP_GENERAL..23,
     // E_PMP_MAX=24). Only the general page + the count are needed for the bounded bar overlay.
+    // The DWARF names the whole run E_PMP_GENERAL(0), E_PMP_1 .. E_PMP_23, E_PMP_MAX(24).
+    // Only the pages the reconstructed call sites actually pass are declared here; add the
+    // next one when a wave needs it (they are plain positional page ids, not semantic names).
     enum PerfMonCpuPage
     {
         E_PMP_GENERAL = 0,
+        E_PMP_4       = 4,   // CgsPhysics::PhysicsSimulationModule::Construct's four "Sim *" monitors
         E_PMP_MAX     = 24,
     };
 

@@ -20,16 +20,16 @@
 // list whose head/tail/iter pointers self-reference).
 //
 // LAYOUT MODEL. The full DWARF member set (BrnPhysicsModule.h:189..241) is
-// recorded below as DOCUMENTATION, but several of those members
-// (PhysicsSimulationModule, ContactSpyData, DeformationManager, PropManager, and
-// the tail interface) have NO complete reconstructed type yet, so they cannot be
-// embedded by value without fabricating layouts/vtables (which the project rules
-// forbid). They are therefore modelled here as correctly-named, asm-sized OPAQUE
-// PLACEHOLDER members so the four constructor-touched offsets land where the X360
-// asm proves them, and the constructor reproduces every store BY NAMED MEMBER (no
-// raw-offset pointer hacks). Each placeholder is FLAGGED. When the real
-// PhysicsSimulationModule / DeformationManager / PropManager / tail-interface
-// layout passes land, the placeholders fold into the real typed members.
+// recorded below as DOCUMENTATION, but several of those members (ContactSpyData,
+// DeformationManager, PropManager, and the tail interface) have NO complete
+// reconstructed type yet, so they cannot be embedded by value without fabricating
+// layouts/vtables (which the project rules forbid). They are therefore modelled
+// here as correctly-named, asm-sized OPAQUE PLACEHOLDER members so the four
+// constructor-touched offsets land where the X360 asm proves them, and the
+// constructor reproduces every store BY NAMED MEMBER (no raw-offset pointer
+// hacks). Each placeholder is FLAGGED. When the real DeformationManager /
+// PropManager / tail-interface layout passes land, the placeholders fold into the
+// real typed members -- as mSimulationModule already has (2026-08-03).
 //
 // X360 byte offsets are the 4-byte-pointer console ABI; member access here is by
 // name, so the bodies are faithful regardless of host pointer width.
@@ -37,6 +37,7 @@
 #include "types.hpp"
 #include "SharedClasses/BrnSharedConstants.h"   // BrnUpdateSet
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h" // CgsModule::ModuleSingleBuffered (the base; supplies the vtable + the two RWMutexes the ctor constructs inline)
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModule.h" // CgsPhysics::PhysicsSimulationModule (embedded by value @ +0x230)
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"   // BrnPhysics::Vehicle::VehicleManager (embedded by value @ +0x4AA0)
 
 namespace CgsModule { struct IOBufferStack; }
@@ -131,13 +132,23 @@ namespace PhysicsModuleIO { class InputBuffer; class OutputBuffer; }
         // does not touch it.
         // ===================================================================
 
-        // FLAG: PLACEHOLDER. mSimulationModule == CgsPhysics::PhysicsSimulationModule,
-        // X360 class offset +0x230 (560). Its real class layout is not reconstructed
-        // (only its JointData/DriveData slot tables exist), so it is modelled as an
-        // asm-sized opaque buffer spanning to mVehicleManager (+0x4AA0 - +0x230 ==
-        // 18512 bytes on the X360 4-byte-pointer ABI). The constructor chains its
-        // sub-constructor; see the .cpp note (DEFERRED, see below).
-        u8 maSimulationModulePlaceholder[0x4AA0 - 0x230]; // +0x230
+        // mSimulationModule -- CgsPhysics::PhysicsSimulationModule, X360 class offset
+        // +0x230 (560). Embedded by value.
+        //
+        // PLACEHOLDER FOLDED 2026-08-03. This was `u8 maSimulationModulePlaceholder
+        // [0x4AA0 - 0x230]`, an opaque span, because the class had no reconstructed
+        // layout. It has one now (CgsPhysicsSimulationModule.h), re-derived from the
+        // class's own constructor @0x827DF1E0 and from Construct @0x828A1EE8, and it
+        // closes to the byte against exactly this span:
+        //     0x4864 (mpSimulation) + 4 -> 8-align -> 0x4870 == 18544 == 0x4AA0 - 0x230.
+        // ⚠️ The old comment here said that span was "18512 bytes". It is 18544
+        // (19104 - 560); the array EXPRESSION was right, the prose number was not.
+        //
+        // Folding this also un-defers the sub-constructor: the X360 ctor's
+        // `bl CgsPhysics::PhysicsSimulationModule::PhysicsSimulationModule(this+0x230)`
+        // is now the implicit member construction of this member, which is what seeds
+        // the 200 rw::physics::Inertia records and the 36 JointLimits.
+        CgsPhysics::PhysicsSimulationModule mSimulationModule; // +0x230
 
         // mVehicleManager -- BrnPhysics::Vehicle::VehicleManager, X360 class offset
         // +0x4AA0 (19104). Embedded by value (it is a complete, layout-pinned type).
