@@ -500,7 +500,35 @@ void MassiveAdClient3::CMassiveAdObjectSubscriber::operator delete(void *)
 // BOOT-GATE (world-module mount 2026-07-26): REACHED at boot by the wired
 // WorldModule::Construct @0x827CF540 fleet cascade; quiet no-op (see
 // AIModule::Construct above). Reconstruct from X360 before wiring Prepare.
-// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
+//
+// ⛔⛔ 2026-08-03 (task #116) -- WHY THIS IS STILL A STUB, MEASURED. The blocker is NOT the link.
+// The whole call graph of the real @0x825AE308 now RESOLVES: its X360 xrefs_from is a closed set of
+// ten callees and every one of them is bodied AND mounted as of this commit --
+//     ModuleSingleBuffered::Construct, PerfMonCpu::AddMonitor,
+//     PropManager::{Construct,ConstructPreScenePerfMonitors,ConstructContactGenerationPerfMonitors},
+//     DeformationOutputInterface::Construct, ContactSpyData::Construct,
+//     DeformationInputInterface::Construct, DeformationManager::Construct,
+//     VehicleManager::Construct.
+// The last three were the gap and they cost ZERO new bodies -- see the split-TU block in
+// tools/build/build_game_exe.bat.
+//
+// ⛔ THE ACTUAL BLOCKER IS THE CLASS LAYOUT. BrnPhysicsModule.h models PhysicsModule as ending at
+// +0x636A0 (407,200 bytes). The X360 body writes as far as `*(this + 433208)`. It is 26,012 BYTES
+// SHORT. Bodying it against the committed header would:
+//   * store all twenty-one perfmon handles (+433072..+433208) ~26 KB PAST THE END of the object;
+//   * call PropManager::Construct(this + 407088) -- and +407088 == 0x63630 is exactly where the
+//     header puts its 0x70-byte `ContainedListInterface mContainedList` placeholder, so the real
+//     PropManager would be constructed into 112 bytes of a mis-modelled sub-object. That is the
+//     ArticulatedJointPool sliced-call-site failure again, except this one also overruns;
+//   * call ContactSpyData::Construct(+191728), DeformationManager::Construct(+314272),
+//     DeformationInputInterface::Construct(+391024) and DeformationOutputInterface::Construct
+//     (+396096) at raw offsets inside `maTailPlaceholder`, an opaque u8 array with no objects in it.
+// Every one of those is silent memory corruption on a build that links clean and boots.
+//
+// ⇒ THE NEXT STEP IS BrnPhysicsModule.h, NOT MORE MOUNTING. The five sub-objects must become real
+// embedded members and the perfmon/state block must be modelled; the proven console offsets and
+// spans are recorded in that header's banner. Until then this stays a no-op ON PURPOSE.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body blocked on the BrnPhysicsModule.h layout gap measured above, NOT on link closure.
 void BrnPhysics::PhysicsModule::Construct()
 {
 }

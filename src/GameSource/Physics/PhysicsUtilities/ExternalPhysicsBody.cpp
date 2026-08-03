@@ -389,6 +389,29 @@ namespace BrnPhysics
         mTotalTorque.SetZero();
     }
 
+    // ---------------------------------------------------------------------------------------
+    // SetMass -- the mass setter the header has carried as DECLARE-ONLY ("ADDITIVE GROW",
+    // ExternalPhysicsBody.h:178) since the deformation wave. Bodied here 2026-08-03 (task #116),
+    // in the authoritative home the header names, because it was the ONE symbol on
+    // PhysicalBodyPart::Construct's link path that had no definition anywhere in the tree -- and
+    // PhysicalBodyPart::Construct is reached from PhysicsModule::Construct @0x825AE308, which had
+    // been a live empty stub.
+    //
+    // SHAPE FROM THE ASM, not invented. The only call site in either build is
+    // PhysicalBodyPart::Construct @0x825B4178, which materialises 5.0f on the stack, loads it with
+    // `lvlx`, BROADCASTS it with `vspltw`, and stores the whole 16-byte vector to the body's +0xD0
+    // (mfMass). So the setter splats its scalar across all four lanes rather than writing .x and
+    // leaving the other three lanes stale -- which matters, because every consumer in this file
+    // reads mfMass.x while CalculateWorldIntertia-style vector maths would see the rest.
+    // ---------------------------------------------------------------------------------------
+    void ExternalPhysicsBody::SetMass(f32 lfMass)
+    {
+        mfMass.x = lfMass;
+        mfMass.y = lfMass;
+        mfMass.z = lfMass;
+        mfMass.w = lfMass;
+    }
+
     void ExternalPhysicsBody::Destruct()
     {
         ExternallySimulatedBody::Destruct();

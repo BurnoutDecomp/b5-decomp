@@ -60,16 +60,24 @@ namespace Deformation
     // handles CgsDev::PerfMonCpu::AddMonitor returns; the per-stage Update/Render code reads them back.
     // Names taken verbatim from the asm FireAssert expression strings. NOT DeformableObject members.
     // -------------------------------------------------------------------------------------------------
-    static s32 siSortContactsPerfMon        = -1;   // dword_82F2A348
-    static s32 siSolveContactsPerfMon       = -1;   // dword_82F2A34C
-    static s32 siUpdateWheelsAndGlassPerfMon = -1;  // dword_82F2A350
-    static s32 siUpdateSweptSpherePerfMon   = -1;   // dword_82F2A354
-    static s32 siUpdateWorldSpheres         = -1;   // dword_82F2A358
-    static s32 siCheckDetaching             = -1;   // dword_82F2A35C
-    static s32 siUpdateSkinningOffsets      = -1;   // dword_82F2A360
-    static s32 siUpdateIK                   = -1;   // dword_82F2A364
-    static s32 siUpdateSuspensionIK         = -1;   // dword_82F2A368
-    static s32 siUpdateLocators             = -1;   // dword_82F2A36C
+    // ⚠️⚠️ DEFINED IN BrnDeformationConstructShims.cpp, NOT HERE (2026-08-03, task #116). They used
+    // to be `static s32 ... = -1;` in this file, alongside the three ConstructXPerformanceMonitors
+    // bodies that seed them. Those three registrations had to be split out so that
+    // DeformationManager::Construct -- and therefore PhysicsModule::Construct, which was a live
+    // empty stub -- could link without mounting this TU's whole Update/Render closure. Leaving these
+    // `static` would have given the shim its own private copy: the shim would register into that
+    // copy while the thirty-three read sites BELOW kept reading -1 forever. That is the silent-drop
+    // stub failure class exactly. EXTERNAL linkage, one definition, either TU can be mounted.
+    extern s32 siSortContactsPerfMon;         // dword_82F2A348
+    extern s32 siSolveContactsPerfMon;        // dword_82F2A34C
+    extern s32 siUpdateWheelsAndGlassPerfMon; // dword_82F2A350
+    extern s32 siUpdateSweptSpherePerfMon;    // dword_82F2A354
+    extern s32 siUpdateWorldSpheres;          // dword_82F2A358
+    extern s32 siCheckDetaching;              // dword_82F2A35C
+    extern s32 siUpdateSkinningOffsets;       // dword_82F2A360
+    extern s32 siUpdateIK;                    // dword_82F2A364
+    extern s32 siUpdateSuspensionIK;          // dword_82F2A368
+    extern s32 siUpdateLocators;              // dword_82F2A36C
 
     // The "deformation parts enabled" debug flag the asm tests (byte_82F2A345). FLAG: real home is a
     // debug-menu global not in-tree; carried as an honest file-static (default: parts enabled == true,
@@ -748,67 +756,14 @@ namespace Deformation
         else
             meAbsorptionSet = E_ABSORPTIONSET_NORMAL;                 // asm: +26460 = 0
     }
+    // ==============================================================================================
+    // ConstructUpdatePerformanceMonitors @0x825B99A0, ConstructUpdateIKAndLocatorsPerformanceMonitors
+    // @0x825B9B00 and ConstructPostPhysicsPerformanceMonitors @0x825B9C88 WERE HERE. They were MOVED
+    // VERBATIM to BrnDeformationConstructShims.cpp on 2026-08-03 (task #116) together with the ten
+    // si* handles they seed -- see the note at the handle declarations above. Nothing about them
+    // changed; this TU simply cannot be mounted yet and DeformationManager::Construct needed them.
+    // TO RE-MERGE: mount this TU, move the three bodies back, and make the handles `static` again.
+    // ==============================================================================================
 
-    // =================================================================================================
-    // ConstructUpdatePerformanceMonitors @ 0x825B99A0
-    //   Register the four per-frame Update-stage CPU perf monitors (Sort contacts, Solve contacts,
-    //   Upd. Suspension IK, Upd. Locators), each asserting the returned handle id is >= 0. The
-    //   AddMonitor args (group 15, parent 0, budget 10.0 ms, the per-call cookie, enabled 1) are
-    //   verbatim from the asm.
-    // =================================================================================================
-    void DeformableObject::ConstructUpdatePerformanceMonitors()
-    {
-        siSortContactsPerfMon = CgsDev::PerfMonCpu::AddMonitor("          Sort contacts", 15, 0, 10.0, 0, 1);
-        CGS_ASSERT(siSortContactsPerfMon >= 0, "siSortContactsPerfMon >= 0");
-
-        siSolveContactsPerfMon = CgsDev::PerfMonCpu::AddMonitor("          Solve contacts", 15, 0, 10.0, 0, 1);
-        CGS_ASSERT(siSolveContactsPerfMon >= 0, "siSolveContactsPerfMon >= 0");
-
-        siUpdateSuspensionIK = CgsDev::PerfMonCpu::AddMonitor("          Upd. Suspension IK", 15, 0, 10.0, 0, 1);
-        CGS_ASSERT(siUpdateSuspensionIK >= 0, "siUpdateSuspensionIK >= 0");
-
-        siUpdateLocators = CgsDev::PerfMonCpu::AddMonitor("          Upd. Locators", 15, 0, 10.0, 0, 1);
-        CGS_ASSERT(siUpdateLocators >= 0, "siUpdateLocators >= 0");
-    }
-
-    // =================================================================================================
-    // ConstructUpdateIKAndLocatorsPerformanceMonitors @ 0x825B9B00
-    //   Register the IK/locators-stage perf monitors. NOTE the asm asserts siSolveContactsPerfMon >= 0
-    //   FIRST (it was registered by ConstructUpdatePerformanceMonitors; this is a dependency tripwire,
-    //   it does NOT register it), then adds Check Detaching, Upd. Skinning Offs, Upd. IK, and
-    //   Upd. wheels & glass.
-    // =================================================================================================
-    void DeformableObject::ConstructUpdateIKAndLocatorsPerformanceMonitors()
-    {
-        // Dependency tripwire (asm: tests the already-registered solve-contacts handle, no AddMonitor).
-        CGS_ASSERT(siSolveContactsPerfMon >= 0, "siSolveContactsPerfMon >= 0");
-
-        siCheckDetaching = CgsDev::PerfMonCpu::AddMonitor("          Check Detaching", 15, 0, 10.0, 0, 1);
-        CGS_ASSERT(siCheckDetaching >= 0, "siCheckDetaching >= 0");
-
-        siUpdateSkinningOffsets = CgsDev::PerfMonCpu::AddMonitor("          Upd. Skinning Offs", 15, 0, 10.0, 0, 1);
-        CGS_ASSERT(siUpdateSkinningOffsets >= 0, "siUpdateSkinningOffsets >= 0");
-
-        siUpdateIK = CgsDev::PerfMonCpu::AddMonitor("          Upd. IK", 15, 0, 10.0, 0, 1);
-        CGS_ASSERT(siUpdateIK >= 0, "siUpdateIK >= 0");
-
-        siUpdateWheelsAndGlassPerfMon = CgsDev::PerfMonCpu::AddMonitor("          Upd.wheels & glass", 15, 0, 10.0, 0, 1);
-        CGS_ASSERT(siUpdateWheelsAndGlassPerfMon >= 0, "siUpdateWheelsAndGlassPerfMon >= 0");
-    }
-
-    // =================================================================================================
-    // ConstructPostPhysicsPerformanceMonitors @ 0x825B9C88
-    //   Register the post-physics sphere-update perf monitors (Update World Spheres, Update Swept
-    //   Spheres). NOTE the leading indentation in these two labels differs from the IK ones (8 spaces),
-    //   verbatim from the asm.
-    // =================================================================================================
-    void DeformableObject::ConstructPostPhysicsPerformanceMonitors()
-    {
-        siUpdateWorldSpheres = CgsDev::PerfMonCpu::AddMonitor("        Update World Spheres", 15, 0, 10.0, 0, 1);
-        CGS_ASSERT(siUpdateWorldSpheres >= 0, "siUpdateWorldSpheres >= 0");
-
-        siUpdateSweptSpherePerfMon = CgsDev::PerfMonCpu::AddMonitor("        Update Swept Spheres", 15, 0, 10.0, 0, 1);
-        CGS_ASSERT(siUpdateSweptSpherePerfMon >= 0, "siUpdateSweptSpherePerfMon >= 0");
-    }
 }
 }
