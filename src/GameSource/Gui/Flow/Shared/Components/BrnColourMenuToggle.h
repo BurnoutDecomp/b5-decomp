@@ -75,13 +75,15 @@ namespace BrnGui
         // @ 0x824EA2A0 -- highlight the requested index on the centre picker; on change,
         // refresh neighbours + dirty the component.
         //
-        // ⚠️ FLAG (2026-08-02): the X360 body sets ONLY r3 before dispatching the centre
-        // picker's slot 12 (`addi r3,r31,0x2718 / lwz r11,0x2718(r31) / lwz r11,0x30(r11) /
-        // bctrl` -- no r4), and its two BrnGui::CarSelectLivery call sites likewise pass only
-        // `this`. The console therefore hands SelectableGroup::HighlightIndex whatever the
-        // caller happened to leave in r4 -- undefined, and not a behaviour that can be
-        // reproduced. Reconstructed with the index as an explicit parameter and forwarded;
-        // the callers pass the index they are re-applying, which is the only defined reading
+        // NOTE (measured 2026-08-02, corrected 2026-08-03): this body genuinely never touches
+        // r4 -- it sets only r3 before dispatching the centre picker's slot 12
+        // (`addi r3,r31,0x2718 / lwz r11,0x2718(r31) / lwz r11,0x30(r11) / bctrl`). But the
+        // behaviour is FULLY DETERMINED, not undefined: both BrnGui::CarSelectLivery call
+        // sites DO set r4 (0x824C0E88 `lwz r4,4(r30)`; 0x824D73B0 `lbz r4,0xEE(r28)`), and
+        // because this body leaves r4 alone the caller's value is ABI-forwarded straight
+        // through to the picker's slot 12. An earlier version of this comment claimed the
+        // callers passed only `this` and that the result was unreproducible -- both wrong.
+        // The committed explicit-parameter form below is therefore exactly faithful
         // of "refresh the colour highlight".
         bool HighlightIndex(s32 liIndex);
         // @ 0x824EA1A0 / 0x824EA220 -- move the focused picker's highlight next/prev.
