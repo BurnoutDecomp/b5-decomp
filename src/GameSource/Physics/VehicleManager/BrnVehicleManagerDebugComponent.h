@@ -30,10 +30,21 @@
 // pointer inside the base and `mpVehicleManager` -- so everything after them shifts. Per the
 // project's x64 rule (parity by NAMED MEMBERS, not byte offsets) the _AssertLayout() pins below
 // are written as RELATIVE deltas, which are X360-identical for every member from
-// mPlayerCarContactPosition onwards (that whole tail contains no pointers). VehicleManager keeps
-// its own `mDebugComponent` as the X360-sized 1296-byte opaque span so its byte-pinned offsetof
-// chain stays intact -- exactly as it already does for mStuntOffencesManager and the contained
-// PhysicalTrafficManager.
+// mPlayerCarContactPosition onwards (that whole tail contains no pointers).
+//
+// ⭐⭐ UPDATED 2026-08-03 (the un-pin wave). This banner used to end: "VehicleManager keeps its own
+// `mDebugComponent` as the X360-sized 1296-byte opaque span so its byte-pinned offsetof chain stays
+// intact -- exactly as it already does for mStuntOffencesManager and the contained
+// PhysicalTrafficManager." Every clause of that is now out of date:
+//   * VehicleManager embeds this class BY VALUE at +161968 (host 1328 vs the X360's 1296) and
+//     carries the 32-byte difference as KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, so its offsetof chain
+//     stays intact WITH the real type rather than instead of it;
+//   * mStuntOffencesManager was never an opaque span in the sense meant -- its real class fits the
+//     X360 span exactly;
+//   * PhysicalTrafficManager is embedded by name too, and the 103360-byte "span" it was being kept
+//     for was 2288 bytes short of that class's real X360 size.
+// The layout below did not change; only the reason it is here did. `VehicleManagerDebugComponent::
+// Construct(this + 161968, this)` is now callable as `mDebugComponent.Construct(this)`.
 //
 // INCREMENTAL: this slice lands the full DATA layout plus Construct + GetName. The ~20
 // render/record members declared by the DWARF (RenderWorld, RenderHUD, RecordSlam,

@@ -1517,79 +1517,79 @@ namespace Vehicle
                       "44768 + 103360 == 148128 -- the seat SetRaceCarCrashing's owner==2 branch loads");
         static_assert(offsetof(VehicleManager, mDiscardedContacts)       == 160672 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mDiscardedContacts (asm addi r29,r29,0x73A0)");
         static_assert(offsetof(VehicleManager, mDebugComponent)          == 161968 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mDebugComponent (asm VehicleManagerDebugComponent::Construct(this + 161968, this))");
-        static_assert(offsetof(VehicleManager, maRaceCarDebugComponent)  == 163264 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "maRaceCarDebugComponent (asm addi r27,r27,0x7DC0; stride 0x400)");
-        static_assert(offsetof(VehicleManager, mabRaceCarDebugComponentRegistered) == 171456 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER,
+        static_assert(offsetof(VehicleManager, maRaceCarDebugComponent)  == 163264 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "maRaceCarDebugComponent (asm addi r27,r27,0x7DC0; stride 0x400)");
+        static_assert(offsetof(VehicleManager, mabRaceCarDebugComponentRegistered) == 171456 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
                       "163264 + 8*1024 == 171456, and +8 lands exactly on the asm-proven gate byte at 171464");
         // ---- the tuning bank, pinned member by member (2026-08-03). Every offset below is an
         //      asm seat from VehicleManager::Construct @0x8263B7C8, cross-checked against the PS3
         //      DecFIGS build at Δ=672. The padding runs between them are what these asserts test.
-        static_assert(offsetof(VehicleManager, mbSlamsAndShuntsOn)       == 171464 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mbSlamsAndShuntsOn (asm +171464)");
-        static_assert(offsetof(VehicleManager, mbAllowSlamsAndShuntsEffectsForRivals) == 171465 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mbAllowSlamsAndShuntsEffectsForRivals (asm +171465)");
+        static_assert(offsetof(VehicleManager, mbSlamsAndShuntsOn)       == 171464 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mbSlamsAndShuntsOn (asm +171464)");
+        static_assert(offsetof(VehicleManager, mbAllowSlamsAndShuntsEffectsForRivals) == 171465 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mbAllowSlamsAndShuntsEffectsForRivals (asm +171465)");
         // The head and tail of the 44-float run, plus the closure that proves it has no gaps.
-        static_assert(offsetof(VehicleManager, mfFrontRaySensorLength)   == 171468 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfFrontRaySensorLength (asm +171468)");
-        static_assert(offsetof(VehicleManager, mfMaxSlamClosingXSpeed)   == 171536 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfMaxSlamClosingXSpeed (asm +171536)");
-        static_assert(offsetof(VehicleManager, mfMinSecondsBetweenImpacts) == 171540 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfMinSecondsBetweenImpacts (asm +171540) -- was mis-typed s32 miAttackerToRecord");
-        static_assert(offsetof(VehicleManager, mfTailgatingVunerabilityTime) == 171552 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfTailgatingVunerabilityTime (asm +171552; value from the PS3 build)");
-        static_assert(offsetof(VehicleManager, mfTBoneTakedownMaxAngle)  == 171564 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfTBoneTakedownMaxAngle (asm +171564)");
-        static_assert(offsetof(VehicleManager, mfTBoneTakedownSpeed)     == 171568 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfTBoneTakedownSpeed (asm +171568)");
-        static_assert(offsetof(VehicleManager, mfMinShuntSpeed)          == 171580 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfMinShuntSpeed (asm +171580)");
-        static_assert(offsetof(VehicleManager, mfFatalShuntSpeed)        == 171584 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfFatalShuntSpeed (asm +171584)");
-        static_assert(offsetof(VehicleManager, mfMinTradingPaintSpeed)   == 171616 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfMinTradingPaintSpeed (asm +171616)");
-        static_assert(offsetof(VehicleManager, mfFatalSlamSpeed)         == 171620 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfFatalSlamSpeed (asm +171620)");
-        static_assert(offsetof(VehicleManager, mfMaxHeadToHeadAngle)     == 171628 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfMaxHeadToHeadAngle (asm +171628)");
-        static_assert(offsetof(VehicleManager, mfMinHeadToHeadIndividualSpeed) == 171636 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfMinHeadToHeadIndividualSpeed (asm +171636)");
-        static_assert(offsetof(VehicleManager, mfAngleForVerticleTakedown) == 171640 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfAngleForVerticleTakedown (asm +171640) -- last of the 44-float run");
-        static_assert(offsetof(VehicleManager, maeImpactType) == 171644 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER,
+        static_assert(offsetof(VehicleManager, mfFrontRaySensorLength)   == 171468 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfFrontRaySensorLength (asm +171468)");
+        static_assert(offsetof(VehicleManager, mfMaxSlamClosingXSpeed)   == 171536 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfMaxSlamClosingXSpeed (asm +171536)");
+        static_assert(offsetof(VehicleManager, mfMinSecondsBetweenImpacts) == 171540 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfMinSecondsBetweenImpacts (asm +171540) -- was mis-typed s32 miAttackerToRecord");
+        static_assert(offsetof(VehicleManager, mfTailgatingVunerabilityTime) == 171552 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfTailgatingVunerabilityTime (asm +171552; value from the PS3 build)");
+        static_assert(offsetof(VehicleManager, mfTBoneTakedownMaxAngle)  == 171564 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfTBoneTakedownMaxAngle (asm +171564)");
+        static_assert(offsetof(VehicleManager, mfTBoneTakedownSpeed)     == 171568 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfTBoneTakedownSpeed (asm +171568)");
+        static_assert(offsetof(VehicleManager, mfMinShuntSpeed)          == 171580 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfMinShuntSpeed (asm +171580)");
+        static_assert(offsetof(VehicleManager, mfFatalShuntSpeed)        == 171584 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfFatalShuntSpeed (asm +171584)");
+        static_assert(offsetof(VehicleManager, mfMinTradingPaintSpeed)   == 171616 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfMinTradingPaintSpeed (asm +171616)");
+        static_assert(offsetof(VehicleManager, mfFatalSlamSpeed)         == 171620 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfFatalSlamSpeed (asm +171620)");
+        static_assert(offsetof(VehicleManager, mfMaxHeadToHeadAngle)     == 171628 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfMaxHeadToHeadAngle (asm +171628)");
+        static_assert(offsetof(VehicleManager, mfMinHeadToHeadIndividualSpeed) == 171636 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfMinHeadToHeadIndividualSpeed (asm +171636)");
+        static_assert(offsetof(VehicleManager, mfAngleForVerticleTakedown) == 171640 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfAngleForVerticleTakedown (asm +171640) -- last of the 44-float run");
+        static_assert(offsetof(VehicleManager, maeImpactType) == 171644 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
                       "171468 + 44*4 == 171644: the 44-float tuning run closes exactly onto maeImpactType with no gaps");
-        static_assert(offsetof(VehicleManager, mauImpactScore)  == 171676 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mauImpactScore (asm base 171676)");
-        static_assert(offsetof(VehicleManager, mafNoImpactTimeSeconds)    == 171684 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mafNoImpactTimeSeconds (asm base 171684) -- was mis-typed s32[8]");
-        static_assert(offsetof(VehicleManager, maiPhysicsSlamIndex) == 171716 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "maiPhysicsSlamIndex (DWARF :926)");
-        static_assert(offsetof(VehicleManager, mPlayerWonImpact) == 171736 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mPlayerWonImpact (asm +171736; DWARF :934)");
+        static_assert(offsetof(VehicleManager, mauImpactScore)  == 171676 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mauImpactScore (asm base 171676)");
+        static_assert(offsetof(VehicleManager, mafNoImpactTimeSeconds)    == 171684 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mafNoImpactTimeSeconds (asm base 171684) -- was mis-typed s32[8]");
+        static_assert(offsetof(VehicleManager, maiPhysicsSlamIndex) == 171716 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "maiPhysicsSlamIndex (DWARF :926)");
+        static_assert(offsetof(VehicleManager, mPlayerWonImpact) == 171736 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mPlayerWonImpact (asm +171736; DWARF :934)");
         // The two seats the committed header modelled as scalar grind thresholds are element 7 of
         // these two per-car arrays -- 171840 + 7*4 == 171868 and 171872 + 7*4 == 171900.
-        static_assert(offsetof(VehicleManager, mafVulnerableTimeSeconds) == 171744 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mafVulnerableTimeSeconds (DWARF :937)");
-        static_assert(offsetof(VehicleManager, mafPlayerGrindingOtherDurationSeconds) == 171840 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER,
+        static_assert(offsetof(VehicleManager, mafVulnerableTimeSeconds) == 171744 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mafVulnerableTimeSeconds (DWARF :937)");
+        static_assert(offsetof(VehicleManager, mafPlayerGrindingOtherDurationSeconds) == 171840 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
                       "mafPlayerGrindingOtherDurationSeconds base; [7] == the old mfGrindingThresholdA seat 171868");
-        static_assert(offsetof(VehicleManager, mafOtherGrindingPlayerDurationSeconds) == 171872 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER,
+        static_assert(offsetof(VehicleManager, mafOtherGrindingPlayerDurationSeconds) == 171872 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
                       "mafOtherGrindingPlayerDurationSeconds base; [7] == the old mfGrindingThresholdB seat 171900");
-        static_assert(offsetof(VehicleManager, mabRubbingThisUpdate) == 171952 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mabRubbingThisUpdate (DWARF :951)");
-        static_assert(offsetof(VehicleManager, mPlayerAiDriver)          == 171968 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mPlayerAiDriver (asm VehicleDriver::Construct(this + 171968))");
-        static_assert(offsetof(VehicleManager, mbPlayerAiDriverValid)    == 172192 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mbPlayerAiDriverValid (DWARF :954)");
-        static_assert(offsetof(VehicleManager, mfSteeringUpdateRemainder) == 172200 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfSteeringUpdateRemainder (DWARF :956)");
-        static_assert(offsetof(VehicleManager, mePlayerActiveRaceCarIndex) == 172204 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mePlayerActiveRaceCarIndex (DWARF/asm +172204)");
-        static_assert(offsetof(VehicleManager, mfCrashingAICollisionCrashThresholdMPH) == 172208 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfCrashingAICollisionCrashThresholdMPH (asm +172208)");
-        static_assert(offsetof(VehicleManager, mfVerticalTakedownAngleDeg) == 172228 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfVerticalTakedownAngleDeg (asm +172228; last of the six-float run)");
-        static_assert(offsetof(VehicleManager, mCameraMatrix)            == 172240 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mCameraMatrix (asm addi r11,r11,-0x5F30; 4 x stvx128)");
+        static_assert(offsetof(VehicleManager, mabRubbingThisUpdate) == 171952 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mabRubbingThisUpdate (DWARF :951)");
+        static_assert(offsetof(VehicleManager, mPlayerAiDriver)          == 171968 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mPlayerAiDriver (asm VehicleDriver::Construct(this + 171968))");
+        static_assert(offsetof(VehicleManager, mbPlayerAiDriverValid)    == 172192 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mbPlayerAiDriverValid (DWARF :954)");
+        static_assert(offsetof(VehicleManager, mfSteeringUpdateRemainder) == 172200 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfSteeringUpdateRemainder (DWARF :956)");
+        static_assert(offsetof(VehicleManager, mePlayerActiveRaceCarIndex) == 172204 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mePlayerActiveRaceCarIndex (DWARF/asm +172204)");
+        static_assert(offsetof(VehicleManager, mfCrashingAICollisionCrashThresholdMPH) == 172208 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfCrashingAICollisionCrashThresholdMPH (asm +172208)");
+        static_assert(offsetof(VehicleManager, mfVerticalTakedownAngleDeg) == 172228 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfVerticalTakedownAngleDeg (asm +172228; last of the six-float run)");
+        static_assert(offsetof(VehicleManager, mCameraMatrix)            == 172240 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mCameraMatrix (asm addi r11,r11,-0x5F30; 4 x stvx128)");
         static_assert(offsetof(VehicleManager, mCameraMatrix) % 16 == 0, "Matrix44Affine must land 16-aligned with no compiler-inserted padding");
-        static_assert(offsetof(VehicleManager, mbImpactTime)            == 172304 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mbImpactTime (asm +172304)");
-        static_assert(offsetof(VehicleManager, mbStopPlayerCrashing)    == 172306 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mbStopPlayerCrashing (asm +172306)");
-        static_assert(offsetof(VehicleManager, mbStopAICrashing) == 172307 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mbStopAICrashing (asm +172307)");
-        static_assert(offsetof(VehicleManager, DEBUG_mbHornTakedownEnabled)    == 172311 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "DEBUG_mbHornTakedownEnabled (asm +172311)");
-        static_assert(offsetof(VehicleManager, mbTrafficCheckingAllowed) == 172313 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mbTrafficCheckingAllowed (asm +172313; the one bool Construct seeds TRUE)");
-        static_assert(offsetof(VehicleManager, mbIsOnlineGameMode) == 172315 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mbIsOnlineGameMode (asm +172315)");
-        static_assert(offsetof(VehicleManager, mbPlayerCarInJunkYard) == 172319 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mbPlayerCarInJunkYard (asm +172319)");
-        static_assert(offsetof(VehicleManager, mfPlayerStatStrength)  == 172320 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfPlayerStatStrength (asm +172320; stfsx => f32)");
-        static_assert(offsetof(VehicleManager, miCarSpeed)            == 172328 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "miCarSpeed (asm +172328; stwx => s32)");
-        static_assert(offsetof(VehicleManager, meCarType)             == 172344 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "meCarType (asm +172344; stwx, seeded 3)");
-        static_assert(offsetof(VehicleManager, miPlayerBoost)         == 172360 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "miPlayerBoost (DWARF :1007)");
-        static_assert(offsetof(VehicleManager, meCurrentGameModeType) == 172380 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "meCurrentGameModeType (asm +172380; seeded -1)");
-        static_assert(offsetof(VehicleManager, mfCarStatStrengthSlamMax) == 172384 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfCarStatStrengthSlamMax (asm +172384)");
-        static_assert(offsetof(VehicleManager, mfCarrStatStrengthBeingShuntedMin) == 172412 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfCarrStatStrengthBeingShuntedMin (asm +172412; last of the eight)");
-        static_assert(offsetof(VehicleManager, muCachedCarASlot)      == 172416 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "muCachedCarASlot (asm +172416)");
-        static_assert(offsetof(VehicleManager, mbCachedCarCarPredictionResult) == 172424 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mbCachedCarCarPredictionResult (asm +172424)");
-        static_assert(offsetof(VehicleManager, mCachedCarCarPredictionNormal) == 172432 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mCachedCarCarPredictionNormal (asm stvx128 v0,r31,r9 with r9 == 172432)");
+        static_assert(offsetof(VehicleManager, mbImpactTime)            == 172304 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mbImpactTime (asm +172304)");
+        static_assert(offsetof(VehicleManager, mbStopPlayerCrashing)    == 172306 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mbStopPlayerCrashing (asm +172306)");
+        static_assert(offsetof(VehicleManager, mbStopAICrashing) == 172307 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mbStopAICrashing (asm +172307)");
+        static_assert(offsetof(VehicleManager, DEBUG_mbHornTakedownEnabled)    == 172311 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "DEBUG_mbHornTakedownEnabled (asm +172311)");
+        static_assert(offsetof(VehicleManager, mbTrafficCheckingAllowed) == 172313 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mbTrafficCheckingAllowed (asm +172313; the one bool Construct seeds TRUE)");
+        static_assert(offsetof(VehicleManager, mbIsOnlineGameMode) == 172315 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mbIsOnlineGameMode (asm +172315)");
+        static_assert(offsetof(VehicleManager, mbPlayerCarInJunkYard) == 172319 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mbPlayerCarInJunkYard (asm +172319)");
+        static_assert(offsetof(VehicleManager, mfPlayerStatStrength)  == 172320 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfPlayerStatStrength (asm +172320; stfsx => f32)");
+        static_assert(offsetof(VehicleManager, miCarSpeed)            == 172328 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "miCarSpeed (asm +172328; stwx => s32)");
+        static_assert(offsetof(VehicleManager, meCarType)             == 172344 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "meCarType (asm +172344; stwx, seeded 3)");
+        static_assert(offsetof(VehicleManager, miPlayerBoost)         == 172360 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "miPlayerBoost (DWARF :1007)");
+        static_assert(offsetof(VehicleManager, meCurrentGameModeType) == 172380 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "meCurrentGameModeType (asm +172380; seeded -1)");
+        static_assert(offsetof(VehicleManager, mfCarStatStrengthSlamMax) == 172384 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfCarStatStrengthSlamMax (asm +172384)");
+        static_assert(offsetof(VehicleManager, mfCarrStatStrengthBeingShuntedMin) == 172412 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfCarrStatStrengthBeingShuntedMin (asm +172412; last of the eight)");
+        static_assert(offsetof(VehicleManager, muCachedCarASlot)      == 172416 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "muCachedCarASlot (asm +172416)");
+        static_assert(offsetof(VehicleManager, mbCachedCarCarPredictionResult) == 172424 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mbCachedCarCarPredictionResult (asm +172424)");
+        static_assert(offsetof(VehicleManager, mCachedCarCarPredictionNormal) == 172432 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mCachedCarCarPredictionNormal (asm stvx128 v0,r31,r9 with r9 == 172432)");
         static_assert(offsetof(VehicleManager, mCachedCarCarPredictionNormal) % 16 == 0, "the prediction normal is loaded/stored with lvx128/stvx128 -- it must be 16-aligned");
-        static_assert(offsetof(VehicleManager, meStationaryPlayerWheelAngle) == 172448 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "meStationaryPlayerWheelAngle (asm +172448; seeded 2)");
-        static_assert(offsetof(VehicleManager, mbCrashRaceCarWhenFatal) == 172452 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mbCrashRaceCarWhenFatal (asm +172452; seeded true)");
-        static_assert(offsetof(VehicleManager, meShowtimeBehaviour)   == 172456 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "meShowtimeBehaviour (asm +172456; seeded 2)");
-        static_assert(offsetof(VehicleManager, miRaceCarWorldContactValidationPM) == 172460 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER,
+        static_assert(offsetof(VehicleManager, meStationaryPlayerWheelAngle) == 172448 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "meStationaryPlayerWheelAngle (asm +172448; seeded 2)");
+        static_assert(offsetof(VehicleManager, mbCrashRaceCarWhenFatal) == 172452 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mbCrashRaceCarWhenFatal (asm +172452; seeded true)");
+        static_assert(offsetof(VehicleManager, meShowtimeBehaviour)   == 172456 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "meShowtimeBehaviour (asm +172456; seeded 2)");
+        static_assert(offsetof(VehicleManager, miRaceCarWorldContactValidationPM) == 172460 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
                       "miRaceCarWorldContactValidationPM (asm +172460; named by the console's own assert at BrnVehicleManager.cpp:778)");
-        static_assert(offsetof(VehicleManager, miContactStreamCounterA) == 172580 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "contact-stream counter A (asm +172580)");
-        static_assert(offsetof(VehicleManager, miContactStreamCounterB) == 172584 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "contact-stream counter B (asm +172584)");
-        static_assert(offsetof(VehicleManager, mStuckInCollisionTestCacheSphere) == 172592 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mStuckInCollisionTestCacheSphere (asm stvx128 v127,r31,r11 with r11 == 172592)");
-        static_assert(offsetof(VehicleManager, mbPlayerCarStuckInCollision) == 172608 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER,
+        static_assert(offsetof(VehicleManager, miContactStreamCounterA) == 172580 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "contact-stream counter A (asm +172580)");
+        static_assert(offsetof(VehicleManager, miContactStreamCounterB) == 172584 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "contact-stream counter B (asm +172584)");
+        static_assert(offsetof(VehicleManager, mStuckInCollisionTestCacheSphere) == 172592 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mStuckInCollisionTestCacheSphere (asm stvx128 v127,r31,r11 with r11 == 172592)");
+        static_assert(offsetof(VehicleManager, mbPlayerCarStuckInCollision) == 172608 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
                       "172592 + 16 == 172608: the Sphere/bool pair (DWARF :1087/:1088) closes to the byte");
-        static_assert(offsetof(VehicleManager, muTakedownEventsThisFrame) == 172612 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "muTakedownEventsThisFrame (asm +172612)");
+        static_assert(offsetof(VehicleManager, muTakedownEventsThisFrame) == 172612 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "muTakedownEventsThisFrame (asm +172612)");
     }
 }
 }
