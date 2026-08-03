@@ -265,12 +265,43 @@ namespace Vehicle
         //       Only the console offsets are asm-proven; FLAG: IsConsideredAirborne and the
         //       Stunt* names are proposed-by-role. The stunt code MUST go through these (host
         //       vptr is 8 bytes -- raw console offsets would be wrong). -----
-        f32     GetDriftActiveTime() const;        // +0x109C: drift-active timer (>0 while drifting)
-        f32     GetDriftLateralSpeed() const;      // +0x1010 lane 2: drift lateral (Z) speed
-        bool    IsHandbrakeHeld() const;           // +0x135B: handbrake-held byte
-        bool    IsConsideredAirborne() const;      // +0x1350: physics "should be airborne" gate
-        Vector3 GetStuntReferenceVelocity() const; // +0x6C0: stunt reference velocity register
-        Vector3 GetStuntWorldPosition() const;     // +0x1340: world position for tailgating tests
+        //
+        // ⛔⛔ DO NOT BODY THESE OFF THE ROLE NAMES. Measured 2026-08-03 (task #110): these seven
+        // are the ONLY thing keeping BrnStuntOffencesManager.cpp out of the build (7 of the 10
+        // LNK2019 a first mount produced), so the next wave will be tempted to knock them out as
+        // one-line member returns. FOUR of the seven have an offset whose committed meaning in the
+        // base classes CONTRADICTS the role in the comment -- the "address right, meaning wrong"
+        // class this tree keeps paying for. Each conflict is between two already-committed,
+        // separately asm-cited comments, so ONE of the two is wrong and neither wins by default:
+        //
+        //   +0x109C  GetDriftActiveTime   vs  VehiclePhysics.h:1447 -- mPreviousControls sits at
+        //            +0x1090 and is the WHOLE 0x48-byte BrnPlayerDriverControls, so +0x109C is
+        //            +0x0C INSIDE last frame's controls, not a free timer slot.
+        //   +0x1010  GetDriftLateralSpeed ("lane 2")  vs  VehiclePhysics.h:1095 + VehiclePhysics.cpp
+        //            :2099/:2462, which pin that register's lanes as .x=1/TimeToReachTargetDriftSlip,
+        //            .y=StartSlip, .z=TimeDrifting, .w=BrakeScale. Lane 2 is a TIME, not a speed.
+        //   +0x135B  IsHandbrakeHeld      vs  VehiclePhysics.h:1183 -- mbAllWheelsHaveTraction,
+        //            pinned by `lbz r11,0x135B(r3)` and gated by VehiclePhysics_layout_check.cpp.
+        //   +0x1340  GetStuntWorldPosition vs VehiclePhysics.h:1197 -- mNormLinearVelocityMag, the
+        //            cached NORMALIZED LINEAR VELOCITY (xyz) + magnitude (.w), written by
+        //            UpdateLinearVelocityMagnitude and likewise gated by the layout check. A unit
+        //            vector is not a world position. (Note the sibling GetStuntForwardAxis reads
+        //            the SAME +0x1340 and calls it a normalized velocity -- they cannot both hold.)
+        //
+        // The remaining three are consistent with the committed map: IsConsideredAirborne/+0x1350
+        // == mbHasAir; GetStuntForwardAxis/+0x1340 == the normalized velocity; and
+        // GetStuntReferenceVelocity/+0x6C0 == SimpleVehiclePhysics::mfSpeedMPH -- a SPLATTED SPEED,
+        // which is why every call site reads only `.x >= 30.0f`; the "Velocity" in its name is
+        // misleading but its use is not.
+        // ⇒ Re-derive all four from the StuntOffencesManager asm that produced the offsets before
+        // writing a single body. A wrong body here compiles, links, and silently feeds the whole
+        // stunt/takedown scoring system the wrong field.
+        f32     GetDriftActiveTime() const;        // +0x109C  ⛔ conflicts with mPreviousControls
+        f32     GetDriftLateralSpeed() const;      // +0x1010 lane 2  ⛔ conflicts with TimeDrifting
+        bool    IsHandbrakeHeld() const;           // +0x135B  ⛔ conflicts with mbAllWheelsHaveTraction
+        bool    IsConsideredAirborne() const;      // +0x1350: mbHasAir (consistent)
+        Vector3 GetStuntReferenceVelocity() const; // +0x6C0: mfSpeedMPH, splatted speed (consistent)
+        Vector3 GetStuntWorldPosition() const;     // +0x1340  ⛔ conflicts with mNormLinearVelocityMag
         Vector3 GetStuntForwardAxis() const;       // normalized +0x1340 velocity = cone forward axis
 
     public:

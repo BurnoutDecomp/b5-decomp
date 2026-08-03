@@ -1,6 +1,8 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"             // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"     // CgsContainers::BitArray<N>
+// ⭐ 2026-08-03 (task #110): the REAL ArticulatedJoint, not a local opaque re-declaration.
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnArticulatedJoint.h"
 
 // BrnPhysics::Vehicle::ArticulatedJointPool -- the fixed pool of 10 articulation joints plus its
 // two use/broken bit-masks and the four swing/twist limit parameters. Member names/order/types
@@ -11,16 +13,40 @@
 // (the DWARF member layout lands the two BitArrays at +800/+808 and the four floats at
 // +816/+820/+824/+828), and GetJoint / IsJointInUse are bodied here against the named members.
 
+// ==================================================================================================
+// ⭐⭐ ODR FORK RETIRED 2026-08-03 (task #110). This TU used to declare, at namespace scope in
+// BrnPhysics::Vehicle, its own
+//         class ArticulatedJoint { public: int Construct(); private: u8 mPad0[80]; };
+// while the real class lives in BrnArticulatedJoint.h -- whose own banner asked for exactly this
+// unification ("the two should be unified onto this header by the maintainer").
+//
+// ⚠️⚠️ IT WAS NOT MERELY UNTIDY, IT WAS UNSATISFIABLE. The fork declared `int Construct()`; the
+// DWARF (BrnArticulatedJoint.h:100) declares `void Construct()`. MSVC folds the return type into
+// the mangled name, so the fork's call site demanded
+//     ?Construct@ArticulatedJoint@Vehicle@BrnPhysics@@QEAAHXZ
+// while any faithful body written against the real header defines
+//     ?Construct@ArticulatedJoint@Vehicle@BrnPhysics@@QEAAXXZ
+// -- two symbols, and no TU could ever have defined the one this file asked for. That is the
+// standing "shadowing redeclaration" failure: invisible to every per-TU compile gate, visible only
+// to a LINK (measured here as LNK2019 the moment this TU was first mounted).
+//
+// The de-fork is layout-neutral: the real ArticulatedJoint is Matrix44Affine(64) +
+// ArticulatedJointId(8) = 72, and the type is alignas(16) via Matrix44Affine, so sizeof == 80 --
+// exactly the stride the console's `slwi/add/slwi` index math uses (i*80) and exactly the size the
+// retired opaque asserted. The static_assert below is the gate that keeps it that way.
+// ==================================================================================================
 namespace BrnPhysics::Vehicle
 {
-class ArticulatedJoint
-{
-public:
-    int Construct();
-
-private:
-    u8 mPad0[80];   // sizeof-compatible with the real BrnArticulatedJoint.h layout (0x48 -> 0x50)
-};
+// ⚠️ THIS IS THE WEAK HALF OF THE GATE and is kept only because the STRIDE is this TU's concern.
+// A sizeof assert cannot catch a member being displaced: ArticulatedJoint is 64 + 8 == 72 with
+// alignas(16), so eight bytes of tail padding absorb any small addition and 80 never moves
+// (tamper-verified 2026-08-03 -- adding a u32 did not fail this line). The line that actually
+// pins the layout is ArticulatedJoint::_AssertLayout() in BrnArticulatedJoint.cpp, whose
+// offsetof(mJointId) == 0x40 does fail on the same tamper. Do not treat this one as coverage.
+static_assert(sizeof(ArticulatedJoint) == 80,
+              "ArticulatedJointPool::Construct @0x82600938 indexes maJoints with i*80 "
+              "(slwi r11,r31,2 ; add r11,r31,r11 ; slwi r11,r11,4), and the embedded pool must "
+              "stay 832 bytes for BrnPhysicalTrafficManager.h's +103616..+104448 span");
 
 class ArticulatedJointPool
 {
@@ -51,15 +77,22 @@ int ArticulatedJointPool::Construct()
     mUsedJoints.UnSetAll();
     mJointsBrokenThisFrame.UnSetAll();
 
-    int liResult = 0;
     for (ArticulatedJoint& lJoint : maJoints)
-        liResult = lJoint.Construct();
+        lJoint.Construct();
 
     mfSwingAngleDegrees       = 30.0f;   // @816
     mfMaxSwingVelocityDegrees = 10.0f;   // @820
     mfTwistAngleDegrees       = 15.0f;   // @824
     mfMaxTwistVelocityDegrees = 10.0f;   // @828 (same f0 reg/value reused from @820 in the asm)
-    return liResult;
+
+    // ⚠️ FLAG (task #110): THE CONSOLE RETURNS NOTHING. @0x82600938 ends `blr` with r3 still
+    // holding whatever the last ArticulatedJoint::Construct left there (its own `this`), which is
+    // why Hex-Rays types both functions `int`. The `int` here is NOT recovered semantics -- it is
+    // the shape BrnPhysicalTrafficManager.h's ArticulatedJointPool slice was committed against
+    // (that header says so at :376-379), and MSVC encodes the return type in the mangled name, so
+    // narrowing it to `void` is part of retiring THAT fork, not this one. This value is read by
+    // nobody: the sole caller, PhysicalTrafficManager::Construct @0x82636CA8, discards it.
+    return 0;
 }
 
 // GetJoint @ 0x825C2B40 : bounds-/in-use-asserted accessor; returns &maJoints[liJointIndex]
