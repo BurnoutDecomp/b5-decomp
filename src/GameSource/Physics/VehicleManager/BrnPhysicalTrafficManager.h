@@ -45,6 +45,25 @@
 //     It also disagrees on the CLASS-KEY (`struct` vs `class`), which MSVC folds into the mangled
 //     name of anything templated on it.
 //
+//     ⛔⛔ AND IT IS NOW THE **LAST AND ONLY** THING BETWEEN THIS TU AND THE BUILD -- MEASURED
+//     2026-08-03 by mounting BrnPhysicalTrafficManager.cpp and reading the link, not inferred:
+//         UNRESOLVED COUNT = 1
+//         ?SendCreateRemoveJointEvents@ArticulatedJointPool@Vehicle@BrnPhysics@@QEAAXPEBXPEAU...
+//           referenced in PhysicalTrafficManager::BridgeArticulatedJointRequestsToSim
+//     (The previous wave's M1 measurement listed THREE for this TU: TrafficPhysics::Construct,
+//     ArticulatedJointPool::Construct and this one. TrafficPhysics::Construct is bodied as of this
+//     wave; see below for why the second one "resolved".)
+//
+//     ⚠️⚠️ AND THAT SECOND ONE RESOLVING IS THE HAZARD, NOT THE GOOD NEWS. `ArticulatedJointPool::
+//     Construct` linked -- against the REAL class's body inside BrnArticulatedJointPool.cpp -- even
+//     though the call site here is the 832-byte SLICE below. That is the identical silent-link trap
+//     the TrafficPhysics fork carried until this wave: the mangled name carries neither the
+//     class-key nor the bases, so the two definitions are one symbol. The real class widens four
+//     pointers 4 -> 8 on the host, so a body written against it and called through this slice writes
+//     past the slice's end. ⛔ DO NOT MOUNT THIS TU BY JUST BODYING SendCreateRemoveJointEvents.
+//     De-fork ArticulatedJointPool FIRST -- which means giving it a real header (it is currently
+//     declared inside a .cpp), exactly as TrafficPhysics.h was given one -- and only then mount.
+//
 //     ⚠️ THE OLD NOTE'S REASON FOR LEAVING THE TrafficPhysics FORK ALONE WAS WRONG, TWICE OVER. It
 //     said de-forking it "means pulling VehiclePhysics.h in here, which is its own wave" -- pulling
 //     VehiclePhysics.h in cost ONE include and broke nothing; and it said the real class is LARGER
