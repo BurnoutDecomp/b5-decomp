@@ -26,16 +26,20 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h" // VolumeInstanceId { u64 muId }
 #include "GameShared/GameClasses/SceneManager/CgsVolumeId.h"         // VolumeId { u64 mId } (PropVolumeID home)
+// BrnWorld::EEntityTypeID (E_ENTITYTYPE_PROP == 3) -- the committed home.
+// ⚠️ DE-FORKED 2026-08-03 (task #123). This header used to declare its own one-value
+// `enum BrnWorld::EEntityType { E_ENTITYTYPE_PROP = 3 };`, described in-comment as
+// "minimal, non-forking". It WAS a fork: BrnEntityTypes.h already owns the DWARF-attested
+// `BrnWorld::EEntityTypeID` with the same enumerator, and unscoped-enum enumerators land in
+// the enclosing namespace -- so any TU that saw both headers failed with
+// C2365 "'BrnWorld::E_ENTITYTYPE_PROP': redefinition; previous definition was 'enumerator'".
+// Nothing had tripped it only because no TU had yet embedded a ContactSpyData (-> BrnContactSpyQueue.h
+// -> BrnEntityTypes.h) alongside a PropManager (-> here); PhysicsModule is the first, so it
+// surfaced here. BrnEntityTypes.h has no #includes at all, so this costs no cascade and no cycle.
+#include "GameSource/World/BrnEntityTypes.h"
 
 namespace BrnWorld
 {
-    // Prop entity owner tag. The X360 asm only ever compares the owner byte against
-    // the literal 3, so only the prop value is needed here (minimal, non-forking).
-    enum EEntityType
-    {
-        E_ENTITYTYPE_PROP = 3
-    };
-
     struct PropEntityID
     {
         // --- packed-field geometry (X360-authoritative; see header banner) ---
