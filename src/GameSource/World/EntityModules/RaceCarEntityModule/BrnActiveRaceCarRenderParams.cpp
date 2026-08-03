@@ -97,13 +97,31 @@ Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelScaleMatrix(u32 luWheel)
     return mWheelScaleTransforms[luWheel];
 }
 
-// X360 0x822CD170: the scale matrix arrived split across the int arg registers on
-// console; the asm broadcasts each column and stores a full Matrix44Affine into slot
-// (luWheel+39)<<6. In clean C++ this is a plain Matrix44Affine copy-assign.
-void ActiveRaceCar::RenderParams::SetWheelScale(u32 luWheel, const Matrix44Affine& lrScale)
+// X360 0x822CD170.
+//
+// ⛔ SIGNATURE CORRECTED (wheel-render wave 2026-08-03). This used to be declared as
+// `SetWheelScale(u32, const Matrix44Affine&)` with the note "the scale matrix arrived split
+// across the int arg registers on console". It did not: the asm's ONLY value argument is a
+// single VECTOR register, `stvx128 v1, r0, r11` at 0x822CD194 spilling v1 and nothing else,
+// and the caller (ActiveRaceCar::OnResourcesLoaded @0x822EB2FC) loads it with ONE
+// `lvx128 v1, r30, r29` off the deformation spec -- WheelSpec::mScale, a Vector3. The
+// Hex-Rays prototype's fifteen int arguments are the usual noise.
+//
+// The body then BUILDS the matrix: it fills a 4x4 on the stack with flt_82001C98 (1.0f) on
+// the diagonal and flt_82001CC0 (0.0f) everywhere else, splats the argument's x/y/z
+// (`vspltw v13/v12/v11, v1, 0/1/2`) and vperms each one into its own diagonal slot. That is
+// diag(scale.x, scale.y, scale.z, 1) -- so the console stores a SCALE matrix built from a
+// scale VECTOR, and the old declaration would have made every caller hand it 64 bytes of
+// something else.
+void ActiveRaceCar::RenderParams::SetWheelScale(u32 luWheel, const Vector3& lrScale)
 {
     CGS_ASSERT(luWheel < 6, "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
-    mWheelScaleTransforms[luWheel] = lrScale;
+
+    Matrix44Affine& lrDest = mWheelScaleTransforms[luWheel];
+    lrDest.xAxis.x = lrScale.x; lrDest.xAxis.y = 0.0f;      lrDest.xAxis.z = 0.0f;      lrDest.xAxis.w = 0.0f;
+    lrDest.yAxis.x = 0.0f;      lrDest.yAxis.y = lrScale.y; lrDest.yAxis.z = 0.0f;      lrDest.yAxis.w = 0.0f;
+    lrDest.zAxis.x = 0.0f;      lrDest.zAxis.y = 0.0f;      lrDest.zAxis.z = lrScale.z; lrDest.zAxis.w = 0.0f;
+    lrDest.wAxis.x = 0.0f;      lrDest.wAxis.y = 0.0f;      lrDest.wAxis.z = 0.0f;      lrDest.wAxis.w = 1.0f;
 }
 
 // ----------------------------------------------------------------------------

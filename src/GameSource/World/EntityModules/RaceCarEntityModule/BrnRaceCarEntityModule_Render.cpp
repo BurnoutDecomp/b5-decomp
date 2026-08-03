@@ -35,19 +35,23 @@
 //    (BrnBlobbyShadowManager::BrnBlobbyShadowBuffer::AddShadow), ShadowMap::CalcOptimisedLod
 //    and RaceCarEntityModule::SubmitCoronasForRaceCar -- none of which exist in the tree.
 //    It is a later wave, not a stub: no empty branch is written for it here.
-// 2. RenderRaceCar's WHEEL block (`if (mbRenderWheels && lbRenderAttachedGeometry)`).
-//    It gathers per-wheel instance matrices and submits ONE instanced draw through
-//    CgsGraphics::Model::SetupShaderConstantsForInstancing, which does not exist in the
-//    tree, and whose draw leaf DrawInstancedIndexedPrimitive_Custom is an explicit
-//    CGS_ASSERT(false) trap (CgsDispatcherCommands.cpp:1045 / :1177). A bodyshell-only
-//    car is the honest state of this build.
-// 3. RenderRaceCar's CRACKED-GLASS loop and its shader constants 24/25. The glass loop
+// 2. RenderRaceCar's CRACKED-GLASS loop and its shader constant 24. The glass loop
 //    needs the spec's shattered-glass part table plus two .rodata constant vectors the
 //    function-only IDA export does not carry; constant 24 (the brake/reverse light
 //    emission vector) additionally needs three module debug floats at +100232..+100240
 //    that are not named in this header's layout yet.
-// 4. The four IsNormal3x3 / IsOrthogonal3x3 dev-assert blocks (~73% of the function's
-//    2008 instructions is assert scaffolding).
+// 3. The IsNormal3x3 / IsOrthogonal3x3 / IsValid dev-assert blocks (~73% of the
+//    function's 2008 instructions is assert scaffolding), including the wheel loop's
+//    own rw::math::IsValid(lWheelMatrix).
+//
+// ---- THE WHEEL BLOCK IS NOW HERE, AND IT IS A FAITHFUL DECOMPILE ------------
+// It submits ONE DrawRenderable command with instanceCount == the number of wheels,
+// exactly as the console does. The PC's D3D9 back end cannot honour that in one draw
+// (the fallback shader takes a single WVP per draw and the instanced draw leaf is a
+// trap), so the N-instance command is expanded into N single-instance mesh commands in
+// CgsGraphics::DrawRenderable::Interpret -- the same PC bring-up shim that already
+// carries the per-object WVP there. The deviation belongs in that render back end, NOT
+// in this function.
 // ============================================================================
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
@@ -60,6 +64,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"                     // BrnWorld::ShadowMap
 #include "SharedClasses/World/BrnVehicleGraphicsSpec.h"                  // BrnVehicle::GraphicsSpec
+#include "SharedClasses/World/BrnWheelGraphicsSpec.h"                    // BrnWheel::GraphicsSpec
 #include "rw/math/vpu/matrix44affine_operation.h"                        // rw::math::vpu::Mult
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint
@@ -69,6 +74,36 @@
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable; bodied
 // by the CgsShaderConstants TU). Mirrors the committed extern in the sibling TUs.
 namespace CgsGraphics { extern ::ShaderConstantTable mShaderConstantTable; }
+
+// ============================================================================
+// The two file-scope globals the wheel block reads. Both are console globals, and
+// both were recovered from the image rather than guessed.
+// ============================================================================
+
+// dword_82CDB4A0. NAMED, not inferred: RaceCarEntityModuleDebugComponent::OnActivate
+// @0x822C2538 registers it as the debug variable "Graphics/Vehicles.../Wheels to
+// Render" with range [0, 4]. The shipped image holds 4. RenderRaceCar re-reads it on
+// every loop iteration (a debug slider can move under the loop) and
+// TrafficEntityModule::RenderTrafficCar @0x82728B08 shares it, which is why it is a
+// plain global here and not a file-static.
+s32 giWheelsToRender = 4;
+
+// unk_82FAD6F0. The wheel-spin blur reference: constant 25's lane x is
+// angularVelocity / gvWheelBlurConstants.x clamped to 1, and the same value picks the
+// blurred-vs-static wheel technique.
+// ⚠️ MEASURED: all 16 bytes read ZERO in the shipped image and a whole-export scan finds
+// exactly ONE reference -- RenderRaceCar's own read. So on the console the divide is by
+// zero, the quotient is +inf for any spinning wheel, and the vminfp clamp pins the
+// constant at 1.0f; a stationary wheel gives 0/0. The PC keeps the console arithmetic
+// (x87/SSE produce the same inf/NaN without trapping, and the fallback shader does not
+// sample constant 25) rather than inventing a divisor. Named, zero-initialised, and
+// left for the day a writer turns up -- the export set is known to have holes.
+Vector4 gvWheelBlurConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+// The console's wheel matrix / pointer stack arrays are four entries long
+// (`__vector_constructor_iterator(v390, 64, 4, ...)`), which is also the debug
+// variable's upper bound.
+static const s32 KU_WHEELS_TO_RENDER_MAX = 4;
 
 namespace BrnWorld
 {
@@ -103,7 +138,6 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     CGS_ASSERT( lpRenderParams != 0, "lpRenderParams" );
     CGS_ASSERT( lpDispatchFrame != 0, "lpDispatchFrame" );
     CGS_ASSERT( lpShadowMap != 0, "lpShadowMap" );
-    (void)lpWheelGraphics;   // consumed only by the (unreconstructed) wheel block
 
     // The X360 loads the four body-transform rows into v124/v126/v125/v117 straight from
     // r5 (the RenderParams) before anything else -- the matrix at offset 0 IS
@@ -310,9 +344,229 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // NOT reconstructed (see the banner), in console order after the body-part loop:
     //   * `if (lbRenderAttachedGeometry)`  -- the cracked-glass loop, which walks the
     //     spec's shattered-glass part table and calls BrnWorld::SetGlassFractureConstants
-    //     per pane before its own AddToBin/Submit;
-    //   * `if (mbRenderWheels && lbRenderAttachedGeometry)` -- the wheel block, one
-    //     instanced draw through Model::SetupShaderConstantsForInstancing.
+    //     per pane before its own AddToBin/Submit.
+
+    // ---- the WHEEL block  (@0x822D0F60..0x822D15BC) -------------------------
+    // `if (*(this + 99148) && a42)` -- the module's wheel switch and the caller's
+    // "render attached geometry" bool. One INSTANCED draw for all four wheels: the
+    // per-wheel world matrices go up as shader constant 6 and the per-wheel spin
+    // constants as 7, then a single DrawRenderable command carries the instance count.
+
+    // [DIAG wheel wave] The outcome code for the block below, reported once per DISTINCT
+    // value at the end. Latched on the VALUE, never on a "printed once" bool: this block
+    // has five different ways to draw nothing and a "did it run" flag could only ever
+    // report the first car's answer.
+    //   0 no wheel resource / block skipped   1 spec has no wheel model
+    //   2 no LOD state on the model           3 no wheel reported as existing
+    //   4..8 SUBMITTED with 1..5 instances
+    s32 liWheelDiagCode = 0;
+
+    if ( mbRenderWheels && lbRenderAttachedGeometry && lpWheelGraphics->HasMemoryResource() )
+    {
+        // [FLAG PC boot gate] `HasMemoryResource()` is NOT console. The console reaches
+        // this block only for a car whose whole resource set is in (its own
+        // RaceCarStreamer::GetWheelGraphicsResource asserts IsRaceCarLoaded() before
+        // handing the pointer over), so it dereferences unguarded. This build renders
+        // cars with PARTIAL sets through the BringUp getters -- see GenerateDispatchLists
+        // -- and a car really can go E_STATE_ACTIVE before its wheel graphics reply
+        // lands (measured: car 2 is placed on track and drawn several frames before
+        // "STRM: Wheel graphics loaded: 2"). Without the gate that car fires
+        // ResourcePtr::operator->'s "Can not instance resource pointer" assert on every
+        // frame of the render walk. DELETE with the BringUp getters.
+        const BrnWheel::GraphicsSpec* lpWheelGraphicsSpec = lpWheelGraphics->operator->();
+
+        // `v230 = *(v229 + 4)` -- the spec's wheel model (its calliper twin at +8 is
+        // not drawn by this block).
+        const CgsGraphics::Model* lpWheelModel = lpWheelGraphicsSpec->GetWheelModel();
+
+        // The wheels never draw at LOD 0: `if (v231 <= 1) v231 = 1`.
+        CgsGraphics::Model::State leWheelLOD = lpRenderParams->GetLOD();
+        if ( leWheelLOD <= CgsGraphics::Model::E_STATE_LOD_1 )
+        {
+            leWheelLOD = CgsGraphics::Model::E_STATE_LOD_1;
+        }
+
+        liWheelDiagCode = 1;
+
+        if ( lpWheelModel != 0 )
+        {
+            // Fall back to LOD 1 when the requested state is absent, then bail if even
+            // that is missing (the console calls DoesStateExist twice, in that order).
+            if ( !lpWheelModel->DoesStateExist( leWheelLOD ) )
+            {
+                leWheelLOD = CgsGraphics::Model::E_STATE_LOD_1;
+            }
+
+            liWheelDiagCode = 2;
+
+            if ( lpWheelModel->DoesStateExist( leWheelLOD ) )
+            {
+                liWheelDiagCode = 3;
+                // The three console stack arrays. maWheelMatrices / mapWheelMatrices are
+                // four entries because the loop bound tops out at four; the CONSTANTS
+                // array is sized to what the callee reads (see the note on
+                // KU_MAX_INSTANCES_PER_GROUP below).
+                Matrix44Affine        laWheelMatrices[ KU_WHEELS_TO_RENDER_MAX ];
+                const Matrix44Affine* lapWheelMatrices[ KU_WHEELS_TO_RENDER_MAX ] = { 0, 0, 0, 0 };
+
+                // ⚠️ The console declares this array FOUR entries long
+                // (`__vector_constructor_iterator(v389, 16, 4, ...)`) but
+                // SetupShaderConstantsForInstancing reads FIVE
+                // (KU_MAX_INSTANCES_PER_GROUP) -- a 16-byte read off the end of the
+                // caller's stack slot. Sized to the callee's contract and zeroed, which
+                // changes no value the console produces (the loop can never fill a fifth
+                // entry) and removes the overread.
+                Vector4 laWheelConstants[ CgsGraphics::Model::KU_MAX_INSTANCES_PER_GROUP ] =
+                    { { 0.f, 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f, 0.f },
+                      { 0.f, 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f, 0.f } };
+
+                s32 liInstanceCount = 0;
+
+                // Technique. Seeded 0 (the spinning/blurred variant) OUTSIDE the loop and
+                // only ever raised, so it is sticky across wheels: 1 as soon as any wheel
+                // is turning slower than the blur threshold, 2 for the shadow pass.
+                u8 lu8Technique = 0;
+
+                for ( s32 liWheel = 0; liWheel < giWheelsToRender; ++liWheel )
+                {
+                    if ( !lpRenderParams->GetWheelExists( static_cast< u32 >( liWheel ) ) )
+                    {
+                        continue;
+                    }
+
+                    // ⚠️ GetWheelTransform is ALREADY a world transform -- unlike the body
+                    // parts, the body matrix is NOT re-applied here. The only composition is
+                    // the per-wheel scale matrix on the LEFT:
+                    //   row i = S[i].x*T[0] + S[i].y*T[1] + S[i].z*T[2] (+ T[3] on row 3)
+                    // (the vmulfp128/vmaddfp chain @0x822D10D0..0x822D1134; `vmaddfp` prints
+                    // as vD,vA,vB,vC and computes vA*vC+vB, which is what makes this
+                    // Mult(scale, transform) and not the other order).
+                    const Matrix44Affine lWheelMatrix = rw::math::vpu::Mult(
+                        lpRenderParams->GetWheelScaleMatrix( static_cast< u32 >( liWheel ) ),
+                        lpRenderParams->GetWheelTransform( static_cast< u32 >( liWheel ) ) );
+
+                    // Shader constant 25, "g_wheelConstants": the wheel's spin blur factor
+                    // in lane x and nothing else. `vrlimi128 v0, v13, 8, 0` -- mask 8 is
+                    // lane X, and the vector it merges into (v123) is `vspltisw128 0`, so
+                    // yzw are ZERO. (The previous wave's decode had the lanes the other way
+                    // round; the mask bit settles it, and the fog block eight lines up uses
+                    // mask 1 == lane w for contrast.)
+                    const f32 lfSpin =
+                        lpRenderParams->GetWheelAngularVelocity( static_cast< u32 >( liWheel ) )
+                        / gvWheelBlurConstants.x;
+                    Vector4 lv4WheelConstants = { lfSpin, 0.0f, 0.0f, 0.0f };
+                    if ( lv4WheelConstants.x > 1.0f )   // vminfp128 against vcsxwfp(1) == 1.0f
+                    {
+                        lv4WheelConstants.x = 1.0f;
+                    }
+                    CgsGraphics::mShaderConstantTable.SetShaderConstantData( 25, lv4WheelConstants );
+
+                    // `vcmpgtfp. v0, v0, v13` + the CR6 "all lanes" bit: a wheel turning
+                    // slower than the threshold selects the non-blurred technique.
+                    if ( gvWheelBlurConstants.x >
+                         lpRenderParams->GetWheelAngularVelocity( static_cast< u32 >( liWheel ) ) )
+                    {
+                        lu8Technique = 1u;
+                    }
+                    if ( lbShadowPass )
+                    {
+                        lu8Technique = 2u;
+                    }
+
+                    // (The four rw::math::IsValid(lWheelMatrix) dev-assert blocks that follow
+                    // in the console are elided, exactly as the body-part loop's
+                    // IsNormal3x3/IsOrthogonal3x3 blocks are -- see the banner.)
+
+                    // Everything is appended at the COMPACTED index, not at liWheel: the
+                    // console advances r28/r26/v237 only when the wheel exists.
+                    laWheelMatrices[ liInstanceCount ]   = lWheelMatrix;
+                    laWheelConstants[ liInstanceCount ]  = lv4WheelConstants;
+                    lapWheelMatrices[ liInstanceCount ]  = &laWheelMatrices[ liInstanceCount ];
+                    ++liInstanceCount;
+                }
+
+                if ( liInstanceCount > 0 )
+                {
+                    liWheelDiagCode = 3 + liInstanceCount;
+
+                    // [FLAG PC data gap] The console's dev assert here is
+                    //   CGS_ASSERT(lpWheelModel->GetFlag(E_FLAG_MODEL_USES_INSTANCE_SHADER),
+                    //              "lpWheelModel->GetFlag(...)")
+                    // and on the ported WHE_51916650_GR wheel model it FAILS: the model's
+                    // mu8Flags (Model +0x11) reads 0, so bit 0 is clear. It is not a scrambled
+                    // header -- mu8NumStates (+0x12) and mu8NumRenderables (+0x10) in the same
+                    // word both read correctly (DoesStateExist and GetRenderable succeed on
+                    // this very model), which a byte-reversed word could not do.
+                    // It is a NON-GATING assert on the console (it only says "this model was
+                    // supposed to be authored with the instancing vertex shader") and it has no
+                    // effect on this build at all, because the PC path renders through the
+                    // fallback shader and never binds the instancing program. Kept as a
+                    // one-shot report carrying the MEASURED byte rather than a per-frame
+                    // assert storm -- 475 asserts in one run when it was left as-is.
+                    // RESTORE the assert once the wheel model's flags byte is understood.
+                    {
+                        static bool sbLoggedInstanceShaderFlag = false;
+                        if ( !sbLoggedInstanceShaderFlag
+                             && !lpWheelModel->GetFlag( CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER )
+                             && CgsDev::Log::gpDebugPrint != 0 )
+                        {
+                            sbLoggedInstanceShaderFlag = true;
+                            *CgsDev::Log::gpDebugPrint
+                                << "[racecar-wheels] wheel model does NOT carry"
+                                   " E_FLAG_MODEL_USES_INSTANCE_SHADER (console asserts here);"
+                                   " renderables " << lpWheelModel->GetNumRenderables()
+                                << " states " << lpWheelModel->GetNumLods()
+                                << " version " << lpWheelModel->GetVersionNumber()
+                                << " [FLAG PC data gap]\n";
+                        }
+                    }
+
+                    const CgsGraphics::Renderable* lpWheelRenderable =
+                        lpWheelModel->GetRenderable( leWheelLOD );
+
+                    CgsGraphics::DispatchList* lpWheelList = lpDispatchFrame->GetList( liObjectList );
+                    CGS_ASSERT( lpWheelList != 0, "lpDispatchList" );
+
+                    // Publish constants 6 (the instance matrices) and 7 (the per-instance
+                    // spin vectors) BEFORE the packet opens -- AddToBin drains whatever the
+                    // constant table has marked dirty at that moment.
+                    CgsGraphics::Model::SetupShaderConstantsForInstancing(
+                        liInstanceCount, lapWheelMatrices, laWheelConstants );
+
+                    const bool lbFirstInList = ( lpWheelList->GetCount() & 0x7F ) == 0;
+
+                    lpDispatchFrame->GetBin().BeginPacket();
+                    // @0x822D1584: frustumEnable 0 (the wheels ride inside the body's own
+                    // bounds), preZList 0xFF, preZTechnique 0, excludeMeshBits 0, and the
+                    // instance count that makes this ONE command draw all the wheels.
+                    CgsGraphics::DrawRenderable::AddToBin(
+                        lpWheelRenderable, lpDispatchFrame, lbFirstInList,
+                        static_cast< s8 >( liOpaqueMeshList ), static_cast< s8 >( liTransparentMeshList ),
+                        0, lu8Technique, lbShadowPass,
+                        0xFFu, 0u, liInstanceCount, 0u );
+
+                    lpWheelList->Submit( 0, lpDispatchFrame->GetBin().EndPacket() );
+                }
+            }
+        }
+    }
+
+    // [DIAG wheel wave] one line per DISTINCT outcome (a bitmask of codes already seen,
+    // so a car that draws wheels and a car whose wheel resource has not arrived each get
+    // reported exactly once instead of every frame for ever).
+    {
+        static u32 suSeenWheelDiagCodes = 0;
+        const u32  luBit = 1u << static_cast< u32 >( liWheelDiagCode );
+        if ( ( suSeenWheelDiagCodes & luBit ) == 0 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            suSeenWheelDiagCodes |= luBit;
+            *CgsDev::Log::gpDebugPrint
+                << "[racecar-wheels] RenderRaceCar wheel block outcome " << liWheelDiagCode
+                << " (0 no resource, 1 no model, 2 no LOD state, 3 no wheel exists, "
+                   "4..8 submitted with 1..5 instances); wheels-to-render "
+                << giWheelsToRender << "\n";
+        }
+    }
 }
 
 

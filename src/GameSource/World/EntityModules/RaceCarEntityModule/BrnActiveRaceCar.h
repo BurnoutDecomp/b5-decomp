@@ -289,12 +289,20 @@ public:
         Matrix44Affine&       GetWheelTransform(u32 luWheel);
         // X360 0x822A31B8: ((luWheel+39)<<6)+this == &mWheelScaleTransforms[luWheel].
         Matrix44Affine&       GetWheelScaleMatrix(u32 luWheel);
-        // X360 0x822CD170: mWheelScaleTransforms[luWheel] = lrScale (the matrix arrived
-        // split across the int arg registers on console; clean C++ takes it by ref).
-        void                  SetWheelScale(u32 luWheel, const Matrix44Affine& lrScale);
+        // X360 0x822CD170: mWheelScaleTransforms[luWheel] = diag(lrScale.xyz, 1). The
+        // console argument is a scale VECTOR in v1, not a matrix -- see the .cpp banner
+        // for the asm that settles it.
+        void                  SetWheelScale(u32 luWheel, const Vector3& lrScale);
 
         bool GetWheelExists(u32 luWheel) const { return mabWheelExists[luWheel]; }
         void SetWheelExists(u32 luWheel, bool lbExists) { mabWheelExists[luWheel] = lbExists; }
+
+        // ADDITIVE (wheel-render wave): the console has no accessor symbol for the
+        // angular-velocity array either -- RenderRaceCar @0x822D1110 emits a bare
+        // `lfsx f0, r30, r17` with r17 = this + 0xD8C and r30 = 4*luWheel. This exists
+        // so the wheel block reads it BY NAME instead of by offset.
+        f32  GetWheelAngularVelocity(u32 luWheel) const { return mafWheelAngularVelocities[luWheel]; }
+        void SetWheelAngularVelocity(u32 luWheel, f32 lfValue) { mafWheelAngularVelocities[luWheel] = lfValue; }
 
         // --- part visibility (96 body parts) --------------------------------
         // X360 0x822B8B60: the inlined BitArray<96>::IsBitSet (field = part/64).

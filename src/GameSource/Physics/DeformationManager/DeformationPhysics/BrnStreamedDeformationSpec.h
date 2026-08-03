@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"          // CgsGeometric::AxisAlignedBox (GetBoundingBox out-param)
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"   // EBodyParts (committed home)
 #include "SharedClasses/Physics/Deformation/BrnSensorSpec.h"                       // SensorSpec (canonical home; embedded by value below)
+#include "GameShared/GameClasses/Graphics/CgsSerialisedPtr.h"                      // CgsGraphics::Ptr32<T> (the 32-bit serialised slot)
+#include <cstddef>                                                                 // offsetof (the layout tripwires)
 
 // BrnPhysics::Deformation::StreamedDeformationSpec and its inline spec sub-structs.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX with member names/types from the DecFIGS
@@ -13,11 +15,26 @@
 // the streamed (resource-baked) description of a deformable vehicle: tag/driven/IK part
 // tables, glass panes, locator lists, the four wheel specs and the deformation sensor grid.
 //
-// Layout faithfulness: the X360 member offsets used by the asm accessors (maGlassPaneData @
-// +28, miNumGlassPanes @ +32, maWheelSpecs @ +80) are 32-bit-pointer offsets that do not
-// (and need not) reproduce byte-for-byte on a 64-bit host. The accessors here are bodied
-// BY MEMBER NAME, so the host compiler recomputes the correct element addresses; semantic
-// parity (which member, which stride multiple, which bounds assert) is preserved exactly.
+// ⛔⛔ LAYOUT NOTE CORRECTED (wheel-render wave, 2026-08-03). This banner used to say the
+// X360 offsets "do not (and need not) reproduce byte-for-byte on a 64-bit host" because the
+// accessors are written by member name. THAT IS WRONG, and it was wrong in the way this
+// project has been bitten by five times: StreamedDeformationSpec is NOT a host object, it
+// IS the streamed resource image. The bytes arrive off disc in the console's 32-bit-pointer
+// shape and the resource type relocates them in place, so a member name only computes the
+// right address if the STRUCT reproduces that shape. With host-width pointers the eight
+// embedded pointer slots (four tables + one per locator list) each grew four bytes and
+// pushed everything after them along.
+//
+// MEASURED, which is how it was caught: reading the four authored WheelSpecs out of the
+// shipped VEH_PUSMC01 deformation spec through this struct returned
+//   pos(0.259968, 0.662665, 0.662665) scale(0, 0, 0)   -- twice, identically --
+// i.e. two duplicate "wheels" with a zero scale and y == z. Those are not wheel placements;
+// that is a read starting 28-odd bytes early, inside mHandlingBodyDimensions.
+//
+// The pointer slots are now CgsGraphics::Ptr32<T> and the console offsets the asm attests
+// (maGlassPaneData @ +28, miNumGlassPanes @ +32, maWheelSpecs @ +80, the sensor grid @ +272,
+// mCarModelSpaceToHandlingBodySpaceTransform @ +1552, mu8NumDeformationSensors @ +1618,
+// mCurrentCOMOffset @ +1632, mMeshOffset @ +1648) are pinned by static_assert below.
 namespace BrnPhysics
 {
 namespace Deformation
@@ -154,9 +171,12 @@ namespace Deformation
         ETagPointType          GetLocatorTy(u32 luTag) const;  // X360 0x82704930 meTagPointType at element +64 (.h:94)
         const Matrix44Affine*  GetLocatorXf(u32 luTag) const;  // X360 0x825B31E0 &element.mLocatorMatrix (.h:98)
 
-    private:
-        u32               muNumLocators;
-        LocatorPointSpec* mpaLocatorPoints;
+        // Streamed record: count then a 32-bit array slot (asm count @ +0, ptr @ +4 -- eight
+        // bytes per list, which is what puts mHandlingBodyDimensions at +64 and the wheel
+        // specs at +80). Public because this IS the on-disc image and its owner rebases the
+        // slot in place, exactly as SensorSpec's members are public for the same reason.
+        u32                                    muNumLocators;
+        CgsGraphics::Ptr32<LocatorPointSpec>   mpaLocatorPoints;
 
         // StreamedDeformationSpec::FixUp / FixDown rebase the embedded mpaLocatorPoints offset of
         // each of the three locator lists in place (add / subtract the stream base), exactly as the
@@ -216,16 +236,18 @@ namespace Deformation
         void FixDown(void* lpBaseAddress);
         void FixUp(void* lpBaseAddress);
 
-    private:
-        s32                  miVersionNumber;
-        TagPointSpec*        maTagPointData;
-        s32                  miNumberOfTagPoints;
-        IKDrivenPointSpec*   maDrivenPointData;
-        s32                  miNumberOfDrivenPoints;
-        IKBodyPartSpec*      maIKPartData;
-        s32                  miNumberOfIKParts;
-        GlassPaneSpec*       maGlassPaneData;
-        s32                  miNumGlassPanes;
+        // ---- THE STREAMED RECORD (public: this struct IS the on-disc image) -------------
+        // Every pointer is a 32-bit slot the resource FixUp rebases in place -- see the
+        // banner. Widening any of them moves every member after it.
+        s32                              miVersionNumber;
+        CgsGraphics::Ptr32<TagPointSpec>      maTagPointData;
+        s32                              miNumberOfTagPoints;
+        CgsGraphics::Ptr32<IKDrivenPointSpec> maDrivenPointData;
+        s32                              miNumberOfDrivenPoints;
+        CgsGraphics::Ptr32<IKBodyPartSpec>    maIKPartData;
+        s32                              miNumberOfIKParts;
+        CgsGraphics::Ptr32<GlassPaneSpec>     maGlassPaneData;
+        s32                              miNumGlassPanes;
         LocatorPointSpecList mGenericTags;
         LocatorPointSpecList mCameraTags;
         LocatorPointSpecList mLightTags;
@@ -243,5 +265,24 @@ namespace Deformation
         Vector3              mCollisionOffset;
         Vector3              mInertiaTensor;
     };
+
+    // ---- THE LAYOUT TRIPWIRES ---------------------------------------------------------
+    // Every one of these offsets is quoted from the X360 asm of a function that reads it
+    // (the accessors' element arithmetic, GetBoundingBox's sensor walk, TransformToNewCOMSpace's
+    // COM/mesh offsets, and ActiveRaceCar::OnResourcesLoaded @0x822EB2FC reading
+    // `spec + 96 + 48*i` for wheel i's scale == maWheelSpecs[i].mScale). If one of these
+    // fails, a pointer slot has been widened back to host width.
+    static_assert(sizeof(LocatorPointSpecList) == 8, "LocatorPointSpecList is {u32 count, u32 slot}");
+    static_assert(offsetof(StreamedDeformationSpec, maGlassPaneData) == 28, "maGlassPaneData @ +28");
+    static_assert(offsetof(StreamedDeformationSpec, miNumGlassPanes) == 32, "miNumGlassPanes @ +32");
+    static_assert(offsetof(StreamedDeformationSpec, mHandlingBodyDimensions) == 64, "mHandlingBodyDimensions @ +64");
+    static_assert(offsetof(StreamedDeformationSpec, maWheelSpecs) == 80, "maWheelSpecs @ +80");
+    static_assert(sizeof(WheelSpec) == 48, "WheelSpec stride 48 (spec + 96 + 48*i is its mScale)");
+    static_assert(offsetof(StreamedDeformationSpec, maDeformationSensorSpecs) == 272, "sensor grid @ +272");
+    static_assert(offsetof(StreamedDeformationSpec, mCarModelSpaceToHandlingBodySpaceTransform) == 1552,
+                  "COM transform @ +1552 (ActiveRaceCar::OnResourcesLoaded reads Def + 1552)");
+    static_assert(offsetof(StreamedDeformationSpec, mu8NumDeformationSensors) == 1618, "sensor count @ +1618");
+    static_assert(offsetof(StreamedDeformationSpec, mCurrentCOMOffset) == 1632, "mCurrentCOMOffset @ +1632");
+    static_assert(offsetof(StreamedDeformationSpec, mMeshOffset) == 1648, "mMeshOffset @ +1648");
 }
 }

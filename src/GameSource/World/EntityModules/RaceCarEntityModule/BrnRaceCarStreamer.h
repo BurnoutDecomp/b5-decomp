@@ -146,6 +146,14 @@ public:
     {
         return maWheelGraphicsResources[liActiveRaceCar];
     }
+    // Same relaxation, for the deformation spec: the wheel-pose stand-in in
+    // RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp reads the car's four
+    // authored WheelSpecs out of it. LOADEDPHYSICS is one of the three bits a car
+    // actually gets on this build, so this is only dropping the all-five predicate.
+    const PhysicsResourcePtr& GetPhysicsResourceBringUp( s32 liActiveRaceCar ) const
+    {
+        return maPhysicsResources[liActiveRaceCar];
+    }
 
     // [FLAG PC bring-up] NOT an X360 predicate (drivable wave 2026-08-01). THE ONE GATE
     // RELAXATION IN THE WHOLE ATTACHED -> WAITING -> ACTIVE CHAIN, and it is a DATA gap,

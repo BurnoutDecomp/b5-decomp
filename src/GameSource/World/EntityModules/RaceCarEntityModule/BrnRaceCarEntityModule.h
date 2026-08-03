@@ -549,7 +549,8 @@ private:
     // made the car INVISIBLE rather than drivable. This publishes what UpdatePhysicsState
     // publishes, using the console's own CalcBodyTransform, from the console's own slot
     // (PostPhysicsUpdate). DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics lands.
-    void PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar );
+    void PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar,
+                                                 s32 liActiveRaceCar );
 
     // ========================================================================
     // MODELLED members (pose wave 2026-07-31): the three module flags

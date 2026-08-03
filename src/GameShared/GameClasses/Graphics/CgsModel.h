@@ -119,6 +119,16 @@ namespace CgsGraphics
         // CgsModel.h:210
         f32 GetLodDistance(u32 luLodIndex) const;
 
+        // CgsModel.cpp:555 (the assert file/line the X360 body carries) --
+        // SetupShaderConstantsForInstancing @0x827FBB98. STATIC: the console call
+        // (RenderRaceCar @0x822D154C) passes the instance count in r3, so there is no
+        // `this`. Publishes the per-instance blocks the instancing vertex shader reads:
+        // constant 6 "InstancingMatrixArray" and constant 7 "InstancingIndexArray".
+        static void SetupShaderConstantsForInstancing(
+            s32 liModelInstanceCount,
+            const rw::math::vpu::Matrix44Affine* const* lpaModelInstancingArray,
+            const rw::math::vpu::Vector4* lpaModelInstancingIndexArray);
+
         // --- Other declared members (bodied by their own TUs) ---
 
         // CgsModel.h:182
