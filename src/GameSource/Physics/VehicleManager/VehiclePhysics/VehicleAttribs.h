@@ -211,9 +211,12 @@ namespace Vehicle
 
         // --- functions -------------------------------------------------------------------------
 
-        // @0x825F3FB8 -- the console constructor. ⚠️ ABSENT from `.ida-exports` (an export-set
-        // hole: Engine::Prepare @0x825F3F38 is 31 instrs and ends at 0x825F3FB4, and the next
-        // indexed symbol is 0x825F4CD8). Declared only -- no body in the tree yet.
+        // @0x825F3FB8 (840 instrs) -- the console constructor. ⚠️ ABSENT from `.ida-exports` (an
+        // export-set hole: Engine::Prepare @0x825F3F38 is 31 instrs and ends at 0x825F3FB4, and the
+        // next indexed symbol is 0x825F4CD8); pulled from the .i64 with headless IDA and replayed
+        // through a symbolic VMX128 simulator. ⚠️ The "declared only -- no body in the tree yet"
+        // that stood here is STALE: it is BODIED in VehicleAttribs.cpp (commit 05456841), and
+        // VehiclePhysics::Construct calls it twice (mAIVehicleAttribs / mPlayerVehicleAttribs).
         void Construct();
 
         // @0x825F4CD8 (770 instrs) / @0x825F58E0 (622) -- the streamed-attribute loaders. Owned by

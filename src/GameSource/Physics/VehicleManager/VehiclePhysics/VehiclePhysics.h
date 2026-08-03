@@ -392,11 +392,18 @@ namespace Vehicle
         void SetWheelVelocities(Vector3 lvVelocity);
 
         // ==========================================================================================
-        // ⭐ Construct @0x8262DBD0 / Reset(Vector3) @0x825FDD78 -- FULLY DECODED 2026-08-03, NOT
-        //    YET BODIED. Both are `.ida-exports` holes; both were pulled from
-        //    BURNOUT_X360_ARTIST.XEX.i64 with headless IDA 9.3 and replayed instruction-by-
-        //    instruction through a symbolic VMX128 simulator, so the work below is finished
-        //    analysis, not a lead. They are NOT bodied because of ONE blocker, stated at the end.
+        // ⭐ Construct @0x8262DBD0 / Reset(Vector3) @0x825FDD78 -- BOTH BODIED IN VehiclePhysics.cpp
+        //    as of 2026-08-03. Reset was decoded out of BURNOUT_X360_ARTIST.XEX.i64 with headless
+        //    IDA 9.3 and replayed through a symbolic VMX128 simulator (it IS an `.ida-exports`
+        //    hole); the decode is preserved below because it is the record of that work.
+        //
+        // ⚠️ CORRECTION (Construct wave): the sentence that stood here said "Both are `.ida-exports`
+        //    holes". **Construct is not one.** `.ida-exports/BURNOUT_X360_ARTIST.XEX/0x8262DBD0.json`
+        //    exists and carries the full `assembly` plus a complete `xrefs_from`; only its
+        //    `pseudocode` is degenerate (the bare prototype), which is what got mis-read as a hole.
+        //    The whole function was re-pulled from that JSON, without opening IDA at all. The
+        //    boundary check the project rule prescribes passes: 0x8262DBD0..0x8262DD50 is one
+        //    prologue + one epilogue, and VehiclePhysics::Destruct starts at 0x8262DD58.
         //
         // ---- Reset(Vector3 lvVelocity) @0x825FDD78, 0x825FDD78..0x825FE118 (232 instrs) --------
         //   SimpleVehiclePhysics::Reset();                       // 0-arg overload -- @0x825D9A58
@@ -454,22 +461,59 @@ namespace Vehicle
         //   UpdateHandBrake reads of the same slot gate on. (Same shape as the +0x1050 .z seed
         //   TimeSinceLastRaceCarContact = 100.0f: "long ago".)
         //
-        // ---- Construct() @0x8262DBD0, 98 instrs -------------------------------------------------
+        // ---- Construct() @0x8262DBD0, 97 instrs + 1 pad -- BODIED, see VehiclePhysics.cpp -------
         //   for (i = 0..3) { maWheels[i].Clear();                        // this+0x130 stride 0xE0
         //                    maSprings[i].Prepare(0, 0, 0); }            // this+0xE10 stride 0x30
         //   mvSpringMassScalers = 0;                                     // +0xED0
-        //   mEngine.mAttribs.Construct();  mEngine.Reset(0);             // +0xF00 (Engine::mAttribs
-        //                                                                //   is Engine's leading member)
-        //   mpAttribs = NULL;                                            // +0x720
+        //   mEngine.Construct();                                         // +0xF00 -- the X360 INLINES
+        //     Engine::Construct here (EngineAttribs::Construct(+0xF00) then Engine::Reset(+0xF00, 0)),
+        //     which is that function instruction-for-instruction @0x825F3EE8. The PS3 build of the
+        //     same source calls `Engine::Construct` OUT OF LINE, which settles the identification.
+        //   mpAttribs = NULL;                                            // +0x720 (stw, 4-byte)
         //   mAIVehicleAttribs.Construct();  mPlayerVehicleAttribs.Construct();   // +0x730 / +0xAA0
-        //   ... zero +0x690/+0x6A0/+0x1330/+0x570 ; mSlamEffect partial seed at +0x590+0x20 ...
-        //   SimpleVehiclePhysics::Reset();                               // this
-        //   mbCrashing(+0x70) = false;
-        //   Reset(Vector3(0,0,0));
+        //   mUsedAirRams = 0 ; mUsedSpins = 0                            // +0x1158 / +0x1220 (std)
+        //   mHandlingBodyOffset = 0 ; mHalfExtent = 0                    // +0x690 / +0x6A0 (base's)
+        //   mPreviousWorldSpaceVelocity = 0                              // +0x1330
+        //   mAboveGroundTestResult: mIntersectionPosition = 0, mIntersectionNormal = 0,
+        //         mfVerticalDistance = 0, mCollisionTag.muValue = 0xFFFF8000, mbValid = false
+        //                                                                // +0x570/580/590/594+596/598
+        //   mvSideForceMag_..._TimeSinceLastBoostKick_....z          = 0 // +0x1040 LANE Z ONLY
+        //   mvTimeSinceHardLanding_..._CarCarResponse_....z          = 0 // +0x1070 LANE Z ONLY
+        //   mvSpeedOnLastCrashMPH_TimeCrashing_...                   = 0 // +0xEF0 (whole register)
+        //   SimpleVehiclePhysics::Reset();                               // 0-arg base @0x825D9A58
+        //   mbFrozen = false;                                            // +0x70   <- SEE CORRECTION
+        //   Reset(Vector3(0,0,0));                                       // the Vector3 overload
+        //
+        //   ⚠️⚠️ TWO CORRECTIONS TO THE DECODE THAT USED TO SIT HERE. It ended in an elided line,
+        //   `"... zero +0x690/+0x6A0/+0x1330/+0x570 ; mSlamEffect partial seed at +0x590+0x20 ..."`,
+        //   followed by `mbCrashing(+0x70) = false;`. BOTH are wrong, and both were caught by
+        //   re-pulling the asm rather than transcribing the note:
+        //     1. There is NO mSlamEffect store in this function. +0x590/+0x594/+0x596/+0x598 are the
+        //        TAIL OF THE +0x570 BLOCK -- mAboveGroundTestResult's mfVerticalDistance, the two
+        //        CollisionTag halfwords and mbValid -- exactly as this header's own +0x570 map (and
+        //        SimpleVehiclePhysics::SetAboveGroundTestResult @0x826029D4) already say. mSlamEffect
+        //        is at +0x1100.
+        //     2. `stb r30, 0x70(r31)` is **mbFrozen**, NOT mbCrashing. VP frame +0x70 ==
+        //        ExternallySimulatedBody frame +0x60, and ExternallySimulatedBody::Construct
+        //        @0x8259CFA4 stores its zero byte at exactly `0x60(r3)`. mbCrashing is at +0x710
+        //        (this file's own HandleWheelFrictionCrashing note pins it there). Independent
+        //        confirmation: UpdateFreezing @0x825CFFA0/FFB8/FFC8/FFE8 reads and writes 0x70(r31)
+        //        alongside `lbz r9,0x10F6(r31)` == mbForceFrozen -- a freezing routine touching the
+        //        pair {+0x70, +0x10F6} is {mbFrozen, mbForceFrozen}, not the crash flag.
+        //   Clearing +0x710 instead of +0x70 would have been an invented store in mounted code.
+        //
         //   ⭐ `VehicleAttribs::Construct(this+0x730)` and `(this+0xAA0)` are an INDEPENDENT
         //   confirmation of the DWARF member sequence: mpAttribs @0x720, then two VehicleAttribs
         //   of 0x370 each land mAIVehicleAttribs at 0x730 and mPlayerVehicleAttribs at 0xAA0
         //   exactly, and maSprings then falls on its asm-pinned +0xE10.
+        //
+        //   ⭐⭐ THE LANE-Z INSERT IS PROVEN TWICE, ON TWO ISAs. X360 does
+        //   `lvx128 ; vrlimi128 v0,v127,2,0 ; stvx128` (mask 2 == lane z under the 8/4/2/1 ==
+        //   x/y/z/w convention). The PS3 build of the same two statements does
+        //   `lvx ; vperm v1,v1,v31,<VectorPermuteConstant<0,1,6,3>> ; stvx` -- selector lanes
+        //   {x, y, SECOND-operand z, w}, i.e. the zero lands in z and x/y/w survive. Two different
+        //   compilers, two different instructions, the same lane. Both registers keep every other
+        //   lane, so these are read-modify-writes and NOT whole-register clears.
         //
         // ---- THE BLOCKER IS GONE (2026-08-03) ---------------------------------------------------
         // The note that used to sit here said neither could be bodied because of ONE symbol,
@@ -487,11 +531,24 @@ namespace Vehicle
         // ⚠️ It HIDES SimpleVehiclePhysics::Reset() (the 0-arg base overload) -- which is exactly
         // what the console does, and the body calls the base one explicitly-qualified, as the X360
         // does out of line at 0x825D9A58.
-        // Construct() is still NOT bodied: it additionally needs mAIVehicleAttribs /
-        // mPlayerVehicleAttribs (two VehicleAttribs @+0x730/+0xAA0) and mvSpringMassScalers
-        // (+0xED0), none of which this home declares yet.
+        //
+        // ⭐ Construct() is BODIED TOO as of 2026-08-03. The three members it needed --
+        // mAIVehicleAttribs / mPlayerVehicleAttribs (+0x730/+0xAA0) and mvSpringMassScalers
+        // (+0xED0) -- are now declared below, each name and type verbatim from the DecFIGS DWARF
+        // (VehiclePhysics.h:840 / :843 / :849). EVERY callee of Construct was already bodied
+        // (Wheel::Clear, SuspensionSpring::Prepare, VehicleAttribs::EngineAttribs::Construct,
+        // Engine::Reset, VehicleAttribs::Construct, SimpleVehiclePhysics::Reset, Reset(Vector3)),
+        // so bodying it adds ZERO new link closure -- verified against the function's own
+        // `xrefs_from`, not against the mnemonic text.
         // ==========================================================================================
         void Reset(Vector3 lvVelocity);
+
+        // @0x8262DBD0: the console constructor -- clear the four wheels + springs, build the engine
+        // and both embedded attribute sets, clear the above-ground test / half-extent / air-ram +
+        // spin allocators, then base-Reset, unfreeze and Reset(0). Bodied in VehiclePhysics.cpp.
+        // Its callers are VehicleManager::Construct, VehicleManager::PrepareData and
+        // TrafficPhysics::Construct.
+        void Construct();
 
         // ----- ADDITIVE GROW (C11_simple_traffic_attribs group): the three VehiclePhysics entries the
         //       TrafficPhysics layer forwards into. DECLARE-ONLY -- each is bodied by its own (full
@@ -951,6 +1008,21 @@ namespace Vehicle
         // full VehiclePhysics TU). Typed against the minimal VehicleAttribs slice above.
         const VehicleAttribs* mpAttribs;
 
+        // ===== ADDITIVE GROW (Construct wave, 2026-08-03): the TWO EMBEDDED ATTRIBUTE SETS =====
+        // @+0x730 (1840) and @+0xAA0 (2720). Names and types VERBATIM from the DecFIGS DWARF
+        // (VehiclePhysics.h:840 / :843), which places them immediately after mpAttribs -- and the
+        // asm agrees exactly: VehiclePhysics::Construct @0x8262DC88/@0x8262DC94 calls
+        // `VehicleAttribs::Construct` on `this+0x730` then `this+0xAA0`, a gap of 0x370 ==
+        // sizeof(VehicleAttribs). mpAttribs (+0x720, a 4-byte console pointer) is re-pointed at one
+        // of these two each frame by SwitchAttribs depending on whether the car is player- or
+        // AI-driven; that is why the pointer and the storage are separate members. The PS3 build of
+        // the same source makes the same two calls at its own +0x720/+0xA90.
+        // These are 0x370 bytes EACH, so declaring them grows sizeof(VehiclePhysics) by 1760 bytes
+        // -- which is correct: on the console they are part of the object. Parity here is BY NAME,
+        // and no absolute offset in this class is static_asserted.
+        VehicleAttribs mAIVehicleAttribs;       // :840  (+0x730)
+        VehicleAttribs mPlayerVehicleAttribs;   // :843  (+0xAA0)
+
         // ===== The +0x570 above-ground-test block and the +0x6A0 half-extent are the BASE's =====
         // This home used to carry five separately-named members over the console bytes
         // +0x580/+0x590/+0x594/+0x596/+0x598, plus a scalar at +0x6A4. All six are views into two
@@ -1169,6 +1241,13 @@ namespace Vehicle
         // @+0xE10 (3600), stride 0x30: the four 1-D damped suspension springs (one per driven wheel).
         // SuspensionSpring is the already-committed namespace-scope slice (sizeof 0x30 = 3*Vector4).
         SuspensionSpring maSprings[eNumDrivenWheels];
+
+        // @+0xED0 (3792, DWARF VehiclePhysics.h:849). The per-spring mass scalers. Construct
+        // @0x8262DC64 zeroes it with a single whole-register `stvx128 v127(==0), this, 0xED0`
+        // BEFORE it builds the engine; SetupSuspension installs the real values later. The offset
+        // closes by sequence with no slack: maSprings @+0xE10 + 4*0x30 == +0xED0, and the very next
+        // DWARF member (mWeightTransfer, already declared below) is at +0xEE0. Pinned BY NAME.
+        Vector4 mvSpringMassScalers;
 
         // @+0xEE0 (3808): the dynamic load-transfer force CalculateWeightTransfer builds and
         // distributes to the springs (SetExternalForce). DWARF VehiclePhysics.h:830. The offset is

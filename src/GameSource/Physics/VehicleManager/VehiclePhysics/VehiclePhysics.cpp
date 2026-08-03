@@ -803,6 +803,114 @@ namespace Vehicle
         mi8LastAttackersRaceCarIndex = -1;                                       // +0x13E0
     }
 
+    // ==============================================================================================
+    //  @0x8262DBD0  BrnPhysics::Vehicle::VehiclePhysics::Construct()   (97 X360 instrs + 1 pad)
+    // ==============================================================================================
+    // The console constructor. Callers: VehicleManager::Construct @0x8263B7C8,
+    // VehicleManager::PrepareData and TrafficPhysics::Construct.
+    //
+    // ⛔ THIS BODY WAS *NOT* WRITTEN FROM THE BANKED DECODE. The note that sat in VehiclePhysics.h
+    //    ended in an elided line whose offsets were unnamed and internally inconsistent, and it was
+    //    WRONG IN TWO PLACES (see the corrected block comment in the header). All 97 instructions
+    //    were re-pulled and re-read; the two errors, and the two things that caught them, are:
+    //      * "mSlamEffect partial seed at +0x590+0x20" -- there is no mSlamEffect store in this
+    //        function. +0x590/+0x594/+0x596/+0x598 are the tail of the ONE +0x570 block, i.e.
+    //        mAboveGroundTestResult, which is what SetAboveGroundTestResult @0x826029D4 (already
+    //        committed in BrnSimpleVehiclePhysics.cpp) writes through the same `addi r11,this,0x570`.
+    //      * "mbCrashing(+0x70) = false" -- +0x70 is mbFrozen. ExternallySimulatedBody::Construct
+    //        @0x8259CFA4 stores its zero byte at `0x60(r3)` in its own frame, and the base subobject
+    //        starts at VehiclePhysics+0x10, so VP+0x70 is that byte. mbCrashing is at +0x710.
+    //        UpdateFreezing @0x825CFFA0..FFE8 confirms it independently: it reads and writes
+    //        0x70(r31) beside `lbz r9,0x10F6(r31)` == mbForceFrozen.
+    //
+    // ⭐ NOT AN EXPORT HOLE. `.ida-exports/BURNOUT_X360_ARTIST.XEX/0x8262DBD0.json` carries the full
+    //    assembly and xrefs_from (only its Hex-Rays pseudocode is degenerate). Every callee below is
+    //    taken from that xrefs_from -- Wheel::Clear @0x825D6E88, SuspensionSpring::Prepare
+    //    @0x825A7A28, VehicleAttribs::EngineAttribs::Construct @0x825B7B90, Engine::Reset
+    //    @0x825CF130, VehicleAttribs::Construct @0x825F3FB8, SimpleVehiclePhysics::Reset @0x825D9A58
+    //    (the 0-arg base overload) and VehiclePhysics::Reset @0x825FDD78 (the Vector3 overload) --
+    //    so there is no ambiguity about which overload each `bl` reaches, and no new link closure.
+    //
+    // ⭐ CORROBORATED BY A SECOND IMAGE. The PS3 DecFIGS build carries the same function at
+    //    0x6EB1F0 with readable Hex-Rays. It reproduces every store, with a uniform -0x10 shift for
+    //    everything past +0x6A0 (that build's drift bank sits 16 bytes lower), and it resolves three
+    //    things the X360 inlines:
+    //      * it calls `Engine::Construct` OUT OF LINE at its +0xEF0  ->  the X360's
+    //        EngineAttribs::Construct + Engine::Reset(0) pair IS Engine::Construct @0x825F3EE8;
+    //      * it calls `CgsContainers::BitArray<4u>::Construct` at its +0x1148 and the BitArray<8>
+    //        twin at its +0x1210  ->  the X360's two bare `std 0` really are mUsedAirRams/mUsedSpins;
+    //      * its two lane-inserts are `vperm` with VectorPermuteConstant<0,1,6,3> -- lanes
+    //        {x, y, second-operand z, w} -- which is the same LANE Z the X360's `vrlimi128 ...,2,0`
+    //        selects. Two compilers, two ISAs, one lane.
+    // ----------------------------------------------------------------------------------------------
+    void VehiclePhysics::Construct()
+    {
+        // The X360 parks 0.0f (flt_82001CC0) in three stack slots once, then broadcasts them into
+        // v1/v2/v3 for every Prepare call in the loop -- i.e. all three spring seeds are zero.
+        // SetupSuspension installs the real stiffness/damping/mass later.
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            maWheels[liWheel].Clear();                                       // +0x130 stride 0xE0
+            maSprings[liWheel].Prepare(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f },   // +0xE10 stride 0x30
+                                       VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f },
+                                       VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+        }
+
+        mvSpringMassScalers.SetZero();          // +0xED0 (whole register, stvx128 v127)
+
+        // +0xF00. Inlined on X360 as EngineAttribs::Construct(&mEngine) then Engine::Reset(&mEngine,
+        // 0.0f) -- Engine::Construct @0x825F3EE8 instruction-for-instruction, and what the PS3 build
+        // calls out of line. mEngine.mAttribs is private, which is the other reason to spell it this
+        // way rather than reproducing the two inlined calls.
+        mEngine.Construct();
+
+        mpAttribs = NULL;                       // +0x720 (stw r30 -- the 4-byte console pointer)
+
+        mAIVehicleAttribs.Construct();          // +0x730
+        mPlayerVehicleAttribs.Construct();      // +0xAA0
+
+        // Both slot allocators start empty. The X360 clears each with one `std r30(==0)`; the PS3
+        // build calls BitArray<N>::Construct on the same two addresses. UnSetAll() is that store.
+        mUsedAirRams.UnSetAll();                // +0x1158
+        mUsedSpins.UnSetAll();                  // +0x1220
+
+        mHandlingBodyOffset.SetZero();          // +0x690  (SimpleVehiclePhysics')
+        mHalfExtent.SetZero();                  // +0x6A0  (SimpleVehiclePhysics')
+
+        mPreviousWorldSpaceVelocity.SetZero();  // +0x1330
+
+        // The whole +0x570 above-ground-test block, cleared in place (the X360 walks it off one
+        // `addi r11,this,0x570` base). The two halfword stores are `li r29,-1 ; sth r29,0x24(r11)`
+        // and `li r4,-0x8000 ; sth r4,0x26(r11)`: on big-endian PPC the halfword at the LOWER byte
+        // address is the HIGH 16 bits of the u32, so the assembled tag is 0xFFFF8000. (Same
+        // halfword->u32 rule the committed SetAboveGroundTestResult uses.) The PS3 build writes the
+        // identical pair, `*(this+1428) = -1` then `*(this+1430) = 0x8000`.
+        mAboveGroundTestResult.mIntersectionPosition.SetZero();   // +0x570
+        mAboveGroundTestResult.mIntersectionNormal.SetZero();     // +0x580
+        mAboveGroundTestResult.mfVerticalDistance = 0.0f;         // +0x590
+        mAboveGroundTestResult.mCollisionTag.muValue = 0xFFFF8000u;  // +0x594 hi | +0x596 lo
+        mAboveGroundTestResult.mbValid = false;                   // +0x598
+
+        // Two LANE-Z-ONLY inserts (read-modify-write: lvx128 / vrlimi128 mask 2 / stvx128). Every
+        // other lane of both registers survives -- these are NOT whole-register clears.
+        mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.z = 0.0f;   // +0x1040
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.z = 0.0f;  // +0x1070
+
+        mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.SetZero();   // +0xEF0 (whole)
+
+        // The 0-arg base overload @0x825D9A58 (explicitly qualified because Reset(Vector3) below
+        // hides it), then the body starts unfrozen, then the full reset at zero velocity. The PS3
+        // build wraps these last two in its own VehiclePhysics::Reset() 0-arg
+        // (._ZN10BrnPhysics7Vehicle14VehiclePhysics5ResetEv @0x6EAEC4), whose entire body is
+        // `SimpleVehiclePhysics::Reset(); Reset(Vector3(0));` -- which is what the X360 does here
+        // in line.
+        SimpleVehiclePhysics::Reset();
+
+        mbFrozen = false;                       // +0x70   (NOT mbCrashing -- see the banner)
+
+        Reset(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
+    }
+
     // =====================================================================================
     // C08 airborne/water/freeze/spin group -- BODIES.
     //   UpdateInWaterBehaviour @0x825B81A8, UpdateAirRam @0x825FC8D8, UpdateSpinEffects @0x825FCCF8,

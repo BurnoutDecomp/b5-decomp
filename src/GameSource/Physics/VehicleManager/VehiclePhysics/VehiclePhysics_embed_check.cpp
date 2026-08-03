@@ -38,19 +38,33 @@ bool VehiclePhysics_embed_check(const VehiclePhysics& lrPhysics, f32 lfSteering,
 // ----------------------------------------------------------------------------------------------
 // THE RESET-CHAIN LINK WITNESS (2026-08-03).
 //
-// A green compile gate is NOT a green link: nothing in the tree calls Reset or SetWheelVelocities
-// yet, so /OPT:REF discards both COMDATs and the exe's .map comes back with zero mentions of
-// either. This function exists purely to force the linker to RESOLVE the chain
+// A green compile gate is NOT a green link: nothing in the tree calls Construct, Reset or
+// SetWheelVelocities yet, so /OPT:REF discards their COMDATs and the exe's .map comes back with
+// zero mentions of any of them. This function exists purely to force the linker to RESOLVE the
+// chains
 //     VehiclePhysics::Reset -> SetWheelVelocities -> Engine::Reset
 //     VehiclePhysics::Reset -> SimpleVehiclePhysics::Reset / Wheel::Reset / SuspensionSpring::Reset
+//     VehiclePhysics::Construct -> Wheel::Clear / SuspensionSpring::Prepare / Engine::Construct
+//                               -> VehicleAttribs::Construct (x2) -> ... -> Reset
 // so that an unresolved callee shows up as LNK2019 rather than as a surprise several waves later.
 // (/OPT:REF does not suppress LNK2019 from a stripped COMDAT, so this measures closure even though
 // the code itself is discarded.) It is never called at runtime.
 //
-// MEASURED 2026-08-03 by temporarily mounting this file in tools/build/build_game_exe.bat: the
-// whole chain resolved with zero LNK2019. The mount line was then REVERTED -- see the wave report.
+// MEASURED 2026-08-03: the whole Reset chain resolved with zero LNK2019, and the file has been a
+// STANDING mount in tools/build/build_game_exe.bat since (parent-repo commit be5f2fd, "build: mount
+// VehiclePhysics_embed_check.cpp as a link-closure guard"). ⚠️ The sentence that stood here --
+// "The mount line was then REVERTED" -- was wrong; the mount was kept, and it costs zero exe bytes.
+// ⭐ TAMPER-TESTED 2026-08-03 (Construct wave), because "a stripped COMDAT still LNK2019s" had been
+// an INHERITED claim, never checked. A call to a declared-but-undefined
+// `BpTamperProbe_NoSuchSymbol_2026_08_03()` was added here and the exe rebuilt:
+//     VehiclePhysics_embed_check.obj : error LNK2019: unresolved external symbol ...
+//         referenced in function "void __cdecl VehiclePhysics_reset_link_check(...)"
+//     Burnout_PC.exe : fatal error LNK1120: 1 unresolved externals
+// So the witness really does measure closure even though /OPT:REF discards its code (the exe stays
+// byte-size identical and the .map contains none of these symbols). The probe was then removed.
 void VehiclePhysics_reset_link_check(VehiclePhysics& lrPhysics, Vector3 lvVelocity)
 {
+    lrPhysics.Construct();
     lrPhysics.SetWheelVelocities(lvVelocity);
     lrPhysics.Reset(lvVelocity);
 }
