@@ -116,9 +116,32 @@ namespace Vehicle
     {
         // ---- ADDITIVE (moved 2026-07-24 from the retired BrnVehicleManager.h shell;
         //      declare-only surface, bodied by this interface's own TU) ----
+        //
+        // ⛔⛔ TWO OF THE THREE BELOW ARE ON THE WRONG CLASS -- PROVEN 2026-08-03 (task #110),
+        // NOT FIXED HERE. They are not X360 symbols at all (nothing named GetEventQueue,
+        // AddRemappedEntityIdEvent or FlagTakedownScoredForDriver exists in progress/identity.json);
+        // they are accessor names a previous wave minted over raw offsets on the sink pointer the
+        // asm calls r17, and it attached them to THIS class. The asm settles which object r17 is:
+        //     0x826437A4  addi r3, r17, 0x65F0   ; bl VariableEventQueue<1536,16>::AddEventSafe
+        //     0x82643B48  addi r3, r17, 0x65F0   ; bl VariableEventQueue<1536,16>::AddEvent
+        //     0x82643B00  lbz  r9, 0x6C00(r17)
+        //     0x82643B1C  stb  r9, 0x6C00(r17)
+        // 0x65F0 == 26096 and 0x6C00 == 27648 are, EXACTLY, VehicleOutputInterface::
+        // mGameEventQueueStorage and VehicleOutputInterface::mAggressiveDrivingFlags -- see that
+        // struct's member table thirty lines above. VehicleManagerOutputInterface's own last member
+        // ends at 0x87C, so +26096 and +27648 are ~24 KB OUT OF BOUNDS for the class they are
+        // declared on; a body written here could only have reached them by leaving the object.
+        // The load-bearing consequence is at the CALL SITES: BrnVehicleManager.cpp:611/707/738
+        // invoke these on `lpManagerOutputInterface`, but r17 is the *other* interface argument.
+        // ⇒ Before bodying any of these, move the two out-of-bounds ones onto the VehicleOutputInterface
+        // the contact handler is actually handed (mind that BrnGameState::GameStateModuleIO has its
+        // own same-named class -- decide which of the two r17 is) and re-point the call sites.
+        // ⭐ AddRemappedEntityIdEvent is the one that DOES belong here: its +1872 == 0x750 is
+        // mTrafficTypeRequestQueue, in bounds and on this class.
 
         // sink+26096: the IO event queue the crash record + takedown/grind events push onto.
         // Returned by reference so the bodies can call .AddEvent / .AddEventSafe by name.
+        // ⛔ WRONG CLASS -- see the block above. 0x65F0 is VehicleOutputInterface's.
         CgsModule::VariableEventQueue<1536, 16>& GetEventQueue();
 
         // The cross-module "a race car crashed" event (X360 AddRaceCarCrashEvent). FLAG: the X360
@@ -145,10 +168,14 @@ namespace Vehicle
                                   f32 lfCrashSpeedMPH);
 
         // sink+1872: the secondary "remapped entity id" sub-event the type-2-id path fires. Declare-only.
+        // ⭐ IN BOUNDS AND ON THE RIGHT CLASS: 1872 == 0x750 == mTrafficTypeRequestQueue below.
         void AddRemappedEntityIdEvent(u32 luRemappedActiveRaceCarIndex);
 
         // sink+27648 / sink+27649: the two driver-feedback bytes HandleRaceCarRaceCarContact OR-sets
         // when a takedown is scored (the asm `*(a32+27648) |= ...; *(a32+27649) = ...`). Declare-only.
+        // ⛔ WRONG CLASS -- see the ⛔⛔ block above. 27648 == 0x6C00 is VehicleOutputInterface::
+        // mAggressiveDrivingFlags, whose first two bools are mbPlayerWonSlamThisFrame (+0) and
+        // mbPlayerLostSlamThisFrame (+1) -- which is what "takedown scored, for which slot" means.
         void FlagTakedownScoredForDriver(bool lbVictimIsHighSlot);
     
 

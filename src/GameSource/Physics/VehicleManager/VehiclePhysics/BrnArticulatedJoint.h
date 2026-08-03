@@ -41,6 +41,12 @@ namespace Vehicle
     // (the full BrnWorld::EEntityType enum is owned by the World module).
     const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;
 
+    // The invalid-EntityId sentinel (X360 dword_82F2A3A4). Local constant mirroring the
+    // same-named value in CgsEntityId.h, which declares it as a PRIVATE static of
+    // CgsSceneManager::EntityId and therefore cannot expose it to this TU; the same mirroring
+    // is already committed at BrnPhysicalTrafficManager.cpp:239, which spells it as a literal.
+    const u32 KU_INVALID_ENTITY_ID = 0xFFFFFFFFu;
+
     // DWARF BrnArticulatedJoint.h:40 -- the base packed-id handle. Minimal: only the
     // raw u64 storage is needed here; the engine JointId base supplies the bit layout
     // in its own home. Modelled as a u64-carrying base so ArticulatedJointId is a u64.
@@ -73,6 +79,10 @@ namespace Vehicle
                                             ArticulatedJointId lJointId);  // :105
         rw::math::vpu::Matrix44Affine   GetParentToJointTransform() const; // :108
         ArticulatedJointId              GetJointId() const;               // :111
+
+        // Never called; bodied in BrnArticulatedJoint.cpp (a MOUNTED TU) and nothing but
+        // static_asserts. Static so it can see the private block through offsetof.
+        static void _AssertLayout();
 
     private:
         rw::math::vpu::Matrix44Affine   mParentToJointTransform;          // +0x00  :115
