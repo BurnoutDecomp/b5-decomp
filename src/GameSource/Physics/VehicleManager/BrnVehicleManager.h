@@ -349,39 +349,40 @@ namespace Vehicle
         //    ~511..600 PhysicalTrafficManager::Construct, the mDiscardedContacts queue bind, the
         //              mCameraMatrix identity stamp, the second VehicleDriver::Construct
         //              (mPlayerAiDriver) and the four RaceCarBitArray clears -- all already pinned.
-        //    ~601..943 ⛔ THE ACTUAL BLOCKER, SIZED EXACTLY: 96 INDEXED stores
-        //              (`stfsx`/`stbx`/`stwx fN, r31, rK`) hitting 88 DISTINCT seats, seeding the
-        //              takedown/slam/shunt TUNING BANK across this+0x29DC8..+0x2A244 == +171464
-        //              ..+172612 -- i.e. mbTakedownsEnabled through muTakedownEventsThisFrame, the
-        //              exact span this file already models. MEASURED: 23 of the 88 seats are already
-        //              named above; the other 65 are still inside the mPad29DAA/mPad29DFC/mPad29E14/
-        //              mPad29E24/mPad29E38/mPad29E48/mPad29F44/mPad29F98/mPad29FFC/mPad2A01C/
-        //              mPad2A050/mPad2A0B0/mPad2A0B4/mPad2A0B8/mPad2A0BC/mPad2A0DC/mPad2A12C runs,
-        //              and each needs BOTH a DWARF name AND its default constant resolved
-        //              (~40 distinct .rdata scalars:
-        //              flt_8208F834/flt_8208FA0C/flt_820945DC/flt_82004744/flt_82048974/flt_82094574/
-        //              flt_82004C68/flt_82005450/flt_8200473C/flt_8209C3C4/flt_8209C3C8/flt_820138DC/
-        //              flt_82004740/flt_82004F5C/flt_8208FBD0/flt_8208FA28/flt_8208FA2C/flt_8208F9C8...).
-        //              ⚠️ These are INDEXED stores: the offset lives in a register, so a literal scan
-        //              of pseudocode will not find them (the standing "literal scans miss real stores"
-        //              trap). They must be read off the asm.
-        //              ⚠️ And several of the source slots may be silent-zero .data seeded by an
-        //              IDA-unmarked static-init thunk -- CHECK THE SLOT, NOT THE SECTION, exactly as
-        //              VehiclePhysics::Reset's TimeSinceLastHandBrake (10000.0f) turned out to be.
-        //
-        // ⭐ ONE `[I]` BELOW IS NOW ASM-ATTESTED, FOR FREE. The note on `mPad2A050` says
-        //    "[I] +172208..+172240 is the DWARF's six-float run (:962-968,
-        //    mfCrashingAICollisionCrashThresholdMPH .. mfVerticalTakedownAngleDeg) ... Left opaque
-        //    rather than declared: the placement comes from DWARF ORDER, not from an asm store."
-        //    It does now come from asm stores: Construct writes SIX consecutive 4-byte seats at
-        //    exactly +172208/172212/172216/172220/172224/172228, which is that run to the byte, with
-        //    the 8 remaining bytes being the 16-byte alignment ahead of mCameraMatrix. The inference
-        //    and the image agree; the wave that lands Construct can declare those six by name.
+        //    ~601..943 the TUNING BANK -- ✅ **RESOLVED 2026-08-03**, see the big block further down
+        //              at `mbSlamsAndShuntsOn`. Corrections to the sizing that stood here before:
+        //              it is **89** indexed `st{fs,b,w}x` stores hitting **89 DISTINCT seats** (one
+        //              store per seat, no duplicates), not "96 stores / 88 seats" -- the apparent
+        //              duplicate was a stack-spill reload of the offset register (`stw r10,var_150`
+        //              @0x8263C278, `lwz r8,var_150` @0x8263C38C) that a naive scan mis-resolves.
+        //              There are also **two VECTOR stores** the old sizing missed entirely:
+        //              +172432 <- the 16 bytes at `unk_82181520` ({0,0,1,0}), and +172592 <- 16 zero
+        //              bytes. All 89 + 2 seats are now declared, named and defaulted.
+        //              ⛔ AND THE OLD NOTE'S METHOD ADVICE WAS WRONG: it said the ~40 constants
+        //              "must be read off the asm" because "a literal scan of pseudocode will not
+        //              find them", and warned they might be silent-zero .data. In fact this
+        //              function's Hex-Rays renders every literal directly (`*(_R31 + 171468) = 4.0;`)
+        //              -- the export has a GOOD pseudocode, unlike VehiclePhysics::Construct's. No
+        //              image read was needed. There are 33 distinct scalars, not ~40.
         //
         // ⛔ DO NOT SHIP A PARTIAL Construct. A body that runs the first ~510 instructions and skips
         //    the tuning bank would leave every takedown/slam/shunt threshold at zero while LOOKING
         //    complete -- the silent-drop-stub failure class. Either the tuning bank lands with it or
-        //    the function stays unbodied.
+        //    the function stays unbodied. (The bank's DEFAULTS are now recorded member-by-member
+        //    below, so the body can be written straight off this header.)
+        //
+        // ⭐ WHAT A FUTURE Construct WAVE STILL HAS TO DO, now that the layout is settled:
+        //    * the 30 `AddMonitor` handle globals (29 in dword_82F2A14C..82F2A1A0 +
+        //      dword_82F2A278..82F2A290; the 30th is the member miRaceCarWorldContactValidationPM).
+        //      Monitor name strings are inline in the function, including the indented sub-monitors
+        //      ("VMan: Update Stunt Offences", "   Drivers", "     Update Air Rams", ...).
+        //    * the inlined CgsNumeric::Random seeding (muSeed 0x1AD0891BC87CD8C9, ring[0] = 1.0f,
+        //      then seven draws of seed = seed*0x5851F42D4C957F2D + 1 with `inslwi rX,hi32,23,9`).
+        //    * the 8-car loop. ⚠️ It has **SEVEN** per-record writes, not the six previously banked:
+        //      the missing one is a lane-z insert at in-record **+0x1070** (`r11 = r29 - 0x39D`,
+        //      `lvx128` / `vrlimi128 v0,v127,2,0` / `stvx128`) -- the same +0x1070 seat
+        //      VehiclePhysics::Construct itself touches. The other six are the debug-component
+        //      pointer at +0x13E4, a 16-byte zero at +0x13F0, and +0x1400/+0x1408/+0x140C/+0x140D.
         // ==========================================================================================
 
         // ==========================================================================================
@@ -643,144 +644,315 @@ namespace Vehicle
         unsigned char        maRaceCarDebugComponent[8][1024];        // +163264 (ends 171456)
         bool                 mabRaceCarDebugComponentRegistered[8];   // +171456 (ends 171464)
 
-        // Master gate byte @ +171464 (asm: a non-zero byte gates the whole routine).
-        // ⚠️ FLAG (2026-08-03): the DWARF names the two bytes at this seat `mbSlamsAndShuntsOn`
-        // (:865) and `mbAllowSlamsAndShuntsEffectsForRivals` (:866), and the closure above lands them
-        // exactly here. The role-derived names are kept for now because the bodies read them as
-        // gates and the X360 use sites have not been re-checked against the DWARF semantics; do the
-        // rename in the wave that reconstructs the slam/shunt appliers, not in a layout pass.
-        bool                 mbTakedownsEnabled;      // +171464 (DWARF: mbSlamsAndShuntsOn)
+        // ==========================================================================================
+        // ⭐⭐ THE TUNING BANK, RESOLVED 2026-08-03. Everything from +171464 to +172616 below is now
+        // DWARF-NAMED and, where `VehicleManager::Construct` @0x8263B7C8 seeds it, carries its
+        // DEFAULT CONSTANT in the trailing comment. This span used to be 17 `mPad*` runs with 23
+        // role-guessed members poking through; it is now 100% declared.
+        //
+        // HOW IT WAS PROVEN -- three independent readings, zero conflicts:
+        //   1. the X360 ASM, symbolically simulated (GPR/FPR/stack-spill) -> seat -> flt_XXXXXXXX
+        //   2. the X360 HEX-RAYS for the same function -> seat -> literal value
+        //   3. the PS3 DecFIGS build's `VehicleManager::Construct` @0x6EB6BC -> seat -> literal,
+        //      at a uniform shift of Δ = 672 (X360 offset == PS3 offset + 672)
+        // Every one of the 33 distinct rodata symbols yields the SAME literal at every seat it
+        // feeds, and every seat below matches the PS3 build at Δ=672. Source 3 also supplied the one
+        // value X360 Hex-Rays elided into a register (mfTailgatingVunerabilityTime).
+        //
+        // WHY THE NAMES ARE TRUSTWORTHY: the DWARF member ORDER
+        // (references/DecFIGS/dwarfdump/.../BrnVehicleManager.h:865-1088) lays onto the asm seats and
+        // closes on SIX independent anchors -- the gate byte @171464; 171468 + 44*4 == 171644;
+        // mPlayerWonImpact 8-aligned @171736; mPlayerAiDriver @171968; mePlayerActiveRaceCarIndex
+        // @172204 with the six-float run @172208..172228 landing mCameraMatrix on 172240; and
+        // mpCachedCarA/B + mbCachedCarCarPredictionResult + the 16-aligned prediction normal
+        // @172416/172420/172424/172432. The store OPCODES corroborate the types independently
+        // (stfsx at 172320/172324 for the two float32_t; stwx at 172328..172344 for the four
+        // int32_t + the enum).
+        //
+        // ⚠️⚠️ SEVEN COMMITTED ROLE-GUESSES WERE REFUTED. The offsets were all correct, so no byte
+        // ever moved -- but the bodies that read them were reasoning about the wrong thing. Each is
+        // called out at its member below with "was <old name>". The load-bearing one:
+        // `miAttackerToRecord` -> `mfMinSecondsBetweenImpacts` and `maRaceCarLastAttacker[8]` ->
+        // `mafNoImpactTimeSeconds[8]`; the copy between them is ARMING A PER-CAR IMPACT COOLDOWN,
+        // not recording an attacker index. Both ends were mis-named consistently, which is exactly
+        // why it never looked wrong -- and `HasRaceCarHadRecentImpact` had already noticed the X360
+        // reads that slot AS A FLOAT and worked around it with a memcpy.
+        // ==========================================================================================
 
-        // The slam/shunt-physics enable gate @ +171465, one byte past the takedowns gate. Read by
-        // HandleRaceCarRaceCarContact before ApplySlam/ApplyShunt. FLAG: name proposed; offset asm-proven.
-        bool                 mbSlamShuntPhysicsEnabled; // +171465
+        // ---- the two master gates (DWARF :865/:866; both asm-proven, both seeded TRUE) -----------
+        bool                 mbSlamsAndShuntsOn;                    // +171464 = true   [was mbTakedownsEnabled]
+        bool                 mbAllowSlamsAndShuntsEffectsForRivals; // +171465 = true   [was mbSlamShuntPhysicsEnabled]
+        unsigned char        mPad29DCA[171468 - (171465 + 1)];      // 2 bytes, 4-align
 
-        unsigned char        mPad29DAA[171540 - (171465 + 1)];
-        // The attacker value stamped into maRaceCarLastAttacker[victim] @ +171540 (asm copies
-        // *(this+171540) into the per-victim last-attacker slot). FLAG: name proposed; offset asm-proven.
-        s32                  miAttackerToRecord;      // +171540 (ends 171544)
+        // ---- the 44-float tuning run (DWARF :868..:920). CONTIGUOUS: 171468 + 44*4 == 171644,
+        //      which is exactly where maeImpactType starts -- the run closes with no gaps. Every
+        //      default below is agreed by all three sources. ------------------------------------
+        f32 mfFrontRaySensorLength;                 // +171468 = 4.0f
+        f32 mfFrontRayLength;                       // +171472 = 1.5f
+        f32 mfRearRayLength;                        // +171476 = 1.5f
+        f32 mfPlayerShuntScale;                     // +171480 = 0.325f
+        f32 mfAIShuntScale;                         // +171484 = 0.2f
+        f32 mfShuntDecay;                           // +171488 = 0.15f
+        f32 mfVulnerabilityFactorMax;               // +171492 = 4.0f
+        f32 mfPlayerVulnerabilityDurationSeconds;   // +171496 = 2.0f
+        f32 mfAIVulnerabilityDurationSeconds;       // +171500 = 4.0f
+        f32 mfMinSteeringOverrideTimeSlam;          // +171504 = 0.2f
+        f32 mfMinSteeringOverrideTimeShunt;         // +171508 = 0.2f
+        f32 mfPlayerMaxSteeringOverrideTimeSlam;    // +171512 = 0.7f
+        f32 mfAIMaxSteeringOverrideTimeSlam;        // +171516 = 0.9f
+        f32 mfPlayerMaxSteeringOverrideTimeShunt;   // +171520 = 0.4f
+        f32 mfAIMaxSteeringOverrideTimeShunt;       // +171524 = 0.7f
+        f32 mfPlayerSlamForceScale;                 // +171528 = 0.25f
+        f32 mfAISlamForceScale;                     // +171532 = 0.25f
+        f32 mfMaxSlamClosingXSpeed;                 // +171536 = 16.0f
+        // ⚠️ REFUTED ROLE: committed as `s32 miAttackerToRecord`. It is a FLOAT cooldown, and the
+        // body that copies it into mafNoImpactTimeSeconds[victim] is starting that car's timer.
+        f32 mfMinSecondsBetweenImpacts;             // +171540 = 0.3f   [was miAttackerToRecord (s32)]
+        f32 mfMinAmountOfSlamForce;                 // +171544 = 0.2f
+        f32 mfMinAmountOfShuntForce;                // +171548 = 0.25f
+        // ⭐ The one value X360 Hex-Rays carried in a register; PS3 (170880) gives it literally, and
+        // flt_82001C98 is the same slot this function uses for the mCameraMatrix identity diagonal.
+        f32 mfTailgatingVunerabilityTime;           // +171552 = 1.0f
+        f32 mfBaseSlamMagnitude;                    // +171556 = 3.0f
+        f32 mfBaseShuntMagnitude;                   // +171560 = 22.5f
+        f32 mfTBoneTakedownMaxAngle;                // +171564 = 35.0f  [was mfTBoneAngleBandDegrees]
+        // ⚠️ REFUTED ROLE: committed as `mfTBoneSidePlaneHalfWidth`. It is a SPEED, not a width.
+        f32 mfTBoneTakedownSpeed;                   // +171568 = 30.0f  [was mfTBoneSidePlaneHalfWidth]
+        f32 mfMaxShuntAngle;                        // +171572 = 25.0f
+        f32 mfMinNudgeSpeed;                        // +171576 = 8.0f
+        // ⚠️ REFUTED ROLE: committed as `mfNudgeMaxClosingSpeed` / `mfShuntMaxClosingSpeed`. They are
+        // the shunt MINIMUM and the FATAL shunt speed -- opposite ends of the scale from the guess.
+        f32 mfMinShuntSpeed;                        // +171580 = 12.0f  [was mfNudgeMaxClosingSpeed]
+        f32 mfFatalShuntSpeed;                      // +171584 = 140.0f [was mfShuntMaxClosingSpeed]
+        f32 mfSlamDecayRate;                        // +171588 = 0.13f
+        f32 mfSlamEffectMinMagnitude;               // +171592 = 0.4f
+        f32 mfSlamEffectMaxMagnitude;               // +171596 = 2.0f
+        f32 mfMinShuntMagnitude;                    // +171600 = 0.2f
+        f32 mfMaxShuntMagnitude;                    // +171604 = 0.4f
+        f32 mfMinShuntBackwardsMagnitude;           // +171608 = 0.3f
+        f32 mfMaxShuntBackwardsMagnitude;           // +171612 = 0.75f
+        f32 mfMinTradingPaintSpeed;                 // +171616 = 0.8f   [was mfTradingPaintMinSpeed]
+        // ⚠️ REFUTED ROLE: committed as `mfTradingPaintMaxSpeed`; it is the FATAL SLAM speed (and it
+        // shares its value, 140.0f, with mfFatalShuntSpeed -- which is what made the guess plausible).
+        f32 mfFatalSlamSpeed;                       // +171620 = 140.0f [was mfTradingPaintMaxSpeed]
+        f32 mfFatalHitCrashingCarSpeed;             // +171624 = 50.0f
+        f32 mfMaxHeadToHeadAngle;                   // +171628 = 45.0f  [was mfHeadToHeadAngleToleranceDeg]
+        f32 mfMinHeadToHeadSpeed;                   // +171632 = 40.0f
+        f32 mfMinHeadToHeadIndividualSpeed;         // +171636 = 40.0f  [was mfHeadToHeadMinClosingSpeed]
+        f32 mfAngleForVerticleTakedown;             // +171640 = 60.0f  (DWARF's spelling)
 
-        unsigned char        mPad29DFC[171564 - (171540 + 4)];
-        // ---- per-type tuning floats (asm-proven offsets; FLAG: names proposed) --------------------
-        // T-bone test: angle band (degrees) and the side-plane half-width (the latter * flt_82F31928).
-        f32                  mfTBoneAngleBandDegrees;   // +171564
-        f32                  mfTBoneSidePlaneHalfWidth; // +171568 (ends 171572)
+        // ---- per-car impact bookkeeping (DWARF :923..:926) ---------------------------------------
+        // ⚠️ REFUTED ROLE: committed as `f32 maRaceCarLastImpactMagnitude[8]`. It is the per-car
+        // IMPACT TYPE enum array; the value written into it is the classifier's result, not a
+        // magnitude. Same 32 bytes, same seats.
+        EImpactType          maeImpactType[8];              // +171644 (32; ends 171676) [was maRaceCarLastImpactMagnitude]
+        // ⚠️ REFUTED ROLE: committed as `maRaceCarTakenDownThisFrame[8]`; it is the per-car impact SCORE.
+        unsigned char        mauImpactScore[8];             // +171676 (8;  ends 171684) [was maRaceCarTakenDownThisFrame]
+        // ⚠️ REFUTED ROLE: committed as `s32 maRaceCarLastAttacker[8]`. It is a FLOAT per-car
+        // "seconds until this car may be impacted again" countdown, seeded from
+        // mfMinSecondsBetweenImpacts. HasRaceCarHadRecentImpact tests it > 0.0f -- which is why that
+        // body already had to memcpy the s32 through to a float to stay byte-faithful.
+        f32                  mafNoImpactTimeSeconds[8];     // +171684 (32; ends 171716) [was maRaceCarLastAttacker]
+        signed char          maiPhysicsSlamIndex[8];        // +171716 (8;  ends 171724)
+        f32                  mfContactDisplaySeconds;       // +171724
+        EImpactType          meDisplayImpactType;           // +171728
+        bool                 mbPlayerWonDisplayImpact;      // +171732
+        unsigned char        mPad29F95[171736 - (171732 + 1)]; // 3 bytes; BitArray is 8-aligned
+        // ⚠️ REFUTED ROLE: committed as `mTakenDownRaceCarsBitArray`. DWARF :934 calls it
+        // mPlayerWonImpact -- a per-car "the player won this impact" bitset, not a taken-down set.
+        CgsContainers::BitArray<8> mPlayerWonImpact;        // +171736 (8; ends 171744) [was mTakenDownRaceCarsBitArray]
 
-        unsigned char        mPad29E14[171580 - (171568 + 4)];
-        // Shunt/nudge closing-speed bands (each * flt_82F31928 before comparison).
-        f32                  mfNudgeMaxClosingSpeed;    // +171580
-        f32                  mfShuntMaxClosingSpeed;    // +171584 (ends 171588)
+        // ---- the per-car vulnerability / grinding arrays (DWARF :937..:951) -----------------------
+        // ⚠️⚠️ REFUTED SHAPE, not just a name: the committed header declared SCALARS
+        // `mfGrindingThresholdA` @171868 and `mfGrindingThresholdB` @171900. Those two addresses are
+        // ELEMENT 7 of the two per-car grinding-duration arrays below (171840 + 7*4 == 171868;
+        // 171872 + 7*4 == 171900). The grind pre-pass in this class's .cpp therefore reads car
+        // index 7's durations at a hard-coded offset. Left as-is and FLAGGED rather than "fixed":
+        // per the standing rule an asm-derived index is never changed to match a label -- the wave
+        // that re-reads CheckForGrindingAndRubbing against its own asm owns that call.
+        f32                  mafVulnerableTimeSeconds[8];              // +171744 (ends 171776)
+        f32                  mafVulnerabilityFactor[8];                // +171776 (ends 171808)
+        f32                  mafTotalVulnerableTime[8];                // +171808 (ends 171840)
+        f32                  mafPlayerGrindingOtherDurationSeconds[8]; // +171840 (ends 171872) [7] == old mfGrindingThresholdA
+        f32                  mafOtherGrindingPlayerDurationSeconds[8]; // +171872 (ends 171904) [7] == old mfGrindingThresholdB
+        f32                  mafRubbingDurationSeconds[8];             // +171904 (ends 171936)
+        unsigned char        mau8FramesSincePlayerGrindingOther[8];    // +171936 (ends 171944)
+        unsigned char        mau8FramesSinceOtherGrindingPlayer[8];    // +171944 (ends 171952)
+        bool                 mabRubbingThisUpdate[8];                  // +171952 (ends 171960)
+        unsigned char        mPad29FF8[171968 - 171960];               // 8 bytes; VehicleDriver is 16-aligned
 
-        unsigned char        mPad29E24[171616 - (171584 + 4)];
-        // Trading-paint energy band (each * flt_82F31928).
-        f32                  mfTradingPaintMinSpeed;    // +171616
-        f32                  mfTradingPaintMaxSpeed;    // +171620 (ends 171624)
-
-        unsigned char        mPad29E38[171628 - (171620 + 4)];
-        // Head-to-head test: angle tolerance (degrees, subtracted from 180) and min closing speed
-        // (* flt_82F31928).
-        f32                  mfHeadToHeadAngleToleranceDeg; // +171628
-        unsigned char        mPad29E40[171636 - (171628 + 4)];
-        f32                  mfHeadToHeadMinClosingSpeed;   // +171636 (ends 171640)
-
-        unsigned char        mPad29E48[171644 - (171636 + 4)];
-        // Per-car last-impact magnitude @ +171644. Stride 4. FLAG: name proposed; offset asm-proven.
-        f32                  maRaceCarLastImpactMagnitude[8]; // +171644 (4 * 8 = 32; ends 171676)
-        // Per-car "taken down this frame" byte @ +171676. Stride 1; abuts maRaceCarLastAttacker.
-        unsigned char        maRaceCarTakenDownThisFrame[8];  // +171676 (1 * 8 = 8; ends 171684)
-
-        // Per-car LAST-ATTACKER array @ +171684. Stride 4 (asm: 4*(victim+42921) == 4*victim+171684);
-        // written from miAttackerToRecord. FLAG: name proposed; offset asm-proven.
-        s32                  maRaceCarLastAttacker[8]; // +171684 (4 * 8 = 32; ends at 171716)
-
-        unsigned char        mPad29F44[171736 - (171684 + 32)];
-        // Per-car "taken down this frame" bit array @ +171736 (CgsBitArray<8>, 8-byte single field).
-        // HandleRaceCarRaceCarContact sets the victim's bit here when a takedown is scored.
-        // FLAG: name proposed; +171736 asm-proven (asm: v141 = v39 + 171736).
-        CgsContainers::BitArray<8> mTakenDownRaceCarsBitArray; // +171736 (ends 171744)
-
-        unsigned char        mPad29F98[171868 - (171736 + 8)];
-        // Grind pre-pass thresholds @ +171868 / +171900 (asm: *(v39+171868) < 1.0 selects grind type
-        // 7 vs 8; *(v39+171900) < 0.8 the second gate). FLAG: names proposed; offsets asm-proven.
-        f32                  mfGrindingThresholdA;    // +171868
-        unsigned char        mPad29FFC[171900 - (171868 + 4)];
-        f32                  mfGrindingThresholdB;    // +171900 (ends 171904)
-
-        unsigned char        mPad2A01C[171968 - (171900 + 4)];
-        // ⭐ NEWLY PINNED: the manager's own spare AI driver. Construct calls
+        // ⭐ The manager's own spare AI driver. Construct calls
         // `VehicleDriver::Construct(this + 3*65536 - 0x6040)` == this + 171968 @0x8263C088 -- the
         // SECOND VehicleDriver::Construct call in the function, the first being the 8-car array at
         // +64. DWARF: `VehicleDriver mPlayerAiDriver` (BrnVehicleManager.h:953).
         VehicleDriver        mPlayerAiDriver;         // +171968 (224; ends 172192)
 
-        // [I] +172192..+172204 is the DWARF run that follows mPlayerAiDriver:
-        //   bool mbPlayerAiDriverValid (:954), float mfPlayerRecentSteering (:955),
-        //   float mfSteeringUpdateRemainder (:956)
-        // -- which lands the next member on 172204 exactly, i.e. it is what CLOSES this span onto
-        // the asm-proven mePlayerActiveRaceCarIndex. Left opaque rather than declared: the placement
-        // comes from DWARF ORDER, not from an asm store, and a wrong guess here would be invisible.
-        unsigned char        mPad2A040[172204 - 172192];
+        // DWARF :954-956 -- the run that closes 172192 onto the asm-proven mePlayerActiveRaceCarIndex.
+        // Now DECLARED (was opaque): the run has to be exactly bool + f32 + f32 for 172192 + 12 to
+        // land on 172204, and no other DWARF member sits between them.
+        bool                 mbPlayerAiDriverValid;      // +172192
+        unsigned char        mPad2A041[172196 - (172192 + 1)];
+        f32                  mfPlayerRecentSteering;     // +172196
+        f32                  mfSteeringUpdateRemainder;  // +172200
 
         // The local player's active-race-car slot @ +172204. DWARF-attested name (BrnVehicleManager.h:959).
         EActiveRaceCarIndex  mePlayerActiveRaceCarIndex; // +172204 (ends 172208)
 
-        // [I] +172208..+172240 is the DWARF's six-float run (:962-968,
-        // mfCrashingAICollisionCrashThresholdMPH .. mfVerticalTakedownAngleDeg) plus the 16-byte
-        // alignment ahead of mCameraMatrix. Left opaque for the same reason as the span above.
-        unsigned char        mPad2A050[172240 - (172204 + 4)];
+        // ---- the six world/traffic crash thresholds (DWARF :962..:968). Previously left opaque
+        //      because the placement came from DWARF order only; Construct writes all six with
+        //      `stfsx` at exactly these seats, and the PS3 build agrees at Δ=672. -----------------
+        f32 mfCrashingAICollisionCrashThresholdMPH; // +172208 = 50.0f
+        f32 mfHeadOnWorldCrashThreshold;            // +172212 = 40.5f
+        f32 mfSideOnWorldCrashThreshold;            // +172216 = 50.0f
+        f32 mfTrafficCollisionCheckThresholdMPH;    // +172220 = 30.0f
+        f32 mfMinRCTrafficTranslateSpeedMPH;        // +172224 = 40.0f
+        f32 mfVerticalTakedownAngleDeg;             // +172228 = 65.0f
+        unsigned char        mPad2A074[172240 - (172228 + 4)];  // 8 bytes; Matrix44Affine is 16-aligned
 
-        // ⭐ NEWLY PINNED: the camera matrix Construct stamps with the identity. Asm @0x8263C068:
+        // ⭐ The camera matrix Construct stamps with the identity. Asm @0x8263C068:
         //   addis r11,r31,3 ; addi r11,r11,-0x5F30   -> this + 172240
         //   stvx128 v0,r0,r11 / v13,r11,0x10 / v12,r11,0x20 / v11,r11,0x30
         // -- four 16-byte lanes built on the stack from flt_82001C98 (1.0f) and flt_82001CC0 (0.0f).
-        // DWARF: `Matrix44Affine mCameraMatrix` (BrnVehicleManager.h:970). 172240 is 16-aligned, so
-        // the declaration needs no extra padding.
+        // DWARF: `Matrix44Affine mCameraMatrix` (BrnVehicleManager.h:970).
         Matrix44Affine       mCameraMatrix;           // +172240 (64; ends 172304)
 
-        // [I] +172304 / +172305 are the DWARF's `mbImpactTime` (:972) and `mbEasyCrashingEnabled`
-        // (:973); the next two bools ARE asm-proven and are named below.
-        unsigned char        mPad2A0B0[172306 - 172304];
-        // ---- crash-suppression + alternate-entry gates (asm-proven offsets; FLAG: names proposed) --
-        bool                 mbSuppressPlayerCrash;            // +172306
-        bool                 mbSuppressIfAlreadyCrashState1;   // +172307 (ends 172308)
-        unsigned char        mPad2A0B4[172311 - (172307 + 1)];
-        bool                 mbHornTakedownEnabled;            // +172311
-        unsigned char        mPad2A0B8[172315 - (172311 + 1)];
-        bool                 mbStationaryTakedownsEnabled;     // +172315
+        // ---- the 16 gameplay/debug bools (DWARF :972..:988). Construct seeds 12 of them; the four
+        //      it leaves alone are marked "(not seeded)". ----------------------------------------
+        bool mbImpactTime;                          // +172304 = false
+        bool mbEasyCrashingEnabled;                 // +172305   (not seeded)
+        bool mbStopPlayerCrashing;                  // +172306 = false  [was mbSuppressPlayerCrash]
+        // ⚠️ REFUTED ROLE: committed as `mbSuppressIfAlreadyCrashState1`; it is the AI twin of the
+        // byte above, nothing to do with a crash state value.
+        bool mbStopAICrashing;                      // +172307 = false  [was mbSuppressIfAlreadyCrashState1]
+        bool mbCrashOnHandbrakeTurn;                // +172308 = false
+        bool mbCrashPlayerNextUpdate;               // +172309 = false
+        bool DEBUG_mbAlwaysCrashRaceCarToRaceCar;   // +172310   (not seeded)
+        bool DEBUG_mbHornTakedownEnabled;           // +172311   (not seeded)  [was mbHornTakedownEnabled]
+        bool mbDebugModifyTrafficContacts;          // +172312   (not seeded)
+        bool mbTrafficCheckingAllowed;              // +172313 = true
+        bool mbAftertouchIsForceAdditive;           // +172314 = false
+        // ⚠️ REFUTED ROLE: committed as `mbStationaryTakedownsEnabled`. It is the online-mode flag.
+        bool mbIsOnlineGameMode;                    // +172315 = false  [was mbStationaryTakedownsEnabled]
+        bool mbUpdatedPlayerDriver;                 // +172316   (not seeded)
+        bool mbForceNoSlowMo;                       // +172317   (not seeded)
+        bool mbInOnlineGameModeStartLine;           // +172318 = false
+        bool mbPlayerCarInJunkYard;                 // +172319 = false
 
-        unsigned char        mPad2A0BC[172320 - (172315 + 1)];
-        // ---- player-car stats (written by ApplyPlayerStats; the first two re-read by
-        //      SetPlayerCarToShowtimeMode -> RaceCarPhysics::SetPlayerVehicleInShowtime) -------------
-        // +172320 (asm v3[43080]): the showtime "player car strength" == (s32)lpSendCarStatsAction[1]
-        //   sign-extended * 0.1f. +172324 (asm v3[43081]): the showtime "damage limit" ==
-        //   lpSendCarStatsAction[4]. FLAG: names proposed by role; +172320/+172324 asm-proven.
-        f32                  mfShowtimePlayerCarStrength;      // +172320
-        f32                  mfShowtimePlayerCarDamageLimit;   // +172324
-        // +172328..+172344 (asm v3[43082..43086]): the raw player-car stats block ApplyPlayerStats
-        //   copies straight from lpSendCarStatsAction[0],[1],[2],[3],[5] (the [4] entry goes to the
-        //   damage-limit field above, [1] also feeds the *0.1 strength). FLAG: names proposed;
-        //   offsets/stride asm-proven (172328,172332,172336,172340,172344).
-        f32                  maPlayerCarStats[5];              // +172328 (5 * 4 = 20; ends 172348)
+        // ---- the player/car stat block (DWARF :993..:1007) ---------------------------------------
+        // ⚠️⚠️ REFUTED TYPE: the committed header modelled +172328..+172348 as `f32
+        // maPlayerCarStats[5]`. It is four `int32_t` plus a `BrnResource::ECarType`, and Construct
+        // proves it at the opcode level -- the two seats above are written with `stfsx` and these
+        // five with `stwx`. Same 20 bytes; the accessors were reading integers as floats.
+        f32 mfPlayerStatStrength;                   // +172320 = 0.0f  [was mfShowtimePlayerCarStrength]
+        f32 mfPlayerStatDamageLimit;                // +172324 = 0.0f  [was mfShowtimePlayerCarDamageLimit]
+        s32 miCarSpeed;                             // +172328 = 0     [was maPlayerCarStats[0]]
+        s32 miCarStrength;                          // +172332 = 0     [was maPlayerCarStats[1]]
+        s32 miCarControl;                           // +172336 = 0     [was maPlayerCarStats[2]]
+        s32 miCarBoost;                             // +172340 = 0     [was maPlayerCarStats[3]]
+        // FLAG: BrnResource::ECarType has no committed home; kept as s32 (Construct seeds 3).
+        s32 meCarType;                              // +172344 = 3     [was maPlayerCarStats[4]]
+        s32 miPlayerSpeed;                          // +172348   (not seeded)
+        s32 miPlayerStrength;                       // +172352   (not seeded)
+        s32 miPlayerControl;                        // +172356   (not seeded)
+        s32 miPlayerBoost;                          // +172360   (not seeded; ends 172364)
 
-        unsigned char        mPad2A0DC[172456 - (172328 + 20)];
-        // +172456 (asm v3[43114]): the current showtime behaviour mode (BrnGameState::EShowtimeMode;
-        //   gated 0..2 against E_SHOWTIME_MODE_COUNT==3). Stored as a 4-byte word (asm stwx). FLAG:
-        //   stored as a plain u32 because the EShowtimeMode enum has no committed home yet; +172456
-        //   asm-proven. Replace the type with the enum when its home lands.
-        u32                  muShowtimeBehaviour;              // +172456 (ends 172460)
+        // [I] +172364..+172380 is the DWARF's `Time mCurrentTime` / `Time mStartModeTime` pair
+        // (:1010/:1011). Left OPAQUE deliberately: Construct never writes either, so nothing pins
+        // sizeof(Time) here, and both the 4-byte and 8-byte readings can be made to fit this 16-byte
+        // span. The next member IS asm-proven, so a wrong split inside this span cannot leak out.
+        unsigned char        mPad2A0EC[172380 - 172364];
 
-        unsigned char        mPad2A12C[172612 - (172456 + 4)];
-        // Per-frame takedown-event cap counter @ +172612 (throttled < 32). FLAG: name proposed.
-        u32                  muTakedownEventsThisFrame;        // +172612 (ends 172616)
+        // FLAG: BrnGameState::GameStateModuleIO::EGameModeType has no committed home; kept as s32.
+        // Construct seeds -1 ("no mode"), asm-proven (`stwx` of 0xFFFFFFFF).
+        s32 meCurrentGameModeType;                  // +172380 = -1
+
+        // ---- the eight car-stat strength scalars (DWARF :1015..:1023). All eight asm-proven and
+        //      PS3-confirmed; note the Max/Min symmetry (2.0/0.5 slam, 2.0/0.05 shunt). -----------
+        f32 mfCarStatStrengthSlamMax;               // +172384 = 2.0f
+        f32 mfCarrStatStrengthSlamMin;              // +172388 = 0.5f   (DWARF's spelling: "Carr")
+        f32 mfCarStatStrengthShuntMax;              // +172392 = 2.0f
+        f32 mfCarrStatStrengthShuntMin;             // +172396 = 0.05f
+        f32 mfCarStatStrengthBeingSlammedMax;       // +172400 = 2.0f
+        f32 mfCarStatStrengthBeingSlammedMin;       // +172404 = 0.5f
+        f32 mfCarStatStrengthBeingShuntedMax;       // +172408 = 2.0f
+        f32 mfCarrStatStrengthBeingShuntedMin;      // +172412 = 0.05f
+
+        // ⚠️ POINTER WIDTH. The DWARF types these two `const SimpleVehiclePhysics*`. They are
+        // modelled as u32 slots so the 16-aligned mCachedCarCarPredictionNormal below keeps its
+        // asm-proven +172432 seat on x64 -- two 8-byte pointers would push it to +172440 and silently
+        // break the rest of the class. Construct only NULLs them; nothing in this tree dereferences
+        // them yet. DELETE-WHEN a RaceCarPhysics/SimpleVehiclePhysics cache pass needs them live.
+        u32 muCachedCarASlot;                       // +172416 = NULL  (DWARF: mpCachedCarA)
+        u32 muCachedCarBSlot;                       // +172420 = NULL  (DWARF: mpCachedCarB)
+        bool mbCachedCarCarPredictionResult;        // +172424 = false
+        unsigned char        mPad2A189[172432 - (172424 + 1)];  // 7 bytes; Vector3 is 16-aligned
+        // ⭐ NEWLY PINNED, and the reason the whole tail closes: Construct loads 16 bytes from
+        // `unk_82181520` and stores them here (`stvx128 v0, r31, r9` @0x8263C48C, r9 == 172432).
+        // unk_82181500/10/20 are the identity basis rows {1,0,0,0}/{0,1,0,0}/{0,0,1,0} -- already
+        // settled in-repo twice (ICECameraSpaceHandler.cpp:124, BrnShadowMap.cpp:955/998). So the
+        // cached car-vs-car prediction normal is seeded to the world +Z axis.
+        Vector3 mCachedCarCarPredictionNormal;      // +172432 = {0,0,1,0}  (16; ends 172448)
+
+        // FLAG: VehicleManager::EStationaryPlayerWheelAngle has no committed home; kept as s32.
+        s32 meStationaryPlayerWheelAngle;           // +172448 = 2
+        bool mbCrashRaceCarWhenFatal;               // +172452 = true
+        unsigned char        mPad2A1A5[172456 - (172452 + 1)];
+        // FLAG: BrnGameState::EShowtimeBehaviour has no committed home; kept as u32. Gated 0..2
+        // against E_SHOWTIME_MODE_COUNT==3 by SetShowtimeBehaviour; Construct seeds 2.
+        u32 meShowtimeBehaviour;                    // +172456 = 2     [was muShowtimeBehaviour]
+        // ⭐ The 30th PerfMonCpu monitor handle -- the only one of the thirty that is stored INTO the
+        // object rather than into a file-scope global. Named by the console's OWN assert text,
+        // `"miRaceCarWorldContactValidationPM >= 0"` (BrnVehicleManager.cpp:778), which matches
+        // DWARF :1041 exactly.
+        s32 miRaceCarWorldContactValidationPM;      // +172460 = AddMonitor("PHYS ValidateRCWorldContact", ...)
+        unsigned char mn8RoundRobinControlWord;     // +172464   (not seeded; DWARF :1042)
+
+        // [I] +172465..+172580 holds the DWARF's contact-generation block (:1045..:1076 -- the two
+        // generator pointers, three PrimitivePairListBuilders, the job pointers, the stream
+        // producers and mOverlappingRaceCars). Opaque: none of those types has a committed size, and
+        // Construct does not touch the span. Recorded so the next wave does not re-derive it.
+        unsigned char        mPad2A1D1[172580 - 172465];
+
+        // ⭐ NEWLY PINNED (asm `stwx` of 0 at both). [I] on the NAMES only: the DWARF counters that
+        // live in this region are miNumTrafficSphereWorldTests (:1072) and miNumSPUTractionLineTests
+        // (:1076); which of them is which is NOT pinned, so they are left role-neutral.
+        s32 miContactStreamCounterA;                // +172580 = 0   FLAG: name role-neutral
+        s32 miContactStreamCounterB;                // +172584 = 0   FLAG: name role-neutral
+        unsigned char        mPad2A22C[172592 - (172584 + 4)];
+        // ⭐ NEWLY PINNED, and it closes the class tail to the byte: Construct zero-stores 16 bytes
+        // here (`stvx128 v127, r31, r11` @0x8263C664, r11 == 172592) and a zero byte at 172608 --
+        // exactly the DWARF's adjacent `Sphere mStuckInCollisionTestCacheSphere` (:1087) +
+        // `bool mbPlayerCarStuckInCollision` (:1088) pair. Modelled as raw bytes because Sphere has
+        // no committed home; the 16-byte size is what the single stvx128 proves.
+        unsigned char        mStuckInCollisionTestCacheSphere[16];   // +172592 = {0,0,0,0} (ends 172608)
+        bool                 mbPlayerCarStuckInCollision;            // +172608 = false
+        unsigned char        mPad2A241[172612 - (172608 + 1)];
+        // Per-frame takedown-event cap counter @ +172612 (throttled < 32). FLAG: name still proposed
+        // -- this seat is past the end of the DWARF member list dumped for this class.
+        u32                  muTakedownEventsThisFrame;        // +172612 = 0 (ends 172616)
 
         // Pin every recovered offset. Never called -- exists only so offsetof can see the private
         // members (offsetof on a private member needs member-function context). The gate FAILS if any
         // padding run is wrong, which is the intended signal.
+        //
+        // ⚠️⚠️ 2026-08-03: _AssertLayout and _AssertLayoutPlayerStats DO NOT CURRENTLY RUN. They are
+        // defined in BrnVehicleManager.cpp / BrnVehicleManagerPlayerStats.cpp, and NEITHER TU is
+        // mounted in tools/build/build_game_exe.bat -- so a static_assert in them is a comment, not
+        // a gate, and a green build says nothing at all about this class's layout. That was true for
+        // every wave that has touched this header. _AssertLayoutTuningBank below is the fix for the
+        // span this wave resolved; it lives in its own mounted TU
+        // (BrnVehicleManager_layout_check.cpp) precisely so that it is actually compiled.
         static void _AssertLayout();
 
         // As _AssertLayout, but pins the wave-10 player-stats / showtime / network / map members added
-        // for the second .cpp (BrnVehicleManagerPlayerStats.cpp). Never called.
+        // for the second .cpp (BrnVehicleManagerPlayerStats.cpp). Never called. NOT MOUNTED -- see above.
         static void _AssertLayoutPlayerStats();
+
+        // ⭐ THE ONE LAYOUT GATE THAT IS ACTUALLY COMPILED. Defined in the mounted
+        // BrnVehicleManager_layout_check.cpp; pins the whole +171464..+172616 tuning bank. Never
+        // called -- static_assert fires at compile time, so /OPT:REF discarding it afterwards is
+        // irrelevant. Keep this TU mounted.
+        static void _AssertLayoutTuningBank();
     };
 }
 }
