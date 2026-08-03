@@ -27,9 +27,11 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h" // BrnWorld::ERaceCarType (maeRaceCarTypes)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"  // RaceCarContact (mNormal @+48, mPointOnA @+64)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<1536,16> (the IO event queue the crash/takedown events push onto)
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"          // CgsModule::EventQueue<DiscardedContact,20> (mDiscardedContacts @+160672)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"        // CgsContainers::BitArray<N> (live-car bitset, crash-data free-list, taken-down bitset)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"             // CgsNumeric::Random (mRandom @+16)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h" // VehicleDriver (maRaceCarDrivers @+64, mPlayerAiDriver @+171968)
+#include "GameSource/Physics/VehicleManager/StuntOffences/BrnStuntOffencesManager.h" // BrnPhysics::StuntOffencesManager (mStuntOffencesManager @+44240 -- the ONE contained sub-object whose real x64 type fits its X360 span exactly)
 
 // Pointer-only collaborators in RaceCarResponseInfo -- forward-declared in their real namespaces
 // (homed by their own TUs; the classifier never dereferences them here).
@@ -326,6 +328,10 @@ namespace Vehicle
         //    ⇒ Construct is NOT blocked on link closure. Its only caller is PhysicsModule::Construct
         //    @0x825AE308, which is still a stub for exactly two reasons: this function, and
         //    PhysicsSimulationModule::Construct.
+        //    ⛔ BUT DO NOT STOP READING HERE. "Has a body" is not "can be called": three of those
+        //    six sub-constructors take a `this` that VehicleManager cannot supply, because the
+        //    member is an X360-sized opaque span and the real x64 class does not fit in it. The
+        //    measured table is a few paragraphs down and it is the actual blocker.
         //
         // THE SHAPE, measured (instruction counts are from the disassembly, not guessed):
         //    ~1..310   THIRTY `CgsDev::PerfMonCpu::AddMonitor` calls, each storing its s32 handle into
@@ -371,18 +377,159 @@ namespace Vehicle
         //    the function stays unbodied. (The bank's DEFAULTS are now recorded member-by-member
         //    below, so the body can be written straight off this header.)
         //
-        // ⭐ WHAT A FUTURE Construct WAVE STILL HAS TO DO, now that the layout is settled:
-        //    * the 30 `AddMonitor` handle globals (29 in dword_82F2A14C..82F2A1A0 +
-        //      dword_82F2A278..82F2A290; the 30th is the member miRaceCarWorldContactValidationPM).
-        //      Monitor name strings are inline in the function, including the indented sub-monitors
-        //      ("VMan: Update Stunt Offences", "   Drivers", "     Update Air Rams", ...).
-        //    * the inlined CgsNumeric::Random seeding (muSeed 0x1AD0891BC87CD8C9, ring[0] = 1.0f,
-        //      then seven draws of seed = seed*0x5851F42D4C957F2D + 1 with `inslwi rX,hi32,23,9`).
-        //    * the 8-car loop. ⚠️ It has **SEVEN** per-record writes, not the six previously banked:
-        //      the missing one is a lane-z insert at in-record **+0x1070** (`r11 = r29 - 0x39D`,
-        //      `lvx128` / `vrlimi128 v0,v127,2,0` / `stvx128`) -- the same +0x1070 seat
-        //      VehiclePhysics::Construct itself touches. The other six are the debug-component
-        //      pointer at +0x13E4, a 16-byte zero at +0x13F0, and +0x1400/+0x1408/+0x140C/+0x140D.
+        // ==========================================================================================
+        // ⛔⛔ AND HERE IS WHY IT IS STILL UNBODIED -- MEASURED 2026-08-03 (the Construct-blocker
+        //     wave), with the compiler, not reasoned. The previous note ended "now that the layout
+        //     is settled", and the wave brief that followed it said Construct was "no longer blocked
+        //     on layout". **BOTH ARE WRONG.** The TUNING BANK is settled -- that is the last ~340
+        //     instructions. The FIRST ~600 are the sub-constructor spine, and three of its six calls
+        //     target members that this class carries as X360-SIZED OPAQUE SPANS whose real
+        //     reconstructed types are LARGER on x64. You cannot call a constructor on a span that
+        //     cannot hold the object.
+        //
+        //     Measured with `char (*p)[sizeof(T)] = 1;` against the committed headers (MSVC 19,
+        //     /std:c++17, x64) -- the C2440 diagnostic prints the array bound:
+        //
+        //       call site in Construct                          real x64 sizeof   span here   verdict
+        //       ---------------------------------------------   ---------------   ---------   -------
+        //       VehicleDriver::Construct(&maRaceCarDrivers[i])              224         224   ✅ READY
+        //       VehicleDriver::Construct(&mPlayerAiDriver)                  224         224   ✅ READY
+        //       StuntOffencesManager::Construct(this + 44240)               464         464   ✅ READY
+        //       mDiscardedContacts bind (this + 160672)                    1296        1296   ✅ READY
+        //       VehicleManagerDebugComponent::Construct(+161968)           1328        1296   ⛔ +32
+        //       PhysicalTrafficManager::Construct(this + 44768)          105840      103360   ⛔ +2480
+        //       VehiclePhysics::Construct(&maRaceCarVehicles[i])           4752   (rec 5216)  ⛔ see below
+        //
+        //     THREE of the four READY rows were opaque byte arrays before this wave and are typed
+        //     now (mStuntOffencesManager, mDiscardedContacts) or were already typed
+        //     (maRaceCarDrivers / mPlayerAiDriver). Nothing moved: the compiled layout gate in
+        //     BrnVehicleManager_layout_check.cpp is what proves it, and growing either new type by
+        //     one byte fires 68 of its asserts (tamper-tested).
+        //
+        //     * VehicleManagerDebugComponent grows 32 bytes because its base's vptr and its
+        //       `mpVehicleManager` both widen 4 -> 8; BrnVehicleManagerDebugComponent.h's own banner
+        //       already says VehicleManager must keep the 1296-byte span for exactly this reason.
+        //     * PhysicalTrafficManager grows 2480 bytes; BrnPhysicalTrafficManager.h's finding (3)
+        //       lists three of the contributing host/X360 size divergences on its own.
+        //     * VehiclePhysics is SMALLER than the 5216-byte record, which is worse, not better:
+        //       RaceCarVehicleRecord reproduces the X360 IN-RECORD offsets that the mounted takedown
+        //       chain reads by name (mbIsCrashingOrDisabled @+1808, mvWorldPosition @+1920,
+        //       mCrashMatrix @+3328, ...). Constructing a real x64 VehiclePhysics in that storage
+        //       would write its members at x64 offsets while every reader still looks at X360 ones --
+        //       a silent-corruption trade, not a fix. (sizeof(RaceCarPhysics) == 4816 vs 5216.)
+        //
+        //     ⇒ THE BLOCKER IS NOT LINK CLOSURE AND NOT THE TUNING BANK. It is that this class is
+        //       BYTE-PINNED to X360 offsets (deliberately -- most of it is unreconstructed padding),
+        //       and a byte-pinned class cannot embed real x64 sub-objects. Resolving it means moving
+        //       the affected spans from absolute offsetof asserts to RELATIVE deltas, which is what
+        //       BrnVehicleManagerDebugComponent.h already did for its own tail. That is a multi-wave
+        //       refactor and it drags the unreconstructed RaceCarPhysics layout with it.
+        //
+        //     ⚠️ THE TEMPTING WRONG FIX, written down so it is not re-invented: the 32-byte debug
+        //       component overflow could be "absorbed" by shrinking the maRaceCarDebugComponent pad
+        //       behind it (both are opaque, nothing reads either by name, and the tuning bank would
+        //       keep its offsets). Do not. Construct stores &maRaceCarDebugComponent[i] into each car
+        //       record at an asm-literal 1024 stride (`addi r27, r27, 0x400`); silently re-striding
+        //       that array to make an unrelated call compile is inventing layout to buy a green
+        //       build. If it is ever done it must be a deliberate, argued decision with its own gate.
+        //
+        // ⭐ WHAT IS ALREADY DECODED, so the unblocking wave writes zero new decode. All of the
+        //    below is re-derived first-hand from the freshly pulled asm (943 instructions) and
+        //    cross-checked against the same function's Hex-Rays; the seat/constant join reproduced
+        //    the tuning bank below with ZERO conflicts across 33 rodata symbols and 91 seats.
+        //
+        //    (a) THE PERFMON BLOCK, exactly 30 AddMonitor calls. All thirty pass page/min/budget/tag
+        //        as (r4, r5, f1, r7); r6 is never written, so these are the FIVE-argument
+        //        CgsDev::PerfMonCpu::AddMonitor (CgsPerfMonCpu.h settled that). Budget f22 ==
+        //        flt_82004A20 == 10.0f for all thirty. Page is 12 for the first 29 and **6** for the
+        //        30th. Twenty-nine store to file-scope globals; the 30th stores to the member
+        //        miRaceCarWorldContactValidationPM and is followed by the console's own
+        //        `miRaceCarWorldContactValidationPM >= 0` assert (BrnVehicleManager.cpp:778).
+        //        ⚠️ SEVEN of the 29 are GUARDED -- `if (global < 0) global = AddMonitor(...)` -- so
+        //        those seven globals must be initialised to a NEGATIVE sentinel or they never
+        //        register at all (the CgsNetworkPlayer.cpp `s_i*PM = -1` + register-once pattern is
+        //        the committed precedent). The other 22 are unconditional.
+        //        The monitor strings carry their own tree in their LEADING SPACES (that indentation
+        //        is data, not a guess), in call order:
+        //          82F2A1A0  "VMan: Update Stunt Offences"
+        //          82F2A14C  "VMan: Update Vehicle Impacts"
+        //          82F2A150  "VMan: Process Above Ground LTs"
+        //          82F2A154  "VMan: Traction LTs"
+        //          82F2A158  "        GetLines"
+        //          82F2A15C  "        LineTests"
+        //          82F2A168  "           Begin"
+        //          82F2A16C  "           RunStream"
+        //          82F2A170  "           Finish"
+        //          82F2A174  "           End"
+        //          82F2A160  "        ProcessResults"
+        //          82F2A164  "        Traffic"
+        //          82F2A178  "VMan: Crash Fatal"
+        //          82F2A17C  "VMan: Update Race Cars"
+        //          82F2A180  "        Drivers"
+        //          82F2A184  "        Vehicles"
+        //          82F2A278  "          VPhys::Update"        <- guarded
+        //          82F2A27C  "            Switch Attribs"     <- guarded
+        //          82F2A280  "            Update Crashing"    <- guarded
+        //          82F2A284  "            Update Air Rams"    <- guarded
+        //          82F2A288  "            Update Spin"        <- guarded
+        //          82F2A28C  "            Update Driving"     <- guarded
+        //          82F2A290  "            Update LV"          <- guarded
+        //          82F2A188  "        RB Change"
+        //          82F2A18C  "        AfterTouch"
+        //          82F2A190  "VMan: Update Traffic"
+        //          82F2A194  "VMan: Update Aggressive Driving"
+        //          82F2A198  "VMan: Update Crashes"
+        //          82F2A19C  "VMan: Update PassBys"
+        //          (member)  "PHYS ValidateRCWorldContact"    <- page 6, the 30th
+        //        The seven guarded ones are precisely the VehiclePhysics-level sub-monitors, which
+        //        is what the guard is for: register-once across whoever constructs first.
+        //
+        //    (b) THE RANDOM SEEDING IS ALREADY A COMMITTED FUNCTION. The inlined block at
+        //        0x8263BCDC..0x8263BEE8 is `CgsNumeric::Random::Construct()` verbatim: muSeed =
+        //        0xC87CD8C91AD0891B (built by `insrdi r10, r9, 32, 0`, i.e. 0xC87CD8C9 in the HIGH
+        //        half -- KU_RANDOM_DEFAULT_SEED), muOldestBufferIndex = 0, ring[0] = 0x3F800000,
+        //        then SEVEN AddRandomFloatToBuffer draws (`inslwi r6, hi32, 23, 9` == 0x3F800000 |
+        //        (hi32 >> 9)), then one final `index = (index + 1) & 7`. ⇒ the body is
+        //        `mRandom.Construct();` -- nothing to write.
+        //
+        //    (c) THE 8-CAR LOOP body, seat by seat (r29 walks the record at stride 0x1460 == 5216;
+        //        every offset below is IN-RECORD, i.e. minus 1856):
+        //          VehicleDriver::Construct(&maRaceCarDrivers[i])         (r25, stride 0xE0)
+        //          VehiclePhysics::Construct(record + 0)                  (r29 - 0x140D)
+        //          +0x1070  lvx128 / vrlimi128 v0,v127,2,0 / stvx128      -- inserts 0 into the Z LANE
+        //                   only (mask 8/4/2/1 == x/y/z/w); the same +0x1070 seat
+        //                   VehiclePhysics::Construct itself touches
+        //          +0x13F0  stvx128 v127  -- 16 zero bytes
+        //          +0x1400  stfs 0.0f
+        //          +0x1408  stfs 0.0f
+        //          +0x140C  stb 0
+        //          +0x140D  stb 0
+        //          +0x13E4  stw &maRaceCarDebugComponent[i]  (after the NULL assert, VehiclePhysics.h:2228)
+        //        and, outside the record: maRaceCarEntityIDs[i] = dword_82F2A3A4,
+        //        maRaceCarHandlingBodyIDs[i] = qword_82F2A3A8, maeRaceCarTypes[i] = 3,
+        //        mauNetworkCarHiddenFramesRemaining[i] = 0.
+        //        ⚠️ SEVEN per-record writes, not the six an earlier sizing banked.
+        //
+        //    (d) THE REST OF THE SPINE, in issue order:
+        //          mePrepareStage = 0; meReleaseStage = 3;
+        //          mUsedRaceCars = 0; mUsedRaceCarCrashesList = 0;
+        //          VehicleManagerDebugComponent::Construct(this + 161968, this)   <- TWO args; the
+        //              Hex-Rays renders it with none
+        //          mRandom.Construct();
+        //          <the 8-car loop>
+        //          PhysicalTrafficManager::Construct(this + 44768)
+        //          mDiscardedContacts = { buffer = this + 160688, capacity = 20, count = 0 }
+        //              (+ the console's `lpEventBuffer != NULL` assert, CgsBaseEventQueue.h:160)
+        //          mCameraMatrix = identity with a ZERO fourth row: rows {1,0,0,0} {0,1,0,0}
+        //              {0,0,1,0} {0,0,0,0}. The 1.0f lanes are flt_82001C98 -- which is the same
+        //              rodata slot the tuning bank's mfTailgatingVunerabilityTime reads, so THIS
+        //              FUNCTION ALONE proves that value is 1.0f, independently of the PS3 build.
+        //          VehicleDriver::Construct(&mPlayerAiDriver)
+        //          mHiddenRaceCars = mRaceCarsAddedForCollision =
+        //              mNetworkCarsAddedForCollisionThisFrame = mNetworkCarsRecievedFirstUpdate = 0
+        //          <the tuning bank -- all 91 seats, defaults recorded member-by-member below>
+        //          StuntOffencesManager::Construct(this + 44240)   (issued LATE, between the
+        //              +172580 and +172584 counter stores)
         // ==========================================================================================
 
         // ==========================================================================================
@@ -572,9 +719,25 @@ namespace Vehicle
         // ⭐ NEWLY PINNED: the contained StuntOffencesManager subobject. Construct calls
         // `StuntOffencesManager::Construct(this + 65536 - 0x5330)` == this + 44240 @0x8263C620, and
         // the next pinned member (mHiddenRaceCars) is at 44704, so the subobject occupies exactly
-        // 464 bytes. Opaque until BrnStuntOffencesManager's layout pass; the span is what stops a
-        // future member from being dropped into it.
-        unsigned char        mStuntOffencesManager[44704 - 44240];  // +44240 (464 bytes)
+        // 464 bytes.
+        //
+        // ⭐⭐ TYPED 2026-08-03 (was `unsigned char mStuntOffencesManager[464]`). This is the ONE
+        // contained sub-object of VehicleManager whose real reconstructed class FITS ITS X360 SPAN
+        // ON x64 -- measured, not assumed:
+        //     sizeof(BrnPhysics::StuntOffencesManager)  == 464   ==  44704 - 44240   ✅
+        //     alignof(BrnPhysics::StuntOffencesManager) == 16,  and 44240 % 16 == 0  ✅
+        // and it fits because the class contains NO POINTER MEMBERS at all: its last member ends at
+        // 0x1C4 == 452, which its own header pins, and 452 rounds to 464 at align 16 on both ISAs.
+        // Nothing in this class moves as a result -- the layout gate in
+        // BrnVehicleManager_layout_check.cpp is what proves that, and it is compiled.
+        //
+        // WHY IT IS WORTH TYPING: `VehicleManager::Construct` has to call
+        // `StuntOffencesManager::Construct(this + 44240)`. With an opaque byte array that call can
+        // only be spelled as a reinterpret_cast off a raw offset, which is the offset-poke this
+        // project forbids. Typed, it is `mStuntOffencesManager.Construct()` -- by name. The other
+        // four contained sub-objects CANNOT be typed today; see the measured blocker table in the
+        // Construct note above.
+        BrnPhysics::StuntOffencesManager mStuntOffencesManager;      // +44240 (464 bytes)
 
         // ⭐ NEWLY PINNED / RENAMED: FOUR RaceCarBitArrays, not one. Construct zero-stores all four
         // back to back (0x8263C0A8..0x8263C0C0), and the DWARF lists exactly these four names in
@@ -623,10 +786,25 @@ namespace Vehicle
         //   addis r29,r31,2 ; addi r29,r29,0x73A0   -> this + 160672
         //   addi  r28,r29,0x10                      -> the buffer, this + 160688
         //   stw r28,0(r29) ; stw 0x14,4(r29) ; stw 0,8(r29)   -> {buffer, capacity 20, count 0}
-        // plus the console's own `lpEventBuffer != NULL` assert (BrnContactSpyData.h:160). The
+        // plus the console's own `lpEventBuffer != NULL` assert (CgsBaseEventQueue.h:160). The
         // 16-byte header + 20 entries fills exactly to mDebugComponent, so each entry is 64 bytes.
         // DWARF: `ContactSpyData::DiscardedContactQueue mDiscardedContacts` (BrnVehicleManager.h:854).
-        unsigned char        mDiscardedContacts[161968 - 160672];  // +160672 (1296 bytes)
+        //
+        // ⭐⭐ TYPED 2026-08-03 (was `unsigned char mDiscardedContacts[1296]`), and it fits for a
+        // reason worth writing down: the X360 header is {T* @0, s32 maxLen @4, s32 len @8} == 12
+        // bytes rounded to 16 by DiscardedContact's alignment. On x64 the pointer widens to 8, and
+        // 8 + 4 + 4 == 16 -- the widening lands exactly in the padding the X360 already had. So
+        //     sizeof(CgsModule::EventQueue<ContactSpy::DiscardedContact, 20>) == 1296 == the span,
+        // MEASURED, and 16 + 20*64 == 1296 confirms the 64-byte entry the span implied.
+        // ⇒ Construct's three-store bind is spelled `mDiscardedContacts.Construct();` BY NAME --
+        // BaseEventQueue<T>::Construct sets {mpEvents = maEvents, miMaxLength = 20, miLength = 0}
+        // and fires the same `lpEventBuffer != NULL` assert the console does.
+        // The 20 is the DWARF/asm capacity (`stw 0x14, 4(r29)`), spelled in BrnContactSpyData.h as
+        // ContactSpyData::KI_MAX_DISCARDED_CONTACTS; the canonical spelling of this whole type is
+        // that header's `ContactSpyData::DiscardedContactQueue` typedef. It is written out longhand
+        // here so this header keeps its light include set (BrnContactSpyEvents.h was already in).
+        CgsModule::EventQueue<BrnPhysics::ContactSpy::DiscardedContact, 20>
+                             mDiscardedContacts;                  // +160672 (1296 bytes)
 
         // ⭐ NEWLY PINNED: the manager's own debug component. Construct calls
         // `VehicleManagerDebugComponent::Construct(this + 161968, this)` @0x8263BCD8 -- note it takes

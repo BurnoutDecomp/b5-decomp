@@ -63,13 +63,18 @@ namespace Vehicle
     };
 
     // The takedown-scored event HandleRaceCarRaceCarContact pushes when a takedown registers
-    // (asm AddEvent(..., 31, 12)). The X360 writes the impact magnitude (v204=v136), the attacker
-    // index (v205=v138) and a third field (v206=v250). FLAG: 12-byte layout modelled; size 12 asm-proven.
+    // (asm AddEvent(..., 31, 12) @0x82643B58). FLAG: 12-byte layout modelled; size 12 asm-proven.
+    //
+    // ⚠️ CORRECTED 2026-08-03: +0 was declared `f32 mfImpactMagnitude`. All three of the event's
+    // stack stores are `stw` (0x82643B34 / 0x82643B3C / 0x82643B54), and +0's r23 is the very same
+    // register 0x826439E8 stamps into maeImpactType[victim] -- loaded once at 0x82643908 from
+    // var_14C and never rewritten in between. It is the EImpactType word. (Same mis-typing that
+    // the tuning-bank wave found on the maeImpactType array itself: a slot IDA had typed float.)
     struct TakedownIoEventRecord : public CgsModule::Event
     {
-        f32 mfImpactMagnitude; // +0 (asm v204 = v136)
-        s32 miAttackerIndex;   // +4 (asm v205 = v138)
-        s32 miReserved;        // +8 (asm v206 = v250)
+        s32 miImpactType;      // +0 (asm r23 == var_14C == the value maeImpactType[victim] gets)
+        s32 miAttackerIndex;   // +4 (asm r26 == var_148 @0x82643998 -- FLAG: provenance untraced)
+        s32 miReserved;        // +8 (asm var_144 == r31 @0x826435BC -- FLAG: the -1 written is unproven)
     };
 
     // -------------------------------------------------------------------------------------------
@@ -322,10 +327,31 @@ namespace Vehicle
                         // Push the takedown event, throttled to < 32 per frame (asm: v157 < 32).
                         if (muTakedownEventsThisFrame < 32 && lpManagerOutputInterface)
                         {
+                            // ⚠️⚠️ 2026-08-03 -- THIS LINE DID NOT COMPILE. `lfImpactValue` is used
+                            // here and DECLARED NOWHERE IN THIS FILE (its only occurrence in the
+                            // whole TU was this one), so BrnVehicleManager.cpp has never once been
+                            // through a compiler -- which is why the ~90 offsetof asserts in
+                            // _AssertLayout() below have never run either. Being unmounted hid it.
+                            //
+                            // The asm settles the +0 field with no room for interpretation. The
+                            // takedown AddEvent is @0x82643B58 and its three stack stores are
+                            //     0x82643B34  stw r23, var_2C0(r1)      <- +0
+                            //     0x82643B3C  stw r26, var_2BC(r1)      <- +4
+                            //     0x82643B50/54  lwz r11, var_144(r1) ; stw r11, var_2B8(r1)  <- +8
+                            // and r23 is loaded ONCE, at 0x82643908 (`lwz r23, var_14C(r1)`), with no
+                            // intervening write before 0x82643B34 -- the SAME r23 that 0x826439E8
+                            // stamps into maeImpactType[victim] a few lines above. So +0 is the
+                            // EImpactType word, not a float magnitude; it is `stw`, like its twin.
                             TakedownIoEventRecord lTakedownEvent;
-                            lTakedownEvent.mfImpactMagnitude = lfImpactValue;       // asm v204 = v136
+                            lTakedownEvent.miImpactType      = static_cast<s32>(leImpactType);  // asm r23 == var_14C
                             lTakedownEvent.miAttackerIndex   = static_cast<s32>(lInfo.meAggressorActiveRaceCarIndex); // asm v205 = v138
-                            lTakedownEvent.miReserved        = -1;                  // asm v206 = v250
+                            // ⛔ FLAG, NOT FIXED: the asm's +8 is var_144, written once at
+                            // 0x826435BC (`stw r31, var_144(r1)`) -- it is NOT the -1 committed here,
+                            // and +4's r26 traces to var_148 (0x82643998), not necessarily the
+                            // aggressor index. Both need r19/r31/var_148 traced through a function
+                            // whose Hex-Rays locals FAILED; that is its own wave. Left as-is so this
+                            // correction stays to the one field the asm settles outright.
+                            lTakedownEvent.miReserved        = -1;                  // ⛔ asm says var_144, see above
                             ++muTakedownEventsThisFrame;                            // asm *(v39+172612) = v157 + 1
                             lpManagerOutputInterface->GetEventQueue().AddEvent(
                                 reinterpret_cast<const CgsModule::Event*>(&lTakedownEvent), 31, 12);

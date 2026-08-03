@@ -36,23 +36,30 @@
 //     seated 720 bytes early -- including mUsedTrafficVehicles, whose own comment here claims
 //     "X360 word base this+104552", an offset the declarations did not produce.
 //
-// (2) STILL OPEN -- THREE ODR FORKS. This header defines, at namespace scope in
+// (2) PARTLY CLOSED -- TWO ODR FORKS LEFT, was three. This header defines, at namespace scope in
 //     BrnPhysics::Vehicle, its own private copies of names that already have real definitions
 //     elsewhere in the SAME namespace:
-//        VehicleDriver         -- `struct { u8 [224]; }` here vs the real struct in
-//                                 VehiclePhysics/BrnVehicleDriver.h
 //        TrafficPhysics        -- `struct { u8 [5168]; }` here vs
 //                                 `class TrafficPhysics : public VehiclePhysics` in
 //                                 VehiclePhysics/TrafficPhysics.h
 //        ArticulatedJointPool  -- the slice below vs the real class inside
 //                                 VehiclePhysics/BrnArticulatedJointPool.cpp
-//     Two of the three also disagree on the CLASS-KEY (`struct` vs `class`), which MSVC folds
-//     into the mangled name of anything templated on them. Nothing has detonated only because
-//     BrnPhysicalTrafficManager.cpp is not mounted; including this header together with any of
-//     those three is a hard redefinition error today. De-forking them means pulling
-//     VehiclePhysics.h in here, which is its own wave.
-//     (PhysicalTrafficManagerDebugComponent was the fourth fork and is DE-FORKED as of this
-//      wave -- the real class is now included.)
+//     Both also disagree on the CLASS-KEY (`struct` vs `class`), which MSVC folds into the mangled
+//     name of anything templated on them. Nothing has detonated only because
+//     BrnPhysicalTrafficManager.cpp is not mounted; including this header together with either of
+//     those two is a hard redefinition error today. De-forking THEM means pulling VehiclePhysics.h
+//     in here (both really do derive from VehiclePhysics), which is its own wave.
+//     (PhysicalTrafficManagerDebugComponent was the fourth fork, DE-FORKED 2026-08-03.)
+//
+//     ⭐ VehicleDriver is DE-FORKED as of 2026-08-03 (the Construct-blocker wave), and the old
+//     note's reasoning was wrong about it: BrnVehicleDriver.h does NOT pull VehiclePhysics.h in
+//     (it needs only types.hpp + BrnCommonTypes.h + SharedIO/BrnVehicleDriverControls.h), so that
+//     fork was separable from the other two and cost one include. It was also the one fork that
+//     BLOCKED WORK: BrnVehicleManager.h includes the real BrnVehicleDriver.h, so this header and
+//     that one could not meet, and VehicleManager::Construct @0x8263B7C8 must call both
+//     VehicleDriver::Construct and PhysicalTrafficManager::Construct.
+//     The gate is real, not a comment: BrnVehicleManager_layout_check.cpp (mounted) now includes
+//     THIS header and BrnVehicleManager.h together, so a re-fork fails the build.
 //
 // (3) STILL OPEN -- the host layout does not reproduce the X360 offsets even where no pointer is
 //     involved. Measured host sizes vs the X360 values the asm implies:
@@ -76,6 +83,10 @@
 // `struct PhysicalTrafficManagerDebugComponent { void* mpVTable; u8 mOpaque[60]; };` at namespace
 // scope, a second definition of a name that already had a real one. The real class is included.
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManagerDebugComponent.h"
+// ⭐ DE-FORKED 2026-08-03 (second one): `struct VehicleDriver { u8 mOpaque[224]; }` used to be
+// declared at namespace scope below. The real struct lives here and is 224 bytes, so the stride
+// this header depends on is unchanged -- see the note at the old fork's seat.
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h"
 
 namespace BrnPhysics
 {
@@ -148,11 +159,27 @@ struct TrafficPhysics
 };
 
 // VehicleDriver: the AI/driver block, pointed at by mpaTrafficDrivers (stride 224 / 0xE0 from
-// GetTrafficDriver). Real home is a future TU; opaque size-correct slice.
-struct VehicleDriver
-{
-    u8 mOpaque[224];    // 0xE0 - X360 stride from GetTrafficDriver (*(this+103600) + 224*idx)
-};
+// GetTrafficDriver).
+//
+// ⭐ DE-FORKED 2026-08-03. This slot used to be a second, opaque `struct VehicleDriver
+// { u8 mOpaque[224]; }` at namespace scope in BrnPhysics::Vehicle -- a redefinition of the real
+// struct that VehiclePhysics/BrnVehicleDriver.h already owns. The real header is included above
+// and the stride assert below is what keeps the two readings honest.
+//
+// ⚠️ CORRECTION to finding (2) in the banner, which said de-forking "means pulling VehiclePhysics.h
+// in here, which is its own wave". That is true of TrafficPhysics and ArticulatedJointPool -- both
+// really do derive from VehiclePhysics -- but it was NOT true of VehicleDriver: BrnVehicleDriver.h
+// stands alone (types.hpp + BrnCommonTypes.h + SharedIO/BrnVehicleDriverControls.h) and pulls no
+// physics body in. The three forks were not one problem; this one was separable and is gone.
+//
+// WHY IT MATTERED: while the fork stood, this header and BrnVehicleManager.h (which includes the
+// real BrnVehicleDriver.h for maRaceCarDrivers[8] / mPlayerAiDriver) could not be included in the
+// same translation unit -- a hard C2011. VehicleManager::Construct @0x8263B7C8 has to call BOTH
+// VehicleDriver::Construct and PhysicalTrafficManager::Construct, so the fork was a compile-level
+// blocker on that function, not just a latent tidiness item.
+static_assert(sizeof(VehicleDriver) == 224,
+              "VehicleDriver is 224 bytes (0xE0) -- the X360 GetTrafficDriver stride "
+              "(*(this+103600) + 224*idx) and VehicleManager::Construct's `addi r25, r25, 0xE0`");
 
 // PhysicalTrafficVehicle: pointed at by mpaTrafficVehicles (stride 64 / 0x40 from the
 // GetTrafficVehicle accessors). The member layout below is verbatim from the DecFIGS DWARF
