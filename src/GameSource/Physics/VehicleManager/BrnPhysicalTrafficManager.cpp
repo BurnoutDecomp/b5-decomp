@@ -219,6 +219,79 @@ PhysicalTrafficManager::PhysicalTrafficManager()
 }
 
 // ---------------------------------------------------------------------------------------
+// PhysicalTrafficManager::Construct   @ 0x82636CA8   (99 instructions)
+// DWARF BrnPhysicalTrafficManager.h:475 -- `void Construct()`. Its ONLY caller in the image is
+// VehicleManager::Construct @0x8263B7C8.
+//
+// EVERY offset in the X360 body was decoded and every one lands on a name-matching DWARF member
+// (the base for each `addis rN, r31, 2` group is 131072 minus the displacement):
+//     20 x TrafficPhysics::Construct(this + i*0x1430)              maFullTrafficPhysics[20]
+//     20 x stwx -1 at 4*(i + 0x64F0) == 4*i + 103360               maTrafficEntityIDs[20]
+//      4 x stwx 0  at 0x194B0/B4/B8/BC == 103600/604/608/612       the four pool pointers
+//          ArticulatedJointPool::Construct(this + 103616)          mArticulatedJointPool
+//          stfsx 2.0f @104448, 2.0f @104452, 10.0f @104456         the three joint-break limits
+//          stbx  0    @104460                                      mbAllowArticulatedJointBreaking
+//      8 x std 0 at 104552/560/568/576/584/600/608/616             8 of the 9 traffic bitsets
+//          EventQueue<char,50>::Construct(this + 104624)           mUnusedPotentialTrafficQueue
+//          mDebugComponent.Construct(this)  (inlined, this+105616)
+//
+// ⭐ The chain closes to the byte, which is what re-seats mArticulatedJointPool to 832 (see the
+// header banner, finding (1)): 104624 + 64 == 104688 == mu8GlobalToPhysicalEntityIndexMap, +600
+// == 105288, 16-aligned -> 105296, + 20*16 == 105616 == mDebugComponent.
+//
+// ⚠️ `mTestedTrafficVehicles` IS NOT CLEARED. Nine BitArrays sit at 104552..104624 at stride 8;
+// the body writes eight of them and skips exactly the one at 104592. That is transcribed here as
+// an omission, not "fixed" -- do not add it without new evidence.
+//
+// The three joint-break limits are plain scalar-pool constants read out of the image:
+// flt_82001D9C == 2.0 (used twice) and flt_82004A20 == 10.0. Neither is a static-init slot.
+//
+// FLAG (un-homed callees): TrafficPhysics::Construct @0x8262E980 is an .ida-exports HOLE and
+// ArticulatedJointPool::Construct @0x82600938 lives with the real pool class in
+// BrnArticulatedJointPool.cpp; both are called BY NAME through declare-only declarations on the
+// sliced types in this header (see the ODR-fork finding (2) there).
+// ---------------------------------------------------------------------------------------
+void PhysicalTrafficManager::Construct()
+{
+    for (s32 liVehicle = 0; liVehicle < static_cast<s32>(KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC); ++liVehicle)
+    {
+        maFullTrafficPhysics[liVehicle].Construct();   // bl TrafficPhysics::Construct, stride 0x1430
+    }
+
+    for (s32 liVehicle = 0; liVehicle < static_cast<s32>(KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC); ++liVehicle)
+    {
+        // stwx r10(-1): the invalid-EntityId sentinel (CgsEntityId.h KU_INVALID_ENTITY_ID).
+        maTrafficEntityIDs[liVehicle].muValue = 0xFFFFFFFFu;
+    }
+
+    mpaTrafficDrivers              = 0;   // stwx 0, this + 103600
+    mpaTrafficVehicles             = 0;   // stwx 0, this + 103604
+    mpaSimpleVehiclePhysics        = 0;   // stwx 0, this + 103608
+    mpArticulatedJointCreateBuffer = 0;   // stwx 0, this + 103612
+
+    mArticulatedJointPool.Construct();    // bl ArticulatedJointPool::Construct(this + 103616)
+
+    mfJointSwingBreakVelocity       = 2.0f;   // stfsx flt_82001D9C, this + 104448
+    mfJointTwistBreakVelocity       = 2.0f;   // stfsx flt_82001D9C, this + 104452
+    mfJointLinearBreakMph           = 10.0f;  // stfsx flt_82004A20, this + 104456
+    mbAllowArticulatedJointBreaking = false;  // stbx  0,            this + 104460
+
+    mUsedTrafficVehicles.UnSetAll();            // std 0, this + 104552
+    mUsedFullTrafficPhysics.UnSetAll();         // std 0, this + 104560
+    mUsedSimpleVehiclePhysics.UnSetAll();       // std 0, this + 104568
+    mPotentialTrafficVehicles.UnSetAll();       // std 0, this + 104576
+    mTrafficDeformationModelsActive.UnSetAll(); // std 0, this + 104584
+    // ⚠️ mTestedTrafficVehicles (this + 104592) is deliberately NOT written -- see the banner.
+    mAddedTrafficVehicles.UnSetAll();           // std 0, this + 104600
+    mRemovedTrafficVehicles.UnSetAll();         // std 0, this + 104608
+    mMadeSimpleTrafficVehicles.UnSetAll();      // std 0, this + 104616
+
+    mUnusedPotentialTrafficQueue.Construct();   // bl EventQueue<char,50>::Construct(this + 104624)
+
+    mDebugComponent.Construct(this);            // inlined @0x82636DF8..0x82636E28
+}
+
+// ---------------------------------------------------------------------------------------
 // ResetAboveGroundTestResults   @ 0x825E8808
 // X360: for each set bit (vehicle index) of mUsedTrafficVehicles (the GetFirstNonZeroBit /
 // GetNextNonZeroBit walk with the CgsBitArray.h:203 bounds asserts), take

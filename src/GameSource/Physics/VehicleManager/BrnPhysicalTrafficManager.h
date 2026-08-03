@@ -21,6 +21,48 @@
 // SimpleVehiclePhysics, the debug component, the IO interfaces) are their own future TUs;
 // they are forward-declared or minimally sliced here only as far as this TU's 12 functions
 // require, and flagged where a future TU must complete them.
+//
+// ============================================================================================
+// ⚠️⚠️ OPEN FINDINGS, 2026-08-03 (the Construct wave). Read before growing this header.
+//
+// (1) FIXED HERE: the `ArticulatedJointPool` slice below was **720 bytes too small** (112 vs the
+//     real 832). PhysicalTrafficManager::Construct @0x82636CA8 proves 832 two ways:
+//       ArticulatedJointPool::Construct(this + 131072 - 0x6B40) == this + 103616, and the next
+//       member it writes is `stfsx f0, r31, 0x19800` == this + 104448.  104448 - 103616 == 832.
+//     And the REAL class (declared inside BrnArticulatedJointPool.cpp) is exactly 832:
+//       10 joints * 80 + BitArray<10> 8 + BitArray<10> 8 + 4 floats == 800 + 16 + 16 == 832.
+//     With the old 112 the embedded pool overran into mfJointSwingBreakVelocity the moment
+//     anything constructed it, and every member from mfJointSwingBreakVelocity onwards was
+//     seated 720 bytes early -- including mUsedTrafficVehicles, whose own comment here claims
+//     "X360 word base this+104552", an offset the declarations did not produce.
+//
+// (2) STILL OPEN -- THREE ODR FORKS. This header defines, at namespace scope in
+//     BrnPhysics::Vehicle, its own private copies of names that already have real definitions
+//     elsewhere in the SAME namespace:
+//        VehicleDriver         -- `struct { u8 [224]; }` here vs the real struct in
+//                                 VehiclePhysics/BrnVehicleDriver.h
+//        TrafficPhysics        -- `struct { u8 [5168]; }` here vs
+//                                 `class TrafficPhysics : public VehiclePhysics` in
+//                                 VehiclePhysics/TrafficPhysics.h
+//        ArticulatedJointPool  -- the slice below vs the real class inside
+//                                 VehiclePhysics/BrnArticulatedJointPool.cpp
+//     Two of the three also disagree on the CLASS-KEY (`struct` vs `class`), which MSVC folds
+//     into the mangled name of anything templated on them. Nothing has detonated only because
+//     BrnPhysicalTrafficManager.cpp is not mounted; including this header together with any of
+//     those three is a hard redefinition error today. De-forking them means pulling
+//     VehiclePhysics.h in here, which is its own wave.
+//     (PhysicalTrafficManagerDebugComponent was the fourth fork and is DE-FORKED as of this
+//      wave -- the real class is now included.)
+//
+// (3) STILL OPEN -- the host layout does not reproduce the X360 offsets even where no pointer is
+//     involved. Measured host sizes vs the X360 values the asm implies:
+//        CgsResource::ResourceHandle       16   vs   8   (VehicleManager's maRaceCar*Handles
+//                                                         arrays independently prove 8)
+//        Array<EntityId,20>                84   vs  88   (104464 .. 104552)
+//        EventQueue<s8,50>                 72   vs  64   (104624 .. 104688)
+//     Per project rule this TU is written BY NAME, so the bodies are correct regardless; but a
+//     PhysicalTrafficManager _AssertLayout() cannot be written until those three are settled.
+// ============================================================================================
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                            // EntityId, Vector3, CgsID, ResourceHandle
@@ -30,6 +72,10 @@
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"          // CgsModule::IOBufferStack
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle
 #include "GameSource/BurnoutConstants.h"                              // EActiveRaceCarIndex
+// ⭐ DE-FORKED 2026-08-03: this header used to declare its own opaque
+// `struct PhysicalTrafficManagerDebugComponent { void* mpVTable; u8 mOpaque[60]; };` at namespace
+// scope, a second definition of a name that already had a real one. The real class is included.
+#include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManagerDebugComponent.h"
 
 namespace BrnPhysics
 {
@@ -88,8 +134,16 @@ const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;
 // sub-objects. FLAG: this is an opaque size-correct slice (5168 bytes) so the manager's
 // embedded array and the constructor's per-element walk reproduce; named sub-members will be
 // filled in when the TrafficPhysics TU lands.
+// ⚠️ ODR FORK -- see finding (2) in the banner. The real class is
+// `BrnPhysics::Vehicle::TrafficPhysics : public VehiclePhysics` in VehiclePhysics/TrafficPhysics.h.
 struct TrafficPhysics
 {
+    // @0x8262E980 (an .ida-exports HOLE -- no JSON for that address; DWARF TrafficPhysics.h:42
+    // gives the signature `void Construct();`). Called 20 times by
+    // PhysicalTrafficManager::Construct at a 0x1430 stride. DECLARE-ONLY: the body is owned by
+    // the TrafficPhysics TU.
+    void Construct();
+
     u8 mOpaque[5168];   // 0x1430 - X360 per-element stride from the PhysicalTrafficManager ctor
 };
 
@@ -203,17 +257,19 @@ struct ArticulatedJointCreateBuffer
 // declared-only here (no body) so this TU compiles without redefining the pool.
 struct ArticulatedJointPool
 {
+    // @0x82600938. DECLARE-ONLY -- the body lives with the real class in
+    // VehiclePhysics/BrnArticulatedJointPool.cpp, which returns int; the mangled name encodes the
+    // return type on MSVC, so this declaration must agree with it.
+    int  Construct();
     void SendCreateRemoveJointEvents(const void* lpOutputRequestInterface,
                                      ArticulatedJointCreateBuffer* lpCreateBuffer);
-    u8 mOpaque[112];   // size-correct slice (10 joints * 80B-ish + masks/params); not laid out here
-};
 
-// PhysicalTrafficManagerDebugComponent: embedded by value (BrnPhysicalTrafficManager.h:435).
-// The X360 ctor stores a vtable pointer into it. Opaque slice; real component is a future TU.
-struct PhysicalTrafficManagerDebugComponent
-{
-    void* mpVTable;
-    u8    mOpaque[60];
+    // ⚠️⚠️ CORRECTED 2026-08-03: this span was **112**, which is 720 bytes short. See finding (1)
+    // in the banner -- PhysicalTrafficManager::Construct pins the pool at this+103616 and the
+    // next member it writes at this+104448, and the real class in BrnArticulatedJointPool.cpp is
+    // exactly 832 bytes (10*80 joints + 2*8 bit-masks + 4*4 limit floats). With 112 the embedded
+    // pool overran its successor and every member after it was seated 720 bytes early.
+    u8 mOpaque[832];
 };
 
 // Forward-declared IO/interface dependencies (their own TUs).
@@ -261,6 +317,13 @@ public:
 
     // X360 0x827E42E8: the constructor (per-element walk + sentinel init).
     PhysicalTrafficManager();
+
+    // X360 0x82636CA8 (99 instructions; DWARF BrnPhysicalTrafficManager.h:475 `void Construct()`).
+    // One-shot construction: build all 20 full-physics bodies and the joint pool, invalidate the
+    // 20 traffic entity ids, null the four pool pointers, seed the joint-break limits, clear the
+    // traffic bitsets, construct the unused-potential queue and the debug component.
+    // Its ONLY caller in the image is VehicleManager::Construct @0x8263B7C8.
+    void Construct();
 
     // X360 0x825E8808: reset the above-ground (down-ray) test results for every used vehicle.
     void ResetAboveGroundTestResults();
