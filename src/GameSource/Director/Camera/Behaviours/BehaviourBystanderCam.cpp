@@ -496,7 +496,13 @@ void ImpactSlomoController::Update(Camera& lrCamera, f32 lfTimestep,
     const f32 KF_REAL_TIME_SCALE         = 1.0f;       // flt_82001C98 = 1.0 (normal real-time scale)
     // unk_82FAA730 is a 16-byte vector literal that the asm splats lane 0 of; the .rdata value is
     // genuinely all-zero, so K_MIN_VELOCITY_SQUARED_MPS = 0.0 (the vcmpgtfp gate is "magSq > 0").
-    const f32 KF_MIN_VELOCITY_SQUARED_MPS = 0.0f;      // unk_82FAA730 = 0.0 (K_MIN_VELOCITY_SQUARED_MPS)
+    // ⭐⭐ RECOVERED 2026-08-03, and the NAME is confirmed along with the number. The initialiser
+    // @82C49480 multiplies flt_8200D5F8 (30.0) by flt_82F31928 (0.447039992 = MPH->m/s) and squares:
+    // (30 MPH -> 13.4112 m/s)^2 = 179.860275 exactly. So the constant is a minimum-speed gate of
+    // 30 MPH held in squared m/s -- which is what "MIN_VELOCITY_SQUARED_MPS" says, unit and all.
+    // ⚠️ Carried as 0.0 the gate passed at ANY speed, so the bystander camera never rejected a
+    // stationary or crawling car.
+    const f32 KF_MIN_VELOCITY_SQUARED_MPS = 179.860275f;   // unk_82FAA730 = (30 MPH in m/s)^2
 
     void* lpCamera = &lrCamera;
     const void* lpVehicles = &lrVehicles;

@@ -146,7 +146,7 @@ namespace Deformation
         const f32 KF_JOINT_FORCE_MULTIPLIER       = 0.0f;   // FLAG: kfJointForceMultiplier rodata not recovered
         const f32 KF_JOINT_PENETRATION_MULTIPLIER = 0.0f;   // FLAG: kfJointPenetrationMultiplier rodata not recovered
         const f32 KF_JOINT_RELAX                  = 0.97500002f;   // recovered (v58[0])
-        const f32 KF_ROTATION_PROPORTION_GATE     = 0.0f;   // FLAG: &unk_82FB9E00 rodata not recovered
+        const f32 KF_ROTATION_PROPORTION_GATE     = 0.300000012f;   // unk_82FB9E00 @82C5DDC8 <- flt_82004740
 
         // The active-joint default-direction "always detaches when bent past -0.9" early gate the
         // TestJointForBreaking asm checks: GetActiveJointSpec()+52 (mfJointDetachThreshold reinterpreted

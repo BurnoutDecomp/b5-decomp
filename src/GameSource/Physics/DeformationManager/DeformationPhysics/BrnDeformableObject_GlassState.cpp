@@ -92,20 +92,30 @@ namespace Deformation
         // only when the real threshold bytes are recovered.
         //   &unk_82FB9BC0 -> the SMASH band (intact/cracked -> smashed transition)
         //   &unk_82FB9AD0 -> the CRACK  band (intact -> cracked transition)
-        static const Vector4 KVF_GLASS_SMASH_THRESHOLD = { 0.0f, 0.0f, 0.0f, 0.0f }; // FLAG: rodata unk_82FB9BC0 unrecovered
-        static const Vector4 KVF_GLASS_CRACK_THRESHOLD = { 0.0f, 0.0f, 0.0f, 0.0f }; // FLAG: rodata unk_82FB9AD0 unrecovered
+        // ⭐ RECOVERED 2026-08-03, and the pair corroborates its own reading: both initialisers are
+        // SELF-SQUARES. unk_82FB9BC0 @82C5DA38 splats unk_82FB9650 * itself (0.05^2 = 0.0025) and
+        // unk_82FB9AD0 @82C5DA80 splats unk_82FB9DF0 * itself (0.001^2 = 1e-06). That two independent
+        // thresholds are both squares of the two SendGlassUpdateEvents remap constants confirms the
+        // compare is against a SQUARED displacement, exactly as the block comment claims.
+        // ⚠️ The zeros were the opposite of inert: a strict-greater compare against 0 fired on ANY
+        // positive displacement, so glass went straight to cracked/smashed on the first contact.
+        static const Vector4 KVF_GLASS_SMASH_THRESHOLD = { 0.00250000018f, 0.00250000018f, 0.00250000018f, 0.00250000018f }; // unk_82FB9BC0 = unk_82FB9650^2
+        static const Vector4 KVF_GLASS_CRACK_THRESHOLD = { 1.00000011e-06f, 1.00000011e-06f, 1.00000011e-06f, 1.00000011e-06f }; // unk_82FB9AD0 = unk_82FB9DF0^2
 
         // The asm-visible displacement pre-scale: vspltisw v0,2 ; vcfsx v0,v0,0 -> 2.0 ; the
         // threshold vec4 is then vmulfp128'd by (2.0 * 2.0) == 4.0 before the compare.
         static const f32 KF_GLASS_DISPLACEMENT_SCALE = 4.0f;   // asm-visible (= 2.0 * 2.0)
 
-        // FLAGGED-0 PLACEHOLDER: SendGlassUpdateEvents' crack-amount inner remap pulls two unrecovered
-        // rodata vec4s (&unk_82FB9DF0, &unk_82FB9650) through a vrsqrtefp / vrefp Newton refine that
-        // maps the max corner displacement-squared into the [0,1] remap fed to the 1-(1-clamp)^2 outer
-        // shape. Those two constants are NOT in the per-function exports; the remap result is carried
-        // as an honest zero (the crack amount degenerates to 0) -- NEVER fabricated from a substitute
-        // sqrt-clamp formula.
-        static const f32 KF_GLASS_CRACK_REMAP_PLACEHOLDER = 0.0f; // FLAG: rodata unk_82FB9DF0/unk_82FB9650 unrecovered
+        // ⚠️ STILL A PLACEHOLDER, DELIBERATELY. The two constants ARE now recovered --
+        //   unk_82FB9DF0 @82C5DA58 <- flt_82013F90 = 0.001   (splat)
+        //   unk_82FB9650 @82C5DA10 <- flt_820047C8 = 0.05    (splat)
+        // -- but what is missing here is not the numbers, it is the CODE: SendGlassUpdateEvents runs
+        // them through a vrsqrtefp / vrefp Newton refine that maps the max corner displacement-squared
+        // into the [0,1] remap feeding the 1-(1-clamp)^2 outer shape, and that remap has never been
+        // transcribed. Substituting a plausible sqrt-clamp formula around the real constants would be
+        // exactly the kind of confident invention this repo keeps paying for, so the result stays an
+        // honest zero and the two values are recorded here for whoever writes the remap.
+        static const f32 KF_GLASS_CRACK_REMAP_PLACEHOLDER = 0.0f; // FLAG: the REMAP is unmodelled (values known: 0.001 / 0.05)
 
         // -------------------------------------------------------------------------------------
         // Console byte offsets the X360 image indexes through raw pointer arithmetic. They hold on

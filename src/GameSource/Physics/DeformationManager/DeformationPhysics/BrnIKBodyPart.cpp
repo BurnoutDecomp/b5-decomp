@@ -48,9 +48,13 @@ namespace Deformation
     // band-selection + comparison SHAPE below is exact; the numeric band stays inert (every panel sees
     // a [0,0]/[0,0] band, so "peak within band" only ever fires at exactly zero peak) until the real
     // XEX rodata is recovered. Replace the zeros with the homed values then.
-    VecFloat KVF_MIN_IMPULSE_FOR_DETACHMENT       = { 0.0f, 0.0f, 0.0f, 0.0f };  // &unk_82FB9670 (FLAGGED-0)
-    VecFloat KVF_MAX_IMPULSE_FOR_DETACHMENT       = { 0.0f, 0.0f, 0.0f, 0.0f };  // &unk_82FB9730 (FLAGGED-0)
-    VecFloat KVF_MAX_IMPULSE_FOR_DETACHMENT_TOUGH = { 0.0f, 0.0f, 0.0f, 0.0f };  // &unk_82FB9630 (FLAGGED-0)
+    // ⭐ RECOVERED 2026-08-03 (static-init splats). The band the comment above predicted is real and
+    // self-consistent: [500, 5000] normally, and the TOUGH panels cap at 1200 instead of 5000.
+    // ⚠️ The zeros were not inert -- every panel saw a [0,0] band, so "peak within band" could only
+    // ever fire at exactly zero peak, i.e. detachment was effectively disabled.
+    VecFloat KVF_MIN_IMPULSE_FOR_DETACHMENT       = { 500.0f, 500.0f, 500.0f, 500.0f };  // unk_82FB9670 @82C5B720 <- flt_8200A034
+    VecFloat KVF_MAX_IMPULSE_FOR_DETACHMENT       = { 5000.0f, 5000.0f, 5000.0f, 5000.0f };  // unk_82FB9730 @82C5B748 <- flt_82019638
+    VecFloat KVF_MAX_IMPULSE_FOR_DETACHMENT_TOUGH = { 1200.0f, 1200.0f, 1200.0f, 1200.0f };  // unk_82FB9630 @82C5B770 <- flt_82020A6C
 
     namespace
     {

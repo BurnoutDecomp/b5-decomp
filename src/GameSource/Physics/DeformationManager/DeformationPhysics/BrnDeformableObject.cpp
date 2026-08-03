@@ -39,12 +39,16 @@ namespace Deformation
     //   * unk_82FB7F70 / unk_82FB8040 -- the per-axis clamp band (min/max) for the shaped scale.
     //   * unk_82FB82F0 -- the double-bounce damp scale (the "already bounced this frame" path).
     // ---------------------------------------------------------------------------------------------
-    static const f32     KF_MIN_BOUNCE_STRESS_SQ   = 0.0f;                  // FLAG: rodata unk_82FB81F0 value unrecovered
-    static const Vector3 KVF_BOUNCE_BOOST_SCALE     = { 0.0f, 0.0f, 0.0f, 0.0f }; // FLAG: rodata unk_82FB8210 value unrecovered
-    static const Vector3 KVF_BOUNCE_NOBOOST_SCALE   = { 0.0f, 0.0f, 0.0f, 0.0f }; // FLAG: rodata unk_82FB9E40 value unrecovered
-    static const Vector3 KVF_BOUNCE_CLAMP_MIN       = { 0.0f, 0.0f, 0.0f, 0.0f }; // FLAG: rodata unk_82FB7F70 value unrecovered
-    static const Vector3 KVF_BOUNCE_CLAMP_MAX       = { 0.0f, 0.0f, 0.0f, 0.0f }; // FLAG: rodata unk_82FB8040 value unrecovered
-    static const Vector3 KVF_DOUBLE_BOUNCE_DAMP     = { 0.0f, 0.0f, 0.0f, 0.0f }; // FLAG: rodata unk_82FB82F0 value unrecovered
+    // ⭐ RECOVERED 2026-08-03. These are NOT "un-homed rodata": they are .data slots that read zero
+    // in the image and are filled at static-init time by tiny unexported blr-terminated splat runs.
+    // Each line names its initialiser and the .rdata scalar it splats. The clamp band reading
+    // [0.75, 1.5] and the two bounce scales landing either side of it is a self-consistent set.
+    static const f32     KF_MIN_BOUNCE_STRESS_SQ   = 2000000.0f;                  // unk_82FB81F0 @82C5D598 <- flt_8209D734
+    static const Vector3 KVF_BOUNCE_BOOST_SCALE     = { 2.79999995f, 2.79999995f, 2.79999995f, 2.79999995f }; // unk_82FB8210 @82C5D4A8 <- flt_8200C6B8
+    static const Vector3 KVF_BOUNCE_NOBOOST_SCALE   = { 1.5f, 1.5f, 1.5f, 1.5f }; // unk_82FB9E40 @82C5D480 <- flt_820945DC
+    static const Vector3 KVF_BOUNCE_CLAMP_MIN       = { 0.75f, 0.75f, 0.75f, 0.75f }; // unk_82FB7F70 @82C5D548 <- flt_82004018
+    static const Vector3 KVF_BOUNCE_CLAMP_MAX       = { 1.5f, 1.5f, 1.5f, 1.5f }; // unk_82FB8040 @82C5D570 <- flt_820945DC
+    static const Vector3 KVF_DOUBLE_BOUNCE_DAMP     = { 30.0f, 30.0f, 30.0f, 30.0f }; // unk_82FB82F0 @82C5D430 <- flt_82004F5C
 
     // The one literal that IS visible in the asm: v143 = 0.00066666666f == 1/1500, the bounce-power
     // y-floor the shaped scale's Y lane is seeded with before the clamp/max.

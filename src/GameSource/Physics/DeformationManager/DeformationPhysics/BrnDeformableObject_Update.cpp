@@ -91,9 +91,11 @@ namespace Deformation
         // FLAGGED-0 PLACEHOLDERS for the friction / limit / scale rows the resolved world impulse is
         // shaped by after GetImpulsesFromLocalImpulse (&unk_82FB95C0 / &unk_82FB8330 / &unk_82FB9D30).
         // Honest zeros (NEVER fabricated); the per-lane clamp/scale SHAPE is exact, the values inert.
-        const Vector3 KVF_APPLY_FRICTION_SCALE = { 0.0f, 0.0f, 0.0f, 0.0f };  // FLAG: unk_82FB8330
-        const Vector3 KVF_APPLY_FRICTION_CLAMP = { 0.0f, 0.0f, 0.0f, 0.0f };  // FLAG: unk_82FB95C0
-        const Vector3 KVF_APPLY_SHOWTIME_SCALE = { 0.0f, 0.0f, 0.0f, 0.0f };  // FLAG: unk_82FB9D30
+        // ⭐ RECOVERED 2026-08-03 (static-init splats). The friction scale is tiny (1.5e-4) and the
+        // clamp is 1000, which is why the pair reads as "scale hard down, then bound".
+        const Vector3 KVF_APPLY_FRICTION_SCALE = { 0.000150000007f, 0.000150000007f, 0.000150000007f, 0.000150000007f };  // unk_82FB8330 @82C5D688 <- flt_8209D738
+        const Vector3 KVF_APPLY_FRICTION_CLAMP = { 1000.0f, 1000.0f, 1000.0f, 1000.0f };  // unk_82FB95C0 @82C5D868 <- flt_82009E10
+        const Vector3 KVF_APPLY_SHOWTIME_SCALE = { 5.0f, 5.0f, 5.0f, 5.0f };  // unk_82FB9D30 @82C5D890 <- flt_8200426C
 
         // The two part-type ids whose driven points are skinned through the BOX-CLAMPED path
         // (UpdateSkinningOffsetsWithinBox) -- the bonnet / boot panel types in the asm's
@@ -111,7 +113,10 @@ namespace Deformation
         // max to build the bonnet/boot WithinBox clamp). No recoverable XEX symbol -- honest zeros
         // (NEVER fabricated); the box-construction SHAPE (min = ext - row, max = ext + row) is exact,
         // the inflation stays inert until the rodata lands.
-        const Vector3 KVF_SKINNING_CLAMP_MARGIN = { 0.0f, 0.0f, 0.0f, 0.0f };  // FLAG: unk_82FB9550
+        // ⭐ RECOVERED 2026-08-03. Note this one is NOT a splat: the initialiser @82C5D97C builds
+        // {flt_82004014 (0.1), 0, 0, 0}, i.e. only the X lane carries the margin. A splat would have
+        // inflated all three axes; the console inflates one.
+        const Vector3 KVF_SKINNING_CLAMP_MARGIN = { 0.100000001f, 0.0f, 0.0f, 0.0f };  // unk_82FB9550
     }
 
     // =============================================================================================

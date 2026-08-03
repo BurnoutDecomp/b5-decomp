@@ -79,8 +79,11 @@ namespace Deformation
     // FLAGGED-0 .rodata placeholders (NEVER fabricated). Shapes are authoritative; values stay inert.
     //   unk_82FB9B80 -- ResetDeformation per-axis initial-damage->bbox scale (vmulfp into the spec BB).
     //   unk_82FB9AB0 -- UpdateAbsorptionSet extreme-crash speed margin (vsubfp from crash-speed delta).
-    static const Vector3 KVF_INITIAL_DAMAGE_BBOX_SCALE = { 0.0f, 0.0f, 0.0f, 0.0f }; // FLAG: unk_82FB9B80
-    static const f32     KF_EXTREME_CRASH_SPEED_MARGIN = 0.0f;                        // FLAG: unk_82FB9AB0
+    // ⭐ RECOVERED 2026-08-03. unk_82FB9B80's initialiser @82C5D7D0 is a RECIPROCAL, not a splat:
+    // `vrefp` + two Newton-Raphson steps over unk_82FB9770 (0.2), i.e. 1/0.2 = 5.0. A static-init
+    // scan that only recognises the splat idiom cannot resolve it, which is why it stayed flagged.
+    static const Vector3 KVF_INITIAL_DAMAGE_BBOX_SCALE = { 5.0f, 5.0f, 5.0f, 5.0f }; // unk_82FB9B80 = 1/unk_82FB9770
+    static const f32     KF_EXTREME_CRASH_SPEED_MARGIN = 5.0f;                        // unk_82FB9AB0 @82C5D8B8 <- flt_8200426C
 
     // Wheel-tag body-part selectors used by PrepareIKPart's switch on the part's GetPartType(). These
     // are the asm switch keys; the placeholder EBodyParts enum has no named enumerators, so the keys
