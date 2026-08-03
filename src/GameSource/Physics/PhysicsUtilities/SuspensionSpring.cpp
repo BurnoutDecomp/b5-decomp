@@ -72,4 +72,40 @@ namespace BrnPhysics
         CGS_ASSERT(lfExternalForce == lfExternalForce, "SuspensionSpring: setting invalid (NaN) external force");
         mvExternalForce.x = lfExternalForce;
     }
+
+    // @0x825A7A28 (35 instrs) -- seed stiffness/damping/mass, zero the position, and clear the two
+    // trailing registers wholesale.
+    //
+    // The three VecFloat arguments arrive in v1/v2/v3 and the body immediately parks v2 and v3
+    // (`vmr128 v127,v2` / `vmr128 v126,v3`) so it can reuse v1 as the single-argument register for
+    // each setter -- so the parameter ORDER is asm-literal: v1 -> SetStiffness, v2 -> SetDamping,
+    // v3 -> SetMass. Each setter inserts lane 0, so passing `.x` is store-for-store equivalent to
+    // the console's broadcast register.
+    //
+    // The last two stores are FULL 16-byte `stvx128 v127(==0)` at base+0x10 and base+0x20, i.e. all
+    // four lanes of mvVelocity_Acceleration_DampingForce_SpringForce and all four of mvExternalForce
+    // -- not the single-lane setters. Written as whole-register clears, which is what the asm does.
+    //
+    // Its two callers are VehiclePhysics::SetupSuspension @0x825CF718 and VehiclePhysics::Construct
+    // @0x8262DBD0 (the latter passes 0/0/0 -- SetupSuspension installs the real values later).
+    void SuspensionSpring::Prepare(VecFloat lvStiffness, VecFloat lvDamping, VecFloat lvMass)
+    {
+        SetStiffness(lvStiffness.x);                            // 0x825A7A54
+        SetDamping(lvDamping.x);                                // 0x825A7A60  (v1 <- v127 == v2)
+        SetMass(lvMass.x);                                      // 0x825A7A6C  (v1 <- v126 == v3)
+        SetPosition(0.0f);                                      // 0x825A7A7C  (vspltisw128 v127,0)
+        mvVelocity_Acceleration_DampingForce_SpringForce.SetZero();   // 0x825A7A88  stvx128 base+0x10
+        mvExternalForce.SetZero();                                    // 0x825A7A8C  stvx128 base+0x20
+    }
+
+    // @0x825A2E30 (21 instrs) -- the same tail as Prepare without the three seeds: zero the
+    // position lane through the setter, then clear the two trailing registers wholesale.
+    // Its ONLY caller in the image is VehiclePhysics::Reset @0x825FDD78 (four times, once per
+    // driven wheel, stepping the 0x30 stride of VehiclePhysics::maSprings).
+    void SuspensionSpring::Reset()
+    {
+        SetPosition(0.0f);                                      // 0x825A2E54  (vspltisw128 v127,0)
+        mvVelocity_Acceleration_DampingForce_SpringForce.SetZero();   // 0x825A2E60  stvx128 base+0x10
+        mvExternalForce.SetZero();                                    // 0x825A2E64  stvx128 base+0x20
+    }
 }
