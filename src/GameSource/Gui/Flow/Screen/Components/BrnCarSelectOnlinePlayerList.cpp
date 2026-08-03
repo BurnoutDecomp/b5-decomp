@@ -17,6 +17,8 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiWorldDataController.h"                     // BrnGui::WorldDataController
+#include "SharedClasses/DataLists/VehicleList.h"                          // BrnResource::VehicleList::GetVehicleData
+#include "SharedClasses/DataLists/VehicleListEntry.h"                     // GetLiveryType / GetParentId
 
 #include <cstring>   // std::strstr
 
@@ -62,6 +64,109 @@ namespace BrnGui
                    "Invalid player index");                                   // @0x82482968/0x82482970
 
         return maPlayerRows[liPlayerIndex].IsVisible();
+    }
+
+    // ---------------------------------------------------------------------------------
+    // The five bank-level row drivers, RECONSTRUCTED 2026-08-03. They were declared in the
+    // header by b5-decomp fd0925f4 with their bodies deferred to "this component's own TU";
+    // the same commit landed BrnCarSelectLivery_wJ_01.cpp, whose HandleLobbyPlayerList calls
+    // all five, so the exe could not link until they existed. Reconstructed store-for-store
+    // from the X360 ARTIST bodies named in the header (asm arbitrates; the row-bank base
+    // +0x90 / stride 0x2F0 that every one of them walks is the re-homed layout, so the
+    // console's `752 * index + this + 144` is exactly `maPlayerRows[index]`).
+    //
+    // All five open with the same range assert. The X360 streams "Invalid player index : "
+    // followed by the index into the assert buffer; CGS_ASSERT carries the plain condition,
+    // matching IsShowing() above. The per-body cpp line numbers are the console's.
+    // ---------------------------------------------------------------------------------
+
+    // @ 0x8241B1C8 -- show the row (the console's whole body after the assert is the row's
+    // own Show(), which sets mbVisible and pushes the visible/final apt view-state).
+    void CarSelectOnlinePlayerList::Show(s32 liPlayerIndex)
+    {
+        CGS_ASSERT(liPlayerIndex >= 0 && liPlayerIndex < KI_MAX_PLAYERS,
+                   "Invalid player index");                                   // cpp:146
+
+        maPlayerRows[liPlayerIndex].Show();
+    }
+
+    // @ 0x8241B2A0 -- take the row down. There is no Item::Hide on the console: the bank
+    // clears the row's visible byte itself (`*(row + 744) = 0` == row + 0x2E8 == mbVisible)
+    // and pushes the "invisible" apt view-state on the ROW component, non-immediate.
+    void CarSelectOnlinePlayerList::Hide(s32 liPlayerIndex)
+    {
+        CGS_ASSERT(liPlayerIndex >= 0 && liPlayerIndex < KI_MAX_PLAYERS,
+                   "Invalid player index");                                   // cpp:164
+
+        CarSelectOnlinePlayerListItem& lrRow = maPlayerRows[liPlayerIndex];
+        lrRow.mbVisible = false;
+        lrRow.AddOutputAptViewState("apt_state", "invisible", false);
+    }
+
+    // @ 0x82427948 -- push a gamertag into the row's name field, but ONLY while the row is up
+    // (X360 `if (HIBYTE(row + 888))` -- the big-endian MSB of the word at +888 is the byte at
+    // +888 itself, i.e. row + 0x2E8 == mbVisible). The console calls TextField::SetText on
+    // row + 0x8C == mGamertagTextfield directly.
+    void CarSelectOnlinePlayerList::SetPlayerName(s32 liPlayerIndex, const char* lpacPlayerName)
+    {
+        CGS_ASSERT(liPlayerIndex >= 0 && liPlayerIndex < KI_MAX_PLAYERS,
+                   "Invalid player index");                                   // cpp:79
+
+        CarSelectOnlinePlayerListItem& lrRow = maPlayerRows[liPlayerIndex];
+        if (lrRow.mbVisible)
+        {
+            lrRow.mGamertagTextfield.SetText(lpacPlayerName);
+        }
+    }
+
+    // @ 0x82434B70 -- display a car on the row. A livery variant is shown under its PARENT
+    // car's id, so the id is resolved through the vehicle list first.
+    //
+    // ⚠️ HEX-RAYS MISREADS THE PARENT FETCH. Its `VehicleData[3].field_0` is a 32-bit view of
+    // the asm's `ld r11, 8(r31)` @0x82434C90 -- a 64-bit load of the CgsID parent id at
+    // entry + 0x08, i.e. VehicleListEntry::GetParentId(). The livery tag beside it is
+    // `lbz r11, 0xE9(r31)` == GetLiveryType(). Identical idiom to the committed
+    // BrnLeaderboardTableComponent.cpp:214 (`GetLiveryType() != 2 && GetParentId() != 0`);
+    // the 2 is a literal in the asm and the committed ELiveryType only models 0/1, so it
+    // stays a literal here too, as it does there.
+    void CarSelectOnlinePlayerList::SetPlayerCar(s32 liPlayerIndex, CgsID lCarId)
+    {
+        CGS_ASSERT(liPlayerIndex >= 0 && liPlayerIndex < KI_MAX_PLAYERS,
+                   "Invalid player index");                                   // cpp:98
+
+        // The console does GetVehicleIndex() then GetVehicleData(index) and routes BOTH the
+        // "id not present" arm and the "no entry" arm into the same assert; the committed
+        // GetVehicleData(CgsID) overload is exactly that composite and returns null for both.
+        const BrnResource::VehicleListEntry* lpVehicleData = mpVehicleList->GetVehicleData(lCarId);
+        CGS_ASSERT(lpVehicleData != 0, "lpVehicleData");                      // cpp:101
+
+        if (lpVehicleData->GetLiveryType() != 2 && lpVehicleData->GetParentId() != 0)
+        {
+            lCarId = lpVehicleData->GetParentId();
+        }
+
+        maPlayerRows[liPlayerIndex].SetPlayerCar(lCarId);
+    }
+
+    // @ 0x8241B0C8 -- latch the row's "final selection" tick. Nothing happens unless the flag
+    // actually changes; the visible byte is sampled BEFORE the store (X360 reads +888 into a
+    // register, then stores +889, then tests the register), and a row that was already up is
+    // re-Shown so it swaps to the "final" apt state.
+    void CarSelectOnlinePlayerList::SetFinalSelection(s32 liPlayerIndex, bool lbFinalSelection)
+    {
+        CGS_ASSERT(liPlayerIndex >= 0 && liPlayerIndex < KI_MAX_PLAYERS,
+                   "Invalid player index");                                   // cpp:128
+
+        CarSelectOnlinePlayerListItem& lrRow = maPlayerRows[liPlayerIndex];
+        if (lrRow.mbFinalSelection != lbFinalSelection)
+        {
+            const bool lbWasVisible = lrRow.mbVisible;
+            lrRow.mbFinalSelection  = lbFinalSelection;
+            if (lbWasVisible)
+            {
+                lrRow.Show();
+            }
+        }
     }
 
     // @ 0x82427A38 -- walk the eight rows in order and hand the notification to the first
