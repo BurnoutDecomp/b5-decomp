@@ -36,7 +36,40 @@ namespace Vehicle
 {
     class RaceCarPhysics : public VehiclePhysics
     {
+        // ⭐ VehicleManager owns the eight-car array (`RaceCarPhysics maRaceCarVehicles[8]`,
+        // BrnVehicleManager.h) and the X360 build reaches these members BARE, off an absolute
+        // per-car offset, from VehicleManager::SetRaceCarCrashing @0x82634C90 and
+        // VehicleManager::ApplyPlayerStats @0x8259BFE8 -- no accessor, no assert. Routing those
+        // reads through getters would add asserts the console does not fire there, so the console
+        // access is reproduced by friendship instead. Same precedent as PhysicalTrafficManager,
+        // which is a friend of this class's owner for exactly the same reason.
+        friend class VehicleManager;
+
     public:
+        // ⭐ Construct @0x8263BF10..0x8263BF38 -- INLINED into the eight-car loop of
+        // VehicleManager::Construct @0x8263B7C8, which is the only place it is issued. It is a
+        // real function and not a hand-rolled sequence of pokes: the PS3 DecFIGS build calls it
+        // OUT OF LINE (RaceCarPhysics::Construct @0x6EB3D4) and its body there is exactly this
+        // one -- `bl VehiclePhysics::Construct` then the same six writes, at the uniform Δ = −16
+        // that separates the two builds in this region:
+        //     PS3 @0x6EB3D4  bl   VehiclePhysics::Construct
+        //         @0x6EB404  stvx v13(0), this, 0x13E0   <- X360 +0x13F0  mPropCollisionImpulseSum
+        //                    stfs 0.0f, 0x13F8(this)     <- X360 +0x1408  mfBeachedTime
+        //                    stfs 0.0f, 0x13F0(this)     <- X360 +0x1400  mfTimeSinceTookDownPlayer
+        //                    stb  0,    0x13FD(this)     <- X360 +0x140D  mbUsingAftertouch
+        //                    stb  0,    0x13FC(this)     <- X360 +0x140C  mbPlayerCarInShowtime
+        //                    <lvx/vperm/stvx at this+0x1060>  <- X360 +0x1070, the Z-lane insert
+        // ⚠️ SEVEN writes, not six: the X360 loop body ALSO re-zeroes lane .z of the +0x1070
+        // register (`lvx128 v0,r0,r11 ; vrlimi128 v0,v127,2,0 ; stvx128 v0,r0,r11` with
+        // r11 == record + 0x1070), a lane VehiclePhysics::Construct has already cleared. The
+        // redundancy is in both builds; it is reproduced rather than optimised away.
+        // ⛔ NOTE WHAT IS *NOT* HERE. Nine of this class's sixteen own members are left untouched
+        // (mfSlamSteering, mu8StrengthStat, mInitialCrashVel/AngVel, mfCrashTimer, mbAISlowMo,
+        // mbWroteIntoRWInSlowMo, mbDeformedBeyondDriveTimeLimitsInCrash, mCrashNormal,
+        // mEntityCausingCrash, mbDebugShowTargetAssist). That is the console's behaviour, not an
+        // omission: Prepare and the crash paths seed them. Do not "complete" it.
+        void Construct();
+
         // @0x827E42B0: trivial getter -- true while the player car is actually in showtime.
         //   asm: lbz r3,0x140C(r3); blr
         bool IsPlayerVehicleActuallyInShowtime() const
