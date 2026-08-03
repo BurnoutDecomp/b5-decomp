@@ -4015,8 +4015,22 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         return;
     }
 
+    // [DIAG] BRN_WORLD_CAMFREE=1 makes this stand-in IGNORE the director override, so a
+    // capture gets the tour/establishing camera below (which frames the spawned race car)
+    // instead of whatever the director's fly-by is pointing at. Sibling of the two
+    // BRN_WORLD_CAM* switches below and equally capture-only: it changes nothing unless the
+    // variable is set. Needed because on this build the director parks the view inside the
+    // junkyard's scrap geometry, so no frame of a default run ever shows the car.
+    static s32 siCamFree = -1;
+    if ( siCamFree < 0 )
+    {
+        const char* lpcFreeEnv = std::getenv( "BRN_WORLD_CAMFREE" );
+        siCamFree = ( lpcFreeEnv != 0 && lpcFreeEnv[0] != '0' ) ? 1 : 0;
+    }
+
     // Consume this frame's director-camera override (one frame only -- see the header).
-    const bool                          lbUseDirectorCamera = mbBringUpCameraOverrideValid;
+    const bool                          lbUseDirectorCamera =
+        mbBringUpCameraOverrideValid && ( siCamFree == 0 );
     const rw::math::vpu::Matrix44Affine lDirectorTransform  = mBringUpCameraOverride;
     const f32                           lfDirectorFOVDegs   = mfBringUpCameraOverrideFOV;
     mbBringUpCameraOverrideValid = false;

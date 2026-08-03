@@ -106,6 +106,40 @@ void ShaderConstantTable::SetShaderConstantArrayData(u32 luIndex, const rw::math
     }
 }
 
+// The Matrix44Affine* overload @ 0x827FB918 -- the array twin of
+// SetShaderConstantData(u32, Matrix44Affine). Model::SetupShaderConstantsForInstancing
+// is its only caller in the XEX (it uploads the five per-instance world matrices as
+// constant 6, "InstancingMatrixArray").
+//
+// Same slot bookkeeping as the siblings; the difference is the W LANES. The X360 loop
+// (@0x827FB958..0x827FB998) copies four quad-words per entry and rewrites each row's w
+// with a vrlimi128: rows 0..2 take it from a zeroed vector (`vspltisw v0, 0`) and row 3
+// from `vcfsx(vspltisw 1, 0)` == 1.0f -- i.e. the affine 3-row matrix is widened into a
+// full 4x4 exactly as the scalar Matrix44Affine setter does, per entry.
+//
+// The entry count comes from maConstants[luIndex].mu8NumEntries (the asm's `12*index +
+// table + 3` byte), so the loop runs the DECLARED array length regardless of how many
+// entries the caller filled -- which is why SetupShaderConstantsForInstancing zero-fills
+// its unused tail before calling.
+void ShaderConstantTable::SetShaderConstantArrayData(u32 luIndex, const rw::math::vpu::Matrix44Affine* lpaValues)
+{
+    CGS_ASSERT(luIndex < mu8NumUsedConstants, "luIndex < mu8NumUsedConstants");
+
+    Vector4* lpDest = UpdateShaderChangeTableAndGetConstantDestination(luIndex);
+
+    const u32 luNumEntries = maConstants[luIndex].GetNumEntries();
+    for (u32 luEntry = 0; luEntry < luNumEntries; ++luEntry)
+    {
+        const rw::math::vpu::Matrix44Affine& lrSrc = lpaValues[luEntry];
+        Vector4* lpRows = lpDest + luEntry * 4u;
+
+        lpRows[0].x = lrSrc.xAxis.x; lpRows[0].y = lrSrc.xAxis.y; lpRows[0].z = lrSrc.xAxis.z; lpRows[0].w = 0.0f;
+        lpRows[1].x = lrSrc.yAxis.x; lpRows[1].y = lrSrc.yAxis.y; lpRows[1].z = lrSrc.yAxis.z; lpRows[1].w = 0.0f;
+        lpRows[2].x = lrSrc.zAxis.x; lpRows[2].y = lrSrc.zAxis.y; lpRows[2].z = lrSrc.zAxis.z; lpRows[2].w = 0.0f;
+        lpRows[3].x = lrSrc.wAxis.x; lpRows[3].y = lrSrc.wAxis.y; lpRows[3].z = lrSrc.wAxis.z; lpRows[3].w = 1.0f;
+    }
+}
+
 // Record that constant luIndex changed this frame and hand back a fresh destination for its
 // value in the active dispatch bin. Appends luIndex to the dirty list, allocates
 // mu16SizeOfArrayInQw quad-words from the bin, stores that pointer as the constant's latest

@@ -3,21 +3,10 @@
 #include "types.hpp"
 #include "rw/rwcore_structs.h"   // rw::BaseResourceDescriptors<5> complete for the descriptor body
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "SharedClasses/World/BrnWheelGraphicsSpec.h"   // BrnWheel::GraphicsSpec (the record)
 
 namespace BrnWheel
 {
-
-// The wheel graphics-spec resource layout is not yet committed.
-// FLAG: minimal flagged slice — only the one field this FixUp touches is
-// modelled. miVersion (dword 0) is the on-disk graphics-spec version; the
-// remainder of the GraphicsSpec layout is deferred.
-struct GraphicsSpec
-{
-    s32 miVersion;   // +0   serialised wheel graphics-spec version
-};
-
-// FLAG: value 1 taken from the X360 `*a2 != 1` version check.
-static const s32 KI_WHEEL_GRAPHICS_SPEC_VERSION = 1;
 
 // Resource registry type id for the wheel graphics-spec resource (0x1000A).
 // Recovered verbatim from GetTypeID @ 0x82676490.
@@ -30,7 +19,8 @@ uint32_t GraphicsSpecResourceType::GetTypeID() const
 
 // GetSerialisedResourceDescriptor @ 0x8267D478 (store-for-store). A constant
 // descriptor: the wheel graphics-spec serialises into a single 16-byte-aligned
-// block of fixed size 0xC (the std at +0 packs {size=0xC, align=0x10} on the big-endian
+// block of fixed size 0xC -- which is exactly sizeof(GraphicsSpec), the three
+// 32-bit slots the header declares (the std at +0 packs {size=0xC, align=0x10} on the big-endian
 // image: back_chain+0=0xC -> result+0=m_size, back_chain+4=0x10 -> result+4=m_alignment;
 // entries 1..4 are {0,1}). lpResource is unread by the X360 body.
 CgsResource::ResourceDescriptor
@@ -59,8 +49,13 @@ void GraphicsSpecResourceType::FixUp(void* lpResource, const rw::Resource& lrRes
 
     const GraphicsSpec* lpGraphicsSpec = static_cast<const GraphicsSpec*>(lpResource);
 
-    CGS_ASSERT(lpGraphicsSpec->miVersion == KI_WHEEL_GRAPHICS_SPEC_VERSION,
+    CGS_ASSERT(lpGraphicsSpec->muVersion == KU_WHEEL_GRAPHICS_SPEC_VERSION,
                "Incorrect version for wheel Graphics Spec.  Get latest code/tools and rebuild data.  If that doesn't work, grab Keef! \n");
 }
+
+// The 12-byte descriptor above is the record's own size: three 32-bit slots, no
+// padding. If this ever fails, the two model slots have been widened by mistake
+// (see the header banner -- serialised slots stay 32-bit on x64).
+static_assert(sizeof(GraphicsSpec) == 0x0C, "BrnWheel::GraphicsSpec must be the console's 12-byte serialised record");
 
 }

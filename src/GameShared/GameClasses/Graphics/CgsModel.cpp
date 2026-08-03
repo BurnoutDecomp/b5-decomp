@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Graphics/CgsModel.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
+#include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"  // ShaderConstantTable
 
 // CgsModel.cpp - the three CgsGraphics::Model accessors bodied store-for-store from
 // the X360 asm (GetRenderable @0x822A0AC8, DoesStateExist @0x822A0B60,
@@ -88,5 +89,85 @@ namespace CgsGraphics
     u32 Model::GetVersionNumber() const
     {
         return mu8VersionNumber;
+    }
+
+    // The global runtime shader-constant register (X360 symbol mShaderConstantTable,
+    // bodied by the CgsShaderConstants TU). Same extern the other consumers carry.
+    extern ::ShaderConstantTable mShaderConstantTable;
+
+    // ------------------------------------------------------------------------
+    // The .w-lane source for shader constant 7 -- the X360's `unk_830111C0`.
+    //
+    // SetupShaderConstantsForInstancing splices ONLY the w lane of these five vectors
+    // into constant 7 ("InstancingIndexArray"); the xyz lanes come from the caller.
+    // MEASURED, not assumed: the shipped image has all 80 bytes at 0x830111C0 ZERO, and
+    // a whole-export scan for the symbol finds exactly ONE reference -- this read. So on
+    // the console the splice contributes 0.0f, i.e. it clears the w lane. Modelled as the
+    // zero-initialised file-scope table it is, rather than folded away, so that the day a
+    // writer turns up (the export set is known to have holes) there is a named thing to
+    // fill in.
+    // ------------------------------------------------------------------------
+    static const rw::math::vpu::Vector4
+    saInstancingIndexWLanes[Model::KU_MAX_INSTANCES_PER_GROUP] =
+    {
+        { 0.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f },
+        { 0.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f },
+    };
+
+    // ========================================================================
+    // Model::SetupShaderConstantsForInstancing  @ 0x827FBB98
+    //
+    // Publish one instanced draw group's per-instance data into the shader-constant
+    // table. Two blocks, in the console's order (7 then 6):
+    //
+    //   constant 7 "InstancingIndexArray"  (5 x Vector4, declared size 16 x 5)
+    //       entry i = { lpaModelInstancingIndexArray[i].xyz, saInstancingIndexWLanes[i].w }
+    //       -- the five `vrlimi128 vX, vY, 1, 0` inserts (mask 1 == lane w) at
+    //       0x827FBBF8..0x827FBC30, then the inlined Vector4* SetShaderConstantArrayData
+    //       (the CgsShaderConstants.h:492/:496 assert pair + FastNonOverlappedVectorMemcpy
+    //       of maConstants[7].mu8NumEntries quad-words).
+    //
+    //   constant 6 "InstancingMatrixArray" (5 x Matrix44Affine, declared size 64 x 5)
+    //       entries 0..count-1 = *lpaModelInstancingArray[i]  (a straight 64-byte copy;
+    //       the argument really is an array of POINTERS to matrices -- `_R10 = *v23`
+    //       then four lvx128 off _R10)
+    //       entries count..4    = zero  (the `vspltisw v0, 0` fill loop)
+    //       uploaded through the Matrix44Affine* SetShaderConstantArrayData (sub_827FB918).
+    //
+    // Both blocks are always FIVE entries long because that is what the table declares;
+    // that is exactly why the tail is zero-filled instead of left alone.
+    // ========================================================================
+    void Model::SetupShaderConstantsForInstancing(
+        s32 liModelInstanceCount,
+        const rw::math::vpu::Matrix44Affine* const* lpaModelInstancingArray,
+        const rw::math::vpu::Vector4* lpaModelInstancingIndexArray)
+    {
+        CGS_ASSERT(liModelInstanceCount <= static_cast<s32>(KU_MAX_INSTANCES_PER_GROUP),
+                   "liModelInstanceCount <= int32_t(Model::KU_MAX_INSTANCES_PER_GROUP)");
+        CGS_ASSERT(lpaModelInstancingArray != 0, "lpaModelInstancingArray != NULL");
+
+        rw::math::vpu::Vector4        laIndexArray[KU_MAX_INSTANCES_PER_GROUP];
+        rw::math::vpu::Matrix44Affine laMatrixArray[KU_MAX_INSTANCES_PER_GROUP];
+
+        for (u32 luEntry = 0; luEntry < KU_MAX_INSTANCES_PER_GROUP; ++luEntry)
+        {
+            laIndexArray[luEntry].x = lpaModelInstancingIndexArray[luEntry].x;
+            laIndexArray[luEntry].y = lpaModelInstancingIndexArray[luEntry].y;
+            laIndexArray[luEntry].z = lpaModelInstancingIndexArray[luEntry].z;
+            laIndexArray[luEntry].w = saInstancingIndexWLanes[luEntry].w;
+        }
+
+        for (s32 liInstance = 0; liInstance < liModelInstanceCount; ++liInstance)
+        {
+            laMatrixArray[liInstance] = *lpaModelInstancingArray[liInstance];
+        }
+        for (u32 luPad = static_cast<u32>(liModelInstanceCount);
+             luPad < KU_MAX_INSTANCES_PER_GROUP; ++luPad)
+        {
+            laMatrixArray[luPad].SetZero();
+        }
+
+        mShaderConstantTable.SetShaderConstantArrayData(7u, laIndexArray);
+        mShaderConstantTable.SetShaderConstantArrayData(6u, laMatrixArray);
     }
 }

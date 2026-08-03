@@ -420,9 +420,17 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     // renderer wave (BrnWorldEntityModule's camera call site), so name every non-empty
     // mesh list the first frame ANY of them is non-empty. DELETE once the producer's
     // list ids are pinned against the X360 call-site asm.
+    //
+    // ⚠️ LATCHED ON THE VALUE, not on a "printed once" bool (wheel-render wave 2026-08-03).
+    // As a pure one-shot this fired on the boot loading screen, ~200 log lines before the
+    // first car existed, and then never again -- so it reported "[11] [15] [21]" for the
+    // whole run and could NEVER show the car lists 19/20 whatever they did. It now reprints
+    // whenever the car-opaque count changes, which is exactly when a body-part or wheel
+    // draw appears or disappears.
     {
         static bool sbLoggedLists = false;
-        if (!sbLoggedLists && CgsDev::Log::gpDebugPrint != 0)
+        static u32  suLastCarOpaque = 0xFFFFFFFFu;
+        if ((!sbLoggedLists || luCarOpaque != suLastCarOpaque) && CgsDev::Log::gpDebugPrint != 0)
         {
             u32 luTotal = 0;
             for (u32 luList = 0; luList < 25u; ++luList)
@@ -430,7 +438,8 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
             if (luTotal != 0)
             {
                 sbLoggedLists = true;
-                *CgsDev::Log::gpDebugPrint << "[FLAG PC bring-up] first non-empty MESH lists:";
+                suLastCarOpaque = luCarOpaque;
+                *CgsDev::Log::gpDebugPrint << "[FLAG PC bring-up] MESH lists:";
                 for (u32 luList = 0; luList < 25u; ++luList)
                 {
                     const u32 luCount = mSingleBufferedDispatchFrame.GetList(luList)->GetCount();

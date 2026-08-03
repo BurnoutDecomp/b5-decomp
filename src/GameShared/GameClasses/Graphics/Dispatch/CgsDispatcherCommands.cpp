@@ -635,99 +635,23 @@ void DrawRenderableMesh::InterpretOcclusionQuery(DispatchCommand* lpCommand, f32
 }
 
 // =============================================================================
-// CgsGraphics::DrawRenderable::Interpret  @ 0x827FCDA0
+// The per-WVP half of DrawRenderable::Interpret: the object bounding-sphere test
+// and the per-mesh emit loop. Lifted verbatim out of Interpret so that ONE object
+// command can be walked more than once with a different world matrix -- see the
+// [PC bring-up shim] instancing note in Interpret below. With a single instance
+// this is called exactly once and the code path is bit-for-bit what it was.
 //
-// The object -> mesh expansion: restore the command's dirty shader constants
-// into the object context, build the object's WVP, frustum-cull, then emit one
-// DRAWRENDERABLEMESH[ZONLY] command + sort record per surviving mesh into the
-// mesh-only frame's lists.
+// lu8MeshInstanceCount is the instance byte stamped into each emitted mesh command
+// (the console forwards the trailer's byte unchanged; the PC expansion forwards 1
+// because it has already unrolled the instances).
 // =============================================================================
-void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFrame,
-                               void* lpUserData, f32 /*lfTime*/)
+static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame* lpFrame,
+                                   DispatchObjectContext* lpContext, const u8* lpTrailer,
+                                   u32 luOpaqueListId, u32 luTransparentListId,
+                                   u8 lu8Technique, bool lbFrustumTest, s32 liListBase,
+                                   u8 lu8MeshInstanceCount,
+                                   const rw::math::vpu::Matrix44& lWorldViewProjection)
 {
-    u32* lpWords = reinterpret_cast<u32*>(lpCommand);
-    DispatchObjectContext* lpContext = static_cast<DispatchObjectContext*>(lpUserData);
-
-    CGS_ASSERT(lpCommand != 0, "lpCommand");
-    CGS_ASSERT(lpFrame != 0,   "lpMeshOnlyDispatchFrame");
-    CGS_ASSERT(lpContext != 0, "lpDispatchObjectContextVoid");
-    CGS_ASSERT(CommandIdOf(lpWords[0]) == DispatchCommand::E_DRAWRENDERABLE,
-               "lpCommand->GetCommandID() == DRAWRENDERABLE");
-
-    const Renderable* lpRenderable =
-        reinterpret_cast<const Renderable*>(ReadCommandPointer(&lpWords[2]));
-    CGS_ASSERT(lpRenderable != 0, "lpRenderable");
-
-    // word1 routing bytes.
-    // ⭐ CORRECTED (race-car render wave 2026-07-31). Byte 2 and byte 1 were swapped here:
-    // the X360 Interpret @0x827FCE94..0x827FCEDC adds the context's liListBase to BOTH the
-    // >>24 and the >>16 bytes (`add r5, r5, r7` / `add r7, r6, r7`) and stores the >>8 byte
-    // RAW. Two list ids and one technique -- so byte2 is the TRANSPARENT LIST and byte1 is
-    // the TECHNIQUE, not the other way round. RenderInstance in BrnWorldEntityModule.cpp
-    // passed AddToBin's arguments with the same swap, so the two errors cancelled and the
-    // world still drew correctly; the race car passes (opaque 19, transparent 20, technique
-    // 0..3) and would have been routed into list 19 with technique 20 (clamped to the last
-    // material) and its transparent meshes into list 0..3 -- the SHADOW cascades.
-    const u32 luWord1          = lpWords[1];
-    const u8  lu8OpaqueList    = static_cast<u8>(luWord1 >> 24);
-    const u8  lu8Transparent   = static_cast<u8>(luWord1 >> 16);
-    const u8  lu8Technique     = static_cast<u8>(luWord1 >> 8);
-    bool      lbFrustumTest    = (luWord1 & 0xFFu) != 0;
-    const s32 liListBase       = lpContext->miListIdBase;
-    const u32 luOpaqueListId   = static_cast<u32>(lu8OpaqueList + liListBase);
-    const u32 luTransparentListId = static_cast<u32>(lu8Transparent + liListBase);
-
-    // The thread-info trailer + the dirty-constant restore. GetPacketLength() =
-    // dirtyQw + 1 (trailer), so the trailer is the packet's LAST qword.
-    const u32 luDirtyQw = (lpWords[0] & 0x00FFFFFFu) - 1u;
-    const u8* lpTrailer = reinterpret_cast<const u8*>(lpCommand) + 16u + (luDirtyQw << 4);
-
-    // Restore: {count u8, idx bytes, aligned host-pointer array} at cmd+16.
-    {
-        const u8* lpBlock  = reinterpret_cast<const u8*>(lpCommand) + 16;
-        const u32 luCount  = lpBlock[0];
-        const u8* lpaIdx   = lpBlock + 1;
-        const u8* lpaPtrs  = lpBlock + ((luCount + 4u) & ~3u);
-        for (u32 lu = 0; lu < luCount; ++lu)
-        {
-            const rw::math::vpu::Vector4* lpData;
-            std::memcpy(&lpData, lpaPtrs + lu * sizeof(void*), sizeof(void*));
-            lpContext->mapConstantData[lpaIdx[lu]] = lpData;
-        }
-    }
-
-    // WVP = worldMatrix (constant 0) * viewProjection (constant 3).
-    const rw::math::vpu::Matrix44* lpWorld =
-        reinterpret_cast<const rw::math::vpu::Matrix44*>(lpContext->mapConstantData[0]);
-    const rw::math::vpu::Matrix44* lpViewProjection =
-        reinterpret_cast<const rw::math::vpu::Matrix44*>(lpContext->mapConstantData[3]);
-    CGS_ASSERT(lpWorld != 0,          "lpWorldMatrix != NULL");
-    CGS_ASSERT(lpViewProjection != 0, "lpViewProjectionMatrix != NULL");
-
-    rw::math::vpu::Matrix44 lWorldViewProjection;
-    {
-        // Row-vector 4x4 multiply (the X360 inline VMX chain, de-vectorised;
-        // the world matrix is affine -- its rows' w lanes are 0/0/0/1).
-        const rw::math::vpu::Vector4* lapW[4] =
-            { &lpWorld->xAxis, &lpWorld->yAxis, &lpWorld->zAxis, &lpWorld->wAxis };
-        const rw::math::vpu::Vector4* lapV[4] =
-            { &lpViewProjection->xAxis, &lpViewProjection->yAxis,
-              &lpViewProjection->zAxis, &lpViewProjection->wAxis };
-        rw::math::vpu::Vector4* lapO[4] =
-            { &lWorldViewProjection.xAxis, &lWorldViewProjection.yAxis,
-              &lWorldViewProjection.zAxis, &lWorldViewProjection.wAxis };
-        for (int liRow = 0; liRow < 4; ++liRow)
-        {
-            const rw::math::vpu::Vector4& lrW = *lapW[liRow];
-            rw::math::vpu::Vector4&       lrO = *lapO[liRow];
-            const f32 lfWLane = (liRow == 3) ? 1.0f : lrW.w;
-            lrO.x = lrW.x * lapV[0]->x + lrW.y * lapV[1]->x + lrW.z * lapV[2]->x + lfWLane * lapV[3]->x;
-            lrO.y = lrW.x * lapV[0]->y + lrW.y * lapV[1]->y + lrW.z * lapV[2]->y + lfWLane * lapV[3]->y;
-            lrO.z = lrW.x * lapV[0]->z + lrW.y * lapV[1]->z + lrW.z * lapV[2]->z + lfWLane * lapV[3]->z;
-            lrO.w = lrW.x * lapV[0]->w + lrW.y * lapV[1]->w + lrW.z * lapV[2]->w + lfWLane * lapV[3]->w;
-        }
-    }
-
     const u32 luNumMeshes = lpRenderable->mu16NumMeshes;
 
     // Object-level bounding-sphere frustum test (only worth it for >= 3 meshes):
@@ -831,10 +755,10 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
         bool lbAdded;
         if (lpTrailer[0] != 0)
             lbAdded = DrawRenderableMeshZOnly::AddToBin(lpMesh, &lrBin, lpContext,
-                          static_cast<u8>(luTechnique), lpTrailer[2], lpThreadInfo);
+                          static_cast<u8>(luTechnique), lu8MeshInstanceCount, lpThreadInfo);
         else
             lbAdded = DrawRenderableMesh::AddToBin(lpMesh, &lrBin, lpContext,
-                          static_cast<u8>(luTechnique), lpTrailer[2], lpThreadInfo);
+                          static_cast<u8>(luTechnique), lu8MeshInstanceCount, lpThreadInfo);
         // [PC shim] overwrite the identity WVP lane the AddToBin seeded with the
         // real object WVP (payload qwords 1..4 -- see the header note).
         {
@@ -893,7 +817,7 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
                                "Why would you ever want to do a preZ pass for Z only rendering?!");
                     const bool lbPreZAdded = DrawRenderableMeshZOnly::AddToBin(
                         lpMesh, &lrBin, lpContext, static_cast<u8>(luPreZTechnique),
-                        lpTrailer[2], lpThreadInfo);
+                        lu8MeshInstanceCount, lpThreadInfo);
                     DispatchCommand* lpPreZPacket = lrBin.EndPacket();
                     CGS_ASSERT(lbPreZAdded && lpPreZPacket != 0,
                                "Failed to add mesh to dispatch bin (pre-z)");
@@ -910,6 +834,189 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
                 }
             }
         }
+    }
+}
+
+// =============================================================================
+// CgsGraphics::DrawRenderable::Interpret  @ 0x827FCDA0
+//
+// The object -> mesh expansion: restore the command's dirty shader constants
+// into the object context, build the object's WVP, frustum-cull, then emit one
+// DRAWRENDERABLEMESH[ZONLY] command + sort record per surviving mesh into the
+// mesh-only frame's lists (EmitObjectMeshCommands above).
+// =============================================================================
+void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFrame,
+                               void* lpUserData, f32 /*lfTime*/)
+{
+    u32* lpWords = reinterpret_cast<u32*>(lpCommand);
+    DispatchObjectContext* lpContext = static_cast<DispatchObjectContext*>(lpUserData);
+
+    CGS_ASSERT(lpCommand != 0, "lpCommand");
+    CGS_ASSERT(lpFrame != 0,   "lpMeshOnlyDispatchFrame");
+    CGS_ASSERT(lpContext != 0, "lpDispatchObjectContextVoid");
+    CGS_ASSERT(CommandIdOf(lpWords[0]) == DispatchCommand::E_DRAWRENDERABLE,
+               "lpCommand->GetCommandID() == DRAWRENDERABLE");
+
+    const Renderable* lpRenderable =
+        reinterpret_cast<const Renderable*>(ReadCommandPointer(&lpWords[2]));
+    CGS_ASSERT(lpRenderable != 0, "lpRenderable");
+
+    // word1 routing bytes.
+    // ⭐ CORRECTED (race-car render wave 2026-07-31). Byte 2 and byte 1 were swapped here:
+    // the X360 Interpret @0x827FCE94..0x827FCEDC adds the context's liListBase to BOTH the
+    // >>24 and the >>16 bytes (`add r5, r5, r7` / `add r7, r6, r7`) and stores the >>8 byte
+    // RAW. Two list ids and one technique -- so byte2 is the TRANSPARENT LIST and byte1 is
+    // the TECHNIQUE, not the other way round. RenderInstance in BrnWorldEntityModule.cpp
+    // passed AddToBin's arguments with the same swap, so the two errors cancelled and the
+    // world still drew correctly; the race car passes (opaque 19, transparent 20, technique
+    // 0..3) and would have been routed into list 19 with technique 20 (clamped to the last
+    // material) and its transparent meshes into list 0..3 -- the SHADOW cascades.
+    const u32 luWord1          = lpWords[1];
+    const u8  lu8OpaqueList    = static_cast<u8>(luWord1 >> 24);
+    const u8  lu8Transparent   = static_cast<u8>(luWord1 >> 16);
+    const u8  lu8Technique     = static_cast<u8>(luWord1 >> 8);
+    const bool lbFrustumTest   = (luWord1 & 0xFFu) != 0;
+    const s32 liListBase       = lpContext->miListIdBase;
+    const u32 luOpaqueListId   = static_cast<u32>(lu8OpaqueList + liListBase);
+    const u32 luTransparentListId = static_cast<u32>(lu8Transparent + liListBase);
+
+    // The thread-info trailer + the dirty-constant restore. GetPacketLength() =
+    // dirtyQw + 1 (trailer), so the trailer is the packet's LAST qword.
+    const u32 luDirtyQw = (lpWords[0] & 0x00FFFFFFu) - 1u;
+    const u8* lpTrailer = reinterpret_cast<const u8*>(lpCommand) + 16u + (luDirtyQw << 4);
+
+    // Restore: {count u8, idx bytes, aligned host-pointer array} at cmd+16.
+    {
+        const u8* lpBlock  = reinterpret_cast<const u8*>(lpCommand) + 16;
+        const u32 luCount  = lpBlock[0];
+        const u8* lpaIdx   = lpBlock + 1;
+        const u8* lpaPtrs  = lpBlock + ((luCount + 4u) & ~3u);
+        for (u32 lu = 0; lu < luCount; ++lu)
+        {
+            const rw::math::vpu::Vector4* lpData;
+            std::memcpy(&lpData, lpaPtrs + lu * sizeof(void*), sizeof(void*));
+            lpContext->mapConstantData[lpaIdx[lu]] = lpData;
+        }
+    }
+
+    // WVP = worldMatrix (constant 0) * viewProjection (constant 3).
+    const rw::math::vpu::Matrix44* lpWorld =
+        reinterpret_cast<const rw::math::vpu::Matrix44*>(lpContext->mapConstantData[0]);
+    const rw::math::vpu::Matrix44* lpViewProjection =
+        reinterpret_cast<const rw::math::vpu::Matrix44*>(lpContext->mapConstantData[3]);
+    CGS_ASSERT(lpWorld != 0,          "lpWorldMatrix != NULL");
+    CGS_ASSERT(lpViewProjection != 0, "lpViewProjectionMatrix != NULL");
+
+    // -------------------------------------------------------------------------
+    // [PC bring-up shim] INSTANCING EXPANSION.
+    //
+    // The console draws an N-instance object as ONE command: the instancing vertex
+    // shader picks its own world matrix out of shader constant 6
+    // ("InstancingMatrixArray", five Matrix44Affine, published by
+    // Model::SetupShaderConstantsForInstancing) using the per-instance index in
+    // constant 7, and the GPU replays the index buffer N times.
+    //
+    // This build has neither half of that: the instanced draw leaf
+    // (DrawInstancedIndexedPrimitive_Custom) is a loud trap in DispatchAllMeshes, and
+    // the PC path renders through a FALLBACK shader that is fed exactly one
+    // world-view-projection per draw (Device::SetObjectTransformPC ->
+    // WorldFallbackShader_SetWvp). Submitting the console's single N-instance command
+    // unchanged would either hit the trap or stack all N instances on one transform.
+    //
+    // So the expansion happens HERE, in the object -> mesh step that already owns the
+    // per-object WVP shim: one N-instance object command becomes N single-instance
+    // mesh commands, each carrying instance i's own WVP. Nothing upstream changes --
+    // RenderRaceCar stays the console's one-instanced-draw decompile -- and nothing
+    // downstream needs the trap, because every emitted command now says instances == 1.
+    //
+    // The instance matrices come out of the command's own restored constant block
+    // (constant 6), i.e. the console's own channel; they are already 4x4 with the w
+    // lanes fixed by SetShaderConstantArrayData. If the object claims instances but the
+    // constant is absent, fall back to the single constant-0 draw rather than guess.
+    //
+    // DELETE when a real instanced draw path exists on the D3D9 back end.
+    // -------------------------------------------------------------------------
+    const u8 lu8InstanceCount = lpTrailer[2];
+    const rw::math::vpu::Matrix44* lpaInstanceWorlds = 0;
+    u32 luNumInstanceDraws = 1;
+    if (lu8InstanceCount > 1u)
+    {
+        lpaInstanceWorlds = reinterpret_cast<const rw::math::vpu::Matrix44*>(
+            lpContext->mapConstantData[6]);
+        if (lpaInstanceWorlds != 0)
+        {
+            luNumInstanceDraws = lu8InstanceCount;
+
+            // [DIAG] latched on the EXPANDED COUNT and on the spread of the instance
+            // translations, not on a "ran once" bool -- an expansion that produced N
+            // draws all at the same place would otherwise look identical to a correct
+            // one in the log.
+            static u32 suLoggedInstanceCount = 0;
+            if (suLoggedInstanceCount != luNumInstanceDraws && CgsDev::Log::gpDebugPrint != 0)
+            {
+                suLoggedInstanceCount = luNumInstanceDraws;
+                *CgsDev::Log::gpDebugPrint
+                    << "[instancing] DrawRenderable::Interpret expanding "
+                    << luNumInstanceDraws << " instances; translations";
+                for (u32 luLog = 0; luLog < luNumInstanceDraws; ++luLog)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << " (" << lpaInstanceWorlds[luLog].wAxis.x
+                        << ", " << lpaInstanceWorlds[luLog].wAxis.y
+                        << ", " << lpaInstanceWorlds[luLog].wAxis.z << ")";
+                }
+                *CgsDev::Log::gpDebugPrint << "\n";
+            }
+        }
+        else
+        {
+            static bool sbLoggedMissingInstanceMatrices = false;
+            if (!sbLoggedMissingInstanceMatrices && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbLoggedMissingInstanceMatrices = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "DrawRenderable::Interpret: instanced object with no"
+                       " InstancingMatrixArray (constant 6) -- drawing one instance"
+                       " [PC bring-up shim]\n";
+            }
+        }
+    }
+
+    for (u32 luInstance = 0; luInstance < luNumInstanceDraws; ++luInstance)
+    {
+        const rw::math::vpu::Matrix44* lpWorldForDraw =
+            (lpaInstanceWorlds != 0) ? &lpaInstanceWorlds[luInstance] : lpWorld;
+
+        rw::math::vpu::Matrix44 lWorldViewProjection;
+        {
+            // Row-vector 4x4 multiply (the X360 inline VMX chain, de-vectorised;
+            // the world matrix is affine -- its rows' w lanes are 0/0/0/1).
+            const rw::math::vpu::Vector4* lapW[4] =
+                { &lpWorldForDraw->xAxis, &lpWorldForDraw->yAxis,
+                  &lpWorldForDraw->zAxis, &lpWorldForDraw->wAxis };
+            const rw::math::vpu::Vector4* lapV[4] =
+                { &lpViewProjection->xAxis, &lpViewProjection->yAxis,
+                  &lpViewProjection->zAxis, &lpViewProjection->wAxis };
+            rw::math::vpu::Vector4* lapO[4] =
+                { &lWorldViewProjection.xAxis, &lWorldViewProjection.yAxis,
+                  &lWorldViewProjection.zAxis, &lWorldViewProjection.wAxis };
+            for (int liRow = 0; liRow < 4; ++liRow)
+            {
+                const rw::math::vpu::Vector4& lrW = *lapW[liRow];
+                rw::math::vpu::Vector4&       lrO = *lapO[liRow];
+                const f32 lfWLane = (liRow == 3) ? 1.0f : lrW.w;
+                lrO.x = lrW.x * lapV[0]->x + lrW.y * lapV[1]->x + lrW.z * lapV[2]->x + lfWLane * lapV[3]->x;
+                lrO.y = lrW.x * lapV[0]->y + lrW.y * lapV[1]->y + lrW.z * lapV[2]->y + lfWLane * lapV[3]->y;
+                lrO.z = lrW.x * lapV[0]->z + lrW.y * lapV[1]->z + lrW.z * lapV[2]->z + lfWLane * lapV[3]->z;
+                lrO.w = lrW.x * lapV[0]->w + lrW.y * lapV[1]->w + lrW.z * lapV[2]->w + lfWLane * lapV[3]->w;
+            }
+        }
+
+        EmitObjectMeshCommands(lpRenderable, lpFrame, lpContext, lpTrailer,
+                               luOpaqueListId, luTransparentListId, lu8Technique,
+                               lbFrustumTest, liListBase,
+                               (lpaInstanceWorlds != 0) ? 1u : lu8InstanceCount,
+                               lWorldViewProjection);
     }
 }
 

@@ -128,7 +128,7 @@ namespace Deformation
     {
         CGS_ASSERT(liIndex < miNumberOfIKParts, "liIndex < miNumberOfIKParts");   // BrnStreamedDeformationSpec.h:378
         CGS_ASSERT(liIndex >= 0, "liIndex >= 0");                                  // BrnStreamedDeformationSpec.h:379
-        const char* lpBase = reinterpret_cast<const char*>(maIKPartData);
+        const char* lpBase = reinterpret_cast<const char*>(maIKPartData.Get());
         return reinterpret_cast<const IKBodyPartSpec*>(lpBase + KU_IK_PART_STRIDE * liIndex);
     }
 
@@ -277,7 +277,7 @@ namespace Deformation
             if ( miNumberOfTagPoints > 0 )
             {
                 s32 liIndex = 0;
-                char* lpTagBase = reinterpret_cast<char*>(maTagPointData);
+                char* lpTagBase = reinterpret_cast<char*>(maTagPointData.Get());
                 do
                 {
                     f32* lpPos = reinterpret_cast<f32*>(
@@ -295,7 +295,7 @@ namespace Deformation
             if ( miNumberOfDrivenPoints > 0 )
             {
                 s32 liIndex = 0;
-                char* lpDrivenBase = reinterpret_cast<char*>(maDrivenPointData);
+                char* lpDrivenBase = reinterpret_cast<char*>(maDrivenPointData.Get());
                 do
                 {
                     f32* lpPos = reinterpret_cast<f32*>(lpDrivenBase + KU_DRIVEN_POINT_STRIDE * liIndex);
@@ -312,7 +312,7 @@ namespace Deformation
             if ( miNumberOfIKParts > 0 )
             {
                 s32 liPart = 0;
-                char* lpPartBase = reinterpret_cast<char*>(maIKPartData);
+                char* lpPartBase = reinterpret_cast<char*>(maIKPartData.Get());
                 do
                 {
                     char* lpPart      = lpPartBase + KU_IK_PART_STRIDE * liPart;
@@ -356,7 +356,7 @@ namespace Deformation
         if ( miNumberOfIKParts > 0 )
         {
             s32 liIndex = 0;
-            char* lpPartBase = reinterpret_cast<char*>(maIKPartData);
+            char* lpPartBase = reinterpret_cast<char*>(maIKPartData.Get());
             do
             {
                 char**    lppJoints = reinterpret_cast<char**>(
@@ -373,39 +373,41 @@ namespace Deformation
         // mGenericTags: vestigial count-walk (no store), then rebase the array pointer (preserve null).
         for ( u32 luIndex = 0; luIndex < mGenericTags.muNumLocators; ++luIndex ) { /* no-op */ }
         {
-            ptrdiff_t liPtr = reinterpret_cast<ptrdiff_t>(mGenericTags.mpaLocatorPoints);
-            mGenericTags.mpaLocatorPoints = (liPtr != 0)
-                ? reinterpret_cast<LocatorPointSpec*>(liPtr - liBase)
-                : 0;
+            // [x64] the slot is FOUR bytes (see the header banner): rebase the SLOT, never a
+            // host pointer, or the store truncates a widened value back into it.
+            const u32 luSlot = mGenericTags.mpaLocatorPoints.muSlot;
+            mGenericTags.mpaLocatorPoints.muSlot = (luSlot != 0)
+                ? static_cast<u32>(luSlot - static_cast<u32>(liBase))
+                : 0u;
         }
 
         // mLightTags (FixDown order: Generic, Light, Camera).
         for ( u32 luIndex = 0; luIndex < mLightTags.muNumLocators; ++luIndex ) { /* no-op */ }
         {
-            ptrdiff_t liPtr = reinterpret_cast<ptrdiff_t>(mLightTags.mpaLocatorPoints);
-            mLightTags.mpaLocatorPoints = (liPtr != 0)
-                ? reinterpret_cast<LocatorPointSpec*>(liPtr - liBase)
-                : 0;
+            // [x64] the slot is FOUR bytes (see the header banner): rebase the SLOT, never a
+            // host pointer, or the store truncates a widened value back into it.
+            const u32 luSlot = mLightTags.mpaLocatorPoints.muSlot;
+            mLightTags.mpaLocatorPoints.muSlot = (luSlot != 0)
+                ? static_cast<u32>(luSlot - static_cast<u32>(liBase))
+                : 0u;
         }
 
         // mCameraTags.
         for ( u32 luIndex = 0; luIndex < mCameraTags.muNumLocators; ++luIndex ) { /* no-op */ }
         {
-            ptrdiff_t liPtr = reinterpret_cast<ptrdiff_t>(mCameraTags.mpaLocatorPoints);
-            mCameraTags.mpaLocatorPoints = (liPtr != 0)
-                ? reinterpret_cast<LocatorPointSpec*>(liPtr - liBase)
-                : 0;
+            // [x64] the slot is FOUR bytes (see the header banner): rebase the SLOT, never a
+            // host pointer, or the store truncates a widened value back into it.
+            const u32 luSlot = mCameraTags.mpaLocatorPoints.muSlot;
+            mCameraTags.mpaLocatorPoints.muSlot = (luSlot != 0)
+                ? static_cast<u32>(luSlot - static_cast<u32>(liBase))
+                : 0u;
         }
 
         // The four top-level table pointers: unconditional subtract (no null guard in the asm).
-        maIKPartData     = reinterpret_cast<IKBodyPartSpec*>(
-                               reinterpret_cast<ptrdiff_t>(maIKPartData)     - liBase);
-        maDrivenPointData = reinterpret_cast<IKDrivenPointSpec*>(
-                               reinterpret_cast<ptrdiff_t>(maDrivenPointData) - liBase);
-        maGlassPaneData  = reinterpret_cast<GlassPaneSpec*>(
-                               reinterpret_cast<ptrdiff_t>(maGlassPaneData)  - liBase);
-        maTagPointData   = reinterpret_cast<TagPointSpec*>(
-                               reinterpret_cast<ptrdiff_t>(maTagPointData)   - liBase);
+        maIKPartData.muSlot = static_cast<u32>(maIKPartData.muSlot - static_cast<u32>(liBase));
+        maDrivenPointData.muSlot = static_cast<u32>(maDrivenPointData.muSlot - static_cast<u32>(liBase));
+        maGlassPaneData.muSlot = static_cast<u32>(maGlassPaneData.muSlot - static_cast<u32>(liBase));
+        maTagPointData.muSlot = static_cast<u32>(maTagPointData.muSlot - static_cast<u32>(liBase));
     }
 
     // X360 @ 0x82630E18. Serialise-in pointer relocation: the inverse of FixDown. Add lpBaseAddress
@@ -418,39 +420,41 @@ namespace Deformation
 
         // The four unconditionally-rebased top-level table pointers (no null guard in the asm):
         // asm computes v5=IK, v6=Driven, v7=Glass, then result[1]+=a2 for Tag.
-        maIKPartData     = reinterpret_cast<IKBodyPartSpec*>(
-                               reinterpret_cast<ptrdiff_t>(maIKPartData)     + liBase);
-        maDrivenPointData = reinterpret_cast<IKDrivenPointSpec*>(
-                               reinterpret_cast<ptrdiff_t>(maDrivenPointData) + liBase);
-        maGlassPaneData  = reinterpret_cast<GlassPaneSpec*>(
-                               reinterpret_cast<ptrdiff_t>(maGlassPaneData)  + liBase);
-        maTagPointData   = reinterpret_cast<TagPointSpec*>(
-                               reinterpret_cast<ptrdiff_t>(maTagPointData)   + liBase);
+        maIKPartData.muSlot = static_cast<u32>(maIKPartData.muSlot + static_cast<u32>(liBase));
+        maDrivenPointData.muSlot = static_cast<u32>(maDrivenPointData.muSlot + static_cast<u32>(liBase));
+        maGlassPaneData.muSlot = static_cast<u32>(maGlassPaneData.muSlot + static_cast<u32>(liBase));
+        maTagPointData.muSlot = static_cast<u32>(maTagPointData.muSlot + static_cast<u32>(liBase));
 
         // mGenericTags: rebase the list pointer (preserve null), then the vestigial count-walk.
         {
-            ptrdiff_t liPtr = reinterpret_cast<ptrdiff_t>(mGenericTags.mpaLocatorPoints);
-            mGenericTags.mpaLocatorPoints = (liPtr != 0)
-                ? reinterpret_cast<LocatorPointSpec*>(liPtr + liBase)
-                : 0;
+            // [x64] the slot is FOUR bytes (see the header banner): rebase the SLOT, never a
+            // host pointer, or the store truncates a widened value back into it.
+            const u32 luSlot = mGenericTags.mpaLocatorPoints.muSlot;
+            mGenericTags.mpaLocatorPoints.muSlot = (luSlot != 0)
+                ? static_cast<u32>(luSlot + static_cast<u32>(liBase))
+                : 0u;
         }
         for ( u32 luIndex = 0; luIndex < mGenericTags.muNumLocators; ++luIndex ) { /* no-op */ }
 
         // mLightTags (FixUp order: Generic, Light, Camera).
         {
-            ptrdiff_t liPtr = reinterpret_cast<ptrdiff_t>(mLightTags.mpaLocatorPoints);
-            mLightTags.mpaLocatorPoints = (liPtr != 0)
-                ? reinterpret_cast<LocatorPointSpec*>(liPtr + liBase)
-                : 0;
+            // [x64] the slot is FOUR bytes (see the header banner): rebase the SLOT, never a
+            // host pointer, or the store truncates a widened value back into it.
+            const u32 luSlot = mLightTags.mpaLocatorPoints.muSlot;
+            mLightTags.mpaLocatorPoints.muSlot = (luSlot != 0)
+                ? static_cast<u32>(luSlot + static_cast<u32>(liBase))
+                : 0u;
         }
         for ( u32 luIndex = 0; luIndex < mLightTags.muNumLocators; ++luIndex ) { /* no-op */ }
 
         // mCameraTags.
         {
-            ptrdiff_t liPtr = reinterpret_cast<ptrdiff_t>(mCameraTags.mpaLocatorPoints);
-            mCameraTags.mpaLocatorPoints = (liPtr != 0)
-                ? reinterpret_cast<LocatorPointSpec*>(liPtr + liBase)
-                : 0;
+            // [x64] the slot is FOUR bytes (see the header banner): rebase the SLOT, never a
+            // host pointer, or the store truncates a widened value back into it.
+            const u32 luSlot = mCameraTags.mpaLocatorPoints.muSlot;
+            mCameraTags.mpaLocatorPoints.muSlot = (luSlot != 0)
+                ? static_cast<u32>(luSlot + static_cast<u32>(liBase))
+                : 0u;
         }
         for ( u32 luIndex = 0; luIndex < mCameraTags.muNumLocators; ++luIndex ) { /* no-op */ }
 
@@ -459,7 +463,7 @@ namespace Deformation
         if ( miNumberOfIKParts > 0 )
         {
             s32 liIndex = 0;
-            char* lpPartBase = reinterpret_cast<char*>(maIKPartData);
+            char* lpPartBase = reinterpret_cast<char*>(maIKPartData.Get());
             do
             {
                 char*  lpPart    = lpPartBase + KU_IK_PART_STRIDE * liIndex;
@@ -479,7 +483,7 @@ namespace Deformation
         // non-gating tripwires (BeginAssert/FireAssert/EndAssert, execution continues) and run in the
         // FixUp order Generic, Light, Camera (matching the asm's three assert loops at :340/:347/:354).
         {
-            char* lpBase = reinterpret_cast<char*>(mGenericTags.mpaLocatorPoints);
+            char* lpBase = reinterpret_cast<char*>(mGenericTags.mpaLocatorPoints.Get());
             for ( u32 luLoop = 0; luLoop < mGenericTags.muNumLocators; ++luLoop )
             {
                 const s16 li16IkPartIndex =
@@ -489,7 +493,7 @@ namespace Deformation
             }
         }
         {
-            char* lpBase = reinterpret_cast<char*>(mLightTags.mpaLocatorPoints);
+            char* lpBase = reinterpret_cast<char*>(mLightTags.mpaLocatorPoints.Get());
             for ( u32 luLoop = 0; luLoop < mLightTags.muNumLocators; ++luLoop )
             {
                 const s16 li16IkPartIndex =
@@ -499,7 +503,7 @@ namespace Deformation
             }
         }
         {
-            char* lpBase = reinterpret_cast<char*>(mCameraTags.mpaLocatorPoints);
+            char* lpBase = reinterpret_cast<char*>(mCameraTags.mpaLocatorPoints.Get());
             for ( u32 luLoop = 0; luLoop < mCameraTags.muNumLocators; ++luLoop )
             {
                 const s16 li16IkPartIndex =

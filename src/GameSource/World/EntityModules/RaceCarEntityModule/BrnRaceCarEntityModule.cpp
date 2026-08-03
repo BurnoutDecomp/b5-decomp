@@ -56,7 +56,8 @@
 #include "GameSource/Math/BrnMathUtils.h"                                                // BrnMath::BuildTransform / IsNormal
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"                      // Attrib::Gen::burnoutcarasset (the new-vehicle residency gate)
 #include "rw/math/vpu/vector3_operation.h"                                               // rw::math::vpu::IsValid(Vector3)
-#include "rw/math/vpu/matrix44affine_operation.h"                                        // rw::math::vpu::IsValid(Matrix44Affine)
+#include "rw/math/vpu/matrix44affine_operation.h"                                        // rw::math::vpu::IsValid(Matrix44Affine) / Mult
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h" // StreamedDeformationSpec::WheelSpec (the authored wheel placements)
 
 #include <cstring>   // memset
 
@@ -206,16 +207,16 @@ void RaceCarEntityModule::Construct()
 
     // The three render switches the dispatch leg reads (see the header for the offset
     // fit). The console seeds them from its debug-variable table, which is not live on
-    // this build; both body and coronas default ON.
+    // this build; body, coronas and wheels all default ON.
     mbRenderCarsDuringCrash = true;
     mbRenderRaceCarCoronas  = true;
 
-    // [FLAG PC bring-up] mbRenderWheels OFF. RenderRaceCar's wheel block is not
-    // reconstructed: its only submission path is
-    // CgsGraphics::Model::SetupShaderConstantsForInstancing (absent from the tree) and its
-    // draw leaf DrawInstancedIndexedPrimitive_Custom is an explicit CGS_ASSERT(false) trap
-    // (CgsDispatcherCommands.cpp:1045 / :1177). Set true when both land.
-    mbRenderWheels = false;
+    // ON since the wheel-render wave (2026-08-03). RenderRaceCar's wheel block is now
+    // reconstructed, Model::SetupShaderConstantsForInstancing has a body, and the
+    // instanced submission is unrolled into per-instance mesh commands in
+    // DrawRenderable::Interpret, so no draw ever reaches the
+    // DrawInstancedIndexedPrimitive_Custom trap.
+    mbRenderWheels = true;
 }
 
 // X360 0x82300730. The module's resumable global-resource load, driven from Prepare
@@ -879,14 +880,104 @@ void RaceCarEntityModule::ResetActiveRaceCar(
 // It runs from PostPhysicsUpdate, which is where the console's own producer runs.
 // DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics + UpdatePhysicsState land.
 // ============================================================================
-void RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar )
+void RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar,
+                                                                  s32 liActiveRaceCar )
 {
-    lpActiveRaceCar->GetRenderParams()->SetLOD( CgsGraphics::Model::E_STATE_LOD_0 );
-    lpActiveRaceCar->GetRenderParams()->SetDamaged( false );
+    ActiveRaceCar::RenderParams* lpRenderParams = lpActiveRaceCar->GetRenderParams();
+
+    lpRenderParams->SetLOD( CgsGraphics::Model::E_STATE_LOD_0 );
+    lpRenderParams->SetDamaged( false );
 
     Matrix44Affine lBodyTransform;
     lpActiveRaceCar->CalcBodyTransform( lBodyTransform );
-    lpActiveRaceCar->GetRenderParams()->SetBodyTransform( lBodyTransform );
+    lpRenderParams->SetBodyTransform( lBodyTransform );
+
+    // ---- THE WHEEL POSE (wheel-render wave 2026-08-03) ----------------------
+    // The same stand-in, for the same missing producer. UpdatePhysicsState /
+    // UpdateWheelPhysicsState are the console's ONLY writers of mWheelTransforms[] and
+    // mabWheelExists[], and both read the physics snapshot -- so with no physics module
+    // every wheel reports "does not exist" and RenderRaceCar's wheel block, faithful or
+    // not, draws nothing. (MEASURED: "[racecar-wheels] ... outcome 3" -- no wheel exists.)
+    //
+    // WHAT IS HONEST ABOUT IT. The positions and scales are NOT invented: they are the
+    // car's own authored WheelSpecs, read out of the streamed deformation spec the
+    // streamer already has resident on this build (E_LOADFLAG_LOADEDPHYSICS -- the log's
+    // "STRM: Physics loaded: N"). That is the same table the console feeds the suspension
+    // from, and the same one OnResourcesLoaded @0x822EB2FC reads its four
+    // RenderParams::SetWheelScale arguments out of (spec + 96 + 48*i == maWheelSpecs[i].mScale).
+    // The composition -- wheel world = wheelLocal * bodyTransform -- is the body-part
+    // loop's own, because a WheelSpec position is in the same car model space as a
+    // GraphicsSpec part locator.
+    //
+    // WHAT IS A LIE, stated plainly:
+    //   * NO SUSPENSION, NO STEERING, NO SPIN. The console's wheel transform carries the
+    //     suspension travel, the steer angle and the rolling rotation the vehicle sim
+    //     produces each frame. This publishes the wheel at its rest position with the
+    //     body's own orientation, which is exactly right for a car that is not moving --
+    //     and this car is not moving, because nothing simulates it.
+    //   * mabWheelExists is forced TRUE for all four. On the console that byte is the
+    //     wheel's ON-GROUND flag from the physics snapshot, so a wheel torn off in a crash
+    //     stops drawing. Nothing here can tear a wheel off yet.
+    // DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics + UpdateWheelPhysicsState land,
+    // together with the body-pose stand-in above.
+    const RaceCarStreamer::PhysicsResourcePtr& lrPhysicsResource =
+        mRaceCarStreamer.GetPhysicsResourceBringUp( liActiveRaceCar );
+
+    if ( lrPhysicsResource.HasMemoryResource() )
+    {
+        const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec =
+            lrPhysicsResource.operator->();
+
+        for ( s32 liWheel = 0; liWheel < 4; ++liWheel )
+        {
+            const BrnPhysics::Deformation::WheelSpec* lpWheelSpec =
+                lpSpec->GetWheelSpec( liWheel );
+            if ( lpWheelSpec == 0 )
+            {
+                continue;
+            }
+
+            Matrix44Affine lWheelLocal;
+            lWheelLocal.SetIdentity();
+            lWheelLocal.wAxis.x = lpWheelSpec->mPosition.x;
+            lWheelLocal.wAxis.y = lpWheelSpec->mPosition.y;
+            lWheelLocal.wAxis.z = lpWheelSpec->mPosition.z;
+
+            lpRenderParams->GetWheelTransform( static_cast<u32>( liWheel ) ) =
+                rw::math::vpu::Mult( lWheelLocal, lBodyTransform );
+            lpRenderParams->SetWheelScale( static_cast<u32>( liWheel ), lpWheelSpec->mScale );
+            lpRenderParams->SetWheelExists( static_cast<u32>( liWheel ), true );
+        }
+
+        // [DIAG wheel wave] the four authored wheel placements, printed once. Latched on
+        // the FIRST WHEEL'S POSITION, not on a "printed once" bool: if the spec pointer
+        // ever resolves to a different car the numbers change and the line reprints, and
+        // a run where the positions are all zero is immediately distinguishable from a
+        // run where this never executed at all.
+        {
+            static f32 sfLastLoggedWheel0X = 1e30f;
+            const BrnPhysics::Deformation::WheelSpec* lpWheel0 =
+                lpSpec->GetWheelSpec( 0 );
+            if ( lpWheel0 != 0 && lpWheel0->mPosition.x != sfLastLoggedWheel0X
+                 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                sfLastLoggedWheel0X = lpWheel0->mPosition.x;
+                *CgsDev::Log::gpDebugPrint << "[racecar-wheels] authored WheelSpecs for car "
+                                           << liActiveRaceCar << ":";
+                for ( s32 liLog = 0; liLog < 4; ++liLog )
+                {
+                    const BrnPhysics::Deformation::WheelSpec* lpLog =
+                        lpSpec->GetWheelSpec( liLog );
+                    if ( lpLog == 0 ) { continue; }
+                    *CgsDev::Log::gpDebugPrint
+                        << " pos(" << lpLog->mPosition.x << ", " << lpLog->mPosition.y
+                        << ", " << lpLog->mPosition.z << ") scale(" << lpLog->mScale.x
+                        << ", " << lpLog->mScale.y << ", " << lpLog->mScale.z << ")";
+                }
+                *CgsDev::Log::gpDebugPrint << "\n";
+            }
+        }
+    }
 }
 
 
@@ -2156,7 +2247,7 @@ void RaceCarEntityModule::PostPhysicsUpdate(
             GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
         if( lpActiveRaceCar->IsActive() )
         {
-            PublishRenderPoseWithoutPhysicsBringUp( lpActiveRaceCar );
+            PublishRenderPoseWithoutPhysicsBringUp( lpActiveRaceCar, liCar );
         }
     }
 
