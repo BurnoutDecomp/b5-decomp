@@ -5,15 +5,17 @@
 
 namespace BrnGui
 {
-    // @0x824E47D8 - bounds-checked row-data fetch, returned by value (X360 lwzx of the
-    // 4-byte element at maRowData[liRow]). The dual bound (liRow < 0 || liRow >= count)
-    // is faithful: the X360 reads the count with lbz+extsb (a signed byte) and tests both
-    // ends, firing "TableDataSet::GetRowData() invalid index specified" (BrnTable.h:477).
-    u32 TableDataSet::GetRowData(s32 liRow) const
+    // @0x824E47D8 - bounds-checked row-data fetch. The X360 `lwzx` reads a 4-byte element
+    // at mapRowData[liRow]; that element is a TableRowDataSet* (DWARF BrnTable.h:219/211),
+    // and 4 is the CONSOLE pointer size -- it widens on the host, so the fetch is written
+    // by name. The dual bound (liRow < 0 || liRow >= count) is faithful: the X360 reads the
+    // count with lbz+extsb (a signed byte) and tests both ends, firing
+    // "TableDataSet::GetRowData() invalid index specified" (assert line 477).
+    TableRowDataSet* TableDataSet::GetRowData(s32 liRow)
     {
-        CGS_ASSERT(liRow >= 0 && liRow < miRowCount,
+        CGS_ASSERT(liRow >= 0 && liRow < miNumRowDataSets,
                    "TableDataSet::GetRowData() invalid index specified");
-        return maRowData[liRow];
+        return mapRowData[liRow];
     }
 
     // @0x82500F40 -- default constructor. The X360 body writes the base SelectableGroup

@@ -226,21 +226,45 @@ struct GuiEventUpdateSatNav
         const Vector4& GetPositionLane() const { return mv4Position; }      // @0x00
         s16  GetLandmarkIndexHalf() const                                   // @0x20 (within the head)
         {
-            return *reinterpret_cast<const s16*>(&maHeadReserved[0x20 - 0x10]);
+            return *reinterpret_cast<const s16*>(&maHeadReserved[0x20 - 0x18]);
+        }
+
+        // ADDITIVE GROW (wave-J CrashNavMap + PreRaceFlyBy TUs). Two named faces over head
+        // members that are already DWARF-documented but were, until now, buried inside the
+        // opaque reserved head:
+        //   * mCgsId (@0x10) is the icon's identity word -- the drive-thru / landmark /
+        //     rival CgsID. PreRaceFlyByState::SetEventIconResource @0x824BB5F8 loads it
+        //     WHOLE (`ld r11, info+0x10` at 0x824BB704, after GetLandmarkInfoFromIndex
+        //     filled the stack record) and switches on it; CrashNavMap::UpdateIconManager
+        //     reads it for the hovered drive-thru / rival id.
+        //   * the 16-byte position lane is WRITTEN (not just read) by
+        //     CrashNavMap::UpdateIconManager / MoveCursor, which park a located icon into
+        //     mLockedIconInfo with a `stvx128` of the whole lane.
+        // FLAG consumer-named: the ACCESSORS are ours (the PS3 DWARF exposes mv3Position /
+        // mCgsId as public members and declares no getter/setter pair); the MEMBER names
+        // are the DWARF's. Same idiom as the GetIconTypeByte / GetPositionLane faces above.
+        CgsID GetCgsId() const { return mCgsId; }                           // @0x10
+        void  SetPositionLane(const Vector4& lv4Position)                   // @0x00
+        {
+            mv4Position = lv4Position;
         }
 
     private:
         // ---- leading payload (PS3 DWARF :1699-1707) ----
         // The DWARF-documented head order is, at byte offsets: Vector3 mv3Position
         // @0x00; CgsID mCgsId @0x10; f32 mfRotation @0x18; f32 mfSpeedMph @0x1C;
-        // LandmarkIndex @0x20; u8 mu8DesignIndex; bool mbIsHiddenDriveThru. Only the
-        // 16-byte position lane (read/written by DoWorstCase via lvx128/stvx128) is
-        // pinned by the X360 binary; the remaining head bytes' exact inter-member
-        // padding is NOT independently verified, so they stay an explicitly-reserved
-        // mid block. This keeps the four verified trailing bytes at their proven
-        // offsets. See LAYOUT NOTE at top of file.
+        // LandmarkIndex @0x20; u8 mu8DesignIndex; bool mbIsHiddenDriveThru. The
+        // 16-byte position lane (read/written by DoWorstCase via lvx128/stvx128) and
+        // the 8-byte id at @0x10 (SetEventIconResource's whole-word `ld`) are pinned by
+        // the X360 binary; the remaining head bytes' exact inter-member padding is NOT
+        // independently verified, so they stay an explicitly-reserved mid block. This
+        // keeps the four verified trailing bytes at their proven offsets. See LAYOUT
+        // NOTE at top of file.
         Vector4 mv4Position;          // @0x00 .. 0x0F  (X360-pinned; DoWorstCase lvx128)
-        u8      maHeadReserved[0x13]; // @0x10 .. 0x22  (named head tail, see comment above)
+        CgsID   mCgsId;               // @0x10 .. 0x17  (DWARF head order, X360-pinned by
+                                      //   the SetEventIconResource `ld info+0x10`)
+        u8      maHeadReserved[0x0B]; // @0x18 .. 0x22  (mfRotation / mfSpeedMph / the
+                                      //   landmark-index half remain reserved)
         bool    mbIsHiddenDriveThru;  // @0x23  (DWARF head tail; MapIconManager drive-thru skip)
 
         // ---- trailing bytes, X360-pinned (offsets proven by the four accessors) ----
@@ -282,52 +306,88 @@ struct GuiEventUpdateSatNav
     static s32 SatNavI(const GuiEventUpdateSatNav* lpThis);
 };
 
+// The icon record is a pointer-free scalar run, so its host size is the X360 stride the
+// binary proves (DoWorstCase indexes icons 0x30 apart; KI_MAX_SAT_NAV_ICONS above divides
+// the +0x900 count offset by it). Pinned so a later head carve cannot silently resize it.
+static_assert(sizeof(GuiEventUpdateSatNav::SatNavIconInfo) == 0x30,
+              "SatNavIconInfo stride 0x30 (DoWorstCase icon step; 0x900/0x30 == 48 icons)");
+
 // ===================================================================================
 // BrnGui::GuiEventDrawEventIcons -- the "draw event icons" GUI event payload.
 //   Home: this header (Gui/BrnGuiEventTypeDefs.h; the X360 asserts reference it:
 //   Construct @0x824EB218 -> BrnGuiEventTypeDefs.h:2785; GetIgnoreIcons @0x82443518 ->
 //   :2815/:2816). Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// Construct populates the event from an icon-set descriptor: a per-event float, two
-// ids, a flag byte, and an "icons to ignore" list (up to KI_MAX_ICONS_TO_IGNORE = 10
-// entries) copied in from a caller-supplied source array. GetIgnoreIcons reads the
-// list back out (count + the entries).
+// Construct populates the event: a draw/hide flag, which event set the icon pass draws,
+// a fade time, and an "icons to ignore" list (up to KI_MAX_ICONS_TO_IGNORE = 10 entries)
+// copied in from a caller-supplied source array. GetIgnoreIcons reads the list back out
+// (count + the entries).
 //
 // X360 layout (stores authoritative on width / offset):
-//   maIgnoreIcons[10]    @0x00..0x27  (the copied list; Construct loop / GetIgnoreIcons)
-//   mfDisplayTime        @0x28        (stfs f1)
-//   muIconSetId          @0x2C        (stw a3)
-//   miNumIconsToIgnore   @0x30        (stw count -- read by both methods)
-//   mbFlag               @0x34        (stb a2)
+//   mauIconsToIgnore[10] @0x00..0x27  (the copied list; Construct loop / GetIgnoreIcons)
+//   mfFadeTime           @0x28        (stfs f1)
+//   meIconDisplayType    @0x2C        (stw r5)
+//   miNumIconsToIgnore   @0x30        (stw r8 -- read by both methods)
+//   mbDrawIcons          @0x34        (stb r4)
+//
+// CORRECTED (wave J): the previously committed shape named these
+// mfDisplayTime/muIconSetId/mbFlag and gave Construct a phantom 4th parameter
+// (`s32 liUnused`). Both were artifacts of reading the X360 register usage without the
+// PPC float-argument rule: a float argument travels in f1 and SKIPS its GPR slot, so r6
+// is dead at 0x824EB218 -- there is no 4th integer parameter. The DWARF
+// (BrnGuiEventTypeDefs.h:2680/2693-2697) gives the real member names and the 5-parameter
+// signature, and the store offsets above match it position-for-position. The DWARF also
+// returns void from both methods; the X360 leaves `this` in r3 only by accident (both
+// bodies clobber r3 via the CgsDev::Assert calls and never restore it), so the old
+// `returns this` was a decompiler artifact.
+//
+// NOT MODELLED: the PS3 DWARF derives this event from GuiEvent<539>. The X360 Construct
+// writes maIgnoreIcons at `this`+0x00, so the console base contributes no bytes; adding
+// the committed 12-byte PC GuiEvent<N> header here would be a layout change no X360
+// AddGuiEvent instantiation attests. Left as a plain class -- flagged, not fixed.
 // ===================================================================================
 class GuiEventDrawEventIcons
 {
 public:
+    // DWARF BrnGuiEventTypeDefs.h:2662 -- which event set the icon pass draws. Nested
+    // here per the DWARF; BrnGui::GuiEventEnableSatNavIcons carries an identical-valued
+    // copy at ITS OWN DWARF home (:7511) -- both are real, and the DWARF
+    // MapIconManager::SetOwnerParameters signature (BrnMapIconManager.h:191) types its
+    // 8th parameter with THIS one.
+    enum EIconDisplayType
+    {
+        E_ICON_DISPLAY_TYPE_OFFLINE_EVENTS       = 0,
+        E_ICON_DISPLAY_TYPE_ONLINE_EVENT_STARTS  = 1,
+        E_ICON_DISPLAY_TYPE_ONLINE_CHECKPOINTS   = 2,
+        E_ICON_DISPLAY_TYPE_ONLINE_FINISH_POINTS = 3,
+        E_ICON_DISPLAY_TYPE_ONLINE_EVENT_PRESETS = 4,
+        E_ICON_DISPLAY_TYPE_COUNT                = 5,
+    };
+
     // BrnGuiEventTypeDefs.h:2785 guard bound -- max entries in the ignore list.
     static const s32 KI_MAX_ICONS_TO_IGNORE = 10;
 
-    // @0x824EB218 -- populate the event. lbFlag/luIconSetId/lfDisplayTime are stored
-    // verbatim; the ignore list (lpuIconsToIgnore[0..liNumIconsToIgnore-1]) is copied
-    // into maIgnoreIcons. Asserts the list is empty OR (non-NULL and within bound).
-    // Returns `this`.
-    GuiEventDrawEventIcons* Construct(u8 lbFlag,
-                                      u32 luIconSetId,
-                                      f32 lfDisplayTime,
-                                      s32 liUnused,
-                                      const u32* lpuIconsToIgnore,
-                                      s32 liNumIconsToIgnore);
+    // @0x824EB218 (DWARF :2680) -- populate the event. lbDrawIcons / leIconDisplayType /
+    // lfFadeTime are stored verbatim; the ignore list
+    // (lpuIconsToIgnore[0..liNumIconsToIgnore-1]) is copied into mauIconsToIgnore.
+    // Asserts the list is empty OR (non-NULL and within bound).
+    void Construct(bool lbDrawIcons,
+                   EIconDisplayType leIconDisplayType,
+                   f32 lfFadeTime,
+                   u32* lpuIconsToIgnore,
+                   s32 liNumIconsToIgnore);
 
-    // @0x82443518 -- copy the ignore list back out. Asserts both pointers non-NULL,
-    // writes the count to *lpiNumIconsToIgnore, copies the entries to lpuIconsToIgnore.
-    // Returns `this`.
-    GuiEventDrawEventIcons* GetIgnoreIcons(u32* lpuIconsToIgnore, s32* lpiNumIconsToIgnore) const;
+    // @0x82443518 (DWARF :2688) -- copy the ignore list back out. Asserts both pointers
+    // non-NULL, writes the count to *lpiNumIconsToIgnore, copies the entries to
+    // lpuIconsToIgnore.
+    void GetIgnoreIcons(u32* lpuIconsToIgnore, s32* lpiNumIconsToIgnore) const;
 
 private:
-    u32 maIgnoreIcons[KI_MAX_ICONS_TO_IGNORE]; // @0x00 -- the copied "icons to ignore" list
-    f32 mfDisplayTime;                         // @0x28
-    u32 muIconSetId;                           // @0x2C
-    s32 miNumIconsToIgnore;                    // @0x30 -- entry count
-    u8  mbFlag;                                // @0x34
+    u32 mauIconsToIgnore[KI_MAX_ICONS_TO_IGNORE]; // @0x00 (DWARF :2693) -- the copied list
+    f32 mfFadeTime;                               // @0x28 (DWARF :2694)
+    EIconDisplayType meIconDisplayType;           // @0x2C (DWARF :2695)
+    s32 miNumIconsToIgnore;                       // @0x30 (DWARF :2696) -- entry count
+    bool mbDrawIcons;                             // @0x34 (DWARF :2697)
 };
 
 // ===================================================================================

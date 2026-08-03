@@ -72,6 +72,7 @@
 #include "GameSource/Gui/Flow/Screen/Components/BrnCrashNavLegend.h"    // BrnGui::CrashNavLegend (by value)
 #include "GameSource/Gui/Flow/Screen/Components/BrnCursor.h"            // BrnGui::GuiCursor (by value)
 #include "GameSource/Gui/Flow/Shared/Components/BrnAnimationComponent.h" // BrnGui::AnimationComponent (by value)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                          // BrnGui::GuiEventUpdateSatNav::SatNavIconInfo (mLockedIconInfo, by value)
 
 #include <cstddef>   // offsetof (layout pins in _AssertLayout)
 
@@ -252,12 +253,13 @@ namespace BrnGui
         EVisibleAnimationStates      meTitleButtonsState;      // X360 +24800
         EButtonPromptAnimationStates meNavigationButtonsState; // X360 +24804
         Vector2         mv2WorldCentrePoint;      // X360 +24816 (16-aligned)
-        // DWARF h:288 GuiEventUpdateSatNav::SatNavIconInfo -- 48-byte record on X360
-        // (+24832..+24879, vector-zeroed by the ctor). The SatNavIconInfo home
-        // (BrnMapIconManager.h) is not pulled in here to keep this state header light;
-        // real named record, opaque width, same recipe as the icon manager's own slice.
-        struct LockedIconInfo { u8 maRecord[48]; };
-        LockedIconInfo  mLockedIconInfo;          // X360 +24832
+        // DWARF h:288 GuiEventUpdateSatNav::SatNavIconInfo -- the real committed type
+        // (home: GameSource/Gui/BrnGuiEventTypeDefs.h, 0x30/48-byte X360 stride; an
+        // earlier slice held an opaque 48-byte blob here and mis-stated the home as
+        // BrnMapIconManager.h). The TU reads its position lane / CgsID / icon-type byte
+        // (UpdateIconManager/UpdateDrivethru/UpdateRival/MoveCursor), so the named type
+        // is required. Wave-J header pass, 2026-08-03.
+        GuiEventUpdateSatNav::SatNavIconInfo mLockedIconInfo;   // X360 +24832
         CrashNavMapSoundData mSoundData;          // X360 +24880
         f32             mfMapPanningStopTime;     // X360 +24900
 

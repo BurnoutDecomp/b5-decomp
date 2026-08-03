@@ -3,7 +3,10 @@
 //   class:BrnGui::CrashNavPanel
 //
 // Typed accessors for the crash-nav map panel's current selection. Each guards its read with
-// a CGS_ASSERT that the panel is in the matching display sub-mode (+0x90):
+// a CGS_ASSERT that mePanelType (+0x90) is the matching sub-panel. The enum/member spellings
+// are DWARF-supplied and corroborated by the X360 assert literals ("E_PANEL_EVENT ==
+// mePanelType" etc.); an earlier revision of this file called them E_SHOWING_MODE_* /
+// meShowingMode because it wrongly believed no DWARF existed for this class.
 //
 //   GetPanelActiveGameModeType @ 0x824BAE58
 //     Asserts the panel is showing events (+0x90 == 0), then returns the progression mode
@@ -29,7 +32,7 @@ namespace BrnGui
     // @ 0x824BAE58
     BrnProgression::RaceEventData::EModeType CrashNavPanel::GetPanelActiveGameModeType()
     {
-        CGS_ASSERT(meShowingMode == E_SHOWING_MODE_EVENTS,
+        CGS_ASSERT(mePanelType == E_PANEL_EVENT,
                    "Cannot get active game mode type if not showing events");   // @0x824BAE58 (beq on +0x90==0)
 
         return mEventPanel.ConvertLocalEventDefToProgressionEventDef(mEventPanel.meCurrentGameMode);
@@ -38,7 +41,7 @@ namespace BrnGui
     // @ 0x824185C8
     s32 CrashNavPanel::GetPanelActiveRoadRuleType() const
     {
-        CGS_ASSERT(meShowingMode == E_SHOWING_MODE_ROAD_RULES,
+        CGS_ASSERT(mePanelType == E_PANEL_ROADSIGN,
                    "Cannot get active road rules type if not showing road rules");   // @0x824185C8 (beq on +0x90==2)
 
         return miActiveRoadRuleType;   // +0x481C
@@ -47,7 +50,7 @@ namespace BrnGui
     // @ 0x82418668
     s32 CrashNavPanel::GetRoadPanelScoreMode() const
     {
-        CGS_ASSERT(meShowingMode == E_SHOWING_MODE_ROAD_RULES,
+        CGS_ASSERT(mePanelType == E_PANEL_ROADSIGN,
                    "Cannot get active road rules scoring mode if not showing road rules");   // @0x82418668 (beq on +0x90==2)
 
         return miActiveRoadRuleScoreMode;   // +0x4820

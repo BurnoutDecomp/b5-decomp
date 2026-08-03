@@ -23,6 +23,14 @@ namespace BrnGui { struct WorldDataController; }  // GetWorldDataController retu
 namespace BrnProgression { struct ProfileEvent; } // GetProfileEvent return (pointer only)
 namespace BrnProgression { struct Profile; }      // DetermineCarUnlockPending arg (pointer only)
 namespace BrnGameState { class LandmarkIndex; }    // GetLandmarkInfoFromIndex arg (by value)
+// GetRequiredScoreForMedal arg (by value). Opaque-enum forward declaration with the
+// committed underlying type -- the SAME idiom (and the same underlying type) as
+// GameSource/GameState/BrnGameStateSharedIO.h:22; the definition lives in
+// GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h:144, which cannot be
+// included here (it pulls the whole game-state IO tree into this GUI boundary header).
+// A fixed-underlying-type enum is a COMPLETE type after an opaque declaration, so it can
+// be taken by value and used as an array subscript below.
+namespace BrnGameState { enum ECurrentMedalTargetTime : s32; }
 namespace BrnNetwork { namespace BrnNetworkModuleIO { struct InGamePlayerStatusData; } } // GetOnlinePlayerInfo return (pointer only; home BrnNetworkModuleInGamePlayerStatusInterface.h)
 namespace BrnTraffic { struct ScoringTrafficData; } // GetScoringTrafficData return (pointer only; home BrnTraffic scoring TU) -- element of the maScoringTrafficData table
 // CgsNetwork::PlayerName is now a COMPLETE type (included above): it is the lead value member
@@ -44,6 +52,7 @@ namespace BrnGui
     struct OnlineGameRoomPlayerInfo; // friend of GuiCache (reads its wave-H-carved members by name)
     struct OnlineGameOptions;        // friend of GuiCache (reads its wave-I-carved members by name)
     struct CrashNavEnterOnlineBase;  // friend of GuiCache (reads its wave-I-carved members by name)
+    struct OnlineCustomMatch;        // friend of GuiCache (reads its ranked/unranked bytes by name)
     // Defined later in this header (minimal-slice records returned by GetPresetEvent /
     // the inlined event-display helpers).
     struct PresetEvent;
@@ -389,6 +398,21 @@ namespace BrnGui
             GetLandmarkInfoFromIndex(BrnGameState::LandmarkIndex lLandmarkIndex,
                                      GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const;
 
+        // ADDITIVE GROW (wave J: CrashNavMap::CalculateEventZoomFactor and
+        // PreRaceFlyByState::CalculateZoomFactor, which both walk an event's checkpoints and
+        // resolve each checkpoint's landmark CgsID to its on-map icon record). The id sibling
+        // of GetLandmarkInfoFromIndex above: it asserts mpWorldDataController, forwards to
+        // WorldDataController::GetLandmarkInfoFromID, asserts the returned landmark, then
+        // fills the caller's SatNavIconInfo (position lane, the two float fields at +0x18/
+        // +0x1C, the id at +0x10, the district/county bytes, type 4 and the -1 slot at +0x26).
+        // X360 out-of-line @0x825067E0; the id rides in ONE GPR (r4) with the out pointer in
+        // r5 -- the Xenon ABI passes a 64-bit CgsID whole -- and r3 at return is the
+        // DistrictToCounty leftover, NOT a result. Return type is `void` per DWARF
+        // (dwarfdump BrnGuiCache.h:798) and neither wave-J caller uses a return value.
+        // DECLARATION-ONLY per the far-member convention; body links from the GuiCache TU.
+        void GetLandmarkInfoFromID(CgsID lLandmarkID,
+                                   GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const;
+
         // X360 inlined cache helpers (sub_824F8838 / sub_824F8AF0): resolve an event id to its
         // on-map display record. The record's leading 16-byte lane is the world-space icon
         // position (the renderer VMX-copies it into the cached icon's mv3Position); its +0x18 word
@@ -647,6 +671,79 @@ namespace BrnGui
         void ZoomSatNavOut();                                     // X360 @0x82472FD0 (miSatNavZoomLevel @0x803C)
         void DetermineCarUnlockPending(BrnProgression::Profile* lpProfile); // X360 @0x824EC678 (sets mbCarUnlockPending/mbCarUnlockDetermined @0x4B75/0x4B76; reads Profile far members -- BrnProfile.h boundary)
 
+        // ====================================================================
+        //  ADDITIVE GROW (wave J: PreRaceFlyByState + CrashNavMap). The pre-race
+        //  fly-by / crash-nav map surface. Split by how the X360 built each face:
+        //  the two `bl` targets are DECLARATION-ONLY (real out-of-line X360 symbols,
+        //  bodies link from the GuiCache TU); the rest have NO X360 symbol at all --
+        //  every call site inlines a raw far-member load/store -- so they are
+        //  header-inlines over the named members carved below, exactly like the
+        //  GetGuiTracker / GetGameMode / GetOnlineGameMode precedents above.
+        // ====================================================================
+
+        // DWARF BrnGuiCache.h:993. Re-publish the map state after the fly-by tears its
+        // screen down. X360 out-of-line, called by PreRaceFlyByState::OnLeave
+        // (`bl` @0x824C6AE8). DECLARATION-ONLY.
+        void RefreshMapState();
+
+        // DWARF BrnGuiCache.h:1476 -- EXACT signature (`int32_t (uint32_t, float32_t, bool)`).
+        // Re-latch the cache's active-landmark set for one event id at animation parameter
+        // lfT, returning the resulting active-landmark count. X360 out-of-line, called by
+        // PreRaceFlyByState::UpdateIconManager (`bl` @0x824C7C00) and CrashNavMap::UpdateEvent.
+        // The PPC float-arg ABI is why the trailing bool is invisible in Hex-Rays: at the
+        // call site r4 = GetEventID(), f1 = the clamped animation t (the float SKIPS its GPR
+        // slot, so r5 is dead) and r6 = 0. The result is compared against the screen's
+        // miPreviousIconCount, so it is the s32 count. DECLARATION-ONLY.
+        s32 HACK_FindABetterPlaceForMe_SetActiveLandmarksByEventID(u32 luEventID, f32 lfT,
+                                                                   bool lbFlag);
+
+        // DWARF BrnGuiCache.h:780 -- the map-icon manager SetMapIconManager latched.
+        // X360-INLINED at every call site (`lwz r11, 0x4060(cache)`, e.g.
+        // PreRaceFlyByState::OnEnter @0x824C679C, CrashNavMap::ResetIconManager).
+        MapIconManager* GetMapIconManager() const                { return mpMapIconManager; }
+
+        // DWARF BrnGuiCache.h:987 / :990 -- the current event's id and its junction id.
+        // X360-INLINED as far-member word loads (`lwzx r4, cache, 0x9E5C` /
+        // `lwzx r11, cache, 0x9E60`, PreRaceFlyByState::UpdateIconManager @0x824C7BDC /
+        // @0x824C7C8C; SetupComponents and the five Set*Description workers read the
+        // event id the same way).
+        u32 GetEventID() const                                   { return muEventID; }
+        u32 GetJunctionID() const                                { return muJunctionID; }
+
+        // DWARF BrnGuiCache.h:1215 (member mbIsPreRaceFlyByActive, DWARF h:569). The
+        // fly-by-active gate. X360-INLINED as a far-member byte store: OnEnter
+        // @0x824C6718 stores 1 and OnLeave @0x824C6BC4 stores 0 (`stbx r, cache, 0xA015`).
+        void SetPreRaceFlyByActive(bool lbActive)                { mbIsPreRaceFlyByActive = lbActive; }
+
+        // DWARF BrnGuiCache.h:1122 -- EXACT signature (`float32_t (ECurrentMedalTargetTime)`,
+        // declared NON-const there). The per-medal score target for the current event.
+        // X360-INLINED as `ori r9, 0x9F34` + `lfsx` at PreRaceFlyByState::
+        // SetRoadRageDescription @0x824C70C0 and ::SetFreestyleDescription @0x824C727C
+        // (both with the constant GOLD index 0). The value is a FLOAT: those two callers
+        // convert it with `fctiwz`/`stfiwx` before handing it to SPrintf's "%d", which is
+        // why the printed target looks like an integer at the call site.
+        f32 GetRequiredScoreForMedal(BrnGameState::ECurrentMedalTargetTime leMedal)
+        {
+            return mafTargetScores[leMedal];
+        }
+
+        // ADDITIVE GROW (BrnCrashNavMap wave J): the local player's car id. X360-INLINED as
+        // an 8-byte far-member load (`ld r11, 0x4AF0(cache)` @0x824CBCB0) in CrashNavMap::
+        // UpdateIconManager, which copies it into the screen's mHoveringRivalId when the map
+        // cursor snaps onto the local-player icon. FLAG: consumer-named -- only the WIDTH
+        // (8 bytes), the OFFSET (+0x4AF0) and that one use are measured; no DWARF member row
+        // can be pinned to this X360 offset.
+        CgsID GetLocalPlayerCarId() const                        { return mLocalPlayerCarId; }
+
+        // ADDITIVE GROW (BrnCrashNavMap wave J): the gate byte for the friend-selected
+        // road-rule score prompts. X360-INLINED as a BYTE load (`lbz r11, 0x4B50(cache)` at
+        // BOTH read sites, @0x824B6A50 and @0x824B6B3C, in CrashNavMap::UpdateButtonPrompts);
+        // ANDed with CrashNavPanel::IsRoadRuleFriendSelected() it picks prompt state 11 over
+        // state 9. FLAG: consumer-named -- the producer side is not reconstructed. (The byte
+        // width is what makes this carve safe: an `lwz` here would have spanned
+        // mbOnlineMatchRanked/mbOnlineMatchUnranked/mbOnlineStartPending at +0x4B51..53.)
+        bool AreRoadRuleFriendScoresAvailable() const            { return mbRoadRuleFriendScoresAvailable; }
+
     private:
         // The HUD-message analyzer reads a handful of consumer-carved snapshot members
         // directly by name (mfFrameDeltaTime, mbGameplayHudActive, the +0x4930 pending
@@ -671,6 +768,16 @@ namespace BrnGui
         // (+0x4B74). No DWARF accessor rows exist for these X360-only offsets.
         friend struct OnlineGameOptions;
         friend struct CrashNavEnterOnlineBase;
+
+        // Same exposure rule once more for the online custom-match search screen (wave J):
+        // ShowInitialScreen, HandleControllerInputSelectParams, HandleGuiCacheEvent and the
+        // three back-out arms all read mbOnlineMatchRanked (+0x4B51, `lbz r11, 0x4B51(r30)`
+        // @0x82497D38) and mbOnlineMatchUnranked (+0x4B52, @0x82497D50) as raw inlined byte
+        // loads. The cluster has setters but NO getters in the DWARF, so friendship -- not a
+        // fabricated accessor pair -- is the honest exposure. (Its IsOnlineStartPending /
+        // SetOnlineStartPending / IsOnlineStartInProgress uses go through the public
+        // accessors above.)
+        friend struct OnlineCustomMatch;
 
         // ===================================================================
         //  DATA LAYOUT -- named anchors at asm-proven `this+offset`, gaps
@@ -722,7 +829,13 @@ namespace BrnGui
         u64 mu64PendingEventPayload;                     // +0x4938 (18744)
         u8  mPad_4940[0x4AE0 - 0x4940];                  // +0x4940..+0x4ADF
         Vector4 mv4WorldCameraPosition;                  // +0x4AE0 (19168) GetWorldCameraPosition (SatNavRenderer @0x8245FA48 lvx128 mpGuiCache,0x4AE0)
-        u8  mPad_4AF0[16];                               // +0x4AF0..+0x4AFF
+        // ADDITIVE CARVE (BrnCrashNavMap wave J): the leading 8 bytes of the former
+        // mPad_4AF0[16] -- the local player's car id. X360-attested as an `ld` (8-byte load)
+        // at +0x4AF0 in CrashNavMap::UpdateIconManager @0x824CBCB0, `std`'d straight into
+        // the screen's mHoveringRivalId slot. No member is shifted (8 + 8 == 16).
+        // FLAG: consumer-named -- no DWARF member row can be pinned to this X360 offset.
+        CgsID mLocalPlayerCarId;                         // +0x4AF0 (19184)
+        u8  mPad_4AF8[8];                                // +0x4AF8..+0x4AFF
         s32 mePlayerActiveRaceCarIndex;                  // +0x4B00 (19200) EActiveRaceCarIndex (DWARF h; HudMessageAnalyzer::HandleLiveRevengeUpdate @0x8251E2xx)
         u8   mPad_4B04[0x2C];                             // +0x4B04..+0x4B2F
         // ADDITIVE CARVE (HudMessageAnalyzer keystone): the game-flow state word the
@@ -765,7 +878,11 @@ namespace BrnGui
         // The x64 layout is name-based, so both live as distinct members until the DWARF
         // claim is re-verified; the IsLoadingScreenVisible accessor reads this one.
         bool mbIsLoadingScreenVisible;                   // +0x4B4F claim (19279) -- see note
-        u8   mPad_4B50[1];                                // +0x4B50
+        // ADDITIVE CARVE (BrnCrashNavMap wave J): the friend-selected road-rule score gate.
+        // X360-attested as an `lbz` at BOTH read sites in CrashNavMap::UpdateButtonPrompts
+        // (@0x824B6A50 / @0x824B6B3C) -- a BYTE, so this carve stops short of
+        // mbOnlineMatchRanked @+0x4B51. FLAG: consumer-named (producer side unrecovered).
+        bool mbRoadRuleFriendScoresAvailable;             // +0x4B50 (19280)
         bool mbOnlineMatchRanked;                        // +0x4B51 (19281) SelectOnlineMenuOption
         bool mbOnlineMatchUnranked;                      // +0x4B52 (19282) SelectOnlineMenuOption
         bool mbOnlineStartPending;                       // +0x4B53 (19283) SelectOnlineMenuOption (cleared)
@@ -811,14 +928,26 @@ namespace BrnGui
         u8  maEventsStorage[7700];                       // +0x8040 (32832) mEvents preset-event CgsArray storage (GetPresetEvent @0x8241E520 forwards 32832; count is mEventsCtorSentinel @+7700)
         s32 mEventsCtorSentinel;                         // +0x9E54 (40532) mEvents array ctor marker / GetNumPresetEvents count (-1 = not constructed)
         s32 meGameModeType;                              // +0x9E58 (40536) GsmIO::EGameModeType
-        u8  mPad_9E5C[124];                              // +0x9E5C..+0x9ED7
+        // ADDITIVE CARVE (wave J): the two ids the DWARF member run places IMMEDIATELY after
+        // meGameModeType (DWARF BrnGuiCache.h:467 muEventID, :470 muJunctionID -- the order
+        // is what pins them here), X360-attested as the far words read by
+        // PreRaceFlyByState::UpdateIconManager (`lwzx r4, cache, 0x9E5C` @0x824C7BDC /
+        // `lwzx r11, cache, 0x9E60` @0x824C7C8C). No member is shifted (4 + 4 + 116 == 124).
+        u32 muEventID;                                   // +0x9E5C (40540) GetEventID
+        u32 muJunctionID;                                // +0x9E60 (40544) GetJunctionID
+        u8  mPad_9E64[116];                              // +0x9E64..+0x9ED7
         s32 miCtorSentinel_9ED8;                         // +0x9ED8 (40664) ctor writes -1 (CgsArray sentinel; sub-array un-homed)
         u8  mPad_9EDC[36];                               // +0x9EDC..+0x9EFF
         s32 miCtorSentinel_9F00;                         // +0x9F00 (40704) ctor writes -1 (CgsArray sentinel; sub-array un-homed)
         u8  mPad_9F04[40];                               // +0x9F04..+0x9F2B
         f32 mfEventTime;                                 // +0x9F2C (40748)
         f32 mfTargetTime;                                // +0x9F30 (40752)
-        u8  mPad_9F34[16];                               // +0x9F34..+0x9F43 mafTargetScores[4]
+        // ADDITIVE CARVE (wave J): the per-medal score targets the pad comment already
+        // labelled. DWARF BrnGuiCache.h:485 `float32_t[4] mafTargetScores`, sitting right
+        // after mfTargetTime in the DWARF member run -- which is exactly this slot.
+        // X360-attested FLOAT: PreRaceFlyByState::SetRoadRageDescription @0x824C70C0 and
+        // ::SetFreestyleDescription @0x824C727C do `ori r9, 0x9F34` + `lfsx` + `fctiwz`.
+        f32 mafTargetScores[4];                          // +0x9F34 (40756) GetRequiredScoreForMedal
         s8  miOpponentsInEvent;                          // +0x9F44 (40772)
         u8  mPad_9F45[3];                                // +0x9F45..+0x9F47
         f32 mfDistanceInEvent;                           // +0x9F48 (40776) GetDistanceInEvent @0x8240F398 (result[10194], >= 0)
@@ -864,7 +993,15 @@ namespace BrnGui
         u8  mPad_9FF8[8];                                // +0x9FF8..+0x9FFF
         s32 meTrophyCarUnlockType;                       // +0xA000 (40960) TrophyUnlockData::UnlockType
         // ---- mRaceCarInfo SoA (ARCI-indexed, 8 lanes) carved from the former mPad_A004[0x9C4] ----
-        u8  mPad_A004[28];                               // +0xA004..+0xA01F
+        u8  mPad_A004[17];                               // +0xA004..+0xA014
+        // ADDITIVE CARVE (BrnPreRaceFlyBy wave J): the fly-by-active gate byte. NAME from
+        // DWARF (BrnGuiCache.h:569 mbIsPreRaceFlyByActive, with the DWARF accessor pair
+        // IsPreRaceFlyByActive/SetPreRaceFlyByActive); OFFSET X360-attested by the two
+        // inlined `stbx r, cache, 0xA015` stores -- PreRaceFlyByState::OnEnter @0x824C6718
+        // (r24 == 1) and ::OnLeave @0x824C6BC4 (r29 == 0). Those two are the ONLY recovered
+        // writers and no recovered reader exists yet. No member is shifted (17 + 1 + 10 == 28).
+        bool mbIsPreRaceFlyByActive;                     // +0xA015 (40981)
+        u8  mPad_A016[10];                               // +0xA016..+0xA01F
         Vector4 maRaceCarPositions[8];                   // +0xA020 (40992) GetRaceCarPosition @0x82443750 (16*(idx+2562)+this)
         u8  mPad_A0A0[68];                               // +0xA0A0..+0xA0E3
         bool maRaceCarUsed[8];                           // +0xA0E4 (41188) IsActiveRaceCarIndexUsed @0x82443A00 / GetRaceCarPosition used-gate

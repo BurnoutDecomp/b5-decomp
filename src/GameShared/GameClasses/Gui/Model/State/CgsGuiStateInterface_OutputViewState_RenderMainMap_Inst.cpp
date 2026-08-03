@@ -18,5 +18,5 @@
 
 namespace CgsGui
 {
-    template int StateInterface::OutputViewState<BrnGui::GuiEventRenderMainMap>(BrnGui::GuiEventRenderMainMap&);  // 0x82465E50
+    template void StateInterface::OutputViewState<BrnGui::GuiEventRenderMainMap>(BrnGui::GuiEventRenderMainMap&);  // 0x82465E50
 }

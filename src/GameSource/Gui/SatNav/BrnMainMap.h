@@ -7,6 +7,10 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"           // CgsGui::GuiEvent<N> / CgsModule::Event
 #include "GameSource/Gui/SatNav/BrnMapManager.h"              // BrnGui::MapManager (embedded by value)
 
+#include <cstddef>                                            // offsetof (uncalled _AssertLayout)
+
+namespace BrnGui { class GuiCache; }  // mpGuiCache (pointer only; full type GameSource/Gui/BrnGuiCache.h)
+
 // BrnMainMap.h
 // BrnGui::MainMapComponent - the sat-nav "main map" GUI screen component. It owns a
 // BrnGui::MapManager (the tile working set), drives the animated world-rect / zoom of the
@@ -24,10 +28,10 @@
 //
 // LAYOUT NOTE: the X360 `this` embeds MapManager at +0x8C (4-byte-pointer ABI). Members are
 // reached BY NAME (semantic parity, not byte offsets) so the PC x64 widths differ from the
-// documented X360 offsets. Only the members reached by the reconstructed bodies are declared
-// here; the animated world-rect / zoom instance state is added as the Construct / Update /
-// SnapToLocation / ApplyZoom / SetZoom bodies are reconstructed (those TUs are still todo:
-// they depend on the still-unrecovered sub_8245A080 vector helper, the CalculateViewPaddingOffset
+// documented X360 offsets -- every X360 offset in this file is a COMMENT, never arithmetic.
+// The full DWARF instance-member run (BrnMainMap.h:209-232) is declared below; the bodies of
+// Construct / Update / SnapToLocation / ApplyZoom / SetZoom that animate it are still todo
+// (they depend on the still-unrecovered sub_8245A080 vector helper, the CalculateViewPaddingOffset
 // / CalculatePositionedWorldRect methods, and the OutputViewState<> / GuiAudioTriggerEvent /
 // MapTransform collaborators).
 
@@ -110,6 +114,42 @@ namespace BrnGui
         bool    IsZooming() const;
         void    SetStickMapToScreenEdges(bool lbTop, bool lbBottom, bool lbLeft, bool lbRight);
 
+        // ---- the DWARF accessor block (BrnMainMap.h:297-465) --------------------------
+        // Every entry below carries a DWARF decl line in BrnMainMap.h itself, never a
+        // BrnMainMap.cpp line (contrast Construct / Update / SnapToLocation / SetZoom /
+        // ApplyZoom / SetZoomLevel / CalculateOffsetWorldCentre..., which the same dump
+        // gives .cpp lines) -- that is how the dump marks a function defined inline in the
+        // header, which is also why none of them has an out-of-line X360 address. Only the
+        // declarations are reproduced: the campaign rule is that a body lands with its own
+        // TU, and writing "return mv4WorldRect;" here would be a guess about which member
+        // each accessor reads. Signatures transcribed verbatim from
+        // references/DecFIGS/dwarfdump/GameSource/Gui/SatNav/BrnMainMap.h.
+        void       SetMapManager(MapManager* lpMapManager);   // DWARF h:297
+        // FLAG, X360-vs-PS3 delta worth knowing before anyone re-plumbs this: the world
+        // rect the DWARF models as the instance member mv4WorldRect is, on the X360, a
+        // single process-wide Vector4 at .data 0x82FB31F0. Measured (headless IDA,
+        // scratchpad/waveJ/g07_rect.txt): it is WRITTEN only by this class's own
+        // Prepare @0x8244F4D0 / Construct @0x8245E514 / CalculatePositionedWorldRect
+        // @0x8245E61C, and READ by CrashNavMap::MoveCursor @0x824BF2F4 and
+        // RoadSignIconManager::SetupComponent @0x8250AEFC. No static member is declared for
+        // it here because the DWARF has none; the instance shape below is the attested one.
+        Vector4    GetWorldRect() const;                      // DWARF h:314
+        Vector4    GetViewRect() const;                       // DWARF h:330
+        // DWARF spells this return type fully qualified (`const rw::math::vpu::Vector4&`);
+        // `Vector4` is the file-wide typedef of exactly that type (BrnCommonTypes.h:14).
+        const Vector4& GetDisplayRect() const;                // DWARF h:346
+        ZoomFactor GetZoomLevel() const;                      // DWARF h:362
+        // DWARF h:435, return type float32_t. This is the DWARF-supplied name for the
+        // float-valued zoom accessor; wave-J CrashNavMap::UpdateIconManager reads that
+        // quantity inline at `lfs f13, 0x6C0(state)` == mMainMapComponent+1632, which is
+        // mfWorldZoomScaleFactor by the DWARF member order below. Which of the two zoom
+        // floats the accessor actually returns is NOT independently attested (the accessor
+        // is inlined everywhere and the DWARF carries no body hint) -- callers that need
+        // specifically the +1632 quantity should say so at the call site.
+        f32        GetZoomFactor() const;                     // DWARF h:435
+        void       SetActive(bool lbActive);                  // DWARF h:449
+        bool       IsActive() const;                          // DWARF h:465
+
     private:
         Vector2 CalculateOffsetWorldCentre(Vector2 lv2Centre, OffsetPadding lePadding);
         Vector2 CalculateViewPaddingOffset();
@@ -119,9 +159,81 @@ namespace BrnGui
         // @0x82447ED8 -- reset the active zoom-scale table to the compile-time defaults.
         void    SetStandardDefZoomParams();
 
+        // ---- instance state, verbatim DWARF member order (BrnMainMap.h:209-232) -------
+        // The X360 offsets in the trailing comments are DOCUMENTARY ONLY: this is the
+        // 32-bit console layout and the host is LLP64, so mpMapManager / mpGuiCache widen
+        // and everything after them shifts. Nothing here may be used as arithmetic.
+        // The offsets that ARE quoted were measured this wave off the CrashNavMap and
+        // PreRaceFlyBy call sites (mMainMapComponent at CrashNavMap+96 / PreRaceFlyBy+0x9A0)
+        // and they corroborate this exact ordering, including the mpGuiCache slot between
+        // mbIsZooming and the stick flags.
+
         // +0x8C -- the tile working set (embedded by value; MainMapComponent pokes its
         // map-active flag directly on the cache-ready event, see RecvEvent).
-        MapManager mMapManager;
+        MapManager  mMapManager;                    // DWARF h:209, X360 comp+0x8C
+        MapManager* mpMapManager;                   // DWARF h:210 (SetMapManager's target)
+
+        Vector4 mv4WorldRect;                       // DWARF h:212
+        Vector4 mv4ViewRect;                        // DWARF h:213
+        Vector4 mv4PaddingRect;                     // DWARF h:214
+        Vector4 mv4DisplayRect;                     // DWARF h:215
+        // X360 comp+1616: `stvx128 v0, r26, 0xFF0` in PreRaceFlyBy::CalculateZoomFactor
+        // (0x9A0 + 0x650) and the CrashNavMap+1712 store are both this lane -- the
+        // SetDesiredWorldCentre target.
+        Vector2 mv2DesiredCentre;                   // DWARF h:216, X360 comp+1616
+
+        // Two file-scope float[4] zoom-scale tables the DWARF places INSIDE the class as
+        // private statics (h:218 / h:219). Declared, not defined: SetStandardDefZoomParams
+        // copies flt_82F259EC -> flt_82F259DC and those .rodata values are not in the IDA
+        // export, so the definitions land with that body in BrnMainMap.cpp.
+        static f32 mfZoomScalFactors[4];            // DWARF h:218
+        static f32 mfStandardDefZoomScalFactors[4]; // DWARF h:219
+
+        // X360 comp+1632 -- read inline by CrashNavMap::UpdateIconManager (`lfs f13,
+        // 0x6C0(state)` @0x824CBACC, state+96 == the component).
+        f32 mfWorldZoomScaleFactor;                 // DWARF h:220, X360 comp+1632
+        f32 mfDesiredWorldZoomFactor;               // DWARF h:221
+        ZoomFactor                      meCurrentZoomFactor; // DWARF h:222
+        GuiEventRenderMainMap::EMapType meMapType;           // DWARF h:223
+        bool mbIsZooming;                           // DWARF h:224, X360 comp+1648
+        GuiCache* mpGuiCache;                       // DWARF h:225
+
+        bool mbStickMapUp;                          // DWARF h:227, X360 comp+1656
+        bool mbStickMapDown;                        // DWARF h:228, X360 comp+1657
+        bool mbStickMapLeft;                        // DWARF h:229, X360 comp+1658
+        bool mbStickMapRight;                       // DWARF h:230, X360 comp+1659
+        bool mbIsActive;                            // DWARF h:232, X360 comp+1660
+
+        // Never called. Pins only the RELATIVE deltas inside the two pointer-free scalar
+        // runs -- those hold identically on the 32-bit console and the LLP64 host, which
+        // absolute offsets do not.
+        static void _AssertLayout()
+        {
+            // Run 1: the zoom/type/flag block between mv2DesiredCentre and mpGuiCache.
+            static_assert(offsetof(MainMapComponent, mfDesiredWorldZoomFactor) -
+                          offsetof(MainMapComponent, mfWorldZoomScaleFactor) == 4,
+                          "mfDesiredWorldZoomFactor follows mfWorldZoomScaleFactor");
+            static_assert(offsetof(MainMapComponent, meCurrentZoomFactor) -
+                          offsetof(MainMapComponent, mfWorldZoomScaleFactor) == 8,
+                          "meCurrentZoomFactor follows the two zoom floats");
+            static_assert(offsetof(MainMapComponent, meMapType) -
+                          offsetof(MainMapComponent, mfWorldZoomScaleFactor) == 12,
+                          "meMapType follows meCurrentZoomFactor");
+            static_assert(offsetof(MainMapComponent, mbIsZooming) -
+                          offsetof(MainMapComponent, mfWorldZoomScaleFactor) == 16,
+                          "mbIsZooming closes the pointer-free zoom run");
+
+            // Run 2: the five trailing bools after mpGuiCache.
+            static_assert(offsetof(MainMapComponent, mbStickMapDown) -
+                          offsetof(MainMapComponent, mbStickMapUp) == 1, "stick flag order");
+            static_assert(offsetof(MainMapComponent, mbStickMapLeft) -
+                          offsetof(MainMapComponent, mbStickMapUp) == 2, "stick flag order");
+            static_assert(offsetof(MainMapComponent, mbStickMapRight) -
+                          offsetof(MainMapComponent, mbStickMapUp) == 3, "stick flag order");
+            static_assert(offsetof(MainMapComponent, mbIsActive) -
+                          offsetof(MainMapComponent, mbStickMapUp) == 4,
+                          "mbIsActive closes the trailing bool run");
+        }
     };
 }
 
