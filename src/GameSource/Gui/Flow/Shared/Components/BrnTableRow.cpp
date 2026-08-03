@@ -11,11 +11,36 @@
 //   TableRowDataSet::Clear             @0x824E4F68
 //
 // Reconstructed store-for-store from the X360 ARTIST pseudocode/asm. Member access is BY
-// NAME. Where the X360 dispatches one of the component's still-unnamed virtuals, the call is
-// routed through the modelled base vtable (SelectableGroup::mppVTable) with the X360 byte
-// offset / slot index documented at the site -- the project's modelled-vtable convention
-// (see BrnOnlineTimeoutTimerComponent). The component flag byte the row dirties is the base
-// SelectableGroup +0xC byte (muFlags); 0x10 is its "needs re-output" bit.
+// NAME. The component flag byte the row dirties is the base SelectableGroup +0xC byte
+// (muFlags); 0x10 is its "needs re-output" bit.
+//
+// ⚠️⚠️ 2026-08-03 -- THE FLAT-VTABLE DISPATCH IN THIS FILE WAS UNSOUND AND IS RETIRED,
+// as it already was in BrnMenuToggleGroup.cpp and its sibling group TUs (2026-08-02). Every
+// component virtual used to be reached through `mppVTable[slot]`. `SelectableGroup::
+// mppVTable` is a MODELLED data member that NOTHING in this tree ever writes -- its own
+// header says so, and BrnMenuComponent.cpp:28 explicitly stores nullptr into it -- so the
+// first call through it would have jumped through a null pointer. This TU was unmounted,
+// which is the only reason it never fired; it is mounted from today (BrnOnlineCustomMatch.h
+// embeds a Table by value, so BrnScreenFlow needs the whole Table/TableRow/TableCell
+// family), so the dispatches had to go before the mount, not after.
+//
+// Every target is known BY NAME. The slot map is the one resolved from .rdata for the
+// sibling groups (BrnMenuToggleGroup.cpp:18-23): slots 0/1/2/3 == SetActive /
+// SetHighlightable / SetSelectable / SetHighlighted, slot 6 == Clear. The two slot-6 sites
+// dispatch on the ROW'S OWN vptr, so they land on TableRow::Clear, not the base:
+//   * Construct @0x824E70EC  `bl SelectableGroup::Construct` then `lwz r11,0(r20)` /
+//     `lwz r11,0x18(r11)` / `bctrl` with r3 = this and no second argument.
+//   * SetupRow  @0x824E4C9C  the same pair, then slot 0 with r4 = 1.
+//   * TableRow::Clear @0x824E4D00 is itself reached ONLY through a vtable -- the export's
+//     xrefs_to is EMPTY -- and it opens with `bl BrnGui__SelectableGroup__Clear`, the
+//     derived-override-calls-base shape. Its own four dispatches read 0x0/0x4/0xC/0x8 with
+//     r4 = 0/1/0/1, i.e. SetActive(false) / SetHighlightable(true) / SetHighlighted(false)
+//     / SetSelectable(true) -- exactly the four calls below, now by name.
+//
+// ⚠️ ONE LIVE FLAT DISPATCH SURVIVES IN THE TREE after this file:
+// BrnOnlineTimeoutTimerComponent.cpp:23 still calls through its own `mppVTable[3]`. That TU
+// is UNMOUNTED, which is the only thing keeping it inert -- de-flatten it BEFORE mounting it,
+// exactly as was done here.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/Components/BrnTableRow.h"
 
@@ -30,20 +55,6 @@ namespace BrnGui
     // ---------------------------------------------------------------------------------
     // The component "needs re-output" bit OR'd into the base flag byte (X360 `ori 0x10`).
     static const u8 KU_FLAG_DIRTY = 0x10;
-
-    // Slot indices into the component vtable for the still-unnamed component virtuals the
-    // row drives (X360 byte offsets: slot N == *(*this + 4*N)).
-    namespace
-    {
-        typedef void (*ComponentToggleFn)(void* lpThis, s32 liArg);  // (this, bool/int)
-
-        inline void DispatchToggle(SelectableGroup* lpThis, s32 liSlot, s32 liArg)
-        {
-            ComponentToggleFn lpfFn =
-                reinterpret_cast<ComponentToggleFn>(lpThis->mppVTable[liSlot]);
-            lpfFn(lpThis, liArg);
-        }
-    }
 
     // @0x824E6F00 -----------------------------------------------------------------------
     void TableRow::Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
@@ -61,9 +72,9 @@ namespace BrnGui
         // Base group construct: (name, state interface, parent name, apt id).
         SelectableGroup::Construct(lpacName, lpStateInterface, lpacParentName, luAptId);
 
-        // X360: (*(*this + 24))(this) -- vtable slot 6, the component's parameterless
-        // re-init/clear virtual, dispatched immediately after the base construct.
-        reinterpret_cast<void (*)(SelectableGroup*)>(mppVTable[6])(this);
+        // X360 @0x824E70EC: slot 6 on the row's own vptr, r3 = this, no second argument --
+        // TableRow::Clear, dispatched immediately after the base construct.
+        Clear();
 
         // Pre-clear the cell array: the X360 zeroes each cell's two data words
         // (meComponentType + mpComponent) inline before constructing the live cells; that is
@@ -105,10 +116,10 @@ namespace BrnGui
         CGS_ASSERT(liColumn >= 0 && liColumn <= miNumColumns,
                    "TableRow::SetupRow() too many columns!");   // X360 line 103
 
-        // X360: (*(*this + 24))(this) -- vtable slot 6 (parameterless re-init), then
-        // (**this)(this, 1) -- vtable slot 0 with arg 1.
-        reinterpret_cast<void (*)(SelectableGroup*)>(mppVTable[6])(this);
-        DispatchToggle(this, 0, 1);
+        // X360 @0x824E4C9C: slot 6 on the row's own vptr (TableRow::Clear), then slot 0 with
+        // r4 = 1 (SelectableGroup::SetActive).
+        Clear();
+        SetActive(true);
 
         // Toggle the base wrap flag if it changed, dirtying the component when it does.
         if (lbEnableShowingAnim != mbWrapped)
@@ -139,13 +150,14 @@ namespace BrnGui
         mePreviousState   = E_TABLEROWSTATES_INVISIBLE;  // stw 1, 0x2FC
         muFlags |= KU_FLAG_DIRTY;
 
-        // X360: dispatch four component virtuals through the vtable -- slot 0(this,0),
-        // slot 1(this,1), slot 3(this,0), slot 2(this,1) -- the re-output / show / hide /
-        // enable toggles that re-publish the cleared row to its apt clip.
-        DispatchToggle(this, 0, 0);
-        DispatchToggle(this, 1, 1);
-        DispatchToggle(this, 3, 0);
-        DispatchToggle(this, 2, 1);
+        // X360 @0x824E4D40..0x824E4DB8: four component virtuals in this order -- slot 0
+        // (r4=0), slot 1 (r4=1), slot 3 (r4=0), slot 2 (r4=1). By the .rdata slot map that is
+        // SetActive(false) / SetHighlightable(true) / SetHighlighted(false) /
+        // SetSelectable(true): the flag toggles that re-publish the cleared row to its clip.
+        SetActive(false);
+        SetHighlightable(true);
+        SetHighlighted(false);
+        SetSelectable(true);
 
         muFlags |= KU_FLAG_DIRTY;
     }

@@ -40,8 +40,18 @@
 
 namespace BrnGui
 {
+    class CarSelectOnlinePlayerList;
+
     struct CarSelectOnlinePlayerListItem : public CgsGui::GuiComponent
     {
+        // The owning bank writes this row's two state bytes and its gamertag field DIRECTLY on
+        // the console rather than through row methods -- Hide @0x8241B2A0 does `stb 0,row+0x2E8`,
+        // SetFinalSelection @0x8241B0C8 reads +0x2E8 and stores +0x2E9, and SetPlayerName
+        // @0x82427948 calls TextField::SetText on row+0x8C. Friendship reproduces that without
+        // inventing four row methods the console does not have. (Same construction as
+        // BrnGuiCache.h's `friend struct OnlineGameRoomPlayerInfo`.)
+        friend class CarSelectOnlinePlayerList;
+
         // @0x8241B390 -- base Construct, Construct both text fields, zero the state.
         virtual void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
                                const char* lpacParentName);

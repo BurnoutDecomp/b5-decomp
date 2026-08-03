@@ -16,6 +16,7 @@
 // has to satisfy for the exe to link at all -- see the DELETE-WHEN block at the bottom.
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavEnterOnline.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavEnterOnlineMod.h"
+#include "GameSource/Gui/Flow/Screen/States/BrnOnlineCustomMatch.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineScoreboards.h"
 #include "GameSource/Gui/Flow/Screen/Components/BrnGuiNetworkRouteInfo.h"
@@ -234,4 +235,38 @@ namespace BrnGui
     // FLAG link scaffold: no definition anywhere in src/ -- BrnHelpBar.cpp:46 declares
     // HelpBar::HelpBar @0x82515328 BLOCKED and deliberately leaves it undefined.
     HelpBar::HelpBar() {}
+
+    // =====================================================================================
+    // ⛔ THE SAME REGRESSION, A THIRD TIME -- ON_CUST_MAT, ADDED 2026-08-03.
+    //
+    // b5-decomp a1fec0e9 ("Gui components: grow thirteen thin header slices to their DWARF
+    // shapes") grew BrnOnlineCustomMatch.h from a one-accessor slice to the full DWARF class
+    // and, in doing so, DECLARED OnEnter/OnLeave/Update virtual. Its own trailing comments say
+    // where the bodies are ("FOREIGN TU ... defined nowhere yet"), and grep over all of src/
+    // confirms it: there is no BrnOnlineCustomMatch.cpp in the tree at all, so ALL THREE are
+    // undefined. BrnScreenFlow.cpp:178 instantiates the class through NewPoolState<T>, which
+    // materialises the vtable, and the vtable references every virtual -- so from that commit
+    // on the exe failed to link with LNK2001 x3 (plus the Table::Table() LNK2019 the same
+    // header's by-value BrnGui::Table member introduced; that one is a MOUNT, see the build
+    // script). Identical shape to the CN_ENTER_ONLINE / ONLINE_GAME_OPTIONS /
+    // ONLINE_SCOREBOARDS block above, same minimum fix, same zero behaviour change: ON_CUST_MAT
+    // is online-only and unreachable on this build, and the pre-a1fec0e9 shape inherited these
+    // three from CgsFsm::State, whose bodies are empty.
+    //
+    // ⚠️ DELETE-WHEN, PER SYMBOL. The moment a TU defining any of these three lands AND IS
+    // MOUNTED, the matching stub here MUST be deleted or the link fails the other way
+    // (LNK2005). One of the three already has its real body in the tree -- see below. The
+    // console addresses are on the declarations in BrnOnlineCustomMatch.h (OnEnter
+    // @0x82496C10, OnLeave @0x824970D0, Update @0x824AC808).
+    // =====================================================================================
+
+    // ---- ON_CUST_MAT --------------------------------------------------------------------
+    // FLAG link scaffold: REAL BODY EXISTS, unmounted -- b5-decomp 62f56950 landed it at
+    // BrnOnlineCustomMatch_wJ_06.cpp:214 while this stub was being written. Mounting that TU
+    // (and its five siblings) REQUIRES deleting this line.
+    void OnlineCustomMatch::OnEnter() { LogUnreconstructedState("OnlineCustomMatch", "OnEnter"); }
+    // FLAG link scaffold: no definition anywhere in src/ (@0x824970D0, foreign ledger TU).
+    void OnlineCustomMatch::OnLeave() {}
+    // FLAG link scaffold: no definition anywhere in src/ (@0x824AC808, foreign ledger TU).
+    void OnlineCustomMatch::Update() {}
 }
