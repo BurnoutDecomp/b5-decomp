@@ -22,6 +22,8 @@
 //                                     (BrnGuiShared.cpp / off_82F27C98), declared here.
 //   - BrnGui::EGuiResourceId       -- the GUI resource-id enum (slice), and
 //   - gGuiResourceIdentifier[]     -- the parallel resource-NAME table (X360 off_82F278E0).
+//   - BrnGui::ECompassPoints       -- the 8-point compass PreRaceFlyByState::FindEventDirection
+//                                     (X360 @0x824B4EC8) returns.
 // ============================================================================
 
 namespace BrnGui
@@ -69,7 +71,36 @@ namespace BrnGui
     // DEFINED by BrnGuiCache.cpp (the TU that owns the resource pump).
     extern const char* const gGuiResourceIdentifier[E_GUI_RESOURCEID_NUM];
 
-    // BrnGuiShared.h:296 (DWARF) -- a sat-nav road icon. Each value's numeric suffix
+    // BrnGuiShared.h:416 (DWARF) -- the 8-sector compass the pre-race fly-by resolves an
+    // event's bearing into. The order is counter-clockwise from north (N, NW, W, SW, S,
+    // SE, E, NE) because FindEventDirection @0x824B4EC8 floors a 0..360 bearing measured
+    // from the reference vector by 45 and returns the sector index directly; that same
+    // index also selects from the DIRECTION_* localisation-id table @0x82F27820, whose 8
+    // entries are in exactly this order (image read: scratchpad/waveJ/prfb_rodata.txt).
+    // The cpp:1648 assert bounds the result against 8 (`cmpwi cr6, r31, 8` / `blt`).
+    //
+    // FIXED UNDERLYING TYPE `: s32` IS LOAD-BEARING: the leaf class header
+    // GameSource/Gui/Flow/PreEvent/States/BrnPreRaceFlyBy.h forward-declares this enum
+    // opaquely as `namespace BrnGui { enum ECompassPoints : s32; }`, and an opaque-enum
+    // declaration and its definition must agree on the underlying type. (The DWARF does
+    // not record an underlying type for it; s32 is what the existing in-tree opaque
+    // declaration already committed to, and it matches the console's 4-byte stores of the
+    // returned value.)
+    enum ECompassPoints : s32
+    {
+        E_COMPASS_POINTS_N     = 0,
+        E_COMPASS_POINTS_NW    = 1,
+        E_COMPASS_POINTS_W     = 2,
+        E_COMPASS_POINTS_SW    = 3,
+        E_COMPASS_POINTS_S     = 4,
+        E_COMPASS_POINTS_SE    = 5,
+        E_COMPASS_POINTS_E     = 6,
+        E_COMPASS_POINTS_NE    = 7,
+        E_COMPASS_POINTS_COUNT = 8,
+        E_COMPASS_POINTS_START = 0,
+    };
+
+    // BrnGuiShared.h:327 (DWARF) -- a sat-nav road icon. Each value's numeric suffix
     // is the apt timeline-label code for that road's sign artwork; the parallel name
     // table below holds those code strings in the same order.
     enum ERoadIcon

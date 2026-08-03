@@ -127,10 +127,76 @@ namespace CgsGui
         // template is generic so it can carry a higher-layer (GameSource) event type without this GameShared
         // header depending on it -- it is only instantiated where TEvent is complete. The queued event is
         // then routed to the registered observers (the MovieManager for the video events).
+        //
+        // FLAG known divergence -- DO NOT "harmonize" OutputViewState/OutputInternalState below
+        // to match this body; harmonize this body to THEM when the payload types are re-shaped.
+        // The X360 OutputGuiEvent<T> bodies also stack-build a GuiEventWrapper<T,40> and pass the
+        // constant channel 40, exactly like the two templates below: @0x824367D8
+        // (<GuiAudioEvent>) writes {24,456,16} + a 24-byte copy -> AddEvent(&rec, 40, 40), and
+        // @0x82476C00 (<GuiEventPlayMusicOnMenuStream>) writes {8,23,12} + 8 -> AddEvent(&rec,
+        // 40, 20). This body instead passes the event directly with lrEvent.GetEventType() as the
+        // channel. It is kept as-is deliberately, because the payload-type population is SPLIT
+        // between two encodings (BrnGuiDemangledEventTypes.h alone: 94 GuiEvent<N>-derived vs 152
+        // raw). The GuiEvent<N>-derived ones -- this header's GuiEventPlayMusicOnMenuStream(8,12) /
+        // GuiEventNetworkSuspension(4,12) / GuiEventPlayAptMovie(8,12) included -- set
+        // muHeader0/muHeader2 to the wrapper's own size/offset words, i.e. they bake the wrapper
+        // header INTO the type, so direct-pass reproduces the right record bytes for them and
+        // switching to the wrapper would emit a DOUBLE header. The raw ones (`u8 maData[N]` +
+        // GetEventType(), no GuiEvent base) need the wrapper and get no header at all here.
+        // Resolving the split means re-shaping the payload types across several headers this TU
+        // does not own; until then CgsGuiStateInterface_OutputGuiEvent_Inst.cpp does not compile
+        // (measured: C3190 on `template int`, then C2664 on the raw types once that is spelled
+        // `void` -- `void` is correct, its mangled names are `QAAX` too).
         template <typename TEvent>
         void OutputGuiEvent(TEvent& lrEvent)
         {
             mOutEventQueue.AddEvent(&lrEvent, lrEvent.GetEventType(), static_cast<s32>(sizeof(TEvent)));
+        }
+
+        // The two sibling output channels of OutputGuiEvent: 41 == "view state", 42 ==
+        // "internal state" (the channel legend is in CgsGuiEvent.h's GuiEventWrapper
+        // comment). Both return **void**: the X360 mangled names are
+        //   ??$OutputViewState@V<T>@BrnGui@@@StateInterface@CgsGui@@QAAXAAV<T>@BrnGui@@@Z
+        // and the same with OutputInternalState -- `QAAX` == public / non-const / __cdecl /
+        // **X = void return**. Checked on all 12 attested instantiations -- view state
+        // 0x824C2FA0 / 0x82436CF0 / 0x824C2EE8 / 0x82493D98 / 0x82476B60 / 0x82476DD8 /
+        // 0x82465E50, internal state 0x82436A30 / 0x82436A80 / 0x82493DE8 / 0x82493C98 /
+        // 0x82476E38 -- every one of them spells `QAAX`. Hex-Rays renders them `int`
+        // only because it propagates the tail-called AddEvent's bool return.
+        //
+        // BODY (X360 ARTIST, rung 1). These two stack-build a GuiEventWrapper<TEvent, channel>
+        // and queue *that* -- which is what the X360 OutputGuiEvent bodies do as well; only the
+        // in-tree OutputGuiEvent body above still direct-passes (see its FLAG). Measured on
+        // OutputViewState<GuiEventShowHideSatNav> @0x82476DD8 -- the record written is
+        //     +0 = 12 (sizeof(T))   +4 = 213 (GetEventType())   +8 = 12 (payload offset)
+        //     +12..+23 = a 3-word copy of the caller's object, loaded from 0/4/8(r4)
+        // then AddEvent(&record, /*channel*/41, /*size*/24). The payload words come from
+        // offsets 0/4/8 of the passed event -- confirmed at the emitter, PreRaceFlyByState::
+        // Update @0x824DC804..0x824DC820, which fills its local at +0/+4/+8 -- so the
+        // wrapper's three header words are NOT part of TEvent. The channel is a compile-time
+        // constant (`li r5,0x29` / `li r5,0x2A`), not the event's type id.
+        // This shape reproduces every attested record exactly, including the align-8 cases:
+        //   <GuiEventFilterEventIcons>     {4,557,12}  + 4  -> 16   @0x824C2FA0
+        //   <GuiEventShowHideBoostBar>     {1,214,12}  + 1  -> 16   @0x82476B60
+        //   <GuiEventShowHideHud>          {1,148,12}  + 1  -> 16   @0x82493C98
+        //   <GuiEventShowHideSatNav>       {12,213,12} + 12 -> 24   @0x82476DD8 / 0x82476E38
+        //   <GuiEventSetHoveredEventIcon>  {24,559,16} + 24 -> 40   @0x824C2EE8 (alignas(8))
+        // Bodies live here (not in a .cpp) because the X360 emits one out-of-line copy per
+        // T; the explicit instantiations are in the sibling CgsGuiStateInterface_Output*_Inst.cpp.
+        template <typename TEvent>
+        void OutputViewState(TEvent& lrEvent)
+        {
+            GuiEventWrapper<TEvent, 41> lWrapper(lrEvent);
+            mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWrapper),
+                                    41, static_cast<s32>(sizeof(lWrapper)));
+        }
+
+        template <typename TEvent>
+        void OutputInternalState(TEvent& lrEvent)
+        {
+            GuiEventWrapper<TEvent, 42> lWrapper(lrEvent);
+            mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWrapper),
+                                    42, static_cast<s32>(sizeof(lWrapper)));
         }
 
         void PlayAptMovie(const char* lpacMovieName, s32 liLevelNum);

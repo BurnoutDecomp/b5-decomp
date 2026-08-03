@@ -28,10 +28,10 @@
 
 namespace CgsGui
 {
-    template int StateInterface::OutputViewState<BrnGui::GuiEventFilterEventIcons>(BrnGui::GuiEventFilterEventIcons&);  // 0x824C2FA0
-    template int StateInterface::OutputViewState<BrnGui::GuiEventNetworkPlayerImage>(BrnGui::GuiEventNetworkPlayerImage&);  // 0x82436CF0
-    template int StateInterface::OutputViewState<BrnGui::GuiEventSetHoveredEventIcon>(BrnGui::GuiEventSetHoveredEventIcon&);  // 0x824C2EE8
-    template int StateInterface::OutputViewState<BrnGui::GuiEventSetInspectedEventIcon>(BrnGui::GuiEventSetInspectedEventIcon&);  // 0x82493D98
-    template int StateInterface::OutputViewState<BrnGui::GuiEventShowHideBoostBar>(BrnGui::GuiEventShowHideBoostBar&);  // 0x82476B60
-    template int StateInterface::OutputViewState<BrnGui::GuiEventShowHideSatNav>(BrnGui::GuiEventShowHideSatNav&);  // 0x82476DD8
+    template void StateInterface::OutputViewState<BrnGui::GuiEventFilterEventIcons>(BrnGui::GuiEventFilterEventIcons&);  // 0x824C2FA0
+    template void StateInterface::OutputViewState<BrnGui::GuiEventNetworkPlayerImage>(BrnGui::GuiEventNetworkPlayerImage&);  // 0x82436CF0
+    template void StateInterface::OutputViewState<BrnGui::GuiEventSetHoveredEventIcon>(BrnGui::GuiEventSetHoveredEventIcon&);  // 0x824C2EE8
+    template void StateInterface::OutputViewState<BrnGui::GuiEventSetInspectedEventIcon>(BrnGui::GuiEventSetInspectedEventIcon&);  // 0x82493D98
+    template void StateInterface::OutputViewState<BrnGui::GuiEventShowHideBoostBar>(BrnGui::GuiEventShowHideBoostBar&);  // 0x82476B60
+    template void StateInterface::OutputViewState<BrnGui::GuiEventShowHideSatNav>(BrnGui::GuiEventShowHideSatNav&);  // 0x82476DD8
 }

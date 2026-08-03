@@ -22,9 +22,9 @@
 
 namespace CgsGui
 {
-    template int StateInterface::OutputInternalState<BrnGui::GuiEventPerformOnlineMainMenuOption>(BrnGui::GuiEventPerformOnlineMainMenuOption&);  // 0x82436A30
-    template int StateInterface::OutputInternalState<BrnGui::GuiEventPerformOnlinePauseOption>(BrnGui::GuiEventPerformOnlinePauseOption&);  // 0x82436A80
-    template int StateInterface::OutputInternalState<BrnGui::GuiEventSetInspectedEventIcon>(BrnGui::GuiEventSetInspectedEventIcon&);  // 0x82493DE8
-    template int StateInterface::OutputInternalState<BrnGui::GuiEventShowHideHud>(BrnGui::GuiEventShowHideHud&);  // 0x82493C98
-    template int StateInterface::OutputInternalState<BrnGui::GuiEventShowHideSatNav>(BrnGui::GuiEventShowHideSatNav&);  // 0x82476E38
+    template void StateInterface::OutputInternalState<BrnGui::GuiEventPerformOnlineMainMenuOption>(BrnGui::GuiEventPerformOnlineMainMenuOption&);  // 0x82436A30
+    template void StateInterface::OutputInternalState<BrnGui::GuiEventPerformOnlinePauseOption>(BrnGui::GuiEventPerformOnlinePauseOption&);  // 0x82436A80
+    template void StateInterface::OutputInternalState<BrnGui::GuiEventSetInspectedEventIcon>(BrnGui::GuiEventSetInspectedEventIcon&);  // 0x82493DE8
+    template void StateInterface::OutputInternalState<BrnGui::GuiEventShowHideHud>(BrnGui::GuiEventShowHideHud&);  // 0x82493C98
+    template void StateInterface::OutputInternalState<BrnGui::GuiEventShowHideSatNav>(BrnGui::GuiEventShowHideSatNav&);  // 0x82476E38
 }

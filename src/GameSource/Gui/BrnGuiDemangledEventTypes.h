@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstddef>   // offsetof -- GuiEventNetworkCustomMatchSearch derives its two record
+                     // header words from the HOST layout, never from a console literal
+
 #include "types.hpp"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEvent<N> (12-byte event header)
 #include "GameShared/GameClasses/Core/CgsID.h"
@@ -345,8 +348,95 @@ namespace BrnGui
             , miConnectType(liConnectType) {}
     };
     struct GuiEventNetworkCustomMatchJoin { u8 maData[4]; s32 GetEventType() const { return 255; } };  // id 255 size 4
-    struct GuiEventNetworkCustomMatchResults : public CgsGui::GuiEvent<254> { u8 maPayload[592]; };  // id 254 size 604
-    struct GuiEventNetworkCustomMatchSearch : public CgsGui::GuiEvent<252> {};  // id 252 size 12
+    // id 254, record 604 bytes -- HEADERLESS, and deliberately so. MEASURED: the only
+    // producer, BrnNetwork::BrnNetworkModule::AddOutputGuiEvent<T> @0x82565E88, calls
+    // AddEvent(queue, &event, 254, 604) with the CALLER'S OBJECT POINTER -- it does not
+    // stack-build a { payload size, id, payload offset } header the way OutputGuiEvent<T>
+    // does (contrast GuiEventNetworkCustomMatchSearch below). So the console record IS the
+    // 604-byte payload, and the host type must be 604 bytes carrying its own
+    // GetEventType() == 254 (this header's raw-struct form). The previous
+    // GuiEvent<254> + u8[592] shape had the right TOTAL size but pushed all 604 bytes of
+    // real data 12 bytes down behind a header the producer never writes.
+    //
+    // Field names and the three constants are DWARF-attested (DecFIGS
+    // BrnGuiEventTypeDefs.h:3180; KI_* :3183/:3184/:3186, members :3188-:3196).
+    // MEMBER ORDER IS THE X360's, NOT the DWARF's: DecFIGS declares maacGameNames first,
+    // but the ARTIST asm puts the six 10-element arrays first and the names last.
+    // OnlineCustomMatch::FillInTable @0x8248BA90 reads the member (this+57332) at +0
+    // (maiNumPlayers, the "%d" first arg), +40 (maiMaxNumPlayers), +80 (maiGameFlags,
+    // tested &2 then &4), +160 (maeGameMode, indexes the string table as [mode-10]),
+    // +200 (maePreviousGameMode) and +240 (miNumGames), and the names at +244 with
+    // stride 36; HandleControllerInputSelectGame @0x82497570 reads +120
+    // (maiFoundGameIndex). Rung 1 arbitrates placement, and 244 + 10*36 == 604 closes the
+    // record exactly.
+    // FLAG (id delta): DecFIGS derives this type from GuiEvent<252>; the X360 id is 254 --
+    // the same uniform +2 shift as the rest of this cluster (see GuiEventShowHideSatNav).
+    struct GuiEventNetworkCustomMatchResults
+    {
+        static const s32 KI_HAS_FRIENDS   = 2;    // DWARF :3183 -- maiGameFlags mask -> the "Friends" icon
+        static const s32 KI_HAS_RIVALS    = 4;    // DWARF :3184 -- maiGameFlags mask -> the "Rivals" icon
+        static const s32 KI_MAX_NUM_GAMES = 10;   // DWARF :3186
+
+        s32  maiNumPlayers[KI_MAX_NUM_GAMES];        // payload +0x000
+        s32  maiMaxNumPlayers[KI_MAX_NUM_GAMES];     // payload +0x028
+        s32  maiGameFlags[KI_MAX_NUM_GAMES];         // payload +0x050 (KI_HAS_FRIENDS / KI_HAS_RIVALS)
+        s32  maiFoundGameIndex[KI_MAX_NUM_GAMES];    // payload +0x078 (the word the CustomMatchJoin payload carries)
+        s32  maeGameMode[KI_MAX_NUM_GAMES];          // payload +0x0A0 -- DWARF type
+                                                     //   BrnGameState::GameStateModuleIO::EGameModeType; carried as
+                                                     //   s32 because that enum's home does not include cleanly here
+                                                     //   (see the GuiEventAudioTraxUpdate note above). X360 values 10..17.
+        s32  maePreviousGameMode[KI_MAX_NUM_GAMES];  // payload +0x0C8 -- same enum; outside 10..17 means "no previous mode"
+        s32  miNumGames;                             // payload +0x0F0
+        char maacGameNames[KI_MAX_NUM_GAMES][36];    // payload +0x0F4 .. +0x25C
+
+        s32 GetEventType() const { return 254; }
+    };  // id 254, record 604 bytes (headerless -- AddOutputGuiEvent posts the object itself)
+    // The record size IS the X360 AddEvent literal, and the whole record is a pointer-free
+    // scalar run, so it is host-stable and worth pinning.
+    static_assert(sizeof(GuiEventNetworkCustomMatchResults) == 604,
+                  "GuiEventNetworkCustomMatchResults is the 604-byte AddOutputGuiEvent record");
+    // id 252, record 24 bytes: { 12, 252, 12 } + a 12-byte payload. MEASURED at
+    // OutputGuiEvent<GuiEventNetworkCustomMatchSearch> @0x82493BE8, which stack-builds
+    // v4 = { 12, 252, 12 }, copies THREE words out of the caller's object into v4[3..5] and
+    // calls AddEvent(queue, v4, 40, 24). The old bare GuiEvent<252> posted an EMPTY payload
+    // where the console copies 12 bytes.
+    // Field names and types are DWARF-attested (DecFIGS BrnGuiEventTypeDefs.h:3164,
+    // members :3165-:3168).
+    // FLAG (id delta): DecFIGS derives this type from GuiEvent<250>; the X360 id is 252.
+    // WIRE NOTE -- this is a CHANNEL-40 type, so it takes the BAKED-HEADER encoding, unlike
+    // the wrapped channel-41/42 types (GuiEventShowHideSatNav below, which is deliberately
+    // raw). Per the FLAG in CgsGuiStateInterface.h, the committed OutputGuiEvent<T> body
+    // direct-passes the event (it does NOT build a GuiEventWrapper), while OutputViewState /
+    // OutputInternalState do build one. So a channel-40 payload has to fold the wrapper's
+    // three header words into itself through the CgsGui::GuiEvent<252> base, and the record
+    // is published with AddEvent(&event, /*channel*/ 40, sizeof(event)) == 24 -- byte-for-byte
+    // the console record. On the console the type is the 12-byte payload only.
+    // OnlineCustomMatch::mLastSearchParams IS this type (12 bytes on the console, 24 on the
+    // host -- harmless, every access is by name). If OutputGuiEvent<T> is ever rebuilt to
+    // emit the real wrapper header, this base must come back off or the header ships twice.
+    struct GuiEventNetworkCustomMatchSearch : public CgsGui::GuiEvent<252>
+    {
+        s32  meGameMode;              // payload +0x00 -- DWARF type BrnNetwork::ESearchGameModes,
+                                      //   which has no committed home; carried as s32 exactly as
+                                      //   BrnOnlineCustomMatch.h's StringGameModeMapping does.
+                                      //   X360 producer values: 0 any, 1 race, 4 freeburn lobby.
+        s32  meSearchOpponentTypes;   // payload +0x04 -- DWARF type BrnNetwork::ESearchOpponentTypes
+                                      //   (same no-home treatment); widened from the toggle row's
+                                      //   SIGNED s8 highlight index, so -1 is reachable.
+        bool mbRanked;                // payload +0x08
+        bool mbFreeburn;              // payload +0x09
+        u8   maPad[2];                // payload +0x0A -- the console reads the +8 word whole (`lwz`)
+
+        GuiEventNetworkCustomMatchSearch()
+            : CgsGui::GuiEvent<252>(
+                  static_cast<u32>(sizeof(GuiEventNetworkCustomMatchSearch)
+                                   - offsetof(GuiEventNetworkCustomMatchSearch, meGameMode)),
+                  static_cast<u32>(offsetof(GuiEventNetworkCustomMatchSearch, meGameMode)))
+            , meGameMode(0), meSearchOpponentTypes(0), mbRanked(false), mbFreeburn(false)
+        { maPad[0] = 0; maPad[1] = 0; }
+    };  // id 252, record 24 bytes
+    static_assert(sizeof(GuiEventNetworkCustomMatchSearch) == 24,
+                  "GuiEventNetworkCustomMatchSearch is the 24-byte OutputGuiEvent record");
     struct GuiEventNetworkLeavingGameFailed { u8 maData[1]; s32 GetEventType() const { return 275; } };  // id 275 size 1
     struct GuiEventNetworkNewsAndTOS { u8 maData[4]; s32 GetEventType() const { return 266; } };  // id 266 size 4
     struct GuiEventNetworkOutputPlayerTexture { u8 maData[8]; s32 GetEventType() const { return 264; } };  // id 264 size 8
@@ -451,6 +541,57 @@ namespace BrnGui
     struct GuiEventFilterEventIcons { u8 maData[4]; s32 GetEventType() const { return 557; } };  // id 557 size 4
     struct GuiEventSetInspectedEventIcon { u8 maData[4]; s32 GetEventType() const { return 558; } };  // id 558 size 4 (OutputViewState + OutputInternalState)
     struct GuiEventShowHideBoostBar { u8 maData[1]; s32 GetEventType() const { return 214; } };  // id 214 size 1
-    struct GuiEventShowHideSatNav : public CgsGui::GuiEvent<213> {};  // id 213 size 12 (bare 12B GuiEvent header)
+    // id 213, PAYLOAD 12 bytes -- and it stays a raw 12-byte payload, with no
+    // CgsGui::GuiEvent<213> base, because this type only ever travels the WRAPPED channels.
+    // MEASURED: OutputViewState<GuiEventShowHideSatNav> @0x82476DD8 and
+    // OutputInternalState<...> @0x82476E38 stack-build v4 = { 12, 213, 12 }, copy THREE words
+    // out of the caller's object (loaded from 0/4/8 of the passed event) into v4[3..5] and
+    // call AddEvent(queue, v4, 41 | 42, 24) -- so the three header words are NOT part of this
+    // type and sizeof(T) is the 12 in the record's first word. PreRaceFlyByState::OnLeave
+    // @0x824C68F0 shows the same record inlined (`li r30,0xC` / `li r26,0xD5` / three payload
+    // stores / `li r6,0x18` / `li r5,0x29` then `li r5,0x2A`: one record, both channels).
+    // Consumers must therefore go through StateInterface::OutputViewState / OutputInternalState
+    // (CgsGuiStateInterface.h builds the GuiEventWrapper<T,41|42>); posting this struct
+    // directly on the out-queue would ship a headerless 12-byte record.
+    // The previous placeholder was a bare GuiEvent<213>, i.e. a header with NO payload where
+    // the console copies 12 bytes of real data.
+    // The three fields are DWARF-ATTESTED, not consumer-named: DecFIGS BrnGuiEventTypeDefs.h
+    // declares meMapType/mfFadeTime/mbShow private at :2042-:2044, Construct(MapType, bool,
+    // float32_t) at :2015, the accessors at :2023/:2029/:2035, the nested MapType at :2005.
+    // FLAG (id delta): DecFIGS derives this type from GuiEvent<211>, the X360 id is 213. The
+    // whole cluster is shifted by +2 between the PS3 (Dec-2007) and X360 (Jan-2008) builds --
+    // ShowHideBoostBar 212->214, CustomMatchSearch 250->252, CustomMatchResults 252->254,
+    // CustomMatchJoin 253->255, every one matching this header's committed X360 ids -- so this
+    // is the same type renumbered. The X360 id wins.
+    struct GuiEventShowHideSatNav
+    {
+        enum MapType { E_MAPTYPE_MAIN = 0, E_MAPTYPE_GPS = 1 };   // DWARF :2005
+
+        GuiEventShowHideSatNav()
+            : meMapType(E_MAPTYPE_MAIN), mfFadeTime(0.0f), mbShow(false) {}
+
+        // DWARF :2015 -- the parameter order is (map type, show, fade time) while the payload
+        // order is (map type, fade time, show). Keep the DWARF order: call sites read as
+        // Construct(E_MAPTYPE_MAIN, false, 0.0f) == "hide the main map, no fade".
+        void Construct(MapType leMapType, bool lbShow, f32 lfFadeTime)
+        {
+            meMapType  = leMapType;
+            mfFadeTime = lfFadeTime;
+            mbShow     = lbShow;
+        }
+
+        MapType GetMapType()  const { return meMapType; }    // DWARF :2023
+        bool    GetShow()     const { return mbShow; }       // DWARF :2029
+        f32     GetFadeTime() const { return mfFadeTime; }   // DWARF :2035
+
+        s32 GetEventType() const { return 213; }
+
+    private:
+        MapType meMapType;    // payload +0x00 (DWARF :2042)
+        f32     mfFadeTime;   // payload +0x04 (DWARF :2043)
+        bool    mbShow;       // payload +0x08 (DWARF :2044; pads out to the attested 12)
+    };  // id 213, payload 12 bytes -> wrapped record 24 on channel 41 / 42
+    static_assert(sizeof(GuiEventShowHideSatNav) == 12,
+                  "GuiEventShowHideSatNav is the 12-byte OutputViewState/InternalState payload");
     struct alignas(8) GuiEventSetHoveredEventIcon : public CgsGui::GuiEvent<559> { u8 maPayload[12]; };  // id 559 size 24 [8-aligned: OViewState off16]
 }

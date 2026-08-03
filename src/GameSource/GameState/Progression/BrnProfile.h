@@ -246,6 +246,14 @@ public:
     s32  GetCurrentCarType() const             { return meCurrentCarType; }
     void SetCurrentCarType(s32 leCarType)      { meCurrentCarType = leCarType; }
 
+    // ADDITIVE GROW (BrnGui::PreRaceFlyByState::Set*Description): the progression-rank byte
+    // at +112 (mi8CurrentProgressionRank, Construct seeds it -2). DWARF BrnProfile.h:553
+    // gives the shape (`int8_t GetCurrentProgressionRank() const`). No standalone X360
+    // symbol -- every callsite inlines the byte load `lbz r10, 0x70(profile)` and re-stores
+    // it as a byte into the description record (0x824C6FCC / 0x824C762C / 0x824C7AC4) -- so
+    // it is defined inline here, same precedent as the pairs above.
+    s8   GetCurrentProgressionRank() const     { return mi8CurrentProgressionRank; }
+
     // ADDITIVE GROW: the persisted "car the player is in / where they left it" pair at +80/+88
     // (mSpawnCarId / mSpawnWheelId). The X360 emits no accessor symbols -- ProgressionManager::
     // OnPlayerCarChange @0x8237AC38 open-codes the two stores as `std r29, 0x1C0(progMgr)` /
@@ -303,6 +311,25 @@ public:
     s32  GetNumRankWinsForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType) const; // 0x8230FA40
     s32  GetNumLossesForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType) const;   // 0x8230FAB0
 
+    // ADDITIVE GROW (BrnGui::PreRaceFlyByState::Set*Description). The PLAIN offline win
+    // tally -- maiWinsPerOfflineGameMode @+468 (0x1D4), NOT the rank-only array at +508.
+    // Which array is which is settled by AddWinForGameMode @0x82354C80, which increments
+    // BOTH `4*mode + 0x1D4` and `4*mode + 0x1FC`; the out-of-line GetNumRankWinsForGameMode
+    // @0x8230FA40 reads `4*mode + 0x1FC` (+508), so +468 is the one this accessor reads.
+    // Shape is the DWARF's (BrnProfile.h:574 -- int32_t, const, EGameModeType param).
+    // The X360 image has NO standalone symbol for it (no `Profile::GetNumWinsForGameMode`
+    // in identity.json): every caller inlines the single indexed load --
+    //   0x824C6FC8 `lwz r11, 0x1D4(profile)` (SetRaceDescription,          mode 0)
+    //   0x824C7AC0 `lwz r11, 0x1E8(profile)` (SetBurningRouteDescription,  mode 5)
+    //   0x824C7628 `lwz r11, 0x1F4(profile)` (SetMarkedManDescription,     mode 8)
+    // so it is defined inline here, the same precedent as the accessor pairs above.
+    // FLAG: the three out-of-line siblings (rank-wins/losses/AddWin) each open with a
+    // `leGameModeType < GsmIO::E_MODE_OFFLINE_*` range assert; this one has no symbol, so
+    // its assert text/line is unrecoverable and is deliberately NOT fabricated here (and
+    // this header pulls in no assert facility). Every attested callsite passes a constant.
+    s32  GetNumWinsForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType) const
+    { return maiWinsPerOfflineGameMode[leGameModeType]; }
+
     // Takedown tallies.
     void AddTakedown(BrnGameState::ETakedownType leTakedownType);                   // 0x82354C00
 
@@ -316,6 +343,18 @@ public:
 
     // Event records / medals.
     const ProfileEvent* GetEvent(u32 luIndex) const;                                // 0x82354DA0
+
+    // ADDITIVE GROW (BrnGui::PreRaceFlyByState::Set*Description). The live length of maEvents.
+    // DWARF BrnProfile.h:833 gives the shape -- `uint32_t GetEventCount() const` -- while the
+    // backing member miEventCount @+0x278 is a signed word (already committed below).
+    // No standalone X360 symbol: every caller inlines `lwz r11, 0x278(profile)` as the bound of
+    // the maEvents walk (0x824C6FDC / 0x824C763C / 0x824C7AD4), so it is defined inline here.
+    // FLAG: those callsites compare the value SIGNED -- `cmpwi r11, 0 / ble` for the zero-trip
+    // guard and `cmpw r7, r11 / blt` for the loop bound -- i.e. the original callers took the
+    // count into an s32 before comparing. The DWARF return type is kept (it is the declaration
+    // authority); reconstructed callers cast back to s32 at the comparison to match the asm.
+    u32  GetEventCount() const                        { return static_cast<u32>(miEventCount); }
+
     s32  GetMedalAchievedForEventWithID(s32 liEventID) const;                       // 0x82354EB0 (0 gold / 1 silver / 2 bronze / -1 none)
     u32  GetTotalWinCount(u32& lruRankWins, u32& lruNonRankWins,
                           u32& lruSpecialEventWins) const;                          // 0x82354E10

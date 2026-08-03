@@ -23,14 +23,13 @@ void EventRacerPersonality::Construct()
 // X360 0x8230F808. Bounds-checked accessor into the per-event checkpoint table (40-byte stride).
 // Asserts 0 <= liCheckpointIndex < miCheckpointCount (BrnRaceEventData.h:953), then returns
 // &mpaCheckpoints[liCheckpointIndex] (X360: `return 40 * index + *(this + 0x18)`).
-const RaceEventData::CheckpointData* RaceEventData::GetCheckpointData(s32 liCheckpointIndex) const
+const CheckpointData* RaceEventData::GetCheckpointData(s32 liCheckpointIndex) const
 {
     CGS_ASSERT(liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount,
                "liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount");
-    // Pointer arithmetic on the 40-byte element via the named base pointer (the element's
-    // internal layout is not modelled in this slice -- see the incomplete CheckpointData decl).
-    const u8* lpBase = reinterpret_cast<const u8*>(mpaCheckpoints);
-    return reinterpret_cast<const CheckpointData*>(lpBase + 40 * liCheckpointIndex);
+    // CheckpointData is now a complete 40-byte type (static_assert in the header), so the
+    // console's `40 * index + base` is plain element indexing -- no byte arithmetic needed.
+    return mpaCheckpoints + liCheckpointIndex;
 }
 
 // X360 0x823543D0. Returns the target score for rank luRank. The X360 build asserts the rank is
