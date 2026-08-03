@@ -153,8 +153,8 @@ namespace Vehicle
         // as the documented predicates (player car == mePlayerActiveRaceCarIndex; crashing == the
         // in-record disabled flag). The struct's A/B crashing bytes carry the X360 swap (B->A, A->B).
         const s32 liPlayer = static_cast<s32>(mePlayerActiveRaceCarIndex);
-        lInfo.mbRaceCarAIsCrashing   = (lrRecordB.mbIsCrashingOrDisabled != 0);   // asm v229[16] = v90 (B's flag)
-        lInfo.mbRaceCarBIsCrashing   = (lrRecordA.mbIsCrashingOrDisabled != 0);   // asm v229[17] = v93 (A's flag)
+        lInfo.mbRaceCarAIsCrashing   = (lrRecordB.mbCrashing != 0);   // asm v229[16] = v90 (B's flag)
+        lInfo.mbRaceCarBIsCrashing   = (lrRecordA.mbCrashing != 0);   // asm v229[17] = v93 (A's flag)
         lInfo.mbRaceCarAIsPlayer     = (liIndexA == liPlayer);
         lInfo.mbRaceCarBIsPlayer     = (liIndexB == liPlayer);
         lInfo.mbRaceCarAIsNetworkCar = false;   // FLAG: network-car flag not pinned in this dossier; default false
@@ -271,7 +271,7 @@ namespace Vehicle
         // Guard: neither car already crashing (asm: *(record+3664)==0 both) AND neither is the
         // protected player-with-grace (asm: idx==player && *(record+6164)). If either guard fails the
         // routine skips straight to the post-pass / return.
-        const bool lbEitherCrashing = (lrRecordA.mbIsCrashingOrDisabled != 0) || (lrRecordB.mbIsCrashingOrDisabled != 0);
+        const bool lbEitherCrashing = (lrRecordA.mbCrashing != 0) || (lrRecordB.mbCrashing != 0);
         bool lbProtectedPlayerGrace = false;   // asm: (idxA==player && recA+6164) || (idxB==player && recB+6164)
         if ((liIndexA == liPlayer && lrRecordA.mbPlayerGrace) ||
             (liIndexB == liPlayer && lrRecordB.mbPlayerGrace))
@@ -519,7 +519,7 @@ namespace Vehicle
 
         // If the player was the one taken down, reset the aggressor's recovery timer.
         if (mePlayerActiveRaceCarIndex == liVictimActiveRaceCarIndex)
-            maRaceCarVehicles[liAggressorActiveRaceCarIndex].mfRecoveryTimer = 0.0f;
+            maRaceCarVehicles[liAggressorActiveRaceCarIndex].mfTimeSinceTookDownPlayer = 0.0f;
 
         // Record who took the victim down, and flag the aggressor as having scored a takedown this frame.
         mafNoImpactTimeSeconds[liVictimActiveRaceCarIndex]   = mfMinSecondsBetweenImpacts;
@@ -634,7 +634,7 @@ namespace Vehicle
         RaceCarPhysics* const lpVictimPhysics =
             reinterpret_cast<RaceCarPhysics*>(&lrVictimRecord);                    // asm RaceCarPhysics @ _R31 + 1856
 
-        if (lrVictimRecord.mbIsCrashingOrDisabled)
+        if (lrVictimRecord.mbCrashing)
         {
             // (A) REMOTE / already-handled path: fire the LIGHT crash event and fall through to the
             // crash-data slot alloc. asm: AddRaceCarCrashEvent(sink, 0, id, a3, 0,0, v45, 0, vCrashPos).
@@ -669,7 +669,7 @@ namespace Vehicle
             const bool lbWithinRadius = (lfDistSq < lrVictimRecord.mfProximityRadiusSq); // asm vcmpgtfp. radius>dist
 
             const bool lbLatchPhysics =
-                (!lrPlayerRecord.mbIsCrashingOrDisabled)   // asm *(_R10+3664)==0  (player not remote)
+                (!lrPlayerRecord.mbCrashing)   // asm *(_R10+3664)==0  (player not remote)
                 && lbWithinRadius                          // asm dist<radius
                 && (liCrashState == 1)                     // asm *(v39+v35)==1  (== maeRaceCarTypes[victim])
                 /* && lbA7Predicate */;                    // asm & v108 (FLAG: modelled true, see above)
@@ -687,7 +687,7 @@ namespace Vehicle
             // writes a zero register. We mark the record committed and stamp the id regardless (the
             // load-bearing state), and FLAG the matrix copy as a no-op on this branch.
             lrVictimRecord.mbCrashCommitted = 1;                  // asm *(record+4953) = 1 (only when re-read flag set)
-            lrVictimRecord.mStampedEntityId = lValidatedVictimId; // asm *(_R31+7056) = v34
+            lrVictimRecord.mEntityCausingCrash = lValidatedVictimId; // asm *(_R31+7056) = v34
             // asm stvx128 v127, r30, 5184 stores the crash matrix (zeroed on this branch). Modelled
             // by leaving mCrashMatrix as-is and forwarding it to the event. FLAG: matrix value is the
             // X360's "remote-only" copy, vacuous on the local branch.
@@ -1481,15 +1481,15 @@ namespace Vehicle
         static_assert(offsetof(VehicleManager, maRaceCarDrivers) + 224 * 1 + 59 == 224 * 1 + 123,
                       "the re-seat is byte-identical to the old model for every element");
         static_assert(sizeof(RaceCarVehicleRecord) == 5216, "RaceCarVehicleRecord stride (asm: 5216)");
-        static_assert(offsetof(RaceCarVehicleRecord, mbIsCrashingOrDisabled) == 1808, "in-record crashing flag (asm: +3664)");
+        static_assert(offsetof(RaceCarVehicleRecord, mbCrashing) == 1808, "in-record crashing flag (asm: +3664)");
         static_assert(offsetof(RaceCarVehicleRecord, mfProximityRadiusSq) == 1904, "in-record radius-sq (asm: +1904)");
         static_assert(offsetof(RaceCarVehicleRecord, mvWorldPosition) == 1920, "in-record world pos (asm: +1920)");
         static_assert(offsetof(RaceCarVehicleRecord, mbCrashCommitted) == 3097, "in-record crash-committed (asm: +4953)");
         static_assert(offsetof(RaceCarVehicleRecord, mCrashMatrix) == 3328, "in-record crash matrix (asm: +5184)");
         static_assert(offsetof(RaceCarVehicleRecord, mvCrashPosition) == 3824, "in-record crash pos (asm: +5680)");
         static_assert(offsetof(RaceCarVehicleRecord, mbPlayerGrace) == 4308, "in-record player-grace (asm: +6164)");
-        static_assert(offsetof(RaceCarVehicleRecord, mfRecoveryTimer) == 5120, "recovery timer (asm: +5120)");
-        static_assert(offsetof(RaceCarVehicleRecord, mStampedEntityId) == 5200, "in-record stamped id (asm: +7056)");
+        static_assert(offsetof(RaceCarVehicleRecord, mfTimeSinceTookDownPlayer) == 5120, "recovery timer (asm: +5120)");
+        static_assert(offsetof(RaceCarVehicleRecord, mEntityCausingCrash) == 5200, "in-record stamped id (asm: +7056)");
         static_assert(sizeof(RaceCarCrashData)     == 12,   "RaceCarCrashData stride (asm: 12)");
 
         static_assert(offsetof(VehicleManager, maRaceCarDrivers)         == 64,     "maRaceCarDrivers (asm addi r25, r31, 0x40) -- was WRONGLY seated at 0");
