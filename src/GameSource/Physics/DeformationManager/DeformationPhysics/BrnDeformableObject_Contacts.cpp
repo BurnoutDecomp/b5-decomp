@@ -58,8 +58,12 @@ namespace Deformation
     //   * unk_82FB8260 -- the restitution value returned when abs(normal.y) >= that threshold (a broadcast vec4).
     // The compare/select SHAPE is exact; the numeric output stays inert until the rodata is recovered.
     // -------------------------------------------------------------------------------------------------
-    static const f32     KF_WORLD_RESTITUTION_NORMAL_Y_THRESHOLD = 0.0f;             // FLAG: rodata unk_82FB7FF0 unrecovered
-    static const VecFloat KVF_WORLD_RESTITUTION_VALUE = { 0.0f, 0.0f, 0.0f, 0.0f };  // FLAG: rodata unk_82FB8260 unrecovered
+    // ⭐ RECOVERED 2026-08-03 from the static-init splats (they read zero in the image because they
+    // are .data filled at init, not because they have no value). ⚠️ The zero threshold was NOT inert:
+    // abs(normal.y) >= 0 is true for every contact, so the restitution branch was taken always --
+    // and then returned 0 restitution. A 0.5 threshold is the usual "is this surface floor-like".
+    static const f32     KF_WORLD_RESTITUTION_NORMAL_Y_THRESHOLD = 0.5f;   // unk_82FB7FF0 @82C5D3E0 <- flt_82001DA0
+    static const VecFloat KVF_WORLD_RESTITUTION_VALUE = { 1.10000002f, 1.10000002f, 1.10000002f, 1.10000002f };  // unk_82FB8260 @82C5D3B4 <- flt_82004A1C
 
     // The global "spy/debug world-contact mode" selector byte the two Do*WorldContactGeneration methods
     // branch on (asm: DoBodyPart `*(v77 - 23737)`, DoDetachedWheel `byte_82F2A347`): when set, the
