@@ -1395,6 +1395,12 @@ namespace BrnResource
         const char* const KPC_ENGINE_BUNDLE_FILE_FORMAT    = "Engines\\%08x.bundle";
         const char* const KPC_VEHICLE_RESOURCE_FORMAT      = "%s_%s";
         const char* const KPC_VEHICLE_RESOURCE_NOSEP_FORMAT = "%s%s";
+
+        // The wheel LOAD handler's own file literal (X360 aWheelsSSBndl @0x8266EE7C). Note
+        // it is NOT the vehicle spelling: forward slash, and a ".bndl" extension, matching
+        // WHEELS/WHE_<code>_GR.BNDL on disc. The wheel GET handler reuses
+        // KPC_VEHICLE_RESOURCE_FORMAT ("%s_%s", the shared aSS_13 literal).
+        const char* const KPC_WHEEL_FILE_FORMAT            = "Wheels/%s_%s.bndl";
     }
 
     // @ 0x82674670 -- the per-frame pump. Reconstructed slice: the GameData request drain
@@ -1682,7 +1688,7 @@ namespace BrnResource
         }
         else if (memcmp(lacName, "WHE_", 4) == 0)
         {
-            DeferredGameDataRequest("LoadWheel (0x8266EDB8, id 36)", lpSlot);
+            ProcessLoadWheelRequest(lpResourceInput, lpEvent, 36, liIndex);
         }
         else if (memcmp(lacName, "TVEH", 4) == 0)
         {
@@ -1759,7 +1765,7 @@ namespace BrnResource
         }
         else if (memcmp(lacName, "WHE_", 4) == 0)
         {
-            DeferredGameDataRequest("GetWheel (0x82670140, id 60)", lpSlot);
+            ProcessGetWheelRequest(lpResourceInput, lpEvent, 60, liIndex);
         }
         else if (memcmp(lacName, "TVEH", 4) == 0)
         {
@@ -1994,6 +2000,61 @@ namespace BrnResource
             2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
     }
 
+    // @ 0x8266EDB8 -- service a LOAD wheel request (dispatch id 36). The bodyshell's twin:
+    // hop 1 of the wheel-graphics fetch the race-car streamer drives ("STRM: Need to load
+    // WheelGfx" -> RequestInterface::LoadGameData("WHE_<code>")).
+    //
+    // Simpler than the vehicle handler in three ways the asm is explicit about:
+    //   * ONE asset set. `if (event->meType) assert` -- wheels only ever ship GRAPHICS, so
+    //     there is no PHYSICS->ATTRIBS remap and no SOUND leg. (The assert TEXT really does
+    //     say "vehicles"; the console's copy-paste, reproduced verbatim.)
+    //   * The suffix table is indexed with meType UNREMAPPED (`slwi r10, r9, 2` straight off
+    //     the request), so a valid request always picks KAPC_ASSET_SET_SUFFIXES[0] == "GR".
+    //   * The file name keeps the FULL id string including the "WHE_" prefix -- the disc
+    //     really holds WHEELS/WHE_51916650_GR.BNDL. (ProcessGetWheelRequest below drops the
+    //     prefix for the RESOURCE name; that asymmetry is the same one the vehicle pair has.)
+    //
+    // No reply is posted here: the completion rides ProcessInternalLoadBundleResponse's
+    // case 36, which chains into ProcessGetWheelRequest -- hence the response id is staged
+    // into the slot first, exactly as the vehicle LOAD does.
+    void GameDataModule::ProcessLoadWheelRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                 const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                 s32 liEventId, s32 liSlotIndex)
+    {
+        // X360 store order: the response id is staged FIRST (`stw r31, 0x28(r3)` before the
+        // CgsIDConvertToString call).
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        char lacWheelID[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacWheelID);
+
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for vehicles\n");   // X360 line 4010
+
+        const u32 luAssetSet = static_cast<u32>(lpEvent->meType);
+        const char* lpcSuffix =
+            (luAssetSet < (sizeof(KAPC_ASSET_SET_SUFFIXES) / sizeof(KAPC_ASSET_SET_SUFFIXES[0])))
+                ? KAPC_ASSET_SET_SUFFIXES[luAssetSet]
+                : KAPC_ASSET_SET_SUFFIXES[0];
+
+        char lacFileName[208];
+        CgsCore::SPrintf(lacFileName, 128, KPC_WHEEL_FILE_FORMAT, lacWheelID, lpcSuffix);
+
+        CgsResource::Events::LoadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.SetFileName(lacFileName);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId            = lpEvent->miPoolId;
+        lRequest.mbAllowFailiure     = lpEvent->mbFailFlag;
+        lRequest.mbUseHDCache        = false;   // X360 stores 0 here, like the vehicle path
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
     // @ 0x8266FDA0 -- service a GET vehicle request (dispatch id 50).
     //
     // Four asset sets, four RESOURCE names, all built from the id string WITHOUT its
@@ -2107,6 +2168,57 @@ namespace BrnResource
                              lacVehicleID + 4, "DeformationModel");
         }
 
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.miPoolId  = lpEvent->miPoolId;
+        lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+            CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacResourceName)))));
+        lRequest.mbCheckRefCount = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            4 /*AcquireResource*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x82670140 -- service a GET wheel request (dispatch id 60). Hop 2 of the wheel
+    // fetch: the bundle is now in the pool, so acquire the wheel's GraphicsSpec by name.
+    //
+    // ONE resource name, and it is built from the id string WITHOUT its "WHE_" prefix --
+    // the asm passes `var_D4`, i.e. the name buffer + 4, into the "%s_%s" format
+    // (`lacWheelID + 4` + "Graphics" -> "51916650_Graphics"). Same prefix asymmetry the
+    // vehicle pair has: the FILE keeps the prefix, the RESOURCE drops it.
+    //
+    // The reply rides ProcessInternalAcquireResponse with the response id staged at the
+    // slot (60), which is what finally binds RaceCarStreamer::maWheelGraphicsResources.
+    void GameDataModule::ProcessGetWheelRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                s32 liEventId, s32 liSlotIndex)
+    {
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        char lacWheelID[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacWheelID);
+
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for wheel\n");   // X360 line 4764
+
+        // [marked deviation] the X360 leaves lacResourceName UNINITIALISED when the (already
+        // asserted) meType is not GRAPHICS and hashes it anyway; terminate it so the host
+        // cannot walk off the stack down that dead branch.
+        char lacResourceName[208];
+        lacResourceName[0] = '\0';
+
+        if (lpEvent->meType == E_ASSETSET_GRAPHICS)
+        {
+            CgsCore::SPrintf(lacResourceName, 128, KPC_VEHICLE_RESOURCE_FORMAT,
+                             lacWheelID + 4, "Graphics");
+        }
+
+        // The X360 24-byte type-4 record: {mpUser = &mReceiverQueue, miEventId = the slot
+        // index, miPoolId = the request's pool, mResourceId = ID::HashString(name)}.
+        // mbCheckRefCount lies outside the X360 record; false per the committed convention.
         CgsResource::Events::AcquireResourceRequest lRequest;
         memset(&lRequest, 0, sizeof(lRequest));
         lRequest.mpUser    = &mReceiverQueue;
@@ -2835,7 +2947,7 @@ namespace BrnResource
                 mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
             }
             else
-                DeferredGameDataRequest("GetWheel after load (0x82670140, id 60)", lpSlot);
+                ProcessGetWheelRequest(lpResourceInput, &lpSlot->mEvent, 60, liSlotIndex);
             break;
 
         case 37:   // surface list

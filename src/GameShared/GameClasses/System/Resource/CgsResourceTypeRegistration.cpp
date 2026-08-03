@@ -34,6 +34,7 @@
 #include "SharedClasses/DataLists/VehicleListResourceType.h"                   // BrnResource::VehicleListResourceType (0x10005)
 #include "SharedClasses/DataLists/WheelListResourceType.h"                     // BrnResource::WheelListResourceType (0x10009)
 #include "SharedClasses/World/BrnVehicleGraphicsSpecResourceType.h"            // BrnVehicle::GraphicsSpecResourceType (0x10006)
+#include "SharedClasses/World/BrnWheelGraphicsSpecResourceType.h"              // BrnWheel::GraphicsSpecResourceType (0x1000A)
 #include "SharedClasses/Graphics/PlayerCarColoursResourceType.h"               // CgsResource::PlayerCarColoursResourceType (0x1001E)
 #include "GameShared/GameClasses/Containers/CgsDictionaryResourceType.h"       // CgsContainers::DictionaryResourceType<ICE::ICETakeData> (0x41)
 #include "SDKs/Packages/ICE/ICEData.hpp"                                       // ICE::ICETakeData (the dictionary's element type)
@@ -174,6 +175,19 @@ namespace CgsResource
         // load fine on the documented null-type path, so it is not a vehicle-specific gap.)
         static BrnVehicle::GraphicsSpecResourceType   sVehicleGraphicsSpec;  // 0x10006 (65542)
         TypeRegistry::Register(&sVehicleGraphicsSpec);
+        // The WHEEL graphics spec -- the exact twin of the gap above, and LOAD-BEARING for the
+        // same reason the vehicle one was. BundleLoader::LoadBundle gates ALL THREE fix-up
+        // passes on `mpResourceType != 0`, so an unregistered type does not merely skip FixUp:
+        // it skips ResolveImportsForEntry too. MEASURED over the shipped
+        // build/game/WHEELS/WHE_51916650_GR.BNDL (48 resources): the single 0x1000A resource
+        // (id 0xB289585E) carries TWO imports, at +0x04 and +0x08, and both target type-42
+        // CgsGraphics::Model resources inside the same bundle -- +0x04 being the wheel model
+        // RenderRaceCar's wheel block reads (`*(spec + 4)`). Unregistered, that slot stays
+        // serialised-null and the wheel has no model at all. The handler's own FixUp performs
+        // NO relocation (it only asserts the spec version), and the shipped payload's version
+        // word reads 1, so registering it is import resolution, not layout risk.
+        static BrnWheel::GraphicsSpecResourceType     sWheelGraphicsSpec;    // 0x1000A (65546)
+        TypeRegistry::Register(&sWheelGraphicsSpec);
         // ---- the ICE take dictionary (ICE take-runtime wave, 2026-08-01) --------------------
         // GameDataModule::PrepareICEList streams Cameras.bundle into pool 5 and acquires
         // "StandardICETakes" (id 0x0DC0EE8F == HashString("StandardICETakes")), whose type is
