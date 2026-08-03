@@ -44,6 +44,24 @@ namespace SceneManagerIO
         // @ 0x825BD8C0 -- write-lock tripwire, then the in-scene-update aggregate.
         InSceneUpdateInterface* GetInSceneUpdateInterface();   // +16, write
 
+        // DWARF CgsSceneManagerModuleIO.h:164/:462/:463 -- the nested alias and the plain
+        // (unlocked) accessor pair for the same embedded member.
+        // ⚠️ MOVED HERE 2026-08-03 (task #123) FROM A DUPLICATE DEFINITION OF THIS WHOLE STRUCT.
+        // SharedIO/CgsInputBufferUpdate.h used to define a SECOND, DIFFERENT
+        // CgsSceneManager::SceneManagerIO::InputBuffer_Update -- same namespace, same name, but
+        // WITHOUT the maStatusPad[15] that puts the interface on its asm-attested +16, and with
+        // this accessor pair instead of GetInSceneUpdateInterface(). The two never met in one TU
+        // until PhysicsModule embedded the deformation manager, at which point it was a hard
+        // C2011. This home wins because it is the asm-attested one (+16 and the out-of-line
+        // symbol @0x825BD8C0); the duplicate's layout was simply wrong, so folding it here also
+        // retires a latent wrong-offset bug on the deformation path. The accessor is kept under
+        // its DWARF name because that is what the two call sites in
+        // BrnDeformationManager_Contacts.cpp use, and it is carried over verbatim -- a plain
+        // getter with no lock tripwire, exactly as the retired header had it.
+        typedef InSceneUpdateInterface InSmSceneUpdateInterface;                                   // DWARF :164
+        const InSmSceneUpdateInterface* GetSceneUpdateInterface() const { return &mInSceneUpdateInterface; } // :462
+        InSmSceneUpdateInterface*       GetSceneUpdateInterface()       { return &mInSceneUpdateInterface; } // :463
+
     private:
         u8                     maStatusPad[15];           // +1..+15 (force +16)
         InSceneUpdateInterface mInSceneUpdateInterface;   // +16
