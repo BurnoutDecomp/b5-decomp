@@ -36,20 +36,23 @@
 //     seated 720 bytes early -- including mUsedTrafficVehicles, whose own comment here claims
 //     "X360 word base this+104552", an offset the declarations did not produce.
 //
-// (2) PARTLY CLOSED -- TWO ODR FORKS LEFT, was three. This header defines, at namespace scope in
+// (2) ONE ODR FORK LEFT, was four. This header used to define, at namespace scope in
 //     BrnPhysics::Vehicle, its own private copies of names that already have real definitions
-//     elsewhere in the SAME namespace:
-//        TrafficPhysics        -- `struct { u8 [5168]; }` here vs
-//                                 `class TrafficPhysics : public VehiclePhysics` in
-//                                 VehiclePhysics/TrafficPhysics.h
+//     elsewhere in the SAME namespace. Three are retired (PhysicalTrafficManagerDebugComponent,
+//     VehicleDriver, and -- 2026-08-03, the Construct wave -- TrafficPhysics). What is left:
 //        ArticulatedJointPool  -- the slice below vs the real class inside
 //                                 VehiclePhysics/BrnArticulatedJointPool.cpp
-//     Both also disagree on the CLASS-KEY (`struct` vs `class`), which MSVC folds into the mangled
-//     name of anything templated on them. Nothing has detonated only because
-//     BrnPhysicalTrafficManager.cpp is not mounted; including this header together with either of
-//     those two is a hard redefinition error today. De-forking THEM means pulling VehiclePhysics.h
-//     in here (both really do derive from VehiclePhysics), which is its own wave.
-//     (PhysicalTrafficManagerDebugComponent was the fourth fork, DE-FORKED 2026-08-03.)
+//     It also disagrees on the CLASS-KEY (`struct` vs `class`), which MSVC folds into the mangled
+//     name of anything templated on it.
+//
+//     ⚠️ THE OLD NOTE'S REASON FOR LEAVING THE TrafficPhysics FORK ALONE WAS WRONG, TWICE OVER. It
+//     said de-forking it "means pulling VehiclePhysics.h in here, which is its own wave" -- pulling
+//     VehiclePhysics.h in cost ONE include and broke nothing; and it said the real class is LARGER
+//     on the host "(pointer widening -- the same +176 drift this header already tabulates)". It is
+//     **SMALLER**: 4960 against the console's 5168, because several embedded sub-types are minimal
+//     owning slices (SimpleVehicleAttribs is 20 bytes against 240), and pointer widening does not
+//     come close to making that back. The whole-manager drift therefore moved +192 -> **-3968**, in
+//     the opposite direction the note predicted. MEASURED, not reasoned.
 //
 //     ⭐ VehicleDriver is DE-FORKED as of 2026-08-03 (the Construct-blocker wave), and the old
 //     note's reasoning was wrong about it: BrnVehicleDriver.h does NOT pull VehiclePhysics.h in
@@ -110,48 +113,51 @@
 //     S = 105632 leaves a 28-byte hole (impossible, the pad is < 16); S = 105664 overshoots.
 //     Two derivations, no shared assumption, same number.
 //
-//     ⇒ THE MEASURED HOST OVERRUN IS +192, NOT +2480:  105840 (host, measured with
-//       `char (*p)[sizeof(T)] = 1;`) - 105648 (X360, derived) == 192. That is small enough to CARRY
-//       as an explicit drift, which is what BrnVehicleManager.h now does -- it embeds this class by
-//       name at +44768 and adds KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER to every downstream offsetof
-//       assert. Do NOT "absorb" the 192 by shrinking a neighbouring pad: maNonPhysicalContacts is a
-//       real DWARF member with a derived size, and shrinking it would be inventing layout.
+//     ⇒ THE MEASURED HOST SIZE IS 101680, SO THE DRIFT IS **-3968** (2026-08-03, the de-fork wave;
+//       it was +192 while maFullTrafficPhysics was a byte-pinned `u8[5168]` stand-in). Both numbers
+//       measured with `char (*p)[sizeof(T)] = 1;`. BrnVehicleManager.h embeds this class by name at
+//       +44768 and adds KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER to every downstream offsetof assert.
+//       Do NOT "absorb" it by shrinking a neighbouring pad: maNonPhysicalContacts is a real DWARF
+//       member with a derived size, and shrinking it would be inventing layout.
 //
-//     ⭐ AND THE 192 IS ACCOUNTED FOR MEMBER BY MEMBER -- it is not a residue. Walking both layouts
-//     in parallel (X360 offset -> host offset, running delta in the last column):
-//        maFullTrafficPhysics       0      ->      0     +0    (u8[5168] x20, align 1 both)
-//        maTrafficEntityIDs         103360 -> 103360     +0    ⭐ still exact on the host
-//        maTrafficCarModelHandles   103440 -> 103440     +0
-//        mpaTrafficDrivers          103600 -> 103760   +160    (ResourceHandle 16 vs 8, x20)
-//        mArticulatedJointPool      103616 -> 103792   +176    (four pointers 4 -> 8)
-//        mfJointSwingBreakVelocity  104448 -> 104624   +176    (pool is u8[832] on both)
-//        maRecycledTrafficThisFrame 104464 -> 104640   +176
-//        mUsedTrafficVehicles       104552 -> 104728   +176    (Array 84 vs 88 costs -4, then the
-//                                                               BitArray's 8-alignment gives it back)
-//        mUnusedPotentialTrafficQ.  104624 -> 104800   +176    (nine BitArrays, 8 bytes on both)
-//        mu8GlobalToPhysical...     104688 -> 104872   +184    (EventQueue<s8,50> 72 vs 64)
-//        mavfLowestPointWorldSpace  105296 -> 105472   +176    (X360 needs 8 bytes of 16-align pad
-//                                                               after the 600-byte map; the host,
-//                                                               already at 105472, needs none)
-//        mDebugComponent            105616 -> 105792   +176
-//        end of class               105648 -> 105840   +192    (debug component 48 vs 32)
-//     Two of the twelve steps are alignment give-and-take rather than width, which is exactly why
-//     the naive width sum (160+16+8+16 = 200) does not match: it double-counts the Array's -4 and
-//     misses the map's -8 of pad. Every host number above is what the compiler produced.
+//     ⭐ AND IT IS ACCOUNTED FOR MEMBER BY MEMBER -- it is not a residue. Walking both layouts in
+//     parallel (X360 offset -> host offset, running delta in the last column):
+//        maFullTrafficPhysics       0      ->      0        0    (TrafficPhysics 4960 vs 5168, x20)
+//        maTrafficEntityIDs         103360 ->  99200    -4160    ⭐ MEASURED (compiler offsetof)
+//        maTrafficCarModelHandles   103440 ->  99280    -4160
+//        mpaTrafficDrivers          103600 ->  99600    -4000    (ResourceHandle 16 vs 8, x20: +160)
+//        mArticulatedJointPool      103616 ->  99632    -3984    (four pointers 4 -> 8: +16)
+//        mfJointSwingBreakVelocity  104448 -> 100464    -3984    (pool is u8[832] on both)
+//        maRecycledTrafficThisFrame 104464 -> 100480    -3984
+//        mUsedTrafficVehicles       104552 -> 100568    -3984    (Array 84 vs 88 costs -4, then the
+//                                                                 BitArray's 8-alignment gives it back)
+//        mUnusedPotentialTrafficQ.  104624 -> 100640    -3984    (nine BitArrays, 8 bytes on both)
+//        mu8GlobalToPhysical...     104688 -> 100712    -3976    (EventQueue<s8,50> 72 vs 64: +8)
+//        mavfLowestPointWorldSpace  105296 -> 101312    -3984    (X360 needs 8 bytes of 16-align pad
+//                                                                 after the 600-byte map; the host,
+//                                                                 already 16-aligned, needs none)
+//        mDebugComponent            105616 -> 101632    -3984
+//        end of class               105648 -> 101680    -3968    (debug component 48 vs 32: +16)
+//     The two ENDS of that column are compiler-measured (99200 and 101680); the interior is the
+//     previously-measured host column shifted by the array's -4160, which is forced rather than
+//     assumed: TrafficPhysics is 16-aligned and 99200 % 16 == 0, so nothing behind the array can
+//     re-align. Two of the steps are alignment give-and-take rather than width, which is why the
+//     naive width sum (160+16+8+16 = 200) never matched the +192 the old table ended on: it
+//     double-counts the Array's -4 and misses the map's -8 of pad.
 //
 //     ⚠️ ONE ASYMMETRY WORTH KNOWING, found by tamper-testing: the 600-vs-601 choice for
 //     mu8GlobalToPhysicalEntityIndexMap (asm `cmplwi 0x258` vs the DWARF's 601) does NOT change the
 //     X360 size -- 105288 and 105289 both round to the same 105296 -- but it DOES change the host
-//     size, because the host map starts 184 bytes later and 601 pushes the 16-aligned VecFloat array
-//     a whole slot out. So the derived X360 constant is robust to that choice and the host drift is
-//     not. If the map is ever re-sized to 601, KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER becomes 208.
+//     size, because the host map does not start on the same alignment phase as the console's and 601
+//     can push the 16-aligned VecFloat array a whole slot out. So the derived X360 constant is
+//     robust to that choice and the host drift is not; re-measure the drift if the map is re-sized.
 //
 // (5) WHY THE CONSTRUCTOR @0x827E42E8 IS DEFINED INLINE IN THIS HEADER (2026-08-03). VehicleManager
 //     now embeds this class BY VALUE, VehicleManager is embedded by value in PhysicsModule, and
 //     PhysicsModule's constructor is MOUNTED -- so the implicit constructor chain references this
 //     symbol from mounted code. Its only definition was in BrnPhysicalTrafficManager.cpp, which is
-//     NOT mounted (findings (2)'s two live ODR forks make mounting it a wave of its own), so the
-//     link failed with LNK2019.
+//     NOT mounted (finding (2)'s remaining ArticulatedJointPool fork makes mounting it a wave of its
+//     own), so the link failed with LNK2019.
 //     ⛔ THE REJECTED ALTERNATIVE was a link stub -- an empty
 //     `PhysicalTrafficManager::PhysicalTrafficManager() {}` in a stubs TU. That is the silent-drop
 //     failure class exactly: it links, it runs, and it leaves mpaTrafficDrivers / mpaTrafficVehicles
@@ -176,6 +182,11 @@
 // declared at namespace scope below. The real struct lives here and is 224 bytes, so the stride
 // this header depends on is unchanged -- see the note at the old fork's seat.
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h"
+// ⭐⭐ DE-FORKED 2026-08-03 (third one): `struct TrafficPhysics { void Construct(); u8[5168]; }` used
+// to be declared at namespace scope below. The real class -- and, transitively, VehiclePhysics and
+// SimpleVehiclePhysics -- is included here. See the note at the old fork's seat for why the mangled
+// name made this a correctness item and not a tidiness one.
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/TrafficPhysics.h"
 
 namespace BrnPhysics
 {
@@ -187,11 +198,16 @@ namespace Vehicle
 {
 
 // Forward decls for the PhysicalTrafficVehicle wave-8 method params (real homes elsewhere; only
-// pointers/refs are taken here so incomplete types suffice):
+// pointers/refs are taken here so incomplete types suffice).
+// ⚠️ CLASS-KEYS CORRECTED 2026-08-03 with the TrafficPhysics de-fork: including the real
+// TrafficPhysics.h drags in VehiclePhysics.h / BrnSimpleVehiclePhysics.h, which declare
+// VehicleAttribs and BrnPlayerDriverControls for real. The keys here said `struct VehicleAttribs`
+// against the real `class`, and `class BrnPlayerDriverControls` against the real `struct` -- a
+// C4099 apiece and, more to the point, a second reading of what those names are.
+// CreatePhysicalTrafficEvent and RaceCarPhysics keep their forward declarations (neither header is
+// pulled in here; only pointers/refs to them appear).
 struct CreatePhysicalTrafficEvent;   // spawn event -- SharedIO/BrnVehicleEvents.h
-struct VehicleAttribs;               // per-car attribs -- VehiclePhysics.h
 class  RaceCarPhysics;               // the checking race car -- RaceCarPhysics.h
-class  BrnPlayerDriverControls;      // per-frame driver controls -- SharedIO/BrnPlayerDriverControls.h
 
 // VecFloat: a single 16-byte VMX float lane (the DWARF spells the members below as VecFloat).
 // Its canonical home is rw::math::vpu; here it is the 16-byte 4-lane vector value used for the
@@ -200,11 +216,13 @@ class  BrnPlayerDriverControls;      // per-frame driver controls -- SharedIO/Br
 typedef rw::math::vpu::Vector4 VecFloat;
 
 // SimpleVehiclePhysics: the per-vehicle physics body, pointed at by mpVehicleBody and by
-// mpaSimpleVehiclePhysics. Its full layout/methods are the BrnSimpleVehiclePhysics TU; this
-// manager only takes/returns SimpleVehiclePhysics* (GetVehiclePhysics) and, in
-// ResetAboveGroundTestResults, reaches into its above-ground-test sub-objects (flagged in the
-// .cpp). Forward-declared here.
-struct SimpleVehiclePhysics;
+// mpaSimpleVehiclePhysics. This manager only takes/returns SimpleVehiclePhysics*
+// (GetVehiclePhysics) and, in ResetAboveGroundTestResults, reaches into its above-ground-test
+// sub-objects.
+// ⚠️ THE FORWARD DECLARATION HERE WAS `struct SimpleVehiclePhysics;` AGAINST THE REAL `class`
+// (BrnSimpleVehiclePhysics.h:99). It is gone: the real header now arrives with TrafficPhysics.h,
+// which is strictly better -- ResetAboveGroundTestResults can reach the sub-objects BY NAME through
+// a complete type instead of through the incomplete one it was flagged against.
 
 // ku8TotalMaxNumPhysicalTraffic: the pool capacity asserted throughout this TU
 // ("liVehicle < ku8TotalMaxNumPhysicalTraffic", upper bound 20).
@@ -228,24 +246,31 @@ const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;
 
 // ---- Minimal slices of un-homed sibling types this TU touches BY NAME ----------------
 
-// TrafficPhysics (BrnPhysicalTrafficManager.h:396, maFullTrafficPhysics[20]): the per-vehicle
-// full-physics block. Its real layout/methods are a future TU; the X360 ctor builds it with a
-// 0x1430-byte (5168) stride and three vtable slots plus several vector-constructor-iterator
-// sub-objects. FLAG: this is an opaque size-correct slice (5168 bytes) so the manager's
-// embedded array and the constructor's per-element walk reproduce; named sub-members will be
-// filled in when the TrafficPhysics TU lands.
-// ⚠️ ODR FORK -- see finding (2) in the banner. The real class is
-// `BrnPhysics::Vehicle::TrafficPhysics : public VehiclePhysics` in VehiclePhysics/TrafficPhysics.h.
-struct TrafficPhysics
-{
-    // @0x8262E980 (an .ida-exports HOLE -- no JSON for that address; DWARF TrafficPhysics.h:42
-    // gives the signature `void Construct();`). Called 20 times by
-    // PhysicalTrafficManager::Construct at a 0x1430 stride. DECLARE-ONLY: the body is owned by
-    // the TrafficPhysics TU.
-    void Construct();
-
-    u8 mOpaque[5168];   // 0x1430 - X360 per-element stride from the PhysicalTrafficManager ctor
-};
+// TrafficPhysics: the per-vehicle full-physics block (BrnPhysicalTrafficManager.h:396,
+// maFullTrafficPhysics[20]).
+//
+// ⭐⭐ DE-FORKED 2026-08-03 (the TrafficPhysics::Construct wave). This slot used to hold a second,
+// opaque `struct TrafficPhysics { void Construct(); u8 mOpaque[5168]; };` at namespace scope in
+// BrnPhysics::Vehicle -- a redefinition of the class VehiclePhysics/TrafficPhysics.h already owns,
+// disagreeing with it on the class-key AND on the bases. The real header is included above.
+//
+// WHY IT HAD TO GO, and why it was not tidiness: the mangled name
+// `?Construct@TrafficPhysics@Vehicle@BrnPhysics@@QEAAXXZ` encodes neither the class-key nor the base
+// list, so the slice's `void Construct();` and the real class's `void Construct();` are THE SAME
+// SYMBOL. A body written against the real class would have linked against this call site silently,
+// with the array strided by the console's 5168 while the real host class is a different size --
+// writing mRandom (host +0x1330) into the neighbouring element's storage on every one of the twenty
+// iterations. This is exactly the trade BrnVehicleManager.h refused for maRaceCarVehicles when it
+// folded that array from a byte-pinned record to the real RaceCarPhysics[8]; the same fold, for the
+// same reason, is done here.
+//
+// WHAT IT COSTS, stated rather than hidden: sizeof(TrafficPhysics) is 4960 on the host against the
+// X360's 5168 (the reconstruction carries minimal owning slices for several embedded sub-types --
+// SimpleVehicleAttribs is 20 bytes against the console's 240 -- deliberately, per the project rule
+// that unrecovered interiors are never faked as padding). So maFullTrafficPhysics[20] is
+// 20 * 208 == 4160 bytes shorter here and every member behind it moves DOWN by that much. That is
+// carried explicitly in finding (4) below and in BrnVehicleManager.h's
+// KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, never absorbed into a neighbouring pad.
 
 // VehicleDriver: the AI/driver block, pointed at by mpaTrafficDrivers (stride 224 / 0xE0 from
 // GetTrafficDriver).
@@ -447,12 +472,13 @@ public:
     // CgsCollision::BaseCollisionGenerator sub-arrays; then sets the unused-potential-traffic
     // queue head sentinel (*(this+104544) = -1) and the debug-component vtable (*(this+105616)).
     //
-    // FLAG (un-homed): the per-element TrafficPhysics construction (its vtables + the
-    // vector-constructor-iterator sub-object init) bottoms out in the TrafficPhysics +
-    // CgsSceneManager::CgsCollision::BaseCollisionGenerator TUs, which are NOT homed. We cannot
-    // reproduce those placement-new walks against the opaque TrafficPhysics slice without
-    // fabricating its layout, so the per-element construction is left to those TUs. The two
-    // observable, name-bearing inits this TU CAN reproduce are the member initialisers below.
+    // ⭐ UPDATED 2026-08-03 (the de-fork wave). maFullTrafficPhysics is now a real
+    // `TrafficPhysics[20]`, so the compiler's own implicit default-initialisation of that array IS
+    // the per-element vtable walk the X360 constructor does -- it is no longer "left to an un-homed
+    // TU", it happens because the member is the real type. What remains genuinely un-homed is the
+    // CgsSceneManager::CgsCollision::BaseCollisionGenerator vector-constructor-iterator run over
+    // that class's embedded sub-arrays; those sub-objects are not modelled in the reconstruction, so
+    // there is nothing to iterate and nothing is faked in their place.
     //
     // ⭐⭐ MOVED HERE (INLINE) FROM BrnPhysicalTrafficManager.cpp, 2026-08-03 (the un-pin wave),
     // VERBATIM -- the eight member initialisers are byte-for-byte the ones that were in the .cpp
