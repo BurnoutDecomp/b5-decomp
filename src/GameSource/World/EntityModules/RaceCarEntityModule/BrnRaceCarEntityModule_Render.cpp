@@ -489,7 +489,10 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                 {
                     liWheelDiagCode = 3 + liInstanceCount;
 
-                    // [FLAG PC data gap] The console's dev assert here is
+                    // ================================================================
+                    // ⛔ THE CONSOLE'S OWN GATE, RE-INSTATED (2026-08-03, task 118).
+                    //
+                    // The console's check here is
                     //   CGS_ASSERT(lpWheelModel->GetFlag(E_FLAG_MODEL_USES_INSTANCE_SHADER),
                     //              "lpWheelModel->GetFlag(...)")
                     // and on the ported WHE_51916650_GR wheel model it FAILS: the model's
@@ -497,30 +500,53 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                     // header -- mu8NumStates (+0x12) and mu8NumRenderables (+0x10) in the same
                     // word both read correctly (DoesStateExist and GetRenderable succeed on
                     // this very model), which a byte-reversed word could not do.
-                    // It is a NON-GATING assert on the console (it only says "this model was
-                    // supposed to be authored with the instancing vertex shader") and it has no
-                    // effect on this build at all, because the PC path renders through the
-                    // fallback shader and never binds the instancing program. Kept as a
-                    // one-shot report carrying the MEASURED byte rather than a per-frame
-                    // assert storm -- 475 asserts in one run when it was left as-is.
-                    // RESTORE the assert once the wheel model's flags byte is understood.
+                    //
+                    // ⚠️⚠️ The wheel wave downgraded that assert to a one-shot log on the
+                    // reasoning that it "is a NON-GATING assert on the console ... and it has
+                    // no effect on this build at all". THAT REASONING WAS WRONG IN EFFECT, and
+                    // submitting the draw anyway is what destroyed the rendered world for a
+                    // full day. MEASURED, not inferred (task 118, dumped frames, bisected to
+                    // this commit):
+                    //   * with the draw submitted as authored (instanceCount == 4) the frame is
+                    //     screen-filling dark shards from the junkyard chase camera;
+                    //   * with the SAME draw submitted at instanceCount == 1 -- i.e. one copy,
+                    //     under shader constant 0, the car body's own KNOWN-GOOD world matrix
+                    //     that renders the bodyshell correctly in the same frame -- this
+                    //     renderable draws as a single distorted SPIKE through the car's roof.
+                    //     So the matrices are not the fault: THE WHEEL RENDERABLE'S GEOMETRY
+                    //     IS NOT DRAWABLE AS LOADED. Instancing it four times just turns one
+                    //     spike into four screen-filling ones.
+                    //   * a DrawRenderable::Interpret probe over every expansion candidate in a
+                    //     whole run shows this renderable (7 meshes, bounding sphere r 0.837,
+                    //     lists 19/20) is the ONLY object ever expanded -- no world object is
+                    //     touched, so the instancing shim itself is behaving.
+                    //
+                    // So the console's flag is doing exactly the job it exists for: it says
+                    // "this model is fit for the instanced wheel path", and on this data it is
+                    // not. Honour it. This is a DATA gap, not a code one -- the moment the
+                    // ported wheel model carries the flag the wheels submit again with no
+                    // further change here, and the frame is the check that proves it.
+                    // ⛔ Do NOT re-enable this draw by deleting the gate; fix the wheel model.
+                    // ================================================================
+                    if ( !lpWheelModel->GetFlag( CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER ) )
                     {
+                        liWheelDiagCode = 9;   // "gated: model not fit for the instanced path"
                         static bool sbLoggedInstanceShaderFlag = false;
-                        if ( !sbLoggedInstanceShaderFlag
-                             && !lpWheelModel->GetFlag( CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER )
-                             && CgsDev::Log::gpDebugPrint != 0 )
+                        if ( !sbLoggedInstanceShaderFlag && CgsDev::Log::gpDebugPrint != 0 )
                         {
                             sbLoggedInstanceShaderFlag = true;
                             *CgsDev::Log::gpDebugPrint
-                                << "[racecar-wheels] wheel model does NOT carry"
-                                   " E_FLAG_MODEL_USES_INSTANCE_SHADER (console asserts here);"
+                                << "[racecar-wheels] WHEEL DRAW GATED OFF: model does not carry"
+                                   " E_FLAG_MODEL_USES_INSTANCE_SHADER (the console asserts here);"
                                    " renderables " << lpWheelModel->GetNumRenderables()
                                 << " states " << lpWheelModel->GetNumLods()
                                 << " version " << lpWheelModel->GetVersionNumber()
-                                << " [FLAG PC data gap]\n";
+                                << " -- its geometry draws as spikes, see the banner"
+                                   " [FLAG PC data gap]\n";
                         }
                     }
-
+                    else
+                    {
                     const CgsGraphics::Renderable* lpWheelRenderable =
                         lpWheelModel->GetRenderable( leWheelLOD );
 
@@ -546,6 +572,7 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                         0xFFu, 0u, liInstanceCount, 0u );
 
                     lpWheelList->Submit( 0, lpDispatchFrame->GetBin().EndPacket() );
+                    }
                 }
             }
         }
@@ -563,7 +590,8 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
             *CgsDev::Log::gpDebugPrint
                 << "[racecar-wheels] RenderRaceCar wheel block outcome " << liWheelDiagCode
                 << " (0 no resource, 1 no model, 2 no LOD state, 3 no wheel exists, "
-                   "4..8 submitted with 1..5 instances); wheels-to-render "
+                   "4..8 submitted with 1..5 instances, 9 GATED -- model lacks "
+                   "E_FLAG_MODEL_USES_INSTANCE_SHADER); wheels-to-render "
                 << giWheelsToRender << "\n";
         }
     }
