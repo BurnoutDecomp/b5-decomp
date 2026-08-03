@@ -104,18 +104,24 @@ namespace Deformation
 		// The continuous-collision minimum speed (asm-visible literal `v11[0] = 6.0`).
 		static const f32 KF_MIN_SWEPT_SPHERE_SPEED = 6.0f;
 
-		// FLAGGED-0 PLACEHOLDER for the swept-sphere speed-scale vector (&unk_83017FE0). The asm splats
-		// lane 0 of (mfSpeedMPH-vector * this) before the > 6.0 test. Honest zero (NEVER fabricated).
-		static const Vector4 KVF_SWEPT_SPHERE_SPEED_SCALE = { 0.0f, 0.0f, 0.0f, 0.0f };
+		// ⭐⭐ RECOVERED 2026-08-03, and this one identifies ITSELF. unk_83017FE0 is a static-init splat
+		// (@0x82C6D160) of flt_82F31928, and flt_82F31928 is 0.447039992 -- the MPH->m/s constant this
+		// image uses in ~300 places. So the "speed-scale vector" is a UNIT CONVERSION: the asm splats
+		// lane 0 of (mfSpeedMPH * 0.44704), i.e. the speed in m/s, and compares it against
+		// KF_MIN_SWEPT_SPHERE_SPEED = 6.0 just above -- 6 m/s, not 6 MPH. The two constants only make
+		// sense together, and they agree.
+		static const Vector4 KVF_SWEPT_SPHERE_SPEED_SCALE = { 0.447039992f, 0.447039992f, 0.447039992f, 0.447039992f };
 
-		// FLAGGED-0 PLACEHOLDER for the per-axis deformed-bbox-vs-limit tolerance vector (&unk_82FB9B30).
-		// Honest zero (NEVER fabricated); the comparison shape/strides are exact.
-		static const Vector4 KVF_DEFORMED_BBOX_TOLERANCE = { 0.0f, 0.0f, 0.0f, 0.0f };
+		// unk_82FB9B30 <- flt_82002138 = 0.01, static-init splat @0x82C5DAA0.
+		static const Vector4 KVF_DEFORMED_BBOX_TOLERANCE = { 0.00999999978f, 0.00999999978f, 0.00999999978f, 0.00999999978f };
 
-		// FLAGGED-0 PLACEHOLDER for the aligned-deformed-box half-extent shrink vector (&unk_82FB95E0;
-		// the DWARF-named KVF_CAR_BBOX_SHRINK, a namespace-scope rodata not in the exports). Honest zero
-		// (NEVER fabricated) -> the shrink term vanishes; the half-extent shape is exact.
-		static const Vector4 KVF_CAR_BBOX_SHRINK = { 0.0f, 0.0f, 0.0f, 0.0f };
+		// ⭐ RECOVERED 2026-08-03. unk_82FB95E0's initialiser @0x82C5B798 is NOT a splat -- it builds a
+		// genuinely PER-AXIS row from three different .rdata scalars: flt_82004014 (0.1),
+		// flt_82004740 (0.3) and flt_820047C8 (0.05), with lane w left at 0. Writing the usual splat here
+		// would have shrunk all three axes by the same amount, which is exactly what this constant does
+		// not do -- the DWARF name KVF_CAR_BBOX_SHRINK describes a car-shaped box, and the numbers are
+		// car-shaped too (deepest shrink along the middle axis).
+		static const Vector4 KVF_CAR_BBOX_SHRINK = { 0.100000001f, 0.300000012f, 0.0500000007f, 0.0f };
 
 		// VehiclePhysics::mfSpeedMPH -- `*(vehiclePhysics + 0x6C0)`. Private in the homed VehiclePhysics
 		// (no public getter, header not editable here); read off the asm-proven console offset.
