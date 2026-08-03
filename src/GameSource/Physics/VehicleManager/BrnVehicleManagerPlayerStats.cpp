@@ -59,14 +59,16 @@ namespace Vehicle
     //
     // Copies the per-frame player-car stats action (a pointer to >= 6 floats) into the manager's
     // player-stats block + the player car's record. The X360 layout of the source action:
-    //   [0] -> maPlayerCarStats[0]              (asm v3[43082] == class +172328)
-    //   [1] -> maPlayerCarStats[1]              (asm v3[43083] == +172332); ALSO, treated as an INTEGER,
-    //          sign-extended and * 0.1f -> mfShowtimePlayerCarStrength (asm v3[43080] == +172320)
-    //   [2] -> maPlayerCarStats[2]              (asm v3[43084] == +172336)
-    //   [3] -> maPlayerCarStats[3]              (asm v3[43085] == +172340)
-    //   [4] -> mfShowtimePlayerCarDamageLimit   (asm v3[43081] == +172324)
-    //   [5] -> maPlayerCarStats[4]              (asm v3[43086] == +172344); ALSO into the player car's
+    //   [0] -> miCarSpeed                (asm v3[43082] == class +172328)
+    //   [1] -> miCarStrength             (asm v3[43083] == +172332); ALSO, treated as an INTEGER,
+    //          sign-extended and * 0.1f -> mfPlayerStatStrength (asm v3[43080] == +172320)
+    //   [2] -> miCarControl              (asm v3[43084] == +172336)
+    //   [3] -> miCarBoost                (asm v3[43085] == +172340)
+    //   [4] -> mfPlayerStatDamageLimit   (asm v3[43081] == +172324)
+    //   [5] -> meCarType                 (asm v3[43086] == +172344); ALSO into the player car's
     //          record at in-record +5084 (asm stw r10, 0x1B1C(5216*playerIdx + this)).
+    // The five destinations named here are int32/enum in the DWARF (:997-:1001), which is why the
+    // "treated as an INTEGER" note on [1] was needed -- the whole payload is integers.
     // -------------------------------------------------------------------------------------------
     void VehicleManager::ApplyPlayerStats(const f32* lpSendCarStatsAction)
     {
@@ -76,12 +78,21 @@ namespace Vehicle
         CGS_ASSERT(liPlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT && liPlayerIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID,
                    "( mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( mePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )");
 
-        // The raw stats block (asm writes [0],[1],[2],[3],[5] into the five-float block).
-        maPlayerCarStats[0] = lpSendCarStatsAction[0];
-        maPlayerCarStats[1] = lpSendCarStatsAction[1];
-        maPlayerCarStats[2] = lpSendCarStatsAction[2];
-        maPlayerCarStats[3] = lpSendCarStatsAction[3];
-        maPlayerCarStats[4] = lpSendCarStatsAction[5];
+        // The raw stats block (asm writes [0],[1],[2],[3],[5] as WORDS).
+        // ⚠️ CORRECTED 2026-08-03: the destination used to be modelled as `f32 maPlayerCarStats[5]`.
+        // The DWARF names these `int32_t miCarSpeed/miCarStrength/miCarControl/miCarBoost` +
+        // `BrnResource::ECarType meCarType`, and VehicleManager::Construct proves the types at the
+        // opcode level (it seeds +172320/+172324 with `stfsx` and +172328..+172344 with `stwx`).
+        // The X360 copy is a raw `lwz`/`stw` word move either way, so these stay BIT-PRESERVING
+        // memcpys rather than float->int conversions, which would change the bytes.
+        // FLAG: the `const f32*` parameter type is itself the thing to revisit -- the action's
+        // payload is integers, which is why the strength computation below already had to
+        // bit-reinterpret element [1]. Left alone here so no caller signature moves in a layout wave.
+        std::memcpy(&miCarSpeed,    &lpSendCarStatsAction[0], sizeof(miCarSpeed));
+        std::memcpy(&miCarStrength, &lpSendCarStatsAction[1], sizeof(miCarStrength));
+        std::memcpy(&miCarControl,  &lpSendCarStatsAction[2], sizeof(miCarControl));
+        std::memcpy(&miCarBoost,    &lpSendCarStatsAction[3], sizeof(miCarBoost));
+        std::memcpy(&meCarType,     &lpSendCarStatsAction[5], sizeof(meCarType));
 
         // The player car's per-record copy of stat [5] (asm: stw into 5216*playerIdx + in-record +5084).
         maRaceCarVehicles[liPlayerIndex].mfPlayerBoostStrengthStat = lpSendCarStatsAction[5];
@@ -92,10 +103,10 @@ namespace Vehicle
         s32 liStatOneAsInt;
         const f32 lfStatOne = lpSendCarStatsAction[1];
         std::memcpy(&liStatOneAsInt, &lfStatOne, sizeof(liStatOneAsInt));
-        mfShowtimePlayerCarStrength = static_cast<f32>(liStatOneAsInt) * KF_STAT_STRENGTH_SCALE;
+        mfPlayerStatStrength = static_cast<f32>(liStatOneAsInt) * KF_STAT_STRENGTH_SCALE;
 
         // The showtime damage limit: stat [4] verbatim.
-        mfShowtimePlayerCarDamageLimit = lpSendCarStatsAction[4];
+        mfPlayerStatDamageLimit = lpSendCarStatsAction[4];
     }
 
     // -------------------------------------------------------------------------------------------
@@ -162,20 +173,22 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     // HasRaceCarHadRecentImpact  @0x825B4EB8
     //
-    // Recency throttle: true when the per-car "last attacker / recent-impact" slot (read as a float)
-    // is > 0 (asm: load *(4*(idx+42921)+this) as a float, fcmpu > 0.0). The slot is maRaceCarLastAttacker
-    // @ +171684 (4*(idx+42921) == 4*idx + 171684); the X360 reinterprets that word as a float here.
+    // Recency throttle: true while this car's post-impact cooldown is still running, i.e. while
+    // mafNoImpactTimeSeconds[idx] > 0.0f (asm: load *(4*(idx+42921)+this) as a float, fcmpu > 0.0;
+    // 4*(idx+42921) == 4*idx + 171684).
+    // ⭐ SIMPLIFIED 2026-08-03. This body used to read the slot as an s32 and memcpy it to a float,
+    // because the member was modelled as `s32 maRaceCarLastAttacker[8]`. That workaround was the
+    // symptom, not the fix: DWARF :925 names the array `mafNoImpactTimeSeconds` and types it
+    // float32_t[8], and HandleRaceCarRaceCarContact seeds it with `lfsx`/`stfsx` from the f32
+    // tuning constant mfMinSecondsBetweenImpacts. The slot was always a float; only the model was
+    // wrong. Same bytes, one fewer reinterpretation.
     // -------------------------------------------------------------------------------------------
     bool VehicleManager::HasRaceCarHadRecentImpact(s32 liActiveRaceCarIndex)
     {
         CGS_ASSERT(liActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
         CGS_ASSERT(liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
 
-        // The X360 loads the maRaceCarLastAttacker word as a float and tests > 0.0.
-        f32 lfRecentImpact;
-        const s32 liSlotWord = maRaceCarLastAttacker[liActiveRaceCarIndex];
-        std::memcpy(&lfRecentImpact, &liSlotWord, sizeof(lfRecentImpact));
-        return lfRecentImpact > 0.0f;
+        return mafNoImpactTimeSeconds[liActiveRaceCarIndex] > 0.0f;
     }
 
     // -------------------------------------------------------------------------------------------
@@ -230,7 +243,7 @@ namespace Vehicle
         CGS_ASSERT(luShowtimeBehaviour < 3u,
                    "leShowtimeBehaviour >= 0 && leShowtimeBehaviour < BrnGameState::E_SHOWTIME_MODE_COUNT");
 
-        muShowtimeBehaviour = luShowtimeBehaviour;   // asm: stwx @ +172456
+        meShowtimeBehaviour = luShowtimeBehaviour;   // asm: stwx @ +172456
     }
 
     // -------------------------------------------------------------------------------------------
@@ -243,8 +256,8 @@ namespace Vehicle
     // ASM ARG MAPPING: the call is __thiscall RaceCarPhysics::SetPlayerVehicleInShowtime(
     //   this = 5216*playerIdx + this + 1856 == &maRaceCarVehicles[playerIdx],
     //   r4   = lbInShowtime (the char arg a2),
-    //   f1   = *(this+172320) == mfShowtimePlayerCarStrength,
-    //   f2   = *(this+172324) == mfShowtimePlayerCarDamageLimit ).
+    //   f1   = *(this+172320) == mfPlayerStatStrength,
+    //   f2   = *(this+172324) == mfPlayerStatDamageLimit ).
     // The Hex-Rays `a5` parameter is a SIMD-spill artefact and is not a real argument.
     // -------------------------------------------------------------------------------------------
     void VehicleManager::SetPlayerCarToShowtimeMode(bool lbInShowtime)
@@ -256,8 +269,8 @@ namespace Vehicle
         RaceCarPhysics* const lpPlayerCar =
             reinterpret_cast<RaceCarPhysics*>(&maRaceCarVehicles[liPlayerIndex]);
         lpPlayerCar->SetPlayerVehicleInShowtime(lbInShowtime,
-                                                mfShowtimePlayerCarStrength,
-                                                mfShowtimePlayerCarDamageLimit);
+                                                mfPlayerStatStrength,
+                                                mfPlayerStatDamageLimit);
 
         gbPlayerCarInShowtime = lbInShowtime;   // asm: stb r29, byte_82FB7DF2
     }
@@ -271,10 +284,14 @@ namespace Vehicle
         static_assert(offsetof(VehicleManager, mHiddenRaceCars)          == 44704,  "mHiddenRaceCars (asm +44704)");
         static_assert(offsetof(VehicleManager, mauNetworkCarHiddenFramesRemaining)               == 44736,  "mauNetworkCarHiddenFramesRemaining (asm base 44736)");
         static_assert(offsetof(VehicleManager, mau8GlobalToPhysicalEntityIndexMap) == 149456, "global->physical map (asm +149456)");
-        static_assert(offsetof(VehicleManager, mfShowtimePlayerCarStrength)     == 172320, "mfShowtimePlayerCarStrength (asm +172320)");
-        static_assert(offsetof(VehicleManager, mfShowtimePlayerCarDamageLimit)  == 172324, "mfShowtimePlayerCarDamageLimit (asm +172324)");
-        static_assert(offsetof(VehicleManager, maPlayerCarStats)                == 172328, "maPlayerCarStats (asm base 172328)");
-        static_assert(offsetof(VehicleManager, muShowtimeBehaviour)             == 172456, "muShowtimeBehaviour (asm +172456)");
+        static_assert(offsetof(VehicleManager, mfPlayerStatStrength)     == 172320, "mfPlayerStatStrength (asm +172320)");
+        static_assert(offsetof(VehicleManager, mfPlayerStatDamageLimit)  == 172324, "mfPlayerStatDamageLimit (asm +172324)");
+        static_assert(offsetof(VehicleManager, miCarSpeed)               == 172328, "miCarSpeed (asm +172328)");
+        static_assert(offsetof(VehicleManager, miCarStrength)            == 172332, "miCarStrength (asm +172332)");
+        static_assert(offsetof(VehicleManager, miCarControl)             == 172336, "miCarControl (asm +172336)");
+        static_assert(offsetof(VehicleManager, miCarBoost)               == 172340, "miCarBoost (asm +172340)");
+        static_assert(offsetof(VehicleManager, meCarType)                == 172344, "meCarType (asm +172344)");
+        static_assert(offsetof(VehicleManager, meShowtimeBehaviour)             == 172456, "meShowtimeBehaviour (asm +172456)");
     }
 
     // -------------------------------------------------------------------------------------------

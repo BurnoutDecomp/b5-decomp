@@ -108,7 +108,7 @@ namespace Vehicle
         const s32 liIndexB = static_cast<s32>((lContact.mEntityIdB.muValue >> 10) & 0x3FFF);   // asm v44
 
         // Master gate: the whole routine is a no-op unless takedowns are enabled. asm v45 = *(v39+171464).
-        if (!mbTakedownsEnabled)
+        if (!mbSlamsAndShuntsOn)
             return;   // asm: goto LABEL_92
 
         // Both cars must be live in the mUsedRaceCars bitset (asm reads the 64-bit word and tests the
@@ -219,9 +219,9 @@ namespace Vehicle
             //   if (*(v39+171868) < 1.0) { if (*(v39+171900) < 0.8) skip; else type=8 } else type=7.
             bool lbPushGrind = true;
             s32 liGrindType = 7;
-            if (mfGrindingThresholdA < 1.0f)
+            if (mafPlayerGrindingOtherDurationSeconds[7] < 1.0f)
             {
-                if (mfGrindingThresholdB < 0.80000001f)
+                if (mafOtherGrindingPlayerDurationSeconds[7] < 0.80000001f)
                     lbPushGrind = false;   // asm: goto LABEL_43 (no grind event)
                 else
                     liGrindType = 8;
@@ -277,11 +277,16 @@ namespace Vehicle
         if (!lbEitherCrashing && !lbProtectedPlayerGrace)
         {
             // The value the asm names v248 is the +0xF4 lane == meImpactType (NOT meImpactSitutation
-            // @+0x108 -- the stack offset 0x1F4-0x100 == 0xF4 proves it). It is read both as a float
-            // (== 0.0 test) and as an int ({1,3,5}/{2,4,6} slam/shunt select). v136 = v248 is the value
-            // stamped into maRaceCarLastImpactMagnitude.
-            const EImpactType leImpactType = lInfo.meImpactType;          // asm v248 (@+0xF4)
-            const f32 lfImpactValue = static_cast<f32>(static_cast<s32>(leImpactType)); // asm v136 = v248
+            // @+0x108 -- the stack offset 0x1F4-0x100 == 0xF4 proves it).
+            // ⚠️ CORRECTED 2026-08-03: this used to read "it is read both as a float (== 0.0 test)
+            // and as an int", and stamped `(f32)(s32)leImpactType` into the array. Both halves were
+            // wrong, and they were wrong because the destination member was mis-typed as f32[8]:
+            //   0x82643908  lwz   r23, var_14C(r1)      <- the type, loaded as a WORD
+            //   0x8264390C  cmpwi cr6, r23, 0           <- an INTEGER compare, not fcmpu vs 0.0
+            //   0x826439E8  stwx  r23, r11, r25         <- stored as a WORD (r11 == 4*(idx+42911))
+            // Hex-Rays only rendered it as a float because IDA had the slot typed float. For
+            // E_IMPACT_TYPE == 3 the old line wrote 0x40400000 (3.0f) where the console writes 3.
+            const EImpactType leImpactType = lInfo.meImpactType;          // asm v248 (@+0xF4) == r23
 
             // asm flow: if (v248 == 0.0) goto LABEL_84 (post-pass only -- no situation, no bookkeeping).
             if (leImpactType != E_IMPACT_NONE)
@@ -297,12 +302,18 @@ namespace Vehicle
                     const s32 liOther = static_cast<s32>(lInfo.meVictimActiveRaceCarIndex);   // asm v114
                     if (liOther >= 0 && liOther < 8)
                     {
-                        maRaceCarLastImpactMagnitude[liOther] = lfImpactValue;      // asm *(4*(v114+42911)+v39) = v136
-                        maRaceCarLastAttacker[liOther]        = miAttackerToRecord; // asm *(4*(v114+42921)+v39) = *(v39+171540)
-                        maRaceCarTakenDownThisFrame[liOther]  = 1;                  // asm *(v114+v39+171676) = 1
+                        // asm 0x826439E8 `stwx r23, r11, r25`, r11 == 4*(idx+42911) == 4*idx+171644.
+                        maeImpactType[liOther] = leImpactType;
+                        // asm 0x826439EC/F0 `lfsx f0, r25, r9` (r9 == 171540) then `stfsx f0, r10, r25`
+                        // -- a FLOAT load and a FLOAT store, which is what proves both ends of this
+                        // copy are f32: it arms the victim's impact cooldown from the tuning constant.
+                        mafNoImpactTimeSeconds[liOther] = mfMinSecondsBetweenImpacts;
+                        // asm 0x826439FC `stbx r10, r8, r7`, r7 == 171676, r10 == 1.
+                        mauImpactScore[liOther] = 1;
 
-                        // Set the victim's bit in the taken-down bitset (asm: v141 = v39 + 171736).
-                        mTakenDownRaceCarsBitArray.SetBit(static_cast<u32>(liOther));
+                        // Set the victim's bit (asm: v141 = v39 + 171736). ⚠️ DWARF :934 names this
+                        // mPlayerWonImpact, not a taken-down set -- see the header FLAG.
+                        mPlayerWonImpact.SetBit(static_cast<u32>(liOther));
 
                         // Driver-feedback bytes (asm: *(a32+27648) |= ...; *(a32+27649) = ...).
                         if (lpManagerOutputInterface)
@@ -330,10 +341,10 @@ namespace Vehicle
                 const s32 liType = static_cast<s32>(lInfo.meImpactType);   // asm re-reads v248
                 if (liType == 1 || liType == 3 || liType == 5)
                 {
-                    if (mbSlamShuntPhysicsEnabled)
+                    if (mbAllowSlamsAndShuntsEffectsForRivals)
                         ApplySlam(&lInfo);
                 }
-                else if ((liType == 2 || liType == 4 || liType == 6) && mbSlamShuntPhysicsEnabled)
+                else if ((liType == 2 || liType == 4 || liType == 6) && mbAllowSlamsAndShuntsEffectsForRivals)
                 {
                     ApplyShunt(&lInfo);
                 }
@@ -424,12 +435,12 @@ namespace Vehicle
     // The takedown COMMIT routine the impact classifiers call once a takedown is decided. It:
     //   1. decodes the victim and aggressor EntityIds to active-car indices (the recurring
     //      `(muValue >> 10) & 0x3FFF` packing used TU-wide);
-    //   2. does nothing unless takedowns are enabled (the master gate at mbTakedownsEnabled);
+    //   2. does nothing unless takedowns are enabled (the master gate at mbSlamsAndShuntsOn);
     //   3. crashes the victim via SetRaceCarCrashing -- UNLESS the victim is already in the fatal
     //      crash state -- forwarding the collision normal + contact point, the four output/
     //      deformation interfaces, and the takedown type (lfNormalStressSq is NOT forwarded);
     //   4. if the victim is the local player, zeroes the aggressor's per-car recovery timer;
-    //   5. records the aggressor (via miAttackerToRecord) as the victim's last attacker, and marks
+    //   5. records the aggressor (via mfMinSecondsBetweenImpacts) as the victim's last attacker, and marks
     //      the aggressor's "taken down this frame" status byte.
     //
     // INDEXING NOTE (asm-authoritative, surprising): the car-type check and the last-attacker
@@ -462,7 +473,7 @@ namespace Vehicle
         const s32 liAggressorActiveRaceCarIndex = static_cast<s32>((lAggressorEntityId.muValue >> 10) & 0x3FFF);
 
         // Master gate: do nothing at all unless takedowns are currently enabled.
-        if (!mbTakedownsEnabled)
+        if (!mbSlamsAndShuntsOn)
             return;
 
         // Crash the victim, unless it is a NETWORK car (the X360 `!= 2`; see the maeRaceCarTypes
@@ -485,7 +496,7 @@ namespace Vehicle
             maRaceCarVehicles[liAggressorActiveRaceCarIndex].mfRecoveryTimer = 0.0f;
 
         // Record who took the victim down, and flag the aggressor as having scored a takedown this frame.
-        maRaceCarLastAttacker[liVictimActiveRaceCarIndex]   = miAttackerToRecord;
+        mafNoImpactTimeSeconds[liVictimActiveRaceCarIndex]   = mfMinSecondsBetweenImpacts;
         maRaceCarDrivers[liAggressorActiveRaceCarIndex].mControls.mbIsInvulnerableToVehicles = true;
     }
 
@@ -549,8 +560,8 @@ namespace Vehicle
 
         if ((lbInvulnerableToVehicles && (luCauseSubCode == 1 || luCauseSubCode == 2))
             || (lbInvulnerableToWorld && (luCauseSubCode == 0 || luCauseSubCode == 3 || luCauseSubCode == 5))
-            || (mbSuppressPlayerCrash && liVictimIndex == static_cast<s32>(mePlayerActiveRaceCarIndex))
-            || (mbSuppressIfAlreadyCrashState1 && liCrashState == 1))
+            || (mbStopPlayerCrashing && liVictimIndex == static_cast<s32>(mePlayerActiveRaceCarIndex))
+            || (mbStopAICrashing && liCrashState == 1))
         {
             return;   // asm: goto LABEL_134 -- the crash is SUPPRESSED for this car.
         }
@@ -748,9 +759,9 @@ namespace Vehicle
     // CheckForTBoneTakedown  @0x8263D480  ->  T_BONE
     //
     // Perpendicular hit. Gates: neither car already crashing; the angle between the cars is within
-    // an asm band of pi/2: |mfAngleBetweenCars - pi/2| < mfTBoneAngleBandDegrees * (pi/180). Then a
+    // an asm band of pi/2: |mfAngleBetweenCars - pi/2| < mfTBoneTakedownMaxAngle * (pi/180). Then a
     // side-plane containment test (IsPointBetweenTwoParallelPlanes, half-width
-    // mfTBoneSidePlaneHalfWidth * scale) decides which car is the victim. Commits T_BONE via
+    // mfTBoneTakedownSpeed * scale) decides which car is the victim. Commits T_BONE via
     // InstantTakedown with the contact normal/point.
     // -------------------------------------------------------------------------------------------
     bool VehicleManager::CheckForTBoneTakedown(RaceCarResponseInfo* lpInfo)
@@ -770,9 +781,9 @@ namespace Vehicle
         const f32 lfPiOver2 = 1.5707964f;
         const f32 lfDegToRad = 0.017453292f;
         if (std::fabs(std::fabs(lpInfo->mfAngleBetweenCars) - lfPiOver2)
-            < mfTBoneAngleBandDegrees * lfDegToRad)
+            < mfTBoneTakedownMaxAngle * lfDegToRad)
         {
-            const f32 lfHalfWidth = mfTBoneSidePlaneHalfWidth * KF_SPEED_UNIT_SCALE; // FLAG: scale rodata flt_82F31928
+            const f32 lfHalfWidth = mfTBoneTakedownSpeed * KF_SPEED_UNIT_SCALE; // FLAG: scale rodata flt_82F31928
 
             // The X360 builds a parallel-plane pair from a car's transform basis + the half-width and
             // tests the contact point against it (twice: once per car). The plane-construction VMX
@@ -827,11 +838,11 @@ namespace Vehicle
 
         const f32 lfDegToRad = 0.017453292f;
         // Near-180 band: bail if the cars are not nearly head-on.
-        if (std::fabs(lpInfo->mfAngleBetweenCars) < (180.0f - mfHeadToHeadAngleToleranceDeg) * lfDegToRad)
+        if (std::fabs(lpInfo->mfAngleBetweenCars) < (180.0f - mfMaxHeadToHeadAngle) * lfDegToRad)
             return false;
 
         // At least one car must clear the min closing speed (* scale).
-        const f32 lfMinSpeed = mfHeadToHeadMinClosingSpeed * KF_SPEED_UNIT_SCALE; // FLAG: scale rodata flt_82F31928
+        const f32 lfMinSpeed = mfMinHeadToHeadIndividualSpeed * KF_SPEED_UNIT_SCALE; // FLAG: scale rodata flt_82F31928
         const f32 lfSpeedA = lpInfo->mfRaceCarASpeed;   // asm a2+23 (==+0x5C)
         const f32 lfSpeedB = lpInfo->mfRaceCarBSpeed;   // asm a2+24 (==+0x60)
         if (lfSpeedA <= lfMinSpeed && lfSpeedB <= lfMinSpeed)
@@ -935,7 +946,7 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     // CheckForStationaryTargetTakedown  @0x8263D948  ->  STANDARD (taking down a near-stopped car)
     //
-    // Gates: neither car crashing; the master gate mbStationaryTakedownsEnabled; the two cars are
+    // Gates: neither car crashing; the master gate mbIsOnlineGameMode; the two cars are
     // close (squared distance between their positions < 0.04); a speed asymmetry
     // (|speedA - speedB| >= flt_82FB8298, the slower car <= flt_82FB829C, the faster >= flt_82FB7F18).
     // No shove (the victim is stationary) -- commits straight to InstantTakedown.
@@ -944,7 +955,7 @@ namespace Vehicle
     {
         if (lpInfo->mbRaceCarAIsCrashing || lpInfo->mbRaceCarBIsCrashing)
             return false;
-        if (!mbStationaryTakedownsEnabled)
+        if (!mbIsOnlineGameMode)
             return false;
 
         // Proximity: squared distance between the two car positions must be < 0.04 (asm immediate
@@ -1018,7 +1029,7 @@ namespace Vehicle
     // Bails if either car has had a recent impact. Alignment must be below 1.9 (too head-on belongs
     // to head-to-head). Picks the aggressor/victim by a closing-velocity sign test, then -- if the
     // victim is not already being slammed/shunted -- classifies the contact as nudge (closing <=
-    // mfNudgeMaxClosingSpeed*scale, type 2) or shunt (<= mfShuntMaxClosingSpeed*scale, type 4),
+    // mfMinShuntSpeed*scale, type 2) or shunt (<= mfFatalShuntSpeed*scale, type 4),
     // promoting shunt->boost-shunt (6) when the victim is boost-eligible. Returns 1; never crashes.
     // -------------------------------------------------------------------------------------------
     bool VehicleManager::CheckForShuntAndNudge(RaceCarResponseInfo* lpInfo)
@@ -1073,10 +1084,10 @@ namespace Vehicle
         //    guard is documented but not invoked. FLAG: redundancy guard omitted (cross-TU callee).
 
         const f32 lfClosing = lpInfo->mfClosingSpeed; // asm *(_R31+22) == word 22 == byte 88 == mfClosingSpeed
-        if (lfClosing <= (mfShuntMaxClosingSpeed * KF_SPEED_UNIT_SCALE)) // FLAG: scale rodata flt_82F31928
+        if (lfClosing <= (mfFatalShuntSpeed * KF_SPEED_UNIT_SCALE)) // FLAG: scale rodata flt_82F31928
         {
             EImpactType leType = E_IMPACT_SHUNT;                       // asm v25 = 4
-            if (lfClosing <= (mfNudgeMaxClosingSpeed * KF_SPEED_UNIT_SCALE)) // FLAG: scale rodata
+            if (lfClosing <= (mfMinShuntSpeed * KF_SPEED_UNIT_SCALE)) // FLAG: scale rodata
                 leType = E_IMPACT_NUDGE;                               // asm v25 = 2
             lpInfo->meImpactType = leType;                             // asm _R31[61] = v25
             // Promote a plain shunt to a boost-shunt when the aggressor was HOLDING BOOST (+123 ==
@@ -1099,8 +1110,8 @@ namespace Vehicle
     // CheckForSlamAndTradingPaint  @0x82619F30  ->  FORCE ONLY (no crash). The lightest tier.
     //
     // Recency-gated. The contact-normal alignment must clear the paint-alignment gate
-    // (unk_82FB8310). The combined energy must fall in the band [mfTradingPaintMinSpeed,
-    // mfTradingPaintMaxSpeed] (* scale). Sets impact severity 1/3/5 (TRADING_PAINT / SLAM /
+    // (unk_82FB8310). The combined energy must fall in the band [mfMinTradingPaintSpeed,
+    // mfFatalSlamSpeed] (* scale). Sets impact severity 1/3/5 (TRADING_PAINT / SLAM /
     // BOOST_SLAM), stores a slam vector, returns 1. No crash.
     //
     // FLAG: this classifier's full body reads several RaceCarPhysics in-record fields the asm
@@ -1134,9 +1145,9 @@ namespace Vehicle
 
         // Energy band [min, max] (* scale). The asm reads *(_R31+88) == mfClosingSpeed.
         const f32 lfEnergy = lpInfo->mfClosingSpeed;
-        if (lfEnergy <= (mfTradingPaintMinSpeed * KF_SPEED_UNIT_SCALE)) // FLAG: scale rodata flt_82F31928
+        if (lfEnergy <= (mfMinTradingPaintSpeed * KF_SPEED_UNIT_SCALE)) // FLAG: scale rodata flt_82F31928
             return false;
-        if (lfEnergy > (mfTradingPaintMaxSpeed * KF_SPEED_UNIT_SCALE))  // FLAG: scale rodata flt_82F31928
+        if (lfEnergy > (mfFatalSlamSpeed * KF_SPEED_UNIT_SCALE))  // FLAG: scale rodata flt_82F31928
         {
             // Above the band -> mark each NON-network car handled, report consumed (no crash).
             // asm 0x8261A2xx (pseudocode 5618/5620): the crash-flag store is gated on the car's
@@ -1452,31 +1463,75 @@ namespace Vehicle
         static_assert(offsetof(VehicleManager, maRaceCarDebugComponent)  == 163264, "maRaceCarDebugComponent (asm addi r27,r27,0x7DC0; stride 0x400)");
         static_assert(offsetof(VehicleManager, mabRaceCarDebugComponentRegistered) == 171456,
                       "163264 + 8*1024 == 171456, and +8 lands exactly on the asm-proven gate byte at 171464");
-        static_assert(offsetof(VehicleManager, mbTakedownsEnabled)       == 171464, "mbTakedownsEnabled (asm +171464)");
-        static_assert(offsetof(VehicleManager, mbSlamShuntPhysicsEnabled) == 171465, "mbSlamShuntPhysicsEnabled (asm +171465)");
-        static_assert(offsetof(VehicleManager, miAttackerToRecord)       == 171540, "miAttackerToRecord (asm +171540)");
-        static_assert(offsetof(VehicleManager, mfTBoneAngleBandDegrees)   == 171564, "mfTBoneAngleBandDegrees (asm +171564)");
-        static_assert(offsetof(VehicleManager, mfTBoneSidePlaneHalfWidth) == 171568, "mfTBoneSidePlaneHalfWidth (asm +171568)");
-        static_assert(offsetof(VehicleManager, mfNudgeMaxClosingSpeed)    == 171580, "mfNudgeMaxClosingSpeed (asm +171580)");
-        static_assert(offsetof(VehicleManager, mfShuntMaxClosingSpeed)    == 171584, "mfShuntMaxClosingSpeed (asm +171584)");
-        static_assert(offsetof(VehicleManager, mfTradingPaintMinSpeed)    == 171616, "mfTradingPaintMinSpeed (asm +171616)");
-        static_assert(offsetof(VehicleManager, mfTradingPaintMaxSpeed)    == 171620, "mfTradingPaintMaxSpeed (asm +171620)");
-        static_assert(offsetof(VehicleManager, mfHeadToHeadAngleToleranceDeg) == 171628, "mfHeadToHeadAngleToleranceDeg (asm +171628)");
-        static_assert(offsetof(VehicleManager, mfHeadToHeadMinClosingSpeed)   == 171636, "mfHeadToHeadMinClosingSpeed (asm +171636)");
-        static_assert(offsetof(VehicleManager, maRaceCarLastImpactMagnitude) == 171644, "maRaceCarLastImpactMagnitude (asm base 171644)");
-        static_assert(offsetof(VehicleManager, maRaceCarTakenDownThisFrame)  == 171676, "maRaceCarTakenDownThisFrame (asm base 171676)");
-        static_assert(offsetof(VehicleManager, maRaceCarLastAttacker)    == 171684, "maRaceCarLastAttacker (asm base 171684)");
-        static_assert(offsetof(VehicleManager, mTakenDownRaceCarsBitArray) == 171736, "mTakenDownRaceCarsBitArray (asm +171736)");
-        static_assert(offsetof(VehicleManager, mfGrindingThresholdA)     == 171868, "mfGrindingThresholdA (asm +171868)");
-        static_assert(offsetof(VehicleManager, mfGrindingThresholdB)     == 171900, "mfGrindingThresholdB (asm +171900)");
+        // ---- the tuning bank, pinned member by member (2026-08-03). Every offset below is an
+        //      asm seat from VehicleManager::Construct @0x8263B7C8, cross-checked against the PS3
+        //      DecFIGS build at Δ=672. The padding runs between them are what these asserts test.
+        static_assert(offsetof(VehicleManager, mbSlamsAndShuntsOn)       == 171464, "mbSlamsAndShuntsOn (asm +171464)");
+        static_assert(offsetof(VehicleManager, mbAllowSlamsAndShuntsEffectsForRivals) == 171465, "mbAllowSlamsAndShuntsEffectsForRivals (asm +171465)");
+        // The head and tail of the 44-float run, plus the closure that proves it has no gaps.
+        static_assert(offsetof(VehicleManager, mfFrontRaySensorLength)   == 171468, "mfFrontRaySensorLength (asm +171468)");
+        static_assert(offsetof(VehicleManager, mfMaxSlamClosingXSpeed)   == 171536, "mfMaxSlamClosingXSpeed (asm +171536)");
+        static_assert(offsetof(VehicleManager, mfMinSecondsBetweenImpacts) == 171540, "mfMinSecondsBetweenImpacts (asm +171540) -- was mis-typed s32 miAttackerToRecord");
+        static_assert(offsetof(VehicleManager, mfTailgatingVunerabilityTime) == 171552, "mfTailgatingVunerabilityTime (asm +171552; value from the PS3 build)");
+        static_assert(offsetof(VehicleManager, mfTBoneTakedownMaxAngle)  == 171564, "mfTBoneTakedownMaxAngle (asm +171564)");
+        static_assert(offsetof(VehicleManager, mfTBoneTakedownSpeed)     == 171568, "mfTBoneTakedownSpeed (asm +171568)");
+        static_assert(offsetof(VehicleManager, mfMinShuntSpeed)          == 171580, "mfMinShuntSpeed (asm +171580)");
+        static_assert(offsetof(VehicleManager, mfFatalShuntSpeed)        == 171584, "mfFatalShuntSpeed (asm +171584)");
+        static_assert(offsetof(VehicleManager, mfMinTradingPaintSpeed)   == 171616, "mfMinTradingPaintSpeed (asm +171616)");
+        static_assert(offsetof(VehicleManager, mfFatalSlamSpeed)         == 171620, "mfFatalSlamSpeed (asm +171620)");
+        static_assert(offsetof(VehicleManager, mfMaxHeadToHeadAngle)     == 171628, "mfMaxHeadToHeadAngle (asm +171628)");
+        static_assert(offsetof(VehicleManager, mfMinHeadToHeadIndividualSpeed) == 171636, "mfMinHeadToHeadIndividualSpeed (asm +171636)");
+        static_assert(offsetof(VehicleManager, mfAngleForVerticleTakedown) == 171640, "mfAngleForVerticleTakedown (asm +171640) -- last of the 44-float run");
+        static_assert(offsetof(VehicleManager, maeImpactType) == 171644,
+                      "171468 + 44*4 == 171644: the 44-float tuning run closes exactly onto maeImpactType with no gaps");
+        static_assert(offsetof(VehicleManager, mauImpactScore)  == 171676, "mauImpactScore (asm base 171676)");
+        static_assert(offsetof(VehicleManager, mafNoImpactTimeSeconds)    == 171684, "mafNoImpactTimeSeconds (asm base 171684) -- was mis-typed s32[8]");
+        static_assert(offsetof(VehicleManager, maiPhysicsSlamIndex) == 171716, "maiPhysicsSlamIndex (DWARF :926)");
+        static_assert(offsetof(VehicleManager, mPlayerWonImpact) == 171736, "mPlayerWonImpact (asm +171736; DWARF :934)");
+        // The two seats the committed header modelled as scalar grind thresholds are element 7 of
+        // these two per-car arrays -- 171840 + 7*4 == 171868 and 171872 + 7*4 == 171900.
+        static_assert(offsetof(VehicleManager, mafVulnerableTimeSeconds) == 171744, "mafVulnerableTimeSeconds (DWARF :937)");
+        static_assert(offsetof(VehicleManager, mafPlayerGrindingOtherDurationSeconds) == 171840,
+                      "mafPlayerGrindingOtherDurationSeconds base; [7] == the old mfGrindingThresholdA seat 171868");
+        static_assert(offsetof(VehicleManager, mafOtherGrindingPlayerDurationSeconds) == 171872,
+                      "mafOtherGrindingPlayerDurationSeconds base; [7] == the old mfGrindingThresholdB seat 171900");
+        static_assert(offsetof(VehicleManager, mabRubbingThisUpdate) == 171952, "mabRubbingThisUpdate (DWARF :951)");
         static_assert(offsetof(VehicleManager, mPlayerAiDriver)          == 171968, "mPlayerAiDriver (asm VehicleDriver::Construct(this + 171968))");
+        static_assert(offsetof(VehicleManager, mbPlayerAiDriverValid)    == 172192, "mbPlayerAiDriverValid (DWARF :954)");
+        static_assert(offsetof(VehicleManager, mfSteeringUpdateRemainder) == 172200, "mfSteeringUpdateRemainder (DWARF :956)");
         static_assert(offsetof(VehicleManager, mePlayerActiveRaceCarIndex) == 172204, "mePlayerActiveRaceCarIndex (DWARF/asm +172204)");
+        static_assert(offsetof(VehicleManager, mfCrashingAICollisionCrashThresholdMPH) == 172208, "mfCrashingAICollisionCrashThresholdMPH (asm +172208)");
+        static_assert(offsetof(VehicleManager, mfVerticalTakedownAngleDeg) == 172228, "mfVerticalTakedownAngleDeg (asm +172228; last of the six-float run)");
         static_assert(offsetof(VehicleManager, mCameraMatrix)            == 172240, "mCameraMatrix (asm addi r11,r11,-0x5F30; 4 x stvx128)");
         static_assert(offsetof(VehicleManager, mCameraMatrix) % 16 == 0, "Matrix44Affine must land 16-aligned with no compiler-inserted padding");
-        static_assert(offsetof(VehicleManager, mbSuppressPlayerCrash)    == 172306, "mbSuppressPlayerCrash (asm +172306)");
-        static_assert(offsetof(VehicleManager, mbSuppressIfAlreadyCrashState1) == 172307, "mbSuppressIfAlreadyCrashState1 (asm +172307)");
-        static_assert(offsetof(VehicleManager, mbHornTakedownEnabled)    == 172311, "mbHornTakedownEnabled (asm +172311)");
-        static_assert(offsetof(VehicleManager, mbStationaryTakedownsEnabled) == 172315, "mbStationaryTakedownsEnabled (asm +172315)");
+        static_assert(offsetof(VehicleManager, mbImpactTime)            == 172304, "mbImpactTime (asm +172304)");
+        static_assert(offsetof(VehicleManager, mbStopPlayerCrashing)    == 172306, "mbStopPlayerCrashing (asm +172306)");
+        static_assert(offsetof(VehicleManager, mbStopAICrashing) == 172307, "mbStopAICrashing (asm +172307)");
+        static_assert(offsetof(VehicleManager, DEBUG_mbHornTakedownEnabled)    == 172311, "DEBUG_mbHornTakedownEnabled (asm +172311)");
+        static_assert(offsetof(VehicleManager, mbTrafficCheckingAllowed) == 172313, "mbTrafficCheckingAllowed (asm +172313; the one bool Construct seeds TRUE)");
+        static_assert(offsetof(VehicleManager, mbIsOnlineGameMode) == 172315, "mbIsOnlineGameMode (asm +172315)");
+        static_assert(offsetof(VehicleManager, mbPlayerCarInJunkYard) == 172319, "mbPlayerCarInJunkYard (asm +172319)");
+        static_assert(offsetof(VehicleManager, mfPlayerStatStrength)  == 172320, "mfPlayerStatStrength (asm +172320; stfsx => f32)");
+        static_assert(offsetof(VehicleManager, miCarSpeed)            == 172328, "miCarSpeed (asm +172328; stwx => s32)");
+        static_assert(offsetof(VehicleManager, meCarType)             == 172344, "meCarType (asm +172344; stwx, seeded 3)");
+        static_assert(offsetof(VehicleManager, miPlayerBoost)         == 172360, "miPlayerBoost (DWARF :1007)");
+        static_assert(offsetof(VehicleManager, meCurrentGameModeType) == 172380, "meCurrentGameModeType (asm +172380; seeded -1)");
+        static_assert(offsetof(VehicleManager, mfCarStatStrengthSlamMax) == 172384, "mfCarStatStrengthSlamMax (asm +172384)");
+        static_assert(offsetof(VehicleManager, mfCarrStatStrengthBeingShuntedMin) == 172412, "mfCarrStatStrengthBeingShuntedMin (asm +172412; last of the eight)");
+        static_assert(offsetof(VehicleManager, muCachedCarASlot)      == 172416, "muCachedCarASlot (asm +172416)");
+        static_assert(offsetof(VehicleManager, mbCachedCarCarPredictionResult) == 172424, "mbCachedCarCarPredictionResult (asm +172424)");
+        static_assert(offsetof(VehicleManager, mCachedCarCarPredictionNormal) == 172432, "mCachedCarCarPredictionNormal (asm stvx128 v0,r31,r9 with r9 == 172432)");
+        static_assert(offsetof(VehicleManager, mCachedCarCarPredictionNormal) % 16 == 0, "the prediction normal is loaded/stored with lvx128/stvx128 -- it must be 16-aligned");
+        static_assert(offsetof(VehicleManager, meStationaryPlayerWheelAngle) == 172448, "meStationaryPlayerWheelAngle (asm +172448; seeded 2)");
+        static_assert(offsetof(VehicleManager, mbCrashRaceCarWhenFatal) == 172452, "mbCrashRaceCarWhenFatal (asm +172452; seeded true)");
+        static_assert(offsetof(VehicleManager, meShowtimeBehaviour)   == 172456, "meShowtimeBehaviour (asm +172456; seeded 2)");
+        static_assert(offsetof(VehicleManager, miRaceCarWorldContactValidationPM) == 172460,
+                      "miRaceCarWorldContactValidationPM (asm +172460; named by the console's own assert at BrnVehicleManager.cpp:778)");
+        static_assert(offsetof(VehicleManager, miContactStreamCounterA) == 172580, "contact-stream counter A (asm +172580)");
+        static_assert(offsetof(VehicleManager, miContactStreamCounterB) == 172584, "contact-stream counter B (asm +172584)");
+        static_assert(offsetof(VehicleManager, mStuckInCollisionTestCacheSphere) == 172592, "mStuckInCollisionTestCacheSphere (asm stvx128 v127,r31,r11 with r11 == 172592)");
+        static_assert(offsetof(VehicleManager, mbPlayerCarStuckInCollision) == 172608,
+                      "172592 + 16 == 172608: the Sphere/bool pair (DWARF :1087/:1088) closes to the byte");
         static_assert(offsetof(VehicleManager, muTakedownEventsThisFrame) == 172612, "muTakedownEventsThisFrame (asm +172612)");
     }
 }
