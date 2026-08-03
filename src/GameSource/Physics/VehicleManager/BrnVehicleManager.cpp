@@ -1930,8 +1930,24 @@ namespace Vehicle
         // embedded traffic manager's maTrafficEntityIDs. Same byte, real owner -- and the sum below
         // is a STRONGER assert than the old one, because it also pins the manager's own head.
         static_assert(offsetof(VehicleManager, mPhysicalTrafficManager) == 44768 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY, "mPhysicalTrafficManager (asm PhysicalTrafficManager::Construct(this + 44768))");
+        // ⚠️⚠️ CORRECTED 2026-08-03 (task #113), AND IT HAD BEEN FAILING SINCE task #112.
+        // This line used to read `== 148128 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY`, i.e. it applied
+        // only the race-car array's drift to a seat that also sits behind maFullTrafficPhysics[20].
+        // The TrafficPhysics de-fork shrank that array by 20 * (5168 - 4960) == 4160 bytes, so the
+        // assert had been false -- by exactly 4160 -- from the moment that wave landed. NOTHING
+        // CAUGHT IT: this TU is not in the build, so the only compiler that would ever have seen the
+        // line is a per-TU gate nobody ran on it. It surfaced the instant task #113 trial-mounted
+        // this file to measure its link closure. ⭐ The lesson is general: a fold that re-measures
+        // its own drift constants must also re-compile every UNMOUNTED TU that consumes them.
+        //
+        // The correction is derived, not typed: `20*sizeof(TrafficPhysics) - 103360` IS the array's
+        // host-minus-console difference, so this stays true if that class is ever re-measured again.
+        // The absolute value is independently asserted (== 99200) in BrnVehicleManager_layout_check.cpp,
+        // which IS mounted -- that is the pair that makes this a gate rather than a restatement.
         static_assert(offsetof(VehicleManager, mPhysicalTrafficManager)
-                          + offsetof(PhysicalTrafficManager, maTrafficEntityIDs) == 148128 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
+                          + offsetof(PhysicalTrafficManager, maTrafficEntityIDs)
+                      == 148128 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY
+                               + (static_cast<std::ptrdiff_t>(20 * sizeof(TrafficPhysics)) - 103360),
                       "44768 + 103360 == 148128 -- the seat SetRaceCarCrashing's owner==2 branch loads");
         static_assert(offsetof(VehicleManager, mDiscardedContacts)       == 160672 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mDiscardedContacts (asm addi r29,r29,0x73A0)");
         static_assert(offsetof(VehicleManager, mDebugComponent)          == 161968 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mDebugComponent (asm VehicleManagerDebugComponent::Construct(this + 161968, this))");

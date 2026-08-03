@@ -1,5 +1,10 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+// ⭐ 2026-08-03 (task #113): this TU's own `static const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;`
+// was the THIRD copy of that constant at BrnPhysics::Vehicle namespace scope (the others were
+// BrnPhysicalTrafficManager.h:272 and BrnArticulatedJoint.h:42). It is owned by
+// BrnVehicleConstants.h now; see the note there.
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"  // KU_ENTITYTYPE_TRAFFIC_VEHICLE
 
 // BrnPhysics::Vehicle::VehicleInputInterface -- the bodied ledger functions homed by this group.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Each enqueue builds its event inline in declaration
@@ -9,11 +14,6 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
-    // Owner-type byte (EntityId bits 24..31) for a traffic vehicle (== BrnWorld::
-    // E_ENTITYTYPE_TRAFFIC_VEHICLE, value 2). Local constant mirroring the committed
-    // BrnPhysicalTrafficManager.h convention (the World-module enum owns the full type).
-    static const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;
-
     // ========================================================================
     // @0x822E66A0  VehicleInputInterface::Construct
     //   Point every embedded EventQueue's mpEvents at its own inline storage and clear the

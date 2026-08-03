@@ -20,7 +20,9 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                          // CgsModule::EventQueue<T,N>
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                  // CgsModule::VariableEventQueue<BUFSIZE,ALIGN>
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                        // CgsContainers::BitArray<N>
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"         // InAddJoint / InRemoveJoint / InAddRigidBody / InRemoveRigidBody / InChangeRigidBodyInertia
 #include "GameShared/GameClasses/System/Input/CgsInputTypes.h"                    // CgsInput::Device::WheelFFSpring
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"          // RaceCarState, ImpactEvent, PhysicalTrafficState + traffic/crash/reset events
 
@@ -213,6 +215,98 @@ namespace Vehicle
         VehicleGuiOutputMessages     mVehicleGuiOutputMessages;     // @0x079C  (DWARF :183)
         RemovedTrafficEventQueue     mRemovedTrafficEventQueue;     // @0x07A0  (DWARF :184)
         CgsInput::Device::WheelFFSpring mWheelFFSpring;             // @0x0874  (DWARF :185)
+    };
+
+    // ------------------------------------------------------------------------
+    // VehicleOutputRequestInterface  (DWARF BrnVehicleOutputInterface.h:197)   NEW 2026-08-03
+    //
+    // The vehicle manager's REQUEST channel into the physics simulation: six queues of
+    // "please do this to the simulation" events, drained by
+    // PhysicsModule::BridgeVehicleManagerRequestsToSimulation.
+    //
+    // ⭐⭐ THE LAYOUT IS DERIVED, NOT GUESSED, AND IT CLOSES ON TWO INDEPENDENT ASM PINS.
+    // The member ORDER is the DecFIGS DWARF's (BrnVehicleOutputInterface.h:263,264,265,268,270,271).
+    // Two absolute member offsets are pinned by the X360 asm:
+    //   * mAddJointQueue    @ 39904 -- VehicleOutputRequestInterface::AddJoint @0x825E7170 ends
+    //       `addis r3,r28,1 ; addi r3,r3,-0x6420 ; bl BaseEventQueue<InAddJoint>::AddEvent`
+    //       (65536 - 0x6420 == 39904).  [that function is an .ida-exports HOLE -- absent from
+    //        identity.json AND from the PS3 set; pulled with headless IDA 9.3, 53 instructions]
+    //   * mRemoveJointQueue @ 41840 -- ArticulatedJointPool::SendCreateRemoveJointEvents @0x826013C0
+    //       does `addis r26,r26,1 ; addi r26,r26,-0x5C90` before
+    //       `bl BaseEventQueue<InRemoveJoint>::AddEvent` (65536 - 0x5C90 == 41840).
+    // Running the chain forward from 0 using ONLY element strides that were attested elsewhere
+    // (each of the five payload types carries its own X360 stride derivation in
+    // CgsPhysicsSimulationIO_Events.h; VariableEventQueue<N,16> is 1 + N -> 4-aligned + 12):
+    //     mRequiredRigidBodiesQueue     16 + 50*192 =  9616      [    0 ..  9616)
+    //     mRemoveRigidBodyQueue         16 + 50*16  =   816      [ 9616 .. 10432)
+    //     mRequestFineLineQueue                       13456      [10432 .. 23888)
+    //     mChangeRigidBodyInertiaQueue  16 + 200*80 = 16016      [23888 .. 39904)   <-- PIN 1 hit
+    //     mAddJointQueue                16 + 10*192 =  1936      [39904 .. 41840)   <-- PIN 2 hit
+    //     mRemoveJointQueue             16 + 10*8   =    96      [41840 .. 41936)
+    // Both pins land with ZERO slack, so sizeof == 41936 -- and the HOST reproduces it exactly,
+    // because every element type is pointer-free and BaseEventQueue<T>'s only pointer sits inside a
+    // header that is padded to 16 on both targets (X360 4+4+4 -> 16-aligned element array; host
+    // 8+4+4 == 16). The gate is in ArticulatedJointPool_layout_check.cpp.
+    //
+    // FLAG (named honestly rather than hidden): the DWARF spells mRequestFineLineQueue's type
+    // `CgsSceneManager::SceneManagerIO::InFineQueryQueue<13440>`, which the DWARF also shows is
+    // `: public VariableEventQueue<13440,16>` WITH NO DATA MEMBERS OF ITS OWN (only the four
+    // LineTest*/VolumeTest* helpers). That derived class has no home in this tree yet, so the
+    // member is declared as its base. Layout-identical; the four helpers are simply not reachable
+    // through this member until the SceneManagerIO fine-query TU lands.
+    //
+    // FLAG: only the two joint methods are declared. The DWARF lists twelve more (Append, Construct,
+    // Clear, CreateNewRigidBody, RemoveRigidBody, AddLineRequest, AddChangeRigidBodyInertiaEvent and
+    // the five Get*Queue accessors); none of them is bodied anywhere in this tree, and per the
+    // "gate each DWARF declaration on X360 attestation" rule they are left out rather than declared
+    // as an unbacked surface.
+    // ------------------------------------------------------------------------
+    struct alignas(16) VehicleOutputRequestInterface
+    {
+        typedef CgsPhysics::PhysicsSimulationIO::InAddJoint    InAddJoint;     // BrnVehicleQueues.h:39 element
+        typedef CgsPhysics::PhysicsSimulationIO::InRemoveJoint InRemoveJoint;  // BrnVehicleQueues.h:41 element
+
+        typedef CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InAddRigidBody, 50>            InAddRigidBodyQueue;           // BrnVehicleQueues.h:32
+        typedef CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InRemoveRigidBody, 50>         InRemoveRigidBodyQueue;        // BrnVehicleQueues.h:33
+        typedef CgsModule::VariableEventQueue<13440, 16>                                              OutFineQueryQueue;             // BrnPhysicsToSceneQueueIO.h:41 (see FLAG above)
+        typedef CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InChangeRigidBodyInertia, 200> InChangeRigidBodyInertiaQueue; // InputBuffer::InChangeRigidBodyInertiaQueue
+        typedef CgsModule::EventQueue<InAddJoint, 10>                                                 AddArticulatedJointQueue;      // BrnVehicleQueues.h:39
+        typedef CgsModule::EventQueue<InRemoveJoint, 10>                                              RemoveArticulatedJointQueue;   // BrnVehicleQueues.h:41
+
+        // @0x825E7170 (DWARF :236). Validate the event's three handles, then queue it.
+        // Bodied in BrnVehicleOutputInterface.cpp -- out of line, exactly as the console emits it.
+        void AddJoint(const InAddJoint& lAddJointEvent);
+
+        // DWARF :241. The console has NO out-of-line symbol for this one: it is inlined into
+        // ArticulatedJointPool::SendCreateRemoveJointEvents @0x826013C0, whose asm carries the
+        // assert (SharedIO/BrnVehicleOutputInterface.h:730) and then the queue AddEvent at +41840.
+        // Header-inline here, matching that.
+        void RemoveJoint(const InRemoveJoint& lRemoveJointEvent)
+        {
+            CGS_ASSERT(lRemoveJointEvent.mu64Id != KU64_INVALID_JOINT_ID,
+                       "!lRemoveJointEvent.mId.IsInvalid()");
+            mRemoveJointQueue.AddEvent(lRemoveJointEvent);
+        }
+
+        // Never called; bodied in BrnVehicleOutputInterface.cpp (a MOUNTED TU) and nothing but
+        // static_asserts. Static so it can see the private queue block through offsetof.
+        static void _AssertLayout();
+
+        // The invalid-JointId sentinel the two joint asserts compare against (X360 qword_82F2A3B0).
+        // Mirrored locally for the same reason BrnArticulatedJoint.h mirrors KU_INVALID_ENTITY_ID:
+        // CgsPhysics::JointId is one of the names that is currently declared TWICE in this tree
+        // (CgsPhysicsSimulationModule.h:102 vs the CgsRigidBody.h family), so pulling either header
+        // in here would make an open ODR fork meet and fail to compile. The handle is a single u64
+        // in both readings.
+        static const u64 KU64_INVALID_JOINT_ID = 0xFFFFFFFFFFFFFFFFull;
+
+    private:
+        InAddRigidBodyQueue           mRequiredRigidBodiesQueue;     // @0x0000  (DWARF :263)
+        InRemoveRigidBodyQueue        mRemoveRigidBodyQueue;         // @0x2590  (DWARF :264)
+        OutFineQueryQueue             mRequestFineLineQueue;         // @0x28C0  (DWARF :265)
+        InChangeRigidBodyInertiaQueue mChangeRigidBodyInertiaQueue;  // @0x5D50  (DWARF :268)
+        AddArticulatedJointQueue      mAddJointQueue;                // @0x9BE0  (DWARF :270) ASM-PINNED
+        RemoveArticulatedJointQueue   mRemoveJointQueue;             // @0xA370  (DWARF :271) ASM-PINNED
     };
 }
 }

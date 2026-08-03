@@ -62,6 +62,17 @@ namespace Vehicle
     // table -- the table mis-pairs multi-store blocks (it shows one slot receiving 2, 100 and 80).
     const f32 KVF_HANDBRAKE_OFF_TIME_TO_ALLOW_DRIFT = 2.0f;   // X360 flt_82001D9C -> unk_82FB9170
 
+    // ⭐ DE-DUPLICATED HERE 2026-08-03 (task #113). The EntityId owner-type byte (bits 24..31) that
+    // the traffic/articulation code asserts for physics-traffic ids ("...GetOwner() ==
+    // BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", value 2). It was defined TWICE at BrnPhysics::Vehicle
+    // namespace scope -- BrnPhysicalTrafficManager.h:272 and BrnArticulatedJoint.h:42 -- each with a
+    // comment saying it mirrored the other. Harmless while the two headers could never meet; a hard
+    // C2374/C2086 the moment the ArticulatedJointPool de-fork made them meet. One owner now, and
+    // this is the header the DWARF already homes the vehicle constants in.
+    // FLAG (unchanged from both old comments): the full BrnWorld::EEntityType enum is owned by the
+    // World module; only the one value these TUs use is reproduced.
+    const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;
+
     // Severity/kind of a vehicle-vs-vehicle impact.
     enum EImpactType : s32
     {
