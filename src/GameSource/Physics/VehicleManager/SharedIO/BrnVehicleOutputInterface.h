@@ -126,11 +126,23 @@ namespace Vehicle
         // local-vs-remote flag, an optional crash matrix, the was-crash-state-1 bool, a 0, and the
         // splatted crash position). The load-bearing args are kept; the rest are MODELLED as a single
         // packed call. Declare-only -- bodied by the interface's own TU.
+        // ⭐⭐ TWO ARGUMENT ROLES CORRECTED 2026-08-03 (VehiclePhysics own-block wave). This used to
+        // take `const Matrix44Affine& lCrashMatrix` and `Vector3 lvCrashPosition`. BOTH were wrong,
+        // and both errors came from the same mis-based reading of VehicleManager::SetRaceCarCrashing:
+        //   * the "crash matrix" was a single 16-byte `stvx128 v127, r30, 0x1440` -- a VECTOR store
+        //     into RaceCarPhysics::mCrashNormal -- and the value passed to this call is that same
+        //     v127 register (`vmr128 v1, v127` @0x82635484). Not a 64-byte matrix.
+        //   * the "crash position" is a SCALAR FLOAT. Both call sites (@0x826354BC and @0x82635530)
+        //     do `lvx128 v0, record+0xEF0 ; vspltw v0,v0,0 ; stvx128 ; lfs f1` -- lane .x of
+        //     mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare, i.e. the crash SPEED.
+        // FLAG (unchanged): the console call still passes more registers than this models -- a
+        // second vector v2 (== v126) and three more integer args. Those are not recovered; the
+        // simplification is deliberate and is not made worse by this correction.
         void AddRaceCarCrashEvent(EntityId lVictimEntityId,
                                   bool lbLocalPhysicalCrash,
-                                  const Matrix44Affine& lCrashMatrix,
+                                  Vector3 lvCrashNormal,
                                   bool lbWasInCrashState1,
-                                  Vector3 lvCrashPosition);
+                                  f32 lfCrashSpeedMPH);
 
         // sink+1872: the secondary "remapped entity id" sub-event the type-2-id path fires. Declare-only.
         void AddRemappedEntityIdEvent(u32 luRemappedActiveRaceCarIndex);

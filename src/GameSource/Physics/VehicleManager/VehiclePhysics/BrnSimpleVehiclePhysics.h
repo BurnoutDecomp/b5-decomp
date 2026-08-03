@@ -174,37 +174,105 @@ namespace Vehicle
         virtual void SetCrashing();
 
     protected:
-        // Member sequence per BrnSimpleVehiclePhysics.h:357-373. The C11 group (which owns the
-        // SimpleVehiclePhysics body set) now lays out the four leading sub-type arrays + the
-        // above-ground test result that PRECEDE mSimpleAttribs, in DWARF SEQUENCE, so its bodies
-        // resolve them BY NAME. (Originally these were deferred to a "future TU"; that TU is this
-        // group.) The members this group's funcs read (maWheels, mAboveGroundTestResult,
-        // mSimpleAttribs, mWheelPlanePosAndHeight, mbMinWheelDistValid) are all present BY NAME;
-        // per project rule the absolute console offsets are NOT reproduced as padding.
+        // ==========================================================================================
+        // ⭐⭐ THE OWN-MEMBER BLOCK, SEATED 2026-08-03 (VehiclePhysics own-block wave).
         //
-        // ----- ADDITIVE GROW (C11 group): the four leading sub-type arrays + the above-ground test
-        //       result, in their DWARF SEQUENCE (:357-360). The full Wheel (0xE0) is the committed
-        //       sibling type; SweptSphere / AxisAlignedBox are minimal owning slices (flagged above).
-        //       Pinned BY NAME -- the absolute console offsets (maWheels @ +304 stride 224) are NOT
-        //       reproduced as padding per project rule; the bodies index these arrays by name.
-        Wheel                maWheels[eNumDrivenWheels];              // :357  (+304, stride 0xE0)
-        SweptSphere          maWheelSpheres[eNumDrivenWheels];        // :358
-        Vector3              maLocalTractionPoints[eNumDrivenWheels]; // :359
-        AboveGroundTestResult mAboveGroundTestResult;                 // :360 (pos @ +348, normal @ +364)
+        // Member SEQUENCE is the DecFIGS DWARF's (BrnSimpleVehiclePhysics.h:357-373). Every OFFSET
+        // in the right-hand column is an X360 ASM LITERAL or is forced with zero slack between two
+        // asm literals. The two derivations know nothing about each other, and the block CLOSES:
+        // its last data byte is 0x715, which 16-rounds to **0x720 == 1824**, and 0x720 is exactly
+        // where `VehiclePhysics::Construct` @0x8262DC8C puts `mpAttribs` (`stw r30, 0x720(r31)`).
+        //
+        // ⭐ THE FRAME. `SimpleVehiclePhysics::Construct` @0x82620400 calls
+        // `ExternalPhysicsBody::Construct(this + 0x10)`, so the leaf's vptr occupies +0x00 and the
+        // 16-aligned base sub-object starts at +0x10. Laid out from the committed base headers the
+        // chain ends at +0x130 -- the asm-literal `addi r3, r31, 0x130` this Construct then uses as
+        // &maWheels[0]. That closure independently re-derives Matrix33 == 48 and
+        // sizeof(ExternalPhysicsBody) == 0x120:
+        //     +0x10 mTransform(64)  +0x50 mLinearVelocity  +0x60 mAngularVelocity  +0x70 mbFrozen
+        //     +0x80 mLocalInverseInertia(48)  +0xB0 mWorldInverseInertia(48)  +0xE0 mfMass
+        //     +0xF0 mTotalLinearForce  +0x100 mTotalTorque  +0x110 mTotalLinearImpulse
+        //     +0x120 mTotalAngularImpulse                                    -> ends 0x130
+        //
+        // ⚠️ HOST DIVERGENCE, stated once. The leaf vptr widens 4 -> 8 on x64 but the base is
+        // 16-aligned either way, so the base chain does NOT drift. The sub-types embedded below,
+        // however, are MINIMAL OWNING SLICES in this tree (SweptSphere is an opaque 0x20 --
+        // correct, see the closure note on it -- but SimpleVehicleAttribs is 20 bytes here against
+        // the console's 240, and Wheel/AxisAlignedBox are their own reconstructions). So the
+        // absolute console offsets below are NOT reproducible as host offsetofs and are NOT
+        // static_asserted. What IS gated (BrnSimpleVehiclePhysics_layout_check.cpp) is the DWARF
+        // ORDER and every pointer-free RELATIVE run.
+        //
+        //   X360   member                       first-hand evidence
+        //   -----  ---------------------------  ------------------------------------------------
+        //   0x130  maWheels[4]  stride 0xE0     Construct `addi r3,r31,0x130` + Wheel::Clear loop
+        //                                       `addi r3,r3,0xE0`, 4 iterations
+        //   0x4B0  maWheelSpheres[4]            closure: 0x530-0x4B0 == 128 == 4 x 32, so
+        //                                       sizeof(SweptSphere) == 0x20 -- the committed
+        //                                       opaque slice's size is CORRECT, not a guess
+        //   0x530  maLocalTractionPoints[4]     Reset's zero loop (+0x530, stride 16)
+        //   0x570  mAboveGroundTestResult       Construct `addi r11,r31,0x570`, then +0x00 pos,
+        //                                       +0x10 normal, +0x20 mfVerticalDistance,
+        //                                       +0x24/+0x26 the two CollisionTag halfwords,
+        //                                       +0x28 mbValid -- the sub-struct's own DWARF order
+        //   0x5A0  mSimpleAttribs (240)         Construct `addi r3,r31,0x5A0 ; bl
+        //                                       SimpleVehicleAttribs::Construct`
+        //   0x690  mHandlingBodyOffset          Construct `li r9,0x690 ; stvx128 v1,r31,r9`
+        //   0x6A0  mHalfExtent                  Construct `li r8,0x6A0 ; stvx128 v1,r31,r8`
+        //   0x6B0  mWheelPlanePosAndHeight      (bracketed, zero slack)
+        //   0x6C0  mfSpeedMPH                   UpdateHandBrake `li r7,0x6C0 ; lvx128 v13,r3,r7`;
+        //                                       AddSlam `li r10,0x6C0`
+        //   0x6D0  mDeformableAABB (32)         ⭐ VehicleManager::SetRaceCarCrashing
+        //   0x6F0  mOriginalAABB   (32)         @0x82635438-0x82635468 copies 32 bytes FROM +0x6F0
+        //                                       TO +0x6D0 -- ResetDeformableAABB() inlined. Pins
+        //                                       both AABBs and sizeof(AxisAlignedBox) == 32.
+        //   0x710  mbCrashing                   the console's own assert string:
+        //                                       FireAssert("mbCrashing", ".../RaceCarPhysics.h", 328)
+        //   0x711  mbStartedFatallyCrashing     DWARF order
+        //   0x712  mbStartedDeforming           DWARF order
+        //   0x713  mbCrashedThisFrame           DWARF order
+        //   0x714  mbMinWheelDistValid          previously committed (gates IsContactBelowWheelPlane)
+        //   0x715  mbAnyWheelsDetatched         DWARF order (last)
+        //                                       -> 0x716 rounds to **0x720 == 1824**
+        // ==========================================================================================
+        Wheel                maWheels[eNumDrivenWheels];              // :357  @0x130 stride 0xE0
+        SweptSphere          maWheelSpheres[eNumDrivenWheels];        // :358  @0x4B0 stride 0x20
+        Vector3              maLocalTractionPoints[eNumDrivenWheels]; // :359  @0x530 stride 0x10
+        AboveGroundTestResult mAboveGroundTestResult;                 // :360  @0x570 (48 bytes)
 
-        SimpleVehicleAttribs mSimpleAttribs;          // :361
-        Vector3      mHandlingBodyOffset;             // :362
-        Vector3      mHalfExtent;                     // :363
-        Vector3Plus  mWheelPlanePosAndHeight;         // :364  (pos in xyz, plane height in w lane)
-        VecFloat     mfSpeedMPH;                      // :365
-        AxisAlignedBox mDeformableAABB;               // :366
-        AxisAlignedBox mOriginalAABB;                 // :367
-        bool         mbCrashing;                      // :368
-        bool         mbStartedFatallyCrashing;        // :369
-        bool         mbStartedDeforming;              // :370
-        bool         mbCrashedThisFrame;              // :371
-        bool         mbMinWheelDistValid;             // :372  (gates IsContactBelowWheelPlane)
-        bool         mbAnyWheelsDetatched;            // :373
+        SimpleVehicleAttribs mSimpleAttribs;          // :361  @0x5A0 (console 240)
+        Vector3      mHandlingBodyOffset;             // :362  @0x690
+        Vector3      mHalfExtent;                     // :363  @0x6A0
+        Vector3Plus  mWheelPlanePosAndHeight;         // :364  @0x6B0 (pos in xyz, plane height in w)
+        VecFloat     mfSpeedMPH;                      // :365  @0x6C0
+        AxisAlignedBox mDeformableAABB;               // :366  @0x6D0
+        AxisAlignedBox mOriginalAABB;                 // :367  @0x6F0
+        bool         mbCrashing;                      // :368  @0x710
+        bool         mbStartedFatallyCrashing;        // :369  @0x711
+        bool         mbStartedDeforming;              // :370  @0x712
+        bool         mbCrashedThisFrame;              // :371  @0x713
+        bool         mbMinWheelDistValid;             // :372  @0x714 (gates IsContactBelowWheelPlane)
+        bool         mbAnyWheelsDetatched;            // :373  @0x715
     };
+
+    // ⭐ The console sizes this block closes on, exported so the layout gate and the VehiclePhysics
+    // own-block map can assert against ONE copy of each number instead of re-typing literals.
+    // Every one is an X360 asm literal or forced with zero slack between two of them (see the map
+    // above). They describe the CONSOLE object, not the host reconstruction.
+    namespace X360Layout
+    {
+        const unsigned KU_SVP_BASE_END              = 0x130u;  // asm: Construct `addi r3,r31,0x130`
+        const unsigned KU_SVP_WHEEL_STRIDE          = 0xE0u;   // asm: Wheel::Clear loop
+        const unsigned KU_SVP_SWEPTSPHERE_SIZE      = 0x20u;   // closure 0x530-0x4B0 == 4*0x20
+        const unsigned KU_SVP_ABOVEGROUND_OFF       = 0x570u;  // asm: `addi r11,r31,0x570`
+        const unsigned KU_SVP_ABOVEGROUND_SIZE      = 0x30u;   // +0x28 mbValid -> 16-round
+        const unsigned KU_SVP_SIMPLEATTRIBS_OFF     = 0x5A0u;  // asm: `addi r3,r31,0x5A0`
+        const unsigned KU_SVP_HANDLINGBODYOFFSET    = 0x690u;  // asm: `li r9,0x690`
+        const unsigned KU_SVP_DEFORMABLE_AABB_OFF   = 0x6D0u;  // asm: SetRaceCarCrashing copy dst
+        const unsigned KU_SVP_ORIGINAL_AABB_OFF     = 0x6F0u;  // asm: SetRaceCarCrashing copy src
+        const unsigned KU_SVP_AABB_SIZE             = 0x20u;   // asm: the copy is 4 x `ld`/`std`
+        const unsigned KU_SVP_MBCRASHING_OFF        = 0x710u;  // console assert RaceCarPhysics.h:328
+        const unsigned KU_SVP_SIZEOF                = 0x720u;  // == VehiclePhysics::mpAttribs offset
+    }
 }
 }

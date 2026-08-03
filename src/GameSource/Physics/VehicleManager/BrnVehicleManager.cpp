@@ -162,19 +162,19 @@ namespace Vehicle
 
         // (asm asserts !(A-is-player && B-is-player) and liIndexA != liIndexB -- debug-only.)
 
-        // Cache the two transforms (the classifiers read mRaceCarA/BTransform). FLAG: the X360 reads
-        // the transforms out of the physics records via VMX loads; here they are taken from the named
-        // in-record world position + identity basis stand-in. The full transform basis lives in the
-        // unmodelled RaceCarPhysics layout, so only the position lane is faithfully populated; the
-        // basis is left identity (the classifiers that need the basis FLAG this themselves).
-        lInfo.mRaceCarATransform.Right().SetZero(); lInfo.mRaceCarATransform.Right().x = 1.0f;
-        lInfo.mRaceCarATransform.Up().SetZero();    lInfo.mRaceCarATransform.Up().y    = 1.0f;
-        lInfo.mRaceCarATransform.At().SetZero();    lInfo.mRaceCarATransform.At().z    = 1.0f;
-        lInfo.mRaceCarATransform.Pos() = lrRecordA.mvWorldPosition;
-        lInfo.mRaceCarBTransform.Right().SetZero(); lInfo.mRaceCarBTransform.Right().x = 1.0f;
-        lInfo.mRaceCarBTransform.Up().SetZero();    lInfo.mRaceCarBTransform.Up().y    = 1.0f;
-        lInfo.mRaceCarBTransform.At().SetZero();    lInfo.mRaceCarBTransform.At().z    = 1.0f;
-        lInfo.mRaceCarBTransform.Pos() = lrRecordB.mvWorldPosition;
+        // Cache the two transforms (the classifiers read mRaceCarA/BTransform).
+        // ⭐⭐ FIXED 2026-08-03 (VehiclePhysics own-block wave). This used to build an IDENTITY
+        // BASIS and fill only the position lane from a phantom member called `mvWorldPosition`,
+        // with a FLAG saying "the full transform basis lives in the unmodelled RaceCarPhysics
+        // layout". It does not: the base sub-object starts at record +0x10 (the leaf vptr occupies
+        // +0x00 -- SimpleVehiclePhysics::Construct calls ExternalPhysicsBody::Construct(this+0x10)),
+        // so ExternallySimulatedBody::mTransform occupies record +16..+80 and IS the record's own
+        // named member now. The X360's VMX loads at class+0x780 / class+0x770 that the phantom was
+        // derived from are simply rows 3 and 2 of THIS matrix.
+        // This matters: every classifier that consults mfAngleBetweenCars or a car's forward axis
+        // was being handed an identity basis, i.e. a constant answer.
+        lInfo.mRaceCarATransform = lrRecordA.mTransform;
+        lInfo.mRaceCarBTransform = lrRecordB.mTransform;
 
         // Speeds + closing velocity + inter-car angle. FLAG (VMX): the X360 loads each car's velocity
         // vector from its record and computes magnitudes; here the speeds/closing-speed are left as
@@ -268,18 +268,24 @@ namespace Vehicle
         }
 
         // ---- Step 7: slam/shunt physics + last-attacker / revenge bookkeeping ----
-        // Guard: neither car already crashing (asm: *(record+3664)==0 both) AND neither is the
-        // protected player-with-grace (asm: idx==player && *(record+6164)). If either guard fails the
-        // routine skips straight to the post-pass / return.
+        // Guard: neither car already crashing (asm: *(record+3664)==0 both) AND the player's car is
+        // actually being driven by the PLAYER.
+        // ⭐ NAME FIXED 2026-08-03: the second half used to read a role-guessed byte called
+        // `mbPlayerGrace` at +4308. The asm reads FOUR bytes (`lwz r7, 0x1814(r7)` @0x826438E8,
+        // class-relative -> in-record 4308) and compares against 0, and 4308 is
+        // mPreviousControls.meDriverType -- 0x1090 + 0x44, the seat BrnVehicleDriverControls.h
+        // pinned from six independent attestations. E_DRIVER_TYPE_PLAYER == 0, so the console gate
+        // is "this is the player's slot AND its driver type is NOT player" (an AI- or
+        // network-driven player car), which is a different predicate from a grace timer.
         const bool lbEitherCrashing = (lrRecordA.mbCrashing != 0) || (lrRecordB.mbCrashing != 0);
-        bool lbProtectedPlayerGrace = false;   // asm: (idxA==player && recA+6164) || (idxB==player && recB+6164)
-        if ((liIndexA == liPlayer && lrRecordA.mbPlayerGrace) ||
-            (liIndexB == liPlayer && lrRecordB.mbPlayerGrace))
+        bool lbPlayerSlotNotPlayerDriven = false;   // asm: (idxA==player && recA+6164 != 0) || (idxB==...)
+        if ((liIndexA == liPlayer && lrRecordA.meDriverType != E_DRIVER_TYPE_PLAYER) ||
+            (liIndexB == liPlayer && lrRecordB.meDriverType != E_DRIVER_TYPE_PLAYER))
         {
-            lbProtectedPlayerGrace = true;
+            lbPlayerSlotNotPlayerDriven = true;
         }
 
-        if (!lbEitherCrashing && !lbProtectedPlayerGrace)
+        if (!lbEitherCrashing && !lbPlayerSlotNotPlayerDriven)
         {
             // The value the asm names v248 is the +0xF4 lane == meImpactType (NOT meImpactSitutation
             // @+0x108 -- the stack offset 0x1F4-0x100 == 0xF4 proves it).
@@ -643,9 +649,13 @@ namespace Vehicle
                 lpManagerOutputInterface->AddRaceCarCrashEvent(
                     lValidatedVictimId,
                     /*lbLocalPhysicalCrash=*/false,
-                    lrVictimRecord.mCrashMatrix,          // unused on the light path (0 in asm); passed by name
+                    lrVictimRecord.mCrashNormal,          // asm v1 == the crash normal register
                     lbWasInCrashState1,
-                    lrVictimRecord.mvCrashPosition);      // asm: splat of record+5680
+                    // ⭐ 2026-08-03: this argument used to be a phantom `mvCrashPosition`. Both
+                    // AddRaceCarCrashEvent sites do `lvx128 ; vspltw v0,v0,0 ; stvx128 ; lfs f1`
+                    // on record+0xEF0 -- they pass LANE .x as the scalar float f1, and +0xEF0 is
+                    // mvSpeedOnLastCrashMPH_... So the event carries the crash SPEED IN MPH.
+                    lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.x);
             }
         }
         else
@@ -659,18 +669,30 @@ namespace Vehicle
             const s32 liPlayerIndex = static_cast<s32>(mePlayerActiveRaceCarIndex);   // asm v109
             RaceCarVehicleRecord& lrPlayerRecord = maRaceCarVehicles[liPlayerIndex];  // asm _R10 = 5216*v109 + this
 
-            // distance test: ||victim.pos - player.pos|| (squared) < victim.radiusSq.
-            const Vector3& lvVictimPos = lrVictimRecord.mvWorldPosition;   // asm record+1920
-            const Vector3& lvPlayerPos = lrPlayerRecord.mvWorldPosition;
-            const f32 ldx = lvVictimPos.x - lvPlayerPos.x;
-            const f32 ldy = lvVictimPos.y - lvPlayerPos.y;
-            const f32 ldz = lvVictimPos.z - lvPlayerPos.z;
-            const f32 lfDistSq = ldx * ldx + ldy * ldy + ldz * ldz;       // asm vmsum3fp128
-            const bool lbWithinRadius = (lfDistSq < lrVictimRecord.mfProximityRadiusSq); // asm vcmpgtfp. radius>dist
+            // ⭐⭐ RE-DECODED 2026-08-03 (VehiclePhysics own-block wave). This used to be
+            //     ||victim.pos - player.pos||^2 < victim.mfProximityRadiusSq
+            // built on two PHANTOM members (`mvWorldPosition` @+1920, `mfProximityRadiusSq` @+1904).
+            // Both offsets are applied to a CLASS-relative base in the asm, so the in-record seats
+            // are +0x40 and +0x30 -- rows 3 and 2 of the base's mTransform. There is no radius. The
+            // console does (@0x82635364..0x82635398):
+            //     lvx128 v0, victimClass+0x780   ; victim mTransform.pos
+            //     lvx128 v12, playerClass+0x780  ; player mTransform.pos
+            //     vsubfp v0, v0, v12             ; delta
+            //     lvx128 v12, playerClass+0x770  ; player mTransform.zAxis (the forward axis)
+            //     vmsum3fp128 v0, v0, v12        ; dot3(delta, playerForward)
+            //     vcmpgtfp.  v0, splat(f30), v0  ; f30 == flt_82001CC0 == 0.0f
+            // i.e. **"is the victim BEHIND the player along the player's forward axis"**. That is a
+            // visibility test for whether the crash is worth latching for the replay camera, which
+            // is what the surrounding branch is for -- a proximity radius never existed.
+            const Vector3 lvDelta = lrVictimRecord.mTransform.Pos() - lrPlayerRecord.mTransform.Pos();
+            const Vector3& lvPlayerForward = lrPlayerRecord.mTransform.At();   // mTransform row 2
+            const f32 lfAlongForward =
+                lvDelta.x * lvPlayerForward.x + lvDelta.y * lvPlayerForward.y + lvDelta.z * lvPlayerForward.z;
+            const bool lbBehindPlayer = (0.0f > lfAlongForward);   // asm vcmpgtfp. 0.0f > dot
 
             const bool lbLatchPhysics =
                 (!lrPlayerRecord.mbCrashing)   // asm *(_R10+3664)==0  (player not remote)
-                && lbWithinRadius                          // asm dist<radius
+                && lbBehindPlayer                          // asm 0.0f > dot3(delta, playerForward)
                 && (liCrashState == 1)                     // asm *(v39+v35)==1  (== maeRaceCarTypes[victim])
                 /* && lbA7Predicate */;                    // asm & v108 (FLAG: modelled true, see above)
 
@@ -681,16 +703,25 @@ namespace Vehicle
 
             // (asm debug print " Physically crashing local car <idx>" -- log only, not reproduced.)
 
-            // Stamp the vehicle record: crash matrix @ +5184, crash-committed @ +4953, entity id @
-            // +7056. The asm re-reads *(record+3664) before copying the matrix; since this is the
-            // local (==0) branch it is 0, so the asm's matrix copy is skipped and the matrix store
-            // writes a zero register. We mark the record committed and stamp the id regardless (the
-            // load-bearing state), and FLAG the matrix copy as a no-op on this branch.
-            lrVictimRecord.mbCrashCommitted = 1;                  // asm *(record+4953) = 1 (only when re-read flag set)
-            lrVictimRecord.mEntityCausingCrash = lValidatedVictimId; // asm *(_R31+7056) = v34
-            // asm stvx128 v127, r30, 5184 stores the crash matrix (zeroed on this branch). Modelled
-            // by leaving mCrashMatrix as-is and forwarding it to the event. FLAG: matrix value is the
-            // X360's "remote-only" copy, vacuous on the local branch.
+            // Stamp the vehicle record: mCrashNormal @ +5184 and mEntityCausingCrash @ +5200 (the
+            // console's SetCrashEntityIdAndNormal inlined -- `stvx128 v127, r30, 0x1440` four
+            // instructions before `stw r26, 0x1450(r30)`).
+            // ⭐⭐ RE-SEATED 2026-08-03: the flag this used to set was `mbCrashCommitted` at +3097.
+            // The asm store is `stb r20(1), 0x1359(r11)` and r11 was made the RECORD base two
+            // instructions earlier (`addi r11, r11, 0x740`), so the seat is in-record 4953 and the
+            // member is VehiclePhysics::mbDeformationModelIsActive. ⚠️ AND ITS GUARD IS INVERTED
+            // HERE: the console sets it (together with an inlined ResetDeformableAABB, a 32-byte
+            // copy of mOriginalAABB over mDeformableAABB) only when the RE-READ mbCrashing is
+            // NON-zero, i.e. on the already-crashing path -- not on this local one. FLAG: left on
+            // this branch pending the SetRaceCarCrashing control-flow re-decode noted below.
+            lrVictimRecord.mbDeformationModelIsActive = 1;          // asm *(record+4953) = 1
+            lrVictimRecord.mEntityCausingCrash = lValidatedVictimId; // asm *(record+5200) = v34
+            // FLAG (structural, recorded 2026-08-03): this body models TWO AddRaceCarCrashEvent
+            // calls split by `mbCrashing`. There ARE two call sites (@0x826354BC with r7=1 and
+            // @0x82635530 with r7=0), but the `mbCrashing` re-read at 0x82635424 gates only the
+            // deformation flag + AABB reset and the r8 argument -- it is a COMMON TAIL after
+            // RaceCarPhysics::SetCrashing, not the branch that selects the call site. Re-decoding
+            // that control flow is a separate wave; the member seats above are settled regardless.
 
             // Fire the FULL crash event (asm arg `1` + the matrix vs the light path's 0/0).
             if (lpManagerOutputInterface)
@@ -698,9 +729,9 @@ namespace Vehicle
                 lpManagerOutputInterface->AddRaceCarCrashEvent(
                     lValidatedVictimId,
                     /*lbLocalPhysicalCrash=*/true,
-                    lrVictimRecord.mCrashMatrix,
+                    lrVictimRecord.mCrashNormal,
                     lbWasInCrashState1,
-                    lrVictimRecord.mvCrashPosition);
+                    lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.x);
 
                 // Push the 64-byte crash record onto the IO VariableEventQueue<1536,16> @ sink+26096
                 // (asm: AddEvent(a5+26096, &record, 63, 32)). The record packs { entityId, victimIdx }.
@@ -1481,13 +1512,25 @@ namespace Vehicle
         static_assert(offsetof(VehicleManager, maRaceCarDrivers) + 224 * 1 + 59 == 224 * 1 + 123,
                       "the re-seat is byte-identical to the old model for every element");
         static_assert(sizeof(RaceCarVehicleRecord) == 5216, "RaceCarVehicleRecord stride (asm: 5216)");
+        // ⭐⭐ RE-SEATED / RENAMED 2026-08-03 (VehiclePhysics own-block wave): three of the seats
+        // this block used to pin were PHANTOMS born of applying a CLASS-relative asm offset to the
+        // RECORD base, and four more carried role-guessed names. See the fold-in map in
+        // BrnVehicleManager.h and the ⭐⭐ own-block maps in VehiclePhysics.h /
+        // BrnSimpleVehiclePhysics.h. The mounted duplicate of these lives in
+        // BrnVehicleManager_layout_check.cpp -- this TU is NOT mounted.
+        static_assert(offsetof(RaceCarVehicleRecord, mTransform) == 16, "base mTransform (leaf vptr @+0)");
         static_assert(offsetof(RaceCarVehicleRecord, mbCrashing) == 1808, "in-record crashing flag (asm: +3664)");
-        static_assert(offsetof(RaceCarVehicleRecord, mfProximityRadiusSq) == 1904, "in-record radius-sq (asm: +1904)");
-        static_assert(offsetof(RaceCarVehicleRecord, mvWorldPosition) == 1920, "in-record world pos (asm: +1920)");
-        static_assert(offsetof(RaceCarVehicleRecord, mbCrashCommitted) == 3097, "in-record crash-committed (asm: +4953)");
-        static_assert(offsetof(RaceCarVehicleRecord, mCrashMatrix) == 3328, "in-record crash matrix (asm: +5184)");
-        static_assert(offsetof(RaceCarVehicleRecord, mvCrashPosition) == 3824, "in-record crash pos (asm: +5680)");
-        static_assert(offsetof(RaceCarVehicleRecord, mbPlayerGrace) == 4308, "in-record player-grace (asm: +6164)");
+        static_assert(offsetof(RaceCarVehicleRecord,
+                               mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare) == 3824,
+                      "VehiclePhysics::mvSpeedOnLastCrashMPH_... (asm: +0xEF0)");
+        static_assert(offsetof(RaceCarVehicleRecord, meDriverType) == 4308,
+                      "mPreviousControls.meDriverType (asm: class+6164, lwz)");
+        static_assert(offsetof(RaceCarVehicleRecord, mbDeformationModelIsActive) == 4953,
+                      "VehiclePhysics::mbDeformationModelIsActive (asm: record+0x1359)");
+        static_assert(offsetof(RaceCarVehicleRecord, meCarType) == 5084,
+                      "VehiclePhysics::meCarType (asm: class+6940, stw)");
+        static_assert(offsetof(RaceCarVehicleRecord, mCrashNormal) == 5184,
+                      "RaceCarPhysics::mCrashNormal (asm: record+0x1440, stvx128)");
         static_assert(offsetof(RaceCarVehicleRecord, mfTimeSinceTookDownPlayer) == 5120, "recovery timer (asm: +5120)");
         static_assert(offsetof(RaceCarVehicleRecord, mEntityCausingCrash) == 5200, "in-record stamped id (asm: +7056)");
         static_assert(sizeof(RaceCarCrashData)     == 12,   "RaceCarCrashData stride (asm: 12)");

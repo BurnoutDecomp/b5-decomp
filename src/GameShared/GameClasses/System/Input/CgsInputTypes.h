@@ -64,10 +64,20 @@ namespace CgsInput
         // {coefficient, saturation} float pair the most likely intent; modelled as two f32 with
         // inferred names. Promote names/types when the vehicle-output WheelFFSpring producer TU
         // (the +2164 sub-record of BrnVehicleOutputInterface) lands. Size must stay 8 bytes.
+        //
+        // ⭐ 2026-08-03 (VehiclePhysics own-block wave): the DWARF NAMES ARE NOW KNOWN and they are
+        // NOT these. references/DecFIGS/dwarfdump/.../Input/Devices/CgsInputDevice.h:57-63 declares
+        //     struct WheelFFSpring { float32_t mfStrength; float32_t mfOffset; }
+        // -- two f32, so the SIZE and the TYPES above are confirmed (and independently so: the
+        // producer VehiclePhysics::UpdateDriving @0x82638720/@0x826387D0 writes them with `stfs` at
+        // this+0x13D0 and this+0x13D4, floats, and VehiclePhysics::mbRollingInAir sits at 0x13D8).
+        // Only the two NAMES are wrong, and "offset" (a centring offset) is a different quantity
+        // from "saturation". NOT renamed here: this type has consumers in the input layer outside
+        // this wave's scope, and a rename is a mechanical follow-up, not a discovery.
         struct WheelFFSpring
         {
-            f32 mfSpringCoefficient;   // +0x00  (inferred; raw word copied @ buffer+632)
-            f32 mfSpringSaturation;    // +0x04  (inferred; raw word copied @ buffer+636)
+            f32 mfSpringCoefficient;   // +0x00  DWARF name: mfStrength
+            f32 mfSpringSaturation;    // +0x04  DWARF name: mfOffset
         };
     }
 }

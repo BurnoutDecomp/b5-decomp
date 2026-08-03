@@ -337,30 +337,41 @@ namespace Vehicle
         // The record's seats had exactly the same hole and it had been missed because the header
         // reads as if the asserts were live. Duplicated here, in the mounted TU, so they run.
         //
-        // ⚠️ THREE OF THESE ARE FLAGGED AS SUSPECT IN THE HEADER (mCrashMatrix @3328,
-        // mvWorldPosition @1920, mfProximityRadiusSq @1904 -- see the ⚠️⚠️ block over
-        // RaceCarVehicleRecord). They are asserted here AS COMMITTED, deliberately: the point of a
-        // gate is to pin what the model currently claims so that a change to it is visible. When
-        // the VehiclePhysics own-block pass moves them, these three lines are what will fail, and
-        // that failure is the reminder to re-read the derivation rather than re-type the number.
+        // ⭐⭐ ALL THREE SUSPECTS RESOLVED 2026-08-03 (VehiclePhysics own-block wave), and four more
+        // fields renamed with them. This gate previously asserted mfProximityRadiusSq @1904,
+        // mvWorldPosition @1920 and mCrashMatrix @3328 AS COMMITTED, with a note saying "when the
+        // VehiclePhysics own-block pass moves them, these three lines are what will fail". That is
+        // exactly what happened: all three were PHANTOMS (the first two are rows of the base's
+        // mTransform, the third is the 16-byte mCrashNormal at in-record 5184), so the lines are
+        // gone rather than re-typed, and the four survivors below are asserted under the names the
+        // recovered VehiclePhysics / RaceCarPhysics blocks give them.
         // =========================================================================================
         static_assert(sizeof(RaceCarVehicleRecord) == 5216,
                       "per-car stride (asm: VehicleManager::Construct `addi r29, r29, 0x1460`)");
+        static_assert(offsetof(RaceCarVehicleRecord, mTransform) == 16,
+                      "ExternallySimulatedBody::mTransform -- the base sub-object starts at +0x10 "
+                      "because the leaf vptr occupies +0x00 (SimpleVehiclePhysics::Construct "
+                      "@0x82620400 `addi r3,r31,0x10 ; bl ExternalPhysicsBody::Construct`)");
         static_assert(offsetof(RaceCarVehicleRecord, mbCrashing) == 1808,
                       "SimpleVehiclePhysics::mbCrashing -- named by the console's own assert string "
                       "at RaceCarPhysics.h:328 (GetNormalCausingCrash @0x825B3944)");
-        static_assert(offsetof(RaceCarVehicleRecord, mfProximityRadiusSq) == 1904,
-                      "in-record radius-sq -- ⚠️ SUSPECT, see the header (probably +48)");
-        static_assert(offsetof(RaceCarVehicleRecord, mvWorldPosition) == 1920,
-                      "in-record world pos -- ⚠️ SUSPECT, see the header (probably +64)");
-        static_assert(offsetof(RaceCarVehicleRecord, mbCrashCommitted) == 3097, "in-record crash-committed");
-        static_assert(offsetof(RaceCarVehicleRecord, mCrashMatrix) == 3328,
-                      "in-record crash matrix -- ⚠️ SUSPECT, see the header (probably a phantom; the "
-                      "store is a 16-byte stvx128 at in-record 5184 == mCrashNormal)");
-        static_assert(offsetof(RaceCarVehicleRecord, mvCrashPosition) == 3824, "in-record crash pos");
-        static_assert(offsetof(RaceCarVehicleRecord, mbPlayerGrace) == 4308, "in-record player-grace");
-        static_assert(offsetof(RaceCarVehicleRecord, mfPlayerBoostStrengthStat) == 5084,
-                      "in-record player boost stat (asm: stw r10, 0x1B1C(5216*idx + this))");
+        static_assert(offsetof(RaceCarVehicleRecord,
+                               mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare) == 3824,
+                      "VehiclePhysics::mvSpeedOnLastCrashMPH_... @+0xEF0 (asm: Construct "
+                      "`li r28,0xEF0 ; stvx128 v127,r31,r28`, between mWeightTransfer and mEngine)");
+        static_assert(offsetof(RaceCarVehicleRecord, meDriverType) == 4308,
+                      "VehiclePhysics::mPreviousControls.meDriverType == 0x1090 + 0x44 (asm: "
+                      "VehiclePhysics::Prepare `stw r30,0x10D4(r31)`; read with `lwz`, 4 bytes)");
+        static_assert(offsetof(RaceCarVehicleRecord, mbDeformationModelIsActive) == 4953,
+                      "VehiclePhysics::mbDeformationModelIsActive @+0x1359 -- SetRaceCarCrashing's "
+                      "`stb r20,0x1359(r11)` is applied to the RECORD base (`addi r11,r11,0x740` "
+                      "two instructions earlier), so no -1856 correction applies");
+        static_assert(offsetof(RaceCarVehicleRecord, meCarType) == 5084,
+                      "VehiclePhysics::meCarType @+0x13DC (asm: VehiclePhysics::Prepare "
+                      "`stw r8,0x13DC(r31)` and ApplyPlayerStats `stw r10,0x1B1C(5216*idx + this)`)");
+        static_assert(offsetof(RaceCarVehicleRecord, mCrashNormal) == 5184,
+                      "RaceCarPhysics::mCrashNormal @+0x1440 -- the single 16-byte `stvx128 v127, "
+                      "r30, 0x1440` the retired `mCrashMatrix` @3328 was a mis-based reading of");
         static_assert(offsetof(RaceCarVehicleRecord, mfTimeSinceTookDownPlayer) == 5120,
                       "RaceCarPhysics::mfTimeSinceTookDownPlayer @+0x1400 (DWARF :395)");
         static_assert(offsetof(RaceCarVehicleRecord, mEntityCausingCrash) == 5200,

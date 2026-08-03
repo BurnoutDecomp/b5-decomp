@@ -272,21 +272,24 @@ namespace Vehicle
         VehiclePhysics::Update(a2, lpControls, lbApplyAftertouch, a5, a6, a7,
                                lrPassThroughV1, lrTimeStep);
 
-        // ⛔ WRONG GATE, MEASURED 2026-08-03 AND LEFT VISIBLE RATHER THAN SWAPPED FOR A SECOND GUESS.
-        // The console gates this follow-up steering pass on a byte at +0x70 (asm @0x82641884:
-        // `lbz r11, 0x70(r31) ; cmplwi ; beq`). +0x70 is **mbFrozen** -- VehiclePhysics.h's own
-        // Reset note pins it there twice over (VP frame +0x70 == ExternallySimulatedBody frame
-        // +0x60, and UpdateFreezing @0x825CFFA0 reads/writes it alongside mbForceFrozen @+0x10F6).
-        // mbUsingAftertouch is +0x140D -- a different member, and one THIS FUNCTION WRITES twenty
-        // lines below, so the condition reads its own previous-frame output.
-        // It is NOT re-pointed here because mbFrozen has no declared member in this tree yet (only a
-        // comment in VehiclePhysics.h), and inventing an accessor or a placeholder for it would be
-        // the fabrication this file keeps warning about. NEXT WAVE: declare mbFrozen on
-        // ExternallySimulatedBody / VehiclePhysics from its own asm, then re-point this one line.
+        // ⭐⭐ RE-POINTED 2026-08-03 (VehiclePhysics own-block wave). The console gates this
+        // follow-up steering pass on a byte at +0x70 (asm @0x82641884: `lbz r11, 0x70(r31) ;
+        // cmplwi ; beq`), and the committed body read mbUsingAftertouch (+0x140D) instead -- a
+        // different member, and one THIS FUNCTION WRITES twenty lines below, so the condition was
+        // reading its own previous-frame output.
+        //
+        // ⛔ THE PREVIOUS WAVE'S BLOCKER WAS FALSE. It left this line unfixed because "mbFrozen has
+        // no declared member in this tree yet (only a comment in VehiclePhysics.h)". It has had one
+        // all along: BrnPhysics::ExternallySimulatedBody::mbFrozen (ExternallySimulatedBody.h:112),
+        // whose own banner already documents the leaf seat as +0x70, with the public IsFrozen()
+        // accessor right there. Nothing needed declaring and nothing is invented here.
+        // Independent attestation added this wave: SimpleVehiclePhysics::Construct @0x8262047C does
+        // `stb r30(0), 0x70(r31)` with r31 == the leaf `this` -- Construct clearing mbFrozen -- and
+        // the base chain closes on +0x130 from exactly that framing (see BrnSimpleVehiclePhysics.h).
         // ⭐ RE-NAMED 2026-08-03: the byte at controls+0x41 is mbIsSteeringWheel, not a "car type"
         // (UpdateDriving @0x82638348 passes the same +0x41 byte to UpdateSteering, and
         // ModifyControlsForSteeringWheelInput is gated on it @0x826381A8).
-        if (mbUsingAftertouch)   // ⛔ WRONG MEMBER: the console reads mbFrozen @+0x70 (see above)
+        if (IsFrozen())   // asm @0x82641884: lbz r11, 0x70(r31) == ExternallySimulatedBody::mbFrozen
             VehiclePhysics::UpdateSteering(lpControls->mbIsSteeringWheel ? 1 : 0, lfSteer);
 
         // Decay the uncapped-speed window timer while it is positive.
