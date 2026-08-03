@@ -381,6 +381,100 @@ namespace Vehicle
         //       (the velocity vector). FLAG: arg shape inferred from the call site. -----
         void SetWheelVelocities(Vector3 lvVelocity);
 
+        // ==========================================================================================
+        // ⭐ Construct @0x8262DBD0 / Reset(Vector3) @0x825FDD78 -- FULLY DECODED 2026-08-03, NOT
+        //    YET BODIED. Both are `.ida-exports` holes; both were pulled from
+        //    BURNOUT_X360_ARTIST.XEX.i64 with headless IDA 9.3 and replayed instruction-by-
+        //    instruction through a symbolic VMX128 simulator, so the work below is finished
+        //    analysis, not a lead. They are NOT bodied because of ONE blocker, stated at the end.
+        //
+        // ---- Reset(Vector3 lvVelocity) @0x825FDD78, 0x825FDD78..0x825FE118 (232 instrs) --------
+        //   SimpleVehiclePhysics::Reset();                       // 0-arg overload -- @0x825D9A58
+        //                                                        // builds its OWN zero (vspltisw128)
+        //   if (mpAttribs == NULL) {                             // lwz r11,0x720(this) ; beq
+        //       maWheels[0..3].Reset(0);                         // this+0x130/0x210/0x2F0/0x3D0
+        //       mEngine.Reset(0);                                // this+0xF00
+        //   } else {
+        //       SetWheelVelocities(lvVelocity);                  // ⛔ THE BLOCKER -- see below
+        //   }
+        //   maLocalTractionPoints[0..3]                       = 0     // +0x530/540/550/560
+        //   mvSpeedOnLastCrashMPH_TimeCrashing_...            = 0     // +0xEF0 (whole register)
+        //   mWeightTransfer                                   = 0     // +0xEE0
+        //   mvSteeringAngle_...      .x/.y/.z = 0 (.w untouched)      // +0xFE0
+        //   mvSpare_MaintainedSpeed_...   .y/.z/.w = 0 (.x Spare)     // +0x1000
+        //   mvTimeToReachTargetDriftSlipRecip_...  all four = 0       // +0x1010
+        //   mvDesiredDriftAngleScale_...           all four = 0       // +0x1020
+        //   mvLatDriftForceFactor_...  .x = 1.0f, .y/.z/.w = 0        // +0x1030  (vspltisw 1 + vcfsx)
+        //   mvSideForceMag_...  .x/.y/.w = 0 (.z TimeSinceLastBoostKick untouched)  // +0x1040
+        //   mvPropSpeedMaintainAlongZ_...  .x = -0.1f (unk_8208FAE4), .y = 1.0f
+        //                                  (unk_8208FAE8), .z = 100.0f (flt_820049E0)   // +0x1050
+        //   mvTimeStandingStill_...   all four = 0                    // +0x1060
+        //   mvDampRollVel_...  .x = 0, .z = 0, .w = 10000.0f          // +0x1080  ⚠️ SEE BELOW
+        //   mSteeringDirection                                = 0     // +0x10E0
+        //   mfTimeUntilStuckInCollisionTest                   = 5.0f  // +0x10F0 (flt_8200426C ==
+        //                                                             //   KF_STUCK_IN_COLLISION_TEST_INTERVAL)
+        //   mDriftFlags = 0xFF (DO_ALL) ; mbInBoostKick = false       // +0x10F4 / +0x10F5
+        //   mbForceFrozen = false ; mbGivenAftertouchAirBoost = false // +0x10F6 / +0x10F8
+        //   mSlamEffect: mfSteering = mfOriginalSteering = mfSlamLife = mfTotalSlamTime = 0,
+        //                mi8SlamNumber = -1                           // +0x1114/18/1C/20 and +0x1128
+        //                (mForce, mfDecay and mfRecoveryTime are NOT written -- so this is an
+        //                 inlined PARTIAL clear, not SlamEffect::Clear())
+        //   mShuntEffect: mDirectionPlusDesiredSpeed = 0,
+        //                 mv4_Life_SpeedIncreaseToQuit.x = -1.0f, .y = 0   // +0x1130 / +0x1140
+        //   mi8LastContactedRaceCar = -1                              // +0x1150
+        //   mUsedAirRams = 0 ; mUsedSpins = 0                         // +0x1158 / +0x1220 (std)
+        //   maSprings[0..3].Reset()                                   // +0xE10 stride 0x30, x4
+        //   mPreviousWorldSpaceVelocity = lvVelocity                  // +0x1330 (the argument)
+        //   mNormLinearVelocityMag = 0                                // +0x1340
+        //   mbHasAir = mbHadAirLastFrame = false ; mu8DriftState = 0 ; miNumCollisions = 0 ;
+        //   mbHandBrake = false ; mbAllWheelsHaveTraction = false ; mbResetCarTransform = TRUE ;
+        //   mbJustBeenSlammed = false ; mbDoingBurnout = false        // +0x1350..+0x1361
+        //   mPreviousTransform = mTransform                           // +0x1370 <- this+0x10, 4 rows
+        //   mWheelFFSpring.mfSpringCoefficient = mfSpringSaturation = 0   // +0x13D0 / +0x13D4
+        //   mi8LastAttackersRaceCarIndex = -1                         // +0x13E0
+        //
+        // ⚠️⚠️ THE SILENT-ZERO CONSTANT IN THAT LIST. `TimeSinceLastHandBrake` (+0x1080 .w) is
+        //   seeded from `unk_82FB9080`, which reads **all-zero in the shipped image** (.data,
+        //   perm=6). It is NOT zero: an IDA-UNMARKED static-init thunk at 0x82C5C398 does
+        //       lis r11, flt_82005D9C@ha ; lfs f0 ; stfs ; lvlx ; vspltw v0,v0,0 ;
+        //       stvx128 v0, r0, unk_82FB9080
+        //   and flt_82005D9C (.rdata perm=4) == **10000.0f**. So the reset seeds "the handbrake
+        //   was last used 10000 seconds ago" -- i.e. never. Left at the image's 0.0f it would read
+        //   as "the handbrake was released THIS INSTANT" on every reset, which is what the two
+        //   UpdateHandBrake reads of the same slot gate on. (Same shape as the +0x1050 .z seed
+        //   TimeSinceLastRaceCarContact = 100.0f: "long ago".)
+        //
+        // ---- Construct() @0x8262DBD0, 98 instrs -------------------------------------------------
+        //   for (i = 0..3) { maWheels[i].Clear();                        // this+0x130 stride 0xE0
+        //                    maSprings[i].Prepare(0, 0, 0); }            // this+0xE10 stride 0x30
+        //   mvSpringMassScalers = 0;                                     // +0xED0
+        //   mEngine.mAttribs.Construct();  mEngine.Reset(0);             // +0xF00 (Engine::mAttribs
+        //                                                                //   is Engine's leading member)
+        //   mpAttribs = NULL;                                            // +0x720
+        //   mAIVehicleAttribs.Construct();  mPlayerVehicleAttribs.Construct();   // +0x730 / +0xAA0
+        //   ... zero +0x690/+0x6A0/+0x1330/+0x570 ; mSlamEffect partial seed at +0x590+0x20 ...
+        //   SimpleVehiclePhysics::Reset();                               // this
+        //   mbCrashing(+0x70) = false;
+        //   Reset(Vector3(0,0,0));
+        //   ⭐ `VehicleAttribs::Construct(this+0x730)` and `(this+0xAA0)` are an INDEPENDENT
+        //   confirmation of the DWARF member sequence: mpAttribs @0x720, then two VehicleAttribs
+        //   of 0x370 each land mAIVehicleAttribs at 0x730 and mPlayerVehicleAttribs at 0xAA0
+        //   exactly, and maSprings then falls on its asm-pinned +0xE10.
+        //
+        // ---- WHY NEITHER IS BODIED YET ----------------------------------------------------------
+        // ⛔ ONE symbol: `VehiclePhysics::SetWheelVelocities` @0x825FD218 (728 instrs), which the
+        //    ledger marks BLOCKED (degenerate VMX128 + un-committed helpers). It has NO body
+        //    anywhere in the tree, and Reset's `mpAttribs != NULL` branch calls it out of line, so
+        //    bodying Reset inside the MOUNTED VehiclePhysics.cpp would introduce an unresolvable
+        //    LNK2019. Reset is Construct's last hole, and Construct is VehicleManager::Construct's
+        //    last sub-constructor -- so as of this wave the whole remaining chain to
+        //    VehicleManager::Construct hangs on that ONE function. Everything else Construct/Reset
+        //    need is now defined: VehicleAttribs::Construct (landed this wave),
+        //    SuspensionSpring::Prepare/Reset (landed this wave), Engine::Reset,
+        //    VehicleAttribs::EngineAttribs::Construct, SimpleVehiclePhysics::Reset,
+        //    Wheel::Clear/Reset.
+        // ==========================================================================================
+
         // ----- ADDITIVE GROW (C11_simple_traffic_attribs group): the three VehiclePhysics entries the
         //       TrafficPhysics layer forwards into. DECLARE-ONLY -- each is bodied by its own (full
         //       VehiclePhysics / driving-spine) TU; declared here so TrafficPhysics::PreparePhysical /

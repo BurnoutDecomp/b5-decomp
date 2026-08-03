@@ -133,8 +133,10 @@ namespace Vehicle
         // @0x826206D0: destruct -- base Destruct, Wheel::Clear loop, Reset. Bodied below.
         void Destruct();
 
-        // @0x825D9A58: reset -- (gated by mbStartedDeforming==0) Wheel::Reset each wheel, zero the
-        // velocity/transform-delta SIMD registers + mfSpeedMPH, clear the crash bools. Bodied below.
+        // @0x825D9A58: reset -- (gated by mbStartedDeforming==0) Wheel::Reset each wheel, zero
+        // maLocalTractionPoints[0..3] (+0x530 stride 16) + mfSpeedMPH, clear the crash bools.
+        // Bodied below. ⚠️ The "velocity/transform-delta SIMD registers" reading of the four
+        // vector stores was WRONG and is corrected in the .cpp banner (2026-08-03).
         void Reset();
 
         // @0x82602880: stamp the above-ground (down-ray) test result from a position+normal+two

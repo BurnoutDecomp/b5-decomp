@@ -139,10 +139,33 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     // Reset  @0x825D9A58
     //   if !mbStartedDeforming (the `if ( !*(result+1668) )` gate -- 1668 is the deform latch in
-    //   the console layout) Wheel::Reset each wheel; then zero the four velocity/transform-delta
-    //   SIMD caches (+1328/+1344/+1360/+1376), splat mfSpeedMPH(+1728) to 0, and clear the crash
-    //   bools (+1808 mbCrashing, +1809 mbStartedFatallyCrashing, +1812 mbMinWheelDistValid,
+    //   the console layout) Wheel::Reset each wheel; then zero maLocalTractionPoints[0..3]
+    //   (+1328/+1344/+1360/+1376), splat mfSpeedMPH(+1728) to 0, and clear the crash bools
+    //   (+1808 mbCrashing, +1809 mbStartedFatallyCrashing, +1812 mbMinWheelDistValid,
     //   +1813 mbAnyWheelsDetatched).
+    //
+    // ⚠️⚠️ CORRECTED 2026-08-03. The four 16-byte stores at +1328/+1344/+1360/+1376 were
+    // FLAGGED here as "the body's velocity / angular-velocity / transform-delta scratch
+    // registers" and reproduced as `mLinearVelocity = 0; mAngularVelocity = 0;
+    // mWheelPlanePosAndHeight = 0;`. All THREE of those were INVENTED STORES -- this function
+    // touches none of those members -- and the four members it does clear were left out.
+    //
+    // 1328 == 0x530, and the asm is `li r9,0x530 ; li r8,0x540 ; li r7,0x550 ; li r6,0x560` with
+    // four `stvx128 v0(==0), r31, rX`: four consecutive 16-byte slots at stride 16 starting at
+    // +0x530. That is exactly `Vector3 maLocalTractionPoints[4]` (BrnSimpleVehiclePhysics.h:190,
+    // DWARF :359). Two independent witnesses:
+    //   * VehiclePhysics.h's own map already records "maLocalWheelPositions +0x530 ->
+    //     SimpleVehiclePhysics::maLocalTractionPoints", and StoreLocalWheelPositions writes
+    //     +0x530/+0x540/+0x550/+0x560;
+    //   * VehiclePhysics::Reset @0x825FDD78 (pulled from the .i64 this wave) zeroes the SAME four
+    //     addresses with the same `li 0x530/0x540/0x550/0x560` idiom, alongside its own separate
+    //     clears -- and it does NOT touch mLinearVelocity (base+0x40 == this+0x50) either.
+    // mWheelPlanePosAndHeight is +1712 (0x6B0); the only register in that neighbourhood this
+    // function writes is +0x6C0 == mfSpeedMPH, which was already correct.
+    //
+    // This mattered: Reset is on the car-placement path, and zeroing mLinearVelocity /
+    // mAngularVelocity there destroys the velocity the caller is resetting the car WITH
+    // (VehiclePhysics::Reset takes the velocity as its argument and re-publishes it).
     // -------------------------------------------------------------------------------------------
     void SimpleVehiclePhysics::Reset()
     {
@@ -152,13 +175,9 @@ namespace Vehicle
                 maWheels[liWheel].Reset(KV_ZERO);
         }
 
-        // FLAG: the four zeroed SIMD caches at +1328/+1344/+1360/+1376 are the body's
-        // velocity / angular-velocity / transform-delta scratch registers (below mSimpleAttribs in
-        // the console layout). The faithful named intent is to zero the body motion + wheel-plane
-        // cache; reproduced here on the base motion vectors and the wheel-plane register.
-        mLinearVelocity      = KV_ZERO;
-        mAngularVelocity     = KV_ZERO;
-        mWheelPlanePosAndHeight = { 0.0f, 0.0f, 0.0f, 0.0f };
+        for (int liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+            maLocalTractionPoints[liWheel] = KV_ZERO;   // +0x530/+0x540/+0x550/+0x560
+
         mfSpeedMPH           = { 0.0f, 0.0f, 0.0f, 0.0f };   // +1728 (VecFloat == Vector4)
 
         mbCrashing               = false;               // +1808
