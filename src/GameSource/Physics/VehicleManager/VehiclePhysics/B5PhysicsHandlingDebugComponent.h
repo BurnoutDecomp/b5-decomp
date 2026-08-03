@@ -1,7 +1,10 @@
 #pragma once
 
 #include "types.hpp"
-#include "DebugSystem/Core/CgsDebugComponent.h"   // CgsDev::DebugComponent (real base)
+// ⚠️ FIXED 2026-08-03: this was `#include "DebugSystem/Core/CgsDebugComponent.h"`, which resolves
+// against NO -I directory in either the per-TU gate or build_game_exe.bat -- i.e. this header had
+// never been compiled by anything. The real path is below.
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"   // CgsDev::DebugComponent (real base)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"   // CgsGeometric::Triangle4::AOSTriangle
 
 // BrnPhysics::Vehicle::DebugComponent - the in-game handling/grip-curve debug menu for the
