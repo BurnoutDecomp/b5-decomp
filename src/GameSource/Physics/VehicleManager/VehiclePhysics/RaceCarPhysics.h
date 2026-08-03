@@ -3,17 +3,20 @@
 // BrnPhysics::Vehicle::RaceCarPhysics -- the player/AI race-car physics body (a VehiclePhysics
 // subclass that adds showtime, bounce-boost, target-assist and crash state).
 //
-// MINIMAL OWNING SLICE. The full RaceCarPhysics carries a large PlayerParameters block and ~100
-// methods owned by separate future TUs. THIS group bodies only the three ledger funcs
-// GetHeightAboveRoad @0x825B3998, IsCrashingNormally @0x827E42B8 and
-// IsPlayerVehicleActuallyInShowtime @0x827E42B0; the rest of the API is NOT declared here. The
-// single bool member the latter two read (mbPlayerCarInShowtime) is reconstructed BY NAME.
+// MINIMAL OWNING SLICE for the METHODS. The full RaceCarPhysics carries ~100 methods owned by
+// separate future TUs and only a few are declared here.
+//
+// ⭐⭐ THE DATA IS NO LONGER A SLICE (2026-08-03). All SIXTEEN of this class's own members are now
+// declared, in DWARF order, at their X360 seats -- see the big block above the private section.
+// The block is width- and alignment-identical on x64, and its derivation closes independently on
+// sizeof == 5216, the asm-literal per-car stride in VehicleManager::Construct. That closure is what
+// makes it a derivation rather than an accumulation of plausible single fields.
 //
 // LAYOUT NOTES (from the asm):
-//   * mbPlayerCarInShowtime is read at this+0x140C by both IsPlayerVehicleActuallyInShowtime
-//     (`lbz r3,0x140C(r3); blr`) and IsCrashingNormally. Per project rule the absolute console
-//     offset is pinned BY NAME (the ~0x1400 bytes of base+VehiclePhysics state that precede it
-//     are not reproduced as padding here).
+//   * The class as a whole is NOT byte-pinned: the ~0x13F0 bytes of ExternalPhysicsBody /
+//     SimpleVehiclePhysics / VehiclePhysics state that precede the own block are not reproduced as
+//     padding here (project rule -- parity by NAMED MEMBERS). What IS pinned, and compiled, is
+//     every own member's offset RELATIVE to the first of them; see _AssertOwnBlockLayout.
 //   * GetHeightAboveRoad iterates the four driven wheels (VehiclePhysics::maWheels, console
 //     stride 0xE0) reading each wheel's road-contact result and the vehicle up axis -- accessed
 //     here BY NAME through the VehiclePhysics accessors, not by absolute offset.
@@ -108,12 +111,19 @@ namespace Vehicle
         // the singleton and latches mbUsingAftertouch. lpControls is the driver-control block.
         // ⭐ THE TIMESTEP IS lrTimeStep.x -- RECOVERED FROM THE ASM 2026-08-01 (physics wave 1).
         // The entry prologue saves BOTH incoming vector registers (`vmr128 v126, v2` and
-        // `vmr128 v127, v1` at 0x8264160C/0x82641614) and the very first thing the engine-only
+        // `vmr128 v127, v1` at 0x8264160C/0x82641614) and the very first thing the CRASHING
         // branch does is spill v2 and read LANE 0 as a scalar float:
         //     addi r11, r1, var_80 ; stvx128 v126, r0, r11
         //     lfs  f13, var_80(r1)              ; == v2.x
         //     lfs  f0, 0x1430(r31) ; fadds f0, f0, f13 ; stfs f0, 0x1430(r31)
-        // i.e. `mfSlamSteerEnvelope += v2.x`. Both vectors are restored verbatim
+        // i.e. `mfCrashTimer += v2.x`.
+        // ⚠️ CORRECTED 2026-08-03: this note used to say "the engine-only branch" and
+        // "mfSlamSteerEnvelope". The branch is gated on `lbz r11,0x710(r31)` == mbCrashing, and
+        // +0x1430 is mfCrashTimer -- see the ⛔ block over the member declarations below. It also
+        // matters WHICH vector each timer uses: mfCrashTimer integrates v2 (the REAL timestep, so
+        // the slow-motion window is real-time-bounded) while mfTimeSinceTookDownPlayer @+0x1400 and
+        // mfBeachedTime @+0x1408 integrate v1 (the SIM timestep, which the slow-mo path scales).
+        // Both vectors are restored verbatim
         // (`vmr128 v2,v126 ; vmr128 v1,v127` @0x8264185C) immediately before the chained
         // VehiclePhysics::Update, so they are pass-through arguments, not scratch.
         // ⚠️ FLAG: only the REGISTER assignment is recovered, not the console's declaration
@@ -230,34 +240,186 @@ namespace Vehicle
         Vector3 GetStuntWorldPosition() const;     // +0x1340: world position for tailgating tests
         Vector3 GetStuntForwardAxis() const;       // normalized +0x1340 velocity = cone forward axis
 
+    public:
+        // Never called. Bodied in RaceCarPhysics_layout_check.cpp (a MOUNTED TU) and nothing but
+        // static_asserts -- see the ⭐⭐ block below for why it has to be a compiled gate and why it
+        // has to live in a separate TU. Static so it can see the private block through offsetof.
+        static void _AssertOwnBlockLayout();
+
     private:
-        bool mbPlayerCarInShowtime;   // +0x140C (pinned BY NAME)
+        // =========================================================================================
+        // ⭐⭐ THE RaceCarPhysics OWN-MEMBER BLOCK -- RECOVERED IN FULL 2026-08-03.
+        //
+        // WHAT CHANGED. This section used to hold FIVE members in an order that did not reproduce
+        // the console's (mbPlayerCarInShowtime was declared FIRST while living at +0x140C, i.e.
+        // AFTER mPropCollisionImpulseSum at +0x13F0), plus one member -- `mfSlamSteerEnvelope`
+        // @+0x1430 -- whose ROLE was wrong (see the ⛔ below). It now holds all SIXTEEN members the
+        // DecFIGS DWARF attests for this class, in DWARF DECLARATION ORDER, each at its X360 seat.
+        //
+        // WHY THIS IS THE BLOCKER THE VehicleManager BRIEF NAMES. BrnVehicleManager.h carries
+        // `RaceCarVehicleRecord maRaceCarVehicles[8]` -- a byte-pinned 5216-byte stand-in for this
+        // very class -- and cannot be swapped for the real type while the real type does not
+        // DECLARE the fields the record names. TWO of the record's ten named fields live in this
+        // block and are settled by it (+5120 -> mfTimeSinceTookDownPlayer, +5200 ->
+        // mEntityCausingCrash); a third (+1808) is SimpleVehiclePhysics::mbCrashing. The other
+        // seven are VehiclePhysics / SimpleVehiclePhysics members and are a separate wave. The
+        // full fold-in map lives over RaceCarVehicleRecord in BrnVehicleManager.h.
+        //
+        // ⭐ WHY THE OFFSETS ARE MEANINGFUL ON x64 AT ALL. Every member below is a fixed-width
+        // scalar or a 16-byte `alignas(16)` Vector3/EntityId -- no pointer, no vptr, no
+        // ResourceHandle. So this block is WIDTH- AND ALIGNMENT-IDENTICAL on X360 and on host x64,
+        // and every INTERNAL offset difference is exactly zero. The class as a whole is NOT
+        // byte-pinned (the ~0x13F0 bytes of base state ahead of it are not reproduced as padding,
+        // per project rule), so what _AssertOwnBlockLayout pins is each member's offset RELATIVE TO
+        // mPropCollisionImpulseSum, written as `<X360 offset> - <X360 base>` with BOTH terms
+        // literal. Never as `sizeof(T) - K`, which would make the assert self-fulfilling.
+        //
+        // ⭐⭐ THE INDEPENDENT CLOSURE -- this is what makes the block a derivation and not a guess.
+        // The DWARF supplies the member ORDER; the X360 asm supplies the OFFSETS (table below);
+        // neither knows about the other. Run them together and the last data byte lands at
+        // +0x1454 (a bool), so sizeof rounds up to the 16-byte alignment the four Vector3s force:
+        //       0x1455 -> 0x1460 == 5216
+        // and 5216 is the asm-literal per-car stride in VehicleManager::Construct @0x8263B7C8
+        // (`addi r29, r29, 0x1460`) -- a different function, in a different class, pinned by an
+        // earlier wave that knew nothing about this member list. The two meet with ZERO SLACK: no
+        // member can be added, dropped, widened or re-ordered inside this block without breaking
+        // the stride. `_AssertOwnBlockLayout` pins that closure too.
+        // ⚠️ ONE THING THE CLOSURE CANNOT SEE, measured by tamper test rather than assumed: a
+        // SEVENTEENTH member of <= 11 bytes appended after mbDebugShowTargetAssist fits inside the
+        // alignment pad and changes neither sizeof nor any offset, so no assert C++ can express
+        // would catch it. What guards that case is that the DWARF list above is exhaustive and is
+        // quoted verbatim -- a 17th member would have to be invented.
+        //
+        // PROVENANCE, member by member. X360 first-hand unless marked; PS3 = the DecFIGS internal
+        // build, which is a second symbolled witness at a UNIFORM Δ = −16 in this region
+        // (IsPlayerVehicleActuallyInShowtime reads 0x13FC there vs 0x140C here; IsUsingAftertouch
+        // 0x13FD vs 0x140D; RaceCarPhysics::Construct's Z-lane insert 0x1060 vs 0x1070). PS3 is
+        // used for IDENTITY ONLY -- no PS3 number is committed as an offset anywhere below.
+        //
+        //   +0x13F0  mPropCollisionImpulseSum   PS3 Construct @0x6EB404 `stvx v13,this,0x13E0`;
+        //                                       X360 ApplyPropCollisionImpulseSum `addi r31,this,0x13F0`
+        //   +0x1400  mfTimeSinceTookDownPlayer  X360 Update @0x826418E0..F8 `lfs 0x1400 ; fadds v1.x ;
+        //                                       stfs 0x1400` -- a per-frame timer INTEGRATION
+        //   +0x1404  mfSlamSteering             X360 Update (11 accesses); VehicleManager::
+        //                                       CalculateSlamData @0x825C7678 `lfs f0,0x1404(r26)`
+        //   +0x1408  mfBeachedTime              X360 Update @0x826419C8..D8 (`+= dt` only when slow AND
+        //                                       not airborne AND wheels ungrounded AND NOT crashing);
+        //                                       AddTractionPoint @0x825FFB0C reads it
+        //   +0x140C  mbPlayerCarInShowtime      X360 IsPlayerVehicleActuallyInShowtime @0x827E42B0
+        //   +0x140D  mbUsingAftertouch          X360 IsUsingAftertouch @0x825B8C88
+        //   +0x140E  mu8StrengthStat            X360 PhysicalTrafficVehicle::OnChecked @0x8261E3F0
+        //                                       `lbz r11,0x140E(r28)`; PS3 Prepare @0x736554 stores it
+        //                                       from a parameter IDA names `lu8StrengthStat` (that name
+        //                                       is IDA reading the PS3 build's own DWARF)
+        //   +0x1410  mInitialCrashVel           X360 SetCrashing @0x825B8AD0 `stvx128 v0,r31,0x1410`
+        //                                       loaded from this+0x50 (mLinearVelocity)
+        //   +0x1420  mInitialCrashAngVel        X360 SetCrashing @0x825B8ACC `stvx128 v13,r31,0x1420`
+        //                                       loaded from this+0x60 (angular velocity)
+        //   +0x1430  mfCrashTimer               X360 SetCrashing @0x825B8AC8 `stfs flt_82001CC0,0x1430`
+        //   +0x1434  mbAISlowMo                 X360 Update @0x82641698/9C/F4
+        //   +0x1435  mbWroteIntoRWInSlowMo      PS3 Prepare @0x7365C4; PS3 VehicleManager::
+        //                                       GetUpdatedVehicleBodies reads 0x1424 then writes 0x1425
+        //   +0x1436  mbDeformedBeyondDrive...   X360 DeformableObject::UpdateDeformedBBox @0x825E0EBC
+        //                                       `stb r11,0x1436(r10)` (IDA names the PS3 source register
+        //                                       `lbDeformedPastLimit`); VehicleOutputInterface::
+        //                                       UpdateRaceCarState @0x825ECC40 reads it
+        //   +0x1440  mCrashNormal               X360 GetNormalCausingCrash @0x825B3978
+        //                                       `lvx128 v0,r30,0x1440`
+        //   +0x1450  mEntityCausingCrash        X360 VehicleManager::SetRaceCarCrashing @0x82635478
+        //                                       `stw r26,0x1450(r30)`; ProcessContactSpies @0x82646DC0
+        //   +0x1454  mbDebugShowTargetAssist    X360 UpdateTargetAssist @0x826202F4 `lbz r11,0x1454(r28)`
+        //
+        // ⛔ ONE COMMITTED ROLE WAS WRONG, and it is the exact shape this project keeps hitting:
+        // ADDRESS RIGHT, MEANING WRONG. The member at +0x1430 was committed as `mfSlamSteerEnvelope`,
+        // "a short-lived slam/steer envelope scalar Update also drives on the engine-only path". The
+        // address is right and everything else about it is not. Re-pulled X360 Update @0x826415E8:
+        //     0x82641624  lbz   r11, 0x710(r31)          <- mbCrashing, NOT an "engine-only" flag
+        //     0x82641638  beq   -> not-crashing branch
+        //     0x82641640  lfs   f0, 0x1430(r31)          <- crashing: timer += the REAL timestep (v2.x)
+        //     0x82641664  stfs  f0, 0x1430(r31)
+        //     0x8264168C  <compare the timer against unk_82FB83B0>   == KVF_AI_CRASH_PAUSE_TIME
+        //     0x82641698  stb   r30(0), 0x1434(r31)      <- expired -> mbAISlowMo = false
+        //     0x8264169C  lbz   r11, 0x1434(r31)         <- still in slow-mo ->
+        //     0x826416D8  vmulfp128 v127, v0, v1                scale the SIM timestep by
+        //                                                       1/unk_82FB8880 == KVF_AI_CRASH_SLOWMO_FACTOR
+        //     0x826416F4  stb   r30(0), 0x1434(r31)      <- not crashing: mbAISlowMo = false
+        //     0x826416FC  stfs  <flt_820037C8>, 0x1430(r31)      and the timer is re-seeded
+        // i.e. +0x1430 is the AI CRASH TIMER that drives the AI crash slow-motion, which is precisely
+        // the DWARF's `mfCrashTimer` (:408) + `mbAISlowMo` (:409), and precisely what the two
+        // constants BrnPhysics::Vehicle::KVF_AI_CRASH_PAUSE_TIME / KVF_AI_CRASH_SLOWMO_FACTOR
+        // (DWARF RaceCarPhysics.h:39/:40) exist for. It has nothing to do with slam steering.
+        // =========================================================================================
 
-        // ----- ADDITIVE GROW (C10): per-instance race-car state the C10 functions touch. -----
-
-        // @+0x140D (BY NAME). Latched each frame by Update; read by IsUsingAftertouch. The asm
-        // stores the aftertouch-enable bool to this+0x140D (`stb r11,0x140D(r31)`) and the getter
-        // returns `lbz r3,0x140D(r3)`.
-        bool mbUsingAftertouch;
-
-        // @+0x13F0 (BY NAME). The accumulated prop-collision impulse summed across the frame, flushed
-        // by ApplyPropCollisionImpulseSum (asm: `addi r31,this,0x13F0`). Read/written as a single VMX
-        // register. The ~0x13F0 bytes of base+VehiclePhysics state before it are not padded here.
+        // @+0x13F0 (DWARF :393). The accumulated prop-collision impulse summed across the frame,
+        // flushed by ApplyPropCollisionImpulseSum. Read/written as a single VMX register.
         Vector3 mPropCollisionImpulseSum;
 
-        // @+0x1404 (BY NAME). The stick-driven extra-steer scalar Update maintains (mfSlamSteering;
-        // the asm reads/writes `this->float1404`). Decays 0.95/frame, deadzone 0.1, clamp +/-10.
+        // @+0x1400 (DWARF :395). Time since this car last took the player down -- integrated by
+        // Update every frame and reset to 0 by the takedown path (VehicleManager::SetRaceCarCrashing
+        // zeroes it in the victim==player case). Read by HasRecentlyTakendownPlayer against
+        // KF_POST_PLAYER_TD_INVULNERABILITY_TIME (DWARF RaceCarPhysics.h:34/:518/:532).
+        // ⭐ This is the field BrnVehicleManager.h's RaceCarVehicleRecord carried as
+        // `mfRecoveryTimer` at in-record +5120.
+        f32 mfTimeSinceTookDownPlayer;
+
+        // @+0x1404 (DWARF :396). The stick-driven extra-steer scalar Update maintains. Decays
+        // 0.95/frame, deadzone 0.1, clamp +/-10; consumed by VehicleManager::CalculateSlamData.
         f32 mfSlamSteering;
 
-        // @+0x1430 (BY NAME). A short-lived slam/steer envelope scalar Update also drives on the
-        // engine-only path (the asm's `this->float1430`).
-        f32 mfSlamSteerEnvelope;
+        // @+0x1408 (DWARF :397). How long this car has been "beached" -- integrated by Update only
+        // while the car is slow, is not considered airborne, has its wheels off the ground and is
+        // not crashing; the whole point is the IsBeached() query (DWARF RaceCarPhysics.h:363).
+        f32 mfBeachedTime;
 
-        // @+0x1440 (BY NAME; DWARF RaceCarPhysics.h:414). The collision normal that caused the
-        // current crash, snapshotted when the crash begins; read out by GetNormalCausingCrash
-        // (asm: lvx128 v0, this, 0x1440). The ~0x1440 bytes of preceding base+VehiclePhysics+
-        // RaceCarPhysics state are not padded here.
+        // @+0x140C (DWARF :399). Read by IsPlayerVehicleActuallyInShowtime / IsCrashingNormally.
+        bool mbPlayerCarInShowtime;
+
+        // @+0x140D (DWARF :400). Latched each frame by Update; read by IsUsingAftertouch.
+        bool mbUsingAftertouch;
+
+        // @+0x140E (DWARF :401). The car's "strength" stat byte, seeded by Prepare from its
+        // parameter and read back by GetStrengthStat (DWARF :355) -- PhysicalTrafficVehicle::
+        // OnChecked reads it directly off the race car to weight traffic interest.
+        u8 mu8StrengthStat;
+
+        // @+0x1410 / +0x1420 (DWARF :406 / :407). The linear and angular velocity snapshot taken the
+        // instant a crash begins: SetCrashing copies this+0x50 and this+0x60 into them verbatim.
+        Vector3 mInitialCrashVel;
+        Vector3 mInitialCrashAngVel;
+
+        // @+0x1430 (DWARF :408). The AI crash timer -- see the ⛔ block above. Re-seeded whenever the
+        // car is not crashing, integrated by the REAL (unscaled) timestep while it is, and compared
+        // against KVF_AI_CRASH_PAUSE_TIME to end the AI crash slow-motion.
+        f32 mfCrashTimer;
+
+        // @+0x1434 (DWARF :409). While set, Update scales the simulation timestep by
+        // KVF_AI_CRASH_SLOWMO_FACTOR (the AI crash slow-motion). Read by IsInAICrashSlowMo (:292).
+        bool mbAISlowMo;
+
+        // @+0x1435 (DWARF :410). Latched by VehicleManager::GetUpdatedVehicleBodies once a slow-mo
+        // frame's state has been written back into RenderWare, so it is written at most once per
+        // slow-mo episode. Accessors SetWrittenIntoRWInSlowMo / GetWrittenIntoRWInSlowMo (:296/:300).
+        bool mbWroteIntoRWInSlowMo;
+
+        // @+0x1436 (DWARF :412). Set by the deformation pass when this car's crush has passed the
+        // limit past which it can still be driven; read back by VehicleOutputInterface::
+        // UpdateRaceCarState. Accessors Set/GetDeformedBeyondDriveTimeLimitsInCrash (:347/:351).
+        bool mbDeformedBeyondDriveTimeLimitsInCrash;
+
+        // @+0x1440 (DWARF :414). The collision normal that caused the current crash, snapshotted
+        // when the crash begins; read out by GetNormalCausingCrash (which asserts mbCrashing first).
         Vector3 mCrashNormal;
+
+        // @+0x1450 (DWARF :415). The entity that caused the current crash. Written by
+        // VehicleManager::SetRaceCarCrashing together with mCrashNormal (the pair is the console's
+        // SetCrashEntityIdAndNormal, DWARF :590) and read back by GetEntityCausingCrash (:331).
+        // ⭐ This is the field BrnVehicleManager.h's RaceCarVehicleRecord carried as
+        // `mStampedEntityId` at in-record +5200.
+        EntityId mEntityCausingCrash;
+
+        // @+0x1454 (DWARF :417). Debug-draw gate consulted by UpdateTargetAssist. LAST DATA BYTE OF
+        // THE CLASS -- the 11 bytes after it are the alignment pad that closes sizeof at 5216.
+        bool mbDebugShowTargetAssist;
     };
 
     // =========================================================================================

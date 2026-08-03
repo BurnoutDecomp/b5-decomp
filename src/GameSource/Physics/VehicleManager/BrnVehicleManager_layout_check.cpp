@@ -325,6 +325,60 @@ namespace Vehicle
         static_assert(sizeof(VehicleManager::mafPlayerGrindingOtherDurationSeconds) == 32, "f32[8] -- NOT a scalar threshold");
         static_assert(sizeof(VehicleManager::mafOtherGrindingPlayerDurationSeconds) == 32, "f32[8] -- NOT a scalar threshold");
         static_assert(sizeof(VehicleManager::mStuckInCollisionTestCacheSphere) == 16, "one stvx128 == 16 bytes");
+
+        // =========================================================================================
+        // ⭐⭐ THE RaceCarVehicleRecord IN-RECORD SEATS -- ADDED 2026-08-03 (RaceCarPhysics own-block
+        // wave), AND THEY HAD NEVER BEEN CHECKED BY ANYTHING.
+        //
+        // BrnVehicleManager.h pins ten in-record field offsets on the 5216-byte stand-in for
+        // RaceCarPhysics, and says so. The asserts that were supposed to enforce them live in
+        // BrnVehicleManager.cpp (nine of them) and BrnVehicleManagerPlayerStats.cpp (one), and
+        // NEITHER TU IS MOUNTED -- which is the whole reason this file exists for the outer class.
+        // The record's seats had exactly the same hole and it had been missed because the header
+        // reads as if the asserts were live. Duplicated here, in the mounted TU, so they run.
+        //
+        // ⚠️ THREE OF THESE ARE FLAGGED AS SUSPECT IN THE HEADER (mCrashMatrix @3328,
+        // mvWorldPosition @1920, mfProximityRadiusSq @1904 -- see the ⚠️⚠️ block over
+        // RaceCarVehicleRecord). They are asserted here AS COMMITTED, deliberately: the point of a
+        // gate is to pin what the model currently claims so that a change to it is visible. When
+        // the VehiclePhysics own-block pass moves them, these three lines are what will fail, and
+        // that failure is the reminder to re-read the derivation rather than re-type the number.
+        // =========================================================================================
+        static_assert(sizeof(RaceCarVehicleRecord) == 5216,
+                      "per-car stride (asm: VehicleManager::Construct `addi r29, r29, 0x1460`)");
+        static_assert(offsetof(RaceCarVehicleRecord, mbCrashing) == 1808,
+                      "SimpleVehiclePhysics::mbCrashing -- named by the console's own assert string "
+                      "at RaceCarPhysics.h:328 (GetNormalCausingCrash @0x825B3944)");
+        static_assert(offsetof(RaceCarVehicleRecord, mfProximityRadiusSq) == 1904,
+                      "in-record radius-sq -- ⚠️ SUSPECT, see the header (probably +48)");
+        static_assert(offsetof(RaceCarVehicleRecord, mvWorldPosition) == 1920,
+                      "in-record world pos -- ⚠️ SUSPECT, see the header (probably +64)");
+        static_assert(offsetof(RaceCarVehicleRecord, mbCrashCommitted) == 3097, "in-record crash-committed");
+        static_assert(offsetof(RaceCarVehicleRecord, mCrashMatrix) == 3328,
+                      "in-record crash matrix -- ⚠️ SUSPECT, see the header (probably a phantom; the "
+                      "store is a 16-byte stvx128 at in-record 5184 == mCrashNormal)");
+        static_assert(offsetof(RaceCarVehicleRecord, mvCrashPosition) == 3824, "in-record crash pos");
+        static_assert(offsetof(RaceCarVehicleRecord, mbPlayerGrace) == 4308, "in-record player-grace");
+        static_assert(offsetof(RaceCarVehicleRecord, mfPlayerBoostStrengthStat) == 5084,
+                      "in-record player boost stat (asm: stw r10, 0x1B1C(5216*idx + this))");
+        static_assert(offsetof(RaceCarVehicleRecord, mfTimeSinceTookDownPlayer) == 5120,
+                      "RaceCarPhysics::mfTimeSinceTookDownPlayer @+0x1400 (DWARF :395)");
+        static_assert(offsetof(RaceCarVehicleRecord, mEntityCausingCrash) == 5200,
+                      "RaceCarPhysics::mEntityCausingCrash @+0x1450 (DWARF :415); "
+                      "SetRaceCarCrashing @0x82635478 `stw r26, 0x1450(r30)`");
+        static_assert(sizeof(RaceCarCrashData) == 12, "RaceCarCrashData stride (asm: 12)");
+
+        // ⭐ THE CROSS-CHECK BETWEEN THE TWO MODELS OF THE SAME CLASS. The record is byte-pinned to
+        // X360 and RaceCarPhysics is not, so they can only be compared by DELTA -- but a delta is
+        // enough, because the two fields below bracket the whole RaceCarPhysics own block and were
+        // derived from completely different evidence (this side from SetRaceCarCrashing's store
+        // offsets; the other side from the DecFIGS DWARF member order closing on this class's own
+        // stride). Both terms of the right-hand side are X360 literals.
+        static_assert(offsetof(RaceCarVehicleRecord, mEntityCausingCrash)
+                          - offsetof(RaceCarVehicleRecord, mfTimeSinceTookDownPlayer)
+                          == 0x1450 - 0x1400,
+                      "the record's two settled fields must be the same 0x50 apart as "
+                      "RaceCarPhysics::mEntityCausingCrash and ::mfTimeSinceTookDownPlayer");
     }
 }
 }

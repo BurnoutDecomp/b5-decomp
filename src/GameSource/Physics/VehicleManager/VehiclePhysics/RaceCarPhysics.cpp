@@ -159,12 +159,37 @@ namespace Vehicle
 
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::Update  @0x826415E8
-    //   Maintain mfSlamSteering (mfSlamSteerEnvelope on the engine-only path), flush prop impulses,
-    //   chain to VehiclePhysics::Update (+ UpdateSteering on the engine-only branch), then decay the
-    //   uncapped-speed timer + a per-frame timer and latch mbUsingAftertouch.
-    //   lfTimeStep arrives in a VMX lane (the asm splats v2/v1); modelled here as the frame dt the
-    //   timers integrate by. FLAG: the dt source register is not separately homed -- taken as the
-    //   physics tick dt.
+    //   Run the AI-crash slow-motion timer OR maintain mfSlamSteering, flush prop impulses, chain to
+    //   VehiclePhysics::Update, then tick mfTimeSinceTookDownPlayer / mfBeachedTime and latch
+    //   mbUsingAftertouch.
+    //
+    // ⛔⛔ THE TOP-LEVEL BRANCH IN THIS BODY WAS THE WRONG FLAG -- CORRECTED 2026-08-03 (own-block
+    //   recovery wave). It read `if (mbUsingAftertouch)` with the comment "byte710 in the asm". The
+    //   asm is `lbz r11, 0x710(r31)` @0x82641624 and +0x710 is **mbCrashing** -- proven first-hand,
+    //   not inferred: RaceCarPhysics::GetNormalCausingCrash @0x825B3944 loads the same +0x710 and
+    //   asserts on it with the literal string "mbCrashing" and __FILE__ ".../RaceCarPhysics.h",
+    //   __LINE__ 328. mbUsingAftertouch is +0x140D and is WRITTEN AT THE BOTTOM OF THIS FUNCTION, so
+    //   the committed form branched on its own previous-frame output. Classic address-right /
+    //   meaning-wrong, with a self-referential twist.
+    //
+    // ⛔ AND THE MEMBER THE CRASHING BRANCH DRIVES IS mfCrashTimer, NOT A "SLAM-STEER ENVELOPE".
+    //   +0x1430 is the AI crash timer (DWARF RaceCarPhysics.h:408); it is compared against
+    //   KVF_AI_CRASH_PAUSE_TIME to clear mbAISlowMo @+0x1434, which is what gates the
+    //   KVF_AI_CRASH_SLOWMO_FACTOR timestep scale. Full asm trace in RaceCarPhysics.h's own-block
+    //   comment. Three call sites re-pointed here.
+    //
+    // ⚠️ STILL NOT FAITHFUL, and deliberately left visible rather than papered over: the two rodata
+    //   seeds this function needs (flt_820037C8, the value stored into mfCrashTimer when the car is
+    //   NOT crashing, and unk_82FB8880 == KVF_AI_CRASH_SLOWMO_FACTOR) have not been read off the
+    //   image, so the not-crashing re-seed below still carries a placeholder literal and the
+    //   slow-mo timestep scaling is not applied at all. This TU is NOT MOUNTED
+    //   (tools\build\build_game_exe.bat has zero RaceCarPhysics.cpp hits), so none of it runs today
+    //   -- but it must not be mounted while those two remain guesses.
+    //
+    //   lfTimeStep arrives in a VMX lane (the asm splats v2/v1). ⚠️ THE TWO VECTORS ARE NOT
+    //   INTERCHANGEABLE: mfCrashTimer integrates v2 (the REAL frame time, so the slow-mo window is
+    //   bounded in real time) while mfTimeSinceTookDownPlayer and mfBeachedTime integrate v1 (the
+    //   SIM timestep, which the slow-mo path scales).
     // ---------------------------------------------------------------------------------------
     void RaceCarPhysics::Update(s32 a2, const BrnPlayerDriverControls* lpControls,
                                 bool lbApplyAftertouch, s32 a5, s32 a6, s32 a7,
@@ -175,24 +200,37 @@ namespace Vehicle
         // -- a committed zero that made EVERY timer in this function a no-op, and a `0.0f`
         // "placeholder" is never inert: it means *immediately* / *never*. The dt is lane 0 of
         // the second incoming vector register; the asm is quoted in RaceCarPhysics.h above the
-        // declaration (`stvx128 v126 ; lfs f13 ; fadds` on mfSlamSteerEnvelope, at the top of
-        // the engine-only branch). NOT un-homed -- just never read off the asm.
+        // declaration (`stvx128 v126 ; lfs f13 ; fadds` on mfCrashTimer, at the top of the
+        // CRASHING branch). NOT un-homed -- just never read off the asm.
+        // ⚠️ ONE dt IS NOT ENOUGH, and this model still only has one. The console integrates
+        // mfCrashTimer by v2 (real time) and mfTimeSinceTookDownPlayer / mfBeachedTime by v1 (the
+        // sim timestep, which the AI-slowmo path scales). Both arrive here -- lrPassThroughV1 is v1
+        // and lrTimeStep is v2 -- so the split is expressible; it is not applied below only because
+        // the slowmo scaling that makes the two differ is itself elided on an unread constant.
         const f32 lfDT = lrTimeStep.x;
 
         const f32 lfSteer = lpControls->GetSteer();
 
-        if (mbUsingAftertouch /* byte710 in the asm == the in-air/crash gate; see note */)
+        if (mbCrashing)   // asm @0x82641624: `lbz r11, 0x710(r31)` -- see the ⛔ note above
         {
-            // Engine-only / airborne envelope path: integrate the slam-steer envelope, optionally
-            // shrink it toward a target (the unk_82FB8880 reciprocal blend), then chain Update.
-            mfSlamSteerEnvelope += lfDT;   // this->float1430 += dt (the asm's `fadds f0,f0,v2.x`)
-            // (the unk_82FB8880 Newton-reciprocal blend that scales v127 is an un-homed rodata
-            //  shaping term -- elided as faithful-but-inert; it does not change the member written.)
+            // Crashing: run the AI crash-slowmo timer. It integrates the REAL frame time (v2), and
+            // once it passes KVF_AI_CRASH_PAUSE_TIME the slow-motion window closes.
+            mfCrashTimer += lrTimeStep.x;   // asm 0x82641640..0x82641664 (`fadds f0,f0,v2.x`)
+            // ⚠️ ELIDED, and it is NOT inert: `if (mfCrashTimer > KVF_AI_CRASH_PAUSE_TIME)
+            //    mbAISlowMo = false;` then `if (mbAISlowMo) <scale the sim timestep v1 by
+            //    1/KVF_AI_CRASH_SLOWMO_FACTOR>` (asm 0x8264168C..0x826416D8). Both constants are
+            //    un-read rodata (unk_82FB83B0 / unk_82FB8880), so writing the comparison would mean
+            //    inventing them. Left out with the flag rather than guessed.
             mfSlamSteering = 0.0f;          // this->float1404 = 0.0
         }
         else
         {
-            mfSlamSteerEnvelope = -1.0f;    // this->float1430 = -1.0
+            // FLAG (rodata): the console re-seeds mfCrashTimer from flt_820037C8 here
+            // (asm 0x826416F4..0x826416FC, which also clears mbAISlowMo). That symbol has not been
+            // read off the image; the -1.0f below is the committed PLACEHOLDER it has always been,
+            // now correctly named. Do not treat it as recovered.
+            mbAISlowMo = false;             // asm: `stb r30(0), 0x1434(r31)`
+            mfCrashTimer = -1.0f;           // FLAG: placeholder for flt_820037C8
 
             // ⭐ RE-NAMED 2026-08-03. The asm is `lwz r11,0x44(r29); cmpwi 1; bne` then
             // `lbz r11,0x4E(r29)` (@0x82641700..0x82641714): the console checks the DRIVER TYPE and,
@@ -234,19 +272,32 @@ namespace Vehicle
         VehiclePhysics::Update(a2, lpControls, lbApplyAftertouch, a5, a6, a7,
                                lrPassThroughV1, lrTimeStep);
 
-        // Engine-only path follow-up: re-run steering with the steering-wheel flag + steer.
+        // ⛔ WRONG GATE, MEASURED 2026-08-03 AND LEFT VISIBLE RATHER THAN SWAPPED FOR A SECOND GUESS.
+        // The console gates this follow-up steering pass on a byte at +0x70 (asm @0x82641884:
+        // `lbz r11, 0x70(r31) ; cmplwi ; beq`). +0x70 is **mbFrozen** -- VehiclePhysics.h's own
+        // Reset note pins it there twice over (VP frame +0x70 == ExternallySimulatedBody frame
+        // +0x60, and UpdateFreezing @0x825CFFA0 reads/writes it alongside mbForceFrozen @+0x10F6).
+        // mbUsingAftertouch is +0x140D -- a different member, and one THIS FUNCTION WRITES twenty
+        // lines below, so the condition reads its own previous-frame output.
+        // It is NOT re-pointed here because mbFrozen has no declared member in this tree yet (only a
+        // comment in VehiclePhysics.h), and inventing an accessor or a placeholder for it would be
+        // the fabrication this file keeps warning about. NEXT WAVE: declare mbFrozen on
+        // ExternallySimulatedBody / VehiclePhysics from its own asm, then re-point this one line.
         // ⭐ RE-NAMED 2026-08-03: the byte at controls+0x41 is mbIsSteeringWheel, not a "car type"
         // (UpdateDriving @0x82638348 passes the same +0x41 byte to UpdateSteering, and
         // ModifyControlsForSteeringWheelInput is gated on it @0x826381A8).
-        if (mbUsingAftertouch)
+        if (mbUsingAftertouch)   // ⛔ WRONG MEMBER: the console reads mbFrozen @+0x70 (see above)
             VehiclePhysics::UpdateSteering(lpControls->mbIsSteeringWheel ? 1 : 0, lfSteer);
 
         // Decay the uncapped-speed window timer while it is positive.
         if (mbPlayerCarInShowtime && MS.mfUncappedSpeedTimer > 0.0f)
             MS.mfUncappedSpeedTimer -= lfDT;
 
-        // Integrate the short slam-steer envelope timer (the asm's gap13F1[15] += dt).
-        mfSlamSteerEnvelope += lfDT;
+        // ⭐ RE-POINTED 2026-08-03. This store is at +0x1400 (asm 0x826418E0: `lfs f0,0x1400(r31)`
+        // / 0x826418F8: `stfs f0,0x1400(r31)`), i.e. mfTimeSinceTookDownPlayer -- the post-takedown
+        // invulnerability clock HasRecentlyTakendownPlayer reads. It was written into the +0x1430
+        // member, which is a different timer entirely.
+        mfTimeSinceTookDownPlayer += lfDT;
 
         // Latch aftertouch-active for this frame: needs the request flag (a5), an aftertouch-enable
         // input ( > 0 ) and the virtual "can use aftertouch" query (vtbl+20).
@@ -391,10 +442,12 @@ namespace Vehicle
         // method on VehiclePhysics (this minimal slice has no real SimpleVehiclePhysics base type).
         VehiclePhysics::AddTractionPoint(leWheel, luSurfaceTag);
 
-        // gap1408 is the per-frame push timer (mfBeachedTime region). When it has reached the
-        // threshold the contact is snapshotted -- faithful-but-inert while the threshold is a
-        // placeholder (the comparison is `threshold >= timer`, so with 0 it mirrors the timer<=0 case).
-        const f32 lfPushTimer = mfSlamSteerEnvelope;   // FLAG: the +0x1408 timer (un-modelled separately)
+        // ⭐ RE-POINTED 2026-08-03 (own-block recovery). This read `mfSlamSteerEnvelope` while its
+        // own comment said "the +0x1408 timer (un-modelled separately)" -- i.e. it knew the console
+        // offset and used the member that did not live there (+0x1430). +0x1408 is mfBeachedTime,
+        // now a declared member; the asm is `lfs f0, 0x1408(r31)` @0x825FFB0C. Still gated on a
+        // placeholder threshold (unk_82FB9180 unread), which is FLAGGED above, not hidden.
+        const f32 lfPushTimer = mfBeachedTime;   // asm: lfs f0, 0x1408(r31)
         if (KF_TRACTION_PUSH_THRESHOLD >= lfPushTimer)
         {
             // The 56-byte (6x8) road-contact snapshot + the byte[42] -> +344 flag step are structural
