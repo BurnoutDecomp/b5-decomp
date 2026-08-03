@@ -26,6 +26,20 @@
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 
+// ⭐ ADDED 2026-08-03 (the Construct-blocker wave) -- THIS INCLUDE IS ITSELF A GATE, not a
+// convenience. BrnPhysicalTrafficManager.h used to define its own `struct VehicleDriver
+// { u8 mOpaque[224]; }` at namespace scope in BrnPhysics::Vehicle, while BrnVehicleManager.h
+// (above) pulls in the REAL VehicleDriver for maRaceCarDrivers[8] / mPlayerAiDriver. The two
+// headers therefore could not be included in the same translation unit -- a hard C2011 -- and
+// VehicleManager::Construct @0x8263B7C8 has to call both VehicleDriver::Construct and
+// PhysicalTrafficManager::Construct. That fork is retired; this line is what keeps it retired,
+// because BrnPhysicalTrafficManager.h's only other includer (BrnPhysicalTrafficManager.cpp) is
+// NOT mounted, so nothing else in the build would ever notice a re-fork.
+#include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
+// The two sub-object classes whose real x64 size decides whether Construct can call their
+// constructors at all. Included so the size verdicts below are compiled facts.
+#include "GameSource/Physics/VehicleManager/BrnVehicleManagerDebugComponent.h"
+
 #include <cstddef>   // offsetof
 
 namespace BrnPhysics
@@ -34,6 +48,61 @@ namespace Vehicle
 {
     void VehicleManager::_AssertLayoutTuningBank()
     {
+        // ==========================================================================================
+        // ⛔ THE `VehicleManager::Construct` SUB-CONSTRUCTOR BLOCKER TABLE, as compiled asserts.
+        //
+        // These are not decoration. Construct @0x8263B7C8 calls six sub-constructors; three of them
+        // take a `this` that VehicleManager cannot supply, because the member is an X360-sized
+        // opaque span and the real x64 class is bigger. The header records the measured numbers;
+        // these asserts make the build fail the day any of them changes, in EITHER direction --
+        // including the good direction, which is the point: when a wave shrinks
+        // VehicleManagerDebugComponent to 1296 or re-seats the traffic manager, one of these fires
+        // and says "the blocker you were told about is gone".
+        //
+        // ⚠️ Deliberately written as `!=` / `==` against the MEASURED values rather than as
+        // `<= span`, so they are tripwires, not permissions.
+        // ==========================================================================================
+
+        // ✅ READY -- fits exactly, so `VehicleDriver::Construct` is callable by name today.
+        static_assert(sizeof(VehicleDriver) == 224,
+                      "VehicleDriver fits maRaceCarDrivers[8] (stride 0xE0) and mPlayerAiDriver");
+        static_assert(sizeof(VehicleManager::maRaceCarDrivers) == 8 * 224,
+                      "the eight-car driver array is 1792 bytes: 64 + 1792 == 1856 == maRaceCarVehicles");
+
+        // ✅ READY -- the ONE contained sub-object whose real class fits its X360 span on x64.
+        static_assert(sizeof(BrnPhysics::StuntOffencesManager) == 464,
+                      "StuntOffencesManager fits this+44240..44704 exactly (no pointer members; "
+                      "last member ends at 0x1C4 == 452, padded to 464 at align 16 on both ISAs)");
+        static_assert(alignof(BrnPhysics::StuntOffencesManager) == 16 &&
+                      offsetof(VehicleManager, mStuntOffencesManager) % 16 == 0,
+                      "and its 16-byte alignment is satisfied at 44240, so typing it moved nothing");
+
+        // ✅ READY -- the discarded-contact queue fits because the pointer widening lands in the
+        // padding the X360 header already carried: {T* , s32, s32} is 12->16 there and 8+4+4 == 16
+        // here, then 16 + 20*64 == 1296 either way.
+        static_assert(sizeof(VehicleManager::mDiscardedContacts) == 1296,
+                      "EventQueue<DiscardedContact,20> fits this+160672..161968 exactly");
+        static_assert(sizeof(BrnPhysics::ContactSpy::DiscardedContact) == 64,
+                      "and the 64-byte entry is what makes 16 + 20*64 == 1296 close");
+        static_assert(offsetof(VehicleManager, mDiscardedContacts) == 160672,
+                      "asm: addis r29,r31,2 ; addi r29,r29,0x73A0 ; stw r28,0(r29)");
+
+        // ⛔ BLOCKED -- the debug component grows 32 bytes on x64 (base vptr + mpVehicleManager).
+        static_assert(sizeof(VehicleManagerDebugComponent) == 1328,
+                      "MEASURED x64 size. The span mDebugComponent[163264 - 161968] is 1296, so "
+                      "VehicleManagerDebugComponent::Construct(this + 161968, this) CANNOT be called "
+                      "by name until this class is 1296 or VehicleManager stops being byte-pinned. "
+                      "If this assert fires, re-measure -- the blocker may have moved.");
+        static_assert(sizeof(VehicleManager::mDebugComponent) == 1296,
+                      "the X360-sized span the 1328 above overflows by exactly 32 bytes");
+
+        // ⛔ BLOCKED -- the contained traffic manager grows 2480 bytes on x64.
+        static_assert(sizeof(PhysicalTrafficManager) == 105840,
+                      "MEASURED x64 size vs the 103360-byte span this class models at +44768..148128. "
+                      "PhysicalTrafficManager::Construct(this + 44768) is unreachable by name until "
+                      "that closes; see BrnPhysicalTrafficManager.h finding (3) for three of the "
+                      "contributing host/X360 size divergences.");
+
         // ---- the two master gates (DWARF :865/:866) -------------------------------------------
         static_assert(offsetof(VehicleManager, mbSlamsAndShuntsOn) == 171464,
                       "mbSlamsAndShuntsOn (asm stbx 1 @+171464)");
