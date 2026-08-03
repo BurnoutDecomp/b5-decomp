@@ -34,3 +34,23 @@ bool VehiclePhysics_embed_check(const VehiclePhysics& lrPhysics, f32 lfSteering,
     return lbCounter && (lfScale > 0.0) && (lDownForce.x >= 0.0f)
         && (lGrip.x >= 0.0f) && (lRough.x >= 0.0f) && (lDrag.x >= 0.0f);
 }
+
+// ----------------------------------------------------------------------------------------------
+// THE RESET-CHAIN LINK WITNESS (2026-08-03).
+//
+// A green compile gate is NOT a green link: nothing in the tree calls Reset or SetWheelVelocities
+// yet, so /OPT:REF discards both COMDATs and the exe's .map comes back with zero mentions of
+// either. This function exists purely to force the linker to RESOLVE the chain
+//     VehiclePhysics::Reset -> SetWheelVelocities -> Engine::Reset
+//     VehiclePhysics::Reset -> SimpleVehiclePhysics::Reset / Wheel::Reset / SuspensionSpring::Reset
+// so that an unresolved callee shows up as LNK2019 rather than as a surprise several waves later.
+// (/OPT:REF does not suppress LNK2019 from a stripped COMDAT, so this measures closure even though
+// the code itself is discarded.) It is never called at runtime.
+//
+// MEASURED 2026-08-03 by temporarily mounting this file in tools/build/build_game_exe.bat: the
+// whole chain resolved with zero LNK2019. The mount line was then REVERTED -- see the wave report.
+void VehiclePhysics_reset_link_check(VehiclePhysics& lrPhysics, Vector3 lvVelocity)
+{
+    lrPhysics.SetWheelVelocities(lvVelocity);
+    lrPhysics.Reset(lvVelocity);
+}

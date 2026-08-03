@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h" // CgsNumeric::Random (the shared LCG ring)
 #include "rw/math/vpu/vector3_operation.h"            // rw::math::vpu::{MagnitudeSquared, Normalize, Dot, operator*}
 #include "rw/math/vpu/matrix44affine_operation.h"     // rw::math::vpu::{InverseOfMatrixWithOrthonormal3x3, operator*}
+#include "rw/math/fpu/scalar_operation.h"            // rw::math::fpu::IsZero (SetWheelVelocities' per-axle power gates)
 
 #include <stdint.h>   // uint32_t / uint64_t for the road-noise LCG draw
 #include <cstring>    // std::memcpy (bit-reinterpret the road-noise float)
@@ -456,6 +457,350 @@ namespace Vehicle
                 lfDx * lvAt.x    + lfDy * lvAt.y    + lfDz * lvAt.z,
                 0.0f };
         }
+    }
+
+    // ==============================================================================================
+    //  @0x825FD218  BrnPhysics::Vehicle::VehiclePhysics::SetWheelVelocities   (728 X360 instrs)
+    // ==============================================================================================
+    // Re-seed the whole drivetrain from the body's current rigid-body motion. Three callers, all
+    // car-PLACEMENT paths: VehiclePhysics::Reset (the `mpAttribs != NULL` branch),
+    // TrafficPhysics::PreparePhysical, and VehicleManager::HandleRaceCarRaceCarContact (once per
+    // car, right after a slam/shunt impulse lands).
+    //
+    // ⭐ THE "BLOCKED" LABEL WAS INHERITED AND WRONG. The ledger and this file's own group notes
+    //    called it "un-recoverable degenerate VMX128 + a dozen un-committed helpers / un-homed
+    //    rodata". Disassembled first-hand 2026-08-03:
+    //      * it is ONE function -- one `bl __savegprlr_14` + `stwu` prologue, one `b __restgprlr`
+    //        epilogue, and 0x825FD218 + 728*4 == 0x825FDD78 == exactly where Reset starts, so the
+    //        export-hole check the campaign uses passes;
+    //      * the callee set is `Engine::Reset` plus BeginAssert/FireAssert/EndAssert and the assert
+    //        message-builder (BasePriorityQueue::Clear + sub_82203F70) -- nothing else, and
+    //        Engine::Reset has been committed since the engine-defaults wave;
+    //      * the "degenerate VMX128" is an inlined `XMVectorSinCos` over unk_82000BD0..unk_82000C60,
+    //        the SAME table three earlier waves already decoded (BrnBehaviourRoadRunner.cpp:988
+    //        pins unk_82000C60 lane1 == 6.283185482 == 2*pi and lane3 == 0.1591549367 == 1/(2*pi),
+    //        and 0x82000BD0 == {1, -1/6, 1/120, -1/5040, ...}), plus a Rodrigues axis-angle rotation
+    //        and one cross product.
+    //
+    // ⚠️ THE PARAMETER IS DEAD IN THE CONSOLE BODY. Vector arguments arrive in v1 (proved by this
+    //    function's own outgoing calls -- `vspltw v1,v0,0 ; bl Engine::Reset`), and the first
+    //    mention of v1 in the body is a WRITE at 0x825FD364. That is not a decode gap: the caller
+    //    HandleRaceCarRaceCarContact does `li r22,0x50 ; lvx128 v1,r3,r22 ; bl SetWheelVelocities`,
+    //    i.e. it passes the car's own mLinearVelocity (+0x50) -- exactly the value the callee
+    //    re-reads from `this` itself. The argument is redundant with `this`, so it is kept in the
+    //    signature and named-but-unused here, exactly as the console has it.
+    //
+    // The asm, in order:
+    //   0x825FD2CC  mAngularVelocity -= Up * dot3(mAngularVelocity, Up)      (lvx +0x60, lvx +0x20,
+    //               vmsum3fp128, vmulfp128, vsubfp, stvx128 back to +0x60) -- the YAW-RATE KILL.
+    //   0x825FD2F4..0x825FD534  one inlined XMVectorSinCos of
+    //               mvSteeringAngle_..._.x (+0xFE0 lane .x), then the Rodrigues rows for
+    //               R(axis = mTransform.Up(), angle = that), applied to mTransform.At():
+    //               v125 = R * At.  (The three `vperm`+`vrlimi128` triples build columns 0/1/2 of
+    //               the standard Rodrigues matrix; `vrlimi128 v9,v3,2,0` inserting (1-c)xz - s*y --
+    //               the Z element of row 0 -- independently re-proves the mask convention
+    //               8/4/2/1 == lane x/y/z/w that the two register stores below depend on.)
+    //   then FOUR fully unrolled wheel blocks (bases +0x130/+0x210/+0x2F0/+0x3D0, stride 0xE0):
+    //               assert(IsFinite(wheel.mPosition));      // "Invalid wheel position: " << pos <<
+    //                                                       // ", please tell Graham D."  (:412)
+    //               r = Right*p.x + Up*p.y + At*p.z         // p = wheel.mPosition, body-local
+    //               v = cross(mAngularVelocity, r) + mLinearVelocity     // rigid-body point velocity
+    //               wheel.mBodyPointVelocity      = v                        // +0xA0
+    //               wheel.mIntegrationVariables.y = 0                        // vrlimi128 mask 4
+    //               wheel.mIntegrationVariables.x = dot3(v, dir) / wheel.mSlipVariables.w
+    //                                                                       // vmsum3fp128 * vrefp
+    //                                                                       // + 2 Newton steps
+    //               wheel.mbBrokenAdhesiveLimit   = false                    // +0xD5
+    //               with dir = the STEERED direction v125 for wheels 0/1 and the plain
+    //               mTransform.At() for wheels 2/3 (the rear pair reloads +0x30 instead of v125).
+    //   0x825FDC04..end  the engine re-seed (see below).
+    //
+    // ⭐ Two independent corroborations of the per-wheel store, both from ALREADY-COMMITTED code:
+    //    StoreLocalWheelPositions above uses the transpose of the very same Right/Up/At basis, and
+    //    the C07 speed-match block at VehiclePhysics.cpp:1033-1036 uses the identical
+    //    `mIntegrationVariables.x = target / mSlipVariables.w` idiom with the front pair taking
+    //    maWheels[0].mSlipVariables.w and the rear pair maWheels[2]'s.
+    //
+    // ⭐ Why the yaw-rate kill is deliberate and not a misread of the lanes: each wheel's spin is
+    //    re-seeded from the body velocity AT THAT WHEEL, so any residual rotation about the body's
+    //    up axis would spin the outer wheels faster than the inner ones -- and the engine is then
+    //    re-seeded from the AVERAGE of the four. Removing the Up component makes all four agree.
+    //
+    // CONSTANTS -- every one attested, none guessed. The exported Hex-Rays pseudocode folds the
+    // .rdata scalar loads into literals: flt_82001CC0 == 0.0f (the two accumulator seeds),
+    // flt_82001D9C == 2.0f (`v8 = 2.0` / `v8 = v8 + 2.0` -- wheels per driven axle), and
+    // stru_8208F620 / flt_82002514 == +/-1.1920929e-7 == FLT_EPSILON, the rw::math::fpu::IsZero
+    // band. The two per-axle gates read mpAttribs->mBaseAttribs
+    // .mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo (+0xB0): lane .z == PowerToRear
+    // gates the REAR pair and lane .y == PowerToFront gates the FRONT pair -- the DWARF's own lane
+    // names confirm the front/rear wheel-index assignment independently of the offsets.
+    //
+    // FLAG (PC-platform, numeric): the console's SinCos is a shared minimax polynomial over a
+    //   2*pi-reduced argument; std::sin / std::cos are the exact forms. Tighter than the console,
+    //   never looser -- the same de-optimisation CameraUtils.cpp:561 already applies to this table.
+    //
+    // ⚠️ NOT REPRODUCED, deliberately: the console prologue lazily initialises two function-scope
+    //   statics -- unk_82FBA210 = splat(100.0f) and unk_82FBA200 = splat(1000.0f), guarded by bits
+    //   0/1 of dword_82FBA220 -- and then NEVER READS EITHER. That is magic-static init left behind
+    //   by an inlined helper whose use was dead-coded; every real reader emits its own guard+init.
+    //   Recorded here so a later wave does not mistake the omission for a silent-zero constant.
+    void VehiclePhysics::SetWheelVelocities(Vector3 lvVelocity)
+    {
+        // The console's own parameter, dead in the console's own body -- see the note above. Both
+        // surviving call sites pass the car's mLinearVelocity, which is re-read from `this` below.
+        (void)lvVelocity;
+
+        const Vector3& lvRight = mTransform.Right();   // +0x10
+        const Vector3& lvUp    = mTransform.Up();      // +0x20
+        const Vector3& lvAt    = mTransform.At();      // +0x30
+
+        // ---- 0x825FD2CC: strip the yaw rate (the component of omega along the body up axis) -----
+        const f32 lfYawRate = mAngularVelocity.x * lvUp.x
+                            + mAngularVelocity.y * lvUp.y
+                            + mAngularVelocity.z * lvUp.z;          // vmsum3fp128
+        mAngularVelocity = Vector3{ mAngularVelocity.x - lvUp.x * lfYawRate,
+                                    mAngularVelocity.y - lvUp.y * lfYawRate,
+                                    mAngularVelocity.z - lvUp.z * lfYawRate,
+                                    0.0f };
+
+        // ---- 0x825FD2F4: the steered wheel direction = R(Up, steeringAngle) * At ----------------
+        // Rodrigues about the (unit) body up axis. The console evaluates sin/cos with one inlined
+        // XMVectorSinCos of the +0xFE0 .x lane; std::sin/std::cos are the exact forms.
+        const f32 lfSteerAngle =
+            mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x;
+        const f32 lfSin = std::sin(lfSteerAngle);
+        const f32 lfCos = std::cos(lfSteerAngle);
+        const f32 lfOneMinusCos = 1.0f - lfCos;                     // vsubfp128 v10, v127(1.0), v11
+
+        // Columns of the rotation, exactly as the asm packs them (vperm of lanes x/y then a
+        // vrlimi128 of lane z).
+        const Vector3 lvCol0{ lfCos + lfOneMinusCos * lvUp.x * lvUp.x,
+                              lfOneMinusCos * lvUp.x * lvUp.y + lfSin * lvUp.z,
+                              lfOneMinusCos * lvUp.x * lvUp.z - lfSin * lvUp.y, 0.0f };
+        const Vector3 lvCol1{ lfOneMinusCos * lvUp.y * lvUp.x - lfSin * lvUp.z,
+                              lfCos + lfOneMinusCos * lvUp.y * lvUp.y,
+                              lfOneMinusCos * lvUp.y * lvUp.z + lfSin * lvUp.x, 0.0f };
+        const Vector3 lvCol2{ lfOneMinusCos * lvUp.z * lvUp.x + lfSin * lvUp.y,
+                              lfOneMinusCos * lvUp.z * lvUp.y - lfSin * lvUp.x,
+                              lfCos + lfOneMinusCos * lvUp.z * lvUp.z, 0.0f };
+
+        // v125 = R * At  (the asm's `col0*At.x + col1*At.y + col2*At.z` FMA cascade).
+        const Vector3 lvSteeredDirection{
+            lvCol0.x * lvAt.x + lvCol1.x * lvAt.y + lvCol2.x * lvAt.z,
+            lvCol0.y * lvAt.x + lvCol1.y * lvAt.y + lvCol2.y * lvAt.z,
+            lvCol0.z * lvAt.x + lvCol1.z * lvAt.y + lvCol2.z * lvAt.z, 0.0f };
+
+        // ---- the four unrolled wheel blocks ------------------------------------------------------
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            Wheel& lrWheel = maWheels[liWheel];
+
+            // CgsDev::Assert( RwMathVPU::IsValid( wheel.mPosition ) ) -- elided (debug-only finite
+            // check; X360 message "Invalid wheel position: " << pos << ", please tell Graham D.",
+            // VehiclePhysics.cpp:412).
+            const Vector3& lvLocalPos = lrWheel.mPosition;          // +0x80, body-local at this point
+
+            // r = R_body * localPos   (Right/Up/At are mTransform's rows -- the same basis
+            // StoreLocalWheelPositions inverts by transpose).
+            const f32 lfRx = lvRight.x * lvLocalPos.x + lvUp.x * lvLocalPos.y + lvAt.x * lvLocalPos.z;
+            const f32 lfRy = lvRight.y * lvLocalPos.x + lvUp.y * lvLocalPos.y + lvAt.y * lvLocalPos.z;
+            const f32 lfRz = lvRight.z * lvLocalPos.x + lvUp.z * lvLocalPos.y + lvAt.z * lvLocalPos.z;
+
+            // v = omega x r + linearVelocity   (the vpermwi128 yzx lane-rotated cross product)
+            const Vector3 lvPointVelocity{
+                mLinearVelocity.x + (mAngularVelocity.y * lfRz - mAngularVelocity.z * lfRy),
+                mLinearVelocity.y + (mAngularVelocity.z * lfRx - mAngularVelocity.x * lfRz),
+                mLinearVelocity.z + (mAngularVelocity.x * lfRy - mAngularVelocity.y * lfRx),
+                0.0f };
+
+            // The direction the wheel rolls along: the STEERED direction for the front pair, the
+            // body forward axis for the rear pair (the asm reloads +0x30 for wheels 2 and 3).
+            const Vector3& lvRollDirection =
+                (liWheel == eFrontLeftWheel || liWheel == eFrontRightWheel) ? lvSteeredDirection
+                                                                           : lvAt;
+
+            // The console zeroes lane .y first (vrlimi128 mask 4) and then writes lane .x
+            // (vrlimi128 mask 8) from dot3(v, dir) * (1 / mSlipVariables.w) -- vrefp plus two
+            // Newton refinement steps, i.e. an exact reciprocal to float precision.
+            lrWheel.mIntegrationVariables.y = 0.0f;
+
+            const f32 lfWheelRadius = lrWheel.mSlipVariables.w;
+            const f32 lfAlongRoll   = lvPointVelocity.x * lvRollDirection.x
+                                    + lvPointVelocity.y * lvRollDirection.y
+                                    + lvPointVelocity.z * lvRollDirection.z;
+            lrWheel.mIntegrationVariables.x = lfAlongRoll / lfWheelRadius;
+
+            lrWheel.mBodyPointVelocity    = lvPointVelocity;        // +0xA0
+            lrWheel.mbBrokenAdhesiveLimit = false;                  // +0xD5
+        }
+
+        // ---- 0x825FDC04: re-seed the engine from the average spin of the DRIVEN wheels -----------
+        // Each driven axle contributes its two wheels and 2.0 to the divisor. Which axles are driven
+        // comes from mpAttribs->mBaseAttribs's +0xB0 register: lane .z == PowerToRear gates the rear
+        // pair, lane .y == PowerToFront gates the front pair.
+        const Vector4& lvPowerSplit =
+            mpAttribs->mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo;
+
+        f32 lfSumWheels  = 0.0f;   // flt_82001CC0
+        f32 lfDivWheels  = 0.0f;   // flt_82001CC0  (the assert below names this variable)
+
+        if (!rw::math::fpu::IsZero(lvPowerSplit.z))                                // PowerToRear
+        {
+            lfDivWheels  = 2.0f;                                    // flt_82001D9C
+            lfSumWheels  = maWheels[eRearLeftWheel ].mIntegrationVariables.x
+                         + maWheels[eRearRightWheel].mIntegrationVariables.x;
+        }
+        if (!rw::math::fpu::IsZero(lvPowerSplit.y))                                // PowerToFront
+        {
+            lfDivWheels += 2.0f;
+            lfSumWheels += maWheels[eFrontLeftWheel ].mIntegrationVariables.x
+                         + maWheels[eFrontRightWheel].mIntegrationVariables.x;
+        }
+
+        // CgsDev::Assert( rw::math::fpu::IsZero( lfDivWheels ) == false ) -- elided (debug-only;
+        // VehiclePhysics.cpp:6504). A car with neither axle driven would divide by zero here.
+        const f32 lfAverage = lfSumWheels / lfDivWheels;
+        mEngine.Reset(VecFloat{ lfAverage, lfAverage, lfAverage, lfAverage });
+    }
+
+    // ==============================================================================================
+    //  @0x825FDD78  BrnPhysics::Vehicle::VehiclePhysics::Reset(Vector3)   (232 X360 instrs)
+    // ==============================================================================================
+    // Return the car to a clean placed state at the supplied velocity. Called by Construct
+    // @0x8262DBD0 (with the zero vector) and by the car-placement paths.
+    //
+    // ⭐ THE DECODE IS NOT MINE. This function is an `.ida-exports` HOLE; the previous wave pulled
+    //    0x825FDD78..0x825FE118 out of BURNOUT_X360_ARTIST.XEX.i64 with headless IDA and replayed it
+    //    through a symbolic VMX128 simulator, closing the member map against the DWARF eight ways.
+    //    That store-by-store decode is preserved verbatim in the block comment in VehiclePhysics.h;
+    //    this body is its transcription, member for member, in the console's own order. It became
+    //    writable this wave only because SetWheelVelocities did (the `mpAttribs != NULL` branch
+    //    calls it out of line, so bodying Reset before it would have been a guaranteed LNK2019).
+    //
+    // ⚠️⚠️ THE TWO SILENT-ZERO SEEDS IN HERE. Both slots read all-zero in the shipped image and are
+    //    filled at static init by IDA-unmarked thunks, so a literal scan finds only readers:
+    //      * TimeSinceLastHandBrake (the +0x1080 .w lane) is seeded from unk_82FB9080 == 10000.0f
+    //        (thunk 0x82C5C398 -> flt_82005D9C). Left at the image's 0.0f it would read as "the
+    //        handbrake was released THIS INSTANT" on every single reset, which is exactly what the
+    //        two UpdateHandBrake reads of that slot gate on.
+    //      * TimeSinceLastRaceCarContact (the +0x1050 .z lane) is the same shape at 100.0f.
+    //    Both are written here as the recovered values, NOT as the image's zeros.
+    //
+    // ⚠️ The partial clears are partial ON PURPOSE and are reproduced as such: mSlamEffect keeps
+    //    mForce / mfDecay / mfRecoveryTime (so this is an inlined partial clear, not SlamEffect::
+    //    Clear()); mvSteeringAngle keeps .w (DriftGasLetOffAmount); mvSpare_MaintainedSpeed keeps .x
+    //    (Spare); mvSideForceMag keeps .z (TimeSinceLastBoostKick); mvDampRollVel keeps .y.
+    void VehiclePhysics::Reset(Vector3 lvVelocity)
+    {
+        // The 0-arg base overload -- @0x825D9A58, which builds its own zero with vspltisw128, so
+        // there is no dropped argument here.
+        SimpleVehiclePhysics::Reset();
+
+        if (mpAttribs == NULL)
+        {
+            // No attribs yet: park every wheel and the engine at a dead stop.
+            const Vector3 lvZero{ 0.0f, 0.0f, 0.0f, 0.0f };
+            for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+                maWheels[liWheel].Reset(lvZero);
+            mEngine.Reset(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+        }
+        else
+        {
+            // Attribs present: re-seed the whole drivetrain from the body's motion instead.
+            SetWheelVelocities(lvVelocity);
+        }
+
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+            maLocalTractionPoints[liWheel].SetZero();                        // +0x530 stride 0x10
+
+        mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.SetZero();   // +0xEF0 (whole)
+        mWeightTransfer.SetZero();                                               // +0xEE0
+
+        // ---- the drift state bank (+0xFE0..+0x1080) ----------------------------------------------
+        mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x = 0.0f;      // +0xFE0 .x/.y/.z
+        mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y = 0.0f;      //   (.w untouched)
+        mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.z = 0.0f;
+
+        mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.y = 0.0f;          // +0x1000 .y/.z/.w
+        mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.z = 0.0f;          //   (.x Spare kept)
+        mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w = 0.0f;
+
+        mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.SetZero();        // +0x1010
+        mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState.SetZero(); // +0x1020
+
+        // +0x1030: .x = 1.0f (vspltisw 1 + vcfsx -- an integer 1 converted, not a rodata literal).
+        mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.x = 1.0f;
+        mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.y = 0.0f;
+        mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.z = 0.0f;
+        mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.w = 0.0f;
+
+        mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.x = 0.0f;  // +0x1040
+        mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.y = 0.0f;  // (.z kept)
+        mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.w = 0.0f;
+
+        // +0x1050: .x = -0.1f (unk_8208FAE4), .y = 1.0f (unk_8208FAE8), and .z = 100.0f
+        // (flt_820049E0) == TimeSinceLastRaceCarContact, i.e. "this car last touched another one a
+        // long time ago".
+        mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.x = -0.1f;
+        mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.y = 1.0f;
+        mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z = 100.0f;
+
+        mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.SetZero();       // +0x1060
+
+        // +0x1080: .x = 0, .z = 0, and .w = TimeSinceLastHandBrake = 10000.0f -- the recovered
+        // static-init value (unk_82FB9080), NOT the zero the image ships. (.y untouched.)
+        mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.x = 0.0f;
+        mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.z = 0.0f;
+        mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.w = 10000.0f;
+
+        mSteeringDirection.SetZero();                                            // +0x10E0
+
+        // +0x10F0: flt_8200426C == 5.0f == the DWARF's own KF_STUCK_IN_COLLISION_TEST_INTERVAL.
+        mfTimeUntilStuckInCollisionTest = 5.0f;
+
+        mDriftFlags.mu8DriftFlags = DriftFlags::KU_DRIFT_FLAG_DO_ALL;            // +0x10F4 (0xFF)
+        mbInBoostKick             = false;                                       // +0x10F5
+        mbForceFrozen             = false;                                       // +0x10F6
+        mbGivenAftertouchAirBoost = false;                                       // +0x10F8
+
+        // The PARTIAL slam clear (mForce / mfDecay / mfRecoveryTime are deliberately kept).
+        mSlamEffect.mfSteering         = 0.0f;                                   // +0x1114
+        mSlamEffect.mfOriginalSteering = 0.0f;                                   // +0x1118
+        mSlamEffect.mfSlamLife         = 0.0f;                                   // +0x111C
+        mSlamEffect.mfTotalSlamTime    = 0.0f;                                   // +0x1120
+        mSlamEffect.mi8SlamNumber      = -1;                                     // +0x1128
+
+        mShuntEffect.mDirectionPlusDesiredSpeed.SetZero();                       // +0x1130
+        mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = -1.0f;                     // +0x1140 (dead)
+        mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y = 0.0f;
+
+        mi8LastContactedRaceCar = -1;                                            // +0x1150
+
+        mUsedAirRams.UnSetAll();                                                 // +0x1158
+        mUsedSpins.UnSetAll();                                                   // +0x1220
+
+        for (s32 liSpring = 0; liSpring < eNumDrivenWheels; ++liSpring)
+            maSprings[liSpring].Reset();                                         // +0xE10 stride 0x30
+
+        mPreviousWorldSpaceVelocity = lvVelocity;                                // +0x1330
+        mNormLinearVelocityMag.SetZero();                                        // +0x1340
+
+        mbHasAir                 = false;                                        // +0x1350
+        mbHadAirLastFrame        = false;                                        // +0x1351
+        mu8DriftState            = 0;                                            // +0x1352
+        miNumCollisions          = 0;                                            // +0x1354
+        mbHandBrake              = false;                                        // +0x1358
+        mbAllWheelsHaveTraction  = false;                                        // +0x135B
+        mbResetCarTransform      = true;                                         // +0x135C  (TRUE)
+        mbJustBeenSlammed        = false;                                        // +0x135D
+        mbDoingBurnout           = false;                                        // +0x1361
+
+        mPreviousTransform = mTransform;                                         // +0x1370 <- +0x10
+
+        mWheelFFSpring.mfSpringCoefficient = 0.0f;                               // +0x13D0
+        mWheelFFSpring.mfSpringSaturation  = 0.0f;                               // +0x13D4
+
+        mi8LastAttackersRaceCarIndex = -1;                                       // +0x13E0
     }
 
     // =====================================================================================
