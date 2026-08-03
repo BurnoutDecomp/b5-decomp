@@ -119,7 +119,8 @@ namespace Vehicle
         static_assert(alignof(VehicleManagerDebugComponent) == 16 &&
                       offsetof(VehicleManager, mDebugComponent) % 16 == 0,
                       "the component holds alignas(16) OutContactSpy/PotentialContact members, and "
-                      "161968 + 192 == 162160 is 16-aligned, so embedding it inserted no leading pad");
+                      "the drift is a multiple of 16 (asserted above), so embedding it inserted no "
+                      "leading pad");
         static_assert(offsetof(VehicleManager, mDiscardedContacts)
                           + sizeof(VehicleManager::mDiscardedContacts)
                           == offsetof(VehicleManager, mDebugComponent),
@@ -130,8 +131,10 @@ namespace Vehicle
         //
         // This block used to read "⛔ BLOCKED -- grows 2480 bytes on x64", measured against a
         // 103360-byte opaque span. The SPAN was wrong, not the class: the X360 size is 105648
-        // (BrnPhysicalTrafficManager.h finding (4), derived twice) and the host overrun is +192,
-        // which BrnVehicleManager.h now carries as KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER.
+        // (BrnPhysicalTrafficManager.h finding (4), derived twice) and the host DRIFT is -3968
+        // (2026-08-03, once maFullTrafficPhysics became the real TrafficPhysics[20]; it was +192
+        // while that array was a byte-pinned stand-in), which BrnVehicleManager.h carries as
+        // KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER.
         //
         // The three numbers are tied together here so none of them can drift alone.
         // ==========================================================================================
@@ -149,7 +152,7 @@ namespace Vehicle
         static_assert(sizeof(PhysicalTrafficManager)
                           == KU_X360_SIZEOF_PHYSICAL_TRAFFIC_MANAGER
                              + (KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER - KU_HOST_DRIFT_AFTER_RACECAR_ARRAY),
-                      "MEASURED host size 105840 == DERIVED X360 size 105648 + the 192-byte step this "
+                      "MEASURED host size 101680 == DERIVED X360 size 105648 + the -3968 step this "
                       "sub-object contributes. If this fires, one of the three has moved: re-derive, "
                       "do not just bump the drift.");
         static_assert((KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER - KU_HOST_DRIFT_AFTER_RACECAR_ARRAY) % 16 == 0
@@ -168,16 +171,32 @@ namespace Vehicle
         // offsets survive verbatim on the host -- and the one that matters is maTrafficEntityIDs,
         // because VehicleManager used to model it as a sibling of its own called
         // `maRaceCarEntityIdRemap[8]` at class +148128.
-        static_assert(sizeof(TrafficPhysics) == 5168,
+        // ⚠️⚠️ REWRITTEN 2026-08-03 (the TrafficPhysics de-fork). What stood here was
+        //     static_assert(sizeof(TrafficPhysics) == 5168, "asm: mulli r11, r29, 0x1430 ...");
+        // -- a HOST sizeof gate wearing a console literal. It held only because TrafficPhysics was a
+        // byte-pinned `u8[5168]` stand-in, i.e. it asserted that the stand-in was still a stand-in.
+        // Now that the member is the real class, the console 0x1430 is asserted where it belongs:
+        // as CONSOLE ARITHMETIC over the recovered member seats, in TrafficPhysics_layout_check.cpp,
+        // whose chain closes on this very 5168. Here what is checked is the thing this TU can see --
+        // that the array is exactly 20 elements with no pad behind it, and that the console
+        // identification still holds as console arithmetic.
+        static_assert(X360Layout::KU_TP_SIZEOF == 5168u,
                       "asm: mulli r11, r29, 0x1430 -- the 20-element per-vehicle walk in "
                       "PhysicalTrafficManager::Construct @0x82636CA8");
-        static_assert(offsetof(PhysicalTrafficManager, maTrafficEntityIDs) == 103360,
-                      "asm: addi r8,r11,0x64F0 ; slwi r9,r8,2 ; stwx -1,r9,r31 for i<20 == 4*(i+25840)");
-        static_assert(offsetof(VehicleManager, mPhysicalTrafficManager)
-                          + offsetof(PhysicalTrafficManager, maTrafficEntityIDs) == 148128 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
-                      "⭐ THE IDENTIFICATION: 44768 + 103360 == 148128, the exact class offset the old "
-                      "`EntityId maRaceCarEntityIdRemap[8]` sibling claimed. Same address, real name, "
-                      "and the real bound is 20 (a TRAFFIC index), not 8.");
+        static_assert(20u * X360Layout::KU_TP_SIZEOF + 44768u == 148128u,
+                      "⭐ THE IDENTIFICATION, as console arithmetic: 44768 + 20*0x1430 == 148128, the "
+                      "exact class offset the old `EntityId maRaceCarEntityIdRemap[8]` sibling "
+                      "claimed. Same address, real name, and the real bound is 20 (a TRAFFIC index), "
+                      "not 8.");
+        static_assert(offsetof(PhysicalTrafficManager, maTrafficEntityIDs)
+                          == 20u * sizeof(TrafficPhysics),
+                      "the entity-id array must abut maFullTrafficPhysics[20] with no pad -- this is "
+                      "what fires if the array bound changes or TrafficPhysics grows an alignment "
+                      "that inserts one");
+        static_assert(offsetof(PhysicalTrafficManager, maTrafficEntityIDs) == 99200,
+                      "MEASURED host seat (X360 103360 + the array's 20 * (4960 - 5168) == -4160). A "
+                      "literal, so it is a tripwire in both directions rather than a restatement of "
+                      "the line above.");
         static_assert(sizeof(PhysicalTrafficManager::maTrafficEntityIDs) == 20 * 4,
                       "EntityId[20] -- SetRaceCarCrashing's owner==2 branch indexes it with a traffic "
                       "index, so the old [8] model was an out-of-bounds read for slots 8..19");
@@ -335,8 +354,10 @@ namespace Vehicle
         // was folded to the real RaceCarPhysics. Both times the correct response was the named drift
         // term above, not a bigger literal here -- and both times the literal moved only after the
         // term did.
-        static_assert(sizeof(VehicleManager) == 171184,
-                      "MEASURED total. X360 end 172616 + (-1440) drift == 171176 -> 16-aligned 171184");
+        // ⭐ THREE TIMES NOW: 172816 -> 172848 -> 171184 -> 167024, and every move followed a named
+        // drift term, never the other way round. This one is the TrafficPhysics de-fork.
+        static_assert(sizeof(VehicleManager) == 167024,
+                      "MEASURED total. X360 end 172616 + (-5600) drift == 167016 -> 16-aligned 167024");
         static_assert(sizeof(VehicleManager::maeImpactType) == 32, "EImpactType[8]");
         static_assert(sizeof(VehicleManager::mauImpactScore) == 8, "uint8[8]");
         static_assert(sizeof(VehicleManager::mafPlayerGrindingOtherDurationSeconds) == 32, "f32[8] -- NOT a scalar threshold");

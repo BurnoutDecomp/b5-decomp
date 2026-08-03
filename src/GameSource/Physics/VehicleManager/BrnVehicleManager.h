@@ -94,8 +94,8 @@ namespace Vehicle
     // width differs from the console's. They apply to disjoint address ranges and they ACCUMULATE:
     //     X360 +0        .. +43584    ->  0               (nothing before the race-car array moves)
     //     X360 +43584    .. +44768    ->  -1664           KU_HOST_DRIFT_AFTER_RACECAR_ARRAY
-    //     X360 +44768    .. +163264   ->  -1472           KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER
-    //     X360 +163264   .. end       ->  -1440           KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT
+    //     X360 +44768    .. +163264   ->  -5632           KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER
+    //     X360 +163264   .. end       ->  -5600           KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT
     //
     // ⚠️ THE TERMS ARE SIGNED AND THE FIRST IS NEGATIVE. The old shape of this block predicted
     // exactly that ("a third one will appear the day RaceCarVehicleRecord becomes a real
@@ -128,8 +128,19 @@ namespace Vehicle
     // That is the same trade VehiclePhysics_layout_check.cpp already argued for its own block.
     const std::ptrdiff_t KU_HOST_DRIFT_AFTER_RACECAR_ARRAY = -1664;
 
+    // ⭐⭐ RE-MEASURED 2026-08-03 (the TrafficPhysics de-fork wave): the second term is now **-3968**,
+    // not +192. `maFullTrafficPhysics` inside PhysicalTrafficManager was folded from a byte-pinned
+    // `u8[5168]` stand-in to the real `TrafficPhysics[20]`, for exactly the reason maRaceCarVehicles
+    // was folded one level up (BrnPhysicalTrafficManager.h's de-fork note): the console's
+    // per-element Construct call cannot be spelled against a stand-in without writing host-offset
+    // members into console-strided storage. sizeof(TrafficPhysics) is 4960 on the host against the
+    // X360's 5168, so the array is 20 * 208 == 4160 shorter and the traffic manager goes
+    // 105840 -> 101680 while the X360 stays at its derived 105648:
+    //     101680 - 105648 == -3968     (and -3968 % 16 == 0, so every 16-aligned member behind it
+    //                                   keeps its alignment)
+    // MEASURED with the compiler (`char (*p)[sizeof(T)] = 1;`), not carried forward from a note.
     const std::ptrdiff_t KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER =
-        KU_HOST_DRIFT_AFTER_RACECAR_ARRAY + 192;   // -1472
+        KU_HOST_DRIFT_AFTER_RACECAR_ARRAY + -3968;   // -5632
 
     // ⭐ The third term, added 2026-08-03 in an earlier wave. VehicleManagerDebugComponent is 1328
     // bytes on the host against the 1296-byte X360 span at +161968..+163264 -- +32, because its
@@ -138,7 +149,7 @@ namespace Vehicle
     // the stride-1024 walk from +163264), so the +32 is real and the only honest answer is to carry
     // it. 32 % 16 == 0, so every 16-aligned member past it keeps its alignment.
     const std::ptrdiff_t KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT =
-        KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER + 32;  // -1440
+        KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER + 32;  // -5600
 
     class VehicleManager
     {
