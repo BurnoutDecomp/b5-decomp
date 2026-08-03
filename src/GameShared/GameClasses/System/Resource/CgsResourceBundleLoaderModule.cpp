@@ -136,7 +136,21 @@ namespace CgsResource
                                           << "' -> pool " << (s32)lrRequest.miPoolId
                                           << ": " << (s32)liLoaded << " resources\n";
                 if (liLoaded < 0)
+                {
+                    // The request's OWN failure policy, finally consumed. Every producer in
+                    // the tree fills mbAllowFailiure (from the GameData request's fail flag,
+                    // or a literal at the fixed-asset sites) and until now NOTHING read it:
+                    // an asset the caller declared mandatory disappeared as quietly as an
+                    // optional one, which is precisely the silent-drop shape this codebase
+                    // keeps getting bitten by. The console consumes the flag inside the async
+                    // stream FSM (deferred here) for exactly this: a disallowed failure is
+                    // loud. The RESULT is unchanged either way -- the requester still gets
+                    // the failure reply and its own error path -- so this adds a diagnostic,
+                    // not a behaviour.
+                    CGS_ASSERT(lrRequest.mbAllowFailiure,
+                               "LoadBundle failed for a request that did not allow failure");
                     lResponse.meResult = Events::LoadBundleResponse::E_RESULT_OUT_OF_MEMORY;
+                }
             }
 
             // Reply to the request's originating receiver queue (the X360 ProcessPoolResponses path; here a
