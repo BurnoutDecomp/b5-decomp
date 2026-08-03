@@ -31,6 +31,7 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"        // CgsContainers::BitArray<N> (live-car bitset, crash-data free-list, taken-down bitset)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"             // CgsNumeric::Random (mRandom @+16)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h" // VehicleDriver (maRaceCarDrivers @+64, mPlayerAiDriver @+171968)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"  // BrnPhysics::Vehicle::RaceCarPhysics (maRaceCarVehicles @+1856 -- the REAL type as of 2026-08-03; that header does not include this one, so this is not a cycle)
 #include "GameSource/Physics/VehicleManager/StuntOffences/BrnStuntOffencesManager.h" // BrnPhysics::StuntOffencesManager (mStuntOffencesManager @+44240 -- the ONE contained sub-object whose real x64 type fits its X360 span exactly)
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h" // BrnPhysics::Vehicle::PhysicalTrafficManager (mPhysicalTrafficManager @+44768 -- embedded BY NAME as of 2026-08-03; see the drift note below)
 #include "GameSource/Physics/VehicleManager/BrnVehicleManagerDebugComponent.h" // BrnPhysics::Vehicle::VehicleManagerDebugComponent (mDebugComponent @+161968 -- embedded BY NAME as of 2026-08-03; that header only forward-declares VehicleManager, so this is not a cycle)
@@ -89,28 +90,73 @@ namespace Vehicle
     // Defining it from sizeof would make the asserts self-fulfilling; as a literal it is a tripwire
     // in both directions, and BrnVehicleManager_layout_check.cpp ties the three numbers together.
     //
-    // There are now TWO drift terms, because there are two embedded sub-objects that widen. They
-    // apply to disjoint address ranges and they ACCUMULATE:
-    //     X360 +0        .. +44768    ->  no drift        (nothing before the traffic manager moves)
-    //     X360 +44768    .. +163264   ->  +192            KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER
-    //     X360 +163264   .. end       ->  +224            KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT
-    // A third one will appear the day RaceCarVehicleRecord becomes a real RaceCarPhysics -- and
-    // that one will be NEGATIVE (the host class is 4816 against the record's 5216), which is a
-    // reason to keep this shape rather than to fold the terms into one number.
+    // There are now THREE drift terms, because there are three embedded sub-objects whose host
+    // width differs from the console's. They apply to disjoint address ranges and they ACCUMULATE:
+    //     X360 +0        .. +43584    ->  0               (nothing before the race-car array moves)
+    //     X360 +43584    .. +44768    ->  -1664           KU_HOST_DRIFT_AFTER_RACECAR_ARRAY
+    //     X360 +44768    .. +163264   ->  -1472           KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER
+    //     X360 +163264   .. end       ->  -1440           KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT
+    //
+    // ⚠️ THE TERMS ARE SIGNED AND THE FIRST IS NEGATIVE. The old shape of this block predicted
+    // exactly that ("a third one will appear the day RaceCarVehicleRecord becomes a real
+    // RaceCarPhysics -- and that one will be NEGATIVE"), which is why they were never folded into
+    // one number. That day is 2026-08-03. The old note's arithmetic is stale, though: it said the
+    // host class was 4816. It is **5008** -- the VehiclePhysics/SimpleVehiclePhysics own-member
+    // blocks grew it between the two waves -- so the term is -1664, not -3200. MEASURED with the
+    // compiler, not carried forward from the note.
     // ==========================================================================================
-    const u32 KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER = 192u;
 
-    // ⭐ The second term, added 2026-08-03 in the same wave. VehicleManagerDebugComponent is 1328
+    // ⭐⭐ THE THIRD TERM, added 2026-08-03 (the record-fold wave). `maRaceCarVehicles` is now
+    // `RaceCarPhysics[8]`, the real class, not the byte-pinned 5216-byte `RaceCarVehicleRecord`
+    // stand-in it carried for ten waves. sizeof(RaceCarPhysics) is 5008 on the host against the
+    // 5216 the X360 bakes as a literal stride (`mulli r11, r22, 0x1460` in SetRaceCarCrashing), so
+    // the array is 8 * 208 == 1664 bytes shorter and everything after it moves DOWN.
+    //
+    // WHY THE FOLD HAD TO HAPPEN, and why it is not just tidying: VehicleManager::Construct calls
+    // a constructor on each element. On a byte-pinned stand-in that call can only be a
+    // reinterpret_cast, which writes the real class's members at HOST offsets into storage whose
+    // readers use CONSOLE offsets -- the silent-corruption trade this header has warned about since
+    // the blocker table was written. ⛔ AND THE TREE WAS ALREADY MAKING THAT TRADE: six live
+    // `reinterpret_cast<RaceCarPhysics*>(&maRaceCarVehicles[i])` sites existed in
+    // BrnVehicleManager.cpp / BrnVehicleManagerPlayerStats.cpp before this wave, latent only
+    // because neither TU is mounted. The fold retires all six.
+    //
+    // WHAT IT COSTS, stated rather than hidden: the record's ten IN-RECORD offsetof asserts are
+    // gone, because a host class does not reproduce console offsets. They are not lost, they moved:
+    // RaceCarPhysics_layout_check.cpp and VehiclePhysics_layout_check.cpp assert the same seats as
+    // CONSOLE ARITHMETIC over the X360Layout literals, and their chain closes on this very 5216.
+    // That is the same trade VehiclePhysics_layout_check.cpp already argued for its own block.
+    const std::ptrdiff_t KU_HOST_DRIFT_AFTER_RACECAR_ARRAY = -1664;
+
+    const std::ptrdiff_t KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER =
+        KU_HOST_DRIFT_AFTER_RACECAR_ARRAY + 192;   // -1472
+
+    // ⭐ The third term, added 2026-08-03 in an earlier wave. VehicleManagerDebugComponent is 1328
     // bytes on the host against the 1296-byte X360 span at +161968..+163264 -- +32, because its
     // base's vptr and its mpVehicleManager both widen 4 -> 8. Unlike the traffic manager's span,
     // this 1296 was never a guess: both ends are asm-literal (Construct(this + 161968, this), then
     // the stride-1024 walk from +163264), so the +32 is real and the only honest answer is to carry
     // it. 32 % 16 == 0, so every 16-aligned member past it keeps its alignment.
-    const u32 KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT = KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER + 32u;   // 224
+    const std::ptrdiff_t KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT =
+        KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER + 32;  // -1440
 
     class VehicleManager
     {
     public:
+        // ⭐ The eight-car array bound, asm-literal in VehicleManager::Construct
+        // (`li r23, 8` then `addi r23, r23, -1` per iteration) and the width of every one of this
+        // class's per-car arrays. The console spells it BrnWorld::KI_MAX_ACTIVE_RACE_CARS -- the
+        // disconnect asserts name it -- but that constant has no committed home in this tree, so it
+        // is declared at the class that owns the arrays. DELETE-WHEN BrnWorld homes it.
+        static const s32 KI_MAX_ACTIVE_RACE_CARS = 8;
+
+        // ⭐⭐⭐ Construct @0x8263B7C8, 943 instructions -- BODIED 2026-08-03 in
+        // BrnVehicleManager.cpp. Its only caller is BrnPhysics::PhysicsModule::Construct
+        // @0x825AE308, which is still a link stub (WorldLinkStubs.cpp). See the big ⭐ recipe block
+        // further down in this header for the full instruction-level shape and every default the
+        // tuning bank seeds; the body is written straight off it.
+        void Construct();
+
         // ADDITIVE (WorldModule::Prepare @0x827D53B0 stage-8 success path reads the
         // surface-property table once the world entity module prepared). Static on the
         // X360 (a global manager pair). Declaration-only; body with this manager's TU.
@@ -353,7 +399,38 @@ namespace Vehicle
         // ------------------------------------------------------------------------------------------
         //
         // ==========================================================================================
-        // ⭐ WHAT IS STILL MISSING FOR `VehicleManager::Construct` @0x8263B7C8 -- MEASURED 2026-08-03,
+        // ⭐⭐⭐ `VehicleManager::Construct` @0x8263B7C8 IS BODIED as of 2026-08-03, in
+        //    BrnVehicleManager.cpp. All 943 instructions: the thirty monitors, the spine, the
+        //    eight-car loop and all 91 tuning seats. The rest of this block is the recipe it was
+        //    written from and is kept because it is the evidence; the two corrections THIS wave
+        //    forced are recorded first, because both were claims this file made about itself.
+        //
+        // ⛔ CORRECTION 1 -- "⇒ Construct is NOT blocked on link closure" (below) IS WRONG, and the
+        //    ✅ READY column of the blocker table is what misled it. READY there means "the real x64
+        //    class FITS its X360 span, so the call is spellable BY NAME". It does NOT mean the symbol
+        //    resolves. MEASURED by mounting BrnVehicleManager.cpp and reading the linker: of
+        //    Construct's own callees, TWO are unresolved in the mounted build --
+        //        BrnPhysics::StuntOffencesManager::Construct
+        //        BrnPhysics::Vehicle::PhysicalTrafficManager::Construct
+        //    -- and both BODIES EXIST (BrnStuntOffencesManager.cpp / BrnPhysicalTrafficManager.cpp);
+        //    neither TU is in tools/build/build_game_exe.bat. Mounting the whole TU costs 15
+        //    unresolved externals in total (the other 13 belong to the takedown chain that shares
+        //    this file -- see the ⛔ note at the mount site in the build script for the list).
+        //    ⇒ Construct IS blocked on link closure. It is blocked on TWO mount lines, not on
+        //    reconstruction, which is a much better place to be -- but "not blocked" was false.
+        //
+        // ⛔ CORRECTION 2 -- the blocker table's remaining ⛔ row (RaceCarVehicleRecord vs
+        //    VehiclePhysics) IS RETIRED, but not the way the table expected. The record is GONE:
+        //    maRaceCarVehicles is the real `RaceCarPhysics[8]` and the host/console difference is
+        //    carried as KU_HOST_DRIFT_AFTER_RACECAR_ARRAY. See the fold-in note further down.
+        //    ⚠️ AND IT HAD A COST THE TABLE DID NOT ANTICIPATE: embedding a POLYMORPHIC class by
+        //    value made the already-mounted BrnPhysicsModule.cpp (which embeds a VehicleManager)
+        //    odr-use the whole RaceCarPhysics vtable, which turned two long-standing DECLARE-ONLY
+        //    virtuals into link errors -- SimpleVehiclePhysics::SetCrashing and
+        //    VehiclePhysics::IsIgnoringPassedOnImpulses. Both now have vtable-closure GATES (loud
+        //    asserts, not quiet no-ops) in their own TUs; read those banners before touching them.
+        //
+        // ⭐ WHAT WAS STILL MISSING FOR `VehicleManager::Construct` @0x8263B7C8 -- MEASURED 2026-08-03,
         //    not estimated. The layout wave above mined this function for OFFSETS; this note records
         //    what re-reading all 943 instructions says about BODYING it, so the next wave starts from
         //    a measurement instead of from a label.
@@ -368,8 +445,14 @@ namespace Vehicle
         //      PhysicalTrafficManager::Construct             @0x82636CA8  bodied
         //      StuntOffencesManager::Construct               @0x825E8C08  bodied
         //    plus __savegprlr_14 / __savefpr_22 / __restfpr_22 and the three CgsDev::Assert entries.
-        //    ⇒ Construct is NOT blocked on link closure. Its only caller is PhysicsModule::Construct
-        //    @0x825AE308, which is still a stub for exactly two reasons: this function, and
+        //    ⛔⛔ THE SENTENCE THAT STOOD HERE -- "⇒ Construct is NOT blocked on link closure" --
+        //    IS FALSE; see CORRECTION 1 at the top of this block. "bodied" in the list above means
+        //    the body EXISTS SOMEWHERE IN THE TREE, and for two of the six the TU that holds it is
+        //    not mounted, so the symbol does not resolve. Construct IS blocked on link closure, on
+        //    exactly two mount lines (BrnStuntOffencesManager.cpp, BrnPhysicalTrafficManager.cpp).
+        //    MEASURED with the linker 2026-08-03, not reasoned.
+        //    Its only caller is PhysicsModule::Construct @0x825AE308, which is still a
+        //    WorldLinkStubs stub for exactly two reasons: this function, and
         //    PhysicsSimulationModule::Construct.
         //    ⛔ BUT DO NOT STOP READING HERE. "Has a body" is not "can be called": three of those
         //    six sub-constructors take a `this` that VehicleManager cannot supply, because the
@@ -458,7 +541,10 @@ namespace Vehicle
         //       mDiscardedContacts bind (this + 160672)                    1296        1296   ✅ READY
         //       PhysicalTrafficManager::Construct(this + 44768)          105840      105648   ✅ READY   <- 2026-08-03
         //       VehicleManagerDebugComponent::Construct(+161968)           1328        1296   ✅ READY   <- 2026-08-03
-        //       VehiclePhysics::Construct(&maRaceCarVehicles[i])           4752   (rec 5216)  ⛔ see below
+        //       RaceCarPhysics::Construct(&maRaceCarVehicles[i])           5008    (5216)  ✅ READY   <- 2026-08-03
+        //         (was "VehiclePhysics::Construct ... 4752 (rec 5216) ⛔". The record is GONE and the
+        //          call is by name on the real type. The two numbers no longer have to match: the
+        //          difference is KU_HOST_DRIFT_AFTER_RACECAR_ARRAY == -1664. See the fold-in note.)
         //
         //     THREE of the READY rows were opaque byte arrays before and are typed now
         //     (mStuntOffencesManager, mDiscardedContacts, mPhysicalTrafficManager) or were already
@@ -670,224 +756,69 @@ namespace Vehicle
         // BrnVehicleDriver.h pin all three, and the call sites in this class's .cpp now read them
         // by their real names.
 
-        // Per-car VEHICLE/physics record array @ class offset 1856. Stride 5216 -- this is the
-        // BrnPhysics::Vehicle::RaceCarPhysics[8] array the DWARF attests at this slot
-        // (sizeof(RaceCarPhysics) ~= 5216). Modelled as a mostly-opaque 5216-byte blob because the
-        // full RaceCarPhysics layout is not reconstructed here; only the handful of in-record fields
-        // the takedown chain reaches are NAMED (offsets asm-proven; the surrounding bytes are
-        // opaque padding). In-record offset == (class offset of the asm load) - 1856.
-        // FLAG: the stand-in record type + every field NAME below are proposed-by-role EXCEPT the
-        // three settled in the table below; only the 5216 stride and each in-record field OFFSET are
-        // asm-proven (the same array IsRaceCarCrashing reads). When the real RaceCarPhysics layout
-        // pass lands, these fields fold into it.
-        //
         // ==========================================================================================
-        // ⭐⭐ THE FOLD-IN MAP -- STARTED 2026-08-03 (RaceCarPhysics own-block recovery wave).
+        // ⭐⭐⭐ THE RECORD IS GONE -- FOLDED IN 2026-08-03. This slot carried
+        // `RaceCarVehicleRecord maRaceCarVehicles[8]`, a byte-pinned 5216-byte stand-in with ten
+        // named fields poking through opaque padding, for ten waves. It is now the real
+        // `BrnPhysics::Vehicle::RaceCarPhysics[8]`.
         //
-        // The blocker this class documents further up ("the ten named in-record fields DO NOT EXIST
-        // as members of the reconstructed RaceCarPhysics/VehiclePhysics ... each one has to be
-        // re-recovered as a named member with a DWARF-ordered seat before any reader can be
-        // re-pointed") is now partly retired. THREE of the ten are settled, by NAME, against a
-        // DWARF-seated member that exists in the tree today:
+        // ⛔ WHY THE BLOCKER TABLE ABOVE SAID THIS COULD NOT BE DONE, AND WHAT ACTUALLY CHANGED.
+        // The table's ⛔ row read "VehiclePhysics::Construct(&maRaceCarVehicles[i]) 4752 (rec
+        // 5216)", and the reasoning under it was correct at the time: the ten field names did not
+        // exist as members of the reconstructed classes, so swapping the type would DELETE them.
+        // Two waves since then recovered the SimpleVehiclePhysics, VehiclePhysics and
+        // RaceCarPhysics own-member blocks in full, and all ten now resolve to a DWARF-seated
+        // member -- three of them to members that were never real (they were rows of the base
+        // `mTransform`). The blocker retired itself; nothing here argues it away.
         //
-        //   in-record  was ...                     IS ...                            declared in
-        //   ---------  --------------------------  --------------------------------  --------------------
-        //   +1808      mbIsCrashingOrDisabled      SimpleVehiclePhysics::mbCrashing  BrnSimpleVehiclePhysics.h
-        //   +5120      mfRecoveryTimer             RaceCarPhysics::                  RaceCarPhysics.h
-        //                                            mfTimeSinceTookDownPlayer
-        //   +5200      mStampedEntityId            RaceCarPhysics::                  RaceCarPhysics.h
-        //                                            mEntityCausingCrash
+        // ⛔⛔ AND THE TREE WAS ALREADY BROKEN IN THE DIRECTION THE TABLE FEARED. Before this wave
+        // BrnVehicleManager.cpp (x5) and BrnVehicleManagerPlayerStats.cpp (x1) held live
+        //     RaceCarPhysics* p = reinterpret_cast<RaceCarPhysics*>(&maRaceCarVehicles[i]);
+        // -- the real class read at HOST offsets over storage laid out at CONSOLE offsets, which is
+        // precisely the silent corruption the table refused to allow in the other direction. It was
+        // latent only because neither TU is mounted. All six are retired by this fold; they are now
+        // plain `&maRaceCarVehicles[i]`, correct by construction.
         //
-        //   * +1808 is settled by the console's OWN ASSERT, not by inference: RaceCarPhysics::
-        //     GetNormalCausingCrash @0x825B3944 does `lbz r11, 0x710(r30)` and, when it is zero,
-        //     fires CgsDev::Assert::FireAssert("mbCrashing", ".../VehiclePhysics/RaceCarPhysics.h",
-        //     328). The DWARF puts mbCrashing last-but-five in SimpleVehiclePhysics (:368).
-        //   * +5120 / +5200 are settled by the RaceCarPhysics own-member block, whose seats close
-        //     independently on this class's own 5216 stride -- see the ⭐⭐ block in RaceCarPhysics.h.
-        //     +5200 in particular is written by SetRaceCarCrashing @0x82635478 (`stw r26,0x1450(r30)`)
-        //     four instructions after it stores mCrashNormal at +0x1440 (`stvx128 v127,r30,0x1440`),
-        //     i.e. the pair is the console's SetCrashEntityIdAndNormal(EntityId, Vector3) inlined --
-        //     which is exactly the pair of DWARF members :414 / :415.
+        // THE ARITHMETIC, measured: sizeof(RaceCarPhysics) == 5008 on the host, 5216 on the X360
+        // (`mulli r11, r22, 0x1460`). alignof == 16 and 1856 % 16 == 0, so element 0 still starts
+        // at the asm-literal +1856 and every element stays 16-aligned. The array ends at
+        // 1856 + 8*5008 == 41920 instead of 43584, hence KU_HOST_DRIFT_AFTER_RACECAR_ARRAY == -1664
+        // for everything past it.
         //
-        // ⭐ AND THE WHOLE TAIL OF THIS RECORD IS NOW KNOWN, member for member. In-record +5104
-        // (0x13F0) .. +5216 (0x1460) is EXACTLY the RaceCarPhysics own-member block, and that block
-        // is width- and alignment-identical on x64 (no pointer, no vptr anywhere in it), so it can
-        // be lifted here verbatim whenever a wave wants to:
-        //     +5104 mPropCollisionImpulseSum   +5152 mInitialCrashAngVel
-        //     +5120 mfTimeSinceTookDownPlayer  +5168 mfCrashTimer
-        //     +5124 mfSlamSteering             +5172 mbAISlowMo
-        //     +5128 mfBeachedTime              +5173 mbWroteIntoRWInSlowMo
-        //     +5132 mbPlayerCarInShowtime      +5174 mbDeformedBeyondDriveTimeLimitsInCrash
-        //     +5133 mbUsingAftertouch          +5184 mCrashNormal
-        //     +5134 mu8StrengthStat            +5200 mEntityCausingCrash
-        //     +5136 mInitialCrashVel           +5204 mbDebugShowTargetAssist
-        // It is NOT lifted in this wave: declaring the same sixteen names in two structs is a
-        // duplication that can drift, and the value of doing it is zero until the other seven
-        // in-record fields (which live in VehiclePhysics / SimpleVehiclePhysics, all below +5104)
-        // have homes too. Recorded so the next wave writes no new decode.
+        // WHERE THE TEN IN-RECORD SEATS ARE NOW ASSERTED. They are NOT asserted here any more --
+        // a host class cannot reproduce console offsets, so an `offsetof(RaceCarPhysics, ...) ==
+        // <X360 seat>` would simply be false. The seats live in the two mounted console-arithmetic
+        // gates, which is where they belong:
+        //     RaceCarPhysics_layout_check.cpp   +0x13F0..+0x1460, closing on the 5216 stride
+        //     VehiclePhysics_layout_check.cpp   +0x130..+0x720 and +0x720..+0x13F0
+        // and every one of the ten is additionally named in a `(void)offsetof(...)` existence check
+        // there, so a rename or a deletion still breaks the build.
         //
+        //   in-record  the record called it ...        the member it IS
+        //   ---------  ------------------------------  ---------------------------------------------
+        //   +16..+80   mTransform                      ExternallySimulatedBody::mTransform (base)
+        //   +1808      mbCrashing                      SimpleVehiclePhysics::mbCrashing      (0x710)
+        //   +3824      mvSpeedOnLastCrashMPH_...       VehiclePhysics:: same name             (0xEF0)
+        //   +4308      meDriverType                    VehiclePhysics::mPreviousControls's    (0x10D4)
+        //                                                meDriverType, i.e. +0x1090 + 0x44
+        //   +4953      mbDeformationModelIsActive      VehiclePhysics:: same name            (0x1359)
+        //   +5084      meCarType                       VehiclePhysics::meCarType             (0x13DC)
+        //   +5120      mfTimeSinceTookDownPlayer       RaceCarPhysics:: same name            (0x1400)
+        //   +5184      mCrashNormal                    RaceCarPhysics:: same name            (0x1440)
+        //   +5200      mEntityCausingCrash             RaceCarPhysics:: same name            (0x1450)
+        //   (+1904/+1920 were PHANTOMS -- rows of mTransform. There is nothing to fold.)
+        //
+        // ⚠️ `mbCrashing` is `protected` and the RaceCarPhysics own block is `private`, so this
+        // class is a `friend` of RaceCarPhysics (declared there, with its reason). The X360 reaches
+        // both bare, off an absolute per-car offset, with no accessor and no assert -- routing them
+        // through getters would add asserts the console does not fire. Same precedent as the two
+        // bare PhysicalTrafficManager loads this class already makes.
+        //
+        // [V] BOTH the base and the stride are asm-literal:
+        //     0x8263BF0C  addi  r3, r29, -0x140D   <- &maRaceCarVehicles[0] == this + 1856
+        //     0x82635310  mulli r11, r22, 0x1460   <- the 5216 per-car stride
+        // (The member itself is declared with the rest of the class head below.)
         // ==========================================================================================
-        // ⭐⭐⭐ SETTLED 2026-08-03 (VehiclePhysics own-block wave): **ALL TEN in-record fields now
-        // have a NAMED home.** The VehiclePhysics / SimpleVehiclePhysics own blocks were recovered
-        // and both close with zero slack (0x720 and 0x13F0 -- see the ⭐⭐ maps in
-        // BrnSimpleVehiclePhysics.h and VehiclePhysics.h, gated by VehiclePhysics_layout_check.cpp).
-        // Of the seven that were open, **THREE WERE PHANTOMS** and **FOUR HAD THE WRONG NAME**:
-        //
-        //   was                                verdict   is
-        //   ---------------------------------  --------  ------------------------------------------
-        //   f32  mfProximityRadiusSq  @1904    PHANTOM   mTransform row 2 (zAxis), in-record +0x30
-        //   Vector3 mvWorldPosition   @1920    PHANTOM   mTransform row 3 (translation), +0x40
-        //   u8   mbCrashCommitted     @3097    RE-SEAT   VehiclePhysics::mbDeformationModelIsActive
-        //                                                at in-record **4953**
-        //   Matrix44Affine mCrashMatrix @3328  PHANTOM   RaceCarPhysics::mCrashNormal, a 16-byte
-        //                                                vector at in-record **5184**
-        //   Vector3 mvCrashPosition   @3824    RENAME    VehiclePhysics::mvSpeedOnLastCrashMPH_
-        //                                                TimeCrashing_CounterSteerSideMag_Spare;
-        //                                                the crash event takes LANE .x as a float
-        //   u8   mbPlayerGrace        @4308    RENAME    mPreviousControls.meDriverType (4 bytes)
-        //   f32  mfPlayerBoostStrengthStat @5084 RENAME  meCarType (an int, not a float)
-        //
-        // Nothing in this record is a role guess any more. The derivations are in the member
-        // comments below; the ⚠️⚠️ note that follows is the ORIGINAL measurement that started it,
-        // kept because it is the evidence.
-        // ==========================================================================================
-        //
-        // ⚠️⚠️ THE MEASUREMENT (2026-08-03, previous wave). SetRaceCarCrashing @0x82634C90 walks
-        // the array through TWO bases and the committed seats mixed them up:
-        //     0x82635310  mulli r11, r22, 0x1460
-        //     0x82635314  add   r31, r11, r18      <- r31 = <manager this> + 5216*idx  (CLASS-relative)
-        //     0x826353AC  addi  r30, r31, 0x740    <- r30 = r31 + 1856                 (RECORD base)
-        // so an offset applied to r31 needs the −1856 correction and one applied to r30 does NOT.
-        // That r18 is the manager `this` and not `&maRaceCarVehicles[0]` is forced by the pseudocode
-        // itself: it writes `*(_R31 + 7056)`, and 7056 > 5216, so _R31 cannot be a record base. The
-        // same reading independently reproduces +1808 (mbCrashing, 3664−1856) and +5200
-        // (mEntityCausingCrash, 7056−1856), and +5200 is cross-confirmed by the DWARF-derived
-        // RaceCarPhysics block, which puts mEntityCausingCrash at exactly +0x1450.
-        //   * +3328 `mCrashMatrix` -- ⛔ almost certainly a PHANTOM. Its provenance note says
-        //     "(asm: +5184)", and the only 5184 in that function is `_R6 = 5184 ; stvx128 v127,
-        //     r30, r6` @0x8263549C -- applied to **r30**, so the target is in-record 5184, not
-        //     5184−1856. In-record 5184 is RaceCarPhysics::mCrashNormal, and the instruction is a
-        //     single 16-byte vector store, not a 64-byte matrix copy. It is stored four instructions
-        //     before `stw r26, 0x1450(r30)` == mEntityCausingCrash: the two together are the
-        //     console's SetCrashEntityIdAndNormal(EntityId, Vector3) inlined, i.e. exactly the
-        //     DWARF pair :414/:415. ⇒ there is probably no member at +3328 at all, and the bytes
-        //     the record already reserves at +5184 (inside mPad1404) are the real target.
-        //   * +1920 `mvWorldPosition` and +1904 `mfProximityRadiusSq` -- ⛔ both are probably
-        //     +1856 too high. Their provenance notes say "asm: record+1920" / "record+1904", but the
-        //     site is `li r9,0x780 ; li r7,0x770 ; lvx128 v0,r31,r9 ; lvx128 v12,r10,r9 ; vsubfp ;
-        //     lvx128 v12,r10,r7` @0x82635350..0x82635378 -- both bases are CLASS-relative
-        //     (r10 = r18 + 5216*idx2), so the in-record seats are **64** and **48**. Independent
-        //     support: RaceCarPhysics::SetCrashing snapshots this+0x50 into mInitialCrashVel and
-        //     this+0x60 into mInitialCrashAngVel, i.e. linear and angular velocity sit at +0x50 and
-        //     +0x60, which puts a world POSITION at +0x40 == 64 exactly one register ahead of them.
-        //     ⚠️ And +1904 is loaded with `lvx128` -- a 16-byte VECTOR feeding a vcmpgtfp -- so even
-        //     at the right seat the committed scalar `f32` model captures lane .x only.
-        //   ⭐ CONFIRMED AND RESOLVED 2026-08-03: in-record +0x30 and +0x40 are mTransform's zAxis
-        //     and translation rows -- the base sub-object starts at +0x10, so its Matrix44Affine
-        //     occupies +0x10..+0x50 and those two seats are INSIDE it. Neither is a member.
-        //     ⇒ The site is not a distance test at all. It is
-        //         dot3(posVictim - posOther, zAxisOther)  <  0.0f
-        //     (`vmsum3fp128 v0,v0,v12` then `vcmpgtfp. v0, splat(f30==flt_82001CC0==0.0f), v0`),
-        //     i.e. "is the victim BEHIND the other car along its forward axis". The committed
-        //     "||delta||² < radius²" body is a mis-decode: there is no radius anywhere in it.
-        //   * +3824 (0xEF0) `mvCrashPosition` is read on r31 (`addi r11, r31, 0x1630` @0x8263547C),
-        //     so its −1856 IS right. But VehiclePhysics.h ALREADY declares a member at +0xEF0 --
-        //     `mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare` (DWARF
-        //     VehiclePhysics.h:855). One of the two roles is wrong; they cannot both be right.
-        //     ⭐ RESOLVED 2026-08-03 IN FAVOUR OF THE DWARF: VehiclePhysics::Construct
-        //     @0x8262DCDC/@0x8262DD10 zeroes exactly 16 bytes at `li r28,0xEF0 ; stvx128 v127,r31,r28`
-        //     between mWeightTransfer (+0xEE0) and mEngine (+0xF00, `addi r30,r31,0xF00`), which is
-        //     the DWARF sequence :830/:831/:833 with zero slack. And BOTH AddRaceCarCrashEvent call
-        //     sites do `lvx128 ; vspltw v0,v0,0 ; stvx128 ; lfs f1` -- they take LANE .x as a scalar
-        //     FLOAT argument, which is a speed, not a position.
-        // ==========================================================================================
-        struct RaceCarVehicleRecord
-        {
-            // +16 (X360 RaceCarPhysics +0x10): ⭐⭐ THE BASE TRANSFORM, added 2026-08-03. This is
-            // ExternallySimulatedBody::mTransform -- the first member of the 16-aligned base
-            // sub-object that sits at +0x10 because the leaf's vptr occupies +0x00
-            // (SimpleVehiclePhysics::Construct @0x82620400 calls
-            // ExternalPhysicsBody::Construct(this + 0x10)). Its rows are xAxis/yAxis/zAxis/pos at
-            // +0x10/+0x20/+0x30/+0x40, and the two record fields this replaces were BOTH views into
-            // it -- see the ⛔ note in the fold-in map above.
-            unsigned char mPad0000[16];
-            Matrix44Affine mTransform;               // +16   (rows at +16/+32/+48/+64)
-            unsigned char mPad0050[1808 - 80];
-            // +1808 (asm: record+3664): the per-car crash master flag.
-            // ⭐ NAME SETTLED 2026-08-03 -- this was `mbIsCrashingOrDisabled`, a proposed-by-role
-            // name. It is SimpleVehiclePhysics::mbCrashing (DWARF BrnSimpleVehiclePhysics.h:368),
-            // named by the console's own assert string at RaceCarPhysics.h:328 (see the map above).
-            // Read by SetRaceCarCrashing to pick its remote vs physical-crash branch, and by
-            // HandleRaceCarRaceCarContact to skip slam/shunt on an already-crashing car.
-            unsigned char mbCrashing;               // +1808
-            // ⛔ RETIRED 2026-08-03: `f32 mfProximityRadiusSq` @+1904 and `Vector3 mvWorldPosition`
-            // @+1920 used to sit here. BOTH WERE PHANTOMS -- their asm sites apply the offset to a
-            // CLASS-relative base, so the in-record seats are +48 and +64, i.e. mTransform's zAxis
-            // and translation rows. There are no members at +1904/+1920 at all. Full derivation in
-            // the fold-in map above.
-            unsigned char mPad0711[3824 - 1809];
-            // +3824 (X360 VehiclePhysics +0xEF0). ⭐ NAME SETTLED 2026-08-03 -- was
-            // `Vector3 mvCrashPosition`, "the crash-position vector splatted into the crash event".
-            // It is VehiclePhysics::mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare
-            // (DWARF VehiclePhysics.h:831), pinned at +0xEF0 by VehiclePhysics::Construct
-            // @0x8262DCDC/@0x8262DD10 (`li r28,0xEF0 ; stvx128 v127,r31,r28`). Both
-            // AddRaceCarCrashEvent call sites splat LANE .x and pass it as the FLOAT argument f1 --
-            // i.e. the crash event carries the car's SPEED IN MPH, not a position.
-            Vector4       mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare;  // +3824
-            unsigned char mPad0EF0[4308 - 3840];
-            // +4308 (X360 VehiclePhysics +0x10D4). ⭐ NAME + WIDTH SETTLED 2026-08-03 -- was
-            // `unsigned char mbPlayerGrace`, a role guess. The asm reads it with `lwz` (4 bytes),
-            // and 4308 == mPreviousControls (+0x1090) + 0x44 == its meDriverType lane, a seat an
-            // EARLIER wave pinned independently from BrnNetworkDriverControls::Clear.
-            // VehiclePhysics::Prepare @0x826380F0 writes it (`stw r30,0x10D4(r31)`).
-            // The takedown gate is therefore "this IS the player's car AND its driver type is not
-            // E_DRIVER_TYPE_PLAYER" -- an AI/network-driven player car, not a grace timer.
-            s32           meDriverType;              // +4308  (BrnPhysics::Vehicle::E_DRIVER_TYPE)
-            unsigned char mPad10D4[4953 - 4312];
-            // +4953 (X360 VehiclePhysics +0x1359). ⭐ RE-SEATED 2026-08-03 -- this was
-            // `mbCrashCommitted` at +3097, from taking the asm's 4953 as class-relative. It is not:
-            // SetRaceCarCrashing does `addi r11, r11, 0x740` two instructions before the store, so
-            // r11 IS the record base and 4953 is the in-record seat. The member is
-            // VehiclePhysics::mbDeformationModelIsActive (DWARF VehiclePhysics.h:954): the same
-            // guarded block copies mOriginalAABB over mDeformableAABB (ResetDeformableAABB), i.e.
-            // "arm the deformation model and reset its box" is one action.
-            unsigned char mbDeformationModelIsActive;   // +4953
-            unsigned char mPad1359[5084 - 4954];
-            // +5084 (X360 VehiclePhysics +0x13DC == 5216*playerIdx + 6940 class-relative).
-            // ⭐ NAME + TYPE SETTLED 2026-08-03 -- was `f32 mfPlayerBoostStrengthStat`, a proposed
-            // name. It is an INT, not a float: VehiclePhysics::Prepare @0x826380F0 stores it with
-            // `stw r8,0x13DC(r31)` and ApplyPlayerStats @0x8259BFE8 stores the car-stats action's
-            // sixth word into it with `stw`. It is VehiclePhysics::meCarType (DWARF
-            // VehiclePhysics.h:977), and its seat is forced with zero slack by the own-block closure
-            // (0x13D0 mWheelFFSpring(8), 0x13D8 mbRollingInAir, 0x13DC meCarType, 0x13E0
-            // mi8LastAttackersRaceCarIndex, 0x13E4 mpDebugComponent -> 0x13F0).
-            // FLAG: BrnResource::ECarType has no committed home yet; carried as the s32 it is on
-            // the wire (same as maPlayerCarStats' note below).
-            s32           meCarType;                 // +5084  (BrnResource::ECarType)
-            unsigned char mPad13DC[5120 - 5088];
-            // +5120 (== RaceCarPhysics +0x1400). ⭐ NAME SETTLED 2026-08-03 -- was `mfRecoveryTimer`.
-            // It is RaceCarPhysics::mfTimeSinceTookDownPlayer (DWARF RaceCarPhysics.h:395): the
-            // post-takedown invulnerability clock RaceCarPhysics::Update integrates every frame
-            // (@0x826418E0: `lfs f0,0x1400 ; fadds v1.x ; stfs f0,0x1400`) and that
-            // HasRecentlyTakendownPlayer compares against KF_POST_PLAYER_TD_INVULNERABILITY_TIME.
-            // The store here (0.0f when the victim is the player) is OnTakendownPlayer() inlined.
-            f32           mfTimeSinceTookDownPlayer; // +5120
-            unsigned char mPad1404[5184 - 5124];
-            // +5184 (== RaceCarPhysics +0x1440). ⭐ ADDED 2026-08-03 -- this is what the retired
-            // `Matrix44Affine mCrashMatrix` @+3328 really was. The only 5184 in SetRaceCarCrashing
-            // is `li r6,0x1440 ; stvx128 v127, r30, r6` @0x8263549C, applied to the RECORD base r30,
-            // so it is a SINGLE 16-byte vector store, not a 64-byte matrix copy, and it lands on
-            // RaceCarPhysics::mCrashNormal (DWARF RaceCarPhysics.h:414). It is stored four
-            // instructions before `stw r26, 0x1450(r30)` == mEntityCausingCrash: the pair is the
-            // console's SetCrashEntityIdAndNormal(EntityId, Vector3) inlined, exactly DWARF :414/:415.
-            Vector3       mCrashNormal;              // +5184  (ends at 5200 -- no pad needed)
-            // +5200 (asm: record+7056; == RaceCarPhysics +0x1450). ⭐ NAME SETTLED 2026-08-03 -- was
-            // `mStampedEntityId`. It is RaceCarPhysics::mEntityCausingCrash (DWARF :415): the entity
-            // that caused the current crash, stored by the local-crash path together with
-            // mCrashNormal (+0x1440) -- the two stores are SetCrashEntityIdAndNormal inlined.
-            EntityId      mEntityCausingCrash;       // +5200
-            unsigned char mPad1454[5216 - 5204];
-        };
 
         // The takedown-type record pool. 32 entries, 12-byte stride, @ class offset +43808.
         // SetRaceCarCrashing allocates a slot {entity id, ETakedownType, priority} here for the
@@ -929,7 +860,10 @@ namespace Vehicle
         CgsNumeric::Random   mRandom;           // +16  (sizeof 48; ends at 64)
 
         VehicleDriver        maRaceCarDrivers[8];   // +64      (224 * 8 = 1792; ends at 1856)
-        RaceCarVehicleRecord maRaceCarVehicles[8];  // +1856    (5216 * 8 = 41728; ends at 43584)
+        // ⭐⭐ THE REAL TYPE as of 2026-08-03 -- see the fold-in note above. X360 5216 * 8 = 41728
+        // ending at 43584; host 5008 * 8 = 40064 ending at 41920, which is what
+        // KU_HOST_DRIFT_AFTER_RACECAR_ARRAY (-1664) carries for every member past it.
+        RaceCarPhysics       maRaceCarVehicles[8];  // +1856
 
         // Per-car EntityId validation table @ +43584. Stride 4 (asm: 4*(idx+10896) == 4*idx+43584;
         // Construct seeds it from dword_82F2A3A4 through a stride-4 cursor). SetRaceCarCrashing

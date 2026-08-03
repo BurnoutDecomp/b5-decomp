@@ -227,5 +227,39 @@ namespace Vehicle
         mbCrashing               = false;   // +1808
         mbStartedFatallyCrashing = false;   // +1809
     }
+
+    // -------------------------------------------------------------------------------------------
+    // ⛔⛔ SetCrashing -- NOT THE CONSOLE BODY. VTABLE-CLOSURE GATE ONLY, added 2026-08-03.
+    //
+    // WHY IT EXISTS AT ALL. `SimpleVehiclePhysics::SetCrashing()` is one of this group's
+    // fidelity:BLOCKED entries (BrnSimpleVehiclePhysics.h: "deep VMX128 routines ... whose
+    // pseudocode is the degenerate 'local variable allocation has failed' form ... no fabricated
+    // math is committed"). It was DECLARE-ONLY and that cost nothing, because nothing mounted ever
+    // instantiated this class's vtable.
+    //
+    // ⭐⭐ THAT CHANGED THE MOMENT BrnVehicleManager.h STOPPED USING A BYTE-PINNED STAND-IN. With
+    // `RaceCarPhysics maRaceCarVehicles[8]` embedded BY VALUE, the already-mounted
+    // BrnPhysicsModule.cpp -- which embeds a VehicleManager by value -- odr-uses the implicit
+    // constructor, which writes eight vptrs, which requires the WHOLE vtable to be defined.
+    // Exactly the standing lesson that a mount's closure is its STATIC reference graph and not its
+    // live-call graph: this function has no caller anywhere in the mounted tree and is still
+    // link-required. It and VehiclePhysics::IsIgnoringPassedOnImpulses were the only two symbols
+    // of the entire RaceCarPhysics vtable still missing.
+    //
+    // ⛔ WHAT IT MUST NOT BECOME. A quiet `{}` here is the silent-drop-stub failure class this
+    // project keeps paying for: crash arming would be dropped and every downstream reader would see
+    // a plausible "not crashing". So it asserts. It is UNREACHABLE today -- the only callers are
+    // TrafficPhysics::Update and VehiclePhysics::SetCrashing's base entry, both unmounted -- and the
+    // assert is the thing that says so out loud if that ever stops being true.
+    //
+    // ⚠️ IT DELIBERATELY WRITES NOTHING. Setting mbCrashing here would be inventing the one part of
+    // the body that happens to be guessable and would make the assert look survivable.
+    // -------------------------------------------------------------------------------------------
+    void SimpleVehiclePhysics::SetCrashing()
+    {
+        CGS_ASSERT(false,
+                   "SimpleVehiclePhysics::SetCrashing is a vtable-closure gate, not a body -- "
+                   "reconstruct it before anything calls it");
+    }
 }
 }

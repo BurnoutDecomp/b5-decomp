@@ -3322,6 +3322,31 @@ namespace Vehicle
     // mWeightTransferRow(+0xEF0) = bodyAxes * lfScale  (lane-by-lane vrlimi insert)
     }
 
-
+    // -------------------------------------------------------------------------------------------
+    // ⛔ IsIgnoringPassedOnImpulses -- VTABLE-CLOSURE GATE, added 2026-08-03. Vtable slot +0x10.
+    //
+    // Same cause as SimpleVehiclePhysics::SetCrashing (see the long ⛔⛔ banner there): embedding
+    // `RaceCarPhysics maRaceCarVehicles[8]` by value in VehicleManager made the mounted
+    // BrnPhysicsModule.cpp odr-use this class's vtable, so every virtual now needs a definition.
+    // These two were the only ones missing.
+    //
+    // ⚠️ THIS ONE CANNOT BE A PURE ASSERT: it has to RETURN something, and the return VALUE is the
+    // gate. VehicleRigidBody::RecievePassedOnImpulse early-outs WITHOUT applying the impulse when
+    // this is true, so `true` would be a silent-drop -- every passed-on deformation impulse
+    // swallowed, plausibly, forever. `false` is the pass-through, and it is also the state the
+    // object is in immediately after Construct (not crashing), so it is the conservative answer
+    // rather than a guess dressed as one.
+    // ⚠️ FLAG: the console body is NOT recovered -- neither the address nor the method NAME is
+    // pinned (VehiclePhysics.h calls the name role-inferred). It is unreachable in the mounted tree
+    // today: both call sites (BrnVehicleRigidBody.cpp, BrnDeformableObject_Update.cpp) are
+    // unmounted. The assert is what says so out loud if that changes.
+    // -------------------------------------------------------------------------------------------
+    bool VehiclePhysics::IsIgnoringPassedOnImpulses() const
+    {
+        CGS_ASSERT(false,
+                   "VehiclePhysics::IsIgnoringPassedOnImpulses is a vtable-closure gate, not a "
+                   "body -- reconstruct it before the deformation impulse path is mounted");
+        return false;   // pass-through: apply the impulse. NEVER flip this without the real body.
+    }
 }
 }

@@ -288,7 +288,7 @@ namespace Vehicle
         CGS_ASSERT(liPlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
 
         RaceCarPhysics* const lpPlayerCar =
-            reinterpret_cast<RaceCarPhysics*>(&maRaceCarVehicles[liPlayerIndex]);
+            &maRaceCarVehicles[liPlayerIndex];
         lpPlayerCar->SetPlayerVehicleInShowtime(lbInShowtime,
                                                 mfPlayerStatStrength,
                                                 mfPlayerStatDamageLimit);
@@ -301,9 +301,18 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     void VehicleManager::_AssertLayoutPlayerStats()
     {
-        static_assert(offsetof(RaceCarVehicleRecord, meCarType) == 5084, "in-record meCarType (asm: 5216*idx + 6940 -> in-record +5084; VehiclePhysics.h:977)");
-        static_assert(offsetof(VehicleManager, mHiddenRaceCars)          == 44704,  "mHiddenRaceCars (asm +44704)");
-        static_assert(offsetof(VehicleManager, mauNetworkCarHiddenFramesRemaining)               == 44736,  "mauNetworkCarHiddenFramesRemaining (asm base 44736)");
+        // ⭐ 2026-08-03 (the record-fold wave): `offsetof(RaceCarVehicleRecord, meCarType) == 5084`
+        // stood here. The record is gone -- `maRaceCarVehicles` is the real RaceCarPhysics -- and a
+        // host class does not reproduce a console in-record seat, so the assert cannot be kept and
+        // must not be re-based to whatever the host produces. The 0x13DC seat is asserted as console
+        // arithmetic in the mounted VehiclePhysics_layout_check.cpp (KU_B_CARTYPE), which also names
+        // the member in an existence check. What is still checkable HERE is that ApplyPlayerStats is
+        // writing a member of the real class at all:
+        static_assert(sizeof(decltype(VehicleManager::maRaceCarVehicles[0].meCarType)) == 4,
+                      "VehiclePhysics::meCarType is the 4-byte `stw` seat ApplyPlayerStats writes "
+                      "(asm 0x8259BFE8), not the f32 the retired record modelled");
+        static_assert(offsetof(VehicleManager, mHiddenRaceCars)          == 44704 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,  "mHiddenRaceCars (asm +44704)");
+        static_assert(offsetof(VehicleManager, mauNetworkCarHiddenFramesRemaining)               == 44736 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,  "mauNetworkCarHiddenFramesRemaining (asm base 44736)");
         // ⭐ RE-SEATED 2026-08-03: the map is the embedded traffic manager's own member, not a
         // sibling of this class. The old assert claimed `offsetof(VehicleManager,
         // mau8GlobalToPhysicalEntityIndexMap) == 149456`; the X360 address is indeed 149456 ==
@@ -311,7 +320,7 @@ namespace Vehicle
         // (16 vs 8, x20) and four 4->8 pointers and EventQueue<s8,50> (72 vs 64) all sit ahead of it
         // inside the manager. What still reproduces exactly is the manager's OWN seat, so that is
         // what is pinned; the map is reached BY NAME through it and needs no offset at all.
-        static_assert(offsetof(VehicleManager, mPhysicalTrafficManager) == 44768,
+        static_assert(offsetof(VehicleManager, mPhysicalTrafficManager) == 44768 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
                       "mPhysicalTrafficManager (asm PhysicalTrafficManager::Construct(this + 44768)); "
                       "the global->physical map lives inside it at X360 in-manager +104688");
         static_assert(sizeof(PhysicalTrafficManager::mu8GlobalToPhysicalEntityIndexMap) == 600,

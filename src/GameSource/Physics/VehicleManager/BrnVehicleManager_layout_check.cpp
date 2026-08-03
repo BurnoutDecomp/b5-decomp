@@ -45,6 +45,10 @@
 // committed layout, the derivation it feeds has to be redone -- so it is asserted here rather than
 // left as a number in a comment.
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"
+// The per-car physics DebugComponent VehicleManager::Construct casts the opaque 8x1024 span to.
+// Needed as a COMPLETE type here so the fit/alignment assert at the bottom is real and not a
+// promise about a forward declaration.
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h"
 
 #include <cstddef>   // offsetof
 
@@ -131,15 +135,25 @@ namespace Vehicle
         //
         // The three numbers are tied together here so none of them can drift alone.
         // ==========================================================================================
-        static_assert(offsetof(VehicleManager, mPhysicalTrafficManager) == 44768,
+        static_assert(offsetof(VehicleManager, mPhysicalTrafficManager) == 44768 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
                       "asm: addis r3,r31,1 ; addi r3,r3,-0x5120 ; bl PhysicalTrafficManager::Construct "
                       "@0x8263BF9C -- the embedded manager keeps its X360 seat (nothing before it moved)");
+        // ⭐ 2026-08-03 (the record-fold wave): this used to read
+        // `KU_X360_SIZEOF_... + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER`, which was right only while
+        // that term was the FIRST drift zone. It is now the SECOND (the race-car array's -1664 sits
+        // ahead of it), so what belongs here is the ZONE STEP -- the difference between the term
+        // after this sub-object and the term before it. That is a strictly stronger assert: it fires
+        // if either term moves independently, which the absolute form could not see.
+        // ⛔ THIS FIRED FOR REAL when the third term landed, and the wrong fix would have been to
+        // bump the literal. The right one is here.
         static_assert(sizeof(PhysicalTrafficManager)
-                          == KU_X360_SIZEOF_PHYSICAL_TRAFFIC_MANAGER + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER,
-                      "MEASURED host size 105840 == DERIVED X360 size 105648 + the 192-byte drift this "
-                      "class carries. If this fires, one of the three has moved: re-derive, do not "
-                      "just bump the drift.");
-        static_assert(KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER % 16 == 0,
+                          == KU_X360_SIZEOF_PHYSICAL_TRAFFIC_MANAGER
+                             + (KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER - KU_HOST_DRIFT_AFTER_RACECAR_ARRAY),
+                      "MEASURED host size 105840 == DERIVED X360 size 105648 + the 192-byte step this "
+                      "sub-object contributes. If this fires, one of the three has moved: re-derive, "
+                      "do not just bump the drift.");
+        static_assert((KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER - KU_HOST_DRIFT_AFTER_RACECAR_ARRAY) % 16 == 0
+                      && KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER % 16 == 0,
                       "the drift MUST be a multiple of 16, or every 16-aligned member after the traffic "
                       "manager (mCameraMatrix, mCachedCarCarPredictionNormal, the Sphere) would need a "
                       "different correction than the scalars around it -- the alignment asserts below "
@@ -160,7 +174,7 @@ namespace Vehicle
         static_assert(offsetof(PhysicalTrafficManager, maTrafficEntityIDs) == 103360,
                       "asm: addi r8,r11,0x64F0 ; slwi r9,r8,2 ; stwx -1,r9,r31 for i<20 == 4*(i+25840)");
         static_assert(offsetof(VehicleManager, mPhysicalTrafficManager)
-                          + offsetof(PhysicalTrafficManager, maTrafficEntityIDs) == 148128,
+                          + offsetof(PhysicalTrafficManager, maTrafficEntityIDs) == 148128 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
                       "⭐ THE IDENTIFICATION: 44768 + 103360 == 148128, the exact class offset the old "
                       "`EntityId maRaceCarEntityIdRemap[8]` sibling claimed. Same address, real name, "
                       "and the real bound is 20 (a TRAFFIC index), not 8.");
@@ -313,13 +327,16 @@ namespace Vehicle
                       "the class must extend at least to the end of muTakedownEventsThisFrame");
         // ⭐ AND PIN THE END EXACTLY, not just `>=`. The standing rule from the wave that lost a
         // 4 -> 8 array growth to tail padding: a `>=` on sizeof cannot see a trailing member that
-        // grew into slack. 172616 + 224 == 172840, rounded up to this class's 16-alignment == 172848
-        // (MEASURED). This assert has already earned its keep once: it was written as 172816 (the
-        // one-drift-term number) and it is the ONLY thing that fired when the debug component was
-        // un-pinned in the same wave -- the correct response was the second named drift term above,
-        // not a bigger literal here.
-        static_assert(sizeof(VehicleManager) == 172848,
-                      "MEASURED total. X360 end 172616 + 224 drift == 172840 -> 16-aligned 172848");
+        // grew into slack. 172616 + (-1440) == 171176, rounded up to this class's 16-alignment
+        // == 171184 (MEASURED).
+        // ⭐ THIS ASSERT HAS NOW EARNED ITS KEEP TWICE. It was written as 172816 (the one-drift-term
+        // number) and was the ONLY thing that fired when the debug component was un-pinned; it was
+        // 172848 (the two-term number) and was one of two things that fired when the race-car array
+        // was folded to the real RaceCarPhysics. Both times the correct response was the named drift
+        // term above, not a bigger literal here -- and both times the literal moved only after the
+        // term did.
+        static_assert(sizeof(VehicleManager) == 171184,
+                      "MEASURED total. X360 end 172616 + (-1440) drift == 171176 -> 16-aligned 171184");
         static_assert(sizeof(VehicleManager::maeImpactType) == 32, "EImpactType[8]");
         static_assert(sizeof(VehicleManager::mauImpactScore) == 8, "uint8[8]");
         static_assert(sizeof(VehicleManager::mafPlayerGrindingOtherDurationSeconds) == 32, "f32[8] -- NOT a scalar threshold");
@@ -327,69 +344,70 @@ namespace Vehicle
         static_assert(sizeof(VehicleManager::mStuckInCollisionTestCacheSphere) == 16, "one stvx128 == 16 bytes");
 
         // =========================================================================================
-        // ⭐⭐ THE RaceCarVehicleRecord IN-RECORD SEATS -- ADDED 2026-08-03 (RaceCarPhysics own-block
-        // wave), AND THEY HAD NEVER BEEN CHECKED BY ANYTHING.
+        // ⭐⭐⭐ THE RECORD IS GONE -- FOLDED 2026-08-03. `maRaceCarVehicles` is
+        // `BrnPhysics::Vehicle::RaceCarPhysics[8]`, the real class.
         //
-        // BrnVehicleManager.h pins ten in-record field offsets on the 5216-byte stand-in for
-        // RaceCarPhysics, and says so. The asserts that were supposed to enforce them live in
-        // BrnVehicleManager.cpp (nine of them) and BrnVehicleManagerPlayerStats.cpp (one), and
-        // NEITHER TU IS MOUNTED -- which is the whole reason this file exists for the outer class.
-        // The record's seats had exactly the same hole and it had been missed because the header
-        // reads as if the asserts were live. Duplicated here, in the mounted TU, so they run.
+        // WHAT STOOD HERE, and why it could not be kept. This block held ten
+        // `offsetof(RaceCarVehicleRecord, ...) == <X360 in-record seat>` asserts -- the byte-pinning
+        // gate for the stand-in. A host class does not reproduce console offsets, so after the fold
+        // every one of those ten would be FALSE. Re-basing them to whatever the host happens to
+        // produce would be the worst of both: a green gate that measures nothing. They are deleted,
+        // and the seats they guarded are guarded elsewhere:
+        //     RaceCarPhysics_layout_check.cpp   the +0x13F0..+0x1460 own block, closing on 5216
+        //     VehiclePhysics_layout_check.cpp   +0x130..+0x720 and +0x720..+0x13F0
+        // Both are MOUNTED, both assert CONSOLE ARITHMETIC over X360Layout literals, and between
+        // them every one of the ten former record fields is additionally named in a
+        // `(void)offsetof(...)` existence check -- so a rename or a deletion still fails the build.
         //
-        // ⭐⭐ ALL THREE SUSPECTS RESOLVED 2026-08-03 (VehiclePhysics own-block wave), and four more
-        // fields renamed with them. This gate previously asserted mfProximityRadiusSq @1904,
-        // mvWorldPosition @1920 and mCrashMatrix @3328 AS COMMITTED, with a note saying "when the
-        // VehiclePhysics own-block pass moves them, these three lines are what will fail". That is
-        // exactly what happened: all three were PHANTOMS (the first two are rows of the base's
-        // mTransform, the third is the 16-byte mCrashNormal at in-record 5184), so the lines are
-        // gone rather than re-typed, and the four survivors below are asserted under the names the
-        // recovered VehiclePhysics / RaceCarPhysics blocks give them.
+        // WHAT IS STILL THIS FILE'S JOB is the claim the fold actually makes about THIS class: that
+        // the element is the real type, that its host size is the number the drift term is derived
+        // from, and that the array still starts on the asm-literal +1856 at 16 alignment. Those are
+        // checkable and they are checked. Tamper-tested: changing either constant fires.
         // =========================================================================================
-        static_assert(sizeof(RaceCarVehicleRecord) == 5216,
-                      "per-car stride (asm: VehicleManager::Construct `addi r29, r29, 0x1460`)");
-        static_assert(offsetof(RaceCarVehicleRecord, mTransform) == 16,
-                      "ExternallySimulatedBody::mTransform -- the base sub-object starts at +0x10 "
-                      "because the leaf vptr occupies +0x00 (SimpleVehiclePhysics::Construct "
-                      "@0x82620400 `addi r3,r31,0x10 ; bl ExternalPhysicsBody::Construct`)");
-        static_assert(offsetof(RaceCarVehicleRecord, mbCrashing) == 1808,
-                      "SimpleVehiclePhysics::mbCrashing -- named by the console's own assert string "
-                      "at RaceCarPhysics.h:328 (GetNormalCausingCrash @0x825B3944)");
-        static_assert(offsetof(RaceCarVehicleRecord,
-                               mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare) == 3824,
-                      "VehiclePhysics::mvSpeedOnLastCrashMPH_... @+0xEF0 (asm: Construct "
-                      "`li r28,0xEF0 ; stvx128 v127,r31,r28`, between mWeightTransfer and mEngine)");
-        static_assert(offsetof(RaceCarVehicleRecord, meDriverType) == 4308,
-                      "VehiclePhysics::mPreviousControls.meDriverType == 0x1090 + 0x44 (asm: "
-                      "VehiclePhysics::Prepare `stw r30,0x10D4(r31)`; read with `lwz`, 4 bytes)");
-        static_assert(offsetof(RaceCarVehicleRecord, mbDeformationModelIsActive) == 4953,
-                      "VehiclePhysics::mbDeformationModelIsActive @+0x1359 -- SetRaceCarCrashing's "
-                      "`stb r20,0x1359(r11)` is applied to the RECORD base (`addi r11,r11,0x740` "
-                      "two instructions earlier), so no -1856 correction applies");
-        static_assert(offsetof(RaceCarVehicleRecord, meCarType) == 5084,
-                      "VehiclePhysics::meCarType @+0x13DC (asm: VehiclePhysics::Prepare "
-                      "`stw r8,0x13DC(r31)` and ApplyPlayerStats `stw r10,0x1B1C(5216*idx + this)`)");
-        static_assert(offsetof(RaceCarVehicleRecord, mCrashNormal) == 5184,
-                      "RaceCarPhysics::mCrashNormal @+0x1440 -- the single 16-byte `stvx128 v127, "
-                      "r30, 0x1440` the retired `mCrashMatrix` @3328 was a mis-based reading of");
-        static_assert(offsetof(RaceCarVehicleRecord, mfTimeSinceTookDownPlayer) == 5120,
-                      "RaceCarPhysics::mfTimeSinceTookDownPlayer @+0x1400 (DWARF :395)");
-        static_assert(offsetof(RaceCarVehicleRecord, mEntityCausingCrash) == 5200,
-                      "RaceCarPhysics::mEntityCausingCrash @+0x1450 (DWARF :415); "
-                      "SetRaceCarCrashing @0x82635478 `stw r26, 0x1450(r30)`");
+        static_assert(sizeof(RaceCarPhysics) == 5008,
+                      "host sizeof(RaceCarPhysics). NOT an X360 number -- the console class is 5216 "
+                      "(`mulli r11,r22,0x1460`). This line exists so the class cannot change size "
+                      "without the drift term below being revisited");
+        static_assert(8 * (5216 - static_cast<std::ptrdiff_t>(sizeof(RaceCarPhysics)))
+                          == -KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
+                      "⭐ KU_HOST_DRIFT_AFTER_RACECAR_ARRAY must BE 8 * (console stride - host "
+                      "sizeof). It is written as a literal in the header, deliberately, so this is "
+                      "a tripwire in both directions and not a definition");
+        static_assert(alignof(RaceCarPhysics) == 16,
+                      "the array element must stay 16-aligned so element 0 keeps the asm-literal "
+                      "+1856 base (1856 % 16 == 0)");
+        static_assert(offsetof(VehicleManager, maRaceCarVehicles) == 1856,
+                      "⭐ the fold must NOT move element 0: 1856 is the asm literal "
+                      "VehicleManager::Construct hands VehiclePhysics::Construct "
+                      "(`addi r3, r29, -0x140D`)");
+        static_assert(offsetof(VehicleManager, maRaceCarEntityIDs)
+                          == offsetof(VehicleManager, maRaceCarVehicles) + 8 * sizeof(RaceCarPhysics),
+                      "the eight-car array must abut maRaceCarEntityIDs with no slack -- the same "
+                      "closure the X360's 1856 + 8*5216 == 43584 has");
         static_assert(sizeof(RaceCarCrashData) == 12, "RaceCarCrashData stride (asm: 12)");
 
-        // ⭐ THE CROSS-CHECK BETWEEN THE TWO MODELS OF THE SAME CLASS. The record is byte-pinned to
-        // X360 and RaceCarPhysics is not, so they can only be compared by DELTA -- but a delta is
-        // enough, because the two fields below bracket the whole RaceCarPhysics own block and were
-        // derived from completely different evidence (this side from SetRaceCarCrashing's store
-        // offsets; the other side from the DecFIGS DWARF member order closing on this class's own
-        // stride). Both terms of the right-hand side are X360 literals.
-        static_assert(offsetof(RaceCarVehicleRecord, mEntityCausingCrash)
-                          - offsetof(RaceCarVehicleRecord, mfTimeSinceTookDownPlayer)
-                          == 0x1450 - 0x1400,
-                      "the record's two settled fields must be the same 0x50 apart as "
-                      "RaceCarPhysics::mEntityCausingCrash and ::mfTimeSinceTookDownPlayer");
+        // ⭐ The eight-car loop bound VehicleManager::Construct uses must BE the width of every
+        // per-car array it walks. The 8 is asm-literal (`li r23, 8`); this pins that the constant
+        // and the arrays cannot drift apart, which is the only way that loop could run off an end.
+        static_assert(sizeof(VehicleManager::maRaceCarVehicles) / sizeof(RaceCarPhysics)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "maRaceCarVehicles[8]");
+        static_assert(sizeof(VehicleManager::maRaceCarDrivers) / sizeof(VehicleDriver)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "maRaceCarDrivers[8]");
+        static_assert(sizeof(VehicleManager::maRaceCarEntityIDs) / sizeof(EntityId)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "maRaceCarEntityIDs[8]");
+        static_assert(sizeof(VehicleManager::maRaceCarHandlingBodyIDs) / sizeof(u64)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "maRaceCarHandlingBodyIDs[8]");
+        static_assert(sizeof(VehicleManager::maeRaceCarTypes) / sizeof(BrnWorld::ERaceCarType)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "maeRaceCarTypes[8]");
+        static_assert(sizeof(VehicleManager::mauNetworkCarHiddenFramesRemaining) / sizeof(u32)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "mauNetworkCarHiddenFrames[8]");
+        // ⭐ AND the debug-component span the loop casts into: 8 slots of 1024, big enough and
+        // aligned enough for the reconstructed DebugComponent (112 bytes, align 16). If the class
+        // ever outgrows the slot, the reinterpret_cast in the loop stops being merely inert.
+        static_assert(sizeof(VehicleManager::maRaceCarDebugComponent)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS * 1024, "8 x 1024 (asm stride 0x400)");
+        static_assert(sizeof(DebugComponent) <= 1024 && (1024 % alignof(DebugComponent)) == 0,
+                      "the reconstructed per-car DebugComponent must still fit its opaque slot");
     }
 }
 }
