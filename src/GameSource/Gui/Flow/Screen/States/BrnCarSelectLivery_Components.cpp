@@ -141,7 +141,14 @@ namespace BrnGui
                 : CgsGui::GuiEvent<537>(static_cast<u32>(sizeof(GuiTickerCustomMessagePayload)), 12)
             {
                 std::memset(&mMessage, 0, sizeof(mMessage));
-                mMessage.maFlags[2] = 1;   // the one non-zero seed (+0x813)
+                // Two non-zero seeds, both measured at 0x824C7D7C..0x824C7D90:
+                //   stb 1 -> +0x811 maFlags[0], stb 1 -> +0x813 maFlags[2].
+                // maFlags[0] is what distinguishes the ticker KINDS -- SetTicker seeds
+                // {0,0,1,0} where this producer seeds {1,0,1,0} (measured independently
+                // in BrnOnlineGameOptions_wI_09.cpp). Dropping it sends the line out as
+                // the wrong ticker kind.
+                mMessage.maFlags[0] = 1;   // +0x811
+                mMessage.maFlags[2] = 1;   // +0x813
             }
         };
     }

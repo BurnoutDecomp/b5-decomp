@@ -60,6 +60,32 @@ namespace BrnGui
         // index (asserts on out-of-range) and returns the row's visible flag.
         bool IsShowing(s32 liPlayerIndex) const;
 
+        // ---- declared here, bodies owned by this component's own TU -------------------
+        // Shapes are the DecFIGS DWARF's for this very header (rows 21/24/27/30/33), and
+        // the call sites bl them directly from CarSelectLivery::HandleLobbyPlayerList
+        // @0x824B5190 and CarSelectVehicle @0x824C9E58.
+
+        // @0x8241B1C8 (DWARF cpp:144) -- range-assert (cpp:146), then the row's Item::Show.
+        void Show(s32 liPlayerIndex);
+
+        // @0x8241B2A0 (DWARF cpp:162) -- range-assert (cpp:164), clear the row's visible
+        // flag and push the "apt_state"/"invisible" apt view-state on the row component.
+        void Hide(s32 liPlayerIndex);
+
+        // @0x82427948 (DWARF cpp:77) -- range-assert (cpp:79); if the row is visible, push
+        // lpacPlayerName into the row's gamertag text field.
+        void SetPlayerName(s32 liPlayerIndex, const char* lpacPlayerName);
+
+        // @0x82434B70 (DWARF cpp:96) -- range-assert (cpp:98); resolve the car in
+        // mpVehicleList (assert "lpVehicleData", cpp:101), display the PARENT car instead
+        // when the entry has one and its livery type != 2, then the row's Item::SetPlayerCar.
+        // The CgsID (rather than two words) is proven by the caller's ld r5,-0x10(r30).
+        void SetPlayerCar(s32 liPlayerIndex, CgsID lCarId);
+
+        // @0x8241B0C8 (DWARF cpp:126) -- range-assert (cpp:128); latch the row's
+        // final-selection flag and re-Show a visible row when it changed.
+        void SetFinalSelection(s32 liPlayerIndex, bool lbFinalSelection);
+
         // @ 0x82427A38 - route an apt load notification to the first row whose component
         // name is a substring of the reported clip name; returns whether one claimed it.
         bool HandleLoadNotification(const char* lpacComponentName);

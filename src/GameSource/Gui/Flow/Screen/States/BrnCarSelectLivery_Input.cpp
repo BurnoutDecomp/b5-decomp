@@ -8,7 +8,6 @@
 //   HandlePlayerInfoResponse            @ 0x824C8758  (DWARF cpp:1002)
 //   HandleUnlockedLiveryResponseEvent   @ 0x824BBA80  (DWARF cpp:1031)
 //   HandlePlayerCarColourResponseEvent  @ 0x824C0E18  (DWARF cpp:1066)
-//   HandleLobbyPlayerList               @ 0x824B5190  (DWARF cpp:1155)
 //
 // ⭐⭐ THIS FILE CLOSES THE JUNKYARD HANDOVER. HandleControllerInput's case 0x31 is the
 // accept: IsLoading() (state vtable +0x2C) gates it, mbExiting latches it once, and
@@ -77,13 +76,18 @@ namespace BrnGui
             s32 miButtonId;   // +0x04 (EGameInputActions)
         };
 
-        // Event 406 (GuiPlayerInfoResponse). This screen reads the "car needs repair" word at
+        // Event 406 (GuiPlayerInfoResponse). This screen reads the "car needs repair" BYTE at
         // +0x38 (X360 `lwz r11, 0x38(r4)`); the base's dispatcher has already taken the car id
         // at +0x20 out of the same record.
         struct GuiPlayerInfoResponsePayload : public CgsModule::Event
         {
             u8  maHead[0x38];        // +0x00 (the car id at +0x20 -- taken by the base)
-            s32 miCarNeedsRepair;    // +0x38
+            u8  mbCarNeedsRepair;    // +0x38 -- BYTE: the X360 uses lbz r11, 0x38(r30)
+                                     // @0x824C87B0 and stores it back with stbx. On the
+                                     // big-endian console an lbz here would read the HIGH
+                                     // byte of an s32, so the producer field really is a
+                                     // byte. Modelling it as s32 on the little-endian host
+                                     // makes != 0 true for any non-zero byte in +0x38..3B.
         };
 
         // Event 413 (the unlocked-livery list). The transport is a
@@ -385,7 +389,7 @@ namespace BrnGui
         const GuiPlayerInfoResponsePayload* lpPayload =
             reinterpret_cast<const GuiPlayerInfoResponsePayload*>(lpEvent);
 
-        mbDisableCarModifyInteraction = (lpPayload->miCarNeedsRepair != 0);
+        mbDisableCarModifyInteraction = (lpPayload->mbCarNeedsRepair != 0);
         if (mbDisableCarModifyInteraction)
         {
             mbFadeScreenPending = true;
@@ -442,28 +446,14 @@ namespace BrnGui
         const GuiPlayerCarColourPayload* lpPayload =
             reinterpret_cast<const GuiPlayerCarColourPayload*>(lpEvent);
 
-        // ⚠️ The X360 calls both HighlightItem and HighlightIndex with their index arguments
-        // LEFT UNSET (see the FLAG on ColourMenuToggle::HighlightIndex). The reported colour
-        // is the only defined value to re-seat onto, so it is what both are given.
+        // Both index arguments ARE explicitly loaded from the payload by the X360, measured
+        // at 0x824C0E74..0x824C0E8C:  li r4,1 / lwz r5,0(r30) -> HighlightItem(liItem =
+        // payload+0x00), then addi r3,r31,0x2860 / lwz r4,4(r30) -> HighlightIndex(liIndex =
+        // payload+0x04). (An earlier comment here claimed both were left unset -- it was
+        // wrong, and the code below was already right.)
         mOptionToggles.HighlightItem(E_OPTIONTOGGLE_PAINT_FINISH, lpPayload->miPaintFinishIndex);
         mColourMenuToggle.HighlightIndex(lpPayload->miColourIndex);
         SetupPaintColourToggle(lpPayload->miColourIndex, mColourMenuToggle.IsHighlighted());
     }
 
-    // ---- HandleLobbyPlayerList @ 0x824B5190 ----------------------------------------
-    // ⛔ NOT RECONSTRUCTED, and deliberately NOT a silent {}. Event 244 is the ONLINE lobby
-    // player table: the X360 body walks the event's player records and drives
-    // CarSelectOnlinePlayerList::Show / Hide / SetPlayerName / SetPlayerCar /
-    // SetFinalSelection (@0x8241B1C8 / 0x8241B2A0 / 0x82427948 / 0x82434B70 / 0x8241B0C8),
-    // none of which has a reconstructed body, and it reads a GuiEventNetworkLobbyPlayerList
-    // record with no recovered home. Its own guard (`meCarSelectType == 2 && meCurrentState
-    // == 2`) makes it online-only, so the offline Junkyard flow never reaches it -- the
-    // assert is a tripwire, not a live path. Identical treatment to the sibling screen's.
-    void CarSelectLivery::HandleLobbyPlayerList(const GuiEventNetworkLobbyPlayerList* /*lpEvent*/)
-    {
-        CGS_ASSERT(false,
-                   "CarSelectLivery::HandleLobbyPlayerList (0x824B5190) is not reconstructed -- "
-                   "the online lobby player table is missing. Recover CarSelectOnlinePlayerList's "
-                   "Show/Hide/SetPlayerName/SetPlayerCar/SetFinalSelection first.");
-    }
 }

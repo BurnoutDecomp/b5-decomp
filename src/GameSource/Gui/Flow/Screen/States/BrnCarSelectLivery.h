@@ -90,9 +90,15 @@ namespace BrnResource { struct VehicleListEntry; }
 
 namespace BrnGui
 {
-    // Event 244's payload (the online lobby player table). Pointer-only: the record has no
-    // reconstructed home and the only consumer is the online-lobby handler below. Declared
-    // here as well as in BrnCarSelectVehicle.h -- same incomplete type, one namespace.
+    // Event 244's payload (the online lobby player table). Kept incomplete here, but the
+    // record IS recovered (wave J): the X360 posts it RAW -- no GuiEvent header --
+    // AddGuiEvent<GuiEventNetworkLobbyPlayerList> @0x823CF4C8 calls AddEvent(queue, record,
+    // 244, 456), and the 456 bytes decompose as
+    // BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData maPlayers[8] (the committed
+    // 56-byte rows) then s32 miNumPlayers at +448 (+4 tail pad). Consumers view it through
+    // a TU-local payload struct per the wave-H precedent
+    // (BrnOnlineGameRoomPlayerInfo_wH_15.cpp); declared here as well as in
+    // BrnCarSelectVehicle.h -- same incomplete type, one namespace.
     struct GuiEventNetworkLobbyPlayerList;
 
     struct CarSelectLivery : public CarSelectMain
