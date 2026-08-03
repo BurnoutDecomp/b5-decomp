@@ -222,6 +222,11 @@ namespace BrnGui
         bool EnsureResourceIsUnloaded(const CgsGui::sResourceTuple& lResource);
         bool EnsureResourcesAreUnloaded(const CgsGui::sResourceTuple* lpResources, u32 luCount);
         const void* GetLoadedResource(u32 luId) const;
+        // DWARF BrnGuiCache.h:638 (`void UnloadResource(const sResourceTuple &)`) -- the
+        // single-tuple form of UnloadResources below. PreRaceFlyByState::OnLeave calls it
+        // once for the resolved large-event-icon tuple and once for the per-gamemode screen
+        // tuple. Body links from the GuiCache TU.
+        void UnloadResource(const CgsGui::sResourceTuple& lResource);
         void UnloadResources(const CgsGui::sResourceTuple* lpResources, u32 luCount);
 
         f32 GetTime() const;
@@ -248,6 +253,16 @@ namespace BrnGui
         void SetExpectedAptComponentList(GuiFlow leFlow, const u32* lpauComponentNameHashes,
                                          u32 luCount);
 
+        // DWARF BrnGuiCache.h:691 -- the APPEND sibling of SetExpectedAptComponentList
+        // above: add the caller's hash array to whatever the flow layer is already waiting
+        // on, rather than replacing it. CrashNavMap::AppendExpectedAptComponents passes
+        // E_GUIFLOW_SCREEN and the 50 "SatNavIcon<n>" hashes Construct precomputed.
+        // The DWARF spells the array `uint32_t *`; declared const here to match the Set
+        // sibling (read-only in both, and every caller passes a non-const array).
+        // Body links from the GuiCache TU.
+        void AppendExpectedAptComponentList(GuiFlow leFlow, const u32* lpauComponentNameHashes,
+                                            u32 luCount);
+
         // ADDITIVE GROW (BrnImageGallery.h TU): has every expected component on the flow
         // layer finished initialising (the per-frame init-wait poll -- ImageGalleryState::
         // UpdateWFInit @0x824846B8 gates on it). X360 @0x824EE7A8 (`addi r3,r3,8` +
@@ -260,6 +275,14 @@ namespace BrnGui
         // ClearComponentInitialised); the online car-select-end state also calls it
         // (@0x824968A8 / @0x82484A3C). Bodied in the GuiCache TU.
         void ClearExpectedAptComponentList(GuiFlow leFlow);
+
+        // DWARF BrnGuiCache.h:720 -- drop the whole CONTROLLED-component registration list
+        // (the mpaControlledComponents / muControlledComponentNameHash pair the embedded
+        // watcher carries), as opposed to the per-flow EXPECTED list cleared above. Screens
+        // call it once, next to ClearExpectedAptComponentList, when they start a fresh apt
+        // movie (CrashNavMap::CheckForLoadComplete). Takes no argument -- it is not
+        // per-flow. Body links from the GuiCache TU.
+        void ClearExpectedControlledAptComponentList();
 
         // RecEvent @ 0x8250DDF0 -- resource completion (14/16) and Apt ONLOAD (21)
         // branches used by the module bridges.
@@ -1176,7 +1199,15 @@ namespace BrnGui
     struct SatNavEventDisplayInfo
     {
         Vector3 mv3Position;     // +0x00 (16-byte VMX lane copied to the cached icon)
-        u8      mPad_10[0x08];   // +0x10..+0x17
+        u8      mPad_10[0x04];   // +0x10..+0x13
+        // +0x14. ADDITIVE CARVE out of the old mPad_10[8] (4 + 4 == 8, so the layout is
+        // unchanged). MEASURED: CrashNavMap::UpdateEvent @0x824CC594 does
+        // `lwz r9, 0x14(r3)` on this record straight after `bl sub_824F8AF0`
+        // (== GetProfileEventDisplayInfo) and stores the word into the icon manager's
+        // muSelectedJunctionID (`stwx r9, mpIconManager, 0xAA10` @0x824CC59C).
+        // FLAG: consumer-named -- there is no DWARF row for this record at all, so the
+        // name comes from the one recovered reader and the field it feeds.
+        u32     muJunctionId;
         u32     muEventInstanceId; // +0x18 (preset path WDC lookup id)
     };
 

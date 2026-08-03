@@ -128,7 +128,20 @@ namespace BrnStreetData
         // tests with `< 0`). DECLARE-ONLY: its body + the comparator table live in the
         // BrnChallengeData.cpp TU (it appears only as [external/unknown] from every caller), so
         // it resolves under cl /c without forcing that TU's reconstruction here.
-        int32_t CompareScores( ScoreType leScoreType, int32_t liScore0, int32_t liScore1 );
+        //
+        // STATIC -- MEASURED, and it used to be declared non-static here. The whole X360 body
+        // (@0x82676640, dumped with headless IDA into scratchpad/waveJ/comparescores.txt) is
+        //     mr r11,r3 / slwi r11,r11,2 / lwzx r11, r11, off_820A765C
+        //     mr r3,r4  / mr r4,r5       / mtctr r11 / bctr
+        // i.e. r3 is used as the comparator-table INDEX (the ScoreType), not as a `this`
+        // pointer, and the two scores arrive in r4/r5 -- three arguments, no object. Every
+        // call site agrees: CrashNavMap::UpdateRoadRule @0x824B6EA8 (`mr r3, r28` where r28 is
+        // the loop's ScoreType) and StreetManager::ProcessNewRoadScore @0x823498F4 (`mr r3,
+        // r27`, the same register it feeds GetScore's ScoreType argument). Declaring it static
+        // is source-compatible with the committed callers that already spell it through an
+        // object (`lEntry.CompareScores(...)` stays legal), and it lets the call sites that
+        // have no ChallengeData in hand -- like UpdateRoadRule -- spell it as the console does.
+        static int32_t CompareScores( ScoreType leScoreType, int32_t liScore0, int32_t liScore1 );
     };
 
     // BrnChallengeData.h:225 (DWARF). The local-player challenge record: a ChallengeData plus the

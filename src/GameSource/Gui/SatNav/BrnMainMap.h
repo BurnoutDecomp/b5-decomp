@@ -9,7 +9,8 @@
 
 #include <cstddef>                                            // offsetof (uncalled _AssertLayout)
 
-namespace BrnGui { class GuiCache; }  // mpGuiCache (pointer only; full type GameSource/Gui/BrnGuiCache.h)
+namespace BrnGui { class GuiCache; }
+namespace BrnGui { struct CrashNavMap; }  // friend of MainMapComponent (reads mfWorldZoomScaleFactor by name)  // mpGuiCache (pointer only; full type GameSource/Gui/BrnGuiCache.h)
 
 // BrnMainMap.h
 // BrnGui::MainMapComponent - the sat-nav "main map" GUI screen component. It owns a
@@ -151,6 +152,13 @@ namespace BrnGui
         bool       IsActive() const;                          // DWARF h:465
 
     private:
+        // CrashNavMap::UpdateIconManager @0x824CBAC4 reads mfWorldZoomScaleFactor directly
+        // (`lfs f13, 0x6C0(r31)`, and 0x6C0 - mMainMapComponent@+96 == 1632 == the member's
+        // X360 offset). The DWARF declares the member private and supplies NO accessor for
+        // it, so friendship -- not a fabricated getter -- is the honest exposure, exactly as
+        // BrnGuiCache.h and BrnMapIconManager.h do for their own consumer screens.
+        friend struct CrashNavMap;
+
         Vector2 CalculateOffsetWorldCentre(Vector2 lv2Centre, OffsetPadding lePadding);
         Vector2 CalculateViewPaddingOffset();
         Vector2 CalculatePositionedWorldRect(Vector2 lv2Centre);

@@ -40,21 +40,24 @@
 // still reserved byte-span so each named field lands at its binary offset without
 // raw-offset casting. All access is by name.
 //
-// NOT MODELLED (deliberate, see the report for wave J):
-//   * The DWARF base `struct CrashNavPanel : public CgsGui::GuiComponent` is NOT applied.
-//     The head is still a reserved span, so applying the base would double-count it. That
-//     is a layout redesign, not a declaration add, and it is what still blocks
-//     CrashNavPanel::Construct (@0x82425C60, virtual slot 0) for CrashNavMap::OnEnter.
-//   * `PanelType GetPanelActiveFilterMode()` (DWARF h:314) is NOT declared: it has no
-//     out-of-line X360 body, so no TU owns it and nothing attests what it reads
-//     (mePanelType @+0x90 or the toggle group @+0xA0 are both plausible). Adding it would
-//     be an invented body.
+// BASE APPLIED (2026-08-03). The DWARF base `struct BrnGui::CrashNavPanel : public
+// CgsGui::GuiComponent` is now spelled out, and the old `u8 maHeadReserved[0x90]` that
+// stood in for it is replaced by the ONE member the DWARF puts between the base and
+// mePanelType: `EPrepareStage mePrepareStage` (h:237, X360 +0x8C -- exactly where the
+// 32-bit GuiComponent layout ends: vptr 0x00 / macName[128] 0x04 / muHashedName 0x84 /
+// mpStateInterface 0x88). Nothing is double-counted: the reserved span WAS the base plus
+// that member, and both are now named. This is what makes the DWARF's virtual
+// `Construct(const char*, StateInterface*, const char*)` (@0x82425C60, vtable slot 0)
+// declarable, which CrashNavMap::OnEnter calls through slot 0 (`lwz r10, 0x6E0(r31);
+// lwz r11, 0(r10); bctrl` @0x824CB2D0..0x824CB2F0). As everywhere else in this header the
+// X360 offsets are COMMENTS ONLY -- the host base widens and all access is by name.
 // ===================================================================================
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                        // typedef u64 CgsID
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                    // BrnGui::GuiFlow (E_GUIFLOW_*)
 #include "GameSource/Gui/Flow/Screen/Components/BrnEventPanel.h"   // embedded EventPanel + EModeType
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h" // CgsGui::GuiComponent (DWARF base)
 
 // Pointer/reference-only collaborators -- forward declared rather than included.
 //   CgsModule::Event   : the shared opaque event base (defined in
@@ -77,7 +80,7 @@ namespace BrnGui
     // reference, so an incomplete type suffices.
     struct RoadPanelData;
 
-    class CrashNavPanel
+    class CrashNavPanel : public CgsGui::GuiComponent
     {
     public:
         // Which sub-panel the crash-nav panel is currently showing (object +0x90).
@@ -96,6 +99,15 @@ namespace BrnGui
             E_PANEL_SELECTABLE_COUNT = 4,   // the four above are the selectable filters
             E_PANEL_GENERIC          = 4,
             E_PANEL_COUNT            = 5,
+        };
+
+        // DWARF BrnCrashNavPanel.h:103. Names and values verbatim; StoreSettings gates its
+        // capture branch on mePrepareStage == E_PREPARESTAGE_DONE.
+        enum EPrepareStage
+        {
+            E_PREPARESTAGE_CONSTRUCTED = 0,
+            E_PREPARESTAGE_DONE        = 1,
+            E_PREPARESTAGE_COUNT       = 2,
         };
 
         // The 20-byte "challenged event scores" record CrashNavMap builds on its stack and
@@ -118,6 +130,14 @@ namespace BrnGui
         // Shapes are DWARF (BrnCrashNavPanel.h line numbers noted) gated on X360
         // attestation -- every one below has an X360 address in progress/identity.json.
         // --------------------------------------------------------------------------
+
+        // @ 0x82425C60 (DWARF cpp:85), the CgsGui::GuiComponent virtual at vtable slot 0.
+        // CrashNavMap::OnEnter reaches it through the vtable rather than by name:
+        // `addi r3, r31, 0x6E0; addi r4, "CrashNavPanel_mc"; lwz r5, 0x1C(r31); li r6, 0;
+        //  lwz r11, 0(r10); mtctr r11; bctrl` @0x824CB2D4..0x824CB2F0 -- three arguments,
+        // the third (the parent name) NULL. Body links from the CrashNavPanel TU.
+        virtual void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
+                               const char* lpacParentName);
 
         // @ 0x82418708 (DWARF h:249 / cpp:127). MEASURED BEHAVIOUR, which the name does not
         // convey: with the flag TRUE the panel does NOT store anything -- it writes the
@@ -197,6 +217,19 @@ namespace BrnGui
         // @0x824188EC..0x82418918). `const` is DWARF-attested.
         bool IsRoadRuleFriendSelected() const;
 
+        // DWARF h:314 -- which sub-panel the panel is currently showing. It has no
+        // out-of-line X360 body (the DWARF gives it a .h line, i.e. it is defined inline in
+        // the original header), so NO TU will ever home it and a bare declaration would be
+        // an unresolved external the compile-only gate cannot see. Written inline over the
+        // named member instead, and the member it reads is now MEASURED rather than
+        // guessed: CrashNavMap::UpdateButtonPrompts inlines all three of its calls as
+        // `lwz r11, 0x770(r31)` (@0x824B69B4 / @0x824B6A98 / @0x824B6B84), and
+        // 0x770 == mCrashNavPanel (state +0x6E0) + 0x90 == mePanelType -- not the toggle
+        // group at +0xA0. The compares that follow pin the enumerators too: `cmpwi 0`
+        // (E_PANEL_EVENT), `cmpwi 2` (E_PANEL_ROADSIGN), `cmpwi 3` (E_PANEL_RIVALS).
+        // Non-const per the DWARF.
+        PanelType GetPanelActiveFilterMode() { return mePanelType; }
+
         // @ 0x824BAE58 - active game/progression mode for the highlighted event. Asserts the
         // panel is showing events, then maps the embedded event panel's current game mode
         // through EventPanel::ConvertLocalEventDefToProgressionEventDef. Non-const because that
@@ -216,10 +249,10 @@ namespace BrnGui
         s32 GetRoadPanelScoreMode() const;
 
     private:
-        // Reserved storage for the unrecovered panel head that precedes mePanelType
-        // (object +0x90). Per the DWARF this span is the CgsGui::GuiComponent base plus
-        // mePrepareStage (+0x8C). Layout-recovery padding only.
-        u8           maHeadReserved[0x90];
+        // The single member the DWARF places between the CgsGui::GuiComponent base and
+        // mePanelType. It replaces the old maHeadReserved[0x90] stand-in for base +
+        // this member (see the BASE APPLIED note in the banner).
+        EPrepareStage mePrepareStage; // +0x8C  (StoreSettings' capture gate)
 
         PanelType    mePanelType;     // +0x90  (lwz; the assert subject)
 
