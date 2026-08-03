@@ -306,6 +306,83 @@ namespace Vehicle
         // PhysicalTrafficManager interior at +148128 / +149456) stay siblings here, because the X360
         // build folds them to absolute class offsets; that is deliberate, not an oversight.
         // ------------------------------------------------------------------------------------------
+        //
+        // ==========================================================================================
+        // ⭐ WHAT IS STILL MISSING FOR `VehicleManager::Construct` @0x8263B7C8 -- MEASURED 2026-08-03,
+        //    not estimated. The layout wave above mined this function for OFFSETS; this note records
+        //    what re-reading all 943 instructions says about BODYING it, so the next wave starts from
+        //    a measurement instead of from a label.
+        //
+        // ⭐ NOT AN EXPORT HOLE, AND EVERY SUB-CONSTRUCTOR IS ALREADY BODIED. From the function's own
+        //    `xrefs_from` (`.ida-exports/BURNOUT_X360_ARTIST.XEX/0x8263B7C8.json`), the complete
+        //    callee set is twelve symbols, and after 2026-08-03 all six real ones have bodies:
+        //      CgsDev::PerfMonCpu::AddMonitor                @0x82824C30  (declared, PC-leaf)
+        //      VehicleManagerDebugComponent::Construct       @0x825B5A78  bodied
+        //      VehicleDriver::Construct                      @0x825B83C8  bodied
+        //      VehiclePhysics::Construct                     @0x8262DBD0  bodied THIS wave
+        //      PhysicalTrafficManager::Construct             @0x82636CA8  bodied
+        //      StuntOffencesManager::Construct               @0x825E8C08  bodied
+        //    plus __savegprlr_14 / __savefpr_22 / __restfpr_22 and the three CgsDev::Assert entries.
+        //    ⇒ Construct is NOT blocked on link closure. Its only caller is PhysicsModule::Construct
+        //    @0x825AE308, which is still a stub for exactly two reasons: this function, and
+        //    PhysicsSimulationModule::Construct.
+        //
+        // THE SHAPE, measured (instruction counts are from the disassembly, not guessed):
+        //    ~1..310   THIRTY `CgsDev::PerfMonCpu::AddMonitor` calls, each storing its s32 handle into
+        //              a FILE-SCOPE global in the run dword_82F2A14C..dword_82F2A1A0. Every call uses
+        //              the same register shape CgsPerfMonCpu.h already documents
+        //              (`li r4,0xC ; li r5,0 ; fmr f1,f22 ; li r7,1`) with f22 == flt_82004A20, and
+        //              every monitor NAME is an inline string ("VMan: Update Stunt Offences",
+        //              "VMan: Update Vehicle Impacts", "VMan: Process Above Ground LTs", ...).
+        //              ⇒ Fully recoverable; the work is homing 30 named globals, not decoding.
+        //    ~311..410 mePrepareStage/meReleaseStage, then an INLINED CgsNumeric::Random seeding:
+        //              muSeed = 0x1AD0891BC87CD8C9, index = 0, ring[0] = 1.0f, then seven draws of the
+        //              LCG `seed = seed*0x5851F42D4C957F2D + 1` with `inslwi rX,hi32,23,9` building a
+        //              float in [1,2) -- the same generator VehiclePhysics::UpdateRoadNoise already
+        //              documents. ⇒ Recoverable; belongs in CgsRandom.h as the real seed/Construct.
+        //    ~411..510 the EIGHT-CAR LOOP: VehicleDriver::Construct(&maRaceCarDrivers[i]) and
+        //              VehiclePhysics::Construct(&maRaceCarVehicles[i]) -- note it constructs the
+        //              VEHICLEPHYSICS BASE of each RaceCarPhysics, not a RaceCarPhysics::Construct --
+        //              plus six per-record writes at in-record +0x13E4/+0x13F0/+0x1400/+0x1408/
+        //              +0x140C/+0x140D, all of which land inside RaceCarVehicleRecord's `mPad13DC`/
+        //              `mPad1404` runs and are NOT named yet.
+        //    ~511..600 PhysicalTrafficManager::Construct, the mDiscardedContacts queue bind, the
+        //              mCameraMatrix identity stamp, the second VehicleDriver::Construct
+        //              (mPlayerAiDriver) and the four RaceCarBitArray clears -- all already pinned.
+        //    ~601..943 ⛔ THE ACTUAL BLOCKER, SIZED EXACTLY: 96 INDEXED stores
+        //              (`stfsx`/`stbx`/`stwx fN, r31, rK`) hitting 88 DISTINCT seats, seeding the
+        //              takedown/slam/shunt TUNING BANK across this+0x29DC8..+0x2A244 == +171464
+        //              ..+172612 -- i.e. mbTakedownsEnabled through muTakedownEventsThisFrame, the
+        //              exact span this file already models. MEASURED: 23 of the 88 seats are already
+        //              named above; the other 65 are still inside the mPad29DAA/mPad29DFC/mPad29E14/
+        //              mPad29E24/mPad29E38/mPad29E48/mPad29F44/mPad29F98/mPad29FFC/mPad2A01C/
+        //              mPad2A050/mPad2A0B0/mPad2A0B4/mPad2A0B8/mPad2A0BC/mPad2A0DC/mPad2A12C runs,
+        //              and each needs BOTH a DWARF name AND its default constant resolved
+        //              (~40 distinct .rdata scalars:
+        //              flt_8208F834/flt_8208FA0C/flt_820945DC/flt_82004744/flt_82048974/flt_82094574/
+        //              flt_82004C68/flt_82005450/flt_8200473C/flt_8209C3C4/flt_8209C3C8/flt_820138DC/
+        //              flt_82004740/flt_82004F5C/flt_8208FBD0/flt_8208FA28/flt_8208FA2C/flt_8208F9C8...).
+        //              ⚠️ These are INDEXED stores: the offset lives in a register, so a literal scan
+        //              of pseudocode will not find them (the standing "literal scans miss real stores"
+        //              trap). They must be read off the asm.
+        //              ⚠️ And several of the source slots may be silent-zero .data seeded by an
+        //              IDA-unmarked static-init thunk -- CHECK THE SLOT, NOT THE SECTION, exactly as
+        //              VehiclePhysics::Reset's TimeSinceLastHandBrake (10000.0f) turned out to be.
+        //
+        // ⭐ ONE `[I]` BELOW IS NOW ASM-ATTESTED, FOR FREE. The note on `mPad2A050` says
+        //    "[I] +172208..+172240 is the DWARF's six-float run (:962-968,
+        //    mfCrashingAICollisionCrashThresholdMPH .. mfVerticalTakedownAngleDeg) ... Left opaque
+        //    rather than declared: the placement comes from DWARF ORDER, not from an asm store."
+        //    It does now come from asm stores: Construct writes SIX consecutive 4-byte seats at
+        //    exactly +172208/172212/172216/172220/172224/172228, which is that run to the byte, with
+        //    the 8 remaining bytes being the 16-byte alignment ahead of mCameraMatrix. The inference
+        //    and the image agree; the wave that lands Construct can declare those six by name.
+        //
+        // ⛔ DO NOT SHIP A PARTIAL Construct. A body that runs the first ~510 instructions and skips
+        //    the tuning bank would leave every takedown/slam/shunt threshold at zero while LOOKING
+        //    complete -- the silent-drop-stub failure class. Either the tuning bank lands with it or
+        //    the function stays unbodied.
+        // ==========================================================================================
 
         // ==========================================================================================
         // ⭐ RE-SEATED 2026-08-03 (VehicleManager layout wave). This array used to be declared as
