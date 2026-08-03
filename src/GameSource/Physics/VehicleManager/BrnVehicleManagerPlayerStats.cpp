@@ -94,8 +94,14 @@ namespace Vehicle
         std::memcpy(&miCarBoost,    &lpSendCarStatsAction[3], sizeof(miCarBoost));
         std::memcpy(&meCarType,     &lpSendCarStatsAction[5], sizeof(meCarType));
 
-        // The player car's per-record copy of stat [5] (asm: stw into 5216*playerIdx + in-record +5084).
-        maRaceCarVehicles[liPlayerIndex].mfPlayerBoostStrengthStat = lpSendCarStatsAction[5];
+        // ⭐⭐ NAME + TYPE FIXED 2026-08-03 (VehiclePhysics own-block wave). This used to write a
+        // proposed-name `f32 mfPlayerBoostStrengthStat`. The asm stores the SAME word twice --
+        // `lwz r10,0x14(r30) ; stwx r10,r31,0x2A138` (this class's meCarType, three lines above)
+        // and `lwz r10,0x14(r30) ; stw r10,0x1B1C(r11)` (the record) -- and in-record 5084 is
+        // VehiclePhysics::meCarType, seated with zero slack by that class's own-block closure. So
+        // the record copy is the per-car CAR TYPE, an int, not a float boost stat. The manager-level
+        // sibling in this very function was already correctly named meCarType.
+        maRaceCarVehicles[liPlayerIndex].meCarType = meCarType;   // asm: the same action[5] word
 
         // The showtime strength: stat [1] taken as a signed INTEGER, converted to float, * 0.1f
         // (asm extsw -> fcfid -> frsp -> fmuls flt_82004014). The bit pattern of lpSendCarStatsAction[1]
@@ -295,7 +301,7 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     void VehicleManager::_AssertLayoutPlayerStats()
     {
-        static_assert(offsetof(RaceCarVehicleRecord, mfPlayerBoostStrengthStat) == 5084, "in-record player boost stat (asm: 5216*idx + 6940 -> in-record +5084)");
+        static_assert(offsetof(RaceCarVehicleRecord, meCarType) == 5084, "in-record meCarType (asm: 5216*idx + 6940 -> in-record +5084; VehiclePhysics.h:977)");
         static_assert(offsetof(VehicleManager, mHiddenRaceCars)          == 44704,  "mHiddenRaceCars (asm +44704)");
         static_assert(offsetof(VehicleManager, mauNetworkCarHiddenFramesRemaining)               == 44736,  "mauNetworkCarHiddenFramesRemaining (asm base 44736)");
         // ⭐ RE-SEATED 2026-08-03: the map is the embedded traffic manager's own member, not a
