@@ -67,8 +67,97 @@
 //                                                         arrays independently prove 8)
 //        Array<EntityId,20>                84   vs  88   (104464 .. 104552)
 //        EventQueue<s8,50>                 72   vs  64   (104624 .. 104688)
-//     Per project rule this TU is written BY NAME, so the bodies are correct regardless; but a
-//     PhysicalTrafficManager _AssertLayout() cannot be written until those three are settled.
+//        PhysicalTrafficManagerDebugComponent  48 vs 32  (105616 .. 105648)
+//     Per project rule this TU is written BY NAME, so the bodies are correct regardless. The old
+//     note ended "a PhysicalTrafficManager _AssertLayout() cannot be written until those three are
+//     settled" -- that was too pessimistic; see (4). The head of the class IS pointer-free and is
+//     now pinned, and the tail is pinned by the DERIVED X360 size below.
+//
+// (4) ⭐⭐ THE X360 sizeof(PhysicalTrafficManager) IS 105648, DERIVED TWO INDEPENDENT WAYS
+//     2026-08-03 (the un-pin wave). This number matters far outside this header: BrnVehicleManager.h
+//     carried this class as an opaque span of **103360** bytes (+44768..+148128) and concluded from
+//     that span that the real class "overruns by +2480" and so cannot be embedded. THE SPAN WAS
+//     WRONG BY 2288 BYTES, and the header's own notes contradicted it -- it simultaneously claimed
+//     the span ended at +148128 AND that this class's mu8GlobalToPhysicalEntityIndexMap (X360
+//     in-class +104688) folds to VehicleManager +149456 == 44768 + 104688, which is 2128 bytes past
+//     the end of the span it had just declared.
+//
+//     DERIVATION A -- forward from the asm, every link literal in PhysicalTrafficManager::Construct
+//     @0x82636CA8 (re-pulled first-hand this wave, 99 instructions):
+//        maFullTrafficPhysics   @0      `mulli r11, r29, 0x1430` x20            -> 20*5168 = 103360
+//        maTrafficEntityIDs     @103360 `addi r8,r11,0x64F0 ; slwi r9,r8,2 ;
+//                                        stwx -1, r9, r31` for i<20             -> 4*(i+25840)
+//        mpaTrafficDrivers      @103600 `ori r11,r11,0x194B0 ; stwx 0`          (and 103604/8/12)
+//        mArticulatedJointPool  @103616 `addi r3,r3,-0x6B40 ; bl ...Construct`  832 bytes
+//        mfJointSwingBreakVel   @104448 `ori r5,r5,0x19800 ; stfsx`             (+4/+8/+0xC bool)
+//        mUsedTrafficVehicles   @104552 `addi r6,r6,-0x6798 ; std 0`  -- then EIGHT more `std 0`
+//                                        at 104560/68/76/84/104600/08/16: nine 8-byte BitArrays
+//                                        spanning 104552..104624 exactly
+//        mUnusedPotentialTraffic@104624 `addi r3,r3,-0x6750 ; bl char_50___Construct`  X360 64B
+//        mu8GlobalToPhysical... @104688 (104624 + 64; the asm's own `cmplwi 0x258` sizes it 600)
+//        mavfLowestPointWorld.. @105296 (105288 -> 16-aligned; 20 * 16 == 320)
+//        mDebugComponent        @105616 `addis r29,r31,2 ; addi r29,r29,-0x6370`, then stores at
+//                                        +0xC/0x10/0x14/0x18..0x1E -> last byte 0x1E, X360 size 32
+//        => 105616 + 32 == 105648, and 105648 % 16 == 0 (this class is 16-aligned: VecFloat).
+//
+//     DERIVATION B -- backward from VehicleManager, which is an INDEPENDENT closure. The DecFIGS
+//     DWARF puts `PotentialContact[128] maNonPhysicalContacts` + `int32_t miNonPhysicalContactCount`
+//     between this manager and mDiscardedContacts (BrnVehicleManager.h:847/850/851/854), and
+//     mDiscardedContacts is asm-pinned at VehicleManager +160672. sizeof(PotentialContact) is 80
+//     (3 x Vector3 + 2 VolumeInstanceId + 2 u32 + 2 u16, 16-aligned -- 80 for either a 4- or an
+//     8-byte VolumeInstanceId). So:
+//        44768 + S + 128*80 + 4 -> padded to 16 -> 160672   =>   S == 105648, uniquely.
+//     S = 105632 leaves a 28-byte hole (impossible, the pad is < 16); S = 105664 overshoots.
+//     Two derivations, no shared assumption, same number.
+//
+//     ⇒ THE MEASURED HOST OVERRUN IS +192, NOT +2480:  105840 (host, measured with
+//       `char (*p)[sizeof(T)] = 1;`) - 105648 (X360, derived) == 192. That is small enough to CARRY
+//       as an explicit drift, which is what BrnVehicleManager.h now does -- it embeds this class by
+//       name at +44768 and adds KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER to every downstream offsetof
+//       assert. Do NOT "absorb" the 192 by shrinking a neighbouring pad: maNonPhysicalContacts is a
+//       real DWARF member with a derived size, and shrinking it would be inventing layout.
+//
+//     ⭐ AND THE 192 IS ACCOUNTED FOR MEMBER BY MEMBER -- it is not a residue. Walking both layouts
+//     in parallel (X360 offset -> host offset, running delta in the last column):
+//        maFullTrafficPhysics       0      ->      0     +0    (u8[5168] x20, align 1 both)
+//        maTrafficEntityIDs         103360 -> 103360     +0    ⭐ still exact on the host
+//        maTrafficCarModelHandles   103440 -> 103440     +0
+//        mpaTrafficDrivers          103600 -> 103760   +160    (ResourceHandle 16 vs 8, x20)
+//        mArticulatedJointPool      103616 -> 103792   +176    (four pointers 4 -> 8)
+//        mfJointSwingBreakVelocity  104448 -> 104624   +176    (pool is u8[832] on both)
+//        maRecycledTrafficThisFrame 104464 -> 104640   +176
+//        mUsedTrafficVehicles       104552 -> 104728   +176    (Array 84 vs 88 costs -4, then the
+//                                                               BitArray's 8-alignment gives it back)
+//        mUnusedPotentialTrafficQ.  104624 -> 104800   +176    (nine BitArrays, 8 bytes on both)
+//        mu8GlobalToPhysical...     104688 -> 104872   +184    (EventQueue<s8,50> 72 vs 64)
+//        mavfLowestPointWorldSpace  105296 -> 105472   +176    (X360 needs 8 bytes of 16-align pad
+//                                                               after the 600-byte map; the host,
+//                                                               already at 105472, needs none)
+//        mDebugComponent            105616 -> 105792   +176
+//        end of class               105648 -> 105840   +192    (debug component 48 vs 32)
+//     Two of the twelve steps are alignment give-and-take rather than width, which is exactly why
+//     the naive width sum (160+16+8+16 = 200) does not match: it double-counts the Array's -4 and
+//     misses the map's -8 of pad. Every host number above is what the compiler produced.
+//
+//     ⚠️ ONE ASYMMETRY WORTH KNOWING, found by tamper-testing: the 600-vs-601 choice for
+//     mu8GlobalToPhysicalEntityIndexMap (asm `cmplwi 0x258` vs the DWARF's 601) does NOT change the
+//     X360 size -- 105288 and 105289 both round to the same 105296 -- but it DOES change the host
+//     size, because the host map starts 184 bytes later and 601 pushes the 16-aligned VecFloat array
+//     a whole slot out. So the derived X360 constant is robust to that choice and the host drift is
+//     not. If the map is ever re-sized to 601, KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER becomes 208.
+//
+// (5) WHY THE CONSTRUCTOR @0x827E42E8 IS DEFINED INLINE IN THIS HEADER (2026-08-03). VehicleManager
+//     now embeds this class BY VALUE, VehicleManager is embedded by value in PhysicsModule, and
+//     PhysicsModule's constructor is MOUNTED -- so the implicit constructor chain references this
+//     symbol from mounted code. Its only definition was in BrnPhysicalTrafficManager.cpp, which is
+//     NOT mounted (findings (2)'s two live ODR forks make mounting it a wave of its own), so the
+//     link failed with LNK2019.
+//     ⛔ THE REJECTED ALTERNATIVE was a link stub -- an empty
+//     `PhysicalTrafficManager::PhysicalTrafficManager() {}` in a stubs TU. That is the silent-drop
+//     failure class exactly: it links, it runs, and it leaves mpaTrafficDrivers / mpaTrafficVehicles
+//     / mpaSimpleVehiclePhysics / mpArticulatedJointCreateBuffer as uninitialised garbage that every
+//     later `!= NULL` check reads as "already allocated". Inlining keeps the real initialiser list,
+//     gives it exactly one definition, and cannot decay into an empty body later.
 // ============================================================================================
 
 #include "types.hpp"
@@ -302,6 +391,15 @@ struct ArticulatedJointPool
 // Forward-declared IO/interface dependencies (their own TUs).
 struct VehicleOutputRequestInterface;
 
+// The OWNER. VehicleManager embeds this manager by value at its +44768 and, in two places, reads
+// two of its tables with BARE loads -- no accessor, no assert (see the friend declaration below).
+class VehicleManager;
+
+// ⭐ The X360 sizeof(PhysicalTrafficManager), DERIVED (finding (4) in the banner), not measured on
+// the host and not guessed. VehicleManager subtracts this from the host sizeof to get the drift it
+// carries through the rest of its own layout, so a change to either number is visible there.
+const u32 KU_X360_SIZEOF_PHYSICAL_TRAFFIC_MANAGER = 105648u;
+
 // =====================================================================================
 // PhysicalTrafficManager
 // =====================================================================================
@@ -342,8 +440,46 @@ public:
     // X360 0x82615B10: drain the create-buffer into the output request interface.
     void BridgeArticulatedJointRequestsToSim(VehicleOutputRequestInterface* lpOutputRequestInterface);
 
-    // X360 0x827E42E8: the constructor (per-element walk + sentinel init).
-    PhysicalTrafficManager();
+    // ---------------------------------------------------------------------------------------
+    // PhysicalTrafficManager (constructor)   @ 0x827E42E8
+    // X360: walks maFullTrafficPhysics[0..19] (stride 0x1430), placing each element's three
+    // vtables and running the vector-constructor-iterators for its embedded
+    // CgsCollision::BaseCollisionGenerator sub-arrays; then sets the unused-potential-traffic
+    // queue head sentinel (*(this+104544) = -1) and the debug-component vtable (*(this+105616)).
+    //
+    // FLAG (un-homed): the per-element TrafficPhysics construction (its vtables + the
+    // vector-constructor-iterator sub-object init) bottoms out in the TrafficPhysics +
+    // CgsSceneManager::CgsCollision::BaseCollisionGenerator TUs, which are NOT homed. We cannot
+    // reproduce those placement-new walks against the opaque TrafficPhysics slice without
+    // fabricating its layout, so the per-element construction is left to those TUs. The two
+    // observable, name-bearing inits this TU CAN reproduce are the member initialisers below.
+    //
+    // ⭐⭐ MOVED HERE (INLINE) FROM BrnPhysicalTrafficManager.cpp, 2026-08-03 (the un-pin wave),
+    // VERBATIM -- the eight member initialisers are byte-for-byte the ones that were in the .cpp
+    // and all three FLAG notes came with them; nothing was dropped or simplified. See finding (5)
+    // in the banner for WHY it had to move and what the rejected alternative was.
+    // ---------------------------------------------------------------------------------------
+    PhysicalTrafficManager()
+        : mpaTrafficDrivers(nullptr)
+        , mpaTrafficVehicles(nullptr)
+        , mpaSimpleVehiclePhysics(nullptr)
+        , mpArticulatedJointCreateBuffer(nullptr)
+        , mfJointSwingBreakVelocity(0.0f)
+        , mfJointTwistBreakVelocity(0.0f)
+        , mfJointLinearBreakMph(0.0f)
+        , mbAllowArticulatedJointBreaking(false)
+    {
+        // X360 *(this+104544) = -1: the EventQueue head/read-index sentinel of
+        // mUnusedPotentialTrafficQueue. FLAG: the exact member is inside the un-homed
+        // CgsModule::EventQueue body layout; the observable effect is the queue starting empty.
+        // Its Construct()/reset is owned by the EventQueue TU; here the member is value-initialised.
+
+        // X360 *(this+105616) = &debug-component vtable: mDebugComponent's vtable. FLAG: the debug
+        // component is its own TU; the vtable store happens in its constructor, not reproduced here.
+
+        // FLAG: the maFullTrafficPhysics[20] per-element placement walk (TrafficPhysics ctor +
+        // BaseCollisionGenerator vector-constructor-iterators) is left to those un-homed TUs.
+    }
 
     // X360 0x82636CA8 (99 instructions; DWARF BrnPhysicalTrafficManager.h:475 `void Construct()`).
     // One-shot construction: build all 20 full-physics bodies and the joint pool, invalidate the
@@ -359,6 +495,24 @@ public:
     bool ValidateAndFixUpTrafficTrafficContact(void* lpContact) const;
 
 private:
+    // ⭐ 2026-08-03 (the un-pin wave). VehicleManager owns this object by value and reaches TWO of
+    // its tables directly, with bare loads that fire none of the asserts the matching accessors do.
+    // Both are asm-proven, and both used to be modelled as SIBLING members of VehicleManager at
+    // absolute class offsets that in fact fall INSIDE this object:
+    //   * maTrafficEntityIDs -- SetRaceCarCrashing @0x82634C90 on the owner==2 (TRAFFIC) branch:
+    //       extrwi r11, r31, 14,8 ; addis r11,r11,1 ; addi r11,r11,-0x6F58 ; slwi r11,r11,2
+    //       lwzx r25, r11, r18                       ==  *(u32*)(vehicleManager + 4*idx + 148128)
+    //     and 148128 == 44768 + 103360 == &mPhysicalTrafficManager.maTrafficEntityIDs[0]. Note the
+    //     plain `lwzx`: the console does NOT go through GetGlobalTrafficEntityId there (that one
+    //     fires an index assert AND an mUsedTrafficVehicles.IsBitSet assert), so routing the read
+    //     through the accessor would ADD two asserts the X360 never fires at that site.
+    //   * mu8GlobalToPhysicalEntityIndexMap -- GetTrafficPhysicsEntityIDFromGlobalEntityID_Safe
+    //     @0x825B4DE0 reads vehicleManager + 149456 + idx == 44768 + 104688 + idx.
+    // Friendship is the minimum accommodation that lets those two sites read BY NAME; it makes no
+    // layout claim and adds no API. (Adding public accessors instead would have invented API that
+    // the console does not have, and would have hidden the assert-count difference above.)
+    friend class VehicleManager;
+
     // ---- member SEQUENCE verbatim from the DecFIGS DWARF (offsets are X360/32-bit) --------
     TrafficPhysics                maFullTrafficPhysics[20];                 // :396
     EntityId                      maTrafficEntityIDs[20];                   // :397

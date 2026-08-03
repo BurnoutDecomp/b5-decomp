@@ -32,6 +32,7 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"             // CgsNumeric::Random (mRandom @+16)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h" // VehicleDriver (maRaceCarDrivers @+64, mPlayerAiDriver @+171968)
 #include "GameSource/Physics/VehicleManager/StuntOffences/BrnStuntOffencesManager.h" // BrnPhysics::StuntOffencesManager (mStuntOffencesManager @+44240 -- the ONE contained sub-object whose real x64 type fits its X360 span exactly)
+#include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h" // BrnPhysics::Vehicle::PhysicalTrafficManager (mPhysicalTrafficManager @+44768 -- embedded BY NAME as of 2026-08-03; see the drift note below)
 
 // Pointer-only collaborators in RaceCarResponseInfo -- forward-declared in their real namespaces
 // (homed by their own TUs; the classifier never dereferences them here).
@@ -64,6 +65,30 @@ namespace Vehicle
     // (DWARF :82, full member layout). The declare-only shell that lived here was
     // retired; its method surface moved to the canonical struct additively.
 
+
+    // ==========================================================================================
+    // ⭐⭐ KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER -- the ONE place this class stops being byte-pinned.
+    //
+    // VehicleManager embeds PhysicalTrafficManager by value at +44768. That class is 105648 bytes
+    // on the X360 (derived; BrnPhysicalTrafficManager.h finding (4)) and 105840 on the host, so
+    // every member after it sits this many bytes later here than it did there. The divergence is
+    // real host/console width, not a reconstruction error, and it is accounted for member by member
+    // in BrnPhysicalTrafficManager.h finding (4): ResourceHandle 16 vs 8 over a 20-element array
+    // (+160), four pointers 4 -> 8 (+16), EventQueue<s8,50> 72 vs 64 (+8), the debug component 48 vs
+    // 32 (+16), and two alignment give-and-takes worth -8 between them.
+    //
+    // WHY IT IS A NAMED CONSTANT AND NOT A HIDDEN PAD ADJUSTMENT: the project rule is x64 parity by
+    // NAMED MEMBERS, not byte offsets. Absorbing the 192 into a neighbouring padding run would keep
+    // the pretty absolute numbers and quietly make one modelled DWARF member the wrong size --
+    // exactly the "inventing layout to buy a green build" trap. Carrying it explicitly keeps every
+    // downstream offsetof assert LIVE (they read `<X360 offset> + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER`,
+    // so a wrong padding run still fails the build) and keeps the X360 offset visible in the source.
+    //
+    // ⚠️ It is a literal, deliberately, NOT `sizeof(PhysicalTrafficManager) - KU_X360_SIZEOF_...`.
+    // Defining it from sizeof would make the asserts self-fulfilling; as a literal it is a tripwire
+    // in both directions, and BrnVehicleManager_layout_check.cpp ties the three numbers together.
+    // ==========================================================================================
+    const u32 KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER = 192u;
 
     class VehicleManager
     {
@@ -396,21 +421,36 @@ namespace Vehicle
         //       VehicleDriver::Construct(&mPlayerAiDriver)                  224         224   ✅ READY
         //       StuntOffencesManager::Construct(this + 44240)               464         464   ✅ READY
         //       mDiscardedContacts bind (this + 160672)                    1296        1296   ✅ READY
+        //       PhysicalTrafficManager::Construct(this + 44768)          105840      105648   ✅ READY   <- 2026-08-03
         //       VehicleManagerDebugComponent::Construct(+161968)           1328        1296   ⛔ +32
-        //       PhysicalTrafficManager::Construct(this + 44768)          105840      103360   ⛔ +2480
         //       VehiclePhysics::Construct(&maRaceCarVehicles[i])           4752   (rec 5216)  ⛔ see below
         //
-        //     THREE of the four READY rows were opaque byte arrays before this wave and are typed
-        //     now (mStuntOffencesManager, mDiscardedContacts) or were already typed
-        //     (maRaceCarDrivers / mPlayerAiDriver). Nothing moved: the compiled layout gate in
-        //     BrnVehicleManager_layout_check.cpp is what proves it, and growing either new type by
-        //     one byte fires 68 of its asserts (tamper-tested).
+        //     THREE of the READY rows were opaque byte arrays before and are typed now
+        //     (mStuntOffencesManager, mDiscardedContacts, mPhysicalTrafficManager) or were already
+        //     typed (maRaceCarDrivers / mPlayerAiDriver). Nothing moved that was not meant to: the
+        //     compiled layout gate in BrnVehicleManager_layout_check.cpp is what proves it, and
+        //     growing any of them by one byte fires its asserts (tamper-tested).
         //
+        //     ⭐⭐ THE PhysicalTrafficManager ROW WAS WRONG, and it was the biggest of the three
+        //       blockers. It read "105840 vs 103360, ⛔ +2480". The 103360 was this class's own
+        //       opaque-span guess, and it was 2288 bytes short -- the real X360 size is 105648,
+        //       derived twice over (BrnPhysicalTrafficManager.h finding (4); the span's own header
+        //       note already contradicted it by placing a manager member at 44768 + 104688). The
+        //       genuine host overrun is +192, small enough to CARRY as
+        //       KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER rather than to block on. The member is embedded
+        //       by name and `mPhysicalTrafficManager.Construct()` is callable today.
+        //       ⇒ Lesson for the two rows still marked ⛔: **re-derive the span before trusting the
+        //         verdict**. A blocker computed against an opaque byte array is a claim about the
+        //         array, not about the class.
         //     * VehicleManagerDebugComponent grows 32 bytes because its base's vptr and its
         //       `mpVehicleManager` both widen 4 -> 8; BrnVehicleManagerDebugComponent.h's own banner
         //       already says VehicleManager must keep the 1296-byte span for exactly this reason.
-        //     * PhysicalTrafficManager grows 2480 bytes; BrnPhysicalTrafficManager.h's finding (3)
-        //       lists three of the contributing host/X360 size divergences on its own.
+        //       ⚠️ Unlike the traffic manager, this span is NOT a guess: 161968..163264 is bracketed
+        //       by two asm-literal anchors (the Construct call at +161968 and the stride-1024 walk
+        //       from +163264), so the +32 is real. It cannot be fixed the same way -- and it cannot
+        //       be embedded at all today, because BrnVehicleManagerDebugComponent.h includes THIS
+        //       header, so embedding it by value would be an include cycle. That has to be broken
+        //       first (the component only needs a forward declaration of VehicleManager).
         //     * VehiclePhysics is SMALLER than the 5216-byte record, which is worse, not better:
         //       RaceCarVehicleRecord reproduces the X360 IN-RECORD offsets that the mounted takedown
         //       chain reads by name (mbIsCrashingOrDisabled @+1808, mvWorldPosition @+1920,
@@ -418,12 +458,25 @@ namespace Vehicle
         //       would write its members at x64 offsets while every reader still looks at X360 ones --
         //       a silent-corruption trade, not a fix. (sizeof(RaceCarPhysics) == 4816 vs 5216.)
         //
-        //     ⇒ THE BLOCKER IS NOT LINK CLOSURE AND NOT THE TUNING BANK. It is that this class is
+        //     ⇒ THE BLOCKER IS NOT LINK CLOSURE AND NOT THE TUNING BANK. It is that this class was
         //       BYTE-PINNED to X360 offsets (deliberately -- most of it is unreconstructed padding),
-        //       and a byte-pinned class cannot embed real x64 sub-objects. Resolving it means moving
-        //       the affected spans from absolute offsetof asserts to RELATIVE deltas, which is what
-        //       BrnVehicleManagerDebugComponent.h already did for its own tail. That is a multi-wave
-        //       refactor and it drags the unreconstructed RaceCarPhysics layout with it.
+        //       and a byte-pinned class cannot embed real x64 sub-objects. The fix is the project's
+        //       own standing rule -- parity by NAMED MEMBERS, with the host/console divergence
+        //       carried as an explicit, tripwired constant instead of pretending it is zero.
+        //       ⭐ DONE ONCE, 2026-08-03, for the traffic manager (see KU_HOST_DRIFT_AFTER_TRAFFIC_
+        //       MANAGER above): the member is real, the two mis-identified "siblings" are retired,
+        //       and every downstream assert still runs. That is the pattern for the remaining two.
+        //       ⚠️ REMAINING WORK, and it is NOT symmetric with what was just done:
+        //         - VehicleManagerDebugComponent: blocked on an INCLUDE CYCLE first, then a second
+        //           drift term after +161968. Cheap once the cycle is broken.
+        //         - RaceCarVehicleRecord -> RaceCarPhysics: genuinely multi-wave. It is not a size
+        //           argument at all. The ten named in-record fields below (mbIsCrashingOrDisabled,
+        //           mvWorldPosition, mCrashMatrix, ...) DO NOT EXIST as members of the reconstructed
+        //           RaceCarPhysics/VehiclePhysics -- that class is not byte-pinned, it declares only
+        //           the handful of members its own bodies touch. Swapping the record for the real
+        //           type therefore does not "move" those fields, it DELETES them, and each one has
+        //           to be re-recovered as a named member (with a DWARF-ordered seat) before any
+        //           reader can be re-pointed. Until then the record stays, and it stays byte-pinned.
         //
         //     ⚠️ THE TEMPTING WRONG FIX, written down so it is not re-invented: the 32-byte debug
         //       component overflow could be "absorbed" by shrinking the maRaceCarDebugComponent pad
@@ -517,7 +570,8 @@ namespace Vehicle
         //              Hex-Rays renders it with none
         //          mRandom.Construct();
         //          <the 8-car loop>
-        //          PhysicalTrafficManager::Construct(this + 44768)
+        //          PhysicalTrafficManager::Construct(this + 44768)   -- ⭐ callable by name today:
+        //              `mPhysicalTrafficManager.Construct();`
         //          mDiscardedContacts = { buffer = this + 160688, capacity = 20, count = 0 }
         //              (+ the console's `lpEventBuffer != NULL` assert, CgsBaseEventQueue.h:160)
         //          mCameraMatrix = identity with a ZERO fourth row: rows {1,0,0,0} {0,1,0,0}
@@ -757,30 +811,70 @@ namespace Vehicle
         // the requested frame count here. DWARF name (`uint32_t[8] mauNetworkCarHiddenFramesRemaining`).
         u32                  mauNetworkCarHiddenFramesRemaining[8];        // +44736 (ends 44768)
 
-        // The contained PhysicalTrafficManager subobject begins at **+44768** -- asm-literal
-        // (`addis r3,r31,1; addi r3,r3,-0x5120; bl PhysicalTrafficManager::Construct` @0x8263BF9C).
-        // Still modelled as opaque padding, consistent with the existing layout that names
-        // maRaceCarEntityIdRemap as a direct sibling at +148128 inside this region: the X360 build
-        // folds every contained-manager member the VehicleManager methods touch to its absolute class
-        // offset, so the members below are reached BY their absolute-offset NAMES rather than through
-        // an embedded manager object.
-        // Two further DWARF members live inside this span and are NOT separately pinned yet:
-        // `PotentialContact[128] maNonPhysicalContacts` + `int32_t miNonPhysicalContactCount`
-        // (BrnVehicleManager.h:850/851), which sit between the traffic manager and mDiscardedContacts.
-        unsigned char        mPadAEE0[148128 - 44768];
-        // Per-car EntityId REMAP table @ +148128. Stride 4 (asm: 4*(idx+37032) == 4*idx+148128).
-        // SetRaceCarCrashing remaps a "type 2" packed id through this table before re-validating /
-        // firing the secondary remapped-id event. FLAG: name proposed; +148128 / stride 4 asm-proven.
-        EntityId             maRaceCarEntityIdRemap[8]; // +148128 (4 * 8 = 32; ends 148160)
-        unsigned char        mPad242C0[149456 - 148160];
-        // The traffic "global entity index -> physical entity index" map @ +149456 (the contained
-        // PhysicalTrafficManager's mu8GlobalToPhysicalEntityIndexMap, which the build folds to this
-        // absolute class offset == 44768 + 104688). 600 entries, 1 byte each (asm asserts the global
-        // index < 0x258 == 600). A slot value of 127 (0x7F) means "no physical vehicle for this global
-        // index". GetTrafficPhysicsEntityIDFromGlobalEntityID_Safe reads it. FLAG: name from the assert
-        // string; +149456 / size 600 asm-proven (lbzx this+149456+idx; cmplwi idx, 0x258).
-        unsigned char        mau8GlobalToPhysicalEntityIndexMap[600]; // +149456 (ends 150056)
-        unsigned char        mPad24A68[160672 - 150056];
+        // ==========================================================================================
+        // ⭐⭐ UN-PINNED 2026-08-03 -- THE CONTAINED PhysicalTrafficManager IS NOW A REAL NAMED
+        //     MEMBER, and the two members that used to poke through it as "siblings" are gone.
+        //
+        // WHAT IT WAS: `unsigned char mPadAEE0[148128 - 44768]` (103360 bytes) followed by
+        //     `EntityId maRaceCarEntityIdRemap[8]` @+148128 and
+        //     `unsigned char mau8GlobalToPhysicalEntityIndexMap[600]` @+149456, on the theory that
+        //     "the X360 build folds every contained-manager member the VehicleManager methods touch
+        //     to its absolute class offset".
+        //
+        // ⛔ THAT MODEL WAS SELF-CONTRADICTORY, and it is what produced the "+2480 overrun" verdict
+        //     that has blocked VehicleManager::Construct. It declared the manager's span to END at
+        //     +148128 while, four lines later, correctly identifying +149456 as the manager's own
+        //     mu8GlobalToPhysicalEntityIndexMap "== 44768 + 104688" -- i.e. 2128 bytes PAST the end
+        //     of the span it had just declared. The span was short by 2288 bytes.
+        //
+        // ⭐ THE REAL X360 SIZE IS 105648 (KU_X360_SIZEOF_PHYSICAL_TRAFFIC_MANAGER), derived twice
+        //     over in BrnPhysicalTrafficManager.h finding (4): once forward from ten asm-literal
+        //     anchors inside PhysicalTrafficManager::Construct @0x82636CA8, and once BACKWARD from
+        //     this class -- 44768 + S + 128*sizeof(PotentialContact) + 4, padded to 16, must equal
+        //     the asm-pinned mDiscardedContacts at +160672, which forces S == 105648 uniquely.
+        //     Host sizeof is 105840 (measured), so the real overrun is **+192, not +2480**.
+        //
+        // ⭐ AND THE TWO "SIBLINGS" WERE MIS-IDENTIFIED MEMBERS OF THIS OBJECT:
+        //     +148128 == 44768 + 103360 == mPhysicalTrafficManager.maTrafficEntityIDs -- proven by
+        //       PhysicalTrafficManager::Construct's own `addi r8,r11,0x64F0 ; slwi r9,r8,2 ;
+        //       stwx -1,r9,r31` loop, which seeds 4*(i+25840) == 4i+103360 for i<20. The committed
+        //       name `maRaceCarEntityIdRemap` and its [8] bound were both wrong: the reader is
+        //       SetRaceCarCrashing's owner==2 (TRAFFIC_VEHICLE) branch, so the index is a TRAFFIC
+        //       index in [0,20) and the array is EntityId[20]. Reading it as an 8-element race-car
+        //       table was an out-of-bounds read for any traffic slot >= 8 -- offsets right, meaning
+        //       wrong, the usual shape.
+        //     +149456 == 44768 + 104688 == mPhysicalTrafficManager.mu8GlobalToPhysicalEntityIndexMap
+        //       (the committed header already said so; it just could not act on it).
+        //
+        // ⇒ Both readers now go through the named members (VehicleManager is a friend of
+        //   PhysicalTrafficManager precisely so those two BARE loads stay bare -- routing them
+        //   through the accessors would add asserts the console does not fire there), and
+        //   `PhysicalTrafficManager::Construct(this + 44768)` is spelled
+        //   `mPhysicalTrafficManager.Construct();` BY NAME. One of the three Construct blockers is
+        //   gone. (The other two -- VehicleManagerDebugComponent +32 and the RaceCarVehicleRecord /
+        //   VehiclePhysics mismatch -- are unchanged; see the blocker table above.)
+        //
+        // ⚠️ THE PRICE, PAID EXPLICITLY: every member after this one now sits
+        //    KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER (192) bytes later on the host than on the X360.
+        //    That is carried, not hidden: the three _AssertLayout* functions add the constant to
+        //    every downstream offsetof, so they still fail if any padding run is wrong, and the
+        //    constant itself is tripwired against sizeof(PhysicalTrafficManager) below.
+        //    ⛔ Do NOT "absorb" the 192 by shrinking mPadNonPhysicalContacts. That span is the
+        //    DWARF's maNonPhysicalContacts[128] + miNonPhysicalContactCount and its size is derived,
+        //    not spare; shrinking it to buy back the X360 offsets would be inventing layout -- the
+        //    same trap the maRaceCarDebugComponent note below warns about.
+        // ==========================================================================================
+        PhysicalTrafficManager mPhysicalTrafficManager;   // +44768 (X360 105648; host 105840)
+
+        // The DWARF's `PotentialContact[128] maNonPhysicalContacts` (:850) + `int32_t
+        // miNonPhysicalContactCount` (:851). Still opaque -- CgsSceneManager::SceneManagerIO::
+        // PotentialContact is only forward-declared in this header -- but now correctly SIZED and
+        // correctly PLACED: X360 150416..160672, i.e. 128*80 + 4 rounded up to the 16-alignment
+        // mDiscardedContacts needs. The 80 is the DWARF record (3 x Vector3 + 2 VolumeInstanceId +
+        // 2 uint32 + 2 uint16, 16-aligned), and it is the number that makes the backward derivation
+        // of the traffic manager's X360 size close exactly.
+        // DELETE-WHEN PotentialContact gets a committed home; then this becomes the real array.
+        unsigned char        mPadNonPhysicalContacts[160672 - 150416];   // 10256 bytes
 
         // ⭐ NEWLY PINNED: the discarded-contact queue. Construct binds it in place @0x8263C048:
         //   addis r29,r31,2 ; addi r29,r29,0x73A0   -> this + 160672

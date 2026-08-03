@@ -182,41 +182,16 @@ void PhysicalTrafficManager::BridgeArticulatedJointRequestsToSim(
 }
 
 // ---------------------------------------------------------------------------------------
-// PhysicalTrafficManager (constructor)   @ 0x827E42E8
-// X360: walks maFullTrafficPhysics[0..19] (stride 0x1430), placing each element's three
-// vtables and running the vector-constructor-iterators for its embedded
-// CgsCollision::BaseCollisionGenerator sub-arrays; then sets the unused-potential-traffic
-// queue head sentinel (*(this+104544) = -1) and the debug-component vtable (*(this+105616)).
+// PhysicalTrafficManager (constructor)   @ 0x827E42E8  -- MOVED, NOT DELETED.
 //
-// FLAG (un-homed): the per-element TrafficPhysics construction (its vtables + the
-// vector-constructor-iterator sub-object init) bottoms out in the TrafficPhysics +
-// CgsSceneManager::CgsCollision::BaseCollisionGenerator TUs, which are NOT homed. We cannot
-// reproduce those placement-new walks against the opaque TrafficPhysics slice without
-// fabricating its layout, so the per-element construction is left to those TUs. The two
-// observable, name-bearing inits this TU CAN reproduce are restated below. Default-construct
-// the embedded/named members so the object is well-formed under MSVC.
+// ⭐ 2026-08-03 (the un-pin wave): the body (and its full FLAG commentary) now lives INLINE in
+// BrnPhysicalTrafficManager.h, verbatim. It had to move because VehicleManager embeds this class
+// by value now, VehicleManager is embedded by value in PhysicsModule, and PhysicsModule's ctor is
+// MOUNTED -- so the implicit constructor chain references this symbol from mounted code while THIS
+// TU is still unmounted (two live ODR forks). Defining it here as well would be a duplicate symbol
+// the day this TU is mounted, so there is exactly one definition and it is the inline one.
+// Nothing was dropped: same eight member initialisers, same three FLAG notes.
 // ---------------------------------------------------------------------------------------
-PhysicalTrafficManager::PhysicalTrafficManager()
-    : mpaTrafficDrivers(nullptr)
-    , mpaTrafficVehicles(nullptr)
-    , mpaSimpleVehiclePhysics(nullptr)
-    , mpArticulatedJointCreateBuffer(nullptr)
-    , mfJointSwingBreakVelocity(0.0f)
-    , mfJointTwistBreakVelocity(0.0f)
-    , mfJointLinearBreakMph(0.0f)
-    , mbAllowArticulatedJointBreaking(false)
-{
-    // X360 *(this+104544) = -1: the EventQueue head/read-index sentinel of
-    // mUnusedPotentialTrafficQueue. FLAG: the exact member is inside the un-homed
-    // CgsModule::EventQueue body layout; the observable effect is the queue starting empty.
-    // Its Construct()/reset is owned by the EventQueue TU; here the member is value-initialised.
-
-    // X360 *(this+105616) = &debug-component vtable: mDebugComponent's vtable. FLAG: the debug
-    // component is its own TU; the vtable store happens in its constructor, not reproduced here.
-
-    // FLAG: the maFullTrafficPhysics[20] per-element placement walk (TrafficPhysics ctor +
-    // BaseCollisionGenerator vector-constructor-iterators) is left to those un-homed TUs.
-}
 
 // ---------------------------------------------------------------------------------------
 // PhysicalTrafficManager::Construct   @ 0x82636CA8   (99 instructions)
