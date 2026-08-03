@@ -101,6 +101,8 @@
 // setter/getter API, so the fork is RETIRED here in favour of the include -- the two definitions
 // were an ODR clash for any TU that reached both (every camera-behaviour TU does, via BehaviourRig.h).
 #include "GameSource/Physics/PhysicsUtilities/Spring1D.h"   // BrnPhysics::SuspensionSpring (canonical home)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/Engine.h"   // BrnPhysics::Vehicle::Engine (mEngine @+0xF00)
+#include "GameShared/GameClasses/System/Input/CgsInputTypes.h"   // CgsInput::Device::WheelFFSpring (mWheelFFSpring @+0x13D0)
 
 namespace CgsNumeric { struct Random; }   // UpdateRoadNoise draws from the shared Random ring (CgsRandom.h)
 
@@ -374,11 +376,19 @@ namespace Vehicle
         // (transposed into car space) to score rolls/spins.
         const Vector3& GetAngularVelocity() const { return mAngularVelocity; }
 
-        // ----- ADDITIVE GROW (takedown-chain group): the post-slam/shunt wheel-velocity refresh the
-        //       car-car contact handler re-runs on both cars after applying a slam/shunt impulse
-        //       (X360 VehiclePhysics::SetWheelVelocities). DECLARE-ONLY -- bodied by its own TU. The
-        //       X360 passes the slam/shunt velocity in a VMX register; the scalar shape used here is
-        //       (the velocity vector). FLAG: arg shape inferred from the call site. -----
+        // ----- @0x825FD218: re-seed every wheel's body-point velocity and spin rate from the body's
+        //       current motion, then re-seed the engine from their average. Called on the three
+        //       car-PLACEMENT paths: Reset (mpAttribs != NULL), TrafficPhysics::PreparePhysical, and
+        //       VehicleManager::HandleRaceCarRaceCarContact (once per car, after a slam/shunt
+        //       impulse). BODIED 2026-08-03 in VehiclePhysics.cpp -- see the block comment there.
+        //
+        //       ⭐ THE SIGNATURE IS NOW ATTESTED, NOT INFERRED. This declaration used to carry
+        //       "FLAG: arg shape inferred from the call site". The PS3 ELF export 0x3E10FC is
+        //       `_ZN10BrnPhysics7Vehicle14VehiclePhysics18SetWheelVelocitiesEN2rw4math3vpu7Vector3E`
+        //       == SetWheelVelocities(rw::math::vpu::Vector3). Flag removed.
+        //
+        //       ⚠️ The parameter is DEAD in the console body (see the .cpp) -- kept because it is
+        //       the console's own signature and both surviving call sites pass it.
         void SetWheelVelocities(Vector3 lvVelocity);
 
         // ==========================================================================================
@@ -461,19 +471,27 @@ namespace Vehicle
         //   of 0x370 each land mAIVehicleAttribs at 0x730 and mPlayerVehicleAttribs at 0xAA0
         //   exactly, and maSprings then falls on its asm-pinned +0xE10.
         //
-        // ---- WHY NEITHER IS BODIED YET ----------------------------------------------------------
-        // ⛔ ONE symbol: `VehiclePhysics::SetWheelVelocities` @0x825FD218 (728 instrs), which the
-        //    ledger marks BLOCKED (degenerate VMX128 + un-committed helpers). It has NO body
-        //    anywhere in the tree, and Reset's `mpAttribs != NULL` branch calls it out of line, so
-        //    bodying Reset inside the MOUNTED VehiclePhysics.cpp would introduce an unresolvable
-        //    LNK2019. Reset is Construct's last hole, and Construct is VehicleManager::Construct's
-        //    last sub-constructor -- so as of this wave the whole remaining chain to
-        //    VehicleManager::Construct hangs on that ONE function. Everything else Construct/Reset
-        //    need is now defined: VehicleAttribs::Construct (landed this wave),
-        //    SuspensionSpring::Prepare/Reset (landed this wave), Engine::Reset,
-        //    VehicleAttribs::EngineAttribs::Construct, SimpleVehiclePhysics::Reset,
-        //    Wheel::Clear/Reset.
+        // ---- THE BLOCKER IS GONE (2026-08-03) ---------------------------------------------------
+        // The note that used to sit here said neither could be bodied because of ONE symbol,
+        // `VehiclePhysics::SetWheelVelocities` @0x825FD218, "which the ledger marks BLOCKED
+        // (degenerate VMX128 + un-committed helpers)". That label was INHERITED, never checked.
+        // All 728 instructions have now been disassembled first-hand and **all three clauses of the
+        // label are false**: it is one whole function (one prologue, one epilogue, and it ends
+        // exactly where Reset begins), its callee set is `Engine::Reset` plus the assert
+        // message-builder and NOTHING else, and the "degenerate VMX128" is an inlined
+        // `XMVectorSinCos` over the rodata table THREE earlier waves had already decoded
+        // (BrnBehaviourRoadRunner.cpp:988) plus a Rodrigues rotation and a cross product.
+        // It is BODIED in VehiclePhysics.cpp as of this wave, so Reset/Construct are unblocked.
+        //
+        // Reset(Vector3) is BODIED in VehiclePhysics.cpp as of this wave, from the decode above.
+        // ⚠️ It HIDES SimpleVehiclePhysics::Reset() (the 0-arg base overload) -- which is exactly
+        // what the console does, and the body calls the base one explicitly-qualified, as the X360
+        // does out of line at 0x825D9A58.
+        // Construct() is still NOT bodied: it additionally needs mAIVehicleAttribs /
+        // mPlayerVehicleAttribs (two VehicleAttribs @+0x730/+0xAA0) and mvSpringMassScalers
+        // (+0xED0), none of which this home declares yet.
         // ==========================================================================================
+        void Reset(Vector3 lvVelocity);
 
         // ----- ADDITIVE GROW (C11_simple_traffic_attribs group): the three VehiclePhysics entries the
         //       TrafficPhysics layer forwards into. DECLARE-ONLY -- each is bodied by its own (full
@@ -489,9 +507,11 @@ namespace Vehicle
 
         // ----- ADDITIVE GROW (C04 wheels/tire group): two per-frame wheel-geometry funcs bodied in
         //       VehiclePhysics.cpp (CalculateBodyVelocityAtWheelContact, StoreLocalWheelPositions).
-        //       The wheels orchestrator UpdateWheels @0x8261E4F0 and the post-impulse refresh
-        //       SetWheelVelocities @0x825FD218 are BLOCKED (un-recoverable degenerate VMX128 +
-        //       a dozen un-committed helpers / un-homed rodata) -- see the group notes. -----
+        //       The wheels orchestrator UpdateWheels @0x8261E4F0 is still BLOCKED.
+        //       ⚠️ This note used to lump SetWheelVelocities @0x825FD218 in with it as
+        //       "un-recoverable degenerate VMX128 + a dozen un-committed helpers / un-homed rodata".
+        //       That was wrong on all three counts -- it is bodied below as of 2026-08-03. Treat the
+        //       remaining "BLOCKED" labels in this file as UNVERIFIED CLAIMS until disassembled. ----
 
         // @0x825FB200: the body velocity at one wheel's contact point:
         //   v_contact = mLinearVelocity + mAngularVelocity x (r_contact - bodyPos)
@@ -1104,6 +1124,47 @@ namespace Vehicle
         // inline). Pinned BY NAME.
         Matrix44Affine mPreviousTransform;
 
+        // ===== ADDITIVE GROW (Reset wave, 2026-08-03): the ten members VehiclePhysics::Reset
+        //       @0x825FDD78 writes that this home had never DECLARED. Every name and type is
+        //       VERBATIM from references/DecFIGS/dwarfdump/.../VehiclePhysics.h at the cited line;
+        //       none is abbreviated or inferred. Pinned BY NAME (this header is deliberately not in
+        //       DWARF declaration order -- e.g. the +0x1040 boost register already sits after the
+        //       +0x1352 drift state -- so they are grouped here rather than interleaved). The
+        //       console offsets are the ones Reset's stores land on. =====
+
+        // @+0x10E0 (4320, DWARF :933). The cached steering direction; Reset zeroes it.
+        Vector3 mSteeringDirection;
+
+        // @+0x10F0 (4336, DWARF :936). Reset seeds it to 5.0f == flt_8200426C ==
+        // KF_STUCK_IN_COLLISION_TEST_INTERVAL (the DWARF's own constant for this member).
+        f32 mfTimeUntilStuckInCollisionTest;
+
+        // @+0x10F6 / +0x10F8 (DWARF :945 / :951). Two latches Reset clears. They sit either side of
+        // mbIsUsingAIDonutAttribs (:948), which Reset does NOT touch and which is not declared here.
+        bool mbForceFrozen;
+        bool mbGivenAftertouchAirBoost;
+
+        // @+0x1150 (4432, DWARF :966). The last car this one touched; Reset seeds -1 ("none").
+        s8 mi8LastContactedRaceCar;
+
+        // @+0x1350 / +0x1351 (DWARF :987 / :990). The airborne latches; Reset clears both.
+        bool mbHasAir;
+        bool mbHadAirLastFrame;
+
+        // @+0x135C (4956, DWARF :1014). ⚠️ Reset sets this one TRUE, not false -- it is the request
+        // that the next update re-seat the car's transform. The byte order mbAllWheelsHaveTraction
+        // +0x135B / mbResetCarTransform +0x135C / mbJustBeenSlammed +0x135D (already documented
+        // above) places it exactly.
+        bool mbResetCarTransform;
+
+        // @+0x1361 (4961, DWARF :1029). The burnout latch; Reset clears it.
+        bool mbDoingBurnout;
+
+        // @+0x13D0 (5072, DWARF :1044). The force-feedback wheel spring the input layer reads;
+        // Reset zeroes both of its coefficients. CgsInput::Device::WheelFFSpring is the committed
+        // type from CgsInputTypes.h, not a slice.
+        CgsInput::Device::WheelFFSpring mWheelFFSpring;
+
         // ===== ADDITIVE GROW (C03 suspension/downforce/weight group) =====
         // @+0xE10 (3600), stride 0x30: the four 1-D damped suspension springs (one per driven wheel).
         // SuspensionSpring is the already-committed namespace-scope slice (sizeof 0x30 = 3*Vector4).
@@ -1114,6 +1175,22 @@ namespace Vehicle
         // confirmed by sequence: maSprings @+0xE10 + 4*0x30 = +0xED0 = mvSpringMassScalers, then
         // mWeightTransfer at +0xEE0.
         Vector3 mWeightTransfer;        // +0xEE0 (packed; .x/.y/.z load-transfer per body axis)
+
+        // @+0xEF0 (3824): the crash-state register Reset zeroes wholesale. DWARF VehiclePhysics.h:855
+        // places it between mWeightTransfer and mEngine, which is exactly the +0xEE0/+0xEF0/+0xF00
+        // sequence. Pinned BY NAME.
+        Vector4 mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare;
+
+        // @+0xF00 (3840): the engine/gearbox model. ADDED 2026-08-03 with SetWheelVelocities, which
+        // ends by calling `mEngine.Reset(averageWheelAngularVelocity)` -- the X360 does
+        // `addi r3, r29, 0xF00 ; vspltw v1, v0, 0 ; bl Engine::Reset` at 0x825FDD40-0x825FDD4C, and
+        // `Engine::mAttribs` is Engine's leading member, so +0xF00 is the object's own base.
+        // Construct's `mEngine.mAttribs.Construct(); mEngine.Reset(0);` pair reads the same base.
+        // The member was referenced by three comment blocks in this header but had never been
+        // DECLARED. Pinned BY NAME; the offset closes by sequence (maSprings +0xE10 + 4*0x30 =
+        // +0xED0 mvSpringMassScalers, +0xEE0 mWeightTransfer, +0xEF0
+        // mvSpeedOnLastCrashMPH_TimeCrashing_..., then mEngine at +0xF00).
+        Engine mEngine;
 
         // @+0x1330 (4912): the PREVIOUS frame's world-space linear velocity. This home used to call
         // it `mWeightTransferMirror` and describe it as "the +0x50 weight register snapshot" -- but
