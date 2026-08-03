@@ -167,6 +167,30 @@ namespace PhysicsModuleIO { class InputBuffer; class OutputBuffer; }
         // type, so the whole span is modelled as one opaque placeholder. (sizeof on
         // the X360 ABI; the byte count below pins the tail interface to its proven
         // +0x63630 offset under the X360 sizes used here.)
+        // ⛔⛔ 2026-08-03 (task #116) -- THIS PLACEHOLDER IS THE THING BLOCKING PhysicsModule::
+        // Construct, and it is 26,012 BYTES SHORT. The class as modelled here ends at +0x636A0
+        // (407,200). The X360 Construct @0x825AE308 writes as far as `*(this + 433208)`, so the real
+        // object is at least 433,212 bytes. MEASURED, from the ARTIST asm, the exact console offsets
+        // and the span each sub-object therefore occupies:
+        //
+        //     +19104   (0x04AA0)  mVehicleManager        span 172,624   [modelled, by value]
+        //     +191728  (0x2ECF0)  mContactData           span 122,544   ContactSpyData
+        //     +314272  (0x4CBA0)  mDeformationManager    span  76,752   DeformationManager
+        //     +391024  (0x5F770)  mDeformationInput      span   5,072   DeformationInputInterface
+        //     +396096  (0x60B40)  mDeformationOutput     span  10,992   DeformationOutputInterface
+        //     +407088  (0x63630)  mPropManager           span  25,984   PropManager
+        //     +433072..+433208              the state words + the twenty-one perfmon handle ids
+        //
+        // ⚠️⚠️ NOTE +407088 == 0x63630 -- that is EXACTLY where `mContainedList` sits below. The
+        // "trailing contained interface with an intrusive list" is not a separate sub-object at all:
+        // it is the leading part of mPropManager, which the constructor stamps and which
+        // PropManager::Construct(this + 407088) then finishes. The constructor's stores are still
+        // correct as stores; the TYPE they are attributed to is wrong.
+        //
+        // ⇒ Until the five sub-objects above are real embedded members and the trailing state/perfmon
+        // block is modelled, PhysicsModule::Construct CANNOT be bodied: every one of its stores would
+        // land inside this opaque array or past the end of the object. Its whole link closure is
+        // already green (see WorldLinkStubs.cpp) -- the layout is the only thing left.
         u8 maTailPlaceholder[0x63630 - (0x4AA0 + sizeof(BrnPhysics::Vehicle::VehicleManager))]; // ends at +0x63630
 
         // The trailing contained interface sub-object (X360 +0x63630). The ctor

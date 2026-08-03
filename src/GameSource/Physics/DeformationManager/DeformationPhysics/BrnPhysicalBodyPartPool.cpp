@@ -59,24 +59,15 @@ namespace Deformation
     // these two before accepting it.
     static const u32 KU_OWNER_RACECAR_DEFORMABLE_PART = 6;  // BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART
     static const u32 KU_OWNER_TRAFFIC_DEFORMABLE_PART = 7;  // BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART
+    // ==========================================================================================
+    // PhysicalBodyPartPool::Construct MOVED OUT on 2026-08-03 (task #116) to
+    // BrnPhysicalBodyPartPool_Construct.cpp, verbatim. WHY: PhysicsModule::Construct @0x825AE308
+    // was a live empty stub; un-stubbing it reaches DetachedPartManager::Construct -> this. THIS
+    // TU cannot be mounted -- a MEASURED trial link (task #116, M2) put it at 9 unresolved
+    // externals, all from CreatePart / UpdateRWBodies / UpdateJoinedParts. NONE were referenced
+    // from Construct. TO RE-MERGE: close the 9, mount this TU, move the body back.
+    // ==========================================================================================
 
-    // ------------------------------------------------------------------------------------------
-    // Construct (DWARF BrnPhysicalBodyPartPool.cpp:42; no per-function asm export)
-    //   Construct every part slot, then clear the used-mask. The DWARF hint lists the per-slot
-    //   PhysicalBodyPart::Construct + the inlined Vector3Plus::SetZero seeds (those zero-seeds live
-    //   inside PhysicalBodyPart::Construct) and the BitArray<50>::UnSetAll. The pool's own scalar
-    //   state (bbox cursor + live count) is reset alongside.
-    // ------------------------------------------------------------------------------------------
-    void PhysicalBodyPartPool::Construct()
-    {
-        for (u32 luPart = 0; luPart < KU_MAX_DETACHED_PARTS; ++luPart)
-        {
-            maParts[luPart].Construct();
-        }
-        mUsedParts.UnSetAll();
-        miLastUpdatedBoundingBox = 0;
-        mu8NumDetachedParts = 0;
-    }
 
     // ------------------------------------------------------------------------------------------
     // Create @ 0x826269A0
