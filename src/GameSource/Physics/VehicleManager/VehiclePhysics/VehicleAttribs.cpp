@@ -16,43 +16,67 @@ namespace Vehicle
 {
 namespace EngineDefaults
 {
-// The console's default-engine tuning constants. .rdata on X360; declared here, NOT yet defined --
-// EngineAttribs::Construct @0x825B7B90 loads each one from a distinct .rdata slot and the values
-// have not been read out of the image yet. ⚠️ These 29 externs are what stands between this TU and
-// being mounted (plus InterpedParam3::Construct/Prepare); see the build-list note.
-extern const f32 KF_DEFAULT_GEAR_RATIO_0;
-extern const f32 KF_DEFAULT_GEAR_RATIO_1;
-extern const f32 KF_DEFAULT_GEAR_RATIO_2;
-extern const f32 KF_DEFAULT_GEAR_RATIO_3;
-extern const f32 KF_DEFAULT_GEAR_RATIO_4;
-extern const f32 KF_DEFAULT_GEAR_RATIO_5;
-extern const f32 KF_DEFAULT_DIFFERENTIAL;
-extern const f32 KF_DEFAULT_TRANSMISSION_EFFICIENCY;
-extern const f32 KF_DEFAULT_ENGINE_RESISTANCE;
-extern const f32 KF_DEFAULT_GEAR_DOWN_RPM;
-extern const f32 KF_DEFAULT_MAX_TORQUE;
-extern const f32 KF_DEFAULT_TORQUE_FALL_OFF_RPM;
-extern const f32 KF_DEFAULT_MAX_RPM;
-extern const f32 KF_DEFAULT_LSDM_SPEED_TO_ALLOW_GEAR_CHANGES;
-extern const f32 KF_DEFAULT_FLYWHEEL_INERTIA;
-extern const f32 KF_DEFAULT_FLYWHEEL_FRICTION;
-extern const f32 KF_DEFAULT_GEAR_CHANGE_TIME;
-extern const f32 KF_DEFAULT_TORQUE_SCALE_0;
-extern const f32 KF_DEFAULT_TORQUE_SCALE_1;
-extern const f32 KF_DEFAULT_TORQUE_SCALE_2;
-extern const f32 KF_DEFAULT_TORQUE_SCALE_3;
-extern const f32 KF_DEFAULT_TORQUE_SCALE_4;
-extern const f32 KF_DEFAULT_TORQUE_SCALE_5;
-extern const f32 KF_DEFAULT_GEAR_UP_RPM_0;
-extern const f32 KF_DEFAULT_GEAR_UP_RPM_1;
-extern const f32 KF_DEFAULT_GEAR_UP_RPM_2;
-extern const f32 KF_DEFAULT_GEAR_UP_RPM_3;
-extern const f32 KF_DEFAULT_GEAR_UP_RPM_4;
-extern const f32 KF_DEFAULT_GEAR_UP_RPM_5;
+// The console's default-engine tuning constants, READ OUT OF THE IMAGE (2026-08-03).
+//
+// EngineAttribs::Construct @0x825B7B90 is 267 instructions of `lfs` + stack-scratch +
+// `lvlx`/`vspltw` + `vrlimi128` lane inserts, and it REUSES its eight stack slots between
+// inserts -- so which .rdata slot lands in which (register, lane) is a dataflow question, not a
+// reading-the-listing question. It was answered by symbolically simulating the whole body
+// (GPRs carrying this+off / &stackslot, VRs carrying four symbolic lanes, `vrlimi128` masks
+// 8/4/2/1 == lanes x/y/z/w, `stvx128` committing). 31 stores, no lane left unresolved.
+//
+// Every value below was then read TWICE from the shipped X360 image and the two agree exactly:
+//   * the self-calibrating .id1 reader (delta -1594, 9/9 prologue witnesses), and
+//   * headless IDA 9.3 `ida_bytes.get_bytes` on the ARTIST .i64.
+// All 23 distinct slots report `seg=.rdata perm=4` -- read-only, so none of them is the
+// static-init `.data` family whose image bytes are meaningless.
+//
+// Independent confirmations that the simulation is right:
+//   * Hex-Rays itself decodes nine of them inline in the pseudocode (v43=1.0, v44=1.6, v45=20.0,
+//     v46=4400.0, v47=370.0, and `Prepare(a1, 37.0, 740.0, 0.0)`) -- all match.
+//   * every lane the simulation leaves untouched is exactly a `Vector3`'s unused `.w`.
+//   * role: gear ratio 0 is NEGATIVE (reverse) and 1..5 descend monotonically; every gear-up RPM
+//     is below MaxRPM; GearDownRPM (1500) sits between idle (1000) and the up-shift band.
+const f32 KF_DEFAULT_GEAR_RATIO_0 = -2.5f;                       // flt_8200D568 -- reverse gear
+const f32 KF_DEFAULT_GEAR_RATIO_1 = 3.20999998f;                 // flt_820920B0
+const f32 KF_DEFAULT_GEAR_RATIO_2 = 1.92999995f;                 // flt_820920AC
+const f32 KF_DEFAULT_GEAR_RATIO_3 = 1.29999995f;                 // flt_8201ECC8
+const f32 KF_DEFAULT_GEAR_RATIO_4 = 1.0f;                        // flt_82001C98
+const f32 KF_DEFAULT_GEAR_RATIO_5 = 0.75f;                       // flt_82004018
+const f32 KF_DEFAULT_DIFFERENTIAL = 4.11000013f;                 // flt_820920B4
+const f32 KF_DEFAULT_TRANSMISSION_EFFICIENCY = 1.0f;             // flt_82001C98
+// ⚠️ A REAL 0.0f, not a placeholder: flt_82001CC0 is `.rdata perm=4`, it sits in the compiler's
+// shared scalar pool next to 1.0/2.0/0.5, and scratch/GVM/init_map_table.txt lists it only ever as
+// a static-init SOURCE, never as a target. These are the *defaults*; EngineAttribs::
+// InitializeFromAttribs @0x825CF278 overwrites them from the per-car data record.
+const f32 KF_DEFAULT_ENGINE_RESISTANCE = 0.0f;                   // flt_82001CC0
+const f32 KF_DEFAULT_GEAR_DOWN_RPM = 1500.0f;                    // flt_820266C4
+const f32 KF_DEFAULT_MAX_TORQUE = 370.0f;                        // flt_820298E0
+const f32 KF_DEFAULT_TORQUE_FALL_OFF_RPM = 4400.0f;              // flt_820543BC
+const f32 KF_DEFAULT_MAX_RPM = 8000.0f;                          // flt_82019690
+const f32 KF_DEFAULT_LSDM_SPEED_TO_ALLOW_GEAR_CHANGES = 20.0f;   // flt_8208F9D4
+const f32 KF_DEFAULT_FLYWHEEL_INERTIA = 0.200000003f;            // flt_82004744
+const f32 KF_DEFAULT_FLYWHEEL_FRICTION = 500.0f;                 // flt_8200A034
+const f32 KF_DEFAULT_GEAR_CHANGE_TIME = 0.0f;                    // flt_82001CC0 (see the note above)
+const f32 KF_DEFAULT_TORQUE_SCALE_0 = 1.60000002f;               // flt_8200C6C8 -- reverse
+const f32 KF_DEFAULT_TORQUE_SCALE_1 = 1.0f;                      // flt_82001C98
+const f32 KF_DEFAULT_TORQUE_SCALE_2 = 1.0f;                      // flt_82001C98
+const f32 KF_DEFAULT_TORQUE_SCALE_3 = 1.0f;                      // flt_82001C98
+const f32 KF_DEFAULT_TORQUE_SCALE_4 = 1.0f;                      // flt_82001C98
+const f32 KF_DEFAULT_TORQUE_SCALE_5 = 1.0f;                      // flt_82001C98
+const f32 KF_DEFAULT_GEAR_UP_RPM_0 = 6000.0f;                    // flt_820920A8
+const f32 KF_DEFAULT_GEAR_UP_RPM_1 = 7000.0f;                    // flt_820920A4
+const f32 KF_DEFAULT_GEAR_UP_RPM_2 = 5853.0f;                    // flt_820920A0
+const f32 KF_DEFAULT_GEAR_UP_RPM_3 = 5945.0f;                    // flt_8209209C
+const f32 KF_DEFAULT_GEAR_UP_RPM_4 = 6000.0f;                    // flt_820920A8 (same slot as gear 0)
+const f32 KF_DEFAULT_GEAR_UP_RPM_5 = 6000.0f;                    // flt_820920A8 (same slot as gear 0)
 
-const f32 KF_DEFAULT_TORQUE_CURVE_INPUT_MIN = 37.0f;
-const f32 KF_DEFAULT_TORQUE_CURVE_INPUT_MAX = 740.0f;
-const f32 KF_DEFAULT_TORQUE_CURVE_OUTPUT_AT_MIN = 0.0f;
+// The torque-curve domain. ⚠️ The DWARF names InterpedParam3::Prepare's parameters generically
+// (lParamA/lParamB/lParamC); the "input min / input max / output at min" reading is this tree's
+// interpretation of the roles, not a console name. The VALUES are asm-literal.
+const f32 KF_DEFAULT_TORQUE_CURVE_INPUT_MIN = 37.0f;             // flt_82092094
+const f32 KF_DEFAULT_TORQUE_CURVE_INPUT_MAX = 740.0f;            // flt_82092098
+const f32 KF_DEFAULT_TORQUE_CURVE_OUTPUT_AT_MIN = 0.0f;          // flt_82001CC0
 
 // SetupAttribsForDonutAI @0x825F6298 loads ONE .rdata float (flt_8205820C) and stores it to two
 // places -- the engine's MaxTorque lane and the base block's Mass lane. Modelled as the single
@@ -78,46 +102,55 @@ inline VecFloat KVF(f32 lfValue)
 //
 // Build the default engine attributes. This is the symbol Engine::Construct @0x825F3EE8 calls
 // (nested under VehicleAttribs, NOT at namespace scope).
+//
+// The setter ORDER below is the asm's `stvx128` order, recovered by simulating the body (the
+// previous reconstruction had SetMaxTorque three calls too early and SetFlyWheelInertia before the
+// torque curve instead of after it). Every store targets a distinct lane, so the order is not
+// behavioural -- it is recorded because it is what the console does.
 void VehicleAttribs::EngineAttribs::Construct()
 {
-    SetGearRatio(0, KVF(KF_DEFAULT_GEAR_RATIO_0));
-    SetGearRatio(1, KVF(KF_DEFAULT_GEAR_RATIO_1));
-    SetGearRatio(2, KVF(KF_DEFAULT_GEAR_RATIO_2));
-    SetGearRatio(3, KVF(KF_DEFAULT_GEAR_RATIO_3));
-    SetGearRatio(4, KVF(KF_DEFAULT_GEAR_RATIO_4));
-    SetGearRatio(5, KVF(KF_DEFAULT_GEAR_RATIO_5));
+    SetGearRatio(0, KVF(KF_DEFAULT_GEAR_RATIO_0));     // 0x825B7C6C  [this+0x40].x
+    SetGearRatio(1, KVF(KF_DEFAULT_GEAR_RATIO_1));     // 0x825B7C88  [this+0x50].x
+    SetGearRatio(2, KVF(KF_DEFAULT_GEAR_RATIO_2));     // 0x825B7CA0  [this+0x60].x
+    SetGearRatio(3, KVF(KF_DEFAULT_GEAR_RATIO_3));     // 0x825B7CB8  [this+0x70].x
+    SetGearRatio(4, KVF(KF_DEFAULT_GEAR_RATIO_4));     // 0x825B7CCC  [this+0x80].x
+    SetGearRatio(5, KVF(KF_DEFAULT_GEAR_RATIO_5));     // 0x825B7CD8  [this+0x90].x
 
-    SetDifferential(KVF(KF_DEFAULT_DIFFERENTIAL));
-    SetMaxTorque(KVF(KF_DEFAULT_MAX_TORQUE));
-    SetTransmissionEfficiency(KVF(KF_DEFAULT_TRANSMISSION_EFFICIENCY));
-    SetEngineResistance(KVF(KF_DEFAULT_ENGINE_RESISTANCE));
+    SetDifferential(KVF(KF_DEFAULT_DIFFERENTIAL));                       // 0x825B7D04  [+0x10].x
+    SetTransmissionEfficiency(KVF(KF_DEFAULT_TRANSMISSION_EFFICIENCY));  // 0x825B7D40  [+0x10].y
+    SetEngineResistance(KVF(KF_DEFAULT_ENGINE_RESISTANCE));              // 0x825B7D84  [+0x10].z
 
-    SetGearUpRPM(0, KVF(KF_DEFAULT_GEAR_UP_RPM_0));
-    SetGearUpRPM(1, KVF(KF_DEFAULT_GEAR_UP_RPM_1));
-    SetGearUpRPM(2, KVF(KF_DEFAULT_GEAR_UP_RPM_2));
-    SetGearUpRPM(3, KVF(KF_DEFAULT_GEAR_UP_RPM_3));
-    SetGearUpRPM(4, KVF(KF_DEFAULT_GEAR_UP_RPM_4));
-    SetGearUpRPM(5, KVF(KF_DEFAULT_GEAR_UP_RPM_5));
-    SetGearDownRPM(KVF(KF_DEFAULT_GEAR_DOWN_RPM));
+    SetGearUpRPM(0, KVF(KF_DEFAULT_GEAR_UP_RPM_0));    // 0x825B7DA4  [this+0x40].z
+    SetGearUpRPM(1, KVF(KF_DEFAULT_GEAR_UP_RPM_1));    // 0x825B7DC4  [this+0x50].z
+    SetGearUpRPM(2, KVF(KF_DEFAULT_GEAR_UP_RPM_2));    // 0x825B7DE0  [this+0x60].z
+    SetGearUpRPM(3, KVF(KF_DEFAULT_GEAR_UP_RPM_3));    // 0x825B7DF8  [this+0x70].z
+    SetGearUpRPM(4, KVF(KF_DEFAULT_GEAR_UP_RPM_4));    // 0x825B7E10  [this+0x80].z
+    SetGearUpRPM(5, KVF(KF_DEFAULT_GEAR_UP_RPM_5));    // 0x825B7E50  [this+0x90].z
 
-    SetTorqueFallOffRPM(KVF(KF_DEFAULT_TORQUE_FALL_OFF_RPM));
-    SetLSDMSpeedToAllowGearChanges(KVF(KF_DEFAULT_LSDM_SPEED_TO_ALLOW_GEAR_CHANGES));
-    SetTorqueScale(0, KVF(KF_DEFAULT_TORQUE_SCALE_0));
-    SetTorqueScale(1, KVF(KF_DEFAULT_TORQUE_SCALE_1));
-    SetTorqueScale(2, KVF(KF_DEFAULT_TORQUE_SCALE_2));
-    SetTorqueScale(3, KVF(KF_DEFAULT_TORQUE_SCALE_3));
-    SetTorqueScale(4, KVF(KF_DEFAULT_TORQUE_SCALE_4));
-    SetTorqueScale(5, KVF(KF_DEFAULT_TORQUE_SCALE_5));
+    SetGearDownRPM(KVF(KF_DEFAULT_GEAR_DOWN_RPM));                                  // 0x825B7E78 [+0x10].w
+    SetMaxTorque(KVF(KF_DEFAULT_MAX_TORQUE));                                       // 0x825B7E8C [+0x20].x
+    SetTorqueFallOffRPM(KVF(KF_DEFAULT_TORQUE_FALL_OFF_RPM));                       // 0x825B7E94 [+0x20].y
+    SetLSDMSpeedToAllowGearChanges(KVF(KF_DEFAULT_LSDM_SPEED_TO_ALLOW_GEAR_CHANGES)); // 0x825B7E9C [+0x20].w
 
-    SetFlyWheelInertia(KVF(KF_DEFAULT_FLYWHEEL_INERTIA));
+    SetTorqueScale(0, KVF(KF_DEFAULT_TORQUE_SCALE_0)); // 0x825B7EA8  [this+0x40].y
+    SetTorqueScale(1, KVF(KF_DEFAULT_TORQUE_SCALE_1)); // 0x825B7EBC  [this+0x50].y
+    SetTorqueScale(2, KVF(KF_DEFAULT_TORQUE_SCALE_2)); // 0x825B7ED8  [this+0x60].y
+    SetTorqueScale(3, KVF(KF_DEFAULT_TORQUE_SCALE_3)); // 0x825B7EEC  [this+0x70].y
+    SetTorqueScale(4, KVF(KF_DEFAULT_TORQUE_SCALE_4)); // 0x825B7EF8  [this+0x80].y
+    SetTorqueScale(5, KVF(KF_DEFAULT_TORQUE_SCALE_5)); // 0x825B7F04  [this+0x90].y
+
+    // 0x825B7F08 / 0x825B7F24 -- both called with r3 == this, because mTorqueCurve is the leading
+    // member of EngineAttribs (&mTorqueCurve == this).
     mTorqueCurve.Construct();
     mTorqueCurve.Prepare(
         KF_DEFAULT_TORQUE_CURVE_INPUT_MIN,
         KF_DEFAULT_TORQUE_CURVE_INPUT_MAX,
         KF_DEFAULT_TORQUE_CURVE_OUTPUT_AT_MIN);
-    SetMaxRPM(KVF(KF_DEFAULT_MAX_RPM));
-    SetFlyWheelFriction(KVF(KF_DEFAULT_FLYWHEEL_FRICTION));
-    SetGearChangeTime(KVF(KF_DEFAULT_GEAR_CHANGE_TIME));
+
+    SetMaxRPM(KVF(KF_DEFAULT_MAX_RPM));                       // 0x825B7F84  [+0x20].z
+    SetFlyWheelInertia(KVF(KF_DEFAULT_FLYWHEEL_INERTIA));     // 0x825B7F90  [+0x30].x
+    SetFlyWheelFriction(KVF(KF_DEFAULT_FLYWHEEL_FRICTION));   // 0x825B7F98  [+0x30].y
+    SetGearChangeTime(KVF(KF_DEFAULT_GEAR_CHANGE_TIME));      // 0x825B7FAC  [+0x30].z
 }
 
 // @0x825CF278  BrnPhysics::Vehicle::VehicleAttribs::EngineAttribs::InitializeFromAttribs

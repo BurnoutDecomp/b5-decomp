@@ -62,30 +62,17 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3, Vector3Plus, Vector4, VecFloat
+#include "GameSource/Physics/PhysicsUtilities/InterpedParam3.h"        // BrnPhysics::InterpedParam3 (canonical home)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"   // Wheel::TireAttribs (canonical home)
 
 #include <cstddef>
 
 namespace BrnPhysics
 {
-    // BrnPhysics::InterpedParam3 -- a 4-point interpolated parameter curve packed into one
-    // 16-byte register. The canonical home; VehicleAttribs.cpp used to re-declare it privately
-    // and Engine.h modelled it as a stand-in `EngineTorqueCurve`.
-    //
-    // Both methods are real console leaves, declared-only here (no body in the tree yet):
-    //   InterpedParam3::Construct @0x8259CD30 (36 instrs)
-    //   InterpedParam3::Prepare   @0x8259CDC0 (34 instrs)
-    class InterpedParam3
-    {
-    public:
-        void Construct();
-        void Prepare(f32 lfInputMin, f32 lfInputMax, f32 lfOutputAtMin);
-
-    private:
-        Vector4 mvParams;
-    };
-
-    static_assert(sizeof(InterpedParam3) == 16, "InterpedParam3 is one 16-byte register");
+// InterpedParam3 used to be declared privately HERE. It is retired in favour of its DecFIGS home,
+// GameSource/Physics/PhysicsUtilities/InterpedParam3.h, which is also where its two console leaves
+// (Construct @0x8259CD30 / Prepare @0x8259CDC0) are now bodied. The private slice also had the
+// member as a `Vector4`; the DWARF says `Vector3` -- the asm writes three lanes and never lane 3.
 
 namespace Vehicle
 {
