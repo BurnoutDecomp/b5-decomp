@@ -122,10 +122,15 @@ namespace Vehicle
         CGS_ASSERT(lpOutPhysicsEntityId != nullptr, "lpOutPhysicsEntityId != NULL");
 
         const u32 luGlobalIndex = (luGlobalEntityId >> KU_ENTITY_INDEX_SHIFT) & KU_ENTITY_INDEX_MASK;
-        CGS_ASSERT(luGlobalIndex < KU_MAX_GLOBAL_TRAFFIC_ENTITY_INDEX,
+        // ⭐ RE-SEATED 2026-08-03: the map is the embedded traffic manager's own member
+        // (VehicleManager +149456 == 44768 + 104688), not a sibling of VehicleManager. The assert
+        // condition is the console's own text, and it can now be spelled against the real
+        // `sizeof(map)` it names instead of against a hand-copied 600.
+        CGS_ASSERT(luGlobalIndex < sizeof(mPhysicalTrafficManager.mu8GlobalToPhysicalEntityIndexMap),
                    "lGlobalEntityId.GetEntityIndex() < sizeof(mu8GlobalToPhysicalEntityIndexMap)");
 
-        const unsigned char lu8PhysicalIndex = mau8GlobalToPhysicalEntityIndexMap[luGlobalIndex];
+        const unsigned char lu8PhysicalIndex =
+            mPhysicalTrafficManager.mu8GlobalToPhysicalEntityIndexMap[luGlobalIndex];
         if (lu8PhysicalIndex == KU8_NO_PHYSICAL_VEHICLE)
             return false;
 
@@ -143,15 +148,15 @@ namespace Vehicle
     //   TRAFFIC_VEHICLE(2) -> PhysicalTrafficManager::GetVehiclePhysics on the contained subobject.
     // The X360 returns a raw pointer; the two branch types share no common base, so this returns void*.
     //
-    // FLAG (traffic branch DEFERRED): the contained PhysicalTrafficManager subobject @ +44768 is
-    // modelled as opaque padding in this layout (it cannot be embedded by its real type because the
-    // takedown TU already names maRaceCarEntityIdRemap as a direct sibling at +148128, which falls
-    // inside the subobject's byte range -- the two models are mutually exclusive). Reaching the
-    // contained manager's GetVehiclePhysics by NAME therefore requires the full embedded-manager layout
-    // pass. Until then, only the RACECAR branch (the boot-relevant DoCarCarContactGeneration path) is
-    // bodied; the TRAFFIC branch asserts + falls through to the racecar-record formula, which is the
-    // X360's structural shape (5216*index + this + 1856) -- it does NOT delegate to the traffic manager
-    // here. This is a KNOWN GAP, not a fabricated body.
+    // ⭐ THE TRAFFIC BRANCH IS REAL AS OF 2026-08-03. The old note here read: "the contained
+    // PhysicalTrafficManager subobject @ +44768 is modelled as opaque padding in this layout (it
+    // cannot be embedded by its real type because the takedown TU already names
+    // maRaceCarEntityIdRemap as a direct sibling at +148128, which falls inside the subobject's byte
+    // range -- the two models are mutually exclusive)". The diagnosis was exactly right and the
+    // resolution is the opposite of what it assumed: the sibling was the MISTAKE. +148128 IS a
+    // member of the subobject (its maTrafficEntityIDs, 44768 + 103360), so the two models were never
+    // in tension -- one of them was simply wrong. The manager is embedded by name now and this
+    // branch delegates, as the X360 does.
     // -------------------------------------------------------------------------------------------
     void* VehicleManager::GetVehiclePhysi(EntityId lPhysicsVehicleId)
     {
@@ -162,11 +167,21 @@ namespace Vehicle
                        "lPhysicsVehicleId.GetOwner() == BrnWorld::E_ENTITYTYPE_RACECAR || lPhysicsVehicleId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
         }
 
+        // NON-RACECAR branch. Re-pulled from the asm this wave (@0x825B4F50, 32 instructions):
+        //   0x825B4FB8  addis r3, r29, 1
+        //   0x825B4FC0  addi  r3, r3, -0x5120        ; this + 44768 == &mPhysicalTrafficManager
+        //   0x825B4FBC  mr    r4, r31                ; the packed id, verbatim (NOT the index)
+        //   0x825B4FC4  bl    PhysicalTrafficManager::GetVehiclePhysics
+        // Note the branch order: the assert above does not return, so an id whose owner is neither
+        // 1 nor 2 falls through to HERE, not to the racecar branch. Reproduced exactly.
+        if (luOwner != KU_ENTITY_OWNER_RACECAR)
+        {
+            return mPhysicalTrafficManager.GetVehiclePhysics(lPhysicsVehicleId);
+        }
+
+        // RACECAR branch (asm: extrwi index ; mulli 0x1460 ; add this ; addi 0x740
+        //                     == 5216*index + this + 1856 == &maRaceCarVehicles[index]).
         const u32 luIndex = (lPhysicsVehicleId.muValue >> KU_ENTITY_INDEX_SHIFT) & KU_ENTITY_INDEX_MASK;
-        // RACECAR branch (asm: 5216*index + this + 1856 == &maRaceCarVehicles[index]).
-        // FLAG: the TRAFFIC branch should delegate to the contained PhysicalTrafficManager
-        // (PhysicalTrafficManager::GetVehiclePhysics) -- DEFERRED (see header note); we return the
-        // racecar-record address for both owners as the structurally-faithful stand-in.
         return &maRaceCarVehicles[luIndex];
     }
 
@@ -283,15 +298,27 @@ namespace Vehicle
         static_assert(offsetof(RaceCarVehicleRecord, mfPlayerBoostStrengthStat) == 5084, "in-record player boost stat (asm: 5216*idx + 6940 -> in-record +5084)");
         static_assert(offsetof(VehicleManager, mHiddenRaceCars)          == 44704,  "mHiddenRaceCars (asm +44704)");
         static_assert(offsetof(VehicleManager, mauNetworkCarHiddenFramesRemaining)               == 44736,  "mauNetworkCarHiddenFramesRemaining (asm base 44736)");
-        static_assert(offsetof(VehicleManager, mau8GlobalToPhysicalEntityIndexMap) == 149456, "global->physical map (asm +149456)");
-        static_assert(offsetof(VehicleManager, mfPlayerStatStrength)     == 172320, "mfPlayerStatStrength (asm +172320)");
-        static_assert(offsetof(VehicleManager, mfPlayerStatDamageLimit)  == 172324, "mfPlayerStatDamageLimit (asm +172324)");
-        static_assert(offsetof(VehicleManager, miCarSpeed)               == 172328, "miCarSpeed (asm +172328)");
-        static_assert(offsetof(VehicleManager, miCarStrength)            == 172332, "miCarStrength (asm +172332)");
-        static_assert(offsetof(VehicleManager, miCarControl)             == 172336, "miCarControl (asm +172336)");
-        static_assert(offsetof(VehicleManager, miCarBoost)               == 172340, "miCarBoost (asm +172340)");
-        static_assert(offsetof(VehicleManager, meCarType)                == 172344, "meCarType (asm +172344)");
-        static_assert(offsetof(VehicleManager, meShowtimeBehaviour)             == 172456, "meShowtimeBehaviour (asm +172456)");
+        // ⭐ RE-SEATED 2026-08-03: the map is the embedded traffic manager's own member, not a
+        // sibling of this class. The old assert claimed `offsetof(VehicleManager,
+        // mau8GlobalToPhysicalEntityIndexMap) == 149456`; the X360 address is indeed 149456 ==
+        // 44768 + 104688, but that in-manager 104688 does NOT reproduce on the host -- ResourceHandle
+        // (16 vs 8, x20) and four 4->8 pointers and EventQueue<s8,50> (72 vs 64) all sit ahead of it
+        // inside the manager. What still reproduces exactly is the manager's OWN seat, so that is
+        // what is pinned; the map is reached BY NAME through it and needs no offset at all.
+        static_assert(offsetof(VehicleManager, mPhysicalTrafficManager) == 44768,
+                      "mPhysicalTrafficManager (asm PhysicalTrafficManager::Construct(this + 44768)); "
+                      "the global->physical map lives inside it at X360 in-manager +104688");
+        static_assert(sizeof(PhysicalTrafficManager::mu8GlobalToPhysicalEntityIndexMap) == 600,
+                      "and it is 600 bytes -- the sizeof the console's own assert text names "
+                      "(asm cmplwi 0x258)");
+        static_assert(offsetof(VehicleManager, mfPlayerStatStrength)     == 172320 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfPlayerStatStrength (asm +172320)");
+        static_assert(offsetof(VehicleManager, mfPlayerStatDamageLimit)  == 172324 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mfPlayerStatDamageLimit (asm +172324)");
+        static_assert(offsetof(VehicleManager, miCarSpeed)               == 172328 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "miCarSpeed (asm +172328)");
+        static_assert(offsetof(VehicleManager, miCarStrength)            == 172332 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "miCarStrength (asm +172332)");
+        static_assert(offsetof(VehicleManager, miCarControl)             == 172336 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "miCarControl (asm +172336)");
+        static_assert(offsetof(VehicleManager, miCarBoost)               == 172340 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "miCarBoost (asm +172340)");
+        static_assert(offsetof(VehicleManager, meCarType)                == 172344 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "meCarType (asm +172344)");
+        static_assert(offsetof(VehicleManager, meShowtimeBehaviour)             == 172456 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "meShowtimeBehaviour (asm +172456)");
     }
 
     // -------------------------------------------------------------------------------------------
