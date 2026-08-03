@@ -33,6 +33,7 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h" // VehicleDriver (maRaceCarDrivers @+64, mPlayerAiDriver @+171968)
 #include "GameSource/Physics/VehicleManager/StuntOffences/BrnStuntOffencesManager.h" // BrnPhysics::StuntOffencesManager (mStuntOffencesManager @+44240 -- the ONE contained sub-object whose real x64 type fits its X360 span exactly)
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h" // BrnPhysics::Vehicle::PhysicalTrafficManager (mPhysicalTrafficManager @+44768 -- embedded BY NAME as of 2026-08-03; see the drift note below)
+#include "GameSource/Physics/VehicleManager/BrnVehicleManagerDebugComponent.h" // BrnPhysics::Vehicle::VehicleManagerDebugComponent (mDebugComponent @+161968 -- embedded BY NAME as of 2026-08-03; that header only forward-declares VehicleManager, so this is not a cycle)
 
 // Pointer-only collaborators in RaceCarResponseInfo -- forward-declared in their real namespaces
 // (homed by their own TUs; the classifier never dereferences them here).
@@ -87,8 +88,25 @@ namespace Vehicle
     // ⚠️ It is a literal, deliberately, NOT `sizeof(PhysicalTrafficManager) - KU_X360_SIZEOF_...`.
     // Defining it from sizeof would make the asserts self-fulfilling; as a literal it is a tripwire
     // in both directions, and BrnVehicleManager_layout_check.cpp ties the three numbers together.
+    //
+    // There are now TWO drift terms, because there are two embedded sub-objects that widen. They
+    // apply to disjoint address ranges and they ACCUMULATE:
+    //     X360 +0        .. +44768    ->  no drift        (nothing before the traffic manager moves)
+    //     X360 +44768    .. +163264   ->  +192            KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER
+    //     X360 +163264   .. end       ->  +224            KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT
+    // A third one will appear the day RaceCarVehicleRecord becomes a real RaceCarPhysics -- and
+    // that one will be NEGATIVE (the host class is 4816 against the record's 5216), which is a
+    // reason to keep this shape rather than to fold the terms into one number.
     // ==========================================================================================
     const u32 KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER = 192u;
+
+    // ⭐ The second term, added 2026-08-03 in the same wave. VehicleManagerDebugComponent is 1328
+    // bytes on the host against the 1296-byte X360 span at +161968..+163264 -- +32, because its
+    // base's vptr and its mpVehicleManager both widen 4 -> 8. Unlike the traffic manager's span,
+    // this 1296 was never a guess: both ends are asm-literal (Construct(this + 161968, this), then
+    // the stride-1024 walk from +163264), so the +32 is real and the only honest answer is to carry
+    // it. 32 % 16 == 0, so every 16-aligned member past it keeps its alignment.
+    const u32 KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT = KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER + 32u;   // 224
 
     class VehicleManager
     {
@@ -422,7 +440,7 @@ namespace Vehicle
         //       StuntOffencesManager::Construct(this + 44240)               464         464   ✅ READY
         //       mDiscardedContacts bind (this + 160672)                    1296        1296   ✅ READY
         //       PhysicalTrafficManager::Construct(this + 44768)          105840      105648   ✅ READY   <- 2026-08-03
-        //       VehicleManagerDebugComponent::Construct(+161968)           1328        1296   ⛔ +32
+        //       VehicleManagerDebugComponent::Construct(+161968)           1328        1296   ✅ READY   <- 2026-08-03
         //       VehiclePhysics::Construct(&maRaceCarVehicles[i])           4752   (rec 5216)  ⛔ see below
         //
         //     THREE of the READY rows were opaque byte arrays before and are typed now
@@ -443,14 +461,20 @@ namespace Vehicle
         //         verdict**. A blocker computed against an opaque byte array is a claim about the
         //         array, not about the class.
         //     * VehicleManagerDebugComponent grows 32 bytes because its base's vptr and its
-        //       `mpVehicleManager` both widen 4 -> 8; BrnVehicleManagerDebugComponent.h's own banner
-        //       already says VehicleManager must keep the 1296-byte span for exactly this reason.
-        //       ⚠️ Unlike the traffic manager, this span is NOT a guess: 161968..163264 is bracketed
-        //       by two asm-literal anchors (the Construct call at +161968 and the stride-1024 walk
-        //       from +163264), so the +32 is real. It cannot be fixed the same way -- and it cannot
-        //       be embedded at all today, because BrnVehicleManagerDebugComponent.h includes THIS
-        //       header, so embedding it by value would be an include cycle. That has to be broken
-        //       first (the component only needs a forward declaration of VehicleManager).
+        //       `mpVehicleManager` both widen 4 -> 8. ⚠️ Unlike the traffic manager, this span is
+        //       NOT a guess: 161968..163264 is bracketed by two asm-literal anchors (the Construct
+        //       call at +161968 and the stride-1024 walk from +163264), so the +32 is real -- which
+        //       is why it is CARRIED (KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT) rather than derived away.
+        //       ⚠️⚠️ AND A CLAIM WRITTEN HERE EARLIER IN THIS SAME WAVE WAS WRONG, recorded because
+        //       it is the exact failure mode this file keeps warning about: it said the component
+        //       "cannot be embedded at all today, because BrnVehicleManagerDebugComponent.h includes
+        //       THIS header, so embedding it by value would be an include cycle". There is no cycle.
+        //       That header includes types.hpp / BrnCommonTypes.h / CgsDebugComponent.h /
+        //       CgsPhysicsSimulationIO_Events.h / CgsPotentialContact.h / BrnVehicleConstants.h and
+        //       FORWARD-DECLARES `class VehicleManager;`. The claim came from a grep whose only hits
+        //       were the string "BrnVehicleManager.h" inside that header's COMMENTS -- a blocker
+        //       asserted from a text match rather than from the include list, which is the same
+        //       shape as the 103360 span above: a verdict about the model, not about the code.
         //     * VehiclePhysics is SMALLER than the 5216-byte record, which is worse, not better:
         //       RaceCarVehicleRecord reproduces the X360 IN-RECORD offsets that the mounted takedown
         //       chain reads by name (mbIsCrashingOrDisabled @+1808, mvWorldPosition @+1920,
@@ -463,12 +487,11 @@ namespace Vehicle
         //       and a byte-pinned class cannot embed real x64 sub-objects. The fix is the project's
         //       own standing rule -- parity by NAMED MEMBERS, with the host/console divergence
         //       carried as an explicit, tripwired constant instead of pretending it is zero.
-        //       ⭐ DONE ONCE, 2026-08-03, for the traffic manager (see KU_HOST_DRIFT_AFTER_TRAFFIC_
-        //       MANAGER above): the member is real, the two mis-identified "siblings" are retired,
-        //       and every downstream assert still runs. That is the pattern for the remaining two.
-        //       ⚠️ REMAINING WORK, and it is NOT symmetric with what was just done:
-        //         - VehicleManagerDebugComponent: blocked on an INCLUDE CYCLE first, then a second
-        //           drift term after +161968. Cheap once the cycle is broken.
+        //       ⭐ DONE TWICE, 2026-08-03 -- for the traffic manager (KU_HOST_DRIFT_AFTER_TRAFFIC_
+        //       MANAGER) and for the debug component (KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT): both
+        //       members are real, the two mis-identified "siblings" are retired, and every
+        //       downstream assert still runs. Two of the three blockers are gone.
+        //       ⚠️ REMAINING WORK -- ONE item, and it is NOT symmetric with the two just done:
         //         - RaceCarVehicleRecord -> RaceCarPhysics: genuinely multi-wave. It is not a size
         //           argument at all. The ten named in-record fields below (mbIsCrashingOrDisabled,
         //           mvWorldPosition, mCrashMatrix, ...) DO NOT EXIST as members of the reconstructed
@@ -900,10 +923,23 @@ namespace Vehicle
         CgsModule::EventQueue<BrnPhysics::ContactSpy::DiscardedContact, 20>
                              mDiscardedContacts;                  // +160672 (1296 bytes)
 
-        // ⭐ NEWLY PINNED: the manager's own debug component. Construct calls
+        // ⭐ The manager's own debug component. Construct calls
         // `VehicleManagerDebugComponent::Construct(this + 161968, this)` @0x8263BCD8 -- note it takes
         // TWO arguments (r3 = the component, r4 = r31 = the manager); Hex-Rays renders it with none.
-        unsigned char        mDebugComponent[163264 - 161968];     // +161968 (1296 bytes)
+        //
+        // ⭐⭐ UN-PINNED 2026-08-03 (was `unsigned char mDebugComponent[163264 - 161968]`). This was
+        // the second of the three Construct blockers: real host class 1328 vs the 1296-byte X360
+        // span, "⛔ +32". Both the old header and BrnVehicleManagerDebugComponent.h's own banner
+        // concluded from that that "VehicleManager keeps its own mDebugComponent as the X360-sized
+        // 1296-byte opaque span so its byte-pinned offsetof chain stays intact". That conclusion
+        // followed only from the byte-pinning, and the byte-pinning is what this wave retired: with
+        // KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT the chain stays intact WITH the real type in place.
+        // ⚠️ Note the 1296 span itself was NEVER wrong (unlike the traffic manager's 103360) -- both
+        // of its ends are asm-literal. The +32 is a genuine host/console width difference and it is
+        // carried, not argued away.
+        // ⇒ `VehicleManagerDebugComponent::Construct(this + 161968, this)` is now spelled
+        //   `mDebugComponent.Construct(this);` BY NAME.
+        VehicleManagerDebugComponent mDebugComponent;               // +161968 (X360 1296; host 1328)
 
         // ⭐ NEWLY PINNED: the per-car debug components. Construct walks them in the 8-car loop with
         // `addis r27,r31,2 ; addi r27,r27,0x7DC0` -> this + 163264 and `addi r27,r27,0x400`
