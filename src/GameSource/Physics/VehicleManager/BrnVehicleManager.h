@@ -28,6 +28,8 @@
 #include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"  // RaceCarContact (mNormal @+48, mPointOnA @+64)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<1536,16> (the IO event queue the crash/takedown events push onto)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"        // CgsContainers::BitArray<N> (live-car bitset, crash-data free-list, taken-down bitset)
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"             // CgsNumeric::Random (mRandom @+16)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h" // VehicleDriver (maRaceCarDrivers @+64, mPlayerAiDriver @+171968)
 
 // Pointer-only collaborators in RaceCarResponseInfo -- forward-declared in their real namespaces
 // (homed by their own TUs; the classifier never dereferences them here).
@@ -322,31 +324,25 @@ namespace Vehicle
         //     0x8263BF80  addi r25, r25, 0xE0      <- stride 224, x8 -> ends at 1856
         // and 1856 is exactly where maRaceCarVehicles starts (asm below), so the array closes.
         //
-        // ⚠️ THE RECORD IS A STAND-IN, NOT THE REAL VehicleDriver. The DWARF type is
-        //   VehicleDriver { BrnAIDriverControls mControls;      // 0..80
-        //                   Matrix44Affine mCatchupTargetTransform;  // +80
-        //                   Matrix44Affine mSlerpTransform;          // +144
-        //                   E_DRIVER_TYPE meDriverType;              // +208
-        //                   int8_t mi8NumOfInterpSteps;              // +212
-        //                   bool mbSnappedThisFrame; }               // +213  -> sizeof 224
-        // so all three fields named here live INSIDE mControls. [I] Walking the DWARF
-        // BrnPlayerDriverControls run (miVehicleID@0, twelve floats, miVehicleIDToMerge@52, then the
-        // bool run mbReset@53 .. mbHorn@62) puts in-record 59/60/61 on mbBoostBounce /
-        // mbIsOnStartLine / mbIsSteeringWheel. That is a HYPOTHESIS, not a measurement -- it assumes
-        // an empty `CgsModule::Event` base (which this tree's `struct Event {}` is) and it has not
-        // been checked against a use site. The role-derived names below are kept because the bodies
-        // read them by role; DELETE-WHEN VehicleDriver + BrnAIDriverControls are really reconstructed
-        // (that is wave T2-B), at which point this stand-in disappears entirely.
-        struct RaceCarDriverRecord
-        {
-            unsigned char mPad0000[59];
-            unsigned char mbBoostImpactEligible; // in-record +59 (asm: 224*idx + 123; promotes SLAM->BOOST_SLAM, SHUNT->BOOST_SHUNT)
-            unsigned char mbTakenDown;           // in-record +60 (asm: 224*idx + 124; stores literal 1; also read as a crash-suppression flag)
-            // in-record +61 (asm: 224*idx + 125): a second per-car suppression flag SetRaceCarCrashing
-            // reads. It gates the crash by the cause sub-code (0/3/5). FLAG: role/name proposed.
-            unsigned char mbSuppressByCause;     // in-record +61
-            unsigned char mPad003E[224 - 62];
-        };
+        // ⭐⭐ STAND-IN RETIRED 2026-08-03. This slot used to be an opaque 224-byte
+        // `RaceCarDriverRecord` carrying three role-named bytes at in-record 59/60/61 behind an
+        // explicit HYPOTHESIS flag ("assumes an empty CgsModule::Event base and has not been
+        // checked against a use site"). It is now the real
+        // `BrnPhysics::Vehicle::VehicleDriver` (VehiclePhysics/BrnVehicleDriver.h), recovered from
+        // VehicleDriver::Construct @0x825B83C8 with every offset asm-literal.
+        //
+        // The hypothesis was WRONG in its arithmetic and RIGHT in its instinct. The committed
+        // BrnPlayerDriverControls layout it walked put the bool run at 0x35..0x3E; the X360 build
+        // carries a thirteenth control float at +0x34, so the run is really 0x39..0x42. The three
+        // bytes therefore resolve one slot LOWER than the guess -- and each lands on a DWARF member
+        // whose name is an exact match for the role the bodies had already derived:
+        //     in-record 59 (0x3B)  was "mbBoostImpactEligible" -> mControls.mbBoost
+        //     in-record 60 (0x3C)  was "mbTakenDown"           -> mControls.mbIsInvulnerableToVehicles
+        //     in-record 61 (0x3D)  was "mbSuppressByCause"     -> mControls.mbIsInvulnerableToWorld
+        // (the boost button promoting SLAM->BOOST_SLAM; the two invulnerability flags suppressing a
+        // vehicle-caused and a world-caused crash respectively). The offsetof asserts in
+        // BrnVehicleDriver.h pin all three, and the call sites in this class's .cpp now read them
+        // by their real names.
 
         // Per-car VEHICLE/physics record array @ class offset 1856. Stride 5216 -- this is the
         // BrnPhysics::Vehicle::RaceCarPhysics[8] array the DWARF attests at this slot
@@ -433,12 +429,14 @@ namespace Vehicle
         // ==========================================================================================
         s32                  mePrepareStage;    // +0   EPrepareStage (Construct: 0)
         s32                  meReleaseStage;    // +4   EReleaseStage (Construct: 3)
-        unsigned char        mPad0008[8];       // +8   alignment ahead of the 16-aligned mRandom
-        // CgsNumeric::Random mRandom -- OPAQUE 48 bytes (alignas 16). The real type belongs to its
-        // own TU (wave T2-B); modelled as a sized, aligned blob so every offset behind it is right.
-        alignas(16) unsigned char mRandom[48];  // +16  (ends at 64)
+        // ⭐ The eight bytes at +8 are NOT a modelled pad any more -- they are the alignment the
+        // 16-aligned CgsNumeric::Random forces, and the compiler now inserts them itself. (The
+        // class was carrying an explicit `mPad0008[8]` while mRandom was an opaque blob; with the
+        // real 16-aligned type both the padding and the blob are redundant. CgsRandom.h was
+        // alignas(8) until this wave -- see the note there.)
+        CgsNumeric::Random   mRandom;           // +16  (sizeof 48; ends at 64)
 
-        RaceCarDriverRecord  maRaceCarDrivers[8];   // +64      (224 * 8 = 1792; ends at 1856)
+        VehicleDriver        maRaceCarDrivers[8];   // +64      (224 * 8 = 1792; ends at 1856)
         RaceCarVehicleRecord maRaceCarVehicles[8];  // +1856    (5216 * 8 = 41728; ends at 43584)
 
         // Per-car EntityId validation table @ +43584. Stride 4 (asm: 4*(idx+10896) == 4*idx+43584;
@@ -635,9 +633,8 @@ namespace Vehicle
         // ⭐ NEWLY PINNED: the manager's own spare AI driver. Construct calls
         // `VehicleDriver::Construct(this + 3*65536 - 0x6040)` == this + 171968 @0x8263C088 -- the
         // SECOND VehicleDriver::Construct call in the function, the first being the 8-car array at
-        // +64. DWARF: `VehicleDriver mPlayerAiDriver` (BrnVehicleManager.h:953). Same 224-byte
-        // stand-in record as the array.
-        RaceCarDriverRecord  mPlayerAiDriver;         // +171968 (224; ends 172192)
+        // +64. DWARF: `VehicleDriver mPlayerAiDriver` (BrnVehicleManager.h:953).
+        VehicleDriver        mPlayerAiDriver;         // +171968 (224; ends 172192)
 
         // [I] +172192..+172204 is the DWARF run that follows mPlayerAiDriver:
         //   bool mbPlayerAiDriverValid (:954), float mfPlayerRecentSteering (:955),

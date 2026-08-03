@@ -7,6 +7,40 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    // ⭐⭐ GRAVITY -- what actually accelerates a Burnout race car downward. [V] 2026-08-03.
+    //
+    // A race car is a BrnPhysics::ExternalPhysicsBody: the game integrates it ITSELF and only
+    // publishes the pose to rw::physics. So the rw::physics SimulationParams::mGravity that
+    // PhysicsModule::Prepare stage 3 builds -- (0, -9.81, 0) -- is NOT what moves it, and
+    // ExternalPhysicsBody::CalculateNewVelocity @0x825A1B10 (which applies the force/impulse
+    // accumulators) loads no constants at all. Gravity never enters the force accumulator.
+    //
+    // It is applied DIRECTLY to the body's linear velocity, once per car per frame, by
+    // VehicleManager::ReadUpdatedBodies @0x82619A10, immediately before IntegrateTransform:
+    //     lvx128    v0, r0, r15          ; r15 = &<this constant, splatted>
+    //     vmulfp128 v13, v0, v127        ; g * dt
+    //     lvx128    v0, r0, r10          ; r10 = &mBody.mLinearVelocity   (vehicle+0x50)
+    //     vspltw    v0, v0, 1            ; .y
+    //     vsubfp    v0, v0, v13          ; y - g*dt
+    //     vrlimi128 v12, v0, 4, 0
+    //     stvx128   v0, r0, r10
+    //     bl        ExternalPhysicsBody::IntegrateTransform
+    // i.e. **mLinearVelocity.y -= KF_GRAVITY * dt**, skipped entirely when the vehicle's frozen
+    // byte (VehiclePhysics +0x70) is set. PhysicalTrafficManager::ReadUpdatedBodies @0x825EF608
+    // does the identical thing for traffic. The same constant is also the suspension-stiffness
+    // term: UpdateSuspensionSprings computes k = massOnSpring * g / restDisplacement, and the
+    // DecFIGS DWARF names that local **lvfGravity** (VehiclePhysics.cpp:3202) -- which is what
+    // identifies this slot by NAME and not merely by value.
+    //
+    // ⚠️ WHY FIVE WAVES OF LITERAL SCANS MISSED IT. On the X360 the value lives in a .data slot
+    // (unk_82FB9160) that reads **all zeros in the image**; it is filled at static-init time by a
+    // tiny unexported, IDA-unmarked initialiser at 0x82C5B128 that splats the .rdata scalar
+    // flt_8208F83C. Read out of the IDB with headless IDA: flt_8208F83C == 0x411CF5C3 ==
+    // 9.81000042f. No use site contains the literal, so "a scan of the export set for 9.81 finds
+    // nothing in the vehicle chain" was a TRUE statement about the export set and a FALSE
+    // conclusion about the game. (Console storage is a splatted VecFloat; the datum is the scalar.)
+    const f32 KF_GRAVITY = 9.81000042f;   // X360 flt_8208F83C -> unk_82FB9160 (splat)
+
     // Severity/kind of a vehicle-vs-vehicle impact.
     enum EImpactType : s32
     {

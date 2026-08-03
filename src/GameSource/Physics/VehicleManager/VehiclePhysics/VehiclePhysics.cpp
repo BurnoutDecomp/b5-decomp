@@ -792,10 +792,12 @@ namespace Vehicle
     // FLAG (rodata): the boost speed FLOOR flt_8200426C (= 5.0 mph), the kick cooldown flt_82001D9C
     // (= 2.0 s) and the ratio numerator flt_82001C98 (= 1.0) are resolved constants (homed in sibling
     // TUs / the findings doc). flt_82001CC0 (the position/timer zero-init seed) is un-homed and carried
-    // as a flagged-0 placeholder. kfMaxWheelieAngle / kfWheelieLimitDamping (the kick self-limit) and
-    // unk_82FB8A90 (the speed-match clamp vector) are un-homed/runtime-loaded, carried as flagged-0
-    // placeholders (faithful-but-inert: the math/structure is exact, the value stays 0 until recovered).
-    // NEVER fabricated.
+    // as a flagged-0 placeholder. kfMaxWheelieAngle / kfWheelieLimitDamping (the kick self-limit) are
+    // un-homed, carried as flagged-0 placeholders (faithful-but-inert: the math/structure is exact, the
+    // value stays 0 until recovered). NEVER fabricated.
+    // ⭐ unk_82FB8A90 (the speed-match clamp) is NO LONGER a placeholder -- it is 50.0f; see the note
+    // on UpdateSpeedMatch. The whole 0x82FB.... family reads zero in the image because those slots are
+    // filled by an unexported static-initialiser block, not because their values are unrecoverable.
     // =======================================================================================
 
     // @0x825FACE8  BrnPhysics::Vehicle::VehiclePhysics::UpdateBoost
@@ -832,10 +834,12 @@ namespace Vehicle
             maWheels[eRearLeftWheel].GetRoadContact().mbIsOnGround &&
             maWheels[eRearRightWheel].GetRoadContact().mbIsOnGround;
 
-        // The boost button (asm reads controls byte +0x3B; mbBoostBounce in the committed layout).
+        // The boost button. asm `lbz r10, 0x3B(r4)` @0x825FAD34 -- with the corrected controls
+        // layout +0x3B is mbBoost (the committed layout put mbBoostBounce there, so this read the
+        // right BYTE under the wrong NAME).
         // Below the 5.0-mph floor, or with the rear wheels airborne, no boost ever applies this
         // frame -- either -> the "not boosting" reset path.
-        const bool lbApply = lpControls->mbBoostBounce
+        const bool lbApply = lpControls->mbBoost
                            && (mfSpeedMPH.x >= KF_BOOST_SPEED_FLOOR)
                            && lbRearWheelsOnGround;
 
@@ -843,11 +847,11 @@ namespace Vehicle
         {
             // Throttle-scaled speed cap. At/above the cap, the timers still advance but no force is
             // applied this frame.
-            // FLAG (control offset): the X360 reads throttle at controls+0x34, which the committed
-            // BrnPlayerDriverControls layout labels miVehicleIDToMerge; the semantic throttle field is
-            // mfRequestedGas. Behaviour (cap = MaxBoostSpeed * throttle) is faithful; the source offset
-            // is flagged for reconciliation when the full controls layout lands.
-            const f32 lfThrottle      = lpControls->mfRequestedGas;          // FLAG: X360 offset +0x34
+            // ⭐ RESOLVED 2026-08-03. The X360 reads controls+0x34 (`lfs f0, 0x34(r4)` @0x825FAD98).
+            // The committed layout labelled that slot miVehicleIDToMerge and this body substituted
+            // mfRequestedGas (+0x1C) -- a DIFFERENT field. +0x34 is a thirteenth control float the
+            // X360 build carries (Clear seeds it 1.0f); it is now a named member.
+            const f32 lfThrottle      = lpControls->mfBoostMaxSpeedScale;    // asm +0x34
             const f32 lfMaxBoostSpeed =
                 lrBA.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.y;
 
@@ -1031,36 +1035,39 @@ namespace Vehicle
     //     maWheels[2/3].mIntegrationVariables.x = recipRear  * target
     //     mLinearVelocity += forwardAxis * clampedDelta                   (the soft fold-back)
     //
-    //   FLAG (control offsets): the speed-match mode (+0x44, s32), target speed (+0x48, float) and
-    //   target-present flag (+0x4C, byte) lie PAST the committed BrnPlayerDriverControls layout (which
-    //   ends at meDriverType @+0x40) -- they belong to a richer control payload owned by a separate TU.
-    //   Read here via a layout-faithful byte view at the X360 console offsets (the same pattern the C05
-    //   road-noise draw uses for the SDK Random's private fields), so the offsets stay exact without
-    //   befriending or fabricating named members.
-    //   FLAG (runtime data): unk_82FB8A90 (the per-frame clamp vector) is a runtime-loaded scratch
-    //   global, not .rdata in the export -> a flagged-0 placeholder (faithful-but-inert): the clamp math
-    //   is exact, the bound stays 0 until the value is recovered. With the bound 0 the clamped delta is
-    //   0 (no nudge) -- inert, never fabricated.
+    //   ⭐ RESOLVED 2026-08-03 (both of this body's two flags).
+    //   (1) CONTROL OFFSETS. +0x44/+0x48/+0x4C are not "past the layout" -- +0x44 is meDriverType and
+    //   the other two are BrnAIDriverControls::mfSpeedMatchSpeed / mbDoSpeedMatch. The console is
+    //   doing exactly what it looks like: check the driver type, then read the AI payload. The DWARF
+    //   NAMES the two AI members after this very function, which is what settles it beyond offsets.
+    //   The raw byte view is gone.
+    //   (2) THE CLAMP BOUND. unk_82FB8A90 is a .data slot that reads zero in the image; it is filled
+    //   at static-init time by an unexported initialiser at 0x82C5CB28 that splats the .rdata scalar
+    //   flt_820138DC == 50.0f. So the bound is 50, not 0 -- and with the placeholder 0 the clamped
+    //   delta was identically zero, i.e. the speed-match nudge did NOTHING.
     void VehiclePhysics::UpdateSpeedMatch(const BrnPlayerDriverControls* lpControls, f32 lfTimeStep)
     {
         if (!mbAllWheelsHaveTraction)
             return;
 
-        // Speed-match control fields past the committed controls layout (X360 +0x44/+0x48/+0x4C).
-        const uint8_t* lpC = reinterpret_cast<const uint8_t*>(lpControls);
-        const s32 liMode        = *reinterpret_cast<const s32*>(lpC + 0x44);   // mode (== 1 to run)
-        const f32 lfTargetSpeed = *reinterpret_cast<const f32*>(lpC + 0x48);   // target forward speed
-        const u8  lu8HasTarget  = *(lpC + 0x4C);                               // target-present flag
-
-        if (liMode != 1 || lu8HasTarget == 0)
+        // asm @0x825D4AE4: lwz 0x44 (meDriverType) == 1, then lbz 0x4C (mbDoSpeedMatch), then
+        // lfs 0x48 (mfSpeedMatchSpeed). Speed-match is an AI-only behaviour.
+        if (lpControls->GetType() != E_DRIVER_TYPE_AI)
             return;
+        const BrnAIDriverControls* lpAIControls = static_cast<const BrnAIDriverControls*>(lpControls);
+        if (!lpAIControls->mbDoSpeedMatch)
+            return;
+        const f32 lfTargetSpeed = lpAIControls->mfSpeedMatchSpeed;
 
         // Current forward speed = dot3(mLinearVelocity, body forward axis).
         const f32 lfForwardSpeed = vpu::Dot(mLinearVelocity, mTransform.zAxis);
         const f32 lfDelta        = lfTargetSpeed - lfForwardSpeed;
 
-        // Clamp the delta to +/-(clampVec * dt). FLAG: clampVec is the un-homed unk_82FB8A90 (flagged 0).
-        static const f32 KF_SPEED_MATCH_CLAMP = 0.0f;   // FLAG: runtime-loaded unk_82FB8A90 (flagged-inert)
+        // Clamp the delta to +/-(clampVec * dt). ⭐ RESOLVED 2026-08-03: unk_82FB8A90 is zero in the
+        // image only because it is filled at static-init time -- the unexported initialiser at
+        // 0x82C5CB28 splats the .rdata scalar flt_820138DC == 50.0f into it. Read out of the IDB with
+        // headless IDA. It was a flagged-0 placeholder, which made this whole nudge a no-op.
+        static const f32 KF_SPEED_MATCH_CLAMP = 50.0f;  // X360 flt_820138DC -> unk_82FB8A90 (splat)
         const f32 lfBound = KF_SPEED_MATCH_CLAMP * lfTimeStep;
         f32 lfClampedDelta = lfDelta;
         if (lfClampedDelta > lfBound)  lfClampedDelta = lfBound;
@@ -1250,7 +1257,9 @@ namespace Vehicle
     {
         if (mu8DriftState == eDriftState_None)
             return;
-        if (lrControls.GetMode() == 1)   // *(a2+68) == 1 gate (proceeds only when mode != 1)
+        // 68 decimal == 0x44 == meDriverType; `== 1` is E_DRIVER_TYPE_AI. The drift remap is a
+        // PLAYER-input remap, so an AI-driven car returns immediately. (Was the invented GetMode().)
+        if (lrControls.GetType() == E_DRIVER_TYPE_AI)   // asm lwz 0x44(r4); cmpwi 1; beqlr
             return;
 
         const f32 lfSign = (mu8DriftState == eDriftState_FacingLeft) ? 1.0f : -1.0f;
@@ -1494,11 +1503,12 @@ namespace Vehicle
         // CheckForEnteringDrift may latch a NEW drift this frame (owned by another TU -- declare-only).
         CheckForEnteringDrift(lpControls, lfSlipAngle, lfSpeed, lfSpeed, lfSteeringDir);
 
-        // only run the exit battery while drifting and not force-coming-out. 0x8261F74C: `lbz
-        // r11,0x3E(r31)` where r31=controls -- reads controls.mbHorn (+0x3E), NOT the mode byte
-        // (+0x44); force-out is gated on the horn button, not GetMode().
-        const bool lbForceOut = lpControls ? lpControls->mbHorn : false;
-        if (mu8DriftState == eDriftState_None || lbForceOut)
+        // only run the exit battery while drifting and not being HELD in drift. 0x8261F74C:
+        // `lbz r11,0x3E(r31)` where r31 == controls. ⭐ RE-NAMED 2026-08-03: with the corrected
+        // controls layout +0x3E is **mbForceDrift**, not mbHorn (the old layout had mbHorn there).
+        // That is also the better fit for the gate: a car being force-drifted skips the exit battery.
+        const bool lbHeldInDrift = lpControls ? lpControls->mbForceDrift : false;
+        if (mu8DriftState == eDriftState_None || lbHeldInDrift)
             return;
 
         // 1. slip too small: CappedDriftScale (@+0x1020 .y) vs a drift-slip exit limit (flagged-inert).
@@ -1587,10 +1597,13 @@ namespace Vehicle
     //   curve carried as a flagged-inert blend so no fabricated coefficients are emitted.
     void VehiclePhysics::UpdateDriftScale(const BrnPlayerDriverControls* lpControls, f32 lfTimeStep, f32 lfSlip)
     {
-        // an aftertouch latch the asm reads from *(controls+68)==1 -> *(controls+77).
-        bool lbAfterTouch = false;
-        if (lpControls && lpControls->GetMode() == 1)   // *(this+68)==1 control-mode proxy
-            lbAfterTouch = lpControls->GetFlag78();   // FLAG: +77/+78 control-byte proxy   // *(this+77) proxy (control byte)
+        // ⭐ RE-NAMED 2026-08-03. asm @0x825FA778: `lwz r11,0x44(r30); cmpwi 1; bne;
+        // lbz r26,0x4D(r30)` -- an AI-driver check followed by the AI payload's
+        // mbForceComeOutOfDrift (77 decimal == 0x4D). The DWARF name matches the function it is
+        // read in, which is what identifies it. Was GetMode()/GetFlag78().
+        bool lbForceComeOutOfDrift = false;
+        if (lpControls && lpControls->GetType() == E_DRIVER_TYPE_AI)
+            lbForceComeOutOfDrift = static_cast<const BrnAIDriverControls*>(lpControls)->mbForceComeOutOfDrift;
 
         // recompute the local drift angle: acos(dot(normalize(vel), driftDir)) signed, in degrees,
         // wrapped to (-180,180]. driftDir is the cached steering direction (mSteeringDirection-equivalent
@@ -1607,8 +1620,9 @@ namespace Vehicle
         // store the current (capped) drift angle lane.
         mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.w = lfAngleDeg;
 
-        // gate: per-car drift slip lane (mpAttribs->mvDriftParams0 @+0x110 .x) vs body speed, OR the aftertouch latch.
-        const bool lbEase = !(mfSpeedMPH.x > mpAttribs->mvDriftParams0.x) || lbAfterTouch;
+        // gate: per-car drift slip lane (mpAttribs->mvDriftParams0 @+0x110 .x) vs body speed, OR the
+        // AI's force-come-out-of-drift request.
+        const bool lbEase = !(mfSpeedMPH.x > mpAttribs->mvDriftParams0.x) || lbForceComeOutOfDrift;
         if (lbEase)
         {
             // ease branch: leave the drift scale where it is (the asm's "set to 1.0 seed" no-op store path

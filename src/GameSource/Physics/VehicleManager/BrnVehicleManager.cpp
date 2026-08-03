@@ -486,7 +486,7 @@ namespace Vehicle
 
         // Record who took the victim down, and flag the aggressor as having scored a takedown this frame.
         maRaceCarLastAttacker[liVictimActiveRaceCarIndex]   = miAttackerToRecord;
-        maRaceCarDrivers[liAggressorActiveRaceCarIndex].mbTakenDown = 1;
+        maRaceCarDrivers[liAggressorActiveRaceCarIndex].mControls.mbIsInvulnerableToVehicles = true;
     }
 
     // -------------------------------------------------------------------------------------------
@@ -531,7 +531,7 @@ namespace Vehicle
 
         // ---- Step 1: index + early-out suppression gates (asm v36/v38/v43/v44/v45) ----
         const s32 liVictimIndex = static_cast<s32>((lVictimEntityId.muValue >> 10) & 0x3FFF);
-        RaceCarDriverRecord& lrStatus = maRaceCarDrivers[liVictimIndex];   // asm 224*v36 + this
+        VehicleDriver& lrDriver = maRaceCarDrivers[liVictimIndex];   // asm 224*v36 + this
         const s32 liCrashState = maeRaceCarTypes[liVictimIndex];      // asm v44 = maeRaceCarTypes[v36]
         const bool lbWasInCrashState1 = (liCrashState == 1);             // asm v45 -> AddRaceCarCrashEvent arg
 
@@ -539,13 +539,16 @@ namespace Vehicle
         // asm: v42 = HIBYTE(a2).
         const u32 luCauseSubCode = (lAggressorEntityId.muValue >> 24) & 0xFF;
 
-        // The two RaceCarDriverRecord flag bytes the asm reads: +124 (mbTakenDown) and +125
-        // (mbSuppressByCause), both now NAMED fields of the record.
-        const unsigned char lbFlag124 = lrStatus.mbTakenDown;       // asm *(v38+124)
-        const unsigned char lbFlag125 = lrStatus.mbSuppressByCause; // asm *(v38+125)
+        // The two driver flag bytes the asm reads at +124 and +125. RE-NAMED 2026-08-03: they are
+        // the victim's two INVULNERABILITY flags inside VehicleDriver::mControls (in-record 60/61),
+        // and the cause sub-codes they gate on say so -- 1/2 are the vehicle-owner codes, 0/3/5 the
+        // world ones. The old role names ("mbTakenDown" / "mbSuppressByCause") described the effect;
+        // these are the console's own members.
+        const bool lbInvulnerableToVehicles = lrDriver.mControls.mbIsInvulnerableToVehicles; // *(v38+124)
+        const bool lbInvulnerableToWorld    = lrDriver.mControls.mbIsInvulnerableToWorld;    // *(v38+125)
 
-        if ((lbFlag124 && (luCauseSubCode == 1 || luCauseSubCode == 2))
-            || (lbFlag125 && (luCauseSubCode == 0 || luCauseSubCode == 3 || luCauseSubCode == 5))
+        if ((lbInvulnerableToVehicles && (luCauseSubCode == 1 || luCauseSubCode == 2))
+            || (lbInvulnerableToWorld && (luCauseSubCode == 0 || luCauseSubCode == 3 || luCauseSubCode == 5))
             || (mbSuppressPlayerCrash && liVictimIndex == static_cast<s32>(mePlayerActiveRaceCarIndex))
             || (mbSuppressIfAlreadyCrashState1 && liCrashState == 1))
         {
@@ -1076,9 +1079,10 @@ namespace Vehicle
             if (lfClosing <= (mfNudgeMaxClosingSpeed * KF_SPEED_UNIT_SCALE)) // FLAG: scale rodata
                 leType = E_IMPACT_NUDGE;                               // asm v25 = 2
             lpInfo->meImpactType = leType;                             // asm _R31[61] = v25
-            // Promote a plain shunt to a boost-shunt when the aggressor is boost-eligible (+123).
+            // Promote a plain shunt to a boost-shunt when the aggressor was HOLDING BOOST (+123 ==
+            // VehicleDriver::mControls.mbBoost, in-record 59).
             const s32 liAggressor = static_cast<s32>(lpInfo->meAggressorActiveRaceCarIndex);
-            if (maRaceCarDrivers[liAggressor].mbBoostImpactEligible && lpInfo->meImpactType == E_IMPACT_SHUNT)
+            if (maRaceCarDrivers[liAggressor].mControls.mbBoost && lpInfo->meImpactType == E_IMPACT_SHUNT)
                 lpInfo->meImpactType = E_IMPACT_BOOST_SHUNT;          // asm _R31[61] = 6
             return true;
         }
@@ -1152,7 +1156,7 @@ namespace Vehicle
         lpInfo->meAggressorActiveRaceCarIndex = lpInfo->meActiveRaceCarIndexA; // asm *(_R31+248)=v27
         lpInfo->meVictimActiveRaceCarIndex    = lpInfo->meActiveRaceCarIndexB; // asm *(_R31+252)=v29
         EImpactType leSeverity = E_IMPACT_TRADING_PAINT;                       // asm *(_R31+244)=1
-        if (maRaceCarDrivers[liA].mbBoostImpactEligible)
+        if (maRaceCarDrivers[liA].mControls.mbBoost)
             leSeverity = E_IMPACT_BOOST_SLAM;                                  // asm *(_R31+244)=5 (3->5 promote)
         lpInfo->meImpactType = leSeverity;
         return true;
@@ -1402,12 +1406,16 @@ namespace Vehicle
         static_assert(offsetof(VehicleManager, mRandom)        == 16, "mRandom (asm addi r11, r31, 0x10) -- 16-aligned, NOT +8");
         static_assert(sizeof(VehicleManager::mRandom) == 48, "CgsNumeric::Random is 44 bytes at align 16 -> sizeof 48");
 
-        static_assert(sizeof(RaceCarDriverRecord)  == 224,  "RaceCarDriverRecord stride (asm: addi r25, r25, 0xE0)");
+        static_assert(sizeof(VehicleDriver)  == 224,  "VehicleDriver stride (asm: addi r25, r25, 0xE0)");
         // The three named bytes are at ABSOLUTE class offsets 224*idx + 123/124/125; with the array
         // correctly seated at +64 that is in-record 59/60/61 (inside VehicleDriver::mControls).
-        static_assert(offsetof(RaceCarDriverRecord, mbBoostImpactEligible) == 59, "boost-eligible byte (asm: 224*idx + 123)");
-        static_assert(offsetof(RaceCarDriverRecord, mbTakenDown) == 60, "taken-down byte (asm: 224*idx + 124)");
-        static_assert(offsetof(RaceCarDriverRecord, mbSuppressByCause) == 61, "suppress-by-cause byte (asm: 224*idx + 125)");
+        // ⭐ RE-NAMED 2026-08-03: the stand-in record retired, so these now pin REAL members.
+        static_assert(offsetof(VehicleDriver, mControls) + offsetof(BrnAIDriverControls, mbBoost) == 59,
+                      "mControls.mbBoost -- the boost-eligible byte (asm: 224*idx + 123)");
+        static_assert(offsetof(VehicleDriver, mControls) + offsetof(BrnAIDriverControls, mbIsInvulnerableToVehicles) == 60,
+                      "mControls.mbIsInvulnerableToVehicles (asm: 224*idx + 124)");
+        static_assert(offsetof(VehicleDriver, mControls) + offsetof(BrnAIDriverControls, mbIsInvulnerableToWorld) == 61,
+                      "mControls.mbIsInvulnerableToWorld (asm: 224*idx + 125)");
         static_assert(offsetof(VehicleManager, maRaceCarDrivers) + 224 * 1 + 59 == 224 * 1 + 123,
                       "the re-seat is byte-identical to the old model for every element");
         static_assert(sizeof(RaceCarVehicleRecord) == 5216, "RaceCarVehicleRecord stride (asm: 5216)");
