@@ -41,6 +41,27 @@ namespace Vehicle
     // conclusion about the game. (Console storage is a splatted VecFloat; the datum is the scalar.)
     const f32 KF_GRAVITY = 9.81000042f;   // X360 flt_8208F83C -> unk_82FB9160 (splat)
 
+    // ⭐ How long the handbrake has to have been RELEASED before a car may enter a drift.
+    // [V] 2026-08-03. Read by VehiclePhysics::CheckForEnteringDrift @0x825FA4E4 against the
+    // TimeSinceLastHandBrake lane (+0x1080 .w):
+    //     addi   r11, r3, 0x1080
+    //     lvx128 v13, r0, r11 ; vspltw v13,v13,3      ; TimeSinceLastHandBrake
+    //     lvx128 v0,  r0, <unk_82FB9170>
+    //     vcmpgtfp. v0, v13, v0                       ; require t > this
+    //
+    // NAMED, not guessed: the PS3 DecFIGS build materialises the same slot through a TOC entry whose
+    // symbol is `_ZN10BrnPhysics7Vehicle37KVF_HANDBRAKE_OFF_TIME_TO_ALLOW_DRIFTE`
+    // (PS3 CheckForEnteringDrift @0x6C89D4), i.e. BrnPhysics::Vehicle:: namespace scope -- which is
+    // why it is homed here and not as a function-scope static. The lane the X360 tests it against
+    // was independently named TimeSinceLastHandBrake by this tree before the constant was found.
+    //
+    // ⚠️ SAME TRAP AS KF_GRAVITY: unk_82FB9170 reads ALL ZEROS in the X360 image. It is filled at
+    // static-init by an unexported, IDA-unmarked initialiser (disassembled at 0x82C5C9D8) that
+    // splats the .rdata scalar flt_82001D9C == 2.0f. Console storage is a splatted VecFloat; the
+    // datum is the scalar. Verified by reading that initialiser, NOT by trusting the splat-pattern
+    // table -- the table mis-pairs multi-store blocks (it shows one slot receiving 2, 100 and 80).
+    const f32 KVF_HANDBRAKE_OFF_TIME_TO_ALLOW_DRIFT = 2.0f;   // X360 flt_82001D9C -> unk_82FB9170
+
     // Severity/kind of a vehicle-vs-vehicle impact.
     enum EImpactType : s32
     {

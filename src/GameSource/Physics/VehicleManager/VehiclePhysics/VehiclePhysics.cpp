@@ -1,5 +1,6 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"  // BrnPlayerDriverControls (C07 boost/speed-match)
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"  // KVF_HANDBRAKE_OFF_TIME_TO_ALLOW_DRIFT (CheckForEnteringDrift)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h" // CgsNumeric::Random (the shared LCG ring)
 #include "rw/math/vpu/vector3_operation.h"            // rw::math::vpu::{MagnitudeSquared, Normalize, Dot, operator*}
 #include "rw/math/vpu/matrix44affine_operation.h"     // rw::math::vpu::{InverseOfMatrixWithOrthonormal3x3, operator*}
@@ -1117,9 +1118,27 @@ namespace Vehicle
     static const f32  KF_DRIFT_STEER_EPSILON       = 0.0f;   // FLAG: flt_8208F620 (speed/guard epsilon splat)
     static const f32  KF_STEER_ANGLE_CLAMP         = 0.0f;   // FLAG: unk_82FB9020 (steering-angle clamp)
     static const f32  KF_WHEEL_STEER_BLEND         = 0.0f;   // FLAG: unk_82FB9370 (wheel-device steer blend)
-    static const f32  KF_DRIFT_SLIP_TIME_GAIN      = 0.0f;   // FLAG: flt_830180B0 (drift slip-time gain)
-    static const f32  KF_DRIFT_SLIP_EXIT_LIMIT     = 0.0f;   // FLAG: unk_82FB8AC0 (slip-too-small exit limit)
-    static const f32  KF_DRIFT_SPEED_EXIT_LIMIT    = 0.0f;   // FLAG: unk_82FB9ED0 (speed-too-low exit limit)
+    // ⭐⭐ THREE OF THE "un-homed" PLACEHOLDERS ABOVE ARE NOW RECOVERED (2026-08-03). All three read
+    //    ZERO in the X360 image because they are .data slots filled at static-init time -- exactly the
+    //    trap the gravity constant fell into -- so a literal scan of the export set could never find
+    //    them. Read out of the IDB with headless IDA 9.3, from the initialisers themselves:
+    //
+    //  * flt_830180B0 is NOT a "drift slip-time gain" at all. Its initialiser is a DIVISION, not a
+    //    splat, which is why even the static-init map (which only recognises the splat idiom) misses
+    //    it:  0x82C6D0C0  f0 = flt_82001C98 (1.0f) ; f13 = flt_82F31928 (0.447039992f = MPH->m/s)
+    //         0x82C6D0D4  fdivs f0, f0, f13 ; stfs f0, flt_830180B0     => 1/0.44704 = 2.2369363f
+    //    i.e. it is **m/s -> MPH**. Its consumers say the same thing: BridgeWorldVehicleDataToGui,
+    //    RaceCarEntityModuleDebugComponent::RenderHUD and three AI debug HUDs all read it. And in
+    //    UpdateDriftState it converts the m/s speed parameter before comparing it against the SAME
+    //    per-car attrib lane (mvDriftParams0.x) that CheckForEnteringDrift compares mfSpeedMPH
+    //    against -- one threshold, one unit, two directions. That is what identifies it by ROLE.
+    //  * unk_82FB8AC0 <- flt_82094574 = 0.15f   (static-init splat @0x82C5C988)
+    //  * unk_82FB9ED0 <- flt_82004A20 = 10.0f   (static-init splat @0x82C5C9B0)
+    //    Both are still exit limits, but on DIFFERENT quantities than the committed names claimed --
+    //    see UpdateDriftState below, whose guards were rebuilt from the asm this wave.
+    static const f32  KF_MPS_TO_MPH                = 2.2369363f;   // flt_830180B0 = 1/flt_82F31928
+    static const f32  KF_DRIFT_HANDBRAKE_ON_LIMIT  = 0.15f;        // unk_82FB8AC0 (splat)
+    static const f32  KF_DRIFT_SPEED_EXIT_LIMIT    = 10.0f;        // unk_82FB9ED0 (splat), MPH
     static const f32  KF_DRIFT_SCALE_GROW_LIMIT    = 0.0f;   // FLAG: unk_82FB80F0 (drift-scale grow clamp)
     static const f32  KF_HANDBRAKE_TIME_CAP        = 0.0f;   // FLAG: unk_82FB9080 (handbrake timer cap)
     static const f32  KF_HANDBRAKE_ONTIME_RELEASE  = 0.0f;   // FLAG: unk_82FB8B00 (handbrake on-time release thresh)
@@ -1478,110 +1497,264 @@ namespace Vehicle
         }
     }
 
-    // @0x8261F728  VehiclePhysics::UpdateDriftState
-    //   The drift state machine. Runs CheckForEnteringDrift (owned elsewhere -- declare-only), then a
-    //   battery of ExitDrift guards while drifting (mu8DriftState != 0 AND controls.mbHorn (+0x3E) is
-    //   NOT set -- 0x8261F74C reads r31=controls, not the mode byte). The guards (in asm order):
-    //     1. drift slip too small        (drift attrib slip lane > current slip -> exit)
-    //     2. airborne too long           (mbHandBrake (this+0x1358) && TimeWithoutTraction over a cap
-    //                                    -> exit; NOT gated on mbAllWheelsHaveTraction==false)
-    //     3. wheel adhesive-limit fold   (all 4 wheels' mbBrokenAdhesiveLimit @wheel+0xD5 -> a vsel
-    //                                    CurrentDriftAngle accumulate; NOT a RoadContact.mbIsOnGround
-    //                                    test and NOT a direct exit branch)
-    //     4. slip-ratio below threshold  (steering^4 vs a slip lane -> exit)
-    //     5. exit timers                 (mi8NumWorldCollisions > 0, miNumCollisions > 0 -> exit)
-    //     6. attribs limit               (per-car drift slip limit * slip-time-gain vs seed slip -> exit)
-    //     7. desired-slip cap            (DesiredDriftSlip lane > 1.0 -> exit)
-    //     8. above-ground invalid        (!mAboveGroundTestResult.mbValid -> exit)
-    //     9. speed too low               (current speed below KF_DRIFT_SPEED_EXIT_LIMIT -> exit)
-    //    10. steering crossed centre     (for the latched direction, slip & steer both back across 0 -> exit)
-    //   FLAG: the comparison limits (4,6,9) are un-homed rodata carried as flagged-inert placeholders;
-    //   the guard structure + the named lanes/flags are exact.
-    void VehiclePhysics::UpdateDriftState(const BrnPlayerDriverControls* lpControls, f32 lfSlipAngle,
-                                          f32 lfSpeed, f32 lfSteeringDir)
+    // @0x825FA448  BrnPhysics::Vehicle::VehiclePhysics::CheckForEnteringDrift   (192 instructions)
+    //
+    // ⭐ THE LAST UNRESOLVED EXTERNAL OF THIS TRANSLATION UNIT. It had been declare-only since this
+    //   header was written ("bodied by its own TU"), which no TU ever did, and the arity it was
+    //   declared with (five trailing f32) never existed on any platform.
+    //
+    // ⚠️ It is ABSENT from `.ida-exports/BURNOUT_X360_ARTIST.XEX/` -- the third confirmed hole in
+    //   that export set. It is a perfectly ordinary named function inside the IDB: headless IDA 9.3
+    //   reports `BrnPhysics::Vehicle::VehiclePhysics::CheckForEnteringDrift 0x825FA448..0x825FA748`.
+    //   The gap is visible without IDA too: EnterDrift @0x825FA268 is 120 instructions and therefore
+    //   ends exactly at 0x825FA448, and the next symbol the index knows is UpdateDriftScale
+    //   @0x825FA748. Body transcribed from that X360 disassembly; the PS3 DecFIGS twin (0x6C8924) is
+    //   used only for the parameter names and for the two function-static constant NAMES below.
+    //
+    // Signature: the DecFIGS DWARF (VehiclePhysics.h:1457) and the PS3 mangled symbol agree that the
+    // last parameter is a `rw::math::vpu::VecFloat`, not the f32 this tree declared. The three f32s'
+    // roles are the PS3 DWARF's own local names, and each is independently confirmed by what
+    // UpdateDrift @0x8262E200 loads into f1/f2/f3 before the call (see UpdateDrift below).
+    // The time-step is not read by this function on either platform -- UpdateDriftState is the only
+    // member of the family that consumes it -- but it is part of the signature and dropping it is
+    // what produced a symbol no TU could define.
+    void VehiclePhysics::CheckForEnteringDrift(const BrnPlayerDriverControls* lpControls,
+                                               f32 lfAbsSteering, f32 lfAbsDriftScale,
+                                               f32 lfSpeedMPS, VecFloat lvfTimeStep)
     {
-        // CheckForEnteringDrift may latch a NEW drift this frame (owned by another TU -- declare-only).
-        CheckForEnteringDrift(lpControls, lfSlipAngle, lfSpeed, lfSpeed, lfSteeringDir);
+        // The two entry windows for a "natural" (un-forced) drift. Both are function-scope statics in
+        // the console build: they live in .data at flt_82F2A520 / flt_82F2A51C / flt_82F2A518 and the
+        // PS3 mangles their names into the enclosing function's symbol, which is what NAMES them:
+        //     _ZZN10BrnPhysics7Vehicle14VehiclePhysics21CheckForEnteringDrift...E34KF_MAX_COS_ANGLE_FOR_NATURAL_DRIFT
+        // The values are the X360 image bytes. Note the naming is about the ANGLE, so the "MAX angle"
+        // is the SMALLER cosine: the accepted slip window is acos(0.985)=9.9 deg .. acos(0.76)=40.5 deg.
+        static const f32 KF_MAX_COS_ANGLE_FOR_NATURAL_DRIFT = 0.76f;    // flt_82F2A520
+        static const f32 KF_MIN_COS_ANGLE_FOR_NATURAL_DRIFT = 0.985f;   // flt_82F2A51C
+        static const f32 KF_MAX_YAW_FOR_NATURAL_DRIFT       = 2.0f;     // flt_82F2A518
+
+        // 0x825FA454-478: an AI car that is being told to come OUT of a drift may not enter one.
+        //   lwz r11,0x44(r4) ; cmpwi cr6,r11,1 ; (only when AI) lbz r11,0x4D(r4)
+        // The console checks the driver type and then reads the AI payload -- the same shape as
+        // UpdateDriftScale/UpdateSpeedMatch. The DWARF names the local lbAIAllowingDrift.
+        bool lbAIAllowingDrift = true;
+        if (lpControls != NULL && lpControls->GetType() == E_DRIVER_TYPE_AI)
+            lbAIAllowingDrift = !static_cast<const BrnAIDriverControls*>(lpControls)->mbForceComeOutOfDrift;
+
+        if (mu8DriftState != eDriftState_None) return;   // 0x825FA478 already drifting
+        if (mbHandBrake)                       return;   // 0x825FA484 handbrake held
+        if (!mbAllWheelsHaveTraction)          return;   // 0x825FA490 (0x135B, beq -> return)
+
+        // 0x825FA49C-4C8: fast enough for THIS car to drift. mfSpeedMPH is the splatted body speed
+        // (+0x6C0); mvDriftParams0.x is the per-car minimum, in the same unit -- see the KF_MPS_TO_MPH
+        // note above, where UpdateDriftState's exit guard compares the same lane the other way round.
+        if (!(mfSpeedMPH.x > mpAttribs->mvDriftParams0.x)) return;
+
+        if (mi8NumWorldCollisions != 0) return;          // 0x825FA4CC (bne -> return)
+        if (!lbAIAllowingDrift)         return;          // 0x825FA4D8
+
+        // 0x825FA4E4-510: the handbrake has to have been OFF for long enough. The threshold is the
+        // .data VecFloat unk_82FB9170, which reads ZERO in the image and is splatted at static-init
+        // from flt_82001D9C == 2.0f (initialiser disassembled at 0x82C5C9D8). The PS3 build names
+        // that slot KVF_HANDBRAKE_OFF_TIME_TO_ALLOW_DRIFT and the lane this reads is the tree's own
+        // TimeSinceLastHandBrake -- two independent sources agreeing on the same field.
+        if (!(mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.w
+              > KVF_HANDBRAKE_OFF_TIME_TO_ALLOW_DRIFT))
+            return;
+
+        // 0x825FA514-54C: the two ways in. Either brake + steer past the dead zone, or the controls
+        // force it. `lfs f13,8(r4)` is mfBrake and `f1` is |Steering|; the threshold is flt_82004014.
+        static const f32 KF_DRIFT_ENTRY_INPUT_DEADZONE = 0.1f;   // flt_82004014
+        const bool lbBrakeAndSteer = (lpControls != NULL)
+                                   && (lpControls->mfBrake > KF_DRIFT_ENTRY_INPUT_DEADZONE)
+                                   && (lfAbsSteering       > KF_DRIFT_ENTRY_INPUT_DEADZONE);
+        const bool lbForcedDrift   = (lpControls != NULL) && lpControls->mbForceDrift;
+
+        if (lbBrakeAndSteer || lbForcedDrift)
+        {
+            // 0x825FA550-620: snap the steering register to the live input and enter. The asm writes
+            // .y then .z with the SAME value (controls+0x10 == mfSteering), then derives .x from the
+            // freshly-written .y:
+            //     vrlimi128 v10,v13,4,0  -> .y = mfSteering
+            //     vrlimi128 v10,v13,2,0  -> .z = mfSteering
+            //     v0 = (-MaxSteeringAngle) * 1.5f * DEG_TO_RAD * .y ; vrlimi128 v9,v0,8,0 -> .x
+            // (1.5f == flt_820945DC, 0.0174532924f == flt_8208F5F4.)
+            static const f32 KF_DRIFT_ENTRY_STEER_ANGLE_SCALE = 1.5f;   // flt_820945DC
+            const f32 lfSteering = (lpControls != NULL) ? lpControls->mfSteering : 0.0f;
+
+            mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y = lfSteering;
+            mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.z = lfSteering;
+            mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x =
+                mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y
+                * -mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.z
+                * KF_DRIFT_ENTRY_STEER_ANGLE_SCALE * KF_DEG_TO_RAD;
+
+            // 0x825FA604-620: EnterDrift(controls, speed, mpAttribs[+0x170].w)
+            EnterDrift(lpControls, lfSpeedMPS, mpAttribs->mvDriftParams6.w);
+            return;
+        }
+
+        // ---- the NATURAL drift path (0x825FA634 onward) -------------------------------------
+        // 0x825FA634-660: all four wheels must ALREADY have broken their adhesive limit, i.e. the car
+        // is genuinely sliding. Note the sense: each `lbz wheel+0xD5 ; beq -> return` REQUIRES the
+        // byte to be non-zero (UpdateDriftState's guard 3 reads the same four bytes the other way).
+        if (!maWheels[eFrontLeftWheel].mbBrokenAdhesiveLimit)  return;
+        if (!maWheels[eFrontRightWheel].mbBrokenAdhesiveLimit) return;
+        if (!maWheels[eRearLeftWheel].mbBrokenAdhesiveLimit)   return;
+        if (!maWheels[eRearRightWheel].mbBrokenAdhesiveLimit)  return;
+
+        // 0x825FA664-6EC: two body-frame quantities, both computed before either is tested.
+        //   |yaw rate|   = |dot3(mAngularVelocity, mTransform.yAxis)|   (vmsum3fp128 + vandc sign-mask)
+        //   cos(slip)    =  dot3(mLinearVelocity / speed, mTransform.zAxis)
+        // The reciprocal is a vrefp + two Newton steps on the SPEED PARAMETER (not on |v|); written
+        // as the division it is. There is no zero guard here on either platform -- the speed gate
+        // above is what keeps it away from 0.
+        const f32 lfYawSpeed = std::fabs(vpu::Dot(mAngularVelocity, mTransform.yAxis));
+
+        const f32 lfRecipSpeed = 1.0f / lfSpeedMPS;
+        const Vector3 lUnitVel{ mLinearVelocity.x * lfRecipSpeed,
+                                mLinearVelocity.y * lfRecipSpeed,
+                                mLinearVelocity.z * lfRecipSpeed,
+                                0.0f };
+        const f32 lfCosSlipAngle = vpu::Dot(lUnitVel, mTransform.zAxis);
+
+        // 0x825FA6F0-724: the slip angle has to sit inside the window, and the car must not already
+        // be spinning faster than the natural-drift yaw cap.
+        if (!(lfCosSlipAngle > KF_MAX_COS_ANGLE_FOR_NATURAL_DRIFT)) return;
+        if (lfCosSlipAngle >= KF_MIN_COS_ANGLE_FOR_NATURAL_DRIFT)   return;
+        if (lfYawSpeed     >= KF_MAX_YAW_FOR_NATURAL_DRIFT)         return;
+
+        // 0x825FA728-734: EnterDrift(controls, speed, 0.0f)   (flt_82001CC0 == 0.0f)
+        EnterDrift(lpControls, lfSpeedMPS, 0.0f);
+
+        (void)lfAbsDriftScale;   // [V] neither platform reads it here; part of the signature only
+        (void)lvfTimeStep;       // [V] idem -- UpdateDriftState is the only consumer of the dt
+    }
+
+    // @0x8261F728  VehiclePhysics::UpdateDriftState
+    //   The drift state machine. Runs CheckForEnteringDrift (a straight pass-through of all five
+    //   arguments -- `bl` at 0x8261F73C with r3/r4/f1/f2/f3/v1 untouched), then a battery of
+    //   ExitDrift guards while drifting (mu8DriftState != 0 AND controls.mbForceDrift (+0x3E) NOT
+    //   set -- 0x8261F74C reads r31 == controls).
+    //
+    // ⭐⭐ REBUILT FROM THE ASM 2026-08-03. The committed guard battery was written before the three
+    //   .data constants below were recoverable, and six of its ten guards named the WRONG register,
+    //   the WRONG lane, or a quantity the function never touches. What the X360 actually does, in
+    //   asm order, with every threshold now homed:
+    //     1. 0x8261F758  TimeHandbrakeHasBeenOn (+0x1080 .z) >  0.15f      (unk_82FB8AC0)
+    //     2. 0x8261F78C  mbHandBrake && 0.5f > TimeSinceLastHandBrake (+0x1080 .w)
+    //     3. 0x8261F7C0  TimeInDriftWithStaticFriction (+0x1080 .y) = allAdhesive ? t + dt : 0
+    //     4. 0x8261F844  TimeDrifting (+0x1010 .z) > 1.0f && (3) > 0.0625f
+    //     5. 0x8261F890  mi8NumWorldCollisions > 0 ; miNumCollisions > 0
+    //     6. 0x8261F8AC  mvDriftParams0.x > lfSpeedMPS * KF_MPS_TO_MPH
+    //     7. 0x8261F900  TimeWithoutTraction (+0x1060 .z) > 1.0f       (ungated)
+    //     8. 0x8261F94C  !mAboveGroundTestResult.mbValid
+    //     9. 0x8261F958  10.0f > mfSpeedMPH                            (unk_82FB9ED0)
+    //    10. 0x8261F984  the steering-crossed-centre pair, on a slip computed HERE
+    //   Retired with this rewrite: a "drift slip too small" guard on +0x1020 .y, an "airborne too
+    //   long" guard on +0x1060 .w, a steering^4 compare, and a "DesiredDriftSlip > 1.0" guard. None
+    //   of those four registers/lanes is read by this function at all -- there is no +0x1020 access
+    //   anywhere in 0x8261F728..0x8261FAA8.
+    //
+    // ⭐ Guard 3 is the reason the dropped `VecFloat` mattered: it is the ONLY consumer of the
+    //   time-step in the whole drift family, and with the parameter missing it had been written as a
+    //   `(void)` no-op. `vsel` selects between {0,0,0,0} and {~0,~0,~0,~0} -- the two halves of the
+    //   static-init table at unk_8327F240 (0x82C74368), read out of the IDB -- so it is a plain
+    //   conditional select, not a blend.
+    void VehiclePhysics::UpdateDriftState(const BrnPlayerDriverControls* lpControls, f32 lfAbsSteering,
+                                          f32 lfAbsDriftScale, f32 lfSpeedMPS, VecFloat lvfTimeStep)
+    {
+        // CheckForEnteringDrift may latch a NEW drift this frame; every argument is forwarded.
+        CheckForEnteringDrift(lpControls, lfAbsSteering, lfAbsDriftScale, lfSpeedMPS, lvfTimeStep);
 
         // only run the exit battery while drifting and not being HELD in drift. 0x8261F74C:
-        // `lbz r11,0x3E(r31)` where r31 == controls. ⭐ RE-NAMED 2026-08-03: with the corrected
-        // controls layout +0x3E is **mbForceDrift**, not mbHorn (the old layout had mbHorn there).
-        // That is also the better fit for the gate: a car being force-drifted skips the exit battery.
-        const bool lbHeldInDrift = lpControls ? lpControls->mbForceDrift : false;
+        // `lbz r11,0x3E(r31)` where r31 == controls -> mbForceDrift.
+        const bool lbHeldInDrift = (lpControls != NULL) ? lpControls->mbForceDrift : false;
         if (mu8DriftState == eDriftState_None || lbHeldInDrift)
             return;
 
-        // 1. slip too small: CappedDriftScale (@+0x1020 .y) vs a drift-slip exit limit (flagged-inert).
-        if (mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState.y > KF_DRIFT_SLIP_EXIT_LIMIT
-            && KF_DRIFT_SLIP_EXIT_LIMIT > 0.0f)
+        // 1. the handbrake has been held down too long to still count as a drift.
+        if (mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.z
+            > KF_DRIFT_HANDBRAKE_ON_LIMIT)
         { ExitDrift(); return; }
 
-        // 2. airborne too long: gated on mbHandBrake (this+0x1358), NOT mbAllWheelsHaveTraction==false
-        // (0x8261F78C: `lbz r9,0x1358(r3)`). TimeWithoutTraction (@+0x1060 .w) vs a cap.
-        if (mbHandBrake)
+        // 2. the handbrake is down and was released too recently (vcfsx v0,1,1 == 0.5f).
+        if (mbHandBrake
+            && 0.5f > mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.w)
+        { ExitDrift(); return; }
+
+        // 3. NOT an exit test: the static-friction dwell timer. It accumulates by the time-step while
+        //    all four wheels still have adhesive grip (wheel+0xD5, stride 0xE0) and resets otherwise.
         {
-            if (mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.w > 1.0f)
-            { ExitDrift(); return; }
+            const bool lbAllWheelsHaveAdhesive = !maWheels[eFrontLeftWheel].mbBrokenAdhesiveLimit
+                                               && !maWheels[eFrontRightWheel].mbBrokenAdhesiveLimit
+                                               && !maWheels[eRearLeftWheel].mbBrokenAdhesiveLimit
+                                               && !maWheels[eRearRightWheel].mbBrokenAdhesiveLimit;
+            mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.y =
+                lbAllWheelsHaveAdhesive
+                    ? mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.y
+                      + lvfTimeStep.x   // VecFloat is a broadcast lane; the asm vaddfp's the splat
+                    : 0.0f;
         }
 
-        // 3. NOT an on-ground test: 0x8261F7C0-E4 reads each wheel's mbBrokenAdhesiveLimit (wheel+0xD5,
-        // stride 0xE0 -- Wheel.h's pinned member), not RoadContact.mbIsOnGround (wheel+0x28). The
-        // "all four wheels still have adhesive grip" result feeds a vsel-based CurrentDriftAngle
-        // accumulate (unk_8327F240 permute table), not a direct ExitDrift branch -- structural, not a
-        // simple exit condition; the accumulate itself is not store-faithfully recoverable here.
-        const bool lbAllWheelsHaveAdhesive = !maWheels[eFrontLeftWheel].mbBrokenAdhesiveLimit
-                                           && !maWheels[eFrontRightWheel].mbBrokenAdhesiveLimit
-                                           && !maWheels[eRearLeftWheel].mbBrokenAdhesiveLimit
-                                           && !maWheels[eRearRightWheel].mbBrokenAdhesiveLimit;
-        (void)lbAllWheelsHaveAdhesive;   // feeds the un-reconstructed vsel CurrentDriftAngle accumulate
-
-        // 4. slip-ratio below threshold: steering^4 vs the CappedDriftScale lane (flagged compare).
-        {
-            const f32 lfSteer = mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.y;  // a control lane
-            const f32 lfSteer4 = lfSteer * lfSteer * lfSteer * lfSteer;
-            if (lfSteer4 > mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.y && false)
-            { ExitDrift(); return; }   // guarded false: the literal compare is un-homed (inert)
-        }
+        // 4. a long drift that has spent too long gripping. 0.0625f is built in the asm as
+        //    vcfsx(1,1) == 0.5f raised to the fourth by three vmulfp128.
+        if (mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z > 1.0f
+            && mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.y
+               > 0.0625f)
+        { ExitDrift(); return; }
 
         // 5. exit collision counters.
         if (mi8NumWorldCollisions > 0) { ExitDrift(); return; }
-        if (miNumCollisions      > 0) { ExitDrift(); return; }
+        if (miNumCollisions       > 0) { ExitDrift(); return; }
 
-        // 6. attribs limit: per-car drift slip limit (mpAttribs->mvDriftParams0 @+0x110 .x) vs the seed slip
-        //    (StartSlip lane * slip-time gain flt_830180B0, flagged-inert).
-        {
-            const f32 lfSeed = mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.y
-                               * KF_DRIFT_SLIP_TIME_GAIN;
-            if (mpAttribs->mvDriftParams0.x > lfSeed && KF_DRIFT_SLIP_TIME_GAIN > 0.0f)
-            { ExitDrift(); return; }
-        }
-
-        // 7. desired-slip cap: DesiredDriftSlip (@+0x1020 .z) > 1.0 -> exit.
-        if (mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState.z > 1.0f)
+        // 6. below the per-car minimum drift speed. mvDriftParams0.x is in MPH, the parameter is in
+        //    m/s -- see the KF_MPS_TO_MPH note. This is the same lane, same threshold and same unit
+        //    that CheckForEnteringDrift tests the other way round to allow entry.
+        if (mpAttribs->mvDriftParams0.x > lfSpeedMPS * KF_MPS_TO_MPH)
         { ExitDrift(); return; }
 
-        // 8. above-ground invalid -> exit.
+        // 7. off the ground too long (lane .z, and NOT gated on the handbrake).
+        if (mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z > 1.0f)
+        { ExitDrift(); return; }
+
+        // 8. above-ground result invalid -> exit.
         if (!mAboveGroundTestResult.mbValid) { ExitDrift(); return; }
 
-        // 9. speed too low: current body speed (mfSpeedMPH) below a limit (flagged-inert).
-        if (KF_DRIFT_SPEED_EXIT_LIMIT > mfSpeedMPH.x && KF_DRIFT_SPEED_EXIT_LIMIT > 0.0f)
+        // 9. speed too low (mfSpeedMPH is the splatted body speed at +0x6C0).
+        if (KF_DRIFT_SPEED_EXIT_LIMIT > mfSpeedMPH.x)
         { ExitDrift(); return; }
 
-        // 10. steering crossed centre for the latched direction.
+        // 10. steering crossed centre for the latched direction. The slip term is computed HERE, from
+        //     the speed parameter and the body basis -- dot3(mLinearVelocity / speed, mTransform.xAxis)
+        //     -- and the gate is TimeDrifting > 0.5f (flt_82001DA0). The four literals are
+        //     flt_8201FDB8 / flt_82058304 / flt_82002138 / flt_8200CE04.
         if (mu8DriftState == eDriftState_FacingLeft || mu8DriftState == eDriftState_FacingRight)
         {
-            const f32 lfSteer = lpControls ? lpControls->mfSteering : 0.0f;
+            const f32 lfRecipSpeed = 1.0f / lfSpeedMPS;
+            const Vector3 lUnitVel{ mLinearVelocity.x * lfRecipSpeed,
+                                    mLinearVelocity.y * lfRecipSpeed,
+                                    mLinearVelocity.z * lfRecipSpeed,
+                                    0.0f };
+            const f32 lfLateralSlip = vpu::Dot(lUnitVel, mTransform.xAxis);
+
+            if (!(mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z > 0.5f))
+                return;
+
+            const f32 lfSteer = (lpControls != NULL) ? lpControls->mfSteering : 0.0f;
             if (mu8DriftState == eDriftState_FacingRight)
             {
-                if (lfSteeringDir >= -0.0099999998f && lfSteer >= -0.0049999999f)
+                if (lfLateralSlip >= -0.0099999998f && lfSteer >= -0.0049999999f)
                 { ExitDrift(); return; }
             }
             else
             {
-                if (lfSteeringDir <= 0.0099999998f && lfSteer <= 0.0049999999f)
+                if (lfLateralSlip <= 0.0099999998f && lfSteer <= 0.0049999999f)
                 { ExitDrift(); return; }
             }
         }
+
+        (void)lfAbsSteering;     // [V] consumed by CheckForEnteringDrift, not by the exit battery
+        (void)lfAbsDriftScale;   // [V] idem
     }
 
     // @0x825FA748  VehiclePhysics::UpdateDriftScale
@@ -1595,7 +1768,14 @@ namespace Vehicle
     //   the ApplyNaturalDriftForces tail) is reconstructed against named lanes; the inner per-branch
     //   polynomial (the vexptefp/vlogefp + unk_82014AC0.. coefficient cascade) is an un-homed rodata
     //   curve carried as a flagged-inert blend so no fabricated coefficients are emitted.
-    void VehiclePhysics::UpdateDriftScale(const BrnPlayerDriverControls* lpControls, f32 lfTimeStep, f32 lfSlip)
+    //   ⭐ SIGNATURE CORRECTED 2026-08-03 (DWARF VehiclePhysics.h:1466 + asm). It takes the same two
+    //   f32s and the same VecFloat dt that ApplyDriftForces was handed, forwarded verbatim
+    //   (0x8261FB28-3C: `vmr128 v1,v127 ; fmr f2,f30 ; fmr f1,f31`). The tree used to declare
+    //   `(ctrl, f32 lfTimeStep, f32 lfSlip)` and ApplyDriftForces called it as
+    //   `UpdateDriftScale(lpControls, lfSpeed, lfSlipAngle)` -- so the parameter the integrate branch
+    //   below uses as a TIME STEP was in fact receiving the SPEED.
+    void VehiclePhysics::UpdateDriftScale(const BrnPlayerDriverControls* lpControls, f32 lfAbsSteering,
+                                          f32 lfAbsDriftScale, VecFloat lvfTimeStep)
     {
         // ⭐ RE-NAMED 2026-08-03. asm @0x825FA778: `lwz r11,0x44(r30); cmpwi 1; bne;
         // lbz r26,0x4D(r30)` -- an AI-driver check followed by the AI payload's
@@ -1636,11 +1816,12 @@ namespace Vehicle
             // mpAttribs->mvDriftParams1 weights; the exact polynomial blend is the flagged coefficient cascade.
             const f32 lfTarget  = mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState.z; // DesiredDriftSlip
             f32 lfScale = mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w;   // DriftScale lane
-            const f32 lfStep = lfTimeStep * mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.x; // *LatDriftForceFactor
+            const f32 lfStep = lvfTimeStep.x * mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.x; // *LatDriftForceFactor
             lfScale += (lfTarget - lfScale) * lfStep;   // first-order approach toward the target slip
             mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w = lfScale;
         }
-        (void)lfSlip;
+        (void)lfAbsSteering;
+        (void)lfAbsDriftScale;
 
         // always apply the natural self-aligning yaw.
         ApplyNaturalDriftForces();
@@ -1756,15 +1937,34 @@ namespace Vehicle
     //   Dispatches the four drift sub-forces in order. Each is preceded by an elided CheckState debug
     //   call. ApplyDriftLatForce is gated by mbAllWheelsHaveTraction && mAboveGroundTestResult.mbValid &&
     //   !mbHandBrake (asm: `_R31[4955] && _R31[1432] && !_R31[4952]`).
-    void VehiclePhysics::ApplyDriftForces(const BrnPlayerDriverControls* lpControls, f32 lfSlipAngle,
-                                          f32 lfSpeed, f32 lfSteeringDir)
+    //   ⭐ SIGNATURE CORRECTED 2026-08-03 (DWARF VehiclePhysics.h:1460). Its two leading f32s and the
+    //   VecFloat dt are UpdateDrift's, forwarded unchanged; only MaintainDriftSpeed is handed the
+    //   speed (0x8261FB00-18: `lvlx v0,r0,&arg_34 ; vspltw v2,v0,0` -- the spilled f3).
+    void VehiclePhysics::ApplyDriftForces(const BrnPlayerDriverControls* lpControls, f32 lfAbsSteering,
+                                          f32 lfAbsDriftScale, f32 lfSpeedMPS, VecFloat lvfTimeStep)
     {
-        MaintainDriftSpeed(lpControls, lfSpeed);
-        UpdateDriftScale(lpControls, lfSpeed, lfSlipAngle);
-        ApplyDriftYaw(lpControls, lfSlipAngle, lfSpeed);
+        // ⚠️ FLAG (arity, unfixed): the DWARF gives the other three sub-forces signatures this header
+        //    still does not carry, and the tree's stand-in forms cannot express them --
+        //      MaintainDriftSpeed     (const BrnPlayerDriverControls*, Vector3, VecFloat)   :1463
+        //      ApplyDriftLatForce     (VecFloat x6)                                          :1472
+        //      ApplyNaturalDriftForces(VecFloat x5)                                          :1475
+        //    The asm operands, for whoever corrects them:
+        //      MaintainDriftSpeed  v1 = mTransform.zAxis (this+0x30), v2 = splat(lfSpeedMPS)
+        //      ApplyDriftYaw       v1 = splat(lfAbsSteering),  v2 = splat(lfAbsDriftScale)
+        //      ApplyDriftLatForce  v1 = splat(lfAbsDriftScale), v2 = splat(lfSpeedMPS),
+        //                          v3 = splat(controls->mfSteering), v4 = splat(controls->mfBrake),
+        //                          v5 = splat(controls->mfGas),      v6 = the VecFloat dt
+        //    Only the ARGUMENT ORDER is corrected here, against those operands; the three parameter
+        //    LISTS are left as they are so this wave stays scoped to the link closure.
+        MaintainDriftSpeed(lpControls, lfSpeedMPS);
+        UpdateDriftScale(lpControls, lfAbsSteering, lfAbsDriftScale, lvfTimeStep);
+        ApplyDriftYaw(lpControls, lfAbsSteering, lfAbsDriftScale);
 
         if (mbAllWheelsHaveTraction && mAboveGroundTestResult.mbValid && !mbHandBrake)
-            ApplyDriftLatForce(lfSlipAngle, lfSpeed, lfSteeringDir, lfSpeed);
+        {
+            const f32 lfSteering = (lpControls != NULL) ? lpControls->mfSteering : 0.0f;
+            ApplyDriftLatForce(lfAbsDriftScale, lfSpeedMPS, lfSteering, lvfTimeStep.x);
+        }
     }
 
     // @0x8262E200  VehiclePhysics::UpdateDrift
@@ -1782,30 +1982,41 @@ namespace Vehicle
     //   lanes; the two drift-register advance cascades (the vexptefp/vlogefp + unk_82014AC0.. landing/
     //   damp polynomials) are un-homed rodata curves carried as flagged-inert blends -- no fabricated
     //   coefficients emitted.
-    void VehiclePhysics::UpdateDrift(const BrnPlayerDriverControls* lpOriginalControls, f32 lfTimeStep)
+    void VehiclePhysics::UpdateDrift(const BrnPlayerDriverControls* lpOriginalControls, VecFloat lvfTimeStep)
     {
-        // refresh the cached steering direction: normalize(mLinearVelocity) -> the steering register's
-        // packed direction (the asm vrsqrtefp/Newton + vsel zero-guard, stored to the +0x1000-region scratch).
-        const Vector3 lUnitVel = vpu::Normalize(mLinearVelocity);
-        mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.x = vpu::Dot(lUnitVel, mTransform.zAxis);
+        // ⭐⭐ THE THREE SCALARS, CORRECTED 2026-08-03 FROM THE ASM (0x8262E230-2D8). The committed
+        //    version read three different members and mis-ordered them; every one of the three below
+        //    is an asm-literal load, and each independently confirms the PS3 DWARF's parameter name
+        //    for the slot it lands in:
+        //      f29 = |this[0xFE0].y|  -> |Steering|    (vspltw lane 1 + vandc 0x80000000) lfAbsSteering
+        //      f30 = |this[0x1000].w| -> |DriftScale|  (vspltw lane 3 + vandc)            lfAbsDriftScale
+        //      f31 = sqrt(dot3(mLinearVelocity, mLinearVelocity))                         lfSpeedMPS
+        //            (vmsum3fp128 + vrsqrtefp + two Newton steps, then `vsel` back to 0 when the
+        //             squared magnitude is exactly 0 -- so a stationary car yields 0, not NaN)
+        //    ⚠️ RETIRED with them: a write of `dot(normalize(v), zAxis)` into
+        //    mvSpare_...DriftScale.x. This function writes NOTHING to the object before the call --
+        //    0x8262E230..0x8262E2D8 are all stack stores. That write was invented.
+        const f32 lfAbsSteering   = std::fabs(mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y);
+        const f32 lfAbsDriftScale = std::fabs(mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w);
 
-        // gather the slip/speed/steering scalars the state machine + forces consume (the v60/v61/v62
-        // locals the asm fills before the UpdateDriftState call).
-        const f32 lfSlipAngle  = mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.w;
-        const f32 lfSpeed      = mfSpeedMPH.x;
-        const f32 lfSteeringDir = mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y;
+        const f32 lfSpeedSq  = vpu::Dot(mLinearVelocity, mLinearVelocity);
+        const f32 lfSpeedMPS = (lfSpeedSq != 0.0f) ? std::sqrt(lfSpeedSq) : 0.0f;
 
-        UpdateDriftState(lpOriginalControls, lfSlipAngle, lfSpeed, lfSteeringDir);
+        UpdateDriftState(lpOriginalControls, lfAbsSteering, lfAbsDriftScale, lfSpeedMPS, lvfTimeStep);
 
         if (mu8DriftState != eDriftState_None)
         {
+            // 0x8262E31C-3C: TimeDrifting (+0x1010 .z) += dt, before any of the force work. This is
+            // the second real consumer of the VecFloat the tree had dropped.
+            mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z += lvfTimeStep.x;
+
             // drift register advance: the asm runs two unk_82014AC0.. landing/damp polynomial cascades
             // over the per-car drift attrib lanes (mpAttribs->mvDriftParams1 @+0x120 +16 / +0 = +0x130/+0x120) and
             // folds the result into the +0x1000-region scratch + the body local velocity (+0x60). FLAG:
             // the coefficient tables are un-homed -> carried inert; the named lanes + the structure are
             // exact, the numeric advance stays 0 until the .rdata is recovered.
             if (mbAllWheelsHaveTraction)
-                ApplyDriftForces(lpOriginalControls, lfSlipAngle, lfSpeed, lfSteeringDir);
+                ApplyDriftForces(lpOriginalControls, lfAbsSteering, lfAbsDriftScale, lfSpeedMPS, lvfTimeStep);
         }
         else
         {
@@ -1822,7 +2033,6 @@ namespace Vehicle
                 (void)lfDamp;
             }
         }
-        (void)lfTimeStep;
     }
 
     // ============================ C03 suspension/downforce/weight group ============================
