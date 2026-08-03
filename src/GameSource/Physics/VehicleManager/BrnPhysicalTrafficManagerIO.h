@@ -56,11 +56,22 @@ namespace Vehicle
         // accessor for the remove-joint request stashed in slot liJointIndex by FlagJointToBeRemoved.
         const InRemoveJoint& GetRemoveJointEvent(s32 liJointIndex) const;
 
+        typedef CgsContainers::BitArray<10u> CreatedJointBitArray;  // DWARF :42
+        typedef CgsContainers::BitArray<10u> RemovedJointBitArray;  // DWARF :43
+
+        // DWARF BrnPhysicalTrafficManagerIO.h:99 / :103. The console emits no out-of-line symbol for
+        // either: ArticulatedJointPool::SendCreateRemoveJointEvents @0x826013C0 inlines both to a
+        // bare `buffer + 2016` / `buffer + 2024` and then walks the returned mask in place, which is
+        // exactly where these two members sit. Header-inline here, matching that -- and it is what
+        // keeps the pool's walk BY NAME instead of reaching through a friend or an offset.
+        const CreatedJointBitArray* GetCreatedJointBitArray() const { return &mCreatedJointBitArray; }
+        const RemovedJointBitArray* GetRemovedJointBitArray() const { return &mRemovedJointBitArray; }
+
     private:
         InAddJoint                             maCreatedJointEvents[KI_MAX_ARTICULATED_TRAFFIC_VEHICLES]; // @0x0010 (stride 192)
         InRemoveJoint                          maRemovedJointEvents[KI_MAX_ARTICULATED_TRAFFIC_VEHICLES]; // @0x0790 (stride 8)
-        CgsContainers::BitArray<10u>           mCreatedJointBitArray;                                     // @0x07E0
-        CgsContainers::BitArray<10u>           mRemovedJointBitArray;                                     // @0x07E8
+        CreatedJointBitArray                   mCreatedJointBitArray;                                     // @0x07E0
+        RemovedJointBitArray                   mRemovedJointBitArray;                                     // @0x07E8
     };
 }
 }

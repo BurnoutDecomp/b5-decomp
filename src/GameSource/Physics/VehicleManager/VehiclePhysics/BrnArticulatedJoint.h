@@ -30,17 +30,16 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                           // EntityId
 #include "rw/math/vpu/types.h"                        // rw::math::vpu::Matrix44Affine
+// ⭐ 2026-08-03 (task #113): KU_ENTITYTYPE_TRAFFIC_VEHICLE moved OUT of this header and into
+// BrnVehicleConstants.h. It was defined identically here and in BrnPhysicalTrafficManager.h, and
+// the ArticulatedJointPool de-fork made those two headers meet for the first time -- turning a
+// duplicate that had never mattered into a hard C2374. See that header for the note.
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"  // KU_ENTITYTYPE_TRAFFIC_VEHICLE
 
 namespace BrnPhysics
 {
 namespace Vehicle
 {
-    // The EntityId owner-type byte (bits 24..31) that the ArticulatedJointId asserts for cab /
-    // trailer physics ids ("...GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", value 2).
-    // Local constant mirroring the same-named const in BrnPhysicalTrafficManager.h / BrnPropEntityID.h
-    // (the full BrnWorld::EEntityType enum is owned by the World module).
-    const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;
-
     // The invalid-EntityId sentinel (X360 dword_82F2A3A4). Local constant mirroring the
     // same-named value in CgsEntityId.h, which declares it as a PRIVATE static of
     // CgsSceneManager::EntityId and therefore cannot expose it to this TU; the same mirroring

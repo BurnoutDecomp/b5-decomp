@@ -36,33 +36,31 @@
 //     seated 720 bytes early -- including mUsedTrafficVehicles, whose own comment here claims
 //     "X360 word base this+104552", an offset the declarations did not produce.
 //
-// (2) ONE ODR FORK LEFT, was four. This header used to define, at namespace scope in
-//     BrnPhysics::Vehicle, its own private copies of names that already have real definitions
-//     elsewhere in the SAME namespace. Three are retired (PhysicalTrafficManagerDebugComponent,
-//     VehicleDriver, and -- 2026-08-03, the Construct wave -- TrafficPhysics). What is left:
-//        ArticulatedJointPool  -- the slice below vs the real class inside
-//                                 VehiclePhysics/BrnArticulatedJointPool.cpp
-//     It also disagrees on the CLASS-KEY (`struct` vs `class`), which MSVC folds into the mangled
-//     name of anything templated on it.
+// (2) ✅ CLOSED 2026-08-03 (task #113). ZERO ODR FORKS LEFT, was four (really five). This header
+//     used to define, at namespace scope in BrnPhysics::Vehicle, its own private copies of names
+//     that already have real definitions elsewhere in the SAME namespace:
+//        PhysicalTrafficManagerDebugComponent  retired
+//        VehicleDriver                         retired
+//        TrafficPhysics                        retired (task #112)
+//        ArticulatedJointPool                  retired (task #113) -- had no header to include; it
+//                                              has one now: VehiclePhysics/BrnArticulatedJointPool.h
+//        ArticulatedJointCreateBuffer          retired (task #113) -- the FIFTH, which nobody had
+//                                              counted: a 16-byte opaque standing in for the
+//                                              2032-byte class BrnPhysicalTrafficManagerIO.h owns.
+//                                              ⚠️ That one was an ALLOCATION BUG, not a stand-in --
+//                                              see the note at its old seat.
+//     ⭐ THE STANDING LESSON, now four for four: a local stand-in for a type that has (or should
+//     have) a real owner elsewhere is THE recurring defect in this header. When you open it, grep
+//     every namespace-scope type it declares against the rest of the tree before adding anything.
 //
-//     ⛔⛔ AND IT IS NOW THE **LAST AND ONLY** THING BETWEEN THIS TU AND THE BUILD -- MEASURED
-//     2026-08-03 by mounting BrnPhysicalTrafficManager.cpp and reading the link, not inferred:
-//         UNRESOLVED COUNT = 1
+//     ⭐ THE MEASURED CONSEQUENCE: this TU is MOUNTED as of task #113. The previous wave measured
+//     the mount at UNRESOLVED COUNT = 1
 //         ?SendCreateRemoveJointEvents@ArticulatedJointPool@Vehicle@BrnPhysics@@QEAAXPEBXPEAU...
-//           referenced in PhysicalTrafficManager::BridgeArticulatedJointRequestsToSim
-//     (The previous wave's M1 measurement listed THREE for this TU: TrafficPhysics::Construct,
-//     ArticulatedJointPool::Construct and this one. TrafficPhysics::Construct is bodied as of this
-//     wave; see below for why the second one "resolved".)
-//
-//     ⚠️⚠️ AND THAT SECOND ONE RESOLVING IS THE HAZARD, NOT THE GOOD NEWS. `ArticulatedJointPool::
-//     Construct` linked -- against the REAL class's body inside BrnArticulatedJointPool.cpp -- even
-//     though the call site here is the 832-byte SLICE below. That is the identical silent-link trap
-//     the TrafficPhysics fork carried until this wave: the mangled name carries neither the
-//     class-key nor the bases, so the two definitions are one symbol. The real class widens four
-//     pointers 4 -> 8 on the host, so a body written against it and called through this slice writes
-//     past the slice's end. ⛔ DO NOT MOUNT THIS TU BY JUST BODYING SendCreateRemoveJointEvents.
-//     De-fork ArticulatedJointPool FIRST -- which means giving it a real header (it is currently
-//     declared inside a .cpp), exactly as TrafficPhysics.h was given one -- and only then mount.
+//     and read that as "one body away". It was not: that mangled name -- `PEBX` for the request
+//     interface, non-const `PEAU` for the buffer -- is the FORK's signature, and the DWARF has
+//     `(VehicleOutputRequestInterface*, const ArticulatedJointCreateBuffer*)`. No faithful body
+//     could ever have defined the symbol that call site asked for. De-forking first, as the
+//     TrafficPhysics wave's note instructed, is what made the body land on the right symbol.
 //
 //     ⚠️ THE OLD NOTE'S REASON FOR LEAVING THE TrafficPhysics FORK ALONE WAS WRONG, TWICE OVER. It
 //     said de-forking it "means pulling VehiclePhysics.h in here, which is its own wave" -- pulling
@@ -193,6 +191,7 @@
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"          // CgsModule::IOBufferStack
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle
 #include "GameSource/BurnoutConstants.h"                              // EActiveRaceCarIndex
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"    // KU_ENTITYTYPE_TRAFFIC_VEHICLE
 // ⭐ DE-FORKED 2026-08-03: this header used to declare its own opaque
 // `struct PhysicalTrafficManagerDebugComponent { void* mpVTable; u8 mOpaque[60]; };` at namespace
 // scope, a second definition of a name that already had a real one. The real class is included.
@@ -206,6 +205,16 @@
 // SimpleVehiclePhysics -- is included here. See the note at the old fork's seat for why the mangled
 // name made this a correctness item and not a tidiness one.
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/TrafficPhysics.h"
+// ⭐⭐ DE-FORKED 2026-08-03 (fourth and fifth, task #113 -- finding (2) is now CLOSED).
+//   * `struct ArticulatedJointPool { int Construct(); void SendCreateRemoveJointEvents(const void*,
+//      ArticulatedJointCreateBuffer*); u8 mOpaque[832]; }` used to be declared at namespace scope
+//     below. The real class had no header at all (it was declared inside
+//     VehiclePhysics/BrnArticulatedJointPool.cpp); it has one now and it is included here.
+//   * `struct ArticulatedJointCreateBuffer { u8 mOpaque[16]; }` used to be declared below too --
+//     and THAT one was never a layout-neutral stand-in: the real class is 2032 bytes.
+// See the notes at the two old fork seats for the measured consequences of each.
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnArticulatedJointPool.h"
+#include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManagerIO.h"
 
 namespace BrnPhysics
 {
@@ -257,11 +266,11 @@ const u8 KU8_INVALID_MAP = 127;
 // packs an EntityId as (entityIndex << 10) | (ownerType << 24); the index field is 14 bits.
 const u32 KU_NUM_BITS_FOR_ENTITY_NUM = 14;
 
-// E_ENTITYTYPE_TRAFFIC_VEHICLE: the owner-type byte (EntityId bits 24..31) that this TU
-// asserts for physics-traffic ids ("lPhysicsVehicleId.GetOwner() ==
-// BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", value 2). FLAG: the full BrnWorld::EEntityType
-// enum is owned by the World module; only the value used here is reproduced.
-const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;
+// ⭐ KU_ENTITYTYPE_TRAFFIC_VEHICLE MOVED OUT 2026-08-03 (task #113) to BrnVehicleConstants.h,
+// included above. It was defined here AND, identically, at BrnArticulatedJoint.h:42 -- each
+// comment describing itself as a mirror of the other. That cost nothing while the two headers
+// could not meet; the ArticulatedJointPool de-fork made them meet and it became a hard C2374.
+// It is the same defect class as the five type forks in finding (2), one level down.
 
 // ---- Minimal slices of un-homed sibling types this TU touches BY NAME ----------------
 
@@ -403,36 +412,58 @@ struct PhysicalTrafficVehicle
 };
 
 // ArticulatedJointCreateBuffer: the IO buffer pushed onto the input stack by
-// AllocateInternalBuffers (CreateIOBuffer<ArticulatedJointCreateBuffer>). Real layout/use is a
-// future TU; opaque minimal slice so the pointer member + CreateIOBuffer<T> instantiate.
-struct ArticulatedJointCreateBuffer
-{
-    u8 mOpaque[16];
-};
+// AllocateInternalBuffers (CreateIOBuffer<ArticulatedJointCreateBuffer>).
+//
+// ⭐⭐ DE-FORKED 2026-08-03 (task #113). This slot used to hold
+//     struct ArticulatedJointCreateBuffer { u8 mOpaque[16]; };
+// -- a second definition, at namespace scope in BrnPhysics::Vehicle, of a class
+// BrnPhysicalTrafficManagerIO.h has owned in full since its own wave. The real header is included
+// at the top.
+//
+// ⚠️⚠️ AND THIS ONE WAS NOT A LAYOUT-NEUTRAL STAND-IN, IT WAS AN ALLOCATION BUG WITH A FUSE.
+// The real class is IOBuffer(16) + InAddJoint[10](1920) + InRemoveJoint[10](80) + 2*BitArray<10>
+// == 2032 bytes. AllocateInternalBuffers below calls
+//     lpInputBufferStack->CreateIOBuffer<ArticulatedJointCreateBuffer>(...)
+// -- a TEMPLATE, so the type's SIZE and its CLASS-KEY both go into the instantiation. With the
+// 16-byte fork in scope that call would have allocated 16 bytes for a 2032-byte IO buffer, and the
+// first FlagJointToBeCreated would have written 2 KB past the end of it. (The class-key disagreed
+// too: the X360 mangles the real instantiation `??$CreateIOBuffer@VArticulatedJointCreateBuffer@...`
+// -- `V` for class -- against the fork's `U` for struct.) The fuse had not lit only because
+// this TU has never been mounted; it is mounted as of this wave.
 
-// ArticulatedJointPool: embedded by value (BrnPhysicalTrafficManager.h:406). A self-contained
-// reconstruction already exists in BrnArticulatedJointPool.cpp; this TU only needs to take the
-// address of the pool member and pass it to ArticulatedJointPool::SendCreateRemoveJointEvents
-// (declared below, owned by the ArticulatedJointPool TU). FLAG: SendCreateRemoveJointEvents is
-// declared-only here (no body) so this TU compiles without redefining the pool.
-struct ArticulatedJointPool
-{
-    // @0x82600938. DECLARE-ONLY -- the body lives with the real class in
-    // VehiclePhysics/BrnArticulatedJointPool.cpp, which returns int; the mangled name encodes the
-    // return type on MSVC, so this declaration must agree with it.
-    int  Construct();
-    void SendCreateRemoveJointEvents(const void* lpOutputRequestInterface,
-                                     ArticulatedJointCreateBuffer* lpCreateBuffer);
-
-    // ⚠️⚠️ CORRECTED 2026-08-03: this span was **112**, which is 720 bytes short. See finding (1)
-    // in the banner -- PhysicalTrafficManager::Construct pins the pool at this+103616 and the
-    // next member it writes at this+104448, and the real class in BrnArticulatedJointPool.cpp is
-    // exactly 832 bytes (10*80 joints + 2*8 bit-masks + 4*4 limit floats). With 112 the embedded
-    // pool overran its successor and every member after it was seated 720 bytes early.
-    u8 mOpaque[832];
-};
+// ArticulatedJointPool: embedded by value (BrnPhysicalTrafficManager.h:406).
+//
+// ⭐⭐ DE-FORKED 2026-08-03 (task #113). This slot used to hold an opaque
+//     struct ArticulatedJointPool { int Construct(); void SendCreateRemoveJointEvents(const void*,
+//                                   ArticulatedJointCreateBuffer*); u8 mOpaque[832]; };
+// The real class had NO header -- it was declared inside VehiclePhysics/BrnArticulatedJointPool.cpp
+// -- which is exactly why this fork existed. It has a header now (BrnArticulatedJointPool.h) and it
+// is included at the top; that header's banner carries the full reasoning.
+//
+// WHY IT HAD TO GO: the previous wave measured `ArticulatedJointPool::Construct` as RESOLVED when
+// this TU was trial-mounted, and read that as progress. It is the hazard. The mangled name encodes
+// neither the class-key (`struct` here vs `class` there) nor the member layout, so the slice's
+// declaration and the real class's definition were ONE symbol -- the identical silent-link trap the
+// TrafficPhysics fork carried until the wave before.
+//
+// ⭐ THE FOLD IS LAYOUT-NEUTRAL, MEASURED: the real class is pointer-free (10*80 + 8 + 8 + 4*4)
+// and is 832 bytes on the host as well as on the console, so -- unlike the TrafficPhysics fold,
+// which moved everything behind it by -4160 -- NOTHING in this class's layout moves. The drift
+// table in finding (4) is unchanged by this wave.
+//
+// ⚠️ ONE SIGNATURE CORRECTION CAME WITH IT, and it is the reason the fork could never have worked:
+// `SendCreateRemoveJointEvents` is `(VehicleOutputRequestInterface*, const ArticulatedJointCreateBuffer*)`
+// in the DWARF (BrnArticulatedJointPool.h:104). The fork declared it `(const void*,
+// ArticulatedJointCreateBuffer*)` -- wrong on both parameters -- so the symbol its call site
+// demanded (`...QEAAXPEBXPEAU...`) was one no faithful body could ever define. And `Construct` is
+// `void`, not `int`; see the pool header.
 
 // Forward-declared IO/interface dependencies (their own TUs).
+// ⭐ VehicleOutputRequestInterface HAS A REAL HOME as of 2026-08-03 --
+// SharedIO/BrnVehicleOutputInterface.h, where its six-queue layout is derived and gated. It is kept
+// as a forward declaration HERE (rather than an include) deliberately: this TU only ever passes the
+// pointer through, and the real header is ~42 KB of event-queue storage that nothing in this
+// translation unit needs the complete type of.
 struct VehicleOutputRequestInterface;
 
 // The OWNER. VehicleManager embeds this manager by value at its +44768 and, in two places, reads

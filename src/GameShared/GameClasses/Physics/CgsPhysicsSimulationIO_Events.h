@@ -38,9 +38,30 @@ namespace PhysicsSimulationIO
     };
 
     // Add a constraint joint. Stride 192 bytes (X360-attested, see above).
+    //
+    // ⭐ ADDITIVE GROW 2026-08-03 (the ArticulatedJointPool de-fork): the first three 8-byte
+    // slots are NAMED, and the names are the binary's own. BrnPhysics::Vehicle::
+    // VehicleOutputRequestInterface::AddJoint @0x825E7170 (an .ida-exports HOLE, pulled with
+    // headless IDA 9.3) validates exactly these three fields before queueing the event, and its
+    // three FireAssert strings spell them out verbatim:
+    //     ld r10, 0(r29)     -> "!lAddJointEvent.mId.IsInvalid()"                        (:718)
+    //     ld r10, 8(r29)     -> "lAddJointEvent.mParentBodyId != CgsPhysics::K_INVALID_RIGID_BODY_ID" (:719)
+    //     ld r10, 0x10(r29)  -> "lAddJointEvent.mChildBodyId  != CgsPhysics::K_INVALID_RIGID_BODY_ID" (:720)
+    // So the names come from the image and the offsets/widths from the asm; nothing is invented.
+    // ⚠️ TYPED u64 DELIBERATELY, NOT AS CgsPhysics::JointId / CgsPhysics::RigidBodyId. Those two
+    // names are each defined TWICE in this tree -- CgsRigidBody.h:24 (class, private mId,
+    // `static const K_INVALID_RIGID_BODY_ID`) and CgsPhysicsSimulationModule.h:102/111 (structs,
+    // public mId, `extern const K_INVALID_RIGID_BODY_ID` defined in the MOUNTED
+    // CgsPhysicsSimulationModule.cpp:183) -- an open ODR fork that has simply never met in one TU.
+    // Including either header here would make them meet and fail with a hard C2011. The handles are
+    // a single u64 in both readings, so the width and the stores are identical either way.
+    // sizeof stays 192 and alignof stays 16 (three u64 + 168 tail bytes), gated below.
     struct alignas(16) InAddJoint : public Event
     {
-        u8 macOpaquePayload[192];  // internal layout not recovered (no DWARF/source)
+        u64 mu64Id;            // @+0x00  "mId"           (a CgsPhysics::JointId handle)
+        u64 mu64ParentBodyId;  // @+0x08  "mParentBodyId" (a CgsPhysics::RigidBodyId handle)
+        u64 mu64ChildBodyId;   // @+0x10  "mChildBodyId"  (a CgsPhysics::RigidBodyId handle)
+        u8  macOpaquePayload[168];  // @+0x18 .. +0xC0: joint frames/limits, not recovered (no DWARF/source)
     };
 
     // Add a vehicle drive. Stride 144 bytes (X360-attested, see above).
@@ -223,9 +244,17 @@ namespace PhysicsSimulationIO
     // 8-byte id. The id's semantic interpretation (a JointId/handle) is not field-named here (no
     // DWARF/source), so it is modelled as an opaque 8-byte span; the AddEvent/Append bodies remain
     // store-for-store faithful regardless.
+    // ⭐ ADDITIVE GROW 2026-08-03 (the ArticulatedJointPool de-fork): the single 8-byte slot is now
+    // NAMED, from the image. VehicleOutputRequestInterface::RemoveJoint is INLINED into
+    // ArticulatedJointPool::SendCreateRemoveJointEvents @0x826013C0, where the inlined guard is
+    //     ld r10, 0(r30) ; cmpld against qword_82F2A3B0  ->  "!lRemoveJointEvent.mId.IsInvalid()"
+    // (FireAssert file SharedIO/BrnVehicleOutputInterface.h, line 730). Same u64-vs-JointId note as
+    // InAddJoint above. sizeof stays 8; alignof rises 1 -> 8, which changes nothing: on BOTH targets
+    // the EventQueue<InRemoveJoint,N> element array already starts at +0x10 (the console because a
+    // JointId is 8-aligned, the host because BaseEventQueue<T> is 8+4+4 == 16 bytes).
     struct InRemoveJoint : public Event
     {
-        u8 macOpaquePayload[8];  // stride 8B X360-attested (AddEvent @ 0x825E4208 stdx); fields not recovered
+        u64 mu64Id;  // @+0x00  "mId" -- stride 8B X360-attested (AddEvent @ 0x825E4208 stdx)
     };
 
     // Remove a previously-added rigid body from the simulation, addressed by its 8-byte rigid-body
