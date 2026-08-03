@@ -194,10 +194,14 @@ namespace Vehicle
         {
             mfSlamSteerEnvelope = -1.0f;    // this->float1430 = -1.0
 
-            if (lpControls->GetMode() == 1)
+            // ⭐ RE-NAMED 2026-08-03. The asm is `lwz r11,0x44(r29); cmpwi 1; bne` then
+            // `lbz r11,0x4E(r29)` (@0x82641700..0x82641714): the console checks the DRIVER TYPE and,
+            // if this car is AI-driven, looks at the AI payload's mbSlamPlayer. Was two invented
+            // accessors (GetMode()==1 / GetFlag78()); both are retired.
+            if (lpControls->GetType() == E_DRIVER_TYPE_AI)
             {
-                if (lpControls->GetFlag78())
-                    mfSlamSteering += lfSteer * 4.0f;   // (a3+16)*4.0 added (mode-1 slam-steer add)
+                if (static_cast<const BrnAIDriverControls*>(lpControls)->mbSlamPlayer)
+                    mfSlamSteering += lfSteer * 4.0f;   // (a3+16)*4.0 added (AI slam-steer add)
             }
             else if (lfSteer * mfSlamSteering < -0.30000001f)
             {
@@ -230,9 +234,12 @@ namespace Vehicle
         VehiclePhysics::Update(a2, lpControls, lbApplyAftertouch, a5, a6, a7,
                                lrPassThroughV1, lrTimeStep);
 
-        // Engine-only path follow-up: re-run steering with the car-type byte + steer (asm gap0[112]).
+        // Engine-only path follow-up: re-run steering with the steering-wheel flag + steer.
+        // ⭐ RE-NAMED 2026-08-03: the byte at controls+0x41 is mbIsSteeringWheel, not a "car type"
+        // (UpdateDriving @0x82638348 passes the same +0x41 byte to UpdateSteering, and
+        // ModifyControlsForSteeringWheelInput is gated on it @0x826381A8).
         if (mbUsingAftertouch)
-            VehiclePhysics::UpdateSteering(lpControls->GetCarType(), lfSteer);
+            VehiclePhysics::UpdateSteering(lpControls->mbIsSteeringWheel ? 1 : 0, lfSteer);
 
         // Decay the uncapped-speed window timer while it is positive.
         if (mbPlayerCarInShowtime && MS.mfUncappedSpeedTimer > 0.0f)
@@ -814,7 +821,10 @@ namespace Vehicle
         // gate: airborne/crash (this+1808). The minimal slice models this via the aftertouch latch.
         if (!mbUsingAftertouch /* *(this+1808): in-air/crash */)
             return;
-        if (lpControls->GetMode() != 0 /* !*(v6+64): a control-block gate */)
+        // ⭐ RE-NAMED 2026-08-03. `lbz r11, 0x40(r25)` @0x8262EC28, must be ZERO to proceed --
+        // decimal 64 IS 0x40, and 0x40 is mbIsOnStartLine, not the +0x44 driver type the invented
+        // GetMode() accessor read. Aftertouch is disabled while the car sits on the start line.
+        if (lpControls->mbIsOnStartLine)          // asm lbz +0x40, bne -> bail
             return;
 
         // virtual "can use aftertouch" query (vtbl+20). On this path: IsPlayerVehicleActuallyInShowtime.

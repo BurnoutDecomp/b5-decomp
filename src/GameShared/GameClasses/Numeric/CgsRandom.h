@@ -12,10 +12,28 @@
 //
 // LAYOUT (DWARF-authoritative, asm-confirmed by the +0x260 mRandom embed in
 // FlybyManager @ 0x823774C8):
-//   +0x00  union { f32 mafFloatBuffer[8]; u32 mauIntegerBuffer[8]; }  (32 bytes)
+//   +0x00  union { f32 mafFloatBuffer[8]; u32 mauIntegerBuffer[8];
+//                  VectorIntrinsic mvVector[2]; }                     (32 bytes)
 //   +0x20  u64 muSeed
 //   +0x28  u32 muOldestBufferIndex
-// sizeof == 0x30 (8-byte aligned).
+// sizeof == 0x30, **16-byte aligned**.
+//
+// ⚠️ CORRECTED 2026-08-03: this class was declared `alignas(8)`. The DWARF union
+// (CgsRandom.h:179-183) has a THIRD member the committed banner omitted --
+// `VectorIntrinsicUnion::VectorIntrinsic mvVector[2]` -- which makes the whole object
+// **16-byte aligned**. sizeof is 0x30 either way (44 rounded to 48 at align 8, or to 48 at
+// align 16), so the existing sizeof gate could never have caught it; what catches it is an
+// EMBED at a 16-but-not-8 seat. VehicleManager has one: `mRandom` sits at +16 with
+// meReleaseStage ending at +8, i.e. eight bytes of pure alignment padding that only exist
+// because the type is 16-aligned (X360 VehicleManager::Construct @0x8263BCEC takes
+// `addi r11, r31, 0x10` as &mRandom). At alignas(8) the compiler is free to seat it at +8 and
+// every member behind it moves. Every other embed in the tree is already at a 16-aligned seat
+// (CgsSoundUtils::SelectionHistory +0x10, CameraShake +0x7A0, FlybyManager +0x260), so this
+// widening moves nothing that exists today -- it only makes the next embed correct by
+// construction.
+// The vector member itself is NOT declared below: VectorIntrinsic is an SDK register type this
+// minimal home deliberately does not pull in, and no reconstructed body reads the ring through
+// it. alignas(16) carries the only observable consequence it has.
 //
 // Only the buffer-priming spine the embedders inline (Construct + its two private
 // helpers) is bodied here. The remaining DWARF methods
@@ -80,7 +98,7 @@ struct DebrisColourRandomiser;
 
 namespace CgsNumeric
 {
-class alignas(8) Random
+class alignas(16) Random
 {
     // Additive grant only -- does not change Random's own layout or method
     // semantics. The randomisers use their own Vector-slot indexing scheme
@@ -181,4 +199,7 @@ private:
 };
 
 static_assert(sizeof(Random) == 0x30, "CgsNumeric::Random layout drift");
+static_assert(alignof(Random) == 16,
+              "CgsNumeric::Random is 16-aligned (the DWARF union's VectorIntrinsic[2] member); "
+              "at align 8 an embedder can seat it at +8 and shift everything behind it");
 }
