@@ -10,6 +10,46 @@
 // CapShowtimeVelocities, the showtime singleton PlayerParameters, ...). The X360 build is VMX128
 // inline asm; these are the de-SIMD'd named-member equivalents. Showtime state lives in the
 // module-static singleton msPlayerParams (defined below), not per-instance.
+//
+// =============================================================================================
+// ⛔⛔ WHY THIS TU IS STILL UNMOUNTED -- AND WHY THE REASON ON FILE WAS WRONG
+//
+// tools\build\build_game_exe.bat says, next to RaceCarPhysics_Construct.cpp:
+//     "RaceCarPhysics.cpp itself must stay unmounted while flt_820037C8 / unk_82FB8880 are unread"
+// Both are read now (see the Update block below), so by that note this TU should be mountable.
+// It is not, and the note was never the real obstacle. MEASURED 2026-08-03 by actually adding the
+// line to the source list and linking -- not inherited, not reasoned about, because the counts in
+// this campaign have gone 15 -> 13 -> 12 -> 23 -> 14 and were wrong every single time they were
+// inherited. The measurement: 0 compile errors, 0 LNK2005, and exactly FIVE LNK2019:
+//
+//   1-3. VehiclePhysics::Update(int, const BrnPlayerDriverControls*, bool, int, int, int,
+//                               Vector3, Vector3)
+//        VehiclePhysics::UpdateSteering(signed char, float)
+//        VehiclePhysics::AddTractionPoint(int, unsigned int)
+//        ⚠️ These are NOT missing because their TU is unmounted -- VehiclePhysics.cpp IS mounted.
+//        They have NO DEFINITION ANYWHERE IN THE TREE. VehiclePhysics.cpp bodies fifteen
+//        Update* sub-steps (UpdateBoost, UpdateDrift, UpdateSuspension, UpdateHandBrake, ...) but
+//        never the top-level VehiclePhysics::Update that orders them. The orchestrator is the hole.
+//
+//   4.   BrnPlayerDriverControls::GetAftertouchValues(float*, float*, float*)  [returns bool]
+//        ⚠️ THIS ONE IS AN OVERLOAD FORK, the defect class that only a LINK can see.
+//        BrnVehicleDriverControls.h declares GetAftertouchValues TWICE on the SAME class:
+//          :112  void GetAftertouchValues(f32&, f32&, f32&, bool) const;   <- BODIED
+//                                                       (BrnPlayerDriverControls.cpp:39)
+//          :131  bool GetAftertouchValues(f32*, f32*, f32*) const;         <- DECLARE-ONLY
+//        and the two comments contradict each other about which one is the standalone X360 leaf
+//        @0x825B2E88. UpdateAftertouch below calls the pointer form, which mangles to a symbol no
+//        TU defines or ever could. Per-TU compile gates cannot see this -- both forms are declared,
+//        so every TU compiles green. Resolve it by deciding from the asm which form the console
+//        leaf actually has, then deleting the other; do not add a body for both.
+//        (BrnPlayerDriverControls.cpp is also unmounted, so even the bodied form is not linked.)
+//
+//   5.   gbVehicleBounceBoosting -- the known un-homed module static, already flagged below.
+//
+// So the mount is gated on ONE missing orchestrator function, ONE overload fork and ONE un-homed
+// global -- none of them a constant. The build file's note is stale and should be replaced when
+// someone next edits it; it is left alone here because this file cannot edit the parent repo.
+// =============================================================================================
 
 namespace BrnPhysics
 {
