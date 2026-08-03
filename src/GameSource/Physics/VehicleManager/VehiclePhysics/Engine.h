@@ -19,67 +19,33 @@
 //   mbAllowToChangeUpGear / mbAllowToChangeDownGear (bool)
 //
 // Members are pinned BY NAME + SEQUENCE per the DWARF; the EngineAttribs sub-type is the
-// committed type from VehicleAttribs.cpp (reused by name). Per project rule the absolute
+// committed type from VehicleAttribs.h (included, not re-declared). Per project rule the absolute
 // console offsets (which assume 32-bit pointer widths in EngineAttribs' InterpedParam3 etc.)
 // are NOT cross-pointer static_asserted here; the leading-member offsets that ARE load-bearing
 // for memcpy size (sizeof(EngineAttribs)==0xA0) are asserted in the embed check.
+//
+// ⚠️ RETIRED FORK (2026-08-03): this header used to declare its own `struct EngineAttribs` at
+// NAMESPACE scope, `BrnPhysics::Vehicle::EngineAttribs`. The console's type is NESTED --
+// `BrnPhysics::Vehicle::VehicleAttribs::EngineAttribs` -- which is what Engine::Construct
+// @0x825F3EE8 calls (`bl VehicleAttribs::EngineAttribs::Construct` @0x825B7B90, read from the
+// xrefs of that function). The two spellings mangle differently, so Engine.cpp was emitting a
+// call to a symbol the console never had and no TU could ever define. That, and not
+// "VehicleAttribs.cpp is unmountable", was the real reason this TU would not link.
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector4, VecFloat
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"   // VehicleAttribs::EngineAttribs (canonical home)
 
 namespace BrnPhysics
 {
 namespace Vehicle
 {
-    // FLAG (dep): the canonical EngineAttribs home is currently INSIDE VehicleAttribs.cpp
-    // (as VehicleAttribs::EngineAttribs, sizeof 0xA0, with Construct()) -- there is NO shared
-    // header exporting it, so the Engine TU cannot #include it. A minimal OWNING slice is
-    // declared here so Engine's two funcs resolve mAttribs BY NAME (its leading member, copied
-    // wholesale by Prepare's 160-byte memcpy and constructed by Construct). When VehicleAttribs
-    // gets a real header, this slice should be REPLACED by an include of the committed type
-    // (the 0xA0 size + Construct() signature already match). Members are intentionally an opaque
-    // 0xA0 byte block here (the attribs' internal lanes are not read by Construct/Prepare).
-    class VehicleAttribsEngineSliceTag;  // doc anchor only
+    // The canonical EngineAttribs is VehicleAttribs::EngineAttribs (VehicleAttribs.h). The old
+    // namespace-scope slice that lived here is retired; this alias keeps the Engine TU's spelling
+    // (`EngineAttribs`) while binding it to the console's nested type, so Engine::Construct emits
+    // a call to the symbol that actually exists (@0x825B7B90).
+    typedef VehicleAttribs::EngineAttribs EngineAttribs;
 
-    // A 4-point RPM->torque lookup curve (BrnPhysics::InterpedParam3). The Engine TU only needs
-    // it as a 16-byte leading member of EngineAttribs (it is not sampled by ComputeGear /
-    // GetMaxWheelAngularVelocity, which read the scalar gearing lanes); declared opaque here so
-    // the slice's sizeof + member offsets match the committed VehicleAttribs::EngineAttribs.
-    struct EngineTorqueCurve
-    {
-        Vector4 mvParams;   // BrnPhysics::InterpedParam3::mvParams
-    };
-
-    struct EngineAttribs
-    {
-        // Build the default engine attributes (gear ratios/torque curve/flywheel). Owned by
-        // VehicleAttribs.cpp -- declared only here.
-        void Construct();
-
-        // ----- ADDITIVE GROW (engine/drivetrain group): the gearing lanes ComputeGear and
-        //       GetMaxWheelAngularVelocity read BY NAME. The console EngineAttribs is a 0xA0 block
-        //       (InterpedParam3 + 3 Vector4 + 6 Vector3); these accessors expose the lanes those two
-        //       Engine methods index (Differential, MaxRPM, per-gear ratio/torqueScale/gearUpRPM).
-        //       The member SEQUENCE/sizes mirror the committed VehicleAttribs::EngineAttribs exactly
-        //       (same lvx128 offsets); sizeof stays 0xA0. When VehicleAttribs gets a real header this
-        //       whole slice is replaced by an include of that type. -----
-        f32 GetDifferential() const  { return mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.x; }
-        f32 GetMaxRPM() const        { return mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.z; }
-        f32 GetGearRatio(s32 liGear) const   { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].x; }
-        f32 GetGearUpRPM(s32 liGear) const   { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].z; }
-
-    private:
-        // @+0x00 mTorqueCurve (InterpedParam3, 16B)
-        EngineTorqueCurve mTorqueCurve;
-        // @+0x10 (.x=Differential .y=TransmissionEfficiency .z=EngineResistance .w=GearDownRPM)
-        Vector4 mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM;
-        // @+0x20 (.x=MaxTorque .y=TorqueFallOffRPM .z=MaxRPM .w=LSDMSpeedToAllowGearChanges)
-        Vector4 mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges;
-        // @+0x30 (.x=FlyWheelInertia .y=FlyWheelFriction .z=GearChangeTime)
-        Vector4 mvFlyWheelInertia_FlyWheelFriction_GearChangeTime;
-        // @+0x40 per-gear (.x=gearRatio .y=torqueScale .z=gearUpRPM), 6 gears * 16B = 0x60 -> ends @0xA0
-        Vector3 mavGearRatios_TorqueScales_GearUpRPMs[6];
-    };
     // Gear-index constants (DWARF Engine.h:55-57). ku8ReverseGear is the sentinel below first
     // gear (0); first gear is 1; highest is 5. Declared here as the shared engine vocabulary.
     static const u8 KU8_REVERSE_GEAR = 0;

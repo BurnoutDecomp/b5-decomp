@@ -122,7 +122,7 @@ namespace Vehicle
 
     // @0x825D0840  BrnPhysics::Vehicle::VehiclePhysics::GetDownForce
     //   The textbook aerodynamic quadratic: F = 0.5 * rho * CdA * |mLinearVelocity|^2 * coeff.
-    //   asm: |v|^2 via vmsum3fp128 of mLinearVelocity(+0x50); coeff = mpAttribs(+0x720)->mvAeroParams
+    //   asm: |v|^2 via vmsum3fp128 of mLinearVelocity(+0x50); coeff = mpAttribs(+0x720)->mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo
     //        (+0xB0) lane .w (vspltw v11,v11,3); 0.5 from vcfsx(1, scale 1); rho/CdA lazily cached
     //        (g_AeroConstInitMask) into g_vAero_Rho / g_vAero_CdA from the .rdata seeds
     //        kAero_Rho_Scalar / kAero_CdA_Scalar. The product order in the asm is
@@ -141,7 +141,7 @@ namespace Vehicle
         static const f32 KF_HALF     = 0.5f;   // vcfsx v0=1, scale 1 -> 0.5
 
         const f32 lfSpeedSquared = vpu::MagnitudeSquared(mLinearVelocity);
-        const f32 lfCoeff        = mpAttribs->mvAeroParams.w;   // .w lane of the aero params register
+        const f32 lfCoeff        = mpAttribs->mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.w;   // .w lane of the aero params register
 
         const f32 lfDownForce = KF_HALF * KF_AERO_RHO * KF_AERO_CDA * lfSpeedSquared * lfCoeff;
 
@@ -152,7 +152,7 @@ namespace Vehicle
     // Surface-response group: GetSurfaceGrip / GetSurfaceRoughness / GetSurfaceLinearDrag
     //   @0x825D51B8 / @0x825D5328 / @0x825D50A8. Each derives a 6-bit surface id from a
     //   RoadContact CollisionTag and looks up a global per-surface property table, blended with a
-    //   lane of mpAttribs->mvSurfaceBlend.
+    //   lane of mpAttribs->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.
     //   FLAG (runtime data): the per-surface tables (grip unk_82FB8890, drag unk_82FB8BD0,
     //   roughness unk_82FB8DE0, global roughness scale unk_82FB9220, wet multiplier unk_82FB9EC0)
     //   are RUNTIME-LOADED scratch globals not present in the exports -> honest flagged-0
@@ -185,8 +185,8 @@ namespace Vehicle
         const f32 lfGrip = SurfacePropertyPlaceholder(liSurfaceId);   // unk_82FB8890[id]
 
         // FRONT wheels (index < eRearLeftWheel) use lane .x, REAR wheels lane .y (asm: if a3<2).
-        const f32 lfBlend = (leWheel < eRearLeftWheel) ? mpAttribs->mvSurfaceBlend.x
-                                                       : mpAttribs->mvSurfaceBlend.y;
+        const f32 lfBlend = (leWheel < eRearLeftWheel) ? mpAttribs->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.x
+                                                       : mpAttribs->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.y;
         const f32 lfResult = 1.0f - (1.0f - lfGrip) * lfBlend;
         // (optional wet/condition multiplier unk_82FB9EC0 gated by byte_82FB7DF2 -- FLAG: that gate
         // defaults off here; the wet path stays inert until the table is recovered.)
@@ -200,7 +200,7 @@ namespace Vehicle
         const f32 lfRoughness = SurfacePropertyPlaceholder(liSurfaceId);     // unk_82FB8DE0[id]
         static const f32 KF_GLOBAL_ROUGHNESS_SCALE = 0.0f;                   // FLAG: un-homed unk_82FB9220
 
-        const f32 lfResult = lfRoughness * KF_GLOBAL_ROUGHNESS_SCALE * mpAttribs->mvSurfaceBlend.z;
+        const f32 lfResult = lfRoughness * KF_GLOBAL_ROUGHNESS_SCALE * mpAttribs->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.z;
         return Vector3{ lfResult, lfResult, lfResult, lfResult };
     }
 
@@ -212,7 +212,7 @@ namespace Vehicle
         const s32 liSurfaceId = static_cast<s32>((GetAboveGroundTagLo() >> 4) & 0x3Fu);
         const f32 lfDrag = SurfacePropertyPlaceholder(liSurfaceId);   // unk_82FB8BD0[id]
 
-        const f32 lfResult = lfDrag * mpAttribs->mvSurfaceBlend.w;
+        const f32 lfResult = lfDrag * mpAttribs->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.w;
         return Vector3{ lfResult, lfResult, lfResult, lfResult };
     }
 
@@ -263,7 +263,7 @@ namespace Vehicle
     //   Per grounded wheel (RoadContact.mbIsOnGround @ wheel+0x28):
     //     lfWheel = (DrawRoadNoiseFloat() - 1.0) * 0.5 + lfPre           [in [0,1)]
     //     lvRough = GetSurfaceRoughness(wheel)                          (flagged-inert table)
-    //     lfFactor = mpAttribs->mvBaseParams.z                          (per-vehicle road-noise scale)
+    //     lfFactor = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z                          (per-vehicle road-noise scale)
     //     lfSpeed  = mfSpeedMPH (+0x6C0)                                (speed gate, v124)
     //     0x825F69E0 region: `vspltw128 v126,(attribs+112),2 ; vrefp128 v0,v126` + two Newton refines
     //     -> v125 = 1/lfFactor (a RECIPROCAL -- lfFactor DIVIDES, it does not multiply). The tail
@@ -282,7 +282,7 @@ namespace Vehicle
         // One pre-loop draw shared across all wheels (matches the single pre-loop LCG step in the asm).
         const f32 lfPreDraw = (DrawRoadNoiseFloat(lrRandom) - KF_ONE) * KF_HALF;
 
-        const f32 lfFactor = mpAttribs->mvBaseParams.z;   // per-vehicle road-noise scale (.z lane)
+        const f32 lfFactor = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z;   // per-vehicle road-noise scale (.z lane)
         const f32 lfSpeed  = mfSpeedMPH.x;                  // +0x6C0 body-frame speed (MPH)
 
         // speedRatio = min(speed / factor, 1.0) -- the asm's vrefp reciprocal + Newton refine of
@@ -637,7 +637,7 @@ namespace Vehicle
     //     * else BODY-space axis seeds (space = BODY):
     //         start 0; bit3(0x8) += +X seed; bit4(0x10) += +Y seed (world up); bit5(0x20) += +Z seed;
     //         then NORMALIZE (vrsqrtefp+Newton).
-    //   MAGNITUDE: mpAttribs->mvBaseParams.x (lane0 @ mpAttribs+0x70) * lfFactor * 50.0;
+    //   MAGNITUDE: mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x (lane0 @ mpAttribs+0x70) * lfFactor * 50.0;
     //              mImpulse = normalize(direction) * magnitude.
     //   POSITION (v127'): bit8(0x100) custom -> lvCustomPosition; else seeds from mHalfExtent
     //     (this+0x6A0, already pinned) with bit-selected lane negations: 0x200 -> +z, 0x400 -> -z,
@@ -689,7 +689,7 @@ namespace Vehicle
 
         // ----- magnitude: (attribs base lane0) * lfFactor * 50.0 -----
         static const f32 KF_AIR_RAM_SCALE = 50.0f;   // inline literal (asm v121[0] = 50.0)
-        const f32 lfMagnitude = mpAttribs->mvBaseParams.x * lfFactor * KF_AIR_RAM_SCALE;
+        const f32 lfMagnitude = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x * lfFactor * KF_AIR_RAM_SCALE;
 
         Vector3 lvImpulse = { lvDirection.x * lfMagnitude,
                               lvDirection.y * lfMagnitude,
@@ -785,7 +785,7 @@ namespace Vehicle
     //
     // All boost force = Mass * acceleration along the body forward axis (mTransform.zAxis @+0x30),
     // applied via the base ExternalPhysicsBody::AddLocalForce at a local-space point. mpAttribs
-    // (+0x720) supplies Mass (mvBaseParams.x @+0x70) + the BoostAttribs lanes (+0x290..+0x2B0). The
+    // (+0x720) supplies Mass (mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x @+0x70) + the BoostAttribs lanes (+0x290..+0x2B0). The
     // boost-state timers live in mvSideForceMag_..._CurrentBoostKickTime (+0x1040): .y=TimeBoosting,
     // .z=TimeSinceLastBoostKick, .w=CurrentBoostKickTime. The heavy CgsDev::Assert mutual-exclusion
     // machinery in the two appliers is ELIDED (debug-build guards; no effect on output).
@@ -924,7 +924,7 @@ namespace Vehicle
         {
             const VehicleAttribs::BoostAttribs& lrBA = mpAttribs->mBoostAttribs;
 
-            const f32 lfMass  = mpAttribs->mvBaseParams.x;   // mvMass_..._.x lane (+0x70 lane0)
+            const f32 lfMass  = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;   // mvMass_..._.x lane (+0x70 lane0)
             const f32 lfAccel =
                 lrBA.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.x;
             const f32 lfHeightOffset =
@@ -974,7 +974,7 @@ namespace Vehicle
 
         const VehicleAttribs::BoostAttribs& lrBA = mpAttribs->mBoostAttribs;
 
-        const f32 lfMass         = mpAttribs->mvBaseParams.x;                            // Mass
+        const f32 lfMass         = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;                            // Mass
         const f32 lfAccel        = lrBA.mvBoostKickAcceleration_BoostKickHeightOffset.x; // BoostKickAcceleration
         const f32 lfHeightOffset = lrBA.mvBoostKickAcceleration_BoostKickHeightOffset.y; // BoostKickHeightOffset
 
@@ -1130,7 +1130,7 @@ namespace Vehicle
     //    i.e. it is **m/s -> MPH**. Its consumers say the same thing: BridgeWorldVehicleDataToGui,
     //    RaceCarEntityModuleDebugComponent::RenderHUD and three AI debug HUDs all read it. And in
     //    UpdateDriftState it converts the m/s speed parameter before comparing it against the SAME
-    //    per-car attrib lane (mvDriftParams0.x) that CheckForEnteringDrift compares mfSpeedMPH
+    //    per-car attrib lane (mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x) that CheckForEnteringDrift compares mfSpeedMPH
     //    against -- one threshold, one unit, two directions. That is what identifies it by ROLE.
     //  * unk_82FB8AC0 <- flt_82094574 = 0.15f   (static-init splat @0x82C5C988)
     //  * unk_82FB9ED0 <- flt_82004A20 = 10.0f   (static-init splat @0x82C5C9B0)
@@ -1207,10 +1207,10 @@ namespace Vehicle
 
     // @0x825D34D8  VehiclePhysics::GetMaxSteeringAngleDuringDrift
     //   Builds a steering direction from the quartic-stiffened steer input, takes acos against the
-    //   velocity direction, then scales by the per-car max steering angle (mpAttribs->mvSteeringParams @+0xF0 .x,
+    //   velocity direction, then scales by the per-car max steering angle (mpAttribs->mSteeringAttribs.mvMaxAngle_StraightReactionBias @+0xF0 .x,
     //   in DEGREES) * deg->rad. Returns the capped wheel angle (radians).
     //   asm: dir = normalize(mLinearVelocity); stiff = -1 - sign(s)*(s); angle = acos(dot(dir, steerDir))
-    //        result = angle... * (mpAttribs->mvSteeringParams.x * 0.017453292).
+    //        result = angle... * (mpAttribs->mSteeringAttribs.mvMaxAngle_StraightReactionBias.x * 0.017453292).
     f32 VehiclePhysics::GetMaxSteeringAngleDuringDrift(f32 lfSteeringInput) const
     {
         const Vector3 lUnitVel = vpu::Normalize(mLinearVelocity);   // zero-guarded
@@ -1222,7 +1222,7 @@ namespace Vehicle
         const f32 lfAngle = std::acos(lfDot);                      // XMVectorACos
 
         // per-car max angle (degrees) -> radians cap.
-        const f32 lfMaxDeg = mpAttribs->mvSteeringParams.x;                    // mpAttribs->mvSteeringParams (+0xF0) .x
+        const f32 lfMaxDeg = mpAttribs->mSteeringAttribs.mvMaxAngle_StraightReactionBias.x;                    // mpAttribs->mSteeringAttribs.mvMaxAngle_StraightReactionBias (+0xF0) .x
         // (void) the unused stiffened-sign term; the asm folds the sign into the steer-direction build.
         (void)lfSteeringInput;
         return lfAngle * (lfMaxDeg * KF_DEG_TO_RAD);
@@ -1268,7 +1268,7 @@ namespace Vehicle
     //   While sliding (mu8DriftState != 0) and the ORIGINAL controls mode is NOT 1 (0x825CFC74-7C:
     //   `lwz r10,0x44(r4) ; cmpwi cr6,r10,1 ; beqlr cr6` -- returns when mode==1, i.e. proceeds only
     //   when mode != 1), re-signs and re-maps the steer input by the drift direction. The blend
-    //   weights come from mpAttribs->mvDriftParams1 (@+0x120) lanes .z (zLane) and .w (wLane).
+    //   weights come from mpAttribs->mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale (@+0x120) lanes .z (zLane) and .w (wLane).
     //   asm (0x825CFCC4-825CFD14): sign = (mu8DriftState==1) ? +1 : -1 ; s = sign * steer ;
     //     gas = controls.mfGas (+0x04) ; wGas = wLane * gas ;
     //     steer' = sign * ( (1 - wLane*gas^2) * max(s,0) + (zLane + wGas) * min(s,0) + wGas ).
@@ -1283,9 +1283,9 @@ namespace Vehicle
 
         const f32 lfSign = (mu8DriftState == eDriftState_FacingLeft) ? 1.0f : -1.0f;
 
-        // the two drift remap weights (mpAttribs->mvDriftParams1 @+0x120 .z and .w).
-        const f32 lfWeightZ = mpAttribs->mvDriftParams1.z;
-        const f32 lfWeightW = mpAttribs->mvDriftParams1.w;
+        // the two drift remap weights (mpAttribs->mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale @+0x120 .z and .w).
+        const f32 lfWeightZ = mpAttribs->mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.z;
+        const f32 lfWeightW = mpAttribs->mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.w;
 
         const f32 lfGas    = lrControls.mfGas;                     // *(a2+4)
         const f32 lfWGas   = lfWeightW * lfGas;                    // wLane * gas
@@ -1340,7 +1340,7 @@ namespace Vehicle
         mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState.w = 0.0f;
 
         // a small seed (0.1) the asm writes into the maintained-speed/neutral lane group.
-        // the per-car drift register lanes (mpAttribs->mvDriftParams1 @+0x120 .w) seed the drift control scale.
+        // the per-car drift register lanes (mpAttribs->mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale @+0x120 .w) seed the drift control scale.
         mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w = 0.0f;                   // DriftScale starts 0
         (void)lfSpeed;
 
@@ -1411,32 +1411,32 @@ namespace Vehicle
 
     // @0x825D2F78  VehiclePhysics::ApplyNaturalDriftForces
     //   A gentle straightening yaw applied when NOT actively drifting hard. Gated on the per-car
-    //   drift push-time attrib (mpAttribs->mvDriftParams5 @+0x160 .y > DriftPushTime lane). The torque magnitude
-    //   reads mpAttribs->mvDriftParams4 (@+0x150) lanes, and the SIGN is selected by mu8DriftState through a
+    //   drift push-time attrib (mpAttribs->mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping @+0x160 .y > DriftPushTime lane). The torque magnitude
+    //   reads mpAttribs->mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower (@+0x150) lanes, and the SIGN is selected by mu8DriftState through a
     //   permute table (unk_8327F240). Applied via AddWorldSpaceTorque(this+0x10).
     void VehiclePhysics::ApplyNaturalDriftForces()
     {
         // gate: DriftPushTime (mvLatDriftForceFactor..._.y) vs the per-car push-time threshold
-        // (mpAttribs->mvDriftParams5 @+0x160 .y). The asm: `vandc(DriftPushTime) ; vcmpgtfp. vs attrib.y`.
+        // (mpAttribs->mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping @+0x160 .y). The asm: `vandc(DriftPushTime) ; vcmpgtfp. vs attrib.y`.
         const f32 lfPushTime    = mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.y;
-        const f32 lfPushThresh  = mpAttribs->mvDriftParams5.y;
+        const f32 lfPushThresh  = mpAttribs->mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.y;
         if (lfPushTime > lfPushThresh)
         {
             // within the active-push window the asm grows/decays the DriftScale lane toward a target
-            // (mpAttribs->mvDriftParams4 @+0x150 .z), signed by whether DriftScale exceeds it. FLAG: the gain is the
+            // (mpAttribs->mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower @+0x150 .z), signed by whether DriftScale exceeds it. FLAG: the gain is the
             // attrib lane; the math is exact, the numeric target comes from the (homed) attrib register.
-            const f32 lfTarget = mpAttribs->mvDriftParams4.z;
+            const f32 lfTarget = mpAttribs->mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.z;
             f32 lfScale = mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w;   // DriftScale lane
             if (lfScale > lfTarget) lfScale = lfScale - (lfScale - lfTarget);  // decay toward target
             else                    lfScale = lfScale + (lfTarget - lfScale);  // grow toward target
             mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w = lfScale;
         }
 
-        // the self-aligning yaw torque: magnitude = mpAttribs->mvDriftParams4 (@+0x150) .x, signed by the drift
+        // the self-aligning yaw torque: magnitude = mpAttribs->mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower (@+0x150) .x, signed by the drift
         // state (FacingLeft -> +, FacingRight -> - via the unk_8327F240 select), applied about the body
         // up axis (mTransform.yAxis). FLAG: the asm routes the magnitude through a packed select whose
         // sign mask is exact (state-driven); the magnitude lane is the homed attrib.
-        const f32 lfMag  = mpAttribs->mvDriftParams4.x;
+        const f32 lfMag  = mpAttribs->mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.x;
         const f32 lfSign = (mu8DriftState == eDriftState_FacingRight) ? -1.0f : 1.0f;
         const Vector3 lTorque{ mTransform.yAxis.x * (lfMag * lfSign),
                                mTransform.yAxis.y * (lfMag * lfSign),
@@ -1473,11 +1473,11 @@ namespace Vehicle
             {
                 // deficit-scaled impulse direction = blend of body Z (forward) and velocity, weighted by
                 // mvPropSpeedMaintainAlongZ (.x) / mvPropSpeedMaintainAlongVel (.y), pushed by the per-car
-                // push-time attrib (mpAttribs->mvDriftParams5 @+0x160 .y). The deficit = MaintainedSpeed - speed.
+                // push-time attrib (mpAttribs->mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping @+0x160 .y). The deficit = MaintainedSpeed - speed.
                 const f32 lfDeficit  = lfMaintained - lfSpeed;
                 const f32 lfAlongZ   = mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.x;
                 const f32 lfAlongVel = mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.y;
-                const f32 lfPush     = mpAttribs->mvDriftParams5.y;
+                const f32 lfPush     = mpAttribs->mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.y;
 
                 const Vector3 lVelDir = vpu::Normalize(mLinearVelocity);
                 Vector3 lDir{ mTransform.zAxis.x * lfAlongZ + lVelDir.x * lfAlongVel,
@@ -1545,9 +1545,9 @@ namespace Vehicle
         if (!mbAllWheelsHaveTraction)          return;   // 0x825FA490 (0x135B, beq -> return)
 
         // 0x825FA49C-4C8: fast enough for THIS car to drift. mfSpeedMPH is the splatted body speed
-        // (+0x6C0); mvDriftParams0.x is the per-car minimum, in the same unit -- see the KF_MPS_TO_MPH
+        // (+0x6C0); mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x is the per-car minimum, in the same unit -- see the KF_MPS_TO_MPH
         // note above, where UpdateDriftState's exit guard compares the same lane the other way round.
-        if (!(mfSpeedMPH.x > mpAttribs->mvDriftParams0.x)) return;
+        if (!(mfSpeedMPH.x > mpAttribs->mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x)) return;
 
         if (mi8NumWorldCollisions != 0) return;          // 0x825FA4CC (bne -> return)
         if (!lbAIAllowingDrift)         return;          // 0x825FA4D8
@@ -1589,7 +1589,7 @@ namespace Vehicle
                 * KF_DRIFT_ENTRY_STEER_ANGLE_SCALE * KF_DEG_TO_RAD;
 
             // 0x825FA604-620: EnterDrift(controls, speed, mpAttribs[+0x170].w)
-            EnterDrift(lpControls, lfSpeedMPS, mpAttribs->mvDriftParams6.w);
+            EnterDrift(lpControls, lfSpeedMPS, mpAttribs->mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.w);
             return;
         }
 
@@ -1645,7 +1645,7 @@ namespace Vehicle
     //     3. 0x8261F7C0  TimeInDriftWithStaticFriction (+0x1080 .y) = allAdhesive ? t + dt : 0
     //     4. 0x8261F844  TimeDrifting (+0x1010 .z) > 1.0f && (3) > 0.0625f
     //     5. 0x8261F890  mi8NumWorldCollisions > 0 ; miNumCollisions > 0
-    //     6. 0x8261F8AC  mvDriftParams0.x > lfSpeedMPS * KF_MPS_TO_MPH
+    //     6. 0x8261F8AC  mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x > lfSpeedMPS * KF_MPS_TO_MPH
     //     7. 0x8261F900  TimeWithoutTraction (+0x1060 .z) > 1.0f       (ungated)
     //     8. 0x8261F94C  !mAboveGroundTestResult.mbValid
     //     9. 0x8261F958  10.0f > mfSpeedMPH                            (unk_82FB9ED0)
@@ -1707,10 +1707,10 @@ namespace Vehicle
         if (mi8NumWorldCollisions > 0) { ExitDrift(); return; }
         if (miNumCollisions       > 0) { ExitDrift(); return; }
 
-        // 6. below the per-car minimum drift speed. mvDriftParams0.x is in MPH, the parameter is in
+        // 6. below the per-car minimum drift speed. mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x is in MPH, the parameter is in
         //    m/s -- see the KF_MPS_TO_MPH note. This is the same lane, same threshold and same unit
         //    that CheckForEnteringDrift tests the other way round to allow entry.
-        if (mpAttribs->mvDriftParams0.x > lfSpeedMPS * KF_MPS_TO_MPH)
+        if (mpAttribs->mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x > lfSpeedMPS * KF_MPS_TO_MPH)
         { ExitDrift(); return; }
 
         // 7. off the ground too long (lane .z, and NOT gated on the handbrake).
@@ -1761,7 +1761,7 @@ namespace Vehicle
     //   Grows mDriftScale toward the target drift slip and applies the natural self-aligning drift yaw.
     //   asm: reads *(this+68)==1 (a control mode) -> latches an aftertouch term; recomputes the local
     //   drift angle (acos of velocity vs the body basis, signed, in degrees via 57.29578, wrapped into
-    //   [-180,180]); if the per-car drift slip lane (mpAttribs->mvDriftParams1 @+0x120 .x) exceeds the body speed
+    //   [-180,180]); if the per-car drift slip lane (mpAttribs->mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale @+0x120 .x) exceeds the body speed
     //   OR the aftertouch latch is set, eases the scale; else integrates the scale toward the target by
     //   the time-step. Always tail-calls ApplyNaturalDriftForces.
     //   FIDELITY: PARTIAL -- the outer state machine (angle compute, the two ease/integrate branches,
@@ -1800,9 +1800,9 @@ namespace Vehicle
         // store the current (capped) drift angle lane.
         mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.w = lfAngleDeg;
 
-        // gate: per-car drift slip lane (mpAttribs->mvDriftParams0 @+0x110 .x) vs body speed, OR the
+        // gate: per-car drift slip lane (mpAttribs->mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor @+0x110 .x) vs body speed, OR the
         // AI's force-come-out-of-drift request.
-        const bool lbEase = !(mfSpeedMPH.x > mpAttribs->mvDriftParams0.x) || lbForceComeOutOfDrift;
+        const bool lbEase = !(mfSpeedMPH.x > mpAttribs->mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x) || lbForceComeOutOfDrift;
         if (lbEase)
         {
             // ease branch: leave the drift scale where it is (the asm's "set to 1.0 seed" no-op store path
@@ -1812,8 +1812,8 @@ namespace Vehicle
         else
         {
             // integrate branch: grow CappedDriftScale toward DesiredDriftSlip by the time-step. The asm
-            // mixes in the per-car drift register lanes (mpAttribs->mvDriftParams5 @+0x160 .y push) + the
-            // mpAttribs->mvDriftParams1 weights; the exact polynomial blend is the flagged coefficient cascade.
+            // mixes in the per-car drift register lanes (mpAttribs->mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping @+0x160 .y push) + the
+            // mpAttribs->mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale weights; the exact polynomial blend is the flagged coefficient cascade.
             const f32 lfTarget  = mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState.z; // DesiredDriftSlip
             f32 lfScale = mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w;   // DriftScale lane
             const f32 lfStep = lvfTimeStep.x * mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.x; // *LatDriftForceFactor
@@ -1831,7 +1831,7 @@ namespace Vehicle
     //   A world-space yaw torque rotating the car toward the drift direction. Gated on a computed local
     //   drift angle (the asm wraps acos(dot(vel,driftDir)) into degrees, requires it != 0) AND
     //   mDriftFlags.DoApplyTorque(). The torque magnitude is built from the per-car drift attrib lanes
-    //   (mpAttribs->mvDriftParams2 @+0x130 .x gate, mpAttribs->mvDriftParams4 @+0x150 lanes for the response shape) and the
+    //   (mpAttribs->mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift @+0x130 .x gate, mpAttribs->mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower @+0x150 lanes for the response shape) and the
     //   body up axis; signed by the drift state; applied via AddWorldSpaceTorque(this+0x10).
     //   FIDELITY: PARTIAL -- the gate (angle wrap + the DoApplyTorque() flag), the attrib-driven response
     //   shaping (the vsubfp/vmaddfp interpolation between attrib lanes), the state sign-select and the
@@ -1858,16 +1858,16 @@ namespace Vehicle
         if (lfAngleDeg == 0.0f || !mDriftFlags.DoApplyTorque())
             return;
 
-        // attrib-shaped response: the per-car drift register (mpAttribs->mvDriftParams2 @+0x130 .x) gates, and
-        // mpAttribs->mvDriftParams4 (@+0x150) lanes shape the magnitude vs the (homed) speed. The response is an
+        // attrib-shaped response: the per-car drift register (mpAttribs->mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift @+0x130 .x) gates, and
+        // mpAttribs->mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower (@+0x150) lanes shape the magnitude vs the (homed) speed. The response is an
         // interpolation between the attrib lanes -> a torque magnitude.
-        const f32 lfGate = mpAttribs->mvDriftParams2.x;
+        const f32 lfGate = mpAttribs->mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.x;
         if (!(lfGate > 0.0f))
             return;
 
         // magnitude from the attrib response lanes (the asm's vmaddfp interp between .x/.y/.z of +0x150).
-        const f32 lfA = mpAttribs->mvDriftParams4.x;
-        const f32 lfB = mpAttribs->mvDriftParams4.y;
+        const f32 lfA = mpAttribs->mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.x;
+        const f32 lfB = mpAttribs->mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.y;
         const f32 lfMag = lfA + (lfB - lfA) * 0.0f;   // FLAG: interp blend factor is the homed-speed lane;
                                                       // carried inert so no fabricated blend is emitted.
 
@@ -1885,8 +1885,8 @@ namespace Vehicle
     // @0x825D2B20  VehiclePhysics::ApplyDriftLatForce
     //   The sideways world-space force that steps the rear out. Builds the lateral direction (the body
     //   right axis @+0x10 vs the velocity), shapes its magnitude by the per-car drift attrib lanes
-    //   (mpAttribs->mvDriftParams0 @+0x110 .y reciprocal, mpAttribs->mvDriftParams3 @+0x140 .y, mpAttribs->mvDriftParams5 @+0x160 lanes,
-    //   mpAttribs->mvDriftParams7 @+0x180 .z) and the speed, signs it by the drift state, tangent-projects it
+    //   (mpAttribs->mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor @+0x110 .y reciprocal, mpAttribs->mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff @+0x140 .y, mpAttribs->mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping @+0x160 lanes,
+    //   mpAttribs->mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor @+0x180 .z) and the speed, signs it by the drift state, tangent-projects it
     //   against the ground normal (@+0x580) so it never pushes into/off the road, and applies it via
     //   AddWorldSpaceForce(this+0x10). The "mAboveGroundTestResult.mbValid" assert is elided.
     //   FIDELITY: PARTIAL -- the direction build (right-axis vs velocity), the ground-tangent projection,
@@ -1905,12 +1905,12 @@ namespace Vehicle
         if (lfDot > 1.0f) lfDot = 1.0f;
         const f32 lfAngleDeg = std::acos(lfDot) * KF_RAD_TO_DEG;
 
-        // lateral magnitude shaped by the per-car drift attrib lanes. mpAttribs->mvDriftParams0.y (slip recip),
-        // mpAttribs->mvDriftParams3.y (lat shape), mpAttribs->mvDriftParams5.x (force gate), mpAttribs->mvDriftParams7.z (final scale).
-        const f32 lfSlipRecip = mpAttribs->mvDriftParams0.y;
-        const f32 lfLatShape  = mpAttribs->mvDriftParams3.y;
-        const f32 lfForceGate = mpAttribs->mvDriftParams5.x;
-        const f32 lfFinalScale = mpAttribs->mvDriftParams7.z;
+        // lateral magnitude shaped by the per-car drift attrib lanes. mpAttribs->mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.y (slip recip),
+        // mpAttribs->mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.y (lat shape), mpAttribs->mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.x (force gate), mpAttribs->mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.z (final scale).
+        const f32 lfSlipRecip = mpAttribs->mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.y;
+        const f32 lfLatShape  = mpAttribs->mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.y;
+        const f32 lfForceGate = mpAttribs->mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.x;
+        const f32 lfFinalScale = mpAttribs->mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.z;
 
         // the asm shapes |F| = (angle-derived term) * lfLatShape * lfFinalScale, gated by lfForceGate and
         // the slip recip. The angle-derived term is the flagged interp; carried as the angle scaled by the
@@ -1974,7 +1974,7 @@ namespace Vehicle
     //       the drift register from the per-car drift attrib lanes (mvDriftParams* @+0x110/+0x120) +
     //       the landing/damp coefficient cascade (unk_82014AC0..AF0, flagged).
     //     * when NOT drifting: eases the cached steering direction back toward forward by the per-car
-    //       drift damp factor (mpAttribs->mvDriftParams6 @+0x170 .y) when above the drift slip threshold.
+    //       drift damp factor (mpAttribs->mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime @+0x170 .y) when above the drift slip threshold.
     //   Uses the ORIGINAL controls when the drift-override byte is set. The per-phase CheckState debug
     //   calls are elided.
     //   FIDELITY: PARTIAL -- the dispatch (steering-dir refresh, the drift/not-drift split, the
@@ -2011,7 +2011,7 @@ namespace Vehicle
             mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z += lvfTimeStep.x;
 
             // drift register advance: the asm runs two unk_82014AC0.. landing/damp polynomial cascades
-            // over the per-car drift attrib lanes (mpAttribs->mvDriftParams1 @+0x120 +16 / +0 = +0x130/+0x120) and
+            // over the per-car drift attrib lanes (mpAttribs->mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale @+0x120 +16 / +0 = +0x130/+0x120) and
             // folds the result into the +0x1000-region scratch + the body local velocity (+0x60). FLAG:
             // the coefficient tables are un-homed -> carried inert; the named lanes + the structure are
             // exact, the numeric advance stays 0 until the .rdata is recovered.
@@ -2021,12 +2021,12 @@ namespace Vehicle
         else
         {
             // NOT drifting: ease the cached steering direction back toward forward by the per-car drift
-            // damp factor (mpAttribs->mvDriftParams6 @+0x170 .y) when the body speed exceeds the per-car slip lane
-            // (mpAttribs->mvDriftParams1 @+0x120 .y). The asm builds (1 - 1/speed*...)*dampedDir and subtracts it.
-            const f32 lfSlipThresh = mpAttribs->mvDriftParams1.y;   // *(attribs+144) .y
+            // damp factor (mpAttribs->mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime @+0x170 .y) when the body speed exceeds the per-car slip lane
+            // (mpAttribs->mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale @+0x120 .y). The asm builds (1 - 1/speed*...)*dampedDir and subtracts it.
+            const f32 lfSlipThresh = mpAttribs->mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.y;   // *(attribs+144) .y
             if (mfSpeedMPH.x > lfSlipThresh && !mbHandBrake)   // && !*(this+4952)
             {
-                const f32 lfDamp = mpAttribs->mvDriftParams6.y;     // *(attribs+160) .y drift damp
+                const f32 lfDamp = mpAttribs->mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.y;     // *(attribs+160) .y drift damp
                 // ease the local velocity's lateral component toward the forward direction by lfDamp.
                 mAngularVelocity.x -= mAngularVelocity.x * lfDamp * 0.0f;   // FLAG: damp gain folded with the
                 mAngularVelocity.z -= mAngularVelocity.z * lfDamp * 0.0f;   // (homed) speed-recip; carried inert.
@@ -2433,7 +2433,7 @@ namespace Vehicle
     //   ++miNumCollisions ; GetImpulsesFromLocalImpulse(localImpulse, contactPos) -> (J, rxJ).
     //   if ( lbZeroResponse ): ++mi8NumWorldCollisions ; zero the +0x1070 CarCarResponse lane .x
     //                          (vrlimi128 v13, 0, 1, 0 -> insert 0 into lane 0).
-    //   else:                  rxJ *= mpAttribs->mvCrashImpulseScale.y  (lvx128 mpAttribs+0x280 ;
+    //   else:                  rxJ *= mpAttribs->mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.y  (lvx128 mpAttribs+0x280 ;
     //                          vspltw v13,v13,1 ; vmulfp J,J,scale) -- scales the ANGULAR impulse.
     //   AddWorldSpaceImpulse(J) ; AddWorldSpaceAngularImpulse(rxJ).
     void VehiclePhysics::ApplyCrashedContactImpulse(const Vector3& lvLocalImpulse,
@@ -2461,7 +2461,7 @@ namespace Vehicle
     else
     {
         // scale the angular impulse by the per-car crashed-contact scale (mpAttribs+0x280 lane .y)
-        const f32 lfScale = mpAttribs->mvCrashImpulseScale.y;
+        const f32 lfScale = mpAttribs->mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.y;
         lvAngularJ.x *= lfScale;
         lvAngularJ.y *= lfScale;
         lvAngularJ.z *= lfScale;
@@ -2865,7 +2865,7 @@ namespace Vehicle
     // (the .w lane) and the body axes (+0x30 columns) via an FMA cascade + vrlimi lane inserts;
     // reproduced structurally (the precise lane routing is the blocked part). The +0xEF0 register
     // is mWeightTransfer-adjacent and not pinned in this minimal slice -> faithful comment.
-    // const f32 lfScale = mpAttribs->mvCrashImpulseScale.w;  (+0x280 .w)
+    // const f32 lfScale = mpAttribs->mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.w;  (+0x280 .w)
     // mWeightTransferRow(+0xEF0) = bodyAxes * lfScale  (lane-by-lane vrlimi insert)
     }
 
