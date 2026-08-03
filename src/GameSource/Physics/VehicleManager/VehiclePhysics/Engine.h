@@ -36,6 +36,8 @@
 #include "BrnCommonTypes.h"   // Vector4, VecFloat
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"   // VehicleAttribs::EngineAttribs (canonical home)
 
+#include <cstddef>
+
 namespace BrnPhysics
 {
 namespace Vehicle
@@ -67,11 +69,13 @@ namespace Vehicle
 
         // --- ADDITIVE GROW (engine/drivetrain group): two clean gearbox leaves (bodied in Engine.cpp) ---
 
-        // @0x825CF010: the automatic-gearbox selector. Given the current engine drive (lfEngineDrive,
-        // passed in v1 = mvEngineDrive lane0 by the caller), returns the highest gear 1..5 whose
-        // gear-up RPM threshold is exceeded by `engineDrive * Differential * gearRatio[g] *
-        // KF_RPM_GEAR_METRIC`, or 0 (reverse/neutral) when engineDrive < -0.0099999998.
-        s32 ComputeGear(f32 lfEngineDrive) const;
+        // @0x825CF010: the automatic-gearbox selector. Returns the highest gear 1..5 whose gear-up
+        // RPM threshold is exceeded by `|drive * gearRatio[g] * Differential * 60/(2*pi)|`, or 0
+        // (reverse/neutral) when the drive is below -0.01.
+        // ⚠️ The parameter is a VecFloat, not an f32: the asm's compare and multiplies use the
+        // vector register v1 (`vcmpgefp. v0,v1,v0`, `vmulfp128 v12,v1,v12`), and a PPC `f32`
+        // argument would arrive in f1. It was declared `f32` here until 2026-08-03.
+        s32 ComputeGear(VecFloat lvfEngineDrive) const;
 
         // @0x825BFDA0: the rev limiter mapped through the current gearing --
         //   maxWheelOmega = MaxRPM / (Differential * gearRatio[mu8CurrentGear])
@@ -84,18 +88,35 @@ namespace Vehicle
         // ledger, declared only here so ApplyEngineForces can call it without an ODR clash.
         void Update(/* dt + control/contact args; see ApplyEngineForces call site */);
 
-        // --- Remaining Engine API: owned by separate future TUs -- declared only (no body). ---
-        // Reset seeds the running-state registers from a wheel angular velocity; it is called by
-        // both Construct and Prepare but lives in its own TU.
+        // @0x825CF130..0x825CF274 (82 items): seed the running-state registers from a wheel
+        // angular velocity -- zero the drive/torque/clutch lanes, park the flywheel at idle
+        // (1000 RPM in rad/s), pick a gear, derive RPM from the gearing, and re-arm both
+        // allow-change flags. Bodied in Engine.cpp.
+        // ⚠️ EXPORT-SET HOLE (the fourth): no JSON in .ida-exports; ComputeGear @0x825CF010 is 72
+        // instrs so it ends exactly at 0x825CF130, and the next indexed symbol is 0x825CF278.
         void Reset(VecFloat lvfWheelAngularVelocity);
 
+        // --- Remaining Engine API: owned by separate future TUs -- declared only (no body). ---
+
     private:
+        // ---- THE ASSERT SET ------------------------------------------------------------------
+        // Engine's running state is pure POD (no pointers), so the console's absolute offsets
+        // survive the x64 widening unchanged and CAN be asserted. Defined in Engine.cpp -- it has
+        // to be a member so that `offsetof` may name the private members below, and it has to be
+        // out-of-line so that `Engine` is complete at the point the asserts are evaluated. Never
+        // called, never emitted.
+        //
+        // ⚠️ A `sizeof` assert would be PERMUTATION-BLIND here: swapping the two Vector4s, or the
+        // two bools, keeps sizeof(Engine) at 0xD0. The per-member offsetof block in that function
+        // is what catches those, and it is the part to extend. Tamper-tested 2026-08-03.
+        static void BpAssertConsoleLayout();
+
         EngineAttribs mAttribs;                                                                  // +0x00
         Vector4 mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay;                 // +0xA0
         Vector4 mvClutchFactor_RPM_CurrentGearChangeTime;                                         // +0xB0
         u32     mu8CurrentGear;                                                                   // +0xC0
-        bool    mbAllowToChangeUpGear;
-        bool    mbAllowToChangeDownGear;
+        bool    mbAllowToChangeUpGear;                                                            // +0xC4
+        bool    mbAllowToChangeDownGear;                                                          // +0xC5
     };
 }
 }
