@@ -129,16 +129,24 @@ namespace Vehicle
     //        kAero_Rho_Scalar / kAero_CdA_Scalar. The product order in the asm is
     //        ((0.5*CdA)*|v|^2)*coeff*rho; multiplication is commutative so the grouping is free.
     //
-    //   FLAG (rodata): the rho/CdA seed scalars are un-homed .rdata absent from the function
-    //   exports -- carried as honest flagged-0 placeholders (faithful-but-inert). The formula, the
-    //   v^2 dependence and the attrib-coeff lane are EXACT; the numeric output stays 0 until the
-    //   seeds are recovered from the XEX .rdata. NEVER fabricated. (The X360 also caches an unrelated
-    //   third aero constant flt_8200D57C -> unk_82FBA0B0 for a SIBLING aero function; it does not
-    //   enter this product and is not modelled here.)
+    //   The two seed scalars are RECOVERED from the .rdata (they were never reachable from the
+    //   static-init map: this is a LAZY FIRST-CALL cache, so the literals live inside GetDownForce's
+    //   own asm behind the g_AeroConstInitMask bit tests, which is why five static-init sweeps
+    //   missed them). The `lfs` at 0x825D085C-68 reads kAero_Rho_Scalar @0x820948D4 = 0x40C33333
+    //   = 6.1 into g_vAero_Rho; the `lfs` at 0x825D08D4-E0 reads kAero_CdA_Scalar @0x820948D0 =
+    //   0x3F9CCCCD = 1.225 into g_vAero_CdA. Seated below against those exact symbols.
+    //   NOTE ON THE LABELS: 1.225 is sea-level air density to four digits, so the two IDA symbol
+    //   names may well be transposed relative to their physical meaning. It does not matter here --
+    //   both factors enter the SAME product (0.5*rho*CdA = 3.73625 either way), and seating each
+    //   value against the symbol the asm actually loads into that cache keeps this file's
+    //   address->name mapping honest. Do not "fix" the ordering without new evidence.
+    //   (The X360 also caches an unrelated third aero constant flt_8200D57C = 0.24 -> unk_82FBA0B0;
+    //   that slot has ld=0/st=1 across the whole image -- its consumer is not in this build -- so it
+    //   does not enter this product and is not modelled here.)
     Vector3 VehiclePhysics::GetDownForce() const
     {
-        static const f32 KF_AERO_RHO = 0.0f;   // FLAG: un-homed kAero_Rho_Scalar (.rdata) -> g_vAero_Rho
-        static const f32 KF_AERO_CDA = 0.0f;   // FLAG: un-homed kAero_CdA_Scalar (.rdata) -> g_vAero_CdA
+        static const f32 KF_AERO_RHO = 6.1f;     // kAero_Rho_Scalar @0x820948D4 (0x40C33333) -> g_vAero_Rho
+        static const f32 KF_AERO_CDA = 1.225f;   // kAero_CdA_Scalar @0x820948D0 (0x3F9CCCCD) -> g_vAero_CdA
         static const f32 KF_HALF     = 0.5f;   // vcfsx v0=1, scale 1 -> 0.5
 
         const f32 lfSpeedSquared = vpu::MagnitudeSquared(mLinearVelocity);
@@ -199,7 +207,11 @@ namespace Vehicle
     {
         const s32 liSurfaceId = SurfaceIdFromTag(GetWheel(leWheel).GetRoadContact().mCollisionTag);
         const f32 lfRoughness = SurfacePropertyPlaceholder(liSurfaceId);     // unk_82FB8DE0[id]
-        static const f32 KF_GLOBAL_ROUGHNESS_SCALE = 0.0f;                   // FLAG: un-homed unk_82FB9220
+        // unk_82FB9220 <- flt_82004744 = 0.2f (static-init splat @0x82C5A498). NOTE: the per-surface
+        // roughness TABLE this multiplies is still a runtime-loaded scratch global that is genuinely
+        // zero at compile time, so the product is unchanged today -- the scale is seated for when the
+        // table lands, not because it moves a number now.
+        static const f32 KF_GLOBAL_ROUGHNESS_SCALE = 0.2f;                   // unk_82FB9220
 
         const f32 lfResult = lfRoughness * KF_GLOBAL_ROUGHNESS_SCALE * mpAttribs->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.z;
         return Vector3{ lfResult, lfResult, lfResult, lfResult };
@@ -964,7 +976,11 @@ namespace Vehicle
         if (!WaterSurfacePlaceholder(liSurfaceId))   // byte_82FB7DF4[id] -- inert until recovered
             return;
 
-        static const f32 KF_WATER_DROWN_DEPTH = 0.0f;   // flt_82F2A4E4 (un-homed) -- flagged-inert
+        // flt_82F2A4E4 @0x82F2A4E4 .data = 0x40000000 = 2.0 (already in the image; no initialiser).
+        // ROLE CORROBORATED from the consumer: UpdateInWaterBehaviour @0x825B81D8 does `fcmpu ; bgelr`,
+        // i.e. return early once the depth reaches the constant -- a drown DEPTH, exactly as named.
+        // ⚠️ At 0.0f this test read `if (!(dist < 0))` and the in-water behaviour NEVER RAN.
+        static const f32 KF_WATER_DROWN_DEPTH = 2.0f;   // flt_82F2A4E4
         if (!(mAboveGroundTestResult.mfVerticalDistance < KF_WATER_DROWN_DEPTH))
             return;
 
@@ -1006,7 +1022,9 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------
     void VehiclePhysics::UpdateAirRam(VecFloat lvfDeltaTime)
     {
-        static const f32 KF_AIR_RAM_ALIVE_EPSILON_SQ = 0.0f;   // flt_82F2A430 (un-homed) -- flagged-inert
+        // flt_82F2A430 @0x82F2A430 .data = 0x3C23D70A = 0.01 (already in the image). At 0.0f the air-ram
+        // stayed "alive" on pure numerical noise, because any squared magnitude clears zero.
+        static const f32 KF_AIR_RAM_ALIVE_EPSILON_SQ = 0.01f;   // flt_82F2A430
 
         const f32 lfDeltaTime = lvfDeltaTime.x;   // dt splat lane
 
@@ -1387,8 +1405,9 @@ namespace Vehicle
             const Vector3 lvForce = mTransform.zAxis * (lfMass * lfAccel);
 
             // Local application point: (0, heightOffset, -mHalfExtent.z) -- behind the centre of mass.
-            // FLAG (rodata): flt_82001CC0 is the un-homed zero-seed for the unused lane(s); honest 0.
-            static const f32 KF_BOOST_POS_SEED = 0.0f;   // FLAG: un-homed flt_82001CC0
+            // flt_82001CC0 @0x82001CC0 .rdata reads 0x00000000 in the image -- it IS zero. The value
+            // was never in doubt here; only its FLAGGED status was, and that is now cleared.
+            static const f32 KF_BOOST_POS_SEED = 0.0f;   // flt_82001CC0 (image: 0x00000000)
             const Vector3 lvLocalPos{ KF_BOOST_POS_SEED, lfHeightOffset, -mHalfExtent.z, 0.0f };
 
             // asm @0x825D3160/0x825D3138: r4 = 0 (force WORLD_SPACE -- it is built from
@@ -1420,7 +1439,7 @@ namespace Vehicle
         static const f32 KF_DEG_TO_RAD         = 0.017453292f;   // flt_8208F5F4 (deg->rad, findings)
         static const f32 KF_MAX_WHEELIE_ANGLE  = 0.0f;           // FLAG: un-homed kfMaxWheelieAngle (deg)
         static const f32 KF_WHEELIE_LIMIT_DAMP = 0.0f;           // FLAG: un-homed kfWheelieLimitDamping
-        static const f32 KF_KICK_TIMER_SEED    = 0.0f;           // FLAG: un-homed flt_82001CC0 (zero-seed)
+        static const f32 KF_KICK_TIMER_SEED    = 0.0f;           // flt_82001CC0 (image: 0x00000000)
 
         Vector4& lrBoost = mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime;
         lrBoost.z = 0.0f;   // TimeSinceLastBoostKick = 0 (kick resets the cooldown; vrlimi128 lane z)
@@ -1568,9 +1587,19 @@ namespace Vehicle
     // =====================================================================================
 
     // small file-static placeholders for the un-homed steering/drift rodata gains (flagged-inert).
-    static const f32  KF_DRIFT_STEER_EPSILON       = 0.0f;   // FLAG: flt_8208F620 (speed/guard epsilon splat)
-    static const f32  KF_STEER_ANGLE_CLAMP         = 0.0f;   // FLAG: unk_82FB9020 (steering-angle clamp)
-    static const f32  KF_WHEEL_STEER_BLEND         = 0.0f;   // FLAG: unk_82FB9370 (wheel-device steer blend)
+    // ⭐ stru_8208F620 is plain readable .rdata and holds 1.1920929e-07 -- FLT_EPSILON. This is the one
+    //   placeholder in this file whose zero really WAS harmless: a zero-vs-epsilon guard on a magnitude
+    //   differs only for denormal inputs. Recording it as an honest negative rather than quietly
+    //   "fixing" it, because the standing rule here is that a 0.0f placeholder is never inert -- and
+    //   this is the documented exception, not a counter-example to the rule.
+    static const f32  KF_DRIFT_STEER_EPSILON       = 1.1920929e-07f;  // stru_8208F620 == FLT_EPSILON
+    // ⭐⭐ unk_82FB9020 = 0.785398185, and its NAME and VALUE are both confirmed by its initialiser:
+    //   @0x82C5CA80 computes flt_82009B80 (45.0) * flt_8208F5F4 (0.0174532924 = deg->rad). It is
+    //   literally 45 degrees in radians. GetSteeringAngle @0x825D4150 then loads it, XORs the sign
+    //   mask and `vmaxfp`s against the negation -- a symmetric +/-45 degree clamp. At 0.0f the drift
+    //   steering angle was left entirely unclamped (+/-pi instead of +/-pi/4).
+    static const f32  KF_STEER_ANGLE_CLAMP         = 0.785398185f;    // unk_82FB9020 = 45deg in rad
+    static const f32  KF_WHEEL_STEER_BLEND         = 0.05f;           // unk_82FB9370 <- flt_820047C8 (splat)
     // ⭐⭐ THREE OF THE "un-homed" PLACEHOLDERS ABOVE ARE NOW RECOVERED (2026-08-03). All three read
     //    ZERO in the X360 image because they are .data slots filled at static-init time -- exactly the
     //    trap the gravity constant fell into -- so a literal scan of the export set could never find
@@ -1592,9 +1621,14 @@ namespace Vehicle
     static const f32  KF_MPS_TO_MPH                = 2.2369363f;   // flt_830180B0 = 1/flt_82F31928
     static const f32  KF_DRIFT_HANDBRAKE_ON_LIMIT  = 0.15f;        // unk_82FB8AC0 (splat)
     static const f32  KF_DRIFT_SPEED_EXIT_LIMIT    = 10.0f;        // unk_82FB9ED0 (splat), MPH
-    static const f32  KF_DRIFT_SCALE_GROW_LIMIT    = 0.0f;   // FLAG: unk_82FB80F0 (drift-scale grow clamp)
-    static const f32  KF_HANDBRAKE_TIME_CAP        = 0.0f;   // FLAG: unk_82FB9080 (handbrake timer cap)
-    static const f32  KF_HANDBRAKE_ONTIME_RELEASE  = 0.0f;   // FLAG: unk_82FB8B00 (handbrake on-time release thresh)
+    // unk_82FB80F0 = 90.0. Its initialiser is NOT the splat idiom -- sub_82C5BE28 calls
+    // CgsNumeric::CreateFloatVector(flt_82004F64), and flt_82004F64 is 90.0 (the third word of the
+    // 0x82004F5C block). ⚠️ VALUE PROVED, ROLE NOT: nothing in this TU reads this constant today, so
+    // the "drift-scale grow clamp" name is still the tree's prior guess and cannot be checked against
+    // a consumer. Seated so the number stops being a lie; the NAME stays suspect.
+    static const f32  KF_DRIFT_SCALE_GROW_LIMIT    = 90.0f;          // unk_82FB80F0 <- flt_82004F64
+    static const f32  KF_HANDBRAKE_TIME_CAP        = 10000.0f;       // unk_82FB9080 <- flt_82005D9C (splat)
+    static const f32  KF_HANDBRAKE_ONTIME_RELEASE  = 0.275f;         // unk_82FB8B00 <- flt_8209D720 (splat)
     static const f32  KF_RAD_TO_DEG                = 57.29578f;     // inline literal (asm 57.29578)
     static const f32  KF_DEG_TO_RAD                = 0.017453292f;  // inline literal (deg->rad)
     static const f32  KF_QUARTIC_STIFFEN           = 1.25f;         // inline literal (s^4 * 1.25)
@@ -1645,16 +1679,14 @@ namespace Vehicle
             lfAngle = -lfAngle;
 
         // speed/drift authority shrink: the angle is blended by DriftScale (@+0x1000 .w) toward 0 and
-        // clamped. FLAG: the clamp magnitude unk_82FB9020 is un-homed (inert here).
+        // clamped to the recovered +/-45 degree limit (unk_82FB9020 = 0.785398185 rad).
         const f32 lfDriftScale = mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w;
         f32 lfBlended = lfAngle + (0.0f - lfAngle) * lfDriftScale;   // shrink authority as drift scale grows
 
-        // final clamp to +-KF_STEER_ANGLE_CLAMP (flagged-inert -> leaves lfBlended unclamped when 0).
-        if (KF_STEER_ANGLE_CLAMP > 0.0f)
-        {
-            if (lfBlended >  KF_STEER_ANGLE_CLAMP) lfBlended =  KF_STEER_ANGLE_CLAMP;
-            if (lfBlended < -KF_STEER_ANGLE_CLAMP) lfBlended = -KF_STEER_ANGLE_CLAMP;
-        }
+        // final symmetric clamp to +-KF_STEER_ANGLE_CLAMP. The `> 0.0f` gate that used to wrap this
+        // existed only so a flagged zero would not collapse the angle; the clamp is real now.
+        if (lfBlended >  KF_STEER_ANGLE_CLAMP) lfBlended =  KF_STEER_ANGLE_CLAMP;
+        if (lfBlended < -KF_STEER_ANGLE_CLAMP) lfBlended = -KF_STEER_ANGLE_CLAMP;
         return lfBlended;
     }
 
@@ -1711,8 +1743,10 @@ namespace Vehicle
         // steering-wheel device path: blend the cached steering direction toward forward by a weight.
         if (lrControls.mbIsSteeringWheel)
         {
-            // FLAG: unk_82FB9370 weight is un-homed (inert). The blend reads mTransform.zAxis (forward)
-            // and the cached steering register; with the weight 0 the direction is unchanged.
+            // The unk_82FB9370 weight is RECOVERED (0.05); what is still missing is the BLEND ITSELF --
+            // the asm reads mTransform.zAxis (forward) and the cached steering register and lerps them
+            // by that weight, and this body has never modelled the lerp. Flagged as an unmodelled BODY
+            // now, not as an unknown constant: filling the number does not fill the code.
             (void)KF_WHEEL_STEER_BLEND;
         }
     }
@@ -1817,20 +1851,18 @@ namespace Vehicle
         {
             // advance on-time (cap is flagged-inert -> std::min with 0 would clamp; guard the cap).
             f32 lfOnTime = lrTimers.z + lfTimeStep;
-            if (KF_HANDBRAKE_TIME_CAP > 0.0f && lfOnTime > KF_HANDBRAKE_TIME_CAP)
+            if (lfOnTime > KF_HANDBRAKE_TIME_CAP)   // guard dropped: the cap is real (10000.0) now
                 lfOnTime = KF_HANDBRAKE_TIME_CAP;
             lrTimers.z = lfOnTime;
 
             if (lfHandBrakeInput < 0.1f)
             {
                 const bool lbReleaseByDrift  = (mu8DriftState != eDriftState_None);
-                // KF_HANDBRAKE_ONTIME_RELEASE is a flagged-0 placeholder (unk_82FB8B00, un-homed).
-                // With a real nonzero threshold `onTime > threshold` is normally false; naively
-                // comparing against 0 makes it true on nearly every frame (onTime only grows), the
-                // opposite of "faithful-but-inert" -- guard the comparison like this TU's other
-                // flagged-0 constants so the release path stays disabled until the value is recovered.
-                const bool lbReleaseByOnTime = (KF_HANDBRAKE_ONTIME_RELEASE != 0.0f)
-                                             && (lfOnTime > KF_HANDBRAKE_ONTIME_RELEASE);
+                // The defensive `!= 0.0f` guard that used to wrap this is GONE: it existed only
+                // because the threshold was a flagged zero, which would have made `onTime > 0` true on
+                // nearly every frame (onTime only grows). unk_82FB8B00 is 0.275 s and the plain
+                // comparison is now the faithful one.
+                const bool lbReleaseByOnTime = (lfOnTime > KF_HANDBRAKE_ONTIME_RELEASE);
                 if (lbReleaseByDrift || lbReleaseByOnTime)
                 {
                     mbHandBrake = false;
@@ -1850,7 +1882,7 @@ namespace Vehicle
             {
                 // advance TimeSinceLastHandBrake by dt, capped.
                 f32 lfSince = lrTimers.w + lfTimeStep;
-                if (KF_HANDBRAKE_TIME_CAP > 0.0f && lfSince > KF_HANDBRAKE_TIME_CAP)
+                if (lfSince > KF_HANDBRAKE_TIME_CAP)   // guard dropped: the cap is real (10000.0) now
                     lfSince = KF_HANDBRAKE_TIME_CAP;
                 lrTimers.w = lfSince;
             }
@@ -2851,9 +2883,14 @@ namespace Vehicle
     {
         // Anisotropic projection: strip velocity along three body axes by the (flagged-0) scale
         // vectors. mTransform's rows are the three body axes; the per-axis scale vectors are inert.
-        static const Vector3 KV_CARCAR_SCALE0 = { 0.0f, 0.0f, 0.0f, 0.0f };   // FLAG: un-homed unk_82FB8870
-        static const Vector3 KV_CARCAR_SCALE1 = { 0.0f, 0.0f, 0.0f, 0.0f };   // FLAG: un-homed unk_82FB9B70
-        static const Vector3 KV_CARCAR_SCALE2 = { 0.0f, 0.0f, 0.0f, 0.0f };   // FLAG: un-homed unk_82FB9120
+        // Static-init splats: unk_82FB8870 <- flt_82001C98 (1.0) @0x82C5CBC8,
+        // unk_82FB9B70 <- flt_82004018 (0.75) @0x82C5CBF0, unk_82FB9120 <- flt_82001C98 (1.0) @0x82C5CC18.
+        // ⚠️ At {0,0,0,0} these three did the OPPOSITE of nothing: the car-car impulse was multiplied by
+        // a zero scale on every body axis, so the per-axis stripping this table exists to do was absent
+        // and the impulse passed through unattenuated.
+        static const Vector3 KV_CARCAR_SCALE0 = { 1.0f, 1.0f, 1.0f, 1.0f };    // unk_82FB8870 (splat 1.0)
+        static const Vector3 KV_CARCAR_SCALE1 = { 0.75f, 0.75f, 0.75f, 0.75f };// unk_82FB9B70 (splat 0.75)
+        static const Vector3 KV_CARCAR_SCALE2 = { 1.0f, 1.0f, 1.0f, 1.0f };    // unk_82FB9120 (splat 1.0)
 
         const Vector3 laAxes[3] = { mTransform.Right(), mTransform.Up(), mTransform.At() };
         const Vector3* lapScale[3] = { &KV_CARCAR_SCALE0, &KV_CARCAR_SCALE1, &KV_CARCAR_SCALE2 };
@@ -3080,7 +3117,10 @@ namespace Vehicle
     {
     static const f32 KF_SLAM_RATE_LIMIT = 0.5f;            // inline 0.5 -- min gap between slams
     static const f32 KF_SLAM_BASE_SCALE = 4.0f;           // inline 4.0 -- base steering kick
-    static const f32 KF_SLAM_TAPER_DENOM = 0.0f;          // FLAG: un-homed flt_82F2A294 (air-time denom)
+    // flt_82F2A294 @0x82F2A294 .data = 0x43160000 = 150.0 (already in the image). ROLE CORROBORATED:
+    // AddSlam @0x825D48E0 does `fdivs f0, airTime, K` and then clamps to [0,1] -- a denominator, which
+    // is exactly what the name claims.
+    static const f32 KF_SLAM_TAPER_DENOM = 150.0f;        // flt_82F2A294
     static const s8  KI8_SLAM_NUMBER_MAX = 2;             // saturate
 
     if (!(mSlamEffect.mfSlamLife <= 0.0f) && !((mSlamEffect.mfTotalSlamTime - mSlamEffect.mfSlamLife) >= KF_SLAM_RATE_LIMIT))
@@ -3152,7 +3192,7 @@ namespace Vehicle
     }
 
     // ---- (re)arm ----
-    static const f32 KF_SHUNT_DESIRED_SPEED_CEIL = 0.0f;   // FLAG: un-homed unk_82FB8B30 (clamp ceiling)
+    static const f32 KF_SHUNT_DESIRED_SPEED_CEIL = 180.0f;   // unk_82FB8B30 <- flt_820025FC (splat)
 
     // Strip the UP-axis component off the linear velocity (this+0x20 == base+0x10 == the SECOND
     // row of mTransform, NOT the direction argument):
@@ -3168,7 +3208,9 @@ namespace Vehicle
     const f32 lfDot = lvShuntDirection.x * lvVelMinusUp.x + lvShuntDirection.y * lvVelMinusUp.y
                      + lvShuntDirection.z * lvVelMinusUp.z;
     f32 lfDesiredSpeed = lfDot + lfSpeedIncrease;
-    if (KF_SHUNT_DESIRED_SPEED_CEIL != 0.0f && lfDesiredSpeed > KF_SHUNT_DESIRED_SPEED_CEIL)
+    // plain min, matching the asm's unconditional `vminfp v0, v0, v12`. The `!= 0.0f` guard is gone
+    // with the flagged zero it was protecting against.
+    if (lfDesiredSpeed > KF_SHUNT_DESIRED_SPEED_CEIL)
         lfDesiredSpeed = KF_SHUNT_DESIRED_SPEED_CEIL;
 
     // store the direction ARGUMENT verbatim + desired speed into mDirectionPlusDesiredSpeed (+0x1130).
@@ -3176,7 +3218,13 @@ namespace Vehicle
     mShuntEffect.mDirectionPlusDesiredSpeed.SetPlus(lfDesiredSpeed);
 
     // +0x1140 .y = the Life-seed ARGUMENT; .x = the un-homed unk_82FB90A0 seed lane (flagged-inert).
-    static const f32 KF_SHUNT_LIFE_SEED_LANE = 0.0f;   // FLAG: un-homed unk_82FB90A0 lane0
+    // ⭐⭐ THE SHUNT SYSTEM WAS DEAD ON ARRIVAL. This lane seeds mv4_Life_SpeedIncreaseToQuit.x, and
+    //   the very first thing AddShunt does on the next call is test that Life lane `> 0` (asm
+    //   0x825FC644-4C, `vspltw v13,v13,3 ; vcmpgtfp. v13, v0`). Seeded with 0 the test could never
+    //   pass, so EVERY shunt was born already expired -- an unguarded assignment of a placeholder
+    //   zero straight into the field that gates the whole AI shunt behaviour.
+    //   unk_82FB90A0 <- flt_82001D9C (2.0), static-init splat @0x82C5CB00.
+    static const f32 KF_SHUNT_LIFE_SEED_LANE = 2.0f;   // unk_82FB90A0 lane0
     mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = KF_SHUNT_LIFE_SEED_LANE;
     mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y = lfLifeSeed;
 
@@ -3208,8 +3256,18 @@ namespace Vehicle
     static const f32 KF_SLAM_STEER_CLAMP = 0.94999999f; // inline 0.95
     static const f32 KF_SLAM_GAS_FLOOR   = 0.89999998f; // inline 0.9
     static const f32 KF_SLAM_GAS_BLEND   = 0.1f;        // inline 0.1
-    static const f32 KF_MODE1_STEER_CLAMP = 0.0f;     // FLAG: un-homed flt_82F2A500
-    static const f32 KF_MODE1_STEER_SCALE = 0.0f;     // FLAG: un-homed flt_82F2A4FC
+    // ⚠️ THESE TWO WERE HELD BACK ON PURPOSE and are released only now that the mode-1 branch has been
+    //   re-derived from the asm. The objection on file was that a +/-0.0025 clamp on a control that
+    //   lives in [-1,1] is not credible. Reading 0x825D49CC..0x825D4A2C settles it -- it is not meant
+    //   to be a normal steering clamp, it is a near-total SUPPRESSION of the driver's own steer:
+    //     0x825D49E8-F4  steer := clamp(steer, -flt_82F2A500, +flt_82F2A500)   (two fsel, +/-0.0025)
+    //     0x825D4A08     slam := mfSteering * flt_82F2A4FC                     (0.005)
+    //     0x825D4A18-24  slam := clamp(slam, -1.0, +1.0)                       (flt_820037C8 / flt_82001C98)
+    //     0x825D4A28     steer := slam + steer
+    //   The driver keeps 0.25% authority while the slam envelope supplies the rest. The 0.005 scale is
+    //   what brings the envelope (env * originalSteer * 2.0, which is NOT normalised) into [-1,1].
+    static const f32 KF_MODE1_STEER_CLAMP = 0.0025f;  // flt_82F2A500 (image: 0x3B23D70A)
+    static const f32 KF_MODE1_STEER_SCALE = 0.005f;   // flt_82F2A4FC (image: 0x3BA3D70A)
 
     // float-index helpers into the raw controls copy
     f32& lrGas    = lpControlsCopy[1];    // +0x04

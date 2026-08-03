@@ -92,33 +92,50 @@ namespace Vehicle
     PlayerParameters msPlayerParams = {};
     namespace { PlayerParameters& MS = msPlayerParams; }   // short alias for the bodies below
     // -----------------------------------------------------------------------------------------
-    // FLAGGED un-homed .rdata SEED CONSTANTS. These are the flt_82F2A2xx / flt_82FB7Exx / flt_82FB9xxx
-    // floats the C10 functions splat from .rdata. The exports do NOT contain their numeric values
-    // (verified: 0x82F2A2xx have no function/data export), so per project rule they are carried as
-    // honest FLAGGED-0 placeholders (faithful-but-inert): the MATH and the member roles are exact,
-    // the numeric output stays inert until the seeds are recovered from the XEX .rdata. NEVER
-    // fabricated. The names mirror the X360 symbol + the role inferred from the use site.
-    static const f32 KF_TIMEUNTILPUSH_DELAY      = 0.0f;  // FLAG flt_82F2A2A4 (SetPlayerVehicleInShowtime seed)
-    static const f32 KF_LAUNCH_PUSH_SPEED        = 0.0f;  // FLAG flt_82F2A2A0 (launch impulse scale)
-    static const f32 KF_LAUNCH_AIRRAM_FACTOR     = 0.0f;  // FLAG flt_82F2A2AC
-    static const f32 KF_LAUNCH_AIRRAM_ARG        = 0.0f;  // FLAG flt_82F2A2B0
-    static const f32 KF_DAMAGE_BUDGET_SCALE      = 0.0f;  // FLAG flt_82F2A2C8 (PlayerParameters::Reset seed)
-    static const f32 KF_BOUNCE_AIRRAM_FACTOR     = 0.0f;  // FLAG flt_82F2A2F4
-    static const f32 KF_BOUNCE_AIRRAM_FACTOR_NB  = 0.0f;  // FLAG flt_82F2A2F0 (non-boosted bounce)
-    static const f32 KF_BOUNCE_VELOCITY_SCALE    = 0.0f;  // FLAG flt_82F2A2EC (+1.0 added inline)
-    static const f32 KF_PUSH_AIRRAM_FACTOR       = 0.0f;  // FLAG flt_82F2A29C
-    static const f32 KF_PUSH_AIRRAM_ARG          = 0.0f;  // FLAG flt_82F2A298
-    static const f32 KF_PUSH_SPIN_SCALE          = 0.0f;  // FLAG flt_82F2A2A8
-    static const f32 KF_CAP_SPEED                = 0.0f;  // FLAG flt_82F2A2D8 (non-boost speed cap)
-    static const f32 KF_CAP_SPEED_BOOST          = 0.0f;  // FLAG flt_82F2A2DC (boosting speed cap)
-    static const f32 KF_CAP_VERT                 = 0.0f;  // FLAG flt_82F2A2E0 (non-boost vertical cap)
-    static const f32 KF_CAP_VERT_BOOST           = 0.0f;  // FLAG flt_82F2A2E4 (boosting vertical cap)
-    static const f32 KF_CAP_VERT_UNCAPPED        = 0.0f;  // FLAG flt_82F2A2E8 (uncapped-window vert)
-    static const f32 KF_IDEAL_T_BASE             = 0.0f;  // FLAG flt_82F2A330 (ComputeIdealVelocity t base)
-    static const f32 KF_AFTERTOUCH_LAT           = 0.0f;  // FLAG flt_82F2A304 (lateral force scale)
-    static const f32 KF_AFTERTOUCH_ROLL          = 0.0f;  // FLAG flt_82F2A2FC (roll impulse scale)
-    static const f32 KF_AFTERTOUCH_PITCH         = 0.0f;  // FLAG flt_82F2A300 (pitch impulse scale)
-    static const f32 KF_TARGET_SCORE_GATE        = 0.0f;  // FLAG flt_82F2A328 (UpdateTargetAssist gate)
+    // ⭐⭐ THE SEED CONSTANTS ARE READ (2026-08-03, constants wave). The banner that used to sit
+    // here said "the exports do NOT contain their numeric values (verified: 0x82F2A2xx have no
+    // function/data export)". That verification was sound but it answered the wrong question: the
+    // IDA *function* exports carry no data, and the whole 0x82F2A2xx block is not un-homed .rdata
+    // at all -- it is ORDINARY INITIALISED .data that has held its values in the image the entire
+    // time. flt_82F2A2A0 literally contains 0x41A00000 = 20.0 in the file. There is no initialiser
+    // to disassemble and nothing to recover: one image read settles every row below. Each value
+    // here was decoded from the raw 16 bytes IDA reports at that address (big-endian f32).
+    //
+    // ⚠️ FOR THE NEXT PERSON: "absent from the exports" is not the same as "absent from the image".
+    // Five sweeps re-derived this block's *addresses* and none of them read the *bytes*.
+    static const f32 KF_TIMEUNTILPUSH_DELAY      = 0.4f;         // flt_82F2A2A4 (SetPlayerVehicleInShowtime seed)
+    static const f32 KF_LAUNCH_PUSH_SPEED        = 20.0f;        // flt_82F2A2A0 (launch impulse scale, m/s)
+    static const f32 KF_LAUNCH_AIRRAM_FACTOR     = 0.02f;        // flt_82F2A2AC
+    static const f32 KF_LAUNCH_AIRRAM_ARG        = 0.1f;         // flt_82F2A2B0
+    static const f32 KF_DAMAGE_BUDGET_SCALE      = 0.06f;        // flt_82F2A2C8 (PlayerParameters::Reset seed)
+    static const f32 KF_BOUNCE_AIRRAM_FACTOR     = 0.004f;       // flt_82F2A2F4
+    static const f32 KF_BOUNCE_AIRRAM_FACTOR_NB  = 0.001f;       // flt_82F2A2F0 (non-boosted bounce)
+    static const f32 KF_BOUNCE_VELOCITY_SCALE    = 3.0f;         // flt_82F2A2EC (+1.0 added inline)
+    static const f32 KF_PUSH_AIRRAM_FACTOR       = 0.01f;        // flt_82F2A29C
+    static const f32 KF_PUSH_AIRRAM_ARG          = 0.2f;         // flt_82F2A298
+    static const f32 KF_PUSH_SPIN_SCALE          = 500.0f;       // flt_82F2A2A8
+    // ⛔ RENAMED, NOT JUST FILLED. The five CapShowtimeVelocities caps were carried as a single
+    // "speed then vertical" ladder, and the numbers made that reading impossible (an "uncapped"
+    // vertical of 9 sitting BELOW the boosting vertical of 20). Re-deriving @0x825D7600 from the
+    // asm shows the function clamps TWO DIFFERENT REGISTERS, not one:
+    //   * mAngularVelocity (this+0x60) magnitude -> flt_82F2A2D8 / flt_82F2A2DC  (2 / 4 rad/s)
+    //   * mLinearVelocity  (this+0x50) magnitude -> flt_82F2A2E0 / flt_82F2A2E4  (8 / 20 m/s)
+    // and flt_82F2A2E8 (9.0) is not a third cap in either ladder: 0x825D781C does
+    // `fdivs f0, flt_82F2A2E8, f30`, i.e. it forms the RATIO 9/linearCap and clamps the .y lane of
+    // the UNIT DIRECTION to it. Multiplied back by the capped magnitude that is an absolute
+    // vertical-speed ceiling of 9 m/s, which is why it is smaller than 20 and why it is not
+    // ordered with the others. Values were always certain; the semantics were not, and they were
+    // wrong. Old names kept in these comments so the previous spellings stay greppable.
+    static const f32 KF_CAP_ANGULAR              = 2.0f;         // flt_82F2A2D8 (was KF_CAP_SPEED)
+    static const f32 KF_CAP_ANGULAR_BOOST        = 4.0f;         // flt_82F2A2DC (was KF_CAP_SPEED_BOOST)
+    static const f32 KF_CAP_LINEAR               = 8.0f;         // flt_82F2A2E0 (was KF_CAP_VERT)
+    static const f32 KF_CAP_LINEAR_BOOST         = 20.0f;        // flt_82F2A2E4 (was KF_CAP_VERT_BOOST)
+    static const f32 KF_CAP_VERTICAL_SPEED       = 9.0f;         // flt_82F2A2E8 (was KF_CAP_VERT_UNCAPPED)
+    static const f32 KF_IDEAL_T_BASE             = 5.0f;         // flt_82F2A330 (ComputeIdealVelocity t base)
+    static const f32 KF_AFTERTOUCH_LAT           = -2000.0f;     // flt_82F2A304 (lateral force scale)
+    static const f32 KF_AFTERTOUCH_ROLL          = 1400.0f;      // flt_82F2A2FC (roll impulse scale)
+    static const f32 KF_AFTERTOUCH_PITCH         = 1400.0f;      // flt_82F2A300 (pitch impulse scale)
+    static const f32 KF_TARGET_SCORE_GATE        = 0.765999973f; // flt_82F2A328 (UpdateTargetAssist gate)
     static const f32 KF_GRAVITY                  = 9.8100004f;   // resolved inline literal (ballistic arc)
 
     // ---------------------------------------------------------------------------------------
@@ -178,18 +195,33 @@ namespace Vehicle
     //   KVF_AI_CRASH_SLOWMO_FACTOR timestep scale. Full asm trace in RaceCarPhysics.h's own-block
     //   comment. Three call sites re-pointed here.
     //
-    // ⚠️ STILL NOT FAITHFUL, and deliberately left visible rather than papered over: the two rodata
-    //   seeds this function needs (flt_820037C8, the value stored into mfCrashTimer when the car is
-    //   NOT crashing, and unk_82FB8880 == KVF_AI_CRASH_SLOWMO_FACTOR) have not been read off the
-    //   image, so the not-crashing re-seed below still carries a placeholder literal and the
-    //   slow-mo timestep scaling is not applied at all. This TU is NOT MOUNTED
-    //   (tools\build\build_game_exe.bat has zero RaceCarPhysics.cpp hits), so none of it runs today
-    //   -- but it must not be mounted while those two remain guesses.
+    // ⭐⭐ THE THREE RODATA SEEDS ARE READ (2026-08-03, constants wave). All three were image
+    //   reads, not guesses, and the elided AI-crash slow-mo block below is restored:
+    //     flt_820037C8       @0x820037C8 .rdata = 0xBF800000 = -1.0   (mfCrashTimer "not crashing"
+    //                        re-seed; the committed placeholder happened to already be -1.0, so the
+    //                        VALUE does not move -- only its status, from PLACEHOLDER to attested.
+    //                        Eight other committed sites in this tree agree it is -1.0.)
+    //     unk_82FB83B0       .data splat, init@0x82C5B6A0 from unk_8208F9B4 @0x8208F9B4
+    //                        = 0x3F400000 = 0.75  == KVF_AI_CRASH_PAUSE_TIME (seconds)
+    //     unk_82FB8880       .data splat, init@0x82C5B6C0 from unk_8208F9B8 @0x8208F9B8
+    //                        = 0x42C80000 = 100.0 == KVF_AI_CRASH_SLOWMO_FACTOR
+    //
+    //   ⭐ THE FACTOR IS A DIVISOR, and that is proved by the instruction SHAPE, not by taste.
+    //   0x826416A8..0x826416D8 loads unk_82FB8880, then runs `vrefp` + TWO Newton-Raphson steps
+    //   (`vnmsubfp`/`vmaddfp` pairs against a vcfsx-built 1.0) before the `vmulfp128`. A compiler
+    //   emitting `v1 * K` needs none of that -- it would multiply by the loaded vector directly.
+    //   The reciprocal refinement is only ever emitted for a DIVIDE, so the multiplier applied to
+    //   the sim timestep is 1/100 = 0.01, i.e. a 100x slow-motion window, not a 100x speed-up.
+    //   (Same idiom, same reading, at 0x82C5D7D0 and 0x82C5C1C8 elsewhere in the image.)
     //
     //   lfTimeStep arrives in a VMX lane (the asm splats v2/v1). ⚠️ THE TWO VECTORS ARE NOT
     //   INTERCHANGEABLE: mfCrashTimer integrates v2 (the REAL frame time, so the slow-mo window is
     //   bounded in real time) while mfTimeSinceTookDownPlayer and mfBeachedTime integrate v1 (the
-    //   SIM timestep, which the slow-mo path scales).
+    //   SIM timestep, which the slow-mo path scales). ⭐ THE SPLIT IS NOW APPLIED. It was deferred
+    //   only because the scaling that makes the two differ was elided; with the factor read, leaving
+    //   those integrations on v2 would be a NEWLY WRONG result rather than an inert one. The asm
+    //   stores v127 (== v1) -- not v126 (== v2) -- into the scratch it adds at 0x826418CC
+    //   (mfUncappedSpeedTimer), 0x826418E4 (mfTimeSinceTookDownPlayer) and 0x826419CC (+0x1408).
     // ---------------------------------------------------------------------------------------
     void RaceCarPhysics::Update(s32 a2, const BrnPlayerDriverControls* lpControls,
                                 bool lbApplyAftertouch, s32 a5, s32 a6, s32 a7,
@@ -202,12 +234,11 @@ namespace Vehicle
         // the second incoming vector register; the asm is quoted in RaceCarPhysics.h above the
         // declaration (`stvx128 v126 ; lfs f13 ; fadds` on mfCrashTimer, at the top of the
         // CRASHING branch). NOT un-homed -- just never read off the asm.
-        // ⚠️ ONE dt IS NOT ENOUGH, and this model still only has one. The console integrates
-        // mfCrashTimer by v2 (real time) and mfTimeSinceTookDownPlayer / mfBeachedTime by v1 (the
-        // sim timestep, which the AI-slowmo path scales). Both arrive here -- lrPassThroughV1 is v1
-        // and lrTimeStep is v2 -- so the split is expressible; it is not applied below only because
-        // the slowmo scaling that makes the two differ is itself elided on an unread constant.
-        const f32 lfDT = lrTimeStep.x;
+        // ⭐ TWO dt's, as the console has. lrTimeStep is v2 (REAL frame time) and lrPassThroughV1
+        // is v1 (the SIM timestep, which the AI crash slow-mo branch below scales by 1/100). Only
+        // mfCrashTimer integrates v2; every other timer in this function integrates v1, so v1 is
+        // read at its use sites (AFTER the possible scaling) rather than snapshotted here.
+        const f32 lfRealDT = lrTimeStep.x;   // v126/v2 lane 0 -- the unscaled frame time
 
         const f32 lfSteer = lpControls->GetSteer();
 
@@ -215,22 +246,32 @@ namespace Vehicle
         {
             // Crashing: run the AI crash-slowmo timer. It integrates the REAL frame time (v2), and
             // once it passes KVF_AI_CRASH_PAUSE_TIME the slow-motion window closes.
-            mfCrashTimer += lrTimeStep.x;   // asm 0x82641640..0x82641664 (`fadds f0,f0,v2.x`)
-            // ⚠️ ELIDED, and it is NOT inert: `if (mfCrashTimer > KVF_AI_CRASH_PAUSE_TIME)
-            //    mbAISlowMo = false;` then `if (mbAISlowMo) <scale the sim timestep v1 by
-            //    1/KVF_AI_CRASH_SLOWMO_FACTOR>` (asm 0x8264168C..0x826416D8). Both constants are
-            //    un-read rodata (unk_82FB83B0 / unk_82FB8880), so writing the comparison would mean
-            //    inventing them. Left out with the flag rather than guessed.
-            mfSlamSteering = 0.0f;          // this->float1404 = 0.0
+            mfCrashTimer += lfRealDT;       // asm 0x82641640..0x82641664 (`fadds f0,f0,v2.x`)
+
+            // ⭐ RESTORED 2026-08-03, both constants now read off the image (see the block comment).
+            // asm 0x82641668..0x82641698: splat mfCrashTimer, `vcmpgtfp. v13, v0` against
+            // unk_82FB83B0 (0.75), and on greater-than clear mbAISlowMo @+0x1434.
+            static const f32 KVF_AI_CRASH_PAUSE_TIME   = 0.75f;    // unk_82FB83B0 <- unk_8208F9B4
+            static const f32 KVF_AI_CRASH_SLOWMO_FACTOR = 100.0f;  // unk_82FB8880 <- unk_8208F9B8
+
+            if (mfCrashTimer > KVF_AI_CRASH_PAUSE_TIME)
+                mbAISlowMo = false;         // asm 0x82641698: `stb r30(0), 0x1434(r31)`
+
+            // asm 0x8264169C..0x826416D8: while mbAISlowMo is set, the SIM timestep v1 is divided
+            // by KVF_AI_CRASH_SLOWMO_FACTOR (vrefp + 2 Newton steps, then `vmulfp128 v127, v0, v1`).
+            // v127 is v1, and every later use of v1 in this function reads the SCALED value.
+            if (mbAISlowMo)
+                lrPassThroughV1 = vpu::Mult(lrPassThroughV1, 1.0f / KVF_AI_CRASH_SLOWMO_FACTOR);
+
+            mfSlamSteering = 0.0f;          // this->float1404 = 0.0 (flt_82001CC0)
         }
         else
         {
-            // FLAG (rodata): the console re-seeds mfCrashTimer from flt_820037C8 here
-            // (asm 0x826416F4..0x826416FC, which also clears mbAISlowMo). That symbol has not been
-            // read off the image; the -1.0f below is the committed PLACEHOLDER it has always been,
-            // now correctly named. Do not treat it as recovered.
+            // asm 0x826416F0..0x826416FC: clear mbAISlowMo, then re-seed mfCrashTimer from
+            // flt_820037C8. That symbol is READ: 0x820037C8 .rdata = 0xBF800000 = -1.0f, the same
+            // "invalid timer" sentinel it carries at eight other committed sites in this tree.
             mbAISlowMo = false;             // asm: `stb r30(0), 0x1434(r31)`
-            mfCrashTimer = -1.0f;           // FLAG: placeholder for flt_820037C8
+            mfCrashTimer = -1.0f;           // flt_820037C8 == -1.0f (image-attested)
 
             // ⭐ RE-NAMED 2026-08-03. The asm is `lwz r11,0x44(r29); cmpwi 1; bne` then
             // `lbz r11,0x4E(r29)` (@0x82641700..0x82641714): the console checks the DRIVER TYPE and,
@@ -293,14 +334,18 @@ namespace Vehicle
             VehiclePhysics::UpdateSteering(lpControls->mbIsSteeringWheel ? 1 : 0, lfSteer);
 
         // Decay the uncapped-speed window timer while it is positive.
+        // ⭐ v1, NOT v2: asm 0x826418CC stores v127 (the sim timestep, slow-mo scaled) into the
+        // scratch it then subtracts at 0x826418D4. Was lfDT (v2) while the scaling was elided.
         if (mbPlayerCarInShowtime && MS.mfUncappedSpeedTimer > 0.0f)
-            MS.mfUncappedSpeedTimer -= lfDT;
+            MS.mfUncappedSpeedTimer -= lrPassThroughV1.x;
 
         // ⭐ RE-POINTED 2026-08-03. This store is at +0x1400 (asm 0x826418E0: `lfs f0,0x1400(r31)`
         // / 0x826418F8: `stfs f0,0x1400(r31)`), i.e. mfTimeSinceTookDownPlayer -- the post-takedown
         // invulnerability clock HasRecentlyTakendownPlayer reads. It was written into the +0x1430
         // member, which is a different timer entirely.
-        mfTimeSinceTookDownPlayer += lfDT;
+        // ⭐ v1, NOT v2: asm 0x826418E4 stores v127 (the sim timestep) into the scratch it adds at
+        // 0x826418F0. Was lfDT (v2) while the slow-mo scaling that makes the two differ was elided.
+        mfTimeSinceTookDownPlayer += lrPassThroughV1.x;
 
         // Latch aftertouch-active for this frame: needs the request flag (a5), an aftertouch-enable
         // input ( > 0 ) and the virtual "can use aftertouch" query (vtbl+20).
@@ -439,7 +484,9 @@ namespace Vehicle
     // ---------------------------------------------------------------------------------------
     void RaceCarPhysics::AddTractionPoint(s32 leWheel, u32 luSurfaceTag)
     {
-        static const f32 KF_TRACTION_PUSH_THRESHOLD = 0.0f;   // FLAG unk_82FB9180
+        // unk_82FB9180 <- flt_82001DA0 (0.5), static-init splat @0x82C5D030. ⚠️ At 0.0f the gate read
+        // `if (0 >= pushTimer)`, i.e. INVERTED -- it fired whenever the timer was non-positive.
+        static const f32 KF_TRACTION_PUSH_THRESHOLD = 0.5f;   // unk_82FB9180
 
         // chains to the base SimpleVehiclePhysics::AddTractionPoint -- declared as an additive base
         // method on VehiclePhysics (this minimal slice has no real SimpleVehiclePhysics base type).
@@ -475,7 +522,9 @@ namespace Vehicle
     // ---------------------------------------------------------------------------------------
     void RaceCarPhysics::ApplyPropCollisionImpulseSum()
     {
-        static const f32 KF_PROP_IMPULSE_SCALE = 0.0f;   // FLAG unk_82FB91C0
+        // unk_82FB91C0 <- flt_820047C8 (0.05), static-init splat @0x82C5D13C. ⚠️ At 0.0f this was an
+        // unguarded `mPropCollisionImpulseSum *= 0` -- every accumulated prop impulse was ERASED.
+        static const f32 KF_PROP_IMPULSE_SCALE = 0.05f;   // unk_82FB91C0
 
         // impulse *= scale  (faithful-but-inert: scale is a placeholder)
         mPropCollisionImpulseSum = vpu::Mult(mPropCollisionImpulseSum, KF_PROP_IMPULSE_SCALE);
@@ -627,12 +676,29 @@ namespace Vehicle
 
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::CapShowtimeVelocities  @0x825D7600  (gated on mbLaunchActive)
-    //   Clamp the showtime velocity each frame. Speed cap = boosting ? KF_CAP_SPEED_BOOST : KF_CAP_SPEED;
-    //   vertical cap = boosting ? KF_CAP_VERT_BOOST : KF_CAP_VERT. If |v| > speedCap, rescale v to the
-    //   cap along its unit direction. For the vertical component: unless IsPlayerVehicleWithUncapped...
-    //   lets a fresh launch exceed it, clamp v.y to the vertical cap (KF_CAP_VERT_UNCAPPED/vertCap in
-    //   the uncapped window). FLAG: all caps are un-homed rodata (placeholders) -> the clamp shape is
-    //   faithful, the numeric limits inert.
+    //
+    // ⛔ REWRITTEN 2026-08-03. The committed body clamped ONE vector (mLinearVelocity) with both
+    //   cap pairs. The asm clamps TWO SEPARATE REGISTERS, and the second one it never touched:
+    //     0x825D7634  `addi r29, r30, 0x60`  -> mAngularVelocity, clamped first
+    //     0x825D7730  `addi r28, r30, 0x50`  -> mLinearVelocity,  clamped second
+    //   ExternallySimulatedBody.h pins mLinearVelocity @+0x50 and mAngularVelocity @+0x60, so the
+    //   register identities are not in doubt. Both cap pairs are chosen up front (0x825D7668/766C
+    //   default, 0x825D76E8/76EC when lbBounceBoosting), then used one per register.
+    //
+    //   ANGULAR (0x825D76F0..0x825D7724): if |omega| > cap, rescale to the cap along its unit
+    //   direction. Nothing else -- no vertical term, no uncapped-window exemption.
+    //
+    //   LINEAR (0x825D7760..0x825D78xx), in the asm's own order:
+    //     1. take |v| and its unit direction; if |v| is within FLT_EPSILON of zero (the
+    //        `vandc`+`vcmpgtfp` against stru_8208F620 @0x825D77E8) skip straight to step 3.
+    //     2. unless IsPlayerVehicleWithUncappedShowtimeSpeed(), clamp the .y lane OF THE UNIT
+    //        DIRECTION to KF_CAP_VERTICAL_SPEED / linearCap (`fdivs f0,f0,f30` @0x825D7820,
+    //        `vspltw v0,v13,1` then `vcmpgtfp.` @0x825D7844-50).
+    //     3. clamp the MAGNITUDE to linearCap (`fcmpu f31,f30 ; ble ; fmr` @0x825D7898).
+    //     4. only if step 2 or step 3 actually changed something (r29), rebuild
+    //        v = unit' * magnitude' and store back to +0x50.
+    //   Clamping the direction's .y and then the magnitude is what makes 9.0 an absolute vertical
+    //   speed limit: (9/cap) * cap = 9 m/s regardless of which cap is in force.
     // ---------------------------------------------------------------------------------------
     void RaceCarPhysics::CapShowtimeVelocities()
     {
@@ -640,31 +706,52 @@ namespace Vehicle
             return;
 
         // assert(mbPlayerCarInShowtime) -- elided.
-        f32 lfSpeedCap = KF_CAP_SPEED;   // flt_82F2A2D8
-        f32 lfVertCap  = KF_CAP_VERT;    // flt_82F2A2E0
-        if (MS.mbBounceBoosting)         // lbBounceBoosting
+        f32 lfAngularCap = KF_CAP_ANGULAR;   // flt_82F2A2D8
+        f32 lfLinearCap  = KF_CAP_LINEAR;    // flt_82F2A2E0
+        if (MS.mbBounceBoosting)             // lbBounceBoosting
         {
-            lfSpeedCap = KF_CAP_SPEED_BOOST;   // flt_82F2A2DC
-            lfVertCap  = KF_CAP_VERT_BOOST;    // flt_82F2A2E4
+            lfAngularCap = KF_CAP_ANGULAR_BOOST;   // flt_82F2A2DC
+            lfLinearCap  = KF_CAP_LINEAR_BOOST;    // flt_82F2A2E4
         }
 
-        Vector3 lvVel = GetLinearVelocity();   // +0x60 in the asm reads the body local-vel register
-        const f32 lfSpeedSq = vpu::MagnitudeSquared(lvVel);
-        const f32 lfSpeed   = (lfSpeedSq > 0.0f) ? std::sqrt(lfSpeedSq) : 0.0f;
-
-        // speed clamp: if magnitude exceeds the cap, rescale to the cap along the unit direction.
-        if (lfSpeed > lfSpeedCap)
-            lvVel = vpu::Mult(vpu::Normalize(lvVel), lfSpeedCap);
-
-        // vertical clamp -- skipped while in the uncapped-speed window (fresh launch).
-        if (!IsPlayerVehicleWithUncappedShowtimeSpeed())
+        // ---- 1. angular velocity (this+0x60): plain magnitude clamp ----
+        Vector3 lvAngular = GetAngularVelocity();
+        const f32 lfAngSq  = vpu::MagnitudeSquared(lvAngular);
+        const f32 lfAngMag = (lfAngSq > 0.0f) ? std::sqrt(lfAngSq) : 0.0f;
+        if (lfAngMag > lfAngularCap)
         {
-            const f32 lfVertLimit = (lfVertCap != 0.0f) ? (KF_CAP_VERT_UNCAPPED / lfVertCap) : 0.0f;
-            if (lvVel.y > lfVertLimit)
-                lvVel.y = lfVertLimit;
+            lvAngular = vpu::Mult(vpu::Normalize(lvAngular), lfAngularCap);
+            SetAngularVelocity(lvAngular);   // stvx128 back to +0x60
         }
 
-        SetLinearVelocity(lvVel);   // stvx128 back to +0x60/+0x50
+        // ---- 2. linear velocity (this+0x50): direction .y clamp, then magnitude clamp ----
+        Vector3 lvLinear = GetLinearVelocity();
+        const f32 lfLinSq  = vpu::MagnitudeSquared(lvLinear);
+        f32 lfLinMag = (lfLinSq > 0.0f) ? std::sqrt(lfLinSq) : 0.0f;
+        Vector3 lvUnit = vpu::Normalize(lvLinear);
+        bool lbChanged = false;
+
+        // The asm's zero-length guard: |magnitude| must exceed FLT_EPSILON (stru_8208F620) before
+        // the direction is worth touching -- a zero-length velocity has no meaningful unit vector.
+        static const f32 KF_LENGTH_EPSILON = 1.1920929e-07f;   // stru_8208F620 (== FLT_EPSILON)
+        if (std::fabs(lfLinMag) > KF_LENGTH_EPSILON && !IsPlayerVehicleWithUncappedShowtimeSpeed())
+        {
+            const f32 lfUnitYLimit = KF_CAP_VERTICAL_SPEED / lfLinearCap;   // 9 / (8 or 20)
+            if (lvUnit.y > lfUnitYLimit)
+            {
+                lvUnit.y  = lfUnitYLimit;
+                lbChanged = true;
+            }
+        }
+
+        if (lfLinMag > lfLinearCap)
+        {
+            lfLinMag  = lfLinearCap;
+            lbChanged = true;
+        }
+
+        if (lbChanged)
+            SetLinearVelocity(vpu::Mult(lvUnit, lfLinMag));   // stvx128 back to +0x50
     }
 
     // ---------------------------------------------------------------------------------------

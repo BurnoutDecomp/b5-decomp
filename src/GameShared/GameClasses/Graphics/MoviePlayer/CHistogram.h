@@ -40,14 +40,27 @@ private:
 
     static const u32 KU_NUM_BINS = 256;
 
-    // Reconstructed rodata float literals (values not attested in any dump
-    // available at reconstruction time; derived from statistical/normalizing
-    // role -> flagged medium confidence in the function entries).
-    static constexpr f32 KF_ONE                     = 1.0f;  // flt_82001C98
-    static constexpr f32 KF_HIST_INTERSECTION_SCALE = 1.0f;  // flt_82001D9C
-    static constexpr f32 KF_HIST_DIST_DEFAULT       = 0.0f;  // flt_820037C8
-    static constexpr f32 KF_HIST_CHANGED_HIGH       = 0.6f;  // dbl_8210EF58
-    static constexpr f32 KF_HIST_CHANGED_LOW        = 0.25f; // flt_82003F40
+    // Rodata float literals. The SYMBOL each one loads was always asm-attested; the VALUES were
+    // originally guessed from role because no data dump was available. Three are now READ OUT OF
+    // THE IMAGE (.rdata raw bytes) and two of those guesses were wrong -- corrected here:
+    //   flt_82001C98 = 0x3F800000 =  1.0   (guess was right)
+    //   flt_82001D9C = 0x40000000 =  2.0   (guess said 1.0  -- WRONG, corrected)
+    //   flt_820037C8 = 0xBF800000 = -1.0   (guess said 0.0  -- WRONG, corrected)
+    //   flt_82003F40 = 0x3E800000 =  0.25  (guess was right)
+    // The two corrections are asm-attested at their use sites in CalcHistDist @0x82A048B0:
+    //   0x82A04A28/4A40 `lis r11, flt_82001D9C@ha ; lfs f0, flt_82001D9C@l(r11) ; fmuls f0,f13,f0`
+    //     -- the mode-2 intersection distance is scaled by 2.0, not 1.0.
+    //   0x82A04A54/4A58 `lis r11, flt_820037C8@ha ; lfs f1, flt_820037C8@l(r11) ; b <ret>`
+    //     -- the mode-not-1-not-2 fallthrough returns -1.0, an "invalid distance" sentinel, not 0.0.
+    // -1.0 is the value flt_820037C8 carries at eight other committed call sites in this tree
+    // (LineSegIntersect, BrnAStar, TriangleVolume, AALineClipper, GPBox, BrnAIDriver, ...); the
+    // 0.0f here was the lone dissenter and it was a placeholder, not a reading.
+    // dbl_8210EF58 is a DOUBLE and lies outside the dumped span -- still an unverified guess.
+    static constexpr f32 KF_ONE                     = 1.0f;  // flt_82001C98  (image: 0x3F800000)
+    static constexpr f32 KF_HIST_INTERSECTION_SCALE = 2.0f;  // flt_82001D9C  (image: 0x40000000)
+    static constexpr f32 KF_HIST_DIST_DEFAULT       = -1.0f; // flt_820037C8  (image: 0xBF800000)
+    static constexpr f32 KF_HIST_CHANGED_HIGH       = 0.6f;  // dbl_8210EF58  -- STILL A GUESS
+    static constexpr f32 KF_HIST_CHANGED_LOW        = 0.25f; // flt_82003F40  (image: 0x3E800000)
 
 public:
     // --- byte-exact layout (total size 0x81C) ---

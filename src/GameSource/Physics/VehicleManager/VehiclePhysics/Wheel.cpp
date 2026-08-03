@@ -167,7 +167,11 @@ namespace Vehicle
     // until the factor is recovered. NEVER fabricated.
     void Wheel::Reset(Vector3 lvPosition)
     {
-        static const f32 KF_RESET_SCALE = 0.0f;   // FLAG: un-homed unk_82FB8AB0 (.rdata) scale factor
+        // ⭐ IDENTIFIED, not just filled. unk_82FB8AB0 <- flt_8200D4DC, static-init splat @0x82C5AF90,
+        // and the value 0.447039992 is BIT-IDENTICAL to flt_82F31928 -- the MPH->m/s conversion this
+        // image uses everywhere. So this is not an "un-homed rodata scale factor" of unknown meaning:
+        // Reset seeds the integration register from a direction expressed in MPH.
+        static const f32 KF_RESET_SCALE = 0.447039992f;   // unk_82FB8AB0 == flt_82F31928 (MPH -> m/s)
 
         // Zero the integration / slip-region lanes the asm clears (vrlimi cascades at +0x30/+0x40),
         // and the suspension-inertia register touched at +0x70 region.
