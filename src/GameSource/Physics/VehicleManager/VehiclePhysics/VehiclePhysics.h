@@ -410,11 +410,18 @@ namespace Vehicle
         // `BrnPhysics__ExternalPhysicsBody__AddWorldSpaceImpulse` / `...AngularImpulse` with
         // r3 == this + 0x10 (the ExternalPhysicsBody sub-object), not a VehiclePhysics symbol.
 
-        // (owned elsewhere): the drift-entry test UpdateDriftState chains into to LATCH a new drift
-        // (it sets mu8DriftState + seeds the bank when entry conditions are met). DECLARE-ONLY here --
-        // bodied by its own TU (no ODR clash). Added BY NAME by the C06 group.
-        void CheckForEnteringDrift(const BrnPlayerDriverControls* lpControls, f32 lfSlipAngle,
-                                   f32 lfSpeed, f32 lfTimeStep, f32 lfSteeringDir);
+        // @0x825FA448: the drift-entry test UpdateDriftState chains into to LATCH a new drift (it
+        // tail-calls EnterDrift when the entry conditions are met).
+        // ⭐ BODIED 2026-08-03 -- and it was the LAST unresolved external standing between
+        // VehiclePhysics.cpp and the build. It had been declare-only ("bodied by its own TU") for as
+        // long as this header existed, with a FIVE-f32 signature that no console function ever had.
+        // ⚠️ It is ABSENT from `.ida-exports/BURNOUT_X360_ARTIST.XEX/` (third confirmed export-set
+        // hole). It is a perfectly ordinary named function in the IDB -- headless IDA 9.3 reports
+        // `0x825FA448..0x825FA748`, 192 instructions -- and `fn_index.txt` shows the gap directly
+        // (EnterDrift @0x825FA268 +120 instrs ends exactly at 0x825FA448; the next indexed symbol is
+        // UpdateDriftScale @0x825FA748). The PS3 DecFIGS set also carries it, at 0x6C8924.
+        void CheckForEnteringDrift(const BrnPlayerDriverControls* lpControls, f32 lfAbsSteering,
+                                   f32 lfAbsDriftScale, f32 lfSpeedMPS, VecFloat lvfTimeStep);
 
         // FLAG (re-parenting): a 2-argument stand-in that HIDES the base's real 4-argument
         // SimpleVehiclePhysics::AddTractionPoint(EVehicleDrivenWheel, Vector3, Vector3, u32)
@@ -708,20 +715,39 @@ namespace Vehicle
         //   the original-controls drift-override byte). Direction signed by the drift state.
         void ModifyControlsForDrift(BrnPlayerDriverControls& lrControls) const;
 
-        // @0x8262E200: the per-frame drift entry. Refreshes the cached steering direction, runs the
-        //   drift state machine (UpdateDriftState), and when drifting (mu8DriftState!=0) applies the
-        //   drift forces (ApplyDriftForces); when not drifting, eases the cached drift scale back.
-        void UpdateDrift(const BrnPlayerDriverControls* lpOriginalControls, f32 lfTimeStep);
+        // ⭐⭐ SIGNATURES CORRECTED 2026-08-03 (the "cheap prize" wave). The DecFIGS DWARF declares
+        //    the WHOLE drift family with a TRAILING `VecFloat` time-step that this header had
+        //    dropped from every one of them (VehiclePhysics.h:1439/1451/1457/1460/1466):
+        //        UpdateDrift          (const BrnPlayerDriverControls*, VecFloat)
+        //        UpdateDriftState     (const BrnPlayerDriverControls*, f32, f32, f32, VecFloat)
+        //        CheckForEnteringDrift(const BrnPlayerDriverControls*, f32, f32, f32, VecFloat)
+        //        ApplyDriftForces     (const BrnPlayerDriverControls*, f32, f32, f32, VecFloat)
+        //        UpdateDriftScale     (const BrnPlayerDriverControls*, f32, f32, VecFloat)
+        //    The X360 asm agrees: UpdateDrift keeps the incoming v1 alive across the whole body
+        //    (`vmr128 v122,v1` @0x8262E23C) and hands it to UpdateDriftState/ApplyDriftForces, and
+        //    UpdateDriftState is the only consumer that USES it (guard 3 integrates a timer by it).
+        //    Five wrong arities, one systemic drop -- exactly the trap the tree already documents
+        //    for stubs. The three f32s' ROLES are the PS3 DWARF's own local names, and each one is
+        //    independently confirmed by what UpdateDrift @0x8262E200 loads into f1/f2/f3.
+
+        // @0x8262E200: the per-frame drift entry. Computes |Steering| (+0xFE0 .y), |DriftScale|
+        //   (+0x1000 .w) and the body speed in m/s from mLinearVelocity, runs the drift state machine
+        //   (UpdateDriftState), and when drifting (mu8DriftState!=0) advances TimeDrifting by the
+        //   time-step and applies the drift forces (ApplyDriftForces); when not drifting, eases the
+        //   cached drift scale back.
+        void UpdateDrift(const BrnPlayerDriverControls* lpOriginalControls, VecFloat lvfTimeStep);
 
         // @0x8261F728: the drift state machine. CheckForEnteringDrift then a long battery of
-        //   ExitDrift guards (slip too small, off-ground too long, no wheels on ground, slip-ratio
-        //   below threshold, exit timers, attribs limit, speed too low, steering crossed centre).
-        void UpdateDriftState(const BrnPlayerDriverControls* lpControls, f32 lfSlipAngle,
-                              f32 lfSpeed, f32 lfSteeringDir);
+        //   ExitDrift guards (handbrake-on time, handbrake-off time, static-friction dwell, exit
+        //   timers, the attribs speed limit, off-ground time, above-ground validity, speed too low,
+        //   steering crossed centre).
+        void UpdateDriftState(const BrnPlayerDriverControls* lpControls, f32 lfAbsSteering,
+                              f32 lfAbsDriftScale, f32 lfSpeedMPS, VecFloat lvfTimeStep);
 
         // @0x825FA748: grows mDriftScale toward the target slip and applies the natural self-aligning
         //   drift yaw (ApplyNaturalDriftForces). Reads the controls' aftertouch/forced-drift state.
-        void UpdateDriftScale(const BrnPlayerDriverControls* lpControls, f32 lfTimeStep, f32 lfSlip);
+        void UpdateDriftScale(const BrnPlayerDriverControls* lpControls, f32 lfAbsSteering,
+                              f32 lfAbsDriftScale, VecFloat lvfTimeStep);
 
         // @0x825FA268: latches mu8DriftState from the sign of the entry steering input
         //   (mfSteering <= 0 -> FacingRight(2), else FacingLeft(1)), seeds the drift timers/scale and
@@ -736,8 +762,11 @@ namespace Vehicle
         // @0x8261FAB0: dispatches the four drift sub-forces in order: MaintainDriftSpeed,
         //   UpdateDriftScale, ApplyDriftYaw, then ApplyDriftLatForce (the last gated by
         //   mbAllWheelsHaveTraction && mAboveGroundTestResult.mbValid && !mbHandBrake).
-        void ApplyDriftForces(const BrnPlayerDriverControls* lpControls, f32 lfSlipAngle,
-                              f32 lfSpeed, f32 lfSteeringDir);
+        //   [V] 0x8261FB28-3C: it forwards f1/f2 and the VecFloat v1 UNCHANGED into UpdateDriftScale
+        //   (`vmr128 v1,v127 ; fmr f2,f30 ; fmr f1,f31`), which is what pins UpdateDriftScale's own
+        //   two f32s to lfAbsSteering / lfAbsDriftScale as well.
+        void ApplyDriftForces(const BrnPlayerDriverControls* lpControls, f32 lfAbsSteering,
+                              f32 lfAbsDriftScale, f32 lfSpeedMPS, VecFloat lvfTimeStep);
 
         // @0x825D2B20: the sideways world-space force that steps the rear out. Tangent-projects the
         //   lateral force against the ground normal (+0x580) so drift never pushes into/off the road.
