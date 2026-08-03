@@ -282,11 +282,10 @@ namespace CgsPhysics
     // banner in CgsModule.h; nothing here indexes a vtable numerically, so the
     // tree's extra `virtual ~Module()` stays invisible.
     //
-    // ⚠️ NOT YET DECLARED, deliberately: the console also overrides Release
-    // (slot 2, @0x828A2048, 54 asm -- needs only the already-committed
-    // operator++(EReleaseStage&,int) and ModuleSingleBuffered::Release) and
-    // Destruct (slot 3, @0x828A2120, also missing from .ida-exports), and declares
-    // three new virtuals at slots 16/17/18:
+    // ⭐ Release (slot 2, @0x828A2048) and Destruct (slot 3, @0x828A2120) LANDED 2026-08-03,
+    // with their bodies -- Destruct pulled out of the .i64 with headless IDA because it is an
+    // export-set hole. What is still NOT declared, deliberately, is the three new virtuals at
+    // slots 16/17/18:
     //     Prepare(rw::IResourceAllocator*, const SimulationParams&) @0x828A6A08
     //     Update(IOBufferStack*, IOBufferStack*, const InputBuffer*, OutputBuffer*) @0x828A74D0
     //     ProcessInput(const InputBuffer*) @0x828A76D0
@@ -332,6 +331,16 @@ namespace CgsPhysics
         // X360 @0x828A1EE8 (86 instructions, 5 call sites, no asserts). Console
         // vtable slot 0.
         void Construct() override;
+
+        // X360 @0x828A2048 (54 instructions). Console vtable slot 2. A fall-through
+        // release FSM over meReleaseStage; returns false (cursor left on stage 1) when
+        // the base's Release has not finished, so the owner re-enters next frame.
+        bool Release() override;
+
+        // X360 @0x828A2120 (16 instructions). Console vtable slot 3. ⚠️ Absent from
+        // .ida-exports -- recovered from BURNOUT_X360_ARTIST.XEX.i64 with headless IDA 9.3
+        // (the same export-set hole RigidBodyData::RigidBodyData was).
+        void Destruct() override;
 
     private:
         // DWARF h:532..:536. Static, so they take no space.

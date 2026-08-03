@@ -348,6 +348,71 @@ namespace CgsPhysics
         mbIsNewModule = true;                            // stb r11(=1), 4(r31)
     }
 
+    // X360 @0x828A2048 (54 instructions). Console vtable slot 2 -- the release FSM. It is a
+    // FALL-THROUGH switch on meReleaseStage: stage 0 advances the cursor and falls into stage 1;
+    // stage 1 releases the base and, on success, clears the three bit arrays and the three
+    // counters and advances the cursor again, falling into stage 2; stage 2 resets mePrepareStage
+    // and reports done. Stage >= 3 is unreachable and trips.
+    //
+    // ⚠️ The stage-1 EARLY RETURN is the load-bearing part: when ModuleSingleBuffered::Release()
+    // returns false the console returns false with the cursor LEFT ON STAGE 1, so the owner
+    // re-enters next frame and retries. Returning true there (or clearing the tables anyway)
+    // would silently release a module that had not finished releasing.
+    bool PhysicsSimulationModule::Release()
+    {
+        switch (meReleaseStage)
+        {
+        case RELEASESTAGE_START:                   // blt cr6 (meReleaseStage < 1)
+            meReleaseStage++;                      // bl CgsPhysics::operator++ @0x828A20A4
+            // fall through -- the console has no branch here
+        case RELEASESTAGE_MANAGER:                 // beq cr6 (meReleaseStage == 1)
+            if (!ModuleSingleBuffered::Release())  // bl @0x828A20AC; clrlwi/cmplwi/bne
+                return false;                      // li r3, 0 @0x828A20BC
+
+            // The same twelve `std 0` + three `stw 0` block Construct writes.
+            mNeedFreeze.UnSetAll();                // +0x47E8
+            mDone.UnSetAll();                      // +0x4808
+            mSeen.UnSetAll();                      // +0x4828
+            miNumRigidBodies = 0;                  // stw r30(=0), 0x4848(r31)
+            miNumDrives      = 0;                  // stw r30(=0), 0x484C(r31)
+            miNumJoints      = 0;                  // stw r30(=0), 0x4850(r31)
+
+            meReleaseStage++;                      // bl CgsPhysics::operator++ @0x828A210C
+            // fall through
+        case RELEASESTAGE_DONE:                    // blt cr6 (meReleaseStage < 3)
+            mePrepareStage = PREPARESTAGE_START;   // stw r30(=0), 0x228(r31)
+            return true;                           // li r3, 1 @0x828A2110
+        }
+
+        // The console's out-of-range arm fires an assert whose message/file operands are both
+        // literal 0 and whose line operand is literal -1 (`li r3,0 ; li r4,0 ; li r5,-1` at
+        // 0x828A207C..0x828A2084) -- i.e. it carries no text of its own. CGS_ASSERT supplies its
+        // own __FILE__/__LINE__, so the condition is reproduced and the message is left describing
+        // the tripwire rather than inventing console text.
+        CGS_ASSERT(false, "meReleaseStage out of range");
+        return false;                              // li r3, 0 @0x828A2090
+    }
+
+    // X360 @0x828A2120. Console vtable slot 3.
+    //
+    // ⚠️ EXPORT-SET HOLE -- this function is absent from .ida-exports (the JSON for the address
+    // does not exist; 0x828A2168 is the next exported symbol, AllocateMemoryAndInitialiseRW).
+    // Recovered with headless IDA 9.3 against a COPY of BURNOUT_X360_ARTIST.XEX.i64, same as
+    // RigidBodyData::RigidBodyData. It is sixteen instructions: the identical twelve `std 0` +
+    // three `stw 0` block, then an unconditional `b` (a tail jump, not a call) to
+    // ModuleSingleBuffered::Destruct.
+    void PhysicsSimulationModule::Destruct()
+    {
+        mNeedFreeze.UnSetAll();                    // std 0 x4 at +0x47E8
+        mDone.UnSetAll();                          // std 0 x4 at +0x4808
+        mSeen.UnSetAll();                          // std 0 x4 at +0x4828
+        miNumRigidBodies = 0;                      // stw r11(=0), 0x4848(r3)
+        miNumDrives      = 0;                      // stw r11(=0), 0x484C(r3)
+        miNumJoints      = 0;                      // stw r11(=0), 0x4850(r3)
+
+        ModuleSingleBuffered::Destruct();          // b @0x828A2160 (tail jump)
+    }
+
     // -------------------------------------------------------------------------------
     // Layout pins for PhysicsSimulationModule. Never called; exists only to host the
     // offsetof asserts (offsetof on a private member must be evaluated in member-function
