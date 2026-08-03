@@ -91,6 +91,7 @@
 #include "BrnCommonTypes.h"   // Vector3, Vector3Plus, Vector4
 #include "types.hpp"          // f32, s8
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"   // Wheel + Wheel::RoadContact
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"   // VehicleAttribs (canonical home; replaces the by-name slice this file used to carry)
 #include "rw/physics/rigidbody.h"   // rw::physics::InputSpace (AirRamEffect::meImpulseSpace)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray<N> (air-ram/spin slot allocators)
 // BrnPhysics::SuspensionSpring at its DWARF home. This file used to carry a MINIMAL OWNING SLICE
@@ -117,105 +118,24 @@ namespace Vehicle
     // type owned by a deformation TU; only forwarded through, never dereferenced here.
     struct StreamedDeformationSpec;
 
-    // ----- ADDITIVE GROW (aero/downforce group): a MINIMAL OWNING SLICE of the per-car
-    //       VehicleAttribs block, reconstructed only far enough for GetDownForce to read its
-    //       aerodynamic coefficient. The full VehicleAttribs (masses, wheel positions, tyre/
-    //       steering/drift/engine/suspension/boost lanes) is owned by a separate future TU and
-    //       has NO committed header yet; when it lands this slice should be REPLACED by an include
-    //       of the real type (same as the EngineAttribs minimal slice in Engine.h). Per project
-    //       rule the member is pinned BY NAME at its console offset, not reproduced as padding.
-    struct VehicleAttribs
-    {
-        // @+0x70 (BY NAME). The base parameter register
-        // (mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce in the full VehicleAttribs). UpdateRoadNoise
-        // reads its .z lane as the per-vehicle road-noise scale factor (asm: `lwz mpAttribs,0x720 ;
-        // addi r11,r11,0x70 ; lvx128 ; vspltw128 v126,v0,2`). The other lanes belong to the full TU.
-        Vector4 mvBaseParams;
-
-        // @+0xB0 (BY NAME). The aero parameter register; GetDownForce reads its .w lane as the
-        // per-vehicle downforce/drag coefficient (asm: `lwz mpAttribs ; addi r11,r11,0xB0 ;
-        // lvx128 ; vspltw v11,v11,3`). The other lanes belong to the full VehicleAttribs TU.
-        Vector4 mvAeroParams;
-
-        // @+0xD0 (BY NAME). The per-vehicle surface-response blend register read by the three
-        // GetSurface* accessors (asm: `lwz mpAttribs ; addi r11,r11,0xD0 ; lvx128 ; vspltw`).
-        // Lane .x = grip blend (FRONT wheels), .y = grip blend (REAR wheels), .z = roughness
-        // scale, .w = linear-drag scale. (mvAeroParams + 0x20 = +0xD0.)
-        Vector4 mvSurfaceBlend;
-
-        // ----- ADDITIVE GROW (C06 steering/drift/handbrake group): the per-car STEERING + DRIFT
-        //       attrib lanes the drift pipeline samples. Each register is pinned BY NAME at its
-        //       console offset inside the per-car VehicleAttribs block (the full type owns the rest).
-        //       The exact lane->meaning split inside a register is, where the asm leaves it
-        //       ambiguous, FLAGGED; the offset + the lane index the code reads are ASM-exact.
-
-        // @+0xF0 (240, BY NAME). The steering attrib register. GetMaxSteeringAngleDuringDrift reads
-        //   lane .x as the max wheel angle (in DEGREES; the body multiplies by deg->rad 0.017453292).
-        Vector4 mvSteeringParams;     // FLAG: only lane .x is pinned by use; other lanes belong to full TU
-
-        // @+0x110 (272, BY NAME). The primary drift attrib register. UpdateDriftState reads lane .x
-        //   as the slip-angle limit; ApplyDriftLatForce/ApplyDriftYaw/UpdateDriftScale read lane .x.
-        Vector4 mvDriftParams0;
-
-        // @+0x120 (288, BY NAME). Drift control register. ModifyControlsForDrift reads lane .w and
-        //   lane .z (the drift steer-remap weights); EnterDrift consults it.
-        Vector4 mvDriftParams1;
-
-        // @+0x130 (304, BY NAME). ApplyDriftYaw reads lane .x as a yaw gate term.
-        Vector4 mvDriftParams2;
-
-        // @+0x140 (320, BY NAME). ApplyDriftLatForce reads lane .y (the lateral-force shaping coeff).
-        Vector4 mvDriftParams3;
-
-        // @+0x150 (336, BY NAME). ApplyDriftLatForce / ApplyDriftYaw / ApplyNaturalDriftForces read
-        //   lanes .x/.y/.z here (drift force/yaw magnitudes + the natural-yaw clamp).
-        Vector4 mvDriftParams4;
-
-        // @+0x160 (352, BY NAME). The drift yaw/push register: lane .x = min-yaw threshold (the
-        //   ExitDrift/UpdateDriftState guard), lane .y = drift push-time (the gate in
-        //   ApplyNaturalDriftForces / ApplyDriftYaw / MaintainDriftSpeed entry).
-        Vector4 mvDriftParams5;
-
-        // @+0x170 (368, BY NAME). ApplyDriftYaw / UpdateDrift read lane .y as a drift damping factor.
-        Vector4 mvDriftParams6;
-
-        // @+0x180 (384, BY NAME). ApplyDriftLatForce reads lane .z (the lateral-force final scale).
-        Vector4 mvDriftParams7;
-
-        // @+0x280 (640, BY NAME). ApplyCrashedContactImpulse scales the post-contact ANGULAR impulse
-        // by lane .y of this register (asm: `*(this+1824)+640 ; vspltw v13,v13,1`). A logical by-name
-        // pin (this slice is not offset-faithful); the other lanes belong to the full VehicleAttribs TU.
-        Vector4 mvCrashImpulseScale;
-
-        // ----- ADDITIVE GROW (C07 boost/speed-match group): the per-car BOOST attrib sub-block. The
-        //       three boost appliers (UpdateBoost / ApplyNormalBoostForce / ApplyBoostKickForce) sample
-        //       it via mpAttribs (+0x720) at +0x290..+0x2B0. Reproduced as the DWARF-named nested
-        //       VehicleAttribs::BoostAttribs (VehicleAttribs.h:794) so the lane->meaning split is the
-        //       authoritative one; pinned BY NAME at its console offset inside the per-car block (the
-        //       intervening engine/suspension/collision lanes belong to the full VehicleAttribs TU and
-        //       are not reproduced as padding). When the real VehicleAttribs.h lands, REPLACE this slice.
-        struct BoostAttribs
-        {
-            // @+0x290 (BY NAME). lane .x = BoostBase, .y = MaxBoostSpeed (the boost speed cap, read by
-            //   UpdateBoost as `MaxBoostSpeed * throttle`), .z = BoostLinearDrag, .w =
-            //   NormalBoostHeightOffset (the local offset ApplyNormalBoostForce applies the force at).
-            Vector4 mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset;
-
-            // @+0x2A0 (BY NAME). lane .x = NormalBoostAcceleration (sustained-boost accel), .y =
-            //   BoostKickMaxStartSpeed (kick eligibility speed ceiling), .z = BoostKickMaxTime, .w =
-            //   BoostKickMinTime (the clamp bounds on the computed kick window).
-            Vector4 mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime;
-
-            // @+0x2B0 (BY NAME). lane .x = BoostKickAcceleration (the larger kick accel), .y =
-            //   BoostKickHeightOffset (the off-centre local offset that turns the kick into a
-            //   wheelie/pitch-up torque). Lanes .z/.w unused by this group.
-            Vector4 mvBoostKickAcceleration_BoostKickHeightOffset;
-        };
-
-        // @+0x290 (BY NAME). The embedded boost attrib sub-block. mpAttribs->mBoostAttribs is read by
-        //   the three boost appliers (asm: `lwz mpAttribs,0x720 ; addi r,r,0x290/0x2A0/0x2B0 ; lvx128`).
-        BoostAttribs mBoostAttribs;
-    };
+    // ----- RETIRED SLICE (2026-08-03). This file used to carry a "by-name, NOT offset-faithful"
+    //       `struct VehicleAttribs` of ~14 registers, with a standing note to replace it with an
+    //       include of the real type once that landed. VehicleAttribs.h has now landed, at the
+    //       DWARF member order, so the slice is gone and the include above supplies the type.
+    //
+    //       ⭐ For the record: the slice's OFFSETS were right and the full definition that used to
+    //       live inside VehicleAttribs.cpp was wrong (it transposed mDriftAttribs and
+    //       mEngineAttribs). The register->member map the bodies below were written against is
+    //       preserved exactly -- every lane index is unchanged, only the register NAMES move to
+    //       the DWARF's. The retired placeholder name, its console offset, and the DWARF member
+    //       it became:
+    //           "mvBaseParams"        +0x70  -> mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce
+    //           "mvAeroParams"        +0xB0  -> mBaseAttribs.mvRearWheelMass_..._DownForceLiftCo
+    //           "mvSurfaceBlend"      +0xD0  -> mBaseAttribs.mvFrontSurfaceGripFactor_..._SurfaceLinearDragFactor
+    //           "mvSteeringParams"    +0xF0  -> mSteeringAttribs.mvMaxAngle_StraightReactionBias
+    //           "mvDriftParams0".."7" +0x110..+0x180 -> mDriftAttribs' eight Vector4s, in order
+    //           "mvCrashImpulseScale" +0x280 -> mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare
+    //           "mBoostAttribs"       +0x290 -> mBoostAttribs (same name, same three registers)
 
     // BrnPhysics::Vehicle::VehiclePhysics -- the full race-car handling body. Derives from
     // SimpleVehiclePhysics per the DWARF (VehiclePhysics.h:810); see the re-parenting note at the
@@ -531,7 +451,7 @@ namespace Vehicle
         //   F = 0.5 * rho * CdA * |mLinearVelocity|^2 * coeff
         // where rho (air density) and CdA (drag-area) are process-wide constants lazily cached
         // into g_vAero_Rho / g_vAero_CdA from un-homed .rdata seeds (kAero_Rho_Scalar /
-        // kAero_CdA_Scalar), and coeff is the .w lane of mpAttribs->mvAeroParams (@+0xB0). The
+        // kAero_CdA_Scalar), and coeff is the .w lane of mpAttribs->mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo (@+0xB0). The
         // X360 broadcasts the scalar across a VMX register; here a flat Vector3 with the magnitude
         // in every lane. There is NO speed-curve table -- downforce grows purely with v^2.
         // FLAG (rodata): the rho/CdA seed scalars are un-homed .rdata not present in the function
@@ -546,7 +466,7 @@ namespace Vehicle
         //       tag+2, i.e. the low 16 bits of the big-endian muValue, then >>4 &0x3F; matches
         //       UpdateInWaterBehaviour's identical extraction for the same CollisionTag type),
         //       indexes a global per-surface property table, and blends with a lane
-        //       of mpAttribs->mvSurfaceBlend.
+        //       of mpAttribs->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.
         //       FLAG (runtime data): the per-surface tables (grip unk_82FB8890, drag unk_82FB8BD0,
         //       roughness unk_82FB8DE0, the global roughness scale unk_82FB9220 and the optional
         //       wet/condition multiplier unk_82FB9EC0) are RUNTIME-LOADED scratch globals, not
@@ -557,16 +477,16 @@ namespace Vehicle
         //       asserts are elided (debug-build guards, no effect on output).
 
         // @0x825D51B8: per-wheel surface grip multiplier. result = 1 - (1 - gripTable[id]) * blend,
-        //   blend = mvSurfaceBlend lane .x (FRONT, leWheel<2) or .y (REAR); optional global wet
+        //   blend = mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor lane .x (FRONT, leWheel<2) or .y (REAR); optional global wet
         //   multiplier when enabled. A lerp toward 1.0 by (1 - blend).
         Vector3 GetSurfaceGrip(EVehicleDrivenWheel leWheel) const;
 
         // @0x825D5328: per-wheel surface roughness = roughTable[id] * globalRoughScale *
-        //   mvSurfaceBlend lane .z. Feeds UpdateRoadNoise.
+        //   mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor lane .z. Feeds UpdateRoadNoise.
         Vector3 GetSurfaceRoughness(EVehicleDrivenWheel leWheel) const;
 
         // @0x825D50A8: vehicle linear-drag from a single representative contact (NOT per-wheel) =
-        //   dragTable[id] * mvSurfaceBlend lane .w. Reads the representative-contact tag below.
+        //   dragTable[id] * mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor lane .w. Reads the representative-contact tag below.
         Vector3 GetSurfaceLinearDrag() const;
 
         // ----- ADDITIVE GROW (surface-grip/drag/friction group, C05): the road-noise rumble and the
@@ -576,7 +496,7 @@ namespace Vehicle
         // Per frame it draws floats from the shared Random ring (the inlined Random::AddRandomFloatToBuffer
         // LCG, full 64-bit multiplier 0x5851F42D4C957F2D, +1, 8-entry ring) -- one pre-loop draw shared
         // across wheels plus one draw per grounded wheel -- combines them into a small [0,1) noise term,
-        // scales by GetSurfaceRoughness(wheel), the per-vehicle road-noise factor (mpAttribs->mvBaseParams
+        // scales by GetSurfaceRoughness(wheel), the per-vehicle road-noise factor (mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce
         // .z) and the body-frame speed (mfSpeedMPH @+0x6C0), clamps to 1.0 and accumulates into the
         // wheel's road-noise register. Takes the shared Random by reference (DWARF: UpdateRoadNoise(
         // VecFloat, Random&); the leading VecFloat dt is unused by the rumble math and elided here).
@@ -911,7 +831,7 @@ namespace Vehicle
         // normalizes it, and GetDownForce squares it (`lvx128 v0,r4,0x50 ; vmsum3fp128`).
 
         // @+0x720: the live per-car attribute/tuning block (player vs AI set is reconciled each
-        // frame by Update via SwitchAttribs). GetDownForce reads mpAttribs->mvAeroParams (asm:
+        // frame by Update via SwitchAttribs). GetDownForce reads mpAttribs->mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo (asm:
         // `lwz r11,0x720(r4)`). Pinned BY NAME (the intervening handling state is not reproduced as
         // padding; mpAttribs points at one of the two embedded VehicleAttribs sets owned by the
         // full VehiclePhysics TU). Typed against the minimal VehicleAttribs slice above.
