@@ -16,6 +16,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlinePlay.h"
 
+#include <cstddef>                                                        // offsetof (overlay wire)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsModule::Event, GuiEventQueueLarge
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface, GuiEventNetworkSuspension
@@ -37,79 +38,77 @@ namespace BrnGui
 {
 namespace
 {
-    // FLAG boundaries (same convention as BrnGui::OnlineQuickCustomCreate's OnlineQCCCacheBoundary):
-    // the GuiCache apt-component watcher LIST-CLEAR + the menu/by-name expected-component
-    // registrars the X360 reaches are not on the committed public APIs, so they are reached
-    // through this file-local boundary. Bodies are no-ops here; they link from the GuiCache /
-    // component TUs.
+    // OutputGuiEvent<BrnGui::GuiOverlayRequest>: both of this TU's call sites (@0x824A7698 /
+    // @0x824A76D0) `bl` the SAME folded instantiation whose body is exported @0x82436BE0:
+    //   memcpy(record+0x10, &request, 0x120); header {0x120=288, 0xB8=184, 0x10=16};
+    //   AddEvent(iface+0xC, record, 40, 0x130=304)
+    // (headless-IDA disasm, 2026-08-04). This wire mirrors the committed sibling
+    // GuiOverlayRequestWire in BrnOnlineCustomMatch_wJ_04.cpp / BrnCarSelectMain_wG_02.cpp.
+    struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+    {
+        u32               muPad0C;    // +0x0C (payload is 16-aligned past the header)
+        GuiOverlayRequest mRequest;   // +0x10
 
-    // X360 GuiCache::ClearExpectedAptComponentList(mpGuiCache, flow).
-    void ClearExpectedAptComponentList(GuiCache* /*lpCache*/, s32 /*liFlow*/) {}
-
-    // X360 MenuComponent::AppendExpectedAptComponent(&menu, flow, cache) @0x824E2DE0: register each
-    // active menu row's apt component with the cache watcher. That method is deferred (GuiCache::
-    // AppendExpectedAptComponent is not yet bodied for the menu path), so it is reached here.
-    void AppendMenuExpectedAptComponents(MenuComponent* /*lpMenu*/, s32 /*liFlow*/,
-                                         GuiCache* /*lpCache*/) {}
-
-    // X360 sub_824F87C0(mpGuiCache, flow, name): register a single expected apt component (the
-    // "new news" transition component) by name with the cache watcher (un-homed in scope).
-    void AppendExpectedAptComponentByName(GuiCache* /*lpCache*/, s32 /*liFlow*/,
-                                          const char* /*lpacName*/) {}
-
-    // FLAG: the X360 emits the overlay request through
-    // CgsGui::StateInterface::OutputGuiEvent<BrnGui::GuiOverlayRequest> (@0x824A7694 / @0x824A76D0).
-    // The committed GuiOverlayRequest (BrnGuiEventTypeDefs.h) is a standalone request payload with
-    // no GuiEvent<N> event-type id recovered in scope, so the generic OutputGuiEvent template cannot
-    // be instantiated on it without fabricating that id (worse than an honest gap). The request is
-    // still fully built (Construct latches the compressed overlay id) and handed off through this
-    // boundary; GROW to the real OutputGuiEvent<GuiOverlayRequest> once GuiOverlayRequest carries its
-    // event-type id.
-    void OutputOverlayRequest(CgsGui::StateInterface* /*lpStateInterface*/,
-                              GuiOverlayRequest& /*lrRequest*/) {}
+        GuiOverlayRequestWire()
+            : CgsGui::GuiEvent<184>(
+                  static_cast<u32>(sizeof(GuiOverlayRequest)),                  // X360 288
+                  static_cast<u32>(offsetof(GuiOverlayRequestWire, mRequest)))  // X360 16
+            , muPad0C(0)
+        {
+        }
+    };
 }   // anonymous namespace
 
 // ---- statics ------------------------------------------------------------------------
-// The eight GUI event ids observed by this state (X360 dword_8205EF64, count 8). FLAG: the id
-// VALUES are not attested in scope (only the base address + count of 8); placeholders so the
-// state links, adopted with the XEX-recovered ids when decoded.
-const s32 OnlinePlay::maiEventToObserve[] = { 0, 0, 0, 0, 0, 0, 0, 0 };   // @0x8205EF64 (values not decoded)
+// The eight GUI event ids observed by this state (X360 dword_8205EF64, count 8; the count cell
+// @0x8205EF84 == 8). Values dumped from the ARTIST rodata (headless IDA, 2026-08-04);
+// corroborated by the committed siblings' recovered lists (BrnDebug observes {14, 6},
+// Credits {6, 21}).
+const s32 OnlinePlay::maiEventToObserve[] = { 14, 21, 6, 44, 248, 64, 189, 493 };   // @0x8205EF64 (XEX-attested)
 const s32 OnlinePlay::miNumEventsObserved = 8;
 
-// The state's static resource list (X360 .rdata @0x8205EF88; count 3). The tuples' id + type
-// bytes are not attested in scope (only the base address + the count of 3); every sibling entry
-// is a single {apt-id, E_GUI_RESOURCETYPE_APT} tuple, reproduced with placeholder ids.
+// The state's static resource list (X360 .rdata @0x8205EF88; count cell @0x8205EFA0 == 3).
+// Tuples dumped from the ARTIST rodata (headless IDA, 2026-08-04): three {apt-id,
+// E_GUI_RESOURCETYPE_APT(4)} pairs, matching the sibling states' single-APT pattern.
 const CgsGui::sResourceTuple OnlinePlay::maResourceTuplesToLoad[] =
 {
-    { 0u, CgsGui::E_GUI_RESOURCETYPE_APT },   // FLAG: id unattested in scope
-    { 0u, CgsGui::E_GUI_RESOURCETYPE_APT },   // FLAG: id unattested in scope
-    { 0u, CgsGui::E_GUI_RESOURCETYPE_APT },   // FLAG: id unattested in scope
+    { 172u, CgsGui::E_GUI_RESOURCETYPE_APT },   // @0x8205EF88 (XEX-attested)
+    { 190u, CgsGui::E_GUI_RESOURCETYPE_APT },   // @0x8205EF90 (XEX-attested)
+    { 189u, CgsGui::E_GUI_RESOURCETYPE_APT },   // @0x8205EF98 (XEX-attested)
 };
 const s32 OnlinePlay::miNumResourcesToLoad = 3;
 
-// The main-menu row localisation-key table (X360 off_82F267E4, 7 entries). Only the first
-// pointer's rodata is attested in scope; the rest are the option-named siblings.
+// The main-menu row localisation-key table (X360 off_82F267E4, 7 entries). Every pointer
+// chased to its string in the ARTIST rodata (headless IDA dump, 2026-08-04). The table is
+// bounded on both sides by foreign objects (the OnlinePause option keys before it, the
+// actions table at +0x1C after it), confirming exactly 7 entries.
 const char* const OnlinePlay::KAPC_MAIN_MENU_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
 {
-    "$ONLINE_MAIN_MENU_OPTION_FREEBURN",         // @off_82F267E4 (attested)
-    "$ONLINE_MAIN_MENU_OPTION_IMAGE_GALLERY",    // FLAG: option-named, string unattested in scope
-    "$ONLINE_MAIN_MENU_OPTION_VIEW_CHALLENGES",  // FLAG: option-named, string unattested in scope
-    "$ONLINE_MAIN_MENU_OPTION_UNRANKED",         // FLAG: option-named, string unattested in scope
-    "$ONLINE_MAIN_MENU_OPTION_RANKED",           // FLAG: option-named, string unattested in scope
-    "$ONLINE_MAIN_MENU_OPTION_SCOREBOARDS",      // FLAG: option-named, string unattested in scope
-    "$ONLINE_MAIN_MENU_OPTION_NEWS",             // FLAG: option-named, string unattested in scope
+    "$ONLINE_MAIN_MENU_OPTION_FREEBURN",         // [0] @0x82F267E4 -> 0x8205CB3C (XEX-attested)
+    "$ONLINE_MAIN_MENU_OPTION_IMAGE_GALLERY",    // [1] -> 0x8205CB14 (XEX-attested)
+    "$ONLINE_MAIN_MENU_OPTION_VIEW_CHALLENGES",  // [2] -> 0x8205CAE8 (XEX-attested)
+    "$ONLINE_MAIN_MENU_OPTION_UNRANKED",         // [3] -> 0x8205CAC4 (XEX-attested)
+    "$ONLINE_MAIN_MENU_OPTION_RANKED",           // [4] -> 0x8205CAA4 (XEX-attested)
+    "$ONLINE_MAIN_MENU_OPTION_SCOREBOARDS",      // [5] -> 0x8205CA7C (XEX-attested)
+    "$ONLINE_MAIN_MENU_OPTION_NEWS",             // [6] -> 0x8205CA5C (XEX-attested)
 };
 
 // Picked-option -> state-event name table SelectOnlineMenuOption indexes (X360 off_82F26800).
+// Every pointer chased to its string in the ARTIST rodata (headless IDA dump, 2026-08-04).
+// Bound check: [7] onward (off_82F2681C/off_82F26820 = "Visible"/"Invisible") are separate
+// named objects used by other screens -- the table is exactly 7 entries. The only readers of
+// 0x82F26800 are this TU's ShowMainMenuOptions (loop bound) + SelectOnlineMenuOption (index);
+// TO_IMG_GAL / TO_VIW_CHL / TO_SCOREB / TO_NEWS are additionally shared by a second screen's
+// action table @0x82F272B0.., corroborating the exact spellings.
 const char* const OnlinePlay::KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
 {
-    "TO_FBURN",     // [0] FREEBURN        (X360-attested @0x82F26800)
-    "TO_IMG_GAL",   // [1] IMAGE_GALLERY   FLAG: UNATTESTED placeholder
-    "TO_VW_CHAL",   // [2] VIEW_CHALLENGES FLAG: UNATTESTED placeholder
-    "TO_UNRANKED",  // [3] UNRANKED        FLAG: UNATTESTED placeholder
-    "TO_RANKED",    // [4] RANKED          FLAG: UNATTESTED placeholder
-    "TO_SCORES",    // [5] SCOREBOARDS     FLAG: UNATTESTED placeholder
-    "TO_NEWS",      // [6] NEWS            FLAG: UNATTESTED placeholder
+    "TO_FBURN",     // [0] FREEBURN        @0x82F26800 -> 0x8205CA50 (XEX-attested)
+    "TO_IMG_GAL",   // [1] IMAGE_GALLERY   -> 0x8205CA44 (XEX-attested)
+    "TO_VIW_CHL",   // [2] VIEW_CHALLENGES -> 0x8205CA38 (XEX-attested)
+    "TO_UNRANKED",  // [3] UNRANKED        -> 0x8205CA2C (XEX-attested)
+    "TO_RANKED",    // [4] RANKED          -> 0x8205CA20 (XEX-attested)
+    "TO_SCOREB",    // [5] SCOREBOARDS     -> 0x8205CA14 (XEX-attested)
+    "TO_NEWS",      // [6] NEWS            -> 0x8205CA0C (XEX-attested)
 };
 
 // ---- OnlinePlay (ctor) @ 0x82508B40 -------------------------------------------------
@@ -226,12 +225,17 @@ void OnlinePlay::HandleControllerInputMainMenu(const GuiEventControllerInputPres
 
     switch (liAction)
     {
-        case ')':   // 0x29 -- navigate to the next menu row (component nav virtual, slot 0x38).
-            mMainMenuComponent.HighlightNext();   // FLAG: slot->direction inferred
+        case ')':   // 0x29 -- component nav virtual, vtable slot +0x38.
+            // MEASURED (headless-IDA vtable dump, 2026-08-04): the MenuComponent vptr is
+            // off_82074068; slot +0x38 = 0x824E4DE8 = MenuComponent::HighlightPrevious
+            // (li r4,0 + b SelectableGroup::HighlightPrevious).
+            mMainMenuComponent.HighlightPrevious();
             break;
 
-        case '*':   // 0x2A -- navigate to the previous menu row (component nav virtual, slot 0x34).
-            mMainMenuComponent.HighlightPrevious();   // FLAG: slot->direction inferred
+        case '*':   // 0x2A -- component nav virtual, vtable slot +0x34.
+            // MEASURED: slot +0x34 = 0x824E4DE0 = HighlightNext (the folded
+            // li r4,0 + b SelectableGroup::HighlightNext forwarder).
+            mMainMenuComponent.HighlightNext();
             break;
 
         case '-':   // 0x2D
@@ -260,9 +264,13 @@ void OnlinePlay::HandleControllerInputMainMenu(const GuiEventControllerInputPres
 
             if (!CheckPrivileges(leOption))
             {
-                GuiOverlayRequest lRequest;
-                lRequest.Construct("CNOnlPrivErr");
-                OutputOverlayRequest(mpStateInterface, lRequest);
+                // OutputGuiEvent<GuiOverlayRequest> @0x824A76D0: wire {288, 184, 16, request},
+                // channel 40, 304 bytes.
+                GuiOverlayRequestWire lRequest;
+                lRequest.mRequest.Construct("CNOnlPrivErr");
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lRequest), 40,
+                    static_cast<s32>(sizeof(lRequest)));
                 break;
             }
 
@@ -279,9 +287,13 @@ void OnlinePlay::HandleControllerInputMainMenu(const GuiEventControllerInputPres
                     (!mpGuiCache->IsOnlineStartInProgress() && mpGuiCache->GetGameMode() != -1);
                 if (lbConfirm)
                 {
-                    GuiOverlayRequest lRequest;
-                    lRequest.Construct("CNOnlStrtQn");
-                    OutputOverlayRequest(mpStateInterface, lRequest);
+                    // OutputGuiEvent<GuiOverlayRequest> @0x824A7698: wire {288, 184, 16, request},
+                    // channel 40, 304 bytes.
+                    GuiOverlayRequestWire lRequest;
+                    lRequest.mRequest.Construct("CNOnlStrtQn");
+                    mpStateInterface->GetOutputEventQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lRequest), 40,
+                        static_cast<s32>(sizeof(lRequest)));
                 }
                 else
                 {
@@ -397,8 +409,10 @@ void OnlinePlay::ShowMainMenuOptions()
         mMainMenuComponent.DisableSelectable(E_MAIN_MENU_OPTIONS_VIEW_CHALLENGES);
         mMainMenuComponent.DisableSelectable(E_MAIN_MENU_OPTIONS_UNRANKED);
         mMainMenuComponent.DisableSelectable(E_MAIN_MENU_OPTIONS_RANKED);
-        // Re-settle the highlight onto a still-enabled row (component nav virtual, slot 0x34).
-        mMainMenuComponent.HighlightPrevious();   // FLAG: slot->method inferred (same slot as '*')
+        // Re-settle the highlight onto a still-enabled row (component nav virtual, slot +0x34).
+        // MEASURED (headless-IDA vtable dump, 2026-08-04): slot +0x34 = 0x824E4DE0 =
+        // HighlightNext -- walk FORWARD to the first enabled row (SCOREBOARDS/NEWS).
+        mMainMenuComponent.HighlightNext();
     }
 
     mPlayerStatsDisplay.SetState(GuiNetworkPlayerStats::E_STATE_VISIBLE);
@@ -424,9 +438,14 @@ void OnlinePlay::ShowMainMenuScreen()
 
     meSubState = E_SUBSTATE_LOADING_COMPONENTS;   // +0x2414 = 1
 
-    ClearExpectedAptComponentList(mpGuiCache, 0);
-    AppendMenuExpectedAptComponents(&mMainMenuComponent, 0, mpGuiCache);
+    // X360: GuiCache::ClearExpectedAptComponentList(cache, 0) -> the committed per-flow clear;
+    // MenuComponent::AppendExpectedAptComponent(&menu, 0, cache) @0x824E2DE0;
+    // GuiNetworkPlayerStats::AppendExpectedAptComponent(&stats, 0, cache);
+    // sub_824F87C0(cache, 0, name) == GuiCache::AppendExpectedAptComponent(GuiFlow, const char*)
+    // (the name-taking entry, X360-attested @0x824F87C0 in BrnGuiCache.h).
+    mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+    mMainMenuComponent.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache);
     mPlayerStatsDisplay.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache);
-    AppendExpectedAptComponentByName(mpGuiCache, 0, mNewNewsAnimation.GetName());
+    mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mNewNewsAnimation.GetName());
 }
 }   // namespace BrnGui
