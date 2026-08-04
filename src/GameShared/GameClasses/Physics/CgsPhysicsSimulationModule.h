@@ -38,6 +38,10 @@
 // RigidBodyId ODR fork meet". There is no open RigidBodyId fork any more -- see the block at
 // the RigidBodyId note below, retired the same day.)
 #include "rw/physics/inertia.h"
+// task #143: the DriveFrames/DriveDynamics fork retired below aliases onto these two, so the
+// real definitions have to be visible here rather than forward-declared.
+#include "vendor/renderware/physics/DriveFrames.hpp"    // rw::physics::DriveFrames   (64B)
+#include "vendor/renderware/physics/DriveDynamics.hpp"  // rw::physics::DriveDynamics (32B)
 
 // rw::physics pointer members of PhysicsSimulationModule. Forward declarations
 // only -- the module never dereferences them in the functions homed here. Class
@@ -73,37 +77,42 @@ namespace CgsPhysics
     // Vector3(16)+Quaternion(16) == 80 bytes (DWARF jointframes.h).
     struct alignas(16) JointFrames { u8 macOpaque[80]; };
 
-    // Quaternion(16)+Vector3(16)+Quaternion(16)+Vector3(16) == 64 bytes
-    // (DWARF driveframes.h).
-    struct alignas(16) DriveFrames { u8 macOpaque[64]; };
-
-    // rw::physics::DriveType (DWARF drivedynamics.h:66). Named E_-prefixed per the
-    // project convention, matching the E_SwingType/E_TwistType precedent below.
-    enum E_DriveType : s32 { E_NO_DRIVE = 0, E_SOFT_DRIVE = 1, E_HARD_DRIVE = 2 };
-
-    // rw::physics::DriveDynamics (DWARF drivedynamics.h:95) == two Params
-    // sub-records, mLinear @+0x00 and mAngular @+0x10 (drivedynamics.h:261/262),
-    // each {f32 mSpring, mDamping, mStrength; DriveType mType} (:204..:207) == 16
-    // bytes -> 32-byte stride, which is the X360-attested DriveData stride.
+    // ⚠️⚠️ THE **SEVENTH** TYPE FORK IN THIS SUBSYSTEM WAS RETIRED HERE ON 2026-08-04
+    // (task #143), and it was LIVE. `DriveFrames` and `DriveDynamics` were declared HERE as a
+    // second, cut-down copy of the real rw::physics classes -- DriveFrames as a bare
+    // `u8 macOpaque[64]`, DriveDynamics with its own re-spelled `mfSpring`/`meType` fields and
+    // its own `E_DriveType`. Same shape as the forks tasks #135 (Joint/Drive/RigidBody) and
+    // #141 (Inertia) retired, and it had survived only because nothing had yet moved a VALUE
+    // across the seam.
     //
-    // PROMOTED from an opaque 32-byte span (was: u8 macOpaque[32]). The module
-    // constructor @0x827DF1E0 inlines DriveData's default-initialisation of both
-    // maDynamics[0] and maScaledDynamics[0] as, per record, three `stfs 0.0f` at
-    // +0/+4/+8 and a `stw 0` at +0xC, then the same four again at +0x10..+0x1C --
-    // i.e. it writes these fields BY MEMBER, so they cannot stay opaque.
-    struct alignas(16) DriveDynamics
-    {
-        struct Params
-        {
-            f32         mfSpring;    // @+0x00 (drivedynamics.h:204)
-            f32         mfDamping;   // @+0x04 (:205)
-            f32         mfStrength;  // @+0x08 (:206)
-            E_DriveType meType;      // @+0x0C (:207)
-        };
+    // ⚠️⚠️ IT WAS ALREADY LOAD-BEARING WHEN IT WAS FOUND, and the path is a live one:
+    //   * DriveData::maFrames[] / maScaledDynamics[] hold these types;
+    //   * ProcessAddDriveQueue points Drive::m_skel / Drive::m_crtl straight at those slots;
+    //   * DriveJacobian_Build.cpp:113-114 then dereferences them as the **rw::physics**
+    //     types -- `const DriveFrames& lrF = *lrDrive.m_skel;` -- every tick the solver runs.
+    // Two definitions of one record, the solver reading through one and the table writing the
+    // other. Byte-identical, so it was correct BY LUCK, exactly as the Inertia fork was.
+    //
+    // ⚠️⚠️ AND THE SIGNATURE THAT CARRIES IT HIDES IT: rw::physics::Simulation::AddDrive takes
+    // `void* lpFrames, void* lpDynamics`, so the forked pointer converts IMPLICITLY and
+    // SILENTLY at the one call site that matters. The compiler only ever spoke because
+    // ProcessUpdateDriveFramesQueue does a whole-object ASSIGNMENT. ⇒ a `void*` in a
+    // reconstructed signature is a fork detector switched off; see [[odr-forks-link-silently]].
+    //
+    // The aliases below are the whole fix -- every existing `DriveFrames`/`DriveDynamics`
+    // spelling inside CgsPhysics keeps working and now names ONE type. The X360-attested
+    // 64/32-byte strides are asserted at the definitions they are a claim about
+    // (vendor/renderware/physics/DriveFrames.hpp, DriveDynamics.hpp) and re-pinned in
+    // DriveData's own offsetof block.
+    typedef ::rw::physics::DriveFrames   DriveFrames;
+    typedef ::rw::physics::DriveDynamics DriveDynamics;
 
-        Params mLinear;              // @+0x00 (:261)
-        Params mAngular;             // @+0x10 (:262)
-    };
+    // ⚠️ `JointFrames` BELOW IS THE SAME FORK, STILL OPEN. It is a `u8 macOpaque[80]` shadowing
+    // rw::physics::JointFrames, reached the same way (JointData::maFrames -> Joint::m_skel ->
+    // JointJacobian_Build.cpp). It is NOT retired here because the JOINT drains are a
+    // different group and no value crosses its seam yet -- but it will bite the wave that
+    // writes ProcessAddJointQueue / ProcessUpdateJointFramesQueue, in exactly the way this one
+    // bit this wave. ⛔ Do not "fix" it with a cast when you get there.
 
     // ⚠️ WAS A TYPE FORK UNTIL 2026-08-04 (task #141). This spelled out its OWN copy of
     // rw::physics::Inertia's seven fields (`f32 mafInvTens[4]` + six named scalars), pinned by
@@ -275,6 +284,63 @@ namespace CgsPhysics
         // (`if (*(mDriveData_mabUsedSlot))` at 0x828A25C0), name from RigidBodyData.
         bool IsSlotUsed(s32 liIndex) const;
 
+        // ---- task #143: THIS CLASS WAS A HOLLOW SHELL -------------------------------------
+        // ⚠️ The DWARF (CgsPhysicsSimulationModule.h:197..:255) declares TWELVE methods on
+        // DriveData; this tree declared SIX, and the six missing were exactly the write path --
+        // i.e. exactly what the five drive drains call. That is invisible to every per-TU
+        // compile gate, because a class that declares nothing is not a class that is wrong;
+        // it only fails when someone tries to WRITE the drain. Caught by diffing the class
+        // against the DWARF method list, NOT by `grep -c` (which scores 6 here, not 1).
+        //
+        // Still deliberately absent, because nothing in scope calls them and their bodies are
+        // not decoded: GetIndexFromDrive (h:222), SetTimeStep (h:227),
+        // ScaleOneDriveForTimeStep (h:233), GetGameID (h:237). Declaring them without bodies
+        // would trade one hollow shell for another.
+
+        // DWARF h:210. X360 @0x828A0330 (62 instructions). Claims the first free slot and
+        // fills it; returns the slot index, or -1 when every slot is in use. The `Drive*`
+        // argument is NULL at its only call site -- the slot is claimed BEFORE the
+        // rw::physics drive exists, exactly as RigidBodyData::AddBody does.
+        //
+        // ⚠️⚠️ THE `lfTimeStep` PARAMETER IS ACCEPTED AND NEVER READ. There is not one lfs /
+        // stfs / fmuls in the 62-instruction body and the only `bl` is the save/restore pair,
+        // so ScaleOneDriveForTimeStep is NOT called and maScaledDynamics receives an
+        // UNSCALED copy of lrDynamics. The caller does compute the value
+        // (`lfs f1, 0xA0(mpSimulation)` at 0x828A4DD8) and passes it. This is reconstructed
+        // as it shipped; inventing the multiply the name implies would be fabricating
+        // physics, which is the one thing this subsystem must not do.
+        s32 AddDrive(rw_physics::Drive* lpDrive, const DriveFrames& lrFrames,
+                     const DriveDynamics& lrDynamics, DriveId lId, f32 lfTimeStep);
+
+        // DWARF h:214. No out-of-line symbol -- the console inlines it into
+        // ProcessRemoveDriveQueue @0x828A00A8..0x828A00D0 as the `liIndex < knSize` assert
+        // (.cpp:2803 -- note the RELATIVE path string, which is how you tell a .cpp-defined
+        // inline from a header one here) followed by the single `stb 0` at this+0x47C0
+        // (== mDriveData + 0x90 == &mabUsedSlot[0]). It touches nothing else: the Drive*
+        // slot is deliberately left dangling, as the console leaves it.
+        bool RemoveDrive(s32 liIndex);
+
+        // DWARF h:218. No out-of-line symbol -- inlined identically into FOUR drains
+        // (@0x8289FC9C, @0x828A0008, @0x8289FDC8, @0x8289FEF0). Linear scan of the slot
+        // table returning the first index whose slot is in use AND whose game id matches,
+        // or -1. Both id reads are 8-byte `ld`, which is what pins DriveId at 8 bytes.
+        s32 GetIndexFromGameID(DriveId lId) const;
+
+        // DWARF h:249. Checked slot accessor for the UNSCALED dynamics -- the sibling of
+        // GetScaledDriveDynamics above, and a different array (+0x40, not +0x60).
+        // Inlined into ProcessUpdateDriveDynamicsQueue @0x8289FE44 as `(liIndex+2)<<5`
+        // (== mDriveData + 0x40 + 32*liIndex) behind the same two asserts, at h:675/676.
+        DriveDynamics* GetDriveDynamics(s32 liIndex);
+
+        // [INFERRED NAME], on exactly the same footing as RigidBodyData::SetRigidBody below
+        // and for the same reason. ProcessAddDriveQueue @0x828A4EB0 writes the live drive
+        // pointer into this table itself (`addi r11,r30,0x11EC` ; `slwi r11,r11,2` ;
+        // `stwx r3,r11,r29` == this + 0x47B0 + 4*liIndex == mDriveData.maRWDrives[liIndex] at
+        // the console's 4-byte stride), so the WRITE is not in doubt; only its spelling is.
+        // The DWARF's method list does not carry it, which is what a fully-inlined one-line
+        // setter looks like. ⛔ Do NOT reproduce the index arithmetic: the slot is 8 bytes here.
+        void SetDrive(s32 liIndex, rw_physics::Drive* lpRWDrive);
+
         // Offsets below are X360-ABI (4-byte pointer) byte offsets; on the x64
         // host gate the pointer-array slot widens, but member access is by name.
     private:
@@ -358,6 +424,14 @@ namespace CgsPhysics
         // it fires from inside this function's frame, which is what "inlined" means).
         bool IsSlotUsed(s32 liIndex) const;
         void SetFree(s32 liIndex);
+
+        // DWARF h:96. X360 @0x828A0100 (140 instructions) -- the busiest member of this class,
+        // with twelve call sites across the input drains. Linear scan of maGameIDs[] for the
+        // handle; -1 on a miss. See the .cpp for the three diagnostics and for why there is no
+        // used-slot test (this class has no mabUsedSlot[]; a free slot holds the sentinel).
+        // ⚠️ Still absent, deliberately, because nothing in scope calls them and no body is
+        // decoded: RemoveBody (DWARF h:80), GetIndexFromRigidBody (h:100), SetTimeStep (h:104).
+        s32 GetIndexFromGameID(RigidBodyId lId);
 
         // Offsets below are X360-ABI (4-byte pointer) byte offsets; on the x64
         // host the pointer-array slot widens, but member access is by name.
@@ -599,6 +673,24 @@ namespace CgsPhysics
         // offending id formatted in. They are kept: a drain that silently accepts a duplicate
         // body id is precisely the [[silent-drop-stubs]] shape.
         void ProcessAddRigidBodyQueue(const PhysicsSimulationIO::InputBuffer* lpInput);
+
+        // ---- THE DRIVE GROUP, all five (task #143, 2026-08-04) ---------------------------
+        // Landed as a COMPLETE group, not a sampler: these five are the whole drive subsystem
+        // of the nineteen, and a partly-drained queue is the [[silent-drop-stubs]] shape.
+        // ⚠️ NOTHING CALLS THEM YET. ProcessInputBuffers is still not bodied and must not be
+        // until all nineteen exist -- 6 of 19 are now bodied (AddRigidBody + these five).
+        //
+        // All five share one skeleton, read off the asm and identical in each:
+        //     q = lpInput->Get<X>Queue();
+        //     for (i = 0; i < q->GetLength(); ++i)            // length RE-READ every pass
+        //         e = q->GetEvent(i);
+        //         idx = mDriveData.GetIndexFromGameID(e.mId); // inlined in the console
+        //         if (idx != -1) { ...payload... }
+        void ProcessAddDriveQueue(const PhysicsSimulationIO::InputBuffer* lpInput);            // @0x828A4CB8  136
+        void ProcessRemoveDriveQueue(const PhysicsSimulationIO::InputBuffer* lpInput);         // @0x8289FF98   90
+        void ProcessUpdateDriveFramesQueue(const PhysicsSimulationIO::InputBuffer* lpInput);   // @0x8289FC28   77
+        void ProcessUpdateDriveDynamicsQueue(const PhysicsSimulationIO::InputBuffer* lpInput); // @0x8289FD60   74
+        void ProcessSetDriveSpyQueue(const PhysicsSimulationIO::InputBuffer* lpInput);         // @0x8289FE88   68
         // ---------------------------------------------------------------------------------
 
         // DWARF h:532..:536. Static, so they take no space.

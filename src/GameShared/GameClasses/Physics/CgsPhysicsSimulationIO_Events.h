@@ -158,9 +158,34 @@ namespace PhysicsSimulationIO
     };
 
     // Add a vehicle drive. Stride 144 bytes (X360-attested, see above).
+    //
+    // ⭐⭐ FIELDS RECOVERED 2026-08-04 (task #143). The comment that stood here said
+    // "internal layout not recovered (no DWARF/source)". That was the SIXTH false
+    // "no DWARF/source" claim in this subsystem -- DWARF
+    // CgsPhysicsSimulationModuleIO.h:261..:279 names all six members outright.
+    //
+    // ⭐ TWO INDEPENDENT DERIVATIONS AGREE ON EVERY FIELD, which is the control that makes
+    // this safe. The offsets below were read out of the CONSUMER'S asm first --
+    // `PhysicsSimulationModule::ProcessAddDriveQueue` @0x828A4CB8 does
+    // `ld 8(event)` / `ld 0x10(event)` into two RigidBodyData::GetIndexFromGameID calls,
+    // `ld 0(event)` for the drive id, four `lvx128` from event+0x20 (64B == DriveFrames),
+    // four `ld/std` from event+0x60 (32B == DriveDynamics) and `lbz 0x80(event)` for the
+    // spy flag -- and only afterwards checked against the DWARF field ORDER. The DWARF
+    // order lands on exactly those offsets with nothing invented, and the total falls out
+    // at 0x80 + 1 -> **144, the attested stride**.
+    //
+    // ⚠️ The ids are typed u64 rather than DriveId/RigidBodyId for the same documented
+    // reason as InAddJoint/InAddRigidBody above: promoting them is a ~30-TU type change
+    // that wants its own build + boot test. One u64 in both readings.
     struct alignas(16) InAddDrive : public Event
     {
-        u8 macOpaquePayload[144];  // internal layout not recovered (no DWARF/source)
+        u64                        mu64Id;            // @+0x00  DWARF :304 "mId"           (a CgsPhysics::DriveId handle)
+        u64                        mu64ParentBodyId;  // @+0x08  DWARF :305 "mParentBodyId" (a CgsPhysics::RigidBodyId handle)
+        u64                        mu64ChildBodyId;   // @+0x10  DWARF :306 "mChildBodyId"  (a CgsPhysics::RigidBodyId handle)
+        u64                        mu64IdPad;         // @+0x18  pad to the payload's 16-byte slot (see note on InUpdateDriveFrames)
+        rw::physics::DriveFrames   mDriveFrames;      // @+0x20  DWARF :307 -- 4 lanes, the 4 lvx128 the drain copies
+        rw::physics::DriveDynamics mDriveDynamics;    // @+0x60  DWARF :308 -- 32B, the 4 ld/std the drain copies
+        bool                       mbSpy;             // @+0x80  DWARF :309 -- `lbz 0x80(event)` -> Drive::m_spy
     };
 
     // Add a rigid body to the simulation. Queued with capacities 1 / 50 / 200 across the
@@ -243,10 +268,15 @@ namespace PhysicsSimulationIO
     // EventQueue<InRemoveDrive,1>::Construct @ 0x828A64C8). Only Construct is in scope (no
     // Append/AddEvent to pin the stride, and the InputBuffer::Construct offset map @ 0x828A71B8
     // that would pin it is not in scope), so the payload is sized only to the 16-byte alignment
-    // class the asm proves (addi r30, r31, 0x10). Stride/field layout intentionally NOT invented.
+    // class the asm proves (addi r30, r31, 0x10).
+    //
+    // ⭐ FIELD RECOVERED 2026-08-04 (task #143). DWARF CgsPhysicsSimulationModuleIO.h:283..:288
+    // declares exactly ONE member, and the consumer agrees: `ProcessRemoveDriveQueue`
+    // @0x8289FF98 issues a single `ld 0(event)` and reads nothing else out of the element.
+    // The stride 16 already committed is unchanged (u64 under alignas(16)).
     struct alignas(16) InRemoveDrive : public Event
     {
-        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+        u64 mu64Id;  // @+0x00  DWARF :286 "mId" (a CgsPhysics::DriveId handle) -- the drain's only read
     };
 
     // Remove ALL rigid bodies belonging to one owner from the simulation, addressed by an
@@ -426,10 +456,20 @@ namespace PhysicsSimulationIO
     // EventQueue<InSetDriveSpy,1>::Construct @ 0x828A6618). Only Construct is in scope (no
     // Append/AddEvent to pin the stride, and the InputBuffer::Construct offset map @ 0x828A71B8 that
     // would pin it is not in scope), so the payload is sized only to the 16-byte alignment class the
-    // asm proves (`addi r30, r31, 0x10`). Stride/field layout intentionally NOT invented.
+    // asm proves (`addi r30, r31, 0x10`).
+    //
+    // ⭐ FIELDS RECOVERED 2026-08-04 (task #143). DWARF CgsPhysicsSimulationModuleIO.h:310..:317
+    // names both members, and the consumer pins both offsets: `ProcessSetDriveSpyQueue`
+    // @0x8289FE88 does `ld 0(event)` for the id and `lbz 8(event)` for the flag. The u64 id
+    // puts the bool at +0x08 exactly. Stride 16 unchanged.
+    //
+    // ⚠️ The drain stores that byte with a PLAIN `stw` into Drive::m_spy (+0x1C) -- a whole
+    // word, not a bit. This is NOT the `ori 8` / `clrlwi ...,29` bitfield fork that the
+    // rw::physics `SetSpy(bool)` sibling compiles to; do not import that shape here.
     struct alignas(16) InSetDriveSpy : public Event
     {
-        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+        u64  mu64Id;  // @+0x00  DWARF :313 "mId" (a CgsPhysics::DriveId handle)
+        bool mbSpy;   // @+0x08  DWARF :316 -- `lbz 8(event)`, stored whole-word into Drive::m_spy
     };
 
     // Install/replace the joint "spy" tap (the simulation->game per-frame joint report channel).
@@ -577,6 +617,24 @@ namespace PhysicsSimulationIO
     static_assert(sizeof(InUpdateDriveFrames::mDriveFrames)     == 64, "DriveFrames 64B  = the FOUR lvx128 lanes at _R26..R28 (0/16/32/48) in drain @0x8289FC28");
     static_assert(sizeof(InUpdateJointLimits::mJointLimits)     == 64, "JointLimits 64B  (Vector3 x2 + 6x f32 + SwingType + TwistType)");
     static_assert(sizeof(InUpdateDriveDynamics::mDriveDynamics) == 32, "DriveDynamics 32B (two 16-byte Params: mLinear, mAngular)");
+
+    // ---- task #143: the three drive events promoted from opaque spans to real members -----
+    // Same discipline as above: every term is spelled `sizeof(Class::member)` / `offsetof`, so
+    // a re-TYPING of a member (which leaves sizeof(Class) invariant) still fails the gate.
+    // Every constant here is the drain's own load offset, not a re-statement of the header.
+    static_assert(offsetof(InAddDrive, mu64Id)           ==   0, "InAddDrive::mId @+0x00           (drain @0x828A4CB8 `ld 0(event)`)");
+    static_assert(offsetof(InAddDrive, mu64ParentBodyId) ==   8, "InAddDrive::mParentBodyId @+0x08 (drain `ld 8(event)`  -> GetIndexFromGameID)");
+    static_assert(offsetof(InAddDrive, mu64ChildBodyId)  ==  16, "InAddDrive::mChildBodyId @+0x10  (drain `ld 0x10(event)` -> GetIndexFromGameID)");
+    static_assert(offsetof(InAddDrive, mDriveFrames)     ==  32, "InAddDrive::mDriveFrames @+0x20  (drain `addi r10,r31,0x20` + 4x lvx128)");
+    static_assert(offsetof(InAddDrive, mDriveDynamics)   ==  96, "InAddDrive::mDriveDynamics @+0x60 (drain `ld 0x60/0x68/0x70/0x78(event)`)");
+    static_assert(offsetof(InAddDrive, mbSpy)            == 128, "InAddDrive::mbSpy @+0x80         (drain `lbz 0x80(event)` -> Drive::m_spy)");
+    static_assert(sizeof(InAddDrive::mDriveFrames)       ==  64, "InAddDrive DriveFrames 64B  (the FOUR lvx128 lanes the drain copies)");
+    static_assert(sizeof(InAddDrive::mDriveDynamics)     ==  32, "InAddDrive DriveDynamics 32B (the FOUR ld/std pairs the drain copies)");
+
+    static_assert(offsetof(InRemoveDrive, mu64Id)        ==   0, "InRemoveDrive::mId @+0x00        (drain @0x8289FF98 `ld 0(event)`, its only read)");
+
+    static_assert(offsetof(InSetDriveSpy, mu64Id)        ==   0, "InSetDriveSpy::mId @+0x00        (drain @0x8289FE88 `ld 0(event)`)");
+    static_assert(offsetof(InSetDriveSpy, mbSpy)         ==   8, "InSetDriveSpy::mbSpy @+0x08      (drain @0x8289FE88 `lbz 8(event)`)");
     // =====================================================================================
 }
 }

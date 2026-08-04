@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"   // f32
+#include <cstddef>            // offsetof (the layout pins below)
 
 // ===========================================================================
 // rw::physics::DriveDynamics -- the two Params blocks (linear and angular) that describe how
@@ -49,6 +50,18 @@ namespace physics
         class Params
         {
         public:
+            // DWARF drivedynamics.h:32 declares this constructor. Its body is the store
+            // pattern the console inlines into PhysicsSimulationModule::PhysicsSimulationModule
+            // @0x827DF250..0x827DF294 -- per Params, three `stfs 0.0f` at +0/+4/+8 and one
+            // `stw 0` at +0xC, emitted twice per DriveDynamics and twice over for
+            // DriveData's maDynamics[0] and maScaledDynamics[0]. ⚠️ ADDED 2026-08-04
+            // (task #143) as the honest home for stores this tree already described as
+            // "default-construct every entry" but spelled out by hand in DriveData's
+            // constructor against a SECOND, forked copy of this class. Zero new behaviour:
+            // the same eight slots are zeroed, from the type that owns them.
+            Params()
+                : mSpring(0.0f), mDamping(0.0f), mStrength(0.0f), mType(NO_DRIVE) {}
+
             const f32& GetSpring() const      { return mSpring; }
             const f32& GetMaxVelocity() const { return mSpring; }    // same slot, HARD_DRIVE
             const f32& GetDamping() const     { return mDamping; }
@@ -56,6 +69,8 @@ namespace physics
             DriveType  GetDriveType() const   { return mType; }
 
         private:
+            friend void _rw_physics_DriveDynamics_AssertLayout();
+
             f32       mSpring;     // :204  +0x00
             f32       mDamping;    // :205  +0x04
             f32       mStrength;   // :206  +0x08  the per-row impulse clamp scale
@@ -66,8 +81,39 @@ namespace physics
         const Params& AngularParams() const { return mAngular; }
 
     private:
+        friend void _rw_physics_DriveDynamics_AssertLayout();
+
         Params mLinear;    // :261  +0x00
         Params mAngular;   // :262  +0x10
     };
+
+    // ⭐ SOLE OWNER OF THIS RECORD SINCE 2026-08-04 (task #143), and these pins MOVED HERE
+    // from CgsPhysicsSimulationModule.cpp with the seventh type fork they used to gate.
+    // `CgsPhysics::DriveDynamics` was a SECOND, independent definition of these same six
+    // fields (re-spelled mfSpring/mfDamping/mfStrength/meType over its own E_DriveType);
+    // it is now a plain alias onto this class. ⛔ Do not re-introduce a local copy: this
+    // type reaches the solver as a bare `void*` through Simulation::AddDrive, so a body
+    // compiled against one copy converts SILENTLY at the call site and the link succeeding
+    // proves nothing. See the block at CgsPhysicsSimulationModule.h.
+    inline void _rw_physics_DriveDynamics_AssertLayout()
+    {
+        static_assert(offsetof(DriveDynamics::Params, mSpring)   == 0x00, "Params.mSpring   @+0x00 (ctor stfs 0.0f, 0(r11))");
+        static_assert(offsetof(DriveDynamics::Params, mDamping)  == 0x04, "Params.mDamping  @+0x04 (ctor stfs 0.0f, 4(r11))");
+        static_assert(offsetof(DriveDynamics::Params, mStrength) == 0x08, "Params.mStrength @+0x08 (ctor stfs 0.0f, 8(r11))");
+        static_assert(offsetof(DriveDynamics::Params, mType)     == 0x0C, "Params.mType     @+0x0C (ctor stw 0, 0xC(r11))");
+
+        // Adjacency form -- survives a member WIDENING, which a total-size check would not.
+        static_assert(offsetof(DriveDynamics::Params, mDamping)  == offsetof(DriveDynamics::Params, mSpring)  + sizeof(DriveDynamics::Params::mSpring),   "mDamping follows mSpring");
+        static_assert(offsetof(DriveDynamics::Params, mStrength) == offsetof(DriveDynamics::Params, mDamping) + sizeof(DriveDynamics::Params::mDamping),  "mStrength follows mDamping");
+        static_assert(offsetof(DriveDynamics::Params, mType)     == offsetof(DriveDynamics::Params, mStrength)+ sizeof(DriveDynamics::Params::mStrength), "mType follows mStrength");
+
+        static_assert(offsetof(DriveDynamics, mLinear)  == 0x00, "DriveDynamics.mLinear  @+0x00 (:261)");
+        static_assert(offsetof(DriveDynamics, mAngular) == 0x10, "DriveDynamics.mAngular @+0x10 (asm second quad at +0x10..+0x1C)");
+        static_assert(offsetof(DriveDynamics, mAngular) == offsetof(DriveDynamics, mLinear) + sizeof(DriveDynamics::mLinear), "mAngular follows mLinear");
+
+        // The X360-attested ARRAY STRIDE -- DriveData::AddDrive @0x828A0330 reaches
+        // maDynamics as `(i+2)<<5` and maScaledDynamics as `(i+3)<<5`, i.e. 32 bytes apart.
+        static_assert(sizeof(DriveDynamics) == 32, "DriveDynamics array stride 32 (AddDrive (i+2)<<5 / (i+3)<<5)");
+    }
 }
 }
