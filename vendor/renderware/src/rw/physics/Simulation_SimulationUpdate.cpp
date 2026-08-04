@@ -19,6 +19,27 @@
 //
 // TO MOUNT: reconstruct ContactBatchBuild (343 X360 insn over the 272-byte contact record)
 // and the four pipelines, then move this body back into Simulation.cpp and delete this TU.
+//
+// ⭐ 2026-08-04 (task #138) -- THE EIGHT ARE NOW SIZED, and one "hole" turned out not to be
+// one. Suggested order (cheapest first, and Osiris is on the joints-only path a single car
+// with wheel joints actually takes):
+//     Osiris_Pipeline        179 insn   ⚠️ ABSENT FROM .ida-exports; body recovered headless
+//                                       off the .i64 -- range 0x82BC2680..0x82BC294C, sole
+//                                       xref SimulationUpdate @0x82BC6BE8. "No export" is
+//                                       NOT "no body" (see [[ida-export-set-has-holes]]).
+//     Isis_Pipeline          184 insn
+//     Anubis_Pipeline        192 insn
+//     SpyJointJacobians       97 insn / SpyContactJacobians 107 / SpyDriveJacobians 193
+//     ContactBatchBuild      343 insn
+//     Horus_Pipeline         510 insn
+//   ------------------------------------
+//     1,805 instructions total for the eight.
+//
+// ⚠️⚠️ AND MOUNTING THIS TU STILL DOES NOT STEP A CAR. Landing all eight makes
+// SimulationUpdate callable; nothing calls it. Its caller PhysicsSimulationModule::Update
+// @0x828A74D0 is not declared, and ITS caller BrnPhysics::PhysicsModule::Update @0x825B0640
+// is a link stub whose own depth-1 closure measures ~15,000 instructions. Full measured map
+// in GameShared/GameClasses/Physics/CgsPhysicsSimulationModule.h.
 // =====================================================================================
 
 #include "rw/physics/simulation.h"

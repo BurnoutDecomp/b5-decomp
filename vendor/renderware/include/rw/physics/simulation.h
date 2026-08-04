@@ -116,14 +116,24 @@ public:
     void JointBatchBuild();       // @ 0x82BC6A30  BODIED
     void DriveBatchBuild();       // @ 0x82BC6AB8  BODIED
 
-    void ContactBatchBuild();     // @ 0x82BC14C0  (not reconstructed)
-    void Anubis_Pipeline();       // @ 0x82BC11C0  (contacts only)
-    void Osiris_Pipeline();       // @ 0x82BC2680  (joints, or joints + contacts)
-    void Isis_Pipeline();         // @ 0x82BC2218  (drives only)
-    void Horus_Pipeline();        // @ 0x82BC1A20  (anything mixed with drives)
-    void SpyJointJacobians();     // @ 0x82BC24F8
-    void SpyDriveJacobians();     // @ 0x82BC3010
-    void SpyContactJacobians();   // @ 0x82BC4138
+    // ⭐ 2026-08-04 (task #138) -- MEASURED SIZES, so the next wave can plan instead of guess.
+    // Instruction counts are from the IDA export set except Osiris, which is measured off the
+    // .i64 (see below). Total for the eight: 1,805 instructions.
+    void ContactBatchBuild();     // @ 0x82BC14C0  343 insn  (not reconstructed)
+    void Anubis_Pipeline();       // @ 0x82BC11C0  192 insn  (contacts only)
+    // ⚠️ CORRECTION 2026-08-04: Osiris_Pipeline is ABSENT FROM .ida-exports -- there is no
+    // 0x82BC2680.json. Notes elsewhere in the tree treat "no export" as "no body"; it has one.
+    // Recovered headless (IDA Pro 9.3 `idat.exe -A -S<script> -L<log> <copy>.i64`, the same
+    // route that produced PairSet::ClearAll and PhysicsSimulationModule::Destruct):
+    //     range 0x82BC2680 .. 0x82BC294C  = 716 bytes = 179 instructions
+    //     the ONLY xref to it is SimulationUpdate @0x82BC6BE8
+    // That makes it the SMALLEST of the four pipelines and the cheapest one to land first.
+    void Osiris_Pipeline();       // @ 0x82BC2680  179 insn  (joints, or joints + contacts)
+    void Isis_Pipeline();         // @ 0x82BC2218  184 insn  (drives only)
+    void Horus_Pipeline();        // @ 0x82BC1A20  510 insn  (anything mixed with drives)
+    void SpyJointJacobians();     // @ 0x82BC24F8   97 insn
+    void SpyDriveJacobians();     // @ 0x82BC3010  193 insn
+    void SpyContactJacobians();   // @ 0x82BC4138  107 insn
 
     // -------------------------------------------------------------------------------------
     // Rigid-body list membership. All three are the same shape: unlink from the current list,
@@ -136,8 +146,74 @@ public:
     void FreezeRigidBody(RigidBody* lpBody);     // @ 0x82BC2A58  BODIED
     void RemoveRigidBody(RigidBody* lpBody);     // @ 0x82BC2950  BODIED
 
+    // -------------------------------------------------------------------------------------
     // Still un-reconstructed: AddRigidBody is 669 VMX instructions, and the Add/Remove
     // Joint/Drive quartet needs the free-list splice the same way.
+    //
+    // ⭐⭐ 2026-08-04 (task #138) -- FULLY DECODED, NOT YET WRITTEN. The body is deliberately
+    // NOT committed this wave because it PROVABLY CANNOT EXECUTE: its only caller would be
+    // ProcessAddRigidBodyQueue @0x828A2708, which is absent from the tree, reached only
+    // through ProcessInputBuffers @0x828A73C0, reached only from PhysicsSimulationModule::
+    // Update @0x828A74D0 (not declared) under PhysicsModule::Update @0x825B0640 (still a link
+    // stub in WorldLinkStubs.cpp). An unwitnessable body on the exact member the whole
+    // campaign depends on is this project's worst-documented failure shape, so the DECODE is
+    // recorded here instead and the next wave can transcribe it without re-deriving anything.
+    //
+    // SIGNATURE is DWARF-exact (DecFIGS simulation.h:308) and matches the asm: r3=this,
+    // r4=&frame, r5=Inertia*, r6=BodyState.
+    //
+    // SHAPE: pop the free list, then ONE OF THREE near-identical paths chosen by leState.
+    // The three differ in five values ONLY; everything else is the same code emitted 3x
+    // (which is why the function is 669 instructions for ~120 of logic).
+    //
+    //   entry @0x82BC3318:
+    //       if (m_FreeRB_Count == 0) return NULL;          // lwz 0x3C ; beq -> li r3,0
+    //       --m_FreeRB_Count;                              // stw 0x3C
+    //       RigidBody* b = m_FreeRB_Anchor->mRight;        // lwz 0x1C ; lwz 0x2C(anchor)
+    //
+    //   per-path table (X360 offsets in the trailing comments are decode documentation):
+    //       leState        ACTIVE(4) fallthrough  FROZEN(2) @0x82BC36CC  STATIC(1) @0x82BC3A28
+    //       mState  +0x8C  4                      2                      1
+    //       mCool   +0xAC  0                      m_CoolDown (+0xA4)     m_CoolDown (+0xA4)
+    //       mInertia+0x5C  lpInertia (r5)         lpInertia (r5)         NULL   <-- ⚠️ ignores r5
+    //       anchor         m_ActiveRB_Anchor+0x28 m_FrozenRB_Anchor+0x24 m_StaticRB_Anchor+0x20
+    //       count          ++m_ActiveRB_Count     ++m_FrozenRB_Count     ++m_StaticRB_Count
+    //                        (+0x48)                (+0x44)                (+0x40)
+    //
+    //   common body, in emission order:
+    //     1. unlink b from the free list and append it at the tail of the chosen circular
+    //        list -- byte-for-byte the splice ActivateRigidBody/FreezeRigidBody already use.
+    //     2. frame copy, w LANES PRESERVED (`vrlimi128 vD,vS,1,0` = take xyz from vS, keep
+    //        w of vD). On the PC the w lanes are separate members, so this is a plain
+    //        .xyz assignment of four rows:
+    //             mRi  (+0x40) = frame.xAxis      mUp  (+0x50) = frame.yAxis
+    //             mAt  (+0x60) = frame.zAxis      mCom (+0x10) = frame.pos
+    //     3. mQuat (+0x00) = rw::math::vpu::QuaternionFromMatrix33(basis).
+    //        ⭐ ALREADY COMMITTED -- src/vendor/renderware/physics/JointFrames.hpp:63. The
+    //        three `vxor` masks the asm loads (unk_8327F120/F100/F0F0) are that inline's
+    //        gQuatFromMat_{x,y,z}Signs. They read ALL ZERO out of the image because they sit
+    //        in a 9,216-byte zero run of the RW `.data` segment (0x8327E000..0x83280400) --
+    //        do NOT try to byte-recover them, and do NOT read the zeros as "no sign flip".
+    //        The routine's ground truth is the Feb-2007 rwmath source already cited there.
+    //     4. world inverse inertia, gated on `mInertia != NULL` (so the STATIC path always
+    //        skips it -- the block is emitted but dead there). With I = mInertia's local
+    //        inverse diagonal and the basis just written:
+    //             I_world = Ix*(Ri (x) Ri) + Iy*(Up (x) Up) + Iz*(At (x) At)
+    //        stored in the split rigidbody.h documents:
+    //             mIfull (+0x70) = {Ixx, Ixy, Ixz}     mIsplt (+0x80) = {Izz, Iyy, Iyz}
+    //        The asm builds it with `vpermwi128 .. 0x97` (= .zyyw) and `0x9B` (= .zyzw),
+    //        exactly the pair RigidBody::DynamicUpdate already uses, then
+    //             mInvm (+0x7C) = *(f32*)((char*)mInertia + 0x10)      // lvlx + vspltw
+    //        ⚠️ `vmaddfp vD,vA,vB,vC` is `vD = vA*vC + vB` (ISA), not what the operand order
+    //        reads like -- getting this backwards silently transposes the tensor.
+    //     5. common tail:
+    //             mVel (+0x20) = 0        mOmega (+0x30) = 0      mTorque (+0xA0) = 0
+    //             mKine (+0x9C) = FLT_MAX                      // flt_821815B0 = 0x7F7FFFFF
+    //             mForce (+0x90) = m_Gravity                   // lvx from mStasis + 0x90
+    //        ⚠️ mForce is SEEDED WITH GRAVITY, not zeroed. mStasis (+0x4C) is NOT written
+    //        here -- Initialize threads it when it builds the free list.
+    //     6. return b.                                        // mr r3, r11
+    // -------------------------------------------------------------------------------------
     RigidBody* AddRigidBody(const rw::math::vpu::Matrix44Affine& lrFrame,
                             Inertia* lpInertia, BodyState leState);   // @ 0x82BC3318
     Joint* AddJoint(RigidBody* lpA, RigidBody* lpB, void* lpFrames, void* lpLimits);   // @ 0x82BC3D90
