@@ -28,7 +28,14 @@
 // only -- the module never dereferences them in the functions homed here. Class
 // keys match their real homes (vendor/renderware/include/rw/physics/{simulation,
 // pairset}.h), so no ODR/class-key mismatch.
-namespace rw { namespace physics { class Simulation; class PairSet; } }
+namespace rw { namespace physics { class Simulation; class PairSet; class Joint; class Drive; struct RigidBody; } }
+
+// The abstract resource allocator PhysicsSimulationModule::Prepare carves the simulation,
+// its workspace and the three pair sets out of.
+// ⚠️ THE CLASS KEY IS `struct`, matching rw/rwcore_structs.h. A `class` here and a `struct`
+// there mangles into a different symbol and produces an LNK2019 naming something that looks
+// character-for-character identical in the log.
+namespace rw { struct IResourceAllocator; }
 
 namespace CgsPhysics
 {
@@ -117,12 +124,17 @@ namespace CgsPhysics
     extern const RigidBodyId K_INVALID_RIGID_BODY_ID;
     inline bool RigidBodyId::IsInvalid() const { return mId == K_INVALID_RIGID_BODY_ID.mId; }
 
-    namespace rw_physics
-    {
-        struct Joint;      // opaque rw::physics::Joint (maRWJoints holds Joint*)
-        struct Drive;      // opaque rw::physics::Drive (maRWDrives holds Drive*)
-        struct RigidBody;  // opaque rw::physics::RigidBody (maRWBodies holds RigidBody*)
-    }
+    // ⚠️ WAS A TYPE FORK UNTIL 2026-08-04 (task #135). This used to declare THREE OF ITS OWN
+    // opaque `CgsPhysics::rw_physics::{Joint,Drive,RigidBody}` structs, distinct from the real
+    // rw::physics types the slot arrays actually hold. That was invisible while nothing in
+    // this TU ever passed a slot pointer to rw::physics -- and it stopped being invisible the
+    // moment AllocateMemoryAndInitialiseRW landed, which hands exactly those pointers to
+    // Simulation::RemoveJoint / RemoveDrive / RemoveRigidBody. A namespace ALIAS onto the real
+    // types keeps every existing `rw_physics::X` spelling working and removes the fork; the
+    // class keys below match their real homes (Joint/Drive are `class`, RigidBody is `struct`),
+    // because a key mismatch mangles into a different symbol and produces an LNK2019 naming
+    // something that looks character-for-character identical in the log.
+    namespace rw_physics = ::rw::physics;
 
     // JointLimits IS modelled field-by-field: JointData's constructor writes its
     // members by name. 64-byte record (DWARF jointlimits.h). The two trailing
@@ -168,6 +180,13 @@ namespace CgsPhysics
         // mabUsedSlot[liIndex], then returns maRWJoints[liIndex].
         rw_physics::Joint* GetJoint(s32 liIndex);
 
+        // The raw slot-occupancy probe. X360-ATTESTED READ, [INFERRED NAME]: the console
+        // inlines it into PhysicsSimulationModule::AllocateMemoryAndInitialiseRW as
+        // `if (*(mJointData_mabUsedSlot + i))` at 0x828A2560, so the read is not in doubt;
+        // only the spelling is, and it is taken from the DWARF-attested sibling on
+        // RigidBodyData (CgsPhysicsSimulationModule.h:113).
+        bool IsSlotUsed(s32 liIndex) const;
+
         // Offsets below are X360-ABI (4-byte pointer) byte offsets; on the x64
         // host gate the pointer-array slots widen, but member access is by name.
     private:
@@ -205,6 +224,16 @@ namespace CgsPhysics
         // Checked slot accessor (X360 @0x8289D268): asserts liIndex < knSize and
         // mabUsedSlot[liIndex], then returns &maScaledDynamics[liIndex].
         DriveDynamics* GetScaledDriveDynamics(s32 liIndex);
+
+        // DWARF CgsPhysicsSimulationModule.h:241. The console inlines it into
+        // AllocateMemoryAndInitialiseRW as the bare `lwz` of maRWDrives[0] at 0x828A25CC
+        // (no assert -- the slot-used test guarding it IS the tripwire), so the body is
+        // the raw slot read.
+        rw_physics::Drive* GetDrive(s32 liIndex);
+
+        // Same provenance as JointData::IsSlotUsed above -- X360-attested read
+        // (`if (*(mDriveData_mabUsedSlot))` at 0x828A25C0), name from RigidBodyData.
+        bool IsSlotUsed(s32 liIndex) const;
 
         // Offsets below are X360-ABI (4-byte pointer) byte offsets; on the x64
         // host gate the pointer-array slot widens, but member access is by name.
@@ -254,6 +283,14 @@ namespace CgsPhysics
         // Checked slot read of &maInertias[liIndex] (X360 @0x8289D0C0).
         Inertia* GetInertia(s32 liIndex);
 
+        // DWARF CgsPhysicsSimulationModule.h:113 / :108. Both are inlined by the console
+        // into AllocateMemoryAndInitialiseRW: IsSlotUsed is the `maGameIDs[i] !=
+        // K_INVALID_RIGID_BODY_ID` test at 0x828A25FC, SetFree the write-back of the
+        // sentinel at 0x828A26C0 (whose bounds tripwire carries the .cpp:2504 line, i.e.
+        // it fires from inside this function's frame, which is what "inlined" means).
+        bool IsSlotUsed(s32 liIndex) const;
+        void SetFree(s32 liIndex);
+
         // Offsets below are X360-ABI (4-byte pointer) byte offsets; on the x64
         // host the pointer-array slot widens, but member access is by name.
     private:
@@ -284,9 +321,16 @@ namespace CgsPhysics
     //
     // ⭐ Release (slot 2, @0x828A2048) and Destruct (slot 3, @0x828A2120) LANDED 2026-08-03,
     // with their bodies -- Destruct pulled out of the .i64 with headless IDA because it is an
-    // export-set hole. What is still NOT declared, deliberately, is the three new virtuals at
-    // slots 16/17/18:
-    //     Prepare(rw::IResourceAllocator*, const SimulationParams&) @0x828A6A08
+    // export-set hole.
+    //
+    // ⭐⭐ SLOT 16, Prepare(rw::IResourceAllocator*, const SimulationParams&) @0x828A6A08,
+    // LANDED 2026-08-04 (task #135) WITH ITS BODY AND ITS CALLEE. It is THE function that
+    // assigns mpSimulation, and until it existed `rw::physics::Simulation` had no constructor
+    // anywhere in the tree: six reconstructed solver objects linked and not one byte of them
+    // could ever execute. Note this class was a HOLLOW SHELL in the precise sense -- the DWARF
+    // declares SIX virtuals (Construct/Prepare/Release/Destruct/Update/ProcessInput) and the
+    // committed header declared THREE, so the two that drive the simulation silently bound to
+    // base defaults. Two are still missing:
     //     Update(IOBufferStack*, IOBufferStack*, const InputBuffer*, OutputBuffer*) @0x828A74D0
     //     ProcessInput(const InputBuffer*) @0x828A76D0
     // Declaring a virtual with no body while a constructor is defined materialises
@@ -332,6 +376,22 @@ namespace CgsPhysics
         // vtable slot 0.
         void Construct() override;
 
+        // X360 @0x828A6A08. Console vtable slot 16 -- the FIRST of this class's own new
+        // virtuals, and the one BrnPhysics::PhysicsModule::Prepare stage 3 dispatches
+        // through (`lwz r11,0x40(r11)` == slot 16 on the 4-byte console vtable).
+        //
+        // A two-stage fall-through FSM over mePrepareStage, exactly the shape Release()
+        // has: stage 0 advances the cursor and falls into stage 1; stage 1 runs the base's
+        // Prepare and, on success, clears the three bit arrays, builds/refreshes the whole
+        // rw::physics world through AllocateMemoryAndInitialiseRW, clears the three slot
+        // tables and advances again.
+        //
+        // ⚠️ NOT an `override`: the base has a NO-ARGUMENT Prepare(). This is a new virtual
+        // with its own signature, which is why the console gives it a fresh slot rather than
+        // reusing slot 1. It therefore HIDES the base name; every in-class use of the base's
+        // Prepare is explicitly qualified, as the console's own body is.
+        virtual bool Prepare(rw::IResourceAllocator* lpAllocator, const SimulationParams& lrParams);
+
         // X360 @0x828A2048 (54 instructions). Console vtable slot 2. A fall-through
         // release FSM over meReleaseStage; returns false (cursor left on stage 1) when
         // the base's Release has not finished, so the owner re-enters next frame.
@@ -343,6 +403,22 @@ namespace CgsPhysics
         void Destruct() override;
 
     private:
+        // X360 @0x828A2168 (DWARF CgsPhysicsSimulationModule.cpp:266). NON-virtual; the only
+        // caller is Prepare above. Builds or REBUILDS the rw::physics world:
+        //   * first call (mpSimulation == NULL): size + carve the Simulation, its
+        //     SimulationWorkspace and the three PairSets out of lpAllocator, initialise each,
+        //     push the caller's gravity / freezing energy / iteration cap into the simulation,
+        //     enable all three jacobian spies, and allocate the 200-entry next-index array.
+        //   * every later call: tear the world's CONTENTS down instead -- remove every live
+        //     joint, the drive, and every rigid body whose slot is in use -- keeping the
+        //     allocation. (The console can only bump-allocate, so a re-Prepare must reuse it.)
+        // Both paths then clear the three pair sets and reset the counters.
+        //
+        // ⚠️ EXPORT-SET NEIGHBOUR: this symbol is the one immediately after Destruct
+        // @0x828A2120, which is itself an export hole -- see Destruct's note above.
+        void AllocateMemoryAndInitialiseRW(rw::IResourceAllocator* lpAllocator,
+                                           const SimulationParams& lrParams);
+
         // DWARF h:532..:536. Static, so they take no space.
         static const u32 KU_NUM_BODIES             = 200;   // kuNumBodies
         static const u32 KU_NUM_JOINTS             = 36;    // kuNumJoints
@@ -394,4 +470,12 @@ namespace CgsPhysics
     // the release-stage cursor.
     PhysicsSimulationModule::EReleaseStage
     operator++(PhysicsSimulationModule::EReleaseStage& leEnumIndex, int);
+
+    // DWARF CgsPhysicsSimulationModule.h:565 -- the prepare-stage twin. The console INLINED
+    // it into Prepare @0x828A6A08 (the `+1`, the store and the `> 2` tripwire are open-coded
+    // there, unlike Release which keeps the out-of-line call), but the source declares it and
+    // the assert text it carries names it: "leEnumIndex <= PhysicsSimulationModule::
+    // PREPARESTAGE_DONE", CgsPhysicsSimulationModule.h:565.
+    PhysicsSimulationModule::EPrepareStage
+    operator++(PhysicsSimulationModule::EPrepareStage& leEnumIndex, int);
 }

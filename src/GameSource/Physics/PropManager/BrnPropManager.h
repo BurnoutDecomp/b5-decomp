@@ -12,6 +12,8 @@
 
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InAddPotentialContact; } }
 namespace CgsMemory { struct SimpleDataStreamProducer; }   // pointer-only member (mpPrimitiveWithTriangleStream)
+// Class key `struct`, matching rw/rwcore_structs.h -- a `class` here mangles differently.
+namespace rw { struct IResourceAllocator; }
 
 namespace BrnPhysics
 {
@@ -78,6 +80,14 @@ namespace Props
         };
 
         static const s32 KI_MAX_DEBUG_WORLD_CONTACTS = 32;    // DWARF BrnPropManager.h:110
+
+        // ADDITIVE 2026-08-04 (task #135) -- X360 @0x82C08ED0, the stage-5 arm of
+        // BrnPhysics::PhysicsModule::Prepare @0x825ADB68 (`bl` at 0x825ADDCC, result tested
+        // with a `bne` so the return is a bool). Its one argument is the physics resource
+        // allocator (bank 23). Declaration-only; the body is a named LINK STUB in
+        // WorldLinkStubs.cpp until this manager's own prepare pass lands, so the drop is one
+        // greppable symbol rather than a silent `return true` for the whole physics module.
+        bool Prepare( rw::IResourceAllocator* lpAllocator );
         static const s32 KI_PROP_INDEX_NOT_FOUND     = -1;    // DWARF BrnPropManager.h:245
 
         typedef CgsModule::EventQueue<UpdatePropEvent, 200> UpdatePropEventQueue;

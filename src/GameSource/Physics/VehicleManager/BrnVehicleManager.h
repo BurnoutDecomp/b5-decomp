@@ -47,7 +47,10 @@ namespace BrnGameState { namespace GameStateModuleIO { class VehicleOutputInterf
 // pointers + one by-value contact, so the declarations need no complete type here).
 namespace BrnPhysics { namespace PhysicsModuleIO { struct PotentialContactInterface; } }
 namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface; } }
-namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; struct TriangleCacheInterface; } }
+namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; struct TriangleCacheInterface;
+                                                      struct InputBuffer_Update; } }
+// Class key `struct`, matching rw/rwcore_structs.h -- a `class` here mangles differently.
+namespace rw { struct IResourceAllocator; }
 
 namespace BrnPhysics
 {
@@ -172,6 +175,17 @@ namespace Vehicle
         // surface-property table once the world entity module prepared). Static on the
         // X360 (a global manager pair). Declaration-only; body with this manager's TU.
         static void ReadSurfaceProperties();
+
+        // ADDITIVE 2026-08-04 (task #135) -- X360 @0x82633568, the stage-6 arm of
+        // BrnPhysics::PhysicsModule::Prepare @0x825ADB68 (`bl` at 0x825ADDFC, result tested
+        // with a `bne` so the return is a bool). Arguments are the physics resource allocator
+        // (bank 23) and the scene input buffer PhysicsModule::Prepare was handed.
+        // Declaration-only; the body is a named LINK STUB in WorldLinkStubs.cpp until this
+        // manager's own prepare pass lands. It is declared here rather than left implicit so
+        // the drop is one greppable symbol instead of a silent `return true` for the whole
+        // physics module.
+        bool Prepare( rw::IResourceAllocator* lpAllocator,
+                      CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer );
 
         // The per-contact working set the impact classifiers read/populate. Verbatim DWARF
         // layout (BrnVehicleManager.h:763). Pointer members use the forward-declared collaborators.

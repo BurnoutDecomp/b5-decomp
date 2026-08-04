@@ -514,19 +514,55 @@ void MassiveAdClient3::CMassiveAdObjectSubscriber::operator delete(void *)
 // SEVEN perf-monitor members (21 is only how many Construct registers), and +433208 is a `stbx`,
 // so the console object is 433,209 bytes raw, not "at least 433,212".
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnPhysics::PhysicsModule::Prepare(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,class BrnResource::GameDataIO::AllocatorList *)
+// ⭐⭐ RETIRED 2026-08-04 (task #135): BrnPhysics::PhysicsModule::Prepare IS BODIED, in
+// GameSource/Physics/BrnPhysicsModule.cpp. It was the stub that kept the entire rw::physics
+// solver unreachable -- its stage 3 is the only path to PhysicsSimulationModule::Prepare, which
+// is the only assignment to mpSimulation in the tree. The three stubs below are what is LEFT of
+// it: one named symbol per sibling subsystem whose own prepare pass is still unreconstructed,
+// instead of one silent `return true` for the whole module.
+
+// LINK STUB (task #135, 2026-08-04): X360 @0x82C08ED0. Called from
+// PhysicsModule::Prepare stage 5 (E_PREPARESTAGE_PROPMANAGER).
+bool BrnPhysics::Props::PropManager::Prepare(struct rw::IResourceAllocator *)
 {
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
-    // chain. One-shot log + report success so the scripted load advances toward
-    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
-    // deeper consumers keep their traps. Reconstruct from X360.
     static bool s_bLogged = false;
     if (!s_bLogged)
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PhysicsModule::Prepare: inert [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "PropManager::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
+}
+
+// LINK STUB (task #135, 2026-08-04): X360 @0x82633568. Called from
+// PhysicsModule::Prepare stage 6 (E_PREPARESTAGE_VEHICLEMODULE).
+bool BrnPhysics::Vehicle::VehicleManager::Prepare(struct rw::IResourceAllocator *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "VehicleManager::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
+}
+
+// LINK STUB (task #135, 2026-08-04): X360 @0x82630230. Called from
+// PhysicsModule::Prepare stage 4 (E_PREPARESTAGE_DEFORMATIONMANAGER).
+// ⚠️ UNLIKE THE OTHER TWO, THIS ONE HAS A REAL BODY ALREADY -- BrnDeformationManager.cpp:132,
+// in a TU that is not mounted (25 unresolved externals; see the build script's note at the
+// deformation block). Delete this stub the moment that TU mounts, or the link will pick a
+// winner silently.
+bool BrnPhysics::Deformation::DeformationManager::Prepare(struct rw::IResourceAllocator *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "DeformationManager::Prepare: inert [FLAG PC boot gate]\n";
     }
     return true;
 }

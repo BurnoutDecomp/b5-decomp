@@ -24,12 +24,15 @@
 // are real named members now, and the four functions are transcribed instruction for
 // instruction below.
 //
+// ⭐ 2026-08-04 (task #135): Initialize @0x82BC5158 IS NOW BODIED -- it is the function that
+// makes every other one above reachable, because it is what CgsPhysics::PhysicsSimulationModule::
+// AllocateMemoryAndInitialiseRW assigns to mpSimulation.
+//
 // STILL BLOCKED, honestly (and this is why SimulationUpdate sits in its own unmounted TU):
 //   * ContactBatchBuild and the four solver pipelines (Anubis/Osiris/Isis/Horus) -- heavy
 //     VMX over the 272-byte contact batch record, not reconstructed.
 //   * The three Spy* dumps -- debug-only, not reconstructed.
 //   * AddRigidBody @0x82BC3318 (669 VMX instructions) and the Add/Remove Joint/Drive quartet.
-//   * Initialize @0x82BC5158 -- builds the whole intrusive node graph inside the workspace.
 // =====================================================================================
 
 #include "rw/physics/simulation.h"
@@ -38,10 +41,57 @@
 #include "vendor/renderware/physics/Joint.hpp"
 #include "vendor/renderware/physics/Drive.hpp"
 
+#include <string.h>   // memset -- the `vspltisb v0,0` + four stvx128 block-clear
+
 namespace rw
 {
 namespace physics
 {
+
+namespace
+{
+    // -------------------------------------------------------------------------------------
+    // THE ONE BLOCK LAYOUT, shared by GetResourceDescriptor (which sizes it) and Initialize
+    // (which carves it). Keeping them in one place is not tidiness: if the sizer and the
+    // carver ever disagree by one byte the solver walks off the end of its own allocation
+    // with no diagnostic.
+    //
+    // The console block is, in order (all read off Initialize @0x82BC5158):
+    //     [ Simulation ]                     RoundUp(192, alignment)   <- the object itself
+    //     [ reaction-force blocks ]          64  * liNumBodies
+    //     [ RigidBody array ]                176 * (liNumBodies + 4)   <- +4 list sentinels
+    //     [ Joint array ]                    32  * (liNumJoints + 2)   <- +2 list sentinels
+    //     [ Drive array ]                    32  * (liNumDrives + 2)   <- +2 list sentinels
+    // and 192 + 4*176 + 2*32 + 2*32 == 1024, which is exactly the constant folded into
+    // GetResourceDescriptor's `32 * (joints + drives + 32)`, and 64 + 176 == 240 is its
+    // per-body term. The two functions agree on the console; they must agree here too.
+    //
+    // ⚠️⚠️ EVERY ONE OF THOSE FIVE STRIDES WIDENS ON x64 (sizeof(RigidBody) is 240, not 176;
+    // sizeof(Joint)/sizeof(Drive) are 96, not 32 -- the DWARF's m_offset/m_pad[8] tail is
+    // PS3-only but it is in the committed type, and the six node pointers are 8 bytes each).
+    // Carving with the console literals would overlap consecutive bodies and the integrator
+    // would read its neighbour's pose. Same class of bug as KU_JACOBIAN_STRIDE. All five
+    // come from sizeof() here and the console numbers are decode documentation only.
+    // -------------------------------------------------------------------------------------
+    const u32 KU_REACTION_FORCE_STRIDE = 64u;   // four impulse/delta accumulators; no pointers,
+                                                // so this one really is 64 on both.
+
+    inline u32 RoundUpTo(u32 luValue, u32 luAlignment)
+    {
+        // X360: `addi r9,r11,0xBF ; addi r10,r11,-1 ; andc r9,r9,r10` with r11 = alignment,
+        // i.e. (alignment - 1 + 192) & ~(alignment - 1) == RoundUp(192, alignment).
+        return (luValue + luAlignment - 1u) & ~(luAlignment - 1u);
+    }
+
+    inline u32 SimulationBlockSize(int liNumBodies, int liNumJoints, int liNumDrives, u32 luAlignment)
+    {
+        return RoundUpTo(static_cast<u32>(sizeof(Simulation)), luAlignment)
+             + KU_REACTION_FORCE_STRIDE      * static_cast<u32>(liNumBodies)
+             + static_cast<u32>(sizeof(RigidBody)) * static_cast<u32>(liNumBodies + 4)
+             + static_cast<u32>(sizeof(Joint))     * static_cast<u32>(liNumJoints + 2)
+             + static_cast<u32>(sizeof(Drive))     * static_cast<u32>(liNumDrives + 2);
+    }
+}
 
 // -------------------------------------------------------------------------------------
 // Simulation::GetResourceDescriptor @ 0x82BC5090
@@ -67,15 +117,268 @@ rw::BaseResourceDescriptors<5>* Simulation::GetResourceDescriptor(
         lpEntries[luEntry].m_alignment = 1u;
     }
 
-    // size = 240 * luCountA + 32 * (luCountB + luCountC + 32)
-    const u32 luSize =
-        0xF0u * static_cast<u32>(luCountA)
-        + 0x20u * static_cast<u32>(luCountB + luCountC + 32);
+    // CONSOLE: size = 240 * luCountA + 32 * (luCountB + luCountC + 32)
+    //   ; (r5+r6+0x20)<<5 + r4*0xF0
+    // HOST: the same block, measured with the host's own strides -- see SimulationBlockSize
+    // above for why the console literals cannot be used to size a block Initialize then
+    // carves with sizeof(). The alignment (64) is a hardware constraint, not a stride, and
+    // is unchanged.
+    const u32 luSize = SimulationBlockSize(luCountA, luCountB, luCountC, 64u);
 
     // entry[0] = { m_size = size, m_alignment = 64 }
     lpEntries[0].m_size      = luSize;
     lpEntries[0].m_alignment = 64u;
     return lpResult;
+}
+
+// -------------------------------------------------------------------------------------
+// Simulation::RemoveJoint @ 0x82BC2AC8   (21 instructions, all scalar)
+// Simulation::RemoveDrive @ 0x82BC2B20   (21 instructions, all scalar)
+//
+// The rigid-body MoveToListTail splice, one node type over: unlink from the active list,
+// re-insert at the TAIL of the free list, then move one entry between the two counters.
+// Joint and Drive share the layout (m_right @+0x08, m_left @+0x0C), so the two bodies are
+// instruction-identical apart from the anchor (+0x2C vs +0x34) and the counter pair
+// (+0x50/+0x4C vs +0x58/+0x54).
+//
+// ⚠️ There is NO state word to clear here and no `& 7` switch: unlike a rigid body, a joint
+// or a drive is either on the active list or on the free list, so the counter move is
+// unconditional. Reproducing RemoveRigidBody's switch would be inventing a branch.
+// (The `clrlwi r10,r4,0` before the last store is the 64-bit register file's 32-bit
+// zero-extend of a pointer, same artefact as in MoveToListTail; it moves no data.)
+// -------------------------------------------------------------------------------------
+void Simulation::RemoveJoint(Joint* lpJoint)
+{
+    lpJoint->m_right->m_left = lpJoint->m_left;
+    lpJoint->m_left->m_right = lpJoint->m_right;
+
+    Joint* const lpAnchor = m_FreeJT_Anchor;              // +0x2C
+    lpJoint->m_right          = lpAnchor;
+    lpJoint->m_left           = lpAnchor->m_left;
+    lpAnchor->m_left->m_right = lpJoint;
+    lpAnchor->m_left          = lpJoint;
+
+    --m_ActiveJT_Count;                                   // +0x50
+    ++m_FreeJT_Count;                                     // +0x4C
+}
+
+void Simulation::RemoveDrive(Drive* lpDrive)
+{
+    lpDrive->m_right->m_left = lpDrive->m_left;
+    lpDrive->m_left->m_right = lpDrive->m_right;
+
+    Drive* const lpAnchor = m_FreeDR_Anchor;              // +0x34
+    lpDrive->m_right          = lpAnchor;
+    lpDrive->m_left           = lpAnchor->m_left;
+    lpAnchor->m_left->m_right = lpDrive;
+    lpAnchor->m_left          = lpDrive;
+
+    --m_ActiveDR_Count;                                   // +0x58
+    ++m_FreeDR_Count;                                     // +0x54
+}
+
+// -------------------------------------------------------------------------------------
+// Simulation::Initialize @ 0x82BC5158   (224 instructions)
+//
+// STATIC. r3 is the Resource block array the allocator filled, NOT a `this`: the object
+// being initialised is memory[0], and every list node is carved out of the same block
+// behind it. r4/r5/r6 carry the three capacities. Returns the Simulation*.
+//
+// Instruction-for-instruction, the console does:
+//   1. re-run GetResourceDescriptor for the block ALIGNMENT alone (it reads only
+//      `lwz r11, var_8C(r1)` == entry[0].m_alignment); the four unrolled {0,1} descriptor
+//      fills either side of it are dead stack scratch and are not modelled.
+//   2. m_RF_Max = bodies; m_RF_Stack = block + RoundUp(192, alignment).
+//   3. zero the reaction-force blocks (`vspltisb v0,0` + four stvx128 per 64-byte block).
+//   4. carve rigid bodies, joints, drives; the first FOUR bodies and the first TWO joints
+//      and TWO drives are LIST SENTINELS, not usable nodes:
+//        rb[0] free anchor, rb[1] static, rb[2] frozen, rb[3] active, rb[4..] the pool;
+//        jt[0] free anchor, jt[1] active, jt[2..] the pool; likewise drives.
+//   5. thread every pool node onto its free list (circular, through the anchor), and
+//      self-link the anchors of the lists that start empty.
+//   6. seed the solver parameters.
+//
+// ⚠️ THE SENTINELS ARE ONLY PARTLY INITIALISED, on purpose. The console writes mRight/mLeft
+// on rb[0..3] and jt[0..1]/dr[0..1] and NOTHING else -- no mState, no mStasis, no mId. They
+// are never dereferenced as bodies, only as list heads. Zeroing them "to be safe" would be
+// inventing stores the console does not make.
+//
+// ⚠️ THE POOL BODIES GET mId = THEIR INDEX, NOT A POINTER. The console stores the resolved
+// address `m_RF_Stack + 64*i` into the +0x1C slot; on x64 that slot is the 32-bit index
+// (see the banner in rw/physics/rigidbody.h -- the shipping x64 builds index too). Same
+// reaction-force block, different representation.
+// -------------------------------------------------------------------------------------
+Simulation* Simulation::Initialize(void** lpMemory, int liNumBodies, int liNumJoints, int liNumDrives)
+{
+    // 1. the alignment, straight back out of the sizer (the console calls it for this alone)
+    rw::BaseResourceDescriptors<5> lDescriptor;
+    Simulation::GetResourceDescriptor(&lDescriptor, liNumBodies, liNumJoints, liNumDrives);
+    const u32 luAlignment = lDescriptor.m_baseResourceDescriptors[0].m_alignment;   // 64
+
+    // 2. `lwz r3, 0(r29)` -- the object is the head of its own block.
+    Simulation* const lpSim   = static_cast<Simulation*>(lpMemory[0]);
+    char* const       lpBlock = reinterpret_cast<char*>(lpSim);
+
+    lpSim->m_RF_Max = static_cast<u32>(liNumBodies);                                  // +0x88
+
+    char* const lpReactionForces =
+        lpBlock + RoundUpTo(static_cast<u32>(sizeof(Simulation)), luAlignment);
+    lpSim->m_RF_Stack = lpReactionForces;                                             // +0x0C
+
+    RigidBody* const lpaBodies = reinterpret_cast<RigidBody*>(
+        lpReactionForces + KU_REACTION_FORCE_STRIDE * static_cast<u32>(liNumBodies));
+    Joint* const lpaJoints = reinterpret_cast<Joint*>(
+        reinterpret_cast<char*>(lpaBodies) + sizeof(RigidBody) * static_cast<u32>(liNumBodies + 4));
+    Drive* const lpaDrives = reinterpret_cast<Drive*>(
+        reinterpret_cast<char*>(lpaJoints) + sizeof(Joint) * static_cast<u32>(liNumJoints + 2));
+
+    // 3. clear the reaction-force blocks
+    if (liNumBodies != 0)
+        memset(lpReactionForces, 0, KU_REACTION_FORCE_STRIDE * static_cast<size_t>(liNumBodies));
+
+    // ---- rigid bodies -----------------------------------------------------------------
+    lpSim->m_FreeRB_Anchor   = &lpaBodies[0];                    // +0x1C
+    lpSim->m_FreeRB_Count    = static_cast<u32>(liNumBodies);    // +0x3C
+    lpSim->m_StaticRB_Count  = 0u;                               // +0x40
+    lpSim->m_FrozenRB_Count  = 0u;                               // +0x44
+    lpSim->m_ActiveRB_Count  = 0u;                               // +0x48
+    lpSim->m_StaticRB_Anchor = &lpaBodies[1];                    // +0x20
+    lpSim->m_FrozenRB_Anchor = &lpaBodies[2];                    // +0x24
+    lpSim->m_ActiveRB_Anchor = &lpaBodies[3];                    // +0x28
+    lpSim->m_RB_Stack        = &lpaBodies[4];                    // +0x00
+
+    // The three lists that start empty are self-linked circles.
+    lpaBodies[1].mRight = &lpaBodies[1];   // stw r10, 0xDC(r11)  == rb[1] + 0x2C
+    lpaBodies[1].mLeft  = &lpaBodies[1];
+    lpaBodies[2].mRight = &lpaBodies[2];
+    lpaBodies[2].mLeft  = &lpaBodies[2];
+    lpaBodies[3].mRight = &lpaBodies[3];
+    lpaBodies[3].mLeft  = &lpaBodies[3];
+
+    if (liNumBodies != 0)
+    {
+        RigidBody* lpNode = lpSim->m_RB_Stack;
+        RigidBody* lpPrev = lpSim->m_FreeRB_Anchor;
+        u32        luId   = 0u;
+
+        // `addic. r10,r4,-1 ; beq` -- the walk runs numBodies-1 times, the last node is
+        // finished off below (it is the one that closes the circle).
+        for (int liRemaining = liNumBodies - 1; liRemaining != 0; --liRemaining)
+        {
+            lpNode->mLeft   = lpPrev;                            // stw r8, 0x3C(r11)
+            lpPrev          = lpNode;
+            lpNode->mId     = luId;                              // stw r7, 0x1C(r11)
+            lpNode->mState  = FREE_BODY;                         // stw r31,0x8C(r11)
+            ++luId;
+            lpNode->mStasis = lpSim;                             // stw r3, 0x4C(r11)
+            ++lpNode;                                            // addi r11,r11,0xB0
+            lpPrev->mRight  = lpNode;                            // stw r11,0x2C(r8)
+        }
+
+        lpNode->mState  = FREE_BODY;
+        lpNode->mLeft   = lpPrev;
+        lpNode->mStasis = lpSim;
+        lpNode->mId     = static_cast<u32>(liNumBodies - 1);     // `slwi r10,r4,6 ; add r10,r10,r9`
+        lpNode->mRight  = lpSim->m_FreeRB_Anchor;
+
+        lpSim->m_FreeRB_Anchor->mRight = lpSim->m_RB_Stack;
+        lpSim->m_FreeRB_Anchor->mLeft  = lpNode;
+    }
+    else
+    {
+        lpSim->m_FreeRB_Anchor->mRight = lpSim->m_FreeRB_Anchor;
+        lpSim->m_FreeRB_Anchor->mLeft  = lpSim->m_FreeRB_Anchor;
+    }
+
+    // ---- joints -----------------------------------------------------------------------
+    lpSim->m_FreeJT_Anchor   = &lpaJoints[0];                    // +0x2C
+    lpSim->m_FreeJT_Count    = static_cast<u32>(liNumJoints);    // +0x4C
+    lpSim->m_ActiveJT_Count  = 0u;                               // +0x50
+    lpSim->m_ActiveJT_Anchor = &lpaJoints[1];                    // +0x30
+    lpSim->m_JT_Stack        = &lpaJoints[2];                    // +0x04
+
+    lpaJoints[1].m_right = &lpaJoints[1];   // stw r11, 0x28(r30)  == jt[1] + 0x08
+    lpaJoints[1].m_left  = &lpaJoints[1];
+
+    if (liNumJoints != 0)
+    {
+        Joint* lpNode = lpSim->m_JT_Stack;
+        Joint* lpPrev = lpSim->m_FreeJT_Anchor;
+
+        for (int liRemaining = liNumJoints - 1; liRemaining != 0; --liRemaining)
+        {
+            lpNode->m_left  = lpPrev;
+            lpPrev          = lpNode;
+            ++lpNode;
+            lpPrev->m_right = lpNode;
+        }
+
+        lpNode->m_left  = lpPrev;
+        lpNode->m_right = lpSim->m_FreeJT_Anchor;
+
+        lpSim->m_FreeJT_Anchor->m_right = lpSim->m_JT_Stack;
+        lpSim->m_FreeJT_Anchor->m_left  = lpNode;
+    }
+    else
+    {
+        lpSim->m_FreeJT_Anchor->m_right = lpSim->m_FreeJT_Anchor;
+        lpSim->m_FreeJT_Anchor->m_left  = lpSim->m_FreeJT_Anchor;
+    }
+
+    // ---- drives (the identical body, one array over) -----------------------------------
+    lpSim->m_FreeDR_Anchor   = &lpaDrives[0];                    // +0x34
+    lpSim->m_FreeDR_Count    = static_cast<u32>(liNumDrives);    // +0x54
+    lpSim->m_ActiveDR_Count  = 0u;                               // +0x58
+    lpSim->m_ActiveDR_Anchor = &lpaDrives[1];                    // +0x38
+    lpSim->m_DR_Stack        = &lpaDrives[2];                    // +0x08
+
+    lpaDrives[1].m_right = &lpaDrives[1];
+    lpaDrives[1].m_left  = &lpaDrives[1];
+
+    if (liNumDrives != 0)
+    {
+        Drive* lpNode = lpSim->m_DR_Stack;
+        Drive* lpPrev = lpSim->m_FreeDR_Anchor;
+
+        for (int liRemaining = liNumDrives - 1; liRemaining != 0; --liRemaining)
+        {
+            lpNode->m_left  = lpPrev;
+            lpPrev          = lpNode;
+            ++lpNode;
+            lpPrev->m_right = lpNode;
+        }
+
+        lpNode->m_left  = lpPrev;
+        lpNode->m_right = lpSim->m_FreeDR_Anchor;
+
+        lpSim->m_FreeDR_Anchor->m_right = lpSim->m_DR_Stack;
+        lpSim->m_FreeDR_Anchor->m_left  = lpNode;
+    }
+    else
+    {
+        lpSim->m_FreeDR_Anchor->m_right = lpSim->m_FreeDR_Anchor;
+        lpSim->m_FreeDR_Anchor->m_left  = lpSim->m_FreeDR_Anchor;
+    }
+
+    // ---- solver defaults ---------------------------------------------------------------
+    // ⭐ THE GRAVITY DEFAULT IS -600.0f, NOT -9.81f, AND IT WAS READ, NOT INFERRED.
+    // flt_8202CF3C was resolved by a headless IDA read of the X360 image: raw C4160000
+    // big-endian == -600.0f. (The other two constants in this tail read 0.0f and 1.0f.)
+    // The obvious guess -- "-9.81, because BrnPhysics::PhysicsModule::Prepare stage 3 fills
+    // its SimulationParams with -9.81" -- is WRONG; that is the GAME's gravity, overwritten
+    // through SetGravity two calls later. -600.0f is corroborated independently:
+    // BrnGameState::GameStateModule::Construct @0x82380388 is flt_8202CF3C's only other
+    // user and Hex-Rays renders it there as `-600.0`.
+    lpSim->m_SpyFlag      = SPY_NOTHING;                                 // +0xB0
+    lpSim->m_CoolDown     = 30u;                                         // +0xA4  li r8,0x1E
+    lpSim->m_MinEnergy    = 1.0f;                                        // +0xA8  flt_82001C98
+    lpSim->m_Gravity.x    = 0.0f;                                        // flt_82001CC0
+    lpSim->m_Gravity.y    = -600.0f;                                     // flt_8202CF3C
+    lpSim->m_Gravity.z    = 0.0f;                                        // flt_82001CC0
+    lpSim->m_Gravity.w    = 0.0f;                                        // stw r31, 0(r11)
+    lpSim->m_MaxIteration = 50u;                                         // +0xAC  li r10,0x32
+
+    return lpSim;
 }
 
 // -------------------------------------------------------------------------------------

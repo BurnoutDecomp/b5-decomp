@@ -144,7 +144,19 @@ public:
     Drive* AddDrive(RigidBody* lpA, RigidBody* lpB, void* lpFrames, void* lpDynamics);  // @ 0x82BC3E28
     void   RemoveJoint(Joint* lpJoint);          // @ 0x82BC2AC8
     void   RemoveDrive(Drive* lpDrive);          // @ 0x82BC2B20
-    Simulation* Initialize(void** lpMemory);     // @ 0x82BC5158
+
+    // -------------------------------------------------------------------------------------
+    // Initialize @ 0x82BC5158 (224 instructions) -- carve the whole node graph out of the
+    // single block the allocator handed back for GetResourceDescriptor's size, and thread
+    // the three free lists. BODIED.
+    //
+    // ⚠️ THE COMMITTED DECLARATION THAT USED TO STAND HERE, `Simulation* Initialize(void**)`,
+    // WAS WRONG TWICE: it is STATIC (r3 is the Resource block array, not a `this` -- the
+    // object being initialised is `memory[0]`), and it takes the three counts. The DWARF
+    // spells it `Simulation* Initialize(const Resource&, uint32_t, uint32_t, uint32_t)`
+    // (simulation.h:277); the X360 reads the counts out of r4/r5/r6.
+    // -------------------------------------------------------------------------------------
+    static Simulation* Initialize(void** lpMemory, int liNumBodies, int liNumJoints, int liNumDrives);
 
     // DWARF accessors (simulation.h:351..371 / :548). All inlined away on the console.
     f32                           GetTimeStep() const       { return m_TimeStep; }
@@ -154,6 +166,20 @@ public:
     u32                           GetMaxIteration() const   { return m_MaxIteration; }
     SpyingFlag                    GetSpyingMode() const     { return m_SpyFlag; }
     void*                         GetReactionForces() const { return m_RF_Stack; }
+    u32                           GetMaxRigidBody() const   { return m_RF_Max; }
+    u32                           GetFreeBodyCount() const  { return m_FreeRB_Count; }
+    u32                           GetActiveBodyCount() const { return m_ActiveRB_Count; }
+    u32                           GetFreeJointCount() const { return m_FreeJT_Count; }
+    u32                           GetFreeDriveCount() const { return m_FreeDR_Count; }
+
+    // DWARF mutators (simulation.h:383..399). All inlined away on the console -- they are
+    // the individual stores CgsPhysics::PhysicsSimulationModule::AllocateMemoryAndInitialiseRW
+    // makes into +0x90 / +0xA4 / +0xA8 / +0xAC / +0xB0 right after Initialize returns.
+    void SetGravity(const rw::math::vpu::Vector3& lrGravity) { m_Gravity = lrGravity; }
+    void SetCoolDown(u32 luCoolDown)                         { m_CoolDown = luCoolDown; }
+    void SetFreezingEnergy(f32 lfEnergy)                     { m_MinEnergy = lfEnergy; }
+    void SetMaxIteration(u32 luIterations)                   { m_MaxIteration = luIterations; }
+    void SetSpyingMode(SpyingFlag leFlag)                    { m_SpyFlag = leFlag; }
 
 private:
     // Node pool bases (simulation.h:638..640).

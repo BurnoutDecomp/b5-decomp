@@ -2,6 +2,14 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // AddMonitor
 
+// The real rw::physics world Prepare/AllocateMemoryAndInitialiseRW build. Only the .cpp
+// needs the definitions -- the header keeps them forward-declared, exactly as the console's
+// does (its own Prepare is the only member that dereferences mpSimulation).
+#include "rw/rwcore_structs.h"                  // rw::IResourceAllocator, Resource, descriptors
+#include "rw/physics/simulation.h"              // rw::physics::Simulation + SpyingFlag
+#include "rw/physics/SimulationWorkspace.h"     // rw::physics::SimulationWorkspace
+#include "rw/physics/pairset.h"                 // rw::physics::PairSet
+
 #include <cstddef>   // offsetof (layout gate)
 #include <cfloat>    // FLT_MAX  (rw::physics::Inertia's default max velocity/omega)
 
@@ -103,6 +111,14 @@ namespace CgsPhysics
         return maRWJoints[liIndex];
     }
 
+    // Raw slot-occupancy probe. Inlined by the console into
+    // PhysicsSimulationModule::AllocateMemoryAndInitialiseRW (`lbzx` off &mabUsedSlot[0] at
+    // 0x828A2560, then `beq` past the removal). No tripwire -- this IS the tripwire.
+    bool JointData::IsSlotUsed(s32 liIndex) const
+    {
+        return mabUsedSlot[liIndex];
+    }
+
     // ===================== DriveData =======================================
 
     // Inlined by the console into PhysicsSimulationModule::PhysicsSimulationModule
@@ -174,6 +190,20 @@ namespace CgsPhysics
         CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");          // h:684 tripwire (blt skips)
         CGS_ASSERT(mabUsedSlot[liIndex], "mabUsedSlot[liIndex]");   // h:685 tripwire (bne skips)
         return &maScaledDynamics[liIndex];
+    }
+
+    // DWARF h:241. Inlined by the console into AllocateMemoryAndInitialiseRW as the bare
+    // `lwz r4, 0x47B0(r31)` at 0x828A25CC -- maRWDrives[0] with no tripwire of its own,
+    // because the mabUsedSlot test two instructions earlier is the guard.
+    rw_physics::Drive* DriveData::GetDrive(s32 liIndex)
+    {
+        return maRWDrives[liIndex];
+    }
+
+    // Raw slot-occupancy probe -- the `lbz r11, 0x47C0(r31)` + `beq` at 0x828A25C0.
+    bool DriveData::IsSlotUsed(s32 liIndex) const
+    {
+        return mabUsedSlot[liIndex];
     }
 
     // ===================== RigidBodyData ===================================
@@ -276,6 +306,24 @@ namespace CgsPhysics
         CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");                              // h:603 tripwire (blt skips)
         CGS_ASSERT(!maGameIDs[liIndex].IsInvalid(), "!maGameIDs[liIndex].IsInvalid()"); // h:604 tripwire
         return &maInertias[liIndex];
+    }
+
+    // DWARF h:113. Inlined into AllocateMemoryAndInitialiseRW: the console loads the slot's
+    // game id and compares it against qword_82F33E18 (K_INVALID_RIGID_BODY_ID) at 0x828A25FC.
+    // This table has no mabUsedSlot[] -- the sentinel id IS the free marker.
+    bool RigidBodyData::IsSlotUsed(s32 liIndex) const
+    {
+        return !maGameIDs[liIndex].IsInvalid();
+    }
+
+    // DWARF h:108. Inlined into AllocateMemoryAndInitialiseRW as the write-back of the
+    // sentinel at 0x828A26C0. Its bounds tripwire is the one whose asm literals name
+    // "..\..\..\GameShared\GameClasses\Physics/CgsPhysicsSimulationModule.cpp", 2504 --
+    // i.e. it fires from the caller's frame, which is what being inlined there means.
+    void RigidBodyData::SetFree(s32 liIndex)
+    {
+        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");
+        maGameIDs[liIndex] = K_INVALID_RIGID_BODY_ID;
     }
 
     // ===================== PhysicsSimulationModule =========================
@@ -510,5 +558,276 @@ namespace CgsPhysics
         CGS_ASSERT(leEnumIndex <= PhysicsSimulationModule::RELEASESTAGE_DONE,
                    "leEnumIndex <= PhysicsSimulationModule::RELEASESTAGE_DONE");
         return leOld;
+    }
+
+    // DWARF CgsPhysicsSimulationModule.h:565. The prepare-stage twin of the operator above;
+    // the console inlined it into Prepare (`v8 = *(a1+552) + 1; *(a1+552) = v8; if (v8 > 2)
+    // <assert>`), which is the same three steps in the same order.
+    PhysicsSimulationModule::EPrepareStage
+    operator++(PhysicsSimulationModule::EPrepareStage& leEnumIndex, int)
+    {
+        PhysicsSimulationModule::EPrepareStage leOld = leEnumIndex;
+        leEnumIndex = static_cast<PhysicsSimulationModule::EPrepareStage>(
+            static_cast<int>(leEnumIndex) + 1);
+        CGS_ASSERT(leEnumIndex <= PhysicsSimulationModule::PREPARESTAGE_DONE,
+                   "leEnumIndex <= PhysicsSimulationModule::PREPARESTAGE_DONE");
+        return leOld;
+    }
+
+    // ===================================================================================
+    // PhysicsSimulationModule::Prepare @ 0x828A6A08 -- console vtable slot 16.
+    //
+    // ⭐ THIS IS THE FUNCTION THAT ASSIGNS mpSimulation. Until it landed (2026-08-04, task
+    // #135) `rw::physics::Simulation` had exactly one holder in the whole tree and NO
+    // assignment anywhere: the reconstructed solver -- DynamicUpdate, BatchIntegrator, both
+    // Jacobian::Builds, the 384-byte record -- linked and was unreachable, and /OPT:REF
+    // stripped every byte of it back out of the exe.
+    //
+    // Shape: a fall-through FSM over mePrepareStage, the mirror image of Release().
+    //   stage 0 (START)   : the console does `*(a1+552) = 0` then falls into the stage-1 arm
+    //                       via the shared cursor bump. Modelled as the bump + fall-through.
+    //   stage 1 (MANAGER) : base Prepare first; if it is not finished, return false with the
+    //                       cursor LEFT ON 1 so the owner re-enters next frame. On success:
+    //                       clear the three bit arrays, (re)build the rw::physics world, clear
+    //                       the three slot tables, reset the release cursor, bump to DONE.
+    //   stage >= 3        : the console's out-of-range arm fires an assert whose three
+    //                       operands are literal 0/0/-1 -- it carries no text of its own, so
+    //                       the condition is reproduced and the message describes the tripwire.
+    //
+    // ⚠️ THE ORDER IS NOT THE ORDER Construct USES. Construct clears the three slot tables
+    // FIRST and the bit arrays after; Prepare clears the bit arrays, then rebuilds the world,
+    // then clears the slot tables. That matters: AllocateMemoryAndInitialiseRW walks
+    // mBodyData/mJointData/mDriveData to decide what to REMOVE from an existing simulation,
+    // so clearing them before it ran would silently leak every live body back into the
+    // rw::physics free lists' predecessor. Transcribed in the asm's order.
+    // ===================================================================================
+    bool PhysicsSimulationModule::Prepare(rw::IResourceAllocator* lpAllocator,
+                                          const SimulationParams& lrParams)
+    {
+        switch (mePrepareStage)
+        {
+        default:
+            // `if (v4 >= 3) { BeginAssert; FireAssert(0, 0, -1); EndAssert; return 0; }`
+            CGS_ASSERT(false, "mePrepareStage out of range");
+            return false;
+
+        case PREPARESTAGE_DONE:
+            // The console's `*(a1 + 552) = 0` before it falls into the START arm: a module
+            // that already finished preparing restarts from the top.
+            mePrepareStage = PREPARESTAGE_START;
+            // fall through
+
+        case PREPARESTAGE_START:
+            mePrepareStage++;
+            // fall through -- the console has no branch here
+
+        case PREPARESTAGE_MANAGER:
+            if (!CgsModule::ModuleSingleBuffered::Prepare())
+                return false;                       // cursor stays on MANAGER; retried next frame
+
+            // The same twelve `std 0` block Construct and Release write, at +0x47E8.
+            mNeedFreeze.UnSetAll();
+            mDone.UnSetAll();
+            mSeen.UnSetAll();
+
+            AllocateMemoryAndInitialiseRW(lpAllocator, lrParams);
+
+            mBodyData.Clear();                      // 200 x std K_INVALID_RIGID_BODY_ID -> +0x550
+            mJointData.Clear();                     // 36  x stb 0                       -> +0x4700
+            mDriveData.Clear();                     // 1   x stb 0                       -> +0x47C0
+
+            meReleaseStage = RELEASESTAGE_START;    // stw 0, 0x22C(r31)
+            mePrepareStage++;
+            return true;
+        }
+    }
+
+    namespace
+    {
+        // The console's `rw::IResourceAllocator::AllocateMemoryResource` @0x823FF7D0 and the
+        // generic descriptor carve are both INLINES: they build a five-entry serialised
+        // descriptor on the stack and tail-call the allocator's DoAllocate slot. The PC
+        // rwcore models DoAllocate with the narrower <4> alias, so the descriptor is built as
+        // <5> and reinterpret_cast down at the call -- the same idiom
+        // CgsSceneManager::TriangleCacheManager::Prepare and rwgpfxtint.cpp already use.
+        void* CarveResource(rw::IResourceAllocator* lpAllocator,
+                            const rw::BaseResourceDescriptors<5>& lrDescriptor)
+        {
+            rw::Resource lResource = lpAllocator->DoAllocate(
+                reinterpret_cast<const rw::ResourceDescriptor&>(lrDescriptor), 0);
+            return lResource.m_baseResources[0];
+        }
+
+        // rw::IResourceAllocator::AllocateMemoryResource(size, alignment) -- a {size,align}
+        // pair in entry[0], identity in the rest, then the same carve.
+        void* AllocateMemoryResource(rw::IResourceAllocator* lpAllocator, u32 luSize, u32 luAlignment)
+        {
+            rw::BaseResourceDescriptors<5> lDescriptor;
+            for (u32 luEntry = 0u; luEntry < 5u; ++luEntry)
+            {
+                lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0u;
+                lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;
+            }
+            lDescriptor.m_baseResourceDescriptors[0].m_size      = luSize;
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
+            return CarveResource(lpAllocator, lDescriptor);
+        }
+    }
+
+    // ===================================================================================
+    // PhysicsSimulationModule::AllocateMemoryAndInitialiseRW @ 0x828A2168
+    //
+    // Two paths, chosen on `if (mpSimulation)`:
+    //
+    //   FIRST PREPARE (mpSimulation == NULL) -- build the whole rw::physics world:
+    //     Simulation           : GetResourceDescriptor(200,36,1) -> DoAllocate -> Initialize
+    //     SimulationWorkspace  : GetResourceDescriptor(36,1,1024) -> DoAllocate -> Initialize
+    //                            -> Simulation::SetWorkspace(ws, 36, 1, 1024)
+    //     solver parameters    : spy mode = all three; gravity / freezing energy / iteration
+    //                            cap from the caller's SimulationParams
+    //     three PairSets       : contact (200,1024), jointed (200,36), driven (200,1)
+    //     mpiNextIndex         : 800 bytes / align 4 == 200 x s32
+    //
+    //   RE-PREPARE (mpSimulation != NULL) -- the allocator is a BUMP allocator and cannot
+    //     hand the same block back, so the world is emptied instead of rebuilt: every used
+    //     joint slot, the drive slot, and every used body slot are removed from the
+    //     simulation and the body slots freed. Nothing is deallocated.
+    //
+    //   BOTH paths then clear the three pair sets and reset the counters/cursors.
+    //
+    // ⚠️ THE SPY MODE IS SPY_JOINTS|SPY_DRIVES|SPY_CONTACTS (7), NOT SPY_NOTHING. The console
+    // writes literal 7 into +0xB0 here, overriding the SPY_NOTHING that Simulation::Initialize
+    // had just written two calls earlier. That is not debug-only leftover: the contact spy
+    // stream is how the game learns about collisions at all (AddContactSpiesToOutputQueue ->
+    // the crash/deformation modules), so the flags are load-bearing gameplay state.
+    //
+    // ⚠️ THE COUNTS ARE THE CLASS'S OWN CONSTANTS, and they are NOT all the same constant.
+    // The simulation is sized (bodies=200, joints=36, drives=1); the WORKSPACE is sized
+    // (joints=36, drives=1, contacts=1024) -- kuNumPotentialContacts, a different member --
+    // and the contact pair set is (200, kuNumCollidingPairs=1024). Three different 1024s
+    // would have been indistinguishable if they had been written as literals.
+    //
+    // ⭐ EXECUTION PROVEN, NOT ASSUMED (2026-08-04, task #135). A temporary one-shot witness
+    // was compiled into the tail of this body, observed on a default boot_test run, and
+    // removed -- the same protocol PhysicsModule::Construct was proved with:
+    //   [t135] AllocateMemoryAndInitialiseRW RAN; sim=0x19A66F50 freeRB=200 activeRB=0
+    //          freeJT=36 freeDR=1 maxRB=200 grav=-9.810000 freezeE=0.100000 maxIter=2
+    //          cool=30 spy=7 rf=0x19A67090 pairs=0x19ABADD0/0x19AC3110/0x19AC38D0
+    //          nextIdx=0x19AC3C30 simSize=272 rbSize=240
+    // Every field is an independent check, and all of them land:
+    //   * freeRB/freeJT/freeDR are written by Simulation::Initialize, so the three intrusive
+    //     free lists really were threaded (200/36/1 == the class's three capacities).
+    //   * rf - sim == 0x140 == 320 == RoundUp(sizeof(Simulation)=272, 64) -- the block carve
+    //     arithmetic is exact, which is the thing the console-stride widening had to get right.
+    //   * cool=30 comes from Initialize's own defaults while grav/freezeE/maxIter come from
+    //     PhysicsModule::Prepare stage 3's SimulationParams, so BOTH ends of the chain ran.
+    //   * three distinct non-null PairSets and a non-null next-index array.
+    // ===================================================================================
+    void PhysicsSimulationModule::AllocateMemoryAndInitialiseRW(rw::IResourceAllocator* lpAllocator,
+                                                                const SimulationParams& lrParams)
+    {
+        if (mpSimulation != 0)
+        {
+            // ---- RE-PREPARE: empty the existing world, keep its memory -------------------
+            for (s32 liJoint = 0; liJoint < JointData::KI_SIZE; ++liJoint)
+            {
+                if (mJointData.IsSlotUsed(liJoint))
+                    mpSimulation->RemoveJoint(mJointData.GetJoint(liJoint));
+            }
+
+            if (mDriveData.IsSlotUsed(0))
+                mpSimulation->RemoveDrive(mDriveData.GetDrive(0));
+
+            for (s32 liBody = 0; liBody < RigidBodyData::KI_SIZE; ++liBody)
+            {
+                if (mBodyData.IsSlotUsed(liBody))
+                {
+                    mpSimulation->RemoveRigidBody(mBodyData.GetRigidBody(liBody));
+                    mBodyData.SetFree(liBody);
+                }
+            }
+        }
+        else
+        {
+            // ---- FIRST PREPARE: carve and initialise ------------------------------------
+            rw::BaseResourceDescriptors<5> lDescriptor;
+
+            // The simulation object and its whole node graph, in one block.
+            rw::physics::Simulation::GetResourceDescriptor(
+                &lDescriptor, static_cast<int>(KU_NUM_BODIES), static_cast<int>(KU_NUM_JOINTS),
+                static_cast<int>(KU_NUM_DRIVES));
+            void* lpSimulationBlock = CarveResource(lpAllocator, lDescriptor);
+
+            // The per-frame solver scratch arena.
+            rw::physics::SimulationWorkspace::GetResourceDescriptor(
+                &lDescriptor, static_cast<int>(KU_NUM_JOINTS), static_cast<int>(KU_NUM_DRIVES),
+                static_cast<int>(KU_NUM_POTENTIAL_CONTACTS));
+            void* lpWorkspaceBlock = CarveResource(lpAllocator, lDescriptor);
+
+            rw::physics::SimulationWorkspace* lpWorkspace =
+                rw::physics::SimulationWorkspace::Initialize(
+                    &lpWorkspaceBlock, static_cast<int>(KU_NUM_JOINTS), static_cast<int>(KU_NUM_DRIVES),
+                    static_cast<int>(KU_NUM_POTENTIAL_CONTACTS));
+
+            mpSimulation = rw::physics::Simulation::Initialize(
+                &lpSimulationBlock, static_cast<int>(KU_NUM_BODIES), static_cast<int>(KU_NUM_JOINTS),
+                static_cast<int>(KU_NUM_DRIVES));
+
+            // ⚠️ Hex-Rays renders this call as `SetWorkspace()` with NO arguments -- the
+            // dropped-argument artefact. The asm has r4..r7 live across it; the arguments are
+            // the workspace and the same three counts its sizer was given.
+            mpSimulation->SetWorkspace(lpWorkspace, static_cast<int>(KU_NUM_JOINTS),
+                                       static_cast<int>(KU_NUM_DRIVES),
+                                       static_cast<int>(KU_NUM_POTENTIAL_CONTACTS));
+
+            mpSimulation->SetSpyingMode(static_cast<rw::physics::SpyingFlag>(   // stw 7, 0xB0
+                rw::physics::SPY_JOINTS | rw::physics::SPY_DRIVES | rw::physics::SPY_CONTACTS));
+
+            // `lvx128 v0,r0,r29 ; stvx128 v0,r11,144` -- the params' 16-byte gravity lane
+            // straight into the simulation's, then the two scalars behind it.
+            rw::math::vpu::Vector3 lGravity;
+            lGravity.x = lrParams.mafGravity[0];
+            lGravity.y = lrParams.mafGravity[1];
+            lGravity.z = lrParams.mafGravity[2];
+            lGravity.w = lrParams.mafGravity[3];
+            mpSimulation->SetGravity(lGravity);                                 // +0x90
+            mpSimulation->SetFreezingEnergy(lrParams.mfFreezingEnergy);         // +0xA8 <- params+16
+            mpSimulation->SetMaxIteration(lrParams.muMaxIterations);            // +0xAC <- params+24
+
+            // The three pair sets. ⚠️ The ORDER the console builds them in is contact,
+            // jointed, driven -- but they are STORED +0x47D8, +0x47D0, +0x47D4, i.e. the
+            // build order is not the member order. Kept as the asm has it.
+            rw::physics::PairSet::GetResourceDescriptor(
+                &lDescriptor, static_cast<int>(KU_NUM_BODIES), static_cast<int>(KU_NUM_COLLIDING_PAIRS));
+            void* lpContactPairsBlock = CarveResource(lpAllocator, lDescriptor);
+            mpContactPairs = rw::physics::PairSet::Initialize(
+                &lpContactPairsBlock, static_cast<int>(KU_NUM_BODIES), static_cast<int>(KU_NUM_COLLIDING_PAIRS));
+
+            rw::physics::PairSet::GetResourceDescriptor(
+                &lDescriptor, static_cast<int>(KU_NUM_BODIES), static_cast<int>(KU_NUM_JOINTS));
+            void* lpJointedPairsBlock = CarveResource(lpAllocator, lDescriptor);
+            mpJointedPairs = rw::physics::PairSet::Initialize(
+                &lpJointedPairsBlock, static_cast<int>(KU_NUM_BODIES), static_cast<int>(KU_NUM_JOINTS));
+
+            rw::physics::PairSet::GetResourceDescriptor(
+                &lDescriptor, static_cast<int>(KU_NUM_BODIES), static_cast<int>(KU_NUM_DRIVES));
+            void* lpDrivenPairsBlock = CarveResource(lpAllocator, lDescriptor);
+            mpDrivenPairs = rw::physics::PairSet::Initialize(
+                &lpDrivenPairsBlock, static_cast<int>(KU_NUM_BODIES), static_cast<int>(KU_NUM_DRIVES));
+
+            // 800 bytes, 4-aligned == s32[200], one per body slot.
+            mpiNextIndex = static_cast<s32*>(
+                AllocateMemoryResource(lpAllocator, KU_NUM_BODIES * sizeof(s32), 4u));
+        }
+
+        mpContactPairs->ClearAll();
+        mpJointedPairs->ClearAll();
+        mpDrivenPairs->ClearAll();
+
+        miNumRigidBodies = 0;      // +0x4848
+        miNumDrives      = 0;      // +0x484C
+        miNumJoints      = 0;      // +0x4850
+        miNeedThaw       = -1;     // +0x47DC
+        miActive         = -1;     // +0x47E0
     }
 }
