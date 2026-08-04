@@ -26,8 +26,9 @@
 //    name below, exactly the inlined X360 loads.
 //  * Profile::Get/SetOneHundredHudMessageViewed are the DWARF-attested accessors
 //    (BrnProfile.h:556/:560); the X360 inlines both here.
-//  * HandleDeveloperChallengeMessageDEBUG(const CgsID*) is declared in the frozen header
-//    (real named X360 symbol @ the case-596 `bl`; its body is its OWN ledger row).
+//  * HandleDeveloperChallengeMessageDEBUG(const GuiDeveloperChallengesCompleted*) is
+//    declared in the frozen header (real named X360 symbol @ the case-596 `bl`
+//    @0x825275D4; its body is its OWN ledger row).
 
 namespace BrnGui
 {
@@ -560,8 +561,9 @@ void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGu
                 case 578:
                     HandleChallengeEnded(reinterpret_cast<const GuiChallengeEndEvent*>(lpEvent));
                     break;
-                case 596:   // park the developer-challenge id (handler = its own ledger row)
-                    HandleDeveloperChallengeMessageDEBUG(reinterpret_cast<const CgsID*>(lpEvent));
+                case 596:   // developer-challenges-completed bit set (handler = its own ledger row)
+                    HandleDeveloperChallengeMessageDEBUG(
+                        reinterpret_cast<const GuiDeveloperChallengesCompleted*>(lpEvent));
                     break;
 
                 default:
@@ -651,8 +653,9 @@ void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGu
         }
     }
 
-    // Developer-challenge message (X360 debug build).
-    if (mbDeveloperChallengeMessagePending)
+    // Developer-challenge message (X360 debug build; reads 0x4F9, clears 0x4F9 + the
+    // 0x500 bit set after firing -- @0x825277A8..0x82527814).
+    if (mbDEBUGDeveloperChallengeComplete)
     {
         const s32 liGameModeType = mpGuiCache->GetGameMode();
         if (!(liGameModeType == 2 || liGameModeType == 16))
@@ -663,8 +666,8 @@ void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGu
                 if (liGameFlowState == 1 || liGameFlowState == 3)
                 {
                     TriggerDeveloperChallengeMessageDEBUG();
-                    mbDeveloperChallengeMessagePending = false;
-                    mDeveloperChallengeId = 0;
+                    mbDEBUGDeveloperChallengeComplete = false;   // stb 0 -> 0x4F9
+                    mCompletedDeveloperChallenges.UnSetAll();    // std 0 -> 0x500 (one u64 field)
                 }
             }
         }
