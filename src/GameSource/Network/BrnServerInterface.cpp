@@ -6,12 +6,14 @@
 // The X360 codegen at 0x827E4090 is MSVC's scalar-deleting destructor for the
 // most-derived server-interface aggregate. It is the BrnServerInterfaceBase
 // deleting destructor (@ 0x827E1710) with exactly ONE extra embedded-component
-// vtable restore prepended at +0xC2C (the one component this class adds over the
-// Base); the destructor then walks the eleven Base component restores, reinstalls
+// vtable restore prepended at +0xC2C (mGames, the one component the X360 platform
+// intermediate BrnServerInterfaceX360 adds over the Base -- this most-derived class
+// adds no data of its own); the destructor then walks the eleven Base component
+// restores, reinstalls
 // the (shared) Base primary vtable (off_820CDBD0) at this+0, and -- on the
 // delete-expression path (flag & 1) -- frees the object:
 //
-//   result[779] = &off_820CDBF8;   // 0xC2C  mExtraComponent (this class's addition)
+//   result[779] = &off_820CDBF8;   // 0xC2C  BrnServerInterfaceX360::mGames
 //   result[746] = &off_820CDBF8;   // 0xBA8 ]
 //   result[738] = &off_820CDBF8;   // 0xB88 ]
 //   result[727] = &off_820CDBF8;   // 0xB5C ]
@@ -29,9 +31,12 @@
 //
 // Each `&off_820CDBF8` store is the by-value member dtor of one embedded component
 // walking back to the shared CgsNetwork::ServerInterfaceComponent base vtable as it
-// tears down. The +0xC2C store is mExtraComponent (the last-declared member, hence
-// destroyed first); the eleven that follow are the BrnServerInterfaceBase
-// components, and *result = off_820CDBD0 is the Base sub-object's own vtable
+// tears down. The +0xC2C store is BrnServerInterfaceX360::mGames -- a by-value
+// CgsNetwork::ServerInterfaceGamesX360, pinned by BrnNetworkManager's ctor
+// (0x827E557C `stw off_820CFBF8, 0xC2C(r29)` installs the games leaf vtable there);
+// being the last-declared member of the last base it is destroyed first. The eleven
+// that follow are the BrnServerInterfaceBase components, and
+// *result = off_820CDBD0 is the Base sub-object's own vtable
 // reinstall. MSVC synthesises that whole vtable walk + the conditional free from
 // this trivial out-of-line virtual destructor; only the (empty) body is
 // hand-written, matching the established deleting-destructor convention (see

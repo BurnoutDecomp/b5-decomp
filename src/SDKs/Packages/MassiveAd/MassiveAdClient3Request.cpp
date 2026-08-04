@@ -614,6 +614,36 @@ int CRequestObject::ReadRemoveVerifyProtocolVersion()
 }
 
 // ---------------------------------------------------------------------------
+// CRequestObject::ReadRemoveSignature @ 0x82BD02D0
+//
+// Not present in the per-address IDA export (the function was never exported,
+// which is why it long sat undeclared); reconstructed from a headless idat dump
+// of the whole 0x5C-byte body:
+//
+//   lwz  r30, 0x20(r31)   ; snapshot mnPosition BEFORE the read
+//   sth  r11, var_20(r1)  ; unsigned short lnLength = 0
+//   addi r4, r31, 0x30    ; &this->mpSignature (ADDRESS OF the member slot)
+//   addi r5, r1, var_20   ; &lnLength
+//   bl   ReadByteArray
+//   lhz  r11, var_20(r1)  ; zero-extended length
+//   mr   r4, r30 / addi r5, r11, 2
+//   bl   RemoveFromRequestBuffer   ; its r3 falls straight through to the blr
+//
+// Same shape as ReadRemoveVerifyProtocolVersion above: read a field, then delete
+// it from the buffer at the pre-read offset. The +2 is the u16 length prefix
+// ReadByteArray consumed on top of the payload bytes.
+// ---------------------------------------------------------------------------
+int CRequestObject::ReadRemoveSignature()
+{
+    int lnPosition = mnPosition;  // lwz r30, 0x20(r31) -- before the read
+
+    unsigned short lnLength = 0;
+    ReadByteArray(&mpSignature, &lnLength);
+
+    return RemoveFromRequestBuffer(lnPosition, lnLength + 2);
+}
+
+// ---------------------------------------------------------------------------
 // CRequestObject::VerifyHMACSignature @ 0x82BCF538
 // ---------------------------------------------------------------------------
 int CRequestObject::VerifyHMACSignature()

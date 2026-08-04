@@ -14,13 +14,24 @@
 // drives; the inlined container arithmetic itself is homed in those classes so
 // MemcardState reaches them by NAME, not by raw offset.
 //
-// BLOCKED (honest gaps, NOT fabricated): the ctor (@ 0x82C47328) and dtor
-// (@ 0x82C46470) both depend on the un-homed Allocator64 deque constructor
-// (`Rea`) / destructor (`Re`) truncated symbols -- plus, for the ctor, the
-// un-declared default-message global off_832BE1F4 the embedded filter AddRefs.
-// They are declared in the header but intentionally left undefined here until
-// those collaborators are homed; defining them now would require guessing an
-// un-recovered call shape.
+// WHERE THE SPECIAL MEMBERS LIVE (this file carries none of them -- do NOT add
+// a second definition here; `cl /c` cannot see an ODR clash across TUs):
+//   ~MemcardState @ 0x82C46470 -- DEFINED in RealmcMemcardState_wL_02.cpp.
+//   MemcardState  @ 0x82C47328 -- still declared-only in the header. The body is
+//     complete and asm-faithful but parked out of tree at
+//     scratchpad/waveL/parked/RealmcMemcardState_02_MemcardState.cpp.
+//
+// The original blocker text here named the deque ctor/dtor `Rea` / `Re` as
+// "un-homed truncated symbols". That is now OUT OF DATE and was deleted rather
+// than left standing: both were identified by xref in wave L as
+// RealmcCore::Allocator64's constructor @ 0x82C45B48 and destructor @ 0x82C45A10
+// (see scratchpad/waveL/MemcardState.spec.md section 1), and both are now
+// declared in RealmcAllocator64.h with bodies in RealmcAllocator64.cpp -- so the
+// declaration blocker the parked ctor was waiting on no longer exists.
+//
+// The one remaining honest gap on the ctor is a MODELLING gap, not a missing
+// symbol: it AddRefs the default message held in the global off_832BE1F4, whose
+// modelling divergence is owned by RealmcCore.cpp (spec section 4, defect 3).
 // ===========================================================================
 
 namespace RealmcCore

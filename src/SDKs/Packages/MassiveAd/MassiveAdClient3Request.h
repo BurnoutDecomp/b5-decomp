@@ -49,15 +49,23 @@
 //     MassiveAdClient3::CRequestObject::WriteU64                @ 0x82BD01B8
 //     MassiveAdClient3::CRequestObject::WriteFloat              @ 0x82BD0220
 //     MassiveAdClient3::CRequestObject::ReadRemoveVerifyProtocolVersion @ 0x82BD0280
+//     MassiveAdClient3::CRequestObject::ReadRemoveSignature     @ 0x82BD02D0
 //     MassiveAdClient3::CRequestObject::ReadString              @ 0x82BD0330
 //     MassiveAdClient3::CRequestObject::CreateRequest           @ 0x82BD03E0
 //     MassiveAdClient3::CRequestObject::Complete                @ 0x82BD0468
 //     MassiveAdClient3::CRequestObject::FinishBaseBlock         @ 0x82BD04E8
 //     MassiveAdClient3::CRequestObject::WriteString             @ 0x82BD0648
-// (SetStatus and ReadRemoveSignature are CRequestObject functions attributed to
-//  a separate ledger slice; SetStatus is declared below because this TU's
-//  bodies call it, ReadRemoveSignature is not declared -- its signature is not
-//  attested by this TU's asm.)
+// (SetStatus is a CRequestObject function attributed to a separate ledger slice;
+//  it is declared below because this TU's bodies call it, but its body lives
+//  there. ReadRemoveSignature @ 0x82BD02D0 has NO ledger row at all -- it was
+//  never IDA-exported, so the func map that built the ledger simply missed it --
+//  yet it sits inside this class's own address run, between
+//  ReadRemoveVerifyProtocolVersion and ReadString, and six CRequest*::Parse
+//  overrides bl into it. Its name is attested by IDA's own symbol
+//  (`MassiveAdClient3::CRequestObject::ReadRemoveSignature`, reproduced in the
+//  xrefs_from of every calling Parse export) and its full 0x5C-byte body was
+//  dumped headless, so it is declared below and DEFINED in this class's own
+//  MassiveAdClient3Request.cpp -- no other TU would ever supply it.)
 //
 // Per the naming convention the vendor SDK identifiers (the MassiveAdClient3
 // namespace and the CRequestObject class / its methods) are PRESERVED VERBATIM
@@ -366,6 +374,18 @@ public:
     // @ 0x82BD0280. Reads the protocol-version byte, removes it from the buffer
     // (at the pre-read cursor), and returns whether it is version 4.
     int ReadRemoveVerifyProtocolVersion();
+
+    // @ 0x82BD02D0. Reads the length-prefixed response signature block (a u16
+    // length then that many bytes, via ReadByteArray) into the owned mpSignature
+    // member, then removes the length + payload from the buffer at the pre-read
+    // cursor -- so what VerifyHMACSignature later digests is the payload WITHOUT
+    // the signature. In this protocol the block is always the 20-byte SHA1-HMAC
+    // FinishBaseBlock writes. Returns the RemoveFromRequestBuffer result: the
+    // removed byte count (length + 2), or -1 when the removal is rejected.
+    // Body in MassiveAdClient3Request.cpp -- see the note above the layout map:
+    // this function carries no ledger row of its own because it was never
+    // IDA-exported, but it is a CRequestObject member and this is its home TU.
+    int ReadRemoveSignature();
 
     // @ 0x82BCF538. Recomputes the SHA1-HMAC over the live payload with the
     // client HMAC key and compares it against the 20-byte received signature

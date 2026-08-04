@@ -523,6 +523,29 @@ public:
     //            then free 0x10 bytes through the Realmc backend when the delete flag is set).
     ~MessageFilter() override;
 
+    // The X360 allocates a bare MessageFilter through the Realmc backend and frees it
+    // back through the SAME backend, so the free must not reach the host global heap:
+    //   * alloc  -- RealmcCore::MemcardState::MemcardState @ 0x82C47328 inlines
+    //               AllocateMem(nullptr, 0x10) (backend vtable slot +4).
+    //   * free   -- `vector deleting destructor' @ 0x82C46240, delete-flag path
+    //               @0x82C46268..84: r3 = *off_832BE204; li r5, 0x10; mr r4, this;
+    //               lwz r11,0(r3); lwz r11,0xC(r11); bctrl -- i.e. backend slot +0xC
+    //               Free(this, 16), which is EXACTLY what FreeMemSize @ 0x82C44BA0 is
+    //               (same global, same slot, same (block, size) shuffle).
+    // A class-scope sized operator delete reproduces that routing with no call-site
+    // change: `delete pFilter` through the virtual dtor picks the most-derived class's
+    // operator delete, so bare MessageFilters (MemcardState's ctor/dtor and
+    // SetMessageFilter @ 0x82C44FA8) now free through the backend, while
+    // RealmcIface::XenonMessageFilter keeps its own identical override.
+    // NOTE the size argument is the HOST sizeof(MessageFilter), supplied by the
+    // compiler -- the console 0x10 above is a comment, never host arithmetic.
+    // Same pattern as RealmcIfaceGameCallbackProcessor.h and every RealmcIface
+    // message class.
+    static void operator delete(void* lpBlock, std::size_t luSize)
+    {
+        RealmcCore::FreeMemSize(lpBlock, static_cast<u32>(luSize));
+    }
+
     void* mpHandler;    // +0x04 (owner/target pointer)
     MessagePtr maMessage; // +0x08 (embedded MessagePtr; vtable @ +8, message @ +0xC)
 };

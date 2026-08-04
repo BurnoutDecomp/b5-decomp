@@ -25,6 +25,79 @@ namespace RealmcCore
 {
 
 // ---------------------------------------------------------------------------
+// allocator<,64>::allocator @ 0x82C45B48  (export-truncated symbol `Rea`;
+// ledger home class:<global>) -- the deque constructor.
+//
+// MEASURED, raw asm @ 0x82C45B48:
+//   mr   r31, r3 ; li r11, 0
+//   stw  r11, 0/4/8/0xC/0x10/0x14/0x18/0x1C/0x20/0x24(r31)   ; zero all 10 members
+//   bl   RealmcCore::allocator<,64>::DoInit                   ; r3 = this, r4 = a2
+//   mr   r3, r31 ; blr                                        ; return this
+//
+// PARAMETER COUNT: the X360 call site passes a third argument (r5 = the address
+// of a 1-byte never-written stack temporary -- an empty/stateless allocator
+// object by reference); neither this function nor DoInit reads it, so it is
+// dropped on the host. The full measurement is in RealmcAllocator64.h on the
+// declaration -- do NOT re-derive it as "the ctor takes one parameter".
+//
+// INFERENCE: the ten zero-stores are the member init-list; DoInit immediately
+// rewrites all ten fields, so the zeroing is the compiler's belt-and-braces.
+// Reproduced as an init-list in declaration order (== the X360 store order).
+// ---------------------------------------------------------------------------
+Allocator64::Allocator64(unsigned int nByteCapacity)
+    : mppPageArray(nullptr), mnPageSlots(0),
+      mpFrontCur(nullptr), mpFrontBegin(nullptr), mpFrontEnd(nullptr),
+      mppFrontSlot(nullptr), mpBackCur(nullptr), mpBackBegin(nullptr),
+      mpBackEnd(nullptr), mppBackSlot(nullptr)
+{
+    DoInit(nByteCapacity);
+}
+
+// ---------------------------------------------------------------------------
+// allocator<,64>::~allocator @ 0x82C45A10  (export-truncated symbol `Re`;
+// ledger home class:<global>) -- the deque destructor.
+//
+// MEASURED, raw asm @ 0x82C45A10:
+//   r11 = [this+0x00] (mppPageArray) ; beq -> exit          ; nothing to tear down
+//   r11 = [this+0x24] (mppBackSlot)  ; r4 = [this+0x14] (mppFrontSlot)
+//   r5  = r11 + 4                                           ; ONE console slot
+//   bl  RealmcCore::allocator<,64>::DoFreeSubar             ; (r3 = this, unused)
+//   r4  = [this+0x00] ; beq -> exit                         ; redundant re-check
+//   r3  = *off_832BE204 (g_pRealmcAllocator) ; r11 = [r3] ; r11 = [r11+0xC]
+//   r10 = [this+0x04] (mnPageSlots) ; slwi r5, r10, 2 ; bctrl
+//     == g_pRealmcAllocator->Free(mppPageArray, 4 * mnPageSlots)   [vtable +12]
+//
+// HOST-WIDTH, AND PAIRED WITH DoInit'S ALLOCATION. The `+ 4` on the back slot is
+// ONE page-array slot -> `+ 1` in host `char**` arithmetic; the `slwi ..,2` size
+// is `4 * mnPageSlots` only because a console slot is 4 bytes. Both console
+// literals stay in comments. The sized free below MUST keep the same element
+// width as `allocate(sizeof(char*) * luSlots, 0)` in DoInit -- host `char*` is 8
+// bytes, so a console-width literal on either side alone is a live heap
+// mismatch (MemcardState's capacity-0 deque floors at 8 slots: 32 bytes
+// allocated vs 64 freed). They were landed together and must be changed together.
+//
+// INFERENCE: the second `if (mppPageArray)` is the inner guard of the original
+// source's two-step teardown -- nothing between the two loads can write the
+// field (DoFreeSubar @ 0x82C453C8 only reads the range and calls Free), so the
+// two guards fold into one with identical behaviour.
+//
+// DECLARATION-SHAPE NOTE: DoFreeSubar's true X360 shape is a non-static member
+// (r3 = this, unused; begin = r4, end = r5). The committed `static`
+// two-parameter declaration binds the same (begin, end) pair, so this call is
+// semantically exact.
+// ---------------------------------------------------------------------------
+Allocator64::~Allocator64()
+{
+    if (mppPageArray)
+    {
+        DoFreeSubar(mppFrontSlot, mppBackSlot + 1);   // X360: end = mppBackSlot + 4 bytes
+        g_pRealmcAllocator->Free(
+            mppPageArray,
+            sizeof(char*) * static_cast<std::size_t>(mnPageSlots));  // X360: 4 * mnPageSlots
+    }
+}
+
+// ---------------------------------------------------------------------------
 // allocator<,64>::DoInit @ 0x82C455C0
 //
 //   srwi r11, a2, 6 ; addi r30, r11, 1          -> v4 = (a2 >> 6) + 1   (pages)
@@ -37,7 +110,8 @@ namespace RealmcCore
 //   for (slot = v11; slot < v12; slot += 4)     -> fill each slot with a 256B page
 //        *slot = backend->Allocate(0x100, tag, 0)
 //   stw  v11, 0x14(this)                        -> mppFrontSlot = v11
-//   mpFrontCur = mpFrontBegin = *v11 ; mpFrontEnd = *v11 + 0x100
+//   mpFrontBegin (+0xC) = *v11 ; mpFrontEnd (+0x10) = *v11 + 0x100 ;
+//   mpFrontCur (+0x8) = *v11                    -- the X360 store order exactly
 //   stw  v12-4, 0x24(this)                      -> mppBackSlot = v12 - 4
 //   mpBackBegin = *(v12-4) ; mpBackEnd = *(v12-4) + 0x100
 //   mpBackCur = ((a2 & 0x3F) << 2) + *(v12-4)
@@ -54,7 +128,17 @@ void* Allocator64::DoInit(unsigned int nByteCapacity)
         luSlots = 8u;
     mnPageSlots = static_cast<int>(luSlots);
 
-    void* lpLastResult = RealmcCore::allocator::allocate(4u * luSlots, 0);    // page-ptr array
+    // HOST WIDTH (was a live under-allocation): the X360 sizes this array with
+    // `slwi r4, r11, 2` @ 0x82C45608 -- 4 bytes per slot, the CONSOLE pointer
+    // width. mppPageArray is `char**`, so on the LLP64 host a slot is 8 bytes and
+    // `4u * luSlots` half-sized the block that DoInit then fills with luPages
+    // pointers (and DoPushBack grows into). Sized by sizeof(char*) instead; the
+    // console literal survives only in this comment.
+    // PAIRED: ~Allocator64 above frees this exact block with
+    // `sizeof(char*) * mnPageSlots`. The two widths must move together -- either
+    // one alone reverting to the console 4 is a live heap mismatch.
+    void* lpLastResult =
+        RealmcCore::allocator::allocate(sizeof(char*) * luSlots, 0);  // X360: 4 * luSlots
     mppPageArray = static_cast<char**>(lpLastResult);
 
     // v10 = (2*(slots - pages)) & ~3  -- a byte offset over 4-byte slots; the
@@ -73,9 +157,9 @@ void* Allocator64::DoInit(unsigned int nByteCapacity)
     }
 
     mppFrontSlot = lppFront;
-    mpFrontCur   = *lppFront;
-    mpFrontEnd   = *lppFront + KU_PageBytes;
-    mpFrontBegin = *lppFront;
+    mpFrontBegin = *lppFront;                                   // +0x0C page begin
+    mpFrontEnd   = *lppFront + KU_PageBytes;                    // +0x10 page end
+    mpFrontCur   = *lppFront;                                   // +0x08 read cursor
 
     char** lppBack = lppEnd - 1;                                // v12 - 4 (one slot back)
     mppBackSlot = lppBack;
@@ -89,28 +173,33 @@ void* Allocator64::DoInit(unsigned int nByteCapacity)
 // ---------------------------------------------------------------------------
 // allocator<,64>::DoPopFront @ 0x82C45350
 //
-//   v2 = mpFrontCur (0xC) ; if (v2) backend->Free(v2, 0x100)   -> free front page
+//   v2 = mpFrontBegin (0xC) ; if (v2) backend->Free(v2, 0x100)   -> free front page
 //   v3 = mppFrontSlot (0x14) + 4 ; mppFrontSlot = v3           -> advance one slot
-//   v4 = *v3 ; mpFrontCur = v4 ; mpFrontEnd = v4 + 0x100 ; mpFrontBegin = v4
+//   v4 = *v3 ; mpFrontBegin = v4 ; mpFrontEnd = v4 + 0x100 ; mpFrontCur = v4
 //
-// The freed pointer is mpFrontCur (what the X360 reads at +0xC), not the page
-// begin; reproduced exactly. Returns the backend free result, or this when there
-// was nothing to free (the X360 leaves r3 = this in that path).
+// CORRECTED (wave L): the comment here previously claimed the freed pointer was
+// "not the page begin". It IS the page begin -- +0x0C is the deque iterator's
+// `first` and +0x08 the moving read cursor (see the layout map + proof in
+// RealmcAllocator64.h; the code was always offset-faithful, only the two member
+// NAMES and the comments were inverted). Freeing +0x0C is what the X360 does and
+// what is correct: you release a page, never a cursor.
+// Returns the backend free result, or this when there was nothing to free (the
+// X360 leaves r3 = this in that path).
 // ---------------------------------------------------------------------------
 void* Allocator64::DoPopFront()
 {
     void* lpResult = this;
-    if (mpFrontCur)
+    if (mpFrontBegin)
     {
-        g_pRealmcAllocator->Free(mpFrontCur, KU_PageBytes);
-        lpResult = mpFrontCur;
+        g_pRealmcAllocator->Free(mpFrontBegin, KU_PageBytes);
+        lpResult = mpFrontBegin;
     }
 
     ++mppFrontSlot;                 // mppFrontSlot += 1 slot (X360: +4 bytes)
     char* lpPage = *mppFrontSlot;
-    mpFrontCur   = lpPage;
-    mpFrontEnd   = lpPage + KU_PageBytes;
-    mpFrontBegin = lpPage;
+    mpFrontBegin = lpPage;                      // +0x0C page begin
+    mpFrontEnd   = lpPage + KU_PageBytes;       // +0x10 page end
+    mpFrontCur   = lpPage;                      // +0x08 read cursor
     return lpResult;
 }
 
@@ -174,29 +263,29 @@ void Allocator64::DoFreeSubar(char** ppBegin, char** ppEnd)
 // allocator<,64>::PopFront -- the deque front-dequeue folded inline into
 // RealmcCore::MemcardState::GetWaitingToStartTask @ 0x82C46528:
 //
-//   if (mpFrontBegin == mpBackCur) return 0;         -> empty
-//   value = *(int*)mpFrontBegin;
-//   next  = mpFrontBegin + 4;
+//   if (mpFrontCur == mpBackCur) return 0;         -> empty
+//   value = *(int*)mpFrontCur;
+//   next  = mpFrontCur + 4;
 //   if (next == mpFrontEnd) DoPopFront();             -> page exhausted
-//   else mpFrontBegin = next;
+//   else mpFrontCur = next;
 //   return value;
 //
-// mpFrontBegin (X360 +0x08) is the live front read cursor; mpFrontEnd (+0x10) is
+// mpFrontCur (X360 +0x08) is the live front read cursor; mpFrontEnd (+0x10) is
 // one past the current front page; mpBackCur (+0x18) is the back write cursor,
 // so front == back means the deque is empty. The value/advance width is a 4-byte
 // int -- the same element model DoPushBack writes.
 // ---------------------------------------------------------------------------
 int Allocator64::PopFront()
 {
-    if (mpFrontBegin == mpBackCur)
+    if (mpFrontCur == mpBackCur)
         return 0;
 
-    const int iValue = *reinterpret_cast<const int*>(mpFrontBegin);
-    char* lpNext = mpFrontBegin + sizeof(int);
+    const int iValue = *reinterpret_cast<const int*>(mpFrontCur);
+    char* lpNext = mpFrontCur + sizeof(int);
     if (lpNext == mpFrontEnd)
         DoPopFront();
     else
-        mpFrontBegin = lpNext;
+        mpFrontCur = lpNext;
     return iValue;
 }
 
