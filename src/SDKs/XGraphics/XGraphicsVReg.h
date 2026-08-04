@@ -82,16 +82,55 @@ struct VRegInfo
     // kind selected by register type `aiType` in graph context `apContext`, stamped
     // with `aiIndex`, and return it. Signature grounded from the VRegTable::Create
     // call site (Make(aiIndex, aiType, mpContext) -- mirrors this class's ctor arg
-    // order). The BODY is owned by the VRegInfo factory TU and is NOT defined here:
-    // it dispatches by kind through the unrecovered rodata table (off_821B5108,
-    // 3-word entries of registered factory pointers), which the dossier does not
-    // resolve, so reconstructing it would fabricate rodata. Declared-only so
-    // VRegTable::Create compiles/links against it.
+    // order). The body is an unchecked tail-dispatch through the register-type-info
+    // table (gaVRegTypeInfo below, X360 rodata @ 0x821B5100, fully dumped -- see
+    // scratchpad/waveM/VRegInfo.spec.md): mulli r10,r4,0xC selects the 12-byte
+    // record for `aiType`, lwzx loads the factory pointer at record+0x08, bctr
+    // tail-calls it with r3/r4/r5 (aiIndex, aiType, apContext) passed through.
     static VRegInfo* Make(s32 aiIndex, s32 aiType, CFG* apContext);
 };
 
 // The IR-instruction operand descriptor IS a VRegInfo (identical operand-facing
 // offsets: GetType@+0x20 / GetIndex@+0x0C / GetUsage@+0x10 / miTypeInfoIndex@+0x50).
 using VReg = VRegInfo;
+
+// ---------------------------------------------------------------------------
+// The register-type-info table (X360 rodata @ 0x821B5100, 48 records of 12
+// bytes; RECOVERED by full IDA dump -- entries + string pool + factory targets,
+// see scratchpad/waveM/VRegInfo.spec.md). The register-type index (`aiType`
+// passed to VRegInfo::Make, and the miTypeInfoIndex each value node carries at
+// X360 +0x50) IS the row index of this table. Exactly three ARTIST functions
+// consume it, each through one field:
+//   VRegInfo::Make @ 0x82C28E58            -> mpfnNewItem   (record +0x08)
+//   IRInst::GetIndexingMode @ 0x82C2AC10   -> muIndexedKind (record +0x07)
+//   IRAlu::AssembleSrcRegConst @ 0x82C26CA8-> muConstFile   (record +0x06)
+// No consumer bound-checks the index (the dispatch is unchecked); the count 48
+// is proven by (a) the all-zero record at row 48 breaking the name-pointer
+// pattern, (b) the name-string pool directly below the table bottoming out at
+// row 47's "MRSC" @ 0x821B5038, and (c) rows 0..47 all holding a named
+// XGRAPHICS::*::NewItem factory (or the one measured NULL at row 4 "EI").
+// ---------------------------------------------------------------------------
+
+// Factory signature every table row dispatches through (r3/r4/r5 pass straight
+// through Make's bctr, so each NewItem receives Make's own arguments).
+typedef VRegInfo* (*VRegFactoryFn)(s32 aiIndex, s32 aiType, CFG* apContext);
+
+// Number of rows in gaVRegTypeInfo (see count proof above).
+const s32 KI_NUM_VREG_TYPES = 48;
+
+struct VRegTypeInfo
+{
+    const char*   mpName;        // +0x00 register-file mnemonic ("R", "C", ... "MRSC")
+    u8            muUnk04;       // +0x04 measured 0/1; no ARTIST consumer  FLAG purpose unattested
+    u8            muUnk05;       // +0x05 measured 0/1; no ARTIST consumer  FLAG purpose unattested
+    u8            muConstFile;   // +0x06 const-register-file class: 0 none, 1 C, 2 K, 3 CLI, 4 CIX/CIY/CIZ/CIW
+    u8            muIndexedKind; // +0x07 0 plain, 1 addr-indexed (CI*) -> mode 2, 2 loop-indexed (CLI/VLI/OLI) -> mode 1
+    VRegFactoryFn mpfnNewItem;   // +0x08 value-kind factory VRegInfo::Make tail-calls
+};
+
+// Defined in XGraphicsVReg.cpp beside VRegInfo::Make (its only dispatch
+// consumer); IRInst::GetIndexingMode and IRAlu::AssembleSrcRegConst read the
+// two byte fields when those TUs are reconstructed.
+extern const VRegTypeInfo gaVRegTypeInfo[KI_NUM_VREG_TYPES];
 
 } // namespace XGRAPHICS
