@@ -79,8 +79,9 @@ void HudMessageAnalyzer::Construct(HudMessageDirector* lpHudMessageDirector)
     mTrophyCarUnlockedEvent            = GuiEventTrophyCarUnlock();  // 16-byte record zeroed
     mbOnlinePlayerLeft                 = false;
 
-    mbDeveloperChallengeMessagePending = false;
-    mDeveloperChallengeId              = 0;
+    // X360-only developer-challenge tail (stb/std of the same zero register @0x8250932C/30).
+    mbDEBUGDeveloperChallengeComplete = false;   // X360 0x4F9
+    mCompletedDeveloperChallenges.Construct();   // X360 0x500 (zeroes the one u64 field)
 
     mRandom.Construct();
 }
