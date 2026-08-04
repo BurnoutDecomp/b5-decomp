@@ -336,6 +336,79 @@ namespace CgsPhysics
     // Declaring a virtual with no body while a constructor is defined materialises
     // the vtable and turns straight into LNK2019, so they land WITH their bodies,
     // not before. Until then those slots keep the base's behaviour.
+    //
+    // =================================================================================
+    // ⭐⭐ 2026-08-04 (task #138) -- THE MEASURED MAP OF WHAT "STEPPING A CAR" COSTS.
+    // Recorded here because successive briefs have described this as a small remaining
+    // gap. It is not. Every count is an instruction count from the IDA export set, or
+    // measured off the .i64 headless where noted.
+    //
+    // Update @0x828A74D0 is 127 instructions and calls, in order:
+    //     IOBuffer::LockForRead                                50
+    //     ProcessInputBuffers                    @0x828A73C0   68   ⚠️ export hole
+    //     sub_8289E260 (the new time step)                     54
+    //     InputBuffer::GetMaxIterations          @0x8289E338   52
+    //     IOBuffer::UnlockForRead / LockForWrite               51 / 104
+    //     IOBufferStack::CreateIOBuffer<IslandGenerator>       (template)
+    //     QuerySimulationToSetFlags              @0x828A0428  248
+    //     ActiveSetClosure                       @0x828A0808 1184
+    //     ActivateAndFreezeAsNeeded              @0x828A6DD0  249
+    //     rw::physics::PairSet::ClearAll                       BODIED
+    //     rw::physics::Simulation::SimulationUpdate            79   (+1,805 of stages)
+    //     OutputBuffer::SetTimeStepUsed / SetMaxIterationsUsed 44 / 42
+    //     AddActiveBodiesToOutputQueue           @0x828A6CC8   65
+    //     AddContactSpiesToOutputQueue           @0x828A4ED8  641
+    //     AddJointSpiesToOutputQueue             @0x828A58E0  267  ⚠️ export hole
+    //     AddDriveSpiesToOutputQueue             @0x828A5D10   72
+    //     IOBuffer::UnlockForWrite                             51
+    //     IOBufferStack::DestroyIOBuffer<IslandGenerator>      (template)
+    //
+    // ⚠️ TWO of those are ABSENT FROM .ida-exports and were recovered headless out of
+    // BURNOUT_X360_ARTIST.XEX.i64 (IDA Pro 9.3 ships `idat.exe`, there is no
+    // `idat64.exe`) -- the same route that produced PairSet::ClearAll and Destruct:
+    //     ProcessInputBuffers        @0x828A73C0  (xrefs: Update, ProcessInput)
+    //     AddJointSpiesToOutputQueue @0x828A58E0  (xref: Update)
+    // Missing-from-JSON is not nonexistent -- see [[ida-export-set-has-holes]].
+    //
+    // ⭐ ProcessInputBuffers is only 68 instructions and is pure dispatch: NINETEEN
+    // drain calls in a fixed order, each `(this, lpInput)`. That ORDER is load-bearing
+    // (removes before adds; bodies, then joints, then drives) and is recorded in no
+    // other source:
+    //     ProcessAddContactQueue              @0x828A3458   363
+    //     ProcessRemoveDriveQueue             @0x8289FF98    90
+    //     ProcessRemoveJointQueue             @0x8289F970   174
+    //     ProcessRemoveRigidBodyQueue         @0x828A2BD0   546
+    //     ProcessRemoveAllRigidBodiesQueue    @0x8289F1D8    69
+    //     ProcessAddRigidBodyQueue            @0x828A2708   306  <- calls AddRigidBody
+    //     ProcessUpdateExternalBodyQueue      @0x828A3B30   368
+    //     ProcessUpdateRigidBodyQueue         @0x828A3A08    74
+    //     ProcessApplyForceQueue              @0x828A6B80    82
+    //     ProcessSetRigidBodySpyQueue         @0x828A49A8    51
+    //     ProcessChangeRigidBodyInertiaQueue  @0x828A4A78   143
+    //     ProcessAddJointQueue                @0x828A40F0   557
+    //     ProcessUpdateJointFramesQueue       @0x8289F2F0   149
+    //     ProcessUpdateJointLimitsQueue       @0x8289F548   136
+    //     ProcessSetJointSpyQueue             @0x8289F768   129
+    //     ProcessAddDriveQueue                @0x828A4CB8   136
+    //     ProcessUpdateDriveFramesQueue       @0x8289FC28    77
+    //     ProcessUpdateDriveDynamicsQueue     @0x8289FD60    74
+    //     ProcessSetDriveSpyQueue             (final call, at 0x828A74B4)
+    // ⚠️ A drain over an empty queue is a no-op, which makes every one of these a
+    // perfect candidate for a silent-drop stub. Do not stub them --
+    // see [[silent-drop-stubs]].
+    //
+    // AND ABOVE ALL OF IT: BrnPhysics::PhysicsModule::Update @0x825B0640 is itself
+    // 1,999 instructions and is STILL A LINK STUB (GameSource/World/WorldLinkStubs.cpp,
+    // "PhysicsModule::Update: inert [FLAG PC boot gate]"). Its depth-1 closure is ~50
+    // functions / ~15,000 instructions, including BridgeContactsToSimulation 1,671,
+    // StartVehicleContactGeneration 1,229, FixUpVehicleContacts 1,067,
+    // UpdateVehiclePhysics 1,038, DeformationManager::Update 1,021,
+    // DoCrashPrediction 814.
+    //
+    // RUNNING TOTAL for "a car moves under its own physics": ~25,000 X360 instructions,
+    // VMX-heavy, plus RaceCarPhysics.cpp which is still unmounted. Consistent with
+    // [[vehicle-physics-is-the-wall]]'s 6-9 wave estimate; NOT a one-wave gap.
+    // =================================================================================
     class PhysicsSimulationModule : public CgsModule::ModuleSingleBuffered
     {
     public:
