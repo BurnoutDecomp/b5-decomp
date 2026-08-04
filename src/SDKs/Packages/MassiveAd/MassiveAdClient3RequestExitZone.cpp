@@ -13,10 +13,18 @@
 // renders as Hex-Rays `STUB(5, mpcName, fmt, ...)` are the MassiveLog hook
 // (r3 = level 5, r4 = the base name at +0x0C, r5 = format, then the args).
 //
-// Parse @ 0x82BDC700 is intentionally NOT defined here (BLOCKED): after
-// CRequestObject::ReadRemoveSignature its body calls an un-homed, un-named
-// function (Hex-Rays `STUB(this, mpSignature, 20)`) and ReadRemoveSignature is
-// un-attested in the committed base header. See the header.
+// Parse @ 0x82BDC700 was parked on the `STUB(this, mpSignature, 20)` callee;
+// that blocker is now GROUNDED (identically to the sibling
+// CRequestImpressionUpdate::Parse in MassiveAdClient3Request_wL_01.cpp): every
+// `bl STUB` in this function -- the format-string log calls AND the
+// (this, mpSignature, 0x14) digest call -- targets the ONE address 0x82AD5078,
+// whose entire body is a single `blr` shared by ~150 call sites across
+// unrelated subsystems: an ICF-folded empty debug/trace hook compiled out of
+// the retail build. The format-string sites are modelled by the declared
+// MassiveLog vendor hook; the digest-dump site (no format string, no name
+// survives the fold) is documented at its call site rather than modelled.
+// ReadRemoveSignature is meanwhile declared in the committed base header and
+// defined in MassiveAdClient3Request.cpp.
 // ===========================================================================
 
 namespace MassiveAdClient3
@@ -90,6 +98,103 @@ int CRequestExitZone::WriteExitZoneRequest(const char* pcZoneName, int nBandwidt
 
     FinishBaseBlock(207, 1, 1);      // li r4, 0xCF ; li r5, 1 ; li r6, 1
     return 1;
+}
+
+// ---------------------------------------------------------------------------
+// CRequestExitZone::Parse @ 0x82BDC700
+//
+// Response walker: verify protocol version, expect response block ID 208, read
+// the remaining-byte total, then walk the response fields. The one signature
+// field (wire tag 30) is pulled back OUT of the buffer by ReadRemoveSignature
+// so the closing HMAC check digests the payload without it; every other field
+// must SkipField cleanly. Success requires exactly one signature block AND a
+// matching HMAC. Unlike the sibling CRequestImpressionUpdate::Parse (same
+// walker shape, block ID 212, no logging), this one traces every step through
+// the MassiveLog hook (verbose level 5, error level 2).
+//
+// Register map (measured, 0x82BDC700..0x82BDC898):
+//   r31 = this, r27 = signature-block counter (u8: `clrlwi r11, r27, 24`),
+//   r30 = the block ID (`clrlwi r30, r11, 24` after ReadU8), then the
+//         remaining-byte total from ReadU32,
+//   r29 = post-header cursor snapshot (`lwz r29, 0x20(r31)` after ReadU32),
+//   r28 = the hoisted "Reading HMAC Signature:" literal,
+//   r11 = consumed = mnPosition - r29: `subf r11, r29, r29` (= 0) ahead of the
+//         top-entry test, recomputed at the BOTTOM of every iteration
+//         (`lwz r11, 0x20(r31) ; subf r11, r29, r11`) and compared UNSIGNED
+//         against the total (`cmplw cr6, r11, r30 ; blt loc_82BDC7C4`).
+// All the integer literals below are WIRE protocol values (field tags / a
+// response-block ID / a serialised field size), not console offsets or strides
+// -- nothing here is layout-dependent, and both members are reached BY NAME
+// through the protected base (mnPosition at X360 +0x20, mpSignature at X360
+// +0x30 -- offsets quoted only in comments).
+// ---------------------------------------------------------------------------
+int CRequestExitZone::Parse()
+{
+    unsigned char lnSignatureBlocks = 0;      // r27 = 0
+    mnPosition = 0;                           // stw r27, 0x20(r31)
+    MassiveLog(5, GetName(), "Reading ExitZone Response...");
+
+    if (!ReadRemoveVerifyProtocolVersion())   // cmpwi r3, 0 ; beq
+        return 0;
+
+    unsigned char lnBlockID = static_cast<unsigned char>(ReadU8()); // clrlwi r30, r11, 24
+    MassiveLog(5, GetName(), "Block ID: %d", lnBlockID);
+    if (lnBlockID != 208)                     // cmplwi cr6, r30, 0xD0 ; beq
+    {
+        MassiveLog(2, GetName(), "Block ID of %d is not correct. Assuming its an error block.",
+                   lnBlockID);
+        return 0;
+    }
+
+    unsigned int lnRemaining = ReadU32();     // r30 = remaining-byte total
+    MassiveLog(5, GetName(), "Block Length: %d", lnRemaining);
+    int lnBase = mnPosition;                  // r29 = post-header cursor
+
+    // Entry test: `subf r11, r29, r29` (consumed = 0) ; `cmplw cr6, r11, r30 ;
+    // bge loc_82BDC834`; the bottom test at loc_82BDC824 re-derives consumed
+    // from the live cursor.
+    for (unsigned int lnConsumed = 0; lnConsumed < lnRemaining;
+         lnConsumed = static_cast<unsigned int>(mnPosition - lnBase))
+    {
+        unsigned char lnTag = static_cast<unsigned char>(ReadU8()); // clrlwi r11, r4, 24
+        if (lnTag == 30)                      // cmplwi cr6, r11, 0x1E
+        {
+            ReadRemoveSignature();
+            MassiveLog(5, GetName(), "Reading HMAC Signature:");
+            // bl 0x82AD5078 with (r3 = this, r4 = mpSignature [lwz r4,
+            // 0x30(r31)], r5 = 20 [li r5, 0x14, the SHA1-HMAC digest length]).
+            // MEASURED (see MassiveAdClient3Request_wL_01.cpp): the callee's
+            // entire body is a single `blr` shared by ~150 call sites -- an
+            // ICF-folded empty digest-dump debug hook compiled out of the
+            // retail build. Attested no-op: no behaviour to reproduce, and the
+            // fold destroyed the name, so the call is DOCUMENTED here rather
+            // than modelled (inventing a hook name would be fabrication).
+            lnRemaining -= 22;                // addi r30, r30, -0x16 (2-byte
+                                              // length + 20-byte digest that
+                                              // ReadRemoveSignature removed
+                                              // from the buffer; the tag byte
+                                              // stays accounted for by the
+                                              // cursor)
+            ++lnSignatureBlocks;              // addi r11, r11, 1 ; clrlwi r27, r11, 24
+        }
+        else if (!SkipField(lnTag))           // cmpwi r3, 0 ; beq -> fail
+        {
+            return 0;
+        }
+    }
+
+    if (lnSignatureBlocks != 1)               // clrlwi r11, r27, 24 ; cmplwi cr6, r11, 1 ; bne
+    {
+        MassiveLog(2, GetName(), "Response does not contain all of the required fields.");
+        return 0;
+    }
+    MassiveLog(5, GetName(), "Response contains all of the required fields.");
+
+    if (!VerifyHMACSignature())               // cmpwi r3, 0 ; beq
+        return 0;
+
+    MassiveLog(5, GetName(), "Response successfully read and parsed.");
+    return 1;                                 // li r3, 1
 }
 
 // ---------------------------------------------------------------------------
