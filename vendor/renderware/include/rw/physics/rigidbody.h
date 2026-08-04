@@ -108,6 +108,27 @@ namespace physics
         RigidBody& operator=(const RigidBody& rOther);   // @ 0x825E3410
         RigidBody* DynamicUpdate();                      // @ 0x82BC2B78
 
+        // ⭐ 2026-08-04 (task #140). DWARF rigidbody.h:387 -- `void InertiaUpdate(Inertia*)`.
+        // The world inverse-inertia rebuild, I_world = sum_k I_k * r_k (x) r_k over the three
+        // basis vectors, stored in the {Ixx,Ixy,Ixz}/{Izz,Iyy,Iyz} split GetInertiaFull() /
+        // GetInertiaSplit() document, plus mInvm from the block's inverse mass.
+        //
+        // ⚠️ IT HAS NO OWN X360 SYMBOL: the console INLINES it, and this header's whole point
+        // is that it inlines it in TWO places -- DynamicUpdate @0x82BC2D60..0x82BC2DE8 and
+        // Simulation::AddRigidBody @0x82BC35A8..0x82BC365C -- as the SAME instruction sequence
+        // (`vpermwi128` 0x97/.zyyw + 0x9B/.zyzw, three `vmulfp128`, four `vmaddfp`). Before
+        // this landed, that sequence existed once in the tree, hand-written inside
+        // DynamicUpdate; AddRigidBody would have made it twice. A tensor written twice is a
+        // tensor transposed once, silently, and nothing in this subsystem asserts on it --
+        // so the DWARF's own factoring is used instead of copying the block.
+        //
+        // ⚠️ mInvm IS PART OF IT. AddRigidBody's copy ends with `lwz r9,0x5C(r11)` +
+        // `lvlx v13,r9,r8(=0x10)` + `vspltw` -> mIfull.w, i.e. mInvm = mInertia->mInvMass,
+        // inside the same `mInertia != NULL` guard. DynamicUpdate's copy does not re-read it
+        // (the value is already live in a register there), which is an inlining artefact, not
+        // a semantic difference: mInvm is a pure function of the block either way.
+        void InertiaUpdate(Inertia* lpInertia);
+
         // ADDITIVE GROW (BrnPhysics::ExternalPhysicsBody::ReadPropertiesFromRenderware
         // @0x825A2280, which reads these four properties back out of the body):
         //   mIfull  = {Ixx, Ixy, Ixz}   (the tensor's first row)
@@ -139,6 +160,46 @@ namespace physics
         u32        GetCoolDown() const        { return mCool; }
         f32        GetKineticEnergy() const   { return mKine; }
         u32        GetTag() const             { return mTag; }
+
+        // ⭐ 2026-08-04 (task #140). The mutator set CgsPhysics::PhysicsSimulationModule::
+        // ProcessAddRigidBodyQueue @0x828A2708 drives a freshly-added body with. Every NAME
+        // and SIGNATURE below is DWARF-attested (rw/physics/rigidbody.h :89 SetLinearVelocity,
+        // :92 SetAngularVelocity, :113 SetTag, :162 SetState, :215 SetSpy, :273 ResetForces);
+        // none has its own X360 symbol -- the console inlines all six into that drain, which
+        // is why the drain is 306 instructions.
+        //
+        // ⭐ ResetForces IS THE PAIR, NOT A SINGLE STORE. The drain emits, together,
+        // `lwz r7,0x4C(r3)` + `lvx128 v13,r7,r6(=0x90)` + `vrlimi128`/`stvx128` into +0x90 AND
+        // a zeroing `vrlimi128`/`stvx128` into +0xA0 -- i.e. force := the argument, torque := 0.
+        // Reading it as "set the force" and dropping the torque zero would leave whatever the
+        // previous owner of this pool node left behind.
+        //
+        // ⚠️ SetSpy(false) IS `mState & STATE_FILTER`, NOT `mState & ~SPY_BODY`. The console
+        // uses `clrlwi r11,r11,29`, which clears bits 3..31. Identical for any legal state,
+        // and this is the spelling the binary chose.
+        //
+        // The .xyz-only writes are the `vrlimi128 vD,vOld,1,0` w-lane preservation; on the PC
+        // those w payloads are their own members, so leaving them alone IS the faithful copy.
+        void SetLinearVelocity(const rw::math::vpu::Vector3& lrV)
+        { mVel.x = lrV.x; mVel.y = lrV.y; mVel.z = lrV.z; }
+
+        void SetAngularVelocity(const rw::math::vpu::Vector3& lrV)
+        { mOmega.x = lrV.x; mOmega.y = lrV.y; mOmega.z = lrV.z; }
+
+        void ResetForces(const rw::math::vpu::Vector3& lrForce)
+        {
+            mForce.x  = lrForce.x; mForce.y  = lrForce.y; mForce.z  = lrForce.z;   // +0x90
+            mTorque.x = 0.0f;      mTorque.y = 0.0f;      mTorque.z = 0.0f;        // +0xA0
+        }
+
+        void SetState(BodyState leState) { mState = leState; }        // +0x8C
+        void SetTag(u32 luTag)           { mTag   = luTag;   }        // +0x6C
+
+        void SetSpy(bool lbSpy)
+        {
+            mState = lbSpy ? static_cast<BodyState>(mState | SPY_BODY)        // `ori r11,r11,8`
+                           : static_cast<BodyState>(mState & STATE_FILTER);   // `clrlwi r11,r11,29`
+        }
 
         // The body's LOCAL inverse-inertia diagonal -- the console reaches it through the
         // Inertia block whose pointer is packed in the mUp.w lane (`lwz +0x5C`). Now a plain

@@ -68,6 +68,14 @@ namespace PhysicsSimulationIO
         // X360 0x825BCE08: write-lock (bit 3) guarded; returns &mAddRigidBodyQueue (this+0x10).
         InAddRigidBodyQueue* GetAddRigidBodyQueue();
 
+        // X360 0x8289E408: the CONST overload -- read-lock (bit 4) guarded, then the same
+        // `addi r3, r28, 0x10`. This is the one the drain side uses, because
+        // PhysicsSimulationModule::ProcessAddRigidBodyQueue takes `const InputBuffer*`.
+        // ⚠️ ABSENT FROM .ida-exports; recovered from BURNOUT_X360_ARTIST.XEX.i64 with headless
+        // IDA 9.3 (task #140). Its assert text and source line are the binary's own:
+        // "Not locked for reading\n", CgsPhysicsSimulationModuleIO.h:893.
+        const InAddRigidBodyQueue* GetAddRigidBodyQueue() const;
+
         // AppendXxxQueue<N> -- bulk-append the caller's source EventQueue<Elem,N> onto the matching
         // embedded per-command queue. X360-attested member templates on the SOURCE queue capacity N;
         // each asserts write-locked + source non-null, then mXxxQueue.Append(*lpSourceQueue) (the

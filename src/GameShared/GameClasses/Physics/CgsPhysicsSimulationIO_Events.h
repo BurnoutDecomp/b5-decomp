@@ -20,11 +20,54 @@
 // match the InputBuffer gap). The Construct bodies only take &maEvents[0], store the
 // capacity N and clear the count, so they are store-for-store faithful regardless of the
 // span's internal (unrecovered) field layout. Field names are intentionally NOT invented.
+//
+// ⚠️ 2026-08-04 (task #140): the blanket "No DecFIGS DWARF hint covers these event payloads"
+// above is TRUE OF MOST OF THEM AND FALSE OF InAddRigidBody -- see that struct's own banner.
+// Treat the sentence as a per-event claim to check, not a subsystem-wide fact.
+#include <cstddef>   // offsetof (the InAddRigidBody layout pins)
+
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"
+#include "rw/math/vpu/types.h"      // Matrix44Affine / Vector3  (NewRigidBody)
+#include "rw/physics/inertia.h"     // rw::physics::Inertia      (NewRigidBody)
+#include "rw/physics/rigidbody.h"   // rw::physics::BodyState    (InAddRigidBody::meState)
 
 namespace CgsPhysics
 {
+    // ---- CgsPhysics::NewRigidBody (DWARF CgsRigidBody.h:96) -----------------------------
+    // The "please create this body" description the game hands the physics-simulation module
+    // inside an InAddRigidBody event. NOT a live body -- rw::physics::RigidBody is that.
+    //
+    // ⭐ 2026-08-04 (task #140). Field NAMES/TYPES/ORDER are the DWARF's own (CgsRigidBody.h
+    // :39..:43); the OFFSETS are X360-attested off the single consumer, PhysicsSimulation-
+    // Module::ProcessAddRigidBodyQueue @0x828A2708, and the two agree exactly.
+    //
+    // ⚠️ HOMED HERE, NOT IN CgsRigidBody.h WHERE THE DWARF PUTS IT. CgsRigidBody.h defines
+    // `class CgsPhysics::RigidBodyId`, and CgsPhysicsSimulationModule.h defines a second
+    // `struct CgsPhysics::RigidBodyId` -- an open ODR fork. This header is included by ~30
+    // EventQueue_* TUs and by CgsPhysicsSimulationModule.h itself, so including CgsRigidBody.h
+    // from here would make the fork meet and fail with a hard C2011. Same reasoning, and the
+    // same workaround, as InAddJoint's u64 handles below.
+    //
+    // ⚠️ mInertia IS `rw::physics::Inertia`, the vendor type. CgsPhysicsSimulationModule.h
+    // carries a THIRD copy of the same 48-byte record as `CgsPhysics::Inertia`; that is a real
+    // type fork of exactly the shape task #135 retired for Joint/Drive/RigidBody, and it is
+    // now load-bearing -- see the ⚠️⚠️ block at PhysicsSimulationModule::ProcessAddRigidBodyQueue.
+    struct alignas(16) NewRigidBody
+    {
+        rw::math::vpu::Matrix44Affine mTransform;        // @+0x00  DWARF :39  (64 bytes)
+        rw::math::vpu::Vector3        mVelocity;         // @+0x40  DWARF :40
+        rw::math::vpu::Vector3        mAngularVelocity;  // @+0x50  DWARF :41
+        rw::physics::Inertia          mInertia;          // @+0x60  DWARF :42  (48 bytes)
+        bool                          mbSpy;             // @+0x90  DWARF :43
+    };
+    static_assert(sizeof(NewRigidBody) == 160, "NewRigidBody 145 bytes -> 160 at align 16 (makes InAddRigidBody 192)");
+    static_assert(offsetof(NewRigidBody, mTransform)       == 0,   "mTransform @+0x00 (asm lvx128 event+16..+64)");
+    static_assert(offsetof(NewRigidBody, mVelocity)        == 64,  "mVelocity @+0x40 (asm lvx128 event+80 -> mVel)");
+    static_assert(offsetof(NewRigidBody, mAngularVelocity) == 80,  "mAngularVelocity @+0x50 (asm lvx128 event+96 -> mOmega)");
+    static_assert(offsetof(NewRigidBody, mInertia)         == 96,  "mInertia @+0x60 (asm 6x ld/std from event+112)");
+    static_assert(offsetof(NewRigidBody, mbSpy)            == 144, "mbSpy @+0x90 (asm lbz event+160)");
+
 namespace PhysicsSimulationIO
 {
     // Empty per-module event base (CgsModule event-queue convention; the queue stores
@@ -76,15 +119,43 @@ namespace PhysicsSimulationIO
     // @ 0x825A3000 copies each element with `li r5,0xC0; memcpy` (192-byte Size) at a
     // 192-byte stride (`slwi r9,r11,1; add r11,r11,r9; slwi r11,r11,6` == miLength*192), and
     // Append @ 0x825A3898 block-copies at the same 192-byte stride
-    // (`slwi r9,r29,1; add r9,r29,r9; slwi r5,r9,6` == count*192). So this payload is sized to
-    // that attested 192-byte stride. Internal field layout is still NOT recovered (no DWARF/
-    // source), so it is modelled as an opaque, 16-byte-aligned byte span; the Construct bodies
-    // remain store-for-store faithful regardless (they only take &maEvents[0]==this+0x10,
-    // store N and clear the count).
+    // (`slwi r9,r29,1; add r9,r29,r9; slwi r5,r9,6` == count*192).
+    //
+    // ⭐⭐ 2026-08-04 (task #140) -- THE FIELDS ARE REAL NOW, AND THE COMMENT THAT USED TO
+    // STAND HERE WAS FALSE. It said "Internal field layout is still NOT recovered (no DWARF/
+    // source)". A DecFIGS DWARF hint covers this payload and its sub-record exactly, and this
+    // is the FOURTH "no DWARF exists for this" claim in the physics subsystem to be disproved
+    // by simply looking -- see the same retraction in rw/physics/simulation.h.
+    //
+    //   DWARF CgsPhysicsSimulationModuleIO.h:67
+    //     struct InAddRigidBody : public Event {
+    //         RigidBodyId mID;                                                    :69
+    //         NonConstructedClassContainer<CgsPhysics::NewRigidBody> mRigidBody;  :70
+    //         rw::physics::BodyState meState;                                     :71 }
+    //   DWARF CgsRigidBody.h:96  -> struct CgsPhysics::NewRigidBody, below.
+    //
+    // ⭐ TWO INDEPENDENT DERIVATIONS AGREE. The offsets below were ALSO read straight out of
+    // the consumer's asm -- PhysicsSimulationModule::ProcessAddRigidBodyQueue @0x828A2708
+    // loads six vectors from event+16/+32/+48/+64 (the transform), +80 and +96 (the two
+    // velocities), copies 48 bytes from +112 (the inertia), reads a byte at +160 (mbSpy) and
+    // a word at +176 (meState). The DWARF field order lands on exactly those offsets, and the
+    // total falls out at 176 + 4 -> **192, the attested stride**, with nothing invented.
+    //
+    // ⚠️ mID IS TYPED u64, NOT CgsPhysics::RigidBodyId -- the same deliberate choice, for the
+    // same reason, as InAddJoint's three handles above: RigidBodyId is defined twice in this
+    // tree (CgsRigidBody.h:24 and CgsPhysicsSimulationModule.h:111) and pulling either header
+    // in here would make the fork meet and fail with a hard C2011. It is one u64 in both
+    // readings, so the width and the stores are identical.
     struct alignas(16) InAddRigidBody : public Event
     {
-        u8 macOpaquePayload[192];  // stride 192B X360-attested (AddEvent @0x825A3000); fields not recovered
+        u64          mID;          // @+0x00  DWARF :69 (a CgsPhysics::RigidBodyId handle)
+        NewRigidBody mRigidBody;   // @+0x10  DWARF :70 (NonConstructedClassContainer -- raw storage)
+        rw::physics::BodyState meState;  // @+0xB0 (176) DWARF :71
     };
+    static_assert(sizeof(InAddRigidBody) == 192, "InAddRigidBody stride 192 (AddEvent @0x825A3000)");
+    static_assert(offsetof(InAddRigidBody, mID)       == 0,   "mID @+0x00 (asm ld 0(event))");
+    static_assert(offsetof(InAddRigidBody, mRigidBody) == 16, "mRigidBody @+0x10 (asm lvx128 from event+16)");
+    static_assert(offsetof(InAddRigidBody, meState)   == 176, "meState @+0xB0 (asm lwz 0xB0(event))");
 
     // Apply a force to a body. Queued with capacity 250 in PhysicsSimulationIO::InputBuffer
     // (X360 Construct @ 0x828A6068). The event STRIDE *is* X360-attested: the matching

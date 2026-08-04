@@ -145,6 +145,56 @@ namespace
 }
 
 // ---------------------------------------------------------------------------
+// RigidBody::InertiaUpdate(Inertia*)   -- DWARF rigidbody.h:387. NO OWN X360 SYMBOL:
+// the console inlines it, and it inlines it TWICE, which is the whole reason it is
+// factored out here rather than copied:
+//     DynamicUpdate            0x82BC2D60 .. 0x82BC2DE8
+//     Simulation::AddRigidBody 0x82BC35A8 .. 0x82BC365C   (once per BodyState path)
+// Both emissions are the same instruction sequence, transcribed from AddRigidBody's copy
+// (task #140) and checked against DynamicUpdate's, which was already in this file:
+//     vspltw v9/v10/v7 <- the Inertia's inverse-inertia diagonal, lanes 0/1/2
+//     vmulfp128 v0,v13,v9  /  v10,v12,v10  /  v9,v11,v7      = I_k * r_k, k = Ri/Up/At
+//     vpermwi128 .. 0x97 (.zyyw) and 0x9B (.zyzw)            = the (2,2)/(1,1)/(1,2) gather
+//     vspltw .. ,0                                           = r_k.x
+//     four vmaddfp                                           = the two accumulations
+//
+// I_world = sum_k I_k * (r_k (x) r_k). The tensor is symmetric, so only the six unique
+// terms are kept, in the split rigidbody.h documents:
+//     mIfull.xyz = { W00, W01, W02 }   ("Ixx, Ixy, Ixz")
+//     mIsplt.xyz = { W22, W11, W12 }   ("Izz, Iyy, Iyz")  -- Izz FIRST
+// (BurnoutPR writes those six sums to +112/+116/+120 and +128/+132/+136 in that order.)
+//
+// ⚠️ `vmaddfp vD,vA,vB,vC` is `vD = vA*vC + vB`. Applying it left-to-right transposes the
+// tensor, and nothing in this subsystem would assert -- the car would simply tumble wrong.
+// The two accumulations decode as:
+//     v0  = (At*Iz)*At.x + [ (Ri*Ix)*Ri.x + (Up*Iy)*Up.x ]                 -> mIfull
+//     v13 = At.zyyw*(At*Iz).zyzw + [ Ri.zyyw*(Ri*Ix).zyzw + Up.zyyw*(Up*Iy).zyzw ] -> mIsplt
+// which is exactly the {W00,W01,W02} / {W22,W11,W12} pair below.
+//
+// The w lanes are NOT touched: both stores are `vrlimi128 vD,vOld,1,0` (mask 1 == the w
+// word only), preserving the console's packed mInvm / mState. On the PC those are their own
+// members, so vStore3 is the faithful spelling.
+// ---------------------------------------------------------------------------
+void RigidBody::InertiaUpdate(Inertia* lpInertia)
+{
+    const rw::math::vpu::Vector3& lrI = lpInertia->GetInverseInertia();
+    const V3 lR0 = vLoad3(mRi), lR1 = vLoad3(mUp), lR2 = vLoad3(mAt);
+    const V3 lI0 = vMul(lR0, lrI.x), lI1 = vMul(lR1, lrI.y), lI2 = vMul(lR2, lrI.z);
+
+    const V3 lFull = { lR0.x * lI0.x + lR1.x * lI1.x + lR2.x * lI2.x,     // W00
+                       lR0.x * lI0.y + lR1.x * lI1.y + lR2.x * lI2.y,     // W01
+                       lR0.x * lI0.z + lR1.x * lI1.z + lR2.x * lI2.z };   // W02
+    const V3 lSplt = { lR0.z * lI0.z + lR1.z * lI1.z + lR2.z * lI2.z,     // W22
+                       lR0.y * lI0.y + lR1.y * lI1.y + lR2.y * lI2.y,     // W11
+                       lR0.y * lI0.z + lR1.y * lI1.z + lR2.y * lI2.z };   // W12
+    vStore3(mIfull, lFull);
+    vStore3(mIsplt, lSplt);
+
+    // `lwz r9,0x5C(r11)` + `lvlx v13,r9,r8(=0x10)` + `vspltw v13,v13,0` -> mIfull.w.
+    mInvm = lpInertia->GetInverseMass();
+}
+
+// ---------------------------------------------------------------------------
 // RigidBody::DynamicUpdate @ 0x82BC2B78   (276 instructions, 71% VMX)
 //
 // One body, one tick. This is a POSITION-LEVEL (Verlet-flavoured) integrator: it forms
@@ -229,28 +279,18 @@ RigidBody* RigidBody::DynamicUpdate()
         vStore3(mAt, vLoad3(lBasis.zAxis));
     }
 
-    // ---- world inertia tensor: sum_k I_k * r_k (x) r_k --------------------------------
-    // X360 0x82BC2D60..0x82BC2DE8. The tensor is symmetric, so only six terms are stored,
-    // and the split matches rigidbody.h exactly:
-    //     mIfull.xyz = { W00, W01, W02 }   ("Ixx, Ixy, Ixz")
-    //     mIsplt.xyz = { W22, W11, W12 }   ("Izz, Iyy, Iyz")  -- Izz FIRST
-    // The `vpermwi128` immediates 0x97 (.zyyw) and 0x9B (.zyzw) select exactly the
-    // (2,2)/(1,1)/(1,2) pairs, and BurnoutPR writes those six sums to +112/+116/+120 and
-    // +128/+132/+136 in that order.
-    {
-        const rw::math::vpu::Vector3& lrI = lpInertia->GetInverseInertia();
-        const V3 lR0 = vLoad3(mRi), lR1 = vLoad3(mUp), lR2 = vLoad3(mAt);
-        const V3 lI0 = vMul(lR0, lrI.x), lI1 = vMul(lR1, lrI.y), lI2 = vMul(lR2, lrI.z);
-
-        const V3 lFull = { lR0.x * lI0.x + lR1.x * lI1.x + lR2.x * lI2.x,     // W00
-                           lR0.x * lI0.y + lR1.x * lI1.y + lR2.x * lI2.y,     // W01
-                           lR0.x * lI0.z + lR1.x * lI1.z + lR2.x * lI2.z };   // W02
-        const V3 lSplt = { lR0.z * lI0.z + lR1.z * lI1.z + lR2.z * lI2.z,     // W22
-                           lR0.y * lI0.y + lR1.y * lI1.y + lR2.y * lI2.y,     // W11
-                           lR0.y * lI0.z + lR1.y * lI1.z + lR2.y * lI2.z };   // W12
-        vStore3(mIfull, lFull);
-        vStore3(mIsplt, lSplt);
-    }
+    // ---- world inertia tensor -----------------------------------------------------------
+    // X360 0x82BC2D60..0x82BC2DE8. ⭐ 2026-08-04 (task #140): this block USED TO BE WRITTEN
+    // OUT HERE. It is the DWARF's `RigidBody::InertiaUpdate(Inertia*)` (rigidbody.h:387),
+    // which the console inlines here AND in Simulation::AddRigidBody @0x82BC35A8, so it now
+    // lives in one place and both callers use it. See InertiaUpdate below.
+    //
+    // ⚠️ THE ONE DIFFERENCE, AND IT IS AN INLINING ARTEFACT, NOT A SEMANTIC ONE: the copy
+    // inlined here does not re-load mInvm (that value is already live in a register at this
+    // point in DynamicUpdate's frame), whereas AddRigidBody's copy ends with the `lwz 0x5C` +
+    // `lvlx +0x10` that reads it. mInvm is `mInertia->GetInverseMass()` either way, and
+    // DynamicUpdate cannot change it, so recomputing it here stores the identical value.
+    InertiaUpdate(mInertia);   // `lwz r30,0x5C(r3)` -- the same block lpInertia aliases
 
     // ---- back-derive the velocities, with drag ----------------------------------------
     // X360 0x82BC2DCC..0x82BC2E34: 1/dt via `vrefp` + two Newton-Raphson steps; BurnoutPR
