@@ -257,7 +257,11 @@ void Attrib::Collection::FreeNodeData(bool lbIsArray, void* lpData, bool lbRequi
         if (lpHandler != NULL)
             lpHandler->Release(lpData);
         if (lbRequiresRelease)
-            Free(lpData, lrTypeDesc.mIndex, "Attrib::attribute_data");
+            // X360 `lwz r4,0xC(r30)` == TypeDesc+0x0C == mSize -- the value's byte size
+            // drives the live-byte census decrement (and Free skips a zero size). This
+            // passed mIndex (the +0x10 field) until 2026-08-04: census corruption, and a
+            // straight LEAK for any type whose compiled index is 0.
+            Free(lpData, lrTypeDesc.mSize, "Attrib::attribute_data");
     }
 }
 

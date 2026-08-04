@@ -15,19 +15,17 @@
 //     MassiveAdClient3::CRequestExitZone::CRequestExitZone         @ 0x82BDC488
 //     MassiveAdClient3::CRequestExitZone::`vector deleting destructor' @ 0x82BDC4E0
 //     MassiveAdClient3::CRequestExitZone::WriteExitZoneRequest     @ 0x82BDC538
-//     MassiveAdClient3::CRequestExitZone::Parse                    @ 0x82BDC700 (BLOCKED)
+//     MassiveAdClient3::CRequestExitZone::Parse                    @ 0x82BDC700
 //     MassiveAdClient3::CRequestExitZone::CreateRequest            @ 0x82BDC8A0
 //
-// Parse @ 0x82BDC700 is NOT reconstructed here (BLOCKED, exactly as the sibling
-// CRequestImpressionUpdate::Parse): after ReadRemoveSignature its body issues a
-// `bl STUB` (Hex-Rays `STUB(this, mpSignature@+0x30, 20)`) into a function that
-// is neither homed nor named in this TU's dossier, and it also calls
-// CRequestObject::ReadRemoveSignature, whose signature the committed base header
-// deliberately leaves undeclared as un-attested. The Parse override is DECLARED
-// (so the class stays a concrete override of the pure base slot and the compile
-// gate is clean) but its body is left for the ledger slice that homes those two
-// collaborators. Reproducing the STUB side-effect without a real symbol would be
-// fabrication.
+// Parse @ 0x82BDC700 was parked on its `STUB(this, mpSignature@+0x30, 20)`
+// callee; that blocker is GROUNDED (identically to the sibling
+// CRequestImpressionUpdate::Parse): the callee is the ONE address 0x82AD5078,
+// a single measured `blr` shared by ~150 call sites -- an ICF-folded empty
+// debug hook compiled out of the retail build (documented at the call site,
+// not modelled). ReadRemoveSignature is declared in the committed base header
+// (defined in MassiveAdClient3Request.cpp), so the body now lives in
+// MassiveAdClient3RequestExitZone.cpp with the rest of the class.
 //
 // Per the naming convention the vendor SDK identifiers (the MassiveAdClient3
 // namespace and the CRequestExitZone class / its methods) are PRESERVED VERBATIM
@@ -58,9 +56,13 @@ public:
     // object through CMassiveBaseObject::operator delete when its low bit is set.
     virtual ~CRequestExitZone();
 
-    // @ 0x82BDC700 (BLOCKED -- see the file header). Vftable Parse override the
-    // response path (CRequestObject::Complete) dispatches; body lives in the
-    // ReadRemoveSignature/STUB slice.
+    // @ 0x82BDC700. Vftable Parse override the response path
+    // (CRequestObject::Complete) dispatches: verify the protocol version,
+    // expect response block ID 208, walk the fields (the one tag-30 signature
+    // block is pulled back out of the buffer by ReadRemoveSignature; everything
+    // else must SkipField), then require exactly one signature block and a
+    // matching HMAC. Logs every step through the MassiveLog hook. Returns 1 on
+    // a fully parsed + verified response, else 0.
     int Parse() override;
 
     // @ 0x82BDC8A0. Called by CMassiveZoneManager::Tick. Rejects a null builder
