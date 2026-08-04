@@ -52,6 +52,8 @@
 #include <cstring>   // memcpy (PushFloat bit reinterpret)
 #include <cmath>     // fmodf (Array integer-length detection)
 #include <string.h>  // _stricmp (the AS class-name compare)
+#include <cstdio>    // snprintf (FLAG bring-up probe)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // FLAG bring-up probe log sink
 
 // AptActionInterpreter::GetDictEntry (the null-guarded dictionary-slot fetch) is
 // declared in AptActionInterpreter.h.
@@ -937,9 +939,11 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
                 }
             }
         }
-        else if (reinterpret_cast<void*>(pMethodName)
-                 == reinterpret_cast<void*>(pContext->mpCharacterInst))   // console v7 == *(a2+16)
+        else if (pMethodName == pContext->mpScopeVariable)   // console v7 == *(a2+16)
         {
+            // The receiver IS the stream's resolved `super` value (console ctx+0x10 --
+            // runStream resolves the unk_8324E6B8 "super" key there once per stream;
+            // the recon formerly compared the WRONG context field, mpCharacterInst).
             // re-resolve the bound function under the "this" key.
             pBoundThis = pInterp->getVariable(reinterpret_cast<AptValue*>(pContext->mpCIH),
                                               nullptr, &gAptThisKey, 1, 1, 0);   // console &dword_8324E6C0
@@ -983,6 +987,33 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
         }
     }
 
+    // FLAG (bring-up probe, temporary): trace the super-binding chain for 'Update'
+    // method calls -- the licence card's dead super.Update() investigation.
+    {
+        static s32 siSuperProbe = 0;
+        if (siSuperProbe < 200 && pNameSlot != nullptr
+            && *reinterpret_cast<void* const*>(pNameSlot) != nullptr)
+        {
+            const EAStringC* const pNm = reinterpret_cast<const EAStringC*>(pNameSlot);
+            const char* const pBuf = pNm->GetBuffer();
+            if (pBuf && std::strcmp(pBuf, "Update") == 0)
+            {
+                ++siSuperProbe;
+                char lacProbe[224];
+                std::snprintf(lacProbe, sizeof(lacProbe),
+                              "[AptSuper] CallMethod name='Update' recvTag=%d recvDef=%d "
+                              "hasMember=%d thisBinding=%p method=%p methodTag=%d\n",
+                              static_cast<int>(pMethodName->getVtblIndex()),
+                              pMethodName->getIsDefined() ? 1 : 0,
+                              AptActionInterpreter::HasMember(pMethodName, pNameSlot) ? 1 : 0,
+                              static_cast<void*>(pThisBinding),
+                              static_cast<void*>(pMethod),
+                              pMethod ? static_cast<int>(pMethod->getVtblIndex()) : -1);
+                CgsDev::Log::WriteToLog(lacProbe);
+            }
+        }
+    }
+
     // ---- the call: a movie-clip target binds `this` through its parent chain; a
     //      plain value calls straight through. (console isMCInParentChain split) ----
     bool bReleaseAfter = false;   // console v54 (r29)
@@ -1003,9 +1034,8 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
             pMethodName = reinterpret_cast<AptValue*>(
                 pInterp->mpCIHStack[pInterp->mnCIHStackTop - 2]);   // console *(4*(a1[9]-2)+a1[11]) (the CIH/target stack)
 
-        if (reinterpret_cast<void*>(pMethodName)
-            == reinterpret_cast<void*>(pContext->mpCharacterInst))   // console *(a2+16)
-        {
+        if (pMethodName == pContext->mpScopeVariable)   // console *(a2+16) -- the
+        {   // stream's resolved `super` value (see the note at the walk above)
             // a super-call: bind the method's defining function through its owner slot.
             const int nMethodType = (static_cast<int>(pMethod->getVtblIndex()) << 25) >> 25;   // v55
             const bool bScriptFn = ((nMethodType - 34) <= 2) && pMethod->getIsDefined();   // tags 34..36

@@ -69,7 +69,8 @@ public:
         AptCIH*              mpCIH;                 // the current movie-clip scope
         AptValue*            mpPendingReleaseValue; // temp released when the PC reaches...
         const unsigned char* mpPendingReleasePC;   // ...this position
-        AptValue*            mpScopeVariable;       // the run's scope ("this"), from getVariable
+        AptValue*            mpScopeVariable;       // the run's resolved "super" value (console ctx+0x10;
+                                                    // CallMethod's supercall identity test reads it)
         bool                 mbStop;                // a stop/end op sets this -> end execution
         AptCharacterInst*    mpCharacterInst;       // the originating character instance
     };

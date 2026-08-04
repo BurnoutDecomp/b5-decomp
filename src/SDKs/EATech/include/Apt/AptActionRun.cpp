@@ -32,11 +32,12 @@
 // FLAG (wired at AptInit; see AptValueConvert.cpp).
 extern AptValue* gpUndefinedValue;
 
-// FLAG (string-pool key): the scope ("this") variable name runStream binds at entry
-// (console stru_1059C8A0). Homed with the StringPool constants. getVariable's body
-// is deferred too (see AptActionInterpreter.h), so this run-scope bind is a FLAG'd
-// path until both land -- it does not affect the dispatch loop itself.
-extern const EAStringC* gpAptThisKey;
+// The per-stream context resolve key -- console unk_8324E6B8, the AS "super"
+// key (X360 runStream @0x82ADD440: `getVariable(a1, a3, 0, &unk_8324E6B8, 1, 1, 0)`
+// stored at ctx+0x10). ⚠ CORRECTED 2026-08-05: this was previously resolved as
+// "this" (gpAptThisKey), which broke CallMethod's supercall identity test (it
+// compares call receivers against this slot) -- see AptGlobals.cpp gAptKeySuper.
+extern const EAStringC gAptKeySuper;   // unk_8324E6B8 -- "super"
 
 const unsigned char* AptActionInterpreter::runStream(
     const unsigned char* pStream, AptCIH* pCIH, int nLength, AptCharacterInst* pCharInst)
@@ -62,7 +63,7 @@ const unsigned char* AptActionInterpreter::runStream(
     ctx.mpPendingReleaseValue = 0;
     ctx.mpPendingReleasePC    = 0;
     ctx.mpCIH                 = pCIH;
-    ctx.mpScopeVariable       = getVariable(pCIH, 0, gpAptThisKey, 1, 1, 0);  // FLAG: getVariable deferred
+    ctx.mpScopeVariable       = getVariable(pCIH, 0, &gAptKeySuper, 1, 1, 0);  // console: the "super" resolve @ctx+0x10
     ctx.mbStop                = false;
     ctx.mpCharacterInst       = pCharInst;
 

@@ -719,25 +719,31 @@ bool SpeechAudioPC::PlaySpec(const char* lpacSpecName)
 // hash constants: Name::MakeHash is the same function the console interns with,
 // and BrnGui::Intro posts exactly these six names).
 //
-// FLAG (the one piece still inferred): the NAME -> STREAM binding. On the console
-// BrnSound::Logic::SpeechEffect::GetSpeechMapping @0x8269E918 resolves it out of the
-// Attrib::Gen speech data in SOUND\BURNOUTGLOBALDATA.BIN (the six ids are a
-// contiguous u32 column in that vault at +0x252FC, in exactly this declaration
-// order). Until that vault column is decoded, the six lines are bound to their
-// shipped int_* streams by name correspondence. Everything downstream of this
-// table -- the registry resolve, the .SNS, the decode, the mixing -- is real data.
+// The NAME -> STREAM binding below is the CONSOLE VAULT'S OWN, decoded from
+// SOUND\BURNOUTGLOBALDATA.BIN (2026-08-04): the streammappings collection
+// (key 0x019CEB4F7F236546) holds the parallel arrays UserStringsHashed
+// (attribhash64 0xE28BB454C32E1A1D, 229 u32 Playback::Name ids) and
+// LanguageStreamConfigurations (0xE9D833DF68C1540D, 229 RefSpecs, each to a
+// languagestreamconfiguration whose layout is ContentSpecs[6] -- column 0 is
+// the English ContentSpec name hash). The six intro ids sit at indices
+// 104-109, and their English specs are exactly the six below -- this is the
+// same resolve BrnSound::Logic::SpeechEffect::GetSpeechMapping @0x8269E918
+// performs at runtime. NB the previous revision of this table was inferred by
+// name correspondence and had Need_Picture/Take_Photo SWAPPED (int_cam vs
+// int_lic) -- the vault says the WELCOMETEXT line is int_lic (the long DJ
+// self-introduction) and the photo-booth line is int_cam.
 // ---------------------------------------------------------------------------
 bool SpeechAudioPC::PlayByNameHash(u32 luNameHash)
 {
     struct VoiceOverBinding { const char* mpacName; const char* mpacSpec; };
     static const VoiceOverBinding KA_BINDINGS[] =
     {
-        { "Intro_Need_Picture",   "int_cam"      },
-        { "Intro_No_Cam",         "int_nocam"    },
-        { "Intro_Take_Photo",     "int_lic"      },
-        { "Intro_Learner_Permit", "int_lperm"    },
-        { "Intro_Go_To_Junkyard", "int_gotojunk" },
-        { "Intro_Show_Car",       "int_showcar"  },
+        { "Intro_Need_Picture",   "int_lic"      },   // vault mapping index 104
+        { "Intro_No_Cam",         "int_nocam"    },   // 105
+        { "Intro_Take_Photo",     "int_cam"      },   // 106
+        { "Intro_Learner_Permit", "int_lperm"    },   // 107
+        { "Intro_Go_To_Junkyard", "int_gotojunk" },   // 108
+        { "Intro_Show_Car",       "int_showcar"  },   // 109
     };
 
     for (unsigned lu = 0; lu < sizeof(KA_BINDINGS) / sizeof(KA_BINDINGS[0]); ++lu)

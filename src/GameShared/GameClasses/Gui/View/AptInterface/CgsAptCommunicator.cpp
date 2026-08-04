@@ -553,6 +553,26 @@ namespace CgsGui
         CGS_ASSERT(lpacValue != 0, "Invalid value sent to AptCommunicator::UpdateComponent");
 
         const s32 liComponent = FindAptComponent(lpacName);
+        // FLAG (bring-up probe): surface the licence card's model->view pushes AND the
+        // two silent early-outs (unknown name / undefined bound reference).
+        const bool lbLicenseUpdateProbe =
+            (std::strncmp(lpacName, "License", 7) == 0);
+        if (lbLicenseUpdateProbe)
+        {
+            static s32 siUpdLogs = 0;
+            if (siUpdLogs < 400)
+            {
+                ++siUpdLogs;
+                const bool lbDefined = (liComponent >= 0) &&
+                    ((mAptComponentList.GetAptValue(liComponent)->mnValueData &
+                      KU_APT_DEFINED_FLAG_MASK) != 0);
+                char lacProbe[224];
+                std::snprintf(lacProbe, sizeof(lacProbe),
+                              "[AptComm] UpdateComponent '%s' key='%s' val='%s' comp=%d defined=%d\n",
+                              lpacName, lpacKey, lpacValue, liComponent, lbDefined ? 1 : 0);
+                CgsDev::Log::WriteToLog(lacProbe);
+            }
+        }
         if (liComponent < 0)
         {
             return;
@@ -872,13 +892,22 @@ namespace CgsGui
         // FLAG (bring-up probe): surface the AS-side component-data queries.
         {
             static s32 siGetLogs = 0;
-            if (siGetLogs < 60)
+            const char* lpacCompName = (liComponent >= 0)
+                ? mAptComponentList.GetName(liComponent) : "<invalid>";
+            static s32 siLicenseGetLogs = 0;
+            const bool lbLicenseProbe =
+                (lpacCompName != 0 && std::strncmp(lpacCompName, "License", 7) == 0 &&
+                 siLicenseGetLogs < 400);
+            if (lbLicenseProbe)
+                ++siLicenseGetLogs;
+            if (siGetLogs < 60 || lbLicenseProbe)
             {
                 ++siGetLogs;
-                char lacProbe[192];
+                char lacProbe[224];
                 std::snprintf(lacProbe, sizeof(lacProbe),
-                              "[AptComm] GetComponentData comp=%d key='%s' -> '%s'\n",
-                              liComponent, lpacKey ? lpacKey : "<null>", lpacResult);
+                              "[AptComm] GetComponentData comp=%d ('%s') key='%s' -> '%s'\n",
+                              liComponent, lpacCompName ? lpacCompName : "<null>",
+                              lpacKey ? lpacKey : "<null>", lpacResult);
                 CgsDev::Log::WriteToLog(lacProbe);
             }
         }
