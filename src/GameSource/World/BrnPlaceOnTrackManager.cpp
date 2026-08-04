@@ -273,7 +273,42 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
         // three vectors through GetValuesForCarSelect @0x822D3470 (a randomised drop pose
         // built from KA_CAR_SELECT_NORMAL_ADD / KA_CAR_SELECT_NORMAL_RANDOMISE and mRandom).
         // Not reconstructed -- it is ~60 vector intrinsics against three un-homed rodata
-        // Vector3[3] tables, and this build never enters the car-select screen.
+        // Vector3[3] tables.
+        //
+        // ⚠️⚠️ THE SECOND HALF OF THAT JUSTIFICATION HAS EXPIRED, AND IT IS NOW A VISIBLE
+        //   DEFECT (task #127, 2026-08-04). It used to end "...and this build never enters the
+        //   car-select screen". IT DOES -- every boot: "=== CarSelectManager: Car Select" fires
+        //   at ~64 s on a plain dh_run/cs_run, and this very function places the car it frames.
+        //   Corrected in place rather than left to expire silently.
+        //
+        // ⭐ WHAT THE MISSING BRANCH ACTUALLY DOES, read from the asm (not inferred):
+        //   GetValuesForCarSelect's whole body is gated on `v14 = *(module + 100044)` with
+        //   `if (v14 && v14 < 3)`, and its LAST act is
+        //       _R11 = 1952 ; lvx128 v0, r26, r11 ; stvx128 v0, r0, r25
+        //   i.e. it writes `lpActiveRaceCar + 1952` == mPlaceOnTrackPosition (+0x7A0) -- THE
+        //   FREE-AIR QUERY ANCHOR -- back over lResetPosition, and randomises the up-normal
+        //   from unk_82FAD5B0[16*v14] / unk_82FAD560[16*v14]. So on console the car-select car
+        //   is DROPPED IN from the anchor with a random tilt and FALLS to the yard floor; the
+        //   junkyard's authored anchors sit 3.3-6.2 m above their own floor for exactly that.
+        //
+        // ⛔ DO NOT "fix" the car-select camera by restoring this position here. The console's
+        //   drop is a drop: the vehicle physics catches the car and settles it on its
+        //   suspension. That physics is inert on this build (task #121, the physics wall), so
+        //   restoring the anchor alone would hang the car in mid-air for ever -- which is the
+        //   defect 28eb8e42 removed.
+        //
+        // ⭐⭐ WHY THIS MATTERS TO THE CAMERA. BehaviourRotateAboutVehicle (the car-select
+        //   orbit) has NO pitch and NO height term of its own: BecomeSimilarTo flattens the
+        //   orbit seed to the car's horizontal plane AND calls mRotationController.Construct(),
+        //   which zeroes the pitch mover; Update then drives it paused with centering off, so
+        //   with no stick the pitch stays 0 for ever and the eye's Y is IDENTICALLY the car's
+        //   transform-origin Y (measured: dY 0.000000 every frame). The shot's height IS the
+        //   car's height. Since this function writes the origin to the raw ground intersection
+        //   with no seating, the eye sits on the junkyard floor and the screen shows the car's
+        //   underside. The console's own AABB arm (GameBridgeWorldToX.cpp:288, min = -halfExtent
+        //   / max = +halfExtent) says that origin is meant to be the BODY CENTRE, ~0.75 m up.
+        //   ⇒ closing this needs the drop AND the seating, i.e. the physics -- not a camera edit
+        //   and not a fabricated offset here.
     }
     else
     {
