@@ -207,17 +207,20 @@ namespace BrnDirector
 
                 if (mpRaceStartShotGroup->Num_ShotList() <= 1)
                 {
-                    // Single shot: seed reset byte 2 unless the event mode is 15 or 16.
+                    // Single shot: PAUSE the take unless the event mode is 15 or 16
+                    // (behaviour +0xDE6 == the embedded KeyAnimController's mbPaused;
+                    // RESOLVED 2026-08-05 -- the intro shot holds until the countdown).
                     if (lrGameState.meEventType != KI_EVENT_TYPE_15 &&
                         lrGameState.meEventType != KI_EVENT_TYPE_16)
                     {
-                        mRaceIntroBehaviourHandle.GetBehaviour()->SetTakeResetByte2(1);  // +0xDE6
+                        mRaceIntroBehaviourHandle.GetBehaviour()->SetTakePaused(true);  // +0xDE6
                     }
                 }
                 else
                 {
-                    // Multiple shots: seed reset byte 0.
-                    mRaceIntroBehaviourHandle.GetBehaviour()->SetTakeResetByte0(1);      // +0xDE4
+                    // Multiple shots: the bound take loops (behaviour +0xDE4 == the embedded
+                    // KeyAnimController's mbIsLooping; RESOLVED 2026-08-05).
+                    mRaceIntroBehaviourHandle.GetBehaviour()->SetTakeLooping(true);      // +0xDE4
                 }
 
                 mRaceIntroBehaviourHandle.GetBehaviour()->SetUseCollisionPolicy(true);   // +0xE28
@@ -261,14 +264,14 @@ namespace BrnDirector
             lrCamera = mRaceIntroBehaviourHandle.GetProducedCamera();
             lrCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
 
-            // Once the event reaches the countdown, either drop the single-shot reset byte and
+            // Once the event reaches the countdown, either resume the single-shot take and
             // advance, or (for multi-shot groups) re-allocate the behaviour for the countdown
             // take before advancing.
             if (lrGameState.mEventState.GetCurrent() == GameState::E_EVENT_STATE_COUNTDOWN)
             {
                 if (mpRaceStartShotGroup->Num_ShotList() <= 1)
                 {
-                    mRaceIntroBehaviourHandle.GetBehaviour()->SetTakeResetByte2(0);   // +0xDE6 = 0
+                    mRaceIntroBehaviourHandle.GetBehaviour()->SetTakePaused(false);   // +0xDE6 = 0
                     meState = E_STATE_ACTIVE_COUNTDOWN;   // +0x194 = 3
                 }
                 else

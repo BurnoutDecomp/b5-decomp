@@ -154,17 +154,40 @@ const ICE::ICETakeData* ICEResourceMgr::GetTakeData(CgsResource::ID lId) const
         static_cast<CgsContainers::DictEntry::DictionaryKey>(lId.GetHash()));
 }
 
-// @-- no X360 symbol. The DWARF (ICEData.hpp:232) declares the second
-// IResourceManager virtual `GetTakeData(int32_t)` and the ARTIST image contains no
-// out-of-line body for it and no call site: the only GetTakeData symbol in the image
-// is the ID overload above. Null is the interface's own documented "not resident"
-// answer and every caller tests for it, so this stays the honest null rather than a
-// guessed by-index walk over an unknown dictionary ordering.
-// DELETE-WHEN: a call site turns up that pins what the index actually indexes.
+// @0x821F6A60 -- BrnDirector::ICEResourceMgr::GetTakeData(s32) const
+//
+// ⭐ RESOLVED 2026-08-05 (the junkyard-reveal wave). The previous banner here said "the
+// ARTIST image contains no out-of-line body for it and no call site" and returned null.
+// BOTH claims were false, and the null was load-bearing: ICETake::SetSubTake dispatches
+// vtable SLOT 0 with the assembly track's take number, and the image's vtable at
+// 0x820CEA3C reads {slot 0 = 0x821F6A60, slot 1 = 0x821F6A00} -- MSVC lays adjacent
+// overloaded virtuals in REVERSE declaration order, so the second-declared s32 overload
+// is slot 0, and 0x821F6A60 is simply UNNAMED in the export set (the known holes class).
+// Its nine instructions, read out of the unpacked .i64:
+//
+//     lwz  r30, 4(r3)       ; mpResourceManager
+//     mr   r31, r4          ; the guid
+//     lwz  r11, 0x230(r30)  ; mpICEWrapper            (DirectorResourceManager +560)
+//     addi r3, r11, 0x2750  ; &mpICEWrapper->mAuthor
+//     bl   0x82531878       ; ICE::ICEAuthor::FindEditedTakeFromGuid
+//     cmplwi/bne            ; edited copy wins
+//     mr   r4, r31
+//     lwz  r3, 0x220(r30)   ; mpICEDictionaryList     (DirectorResourceManager +544)
+//     bl   0x8267BEC0       ; BrnResource::ICEList::GetICETakeDataFromGuid
+//
+// i.e. the s32 overload is the take-GUID resolve (the miGuid walk), where the ID
+// overload above is the dictionary-KEY (name-hash) resolve. With the null body, every
+// assembly-driven take -- the whole authored game-intro reveal is one -- failed its
+// sub-take bind each frame ("lpSubTakeData" x462/run) and froze on its Prepare seek.
+//
+// ⚠️ [marked deviation] the ICEAuthor overlay is OMITTED here for exactly the reason
+// the ID overload above documents: ICEAuthor has no instance on this build, so
+// FindEditedTakeFromGuid would answer null for every guid and the console falls
+// through to the dictionary walk -- which is what this returns. Restore the pair when
+// BrnDirectorICEWrapper.cpp lands.
 const ICE::ICETakeData* ICEResourceMgr::GetTakeData(s32 liTakeIndex) const
 {
-    (void)liTakeIndex;
-    return 0;
+    return mpResourceManager->GetICEList().GetICETakeDataFromGuid(liTakeIndex);
 }
 
 // ----------------------------------------------------------------------------

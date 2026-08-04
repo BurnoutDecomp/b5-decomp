@@ -55,9 +55,9 @@ namespace BrnDirector
         const void* const KI_NEW_BEHAVIOUR_ARG_A = 0;
         const s32         KI_NEW_BEHAVIOUR_ARG_B = 1;
 
-        // The per-take reset byte the ICE-anim reveal behaviour is seeded with after SetParameters
-        // (X360 stb 1 at behaviour +0xDE4 == BehaviourIceAnim::SetTakeResetByte0(1)).
-        const u8 KU8_TAKE_RESET_BYTE0 = 1;
+        // The reveal take LOOPS. RESOLVED 2026-08-05: the X360's `stb 1` at behaviour +0xDE4
+        // is the embedded KeyAnimController's own mbIsLooping (+0x764), not a "reset byte".
+        const bool KB_TAKE_LOOPS = true;
 
         // The blend every car-select screen-fade camera-PFX hook plays at (flt_82001C98 == 1.0).
         const f32 KF_FADE_BLEND = 1.0f;
@@ -189,7 +189,7 @@ namespace BrnDirector
             lpIceBehaviour->SetParameters(
                 static_cast<Camera::BehaviourIceAnim::ShotReference*>(
                     const_cast<void*>(lpShotData)));
-            mIceCam.GetBehaviour()->SetTakeResetByte0(KU8_TAKE_RESET_BYTE0);   // +0xDE4 = 1
+            mIceCam.GetBehaviour()->SetTakeLooping(KB_TAKE_LOOPS);   // +0xDE4 = 1
         }
 
         if (!mLookAroundCarCam.IsAllocated())

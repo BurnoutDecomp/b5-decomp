@@ -150,11 +150,12 @@ namespace BrnDirector
         const f32 KF_TAKE_PARAMETRIC_TIME_END   = 1.0f;
         const f32 KF_TAKE_PARAMETRIC_TIME_START = 0.0f;
 
-        // The take-reset byte (+0xDE4) the state raises on a take that must HOLD on its last
-        // frame (the game-intro part one and the idle cam) and clears when the take is allowed
-        // to run to completion.
-        const u8 KU8_TAKE_HOLDS_ON_LAST_FRAME = 1u;
-        const u8 KU8_TAKE_RUNS_TO_END         = 0u;
+        // Whether the bound take LOOPS. RESOLVED 2026-08-05: the byte the state writes at
+        // behaviour +0xDE4 is the embedded KeyAnimController's own mbIsLooping (+0x764), not
+        // a "reset byte" -- 1 loops the take (the ambient game-intro part-one shot and the
+        // idle cam), 0 runs it once to the end so HasFinished() can fire.
+        const bool KB_TAKE_LOOPS     = true;
+        const bool KB_TAKE_RUNS_ONCE = false;
 
         // The interpolation the state runs onto / off the look-around-car camera
         // (InterpolaterHelper::Prepare's method / mapping selectors and its two durations).
@@ -559,7 +560,7 @@ namespace BrnDirector
             mIntroNewCars, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_STATE);
         mIntroNewCars.GetBehaviour()->ClearBaseFirstFrameGate();
         mIntroNewCars.GetBehaviour()->SetParameters(mpWaitForAudioShot);
-        mIntroNewCars.GetBehaviour()->SetTakeResetByte0(KU8_TAKE_RUNS_TO_END);
+        mIntroNewCars.GetBehaviour()->SetTakeLooping(KB_TAKE_RUNS_ONCE);
 
         meState = E_STATE_WAIT_FOR_AUDIO;
     }
@@ -767,7 +768,8 @@ namespace BrnDirector
             if (lrGameState.mbNewProfileIntroActive)
             {
                 // ⭐ THE RETAIL GAME-INTRO FLY-BY. Bind mGameIntro to shot 0 of the "game
-                // intro" shot group (holding on its last frame) and start the sequence.
+                // intro" shot group (looping -- the 40 s ambient shot behind the GUI intro)
+                // and start the sequence.
                 const Attrib::Gen::shotgroup& lrGameIntroShots = lrResources.GetGameIntro();
                 if (lrGameIntroShots.Num_ShotList() == 0u)
                     FireAssert("Not enough ice movies in game intro group", 299);
@@ -779,7 +781,7 @@ namespace BrnDirector
                     mGameIntro, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_STATE);
                 mGameIntro.GetBehaviour()->ClearBaseFirstFrameGate();
                 mGameIntro.GetBehaviour()->SetParameters(lpShot);
-                mGameIntro.GetBehaviour()->SetTakeResetByte0(KU8_TAKE_HOLDS_ON_LAST_FRAME);
+                mGameIntro.GetBehaviour()->SetTakeLooping(KB_TAKE_LOOPS);
 
                 mToCarSelectInterpolater.Release();
                 mToGameplayInterpolater.Release();
@@ -833,7 +835,7 @@ namespace BrnDirector
 
                 mGameIntro.GetBehaviour()->ChangeMovie(
                     GetShot(lrGameIntroShots, KU_GAME_INTRO_SHOT_PART_TWO), lrResources);
-                mGameIntro.GetBehaviour()->SetTakeResetByte0(KU8_TAKE_RUNS_TO_END);
+                mGameIntro.GetBehaviour()->SetTakeLooping(KB_TAKE_RUNS_ONCE);
                 meState = E_STATE_GAME_INTRO_PART_TWO;
             }
             break;
@@ -851,7 +853,7 @@ namespace BrnDirector
 
                 mGameIntro.GetBehaviour()->ChangeMovie(
                     GetShot(lrGameIntroShots, KU_GAME_INTRO_SHOT_PART_THREE), lrResources);
-                mGameIntro.GetBehaviour()->SetTakeResetByte0(KU8_TAKE_RUNS_TO_END);
+                mGameIntro.GetBehaviour()->SetTakeLooping(KB_TAKE_RUNS_ONCE);
                 meState = E_STATE_GAME_INTRO_PART_THREE;
             }
             break;
@@ -1086,7 +1088,7 @@ namespace BrnDirector
                     mIdleCam, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_STATE);
                 mIdleCam.GetBehaviour()->ClearBaseFirstFrameGate();
                 mIdleCam.GetBehaviour()->SetParameters(mpIdle);
-                mIdleCam.GetBehaviour()->SetTakeResetByte0(KU8_TAKE_HOLDS_ON_LAST_FRAME);
+                mIdleCam.GetBehaviour()->SetTakeLooping(KB_TAKE_LOOPS);
                 mfTimeInState = 0.0f;
                 meState       = E_STATE_IDLE;
             }
