@@ -17,11 +17,13 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"           // GameDataAssetEvent (the GET reply record)
 
-// BrnGui::WorldDataController -- readiness accessors reconstructed from BURNOUT_X360_ARTIST.XEX.
-// Each asserts the controller has reached the ready state (the X360 compares meState against 11 /
-// WFPLAYERCARCOLOURS; the baked rodata text names READY, reproduced verbatim) then forwards to a
-// resource pointer via ResourcePtr<T>::operator-> const. Only the four verified-PASS accessors are
-// homed here; GetRequiredWinsInRank + the Prepare acquire state machine land in later waves.
+// BrnGui::WorldDataController -- reconstructed from BURNOUT_X360_ARTIST.XEX. The readiness
+// accessors each assert the controller has reached the ready state (the X360 compares meState
+// against 11 / WFPLAYERCARCOLOURS; the baked rodata text names READY, reproduced verbatim) then
+// forward to a resource pointer via ResourcePtr<T>::operator-> const. Construct + the Prepare
+// acquire state machine (0x82516770) are real as of f80e1fab; of the DWARF-declared method set
+// only GetRequiredWinsInRank @0x82428740, Release, GetRoadTriggerVolumeRegions and the two
+// *AtPositionInList lookups remain un-homed (no bodies anywhere in the tree).
 
 namespace BrnGui
 {

@@ -551,7 +551,12 @@ namespace BrnGui
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)            // cpp:491
         {
             const char* lpacPixels = lpCompressedPicEvent->mpacCompressedPixels;
-            *CgsDev::Log::gpDebugPrint << "CompressedPixels: "
+            // The X360 stores 2 into the stream's mePrintMode between the label and the
+            // pixels pointer (@0x8243D5F8 li r11,2 / @0x8243D600 stw r11,4(r31) -- the
+            // inlined operator<<(E_PRINTMODE_HEXONCE)). Inert for the char* that follows,
+            // but the mode latches on the global stream until its next integer print, so
+            // the store is reproduced.
+            *CgsDev::Log::gpDebugPrint << "CompressedPixels: " << CgsDev::E_PRINTMODE_HEXONCE
                                        << (lpacPixels != 0 ? lpacPixels : "<NULLSTRING>") << "\n";
         }
 

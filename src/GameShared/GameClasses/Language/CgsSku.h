@@ -13,8 +13,9 @@
 //   FindSku        @ 0x828608C8   tail-call CgsSystem::HardwareSku::GetSku
 //   SetSku         @ 0x828608B0   meSku = sku; mbSendSku = true
 //   SetLanguage    @ 0x82860F20   meLanguage = lang; mbLoadRequest = true; mbSendLanguage = true
-//   Update         @ 0x828662B8   (NOT homed here -- see CgsSku.cpp; blocked on uncommitted
-//                                  single-event AddGuiOutEvent<> + undecoded language rodata)
+//   Update         @ 0x828662B8   per-frame load/unload + notification pump (homed in CgsSku.cpp;
+//                                  the language rodata tables were dumped from the ARTIST i64 and
+//                                  re-verified 2026-08-04 -- see mapcSupportedLanguage* below)
 //
 // Member byte offsets proven by the Construct / SetLanguage / SetSku stores:
 //   meLanguage       +0x00   stw r11(7) 0(r27) ; SetLanguage stw r4 0(r3)
@@ -122,14 +123,27 @@ namespace CgsLanguage
 
         // CgsSku.h:149 (DWARF). X360 0x828662B8. Per-frame pump: issues language load/unload
         // resource requests against the input buffer and publishes SetSku / SetLanguage
-        // notifications to the output buffer. (Body NOT homed in this batch -- blocked.)
+        // notifications to the output buffer. Bodied in CgsSku.cpp.
         void Update(CgsGui::ModelIO::InputBuffer* lpModelInputBuffer,
                     CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput);
 
     private:
         // CgsSku.h:169 (DWARF). Issues the load request for a language bundle. (Not in this
-        // batch's ledger set; depends on the same uncommitted language rodata as Update.)
+        // batch's ledger set: no X360 out-of-line body exists -- its shape survives only as
+        // the two request-building blocks the compiler inlined into Update @0x828662B8.)
         void RequestLoadLanguage(CgsLanguage::ELanguage leLanguage);
+
+        // CgsSku.h:176 / :177 (DWARF names). The per-language 32-byte-stride string tables
+        // Update indexes by ELanguage, RECOVERED from the ARTIST i64 rodata (dumped via
+        // headless idat, re-verified byte-for-byte 2026-08-04; sole xrefs are Update
+        // @0x828662E8/0x828662F0, so this TU owns them):
+        //   mapcSupportedLanguageFilenames @ X360 0x820E5AD0 -- the request's mpacFileToLoad
+        //     ("0001".."0007" container names); empty slot == unsupported language.
+        //   mapcSupportedLanguageResources @ X360 0x820E5DD0 -- the "<language>.lang" names
+        //     hashed into the request's muResourceId (CgsResource::ID::HashString).
+        // Definitions (with the full dumped contents) live in CgsSku.cpp.
+        static const char mapcSupportedLanguageFilenames[E_LANGUAGE_TOTAL][32];
+        static const char mapcSupportedLanguageResources[E_LANGUAGE_TOTAL][32];
 
         ELanguage meLanguage;       // +0x00  CgsSku.h:186
         ELanguage meLoadedLanguage; // +0x04  CgsSku.h:189

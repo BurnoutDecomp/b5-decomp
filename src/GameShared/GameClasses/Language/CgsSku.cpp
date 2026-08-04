@@ -21,9 +21,11 @@
 // The sixth ledger function, Update @ 0x828662B8, is homed below: its two former blockers
 // are resolved -- the single-event AddGuiOutEvent<> instances + both event types are
 // committed (CgsGuiModuleIO.h / CgsGuiEventTypeDefs.h), and the two per-language rodata
-// tables were RECOVERED from the ARTIST i64 (idat batch dump, 2026-07-17): the 32-byte-
-// stride BUNDLE-name slots @0x820E5AD0 and resource-name slots @0x820E5DD0, indexed by
-// ELanguage (unpopulated slots are empty == unsupported languages).
+// tables were RECOVERED from the ARTIST i64 (idat dump, independently RE-VERIFIED
+// byte-for-byte 2026-08-04): the 32-byte-stride file-to-load slots @0x820E5AD0 and
+// resource-name slots @0x820E5DD0, indexed by ELanguage (unpopulated slots are empty ==
+// unsupported languages). The DWARF (CgsSku.h:176/:177) names them
+// mapcSupportedLanguageFilenames / mapcSupportedLanguageResources -- private statics of Sku.
 
 namespace CgsSystem
 {
@@ -99,17 +101,20 @@ namespace CgsLanguage
     }
 
     // ---- the per-language rodata tables (recovered from the ARTIST i64) --------------
-    // 32-byte-stride char slots indexed by ELanguage. The BUNDLE names (@0x820E5AD0)
-    // feed the request's mpacFileToLoad (the module's container template [13] formats
-    // "Language\%s.bundle"); the RESOURCE names (@0x820E5DD0) feed the request's
+    // DWARF CgsSku.h:176/:177 -- private statics of Sku, declared in CgsSku.h. 32-byte-
+    // stride char slots indexed by ELanguage. The FILENAME table (@X360 0x820E5AD0) feeds
+    // the request's mpacFileToLoad (the module's container template [13] formats
+    // "Language\%s.bundle"); the RESOURCE names (@X360 0x820E5DD0) feed the request's
     // hashed resource id (the "%s.lang" acquire). Empty slots = unsupported languages.
-    static const char KAAC_LANGUAGE_BUNDLE_NAMES[E_LANGUAGE_TOTAL][32] =
+    // Contents dumped from the ARTIST i64 and re-verified byte-for-byte (2026-08-04);
+    // the populated slots are exactly the 7 KI_SKU_LANGUAGES: EN-US/EN-UK/FR/DE/IT/JP/ES.
+    const char Sku::mapcSupportedLanguageFilenames[E_LANGUAGE_TOTAL][32] =
     {
         "",     "",     "",     "",     "",     "",     "",     "0001",   // 7  ENGLISH_US
         "0002", "",     "0003", "0006", "",     "",     "",     "0005",   // 8  ENGLISH_UK .. 15 ITALIAN
         "0007", "",     "",     "",     "",     "",     "0004", "",       // 16 JAPANESE .. 22 SPANISH
     };
-    static const char KAAC_LANGUAGE_RESOURCE_NAMES[E_LANGUAGE_TOTAL][32] =
+    const char Sku::mapcSupportedLanguageResources[E_LANGUAGE_TOTAL][32] =
     {
         "",              "", "", "", "", "", "", "english.lang",
         "english_uk.lang", "", "french.lang", "german.lang", "", "", "", "italian.lang",
@@ -134,13 +139,13 @@ namespace CgsLanguage
         if (mbLoaded && mbLoadRequest)
         {
             CgsGui::GuiEventLoadRequest lRequest;
-            lRequest.meRequestType   = static_cast<CgsGui::ResourceRequestTypes>(12);
+            lRequest.meRequestType   = CgsGui::E_GUI_RESOURCETYPE_LOCALISED_TEXT_BUNDLE; // X360 li 12
             lRequest.meLoadUnload    = CgsGui::E_GUI_RESOURCEREQUEST_UNLOAD;
-            lRequest.mpacFileToLoad  = KAAC_LANGUAGE_BUNDLE_NAMES[meLoadedLanguage];
+            lRequest.mpacFileToLoad  = mapcSupportedLanguageFilenames[meLoadedLanguage];
             lRequest.muLoadRequestId = 0;
             lRequest.muResourceId    =
                 CgsResource::ID::HashString(
-                    reinterpret_cast<const u8*>(KAAC_LANGUAGE_RESOURCE_NAMES[meLoadedLanguage]));
+                    reinterpret_cast<const u8*>(mapcSupportedLanguageResources[meLoadedLanguage]));
             lpModelInputBuffer->AddResourceRequests(lRequest);
             mbLoaded        = false;
             miWaitForUnload = 10;
@@ -151,13 +156,13 @@ namespace CgsLanguage
             if (miWaitForUnload == 0)
             {
                 CgsGui::GuiEventLoadRequest lRequest;
-                lRequest.meRequestType   = static_cast<CgsGui::ResourceRequestTypes>(12);
+                lRequest.meRequestType   = CgsGui::E_GUI_RESOURCETYPE_LOCALISED_TEXT_BUNDLE; // X360 li 12
                 lRequest.meLoadUnload    = CgsGui::E_GUI_RESOURCEREQUEST_LOAD;
-                lRequest.mpacFileToLoad  = KAAC_LANGUAGE_BUNDLE_NAMES[meLanguage];
+                lRequest.mpacFileToLoad  = mapcSupportedLanguageFilenames[meLanguage];
                 lRequest.muLoadRequestId = 0;
                 lRequest.muResourceId    =
                     CgsResource::ID::HashString(
-                        reinterpret_cast<const u8*>(KAAC_LANGUAGE_RESOURCE_NAMES[meLanguage]));
+                        reinterpret_cast<const u8*>(mapcSupportedLanguageResources[meLanguage]));
                 lpModelInputBuffer->AddResourceRequests(lRequest);
                 mbLoaded         = true;
                 mbLoadRequest    = false;
