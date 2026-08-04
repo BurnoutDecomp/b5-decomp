@@ -460,10 +460,30 @@ namespace CgsPhysics
     //     ProcessAddDriveQueue                @0x828A4CB8   136
     //     ProcessUpdateDriveFramesQueue       @0x8289FC28    77
     //     ProcessUpdateDriveDynamicsQueue     @0x8289FD60    74
-    //     ProcessSetDriveSpyQueue             (final call, at 0x828A74B4)
+    //     ProcessSetDriveSpyQueue             @0x8289FE88    68  ⚠️ export hole
     // ⚠️ A drain over an empty queue is a no-op, which makes every one of these a
     // perfect candidate for a silent-drop stub. Do not stub them --
     // see [[silent-drop-stubs]].
+    //
+    // ⭐ 2026-08-04 (task #142) -- THE LIST ABOVE IS NOW COMPLETE AND VERIFIED CALL-FOR-CALL.
+    // Two corrections to what this note used to say:
+    //   * the last entry read "(final call, at 0x828A74B4)". 0x828A74B4 is the CALL SITE inside
+    //     ProcessInputBuffers, not the target. The target is `ProcessSetDriveSpyQueue`
+    //     @0x8289FE88, 68 instructions -- itself an .ida-exports hole, recovered headless.
+    //     (Found via an `xrefs_to` entry sitting inside 0x8289DF80.json, i.e. it was reachable
+    //     from the export set all along by looking at who calls what.)
+    //   * so the nineteen drains are **3,592** instructions, not 3,524. The old figure was the
+    //     sum of the eighteen whose sizes were banked.
+    // The ORDER was re-derived from scratch by reading all nineteen `bl` targets out of
+    // ProcessInputBuffers itself rather than trusting this note, and it reproduces exactly.
+    // The body is pure dispatch: `mr r4,r30 / mr r3,r31 / bl` x19, no branches, no return value.
+    //
+    // ⭐⭐ AND THE ACTUAL PREREQUISITE IS NOT THE INSTRUCTION COUNT. Until task #142, thirteen of
+    // the nineteen input queues were unmodelled byte gaps in PhysicsSimulationIO::InputBuffer
+    // (138,960 bytes of `maQueueGap0..3`), so thirteen of these drains could not be written at
+    // all regardless of how cheap their bodies are. All nineteen queues are now named at
+    // X360-attested offsets and each has its const accessor bodied -- see
+    // CgsPhysicsSimulationModuleIO.h. Landing a drain is now purely about the drain.
     //
     // AND ABOVE ALL OF IT: BrnPhysics::PhysicsModule::Update @0x825B0640 is itself
     // 1,999 instructions and is STILL A LINK STUB (GameSource/World/WorldLinkStubs.cpp,

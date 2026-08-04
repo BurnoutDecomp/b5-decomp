@@ -42,18 +42,78 @@ namespace PhysicsSimulationIO
     // sizeof(T). The remaining input queues are omitted (incomplete slice).
     struct InputBuffer : public CgsModule::IOBuffer
     {
+        // ============================================================================
+        // ⭐⭐ ALL NINETEEN INPUT QUEUES, 2026-08-04 (task #142). The four `maQueueGap`
+        // byte spans that used to stand for "unrecovered queues" (138,960 bytes of
+        // padding) are RETIRED -- every queue is now a named member at an offset read
+        // out of the X360 image.
+        //
+        // NAMES, ORDER AND CAPACITIES: DWARF CgsPhysicsSimulationModuleIO.h:330..:459,
+        // which declares all nineteen in memory order. (The committed claim that this
+        // layout was "not in scope" / needed InputBuffer::Construct @0x828A71B8 was
+        // wrong on both counts -- see the OFFSETS note.)
+        //
+        // OFFSETS: every `InputBuffer::GetXxxQueue() const` accessor is a 42-instruction
+        // read-lock-guarded return whose last two instructions are literally the member
+        // offset. They form a uniform block at 0x8289E408 + k*0xA8:
+        //     #  member                        accessor    addis/addi      offset
+        //     1  mAddRigidBodyQueue            0x8289E408  addi 0x10           16
+        //     2  mUpdateRigidBodyQueue         0x8289E4B0  1 / -0x69E0      38432
+        //     3  mApplyForceQueue              0x8289E558  1 /  0x2C30      76848
+        //     4  mChangeRigidBodyInertiaQueue  -- no const accessor --      84864
+        //     5  mSetRigidBodySpyQueue         0x8289E600  2 / -0x75F0     100880
+        //     6  mRemoveRigidBodyQueue         0x8289E6A8  2 / -0x6960     104096  ⚠️ export HOLE
+        //     7  mRemoveAllRigidBodiesQueue    0x8289E750  2 / -0x5CD0     107312
+        //     8  mAddContactQueue              0x8289E7F8  2 / -0x5CB0     107344
+        //     9  mAddJointQueue                0x8289E8A0  3 / -0x1CA0     189280
+        //    10  mRemoveJointQueue             0x8289E948  3 / -0x190      196208
+        //    11  mUpdateJointFramesQueue       0x8289E9F0  3 / -0x60       196512
+        //    12  mUpdateJointLimitsQueue       0x8289EA98  3 /  0xD30      199984
+        //    13  mSetJointSpyQueue             0x8289EB40  3 /  0x1880     202880
+        //    14  mAddDriveQueue                0x8289EBE8  3 /  0x1AD0     203472
+        //    15  mRemoveDriveQueue             0x8289EC90  3 /  0x1B70     203632
+        //    16  mUpdateDriveFramesQueue       0x8289ED38  3 /  0x1B90     203664
+        //    17  mUpdateDriveDynamicsQueue     0x8289EDE0  3 /  0x1BF0     203760
+        //    18  mSetDriveSpyQueue             0x8289EE88  3 /  0x1C30     203824  ⚠️ export HOLE
+        //    19  mUpdateExternalBodyQueue      0x8289EF30  3 /  0x1C50     203856
+        // ⚠️ #6 and #18 are absent from .ida-exports and were recovered headless from
+        // BURNOUT_X360_ARTIST.XEX.i64 with IDA 9.3 (`idat.exe`, there is no idat64.exe) --
+        // holes #12 and #13 in this campaign. See [[ida-export-set-has-holes]].
+        // #4 has no const accessor at all (its drain reaches the queue differently); its
+        // offset is the one value the chain fixes rather than the image, and it was
+        // already committed at 84864 before this wave, which is the control that passed.
+        //
+        // ⭐ THE CONTROL THAT MAKES THE OTHER THIRTEEN CREDIBLE: six of these offsets
+        // (#1 #4 #6 #9 #10 #19) were already in the tree from earlier waves, derived by a
+        // completely different route. All six reproduce EXACTLY.
+        //
+        // ⭐⭐ AND THE CHAIN CLOSES WITH NO PADDING. Laying the nineteen out in DWARF
+        // order at their natural C++ sizes lands every single one on its X360 offset,
+        // with exactly one 8-byte alignment bump (#7 -> #8, where a 1-byte-element queue
+        // is followed by a 16-aligned one). No explicit padding member survives anywhere
+        // in this class. That is only possible if all nineteen element strides are right,
+        // which is why four of them had to be corrected in the events header first
+        // (InUpdateJointFrames/JointLimits/DriveFrames/DriveDynamics were 16 bytes each).
+        // ============================================================================
         typedef CgsModule::EventQueue<InAddRigidBody, 200>           InAddRigidBodyQueue;           // DWARF :330 (16 + 200*192 = 38416)
-        // Capacities (the InputBuffer's OWN embedded queue capacities) are X360-attested from the
-        // asm offset chain below. mAddJointQueue's capacity is PINNED at 36: 16 + 36*192 == 6928
-        // fills exactly the gap to mRemoveJointQueue (0x2E360 -> 0x2FE70), the only value that fits
-        // (matches the "capacity-36 in the input buffer" note in BaseEventQueue_InAddJoint.cpp).
-        // The others take their attested Construct capacities; the byte OFFSET (not the capacity)
-        // is the load-bearing fact for each AppendXxxQueue<N> body, and is pinned in _AssertLayout.
-        typedef CgsModule::EventQueue<InChangeRigidBodyInertia, 200> InChangeRigidBodyInertiaQueue; // 16 + 200*80  = 16016
-        typedef CgsModule::EventQueue<InRemoveRigidBody, 200>        InRemoveRigidBodyQueue;        // 16 + 200*16  = 3216
-        typedef CgsModule::EventQueue<InAddJoint, 36>                InAddJointQueue;               // 16 + 36*192  = 6928 (capacity pinned by exact fit)
-        typedef CgsModule::EventQueue<InRemoveJoint, 36>             InRemoveJointQueue;            // 16 + 36*8    = 304
-        typedef CgsModule::EventQueue<InUpdateExternalBody, 200>     InUpdateExternalBodyQueue;     // 16 + 200*112 = 22416
+        typedef CgsModule::EventQueue<InUpdateRigidBody, 200>        InUpdateRigidBodyQueue;        // DWARF :337 (16 + 200*192 = 38416)
+        typedef CgsModule::EventQueue<InApplyForce, 250>             InApplyForceQueue;             // DWARF :344 (16 + 250*32  =  8016)
+        typedef CgsModule::EventQueue<InChangeRigidBodyInertia, 200> InChangeRigidBodyInertiaQueue; // DWARF :351 (16 + 200*80  = 16016)
+        typedef CgsModule::EventQueue<InSetRigidBodySpy, 200>        InSetRigidBodySpyQueue;        // DWARF :358 (16 + 200*16  =  3216)
+        typedef CgsModule::EventQueue<InRemoveRigidBody, 200>        InRemoveRigidBodyQueue;        // DWARF :365 (16 + 200*16  =  3216)
+        typedef CgsModule::EventQueue<InRemoveAllRigidBodies, 8>     InRemoveAllRigidBodiesQueue;   // DWARF :372 (16 +   8*1   =    24)
+        typedef CgsModule::EventQueue<InAddPotentialContact, 1024>   InAddContactQueue;             // DWARF :379 (16 +1024*80  = 81936)
+        typedef CgsModule::EventQueue<InAddJoint, 36>                InAddJointQueue;               // DWARF :386 (16 +  36*192 =  6928)
+        typedef CgsModule::EventQueue<InRemoveJoint, 36>             InRemoveJointQueue;            // DWARF :393 (16 +  36*8   =   304)
+        typedef CgsModule::EventQueue<InUpdateJointFrames, 36>       InUpdateJointFramesQueue;      // DWARF :400 (16 +  36*96  =  3472)
+        typedef CgsModule::EventQueue<InUpdateJointLimits, 36>       InUpdateJointLimitsQueue;      // DWARF :407 (16 +  36*80  =  2896)
+        typedef CgsModule::EventQueue<InSetJointSpy, 36>             InSetJointSpyQueue;            // DWARF :414 (16 +  36*16  =   592)
+        typedef CgsModule::EventQueue<InAddDrive, 1>                 InAddDriveQueue;               // DWARF :421 (16 +   1*144 =   160)
+        typedef CgsModule::EventQueue<InRemoveDrive, 1>              InRemoveDriveQueue;            // DWARF :428 (16 +   1*16  =    32)
+        typedef CgsModule::EventQueue<InUpdateDriveFrames, 1>        InUpdateDriveFramesQueue;      // DWARF :435 (16 +   1*80  =    96)
+        typedef CgsModule::EventQueue<InUpdateDriveDynamics, 1>      InUpdateDriveDynamicsQueue;    // DWARF :442 (16 +   1*48  =    64)
+        typedef CgsModule::EventQueue<InSetDriveSpy, 1>              InSetDriveSpyQueue;            // DWARF :449 (16 +   1*16  =    32)
+        typedef CgsModule::EventQueue<InUpdateExternalBody, 200>     InUpdateExternalBodyQueue;     // DWARF :456 (16 + 200*112 = 22416)
 
         // X360 0x8289E338: read-lock (bit 4) guarded; asserts muMaxIterations > 0, returns it.
         int  GetMaxIterations() const;
@@ -75,6 +135,44 @@ namespace PhysicsSimulationIO
         // IDA 9.3 (task #140). Its assert text and source line are the binary's own:
         // "Not locked for reading\n", CgsPhysicsSimulationModuleIO.h:893.
         const InAddRigidBodyQueue* GetAddRigidBodyQueue() const;
+
+        // -----------------------------------------------------------------------------------
+        // ⭐ THE OTHER EIGHTEEN CONST QUEUE ACCESSORS (task #142, 2026-08-04).
+        // DWARF :487..:547 declares a const getter per queue. In the image they are a uniform
+        // block of 42-instruction bodies at 0x8289E408 + k*0xA8, and every one has the same
+        // shape as the AddRigidBody twin above, verified instruction-for-instruction on all
+        // sixteen that .ida-exports carries plus the two pulled headless:
+        //     read-lock guard (`lbz 0(this)`; `extrwi r11,r11,1,27` == LSB bit 4) firing the
+        //     rodata string "Not locked for reading\n", then `addis r3,r28,H`/`addi r3,r3,L`
+        //     == &mXxxQueue. No bounds check, no other work.
+        // They are landed together because they are the entry point EVERY input drain uses:
+        // each `ProcessXxxQueue(const InputBuffer*)` opens with a call to its own accessor.
+        // ⚠️ Their addresses are the offset evidence for the member map above -- so these
+        // bodies and those offsetof pins are the same fact stated twice, deliberately.
+        const InUpdateRigidBodyQueue*        GetUpdateRigidBodyQueue()        const;  // @0x8289E4B0
+        const InApplyForceQueue*             GetApplyForceQueue()             const;  // @0x8289E558
+        const InSetRigidBodySpyQueue*        GetSetRigidBodySpyQueue()        const;  // @0x8289E600
+        const InRemoveRigidBodyQueue*        GetRemoveRigidBodyQueue()        const;  // @0x8289E6A8  ⚠️ export HOLE
+        const InRemoveAllRigidBodiesQueue*   GetRemoveAllRigidBodiesQueue()   const;  // @0x8289E750
+        const InAddContactQueue*             GetAddContactQueue()             const;  // @0x8289E7F8
+        const InAddJointQueue*               GetAddJointQueue()               const;  // @0x8289E8A0
+        const InRemoveJointQueue*            GetRemoveJointQueue()            const;  // @0x8289E948
+        const InUpdateJointFramesQueue*      GetUpdateJointFramesQueue()      const;  // @0x8289E9F0
+        const InUpdateJointLimitsQueue*      GetUpdateJointLimitsQueue()      const;  // @0x8289EA98
+        const InSetJointSpyQueue*            GetSetJointSpyQueue()            const;  // @0x8289EB40
+        const InAddDriveQueue*               GetAddDriveQueue()               const;  // @0x8289EBE8
+        const InRemoveDriveQueue*            GetRemoveDriveQueue()            const;  // @0x8289EC90
+        const InUpdateDriveFramesQueue*      GetUpdateDriveFramesQueue()      const;  // @0x8289ED38
+        const InUpdateDriveDynamicsQueue*    GetUpdateDriveDynamicsQueue()    const;  // @0x8289EDE0
+        const InSetDriveSpyQueue*            GetSetDriveSpyQueue()            const;  // @0x8289EE88  ⚠️ export HOLE
+        const InUpdateExternalBodyQueue*     GetUpdateExternalBodyQueue()     const;  // @0x8289EF30
+        // ⚠️ NOT declared: a const GetChangeRigidBodyInertiaQueue(). The DWARF lists one
+        // (:496) but there is NO such body in the accessor block -- the block runs
+        // ApplyForce(0x8289E558) -> SetRigidBodySpy(0x8289E600) with the exact 0xA8 spacing and
+        // no room between them, and ProcessChangeRigidBodyInertiaQueue @0x828A4A78 reaches its
+        // queue without calling one. Declaring it would be inventing a symbol the image does
+        // not contain. Left out until something proves otherwise.
+        // -----------------------------------------------------------------------------------
 
         // AppendXxxQueue<N> -- bulk-append the caller's source EventQueue<Elem,N> onto the matching
         // embedded per-command queue. X360-attested member templates on the SOURCE queue capacity N;
@@ -100,23 +198,29 @@ namespace PhysicsSimulationIO
         u8  maStatusPad[3];   // +0x0001..+0x0003 (force mfTimeStep to +0x0004 like the X360)
         f32 mfTimeStep;       // +0x0004
         u32 muMaxIterations;  // +0x0008  (pads to +0x0010 before the queue)
-        InAddRigidBodyQueue mAddRigidBodyQueue;  // +0x0010 (16) -- first embedded queue
-        // The full InputBuffer interleaves ~20 embedded per-command queues; only the destinations of
-        // the reconstructed AppendXxxQueue methods are modelled BY NAME at their X360-attested byte
-        // offsets (read off each method's `addi rD, this, off` -- see the AppendXxxQueue banner). The
-        // unrecovered intervening queues are explicit padding (LAYOUT RECOVERY WITH PADDING); the
-        // full offset map is InputBuffer::Construct @0x828A71B8 (out of this slice's scope). Each pad
-        // is (targetOffset - endOfPreviousModelledMember); the _AssertLayout offsetof pins verify it.
-        u8  maQueueGap0[46432];                                        // +0x9620..+0x14B80  (unrecovered queues)
-        InChangeRigidBodyInertiaQueue mChangeRigidBodyInertiaQueue;    // +0x14B80 (84864)
-        u8  maQueueGap1[3216];                                         // +0x18A10..+0x196A0
-        InRemoveRigidBodyQueue        mRemoveRigidBodyQueue;           // +0x196A0 (104096)
-        u8  maQueueGap2[81968];                                        // +0x1A330..+0x2E360
-        InAddJointQueue               mAddJointQueue;                  // +0x2E360 (189280)
-        InRemoveJointQueue            mRemoveJointQueue;               // +0x2FE70 (196208) -- immediately after mAddJointQueue
-        u8  maQueueGap3[7344];                                         // +0x2FFA0..+0x31C50
-        InUpdateExternalBodyQueue     mUpdateExternalBodyQueue;        // +0x31C50 (203856)
-        // ... remaining input queues after this one omitted (incomplete slice) ...
+        // The nineteen embedded per-command queues, in DWARF declaration order. Offsets are the
+        // X360 accessor table in the banner above; sizes are 16 + capacity*sizeof(element).
+        // NO PADDING MEMBERS -- the natural C++ layout reproduces every attested offset. Each
+        // one is pinned by an offsetof static_assert in _AssertLayout().
+        InAddRigidBodyQueue           mAddRigidBodyQueue;            // +0x00010 (     16)  first embedded queue
+        InUpdateRigidBodyQueue        mUpdateRigidBodyQueue;         // +0x09620 (  38432)
+        InApplyForceQueue             mApplyForceQueue;              // +0x12C30 (  76848)
+        InChangeRigidBodyInertiaQueue mChangeRigidBodyInertiaQueue;  // +0x14B80 (  84864)
+        InSetRigidBodySpyQueue        mSetRigidBodySpyQueue;         // +0x18A10 ( 100880)
+        InRemoveRigidBodyQueue        mRemoveRigidBodyQueue;         // +0x196A0 ( 104096)
+        InRemoveAllRigidBodiesQueue   mRemoveAllRigidBodiesQueue;    // +0x1A330 ( 107312)  1-byte element; align 8
+        InAddContactQueue             mAddContactQueue;              // +0x1A350 ( 107344)  <- the one alignment bump (+8)
+        InAddJointQueue               mAddJointQueue;                // +0x2E360 ( 189280)
+        InRemoveJointQueue            mRemoveJointQueue;             // +0x2FE70 ( 196208)
+        InUpdateJointFramesQueue      mUpdateJointFramesQueue;       // +0x2FFA0 ( 196512)
+        InUpdateJointLimitsQueue      mUpdateJointLimitsQueue;       // +0x30D30 ( 199984)
+        InSetJointSpyQueue            mSetJointSpyQueue;             // +0x31880 ( 202880)
+        InAddDriveQueue               mAddDriveQueue;                // +0x31AD0 ( 203472)
+        InRemoveDriveQueue            mRemoveDriveQueue;             // +0x31B70 ( 203632)
+        InUpdateDriveFramesQueue      mUpdateDriveFramesQueue;       // +0x31B90 ( 203664)
+        InUpdateDriveDynamicsQueue    mUpdateDriveDynamicsQueue;     // +0x31BF0 ( 203760)
+        InSetDriveSpyQueue            mSetDriveSpyQueue;             // +0x31C30 ( 203824)
+        InUpdateExternalBodyQueue     mUpdateExternalBodyQueue;      // +0x31C50 ( 203856)  last; ends at 226272
     };
 
     // -------- InputBuffer::AppendXxxQueue<N> (generic bodies; per-N instances in the .cpp) --------

@@ -7,30 +7,63 @@
 // at fixed byte offsets). This header exists so the per-instantiation Construct TUs can see
 // a COMPLETE element type (the queue embeds EventT maEvents[N] inline).
 //
-// No DecFIGS DWARF hint covers these event payloads, so their internal field layout is
-// NOT recovered. What IS X360-attested is each event's STRIDE, read off the
-// InputBuffer::Construct offset map (the byte gap between consecutive queues, minus the
-// 16-byte EventQueue base, divided by the queue capacity):
+// ⛔⛔ RETRACTED 2026-08-04 (task #142). This banner used to open with "No DecFIGS DWARF hint
+// covers these event payloads, so their internal field layout is NOT recovered", and that
+// sentence was then copied down into SEVENTEEN individual struct banners as
+// "fields not recovered (no DWARF/source)". **IT IS FALSE, AND IT WAS FALSE FOR EVERY ONE.**
+// `references/DecFIGS/dwarfdump/GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h`
+// declares ALL nineteen In* events and all four Out* events with EVERY FIELD NAMED
+// (:69..:315), and it declares all nineteen input queues in memory order with their
+// capacities (:330..:459). Task #140 had already caught the claim being false for
+// InAddRigidBody and warned "treat the sentence as a per-event claim to check". It was never
+// re-checked for the other sixteen; instead the sentence kept spreading by citation. This is
+// the fifth false "no DWARF/source exists" claim disproved in this subsystem.
+//
+// ⚠️⚠️ AND THE CLAIM WAS NOT MERELY COSMETIC -- IT HELD FOUR REAL SIZE BUGS IN PLACE.
+// Because the fields were believed unrecoverable, four events were sized "to the 16-byte
+// alignment class the asm proves" instead of to their real stride, and nothing gated them:
+//       InUpdateJointFrames  16 -> 96 | InUpdateJointLimits    16 -> 80
+//       InUpdateDriveFrames  16 -> 80 | InUpdateDriveDynamics  16 -> 48
+// All four are fixed below, each with real typed members and a hard size pin.
+//
+// What IS X360-attested is each event's STRIDE, read off the InputBuffer::Construct offset
+// map -- the byte gap between consecutive queues, minus the 16-byte EventQueue base, divided
+// by the queue capacity. That map is now COMPLETE for all nineteen input queues: every
+// `InputBuffer::GetXxxQueue() const` accessor ends in `addis r3,r28,H` / `addi r3,r3,L`, and
+// they form a uniform block at 0x8289E408 + k*0xA8. The full table lives in
+// CgsPhysicsSimulationModuleIO.h next to the members it pins. Worked examples:
 //   InAddPotentialContact : (189280 - 107344 - 16) / 1024 =  80 bytes
 //   InAddJoint            : (196208 - 189280  - 16) /   36 = 192 bytes
 //   InAddDrive            : (203632 - 203472  - 16) /    1 = 144 bytes
-// Each event is therefore modelled as an opaque, correctly-sized, 16-byte-aligned byte span
-// (alignas(16) forces the 12-byte BaseEventQueue base to pad to +0x10 before maEvents,
-// exactly the asm's `addi r30, r31, 0x10`; the span size makes sizeof(EventQueue<EventT,N>)
-// match the InputBuffer gap). The Construct bodies only take &maEvents[0], store the
-// capacity N and clear the count, so they are store-for-store faithful regardless of the
-// span's internal (unrecovered) field layout. Field names are intentionally NOT invented.
+//   InUpdateJointFrames   : (199984 - 196512  - 16) /   36 =  96 bytes
+//   InUpdateJointLimits   : (202880 - 199984  - 16) /   36 =  80 bytes
+//   InUpdateDriveFrames   : (203760 - 203664  - 16) /    1 =  80 bytes
+//   InUpdateDriveDynamics : (203824 - 203760  - 16) /    1 =  48 bytes
+// alignas(16) forces the 12-byte BaseEventQueue base to pad to +0x10 before maEvents, exactly
+// the asm's `addi r30, r31, 0x10`; the element size makes sizeof(EventQueue<EventT,N>) match
+// the InputBuffer gap. The Construct bodies only take &maEvents[0], store the capacity N and
+// clear the count, so they stay store-for-store faithful across these size corrections.
 //
-// ⚠️ 2026-08-04 (task #140): the blanket "No DecFIGS DWARF hint covers these event payloads"
-// above is TRUE OF MOST OF THEM AND FALSE OF InAddRigidBody -- see that struct's own banner.
-// Treat the sentence as a per-event claim to check, not a subsystem-wide fact.
-#include <cstddef>   // offsetof (the InAddRigidBody layout pins)
+// The events still modelled as opaque spans below are opaque BY COST, not by evidence: giving
+// them typed members means promoting CgsPhysics::RigidBodyId / JointId / DriveId through ~30
+// EventQueue_* TUs, which the tree already (correctly) reasoned is its own change. Their
+// DWARF field lists are now recorded in each banner so no future wave has to re-derive them.
+#include <cstddef>   // offsetof (the layout pins)
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"
 #include "rw/math/vpu/types.h"      // Matrix44Affine / Vector3  (NewRigidBody)
 #include "rw/physics/inertia.h"     // rw::physics::Inertia      (NewRigidBody)
 #include "rw/physics/rigidbody.h"   // rw::physics::BodyState    (InAddRigidBody::meState)
+
+// ⚠️ NOTE THE TWO SEPARATE rw TREES -- this trips every wave that meets it (task #140 T+3).
+// `rw/...` above resolves under `vendor/renderware/include/` (Simulation/RigidBody/Inertia);
+// `vendor/renderware/physics/...` below is the OTHER tree, at the submodule root, and is where
+// Joint/Drive/Jacobian live. Both are real; they are not duplicates of each other.
+#include "vendor/renderware/physics/JointFrames.hpp"     // rw::physics::JointFrames    (80B)
+#include "vendor/renderware/physics/JointLimits.hpp"     // rw::physics::JointLimits    (64B)
+#include "vendor/renderware/physics/DriveFrames.hpp"     // rw::physics::DriveFrames    (64B)
+#include "vendor/renderware/physics/DriveDynamics.hpp"   // rw::physics::DriveDynamics  (32B)
 
 namespace CgsPhysics
 {
@@ -245,14 +278,25 @@ namespace PhysicsSimulationIO
     };
 
     // Push updated per-frame vehicle drive state into the simulation. Queued with capacity 1
-    // in PhysicsSimulationIO (X360 Construct @ 0x828A6538). Same recovery caveat as
-    // InAddRigidBody: no Append/AddEvent for this type is in scope to pin the stride, and the
-    // InputBuffer::Construct offset map @ 0x828A71B8 that would pin it is not in scope either,
-    // so the payload is sized only to the 16-byte alignment class the asm proves
-    // (`addi r30, r31, 0x10`). Stride/field layout intentionally NOT invented.
+    // in PhysicsSimulationIO (X360 Construct @ 0x828A6538).
+    //
+    // ⛔⛔ SIZE CORRECTED 2026-08-04 (task #142): 16 -> 80, and this one has the STRONGEST
+    // witness of the four -- its own consumer copies the payload lane by lane.
+    // `PhysicsSimulationModule::ProcessUpdateDriveFramesQueue` @0x8289FC28 reads the id as
+    // `*result` (event+0), then sets `_R26=16,_R27=32,_R28=48`, takes `_R11 = event + 0x10`
+    // and issues FOUR `lvx128`/`stvx128` pairs at 0/16/32/48 -- **exactly 64 bytes, from
+    // +0x10** -- into a destination stepped by `v12 << 6` (a 64-byte-stride array). 64 bytes
+    // at +0x10 is 80. Cross-checked by the queue chain: GetUpdateDriveFramesQueue @0x8289ED38
+    // == +203664, GetUpdateDriveDynamicsQueue @0x8289EDE0 == +203760, (203760-203664-16)/1 = 80.
+    //
+    // DWARF CgsPhysicsSimulationModuleIO.h:290..:295: { DriveId mId; DriveFrames mDriveFrames; }
+    // -- note the payload is held BY VALUE here, not in a NonConstructedClassContainer, which
+    // is why the drain can `stvx128` straight into it. rw::physics::DriveFrames is 4x16 == 64.
     struct alignas(16) InUpdateDriveFrames : public Event
     {
-        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+        u64                     mu64Id;         // @+0x00  "mId" (a CgsPhysics::DriveId handle; u64 -- see InAddJoint)
+        u64                     mu64IdPad;      // @+0x08  pad to the payload's 16-byte slot
+        rw::physics::DriveFrames mDriveFrames;   // @+0x10  DWARF :295 -- the 4 lanes the drain copies
     };
 
     // Update a rigid body's per-frame state in the simulation. Queued with capacity 200 in
@@ -272,13 +316,27 @@ namespace PhysicsSimulationIO
 
     // Update a constraint joint's limits in the simulation. Queued with capacity 36 in
     // PhysicsSimulationIO::InputBuffer (X360 EventQueue<InUpdateJointLimits,36>::Construct
-    // @ 0x828A6378, capacity 0x24). Only Construct is in scope (no Append/AddEvent to pin the
-    // stride, and the InputBuffer::Construct offset map @ 0x828A71B8 that would pin it is not in
-    // scope), so the payload is sized only to the 16-byte alignment class the asm proves
-    // (`addi r30, r31, 0x10`). Stride/field layout intentionally NOT invented.
+    // @ 0x828A6378, capacity 0x24).
+    //
+    // ⛔⛔ SIZE CORRECTED 2026-08-04 (task #142): 16 -> 80. The previous note claimed the stride
+    // was unrecoverable because "the InputBuffer::Construct offset map @0x828A71B8 that would
+    // pin it is not in scope". THE OFFSET MAP WAS NEVER NEEDED -- the two neighbouring
+    // `InputBuffer::GetXxxQueue() const` accessors pin it directly and they were always
+    // readable: GetUpdateJointLimitsQueue @0x8289EA98 ends `addis r3,r28,3 / addi r3,r3,0xD30`
+    // == +199984, and GetSetJointSpyQueue @0x8289EB40 ends `addis 3 / 0x1880` == +202880.
+    // (202880 - 199984 - 16) / 36 == 80. The class was 64 bytes too small and NOTHING GATED IT.
+    //
+    // DWARF CgsPhysicsSimulationModuleIO.h:241..:246 names both fields:
+    //     { JointId mId;  NonConstructedClassContainer<rw::physics::JointLimits> mJointLimits; }
+    // and the tree's own rw::physics::JointLimits is exactly the 64 bytes that leaves
+    // (Vector3 mPprism, Vector3 mVprism, 6x f32, SwingType, TwistType). The id occupies the
+    // leading 16-byte slot, the payload starts at +0x10 -- the same {id, payload@+0x10} shape
+    // its two siblings' drain asm proves outright (see InUpdateJointFrames below).
     struct alignas(16) InUpdateJointLimits : public Event
     {
-        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+        u64                     mu64Id;         // @+0x00  "mId" (a CgsPhysics::JointId handle; u64 -- see InAddJoint)
+        u64                     mu64IdPad;      // @+0x08  pad to the payload's 16-byte slot
+        rw::physics::JointLimits mJointLimits;   // @+0x10  DWARF :246
     };
 
     // An output "spy" report of a resolved contact, drained from the simulation back to the game.
@@ -400,25 +458,46 @@ namespace PhysicsSimulationIO
 
     // Push updated per-frame vehicle-drive dynamics into the simulation. Queued with capacity 1 in
     // PhysicsSimulationIO::InputBuffer (X360 EventQueue<InUpdateDriveDynamics,1>::Construct
-    // @ 0x828A65A8). Only Construct is in scope (no Append/AddEvent to pin the stride, and the
-    // InputBuffer::Construct offset map @ 0x828A71B8 that would pin it is not in scope), so the
-    // payload is sized only to the 16-byte alignment class the asm proves (`addi r30, r31, 0x10`).
-    // Stride/field layout intentionally NOT invented.
+    // @ 0x828A65A8).
+    //
+    // ⛔⛔ SIZE CORRECTED 2026-08-04 (task #142): 16 -> 48. Pinned by its two neighbouring
+    // accessors: GetUpdateDriveDynamicsQueue @0x8289EDE0 == +203760 and GetSetDriveSpyQueue
+    // @0x8289EE88 == +203824, so (203824 - 203760 - 16) / 1 == 48.
+    // ⚠️ GetSetDriveSpyQueue is an .ida-exports HOLE and was recovered headless from
+    // BURNOUT_X360_ARTIST.XEX.i64 for this pin (task #142) -- see [[ida-export-set-has-holes]].
+    //
+    // DWARF CgsPhysicsSimulationModuleIO.h:300..:305:
+    //     { DriveId mId; NonConstructedClassContainer<rw::physics::DriveDynamics> mDriveDynamics; }
+    // rw::physics::DriveDynamics is two 16-byte Params (mLinear, mAngular) == 32; + the leading
+    // 16-byte id slot == 48.
     struct alignas(16) InUpdateDriveDynamics : public Event
     {
-        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+        u64                        mu64Id;           // @+0x00  "mId" (a CgsPhysics::DriveId handle; u64 -- see InAddJoint)
+        u64                        mu64IdPad;        // @+0x08  pad to the payload's 16-byte slot
+        rw::physics::DriveDynamics mDriveDynamics;    // @+0x10  DWARF :305
     };
 
     // Update a constraint joint's frames (anchor transforms) in the simulation. Queued with
     // capacity 36 in PhysicsSimulationIO::InputBuffer (X360
-    // EventQueue<InUpdateJointFrames,36>::Construct @ 0x828A6308, capacity 0x24). Only Construct is
-    // in scope (no Append/AddEvent to pin the stride, and the InputBuffer::Construct offset map
-    // @ 0x828A71B8 that would pin it is not in scope), so the payload is sized only to the 16-byte
-    // alignment class the asm proves (`addi r30, r31, 0x10`). Stride/field layout intentionally NOT
-    // invented.
+    // EventQueue<InUpdateJointFrames,36>::Construct @ 0x828A6308, capacity 0x24).
+    //
+    // ⛔⛔ SIZE CORRECTED 2026-08-04 (task #142): 16 -> 96, the largest of the four errors.
+    // Witnessed the same way as InUpdateDriveFrames, by its own drain:
+    // `PhysicsSimulationModule::ProcessUpdateJointFramesQueue` @0x8289F2F0 reads the id as
+    // `*result` (event+0) and sets `_R17=16,_R18=32,_R19=48,_R20=64` -- FIVE 16-byte lanes at
+    // 0/16/32/48/64 from the payload base == **80 bytes**, one more lane than the Drive
+    // sibling, because rw::physics::JointFrames carries a fifth quaternion (mQuatL, the parent
+    // LINEAR frame) that DriveFrames does not. 80 bytes at +0x10 is 96.
+    // Cross-checked by the queue chain: GetUpdateJointFramesQueue @0x8289E9F0 == +196512,
+    // GetUpdateJointLimitsQueue @0x8289EA98 == +199984, (199984 - 196512 - 16) / 36 == 96.
+    //
+    // DWARF CgsPhysicsSimulationModuleIO.h:231..:236: { JointId mId; JointFrames mJointFrames; }
+    // -- by value, like InUpdateDriveFrames and unlike the two Limits/Dynamics siblings.
     struct alignas(16) InUpdateJointFrames : public Event
     {
-        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+        u64                     mu64Id;         // @+0x00  "mId" (a CgsPhysics::JointId handle; u64 -- see InAddJoint)
+        u64                     mu64IdPad;      // @+0x08  pad to the payload's 16-byte slot
+        rw::physics::JointFrames mJointFrames;   // @+0x10  DWARF :236 -- the 5 lanes the drain copies
     };
 
     // An output report pushing a rigid body's resolved per-frame state from the simulation back to
@@ -435,5 +514,69 @@ namespace PhysicsSimulationIO
     {
         u8 macOpaquePayload[192];  // stride 192B X360-attested (AddEvent @0x828A66F8); fields not recovered
     };
+
+    // =====================================================================================
+    // ⭐⭐ THE STRIDE PINS -- ALL NINETEEN INPUT EVENTS, 2026-08-04 (task #142).
+    //
+    // WHY THIS BLOCK EXISTS. Before today exactly two of these types were gated
+    // (InAddRigidBody and NewRigidBody). The other seventeen were ungated opaque spans, and
+    // FOUR OF THEM WERE WRONG -- InUpdateJointFrames/JointLimits/DriveFrames/DriveDynamics
+    // were all 16 bytes when they are 96/80/80/48. A wrong stride here is invisible: the type
+    // compiles, every EventQueue<T,N>::Construct over it stays "store-for-store faithful"
+    // (Construct only touches &maEvents[0] and the count), and the error only surfaces as a
+    // silently short InputBuffer -- i.e. as wrong-but-plausible data much later. Exactly the
+    // [[silent-drop-stubs]] shape. So every stride is now pinned, not just the ones in doubt.
+    //
+    // EACH RIGHT-HAND SIDE IS AN X360 CONSTANT, NOT A RESTATEMENT OF THIS HEADER. It is
+    // (nextQueueOffset - thisQueueOffset - 16) / capacity, where both queue offsets are read
+    // out of the corresponding `InputBuffer::GetXxxQueue() const` accessor's closing
+    // `addis r3,r28,H` / `addi r3,r3,L`. The accessors form a uniform block at
+    // 0x8289E408 + k*0xA8; the full offset table is in CgsPhysicsSimulationModuleIO.h.
+    // ⚠️ That distinction is the point: a gate whose terms are all spelled in this header's
+    // own types would be invariant under a member re-typing and would have passed with the
+    // four defects in place. These pin against the binary.
+    // ---------------------------------------------------------------------------------
+    // rigid-body group
+    static_assert(sizeof(InUpdateRigidBody)        == 192, "InUpdateRigidBody stride 192  ((76848-38432-16)/200)");
+    static_assert(sizeof(InApplyForce)             ==  32, "InApplyForce stride 32        ((84864-76848-16)/250)");
+    static_assert(sizeof(InChangeRigidBodyInertia) ==  80, "InChangeRigidBodyInertia 80   ((100880-84864-16)/200)");
+    static_assert(sizeof(InSetRigidBodySpy)        ==  16, "InSetRigidBodySpy stride 16   ((104096-100880-16)/200)");
+    static_assert(sizeof(InRemoveRigidBody)        ==  16, "InRemoveRigidBody stride 16   ((107312-104096-16)/200)");
+    static_assert(sizeof(InAddPotentialContact)    ==  80, "InAddPotentialContact 80      ((189280-107344-16)/1024)");
+    static_assert(sizeof(InUpdateExternalBody)     == 112, "InUpdateExternalBody 112      (Append @0x825A41D8 mulli 0x70)");
+    // InRemoveAllRigidBodies is deliberately NOT pinned by the chain. The 32-byte span between
+    // its queue (+107312) and mAddContactQueue (+107344) is 16 + 8*sizeof(T) PLUS alignment
+    // padding up to the next queue's 16-aligned start, so sizeof 1 and 2 both fit and the
+    // chain cannot decide. DWARF (:154/:156) says one uint8_t over an empty Event base == 1,
+    // and the Construct asm's `addi r30, r31, 0xC` independently proves align < 16. Pinning
+    // the DWARF answer only; NOT inventing a chain result the arithmetic does not support.
+    static_assert(sizeof(InRemoveAllRigidBodies)   ==   1, "InRemoveAllRigidBodies 1B (DWARF :156; Construct base at this+0xC proves align<16)");
+    // joint group
+    static_assert(sizeof(InAddJoint)               == 192, "InAddJoint stride 192         ((196208-189280-16)/36)");
+    static_assert(sizeof(InRemoveJoint)            ==   8, "InRemoveJoint stride 8        ((196512-196208-16)/36)");
+    static_assert(sizeof(InUpdateJointFrames)      ==  96, "InUpdateJointFrames 96        ((199984-196512-16)/36)  [was 16 -- CORRECTED #142]");
+    static_assert(sizeof(InUpdateJointLimits)      ==  80, "InUpdateJointLimits 80        ((202880-199984-16)/36)  [was 16 -- CORRECTED #142]");
+    static_assert(sizeof(InSetJointSpy)            ==  16, "InSetJointSpy stride 16       ((203472-202880-16)/36)");
+    // drive group
+    static_assert(sizeof(InAddDrive)               == 144, "InAddDrive stride 144         ((203632-203472-16)/1)");
+    static_assert(sizeof(InRemoveDrive)            ==  16, "InRemoveDrive stride 16       ((203664-203632-16)/1)");
+    static_assert(sizeof(InUpdateDriveFrames)      ==  80, "InUpdateDriveFrames 80        ((203760-203664-16)/1)   [was 16 -- CORRECTED #142]");
+    static_assert(sizeof(InUpdateDriveDynamics)    ==  48, "InUpdateDriveDynamics 48      ((203824-203760-16)/1)   [was 16 -- CORRECTED #142]");
+    static_assert(sizeof(InSetDriveSpy)            ==  16, "InSetDriveSpy stride 16       ((203856-203824-16)/1)");
+
+    // The four corrected types now carry real members, so pin WHERE the payload sits as well as
+    // how big the whole is -- a size-only pin would still pass if the id slot and the payload
+    // were transposed. The +0x10 payload base is the drains' own `_R11 = event + 0x10`.
+    static_assert(offsetof(InUpdateJointFrames,   mJointFrames)   == 16, "JointFrames @+0x10   (drain @0x8289F2F0 _R11 = event+0x10)");
+    static_assert(offsetof(InUpdateDriveFrames,   mDriveFrames)   == 16, "DriveFrames @+0x10   (drain @0x8289FC28 _R11 = event+0x10)");
+    static_assert(offsetof(InUpdateJointLimits,   mJointLimits)   == 16, "JointLimits @+0x10");
+    static_assert(offsetof(InUpdateDriveDynamics, mDriveDynamics) == 16, "DriveDynamics @+0x10");
+    // And pin the payload classes themselves at the sizes the drains' lane counts prove --
+    // spelled as the MEMBER, so a re-typing of the member cannot leave the gate passing.
+    static_assert(sizeof(InUpdateJointFrames::mJointFrames)     == 80, "JointFrames 80B  = the FIVE lvx128 lanes at _R17..R20 (0/16/32/48/64) in drain @0x8289F2F0");
+    static_assert(sizeof(InUpdateDriveFrames::mDriveFrames)     == 64, "DriveFrames 64B  = the FOUR lvx128 lanes at _R26..R28 (0/16/32/48) in drain @0x8289FC28");
+    static_assert(sizeof(InUpdateJointLimits::mJointLimits)     == 64, "JointLimits 64B  (Vector3 x2 + 6x f32 + SwingType + TwistType)");
+    static_assert(sizeof(InUpdateDriveDynamics::mDriveDynamics) == 32, "DriveDynamics 32B (two 16-byte Params: mLinear, mAngular)");
+    // =====================================================================================
 }
 }
