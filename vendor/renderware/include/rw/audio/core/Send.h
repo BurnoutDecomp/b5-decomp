@@ -10,9 +10,11 @@
 //
 // EARenderWare "rwaudio" middleware. Reconstructed from BURNOUT_X360_ARTIST.XEX
 // (PowerPC) -- the X360 asm is authoritative for member layout. There is NO matching
-// translation unit available for this type, no DecFIGS DWARF, and no ProStreet08 rwaudio
-// PDB entry present, so every offset below is grounded directly in the disassembly of the
-// bodied members (see Send.cpp).
+// translation unit available for this type and no DecFIGS DWARF. The NFS
+// ProStreet08Milestone.pdb (X360, Oct-2007) DOES carry rw::audio::core::Send
+// [sizeof=104] and confirms this layout member-for-member (an earlier note here claimed
+// no PDB entry existed -- wrong; dump in scratchpad/waveL/Send.spec.md). Every offset
+// below is additionally grounded in the disassembly of the bodied members (see Send.cpp).
 //
 // LAYOUT AUTHORITY (sizeof = 104 == GetSize() @0x82B98300 returns 0x68):
 //   +0x00  mBase          PlugInBaseView -- installed vtable (+0x00), owning System
@@ -123,15 +125,17 @@ public:
     // -- host sizeof(SendConnectByPointerCommand) (X360: 12). @0x82B9FEF8.
     static int ConnectByPointerHandler(void *cmd);
 
-    // BLOCKED -- deferred name-connect handler @0x82B9FF80. Declared (the X360 ledger
-    // attests it and EventEvent stores its address) but its BODY is intentionally not
-    // reconstructed: it walks a global by-name SubMix registry (list head off_8327EE68 +
-    // iterator cursor dword_8327EE00 -- un-homed foreign statics) via an X360-offset-
-    // specific intrusive-list idiom (node = link - 0x2C, empty-list sentinel == address
-    // 0x2C, name compared at node+0x4C). Faithful reconstruction on the host needs the
-    // registry's home type and its SubMix name/list-link members, none of which are
-    // groundable from this TU's asm alone. When bodied it returns the queued record's
-    // muRecordSize (the ring advance). See Send.cpp.
+    // BLOCKED (body pending) -- deferred name-connect handler @0x82B9FF80. Declared (the
+    // X360 ledger attests it and EventEvent stores its address); the BODY is now FULLY
+    // GROUNDED (waveL unblock) but waits on the SubMixConnector.h SubMix extension: the
+    // registry is SubMix::sSubMixList (off_8327EE68 head) + SubMix::spSubMixNextNode
+    // (dword_8327EE00 safe-iteration cursor), the link is ListDNode SubMix::
+    // mSubMixListNode (console +0x2C -- the asm's node = link - 0x2C is the node-to-owner
+    // conversion, its "link == 0x2C" test just owner == NULL), and the compared name is
+    // char SubMix::mName[64] (console +0x4C). Names/types: ProStreet08Milestone.pdb +
+    // .map; offsets confirmed in the ARTIST asm (the X360 build inlined SubMix::
+    // EnumerateSubMixReset / EnumerateSubMix / GetName here). Returns the queued record's
+    // muRecordSize (the ring advance). Full recipe: scratchpad/waveL/Send.spec.md.
     static int ConnectByNameHandler(void *cmd);
 
     // Queue a connect command into the owning System's deferred-command ring. When

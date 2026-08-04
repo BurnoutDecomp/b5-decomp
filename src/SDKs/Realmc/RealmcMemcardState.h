@@ -54,15 +54,17 @@ public:
     //   default message held in the global off_832BE1F4, which is not declared),
     //   and reserves 10 slots on the task stack. The deque constructor and the
     //   off_832BE1F4 default-message global are un-homed collaborators, so the
-    //   ctor cannot be reproduced faithfully yet -- declared only.
+    //   ctor cannot be reproduced faithfully yet -- declared only. STILL TRUE as of
+    //   wave L: the dtor beside it was unblocked, but this ctor was NOT, and no
+    //   definition exists anywhere in the tree. Verified by the wave-L close-out.
     explicit MemcardState(EA::Thread::Mutex* pMutex);
 
-    // @ 0x82C46470 -- BLOCKED (honest gap, NOT fabricated). The dtor releases the
-    //   message filter (groundable), drains + destroys the start-waiting deque via
-    //   the X360 `Re` deque destructor (un-homed / truncated symbol), and frees the
-    //   task-stack buffer through g_pRealmcAllocator's vtable slot +12. The deque
-    //   destructor is an un-homed collaborator, so the teardown cannot be
-    //   reproduced faithfully yet -- declared only.
+    // @ 0x82C46470 -- DEFINED, in RealmcMemcardState_wL_02.cpp. Do not add a second
+    //   definition, and do not restore the old "BLOCKED / declared only" text below it:
+    //   the deque destructor it named as an un-homed blocker was homed in wave L (its
+    //   symbol was merely TRUNCATED in the export, not absent). Releases the message
+    //   filter, drains and destroys the start-waiting deque, and frees the task-stack
+    //   buffer through g_pRealmcAllocator's vtable slot.
     ~MemcardState();
 
     // @ 0x82C44D88 -- read the autosave flag (+0x04) under the lock.
