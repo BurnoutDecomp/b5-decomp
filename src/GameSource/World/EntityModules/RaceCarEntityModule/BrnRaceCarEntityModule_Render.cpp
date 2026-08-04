@@ -490,6 +490,39 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                     liWheelDiagCode = 3 + liInstanceCount;
 
                     // ================================================================
+                    // ✅ THE GATE NOW PASSES (2026-08-04, task 133). READ THIS FIRST -- the
+                    // history below is kept because its warning still stands, but its
+                    // conclusion ("this is a DATA gap ... fix the wheel model") was WRONG.
+                    //
+                    // The flag was never authored on disc in ANY build (X360 retail, our port
+                    // and the BPR Remaster all carry mu8Flags == 0x00). It is COMPUTED AT LOAD
+                    // by CgsResource::ModelResourceType::PostFixUp @0x828A7A68 -- an override
+                    // b5-decomp simply never declared, so it bound to the empty base and the
+                    // pass ran, did nothing and reported nothing. Declaring and implementing it
+                    // re-opened this gate by itself, with no change here.
+                    //
+                    // The "spike through the roof" was NOT the wheel geometry being undrawable.
+                    // Device::DrawIndexedMeshPC was submitting the FULL index range of a mesh
+                    // whose index buffer holds mu8InstanceCount (=5) slices with the instance
+                    // number in the high bits of every index -- so 4/5 of the index values
+                    // pointed outside the 240-vertex vertex buffer. It now submits slice 0.
+                    // See the banner on Device::DrawIndexedMeshPC.
+                    //
+                    // ⚠️ WHAT IS STILL MISSING, MEASURED (task 133): the wheels draw, at the
+                    // four correct world positions, with correct geometry and an in-range index
+                    // run -- and are INVISIBLE, because they are 0.74 m UNDERGROUND.
+                    // PlaceCarOnTrack seats the car's ORIGIN on the collision surface
+                    // (y = -3.525 in the junkyard, BrnPlaceOnTrackManager's own measured
+                    // number) and nothing lifts the body by the wheel radius, because nothing
+                    // simulates the suspension. Wheel centre = origin - 0.409 (authored
+                    // WheelSpec), wheel radius = 0.5 * 0.663 = 0.3315 -> the tyre bottom is
+                    // 0.7405 below the ground plane. Proven by drawing the instanced meshes
+                    // with the depth test defeated (BRN_WHEEL_ZALWAYS=1): all four wheels
+                    // appear, correctly placed and shaped, through the sand.
+                    // DELETE-WHEN the suspension settle lands (the vehicle-physics wall).
+                    // ================================================================
+                    //
+                    // ---- history (task 118) ----------------------------------------
                     // ⛔ THE CONSOLE'S OWN GATE, RE-INSTATED (2026-08-03, task 118).
                     //
                     // The console's check here is

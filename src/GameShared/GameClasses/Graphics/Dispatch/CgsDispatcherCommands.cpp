@@ -955,6 +955,24 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
             if (suLoggedInstanceCount != luNumInstanceDraws && CgsDev::Log::gpDebugPrint != 0)
             {
                 suLoggedInstanceCount = luNumInstanceDraws;
+                // [DIAG wheels] constant 0 -- the object's OWN world matrix, i.e. what a
+                // non-instanced draw of this very packet would use -- and constant 3, the
+                // view-projection every WVP in this packet is built from. Printed beside the
+                // instance matrices so the two spaces can be compared directly.
+                *CgsDev::Log::gpDebugPrint
+                    << "[instancing] constant0 world translation ("
+                    << lpWorld->wAxis.x << ", " << lpWorld->wAxis.y << ", "
+                    << lpWorld->wAxis.z << ", " << lpWorld->wAxis.w << ")\n";
+                *CgsDev::Log::gpDebugPrint
+                    << "[instancing] constant3 viewProjection rows"
+                    << " x(" << lpViewProjection->xAxis.x << "," << lpViewProjection->xAxis.y
+                    << "," << lpViewProjection->xAxis.z << "," << lpViewProjection->xAxis.w << ")"
+                    << " y(" << lpViewProjection->yAxis.x << "," << lpViewProjection->yAxis.y
+                    << "," << lpViewProjection->yAxis.z << "," << lpViewProjection->yAxis.w << ")"
+                    << " z(" << lpViewProjection->zAxis.x << "," << lpViewProjection->zAxis.y
+                    << "," << lpViewProjection->zAxis.z << "," << lpViewProjection->zAxis.w << ")"
+                    << " w(" << lpViewProjection->wAxis.x << "," << lpViewProjection->wAxis.y
+                    << "," << lpViewProjection->wAxis.z << "," << lpViewProjection->wAxis.w << ")\n";
                 *CgsDev::Log::gpDebugPrint
                     << "[instancing] DrawRenderable::Interpret expanding "
                     << luNumInstanceDraws << " instances; translations";
@@ -1156,6 +1174,34 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* /*lpInterpreter*/
         // [PC bring-up shim] the per-object WVP carried in the command
         // (payload qwords 1..4) feeds the fallback-shader transform.
         shadow::Device::SetObjectTransformPC(reinterpret_cast<const f32*>(&lpPacket[8]));
+
+        // [DIAG wheels] the clip-space origin of a console-instanced mesh. Row 3 of the
+        // per-object WVP IS the object origin transformed into clip space, so this says
+        // whether the wheel lands on screen at all (|x|,|y| <= w and 0 <= z <= w) and which
+        // technique/list it went to. DELETE with the wheel bring-up.
+        // [DIAG wheels] SAMPLED ACROSS THE WHOLE RUN, not "the first N": the first samples of
+        // the instanced and the plain streams come from different FRAMES (and therefore
+        // different cameras), which makes comparing them meaningless. Every 4096th of each
+        // stream puts the two side by side in the same stretch of the log.
+        {
+            const bool lbInstanced = (lpMesh->mu8InstanceCount > 1u);
+            static u32 suWheelSeen = 0, suWheelLogged = 0;
+            static u32 suPlainSeen = 0, suPlainLogged = 0;
+            u32* lpuCounter = lbInstanced ? &suWheelSeen : &suPlainSeen;
+            u32* lpuLogged  = lbInstanced ? &suWheelLogged : &suPlainLogged;
+            const u32 luSeen   = (*lpuCounter)++;
+            const u32 luStride = lbInstanced ? 65536u : 1048576u;
+            if ((luSeen % luStride) == 0u && (*lpuLogged)++ < 12u && CgsDev::Log::gpDebugPrint != 0)
+            {
+                const f32* lpWvp = reinterpret_cast<const f32*>(&lpPacket[8]);
+                *CgsDev::Log::gpDebugPrint
+                    << (lbInstanced ? "[wheel-wvp] @" : "[plain-wvp] @") << luSeen
+                    << " tech " << luTechnique << "/" << luLen
+                    << " meshInstances " << static_cast<u32>(lpMesh->mu8InstanceCount)
+                    << " clipOrigin (" << lpWvp[12] << ", " << lpWvp[13]
+                    << ", " << lpWvp[14] << ", " << lpWvp[15] << ")\n";
+            }
+        }
 
         // Bind the mesh geometry + draw.
         shadow::Device::SetMeshBuffersPC(lpMesh, luTechnique);

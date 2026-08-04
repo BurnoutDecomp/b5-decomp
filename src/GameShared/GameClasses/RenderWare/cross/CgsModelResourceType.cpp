@@ -2,6 +2,9 @@
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (FixUp version tripwire)
+#include "GameShared/GameClasses/Graphics/Dispatch/Renderable.h"        // PostFixUp walks the graph
+#include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"    // mu8InstanceCount / mpMaterialAssembly
+#include "GameShared/GameClasses/Graphics/CgsMaterialAssembly.h"        // GetLength()
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::ModelResourceType::FixDown                       @ 0x828A8548
@@ -59,6 +62,96 @@ namespace CgsResource
         *reinterpret_cast<u32*>(lBase + 0) += luDelta;   // serialised blob
         *reinterpret_cast<u32*>(lBase + 4) = luP1;
         *reinterpret_cast<u32*>(lBase + 8) = luP2;
+    }
+
+    // PostFixUp @ 0x828A7A68 (DWARF CgsModelResourceType.cpp:241) -- the pass the pool runs
+    // after EVERY resource in the bundle has been fixed up AND had its imports resolved
+    // (CgsResourceBundleLoader: FixUp-all -> ResolveImports-all -> PostFixUp-all), so the
+    // renderable pointers below are live and their own graphs are already relocated.
+    //
+    // Its whole job is to RAISE Model::E_FLAG_MODEL_USES_INSTANCE_SHADER. That bit is never
+    // authored on disc -- measured 0x00 in the X360 retail wheel bundle, in our port and in
+    // the BPR Remaster -- it is COMPUTED HERE from the per-mesh mu8InstanceCount:
+    //
+    //     for each renderable of the model
+    //         for each mesh of the renderable
+    //             assert mu8NumVertexDescriptors == mpMaterialAssembly->GetLength()
+    //             if (mu8InstanceCount) { anyInstanced = true; break; }   // MESH loop only
+    //     if (anyInstanced) mu8Flags |= 1
+    //
+    // Store-for-store against the asm: mu8NumRenderables is re-read from +0x10 on every
+    // outer iteration; the inner break leaves the remaining meshes of THAT renderable
+    // unasserted but the renderable loop runs to completion; the local flag is set once and
+    // never cleared; the OR happens exactly once at the end.
+    //
+    // WIDTHS. The Model is the console's own 20-byte on-disc header -- its three pointer
+    // slots stay 32-bit on x64 (Ptr32, see CgsModel.h) and Pool::ResolveImportForEntry writes
+    // the narrow store into the renderable table -- so the header is walked by OFFSET with
+    // the member name on every line, exactly as FixUp/FixDown above do. The Renderable and
+    // RenderableMesh graphs are the deliberately WIDENED x64 relayout, so those are walked by
+    // NAMED MEMBER and never by a pinned offset.
+    //
+    // ⛔ Do not "simplify" this to a Model method call: the DWARF makes mppRenderables /
+    // mu8NumRenderables / mu8Flags protected with no by-index accessor, and the console body
+    // makes no method calls at all.
+    void ModelResourceType::PostFixUp(void* lpResource, const rw::Resource& /*lrResource*/) const
+    {
+        const uintptr_t lBase = reinterpret_cast<uintptr_t>(lpResource);
+
+        bool lbAnyInstanced = false;
+
+        for (u32 luRenderable = 0;
+             luRenderable < *reinterpret_cast<const u8*>(lBase + 16);   // serialised blob: mu8NumRenderables
+             ++luRenderable)
+        {
+            // mppRenderables (+0x00) -> a table of 32-bit renderable slots; the console
+            // re-reads the table base every iteration.
+            const uintptr_t lTable =
+                static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lBase + 0));   // serialised blob
+            const Renderable* lpRenderable = reinterpret_cast<const Renderable*>(
+                static_cast<uintptr_t>(*reinterpret_cast<const u32*>(   // serialised blob: mppRenderables[i]
+                    lTable + 4u * luRenderable)));
+
+            // [FLAG PC boot gate] The console always has every dependency bundle resident, so
+            // this slot is never null there. On this build a cross-bundle renderable import
+            // can still be unresolved, and Pool::ResolveImportForEntry writes a NULL for it;
+            // the console's unguarded read would be an access violation here. Skip, do not
+            // assert -- the pool already logs the unresolved id.
+            if (lpRenderable == 0)
+                continue;
+
+            const u32 luNumMeshes = lpRenderable->mu16NumMeshes;
+            for (u32 luMesh = 0; luMesh < luNumMeshes; ++luMesh)
+            {
+                const RenderableMesh* lpMesh = lpRenderable->mppMeshes[luMesh];
+                if (lpMesh == 0)
+                    continue;
+
+                // CgsModelResourceType.cpp:261 -- "THIS ASSERT IS WANTED DEAD OR ALIVE."
+                // [FLAG PC boot gate] guarded on the assembly pointer for the same reason
+                // DrawRenderable::Interpret guards it: a mesh whose Material import lives in a
+                // bundle the pool refused keeps a null assembly, and reading GetLength() off
+                // null is an access violation. The assert itself is NOT downgraded.
+                const CgsGraphics::MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly;
+                if (lpAssembly != 0)
+                {
+                    CGS_ASSERT(lpMesh->mu8NumVertexDescriptors == lpAssembly->GetLength(),
+                               "lpMesh->GetNumVertexDescriptors() == lpMesh->mpMaterialAssembly->GetLength()");
+                }
+
+                if (lpMesh->mu8InstanceCount != 0)
+                {
+                    lbAnyInstanced = true;
+                    break;
+                }
+            }
+        }
+
+        if (lbAnyInstanced)
+        {
+            // mu8Flags |= E_FLAG_MODEL_USES_INSTANCE_SHADER   (`lbz/ori 1/stb` @0x828A7CF4)
+            *reinterpret_cast<u8*>(lBase + 17) |= 1u;   // serialised blob
+        }
     }
 
     void ModelResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
