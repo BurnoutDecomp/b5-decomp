@@ -43,13 +43,17 @@ extern AptValue* gpUndefinedValue;
 extern AptValueWithHash* gpAptGlobalFallback;
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the Apt string-pool / globals TU, not yet built): the two magic
-// child names SetupBeforeExecution resolves via findChild -- the X360 static
-// EAStringC constants unk_8324E6C0 ("this") and unk_8324E6B8 ("arguments").
-// Declared extern so the preload paths compile by name.
+// The two magic child names SetupBeforeExecution resolves via findChild -- the
+// X360 static EAStringC constants unk_8324E6C0 ("this") and unk_8324E6B8.
+// ⚠ CORRECTED 2026-08-05: unk_8324E6B8 is the string "super", NOT "arguments" --
+// findChild's ObjectIndex special-name arm (id 18 == super, wordlist slot 36)
+// is exactly what this resolve reaches; with the old "arguments" guess the
+// resolve fell to the generic hash path, found nothing, and every AS
+// `super.X()` call silently no-opped (the invisible learner-permit card).
+// Defined in AptGlobals.cpp.
 // ---------------------------------------------------------------------------
 extern const EAStringC gAptKeyThis;        // unk_8324E6C0 -- "this"
-extern const EAStringC gAptKeyArguments;   // unk_8324E6B8 -- "arguments"
+extern const EAStringC gAptKeySuper;       // unk_8324E6B8 -- "super"
 
 // ---------------------------------------------------------------------------
 // operator new @ 0x82AE61C8
@@ -157,10 +161,12 @@ void AptScriptFunction2::SetArgument(int32_t nArgIndex, AptValue* pValue)
 // for each register the record's preload flags request, resolve the corresponding
 // value and bind it into the next register:
 //   THIS       -> the pre-resolved "this" (pPreloadThis), else findChild("this").
-//   SUPER      -> `undefined` (this build does not bind a super object).
-//   ARGUMENTS  -> the pre-resolved arguments (pPreloadArgs) or one resolved against
-//                 pArgScope; if that is null / not a usable object, fall back to one
-//                 resolved against the function's own scope.
+//   ARGUMENTS  -> `undefined` (this build does not build an arguments object).
+//   SUPER      -> the pre-resolved super (pPreloadSuper -- CallMethod's
+//                 defining-prototype walk result) or one resolved by NAME against
+//                 pArgScope (findChild("super") -> the ObjectIndex special arm);
+//                 if that is null / not defined, fall back to one resolved
+//                 against the function's own scope.
 //   ROOT       -> findChild("_root")  against the function's scope.
 //   PARENT     -> findChild("_parent"), or `undefined` when absent.
 //   GLOBAL     -> the _global fallback scope value.
@@ -170,7 +176,7 @@ void AptScriptFunction2::SetArgument(int32_t nArgIndex, AptValue* pValue)
 void AptScriptFunction2::SetupBeforeExecution(SavedExecutionState* pSaved,
                                               AptValue* pArgScope,
                                               AptValue* pPreloadThis,
-                                              AptValue* pPreloadArgs)
+                                              AptValue* pPreloadSuper)
 {
     pSaved->mpSavedFrameStack = AptScriptFunctionBase::spFrameStack;
     AptScriptFunctionBase::spFrameStack = 0;
@@ -192,22 +198,41 @@ void AptScriptFunction2::SetupBeforeExecution(SavedExecutionState* pSaved,
         nReg = 2;
     }
 
-    if (mpByteCode->muPreloadFlags & KU_PRELOAD_SUPER)
+    if (mpByteCode->muPreloadFlags & KU_PRELOAD_ARGUMENTS)
         AptScriptFunctionBase::SetRegisterValue(nReg++, gpUndefinedValue);
 
-    if (mpByteCode->muPreloadFlags & KU_PRELOAD_ARGUMENTS)
+    if (mpByteCode->muPreloadFlags & KU_PRELOAD_SUPER)
     {
-        AptValue* pArguments = pPreloadArgs;
-        if (!pArguments)
-            pArguments = pArgScope->findChild(&gAptKeyArguments, 0);
-        // X360: ((pArguments->mnValueData >> 27) & 1) -- a type/validity bit on the
-        // resolved value; if it (or the value) is missing, resolve "arguments"
+        AptValue* pSuper = pPreloadSuper;
+        if (!pSuper)
+            pSuper = pArgScope->findChild(&gAptKeySuper, 0);
+        // X360: ((pSuper->mnValueData >> 27) & 1) -- the defined bit on the
+        // resolved value; if it (or the value) is missing, resolve "super"
         // against the function's own scope instead.
-        if (!pArguments || ((pArguments->mnValueData >> 27) & 1) == 0)
-            pArguments = mpCIH->findChild(&gAptKeyArguments, 0);
-        if (!pArguments)
-            pArguments = gpUndefinedValue;     // miss -> the undefined singleton
-        AptScriptFunctionBase::SetRegisterValue(nReg++, pArguments);
+        if (!pSuper || ((pSuper->mnValueData >> 27) & 1) == 0)
+            pSuper = mpCIH->findChild(&gAptKeySuper, 0);
+        if (!pSuper)
+            pSuper = gpUndefinedValue;     // miss -> the undefined singleton
+        // FLAG (bring-up probe, temporary): trace the super-register binding for
+        // the super-preload functions (flags 0x119/0x1a) -- the licence card's
+        // dead super.Update() investigation.
+        {
+            static int snSuperRegProbe = 0;
+            if (snSuperRegProbe < 100 &&
+                (mpByteCode->muPreloadFlags == 0x119 || mpByteCode->muPreloadFlags == 0x1a))
+            {
+                ++snSuperRegProbe;
+                char lacProbe[192];
+                std::snprintf(lacProbe, sizeof(lacProbe),
+                              "[AptSuper] Setup flags=0x%X preloadSuper=%p bound=%p def=%d\n",
+                              static_cast<unsigned>(mpByteCode->muPreloadFlags),
+                              static_cast<void*>(pPreloadSuper),
+                              static_cast<void*>(pSuper),
+                              (pSuper && ((pSuper->mnValueData >> 27) & 1)) ? 1 : 0);
+                CgsDev::Log::WriteToLog(lacProbe);
+            }
+        }
+        AptScriptFunctionBase::SetRegisterValue(nReg++, pSuper);
     }
 
     if (mpByteCode->muPreloadFlags & KU_PRELOAD_ROOT)

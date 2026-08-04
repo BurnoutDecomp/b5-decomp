@@ -212,7 +212,21 @@ extern const AptCXForm gAptNullCXForm  = AptMakeIdentityCXForm();   // off_82F73
 extern const EAStringC gAptKeyThis           ("this");       // unk_8324E6C0
 extern const EAStringC gAptThisKey           ("this");       // dword_8324E6C0 (alias name for the same key)
 extern const EAStringC gAptKeyGlobal         ("_global");    // unk_8324E59C
-extern const EAStringC gAptKeyArguments      ("arguments");  // unk_8324E6B8
+// ⚠ CORRECTED 2026-08-05 (the licence-card dead-super root cause): unk_8324E6B8
+// is the AS "super" key, NOT "arguments". Three console consumers prove it:
+//   * AptScriptFunction2::SetupBeforeExecution's flag-0x10 branch (the SWF
+//     PreloadSuper bit -- flags algebra: super-calling methods carry 0x119
+//     [preload], non-super ones 0x129 [suppress 0x20]) resolves this key via
+//     findChild when no pre-resolved super arrives -- and findChild's
+//     ObjectIndex wordlist has "super" -> special-name id 18 (the super arm).
+//   * runStream resolves this key ONCE per stream into the context slot
+//     (LocalContextT::mpScopeVariable, console ctx+0x10) that CallMethod's
+//     supercall identity test reads.
+//   * CallMethod seeds its default method-name slot with this same object.
+// The old "arguments" guess sent the resolve down the generic hash path (no
+// such child), so every AS `super.X()` silently no-opped -- the learner-permit
+// card never left its 'invisible' frame.
+extern const EAStringC gAptKeySuper          ("super");      // unk_8324E6B8
 extern const EAStringC gAptKeyPrototype      ("prototype"); // dword_8324E698 -- the AS "prototype" key
                                                             // (hash 1689; AptNativeHash's fast-slot gates
                                                             // key it against mpPrototype. The old literal
@@ -221,7 +235,12 @@ extern const EAStringC gAptKeyPrototype      ("prototype"); // dword_8324E698 --
                                                             // methods ever landed. "__proto__" itself is
                                                             // StringPool::saConstant[0].)
 extern const EAStringC gAptKeyControllerKey  ("controller"); // unk_8324E614
-extern const EAStringC gAptEmptyMethodName   ("");           // unk_8324E6B8 (the empty method-name sentinel)
+extern const EAStringC gAptEmptyMethodName   ("super");      // unk_8324E6B8 -- the SAME console object as
+                                                             // gAptKeySuper ("super"); CallMethod seeds its
+                                                             // default name slot with it and NameEquals-tests
+                                                             // against it ("is the slot still the default").
+                                                             // Kept as a distinct PC symbol, but the CONTENT
+                                                             // must match gAptKeySuper (2026-08-05 fix).
 extern const EAStringC gAptObjectClassName   ("Object");     // &dword_8324E650
 extern const EAStringC gAptStringClassName   ("String");     // &dword_8324E6B4
 extern const EAStringC gAptSpriteClassKey    ("MovieClip");  // dword_8324E640 (the Sprite/MovieClip class key)

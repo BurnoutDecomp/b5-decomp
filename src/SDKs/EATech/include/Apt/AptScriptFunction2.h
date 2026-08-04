@@ -99,11 +99,21 @@ struct AptScriptFunction2ByteCode
 
 // DefineFunction2 register-preload flag bits (SetupBeforeExecution masks against
 // muPreloadFlags). Named for the register each requests be pre-bound on entry.
+//
+// ⚠ CORRECTED 2026-08-05 (the licence-card dead-super investigation): the bit
+// assignment is the SWF DefineFunction2 layout -- 0x04 is PreloadARGUMENTS (this
+// build binds `undefined`: no arguments object) and 0x10 is PreloadSUPER (bound
+// from CallMethod's defining-prototype walk, else resolved by name via
+// findChild("super") -- the unk_8324E6B8 key, whose PC guess "arguments" broke
+// every `super.X()` call). The old names had the two bits SWAPPED; the shipped
+// movies prove the layout: every class method that calls super.X() carries flags
+// 0x119 (this|suppressArgs|preloadSuper|global) and every one that does not
+// carries 0x129 (this|suppressArgs|SUPPRESSsuper|global).
 enum AptScriptFunction2PreloadFlags
 {
     KU_PRELOAD_THIS      = 0x0001,   // bind the next register <- the function's "this"
-    KU_PRELOAD_SUPER     = 0x0004,   // bind the next register <- super (undefined in this build)
-    KU_PRELOAD_ARGUMENTS = 0x0010,   // bind the next register <- the "arguments" object
+    KU_PRELOAD_ARGUMENTS = 0x0004,   // bind the next register <- arguments (undefined in this build)
+    KU_PRELOAD_SUPER     = 0x0010,   // bind the next register <- super (see SetupBeforeExecution)
     KU_PRELOAD_ROOT      = 0x0040,   // bind the next register <- _root
     KU_PRELOAD_PARENT    = 0x0080,   // bind the next register <- _parent
     KU_PRELOAD_GLOBAL    = 0x0100    // bind the next register <- _global
@@ -155,7 +165,7 @@ public:
     virtual void SetupBeforeExecution(SavedExecutionState* pSaved,
                                       AptValue* pArgScope,
                                       AptValue* pPreloadThis,
-                                      AptValue* pPreloadArgs);
+                                      AptValue* pPreloadSuper);
     // CleanupAfterExecution @0x82AD6708 -- release every register bound this call,
     // then restore the saved register window + frame stack (via the base) from pSaved.
     virtual void CleanupAfterExecution(SavedExecutionState* pSaved);
