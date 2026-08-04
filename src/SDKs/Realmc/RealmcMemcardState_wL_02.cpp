@@ -12,10 +12,8 @@
 // SCOPE OF THIS FILE
 //   landed here : RealmcCore::MemcardState::~MemcardState  @ 0x82C46470
 //   NOT here    : RealmcCore::MemcardState::MemcardState   @ 0x82C47328 --
-//                 it cannot compile against the tree as it stands (see the
-//                 BLOCKED note at the bottom of this file); the complete body
-//                 is parked at
-//                 scratchpad/waveL/parked/RealmcMemcardState_02_MemcardState.cpp
+//                 DEFINED in RealmcMemcardState.cpp (landed wave N, from the
+//                 formerly parked body). Do not add a second definition here.
 //
 // STATE OF THE FORMER BLOCKERS (fix pass): the `Rea` / `Re` truncated symbols
 // are RealmcCore::Allocator64's ctor @ 0x82C45B48 and dtor @ 0x82C45A10 (see
@@ -88,21 +86,11 @@ MemcardState::~MemcardState()
 
 } // namespace RealmcCore
 
-// STILL PARKED -- RealmcCore::MemcardState::MemcardState @ 0x82C47328
-//
-// The X360 ctor seats the start-waiting deque with `bl Rea(r3 = this + 0x1C,
-// r4 = 0)` (0x82C47344 addi r3,r31,0x1C / 0x82C4734C li r4,0 / 0x82C47364 bl
-// Rea) -- i.e. the member initialiser `maStartWaitingQueue(0u)`. `Rea` is
-// RealmcCore::Allocator64's constructor @ 0x82C45B48. The complete, asm-faithful
-// body is parked (self-contained) at
-//
-//     scratchpad/waveL/parked/RealmcMemcardState_02_MemcardState.cpp
-//
-// THE COMPILE BLOCKER IS GONE: `explicit Allocator64(unsigned int)` is now
-// declared in RealmcAllocator64.h with its body in RealmcAllocator64.cpp, and
-// `IntVector()` / `~IntVector()` are defined in RealmcContainers.h. The parked
-// body was never blocked on anything else (R3 -- a class-scope sized
-// `operator delete` on MessageFilter -- is a correctness item, not a build one).
-// It is left parked here only because landing it was outside the scope this fix
-// pass was given; it is ready to move in verbatim.
+// FORMERLY PARKED, NOW LANDED -- RealmcCore::MemcardState::MemcardState
+// @ 0x82C47328 was moved from scratchpad/waveL/parked/ into
+// RealmcMemcardState.cpp in wave N, once wave L's fix pass had landed its
+// prerequisites (`explicit Allocator64(unsigned int)` + `~Allocator64` in
+// RealmcAllocator64.{h,cpp}, `IntVector()` / `~IntVector()` in
+// RealmcContainers.h, and MessageFilter's class-scope sized `operator delete`
+// in RealmcCore.h). All 15 ledger functions of this TU now have bodies.
 // ===========================================================================

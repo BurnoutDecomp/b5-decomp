@@ -226,10 +226,11 @@ unsigned int Private::GetLength() const
 // -- per the asm (cmpld/bne at 0x82803528) -- fires the assert when liClass equals
 // liExpectedClass. The message buffer is the X360 file-scope scratch (byte_8300FEC8).
 //
-// NOTE: the SPrintf format string is truncated in the recovered rodata to
-// "Collection %08x%08x of incorrect class " -- the asm proves six %08x conversions across
-// the three values, so the trailing ", should be class %08x%08x" is reconstructed to that
-// specifier count. The message text is diagnostic-only and does not affect behavior.
+// The SPrintf format string is the MEASURED rodata literal at 0x820D9088 (dumped whole
+// via headless IDA, 2026-08-04; an earlier pass only saw IDA's display-truncated
+// "Collection %08x%08x of incorrect class "... and invented a ", should be class" tail).
+// Six %08x conversions, three hi/lo pairs, matching the six staged words in the asm
+// (r6..r10 + one stack word).
 static char sacAssertMessage[1024];
 
 void AssertOnClassCheck(int liClass, int liExpectedClass, u64 luCollectionKey)
@@ -239,7 +240,7 @@ void AssertOnClassCheck(int liClass, int liExpectedClass, u64 luCollectionKey)
     const u64 luExpected = static_cast<u64>(static_cast<u32>(liExpectedClass));
 
     CgsCore::SPrintf(sacAssertMessage, 1024,
-        "Collection %08x%08x of incorrect class %08x%08x, should be class %08x%08x",
+        "Collection %08x%08x of incorrect class (%08x%08x) being used to create instance of type %08x%08x",
         static_cast<u32>(luCollection >> 32), static_cast<u32>(luCollection),
         static_cast<u32>(luClass >> 32), static_cast<u32>(luClass),
         static_cast<u32>(luExpected >> 32), static_cast<u32>(luExpected));

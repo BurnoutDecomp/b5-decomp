@@ -35,10 +35,19 @@
 //   +0x52BC  meSavedPanelType / +0x52C0 meSavedEventMode / +0x52C4 meSavedRRScoreType
 //            (the StoreSettings triple @0x8241872C..0x82418734)
 //
-// PARTIAL LAYOUT: only the members the reconstructed accessors touch are carved; the rest
-// of the object (the five sub-panels, the toggle group, the saved-settings triple) is
-// still reserved byte-span so each named field lands at its binary offset without
-// raw-offset casting. All access is by name.
+// FULL DWARF LAYOUT (2026-08-04). The member list below is the complete DWARF sequence
+// (BrnCrashNavPanel.h:237..:264) -- mePrepareStage .. meSavedRRScoreType covers the whole
+// object (console sizeof == 0x52C8: mGenericPanelText2 0x5194 + 0x128 == 0x52BC == the
+// StoreSettings triple). Every member is typed at its committed home EXCEPT mRoadPanel
+// (DWARF h:248), which stays a documented reserved carve -- see the note at that slot.
+// The default ctor @0x82500FD0 is thereby reconstructable as plain member default-
+// construction; its 33 X360 stores were verified against the vtable rodata by headless
+// IDA (scratchpad vtables_cnp.json): each installed vtable is a SINGLE-slot (virtual
+// Construct only) table -- off_82074814[0]==CrashNavPanel::Construct @0x82425C60,
+// off_8207317C/80/84/88[0]==EventPanel/DriveThruMapPanel/RoadPanel/RivalMapPanel::
+// Construct, off_82072F8C[0]==TextField::Construct, and off_82072F68/off_82072F90/
+// off_820564F0[0]==the inherited CgsGui::GuiComponent::Construct (AnimationComponent /
+// IconComponent / RoadSignIcon do not override it). All access is by name.
 //
 // BASE APPLIED (2026-08-03). The DWARF base `struct BrnGui::CrashNavPanel : public
 // CgsGui::GuiComponent` is now spelled out, and the old `u8 maHeadReserved[0x90]` that
@@ -55,9 +64,14 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                        // typedef u64 CgsID
-#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                    // BrnGui::GuiFlow (E_GUIFLOW_*)
-#include "GameSource/Gui/Flow/Screen/Components/BrnEventPanel.h"   // embedded EventPanel + EModeType
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                    // BrnGui::GuiFlow (E_GUIFLOW_*); pulls BrnStreetData::ScoreType
+#include "GameSource/Gui/Flow/Screen/Components/BrnEventPanel.h"   // embedded EventPanel + EEventType
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h" // CgsGui::GuiComponent (DWARF base)
+#include "GameSource/Gui/Flow/Shared/Components/BrnMenuToggleGroup.h"    // MenuToggleGroupVarSize<3> (mFilterToggles, by value)
+#include "GameSource/Gui/Flow/Screen/Components/BrnDriveThruMapPanel.h"  // DriveThruMapPanel (mDrivethruPanel, by value)
+#include "GameSource/Gui/Flow/Screen/Components/BrnRivalMapPanel.h"      // RivalMapPanel (mRivalPanel, by value)
+#include "GameSource/Gui/Flow/Shared/Components/BrnIcon.h"               // IconComponent (mGenericPanel, by value)
+#include "GameSource/Gui/BrnGuiTextField.h"                              // TextField (mGenericPanelText1/2, by value)
 
 // Pointer/reference-only collaborators -- forward declared rather than included.
 //   CgsModule::Event   : the shared opaque event base (defined in
@@ -130,6 +144,19 @@ namespace BrnGui
         // Shapes are DWARF (BrnCrashNavPanel.h line numbers noted) gated on X360
         // attestation -- every one below has an X360 address in progress/identity.json.
         // --------------------------------------------------------------------------
+
+        // @ 0x82500FD0 -- the compiler-synthesised default ctor (the PS3 DWARF carries the
+        // synthesised `CrashNavPanel()` declaration; called by CrashNavMap::CrashNavMap
+        // @0x825114B8 for the by-value mCrashNavPanel). Its X360 body is: its own vtable
+        // install (off_82074814, whose single slot is Construct @0x82425C60), ONE
+        // out-of-line member-ctor call (`bl` MenuToggleGroupVarSize<3>::ctor @0x82500DB8
+        // on mFilterToggles, this+0xA0), and 33 inlined sub-object vtable installs whose
+        // addresses are exactly the DWARF member offsets of the by-value panels/fields
+        // below. It stores NO data members (Construct/StoreSettings do that later), so the
+        // reconstruction is an empty body: C++ emits the base/member construction
+        // implicitly -- the same reading MenuToggleGroupVarSize's and TextSelection's
+        // committed ctors already carry. Body in BrnCrashNavPanel.cpp.
+        CrashNavPanel();
 
         // @ 0x82425C60 (DWARF cpp:85), the CgsGui::GuiComponent virtual at vtable slot 0.
         // CrashNavMap::OnEnter reaches it through the vtable rather than by name:
@@ -240,34 +267,70 @@ namespace BrnGui
         // DWARF DELTA: declared `BrnStreetData::ScoreType GetPanelActiveRoadRuleType() const`
         // (h:346). Kept as s32 here because the committed consumers compare the result
         // against plain integers; retyping it is a separate, consumer-visible change.
+        // The value it returns is really mRoadPanel.meCurrentRule (RoadPanel +0xD9C,
+        // an inlined RoadPanel::GetCurrentRule(), DWARF BrnRoadPanel.h:199) -- see the
+        // mRoadPanel carve note in the layout.
         s32 GetPanelActiveRoadRuleType() const;
 
         // @ 0x82418668 - active road-rule scoring mode. Asserts the panel is showing road rules.
         // DWARF DELTA: declared
         // `BrnGui::GuiEventSetRoadRuleScoreMode::ERoadPanelModes GetRoadPanelScoreMode() const`
-        // (h:363). Same reasoning as above -- left as s32.
+        // (h:363). Same reasoning as above -- left as s32. The value it returns is really
+        // mRoadPanel.meCurrentScoreMode (RoadPanel +0xDA0, an inlined
+        // RoadPanel::GetScoringMode(), DWARF BrnRoadPanel.h:214) -- see the mRoadPanel
+        // carve note in the layout.
         s32 GetRoadPanelScoreMode() const;
 
     private:
+        // ---- full DWARF member sequence (BrnCrashNavPanel.h:237..:264) ----------------
+        // X360 console offsets are COMMENTS ONLY; the host layout is name-based (pointers
+        // widen, sub-panel host sizes differ from the console spans).
+
         // The single member the DWARF places between the CgsGui::GuiComponent base and
-        // mePanelType. It replaces the old maHeadReserved[0x90] stand-in for base +
-        // this member (see the BASE APPLIED note in the banner).
-        EPrepareStage mePrepareStage; // +0x8C  (StoreSettings' capture gate)
+        // mePanelType (see the BASE APPLIED note in the banner).
+        EPrepareStage mePrepareStage;  // +0x8C  (DWARF h:237; StoreSettings' capture gate)
 
-        PanelType    mePanelType;     // +0x90  (lwz; the assert subject)
+        PanelType     mePanelType;     // +0x90  (DWARF h:239; lwz -- the assert subject)
+        PanelType     meVisiblePanel;  // +0x94  (DWARF h:240; ChangeVisiblePanelState's slot)
+        GuiCache*     mpGuiCache;      // +0x98  (DWARF h:242; console 4-byte slot -- widens)
 
-        // Reserved span between mePanelType and the embedded event panel (object +0x2EA8).
-        // Per the DWARF this covers mpGuiCache (+0x98), meVisiblePanel and mFilterToggles
-        // (+0xA0).
-        u8           maReservedToEventPanel[0x2EA8 - (0x90 + sizeof(PanelType))];
+        // (console pads +0x9C..+0x9F before the toggle group)
 
-        EventPanel   mEventPanel;     // +0x2EA8  (event-info sub-panel)
+        // DWARF h:244 spells the member type `BrnGui::MenuToggleGroup`; the X360 build
+        // instantiates it as the var-size template -- the ctor @0x82500FD0 `bl`s
+        // MenuToggleGroupVarSize<3>::MenuToggleGroupVarSize (@0x82500DB8) on this+0xA0,
+        // and Update's vcall dispatches through the group vtable here (+0xA0).
+        MenuToggleGroupVarSize<3> mFilterToggles;   // +0xA0  (console span 0xA0..0x2EA7)
 
-        // Reserved span between the event panel and the road-rule fields (object +0x481C).
-        // Per the DWARF this covers mDrivethruPanel (+0x3788) and mRoadPanel (+0x3A80).
-        u8           maReservedToRoadRule[0x481C - (0x2EA8 + sizeof(EventPanel))];
+        EventPanel        mEventPanel;      // +0x2EA8  (DWARF h:246; event-info sub-panel)
+        DriveThruMapPanel mDrivethruPanel;  // +0x3788  (DWARF h:247)
 
-        s32          miActiveRoadRuleType;        // +0x481C  (lwz)
-        s32          miActiveRoadRuleScoreMode;   // +0x4820  (lwz)
+        // ---- mRoadPanel (DWARF h:248) -- the ONE member still carried as a carve ------
+        // The DWARF places `BrnGui::RoadPanel mRoadPanel` here (console +0x3A80..+0x482F,
+        // 0xDB0 bytes: IconComponent base 0x94 / mRoadSign @+0xA0 (RoadSignIcon vtable
+        // off_820564F0) / mRoadPanelData / mNames[4]+mScores[4]+mTargetCaption TextFields
+        // @+0x2A8..+0xD0F / mBestScoreBackingAnimation @+0xD10 / meCurrentRule @+0xD9C /
+        // meCurrentScoreMode @+0xDA0 / mbActive @+0xDA4 + pad). The committed
+        // BrnRoadPanel.h (owned by the RoadPanel TU, NOT this one) is still its own
+        // pre-DWARF partial slice whose tail fields are PRIVATE and DWARF-misnamed
+        // (miSelectedFriendIndex / miScoringMode), so a typed `RoadPanel mRoadPanel` here
+        // would strand this TU's two road-rule accessors. Until BrnRoadPanel.h applies its
+        // DWARF shape (requested), the region stays a byte-carve with the two fields this
+        // TU's accessors read split out at their console slots. Nothing is double-counted.
+        u8  maRoadPanelHead[0xD9C];        // mRoadPanel head (console +0x3A80..+0x481B)
+        s32 miActiveRoadRuleType;          // +0x481C == RoadPanel::meCurrentRule (+0xD9C)
+        s32 miActiveRoadRuleScoreMode;     // +0x4820 == RoadPanel::meCurrentScoreMode (+0xDA0)
+        u8  maRoadPanelTail[0xC];          // RoadPanel::mbActive + tail pad (+0x4824..+0x482F)
+
+        RivalMapPanel mRivalPanel;         // +0x4830  (DWARF h:249)
+        IconComponent mGenericPanel;       // +0x4FD8  (DWARF h:251; vtable off_82072F90)
+        TextField     mGenericPanelText1;  // +0x506C  (DWARF h:252)
+        TextField     mGenericPanelText2;  // +0x5194  (DWARF h:253)
+
+        // The StoreSettings triple (the @0x8241872C..0x82418734 stores).
+        PanelType                meSavedPanelType;   // +0x52BC  (DWARF h:262)
+        EventPanel::EEventType   meSavedEventMode;   // +0x52C0  (DWARF h:263)
+        BrnStreetData::ScoreType meSavedRRScoreType; // +0x52C4  (DWARF h:264; end of object,
+                                                     //          console sizeof == 0x52C8)
     };
 }
