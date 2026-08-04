@@ -13,7 +13,8 @@
 // Inertia and DriveDynamics ARE modelled field-by-field, because the slot
 // tables' own constructors (X360 @0x827DB798 / @0x827DB728 and the DriveData
 // init inlined into the module constructor @0x827DF1E0) default-initialise each
-// entry BY MEMBER.
+// entry BY MEMBER. Inertia is modelled in rw/physics/inertia.h and merely ALIASED
+// here (task #141); JointLimits and DriveDynamics are still declared below.
 //
 // X360 byte offsets in the comments are the console's 4-byte-pointer ABI. The
 // host gate builds x64, so absolute offsets past a pointer array widen; every
@@ -23,6 +24,13 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"           // CgsContainers::BitArray<200>
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // the module base class
+
+// ⭐ THE REAL rw::physics::Inertia, by value -- `CgsPhysics::Inertia` is now an alias onto it
+// (see the block below) and RigidBodyData embeds 200 of them, so a forward declaration will
+// not do. Safe to pull in here where CgsPhysicsSimulationIO_Events.h is not: inertia.h reaches
+// only types.hpp, rw/math/vpu/types.h, <cfloat> and <cstddef>, so it drags no CgsPhysics type
+// into this header's ~30 includers and cannot make the open RigidBodyId ODR fork meet.
+#include "rw/physics/inertia.h"
 
 // rw::physics pointer members of PhysicsSimulationModule. Forward declarations
 // only -- the module never dereferences them in the functions homed here. Class
@@ -88,28 +96,27 @@ namespace CgsPhysics
         Params mAngular;             // @+0x10 (:262)
     };
 
-    // rw::physics::Inertia. 48-byte X360-attested array stride (GetInertia
-    // @0x8289D0C0 indexes maInertias at 48*(idx+50)).
+    // ⚠️ WAS A TYPE FORK UNTIL 2026-08-04 (task #141). This spelled out its OWN copy of
+    // rw::physics::Inertia's seven fields (`f32 mafInvTens[4]` + six named scalars), pinned by
+    // seven offsetof asserts of its own in the .cpp, and PhysicsSimulationModule::Process-
+    // AddRigidBodyQueue reinterpret_cast'ed BETWEEN the two copies in both directions -- one
+    // cast into RigidBodyData::AddBody, one back out of GetInertia into Simulation::
+    // AddRigidBody, which stores the pointer in RigidBody::mInertia for DynamicUpdate to read
+    // every tick. Same shape as the Joint/Drive/RigidBody fork task #135 retired, and by the
+    // time it was spotted it was already LOAD-BEARING.
     //
-    // PROMOTED from an opaque 48-byte span (was: u8 macOpaque[48]). DWARF
-    // (rw/physics/inertia.h:176..:182) names the interior -- Vector3 mInvTens
-    // then six f32 (mInvMass, mSpherical, mMaxVelocity, mMaxOmega, mLinearDrag,
-    // mAngularDrag) == 40 bytes, padded to 48 by the leading Vector3's 16-align --
-    // and RigidBodyData's constructor (X360 @0x827DB728) default-initialises every
-    // maInertias[] entry BY MEMBER, so the interior is now required.
-    // Vector3 is carried as a 4-lane f32 array, matching the JointLimits
-    // mafPprism/mafVprism precedent immediately below (the console's stvx128 of a
-    // 16-byte {1,1,1,0} stack vector writes all four lanes).
-    struct alignas(16) Inertia
-    {
-        f32 mafInvTens[4];    // @+0x00  Vector3 mInvTens (inertia.h:176); lane 3 is the pad
-        f32 mfInvMass;        // @+0x10  (:177)
-        f32 mfSpherical;      // @+0x14  (:178)
-        f32 mfMaxVelocity;    // @+0x18  (:179)
-        f32 mfMaxOmega;       // @+0x1C  (:180)
-        f32 mfLinearDrag;     // @+0x20  (:181)
-        f32 mfAngularDrag;    // @+0x24  (:182)
-    };
+    // ⚠️⚠️ WHY THAT WAS DANGEROUS RATHER THAN MERELY UNTIDY: `Inertia` is a class TYPE, and a
+    // mangled name encodes neither a class's layout nor its bases. Two definitions of one
+    // record therefore produce call sites and bodies that LINK CLEANLY against each other and
+    // disagree about where every field lives. There is no diagnostic -- not from the compiler,
+    // not from the linker, not from a per-TU compile gate. One of the forks #135 retired would
+    // have allocated 16 bytes for a 2032-byte IO buffer. A SYMBOL RESOLVING CAN ITSELF BE THE
+    // BUG. The alias below is the whole fix; the layout pins moved to the definition they gate
+    // (rw/physics/inertia.h, _rw_physics_Inertia_AssertLayout).
+    //
+    // The X360-attested array stride (48; GetInertia @0x8289D0C0 indexes maInertias at
+    // 48*(idx+50)) is asserted there, next to the members it is a claim about.
+    typedef ::rw::physics::Inertia Inertia;
 
     // Opaque handle tables -- single u64 ids / single pointers; sized to the
     // DWARF (JointId/DriveId == uint64_t).

@@ -29,11 +29,23 @@
 // LAYOUT NOTE (x64): the console block is 0x28 = 40 bytes. rw::math::vpu::Vector3 is
 // `alignas(16)`, so the PC type rounds up to 48. Nothing embeds an Inertia by value in a
 // serialised record (RigidBody holds a POINTER), so the tail padding is inert; parity here
-// is by NAMED MEMBER, not by sizeof.
+// is by NAMED MEMBER, not by sizeof. The 48 IS however the X360-attested ARRAY STRIDE
+// (CgsPhysics::RigidBodyData::GetInertia @0x8289D0C0 indexes maInertias at 48*(idx+50)),
+// which is why _rw_physics_Inertia_AssertLayout below pins sizeof as well as the members.
+//
+// ⭐ SOLE OWNER OF THIS RECORD SINCE 2026-08-04 (task #141). `CgsPhysics::Inertia` used to
+// be a SECOND, independent definition of these same seven fields, cast across at
+// PhysicsSimulationModule::ProcessAddRigidBodyQueue. It is now a plain alias onto this
+// class -- see the block at CgsPhysicsSimulationModule.h. ⛔ Do not re-introduce a local
+// copy of this layout anywhere: `Inertia` appears in no mangled name that encodes its
+// definition, so a body compiled against one copy links CLEANLY against a call site
+// compiled against the other. The link succeeding is not evidence of anything.
 // =====================================================================================
 
 #include "types.hpp"             // f32
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Vector3
+#include <cfloat>                // FLT_MAX -- the ctor's two velocity clamps
+#include <cstddef>               // offsetof (the layout pin below)
 
 namespace rw
 {
@@ -43,6 +55,38 @@ namespace physics
     class Inertia
     {
     public:
+        // DWARF inertia.h:80. NO STANDALONE X360 SYMBOL -- the console inlines it, and the
+        // one place it is inlined is also where its constants were read:
+        // CgsPhysics::RigidBodyData::RigidBodyData @0x827DB728 (0x70 bytes), a 200-pass
+        // loop at stride 0x30 over &maInertias[0]. The three float pool constants were read
+        // out of the image as raw bytes, not inferred from role:
+        //   flt_82001C98 = 3f800000 = 1.0f    (f0)
+        //   flt_820CD79C = 7f7fffff = FLT_MAX (f12)
+        //   flt_82001CC0 = 00000000 = 0.0f    (f13)
+        // The 16-byte stack vector the loop lvx128/stvx128's into mInvTens is built from
+        // three `stfs f0` plus one `stw 0`, i.e. {1.0f, 1.0f, 1.0f, 0.0f} -- lane 3 is the
+        // Vector3 pad and the console does write it.
+        //
+        // ⚠️ THIS CTOR IS WHY THERE IS NO `SetSphericalInertia`. The DWARF declares SEVEN
+        // getters and only SIX setters; mSpherical is the one with no setter. A previous
+        // note (and the task brief) claimed the de-fork "needs SetSphericalInertia added" --
+        // it does not, and adding it would have been a fabricated SDK entry point. mSpherical
+        // is written HERE and read by DynamicUpdate's sleep-energy term; nothing else in the
+        // tree ever writes it. Checked by grep over the whole repo, not assumed.
+        Inertia()
+            : mInvMass(1.0f)
+            , mSpherical(1.0f)
+            , mMaxVelocity(FLT_MAX)
+            , mMaxOmega(FLT_MAX)
+            , mLinearDrag(0.0f)
+            , mAngularDrag(0.0f)
+        {
+            mInvTens.x = 1.0f;      // stack vector lane 0 -> stvx128 to +0x00
+            mInvTens.y = 1.0f;      // lane 1
+            mInvTens.z = 1.0f;      // lane 2
+            mInvTens.w = 0.0f;      // lane 3 (the Vector3 pad; `stw 0`)
+        }
+
         // DWARF accessors (inertia.h:110..134). All of these are inlined away on the
         // console -- no standalone X360 symbol exists for any of them.
         const rw::math::vpu::Vector3& GetInverseInertia() const   { return mInvTens; }
@@ -61,6 +105,11 @@ namespace physics
         void SetAngularDrag(f32 lfV)                              { mAngularDrag = lfV; }
 
     private:
+        // Never-called layout pin, so any drift in a member offset is a compile error.
+        // (The `friend` is what lets offsetof reach these private members from outside --
+        // the CHistogram.h / CArrayLookahead.h / CSeqDissolveDetector.h precedent.)
+        friend void _rw_physics_Inertia_AssertLayout();
+
         rw::math::vpu::Vector3 mInvTens;      // :176  +0x00  local inverse inertia diagonal
         f32                    mInvMass;      // :177  +0x10
         f32                    mSpherical;    // :178  +0x14  sleep-energy angular scale
@@ -69,6 +118,47 @@ namespace physics
         f32                    mLinearDrag;   // :181  +0x20
         f32                    mAngularDrag;  // :182  +0x24
     };
+
+    // RELOCATED HERE 2026-08-04 (task #141) from CgsPhysicsSimulationModule.cpp:225..231,
+    // where they pinned the now-retired `CgsPhysics::Inertia` copy. They belong next to the
+    // definition they describe: pins that live in a different TU from the layout they gate
+    // are pins that stop gating the moment someone edits the other copy.
+    //
+    // Every offset is X360-attested TWICE over, by two functions that never see each other:
+    //   * the stores in CgsPhysics::RigidBodyData::RigidBodyData @0x827DB728 (the ctor above)
+    //   * the loads in rw::physics::RigidBody::DynamicUpdate  @0x82BC2B78 (see the header
+    //     comment: 0x14/0x18/0x1C scalar, 0x20/0x24 via lvlx)
+    // The 0x00 and 0x10 seats come from the ctor's `stvx128 v0,r0,r11` + `stfs f0,0x10(r11)`.
+    //
+    // ⚠️ ADJACENCY, NOT JUST A TOTAL SIZE. The last two pins gate mAngularDrag against
+    // `mLinearDrag + sizeof(f32)`, because a total-`sizeof` assert on this type is absorbed
+    // by the 8 bytes of tail padding the leading alignas(16) Vector3 forces -- i.e. a total
+    // check would sit there GREEN through a 2-field defect. Tamper-tested: moving any single
+    // member fails at least one pin.
+    inline void _rw_physics_Inertia_AssertLayout()
+    {
+        static_assert(offsetof(Inertia, mInvTens)     == 0x00, "mInvTens @+0x00 (ctor stvx128 v0,r0,r11)");
+        static_assert(offsetof(Inertia, mInvMass)     == 0x10, "mInvMass @+0x10 (ctor stfs f0(1.0f),0x10(r11))");
+        static_assert(offsetof(Inertia, mSpherical)   == 0x14, "mSpherical @+0x14 (ctor stfs f0(1.0f),0x14; DynamicUpdate lfs 0x14)");
+        static_assert(offsetof(Inertia, mMaxVelocity) == 0x18, "mMaxVelocity @+0x18 (ctor stfs f12(FLT_MAX); DynamicUpdate lfs 0x18)");
+        static_assert(offsetof(Inertia, mMaxOmega)    == 0x1C, "mMaxOmega @+0x1C (ctor stfs f12(FLT_MAX); DynamicUpdate lfs 0x1C)");
+        static_assert(offsetof(Inertia, mLinearDrag)  == 0x20, "mLinearDrag @+0x20 (ctor stfs f13(0.0f); DynamicUpdate lvlx +0x20)");
+        static_assert(offsetof(Inertia, mAngularDrag) == 0x24, "mAngularDrag @+0x24 (ctor stfs f13(0.0f); DynamicUpdate lvlx +0x24)");
+
+        // Adjacency form of the same six scalars -- survives a member WIDENING, which the
+        // absolute offsets above would too, but which a total-size check would not.
+        static_assert(offsetof(Inertia, mInvMass)     == offsetof(Inertia, mInvTens)     + sizeof(rw::math::vpu::Vector3), "mInvMass follows mInvTens");
+        static_assert(offsetof(Inertia, mSpherical)   == offsetof(Inertia, mInvMass)     + sizeof(f32), "mSpherical follows mInvMass");
+        static_assert(offsetof(Inertia, mMaxVelocity) == offsetof(Inertia, mSpherical)   + sizeof(f32), "mMaxVelocity follows mSpherical");
+        static_assert(offsetof(Inertia, mMaxOmega)    == offsetof(Inertia, mMaxVelocity) + sizeof(f32), "mMaxOmega follows mMaxVelocity");
+        static_assert(offsetof(Inertia, mLinearDrag)  == offsetof(Inertia, mMaxOmega)    + sizeof(f32), "mLinearDrag follows mMaxOmega");
+        static_assert(offsetof(Inertia, mAngularDrag) == offsetof(Inertia, mLinearDrag)  + sizeof(f32), "mAngularDrag follows mLinearDrag");
+
+        // The X360-attested ARRAY STRIDE (GetInertia @0x8289D0C0: 48*(idx+50)). This one IS
+        // a total size, and it is legitimate here because it is a stride claim about
+        // CgsPhysics::RigidBodyData::maInertias[200], not a field-coverage claim.
+        static_assert(sizeof(Inertia) == 48, "Inertia array stride 48 (GetInertia 48*(idx+50))");
+    }
 
 } // namespace physics
 } // namespace rw
