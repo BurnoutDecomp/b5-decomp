@@ -25,11 +25,18 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"           // CgsContainers::BitArray<200>
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // the module base class
 
+// ⭐ THE REAL CgsPhysics::RigidBodyId, by value -- RigidBodyData embeds 200 of them and this
+// header no longer carries a copy (task #141). Cheap and cycle-free: CgsRigidBody.h is
+// header-only and reaches nothing but types.hpp + CgsEntityId.h.
+#include "GameShared/GameClasses/Physics/CgsRigidBody.h"
+
 // ⭐ THE REAL rw::physics::Inertia, by value -- `CgsPhysics::Inertia` is now an alias onto it
 // (see the block below) and RigidBodyData embeds 200 of them, so a forward declaration will
 // not do. Safe to pull in here where CgsPhysicsSimulationIO_Events.h is not: inertia.h reaches
 // only types.hpp, rw/math/vpu/types.h, <cfloat> and <cstddef>, so it drags no CgsPhysics type
-// into this header's ~30 includers and cannot make the open RigidBodyId ODR fork meet.
+// into this header's ~30 includers. (This line used to end "...and cannot make the open
+// RigidBodyId ODR fork meet". There is no open RigidBodyId fork any more -- see the block at
+// the RigidBodyId note below, retired the same day.)
 #include "rw/physics/inertia.h"
 
 // rw::physics pointer members of PhysicsSimulationModule. Forward declarations
@@ -39,10 +46,12 @@
 namespace rw { namespace physics { class Simulation; class PairSet; class Joint; class Drive; struct RigidBody; } }
 
 // The per-frame input buffer the nineteen Process*Queue drains read. Forward-declared only:
-// CgsPhysicsSimulationModuleIO.h includes CgsPhysicsSimulationIO_Events.h, which this header
-// must NOT pull in (it would drag CgsRigidBody.h's RigidBodyId into every TU that sees this
-// one and detonate the open ODR fork with the struct declared below). The .cpp includes the
-// full definition. ⚠️ CLASS KEY IS `struct`, matching CgsPhysicsSimulationModuleIO.h.
+// CgsPhysicsSimulationModuleIO.h includes CgsPhysicsSimulationIO_Events.h, and this header keeps
+// that chain out of its ~30 includers on COMPILE-COST grounds alone. ⚠️ The reason recorded here
+// until 2026-08-04 -- "it would drag CgsRigidBody.h's RigidBodyId in and detonate the open ODR
+// fork with the struct declared below" -- died with that struct (task #141); this header now
+// includes CgsRigidBody.h itself. The .cpp includes the full definition.
+// ⚠️ CLASS KEY IS `struct`, matching CgsPhysicsSimulationModuleIO.h.
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InputBuffer; } }
 
 // The abstract resource allocator PhysicsSimulationModule::Prepare carves the simulation,
@@ -123,20 +132,37 @@ namespace CgsPhysics
     struct JointId { u64 muId; };
     struct DriveId { u64 muId; };
 
-    // CgsPhysics::RigidBodyId (CgsRigidBody.h:48): a single uint64_t id (DWARF
-    // + Feb-2007 source both name the member `mId`). IsInvalid() compares mId
-    // against the module-global sentinel K_INVALID_RIGID_BODY_ID (X360 static
-    // qword_82F33E18; value 0xFFFFFFFFFFFFFFFF per CgsRigidBody.h:87). Only the
-    // RigidBodyData slot tripwires consume it, so just the id + IsInvalid() are
-    // modelled.
-    struct RigidBodyId
-    {
-        u64 mId;                                    // CgsRigidBody.h:84/120
-        bool IsInvalid() const;
-    };
-    // CgsRigidBody.h:87: static const RigidBodyId K_INVALID_RIGID_BODY_ID = ~0ull.
-    extern const RigidBodyId K_INVALID_RIGID_BODY_ID;
-    inline bool RigidBodyId::IsInvalid() const { return mId == K_INVALID_RIGID_BODY_ID.mId; }
+    // ⚠️ THE SECOND TYPE FORK RETIRED ON 2026-08-04 (task #141, right behind Inertia).
+    // `CgsPhysics::RigidBodyId` and its `K_INVALID_RIGID_BODY_ID` sentinel were declared HERE
+    // as a second, cut-down copy (struct, PUBLIC mId, `extern const` sentinel defined in the
+    // .cpp) alongside the real one in CgsRigidBody.h (class, PRIVATE mId, `static const`
+    // sentinel). THREE committed headers documented it as open and none could resolve it,
+    // because each of them could only see half the problem:
+    //   * CgsPhysicsSimulationIO_Events.h (the InAddJoint / InAddRigidBody handle notes) --
+    //     "an open ODR fork ... including both is a hard C2011", and typed its own
+    //     mID/mParentBodyId/mChildBodyId as raw u64 to dodge it;
+    //   * BrnPhysicsModule.h (the mWorldRigidBodyId note) -- deliberately did NOT include
+    //     CgsRigidBody.h "because of it", and called PhysicsModule "the closest any TU has
+    //     come to making them meet";
+    //   * this header (the InputBuffer forward-decl note above) -- must not pull in the
+    //     events header for the same reason.
+    // ⚠️ Cross-references here are deliberately BY NOTE, not by line number: the previous set
+    // of line cites had all drifted, and a stale cite is how the false "JointId is forked"
+    // claim (corrected in the same commit) got believed and copied in the first place.
+    // The C2011 was never the disease. It was the ONE diagnostic the fork could still produce:
+    // unlike Inertia, these two differ in CLASS KEY, so MSVC mangles them apart (U vs V) and a
+    // cross-copy call would have been an LNK2019 rather than a silent miscompile. Deleting the
+    // copy removes the fork AND the reason nobody could include CgsRigidBody.h.
+    //
+    // ⚠️ THE COPY WAS NOT LAYOUT-WRONG, SO NOTHING WOULD HAVE CAUGHT IT DRIFTING. Both spell a
+    // single u64 and both sentinels are 0xFFFFFFFFFFFFFFFF, so every seat, every `std`, and the
+    // sizeof==8 gate agreed -- which is exactly why it survived three headers' worth of review.
+    // Reconstruct against the real class from here on; do not re-declare it locally.
+    //
+    // On the `static const` vs `extern const` question BrnPhysicsModule.h's fork note left open:
+    // the console settles it by emitting a PER-TU copy of the sentinel (qword_82F33E18 in the
+    // sim-module TU, qword_82F2A3A8 in the vehicle-manager TU), which is what CgsRigidBody.h's
+    // header-scope `static const` produces. The `extern const` here was the invention.
 
     // ⚠️ WAS A TYPE FORK UNTIL 2026-08-04 (task #135). This used to declare THREE OF ITS OWN
     // opaque `CgsPhysics::rw_physics::{Joint,Drive,RigidBody}` structs, distinct from the real

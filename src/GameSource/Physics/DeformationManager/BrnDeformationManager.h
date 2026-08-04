@@ -40,7 +40,47 @@
 // ============================================================================
 
 #include "types.hpp"           // s32, s8, u8, u16, u32, f32
-#include "BrnCommonTypes.h"    // Vector3, Matrix44Affine, VecFloat, EntityId, RigidBodyId
+#include "BrnCommonTypes.h"    // Vector3, Matrix44Affine, VecFloat, EntityId
+// ⛔⛔ THE RIGID-BODY HANDLE HERE IS EIGHT BYTES, AND UNTIL 2026-08-04 THIS HEADER MADE IT FOUR
+// (task #141). BrnCommonTypes.h:28 declares a GLOBAL-namespace stand-in `struct RigidBodyId
+// { u32 muValue; }`, and the three uses below were UNQUALIFIED, so inside
+// `namespace BrnPhysics::Deformation` they all bound to that 4-byte stand-in instead of the real
+// 8-byte `CgsPhysics::RigidBodyId`.
+// ⛔⛔ ONLY THESE THREE ARE FIXED. THE NAME IS STILL USED FOR A DIFFERENT, 32-BIT HANDLE
+// ELSEWHERE IN THIS SUBSYSTEM, AND THAT IS *NOT* SAFE TO "FINISH" WITHOUT ASM WORK.
+// BrnDeformationEvents.h types five separate `mHandlingBodyID` fields as the same unqualified
+// `RigidBodyId`, and the committed bodies in BrnDeformationManager.cpp do genuinely 32-BIT
+// arithmetic on them -- `mHandlingBodyID.muValue >> 24` for the owner type,
+// `(... >> 10) & 0x3FFF` for the race-car/traffic index, and at :347/:413 they convert the whole
+// thing to a 32-bit `EntityId`. `.muValue` exists ONLY on the stand-in, and that bit layout
+// CONTRADICTS CgsRigidBody.h's documented packing (high dword = EntityId, low dword = index).
+// So the handling-body handle may legitimately be a different 32-bit id, or those bodies may be
+// wrong -- the DWARF spells both `RigidBodyId` and cannot separate them. ⚠️ Deciding it needs
+// the X360 asm for AddDeformationModel @0x825A95E0's caller and the Process*Events drains.
+// mWorldRigidBodyId is fixed here because its width is settled INDEPENDENTLY by console
+// adjacency (below) and because nothing reads or writes it yet, so the change is inert.
+// ⭐ THE CONSOLE ADJACENCY IS DECISIVE -- and it closes with ZERO padding only on 8 bytes:
+//     mModelsAdded      @ +75904  (BrnDeformationDebugComponent.cpp:736)  BitArray<28> = 8B
+//     maGlobalEntityIDs @ +75912  = 75904 + 8                             28 * 4 = 112B
+//     mWorldRigidBodyId @ +76024  = 75912 + 112                           <-- 8 bytes
+//     mpaModels         @ +76032  = 76024 + 8   ** THE ATTESTED OFFSET ** (Contacts.cpp:13,
+//                                                DebugComponent.cpp:737)
+//   At 4 bytes the chain lands mpaModels on +76028 and misses its attested seat by four.
+//   The DWARF agrees independently: it spells this member's type `RigidBodyId` at
+//   BrnDeformationManager.h:364 with the SAME spelling it uses at BrnPhysicsModule.h:83, and
+//   that one is already proven 8 bytes by a hard `stdx` plus a committed static_assert
+//   (BrnPhysicsModule_layout_check.cpp). There is only one real `CgsPhysics::RigidBodyId` -- the
+//   BrnCommonTypes.h struct is a reconstruction stand-in, not a game type.
+// ⚠️ WHY IT MATTERED: the handle packs the owning EntityId in the HIGH 32 bits and the body
+// index in the LOW 32 (CgsRigidBody.h:3-5), so a 4-byte seat keeps the index and discards the
+// owning EntityId with no diagnostic. It was latent only because SetWorldBodyId /
+// FindModelIndexByPartID are still
+// declaration-only -- nothing writes the member yet.
+// ⭐ THE GATE THAT WOULD HAVE CAUGHT IT DID NOT EXIST. It does now, and it is in
+// **BrnDeformationManager_Construct.cpp** (DeformationManager::_AssertLayout) -- NOT in
+// BrnDeformationManager.cpp, which is UNMOUNTED and where a gate is never compiled. That mistake
+// was made and caught by a tamper test on 2026-08-04; see the banner over the gate.
+#include "GameShared/GameClasses/Physics/CgsRigidBody.h"   // the REAL CgsPhysics::RigidBodyId (8B)
 
 // ---- homed sub-objects embedded BY VALUE (full layout required) --------------------
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h"                  // DeformationState (mStateOutput)
@@ -258,7 +298,9 @@ namespace Deformation
         // ----- ids / contact events (DWARF :156-171) -------------------------------------
 
         // :156. Set the world (static environment) rigid-body id used for vehicle-vs-world contacts.
-        void SetWorldBodyId(RigidBodyId lWorldRigidBodyId);
+        // ⚠️ QUALIFIED DELIBERATELY -- unqualified, this bound to the 4-byte BrnCommonTypes.h
+        // stand-in and truncated the caller's handle. See the header note at the top.
+        void SetWorldBodyId(CgsPhysics::RigidBodyId lWorldRigidBodyId);
 
         // :164. Build a detached-PART contact event from a spy + potential contact.
         void CreateDetachedPartContactEvent(PhysicalCarPartContact* lpOutPhysicalCarPartContact,
@@ -415,6 +457,14 @@ namespace Deformation
         DeformableObject* GetDeformableObject(s32 liIndex);
 
     private:
+        // ⭐ NOT A GAME FUNCTION. Never called; bodied in the MOUNTED BrnDeformationManager.cpp
+        // and nothing but static_asserts. Static so it can see the private tail below.
+        // This class had NO layout gate of any kind until 2026-08-04 (task #141), which is how a
+        // 4-byte mWorldRigidBodyId sat in an 8-byte seat unnoticed. ⚠️ It gates by ADJACENCY
+        // (prev + sizeof(prev)) against the console offsets, NOT by a total sizeof -- a total
+        // would be absorbed by padding on this pointer-bearing, over-aligned class.
+        static void _AssertLayout();
+
         // ====================================================================
         // Private helpers (DWARF :413-497). DECLARE-ONLY -- bodies owned by the
         // DeformationManager TU.
@@ -440,7 +490,7 @@ namespace Deformation
         // :443 / :447 / :451. Model-index lookups (by local entity id / global entity id / part body id).
         s32 FindModelIndexByEntityID(EntityId lEntityId) const;
         s32 FindModelIndexByGlobalEntityID(EntityId lGlobalEntityId);
-        s32 FindModelIndexByPartID(RigidBodyId lPartBodyId);
+        s32 FindModelIndexByPartID(CgsPhysics::RigidBodyId lPartBodyId);   // ⚠️ qualified -- see header note
 
         // :454. Output every live model's sensor state into the output interface.
         void OutputSensorState(DeformationOutputInterface* lpOutput);
@@ -488,7 +538,8 @@ namespace Deformation
         DetachedWheelManager mDetachedWheelManager;   // :361 the detached-WHEEL manager (BY VALUE)
         CgsContainers::BitArray<28u> mModelsAdded;    // :362 which model slots are live
         EntityId             maGlobalEntityIDs[28];   // :363 global scene-entity id per model slot
-        RigidBodyId          mWorldRigidBodyId;       // :364 the static-world rigid-body id (SetWorldBodyId)
+        CgsPhysics::RigidBodyId mWorldRigidBodyId;    // :364 the static-world rigid-body id (SetWorldBodyId)
+                                                      //      X360 +76024, EIGHT bytes -- see the header note
         DeformableObject*    mpaModels;               // :365 the allocated pool of deformable models (Prepare)
         s32                  miNumUsedModels;         // :366 live model count
         s32                  miPlayerModelIndex;      // :367 player car's model slot (-1 if none)

@@ -293,11 +293,16 @@ namespace Vehicle
         static void _AssertLayout();
 
         // The invalid-JointId sentinel the two joint asserts compare against (X360 qword_82F2A3B0).
-        // Mirrored locally for the same reason BrnArticulatedJoint.h mirrors KU_INVALID_ENTITY_ID:
-        // CgsPhysics::JointId is one of the names that is currently declared TWICE in this tree
+        // ⛔ THE REASON RECORDED HERE UNTIL 2026-08-04 WAS FALSE (corrected in task #141). It read:
+        // "CgsPhysics::JointId is one of the names that is currently declared TWICE in this tree
         // (CgsPhysicsSimulationModule.h:102 vs the CgsRigidBody.h family), so pulling either header
-        // in here would make an open ODR fork meet and fail to compile. The handle is a single u64
-        // in both readings.
+        // in here would make an open ODR fork meet and fail to compile." CgsRigidBody.h declares
+        // exactly one type -- RigidBodyId -- and no JointId at all, so there was never a JointId
+        // fork to meet. (The RigidBodyId fork WAS real; it is retired, and the .cpp now includes
+        // CgsRigidBody.h and uses the real K_INVALID_RIGID_BODY_ID.)
+        // ⭐ This constant survives for a different and honest reason: `CgsPhysics::JointId`
+        // (CgsPhysicsSimulationModule.h) carries no sentinel of its own anywhere in the tree, so
+        // there is nothing to include. Give it a real home when a JointId consumer needs one.
         static const u64 KU64_INVALID_JOINT_ID = 0xFFFFFFFFFFFFFFFFull;
 
     private:

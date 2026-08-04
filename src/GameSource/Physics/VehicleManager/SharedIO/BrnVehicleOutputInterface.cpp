@@ -1,5 +1,11 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+// ⭐ CgsPhysics::K_INVALID_RIGID_BODY_ID, the real one (X360 qword_82F2A3A8 in this TU). Was
+// mirrored as a local u64 constant until 2026-08-04 because the RigidBodyId ODR fork made
+// including this header a hard C2011; the fork is retired (task #141) and the mirror with it.
+// Matches the two sibling vehicle-manager TUs (BrnVehicleManager.cpp:7,
+// BrnVehicleManager_Construct.cpp:5), which have always included it directly.
+#include "GameShared/GameClasses/Physics/CgsRigidBody.h"
 
 #include <cstring>   // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
 #include <cstddef>   // offsetof (VehicleOutputRequestInterface::_AssertLayout)
@@ -168,21 +174,27 @@ namespace Vehicle
     //   ld r10, 0x10(r29) ; cmpld qword_82F2A3A8  -> "...mChildBodyId  != K_INVALID_RIGID_BODY_ID" (:720)
     //   addis r3,r28,1 ; addi r3,r3,-0x6420 ; bl BaseEventQueue<InAddJoint>::AddEvent
     // The two sentinels are the module-global invalid handles (qword_82F2A3B0 == invalid JointId,
-    // qword_82F2A3A8 == CgsPhysics::K_INVALID_RIGID_BODY_ID). Both are mirrored as local constants
-    // rather than included: CgsPhysics::RigidBodyId / JointId are each declared twice in this tree
-    // (CgsRigidBody.h vs CgsPhysicsSimulationModule.h -- an open ODR fork that has never met in one
-    // TU), so including either header here would turn a latent fork into a hard C2011.
+    // qword_82F2A3A8 == CgsPhysics::K_INVALID_RIGID_BODY_ID).
+    // ⭐ 2026-08-04 (task #141): the rigid-body sentinel is now the REAL CgsRigidBody.h one, not a
+    // local mirror. This note used to justify mirroring both with "CgsPhysics::RigidBodyId /
+    // JointId are each declared twice in this tree (CgsRigidBody.h vs CgsPhysicsSimulationModule.h
+    // -- an open ODR fork), so including either header here would turn a latent fork into a hard
+    // C2011". Half of that was true and is now fixed; ⛔ THE OTHER HALF WAS NEVER TRUE:
+    // CgsRigidBody.h declares no JointId whatsoever, so `CgsPhysics::JointId` was never forked --
+    // the only other JointId in the tree is BrnPhysics::Vehicle::JointId (BrnArticulatedJoint.h:52),
+    // a different namespace. KU64_INVALID_JOINT_ID stays a local constant only because
+    // CgsPhysics::JointId genuinely has no sentinel of its own anywhere in the tree yet.
     // ---------------------------------------------------------------------------------------
     void VehicleOutputRequestInterface::AddJoint(const InAddJoint& lAddJointEvent)
     {
-        // X360 qword_82F2A3A8 == CgsPhysics::K_INVALID_RIGID_BODY_ID (CgsRigidBody.h:41, ~0ull).
-        static const u64 KU64_INVALID_RIGID_BODY_ID = 0xFFFFFFFFFFFFFFFFull;
-
         CGS_ASSERT(lAddJointEvent.mu64Id != KU64_INVALID_JOINT_ID,
                    "!lAddJointEvent.mId.IsInvalid()");
-        CGS_ASSERT(lAddJointEvent.mu64ParentBodyId != KU64_INVALID_RIGID_BODY_ID,
+        // X360 qword_82F2A3A8 == CgsPhysics::K_INVALID_RIGID_BODY_ID (CgsRigidBody.h:41, ~0ull);
+        // the RigidBodyId -> u64 conversion is the class's own `operator u64() const` (:35), which
+        // is what the console's bare `ld`/`cmpld` pair is.
+        CGS_ASSERT(lAddJointEvent.mu64ParentBodyId != CgsPhysics::K_INVALID_RIGID_BODY_ID,
                    "lAddJointEvent.mParentBodyId != CgsPhysics::K_INVALID_RIGID_BODY_ID");
-        CGS_ASSERT(lAddJointEvent.mu64ChildBodyId != KU64_INVALID_RIGID_BODY_ID,
+        CGS_ASSERT(lAddJointEvent.mu64ChildBodyId != CgsPhysics::K_INVALID_RIGID_BODY_ID,
                    "lAddJointEvent.mChildBodyId != CgsPhysics::K_INVALID_RIGID_BODY_ID");
 
         mAddJointQueue.AddEvent(lAddJointEvent);

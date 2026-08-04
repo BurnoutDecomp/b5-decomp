@@ -42,12 +42,13 @@ namespace CgsPhysics
     // :39..:43); the OFFSETS are X360-attested off the single consumer, PhysicsSimulation-
     // Module::ProcessAddRigidBodyQueue @0x828A2708, and the two agree exactly.
     //
-    // ⚠️ HOMED HERE, NOT IN CgsRigidBody.h WHERE THE DWARF PUTS IT. CgsRigidBody.h defines
-    // `class CgsPhysics::RigidBodyId`, and CgsPhysicsSimulationModule.h defines a second
-    // `struct CgsPhysics::RigidBodyId` -- an open ODR fork. This header is included by ~30
-    // EventQueue_* TUs and by CgsPhysicsSimulationModule.h itself, so including CgsRigidBody.h
-    // from here would make the fork meet and fail with a hard C2011. Same reasoning, and the
-    // same workaround, as InAddJoint's u64 handles below.
+    // ⚠️ HOMED HERE, NOT IN CgsRigidBody.h WHERE THE DWARF PUTS IT -- but ⭐ NOT FOR THE REASON
+    // THIS NOTE USED TO GIVE. It said CgsRigidBody.h could not be included from here because
+    // CgsPhysicsSimulationModule.h carried a second `struct CgsPhysics::RigidBodyId` and the two
+    // would collide with a hard C2011. That fork was retired on 2026-08-04 (task #141) and the
+    // C2011 no longer exists. What remains is only that this header is included by ~30
+    // EventQueue_* TUs, so re-homing the record is a churn decision, not a blocked one.
+    // Same correction applies to InAddJoint's u64 handles below.
     //
     // ⭐ mInertia IS `rw::physics::Inertia`, the vendor type, and since 2026-08-04 (task #141)
     // that is now the ONLY definition of this record in the tree. CgsPhysicsSimulationModule.h
@@ -94,13 +95,26 @@ namespace PhysicsSimulationIO
     //     ld r10, 8(r29)     -> "lAddJointEvent.mParentBodyId != CgsPhysics::K_INVALID_RIGID_BODY_ID" (:719)
     //     ld r10, 0x10(r29)  -> "lAddJointEvent.mChildBodyId  != CgsPhysics::K_INVALID_RIGID_BODY_ID" (:720)
     // So the names come from the image and the offsets/widths from the asm; nothing is invented.
-    // ⚠️ TYPED u64 DELIBERATELY, NOT AS CgsPhysics::JointId / CgsPhysics::RigidBodyId. Those two
-    // names are each defined TWICE in this tree -- CgsRigidBody.h:24 (class, private mId,
-    // `static const K_INVALID_RIGID_BODY_ID`) and CgsPhysicsSimulationModule.h:102/111 (structs,
-    // public mId, `extern const K_INVALID_RIGID_BODY_ID` defined in the MOUNTED
-    // CgsPhysicsSimulationModule.cpp:183) -- an open ODR fork that has simply never met in one TU.
-    // Including either header here would make them meet and fail with a hard C2011. The handles are
-    // a single u64 in both readings, so the width and the stores are identical either way.
+    // ⚠️ TYPED u64, AND THE ORIGINAL REASON EXPIRED ON 2026-08-04 (task #141). The note here
+    // used to say these could not be `CgsPhysics::RigidBodyId` / `JointId` because each name was
+    // defined TWICE in this tree and pulling either header in would make the fork meet and fail
+    // with a hard C2011. That justification is now retired on BOTH counts, and the second count
+    // was never true in the first place:
+    //   * RigidBodyId -- the fork WAS real and IS now gone: CgsPhysicsSimulationModule.h dropped
+    //     its copy and includes CgsRigidBody.h. Measured, not assumed: BrnPhysicsModule.cpp is
+    //     mounted, it pulls that chain AND BrnVehicleManager.h, and it compiles clean.
+    //   * ⛔ JointId -- THERE WAS NEVER A FORK. CgsRigidBody.h declares exactly one type,
+    //     RigidBodyId; it has no JointId at all. The only other `JointId` in the tree is
+    //     `BrnPhysics::Vehicle::JointId` in BrnArticulatedJoint.h -- a DIFFERENT NAMESPACE from
+    //     `CgsPhysics::JointId` (declared just above the RigidBodyId note in
+    //     CgsPhysicsSimulationModule.h). Two distinct types that share a simple name are not an
+    //     ODR fork. ⚠️ The same false claim is committed in BrnVehicleOutputInterface.{h,cpp};
+    //     it spread BY CITATION, which is how it survived. All sites corrected in one commit,
+    //     and the cross-references are now by-note, because every line cite involved had drifted.
+    // ⭐ So what actually blocks promoting these three fields is only COST, not a collision:
+    // it is a type change across ~30 EventQueue_* TUs and deserves its own build + boot test
+    // rather than a ride on the de-fork. The handles are a single u64 in every reading, so the
+    // width and the stores are identical meanwhile.
     // sizeof stays 192 and alignof stays 16 (three u64 + 168 tail bytes), gated below.
     struct alignas(16) InAddJoint : public Event
     {
@@ -144,11 +158,13 @@ namespace PhysicsSimulationIO
     // a word at +176 (meState). The DWARF field order lands on exactly those offsets, and the
     // total falls out at 176 + 4 -> **192, the attested stride**, with nothing invented.
     //
-    // ⚠️ mID IS TYPED u64, NOT CgsPhysics::RigidBodyId -- the same deliberate choice, for the
-    // same reason, as InAddJoint's three handles above: RigidBodyId is defined twice in this
-    // tree (CgsRigidBody.h:24 and CgsPhysicsSimulationModule.h:111) and pulling either header
-    // in here would make the fork meet and fail with a hard C2011. It is one u64 in both
-    // readings, so the width and the stores are identical.
+    // ⚠️ mID IS TYPED u64, NOT CgsPhysics::RigidBodyId -- the same deliberate choice as
+    // InAddJoint's three handles above, but ⭐ NO LONGER FOR THE SAME REASON. RigidBodyId was
+    // defined twice in this tree (CgsRigidBody.h:24 and CgsPhysicsSimulationModule.h) and
+    // pulling either header in would have been a hard C2011; the fork was retired on 2026-08-04
+    // (task #141) and that collision is gone. Promoting this field is now merely a ~30-TU type
+    // change that wants its own build + boot test. It is one u64 in both readings, so the width
+    // and the stores are identical meanwhile.
     struct alignas(16) InAddRigidBody : public Event
     {
         u64          mID;          // @+0x00  DWARF :69 (a CgsPhysics::RigidBodyId handle)

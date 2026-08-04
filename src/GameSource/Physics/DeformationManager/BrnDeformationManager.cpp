@@ -482,5 +482,11 @@ namespace Deformation
         // Finally, output every live model's sensor state into the output interface.
         OutputSensorState(lpOutput);
     }
+
+    // ⚠️ DeformationManager::_AssertLayout IS NOT HOMED HERE. This TU is UNMOUNTED (see
+    // build_game_exe.bat's `rem BrnDeformationManager.cpp  25 unresolved`), so a gate placed
+    // here would never be compiled -- it was, briefly, and a tamper test caught it passing with
+    // the very defect it was written to catch. It lives in the MOUNTED
+    // BrnDeformationManager_Construct.cpp instead. Do not re-home it here until this TU mounts.
 }
 }

@@ -119,5 +119,75 @@ namespace Deformation
         // -- the debug component's registration latch. Modelled inside the debug component's own
         // home; no observable state on the manager.)
     }
+
+    // ==================================================================================================
+    // DeformationManager::_AssertLayout -- NOT A GAME FUNCTION. Never called; nothing but
+    // static_asserts. Added 2026-08-04 (task #141). DeformationManager had NO layout gate of any
+    // kind, which is exactly how a FOUR-byte `::RigidBodyId` stand-in (BrnCommonTypes.h:28) sat in
+    // the EIGHT-byte mWorldRigidBodyId seat without a single check firing.
+    //
+    // ⛔⛔ HOMED HERE, DELIBERATELY, AND THE REASON IS THE WHOLE POINT OF THE GATE.
+    // It was first written into BrnDeformationManager.cpp -- which is UNMOUNTED (this very file's
+    // banner above records the measured 25-unresolved trial link, and build_game_exe.bat carries it
+    // only as a `rem`). A gate in an unmounted TU is not compiled, so it cannot fail. The tamper
+    // test below caught it passing WITH the defect in place. This TU is mounted, so this gate runs.
+    // ⚠️ If BrnDeformationManager.cpp is ever mounted, this stays here -- two definitions would be
+    // a duplicate symbol.
+    //
+    // ⚠️ ADJACENCY (prev + sizeof(prev)) AGAINST THE CONSOLE OFFSETS, NEVER A TOTAL sizeof.
+    // A total-size assert on this pointer-bearing, over-aligned class is absorbed by padding and by
+    // the members that widen on x64, and would be green with the defect present.
+    //
+    // ⭐⭐ EVERY TERM IS `sizeof(DeformationManager::<member>)`, NEVER `sizeof(<Type>)`.
+    // The first draft spelled the types (`sizeof(CgsPhysics::RigidBodyId)`) and was therefore
+    // INVARIANT under the defect -- re-typing the member could not move an assert that names the
+    // type directly. Such a gate only restates the header back to itself.
+    //
+    // Console offsets, all attested in committed asm notes:
+    //   mModelsAdded       @ +75904   BrnDeformationDebugComponent.cpp:736
+    //   mpaModels          @ +76032   BrnDeformationManager_Contacts.cpp:13, DebugComponent.cpp:737
+    //   miNumUsedModels    @ +76036   this file, Construct
+    //   miPlayerModelIndex @ +76040   this file, Construct
+    // ⚠️ BrnDeformationManager_Contacts.cpp:16 also claims "the mModelsAdded words @ +18976".
+    // That value is IMPOSSIBLE and is deliberately NOT used: it sits below mDetachedPartManager
+    // (+48112), which PRECEDES mModelsAdded in DWARF member order (:360 vs :362). +75904 is the
+    // only value consistent with both the member order and the attested mpaModels seat.
+    //
+    // Every member below is host-stable (no pointer participates), so the console arithmetic is
+    // valid arithmetic on the x64 host too. mpaModels itself is only ever the RESULT of the chain,
+    // never a term -- it is a pointer and widens.
+    //
+    // ⭐ TAMPER-TESTED 2026-08-04, and the FIRST version PASSED that test -- i.e. it was worthless
+    // -- for both reasons above. Re-pointing mWorldRigidBodyId at the 4-byte `::RigidBodyId`
+    // stand-in now fails the build on BOTH of the last two asserts (the size one and the
+    // adjacency one, 76024 + 4 == 76028 != 76032): a real gate fails in a cascade.
+    // ⛔ If you edit this function, re-run that tamper test. A gate that has never been made to
+    // fail is not a gate.
+    // ==================================================================================================
+    void DeformationManager::_AssertLayout()
+    {
+        // mModelsAdded is one 64-bit BitArray field (CgsBitArray.h:22, 28 bits -> 1 field).
+        static_assert(sizeof(DeformationManager::mModelsAdded) == 8u,
+                      "DeformationManager: mModelsAdded is ONE 64-bit BitArray field");
+        static_assert(75904u + sizeof(DeformationManager::mModelsAdded) == 75912u,
+                      "DeformationManager: maGlobalEntityIDs must abut mModelsAdded at +75912");
+
+        // 28 scene-entity ids, 4 bytes each.
+        static_assert(sizeof(DeformationManager::maGlobalEntityIDs) == 112u,
+                      "DeformationManager: maGlobalEntityIDs is 28 * 4 bytes");
+        static_assert(75912u + sizeof(DeformationManager::maGlobalEntityIDs) == 76024u,
+                      "DeformationManager: mWorldRigidBodyId must abut maGlobalEntityIDs at +76024");
+
+        // ⭐ THE LOAD-BEARING PAIR. The rigid-body handle packs the owning EntityId in the HIGH
+        // dword and the body index in the LOW dword (CgsRigidBody.h:3-5), so a 4-byte seat keeps
+        // the index and discards the owning entity with no diagnostic at all. These are the two
+        // asserts the 4-byte stand-in must fail.
+        static_assert(sizeof(DeformationManager::mWorldRigidBodyId) == 8u,
+                      "DeformationManager: mWorldRigidBodyId is EIGHT bytes -- it is "
+                      "CgsPhysics::RigidBodyId, not the 4-byte BrnCommonTypes.h stand-in");
+        static_assert(76024u + sizeof(DeformationManager::mWorldRigidBodyId) == 76032u,
+                      "DeformationManager: mpaModels sits at its attested +76032 ONLY if "
+                      "mWorldRigidBodyId is 8 bytes; at 4 the chain lands on +76028");
+    }
 }
 }
