@@ -40,8 +40,10 @@
 #include "vendor/renderware/physics/Jacobian.hpp"   // the 384-byte record + JacobianStride()
 #include "vendor/renderware/physics/Joint.hpp"
 #include "vendor/renderware/physics/Drive.hpp"
+#include "vendor/renderware/physics/JointFrames.hpp" // rw::math::vpu::QuaternionFromMatrix33 (AddRigidBody)
 
 #include <string.h>   // memset -- the `vspltisb v0,0` + four stvx128 block-clear
+#include <cfloat>     // FLT_MAX -- AddRigidBody's mKine seed (X360 flt_821815B0 = 0x7F7FFFFF)
 
 namespace rw
 {
@@ -604,6 +606,120 @@ void Simulation::RemoveRigidBody(RigidBody* lpBody)
 
     lpBody->mState = FREE_BODY;         // +0x8C <- 0
     ++m_FreeRB_Count;                   // +0x3C
+}
+
+// -------------------------------------------------------------------------------------
+// Simulation::AddRigidBody @ 0x82BC3318   (669 instructions)  -- the exact inverse of
+// RemoveRigidBody above: pop one node off the free list and splice it onto the static,
+// frozen or active list. See simulation.h for the per-path table and the transcription
+// notes; every offset quoted here was read off the asm this wave (task #140).
+//
+// The three console paths are ONE source-level body: the compiler emitted it three times
+// because SetStatic/SetDynamic, QuaternionFromMatrix33 and InertiaUpdate are all inlined
+// into each arm. Written once here, with the five per-path values selected up front --
+// that is what the source has to have looked like for the console to emit what it emits.
+// -------------------------------------------------------------------------------------
+RigidBody* Simulation::AddRigidBody(const rw::math::vpu::Matrix44Affine& lrFrame,
+                                    Inertia* lpInertia, BodyState leState)
+{
+    // `lwz r11,0x3C(r3)` ; `cmplwi r11,0` ; `li r3,0` -- the free list is the pool, so an
+    // exhausted pool is a NULL return, not an assert.
+    if (m_FreeRB_Count == 0u)
+        return nullptr;
+
+    --m_FreeRB_Count;                                   // `addi r9,r11,-1` ; `stw r9,0x3C`
+    RigidBody* const lpBody = m_FreeRB_Anchor->mRight;  // `lwz r10,0x1C` ; `lwz r11,0x2C(r10)`
+
+    // ---- the five per-path values (simulation.h's table) --------------------------------
+    RigidBody* lpAnchor;
+    u32*       lpuCount;
+    u32        luCool;
+    Inertia*   lpBodyInertia;
+
+    switch (leState)                                    // `cmpwi r6,1` then `cmpwi r6,2`
+    {
+    case STATIC_BODY:                                   // @0x82BC3A28
+        lpAnchor      = m_StaticRB_Anchor;              // +0x20
+        lpuCount      = &m_StaticRB_Count;              // +0x40
+        luCool        = m_CoolDown;                     // +0xAC <- +0xA4
+        lpBodyInertia = nullptr;                        // ⚠️ `stw r29(=0),0x5C` -- drops lpInertia
+        break;
+
+    case FROZEN_BODY:                                   // @0x82BC36CC
+        lpAnchor      = m_FrozenRB_Anchor;              // +0x24
+        lpuCount      = &m_FrozenRB_Count;              // +0x44
+        luCool        = m_CoolDown;                     // +0xAC <- +0xA4
+        lpBodyInertia = lpInertia;                      // `stw r5,0x5C`
+        break;
+
+    default:                                            // ACTIVE_BODY, the fallthrough arm
+        lpAnchor      = m_ActiveRB_Anchor;              // +0x28
+        lpuCount      = &m_ActiveRB_Count;              // +0x48
+        luCool        = 0u;                             // `li r31,0` ; `stw r31,0xAC`
+        lpBodyInertia = lpInertia;                      // `stw r5,0x5C`
+        break;
+    }
+
+    // ---- 1. unlink from the free list, append at the tail of the chosen list -------------
+    // 0x82BC3374..0x82BC33C4 is MoveToListTail store for store.
+    MoveToListTail(lpBody, lpAnchor);
+
+    lpBody->mState   = leState;                         // +0x8C
+    lpBody->mCool    = luCool;                          // +0xAC
+    lpBody->mInertia = lpBodyInertia;                   // +0x5C
+
+    // ---- 2. the frame, w lanes preserved -------------------------------------------------
+    // `lvx128` the CURRENT register, `lvx128` the frame row, `vrlimi128 vFrame,vCur,1,0`
+    // (w lane from the current value), store. On the PC the w payloads are their own
+    // members, so this is a plain .xyz assignment of four rows.
+    //     mRi (+0x40) <- r4+0x00     mUp  (+0x50) <- r4+0x10
+    //     mAt (+0x60) <- r4+0x20     mCom (+0x10) <- r4+0x30
+    lpBody->mRi.x  = lrFrame.xAxis.x;  lpBody->mRi.y  = lrFrame.xAxis.y;  lpBody->mRi.z  = lrFrame.xAxis.z;
+    lpBody->mUp.x  = lrFrame.yAxis.x;  lpBody->mUp.y  = lrFrame.yAxis.y;  lpBody->mUp.z  = lrFrame.yAxis.z;
+    lpBody->mAt.x  = lrFrame.zAxis.x;  lpBody->mAt.y  = lrFrame.zAxis.y;  lpBody->mAt.z  = lrFrame.zAxis.z;
+    lpBody->mCom.x = lrFrame.wAxis.x;  lpBody->mCom.y = lrFrame.wAxis.y;  lpBody->mCom.z = lrFrame.wAxis.z;
+
+    // ---- 3. the orientation quaternion ----------------------------------------------------
+    // 0x82BC33D0..0x82BC35A0. The three `vxor` masks the asm loads (unk_8327F120/F100/F0F0)
+    // are gQuatFromMat_{x,y,z}Signs; they read ALL ZERO out of the image only because they
+    // sit in a 9,216-byte zero run of the RW `.data` segment (0x8327E000..0x83280400).
+    // ⛔ Do NOT byte-recover them and do NOT read the zeros as "no sign flip" -- the routine
+    // is already committed from the Feb-2007 rwmath source it was compiled from.
+    {
+        rw::math::vpu::Matrix33 lBasis;
+        lBasis.xAxis = lrFrame.xAxis;
+        lBasis.yAxis = lrFrame.yAxis;
+        lBasis.zAxis = lrFrame.zAxis;
+        lpBody->mQuat = rw::math::vpu::QuaternionFromMatrix33(lBasis);   // +0x00
+    }
+
+    // ---- 4. the world inverse inertia, gated on the MEMBER, not the argument ---------------
+    // `lwz r10,0x5C(r11)` ; `cmplwi r10,0` ; `beq` -- the console re-reads mInertia back out
+    // of the body it just stored it into (0x82BC34C0/0x82BC3814/0x82BC3B74, one per path), so
+    // the STATIC arm always skips the block even though the block is emitted there.
+    if (lpBody->mInertia != nullptr)
+        lpBody->InertiaUpdate(lpBody->mInertia);        // mIfull/+0x70, mIsplt/+0x80, mInvm/+0x7C
+
+    // ---- 5. the common tail ---------------------------------------------------------------
+    // 0x82BC3660..0x82BC36B8. mVel/mOmega/mTorque are zeroed .xyz-only; mKine takes
+    // flt_821815B0, re-read from the image this wave as 0x7F7FFFFF == FLT_MAX.
+    lpBody->mVel.x    = 0.0f;  lpBody->mVel.y    = 0.0f;  lpBody->mVel.z    = 0.0f;
+    lpBody->mOmega.x  = 0.0f;  lpBody->mOmega.y  = 0.0f;  lpBody->mOmega.z  = 0.0f;
+    lpBody->mTorque.x = 0.0f;  lpBody->mTorque.y = 0.0f;  lpBody->mTorque.z = 0.0f;
+    lpBody->mKine     = FLT_MAX;                        // +0x9C
+
+    // ⚠️⚠️ mForce IS SEEDED WITH GRAVITY, NOT ZEROED. `lwz r10,0x4C(r11)` reads the body's own
+    // mStasis and `lvx128 v12,r10,r6(=0x90)` loads m_Gravity through it -- so the source
+    // really is `ResetForces(GetSimulation()->GetGravity())` on the body, not `this`. Same
+    // object (Initialize threads mStasis when it builds the free list), kept faithful anyway.
+    // ⚠️ The DEFAULT gravity in this build is -600.0f (flt_8202CF3C), not -9.81f.
+    {
+        const rw::math::vpu::Vector3& lrG = lpBody->mStasis->GetGravity();
+        lpBody->mForce.x = lrG.x;  lpBody->mForce.y = lrG.y;  lpBody->mForce.z = lrG.z;
+    }
+
+    ++(*lpuCount);                                      // `lwz/addi/stw` on +0x40/+0x44/+0x48
+    return lpBody;                                      // `mr r3,r11`
 }
 
 } // namespace physics

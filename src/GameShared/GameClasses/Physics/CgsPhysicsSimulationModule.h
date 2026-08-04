@@ -30,6 +30,13 @@
 // pairset}.h), so no ODR/class-key mismatch.
 namespace rw { namespace physics { class Simulation; class PairSet; class Joint; class Drive; struct RigidBody; } }
 
+// The per-frame input buffer the nineteen Process*Queue drains read. Forward-declared only:
+// CgsPhysicsSimulationModuleIO.h includes CgsPhysicsSimulationIO_Events.h, which this header
+// must NOT pull in (it would drag CgsRigidBody.h's RigidBodyId into every TU that sees this
+// one and detonate the open ODR fork with the struct declared below). The .cpp includes the
+// full definition. ⚠️ CLASS KEY IS `struct`, matching CgsPhysicsSimulationModuleIO.h.
+namespace CgsPhysics { namespace PhysicsSimulationIO { struct InputBuffer; } }
+
 // The abstract resource allocator PhysicsSimulationModule::Prepare carves the simulation,
 // its workspace and the three pair sets out of.
 // ⚠️ THE CLASS KEY IS `struct`, matching rw/rwcore_structs.h. A `class` here and a `struct`
@@ -283,6 +290,34 @@ namespace CgsPhysics
         // Checked slot read of &maInertias[liIndex] (X360 @0x8289D0C0).
         Inertia* GetInertia(s32 liIndex);
 
+        // X360 @0x8289D2E8 (62 instructions). ⚠️ ABSENT from .ida-exports -- recovered from
+        // BURNOUT_X360_ARTIST.XEX.i64 with headless IDA 9.3 (task #140), the same route that
+        // produced RigidBodyData::RigidBodyData and PhysicsSimulationModule::Destruct.
+        //
+        // Claim the first free slot (the first maGameIDs[] entry still holding the invalid
+        // sentinel), store the caller's live rw::physics body pointer and game id into it,
+        // COPY the caller's inertia block into maInertias[slot], and return the slot index.
+        // Its two callers are ProcessAddRigidBodyQueue @0x828A2AB8 and 0x821DBBC0.
+        //
+        // ⚠️ THE FREE-SLOT WALK HAS NO BOUND. The console's loop is
+        //     for (i = 0; !maGameIDs[i].IsInvalid(); ++i) ;
+        // with the `i < 200` test AFTER it, as a fire-and-continue assert -- so a full table
+        // walks off the end of maGameIDs and into maInertias before anything complains. Kept
+        // faithful; do not "fix" it into a bounded loop, that changes which slot is returned.
+        // ⚠️ THE INERTIA IS TAKEN BY REFERENCE, NOT BY POINTER -- DWARF
+        // CgsPhysicsSimulationModule.h:74 spells it `int32_t AddBody(RigidBody*, RigidBodyId,
+        // const Inertia&)`, and the body copies it, so the reference is the whole point.
+        s32 AddBody(rw_physics::RigidBody* lpRWBody, RigidBodyId lId, const Inertia& lrInertia);
+
+        // X360-ATTESTED WRITE, [INFERRED NAME] -- same provenance convention as
+        // JointData::IsSlotUsed above. ProcessAddRigidBodyQueue @0x828A2BA0 writes the live
+        // body pointer into this table itself (`addi r11,r31,0x8C` ; `slwi r11,r11,2` ;
+        // `stwx r3,r11,r29` == mBodyData.maRWBodies[liIndex] at the console's 4-byte stride),
+        // so the WRITE is not in doubt; only its spelling is. The DWARF's method list for
+        // RigidBodyData does not carry it, which is consistent with a fully-inlined one-line
+        // setter. ⛔ Do NOT reproduce the console's index arithmetic: the slot is 8 bytes here.
+        void SetRigidBody(s32 liIndex, rw_physics::RigidBody* lpRWBody);
+
         // DWARF CgsPhysicsSimulationModule.h:113 / :108. Both are inlined by the console
         // into AllocateMemoryAndInitialiseRW: IsSlotUsed is the `maGameIDs[i] !=
         // K_INVALID_RIGID_BODY_ID` test at 0x828A25FC, SetFree the write-back of the
@@ -491,6 +526,27 @@ namespace CgsPhysics
         // @0x828A2120, which is itself an export hole -- see Destruct's note above.
         void AllocateMemoryAndInitialiseRW(rw::IResourceAllocator* lpAllocator,
                                            const SimulationParams& lrParams);
+
+        // ---------------------------------------------------------------------------------
+        // ⭐ THE FIRST OF THE NINETEEN INPUT DRAINS TO BE BODIED (task #140, 2026-08-04).
+        // X360 @0x828A2708 (306 instructions). Sole caller: ProcessInputBuffers @0x828A73C0,
+        // which is not bodied yet -- so this is currently reached by nothing at runtime, and
+        // that is stated plainly rather than implied. What it BUYS is that
+        // rw::physics::Simulation::AddRigidBody, the function the whole vehicle-physics
+        // campaign is built on top of, now lands WITH A CALLER instead of as an orphan; task
+        // #138 decoded it and correctly refused to write it while it had none.
+        //
+        // Drain the input buffer's add-rigid-body queue: for each request, claim a
+        // RigidBodyData slot, create the rw::physics body, then push the requested velocities
+        // and spy flag into it and record the slot.
+        //
+        // ⚠️ THE TWO DEBUG SCANS ARE O(n^2) AND O(n*200) AND THEY ARE REAL. The console runs
+        // a duplicate-id scan over the queue (.cpp:1034) and, per event, a full 200-slot scan
+        // for an id already in the simulation (.cpp:1058), both firing asserts with the
+        // offending id formatted in. They are kept: a drain that silently accepts a duplicate
+        // body id is precisely the [[silent-drop-stubs]] shape.
+        void ProcessAddRigidBodyQueue(const PhysicsSimulationIO::InputBuffer* lpInput);
+        // ---------------------------------------------------------------------------------
 
         // DWARF h:532..:536. Static, so they take no space.
         static const u32 KU_NUM_BODIES             = 200;   // kuNumBodies

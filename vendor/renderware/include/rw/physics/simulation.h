@@ -147,31 +147,22 @@ public:
     void RemoveRigidBody(RigidBody* lpBody);     // @ 0x82BC2950  BODIED
 
     // -------------------------------------------------------------------------------------
-    // Still un-reconstructed: AddRigidBody is 669 VMX instructions, and the Add/Remove
-    // Joint/Drive quartet needs the free-list splice the same way.
-    //
-    // ⭐⭐ 2026-08-04 (task #138) -- FULLY DECODED, NOT YET WRITTEN. The body is deliberately
-    // NOT committed this wave because it PROVABLY CANNOT EXECUTE: its only caller would be
-    // ProcessAddRigidBodyQueue @0x828A2708, which is absent from the tree, reached only
-    // through ProcessInputBuffers @0x828A73C0, reached only from PhysicsSimulationModule::
-    // Update @0x828A74D0 (not declared) under PhysicsModule::Update @0x825B0640 (still a link
-    // stub in WorldLinkStubs.cpp). An unwitnessable body on the exact member the whole
-    // campaign depends on is this project's worst-documented failure shape, so the DECODE is
-    // recorded here instead and the next wave can transcribe it without re-deriving anything.
+    // AddRigidBody @ 0x82BC3318 (669 instructions) -- **BODIED 2026-08-04 (task #140)**,
+    // together with its only caller, CgsPhysics::PhysicsSimulationModule::
+    // ProcessAddRigidBodyQueue @0x828A2708, so it is not an orphan. Task #138 decoded it and
+    // deliberately did not write it, on the grounds that it had no caller anywhere in the
+    // tree and a wrong lane would have been invisible; that condition no longer holds.
     //
     // SIGNATURE is DWARF-exact (DecFIGS simulation.h:308) and matches the asm: r3=this,
     // r4=&frame, r5=Inertia*, r6=BodyState.
     //
-    // SHAPE: pop the free list, then ONE OF THREE near-identical paths chosen by leState.
-    // The three differ in five values ONLY; everything else is the same code emitted 3x
-    // (which is why the function is 669 instructions for ~120 of logic).
+    // WHY 669 INSTRUCTIONS FOR ~120 OF LOGIC: three near-identical paths chosen by leState,
+    // each with QuaternionFromMatrix33 and InertiaUpdate inlined into it. The DWARF names
+    // the pieces the compiler is inlining (rigidbody.h :365 SetStatic, :369 SetDynamic,
+    // :373 SetState, :387 InertiaUpdate, :391 ResetForces), which is why the body below
+    // reads as six short steps rather than a 669-line transcription.
     //
-    //   entry @0x82BC3318:
-    //       if (m_FreeRB_Count == 0) return NULL;          // lwz 0x3C ; beq -> li r3,0
-    //       --m_FreeRB_Count;                              // stw 0x3C
-    //       RigidBody* b = m_FreeRB_Anchor->mRight;        // lwz 0x1C ; lwz 0x2C(anchor)
-    //
-    //   per-path table (X360 offsets in the trailing comments are decode documentation):
+    //   per-path table -- the three differ in FIVE VALUES ONLY:
     //       leState        ACTIVE(4) fallthrough  FROZEN(2) @0x82BC36CC  STATIC(1) @0x82BC3A28
     //       mState  +0x8C  4                      2                      1
     //       mCool   +0xAC  0                      m_CoolDown (+0xA4)     m_CoolDown (+0xA4)
@@ -179,40 +170,24 @@ public:
     //       anchor         m_ActiveRB_Anchor+0x28 m_FrozenRB_Anchor+0x24 m_StaticRB_Anchor+0x20
     //       count          ++m_ActiveRB_Count     ++m_FrozenRB_Count     ++m_StaticRB_Count
     //                        (+0x48)                (+0x44)                (+0x40)
+    //   Verified store by store this wave: `li r10,4`/`stw 0x8C` + `li r31,0`/`stw 0xAC` +
+    //   `lwz r10,0x28(r3)` (ACTIVE); `li r10,2` + `lwz r10,0xA4(r3)` + `lwz r10,0x24(r3)`
+    //   (FROZEN); `li r28,1` + `lwz r10,0xA4(r3)` + `lwz r10,0x20(r3)` + `stw r29(=0),0x5C`
+    //   (STATIC -- the inertia argument really is dropped on this path).
     //
-    //   common body, in emission order:
-    //     1. unlink b from the free list and append it at the tail of the chosen circular
-    //        list -- byte-for-byte the splice ActivateRigidBody/FreezeRigidBody already use.
-    //     2. frame copy, w LANES PRESERVED (`vrlimi128 vD,vS,1,0` = take xyz from vS, keep
-    //        w of vD). On the PC the w lanes are separate members, so this is a plain
-    //        .xyz assignment of four rows:
-    //             mRi  (+0x40) = frame.xAxis      mUp  (+0x50) = frame.yAxis
-    //             mAt  (+0x60) = frame.zAxis      mCom (+0x10) = frame.pos
-    //     3. mQuat (+0x00) = rw::math::vpu::QuaternionFromMatrix33(basis).
-    //        ⭐ ALREADY COMMITTED -- src/vendor/renderware/physics/JointFrames.hpp:63. The
-    //        three `vxor` masks the asm loads (unk_8327F120/F100/F0F0) are that inline's
-    //        gQuatFromMat_{x,y,z}Signs. They read ALL ZERO out of the image because they sit
-    //        in a 9,216-byte zero run of the RW `.data` segment (0x8327E000..0x83280400) --
-    //        do NOT try to byte-recover them, and do NOT read the zeros as "no sign flip".
-    //        The routine's ground truth is the Feb-2007 rwmath source already cited there.
-    //     4. world inverse inertia, gated on `mInertia != NULL` (so the STATIC path always
-    //        skips it -- the block is emitted but dead there). With I = mInertia's local
-    //        inverse diagonal and the basis just written:
-    //             I_world = Ix*(Ri (x) Ri) + Iy*(Up (x) Up) + Iz*(At (x) At)
-    //        stored in the split rigidbody.h documents:
-    //             mIfull (+0x70) = {Ixx, Ixy, Ixz}     mIsplt (+0x80) = {Izz, Iyy, Iyz}
-    //        The asm builds it with `vpermwi128 .. 0x97` (= .zyyw) and `0x9B` (= .zyzw),
-    //        exactly the pair RigidBody::DynamicUpdate already uses, then
-    //             mInvm (+0x7C) = *(f32*)((char*)mInertia + 0x10)      // lvlx + vspltw
-    //        ⚠️ `vmaddfp vD,vA,vB,vC` is `vD = vA*vC + vB` (ISA), not what the operand order
-    //        reads like -- getting this backwards silently transposes the tensor.
-    //     5. common tail:
-    //             mVel (+0x20) = 0        mOmega (+0x30) = 0      mTorque (+0xA0) = 0
-    //             mKine (+0x9C) = FLT_MAX                      // flt_821815B0 = 0x7F7FFFFF
-    //             mForce (+0x90) = m_Gravity                   // lvx from mStasis + 0x90
-    //        ⚠️ mForce is SEEDED WITH GRAVITY, not zeroed. mStasis (+0x4C) is NOT written
-    //        here -- Initialize threads it when it builds the free list.
-    //     6. return b.                                        // mr r3, r11
+    // ⚠️⚠️ CORRECTION 2026-08-04 (#140) TO THE NOTE THAT USED TO STAND HERE. It read
+    // "`vrlimi128 vD,vS,1,0` = take xyz from vS, keep w of vD". THE MECHANISM IS INVERTED.
+    // The VMX128 mask is four bits, one per word, bit0 == word3, so mask==1 selects THE W
+    // LANE ONLY: vD.w = vS.w, and vD.xyz is what was already in vD. PROOF from this very
+    // function: `vmr v13,v1(=0)` ; `lvx128 v12,r0,&mVel` ; `vrlimi128 v13,v12,1,0` ;
+    // `stvx128 v13,r0,&mVel`. Under the old reading that stores {mVel.xyz, 0} -- zeroing
+    // mVel.w, which on the console is **mRight, the intrusive list `next` pointer**. Under
+    // the correct reading it stores {0,0,0,mVel.w}: "zero the vector, keep the packed
+    // scalar". The old note's CONCLUSION (w lanes are preserved) was right; a future wave
+    // applying its stated mechanism literally would corrupt the body lists.
+    //
+    // The four constants the entry block materialises are quaternion/inertia scratch, not
+    // state: `vspltisw v7,1` + `vcfsx v0,v7,1` == 0.5f and `vcfsx v7,v7,0` == 1.0f.
     // -------------------------------------------------------------------------------------
     RigidBody* AddRigidBody(const rw::math::vpu::Matrix44Affine& lrFrame,
                             Inertia* lpInertia, BodyState leState);   // @ 0x82BC3318

@@ -5,6 +5,10 @@
 // The real rw::physics world Prepare/AllocateMemoryAndInitialiseRW build. Only the .cpp
 // needs the definitions -- the header keeps them forward-declared, exactly as the console's
 // does (its own Prepare is the only member that dereferences mpSimulation).
+// The drain side needs the COMPLETE InputBuffer (the header only forward-declares it):
+// ProcessAddRigidBodyQueue reads its embedded add-rigid-body queue and the events in it.
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"
+
 #include "rw/rwcore_structs.h"                  // rw::IResourceAllocator, Resource, descriptors
 #include "rw/physics/simulation.h"              // rw::physics::Simulation + SpyingFlag
 #include "rw/physics/SimulationWorkspace.h"     // rw::physics::SimulationWorkspace
@@ -324,6 +328,49 @@ namespace CgsPhysics
     {
         CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");
         maGameIDs[liIndex] = K_INVALID_RIGID_BODY_ID;
+    }
+
+    // X360 @0x8289D2E8 (62 instructions) -- an .ida-exports HOLE, recovered headless from
+    // BURNOUT_X360_ARTIST.XEX.i64 (task #140). Transcribed instruction for instruction.
+    //
+    // ⚠️ THE WALK IS UNBOUNDED AND THE TWO CHECKS ARE FIRE-AND-CONTINUE. The console emits
+    //     r31 = -1 ; do { r10 += 8 ; ++r31 ; } while (*r10 != K_INVALID)
+    // with NO index test inside the loop, then two asserts that do not gate anything. Both
+    // are kept exactly as they are: the second (`liIndex != -1`) is unreachable in practice
+    // because r31 is >= 0 on every exit, but it is in the binary and its rodata string is
+    // distinct from the first ("Couldn't find a free rigid body slot" vs "Couldn't find free
+    // rigid body slot"), so it is not a decode artefact.
+    //
+    // ⭐ THE THREE STORES ARE WHY THIS IS WRITTEN BY NAME, NOT BY OFFSET. The console does
+    // `stdx` at (i+100)*8, `stwx` at i*4 and a 6x ld/std block copy at (i+50)*48 -- i.e. it
+    // folds the three array BASES into the index arithmetic using the CONSOLE's 4-byte
+    // pointer stride. maRWBodies[] widens to 8 bytes on x64, so every one of those literals
+    // is wrong here; expressed as array subscripts they are right on both.
+    s32 RigidBodyData::AddBody(rw_physics::RigidBody* lpRWBody, RigidBodyId lId, const Inertia& lrInertia)
+    {
+        s32 liIndex = -1;
+        do
+        {
+            ++liIndex;
+        }
+        while (!maGameIDs[liIndex].IsInvalid());   // `ld r11,0(r10)` ; `cmpld r11,K_INVALID`
+
+        CGS_ASSERT(liIndex < KI_SIZE, "Couldn't find free rigid body slot");    // .cpp:2483
+        CGS_ASSERT(liIndex != -1, "Couldn't find a free rigid body slot");      // .cpp:2484
+
+        maGameIDs[liIndex]  = lId;         // stdx  r27 at (i+100)*8  == +0x320 + i*8
+        maRWBodies[liIndex] = lpRWBody;    // stwx  r28 at i*4        == +0x000 + i*4 (console stride)
+        maInertias[liIndex] = lrInertia;   // 6 x ld/std at (i+50)*48 == +0x960 + i*48
+
+        return liIndex;                    // mr r3, r31
+    }
+
+    // X360-attested write, [INFERRED NAME] -- see the declaration. The console open-codes this
+    // store inside ProcessAddRigidBodyQueue @0x828A2BA0; here it is a named one-liner so the
+    // 4-byte pointer stride the console folds into its index arithmetic cannot leak in.
+    void RigidBodyData::SetRigidBody(s32 liIndex, rw_physics::RigidBody* lpRWBody)
+    {
+        maRWBodies[liIndex] = lpRWBody;
     }
 
     // ===================== PhysicsSimulationModule =========================
@@ -829,5 +876,128 @@ namespace CgsPhysics
         miNumJoints      = 0;      // +0x4850
         miNeedThaw       = -1;     // +0x47DC
         miActive         = -1;     // +0x47E0
+    }
+
+    // =====================================================================================
+    // PhysicsSimulationModule::ProcessAddRigidBodyQueue @ 0x828A2708  (306 instructions)
+    //
+    // The first of the nineteen input drains ProcessInputBuffers @0x828A73C0 dispatches to
+    // (task #140, 2026-08-04). ⚠️ NOTHING CALLS IT YET -- ProcessInputBuffers is not bodied,
+    // and it cannot be bodied without all nineteen or it becomes a [[silent-drop-stubs]]
+    // no-op. Stated here rather than implied, because "it links" is not "it runs".
+    //
+    // ⚠️⚠️ THE `CgsPhysics::Inertia` / `rw::physics::Inertia` TYPE FORK IS LOAD-BEARING HERE,
+    // AND IT IS THE EXACT SHAPE TASK #135 RETIRED FOR Joint/Drive/RigidBody. The console has
+    // ONE type: RigidBodyData::GetInertia returns a pointer that is handed straight to
+    // rw::physics::Simulation::AddRigidBody, which stores it in RigidBody::mInertia, which
+    // DynamicUpdate then reads every tick. This tree has TWO definitions of that same 48-byte
+    // record -- `CgsPhysics::Inertia` (CgsPhysicsSimulationModule.h, public members, pinned by
+    // seven offsetof asserts in _AssertLayout) and `rw::physics::Inertia` (rw/physics/inertia.h,
+    // private members + accessors, same DWARF, same field order, same size). The two casts
+    // below are the seam, and they are BEHAVIOURALLY correct today: identical layout, plain
+    // POD, no vtable, and the sizes are gated in _AssertLayout.
+    // ⛔ THEY ARE STILL A DEFECT, NOT A DESIGN. The de-fork (alias CgsPhysics::Inertia onto
+    // the vendor type) needs `SetSphericalInertia` added to rw::physics::Inertia -- the DWARF
+    // declares the getter but this header has no setter -- and the seven offsetof pins moved
+    // inside the class, so it is its own change, not a rider on this one.
+    //
+    // ⚠️ THE TWO DEBUG SCANS ARE KEPT. The console runs an O(n^2) duplicate scan over the
+    // queue itself (.cpp:1034) and, per event, a 200-slot scan of the live table (.cpp:1058),
+    // both formatting the offending id into the message. A drain that silently accepts a
+    // duplicate rigid-body id is exactly the failure this project keeps re-learning.
+    // =====================================================================================
+    void PhysicsSimulationModule::ProcessAddRigidBodyQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        // `bl sub_8289E408` -- the const GetAddRigidBodyQueue overload (read-lock guarded).
+        const PhysicsSimulationIO::InputBuffer::InAddRigidBodyQueue* const lpQueue =
+            lpInput->GetAddRigidBodyQueue();
+
+        // ---- debug scan 1: no two requests in this queue may carry the same id ----------
+        // 0x828A2738..0x828A28A0. Both loops re-read the length every pass, as the asm does.
+        for (s32 liA = 0; liA < lpQueue->GetLength(); ++liA)
+        {
+            const u64 luIdA = lpQueue->GetEvent(liA).mID;
+            for (s32 liB = 0; liB < lpQueue->GetLength(); ++liB)
+            {
+                if (liA != liB)
+                {
+                    CGS_ASSERT(luIdA != lpQueue->GetEvent(liB).mID,
+                               "Trying to add the same rigid body twice in one frame: ");   // .cpp:1034
+                }
+            }
+        }
+
+        // ---- the drain proper ------------------------------------------------------------
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InAddRigidBody& lrEvent = lpQueue->GetEvent(li);
+
+            // The console copies the request out of the queue into its own stack frame first
+            // (six `lvx128`/`stvx128` for the transform + the two velocities, then a 6-pass
+            // ld/std for the inertia) and works from the copy. Kept: AddBody stores the
+            // inertia by value, so aliasing the queue element would be a different program if
+            // the queue were ever mutated mid-drain.
+            const rw::math::vpu::Matrix44Affine lTransform = lrEvent.mRigidBody.mTransform;
+            const rw::physics::Inertia          lInertia   = lrEvent.mRigidBody.mInertia;
+
+            // ---- debug scan 2: the id must not already be live in the simulation ----------
+            // 0x828A28C0..0x828A2AA4: a full 200-slot walk of maGameIDs (offsets 800..2400).
+            for (s32 liSlot = 0; liSlot < RigidBodyData::KI_SIZE; ++liSlot)
+            {
+                if (mBodyData.IsSlotUsed(liSlot))
+                {
+                    CGS_ASSERT(liSlot < RigidBodyData::KI_SIZE, "liIndex < knSize");                      // h:585
+                    CGS_ASSERT(!mBodyData.GetGameID(liSlot).IsInvalid(), "!maGameIDs[liIndex].IsInvalid()"); // h:586
+                    CGS_ASSERT(lrEvent.mID != static_cast<u64>(mBodyData.GetGameID(liSlot).mId),
+                               "Trying to add a rigid body with ID that already exists in the simulation: "); // .cpp:1058
+                }
+            }
+
+            // ⚠️ THE BODY POINTER PASSED HERE IS NULL, DELIBERATELY. `li r4, 0` at 0x828A2AB0:
+            // the slot is claimed BEFORE the rw::physics body exists, and the real pointer is
+            // written into maRWBodies[] at the bottom of this loop. Passing lpBody here
+            // instead would look tidier and would reorder the two writes.
+            const s32 liBodyIndex = mBodyData.AddBody(
+                nullptr,
+                RigidBodyId{ lrEvent.mID },
+                *reinterpret_cast<const Inertia*>(&lInertia));    // <- the type-fork seam
+            CGS_ASSERT(liBodyIndex != -1, "liBodyIndex != -1");   // .cpp:1065
+
+            rw::physics::RigidBody* const lpBody = mpSimulation->AddRigidBody(
+                lTransform,
+                reinterpret_cast<rw::physics::Inertia*>(mBodyData.GetInertia(liBodyIndex)),  // <- the seam
+                lrEvent.meState);
+
+            // ---- push the request's own state into the fresh body -------------------------
+            // 0x828A2B04..0x828A2B94, in the console's order.
+            //
+            // ⚠️ THE FORCE/TORQUE RESET HERE REPEATS WHAT AddRigidBody ALREADY DID. Both sites
+            // inline the DWARF's RigidBody::ResetForces(const Vector3&) (rigidbody.h:273) and
+            // both read the gravity through the BODY's own mStasis (`lwz r7,0x4C(r3)` then
+            // `lvx128 v13,r7,0x90`), not through this module. The repeat is in the binary.
+            lpBody->ResetForces(lpBody->GetSimulation()->GetGravity());
+
+            // `lwz 0x8C` ; `ori 8` ; `stw 0x8C` -- an unconditional SetSpy(true) that the
+            // conditional SetSpy(mbSpy) four instructions below immediately overwrites. It is
+            // redundant in the original source too; kept because it is what executes.
+            lpBody->SetSpy(true);
+
+            lpBody->SetLinearVelocity(lrEvent.mRigidBody.mVelocity);          // mVel   (+0x20) .xyz
+            lpBody->SetAngularVelocity(lrEvent.mRigidBody.mAngularVelocity);  // mOmega (+0x30) .xyz
+
+            // `lbz mbSpy` ; `beq` -> `clrlwi r11,r11,29` else `ori r11,r11,8` == SetSpy(bool).
+            lpBody->SetSpy(lrEvent.mRigidBody.mbSpy);
+
+            // `stw r31, 0x6C(r3)` -- mTag carries the module's slot index, which is how the
+            // output side maps a body back to its RigidBodyData entry.
+            lpBody->SetTag(static_cast<u32>(liBodyIndex));
+
+            // `addi r11,r31,0x8C` ; `slwi r11,r11,2` ; `stwx r3,r11,r29` == this + 560 +
+            // liBodyIndex*4 == mBodyData.maRWBodies[liBodyIndex] at the CONSOLE's 4-byte
+            // pointer stride. ⛔ Never reproduce that arithmetic -- the slot is 8 bytes here.
+            mBodyData.SetRigidBody(liBodyIndex, lpBody);
+
+            ++miNumRigidBodies;   // `lwz/addi/stw 0x4848(r29)`
+        }
     }
 }

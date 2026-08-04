@@ -95,5 +95,17 @@ namespace PhysicsSimulationIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         return &mAddRigidBodyQueue;
     }
+
+    // X360 0x8289E408 (41 instructions) -- the CONST overload, and an .ida-exports HOLE
+    // recovered headless out of BURNOUT_X360_ARTIST.XEX.i64 (task #140). Note the lock bit
+    // DIFFERS from the non-const twin above: `lbz 0(r28)` + `extrwi r11,r11,1,27` is
+    // MSB0 bit 27 == LSB bit 4 == eStatusLockedForRead, and the rodata string it fires is
+    // "Not locked for reading\n" (CgsPhysicsSimulationModuleIO.h:893). Then the identical
+    // `addi r3, r28, 0x10`. Consumed by ProcessAddRigidBodyQueue @0x828A2708.
+    const InputBuffer::InAddRigidBodyQueue* InputBuffer::GetAddRigidBodyQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mAddRigidBodyQueue;
+    }
 }
 }
