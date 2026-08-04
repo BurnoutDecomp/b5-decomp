@@ -180,6 +180,59 @@ void Simulation::RemoveDrive(Drive* lpDrive)
 }
 
 // -------------------------------------------------------------------------------------
+// Simulation::AddDrive @ 0x82BC3E28   (37 instructions)  -- BODIED 2026-08-04 (task #143).
+// Sole in-game caller: PhysicsSimulationModule::ProcessAddDriveQueue @0x828A4E98.
+//
+// ⭐ THIS IS THE EXACT INVERSE OF RemoveDrive DIRECTLY ABOVE, and that is the control that
+// makes it safe to write: RemoveDrive was decoded from the same headless dump in the same
+// pass and reproduced the already-committed body instruction-for-instruction, so the splice
+// idiom here is not being read for the first time. Pop the head of the free list, unlink it,
+// re-insert at the TAIL of the active list, fill the payload, move one entry between the two
+// counters.
+//
+// ⚠️ EXHAUSTION IS A NULL RETURN, NOT AN ASSERT -- `lwz r10,0x54(r11)` / `cmplwi r10,0` /
+// `li r3,0`, the same convention AddRigidBody uses for its own pool.
+//
+// ⚠️ THE TWO BODY ARGUMENTS ARE NOT SYMMETRIC, and the mapping is pinned by BOTH ends rather
+// than guessed. The console stores `stw r5,0x10` and `stw r4,0x14`, i.e. arg2 -> m_bodyA and
+// arg1 -> m_bodyB. ProcessAddDriveQueue passes the PARENT body in r4 and the CHILD in r5, and
+// ProcessRemoveDriveQueue then reads +0x10 as the child and +0x14 as the parent when it calls
+// PairSet::UnlinkParts in the same (parent, child) order that ProcessAddDriveQueue passes to
+// PairSet::LinkParts. ⭐ That independently CONFIRMS the two [INFERRED] annotations on
+// Drive::GetChild()/GetParent() in Drive.hpp -- m_bodyA really is the child.
+//
+// ⚠️ m_tag (+0x18) is NOT written here. The caller writes it immediately afterwards
+// (`stw r30,0x18(r3)` at 0x828A4EA8, the DriveData slot index), along with m_spy. Only the
+// `stw r8,0x1C` zeroing of m_spy belongs to this function.
+// -------------------------------------------------------------------------------------
+Drive* Simulation::AddDrive(RigidBody* lpA, RigidBody* lpB, void* lpFrames, void* lpDynamics)
+{
+    if (m_FreeDR_Count == 0u)                             // +0x54
+        return nullptr;
+
+    Drive* const lpDrive = m_FreeDR_Anchor->m_right;      // +0x34, head of the free list
+
+    lpDrive->m_right->m_left = lpDrive->m_left;
+    lpDrive->m_left->m_right = lpDrive->m_right;
+
+    Drive* const lpAnchor = m_ActiveDR_Anchor;            // +0x38
+    lpDrive->m_right          = lpAnchor;
+    lpDrive->m_left           = lpAnchor->m_left;
+    lpAnchor->m_left->m_right = lpDrive;
+    lpAnchor->m_left          = lpDrive;
+
+    lpDrive->m_skel  = static_cast<DriveFrames*>(lpFrames);      // +0x00  `stw r6,0(r3)`
+    lpDrive->m_crtl  = static_cast<DriveDynamics*>(lpDynamics);  // +0x04  `stw r7,4(r3)`
+    lpDrive->m_bodyA = lpB;                                      // +0x10  `stw r5,0x10(r3)`
+    lpDrive->m_bodyB = lpA;                                      // +0x14  `stw r4,0x14(r3)`
+    lpDrive->m_spy   = 0u;                                       // +0x1C  `stw r8(=0),0x1C(r3)`
+
+    --m_FreeDR_Count;                                     // +0x54
+    ++m_ActiveDR_Count;                                   // +0x58
+    return lpDrive;
+}
+
+// -------------------------------------------------------------------------------------
 // Simulation::Initialize @ 0x82BC5158   (224 instructions)
 //
 // STATIC. r3 is the Resource block array the allocator filled, NOT a `this`: the object

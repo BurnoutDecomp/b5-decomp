@@ -13,6 +13,7 @@
 #include "rw/physics/simulation.h"              // rw::physics::Simulation + SpyingFlag
 #include "rw/physics/SimulationWorkspace.h"     // rw::physics::SimulationWorkspace
 #include "rw/physics/pairset.h"                 // rw::physics::PairSet
+#include "vendor/renderware/physics/Drive.hpp"   // rw::physics::Drive -- the drive drains (task #143)
 
 #include <cstddef>   // offsetof (layout gate)
 #include <cfloat>    // FLT_MAX  (rw::physics::Inertia's default max velocity/omega)
@@ -43,15 +44,14 @@ namespace CgsPhysics
     static_assert(sizeof(DriveFrames)   == 64, "DriveFrames stride 64 (h:driveframes.h)");
     static_assert(sizeof(DriveDynamics) == 32, "DriveDynamics stride 32 (h:drivedynamics.h)");
 
-    // DriveDynamics interior (promoted from opaque 2026-08-03). Pins the four fields the
-    // module constructor writes by member, and the two-Params split.
-    static_assert(sizeof(DriveDynamics::Params)            == 16, "DriveDynamics::Params is 16B (drivedynamics.h:204-207)");
-    static_assert(offsetof(DriveDynamics::Params, mfSpring)   == 0,  "Params.mSpring   @+0x00");
-    static_assert(offsetof(DriveDynamics::Params, mfDamping)  == 4,  "Params.mDamping  @+0x04");
-    static_assert(offsetof(DriveDynamics::Params, mfStrength) == 8,  "Params.mStrength @+0x08");
-    static_assert(offsetof(DriveDynamics::Params, meType)     == 12, "Params.mType     @+0x0C (asm stw 0, 0xC(r11))");
-    static_assert(offsetof(DriveDynamics, mLinear)  == 0,  "DriveDynamics.mLinear  @+0x00 (drivedynamics.h:261)");
-    static_assert(offsetof(DriveDynamics, mAngular) == 16, "DriveDynamics.mAngular @+0x10 (asm second quad at +0x10..+0x1C)");
+    // ⚠️ THE DriveDynamics INTERIOR PINS MOVED, THEY WERE NOT DROPPED (task #143). They used
+    // to sit here and gate the FORKED local copy's `mfSpring`/`meType` spellings. The record
+    // now has ONE definition, so the pins live with it, in the file that owns the fields:
+    // vendor/renderware/physics/DriveDynamics.hpp -> _rw_physics_DriveDynamics_AssertLayout().
+    // Same for the 64-byte DriveFrames interior -> _rw_physics_DriveFrames_AssertLayout().
+    // The two strides above are kept here as well, because here they are a claim about
+    // DriveData's array layout rather than about the records themselves.
+    static_assert(sizeof(DriveDynamics::Params) == 16, "DriveDynamics::Params is 16B (drivedynamics.h:204-207)");
 
     // ===================== JointData =======================================
 
@@ -135,27 +135,24 @@ namespace CgsPhysics
     // NOT written by the constructor.
     DriveData::DriveData()
     {
+        // ⚠️ THE EIGHT ZERO-STORES PER RECORD MOVED, THEY DID NOT DISAPPEAR (task #143).
+        // This loop used to spell them out by hand -- `lDynamics.mLinear.mfSpring = 0.0f;`
+        // and seven more, twice -- against the FORKED `CgsPhysics::DriveDynamics` that this
+        // header no longer declares. `DriveDynamics` is now the real rw::physics class, whose
+        // DWARF-declared `Params()` (drivedynamics.h:32) performs exactly those four stores
+        // per Params. So the console's `stfs 0.0f` x3 + `stw 0` at +0/+4/+8/+0xC, twice per
+        // record and twice over for the two arrays (@0x827DF250..0x827DF294), is now emitted
+        // BY THE TYPE THAT OWNS THE FIELDS -- which is what "default-construct every entry"
+        // in the banner above always claimed this was.
+        //
+        // ⚠️ The explicit re-assignment is kept rather than left to the array's own default
+        // construction: maFrames / maRWDrives / maGameIDs / mabUsedSlot are deliberately NOT
+        // touched by the console here, and relying on implicit construction of the whole
+        // object would be a different program.
         for (s32 li = 0; li < KI_SIZE; ++li)
         {
-            DriveDynamics& lDynamics = maDynamics[li];
-            lDynamics.mLinear.mfSpring    = 0.0f;      // stfs f0, 0(r11)
-            lDynamics.mLinear.mfDamping   = 0.0f;      // stfs f0, 4(r11)
-            lDynamics.mLinear.mfStrength  = 0.0f;      // stfs f0, 8(r11)
-            lDynamics.mLinear.meType      = E_NO_DRIVE; // stw r9(=0), 0xC(r11)
-            lDynamics.mAngular.mfSpring   = 0.0f;      // stfs f0, 0x10(r11)
-            lDynamics.mAngular.mfDamping  = 0.0f;      // stfs f0, 0x14(r11)
-            lDynamics.mAngular.mfStrength = 0.0f;      // stfs f0, 0x18(r11)
-            lDynamics.mAngular.meType     = E_NO_DRIVE; // stw r9(=0), 0x1C(r11)
-
-            DriveDynamics& lScaled = maScaledDynamics[li];
-            lScaled.mLinear.mfSpring    = 0.0f;        // stfs f0, 0(r10)
-            lScaled.mLinear.mfDamping   = 0.0f;        // stfs f0, 4(r10)
-            lScaled.mLinear.mfStrength  = 0.0f;        // stfs f0, 8(r10)
-            lScaled.mLinear.meType      = E_NO_DRIVE;  // stw r9(=0), 0xC(r10)
-            lScaled.mAngular.mfSpring   = 0.0f;        // stfs f0, 0x10(r10)
-            lScaled.mAngular.mfDamping  = 0.0f;        // stfs f0, 0x14(r10)
-            lScaled.mAngular.mfStrength = 0.0f;        // stfs f0, 0x18(r10)
-            lScaled.mAngular.meType     = E_NO_DRIVE;  // stw r9(=0), 0x1C(r10)
+            maDynamics[li]       = DriveDynamics();   // 0x827DF250.. per-Params zero stores
+            maScaledDynamics[li] = DriveDynamics();   // 0x827DF274.. the same four again
         }
 
         // ---- layout pins. Every one of these is X360-EXACT *and* host-invariant:
@@ -208,6 +205,104 @@ namespace CgsPhysics
     bool DriveData::IsSlotUsed(s32 liIndex) const
     {
         return mabUsedSlot[liIndex];
+    }
+
+    // DWARF h:249. The UNSCALED sibling of GetScaledDriveDynamics: a DIFFERENT array
+    // (maDynamics @+0x40, not maScaledDynamics @+0x60). Inlined into
+    // ProcessUpdateDriveDynamicsQueue @0x8289FE44 as `(liIndex+2)<<5` + this, which is
+    // 32*liIndex + 0x40 exactly, behind the same two tripwires.
+    DriveDynamics* DriveData::GetDriveDynamics(s32 liIndex)
+    {
+        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");          // h:675 tripwire (blt skips)
+        CGS_ASSERT(mabUsedSlot[liIndex], "mabUsedSlot[liIndex]");   // h:676 tripwire (bne skips)
+        return &maDynamics[liIndex];
+    }
+
+    // DWARF h:218. No out-of-line symbol: the console inlines this identically into FOUR
+    // drains (ProcessUpdateDriveFramesQueue @0x8289FC9C, ProcessRemoveDriveQueue @0x828A0008,
+    // ProcessUpdateDriveDynamicsQueue @0x8289FDC8, ProcessSetDriveSpyQueue @0x8289FEF0), and
+    // all four copies are instruction-for-instruction the same shape:
+    //
+    //   lbzx r8, r9, r31    ; mabUsedSlot[i]      (r9 = this + 0x90)
+    //   beq  -> next        ; free slot: skip without touching the id
+    //   ld   r8, 0(r11)     ; maGameIDs[i]        (r11 = this + 0x88, stepped by 8)
+    //   cmpld r8, r10       ; == the event's id
+    //   beq  -> found
+    //
+    // ⚠️ The used-slot test comes FIRST and short-circuits, so a free slot's stale id is
+    // never compared. Reordering these two would change which ids can match.
+    // ⭐ Both id reads are 8-byte `ld` at an 8-byte stride -- that, not the header, is what
+    // pins DriveId at 8 bytes.
+    //
+    // Unlike RigidBodyData::GetIndexFromGameID below, the miss path here is silent: no
+    // assert, no diagnostic stream. The four call sites all guard on `!= -1`.
+    s32 DriveData::GetIndexFromGameID(DriveId lId) const
+    {
+        for (s32 li = 0; li < KI_SIZE; ++li)
+        {
+            if (mabUsedSlot[li] && maGameIDs[li].muId == lId.muId)
+                return li;
+        }
+        return -1;
+    }
+
+    // DWARF h:210. X360 @0x828A0330 (62 instructions), sole caller ProcessAddDriveQueue
+    // @0x828A4E2C. Claims the first free slot and fills it.
+    //
+    // ⭐ EVERY ONE OF THE SIX ARRAY BASES IS AN INDEPENDENT WITNESS TO THIS CLASS'S LAYOUT,
+    // because the console reaches each through its own `slwi`, and all six reproduce the
+    // committed offsets exactly:
+    //     i<<6        -> +0x00  maFrames          (i+2)<<5 -> +0x40  maDynamics
+    //     (i+3)<<5    -> +0x60  maScaledDynamics  (i+0x20)<<2 -> +0x80  maRWDrives
+    //     (i+0x11)<<3 -> +0x88  maGameIDs         stb 1, 0x90(this+i) -> +0x90  mabUsedSlot
+    //
+    // ⚠️⚠️ `lfTimeStep` IS ACCEPTED AND NEVER READ, and maScaledDynamics gets an UNSCALED
+    // copy. The 62-instruction body contains no lfs / stfs / fmuls at all and its only `bl`
+    // is the __savegprlr/__restgprlr pair, so ScaleOneDriveForTimeStep is not called from
+    // here. The caller genuinely computes and passes the value (`lfs f1, 0xA0(mpSimulation)`
+    // at 0x828A4DD8). Two copies of the same 32 bytes is what shipped. ⛔ DO NOT "fix" this
+    // into a scale -- inventing a multiply in the drive dynamics is fabricating handling.
+    s32 DriveData::AddDrive(rw_physics::Drive* lpDrive, const DriveFrames& lrFrames,
+                            const DriveDynamics& lrDynamics, DriveId lId, f32 lfTimeStep)
+    {
+        (void)lfTimeStep;   // X360 @0x828A0330 never reads it -- see the note above.
+
+        s32 liIndex = 0;
+        while (liIndex < KI_SIZE && mabUsedSlot[liIndex])
+            ++liIndex;
+
+        if (liIndex >= KI_SIZE)
+            return -1;
+
+        maGameIDs[liIndex]        = lId;         // stdx r7  -> (i+0x11)<<3
+        maRWDrives[liIndex]       = lpDrive;     // stwx r4  -> (i+0x20)<<2   (NULL at the call site)
+        maFrames[liIndex]         = lrFrames;    // 4x lvx128/stvx128 -> i<<6
+        maDynamics[liIndex]       = lrDynamics;  // 4x ld/std -> (i+2)<<5
+        maScaledDynamics[liIndex] = lrDynamics;  // 4x ld/std from the SAME source -> (i+3)<<5
+        mabUsedSlot[liIndex]      = true;        // stb 1, 0x90(this+i)  -- LAST, as the asm does
+        return liIndex;
+    }
+
+    // DWARF h:214. No out-of-line symbol -- inlined into ProcessRemoveDriveQueue at
+    // 0x828A00A8..0x828A00D0: the `liIndex < knSize` tripwire (.cpp:2803) and then the single
+    // `stb r25, 0x47C0(r11)` with r11 = this + liIndex, i.e. mabUsedSlot[liIndex] = false.
+    //
+    // ⚠️ IT CLEARS THE USED FLAG AND NOTHING ELSE. maRWDrives[liIndex] is deliberately left
+    // pointing at the drive the caller is about to hand to Simulation::RemoveDrive -- the
+    // caller reads the slot BEFORE calling this, and the flag is what makes the slot
+    // re-allocatable. Zeroing the pointer "to be tidy" would be inventing a store.
+    bool DriveData::RemoveDrive(s32 liIndex)
+    {
+        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");   // .cpp:2803 tripwire (blt skips)
+        mabUsedSlot[liIndex] = false;
+        return true;
+    }
+
+    // [INFERRED NAME] -- the write-back half of GetDrive. See the header for why the write is
+    // attested (ProcessAddDriveQueue @0x828A4EB0) even though the DWARF carries no such method.
+    void DriveData::SetDrive(s32 liIndex, rw_physics::Drive* lpRWDrive)
+    {
+        maRWDrives[liIndex] = lpRWDrive;
     }
 
     // ===================== RigidBodyData ===================================
@@ -363,6 +458,61 @@ namespace CgsPhysics
     void RigidBodyData::SetRigidBody(s32 liIndex, rw_physics::RigidBody* lpRWBody)
     {
         maRWBodies[liIndex] = lpRWBody;
+    }
+
+    // DWARF h:96. X360 @0x828A0100 (140 instructions) -- by far the most-called member of this
+    // class: TWELVE call sites across the drains (ProcessRemoveRigidBody, ProcessAddContact x2,
+    // ProcessUpdateRigidBody, ProcessUpdateExternalBody, ProcessAddJoint x2,
+    // ProcessSetRigidBodySpy, ProcessChangeRigidBodyInertia, ProcessAddDrive x2,
+    // ProcessApplyForce), which is why it is out-of-line here while the DriveData sibling is
+    // inlined everywhere.
+    //
+    // The search itself is nine instructions (0x828A0118..0x828A014C): a bare linear compare
+    // of maGameIDs[] against the handle, `ld` at an 8-byte stride from this+0x320.
+    //
+    // ⚠️ IT DOES **NOT** TEST A USED-SLOT FLAG, unlike DriveData::GetIndexFromGameID. That is
+    // not an omission: RigidBodyData has no mabUsedSlot[] array at all -- a free slot holds
+    // the K_INVALID_RIGID_BODY_ID sentinel, so a match on a real id already implies the slot
+    // is live. The two post-match asserts below re-check exactly that.
+    //
+    // The remaining ~120 instructions are three diagnostics. All three are reconstructed as
+    // CGS_ASSERTs in the established style of this file (the id that the console formats into
+    // the message via StrStreamBase is dropped; the message text is kept verbatim, including
+    // its original spelling):
+    //   * .cpp:2537 "Bad search"  -- fires ONLY when the miss is on an id whose owner field is
+    //     3. The console computes that owner as `srdi r11,r30,32` then `srwi r11,r11,24`,
+    //     i.e. bits 56..63 of the 64-bit handle. ⚠️ Recorded precisely because that is NOT
+    //     the same as a `>>24` on a 32-bit value -- see the open RigidBodyId item.
+    //   * .cpp:2544 "ID's dont match" and .cpp:2545 "Slot not used" -- both on the HIT path.
+    //
+    // ⚠️ NOT MODELLED, and recorded here rather than left unmentioned: a second, flag-gated debug
+    // print at 0x828A01EC..0x828A0220 on the miss path, which re-streams the same "Bad search"
+    // text to a global stream object (`off_82F31904`) when bit 0 of `qword_82F31908` is set.
+    // It is a log write with no effect on the return value, and modelling it would mean
+    // inventing a logging entry point this tree does not have.
+    s32 RigidBodyData::GetIndexFromGameID(RigidBodyId lId)
+    {
+        for (s32 li = 0; li < KI_SIZE; ++li)
+        {
+            if (static_cast<u64>(maGameIDs[li]) == static_cast<u64>(lId))
+            {
+                // 0x828A0230.. -- the console re-reads the slot and re-checks it, which is
+                // only reachable when the table was mutated under it.
+                CGS_ASSERT(static_cast<u64>(maGameIDs[li]) == static_cast<u64>(lId),
+                           "ID's dont match: Andy H has meesed up the physics: ");   // .cpp:2544
+                CGS_ASSERT(!maGameIDs[li].IsInvalid(),
+                           "Slot not used: Andy H has meesed up the physics: ");     // .cpp:2545
+                return li;
+            }
+        }
+
+        // 0x828A0150 -- the owner-gated miss diagnostic. `srdi 32` then `srwi 24` == the top
+        // byte of the 64-bit handle; the console only complains for owner 3.
+        if (static_cast<u32>(static_cast<u64>(lId) >> 56) == 3u)
+        {
+            CGS_ASSERT(false, "\nPhysics: Bad search for a Rigid body ");            // .cpp:2537
+        }
+        return -1;
     }
 
     // ===================== PhysicsSimulationModule =========================
@@ -1003,6 +1153,239 @@ namespace CgsPhysics
             mBodyData.SetRigidBody(liBodyIndex, lpBody);
 
             ++miNumRigidBodies;   // `lwz/addi/stw 0x4848(r29)`
+        }
+    }
+
+    // =====================================================================================
+    // THE DRIVE GROUP -- the five drive drains of the nineteen (task #143, 2026-08-04).
+    //
+    // Landed together on purpose. `ProcessInputBuffers` is a [[silent-drop-stubs]] no-op
+    // unless ALL NINETEEN drains exist, so a "representative sample" would be worse than
+    // nothing; a drive subsystem that drains AddDrive but not RemoveDrive would leak slots
+    // out of a table with exactly ONE of them. 6 of 19 are bodied after this wave.
+    //
+    // ⚠️ NOTHING CALLS ANY OF THEM YET, and nothing will until the other thirteen land.
+    //
+    // ⭐ THE SHARED SKELETON, and the one thing to preserve if these are ever edited: every
+    // drain RE-READS q->GetLength() on each pass (`lwz r11, 8(rQ)` at the bottom of each
+    // loop, not a cached count) and every one guards its payload on `GetIndexFromGameID(...)
+    // != -1`, so an event naming a drive that is not in the table is skipped SILENTLY. That
+    // silence is the console's, not a stub's -- there is no assert on that path in any of
+    // the five.
+    // =====================================================================================
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessAddDriveQueue @ 0x828A4CB8   (136 instructions)
+    //
+    // The largest of the five, and the only one that touches three subsystems at once:
+    // RigidBodyData (to resolve the two body handles), DriveData (to claim a slot),
+    // PairSet (to suppress collision between the linked pair) and rw::physics::Simulation
+    // (to create the solver drive).
+    //
+    // ⚠️ THE ORDER OF THE LAST FOUR STEPS IS LOAD-BEARING and is the console's:
+    //   1. DriveData::AddDrive claims the slot and COPIES frames+dynamics into the table;
+    //   2. PairSet::LinkParts;
+    //   3. Simulation::AddDrive is handed the TABLE'S OWN copies (GetDriveFrames /
+    //      GetScaledDriveDynamics), never the stack temporaries or the queue element --
+    //      the Drive holds those pointers for the lifetime of the drive, so pointing them
+    //      at this frame would be a dangling read on the very next tick;
+    //   4. only then is the returned Drive* written back into maRWDrives[].
+    // Reordering 1 and 3 would look tidier and would hand the solver a dead pointer.
+    //
+    // ⚠️ `GetScaledDriveDynamics` (+0x60) is what the solver gets, NOT `GetDriveDynamics`
+    // (+0x40) -- `bl 0x8289D268` at 0x828A4E80. See DriveData::AddDrive for why the two
+    // arrays currently hold the same bytes.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessAddDriveQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InAddDriveQueue* const lpQueue =
+            lpInput->GetAddDriveQueue();                                    // `bl sub_8289EBE8`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InAddDrive& lrEvent = lpQueue->GetEvent(li);
+
+            // `ld 8(event)` and `ld 0x10(event)`, in that order.
+            const s32 liParentIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mu64ParentBodyId });
+            const s32 liChildIndex  = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mu64ChildBodyId });
+
+            // 0x828A4D44/0x828A4D4C -- either handle unresolved and the event is dropped
+            // without a word. Both tests are separate branches to the same target.
+            if (liParentIndex == -1 || liChildIndex == -1)
+                continue;
+
+            rw::physics::RigidBody* const lpParentBody = mBodyData.GetRigidBody(liParentIndex);
+            rw::physics::RigidBody* const lpChildBody  = mBodyData.GetRigidBody(liChildIndex);
+
+            CGS_ASSERT(lpParentBody != nullptr, "lpParentBody");   // .cpp:1858 tripwire
+            CGS_ASSERT(lpChildBody  != nullptr, "lpChildBody");    // .cpp:1859 tripwire
+
+            // The console copies both payloads out of the queue element into its own frame
+            // first (four lvx128 from event+0x20, four ld/std from event+0x60) and passes
+            // the copies. Kept: AddDrive takes them by const&, and the copy is what the asm
+            // builds at var_E0/var_100.
+            const rw::physics::DriveFrames   lFrames   = lrEvent.mDriveFrames;
+            const rw::physics::DriveDynamics lDynamics = lrEvent.mDriveDynamics;
+
+            // ⚠️ NULL Drive*, deliberately (`li r4, 0` at 0x828A4DE4) -- the slot is claimed
+            // before the solver drive exists, exactly as ProcessAddRigidBodyQueue does.
+            // The timestep argument is read from the simulation and then ignored by the
+            // callee; see DriveData::AddDrive.
+            const s32 liDriveIndex = mDriveData.AddDrive(
+                nullptr,
+                lFrames,
+                lDynamics,
+                DriveId{ lrEvent.mu64Id },
+                mpSimulation->GetTimeStep());                               // `lfs f1, 0xA0(r9)`
+            CGS_ASSERT(liDriveIndex != -1, "liDriveIndex != -1");           // .cpp:1868 tripwire
+
+            // `bl LinkParts` with r4=parent index, r5=child index, r6=0. The two INDICES,
+            // not the bodies' tags -- the remove side uses the tags instead, which is an
+            // asymmetry in the original, not a transcription slip.
+            mpDrivenPairs->LinkParts(liParentIndex, liChildIndex, 0);
+
+            rw::physics::Drive* const lpDrive = mpSimulation->AddDrive(
+                lpParentBody,
+                lpChildBody,
+                mDriveData.GetDriveFrames(liDriveIndex),
+                mDriveData.GetScaledDriveDynamics(liDriveIndex));
+
+            lpDrive->SetTag(static_cast<u32>(liDriveIndex));   // `stw r30, 0x18(r3)`
+            lpDrive->SetSpy(lrEvent.mbSpy);                    // `stw r10, 0x1C(r3)` -- whole word
+
+            // `addi r11,r30,0x11EC` ; `slwi r11,r11,2` ; `stwx r3,r11,r29` == this + 0x47B0 +
+            // liDriveIndex*4 == mDriveData.maRWDrives[liDriveIndex] at the CONSOLE's 4-byte
+            // pointer stride. ⛔ Never reproduce that arithmetic -- the slot is 8 bytes here.
+            mDriveData.SetDrive(liDriveIndex, lpDrive);
+
+            ++miNumDrives;   // `lwz/addi/stw 0x484C(r29)`
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessRemoveDriveQueue @ 0x8289FF98   (90 instructions)
+    //
+    // The exact inverse of the above, and it reads the slot BEFORE it frees it.
+    //
+    // ⚠️ THE UNLINK USES THE BODIES' TAGS, NOT THE TABLE INDICES. The console reaches the two
+    // bodies THROUGH the drive (`lwz 0x10` child, `lwz 0x14` parent) and passes
+    // `body->mTag` (+0x6C) for each. It cannot do what the add side does, because by this
+    // point it only holds a drive id -- there is no body handle in an InRemoveDrive. The
+    // (parent, child) argument ORDER is preserved from the add side.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessRemoveDriveQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InRemoveDriveQueue* const lpQueue =
+            lpInput->GetRemoveDriveQueue();                                 // `bl sub_8289EC90`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InRemoveDrive& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(DriveId{ lrEvent.mu64Id });
+            if (liDriveIndex == -1)
+                continue;
+
+            CGS_ASSERT(liDriveIndex < DriveData::KI_SIZE, "liIndex < knSize");        // h:657
+            CGS_ASSERT(mDriveData.IsSlotUsed(liDriveIndex), "mabUsedSlot[liIndex]");  // h:658
+
+            rw::physics::Drive* const lpDrive = mDriveData.GetDrive(liDriveIndex);
+
+            mpDrivenPairs->UnlinkParts(static_cast<int>(lpDrive->GetParent()->GetTag()),
+                                       static_cast<int>(lpDrive->GetChild()->GetTag()));
+
+            mDriveData.RemoveDrive(liDriveIndex);   // clears mabUsedSlot only -- see its body
+            mpSimulation->RemoveDrive(lpDrive);
+
+            --miNumDrives;   // `lwz/addi -1/stw 0x484C(r28)`
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessUpdateDriveFramesQueue @ 0x8289FC28   (77 instructions)
+    //
+    // ⭐ THE STRUCTURAL WITNESS FOR THE WHOLE EVENT BLOCK. Its copy loop -- `_R26=16,
+    // _R27=32, _R28=48`, base `event + 0x10`, FOUR lvx128/stvx128 pairs, destination stepped
+    // by `liIndex << 6` -- is what proved sizeof(DriveFrames)==64 and the payload's +0x10
+    // offset independently of the queue-offset chain (task #142). The Joint sibling does
+    // FIVE lanes for its extra quaternion. Written here as the whole-object assignment the
+    // four lanes are.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessUpdateDriveFramesQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InUpdateDriveFramesQueue* const lpQueue =
+            lpInput->GetUpdateDriveFramesQueue();                           // `bl sub_8289ED38`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InUpdateDriveFrames& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(DriveId{ lrEvent.mu64Id });
+            if (liDriveIndex == -1)
+                continue;
+
+            *mDriveData.GetDriveFrames(liDriveIndex) = lrEvent.mDriveFrames;
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessUpdateDriveDynamicsQueue @ 0x8289FD60   (74 instructions)
+    //
+    // ⚠️⚠️ IT WRITES THE UNSCALED ARRAY ONLY. The destination is `(liIndex+2)<<5 + &mDriveData`
+    // == maDynamics (+0x40) -- NOT maScaledDynamics (+0x60), which is the array the solver
+    // actually reads through Drive::m_crtl. So a mid-life dynamics update does not reach the
+    // solver until something re-scales. Nothing in this drain does, and no
+    // ScaleOneDriveForTimeStep body exists in the shipped image's call graph from here.
+    // Recorded as observed console behaviour; ⛔ NOT "fixed" by also writing the scaled copy,
+    // which would be inventing a store and changing the handling.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessUpdateDriveDynamicsQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InUpdateDriveDynamicsQueue* const lpQueue =
+            lpInput->GetUpdateDriveDynamicsQueue();                         // `bl sub_8289EDE0`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InUpdateDriveDynamics& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(DriveId{ lrEvent.mu64Id });
+            if (liDriveIndex == -1)
+                continue;
+
+            *mDriveData.GetDriveDynamics(liDriveIndex) = lrEvent.mDriveDynamics;
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessSetDriveSpyQueue @ 0x8289FE88   (68 instructions)
+    //
+    // The nineteenth and last call in ProcessInputBuffers' dispatch. ⚠️ This function is an
+    // .ida-exports HOLE -- it is absent from the JSON export set and was recovered by
+    // decoding the .i64 directly (task #142 for the address, #143 for the body). Another
+    // instance of [[ida-export-set-has-holes]]: missing-from-JSON is not nonexistent.
+    //
+    // ⚠️ `stw`, not a bitfield edit. The console stores the event's whole byte into
+    // Drive::m_spy (+0x1C) as a word. The `ori 8` / `clrlwi ...,29` pair that
+    // RigidBody::SetSpy compiles to belongs to a DIFFERENT class whose flag shares a word
+    // with its state; importing that shape here would corrupt three unrelated bits.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessSetDriveSpyQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InSetDriveSpyQueue* const lpQueue =
+            lpInput->GetSetDriveSpyQueue();                                 // `bl sub_8289EE88`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InSetDriveSpy& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(DriveId{ lrEvent.mu64Id });
+            if (liDriveIndex == -1)
+                continue;
+
+            CGS_ASSERT(liDriveIndex < DriveData::KI_SIZE, "liIndex < knSize");        // h:657
+            CGS_ASSERT(mDriveData.IsSlotUsed(liDriveIndex), "mabUsedSlot[liIndex]");  // h:658
+
+            mDriveData.GetDrive(liDriveIndex)->SetSpy(lrEvent.mbSpy);
         }
     }
 }

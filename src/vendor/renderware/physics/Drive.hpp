@@ -38,6 +38,20 @@ namespace physics
         Drive*         GetRight() const    { return m_right; }
         Drive*         GetLeft() const     { return m_left; }
 
+        // Both writes are X360-attested inside PhysicsSimulationModule::ProcessAddDriveQueue,
+        // immediately after Simulation::AddDrive returns: `stw r30, 0x18(r3)` (the DriveData
+        // slot index, mirroring RigidBody::SetTag's role) and `stw r10, 0x1C(r3)` at
+        // 0x828A4EA8/0x828A4EAC. ProcessSetDriveSpyQueue @0x8289FF7C writes m_spy the same way.
+        // [INFERRED NAMES] -- the console inlines both, exactly as it inlines
+        // RigidBodyData::SetRigidBody; the spelling is taken from RigidBody's attested pair.
+        //
+        // ⚠️ SetSpy HERE IS A WHOLE-WORD STORE, unlike RigidBody::SetSpy. m_spy is its own u32
+        // slot, so the console emits a plain `stw`; RigidBody's flag shares a word with its
+        // state and therefore compiles to `ori 8` / `clrlwi ...,29`. Copying that shape into
+        // this class would clobber three unrelated bits.
+        void SetTag(u32 luTag)   { m_tag = luTag; }                     // +0x18
+        void SetSpy(bool lbSpy)  { m_spy = static_cast<u32>(lbSpy); }   // +0x1C
+
     private:
         friend struct DriveJacobian;
         friend class Simulation;
