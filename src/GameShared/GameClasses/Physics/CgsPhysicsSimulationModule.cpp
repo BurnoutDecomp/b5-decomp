@@ -212,9 +212,10 @@ namespace CgsPhysics
 
     // ===================== RigidBodyData ===================================
 
-    // CgsRigidBody.h:87: the module-global invalid-rigid-body sentinel (X360 static
-    // qword_82F33E18 == 0xFFFFFFFFFFFFFFFF). RigidBodyId::IsInvalid() compares against it.
-    const RigidBodyId K_INVALID_RIGID_BODY_ID = { 0xFFFFFFFFFFFFFFFFull };
+    // The `const RigidBodyId K_INVALID_RIGID_BODY_ID = { ~0ull };` definition that used to sit
+    // here went with the RigidBodyId de-fork (task #141). The sentinel now comes from its real
+    // home, CgsRigidBody.h:41, as the header-scope `static const` the console's per-TU copies
+    // (qword_82F33E18 here, qword_82F2A3A8 in the vehicle-manager TU) actually attest.
 
     // Host-stable element strides (X360-attested).
     static_assert(sizeof(Inertia)     == 48, "Inertia stride 48 (GetInertia 48*(idx+50))");
@@ -945,7 +946,10 @@ namespace CgsPhysics
                 {
                     CGS_ASSERT(liSlot < RigidBodyData::KI_SIZE, "liIndex < knSize");                      // h:585
                     CGS_ASSERT(!mBodyData.GetGameID(liSlot).IsInvalid(), "!maGameIDs[liIndex].IsInvalid()"); // h:586
-                    CGS_ASSERT(lrEvent.mID != static_cast<u64>(mBodyData.GetGameID(liSlot).mId),
+                    // `.mId` was a reach into the retired local copy's public member; the real
+                    // class keeps it private and exposes it through operator u64 (DWARF
+                    // CgsRigidBody.h:117), which is what the console's bare `ld` is.
+                    CGS_ASSERT(lrEvent.mID != static_cast<u64>(mBodyData.GetGameID(liSlot)),
                                "Trying to add a rigid body with ID that already exists in the simulation: "); // .cpp:1058
                 }
             }

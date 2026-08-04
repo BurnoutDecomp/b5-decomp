@@ -84,22 +84,29 @@
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h" // CgsModule::ModuleSingleBuffered (the base; supplies the vtable + the two RWMutexes the ctor constructs inline)
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModule.h" // CgsPhysics::PhysicsSimulationModule (embedded by value @ +0x230) AND CgsPhysics::RigidBodyId -- see the fork note below
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"       // CgsSceneManager::EntityId + K_INVALID_ENTITY_ID
-// ⚠️⚠️ CgsPhysics::RigidBodyId IS FORKED IN THIS TREE, and this header deliberately does NOT
-// include CgsRigidBody.h because of it. The two homes are:
+// ⭐ CgsPhysics::RigidBodyId WAS FORKED IN THIS TREE UNTIL 2026-08-04; IT IS NOT ANY MORE
+// (task #141), and this header no longer avoids CgsRigidBody.h. The two homes had been:
 //     CgsRigidBody.h:24                 class,  PRIVATE mId, `static const K_INVALID_RIGID_BODY_ID`
-//     CgsPhysicsSimulationModule.h:111  struct, PUBLIC  mId, `extern const K_INVALID_RIGID_BODY_ID`
-//                                       (defined in the mounted CgsPhysicsSimulationModule.cpp:183)
-// CgsPhysicsSimulationIO_Events.h:52 already calls this out as "an open ODR fork that has simply
-// never met in one TU"; including both is a hard C2011. mWorldRigidBodyId therefore uses the
-// declaration that arrives with the embedded mSimulationModule -- BOTH readings are a single u64,
-// so the width, the seat and the `stdx` store are identical either way, and the layout gate asserts
-// sizeof == 8 regardless of which one wins. ⛔ Resolving the fork (CgsPhysicsSimulationModule.h
-// should include CgsRigidBody.h and drop its copy; the `static`-vs-`extern` linkage question is
-// settled by the console emitting a per-TU copy -- qword_82F33E18 in the sim-module TU vs
-// qword_82F2A3A8 in the vehicle-manager TU, exactly like K_INVALID_ENTITY_ID) is a separate pass:
-// it changes member ACCESS (public -> private) across a mounted core TU and needs its own boot test.
-// PhysicsModule is the closest any TU has come to making them meet -- it now includes both this
-// header's chain and BrnVehicleManager.h.
+//     CgsPhysicsSimulationModule.h      struct, PUBLIC  mId, `extern const K_INVALID_RIGID_BODY_ID`
+// The second one is deleted. CgsPhysicsSimulationModule.h now includes CgsRigidBody.h, so the
+// declaration that arrives here with the embedded mSimulationModule IS the real class, and
+// mWorldRigidBodyId is seated on it. Width, seat and the `stdx` store are unchanged (one u64
+// either way) and the layout gate's sizeof == 8 still holds -- ⚠️ which is exactly why nothing
+// would ever have caught the copy drifting.
+//
+// ⭐ THIS HEADER IS THE PROOF, NOT A CLAIM. The note here used to predict that resolving the
+// fork "needs its own boot test" because PhysicsModule "is the closest any TU has come to making
+// them meet -- it now includes both this header's chain and BrnVehicleManager.h". That prediction
+// was testable and was tested: BrnPhysicsModule.cpp is MOUNTED (its .obj rebuilds with this
+// header), it still includes both, and it compiles clean against the de-forked chain with the exe
+// SIZE unchanged at 2,926,592. The feared C2011 does not occur, because the collision needed two
+// definitions and there is now one. ⚠️ Size, not byte-identity -- the pre-change binary was
+// overwritten before a hash was taken, so identical codegen is inferred, not measured.
+//
+// On the `static`-vs-`extern` linkage question this note left open: the console settles it by
+// emitting a PER-TU copy of the sentinel -- qword_82F33E18 in the sim-module TU vs qword_82F2A3A8
+// in the vehicle-manager TU, exactly like K_INVALID_ENTITY_ID -- which is what CgsRigidBody.h's
+// header-scope `static const` produces. The `extern const` in the deleted copy was the invention.
 #include "GameSource/GameState/BrnGameStateSharedIO.h"             // BrnGameState::GameStateModuleIO::EGameModeType (E_MODE_NONE == -1)
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"   // BrnPhysics::Vehicle::VehicleManager (embedded by value @ +0x4AA0)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyData.h"     // BrnPhysics::ContactSpy::ContactSpyData        (@ +0x2ECF0)
