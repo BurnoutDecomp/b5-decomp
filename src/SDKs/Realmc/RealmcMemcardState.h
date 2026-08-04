@@ -47,16 +47,16 @@ namespace RealmcCore
 class MemcardState
 {
 public:
-    // @ 0x82C47328 -- BLOCKED (honest gap, NOT fabricated). The ctor stores the
-    //   mutex, zeroes the flags/masks, default-constructs the deque at +0x1C
-    //   (X360 `Rea` -- the Allocator64 deque constructor, un-homed / truncated
-    //   symbol), builds a RealmcCore::MessageFilter into +0x50 (AddRefing the
-    //   default message held in the global off_832BE1F4, which is not declared),
-    //   and reserves 10 slots on the task stack. The deque constructor and the
-    //   off_832BE1F4 default-message global are un-homed collaborators, so the
-    //   ctor cannot be reproduced faithfully yet -- declared only. STILL TRUE as of
-    //   wave L: the dtor beside it was unblocked, but this ctor was NOT, and no
-    //   definition exists anywhere in the tree. Verified by the wave-L close-out.
+    // @ 0x82C47328 -- DEFINED, in RealmcMemcardState.cpp (landed wave N). Do not
+    //   add a second definition. The former blockers are both closed: the deque
+    //   constructor `Rea` was homed in wave L as RealmcCore::Allocator64's ctor
+    //   @ 0x82C45B48 (truncated export symbol, resolved by xref -- see
+    //   RealmcAllocator64.h), and the off_832BE1F4 default-message global needs
+    //   no declaration here because the ctor reaches it through the homed
+    //   MessageFilter(this) constructor in RealmcCore.cpp. Stores the mutex,
+    //   zeroes flags/masks/containers, default-constructs the +0x1C deque with
+    //   capacity 0, backend-allocates + placement-constructs the MessageFilter
+    //   into +0x50 (null-guarded), and reserves 10 task-stack slots.
     explicit MemcardState(EA::Thread::Mutex* pMutex);
 
     // @ 0x82C46470 -- DEFINED, in RealmcMemcardState_wL_02.cpp. Do not add a second

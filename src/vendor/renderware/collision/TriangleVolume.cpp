@@ -14,13 +14,14 @@
 // operations they approximate (sqrt / divide); see FeatureEdge.cpp for the same
 // treatment.
 //
-// CreateGPInstance @ 0x82BBAA00 is NOT homed here: it assembles the triangle's
-// GP-instance edge-length vector through `vperm ..., v4` with v4 loaded from
-// the un-recovered VMX permute-control table unk_82CDA350 (the export carries
-// no value for it), and installs the un-homed GPTriangle VolumeMethods table
-// (off_82F91920). Without the permute mask the per-lane routing of the packed
-// edge data cannot be reconstructed faithfully -- a guessed mask would be
-// wrong -- so it is left BLOCKED per the project's no-fabrication rule.
+// CreateGPInstance @ 0x82BBAA00 is not yet homed here, but its former blocker
+// is CRACKED (2026-08-04 unblock dump): unk_82CDA350 is DUMPED --
+//   bytes 00 01 02 03 | 14 15 16 17 | 00 01 02 03 | 00 01 02 03,
+// i.e. vperm(vA, vB, ctl) = (vA.x, vB.y, vA.x, vA.x) -- and off_82F91920 is
+// row [3] (TRIANGLE) of the recovered unk_82F918F0 VolumeMethods table
+// (0x82F918F0 + 3*0x10), i.e. g_aGPVolumeMethods[GPInstance::TRIANGLE].
+// Full recovered tables + per-instruction walk-through:
+// scratchpad/waveN/TriangleVolume.spec.md. Implementation pending.
 // ===========================================================================
 
 namespace rw
@@ -28,18 +29,27 @@ namespace rw
 namespace collision
 {
 
-// unk_8327EF10 -- the GetNormal degenerate-area epsilon (vcmpgtfp guard). No
-// value in the export; the role is identical to FeatureEdge's degenerate-edge
-// epsilon, so it takes the same inferred magnitude. FLAGGED as inferred.
-const f32 TriangleVolume::KF_DEGENERATE_EPSILON = 1.0e-12f;
+// unk_8327EF10 -- the GetNormal degenerate-area epsilon (vcmpgtfp guard).
+// MEASURED (2026-08-04 unblock dump): unk_8327EF10 sits in writable .data and
+// is filled at static-init time by the splat thunk @ 0x82C73C70
+// (lvlx unk_82180554 ; vspltw 0 ; stvx128 -> 0x8327EF10); the .rdata source
+// word 0x82180554 is 0x34000000 = 2^-23 = FLT_EPSILON. The earlier 1.0e-12f
+// here was an inference and is superseded by this measured value.
+const f32 TriangleVolume::KF_DEGENERATE_EPSILON = 1.1920928955078125e-07f;   // 0x34000000, 2^-23
 
-// dword_8327EEEC -- a module-scope initialisation word Initialize stamps into
-// every triangle volume at +0x40. It is a relocated .data value (loaded via
-// `lis/addi dword_8327EEE0 ; lwz +0xC`); the export carries no value and none
-// of this TU's functions read the field back, so its meaning/owner TU is not
-// recovered. It is declared extern so the store is reproduced faithfully
-// WITHOUT fabricating a value (the real definition lives in the un-recovered
-// GP/volume registration TU). FLAGGED as un-recovered.
+// dword_8327EEEC -- RECOVERED (2026-08-04 unblock dump): entry [3] (TRIANGLE)
+// of the per-VolumeType vtable registry at dword_8327EEE0, runtime-written by
+// rw::collision::Volume::InitializeVTable @ 0x82BB03A8:
+//   [0]=0, [1]=&unk_82F91740 (SPHERE),  [2]=&unk_82F918C0 (CAPSULE),
+//   [3]=&unk_82F919A4 (TRIANGLE),      [4]=&unk_82F9176C (BOX),
+//   [5]=&unk_82F91894 (CYLINDER),      [6]=&unk_82F919D0 (AGGREGATE).
+// So the word Initialize stamps at +0x40 is the console 32-bit POINTER IMAGE
+// of the triangle Volume vtable record (the block PrimitiveIntersect.cpp's
+// GetVolumeVTable reads back from Volume+0x40; its +0x14 slot is this class's
+// own CreateGPInstance @ 0x82BBAA00). Kept as an extern u32 console image --
+// the definition and the host pointer-width promotion belong to the Volume /
+// InitializeVTable TU, not here. FLAG (host width): a u32 standing in for a
+// console pointer; see the spec (scratchpad/waveN/TriangleVolume.spec.md).
 extern const u32 g_uTriangleVolumeInitWord;
 
 namespace
