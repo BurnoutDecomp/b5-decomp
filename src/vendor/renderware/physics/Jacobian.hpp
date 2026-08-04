@@ -112,6 +112,16 @@ struct Jacobian
     void* mpNode;    // console mRows[12].w  +0xCC -- the only true pointer in the record
 };
 
+// ⚠️⚠️ THE ARRAY STRIDE IS `sizeof(Jacobian)`, **NOT** THE CONSOLE'S 384.
+// Promoting the node pointer out of a w lane makes the host record larger, exactly as it made
+// the Xbox One record 400 bytes. Every walk of m_CJ_Stack / m_JJ_Stack / m_DJ_Stack -- the two
+// batch builders, SetWorkspace's carving, and any future pipeline -- must index with this, or
+// consecutive records OVERLAP and the solver reads its neighbour's constraint rows. That is a
+// silent, plausible-output corruption of exactly the class this subsystem keeps producing.
+// The console literal is kept next to it, for decode documentation only.
+inline u32 JacobianStride()      { return static_cast<u32>(sizeof(Jacobian)); }
+const u32 KU_JACOBIAN_STRIDE_X360 = 0x180u;   // 384 -- CONSOLE, do not index the host with it
+
 class Joint;
 class Drive;
 class Simulation;

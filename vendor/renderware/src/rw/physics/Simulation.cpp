@@ -6,14 +6,15 @@
 // source and no DecFIGS DWARF exist for this TU". That was FALSE -- see the correction block
 // in rw/physics/simulation.h. Names below are DWARF-authoritative.
 //
-// This TU has 22 X360 functions. SEVEN are reconstructed here:
+// This TU has 22 X360 functions. EIGHT are reconstructed here:
 //     GetResourceDescriptor  @ 0x82BC5090
 //     SetWorkspace           @ 0x82BC54D8
 //     BatchIntegrator        @ 0x82BC2FC8
 //     ActivateRigidBody      @ 0x82BC29E8
 //     FreezeRigidBody        @ 0x82BC2A58
 //     RemoveRigidBody        @ 0x82BC2950
-//     (JointBatchBuild / DriveBatchBuild live with the jacobian builders they call.)
+//     JointBatchBuild        @ 0x82BC6A30
+//     DriveBatchBuild        @ 0x82BC6AB8
 //
 // ⭐ THE BLOCK NOTE THIS FILE USED TO CARRY IS RETIRED. It said the list splice/walk
 // functions were blocked because "these read the console RigidBody's intrusive node fields
@@ -32,6 +33,10 @@
 // =====================================================================================
 
 #include "rw/physics/simulation.h"
+
+#include "vendor/renderware/physics/Jacobian.hpp"   // the 384-byte record + JacobianStride()
+#include "vendor/renderware/physics/Joint.hpp"
+#include "vendor/renderware/physics/Drive.hpp"
 
 namespace rw
 {
@@ -89,9 +94,15 @@ rw::BaseResourceDescriptors<5>* Simulation::GetResourceDescriptor(
 // -------------------------------------------------------------------------------------
 bool Simulation::SetWorkspace(void* lpWorkspace, int liMaxJoints, int liMaxDrives, int liMaxContacts)
 {
+    // ⚠️ THE STRIDE IS THE HOST `sizeof(Jacobian)`, NOT THE CONSOLE'S 384. Promoting the node
+    // pointer out of a w lane makes the record larger on x64 (the shipping x64 build grew it
+    // 384 -> 400 for the same reason). Carving with the console literal would make every
+    // buffer overlap its neighbour by the difference. See Jacobian.hpp.
+    const u32 luStride = JacobianStride();
+
     char* lpJointBase   = static_cast<char*>(lpWorkspace);
-    char* lpDriveBase   = lpJointBase + KU_JACOBIAN_STRIDE * static_cast<u32>(liMaxJoints);
-    char* lpContactBase = lpDriveBase + KU_JACOBIAN_STRIDE * static_cast<u32>(liMaxDrives);
+    char* lpDriveBase   = lpJointBase + luStride * static_cast<u32>(liMaxJoints);
+    char* lpContactBase = lpDriveBase + luStride * static_cast<u32>(liMaxDrives);
 
     m_CT_Count = 0u;   // +0x64
     m_CS_Count = 0u;   // +0x68
@@ -108,9 +119,72 @@ bool Simulation::SetWorkspace(void* lpWorkspace, int liMaxJoints, int liMaxDrive
     m_DR_Max = static_cast<u32>(liMaxDrives);     // +0x84
     m_CT_Max = static_cast<u32>(liMaxContacts);   // +0x7C
 
-    m_JT_Stride = KU_JACOBIAN_STRIDE;   // +0x5C
-    m_DR_Stride = KU_JACOBIAN_STRIDE;   // +0x60
+    m_JT_Stride = luStride;   // +0x5C  (the console stores its own 384 here)
+    m_DR_Stride = luStride;   // +0x60
     return true;
+}
+
+// -------------------------------------------------------------------------------------
+// Simulation::JointBatchBuild @ 0x82BC6A30   (34 instructions)
+// Simulation::DriveBatchBuild @ 0x82BC6AB8   (34 instructions)
+//
+// Identical bodies against different members. VERIFIED three ways -- X360, BurnoutPR
+// (sub_5996AD0 / sub_5992420, byte-identical Simulation offsets), and Xbox One
+// (sub_1409B5B50 / sub_1409B30F0, every pointer widened 4 -> 8 and the stride 384 -> 400).
+//
+// The membership test is `(A->mState | B->mState) & ACTIVE_BODY`: X360 `or r11,r11,r10` then
+// `rlwinm. r11,r11,0,29,29`, i.e. a constraint is built if EITHER body is awake. That single
+// instruction pair is also what makes ACTIVE_BODY == 4 unarguable.
+//
+// ⚠️ The spy counter is zeroed BEFORE the built-count (X360 stores +0x70 then +0x6C), and the
+// early-out happens after both -- so a frame with no active joints still clears the counters.
+// -------------------------------------------------------------------------------------
+void Simulation::JointBatchBuild()
+{
+    m_JS_Count = 0u;                                     // +0x70
+    m_JT_Count = 0u;                                     // +0x6C
+
+    if (m_ActiveJT_Count == 0u)                          // +0x50
+        return;
+
+    char* const lpArray = static_cast<char*>(m_JJ_Stack);   // +0x14
+    const u32   luStride = JacobianStride();
+    Joint*      lpNode   = m_ActiveJT_Anchor->m_right;      // +0x30, then node+0x08
+
+    do
+    {
+        if (((lpNode->m_bodyA->mState | lpNode->m_bodyB->mState) & ACTIVE_BODY) != 0)
+        {
+            const u32 luSlot = m_JT_Count++;
+            reinterpret_cast<JointJacobian*>(lpArray + luSlot * luStride)->Build(*lpNode, this);
+        }
+        lpNode = lpNode->m_right;
+    }
+    while (lpNode != m_ActiveJT_Anchor);
+}
+
+void Simulation::DriveBatchBuild()
+{
+    m_DS_Count = 0u;                                     // +0x78
+    m_DR_Count = 0u;                                     // +0x74
+
+    if (m_ActiveDR_Count == 0u)                          // +0x58
+        return;
+
+    char* const lpArray = static_cast<char*>(m_DJ_Stack);   // +0x18
+    const u32   luStride = JacobianStride();
+    Drive*      lpNode   = m_ActiveDR_Anchor->m_right;      // +0x38, then node+0x08
+
+    do
+    {
+        if (((lpNode->m_bodyA->mState | lpNode->m_bodyB->mState) & ACTIVE_BODY) != 0)
+        {
+            const u32 luSlot = m_DR_Count++;
+            reinterpret_cast<DriveJacobian*>(lpArray + luSlot * luStride)->Build(*lpNode, this);
+        }
+        lpNode = lpNode->m_right;
+    }
+    while (lpNode != m_ActiveDR_Anchor);
 }
 
 // -------------------------------------------------------------------------------------
