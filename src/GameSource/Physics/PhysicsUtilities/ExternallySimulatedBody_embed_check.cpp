@@ -98,13 +98,17 @@ namespace
 // existence checks through the accessors, which fail to compile if a member is deleted or
 // renamed -- plus the fact that a pointer in a float lane is a compile error on x64 anyway.
 //
-// TAMPER-TESTED 2026-08-04, six cases, ALL SIX FIRE:
+// TAMPER-TESTED 2026-08-04. Five cases were MECHANICALLY run -- the arithmetic block below was
+// extracted verbatim, compiled standalone (baseline compiles clean), then each tamper applied
+// and re-compiled. ALL FIVE FIRE:
 //   FIRES  KU_VEC = 12 -> 16 in the walk (i.e. "the scalars are separate 16-byte fields")
 //   FIRES  drop mId from the walk (mVel then lands at +0x1C, breaking six later anchors)
 //   FIRES  swap mIfull and mIsplt
 //   FIRES  mState widened to 8 (the run closes on 0xB4, not 0xB0)
 //   FIRES  move mTag before mAt
-//   FIRES  delete the GetInverseMass accessor (PART 2 stops compiling)
+// A sixth case -- deleting any of the twelve accessors -- fires BY CONSTRUCTION rather than by
+// experiment: PART 2 names each one, so its removal is a C2039 in this TU. Said that way round
+// so the claim is not overstated.
 // =====================================================================================
 namespace
 {

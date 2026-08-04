@@ -51,8 +51,12 @@ namespace rw
 namespace physics
 {
 
-struct Joint;
-struct Drive;
+// ⚠️ These MUST match the class-key Joint.hpp / Drive.hpp use (`class`). MSVC mangles a
+// reference by the FIRST declaration the TU sees, so a `struct` here and a `class` there
+// produces two different mangled names for the same function and an LNK2019 that names a
+// symbol which looks identical in the log.
+class Joint;
+class Drive;
 
 // simulation.h:202 (DWARF). The committed header's guess ("bit0 joints, bit1 drives,
 // bit2 contacts") was right; these are the real names.
@@ -67,12 +71,18 @@ enum SpyingFlag
 class Simulation
 {
 public:
-    // The stride, in bytes, of one solver jacobian block (joint/drive share it).
+    // The CONSOLE stride, in bytes, of one solver jacobian block (joint/drive share it).
     // VERIFIED three ways: X360 `mulli r10,r11,0x180` (DriveBatchBuild @0x82BC6B14,
     // JointBatchBuild @0x82BC6A8C); BurnoutPR `lea ecx,[eax+eax*2]` + `shl ecx,7`; and the
     // Xbox One build's `imul rcx,rax,190h` = 400, which is this 384 plus the node pointer
     // widened out of a w lane (+8) plus 8 bytes of tail alignment.
-    static const u32 KU_JACOBIAN_STRIDE = 0x180u;   // 384
+    //
+    // ⚠️⚠️ DO NOT INDEX A HOST ARRAY WITH THIS. The PC record is larger for exactly the reason
+    // the Xbox One one is, so SetWorkspace and the two batch builders walk with
+    // `rw::physics::JacobianStride()` == sizeof(Jacobian). Indexing with 384 would overlap
+    // consecutive records and the solver would read its neighbour's constraint rows.
+    // Kept here as decode documentation.
+    static const u32 KU_JACOBIAN_STRIDE = 0x180u;   // 384 -- CONSOLE ONLY
 
     // -------------------------------------------------------------------------------------
     // GetResourceDescriptor @ 0x82BC5090 -- build-time sizer for the simulation's own block.
