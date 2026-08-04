@@ -42,6 +42,9 @@
 // real definitions have to be visible here rather than forward-declared.
 #include "vendor/renderware/physics/DriveFrames.hpp"    // rw::physics::DriveFrames   (64B)
 #include "vendor/renderware/physics/DriveDynamics.hpp"  // rw::physics::DriveDynamics (32B)
+// task #144: same for the JointFrames/JointLimits pair retired below.
+#include "vendor/renderware/physics/JointFrames.hpp"    // rw::physics::JointFrames   (80B)
+#include "vendor/renderware/physics/JointLimits.hpp"    // rw::physics::JointLimits   (64B)
 
 // rw::physics pointer members of PhysicsSimulationModule. Forward declarations
 // only -- the module never dereferences them in the functions homed here. Class
@@ -73,9 +76,43 @@ namespace CgsPhysics
     // Interior layout not consumed here -> opaque sized spans (declared-only
     // element interiors, flagged).
 
-    // 5 quaternion/vector slots: Quaternion(16)+Vector3(16)+Quaternion(16)+
-    // Vector3(16)+Quaternion(16) == 80 bytes (DWARF jointframes.h).
-    struct alignas(16) JointFrames { u8 macOpaque[80]; };
+    // ⚠️⚠️ THE **EIGHTH AND NINTH** TYPE FORKS IN THIS SUBSYSTEM WERE RETIRED HERE ON
+    // 2026-08-04 (task #144), and both were LIVE. `JointFrames` was declared here as a bare
+    // `u8 macOpaque[80]` and `JointLimits` (below) as a second, re-spelled copy of
+    // rw::physics::JointLimits carrying its own `mafPprism`/`mfVtwist`/`meSwingf` fields and
+    // its own `E_SwingType`/`E_TwistType`. Exactly the DriveFrames/DriveDynamics pair task
+    // #143 retired one group over, and they survived for the same reason: nothing had yet
+    // moved a VALUE across the seam.
+    //
+    // ⚠️⚠️ BOTH WERE ALREADY LOAD-BEARING, on the solver's own read path:
+    //   * JointData::maFrames[] / maLimits[] hold these types;
+    //   * ProcessAddJointQueue points Joint::m_skel / Joint::m_limit straight at those slots;
+    //   * JointJacobian_Build.cpp:74-75 then dereferences them as the **rw::physics** types --
+    //     `const JointFrames& lrF = *lrJoint.m_skel;` -- every tick the solver runs.
+    // Two definitions of two records, the solver reading through one and the table writing the
+    // other. Byte-identical, so correct BY LUCK, exactly as the Inertia and Drive forks were.
+    //
+    // ⚠️⚠️ AND THE SIGNATURE THAT CARRIES THEM HIDES THEM: rw::physics::Simulation::AddJoint
+    // takes `void* lpFrames, void* lpLimits`, so a forked pointer converts IMPLICITLY and
+    // SILENTLY at the one call site that matters. ⇒ a `void*` in a reconstructed signature is
+    // a fork detector switched off; see [[odr-forks-link-silently]].
+    //
+    // ⭐⭐ WHAT SETTLED IT IS NOT STYLE BUT THE SHIPPED BINARY. ProcessAddJointQueue @0x828A40F0
+    // carries ELEVEN validation asserts whose baked literals name the accessors outright --
+    // `RwMathVPU::IsValid( lpFrames->GetChildAngularFrame() )`,
+    // `RwMathVPU::IsValid( lpLimits->GetAngularVelocityLimit() )`, and nine more. Every one of
+    // those accessors exists on the rw::physics classes and NOT ONE exists on the copies that
+    // used to be declared here. The DWARF agrees independently: InAddJoint's payload members
+    // are typed `NonConstructedClassContainer<rw::physics::JointFrames>` /
+    // `<rw::physics::JointLimits>` (CgsPhysicsSimulationModuleIO.h:259-260).
+    //
+    // The aliases are the whole fix -- every existing `JointFrames`/`JointLimits` spelling
+    // inside CgsPhysics keeps working and now names ONE type. The X360-attested 80/64-byte
+    // strides are asserted at the definitions they are a claim about
+    // (vendor/renderware/physics/JointFrames.hpp, JointLimits.hpp) and re-pinned in JointData's
+    // own offsetof block.
+    typedef ::rw::physics::JointFrames JointFrames;
+    typedef ::rw::physics::JointLimits JointLimits;
 
     // ⚠️⚠️ THE **SEVENTH** TYPE FORK IN THIS SUBSYSTEM WAS RETIRED HERE ON 2026-08-04
     // (task #143), and it was LIVE. `DriveFrames` and `DriveDynamics` were declared HERE as a
@@ -107,12 +144,9 @@ namespace CgsPhysics
     typedef ::rw::physics::DriveFrames   DriveFrames;
     typedef ::rw::physics::DriveDynamics DriveDynamics;
 
-    // ⚠️ `JointFrames` BELOW IS THE SAME FORK, STILL OPEN. It is a `u8 macOpaque[80]` shadowing
-    // rw::physics::JointFrames, reached the same way (JointData::maFrames -> Joint::m_skel ->
-    // JointJacobian_Build.cpp). It is NOT retired here because the JOINT drains are a
-    // different group and no value crosses its seam yet -- but it will bite the wave that
-    // writes ProcessAddJointQueue / ProcessUpdateJointFramesQueue, in exactly the way this one
-    // bit this wave. ⛔ Do not "fix" it with a cast when you get there.
+    // ⭐ 2026-08-04 (task #144): `JointFrames` and `JointLimits` -- the two forks this note used
+    // to leave open for "the wave that writes ProcessAddJointQueue" -- are RETIRED, by that
+    // wave, with the alias + moved-pins mechanism above. Nothing here is still forked.
 
     // ⚠️ WAS A TYPE FORK UNTIL 2026-08-04 (task #141). This spelled out its OWN copy of
     // rw::physics::Inertia's seven fields (`f32 mafInvTens[4]` + six named scalars), pinned by
@@ -185,25 +219,14 @@ namespace CgsPhysics
     // something that looks character-for-character identical in the log.
     namespace rw_physics = ::rw::physics;
 
-    // JointLimits IS modelled field-by-field: JointData's constructor writes its
-    // members by name. 64-byte record (DWARF jointlimits.h). The two trailing
-    // enum slots default to 0 (SWING_LOCKED / TWIST_LOCKED).
-    enum E_SwingType : s32 { E_SWING_LOCKED = 0, E_SWING_CONE = 1, E_SWING_HINGE = 2, E_SWING_AXLE = 3, E_SWING_FREE = 4 };
-    enum E_TwistType : s32 { E_TWIST_LOCKED = 0, E_TWIST_ARC = 1, E_TWIST_FREE = 2 };
-
-    struct alignas(16) JointLimits
-    {
-        f32         mafPprism[4];   // Vector3 mPprism  (@+0x00, 16B incl. pad)
-        f32         mafVprism[4];   // Vector3 mVprism  (@+0x10, 16B incl. pad)
-        f32         mfVtwist;       // @+0x20
-        f32         mfVswing;       // @+0x24
-        f32         mfSwinga;       // @+0x28
-        f32         mfTwista;       // @+0x2C
-        f32         mfSwingc;       // @+0x30
-        f32         mfTwistc;       // @+0x34
-        E_SwingType meSwingf;       // @+0x38
-        E_TwistType meTwistf;       // @+0x3C
-    };
+    // ⚠️ THE `E_SwingType` / `E_TwistType` / `JointLimits` TRIO THAT USED TO STAND HERE WAS THE
+    // NINTH TYPE FORK -- see the retirement block above. The enums were a re-spelling of
+    // rw::physics::SwingType / TwistType (identical values; the 5-way and 3-way dispatches at
+    // X360 0x82BC470C / on `lwz 0x3C(r28)` ARE those enums), and the struct a re-spelling of
+    // rw::physics::JointLimits with `mafPprism[4]` in place of a Vector3. Both now alias the
+    // real definitions in vendor/renderware/physics/JointLimits.hpp, where the layout pins live.
+    typedef ::rw::physics::SwingType E_SwingType;
+    typedef ::rw::physics::TwistType E_TwistType;
 
     // ---- JointData (DWARF CgsPhysicsSimulationModule.h:132) ----------------
     // knSize == 36. Struct-of-arrays slot table; the accessors index it by slot.
@@ -235,6 +258,55 @@ namespace CgsPhysics
         // only the spelling is, and it is taken from the DWARF-attested sibling on
         // RigidBodyData (CgsPhysicsSimulationModule.h:113).
         bool IsSlotUsed(s32 liIndex) const;
+
+        // ---- task #144: THIS CLASS WAS A HOLLOW SHELL TOO --------------------------------
+        // ⚠️ The DWARF (CgsPhysicsSimulationModule.h:137..:177) declares TEN methods on
+        // JointData; this tree declared THREE of them, and the seven missing were -- exactly as
+        // with DriveData one wave earlier -- the write path plus the two slot accessors the
+        // joint drains call. ⚠️ `grep -c "JointData::"` scored **6**, so the "a shell scores 1"
+        // heuristic does not fire here either. What catches it is diffing the class against the
+        // DWARF METHOD LIST.
+        //
+        // Still deliberately absent, because nothing in scope calls them and no body is decoded:
+        // GetIndexFromJoint (h:156), SetTimeStep (h:161), GetGameID (h:165). Declaring them
+        // without bodies would trade one hollow shell for another.
+
+        // DWARF h:144. X360 @0x8289D3E0 (98 instructions), sole caller ProcessAddJointQueue.
+        // ⭐ NOT the DriveData::AddDrive shape, despite the symmetry everywhere else: this one
+        // opens with a full 36-slot DUPLICATE-DETECTION pre-pass that asserts, for every live
+        // slot, `maGameIDs[li] != lGameID` and `maRWJoints[li] != lpJoint`. AddDrive (62 insn)
+        // has no such pass -- that is most of the 98-vs-62 gap. Mirroring the drive twin would
+        // have dropped it silently.
+        // ⚠️ FOUR parameters, no timestep. DriveData::AddDrive takes a fifth `float32_t` that it
+        // accepts and never reads (the defect flagged in task #143); the joint side never had it.
+        s32 AddJoint(rw_physics::Joint* lpJoint, const JointFrames& lrFrames,
+                     const JointLimits& lrLimits, JointId lGameID);
+
+        // DWARF h:148. No out-of-line symbol -- inlined into ProcessRemoveJointQueue at
+        // 0x8289FBE4 as the assert at .cpp:2696 followed by the single `stb 0, 0x4700(r15+idx)`
+        // (== mJointData + 0x15F0 == &mabUsedSlot[idx]). It frees the SLOT only; the rw Joint
+        // is returned to the simulation's own free list by Simulation::RemoveJoint separately.
+        bool RemoveJoint(s32 liIndex);
+
+        // DWARF h:152. No out-of-line symbol -- the console inlines it into all five joint
+        // drains as the same linear search, and all five copies agree: walk k = 0..35, skip
+        // unless mabUsedSlot[k], compare maGameIDs[k] to the id with a 64-bit `cmpld`, return k
+        // on a hit and -1 on exhaustion.
+        s32 GetIndexFromGameID(JointId lGameID) const;
+
+        // Checked slot accessors. No out-of-line symbols -- both are inlined at every call site,
+        // but their asserts identify them unambiguously by line: GetJointFrames carries h:630 /
+        // h:631 and GetJointLimits h:639 / h:640, against GetJoint's h:621 / h:622 (which the
+        // out-of-line GetJoint @0x8289D168 confirms directly).
+        JointFrames* GetJointFrames(s32 liIndex);
+        JointLimits* GetJointLimits(s32 liIndex);
+
+        // [INFERRED NAME] -- the write-back half of GetJoint, on exactly the same footing as
+        // DriveData::SetDrive (task #143) and RigidBodyData::SetRigidBody before it: the STORE
+        // is X360-attested (ProcessAddJointQueue @0x828A497C, `stwx r3,(idx+0x1154)<<2,r23`,
+        // 4*0x1154 == 0x4550 == mJointData + 0x1440 == &maRWJoints[idx]) even though the DWARF
+        // carries no such method. Named here rather than reaching into the array from outside.
+        void SetJoint(s32 liIndex, rw_physics::Joint* lpJoint);
 
         // Offsets below are X360-ABI (4-byte pointer) byte offsets; on the x64
         // host gate the pointer-array slots widen, but member access is by name.
@@ -283,6 +355,7 @@ namespace CgsPhysics
         // Same provenance as JointData::IsSlotUsed above -- X360-attested read
         // (`if (*(mDriveData_mabUsedSlot))` at 0x828A25C0), name from RigidBodyData.
         bool IsSlotUsed(s32 liIndex) const;
+
 
         // ---- task #143: THIS CLASS WAS A HOLLOW SHELL -------------------------------------
         // ⚠️ The DWARF (CgsPhysicsSimulationModule.h:197..:255) declares TWELVE methods on
@@ -691,6 +764,17 @@ namespace CgsPhysics
         void ProcessUpdateDriveFramesQueue(const PhysicsSimulationIO::InputBuffer* lpInput);   // @0x8289FC28   77
         void ProcessUpdateDriveDynamicsQueue(const PhysicsSimulationIO::InputBuffer* lpInput); // @0x8289FD60   74
         void ProcessSetDriveSpyQueue(const PhysicsSimulationIO::InputBuffer* lpInput);         // @0x8289FE88   68
+
+        // ---- THE JOINT GROUP -- five more of the nineteen (task #144) ---------------------
+        // Same skeleton, with mJointData in place of mDriveData and a 36-slot table instead of
+        // a 1-slot one. ⚠️ ONE STRUCTURAL DIFFERENCE, and it is not cosmetic: where the drive
+        // five skip an unresolvable id SILENTLY, all five of these ASSERT first and then skip.
+        // Both are transcribed as shipped; do not harmonise them.
+        void ProcessAddJointQueue(const PhysicsSimulationIO::InputBuffer* lpInput);            // @0x828A40F0  557
+        void ProcessRemoveJointQueue(const PhysicsSimulationIO::InputBuffer* lpInput);         // @0x8289F970  174
+        void ProcessUpdateJointFramesQueue(const PhysicsSimulationIO::InputBuffer* lpInput);   // @0x8289F2F0  149
+        void ProcessUpdateJointLimitsQueue(const PhysicsSimulationIO::InputBuffer* lpInput);   // @0x8289F548  136
+        void ProcessSetJointSpyQueue(const PhysicsSimulationIO::InputBuffer* lpInput);         // @0x8289F768  129
         // ---------------------------------------------------------------------------------
 
         // DWARF h:532..:536. Static, so they take no space.

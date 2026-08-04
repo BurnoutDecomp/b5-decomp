@@ -122,7 +122,7 @@ namespace Vehicle
         static_assert(sizeof(CgsPhysics::PhysicsSimulationIO::InAddJoint) == 192,               "InAddJoint stride 192");
         static_assert(sizeof(CgsPhysics::PhysicsSimulationIO::InRemoveJoint) == 8,              "InRemoveJoint stride 8");
 
-        // --- and the widths of the three fields AddJoint reads by name (an offset gate alone is
+        // --- and the widths of the fields AddJoint reads by name (an offset gate alone is
         //     blind to a member retyped in place -- the TrafficPhysics tamper test proved that) ---
         static_assert(sizeof(InAddJoint::mu64Id) == 8,           "mId is an 8-byte handle (ld, not lwz)");
         static_assert(sizeof(InAddJoint::mu64ParentBodyId) == 8, "mParentBodyId is an 8-byte handle");
@@ -131,11 +131,24 @@ namespace Vehicle
         static_assert(offsetof(InAddJoint, mu64ParentBodyId) == 8,  "AddJoint's `ld r10, 8(r29)`");
         static_assert(offsetof(InAddJoint, mu64ChildBodyId) == 16,  "AddJoint's `ld r10, 0x10(r29)`");
         // ⚠️ ADDED AFTER THE TAMPER TEST FOUND A HOLE: with only the sizeof==192 line above, shrinking
-        // the opaque tail 168 -> 160 was **SILENT** -- 24 + 160 == 184 and alignas(16) rounds it right
+        // the tail 168 -> 160 was **SILENT** -- 24 + 160 == 184 and alignas(16) rounds it right
         // back to 192. That is the standing over-aligned-type trap (the same one that let a u32 be
         // added to ArticulatedJoint without moving its 80). Pinning the tail makes 192 an actual SUM.
-        static_assert(offsetof(InAddJoint, macOpaquePayload) == 24, "the unrecovered tail starts after the three handles");
-        static_assert(sizeof(InAddJoint::macOpaquePayload) == 168,  "24 + 168 == 192, with no alignment slack");
+        //
+        // ⭐ 2026-08-04 (task #144): the tail is no longer opaque -- InAddJoint's payload was a
+        // `u8 macOpaquePayload[168]` whose note claimed no DWARF/source existed, and the DWARF
+        // names all six members. The two lines this replaces pinned that span's start and size;
+        // these pin the SAME closure over the real members, so the trap they were guarding
+        // against is still caught: every interior offset is a sum of the widths before it, and
+        // shrinking or re-typing any of them moves a later one.
+        static_assert(offsetof(InAddJoint, mJointFrames) == 32,  "mJointFrames @+0x20 (drain `addi r11,r26,0x20`)");
+        static_assert(sizeof(InAddJoint::mJointFrames) == 80,    "JointFrames is 80B -- the FIVE lvx128 lanes");
+        static_assert(offsetof(InAddJoint, mJointLimits) == offsetof(InAddJoint, mJointFrames) + sizeof(InAddJoint::mJointFrames),
+                                                                 "mJointLimits follows mJointFrames (+0x70)");
+        static_assert(sizeof(InAddJoint::mJointLimits) == 64,    "JointLimits is 64B -- the EIGHT ld/std pairs");
+        static_assert(offsetof(InAddJoint, mbSpy) == offsetof(InAddJoint, mJointLimits) + sizeof(InAddJoint::mJointLimits),
+                                                                 "mbSpy follows mJointLimits (+0xB0, the drain's `lbz 0xB0(event)`)");
+        static_assert(offsetof(InAddJoint, mbSpy) == 176,        "176 + 1 -> 192 is the ONLY alignment slack in this record");
 
         // --- the six queue sizes, each = 16-byte BaseEventQueue header + N * stride -----------
         static_assert(sizeof(InAddRigidBodyQueue) == 9616,            "16 + 50*192");

@@ -148,13 +148,35 @@ namespace PhysicsSimulationIO
     // it is a type change across ~30 EventQueue_* TUs and deserves its own build + boot test
     // rather than a ride on the de-fork. The handles are a single u64 in every reading, so the
     // width and the stores are identical meanwhile.
-    // sizeof stays 192 and alignof stays 16 (three u64 + 168 tail bytes), gated below.
+    // sizeof stays 192 and alignof stays 16, gated below.
+    //
+    // ⭐⭐ FIELDS RECOVERED 2026-08-04 (task #144). The comment that stood on the tail here said
+    // "joint frames/limits, not recovered (no DWARF/source)" over a `u8 macOpaquePayload[168]`.
+    // That was the **SEVENTH** false "no DWARF/source" claim in this subsystem -- DWARF
+    // CgsPhysicsSimulationModuleIO.h:256..:261 names all six members outright, and types the two
+    // payloads `NonConstructedClassContainer<rw::physics::JointFrames>` and
+    // `<rw::physics::JointLimits>`. ⇒ re-verify every such claim before acting on it.
+    //
+    // ⭐ TWO INDEPENDENT DERIVATIONS AGREE ON EVERY FIELD, which is the control that makes this
+    // safe. The offsets were read out of the CONSUMER'S asm first --
+    // `PhysicsSimulationModule::ProcessAddJointQueue` @0x828A40F0 does `ld 0(event)` for the
+    // joint id, `ld 8(event)` / `ld 0x10(event)` into two RigidBodyData::GetIndexFromGameID
+    // calls, five `lvx128` from event+0x20 (80B == JointFrames), eight `ld/std` from event+0x70
+    // (64B == JointLimits) and `lbz 0xB0(event)` for the spy flag -- and only afterwards checked
+    // against the DWARF field ORDER. The DWARF order lands on exactly those offsets with nothing
+    // invented, and the total falls out at 0xB0 + 1 -> **192, the attested stride**.
+    //
+    // ⚠️ The ids stay u64 rather than JointId/RigidBodyId for the same documented reason as
+    // InAddDrive/InAddRigidBody -- a ~30-TU type change that wants its own build + boot test.
     struct alignas(16) InAddJoint : public Event
     {
-        u64 mu64Id;            // @+0x00  "mId"           (a CgsPhysics::JointId handle)
-        u64 mu64ParentBodyId;  // @+0x08  "mParentBodyId" (a CgsPhysics::RigidBodyId handle)
-        u64 mu64ChildBodyId;   // @+0x10  "mChildBodyId"  (a CgsPhysics::RigidBodyId handle)
-        u8  macOpaquePayload[168];  // @+0x18 .. +0xC0: joint frames/limits, not recovered (no DWARF/source)
+        u64                       mu64Id;            // @+0x00  DWARF :256 "mId"           (a CgsPhysics::JointId handle)
+        u64                       mu64ParentBodyId;  // @+0x08  DWARF :257 "mParentBodyId" (a CgsPhysics::RigidBodyId handle)
+        u64                       mu64ChildBodyId;   // @+0x10  DWARF :258 "mChildBodyId"  (a CgsPhysics::RigidBodyId handle)
+        u64                       mu64IdPad;         // @+0x18  pad to the payload's 16-byte slot (as InAddDrive)
+        rw::physics::JointFrames  mJointFrames;      // @+0x20  DWARF :259 -- 80B, the FIVE lvx128 lanes the drain copies
+        rw::physics::JointLimits  mJointLimits;      // @+0x70  DWARF :260 -- 64B, the EIGHT ld/std the drain copies
+        bool                      mbSpy;             // @+0xB0  DWARF :261 -- `lbz 0xB0(event)` -> Joint::m_spy
     };
 
     // Add a vehicle drive. Stride 144 bytes (X360-attested, see above).
@@ -474,14 +496,22 @@ namespace PhysicsSimulationIO
 
     // Install/replace the joint "spy" tap (the simulation->game per-frame joint report channel).
     // Queued with capacity 36 in PhysicsSimulationIO::InputBuffer (X360
-    // EventQueue<InSetJointSpy,36>::Construct @ 0x828A63E8, capacity 0x24). Only Construct is in
-    // scope (no Append/AddEvent to pin the stride, and the InputBuffer::Construct offset map
-    // @ 0x828A71B8 that would pin it is not in scope), so the payload is sized only to the 16-byte
-    // alignment class the asm proves (`addi r30, r31, 0x10`). Stride/field layout intentionally NOT
-    // invented.
+    // EventQueue<InSetJointSpy,36>::Construct @ 0x828A63E8, capacity 0x24).
+    //
+    // ⭐ FIELDS RECOVERED 2026-08-04 (task #144). This was a `u8 macOpaquePayload[16]` whose note
+    // read "stride/field layout intentionally NOT invented" -- correctly cautious at the time,
+    // because no Append/AddEvent was in scope to pin it. The CONSUMER settles it instead:
+    // ProcessSetJointSpyQueue @0x8289F768 reads `ld 0(event)` for the id and `lbz 8(event)` for
+    // the flag, and the DWARF (CgsPhysicsSimulationModuleIO.h:293-294) names exactly those two
+    // members in that order. The 16-byte stride was already pinned by the queue-offset chain.
+    //
+    // ⚠️ The drain stores that byte with a PLAIN `stw` into Joint::m_spy (+0x1C) -- a whole word,
+    // not a bit. This is NOT the `ori 8` / `clrlwi ...,29` bitfield fork that the rw::physics
+    // `SetSpy(bool)` sibling compiles to; do not import that shape here. Same as the drive twin.
     struct alignas(16) InSetJointSpy : public Event
     {
-        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+        u64  mu64Id;  // @+0x00  DWARF :293 "mId" (a CgsPhysics::JointId handle)
+        bool mbSpy;   // @+0x08  DWARF :294 -- `lbz 8(event)`, stored whole-word into Joint::m_spy
     };
 
     // Install/replace the rigid-body "spy" tap (the simulation->game per-frame rigid-body report
@@ -635,6 +665,24 @@ namespace PhysicsSimulationIO
 
     static_assert(offsetof(InSetDriveSpy, mu64Id)        ==   0, "InSetDriveSpy::mId @+0x00        (drain @0x8289FE88 `ld 0(event)`)");
     static_assert(offsetof(InSetDriveSpy, mbSpy)         ==   8, "InSetDriveSpy::mbSpy @+0x08      (drain @0x8289FE88 `lbz 8(event)`)");
+
+    // ---- task #144: the joint events promoted from opaque spans to real members ------------
+    // Same discipline: every term is spelled `sizeof(Class::member)` / `offsetof`, so a
+    // re-TYPING of a member (which leaves sizeof(Class) invariant) still fails the gate. Every
+    // constant is the drain's own load offset, not a re-statement of the header.
+    static_assert(offsetof(InAddJoint, mu64Id)           ==   0, "InAddJoint::mId @+0x00           (drain @0x828A40F0 `ld 0(event)`)");
+    static_assert(offsetof(InAddJoint, mu64ParentBodyId) ==   8, "InAddJoint::mParentBodyId @+0x08 (drain `ld 8(event)`  -> GetIndexFromGameID)");
+    static_assert(offsetof(InAddJoint, mu64ChildBodyId)  ==  16, "InAddJoint::mChildBodyId @+0x10  (drain `ld 0x10(event)` -> GetIndexFromGameID)");
+    static_assert(offsetof(InAddJoint, mJointFrames)     ==  32, "InAddJoint::mJointFrames @+0x20  (drain `addi r11,r26,0x20` + 5x lvx128)");
+    static_assert(offsetof(InAddJoint, mJointLimits)     == 112, "InAddJoint::mJointLimits @+0x70  (drain `addi r11,r26,0x70` + 8x ld/std)");
+    static_assert(offsetof(InAddJoint, mbSpy)            == 176, "InAddJoint::mbSpy @+0xB0         (drain `lbz 0xB0(event)` -> Joint::m_spy)");
+    static_assert(sizeof(InAddJoint::mJointFrames)       ==  80, "InAddJoint JointFrames 80B  (the FIVE lvx128 lanes the drain copies)");
+    static_assert(sizeof(InAddJoint::mJointLimits)       ==  64, "InAddJoint JointLimits 64B  (the EIGHT ld/std pairs the drain copies)");
+
+    static_assert(offsetof(InRemoveJoint, mu64Id)        ==   0, "InRemoveJoint::mId @+0x00        (drain @0x8289F970 `ld 0(event)`, its only read)");
+
+    static_assert(offsetof(InSetJointSpy, mu64Id)        ==   0, "InSetJointSpy::mId @+0x00        (drain @0x8289F768 `ld 0(event)`)");
+    static_assert(offsetof(InSetJointSpy, mbSpy)         ==   8, "InSetJointSpy::mbSpy @+0x08      (drain @0x8289F768 `lbz 8(event)`)");
     // =====================================================================================
 }
 }

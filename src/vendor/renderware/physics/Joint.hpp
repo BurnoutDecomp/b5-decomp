@@ -52,6 +52,21 @@ namespace physics
         Joint*       GetRight() const  { return m_right; }
         Joint*       GetLeft() const   { return m_left; }
 
+        // Both writes are X360-attested inside PhysicsSimulationModule::ProcessAddJointQueue,
+        // immediately after Simulation::AddJoint returns: `stw r28, 0x18(r3)` (the JointData
+        // slot index, mirroring RigidBody::SetTag's role) and `stw r11, 0x1C(r3)` at
+        // 0x828A4974/0x828A4978, the latter fed by `lbz 0xB0(event)` == InAddJoint::mbSpy.
+        // ProcessSetJointSpyQueue @0x8289F950 writes m_spy the same way.
+        // [INFERRED NAMES] -- the console inlines both; the spelling is taken from RigidBody's
+        // attested pair, exactly as Drive.hpp's siblings are.
+        //
+        // ⚠️ SetSpy HERE IS A WHOLE-WORD STORE, unlike RigidBody::SetSpy. m_spy is its own u32
+        // slot, so the console emits a plain `stw`; RigidBody's flag shares a word with its
+        // state and therefore compiles to `ori 8` / `clrlwi ...,29`. Copying that shape into
+        // this class would clobber three unrelated bits.
+        void SetTag(u32 luTag)   { m_tag = luTag; }                     // +0x18
+        void SetSpy(bool lbSpy)  { m_spy = static_cast<u32>(lbSpy); }   // +0x1C
+
     private:
         friend struct JointJacobian;
         friend class Simulation;

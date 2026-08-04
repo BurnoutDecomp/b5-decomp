@@ -103,6 +103,28 @@ namespace vpu
             lLhs.z > lRhs.z ? 1.0f : 0.0f,
             lLhs.w > lRhs.w ? 1.0f : 0.0f };
     }
+
+    // ADDITIVE GROW 2026-08-04 (task #144): the FOUR-lane sibling of the three-lane
+    // `IsValid(const Vector3&)` in vector3_operation.h -- the finite-value ("RwMathVPU::IsValid")
+    // tripwire the console bakes into its asserts, here over all four lanes of a Quaternion.
+    //
+    // X360-ATTESTED SHAPE, and the lane COUNT is what types the argument.
+    // PhysicsSimulationModule::ProcessAddJointQueue @0x828A40F0 inlines this check eleven times
+    // and the widths separate cleanly: FOUR `vspltw`+`vcmpeqfp.` pairs (lanes 0,1,2,3) for
+    // JointFrames::GetChildAngularFrame/GetParentAngularFrame/GetParentLinearFrame -- the three
+    // quaternions -- against THREE for every Vector3 accessor and ONE for each f32. Each lane is
+    // the self-equality NaN test `x == x`, identical to the Vector3 body.
+    //
+    // ⚠️ CANONICAL HOME is rw/math/vpu/quaternion_operation.h, which does not exist in this tree
+    // yet; it lives here, in the 4-lane operation header, on the same "until that header exists"
+    // footing JointFrames.hpp already records for QuaternionFromMatrix33.
+    inline bool IsValid(const Quaternion& lrQuaternion)
+    {
+        return lrQuaternion.x == lrQuaternion.x
+            && lrQuaternion.y == lrQuaternion.y
+            && lrQuaternion.z == lrQuaternion.z
+            && lrQuaternion.w == lrQuaternion.w;
+    }
 }
 }
 }

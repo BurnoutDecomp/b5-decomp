@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>   // std::sqrt (QuaternionFromMatrix33)
+#include <cstddef> // offsetof (the layout pins below)
 
 #include "rw/math/vpu/types.h"   // rw::math::vpu::{Vector3, Matrix33}
 
@@ -132,6 +133,8 @@ namespace physics
         rw::math::vpu::Vector3 GetParentPosition() const { return mPosB; }
 
     private:
+        friend void _rw_physics_JointFrames_AssertLayout();
+
         // DWARF member sequence (jointframes.h:166-170):
         rw::math::vpu::Quaternion mQuatA;   // +0x00  child angular frame
         rw::math::vpu::Vector3    mPosA;    // +0x10  child position
@@ -139,5 +142,45 @@ namespace physics
         rw::math::vpu::Vector3    mPosB;    // +0x30  parent position
         rw::math::vpu::Quaternion mQuatL;   // +0x40  parent linear frame
     };
+
+    // ⭐ SOLE OWNER OF THIS RECORD SINCE 2026-08-04 (task #144). `CgsPhysics::JointFrames` was a
+    // SECOND definition of it -- a bare `u8 macOpaque[80]` -- and it was the type JointData's
+    // slot table actually held while JointJacobian::Build read the very same bytes through THIS
+    // class (`const JointFrames& lrF = *lrJoint.m_skel;`, JointJacobian_Build.cpp:74). Exactly
+    // the DriveFrames fork task #143 retired, one group over.
+    //
+    // ⛔ Do not re-introduce a local copy: this type reaches the solver as a bare `void*`
+    // through Simulation::AddJoint, so that seam is invisible to BOTH the compiler and the
+    // linker -- a `void*` in a reconstructed signature is a fork detector switched off. See
+    // [[odr-forks-link-silently]] and the block at CgsPhysicsSimulationModule.h.
+    //
+    // ⭐⭐ THE SHIPPED BINARY ITSELF NAMES THIS CLASS'S API. PhysicsSimulationModule::
+    // ProcessAddJointQueue @0x828A40F0 carries four validation asserts whose literals are
+    // `RwMathVPU::IsValid( lpFrames->GetChildAngularFrame() )` (.cpp:1529),
+    // `...GetParentAngularFrame() )` (:1530), `...GetParentLinearFrame() )` (:1531) and
+    // `...GetParentPosition() )` (:1532) -- accessors that exist HERE and nowhere on the fork.
+    // Their inlined lane counts type each slot outright: 4x `vspltw`+`vcmpeqfp.` for the three
+    // quaternions, 3x for the position. ⚠️ `GetChildPosition()` is the one slot the console
+    // does NOT validate -- transcribed as shipped, not "completed".
+    inline void _rw_physics_JointFrames_AssertLayout()
+    {
+        static_assert(offsetof(JointFrames, mQuatA) == 0x00, "mQuatA @+0x00 (JointJacobian::Build lvx128 over [r26])");
+        static_assert(offsetof(JointFrames, mPosA)  == 0x10, "mPosA  @+0x10");
+        static_assert(offsetof(JointFrames, mQuatB) == 0x20, "mQuatB @+0x20");
+        static_assert(offsetof(JointFrames, mPosB)  == 0x30, "mPosB  @+0x30");
+        static_assert(offsetof(JointFrames, mQuatL) == 0x40, "mQuatL @+0x40 (Build r25 = 0x40 over body B; BurnoutPR [esi+40h])");
+
+        // Adjacency form -- survives a member WIDENING, which the stride check below would not.
+        static_assert(offsetof(JointFrames, mPosA)  == offsetof(JointFrames, mQuatA) + sizeof(JointFrames::mQuatA), "mPosA follows mQuatA");
+        static_assert(offsetof(JointFrames, mQuatB) == offsetof(JointFrames, mPosA)  + sizeof(JointFrames::mPosA),  "mQuatB follows mPosA");
+        static_assert(offsetof(JointFrames, mPosB)  == offsetof(JointFrames, mQuatB) + sizeof(JointFrames::mQuatB), "mPosB follows mQuatB");
+        static_assert(offsetof(JointFrames, mQuatL) == offsetof(JointFrames, mPosB)  + sizeof(JointFrames::mPosB),  "mQuatL follows mPosB");
+
+        // The X360-attested ARRAY STRIDE. ProcessUpdateJointFramesQueue @0x8289F4E8 steps
+        // JointData::maFrames by `slwi r10,r31,2 / add r10,r31,r10 / slwi r10,r10,4` == i*5*16
+        // == i*80, and copies exactly FIVE 16-byte lanes at 0/0x10/0x20/0x30/0x40. The drive
+        // sibling does four at a stride of 64 -- this record is one quaternion larger.
+        static_assert(sizeof(JointFrames) == 80, "JointFrames array stride 80 (drain i*80 + FIVE lvx128 lanes)");
+    }
 }
 }
