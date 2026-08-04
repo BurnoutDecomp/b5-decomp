@@ -10,22 +10,22 @@
 // function's declared home is still ExternalPhysicsBody.h / the DWARF's matrix33_type_inline.h
 // attribution.
 //
-// ⛔ THIS TU IS DELIBERATELY **NOT MOUNTED** in tools/build/build_game_exe.bat.
-// It calls rw::physics::RigidBody::GetLocalInvInertiaDiagonal(), which is declared-only and
-// cannot be bodied: the console stores that pointer INSIDE the rigid body's mUp.w float lane
-// (the caller loads it as `lwz +0x5C`), and the committed 64-bit rigidbody.h layout types that
-// offset as a float. Widening it would retype a vendor home that all eleven lane-registers'
-// packing depends on, and fabricating a value is forbidden. So the reference stays unresolved
-// and this one function stays out of the link.
+// ⭐ 2026-08-04 -- THE BLOCKER THAT KEPT THIS TU OUT OF THE LINK IS RETIRED, AND IT IS MOUNTED.
+// The note that stood here said GetLocalInvInertiaDiagonal() "cannot be bodied: the console
+// stores that pointer INSIDE the rigid body's mUp.w float lane ... and the committed 64-bit
+// rigidbody.h layout types that offset as a float". That was true of the OLD layout. The rw
+// physics landing promoted all ten packed console scalars -- including the Inertia pointer in
+// the mUp.w lane -- to real named members of RigidBody, so the accessor is now an ordinary
+// member read and this TU links.
 //
-// Everything else in ExternalPhysicsBody -- the four world-space accumulators, AddLocalForce /
-// AddLocalImpulse / GetImpulsesFromLocalImpulse, CalculateWorldIntertia, IntegrateTransform,
-// CalculateNewVelocity and the lifecycle quartet, i.e. the whole integrator -- IS mounted.
-// This function is not on the vehicle path (its only caller is
-// BrnPhysics::Deformation::PhysicalBodyPart::Update).
+// This function is still not on the vehicle path: its only caller,
+// BrnPhysics::Deformation::PhysicalBodyPart::Update, lives in the unmounted
+// BrnPhysicalBodyPart.cpp (16 unresolved of its own). Mounting therefore adds a body to the
+// image without changing a single frame -- it is here for link closure.
 //
-// TO RE-MERGE: body GetLocalInvInertiaDiagonal in src/vendor/renderware/physics/RigidBody.cpp
-// once the packed lane has a PC-side storage answer, then move this body back and delete the TU.
+// The TU split itself is now BUILD-MECHANICS-ONLY history: this body is byte-identical to the
+// one that used to sit at the tail of ExternalPhysicsBody.cpp, and its declared home is still
+// ExternalPhysicsBody.h. Folding it back is a pure code move and is deliberately left alone.
 // ============================================================================================
 
 namespace BrnPhysics
@@ -55,7 +55,7 @@ namespace BrnPhysics
     void ExternalPhysicsBody::ReadPropertiesFromRenderware(const rw::physics::RigidBody* lpRigidBody)
     {
         // Local inverse inertia: the diagonal matrix of the body's local diagonal vector.
-        const vpu::Vector4& lvLocalDiag = *lpRigidBody->GetLocalInvInertiaDiagonal();
+        const vpu::Vector3& lvLocalDiag = lpRigidBody->GetLocalInvInertiaDiagonal();
         mLocalInverseInertia.xAxis = Vector3{ lvLocalDiag.x, 0.0f, 0.0f, 0.0f };
         mLocalInverseInertia.yAxis = Vector3{ 0.0f, lvLocalDiag.y, 0.0f, 0.0f };
         mLocalInverseInertia.zAxis = Vector3{ 0.0f, 0.0f, lvLocalDiag.z, 0.0f };
@@ -64,12 +64,15 @@ namespace BrnPhysics
         const f32 lfMass = 1.0f / lpRigidBody->GetInverseMass();
         mfMass.x = mfMass.y = mfMass.z = mfMass.w = lfMass;
 
-        // World inverse inertia: the symmetric tensor from the two packed vectors (the
-        // dead w lanes carry the packed scalars along, exactly as the X360 row stores do).
-        const vpu::Vector4& lvA = lpRigidBody->GetInertiaFull();    // {Ixx, Ixy, Ixz | invm}
-        const vpu::Vector4& lvB = lpRigidBody->GetInertiaSplit();   // {Izz, Iyy, Iyz | state}
-        mWorldInverseInertia.xAxis = Vector3{ lvA.x, lvA.y, lvA.z, lvA.w };
-        mWorldInverseInertia.yAxis = Vector3{ lvA.y, lvB.y, lvB.z, lvA.w };
-        mWorldInverseInertia.zAxis = Vector3{ lvA.z, lvB.z, lvB.x, lvA.w };
+        // World inverse inertia: the symmetric tensor from the two packed vectors. The three
+        // X360 row stores are whole-register moves, so each row's w lane carries the console's
+        // mIfull.w -- which is the INVERSE MASS. On the PC that scalar is its own member, so
+        // the lane is written from GetInverseMass() by name instead of riding along in .w.
+        const vpu::Vector4& lvA = lpRigidBody->GetInertiaFull();    // {Ixx, Ixy, Ixz}
+        const vpu::Vector4& lvB = lpRigidBody->GetInertiaSplit();   // {Izz, Iyy, Iyz}
+        const f32 lfInvm = lpRigidBody->GetInverseMass();           // console mIfull.w
+        mWorldInverseInertia.xAxis = Vector3{ lvA.x, lvA.y, lvA.z, lfInvm };
+        mWorldInverseInertia.yAxis = Vector3{ lvA.y, lvB.y, lvB.z, lfInvm };
+        mWorldInverseInertia.zAxis = Vector3{ lvA.z, lvB.z, lvB.x, lfInvm };
     }
 }

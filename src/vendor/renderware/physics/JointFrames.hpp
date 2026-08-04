@@ -24,11 +24,13 @@
 // and defined inline from the Feb-2007 rwpcore.h:504-623 originals for
 // vocabulary.
 //
-// NAMESPACE-GROW NOTE: rw::math::vpu::Quaternion and QuaternionFromMatrix33
-// are defined here because their canonical homes (the vendor
-// rw/math/vpu/types.h and a new rw/math/vpu/quaternion_operation.h) sit
-// outside this wave's writable tree; move them there on the next grow of
-// that header. Neither name exists anywhere else in the tree, so no fork.
+// NAMESPACE-GROW NOTE: rw::math::vpu::Quaternion USED to be defined here, with
+// a note saying "move it to the vendor rw/math/vpu/types.h on the next grow of
+// that header". ⭐ 2026-08-04: that move HAS HAPPENED (the rw physics solver
+// landing needed the same type for RigidBody::mQuat, DriveFrames and the two
+// jacobian builders), so the definition now lives in rw/math/vpu/types.h and is
+// picked up through the include above. QuaternionFromMatrix33 stays here until
+// rw/math/vpu/quaternion_operation.h exists; it has no second user yet.
 // ===========================================================================
 
 namespace rw
@@ -37,18 +39,6 @@ namespace math
 {
 namespace vpu
 {
-    // ADDITIVE GROW (class:rw::physics::JointFrames group): the SDK
-    // quaternion -- one 16-byte lane register, (x, y, z, w) with w the scalar
-    // part, matching the console rw::math::vpu::Quaternion layout (the DWARF
-    // spells JointFrames::mQuatA/mQuatB/mQuatL as `Quaternion`; the rwmath
-    // quaternion_operation family returns it). Canonical home: the vendor
-    // rw/math/vpu/types.h (see the namespace-grow note above).
-    struct alignas(16) Quaternion
-    {
-        float x, y, z, w;
-        void SetIdentity() { x = y = z = 0.0f; w = 1.0f; }
-    };
-
     // rw::math::vpu::QuaternionFromMatrix33 -- inlined on the X360 into all
     // three JointFrames setters (e.g. 0x8259B580). GROUND TRUTH: the EXACT
     // original VMX source survives in the Feb-2007 tree (rwmath 1.02.00

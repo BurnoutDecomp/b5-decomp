@@ -25,6 +25,22 @@ namespace vpu
                                  typedef const Vector3& InParam; };   // w: unused 4th lane
     struct alignas(16) Vector4 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; }
                                  typedef const Vector4& InParam; };
+
+    // ADDITIVE GROW (rw-physics solver group): the SDK quaternion -- one 16-byte lane
+    // register, (x, y, z, w) with w the scalar part. The DWARF spells
+    // JointFrames::mQuatA/mQuatB/mQuatL, DriveFrames::mQuatA/mQuatB and RigidBody::mQuat as
+    // `Quaternion`, and the rwmath quaternion_operation family returns it.
+    //
+    // This type was ALREADY WRITTEN, in src/vendor/renderware/physics/JointFrames.hpp, whose
+    // own banner says: "defined here because their canonical homes (the vendor
+    // rw/math/vpu/types.h ...) sit outside this wave's writable tree; move them there on the
+    // next grow of that header". This is that grow -- the definition moved here verbatim and
+    // JointFrames.hpp now includes it rather than declaring a second copy.
+    struct alignas(16) Quaternion
+    {
+        float x, y, z, w;
+        void SetIdentity() { x = y = z = 0.0f; w = 1.0f; }
+    };
     struct alignas(16) Vector3Plus
     {
         float x, y, z, w;

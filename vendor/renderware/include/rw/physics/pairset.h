@@ -6,8 +6,25 @@
 // every part can be walked for the pairs it participates in.
 //
 // EATech RenderWare physics. Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC); the asm
-// is authoritative. No Feb-2007 reference source and no DecFIGS DWARF exist for this TU.
-// Shares the rw::physics vocabulary with the sibling Simulation / SimulationWorkspace TUs.
+// is authoritative. Shares the rw::physics vocabulary with the sibling Simulation /
+// SimulationWorkspace TUs.
+//
+// ⚠️⚠️ CORRECTION 2026-08-04 -- THE SENTENCE THAT USED TO STAND HERE SAID
+//      "No Feb-2007 reference source and no DecFIGS DWARF exist for this TU."
+//      **THAT WAS FALSE.** references/DecFIGS/dwarfdump/SDKs/EATech/include/cmn/rw/physics/
+//      carries twenty real headers including pairset.h, and the identical false claim in the
+//      sibling rw/physics/simulation.h cost three waves of the physics campaign. The DWARF
+//      names for this type are:
+//          Link  { partIndex, flags, next, prev }        (pairset.h:121..125)
+//          PairSet { m_links, m_linkLists, m_maxPairs, m_maxParts, m_freePair }  (:135..140)
+//      plus a nested LinkIterator { m_pairSet, m_cur } (:153..185) and the public method set
+//      SetPairFlags / GetPairFlags / UnlinkPart / ClearAll / PartLinksBegin / PartLinksEnd /
+//      PairIsValid, none of which this reconstruction declares.
+//      ⭐ The recovered LAYOUT below is confirmed by that DWARF member-for-member -- the
+//      structural reconstruction was right. Only the NAMES differ (miData is `flags`,
+//      miFreeList is `m_freePair`, ...). The rename is deliberately NOT done in this pass:
+//      this is a serialised resource block with live users, and the rw physics landing that
+//      wrote this note had no reason to touch it. Do it as its own change, with a boot.
 //
 // LAYOUT (recovered from the union of this TU's offset accesses; the X360 asm is
 // authoritative for placement). The whole object is a single RW resource block, sized by
