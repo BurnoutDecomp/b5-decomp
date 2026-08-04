@@ -49,10 +49,13 @@ namespace CgsPhysics
     // from here would make the fork meet and fail with a hard C2011. Same reasoning, and the
     // same workaround, as InAddJoint's u64 handles below.
     //
-    // ⚠️ mInertia IS `rw::physics::Inertia`, the vendor type. CgsPhysicsSimulationModule.h
-    // carries a THIRD copy of the same 48-byte record as `CgsPhysics::Inertia`; that is a real
-    // type fork of exactly the shape task #135 retired for Joint/Drive/RigidBody, and it is
-    // now load-bearing -- see the ⚠️⚠️ block at PhysicsSimulationModule::ProcessAddRigidBodyQueue.
+    // ⭐ mInertia IS `rw::physics::Inertia`, the vendor type, and since 2026-08-04 (task #141)
+    // that is now the ONLY definition of this record in the tree. CgsPhysicsSimulationModule.h
+    // used to carry a second copy as `CgsPhysics::Inertia`, which ProcessAddRigidBodyQueue
+    // reinterpret_cast'ed to and from on the live AddBody -> AddRigidBody path; it is a typedef
+    // onto the vendor class now, and the casts are gone. ⛔ Do not spell this field's type out
+    // locally to avoid an include -- a duplicated layout here would link silently against the
+    // real one and disagree about every offset.
     struct alignas(16) NewRigidBody
     {
         rw::math::vpu::Matrix44Affine mTransform;        // @+0x00  DWARF :39  (64 bytes)

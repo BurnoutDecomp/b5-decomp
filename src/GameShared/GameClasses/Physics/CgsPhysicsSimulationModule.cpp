@@ -220,15 +220,11 @@ namespace CgsPhysics
     static_assert(sizeof(Inertia)     == 48, "Inertia stride 48 (GetInertia 48*(idx+50))");
     static_assert(sizeof(RigidBodyId) == 8,  "RigidBodyId is a single u64 (CgsRigidBody.h:48)");
 
-    // Inertia interior (promoted from opaque 2026-08-03). Pins the six scalars the
-    // RigidBodyData constructor writes at +0x10..+0x24 and the leading 16-byte vector.
-    static_assert(offsetof(Inertia, mafInvTens)    == 0,  "mInvTens @+0x00 (asm stvx128 v0, r0, r11)");
-    static_assert(offsetof(Inertia, mfInvMass)     == 16, "mInvMass @+0x10 (asm stfs f0(1.0f), 0x10(r11))");
-    static_assert(offsetof(Inertia, mfSpherical)   == 20, "mSpherical @+0x14 (asm stfs f0(1.0f), 0x14(r11))");
-    static_assert(offsetof(Inertia, mfMaxVelocity) == 24, "mMaxVelocity @+0x18 (asm stfs f12(FLT_MAX), 0x18(r11))");
-    static_assert(offsetof(Inertia, mfMaxOmega)    == 28, "mMaxOmega @+0x1C (asm stfs f12(FLT_MAX), 0x1C(r11))");
-    static_assert(offsetof(Inertia, mfLinearDrag)  == 32, "mLinearDrag @+0x20 (asm stfs f13(0.0f), 0x20(r11))");
-    static_assert(offsetof(Inertia, mfAngularDrag) == 36, "mAngularDrag @+0x24 (asm stfs f13(0.0f), 0x24(r11))");
+    // The seven Inertia-interior offsetof pins that used to sit here MOVED to
+    // rw/physics/inertia.h (_rw_physics_Inertia_AssertLayout) with the de-fork, task #141.
+    // They gated `CgsPhysics::Inertia`, which no longer exists as a type of its own; leaving
+    // them here would have pinned an alias from a TU that does not own the layout. Their new
+    // home also gained the adjacency form of the same six seats.
 
     // X360 @0x827DB728 (0x70 bytes). ⚠️ ABSENT from the .ida-exports JSON set (an export
     // hole -- 0x827DB720 is CgsDev::Log::LogOutput::Append, a 2-instruction tail jump that
@@ -245,23 +241,18 @@ namespace CgsPhysics
     //   flt_82001CC0 = 00000000 = 0.0f      (f13)
     // The 16-byte stack vector the loop lvx128/stvx128's into mInvTens is built from three
     // `stfs f0` plus one `stw 0`, i.e. {1.0f, 1.0f, 1.0f, 0.0f}.
+    //
+    // ⚠️⚠️ THIS BODY IS NOT EMPTY AND IT IS NOT A STUB -- READ THIS BEFORE "FIXING" IT.
+    // Until the de-fork (task #141) the loop was written out longhand right here, because
+    // `CgsPhysics::Inertia` was a local struct with public members. Now that the member array
+    // is 200 real `rw::physics::Inertia`, the IMPLICIT member-array construction that runs
+    // before this brace IS the console's 200-pass loop: it calls rw::physics::Inertia::Inertia()
+    // (DWARF inertia.h:80) once per entry, and that ctor carries the ten stores above,
+    // provenance comments and all. Writing the loop out again here would run the whole
+    // initialisation TWICE. maRWBodies / maGameIDs stay untouched either way, which is what
+    // the console does.
     RigidBodyData::RigidBodyData()
     {
-        for (s32 li = 0; li < KI_SIZE; ++li)
-        {
-            Inertia& lInertia = maInertias[li];
-            lInertia.mafInvTens[0] = 1.0f;          // stack vector lane 0 -> stvx128 to +0x00
-            lInertia.mafInvTens[1] = 1.0f;          // lane 1
-            lInertia.mafInvTens[2] = 1.0f;          // lane 2
-            lInertia.mafInvTens[3] = 0.0f;          // lane 3 (the Vector3 pad; stw 0)
-            lInertia.mfInvMass     = 1.0f;          // stfs f0,  0x10(r11)
-            lInertia.mfSpherical   = 1.0f;          // stfs f0,  0x14(r11)
-            lInertia.mfMaxVelocity = FLT_MAX;       // stfs f12, 0x18(r11)
-            lInertia.mfMaxOmega    = FLT_MAX;       // stfs f12, 0x1C(r11)
-            lInertia.mfLinearDrag  = 0.0f;          // stfs f13, 0x20(r11)
-            lInertia.mfAngularDrag = 0.0f;          // stfs f13, 0x24(r11)
-        }
-
         // ---- layout pins. maRWBodies is a pointer array, so everything past it widens
         // on x64; each offset is therefore pinned to the one before it plus the element
         // count times the element size, which is exactly what the console arithmetic is.
@@ -886,20 +877,26 @@ namespace CgsPhysics
     // and it cannot be bodied without all nineteen or it becomes a [[silent-drop-stubs]]
     // no-op. Stated here rather than implied, because "it links" is not "it runs".
     //
-    // ⚠️⚠️ THE `CgsPhysics::Inertia` / `rw::physics::Inertia` TYPE FORK IS LOAD-BEARING HERE,
-    // AND IT IS THE EXACT SHAPE TASK #135 RETIRED FOR Joint/Drive/RigidBody. The console has
-    // ONE type: RigidBodyData::GetInertia returns a pointer that is handed straight to
-    // rw::physics::Simulation::AddRigidBody, which stores it in RigidBody::mInertia, which
-    // DynamicUpdate then reads every tick. This tree has TWO definitions of that same 48-byte
-    // record -- `CgsPhysics::Inertia` (CgsPhysicsSimulationModule.h, public members, pinned by
-    // seven offsetof asserts in _AssertLayout) and `rw::physics::Inertia` (rw/physics/inertia.h,
-    // private members + accessors, same DWARF, same field order, same size). The two casts
-    // below are the seam, and they are BEHAVIOURALLY correct today: identical layout, plain
-    // POD, no vtable, and the sizes are gated in _AssertLayout.
-    // ⛔ THEY ARE STILL A DEFECT, NOT A DESIGN. The de-fork (alias CgsPhysics::Inertia onto
-    // the vendor type) needs `SetSphericalInertia` added to rw::physics::Inertia -- the DWARF
-    // declares the getter but this header has no setter -- and the seven offsetof pins moved
-    // inside the class, so it is its own change, not a rider on this one.
+    // ✅ THE `CgsPhysics::Inertia` / `rw::physics::Inertia` TYPE FORK WAS RETIRED HERE ON
+    // 2026-08-04 (task #141), the same way task #135 retired Joint/Drive/RigidBody. The console
+    // has ONE type, and so does this tree now: `CgsPhysics::Inertia` is a typedef onto
+    // `rw::physics::Inertia`, so the two `reinterpret_cast`s that used to sit in the AddBody /
+    // AddRigidBody calls below are simply gone, along with the second copy of the layout and
+    // its second set of pins.
+    //
+    // ⚠️⚠️ IT MATTERED MORE THAN IT LOOKED. `Inertia` never appears in a mangled name in a form
+    // that encodes its definition, so a body compiled against one copy links CLEANLY against a
+    // call site compiled against the other -- no compiler diagnostic, no linker diagnostic, and
+    // no per-TU compile gate can see it. The path here is live: GetInertia's pointer goes
+    // straight into rw::physics::Simulation::AddRigidBody, which stores it in
+    // RigidBody::mInertia, which DynamicUpdate dereferences every tick. It happened to be
+    // behaviourally correct (identical layout, same DWARF); "happened to be" is the point.
+    //
+    // ⚠️ The de-fork did NOT need the `SetSphericalInertia` a previous note here called for.
+    // The DWARF declares seven getters and six setters; mSpherical deliberately has no setter
+    // because it is written by Inertia::Inertia() (inertia.h:80) and read-only thereafter, and
+    // a repo-wide grep confirms nothing else ever writes it. Adding one would have invented an
+    // SDK entry point to work around a diagnosis that was wrong.
     //
     // ⚠️ THE TWO DEBUG SCANS ARE KEPT. The console runs an O(n^2) duplicate scan over the
     // queue itself (.cpp:1034) and, per event, a 200-slot scan of the live table (.cpp:1058),
@@ -960,12 +957,16 @@ namespace CgsPhysics
             const s32 liBodyIndex = mBodyData.AddBody(
                 nullptr,
                 RigidBodyId{ lrEvent.mID },
-                *reinterpret_cast<const Inertia*>(&lInertia));    // <- the type-fork seam
+                lInertia);
             CGS_ASSERT(liBodyIndex != -1, "liBodyIndex != -1");   // .cpp:1065
 
+            // ⚠️ THE POINTER HANDED OVER IS THE TABLE'S OWN SLOT, NOT `lInertia`. AddBody
+            // COPIED the stack block into maInertias[liBodyIndex]; the body must point at
+            // the copy that outlives this frame, which is exactly what the console does
+            // (`bl GetInertia` between the two calls, not a re-use of the stack image).
             rw::physics::RigidBody* const lpBody = mpSimulation->AddRigidBody(
                 lTransform,
-                reinterpret_cast<rw::physics::Inertia*>(mBodyData.GetInertia(liBodyIndex)),  // <- the seam
+                mBodyData.GetInertia(liBodyIndex),
                 lrEvent.meState);
 
             // ---- push the request's own state into the fresh body -------------------------
