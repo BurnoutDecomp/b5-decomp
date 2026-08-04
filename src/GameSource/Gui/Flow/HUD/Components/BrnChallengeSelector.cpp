@@ -15,8 +15,9 @@
 //   Hide                        @ 0x82436F70 -- publish the transition-OUT apt view-state and
 //                                               post the GuiChallengeSelectedEvent.
 //
-// SelectAvailableChallenge @ 0x82439BA0 is intentionally NOT reconstructed in this TU -- see
-// the block note at the bottom of this file. GetAvailableChallengeData is declared-only here.
+// SelectAvailableChallenge @ 0x82439BA0 IS reconstructed for this TU -- its body lives in the
+// sibling part-file BrnChallengeSelector_wL_01.cpp. DO NOT add a second definition here.
+// GetAvailableChallengeData is declared-only here.
 
 #include "GameSource/Gui/Flow/Hud/Components/BrnChallengeSelector.h"
 
@@ -199,11 +200,12 @@ void ChallengeSelector::Show()
 // Hide the selector (if shown): publish the host/client transition-OUT apt view-state, clear the
 // visible flag, resolve the currently-highlighted challenge and post a GuiChallengeSelectedEvent
 // (selector action 3) onto the state's output event queue. The X360 inlines
-// StateInterface::OutputGuiEvent<GuiChallengeSelectedEvent> (@0x82436778) -- it stack-builds the
-// GuiEventWrapper<T,40> { size 16, type 573, offset 16 } + the 16-byte payload
-// { mChallengeID, 3, GetChall() } and calls mOutEventQueue.AddEvent(&wrapper, 40, 32); this
-// reconstruction drives that same record through the committed OutputGuiEvent<> helper. No-op when
-// already hidden (asm only proceeds when mbVisible == 1).
+// StateInterface::OutputGuiEvent<GuiChallengeSelectedEvent> (the out-of-line copy is @0x82436778)
+// -- MEASURED at 0x82436FE0..0x82437038: it stack-builds a GuiEventWrapper<T,40>
+// { 0x10 @+0x00, 0x23D(573) @+0x04, 0x10 @+0x08 } followed by the 16-byte payload
+// { mChallengeID, 3, GetChallengeStyle() } @+0x10, then calls
+// mOutEventQueue.AddEvent(&wrapper, /*channel*/40, /*size*/32) (`li r5,0x28` / `li r6,0x20`).
+// No-op when already hidden (asm only proceeds when mbVisible == 1).
 void ChallengeSelector::Hide()
 {
     if (!mbVisible)
@@ -223,35 +225,40 @@ void ChallengeSelector::Hide()
     const BrnResource::ChallengeListEntry* lpEntry =
         mpChallengeList->GetChallengeData(liChallengeIndex);
 
-    // Build and post the "challenge selected" GUI event. The wrapper's internal pad word
-    // (@+0x0C of the 32-byte record) is left as the template lays it out -- matching the X360's
-    // uninitialised gap word; the 16-byte payload below is fully written.
+    // Build and post the "challenge selected" GUI event. All 16 payload bytes are written; the
+    // X360 leaves the word at +0x0C of the 32-byte wrapper record uninitialised (nothing is
+    // stored between var_28 @+0x08 and the payload copy @+0x10).
+    //
+    // KNOWN DIVERGENCE, owned elsewhere -- do NOT "fix" it here. GuiChallengeSelectedEvent is one
+    // of the RAW payload types (no CgsModule::Event / GuiEvent<N> base; see
+    // BrnGuiDemangledEventTypes.h:304), and the committed OutputGuiEvent<T> body direct-passes
+    // the event instead of wrapping it, so this call queues AddEvent(&lEvent, 573, 16), not the
+    // AddEvent(&wrapper, 40, 32) measured above. That raw-vs-GuiEvent<N> split is FLAG-owned by
+    // CgsGuiStateInterface.h (see the FLAG above its OutputGuiEvent template) and must be
+    // resolved there, across the payload headers, not by changing this call site.
     GuiChallengeSelectedEvent lEvent;
     lEvent.mChallengeID     = lpEntry->GetChallengeID();  // ld 0xC0 -> mChallengeID
     lEvent.miSelectorAction = KI_SELECTOR_ACTION_HIDE;    // li 3
-    lEvent.miChall          = lpEntry->GetChall();        // BrnResource::ChallengeListEntry::GetChall
+    // bl 0x823542A0 -- the IDB names that address `BrnResource::ChallengeListEntry::GetChall`,
+    // which is the 41-char-truncated form of GetChallengeStyle (one binary function, see
+    // ChallengeListEntry.h). It returns 1/2/3, stored into the event's 32-bit +0x0C word.
+    lEvent.miChall          = static_cast<s32>(lpEntry->GetChallengeStyle());
 
     mpStateInterface->OutputGuiEvent(lEvent);
 }
 
 // -----------------------------------------------------------------------------
-// BLOCKED (not reconstructed in this TU):
-//   ChallengeSelector::SelectAvailableChallenge @ 0x82439BA0
+// WAS BLOCKED, NOW RESOLVED -- kept only so the old block note is not re-derived.
+//   ChallengeSelector::SelectAvailableChallenge @ 0x82439BA0 is DEFINED, in the sibling
+//   part-file BrnChallengeSelector_wL_01.cpp. Do not add a definition here: a second one
+//   is an ODR violation.
 //
-// SelectAvailableChallenge marshals two parameterised-localised-string calls into
-// stack-built parameter-descriptor arrays and forwards them to two collaborators that are
-// UNNAMED and UN-HOMED in every export we have:
-//   * sub_82866450(languageManager, "CHALLENGE_STRING_DESCRIPTION", &entry.macDescriptionStringID,
-//                  9, paramCount, paramBuffers, 11, ...)   -- a CgsLanguage::LanguageManager
-//                  variadic "build localised string with parameters" method;
-//   * sub_824E7800(&mTextfield, "%1:%2.%3", 0, 3, buf, 11, &entry.macTitleStringID, 9, ...)
-//                  -- a BrnGui::TextField variadic "set localised text with parameters" method.
-// Hex-Rays reports "local variable allocation has failed, the output may be wrong" for BOTH
-// call sites, so their argument counts/types and the { ParameterFormatType==11, value } pair
-// layout of the marshalled descriptor arrays cannot be grounded. Reconstructing the variadic
-// contract would be a guess, and a wrong parameter marshalling is worse than an honest gap --
-// so this function (and SelectAvailableChallengeByID, which tail-calls it) are left declared-
-// only until those two collaborators are homed with real signatures.
+// The block reason was that its two variadic collaborators were unnamed and un-homed, so the
+// { text, ParameterFormatType } pair marshalling could not be grounded. Both are homed now:
+//   sub_82866450 = CgsLanguage::LanguageManager::FormatAndAddText(const char*, const char*,
+//                  ParameterFormatType, s32, ...)   -- CgsLanguageManager.h:211
+//   sub_824E7800 = BrnGui::TextField::SetLocalisedText(const char*, ParameterFormatType,
+//                  s32, ...)                        -- BrnGuiTextField.h:94
 // -----------------------------------------------------------------------------
 
 } // namespace BrnGui

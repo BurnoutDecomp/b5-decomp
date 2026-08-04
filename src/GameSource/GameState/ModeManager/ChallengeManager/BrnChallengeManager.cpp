@@ -12,7 +12,7 @@
 // BODIED (this file):
 //   Construct, UpdateResultsTimer, ReceivedSuccessUpdatesFromAllPlayers,
 //   GetNumPlayerSucceeding, GetNumPlayersContributing,
-//   GetChallengeStyle, CountCompletedChallenges, UpdateStuntScores.
+//   GetChallengeStyle, CountCompletedChallenges, ResetActionData, UpdateStuntScores.
 //   (GetFreeburnChallengeList / GetProgressionManager / GetLocalChallengeCompletionData are
 //    now inline in the header.)
 //
@@ -297,6 +297,53 @@ s32 ChallengeManager::CountCompletedChallenges()
         ++liNumCompleted;
     }
     return liNumCompleted;
+}
+
+// ----------------------------------------------------------------------------
+// ResetActionData -- X360 0x823246F0. Reset ONE action's scratch (the single-action sibling of
+// ResetCurrentChallengeData in wB_02): re-seed the action's remaining target from its first
+// target value (X360 lwz action+0x34 == maiTargetValue[0]; the constant-index guard of
+// GetTargetValue(0) folds away), drop its "individual success update sent" flag, then for every
+// active-race-car slot clear that action's cumulative contribution + success status, and zero
+// the banked score of the skill this action's type maps to. The action-type -> skill lookup
+// (KAI_CHALLENGE_ACTION_TYPE_TO_FREEBURN_SKILL, dumped from the XEX and re-verified against
+// dword_82021288 -- 41 entries proven by this function's own `cmplwi 0x29` GetActionType guard
+// AND by the next rodata item byte_8202132C starting at entry [41]'s address) is loop-invariant
+// but sits INSIDE the car loop exactly as the X360 emits it (the lbz + range assert repeat per
+// iteration). 38 == KI_FREEBURN_SKILL_COUNT_X360 is the "no skill" sentinel; the BILLBOARDS
+// skill additionally drops the collected-billboards tally (X360 stw 0,+0x3A0 == miCount).
+// ----------------------------------------------------------------------------
+void ChallengeManager::ResetActionData(s32 liActionToResetIndex)
+{
+    CGS_ASSERT(liActionToResetIndex < mpCurrentChallenge->GetNumActions(),
+               "liActionToResetIndex < mpCurrentChallenge->GetNumActions()");
+
+    const BrnResource::ChallengeListEntryAction* lpAction =
+        mpCurrentChallenge->GetAction(liActionToResetIndex);
+
+    maiRemainingTarget[liActionToResetIndex]                    = lpAction->GetTargetValue(0); // X360 lwz +0x34 -> stw +0x588+4*idx
+    mabIndividualActionsSuccessUpdateSent[liActionToResetIndex] = false;                       // X360 stb 0,+0xFDA+idx
+
+    // The post-increment carries the X360 in-loop "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT"
+    // assert (BurnoutConstants.h:39), matching the asm's per-iteration guard.
+    for (EActiveRaceCarIndex leCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         static_cast<s32>(leCarIndex) < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leCarIndex++)
+    {
+        maafCumulativeContributions[leCarIndex][liActionToResetIndex] = 0.0f;  // X360 stfs 0.0,+0x4A8+8*car+4*idx
+        maaePlayersSuccessStatus[leCarIndex][liActionToResetIndex] =
+            GameStateModuleIO::E_FREEBURN_CHALLENGE_SUCCESS_NONE;              // X360 stw 0,+0x428+8*car+4*idx
+
+        const s32 liSkill = KAI_CHALLENGE_ACTION_TYPE_TO_FREEBURN_SKILL[lpAction->GetActionType()];
+        if (liSkill != KI_FREEBURN_SKILL_COUNT_X360)   // 38 == "no skill for this action type"
+        {
+            mafBankedActionScores[liSkill] = 0.0f;     // X360 stfs 0.0,+0x4E8+4*skill
+            if (liSkill == E_FREEBURN_SKILL_BILLBOARDS)
+            {
+                maBillboardsCollected.Clear();         // X360 stw 0,+0x3A0 (miCount = 0)
+            }
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
