@@ -41,14 +41,27 @@ namespace BrnGui
         void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
                        const char* lpacParentName) override;
 
+        // ---- ledger TU `class:BrnGui::ChallengeSelector`, but DEFINED in this TU's
+        //      BrnChallengeSelector.cpp (do not add second definitions) ----
+        void Show();   // @ 0x82410AA8
+        void Hide();   // @ 0x82436F70
+
         // ---- declared-only (each reconstructed in its own TU) ----
-        void Show();
-        void Hide();
         bool IsVisible();
         void SetChallengeList(const BrnResource::ChallengeList* lpChallengeList);
         void SetGuiCachePointer(GuiCache* lpGuiCache);
         void HandleControllerInput(const CgsGui::GuiEventControllerInputPressed* lpEvent);
+
+        // ---- this TU's ledger functions ----
+        // @ 0x82440138 -- resolve a challenge id to its available slot and select it
+        // (showing the selector first when hidden).  Body: BrnChallengeSelector.cpp
         void SelectAvailableChallengeByID(CgsID lID, bool lbSelect);
+        // @ 0x82439BA0 -- select the available challenge at the given slot: publish the
+        // parameterised description/title text and (when lbSelect) post the
+        // GuiChallengeSelectedEvent (selector action 2).
+        // Body: BrnChallengeSelector_wL_01.cpp (part-file of the same TU) -- NOT
+        // BrnChallengeSelector.cpp, whose old BLOCKED banner for it is retained only as a
+        // do-not-redefine marker.
         void SelectAvailableChallenge(s32 liAvailableChallengeIndex, bool lbSelect);
 
         // ---- reconstructed in this TU ----

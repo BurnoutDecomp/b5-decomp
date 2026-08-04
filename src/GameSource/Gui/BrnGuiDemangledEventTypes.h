@@ -305,7 +305,12 @@ namespace BrnGui
     {
         u64 mChallengeID;      // +0x00  highlighted challenge id (CgsID)
         s32 miSelectorAction;  // +0x08  selector/action code (Hide posts 3; Close posts 3 then 1; SelectPrevious posts 2)
-        s32 miChall;           // +0x0C  BrnResource::ChallengeListEntry::GetChall()
+        s32 miChall;           // +0x0C  the challenge STYLE: all three producers fill it from
+                               //        BrnResource::ChallengeListEntry::GetChallengeStyle()
+                               //        @0x823542A0 (1=NORMAL, 2=ROAD_RULES_TIME, 3=ROAD_RULES_CRASH).
+                               //        FLAG consumer-named: the field name `miChall` was taken from
+                               //        the IDB's 41-char-TRUNCATED symbol "…ChallengeListEntry::GetChall";
+                               //        there is no such method (see ChallengeListEntry.h).
         s32 GetEventType() const { return 573; }
     };  // id 573 size 16 [8-aligned: OGE off16]
     struct GuiEvent100PerCentComplete { u8 maData[1]; s32 GetEventType() const { return 469; } };  // id 469 size 1

@@ -14,11 +14,17 @@
 //   Update                    @0x82416FA8
 //   AppendExpectedAptComponent@0x82417040
 //
-// FormatNetworkStats (@0x82416E88) is intentionally NOT reconstructed here: it indexes the
-// stat-type -> LanguageManager::ParameterFormatType table (KAE_FORMAT_LOOKUP, X360 rodata
-// @0x8204C6B4) whose five values are not present in the dossier and cannot be recovered
-// without the binary in this environment. Reconstructing it would require guessing that
-// rodata, so it is left declaration-only (see the header) rather than fabricated.
+// FormatNetworkStats (@0x82416E88) IS reconstructed -- it lives in the sibling file
+// BrnGuiNetworkPlayerStats_wL_01.cpp, which also carries the definition of the static
+// KAE_FORMAT_LOOKUP table. Do NOT add a second definition of either here.
+//
+// (An earlier revision of this banner said FormatNetworkStats could not be reconstructed
+// because KAE_FORMAT_LOOKUP @0x8204C6B4 was "unrecoverable without the binary". That is
+// false and must not be restored: the table was dumped from BURNOUT_X360_ARTIST.XEX --
+// five dwords 11/0/14/3/13, the only two xrefs to it being 0x82416EE0 and 0x82416EE8,
+// both inside FormatNetworkStats, and its 5-element bound is pinned both by the DWARF
+// (ParameterFormatType[5], cpp:62) and by the next named head KAE_STATS_VALUE_LOOKUP
+// @0x8204C6C8 starting exactly five dwords later.)
 // ===================================================================================
 
 namespace BrnGui
@@ -34,8 +40,8 @@ namespace BrnGui
 
     const char* const GuiNetworkPlayerStats::KAPC_STATE_ID[E_STATE_COUNT] =
     {
-        "visible",     // E_STATE_VISIBLE   (off_82F25028[0], X360-attested)
-        "invisible",   // E_STATE_INVISIBLE (codebase-wide apt-state pair)
+        "visible",     // E_STATE_VISIBLE   (off_82F25028[0] -> 0x82049C28, X360-attested)
+        "invisible",   // E_STATE_INVISIBLE (off_82F2502C  -> 0x8204B4F8, X360-attested)
     };
 
     // @0x82416CA8

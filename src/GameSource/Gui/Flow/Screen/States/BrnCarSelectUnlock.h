@@ -79,18 +79,21 @@ namespace BrnGui
         bool UpdateLoadResources();
         // @0x824B5B28 -- wait for the flow's apt components to finish initialising.
         bool UpdateWFInit();
-        // @0x824CA420 -- drain the in-queue while running (badge/name/description ticker +
-        // advance). Body lands with its own ledger slice (see BrnCarSelectUnlock.cpp note).
+        // @0x824CA420 -- drain the in-queue while running: tick the visible timer (raising
+        // the CONTINUE prompt after KF_SCREENSKIPTIMEOUT), show the unlocked car's badge +
+        // name (event 73), run the blurb ticker (event 76), clear it on accept (event 6),
+        // post the ticker-closed signal (event 77 out) when it hides (event 538), and
+        // SendStateEvent("ADVANCE") on event 74.
         void UpdateRunning();
 
         // @cpp:297 -- play the screen's unlock apt movie. Not in this slice's ledger set;
         // declared here for the UpdateLoadResources call site (body links from its own slice).
         void PlayMovie();
 
-        // ---- statics (DWARF cpp:26-53; .rdata) ----
-        static const s32                    maiEventToObserve[6];               // @0x82066054 (6 entries)
+        // ---- statics (DWARF cpp:26-53; .rdata; values MEASURED, wave L dump) ----
+        static const s32                    maiEventToObserve[6];               // @0x82066054 == {64,73,74,76,538,6}
         static const s32                    miNumEventsObserved;                // == 6
-        static const CgsGui::sResourceTuple maResourcesToLoad[];               // @0x82F26D78 (2 entries)
+        static const CgsGui::sResourceTuple maResourcesToLoad[];               // @0x82F26D78 == {148 BrnCarSelectUnlock, 55 B5ManufacturersIcon} (APT)
         static const u32                    muNumResourcesToLoad;               // == 2
         static const char                   KAC_MANUFACTURER_LOGO[20];          // "ManufacturerLogo_mc"
         static const char                   KAC_CAR_NAME[11];                   // "CarName_mc"

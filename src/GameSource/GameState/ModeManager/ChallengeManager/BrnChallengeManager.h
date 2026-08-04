@@ -461,10 +461,10 @@ namespace BrnGameState
         void HackAllChallenges(s32 liNumPlayers);
         void UnHackAllChallenges();
 
-        // X360 0x823246F0 -- ResetActionData is NOT in this TU's ledger key (class-bucket TU)
-        // but is called by ProcessEvent/UpdateChallenge; declared so the bodies can call it.
-        // Its EChallengeActionType->skill dispatch uses KAI_CHALLENGE_ACTION_TYPE_TO_FREEBURN_SKILL.
-        void ResetActionData(s32 liActionIndex);
+        // X360 0x823246F0 (class-bucket ledger TU; called by ProcessEvent/UpdateChallenge).
+        // Bodied in BrnChallengeManager.cpp. Its EChallengeActionType->skill dispatch uses
+        // KAI_CHALLENGE_ACTION_TYPE_TO_FREEBURN_SKILL (dword_82021288, dump-verified).
+        void ResetActionData(s32 liActionToResetIndex);
 
         // X360 0x8233E530 (class-bucket helper the committed debug component calls).
         s32 CountCompletedChallenges();
