@@ -2,6 +2,11 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu::AddMonitor
+#include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"        // GetRWLinearResourceAllocator (Prepare stage 3)
+// The AllocatorList header only FORWARD-DECLARES rw::LinearResourceAllocator, so without this
+// the derived->base conversion to rw::IResourceAllocator* that every stage-3..6 call needs is
+// ill-formed (both types incomplete). The error names two types that look perfectly compatible.
+#include "rw/rwcore_structs.h"                                            // rw::LinearResourceAllocator : IResourceAllocator
 
 // ================================================================================================
 // BrnPhysics::PhysicsModule -- constructor (X360 @0x827E5400) + Construct (X360 @0x825AE308).
@@ -236,5 +241,158 @@ namespace BrnPhysics
         // Base member (CgsModule::Module::mbIsNewModule, console +4). ModuleSingleBuffered::Construct
         // cleared it at the top of this function; the derived Construct sets it back. `stb r10,4(r31)`.
         mbIsNewModule = true;
+    }
+
+    // ================================================================================================
+    // PhysicsModule::Prepare -- X360 @0x825ADB68 (BrnPhysicsModule.cpp:192).
+    //
+    // ⭐⭐ THE POINT OF THIS FUNCTION, for this campaign, IS STAGE 3. Until 2026-08-04 the whole
+    // body was a one-line `return true` stub in WorldLinkStubs.cpp, so the simulation module's own
+    // Prepare -- the ONLY assignment to CgsPhysics::PhysicsSimulationModule::mpSimulation anywhere
+    // in the tree -- was never called, and every reconstructed rw::physics solver object linked and
+    // was unreachable. Stage 3 is what closes that.
+    //
+    // A resumable ten-stage fall-through FSM over mePrepareStage. Each arm stamps its own stage
+    // number FIRST (so a `false` return leaves the cursor exactly where the work stopped and the
+    // world spine re-enters next frame), then does its work; the last arm resets the cursor to
+    // MANAGER and reports success. `default` fires the console's "Invalid Stage\n" assert.
+    //
+    // ⚠️ STAGE 7 (CREATE_PLAYER_VEHICLE) HAS NO ARM OF ITS OWN. The console's `case 7` jumps
+    // straight to LABEL_17, which stamps stage 8 and falls into the world-rigid-body arm. That is
+    // not an omission here: the stage exists in the enum and is reachable as a resume point, but no
+    // code runs for it.
+    //
+    // ⛔⛔ NOT REPRODUCED, DELIBERATELY AND VISIBLY -- three groups. None of them is reachable
+    // work today (each one's target subsystem is itself inert), but every one of them is a REAL
+    // console store or call and this comment is the whole record of that:
+    //
+    //   (a) stage 4's fourteen `stw 0` after DeformationManager::Prepare succeeds, at X360
+    //       +391032, +394248, +394424, +394888, +395160, +395624, +396080, +396208, +396220,
+    //       +397032, +398648, +398984, +403000, +406848. They land inside mDeformationInput
+    //       (+391024) and mDeformationOutput (+396096) -- the deformation IO queue counters --
+    //       and NEITHER class has a reconstructed member map, so naming them is impossible and
+    //       writing them by raw offset would be an offset hack. They stay out until those two
+    //       interfaces are reconstructed. Harmless *only* because the module lives in
+    //       zero-initialised storage and nothing has written those fields yet; the moment
+    //       deformation IO goes live this becomes a real dropped clear.
+    //
+    //   (b) the three sibling sub-Prepares -- DeformationManager (stage 4), PropManager (stage 5)
+    //       and VehicleManager (stage 6). Each is a named LINK STUB in WorldLinkStubs.cpp, so the
+    //       drop is one greppable symbol per subsystem instead of one silent `return true` for
+    //       the whole module. DeformationManager::Prepare actually EXISTS (bodied in the unmounted
+    //       BrnDeformationManager.cpp); mounting that TU is its own closure job.
+    //
+    //   (c) stage 8's body: `CreateIOBuffer<PhysicsSimulationIO::InputBuffer>("Simulation")`,
+    //       PrepareWorldRigidBody @0x825A9834, `mWorldRigidBodyId = <that id>`, DestroyIOBuffer.
+    //       PrepareWorldRigidBody is not reconstructed, so creating a multi-kilobyte IO buffer on
+    //       the stack purely to hand it to nothing would be pure risk for zero observable. The
+    //       stage stamps its cursor and falls through, as the console's does.
+    // ================================================================================================
+    bool PhysicsModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
+                                 CgsModule::IOBufferStack* lpOutputBufferStack,
+                                 CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+                                 BrnResource::GameDataIO::AllocatorList* lpAllocatorList )
+    {
+        CGS_ASSERT( lpInputBufferStack  != 0, "lpInputBufferStack != NULL" );        // :194
+        CGS_ASSERT( lpOutputBufferStack != 0, "lpOutputBufferStack != NULL" );       // :195
+        CGS_ASSERT( lpSceneInputBuffer  != 0, "lpSceneInputBuffer_Update != NULL" ); // :196
+        CGS_ASSERT( lpAllocatorList     != 0, "lpAllocatorList != NULL" );           // :197
+
+        (void)lpInputBufferStack;      // consumed by stage 8's CreateIOBuffer -- see (c) above
+        (void)lpOutputBufferStack;     // asserted only; the console never uses it either
+        (void)lpSceneInputBuffer;      // consumed by stage 6's VehicleManager::Prepare
+
+        switch ( mePrepareStage )
+        {
+        default:
+            // `FireAssert("Invalid Stage\n", ..., 332)`
+            CGS_ASSERT( false, "Invalid Stage\n" );
+            return false;
+
+        case E_PREPARESTAGE_START:
+        case E_PREPARESTAGE_MANAGER:
+            mePrepareStage                 = E_PREPARESTAGE_MANAGER;   // *v11 = 1
+            miFramesToForceSuperSlowMotion = 0;                        // +433204
+            if ( !ModuleSingleBuffered::Prepare() )
+                return false;
+            // fall through
+
+        case E_PREPARESTAGE_CONTACTMAPPER:
+            // The console's `case 2` / LABEL_11 arm: it stamps the stage and nothing else.
+            mePrepareStage = E_PREPARESTAGE_CONTACTMAPPER;             // *v11 = 2
+            // fall through
+
+        case E_PREPARESTAGE_SIMULATIONMODULE:
+        {
+            mePrepareStage = E_PREPARESTAGE_SIMULATIONMODULE;          // *v11 = 3
+
+            // The four SimulationParams fields, built on the stack. All four are literals
+            // Hex-Rays recovered directly (v20[1] = -9.8100004, v22 = 0.1, v23 = 0.016666668,
+            // v24 = 2); the gravity vector is moved into the params block with one lvx/stvx pair.
+            //
+            // ⚠️ THIS -9.81 IS NOT rw::physics::Simulation::Initialize's DEFAULT GRAVITY. That
+            // one is -600.0f (read out of the X360 .rdata this wave). Initialize seeds the SDK
+            // default and this call overwrites it with the GAME's; both numbers are real and they
+            // are not the same number.
+            CgsPhysics::PhysicsSimulationModule::SimulationParams lSimulationParams;
+            lSimulationParams.mafGravity[0]    = 0.0f;
+            lSimulationParams.mafGravity[1]    = -9.8100004f;
+            lSimulationParams.mafGravity[2]    = 0.0f;
+            lSimulationParams.mafGravity[3]    = 0.0f;
+            lSimulationParams.mfFreezingEnergy = 0.1f;
+            lSimulationParams.mfTimeStep       = 0.016666668f;          // 1/60
+            lSimulationParams.muMaxIterations  = 2u;
+
+            // Bank 23 is the physics resource allocator. WorldModule::Prepare's SCENE stage has
+            // already refused to advance unless banks 49/23/61 are all live, so it is non-null
+            // here by construction.
+            rw::LinearResourceAllocator* lpAllocator =
+                lpAllocatorList->GetRWLinearResourceAllocator( 23 );
+
+            // The console dispatches through mSimulationModule's vtable slot 16
+            // (`lwz r11,0x40(r11)`); the dynamic type is exactly PhysicsSimulationModule, so a
+            // direct member call is the same source and the same behaviour.
+            if ( !mSimulationModule.Prepare( lpAllocator, lSimulationParams ) )
+                return false;
+            // fall through
+        }
+
+        case E_PREPARESTAGE_DEFORMATIONMANAGER:
+            mePrepareStage = E_PREPARESTAGE_DEFORMATIONMANAGER;        // *v11 = 4
+            if ( !mDeformationManager.Prepare( lpAllocatorList->GetRWLinearResourceAllocator( 23 ) ) )
+                return false;
+            // ⛔ the fourteen deformation-IO clears go here -- see (a) in the banner.
+            // fall through
+
+        case E_PREPARESTAGE_PROPMANAGER:
+            mePrepareStage = E_PREPARESTAGE_PROPMANAGER;               // *v11 = 5
+            if ( !mPropManager.Prepare( lpAllocatorList->GetRWLinearResourceAllocator( 23 ) ) )
+                return false;
+            // fall through
+
+        case E_PREPARESTAGE_VEHICLEMODULE:
+            mePrepareStage = E_PREPARESTAGE_VEHICLEMODULE;             // *v11 = 6
+            if ( !mVehicleManager.Prepare( lpAllocatorList->GetRWLinearResourceAllocator( 23 ),
+                                           lpSceneInputBuffer ) )
+                return false;
+            // fall through
+
+        case E_PREPARESTAGE_CREATE_PLAYER_VEHICLE:
+            // No arm of its own -- see the banner. The console's `case 7` lands on LABEL_17.
+            // fall through
+
+        case E_PREPARESTAGE_CREATE_WORLD_RIGIDBODY:
+            mePrepareStage = E_PREPARESTAGE_CREATE_WORLD_RIGIDBODY;    // *v11 = 8
+            // ⛔ PrepareWorldRigidBody and its IO buffer go here -- see (c) in the banner.
+            // fall through
+
+        case E_PREPARESTAGE_DONE:
+            mePrepareStage = E_PREPARESTAGE_DONE;                      // *v11 = 9
+            // LABEL_19: the console immediately rewinds the cursor to MANAGER and clears the
+            // release cursor, so a later Release() starts from its own stage 0.
+            mePrepareStage = E_PREPARESTAGE_MANAGER;                   // *v11 = 1
+            meReleaseStage = E_RELEASESTAGE_START;                     // +433076 = 0
+            return true;
+        }
     }
 }

@@ -6,8 +6,14 @@
 // sizer the physics module calls before it carves the workspace.
 //
 // EATech RenderWare physics. Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC); the
-// asm is authoritative. There is NO matching reference TU and no DecFIGS
-// DWARF for this type.
+// asm is authoritative.
+//
+// ⚠️ CORRECTION 2026-08-04 (task #135): the line that used to stand here said "There is NO
+// matching reference TU and no DecFIGS DWARF for this type." THE SECOND HALF WAS FALSE --
+// references/DecFIGS/dwarfdump/SDKs/EATech/include/cmn/rw/physics/simulationworkspace.h
+// exists and declares the whole surface (ctor, dtor, GetResourceDescriptor, Initialize,
+// Release). It is the same false claim rw/physics/simulation.h carried until this week.
+// `Initialize` below is now the DWARF's own (:84), not an invented name.
 //
 // LAYOUT AUTHORITY (GetResourceDescriptor @0x82BC4090): the function never touches a
 // SimulationWorkspace instance -- it only fills a 5-entry serialised resource descriptor
@@ -36,6 +42,12 @@ struct SimulationWorkspace
     // alignment.
     static rw::BaseResourceDescriptors<5>* GetResourceDescriptor(
         rw::BaseResourceDescriptors<5>* lpResult, int luCountA, int luCountB, int luCountC);
+
+    // Initialize @0x82AD5060 -- `lwz r3,0(r3) ; blr`. Returns the workspace arena base
+    // (Resource block 0). See the body's banner for why this address disassembles under
+    // the name `AptDisplayListState::GetFirstItem`.
+    static SimulationWorkspace* Initialize(
+        void** lpMemory, int luCountA, int luCountB, int luCountC);
 };
 
 } // namespace physics

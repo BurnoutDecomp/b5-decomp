@@ -42,14 +42,87 @@ rw::BaseResourceDescriptors<5>* PairSet::GetResourceDescriptor(
         lpEntries[luEntry].m_alignment = 1u;
     }
 
-    // size = 4 * (8 * liMaxPairs + liNumParts + 5)
+    // CONSOLE: size = 4 * (8 * liMaxPairs + liNumParts + 5)
+    //
+    // ⚠️⚠️ FIXED 2026-08-04 (task #135) -- ANOTHER LIVE CONSOLE-STRIDE BUG, and this one had
+    // teeth. The trailing `+ 5` is the FIVE-WORD (20-byte) PairSet header, and Initialize below
+    // used to lay the link array down at the matching literal `block + 0x14`. On x64
+    // sizeof(PairSet) is 32 (two 8-byte pointers), so the link array would have started TWELVE
+    // BYTES INSIDE the header and the very first ClearAll would have overwritten miMaxPairs /
+    // miNumParts / miFreeList with link data. It was invisible only because nothing in the tree
+    // had ever called PairSet::Initialize; PhysicsSimulationModule::AllocateMemoryAndInitialiseRW
+    // calls it three times.
+    // The `8 * liMaxPairs` words per pair (two 16-byte Links) and the one word per part are
+    // all-s32 records and do not widen; they are written through sizeof anyway so a future
+    // change to Link cannot silently desynchronise the sizer from the carver.
     const u32 luSize =
-        4u * static_cast<u32>(8 * liMaxPairs + liNumParts + 5);
+        static_cast<u32>(sizeof(PairSet))
+        + 2u * static_cast<u32>(sizeof(Link)) * static_cast<u32>(liMaxPairs)
+        + static_cast<u32>(sizeof(s32)) * static_cast<u32>(liNumParts);
 
     // entry[0] = { m_size = size, m_alignment = 4 }
+    // ⚠️ The console's 4 is the alignment of its widest member (an s32/4-byte pointer). Two of
+    // this object's members are 8 bytes on x64, so the block alignment moves with the type
+    // rather than staying on the console literal -- a 4-aligned block would seat both pointers
+    // across an 8-byte boundary.
     lpEntries[0].m_size      = luSize;
-    lpEntries[0].m_alignment = 4u;
+    lpEntries[0].m_alignment = static_cast<u32>(alignof(PairSet));
     return lpResult;
+}
+
+// -------------------------------------------------------------------------------------
+// PairSet::ClearAll @ 0x82BC6DC0   (40 instructions)
+//
+// ⚠️ EXPORT-SET HOLE -- absent from .ida-exports (0x82BC6E60, InitializeLink, is the next
+// exported symbol). Recovered with headless IDA 9.3 against a COPY of
+// BURNOUT_X360_ARTIST.XEX.i64, the same way PhysicsSimulationModule::Destruct and
+// RigidBodyData::RigidBodyData were. This is the fourth confirmed hole in that export set.
+//
+// Two independent loops:
+//   * the pair pool -- walk link0 of every pair (`v2 += 32`, i.e. two 16-byte Links per step),
+//     stamping miPart = -1 (the "unfiled" marker) and threading miNext to the NEXT pair index.
+//     The last pair's miNext is then overwritten with -1 to terminate the chain
+//     (`32*miMaxPairs + mpLinks - 24` == the last pair's link0.miNext, since 32 - 8 == 24).
+//     miFreeList becomes 0, or -1 when the pool has no pairs at all.
+//   * the bucket heads -- mpHeads[i] = -1 for every part.
+//
+// ⚠️ THE FREE LIST IS THREADED IN PAIR UNITS, NOT LINK UNITS. `v3[2] = v1` writes the
+// POST-incremented counter, so pair p points at p+1 -- an index into the pair pool, which is
+// what miFreeList and LinkParts consume. Reading it as a link index would halve the pool.
+// -------------------------------------------------------------------------------------
+PairSet* PairSet::ClearAll()
+{
+    s32* lpFreeThreadTail = 0;
+
+    if (miMaxPairs != 0u)
+    {
+        miFreeList = 0;                                     // stw r11(=0), 0x10(r3)
+
+        u32 luPair = 0u;
+        do
+        {
+            Link* lpLink0 = &mpLinks[2u * luPair];
+            ++luPair;
+            lpLink0->miPart = -1;                           // stw r11(=-1), 0(r8)
+            lpLink0->miNext = static_cast<s32>(luPair);     // stw r10, 8(r8)  -- POST-increment
+            lpFreeThreadTail = &lpLink0->miNext;
+        }
+        while (luPair < miMaxPairs);
+
+        // `stw r11(=-1), -0x18(r10)` off the end of the link array -- the last pair's miNext.
+        *lpFreeThreadTail = -1;
+    }
+    else
+    {
+        miFreeList = -1;                                    // the pool is empty
+    }
+
+    for (u32 luPart = 0u; luPart < miNumParts; ++luPart)
+    {
+        mpHeads[luPart] = -1;                               // stwx r11(=-1), r8, r10
+    }
+
+    return this;
 }
 
 // -------------------------------------------------------------------------------------
@@ -60,8 +133,10 @@ rw::BaseResourceDescriptors<5>* PairSet::GetResourceDescriptor(
 // link array (2*miMaxPairs links = 32*miMaxPairs bytes). Then tail-call ClearAll to build
 // the free list and clear the buckets.
 //
-// The +0x14 / 32*liMaxPairs offsets are the X360 (4-byte-word) block geometry fixed by
-// GetResourceDescriptor -- external serialised-block layout, walked by raw arithmetic.
+// ⚠️⚠️ THE CONSOLE LITERALS WERE +0x14 (the 5-word header) AND 32*liMaxPairs. The first one
+// is a HOST BUG -- see the correction in GetResourceDescriptor above: sizeof(PairSet) is 32 on
+// x64, so `block + 0x14` seated the link array twelve bytes inside the header. Both offsets now
+// come from sizeof and stay locked to the sizer.
 // -------------------------------------------------------------------------------------
 PairSet* PairSet::Initialize(void** lpMemory, int liNumParts, int liMaxPairs)
 {
@@ -70,8 +145,9 @@ PairSet* PairSet::Initialize(void** lpMemory, int liNumParts, int liMaxPairs)
 
     lpSet->miMaxPairs = static_cast<u32>(liMaxPairs);
     lpSet->miNumParts = static_cast<u32>(liNumParts);
-    lpSet->mpLinks    = reinterpret_cast<Link*>(lpBlock + 0x14);
-    lpSet->mpHeads    = reinterpret_cast<s32*>(lpBlock + 32 * static_cast<u32>(liMaxPairs) + 0x14);
+    lpSet->mpLinks    = reinterpret_cast<Link*>(lpBlock + sizeof(PairSet));
+    lpSet->mpHeads    = reinterpret_cast<s32*>(
+        lpBlock + sizeof(PairSet) + 2 * sizeof(Link) * static_cast<u32>(liMaxPairs));
 
     return lpSet->ClearAll();
 }
