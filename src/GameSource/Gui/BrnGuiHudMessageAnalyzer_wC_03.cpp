@@ -75,8 +75,15 @@ void HudMessageAnalyzer::HandleWreckedEvent(const GuiEventPlayerWrecked* lpEvent
 
         case E_WRECKED_STATE_WRECKING:
             CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
-            mfCurrentWreckDuration += mpGuiCache->mfFrameDeltaTime;
-            if (mfCurrentWreckDuration <= KF_REQUIRED_WRECK_DURATION)
+            // @0x8251CB6C lfs f13, 0(mpGuiCache) -- the cache's LEADING frame-delta float
+            // (GuiCache::mfTimeStep @ +0x0000, the GetTimeStep() slot); same inlined load
+            // as Update's three timer sites (@0x8252777C/0x8252782C/0x82527900), which the
+            // committed wB_12 reads via GetTimeStep() too.
+            mfCurrentWreckDuration += mpGuiCache->GetTimeStep();
+            // @0x8251CB80 fcmpu + ble: the hold path is taken when the duration is
+            // <= the threshold OR unordered, so the negated ordered predicate is the
+            // faithful form (plain `<=` would diverge on NaN).
+            if (!(mfCurrentWreckDuration > KF_REQUIRED_WRECK_DURATION))
             {
                 return;
             }
