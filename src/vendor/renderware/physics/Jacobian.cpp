@@ -1,16 +1,13 @@
 #include "vendor/renderware/physics/Jacobian.hpp"
 
 // ===========================================================================
-// rw::physics::Jacobian_RQD -- reconstructed from BURNOUT_X360_ARTIST.XEX.
+// rw::physics jacobian bucket -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-//   Jacobian_RQD::Create  @ 0x82BC0FA8
+//   Jacobian_RQD::Create      @ 0x82BC0FA8
+//   DriveJacobian::GetMatIBT  @ 0x82BC1128
 //
-// Pure scalar FPU arithmetic in the X360 asm. The 27 intermediates (v2..v27)
-// and the 16 output stores are transcribed verbatim from the pseudocode, which
-// the fmuls/fadds/fsubs sequence confirms store-for-store. Inputs:
-//   lpA (r4): a0=lane0, a1=lane1, a2=lane2, a3=lane3  (lfs 0/4/8/0xC(r4))
-//   lpB (r5): b0=lane0, b1=lane1, b2=lane2, b3=lane3  (lfs 0/4/8/0xC(r5))
-// Output mData[i] is the store at byte offset 4*i.
+// Both are pure scalar (Create is fmuls/fadds/fsubs, GetMatIBT is lfs/stfs plus three
+// 16-byte stores), so both transcribe store-for-store as portable float maths.
 // ===========================================================================
 
 namespace rw
@@ -18,17 +15,34 @@ namespace rw
 namespace physics
 {
 
-Jacobian_RQD* Jacobian_RQD::Create(const Vec4* lpA, const Vec4* lpB)
+// ---------------------------------------------------------------------------
+// Jacobian_RQD::Create @ 0x82BC0FA8
+//
+// The 27 intermediates (v2..v27) and the 16 output stores are transcribed verbatim from the
+// asm, which the fmuls/fadds/fsubs sequence confirms store-for-store. Inputs:
+//   lpA (r4): a0..a3 = lfs 0/4/8/0xC(r4)      -- qA'
+//   lpB (r5): b0..b3 = lfs 0/4/8/0xC(r5)      -- qB'
+// Output mData[i] is the store at byte offset 4*i.
+//
+// ⚠️ +0x2C and +0x38 are NEAR-MIRRORS: the same four products with the opposite sign on the
+// (b*a) pair. X360 emits two separate subtractions in opposite order (0x82BC1024
+// `fsubs f22,f29,f1` vs 0x82BC10B4 `fsubs f29,f1,f29`). Do not copy one line to the other.
+//
+// ⚠️ BurnoutPR's `return a3` is a Hex-Rays artefact (a3 was live in eax). X360 never
+// reassigns r3, so the function returns the destination.
+// ---------------------------------------------------------------------------
+Jacobian_RQD* Jacobian_RQD::Create(const rw::math::vpu::Quaternion* lpA,
+                                   const rw::math::vpu::Quaternion* lpB)
 {
-    const f32 a0 = lpA->lane0;   // *v0
-    const f32 a1 = lpA->lane1;   // *(v0 + 4)
-    const f32 a2 = lpA->lane2;   // *(v0 + 8)
-    const f32 a3 = lpA->lane3;   // *(v0 + 12)
+    const f32 a0 = lpA->x;   // *v0
+    const f32 a1 = lpA->y;   // *(v0 + 4)
+    const f32 a2 = lpA->z;   // *(v0 + 8)
+    const f32 a3 = lpA->w;   // *(v0 + 12)
 
-    const f32 b0 = lpB->lane0;   // v1[0]
-    const f32 b1 = lpB->lane1;   // v1[1]
-    const f32 b2 = lpB->lane2;   // v1[2]
-    const f32 b3 = lpB->lane3;   // v1[3]
+    const f32 b0 = lpB->x;   // v1[0]
+    const f32 b1 = lpB->y;   // v1[1]
+    const f32 b2 = lpB->z;   // v1[2]
+    const f32 b3 = lpB->w;   // v1[3]
 
     // Intermediates v2..v27 (verbatim from the asm/pseudocode).
     const f32 v2  = b2 * a3;
@@ -77,6 +91,38 @@ Jacobian_RQD* Jacobian_RQD::Create(const Vec4* lpA, const Vec4* lpB)
     mData[15] = ((v15 + v13) + v8) + v14;                           // +0x3C
 
     return this;
+}
+
+// ---------------------------------------------------------------------------
+// DriveJacobian::GetMatIBT @ 0x82BC1128   (38 instructions, all read this wave)
+//
+// Gathers the nine MatIBT scalar lanes into a 3x3 matrix held as three 16-byte rows:
+//     MatIBT[i][j] = *(jac + 0xDC + i*0x40 + j*0x10)
+// i.e. row i reads +0xDC/+0xEC/+0xFC, then +0x11C/+0x12C/+0x13C, then +0x15C/+0x16C/+0x17C
+// -- which are the `.w` lanes of record rows {13,14,15}, {17,18,19}, {21,22,23}.
+//
+// The destination's w lane is explicitly zeroed (`li r11,0` plus three `stw`) BEFORE the
+// three `stvx128`, so the rows go out as (x, y, z, 0).
+// ---------------------------------------------------------------------------
+rw::math::vpu::Matrix33* DriveJacobian::GetMatIBT(rw::math::vpu::Matrix33* lpDst,
+                                                  const Jacobian* lpJac)
+{
+    rw::math::vpu::Vector3 lRows[3];
+
+    for (u32 luRow = 0u; luRow < 3u; ++luRow)
+    {
+        const u32 luBase = 13u + luRow * 4u;          // rows 13, 17, 21
+        lRows[luRow].x = lpJac->mRows[luBase + 0u].w;   // +0xDC + i*0x40
+        lRows[luRow].y = lpJac->mRows[luBase + 1u].w;   // +0xEC + i*0x40
+        lRows[luRow].z = lpJac->mRows[luBase + 2u].w;   // +0xFC + i*0x40
+        lRows[luRow].w = 0.0f;                         // `li r11,0` / `stw r11,0(rN)`
+    }
+
+    // `stvx128 v0,r0,r3` / `stvx128 v13,r3,r7(=0x10)` / `stvx128 v12,r3,r6(=0x20)`
+    lpDst->xAxis = lRows[0];
+    lpDst->yAxis = lRows[1];
+    lpDst->zAxis = lRows[2];
+    return lpDst;
 }
 
 } // namespace physics
