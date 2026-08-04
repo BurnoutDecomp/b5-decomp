@@ -233,6 +233,66 @@ Drive* Simulation::AddDrive(RigidBody* lpA, RigidBody* lpB, void* lpFrames, void
 }
 
 // -------------------------------------------------------------------------------------
+// Simulation::AddJoint @ 0x82BC3D90   (37 instructions)  -- BODIED 2026-08-04 (task #144).
+// Sole in-game caller: PhysicsSimulationModule::ProcessAddJointQueue @0x828A4960.
+//
+// ⭐ THE SAME CONTROL THAT MADE AddDrive SAFE APPLIES HERE, one node type over: this is the
+// exact inverse of RemoveJoint above, and RemoveJoint was decoded from the same headless dump
+// in the same pass and reproduced its already-committed body instruction-for-instruction (all
+// 21). So the splice idiom is not being read for the first time. Pop the head of the free list,
+// unlink it, re-insert at the TAIL of the active list, fill the payload, move one entry between
+// the two counters. AddDrive is this function with +0x34/+0x38/+0x54/+0x58 in place of
+// +0x2C/+0x30/+0x4C/+0x50; both are 37 instructions.
+//
+// ⚠️ EXHAUSTION IS A NULL RETURN, NOT AN ASSERT -- `lwz r10,0x4C(r11)` / `cmplwi r10,0` /
+// `li r3,0`, the same convention AddRigidBody and AddDrive use for their own pools.
+//
+// ⚠️ THE TWO BODY ARGUMENTS ARE NOT SYMMETRIC, and the mapping is pinned by BOTH ends rather
+// than guessed. The console stores `stw r5,0x10` and `stw r4,0x14`, i.e. arg2 -> m_bodyA and
+// arg1 -> m_bodyB. ProcessAddJointQueue passes the PARENT body in r4 and the CHILD in r5, and
+// ProcessRemoveJointQueue then reads +0x10 and +0x14 back out for PairSet::UnlinkParts in the
+// same order ProcessAddJointQueue passes to PairSet::LinkParts. ⭐ That independently CONFIRMS
+// the two [INFERRED] annotations on Joint::GetChild()/GetParent() in Joint.hpp -- m_bodyA
+// really is the child -- by the identical argument the drive wave used for Drive.
+//
+// ⚠️ m_tag (+0x18) is NOT written here. The caller writes it immediately afterwards
+// (`stw r28,0x18(r3)` at 0x828A4974, the JointData slot index) along with m_spy. Only the
+// `stw r8,0x1C` zeroing of m_spy belongs to this function.
+//
+// ⚠️⚠️ THE `void*` PARAMETERS ARE THE CONSOLE'S, AND THEY ARE A FORK DETECTOR SWITCHED OFF.
+// They are why CgsPhysics::JointFrames/JointLimits could shadow the real records for as long as
+// they did -- a forked pointer converts here implicitly and silently, and neither the compiler
+// nor the linker can see it. The forks are retired (task #144); the signature is kept as
+// shipped. See [[odr-forks-link-silently]].
+// -------------------------------------------------------------------------------------
+Joint* Simulation::AddJoint(RigidBody* lpA, RigidBody* lpB, void* lpFrames, void* lpLimits)
+{
+    if (m_FreeJT_Count == 0u)                             // +0x4C
+        return nullptr;
+
+    Joint* const lpJoint = m_FreeJT_Anchor->m_right;      // +0x2C, head of the free list
+
+    lpJoint->m_right->m_left = lpJoint->m_left;
+    lpJoint->m_left->m_right = lpJoint->m_right;
+
+    Joint* const lpAnchor = m_ActiveJT_Anchor;            // +0x30
+    lpJoint->m_right          = lpAnchor;
+    lpJoint->m_left           = lpAnchor->m_left;
+    lpAnchor->m_left->m_right = lpJoint;
+    lpAnchor->m_left          = lpJoint;
+
+    lpJoint->m_skel  = static_cast<JointFrames*>(lpFrames);   // +0x00  `stw r6,0(r3)`
+    lpJoint->m_limit = static_cast<JointLimits*>(lpLimits);   // +0x04  `stw r7,4(r3)`
+    lpJoint->m_bodyA = lpB;                                   // +0x10  `stw r5,0x10(r3)`
+    lpJoint->m_bodyB = lpA;                                   // +0x14  `stw r4,0x14(r3)`
+    lpJoint->m_spy   = 0u;                                    // +0x1C  `stw r8(=0),0x1C(r3)`
+
+    --m_FreeJT_Count;                                     // +0x4C
+    ++m_ActiveJT_Count;                                   // +0x50
+    return lpJoint;
+}
+
+// -------------------------------------------------------------------------------------
 // Simulation::Initialize @ 0x82BC5158   (224 instructions)
 //
 // STATIC. r3 is the Resource block array the allocator filled, NOT a `this`: the object

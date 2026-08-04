@@ -14,6 +14,12 @@
 #include "rw/physics/SimulationWorkspace.h"     // rw::physics::SimulationWorkspace
 #include "rw/physics/pairset.h"                 // rw::physics::PairSet
 #include "vendor/renderware/physics/Drive.hpp"   // rw::physics::Drive -- the drive drains (task #143)
+#include "vendor/renderware/physics/Joint.hpp"   // rw::physics::Joint -- the joint drains (task #144)
+// The three IsValid overloads ProcessAddJointQueue's eleven inlined tripwires need, one per
+// width: 4-lane Quaternion, 3-lane Vector3, scalar f32.
+#include "rw/math/vpu/vector4_operation.h"       // rw::math::vpu::IsValid(const Quaternion&)
+#include "rw/math/vpu/vector3_operation.h"       // rw::math::vpu::IsValid(const Vector3&)
+#include "rw/math/fpu/scalar_operation.h"        // rw::math::fpu::IsValid(float)
 
 #include <cstddef>   // offsetof (layout gate)
 #include <cfloat>    // FLT_MAX  (rw::physics::Inertia's default max velocity/omega)
@@ -56,30 +62,28 @@ namespace CgsPhysics
     // ===================== JointData =======================================
 
     // X360 @0x827DB798. 36-pass loop default-initialising maLimits[i]: zero the
-    // two leading 16-byte vectors and mfVtwist..mfTwista plus both enum slots,
-    // and set mfSwingc/mfTwistc to 1.0f. (f0 == 0.0f, f13 == 1.0f.)
+    // two leading 16-byte vectors and mVtwist..mTwista plus both enum slots,
+    // and set mSwingc/mTwistc to 1.0f. (f0 == 0.0f, f13 == 1.0f.)
+    //
+    // ⭐ 2026-08-04 (task #144): THIS BODY IS NOW EMPTY, AND THAT IS THE FAITHFUL SPELLING.
+    // It used to be an explicit 36-pass loop writing those sixteen values by hand against the
+    // FORKED CgsPhysics::JointLimits. With the fork retired, `maLimits` is an array of the real
+    // rw::physics::JointLimits, whose own default constructor carries exactly that store
+    // sequence -- so the implicit member initialisation of maLimits[36] IS the console's pass,
+    // and re-writing the same values afterwards would be a second pass the console does not
+    // make. See rw::physics::JointLimits::JointLimits() for why those stores provably belong to
+    // it: mSwingc/mTwistc have no DWARF setter and only a const-ref getter, so no caller
+    // outside the class can write the console's 1.0f.
+    //
+    // ⚠️ maFrames[36] IS ALSO DEFAULT-CONSTRUCTED NOW, and that is likewise correct: the DWARF
+    // declares JointFrames::JointFrames() (jointframes.h:76) and its body is EMPTY, so nothing
+    // is written -- matching the console, whose ctor loop touches maLimits and nothing else.
+    // ⚠️ It is not free, though: JointFrames' user-provided (DWARF-attested) ctor/dtor make
+    // JointData non-trivial, so the compiler emits the array loops. DriveFrames is trivial,
+    // which is why the drive wave was byte-neutral and this one is not. Flagged, not "fixed" --
+    // deleting an attested constructor to save code size would be trading truth for bytes.
     JointData::JointData()
     {
-        for (s32 li = 0; li < KI_SIZE; ++li)
-        {
-            JointLimits& lLimit = maLimits[li];
-            lLimit.mafPprism[0] = 0.0f;            // stvx128 v0,r0,r11   (mPprism)
-            lLimit.mafPprism[1] = 0.0f;
-            lLimit.mafPprism[2] = 0.0f;
-            lLimit.mafPprism[3] = 0.0f;
-            lLimit.mafVprism[0] = 0.0f;            // stvx128 v13,r11,r6  (mVprism)
-            lLimit.mafVprism[1] = 0.0f;
-            lLimit.mafVprism[2] = 0.0f;
-            lLimit.mafVprism[3] = 0.0f;
-            lLimit.mfVtwist = 0.0f;                // stfs f0,0x20(r11)
-            lLimit.mfVswing = 0.0f;                // stfs f0,0x24(r11)
-            lLimit.mfSwinga = 0.0f;                // stfs f0,0x28(r11)
-            lLimit.mfTwista = 0.0f;                // stfs f0,0x2C(r11)
-            lLimit.mfSwingc = 1.0f;                // stfs f13,0x30(r11)
-            lLimit.mfTwistc = 1.0f;                // stfs f13,0x34(r11)
-            lLimit.meSwingf = E_SWING_LOCKED;      // stw r10(=0),0x38(r11)
-            lLimit.meTwistf = E_TWIST_LOCKED;      // stw r10(=0),0x3C(r11)
-        }
 
         // ---- layout pins (hosted here so offsetof can see the private members) ----
         // X360-exact and host-invariant up to the first pointer array: maLimits at
@@ -88,6 +92,24 @@ namespace CgsPhysics
         static_assert(offsetof(JointData, maFrames)   == 0,    "maFrames @+0");
         static_assert(offsetof(JointData, maLimits)   == 2880, "maLimits @+0xB40 (X360-exact: 36*80)");
         static_assert(offsetof(JointData, maRWJoints) == 5184, "maRWJoints @+0x1440 (X360-exact: 0xB40 + 36*64)");
+
+        // ---- task #144: the two element STRIDES, spelled as the MEMBER, not as a literal ----
+        // The two lines above are 2880 and 5184 because the elements are 80 and 64 bytes wide.
+        // Spelled that way they would still pass if JointFrames were re-typed to something 80
+        // bytes long by accident, and they say nothing about WHICH record sits in the array.
+        // These restate the same two offsets in terms of `sizeof(JointData::maFrames[0])`, so a
+        // re-typing of either element -- the exact failure the JointFrames/JointLimits forks
+        // were -- breaks the gate. Both strides are the drains' own arithmetic:
+        // ProcessUpdateJointFramesQueue steps maFrames by i*80 (five lvx128 lanes) and
+        // ProcessUpdateJointLimitsQueue steps maLimits by (i+45)*64 (eight ld/std pairs).
+        static_assert(sizeof(JointData::maFrames[0]) == 80,
+                      "JointData element stride 80 (drain @0x8289F4E8 `slwi/add/slwi` == i*5*16)");
+        static_assert(sizeof(JointData::maLimits[0]) == 64,
+                      "JointData element stride 64 (drain @0x8289F724 `addi r10,r31,0x2D; slwi r10,r10,6`)");
+        static_assert(offsetof(JointData, maLimits)   == KI_SIZE * sizeof(JointData::maFrames[0]),
+                      "maLimits follows the 36 JointFrames");
+        static_assert(offsetof(JointData, maRWJoints) == offsetof(JointData, maLimits) + KI_SIZE * sizeof(JointData::maLimits[0]),
+                      "maRWJoints follows the 36 JointLimits");
         static_assert(offsetof(JointData, maGameIDs)  == 5184 + KI_SIZE * sizeof(rw_physics::Joint*),
                       "maGameIDs follows the 36 Joint* slots (X360 +0x14D0 at 4-byte pointers)");
         static_assert(offsetof(JointData, mabUsedSlot) == offsetof(JointData, maGameIDs) + KI_SIZE * sizeof(JointId),
@@ -121,6 +143,116 @@ namespace CgsPhysics
     bool JointData::IsSlotUsed(s32 liIndex) const
     {
         return mabUsedSlot[liIndex];
+    }
+
+    // DWARF h:152. No out-of-line symbol -- the console inlines it into all FIVE joint drains,
+    // and all five copies are the same linear search, which is the control on this body:
+    // `lbzx` mabUsedSlot[k] -> skip if clear; `ld` maGameIDs[k] and a 64-bit `cmpld` against the
+    // event's id -> return k on a hit; `cmpwi r31,0x24` bounds the walk at 36; exhaustion falls
+    // through to -1. ⭐ Two committed offsets fall out of every copy: `addi r11,r21,0x14D0` for
+    // maGameIDs and `addi r9,r21,0x15F0` for mabUsedSlot. The 8-byte `ld`/`cmpld` pair is also
+    // what pins JointId at 8 bytes.
+    //
+    // ⚠️ UNLIKE THE DRIVE TWIN, THE MISS IS NOT SILENT AT THE CALL SITES. DriveData's four
+    // callers just guard on `!= -1`; every joint drain instead fires an assert on -1 before
+    // skipping the event. The difference lives in the callers, not here -- this body has no
+    // diagnostic of its own, exactly as DriveData::GetIndexFromGameID has none.
+    s32 JointData::GetIndexFromGameID(JointId lGameID) const
+    {
+        for (s32 li = 0; li < KI_SIZE; ++li)
+        {
+            if (mabUsedSlot[li] && maGameIDs[li].muId == lGameID.muId)
+                return li;
+        }
+        return -1;
+    }
+
+    // DWARF h:144. X360 @0x8289D3E0 (98 instructions), sole caller ProcessAddJointQueue
+    // @0x828A4358. Claims the first free slot and fills it.
+    //
+    // ⭐⭐ THIS IS **NOT** DriveData::AddDrive WITH THE NAMES CHANGED, and mirroring that body
+    // would have silently dropped a whole phase. The console opens with a full 36-slot
+    // DUPLICATE-DETECTION pre-pass (0x8289D428..0x8289D48C) that walks every LIVE slot and
+    // asserts the incoming id and joint pointer are not already registered. AddDrive (62
+    // instructions) has no such pass; that pre-pass is most of the 98-vs-62 gap.
+    //
+    // ⭐ EVERY ONE OF THE FIVE ARRAY BASES IS AN INDEPENDENT WITNESS TO THIS CLASS'S LAYOUT,
+    // because the console reaches each through its own shift, and all five reproduce the
+    // committed offsets exactly:
+    //     (i + i*4)<<4 -> +0x0000  maFrames      (i+0x2D)<<6  -> +0x0B40  maLimits
+    //     (i+0x510)<<2 -> +0x1440  maRWJoints    (i+0x29A)<<3 -> +0x14D0  maGameIDs
+    //     stb 1, 0x15F0(this+i) -> +0x15F0  mabUsedSlot
+    //
+    // ⚠️ FOUR PARAMETERS, NO TIMESTEP. DriveData::AddDrive takes a fifth `float32_t` it accepts
+    // and never reads (the defect flagged in task #143); the joint side never had it, and the
+    // DWARF signature (h:144) confirms four.
+    s32 JointData::AddJoint(rw_physics::Joint* lpJoint, const JointFrames& lrFrames,
+                            const JointLimits& lrLimits, JointId lGameID)
+    {
+        // The duplicate-detection pre-pass. Asserts only -- it does not return early, and it
+        // does not skip the add. Transcribed as shipped.
+        for (s32 li = 0; li < KI_SIZE; ++li)
+        {
+            if (mabUsedSlot[li])
+            {
+                CGS_ASSERT(maGameIDs[li].muId != lGameID.muId, "maGameIDs[liIndex] != lGameID");   // .cpp:2661
+                CGS_ASSERT(maRWJoints[li] != lpJoint, "maRWJoints[liIndex] != lpJoint");           // .cpp:2662
+            }
+        }
+
+        s32 liIndex = 0;
+        while (liIndex < KI_SIZE && mabUsedSlot[liIndex])
+            ++liIndex;
+
+        if (liIndex >= KI_SIZE)
+            return -1;
+
+        maGameIDs[liIndex]   = lGameID;    // stdx r24 -> (i+0x29A)<<3
+        maRWJoints[liIndex]  = lpJoint;    // stwx r25 -> (i+0x510)<<2   (NULL at the call site)
+        maFrames[liIndex]    = lrFrames;   // 5x lvx128/stvx128 -> i*80
+        maLimits[liIndex]    = lrLimits;   // 8x ld/std -> (i+0x2D)<<6
+        mabUsedSlot[liIndex] = true;       // stb 1, 0x15F0(this+i)  -- LAST, as the asm does
+        return liIndex;
+    }
+
+    // DWARF h:148. No out-of-line symbol -- inlined into ProcessRemoveJointQueue at
+    // 0x8289FBC4..0x8289FBEC: the `liIndex < knSize` tripwire (.cpp:2696) and then the single
+    // `stb r20(=0), 0x4700(r11)` with r11 = this + liIndex, i.e. mabUsedSlot[liIndex] = false
+    // (0x4700 == mJointData 0x3110 + mabUsedSlot 0x15F0).
+    //
+    // ⚠️ IT CLEARS THE USED FLAG AND NOTHING ELSE, exactly as DriveData::RemoveDrive does.
+    // maRWJoints[liIndex] is deliberately left pointing at the joint the caller is about to
+    // hand to Simulation::RemoveJoint -- the caller reads the slot BEFORE calling this, and the
+    // flag is what makes the slot re-allocatable. Zeroing the pointer would invent a store.
+    bool JointData::RemoveJoint(s32 liIndex)
+    {
+        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");   // .cpp:2696 tripwire (blt skips)
+        mabUsedSlot[liIndex] = false;
+        return true;
+    }
+
+    // Checked slot accessors. No out-of-line symbols -- inlined at every call site -- but their
+    // asserts identify them unambiguously: these two carry h:630/631 and h:639/640 respectively,
+    // against GetJoint's h:621/622 (which the out-of-line GetJoint @0x8289D168 confirms).
+    JointFrames* JointData::GetJointFrames(s32 liIndex)
+    {
+        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");          // h:630 tripwire (blt skips)
+        CGS_ASSERT(mabUsedSlot[liIndex], "mabUsedSlot[liIndex]");   // h:631 tripwire (bne skips)
+        return &maFrames[liIndex];
+    }
+
+    JointLimits* JointData::GetJointLimits(s32 liIndex)
+    {
+        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");          // h:639 tripwire (blt skips)
+        CGS_ASSERT(mabUsedSlot[liIndex], "mabUsedSlot[liIndex]");   // h:640 tripwire (bne skips)
+        return &maLimits[liIndex];
+    }
+
+    // [INFERRED NAME] -- the write-back half of GetJoint. See the header for why the write is
+    // attested (ProcessAddJointQueue @0x828A497C) even though the DWARF carries no such method.
+    void JointData::SetJoint(s32 liIndex, rw_physics::Joint* lpRWJoint)
+    {
+        maRWJoints[liIndex] = lpRWJoint;
     }
 
     // ===================== DriveData =======================================
@@ -1386,6 +1518,269 @@ namespace CgsPhysics
             CGS_ASSERT(mDriveData.IsSlotUsed(liDriveIndex), "mabUsedSlot[liIndex]");  // h:658
 
             mDriveData.GetDrive(liDriveIndex)->SetSpy(lrEvent.mbSpy);
+        }
+    }
+
+    // =====================================================================================
+    // THE JOINT GROUP -- five of the nineteen input drains  (task #144, 2026-08-04)
+    //
+    // Same skeleton as the drive five: fetch the queue, walk mCount events, resolve the
+    // event's 64-bit game id to a slot through JointData::GetIndexFromGameID (which the
+    // console inlines into every one of them), act on the slot.
+    //
+    // ⚠️⚠️ ONE STRUCTURAL DIFFERENCE FROM THE DRIVE GROUP, AND IT IS NOT COSMETIC: a joint
+    // id that resolves to -1 is an ERROR here. The drive drains skip such an event silently
+    // -- "that silence is the console's, not a stub's", as the block above records. Every
+    // joint drain instead fires an assert first and then skips. Both behaviours are
+    // transcribed as shipped; do not harmonise them.
+    //
+    // ⚠️ WHAT IS DELIBERATELY NOT RECONSTRUCTED, AND WHY. The console builds those miss
+    // messages by STREAMING: `CgsDev::StrStreamBase::AppendFormat("0x%08X")` on the high word
+    // of the id followed by `AppendFormat("%08X")` on the low word, into
+    // `CgsDev::Assert::gpcMessageBuffer`, and ProcessRemoveJointQueue additionally guards a
+    // debug-TTY print on a global flag (`ld 0x1908(r11)` & 1 at 0x8289FA74) before firing.
+    // This tree has only `CGS_ASSERT(cond, "literal")`, and CgsAssert.h already records why:
+    // "The original streamed the message into the assert buffer via StrStream; the call sites
+    // all pass a plain string". The console's own message TEXT and the exact control flow
+    // (assert, then skip the event) are kept; the formatting machinery belongs to whoever
+    // reconstructs CgsDev::StrStreamBase. ⭐ Incidentally the two-halves format is itself a
+    // third witness that JointId is 64 bits wide.
+    //
+    // ⭐ THE FIVE QUEUE ACCESSORS ARE A 5-FOR-5 CONTROL on the queue table landed in task #142:
+    // every drain's opening `bl` resolves to exactly the address CgsPhysicsSimulationModuleIO.h
+    // records -- 0x8289E8A0 / E948 / E9F0 / EA98 / EB40.
+    // =====================================================================================
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessAddJointQueue @ 0x828A40F0   (557 instructions)
+    //
+    // ⭐ THE LARGEST DRAIN IN THE WHOLE NINETEEN, and 557 instructions is misleading: roughly
+    // 310 of them are the ELEVEN inlined `RwMathVPU::IsValid` tripwires, each a per-lane
+    // `vspltw` + `vcmpeqfp.` self-comparison. The actual work is the same four steps as
+    // ProcessAddDriveQueue.
+    //
+    // ⭐⭐ THOSE ELEVEN ASSERTS ARE WHY THE JointFrames/JointLimits TYPE FORKS ARE RETIRED.
+    // Their baked literals name the accessors outright -- "RwMathVPU::IsValid(
+    // lpFrames->GetChildAngularFrame() )", "... lpLimits->GetAngularVelocityLimit() )" and nine
+    // more -- and every one of those accessors exists on rw::physics::JointFrames /
+    // rw::physics::JointLimits and on NEITHER of the opaque CgsPhysics copies that used to
+    // shadow them. The shipped binary states the parameter types. See the retirement block in
+    // CgsPhysicsSimulationModule.h.
+    //
+    // ⚠️ THE ORDER OF THE LAST FOUR STEPS IS LOAD-BEARING and is the console's, identical to
+    // the drive twin:
+    //   1. JointData::AddJoint claims the slot and COPIES frames+limits into the table;
+    //   2. PairSet::LinkParts on mpJointedPairs (+0x47D0 -- NOT mpDrivenPairs);
+    //   3. Simulation::AddJoint is handed the TABLE'S OWN copies (GetJointFrames /
+    //      GetJointLimits), never the stack temporaries or the queue element -- the Joint
+    //      holds those pointers for the lifetime of the joint, so pointing them at this
+    //      frame would be a dangling read on the very next tick;
+    //   4. only then is the returned Joint* written back into maRWJoints[].
+    //
+    // ⚠️ `GetChildPosition()` is the ONE JointFrames slot the console does NOT validate -- four
+    // of the five are checked. Transcribed as shipped rather than "completed".
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessAddJointQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InAddJointQueue* const lpQueue =
+            lpInput->GetAddJointQueue();                                    // `bl sub_8289E8A0`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InAddJoint& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liParentBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mu64ParentBodyId });
+            const s32 liChildBodyIndex  = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mu64ChildBodyId });
+            CGS_ASSERT(liParentBodyIndex != -1, "liParentBodyIndex != -1");   // .cpp:1506
+            CGS_ASSERT(liChildBodyIndex  != -1, "liChildBodyIndex != -1");    // .cpp:1507
+
+            rw_physics::RigidBody* const lpParentBody = mBodyData.GetRigidBody(liParentBodyIndex);
+            rw_physics::RigidBody* const lpChildBody  = mBodyData.GetRigidBody(liChildBodyIndex);
+            CGS_ASSERT(lpParentBody != nullptr, "lpParentBody");             // .cpp:1516
+            CGS_ASSERT(lpChildBody  != nullptr, "lpChildBody");              // .cpp:1517
+
+            // The console copies both payloads out of the queue element onto the stack first
+            // (8x ld/std from event+0x70, then 5x lvx128 from event+0x20) and passes those
+            // temporaries by const reference. AddJoint copies them again into the table.
+            const JointFrames lFrames = lrEvent.mJointFrames;
+            const JointLimits lLimits = lrEvent.mJointLimits;
+
+            const s32 liJointIndex = mJointData.AddJoint(nullptr, lFrames, lLimits,
+                                                         JointId{ lrEvent.mu64Id });
+            CGS_ASSERT(liJointIndex != -1, "liJointIndex != -1");            // .cpp:1521
+
+            // ⚠️ mpJointedPairs (+0x47D0), not mpDrivenPairs (+0x47D4). The console reads
+            // `lwz r3, 0x47D0(r23)` here and the same slot again in ProcessRemoveJointQueue.
+            mpJointedPairs->LinkParts(liParentBodyIndex, liChildBodyIndex, 0);
+
+            JointFrames* const lpFrames = mJointData.GetJointFrames(liJointIndex);  // h:630/631
+            JointLimits* const lpLimits = mJointData.GetJointLimits(liJointIndex);  // h:639/640
+
+            // The eleven validation tripwires, in the console's own order. The inlined lane
+            // counts type each one: four `vspltw` for a Quaternion, three for a Vector3, one
+            // for an f32.
+            CGS_ASSERT(rw::math::vpu::IsValid(lpFrames->GetChildAngularFrame()),   "RwMathVPU::IsValid( lpFrames->GetChildAngularFrame() )");   // .cpp:1529
+            CGS_ASSERT(rw::math::vpu::IsValid(lpFrames->GetParentAngularFrame()),  "RwMathVPU::IsValid( lpFrames->GetParentAngularFrame() )");  // .cpp:1530
+            CGS_ASSERT(rw::math::vpu::IsValid(lpFrames->GetParentLinearFrame()),   "RwMathVPU::IsValid( lpFrames->GetParentLinearFrame() )");   // .cpp:1531
+            CGS_ASSERT(rw::math::vpu::IsValid(lpFrames->GetParentPosition()),      "RwMathVPU::IsValid( lpFrames->GetParentPosition() )");      // .cpp:1532
+            CGS_ASSERT(rw::math::vpu::IsValid(lpLimits->GetAngularVelocityLimit()), "RwMathVPU::IsValid( lpLimits->GetAngularVelocityLimit() )"); // .cpp:1535
+            CGS_ASSERT(rw::math::vpu::IsValid(lpLimits->GetLinearVelocityLimit()),  "RwMathVPU::IsValid( lpLimits->GetLinearVelocityLimit() )");  // .cpp:1536
+            CGS_ASSERT(rw::math::vpu::IsValid(lpLimits->GetPositionLimit()),        "RwMathVPU::IsValid( lpLimits->GetPositionLimit() )");        // .cpp:1537
+            CGS_ASSERT(rw::math::fpu::IsValid(lpLimits->GetTwistLimit()),           "RwMathVPU::IsValid( lpLimits->GetTwistLimit() )");           // .cpp:1538
+            CGS_ASSERT(rw::math::fpu::IsValid(lpLimits->GetTwistAngle()),           "RwMathVPU::IsValid( lpLimits->GetTwistAngle() )");           // .cpp:1539
+            CGS_ASSERT(rw::math::fpu::IsValid(lpLimits->GetSwingLimit()),           "RwMathVPU::IsValid( lpLimits->GetSwingLimit() )");           // .cpp:1540
+            CGS_ASSERT(rw::math::fpu::IsValid(lpLimits->GetSwingAngle()),           "RwMathVPU::IsValid( lpLimits->GetSwingAngle() )");           // .cpp:1541
+
+            rw_physics::Joint* const lpJoint =
+                mpSimulation->AddJoint(lpParentBody, lpChildBody, lpFrames, lpLimits);
+
+            lpJoint->SetTag(static_cast<u32>(liJointIndex));   // +0x18  `stw r28,0x18(r3)`
+            lpJoint->SetSpy(lrEvent.mbSpy);                    // +0x1C  `lbz 0xB0(event)` -> `stw`
+            mJointData.SetJoint(liJointIndex, lpJoint);        // maRWJoints[idx] -- `stwx r3,(idx+0x1154)<<2`
+
+            ++miNumJoints;   // `lwz/addi 1/stw 0x4850(r23)`
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessRemoveJointQueue @ 0x8289F970   (174 instructions)
+    //
+    // The exact inverse of the above, and it reads the slot BEFORE it frees it.
+    //
+    // ⚠️ THE UNLINK USES THE BODIES' TAGS, NOT THE TABLE INDICES, for the same reason the
+    // drive twin does: the console reaches the two bodies THROUGH the joint (`lwz 0x10` child,
+    // `lwz 0x14` parent) and passes `body->mTag` (+0x6C) for each. It cannot do what the add
+    // side does, because by this point it only holds a joint id -- there is no body handle in
+    // an InRemoveJoint (which is a bare 8-byte id and nothing else). The (parent, child)
+    // argument ORDER is preserved from the add side.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessRemoveJointQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InRemoveJointQueue* const lpQueue =
+            lpInput->GetRemoveJointQueue();                                 // `bl sub_8289E948`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InRemoveJoint& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liJointIndex = mJointData.GetIndexFromGameID(JointId{ lrEvent.mu64Id });
+            if (liJointIndex == -1)
+            {
+                // .cpp:1792. Console text preserved; see the group banner for the streamed
+                // id and the flag-guarded TTY print that are not reconstructed.
+                CGS_ASSERT(liJointIndex != -1, "Physics: Bad search for a joint ID ");
+                continue;
+            }
+
+            CGS_ASSERT(liJointIndex < JointData::KI_SIZE, "liIndex < knSize");        // h:621
+            CGS_ASSERT(mJointData.IsSlotUsed(liJointIndex), "mabUsedSlot[liIndex]");  // h:622
+
+            rw_physics::Joint* const lpJoint = mJointData.GetJoint(liJointIndex);
+
+            mpJointedPairs->UnlinkParts(static_cast<int>(lpJoint->GetParent()->GetTag()),
+                                        static_cast<int>(lpJoint->GetChild()->GetTag()));
+
+            mJointData.RemoveJoint(liJointIndex);   // clears mabUsedSlot only -- see its body
+            mpSimulation->RemoveJoint(lpJoint);
+
+            --miNumJoints;   // `lwz/addi -1/stw 0x4850(r15)`
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessUpdateJointFramesQueue @ 0x8289F2F0   (149 instructions)
+    //
+    // ⭐ THE STRUCTURAL WITNESS FOR THE JOINT PAYLOAD, exactly as its drive sibling is for the
+    // drive one. Its copy loop -- base `event + 0x10`, destination stepped by
+    // `slwi r10,r31,2 / add r10,r31,r10 / slwi r10,r10,4` (== i*5*16 == i*80), and FIVE
+    // lvx128/stvx128 pairs at 0/0x10/0x20/0x30/0x40 -- is what proves sizeof(JointFrames)==80
+    // independently of the DWARF, and it is the one lane MORE than the drive twin copies.
+    // Written here as the whole-object assignment the five lanes are.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessUpdateJointFramesQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InUpdateJointFramesQueue* const lpQueue =
+            lpInput->GetUpdateJointFramesQueue();                           // `bl sub_8289E9F0`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InUpdateJointFrames& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liJointIndex = mJointData.GetIndexFromGameID(JointId{ lrEvent.mu64Id });
+            if (liJointIndex == -1)
+            {
+                CGS_ASSERT(liJointIndex != -1, "Joint not found: ");   // .cpp:1577
+                continue;
+            }
+
+            *mJointData.GetJointFrames(liJointIndex) = lrEvent.mJointFrames;
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessUpdateJointLimitsQueue @ 0x8289F548   (136 instructions)
+    //
+    // The limits sibling. Its copy is EIGHT `ld/std` pairs (64 bytes) rather than lvx128 lanes
+    // -- an integer whole-object copy, the same idiom ProcessUpdateDriveDynamicsQueue uses --
+    // and its destination steps by `addi r10,r31,0x2D / slwi r10,r10,6` == (i+45)*64, i.e.
+    // maLimits at +0x0B40 with a 64-byte stride.
+    //
+    // ⚠️ UNLIKE THE DRIVE DYNAMICS TWIN THERE IS NO SECOND, SCALED ARRAY here to disagree with:
+    // JointData has one limits array and this writes it. The "writes the unscaled array only"
+    // defect flagged on the drive side has no analogue.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessUpdateJointLimitsQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InUpdateJointLimitsQueue* const lpQueue =
+            lpInput->GetUpdateJointLimitsQueue();                           // `bl sub_8289EA98`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InUpdateJointLimits& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liJointIndex = mJointData.GetIndexFromGameID(JointId{ lrEvent.mu64Id });
+            if (liJointIndex == -1)
+            {
+                CGS_ASSERT(liJointIndex != -1, "Joint not found: ");   // .cpp:1611
+                continue;
+            }
+
+            *mJointData.GetJointLimits(liJointIndex) = lrEvent.mJointLimits;
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessSetJointSpyQueue @ 0x8289F768   (129 instructions)
+    //
+    // ⚠️ The drain stores the event byte with a PLAIN `stw` into Joint::m_spy (+0x1C) -- a
+    // whole word, not a bit. This is NOT the `ori 8` / `clrlwi ...,29` bitfield fork that the
+    // rw::physics `SetSpy(bool)` sibling compiles to; do not import that shape here. Identical
+    // to the drive twin.
+    //
+    // ⭐ Its two accessor asserts are h:621/622, i.e. GetJoint's -- which the out-of-line
+    // GetJoint @0x8289D168 confirms directly. That is how this drain is known to go through
+    // GetJoint rather than reaching into maRWJoints[].
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessSetJointSpyQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InSetJointSpyQueue* const lpQueue =
+            lpInput->GetSetJointSpyQueue();                                 // `bl sub_8289EB40`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InSetJointSpy& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liJointIndex = mJointData.GetIndexFromGameID(JointId{ lrEvent.mu64Id });
+            if (liJointIndex == -1)
+            {
+                CGS_ASSERT(liJointIndex != -1, "Joint not found: ");   // .cpp:1645
+                continue;
+            }
+
+            CGS_ASSERT(liJointIndex < JointData::KI_SIZE, "liIndex < knSize");        // h:621
+            CGS_ASSERT(mJointData.IsSlotUsed(liJointIndex), "mabUsedSlot[liIndex]");  // h:622
+
+            mJointData.GetJoint(liJointIndex)->SetSpy(lrEvent.mbSpy);
         }
     }
 }
