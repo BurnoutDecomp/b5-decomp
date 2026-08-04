@@ -152,7 +152,11 @@ namespace BrnGui
         // through GetLength/GetFirstEvent/Clear. X360 offsets stay in the comments and are NOT
         // host-asserted (the base's buffer pointer widens on x64; callers reach members BY NAME).
         EWorldDataControllerState meState;               // X360 +0x000  (DWARF :182)
-        CgsModule::EventReceiverQueue<1024, 16> mReceiverQueue;  // X360 +0x004 (base) / buffer +0x20
+        CgsModule::EventReceiverQueue<1024, 16> mReceiverQueue;  // X360 base FIELDS +0x008 / buffer +0x20
+        // ^ Prepare @0x82516770 pins the console queue handle at this+0x8 (mpUser = this+8,
+        //   Clear(this+8), count read at this+0x10, buffer at +0x20 = +0x8 + the 0x18 base) --
+        //   i.e. 4 bytes of alignment/unknown sit between meState and the base fields. Host
+        //   layout is by-name; the X360 offsets are comments only.
         s32                       miResourceCount;       // X360 +0x420  (DWARF :184)
 
         CgsResource::ResourcePtr<BrnTrigger::TriggerData>          mpTriggerData;      // X360 +0x424  (DWARF :186)
