@@ -109,6 +109,39 @@ public:
     void Pause()   { mbPaused = true; }
     void Resume()  { mbPaused = false; }
 
+    // Set (not toggle) the reversed-playback flag. FLAG: the setter NAME is inferred -- the
+    // DWARF lists only the Reverse() toggle -- but the absolute store is attested:
+    // BrnArbStateOnlineRaceIntro writes its cntlzw-derived 0/1 straight into this flag
+    // (behaviour +0xDE7 == this controller's +0x767) for the reversed "show" take.
+    void SetReversed(bool lbReversed) { mbReversed = lbReversed; }
+
+    // Reset the playback state for a NEW take: rewind the timer and clear all four playback
+    // flags. This IS the five-store block the X360 inlines into both
+    // BehaviourIceAnim::Construct (@0x82256190..0x822561A0) and
+    // BehaviourIceAnim::ChangeMovie (@0x8220F698..0x8220F6AC): the stores are
+    // CONTROLLER-relative (`addi r3, this, 0x680` re-bases onto the embedded controller
+    // first) -- 0.0f -> +0x760 mfPlaybackTimer, then 0 -> the four flag bytes
+    // +0x766/+0x767/+0x764/+0x765 in that store order. FLAG: the METHOD NAME is inferred
+    // (the console only ever emits this block inlined, and the DWARF lists no member for
+    // it); the member set and stored values are attested at both sites.
+    //
+    // ⭐ THE RESET IS LOAD-BEARING (2026-08-05, the junkyard-reveal wave). A previous
+    // reconstruction mis-homed these stores on the BEHAVIOUR as a fabricated
+    // "per-take reset block" (`mfReset0DE0`/`maReset0DE4`) -- Hex-Rays had flattened the
+    // re-basing `addi` into `*(this+0xDE0)`, and the controller in fact spans
+    // +0x680..+0xDE8, so the block sits inside ITS tail. Without the timer rewind, a take
+    // changed after a long-held one inherits a SATURATED timer, clamps to the new length on
+    // the first Update, reports HasFinished() immediately, and the whole authored game-intro
+    // reveal collapses to one frozen frame.
+    void ResetPlayback()
+    {
+        mfPlaybackTimer = 0.0f;
+        mbPaused        = false;
+        mbReversed      = false;
+        mbIsLooping     = false;
+        mbPrepared      = false;
+    }
+
     // True once the take has run off its end (forward: timer >= length; reverse: timer <= 0).
     // @0x821F4258 (h:155).
     bool HasFinished() const;

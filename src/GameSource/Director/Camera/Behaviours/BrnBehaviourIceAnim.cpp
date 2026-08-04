@@ -387,12 +387,11 @@ void BehaviourIceAnim::Construct()
     mBystanderRef.Set(BrnDirector::VehicleRef::E_PLAYER_CAR,
                       E_ACTIVE_RACE_CAR_INDEX_INVALID, 0u);
 
-    // --- the per-take reset sub-block at +0xDE0 ---
-    mfReset0DE0 = 0.0f;
-    maReset0DE4[0] = 0;
-    maReset0DE4[1] = 0;
-    maReset0DE4[2] = 0;
-    maReset0DE4[3] = 0;
+    // --- the embedded controller's playback reset (X360 @0x82256190..0x822561A0) ---
+    // The console re-bases onto the controller (`this+0x680`) and stores 0.0f -> +0x760
+    // (mfPlaybackTimer) + 0 -> the four playback flags. The previous slice mis-homed this as
+    // a fabricated behaviour-level "reset block" at +0xDE0; see ResetPlayback's banner.
+    mKeyAnimController.ResetPlayback();
 
     // --- the produced camera + the attached-to-car collision policy ---
     mLastCamera.Construct();
@@ -473,14 +472,15 @@ void BehaviourIceAnim::ChangeMovie(ShotReference* lpParameters,
 {
     SetParameters(lpParameters);
 
-    // Reset the per-take sub-block at +0xDE0 (the f32 to 0.0f and the four trailing bytes
-    // to 0). ChangeMovie touches THIS block only -- it does NOT reset the behaviour-mode
-    // flags at +0xE28..+0xE2B.
-    mfReset0DE0 = 0.0f;
-    maReset0DE4[0] = 0;
-    maReset0DE4[1] = 0;
-    maReset0DE4[2] = 0;
-    maReset0DE4[3] = 0;
+    // ⭐ Reset the embedded controller's playback state for the NEW take (X360
+    // @0x8220F698..0x8220F6AC: `addi r3, this, 0x680` then 0.0f -> controller +0x760
+    // mfPlaybackTimer + 0 -> the four playback flags). It does NOT touch the behaviour-mode
+    // flags at +0xE28..+0xE2B. THIS REWIND IS THE GAME-INTRO REVEAL (2026-08-05): the
+    // previous slice zeroed a fabricated behaviour-level block instead, so a take changed
+    // after the long-held 40 s intro shot inherited a saturated timer, clamped to the new
+    // length on its first Update, and reported HasFinished() immediately -- the authored
+    // junkyard reveal collapsed to one frozen top-down frame.
+    mKeyAnimController.ResetPlayback();
 
     if (!mKeyAnimController.Prepare(lrResourceManager, miAnimGuid))
     {

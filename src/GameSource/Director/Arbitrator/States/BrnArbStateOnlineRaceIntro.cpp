@@ -411,10 +411,11 @@ namespace BrnDirector
 
                         mPlayerBehaviourHandle.GetBehaviour()->SetForceMotionBlurEverything(true); // +0xE2B = 1
 
-                        // The trailing reset byte the X360 derives via cntlzw (maReset0DE4[3]).
+                        // The player "show" take plays REVERSED (behaviour +0xDE7 == the
+                        // embedded KeyAnimController's mbReversed; RESOLVED 2026-08-05).
                         // FLAG: the cntlzw-derived value is a 0/1 boolean of an un-recovered
-                        // condition; reproduced as a named byte store of the attested 0/1 result.
-                        mPlayerBehaviourHandle.GetBehaviour()->SetTakeResetByte3(1);   // +0xDE7
+                        // condition; reproduced as the attested 0/1 result.
+                        mPlayerBehaviourHandle.GetBehaviour()->SetTakeReversed(true);   // +0xDE7
 
                         // Mark the state camera behaviour-driven (mState_uFlags |= 0x40).
                         lrCamera.mState_uFlags |= 0x40;

@@ -63,9 +63,7 @@
 //   +0x0610  Matrix44Affine                  mHeadingSpaceTransform      (see the note below)
 //   +0x0650  CameraShake                     mShake
 //   +0x0660  Looker                          mLooker
-//   +0x0680  KeyAnimController               mKeyAnimController           (embeds ICETake @+0x6A0)
-//   +0x0DE0  f32                             mfReset0DE0                  (per-take reset block; ChangeMovie/Construct zero it)
-//   +0x0DE4  u8[4]                           maReset0DE4                  (per-take reset block tail)
+//   +0x0680  KeyAnimController               mKeyAnimController           (embeds ICETake @+0x6A0; runs to +0xDE8)
 //   +0x0DF0  Behaviour::VehicleRef           mPrimaryVehicleRef
 //   +0x0E00  Behaviour::VehicleRef           mSecondaryVehicleRef
 //   +0x0E10  Behaviour::VehicleRef           mBystanderRef
@@ -355,15 +353,20 @@ public:
     // arbitrator state (BrnArbStateOnlineRaceIntro) sets this on its rival/player "show" takes.
     void SetForceMotionBlurEverything(bool lbForce)   { mbForceMotionBlurEverything = lbForce; }          // +0xE2B
 
-    // The two per-take reset bytes the intro state seeds (maReset0DE4[0] / [2]; roles not
-    // recovered -- the intro state sets them to gate the take's first-frame behaviour).
-    void SetTakeResetByte0(u8 lu8Value)               { maReset0DE4[0] = lu8Value; }   // +0xDE4
-    void SetTakeResetByte2(u8 lu8Value)               { maReset0DE4[2] = lu8Value; }   // +0xDE6
-
-    // The trailing per-take reset byte the online-race-intro state seeds with a bool the X360
-    // derives via cntlzw (maReset0DE4[3] @+0xDE7; role not recovered -- modelled as the raw
-    // attested byte store).
-    void SetTakeResetByte3(u8 lu8Value)               { maReset0DE4[3] = lu8Value; }   // +0xDE7
+    // ⭐ RESOLVED 2026-08-05 (the junkyard-reveal wave): the "per-take reset bytes" the arb
+    // states seed are NOT behaviour members -- behaviour +0xDE4..+0xDE7 are the embedded
+    // KeyAnimController's own playback flags at ITS +0x764..+0x767 (the controller spans
+    // +0x680..+0xDE8; the previous slice carved a fabricated `maReset0DE4[4]` out of its
+    // tail). The retired SetTakeResetByte0/2/3 names live on as forwarders with their real
+    // semantics:
+    //   byte0 (+0xDE4) == mbIsLooping -- 1 makes the bound take LOOP (the 40 s game-intro
+    //          ambient shot and the junkyard idle cam), NOT "hold on last frame";
+    //   byte2 (+0xDE6) == mbPaused;
+    //   byte3 (+0xDE7) == mbReversed -- the online-race-intro "show" take plays REVERSED.
+    void SetTakeLooping(bool lbLooping)               { mKeyAnimController.SetLooping(lbLooping); }   // +0xDE4
+    void SetTakePaused(bool lbPaused)                 { if (lbPaused) mKeyAnimController.Pause();
+                                                        else         mKeyAnimController.Resume(); }  // +0xDE6
+    void SetTakeReversed(bool lbReversed)             { mKeyAnimController.SetReversed(lbReversed); } // +0xDE7
 
     // ---- online-race-intro arbitrator-state pokes (BrnArbStateOnlineRaceIntro) ----------
     // The online-race-intro "show" takes anchor the behaviour's primary (eye) and secondary
@@ -484,13 +487,14 @@ private:
     // +0x0660  the looker post-process the take's look space drives.
     Utils::Looker                    mLooker;
 
-    // +0x0680  the live key-anim (ICETake) controller; embeds the ICETake at its +0x20.
+    // +0x0680  the live key-anim (ICETake) controller; embeds the ICETake at its +0x20 and
+    // runs to +0xDE8. RETIRED 2026-08-05: the `mfReset0DE0` f32 + `maReset0DE4[4]` pair that
+    // used to sit "after" it here was a mis-carve of the controller's OWN tail
+    // (+0x760 mfPlaybackTimer + the four playback flags): Construct and ChangeMovie re-base
+    // onto the controller (`addi r3, this, 0x680`) before those stores. They are expressed
+    // as mKeyAnimController.ResetPlayback() now -- the missing timer rewind is what froze
+    // the game-intro reveal to a single frame.
     KeyAnimController                 mKeyAnimController;
-
-    // +0x0DE0  the per-take reset sub-block (sits just before the VehicleRefs). Construct
-    // and ChangeMovie both clear it: the f32 to 0.0f and the four trailing bytes to 0.
-    f32                              mfReset0DE0;
-    u8                               maReset0DE4[4];
 
     // +0x0DF0 / +0x0E00 / +0x0E10  the eye / look / bystander anchor vehicle references.
     Behaviour::VehicleRef            mPrimaryVehicleRef;

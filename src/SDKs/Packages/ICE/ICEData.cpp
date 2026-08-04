@@ -1619,7 +1619,10 @@ void ICETake::FreeEditBuffer()
 // Bind (or, when lpTakeData == 0, unbind) the runtime channel and element pointers
 // into a serialised ICETakeData's variable-data block. lbEdit selects sub-take
 // edit semantics: channels with no source data in the primary take are marked as
-// coming from the sub-take (mxSubTakeChannels bit set) and are NOT rebound.
+// coming from the sub-take (mxSubTakeChannels bit set) and are the ONLY channels
+// bound to the incoming (sub-take) data -- the primary-supplied channels and the
+// assembly channel keep their primary binding (sense corrected 2026-08-05; see
+// the pass-2 note below).
 //
 // FLAG (offsets): the index/parameter/value base arithmetic is matched store-for-store
 // against the asm (index base = take+100; parameter base = even-align(index_base +
@@ -1704,19 +1707,26 @@ void ICETake::SetDataPointers(ICETakeData* lpTakeData, bool lbEdit)
             const u16 lu16Intervals = lpCounts[liChannel].mu16Intervals;
             const u16 lu16Keys      = lpCounts[liChannel].mu16Keys;
 
-            bool lbBind = true;
-            if (lbEdit)
+            // ⭐ BIND SENSE CORRECTED 2026-08-05 (the junkyard-reveal wave). The console's
+            // edit-mode branch (@0x8252FD50, the `v48 != 10 && *(primary counts) == 0` test
+            // whose mark FALLS THROUGH INTO the bind at LABEL_46) binds a channel to the
+            // sub-take ONLY when the channel is not 10/assembly AND the primary take has no
+            // intervals for it -- i.e. exactly the channels the sub-take is supplying.
+            // Channels the primary supplies, and the assembly channel itself, are LEFT
+            // BOUND to the primary. The previous reconstruction inverted this (bound the
+            // complement), so binding a sub-take REBOUND the assembly channel onto the
+            // sub-take's empty channel 10: on the next public SetParameter the assembly
+            // track read 0 intervals, CONTAINS_SUBTAKE evaluated 0, the whole sub-take arm
+            // was skipped, and NO channel was ever driven again -- the authored game-intro
+            // reveal froze on its first sub-take frame (measured: subParam pinned at
+            // 0.001662 while param swept 0->1).
+            bool lbBind = !lbEdit;
+            if (lbEdit && liChannel != 10 &&
+                mpTakeData->GetElementCounts()[liChannel].mu16Intervals == 0)
             {
-                // In edit mode, channels (other than 10/assembly) with no source
-                // intervals in the primary take are flagged sub-take-sourced and
-                // are NOT bound to this take.
-                if (liChannel != 10 &&
-                    mpTakeData->GetElementCounts()[liChannel].mu16Intervals == 0)
-                {
-                    CGS_ASSERT(liChannel < 32, "liChannel<32");
-                    mxSubTakeChannels |= (1 << liChannel);
-                    lbBind = false;
-                }
+                CGS_ASSERT(liChannel < 32, "liChannel<32");
+                mxSubTakeChannels |= (1 << liChannel);
+                lbBind = true;
             }
 
             if (lbBind)
@@ -1778,7 +1788,9 @@ void ICETake::SetDataPointers(ICETakeData* lpTakeData, bool lbEdit)
 //
 //     lwz r3, 0(r31)    ; mpResourceManager
 //     lwz r11, 0(r3)    ; vptr
-//     lwz r11, 0(r11)   ; vtable slot 0 == IResourceManager::GetTakeData(ID)
+//     lwz r11, 0(r11)   ; vtable slot 0 == IResourceManager::GetTakeData(s32) -- see the
+//                       ; slot-identification note on the body below (an earlier reading
+//                       ; called this slot the ID overload; the image's vtable says no)
 //     bctrl             ; r4 (the guid) is NOT reloaded -- the caller already left
 //                       ; it there, so the argument passes straight through
 //     assert(result, "lpSubTakeData", "..\\..\\..\\SDKs\\Packages\\ICE\\ICEData.cpp", 2575)
@@ -1788,6 +1800,18 @@ void ICETake::SetDataPointers(ICETakeData* lpTakeData, bool lbEdit)
 // NOTE the asymmetry with the pointer overload below: this one does NOT go through
 // it (no branch to 0x82530E00) -- it calls SetDataPointers itself. Preserved.
 // ---------------------------------------------------------------------------
+    // ⭐ WHICH OVERLOAD SLOT 0 IS (2026-08-05, the junkyard-reveal wave). The vtable the
+    // dispatch above indexes is at 0x820CEA3C in the image: slot 0 = 0x821F6A60, slot 1 =
+    // GetTakeData(CgsResource::ID) @0x821F6A00. 0x821F6A60 is UNNAMED in the export set (a
+    // known hole class) but its body is nine instructions: the ICEAuthor edited-take overlay,
+    // then `bl 0x8267BEC0` == ICEList::GetICETakeDataFromGuid -- i.e. slot 0 is
+    // **GetTakeData(s32 liGuid)**, the take-NUMBER resolve (MSVC lays adjacent overloaded
+    // virtuals into the vtable in reverse declaration order, which is how the second-declared
+    // s32 overload lands at slot 0). So this plain overload-resolved call IS the console
+    // dispatch. MEASURED (BrnGame.log [ice-subtake]): DMV_IntroA's assembly names sub-take
+    // id 606019 == GameIntro_01_NewWoosh's miGuid -- the guid space, NOT the dictionary-key
+    // space, exactly as that body implies. An interim revision routed this through the ID
+    // overload (dictionary keys are name-hashes) and every resolve missed; do not repeat it.
 void ICETake::SetSubTake(s32 liGuid, bool lbForce)
 {
     const ICETakeData* lpSubTakeData = mpResourceManager->GetTakeData(liGuid);
