@@ -39,6 +39,7 @@
 #include <d3d9.h>
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>
 #include <unordered_map>
 #include <vector>
 
@@ -338,6 +339,10 @@ namespace
     // Set by WorldVd32_GetDeclaration for the mesh currently being bound.
     bool                    sbLastDeclHasTexcoord0 = false;
     u64                     suLastDeclUsageMask = 0;
+    // [FLAG PC data gap] Set by WorldFallbackShader_ForceForNextMesh (see its banner further
+    // down): the next mesh must use the fallback pair even when the technique's real programs
+    // are bound and usable. Console-instanced meshes only.
+    bool                    sbForceFallbackNextMesh = false;
 
     D3DCompileProc GetD3DCompile()
     {
@@ -917,7 +922,20 @@ namespace renderengine
     {
         IDirect3DDevice9* lpDevice = Dev();
         if (lpDevice == nullptr)
+        {
+            sbForceFallbackNextMesh = false;
             return;
+        }
+
+        const bool lbForceFallback = sbForceFallbackNextMesh;
+        sbForceFallbackNextMesh = false;
+        if (lbForceFallback)
+        {
+            LogOnce("forcefb",
+                    "[WorldShader] console-instanced mesh forced onto the flagged fallback pair:"
+                    " its *_Instanced technique program has no InstancingMatrixArray"
+                    " [FLAG PC data gap]\n");
+        }
 
         // The technique's REAL programs are bound and this mesh's declaration supplies every
         // input the vertex program declares -> nothing to choose, keep them.
@@ -925,7 +943,8 @@ namespace renderengine
         // that cannot feed the real shader has to drop back to the flagged fallback pair --
         // which then needs its own c0..c3 WVP restored, because the technique's constants
         // have just been uploaded over those registers.)
-        const bool lbRealUsable = sbRealProgramsBound
+        const bool lbRealUsable = !lbForceFallback
+                               && sbRealProgramsBound
                                && (suRealVsInputMask & ~suLastDeclUsageMask) == 0;
         {
             // [DIAG] one-shot tally of what the world meshes drew with. Printed after the
@@ -998,6 +1017,53 @@ namespace renderengine
         sbNextDrawIsImmediateMode = true;
     }
 
+    // [DIAG wheels] Set by Device::DrawIndexedMeshPC for a mesh whose mu8InstanceCount > 1
+    // (i.e. the console pre-replicated instanced geometry -- on this build that is the wheel
+    // renderable and nothing else). Consumed and cleared by the next WorldDraw_IndexedUP, which
+    // reports everything that decides whether the draw produces pixels. DELETE once the wheels
+    // are confirmed drawing correctly.
+    bool sbNextDrawIsInstanced = false;
+    void WorldDraw_MarkInstanced()
+    {
+        sbNextDrawIsInstanced = true;
+    }
+
+    // ========================================================================
+    // FLAG PC-platform leaf (DATA gap): CONSOLE-INSTANCED MESHES CANNOT USE THEIR OWN
+    // TECHNIQUE PROGRAM ON THIS BUILD.
+    //
+    // A mesh with mu8InstanceCount > 1 carries geometry the Xenos instancing shader decodes
+    // by hand: one copy of the vertices, an index buffer of N slices, and the instance number
+    // in the HIGH BITS of every index (index = (instance << 12) | vertexIndex). The shader
+    // fetches with (index & 0xFFF) and selects its world matrix out of "InstancingMatrixArray"
+    // (shader constant 6) with (index >> 12).
+    //
+    // The PC technique programs for that set do not implement it. As CgsShaderConstants.cpp
+    // (":Missing shader constant from table") already records, the 19 `*_Instanced` techniques
+    // are recompiled from the REMASTER's `_Instanced.fx`, whose instancing was reworked and
+    // which never declares InstancingMatrixArray or InstancingIndexArray at all -- so the
+    // constants Model::SetupShaderConstantsForInstancing publishes are dropped on the floor
+    // and the program transforms every vertex by whatever is left in those registers. MEASURED
+    // (task #133): every wheel draw reached the device with S_OK, an in-range index run and
+    // 240 triangles, and produced EXACTLY ZERO pixels.
+    //
+    // The flagged fallback pair CAN draw it: DrawRenderable::Interpret already unrolls the
+    // N-instance object command into N single-instance mesh commands each carrying instance
+    // i's own world-view-projection, Device::SetObjectTransformPC has already published that
+    // WVP at c240..c243, and Device::DrawIndexedMeshPC submits slice 0, whose index values are
+    // in range of the single vertex copy. So the fallback draws instance i's geometry at
+    // instance i's place -- which is exactly the frame the console's shader produces, minus
+    // the technique's own shading.
+    //
+    // DELETE when the PC `*_Instanced` programs are recompiled from sources that implement the
+    // console scheme (they need manual vertex fetch, i.e. not D3D9 SM3).
+    // (the flag itself lives with the other per-mesh selection state, above)
+    // ========================================================================
+    void WorldFallbackShader_ForceForNextMesh()
+    {
+        sbForceFallbackNextMesh = true;
+    }
+
 
     void WorldDraw_SetIndexSource(const void* lpIndexBufferHeader)
     {
@@ -1051,6 +1117,23 @@ namespace renderengine
         const u8* lpVertices = static_cast<const u8*>(lpVertexData) + luBaseVertexIndex * suVertexStride;
         const UINT luNumVertices = spVertexSource->muSize / suVertexStride;
 
+        // [DIAG wheels] scan the run this draw will actually submit, BEFORE the strip
+        // expansion, so an out-of-range index value is visible as a number.
+        const bool lbInstancedDiag = sbNextDrawIsInstanced;
+        sbNextDrawIsInstanced = false;
+        u32 luDiagMin = 0xFFFFFFFFu, luDiagMax = 0u, luDiagResets = 0u;
+        if (lbInstancedDiag)
+        {
+            for (u32 luI = 0; luI < luIndexCount; ++luI)
+            {
+                const u32 luV = lb32Bit ? reinterpret_cast<const u32*>(lpIndices)[luI]
+                                        : reinterpret_cast<const u16*>(lpIndices)[luI];
+                if (luV == suResetIndex) { ++luDiagResets; continue; }
+                if (luV < luDiagMin) luDiagMin = luV;
+                if (luV > luDiagMax) luDiagMax = luV;
+            }
+        }
+
         // FLAG PC-platform leaf: honour the rasteriser state's primitive reset by
         // expanding the strip runs into a triangle list (see ExpandStripRunsToList).
         if (spResetEnabled && lePrim == D3DPT_TRIANGLESTRIP)
@@ -1078,10 +1161,31 @@ namespace renderengine
                 }
             }
             if (luTriangles == 0)
+            {
+                if (lbInstancedDiag)
+                    LogOnce("wheelexp", "[wheel-draw] strip expansion produced ZERO triangles\n");
                 return;
+            }
             lePrim      = D3DPT_TRIANGLELIST;
             luPrimCount = luTriangles;
             lpIndices   = &sResetScratch[0];
+        }
+
+        // [DIAG wheels, env-gated] BRN_WHEEL_ZALWAYS=1 draws the console-instanced meshes with
+        // the depth test defeated. It separates "the wheels do not draw" from "the wheels draw
+        // and something in front of them wins the depth test". Off unless the variable is set.
+        DWORD luSavedZFunc = 0;
+        bool  lbZDefeated  = false;
+        if (lbInstancedDiag)
+        {
+            static const int siWheelZAlways =
+                (std::getenv("BRN_WHEEL_ZALWAYS") != nullptr) ? 1 : 0;
+            if (siWheelZAlways != 0)
+            {
+                lpDevice->GetRenderState(D3DRS_ZFUNC, &luSavedZFunc);
+                lpDevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
+                lbZDefeated = true;
+            }
         }
 
         const HRESULT lhrDraw =
@@ -1089,6 +1193,88 @@ namespace renderengine
                                              lpIndices,
                                              lb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
                                              lpVertices, suVertexStride);
+
+        if (lbZDefeated)
+            lpDevice->SetRenderState(D3DRS_ZFUNC, luSavedZFunc);
+
+        // [DIAG wheels] one line per instanced draw, SAMPLED across the run (the first draws
+        // of a run are from the boot cameras, not the chase camera). DELETE with the wheels.
+        if (lbInstancedDiag)
+        {
+            static u32 suWheelDiagSeen = 0, suWheelDiagLogged = 0;
+            const u32 luWheelSeen = suWheelDiagSeen++;
+            if ((luWheelSeen % 32768u) == 0u && suWheelDiagLogged++ < 12u)
+            {
+                // Transform the first three REFERENCED vertices by the WVP the fallback pair
+                // was just given, and report their NDC. This is the ground truth for "does
+                // this geometry land on screen": it uses the real vertex bytes, the real
+                // declaration offset (POSITION is element 0 at byte 0) and the real matrix.
+                char lacNdc[192];
+                lacNdc[0] = '\0';
+                if (sbHaveLastWvp && luNumVertices > 0)
+                {
+                    char* lpcAt = lacNdc;
+                    int   liLeft = (int)sizeof(lacNdc);
+                    for (u32 luK = 0; luK < 3u && luK < luIndexCount; ++luK)
+                    {
+                        const u32 luIdx = lb32Bit ? reinterpret_cast<const u32*>(lpIndices)[luK]
+                                                  : reinterpret_cast<const u16*>(lpIndices)[luK];
+                        if (luIdx >= luNumVertices)
+                            continue;
+                        f32 lafP[3];
+                        std::memcpy(lafP, lpVertices + luIdx * suVertexStride, sizeof(lafP));
+                        f32 lafC[4];
+                        for (int liC = 0; liC < 4; ++liC)
+                        {
+                            lafC[liC] = lafP[0] * safLastWvp[0 + liC]
+                                      + lafP[1] * safLastWvp[4 + liC]
+                                      + lafP[2] * safLastWvp[8 + liC]
+                                      +           safLastWvp[12 + liC];
+                        }
+                        const int liN = std::snprintf(lpcAt, (size_t)liLeft,
+                            " v%u obj(%.3f,%.3f,%.3f) ndc(%.3f,%.3f,%.3f)/w%.3f",
+                            (unsigned)luIdx, lafP[0], lafP[1], lafP[2],
+                            lafC[3] != 0.0f ? lafC[0] / lafC[3] : 0.0f,
+                            lafC[3] != 0.0f ? lafC[1] / lafC[3] : 0.0f,
+                            lafC[3] != 0.0f ? lafC[2] / lafC[3] : 0.0f,
+                            lafC[3]);
+                        if (liN <= 0 || liN >= liLeft) break;
+                        lpcAt += liN; liLeft -= liN;
+                    }
+                }
+                IDirect3DVertexShader9*      lpVs   = nullptr;
+                IDirect3DPixelShader9*       lpPs   = nullptr;
+                IDirect3DVertexDeclaration9* lpDecl = nullptr;
+                DWORD luZEnable = 0, luZFunc = 0, luCull = 0, luColourWrite = 0, luAlphaTest = 0;
+                lpDevice->GetVertexShader(&lpVs);
+                lpDevice->GetPixelShader(&lpPs);
+                lpDevice->GetVertexDeclaration(&lpDecl);
+                lpDevice->GetRenderState(D3DRS_ZENABLE, &luZEnable);
+                lpDevice->GetRenderState(D3DRS_ZFUNC, &luZFunc);
+                lpDevice->GetRenderState(D3DRS_CULLMODE, &luCull);
+                lpDevice->GetRenderState(D3DRS_COLORWRITEENABLE, &luColourWrite);
+                lpDevice->GetRenderState(D3DRS_ALPHATESTENABLE, &luAlphaTest);
+                char lacMsg[704];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[wheel-draw] @%u prim=%u start=%u count=%u idx[%u..%u] resets=%u"
+                              " | VBsize=%u stride=%u numVerts=%u | outPrim=%d primCount=%u"
+                              " | vs=%d ps=%d decl=%d z=%u zf=%u cull=%u cw=%u at=%u | hr=0x%08X"
+                              " |%s\n",
+                              (unsigned)luWheelSeen, (unsigned)luPrimTypeXenon,
+                              (unsigned)luStartIndex, (unsigned)luIndexCount,
+                              (unsigned)luDiagMin, (unsigned)luDiagMax, (unsigned)luDiagResets,
+                              (unsigned)spVertexSource->muSize, (unsigned)suVertexStride,
+                              (unsigned)luNumVertices, (int)lePrim, (unsigned)luPrimCount,
+                              lpVs != nullptr, lpPs != nullptr, lpDecl != nullptr,
+                              (unsigned)luZEnable, (unsigned)luZFunc, (unsigned)luCull,
+                              (unsigned)luColourWrite, (unsigned)luAlphaTest,
+                              (unsigned)lhrDraw, lacNdc);
+                CgsDev::Log::WriteToLog(lacMsg);
+                if (lpVs)   lpVs->Release();
+                if (lpPs)   lpPs->Release();
+                if (lpDecl) lpDecl->Release();
+            }
+        }
         {
             // [DIAG one-shot] The first IMMEDIATE-MODE draw of the run -- i.e. the sky dome,
             // the only thing on this build that reaches here through

@@ -119,6 +119,11 @@ namespace renderengine
     // Pick the fallback pair (flat vs textured) for the mesh whose declaration was just
     // resolved -- see the note on Vd32Cached::mbHasTexcoord0 in the shim TU.
     void WorldFallbackShader_SelectForMesh();
+    // [FLAG PC data gap] Make the next WorldFallbackShader_SelectForMesh choose the fallback
+    // pair even when the technique's real programs are bound and the declaration is complete.
+    // Used for console-instanced meshes, whose recompiled `*_Instanced` program has no
+    // InstancingMatrixArray -- see the banner in XenonD3D9Shims.cpp.
+    void WorldFallbackShader_ForceForNextMesh();
     // Resolve + cache a D3D9 vertex declaration and the stream-0 stride from the 32-bit
     // serialised VertexDescriptor image the converted world data carries.
     void* WorldVd32_GetDeclaration(const void* lpVdImage, u32* lpuStride);
@@ -142,6 +147,9 @@ namespace renderengine
     void  WorldDraw_SetVertexSource(const void* lpVertexBufferHeader, u32 luStride);
     void  WorldDraw_IndexedUP(u32 luPrimTypeXenon, u32 luBaseVertexIndex,
                               u32 luStartIndex, u32 luIndexCount);
+    // [DIAG wheels] mark the next WorldDraw_IndexedUP as a console-instanced mesh's draw so
+    // the shim reports what it actually submitted. DELETE with the wheel bring-up.
+    void  WorldDraw_MarkInstanced();
     // The rasteriser state's Xenos primitive reset. D3D9 has no such feature, so the shim
     // re-cuts the strip runs at the marker instead -- see the note in XenonD3D9Shims.cpp.
     void  WorldDraw_SetPrimitiveReset(bool lbEnabled, u32 luResetIndex);
@@ -1250,6 +1258,16 @@ namespace shadow
         renderengine::WorldDraw_SetIndexSource(lppBuffers[0]);
         renderengine::WorldDraw_SetVertexSource(luNumVb != 0 ? lppBuffers[1] : 0, luStride);
 
+        // [FLAG PC data gap] A console-instanced mesh's own `*_Instanced` technique program
+        // cannot draw it on this build -- the recompiled PC program (from the Remaster's
+        // reworked `_Instanced.fx`) declares neither InstancingMatrixArray nor
+        // InstancingIndexArray, so it never receives the per-instance world matrices and
+        // collapses the geometry. The flagged fallback pair transforms POSITION by the
+        // per-instance WVP SetObjectTransformPC just published, which is exactly right for
+        // the unrolled single-instance commands. See the banner in XenonD3D9Shims.cpp.
+        if (lpMesh->mu8InstanceCount > 1u)
+            renderengine::WorldFallbackShader_ForceForNextMesh();
+
         // [PC bring-up shim] The fallback pair can only be chosen once this mesh's
         // declaration is known (a vs_3_0 input the declaration does not supply makes the
         // draw fail on D3D9), so the technique bind above leaves the choice to here.
@@ -1257,12 +1275,94 @@ namespace shadow
     }
 
     // [PC leaf] Issue the indexed draw from the mesh's DrawIndexedParameters
-    // (X360: FlushVertexProgramState + D3DDevice_DrawIndexedVertices).
+    // (X360: FlushVertexProgramState + D3DDevice_DrawIndexedVertices, whose four arguments
+    // are exactly mDrawIndexedParameters -- {PrimitiveType, BaseVertexIndex, StartIndex,
+    // IndexCount}; note muMinVertexIndex is the console's StartIndex, not a min-index bound).
+    //
+    // ========================================================================
+    // ⭐ THE INSTANCED SLICE (mesh mu8InstanceCount > 1).
+    //
+    // A console-instanced mesh does NOT hold one drawable index run. MEASURED over the
+    // retail X360 wheel bundle and over our port (24/24 meshes agree in both):
+    //
+    //   * the VERTEX buffer holds ONE copy of the geometry (mesh 0: 240 vertices, stride 24);
+    //   * the INDEX buffer holds mu8InstanceCount CONSECUTIVE SLICES of
+    //         (muNumVertices + 1) / mu8InstanceCount
+    //     indices, and slice i is slice 0 with (i << 12) added to every non-reset index:
+    //         slice 0 -> 0..239   slice 1 -> 4096..4335   slice 2 -> 8192..8431   ...
+    //   * i.e. the baked index is  (instance << 12) | vertexIndex.  The Xenos instancing
+    //     vertex shader fetches with (index & 0xFFF) and picks its InstancingMatrixArray row
+    //     (shader constant 6, published by Model::SetupShaderConstantsForInstancing) with
+    //     (index >> 12). THAT is how the console tells the five copies apart -- there is no
+    //     instance-index element in the vertex declaration (POSITION/NORMAL/TANGENT/TEXCOORD,
+    //     stride 24) because it does not need one.
+    //
+    // shadow::Device::DrawInstancedIndexedPrimitive_Custom @0x827ED808 is the console leaf:
+    //     count = (muNumVertices + 1) * N / mu8InstanceCount;
+    //     if (N == mu8InstanceCount) count = muNumVertices;   // drop the final pad index
+    //     D3DDevice_DrawIndexedVertices(dev, prim, base, StartIndex, count);
+    // -- one draw over the FIRST N slices. (The `-1` in the all-instances case is not a
+    // quirk: the last element of the last slice is a 0 pad where every other slice ends in a
+    // 0xFFFF strip reset. Measured, in every mesh.)
+    //
+    // ⛔ THE PC PATH CANNOT REPLAY THAT. D3D9 has no manual vertex fetch, so index values
+    // 4096.. are simply out of range of a 240-vertex buffer -- which is precisely the
+    // "distorted spike through the roof" this build has been drawing: submitting the full
+    // muNumVertices range means 4/5 of the index values point outside the vertex buffer
+    // altogether. It was never "5x too many indices".
+    //
+    // So a single-instance draw takes SLICE 0 -- the console's own N == 1 arithmetic, and the
+    // only slice whose index values are in range. DrawRenderable::Interpret already unrolls an
+    // N-instance object command into N single-instance mesh commands each carrying instance
+    // i's own world matrix, and every slice is byte-identical geometry, so slice 0 under
+    // instance i's WVP is exactly the copy the console's shader would have produced.
+    // ⛔ Do NOT give unrolled draw i the StartIndex of slice i: that is what feeds the
+    // out-of-range values and reproduces the spike.
+    //
+    // DELETE the slice when a real instanced draw path (manual fetch / SV_InstanceID) exists
+    // on the D3D9 back end.
+    // ========================================================================
     void Device::DrawIndexedMeshPC(const RenderableMesh* lpMesh)
     {
-        renderengine::WorldDraw_IndexedUP(lpMesh->mDrawIndexedParameters.mePrimitiveType,
-                                          lpMesh->mDrawIndexedParameters.muBaseVertexIndex,
-                                          lpMesh->mDrawIndexedParameters.muMinVertexIndex,
-                                          lpMesh->mDrawIndexedParameters.muNumVertices);
+        // NOTE the global qualification: shadow::Device declares its OWN nested
+        // DrawIndexedParameters (shadowingdevice.h:16) which would shadow the mesh's.
+        const ::DrawIndexedParameters& lrDip = lpMesh->mDrawIndexedParameters;
+
+        u32 luStartIndex = lrDip.muMinVertexIndex;   // the console's StartIndex
+        u32 luIndexCount = lrDip.muNumVertices;      // the console's IndexCount
+
+        const u32 luInstanceMax = lpMesh->mu8InstanceCount;
+        if (luInstanceMax > 1u)
+        {
+            const u32 luTotal = lrDip.muNumVertices + 1u;
+            if ((luTotal % luInstanceMax) == 0u)
+            {
+                luIndexCount = luTotal / luInstanceMax;   // (muNumVertices + 1) * 1 / max
+            }
+            else
+            {
+                // The console's own arithmetic does not divide -- this mesh is not drawable
+                // by the instanced path at all. Report it once and draw the raw range rather
+                // than invent a slice length.
+                static bool sbLoggedRagged = false;
+                if (!sbLoggedRagged && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    sbLoggedRagged = true;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[instancing] mesh with mu8InstanceCount " << luInstanceMax
+                        << " but (muNumVertices + 1) = " << luTotal
+                        << " does not divide -- drawing the unsliced range"
+                           " [FLAG PC data gap]\n";
+                }
+            }
+        }
+
+        if (luInstanceMax > 1u)
+            renderengine::WorldDraw_MarkInstanced();   // [DIAG wheels]
+
+        renderengine::WorldDraw_IndexedUP(lrDip.mePrimitiveType,
+                                          lrDip.muBaseVertexIndex,
+                                          luStartIndex,
+                                          luIndexCount);
     }
 }
