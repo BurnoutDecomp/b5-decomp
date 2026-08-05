@@ -30,9 +30,12 @@
 //
 // STILL BLOCKED, honestly (and this is why SimulationUpdate sits in its own unmounted TU):
 //   * ContactBatchBuild and the four solver pipelines (Anubis/Osiris/Isis/Horus) -- heavy
-//     VMX over the 272-byte contact batch record, not reconstructed.
-//   * The three Spy* dumps -- debug-only, not reconstructed.
-//   * AddRigidBody @0x82BC3318 (669 VMX instructions) and the Add/Remove Joint/Drive quartet.
+//     VMX over the contact batch record, not reconstructed. (XB1 oracle addresses for all
+//     of them are banked in simulation.h's stage list, 2026-08-05.)
+//   * SpyDriveJacobians / SpyContactJacobians -- see the COUPLING note in simulation.h;
+//     SpyJointJacobians IS bodied below (2026-08-05).
+// (The "AddRigidBody not reconstructed" line that stood here was stale -- it landed with
+// task #140 and its body closes this file.)
 // =====================================================================================
 
 #include "rw/physics/simulation.h"
@@ -833,6 +836,91 @@ RigidBody* Simulation::AddRigidBody(const rw::math::vpu::Matrix44Affine& lrFrame
 
     ++(*lpuCount);                                      // `lwz/addi/stw` on +0x40/+0x44/+0x48
     return lpBody;                                      // `mr r3,r11`
+}
+
+// -------------------------------------------------------------------------------------
+// Simulation::SpyJointJacobians @ 0x82BC24F8   (97 instructions)   [2026-08-05]
+//
+// Walk the frame's joint jacobians and, for every one whose mSpy flag is set, emit a
+// 48-byte JointJacobianSpy record over the HEAD of m_JJ_Stack (emit cursor = array base,
+// +0x30 per record; read cursor = 0x180 per record on the console, sizeof(Jacobian) here,
+// so the emit can never catch the read on either target).
+//
+//   force  = (R12*r2.x + R16*r2.y + R20*r2.z) / ts^2                 ; rows +0xC0/0x100/0x140
+//   torque = (M0*r3.x + M1*r3.y + M2*r3.z                            ; M = GetMatIBT(jac)
+//           +  R14*r3.x + R18*r3.y + R22*r3.z) / ts^2                ; rows +0xE0/0x120/0x160
+// where r2/r3 = mRows[2]/mRows[3] (+0x20/+0x30) and 1/ts^2 is the console's vrefp + two
+// Newton-Raphson refinements of 1/(m_TimeStep^2) -- a plain divide here (more precise,
+// same intent; the spy path is diagnostic).
+//
+// ⭐ DECODE NOTE that unblocked this body (banked for the seven remaining stages): in this
+// IDA listing plain `vmaddfp vD,vA,vB,vC` is the VA-form with the ADDEND PRINTED THIRD
+// (vD = vA*vC + vB -- the brief's standing rule), while `vmaddfp128 vD,vA,vB,vC` prints the
+// addend FOURTH (vD = vA*vB + vC). Both occur in this one function and each decodes to
+// algebra the XB1 oracle (sub_1409B7B80) confirms only under its own rule.
+//
+// ⚠️ w LANES, named divergence: the console's emitted w lanes fold in mRows[12].w -- which on
+// the CONSOLE is the low half of the packed node POINTER (Jacobian.hpp's +0xCC note), i.e.
+// deterministic junk. On the host mRows[12].w is a real (zero-filled by Build) float lane, so
+// the emitted w differs from the console's junk. The consumer (AddJointSpiesToOutputQueue
+// @0x828A58E0) forwards rows whole into OutJointSpy events without reading w -- dead cargo,
+// same class as Contact::mBodyA at drain time.
+//
+// The M33 rows contribute xyz only (Matrix33 rows; GetMatIBT gathers nine scalar lanes).
+// -------------------------------------------------------------------------------------
+void Simulation::SpyJointJacobians()
+{
+    if (m_JT_Count == 0u)                               // +0x6C (`ble` after the recip setup)
+        return;
+
+    const f32 lfInvTsSq = 1.0f / (m_TimeStep * m_TimeStep);   // +0xA0
+
+    char*             lpArray = static_cast<char*>(m_JJ_Stack);            // +0x14, read cursor
+    JointJacobianSpy* lpOut   = reinterpret_cast<JointJacobianSpy*>(m_JJ_Stack);  // emit cursor
+
+    for (u32 luIndex = 0u; luIndex < m_JT_Count; ++luIndex, lpArray += JacobianStride())
+    {
+        const Jacobian* lpJac = reinterpret_cast<const Jacobian*>(lpArray);
+        if (lpJac->mSpy == 0u)                          // +0x4C
+            continue;
+
+        Joint* const lpJoint = static_cast<Joint*>(lpJac->mpNode);         // +0xCC
+
+        rw::math::vpu::Matrix33 lMat;
+        DriveJacobian::GetMatIBT(&lMat, lpJac);         // shared joint/drive sub-layout
+
+        const rw::math::vpu::Vector4& lrR2  = lpJac->mRows[2];    // +0x20
+        const rw::math::vpu::Vector4& lrR3  = lpJac->mRows[3];    // +0x30
+        const rw::math::vpu::Vector4& lrR12 = lpJac->mRows[12];   // +0xC0
+        const rw::math::vpu::Vector4& lrR14 = lpJac->mRows[14];   // +0xE0
+        const rw::math::vpu::Vector4& lrR16 = lpJac->mRows[16];   // +0x100
+        const rw::math::vpu::Vector4& lrR18 = lpJac->mRows[18];   // +0x120
+        const rw::math::vpu::Vector4& lrR20 = lpJac->mRows[20];   // +0x140
+        const rw::math::vpu::Vector4& lrR22 = lpJac->mRows[22];   // +0x160
+
+        rw::math::vpu::Vector4 lForce;                  // R12*r2.x + R16*r2.y + R20*r2.z
+        lForce.x = (lrR12.x * lrR2.x + lrR16.x * lrR2.y + lrR20.x * lrR2.z) * lfInvTsSq;
+        lForce.y = (lrR12.y * lrR2.x + lrR16.y * lrR2.y + lrR20.y * lrR2.z) * lfInvTsSq;
+        lForce.z = (lrR12.z * lrR2.x + lrR16.z * lrR2.y + lrR20.z * lrR2.z) * lfInvTsSq;
+        lForce.w = (lrR12.w * lrR2.x + lrR16.w * lrR2.y + lrR20.w * lrR2.z) * lfInvTsSq;
+
+        rw::math::vpu::Vector4 lTorque;                 // M^T-gather + R14/R18/R22 trilinear
+        lTorque.x = (lMat.xAxis.x * lrR3.x + lMat.yAxis.x * lrR3.y + lMat.zAxis.x * lrR3.z
+                   + lrR14.x * lrR3.x + lrR18.x * lrR3.y + lrR22.x * lrR3.z) * lfInvTsSq;
+        lTorque.y = (lMat.xAxis.y * lrR3.x + lMat.yAxis.y * lrR3.y + lMat.zAxis.y * lrR3.z
+                   + lrR14.y * lrR3.x + lrR18.y * lrR3.y + lrR22.y * lrR3.z) * lfInvTsSq;
+        lTorque.z = (lMat.xAxis.z * lrR3.x + lMat.yAxis.z * lrR3.y + lMat.zAxis.z * lrR3.z
+                   + lrR14.z * lrR3.x + lrR18.z * lrR3.y + lrR22.z * lrR3.z) * lfInvTsSq;
+        lTorque.w = (lrR14.w * lrR3.x + lrR18.w * lrR3.y + lrR22.w * lrR3.z) * lfInvTsSq;
+
+        lpOut->mForce  = lForce;                        // stvx128 @r30+0x00
+        lpOut->mTorque = lTorque;                       // stvx128 @r30+0x10
+        lpOut->mpJoint = lpJoint;                       // stw     @r30+0x20
+        lpOut->muTag   = lpJoint->GetTag();             // `lwz 0x18(r28)` -> stw @r30+0x24
+        ++lpOut;                                        // addi r30, r30, 0x30
+
+        ++m_JS_Count;                                   // +0x70
+    }
 }
 
 } // namespace physics
