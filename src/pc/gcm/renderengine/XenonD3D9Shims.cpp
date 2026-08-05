@@ -118,6 +118,16 @@ namespace
     const IndexBufferHeader32*  spIndexSource  = nullptr;
     const VertexBufferHeader32* spVertexSource = nullptr;
     u32                          suVertexStride = 0;
+    u32                          suVertexSourceStride = 0;
+    u32                          suVertexDec3nCount = 0;
+    u16                          sau16VertexDec3nOffsets[16] = {};
+    bool                         sbWorldDeclarationValid = false;
+
+    // Some D3D9 drivers (notably current NVIDIA drivers) do not expose
+    // D3DDTCAPS_DEC3N. DrawIndexedPrimitiveUP already copies the submitted vertex
+    // data, so unsupported packed normals are expanded into FLOAT3 records here
+    // without touching the converted world bundle or the native AMD/Intel path.
+    std::vector<u8> sVertexFormatScratch;
 
     // ---- Xenos primitive reset ----------------------------------------------
     // The technique's rasteriser state (renderengine::RasterizerState
@@ -198,6 +208,9 @@ namespace
     {
         IDirect3DVertexDeclaration9* mpDeclaration;
         u32                          muStride;
+        u32                          muSourceStride;
+        u32                          muDec3nCount;
+        u16                          mau16Dec3nOffsets[16];
         // Whether the declaration exposes D3DDECLUSAGE_TEXCOORD index 0 (the fallback
         // textured variant's only extra input).
         bool                         mbHasTexcoord0;
@@ -339,6 +352,9 @@ namespace
     // Set by WorldVd32_GetDeclaration for the mesh currently being bound.
     bool                    sbLastDeclHasTexcoord0 = false;
     u64                     suLastDeclUsageMask = 0;
+    u32                     suLastDeclSourceStride = 0;
+    u32                     suLastDeclDec3nCount = 0;
+    u16                     sau16LastDeclDec3nOffsets[16] = {};
     // [FLAG PC data gap] Set by WorldFallbackShader_ForceForNextMesh (see its banner further
     // down): the next mesh must use the fallback pair even when the technique's real programs
     // are bound and usable. Console-instanced meshes only.
@@ -794,6 +810,8 @@ namespace renderengine
         *lpuStride = 0;
         sbLastDeclHasTexcoord0 = false;
         suLastDeclUsageMask    = 0;
+        suLastDeclSourceStride = 0;
+        suLastDeclDec3nCount   = 0;
         if (lpVdImage == nullptr)
             return nullptr;
 
@@ -803,17 +821,29 @@ namespace renderengine
             *lpuStride = lIt->second.muStride;
             sbLastDeclHasTexcoord0 = lIt->second.mbHasTexcoord0;
             suLastDeclUsageMask    = lIt->second.muUsageMask;
+            suLastDeclSourceStride = lIt->second.muSourceStride;
+            suLastDeclDec3nCount   = lIt->second.muDec3nCount;
+            std::memcpy(sau16LastDeclDec3nOffsets, lIt->second.mau16Dec3nOffsets,
+                        sizeof(sau16LastDeclDec3nOffsets));
             return lIt->second.mpDeclaration;
         }
 
-        Vd32Cached lEntry = { nullptr, 0, false, 0 };
+        Vd32Cached lEntry = {};
         const u8* lpImage = static_cast<const u8*>(lpVdImage);
         u16 lu16NumElements;
         std::memcpy(&lu16NumElements, lpImage + 0x08, 2);
 
         D3DVERTEXELEMENT9 laElements[17];
+        u16 lau16OriginalOffsets[16] = {};
         bool lbOk = (lu16NumElements > 0 && lu16NumElements <= 16);
-        u32 luMaxEnd = 0;
+        IDirect3DDevice9* lpDevice = Dev();
+        bool lbSupportsDec3n = true;
+        if (lpDevice != nullptr)
+        {
+            D3DCAPS9 lCaps = {};
+            if (SUCCEEDED(lpDevice->GetDeviceCaps(&lCaps)))
+                lbSupportsDec3n = (lCaps.DeclTypes & D3DDTCAPS_DEC3N) != 0;
+        }
         for (u32 lu = 0; lbOk && lu < lu16NumElements; ++lu)
         {
             // Element record (16 bytes): +0 u16 stream, +2 u16 offset, +4 u32 Xenon type,
@@ -847,6 +877,7 @@ namespace renderengine
             laElements[lu].Stream     = 0;
             laElements[lu].Offset     = lu16Offset;
             laElements[lu].Type       = lu8Type;
+            lau16OriginalOffsets[lu]  = lu16Offset;
             // The +8 byte is the record's METHOD lane, but every world element observed uses
             // the plain (DEFAULT) method and D3D9 rejects a whole declaration on an
             // out-of-range method; keep DEFAULT and take only usage/usageIndex from the image.
@@ -856,21 +887,65 @@ namespace renderengine
             if (lu8Usage == D3DDECLUSAGE_TEXCOORD && lu8UsageIndex == 0)
                 lEntry.mbHasTexcoord0 = true;
             lEntry.muUsageMask |= DeclUsageBit(lu8Usage, lu8UsageIndex);
-            if (static_cast<u32>(lu16Offset) + 16u > luMaxEnd)
-                luMaxEnd = lu16Offset + 16u;
+            if (lu8Type == D3DDECLTYPE_DEC3N && !lbSupportsDec3n)
+                lEntry.mau16Dec3nOffsets[lEntry.muDec3nCount++] = lu16Offset;
         }
 
         if (lbOk)
         {
+            // The descriptor stores the source stride immediately after its element
+            // table. Keep that stride for reading the bundle, while the D3D declaration
+            // and UP draw use a stride enlarged by eight bytes per DEC3N -> FLOAT3.
+            lEntry.muSourceStride = lpImage[0x10 + 16 * lu16NumElements];
+
+            // Keep the expansion offsets ordered even if a descriptor's elements are
+            // not serialized by ascending byte offset.
+            for (u32 lu = 1; lu < lEntry.muDec3nCount; ++lu)
+            {
+                const u16 lu16Offset = lEntry.mau16Dec3nOffsets[lu];
+                u32 luInsert = lu;
+                while (luInsert != 0
+                       && lEntry.mau16Dec3nOffsets[luInsert - 1] > lu16Offset)
+                {
+                    lEntry.mau16Dec3nOffsets[luInsert] =
+                        lEntry.mau16Dec3nOffsets[luInsert - 1];
+                    --luInsert;
+                }
+                lEntry.mau16Dec3nOffsets[luInsert] = lu16Offset;
+            }
+
+            for (u32 lu = 0; lu < lEntry.muDec3nCount; ++lu)
+            {
+                if (static_cast<u32>(lEntry.mau16Dec3nOffsets[lu]) + 4u
+                        > lEntry.muSourceStride
+                    || (lu != 0
+                        && lEntry.mau16Dec3nOffsets[lu]
+                           < lEntry.mau16Dec3nOffsets[lu - 1] + 4u))
+                {
+                    lbOk = false;
+                    break;
+                }
+            }
+
+            for (u32 lu = 0; lbOk && lu < lu16NumElements; ++lu)
+            {
+                u32 luExpansionBefore = 0;
+                for (u32 luPacked = 0; luPacked < lEntry.muDec3nCount; ++luPacked)
+                {
+                    if (lEntry.mau16Dec3nOffsets[luPacked] < lau16OriginalOffsets[lu])
+                        ++luExpansionBefore;
+                }
+                laElements[lu].Offset = static_cast<WORD>(
+                    static_cast<u32>(lau16OriginalOffsets[lu]) + 8u * luExpansionBefore);
+                if (laElements[lu].Type == D3DDECLTYPE_DEC3N && !lbSupportsDec3n)
+                    laElements[lu].Type = D3DDECLTYPE_FLOAT3;
+            }
+
+            lEntry.muStride = lEntry.muSourceStride + 8u * lEntry.muDec3nCount;
             const D3DVERTEXELEMENT9 lEnd = D3DDECL_END();
             laElements[lu16NumElements] = lEnd;
 
-            // The per-element stride bytes follow the element table; element 0's
-            // byte is stream 0's stride.
-            lEntry.muStride = lpImage[0x10 + 16 * lu16NumElements];
-
-            IDirect3DDevice9* lpDevice = Dev();
-            if (lpDevice != nullptr)
+            if (lbOk && lpDevice != nullptr)
             {
                 const HRESULT lhr =
                     lpDevice->CreateVertexDeclaration(laElements, &lEntry.mpDeclaration);
@@ -878,9 +953,43 @@ namespace renderengine
                 {
                     lEntry.mpDeclaration  = nullptr;
                     lEntry.mbHasTexcoord0 = false;
-                    LogOnce("vdfail",
-                            "[WorldVd32] CreateVertexDeclaration FAILED for a world descriptor"
-                            " - that mesh cannot draw\n");
+                    lEntry.muUsageMask    = 0;
+                    static bool sbLoggedFailure = false;
+                    if (!sbLoggedFailure)
+                    {
+                        sbLoggedFailure = true;
+                        D3DCAPS9 lCaps = {};
+                        const HRESULT lhrCaps = lpDevice->GetDeviceCaps(&lCaps);
+                        char lacMsg[1024];
+                        int liWritten = std::snprintf(
+                            lacMsg, sizeof(lacMsg),
+                            "[WorldVd32] CreateVertexDeclaration FAILED hr=0x%08X"
+                            " capsHr=0x%08X declTypes=0x%08X elems=%u:",
+                            static_cast<unsigned>(lhr), static_cast<unsigned>(lhrCaps),
+                            static_cast<unsigned>(lCaps.DeclTypes),
+                            static_cast<unsigned>(lu16NumElements));
+                        for (u32 lu = 0; lu < lu16NumElements
+                                       && liWritten > 0
+                                       && static_cast<size_t>(liWritten) < sizeof(lacMsg); ++lu)
+                        {
+                            const D3DVERTEXELEMENT9& lrElement = laElements[lu];
+                            liWritten += std::snprintf(
+                                lacMsg + liWritten, sizeof(lacMsg) - liWritten,
+                                " [s%u o%u t%u m%u u%u i%u]",
+                                static_cast<unsigned>(lrElement.Stream),
+                                static_cast<unsigned>(lrElement.Offset),
+                                static_cast<unsigned>(lrElement.Type),
+                                static_cast<unsigned>(lrElement.Method),
+                                static_cast<unsigned>(lrElement.Usage),
+                                static_cast<unsigned>(lrElement.UsageIndex));
+                        }
+                        const size_t luEnd = (liWritten > 0
+                                             && static_cast<size_t>(liWritten) < sizeof(lacMsg) - 1)
+                            ? static_cast<size_t>(liWritten) : sizeof(lacMsg) - 2;
+                        lacMsg[luEnd] = '\n';
+                        lacMsg[luEnd + 1] = '\0';
+                        CgsDev::Log::WriteToLog(lacMsg);
+                    }
                 }
             }
         }
@@ -912,6 +1021,12 @@ namespace renderengine
         *lpuStride = lEntry.muStride;
         sbLastDeclHasTexcoord0 = lEntry.mbHasTexcoord0;
         suLastDeclUsageMask    = lEntry.muUsageMask;
+        suLastDeclSourceStride = lEntry.muSourceStride;
+        suLastDeclDec3nCount   = lEntry.muDec3nCount;
+        std::memcpy(sau16LastDeclDec3nOffsets, lEntry.mau16Dec3nOffsets,
+                    sizeof(sau16LastDeclDec3nOffsets));
+        if (lEntry.muDec3nCount != 0 && lEntry.mpDeclaration != nullptr)
+            LogOnce("vd32dec3n", "[WorldVd32] driver lacks DEC3N; packed normals expanded to FLOAT3\n");
         return lEntry.mpDeclaration;
     }
 
@@ -1074,6 +1189,10 @@ namespace renderengine
     {
         spVertexSource = static_cast<const VertexBufferHeader32*>(lpVertexBufferHeader);
         suVertexStride = luStride;
+        suVertexSourceStride = suLastDeclSourceStride;
+        suVertexDec3nCount   = suLastDeclDec3nCount;
+        std::memcpy(sau16VertexDec3nOffsets, sau16LastDeclDec3nOffsets,
+                    sizeof(sau16VertexDec3nOffsets));
     }
 
     // The technique's primitive-reset render state, republished on every technique change.
@@ -1088,9 +1207,10 @@ namespace renderengine
     {
         IDirect3DDevice9* lpDevice = Dev();
         if (lpDevice == nullptr || spIndexSource == nullptr || spVertexSource == nullptr
-            || suVertexStride == 0)
+            || suVertexStride == 0 || suVertexSourceStride == 0
+            || !sbWorldDeclarationValid)
         {
-            LogOnce("updraw", "[WorldDraw] draw skipped: no device/geometry stash (stride 0?)\n");
+            LogOnce("updraw", "[WorldDraw] draw skipped: no device/geometry/declaration stash\n");
             return;
         }
 
@@ -1114,8 +1234,63 @@ namespace renderengine
 
 
         const u8* lpIndices  = static_cast<const u8*>(lpIndexData) + luStartIndex * luIndexSize;
-        const u8* lpVertices = static_cast<const u8*>(lpVertexData) + luBaseVertexIndex * suVertexStride;
-        const UINT luNumVertices = spVertexSource->muSize / suVertexStride;
+        const UINT luNumVertices = spVertexSource->muSize / suVertexSourceStride;
+        if (luBaseVertexIndex >= luNumVertices)
+            return;
+
+        const u8* lpVertices = nullptr;
+        if (suVertexDec3nCount != 0)
+        {
+            // D3DDECLTYPE_DEC3N is a signed-normalized 10:10:10 value. Expand
+            // each component exactly as the fixed-function vertex fetch would:
+            // sign-extend ten bits and normalize by 511, clamping -512 to -1.
+            sVertexFormatScratch.resize(
+                static_cast<size_t>(luNumVertices) * suVertexStride);
+            const u8* lpSource = static_cast<const u8*>(lpVertexData);
+            u8* lpDestination = &sVertexFormatScratch[0];
+            for (u32 luVertex = 0; luVertex < luNumVertices; ++luVertex)
+            {
+                const u8* lpSourceVertex = lpSource + luVertex * suVertexSourceStride;
+                u8* lpDestinationVertex = lpDestination + luVertex * suVertexStride;
+                u32 luSourceCursor = 0;
+                u32 luDestinationCursor = 0;
+                for (u32 luPacked = 0; luPacked < suVertexDec3nCount; ++luPacked)
+                {
+                    const u32 luOffset = sau16VertexDec3nOffsets[luPacked];
+                    const u32 luPrefixBytes = luOffset - luSourceCursor;
+                    std::memcpy(lpDestinationVertex + luDestinationCursor,
+                                lpSourceVertex + luSourceCursor, luPrefixBytes);
+                    luDestinationCursor += luPrefixBytes;
+
+                    u32 luValue;
+                    std::memcpy(&luValue, lpSourceVertex + luOffset, sizeof(luValue));
+                    f32 lafNormal[3];
+                    for (u32 luComponent = 0; luComponent < 3; ++luComponent)
+                    {
+                        int liComponent = static_cast<int>(
+                            (luValue >> (10u * luComponent)) & 0x3FFu);
+                        if ((liComponent & 0x200) != 0)
+                            liComponent -= 0x400;
+                        lafNormal[luComponent] = liComponent <= -512
+                            ? -1.0f : static_cast<f32>(liComponent) / 511.0f;
+                    }
+                    std::memcpy(lpDestinationVertex + luDestinationCursor,
+                                lafNormal, sizeof(lafNormal));
+                    luSourceCursor = luOffset + 4u;
+                    luDestinationCursor += sizeof(lafNormal);
+                }
+                const u32 luTailBytes = suVertexSourceStride - luSourceCursor;
+                std::memcpy(lpDestinationVertex + luDestinationCursor,
+                            lpSourceVertex + luSourceCursor, luTailBytes);
+            }
+            lpVertices = &sVertexFormatScratch[0]
+                       + static_cast<size_t>(luBaseVertexIndex) * suVertexStride;
+        }
+        else
+        {
+            lpVertices = static_cast<const u8*>(lpVertexData)
+                       + static_cast<size_t>(luBaseVertexIndex) * suVertexSourceStride;
+        }
 
         // [DIAG wheels] scan the run this draw will actually submit, BEFORE the strip
         // expansion, so an out-of-range index value is visible as a number.
@@ -1424,6 +1599,7 @@ void D3DDevice_SetPixelShader(IDirect3DDevice9* /*lpDeviceArg*/, void* lpShader)
 void D3DDevice_SetVertexDeclaration(IDirect3DDevice9* /*lpDeviceArg*/, void* lpDecl)
 {
     IDirect3DDevice9* lpDevice = Dev();
+    sbWorldDeclarationValid = lpDecl != nullptr;
     if (lpDevice != nullptr && lpDecl != nullptr)
         lpDevice->SetVertexDeclaration(static_cast<IDirect3DVertexDeclaration9*>(lpDecl));
 }
