@@ -53,21 +53,37 @@ namespace BrnGame { BrnGameModule* GetMainGameModule() { return &gGameModule; } 
 #ifdef WIN32
 namespace
 {
-    // TUB 0x53A910. Resolve "<CSIDL_LOCAL_APPDATA>\Criterion Games\Burnout Paradise\<lpcFile>".
-    // TUB passes the hardware-init window as the SHGetSpecialFolderPathA owner; the PC slice
-    // passes null (the folder resolve does not need a window).
+    // PC configuration path. Keep the decomp's config alongside its executable so it
+    // stays self-contained and never reads or overwrites the retail game's AppData INI.
+    //
+    // The historical helper name is retained because LoadConfig() and SaveConfig()
+    // already call it.
     void getGameSaveDir(char* lpcPath, const char* lpcFile)
     {
-        lpcPath[0] = '\0';
-        SHGetSpecialFolderPathA(0, lpcPath, CSIDL_LOCAL_APPDATA, TRUE);
-        size_t luLen = strlen(lpcPath);
-        if (luLen > 0 && lpcPath[luLen - 1] != '\\' && lpcPath[luLen - 1] != '/')
-            strcat(lpcPath, "\\");
-        strcat(lpcPath, "Criterion Games");
-        strcat(lpcPath, "\\");
-        strcat(lpcPath, "Burnout Paradise");
-        strcat(lpcPath, "\\");
-        strcat(lpcPath, lpcFile);
+        const DWORD luPathLength = GetModuleFileNameA(nullptr, lpcPath, MAX_PATH);
+        if (luPathLength == 0 || luPathLength >= MAX_PATH)
+        {
+            lpcPath[0] = '\0';
+            return;
+        }
+
+        // Strip the executable filename, retaining the trailing slash.
+        DWORD luDirectoryLength = luPathLength;
+        while (luDirectoryLength > 0 &&
+               lpcPath[luDirectoryLength - 1] != '\\' &&
+               lpcPath[luDirectoryLength - 1] != '/')
+        {
+            --luDirectoryLength;
+        }
+
+        if (luDirectoryLength == 0)
+        {
+            lpcPath[0] = '\0';
+            return;
+        }
+
+        lpcPath[luDirectoryLength] = '\0';
+        strncat(lpcPath, lpcFile, MAX_PATH - luDirectoryLength - 1);
     }
 }
 #endif
