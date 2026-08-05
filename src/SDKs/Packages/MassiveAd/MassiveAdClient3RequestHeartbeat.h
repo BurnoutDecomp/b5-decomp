@@ -18,20 +18,17 @@
 //     MassiveAdClient3::CRequestHeartbeat::CRequestHeartbeat        @ 0x82BD8608
 //     MassiveAdClient3::CRequestHeartbeat::GetRequestURL            @ 0x82BD8650
 //     MassiveAdClient3::CRequestHeartbeat::`vector deleting destructor' @ 0x82BD8660
-//     MassiveAdClient3::CRequestHeartbeat::Parse                    @ 0x82BD86B8 (BLOCKED)
+//     MassiveAdClient3::CRequestHeartbeat::Parse                    @ 0x82BD86B8
 //     MassiveAdClient3::CRequestHeartbeat::WriteHeartbeatRequest    @ 0x82BD8798
 //     MassiveAdClient3::CRequestHeartbeat::CreateRequest            @ 0x82BD8818
 //
-// Parse @ 0x82BD86B8 is NOT reconstructed here (BLOCKED, exactly as the sibling
-// CRequestCloseSession::Parse / CRequestExitZone::Parse): inside its
-// signature-block branch its body calls CRequestObject::ReadRemoveSignature --
-// whose signature the committed base header deliberately leaves undeclared as
-// un-attested -- and then issues a `bl STUB` (Hex-Rays `STUB(this,
-// mpSignature@+0x30, 20)`) into a function that is neither homed nor named in
-// this TU's dossier. The Parse override is DECLARED (so the class stays a
-// concrete override of the pure base slot and the compile gate is clean) but its
-// body is left for the ledger slice that homes those two collaborators.
-// Reproducing the STUB side-effect without a real symbol would be fabrication.
+// Parse @ 0x82BD86B8 (long parked as BLOCKED) is now reconstructed in the .cpp:
+// its two collaborators are both resolved in the committed tree.
+// CRequestObject::ReadRemoveSignature @ 0x82BD02D0 is declared in the base
+// header and defined in MassiveAdClient3Request.cpp, and the `bl STUB` inside
+// the signature branch targets 0x82AD5078 -- measured as a single `blr` shared
+// by ~150 callers, an ICF-folded debug/trace hook compiled out of the retail
+// build (an attested no-op, documented at the call site rather than modelled).
 //
 // Per the naming convention the vendor SDK identifiers (the MassiveAdClient3
 // namespace and the CRequestHeartbeat class / its methods) are PRESERVED
@@ -68,9 +65,11 @@ public:
     // the base slot-2 per-request-type endpoint getter.
     const char* GetRequestURL() override;
 
-    // @ 0x82BD86B8 (BLOCKED -- see the file header). Vftable Parse override the
-    // response path (CRequestObject::Complete) dispatches; body lives in the
-    // ReadRemoveSignature/STUB slice.
+    // @ 0x82BD86B8. Vftable Parse override the response path
+    // (CRequestObject::Complete) dispatches. Walks the heartbeat response:
+    // protocol version, response-type byte 215, remaining-byte total, then the
+    // fields -- exactly one signature block (wire tag 30, pulled back out of
+    // the buffer by ReadRemoveSignature) and a matching HMAC make it succeed.
     int Parse() override;
 
     // @ 0x82BD8818. Called by CNetworkManager::CreateHeartbeat (the manager
@@ -79,10 +78,12 @@ public:
     // sets status 2 (ready to submit), and returns 0.
     int CreateRequest(CRequestBuilder* pBuilder);
 
-    // @ 0x82BD8798. Builds the outgoing heartbeat block, PREPENDING (front-to-
-    // back on disk): the client session ID (tag 43) then the client player ID
-    // (tag 42). Seals it with FinishBaseBlock(214, timestamp, sign). Returns the
-    // FinishBaseBlock result.
+    // @ 0x82BD8798. Builds the outgoing heartbeat block. Write order (each
+    // write PREPENDS, so the wire order is the reverse): session ID u32, tag
+    // 43, player ID u32, tag 42 -- landing front-to-back on the wire as
+    // [42][player ID u32][43][session ID u32]. Seals it with
+    // FinishBaseBlock(214, timestamp, sign). Returns the FinishBaseBlock
+    // result.
     int WriteHeartbeatRequest();
 };
 

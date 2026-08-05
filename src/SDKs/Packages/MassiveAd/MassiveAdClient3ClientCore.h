@@ -142,6 +142,20 @@ public:
     // Body in the CMassiveClientCore TU.
     int ZoneManagerRemove(CMassiveZoneManager* pZoneManager);
 
+    // @ 0x82BCCE68. Direct (non-virtual) bl target from CRequestOpenSession::Parse
+    // @ 0x82BD4E58 (the zone-name response field, wire tag 71), called on the
+    // Instance() result -- MEASURED at 0x82BD4F8C..0x82BD4F94, where r3 chains
+    // straight from the singleton getter into this member call. Registers
+    // pcZoneName in the core's zone-name list (X360 core+0x104) unless
+    // ZoneNameFind already knows it: strlen+1 MassiveMalloc copy, then a new
+    // CMassiveListNode appended via CMassiveList::Append. Returns 1 on append,
+    // 0 when already present or on a failed allocation (level-2 "ALLOCATION
+    // Failed for pName", SetLastError -99, zeroes the state dword at +0x10).
+    // Not a clipped phantom: 0x82BCCE68 has its own full body, and the export
+    // carries the sibling ZoneNameRemove under the same prefix.
+    // Body in the CMassiveClientCore TU.
+    int ZoneNameAdd(const char* pcZoneName);
+
     // Install the game-supplied heap hooks. Static; body in its own ledger TU.
     static void SetCustomMemoryFunctions(TMassiveMallocFn pfnMalloc, TMassiveFreeFn pfnFree);
 
