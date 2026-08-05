@@ -146,10 +146,23 @@ namespace PhysicsSimulationIO
     }
 
     // X360 0x8259ECD8. Write-lock guard (faithful to the asm's bit-3 test), then asserts the
-    // stored time step is positive before returning it in f1.
-    f32 InputBuffer::GetTimeStep() const
+    // stored time step is positive before returning it in f1. NON-const since 2026-08-05 --
+    // see the overload note in CgsPhysicsSimulationModuleIO.h.
+    f32 InputBuffer::GetTimeStep()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(mfTimeStep > 0.0f, "mfTimeStep > 0.0f");
+        return mfTimeStep;
+    }
+
+    // X360 0x8289E260 (54 instructions) -- the READ-lock const twin (`lbz 0(r27)` +
+    // `extrwi r11,r11,1,27` == LSB bit 4 == eStatusLockedForRead; both asserts cite
+    // d:\p4 CgsPhysicsSimulationModuleIO.h:833/:834 in the image). This is the flavour
+    // PhysicsSimulationModule::Update @0x828A74D0 calls between LockForRead/UnlockForRead
+    // to fetch the step it feeds rw::physics::Simulation::SimulationUpdate.
+    f32 InputBuffer::GetTimeStep() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
         CGS_ASSERT(mfTimeStep > 0.0f, "mfTimeStep > 0.0f");
         return mfTimeStep;
     }

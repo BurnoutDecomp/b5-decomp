@@ -62,9 +62,13 @@ namespace physics
 //
 //   pipeline selector: bit0 = contacts present, bit1 = joints, bit2 = drives
 //     1        -> Anubis   (contacts only)
-//     2, 3     -> Osiris   (joints, or joints + contacts)
+//     2        -> Osiris   (joints only)
 //     4        -> Isis     (drives only)
-//     5, 6, 7  -> Horus    (anything mixed with drives)
+//     3, 5-7   -> Horus    (any MIX)
+//   ⚠️ CORRECTION 2026-08-05: this comment used to claim "2, 3 -> Osiris"; the CODE below
+//   (`else if (luPipeline < 3u)`) always sent 3 to Horus, and the Xbox One SimulationUpdate
+//   (sub_1409B7240, located this wave) confirms the code: its selector chain sends only
+//   v==2 to Osiris (sub_1409B5E80) and 3 to Horus (sub_1409B3CD0). The comment was the bug.
 //
 // The spy block reads m_SpyFlag once for the gate, then RE-READS it for arms 2 and 3
 // (X360 0x82BC6C30 / 0x82BC6C50) -- a spy is allowed to clear its own bit. Reading the

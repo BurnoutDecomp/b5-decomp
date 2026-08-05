@@ -70,6 +70,25 @@ enum SpyingFlag
     SPY_CONTACTS = 4
 };
 
+// =====================================================================================
+// The 48-byte record SpyJointJacobians @0x82BC24F8 emits, IN PLACE, over the HEAD of
+// m_JJ_Stack (the emit cursor starts at the array base and advances 0x30 per spied joint,
+// strictly behind the 0x180-stride read cursor -- same invariant on the host, where
+// sizeof(Jacobian) > 48). Consumed by CgsPhysics::PhysicsSimulationModule::
+// AddJointSpiesToOutputQueue @0x828A58E0, which loads +0x00/+0x10, scales both rows by
+// (m_TimeStep * 59.999996f) and pushes them into OutJointSpy events, and chases +0x20 to
+// the Joint for its slot index (m_tag). Both ends access it BY NAME on the host, so the
+// pointer widening moves muTag from console +0x24 to +0x28 harmlessly (per-frame scratch,
+// never serialised -- the Jacobian::mpNode precedent, not the serialised-slot rule).
+// =====================================================================================
+struct JointJacobianSpy
+{
+    rw::math::vpu::Vector4 mForce;    // console +0x00  trilinear of rows 12/16/20, * 1/ts^2
+    rw::math::vpu::Vector4 mTorque;   // console +0x10  MatIBT + rows 14/18/22 trilinear, * 1/ts^2
+    Joint*                 mpJoint;   // console +0x20  the jacobian's mpNode
+    u32                    muTag;     // console +0x24  Joint::m_tag (the JointData slot index)
+};
+
 class Simulation
 {
 public:
@@ -133,9 +152,33 @@ public:
     void Osiris_Pipeline();       // @ 0x82BC2680  179 insn  (joints, or joints + contacts)
     void Isis_Pipeline();         // @ 0x82BC2218  184 insn  (drives only)
     void Horus_Pipeline();        // @ 0x82BC1A20  510 insn  (anything mixed with drives)
-    void SpyJointJacobians();     // @ 0x82BC24F8   97 insn
+    // ⭐ 2026-08-05 -- the Xbox One build's SimulationUpdate was located (sub_1409B7240,
+    // structure-identical to the committed PC body, and it CONFIRMS the selector CODE above
+    // the old comment's "2,3 -> Osiris" claim: 3 == joints+contacts goes to HORUS). Its call
+    // set names an x64 ALGORITHM oracle for every remaining stage -- offsets stay X360:
+    //     ContactBatchBuild = sub_1409AE210 (per-RECORD there: XB1's SimulationUpdate loops it
+    //                         at stride 272 == this Contact widened for two body POINTERS the
+    //                         batch parks in it -- see the SpyContactJacobians coupling note),
+    //     Anubis = sub_1409ADBF0, Osiris = sub_1409B5E80, Isis = sub_1409B53E0,
+    //     Horus = sub_1409B3CD0, DynamicUpdate = sub_1409B3180,
+    //     SpyJoint = sub_1409B7B80, SpyDrive = sub_1409B7640, SpyContact = sub_1409B7390.
+    // ⚠️ XB1 jacobian ROW GROUPING differs (2 groups of 5, stride 0x50 -- Jacobian.hpp note),
+    // so no XB1 row offset may be imported; only the algebra.
+    void SpyJointJacobians();     // @ 0x82BC24F8   97 insn  BODIED (Simulation.cpp, 2026-08-05)
     void SpyDriveJacobians();     // @ 0x82BC3010  193 insn
     void SpyContactJacobians();   // @ 0x82BC4138  107 insn
+    // ⚠️⚠️ COUPLING, measured 2026-08-05 -- do not land these two piecemeal:
+    //   * SpyContactJacobians reads the POST-ContactBatchBuild record: the batch parks TWO
+    //     RigidBody POINTERS over the +0x7C/+0xAC snapshot lanes (`lwz r7,0x7C / lwz r8,0xAC`
+    //     then `lvx128 vX, rN, 0x10` THROUGH them at 0x82BC4260) and a scalar over +0xDC.
+    //     8-byte host pointers cannot live in those 4-byte lanes -- the PC ContactBatchBuild
+    //     must either widen Contact (the XB1 route: 256 -> 272) or park mId indices and have
+    //     the spy resolve them; EITHER WAY the two functions share one record contract and
+    //     land TOGETHER, with contact.h's pins moved in the same commit.
+    //   * SpyDriveJacobians additionally walks the Drive node (+0x00/+0x10/+0x14 pointers) for
+    //     a ~60-insn quaternion/twist block (0x82BC30D0..0x82BC323C) that is NOT yet decoded
+    //     to landing standard; its emit tail is the SpyJointJacobians trilinear + the two
+    //     scalars {var_130.x, fabs(1 - dot4)} at +0x20/+0x24 of a 48-byte record.
 
     // -------------------------------------------------------------------------------------
     // Rigid-body list membership. All three are the same shape: unlink from the current list,

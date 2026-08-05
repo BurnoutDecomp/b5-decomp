@@ -660,6 +660,36 @@ namespace CgsPhysics
     // UpdateVehiclePhysics 1,038, DeformationManager::Update 1,021,
     // DoCrashPrediction 814.
     //
+    // ⚠️⚠️ 2026-08-05 -- AND THAT STUB IS THE **ONLY** RUNTIME PATH TO THE TWO VIRTUALS.
+    // Verified this wave: Update/ProcessInput have EMPTY xref sets (pure vtable dispatch);
+    // the base no-arg ModuleSingleBuffered::Update() is "// Empty on purpose" and is not
+    // what these override (they are NEW virtuals with their own signatures, like Prepare);
+    // no module-manager pump reaches them. ⇒ Landing the two virtuals makes the chain
+    // LINK-complete but NOTHING EXECUTES until PhysicsModule::Update is reconstructed.
+    // "Witness an empty tick on a default run" is not achievable before that wave.
+    //
+    // ⭐ 2026-08-05 -- THE MEASURED GAME-SIDE GAP for Update's own callee list (do not
+    // inherit older optimism; each verified against the committed .cpp this wave):
+    //   UNBODIED: QuerySimulationToSetFlags @0x828A0428 (248), ActiveSetClosure
+    //     @0x828A0808 (1184, inlines the CgsIslandGenerator union-find -- the class needs
+    //     reconstructing first, DWARF CgsIslandGenerator.h, IOBuffer-derived, 200 slots),
+    //     ActivateAndFreezeAsNeeded @0x828A6DD0 (249), AddActiveBodiesToOutputQueue
+    //     @0x828A6CC8 (65), AddContactSpiesToOutputQueue @0x828A4ED8 (641),
+    //     AddJointSpiesToOutputQueue @0x828A58E0 (267, export hole -- headless dump banked),
+    //     AddDriveSpiesToOutputQueue @0x828A5D10 (72), and the two virtuals themselves.
+    //   BODIED/READY: ProcessInputBuffers + all 19 drains, GetMaxIterations @0x8289E338,
+    //     the READ-lock const GetTimeStep @0x8289E260 (split landed 2026-08-05 -- the old
+    //     single const body asserted the WRITE bit and would have fired every tick),
+    //     SetTimeStepUsed/SetMaxIterationsUsed, IOBuffer Lock/Unlock x4,
+    //     IOBufferStack::Create/DestroyIOBuffer<T> (need only the IslandGenerator type),
+    //     PairSet::ClearAll, Simulation::SimulationUpdate (unmounted TU).
+    //   Update @0x828A74D0 pseudocode decode is CLEAN (banked in the sim_step wave log):
+    //     perf-mon ids at +0x4854..+0x4860, mpSimulation +0x4864; it zeroes the sim's three
+    //     spy counters (+0x68/+0x70/+0x78) before SimulationUpdate and m_CT_Count/m_CS_Count
+    //     (+0x64/+0x68) after the spy dumps; ProcessInput @0x828A76D0 is 33 insn
+    //     (LockForRead, assert GetAddContactQueue empty ".cpp:961", ProcessInputBuffers,
+    //     UnlockForRead).
+    //
     // RUNNING TOTAL for "a car moves under its own physics": ~25,000 X360 instructions,
     // VMX-heavy, plus RaceCarPhysics.cpp which is still unmounted. Consistent with
     // [[vehicle-physics-is-the-wall]]'s 6-9 wave estimate; NOT a one-wave gap.

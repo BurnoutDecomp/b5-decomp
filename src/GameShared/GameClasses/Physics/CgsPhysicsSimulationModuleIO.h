@@ -119,6 +119,17 @@ namespace PhysicsSimulationIO
         int  GetMaxIterations() const;
         // X360 0x8259ECD8: write-lock (bit 3) guarded (NOTE: a Get that tests the WRITE bit --
         // faithful to the asm, intentionally NOT "fixed"); asserts mfTimeStep > 0, returns it.
+        // ⚠️ 2026-08-05: NON-const now. The console carries TWO GetTimeStep bodies with opposite
+        // lock guards, the same split GetAddRigidBodyQueue has: this write-lock one (producer
+        // side) and a READ-lock const one @0x8289E260 (its asserts cite IO.h:833/:834), which is
+        // what PhysicsSimulationModule::Update @0x828A74D0 calls under LockForRead ("lfNewStep").
+        // Until this split the committed const body asserted the WRITE bit, so the first real
+        // Update tick would have fired "Not locked for writing" every frame -- a false assert
+        // armed in a Get. Overload resolution: the drain/Update side holds `const InputBuffer*`,
+        // so it binds the const/read one; producers hold a non-const pointer and bind this.
+        f32  GetTimeStep();
+        // X360 0x8289E260 (54 insn, exports 0x8289E260.json): read-lock (bit 4) guarded const
+        // twin; asserts mfTimeStep > 0 ("mfTimeStep > 0.0f", IO.h:834), returns it.
         f32  GetTimeStep() const;
         // X360 0x8259EDB0: write-lock (bit 3) guarded; asserts the arg > 0, stores muMaxIterations.
         void SetMaxIterations(int luMaxIterations);
