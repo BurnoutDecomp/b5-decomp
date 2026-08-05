@@ -561,10 +561,11 @@ void ActiveRaceCar::RequestPlaceOnTrack( const Vector3& lPosition, const Vector3
 // [FLAG PC bring-up] WHAT IS NOT, and why -- three legs, none paraphrased:
 //   1. mCentreOfMassTransform <- BrnPhysics::Def(mDeformationModelResourcePtr) + 1552.
 //      Needs the alias-list half of CreateFromHandle (to get the resource MEMORY, not
-//      just the handle) plus BrnPhysics::Deformation::StreamedDeformationSpec's +1552
-//      layout. Leaving it is not a silent drop: Prepare/Attach leave the IDENTITY there,
-//      which is what CalcBodyTransform already multiplies by today, so the pose this
-//      build renders is unchanged rather than wrong. DELETE-WHEN the spec is homed.
+//      just the handle) HERE. ⭐ LANDED ELSEWHERE (seat wave 2026-08-05): the promote site
+//      (RaceCarEntityModule::ResetActiveRaceCar) forwards the resident spec's +1552 matrix
+//      through SetCentreOfMassTransformBringUp, so CalcBodyTransform now multiplies the
+//      SHIPPED model-space->handling-space matrix, not the identity. This slot still
+//      belongs here once the alias leg lands. DELETE-WHEN the spec is homed.
 //   2. the four RenderParams::SetWheelScale(i, Def + 96 + 48*i) calls -- same dependency,
 //      and this build cannot draw wheels at all (Model::SetupShaderConstantsForInstancing
 //      is absent).
@@ -658,6 +659,17 @@ void ActiveRaceCar::SeedPhysicsStateFromCreateEventBringUp(const Matrix44Affine&
 {
     CGS_ASSERT(IsAttached(), "IsAttached()");
     mPhysicsState.mTransform = lrTransform;
+}
+
+// ----------------------------------------------------------------------------
+// [FLAG PC bring-up] SetCentreOfMassTransformBringUp -- NOT an X360 function. See the header
+// banner: this is the console OnResourcesLoaded's `Def(...) + 1552` read, fed from the resident
+// spec by the promote site instead of through the unreconstructed resource alias leg.
+// ----------------------------------------------------------------------------
+void ActiveRaceCar::SetCentreOfMassTransformBringUp(const Matrix44Affine& lrCarModelSpaceToHandlingBodySpace)
+{
+    CGS_ASSERT(IsAttached(), "IsAttached()");
+    mCentreOfMassTransform = lrCarModelSpaceToHandlingBodySpace;
 }
 
 // ----------------------------------------------------------------------------

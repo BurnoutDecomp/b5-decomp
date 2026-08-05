@@ -511,6 +511,24 @@ public:
     void SeedPhysicsStateFromCreateEventBringUp(const Matrix44Affine& lrTransform);
 
     // ========================================================================
+    // [FLAG PC bring-up] SetCentreOfMassTransformBringUp -- NOT an X360 function (seat wave
+    // 2026-08-05). Lands the OnResourcesLoaded leg this header's banner lists as missing:
+    // console OnResourcesLoaded reads `BrnPhysics::Def(mDeformationModelResourcePtr) + 1552`
+    // (= StreamedDeformationSpec::mCarModelSpaceToHandlingBodySpaceTransform, SHIPPED in the
+    // bundle: identity rotation, translation (0, -0.740575, +0.170226) for PUSMC01) into
+    // mCentreOfMassTransform. The resource-ptr alias half of CreateFromHandle is still not
+    // reconstructed, but the promote site (RaceCarEntityModule::ResetActiveRaceCar) already
+    // holds the RESIDENT spec through the streamer, so it forwards the very matrix the console
+    // reads. CalcBodyTransform then produces body = COM * physics -- the console's own
+    // composition -- instead of multiplying by the identity Prepare/Attach left.
+    // ⭐ This and the analytic seat LAND TOGETHER: the seat outputs the HANDLING-frame (COM)
+    // transform ~1.446 above ground; only with this matrix does the rendered body come back
+    // down to model-origin height (~0.7055 above ground, the retail rest pose).
+    // DELETE-WHEN OnResourcesLoaded's Def() alias leg lands.
+    // ========================================================================
+    void SetCentreOfMassTransformBringUp(const Matrix44Affine& lrCarModelSpaceToHandlingBodySpace);
+
+    // ========================================================================
     // ADDITIVE named readers for the per-frame OUTPUT publish (2026-08-01).
     //
     // RaceCarEntityModule::UpdateOutputInterfaces @0x822F5CF8 reads every one of these

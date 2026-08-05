@@ -1,4 +1,5 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Wheel::Prepare's lpTireAttribs gate, Wheel.cpp:478)
 
 #include <cmath>   // std::fabs, std::sqrt
 
@@ -204,35 +205,48 @@ namespace Vehicle
     // ===========================================================================================
     //  Wheel::Prepare   @0x825FEBE8
     // ===========================================================================================
-    // Prepare the wheel from a streamed position + suspension limits + tire attribs: Clear() the
-    // running state, assert the attribs pointer (elided), store mpTireAttribs (+0xD0), scatter the
-    // suspension-limit / radius / twist scalars into the integration (+0x30) / slip (+0x40) /
-    // suspension (+0x60) / streamed-position (+0x90) lanes, then SetPosition().
+    // Prepare the wheel from a streamed position + per-wheel scalars + tire attribs: Clear() the
+    // running state, assert the attribs pointer, store mpTireAttribs (+0xD0), scatter the four
+    // scalars into their SIMD lanes, then SetPosition().
     //
-    // FLAG: the suspension-limit scalar->lane assignment (the vrlimi128 cascade laying the min/max
-    // suspension heights + radius + twist across the SIMD lanes) is inferred from the SwitchAttribs
-    // sibling (same scatter, same destination offsets); the console fastcall packs the scalars
-    // across f-regs (a9/a10 + the &a23/&a28/&a30 stack spills). The structurally certain parts
-    // (Clear, the pointer store, the streamed-position store, SetPosition) are EXACT; the per-lane
-    // suspension math is faithful-to-the-stores but the exact source-lane of each scalar is partial.
-    bool Wheel::Prepare(Vector3 lStreamedPosition, f32 lfMaxSuspensionHeight,
-                        f32 lfMinSuspensionHeight, f32 lfRadiusSeed, f32 lfTwistSeed,
+    // ⭐ LANE MAP CORRECTED (seat wave 2026-08-05). The old body's scatter -- "inferred from the
+    // SwitchAttribs sibling" -- was wrong on every lane: it put (radius ± min/max) into the +0x30/
+    // +0x40 Y lanes and invented a twist store into the +0x90 w lane. The raw asm (dossier,
+    // 0x825FEC48..0x825FED10) does none of that:
+    //   0x825FECCC  vsubfp v10, v0, v10   ; v0 = splat(lStreamedPosition.y), v10 = splat(f4)
+    //   0x825FECD8  vrlimi128 v9, v10, 8, 0    -> +0x60 lane x = pos.y - f4
+    //   0x825FECD0  vaddfp v0, v0, v9          ; v9 = splat(f3)
+    //   0x825FECE4  vrlimi128 v10, v0, 4, 3    -> +0x60 lane y = pos.y + f3
+    //   0x825FECF0  vrlimi128 v0, v13, 1, 1    -> +0x30 lane w = f2   (v13 = splat(f2))
+    //   0x825FECFC  vrlimi128 v0, v12, 1, 1    -> +0x40 lane w = f1   (v12 = splat(f1))
+    //   0x825FED08  vrlimi128 v11, v0, 1, 0    -> +0x90 = {pos.xyz, OLD +0x90 w} (w PRESERVED)
+    // The caller (SimpleVehiclePhysics::SetAttributes, asm 0x826027F4..0x82602840) passes
+    //   f1 = lpafWheelRadii[i]  (lfs f1, 0(r31))       -- ⭐ the analytic seat reads this lane
+    //   f2 = flt_82FB8BB0       (a .data scalar, 0 in the image -- runtime-initialised)
+    //   f3 = mSimpleAttribs+0x00 lane x
+    //   f4 = max(mSimpleAttribs+0x00 lane y, unk_82FB8440)
+    //   v1 = (specWheelPos + front/rear ride height) - mSimpleAttribs.mCOMOffset
+    bool Wheel::Prepare(Vector3 lStreamedPosition, f32 lfWheelRadius, f32 lfIntegrationSeed,
+                        f32 lfSuspensionTravelUp, f32 lfSuspensionTravelDown,
                         const TireAttribs* lpTireAttribs)
     {
         Clear();
 
-        // CgsDev::Assert( lpTireAttribs != NULL ) -- elided (debug-only).
-        mpTireAttribs = lpTireAttribs;                                  // *(this+208) = a6
+        CGS_ASSERT(lpTireAttribs != 0, "lpTireAttribs != NULL");        // X360 Wheel.cpp:478
+        mpTireAttribs = lpTireAttribs;                                  // stw r30, 0xD0(r31)
 
-        // Streamed position (xyz) + twist amount (w lane) -> mStreamedPositionPlusTwistAmount (+0x90).
+        // +0x60: the suspension bounds around the streamed hub height (see the asm quote above).
+        mSuspensionAndInertiaVariables.x = lStreamedPosition.y - lfSuspensionTravelDown;
+        mSuspensionAndInertiaVariables.y = lStreamedPosition.y + lfSuspensionTravelUp;
+
+        // +0x30 lane w / +0x40 lane w.
+        mIntegrationVariables.w = lfIntegrationSeed;                    // vrlimi128 (+0x30), 1, 1
+        mSlipVariables.w        = lfWheelRadius;                        // vrlimi128 (+0x40), 1, 1  ⭐ seat input
+
+        // +0x90: xyz replaced with the streamed position, the w lane PRESERVED (vrlimi128 v11, v0,
+        // 1, 0 re-inserts the OLD w -- SetVector3 writes only xyz, which is exactly that). The
+        // merged register is also what SetPosition receives (vmr v1).
         mStreamedPositionPlusTwistAmount.SetVector3(lStreamedPosition);
-        mStreamedPositionPlusTwistAmount.SetPlus(lfTwistSeed);
-
-        // Suspension-limit lanes (FLAG: source-lane assignment inferred from SwitchAttribs). The asm
-        // forms (radius - min) into the integration lane and (radius + max) into a suspension lane,
-        // and inserts the min/max into the +0x30/+0x40 registers via vrlimi128 lane 1.
-        mIntegrationVariables.y = lfRadiusSeed - lfMinSuspensionHeight;   // vsubfp v0,v10  (lane insert 1,1)
-        mSlipVariables.y        = lfRadiusSeed + lfMaxSuspensionHeight;   // vaddfp v0,v9   (lane insert 1,1)
 
         SetPosition(lStreamedPosition);
         return true;

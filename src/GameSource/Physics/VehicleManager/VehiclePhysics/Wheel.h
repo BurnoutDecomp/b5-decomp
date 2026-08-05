@@ -171,17 +171,29 @@ namespace Vehicle
                             Vector3 lPosition, Vector3 lNormal,
                             u16 lu16TagHi, u16 lu16TagLo, f32 lfLineDistanceToRoad);
 
-        // @0x825FEBE8: prepare the wheel from a streamed position + suspension limits + tire attribs
-        // (Clear, set mpTireAttribs, derive the min/max suspension lanes, then SetPosition). Bodied
-        // in Wheel.cpp.
-        // FLAG: the exact scalar->lane assignment of the suspension-limit args is inferred from the
-        // SwitchAttribs sibling (same scatter, same offsets); the console fastcall packs them across
-        // f-regs.
-        bool Prepare(Vector3 lStreamedPosition, f32 lfMaxSuspensionHeight, f32 lfMinSuspensionHeight,
-                     f32 lfRadiusSeed, f32 lfTwistSeed, const TireAttribs* lpTireAttribs);
+        // @0x825FEBE8: prepare the wheel from a streamed position + per-wheel scalars + tire attribs
+        // (Clear, set mpTireAttribs, scatter the scalars into their SIMD lanes, then SetPosition).
+        // Bodied in Wheel.cpp.
+        // ⭐ LANE MAP CORRECTED against the raw asm (seat wave 2026-08-05) -- the old "inferred from
+        // the SwitchAttribs sibling" scatter was wrong on every lane. Proven map (asm 0x825FEC48..
+        // 0x825FED10, caller SimpleVehiclePhysics::SetAttributes asm 0x826027F4..0x82602840):
+        //   f1 -> mSlipVariables.w                 = THE WHEEL RADIUS (the analytic seat's input;
+        //                                            caller passes lpafWheelRadii[i])
+        //   f2 -> mIntegrationVariables.w           (caller passes the .data scalar flt_82FB8BB0)
+        //   f3 -> mSuspensionAndInertiaVariables.y = lStreamedPosition.y + f3  (travel up bound)
+        //   f4 -> mSuspensionAndInertiaVariables.x = lStreamedPosition.y - f4  (travel down bound)
+        //   v1 -> mStreamedPositionPlusTwistAmount.xyz (the w lane is PRESERVED, not written)
+        bool Prepare(Vector3 lStreamedPosition, f32 lfWheelRadius, f32 lfIntegrationSeed,
+                     f32 lfSuspensionTravelUp, f32 lfSuspensionTravelDown,
+                     const TireAttribs* lpTireAttribs);
 
         // @0x825D6D38: re-point the tire attribs + re-derive the suspension lanes WITHOUT clearing
         // the running state (the in-place sibling of Prepare). Bodied in Wheel.cpp.
+        // ⚠️ FLAG (seat wave 2026-08-05): Prepare's lane scatter -- which this body's comments cite
+        // as its own authority -- was proven WRONG against the asm (see Prepare above). This body's
+        // scalar->lane assignment therefore inherits a disproven inference and MUST be re-verified
+        // against @0x825D6D38's own asm before anything consumes it. Not corrected here because no
+        // PC path calls it yet and its asm was not read this wave.
         void SwitchAttribs(Vector3 lStreamedPosition, f32 lfMaxSuspensionHeight,
                            f32 lfMinSuspensionHeight, f32 lfRadiusSeed, f32 lfTwistSeed,
                            const TireAttribs* lpTireAttribs);
