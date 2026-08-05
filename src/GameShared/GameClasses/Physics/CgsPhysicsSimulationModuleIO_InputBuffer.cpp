@@ -52,26 +52,61 @@ namespace PhysicsSimulationIO
         static_assert(offsetof(InputBuffer, mfTimeStep)      == 0x0004, "mfTimeStep @ +0x0004");
         static_assert(offsetof(InputBuffer, muMaxIterations) == 0x0008, "muMaxIterations @ +0x0008");
 
-        //                                                                   X360 offset      attested by
-        static_assert(offsetof(InputBuffer, mAddRigidBodyQueue)           ==     16, "mAddRigidBodyQueue @0x10       (GetAddRigidBodyQueue const @0x8289E408  addi r3,r28,0x10)");
-        static_assert(offsetof(InputBuffer, mUpdateRigidBodyQueue)        ==  38432, "mUpdateRigidBodyQueue @0x9620  (accessor @0x8289E4B0  addis 1 / addi -0x69E0)");
-        static_assert(offsetof(InputBuffer, mApplyForceQueue)             ==  76848, "mApplyForceQueue @0x12C30      (accessor @0x8289E558  addis 1 / addi  0x2C30)");
-        static_assert(offsetof(InputBuffer, mChangeRigidBodyInertiaQueue) ==  84864, "mChangeRigidBodyInertiaQueue @0x14B80 (no const accessor; chain + AppendChangeRigidBodyInertiaQueue @0x825AC2E8)");
-        static_assert(offsetof(InputBuffer, mSetRigidBodySpyQueue)        == 100880, "mSetRigidBodySpyQueue @0x18A10 (accessor @0x8289E600  addis 2 / addi -0x75F0)");
-        static_assert(offsetof(InputBuffer, mRemoveRigidBodyQueue)        == 104096, "mRemoveRigidBodyQueue @0x196A0 (accessor @0x8289E6A8  addis 2 / addi -0x6960 -- export HOLE, headless)");
-        static_assert(offsetof(InputBuffer, mRemoveAllRigidBodiesQueue)   == 107312, "mRemoveAllRigidBodiesQueue @0x1A330 (accessor @0x8289E750  addis 2 / addi -0x5CD0)");
-        static_assert(offsetof(InputBuffer, mAddContactQueue)             == 107344, "mAddContactQueue @0x1A350      (accessor @0x8289E7F8  addis 2 / addi -0x5CB0)");
-        static_assert(offsetof(InputBuffer, mAddJointQueue)               == 189280, "mAddJointQueue @0x2E360        (accessor @0x8289E8A0  addis 3 / addi -0x1CA0)");
-        static_assert(offsetof(InputBuffer, mRemoveJointQueue)            == 196208, "mRemoveJointQueue @0x2FE70     (accessor @0x8289E948  addis 3 / addi -0x190)");
-        static_assert(offsetof(InputBuffer, mUpdateJointFramesQueue)      == 196512, "mUpdateJointFramesQueue @0x2FFA0 (accessor @0x8289E9F0  addis 3 / addi -0x60)");
-        static_assert(offsetof(InputBuffer, mUpdateJointLimitsQueue)      == 199984, "mUpdateJointLimitsQueue @0x30D30 (accessor @0x8289EA98  addis 3 / addi  0xD30)");
-        static_assert(offsetof(InputBuffer, mSetJointSpyQueue)            == 202880, "mSetJointSpyQueue @0x31880     (accessor @0x8289EB40  addis 3 / addi  0x1880)");
-        static_assert(offsetof(InputBuffer, mAddDriveQueue)               == 203472, "mAddDriveQueue @0x31AD0        (accessor @0x8289EBE8  addis 3 / addi  0x1AD0)");
-        static_assert(offsetof(InputBuffer, mRemoveDriveQueue)            == 203632, "mRemoveDriveQueue @0x31B70     (accessor @0x8289EC90  addis 3 / addi  0x1B70)");
-        static_assert(offsetof(InputBuffer, mUpdateDriveFramesQueue)      == 203664, "mUpdateDriveFramesQueue @0x31B90 (accessor @0x8289ED38  addis 3 / addi  0x1B90)");
-        static_assert(offsetof(InputBuffer, mUpdateDriveDynamicsQueue)    == 203760, "mUpdateDriveDynamicsQueue @0x31BF0 (accessor @0x8289EDE0  addis 3 / addi  0x1BF0)");
-        static_assert(offsetof(InputBuffer, mSetDriveSpyQueue)            == 203824, "mSetDriveSpyQueue @0x31C30     (accessor @0x8289EE88  addis 3 / addi  0x1C30 -- export HOLE, headless)");
-        static_assert(offsetof(InputBuffer, mUpdateExternalBodyQueue)     == 203856, "mUpdateExternalBodyQueue @0x31C50 (accessor @0x8289EF30  addis 3 / addi  0x1C50; AppendUpdateExternalBodyQueue @0x825AC208)");
+        // ⚠️⚠️ RE-SPELLED 2026-08-05 (the rigid-body drain group). Until then all nineteen
+        // pins were ABSOLUTE X360 byte offsets, and they held because every event type was
+        // pointer-free -- the host InputBuffer was byte-for-byte the console one. Promoting
+        // InUpdateRigidBody's payload to the real rw::physics::RigidBody (BY VALUE, per its
+        // DWARF) makes queue #2's element legitimately WIDER on x64 (the body's five pointer
+        // lanes widen), which shifts every later member by 200 * (sizeof(RigidBody) - 176).
+        // This is a RUNTIME IO buffer, sizeof-driven end to end -- NOT a serialized record,
+        // so [[serialized slots stay 32-bit]] does not apply and forcing the console offsets
+        // onto the host would be pinning the WRONG layout in place (the exact
+        // console-offset-embed_check trap, in reverse).
+        //
+        // The gate keeps its strength in three parts:
+        //   * the two members BEFORE the widened queue keep their ABSOLUTE X360 pins (their
+        //     host offsets still equal the console's);
+        //   * every element stride is pinned against its own X360 constant in
+        //     CgsPhysicsSimulationIO_Events.h (InUpdateRigidBody's as the adjacency form);
+        //   * the FULL eighteen-seam gapless chain below enforces order + no padding, which
+        //     together with the stride pins reproduces every console constant (quoted in the
+        //     messages) on a 4-byte-pointer target.
+        // ⚠️ The DIVISION OF LABOUR is exact, and was tamper-MEASURED, not assumed: widening
+        // one element (InSetRigidBodySpy 16 -> 32) fails ONLY its Events.h stride pin (35
+        // C2338s) -- the chain re-lays out consistently and stays green, BY DESIGN. What the
+        // chain alone catches is member REORDERING and inserted padding (tamper: swapping two
+        // queue members fails the seams around them). Neither gate subsumes the other.
+        static_assert(offsetof(InputBuffer, mAddRigidBodyQueue)    ==    16, "mAddRigidBodyQueue @0x10      (GetAddRigidBodyQueue const @0x8289E408  addi r3,r28,0x10)");
+        static_assert(offsetof(InputBuffer, mUpdateRigidBodyQueue) == 38432, "mUpdateRigidBodyQueue @0x9620 (accessor @0x8289E4B0  addis 1 / addi -0x69E0; host == console, InAddRigidBody is pointer-free)");
+
+        static_assert(offsetof(InputBuffer, mApplyForceQueue)             == offsetof(InputBuffer, mUpdateRigidBodyQueue)        + sizeof(InputBuffer::mUpdateRigidBodyQueue),        "update-rb -> apply-force gapless        (X360 @0x12C30, accessor @0x8289E558  addis 1 / addi  0x2C30)");
+        static_assert(offsetof(InputBuffer, mChangeRigidBodyInertiaQueue) == offsetof(InputBuffer, mApplyForceQueue)             + sizeof(InputBuffer::mApplyForceQueue),             "apply-force -> change-inertia gapless   (X360 @0x14B80, accessor @0x8259EE80 -- the retracted one)");
+        static_assert(offsetof(InputBuffer, mSetRigidBodySpyQueue)        == offsetof(InputBuffer, mChangeRigidBodyInertiaQueue) + sizeof(InputBuffer::mChangeRigidBodyInertiaQueue), "change-inertia -> set-rb-spy gapless    (X360 @0x18A10, accessor @0x8289E600  addis 2 / addi -0x75F0)");
+        static_assert(offsetof(InputBuffer, mRemoveRigidBodyQueue)        == offsetof(InputBuffer, mSetRigidBodySpyQueue)        + sizeof(InputBuffer::mSetRigidBodySpyQueue),        "set-rb-spy -> remove-rb gapless         (X360 @0x196A0, accessor @0x8289E6A8 -- export HOLE, headless)");
+        static_assert(offsetof(InputBuffer, mRemoveAllRigidBodiesQueue)   == offsetof(InputBuffer, mRemoveRigidBodyQueue)        + sizeof(InputBuffer::mRemoveRigidBodyQueue),        "remove-rb -> remove-all gapless         (X360 @0x1A330, accessor @0x8289E750  addis 2 / addi -0x5CD0)");
+        // ⚠️ The ONE seam with alignment slack, on BOTH targets: the remove-all queue ends
+        // 16-unaligned (its element is a bare u8) and the next queue is 16-aligned. Console:
+        // 107312 + 20 -> pad to 107344. The rounded form is the exact claim; a gapless form
+        // here would be inventing a layout neither target has.
+        static_assert(offsetof(InputBuffer, mAddContactQueue)             == ((offsetof(InputBuffer, mRemoveAllRigidBodiesQueue) + sizeof(InputBuffer::mRemoveAllRigidBodiesQueue) + 15) / 16) * 16,
+                                                                                                                                                                                      "remove-all -> add-contact, padded to 16 (X360 @0x1A350, accessor @0x8289E7F8  addis 2 / addi -0x5CB0)");
+        static_assert(offsetof(InputBuffer, mAddJointQueue)               == offsetof(InputBuffer, mAddContactQueue)             + sizeof(InputBuffer::mAddContactQueue),             "add-contact -> add-joint gapless        (X360 @0x2E360, accessor @0x8289E8A0  addis 3 / addi -0x1CA0)");
+        static_assert(offsetof(InputBuffer, mRemoveJointQueue)            == offsetof(InputBuffer, mAddJointQueue)               + sizeof(InputBuffer::mAddJointQueue),               "add-joint -> remove-joint gapless       (X360 @0x2FE70, accessor @0x8289E948  addis 3 / addi -0x190)");
+        static_assert(offsetof(InputBuffer, mUpdateJointFramesQueue)      == offsetof(InputBuffer, mRemoveJointQueue)            + sizeof(InputBuffer::mRemoveJointQueue),            "remove-joint -> joint-frames gapless    (X360 @0x2FFA0, accessor @0x8289E9F0  addis 3 / addi -0x60)");
+        static_assert(offsetof(InputBuffer, mUpdateJointLimitsQueue)      == offsetof(InputBuffer, mUpdateJointFramesQueue)      + sizeof(InputBuffer::mUpdateJointFramesQueue),      "joint-frames -> joint-limits gapless    (X360 @0x30D30, accessor @0x8289EA98  addis 3 / addi  0xD30)");
+        static_assert(offsetof(InputBuffer, mSetJointSpyQueue)            == offsetof(InputBuffer, mUpdateJointLimitsQueue)      + sizeof(InputBuffer::mUpdateJointLimitsQueue),      "joint-limits -> joint-spy gapless       (X360 @0x31880, accessor @0x8289EB40  addis 3 / addi  0x1880)");
+        static_assert(offsetof(InputBuffer, mAddDriveQueue)               == offsetof(InputBuffer, mSetJointSpyQueue)            + sizeof(InputBuffer::mSetJointSpyQueue),            "joint-spy -> add-drive gapless          (X360 @0x31AD0, accessor @0x8289EBE8  addis 3 / addi  0x1AD0)");
+        static_assert(offsetof(InputBuffer, mRemoveDriveQueue)            == offsetof(InputBuffer, mAddDriveQueue)               + sizeof(InputBuffer::mAddDriveQueue),               "add-drive -> remove-drive gapless       (X360 @0x31B70, accessor @0x8289EC90  addis 3 / addi  0x1B70)");
+        static_assert(offsetof(InputBuffer, mUpdateDriveFramesQueue)      == offsetof(InputBuffer, mRemoveDriveQueue)            + sizeof(InputBuffer::mRemoveDriveQueue),            "remove-drive -> drive-frames gapless    (X360 @0x31B90, accessor @0x8289ED38  addis 3 / addi  0x1B90)");
+        static_assert(offsetof(InputBuffer, mUpdateDriveDynamicsQueue)    == offsetof(InputBuffer, mUpdateDriveFramesQueue)      + sizeof(InputBuffer::mUpdateDriveFramesQueue),      "drive-frames -> drive-dynamics gapless  (X360 @0x31BF0, accessor @0x8289EDE0  addis 3 / addi  0x1BF0)");
+        static_assert(offsetof(InputBuffer, mSetDriveSpyQueue)            == offsetof(InputBuffer, mUpdateDriveDynamicsQueue)    + sizeof(InputBuffer::mUpdateDriveDynamicsQueue),    "drive-dynamics -> drive-spy gapless     (X360 @0x31C30, accessor @0x8289EE88 -- export HOLE, headless)");
+        static_assert(offsetof(InputBuffer, mUpdateExternalBodyQueue)     == offsetof(InputBuffer, mSetDriveSpyQueue)            + sizeof(InputBuffer::mSetDriveSpyQueue),            "drive-spy -> external-body gapless      (X360 @0x31C50, accessor @0x8289EF30  addis 3 / addi  0x1C50)");
+
+        // The widened queue itself, stated in the only form that is true on both targets:
+        // 16-byte queue header + 200 elements of (16-byte id slot + the RigidBody). On the
+        // console that evaluates to 16 + 200*192 == 38416 (the 0x9620->0x12C30 gap).
+        static_assert(sizeof(InputBuffer::mUpdateRigidBodyQueue) == 16 + 200 * (16 + sizeof(rw::physics::RigidBody)),
+                      "update-rb queue = 16 + 200*(16 + sizeof(RigidBody))  (X360: 16 + 200*192)");
 
         // ADJACENCY, spelled as `sizeof(InputBuffer::member)` and NOT as `sizeof(SomeQueueType)`.
         // The difference is the whole point: a type-spelled gate is invariant under re-typing the
@@ -216,5 +251,13 @@ namespace PhysicsSimulationIO
 
     const InputBuffer::InUpdateExternalBodyQueue* InputBuffer::GetUpdateExternalBodyQueue() const
     { CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n"); return &mUpdateExternalBodyQueue; }
+
+    // ⭐ 2026-08-05 (the rigid-body drain group): the NINETEENTH const accessor, whose
+    // committed nonexistence claim was retracted -- see the header. Its body @0x8259EE80 is
+    // the same 42-instruction shape as the eighteen above (read-lock guard, this header's
+    // line 914, then `addis r3,r28,1 / addi r3,r3,0x4B80` == &mChangeRigidBodyInertiaQueue);
+    // it merely was not EMITTED inside the uniform 0x8289E408+k*0xA8 block.
+    const InputBuffer::InChangeRigidBodyInertiaQueue* InputBuffer::GetChangeRigidBodyInertiaQueue() const
+    { CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n"); return &mChangeRigidBodyInertiaQueue; }
 }
 }

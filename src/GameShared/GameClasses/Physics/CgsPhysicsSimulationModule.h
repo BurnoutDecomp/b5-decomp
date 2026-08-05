@@ -268,8 +268,18 @@ namespace CgsPhysics
         // DWARF METHOD LIST.
         //
         // Still deliberately absent, because nothing in scope calls them and no body is decoded:
-        // GetIndexFromJoint (h:156), SetTimeStep (h:161), GetGameID (h:165). Declaring them
-        // without bodies would trade one hollow shell for another.
+        // GetIndexFromJoint (h:156), SetTimeStep (h:161). Declaring them without bodies would
+        // trade one hollow shell for another. (GetGameID left this list on 2026-08-05 -- see
+        // its declaration below; the rigid-body remove drain decoded its inlined body.)
+
+        // DWARF h:165. ⭐ ADDED 2026-08-05 (the rigid-body drain group): a decoded body and a
+        // caller now exist -- ProcessRemoveRigidBodyQueue's "Removing jointed body" diagnostic
+        // inlines it at 0x828A30B0..0x828A3108 as the checked maGameIDs[liIndex] read behind
+        // asserts h:612 (`liIndex < knSize`, `cmpwi r24,0x24`) / h:613 (`mabUsedSlot[liIndex]`,
+        // `lbz 0x15F0`). ⭐ Those two lines complete the accessor-assert arithmetic this class
+        // already recorded -- 612/613, then GetJoint 621/622, GetJointFrames 630/631,
+        // GetJointLimits 639/640: four checked accessors, nine header lines apart each.
+        JointId GetGameID(s32 liIndex);
 
         // DWARF h:144. X360 @0x8289D3E0 (98 instructions), sole caller ProcessAddJointQueue.
         // ⭐ NOT the DriveData::AddDrive shape, despite the symmetry everywhere else: this one
@@ -498,12 +508,22 @@ namespace CgsPhysics
         bool IsSlotUsed(s32 liIndex) const;
         void SetFree(s32 liIndex);
 
-        // DWARF h:96. X360 @0x828A0100 (140 instructions) -- the busiest member of this class,
-        // with twelve call sites across the input drains. Linear scan of maGameIDs[] for the
-        // handle; -1 on a miss. See the .cpp for the three diagnostics and for why there is no
-        // used-slot test (this class has no mabUsedSlot[]; a free slot holds the sentinel).
-        // ⚠️ Still absent, deliberately, because nothing in scope calls them and no body is
-        // decoded: RemoveBody (DWARF h:80), GetIndexFromRigidBody (h:100), SetTimeStep (h:104).
+        // DWARF h:82. X360 @0x828A0100 (140 instructions) -- the busiest member of this class,
+        // with twelve call sites across the input drains (the t150 dump's xref set reproduces
+        // the twelve exactly). Linear scan of maGameIDs[] for the handle; -1 on a miss. See the
+        // .cpp for the three diagnostics and for why there is no used-slot test (this class has
+        // no mabUsedSlot[]; a free slot holds the sentinel).
+        //
+        // ⚠️ Still absent, deliberately: RemoveBody (DWARF h:78), GetIndexFromRigidBody (h:86),
+        // SetTimeStep (h:92) -- nothing in scope calls them and no body is decoded. ⭐ Re-proved
+        // 2026-08-05 against the asm, not just re-cited: ProcessRemoveRigidBodyQueue and
+        // ProcessRemoveAllRigidBodiesQueue DO NOT call RemoveBody -- both inline SetFree (the
+        // .cpp:2504 assert + the sentinel store) after Simulation::RemoveRigidBody, so the
+        // remove drains close with zero new RigidBodyData surface. ⚠️ The line numbers this
+        // note used to carry (h:80/h:100/h:104, and h:96 above) were ALL drifted; the set here
+        // is re-read from the DWARF dump directly (RemoveBody :78, GetIndexFromGameID :82,
+        // GetIndexFromRigidBody :86, SetTimeStep :92, GetGameID :96, GetRigidBody :100,
+        // GetInertia :104, SetFree :108, IsSlotUsed :113).
         s32 GetIndexFromGameID(RigidBodyId lId);
 
         // Offsets below are X360-ABI (4-byte pointer) byte offsets; on the x64
@@ -775,6 +795,30 @@ namespace CgsPhysics
         void ProcessUpdateJointFramesQueue(const PhysicsSimulationIO::InputBuffer* lpInput);   // @0x8289F2F0  149
         void ProcessUpdateJointLimitsQueue(const PhysicsSimulationIO::InputBuffer* lpInput);   // @0x8289F548  136
         void ProcessSetJointSpyQueue(const PhysicsSimulationIO::InputBuffer* lpInput);         // @0x8289F768  129
+
+        // ---- THE RIGID-BODY GROUP -- seven more of the nineteen (2026-08-05) ---------------
+        // Landed as the complete rigid-body-side set, same rule as the two groups above.
+        // ⚠️ NOTHING CALLS THEM YET -- ProcessInputBuffers stays unbodied until all nineteen
+        // exist; 18 of 19 are bodied after this group (ProcessAddContactQueue remains).
+        // Shared skeleton as the drive/joint groups (length RE-READ per pass; miss on
+        // GetIndexFromGameID(id) == -1). ⚠️ THE MISS POLICY IS PER-DRAIN, READ OFF THE ASM,
+        // NOT INHERITED: the five update-side drains skip a miss SILENTLY (drive-style);
+        // ProcessRemoveRigidBodyQueue asserts on a miss ONLY when the event's
+        // mbFailIfRigidBodyNotFound is set; ProcessRemoveAllRigidBodiesQueue has no id at all
+        // (it sweeps by owner byte).
+        void ProcessRemoveRigidBodyQueue(const PhysicsSimulationIO::InputBuffer* lpInput);      // @0x828A2BD0  546
+        void ProcessRemoveAllRigidBodiesQueue(const PhysicsSimulationIO::InputBuffer* lpInput); // @0x8289F1D8   69
+        // ⚠️ DWARF ACCESSIBILITY: this ONE drain is PUBLIC in the DWARF (declared alongside
+        // GetDefaultParams / AddActiveBodiesToOutputQueue, before the private block that holds
+        // its eighteen siblings) -- some out-of-module caller existed on the console. Kept
+        // public accordingly; the specifier flips back right below it.
+    public:
+        void ProcessUpdateExternalBodyQueue(const PhysicsSimulationIO::InputBuffer* lpInput);   // @0x828A3B30  368
+    private:
+        void ProcessUpdateRigidBodyQueue(const PhysicsSimulationIO::InputBuffer* lpInput);      // @0x828A3A08   74
+        void ProcessApplyForceQueue(const PhysicsSimulationIO::InputBuffer* lpInput);           // @0x828A6B80   82
+        void ProcessSetRigidBodySpyQueue(const PhysicsSimulationIO::InputBuffer* lpInput);      // @0x828A49A8   51
+        void ProcessChangeRigidBodyInertiaQueue(const PhysicsSimulationIO::InputBuffer* lpInput); // @0x828A4A78 143
         // ---------------------------------------------------------------------------------
 
         // DWARF h:532..:536. Static, so they take no space.

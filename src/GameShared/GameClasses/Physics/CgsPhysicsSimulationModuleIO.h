@@ -166,12 +166,20 @@ namespace PhysicsSimulationIO
         const InUpdateDriveDynamicsQueue*    GetUpdateDriveDynamicsQueue()    const;  // @0x8289EDE0
         const InSetDriveSpyQueue*            GetSetDriveSpyQueue()            const;  // @0x8289EE88  ⚠️ export HOLE
         const InUpdateExternalBodyQueue*     GetUpdateExternalBodyQueue()     const;  // @0x8289EF30
-        // ⚠️ NOT declared: a const GetChangeRigidBodyInertiaQueue(). The DWARF lists one
-        // (:496) but there is NO such body in the accessor block -- the block runs
-        // ApplyForce(0x8289E558) -> SetRigidBodySpy(0x8289E600) with the exact 0xA8 spacing and
-        // no room between them, and ProcessChangeRigidBodyInertiaQueue @0x828A4A78 reaches its
-        // queue without calling one. Declaring it would be inventing a symbol the image does
-        // not contain. Left out until something proves otherwise.
+
+        // ⛔⛔ RETRACTED 2026-08-05 (the rigid-body drain group). The note that stood here said
+        // a const GetChangeRigidBodyInertiaQueue() does NOT exist in the image ("no room in
+        // the accessor block ... the drain reaches its queue without calling one"). BOTH
+        // halves were false, and the second was checkable all along: ProcessChangeRigidBody-
+        // InertiaQueue @0x828A4A90 opens with `bl 0x8259EE80`, and THAT function is the
+        // accessor -- the identical 42-instruction read-lock body ("Not locked for reading\n",
+        // this header's line 914) ending `addis r3,r28,1 / addi r3,r3,0x4B80` == +84864 ==
+        // mChangeRigidBodyInertiaQueue, exactly the offset pinned in the member table. It
+        // simply does not LIVE in the uniform 0x8289E408+k*0xA8 block (the compiler emitted it
+        // at 0x8259EE80, next to GetTimeStep/SetTimeStep); "not in the block" was read as
+        // "not in the image". The NINTH false nonexistence claim in this subsystem --
+        // re-verify every remaining one before acting on it.
+        const InChangeRigidBodyInertiaQueue* GetChangeRigidBodyInertiaQueue() const;  // @0x8259EE80 (NOT in the k*0xA8 block)
         // -----------------------------------------------------------------------------------
 
         // AppendXxxQueue<N> -- bulk-append the caller's source EventQueue<Elem,N> onto the matching

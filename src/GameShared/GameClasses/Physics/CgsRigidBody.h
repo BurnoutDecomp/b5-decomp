@@ -26,6 +26,7 @@ namespace CgsPhysics
     public:
         inline void                      SetEntityId( CgsSceneManager::EntityId lEntityId );
         inline CgsSceneManager::EntityId GetEntityId() const;
+        inline u8                        GetEntityIDOwner() const;
         inline u16                       GetIndex() const;
         inline void                      SetInvalid();
         inline bool                      IsInvalid() const;
@@ -52,6 +53,18 @@ namespace CgsPhysics
     RigidBodyId::GetEntityId() const
     {
         return (CgsSceneManager::EntityId)(u32)( mId >> 32 );
+    }
+
+    // DWARF CgsRigidBody.h:76 `uint8_t GetEntityIDOwner() const`. ⭐ ADDITIVE GROW 2026-08-05
+    // (the rigid-body drain group): now WITNESSED in this build -- PhysicsSimulationModule::
+    // ProcessRemoveAllRigidBodiesQueue @0x8289F274 inlines it as `srdi r10,r10,32` +
+    // `srwi r10,r10,24` == bits 56..63 of the handle == the owner byte of the embedded
+    // EntityId (CgsEntityId.h KU_OWNER_BASE == 24 on the high dword). Spelled through the
+    // two committed accessors so the bit arithmetic lives in ONE place each.
+    inline u8
+    RigidBodyId::GetEntityIDOwner() const
+    {
+        return GetEntityId().GetOwner();
     }
 
     inline u16

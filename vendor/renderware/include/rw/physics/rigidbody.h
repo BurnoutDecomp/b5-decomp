@@ -46,8 +46,10 @@
 //
 // SCOPE: the read accessors BrnPhysics::ExternallySimulatedBody::ReadFromRenderware and
 // ExternalPhysicsBody::ReadPropertiesFromRenderware use, plus the two methods the X360
-// binary carries as their own TU (operator=, DynamicUpdate). The rest of the SDK method set
-// (Set*, Add*, InertiaUpdate, ...) is still intentionally NOT declared here.
+// binary carries as their own TU (operator=, DynamicUpdate), plus every mutator with a
+// witnessed console inline (the ProcessAddRigidBodyQueue set from task #140, and
+// SetCoolDown / AddForce / SetTransform from the 2026-08-05 rigid-body drain group).
+// SDK methods with NO witnessed inline in this image remain intentionally NOT declared.
 
 #include "types.hpp"             // u32 / f32
 #include "rw/math/vpu/types.h"   // rw::math::vpu::{Vector3, Vector4, Matrix44Affine}
@@ -194,6 +196,40 @@ namespace physics
 
         void SetState(BodyState leState) { mState = leState; }        // +0x8C
         void SetTag(u32 luTag)           { mTag   = luTag;   }        // +0x6C
+
+        // DWARF rigidbody.h:209. ⭐ ADDITIVE GROW 2026-08-05 (the rigid-body drain group):
+        // witnessed as the bare `stw 0, 0xAC(body)` all four update-side drains emit
+        // (ProcessUpdateExternalBodyQueue @0x828A40B4, ProcessUpdateRigidBodyQueue
+        // @0x828A3AFC, ProcessApplyForceQueue @0x828A6C84/0x828A6C94, and the committed
+        // Simulation::ActivateRigidBody's `mCool = m_CoolDown - 1u` is the same slot).
+        void SetCoolDown(u32 luCool)     { mCool  = luCool;  }        // +0xAC
+
+        // DWARF rigidbody.h:221 `void AddForce(const Vector3&, InputSpace)`. NO OWN X360
+        // SYMBOL; sole witness is the inline in ProcessApplyForceQueue @0x828A6C1C..0x828A6C7C,
+        // whose call site passes WORLD_SPACE and where the console folded the space branch
+        // away. So ONLY the world-space leg is attested:
+        //     mForce.xyz += lrForce * mInvm
+        // (`vmulfp128 v0, v0, {mInvm splat}` then three scalar `fadds` into +0x90/+0x94/+0x98).
+        // ⚠️ The BODY_SPACE leg (a basis rotation before the accumulate) has NO witness in this
+        // image and is deliberately NOT fabricated; the parameter is kept for the DWARF
+        // signature and every in-tree caller passes WORLD_SPACE.
+        // ⚠️ Yes, the accumulate is PRE-SCALED by the inverse mass -- mForce holds an
+        // ACCELERATION-dimensioned sum here (consistent with ResetForces seeding it with the
+        // simulation's gravity vector, -600 y, which DynamicUpdate integrates as-is).
+        void AddForce(const rw::math::vpu::Vector3& lrForce, InputSpace leSpace)
+        {
+            (void)leSpace;   // only WORLD_SPACE witnessed -- see the banner above
+            mForce.x += lrForce.x * mInvm;
+            mForce.y += lrForce.y * mInvm;
+            mForce.z += lrForce.z * mInvm;
+        }
+
+        // DWARF rigidbody.h:200 (the Matrix44Affine overload; the :203 QuatPos overload has
+        // no witness in this build and is not declared). NO OWN X360 SYMBOL -- inlined into
+        // ProcessUpdateExternalBodyQueue @0x828A3E28..0x828A3FAC, which is the transcription
+        // basis. Bodied out-of-line in src/vendor/renderware/physics/RigidBody.cpp (it needs
+        // rw::math::vpu::QuaternionFromMatrix33, whose current home is JointFrames.hpp).
+        void SetTransform(const rw::math::vpu::Matrix44Affine& lrTransform);
 
         void SetSpy(bool lbSpy)
         {
