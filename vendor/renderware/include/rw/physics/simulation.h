@@ -57,6 +57,8 @@ namespace physics
 // symbol which looks identical in the log.
 class Joint;
 class Drive;
+struct Contact;   // contact.h -- class-key `struct` there; must match here (same MSVC
+                  // mangling rule as the Joint/Drive note above)
 
 // simulation.h:202 (DWARF). The committed header's guess ("bit0 joints, bit1 drives,
 // bit2 contacts") was right; these are the real names.
@@ -145,6 +147,14 @@ public:
     void ActivateRigidBody(RigidBody* lpBody);   // @ 0x82BC29E8  BODIED
     void FreezeRigidBody(RigidBody* lpBody);     // @ 0x82BC2A58  BODIED
     void RemoveRigidBody(RigidBody* lpBody);     // @ 0x82BC2950  BODIED
+
+    // GetFreeContact (DWARF simulation.h:475) -- bump-allocate the next 256-byte contact
+    // record out of m_CJ_Stack, NULL when m_CT_Count reaches m_CT_Max. The console inlines it
+    // into ProcessAddContactQueue @0x828A36B0 (`cmplw 0x64 vs 0x7C` / `slwi count,8` / `stw
+    // count+1,0x64`); defined inline in contact.h, where Contact is complete. The DWARF's
+    // GetFreeContactBatch (:479) / GetContact (:483) siblings have no witnessed body and are
+    // not declared.
+    Contact* GetFreeContact();
 
     // -------------------------------------------------------------------------------------
     // AddRigidBody @ 0x82BC3318 (669 instructions) -- **BODIED 2026-08-04 (task #140)**,
@@ -243,8 +253,13 @@ private:
     // accumulators that DynamicUpdate consumes and zeroes every tick, not a pose.)
     void*      m_RF_Stack;           // X360 +0x0C
 
-    // The three jacobian scratch arrays, KU_JACOBIAN_STRIDE apart (:646..648).
-    void*      m_CJ_Stack;           // X360 +0x10  contacts
+    // The three jacobian scratch arrays (:646..648). ⚠️ CORRECTION 2026-08-05: the stride
+    // note that stood here ("KU_JACOBIAN_STRIDE apart") is true of the JOINT and DRIVE arrays
+    // only. m_CJ_Stack is an array of 256-byte rw::physics::Contact records -- GetFreeContact
+    // walks it at `slwi 8` (== sizeof(Contact), unchanged on the host: no pointer lanes) and
+    // ContactBatchBuild at `addi r11, r11, 256`; the workspace sizer's `liMaxContacts << 8`
+    // term agrees. 384 would overlap nothing today but would mis-seat every record.
+    void*      m_CJ_Stack;           // X360 +0x10  contacts (stride sizeof(Contact) == 256)
     void*      m_JJ_Stack;           // X360 +0x14  joints
     void*      m_DJ_Stack;           // X360 +0x18  drives
 

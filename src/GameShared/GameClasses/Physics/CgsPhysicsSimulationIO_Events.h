@@ -112,9 +112,35 @@ namespace PhysicsSimulationIO
     struct Event {};
 
     // Add a potential narrow-phase contact pair. Stride 80 bytes (X360-attested, see above).
+    //
+    // ⭐ FIELDS RECOVERED 2026-08-05 (the contact-drain close). The "not recovered (no
+    // DWARF/source)" line that stood here was the same false claim retracted in this file's
+    // banner: DWARF CgsPhysicsSimulationModuleIO.h:200..:208 names all nine members. TWO
+    // INDEPENDENT DERIVATIONS AGREE: the consumer ProcessAddContactQueue @0x828A3458 does
+    // `ld 0x30/0x38(event)` into two GetIndexFromGameID calls, three `lvx128` at
+    // event+0/+0x10/+0x20, and `lfs 0x40/0x44/0x48(event)` for the frictions/restitution;
+    // the DWARF field ORDER lands on exactly those offsets and the total falls out at
+    // 0x4C + 4 -> 80, the attested stride.
+    //
+    // ⚠️ muTag (+0x4C) IS NEVER READ BY THE DRAIN -- it stores its own loop index into
+    // Contact::mTag instead (verified: no load of 0x4C(event) anywhere in @0x828A3458).
+    // The field itself is real (DWARF :208, and producers write it -- e.g.
+    // BridgeSimpleTrafficWithWorldContactsToSimulation @0x825A5618 stores
+    // `eventIndex | 0xA000000`); only this consumer ignores it.
+    //
+    // ⚠️ The two ids stay u64 rather than RigidBodyId for the same documented reason as
+    // InAddDrive/InAddJoint -- a ~30-TU type change that wants its own build + boot test.
     struct alignas(16) InAddPotentialContact : public Event
     {
-        u8 macOpaquePayload[80];  // internal layout not recovered (no DWARF/source)
+        rw::math::vpu::Vector3 mPointOnA;        // @+0x00  DWARF :200 -- contact point on A
+        rw::math::vpu::Vector3 mPointOnB;        // @+0x10  DWARF :201 -- contact point on B
+        rw::math::vpu::Vector3 mNormal;          // @+0x20  DWARF :202
+        u64                    mIDA;             // @+0x30  DWARF :203 (a CgsPhysics::RigidBodyId handle)
+        u64                    mIDB;             // @+0x38  DWARF :204
+        f32                    mStaticFriction;  // @+0x40  DWARF :205 -> Contact::mMus
+        f32                    mDynamicFriction; // @+0x44  DWARF :206 -> Contact::mMud
+        f32                    mRestitution;     // @+0x48  DWARF :207 -> Contact::mRes
+        u32                    muTag;            // @+0x4C  DWARF :208 -- see the banner
     };
 
     // Add a constraint joint. Stride 192 bytes (X360-attested, see above).
@@ -776,6 +802,18 @@ namespace PhysicsSimulationIO
 
     static_assert(offsetof(InUpdateRigidBody, mID)        ==  0, "InUpdateRigidBody::mID @+0x00        (drain @0x828A3A08 `ld 0(event)`)");
     static_assert(offsetof(InUpdateRigidBody, mRigidBody) == 16, "InUpdateRigidBody::mRigidBody @+0x10 (drain `addi r4,r30,0x10` -> RigidBody::operator=; state cmp `lwz 0x9C(event)` == +0x10 + mState 0x8C)");
+
+    // ---- 2026-08-05: the contact event promoted (drain 19 close) ---------------------------
+    // Same discipline; every constant is ProcessAddContactQueue @0x828A3458's own load offset.
+    static_assert(offsetof(InAddPotentialContact, mPointOnA)        ==  0, "InAddPotentialContact::mPointOnA @+0x00        (drain `lvx128 v0,r0,r8` -> Contact::mPosA row)");
+    static_assert(offsetof(InAddPotentialContact, mPointOnB)        == 16, "InAddPotentialContact::mPointOnB @+0x10        (drain `lvx128 v12,r8,0x10` -> Contact::mPosB row)");
+    static_assert(offsetof(InAddPotentialContact, mNormal)          == 32, "InAddPotentialContact::mNormal @+0x20          (drain `lvx128 v0,r8,0x20` -> the frame build)");
+    static_assert(offsetof(InAddPotentialContact, mIDA)             == 48, "InAddPotentialContact::mIDA @+0x30             (drain `ld 0x30(event)` -> GetIndexFromGameID)");
+    static_assert(offsetof(InAddPotentialContact, mIDB)             == 56, "InAddPotentialContact::mIDB @+0x38             (drain `ld 0x38(event)` -> GetIndexFromGameID)");
+    static_assert(offsetof(InAddPotentialContact, mStaticFriction)  == 64, "InAddPotentialContact::mStaticFriction @+0x40  (drain `lfs 0x40(event)` -> Contact::mMus)");
+    static_assert(offsetof(InAddPotentialContact, mDynamicFriction) == 68, "InAddPotentialContact::mDynamicFriction @+0x44 (drain `lfs 0x44(event)` -> Contact::mMud)");
+    static_assert(offsetof(InAddPotentialContact, mRestitution)     == 72, "InAddPotentialContact::mRestitution @+0x48     (drain `lfs 0x48(event)` -> Contact::mRes)");
+    static_assert(offsetof(InAddPotentialContact, muTag)            == 76, "InAddPotentialContact::muTag @+0x4C            (NOT read by the drain -- pinned off the producer @0x825A5618 `stw tag,0x12C(sp)` in its event image)");
     // =====================================================================================
 }
 }

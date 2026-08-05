@@ -13,6 +13,7 @@
 #include "rw/physics/simulation.h"              // rw::physics::Simulation + SpyingFlag
 #include "rw/physics/SimulationWorkspace.h"     // rw::physics::SimulationWorkspace
 #include "rw/physics/pairset.h"                 // rw::physics::PairSet
+#include "rw/physics/contact.h"                 // rw::physics::Contact -- drain 19 (2026-08-05)
 #include "vendor/renderware/physics/Drive.hpp"   // rw::physics::Drive -- the drive drains (task #143)
 #include "vendor/renderware/physics/Joint.hpp"   // rw::physics::Joint -- the joint drains (task #144)
 // The three IsValid overloads ProcessAddJointQueue's eleven inlined tripwires need, one per
@@ -1806,10 +1807,11 @@ namespace CgsPhysics
     //
     // Landed together as the complete rigid-body side, same rule as the drive (#143) and
     // joint (#144) groups: a partly-drained subsystem is the [[silent-drop-stubs]] shape.
-    // 18 of 19 are bodied after this group -- only ProcessAddContactQueue remains, and
-    // ProcessInputBuffers stays unbodied until it lands.
+    // (The "18 of 19 / only ProcessAddContactQueue remains" note that stood here is retired:
+    // drain 19 and ProcessInputBuffers landed later the same day, at the end of this file.)
     //
-    // ⚠️ NOTHING CALLS ANY OF THEM YET.
+    // ⚠️ NOTHING CALLS ANY OF THEM YET -- ProcessInputBuffers exists now but its own two
+    // callers (the Update / ProcessInput virtuals) do not.
     //
     // ⭐ THE MISS POLICY IS PER-DRAIN, READ OFF EACH BODY'S OWN ASM, NOT INHERITED: the five
     // update-side drains skip a GetIndexFromGameID miss SILENTLY (the drive shape, not the
@@ -2224,5 +2226,143 @@ namespace CgsPhysics
                 lpInertia->SetMaxLinearVelocity(lrEvent.mInertia.GetMaxLinearVelocity());   // e+0x28 -> +0x18
             }
         }
+    }
+
+    // =====================================================================================
+    // DRAIN 19 -- THE CONTACT DRAIN (2026-08-05). All nineteen input drains now exist.
+    // =====================================================================================
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessAddContactQueue @ 0x828A3458   (363 instructions)
+    //
+    // Per event: resolve both body ids, allocate a contact record off the simulation's
+    // per-frame budget, fill it (the inlined Contact::GenerateFromCollision -- the ~200-insn
+    // VMX block, transcribed in vendor's contact.h), and register the (idxA, idxB) pair in
+    // the contact PairSet, de-duplicated ONLY against the immediately previous event's pair.
+    //
+    // ⭐ THE BLOCKER THAT KEPT THIS DRAIN UNWRITTEN FOR A WAVE IS CLOSED, from the consumer:
+    // Contact::mBodyA/mBodyB, which on the console receive the event's mPointOnA/mPointOnB
+    // w lanes via the full-row stvx, are DEAD CARGO -- ContactBatchBuild @0x82BC14C0
+    // overwrites both from the snapshot mCom.w (== RigidBody::mId) before any read, and no
+    // producer mints them (see contact.h's banner for all three witnesses).
+    //
+    // ⚠️ MISS POLICY: either id unresolved -> skip SILENTLY (0x828A3580/0x828A3588) -- the
+    // drive shape, no assert. The three asserts it does have are all fire-and-continue:
+    //   * NEITHER body ACTIVE (streamed "Rigid Body A: <idA> Rigid Body B: <idB>") .cpp:1302
+    //     -- the streamed values are the raw event ids (`ld 0x30/0x38`), no checked lookups,
+    //     so the plain-literal convention drops nothing;
+    //   * lpBodyB == NULL                                                          .cpp:1307
+    //   * lpContact == NULL (the frame's contact budget m_CT_Max is spent)         .cpp:1312
+    //     -- and the console then generates into the NULL record regardless (fire-and-
+    //     continue straight into the fill at 0x828A3708), exactly as transcribed: not
+    //     "fixed", same rule as ProcessRemoveRigidBodyQueue's -1 fall-through.
+    //
+    // ⚠️ Contact::mTag gets THE LOOP INDEX, not the event's muTag -- the event field is never
+    // read by this drain (verified: no load of 0x4C(event) in the body; the producers do
+    // write it). The double store the asm shows at +0x5C (restore-then-overwrite) is the
+    // dead prelude artifact documented on GenerateFromCollision.
+    //
+    // ⚠️ ACTIVE-BODY GATE ASYMMETRY, real, not harmonised: the assert fires only when
+    // NEITHER body is ACTIVE, but the tangent frame's r-vector is chosen by BODY A's ACTIVE
+    // bit alone (the vsel mask at 0x828A37B4 splats bodyA's state word only).
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessAddContactQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InAddContactQueue* const lpQueue =
+            lpInput->GetAddContactQueue();                                  // `bl sub_8289E7F8`
+
+        // The one-deep pair-dedup state (var_110/var_10C, init -1 -- 0x828A3488/0x828A3490).
+        s32 liPrevIndexA = -1;
+        s32 liPrevIndexB = -1;
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)   // length RE-READ every pass (0x828A39EC)
+        {
+            const PhysicsSimulationIO::InAddPotentialContact& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liIndexA = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mIDA });   // `ld 0x30(event)`
+            const s32 liIndexB = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mIDB });   // `ld 0x38(event)`
+            if (liIndexA == -1 || liIndexB == -1)
+            {
+                continue;   // SILENT -- 0x828A3580 / 0x828A3588, no assert on this path
+            }
+
+            // Inlined checked accessors (h:594/h:595 fire from this frame on the console).
+            rw_physics::RigidBody* const lpBodyA = mBodyData.GetRigidBody(liIndexA);
+            rw_physics::RigidBody* const lpBodyB = mBodyData.GetRigidBody(liIndexB);
+
+            // Both bodies asleep -> the streamed diagnostic (its two values are the raw event
+            // ids, already in lrEvent -- this file's standing plain-literal convention).
+            const bool lbEitherActive =
+                (lpBodyA->GetState() & rw_physics::ACTIVE_BODY) != 0 ||
+                (lpBodyB->GetState() & rw_physics::ACTIVE_BODY) != 0;
+            if (!lbEitherActive)
+            {
+                CGS_ASSERT(lbEitherActive, "Rigid Body A: ");   // .cpp:1302 -- fire-and-continue
+            }
+            CGS_ASSERT(lpBodyB != NULL, "lpBodyB");             // .cpp:1307 -- fire-and-continue
+
+            // Bump-allocate the record (the inlined Simulation::GetFreeContact, 0x828A36B0).
+            rw_physics::Contact* const lpContact = mpSimulation->GetFreeContact();
+            CGS_ASSERT(lpContact != NULL, "lpContact");         // .cpp:1312 -- fire-and-continue,
+                                                                // straight into the fill, as shipped
+
+            // The ~200-instruction VMX fill, 0x828A3708..0x828A39B4 -- transcribed as the
+            // 9-argument GenerateFromCollision the console inlined (DWARF contact.h:207).
+            // ⚠️ the tag argument is the LOOP INDEX (`lwz r28, var_104` at 0x828A3938).
+            lpContact->GenerateFromCollision(lpBodyA, lpBodyB,
+                                             lrEvent.mPointOnA, lrEvent.mPointOnB, lrEvent.mNormal,
+                                             lrEvent.mStaticFriction, lrEvent.mDynamicFriction,
+                                             lrEvent.mRestitution, static_cast<u32>(li));
+
+            // Register the pair -- skipped ONLY when both indices match the previous event's
+            // (0x828A39B8..0x828A39C4); the memo updates only when LinkParts runs.
+            if (liIndexA != liPrevIndexA || liIndexB != liPrevIndexB)
+            {
+                mpContactPairs->LinkParts(liIndexA, liIndexB, 0);   // `bl 0x82BC6F18`, liData = 0
+                liPrevIndexA = liIndexA;
+                liPrevIndexB = liIndexB;
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessInputBuffers @ 0x828A73C0   (68 instructions)
+    //
+    // The pure dispatcher: NINETEEN drain calls, each `(this, lpInput)`, no branches, no
+    // return value. Bodied ONLY NOW because the nineteenth drain exists -- the standing
+    // "stays unbodied until all nineteen" rule is satisfied, not bent (a dispatcher over a
+    // partial set silently drops whole queues, the [[silent-drop-stubs]] shape).
+    //
+    // ⭐ THE ORDER IS LOAD-BEARING AND IS THE FUNCTION'S OWN: removes before adds; bodies,
+    // then joints, then drives. Re-derived from the nineteen `bl` targets twice (task #142,
+    // and again from the headless dump on 2026-08-05) and reproduced call-for-call; it is
+    // recorded in no other source. Do not re-order to "group" the drains.
+    //
+    // ⚠️ NO CALLER YET: the console reaches this only from the Update / ProcessInput
+    // virtuals (@0x828A74D0 / @0x828A76D0), neither of which is bodied -- declaring either
+    // without its body would materialise the vtable into LNK2019 (see the header's slot-16
+    // note). /OPT:REF strips this whole chain until they land; nothing new executes.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessInputBuffers(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        ProcessAddContactQueue(lpInput);               // bl 0x828A3458
+        ProcessRemoveDriveQueue(lpInput);              // bl 0x8289FF98
+        ProcessRemoveJointQueue(lpInput);              // bl 0x8289F970
+        ProcessRemoveRigidBodyQueue(lpInput);          // bl 0x828A2BD0
+        ProcessRemoveAllRigidBodiesQueue(lpInput);     // bl 0x8289F1D8
+        ProcessAddRigidBodyQueue(lpInput);             // bl 0x828A2708
+        ProcessUpdateExternalBodyQueue(lpInput);       // bl 0x828A3B30
+        ProcessUpdateRigidBodyQueue(lpInput);          // bl 0x828A3A08
+        ProcessApplyForceQueue(lpInput);               // bl 0x828A6B80
+        ProcessSetRigidBodySpyQueue(lpInput);          // bl 0x828A49A8
+        ProcessChangeRigidBodyInertiaQueue(lpInput);   // bl 0x828A4A78
+        ProcessAddJointQueue(lpInput);                 // bl 0x828A40F0
+        ProcessUpdateJointFramesQueue(lpInput);        // bl 0x8289F2F0
+        ProcessUpdateJointLimitsQueue(lpInput);        // bl 0x8289F548
+        ProcessSetJointSpyQueue(lpInput);              // bl 0x8289F768
+        ProcessAddDriveQueue(lpInput);                 // bl 0x828A4CB8
+        ProcessUpdateDriveFramesQueue(lpInput);        // bl 0x8289FC28
+        ProcessUpdateDriveDynamicsQueue(lpInput);      // bl 0x8289FD60
+        ProcessSetDriveSpyQueue(lpInput);              // bl 0x8289FE88
     }
 }

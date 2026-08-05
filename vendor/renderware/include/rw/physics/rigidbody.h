@@ -244,11 +244,15 @@ namespace physics
         { return mInertia->GetInverseInertia(); }
 
     private:
-        // The SDK keeps everything private and reaches it through Simulation / the two
-        // jacobian builders, which are the only other classes in the subsystem.
+        // The SDK keeps everything private and reaches it through Simulation, the two
+        // jacobian builders, and (since 2026-08-05) Contact -- whose GenerateFromCollision
+        // is the console's inline in ProcessAddContactQueue @0x828A3458 and snapshots the
+        // body's mCom/mIfull/mIsplt/mForce/mTorque rows plus their packed scalars into the
+        // contact record's pad region for ContactBatchBuild to consume.
         friend class Simulation;
         friend struct JointJacobian;
         friend struct DriveJacobian;
+        friend struct Contact;
 
         // ---- the eleven 16-byte pose/inertia registers, DWARF order ----------------------
         // Each `// w:` note records what the CONSOLE packs in that lane. On the PC the lane

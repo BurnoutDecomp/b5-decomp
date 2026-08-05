@@ -798,8 +798,10 @@ namespace CgsPhysics
 
         // ---- THE RIGID-BODY GROUP -- seven more of the nineteen (2026-08-05) ---------------
         // Landed as the complete rigid-body-side set, same rule as the two groups above.
-        // ⚠️ NOTHING CALLS THEM YET -- ProcessInputBuffers stays unbodied until all nineteen
-        // exist; 18 of 19 are bodied after this group (ProcessAddContactQueue remains).
+        // (The "18 of 19 / ProcessInputBuffers stays unbodied" note that stood here is
+        // retired: drain 19 and ProcessInputBuffers landed later the same day -- see them
+        // below. ⚠️ ProcessInputBuffers itself still has no caller; the two virtuals that
+        // call it, Update @0x828A74D0 / ProcessInput @0x828A76D0, remain unbodied.)
         // Shared skeleton as the drive/joint groups (length RE-READ per pass; miss on
         // GetIndexFromGameID(id) == -1). ⚠️ THE MISS POLICY IS PER-DRAIN, READ OFF THE ASM,
         // NOT INHERITED: the five update-side drains skip a miss SILENTLY (drive-style);
@@ -819,6 +821,27 @@ namespace CgsPhysics
         void ProcessApplyForceQueue(const PhysicsSimulationIO::InputBuffer* lpInput);           // @0x828A6B80   82
         void ProcessSetRigidBodySpyQueue(const PhysicsSimulationIO::InputBuffer* lpInput);      // @0x828A49A8   51
         void ProcessChangeRigidBodyInertiaQueue(const PhysicsSimulationIO::InputBuffer* lpInput); // @0x828A4A78 143
+
+        // ---- DRAIN 19 -- THE CONTACT DRAIN, and the dispatcher (2026-08-05) ----------------
+        // The last of the nineteen. It was decoded in full one wave earlier and deliberately
+        // NOT written, because Contact::mBodyA/mBodyB (+0x0C/+0x1C) are populated only by the
+        // full-row stvx of the event's mPointOnA/mPointOnB w lanes -- a producer-side contract
+        // nobody had read. THAT CONTRACT IS NOW READ AND CLOSED from the CONSUMER:
+        // rw::physics::Simulation::ContactBatchBuild @0x82BC14C0 overwrites both lanes
+        // (vsel mask {-1,-1,-1,0} @0x82181660) with the snapshot mCom.w == RigidBody::mId
+        // before anything reads them -- the event w lanes are DEAD CARGO. Full write-up in
+        // vendor's contact.h banner. DWARF h: CgsPhysicsSimulationModule.h:458 (.cpp:1224).
+        void ProcessAddContactQueue(const PhysicsSimulationIO::InputBuffer* lpInput);           // @0x828A3458  363
+
+        // ProcessInputBuffers -- the pure 19-call dispatcher (DWARF h:440, .cpp:978; an
+        // .ida-exports hole, recovered headless). ALL NINETEEN drains exist, so the standing
+        // "stays unbodied until all nineteen" rule is SATISFIED, not bent. The call ORDER is
+        // load-bearing (removes before adds; bodies, then joints, then drives) and was
+        // re-derived from the function's own `bl` targets twice -- see the banner above the
+        // class. ⚠️ STILL UNREACHED AT RUNTIME: its two callers on the console, the Update /
+        // ProcessInput virtuals, are not bodied (declaring them without bodies materialises
+        // the vtable into LNK2019 -- see the slot-16 note above the class).
+        void ProcessInputBuffers(const PhysicsSimulationIO::InputBuffer* lpInput);              // @0x828A73C0   68
         // ---------------------------------------------------------------------------------
 
         // DWARF h:532..:536. Static, so they take no space.
