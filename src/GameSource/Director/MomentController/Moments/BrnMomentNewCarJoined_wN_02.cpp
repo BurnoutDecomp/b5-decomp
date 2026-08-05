@@ -246,20 +246,12 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
             lpBehaviourManager->NewBehaviour<Camera::BehaviourInterpolate>(
                 mInterpolaterB, 0, this, 1);
 
-            // ⛔ BLOCKED (one store, @0x82266DB0: `stb r26(=1), 0x32E(looseBehaviour)`).
-            //    The console sets the loose attachment's detach-requested byte here so
-            //    the attachment eases off while the return blend runs. The committed
-            //    BrnBehaviourLooseAttachment.h models the class only up to +0x32C
-            //    (mbNoResult) and has NO member at +0x32E, and this wave may not edit
-            //    that header; poking the byte by offset is forbidden, so the store is
-            //    OMITTED rather than faked. UNBLOCK: add to BehaviourLooseAttachment,
-            //    between mbNoResult (+0x32C) and mpParameters:
-            //        u8 maReserved32D;        // +0x32D (rig byte not modelled)
-            //        u8 mbDetachRequested;    // +0x32E set by MomentNewCarJoined::Update
-            //    then restore the statement here:
-            //        mLooseAttachment.GetBehaviour()->mbDetachRequested = 1;
-            //    (the store and the offset are asm; the NAME is role-inferred from the
-            //    sibling tunable Parameters::mfDetachLerpAmount.)
+            // @0x82266DB0: `stb r26(=1), 0x32E(looseBehaviour)` -- the console sets the
+            // loose attachment's detach-requested byte here so the attachment eases off
+            // while the return blend runs. RESTORED in wave O, once the member landed in
+            // BrnBehaviourLooseAttachment.h. The store and the offset are asm; the NAME
+            // is role-inferred from the sibling tunable Parameters::mfDetachLerpAmount.
+            mLooseAttachment.GetBehaviour()->mbDetachRequested = 1;
 
             mInterpolaterB.GetBehaviour()->SetParameters(&mInterpolateParams);
             mInterpolaterB.GetBehaviour()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
