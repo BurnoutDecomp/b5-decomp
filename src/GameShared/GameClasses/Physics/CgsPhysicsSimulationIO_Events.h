@@ -260,13 +260,21 @@ namespace PhysicsSimulationIO
     // (X360 Construct @ 0x828A6068). The event STRIDE *is* X360-attested: the matching
     // BaseEventQueue<InApplyForce>::AddEvent @ 0x825E3CC8 and AddEventSafe @ 0x825E3E20 each
     // copy an element as exactly four 64-bit block moves (ld/std x4 == 32 bytes) at a 32-byte
-    // stride (`slwi r11,r11,5` == miLength*32). So this payload is sized to that attested
-    // 32-byte stride. Internal field layout is still NOT recovered (no DWARF/source), so it is
-    // modelled as an opaque, 16-byte-aligned byte span; the Construct body remains
-    // store-for-store faithful regardless.
+    // stride (`slwi r11,r11,5` == miLength*32).
+    //
+    // ⭐ FIELDS RECOVERED 2026-08-05 (the rigid-body drain group). The "fields not recovered
+    // (no DWARF/source)" sentence that stood here was the same false claim as its sixteen
+    // siblings -- DWARF CgsPhysicsSimulationModuleIO.h:102/:103 names both members. TWO
+    // INDEPENDENT DERIVATIONS AGREE: the consumer ProcessApplyForceQueue @0x828A6B80 reads
+    // `ld 0(event)` into RigidBodyData::GetIndexFromGameID and `lvx128 v0, r30, 0x10` as the
+    // force vector, and the DWARF order lands on exactly those offsets. 8 + pad-to-16 + 16
+    // == 32, the attested stride, nothing invented.
+    // ⚠️ mID stays u64, not CgsPhysics::RigidBodyId -- the same documented ~30-TU cost
+    // decision as every sibling event.
     struct alignas(16) InApplyForce : public Event
     {
-        u8 macOpaquePayload[32];  // stride 32B X360-attested (AddEvent @0x825E3CC8); fields not recovered
+        u64                    mID;     // @+0x00  DWARF :102 (a CgsPhysics::RigidBodyId handle)
+        rw::math::vpu::Vector3 mForce;  // @+0x10  DWARF :103 -- the drain's `lvx128 v0,r30,0x10`
     };
 
     // Change a rigid body's inertia tensor. Queued with capacity 200 across the input/output
@@ -278,11 +286,28 @@ namespace PhysicsSimulationIO
     // 80-byte stride. 80 is 16-byte aligned so alignas(16) is preserved (and the committed
     // EventQueue<...,200>::Construct stays store-for-store faithful -- it depends only on the
     // base size for the +0x10 buffer padding and stores N / clears the count, element-size-
-    // agnostic). Internal field layout is still NOT recovered (no DWARF/source), so it is
-    // modelled as an opaque, 16-byte-aligned byte span.
+    // agnostic).
+    //
+    // ⭐ FIELDS RECOVERED 2026-08-05 (the rigid-body drain group). DWARF
+    // CgsPhysicsSimulationModuleIO.h:118..:120 names all three members
+    // ({ RigidBodyId mID; NonConstructedClassContainer<rw::physics::Inertia> mInertia;
+    // uint32_t mu32Flags; }), and the consumer ProcessChangeRigidBodyInertiaQueue @0x828A4A78
+    // pins every offset: `ld 0(event)` for the id, the flags==0x3F fast path copies SIX
+    // 64-bit words from event+0x10 (== the 48-byte Inertia), and every flag test reads
+    // `lwz 0x40(event)`. 0x40 + 4 -> pads to 80, the attested stride. Per-bit consumer map
+    // (each bit copies ONE Inertia field; the module .cpp quotes the offsets):
+    //     bit0 mAngularDrag  bit1 mInvTens(+recompute mSpherical)  bit2 mInvMass
+    //     bit3 mLinearDrag   bit4 mMaxOmega                        bit5 mMaxVelocity
+    // ⚠️ The DWARF's NonConstructedClassContainer means RAW STORAGE on the console; embedding
+    // the Inertia by value runs its default ctor per queue slot on the PC. Behaviourally
+    // invisible (AddEvent overwrites the slot before any GetEvent reads it) -- the same
+    // accepted cost as InUpdateJointLimits' embedded JointLimits.
     struct alignas(16) InChangeRigidBodyInertia : public Event
     {
-        u8 macOpaquePayload[80];  // stride 80B X360-attested (Append @0x825A40E8); fields not recovered
+        u64                  mID;        // @+0x00  DWARF :118 (a CgsPhysics::RigidBodyId handle)
+        u64                  mIDPad;     // @+0x08  pad to the payload's 16-byte slot
+        rw::physics::Inertia mInertia;   // @+0x10  DWARF :119 -- 48B, the 6x ld/std fast path
+        u32                  mu32Flags;  // @+0x40  DWARF :120 -- `lwz 0x40(event)`, the bit map above
     };
 
     // Remove a previously-added vehicle drive from the simulation (symmetric partner of
@@ -319,14 +344,21 @@ namespace PhysicsSimulationIO
     // capacities 1 / 60 / 200 across the input/output buffers (X360 Construct @ 0x828A6538 /
     // 0x825A8370 / 0x828A6688). The event STRIDE *is* X360-attested here: the matching
     // EventQueue<InUpdateExternalBody>::Append @ 0x825A41D8 block-copies at a 112-byte stride
-    // (`mulli r5,r29,0x70`, `mulli r11,r11,0x70` == count*0x70 == count*112). So this payload is
-    // sized to that attested 112-byte stride. Internal field layout is still NOT recovered
-    // (no DWARF/source), so it is modelled as an opaque, 16-byte-aligned byte span; the Construct
-    // bodies only take &maEvents[0]==this+0x10, store N and clear the count, so they remain
-    // store-for-store faithful regardless of the span's internal layout.
+    // (`mulli r5,r29,0x70`, `mulli r11,r11,0x70` == count*0x70 == count*112).
+    //
+    // ⭐ FIELDS RECOVERED 2026-08-05 (the rigid-body drain group). DWARF
+    // CgsPhysicsSimulationModuleIO.h:151..:154 names all four members, and the consumer
+    // ProcessUpdateExternalBodyQueue @0x828A3B30 pins every offset: `ld 0(event)` for the id,
+    // four `lvx128` rows from event+0x10..+0x40 into the body's basis/position (the inlined
+    // RigidBody::SetTransform), `lvx128` from +0x50 into mVel(+0x20) and from +0x60 into
+    // mOmega(+0x30). 0x60 + 16 == 112, the attested stride, nothing invented.
     struct alignas(16) InUpdateExternalBody : public Event
     {
-        u8 macOpaquePayload[112];  // stride 112B X360-attested (Append @ 0x825A41D8); fields not recovered
+        u64                           mID;          // @+0x00  DWARF :151 (a CgsPhysics::RigidBodyId handle)
+        u64                           mIDPad;       // @+0x08  pad to the payload's 16-byte slot
+        rw::math::vpu::Matrix44Affine mTransform;   // @+0x10  DWARF :152 -- 64B, the four SetTransform rows
+        rw::math::vpu::Vector3        mVel;         // @+0x50  DWARF :153 -- `lvx128 v0,r30,0x50` -> body mVel
+        rw::math::vpu::Vector3        mAngularVel;  // @+0x60  DWARF :154 -- `lvx128 v0,r30,0x60` -> body mOmega
     };
 
     // Push updated per-frame vehicle drive state into the simulation. Queued with capacity 1
@@ -353,17 +385,32 @@ namespace PhysicsSimulationIO
 
     // Update a rigid body's per-frame state in the simulation. Queued with capacity 200 in
     // PhysicsSimulationIO::InputBuffer (X360 EventQueue<InUpdateRigidBody,200>::Construct
-    // @ 0x828A5FF8, capacity 0xC8). The event STRIDE *is* now X360-attested: the matching
+    // @ 0x828A5FF8, capacity 0xC8). The X360 event STRIDE is attested: the matching
     // BaseEventQueue<InUpdateRigidBody>::AddEvent @ 0x82614928 copies the element at index
     // miLength via `slwi r9,r11,1; add r11,r11,r9` (miLength*3), `slwi r11,r11,6` (*64) ==
-    // miLength*192 (the Hex-Rays pseudocode renders this literally as `192 * v11 + *a1`). So
-    // this payload is sized to that attested 192-byte stride. Internal field layout is still
-    // NOT recovered (no DWARF/source), so it is modelled as an opaque, 16-byte-aligned byte
-    // span; the Construct body stays store-for-store faithful (it only takes &maEvents[0] ==
-    // this+0x10, stores N and clears the count) regardless of the span's internal layout.
+    // miLength*192, and the GetEvent instantiation @0x8289D620 indexes with the same *192.
+    //
+    // ⭐ FIELDS RECOVERED 2026-08-05 (the rigid-body drain group). DWARF
+    // CgsPhysicsSimulationModuleIO.h:86/:87 names both members, and the payload type is the
+    // FULL rw::physics::RigidBody BY VALUE (the :87 member is typed through the CgsRigidBody.h:33
+    // `typedef RigidBody RigidBody` alias): X360 16 (id slot) + 176 (console RigidBody) == 192.
+    // The consumer ProcessUpdateRigidBodyQueue @0x828A3A08 pins both offsets: `ld 0(event)`
+    // for the id, RigidBody::operator=(body, event+0x10) for the payload, plus the state
+    // compare `lwz 0x9C(event)` == (event+0x10)+0x8C == mRigidBody.mState.
+    //
+    // ⚠️⚠️ THE HOST STRIDE IS NOT 192, AND MUST NOT BE PINNED TO 192. rw::physics::RigidBody
+    // carries five pointer lanes that widen on x64 (the ten packed w-lane scalars are real
+    // members on the PC -- see rigidbody.h's banner), so sizeof(InUpdateRigidBody) grows with
+    // it. This is a RUNTIME queue element, not a serialized record, so [[serialized slots
+    // stay 32-bit]] does NOT apply; the queue machinery is sizeof-driven end to end. The pin
+    // below is therefore the ADJACENCY form (16 + sizeof(RigidBody)) -- on the console that
+    // evaluates to the attested 192, on the host it tracks the widened body -- plus the
+    // offsetof pin that catches a transposed id/payload.
     struct alignas(16) InUpdateRigidBody : public Event
     {
-        u8 macOpaquePayload[192];  // stride 192B X360-attested (AddEvent @0x82614928); fields not recovered
+        u64                    mID;         // @+0x00  DWARF :86 (a CgsPhysics::RigidBodyId handle)
+        u64                    mIDPad;      // @+0x08  pad to the payload's 16-byte slot
+        rw::physics::RigidBody mRigidBody;  // @+0x10  DWARF :87 -- BY VALUE, the operator= source
     };
 
     // Update a constraint joint's limits in the simulation. Queued with capacity 36 in
@@ -465,12 +512,17 @@ namespace PhysicsSimulationIO
     // (ld/std r10 @0/@8 == 16 bytes), and Append @ 0x825A3988 block-copies at the same 16-byte stride
     // (`slwi r11,r11,4` == miLength*16, `slwi r5,r29,4` == count*16). This matches the DWARF shape
     // (CgsPhysicsSimulationModuleIO.h:167): { RigidBodyId mID (u64); bool mbFailIfRigidBodyNotFound; }
-    // == 8 + 1 padded to 16. So this payload is sized to that attested 16-byte stride. Field names
-    // are intentionally NOT invented; it is modelled as an opaque, 16-byte-aligned byte span and the
-    // Construct/AddEvent/Append bodies stay store-for-store faithful regardless.
+    // == 8 + 1 padded to 16.
+    //
+    // ⭐ FIELDS PROMOTED 2026-08-05 (the rigid-body drain group). The names were never invented --
+    // they were already quoted from the DWARF in the note above; what was missing was a CONSUMER,
+    // and ProcessRemoveRigidBodyQueue @0x828A2BD0 now pins both offsets: `ld 0(event)` feeds
+    // RigidBodyData::GetIndexFromGameID and `lbz 8(event)` gates the "Couldn't find rigid body
+    // with id" assert (the not-found-tolerant remove).
     struct alignas(16) InRemoveRigidBody : public Event
     {
-        u8 macOpaquePayload[16];  // stride 16B X360-attested (AddEvent @0x825E3ED8); DWARF { RigidBodyId mID(u64); bool mbFailIfRigidBodyNotFound; }; fields not invented
+        u64  mID;                       // @+0x00  DWARF :169 (a CgsPhysics::RigidBodyId handle)
+        bool mbFailIfRigidBodyNotFound; // @+0x08  DWARF :170 -- `lbz 8(event)`
     };
 
     // Install/replace the drive "spy" tap (the simulation->game per-frame vehicle-drive report
@@ -516,14 +568,21 @@ namespace PhysicsSimulationIO
 
     // Install/replace the rigid-body "spy" tap (the simulation->game per-frame rigid-body report
     // channel). Queued with capacity 200 in PhysicsSimulationIO::InputBuffer (X360
-    // EventQueue<InSetRigidBodySpy,200>::Construct @ 0x828A60D8, capacity 0xC8). Only Construct is
-    // in scope (no Append/AddEvent to pin the stride, and the InputBuffer::Construct offset map
-    // @ 0x828A71B8 that would pin it is not in scope), so the payload is sized only to the 16-byte
-    // alignment class the asm proves (`addi r30, r31, 0x10`). Stride/field layout intentionally NOT
-    // invented.
+    // EventQueue<InSetRigidBodySpy,200>::Construct @ 0x828A60D8, capacity 0xC8). The 16-byte
+    // stride is pinned by the queue-offset chain (see the stride-pin block below).
+    //
+    // ⭐ FIELDS RECOVERED 2026-08-05 (the rigid-body drain group). Same settlement as
+    // InSetJointSpy one group earlier: the CONSUMER pins it -- ProcessSetRigidBodySpyQueue
+    // @0x828A49A8 reads `ld 0(event)` for the id and `lbz 8(event)` for the flag, and the
+    // DWARF (CgsPhysicsSimulationModuleIO.h:135/:136) names exactly those two members.
+    // ⚠️ UNLIKE the joint/drive twins, the payload feeds the REAL RigidBody::SetSpy bitfield
+    // fork -- `ori r11,r11,8` / `clrlwi r11,r11,29` on mState(+0x8C) -- not a plain whole-word
+    // spy store. The committed rw/physics/rigidbody.h SetSpy already carries that exact shape.
+    // ⚠️ DWARF spells this one `mSpy`, not `mbSpy`; the DWARF's own name is kept.
     struct alignas(16) InSetRigidBodySpy : public Event
     {
-        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+        u64  mID;   // @+0x00  DWARF :135 (a CgsPhysics::RigidBodyId handle)
+        bool mSpy;  // @+0x08  DWARF :136 -- `lbz 8(event)` -> RigidBody::SetSpy(bool)
     };
 
     // Push updated per-frame vehicle-drive dynamics into the simulation. Queued with capacity 1 in
@@ -607,7 +666,13 @@ namespace PhysicsSimulationIO
     // four defects in place. These pin against the binary.
     // ---------------------------------------------------------------------------------
     // rigid-body group
-    static_assert(sizeof(InUpdateRigidBody)        == 192, "InUpdateRigidBody stride 192  ((76848-38432-16)/200)");
+    // ⚠️ InUpdateRigidBody's pin is deliberately the ADJACENCY form, not the X360 constant:
+    // its payload is a full rw::physics::RigidBody BY VALUE, whose five pointer lanes widen on
+    // x64, so the host stride is 16 + sizeof(RigidBody) (== the attested 192 ONLY on a 4-byte-
+    // pointer target). Every other event in this table is pointer-free and its host size still
+    // equals the X360 stride. See the banner on the struct itself.
+    static_assert(sizeof(InUpdateRigidBody) == 16 + sizeof(rw::physics::RigidBody),
+                  "InUpdateRigidBody = 16B id slot + the full RigidBody (X360: 16+176 == the attested 192 ((76848-38432-16)/200))");
     static_assert(sizeof(InApplyForce)             ==  32, "InApplyForce stride 32        ((84864-76848-16)/250)");
     static_assert(sizeof(InChangeRigidBodyInertia) ==  80, "InChangeRigidBodyInertia 80   ((100880-84864-16)/200)");
     static_assert(sizeof(InSetRigidBodySpy)        ==  16, "InSetRigidBodySpy stride 16   ((104096-100880-16)/200)");
@@ -683,6 +748,34 @@ namespace PhysicsSimulationIO
 
     static_assert(offsetof(InSetJointSpy, mu64Id)        ==   0, "InSetJointSpy::mId @+0x00        (drain @0x8289F768 `ld 0(event)`)");
     static_assert(offsetof(InSetJointSpy, mbSpy)         ==   8, "InSetJointSpy::mbSpy @+0x08      (drain @0x8289F768 `lbz 8(event)`)");
+
+    // ---- 2026-08-05: the six rigid-body events promoted from opaque spans ------------------
+    // Same discipline as #143/#144: every term is spelled `sizeof(Class::member)` / `offsetof`
+    // so a re-TYPING of a member still fails the gate, and every constant is the drain's own
+    // load offset, not a re-statement of this header.
+    static_assert(offsetof(InApplyForce, mID)                 ==  0, "InApplyForce::mID @+0x00              (drain @0x828A6B80 `ld 0(event)`)");
+    static_assert(offsetof(InApplyForce, mForce)              == 16, "InApplyForce::mForce @+0x10           (drain `lvx128 v0,r30,0x10`)");
+    static_assert(sizeof(InApplyForce::mForce)                == 16, "InApplyForce::mForce one 16B lane     (single lvx128, xyz consumed)");
+
+    static_assert(offsetof(InChangeRigidBodyInertia, mID)       ==  0, "InChangeRigidBodyInertia::mID @+0x00       (drain @0x828A4A78 `ld 0(event)`)");
+    static_assert(offsetof(InChangeRigidBodyInertia, mInertia)  == 16, "InChangeRigidBodyInertia::mInertia @+0x10  (drain fast path `addi r11,r28,0x10` + 6x ld/std)");
+    static_assert(offsetof(InChangeRigidBodyInertia, mu32Flags) == 64, "InChangeRigidBodyInertia::mu32Flags @+0x40 (drain `lwz 0x40(event)`, every bit test)");
+    static_assert(sizeof(InChangeRigidBodyInertia::mInertia)    == 48, "InChangeRigidBodyInertia::mInertia 48B     (the SIX ld/std pairs the fast path copies)");
+
+    static_assert(offsetof(InUpdateExternalBody, mID)         ==  0, "InUpdateExternalBody::mID @+0x00          (drain @0x828A3B30 `ld 0(event)`)");
+    static_assert(offsetof(InUpdateExternalBody, mTransform)  == 16, "InUpdateExternalBody::mTransform @+0x10   (drain `addi r11,r30,0x10` + 4 rows -> SetTransform)");
+    static_assert(offsetof(InUpdateExternalBody, mVel)        == 80, "InUpdateExternalBody::mVel @+0x50         (drain `lvx128 v13,r30,0x50` -> body mVel +0x20)");
+    static_assert(offsetof(InUpdateExternalBody, mAngularVel) == 96, "InUpdateExternalBody::mAngularVel @+0x60  (drain `lvx128 v0,r30,0x60` -> body mOmega +0x30)");
+    static_assert(sizeof(InUpdateExternalBody::mTransform)    == 64, "InUpdateExternalBody::mTransform 64B      (the FOUR w-preserving rows SetTransform copies)");
+
+    static_assert(offsetof(InRemoveRigidBody, mID)                       == 0, "InRemoveRigidBody::mID @+0x00                       (drain @0x828A2BD0 `ld 0(event)`)");
+    static_assert(offsetof(InRemoveRigidBody, mbFailIfRigidBodyNotFound) == 8, "InRemoveRigidBody::mbFailIfRigidBodyNotFound @+0x08 (drain `lbz 8(event)`)");
+
+    static_assert(offsetof(InSetRigidBodySpy, mID)  == 0, "InSetRigidBodySpy::mID @+0x00  (drain @0x828A49A8 `ld 0(event)`)");
+    static_assert(offsetof(InSetRigidBodySpy, mSpy) == 8, "InSetRigidBodySpy::mSpy @+0x08 (drain @0x828A49A8 `lbz 8(event)` -> SetSpy fork)");
+
+    static_assert(offsetof(InUpdateRigidBody, mID)        ==  0, "InUpdateRigidBody::mID @+0x00        (drain @0x828A3A08 `ld 0(event)`)");
+    static_assert(offsetof(InUpdateRigidBody, mRigidBody) == 16, "InUpdateRigidBody::mRigidBody @+0x10 (drain `addi r4,r30,0x10` -> RigidBody::operator=; state cmp `lwz 0x9C(event)` == +0x10 + mState 0x8C)");
     // =====================================================================================
 }
 }

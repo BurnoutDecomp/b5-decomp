@@ -137,6 +137,20 @@ namespace CgsPhysics
         return maRWJoints[liIndex];
     }
 
+    // DWARF h:165. ⭐ ADDED 2026-08-05 (the rigid-body drain group). No out-of-line symbol --
+    // the console inlines it into ProcessRemoveRigidBodyQueue's "Removing jointed body"
+    // diagnostic at 0x828A30B0..0x828A3108: asserts h:612 (`cmpwi r24,0x24` == liIndex <
+    // knSize) and h:613 (`lbz 0x15F0(this+liIndex)` == mabUsedSlot), then the 8-byte
+    // `ldx` off maGameIDs (+0x14D0). Same checked-accessor shape as its three siblings; the
+    // four assert-line pairs run 612/613, 621/622, 630/631, 639/640 -- nine header lines
+    // apart each, which is the arithmetic that identifies every one of them.
+    JointId JointData::GetGameID(s32 liIndex)
+    {
+        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");          // h:612 tripwire (blt skips)
+        CGS_ASSERT(mabUsedSlot[liIndex], "mabUsedSlot[liIndex]");   // h:613 tripwire (bne skips)
+        return maGameIDs[liIndex];
+    }
+
     // Raw slot-occupancy probe. Inlined by the console into
     // PhysicsSimulationModule::AllocateMemoryAndInitialiseRW (`lbzx` off &mabUsedSlot[0] at
     // 0x828A2560, then `beq` past the removal). No tripwire -- this IS the tripwire.
@@ -171,7 +185,7 @@ namespace CgsPhysics
     // @0x828A4358. Claims the first free slot and fills it.
     //
     // ⭐⭐ THIS IS **NOT** DriveData::AddDrive WITH THE NAMES CHANGED, and mirroring that body
-    // would have silently dropped a whole phase. The console opens with a full 36-slot
+    // would have lost a whole phase with no diagnostic. The console opens with a full 36-slot
     // DUPLICATE-DETECTION pre-pass (0x8289D428..0x8289D48C) that walks every LIVE slot and
     // asserts the incoming id and joint pointer are not already registered. AddDrive (62
     // instructions) has no such pass; that pre-pass is most of the 98-vs-62 gap.
@@ -1176,10 +1190,13 @@ namespace CgsPhysics
     // behaviourally correct (identical layout, same DWARF); "happened to be" is the point.
     //
     // ⚠️ The de-fork did NOT need the `SetSphericalInertia` a previous note here called for.
-    // The DWARF declares seven getters and six setters; mSpherical deliberately has no setter
-    // because it is written by Inertia::Inertia() (inertia.h:80) and read-only thereafter, and
-    // a repo-wide grep confirms nothing else ever writes it. Adding one would have invented an
-    // SDK entry point to work around a diagnosis that was wrong.
+    // The DWARF declares seven getters and six setters; mSpherical has no setter of its own,
+    // and adding one would have invented an SDK entry point to work around a diagnosis that
+    // was wrong. ⚠️ AMENDED 2026-08-05: the reason given here ("written by Inertia::Inertia()
+    // and read-only thereafter; a repo-wide grep confirms nothing else ever writes it")
+    // half-expired when ProcessChangeRigidBodyInertiaQueue was decoded -- the console DOES
+    // rewrite mSpherical on every diagonal change, inside SetInverseInertia, where the
+    // derived-value maintenance now lives (see inertia.h). Still no independent setter.
     //
     // ⚠️ THE TWO DEBUG SCANS ARE KEPT. The console runs an O(n^2) duplicate scan over the
     // queue itself (.cpp:1034) and, per event, a 200-slot scan of the live table (.cpp:1058),
@@ -1781,6 +1798,431 @@ namespace CgsPhysics
             CGS_ASSERT(mJointData.IsSlotUsed(liJointIndex), "mabUsedSlot[liIndex]");  // h:622
 
             mJointData.GetJoint(liJointIndex)->SetSpy(lrEvent.mbSpy);
+        }
+    }
+
+    // =====================================================================================
+    // THE RIGID-BODY GROUP -- seven more of the nineteen input drains (2026-08-05).
+    //
+    // Landed together as the complete rigid-body side, same rule as the drive (#143) and
+    // joint (#144) groups: a partly-drained subsystem is the [[silent-drop-stubs]] shape.
+    // 18 of 19 are bodied after this group -- only ProcessAddContactQueue remains, and
+    // ProcessInputBuffers stays unbodied until it lands.
+    //
+    // ⚠️ NOTHING CALLS ANY OF THEM YET.
+    //
+    // ⭐ THE MISS POLICY IS PER-DRAIN, READ OFF EACH BODY'S OWN ASM, NOT INHERITED: the five
+    // update-side drains skip a GetIndexFromGameID miss SILENTLY (the drive shape, not the
+    // joint shape -- there is no "not found" assert in any of them); the remove drain asserts
+    // on a miss ONLY when the event asks it to (mbFailIfRigidBodyNotFound); the remove-all
+    // drain has no id at all. Do not harmonise them.
+    //
+    // ⭐ FOUR OF THE FIVE UPDATE DRAINS SHARE THE SAME TAIL, decoded identically in each:
+    // reload mState AFTER the payload work, `if ((state & STATIC_BODY) == 0) SetCoolDown(0)`,
+    // `if (state & FROZEN_BODY) mpSimulation->ActivateRigidBody(body)` -- i.e. touching a
+    // body wakes it. ChangeInertia alone has NO such tail (it writes the shared Inertia
+    // block, not the body).
+    // =====================================================================================
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessRemoveRigidBodyQueue @ 0x828A2BD0   (546 instructions)
+    //
+    // The heaviest drain of the nineteen, and ~80% of it is diagnostics: an O(n^2)
+    // duplicate-remove scan, a 36-slot jointed-body scan, and a cross-QUEUE scan against the
+    // pending external-body updates. All three are kept -- a remove that silently races an
+    // update is exactly the failure the third scan exists to catch.
+    //
+    // ⚠️ THE NOT-FOUND PATH IS TWO-TIERED, off `InRemoveRigidBody::mbFailIfRigidBodyNotFound`
+    // (`lbz 8(event)` at 0x828A2E38): a miss with the flag CLEAR skips the event silently; a
+    // miss with the flag SET fires ".cpp:1172" -- and then FALLS THROUGH into the checked
+    // accessor with liBodyIndex == -1, exactly as the console does (fire-and-continue
+    // asserts; the accessor's own h:594/h:595 tripwires then fire on the bad index). Not
+    // "fixed": the divergence would be invisible exactly when the diagnostics matter.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessRemoveRigidBodyQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InRemoveRigidBodyQueue* const lpQueue =
+            lpInput->GetRemoveRigidBodyQueue();                             // `bl sub_8289E6A8`
+
+        // ---- debug scan 1: no two requests may remove the same id this frame -------------
+        // 0x828A2C44..0x828A2D2C; both loops re-read the length every pass, as the asm does.
+        for (s32 liA = 0; liA < lpQueue->GetLength(); ++liA)
+        {
+            const u64 luIdA = lpQueue->GetEvent(liA).mID;
+            for (s32 liB = 0; liB < lpQueue->GetLength(); ++liB)
+            {
+                if (liA != liB)
+                {
+                    CGS_ASSERT(luIdA != lpQueue->GetEvent(liB).mID,
+                               "Trying to remove rigid bodies with the same ID on the same frame: ");   // .cpp:1145
+                }
+            }
+        }
+
+        // ---- the drain proper ------------------------------------------------------------
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InRemoveRigidBody& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mID });
+            if (liBodyIndex == -1 && !lrEvent.mbFailIfRigidBodyNotFound)
+            {
+                continue;   // the tolerant remove -- silent, 0x828A2E54
+            }
+            if (liBodyIndex == -1)
+            {
+                CGS_ASSERT(liBodyIndex != -1, "Couldn't find rigid body with id: ");   // .cpp:1172
+                // fire-and-continue: the console falls through with -1 -- see the banner.
+            }
+
+            // Inlined checked accessor at 0x828A2EEC..0x828A2F68 (h:594/h:595 fire from this
+            // frame on the console; here they live in the accessor's own body).
+            rw_physics::RigidBody* const lpBody = mBodyData.GetRigidBody(liBodyIndex);
+
+            // ---- debug scan 2: is any live joint still attached to this body? ------------
+            // 0x828A2F6C..0x828A3268. ⚠️ GetJoint is asserts-free HERE on the console: under
+            // the IsSlotUsed guard, inside a loop bounded at KI_SIZE, both of its h:621/h:622
+            // conditions are provably true and the compiler folded them. The THREE id lookups
+            // in the diagnostic branch keep their tripwires (they sit past opaque assert-
+            // machinery calls), and they are what pins JointData::GetGameID's h:612/h:613.
+            for (s32 liJoint = 0; liJoint < JointData::KI_SIZE; ++liJoint)
+            {
+                if (!mJointData.IsSlotUsed(liJoint))
+                {
+                    continue;
+                }
+                rw_physics::Joint* const lpJoint = mJointData.GetJoint(liJoint);
+                const bool lbJointed = (lpJoint->GetChild() == lpBody || lpJoint->GetParent() == lpBody);
+                if (lbJointed)
+                {
+                    // The console streams " Removing jointed body <id> Joint ID: <jid>
+                    // Body A: <idA> Body B: <idB>" from three checked lookups, in THIS order
+                    // (B's id first, then A's, then the joint id -- 0x828A2FBC/0x828A302C/
+                    // 0x828A3108). The lookups are kept because their tripwires are real
+                    // behaviour; the streamed formatting is not reconstructed (this file's
+                    // standing plain-literal convention).
+                    const RigidBodyId lIdB = mBodyData.GetGameID(static_cast<s32>(lpJoint->GetParent()->GetTag()));   // h:585/h:586
+                    const RigidBodyId lIdA = mBodyData.GetGameID(static_cast<s32>(lpJoint->GetChild()->GetTag()));    // h:585/h:586
+                    const JointId     lJId = mJointData.GetGameID(liJoint);                                           // h:612/h:613
+                    (void)lIdB; (void)lIdA; (void)lJId;
+                    CGS_ASSERT(!lbJointed, " Removing jointed body ");   // .cpp:1188 -- fire-and-continue
+                }
+            }
+
+            // ---- debug scan 3: is this body about to receive an external update? ---------
+            // 0x828A326C..0x828A33AC -- reads the OTHER queue through its own const accessor
+            // (`bl sub_8289EF30`), then per-element GetEvent (whose CgsBaseEventQueue.h :272/
+            // :274/:275 tripwires the console emits inline in this frame).
+            const PhysicsSimulationIO::InputBuffer::InUpdateExternalBodyQueue* const lpExtQueue =
+                lpInput->GetUpdateExternalBodyQueue();
+            for (s32 liExt = 0; liExt < lpExtQueue->GetLength(); ++liExt)
+            {
+                CGS_ASSERT(lpExtQueue->GetEvent(liExt).mID != lrEvent.mID,
+                           "Attempting to remove a body which is going to be updated ");   // .cpp:1197
+            }
+
+            CGS_ASSERT(lpBody != NULL, "lpRwBody");   // .cpp:1202
+
+            mpSimulation->RemoveRigidBody(lpBody);
+            mBodyData.SetFree(liBodyIndex);   // inlined on the console: .cpp:2504 + the sentinel store
+            --miNumRigidBodies;               // `lwz/addi -1/stw 0x4848` -- 0x828A342C
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessRemoveAllRigidBodiesQueue @ 0x8289F1D8   (69 instructions)
+    //
+    // Per event: sweep ALL 200 slots and remove every live body whose id's OWNER BYTE matches
+    // the event's mu8OwnerId. ⭐ The owner byte is bits 56..63 of the 64-bit handle
+    // (`srdi r10,r10,32` + `srwi r10,r10,24` at 0x8289F274) == RigidBodyId::GetEntityIDOwner()
+    // -- the first in-scope witness for that DWARF accessor.
+    //
+    // ⚠️ TWO ASYMMETRIES AGAINST THE SINGLE-BODY REMOVE ABOVE, both real, neither harmonised:
+    //   * it does NOT decrement miNumRigidBodies (no 0x4848 store anywhere in the body);
+    //   * it runs none of the three diagnostic scans.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessRemoveAllRigidBodiesQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InRemoveAllRigidBodiesQueue* const lpQueue =
+            lpInput->GetRemoveAllRigidBodiesQueue();                        // `bl sub_8289E750`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const u8 luOwner = lpQueue->GetEvent(li).mu8OwnerId;
+
+            for (s32 liSlot = 0; liSlot < RigidBodyData::KI_SIZE; ++liSlot)
+            {
+                if (!mBodyData.IsSlotUsed(liSlot))    // inlined 64-bit sentinel compare, 0x8289F234
+                {
+                    continue;
+                }
+                if (mBodyData.GetGameID(liSlot).GetEntityIDOwner() != luOwner)   // called @0x8289CF78
+                {
+                    continue;
+                }
+                mpSimulation->RemoveRigidBody(mBodyData.GetRigidBody(liSlot));   // called @0x8289D020 / @0x82BC2950
+                mBodyData.SetFree(liSlot);   // inlined: the .cpp:2504 tripwire + the sentinel store
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessUpdateExternalBodyQueue @ 0x828A3B30   (368 instructions)
+    //
+    // Push an externally-simulated body's authored pose/velocities into the rw body. The
+    // payload block is the witnessed inline of THREE RigidBody methods, in the console's
+    // order: SetTransform (the four w-preserving rows + QuaternionFromMatrix33 -- bodied in
+    // src/vendor/renderware/physics/RigidBody.cpp off THIS drain's asm), the mInertia-guarded
+    // InertiaUpdate (the same vpermwi128 0x97/0x9B block AddRigidBody and DynamicUpdate
+    // emit), then the two velocity setters.
+    //
+    // ⚠️ DWARF ACCESSIBILITY: this is the ONE drain the DWARF declares PUBLIC -- see the
+    // header. ⚠️ Its miss policy is the drive shape (SILENT skip), not the joint shape.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessUpdateExternalBodyQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InUpdateExternalBodyQueue* const lpQueue =
+            lpInput->GetUpdateExternalBodyQueue();                          // `bl sub_8289EF30`
+
+        // ---- debug scan: no two updates may name the same id this frame ------------------
+        // 0x828A3B98..0x828A3C88; both loops re-read the length every pass, as the asm does.
+        for (s32 liA = 0; liA < lpQueue->GetLength(); ++liA)
+        {
+            const u64 luIdA = lpQueue->GetEvent(liA).mID;
+            for (s32 liB = 0; liB < lpQueue->GetLength(); ++liB)
+            {
+                if (liA != liB)
+                {
+                    CGS_ASSERT(luIdA != lpQueue->GetEvent(liB).mID,
+                               "Trying to update external bodies with the same ID on the same frame: ");   // .cpp:1450
+                }
+            }
+        }
+
+        // ---- the drain proper ------------------------------------------------------------
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InUpdateExternalBody& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mID });
+            if (liBodyIndex == -1)
+            {
+                continue;   // SILENT -- 0x828A3D8C, no assert on this path
+            }
+
+            // Inlined checked accessor (h:594/h:595 fire from this frame on the console).
+            rw_physics::RigidBody* const lpBody = mBodyData.GetRigidBody(liBodyIndex);
+            CGS_ASSERT(lpBody != NULL, "lpBody");   // .cpp:1466
+
+            lpBody->SetTransform(lrEvent.mTransform);           // 0x828A3E28..0x828A3FAC
+            if (lpBody->GetInertia() != NULL)                   // `lwz 0x5C` guard, 0x828A3FB0
+            {
+                lpBody->InertiaUpdate(lpBody->GetInertia());    // 0x828A3FB4..0x828A4070
+            }
+            lpBody->SetLinearVelocity(lrEvent.mVel);            // event+0x50 -> mVel  (+0x20)
+            lpBody->SetAngularVelocity(lrEvent.mAngularVel);    // event+0x60 -> mOmega(+0x30)
+
+            lpBody->SetCoolDown(0);                             // unconditional, 0x828A40B4
+            if ((lpBody->GetState() & rw_physics::FROZEN_BODY) != 0)
+            {
+                mpSimulation->ActivateRigidBody(lpBody);        // 0x828A40C8
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessUpdateRigidBodyQueue @ 0x828A3A08   (74 instructions)
+    //
+    // Overwrite a live body with the event's full RigidBody image via RigidBody::operator=
+    // @0x825E3410, PRESERVING the destination's intrusive list links: the console saves
+    // +0x2C/+0x3C around the call and restores them after (0x828A3AD4/0x828A3AE8) -- the
+    // save/restore that proved operator= copies the w-lane payloads (see RigidBody.cpp's
+    // corrected banner).
+    //
+    // ⚠️ THE STATE MAY NOT CHANGE THROUGH THIS PATH -- .cpp:1358 asserts the incoming image
+    // carries the SAME mState the live body has, which is what makes the post-copy
+    // wake/activate tail below meaningful.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessUpdateRigidBodyQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InUpdateRigidBodyQueue* const lpQueue =
+            lpInput->GetUpdateRigidBodyQueue();                             // `bl sub_8289E4B0`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InUpdateRigidBody& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mID });
+            if (liBodyIndex == -1)
+            {
+                continue;   // SILENT -- 0x828A3A78
+            }
+
+            rw_physics::RigidBody* const lpBody = mBodyData.GetRigidBody(liBodyIndex);   // called @0x8289D020
+            CGS_ASSERT(lpBody != NULL, "lpBody");   // .cpp:1356
+            CGS_ASSERT(lpBody->GetState() == lrEvent.mRigidBody.GetState(),
+                       "Can't change the state in an update RigidBody");   // .cpp:1358 (`lwz 0x8C` vs `lwz 0x9C(event)`)
+
+            rw_physics::RigidBody* const lpSavedRight = lpBody->GetRight();   // `lwz 0x2C`
+            rw_physics::RigidBody* const lpSavedLeft  = lpBody->GetLeft();    // `lwz 0x3C`
+            *lpBody = lrEvent.mRigidBody;                                     // `bl 0x825E3410`
+            lpBody->SetRight(lpSavedRight);                                   // `stw 0x2C`
+            lpBody->SetLeft(lpSavedLeft);                                     // `stw 0x3C`
+
+            const s32 liState = lpBody->GetState();     // re-read AFTER the copy (`lwz 0x8C`, 0x828A3AE4)
+            if ((liState & rw_physics::STATIC_BODY) == 0)
+            {
+                lpBody->SetCoolDown(0);                 // 0x828A3AFC
+            }
+            if ((liState & rw_physics::FROZEN_BODY) != 0)
+            {
+                mpSimulation->ActivateRigidBody(lpBody);   // 0x828A3B14
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessApplyForceQueue @ 0x828A6B80   (82 instructions)
+    //
+    // The payload is the witnessed inline of RigidBody::AddForce (rigidbody.h): the force is
+    // PRE-SCALED by the body's inverse mass before accumulating -- `lfs 0x7C` (mInvm), splat,
+    // `vmulfp128`, three scalar `fadds` into +0x90/+0x94/+0x98. mForce is an acceleration-
+    // dimensioned accumulator here (it is seeded with gravity, -600 y, by ResetForces).
+    //
+    // ⚠️ THE COOLDOWN CLEAR IS EMITTED TWICE, 0x828A6C84 unconditional and 0x828A6C94 under
+    // `(state & STATIC_BODY) == 0` -- redundant in the original source too, kept because it
+    // is what executes (same rule as the double SetSpy in ProcessAddRigidBodyQueue).
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessApplyForceQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InApplyForceQueue* const lpQueue =
+            lpInput->GetApplyForceQueue();                                  // `bl sub_8289E558`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InApplyForce& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mID });
+            if (liBodyIndex == -1)
+            {
+                continue;   // SILENT -- 0x828A6BEC
+            }
+
+            rw_physics::RigidBody* const lpBody = mBodyData.GetRigidBody(liBodyIndex);   // called @0x8289D020
+            CGS_ASSERT(lpBody != NULL, "lpBody");   // .cpp:1405
+
+            lpBody->AddForce(lrEvent.mForce, rw_physics::WORLD_SPACE);   // 0x828A6C1C..0x828A6C7C
+
+            const s32 liState = lpBody->GetState();     // one read (`lwz 0x8C`), used twice
+            lpBody->SetCoolDown(0);                     // unconditional first store
+            if ((liState & rw_physics::STATIC_BODY) == 0)
+            {
+                lpBody->SetCoolDown(0);                 // the shipped second store
+            }
+            if ((liState & rw_physics::FROZEN_BODY) != 0)
+            {
+                mpSimulation->ActivateRigidBody(lpBody);   // 0x828A6CAC
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessSetRigidBodySpyQueue @ 0x828A49A8   (51 instructions)
+    //
+    // ⚠️ UNLIKE the joint/drive spy twins (plain whole-word `stw` into m_spy), this one IS
+    // the `ori r11,r11,8` / `clrlwi r11,r11,29` bitfield fork on mState -- i.e. exactly the
+    // committed RigidBody::SetSpy(bool). The three spy drains genuinely differ; do not
+    // harmonise them in either direction.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessSetRigidBodySpyQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InSetRigidBodySpyQueue* const lpQueue =
+            lpInput->GetSetRigidBodySpyQueue();                             // `bl sub_8289E600`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InSetRigidBodySpy& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mID });
+            if (liBodyIndex == -1)
+            {
+                continue;   // SILENT -- 0x828A4A0C
+            }
+
+            rw_physics::RigidBody* const lpBody = mBodyData.GetRigidBody(liBodyIndex);   // called @0x8289D020
+            CGS_ASSERT(lpBody != NULL, "lpBody");   // .cpp:1683
+
+            lpBody->SetSpy(lrEvent.mSpy);           // `lbz 8(event)`; ori 8 / clrlwi 29
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessChangeRigidBodyInertiaQueue @ 0x828A4A78   (143 instructions)
+    //
+    // Selective per-field update of the SHARED maInertias[] block the live body points at --
+    // it never touches the body itself (no world-inertia rebuild, no cooldown clear, no
+    // activate; the body picks the new values up through its mInertia pointer on its next
+    // DynamicUpdate). `mu32Flags` selects fields, one bit per settable Inertia property:
+    //     bit0 AngularDrag   bit1 InverseInertia (SetInverseInertia also re-derives
+    //     mSpherical -- see inertia.h)   bit2 InverseMass   bit3 LinearDrag
+    //     bit4 MaxAngularVelocity        bit5 MaxLinearVelocity
+    // flags == 0x3F short-circuits into a whole-object copy (six ld/std pairs, 0x828A4BA8).
+    //
+    // ⭐ ITS QUEUE ACCESSOR IS THE RETRACTION: `bl 0x8259EE80` at 0x828A4A90 is the const
+    // GetChangeRigidBodyInertiaQueue this tree's IO header used to claim did not exist in
+    // the image. See the header's retraction block.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessChangeRigidBodyInertiaQueue(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InChangeRigidBodyInertiaQueue* const lpQueue =
+            lpInput->GetChangeRigidBodyInertiaQueue();                      // `bl 0x8259EE80`
+
+        for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+        {
+            const PhysicsSimulationIO::InChangeRigidBodyInertia& lrEvent = lpQueue->GetEvent(li);
+
+            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mID });
+            if (liBodyIndex == -1)
+            {
+                continue;   // SILENT -- 0x828A4B08
+            }
+
+            Inertia* const lpInertia = mBodyData.GetInertia(liBodyIndex);   // called @0x8289D0C0
+            CGS_ASSERT(lpInertia != NULL, "lpInertia");                     // .cpp:1716
+            CGS_ASSERT(lrEvent.mu32Flags != 0, "You didn't send any flags!\n");   // .cpp:1718 -- fire-and-continue
+
+            if (lrEvent.mu32Flags == 0x3F)
+            {
+                *lpInertia = lrEvent.mInertia;   // the whole-object fast path: 6x ld/std, 0x828A4BA8
+                continue;                        // `b loc_828A4C98`
+            }
+
+            // The per-bit path re-reads mu32Flags before every test, as the asm does
+            // (`lwz 0x40(r28)` six times). Console test order preserved: 1, 2, 4, 8, 0x10, 0x20.
+            if ((lrEvent.mu32Flags & 0x01) != 0)
+            {
+                lpInertia->SetAngularDrag(lrEvent.mInertia.GetAngularDrag());           // e+0x34 -> +0x24
+            }
+            if ((lrEvent.mu32Flags & 0x02) != 0)
+            {
+                lpInertia->SetInverseInertia(lrEvent.mInertia.GetInverseInertia());     // e+0x10 -> +0x00 (+ mSpherical, see inertia.h)
+            }
+            if ((lrEvent.mu32Flags & 0x04) != 0)
+            {
+                lpInertia->SetInverseMass(lrEvent.mInertia.GetInverseMass());           // e+0x20 -> +0x10
+            }
+            if ((lrEvent.mu32Flags & 0x08) != 0)
+            {
+                lpInertia->SetLinearDrag(lrEvent.mInertia.GetLinearDrag());             // e+0x30 -> +0x20
+            }
+            if ((lrEvent.mu32Flags & 0x10) != 0)
+            {
+                lpInertia->SetMaxAngularVelocity(lrEvent.mInertia.GetMaxAngularVelocity()); // e+0x2C -> +0x1C
+            }
+            if ((lrEvent.mu32Flags & 0x20) != 0)
+            {
+                lpInertia->SetMaxLinearVelocity(lrEvent.mInertia.GetMaxLinearVelocity());   // e+0x28 -> +0x18
+            }
         }
     }
 }

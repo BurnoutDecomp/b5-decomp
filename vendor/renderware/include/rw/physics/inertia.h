@@ -67,12 +67,16 @@ namespace physics
         // three `stfs f0` plus one `stw 0`, i.e. {1.0f, 1.0f, 1.0f, 0.0f} -- lane 3 is the
         // Vector3 pad and the console does write it.
         //
-        // ⚠️ THIS CTOR IS WHY THERE IS NO `SetSphericalInertia`. The DWARF declares SEVEN
-        // getters and only SIX setters; mSpherical is the one with no setter. A previous
-        // note (and the task brief) claimed the de-fork "needs SetSphericalInertia added" --
-        // it does not, and adding it would have been a fabricated SDK entry point. mSpherical
-        // is written HERE and read by DynamicUpdate's sleep-energy term; nothing else in the
-        // tree ever writes it. Checked by grep over the whole repo, not assumed.
+        // ⚠️ WHY THERE IS NO `SetSphericalInertia`: the DWARF declares SEVEN getters and only
+        // SIX setters; mSpherical is the one with no setter because it is a DERIVED value. A
+        // previous note claimed the de-fork "needs SetSphericalInertia added" -- it does not,
+        // and adding it would have been a fabricated SDK entry point.
+        // ⚠️ AMENDED 2026-08-05: this note used to close with "mSpherical is written HERE and
+        // nothing else in the tree ever writes it". That grep result EXPIRED the moment the
+        // ChangeRigidBodyInertia drain was decoded -- the console recomputes mSpherical
+        // whenever the diagonal changes, INSIDE SetInverseInertia (see its banner below).
+        // Written here at construction and there on every diagonal change; still no
+        // independent setter anywhere.
         Inertia()
             : mInvMass(1.0f)
             , mSpherical(1.0f)
@@ -97,7 +101,25 @@ namespace physics
         const f32& GetLinearDrag() const                          { return mLinearDrag; }
         const f32& GetAngularDrag() const                         { return mAngularDrag; }
 
-        void SetInverseInertia(const rw::math::vpu::Vector3& lrV) { mInvTens = lrV; }
+        // ⭐ CORRECTED 2026-08-05 (the rigid-body drain group): SetInverseInertia MAINTAINS
+        // mSpherical. Witness: ProcessChangeRigidBodyInertiaQueue @0x828A4BF8..0x828A4C34
+        // (its `mu32Flags & 2` leg -- the only leg that touches mInvTens) emits, immediately
+        // after the 16-byte `stvx128` into +0x00, exactly this pair of +0x14 stores:
+        //     `fcmpu/blt/fmr` min(x,y) -> `stfs 0x14`     (the intermediate store)
+        //     min(that, z)   -> `fdivs f0, f31(=1.0f), f0` -> `stfs 0x14`
+        // with 1.0f read from flt_82001C98 (byte-verified via x360rd). So mSpherical =
+        // 1 / min(diagonal) = the LARGEST principal inertia, a DERIVED value -- which is
+        // (a) why the DWARF has no SetSphericalInertia (the ctor note below stands), and
+        // (b) consistent with the ctor: 1/min(1,1,1) == the 1.0f it seeds.
+        // ⚠️ Only this one console emission of SetInverseInertia is in scope; if a future
+        // site sets mInvTens WITHOUT the +0x14 pair, that site is NOT this method inlined,
+        // and this body must not be "simplified" to explain it.
+        void SetInverseInertia(const rw::math::vpu::Vector3& lrV)
+        {
+            mInvTens   = lrV;                                            // stvx128 -> +0x00
+            mSpherical = (lrV.x < lrV.y) ? lrV.x : lrV.y;                // stfs -> +0x14 (kept: the console stores the intermediate)
+            mSpherical = 1.0f / ((mSpherical < lrV.z) ? mSpherical : lrV.z);   // fdivs; stfs -> +0x14
+        }
         void SetInverseMass(f32 lfV)                              { mInvMass = lfV; }
         void SetMaxLinearVelocity(f32 lfV)                        { mMaxVelocity = lfV; }
         void SetMaxAngularVelocity(f32 lfV)                       { mMaxOmega = lfV; }

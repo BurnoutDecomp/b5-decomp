@@ -1,6 +1,7 @@
 #include "rw/physics/rigidbody.h"
 #include "rw/physics/simulation.h"   // the owning Simulation's parameters
 #include "rw/physics/quaternion.h"   // Quaternion::UnitQuaternionToMatrix
+#include "JointFrames.hpp"           // rw::math::vpu::QuaternionFromMatrix33 (its current home) -- SetTransform
 
 #include <cmath>   // std::sqrt
 
@@ -26,10 +27,21 @@ namespace physics
 // A full field copy of the 176-byte (0xB0) body. The asm copies the first
 // 16-byte register at +0x00 (lvx128/stvx128) then every 4-byte field from
 // +0x10 to +0xAC (lfs/stfs for the float lanes, lwz/stw for the integer
-// housekeeping lanes at +0x1C/+0x2C/+0x3C/.../+0xAC). That is exactly a
-// member-wise copy of all eleven Vector4 lane-registers, so the reconstruction
-// copies the members by name. (RigidBody's members are private; this method is
-// a member, so the named copy is well-formed.)
+// housekeeping lanes at +0x1C/+0x2C/+0x3C/.../+0xAC).
+//
+// ⛔⛔ CORRECTED 2026-08-05 (the rigid-body drain group). This body used to copy ONLY the
+// eleven vector registers "by name" -- but on the console the +0x10..+0xAC range CONTAINS
+// the ten packed housekeeping scalars (they live in the vectors' w lanes there), so the
+// vectors-only spelling omitted ten field copies on the PC -- with no diagnostic -- where those scalars
+// are their own members. That was exactly the wrong-but-plausible shape: every caller
+// still linked and the pose still copied.
+// ⭐ THE WITNESS THAT SETTLED IT IS A CALLER'S OWN SAVE/RESTORE: ProcessUpdateRigidBodyQueue
+// @0x828A3AD4 saves the destination's +0x2C/+0x3C (mRight/mLeft) around this call and puts
+// them back afterwards -- which is only meaningful if operator= CLOBBERS the intrusive
+// links, i.e. if it copies the w-lane payloads too. (The OutUpdateRigidBody AddEvent
+// @0x828A66F8 also delegates its 192-byte element copy here, id slot aside.)
+// (RigidBody's members are private; this method is a member, so the named copy is
+// well-formed.)
 // ---------------------------------------------------------------------------
 RigidBody& RigidBody::operator=(const RigidBody& rOther)
 {
@@ -44,6 +56,20 @@ RigidBody& RigidBody::operator=(const RigidBody& rOther)
     mIsplt  = rOther.mIsplt;    // +0x80
     mForce  = rOther.mForce;    // +0x90
     mTorque = rOther.mTorque;   // +0xA0  (ends at +0xAC)
+
+    // The ten w-lane payloads, in ascending console-offset order. Each line IS one of the
+    // `lwz/stw` (or `lfs/stfs`) pairs of the +0x10..+0xAC sweep; on the PC they are the
+    // named scalars the banner above describes.
+    mId      = rOther.mId;      // console +0x1C (mCom.w)
+    mRight   = rOther.mRight;   // console +0x2C (mVel.w)   -- callers that must keep their
+    mLeft    = rOther.mLeft;    // console +0x3C (mOmega.w)    links save/restore around this
+    mStasis  = rOther.mStasis;  // console +0x4C (mRi.w)
+    mInertia = rOther.mInertia; // console +0x5C (mUp.w)
+    mTag     = rOther.mTag;     // console +0x6C (mAt.w)
+    mInvm    = rOther.mInvm;    // console +0x7C (mIfull.w)
+    mState   = rOther.mState;   // console +0x8C (mIsplt.w)
+    mKine    = rOther.mKine;    // console +0x9C (mForce.w)
+    mCool    = rOther.mCool;    // console +0xAC (mTorque.w)
     return *this;
 }
 
@@ -192,6 +218,45 @@ void RigidBody::InertiaUpdate(Inertia* lpInertia)
 
     // `lwz r9,0x5C(r11)` + `lvlx v13,r9,r8(=0x10)` + `vspltw v13,v13,0` -> mIfull.w.
     mInvm = lpInertia->GetInverseMass();
+}
+
+// ---------------------------------------------------------------------------
+// RigidBody::SetTransform(const Matrix44Affine&)   -- DWARF rigidbody.h:200. NO OWN X360
+// SYMBOL: the console inlines it into PhysicsSimulationModule::ProcessUpdateExternalBodyQueue
+// @0x828A3E28..0x828A3FAC, which is the transcription basis (task: the rigid-body drain
+// group, 2026-08-05).
+//
+// The inline decomposes as:
+//   1. four w-preserving row copies (`vrlimi128 vD,vOld,1,0` before every store):
+//          mRi  (+0x40) <- xAxis     mUp  (+0x50) <- yAxis
+//          mAt  (+0x60) <- zAxis     mCom (+0x10) <- wAxis (the position row)
+//      On the PC the w payloads (mStasis/mInertia/mId lanes) are their own members, so
+//      xyz-only stores ARE the faithful copy -- same rule as every mutator above.
+//   2. mQuat (+0x00) = QuaternionFromMatrix33(upper 3x3), stored as a FULL 16-byte row (the
+//      one store in the block with no vrlimi -- mQuat.w is the quaternion's real part, not a
+//      packed scalar). The console computes it from the ARGUMENT's rows (`lvx128` from the
+//      event copy at r30+0x10/+0x20/+0x30), not from the just-written body rows; same values,
+//      but the source is transcribed as-is. The epsilon the console feeds the vsel network is
+//      `lvlx` of flt_820F105C == 0.0f (byte-read via x360rd this wave) == the committed
+//      inline's defaulted argument, so no explicit epsilon is passed.
+//
+// ⚠️ WHAT IS *NOT* IN HERE: the drain follows this inline with the `if (mInertia != NULL)`
+// world-inertia rebuild. That block is RigidBody::InertiaUpdate (above) -- a separate DWARF
+// method with its own guard at the CALL SITE, exactly as Simulation::AddRigidBody emits it.
+// Folding it into SetTransform would make the two other InertiaUpdate call sites wrong.
+// ---------------------------------------------------------------------------
+void RigidBody::SetTransform(const rw::math::vpu::Matrix44Affine& lrTransform)
+{
+    vStore3(mRi,  vLoad3(lrTransform.xAxis));   // +0x40, w (mStasis lane) untouched
+    vStore3(mUp,  vLoad3(lrTransform.yAxis));   // +0x50, w (mInertia lane) untouched
+    vStore3(mAt,  vLoad3(lrTransform.zAxis));   // +0x60, w (mTag lane) untouched
+    vStore3(mCom, vLoad3(lrTransform.wAxis));   // +0x10, w (mId lane) untouched
+
+    rw::math::vpu::Matrix33 lBasis;
+    lBasis.xAxis = lrTransform.xAxis;
+    lBasis.yAxis = lrTransform.yAxis;
+    lBasis.zAxis = lrTransform.zAxis;
+    mQuat = rw::math::vpu::QuaternionFromMatrix33(lBasis);   // epsilon 0.0f (flt_820F105C)
 }
 
 // ---------------------------------------------------------------------------
