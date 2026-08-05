@@ -64,7 +64,10 @@ namespace BrnGui
     struct GuiCompletedStuntEvent : public CgsGui::GuiEvent<390> { u8 maPayload[20]; };  // id 390 size 32 (12B GuiEvent header + opaque payload)
     struct GuiCrashComboEvent { u8 maData[8]; s32 GetEventType() const { return 347; } };  // id 347 size 8 (raw; size not GuiEvent-shaped)
     struct GuiCrashScoreUpdate : public CgsGui::GuiEvent<434> { u8 maPayload[4]; };  // id 434 size 16 (12B GuiEvent header + opaque payload)
-    struct GuiDeveloperChallengesCompleted { u8 maData[8]; s32 GetEventType() const { return 596; } };  // id 596 size 8 (raw; size not GuiEvent-shaped)
+    // GuiDeveloperChallengesCompleted (id 596) has been RECOVERED and now lives in
+    // BrnGuiEventTypeDefs.h as a real FastBitArray<15> payload. The opaque u8[8]
+    // placeholder that stood here was deleted rather than left to shadow it -- this
+    // header includes BrnGuiEventTypeDefs.h, so every includer still sees the type.
     struct GuiDriftingEvent { u8 maData[4]; s32 GetEventType() const { return 385; } };  // id 385 size 4 (raw; size not GuiEvent-shaped)
     struct GuiDriveThroughEvent { u8 maData[8]; s32 GetEventType() const { return 366; } };  // id 366 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEnteredJunkyard { u8 maData[1]; s32 GetEventType() const { return 79; } };  // id 79 size 1 (raw; size not GuiEvent-shaped)

@@ -769,7 +769,7 @@ namespace BrnGui
 
     private:
         // The HUD-message analyzer reads a handful of consumer-carved snapshot members
-        // directly by name (mfFrameDeltaTime, mbGameplayHudActive, the +0x4930 pending
+        // directly by name (mfTimeStep via GetTimeStep(), mbGameplayHudActive, the +0x4930 pending
         // cluster, miGameFlowState, miLastStuntScore): the X360 inlines the raw loads at
         // its Update / HandleWreckedEvent sites and the PS3 DWARF has no accessor rows
         // for these X360-only offsets, so friendship -- not a fabricated accessor
