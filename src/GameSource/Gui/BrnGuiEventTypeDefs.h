@@ -33,6 +33,7 @@
 #include "types.hpp"                                   // u8/s8/u32 widths, f32
 #include "BrnCommonTypes.h"                             // Vector3, CgsID
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle
+#include "GameShared/GameClasses/Containers/CgsFastBitArray.h"  // CgsContainers::FastBitArray
 #include "GameSource/BurnoutConstants.h"                // EActiveRaceCarIndex
 #include "SharedClasses/World/BrnWorldRegion.h"         // BrnWorld::ECounty / EDistrict
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
@@ -748,6 +749,19 @@ struct GuiOnlineStuntRunMessageEvent
 // only null-checks the pointer and fires the parameterless "OnlSRLastRun" message; no field is
 // read, so the payload layout is not recovered. FLAG: opaque pointer-only payload.
 struct GuiOnlineStuntRunLastRunEvent {};
+
+// The developer-challenges-completed notification (X360-only debug flow; id 596, 8 bytes).
+// HandleDeveloperChallengeMessageDEBUG @0x824F9D48 reads ONE u64 at +0x00 (ldx @0x824F9D90,
+// ld @0x824F9DE0) and OR-accumulates it into the analyzer's FastBitArray<15>; the member name
+// is VERBATIM X360 assert rodata (BrnGuiHudMessageAnalyzer.cpp:5974).
+// Moved here from BrnGuiDemangledEventTypes.h (where it was an opaque u8[8]) per that
+// header's own migration note: recovered analyzer payloads belong in this catalogue.
+struct GuiDeveloperChallengesCompleted
+{
+    CgsContainers::FastBitArray<15> mCompletedDeveloperChallenges;   // +0x00 (one u64)
+
+    s32 GetEventType() const { return 596; }   // id 596 size 8 (raw; size not GuiEvent-shaped)
+};
 
 // ===================================================================================
 // BrnGui::GuiOverlayFullInfoRequest -- "send me the current overlay's full info"
