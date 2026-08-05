@@ -112,15 +112,22 @@ namespace CgsNumeric { struct Random; }   // UpdateRoadNoise draws from the shar
 
 namespace BrnPhysics
 {
+// Forward decl: the streamed deformation spec Prepare and the seat bring-up leg consume by
+// pointer. Full type owned by BrnStreamedDeformationSpec.h. ⚠️ RETIRED (seat wave 2026-08-05):
+// this used to be forward-declared INSIDE namespace Vehicle -- a namespace FORK of the real
+// BrnPhysics::Deformation::StreamedDeformationSpec, so any body written against the fork could
+// never link against the real spec ([[odr-forks-link-silently]] pattern, caught at compile here
+// only because the seat leg dereferences it).
+namespace Deformation { struct StreamedDeformationSpec; }
+
 namespace Vehicle
 {
     // ⚠️ RETIRED 2026-08-03 (own-block closure wave): this file used to forward-declare
     // `class BrnPlayerDriverControls;` (also mis-keyed as `class` where the DWARF says `struct`).
     // The type is now INCLUDED above, because mPreviousControls @+0x1090 embeds it BY VALUE.
 
-    // Forward decl (C11 group): the streamed deformation spec a Prepare consumes by pointer. Full
-    // type owned by a deformation TU; only forwarded through, never dereferenced here.
-    struct StreamedDeformationSpec;
+    // The spec name Vehicle-scope code uses; resolves to the REAL Deformation-namespace type.
+    using Deformation::StreamedDeformationSpec;
 
     // Forward decl (own-block closure wave): the per-car physics debug component mpDebugComponent
     // @+0x13E4 points at (DWARF VehiclePhysics.h:982 types it
@@ -569,6 +576,40 @@ namespace Vehicle
                      const f32* lpafWheelRadii);
         void UpdateShunt(const BrnPlayerDriverControls* lpControls);
         void UpdateCrashing(f32 lfTimeStep, const BrnPlayerDriverControls* lpControls);
+
+        // ==========================================================================================
+        // @0x825D1C00 -- THE ANALYTIC REST SEAT (seat wave 2026-08-05). Bodied in VehiclePhysics.cpp.
+        //
+        // Copies the four rows of lrTransform into mTransform (this+0x10..0x40), then OVERWRITES the
+        // translation row with the analytic at-rest seat above the supplied road point:
+        //     newPos = pos + up * (maWheels[1].mSlipVariables.w                    // wheel 1 radius
+        //                          - maWheels[1].mStreamedPositionPlusTwistAmount.y // wheel 1 local Y
+        //                          - 0.035f)                                       // flt_8208FB0C
+        //                  + zAxis * mpAttribs->mBaseAttribs.mCOMOffset.z
+        // (asm 0x825D1E34..0x825D1EDC; flt_8208FB0C == 0.035f read from the image, the tyre-
+        // compression allowance the suspension settles out). Console callers:
+        // VehicleManager::ProcessResetEvents (gated on the reset event's mbResetTransform) and
+        // RaceCarPhysics::Prepare @0x82639CB8 (the create leg -- an export-set hole, decoded from
+        // image bytes: bl VehiclePhysics::Prepare @0x82637C80 then bl 0x825D1C00). The create leg is
+        // reached from VehicleManager::ProcessCreateEvents @0x82616770 via the vcall at vtable
+        // slot +0x30 on maRaceCarPhysics[i] (VERIFIED in the pseudocode: `(*(vtbl+48))(...)` on the
+        // 0x1460-stride array at VehicleManager+0x740).
+        // ==========================================================================================
+        void SetTransformFromPositionOnRoad(const Matrix44Affine& lrTransform);
+
+        // ==========================================================================================
+        // [FLAG PC bring-up] SeatTransformFromCreateLegBringUp -- NOT an X360 function. Bodied in
+        // VehiclePhysics.cpp. The PC stand-in for the create-event leg above (ProcessCreateEvents ->
+        // vcall slot +0x30 -> RaceCarPhysics::Prepare -> VehiclePhysics::Prepare -> the seat), used
+        // by RaceCarEntityModule::ResetActiveRaceCar while no VehicleManager runs on this build.
+        // Every seat input is derived from the RESIDENT streamed deformation spec exactly the way
+        // the console's own create leg derives it -- see the body for the per-input provenance and
+        // the one INFERRED step (the effective COM offset). Returns the seated transform.
+        // DELETE-WHEN VehicleManager::ProcessCreateEvents + RaceCarPhysics::Prepare land.
+        // ==========================================================================================
+        static Matrix44Affine SeatTransformFromCreateLegBringUp(
+                const StreamedDeformationSpec* lpSpec,
+                const Matrix44Affine&          lrPlacementTransform);
 
         // ----- ADDITIVE GROW (C04 wheels/tire group): two per-frame wheel-geometry funcs bodied in
         //       VehiclePhysics.cpp (CalculateBodyVelocityAtWheelContact, StoreLocalWheelPositions).

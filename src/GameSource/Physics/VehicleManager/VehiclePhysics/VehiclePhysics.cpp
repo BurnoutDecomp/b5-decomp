@@ -1,4 +1,5 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"  // the seat bring-up leg reads the RESIDENT spec (WheelSpecs, mMeshOffset)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"  // BrnPlayerDriverControls (C07 boost/speed-match)
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"  // KVF_HANDBRAKE_OFF_TIME_TO_ALLOW_DRIFT (CheckForEnteringDrift)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h" // CgsNumeric::Random (the shared LCG ring)
@@ -3405,6 +3406,167 @@ namespace Vehicle
                    "VehiclePhysics::IsIgnoringPassedOnImpulses is a vtable-closure gate, not a "
                    "body -- reconstruct it before the deformation impulse path is mounted");
         return false;   // pass-through: apply the impulse. NEVER flip this without the real body.
+    }
+
+    // flt_8208FB0C -- the seat's tyre-compression allowance, read from the image (x360rd, the
+    // calibrated .id1 reader): 0.03500000014901161f. The seat plants the car this much LOW and the
+    // suspension settles it out.
+    static const f32 KF_TYRE_COMPRESSION_ALLOWANCE = 0.035f;
+
+    // ===========================================================================================
+    //  VehiclePhysics::SetTransformFromPositionOnRoad   @0x825D1C00   (seat wave 2026-08-05)
+    // ===========================================================================================
+    // THE ANALYTIC REST SEAT. The console's own placement mechanism: given a transform whose
+    // translation is a point ON the road, copy its rows into mTransform (this+0x10..0x40), then
+    // overwrite the translation row with the at-rest position above that point:
+    //
+    //     S      = maWheels[1].mSlipVariables.w                          // wheel 1 radius (+0x250.w)
+    //            - maWheels[1].mStreamedPositionPlusTwistAmount.y        // wheel 1 local Y (+0x2A0.y)
+    //            - KF_TYRE_COMPRESSION_ALLOWANCE                         // flt_8208FB0C = 0.035f
+    //     newPos = pos + up * S + zAxis * mpAttribs->mBaseAttribs.mCOMOffset.z
+    //
+    // asm 0x825D1E34..0x825D1EDC: lvx128 this+0x2A0 (vspltw lane 1) / this+0x250 (vspltw lane 3) /
+    // mpAttribs+0x20 (vspltw lane 2) / flt_8208FB0C; vsubfp twice; two vmaddfp against the
+    // transform's yAxis and zAxis rows; four stvx128 to this+0x10..0x40 with the position row
+    // overwritten. flt_8208FB0C == 0.03500000 read from the image (x360rd, calibrated reader).
+    //
+    // The 0.035 is the tyre-compression allowance: the seat plants the car 3.5 cm low and the
+    // suspension settles it out on the very next ticks (retail's measured rest = seat + 0.035).
+    //
+    // Asserts (X360 VehiclePhysics.cpp:3364-3366): IsValid(lTransform), mpAttribs != NULL,
+    // mpAttribs->IsValid().
+    // -------------------------------------------------------------------------------------------
+    void VehiclePhysics::SetTransformFromPositionOnRoad(const Matrix44Affine& lrTransform)
+    {
+        CGS_ASSERT(rw::math::vpu::IsValid(lrTransform), "rw::math::IsValid( lTransform )"); // :3364
+        CGS_ASSERT(mpAttribs != 0,                      "mpAttribs != NULL");               // :3365
+        CGS_ASSERT(mpAttribs->IsValid(),                "mpAttribs->IsValid()");            // :3366
+
+        const f32 lfWheel1Radius = maWheels[1].mSlipVariables.w;                        // +0x250.w
+        const f32 lfWheel1LocalY = maWheels[1].mStreamedPositionPlusTwistAmount.y;      // +0x2A0.y
+        const f32 lfSeatHeight   = lfWheel1Radius - lfWheel1LocalY
+                                   - KF_TYRE_COMPRESSION_ALLOWANCE;                     // vsubfp x2
+        const f32 lfForwardShift = mpAttribs->mBaseAttribs.mCOMOffset.z;                // +0x20.z
+
+        // Rows copied to this+0x10..0x40, then the position row overwritten (the two vmaddfp).
+        mTransform = lrTransform;
+        mTransform.wAxis.x = lrTransform.wAxis.x + lrTransform.yAxis.x * lfSeatHeight
+                                                 + lrTransform.zAxis.x * lfForwardShift;
+        mTransform.wAxis.y = lrTransform.wAxis.y + lrTransform.yAxis.y * lfSeatHeight
+                                                 + lrTransform.zAxis.y * lfForwardShift;
+        mTransform.wAxis.z = lrTransform.wAxis.z + lrTransform.yAxis.z * lfSeatHeight
+                                                 + lrTransform.zAxis.z * lfForwardShift;
+    }
+
+    // ===========================================================================================
+    //  [FLAG PC bring-up] SeatTransformFromCreateLegBringUp -- NOT an X360 function.
+    // ===========================================================================================
+    // The PC stand-in for the create-event leg that reaches the seat on console:
+    //     VehicleManager::ProcessCreateEvents @0x82616770
+    //       -> vcall vtable+0x30 on maRaceCarPhysics[i]        (VERIFIED in the pseudocode)
+    //       -> RaceCarPhysics::Prepare @0x82639CB8             (export hole; bl chain decoded)
+    //       -> VehiclePhysics::Prepare @0x82637C80 -> ... -> SetAttributes -> Wheel::Prepare
+    //       -> SetTransformFromPositionOnRoad @0x825D1C00
+    // No VehicleManager runs on this build, so RaceCarEntityModule::ResetActiveRaceCar calls this
+    // instead, and every seat input is derived from the RESIDENT streamed deformation spec the way
+    // the console's own create leg derives it:
+    //
+    //   * wheel radius[i] = 0.5f * spec.maWheelSpecs[i].mScale.y -- ProcessCreateEvents' own
+    //     derivation (v219[0]=0.5; vspltw scale lane 1; vmulfp128), fed through the REAL
+    //     Wheel::Prepare (f1 -> mSlipVariables.w), which is the lane the seat reads.
+    //   * wheel local position[i] = spec.maWheelSpecs[i].mPosition - COMeff, fed through the REAL
+    //     Wheel::Prepare (v1 -> mStreamedPositionPlusTwistAmount.xyz). On console the subtraction
+    //     is SimpleVehiclePhysics::SetAttributes' `vsubfp v1, wheelPos, mSimpleAttribs.mCOMOffset`.
+    //
+    //   * ⚠️ COMeff = spec.mMeshOffset -- ONE STEP HERE IS INFERRED FROM MEASUREMENT, stated
+    //     plainly. The console populates mSimpleAttribs.mCOMOffset from VehicleAttribs+0x20, which
+    //     SetupAttribs @0x825F4CD8 fills VERBATIM from the vault's physicsvehiclebaseattribs
+    //     CoMOffset -- and that ships (6000, 0, 0) for PUSMC01 (5000/6000 across cars), which
+    //     CANNOT be the live subtractor (wheel local x would be -5999; retail drives). The value
+    //     that IS consistent with everything measured:
+    //       - shipped spec mMeshOffset            = (0, +0.740575, -0.170226)
+    //       - shipped spec+1552 (the model-space -> handling-space matrix the game side reads into
+    //         ActiveRaceCar::mCentreOfMassTransform) = identity, translation (0, -0.740575,
+    //         +0.170226) = -mMeshOffset
+    //       - the user-attested retail rest height: physics origin ~1.481 above ground
+    //         == radius(0.342469) + |specY - mMeshOffset.y|(1.138681) - 0.035 + 0.035-settle
+    //     so mMeshOffset is used, and the exact console plumbing of that vector into
+    //     mSimpleAttribs.mCOMOffset stays an OPEN question (the ProcessCreateEvents pseudocode
+    //     shows a `mCOMOffset += avg(wheelSpecPos)` mutation that cannot be the whole story;
+    //     its raw asm was not decoded this wave). The witness prints at the call site expose all
+    //     three numbers on every run.
+    //
+    //   * ⚠️ TWO CONSOLE TERMS DELIBERATELY NOT REPRODUCED, stated plainly:
+    //       1. the front/rear RIDE-HEIGHT raise (SetAttributes adds suspension FrontHeight/
+    //          RearHeight -- +0.033/-0.02 in PUSMC01's vault -- to the wheel Y before the COM
+    //          subtraction). On console the springs settle the car back to design height within
+    //          ticks; on this build NOTHING simulates, so reproducing the raise without the
+    //          settling would freeze the car sunk by exactly that amount. Lands with the
+    //          vault->VehicleAttribs chain + the integrator (the physics wall).
+    //       2. Wheel::Prepare's f2..f4 scalars (flt_82FB8BB0 + the two suspension-travel bounds):
+    //          passed 0 -- none of those lanes is read by the seat, and their live sources are the
+    //          same unlanded attribs chain. Flagged, not faked.
+    //
+    //   * mpAttribs: the REAL mPlayerVehicleAttribs member (the slot VehiclePhysics::Prepare
+    //     @0x82637C80 copies the create attribs into and re-points mpAttribs at), Construct()ed by
+    //     the REAL VehicleAttribs::Construct, with mBaseAttribs.mCOMOffset = COMeff and mbIsValid
+    //     set the way SetupAttribs' tail sets it -- so the seat's z-term (mCOMOffset.z =
+    //     -0.170226) exactly cancels mCentreOfMassTransform's +0.170226 and the MODEL origin lands
+    //     on the road point. That geometric closure is the role of the term; the seat's asserts
+    //     run against a valid attribs block.
+    //
+    // The staged VehiclePhysics lives in zeroed static storage (no constructor: the class uses the
+    // console's Construct() pattern, and running the full Construct here would drag the whole
+    // dynamics closure in for a placement-only helper; the seat and Wheel::Prepare touch no vptr).
+    // DELETE-WHEN ProcessCreateEvents + RaceCarPhysics::Prepare land.
+    // -------------------------------------------------------------------------------------------
+    Matrix44Affine VehiclePhysics::SeatTransformFromCreateLegBringUp(
+            const StreamedDeformationSpec* lpSpec,
+            const Matrix44Affine&          lrPlacementTransform)
+    {
+        using BrnPhysics::Deformation::WheelSpec;
+
+        alignas(16) static u8 saSeatVehicleStorage[sizeof(VehiclePhysics)];
+        std::memset(saSeatVehicleStorage, 0, sizeof(saSeatVehicleStorage));
+        VehiclePhysics* lpStaged = reinterpret_cast<VehiclePhysics*>(saSeatVehicleStorage);
+
+        // COMeff -- see the banner. mMeshOffset, witness-checked against -(spec+1552 translation)
+        // at the call site's print.
+        const Vector3& lvCOMOffset = lpSpec->mMeshOffset;
+
+        // The REAL attribs block in its REAL slot, built by the REAL constructor.
+        VehicleAttribs& lrAttribs = lpStaged->mPlayerVehicleAttribs;
+        lrAttribs.Construct();
+        lrAttribs.mBaseAttribs.mCOMOffset = lvCOMOffset;
+        lrAttribs.mbIsValid = true;              // SetupAttribs @0x825F4CD8 tail: li 1; stb +0x360
+        lrAttribs.mFrontTireAttribs.PrepareDefaultFrontTire();
+        lrAttribs.mRearTireAttribs.PrepareDefaultRearTire();
+        lpStaged->mpAttribs = &lrAttribs;        // Prepare: `*(this+0x720) = this+0xAA0`
+
+        // The four wheels, in spec order (0/1 front, 2/3 rear -- the same order the console's
+        // create leg walks), through the REAL writer.
+        for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+        {
+            const WheelSpec* lpWheelSpec = lpSpec->GetWheelSpec(liWheel);
+
+            const Vector3 lvLocalPos = {
+                lpWheelSpec->mPosition.x - lvCOMOffset.x,
+                lpWheelSpec->mPosition.y - lvCOMOffset.y,
+                lpWheelSpec->mPosition.z - lvCOMOffset.z,
+                0.0f
+            };
+            const f32 lfRadius = 0.5f * lpWheelSpec->mScale.y;   // ProcessCreateEvents' derivation
+
+            lpStaged->maWheels[liWheel].Prepare(
+                lvLocalPos, lfRadius,
+                0.0f, 0.0f, 0.0f,                                // f2..f4 -- flagged, see banner
+                (liWheel < 2) ? &lrAttribs.mFrontTireAttribs     // the console's per-wheel table:
+                              : &lrAttribs.mRearTireAttribs );   // {front, front, rear, rear}
+        }
+
+        // The REAL seat.
+        lpStaged->SetTransformFromPositionOnRoad(lrPlacementTransform);
+        return lpStaged->GetTransform();
     }
 }
 }

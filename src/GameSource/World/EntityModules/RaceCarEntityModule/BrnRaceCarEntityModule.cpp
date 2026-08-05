@@ -58,6 +58,7 @@
 #include "rw/math/vpu/vector3_operation.h"                                               // rw::math::vpu::IsValid(Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"                                        // rw::math::vpu::IsValid(Matrix44Affine) / Mult
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h" // StreamedDeformationSpec::WheelSpec (the authored wheel placements)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"                 // VehiclePhysics::SeatTransformFromCreateLegBringUp (the analytic rest seat, seat wave 2026-08-05)
 
 #include <cstring>   // memset
 
@@ -819,13 +820,69 @@ void RaceCarEntityModule::ResetActiveRaceCar(
 
     // [FLAG PC bring-up] the OTHER half of that create event. AddHandlingModel has just
     // published lrTransform to the vehicle manager; on the console the next tick's
-    // RaceCarState carries it straight back into mPhysicsState via UpdatePhysicsState.
-    // Nothing on this build answers a create event, so without this the slot keeps the
-    // transform Attach seeded (the spawn ANCHOR) and every consumer downstream -- the
-    // render pose, the output interface, the director's framing -- reads the car at a
-    // position it was NOT placed at. See BrnActiveRaceCar.h for the measurement.
+    // RaceCarState carries back the transform the create leg PRODUCED -- which is NOT the
+    // raw ground transform: RaceCarPhysics::Prepare @0x82639CB8 runs the ANALYTIC SEAT
+    // (VehiclePhysics::SetTransformFromPositionOnRoad @0x825D1C00) over it, planting the
+    // handling-frame origin `radius1 - localY1 - 0.035` above the road point. Seeding the
+    // RAW transform here (as this build did until the seat wave 2026-08-05) is what put the
+    // car in the ground: the render composition body = COM * physics subtracts 0.740575 from
+    // whatever is seeded, so the body origin sat ~0.74 BELOW the road.
+    //
+    // Now the seat runs at the seam (the create leg's own math over the resident spec's own
+    // data -- see VehiclePhysics::SeatTransformFromCreateLegBringUp), and the SHIPPED
+    // model-space->handling-space matrix (spec+1552) lands in mCentreOfMassTransform so the
+    // two halves compose: physics ~= ground + 1.4459, body ~= ground + 0.7054 (PUSMC01).
     // DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics is wired to a real producer.
-    lpActiveRaceCar->SeedPhysicsStateFromCreateEventBringUp( lrTransform );
+    {
+        const RaceCarStreamer::PhysicsResourcePtr& lrSeatPhysicsResource =
+            mRaceCarStreamer.GetPhysicsResourceBringUp(
+                static_cast<s32>( lpActiveRaceCar->GetActiveRaceCarIndex() ) );
+
+        if( lrSeatPhysicsResource.HasMemoryResource() )
+        {
+            const BrnPhysics::Deformation::StreamedDeformationSpec* lpSeatSpec =
+                lrSeatPhysicsResource.operator->();
+
+            const Matrix44Affine lSeatedTransform =
+                BrnPhysics::Vehicle::VehiclePhysics::SeatTransformFromCreateLegBringUp(
+                    lpSeatSpec, lrTransform );
+
+            lpActiveRaceCar->SetCentreOfMassTransformBringUp(
+                lpSeatSpec->mCarModelSpaceToHandlingBodySpaceTransform );
+
+            lpActiveRaceCar->SeedPhysicsStateFromCreateEventBringUp( lSeatedTransform );
+
+            // ---- WITNESS PRINTS (both ends of the seat, every promote) -----------------
+            if( CgsDev::Log::gpDebugPrint != 0 )
+            {
+                const BrnPhysics::Deformation::WheelSpec* lpWheel1 = lpSeatSpec->GetWheelSpec( 1 );
+                const Matrix44Affine& lrM1552 =
+                    lpSeatSpec->mCarModelSpaceToHandlingBodySpaceTransform;
+                *CgsDev::Log::gpDebugPrint
+                    << "[seat] car " << static_cast<s32>( leActiveRaceCarIndex )
+                    << " ground y " << lrTransform.wAxis.y
+                    << " -> physics y " << lSeatedTransform.wAxis.y
+                    << " | radius1 " << 0.5f * lpWheel1->mScale.y
+                    << " specY1 " << lpWheel1->mPosition.y
+                    << " COMeff (" << lpSeatSpec->mMeshOffset.x << ", "
+                    << lpSeatSpec->mMeshOffset.y << ", " << lpSeatSpec->mMeshOffset.z
+                    << ") -M1552.w (" << -lrM1552.wAxis.x << ", " << -lrM1552.wAxis.y
+                    << ", " << -lrM1552.wAxis.z << ")\n";
+            }
+        }
+        else
+        {
+            // Pre-seat behaviour, kept as the loud fallback: without the spec there are no
+            // wheel radii to seat with, so the raw ground transform is seeded and SAID SO.
+            lpActiveRaceCar->SeedPhysicsStateFromCreateEventBringUp( lrTransform );
+            if( CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[seat] car " << static_cast<s32>( leActiveRaceCarIndex )
+                    << " SPEC NOT RESIDENT -- raw ground transform seeded, car will sit low\n";
+            }
+        }
+    }
 
     if( CgsDev::Log::gpDebugPrint != 0 )
     {
@@ -890,7 +947,36 @@ void RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar*
 
     Matrix44Affine lBodyTransform;
     lpActiveRaceCar->CalcBodyTransform( lBodyTransform );
-    lpRenderParams->SetBodyTransform( lBodyTransform );
+
+    // ---- THE GRAPHICS-FRAME STEP (seat wave 2026-08-05) ---------------------
+    // CalcBodyTransform yields the MODEL-frame pose (COM * physics -- the console's own
+    // composition, now fed by the real seat + the shipped spec+1552 matrix). But the shipped
+    // GraphicsSpec PART LOCATORS are NOT authored in that frame: every locator translation in
+    // VEH_PUSMC01_GR.BIN is POSITIVE-Y (bumpers +0.73, arch parts +0.325 -- real part heights
+    // above the GROUND), i.e. the locator frame sits ONE MORE model->handling step below the
+    // model frame. MEASURED, not tuned: with body = M1552 * modelFrame the front-arch locators
+    // (+0.325) land at ground+0.290 against wheel centres at ground+0.296 -- a 1 mm fit --
+    // and the pre-seat builds' look confirms it (body drawn AT the raw ground transform looked
+    // grounded; wheels composed with the same matrix hung 0.4 m under the floor).
+    // The factor is the SHIPPED spec+1552 matrix applied once more -- no invented offset.
+    // ⚠️ FLAG: the console mechanism carrying this step (RenderRaceCar's own consumption of
+    // mBodyTransform, or the GraphicsSpec's mppRigidBodyToSkinMatrixTransforms table this leg
+    // ignores) is NOT yet recovered; this is the measured stand-in inside an already-flagged
+    // bring-up leg. The WHEELS keep composing against the MODEL frame (WheelSpec positions are
+    // model-space -- verified by the same measurement).
+    const RaceCarStreamer::PhysicsResourcePtr& lrPhysicsResource =
+        mRaceCarStreamer.GetPhysicsResourceBringUp( liActiveRaceCar );
+
+    if ( lrPhysicsResource.HasMemoryResource() )
+    {
+        lpRenderParams->SetBodyTransform( rw::math::vpu::Mult(
+            lrPhysicsResource.operator->()->mCarModelSpaceToHandlingBodySpaceTransform,
+            lBodyTransform ) );
+    }
+    else
+    {
+        lpRenderParams->SetBodyTransform( lBodyTransform );
+    }
 
     // ---- THE WHEEL POSE (wheel-render wave 2026-08-03) ----------------------
     // The same stand-in, for the same missing producer. UpdatePhysicsState /
@@ -920,9 +1006,7 @@ void RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar*
     //     stops drawing. Nothing here can tear a wheel off yet.
     // DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics + UpdateWheelPhysicsState land,
     // together with the body-pose stand-in above.
-    const RaceCarStreamer::PhysicsResourcePtr& lrPhysicsResource =
-        mRaceCarStreamer.GetPhysicsResourceBringUp( liActiveRaceCar );
-
+    // (lrPhysicsResource is fetched above, where the graphics-frame step needs it first.)
     if ( lrPhysicsResource.HasMemoryResource() )
     {
         const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec =
@@ -962,6 +1046,16 @@ void RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar*
                  && CgsDev::Log::gpDebugPrint != 0 )
             {
                 sfLastLoggedWheel0X = lpWheel0->mPosition.x;
+                // [seat wave 2026-08-05] the OTHER end of the seat's witness pair: what the
+                // renderer actually composes. physics = the seeded handling-frame transform,
+                // model = COM * physics (CalcBodyTransform), bodyDraw = M1552 * model (the
+                // graphics-frame step). Expected: model = physics - 0.740575, bodyDraw =
+                // model - 0.740575 (z +0.170226 each step).
+                *CgsDev::Log::gpDebugPrint
+                    << "[seat-pose] car " << liActiveRaceCar
+                    << " physics y " << lpActiveRaceCar->GetPhysicsState()->mTransform.wAxis.y
+                    << " model y " << lBodyTransform.wAxis.y
+                    << " bodyDraw y " << lpRenderParams->GetBodyTransform().wAxis.y << "\n";
                 *CgsDev::Log::gpDebugPrint << "[racecar-wheels] authored WheelSpecs for car "
                                            << liActiveRaceCar << ":";
                 for ( s32 liLog = 0; liLog < 4; ++liLog )
