@@ -74,6 +74,16 @@ public:
         // Declared so a serialiser's Serialise<Parameters> can drive it by name.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
+        // @0x821FA920 -- seed the block's defaults. MEASURED: a this-only leaf with no
+        // calls, opening `li r9,0xB; stw r9,0(r3)` (type tag 11 to +0x00), then
+        // miParamWord1=0 and the impact/rig/tunable seeds up to mbLookFromTarget=false
+        // at +0x60. Called by MomentNewCarJoined::Construct @0x8225F4D0 with
+        // r3 = this+0x1D0 (&mLooseAttachmentParameters).
+        // Its own ledger function (under the class:BehaviourLooseAttachment TU key,
+        // currently reviewed-but-unimplemented); DECLARATION-ONLY here -- the per-TU
+        // cl /c gate does not link.
+        void Construct();
+
         EBehaviourTypeLooseAttachment GetType() const
         {
             return static_cast<EBehaviourTypeLooseAttachment>(meType);
@@ -154,6 +164,13 @@ public:
     u32   muParametersSlot;                    // +0x324  adopted parameter block (X360 4B ptr slot)
     u8    maReserved328[0x32C - 0x328];        // +0x328 .. +0x32B (rig members not modelled here)
     u8    mbNoResult;                          // +0x32C  when set, Get returns null
+    u8    maReserved32D;                       // +0x32D  (rig byte not modelled)
+    u8    mbDetachRequested;                   // +0x32E  set (=1) by MomentNewCarJoined::Update
+                                               //         @0x82266DB0 (`stb r26(=1), 0x32E(r11)`)
+                                               //         when the return blend (loose->gameplay)
+                                               //         starts. FLAG: the NAME is role-inferred
+                                               //         (the params carry mfDetachLerpAmount);
+                                               //         the STORE and the OFFSET are asm.
 
     // x64 typed view of the adopted parameter pointer (the by-name, type-correct store target).
     // Appended at the tail so it never disturbs the pinned offsets above; the X360 packs the same
