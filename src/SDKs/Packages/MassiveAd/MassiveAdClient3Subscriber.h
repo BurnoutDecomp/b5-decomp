@@ -56,6 +56,11 @@ class CMassiveAdObjectSubscriber
     // member read rather than an offset hack; the zone manager owns the queue.
     friend class CMassiveZoneManager;
 
+    // CMassiveAdObjectModelDynamic::Initialize name-matches each queued subscriber's
+    // private mpcName (+0x04) directly -- `CompareStrings(name, subscriber+0x04)`
+    // @ 0x82BDEF4C -- the same attested pattern already granted to the zone manager.
+    friend class CMassiveAdObjectModelDynamic;
+
 public:
     // @ 0x82BCE968. Copies the slot name, then -- when the client core and its
     // current zone are live and the name is valid (>= 2 chars) -- attaches to the

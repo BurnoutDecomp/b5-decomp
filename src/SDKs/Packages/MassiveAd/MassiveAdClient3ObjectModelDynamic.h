@@ -7,8 +7,8 @@
 // composite CMassiveAdObjectAudioDynamic (W48): like the audio-dynamic object
 // it is a COMPOSITE -- it owns a list of "slave" ad objects (CMassiveAdObjectModel
 // instances it spawns per delivered asset) and fans its own lifecycle operations
-// (Tic / Rep(ort impressions) / Resume / SetAssetExpired) out across them. It
-// installs its own X360 vftable (off_821872B4). It is built by
+// (Tic / ReportImpressions / Suspend / Resume / SetAssetExpired) out across
+// them. It installs its own X360 vftable (off_821872B4). It is built by
 // CRequestEnterZone::ReadIEBlock (parsing a delivered ad).
 //
 // SHAPE and BODIES are reconstructed from the X360 ARTIST.XEX pseudocode +
@@ -18,7 +18,8 @@
 //     CMassiveAdObjectModelDynamic::`scalar deleting destructor'   @ 0x82BDADD0
 //     CMassiveAdObjectModelDynamic::~CMassiveAdObjectModelDynamic   @ 0x82BDE7B8
 //     CMassiveAdObjectModelDynamic::Tic                            @ 0x82BDEAD8
-//     CMassiveAdObjectModelDynamic::Rep                            @ 0x82BDEB50
+//     CMassiveAdObjectModelDynamic::Rep[ortImpressions]            @ 0x82BDEB50
+//     CMassiveAdObjectModelDynamic::Suspend                        @ 0x82BDEBC8  (absent from the ledger/.ida-exports; recovered from the off_821872B4 vftable, slot 5)
 //     CMassiveAdObjectModelDynamic::Resume                         @ 0x82BDEC38
 //     CMassiveAdObjectModelDynamic::SetAssetExpired                @ 0x82BDEA58
 //     CMassiveAdObjectModelDynamic::Sub                            @ 0x82BDECA8
@@ -71,10 +72,12 @@
 //     and links the slave into mSlaveList. Homing it faithfully needs the slave
 //     class and the base's asset machinery first.
 //   - GetNextAssetID @ 0x82BDE960 walks the base CMassiveAdObject's delivered-
-//     asset list (X360 +0x50) and its u16 count (+0x4C), plus two more un-homed
-//     base fields (+0x58, +0x5C), and reads each list element's first dword as an
-//     asset id through an un-homed element type. Left for when the base asset list
-//     and its element type are recovered.
+//     asset list (X360 +0x50, a CMassiveList whose nodes carry MassiveMalloc(4)'d
+//     int* asset ids -- AssetIDAdd @ 0x82BD5C60) and its u16 count (+0x4C). The
+//     raw +0x58/+0x5C reads in the asm are NOT further base fields -- they are
+//     that list's own mpCurrent/mnCount (CMassiveList +0x08/+0x0C), reached via
+//     the committed GetCurrent()/GetCount() accessors. Blocked only on the
+//     two-member base carve (muAssetIDCount + mAssetIDList).
 //   - Initialize @ 0x82BDEEF8 pulls the current zone off CMassiveClientCore, walks
 //     the zone manager's internal list (X360 +0x28), reads an un-homed base field
 //     (+0x18), CompareStrings-matches an un-homed list element's name (+0x04), and
@@ -126,25 +129,41 @@ public:
     // list cursor, which is null at the loop exit).
     int Resume() override;
 
+    // @ 0x82BDEBC8. Composite override of the ad-object suspend (base vftable
+    // +0x14): suspends each slave (slave vftable +0x14, result discarded). Always
+    // returns 0 (the X360 returns the last list helper's r3, which is the null
+    // cursor on every exit path). This function is ABSENT from the ledger and
+    // from .ida-exports/ (no 0x82BDEBC8.json) -- it was recovered from the
+    // off_821872B4 vftable (slot 5 -> 0x82BDEBC8, IDB symbol
+    // MassiveAdClient3::CMassiveAdObjectModelDynamic::Suspend) and disassembled
+    // headlessly; conductor: add the ledger row so coverage counts 12, not 11.
+    int Suspend() override;
+
     // @ 0x82BDEA58. Override of the ad-object asset-expiry (base vftable +0x08):
     // chains the base CMassiveAdObject::SetAssetExpired first and returns 0 if it
     // rejects; otherwise decrements muActiveAssetCount (clamped at 0), clears
     // mnCurrentAssetID when it matches the expiring asset id, and returns 1.
     int SetAssetExpired(int nAssetId) override;
 
-    // @ 0x82BDEB50. The composite "report impressions" pass: reports each slave's
-    // impressions (the slave's own vftable +0x10) and returns the first non-zero
-    // sub-result, or 0. Kept under its X360 identity name Rep (not marked an
-    // override of the base ReportImpressions +0x10 slot: the composite forwarding
-    // is modelled by NAME -- it calls slave->ReportImpressions() directly -- so
-    // the vtable slot mapping is not asserted, matching the base pin's stance).
-    int Rep();
+    // @ 0x82BDEB50 (X360 identity/ledger name `Rep` -- the qualified symbol is
+    // clipped at 51 chars, like the base's own `ReportImpressio[ns]` @ 0x82BD7370).
+    // MEASURED override: off_821872B4 slot 4 (+0x10) -> 0x82BDEB50, the same slot
+    // the base off_82186474 fills with CMassiveAdObject::ReportImpressions, and
+    // CMassiveZoneManager::ReportImpressions dispatches virtually through +0x10
+    // over its ad-object list (@ 0x82BD2F80..0x82BD2F8C). The composite pass:
+    // reports each slave's impressions (slave vftable +0x10) and returns the
+    // first non-zero sub-result, or 0.
+    int ReportImpressions() override;
 
-    // @ 0x82BDECA8. Subscribe entry point: with a null subscriber it records
-    // error -500 via the base SetLastError; otherwise it spawns a slave model ad
-    // object bound to that subscriber (CreateSlaveM). Returns the error code on
-    // the null path, else 0.
-    int Sub(CMassiveAdObjectSubscriber* pSubscriber);
+    // @ 0x82BDECA8 (X360 identity/ledger name `Sub` -- the qualified symbol is
+    // clipped at 51 chars). MEASURED override: off_821872B4 slot 7 (+0x1C) ->
+    // 0x82BDECA8, the base SubscriberAdd slot (base off_82186474 slot 7 ->
+    // CMassiveAdObject::SubscriberAdd @ 0x82BD65E0), and the subscriber ctor
+    // dispatches virtually through +0x1C on the MAOFind result (@ 0x82BCEA44).
+    // With a null subscriber it records error -500 via the base SetLastError;
+    // otherwise it spawns a slave model ad object bound to that subscriber
+    // (CreateSlaveM). Returns the error code on the null path, else 0.
+    int SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber) override;
 
     // ----- BLOCKED (declared for class shape; bodies un-homed, see header top) --
 
@@ -159,7 +178,15 @@ public:
 
     // @ 0x82BDEEF8. Builds slaves for the current zone's matching entries.
     // BLOCKED: walks un-homed zone-manager / base internals and calls CreateSlaveM.
-    int Initialize();
+    // MEASURED: this IS a virtual override -- off_821872B4 slot 1 (+0x04) ->
+    // 0x82BDEEF8, and the base slot 1 is CMassiveAdObject::Initialize @ 0x82BD6FD0
+    // (`mr r4, r3; b BaseFindPreSubscribers`), which the minimal base pin does not
+    // declare yet. Once the shared AdObject.h carve adds
+    // `virtual int Initialize();` to the base, THIS declaration must become
+    // `int Initialize() override;` -- as committed, a virtual dispatch through the
+    // base +0x04 slot on a ModelDynamic would reach the BASE implementation.
+    // DONE (wave O): the base carve landed, so this is now the override it must be.
+    int Initialize() override;
 
 private:
     unsigned short muField60;          // +0x60 (preserved across ctor, masked to 16 bits; role not grounded)

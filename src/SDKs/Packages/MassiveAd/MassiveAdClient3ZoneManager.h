@@ -235,6 +235,13 @@ public:
     // so the asset does not read the zone's private +0x6C slot by offset.
     CRequestImpressionUpdate* GetImpressionUpdate() const { return mpImpressionUpdate; }
 
+    // CMassiveAdObjectModelDynamic::Initialize @ 0x82BDEEF8 walks the current zone's
+    // mPreSubscriberList directly on the X360 (GoToStart/GetCurrData/GoToNext on
+    // zone+0x28, raw cursor read at zone+0x30) to spawn one slave per name-matching
+    // queued subscriber; friendship keeps that a named-member walk rather than an
+    // offset poke. The audio/texture/video Dynamic siblings will need the same.
+    friend class CMassiveAdObjectModelDynamic;
+
 private:
     CMassiveList             mPreSubscriberList; // +0x28
     char*                    mpcZoneName;        // +0x38 (owned zone-name copy)
