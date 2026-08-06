@@ -48,11 +48,14 @@ namespace BrnGameState
         // and the posting StreetManager (4B) -- and hands the leading address to
         // VariableEventQueue<13312,16>::AddEvent(&payload, 232, 16).
         //
-        // FLAG: the attested size is the X360's (32-bit pointers pack the manager
-        // at +12, total 16). On the x64 gate the pointer aligns to +16 and the
-        // struct grows to 24, so no static_assert is possible here -- the (232,16)
-        // ints stay verbatim from the asm (the committed
-        // CgsResource::Events::AcquireResourceRequest post is the same precedent).
+        // HOST-vs-CONSOLE (gotcha 1). The X360 immediate is 16 because 32-bit
+        // pointers pack mpStreetManager at +12. MEASURED on the x64 gate: the
+        // pointer aligns to +16 and the struct is sizeof == 24. Posting the
+        // console 16 here would copy the u64, the u32 and 4 bytes of padding and
+        // DROP THE MANAGER POINTER ENTIRELY, so the byte count is sizeof(lSummary)
+        // and the console value survives only in this comment. The payload is
+        // zero-initialised so the alignment hole is never an indeterminate read.
+        // The event id 232 IS verbatim from the asm.
         struct RoadRulesScoreSummaryPayload
         {
             u64            mu64RoadRulesID;       // +0
@@ -76,13 +79,13 @@ namespace BrnGameState
         memcpy( maNetworkChallengeData, lpProfile->GetNetworkChallengeData( 0 ), sizeof( maNetworkChallengeData ) );
         memcpy( maChallengeData,        lpProfile->GetUserChallengeData( 0 ),    sizeof( maChallengeData ) );
 
-        RoadRulesScoreSummaryPayload lSummary;
+        RoadRulesScoreSummaryPayload lSummary = {};
         lSummary.mu64RoadRulesID     = lpProfile->GetRoadRulesID();
         lSummary.muDownloadTimestamp = lpProfile->GetNetworkChallengeDownloadTimestamp();
         lSummary.mpStreetManager     = this;
 
         lpOutput->GetGuiOutputQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>( &lSummary ), 232, 16 );
+            reinterpret_cast<const CgsModule::Event*>( &lSummary ), 232, sizeof( lSummary ) );
     }
 
     // -----------------------------------------------------------------------
@@ -105,13 +108,13 @@ namespace BrnGameState
 
             BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
 
-            RoadRulesScoreSummaryPayload lSummary;
+            RoadRulesScoreSummaryPayload lSummary = {};
             lSummary.mu64RoadRulesID     = lpProfile->GetRoadRulesID();
             lSummary.muDownloadTimestamp = lpProfile->GetNetworkChallengeDownloadTimestamp();
             lSummary.mpStreetManager     = this;
 
             lpOutput->GetGuiOutputQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>( &lSummary ), 232, 16 );
+                reinterpret_cast<const CgsModule::Event*>( &lSummary ), 232, sizeof( lSummary ) );
 
             mpProgressionManager->GetProfile()->SetLastRoadRulesResetTime(
                 lpConnectInfoEvent->muLastRoadRulesResetTime );
@@ -218,13 +221,13 @@ namespace BrnGameState
                 SetChallengeUserScore( liRoadIndex, &lLocalEntry, false );
             }
 
-            RoadRulesScoreSummaryPayload lSummary;
+            RoadRulesScoreSummaryPayload lSummary = {};
             lSummary.mu64RoadRulesID     = mpProgressionManager->GetProfile()->GetRoadRulesID();
             lSummary.muDownloadTimestamp = 0;
             lSummary.mpStreetManager     = this;
 
             lpOutput->GetGuiOutputQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>( &lSummary ), 232, 16 );
+                reinterpret_cast<const CgsModule::Event*>( &lSummary ), 232, sizeof( lSummary ) );
 
             if ( lbDroppedForeignRecords )
             {

@@ -1,8 +1,26 @@
 // =====================================================================================
 // rw::audio::core::Send -- member bodies reconstructed from BURNOUT_X360_ARTIST.XEX
 // (PowerPC). The asm is authoritative for every store; see Send.h for the reconstructed
-// layout. No reference source, no DecFIGS DWARF, and no ProStreet08 PDB entry exist for
-// this type.
+// layout.
+//
+// PROVENANCE (corrected twice now; an earlier note here claimed "no reference source and
+// no DecFIGS DWARF exist for this type" -- BOTH halves of that were wrong):
+//   references/Feb-2007/BrnEntityModuleUnity/SDKs/Packages/rwaudiocore/2.11.00/include/
+//     rw/audio/core/plugins/send.h -- the complete class, in declaration order:
+//     `Attribute_t mAttribute[ATTRIBUTE_MAX]; SubMixConnector mSubMixConnector;
+//     float mDeClickValue[MAX_CHANNELS]; float mPreviousGain; unsigned char
+//     mDiscontinuity;` with `enum EventId { EVENT_CONNECTBYPOINTER = 0,
+//     EVENT_CONNECTBYNAME = 1 }` and both Connect*Handler declarations. This is the
+//     highest-authority source and it agrees with the reconstructed layout member-for-
+//     member. (Its `void DisconnectImmediate();` is a non-static member returning void;
+//     this tree models the identical ABI as `static SubMixConnector*
+//     DisconnectImmediate(Send*)` -- see the FLAG on that function.)
+//   references/DecFIGS/dwarfdump/SDKs/EATech/include/rw/audio/core/plugins/send.h --
+//     partial (Send::ConnectByPointerParams and `GUID = 1399156272` == 'Sen0').
+//   The NFS ProStreet08Milestone.pdb (X360, Oct-2007) carries rw::audio::core::Send
+//   [sizeof=104] with the same offsets (mAttribute[1] @+0x28, mSubMixConnector @+0x30,
+//   mDeClickValue[6] @+0x44, mPreviousGain @+0x5C, mDiscontinuity @+0x60) and is kept as
+//   corroboration (full dump: scratchpad/waveL/Send.spec.md).
 //
 // Send is a PlugIn-family node that mixes (accumulates) its input into a target SubMix
 // through an embedded SubMixConnector subobject (this+0x30), with a deferred connect/
@@ -10,11 +28,12 @@
 // +0x10B8) and a Gain-style de-click ramp on the send level. Each store WIDTH below
 // (stw / stfs / stb) is reproduced from the asm.
 //
-// One ledger function is intentionally NOT reconstructed:
-//   ConnectByNameHandler @0x82B9FF80 -- BLOCKED (see the stub note below): it walks a
-//   global by-name SubMix registry through un-homed foreign statics (off_8327EE68 list
-//   head + dword_8327EE00 iterator) with an X360-offset-specific intrusive-list idiom
-//   whose element (SubMix) name/list-link members are not groundable from this TU.
+// PART-FILE / ODR NOTE: one ledger function of this TU is bodied in a SIBLING part-file,
+// not here -- `Send::ConnectByNameHandler` @0x82B9FF80 lives in
+// b5-decomp/vendor/renderware/src/rw/audio/core/Send_wL_01.cpp (wave L). It IS defined.
+// Do not add a second definition in this file. An earlier banner here and a block further
+// down both said "BLOCKED, NOT reconstructed"; that is no longer true and the stale text
+// has been replaced.
 // =====================================================================================
 
 #include "rw/audio/core/Send.h"
@@ -30,12 +49,18 @@ namespace audio
 namespace core
 {
 
-// off_8217F534 -- the Send (derived) vtable installed by CreateInstance. off_820AA810 --
-// the PlugIn base vtable the scalar-deleting destructor reverts to during teardown.
-// off_82F8FF60 -- the static "Send" plug-in run-time descriptor (a pointer to the
-// type-name string). These are opaque data symbols in the XEX (no exported contents);
-// modelled as honest file-static sentinel storage so the bodies below link without
-// fabricating their contents -- the same idiom Route.cpp / Gain.cpp use.
+// off_8217F534 -- the Send (derived) vtable installed by CreateInstance: 4 slots
+// {ReleaseEvent, EventEvent, <ICF'd trivial virtual>, scalar deleting destructor}.
+// off_820AA810 -- the PlugIn base vtable the scalar-deleting destructor reverts to.
+// off_82F8FF60 -- Send::sPlugInDescRunTime: a full 52-byte rw::audio::core::
+// PlugInDescRunTime { name="Send", &GetSize, &CreateInstance, pPreProcess=0, &Process,
+// pChannelMaps, pParameterDescRunTime, pEventDescRunTime, 0, 0, guid='Sen0',
+// type=4/ctorParams=0/attrs=1/events=2 }. The contents of all three ARE recoverable
+// (rodata dump: scratchpad/waveL/Send.spec.md) -- an earlier note claiming "no exported
+// contents" was wrong. They stay modelled as file-static sentinel storage here only for
+// consistency with the Route.cpp / Gain.cpp idiom until PlugInDescRunTime gets a real
+// type home; the sentinels under-model the descriptor, which is safe today because no
+// committed consumer dereferences it yet (see the spec's follow-up note).
 static void* skSendVTableSlot = 0;
 static void* const skpSendVTable = &skSendVTableSlot;             // off_8217F534
 
@@ -116,6 +141,14 @@ int Send::CreateInstance(Send* self)
 //   return result
 // (The X360 passes DisconnectImmediate a2/a3 through to ReChannelGainWrite's dead r5 slot;
 // both are unused, so the reconstruction takes only `self`.)
+//
+// FLAG (shape, vs the Feb-2007 leak): plugins/send.h declares this as the non-static
+// member `void DisconnectImmediate();`. This tree models the same ABI as
+// `static SubMixConnector* DisconnectImmediate(Send* self)` -- `self` in r3 is identical
+// either way, and the SubMixConnector* return is real in the asm (it is
+// SubMixConnector::Disconnect's r3, tail-forwarded by ReleaseEvent @0x82BA3EF8) even
+// though the leak's declaration discards it. Changing the shape would mean editing the
+// shared Send.h; it is recorded here rather than silently "corrected".
 // -------------------------------------------------------------------------------------
 SubMixConnector* Send::DisconnectImmediate(Send* self)
 {
@@ -270,7 +303,10 @@ int Send::ConnectByPointerHandler(void* cmd)
 }
 
 // -------------------------------------------------------------------------------------
-// ConnectByNameHandler @0x82B9FF80 -- BLOCKED, NOT reconstructed.
+// ConnectByNameHandler @0x82B9FF80 -- DEFINED, in the sibling part-file
+// b5-decomp/vendor/renderware/src/rw/audio/core/Send_wL_01.cpp. NOT a hole: adding a
+// definition here would be an ODR violation. What follows is the reading notes that
+// unblocked it, kept because they carry SubMix-side asm this file's siblings still need.
 //
 // The X360 body disconnects the send's connector then walks a GLOBAL by-name SubMix
 // registry to find the SubMix whose name matches the queued command's name string, and
@@ -279,7 +315,10 @@ int Send::ConnectByPointerHandler(void* cmd)
 //   for (link = off_8327EE68; ...; ) {           // global list head
 //       dword_8327EE00 = link->next;             // global iterator cursor (side-effect)
 //       node = (SubMix*)((char*)link - 0x2C);     // intrusive link at SubMix+0x2C
-//       if (link == (void*)0x2C) break;           // empty-list sentinel == address 0x2C
+//       if (!node) break;                         // `addic. r10,r11,-0x2C ; bne` -- the
+//                                                 // owner-is-NULL test, i.e. the caller's
+//                                                 // `EnumerateSubMix() != NULL`, NOT an
+//                                                 // "address 0x2C sentinel"
 //       if (strcmp(node + 0x4C, cmd + 0xC) == 0) { ...link connector into node... }
 //   }
 //   return *(cmd+8)                              // == the record's own muRecordSize
@@ -299,21 +338,42 @@ int Send::ConnectByPointerHandler(void* cmd)
 // SubMixConnector), the loop's `link == 0x2C` test is just `link - 0x2C == NULL` (an
 // owner-is-null break), and the compared name lives at SubMix+0x4C.
 //
-// It is nevertheless still left undefined, because bodying it here would require work
-// OUTSIDE this TU that cannot be faked:
-//   1. off_8327EE68 (list head) and dword_8327EE00 (the per-iteration cursor this
-//      function writes but nothing else in the export reads) are statics OWNED by the
-//      SubMix TU above. There is no SubMix.cpp to define them, so defining them here
-//      would fork a global away from its home -- and merely declaring them `extern`
-//      would pass the compile-only gate while leaving an unresolvable link symbol.
-//   2. SubMix's registry-link (+0x2C/+0x30), mbRegistered (+0x8C) and name (+0x4C)
-//      members are not modelled: the committed SubMix in SubMixConnector.h keeps
-//      +0x2C..+0x33 opaque and declares mafChannelGain spanning +0x34..+0x8C, which
-//      OVERLAPS the name at +0x4C. (Disconnect only ever indexes that array over
-//      [0, mbNumChannels) i.e. +0x34..+0x4B, so the array is merely over-declared --
-//      but narrowing it is a change to SubMixConnector.h, not to this file.)
-// EventEvent still faithfully stores &Send::ConnectByNameHandler into the name-path
-// command; only the handler body is deferred until SubMix gets a home TU.
+// WAVEL UPDATE -- the registry is FULLY grounded, and the grounding is the Feb-2007 leak
+// (references/Feb-2007/BrnEntityModuleUnity/SDKs/Packages/rwaudiocore/2.11.00/include/
+// rw/audio/core/plugins/submix.h, which declares the whole SubMix class in order) plus
+// the DecFIGS dwarfdump of the same header (`extern ListDStack sSubMixList;` submix.h:151,
+// `extern ListDNode * spSubMixNextNode;` submix.h:152); ProStreet08Milestone.pdb + .map
+// merely corroborate. All confirmed against the ARTIST asm; see
+// scratchpad/waveL/Send.spec.md:
+//   off_8327EE68  == SubMix::sSubMixList (private static ListDStack {phead}) -- the map
+//                    carries ?sSubMixList@SubMix@core@audio@rw@@0VListDStack@234@A.
+//   dword_8327EE00== SubMix::spSubMixNextNode (private static ListDNode*) -- the safe-
+//                    iteration cursor of SubMix::EnumerateSubMixReset/EnumerateSubMix,
+//                    which ARTIST inlined into this function (that is why nothing else
+//                    in the export reads it -- the standalone enumerators were folded).
+//                    submix.h spells the reset inline: `spSubMixNextNode =
+//                    sSubMixList.GetHead();` == `dword_8327EE00 = *off_8327EE68`.
+//   node @+0x2C   == ListDNode SubMix::mSubMixListNode; name @+0x4C == char mName[64];
+//                    flag @+0x8C == u8 mSubMixAdded (set by CreateInstanceHandler
+//                    @0x82B9C380, tested by ReleaseEvent @0x82BA0C18). The gap +0x34..
+//                    +0x4B is `float mDeClickValueTotal[MAX_CHANNELS]` with MAX_CHANNELS
+//                    = 6 (Feb-2007 channel.h:22), and +0x8D is mDeClickRequired.
+// STATUS: both of the out-of-file prerequisites are DONE.
+//   1. SubMixConnector.h (SHARED -- Route.h and the embed check also include it) now
+//      carries the SubMix registry members and the two static declarations. The statics'
+//      DEFINITIONS still belong to the seeded-but-todo class:rw::audio::core::SubMix TU
+//      (there is no SubMix.cpp yet) and stay unresolved at link until it lands -- the
+//      normal leaf-first stubbing situation, invisible to `cl /c`.
+//      (Header naming note: it keeps the ARTIST-grounded spellings mafChannelGain /
+//      mbSubMixAdded / mbDirty and records the original spellings mDeClickValueTotal /
+//      mSubMixAdded / mDeClickRequired per member -- those originals are now attested by
+//      the Feb-2007 header, not only by the PDB as the header's comment still says.)
+//   2. The header's old `mafChannelGain` f32[22] spanning +0x34..+0x8B -- which swallowed
+//      mName and packed its dirty byte at +0x8C, one byte early -- is gone; the tail is
+//      now f32[6] @+0x34, char[64] @+0x4C, and the two flag bytes @+0x8C/+0x8D, pinned by
+//      offsetof static_asserts in the header.
+// EventEvent below faithfully stores &Send::ConnectByNameHandler into the name-path
+// command; the handler body itself is in Send_wL_01.cpp.
 // -------------------------------------------------------------------------------------
 
 // -------------------------------------------------------------------------------------

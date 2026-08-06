@@ -129,7 +129,8 @@ namespace BrnGui
         typedef void (ProfileManager::*OptionFunc)(u32 luOption);
 
         // @0x827E0CD0. Bases' vtables + the embedded sub-objects construct themselves on
-        // the host; see the .cpp note for the two X360 stores this cannot reproduce yet.
+        // the host; the nine deep -1 stores are the stored-image CgsArray count-word
+        // KI_UNCONSTRUCTED sentinels (see the .cpp ctor note for the full mapping).
         ProfileManager();
 
         // BrnGuiProfile.cpp:91 @0x824FEED0 (GuiModule::Construct @0x82518028 passes its

@@ -22,10 +22,11 @@
 // SCOPE: only the eight functions this TU's X360 ledger attests are declared here
 // (GetName, OnActivate, Update, PopulateUserChallengeScores, SendRoadRulesScoresToNetwork,
 // WinAllRoadRules, WinSpecificNumberOfCrashRoadRules, WinSpecificNumberOfTimeRoadRules).
-// Seven of them are bodied in the .cpp; only Update is still declaration-only -- it packs a
-// road-rules score-summary game-action event from deep, still-un-named ProgressionManager/Profile
-// members (Profile+0x1CD1C / Profile+0x1CD30 / ProgressionManager+0x1D0) with no attested
-// accessor, so its body is left for when those members are committed. The three Win* actions ARE
+// Seven are bodied in the .cpp; the eighth, Update, is bodied in
+// BrnStreetManagerDebugComponent_wO_01.cpp (wave O). Its old park -- "un-named Profile+0x1CD1C /
+// Profile+0x1CD30 / ProgressionManager+0x1D0" -- was stale: the first two are the halves of
+// Profile::GetRoadRulesID() (BrnProfile.h:473) and the third is the embedded Profile's
+// muTimeStampOfLastRoadRulesDownload (+0x170 + 0x60); all are committed named members. The three Win* actions ARE
 // now bodied: their trophy/achievement tail routes through the now-committed ProgressionManager /
 // AchievementManagerBase and the X360-attested StreetManager road-rule accessors (additively
 // declared on BrnGameStateStreetManager.h). The other DWARF-listed methods (Construct/Destruct/
@@ -78,9 +79,8 @@ namespace BrnGameState
 
         // Per-frame pump (X360 0x8234A7E0, called by StreetManager::Update). When the
         // "send scores to network" toggle is armed, packs the local road-rules score summary
-        // into the output game-action queue. DECLARATION ONLY: reaches deferred
-        // StreetManager/ProgressionManager/Profile layouts + the game-action queue; bodied by a
-        // later pass once those types are committed.
+        // into the output game-action queue. BODIED in
+        // BrnStreetManagerDebugComponent_wO_01.cpp (wave O) -- do not re-park or re-define it.
         void Update(GameStateModuleIO::OutputBuffer* lpOutput);
 
     protected:

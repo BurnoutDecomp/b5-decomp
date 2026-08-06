@@ -14,12 +14,26 @@
 //   GetBits          @0x82B73378
 //   OpenSynth        @0x82B749C0
 //   Seek             @0x82B749A0
-//   PolySynth        @0x82B771D8 -- BLOCKED, NOT reconstructed here (only declared):
-//       it needs the un-recovered poly-phase synthesis-window coefficient rodata
-//       (unk_8214B6C0 / unk_8214B700) and the un-homed matrixing helper
-//       sub_82B765E0, so its 2304-byte-per-channel history addressing cannot be
-//       grounded without fabricating that float table and the helper's contract.
-//   Close            -- body lives in its own TU (external here); only dispatched.
+//   PolySynth        @0x82B771D8 -- RECONSTRUCTED in CMpegBase_wO_01.cpp (wave O),
+//       together with the file-static matrixing helper and the two rodata blocks.
+//       DO NOT add a second definition here.
+//       The wave-N blocker is CRACKED (wave O): the synthesis-window rodata
+//       (unk_8214B6C0, 544 f32) and the Dct32 coefficients (flt_8214BF40, 31 f32)
+//       are DUMPED FROM THE IMAGE (never filled in from ISO/IEC 11172-3 Table B.3 --
+//       the image is assumed to hold a rounded/scaled variant, as a sibling wave
+//       proved for the XDK-rounded BT.601 coefficients) in
+//       scratchpad/waveO/SndCMpegBase.spec.md, and the
+//       "un-homed" matrixing helper sub_82B765E0 HOMES HERE as a file-static (its
+//       only caller is PolySynth; the X360 compiler even interprocedurally kept
+//       r6-r9 live across the call, proving TU-local codegen). Both rodata blocks
+//       are byte-identical to the rw::audio::core copies, and both functions are
+//       instruction-identical to the wave-M interpreter-verified twins
+//       (sub_82B8E258 / 0x82B8EE50) except for ONE load: this class reads
+//       mpPolySynthHistory (+0x50) where the twin reads mpPolySynthWork (+0x4C).
+//   Close            @0x82B74CF0 -- vtable slot +0x0C, but NOT one of this TU's 9
+//       ledger functions (absent from identity.json -- identity gap; spec section
+//       6 carries its dumped asm). RECONSTRUCTED in CMpegBase_wO_01.cpp (wave O),
+//       so this TU now ships 10 bodies against 9 ledger rows.
 //
 // The `twllei` / `twlgei` in the ProcessHeader asm are the compiler's divide-by-
 // zero / overflow trap instrumentation around `divw`, not source-level calls, so
@@ -74,6 +88,15 @@ CMpegBase::~CMpegBase()
 // ----------------------------------------------------------------------------
 u32 CMpegBase::GetBits(s32 aiNumBits)
 {
+    // HOST DIVERGENCE GUARD (wave O, mirrors the wave-M fix in the rw::audio::core
+    // twins): for aiNumBits == 0 the X360 tail is `srw r3, r11, r10` with r10 = 32,
+    // and PPC srw takes a 6-bit shift count, so the console returns 0 (and leaves
+    // the accumulator state untouched, as the guard does). On x64 `luBits >> 32` is
+    // UB and MSVC masks the count to 0, returning the raw accumulator instead.
+    // aiNumBits == 0 is reachable in real MP3 data (a scalefactor slen of 0).
+    if (aiNumBits == 0)
+        return 0;
+
     while (miBitsAvailable < aiNumBits)
     {
         muBitBuffer |= static_cast<u32>(*mpBitPointer) << (24 - miBitsAvailable);

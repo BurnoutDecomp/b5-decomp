@@ -38,7 +38,8 @@ namespace CgsDev
         E_PMP_GENERAL = 0,
         E_PMP_4       = 4,   // CgsPhysics::PhysicsSimulationModule::Construct's four "Sim *" monitors
         E_PMP_6       = 6,   // BrnPhysics::Vehicle::VehicleManager::Construct's "PHYS ValidateRCWorldContact"
-        E_PMP_12      = 12,  // ... and its other twenty-nine "VMan: ..." monitors (`li r4, 0xC`)
+        E_PMP_9       = 9,   // BrnNetwork::BrnServerInterfaceX360::Construct's two "Int - * Update" monitors
+        E_PMP_12      = 12,  // VehicleManager::Construct's other twenty-nine "VMan: ..." monitors (`li r4, 0xC`)
         E_PMP_MAX     = 24,
     };
 

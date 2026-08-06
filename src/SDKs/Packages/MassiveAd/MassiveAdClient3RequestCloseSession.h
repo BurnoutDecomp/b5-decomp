@@ -17,20 +17,18 @@
 //     MassiveAdClient3::CRequestCloseSession::CRequestCloseSession @ 0x82BD3990
 //     MassiveAdClient3::CRequestCloseSession::GetRequestURL        @ 0x82BD39D8
 //     MassiveAdClient3::CRequestCloseSession::`vector deleting destructor' @ 0x82BD39E8
-//     MassiveAdClient3::CRequestCloseSession::Parse                @ 0x82BD3A40 (BLOCKED)
+//     MassiveAdClient3::CRequestCloseSession::Parse                @ 0x82BD3A40
 //     MassiveAdClient3::CRequestCloseSession::WriteCloseSessionRequest @ 0x82BD3B20
 //     MassiveAdClient3::CRequestCloseSession::CreateRequest        @ 0x82BD3BA0
 //
-// Parse @ 0x82BD3A40 is NOT reconstructed here (BLOCKED, exactly as the sibling
-// CRequestExitZone::Parse / CRequestImpressionUpdate::Parse): inside its
-// signature-block branch its body calls CRequestObject::ReadRemoveSignature --
-// whose signature the committed base header deliberately leaves undeclared as
-// un-attested -- and then issues a `bl STUB` (Hex-Rays `STUB(this,
-// mpSignature@+0x30, 20)`) into a function that is neither homed nor named in
-// this TU's dossier. The Parse override is DECLARED (so the class stays a
-// concrete override of the pure base slot and the compile gate is clean) but its
-// body is left for the ledger slice that homes those two collaborators.
-// Reproducing the STUB side-effect without a real symbol would be fabrication.
+// Parse @ 0x82BD3A40 (formerly BLOCKED) is reconstructed in the .cpp: its two
+// once-blocking callees resolved to already-settled symbols. CRequestObject::
+// ReadRemoveSignature @ 0x82BD02D0 is declared in the committed base header and
+// bodied in MassiveAdClient3Request.cpp; the Hex-Rays `STUB(this,
+// mpSignature@+0x30, 20)` call targets 0x82AD5078, whose entire body is a single
+// `blr` shared by ~150 call sites -- the ICF-folded empty debug/trace hook
+// already documented by the CRequestExitZone / CRequestImpressionUpdate
+// closures (attested no-op: documented at the call site, not modelled).
 //
 // Per the naming convention the vendor SDK identifiers (the MassiveAdClient3
 // namespace and the CRequestCloseSession class / its methods) are PRESERVED
@@ -66,9 +64,13 @@ public:
     // the base slot-2 per-request-type endpoint getter.
     const char* GetRequestURL() override;
 
-    // @ 0x82BD3A40 (BLOCKED -- see the file header). Vftable Parse override the
-    // response path (CRequestObject::Complete) dispatches; body lives in the
-    // ReadRemoveSignature/STUB slice.
+    // @ 0x82BD3A40. Vftable Parse override the response path
+    // (CRequestObject::Complete) dispatches. Walks the close-session response
+    // (protocol version, response type 210, then the field loop): the one
+    // signature field (wire tag 30) is pulled out via ReadRemoveSignature and
+    // every other field must SkipField; succeeds only with exactly one
+    // signature block and a matching HMAC. Returns 1 on success, 0 on any
+    // failure.
     int Parse() override;
 
     // @ 0x82BD3BA0. Called by CMassiveClientCore::RequestSessionClose. Rejects a

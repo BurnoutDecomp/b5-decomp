@@ -211,13 +211,47 @@ namespace CgsLanguage
         bool FormatAndAddText(const char* lpcStringId, const char* lpcSourceText,
                               ParameterFormatType leType, s32 liNumParams, ...);
 
-        // X360 0x828651E8 (DWARF CgsLanguageManager.h:273, the va_list form; the h:267
-        // `...` form has no X360 body). Resolve + format lpcSourceText into the caller's
-        // buffer, then format each of the liNumParams (1..3) vararg (const char* text,
-        // ParameterFormatType) pairs into its own 512-byte slot and print them into the
-        // source's %1..%N positional markers (CgsUnicode::_Print). Body in this TU.
+        // X360 0x828651E8 (DecFIGS dwarfdump CgsLanguageManager.h:240 -- the va_list form).
+        // Resolve + format lpcSourceText into the caller's buffer, then format each of the
+        // liNumParams (1..3) vararg (const char* text, ParameterFormatType) pairs into its
+        // own 512-byte slot and print them into the source's %1..%N positional markers
+        // (CgsUnicode::_Print). Body in this TU.
+        //
+        // CORRECTION (wave L): an earlier revision of this comment asserted that the sibling
+        // `...` overload "has no X360 body". That is FALSE -- the body is 0x82866418, dumped
+        // this wave (see the ellipsis overload immediately below). Do not restore that claim.
         bool FormatTextV(char* lpacBuffer, u32 luBufferSize, const char* lpcSourceText,
                          ParameterFormatType leType, s32 liNumParams, va_list lArguments);
+
+        // X360 0x82866418 (DecFIGS dwarfdump CgsLanguageManager.h:223 / .cpp:985) -- the
+        // ellipsis form of the buffer-target positional-parameter formatter: resolve+format
+        // lpcSourceText, then print the liNumParams (const char* text, ParameterFormatType)
+        // vararg pairs into its %1..%N markers. NAME IS DWARF-SUPPLIED: the DWARF declares
+        // BOTH the ellipsis and the va_list overload as `FormatTextV` -- there is no 6-arg
+        // `FormatText` anywhere in the class. Caller: BrnGui::GuiNetworkPlayerStats::
+        // FormatNetworkStats @0x82416E88 ("ONLINE_STAT_X_OF_Y", 2 params).
+        //
+        // HEADER-INLINE, not declaration-only: the X360 body is nothing but a vararg spill +
+        // tail-forward to the va_list overload (0x82866418 keeps r3-r8 untouched -- this plus
+        // the 5 fixed params -- spills only r9/r10 and `bl FormatTextV`, then `blr` with that
+        // r3), the DWARF body carries exactly the two locals `bool lbResult; va_list
+        // lpArgument;`, and it has NO ledger entry, so no TU will ever emit an out-of-line
+        // definition for it. A bare declaration would be an unresolved external that `cl /c`
+        // cannot see. Same wrapper shape as FormatAndAddText(..., ...) @0x82866450, which
+        // this TU's .cpp already implements out-of-line.
+        //
+        // (DWARF parameter spellings are lpcTarget / liTargetLength / lpcText / leFormat /
+        // liParameterCount; named here to match the va_list sibling above.)
+        bool FormatTextV(char* lpacBuffer, u32 luBufferSize, const char* lpcSourceText,
+                         ParameterFormatType leType, s32 liNumParams, ...)
+        {
+            va_list lArguments;
+            va_start(lArguments, liNumParams);
+            const bool lbResult =
+                FormatTextV(lpacBuffer, luBufferSize, lpcSourceText, leType, liNumParams, lArguments);
+            va_end(lArguments);
+            return lbResult;
+        }
 
         // X360 0x82865480 (DWARF CgsLanguageManager.h:276; the DWARF spells the last
         // parameter `ParameterFormatType*` -- const-qualified here, the body only reads

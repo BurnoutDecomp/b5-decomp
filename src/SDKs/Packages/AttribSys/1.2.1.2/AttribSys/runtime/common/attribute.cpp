@@ -10,6 +10,7 @@
 //   Attrib::Attribute::Attribute   @ 0x82805AF0
 //   Attrib::Attribute::IsInherited @ 0x82803600
 //   Attrib::Attribute::GetLength   @ 0x82805B60   (landed 2026-07-31)
+//   Attrib::Attribute::GetInternalPointer @ 0x82805B88   (landed 2026-08-04)
 //   Attrib::Node::GetPointer       @ 0x828045B0   (landed 2026-07-31)
 //   Attrib::Node::GetCount         @ 0x82804610   (landed 2026-07-31)
 //   Attrib::Collection::Get        @ 0x82807E30   (landed 2026-07-31, as Collection_Get)
@@ -160,6 +161,60 @@ namespace Attrib
         return static_cast<int>(
             mpNode->GetCount(mpInstance->GetLayoutPointer(),
                              mpInstance->GetResolvedCollection()));
+    }
+
+    // ========================================================================
+    // Attrib::Attribute::GetInternalPointer @ 0x82805B88   (landed 2026-08-04)
+    // ========================================================================
+    // Raw pointer to element luIndex of this cursor's value. Flag tests in the X360
+    // order: a NON-array node (no 0x2) resolves through Node::GetPointer for index 0
+    // only -- a non-zero index returns null WITHOUT asserting (unlike
+    // Collection::GetData, which fires an assert on the same misuse). An array node
+    // locates its Array header exactly as GetLength's GetCount does -- laid out (0x10)
+    // at the INSTANCE's layout block + muValue, inherited (0x20) in the instance's
+    // resolved collection's class static-data area + muValue, else the node's own
+    // full-width pointer word -- and tail-calls Array::GetData(luIndex).
+    // ⚠️ Like GetLength, it asks the INSTANCE for layout + collection
+    // (`lwz r9,0(r3); lwz r11,4(r9)` / `lwz r11,0(r9)`), not this cursor's own
+    // mpCollection. For an inherited attribute those differ -- reproduce as written.
+    void* Attribute::GetInternalPointer(u32 luIndex)
+    {
+        Node* lpNode = mpNode;
+        if (lpNode == NULL)
+            return NULL;
+
+        const u8 lu8Flags = lpNode->muFlags;
+        if ((lu8Flags & 0x2u) == 0)
+        {
+            if (luIndex != 0)
+                return NULL;
+            return lpNode->GetPointer(mpInstance->GetLayoutPointer(),
+                                      mpInstance->GetResolvedCollection());
+        }
+
+        Array* lpArray;
+        if ((lu8Flags & 0x10u) != 0)
+        {
+            // Laid out: instance layout block + node offset.
+            lpArray = reinterpret_cast<Array*>(
+                static_cast<u8*>(mpInstance->GetLayoutPointer()) + lpNode->muValue);
+        }
+        else if ((lu8Flags & 0x20u) != 0)
+        {
+            // Inherited: the resolved collection's class static-data area + node offset
+            // (X360 collection+0x18 -> class, +8 -> privates, +0x34 -> mStaticData).
+            const ClassPrivate* lpPrivate =
+                reinterpret_cast<const ClassPrivate*>(
+                    mpInstance->GetResolvedCollection()->mpClass)->mpPrivates;
+            lpArray = reinterpret_cast<Array*>(
+                static_cast<u8*>(lpPrivate->mStaticData) + lpNode->muValue);
+        }
+        else
+        {
+            // Plain: the payload slot IS the Array pointer (full-width on the host).
+            lpArray = reinterpret_cast<Array*>(lpNode->mpValue);
+        }
+        return lpArray->GetData(luIndex);
     }
 
     // ========================================================================

@@ -144,13 +144,38 @@ namespace CgsGui
         // switching to the wrapper would emit a DOUBLE header. The raw ones (`u8 maData[N]` +
         // GetEventType(), no GuiEvent base) need the wrapper and get no header at all here.
         // Resolving the split means re-shaping the payload types across several headers this TU
-        // does not own; until then CgsGuiStateInterface_OutputGuiEvent_Inst.cpp does not compile
-        // (measured: C3190 on `template int`, then C2664 on the raw types once that is spelled
-        // `void` -- `void` is correct, its mangled names are `QAAX` too).
+        // does not own, so the direct pass stays. Consumers that need the exact X360 wire record
+        // build it themselves and post it through GetOutputEventQueue()->AddEvent() -- that is the
+        // standing accommodation (BrnCarSelectMain_wG_02.cpp, BrnOnlineGameRoomPlayerInfo_wH_08/13/14.cpp).
+        //
+        // The reinterpret_cast is what lets the RAW half instantiate at all: AddEvent takes a
+        // `const CgsModule::Event*`, and a raw payload type has no CgsModule::Event base, so plain
+        // `&lrEvent` does not convert (C2664). It is the same cast the two sibling bodies below
+        // already spell. For the 94 GuiEvent<N>-derived types it is a NO-OP: CgsModule::Event is an
+        // empty, non-polymorphic base at offset 0, so the cast yields exactly the address the
+        // implicit derived-to-base conversion would. No queued byte changes, and the FLAGged
+        // divergence above is untouched.
+        //
+        // WHY THE CAST STAYS (conductor, measured): without it the COMMITTED, already-reviewed
+        // BrnChallengeSelector.cpp does not compile at all -- its Hide() posts a raw payload type
+        // and fails C2664 right here. That is a pre-existing break on dev, not something wave L
+        // introduced. A wave-L review advised against landing the cast; that advice predates this
+        // measurement and should not be acted on to revert it. The cast changes NO queued byte for
+        // the 94 GuiEvent<N>-derived types (CgsModule::Event is an empty, non-polymorphic base at
+        // offset 0), and it does NOT resolve the raw-vs-wrapped wire divergence FLAGged above --
+        // that divergence is unchanged and still owned here.
+        // GATE STATE (measured 2026-08-04 with the cast in place; the older note here claimed the
+        // raw types still C2664 -- they no longer do). Raw-type consumers compile again:
+        // BrnChallengeSelector.cpp and BrnChallengeSelector_wL_01.cpp (GuiChallengeSelectedEvent)
+        // and BrnPaybackComponent.cpp (GuiEventPaybackBeginAward) all gate pass.
+        // CgsGuiStateInterface_OutputGuiEvent_Inst.cpp still fails, but ONLY on C3190/C2945 from its
+        // `template int` spelling; a copy of it with `template int` -> `template void` gates PASS on
+        // all 66 instantiations. `void` is the correct spelling (the X360 mangled names are `QAAX`).
         template <typename TEvent>
         void OutputGuiEvent(TEvent& lrEvent)
         {
-            mOutEventQueue.AddEvent(&lrEvent, lrEvent.GetEventType(), static_cast<s32>(sizeof(TEvent)));
+            mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrEvent),
+                                    lrEvent.GetEventType(), static_cast<s32>(sizeof(TEvent)));
         }
 
         // The two sibling output channels of OutputGuiEvent: 41 == "view state", 42 ==

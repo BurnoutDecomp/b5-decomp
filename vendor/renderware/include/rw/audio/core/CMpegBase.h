@@ -35,7 +35,8 @@
 //   +0x20  mpBitPointer              (byte cursor for GetBits / GetHeader)
 //   +0x2C  muBitBuffer               (left-justified bit accumulator)
 //   +0x30  miBitsAvailable           (valid bits currently in muBitBuffer)
-//   +0x38  mucPolySynthPhase         (rotating poly-synth history phase; PolySynth only)
+//   +0x38  mucPolySynthPhase[2]      (per-channel rotating poly-synth history phase, one u8
+//                                     per channel -- PolySynth loads 0x38(this + channel))
 //   +0x3A  mucIsMpeg25               (MPEG 2.5 flag)
 //   +0x3B  mucIsLsf                  (low-sampling-frequency: MPEG 2 or 2.5)
 //   +0x3C  mucSampleRateIndex2       (secondary sample-rate table index)
@@ -49,7 +50,12 @@
 //   +0x45  mucCopyright              (copyright flag)
 //   +0x46  mucOriginal               (original/home flag)
 //   +0x48  mpPolySynthHistory        (poly-synth history block, or null)
-//   +0x4C  mpPolySynthWork           (poly-synth work base; PolySynth only)
+//   +0x4C  mpPolySynthWork           (poly-synth work base PolySynth reads; the derived
+//                                     decoders arm it from mpPolySynthHistory -- e.g.
+//                                     Layer3Dec::Decode @0x82B919C0 does `work = history`
+//                                     each pass, and Layer3Dec::Open zeroes 2304 bytes per
+//                                     channel through it. 2304 bytes/channel = 2 banks of
+//                                     288 f32 = 18 rows x 16 rotating history columns.)
 // =====================================================================================
 
 #include "types.hpp" // u8, u16, u32, s32
@@ -87,10 +93,13 @@ public:
     // / 576), or -1 if the header is invalid.
     s32 ProcessHeader(u32 uHeader);
 
-    // @0x82B8EE50 -- poly-phase synthesis filter stage. Defined in its own TU (BLOCKED
-    // here: needs the un-recovered synthesis-window coefficient rodata and the un-homed
-    // sub_82B8E258 matrixing helper). Declared so callers/derived codecs can bind it.
-    s32 PolySynth();
+    // @0x82B8EE50 -- poly-phase synthesis filter stage: rotate this channel's history
+    // phase, run the 32-point synthesis DCT (the file-static Dct32 helper, sub_82B8E258 in
+    // the XEX) into the two rotating history columns, then window 32 PCM output samples
+    // from the history rows. `pInSamples` is one 32-float subband line; `pOutSamples`
+    // receives 32 samples. (The asm leaves no meaningful value in r3 and both callers --
+    // Layer3Dec::Decode / EALayer3Core::Decode -- ignore it, so the return is void.)
+    void PolySynth(s32 iChannel, f32 *pOutSamples, const f32 *pInSamples);
 
     // @0x82B94FB0 -- vector deleting destructor: reinstall the CMpegBase vtable, free the
     // poly-synth history, and (when bit 0 of `flags` is set) delete `self`.
@@ -113,8 +122,7 @@ public:
     u32   muBitBuffer;              // +0x2C
     s32   miBitsAvailable;          // +0x30
     u8    mPad34[4];                // +0x34 .. +0x37  (opaque)
-    u8    mucPolySynthPhase;        // +0x38
-    u8    mPad39;                   // +0x39  (opaque)
+    u8    mucPolySynthPhase[2];     // +0x38 .. +0x39  (per-channel; asm indexes 0x38(this + channel))
     u8    mucIsMpeg25;              // +0x3A
     u8    mucIsLsf;                 // +0x3B
     u8    mucSampleRateIndex2;      // +0x3C

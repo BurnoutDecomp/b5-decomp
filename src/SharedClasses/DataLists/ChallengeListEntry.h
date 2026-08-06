@@ -133,26 +133,27 @@ struct ChallengeListEntryAction
         CgsID   mRoadID;        // ChallengeListEntry.h:149
     };
 
-    // ---- methods (all declared-only; not reconstructed in this batch) ----
+    // ---- methods (declared-only unless marked RECONSTRUCTED; the reconstructed ones are
+    //      defined inline at the bottom of this header) ----
     void                  Construct();                            // :153
     void                  FixUp(void* lpBase);                    // :156
     void                  FixDown(void* lpBase);                  // :159
-    EChallengeActionType  GetActionType() const;                  // :162
+    EChallengeActionType  GetActionType() const;                  // :162  RECONSTRUCTED (inline below)
     bool                  HasTimeLimit() const;                   // :165
     f32                   GetTimeLimit() const;                   // :169
     bool                  HasConvoyTime() const;                  // :172
     f32                   GetConvoyTime() const;                  // :175
     int32_t               GetTargetValue(int32_t liIndex) const;  // :179
-    EChallengeDataType    GetTargetDataType(int32_t liIndex) const; // :183
+    EChallengeDataType    GetTargetDataType(int32_t liIndex) const; // :183  RECONSTRUCTED (inline below)
     CgsID                 GetCgsIDTarget(int32_t liIndex) const;  // :187
-    int32_t               GetNumTargets() const;                  // :190
-    ECombineActionType    GetCombineAction() const;               // :193
+    int32_t               GetNumTargets() const;                  // :190  RECONSTRUCTED (inline below)
+    ECombineActionType    GetCombineAction() const;               // :193  RECONSTRUCTED (inline below)
     EChallengeCoopType    GetCoopType() const;                    // :196
     uint8_t               GetModifier() const;                    // :199
     uint8_t               GetNumLocations() const;                // :202
     ELocationType         GetLocationType(uint8_t lu8Index) const; // :206
     int32_t               GetDistrict(uint8_t lu8Index) const;    // :210 (real ret BrnWorld::EDistrict)
-    CgsID                 GetTriggerID(uint8_t lu8Index) const;   // :214
+    CgsID                 GetTriggerID(uint8_t lu8Index) const;   // :214  RECONSTRUCTED (inline below)
     CgsID                 GetRoadID(uint8_t lu8Index) const;      // :218
     void                  SetActionType(EChallengeActionType leType);          // :223
     void                  SetTimeLimit(f32 lfTime);                            // :226
@@ -235,21 +236,28 @@ struct ChallengeListEntry
     void                          FixUp(void* lpBase);               // :365  declared-only
     void                          FixDown(void* lpBase);             // :368  declared-only
     CgsID                         GetChallengeID() const;            // :372  declared-only
-    // ADDITIVE (declared-only): X360-attested accessor BrnResource::ChallengeListEntry::GetChall
-    // (own TU, un-homed). Called by BrnGui::ChallengeSelector::Hide (@0x82436F70) and
-    // BrnGui::FriendsListComponent::Close/SelectPrevious to fill the GuiChallengeSelectedEvent
-    // +0x0C word (returns a 32-bit challenge value). `const` is required by Hide's const call site
-    // (mpChallengeList->GetChallengeData(...) yields a const ChallengeListEntry*). Definition lives
-    // in its own future TU; declared here so this class's callers link by name.
-    s32                           GetChall() const;                  // declared-only (own TU)
+    // NOTE (do NOT re-add `GetChall`): the ledger/IDB identity
+    // `BrnResource::ChallengeListEntry::GetChall` is the IDA-TRUNCATED form of
+    // GetChallengeStyle -- the IDB clips qualified names at 41 characters
+    // ("BrnResource::ChallengeListEntry::GetChall" is exactly 41, and the same clip produces
+    // "BrnGameState::ChallengeManager::GetChalle" / "BrnGui::ChallengeListComponent::GetChalle").
+    // It is ONE binary function at 0x823542A0, reconstructed inline at the bottom of this header
+    // as GetChallengeStyle; the DecFIGS DWARF for this class has no `GetChall` at any line, and
+    // the DWARF's own BrnFriendsList.cpp call sites name GetChallengeStyle. A separate
+    // `s32 GetChall() const` declaration therefore can never gain a definition (unresolved
+    // external that `cl /c` cannot see) and would be an ODR hazard. Callers wanting the 32-bit
+    // event word use `static_cast<s32>(x->GetChallengeStyle())`.
     int32_t                       GetNumPlayers() const;             // :375  declared-only
     int32_t                       GetOriginalNumPlayers() const;     // :378  declared-only
-    int32_t                       GetNumActions() const;             // :381  declared-only
-    const ChallengeListEntryAction* GetAction(int32_t liActionIndex) const; // :384  declared-only (const twin)
+    int32_t                       GetNumActions() const;             // :381  RECONSTRUCTED (inline below)
+    const ChallengeListEntryAction* GetAction(int32_t liActionIndex) const; // :384  RECONSTRUCTED (inline below, const twin)
     EChallengeDifficulty          GetDifficulty() const;             // :387  declared-only
     const char*                   GetDescriptionStringID() const;    // :390  declared-only
     const char*                   GetTitleStringID() const;          // :393  declared-only
-    EFreeburnChallengeStyle       GetChallengeStyle() const;         // :396  declared-only
+    // X360 0x823542A0. The IDB/ledger identity for this same address is the 41-char-truncated
+    // name `BrnResource::ChallengeListEntry::GetChall` -- see the note above; there is no
+    // separate `GetChall` method.
+    EFreeburnChallengeStyle       GetChallengeStyle() const;         // :396  RECONSTRUCTED (inline below)
     ECarRestrictionType           GetCarType() const;                // :399  declared-only
     CgsID                         GetCarID() const;                  // :402  declared-only
     void                          SetChallengeID(CgsID lID);         // :409  declared-only
@@ -341,6 +349,9 @@ inline ChallengeListEntryAction* ChallengeListEntry::GetAction( int32_t liAction
 
 // ChallengeListEntry::GetChallengeStyle @ 0x823542A0
 // (DWARF: EFreeburnChallengeStyle GetChallengeStyle() const, ChallengeListEntry.h:396)
+// LEDGER IDENTITY: this address is recorded as `BrnResource::ChallengeListEntry::GetChall`
+// (IDA truncates qualified names at 41 chars). THIS inline IS that ledger function's
+// reconstruction -- do not body `GetChall` separately.
 // X360 reads the byte at offset 0 of `this` (== maAction[0].muActionType, the first action's
 // type) and maps ROAD_RULE_TIME/ROAD_RULE_CRASH to the matching freeburn styles. Reconstructed
 // via the named accessor maAction[0].GetActionType() rather than a raw byte read. The range

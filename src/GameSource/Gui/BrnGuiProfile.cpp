@@ -127,11 +127,15 @@ namespace
                           liNumberOfImageFiles, laImageFileInfo);
     }
 
-    // FLAG PC-platform leaf: CgsGui::SaveLoadSystem::CopyImageToBuffer @0x828522D0 is
-    // un-reconstructed; the mugshot stays framed in the circular buffer, nothing exports.
-    s32 SaveLoadSystem_CopyImageToBuffer(CgsGui::SaveLoadSystem& /*lrSystem*/,
-                                         const CgsGui::ImageFileInfo& /*lrRequest*/)
+    // (CgsGui::SaveLoadSystem::CopyImageToBuffer @0x828522D0 now has a real body --
+    // CgsSaveLoadX360_wB_03.cpp commits the framed record into the mugshot-buffer slot
+    // its imageId maps to; the prior fabricated return-0 leaf is retired. This shim only
+    // forwards. The X360 manager's s32 return is the void callee's r3 pass-through
+    // artifact; 0 preserves the committed manager signature.)
+    s32 SaveLoadSystem_CopyImageToBuffer(CgsGui::SaveLoadSystem& lrSystem,
+                                         const CgsGui::ImageFileInfo& lrRequest)
     {
+        lrSystem.CopyImageToBuffer(&lrRequest);
         return 0;
     }
 
@@ -213,9 +217,12 @@ namespace
     {
     }
 
-    // FLAG PC-platform leaf: BrnNetwork::LiveRevengeProfile::ValidateProfile is
-    // declared in BrnNetworkLiveRevengeManager.h but its body TU is not committed (and
-    // the X360 call site passes no live arguments); report the stored segment valid.
+    // BrnNetwork::LiveRevengeProfile::ValidateProfile @0x824FCE98 IS committed
+    // (BrnNetworkLiveRevengeManager.cpp; body: `return true;`, signature
+    // (const LiveRevengeProfile*, s32) const). Calling it on the stored segment would
+    // mean reinterpreting the serialised console image as the live type for a constant
+    // result, so this boundary shim keeps the committed body's exact behaviour instead.
+    // FLAG PC-platform leaf: serialised-vs-live type boundary (see above).
     bool LiveRevengeProfile_ValidateProfile(const u8* /*lpSaveImage*/)
     {
         return true;
@@ -236,6 +243,40 @@ namespace
     void ProfileUpgradeResource_BindFromEvent(CgsResource::BaseResourcePtr& /*lrResourcePtr*/,
                                               const CgsModule::Event* /*lpEvent*/)
     {
+    }
+
+    // ---- stored-image CgsArray count-word offsets (the ctor's -1 sentinels) ---------
+    // The serialised segments are console-format byte images (FixedSizeOpaqueBuffer), so
+    // these offsets are data-format facts, identical on console and host (fixed-width
+    // scalars only, no pointers). Each is arrayBase + capacity*sizeof(element): the
+    // Array<T,N>::miCount word that trails the inline element buffer (CgsArray.h).
+    // Measured derivations (X360):
+    //   * maFreeBurnChallengeData -- Array<CgsID,2000> at progression image+42912
+    //     (Profile::Deserialise @0x8237D308: memcpy(live+42928, image+42912, 16008)
+    //     == 2000*8 data + count + pad); count word @ 42912 + 16000 = 58912.
+    //   * maaMugshotInfo[5] -- Array<MugshotInfo,20>[5] at progression image+112240
+    //     (Profile::Serialise @0x8237C1F0: memcpy(image+112240, live+112256, 5640)
+    //     == 5*1128); count word @ +1120 of each 1128-byte gallery
+    //     (Profile::GetMugshotInfo @0x82371290: base = 1128*type + live+112256,
+    //     count = *(base+1120); 20 * sizeof(MugshotInfo)==56 == 1120).
+    //   * maRelationshipTable -- Array<LiveRevengeRelationship,250> at live-revenge
+    //     image+8 (DWARF LiveRevengeProfile: miVersionNumber then the table;
+    //     250*120 == 30000); count word @ 8 + 30000 = 30008.
+    const u32 KU_STORED_FREEBURN_ARRAY_COUNT_OFFSET     = 58912;  // X360 stw -1 @manager+63712
+    const u32 KU_STORED_MUGSHOT_GALLERY_BASE_OFFSET     = 112240;
+    const u32 KU_STORED_MUGSHOT_GALLERY_STRIDE_BYTES    = 1128;   // sizeof Array<MugshotInfo,20> (X360)
+    const u32 KU_STORED_MUGSHOT_ARRAY_COUNT_OFFSET      = 1120;   // 20 * sizeof(MugshotInfo)==56
+    const s32 KI_STORED_MUGSHOT_GALLERY_COUNT           = 5;      // GsmIO::E_IMAGE_GALLERY_TYPE_COUNT
+    const u32 KU_STORED_RELATIONSHIP_ARRAY_COUNT_OFFSET = 30008;  // X360 stw -1 @manager+152872
+
+    // Stamp one stored-image CgsArray count word with the Array<T,N>::KI_UNCONSTRUCTED(-1)
+    // sentinel ("Array used before Construct/Clear was called", CgsArray.h). Serialised
+    // console-image access by documented offset (external serialised data); memcpy keeps
+    // the write alias-safe on the u8 image.
+    void MarkStoredArrayUnconstructed(u8* lpSegmentImage, u32 luCountWordOffset)
+    {
+        const s32 liSentinel = -1;
+        std::memcpy(lpSegmentImage + luCountWordOffset, &liSentinel, sizeof(liSentinel));
     }
 }
 
@@ -310,17 +351,59 @@ s32 MugshotSaveBuffer::GetBufferLength() const
 
 // ---------------------------------------------------------------------------
 // ProfileManager::ProfileManager  @ 0x827E0CD0
-//   On the host the four base vtables (+0/+4/+8/+12 on X360), the embedded
-//   mProfileUpgradeResourcePtr (the X360 self-linking stores at +20..+47) and the
-//   embedded save/load system construct themselves. The remaining X360 ctor work --
-//   the eight -1 "no signed-in user" stamps into per-licence-segment words DEEP
-//   inside the serialised progression/DLC1 images (mStoredData interiors at
-//   +0x460/+0x8C8/+0xD30/+0x1198/+0x1600/+0xE620 and DLC1 +0x7B0/+0xAC8) -- lives
-//   inside segments owned by the un-reconstructed save-image codecs, so it is NOT
-//   fabricated here; it lands with the BrnGuiSaveLoad::Profile serialiser TU.
+//   The X360 ctor stores, mapped to the host:
+//   * the four base vtables (+0/+4/+8/+12; dumped @0x820D0090/0x820D0080/0x820D007C/
+//     0x820D006C -- their slots are exactly the committed SaveLoadTaskResultHandler /
+//     MessageDisplay / OptionHandler / SystemUserProfile::Listener override sets) --
+//     implicit on the host.
+//   * mProfileUpgradeResourcePtr's self-linking init (+20..+47) -- byte-for-byte the
+//     committed CgsResource::BaseResourcePtr ctor @0x82204E20; implicit.
+//   * stb 0 -> +80: mEventQueue's leading BaseVariableEventQueue::mbIsConstructed
+//     byte -- the same single-byte store GuiModule's own ctor @0x827E54B0 makes on its
+//     queue; reproduced with the MarkUnconstructed() accessor added for that ctor.
+//   * the embedded save/load system's vtables (+4200/+4204, two-phase) and its
+//     embedded allocator's vtable at +4596 == system+0x18C (vtable @0x820CE2E0 ==
+//     CgsGui::MemcardAllocator: {dtor, sub_827DBBB0, Alloc, Free}). The committed
+//     CgsGui::SaveLoadSystem has no default ctor and models the +0x18C object as a
+//     bare `void* mpContentInfoVptr`, so the allocator-vtable install has NO host
+//     counterpart yet -- that gap (and SaveLoadSystem::Release()/Prepare()
+//     dispatching through the never-initialised word) belongs to the save/load TU;
+//     reported with this wave.
+//   * nine `stw -1` stamps deep in mStoredData (+63712, +118160/+119288/+120416/
+//     +121544/+122672, +152872, +184400, +185192): the inlined default-construction
+//     of the serialised segment images. Every CgsContainers Array<T,N> starts life
+//     with its trailing count word at the KI_UNCONSTRUCTED(-1) sentinel ("Array used
+//     before Construct/Clear was called" -- Profile::GetMugshotInfo @0x82371290
+//     tests exactly these words). They are NOT "user-index" fields (the parked
+//     hypothesis) and there are nine, not eight. Per segment:
+//       progression+58912         maFreeBurnChallengeData.miCount
+//       progression+113360+1128k  maaMugshotInfo[k].miCount, k=0..4
+//       liverevenge+30008         maRelationshipTable.miCount
+//       dlc1+1968 / dlc1+2760     the two 56-byte-record DLC1 array count words
+//     The two DLC1 stamps are BrnGuiSaveLoad::ProfileDLC1's own default construction
+//     (its muField_7B0/muField_AC8 ARE those count words -- Construct() clearing them
+//     to 0 is Array::Clear); they land implicitly once that header gains its default
+//     ctor (requested this wave). The opaque-buffer segments are stamped here.
 // ---------------------------------------------------------------------------
 ProfileManager::ProfileManager()
 {
+    mEventQueue.MarkUnconstructed();   // X360 stb 0 -> manager+80
+
+    // The stored progression image's arrays (X360 stw -1 -> +63712, +118160..+122672).
+    MarkStoredArrayUnconstructed(mStoredData.mProgressionProfile.maData,
+                                 KU_STORED_FREEBURN_ARRAY_COUNT_OFFSET);
+    for (s32 liGallery = 0; liGallery < KI_STORED_MUGSHOT_GALLERY_COUNT; ++liGallery)
+    {
+        MarkStoredArrayUnconstructed(
+            mStoredData.mProgressionProfile.maData,
+            KU_STORED_MUGSHOT_GALLERY_BASE_OFFSET
+                + static_cast<u32>(liGallery) * KU_STORED_MUGSHOT_GALLERY_STRIDE_BYTES
+                + KU_STORED_MUGSHOT_ARRAY_COUNT_OFFSET);
+    }
+
+    // The stored live-revenge image's relationship table (X360 stw -1 -> +152872).
+    MarkStoredArrayUnconstructed(mStoredData.mLiveRevengeProfile.maData,
+                                 KU_STORED_RELATIONSHIP_ARRAY_COUNT_OFFSET);
 }
 
 // ---------------------------------------------------------------------------

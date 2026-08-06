@@ -6,22 +6,26 @@
 // authoritative for every offset, width and side-effect. No Feb-2007 source and no DecFIGS
 // DWARF exist for this TU. See HELPER_CMpegBase.h for the byte-exact layout and PlugIn.h
 // for the shared rwaudio System allocator.
-//   Open                       @0x82B92168
+//   Open                       @0x82B92168  (vtable slot 2)
 //   Close                      @0x82B86430
-//   Seek                       @0x82B860A8
+//   Seek                       @0x82B860A8  (vtable slot 3)
 //   GetBits                    @0x82B85FE0
 //   GetHeader                  @0x82B86378
 //   OpenSynth                  @0x82B860C8
-//   ProcessHeader              @0x82B86150
-//   ~HELPER_CMpegBase          (vector deleting destructor @0x82B92100)
-//   PolySynth                  @0x82B87080 -- BLOCKED, NOT reconstructed here (see below);
-//                                only declared in HELPER_CMpegBase.h.
-//
-// PolySynth needs the un-recovered poly-phase synthesis-window coefficient rodata
-// (unk_82156740 / unk_82156780) and the un-homed matrixing helper sub_82B86488, and its
-// history-buffer addressing (the +0x2C rotating phase into the 2304-byte-per-channel block
-// at +0x44) cannot be grounded without them. Reconstructing it would mean fabricating that
-// float table and the helper's contract, so it is left to its own TU -- an honest gap.
+//   OpenLayer                  @0x82B863F8  (vtable slot 4; absent from the ledger's
+//                                9-function list for this TU -- discovered via the
+//                                0x8215A898 vtable dump)
+//   ProcessHeader              @0x82B86150  (vtable slot 1)
+//   ~HELPER_CMpegBase          (vector deleting destructor @0x82B92100, vtable slot 0)
+//   PolySynth                  @0x82B87080 -- NOT YET reconstructed here; declared in
+//                                HELPER_CMpegBase.h. Its previously-blocking inputs are
+//                                now fully dumped (the 544-float synthesis window
+//                                0x82156740..0x82156FC0, the 31-float DCT32 cosine table
+//                                0x82156FC0..0x8215703C, and the file-static DCT32
+//                                helper sub_82B86488 with its 64-float scratch
+//                                0x8327A328) -- see scratchpad/waveM/HelperMpegBase.spec.md
+//                                for the full tables and derivation. It is the one
+//                                remaining body of this TU.
 //
 // The `_savefpr_17` / `_restfpr_17` and the `twllei` / `twlgei` seen in the pseudocode of
 // the sibling functions are the compiler's FP register save/restore helpers and its
@@ -48,18 +52,21 @@ namespace
 // reached from CMpegBase.cpp / Decoder.cpp.
 extern "C" System *off_83271928;
 
-// off_8327A300 -- a global "poly-synth disabled / externally provided" flag. When non-zero
-// OpenSynth skips its per-decoder history allocation entirely. Read-only in this TU; owned
-// elsewhere, so referenced as an honest extern rather than fabricated.
-extern "C" int dword_8327A300;
-
-// The MPEG frame-header lookup tables (word_82156718 / word_82156658 in the X360 rodata).
-// ProcessHeader only *indexes* them -- their contents (the standard MPEG sample-rate Hz and
-// bitrate-kbps values) live in the audio rodata TU, so they are referenced as externs and
-// never fabricated here. The sample-rate table is read with `lhzx` (unsigned u16); the
-// bitrate table with `lhax` (signed s16).
-extern "C" const u16 word_82156718[]; // sample-rate table (Hz), indexed by mucSampleRateIndex
-extern "C" const s16 word_82156658[]; // bitrate table (kbps), indexed by the derived slot
+// The MPEG bitrate table (word_82156658 @0x82156658 in the X360 rodata, dumped 2026-08-04;
+// the standard ISO 11172-3 / 13818-3 table, mpg123's `tabsel_123`, read with `lhax` --
+// signed s16). Carries no symbol in the ProStreet PDB (internal linkage there too), so it
+// homes here as a file-static. Rows: [3*lsf + layerValue - 1][bitrateIndex]; index 0 is
+// the unsupported "free format" slot and index 15 the reserved one, both 0.
+static const s16 KI_BitRateTable[6][16] = {
+    // MPEG-1 Layer I / II / III (kbps)
+    { 0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0 },
+    { 0, 32, 48, 56,  64,  80,  96, 112, 128, 160, 192, 224, 256, 320, 384, 0 },
+    { 0, 32, 40, 48,  56,  64,  80,  96, 112, 128, 160, 192, 224, 256, 320, 0 },
+    // MPEG-2 / 2.5 (LSF) Layer I / II / III
+    { 0, 32, 48, 56,  64,  80,  96, 112, 128, 144, 160, 176, 192, 224, 256, 0 },
+    { 0,  8, 16, 24,  32,  40,  48,  56,  64,  80,  96, 112, 128, 144, 160, 0 },
+    { 0,  8, 16, 24,  32,  40,  48,  56,  64,  80,  96, 112, 128, 144, 160, 0 },
+};
 
 // XMemSet @ the X360 build = byte-wise memset; reproduced with std::memset.
 inline void XMemSet(void *dst, int value, u32 bytes)
@@ -67,6 +74,21 @@ inline void XMemSet(void *dst, int value, u32 bytes)
     std::memset(dst, value, bytes);
 }
 } // namespace
+
+// HELPER_MPEGuse_MMX (dword_8327A300 @0x8327A300 in the X360 .data; the real name is in
+// the ProStreet PDB: `?HELPER_MPEGuse_MMX@core@audio@rw@@3HA`). mpg123-heritage MMX-synth
+// config flag; its ONLY xrefs in the whole image are three reads (OpenSynth here,
+// HELPER_CEALayer3::DecodeMono / DecodeStereo) -- nothing ever writes it, so it stays 0
+// on this platform.
+s32 HELPER_MPEGuse_MMX = 0;
+
+// The MPEG sample-rate table (word_82156718 @0x82156718 in the X360 rodata, dumped
+// 2026-08-04; `lhzx` -- unsigned u16). A static class member in the ProStreet PDB
+// (`?sSampleRateTable@HELPER_CMpegBase@core@audio@rw@@1QBGB`); indices 0..2 MPEG-1,
+// 3..5 MPEG-2 (LSF), 6..8 MPEG-2.5. Also read by HELPER_CEALayer3::ProcessHeader.
+const u16 HELPER_CMpegBase::sSampleRateTable[9] = {
+    44100, 48000, 32000, 22050, 24000, 16000, 11025, 12000, 8000,
+};
 
 // -------------------------------------------------------------------------------------
 // ~HELPER_CMpegBase (vector deleting destructor @0x82B92100)
@@ -99,7 +121,7 @@ s32 HELPER_CMpegBase::Open(u8 *pData)
     if (!pData || GetHeader() != 0 || OpenSynth() < 0)
         return -1;
 
-    OnOpen(); // vtable slot +0x10
+    OpenLayer(); // vtable slot 4 (+0x10); result ignored, matching the asm
 
     mpFrameStart = mpBitPointer;
     muBitBuffer = 0;
@@ -117,7 +139,7 @@ s32 HELPER_CMpegBase::Close()
 {
     if (mucIsOpen)
     {
-        void *pHistory = mpPolySynthHistory;
+        void *pHistory = mpPolySynthHistoryF;
         muHeaderWord = 0;
         mucIsOpen = 0;
 
@@ -188,26 +210,44 @@ s32 HELPER_CMpegBase::GetHeader()
 
 // -------------------------------------------------------------------------------------
 // OpenSynth @0x82B860C8
-// Allocate the poly-phase synthesis history block (2304 bytes per channel) through the
-// shared rwaudio System allocator, store it at mpPolySynthHistory and zero it -- unless the
-// global poly-synth-disabled flag is set, in which case nothing is allocated. Returns 0 on
-// success, -1 when the allocation fails. (The pointer is stored unconditionally, before the
-// null check, matching the asm.)
+// Allocate the poly-phase synthesis history (one f32[2][288] double-bank block -- 2304
+// bytes -- per channel) through the shared rwaudio System allocator, store it at
+// mpPolySynthHistoryF and zero it -- unless the MMX-synth flag is set, in which case
+// nothing is allocated. Returns 0 on success, -1 when the allocation fails. (The pointer
+// is stored unconditionally, before the null check, matching the asm.)
 // -------------------------------------------------------------------------------------
 s32 HELPER_CMpegBase::OpenSynth()
 {
-    if (!dword_8327A300)
+    if (!HELPER_MPEGuse_MMX)
     {
-        const u32 uSize = 2304u * mucChannelCount;
+        const u32 uSize = static_cast<u32>(sizeof(f32[2][288])) * mucChannelCount;
 
         void *pHistory = System::Alloc(off_83271928, uSize, "PolySynthHistoryF", 16, 0);
-        mpPolySynthHistory = pHistory;
+        mpPolySynthHistoryF = static_cast<f32 (*)[2][288]>(pHistory);
 
         if (!pHistory)
             return -1;
 
         XMemSet(pHistory, 0, uSize);
     }
+    return 0;
+}
+
+// -------------------------------------------------------------------------------------
+// OpenLayer @0x82B863F8 (vtable slot 4)
+// The per-layer open hook Open dispatches to. Record the frame's decoded sample count --
+// 1152, halved to 576 for a low-sampling-frequency (MPEG-2/2.5) stream -- and reset both
+// per-channel poly-synth band offsets to 1. Always returns 0. (The asm stores 1152
+// unconditionally, then overwrites with 576 under the LSF flag.)
+// -------------------------------------------------------------------------------------
+s32 HELPER_CMpegBase::OpenLayer()
+{
+    muFrameSamples = 1152;
+    if (mucIsLsf)
+        muFrameSamples = 576;
+
+    mucBandOffset[0] = 1;
+    mucBandOffset[1] = 1;
     return 0;
 }
 
@@ -273,7 +313,7 @@ s32 HELPER_CMpegBase::ProcessHeader(u32 uHeader)
     // Mono when channel mode == 3, stereo otherwise.
     mucChannelCount = static_cast<u8>((mucMode == 3) ? 1 : 2);
 
-    const u32 uSampleRate = word_82156718[mucSampleRateIndex];
+    const u32 uSampleRate = sSampleRateTable[mucSampleRateIndex];
     muSampleRate = uSampleRate;
     muSampleRateCopy = uSampleRate;
 
@@ -281,10 +321,10 @@ s32 HELPER_CMpegBase::ProcessHeader(u32 uHeader)
     if (ucBitRateIndex == 0)
         return -1;
 
+    // (The asm computes the flat slot 48*lsf + 16*layerValue - 16 + index into the
+    // 96-entry table -- identical to this [3*lsf + layerValue - 1][index] row/col form.)
     const u8 ucLsf = mucIsLsf;
-    const s32 iBitRateSlot =
-        48 * ucLsf + 16 * ucLayerValue - 16 + ucBitRateIndex;
-    const s32 iBitRate = word_82156658[iBitRateSlot];
+    const s32 iBitRate = KI_BitRateTable[3 * ucLsf + ucLayerValue - 1][ucBitRateIndex];
     miBitRate = iBitRate;
 
     s32 iResult;

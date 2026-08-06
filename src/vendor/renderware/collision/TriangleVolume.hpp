@@ -22,9 +22,11 @@
 //     rw::collision::TriangleVolume::GetBBox           @ 0x82BBA038
 //     rw::collision::TriangleVolume::GetMaximumFeature @ 0x82BBACD0
 //     rw::collision::TriangleVolume::LineSegIntersect  @ 0x82BBB970
-//     rw::collision::TriangleVolume::CreateGPInstance  @ 0x82BBAA00  (BLOCKED --
-//        needs the un-recovered VMX permute-control table unk_82CDA350 and the
-//        un-homed GPTriangle VolumeMethods table off_82F91920; NOT reconstructed)
+//     rw::collision::TriangleVolume::CreateGPInstance  @ 0x82BBAA00  (declared
+//        below; body pending -- the former rodata blocker is CRACKED: the
+//        unk_82CDA350 vperm control is dumped and off_82F91920 is row [3] of
+//        the recovered VolumeMethods table unk_82F918F0. See
+//        scratchpad/waveN/TriangleVolume.spec.md for the recovered tables.)
 //
 // NO DWARF / Feb-2007 source exists for this TU. The LAYOUT below is entirely
 // X360-asm-attested (member OFFSETS are ground truth, pinned by the
@@ -39,6 +41,9 @@ namespace rw
 {
 namespace collision
 {
+
+struct GPInstance;   // vendor/renderware/collision/GPInstance.hpp (reference-only
+                     // here; same forward-decl precedent as CapsuleVolume.hpp)
 
 class TriangleVolume
 {
@@ -83,16 +88,32 @@ public:
     s32 LineSegIntersect(const Vec4* lpTransform, VolumeLineSegIntersectResult* lpResult,
                          f32 afFatness, Vec4 aLineStart, Vec4 aLineEnd) const;
 
-    // .rdata constant reached only by reference in GetNormal (unk_8327EF10): the
-    // degenerate-area epsilon the vcmpgtfp guards the normalise with (keep the
-    // raw cross product when |n|^2 does not exceed it). Same role as
-    // FeatureEdge::KF_DEGENERATE_EPSILON; FLAGGED as inferred.
-    static const f32 KF_DEGENERATE_EPSILON;   // X360 unk_8327EF10
+    // @ 0x82BBAA00 -- fill arInst with the triangle's GP narrow-phase image:
+    // mPos = (optionally transformed) vert 0, mFaceNormals[0] = the GetNormal
+    // face normal, mFaceNormals[1]/[2] = verts 1/2 (the GPTriangle aliasing),
+    // mEdgeDirections[0..2] = the unit edges (P2-P0, P1-P2, P0-P1),
+    // mDimensions = the three edge lengths (w lane = |P2-P0|, per the dumped
+    // unk_82CDA350 vperm control), mEdgeData[0..2] = mafEdgeCos, plus the
+    // fatness/tag/count/type/flag words and the TRIANGLE VolumeMethods row.
+    // Returns 1. X360 __fastcall: r3 = this, r4 = &arInst, r5 = lpTransform
+    // (NULL = the local frame; rows are w-masked to (0,0,0 | 1) when present).
+    // Body pending: see scratchpad/waveN/TriangleVolume.spec.md.
+    RwBool CreateGPInstance(GPInstance& arInst, const Vec4* lpTransform) const;
+
+    // Degenerate-area epsilon the GetNormal vcmpgtfp guards the normalise with
+    // (keep the raw cross product when |n|^2 does not exceed it).
+    // MEASURED: X360 unk_8327EF10 is splatted at static-init (thunk 0x82C73C70)
+    // from .rdata 0x82180554 = 0x34000000 = 2^-23 = FLT_EPSILON.
+    static const f32 KF_DEGENERATE_EPSILON;   // X360 unk_8327EF10 = 2^-23
 
     // --- members (X360-asm-attested offsets; inferred names) ----------------
     Vec4         maVerts[3];    // +0x00 / +0x10 / +0x20  triangle vertices
     mutable Vec4 mNormal;       // +0x30  cached unit face normal (GetNormal)
-    u32          mInitWord;     // +0x40  Initialize's dword_8327EEEC (see .cpp)
+    u32          mInitWord;     // +0x40  console 32-bit POINTER IMAGE of the
+                                //        triangle Volume vtable (&unk_82F919A4,
+                                //        registry dword_8327EEE0[3]; see .cpp --
+                                //        FLAG host width: what GetVolumeVTable
+                                //        reads back from Volume+0x40)
     f32          mafEdgeCos[3]; // +0x44 / +0x48 / +0x4C  per-edge cosine (-1 = unset)
     f32          mfFatness;     // +0x50  surface fatness (0 by default)
     u32          mu54;          // +0x54  (Initialize: 0)

@@ -15,10 +15,14 @@
 // base name at +0x0C, r5 = format, then the args); the `free' indirect
 // (off_82F91C18) is MassiveFree.
 //
-// Parse @ 0x82BD4E58 is intentionally NOT defined here (BLOCKED): inside its
-// signature branch (wire tag 30) its body calls CRequestObject::ReadRemoveSignature
-// (un-attested in the committed base header) and then an un-homed, un-named
-// function (Hex-Rays `STUB(this, mpSignature, 20)`). See the header.
+// Parse @ 0x82BD4E58 is not yet defined here (body pending). Its two
+// once-blocking collaborators are RESOLVED: ReadRemoveSignature @ 0x82BD02D0 is
+// declared+defined in the committed base slice (MassiveAdClient3Request.cpp),
+// and the post-signature `bl STUB` (`STUB(this, mpSignature, 20)`) is the
+// measured single-`blr` ICF-folded trace hook @ 0x82AD5078 (documented, not
+// modelled -- the CRequestImpressionUpdate::Parse precedent). The remaining
+// compile dependency is a CMassiveClientCore::ZoneNameAdd declaration in the
+// shared MassiveAdClient3ClientCore.h. See the header.
 // ===========================================================================
 
 namespace MassiveAdClient3
