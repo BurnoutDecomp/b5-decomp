@@ -19,21 +19,26 @@
 //     MassiveAdClient3::CRequestOpenSession::CRequestOpenSession        @ 0x82BD4D98
 //     MassiveAdClient3::CRequestOpenSession::GetRequestURL              @ 0x82BD4DF0
 //     MassiveAdClient3::CRequestOpenSession::`scalar deleting destructor'@ 0x82BD4E00
-//     MassiveAdClient3::CRequestOpenSession::Parse                      @ 0x82BD4E58 (BLOCKED)
+//     MassiveAdClient3::CRequestOpenSession::Parse                      @ 0x82BD4E58 (body pending)
 //     MassiveAdClient3::CRequestOpenSession::WriteOpenSessionRequest    @ 0x82BD50A0
 //     MassiveAdClient3::CRequestOpenSession::CreateRequest              @ 0x82BD53C8
 //
-// Parse @ 0x82BD4E58 is NOT reconstructed here (BLOCKED, exactly as the sibling
-// CRequestCloseSession::Parse / CRequestExitZone::Parse / CRequestImpressionUpdate
-// ::Parse): inside its HMAC-signature branch (wire tag 30) its body calls
-// CRequestObject::ReadRemoveSignature -- whose signature the committed base header
-// deliberately leaves undeclared as un-attested -- and then issues a `bl STUB`
-// (Hex-Rays `STUB(this, mpSignature@+0x30, 20)`) into a function that is neither
-// homed nor named in this TU's dossier. The Parse override is DECLARED (so the
-// class stays a concrete override of the pure base slot and the compile gate is
-// clean) but its body is left for the ledger slice that homes those two
-// collaborators. Reproducing the STUB side-effect without a real symbol would be
-// fabrication.
+// Parse @ 0x82BD4E58 is DECLARED here but its body is still to be reconstructed.
+// Its two once-blocking collaborators are now both resolved (measured 2026-08-05
+// against the ARTIST .i64):
+//   * CRequestObject::ReadRemoveSignature @ 0x82BD02D0 is declared in the
+//     committed base header and DEFINED in MassiveAdClient3Request.cpp (its full
+//     0x5C-byte body re-verified by a fresh headless dump).
+//   * the `bl STUB` after the signature read (Hex-Rays `STUB(this,
+//     mpSignature@+0x30, 20)`) resolves to STUB @ 0x82AD5078 -- a single `blr`
+//     shared by 150 call sites: the ICF-folded, compiled-out trace hook. Per the
+//     committed CRequestImpressionUpdate::Parse / CRequestExitZone::Parse
+//     precedent it is DOCUMENTED at the call site, not modelled (the fold
+//     destroyed the original name; inventing one would be fabrication).
+// The one remaining compile dependency is a declaration for
+// CMassiveClientCore::ZoneNameAdd @ 0x82BCCE68 (the zone-name field, wire tag
+// 71, is registered on the Instance() singleton) in the shared
+// MassiveAdClient3ClientCore.h -- owned by the CMassiveClientCore TU.
 //
 // Per the naming convention the vendor SDK identifiers (the MassiveAdClient3
 // namespace and the CRequestOpenSession class / its methods) are PRESERVED
@@ -106,9 +111,10 @@ public:
     // the base slot-2 per-request-type endpoint getter.
     const char* GetRequestURL() override;
 
-    // @ 0x82BD4E58 (BLOCKED -- see the file header). Vftable Parse override the
-    // response path (CRequestObject::Complete) dispatches; body lives in the
-    // ReadRemoveSignature/STUB slice.
+    // @ 0x82BD4E58 (body pending -- see the file header for the resolved
+    // collaborator facts). Vftable slot-1 Parse override the response path
+    // (CRequestObject::Complete) dispatches: walks the 204-response block and
+    // fills the two response IDs below.
     int Parse() override;
 
     // @ 0x82BD53C8. Called by CMassiveClientCore::RequestSessionOpen. Rejects a

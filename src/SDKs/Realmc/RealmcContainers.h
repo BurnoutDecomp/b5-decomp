@@ -101,7 +101,9 @@ public:
     // char16 range over the current contents (reusing or reallocating storage),
     // returning mpBegin. Declared here so the cross-TU callers (the Trc copy ctor
     // and RealmcCore::Trc::_SetMsgOptions) compile against it; the body is not part
-    // of this TU. (Same declare-across-the-TU-boundary pattern as IntVector::DoRealloc.)
+    // of this TU and is not yet reconstructed anywhere in the tree -- it is the one
+    // genuine unresolved external this header declares. (IntVector::DoRealloc below
+    // is NOT such a case: it is defined in RealmcContainers.cpp.)
     char16_t* assign(const char16_t* pFirst, const char16_t* pLast);
 
     // Range accessors so owners can hand [Begin(), End()) to RangeInitialize / assign
@@ -175,6 +177,53 @@ public:
     //                 and reseat begin/end/capEnd.
     void reserve(unsigned int nCapacity);
 
+    // ---- special members --------------------------------------------------
+    // The eastl::vector ctor/dtor the X360 folds inline into its owner
+    // (RealmcCore::MemcardState), de-inlined here so that owner constructs and
+    // destroys its maTaskStack member BY NAME instead of poking the
+    // {begin,end,capEnd} words directly. These are NOT their own X360 functions
+    // (no ledger entry, every call site inlined), so no other TU will ever
+    // supply a body -- they are defined here rather than declared, exactly like
+    // the element-level helpers below.
+
+    // Default -- the empty vector. MEASURED in the MemcardState ctor
+    // @ 0x82C47328: with r29 == this + 0xC (the embedded IntVector),
+    //   0x82C47358  stw r30(=0), 0(r29)   -> mpBegin  = 0
+    //   0x82C4735C  stw r30(=0), 4(r29)   -> mpEnd    = 0
+    //   0x82C47360  stw r30(=0), 8(r29)   -> mpCapEnd = 0
+    // The +0xC allocator-name word gets NO X360 store (it is the stateless
+    // allocator subobject, never read on this platform); it is nulled here only
+    // for defined behaviour, the same host-hygiene divergence String16's ctors
+    // already carry.
+    IntVector()
+        : mpBegin(nullptr)
+        , mpEnd(nullptr)
+        , mpCapEnd(nullptr)
+        , mpAllocatorName(nullptr)
+    {
+    }
+
+    // Destructor -- free the owned buffer at its CAPACITY size. MEASURED in the
+    // MemcardState dtor @ 0x82C46470, which inlines it over this + 0xC:
+    //   0x82C464E0  lwz r4, 0xC(r31)          -> mpBegin
+    //   0x82C464E4  cmplwi r4, 0 / beq        -> the null guard (mpBegin only;
+    //                                            unlike String16 there is NO
+    //                                            capacity > 1 sentinel check)
+    //   0x82C464F0  lwz r10, 0x14(r31)        -> mpCapEnd
+    //   0x82C464F4  subf r10, r4, r10         -> capEnd - begin (console bytes)
+    //   0x82C464F8  srawi r10, r10, 2         -> element count (4-byte int)
+    //   0x82C46500  slwi r5, r10, 2           -> byte size
+    //   0x82C46508  lwz r11, 0xC(r11) / bctrl -> backend vtable slot +12 == Free
+    // i.e. Free(mpBegin, (mpCapEnd - mpBegin) * 4). On the host the same element
+    // count comes out of the pointer subtraction and is sized with sizeof(int),
+    // matching DoInsertValue / reserve in RealmcContainers.cpp.
+    ~IntVector()
+    {
+        if (mpBegin)
+            g_pRealmcAllocator->Free(
+                mpBegin, static_cast<std::size_t>(mpCapEnd - mpBegin) * sizeof(int));
+    }
+
     // ---- element-level helpers de-inlined from RealmcCore::MemcardState ----
     // These reproduce the eastl::vector front()/back()/push_back()/pop_back()
     // operations the X360 folded inline into MemcardState's task-stack methods
@@ -210,9 +259,9 @@ public:
     }
 
 private:
-    // @ external (eastl::vector<int,RealmcCore::allocator>::DoRealloc<int*>) --
-    // allocates the grown buffer and moves the live elements. Defined by its own
-    // TU; declared here so reserve() can call it across the TU boundary.
+    // @ 0x82C46F60 (eastl::vector<int,RealmcCore::allocator>::DoRealloc<int*>) --
+    // allocates the grown buffer and moves the live elements. Defined in this
+    // container's own RealmcContainers.cpp, alongside reserve() which calls it.
     int* DoRealloc(unsigned int nCapacity, int* pBegin, int* pEnd);
 
     int*        mpBegin;         // +0x00

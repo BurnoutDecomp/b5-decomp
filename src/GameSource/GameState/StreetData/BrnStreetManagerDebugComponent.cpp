@@ -25,11 +25,12 @@
 // (GetNumberOf*RuledByLocalPlayer / UpdateTrophyUnlockOnRoadRuleWin / GetProgressionManager, declared
 // on BrnGameStateStreetManager.h) and the now-committed ProgressionManager / AchievementManagerBase.
 //
-// The remaining one, Update @ 0x8234A7E0, packs a road-rules score-summary game-action event from
-// deep, still-un-named ProgressionManager/Profile members (Profile+0x1CD1C / Profile+0x1CD30 /
-// ProgressionManager+0x1D0) into the output queue; those offsets have no attested member/accessor,
-// so reconstructing it now would require raw-offset pokes into opaque classes (which the
-// faithfulness rules forbid). It stays declared-only, for the pass that commits those members.
+// The eighth, Update @ 0x8234A7E0, is BODIED in BrnStreetManagerDebugComponent_wO_01.cpp (wave O).
+// The old park was stale: Profile+0x1CD1C and Profile+0x1CD30 are the two halves the X360 lwzx/
+// extldi/add back together -- literally Profile::GetRoadRulesID() (BrnProfile.h:473) -- and the
+// third offset was misattributed: "ProgressionManager+0x1D0" is the EMBEDDED Profile's
+// muTimeStampOfLastRoadRulesDownload (+0x170 + 0x60). All three are committed named members, so no
+// raw-offset poke was needed.
 //
 // The menu registrations go through the (unnamed) CgsDev::DebugComponent registration helpers,
 // which are the base-class methods reconstructed in CgsDebugComponent.h, called by name
@@ -109,8 +110,11 @@ void StreetManagerDebugComponent::PopulateUserChallengeScores( void* lpData )
         BrnStreetData::ChallengePlayerScoreEntry lEntry;
         lEntry.Construct();
 
-        // Score is the advanced RNG high word reduced modulo 989, biased up by 10.
-        const s32 liScore = static_cast<s32>( static_cast<u32>( luRng >> 32 ) % 989u ) + 10;
+        // Score is the advanced RNG high word reduced modulo 991, biased up by 10.
+        // MEASURED (0x8233FA50..0x8233FA70): the magic-number division is by 991 --
+        // mulhwu with 0x08865437 (== ceil(2^42/991) - 2^32) then `mulli r10, r10, 0x3DF`
+        // (0x3DF == 991) for the remainder. (An earlier pass mis-read this as 989.)
+        const s32 liScore = static_cast<s32>( static_cast<u32>( luRng >> 32 ) % 991u ) + 10;
         luRng = luRng * KU_LCG_MULTIPLIER + 1;
 
         lEntry.SetScore( leScoreType, liScore );
@@ -137,9 +141,10 @@ namespace
         // Wave-B header freeze firmed the param up from the old `int32_t
         // liUpdateHighScores` model to its real type (BrnStreetData::ScoreType --
         // UpdateTrophyUnlockOnRoadRuleWin @ 0x82341780 branches on 0==TIME / 1==CRASH).
-        // The literal 0 this helper always passed == E_SCORE_TYPE_TIME. FLAG: the X360
-        // crash-flavoured Win* actions may pass E_SCORE_TYPE_CRASH at their inlined
-        // copies -- re-verify per-action when those inline tails are next visited.
+        // MEASURED (unblock pass, all three inlined tails): every Win* action passes 0
+        // (`li r4, 0` at 0x82341E44 / 0x823419C8 / 0x82341BDC), so E_SCORE_TYPE_TIME is
+        // correct for ALL callers of this helper -- the earlier "re-verify per-action"
+        // FLAG is resolved.
         lpStreetManager->UpdateTrophyUnlockOnRoadRuleWin( BrnStreetData::E_SCORE_TYPE_TIME );
 
         const int32_t liNumberOfShowTimeRoadsRuled =

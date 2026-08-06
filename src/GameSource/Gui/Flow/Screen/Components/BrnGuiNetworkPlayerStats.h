@@ -41,6 +41,7 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                       // BrnGui::GuiFlow (AppendExpectedAptComponent)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"   // CgsGui::GuiComponent (base), CgsGui::StateInterface
 #include "GameSource/Network/Managers/BrnNetworkPlayerStats.h"        // BrnNetwork::NetworkPlayerStats (+ EStatsValue)
+#include "GameShared/GameClasses/Language/CgsLanguageManager.h"       // CgsLanguage::LanguageManager::ParameterFormatType
 
 namespace BrnGui
 {
@@ -87,16 +88,16 @@ namespace BrnGui
         // component on the given GUI flow layer through the cache.
         void AppendExpectedAptComponent(GuiFlow leFlow, GuiCache* lpGuiCache);
 
-        // ---- declared-only (X360-attested; bodies are separate TUs / not yet reconstructed) --
         // @0x82416E88 -- format one network stat value into lpacBuffer under the stat's display
-        // type. NOT reconstructed in this TU: its stat-type -> LanguageManager::ParameterFormatType
-        // table (KAE_FORMAT_LOOKUP, X360 rodata @0x8204C6B4) is unrecoverable without the binary
-        // (no IDA/raw-XEX access here), and guessing it would be an unfaithful invention.
+        // type (KAE_FORMAT_LOOKUP below), except the freeburn-challenge stat, which goes through
+        // the two-parameter "ONLINE_STAT_X_OF_Y" loc-string. DEFINED, in the sibling file
+        // BrnGuiNetworkPlayerStats_wL_01.cpp -- do not add a second definition.
         void FormatNetworkStats(char* lpacBuffer, int liBufferSize,
                                 const BrnNetwork::NetworkPlayerStats* lpStats,
                                 BrnNetwork::NetworkPlayerStats::EStatsValue leValue,
                                 GuiCache* lpGuiCache);
 
+        // ---- declared-only (X360-attested; bodies are separate TUs / not yet reconstructed) --
         void SetInfo(const char* lpacName, s32 liValue, const BrnNetwork::NetworkPlayerStats* lpStats,
                      s32 liImageIndex, bool lbShowWorldRank, GuiCache* lpGuiCache);   // cpp:251
         void SetPlayerImageIndex(s32 liImageIndex);                                   // cpp:355
@@ -119,9 +120,22 @@ namespace BrnGui
         static const char KAC_APT_STATE[10];                         // cpp:31 "apt_state"
         static const char KAC_PLAYER_IMAGE_INDEX[17];                // cpp:32 "PlayerImageIndex"
 
-        // cpp:40 -- apt view-state label per EState (off_82F25028; "visible" X360-attested,
-        // "invisible" is the codebase-wide apt-state pair for E_STATE_INVISIBLE).
+        // cpp:40 -- apt view-state label per EState. Both entries are X360-attested: the
+        // pointer pair off_82F25028 -> 0x82049C28 "visible" / 0x82F2502C -> 0x8204B4F8
+        // "invisible", whose only xrefs are Update @0x8241700C and @0x82417020.
         static const char* const KAPC_STATE_ID[E_STATE_COUNT];
+
+        // @0x8204C6B4 -- the per-stat-type format selector FormatNetworkStats indexes by
+        // NetworkPlayerStats::EStatType. Dumped this wave: {11, 0, 14, 3, 13} ==
+        // {INTEGER, TEXT, MONEY, MINUTES_SECONDS, PERCENTAGE}. The entry count is pinned
+        // three ways: the DWARF declares ParameterFormatType[5], the next named table
+        // starts exactly five dwords later, and the consumer's index domain is EStatType
+        // (0..4). Note entry [3] is MINUTES_SECONDS, not the HOURS_MINUTES_SECONDS a guess
+        // would reach for. SetInfo's assert literal names this table verbatim
+        // ("Not enough elements in KAE_FORMAT_LOOKUP" @0x82051FAC, read at 0x82425270).
+        // Defined in BrnGuiNetworkPlayerStats_wL_01.cpp alongside its sole consumer.
+        static const CgsLanguage::LanguageManager::ParameterFormatType
+            KAE_FORMAT_LOOKUP[BrnNetwork::NetworkPlayerStats::E_STAT_TYPE_COUNT];
 
         // ---- data members (DWARF order; see the layout map above) --------------------
         StatRow   maStatRows[KI_MAX_STAT_ROWS];   // h:158  +0x008C

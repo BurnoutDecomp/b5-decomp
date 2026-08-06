@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                // CgsID
+#include "GameShared/GameClasses/Containers/CgsFastBitArray.h" // CgsContainers::FastBitArray<15> (mCompletedDeveloperChallenges)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"      // CgsNumeric::Random (embedded)
 #include "GameSource/BurnoutConstants.h"                   // EActiveRaceCarIndex
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"            // GuiHudMessage + the analyzer event-payload family
@@ -25,10 +26,15 @@
 // comments and pinned by _AssertLayout below). Implementer partfiles body the
 // ledger functions WITHOUT touching this header.
 //
-// X360-ONLY TAIL: the last two members (developer-challenge pending flag + id)
-// have no PS3-DWARF entry; they are pinned by Update @0x82525FC0 (reads 0x4F9,
-// clears 0x4F9/0x500 around TriggerDeveloperChallengeMessageDEBUG) -- names are
-// consumer-inferred (FLAGGED).
+// X360-ONLY TAIL: the last two members (developer-challenge complete flag +
+// completed-challenge bit set) have no PS3-DWARF entry; they are pinned by
+// Update @0x82525FC0 (reads 0x4F9, clears 0x4F9/0x500 around
+// TriggerDeveloperChallengeMessageDEBUG). Wave M re-derived them from the two
+// DEBUG siblings' asm: the bool's name is VERBATIM X360 assert rodata
+// ("mbDEBUGDeveloperChallengeComplete", Trigger @0x825204B8, cpp:5994) and
+// 0x500 is a CgsContainers::FastBitArray<15> (Handle @0x824F9DDC OR-accumulates
+// the event's one u64; Trigger @0x825204EC scans it with the inlined
+// Begin()/Iterator::GetIndex() idiom bounded at 15).
 // ============================================================================
 
 namespace CgsGui { struct GuiAccessPointers; }
@@ -80,6 +86,7 @@ namespace BrnGui
     struct GuiEventStuntInfo;
     struct GuiEventStuntAllComplete;
     struct GuiEventRoadRagePlayerDamage;
+    struct GuiDeveloperChallengesCompleted;   // wire id 596, 8B (home BrnGuiDemangledEventTypes.h)
 
     struct HudMessageAnalyzer
     {
@@ -369,17 +376,26 @@ namespace BrnGui
         void HandleAllEventsOfTypeComplete(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType);   // h:618 (not in this fan-out)
         void HandleAllDriveThrusFound();                                 // h:627 (not in this fan-out)
 
-        // FLAG: X360-only sibling (no PS3-DWARF row) -- fires the parked developer
-        // challenge message; Update gates it on mbDeveloperChallengeMessagePending.
+        // @0x82520488 -- X360-only sibling (no PS3-DWARF row). Fires the parked
+        // developer-challenge message: "Generic" + STRING param 0 "DEVELOPER CHALLENGE
+        // COMPLETE" + STRING param 1 = the index of the FIRST set bit of
+        // mCompletedDeveloperChallenges printed via CgsCore::SPrintf("%d") (the
+        // FastBitArray<15>::Begin()/Iterator::GetIndex() machinery is inlined at the
+        // site, CgsFastBitArray.h:235/282 asserts). Asserts
+        // mbDEBUGDeveloperChallengeComplete on entry (cpp:5994); Update gates on the
+        // same flag and clears flag + bit set after firing.
         void TriggerDeveloperChallengeMessageDEBUG();
 
-        // FLAG: X360-only sibling (no PS3-DWARF row; real named symbol, its OWN ledger
-        // row -- do not body in this TU's fan-out). Update's drain case (wire id 596)
-        // calls it @0x825275D4 with the raw queue record; the payload is the
-        // developer-challenge CgsID it parks (mbDeveloperChallengeMessagePending +
-        // mDeveloperChallengeId). Raw-payload-pointer shape follows the committed
-        // HandlePlayerEliminated(const s32*) precedent.
-        void HandleDeveloperChallengeMessageDEBUG(const CgsID* lpEventPayload);
+        // @0x824F9D48 -- X360-only sibling (no PS3-DWARF row). Update's drain case
+        // (wire id 596) calls it @0x825275D4 with the raw queue record; the 8-byte
+        // payload is the completed-developer-challenges FastBitArray<15> (the X360
+        // assert rodata names the parameter and member verbatim:
+        // "lpDeveloperChallengeEvent" cpp:5973,
+        // "!lpDeveloperChallengeEvent->mCompletedDeveloperChallenges.IsZero()"
+        // cpp:5974). Sets mbDEBUGDeveloperChallengeComplete and OR-accumulates the
+        // event bits into mCompletedDeveloperChallenges (@0x824F9DDC ld/or/std).
+        void HandleDeveloperChallengeMessageDEBUG(
+            const GuiDeveloperChallengesCompleted* lpDeveloperChallengeEvent);
 
         // @0x824F3500 -- append the gamer tag (or the given fallback string id) to the
         // message; returns whether the tag resolved.
@@ -445,10 +461,19 @@ namespace BrnGui
         GuiEventTrophyCarUnlock    mTrophyCarUnlockedEvent;         // h:190 (X360 0x4D8, 16B; ctor zeroes both qwords)
         bool                       mbOnlinePlayerLeft;              // h:192 (X360 0x4E8; ctor false)
         CgsNetwork::PlayerName     mOnlinePlayerLeftName;           // h:193 (X360 0x4E9, 16B byte-aligned name; ctor zeroes byte 0? no -- cleared on trigger)
-        // FLAG: X360-only tail (no PS3-DWARF entries) -- consumer-named from Update's
-        // developer-challenge block (reads 0x4F9; clears 0x4F9 + 0x500 after firing).
-        bool                       mbDeveloperChallengeMessagePending; // (X360 0x4F9; ctor false)
-        CgsID                      mDeveloperChallengeId;              // (X360 0x500; ctor 0)
+        // X360-only tail (no PS3-DWARF entries). The bool's name is VERBATIM X360 assert
+        // rodata (TriggerDeveloperChallengeMessageDEBUG @0x825204B8 fires
+        // "mbDEBUGDeveloperChallengeComplete", cpp:5994). The bit set's TYPE is measured:
+        // HandleDeveloperChallengeMessageDEBUG OR-accumulates the event's single u64 into
+        // 0x500 (@0x824F9DDC ld/or/std) and Trigger scans it with the inlined
+        // FastBitArray<15>::Begin()/Iterator::GetIndex() idiom whose range bound is 15
+        // (@0x825205BC cmpwi 0xF; 15 == the developer-challenge count, the same bound as
+        // BrnProgression::Profile::mDeveloperChallengesCompleted). FLAG: the bit set's
+        // NAME mirrors the event member the X360 assert names verbatim
+        // ("...mCompletedDeveloperChallenges.IsZero()", cpp:5974); the analyzer-side
+        // spelling itself appears in no assert (inference, not measurement).
+        bool                       mbDEBUGDeveloperChallengeComplete;  // (X360 0x4F9; ctor false)
+        CgsContainers::FastBitArray<15> mCompletedDeveloperChallenges; // (X360 0x500, one u64; ctor zeroes)
 
         // ---- class statics (DWARF h:79-171; definitions in BrnGuiHudMessageAnalyzer_wB_res.cpp
         //      where this keystone recovered the values; the rest stay declaration-only
@@ -498,6 +523,7 @@ namespace BrnGui
         static_assert(sizeof(GuiEventRoadRuleNewHighScore) == 48, "mRoadRuleHighScoreData span 0x480..0x4AF");
         static_assert(sizeof(GuiEventTrophyCarUnlock)      == 16, "mTrophyCarUnlockedEvent span 0x4D8..0x4E7");
         static_assert(sizeof(CgsNetwork::PlayerName)       == 16, "byte-aligned 16B name slots @0x4BD/0x4E9");
+        static_assert(sizeof(CgsContainers::FastBitArray<15>) == 8, "one-u64 bit set @0x500");
 
         #define HMA_A(member, x360off) \
             static_assert(offsetof(HudMessageAnalyzer, member) - offsetof(HudMessageAnalyzer, mePlayersCurrentlyWreckState) \
@@ -556,8 +582,8 @@ namespace BrnGui
                           == ((x360off) - 0x4D8), #member " @" #x360off)
         HMA_C(mbOnlinePlayerLeft,                  0x4E8);
         HMA_C(mOnlinePlayerLeftName,               0x4E9);
-        HMA_C(mbDeveloperChallengeMessagePending,  0x4F9);
-        HMA_C(mDeveloperChallengeId,               0x500);
+        HMA_C(mbDEBUGDeveloperChallengeComplete,   0x4F9);
+        HMA_C(mCompletedDeveloperChallenges,       0x500);
         #undef HMA_C
     }
 

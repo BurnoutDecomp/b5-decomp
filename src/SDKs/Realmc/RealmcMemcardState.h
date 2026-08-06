@@ -47,22 +47,24 @@ namespace RealmcCore
 class MemcardState
 {
 public:
-    // @ 0x82C47328 -- BLOCKED (honest gap, NOT fabricated). The ctor stores the
-    //   mutex, zeroes the flags/masks, default-constructs the deque at +0x1C
-    //   (X360 `Rea` -- the Allocator64 deque constructor, un-homed / truncated
-    //   symbol), builds a RealmcCore::MessageFilter into +0x50 (AddRefing the
-    //   default message held in the global off_832BE1F4, which is not declared),
-    //   and reserves 10 slots on the task stack. The deque constructor and the
-    //   off_832BE1F4 default-message global are un-homed collaborators, so the
-    //   ctor cannot be reproduced faithfully yet -- declared only.
+    // @ 0x82C47328 -- DEFINED, in RealmcMemcardState.cpp (landed wave N). Do not
+    //   add a second definition. The former blockers are both closed: the deque
+    //   constructor `Rea` was homed in wave L as RealmcCore::Allocator64's ctor
+    //   @ 0x82C45B48 (truncated export symbol, resolved by xref -- see
+    //   RealmcAllocator64.h), and the off_832BE1F4 default-message global needs
+    //   no declaration here because the ctor reaches it through the homed
+    //   MessageFilter(this) constructor in RealmcCore.cpp. Stores the mutex,
+    //   zeroes flags/masks/containers, default-constructs the +0x1C deque with
+    //   capacity 0, backend-allocates + placement-constructs the MessageFilter
+    //   into +0x50 (null-guarded), and reserves 10 task-stack slots.
     explicit MemcardState(EA::Thread::Mutex* pMutex);
 
-    // @ 0x82C46470 -- BLOCKED (honest gap, NOT fabricated). The dtor releases the
-    //   message filter (groundable), drains + destroys the start-waiting deque via
-    //   the X360 `Re` deque destructor (un-homed / truncated symbol), and frees the
-    //   task-stack buffer through g_pRealmcAllocator's vtable slot +12. The deque
-    //   destructor is an un-homed collaborator, so the teardown cannot be
-    //   reproduced faithfully yet -- declared only.
+    // @ 0x82C46470 -- DEFINED, in RealmcMemcardState_wL_02.cpp. Do not add a second
+    //   definition, and do not restore the old "BLOCKED / declared only" text below it:
+    //   the deque destructor it named as an un-homed blocker was homed in wave L (its
+    //   symbol was merely TRUNCATED in the export, not absent). Releases the message
+    //   filter, drains and destroys the start-waiting deque, and frees the task-stack
+    //   buffer through g_pRealmcAllocator's vtable slot.
     ~MemcardState();
 
     // @ 0x82C44D88 -- read the autosave flag (+0x04) under the lock.

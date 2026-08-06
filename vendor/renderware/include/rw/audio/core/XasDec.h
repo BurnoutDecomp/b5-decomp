@@ -62,14 +62,13 @@ public:
     // @0x82B91E80 -- return the address of this codec's static registration descriptor.
     static DecoderDesc *GetDecoderDesc();
 
-    // @0x82B94118 -- FLAGGED / BLOCKED: the codec's decode entry (installed as
-    // Decoder::mpDecodeCallback). Pulls the next request when the current one is drained,
-    // then decodes one 32-sample XAS0 block per interleaved channel into `pOutput`,
-    // returning 32. Its per-channel decode is inlined here (XasDec has no separate
-    // DecodeChannel) and indexes the un-recovered XAS ADPCM coefficient rodata tables
-    // (flt_8215A7F0 / flt_8215A7F4 -- interleaved filter-coefficient pairs; flt_8215A810 --
-    // per-exponent scale) whose bytes are not in the dossier, so the body is left to its
-    // own TU rather than fabricated. Declared here so the class shape stays faithful.
+    // @0x82B94118 -- the codec's decode entry (installed as Decoder::mpDecodeCallback).
+    // Pulls the next request when the current one is drained, then decodes one 32-sample
+    // XAS0 block per interleaved channel into `pOutput`, returning 32. Its per-channel
+    // decode is inlined here (XasDec has no separate DecodeChannel); the XAS ADPCM
+    // coefficient rodata it indexes (flt_8215A7F0 -- filter-coefficient pairs;
+    // flt_8215A810 -- per-exponent residual scales) is dumped and carried as `static
+    // const` tables in XasDec.cpp.
     s32 DecodeEvent(DecoderBuffer *pOutput);
 
 private:

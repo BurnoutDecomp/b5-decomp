@@ -11,13 +11,12 @@
 // CMassiveAdObject slot -- modelled by the virtual destructor, so no vftable
 // store is written by hand.
 //
-// The composite lifecycle passes (Tic / Rep / Resume) all share the same X360
-// shape: reset the slave-list cursor to the head, then for every slave under the
-// cursor dispatch one virtual on the slave and advance. The X360 loop-continue
-// test reads the list cursor (mSlaveList +0x08, i.e. host GetCurrent());
-// GetCurrData() yields the node payload -- a CMassiveAdObject* slave -- which the
-// composite drives by NAME. (This subtype has no Suspend override -- unlike the
-// audio-dynamic sibling -- so it is not defined here.)
+// The composite lifecycle passes (Tic / ReportImpressions / Suspend / Resume)
+// all share the same X360 shape: reset the slave-list cursor to the head, then
+// for every slave under the cursor dispatch one virtual on the slave and
+// advance. The X360 loop-continue test reads the list cursor (mSlaveList +0x08,
+// i.e. host GetCurrent()); GetCurrData() yields the node payload -- a
+// CMassiveAdObject* slave -- which the composite drives by NAME.
 // ===========================================================================
 
 namespace MassiveAdClient3
@@ -111,12 +110,15 @@ int CMassiveAdObjectModelDynamic::Tic()
 }
 
 // ---------------------------------------------------------------------------
-// CMassiveAdObjectModelDynamic::Rep @ 0x82BDEB50
+// CMassiveAdObjectModelDynamic::ReportImpressions @ 0x82BDEB50
+//   (X360 identity/ledger name `Rep` -- a 51-char symbol clip; MEASURED as the
+//    ReportImpressions override: off_821872B4 slot 4 == base +0x10 slot, which
+//    CMassiveZoneManager::ReportImpressions dispatches @ 0x82BD2F80..8C)
 //
 // Reports each slave's impressions (slave vftable +0x10, ReportImpressions) and
 // returns the first non-zero result; 0 when every slave returned 0.
 // ---------------------------------------------------------------------------
-int CMassiveAdObjectModelDynamic::Rep()
+int CMassiveAdObjectModelDynamic::ReportImpressions()
 {
     mSlaveList.GoToStart();
     while (mSlaveList.GetCurrent())
@@ -126,6 +128,30 @@ int CMassiveAdObjectModelDynamic::Rep()
         int nResult = pSlave->ReportImpressions();
         if (nResult)
             return nResult;
+        mSlaveList.GoToNext();
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveAdObjectModelDynamic::Suspend @ 0x82BDEBC8
+//   (absent from the ledger and .ida-exports -- recovered from the off_821872B4
+//    vftable, slot 5, and disassembled headlessly; the asm is identical to
+//    Resume @ 0x82BDEC38 except the dispatched slave slot, +0x14 vs +0x18, and
+//    like Resume the per-slave result is discarded)
+//
+// Suspends every slave (slave vftable +0x14). The X360 returns the last
+// list-walk result, which is the exhausted (null) cursor on every exit path --
+// modelled as 0, exactly as the committed Resume does.
+// ---------------------------------------------------------------------------
+int CMassiveAdObjectModelDynamic::Suspend()
+{
+    mSlaveList.GoToStart();
+    while (mSlaveList.GetCurrent())
+    {
+        CMassiveAdObject* pSlave =
+            static_cast<CMassiveAdObject*>(mSlaveList.GetCurrData());
+        pSlave->Suspend();
         mSlaveList.GoToNext();
     }
     return 0;
@@ -175,14 +201,17 @@ int CMassiveAdObjectModelDynamic::SetAssetExpired(int nAssetId)
 }
 
 // ---------------------------------------------------------------------------
-// CMassiveAdObjectModelDynamic::Sub @ 0x82BDECA8
+// CMassiveAdObjectModelDynamic::SubscriberAdd @ 0x82BDECA8
+//   (X360 identity/ledger name `Sub` -- a 51-char symbol clip; MEASURED as the
+//    SubscriberAdd override: off_821872B4 slot 7 == base +0x1C slot, which the
+//    subscriber ctor dispatches on the MAOFind result @ 0x82BCEA44)
 //
 // asm: if (pSubscriber == 0) return SetLastError(this, -500, &unk_820046A7);
 //      else CreateSlaveM(this, pSubscriber); return 0. (&unk_820046A7 is the
 //      shared un-exported error-format rodata the leaf SetLastError ignores --
 //      modelled as a null format, per the established MassiveAd convention.)
 // ---------------------------------------------------------------------------
-int CMassiveAdObjectModelDynamic::Sub(CMassiveAdObjectSubscriber* pSubscriber)
+int CMassiveAdObjectModelDynamic::SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber)
 {
     if (!pSubscriber)
         return SetLastError(-500, reinterpret_cast<const char*>(0)); // &unk_820046A7
