@@ -227,11 +227,19 @@ namespace Deformation
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct OutContactSpy; } }
 namespace BrnPhysics { namespace ContactSpy { struct PhysicalCarPartContact; } }
 namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; } }
+namespace CgsSceneManager { namespace CgsCollision { struct PrimitivePairListBuilder; } }
+
 namespace BrnPhysics
 {
 namespace Deformation
 {
-    struct PrimitivePairListBuilder; // AddRaceCar*Pair / AddHingedBodyPartPairs out-builder
+    // ⚠ DE-FORKED 2026-08-06 (big-five #2 wave): this was a bare LOCAL forward declaration
+    // (`struct PrimitivePairListBuilder;` in BrnPhysics::Deformation) -- a namespace fork of the
+    // real CgsSceneManager::CgsCollision::PrimitivePairListBuilder the PS3 DecFIGS mangles pin
+    // for all three Add*Pair methods (@0x760100/@0x75B050/@0x760E6C:
+    // ...PNS2_12CgsCollision24PrimitivePairListBuilderE). ALIASED to the real homed type, the
+    // IOBufferStack precedent directly below.
+    using PrimitivePairListBuilder = CgsSceneManager::CgsCollision::PrimitivePairListBuilder;
 
     // SolvePenetration / UpdatePostPhysics scratch stack. ALIASED to the real homed CgsModule type
     // (was a bare local forward-decl) so CreateIOBuffer<>/DestroyIOBuffer<> resolve. FLAG: additive.
@@ -540,7 +548,13 @@ namespace Deformation
         // path into its asserts (BrnDeformationManager.h:695/:701/:710), proving the definition
         // text lives here; the PS3 DecFIGS build both inlines it into the FixUp* family and keeps
         // an out-of-line copy @0x7AF16C with the same header-cited asserts.
+        // ⭐ ACCESS WIDENED 2026-08-06 (big-five #2): FindModelIndexByEntityID moved to a public
+        // stanza -- VehicleManager::StartVehicleContactGeneration @0x8262B0xx calls the
+        // out-of-line copy @0x8259BBD0 from OUTSIDE this class (register-truth bl), which a
+        // private member cannot express.
+    public:
         s32 FindModelIndexByEntityID(EntityId lEntityId) const;
+    private:
         s32 FindModelIndexByGlobalEntityID(EntityId lGlobalEntityId);
         s32 FindModelIndexByPartID(CgsPhysics::RigidBodyId lPartBodyId);   // ⚠️ qualified -- see header note
 

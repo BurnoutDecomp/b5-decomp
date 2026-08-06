@@ -65,6 +65,9 @@ namespace CgsModule { struct IOBufferStack; }                              // Cg
 // ⭐ ADDED 2026-08-06 (big-five #2): StartVehicleContactGeneration collaborators, pointer/
 // template-arg use only in this header.
 namespace CgsMemory { class LinearMalloc; }
+namespace CgsMemory { struct SimpleDataStreamProducer; }   // stream-producer members (pointers)
+namespace EA { namespace Jobs { struct Job; } }            // job members (pointers)
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairListBuilder.h" // PrimitivePairListBuilder (five BY-VALUE members)
 namespace CgsSceneManager { namespace SceneManagerIO { struct OutOverlapPair; } }
 namespace BrnPhysics { namespace Deformation { struct DeformationManager; } }   // class key `struct`, matching BrnDeformationManager.h:237
 namespace BrnPhysics { struct ContactGenList; }                            // BrnContactGenerationList.h
@@ -178,6 +181,15 @@ namespace Vehicle
     const std::ptrdiff_t KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT =
         KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER + 32;  // -5600
 
+    // ⭐ The fourth term, added 2026-08-06 (big-five #2): the contact-generation block carve
+    // (+172465..+172592 console -> real members). Growth = the pointer-pair carve's +12 (4
+    // alignment + 2x pointer widening, already asserted at the head), five builders 12 -> 16
+    // (+20), nine more pointers 4 -> 8 (+36), one alignment pad before the producer run (+4),
+    // and one before the traction-line pointer (+4): +12+20+36+4+4 == +76. MEASURED against the
+    // compiled layout by the gate's own seat asserts (BrnVehicleManager_layout_check.cpp).
+    const std::ptrdiff_t KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK =
+        KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 76;  // -5524
+
     class VehicleManager
     {
     public:
@@ -280,6 +292,54 @@ namespace Vehicle
         // module+179760 == this+160656 == miNonPhysicalContactCount (the int32 the DWARF seats
         // directly after maNonPhysicalContacts[128], :851). Spelled BY NAME here.
         void ResetNonPhysicalContacts() { miNonPhysicalContactCount = 0; }
+
+        // ==========================================================================================
+        // ⭐ ADDED 2026-08-06 (big-five #2): StartVehicleContactGeneration's own contact-generation
+        // callees. Signatures per the PS3 DecFIGS mangles (@0x75C0C8 / @0x788190 / @0x789760);
+        // ⚠ 0x8261BF28 and 0x825C2EA0 are .ida-exports HOLES -- the PS3 twins are the signature
+        // authority for both. ⚠ FLAG: all four bodies are TRAP STUBS this wave
+        // (BrnVehicleManagerContactGeneration.cpp) -- named, not landed.
+        // ==========================================================================================
+
+        // @0x8261BB38 (PS3 0x75C0C8). Generate the car-vs-car contacts for one overlap pair.
+        // lu16QueueIndex is the custom potential-contact queue the pair's contacts route to --
+        // the driver passes 7 (racecar-racecar), 8 (racecar-traffic) or 13 (traffic-traffic),
+        // exactly the bridge's queue-index/ContactId binding.
+        void DoCarCarContactGeneration( CgsSceneManager::EntityId lGlobalIdA,
+                                        CgsSceneManager::EntityId lGlobalIdB,
+                                        CgsSceneManager::EntityId lPhysicsIdA,
+                                        CgsSceneManager::EntityId lPhysicsIdB,
+                                        BrnPhysics::Deformation::DeformationManager* lpDeformationManager,
+                                        BrnPhysics::ContactGenList* lpContactGenList,
+                                        CgsSceneManager::CgsCollision::CollisionGenerator* lpContactGenerator,
+                                        CgsMemory::SimpleDataStreamProducer* lpSphereSphereStream,
+                                        u16 lu16QueueIndex,
+                                        f32 lfTimeStep );
+
+        // @0x825EB140 (PS3 0x788190). Generate one race car's car-vs-world contacts.
+        void DoRaceCarWorldContactGeneration( s32 liRaceCarIndex,
+                                              BrnPhysics::Deformation::DeformationManager* lpDeformationManager,
+                                              const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
+                                              BrnPhysics::ContactGenList* lpContactGenList,
+                                              CgsSceneManager::CgsCollision::CollisionGenerator* lpContactGenerator,
+                                              CgsMemory::SimpleDataStreamProducer* lpSphereTriangleStream,
+                                              CgsMemory::SimpleDataStreamProducer* lpSweptSphereTriangleStream,
+                                              u32 luQueueIndex );
+
+        // @0x8261BF28 (⚠ export HOLE; PS3 0x789760). Generate one traffic car's car-vs-world
+        // contacts.
+        void DoTrafficCarWorldContactGeneration( s32 liTrafficIndex,
+                                                 BrnPhysics::Deformation::DeformationManager* lpDeformationManager,
+                                                 const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
+                                                 BrnPhysics::ContactGenList* lpContactGenList,
+                                                 CgsSceneManager::CgsCollision::CollisionGenerator* lpContactGenerator,
+                                                 CgsMemory::SimpleDataStreamProducer* lpSphereTriangleStream,
+                                                 u32 luQueueIndex,
+                                                 CgsMemory::LinearMalloc* lpLinearMalloc );
+
+        // @0x825C2EA0 (⚠ export HOLE -- no export json AND no PS3 out-of-line twin surfaced;
+        // signature from the two SVCG call sites: (this, race-car index) -> bool in r3).
+        bool IsRaceCarHidden( s32 liRaceCarIndex );
 
         // ==========================================================================================
         // ⭐ ADDED 2026-08-06 (PhysicsModule::Update leaves wave). The four small per-frame leaves of
@@ -1537,19 +1597,53 @@ namespace Vehicle
         BrnPhysics::ContactGenList*                        mpContactGenList;    // +172468 (DWARF :1045)
         CgsSceneManager::CgsCollision::CollisionGenerator* mpContactGenerator;  // +172472 (DWARF :1046)
 
-        // [I] +172476..+172580 holds the REST of the DWARF's contact-generation block (:1047..:1076
-        // -- three PrimitivePairListBuilders, the job pointers, the stream producers and
-        // mOverlappingRaceCars). Opaque: none of those types has a committed size, and Construct
-        // does not touch the span. Recorded so the next wave does not re-derive it.
-        // (104 console bytes modelled as 92 host bytes: the -12 is the two pointers' carve above.)
-        unsigned char        mPad2A1DC[(172580 - 172476) - 12];
+        // ⭐⭐ CARVED IN FULL 2026-08-06 (big-five #2, contact-generation wave): the REST of the
+        // DWARF's contact-generation block, :1047..:1076, every member BY NAME. The consumer that
+        // forced the carve is StartVehicleContactGeneration @0x8262AEE8, whose store/load seats
+        // walk this block end to end and match the DWARF names 1:1:
+        //     +172476 mDetachedPartPrimPairBuilder    (Prepare'd cap 600; "Too many part Vs. Car
+        //              contact tests" gate on its mu16NumTests @+172482)
+        //     +172488 mDetachedWheelPrimPairBuilder   ("Too many wheel Vs. Car..." @+172494)
+        //     +172500 mHingedPartVsVehiclePairBuilder (AddHingedBodyPartPairs' builder)
+        //     +172512 mpTractionLineTestsJob          +172516 miFirstPartContactGenEntry (=0)
+        //     +172520 mpSphereSphereStreamProducer    <- CreateCollideSphereListWithSphereList-
+        //              Stream @0x82811A78 (and so on: each producer seat is filled by exactly the
+        //              Create* whose DWARF name matches it)
+        //     +172524 mpSphereTriangleStreamProducer  <- @0x828113C8
+        //     +172528 mpSweptSphereTriangleStreamProducer <- @0x82811720
+        //     +172532/+172536/+172540 the three *StreamJob seats <- the matching Run* results
+        //     +172544 mOverlappingRaceCars            (BitArray<64>; the 8*idxA+idxB / 8*idxB+idxA
+        //              symmetric pair marking, asm 0x8262B890/0x8262B970)
+        //     +172552 mTrafficSimpleTrafficPrimPairBuilder  (gated on its mu16NumTests @+172558)
+        //     +172564 mRaceCarSimpleTrafficPrimPairBuilder  (gate @+172570)
+        //     +172576 mpBodyPartWithWorldStream
+        // Host layout drifts (pointers widen, the builders are 16 host vs 12 console); the gate
+        // below the class carries the block's own drift constant.
+        CgsSceneManager::CgsCollision::PrimitivePairListBuilder mDetachedPartPrimPairBuilder;     // +172476 :1047
+        CgsSceneManager::CgsCollision::PrimitivePairListBuilder mDetachedWheelPrimPairBuilder;    // +172488 :1048
+        CgsSceneManager::CgsCollision::PrimitivePairListBuilder mHingedPartVsVehiclePairBuilder;  // +172500 :1049
+        EA::Jobs::Job*                       mpTractionLineTestsJob;                              // +172512 :1050
+        s32                                  miFirstPartContactGenEntry;                          // +172516 :1051
+        CgsMemory::SimpleDataStreamProducer* mpSphereSphereStreamProducer;                        // +172520 :1052
+        CgsMemory::SimpleDataStreamProducer* mpSphereTriangleStreamProducer;                      // +172524 :1053
+        CgsMemory::SimpleDataStreamProducer* mpSweptSphereTriangleStreamProducer;                 // +172528 :1054
+        EA::Jobs::Job*                       mpSphereSphereStreamJob;                             // +172532 :1055
+        EA::Jobs::Job*                       mpSphereTriangleStreamJob;                           // +172536 :1056
+        EA::Jobs::Job*                       mpSweptSphereTriangleStreamJob;                      // +172540 :1057
+        CgsContainers::BitArray<64>          mOverlappingRaceCars;                                // +172544 :1060 (kiRaceCarPairs == 64)
+        CgsSceneManager::CgsCollision::PrimitivePairListBuilder mTrafficSimpleTrafficPrimPairBuilder; // +172552 :1065
+        CgsSceneManager::CgsCollision::PrimitivePairListBuilder mRaceCarSimpleTrafficPrimPairBuilder; // +172564 :1066
+        CgsMemory::SimpleDataStreamProducer* mpBodyPartWithWorldStream;                           // +172576 :1069
 
-        // ⭐ NEWLY PINNED (asm `stwx` of 0 at both). [I] on the NAMES only: the DWARF counters that
-        // live in this region are miNumTrafficSphereWorldTests (:1072) and miNumSPUTractionLineTests
-        // (:1076); which of them is which is NOT pinned, so they are left role-neutral.
-        s32 miContactStreamCounterA;                // +172580 = 0   FLAG: name role-neutral
-        s32 miContactStreamCounterB;                // +172584 = 0   FLAG: name role-neutral
-        unsigned char        mPad2A22C[172592 - (172584 + 4)];
+        // ⭐ RENAMED AT CARVE (was miContactStreamCounterA/B, both FLAGGED role-neutral): with the
+        // block carved the DWARF sequence pins the roles uniquely -- the counter at +172580 is
+        // miNumTrafficSphereWorldTests (:1072) and the `stwx 0` seat at +172584 is the CONSOLE
+        // POINTER mpTractionLineStreamProducer (:1075; the zero-store is a null-store), with
+        // miNumSPUTractionLineTests (:1076) closing the run to mStuckInCollisionTestCacheSphere's
+        // asm-pinned +172592 exactly.
+        s32                                  miNumTrafficSphereWorldTests;                        // +172580 :1072 (=0; SVCG resets it too)
+        CgsMemory::SimpleDataStreamProducer* mpTractionLineStreamProducer;                        // +172584 :1075 (=NULL)
+        s32                                  miNumSPUTractionLineTests;                           // +172588 :1076
         // ⭐ NEWLY PINNED, and it closes the class tail to the byte: Construct zero-stores 16 bytes
         // here (`stvx128 v127, r31, r11` @0x8263C664, r11 == 172592) and a zero byte at 172608 --
         // exactly the DWARF's adjacent `Sphere mStuckInCollisionTestCacheSphere` (:1087) +

@@ -36,4 +36,43 @@ namespace BrnPhysics
 
         ++miNumEntries;
     }
+
+    // =================================================================================================
+    // ⭐ ADDED 2026-08-06 (big-five #2, contact-generation wave).
+    //
+    // ContactGenList::Construct -- the X360 CreateIOBuffer<ContactGenList> template runs
+    // T::Construct after the alloc; the PC template placement-news only, so
+    // StartVehicleContactGeneration calls this explicitly (the InputBuffer::Construct precedent).
+    // The console inline (@0x8262AFC8..0x8262AFD4): `stw 0, 0xC08(list)` (miNumEntries = 0) +
+    // the IOBuffer status raise (`li 1 ; stb 0(list)`).
+    // =================================================================================================
+    void ContactGenList::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        miNumEntries = 0;
+    }
+
+    // =================================================================================================
+    // ContactGenList::AddEntry(EntityId, EntityId, u8, u8)  @0x825B59B0 -- the 4-byte-entity-id
+    // overload. asm-exact:
+    //   * assert miNumEntries < 128 BEFORE the writes (non-gating; header line :75);
+    //   * mIdA = (u64)lIdA << 32 (`sldi r30,32 ; std +8`), mIdB = (u64)lIdB << 32 (`std +0x10`)
+    //     -- an entity-only volume-instance id (volume word zero);
+    //   * the two offset bytes at entry+16/+17; then ++miNumEntries.
+    // Callers: StartVehicleContactGeneration (the two simple-traffic pair-list markers) + the
+    // Do*ContactGeneration family.
+    // =================================================================================================
+    void ContactGenList::AddEntry(EntityId lIdA, EntityId lIdB,
+                                  u8 lu8IdAVolInstOffset, u8 lu8IdBVolInstOffset)
+    {
+        CGS_ASSERT(miNumEntries < KI_MAX_ENTRIES, "miNumEntries < miMaxEntries");   // :75
+
+        ContactGenEntry& lrEntry = maEntries[miNumEntries];
+        lrEntry.mIdA.muId         = static_cast<u64>(lIdA.muValue) << 32;
+        lrEntry.mIdB.muId         = static_cast<u64>(lIdB.muValue) << 32;
+        lrEntry.mIdAVolInstOffset = lu8IdAVolInstOffset;
+        lrEntry.mIdBVolInstOffset = lu8IdBVolInstOffset;
+
+        ++miNumEntries;
+    }
 }

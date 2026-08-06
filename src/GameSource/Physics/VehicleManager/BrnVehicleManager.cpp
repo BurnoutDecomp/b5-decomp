@@ -1653,8 +1653,8 @@ namespace Vehicle
         static_assert(offsetof(VehicleManager, meShowtimeBehaviour)   == 172456 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "meShowtimeBehaviour (asm +172456; seeded 2)");
         static_assert(offsetof(VehicleManager, miRaceCarWorldContactValidationPM) == 172460 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
                       "miRaceCarWorldContactValidationPM (asm +172460; named by the console's own assert at BrnVehicleManager.cpp:778)");
-        static_assert(offsetof(VehicleManager, miContactStreamCounterA) == 172580 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "contact-stream counter A (asm +172580)");
-        static_assert(offsetof(VehicleManager, miContactStreamCounterB) == 172584 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "contact-stream counter B (asm +172584)");
+        static_assert(offsetof(VehicleManager, miNumTrafficSphereWorldTests) == 172580 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK - 12, "renamed at the 2026-08-06 carve (asm +172580; see the mounted gate)");
+        static_assert(offsetof(VehicleManager, mpTractionLineStreamProducer) > offsetof(VehicleManager, miNumTrafficSphereWorldTests), "renamed at the 2026-08-06 carve (console +172584 pointer; host seat via the mounted gate)");
         static_assert(offsetof(VehicleManager, mStuckInCollisionTestCacheSphere) == 172592 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mStuckInCollisionTestCacheSphere (asm stvx128 v127,r31,r11 with r11 == 172592)");
         static_assert(offsetof(VehicleManager, mbPlayerCarStuckInCollision) == 172608 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
                       "172592 + 16 == 172608: the Sphere/bool pair (DWARF :1087/:1088) closes to the byte");

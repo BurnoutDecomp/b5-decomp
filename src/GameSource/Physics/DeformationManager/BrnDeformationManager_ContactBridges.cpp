@@ -319,5 +319,34 @@ namespace Deformation
                    "TRAP: DeformationManager::BridgeDetachedWheelCarContactsToSimulation @0x825DDD48 "
                    "not reconstructed (big-five #2 closure stub)\n");
     }
+
+    // =================================================================================================
+    // The three pair-builder feeders StartVehicleContactGeneration @0x8262AEE8 calls.
+    // ⚠⚠ TRAP STUBS (closure enforcement, 2026-08-06 big-five #2 wave) -- the REAL bodies (91 /
+    // 136 / 83 X360 asm lines @0x82605928 / @0x82605BE8 / @0x82605A98; PS3 DecFIGS 0x760100 /
+    // 0x75B050 / 0x760E6C) are NOT reconstructed yet. Dead code today. RECONSTRUCT-NEXT.
+    // =================================================================================================
+    void DeformationManager::AddRaceCarBodyPartPair(EntityId /*lEntityId*/,
+                                                    CgsSceneManager::VolumeInstanceId /*lVolumeInstanceId*/,
+                                                    PrimitivePairListBuilder* /*lpBuilder*/)
+    {
+        CGS_ASSERT(false, "TRAP: DeformationManager::AddRaceCarBodyPartPair @0x82605928 "
+                          "not reconstructed (big-five #2 closure stub)\n");
+    }
+
+    void DeformationManager::AddRaceCarWheelPair(EntityId /*lEntityId*/,
+                                                 CgsSceneManager::VolumeInstanceId /*lVolumeInstanceId*/,
+                                                 PrimitivePairListBuilder* /*lpBuilder*/)
+    {
+        CGS_ASSERT(false, "TRAP: DeformationManager::AddRaceCarWheelPair @0x82605BE8 "
+                          "not reconstructed (big-five #2 closure stub)\n");
+    }
+
+    void DeformationManager::AddHingedBodyPartPairs(EntityId /*lEntityIdA*/, EntityId /*lEntityIdB*/,
+                                                    PrimitivePairListBuilder* /*lpBuilder*/)
+    {
+        CGS_ASSERT(false, "TRAP: DeformationManager::AddHingedBodyPartPairs @0x82605A98 "
+                          "not reconstructed (big-five #2 closure stub)\n");
+    }
 }
 }

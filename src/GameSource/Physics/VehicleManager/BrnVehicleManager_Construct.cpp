@@ -383,14 +383,14 @@ namespace Vehicle
         CGS_ASSERT(miRaceCarWorldContactValidationPM >= 0,
                    "miRaceCarWorldContactValidationPM >= 0");
 
-        miContactStreamCounterA = 0;;  // +172580
+        miNumTrafficSphereWorldTests = 0;;  // +172580 (renamed at the 2026-08-06 carve; DWARF :1072)
 
         // ⚠️ ISSUED HERE, between the two counter stores -- 0x8263C61C stores +172580, 0x8263C620 is
         // this call, 0x8263C640 stores +172612. Not moved next to the other sub-constructors.
         mStuntOffencesManager.Construct();   // +44240
 
         muTakedownEventsThisFrame = 0;;  // +172612
-        miContactStreamCounterB   = 0;;  // +172584
+        mpTractionLineStreamProducer = 0;;  // +172584 (renamed at the carve: the console `stwx 0` here null-stores the DWARF :1075 POINTER)
 
         mbInOnlineGameModeStartLine = false;;  // +172318
         mbPlayerCarInJunkYard       = false;;  // +172319

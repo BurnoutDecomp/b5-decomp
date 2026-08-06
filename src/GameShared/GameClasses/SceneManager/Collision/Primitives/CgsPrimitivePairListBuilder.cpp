@@ -104,6 +104,39 @@ namespace CgsCollision
     }
 
     // -------------------------------------------------------------------------
+    // AddCollisionHeader(EVolumeType, EVolumeType, f32, u16, u16) @ 0x82814480
+    //
+    // ⭐ BODIED 2026-08-06 (big-five #2 wave; it was declared "defined in its own
+    // reconstruction" and nothing defined it -- found by the LNK2019 when this TU
+    // mounted). Bump-allocate a 16-byte CollisionHeader for a two-primitive PAIR
+    // record and stamp it, asm-exact @0x82814480: both type bytes, header-type 1,
+    // per-type packed sizes from KAU16_VOLUME_SIZES, both caller tags, checksum
+    // byte == typeA + typeB + 1 (== A + B + HeaderType).
+    // -------------------------------------------------------------------------
+    void PrimitivePairListBuilder::AddCollisionHeader(EVolumeType lePrimTypeA,
+                                                      EVolumeType lePrimTypeB,
+                                                      f32 lfPadding,
+                                                      u16 lu16PrimitiveTagA,
+                                                      u16 lu16PrimitiveTagB)
+    {
+        CollisionHeader* lpHeader =
+            static_cast<CollisionHeader*>(AllocateMemory(sizeof(CollisionHeader)));
+
+        const u8 lu8TypeA = static_cast<u8>(lePrimTypeA);
+        const u8 lu8TypeB = static_cast<u8>(lePrimTypeB);
+
+        lpHeader->mu8PrimTypeA              = lu8TypeA;
+        lpHeader->mu8PrimTypeB              = lu8TypeB;
+        lpHeader->mu8HeaderType             = 1;
+        lpHeader->mu16PrimADataSize         = KAU16_VOLUME_SIZES[lu8TypeA];
+        lpHeader->mu16PrimBDataSize         = KAU16_VOLUME_SIZES[lu8TypeB];
+        lpHeader->mfPadding                 = lfPadding;
+        lpHeader->mu16PrimitiveATag         = lu16PrimitiveTagA;
+        lpHeader->mu16PrimitiveBTag         = lu16PrimitiveTagB;
+        lpHeader->mu8DataPaddingAndCheckSum = static_cast<u8>(lu8TypeA + lu8TypeB + 1);
+    }
+
+    // -------------------------------------------------------------------------
     // AddPrimitive(Sphere*) @ 0x82814508
     //
     // Append a single-sphere record: stamp a sphere CollisionHeader (padding/tag

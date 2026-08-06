@@ -148,5 +148,27 @@ namespace CgsCollision
 
         return true;
     }
+
+    // -------------------------------------------------------------------------
+    // KAU16_VOLUME_SIZES -- the per-EVolumeType packed-data byte sizes.
+    //
+    // ⭐ RECOVERED FROM IMAGE BYTES 2026-08-06 (big-five #2 wave): the rodata table
+    // word_820DA934, read straight out of the unpacked BURNOUT_X360_ARTIST.XEX.i64
+    // with the proven headless-IDA data dump (six big-endian u16s at 0x820DA934):
+    //     { 0, 16, 32, 224, 80, 80 }
+    //       INVALID SPHERE CAPSULE 4TRIANGLES BOX CYLINDER
+    // Two independent cross-checks: SPHERE == 16 matches AddPrimitive(Sphere*)'s
+    // 16-byte payload alloc, and BOX == 80 matches the long-standing
+    // "KAU16_VOLUME_SIZES[E_VOLUME_TYPE_BOX] = 80" note in the builder header.
+    // -------------------------------------------------------------------------
+    const u16 PrimitivePairList::KAU16_VOLUME_SIZES[PrimitivePairList::NUM_VOLUME_TYPES] =
+    {
+        0,     // E_VOLUME_TYPE_INVALID
+        16,    // E_VOLUME_TYPE_SPHERE
+        32,    // E_VOLUME_TYPE_CAPSULE
+        224,   // E_VOLUME_TYPE_4TRIANGLES
+        80,    // E_VOLUME_TYPE_BOX
+        80,    // E_VOLUME_TYPE_CYLINDER
+    };
 }
 }

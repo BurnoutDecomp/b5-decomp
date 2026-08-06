@@ -55,6 +55,21 @@ namespace CgsMemory
         return ++miNumCommands;
     }
 
+    // X360 0x82867AE8 (⚠ .ida-exports HOLE -- reconstructed from the PS3 DecFIGS out-of-line
+    // body @0xBD1930, whose baked asserts pin the file/lines).
+    // Start a stream: assert not already streaming (:94), raise mbStreaming, then reset the
+    // packed status word to 0. The console resets it through an ldarx/stdcx CAS loop (the
+    // inlined GetEncodedStatus + SetValueConditional pair -- GetEncodedStatus's own
+    // "Encoded status is only valid during stream" tripwire is satisfied by the mbStreaming
+    // store above it); the PC build is single-threaded, so the atomic's own SetValue is the
+    // same observable store.
+    void DataStreamCommandPoster::Begin()
+    {
+        CGS_ASSERT(!mbStreaming, "Already streaming\n");   // CgsDataStreamCommandPoster.cpp:94
+        mbStreaming = true;
+        mEncodedStatus.SetValue(0);
+    }
+
     // X360 0x82867790.
     // Returns the packed 64-bit status word, but only while streaming is in progress:
     // asserts mbStreaming (offset 40) is set, then loads and returns the raw 64-bit
