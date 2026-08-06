@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu::{IsValid, operator+, Dot, Cross, Mult, ...}
 #include "rw/math/vpu/matrix44affine_operation.h"           // rw::math::vpu::OrthoNormalize3x3
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"  // InChangeRigidBodyInertia (ReadPropertiesFromChangeInertiaEvent)
 
 #include <cmath>   // std::pow (models the VMX exp2/log2 pow-curve in the damp funcs)
 
@@ -613,6 +614,54 @@ namespace BrnPhysics
         mAngularVelocity.x *= std::pow(lvfPitchDamping.x, lfDt);   // pitch about body x
         mAngularVelocity.y *= std::pow(lvfYawDamping.x,   lfDt);   // yaw   about body y
         mAngularVelocity.z *= std::pow(lvfRollDamping.x,  lfDt);   // roll  about body z
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // ReadPropertiesFromChangeInertiaEvent  @0x825A2388   (74 instructions, read line by line)
+    //
+    // Reseat mass + local inertia from a queued sim InChangeRigidBodyInertia event, then
+    // re-derive the world tensor. The asm, in order:
+    //   * `lwz 0x40(event)` -> mu32Flags; `rlwinm ..,29,29` / `..,30,30` -- BOTH bit 2 (0x4,
+    //     the mInvMass flag) AND bit 1 (0x2, the mInvTens flag) must be set or the function is
+    //     a no-op. (Bit map per the ProcessChangeRigidBodyInertiaQueue drain, quoted in
+    //     CgsPhysicsSimulationIO_Events.h.)
+    //   * three identity rows stored into mLocalInverseInertia (+0x70/+0x80/+0x90):
+    //     gIVector {1,0,0,0}, unk_82181510 {0,1,0,0}, unk_82181520 {0,0,1,0} -- the settled
+    //     identity-basis constants -- then each row is vmulfp128'd by the vspltw'd x/y/z lane
+    //     of the event's mInertia.mInvTens vector (event+0x10). Net effect: the local inverse
+    //     inertia becomes diag(invTens.x, invTens.y, invTens.z), written below directly (the
+    //     store-identity-then-scale staging is register scheduling, not observable state).
+    //   * `lfs f13, <event+0x20>` == mInertia.mInvMass; `fdivs f0, 1.0f, f13`; vspltw ->
+    //     `stvx128` to +0xD0 == mfMass = splat(1 / inverse mass) -- the event carries the
+    //     INVERSE mass, the body stores the mass (all consumers here divide by mfMass.x).
+    //     Deliberately NOT guarded against a zero inverse mass: the console does not guard,
+    //     and the same modelling note as CalculateNewVelocity's divide applies.
+    //   * `bl CalculateWorldIntertia`.
+    // (The 32-byte stack copy of event+0x20..0x40 the asm makes is a dead by-value staging --
+    // only the +0x20 float is ever read back out of it. The Hex-Rays for this function fails
+    // variable allocation; every claim above is from the asm.)
+    // ---------------------------------------------------------------------------------------
+    void ExternalPhysicsBody::ReadPropertiesFromChangeInertiaEvent(
+        const CgsPhysics::PhysicsSimulationIO::InChangeRigidBodyInertia* lpEvent)
+    {
+        const u32 luFlags = lpEvent->mu32Flags;
+        if ((luFlags & 0x4u) != 0 && (luFlags & 0x2u) != 0)   // mInvMass AND mInvTens present
+        {
+            const Vector3 lvInvTens = lpEvent->mInertia.GetInverseInertia();
+
+            // diag(invTens) -- the identity rows scaled per-lane (see the banner).
+            mLocalInverseInertia.xAxis = Vector3{ lvInvTens.x, 0.0f, 0.0f, 0.0f };
+            mLocalInverseInertia.yAxis = Vector3{ 0.0f, lvInvTens.y, 0.0f, 0.0f };
+            mLocalInverseInertia.zAxis = Vector3{ 0.0f, 0.0f, lvInvTens.z, 0.0f };
+
+            const f32 lfMass = 1.0f / lpEvent->mInertia.GetInverseMass();
+            mfMass.x = lfMass;
+            mfMass.y = lfMass;
+            mfMass.z = lfMass;
+            mfMass.w = lfMass;   // vspltw -- all four lanes, same as SetMass
+
+            CalculateWorldIntertia();
+        }
     }
 
     // ---------------------------------------------------------------------------------------

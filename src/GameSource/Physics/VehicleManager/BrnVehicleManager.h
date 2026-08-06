@@ -56,11 +56,24 @@ namespace rw { struct IResourceAllocator; }
 // class key `struct`, matching CgsPhysicsSimulationIO_Events.h).
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InAddPotentialContact; } }
 
+// ⭐ ADDED 2026-08-06 (PhysicsModule::Update leaves wave) -- the collaborators of the four
+// per-frame leaves (FreeAllocations / UpdateVehicleEffects / ReadUpdatedBodyProperties /
+// ProcessDeformationStates). Class keys match each type's committed home exactly.
+namespace CgsModule { struct IOBufferStack; }                              // CgsIOBufferStack.h
+namespace BrnPhysics { struct ContactGenList; }                            // BrnContactGenerationList.h
+// The REAL namespace, pinned by the X360 mangling of FreeAllocations' DestroyIOBuffer bl target
+// (VCollisionGenerator@CgsCollision@CgsSceneManager@@) -- see the member carve note below.
+namespace CgsSceneManager { namespace CgsCollision { struct CollisionGenerator; } }
+namespace BrnPhysics { namespace Deformation { class DeformationOutputInterface; } } // BrnDeformationOutputInterface.h
+// ReadUpdatedBodyProperties' queue element (CgsPhysicsSimulationIO_Events.h, class key `struct`).
+namespace CgsPhysics { namespace PhysicsSimulationIO { struct InChangeRigidBodyInertia; } }
+
 namespace BrnPhysics
 {
 namespace Vehicle
 {
     class RaceCarPhysics;                 // pointer-only collaborator
+    struct VehicleEffectsInputInterface;  // UpdateVehicleEffects arg (SharedIO/BrnVehicleEffectsInputInterface.h)
 
     // MINIMAL-SLICE definition of the manager-side output interface the crash/takedown events fan
     // out through. The real home is BrnVehicleConstants.h (DWARF); only the surface SetRaceCarCrashing
@@ -209,6 +222,39 @@ namespace Vehicle
         // drains this queue into the module's ContactSpyData every frame.
         const CgsModule::EventQueue<BrnPhysics::ContactSpy::DiscardedContact, 20>*
         GetDiscardedContacts() const { return &mDiscardedContacts; }
+
+        // ==========================================================================================
+        // ⭐ ADDED 2026-08-06 (PhysicsModule::Update leaves wave). The four small per-frame leaves of
+        // PhysicsModule::Update @0x825B0640, DWARF-authoritative signatures, bodied in the slice TU
+        // BrnVehicleManager_PerFrameLeaves.cpp (home BrnVehicleManager.cpp is still unmounted --
+        // the established slice pattern; fold back when the home mounts).
+        // ==========================================================================================
+
+        // @0x8261BAE0 (DWARF h:647). End-of-frame teardown of the two contact-generation IO
+        // allocations: DestroyIOBuffer<CollisionGenerator>(&mpContactGenerator) FIRST, then
+        // DestroyIOBuffer<ContactGenList>(&mpContactGenList) -- the console's call order.
+        void FreeAllocations(CgsModule::IOBufferStack* lpIOBufferStack);
+
+        // @0x82629E18 (DWARF h:908). Drain the air-ram event queue: owner RACE_CAR (1) forwards to
+        // maRaceCarVehicles[idx].AddAirRam, owner TRAFFIC_VEHICLE (2) to
+        // mPhysicalTrafficManager.ProcessAddAirRamEvent, anything else fires the
+        // "Invalid Entity type in air ram UpdateVehicleEffects Effects" assert (:3544).
+        void UpdateVehicleEffects(const VehicleEffectsInputInterface* lpEffectsInterface);
+
+        // @0x825C5520 (DWARF h:917 -- the arg is the sim InputBuffer's InChangeRigidBodyInertiaQueue
+        // typedef == this exact EventQueue instantiation; typedefs do not change the type). Per
+        // queued event whose id owner is RACE_CAR: bounds-assert the 14-bit index (:4321), require
+        // the FULL 64-bit event mID to equal maRaceCarHandlingBodyIDs[idx] (asm `cmpld` -- the
+        // Hex-Rays renders a 32-bit compare, the asm is authoritative), then forward to the car's
+        // ExternalPhysicsBody::ReadPropertiesFromChangeInertiaEvent.
+        void ReadUpdatedBodyProperties(
+            const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InChangeRigidBodyInertia, 200>* lpInertiaQueue);
+
+        // @0x825EA580 (DWARF h:926). In SHOWTIME game modes (meCurrentGameModeType == 2 or == 16),
+        // look up the player car's deformation state record (GetCarStateF on the interface's
+        // mpDeformationState, keyed by maRaceCarEntityIDs[mePlayerActiveRaceCarIndex]) and feed it
+        // to the player car's RaceCarPhysics::UpdateShowtimeBounceModifiers.
+        void ProcessDeformationStates(const Deformation::DeformationOutputInterface* lpDeformationInterface);
 
         // The per-contact working set the impact classifiers read/populate. Verbatim DWARF
         // layout (BrnVehicleManager.h:763). Pointer members use the forward-declared collaborators.
@@ -1387,11 +1433,34 @@ namespace Vehicle
         s32 miRaceCarWorldContactValidationPM;      // +172460 = AddMonitor("PHYS ValidateRCWorldContact", ...)
         unsigned char mn8RoundRobinControlWord;     // +172464   (not seeded; DWARF :1042)
 
-        // [I] +172465..+172580 holds the DWARF's contact-generation block (:1045..:1076 -- the two
-        // generator pointers, three PrimitivePairListBuilders, the job pointers, the stream
-        // producers and mOverlappingRaceCars). Opaque: none of those types has a committed size, and
-        // Construct does not touch the span. Recorded so the next wave does not re-derive it.
-        unsigned char        mPad2A1D1[172580 - 172465];
+        // ⭐ CARVED 2026-08-06 (PhysicsModule::Update leaves wave): the HEAD of the old opaque
+        // +172465..+172580 span is the DWARF's two contact-generation pointers (:1045/:1046), and
+        // both seats are asm-literal in the per-frame chain:
+        //   FreeAllocations @0x8261BAE0:            DestroyIOBuffer<CollisionGenerator>(&this+172472)
+        //                                           then DestroyIOBuffer<ContactGenList>(&this+172468)
+        //   StartVehicleTractionLineTests @0x82629CE0: `lwz` this+172472 + the baked assert
+        //                                           "mpContactGenerator != NULL" (BrnVehicleManager.cpp:2346)
+        // The DestroyIOBuffer bl target's mangled name pins mpContactGenerator's exact qualified
+        // type: CgsSceneManager::CgsCollision::CollisionGenerator (NOT the `CgsPhysics::
+        // CollisionGenerator` some sibling headers forward-declare -- that fork is flagged at those
+        // headers' consumers, not here).
+        //   * console: 3 pad bytes [172465..172468) + two 4-byte pointers [172468..172476)
+        //   * host:    7 pad bytes (3 + 4 more so the 8-byte pointers seat on an 8 boundary) + 16
+        // The +12 host growth is absorbed by the REMAINING opaque run below -- legal here, unlike
+        // the drift-constant cases, because everything both sides of the carve inside this span is
+        // UNRECONSTRUCTED padding, not a modelled DWARF member; the span's two ENDS
+        // (mn8RoundRobinControlWord / miContactStreamCounterA) keep their pinned seats, which the
+        // mounted layout gate (_AssertLayoutTuningBank) checks.
+        unsigned char        mPad2A1D1[7];  // console [172465..172468) + 4B host pointer alignment
+        BrnPhysics::ContactGenList*                        mpContactGenList;    // +172468 (DWARF :1045)
+        CgsSceneManager::CgsCollision::CollisionGenerator* mpContactGenerator;  // +172472 (DWARF :1046)
+
+        // [I] +172476..+172580 holds the REST of the DWARF's contact-generation block (:1047..:1076
+        // -- three PrimitivePairListBuilders, the job pointers, the stream producers and
+        // mOverlappingRaceCars). Opaque: none of those types has a committed size, and Construct
+        // does not touch the span. Recorded so the next wave does not re-derive it.
+        // (104 console bytes modelled as 92 host bytes: the -12 is the two pointers' carve above.)
+        unsigned char        mPad2A1DC[(172580 - 172476) - 12];
 
         // ⭐ NEWLY PINNED (asm `stwx` of 0 at both). [I] on the NAMES only: the DWARF counters that
         // live in this region are miNumTrafficSphereWorldTests (:1072) and miNumSPUTractionLineTests

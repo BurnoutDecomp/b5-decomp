@@ -235,6 +235,7 @@ namespace Vehicle
 // CreatePhysicalTrafficEvent and RaceCarPhysics keep their forward declarations (neither header is
 // pulled in here; only pointers/refs to them appear).
 struct CreatePhysicalTrafficEvent;   // spawn event -- SharedIO/BrnVehicleEvents.h
+struct CreateAirRamEvent;            // air-ram event -- SharedIO/BrnVehicleEvents.h (ProcessAddAirRamEvent arg)
 class  RaceCarPhysics;               // the checking race car -- RaceCarPhysics.h
 
 // VecFloat: a single 16-byte VMX float lane (the DWARF spells the members below as VecFloat).
@@ -495,6 +496,13 @@ public:
 
     // X360 0x825B4900: &mpaTrafficDrivers[idx] (stride 224).
     VehicleDriver* GetTrafficDriver(s32 liVehicle);
+
+    // @0x8261DC08 (DWARF BrnPhysicalTrafficManager.h:194). Forward a queued air-ram event whose
+    // volume id names a GLOBAL traffic entity: assert the owner byte is TRAFFIC_VEHICLE, map the
+    // global index through mu8GlobalToPhysicalEntityIndexMap (KU8_INVALID_MAP = no physical
+    // vehicle -> drop), and hand the impulse to that PhysicalTrafficVehicle's AddAirRam.
+    // ADDED 2026-08-06 (PhysicsModule::Update leaves wave); bodied in this manager's own TU.
+    void ProcessAddAirRamEvent(const CreateAirRamEvent* lpEvent);
 
     // X360 0x825B4A28: mpaTrafficVehicles[ lPhysicsVehicleId.GetEntityIndex() ].mpVehicleBody
     SimpleVehiclePhysics* GetVehiclePhysics(EntityId lPhysicsVehicleId);

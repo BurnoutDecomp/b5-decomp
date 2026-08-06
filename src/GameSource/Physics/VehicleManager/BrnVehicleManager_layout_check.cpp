@@ -330,6 +330,18 @@ namespace Vehicle
         static_assert(offsetof(VehicleManager, meShowtimeBehaviour)      == 172456 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx 2 @+172456");
         static_assert(offsetof(VehicleManager, miRaceCarWorldContactValidationPM) == 172460 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
                       "asm stores the 30th AddMonitor handle here; named by the console's own assert text");
+        // ⭐ ADDED 2026-08-06 (PhysicsModule::Update leaves wave): the two contact-generation
+        // pointers carved from the head of the old +172465..+172580 opaque span (DWARF :1045/:1046;
+        // asm seats FreeAllocations @0x8261BAE0 / StartVehicleTractionLineTests @0x82629CE0). The
+        // extra +4/+8 terms are the HOST-ONLY widening inside the carve: 4 alignment bytes so the
+        // 8-byte pointers seat on an 8 boundary, then each pointer is 4 bytes wider than the
+        // console's. The growth is absorbed by the REMAINING opaque run of the same span, which is
+        // why miContactStreamCounterA below keeps its seat -- that pair of asserts is the carve's
+        // whole tripwire.
+        static_assert(offsetof(VehicleManager, mpContactGenList)    == 172468 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 4,
+                      "console +172468; +4 = host 8-alignment of the pointer pair");
+        static_assert(offsetof(VehicleManager, mpContactGenerator)  == 172472 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 8,
+                      "console +172472; +8 = the alignment pad + mpContactGenList's own 4->8 widening");
         static_assert(offsetof(VehicleManager, miContactStreamCounterA)  == 172580 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx 0 @+172580");
         static_assert(offsetof(VehicleManager, miContactStreamCounterB)  == 172584 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx 0 @+172584");
         static_assert(offsetof(VehicleManager, mStuckInCollisionTestCacheSphere) == 172592 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,

@@ -37,7 +37,7 @@ namespace Deformation
         static_assert(offsetof(DeformationState, mxLiveSlots) == 48048, "mxLiveSlots @48048");
     }
 
-    CarStateRecord* DeformationState::GetCarStateF(u32 luCarId)
+    const CarStateRecord* DeformationState::GetCarStateF(u32 luCarId) const
     {
         s32 liSlot = mxLiveSlots.GetFirstNonZeroBit();
         while (liSlot >= 0)

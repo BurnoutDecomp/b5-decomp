@@ -423,6 +423,62 @@ void PhysicalTrafficVehicle::AddAirRam(u32 luFlags, f32 lfFactor, f32 lfDecay,
     }
 }
 
+// PhysicalTrafficManager::ProcessAddAirRamEvent   @0x8261DC08   (121 instructions)
+//   VehicleManager::UpdateVehicleEffects @0x82629E18 forwards every owner==TRAFFIC air-ram
+//   event here. The X360, branch for branch:
+//     * assert the event volume id's owner byte is TRAFFIC_VEHICLE (2) -- the streamed
+//       "Tried to use physical traffic manager to add air ram to non-traffic thing: <id>"
+//       (BrnPhysicalTrafficManager.cpp:3529) lowered to CGS_ASSERT per the standing rule;
+//       fire-and-continue.
+//     * inlined global->physical map lookup (the same shape GetTrafficPhysicsEntityID* uses):
+//       bounds tripwire index < 600 ("lGlobalEntityId.GetEntityIndex() <
+//       sizeof(mu8GlobalToPhysicalEntityIndexMap)", BrnPhysicalTrafficManager.h:944), then
+//       mu8GlobalToPhysicalEntityIndexMap[idx]; KU8_INVALID_MAP (127) == no physical vehicle
+//       -> the event is dropped. A hit repacks (physIdx << 10) | (TRAFFIC << 24) -- the seed
+//       value before the repack is the K_INVALID_ENTITY_ID global (dword_82F2A3A4), never
+//       read on the drop path, so it is not reproduced.
+//     * GetTrafficVehicle(physIdx) [the asm's GetTrafficInterest_0 alias -- both bodies are
+//       &mpaTrafficVehicles[idx]] -> PhysicalTrafficVehicle::AddAirRam with the same
+//       field->argument map UpdateVehicleEffects uses for race cars: (muEffectFlags,
+//       mDirectionAndMagnitude.w, mfDecay, mDirectionAndMagnitude, mPosition, mfStartTime)
+//       == asm r4 / f1(+0x1C) / f2(+0x0C) / v1(+0x10) / v2(+0x20) / f3(+0x30).
+//   ⚠️ HOST DIVERGENCE, flagged: for a map index >= 600 the console runs the map read anyway
+//   (an OOB read feeding the sentinel test); the host guards it -- the same accepted
+//   divergence as BrnVehicleManager_ValidateSimulationContacts.cpp's bounds tripwire.
+void PhysicalTrafficManager::ProcessAddAirRamEvent(const CreateAirRamEvent* lpEvent)
+{
+    const u32 luEntityWord = static_cast<u32>(lpEvent->mVolumeId.muId >> 32);
+
+    CGS_ASSERT((luEntityWord >> 24) == KU_ENTITYTYPE_TRAFFIC_VEHICLE,
+               "Tried to use physical traffic manager to add air ram to non-traffic thing: ");   // :3529
+
+    const u32 luGlobalIndex = (luEntityWord >> 10) & 0x3FFFu;
+    CGS_ASSERT(luGlobalIndex < sizeof(mu8GlobalToPhysicalEntityIndexMap),
+               "lGlobalEntityId.GetEntityIndex() < sizeof(mu8GlobalToPhysicalEntityIndexMap)");  // h:944
+
+    if (luGlobalIndex < sizeof(mu8GlobalToPhysicalEntityIndexMap))   // host bounds guard (see banner)
+    {
+        const u8 lu8PhysicalIndex = mu8GlobalToPhysicalEntityIndexMap[luGlobalIndex];
+        if (lu8PhysicalIndex != KU8_INVALID_MAP)
+        {
+            // The console passes the raw 16-byte mDirectionAndMagnitude register as v1 (its w
+            // lane rides along); reproduced lane-for-lane rather than through GetVector3(),
+            // which would zero the w lane the console keeps.
+            const Vector3 lvDirection{ lpEvent->mDirectionAndMagnitude.x,
+                                       lpEvent->mDirectionAndMagnitude.y,
+                                       lpEvent->mDirectionAndMagnitude.z,
+                                       lpEvent->mDirectionAndMagnitude.w };
+            GetTrafficVehicle(static_cast<s32>(lu8PhysicalIndex))->AddAirRam(
+                lpEvent->muEffectFlags,
+                lpEvent->mDirectionAndMagnitude.w,   // lfFactor == the packed magnitude lane (asm f1 <- +0x1C)
+                lpEvent->mfDecay,
+                lvDirection,
+                lpEvent->mPosition,
+                lpEvent->mfStartTime);
+        }
+    }
+}
+
 // PhysicalTrafficVehicle::IsSimple (const)   @0x825B33B8
 //   Assert mu8PhysicalType < COUNT; return leType == SIMPLE (the `cntlzw(leType-1)>>5` idiom).
 bool PhysicalTrafficVehicle::IsSimple() const
