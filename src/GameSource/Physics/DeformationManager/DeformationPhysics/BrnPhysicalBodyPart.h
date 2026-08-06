@@ -304,6 +304,25 @@ namespace Deformation
         // BrnPhysicalBodyPart.h:292. Set the packed joint angular velocity.
         void SetJointVelocity(VecFloat lvfJointVelocity);
 
+        // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave): the packed 8-byte word
+        // DeformationManager::FixupBodyPartVehicleContact re-keys a contact's A id from. The
+        // console reads the part's 64-bit BurnoutBodyPartID whole (`ld 0x1D0(part)`
+        // @0x825A0D64 -- mRigidBodyId spans part+464..471 exactly) and stores it into
+        // muVolumeInstanceIdA: the packed part handle IS the part's scene volume-instance id
+        // (entity word == muEntityWord in the big-endian HIGH dword, {muSubA, muSubB} the low).
+        // The DWARF's GetVolumeInstanceId() (:301) is PRIVATE; the console manager reached this
+        // state inline (its access path -- friendship or a public overload -- is not recoverable
+        // from the stripped build), so this is a PUBLIC documented accessor over the same bytes,
+        // following the DeformableObject::GetHandlingBodyIdHighByte precedent.
+        CgsSceneManager::VolumeInstanceId GetContactVolumeInstanceId() const
+        {
+            CgsSceneManager::VolumeInstanceId lId;
+            lId.muId = (static_cast<u64>(mRigidBodyId.muEntityWord) << 32)
+                     | (static_cast<u64>(mRigidBodyId.muSubA) << 16)
+                     |  static_cast<u64>(mRigidBodyId.muSubB);
+            return lId;
+        }
+
     private:
         // ----- private helpers (declarations only) ---------------------------------------
 

@@ -297,6 +297,15 @@ namespace Props           { struct PropRaceCarContactBuffer; }   // DWARF BrnPro
                            const CgsSceneManager::SceneManagerIO::PotentialContact* lpPotentialContact,
                            const Props::PropRaceCarContactBuffer* lpPropRaceCarContactBuffer );
 
+        // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave). @0x825A6010, home TU
+        // BrnPhysicsModuleUpdateFunctions.cpp (:915 -- its own baked assert path names the file).
+        // The big-five opener: walk the three vehicle-vs-vehicle potential-contact queues and
+        // deform-fix each contact -- racecar-vs-traffic ([8], the B id rewritten global->physical
+        // through VehicleManager::GetPhysicsEntityIDFromGlobalEntityID), racecar-vs-racecar ([7]),
+        // and the scene queue's traffic-vs-traffic pairs ([0], both ids rewritten). Caller:
+        // PhysicsModule::Update @0x825B0640 (still a link stub).
+        void FixUpVehicleContacts( PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface );
+
         // :552 @0x825A1100. Diagnostics: when the sim contact queue is FULL, dump a per-owner
         // histogram and assert. Caller: BridgeContactsToSimulation.
         void CheckContactQueueSize( const CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* lpContactQueue );

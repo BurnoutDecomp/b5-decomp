@@ -508,6 +508,11 @@ namespace Deformation
         void ProcessValidateDeformationModelEvents(const DeformationInputInterface* lpInputInterface);
 
         // :443 / :447 / :451. Model-index lookups (by local entity id / global entity id / part body id).
+        // ⭐ FindModelIndexByEntityID is DEFINED INLINE below the class as of 2026-08-06
+        // (FixUpVehicleContacts wave): the X360 out-of-line copy @0x8259BBD0 bakes THIS HEADER's
+        // path into its asserts (BrnDeformationManager.h:695/:701/:710), proving the definition
+        // text lives here; the PS3 DecFIGS build both inlines it into the FixUp* family and keeps
+        // an out-of-line copy @0x7AF16C with the same header-cited asserts.
         s32 FindModelIndexByEntityID(EntityId lEntityId) const;
         s32 FindModelIndexByGlobalEntityID(EntityId lGlobalEntityId);
         s32 FindModelIndexByPartID(CgsPhysics::RigidBodyId lPartBodyId);   // ⚠️ qualified -- see header note
@@ -516,10 +521,18 @@ namespace Deformation
         void OutputSensorState(DeformationOutputInterface* lpOutput);
 
         // :462. Project a sphere contact point onto a box (deformation contact fix-up helper). const.
-        // FLAG: arg1's DWARF type is the nested InEventTriangleCollisionSphereTest::SphereArg; taken
-        // as Vector3 here (the sphere's centre lane the projection uses).
-        Vector3 ProjectSphereContactOntoBox(Vector3 lSphereCentre, Vector3 lPointA, Vector3 lPointB,
-                                            Matrix44Affine lBoxTransform, Vector3* lpOut) const;
+        // ⭐ SIGNATURE CORRECTED 2026-08-06 (FixUpVehicleContacts wave): the PS3 DecFIGS mangled
+        // name (_ZNK...27ProjectSphereContactOntoBoxERKN12CgsGeometric6SphereEN2rw4math3vpu7Vector3ES9_
+        // NS8_14Matrix44AffineEPS9_, out-of-line @0x7A5118) pins the argument list as
+        // (const CgsGeometric::Sphere&, Vector3, Vector3, Matrix44Affine, Vector3*) const -- the
+        // old "SphereArg taken as Vector3" FLAG guess is RETIRED. Parameter names per the body's
+        // own baked asserts ("lWorldSphere" / "lNormal" / "lContactPoint",
+        // BrnDeformationManager.h:771/:810 -- i.e. the definition text lives in this header on
+        // console; here it is bodied in the FixUp slice TU, an inlining-neutral placement).
+        // Returns the projected contact point; *lpNormalOut receives the box-face normal.
+        Vector3 ProjectSphereContactOntoBox(const CgsGeometric::Sphere& lWorldSphere, Vector3 lNormal,
+                                            Vector3 lContactPoint, Matrix44Affine lBoxTransform,
+                                            Vector3* lpNormalOut) const;
 
         // :467 (dossier SolvePenetration). Run the penetration solver over the accumulated contacts.
         void SolvePenetration(IOBufferStack* lpIOBufferStack,
@@ -529,15 +542,20 @@ namespace Deformation
         void AddArticulatedJointContacts(PenetrationSolver* lpSolver,
                                          const PhysicsModuleIO::PotentialContactInterface* lpContacts);
 
-        // :481. Interpolate a contact point + normal across a deformable model's sphere chain.
+        // :481. Interpolate a contact point + normal across a deformable model's sensor-sphere
+        // chain. Parameter names per the PS3 DecFIGS debug info (@0x73C1F4); *lpInOutNormal is
+        // seeded by the caller and rewritten (world space) whether or not the interpolation
+        // succeeds. Returns true iff a neighbour tangent interpolation was performed.
         bool GetInterpolatedContactPointAndNormal(DeformableObject* lpModel, s32 liSensorIndex,
-                                                  Vector3 lPointA, Vector3 lPointB,
-                                                  Vector3* lpPointOut, Vector3* lpNormalOut);
+                                                  Vector3 lWorldPosIn, Vector3 lOtherSensorPos,
+                                                  Vector3* lpOutWorldPos, Vector3* lpInOutNormal);
 
-        // :490. The two tangent points between two spheres (contact fix-up geometry helper).
-        void CalculateTangentPoints(CgsGeometric::Sphere lSphereA, CgsGeometric::Sphere lSphereB,
-                                    Vector3 lAxis, Vector3* lpTangentA, Vector3* lpTangentB,
-                                    Vector3* lpTangentC);
+        // :490. The external tangent line between two (height-flattened) spheres through a side
+        // point: *lpResultA / *lpResultB get the tangent points on lSphereAIn / lSphereBIn,
+        // *lpOutNormal the tangent direction. Names per the PS3 DecFIGS debug info (@0x73B150).
+        void CalculateTangentPoints(CgsGeometric::Sphere lSphereAIn, CgsGeometric::Sphere lSphereBIn,
+                                    Vector3 lPointOnSide, Vector3* lpResultA, Vector3* lpResultB,
+                                    Vector3* lpOutNormal);
 
         // :497 (dossier ProjectLineOntoPlane @ BrnDeformationManager.cpp:1430). Project a line onto
         // a plane (returns the intersection point).
@@ -595,5 +613,29 @@ namespace Deformation
         s32 miUpdateDetachedPartsPerfMon;                                // :404
         s32 miUpdateSkinnedJointsPerfMon;                                // :405
     };
+
+    // ==========================================================================================
+    // FindModelIndexByEntityID -- header-inline definition (see the in-class banner). Byte truth:
+    // the X360 out-of-line copy @0x8259BBD0, whose asserts cite THIS header (:695/:701/:710).
+    // Dispatch on the LOCAL entity id's owner byte: RACECAR -> ma8RaceCarToModelIndex, TRAFFIC ->
+    // ma8TrafficToModelIndex; any other owner streams "Bad entityID finding car: 0x%X" (lowered
+    // to CGS_ASSERT with the static prefix per the standing rule) and falls through to the
+    // traffic table, exactly as the console control flow does.
+    // ==========================================================================================
+    inline s32 DeformationManager::FindModelIndexByEntityID(EntityId lEntityId) const
+    {
+        const u32 luOwner = (lEntityId.muValue >> 24) & 0xFFu;
+        if (luOwner == 1u)   // BrnWorld::E_ENTITYTYPE_RACECAR
+        {
+            const u32 lu16RaceCarIndex = (lEntityId.muValue >> 10) & 0x3FFFu;
+            CGS_ASSERT(lu16RaceCarIndex < 8u, "lu16RaceCarIndex < Vehicle::ku8MaxNumRaceCars");   // :701
+            return ma8RaceCarToModelIndex[lu16RaceCarIndex];
+        }
+
+        CGS_ASSERT(luOwner == 2u, "Bad entityID finding car: ");   // :695 (streamed on console)
+        const u32 lu16TrafficIndex = (lEntityId.muValue >> 10) & 0x3FFFu;
+        CGS_ASSERT(lu16TrafficIndex < 0x14u, "lu16TrafficIndex < Vehicle::ku8TotalMaxNumPhysicalTraffic");   // :710
+        return ma8TrafficToModelIndex[lu16TrafficIndex];
+    }
 }
 }
