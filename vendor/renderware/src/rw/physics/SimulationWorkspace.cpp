@@ -30,6 +30,7 @@
 #include "rw/physics/SimulationWorkspace.h"
 
 #include "vendor/renderware/physics/Jacobian.hpp"   // JacobianStride()
+#include "rw/physics/contact.h"                     // sizeof(Contact) -- the contact term
 
 namespace rw
 {
@@ -59,11 +60,18 @@ rw::BaseResourceDescriptors<5>* SimulationWorkspace::GetResourceDescriptor(
     // would have started 1,184 bytes past the end of its own allocation. Nothing asserts;
     // the solver would simply corrupt whatever followed. The stride is `JacobianStride()`
     // for exactly the reason SetWorkspace's is.
-    // The 256-bytes-per-contact term (`a3 << 8`) is a contact-pair scratch with no pointers
-    // in it and is unchanged; the 128-byte alignment is a hardware constraint, not a stride.
+    // ⚠️⚠️ CORRECTION 2026-08-06 (the pipelines wave): the sentence that stood here -- "the
+    // 256-bytes-per-contact term (`a3 << 8`) is a contact-pair scratch with no pointers in
+    // it and is unchanged" -- was HALF WRONG for the same reason the 384 was. The record's
+    // life cycle DOES carry two RigidBody pointers (the spy path: contact.h's tail banner),
+    // so the host Contact is 272, and sizing at 256 while GetFreeContact and every consumer
+    // walk at sizeof(Contact) would overrun the workspace by 16 bytes per contact -- with
+    // the shipping count (1024 contacts) that is 16 KB of silent corruption. Same class as
+    // the jacobian-stride bug above; the term is sizeof(Contact) for the same reason the
+    // other is JacobianStride(). The 128-byte alignment is a hardware constraint, unchanged.
     const u32 luSize =
         (JacobianStride() * static_cast<u32>(luCountA + luCountB)
-         + (static_cast<u32>(luCountC) << 8) + 0x7Fu) & ~0x7Fu;
+         + static_cast<u32>(sizeof(Contact)) * static_cast<u32>(luCountC) + 0x7Fu) & ~0x7Fu;
 
     // result[0] = { m_size = size, m_alignment = 128 }  (the std of the {size,128} qword)
     lpEntries[0].m_size      = luSize;

@@ -6,15 +6,15 @@
 // source and no DecFIGS DWARF exist for this TU". That was FALSE -- see the correction block
 // in rw/physics/simulation.h. Names below are DWARF-authoritative.
 //
-// This TU has 22 X360 functions. EIGHT are reconstructed here:
-//     GetResourceDescriptor  @ 0x82BC5090
-//     SetWorkspace           @ 0x82BC54D8
-//     BatchIntegrator        @ 0x82BC2FC8
-//     ActivateRigidBody      @ 0x82BC29E8
-//     FreezeRigidBody        @ 0x82BC2A58
-//     RemoveRigidBody        @ 0x82BC2950
-//     JointBatchBuild        @ 0x82BC6A30
-//     DriveBatchBuild        @ 0x82BC6AB8
+// This TU has 22 X360 functions. Reconstructed here:
+//     GetResourceDescriptor  @ 0x82BC5090      RemoveJoint/RemoveDrive/AddJoint/AddDrive
+//     SetWorkspace           @ 0x82BC54D8      Initialize            @ 0x82BC5158
+//     BatchIntegrator        @ 0x82BC2FC8      AddRigidBody          @ 0x82BC3318
+//     ActivateRigidBody      @ 0x82BC29E8      SpyJointJacobians     @ 0x82BC24F8
+//     FreezeRigidBody        @ 0x82BC2A58      ContactBatchBuild     @ 0x82BC14C0   [08-06]
+//     RemoveRigidBody        @ 0x82BC2950      Anubis/Osiris/Isis/Horus pipelines   [08-06]
+//     JointBatchBuild        @ 0x82BC6A30      SpyContact/SpyDrive Jacobians        [08-06]
+//     DriveBatchBuild        @ 0x82BC6AB8      SimulationUpdate      @ 0x82BC6B40   [08-06]
 //
 // ⭐ THE BLOCK NOTE THIS FILE USED TO CARRY IS RETIRED. It said the list splice/walk
 // functions were blocked because "these read the console RigidBody's intrusive node fields
@@ -28,25 +28,35 @@
 // makes every other one above reachable, because it is what CgsPhysics::PhysicsSimulationModule::
 // AllocateMemoryAndInitialiseRW assigns to mpSimulation.
 //
-// STILL BLOCKED, honestly (and this is why SimulationUpdate sits in its own unmounted TU):
-//   * ContactBatchBuild and the four solver pipelines (Anubis/Osiris/Isis/Horus) -- heavy
-//     VMX over the contact batch record, not reconstructed. (XB1 oracle addresses for all
-//     of them are banked in simulation.h's stage list, 2026-08-05.)
-//   * SpyDriveJacobians / SpyContactJacobians -- see the COUPLING note in simulation.h;
-//     SpyJointJacobians IS bodied below (2026-08-05).
-// (The "AddRigidBody not reconstructed" line that stood here was stale -- it landed with
-// task #140 and its body closes this file.)
+// ⭐⭐ 2026-08-06 (the pipelines wave): THE "STILL BLOCKED" LIST THAT STOOD HERE IS RETIRED.
+// ContactBatchBuild, the four pipelines and the two remaining spies are reconstructed at the
+// bottom of this file, SimulationUpdate moved home, and the quarantine TU is deleted. The
+// TU's 22 X360 functions are all accounted for. Oracle discipline for the new bodies:
+//   [X360] every offset, the loop structure, the branchless vsel masking, the store map --
+//          asm read instruction for instruction (Anubis clamp, batch mint/restitution gate
+//          and both spies lane-verified; permute tables 0x82181650..0x821817A0 read off the
+//          image with x360rd, incl. 0x82181760 = the {a.w,b.w,c.w} gather and 0x821817A0 =
+//          {FLT_MAX,0,0,FLT_MAX} = the friction clamp's open corners).
+//   [XB1]  sub_1409AE210 (batch, per-record), sub_1409ADBF0/B5E80/B53E0/B3CD0 (pipelines),
+//          sub_1409B7390/7640 (spies) -- ALGORITHM oracles; SSE immediates settle every
+//          lane. ⛔ Its record slots differ from X360's and none are imported.
+// ⚠️ NOTHING CALLS SimulationUpdate YET (PhysicsSimulationModule::Update @0x828A74D0 is
+// unbodied), so /OPT:REF strips the whole solver cluster: mounting it enforces link closure
+// and buys zero exe bytes. That is the expected outcome, not a failure.
 // =====================================================================================
 
 #include "rw/physics/simulation.h"
+#include "rw/physics/contact.h"                     // Contact + the ContactJacobian overlay
 
 #include "vendor/renderware/physics/Jacobian.hpp"   // the 384-byte record + JacobianStride()
 #include "vendor/renderware/physics/Joint.hpp"
 #include "vendor/renderware/physics/Drive.hpp"
+#include "vendor/renderware/physics/DriveFrames.hpp" // SpyDriveJacobians re-runs Build's prologue
 #include "vendor/renderware/physics/JointFrames.hpp" // rw::math::vpu::QuaternionFromMatrix33 (AddRigidBody)
 
 #include <string.h>   // memset -- the `vspltisb v0,0` + four stvx128 block-clear
 #include <cfloat>     // FLT_MAX -- AddRigidBody's mKine seed (X360 flt_821815B0 = 0x7F7FFFFF)
+#include <cmath>      // std::fabs -- SpyDriveJacobians' angular separation
 
 namespace rw
 {
@@ -921,6 +931,689 @@ void Simulation::SpyJointJacobians()
 
         ++m_JS_Count;                                   // +0x70
     }
+}
+
+// =====================================================================================
+// ⭐⭐ THE SOLVER CLUSTER (2026-08-06) -- ContactBatchBuild, the four pipelines, the two
+// remaining spies, and SimulationUpdate back home. Shared conventions, stated once:
+//
+//   * THE REACTION-FORCE BLOCK is four Vector4 rows per body at m_RF_Stack + 64*mId
+//     (DynamicUpdate's consumer view, RigidBody.cpp): row0 = linear velocity impulse,
+//     row1 = direct linear position correction, row2 = angular velocity impulse,
+//     row3 = angular position correction. The console's mBodyA/mIdA slots hold the RESOLVED
+//     block address (Initialize stores m_RF_Stack + 64*i into mId there); the host holds
+//     the INDEX and resolves it here -- exactly the XB1 move (`shl rdx,6; add rdx,RF`).
+//   * ALL RF ACCUMULATION IS xyz-ONLY on the host. The console's full-row vector adds drag
+//     deterministic junk through the w lanes; DynamicUpdate reads xyz only (vLoad3) and
+//     zeroes whole rows, so the lanes are dead on both targets.
+//   * NO BODY-STATE BRANCHES. X360 solves every pair branchlessly: ContactBatchBuild and
+//     the two jacobian builders zero-mask invm and I^-1 for non-ACTIVE bodies, so a static
+//     side receives and contributes exactly nothing (its RF block provably stays zero:
+//     zeroed at Initialize, only ever incremented by zero-scaled rows, and DynamicUpdate
+//     never runs on it). XB1 instead BRANCHES on a flags bit -- and its batch even swaps
+//     the pair so the dynamic body is always in seat A -- reaching the same fixed point.
+//     The host follows X360.
+//   * `vmaddfp vD,vA,vB,vC == vA*vC + vB` / `vnmsubfp == vB - vA*vC` (JacobianMath.hpp's
+//     proven operand rules) -- every expression below was transposed through them.
+//   * Effective-mass reciprocals: the console batch uses a SINGLE UNREFINED `vrefp`
+//     (~12-bit) on the denominators, and the spies refine `vrefp`/`vrsqrtefp` with two
+//     Newton-Raphson steps; XB1 uses exact divides everywhere. The host divides exactly:
+//     behaviourally identical, not bit-identical (the committed GenerateFromCollision
+//     precedent).
+// =====================================================================================
+
+// The scalar lane helpers the builders already use (JacobianMath.hpp) -- V3/M33/Quat,
+// Add/Sub/Scale/Cross/Dot3, Transform, UnpackInverseInertia, QuatMul, Sqrt, Min3/Max3.
+using namespace jacobian_detail;
+
+namespace
+{
+    inline rw::math::vpu::Vector4* ReactionRows(void* lpRFStack, s32 liId)
+    {
+        return reinterpret_cast<rw::math::vpu::Vector4*>(
+            static_cast<u8*>(lpRFStack) + static_cast<u32>(liId) * KU_REACTION_FORCE_STRIDE);
+    }
+
+    inline V3 U3(const Contact::Vector3U_32& lrU) { return MakeV3(lrU.x, lrU.y, lrU.z); }
+
+    inline void PutU3(Contact::Vector3U_32& lrDst, const V3& lrSrc)
+    { lrDst.x = lrSrc.x; lrDst.y = lrSrc.y; lrDst.z = lrSrc.z; }
+
+    // xyz-only accumulate into an RF row (see the w-lane convention in the banner).
+    inline void AddXyz(rw::math::vpu::Vector4& lrRow, const V3& lrD)
+    { lrRow.x += lrD.x; lrRow.y += lrD.y; lrRow.z += lrD.z; }
+
+    inline void SubXyz(rw::math::vpu::Vector4& lrRow, const V3& lrD)
+    { lrRow.x -= lrD.x; lrRow.y -= lrD.y; lrRow.z -= lrD.z; }
+
+    // The relative velocity both jacobian pipelines start from (Osiris @0x82BC26FC..0x82BC279C,
+    // Isis @0x82BC229C..0x82BC2350, Horus's two segments identically):
+    //     vel = (RF_B0 + cross(RF_B2, rB)) - (RF_A0 + cross(RF_A2, rA))     -- B minus A
+    //     omg =  RF_B2 - RF_A2
+    // (XB1 computes A-minus-B and compensates downstream; the two agree term for term.)
+    inline void JacobianRelVel(const rw::physics::Jacobian& lrJ,
+                               const rw::math::vpu::Vector4* lpA,
+                               const rw::math::vpu::Vector4* lpB,
+                               V3& lrVel, V3& lrOmg)
+    {
+        const V3 lvRA = Xyz(lrJ.mRows[0]);
+        const V3 lvRB = Xyz(lrJ.mRows[1]);
+        lrVel = Sub(Add(Xyz(lpB[0]), Cross(Xyz(lpB[2]), lvRB)),
+                    Add(Xyz(lpA[0]), Cross(Xyz(lpA[2]), lvRA)));
+        lrOmg = Sub(Xyz(lpB[2]), Xyz(lpA[2]));
+    }
+
+    // J . v through the transposed, PRE-DIVIDED rows the builders store (linear rows 4/6/8,
+    // angular rows 5/7/9): lane i of the result = dot(axis_i, v) / mEff_i.
+    inline V3 ProjectRows(const rw::math::vpu::Vector4& lrRx,
+                          const rw::math::vpu::Vector4& lrRy,
+                          const rw::math::vpu::Vector4& lrRz, const V3& lrV)
+    {
+        return Add(Add(Scale(Xyz(lrRx), lrV.x), Scale(Xyz(lrRy), lrV.y)),
+                   Scale(Xyz(lrRz), lrV.z));
+    }
+
+    // The 12-product apply tail both jacobian record types share (rows 12..23 have the
+    // identical meaning in JointJacobian::Build and DriveJacobian::Build):
+    //     RF_A0 += invmA * (row12*dL.x + row16*dL.y + row20*dL.z)        (invm in 16.w/20.w)
+    //     RF_B0 -= invmB * (same world impulse)
+    //     RF_A2 += row13*dL.x + row17*dL.y + row21*dL.z                  (I_A^-1.(rA x L_i))
+    //            + row14*dA.x + row18*dA.y + row22*dA.z                  (I_A^-1.axis_i)
+    //     RF_B2 -= row15*dL.x + row19*dL.y + row23*dL.z                  (I_B^-1.(rB x L_i))
+    //            + {13.w,14.w,15.w}*dA.x + {17..19.w}*dA.y + {21..23.w}*dA.z
+    //              (the w-spread I_B^-1.axis_i vectors, gathered on the console with
+    //               vmrglw + vperm 0x82181760 = {a.w, b.w, c.w})
+    // Verified store for store on Osiris AND Isis (and Horus's fused copies).
+    inline void ApplyJacobianDeltas(const rw::physics::Jacobian& lrJ,
+                                    rw::math::vpu::Vector4* lpA,
+                                    rw::math::vpu::Vector4* lpB,
+                                    const V3& lrDLin, const V3& lrDAng)
+    {
+        const V3 lvWorld = ProjectRows(lrJ.mRows[12], lrJ.mRows[16], lrJ.mRows[20], lrDLin);
+        AddXyz(lpA[0], Scale(lvWorld, lrJ.mRows[16].w));      // +0x10C invmA
+        SubXyz(lpB[0], Scale(lvWorld, lrJ.mRows[20].w));      // +0x14C invmB
+
+        const V3 lvAngA = Add(ProjectRows(lrJ.mRows[13], lrJ.mRows[17], lrJ.mRows[21], lrDLin),
+                              ProjectRows(lrJ.mRows[14], lrJ.mRows[18], lrJ.mRows[22], lrDAng));
+        AddXyz(lpA[2], lvAngA);
+
+        const V3 lvAxB0 = MakeV3(lrJ.mRows[13].w, lrJ.mRows[14].w, lrJ.mRows[15].w);
+        const V3 lvAxB1 = MakeV3(lrJ.mRows[17].w, lrJ.mRows[18].w, lrJ.mRows[19].w);
+        const V3 lvAxB2 = MakeV3(lrJ.mRows[21].w, lrJ.mRows[22].w, lrJ.mRows[23].w);
+        const V3 lvAngB = Add(ProjectRows(lrJ.mRows[15], lrJ.mRows[19], lrJ.mRows[23], lrDLin),
+                              Add(Add(Scale(lvAxB0, lrDAng.x), Scale(lvAxB1, lrDAng.y)),
+                                  Scale(lvAxB2, lrDAng.z)));
+        SubXyz(lpB[2], lvAngB);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // One CONTACT record, one iteration -- the per-record body of Anubis_Pipeline
+    // @0x82BC11C0 (and Horus's contact segment 0x82BC1B48..0x82BC1D58, fused copy).
+    // Lane-verified against the X360 asm; algorithm cross-read on XB1 sub_1409ADBF0.
+    // ---------------------------------------------------------------------------------
+    inline void SolveContactRecord(rw::physics::ContactJacobian& lrJ, void* lpRFStack)
+    {
+        rw::math::vpu::Vector4* const lpA = ReactionRows(lpRFStack, lrJ.mBodyA);
+        rw::math::vpu::Vector4* const lpB = ReactionRows(lpRFStack, lrJ.mBodyB);
+
+        const V3 lvRA = U3(lrJ.mRA);
+        const V3 lvRB = U3(lrJ.mRB);
+
+        // Velocity and positional halves, B minus A (X360 0x82BC12E8..0x82BC1394):
+        //   vel = (RF_B0 + cross(RF_B2,rB)) - (RF_A0 + cross(RF_A2,rA))
+        //   pos = (RF_B1 + cross(RF_B3,rB)) - (RF_A1 + cross(RF_A3,rA))
+        // The xyz residual lanes use vel+pos; the split positional lane uses pos ALONE
+        // (X360 builds the splat pairs {tot.s, tot.s, tot.s, pos.s} with the
+        // 0x821816F0/0x82181700/0x82181710 tables; XB1 keeps xmm5/xmm11 apart -- same).
+        const V3 lvVel = Sub(Add(Xyz(lpB[0]), Cross(Xyz(lpB[2]), lvRB)),
+                             Add(Xyz(lpA[0]), Cross(Xyz(lpA[2]), lvRA)));
+        const V3 lvPos = Sub(Add(Xyz(lpB[1]), Cross(Xyz(lpB[3]), lvRB)),
+                             Add(Xyz(lpA[1]), Cross(Xyz(lpA[3]), lvRA)));
+        const V3 lvTot = Add(lvVel, lvPos);
+
+        // Raw updates: L + bias + J.v through the pre-divided columns; the positional lane
+        // re-uses the J x-lanes (= the normal column) with the positional velocity.
+        const V3  lvJx = U3(lrJ.mJx), lvJy = U3(lrJ.mJy), lvJz = U3(lrJ.mJz);
+        const V3  lvRaw = Add(Add(U3(lrJ.mLambda), U3(lrJ.mBias)),
+                              Add(Add(Scale(lvJx, lvTot.x), Scale(lvJy, lvTot.y)),
+                                  Scale(lvJz, lvTot.z)));
+        const f32 lfRawP = lrJ.mLambdaPos + lrJ.mBiasPos
+                         + lvJx.x * lvPos.x + lvJy.x * lvPos.y + lvJz.x * lvPos.z;
+
+        // The four-lane clamp (X360 0x82BC13BC..0x82BC1410, lane-verified: bounds
+        // {inf, +mus*Lx, +mus*Lx, inf} / {0, -mus*Lx, -mus*Lx, 0} built from the
+        // {0, Lx, Lx, 0} perm and the 0x821817A0 = {FLT_MAX,0,0,FLT_MAX} corners;
+        // replacement values use mud). Both friction tests compare the RAW value; the
+        // TEST cone is static friction, the REPLACEMENT is dynamic friction.
+        const f32 lfLxOld = lrJ.mLambda.x;                       // the PRE-update normal impulse
+        const f32 lfMusLx = lrJ.mMus * lfLxOld;
+        const f32 lfMudLx = lrJ.mMud * lfLxOld;
+
+        f32 lfN  = (lvRaw.x >= 0.0f) ? lvRaw.x : 0.0f;
+        f32 lfT1 = lvRaw.y;
+        if (lvRaw.y < -lfMusLx) lfT1 = -lfMudLx;
+        if (lvRaw.y >  lfMusLx) lfT1 =  lfMudLx;
+        f32 lfT2 = lvRaw.z;
+        if (lvRaw.z < -lfMusLx) lfT2 = -lfMudLx;
+        if (lvRaw.z >  lfMusLx) lfT2 =  lfMudLx;
+        const f32 lfP = (lfRawP >= 0.0f) ? lfRawP : 0.0f;
+
+        const f32 lfDN  = lfN  - lrJ.mLambda.x;
+        const f32 lfDT1 = lfT1 - lrJ.mLambda.y;
+        const f32 lfDT2 = lfT2 - lrJ.mLambda.z;
+        const f32 lfDP  = lfP  - lrJ.mLambdaPos;
+
+        lrJ.mLambda.x = lfN; lrJ.mLambda.y = lfT1; lrJ.mLambda.z = lfT2;   // stvx +0x50
+        lrJ.mLambdaPos = lfP;
+
+        // Apply (X360 0x82BC141C..0x82BC14AC, all eight RF rows, both bodies,
+        // unconditionally -- the zero-masked invm/T rows make the static side a no-op):
+        const V3 lvN  = U3(lrJ.mRi);
+        const V3 lvUp = U3(lrJ.mUp);
+        const V3 lvAt = U3(lrJ.mAt);
+        const V3 lvWorld = Add(Add(Scale(lvN, lfDN), Scale(lvUp, lfDT1)), Scale(lvAt, lfDT2));
+        const V3 lvNP    = Scale(lvN, lfDP);
+
+        AddXyz(lpA[0], Scale(lvWorld, lrJ.mInvmA));
+        AddXyz(lpA[1], Scale(lvNP,    lrJ.mInvmA));
+        AddXyz(lpA[2], Add(Add(Scale(U3(lrJ.mTnA), lfDN), Scale(U3(lrJ.mTupA), lfDT1)),
+                           Scale(U3(lrJ.mTatA), lfDT2)));
+        AddXyz(lpA[3], Scale(U3(lrJ.mTnA), lfDP));
+
+        SubXyz(lpB[0], Scale(lvWorld, lrJ.mInvmB));
+        SubXyz(lpB[1], Scale(lvNP,    lrJ.mInvmB));
+        SubXyz(lpB[2], Add(Add(Scale(U3(lrJ.mTnB), lfDN), Scale(U3(lrJ.mTupB), lfDT1)),
+                           Scale(U3(lrJ.mTatB), lfDT2)));
+        SubXyz(lpB[3], Scale(U3(lrJ.mTnB), lfDP));
+    }
+
+    // ---------------------------------------------------------------------------------
+    // One JOINT jacobian, one iteration -- the per-record body of Osiris_Pipeline
+    // @0x82BC2680 (headless recovery; and Horus's joint segment 0x82BC1D88..0x82BC1FAC).
+    //
+    // ⭐ THE PROJECTION IS A BOX-SHRINK, NOT A CLAMP:  new = max(x+lo,0) + min(x+hi,0)
+    // (X360 `vaddfp/vminfp/vmaxfp/vaddfp` @0x82BC27D8..0x82BC2814). With the limit windows
+    // JointJacobian::Build packs, that one formula covers every joint type: FREE rows have
+    // (lo,hi) = (-FLT_MAX,+FLT_MAX) and the impulse is driven to 0; LOCKED rows have
+    // lo == hi == the error and become equality constraints; CONE's one-sided lo gives a
+    // unilateral row. No gain, no bias row -- unlike the drive, x = L + J.v exactly.
+    // ---------------------------------------------------------------------------------
+    inline void SolveJointRecord(rw::physics::Jacobian& lrJ, void* lpRFStack)
+    {
+        rw::math::vpu::Vector4* const lpA = ReactionRows(lpRFStack, static_cast<s32>(lrJ.mIdA));
+        rw::math::vpu::Vector4* const lpB = ReactionRows(lpRFStack, static_cast<s32>(lrJ.mIdB));
+
+        V3 lvVel, lvOmg;
+        JacobianRelVel(lrJ, lpA, lpB, lvVel, lvOmg);
+
+        const V3 lvXLin = Add(Xyz(lrJ.mRows[2]),
+                              ProjectRows(lrJ.mRows[4], lrJ.mRows[6], lrJ.mRows[8], lvVel));
+        const V3 lvXAng = Add(Xyz(lrJ.mRows[3]),
+                              ProjectRows(lrJ.mRows[5], lrJ.mRows[7], lrJ.mRows[9], lvOmg));
+
+        const V3 lvLinLo = Xyz(lrJ.mRows[10]);                               // +0xA0
+        const V3 lvLinHi = Xyz(lrJ.mRows[11]);                               // +0xB0
+        const V3 lvAngLo = MakeV3(lrJ.mRows[6].w, lrJ.mRows[7].w, lrJ.mRows[10].w);   // {6C,7C,AC}
+        const V3 lvAngHi = MakeV3(lrJ.mRows[8].w, lrJ.mRows[9].w, lrJ.mRows[11].w);   // {8C,9C,BC}
+
+        const V3 lvZero = MakeV3(0.0f, 0.0f, 0.0f);
+        const V3 lvNewLin = Add(Max3(Add(lvXLin, lvLinLo), lvZero),
+                                Min3(Add(lvXLin, lvLinHi), lvZero));
+        const V3 lvNewAng = Add(Max3(Add(lvXAng, lvAngLo), lvZero),
+                                Min3(Add(lvXAng, lvAngHi), lvZero));
+
+        const V3 lvDLin = Sub(lvNewLin, Xyz(lrJ.mRows[2]));
+        const V3 lvDAng = Sub(lvNewAng, Xyz(lrJ.mRows[3]));
+
+        // xyz stores; the console's whole-row stvx writes a dead computed w over the
+        // builder's zero -- the host leaves the zero (both dead, the host's deterministic).
+        lrJ.mRows[2].x = lvNewLin.x; lrJ.mRows[2].y = lvNewLin.y; lrJ.mRows[2].z = lvNewLin.z;
+        lrJ.mRows[3].x = lvNewAng.x; lrJ.mRows[3].y = lvNewAng.y; lrJ.mRows[3].z = lvNewAng.z;
+
+        ApplyJacobianDeltas(lrJ, lpA, lpB, lvDLin, lvDAng);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // One DRIVE jacobian, one iteration -- the per-record body of Isis_Pipeline
+    // @0x82BC2218 (and Horus's drive segment 0x82BC1FD8..0x82BC2208).
+    //
+    // The drive is a leaky-accumulator servo:  new = clamp((L + J.v)*gain + bias, +/-clamp)
+    // with gain = the builder's acceleration gain (mRows[2].w linear / mRows[3].w angular --
+    // 1.0 for NO/HARD drives, <1 for SOFT), bias = the pre-divided impulse rows 10/11, and
+    // the symmetric clamp triples {6C,7C,AC} / {8C,9C,BC} = mStrength*h^2 (X360 gathers
+    // them with the same vmrglw+vperm as the joint's windows; vminfp-then-vmaxfp
+    // @0x82BC23A0..0x82BC23AC). The stores PRESERVE w (`vsel` with the {F,F,F,0} mask) --
+    // the gains live there.
+    // ---------------------------------------------------------------------------------
+    inline void SolveDriveRecord(rw::physics::Jacobian& lrJ, void* lpRFStack)
+    {
+        rw::math::vpu::Vector4* const lpA = ReactionRows(lpRFStack, static_cast<s32>(lrJ.mIdA));
+        rw::math::vpu::Vector4* const lpB = ReactionRows(lpRFStack, static_cast<s32>(lrJ.mIdB));
+
+        V3 lvVel, lvOmg;
+        JacobianRelVel(lrJ, lpA, lpB, lvVel, lvOmg);
+
+        const V3 lvXLin = Add(Scale(Add(Xyz(lrJ.mRows[2]),
+                                        ProjectRows(lrJ.mRows[4], lrJ.mRows[6], lrJ.mRows[8], lvVel)),
+                                    lrJ.mRows[2].w),
+                              Xyz(lrJ.mRows[10]));
+        const V3 lvXAng = Add(Scale(Add(Xyz(lrJ.mRows[3]),
+                                        ProjectRows(lrJ.mRows[5], lrJ.mRows[7], lrJ.mRows[9], lvOmg)),
+                                    lrJ.mRows[3].w),
+                              Xyz(lrJ.mRows[11]));
+
+        const V3 lvClampL = MakeV3(lrJ.mRows[6].w, lrJ.mRows[7].w, lrJ.mRows[10].w);
+        const V3 lvClampA = MakeV3(lrJ.mRows[8].w, lrJ.mRows[9].w, lrJ.mRows[11].w);
+        const V3 lvNegL   = Sub(MakeV3(0.0f, 0.0f, 0.0f), lvClampL);
+        const V3 lvNegA   = Sub(MakeV3(0.0f, 0.0f, 0.0f), lvClampA);
+
+        const V3 lvNewLin = Max3(Min3(lvXLin, lvClampL), lvNegL);
+        const V3 lvNewAng = Max3(Min3(lvXAng, lvClampA), lvNegA);
+
+        const V3 lvDLin = Sub(lvNewLin, Xyz(lrJ.mRows[2]));
+        const V3 lvDAng = Sub(lvNewAng, Xyz(lrJ.mRows[3]));
+
+        lrJ.mRows[2].x = lvNewLin.x; lrJ.mRows[2].y = lvNewLin.y; lrJ.mRows[2].z = lvNewLin.z;
+        lrJ.mRows[3].x = lvNewAng.x; lrJ.mRows[3].y = lvNewAng.y; lrJ.mRows[3].z = lvNewAng.z;
+
+        ApplyJacobianDeltas(lrJ, lpA, lpB, lvDLin, lvDAng);
+    }
+} // anonymous namespace
+
+// -------------------------------------------------------------------------------------
+// Simulation::ContactBatchBuild @ 0x82BC14C0   (343 instructions, branchless VMX)
+//
+// Rewrite every drain-time Contact into the in-place ContactJacobian overlay (contact.h's
+// slot map, verified against this function's store cover). Reads ONLY the record -- the
+// drain snapshot rows carry everything, which is what the snapshot region exists for (XB1
+// re-reads the LIVE bodies instead; same-tick values, divergence noted, X360 followed).
+//
+// ⚠️ THE CONSOLE'S EFFECTIVE-MASS RECIPROCAL IS A SINGLE UNREFINED `vrefp` (@0x82BC1970) --
+// ~12-bit. The host divides exactly (the XB1 spelling); documented, not reproduced.
+//
+// THE RESTITUTION GATE (four cases, verified on BOTH oracles -- XB1's branch tree
+// @0x1409AEC5D..0x1409AECAD == X360's vsel chain @0x82BC19EC..0x82BC1A04): with
+// e = the normal-lane error, P = dot(n, posB-posA), bounce = -res*ts*dot(n, vel):
+//     e <= bounce                 -> subtract nothing
+//     e > bounce, P >= 0          -> e -= bounce
+//     e > bounce, P < 0, bounce<0 -> e -= (P + bounce)
+//     e > bounce, P < 0, bounce>=0-> subtract nothing
+// (X360 compares the recip-scaled values -- same order, positive scale; equivalent.)
+// -------------------------------------------------------------------------------------
+void Simulation::ContactBatchBuild()
+{
+    const u32 luCount = m_CT_Count;                     // +0x64
+    if (luCount == 0u)
+        return;
+
+    const f32 lfTs = m_TimeStep;                        // lfs +0xA0 at the function head
+
+    Contact* lpContact = static_cast<Contact*>(m_CJ_Stack);
+    for (u32 luI = 0u; luI < luCount; ++luI, ++lpContact)
+    {
+        Contact& lrC = *lpContact;
+
+        // ---- read the whole drain record into locals (the rewrite below overlaps it) ----
+        const V3  lvPosA = U3(lrC.mPosA),   lvPosB = U3(lrC.mPosB);
+        const V3  lvN    = U3(lrC.mRi),     lvUp   = U3(lrC.mUp),  lvAt = U3(lrC.mAt);
+        const V3  lvVel  = U3(lrC.mVel);
+        const f32 lfRes  = lrC.mRes;
+        const f32 lfMus  = lrC.mMus,        lfMud  = lrC.mMud;
+        const u32 luTag  = lrC.mTag;
+        const V3  lvComA = U3(lrC.mComA),   lvComB = U3(lrC.mComB);
+        const s32 liIdA  = static_cast<s32>(lrC.mIdA);
+        const s32 liIdB  = static_cast<s32>(lrC.mIdB);
+        const u32 luStA  = lrC.mStateA,     luStB  = lrC.mStateB;
+        RigidBody* const lpBodyA = lrC.mpBodyA;
+        RigidBody* const lpBodyB = lrC.mpBodyB;
+
+        rw::math::vpu::Vector4 lIfullA, lIspltA, lIfullB, lIspltB;
+        lIfullA.x = lrC.mIfullA.x; lIfullA.y = lrC.mIfullA.y; lIfullA.z = lrC.mIfullA.z; lIfullA.w = 0.0f;
+        lIspltA.x = lrC.mIspltA.x; lIspltA.y = lrC.mIspltA.y; lIspltA.z = lrC.mIspltA.z; lIspltA.w = 0.0f;
+        lIfullB.x = lrC.mIfullB.x; lIfullB.y = lrC.mIfullB.y; lIfullB.z = lrC.mIfullB.z; lIfullB.w = 0.0f;
+        lIspltB.x = lrC.mIspltB.x; lIspltB.y = lrC.mIspltB.y; lIspltB.z = lrC.mIspltB.z; lIspltB.w = 0.0f;
+        const V3 lvForceA  = U3(lrC.mForceA),  lvForceB  = U3(lrC.mForceB);
+        const V3 lvTorqueA = U3(lrC.mTorqueA), lvTorqueB = U3(lrC.mTorqueB);
+
+        // ---- the branchless ACTIVE masking (X360 `vand 4` + `vcmpequw` + vsel) -----------
+        const bool lbActiveA = (luStA & static_cast<u32>(ACTIVE_BODY)) != 0u;
+        const bool lbActiveB = (luStB & static_cast<u32>(ACTIVE_BODY)) != 0u;
+        const f32  lfInvmA = lbActiveA ? lrC.mInvmA : 0.0f;
+        const f32  lfInvmB = lbActiveB ? lrC.mInvmB : 0.0f;
+        const M33  lInvIA  = lbActiveA ? UnpackInverseInertia(lIfullA, lIspltA) : ZeroMatrix33();
+        const M33  lInvIB  = lbActiveB ? UnpackInverseInertia(lIfullB, lIspltB) : ZeroMatrix33();
+
+        const V3 lvRA = Sub(lvPosA, lvComA);            // vsubfp @0x82BC15C4
+        const V3 lvRB = Sub(lvPosB, lvComB);            // vsubfp @0x82BC15C0
+        const V3 lvD  = Sub(lvPosB, lvPosA);            // vsubfp @0x82BC1714
+
+        // ---- the six I^-1.(r x frame-row) products and the three denominators ------------
+        const V3 lvCnA = Cross(lvRA, lvN),  lvCuA = Cross(lvRA, lvUp), lvCaA = Cross(lvRA, lvAt);
+        const V3 lvCnB = Cross(lvRB, lvN),  lvCuB = Cross(lvRB, lvUp), lvCaB = Cross(lvRB, lvAt);
+        const V3 lvTnA = Transform(lInvIA, lvCnA), lvTupA = Transform(lInvIA, lvCuA),
+                 lvTatA = Transform(lInvIA, lvCaA);
+        const V3 lvTnB = Transform(lInvIB, lvCnB), lvTupB = Transform(lInvIB, lvCuB),
+                 lvTatB = Transform(lInvIB, lvCaB);
+
+        const f32 lfDenN  = lfInvmA + lfInvmB + Dot3(lvCnA, lvTnA) + Dot3(lvCnB, lvTnB);
+        const f32 lfDenUp = lfInvmA + lfInvmB + Dot3(lvCuA, lvTupA) + Dot3(lvCuB, lvTupB);
+        const f32 lfDenAt = lfInvmA + lfInvmB + Dot3(lvCaA, lvTatA) + Dot3(lvCaB, lvTatB);
+        const f32 lfIDenN = 1.0f / lfDenN;              // console: ONE unrefined vrefp
+        const f32 lfIDenU = 1.0f / lfDenUp;
+        const f32 lfIDenA = 1.0f / lfDenAt;
+
+        // ---- the bias: predicted displacement u = d + ts*vel + ts^2*(accB - accA), with
+        //      the acceleration terms ACTIVE-masked (X360 vsel @0x82BC1828/0x82BC18A4) ------
+        const V3 lvAccA = lbActiveA ? Add(lvForceA, Cross(lvTorqueA, lvRA)) : MakeV3(0.0f, 0.0f, 0.0f);
+        const V3 lvAccB = lbActiveB ? Add(lvForceB, Cross(lvTorqueB, lvRB)) : MakeV3(0.0f, 0.0f, 0.0f);
+        const V3 lvU = Add(Add(lvD, Scale(lvVel, lfTs)),
+                           Scale(Sub(lvAccB, lvAccA), lfTs * lfTs));
+
+        f32       lfEN     = Dot3(lvN, lvU);
+        const f32 lfEUp    = Dot3(lvUp, lvU);
+        const f32 lfEAt    = Dot3(lvAt, lvU);
+        const f32 lfP      = Dot3(lvN, lvD);
+        const f32 lfBounce = -(lfRes * lfTs * Dot3(lvN, lvVel));
+
+        if (lfEN > lfBounce)
+        {
+            if (lfP >= 0.0f)
+                lfEN -= lfBounce;
+            else if (lfBounce < 0.0f)
+                lfEN -= (lfP + lfBounce);
+        }
+
+        // ---- the in-place rewrite (contact.h's ContactJacobian slot map) ------------------
+        ContactJacobian& lrJ = *reinterpret_cast<ContactJacobian*>(&lrC);
+        PutU3(lrJ.mRA, lvRA);   lrJ.mBodyA = liIdA;     // the vsel {r.xyz, com.w} mint
+        PutU3(lrJ.mRB, lvRB);   lrJ.mBodyB = liIdB;
+        PutU3(lrJ.mJx, MakeV3(lvN.x * lfIDenN, lvUp.x * lfIDenU, lvAt.x * lfIDenA));
+        lrJ.mFlags = (luStA | luStB) & static_cast<u32>(SPY_BODY);
+        PutU3(lrJ.mJy, MakeV3(lvN.y * lfIDenN, lvUp.y * lfIDenU, lvAt.y * lfIDenA));
+        lrJ.mMus = lfMus;                               // preserved drain w lanes
+        PutU3(lrJ.mJz, MakeV3(lvN.z * lfIDenN, lvUp.z * lfIDenU, lvAt.z * lfIDenA));
+        lrJ.mMud = lfMud;
+        PutU3(lrJ.mLambda, MakeV3(0.0f, 0.0f, 0.0f));   // stvx v0 @0x82BC19B4
+        lrJ.mLambdaPos = 0.0f;
+        PutU3(lrJ.mBias, MakeV3(lfEN * lfIDenN, lfEUp * lfIDenU, lfEAt * lfIDenA));
+        lrJ.mBiasPos = lfP * lfIDenN;
+        PutU3(lrJ.mRi, lvN);    lrJ.mDeadA = 0.0f;      // console: the parked 4-byte pointers
+        PutU3(lrJ.mTnA, lvTnA); lrJ.mInvmA = lfInvmA;   // zero-masked, the spy's weights
+        PutU3(lrJ.mTnB, lvTnB); lrJ.mInvmB = lfInvmB;
+        PutU3(lrJ.mUp, lvUp);   lrJ.mDeadB = 0.0f;
+        PutU3(lrJ.mTupA, lvTupA); lrJ.mDead0 = 0.0f;
+        PutU3(lrJ.mTupB, lvTupB); lrJ.mDead1 = 0.0f;
+        PutU3(lrJ.mAt, lvAt);   lrJ.mTag = luTag;       // preserved for the spy's emit
+        PutU3(lrJ.mTatA, lvTatA); lrJ.mDead2 = 0.0f;
+        PutU3(lrJ.mTatB, lvTatB); lrJ.mDead3 = 0.0f;
+        lrJ.mpBodyA = lpBodyA;                          // the tail rides through
+        lrJ.mpBodyB = lpBodyB;
+    }
+}
+
+// -------------------------------------------------------------------------------------
+// The four solver pipelines. Each is m_MaxIteration sweeps of dense per-record iteration;
+// Horus @0x82BC1A20 is EXACTLY the other three's per-record bodies fused into one
+// iteration loop (contacts 0x82BC1B48..0x82BC1D58, joints 0x82BC1D88..0x82BC1FAC, drives
+// 0x82BC1FD8..0x82BC2208 -- segment signatures verified against the standalones), so all
+// four share the per-record solvers above; the console compiler inlined the same bodies.
+// Contact records walk at sizeof(Contact) (console 0x100); jacobians at JacobianStride()
+// (console 0x180).
+// -------------------------------------------------------------------------------------
+void Simulation::Anubis_Pipeline()                      // @ 0x82BC11C0  (contacts only)
+{
+    for (u32 luIt = m_MaxIteration; luIt != 0u; --luIt)             // +0xAC
+    {
+        ContactJacobian* lpJ = static_cast<ContactJacobian*>(m_CJ_Stack);
+        for (u32 luI = m_CT_Count; luI != 0u; --luI, ++lpJ)         // +0x64
+            SolveContactRecord(*lpJ, m_RF_Stack);
+    }
+}
+
+void Simulation::Osiris_Pipeline()                      // @ 0x82BC2680  (joints only)
+{
+    for (u32 luIt = m_MaxIteration; luIt != 0u; --luIt)
+    {
+        char* lpJ = static_cast<char*>(m_JJ_Stack);                 // +0x14
+        for (u32 luI = m_JT_Count; luI != 0u; --luI, lpJ += JacobianStride())   // +0x6C
+            SolveJointRecord(*reinterpret_cast<Jacobian*>(lpJ), m_RF_Stack);
+    }
+}
+
+void Simulation::Isis_Pipeline()                        // @ 0x82BC2218  (drives only)
+{
+    for (u32 luIt = m_MaxIteration; luIt != 0u; --luIt)
+    {
+        char* lpJ = static_cast<char*>(m_DJ_Stack);                 // +0x18
+        for (u32 luI = m_DR_Count; luI != 0u; --luI, lpJ += JacobianStride())   // +0x74
+            SolveDriveRecord(*reinterpret_cast<Jacobian*>(lpJ), m_RF_Stack);
+    }
+}
+
+void Simulation::Horus_Pipeline()                       // @ 0x82BC1A20  (any mix)
+{
+    for (u32 luIt = m_MaxIteration; luIt != 0u; --luIt)
+    {
+        ContactJacobian* lpC = static_cast<ContactJacobian*>(m_CJ_Stack);
+        for (u32 luI = m_CT_Count; luI != 0u; --luI, ++lpC)
+            SolveContactRecord(*lpC, m_RF_Stack);
+
+        char* lpJ = static_cast<char*>(m_JJ_Stack);
+        for (u32 luI = m_JT_Count; luI != 0u; --luI, lpJ += JacobianStride())
+            SolveJointRecord(*reinterpret_cast<Jacobian*>(lpJ), m_RF_Stack);
+
+        char* lpD = static_cast<char*>(m_DJ_Stack);
+        for (u32 luI = m_DR_Count; luI != 0u; --luI, lpD += JacobianStride())
+            SolveDriveRecord(*reinterpret_cast<Jacobian*>(lpD), m_RF_Stack);
+    }
+}
+
+// -------------------------------------------------------------------------------------
+// Simulation::SpyContactJacobians @ 0x82BC4138   (107 instructions)
+//
+// Emit a ContactJacobianSpy over the HEAD of m_CJ_Stack for every post-batch record with
+// the spy flag AND a positive accumulated normal impulse (gate order is the console's:
+// flags first @0x82BC41C4, then `fcmpu` L.x > 0 @0x82BC41DC). The emit cursor advances
+// only on emit (console 0x70/record) and can never catch the read cursor.
+//
+// The world points are rebuilt by chasing the record's body pointers -- [ptr+0x10] is
+// RigidBody::mCom on the console (`lvx128 v5,r8,0x10` @0x82BC4260); named member here.
+// 1/ts^2 is the console's NR-refined vrefp; 1/(invmA+invmB) is a genuine `fdivs` there too.
+// -------------------------------------------------------------------------------------
+void Simulation::SpyContactJacobians()
+{
+    static_assert(sizeof(ContactJacobianSpy) <= sizeof(Contact),
+                  "the in-place emit must stay behind the read cursor");
+
+    const f32 lfInvTsSq = 1.0f / (m_TimeStep * m_TimeStep);         // +0xA0
+
+    const ContactJacobian* lpJ   = static_cast<const ContactJacobian*>(m_CJ_Stack);
+    ContactJacobianSpy*    lpOut = static_cast<ContactJacobianSpy*>(m_CJ_Stack);
+
+    for (u32 luI = 0u; luI < m_CT_Count; ++luI, ++lpJ)              // +0x64
+    {
+        if ((lpJ->mFlags & static_cast<u32>(SPY_BODY)) == 0u)       // `lwz 0x2C` + `& 8`
+            continue;
+        if (!(lpJ->mLambda.x > 0.0f))                               // fcmpu vs 0.0f
+            continue;
+
+        const f32 lfWeight = 1.0f / (lpJ->mInvmB + lpJ->mInvmA);    // fdivs, +0x9C + +0x8C
+        const V3 lvPointA = Add(Xyz(lpJ->mpBodyA->mCom), U3(lpJ->mRA));
+        const V3 lvPointB = Add(Xyz(lpJ->mpBodyB->mCom), U3(lpJ->mRB));
+        const V3 lvPoint  = Scale(Add(Scale(lvPointB, lpJ->mInvmB),
+                                      Scale(lvPointA, lpJ->mInvmA)), lfWeight);
+
+        const V3 lvN  = U3(lpJ->mRi);
+        const V3 lvUp = U3(lpJ->mUp);
+        const V3 lvAt = U3(lpJ->mAt);
+        const V3 lvForceN = Scale(lvN, lpJ->mLambda.x * lfInvTsSq);
+        const V3 lvForceT = Scale(Add(Scale(lvUp, lpJ->mLambda.y),
+                                      Scale(lvAt, lpJ->mLambda.z)), lfInvTsSq);
+
+        // The console emits full rows whose w lanes carry the parked pointer/tag junk;
+        // host w lanes are 0 (dead cargo either way -- the consumer reads by name).
+        lpOut->mRi.x  = lvN.x;  lpOut->mRi.y  = lvN.y;  lpOut->mRi.z  = lvN.z;  lpOut->mRi.w  = 0.0f;
+        lpOut->mUp.x  = lvUp.x; lpOut->mUp.y  = lvUp.y; lpOut->mUp.z  = lvUp.z; lpOut->mUp.w  = 0.0f;
+        lpOut->mAt.x  = lvAt.x; lpOut->mAt.y  = lvAt.y; lpOut->mAt.z  = lvAt.z; lpOut->mAt.w  = 0.0f;
+        lpOut->mPoint.x  = lvPoint.x;  lpOut->mPoint.y  = lvPoint.y;  lpOut->mPoint.z  = lvPoint.z;  lpOut->mPoint.w  = 0.0f;
+        lpOut->mForceN.x = lvForceN.x; lpOut->mForceN.y = lvForceN.y; lpOut->mForceN.z = lvForceN.z; lpOut->mForceN.w = 0.0f;
+        lpOut->mForceT.x = lvForceT.x; lpOut->mForceT.y = lvForceT.y; lpOut->mForceT.z = lvForceT.z; lpOut->mForceT.w = 0.0f;
+        lpOut->mpBodyA = lpJ->mpBodyA;                  // console stw +0x60
+        lpOut->mpBodyB = lpJ->mpBodyB;                  // console stw +0x64
+        lpOut->muTag   = lpJ->mTag;                     // console `lwz 0xDC` -> stw +0x68
+        ++lpOut;                                        // addi r10, r10, 0x70
+
+        ++m_CS_Count;                                   // +0x68
+    }
+}
+
+// -------------------------------------------------------------------------------------
+// Simulation::SpyDriveJacobians @ 0x82BC3010   (193 instructions)
+//
+// Emit a DriveJacobianSpy over the HEAD of m_DJ_Stack for every drive jacobian with mSpy
+// set. Force/torque are the SpyJointJacobians shape (rows 12/16/20 . mRows[2] and
+// MatIBT-gather + rows 14/18/22 . mRows[3], each * 1/ts^2 -- NR-refined vrefp there, exact
+// divide here). The held-back "quaternion block" (0x82BC30D0..0x82BC323C) decodes as
+// DriveJacobian::Build's OWN prologue re-run against the live bodies:
+//     anchorA = comA + R_A . skel.mPosA        anchorB = comB + R_B . skel.mPosB
+//     qA'     = bodyA.mQuat (x) skel.mQuatA    qB'     = bodyB.mQuat (x) skel.mQuatB
+// emitting |anchorB - anchorA| (vcmpeqfp-guarded vrsqrtefp + 2xNR == jacobian_detail::Sqrt)
+// and fabs(1 - dot4(qA', qB')). The Hamilton products are the `vpermwi128 0x63` (yzxw)
+// pairs -- QuatMul's exact console shape.
+// -------------------------------------------------------------------------------------
+void Simulation::SpyDriveJacobians()
+{
+    const f32 lfInvTsSq = 1.0f / (m_TimeStep * m_TimeStep);
+
+    char*             lpArray = static_cast<char*>(m_DJ_Stack);     // +0x18, read cursor
+    DriveJacobianSpy* lpOut   = static_cast<DriveJacobianSpy*>(m_DJ_Stack);   // emit cursor
+
+    for (u32 luI = 0u; luI < m_DR_Count; ++luI, lpArray += JacobianStride())  // +0x74
+    {
+        const Jacobian* lpJ = reinterpret_cast<const Jacobian*>(lpArray);
+        if (lpJ->mSpy == 0u)                            // `lwz 0x4C` @0x82BC30C4
+            continue;
+
+        Drive* const lpDrive = static_cast<Drive*>(lpJ->mpNode);    // `lwz 0xCC` @0x82BC30D0
+        const DriveFrames& lrF = *lpDrive->GetFrames();             // `lwz 0(r29)`
+        RigidBody* const lpA = lpDrive->GetChild();                 // `lwz 0x10(r29)`
+        RigidBody* const lpB = lpDrive->GetParent();                // `lwz 0x14(r29)`
+
+        // anchor separation (Build block 2's r = axis*component + com, per body)
+        const V3 lvPA = Xyz(lrF.GetChildPosition());                // skel +0x10
+        const V3 lvPB = Xyz(lrF.GetParentPosition());               // skel +0x30
+        const V3 lvAnchorA = Add(Xyz(lpA->mCom),
+                                 Add(Add(Scale(Xyz(lpA->mRi), lvPA.x), Scale(Xyz(lpA->mUp), lvPA.y)),
+                                     Scale(Xyz(lpA->mAt), lvPA.z)));
+        const V3 lvAnchorB = Add(Xyz(lpB->mCom),
+                                 Add(Add(Scale(Xyz(lpB->mRi), lvPB.x), Scale(Xyz(lpB->mUp), lvPB.y)),
+                                     Scale(Xyz(lpB->mAt), lvPB.z)));
+        const V3  lvSep = Sub(lvAnchorB, lvAnchorA);
+        const f32 lfSep = Sqrt(Dot3(lvSep, lvSep));     // 0-guarded, the console's vsel
+
+        // orientation separation (Build block 1's two Hamilton products)
+        const Quat lqA = QuatMul(lpA->mQuat, lrF.GetChildOrientation());    // skel +0x00
+        const Quat lqB = QuatMul(lpB->mQuat, lrF.GetParentOrientation());   // skel +0x20
+        const f32  lfDot4 = lqA.x * lqB.x + lqA.y * lqB.y + lqA.z * lqB.z + lqA.w * lqB.w;
+        const f32  lfAngSep = std::fabs(1.0f - lfDot4); // fsubs + fabs @0x82BC3290/0x82BC32A8
+
+        M33 lMat;
+        DriveJacobian::GetMatIBT(&lMat, lpJ);           // bl @0x82BC3240
+
+        const V3 lvLam = Xyz(lpJ->mRows[2]);            // +0x20  accumulated linear impulses
+        const V3 lvAng = Xyz(lpJ->mRows[3]);            // +0x30  accumulated angular impulses
+
+        const V3 lvForce = Scale(ProjectRows(lpJ->mRows[12], lpJ->mRows[16], lpJ->mRows[20], lvLam),
+                                 lfInvTsSq);
+        const V3 lvTorque = Scale(
+            Add(Add(Add(Scale(Xyz(lMat.xAxis), lvAng.x), Scale(Xyz(lMat.yAxis), lvAng.y)),
+                    Scale(Xyz(lMat.zAxis), lvAng.z)),
+                ProjectRows(lpJ->mRows[14], lpJ->mRows[18], lpJ->mRows[22], lvAng)),
+            lfInvTsSq);
+
+        // ⚠️ w lanes: the console's full-row stores fold the record's w detritus (for a
+        // DRIVE record mRows[12].w is builder-untouched heap) into the emitted w -- dead on
+        // the console, NONDETERMINISTIC here; the host emits 0 instead (consumer reads xyz).
+        lpOut->mForce.x  = lvForce.x;  lpOut->mForce.y  = lvForce.y;  lpOut->mForce.z  = lvForce.z;  lpOut->mForce.w  = 0.0f;
+        lpOut->mTorque.x = lvTorque.x; lpOut->mTorque.y = lvTorque.y; lpOut->mTorque.z = lvTorque.z; lpOut->mTorque.w = 0.0f;
+        lpOut->mSeparation    = lfSep;                  // stfs +0x20
+        lpOut->mAngSeparation = lfAngSep;               // stfs +0x24
+        lpOut->mpDrive        = lpDrive;                // stw  +0x28
+        lpOut->muTag          = lpDrive->GetTag();      // `lwz 0x18(r29)` -> stw +0x2C
+        ++lpOut;                                        // addi r30, r30, 0x30
+
+        ++m_DS_Count;                                   // +0x78
+    }
+}
+
+// -------------------------------------------------------------------------------------
+// Simulation::SimulationUpdate @ 0x82BC6B40   (79 instructions, no VMX) -- HOME AGAIN
+// (2026-08-06). This body sat quarantined in Simulation_SimulationUpdate.cpp while the
+// eight solver stages above were unreconstructed; that TU is deleted.
+//
+// One solver tick. Early-out when no bodies are active. Build the three jacobian batches,
+// pick the solver pipeline from which batches are non-empty, integrate, then run any
+// enabled jacobian spies.
+//
+// SIGNATURE: the time step arrives in f1 and is stored with `stfs` (0x82BC6B6C) -- a FLOAT,
+// not the `double` Hex-Rays prints. The Xbox One build agrees (`vmovss [rcx+0E0h], xmm1`).
+//
+//   pipeline selector: bit0 = contacts present, bit1 = joints, bit2 = drives
+//     1        -> Anubis   (contacts only)
+//     2        -> Osiris   (joints only)
+//     4        -> Isis     (drives only)
+//     3, 5-7   -> Horus    (any MIX)
+//   ⚠️ CORRECTION 2026-08-05: an older comment claimed "2, 3 -> Osiris"; the CODE below
+//   (`else if (luPipeline < 3u)`) always sent 3 to Horus, and the Xbox One SimulationUpdate
+//   (sub_1409B7240) confirms the code: its selector sends only v==2 to Osiris and 3 to
+//   Horus. The comment was the bug.
+//
+// The spy block reads m_SpyFlag once for the gate, then RE-READS it for arms 2 and 3
+// (X360 0x82BC6C30 / 0x82BC6C50) -- a spy is allowed to clear its own bit. Reading the
+// member each time is faithful to arms 2/3 and harmless for arm 1.
+// -------------------------------------------------------------------------------------
+bool Simulation::SimulationUpdate(f32 lfTimeStep)
+{
+    if (m_ActiveRB_Count == 0u)
+        return false;
+
+    m_TimeStep = lfTimeStep;                 // stfs f1, +0xA0
+
+    ContactBatchBuild();
+    JointBatchBuild();
+    DriveBatchBuild();
+
+    u32 luPipeline = (m_CT_Count != 0u) ? 1u : 0u;
+    if (m_JT_Count != 0u)
+        luPipeline |= 2u;
+    if (m_DR_Count != 0u)
+        luPipeline |= 4u;
+
+    if (luPipeline != 0u)
+    {
+        if (luPipeline == 1u)
+            Anubis_Pipeline();
+        else if (luPipeline < 3u)
+            Osiris_Pipeline();
+        else if (luPipeline == 4u)
+            Isis_Pipeline();
+        else
+            Horus_Pipeline();
+    }
+
+    BatchIntegrator();
+
+    if (m_SpyFlag != SPY_NOTHING)
+    {
+        if (m_JT_Count != 0u && (static_cast<u32>(m_SpyFlag) & SPY_JOINTS) != 0u)
+            SpyJointJacobians();
+        if (m_DR_Count != 0u && (static_cast<u32>(m_SpyFlag) & SPY_DRIVES) != 0u)
+            SpyDriveJacobians();
+        if (m_CT_Count != 0u && (static_cast<u32>(m_SpyFlag) & SPY_CONTACTS) != 0u)
+            SpyContactJacobians();
+    }
+
+    return true;
 }
 
 } // namespace physics

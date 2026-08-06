@@ -89,6 +89,55 @@ struct JointJacobianSpy
     u32                    muTag;     // console +0x24  Joint::m_tag (the JointData slot index)
 };
 
+// =====================================================================================
+// The DRIVE spy record SpyDriveJacobians @0x82BC3010 emits, IN PLACE, over the HEAD of
+// m_DJ_Stack (same emit-behind-read invariant as the joint spy; console stride 0x30, host
+// larger because the node pointer widens). Consumed by CgsPhysics::PhysicsSimulationModule::
+// AddDriveSpiesToOutputQueue @0x828A5A50 (game-side, not yet reconstructed) BY NAME.
+// The two scalars are the drive's separation measures, recomputed by the spy from the live
+// bodies exactly the way DriveJacobian::Build's prologue computes its inputs:
+//     mSeparation    = |(comB + R_B.parentPos) - (comA + R_A.childPos)|   (0 when exact --
+//                       the console's vcmpeqfp-guarded vrsqrtefp + 2xNR)
+//     mAngSeparation = fabs(1 - dot4(qA x skel.mQuatA, qB x skel.mQuatB))
+// =====================================================================================
+struct DriveJacobianSpy
+{
+    rw::math::vpu::Vector4 mForce;          // console +0x00  rows 12/16/20 . mRows[2], * 1/ts^2
+    rw::math::vpu::Vector4 mTorque;         // console +0x10  MatIBT + rows 14/18/22 . mRows[3], * 1/ts^2
+    f32                    mSeparation;     // console +0x20  linear anchor separation length
+    f32                    mAngSeparation;  // console +0x24  fabs(1 - dot4(qA', qB'))
+    Drive*                 mpDrive;         // console +0x28  the jacobian's mpNode
+    u32                    muTag;           // console +0x2C  Drive::m_tag (host +0x30 -- the
+                                            //   pointer widening moves it; per-frame scratch,
+                                            //   never serialised: the JointJacobianSpy rule)
+};
+
+// =====================================================================================
+// The CONTACT spy record SpyContactJacobians @0x82BC4138 emits, IN PLACE, over the HEAD of
+// m_CJ_Stack (console stride 0x70; host stride sizeof -- both strictly behind the
+// sizeof(Contact) read cursor). Consumed by CgsPhysics::PhysicsSimulationModule::
+// AddContactSpiesToOutputQueue @0x828A5BC0 (game-side, not yet reconstructed) BY NAME.
+// Emitted only for records with (mFlags & SPY_BODY) AND a positive accumulated normal
+// impulse. mPoint is the inverse-mass-weighted world contact point, rebuilt by chasing the
+// record's body pointers: (invmA*(comA + rA) + invmB*(comB + rB)) / (invmA + invmB) --
+// a static side has invm 0 (the batch's masking), so the point collapses to the dynamic
+// body's, exactly the console's arithmetic.
+// ⚠️ The console's emitted row w lanes carry the batch's parked 4-byte pointers/tag as
+// float-typed junk; on the host the pointers are the named members and the w lanes are 0.
+// =====================================================================================
+struct ContactJacobianSpy
+{
+    rw::math::vpu::Vector4 mRi;       // console +0x00  the contact normal row
+    rw::math::vpu::Vector4 mUp;       // console +0x10  frame row 1
+    rw::math::vpu::Vector4 mAt;       // console +0x20  frame row 2
+    rw::math::vpu::Vector4 mPoint;    // console +0x30  mass-weighted world contact point
+    rw::math::vpu::Vector4 mForceN;   // console +0x40  n * lambda_normal / ts^2
+    rw::math::vpu::Vector4 mForceT;   // console +0x50  (up*lambda_t1 + at*lambda_t2) / ts^2
+    RigidBody*             mpBodyA;   // console +0x60  (4-byte there; widened here)
+    RigidBody*             mpBodyB;   // console +0x64
+    u32                    muTag;     // console +0x68  the drain's loop-index tag
+};
+
 class Simulation
 {
 public:
@@ -124,61 +173,53 @@ public:
     // (returns false) when no bodies are active. Builds the contact/joint/drive jacobian
     // batches, dispatches the matching solver pipeline, integrates, then dumps any enabled
     // jacobian spies. Returns true when a step ran.
-    // ⛔ Its home TU, Simulation_SimulationUpdate.cpp, is NOT MOUNTED -- see that file.
+    // ⭐ 2026-08-06: home again in Simulation.cpp -- the quarantine TU that held it while the
+    // eight solver stages were unreconstructed is deleted; all eleven stages are bodied.
     bool SimulationUpdate(f32 lfTimeStep);
 
     // -------------------------------------------------------------------------------------
-    // Solver stages driven by SimulationUpdate. Declared here (the class owns them).
-    // BatchIntegrator / JointBatchBuild / DriveBatchBuild are bodied; the eight below them
-    // are not (heavy VMX contact/solver math, still unreconstructed), which is exactly why
-    // SimulationUpdate has to live in its own unmounted TU.
+    // Solver stages driven by SimulationUpdate. ⭐⭐ ALL ELEVEN ARE BODIED as of 2026-08-06
+    // (the pipelines wave): the batch, the four pipelines and the two remaining spies landed
+    // together with the Contact 256->272 pointer-tail widening (contact.h), off the X360 asm
+    // with the XB1 twins as ALGORITHM oracles (Anubis/Osiris/Isis/Horus/batch/spies =
+    // sub_1409ADBF0/B5E80/B53E0/B3CD0/AE210/1409B7390/1409B7640; every committed offset is
+    // X360's -- XB1's record slots DIFFER and none were imported).
+    // SimulationUpdate therefore moved home to Simulation.cpp and its quarantine TU
+    // (Simulation_SimulationUpdate.cpp) is DELETED.
+    // ⚠️ Nothing in the game calls SimulationUpdate yet (PhysicsSimulationModule::Update
+    // @0x828A74D0 is still unbodied), so /OPT:REF strips this whole cluster from the exe --
+    // mounting it is closure enforcement, not bring-up.
     // -------------------------------------------------------------------------------------
     void BatchIntegrator();       // @ 0x82BC2FC8  BODIED
     void JointBatchBuild();       // @ 0x82BC6A30  BODIED
     void DriveBatchBuild();       // @ 0x82BC6AB8  BODIED
 
-    // ⭐ 2026-08-04 (task #138) -- MEASURED SIZES, so the next wave can plan instead of guess.
-    // Instruction counts are from the IDA export set except Osiris, which is measured off the
-    // .i64 (see below). Total for the eight: 1,805 instructions.
-    void ContactBatchBuild();     // @ 0x82BC14C0  343 insn  (not reconstructed)
-    void Anubis_Pipeline();       // @ 0x82BC11C0  192 insn  (contacts only)
-    // ⚠️ CORRECTION 2026-08-04: Osiris_Pipeline is ABSENT FROM .ida-exports -- there is no
-    // 0x82BC2680.json. Notes elsewhere in the tree treat "no export" as "no body"; it has one.
-    // Recovered headless (IDA Pro 9.3 `idat.exe -A -S<script> -L<log> <copy>.i64`, the same
-    // route that produced PairSet::ClearAll and PhysicsSimulationModule::Destruct):
-    //     range 0x82BC2680 .. 0x82BC294C  = 716 bytes = 179 instructions
-    //     the ONLY xref to it is SimulationUpdate @0x82BC6BE8
-    // That makes it the SMALLEST of the four pipelines and the cheapest one to land first.
-    void Osiris_Pipeline();       // @ 0x82BC2680  179 insn  (joints, or joints + contacts)
-    void Isis_Pipeline();         // @ 0x82BC2218  184 insn  (drives only)
-    void Horus_Pipeline();        // @ 0x82BC1A20  510 insn  (anything mixed with drives)
-    // ⭐ 2026-08-05 -- the Xbox One build's SimulationUpdate was located (sub_1409B7240,
-    // structure-identical to the committed PC body, and it CONFIRMS the selector CODE above
-    // the old comment's "2,3 -> Osiris" claim: 3 == joints+contacts goes to HORUS). Its call
-    // set names an x64 ALGORITHM oracle for every remaining stage -- offsets stay X360:
-    //     ContactBatchBuild = sub_1409AE210 (per-RECORD there: XB1's SimulationUpdate loops it
-    //                         at stride 272 == this Contact widened for two body POINTERS the
-    //                         batch parks in it -- see the SpyContactJacobians coupling note),
-    //     Anubis = sub_1409ADBF0, Osiris = sub_1409B5E80, Isis = sub_1409B53E0,
-    //     Horus = sub_1409B3CD0, DynamicUpdate = sub_1409B3180,
-    //     SpyJoint = sub_1409B7B80, SpyDrive = sub_1409B7640, SpyContact = sub_1409B7390.
-    // ⚠️ XB1 jacobian ROW GROUPING differs (2 groups of 5, stride 0x50 -- Jacobian.hpp note),
-    // so no XB1 row offset may be imported; only the algebra.
-    void SpyJointJacobians();     // @ 0x82BC24F8   97 insn  BODIED (Simulation.cpp, 2026-08-05)
-    void SpyDriveJacobians();     // @ 0x82BC3010  193 insn
-    void SpyContactJacobians();   // @ 0x82BC4138  107 insn
-    // ⚠️⚠️ COUPLING, measured 2026-08-05 -- do not land these two piecemeal:
-    //   * SpyContactJacobians reads the POST-ContactBatchBuild record: the batch parks TWO
-    //     RigidBody POINTERS over the +0x7C/+0xAC snapshot lanes (`lwz r7,0x7C / lwz r8,0xAC`
-    //     then `lvx128 vX, rN, 0x10` THROUGH them at 0x82BC4260) and a scalar over +0xDC.
-    //     8-byte host pointers cannot live in those 4-byte lanes -- the PC ContactBatchBuild
-    //     must either widen Contact (the XB1 route: 256 -> 272) or park mId indices and have
-    //     the spy resolve them; EITHER WAY the two functions share one record contract and
-    //     land TOGETHER, with contact.h's pins moved in the same commit.
-    //   * SpyDriveJacobians additionally walks the Drive node (+0x00/+0x10/+0x14 pointers) for
-    //     a ~60-insn quaternion/twist block (0x82BC30D0..0x82BC323C) that is NOT yet decoded
-    //     to landing standard; its emit tail is the SpyJointJacobians trilinear + the two
-    //     scalars {var_130.x, fabs(1 - dot4)} at +0x20/+0x24 of a 48-byte record.
+    // Rewrites each drain-time Contact into the in-place ContactJacobian overlay
+    // (contact.h): the vsel id mint, the pre-divided J columns, bias with the four-case
+    // restitution gate, the I^-1(r x frame) rows -- zero-masked for non-ACTIVE bodies (the
+    // console's branchless vsel; XB1 branches and even SWAPS the pair when A is static --
+    // same fixed point, divergence documented at the body).
+    void ContactBatchBuild();     // @ 0x82BC14C0  BODIED 2026-08-06
+
+    // The four dense constraint-iteration pipelines; the selector in SimulationUpdate picks
+    // by which batches are non-empty. Horus is EXACTLY the other three's per-record bodies
+    // fused into one m_MaxIteration loop (verified segment-by-segment), so all four share
+    // the per-record solvers in Simulation.cpp.
+    void Anubis_Pipeline();       // @ 0x82BC11C0  BODIED  (contacts only)
+    // ⚠️ Osiris is ABSENT FROM .ida-exports (no 0x82BC2680.json) -- body recovered headless
+    // off the .i64: range 0x82BC2680..0x82BC294C, sole xref SimulationUpdate @0x82BC6BE8.
+    void Osiris_Pipeline();       // @ 0x82BC2680  BODIED  (joints only)
+    void Isis_Pipeline();         // @ 0x82BC2218  BODIED  (drives only)
+    void Horus_Pipeline();        // @ 0x82BC1A20  BODIED  (any mix)
+
+    void SpyJointJacobians();     // @ 0x82BC24F8  BODIED (2026-08-05)
+    void SpyDriveJacobians();     // @ 0x82BC3010  BODIED 2026-08-06 -- the quaternion block
+                                  //   is Build's prologue re-run: qA' = qA x skel.mQuatA,
+                                  //   qB' = qB x skel.mQuatB; emits |anchorB - anchorA| and
+                                  //   fabs(1 - dot4(qA', qB')) -- see DriveJacobianSpy below
+    void SpyContactJacobians();   // @ 0x82BC4138  BODIED 2026-08-06 -- landed WITH the batch
+                                  //   (one record contract): chases the Contact tail
+                                  //   pointers to rebuild world points as mCom + r
 
     // -------------------------------------------------------------------------------------
     // Rigid-body list membership. All three are the same shape: unlink from the current list,
@@ -298,11 +339,11 @@ private:
 
     // The three jacobian scratch arrays (:646..648). ⚠️ CORRECTION 2026-08-05: the stride
     // note that stood here ("KU_JACOBIAN_STRIDE apart") is true of the JOINT and DRIVE arrays
-    // only. m_CJ_Stack is an array of 256-byte rw::physics::Contact records -- GetFreeContact
-    // walks it at `slwi 8` (== sizeof(Contact), unchanged on the host: no pointer lanes) and
-    // ContactBatchBuild at `addi r11, r11, 256`; the workspace sizer's `liMaxContacts << 8`
-    // term agrees. 384 would overlap nothing today but would mis-seat every record.
-    void*      m_CJ_Stack;           // X360 +0x10  contacts (stride sizeof(Contact) == 256)
+    // only. m_CJ_Stack is an array of rw::physics::Contact records -- console stride 256
+    // (`slwi 8` in GetFreeContact, `addi r11,r11,0x100` in the batch/pipelines); HOST stride
+    // sizeof(Contact) == 272 since the spy pointer tail landed (contact.h, 2026-08-06), and
+    // the workspace sizer uses sizeof(Contact) for the same reason it uses JacobianStride().
+    void*      m_CJ_Stack;           // X360 +0x10  contacts (host stride sizeof(Contact))
     void*      m_JJ_Stack;           // X360 +0x14  joints
     void*      m_DJ_Stack;           // X360 +0x18  drives
 
