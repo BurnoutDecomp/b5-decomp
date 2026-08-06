@@ -115,13 +115,17 @@
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h" // Deformation::DeformationOutputInterface (@ +0x60B40)
 #include "GameSource/Physics/PropManager/BrnPropManager.h"         // BrnPhysics::Props::PropManager                (@ +0x63630)
 
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h" // CgsPhysics::PhysicsSimulationIO::{InputBuffer,OutputBuffer} nested queue typedefs + OutContactSpy (the bridge-slice method signatures; ADDITIVE 2026-08-06)
+
 namespace CgsModule { struct IOBufferStack; }
-namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Update; } }
+namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Update; struct PotentialContact; } }
 namespace BrnResource { namespace GameDataIO { struct AllocatorList; } }
+namespace BrnWorld { enum EEntityTypeID : int; }   // fixed-underlying-type opaque decl (home BrnEntityTypes.h)
 
 namespace BrnPhysics
 {
-namespace PhysicsModuleIO { class InputBuffer; class OutputBuffer; }
+namespace PhysicsModuleIO { class InputBuffer; class OutputBuffer; struct PotentialContactInterface; }
+namespace Props           { struct PropRaceCarContactBuffer; }   // DWARF BrnPropManager.h:47 (class key struct; IOBuffer-derived, not yet homed)
 
     // ==============================================================================================
     // The X360 literals this class's layout is derived from. Consumed by
@@ -256,6 +260,60 @@ namespace PhysicsModuleIO { class InputBuffer; class OutputBuffer; }
         static void _AssertLayout();
 
     private:
+        // ===================================================================
+        // The contact-spy bridge slice (DWARF-private driver methods, home TU
+        // BrnPhysicsModuleBridgeFunctions.cpp -- each decl carries its DWARF
+        // BrnPhysicsModuleBridgeFunctions.cpp line + X360 address). DE-FACADED
+        // 2026-08-06: these were raw free functions over u8* in the TU; they are
+        // the real private members now, signatures per the DWARF class dump.
+        // ===================================================================
+
+        // :832 @0x825B0448. End-of-frame bridge: resolve the sim's contact spies into
+        // mContactData, drain the vehicle manager's discarded contacts, publish through the
+        // output buffer's contact-spy interface. Caller: Update @0x825B0640.
+        void BridgeSimulationToOutput( PhysicsModuleIO::OutputBuffer* lpOutputBuffer,
+                                       const PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface,
+                                       const Props::PropRaceCarContactBuffer* lpPropRaceCarContactBuffer,
+                                       const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer,
+                                       VecFloat lvfTimeStep );
+
+        // :1049 @0x825B0300. Resolve every raw contact spy, then sort + build the four typed
+        // contact run lists.
+        void ProcessContactSpies( const CgsPhysics::PhysicsSimulationIO::OutputBuffer::OutContactSpyQueue* lpRawContactSpies,
+                                  const PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface,
+                                  const Props::PropRaceCarContactBuffer* lpPropRaceCarContactBuffer,
+                                  VecFloat lvfTimeStep );
+
+        // :1094 @0x825AB4D8. Resolve ONE raw contact spy (spy BY VALUE, per the DWARF -- the
+        // X360 passes the 112-byte record in r4..r10 + stack).
+        void ProcessContactSpy( CgsPhysics::PhysicsSimulationIO::OutContactSpy lContactSpy,
+                                const PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface,
+                                const Props::PropRaceCarContactBuffer* lpPropRaceCarContactBuffer,
+                                VecFloat lvfTimeStep );
+
+        // :1206 @0x825A5DB0. Store one resolved contact into mContactData, dispatched on the
+        // raw contact's A-side entity owner.
+        void StoreContact( const CgsPhysics::PhysicsSimulationIO::OutContactSpy* lpRawContact,
+                           const CgsSceneManager::SceneManagerIO::PotentialContact* lpPotentialContact,
+                           const Props::PropRaceCarContactBuffer* lpPropRaceCarContactBuffer );
+
+        // :552 @0x825A1100. Diagnostics: when the sim contact queue is FULL, dump a per-owner
+        // histogram and assert. Caller: BridgeContactsToSimulation.
+        void CheckContactQueueSize( const CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* lpContactQueue );
+
+        // :604 @0x825A1368. Validate each queued sim contact's entity-type pair, then defer to
+        // the vehicle manager's own pass.
+        void ValidateSimulationContacts( const CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* lpContactQueue );
+
+        // :649 @0x8259C3F8. The per-pair entity-type legality matrix (13-case switch on type A).
+        void ValidateSimulationContactTypes( BrnWorld::EEntityTypeID leEntityTypeA,
+                                             BrnWorld::EEntityTypeID leEntityTypeB );
+
+        // :1313 @0x825AB968. Forward the vehicle manager's per-frame joint requests into the
+        // sim input buffer (remove-joint only; the add-joint queue must already be empty).
+        void BridgeVehicleManagerRequestsToSimulation( CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
+                                                       const Vehicle::VehicleOutputRequestInterface* lpRequestInterface );
+
         // ===================================================================
         // DWARF member set (BrnPhysicsModule.h:189..241), in declaration order --
         // which is also ascending X360 offset order. Every member is now a REAL

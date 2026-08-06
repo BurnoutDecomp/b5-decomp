@@ -10,6 +10,7 @@
 // the ContactId TU and are declared-only. GROW with the full method set as that TU lands.
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (GetQueueId's own :171 tripwire)
 
 namespace BrnPhysics
 {
@@ -56,9 +57,22 @@ namespace PhysicsModuleIO
         void SetEventIndex(u16 lu16EventIndex);
         void SetUserData(u8 lu8UserData);
 
-        PhysicsModuleIO::ECustomQueueTypes GetQueueId()    const;
-        u16                                GetEventIndex() const;
-        u8                                 GetUserData()   const;
+        // GetQueueId / GetEventIndex: INLINE, newly attested 2026-08-06 by
+        // PhysicsModuleIO::PotentialContactInterface::GetEvent(ContactId) @0x825A06A0, which
+        // inlines both (srwi r,24 for the queue id, clrlwi 16 for the event index) and carries
+        // GetQueueId's own bounds tripwire verbatim -- FireAssert cites THIS header, line 171
+        // ("luQueueId < static_cast<uint32_t>( PhysicsModuleIO::E_NUM_CUSTOM_QUEUE_TYPES )"),
+        // proving the bodies were header-inline on the console (no out-of-line emission exists).
+        // Fire-and-continue, exactly as the caller's asm does.
+        PhysicsModuleIO::ECustomQueueTypes GetQueueId() const
+        {
+            const u32 luQueueId = muId >> 24;
+            CGS_ASSERT(luQueueId < static_cast<u32>(PhysicsModuleIO::E_NUM_CUSTOM_QUEUE_TYPES),
+                       "luQueueId < static_cast<uint32_t>( PhysicsModuleIO::E_NUM_CUSTOM_QUEUE_TYPES )");
+            return static_cast<PhysicsModuleIO::ECustomQueueTypes>(luQueueId);
+        }
+        u16 GetEventIndex() const { return static_cast<u16>(muId & KU_EVENT_INDEX_MASK); }
+        u8  GetUserData()   const;
 
         // DWARF :100. Implicit conversion to the raw packed word.
         operator u32() const { return muId; }

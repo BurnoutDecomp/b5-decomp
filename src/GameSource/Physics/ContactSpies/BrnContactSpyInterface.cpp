@@ -20,7 +20,9 @@ namespace ContactSpy
 {
     ContactSpyInterface* ContactSpyInterface::Construct()
     {
-        muField0 = 0;
+        // The console clears the (32-bit) pointer slot; on this host the slot IS the pointer.
+        // (PROMOTED 2026-08-06: was `muField0 = 0;` over a u32 stand-in slot -- see the header.)
+        mpData = nullptr;
         return this;
     }
 
@@ -29,13 +31,14 @@ namespace ContactSpy
     //   0x198D0 (104656) into ContactSpyData
     //   (asm: addis r3,r11,2 ; addi r3,r3,-0x6730  ==>  mpData + 0x20000 - 0x6730 = mpData + 0x198D0).
     //   Identity PROVEN by computing ContactSpyData's DWARF member layout (queues then run lists,
-    //   batch-attested strides) -- mRaceCarContactRunList lands at exactly 0x198D0. ContactSpyData
-    //   is not reconstructed in-tree yet, so this returns an opaque byte pointer over muField0;
-    //   retype once ContactSpyData lands (see the header note).
-    const void* ContactSpyInterface::GetRaceCarContactRunList() const
+    //   batch-attested strides) -- mRaceCarContactRunList lands at exactly 0x198D0.
+    //   RETYPED 2026-08-06 (bridge de-facade wave): ContactSpyData is now in-tree, so the raw
+    //   `muField0 + 0x198D0` byte math (which TRUNCATED the pointer through a u32 on this host)
+    //   becomes the named-member access the console inlined.
+    const ContactSpyData::RaceCarContactRunList* ContactSpyInterface::GetRaceCarContactRunList() const
     {
-        CGS_ASSERT(muField0 != 0, "mpData != NULL");
-        return reinterpret_cast<const u8*>(static_cast<uintptr_t>(muField0)) + 0x198D0;
+        CGS_ASSERT(mpData != nullptr, "mpData != NULL");
+        return mpData->GetRaceCarContactRunList();
     }
 }
 }

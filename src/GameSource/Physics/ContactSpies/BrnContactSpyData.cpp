@@ -114,5 +114,65 @@ bool ContactSpyData::IsEmpty() const
     return lbIsEmpty;
 }
 
+// ============================================================================================
+// The remaining typed AddContact overloads -- ADDED 2026-08-06 (bridge de-facade wave), each
+// read from its own X360 emission (all three are bl targets of PhysicsModule::StoreContact
+// @0x825A5DB0 and share the RaceCarContact overload's exact shape: bounds-gated AddEventSafe
+// into the matching queue; on full, a filtered one-line warning naming the queue):
+//   * AddContact(const TrafficContact&)          @ 0x825A5288 (queue @+0x070A0)
+//   * AddContact(const PhysicalCarPartContact&)  @ 0x825A52E0 (queue @+0x106C0)
+//   * AddContact(const PropContact&)             @ 0x825A5340 (queue @+0x167E0)
+// ============================================================================================
+
+void ContactSpyData::AddContact(const TrafficContact& lrContact)
+{
+    if (!mTrafficContactQueue.AddEventSafe(lrContact))
+    {
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "WARNING: Ran out of contacts in TrafficContactQueue.\n";
+        }
+    }
+}
+
+void ContactSpyData::AddContact(const PhysicalCarPartContact& lrContact)
+{
+    if (!mPhysicalCarPartContactQueue.AddEventSafe(lrContact))
+    {
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "WARNING: Ran out of contacts in PhysicalCarPartContactQueue.\n";
+        }
+    }
+}
+
+void ContactSpyData::AddContact(const PropContact& lrContact)
+{
+    if (!mPropContactQueue.AddEventSafe(lrContact))
+    {
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "WARNING: Ran out of contacts in PropContactQueue.\n";
+        }
+    }
+}
+
+// AddContact(const DiscardedContact&): the console emits NO out-of-line body -- the overload
+// is header-inline and shows up fully inlined in its one caller, PhysicsModule::
+// BridgeSimulationToOutput @0x825B0594..0x825B05E0 (AddEventSafe @0x825A3628 on
+// mDiscardedContactQueue @+0x193C0, then the filtered warning below on a full queue). The
+// BaseEventQueue_DiscardedContact_AddEventSafe.cpp banner has carried this exact attribution
+// since it landed. Bodied here beside its three out-of-line siblings.
+void ContactSpyData::AddContact(const DiscardedContact& lrContact)
+{
+    if (!mDiscardedContactQueue.AddEventSafe(lrContact))
+    {
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "WARNING: Ran out of contacts in DiscardedContactQueue.\n";
+        }
+    }
+}
+
 }
 }

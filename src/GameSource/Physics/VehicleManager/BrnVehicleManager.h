@@ -52,6 +52,10 @@ namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; 
 // Class key `struct`, matching rw/rwcore_structs.h -- a `class` here mangles differently.
 namespace rw { struct IResourceAllocator; }
 
+// ValidateSimulationContacts' queue element (declaration only needs the template + element name;
+// class key `struct`, matching CgsPhysicsSimulationIO_Events.h).
+namespace CgsPhysics { namespace PhysicsSimulationIO { struct InAddPotentialContact; } }
+
 namespace BrnPhysics
 {
 namespace Vehicle
@@ -186,6 +190,25 @@ namespace Vehicle
         // physics module.
         bool Prepare( rw::IResourceAllocator* lpAllocator,
                       CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer );
+
+        // ⭐ ADDED 2026-08-06 (bridge de-facade wave). DWARF BrnVehicleManager.h:667; X360
+        // @0x825C8990 (home BrnVehicleManager.cpp:9877 per its own baked assert path). Debug
+        // validation pass over the outgoing simulation contact queue: for each contact whose
+        // A/B entity owner is TRAFFIC_VEHICLE, assert the packed 14-bit entity index is < 20
+        // and that mPhysicalTrafficManager.mUsedTrafficVehicles has that traffic slot live.
+        // Bodied in BrnVehicleManager_ValidateSimulationContacts.cpp (slice TU -- the home TU
+        // is still unmounted). The queue element is InAddPotentialContact (stride 80); the
+        // spelling below is the same EventQueue instantiation InputBuffer::InAddContactQueue
+        // names (typedefs do not change the mangling).
+        void ValidateSimulationContacts(
+            const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InAddPotentialContact, 1024>* lpContactQueue );
+
+        // ⭐ ADDED 2026-08-06. DWARF BrnVehicleManager.h:562; header-inline on the console (no
+        // out-of-line emission -- PhysicsModule::BridgeSimulationToOutput @0x825B0574 reaches
+        // the member as a bare `this + 0x2BE40` addi, i.e. the inlined accessor). The bridge
+        // drains this queue into the module's ContactSpyData every frame.
+        const CgsModule::EventQueue<BrnPhysics::ContactSpy::DiscardedContact, 20>*
+        GetDiscardedContacts() const { return &mDiscardedContacts; }
 
         // The per-contact working set the impact classifiers read/populate. Verbatim DWARF
         // layout (BrnVehicleManager.h:763). Pointer members use the forward-declared collaborators.

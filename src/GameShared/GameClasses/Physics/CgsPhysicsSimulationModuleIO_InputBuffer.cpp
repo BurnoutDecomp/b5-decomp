@@ -133,7 +133,7 @@ namespace PhysicsSimulationIO
     template bool InputBuffer::AppendAddRigidBodyQueue<1>(CgsModule::EventQueue<InAddRigidBody, 1>*);                    // @0x825A8298
     template bool InputBuffer::AppendAddRigidBodyQueue<50>(CgsModule::EventQueue<InAddRigidBody, 50>*);                  // @0x825A84C0
     template bool InputBuffer::AppendChangeRigidBodyInertiaQueue<200>(CgsModule::EventQueue<InChangeRigidBodyInertia, 200>*); // @0x825AC2E8
-    template bool InputBuffer::AppendRemoveJointQueue<10>(CgsModule::EventQueue<InRemoveJoint, 10>*);                    // @0x825A8678
+    template bool InputBuffer::AppendRemoveJointQueue<10>(const CgsModule::EventQueue<InRemoveJoint, 10>*);   // const src per the console `PBV` mangling                    // @0x825A8678
     template bool InputBuffer::AppendRemoveRigidBodyQueue<50>(CgsModule::EventQueue<InRemoveRigidBody, 50>*);            // @0x825A83E0
     template bool InputBuffer::AppendUpdateExternalBodyQueue<60>(CgsModule::EventQueue<InUpdateExternalBody, 60>*);      // @0x825AC208
 

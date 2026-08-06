@@ -206,7 +206,7 @@ namespace PhysicsSimulationIO
         template <s32 N> bool AppendAddRigidBodyQueue(CgsModule::EventQueue<InAddRigidBody, N>* lpSourceQueue);
         template <s32 N> bool AppendAddJointQueue(CgsModule::EventQueue<InAddJoint, N>* lpSourceQueue);
         template <s32 N> bool AppendChangeRigidBodyInertiaQueue(CgsModule::EventQueue<InChangeRigidBodyInertia, N>* lpSourceQueue);
-        template <s32 N> bool AppendRemoveJointQueue(CgsModule::EventQueue<InRemoveJoint, N>* lpSourceQueue);
+        template <s32 N> bool AppendRemoveJointQueue(const CgsModule::EventQueue<InRemoveJoint, N>* lpSourceQueue);   // const src: console `PBV` mangling, see the body
         template <s32 N> bool AppendRemoveRigidBodyQueue(CgsModule::EventQueue<InRemoveRigidBody, N>* lpSourceQueue);
         template <s32 N> bool AppendUpdateExternalBodyQueue(CgsModule::EventQueue<InUpdateExternalBody, N>* lpSourceQueue);
 
@@ -270,8 +270,14 @@ namespace PhysicsSimulationIO
         return mChangeRigidBodyInertiaQueue.Append(*lpSourceQueue);
     }
 
+    // ⭐ Source-queue param is CONST (retyped 2026-08-06): the console's own mangling proves it
+    // -- the AppendRemoveJointQueue<10> emission @0x825A8678 mangles `...QAAXPBV$EventQueue...`
+    // (`PBV` = pointer to CONST class), and its bridge caller @0x825ABA08 feeds a queue obtained
+    // from a `const VehicleOutputRequestInterface*`. Append() only reads the source, so the
+    // non-const spelling was an over-strict host invention. (Existing non-const callers still
+    // convert implicitly.)
     template <s32 N>
-    bool InputBuffer::AppendRemoveJointQueue(CgsModule::EventQueue<InRemoveJoint, N>* lpSourceQueue)
+    bool InputBuffer::AppendRemoveJointQueue(const CgsModule::EventQueue<InRemoveJoint, N>* lpSourceQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         CGS_ASSERT(lpSourceQueue != nullptr, "lpSourceQueue != NULL");
@@ -334,6 +340,12 @@ namespace PhysicsSimulationIO
 
         // X360 0x8259F120: write-lock (bit 3) guarded; returns &mContactSpyQueue (console +0x9620).
         OutContactSpyQueue* GetContactSpyQueue();
+
+        // X360 0x8259F078: READ-lock (bit 4) guarded const twin (one 0xA8 slot before the
+        // write trio in the uniform accessor block; "Not locked for reading\n", header :1366).
+        // ADDED 2026-08-06 -- called by PhysicsModule::BridgeSimulationToOutput @0x825B0540 on
+        // the const sim-module output buffer.
+        const OutContactSpyQueue* GetContactSpyQueue() const;
 
         // X360 0x8259F1C8: write-lock (bit 3) guarded; returns &mJointSpyQueue (console +0x1F430).
         // (DWARF :734... the :731/:734/:737 non-const trio; AddJointSpiesToOutputQueue opens

@@ -83,5 +83,28 @@ namespace PhysicsModuleIO
         }
         return mpQueue->GetEvent(liIndex);
     }
+
+    // X360 0x825A06A0 (DWARF :159; ADDED 2026-08-06, bridge de-facade wave): the ContactId-
+    // keyed accessor. GetQueueId() carries its own bounds tripwire (BrnContactId.h:171, fired
+    // inline in the X360 body); a non-zero queue id indexes maCustomEventQueues[qid] directly
+    // (asm: this + 163856*qid + 16) with the fire-and-continue length tripwire
+    // (BrnPhysicsModuleIO.h:674) before the queue's own checked GetEvent; queue id 0 routes
+    // through GetEvent(s32) @0x825A0578 (the mpQueue/custom split). Sole caller:
+    // PhysicsModule::ProcessContactSpy @0x825AB5A4, resolving a spy's muTag.
+    const CgsSceneManager::SceneManagerIO::PotentialContact&
+    PotentialContactInterface::GetEvent(ContactId lContactId) const
+    {
+        const u32 luQueueId      = static_cast<u32>(lContactId.GetQueueId());
+        const u16 lu16EventIndex = lContactId.GetEventIndex();
+
+        if (luQueueId != 0u)   // != E_QUEUE_TYPE_EXTERNAL_FROM_SCENE_CONTACTS
+        {
+            CGS_ASSERT(lu16EventIndex < maCustomEventQueues[luQueueId].GetLength(),
+                       "lu16EventIndex < maCustomEventQueues[leQueueId].GetLength()");   // BrnPhysicsModuleIO.h:674
+            return maCustomEventQueues[luQueueId].GetEvent(static_cast<s32>(lu16EventIndex));
+        }
+
+        return GetEvent(static_cast<s32>(lu16EventIndex));
+    }
 }
 }

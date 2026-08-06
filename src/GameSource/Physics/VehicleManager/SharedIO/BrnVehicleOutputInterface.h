@@ -288,6 +288,16 @@ namespace Vehicle
             mRemoveJointQueue.AddEvent(lRemoveJointEvent);
         }
 
+        // ⭐ ADDED 2026-08-06 (bridge de-facade wave): the two joint-queue read accessors
+        // (DWARF :256 / :259). Now X360-ATTESTED, which is what had gated them out: the drain
+        // PhysicsModule::BridgeVehicleManagerRequestsToSimulation @0x825AB968 names
+        // GetAddJointQueue in its own assert string ("lpRequestInterface->GetAddJointQueue()->
+        // GetLength() == 0", reading the miLength word at +0x9BE8 == mAddJointQueue+8) and then
+        // feeds `this + 0xA370` == &mRemoveJointQueue to AppendRemoveJointQueue<10>. Both were
+        // header-inline on the console (no out-of-line emissions); header-inline here.
+        const AddArticulatedJointQueue*    GetAddJointQueue()    const { return &mAddJointQueue; }
+        const RemoveArticulatedJointQueue* GetRemoveJointQueue() const { return &mRemoveJointQueue; }
+
         // Never called; bodied in BrnVehicleOutputInterface.cpp (a MOUNTED TU) and nothing but
         // static_asserts. Static so it can see the private queue block through offsetof.
         static void _AssertLayout();

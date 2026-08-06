@@ -497,6 +497,30 @@ namespace PhysicsSimulationIO
         u64                    mIDA;             // @+0x50  DWARF :389 (a CgsPhysics::RigidBodyId handle)
         u64                    mIDB;             // @+0x58  DWARF :390
         u32                    muTag;            // @+0x60  DWARF :391 -- the drain event's muTag
+
+        // DWARF :379. ⭐ DECLARED 2026-08-06 -- the old gating note ("no X360 body or caller in
+        // the image") is HALF-RETIRED: there is still no out-of-line body, because the one
+        // caller INLINES it -- PhysicsModule::ProcessContactSpy @0x825AB894..0x825AB958 swaps
+        // the two points (lvx/stvx pairs on +0x30/+0x40), swaps the two id qwords (ld/std pairs
+        // on +0x50/+0x58) and sign-flips mNormal (vspltisw -1; vslw -> 0x80000000 splat; vxor)
+        // between its two StoreContact calls. Header-inline, exactly as the console had it.
+        // (The stress rows and muTag are NOT touched -- faithful to the inline site.)
+        void SwapEntityOrder()
+        {
+            const rw::math::vpu::Vector3 lPointOnA = mPointOnA;
+            mPointOnA = mPointOnB;
+            mPointOnB = lPointOnA;
+
+            const u64 luIDA = mIDA;
+            mIDA = mIDB;
+            mIDB = luIDA;
+
+            // vxor with the 0x80000000 lane splat == per-lane sign flip (all four lanes).
+            mNormal.x = -mNormal.x;
+            mNormal.y = -mNormal.y;
+            mNormal.z = -mNormal.z;
+            mNormal.w = -mNormal.w;
+        }
     };
 
     // An output "spy" report of per-frame vehicle drive state, drained from the simulation back to

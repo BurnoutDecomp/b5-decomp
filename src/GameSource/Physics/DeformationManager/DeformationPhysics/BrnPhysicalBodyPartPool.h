@@ -80,12 +80,24 @@ namespace PhysicsModuleIO
     // The per-frame potential-contact source UpdateJoinedParts reads the hinged-body-part
     // contact queues from (DWARF: BrnPhysics::PhysicsModuleIO::PotentialContactInterface).
     //
-    // ADDITIVE GROW (own family): the interface and its contact queue are not homed in any TU
-    // yet. The X360 asm walks each queue as {count @ +8, PotentialContact array @ +0} and reads
-    // the two queues at fixed offsets off the interface base (the world queue and the car queue).
-    // This minimal definition models exactly that shape so UpdateJoinedParts can iterate it
-    // through declared accessors. FLAG: reconstructed-from-asm, member offsets best-effort.
-    class PotentialContactInterface
+    // ⛔ RENAMED 2026-08-06 (bridge de-facade wave): this modelled slice used to CLAIM the real
+    // class's name (`class BrnPhysics::PhysicsModuleIO::PotentialContactInterface`) while the
+    // AUTHORITATIVE type -- `struct PotentialContactInterface : CgsModule::IOBuffer` with 14
+    // EventQueue<CgsSceneManager PotentialContact,2048> custom queues -- is homed in
+    // BrnPhysicsModuleIO_PotentialContactInterface.h. The moment one TU included both headers
+    // (the de-facaded bridge TU does, through BrnPhysicsModule.h -> BrnDeformationManager.h ->
+    // this header), the fork met as a hard C2011 -- the predicted collision in both headers'
+    // own NOTEs. Renamed to ...Model so the fork can never meet again; UpdateJoinedParts'
+    // DWARF-real signature is restored when this model is rehomed onto the authoritative type
+    // (whose maCustomEventQueues[1]/[2] seats -- +163872/+327728 -- are exactly the two queue
+    // bases the pool asm reads).
+    //
+    // ADDITIVE GROW (own family): the X360 asm walks each queue as {count @ +8, PotentialContact
+    // array @ +0} and reads the two queues at fixed offsets off the interface base (the world
+    // queue and the car queue). This minimal definition models exactly that shape so
+    // UpdateJoinedParts can iterate it through declared accessors. FLAG: reconstructed-from-asm,
+    // member offsets best-effort.
+    class PotentialContactInterfaceModel
     {
     public:
         struct CustomPotentialContactQueue
@@ -185,7 +197,7 @@ namespace Deformation
         // BrnPhysicalBodyPartPool.h:117. Resolve the still-joined parts: pull the per-part
         // potential contacts from the contact interface, accumulate them (PhysicalBodyPart::
         // AddContact), integrate each active joint, and forward to the contact spy.
-        void UpdateJoinedParts(const PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface,
+        void UpdateJoinedParts(const PhysicsModuleIO::PotentialContactInterfaceModel* lpPotentialContactsInterface,
                                ContactSpyData* lpContactSpyData, VecFloat lvfTimeStep);
 
         // BrnPhysicalBodyPartPool.h:120. Whether the given slot index is currently in use.

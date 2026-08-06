@@ -123,7 +123,18 @@ namespace Deformation
         // ----- scene ids / pool ----------------------------------------------------------
 
         // BrnPhysicalWheel.h:175. The packed scene volume-instance id of this wheel.
-        CgsSceneManager::VolumeInstanceId GetVolumeInstanceId() const;
+        // ⭐ INLINE 2026-08-06 (bridge de-facade wave): no out-of-line emission exists --
+        // DeformationManager::FixupWheelVehicleContact @0x825A0F80 `ld`s the whole 8-byte
+        // packed record at wheel+0x70 (mWheelBodyId) as the volume-instance id. The host
+        // repacks the three fields in the console's byte order (entity word = high dword).
+        CgsSceneManager::VolumeInstanceId GetVolumeInstanceId() const
+        {
+            CgsSceneManager::VolumeInstanceId lId;
+            lId.muId = (static_cast<u64>(mWheelBodyId.muEntityWord) << 32)
+                     | (static_cast<u64>(mWheelBodyId.muSubA) << 16)
+                     |  static_cast<u64>(mWheelBodyId.muSubB);
+            return lId;
+        }
 
         // BrnPhysicalWheel.h:178. This wheel's slot index inside its pool.
         u8 GetPoolIndex() const;

@@ -40,6 +40,7 @@
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"  // CgsModule::IOBuffer
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<13312,16> (mGameActionQueue)
+#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h" // ContactSpy::ContactSpyInterface (real member @ +998192, promoted 2026-08-06)
 
 namespace BrnPhysics
 {
@@ -55,7 +56,10 @@ namespace PhysicsModuleIO
         struct PropOutputInterfaceStorage           { unsigned char maBytes[1]; };
         struct DeformationOutputInterfaceStorage    { unsigned char maBytes[1]; };
         struct SceneInputInterfaceStorage           { unsigned char maBytes[1]; };
-        struct ContactSpyInterfaceStorage           { unsigned char maBytes[1]; };
+        // mContactSpyInterface PROMOTED 2026-08-06 (bridge de-facade wave): the real
+        // ContactSpy::ContactSpyInterface (one ContactSpyData* + SetData/IsEmpty), consumed by
+        // PhysicsModule::BridgeSimulationToOutput @0x825B0448. Its +998192 seat is 8-aligned,
+        // so the pin below is unchanged.
 
         // ---- accessors owned/bodied by this group --------------------------------------
         VehicleOutputRequestInterfaceStorage*       GetVehicleOutputRequestInterface();       // +16,     write
@@ -64,7 +68,7 @@ namespace PhysicsModuleIO
         const PropOutputInterfaceStorage*           GetPropManagerOutputInterface() const;    // +71792,  read
         PropOutputInterfaceStorage*                 GetPropManagerOutputInterface();          // +71792,  write
         DeformationOutputInterfaceStorage*          GetDeformationOutputInterface();          // +148656, write
-        ContactSpyInterfaceStorage*                 GetContactSpyInterface();                 // +998192, write
+        ContactSpy::ContactSpyInterface*            GetContactSpyInterface();                 // +998192, write (retyped with the promotion)
         // ADDITIVE GROW (BridgePhysicsSceneUpdateToScene @0x827ABAA8): the scene-update
         // sub-interface (DWARF :385), read-locked. @0x8279F838 -> +179424 -- this pins
         // the previously-unpinned mSceneInputInterface offset.
@@ -95,7 +99,7 @@ namespace PhysicsModuleIO
         // gap to mContactSpyInterface: +179425 .. +998191.
         unsigned char                        maScenePad[998192 - 179425];      // ...
 
-        ContactSpyInterfaceStorage           mContactSpyInterface;             // +998192 :386
+        ContactSpy::ContactSpyInterface      mContactSpyInterface;             // +998192 :386 (real type; seat 8-aligned)
     };
 
     // ================================================================================

@@ -76,7 +76,8 @@ namespace PhysicsModuleIO
     }
 
     // X360 0x825A0320: write-lock; return this + 998192.
-    OutputBuffer::ContactSpyInterfaceStorage* OutputBuffer::GetContactSpyInterface()
+    // (Return RETYPED 2026-08-06 with the member promotion to the real ContactSpyInterface.)
+    ContactSpy::ContactSpyInterface* OutputBuffer::GetContactSpyInterface()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return &mContactSpyInterface;

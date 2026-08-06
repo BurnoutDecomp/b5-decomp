@@ -199,9 +199,28 @@ namespace Deformation
 
     // ---- DWARF arg/record types touched by pointer only (homes not in-tree). FLAG: each is a
     //      forward-declared cross-TU type. -------------------------------------------------------
-    struct PhysicalCarPartContact;   // CreateDetached{Part,Wheel}ContactEvent out-record (DWARF PhysicalCarPartContact*)
-    struct OutContactSpy;            // CreateDetached{Part,Wheel}ContactEvent in-spy (DWARF OutContactSpy*)
-    struct PotentialContact;         // BrnPhysics-side potential contact (CreateDetached*ContactEvent in-record)
+    // ⛔ FORK RETIRED 2026-08-06 (bridge de-facade wave). Three LOCAL forward declarations
+    // stood here for the CreateDetached*ContactEvent arg types:
+    //     struct PhysicalCarPartContact;  struct OutContactSpy;  struct PotentialContact;
+    // Declared in namespace BrnPhysics::Deformation, they were DIFFERENT TYPES from the real
+    // records the caller (PhysicsModule::StoreContact @0x825A5DB0) builds and passes --
+    // BrnPhysics::ContactSpy::PhysicalCarPartContact, CgsPhysics::PhysicsSimulationIO::
+    // OutContactSpy and CgsSceneManager::SceneManagerIO::PotentialContact -- so the two decls
+    // below mangled to symbols no caller could ever reference (the silent-ODR-fork shape).
+    // Worse, `PotentialContact` bound to BrnPhysicalBodyPartPool.h's REAL
+    // Deformation::PotentialContact (the hinged-joint record, a deliberately distinct type,
+    // included above). All three arg types are now homed in-tree, so the decls below spell
+    // them fully qualified, like the Fixup* pair always did.
+}
+}
+// Pointer-only forward declarations of the REAL records (class keys match their homes).
+namespace CgsPhysics { namespace PhysicsSimulationIO { struct OutContactSpy; } }
+namespace BrnPhysics { namespace ContactSpy { struct PhysicalCarPartContact; } }
+namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; } }
+namespace BrnPhysics
+{
+namespace Deformation
+{
     struct PrimitivePairListBuilder; // AddRaceCar*Pair / AddHingedBodyPartPairs out-builder
 
     // SolvePenetration / UpdatePostPhysics scratch stack. ALIASED to the real homed CgsModule type
@@ -302,16 +321,17 @@ namespace Deformation
         // stand-in and truncated the caller's handle. See the header note at the top.
         void SetWorldBodyId(CgsPhysics::RigidBodyId lWorldRigidBodyId);
 
-        // :164. Build a detached-PART contact event from a spy + potential contact.
-        void CreateDetachedPartContactEvent(PhysicalCarPartContact* lpOutPhysicalCarPartContact,
-                                            const OutContactSpy* lpInContact,
-                                            const PotentialContact* lpInPotentialContact);
+        // :164 (X360 @0x825DD628). Build a detached-PART contact event from a spy + potential
+        // contact. Arg types fully qualified 2026-08-06 -- see the fork-retirement note above.
+        void CreateDetachedPartContactEvent(BrnPhysics::ContactSpy::PhysicalCarPartContact* lpOutPhysicalCarPartContact,
+                                            const CgsPhysics::PhysicsSimulationIO::OutContactSpy* lpInContact,
+                                            const CgsSceneManager::SceneManagerIO::PotentialContact* lpInPotentialContact);
 
         // :171 (dossier CreateDetachedWheelContactEvent @0x825B95B0). Build a detached-WHEEL
         // contact event (asserts both ids' owners are a detached racecar/traffic wheel).
-        void CreateDetachedWheelContactEvent(PhysicalCarPartContact* lpOutPhysicalCarPartContact,
-                                             const OutContactSpy* lpInContact,
-                                             const PotentialContact* lpInPotentialContact);
+        void CreateDetachedWheelContactEvent(BrnPhysics::ContactSpy::PhysicalCarPartContact* lpOutPhysicalCarPartContact,
+                                             const CgsPhysics::PhysicsSimulationIO::OutContactSpy* lpInContact,
+                                             const CgsSceneManager::SceneManagerIO::PotentialContact* lpInPotentialContact);
 
         // ----- per-car spatial queries (DWARF :176-195) ----------------------------------
 
