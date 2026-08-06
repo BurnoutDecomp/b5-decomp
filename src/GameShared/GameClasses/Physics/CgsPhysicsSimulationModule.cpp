@@ -9,6 +9,13 @@
 // ProcessAddRigidBodyQueue reads its embedded add-rigid-body queue and the events in it.
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"
 
+// The Update-side closure/spy wave (2026-08-06): the tick's IslandGenerator scratch type, the
+// per-frame IOBufferStack it is carved from, and the debug-print stream the contact-spy
+// diagnostic dump streams to.
+#include "GameShared/GameClasses/Physics/CgsIslandGenerator.h"     // CgsPhysics::IslandGenerator (type only)
+#include "GameShared/GameClasses/Module/CgsIOBufferStack.h"        // CgsModule::IOBufferStack (Create/DestroyIOBuffer<T>)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"         // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
+
 #include "rw/rwcore_structs.h"                  // rw::IResourceAllocator, Resource, descriptors
 #include "rw/physics/simulation.h"              // rw::physics::Simulation + SpyingFlag
 #include "rw/physics/SimulationWorkspace.h"     // rw::physics::SimulationWorkspace
@@ -450,6 +457,18 @@ namespace CgsPhysics
     void DriveData::SetDrive(s32 liIndex, rw_physics::Drive* lpRWDrive)
     {
         maRWDrives[liIndex] = lpRWDrive;
+    }
+
+    // DWARF h:237. ⭐ ADDED 2026-08-06 (the spy wave). No out-of-line symbol -- the console
+    // inlines it into AddDriveSpiesToOutputQueue @0x828A5D84..0x828A5E08 as the checked
+    // maGameIDs[liIndex] read behind asserts h:648 (`cmpwi r30,1` == liIndex < knSize) /
+    // h:649 (`lbz 0x90(this+liIndex)` == mabUsedSlot), closing with the 8-byte
+    // `ldx (liIndex+0x11)<<3` off maGameIDs. The JointData::GetGameID shape exactly.
+    DriveId DriveData::GetGameID(s32 liIndex)
+    {
+        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");          // h:648 tripwire (blt skips)
+        CGS_ASSERT(mabUsedSlot[liIndex], "mabUsedSlot[liIndex]");   // h:649 tripwire (bne skips)
+        return maGameIDs[liIndex];
     }
 
     // ===================== RigidBodyData ===================================
@@ -2331,7 +2350,7 @@ namespace CgsPhysics
     // The pure dispatcher: NINETEEN drain calls, each `(this, lpInput)`, no branches, no
     // return value. Bodied ONLY NOW because the nineteenth drain exists -- the standing
     // "stays unbodied until all nineteen" rule is satisfied, not bent (a dispatcher over a
-    // partial set silently drops whole queues, the [[silent-drop-stubs]] shape).
+    // partial set loses whole queues without a diagnostic, the [[silent-drop-stubs]] shape).
     //
     // ⭐ THE ORDER IS LOAD-BEARING AND IS THE FUNCTION'S OWN: removes before adds; bodies,
     // then joints, then drives. Re-derived from the nineteen `bl` targets twice (task #142,
@@ -2364,5 +2383,640 @@ namespace CgsPhysics
         ProcessUpdateDriveFramesQueue(lpInput);        // bl 0x8289FC28
         ProcessUpdateDriveDynamicsQueue(lpInput);      // bl 0x8289FD60
         ProcessSetDriveSpyQueue(lpInput);              // bl 0x8289FE88
+    }
+
+    // =====================================================================================
+    // THE UPDATE-SIDE CLOSURE + SPY EMITTERS + THE TWO VIRTUALS (2026-08-06).
+    // The whole game-side callee set of Update @0x828A74D0; with these, the module's DWARF
+    // virtual set is complete. ⚠️ NOTHING REACHES ANY OF THIS AT RUNTIME YET -- the only
+    // console caller of the two virtuals is BrnPhysics::PhysicsModule::Update @0x825B0640,
+    // still the inert WorldLinkStubs boot gate; /OPT:REF strips the cluster until it lands.
+    // =====================================================================================
+
+    // The world-bounds clamp constants (DWARF .cpp:2350-2353 declares the group
+    // KVF_MAX_DIST_ALONG_AXIS / KV_MAX_POSITION / KV_MIN_POSITION /
+    // TEMP_KF_MAX_DISTANCE_FROM_ORIGIN_SQUARED; only the two KV_ vectors are consumed by the
+    // functions homed here, so only they are defined -- the other two have no in-scope
+    // reader and would be dead weight).
+    //
+    // ⭐ VALUES RECOVERED FROM THE IMAGE, NOT GUESSED. On the X360 these live in BSS
+    // (0x8307A7D0 / 0x8307A7F0 -- zero in the image) and are DYNAMICALLY initialised by an
+    // unnamed static-initializer block the export set does not carry (found by a headless
+    // dref hunt over the .i64): @0x82C6F490 splats flt_820080E8 into KVF_MAX_DIST_ALONG_AXIS,
+    // @0x82C6F4B8 permutes that into KV_MAX_POSITION, @0x82C6F4F0 sign-flips it into
+    // KV_MIN_POSITION. flt_820080E8 == 0x47C35000 == 100000.0f (read via x360rd, validated
+    // reader). Cross-witness: the DecFIGS PS3 build's own initializer @0xC309C0 builds the
+    // same pair by splat + sign-xor from one float. POD aggregates here, so the PC gets
+    // static (compile-time) init where the console needed the runtime block -- same values,
+    // no init-order hazard.
+    static const rw::math::vpu::Vector3 KV_MAX_POSITION = {  100000.0f,  100000.0f,  100000.0f, 0.0f };
+    static const rw::math::vpu::Vector3 KV_MIN_POSITION = { -100000.0f, -100000.0f, -100000.0f, 0.0f };
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::AddContactSpiesToOutputQueue @ 0x828A4ED8   (641 instructions)
+    //
+    // Join each ContactJacobianSpy record the solver emitted with the ORIGINAL drain event
+    // (the spy's muTag is the drain's loop index into the input add-contact queue -- see
+    // ProcessAddContactQueue's tag note above) and push an OutContactSpy. The output stresses
+    // are the accumulated impulses over the step: the vendor spy divided by ts^2, this
+    // multiplies by ts, net impulse/ts == force.
+    //
+    // ⚠️ 500+ of the 641 instructions are ONE diagnostic: when a spy's tag does not index a
+    // live queue event, the console dumps the whole queue and every spy record to
+    // gpDebugPrint and fires .cpp:2112 ("...please tell Andy or Graham..."), then FALLS
+    // THROUGH into the emit with the bad tag -- GetEvent's own tripwires fire and the read
+    // is out of range, as shipped (the ProcessRemoveRigidBodyQueue -1 fall-through rule).
+    // The dump is reconstructed (it is behaviour, gated on gxMessageFilterFlags bit 0, and
+    // this build routes gpDebugPrint to the game log); the E_PRINTMODE_HEXONCE pushes are
+    // the console's own `mePrintMode = 2` stores before each 64-bit id.
+    // ⚠️ The queue add is AddEventSafe -- the ONE bounded add in this module family: a full
+    // spy queue drops the event and logs, it does not overrun (the console's `!result` +
+    // "Warning: ..." path).
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::AddContactSpiesToOutputQueue(const PhysicsSimulationIO::InputBuffer* lpInput,
+                                                               PhysicsSimulationIO::OutputBuffer* lpOutput)
+    {
+        const PhysicsSimulationIO::InputBuffer::InAddContactQueue* const lpQueue =
+            lpInput->GetAddContactQueue();                              // `bl sub_8289E7F8`
+
+        const s32 liNumSpies = static_cast<s32>(mpSimulation->GetContactSpyCount());   // `lwz 0x68`
+        for (s32 liSpy = 0; liSpy < liNumSpies; ++liSpy)
+        {
+            const rw_physics::ContactJacobianSpy* const lpSpy = mpSimulation->GetContactSpy(liSpy);
+
+            const s32 liTag = static_cast<s32>(lpSpy->muTag);
+            if (liTag >= lpQueue->GetLength())
+            {
+                // ---- the "Invalid contact pair ID" diagnostic dump (0x828A4FD0..0x828A58A8) --
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "Invalid contact pair ID:\n\nContact spy index = " << liSpy << "\n";
+                }
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                {
+                    *CgsDev::Log::gpDebugPrint << "\nPotential contacts:\n";
+                }
+                for (s32 li = 0; li < lpQueue->GetLength(); ++li)
+                {
+                    const PhysicsSimulationIO::InAddPotentialContact& lrDump = lpQueue->GetEvent(li);
+                    if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    {
+                        // (The console streams an empty rodata string @0x820046A7 as the line
+                        // prefix -- appending nothing; not reproduced.)
+                        *CgsDev::Log::gpDebugPrint
+                            << li << ". IdA = " << CgsDev::E_PRINTMODE_HEXONCE << lrDump.mIDA
+                            << ", IdB = "       << CgsDev::E_PRINTMODE_HEXONCE << lrDump.mIDB
+                            << ", Tag = "       << lrDump.muTag << "\n";
+                    }
+                }
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                {
+                    *CgsDev::Log::gpDebugPrint << "\nContact spies:\n";
+                }
+                for (s32 li = 0; li < liNumSpies; ++li)
+                {
+                    const rw_physics::ContactJacobianSpy* const lpDumpSpy = mpSimulation->GetContactSpy(li);
+                    // Resolve each side's game id ONLY when its tag lands on a live slot; a
+                    // dead side prints the invalid sentinel (the console seeds both from
+                    // qword_82F33E18 == K_INVALID_RIGID_BODY_ID and overwrites under the
+                    // same guards).
+                    u64 luIdA = K_INVALID_RIGID_BODY_ID;
+                    u64 luIdB = K_INVALID_RIGID_BODY_ID;
+                    const s32 liTagA = static_cast<s32>(lpDumpSpy->mpBodyA->GetTag());
+                    if (liTagA < RigidBodyData::KI_SIZE && mBodyData.IsSlotUsed(liTagA))
+                    {
+                        luIdA = mBodyData.GetGameID(liTagA);            // h:585/h:586
+                    }
+                    const s32 liTagB = static_cast<s32>(lpDumpSpy->mpBodyB->GetTag());
+                    if (liTagB < RigidBodyData::KI_SIZE && mBodyData.IsSlotUsed(liTagB))
+                    {
+                        luIdB = mBodyData.GetGameID(liTagB);            // h:585/h:586
+                    }
+                    if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << li << ". IdA = " << CgsDev::E_PRINTMODE_HEXONCE << luIdA
+                            << ", IdB = "       << CgsDev::E_PRINTMODE_HEXONCE << luIdB
+                            << ", Tag = "       << lpDumpSpy->muTag << "\n";
+                    }
+                }
+                // Streamed on the console; plain-literal per this file's standing convention.
+                CGS_ASSERT(liTag < lpQueue->GetLength(),
+                           "\nInvalid contact pair ID - please tell Andy or Graham and include the debug output above!");   // .cpp:2112
+                // fire-and-continue INTO the emit with the bad tag, as shipped.
+            }
+
+            const PhysicsSimulationIO::InAddPotentialContact& lrEvent = lpQueue->GetEvent(liTag);   // `bl sub_8259D258`
+            const f32 lfTimeStep = mpSimulation->GetTimeStep();                                      // `lfs 0xA0`
+
+            PhysicsSimulationIO::OutContactSpy lEvent = {};   // zero the pad lanes the per-component stores below leave
+            lEvent.mFrictionStress.x = lpSpy->mForceT.x * lfTimeStep;   // spy +0x50 row * splat(ts)
+            lEvent.mFrictionStress.y = lpSpy->mForceT.y * lfTimeStep;
+            lEvent.mFrictionStress.z = lpSpy->mForceT.z * lfTimeStep;
+            lEvent.mNormalStress.x   = lpSpy->mForceN.x * lfTimeStep;   // spy +0x40 row * splat(ts)
+            lEvent.mNormalStress.y   = lpSpy->mForceN.y * lfTimeStep;
+            lEvent.mNormalStress.z   = lpSpy->mForceN.z * lfTimeStep;
+            lEvent.mNormal   = lrEvent.mNormal;                         // drain event +0x20
+            lEvent.mPointOnA = lrEvent.mPointOnA;                       // drain event +0x00
+            lEvent.mPointOnB = lrEvent.mPointOnB;                       // drain event +0x10
+            // The two ids resolve through the spy's tail pointers (the relocated event
+            // w-lane RigidBody* -- contact.h's 272 tail) and each body's slot tag.
+            lEvent.mIDA  = mBodyData.GetGameID(static_cast<s32>(lpSpy->mpBodyA->GetTag()));   // h:585/h:586
+            lEvent.mIDB  = mBodyData.GetGameID(static_cast<s32>(lpSpy->mpBodyB->GetTag()));   // h:585/h:586
+            lEvent.muTag = lrEvent.muTag;                               // drain event +0x4C
+
+            const bool lbAdded = lpOutput->GetContactSpyQueue()->AddEventSafe(lEvent);
+            if (!lbAdded && (CgsDev::Message::gxMessageFilterFlags & 1))
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "Warning: Physics simulation contact spy queue full. Some contacts were not output";
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::AddJointSpiesToOutputQueue @ 0x828A58E0   (267 instructions)
+    // ⚠️ An .ida-exports HOLE -- transcribed from the headless .i64 pull (the same route as
+    // ProcessInputBuffers / Destruct).
+    //
+    // Per JointJacobianSpy record: chase the joint's slot tag, look up its game id, scale
+    // the spy's force/torque rows by (m_TimeStep * 59.999996f) -- flt_820EA088, read off the
+    // image; the odd constant is the shipped rodata, not 60.0f -- and AddEvent an
+    // OutJointSpy. The scale splat is hoisted above the loop, as the console hoists it.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::AddJointSpiesToOutputQueue(PhysicsSimulationIO::OutputBuffer* lpOutput)
+    {
+        PhysicsSimulationIO::OutputBuffer::OutJointSpyQueue* const lpQueue =
+            lpOutput->GetJointSpyQueue();                               // `bl sub_8259F1C8`
+
+        // Diagnostic: a spy record per active joint at most. Streamed on the console
+        // ("Active joints: <n> Joint Spies: <n>\n"); plain-literal here.
+        const bool lbCountsSane =
+            mpSimulation->GetActiveJointCount() >= mpSimulation->GetJointSpyCount();   // `lwz 0x50` vs `lwz 0x70`
+        if (!lbCountsSane)
+        {
+            CGS_ASSERT(lbCountsSane, "Active joints: ");                // .cpp:2180 -- fire-and-continue
+        }
+
+        const f32 lfScale = mpSimulation->GetTimeStep() * 59.999996f;   // `lfs 0xA0` * flt_820EA088, splat
+        const s32 liNumSpies = static_cast<s32>(mpSimulation->GetJointSpyCount());
+        for (s32 liSpy = 0; liSpy < liNumSpies; ++liSpy)
+        {
+            const rw_physics::JointJacobianSpy* const lpSpy = mpSimulation->GetJointSpy(liSpy);
+
+            const s32 liJointIndex = static_cast<s32>(lpSpy->mpJoint->GetTag());   // `lwz 0x18(joint)`
+            CGS_ASSERT(liJointIndex != -1, "liJointIndex != -1");       // .cpp:2220 -- fire-and-continue
+
+            // Streamed on the console (" Joint ptr: <p> Joint Index: <i> Child ptr: <c>
+            // Parent ptr: <p>\n" -- the two body pointers read but only streamed);
+            // plain-literal here, so nothing checked is dropped.
+            const bool lbSlotUsed = mJointData.IsSlotUsed(liJointIndex);   // `lbz 0x4700+idx`
+            if (!lbSlotUsed)
+            {
+                CGS_ASSERT(lbSlotUsed, " Joint ptr: ");                 // .cpp:2226 -- fire-and-continue
+            }
+
+            PhysicsSimulationIO::OutJointSpy lEvent = {};      // zero the pad lanes
+            lEvent.mID = mJointData.GetGameID(liJointIndex).muId;       // h:612/h:613
+            lEvent.mLinearStress.x  = lpSpy->mForce.x  * lfScale;       // spy +0x00 row
+            lEvent.mLinearStress.y  = lpSpy->mForce.y  * lfScale;
+            lEvent.mLinearStress.z  = lpSpy->mForce.z  * lfScale;
+            lEvent.mAngularStress.x = lpSpy->mTorque.x * lfScale;       // spy +0x10 row
+            lEvent.mAngularStress.y = lpSpy->mTorque.y * lfScale;
+            lEvent.mAngularStress.z = lpSpy->mTorque.z * lfScale;
+            lpQueue->AddEvent(lEvent);                                  // `bl 0x828A1C30`
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::AddDriveSpiesToOutputQueue @ 0x828A5D10   (72 instructions)
+    //
+    // Per DriveJacobianSpy record: chase the drive's slot tag and push the record verbatim
+    // -- rows UNSCALED (the joint twin's *ts*59.999996f has no counterpart here; the vendor
+    // spy already emitted force/torque), the two separations copied straight through.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::AddDriveSpiesToOutputQueue(PhysicsSimulationIO::OutputBuffer* lpOutput)
+    {
+        PhysicsSimulationIO::OutputBuffer::OutDriveSpyQueue* const lpQueue =
+            lpOutput->GetDriveSpyQueue();                               // the 0x8259F270 accessor
+
+        const s32 liNumSpies = static_cast<s32>(mpSimulation->GetDriveSpyCount());   // `lwz 0x78`
+        for (s32 liSpy = 0; liSpy < liNumSpies; ++liSpy)
+        {
+            const rw_physics::DriveJacobianSpy* const lpSpy = mpSimulation->GetDriveSpy(liSpy);
+
+            const s32 liDriveIndex = static_cast<s32>(lpSpy->mpDrive->GetTag());   // `lwz 0x18(drive)`
+
+            PhysicsSimulationIO::OutDriveSpy lEvent = {};      // zero the pad lanes
+            lEvent.mID = mDriveData.GetGameID(liDriveIndex).muId;       // h:648/h:649
+            lEvent.mLinearStress.x  = lpSpy->mForce.x;                  // spy +0x00 row (whole-lane stvx)
+            lEvent.mLinearStress.y  = lpSpy->mForce.y;
+            lEvent.mLinearStress.z  = lpSpy->mForce.z;
+            lEvent.mAngularStress.x = lpSpy->mTorque.x;                 // spy +0x10 row
+            lEvent.mAngularStress.y = lpSpy->mTorque.y;
+            lEvent.mAngularStress.z = lpSpy->mTorque.z;
+            lEvent.mLinearDistanceToKey  = lpSpy->mSeparation;          // `lfs 0x20(spy)`
+            lEvent.mAngularDistanceToKey = lpSpy->mAngSeparation;       // `lfs 0x24(spy)`
+            lpQueue->AddEvent(lEvent);                                  // `bl 0x828A1D90`
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::AddActiveBodiesToOutputQueue @ 0x828A6CC8   (65 instructions)
+    //
+    // Sweep ALL 200 slots (not a list walk): for each in-use slot, clamp the body's centre
+    // of mass into the world bounds [KV_MIN_POSITION, KV_MAX_POSITION] -- xyz only; the
+    // console's `vmaxfp/vminfp` then `vrlimi128 ...,1,0` preserves the w lane, which packs
+    // RigidBody::mId, and the xyz-only SetPosition IS that preservation on the host -- and
+    // for each ACTIVE body push an OutUpdateRigidBody snapshot.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::AddActiveBodiesToOutputQueue(PhysicsSimulationIO::OutputBuffer* lpOutput)
+    {
+        PhysicsSimulationIO::OutputBuffer::OutUpdateRigidBodyQueue* const lpQueue =
+            lpOutput->GetUpdateRigidBodyQueue();                        // `bl sub_8289F130`
+
+        for (s32 liSlot = 0; liSlot < RigidBodyData::KI_SIZE; ++liSlot)
+        {
+            if (!mBodyData.IsSlotUsed(liSlot))      // the 64-bit sentinel compare vs qword_82F33E18
+            {
+                continue;
+            }
+
+            // The console reads maRWBodies[slot] raw here; the checked accessor's h:594/h:595
+            // tripwires are provably true under the IsSlotUsed guard (the GetJoint folding
+            // precedent in ProcessRemoveRigidBodyQueue above).
+            rw_physics::RigidBody* const lpBody = mBodyData.GetRigidBody(liSlot);
+            CGS_ASSERT(lpBody != NULL, "lpRigidBody != NULL");          // .cpp:2371 -- fire-and-continue
+
+            rw::math::vpu::Vector3 lPosition = lpBody->GetPosition();   // `lvx128 body+0x10` (mCom row)
+            lPosition.x = (lPosition.x < KV_MIN_POSITION.x) ? KV_MIN_POSITION.x : (lPosition.x > KV_MAX_POSITION.x) ? KV_MAX_POSITION.x : lPosition.x;
+            lPosition.y = (lPosition.y < KV_MIN_POSITION.y) ? KV_MIN_POSITION.y : (lPosition.y > KV_MAX_POSITION.y) ? KV_MAX_POSITION.y : lPosition.y;
+            lPosition.z = (lPosition.z < KV_MIN_POSITION.z) ? KV_MIN_POSITION.z : (lPosition.z > KV_MAX_POSITION.z) ? KV_MAX_POSITION.z : lPosition.z;
+            lpBody->SetPosition(lPosition);                             // xyz only -- w keeps mId
+
+            if (lpBody->GetState() & rw_physics::ACTIVE_BODY)           // `lwz 0x8C` & 4
+            {
+                PhysicsSimulationIO::OutUpdateRigidBody lEvent = {};   // zero mIDPad; operator= fills the body
+                lEvent.mRigidBody = *lpBody;                            // `bl RigidBody::operator=` (frame+0x10)
+                lEvent.mID        = mBodyData.GetGameID(liSlot);        // `ld` maGameIDs[slot] -> frame+0x00
+                lpQueue->AddEvent(lEvent);                              // `bl 0x828A66F8`
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::QuerySimulationToSetFlags @ 0x828A0428   (248 instructions)
+    //
+    // Partition the simulation's active-body ring by sleep counter, seeding the closure:
+    //   * clear mNeedFreeze and mSeen; miActive := -1 (the chain-terminator);
+    //   * walk the ring from m_ActiveRB_Anchor (a circular intrusive list -- GetRight until
+    //     back at the anchor);
+    //   * a body still "warm" (mCool < the simulation's cool-down ceiling) is pushed onto
+    //     the miActive chain through mpiNextIndex and bit-set in mSeen;
+    //   * a body "cold" (mCool >= ceiling) is bit-set in mNeedFreeze -- a freeze CANDIDATE,
+    //     which ActiveSetClosure can still rescue (its UnSetBit path) before
+    //     ActivateAndFreezeAsNeeded acts on what remains.
+    // ⚠️ mDone is deliberately NOT touched here -- ActiveSetClosure clears it itself.
+    //
+    // The two SetBit calls carry the container's inlined bounds tripwires on the console
+    // (CgsBitArray.h:222, same condition as the .cpp:2941 assert just above them); per the
+    // committed CgsBitArray.h policy (bounds asserts live with callers, and duplicates of
+    // an immediately-preceding check are folded) they are not re-emitted.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::QuerySimulationToSetFlags()
+    {
+        mNeedFreeze.UnSetAll();          // 4x `std 0` @ +0x47E8
+        miActive = -1;                   // `stw -1, 0x47E0`
+        mSeen.UnSetAll();                // 4x `std 0` @ +0x4828
+
+        const rw_physics::RigidBody* const lpAnchor = mpSimulation->GetActiveBodyAnchor();   // `lwz 0x28(sim)`
+        const u32 luCoolDown = mpSimulation->GetCoolDown();                                  // `lwz 0xA4(sim)`
+
+        for (const rw_physics::RigidBody* lpBody = lpAnchor->GetRight();   // `lwz 0x2C(anchor)`
+             lpBody != lpAnchor;
+             lpBody = lpBody->GetRight())
+        {
+            const s32 liTag = static_cast<s32>(lpBody->GetTag());          // `lwz 0x6C(body)`
+
+            // The slot table and the simulation must agree about who lives where.
+            CGS_ASSERT(mBodyData.GetRigidBody(liTag) == lpBody, "Rigid Body Mapping Error!\n");   // .cpp:2940
+            CGS_ASSERT(liTag < RigidBodyData::KI_SIZE, "Body tag is not a valid part index.");    // .cpp:2941 (streamed; plain-literal)
+
+            if (lpBody->GetCoolDown() < luCoolDown)      // `lwz 0xAC(body)` -- still warm
+            {
+                mpiNextIndex[liTag] = miActive;          // push onto the closure's seed chain
+                miActive = liTag;
+                mSeen.SetBit(liTag);                     // (BitArray.h:222 tripwire folded -- see banner)
+            }
+            else                                         // cold long enough -- freeze candidate
+            {
+                mNeedFreeze.SetBit(liTag);
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ActiveSetClosure @ 0x828A0808   (1,184 instructions)
+    //
+    // Flood-fill the active set to closure over the three pair sets, pass by pass:
+    //   * pass 0 walks the miActive seed chain QuerySimulationToSetFlags built;
+    //   * every body reached is marked mDone; on passes > 0, a body carrying a
+    //     mNeedFreeze bit is RESCUED (the bit cleared -- something active reached it),
+    //     while a body without one joins the miNeedThaw chain (it was asleep and must wake);
+    //   * each body's partners in mpContactPairs / mpJointedPairs / mpDrivenPairs (the
+    //     inlined PairSet::LinkIterator walk -- see pairset.h's banner) that are not STATIC,
+    //     not already done and not already seen join the NEXT pass's chain and mSeen;
+    //     contact links additionally have their pair flags cleared and count against the
+    //     pair budget;
+    //   * the next pass walks exactly the newly-discovered set; the fill ends when a pass
+    //     discovers nothing (or the depth cap trips).
+    //
+    // ⚠️⚠️ lpIslandGenerator IS DEAD, AND THAT IS THE SHIPPED TRUTH -- r4 is never read by
+    // the X360 body (the brief that commissioned this wave claimed the union-find was
+    // inlined here; it is not -- see CgsIslandGenerator.h's banner for the full evidence).
+    // The parameter stays for the DWARF signature; nothing here may grow a use of it
+    // without a new witness.
+    //
+    // ⚠️ The three limit asserts are shipped dev tripwires, transcribed with their exact
+    // semantics: the depth warning fires one pass BEFORE the cap; the body cap fires only
+    // on passes > 0 and BAILS OUT; the pair cap (contact links only) always bails.
+    // ⚠️ The three partner walks are NOT identical and are not harmonised: the contact walk
+    // reads the partner's state BEFORE the mDone test and burns pair budget + clears flags;
+    // the joint/drive walks test mDone FIRST and touch no budget.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ActiveSetClosure(IslandGenerator* lpIslandGenerator, s32 liMaxDepth,
+                                                   s32 liMaxPairs, s32 liMaxBodies)
+    {
+        (void)lpIslandGenerator;   // dead on the console -- see the banner
+
+        mDone.UnSetAll();          // 4x `std 0` @ +0x4808
+        miNeedThaw = -1;           // `stw -1, 0x47DC`
+
+        s32 liNumBodies = 0;       // var_C8 -- total bodies processed, vs liMaxBodies
+        s32 liNumPairs  = 0;       // var_CC -- contact links crossed, vs liMaxPairs
+        s32 liDepth     = 0;       // var_1A0 -- pass counter, vs liMaxDepth
+        s32 liCursor    = miActive;
+
+        if (liMaxDepth < 0)
+        {
+            return;                // `blt` at entry
+        }
+
+        while (liCursor != -1)
+        {
+            CGS_ASSERT(liDepth != liMaxDepth - 1, "About to run out of depth\n");   // .cpp:3021 -- fire-and-continue
+            s32 liPendingHead = -1;    // var_1A8 -- the next pass's chain
+
+            do
+            {
+                ++liNumBodies;
+                if (liNumBodies > liMaxBodies)
+                {
+                    if (liDepth > 0)
+                    {
+                        CGS_ASSERT(liNumBodies <= liMaxBodies, "Body limit reached\n");   // .cpp:3030
+                        return;
+                    }
+                }
+
+                mDone.SetBit(liCursor);                       // (BitArray.h:222 tripwire -- provably in range)
+                const s32 liNext = mpiNextIndex[liCursor];    // saved BEFORE the thaw-push overwrites it
+
+                if (liDepth > 0)
+                {
+                    if (mNeedFreeze.IsBitSet(liCursor))       // (:203 tripwire)
+                    {
+                        mNeedFreeze.UnSetBit(liCursor);       // rescued -- something active reached it (:241)
+                    }
+                    else
+                    {
+                        mpiNextIndex[liCursor] = miNeedThaw;  // asleep body dragged in -- queue the wake
+                        miNeedThaw = liCursor;
+                    }
+                }
+
+                // ---- contact partners (budgeted; flags cleared) -----------------------------
+                for (rw_physics::PairSet::LinkIterator lIt = mpContactPairs->PartLinksBegin(liCursor);
+                     lIt != mpContactPairs->PartLinksEnd(); ++lIt)
+                {
+                    const s32 liPartner = lIt.GetOtherPartIndex();
+                    // Partner state read BEFORE the mDone test (this walk only). h:594/h:595
+                    // fire from this frame on the console; here they live in the accessor.
+                    const bool lbStatic =
+                        (mBodyData.GetRigidBody(liPartner)->GetState() & rw_physics::STATIC_BODY) != 0;
+
+                    if (mDone.IsBitSet(liPartner))            // (:203 tripwire)
+                    {
+                        continue;
+                    }
+                    ++liNumPairs;
+                    if (liNumPairs > liMaxPairs)
+                    {
+                        CGS_ASSERT(liNumPairs <= liMaxPairs, "Pair limit reached\n");   // .cpp:3075
+                        return;
+                    }
+                    mpContactPairs->SetPairFlags(lIt.GetPairIndex(), 0);   // `stw 0` on link0's flags
+                    if (lbStatic)
+                    {
+                        continue;                             // a static partner absorbs, never joins
+                    }
+                    if (mSeen.IsBitSet(liPartner))            // (:203 tripwire)
+                    {
+                        continue;
+                    }
+                    mpiNextIndex[liPartner] = liPendingHead;  // join the NEXT pass's chain
+                    liPendingHead = liPartner;
+                    mSeen.SetBit(liPartner);                  // (:222 tripwire)
+                }
+
+                // ---- jointed partners (mDone first; no budget, no flags) --------------------
+                for (rw_physics::PairSet::LinkIterator lIt = mpJointedPairs->PartLinksBegin(liCursor);
+                     lIt != mpJointedPairs->PartLinksEnd(); ++lIt)
+                {
+                    const s32 liPartner = lIt.GetOtherPartIndex();
+                    if (mDone.IsBitSet(liPartner))
+                    {
+                        continue;
+                    }
+                    if ((mBodyData.GetRigidBody(liPartner)->GetState() & rw_physics::STATIC_BODY) != 0)
+                    {
+                        continue;
+                    }
+                    if (mSeen.IsBitSet(liPartner))
+                    {
+                        continue;
+                    }
+                    mpiNextIndex[liPartner] = liPendingHead;
+                    liPendingHead = liPartner;
+                    mSeen.SetBit(liPartner);
+                }
+
+                // ---- driven partners (identical to the jointed walk) ------------------------
+                for (rw_physics::PairSet::LinkIterator lIt = mpDrivenPairs->PartLinksBegin(liCursor);
+                     lIt != mpDrivenPairs->PartLinksEnd(); ++lIt)
+                {
+                    const s32 liPartner = lIt.GetOtherPartIndex();
+                    if (mDone.IsBitSet(liPartner))
+                    {
+                        continue;
+                    }
+                    if ((mBodyData.GetRigidBody(liPartner)->GetState() & rw_physics::STATIC_BODY) != 0)
+                    {
+                        continue;
+                    }
+                    if (mSeen.IsBitSet(liPartner))
+                    {
+                        continue;
+                    }
+                    mpiNextIndex[liPartner] = liPendingHead;
+                    liPendingHead = liPartner;
+                    mSeen.SetBit(liPartner);
+                }
+
+                liCursor = liNext;
+            }
+            while (liCursor != -1);
+
+            ++liDepth;                    // one pass done; the discoveries become the chain
+            liCursor = liPendingHead;
+            if (liDepth > liMaxDepth)
+            {
+                return;                   // `ble` back to the top otherwise
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ActivateAndFreezeAsNeeded @ 0x828A6DD0   (249 instructions)
+    //
+    // Act on the partition the two functions above computed:
+    //   * PHASE 1 -- walk the miNeedThaw chain and Activate every body on it that is not
+    //     already ACTIVE. ⚠️ The simulation is reached THROUGH THE BODY here
+    //     (body->GetSimulation()->ActivateRigidBody) where phase 2 uses mpSimulation --
+    //     both shapes are the console's, not harmonised.
+    //   * PHASE 2 -- for every body still bit-set in mNeedFreeze: Freeze it (unless already
+    //     FROZEN) and emit an OutUpdateRigidBody snapshot so the game sees the body's final
+    //     resting state. The bit iteration is BitArray::GetFirst/GetNextNonZeroBit (the
+    //     console open-codes the word-skip + bit-probe; value-identical).
+    //   * then clear mNeedFreeze and reset miNeedThaw.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ActivateAndFreezeAsNeeded(PhysicsSimulationIO::OutputBuffer* lpOutput)
+    {
+        PhysicsSimulationIO::OutputBuffer::OutUpdateRigidBodyQueue* const lpQueue =
+            lpOutput->GetUpdateRigidBodyQueue();                        // `bl sub_8289F130`
+
+        // ---- phase 1: the thaw chain ----------------------------------------------------
+        for (s32 liIndex = miNeedThaw; liIndex != -1; liIndex = mpiNextIndex[liIndex])
+        {
+            rw_physics::RigidBody* const lpBody = mBodyData.GetRigidBody(liIndex);   // `bl 0x8289D020`
+            if (!(lpBody->GetState() & rw_physics::ACTIVE_BODY))
+            {
+                lpBody->GetSimulation()->ActivateRigidBody(lpBody);     // `lwz 0x4C(body)` as this
+            }
+        }
+
+        // ---- phase 2: the freeze set ----------------------------------------------------
+        for (s32 liIndex = mNeedFreeze.GetFirstNonZeroBit(); liIndex >= 0;
+             liIndex = mNeedFreeze.GetNextNonZeroBit(liIndex))
+        {
+            // h:594/h:595 fire from this frame on the console (the inlined checked slot
+            // read); here they live in the accessor's own body.
+            rw_physics::RigidBody* const lpBody = mBodyData.GetRigidBody(liIndex);
+            if (!(lpBody->GetState() & rw_physics::FROZEN_BODY))        // `lwz 0x8C` & 2
+            {
+                mpSimulation->FreezeRigidBody(lpBody);                  // `lwz 0x4864(this)` as this
+            }
+
+            PhysicsSimulationIO::OutUpdateRigidBody lEvent = {};   // zero mIDPad; operator= fills the body
+            lEvent.mRigidBody = *lpBody;                                // `bl RigidBody::operator=` first...
+            lEvent.mID        = mBodyData.GetGameID(liIndex);           // ...then the raw id re-read
+                                                                        // (GetGameID's h:585/h:586 are
+                                                                        // provably true under the reads above)
+            lpQueue->AddEvent(lEvent);                                  // `bl 0x828A66F8`
+        }
+
+        mNeedFreeze.UnSetAll();     // 4x `std 0`
+        miNeedThaw = -1;            // `stw -1, 0x47DC`
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::Update @ 0x828A74D0   (127 instructions) -- ONE TICK.
+    //
+    // The call order below is the console's own and is load-bearing end to end: drains under
+    // the input read-lock; the closure between the perf-mon phase brackets; spy-counter
+    // resets around SimulationUpdate; the output emitters under the output write-lock, with
+    // the input re-locked just for the contact-spy join.
+    //
+    // ⚠️ lpUnusedStack (the second IOBufferStack) is accepted and never read -- dead r5 in
+    // the shipped body. ⚠️ The two SimulationUpdate-bracketing resets are the DWARF's own
+    // HackResetSpyCountHack / ResetContactStack (simulation.h :294/:286), inlined by the
+    // console as the +0x68/+0x78/+0x70 and +0x64/+0x68 stores.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::Update(CgsModule::IOBufferStack* lpTempStack,
+                                         CgsModule::IOBufferStack* lpUnusedStack,
+                                         const PhysicsSimulationIO::InputBuffer* lpInput,
+                                         PhysicsSimulationIO::OutputBuffer* lpOutput)
+    {
+        (void)lpUnusedStack;   // dead on the console
+
+        CgsDev::PerfMonCpu::StartMonitor(miTimeInSim1);        // "Sim setup"
+        lpInput->LockForRead();
+        ProcessInputBuffers(lpInput);
+
+        const f32 lfNewStep = lpInput->GetTimeStep();          // `bl sub_8289E260` -- the READ-lock const overload
+        CGS_ASSERT(lfNewStep > 0.0f, "lfNewStep > 0.0f");                              // .cpp:794
+        CGS_ASSERT(lpInput->GetMaxIterations() > 0, "lpInput->GetMaxIterations() > 0");   // .cpp:867
+        mpSimulation->SetMaxIteration(static_cast<u32>(lpInput->GetMaxIterations()));  // `stw 0xAC(sim)`
+
+        lpInput->UnlockForRead();
+        lpOutput->LockForWrite();
+        CgsDev::PerfMonCpu::StopMonitor(miTimeInSim1);
+        CgsDev::PerfMonCpu::StartMonitor(miTimeInSim2);        // "Sim freezing"
+
+        IslandGenerator* lpIslandGenerator = NULL;
+        lpTempStack->CreateIOBuffer(&lpIslandGenerator, NULL); // `bl 0x8289E0D0` -- Alloc(0x4B2)
+        QuerySimulationToSetFlags();
+        ActiveSetClosure(lpIslandGenerator, 100, 1024, 200);   // `li 0x64 / 0x400 / 0xC8`
+        ActivateAndFreezeAsNeeded(lpOutput);
+        mpContactPairs->ClearAll();
+
+        CgsDev::PerfMonCpu::StopMonitor(miTimeInSim2);
+        CgsDev::PerfMonCpu::StartMonitor(miTimeInSim3);        // "Sim update"
+        mpSimulation->HackResetSpyCountHack();                 // `stw 0, 0x68/0x78/0x70`
+        mpSimulation->SimulationUpdate(lfNewStep);
+        CgsDev::PerfMonCpu::StopMonitor(miTimeInSim3);
+        CgsDev::PerfMonCpu::StartMonitor(miTimeInSim4);        // "Sim output"
+
+        lpOutput->SetTimeStepUsed(mpSimulation->GetTimeStep());                       // `lfs 0xA0(sim)`
+        lpOutput->SetMaxIterationsUsed(static_cast<s32>(mpSimulation->GetMaxIteration()));   // `lwz 0xAC(sim)`
+        AddActiveBodiesToOutputQueue(lpOutput);
+
+        lpInput->LockForRead();                                // re-locked JUST for the spy join
+        AddContactSpiesToOutputQueue(lpInput, lpOutput);
+        lpInput->UnlockForRead();
+
+        AddJointSpiesToOutputQueue(lpOutput);
+        AddDriveSpiesToOutputQueue(lpOutput);
+        lpOutput->UnlockForWrite();
+
+        mpSimulation->ResetContactStack();                     // `stw 0, 0x64/0x68`
+        CgsDev::PerfMonCpu::StopMonitor(miTimeInSim4);
+        lpTempStack->DestroyIOBuffer(&lpIslandGenerator);      // `bl 0x8289E190` -- Free(0x4B2)
+    }
+
+    // -------------------------------------------------------------------------------------
+    // PhysicsSimulationModule::ProcessInput @ 0x828A76D0   (33 instructions)
+    //
+    // The drain-only entry: no solver step, so a contact event arriving through this path
+    // would be generated against bodies that never simulate -- hence the emptiness assert.
+    // -------------------------------------------------------------------------------------
+    void PhysicsSimulationModule::ProcessInput(const PhysicsSimulationIO::InputBuffer* lpInput)
+    {
+        lpInput->LockForRead();
+        CGS_ASSERT(lpInput->GetAddContactQueue()->GetLength() == 0,
+                   "It's invalid to add contacts during a ProcessInput update");   // .cpp:961 -- fire-and-continue
+        ProcessInputBuffers(lpInput);
+        lpInput->UnlockForRead();
     }
 }

@@ -29,7 +29,19 @@ namespace PhysicsSimulationIO
         static_assert(offsetof(OutputBuffer, mfTimeStepUsed)        == 0x0004,  "mfTimeStepUsed @ +0x0004");
         static_assert(offsetof(OutputBuffer, muMaxIterationsUsed)   == 0x0008,  "muMaxIterationsUsed @ +0x0008");
         static_assert(offsetof(OutputBuffer, mUpdateRigidBodyQueue) == 0x0010,  "mUpdateRigidBodyQueue @ +0x0010");
-        static_assert(offsetof(OutputBuffer, mContactSpyQueue)      == 38432,   "mContactSpyQueue @ +0x9620");
+        // ⚠️ ADJACENCY PINS from here on (2026-08-06): OutUpdateRigidBody carries a full
+        // rw::physics::RigidBody whose five pointer lanes widen on x64, so the queues after it
+        // sit at console +0x9620/+0x1F430/+0x20040 ONLY on a 4-byte-pointer target. Each pin
+        // states the console chain in host-tracking form; a transposed pair still fails.
+        static_assert(offsetof(OutputBuffer, mContactSpyQueue) ==
+                      offsetof(OutputBuffer, mUpdateRigidBodyQueue) + sizeof(OutUpdateRigidBodyQueue),
+                      "mContactSpyQueue right after mUpdateRigidBodyQueue (console +0x9620 == 0x10 + 16+200*192)");
+        static_assert(offsetof(OutputBuffer, mJointSpyQueue) ==
+                      offsetof(OutputBuffer, mContactSpyQueue) + sizeof(OutContactSpyQueue),
+                      "mJointSpyQueue right after mContactSpyQueue (console +0x1F430 == 0x9620 + 16+800*112; GetJointSpyQueue @0x8259F1C8)");
+        static_assert(offsetof(OutputBuffer, mDriveSpyQueue) ==
+                      offsetof(OutputBuffer, mJointSpyQueue) + sizeof(OutJointSpyQueue),
+                      "mDriveSpyQueue right after mJointSpyQueue (console +0x20040 == 0x1F430 + 16+64*48; GetDriveSpyQueue @0x8259F270)");
     }
 
     // X360 0x825BD0A8. Read-lock guarded; returns the post-step time-step-used scalar (this+4).
@@ -64,17 +76,35 @@ namespace PhysicsSimulationIO
         return &mContactSpyQueue;
     }
 
-    // X360 0x8259F270. Write-lock (bit 3) guarded accessor returning the embedded OutDriveSpy
-    // output event-queue slice at +0x20040 (131136). The queue interior is not touched by this
-    // getter (its callers -- BrnPhysics::PhysicsModule::Update and
-    // CgsPhysics::PhysicsSimulationModule::AddDriveSpiesToOutputQueue -- own it), so a raw byte
-    // pointer to the attested offset is returned. (Sibling OutputBuffer::Destruct in
-    // CgsPhysicsSimulationModuleIO.cpp clears +131144 == queue+8, confirming the queue base at
-    // +0x20040.)
-    void* OutputBuffer::GetOutDriveSpyQueue()
+    // X360 0x8289F130. Write-lock (bit 3) guarded accessor returning the first embedded
+    // output queue, &mUpdateRigidBodyQueue (+0x10). Both OutUpdateRigidBody emitters
+    // (AddActiveBodiesToOutputQueue @0x828A6CDC, ActivateAndFreezeAsNeeded @0x828A6DE8)
+    // open with `bl sub_8289F130`.
+    OutputBuffer::OutUpdateRigidBodyQueue* OutputBuffer::GetUpdateRigidBodyQueue()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        return reinterpret_cast<u8*>(this) + 0x20040;   // +131136
+        return &mUpdateRigidBodyQueue;
+    }
+
+    // X360 0x8259F1C8. Write-lock (bit 3) guarded accessor returning &mJointSpyQueue
+    // (console +0x1F430 -- the middle entry of the 0x8259F120 + k*0xA8 spy-accessor block).
+    // Sole in-scope caller: AddJointSpiesToOutputQueue @0x828A5900.
+    OutputBuffer::OutJointSpyQueue* OutputBuffer::GetJointSpyQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mJointSpyQueue;
+    }
+
+    // X360 0x8259F270. Write-lock (bit 3) guarded accessor returning &mDriveSpyQueue
+    // (console +0x20040). ⭐ RETYPED 2026-08-06 from the raw-byte-offset GetOutDriveSpyQueue
+    // -- see the header note; the console offset stopped being the host offset the moment
+    // OutUpdateRigidBody's payload widened, and the adjacency pin in _AssertLayout now
+    // carries what the 0x20040 literal used to claim. (Sibling OutputBuffer::Destruct clears
+    // console +131144 == this queue's miLength, confirming the base.)
+    OutputBuffer::OutDriveSpyQueue* OutputBuffer::GetDriveSpyQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mDriveSpyQueue;
     }
 }
 }

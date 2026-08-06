@@ -100,6 +100,59 @@ public:
     // (walk liPartA's bucket for the link whose sibling is liPartB) and release it.
     PairSet* UnlinkParts(int liPartA, int liPartB);
 
+    // -------------------------------------------------------------------------------------
+    // ⭐ ADDITIVE GROW 2026-08-06 (the game-side closure wave): the DWARF's bucket-walk API
+    // (pairset.h:103/:104/:92 + the nested LinkIterator :153..:185), witnessed as the inline
+    // the console folded into CgsPhysics::PhysicsSimulationModule::ActiveSetClosure
+    // @0x828A0808 -- three identical walks (contact/jointed/driven sets):
+    //   * begin: `lwz r10,4(set)` + `lwzx head, r10, 4*part`   == m_linkLists[part];
+    //   * end/compare: the {PairSet*, cursor} pair is compared against {set, -1}
+    //     (0x828A0C48..0x828A0C5C -- BOTH words, which is operator!= on the two-field
+    //     iterator struct, not a bare index compare);
+    //   * partner: `slwi r11,cur,4; xori r11,0x10; lwzx partner,(links)` ==
+    //     m_links[cur ^ 1].partIndex == GetOtherPartIndex();
+    //   * advance: `lwz next, 8(links + 16*cur)` == m_links[cur].next;
+    //   * flags clear: `extlwi r11,cur,27,4` == (cur << 4) & ~0x1F == 32 * (cur >> 1)
+    //     then `stw 0, 4(links + that)` == m_links[2 * GetPairIndex()].flags = 0 ==
+    //     SetPairFlags(GetPairIndex(), 0) -- the LINK0 slot, proving the >>1 in
+    //     GetPairIndex and the *2 in SetPairFlags.
+    // Method NAMES and shapes are the DWARF's; member spellings stay this header's
+    // (the DWARF-name mapping is the banner above: miData == `flags`, mpHeads ==
+    // `m_linkLists`, ... -- the standing no-rename rule).
+    // ⚠️ Cursor width: the DWARF types m_cur uint32_t with (u32)-1 as the end sentinel; the
+    // console's compare is `cmpwi cur, -1`. s32 here, matching this header's miNext/-1
+    // convention -- value-identical.
+    // -------------------------------------------------------------------------------------
+    struct LinkIterator
+    {
+        LinkIterator(PairSet* lpPairSet, s32 liCur) : mpPairSet(lpPairSet), miCur(liCur) {}
+
+        // DWARF :166 -- the pair this link belongs to (link indices are 2*pair / 2*pair+1).
+        s32 GetPairIndex() const { return miCur >> 1; }
+
+        // DWARF :167 -- the OTHER part of the pair: the sibling link's filing bucket.
+        s32 GetOtherPartIndex() const { return mpPairSet->mpLinks[miCur ^ 1].miPart; }
+
+        // DWARF :171 -- chase the bucket's `next` thread.
+        LinkIterator& operator++() { miCur = mpPairSet->mpLinks[miCur].miNext; return *this; }
+
+        // DWARF :172 -- the console compares BOTH fields (see the banner).
+        bool operator!=(const LinkIterator& lrOther) const
+        { return mpPairSet != lrOther.mpPairSet || miCur != lrOther.miCur; }
+
+    private:
+        PairSet* mpPairSet;   // DWARF :184 m_pairSet
+        s32      miCur;       // DWARF :185 m_cur (link index; -1 = end)
+    };
+
+    // DWARF :103 / :104. Begin = the part's bucket head; end = {this, -1}.
+    LinkIterator PartLinksBegin(s32 liPart) { return LinkIterator(this, mpHeads[liPart]); }
+    LinkIterator PartLinksEnd()             { return LinkIterator(this, -1); }
+
+    // DWARF :92 -- write the pair's payload/flags word (carried on link0; see the Link
+    // banner). The closure's only use stores 0.
+    void SetPairFlags(s32 liPairIndex, u32 luFlags) { mpLinks[2 * liPairIndex].miData = static_cast<s32>(luFlags); }
+
 private:
     Link* mpLinks;      // +0x00  base of the 2*miMaxPairs link array (points into this block)
     s32*  mpHeads;      // +0x04  base of the per-part bucket-head index array (-1 = empty)

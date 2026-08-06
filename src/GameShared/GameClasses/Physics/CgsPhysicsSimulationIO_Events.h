@@ -467,45 +467,78 @@ namespace PhysicsSimulationIO
     // An output "spy" report of a resolved contact, drained from the simulation back to the game.
     // Queued with capacity 800 in PhysicsSimulationIO::OutputBuffer (X360
     // EventQueue<OutContactSpy,800>::Construct @ 0x828A68B8, capacity 0x320). The event STRIDE
-    // *is* now X360-attested: the matching BaseEventQueue<OutContactSpy>::AddEvent @ 0x825E44C8
+    // *is* X360-attested: the matching BaseEventQueue<OutContactSpy>::AddEvent @ 0x825E44C8
     // and AddEventSafe @ 0x828A1B78 both copy the element with `li r9,0xE`/`mtctr r9` (14 ld/std
     // 64-bit block moves == 14*8 == 112 bytes) at a 112-byte stride (`mulli rX,rX,0x70` ==
-    // miLength*112). So this payload is sized to that attested 112-byte stride; 112 is still
-    // 16-byte aligned, so the Construct @ 0x828A68B8 stays store-for-store faithful (it only
-    // takes &maEvents[0] == this+0x10, stores N=800 and clears the count). Internal field layout
-    // is still NOT recovered (no DWARF/source), so it is modelled as an opaque byte span.
+    // miLength*112).
+    //
+    // ⭐ FIELDS RECOVERED 2026-08-06 (the game-side spy wave). The "no DWARF" clause of the old
+    // note here was FALSE -- the DWARF (CgsPhysicsSimulationModuleIO.h:373, :384..:391) names
+    // all eight members, and the PRODUCER pins every offset:
+    // PhysicsSimulationModule::AddContactSpiesToOutputQueue @0x828A4ED8 builds the event on its
+    // stack frame and each store lands where the DWARF order puts it --
+    //     +0x00 mFrictionStress <- spy mForceT * ts   (stvx var_110)
+    //     +0x10 mNormalStress   <- spy mForceN * ts   (stvx var_100)
+    //     +0x20 mNormal         <- drain event +0x20  (stvx var_E0)
+    //     +0x30 mPointOnA       <- drain event +0x00  (stvx var_E0+0x10... the four rows land
+    //     +0x40 mPointOnB       <- drain event +0x10   in DWARF field order)
+    //     +0x50 mIDA / +0x58 mIDB  (`std` x2 -- RigidBodyId handles resolved via body mTag)
+    //     +0x60 muTag           <- drain event +0x4C  (`stw`)
+    // 5*16 + 8 + 8 + 4 == 100 -> alignas(16) == the attested 112; pointer-free, host == console.
+    // The DWARF's SwingType-style helper methods (SwapEntityOrder :379 / Clear :382) have no
+    // X360 body or caller in the image and are not declared (the standing gating rule).
     struct alignas(16) OutContactSpy : public Event
     {
-        u8 macOpaquePayload[112];  // stride 112B X360-attested (AddEvent @0x825E44C8 / AddEventSafe @0x828A1B78); fields not recovered
+        rw::math::vpu::Vector3 mFrictionStress;  // @+0x00  DWARF :384 -- tangential impulse / ts
+        rw::math::vpu::Vector3 mNormalStress;    // @+0x10  DWARF :385 -- normal impulse / ts
+        rw::math::vpu::Vector3 mNormal;          // @+0x20  DWARF :386 -- the drain event's mNormal
+        rw::math::vpu::Vector3 mPointOnA;        // @+0x30  DWARF :387 -- the drain event's mPointOnA
+        rw::math::vpu::Vector3 mPointOnB;        // @+0x40  DWARF :388 -- the drain event's mPointOnB
+        u64                    mIDA;             // @+0x50  DWARF :389 (a CgsPhysics::RigidBodyId handle)
+        u64                    mIDB;             // @+0x58  DWARF :390
+        u32                    muTag;            // @+0x60  DWARF :391 -- the drain event's muTag
     };
 
     // An output "spy" report of per-frame vehicle drive state, drained from the simulation back to
     // the game. Queued with capacity 1 in PhysicsSimulationIO::OutputBuffer (X360
-    // EventQueue<OutDriveSpy,1>::Construct @ 0x828A6998). The event STRIDE *is* X360-attested here:
+    // EventQueue<OutDriveSpy,1>::Construct @ 0x828A6998). The event STRIDE *is* X360-attested:
     // the matching BaseEventQueue<OutDriveSpy>::AddEvent @ 0x828A1D90 copies each element as exactly
-    // eight 64-bit block moves (`li r9,8`; ld/std loop) at a 64-byte (0x40) stride
-    // (`slwi r10,r10,6` == miLength*64), i.e. sizeof(OutDriveSpy) == 64. So this payload is sized to
-    // that attested 64-byte stride. Internal field layout is still NOT recovered (no DWARF/source),
-    // so it is modelled as an opaque, 16-byte-aligned byte span; the Construct/AddEvent bodies remain
-    // store-for-store faithful regardless of the span's internal layout.
+    // eight 64-bit block moves at a 64-byte stride (`slwi r10,r10,6` == miLength*64).
+    //
+    // ⭐ FIELDS RECOVERED 2026-08-06 (the game-side spy wave) -- the "no DWARF" clause of the old
+    // note was FALSE: the DWARF (CgsPhysicsSimulationModuleIO.h:421..:427) names all five members,
+    // and the PRODUCER pins each offset -- PhysicsSimulationModule::AddDriveSpiesToOutputQueue
+    // @0x828A5D10 stores `std id` @+0x00, `stvx` spy mForce @+0x10, `stvx` spy mTorque @+0x20,
+    // `stfs` spy mSeparation @+0x30, `stfs` spy mAngSeparation @+0x34 (frame slots var_A0/-90/-80/
+    // -70/-6C). 16 + 16 + 16 + 4 + 4 -> alignas(16) == the attested 64; pointer-free.
     struct alignas(16) OutDriveSpy : public Event
     {
-        u8 macOpaquePayload[64];  // stride 64B X360-attested (AddEvent @ 0x828A1D90); fields not recovered
+        u64                    mID;                    // @+0x00  DWARF :423 (a CgsPhysics::DriveId handle)
+        u64                    mIDPad;                 // @+0x08  pad to the payload's 16-byte slot
+        rw::math::vpu::Vector3 mLinearStress;          // @+0x10  DWARF :424 -- the spy record's mForce row
+        rw::math::vpu::Vector3 mAngularStress;         // @+0x20  DWARF :425 -- the spy record's mTorque row
+        f32                    mLinearDistanceToKey;   // @+0x30  DWARF :426 -- the spy's mSeparation
+        f32                    mAngularDistanceToKey;  // @+0x34  DWARF :427 -- the spy's mAngSeparation
     };
 
     // An output "spy" report of a resolved constraint joint, drained from the simulation back to the
     // game. Queued with capacity 64 in PhysicsSimulationIO::OutputBuffer (X360
     // EventQueue<OutJointSpy,64>::Construct @ 0x828A6928, capacity 0x40). The event STRIDE *is*
-    // X360-attested here: the matching BaseEventQueue<OutJointSpy>::AddEvent @ 0x828A1C30 copies each
-    // element as exactly six 64-bit block moves (ctr == 6, ld/std loop == 48 bytes) at a 48-byte
-    // stride (`slwi r7,r11,1; add r11,r11,r7` == miLength*3, `slwi r11,r11,4` == *16 == miLength*48),
-    // i.e. sizeof(OutJointSpy) == 48. So this payload is sized to that attested 48-byte stride.
-    // Internal field layout is still NOT recovered (no DWARF/source), so it is modelled as an opaque,
-    // 16-byte-aligned byte span; the Construct/AddEvent bodies remain store-for-store faithful
-    // regardless of the span's internal layout.
+    // X360-attested: the matching BaseEventQueue<OutJointSpy>::AddEvent @ 0x828A1C30 copies each
+    // element as exactly six 64-bit block moves at a 48-byte stride (`miLength*3` then `*16`).
+    //
+    // ⭐ FIELDS RECOVERED 2026-08-06 (the game-side spy wave) -- the "no DWARF" clause of the old
+    // note was FALSE: the DWARF (CgsPhysicsSimulationModuleIO.h:404..:408) names all three members,
+    // and the PRODUCER pins each offset -- PhysicsSimulationModule::AddJointSpiesToOutputQueue
+    // @0x828A58E0 stores `std id` @+0x00 (var_E0), `stvx` spy mForce * (ts*59.999996f) @+0x10
+    // (var_D0), `stvx` spy mTorque * (ts*59.999996f) @+0x20 (var_C0).
+    // 16 + 16 + 16 == the attested 48; pointer-free, host == console.
     struct alignas(16) OutJointSpy : public Event
     {
-        u8 macOpaquePayload[48];  // stride 48B X360-attested (AddEvent @ 0x828A1C30); fields not recovered
+        u64                    mID;             // @+0x00  DWARF :406 (a CgsPhysics::JointId handle)
+        u64                    mIDPad;          // @+0x08  pad to the payload's 16-byte slot
+        rw::math::vpu::Vector3 mLinearStress;   // @+0x10  DWARF :407 -- spy mForce  * (ts * 59.999996f)
+        rw::math::vpu::Vector3 mAngularStress;  // @+0x20  DWARF :408 -- spy mTorque * (ts * 59.999996f)
     };
 
     // Remove a previously-added constraint joint from the simulation, addressed by its 8-byte joint
@@ -656,18 +689,29 @@ namespace PhysicsSimulationIO
     };
 
     // An output report pushing a rigid body's resolved per-frame state from the simulation back to
-    // the game. Queued in PhysicsSimulationIO::OutputBuffer. The event STRIDE *is* X360-attested:
+    // the game. Queued in PhysicsSimulationIO::OutputBuffer. The console STRIDE is X360-attested:
     // the matching BaseEventQueue<OutUpdateRigidBody>::AddEvent @ 0x828A66F8 copies the element at
-    // index miLength via `slwi r9,r11,1; add r11,r11,r9` (miLength*3), `slwi r11,r11,6` (*64) ==
-    // miLength*192 (a leading 8-byte ld/std of the Event base + a delegated
-    // rw::physics::RigidBody::operator=(dest+0x10, src+0x10) for the remainder == a full 192-byte
-    // element copy). So this payload is sized to that attested 192-byte stride. This is distinct
-    // from the 16-byte-input InUpdateRigidBody/192 above -- do NOT conflate. Internal field layout
-    // is still NOT recovered (no DWARF/source), so it is modelled as an opaque, 16-byte-aligned byte
-    // span; the AddEvent body stays store-for-store faithful regardless.
+    // miLength*192 -- a leading 8-byte ld/std of the Event base + a delegated
+    // rw::physics::RigidBody::operator=(dest+0x10, src+0x10) for the remainder.
+    //
+    // ⭐ FIELDS RECOVERED 2026-08-06 (the game-side spy wave) -- the "no DWARF" clause of the old
+    // note was FALSE: the DWARF (CgsPhysicsSimulationModuleIO.h:356..:359) names both members and
+    // types the payload through CgsRigidBody.h:33's `typedef RigidBody RigidBody` alias == the FULL
+    // rw::physics::RigidBody BY VALUE, exactly InUpdateRigidBody's shape (see it above). The two
+    // PRODUCERS pin both offsets: PhysicsSimulationModule::AddActiveBodiesToOutputQueue @0x828A6D90
+    // and ActivateAndFreezeAsNeeded @0x828A6F94 each build the event as
+    // `RigidBody::operator=(frame+0x10, body)` then `std gameId, frame+0x00`.
+    //
+    // ⚠️⚠️ THE HOST STRIDE IS NOT 192 AND MUST NOT BE PINNED TO 192 -- same rule, same reason as
+    // InUpdateRigidBody (the payload's five pointer lanes widen on x64; runtime queue element, not
+    // a serialized record; the queue machinery is sizeof-driven end to end). The pin below is the
+    // ADJACENCY form: 16 (id slot) + sizeof(RigidBody) == the attested 192 on the console's 4-byte
+    // ABI, and it tracks the widened body on the host.
     struct alignas(16) OutUpdateRigidBody : public Event
     {
-        u8 macOpaquePayload[192];  // stride 192B X360-attested (AddEvent @0x828A66F8); fields not recovered
+        u64                    mID;         // @+0x00  DWARF :358 (a CgsPhysics::RigidBodyId handle)
+        u64                    mIDPad;      // @+0x08  pad to the payload's 16-byte slot
+        rw::physics::RigidBody mRigidBody;  // @+0x10  DWARF :359 -- BY VALUE, the operator= target
     };
 
     // =====================================================================================
@@ -814,6 +858,38 @@ namespace PhysicsSimulationIO
     static_assert(offsetof(InAddPotentialContact, mDynamicFriction) == 68, "InAddPotentialContact::mDynamicFriction @+0x44 (drain `lfs 0x44(event)` -> Contact::mMud)");
     static_assert(offsetof(InAddPotentialContact, mRestitution)     == 72, "InAddPotentialContact::mRestitution @+0x48     (drain `lfs 0x48(event)` -> Contact::mRes)");
     static_assert(offsetof(InAddPotentialContact, muTag)            == 76, "InAddPotentialContact::muTag @+0x4C            (NOT read by the drain -- pinned off the producer @0x825A5618 `stw tag,0x12C(sp)` in its event image)");
+
+    // ---- 2026-08-06: the four OUTPUT events promoted from opaque spans (the spy wave) ------
+    // Same discipline; the constants are the PRODUCERS' own store offsets (the four
+    // PhysicsSimulationModule output emitters) plus the AddEvent-instantiation strides that
+    // pinned the old opaque spans. OutUpdateRigidBody is the one ADJACENCY pin, for exactly
+    // InUpdateRigidBody's reason (pointer-bearing payload).
+    static_assert(sizeof(OutContactSpy)                     == 112, "OutContactSpy stride 112 (AddEvent @0x825E44C8 / AddEventSafe @0x828A1B78 mulli 0x70)");
+    static_assert(offsetof(OutContactSpy, mFrictionStress)  ==   0, "OutContactSpy::mFrictionStress @+0x00 (emitter @0x828A4ED8 stvx of spy mForceT*ts)");
+    static_assert(offsetof(OutContactSpy, mNormalStress)    ==  16, "OutContactSpy::mNormalStress @+0x10   (emitter stvx of spy mForceN*ts)");
+    static_assert(offsetof(OutContactSpy, mNormal)          ==  32, "OutContactSpy::mNormal @+0x20         (emitter stvx of drain event mNormal)");
+    static_assert(offsetof(OutContactSpy, mPointOnA)        ==  48, "OutContactSpy::mPointOnA @+0x30       (emitter stvx of drain event mPointOnA)");
+    static_assert(offsetof(OutContactSpy, mPointOnB)        ==  64, "OutContactSpy::mPointOnB @+0x40       (emitter stvx of drain event mPointOnB)");
+    static_assert(offsetof(OutContactSpy, mIDA)             ==  80, "OutContactSpy::mIDA @+0x50            (emitter `std` of GetGameID(bodyA tag))");
+    static_assert(offsetof(OutContactSpy, mIDB)             ==  88, "OutContactSpy::mIDB @+0x58            (emitter `std` of GetGameID(bodyB tag))");
+    static_assert(offsetof(OutContactSpy, muTag)            ==  96, "OutContactSpy::muTag @+0x60           (emitter `stw` of drain event muTag +0x4C)");
+
+    static_assert(sizeof(OutJointSpy)                       ==  48, "OutJointSpy stride 48 (AddEvent @0x828A1C30 miLength*3 then *16)");
+    static_assert(offsetof(OutJointSpy, mID)                ==   0, "OutJointSpy::mID @+0x00              (emitter @0x828A58E0 `std` of JointData::GetGameID)");
+    static_assert(offsetof(OutJointSpy, mLinearStress)      ==  16, "OutJointSpy::mLinearStress @+0x10    (emitter stvx of spy mForce  * ts*59.999996f)");
+    static_assert(offsetof(OutJointSpy, mAngularStress)     ==  32, "OutJointSpy::mAngularStress @+0x20   (emitter stvx of spy mTorque * ts*59.999996f)");
+
+    static_assert(sizeof(OutDriveSpy)                       ==  64, "OutDriveSpy stride 64 (AddEvent @0x828A1D90 slwi 6)");
+    static_assert(offsetof(OutDriveSpy, mID)                ==   0, "OutDriveSpy::mID @+0x00                   (emitter @0x828A5D10 `std` of DriveData::GetGameID)");
+    static_assert(offsetof(OutDriveSpy, mLinearStress)      ==  16, "OutDriveSpy::mLinearStress @+0x10         (emitter stvx of spy mForce row)");
+    static_assert(offsetof(OutDriveSpy, mAngularStress)     ==  32, "OutDriveSpy::mAngularStress @+0x20        (emitter stvx of spy mTorque row)");
+    static_assert(offsetof(OutDriveSpy, mLinearDistanceToKey)  == 48, "OutDriveSpy::mLinearDistanceToKey @+0x30  (emitter `stfs` of spy mSeparation +0x20)");
+    static_assert(offsetof(OutDriveSpy, mAngularDistanceToKey) == 52, "OutDriveSpy::mAngularDistanceToKey @+0x34 (emitter `stfs` of spy mAngSeparation +0x24)");
+
+    static_assert(sizeof(OutUpdateRigidBody) == 16 + sizeof(rw::physics::RigidBody),
+                  "OutUpdateRigidBody = 16B id slot + the full RigidBody (X360: 16+176 == the attested 192 of AddEvent @0x828A66F8)");
+    static_assert(offsetof(OutUpdateRigidBody, mID)        ==  0, "OutUpdateRigidBody::mID @+0x00        (both emitters `std gameId, frame+0`)");
+    static_assert(offsetof(OutUpdateRigidBody, mRigidBody) == 16, "OutUpdateRigidBody::mRigidBody @+0x10 (both emitters RigidBody::operator=(frame+0x10, body))");
     // =====================================================================================
 }
 }

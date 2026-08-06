@@ -52,14 +52,21 @@
 // pairset}.h), so no ODR/class-key mismatch.
 namespace rw { namespace physics { class Simulation; class PairSet; class Joint; class Drive; struct RigidBody; } }
 
-// The per-frame input buffer the nineteen Process*Queue drains read. Forward-declared only:
-// CgsPhysicsSimulationModuleIO.h includes CgsPhysicsSimulationIO_Events.h, and this header keeps
-// that chain out of its ~30 includers on COMPILE-COST grounds alone. ⚠️ The reason recorded here
-// until 2026-08-04 -- "it would drag CgsRigidBody.h's RigidBodyId in and detonate the open ODR
-// fork with the struct declared below" -- died with that struct (task #141); this header now
+// The per-frame IO buffers the drains read and the Update-side emitters fill. Forward-declared
+// only: CgsPhysicsSimulationModuleIO.h includes CgsPhysicsSimulationIO_Events.h, and this header
+// keeps that chain out of its ~30 includers on COMPILE-COST grounds alone. ⚠️ The reason recorded
+// here until 2026-08-04 -- "it would drag CgsRigidBody.h's RigidBodyId in and detonate the open
+// ODR fork with the struct declared below" -- died with that struct (task #141); this header now
 // includes CgsRigidBody.h itself. The .cpp includes the full definition.
-// ⚠️ CLASS KEY IS `struct`, matching CgsPhysicsSimulationModuleIO.h.
-namespace CgsPhysics { namespace PhysicsSimulationIO { struct InputBuffer; } }
+// ⚠️ CLASS KEYS ARE `struct`, matching CgsPhysicsSimulationModuleIO.h.
+namespace CgsPhysics { namespace PhysicsSimulationIO { struct InputBuffer; struct OutputBuffer; } }
+
+// The per-frame IOBufferStack Update carves its IslandGenerator scratch out of, and the
+// generator itself. Forward-declared only (the .cpp includes both definitions); class keys
+// match their homes (CgsIOBufferStack.h `struct`; CgsIslandGenerator.h `struct`, per the
+// DWARF's own CgsRigidBody.h:24 declaration).
+namespace CgsModule  { struct IOBufferStack; }
+namespace CgsPhysics { struct IslandGenerator; }
 
 // The abstract resource allocator PhysicsSimulationModule::Prepare carves the simulation,
 // its workspace and the three pair sets out of.
@@ -377,8 +384,15 @@ namespace CgsPhysics
         //
         // Still deliberately absent, because nothing in scope calls them and their bodies are
         // not decoded: GetIndexFromDrive (h:222), SetTimeStep (h:227),
-        // ScaleOneDriveForTimeStep (h:233), GetGameID (h:237). Declaring them without bodies
-        // would trade one hollow shell for another.
+        // ScaleOneDriveForTimeStep (h:233). Declaring them without bodies would trade one
+        // hollow shell for another. (GetGameID left this list on 2026-08-06 -- see below.)
+
+        // DWARF h:237. ⭐ ADDED 2026-08-06 (the spy wave): a decoded body and a caller now
+        // exist -- AddDriveSpiesToOutputQueue @0x828A5DAC inlines it as the checked
+        // maGameIDs[liIndex] read behind asserts h:648 (`liIndex < knSize`, cmpwi 1) /
+        // h:649 (`mabUsedSlot[liIndex]`, lbz +0x90) -- the same accessor-assert pattern as
+        // JointData::GetGameID's h:612/h:613 pair.
+        DriveId GetGameID(s32 liIndex);
 
         // DWARF h:210. X360 @0x828A0330 (62 instructions). Claims the first free slot and
         // fills it; returns the slot index, or -1 when every slot is in use. The `Drive*`
@@ -565,12 +579,9 @@ namespace CgsPhysics
     // could ever execute. Note this class was a HOLLOW SHELL in the precise sense -- the DWARF
     // declares SIX virtuals (Construct/Prepare/Release/Destruct/Update/ProcessInput) and the
     // committed header declared THREE, so the two that drive the simulation silently bound to
-    // base defaults. Two are still missing:
-    //     Update(IOBufferStack*, IOBufferStack*, const InputBuffer*, OutputBuffer*) @0x828A74D0
-    //     ProcessInput(const InputBuffer*) @0x828A76D0
-    // Declaring a virtual with no body while a constructor is defined materialises
-    // the vtable and turns straight into LNK2019, so they land WITH their bodies,
-    // not before. Until then those slots keep the base's behaviour.
+    // base defaults. ⭐⭐ CLOSED 2026-08-06: Update @0x828A74D0 and ProcessInput @0x828A76D0
+    // landed WITH their bodies and the full game-side callee closure (declared below with
+    // the slot notes). All six DWARF virtuals now exist.
     //
     // =================================================================================
     // ⭐⭐ 2026-08-04 (task #138) -- THE MEASURED MAP OF WHAT "STEPPING A CAR" COSTS.
@@ -668,27 +679,20 @@ namespace CgsPhysics
     // LINK-complete but NOTHING EXECUTES until PhysicsModule::Update is reconstructed.
     // "Witness an empty tick on a default run" is not achievable before that wave.
     //
-    // ⭐ 2026-08-05 -- THE MEASURED GAME-SIDE GAP for Update's own callee list (do not
-    // inherit older optimism; each verified against the committed .cpp this wave):
-    //   UNBODIED: QuerySimulationToSetFlags @0x828A0428 (248), ActiveSetClosure
-    //     @0x828A0808 (1184, inlines the CgsIslandGenerator union-find -- the class needs
-    //     reconstructing first, DWARF CgsIslandGenerator.h, IOBuffer-derived, 200 slots),
-    //     ActivateAndFreezeAsNeeded @0x828A6DD0 (249), AddActiveBodiesToOutputQueue
-    //     @0x828A6CC8 (65), AddContactSpiesToOutputQueue @0x828A4ED8 (641),
-    //     AddJointSpiesToOutputQueue @0x828A58E0 (267, export hole -- headless dump banked),
-    //     AddDriveSpiesToOutputQueue @0x828A5D10 (72), and the two virtuals themselves.
-    //   BODIED/READY: ProcessInputBuffers + all 19 drains, GetMaxIterations @0x8289E338,
-    //     the READ-lock const GetTimeStep @0x8289E260 (split landed 2026-08-05 -- the old
-    //     single const body asserted the WRITE bit and would have fired every tick),
-    //     SetTimeStepUsed/SetMaxIterationsUsed, IOBuffer Lock/Unlock x4,
-    //     IOBufferStack::Create/DestroyIOBuffer<T> (need only the IslandGenerator type),
-    //     PairSet::ClearAll, Simulation::SimulationUpdate (unmounted TU).
-    //   Update @0x828A74D0 pseudocode decode is CLEAN (banked in the sim_step wave log):
-    //     perf-mon ids at +0x4854..+0x4860, mpSimulation +0x4864; it zeroes the sim's three
-    //     spy counters (+0x68/+0x70/+0x78) before SimulationUpdate and m_CT_Count/m_CS_Count
-    //     (+0x64/+0x68) after the spy dumps; ProcessInput @0x828A76D0 is 33 insn
-    //     (LockForRead, assert GetAddContactQueue empty ".cpp:961", ProcessInputBuffers,
-    //     UnlockForRead).
+    // ⭐⭐ 2026-08-06 -- THE GAME-SIDE GAP IS CLOSED. Every entry of the "UNBODIED" list that
+    // stood here (the six output/closure functions + the two virtuals) is bodied in the
+    // .cpp; the IslandGenerator TYPE is reconstructed (CgsIslandGenerator.h).
+    // ⚠️⚠️ ONE CLAIM OF THAT LIST WAS WRONG AND IS CORRECTED: ActiveSetClosure does NOT
+    // inline the CgsIslandGenerator union-find. The generator argument is DEAD in the
+    // shipped X360 body (r4 unread); the closure is a chain/bitset flood fill, and the
+    // DWARF's actual union-find consumers (UpdateFreezing .cpp:2435, DebugRender .cpp:3190)
+    // are stripped from the X360 image -- see CgsIslandGenerator.h's banner.
+    //   STILL TRUE: GetMaxIterations @0x8289E338, the READ-lock const GetTimeStep
+    //     @0x8289E260 (split landed 2026-08-05 -- the old single const body asserted the
+    //     WRITE bit and would have fired every tick), SetTimeStepUsed/SetMaxIterationsUsed,
+    //     IOBuffer Lock/Unlock x4, IOBufferStack::Create/DestroyIOBuffer<T>,
+    //     PairSet::ClearAll, Simulation::SimulationUpdate -- all pre-existing, all consumed
+    //     by Update's body now.
     //
     // RUNNING TOTAL for "a car moves under its own physics": ~25,000 X360 instructions,
     // VMX-heavy, plus RaceCarPhysics.cpp which is still unmounted. Consistent with
@@ -759,6 +763,44 @@ namespace CgsPhysics
         // .ida-exports -- recovered from BURNOUT_X360_ARTIST.XEX.i64 with headless IDA 9.3
         // (the same export-set hole RigidBodyData::RigidBodyData was).
         void Destruct() override;
+
+        // =================================================================================
+        // ⭐⭐ THE TWO REMAINING VIRTUALS, LANDED 2026-08-06 WITH THEIR BODIES AND THE WHOLE
+        // GAME-SIDE CALLEE CLOSURE (the six output/closure functions below + the
+        // IslandGenerator type). The hollow shell recorded in the banner above is CLOSED:
+        // all six DWARF virtuals are now declared and bodied.
+        //
+        // Update @0x828A74D0 (127 insn; DWARF .cpp:783) -- ONE SIMULATION TICK: drain the
+        // input queues, derive the step, run the freeze/thaw closure, step the solver, emit
+        // the output/spy queues. NEW virtuals with their own signatures (console slots after
+        // Prepare's 16), NOT overrides of the base's no-arg Update() -- the same
+        // name-hiding note as Prepare above.
+        // ⚠️ The SECOND IOBufferStack argument is accepted and NEVER READ (r5 is dead on
+        // entry in the X360 body; only the first stack allocates the IslandGenerator).
+        // Reconstructed as shipped -- flag, don't fix.
+        // ⚠️⚠️ STILL UNREACHED AT RUNTIME: the only console caller is
+        // BrnPhysics::PhysicsModule::Update @0x825B0640, the inert WorldLinkStubs boot-gate
+        // stub. Landing these makes the chain LINK-complete; nothing executes until that
+        // stub's ~15k-insn closure lands, and /OPT:REF strips this whole cluster meanwhile.
+        // =================================================================================
+        virtual void Update(CgsModule::IOBufferStack* lpTempStack,
+                            CgsModule::IOBufferStack* lpUnusedStack,
+                            const PhysicsSimulationIO::InputBuffer* lpInput,
+                            PhysicsSimulationIO::OutputBuffer* lpOutput);
+
+        // ProcessInput @0x828A76D0 (33 insn; DWARF .cpp:957) -- the drain-only entry (no
+        // solver step): LockForRead, assert the add-contact queue is EMPTY ("It's invalid
+        // to add contacts during a ProcessInput update", .cpp:961), ProcessInputBuffers,
+        // UnlockForRead.
+        virtual void ProcessInput(const PhysicsSimulationIO::InputBuffer* lpInput);
+
+        // X360 @0x828A6CC8 (65 insn; DWARF .cpp:2357 -- declared PUBLIC in the DWARF,
+        // alongside GetDefaultParams, unlike the private spy emitters below). Sweep all 200
+        // body slots; for each in-use slot clamp the body's centre of mass to the world
+        // bounds (KV_MIN_POSITION/KV_MAX_POSITION, the .cpp's namespace constants -- xyz
+        // only, the console's vrlimi preserves the packed w == mId), and for each ACTIVE
+        // body push an OutUpdateRigidBody snapshot {game id, *body} onto the output queue.
+        void AddActiveBodiesToOutputQueue(PhysicsSimulationIO::OutputBuffer* lpOutput);
 
     private:
         // X360 @0x828A2168 (DWARF CgsPhysicsSimulationModule.cpp:266). NON-virtual; the only
@@ -859,7 +901,10 @@ namespace CgsPhysics
         // nobody had read. THAT CONTRACT IS NOW READ AND CLOSED from the CONSUMER:
         // rw::physics::Simulation::ContactBatchBuild @0x82BC14C0 overwrites both lanes
         // (vsel mask {-1,-1,-1,0} @0x82181660) with the snapshot mCom.w == RigidBody::mId
-        // before anything reads them -- the event w lanes are DEAD CARGO. Full write-up in
+        // before anything reads them. ⚠️ CORRECTED 2026-08-06 (the pipelines wave's finding,
+        // recorded here too): the w lanes are dead FOR THE SOLVER ONLY -- the batch RELOCATES
+        // them (console +0x7C/+0xAC) and SpyContactJacobians chases them as RigidBody* -- on
+        // the PC they are the Contact TAIL POINTERS (contact.h, 256->272). Full write-up in
         // vendor's contact.h banner. DWARF h: CgsPhysicsSimulationModule.h:458 (.cpp:1224).
         void ProcessAddContactQueue(const PhysicsSimulationIO::InputBuffer* lpInput);           // @0x828A3458  363
 
@@ -873,6 +918,47 @@ namespace CgsPhysics
         // the vtable into LNK2019 -- see the slot-16 note above the class).
         void ProcessInputBuffers(const PhysicsSimulationIO::InputBuffer* lpInput);              // @0x828A73C0   68
         // ---------------------------------------------------------------------------------
+
+        // ---- THE UPDATE-SIDE CLOSURE + SPY EMITTERS (2026-08-06) -- the six functions the
+        // Update virtual calls between the drains and the output unlock. DWARF declaration
+        // order/accessibility kept (all private; AddActiveBodiesToOutputQueue is the one
+        // public exception, declared above). Details at the bodies.
+
+        // @0x828A0428 (248). DWARF .cpp:2922. Partition the simulation's active-body ring by
+        // sleep counter: cold bodies (mCool >= m_CoolDown) into mNeedFreeze, warm ones onto
+        // the miActive chain + mSeen. Clears mNeedFreeze/mSeen, seeds mDone's inputs.
+        void QuerySimulationToSetFlags();
+
+        // @0x828A0808 (1,184). DWARF .cpp:3003. Flood-fill closure of the active set over the
+        // three PairSets (contact/jointed/driven), pass by pass (liMaxDepth cap): every
+        // non-static partner of a reached body joins the next pass's chain; bodies reached
+        // again lose their mNeedFreeze bit; contact pair flags are cleared as visited.
+        // ⚠️ lpIslandGenerator is accepted and NEVER READ (dead r4 in the shipped body; the
+        // DWARF's UpdateFreezing/DebugRender consumers are stripped from the X360 image) --
+        // see CgsIslandGenerator.h's banner. Reconstructed as shipped.
+        void ActiveSetClosure(IslandGenerator* lpIslandGenerator, s32 liMaxDepth,
+                              s32 liMaxPairs, s32 liMaxBodies);
+
+        // @0x828A6DD0 (249). DWARF .cpp:3149. Act on the partition: Activate everything on
+        // the miNeedThaw chain, then Freeze every body still bit-set in mNeedFreeze --
+        // emitting an OutUpdateRigidBody snapshot for each frozen body -- and reset both.
+        void ActivateAndFreezeAsNeeded(PhysicsSimulationIO::OutputBuffer* lpOutput);
+
+        // @0x828A4ED8 (641). DWARF .cpp:2049. For each ContactJacobianSpy record the solver
+        // emitted: resolve both bodies' game ids (via their mTag slots), join with the
+        // ORIGINAL drain event (the spy's muTag indexes the input add-contact queue), and
+        // AddEventSafe an OutContactSpy. Carries the "Invalid contact pair ID" debug dump.
+        void AddContactSpiesToOutputQueue(const PhysicsSimulationIO::InputBuffer* lpInput,
+                                          PhysicsSimulationIO::OutputBuffer* lpOutput);
+
+        // @0x828A58E0 (267; .ida-exports HOLE, recovered headless). DWARF .cpp:2177. Per
+        // JointJacobianSpy record: chase the joint's slot tag, scale force/torque rows by
+        // (m_TimeStep * 59.999996f), AddEvent an OutJointSpy.
+        void AddJointSpiesToOutputQueue(PhysicsSimulationIO::OutputBuffer* lpOutput);
+
+        // @0x828A5D10 (72). DWARF .cpp:2293. Per DriveJacobianSpy record: chase the drive's
+        // slot tag, AddEvent an OutDriveSpy (rows unscaled; the two separations verbatim).
+        void AddDriveSpiesToOutputQueue(PhysicsSimulationIO::OutputBuffer* lpOutput);
 
         // DWARF h:532..:536. Static, so they take no space.
         static const u32 KU_NUM_BODIES             = 200;   // kuNumBodies
