@@ -173,6 +173,12 @@ namespace Vehicle
         void CalculateNewWheelPlane();
         virtual void SetCrashing();
 
+        // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave). DWARF BrnSimpleVehiclePhysics.h:244 --
+        // the body-space box half extents (mHalfExtent @+0x6A0), by value. Consumed through
+        // DeformableObject::GetHalfExtents() by the WithBoxes contact fix-up (its inside-the-
+        // traffic-box test, `lvx [vehPhys+0x6A0]` @0x825DC0xx).
+        Vector3 GetHalfExtent() const { return mHalfExtent; }
+
     protected:
         // ==========================================================================================
         // ⭐⭐ THE OWN-MEMBER BLOCK, SEATED 2026-08-03 (VehiclePhysics own-block wave).

@@ -21,6 +21,7 @@
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"                          // CgsPhysics::PhysicsSimulationIO::OutContactSpy
 #include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"                                   // ContactSpy::PhysicalCarPartContact (+EBodyParts placeholder)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPart.h"         // PhysicalBodyPart (accessor inlines)
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"          // DeformableObject (GetHandlingBodyVolumeInstanceId -- the B-id rewrite)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"               // IKBodyPart (GetPartType inline)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalWheel.h"            // PhysicalWheel (GetVolumeInstanceId inline)
 
@@ -81,21 +82,20 @@ namespace Deformation
             return false;
         }
 
-        // Re-key the contact. The X360 reads a packed {volumeInstanceId, owningModelIndex} word off
-        // the physical part record (+464), stores it whole into muVolumeInstanceIdA, then writes the
-        // owning model's handling-body word (mpaModels[owningModelIndex] +26384) into
-        // muVolumeInstanceIdB.
-        //
-        // FLAG (unrecovered packed-record reads -- NOT fabricated): the part's volume-instance id +
-        // owning-model index live in a packed word at PhysicalBodyPart +464 that the part's public
-        // API does NOT expose (GetVolumeInstanceId() is private; there is no GetDeformableObjectIndex()).
-        // The owning model's handling-body word at DeformableObject +26384 is reachable
-        // (GetHandlingBodyID()) but is a 32-bit RigidBodyId, whereas muVolumeInstanceIdB is a 64-bit
-        // VolumeInstanceId. The exact byte values are therefore deferred: the control flow, asserts
-        // and boolean return above are byte-faithful; the two id writes are left as flagged
-        // placeholders pending public part accessors (GetVolumeInstanceId() / owning-model index) and
-        // the DeformableObject +26384 handling-body word being homed as a VolumeInstanceId.
-        // PLACEHOLDER (flagged): muVolumeInstanceIdA / muVolumeInstanceIdB rewrite not emitted.
+        // ⭐ FLAG CLOSED 2026-08-06 (FixUpVehicleContacts wave). The two 8-byte id writes are now
+        // byte-decoded from the X360 asm (@0x825A0D40..0x825A0D7C):
+        //   * idA: the console fetches the part (`GetPartFromIndex(low 16 bits of muPolyTagA)`,
+        //     bl @0x825A0D4C) and stores its 64-bit BurnoutBodyPartID whole
+        //     (`ld 0x1D0(part) ; std 0x30(contact)`) -- the packed part handle IS the part's
+        //     volume-instance id. Exposed as PhysicalBodyPart::GetContactVolumeInstanceId().
+        //   * idB: `ld 0x6710(mpaModels[muPolyTagB]) ; std 0x38(contact)` -- the model's
+        //     {mHandlingBodyID, mGlobalEntityId} pair read as one 8-byte volume-instance word
+        //     (the banked "+26384 is an 8-byte word" lead, confirmed). Exposed as
+        //     DeformableObject::GetHandlingBodyVolumeInstanceId().
+        const PhysicalBodyPart* lpPart =
+            mDetachedPartManager.GetPartFromIndex(static_cast<u16>(lpContact->muPolyTagA));
+        lpContact->muVolumeInstanceIdA = lpPart->GetContactVolumeInstanceId();
+        lpContact->muVolumeInstanceIdB = mpaModels[luModelIndex].GetHandlingBodyVolumeInstanceId();
         return true;
     }
 
@@ -138,14 +138,13 @@ namespace Deformation
         const PhysicalWheel* lpWheel = mDetachedWheelManager.GetWheel(lu16Slot);
         lpContact->muVolumeInstanceIdA = lpWheel->GetVolumeInstanceId();
 
-        // FLAG (unrecovered packed-record reads -- NOT fabricated): the wheel's owning-model index
-        // lives in a packed word at PhysicalWheel +112 that the wheel's public API does not expose,
-        // and the owning model's handling-body word at DeformableObject +26384 (GetHandlingBodyID(),
-        // a 32-bit RigidBodyId) does not match muVolumeInstanceIdB's 64-bit VolumeInstanceId shape.
-        // The muVolumeInstanceIdB rewrite is therefore deferred (flagged placeholder); the control
-        // flow, asserts, the A-id rewrite and the boolean return are byte-faithful.
-        // PLACEHOLDER (flagged): muVolumeInstanceIdB rewrite not emitted pending the owning-model
-        // index accessor + the +26384 handling-body word being homed as a VolumeInstanceId.
+        // ⭐ FLAG CLOSED 2026-08-06 (FixUpVehicleContacts wave). The B-id write is byte-decoded
+        // from the X360 asm (@0x825A0F7C..0x825A0F98): `ld 0x6710(mpaModels[muPolyTagB]) ;
+        // std 0x38(contact)` -- the owning model's {mHandlingBodyID, mGlobalEntityId} pair read
+        // as ONE 8-byte volume-instance word (the banked "+26384 is an 8-byte word" lead,
+        // confirmed), not the 32-bit GetHandlingBodyID() the old flag assumed. Exposed as
+        // DeformableObject::GetHandlingBodyVolumeInstanceId().
+        lpContact->muVolumeInstanceIdB = mpaModels[luModelIndex].GetHandlingBodyVolumeInstanceId();
         return true;
     }
 

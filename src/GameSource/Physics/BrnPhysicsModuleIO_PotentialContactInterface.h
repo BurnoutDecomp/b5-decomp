@@ -87,6 +87,24 @@ namespace PhysicsModuleIO
         // layout-correct without the X360 32-bit byte offset.
         const CustomPotentialContactQueue& GetRaceCarWithWorldQueueValidated() const { return maCustomEventQueues[6]; }
 
+        // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave). Three more custom-queue accessors, same
+        // ADDITIVE pattern as [6] above -- byte offsets (indices) are asm-proven from
+        // PhysicsModule::FixUpVehicleContacts @0x825A6010, which walks:
+        //     ifc+0x140090 == 16 + 8*0x28010  ->  maCustomEventQueues[8]   (queue asserts owner
+        //         pair (RACECAR, TRAFFIC_VEHICLE) @BrnPhysicsModuleUpdateFunctions.cpp:947)
+        //     ifc+0x118080 == 16 + 7*0x28010  ->  maCustomEventQueues[7]   (asserts (RACECAR,
+        //         RACECAR) @:975)
+        //     ifc+0x10     == 16 + 0*0x28010  ->  maCustomEventQueues[0]   (FILTERED, not
+        //         asserted, for (TRAFFIC, TRAFFIC) pairs)
+        // NAMES: [8]/[7] carry the DWARF accessor names whose meaning the driver's own owner
+        // asserts prove (GetRaceCarWithTrafficQueue :107 / GetRaceCarWithRaceCarQueue :98).
+        // [0]'s name is the best-fit DWARF accessor (:113 GetSceneManagerContactQueue -- the
+        // driver FILTERS owner pairs instead of asserting them, i.e. the queue holds mixed
+        // scene-manager contacts) FLAGGED as unproven, exactly like [6]'s.
+        const CustomPotentialContactQueue& GetRaceCarWithTrafficQueue() const { return maCustomEventQueues[8]; }
+        const CustomPotentialContactQueue& GetRaceCarWithRaceCarQueue() const { return maCustomEventQueues[7]; }
+        const CustomPotentialContactQueue& GetSceneManagerContactQueue() const { return maCustomEventQueues[0]; }
+
     private:
         const InPotentialContactQueue* mpQueue;                    // +4  :246 (const source queue)
         CustomPotentialContactQueue    maCustomEventQueues[KI_CUSTOM_QUEUE_COUNT]; // +16 :247

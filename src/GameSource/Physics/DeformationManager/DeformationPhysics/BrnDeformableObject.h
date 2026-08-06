@@ -53,6 +53,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnAbsorptionTable.h"           // EAbsorptionSets
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h"          // EGlassState, DeformationOutputInterface(ForEntityModules)
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"                   // EBodyParts, DeformationResetType, AddDeformationModelEvent
+#include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"                               // CgsSceneManager::VolumeInstanceId (GetHandlingBodyVolumeInstanceId packs one)
 #include "GameSource/Physics/PhysicsUtilities/ExternalPhysicsBody.h"                               // ExternalPhysicsBody
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"                       // BrnPhysics::Vehicle::RaceCarPhysics
 
@@ -231,6 +232,21 @@ namespace Deformation
         // (distinct from the reconstructed mu32GameModeState at +26392; do NOT use GetGameModeByte()
         // for the +26384 reads).
         u8 GetHandlingBodyIdHighByte() const { return static_cast<u8>(mHandlingBodyID.muValue >> 24); }
+
+        // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave): the 8-byte handling-body volume-instance
+        // word both Fixup*VehicleContact bodies re-key a contact's B id from. The console reads
+        // {mHandlingBodyID, mGlobalEntityId} as ONE big-endian 8-byte load (`ld 0x6710(model)`
+        // @0x825A0D78 / @0x825A0F94 -- model+26384..26391 spans exactly the adjacent pair) and
+        // stores it WHOLE into muVolumeInstanceIdB: the pair IS the model's handling volume-
+        // instance id (entity word == the handling-body id in the HIGH dword). Same additive-
+        // accessor pattern as GetHandlingBodyIdHighByte above.
+        CgsSceneManager::VolumeInstanceId GetHandlingBodyVolumeInstanceId() const
+        {
+            CgsSceneManager::VolumeInstanceId lId;
+            lId.muId = (static_cast<u64>(mHandlingBodyID.muValue) << 32)
+                     | static_cast<u64>(mGlobalEntityId.muValue);
+            return lId;
+        }
 
         // DWARF :347. This car's global scene-entity id. DECLARE-ONLY (its body reads mGlobalEntityId).
         EntityId GetGlobalEntityId();                                                           // :347

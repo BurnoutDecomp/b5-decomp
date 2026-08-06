@@ -29,6 +29,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<1536,16> (the IO event queue the crash/takedown events push onto)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"          // CgsModule::EventQueue<DiscardedContact,20> (mDiscardedContacts @+160672)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"        // CgsContainers::BitArray<N> (live-car bitset, crash-data free-list, taken-down bitset)
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"      // CgsSceneManager::EntityId + K_INVALID_ENTITY_ID (GetPhysicsEntityIDFromGlobalEntityID)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"             // CgsNumeric::Random (mRandom @+16)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h" // VehicleDriver (maRaceCarDrivers @+64, mPlayerAiDriver @+171968)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"  // BrnPhysics::Vehicle::RaceCarPhysics (maRaceCarVehicles @+1856 -- the REAL type as of 2026-08-03; that header does not include this one, so this is not a cycle)
@@ -414,6 +415,26 @@ namespace Vehicle
         // "no vehicle" sentinel; returns false otherwise.
         bool GetTrafficPhysicsEntityIDFromGlobalEntityID_Safe(u32 luGlobalEntityId,
                                                               EntityId* lpOutPhysicsEntityId);
+
+        // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave). DWARF :1025 -- resolve a GLOBAL entity
+        // id to its LOCAL PHYSICS entity id. The X360 build fully INLINES this (three instances in
+        // PhysicsModule::FixUpVehicleContacts @0x825A6010 alone -- the "Fixup* id-rewrite"
+        // territory); the PS3 DecFIGS build keeps it out-of-line @0x6AC834 with this exact body
+        // and parameter name, and its own baked asserts pin the definition to THIS header
+        // (BrnVehicleManager.h:2031/:2039 on X360; the PS3 copy cites :2030/:2038 -- FIGS-branch
+        // line drift). Defined inline below the class, matching the console inlining.
+        //   * TRAFFIC arm: global index -> physical index through
+        //     mPhysicalTrafficManager.mu8GlobalToPhysicalEntityIndexMap (KU8_INVALID_MAP == 127
+        //     -> streamed "Failed to find local physics ID of traffic vehicle with global entity
+        //     ID: " assert @BrnPhysicalTrafficManager.h:1030 + K_INVALID_ENTITY_ID), else
+        //     (physical << 10) | (E_ENTITYTYPE_TRAFFIC_VEHICLE << 24) -- the exact idiom the
+        //     committed PTM::ValidateAndFixUpTrafficTrafficContact already carries.
+        //   * RACECAR arm: pure VALIDATION -- for every live car (mUsedRaceCars) whose
+        //     maRaceCarEntityIDs[i] matches, assert the re-packed id equals the global id
+        //     ("lEntityId_Physics == lGlobalEntityID" :2031); the id is returned UNCHANGED.
+        //   * any other owner: streamed "Attempting to get local physics ID of unsupported
+        //     entity type" :2039 + 0xFFFFFFFF.
+        CgsSceneManager::EntityId GetPhysicsEntityIDFromGlobalEntityID(CgsSceneManager::EntityId lGlobalEntityID);
 
         // @0x825B4F50: resolve a packed physics-vehicle id to its physics body. Owner==RACECAR (1)
         // returns &maRaceCarVehicles[index] (as the VehiclePhysics base); owner==TRAFFIC_VEHICLE (2)
@@ -1503,5 +1524,75 @@ namespace Vehicle
         // irrelevant. Keep this TU mounted.
         static void _AssertLayoutTuningBank();
     };
+
+    // ==========================================================================================
+    // GetPhysicsEntityIDFromGlobalEntityID -- header-inline definition (see the declaration's
+    // banner). Byte truth: the three X360 inlined instances in PhysicsModule::FixUpVehicleContacts
+    // @0x825A617C/@0x825A6BF4/@0x825A67A8; structural oracle: the PS3 DecFIGS out-of-line body
+    // @0x6AC834 (same asserts, same arms, same returns). All member reads BY NAME -- the console
+    // offsets (map @ this+149456 == mPhysicalTrafficManager+104688, table @ this+43584, bitset
+    // @ this+44224) do not reproduce on the x64 host.
+    // ==========================================================================================
+    inline CgsSceneManager::EntityId VehicleManager::GetPhysicsEntityIDFromGlobalEntityID(
+        CgsSceneManager::EntityId lGlobalEntityID)
+    {
+        const u32 luGlobalId = static_cast<u32>(lGlobalEntityID);
+        const u32 luOwner    = luGlobalId >> 24;                       // EntityId::GetOwner()
+
+        // EntityId::SetOwner tripwire (CgsEntityId.h:153) -- the X360 keeps the owner splice's
+        // bound check even though the owner is only re-packed verbatim.
+        CGS_ASSERT(luOwner <= 0xCu, "Burnout Specfic: Bad entity type set");
+        u32 luEntityId_Physics = luOwner << 24;
+
+        if (luOwner == 2u)   // BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE
+        {
+            const u32 luGlobalIndex = (luGlobalId >> 10) & 0x3FFFu;    // GetEntityIndex()
+            CGS_ASSERT(luGlobalIndex < sizeof(mPhysicalTrafficManager.mu8GlobalToPhysicalEntityIndexMap),
+                       "lGlobalEntityId.GetEntityIndex() < sizeof(mu8GlobalToPhysicalEntityIndexMap)");   // BrnPhysicalTrafficManager.h:944
+
+            const u8 lu8Physical =
+                mPhysicalTrafficManager.mu8GlobalToPhysicalEntityIndexMap[luGlobalIndex];
+            if (lu8Physical == KU8_INVALID_MAP)
+            {
+                // Console streams "Failed to find local physics ID of traffic vehicle with global
+                // entity ID: 0x%X" through gpcMessageBuffer; lowered to CGS_ASSERT with the static
+                // prefix per the standing rule (BrnPhysicalTrafficManager.h:1030).
+                CGS_ASSERT(false, "Failed to find local physics ID of traffic vehicle with global entity ID: ");
+                return CgsSceneManager::K_INVALID_ENTITY_ID;           // dword_82F2A07C
+            }
+            // EntityId ctor bound check (CgsEntityId.h:116) -- dead for a u8 index, emitted on console.
+            CGS_ASSERT(lu8Physical < (1u << 14), "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");
+            return CgsSceneManager::EntityId((static_cast<u32>(lu8Physical) << 10) | (2u << 24));
+        }
+
+        if (luOwner == 1u)   // BrnWorld::E_ENTITYTYPE_RACECAR -- VALIDATION-ONLY arm
+        {
+            // For every live race car whose stored entity id matches, re-pack the physics id from
+            // the slot index and assert it equals the global id. The id returned is UNCHANGED.
+            for (s32 liCar = mUsedRaceCars.GetFirstNonZeroBit();
+                 liCar != CgsContainers::BitArray<8u>::KI_INVALID_BITINDEX;
+                 liCar = mUsedRaceCars.GetNextNonZeroBit(liCar))
+            {
+                if (maRaceCarEntityIDs[liCar].muValue == luGlobalId)
+                {
+                    // EntityId::SetEntityIndex tripwire (CgsEntityId.h:160) -- dead for liCar < 8.
+                    CGS_ASSERT(static_cast<u32>(liCar) < (1u << 14),
+                               "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");
+                    // X360 @0x825A6380: keep the owner byte + low 10 bits, splice the entity index
+                    // (rlwinm mask 0xFF0003FF | index << 10).
+                    luEntityId_Physics = (luEntityId_Physics & 0xFF0003FFu)
+                                       | (static_cast<u32>(liCar) << 10);
+                    CGS_ASSERT(luEntityId_Physics == luGlobalId,
+                               "lEntityId_Physics == lGlobalEntityID");   // BrnVehicleManager.h:2031
+                }
+            }
+            return lGlobalEntityID;
+        }
+
+        // Console streams through gpcMessageBuffer; lowered per the standing rule
+        // (BrnVehicleManager.h:2039).
+        CGS_ASSERT(false, "Attempting to get local physics ID of unsupported entity type");
+        return CgsSceneManager::EntityId(0xFFFFFFFFu);
+    }
 }
 }
