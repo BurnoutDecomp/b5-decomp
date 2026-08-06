@@ -216,6 +216,11 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnArticulatedJointPool.h"
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManagerIO.h"
 
+// ⭐ ADDED 2026-08-06 (big-five #2): ValidateTrafficContact collaborators, pointer use only.
+// Class key `struct`, matching CgsPotentialContact.h / the TriangleCacheInterface home.
+namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact;
+                                                       struct TriangleCacheInterface; } }
+
 namespace BrnPhysics
 {
 // Forward decl of the streamed deformation model spec (real home
@@ -577,6 +582,16 @@ public:
 
     // X360 0x8259BD10: validate (and fix up) a traffic-vs-traffic potential contact.
     bool ValidateAndFixUpTrafficTrafficContact(void* lpContact) const;
+
+    // ⭐ ADDED 2026-08-06 (big-five #2, contact-generation wave). @0x825CACB8 (PS3 DecFIGS
+    // 0x6E5DF8; DWARF h:260). Validate one traffic-vs-world potential contact against the
+    // vehicle-input triangle cache. ⚠ FLAG: DECLARED for VehicleManager::ValidateTrafficContact's
+    // closure; body still a TRAP STUB (169 X360 asm lines / 6 callees -- named, not landed,
+    // this wave). The tri-cache arg is VehicleInputInterface::InTriangleCacheInterface ==
+    // CgsSceneManager::SceneManagerIO::TriangleCacheInterface.
+    bool ValidateTrafficContact(CgsSceneManager::SceneManagerIO::PotentialContact* lpContact,
+                                const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCacheInterface,
+                                f32 lfTimeStep);
 
 private:
     // ⭐ 2026-08-03 (the un-pin wave). VehicleManager owns this object by value and reaches TWO of

@@ -51,8 +51,8 @@ namespace CgsPhysics
 {
 namespace PhysicsSimulationIO
 {
-    class InputBuffer;                   // sim-input event buffer (AddToSim/UpdateRW/...)
-    class OutputBuffer;                  // sim-output buffer; OutputBuffer::SceneInputInterface
+    struct InputBuffer;   // ⚠ class-key fixed 2026-08-06 (struct per CgsPhysicsSimulationModuleIO.h:43)                   // sim-input event buffer (AddToSim/UpdateRW/...)
+    struct OutputBuffer;  // ⚠ class-key fixed 2026-08-06 (struct per CgsPhysicsSimulationModuleIO.h:321)                  // sim-output buffer; OutputBuffer::SceneInputInterface
                                          //   is a typedef of CgsSceneManager::SceneManagerIO::
                                          //   InSceneUpdateInterface (the DWARF spells the Update/
                                          //   SetRigidBodyTransform scene arg as
@@ -77,7 +77,8 @@ namespace PhysicsSimulationIO
 //     -- and AddEvent's a packed {bodyId, transform, linearVel, angularVel} event onto it). Modelled
 //     as a free hook taking the input buffer + the packed event blob.
 namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInterface; } }
-namespace CgsPhysics { namespace PhysicsSimulationIO { class InputBuffer; class OutputBuffer; } }
+// ⚠ CLASS-KEYS FIXED 2026-08-06 (big-five #2): `struct` per CgsPhysicsSimulationModuleIO.h.
+namespace CgsPhysics { namespace PhysicsSimulationIO { struct InputBuffer; struct OutputBuffer; } }
 namespace BrnPhysics
 {
 namespace Deformation
@@ -238,7 +239,10 @@ namespace Deformation
         const IKBodyPart* GetIKPart() const { return mpIKPart; }
 
         // BrnPhysicalBodyPart.h:222. Whether the part is frozen (sim disabled, settled).
-        bool IsFrozen() const;
+        // ⭐ INLINE 2026-08-06 (big-five #2): no out-of-line X360 emission -- the one console
+        // consumer (BridgeContactsToSimulation via PhysicalBodyPartPool::GetPart) reads the
+        // byte at part+486 directly, i.e. the inlined accessor.
+        bool IsFrozen() const { return mbFrozen; }
 
         // BrnPhysicalBodyPart.h:226. Whether the part still needs adding to the scene.
         bool NeedsAddingToScene() const;

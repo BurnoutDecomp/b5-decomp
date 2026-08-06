@@ -306,6 +306,28 @@ namespace Props           { struct PropRaceCarContactBuffer; }   // DWARF BrnPro
         // PhysicsModule::Update @0x825B0640 (still a link stub).
         void FixUpVehicleContacts( PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface );
 
+        // ⭐ ADDED 2026-08-06 (big-five #2, contact-generation wave). @0x825A99E8, home THIS TU
+        // (BrnPhysicsModuleBridgeFunctions.cpp -- the body's own baked asserts span :49..:463).
+        // The producer bridge: convert every merged potential contact into an
+        // InAddPotentialContact sim event (world/deformation id resolution, prop validation,
+        // per-material frictions), then drain the five typed custom queues ([6] vehicle-world,
+        // [9] traffic-world, [7] racecar-racecar, [13] traffic-traffic, [8] racecar-traffic)
+        // into the deformation sensors, bridge the two simple-traffic passes, and validate the
+        // sim queue. Caller: Update @0x825B0640 (still a link stub). Signature per the PS3
+        // DecFIGS mangle @0x6999C0.
+        void BridgeContactsToSimulation( CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
+                                         const PhysicsModuleIO::InputBuffer* lpInputBuffer,
+                                         PhysicsModuleIO::PotentialContactInterface* lpContactInterface,
+                                         Props::PropRaceCarContactBuffer* lpPropRaceCarContactBuffer );
+
+        // @0x825A5618 (PS3 DecFIGS 0x699594 -- same TU, immediately before the bridge driver).
+        // Forward the simple-traffic-with-world potential contacts into the sim add-contact
+        // queue. ⚠ FLAG: DECLARED for the bridge driver's closure; body still a TRAP STUB
+        // (484 X360 asm lines to reconstruct -- named, not landed, this wave).
+        void BridgeSimpleTrafficWithWorldContactsToSimulation(
+            CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* lpContactQueue,
+            const PhysicsModuleIO::PotentialContactInterface* lpContactInterface );
+
         // :552 @0x825A1100. Diagnostics: when the sim contact queue is FULL, dump a per-owner
         // histogram and assert. Caller: BridgeContactsToSimulation.
         void CheckContactQueueSize( const CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* lpContactQueue );

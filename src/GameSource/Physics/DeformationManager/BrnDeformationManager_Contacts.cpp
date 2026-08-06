@@ -92,87 +92,11 @@ namespace Deformation
     }
 
     // ==========================================================================================
-    // ReadPotentialVehicleWorldContact @ 0x82604590
-    //
-    // Route one potential VEHICLE-vs-WORLD contact into the owning car's deformation sensor. The
-    // asm: validity-gate the contact (assert + ignore if any lane is NaN); look up the car's model
-    // slot from muVolumeInstanceIdA's entity; assert the owner tags (A == racecar/traffic, B ==
-    // world); fetch the model's deformation sensor for that volume instance and the model's world
-    // transform; (assert the normal is normalised); then DeformationSensor::ValidateAndAddContact
-    // with no other vehicle / other sensor.
+    // ReadPotentialVehicleWorldContact @ 0x82604590 -- ⭐ MOVED 2026-08-06 (big-five #2 wave) to
+    // the MOUNTED slice TU BrnDeformationManager_ContactBridges.cpp: it is a direct callee of
+    // PhysicsModule::BridgeContactsToSimulation and this TU is still unmounted. Body verbatim
+    // there (one flagged tripwire upgrade, documented at the body). Fold back when this TU mounts.
     // ==========================================================================================
-    void DeformationManager::ReadPotentialVehicleWorldContact(
-        const CgsSceneManager::SceneManagerIO::PotentialContact& lrPotentialContact,
-        BrnPhysics::ContactId lContactId,
-        CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/)
-    {
-        // Initial validity gate: the asm self-compares the three lanes of the contact's leading
-        // vector (mPointOnA) -- any NaN lane means the contact is invalid and is ignored (asserted,
-        // then the function returns without adding it).
-        if (!IsValidVec3(lrPotentialContact.mPointOnA))
-        {
-            CGS_ASSERT(false, "Invalid contact added to deformation. Ignoring...\n");
-            return;
-        }
-
-        // The model lookup keys off muVolumeInstanceIdA's embedded entity word (the high dword of the
-        // packed 64-bit id) -- the asm passes that word to FindModelIndexByGlobalEntityID.
-        const EntityId lEntityA{ static_cast<u32>(lrPotentialContact.muVolumeInstanceIdA.muId >> 32) };
-        const s32 liModelIndexA = FindModelIndexByGlobalEntityID(lEntityA);
-        if (liModelIndexA == -1)
-        {
-            CGS_ASSERT(false, "liModelIndexA != -1");
-            return;
-        }
-
-        // Owner-tag tripwires (non-gating): A must be a racecar / traffic vehicle, B must be world.
-        const u32 luOwnerA = GetVolumeInstanceOwner(lrPotentialContact.muVolumeInstanceIdA);
-        CGS_ASSERT(luOwnerA == KU_OWNER_RACECAR || luOwnerA == KU_OWNER_TRAFFIC_VEHICLE,
-                   "lPotentialContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR || "
-                   "lPotentialContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
-        CGS_ASSERT(GetVolumeInstanceOwner(lrPotentialContact.muVolumeInstanceIdB) == KU_OWNER_WORLD,
-                   "lPotentialContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_WORLD");
-
-        DeformableObject& lrModel = mpaModels[liModelIndexA];
-
-        // The car's deformation sensor for the contacted volume instance, and the car's world
-        // transform (the asm reads the rigid-body transform off the model @ +6476 and packs it into
-        // the Matrix44Affine handed to ValidateAndAddContact).
-        DeformationSensor& lrSensor =
-            lrModel.GetDeformationSensorFromVolumeInstance(lrPotentialContact.muVolumeInstanceIdA);
-
-        Matrix44Affine lWorldTransform;
-        lrModel.GetTransform(lWorldTransform);
-
-        // Normalised-normal tripwire (non-gating): the asm @0x82604590 renormalises the contact
-        // normal (vrsqrtefp Newton-Raphson) and per-lane compares |renormalised - original| against a
-        // splatted epsilon v82 == 0.0099999998 (vsubfp / vandc abs / vcmpgtfp). The assert fires iff
-        // any lane's renormalisation delta EXCEEDS that epsilon -- i.e. a normal-LENGTH test, NOT a
-        // NaN self-compare (RwMathVPU::IsValid). It then streams the contact normal + "Car transform: "
-        // into the message before firing (BrnDeformationManager.cpp:1198).
-        // FLAG (predicate not reproduced -- NOT fabricated): the committed Vector3 / vpu API in-tree
-        // exposes no normalise-delta-vs-epsilon helper, and emitting an ad-hoc renormalise+compare here
-        // would fabricate a body that is not byte-grounded. The exact streamed assert message string is
-        // preserved verbatim; the wrong IsValidVec3 self-compare predicate is dropped in favour of an
-        // honest always-pass placeholder so no fabricated predicate is asserted. Re-emit the
-        // renormalise-delta (epsilon 0.0099999998) test once a faithful Vector3 normalise helper is homed.
-        CGS_ASSERT(true, "Un-normalised vehicle-world contact: ");
-
-        // Validate + store the contact in the sensor (no other vehicle / other sensor for a
-        // vehicle-vs-world contact).
-        // FLAG (cross-TU type-namespace mismatch to reconcile at consolidation):
-        // DeformationSensor::ValidateAndAddContact declares its contact arg as the stale forward-decl
-        // CgsSceneManager::PotentialContact, whereas the canonical (DWARF) type is
-        // CgsSceneManager::SceneManagerIO::PotentialContact (homed by this TU's CgsPotentialContact.h).
-        // They are the SAME on-disk record (only the namespace differs), so the canonical record is
-        // passed through a layout-safe reference cast here; the sensor header should retype its arg to
-        // the SceneManagerIO:: home at consolidation, after which this cast can be dropped.
-        lrSensor.ValidateAndAddContact(
-            lWorldTransform,
-            reinterpret_cast<const CgsSceneManager::PotentialContact&>(lrPotentialContact),
-            lContactId, nullptr, nullptr);
-    }
-
     // ==========================================================================================
     // SolvePenetration @ 0x82621B08
     //
@@ -326,36 +250,10 @@ namespace Deformation
     }
 
     // ==========================================================================================
-    // FindModelIndexByGlobalEntityID @ 0x825B45B0
-    //
-    // Map a global entity id (extracted from a volume-instance entity word: owner in the high byte,
-    // a 14-bit index at bit 10) to its deformation model slot. Race-car ids index
-    // ma8RaceCarToModelIndex (capacity 8); traffic ids index ma8GlobalTrafficToModelIndex
-    // (capacity 600). Asserts the owner is racecar/traffic and the index is in range.
+    // FindModelIndexByGlobalEntityID @ 0x825B45B0 -- ⭐ MOVED 2026-08-06 (big-five #2 wave) to the
+    // MOUNTED slice TU BrnDeformationManager_ContactBridges.cpp (callee of the moved
+    // ReadPotentialVehicleWorldContact). Verbatim. Fold back when this TU mounts.
     // ==========================================================================================
-    s32 DeformationManager::FindModelIndexByGlobalEntityID(EntityId lGlobalEntityId)
-    {
-        // Owner = high byte of the entity word; index = the 14-bit field at bit 10 (the
-        // VolumeInstanceId entity-word geometry the asm decodes: `(id >> 10) & 0x3FFF`).
-        const u32 luOwner = (lGlobalEntityId.muValue >> 24) & 0xFFu;
-
-        CGS_ASSERT(luOwner == KU_OWNER_RACECAR || luOwner == KU_OWNER_TRAFFIC_VEHICLE,
-                   "lID.GetOwner() == BrnWorld::E_ENTITYTYPE_RACECAR || "
-                   "lID.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
-
-        if (luOwner == KU_OWNER_RACECAR)
-        {
-            const u32 lu16RaceCarIndex = (lGlobalEntityId.muValue >> 10) & 0x3FFFu;
-            CGS_ASSERT(lu16RaceCarIndex < KU_MAX_NUM_RACE_CARS, "lu16RaceCarIndex < Vehicle::ku8MaxNumRaceCars");
-            return ma8RaceCarToModelIndex[lu16RaceCarIndex];
-        }
-
-        const u32 lu16TrafficGlobalIndex = (lGlobalEntityId.muValue >> 10) & 0x3FFFu;
-        CGS_ASSERT(lu16TrafficGlobalIndex < KU_MAX_TOTAL_TRAFFIC,
-                   "lu16TrafficGlobalIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");
-        return ma8GlobalTrafficToModelIndex[lu16TrafficGlobalIndex];
-    }
-
     // ==========================================================================================
     // GetPlayerCarModel @ 0x825B44F0  (DWARF spelling truncates to "GetPlaye")
     //

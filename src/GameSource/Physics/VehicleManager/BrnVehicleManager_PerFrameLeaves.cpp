@@ -187,5 +187,41 @@ namespace Vehicle
             }
         }
     }
+
+    // ------------------------------------------------------------------------------------
+    // ⭐ ADDED 2026-08-06 (big-five #2, contact-generation wave).
+    // VehicleManager::ValidateTrafficContact @0x825EAC28 (PS3 DecFIGS 0x6E6178; DWARF h:941).
+    // Thin forwarder: three tripwires, then the embedded traffic manager's own validation.
+    // Register-truth (X360): the wrapper reads muVolumeInstanceIdA's entity word only for the
+    // owner tripwire, then tail-forwards (this+44768 == mPhysicalTrafficManager).
+    // ------------------------------------------------------------------------------------
+    bool VehicleManager::ValidateTrafficContact(
+        CgsSceneManager::SceneManagerIO::PotentialContact* lpContact,
+        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCacheInterface,
+        f32 lfTimeStep)
+    {
+        CGS_ASSERT(lpContact != nullptr, "lpContact != NULL");                          // :7727
+        CGS_ASSERT(lpTriCacheInterface != nullptr, "lpTriCacheInterface != NULL");      // :7728
+        CGS_ASSERT(static_cast<u32>(lpContact->muVolumeInstanceIdA.muId >> 56) == 2u,
+                   "lpContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");   // :7730
+
+        return mPhysicalTrafficManager.ValidateTrafficContact(lpContact, lpTriCacheInterface, lfTimeStep);
+    }
+
+    // ------------------------------------------------------------------------------------
+    // VehicleManager::BridgeSimpleTrafficWithCarContactsToSimulation @0x825C83B0
+    //
+    // ⚠⚠ TRAP STUB (closure enforcement, 2026-08-06 big-five #2 wave) -- the REAL body (375
+    // X360 asm lines / 9 callees; PS3 DecFIGS 0x70DB6C) is NOT reconstructed yet. Dead code
+    // today (Update @0x825B0640 is still a link stub; /OPT:REF strips this). RECONSTRUCT-NEXT.
+    // ------------------------------------------------------------------------------------
+    void VehicleManager::BridgeSimpleTrafficWithCarContactsToSimulation(
+        CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InAddPotentialContact, 1024>* /*lpContactQueue*/,
+        const BrnPhysics::PhysicsModuleIO::PotentialContactInterface* /*lpContactInterface*/)
+    {
+        CGS_ASSERT(false,
+                   "TRAP: VehicleManager::BridgeSimpleTrafficWithCarContactsToSimulation @0x825C83B0 "
+                   "not reconstructed (big-five #2 closure stub)\n");
+    }
 }
 }

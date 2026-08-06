@@ -26,6 +26,7 @@
 #include "GameSource/GameState/BrnTakedownType.h"                 // BrnGameState::ETakedownType
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h" // BrnWorld::ERaceCarType (maeRaceCarTypes)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"  // RaceCarContact (mNormal @+48, mPointOnA @+64)
+#include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact (maNonPhysicalContacts[128], promoted 2026-08-06)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<1536,16> (the IO event queue the crash/takedown events push onto)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"          // CgsModule::EventQueue<DiscardedContact,20> (mDiscardedContacts @+160672)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"        // CgsContainers::BitArray<N> (live-car bitset, crash-data free-list, taken-down bitset)
@@ -61,6 +62,11 @@ namespace CgsPhysics { namespace PhysicsSimulationIO { struct InAddPotentialCont
 // per-frame leaves (FreeAllocations / UpdateVehicleEffects / ReadUpdatedBodyProperties /
 // ProcessDeformationStates). Class keys match each type's committed home exactly.
 namespace CgsModule { struct IOBufferStack; }                              // CgsIOBufferStack.h
+// ⭐ ADDED 2026-08-06 (big-five #2): StartVehicleContactGeneration collaborators, pointer/
+// template-arg use only in this header.
+namespace CgsMemory { class LinearMalloc; }
+namespace CgsSceneManager { namespace SceneManagerIO { struct OutOverlapPair; } }
+namespace BrnPhysics { namespace Deformation { struct DeformationManager; } }   // class key `struct`, matching BrnDeformationManager.h:237
 namespace BrnPhysics { struct ContactGenList; }                            // BrnContactGenerationList.h
 // The REAL namespace, pinned by the X360 mangling of FreeAllocations' DestroyIOBuffer bl target
 // (VCollisionGenerator@CgsCollision@CgsSceneManager@@) -- see the member carve note below.
@@ -223,6 +229,57 @@ namespace Vehicle
         // drains this queue into the module's ContactSpyData every frame.
         const CgsModule::EventQueue<BrnPhysics::ContactSpy::DiscardedContact, 20>*
         GetDiscardedContacts() const { return &mDiscardedContacts; }
+
+        // ==========================================================================================
+        // ⭐ ADDED 2026-08-06 (big-five #2, contact-generation wave). The contact-generation /
+        // bridge surface of PhysicsModule::Update. DWARF-authoritative signatures (:941 / :1052 /
+        // :1073).
+        // ==========================================================================================
+
+        // @0x825EAC28 (DWARF h:941; PS3 DecFIGS 0x6E6178). Thin forwarder: null tripwires
+        // (BrnVehicleManager.cpp:7727/:7728) + the A-owner==TRAFFIC tripwire (:7730), then
+        // mPhysicalTrafficManager.ValidateTrafficContact. Bodied in
+        // BrnVehicleManager_PerFrameLeaves.cpp (home BrnVehicleManager.cpp still unmounted).
+        bool ValidateTrafficContact( CgsSceneManager::SceneManagerIO::PotentialContact* lpContact,
+                                     const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCacheInterface,
+                                     f32 lfTimeStep );
+
+        // @0x825C83B0 (DWARF h:1073). Forward the simple-traffic-with-car potential contacts into
+        // the sim add-contact queue. ⚠ FLAG: DECLARED for BridgeContactsToSimulation's closure;
+        // body still a TRAP STUB (375 X360 asm lines -- named, not landed, this wave).
+        void BridgeSimpleTrafficWithCarContactsToSimulation(
+            CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InAddPotentialContact, 1024>* lpContactQueue,
+            const BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContactInterface );
+
+        // @0x8262AEE8 (DWARF h:1052; PS3 DecFIGS 0x78A754), home TU
+        // BrnVehicleManagerContactGeneration.cpp (the body's own baked assert path). Start the
+        // per-frame vehicle contact generation: prepare the five primitive-pair builders, create
+        // the ContactGenList / CollisionGenerator IO buffers + the three collide-stream
+        // producers, walk the scene's overlap pairs (car-car pairs -> DoCarCarContactGeneration +
+        // hinged-part pairs; part-vs-car / wheel-vs-car pairs -> the deformation pair builders),
+        // run the per-car and per-traffic world contact generation, then kick the three collide
+        // stream jobs. Caller: PhysicsModule::Update @0x825B0640 (still a link stub).
+        void StartVehicleContactGeneration(
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
+            const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>* lpOverlapPairs,
+            f32 lfTimeStep,
+            BrnPhysics::Deformation::DeformationManager* lpDeformationManager,
+            CgsModule::IOBufferStack* lpIOBufferStack,
+            CgsMemory::LinearMalloc* lpLinearMalloc,
+            BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpPotentialContactInterface );
+
+        // ⭐ ADDED 2026-08-06 (big-five #2). PhysicsModule::BridgeContactsToSimulation calls the
+        // embedded traffic manager's ValidateAndFixUpTrafficTrafficContact with the embedded
+        // object's address as `this` (module+63872 == this+44768) -- access a private member
+        // cannot express from PhysicsModule. FLAG: the accessor NAME is inferred (no DWARF
+        // accessor is dumped); the console evidence is the direct embedded-object call.
+        PhysicalTrafficManager& GetPhysicalTrafficManager() { return mPhysicalTrafficManager; }
+
+        // ⭐ ADDED 2026-08-06 (big-five #2). Header-inline reset of the non-physical contact
+        // count -- BridgeContactsToSimulation @0x825A9A50 opens with a bare `stw 0` at
+        // module+179760 == this+160656 == miNonPhysicalContactCount (the int32 the DWARF seats
+        // directly after maNonPhysicalContacts[128], :851). Spelled BY NAME here.
+        void ResetNonPhysicalContacts() { miNonPhysicalContactCount = 0; }
 
         // ==========================================================================================
         // ⭐ ADDED 2026-08-06 (PhysicsModule::Update leaves wave). The four small per-frame leaves of
@@ -1128,15 +1185,19 @@ namespace Vehicle
         // ==========================================================================================
         PhysicalTrafficManager mPhysicalTrafficManager;   // +44768 (X360 105648; host 105840)
 
-        // The DWARF's `PotentialContact[128] maNonPhysicalContacts` (:850) + `int32_t
-        // miNonPhysicalContactCount` (:851). Still opaque -- CgsSceneManager::SceneManagerIO::
-        // PotentialContact is only forward-declared in this header -- but now correctly SIZED and
-        // correctly PLACED: X360 150416..160672, i.e. 128*80 + 4 rounded up to the 16-alignment
-        // mDiscardedContacts needs. The 80 is the DWARF record (3 x Vector3 + 2 VolumeInstanceId +
-        // 2 uint32 + 2 uint16, 16-aligned), and it is the number that makes the backward derivation
-        // of the traffic manager's X360 size close exactly.
-        // DELETE-WHEN PotentialContact gets a committed home; then this becomes the real array.
-        unsigned char        mPadNonPhysicalContacts[160672 - 150416];   // 10256 bytes
+        // ⭐⭐ PROMOTED 2026-08-06 (big-five #2, contact-generation wave) -- the old
+        // `mPadNonPhysicalContacts[10256]` opaque span's own DELETE-WHEN clause has come due:
+        // CgsSceneManager::SceneManagerIO::PotentialContact has a committed home
+        // (SharedIO/CgsPotentialContact.h, 80 bytes host == 80 bytes console), so this is now
+        // the DWARF's real pair -- `PotentialContact[128] maNonPhysicalContacts` (:850) +
+        // `int32_t miNonPhysicalContactCount` (:851). X360 span 150416..160672 == 128*80 + 4 +
+        // 12 tail pad up to mDiscardedContacts' 16-alignment; the host reproduces it exactly
+        // (static_assert in _AssertLayoutTuningBank's TU is NOT extended -- the span sits before
+        // the tuning bank; the count seat is proven by BridgeContactsToSimulation @0x825A9A50's
+        // opening `stw 0` at module+179760 == this+160656 == 150416 + 128*80).
+        CgsSceneManager::SceneManagerIO::PotentialContact maNonPhysicalContacts[128];  // +150416 :850
+        s32                  miNonPhysicalContactCount;                                // +160656 :851
+        unsigned char        mPadAfterNonPhysicalContacts[160672 - 160660];            // 12 tail-pad bytes
 
         // ⭐ NEWLY PINNED: the discarded-contact queue. Construct binds it in place @0x8263C048:
         //   addis r29,r31,2 ; addi r29,r29,0x73A0   -> this + 160672

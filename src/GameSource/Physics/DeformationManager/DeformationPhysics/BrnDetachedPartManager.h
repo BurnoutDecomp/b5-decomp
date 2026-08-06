@@ -64,8 +64,8 @@ namespace CgsPhysics
 {
 namespace PhysicsSimulationIO
 {
-    class InputBuffer;   // sim-input event buffer (MakePartPhysical / RemovePart / Update)
-    class OutputBuffer;  // sim-output buffer (UpdatePostPhysics / TestJointForBreaking)
+    struct InputBuffer;   // ⚠ class-key fixed 2026-08-06 (struct per CgsPhysicsSimulationModuleIO.h:43)   // sim-input event buffer (MakePartPhysical / RemovePart / Update)
+    struct OutputBuffer;  // ⚠ class-key fixed 2026-08-06 (struct per CgsPhysicsSimulationModuleIO.h:321)  // sim-output buffer (UpdatePostPhysics / TestJointForBreaking)
 }
 }
 

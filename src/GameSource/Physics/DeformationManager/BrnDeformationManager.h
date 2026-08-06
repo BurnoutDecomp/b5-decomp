@@ -130,7 +130,10 @@ namespace CgsSceneManager
 
 namespace CgsPhysics
 {
-    namespace PhysicsSimulationIO { class InputBuffer; class OutputBuffer; }   // sim IO buffers
+    // ⚠ CLASS-KEYS FIXED 2026-08-06 (big-five #2): both are `struct` in the authoritative
+    // CgsPhysicsSimulationModuleIO.h (:43/:321); `class` here silently mangled every
+    // cross-TU signature carrying them (?AV vs ?AU) -- found by an LNK2019 pair.
+    namespace PhysicsSimulationIO { struct InputBuffer; struct OutputBuffer; }   // sim IO buffers
     class CollisionGenerator;   // contact-generation arg (same qualified home as BrnDeformableObject.h)
 }
 
@@ -149,10 +152,17 @@ namespace Deformation { class DeformationDebugComponent; }
 namespace PhysicsModuleIO
 {
     // The per-frame potential-contact source the bridge/solve/contact-gen methods read the
-    // hinged-body-part / detached-wheel contact queues from. Homed (minimal) by
-    // BrnPhysicalBodyPartPool.h, included transitively via the managers above. Referenced by
-    // pointer only here. FLAG: forward-declared (full layout not required for declare-only).
-    class PotentialContactInterface;
+    // hinged-body-part / detached-wheel contact queues from. AUTHORITATIVE home:
+    // BrnPhysicsModuleIO_PotentialContactInterface.h. Referenced by pointer only here.
+    // ⚠ CLASS-KEY FIXED 2026-08-06 (big-five #2 wave): this was `class ...;` -- a silent
+    // mangling fork (MSVC encodes struct/class in ?AU/?AV) against the authoritative `struct`
+    // that every OTHER forward declaration in the tree already uses. Same defect class as the
+    // TrafficPhysics fork documented in BrnPhysicalTrafficManager.h.
+    struct PotentialContactInterface;
+
+    // ⭐ ADDED 2026-08-06 (big-five #2): the Bridge* pair's corrected arg-2 type. Class key
+    // `class`, matching BrnPhysicsModuleIO.h:147.
+    class InputBuffer;
 }
 
 namespace GameState { namespace GameStateModuleIO {
@@ -298,6 +308,17 @@ namespace Deformation
                                               BrnPhysics::ContactId lContactId,
                                               CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput);
 
+        // ⭐ ADDED 2026-08-06 (big-five #2, contact-generation wave). PhysicsModule::
+        // BridgeContactsToSimulation @0x825A99E8 calls the embedded part pool's / detached-wheel
+        // manager's OWN out-of-line IsPartIndexUsed/GetPart/IsSlotUsed/GetWheel with the embedded
+        // objects' addresses as `this` (module+362384 == mDetachedPartManager(.mPartPool),
+        // module+387200 == mDetachedWheelManager) -- an access private members cannot express
+        // from PhysicsModule. Exposed as named accessors; FLAG: the accessor NAMES are inferred
+        // (no DWARF accessor is dumped for either member) -- the console evidence is the direct
+        // embedded-object call itself.
+        DetachedPartManager&  GetDetachedPartManager()  { return mDetachedPartManager; }
+        DetachedWheelManager& GetDetachedWheelManager() { return mDetachedWheelManager; }
+
         // :142. Post-physics pass: add contacts to the penetration solver, solve penetrations,
         // read transforms back, update models + the detached managers, process the joint spies.
         void UpdatePostPhysics(const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput,
@@ -376,13 +397,19 @@ namespace Deformation
                                  PrimitivePairListBuilder* lpBuilder);
 
         // :228. Bridge the body-part-vs-car potential contacts back into the simulation.
+        // ⚠ ARG-2 TYPE CORRECTED 2026-08-06 (big-five #2 wave): the PS3 DecFIGS mangle
+        // (@0x6F728C ...PKNS_15PhysicsModuleIO11InputBufferE...) pins arg 2 as the PHYSICS
+        // MODULE IO input buffer (BrnPhysics::PhysicsModuleIO::InputBuffer), not a second sim
+        // input buffer -- exactly what the caller BridgeContactsToSimulation passes.
+        // ⚠ FLAG: body still a TRAP STUB (348 X360 asm lines -- named, not landed, this wave).
         void BridgeBodyPartCarContactsToSimulation(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
-                                                   const CgsPhysics::PhysicsSimulationIO::InputBuffer* lpPrevSimInput,
+                                                   const BrnPhysics::PhysicsModuleIO::InputBuffer* lpInputBuffer,
                                                    PhysicsModuleIO::PotentialContactInterface* lpContacts);
 
         // :234. Bridge the detached-wheel-vs-car potential contacts back into the simulation.
+        // Same arg-2 correction as :228 (PS3 mangle @0x741E28); same TRAP-STUB FLAG (392 asm).
         void BridgeDetachedWheelCarContactsToSimulation(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
-                                                        const CgsPhysics::PhysicsSimulationIO::InputBuffer* lpPrevSimInput,
+                                                        const BrnPhysics::PhysicsModuleIO::InputBuffer* lpInputBuffer,
                                                         PhysicsModuleIO::PotentialContactInterface* lpContacts);
 
         // :242. Generate the detached-wheel-vs-world contacts. const. (Same FLAG as :203.)
