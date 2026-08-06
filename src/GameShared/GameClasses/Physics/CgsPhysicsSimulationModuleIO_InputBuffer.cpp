@@ -232,6 +232,13 @@ namespace PhysicsSimulationIO
     const InputBuffer::InAddContactQueue* InputBuffer::GetAddContactQueue() const
     { CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n"); return &mAddContactQueue; }
 
+    // ⭐ ADDED 2026-08-06 (BridgeContactsToSimulation wave). The WRITE-side accessor
+    // @0x8259EF28: same 42-instruction accessor shape as the const block above but guarded on
+    // the WRITE lock bit -- the PS3 DecFIGS twin's assert path bakes "Not locked for writing\n"
+    // + CgsPhysicsSimulationModuleIO.h:1073, and the X360 body's `extrwi` picks status bit 3.
+    InputBuffer::InAddContactQueue* InputBuffer::GetAddContactQueue()
+    { CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n"); return &mAddContactQueue; }
+
     const InputBuffer::InAddJointQueue* InputBuffer::GetAddJointQueue() const
     { CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n"); return &mAddJointQueue; }
 

@@ -41,6 +41,7 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"  // CgsModule::IOBuffer
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<13312,16> (mGameActionQueue)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h" // ContactSpy::ContactSpyInterface (real member @ +998192, promoted 2026-08-06)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h" // Vehicle::VehicleInputInterface (mVehicleInputInterface, retyped 2026-08-06)
 
 namespace BrnPhysics
 {
@@ -149,7 +150,15 @@ namespace PhysicsModuleIO
     public:
         // Opaque foreign-type storages, sized to their X360-attested copied/embedded extent.
         struct CameraStorage                        { unsigned char maBytes[0x160]; };  // 352
-        struct VehicleInputInterfaceStorage         { unsigned char maBytes[1]; };
+        // ⭐ RETYPED 2026-08-06 (big-five #2, contact-generation wave; GameActionQueueStorage
+        // precedent -- typedef keeps the four accessors' signatures). The vehicle-input span is
+        // the REAL committed BrnPhysics::Vehicle::VehicleInputInterface now: the bridge driver
+        // BridgeContactsToSimulation @0x825A9A64 reads the tri-cache interface out of it
+        // (GetVehicleInputInterface() @0x8259F8A0 + the inlined `+128016` ==
+        // mTriangleCacheInterface, PS3 lpInputBuffer+128384), which a 1-byte opaque span cannot
+        // express. The pad after the member absorbs the host-size difference (compile fails if
+        // the real host type ever outgrows the console span -- the intended tripwire).
+        typedef BrnPhysics::Vehicle::VehicleInputInterface VehicleInputInterfaceStorage;
         struct VehicleDriverInputInterfaceStorage   { unsigned char maBytes[1]; };
         struct VehicleEffectsInputInterfaceStorage  { unsigned char maBytes[1]; };
         struct RCEntityOutputInterfaceStorage       { unsigned char maBytes[0x28F0]; }; // 10480
@@ -208,9 +217,14 @@ namespace PhysicsModuleIO
     private:
         u8                                  maStatusPad[15];                 // +1..+15 (force +16)
         CameraStorage                       mCameraInput;                    // +16      :309
-        VehicleInputInterfaceStorage        mVehicleInputInterface;          // +368     :311
-        // gap to mVehicleDriverInterface: +369 .. +142543.
-        unsigned char                       maDriverPad[142544 - 369];       //
+        VehicleInputInterfaceStorage        mVehicleInputInterface;          // +368     :311 (real type; console span 142176)
+        // ⚠ The console gap [+369..+142543] is GONE on the host: the real interface's host
+        // sizeof EXCEEDS the 142176-byte console span (its embedded event queues carry the
+        // x64-widened pointers), so -- per the mGameActionQueue precedent at the bottom of this
+        // class -- the buffer simply GROWS and the members below sit at host offsets. The
+        // console offsets in the trailing comments stay as console documentation only. (The old
+        // `maDriverPad[142176 - sizeof(...)]` tripwire fired with a negative subscript on the
+        // first build, which is how the growth was measured rather than assumed.)
         VehicleDriverInputInterfaceStorage  mVehicleDriverInterface;         // +142544  :312
         // gap to mVehicleEffectsInputInterface: +142545 .. +147839.
         unsigned char                       maEffectsPad[147840 - 142545];   //

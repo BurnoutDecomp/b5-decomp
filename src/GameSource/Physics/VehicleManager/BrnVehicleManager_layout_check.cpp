@@ -213,13 +213,21 @@ namespace Vehicle
         static_assert(sizeof(CgsSceneManager::SceneManagerIO::PotentialContact) == 80,
                       "3 x Vector3 + 2 VolumeInstanceId + 2 uint32 + 2 uint16, 16-aligned (DWARF "
                       "CgsPotentialContact.h:60-68). This is derivation B's only non-asm input.");
-        static_assert(sizeof(VehicleManager::mPadNonPhysicalContacts)
+        // ⭐ REBASED 2026-08-06 (big-five #2): the old opaque mPadNonPhysicalContacts span was
+        // PROMOTED to the DWARF's real maNonPhysicalContacts[128] + miNonPhysicalContactCount
+        // (+ 12 tail-pad bytes). The derivation closure is unchanged -- it is now stated over
+        // the real members' combined span.
+        static_assert(sizeof(VehicleManager::maNonPhysicalContacts)
+                          + sizeof(VehicleManager::miNonPhysicalContactCount)
+                          + sizeof(VehicleManager::mPadAfterNonPhysicalContacts)
                           == 128 * sizeof(CgsSceneManager::SceneManagerIO::PotentialContact) + 4 + 12,
                       "maNonPhysicalContacts[128] + miNonPhysicalContactCount + 12 bytes of align pad "
                       "== 10256 == 160672 - 150416: the closure that forces X360 sizeof"
                       "(PhysicalTrafficManager) == 105648 and no other value");
         static_assert(44768 + KU_X360_SIZEOF_PHYSICAL_TRAFFIC_MANAGER
-                          + sizeof(VehicleManager::mPadNonPhysicalContacts) == 160672,
+                          + sizeof(VehicleManager::maNonPhysicalContacts)
+                          + sizeof(VehicleManager::miNonPhysicalContactCount)
+                          + sizeof(VehicleManager::mPadAfterNonPhysicalContacts) == 160672,
                       "and it closes on the X360's own mDiscardedContacts seat");
 
         // ---- the two master gates (DWARF :865/:866) -------------------------------------------

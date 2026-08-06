@@ -383,5 +383,30 @@ void PropManager::CreateContactEvent( ContactSpy::PropContact* lpOutPropContact,
     }
 }
 
+// =================================================================================================
+// PropManager::SetupAndValidatePropContact  @0x82628190  (PS3 DecFIGS 0x79008C)
+//
+// ⚠⚠ TRAP STUB (closure enforcement, 2026-08-06 big-five #2 wave) -- the REAL body (572 X360 asm
+// lines / 24 callees: validate + set up one prop-vs-X potential contact for the simulation) is
+// NOT reconstructed yet. Dead code today: the only caller chain is PhysicsModule::
+// BridgeContactsToSimulation <- Update @0x825B0640, still a link stub, so /OPT:REF strips this.
+// RECONSTRUCT-NEXT.
+// =================================================================================================
+bool PropManager::SetupAndValidatePropContact(
+    CgsPhysics::PhysicsSimulationIO::InAddPotentialContact* /*lpAddContactEvent*/,
+    const CgsSceneManager::SceneManagerIO::PotentialContact* /*lpPotentialContact*/,
+    BrnPhysics::Vehicle::VehicleManager* /*lpVehicleManager*/,
+    CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimModuleInputBuffer*/,
+    PropRaceCarContactBuffer* /*lpPropRaceCarContactBuffer*/,
+    CgsPhysics::RigidBodyId /*lWorldRigidBodyId*/,
+    bool /*lbFrozen*/,
+    f32 /*lfTimeStep*/)
+{
+    CGS_ASSERT(false,
+               "TRAP: PropManager::SetupAndValidatePropContact @0x82628190 "
+               "not reconstructed (big-five #2 closure stub)\n");
+    return false;
+}
+
 }
 }

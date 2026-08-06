@@ -36,17 +36,29 @@ namespace PhysicsModuleIO
 {
     void InputBuffer::_AssertLayout()
     {
-        // All InputBuffer members are pointer-free opaque byte storages (or a plain u32), so every
-        // X360-attested member offset is host-reproducible and assertable.
+        // ⚠ REBASED 2026-08-06 (big-five #2 wave): mVehicleInputInterface is the REAL
+        // Vehicle::VehicleInputInterface now (see the header banner), and its host sizeof
+        // exceeds the 142176-byte console span, so every member AFTER it drifts by one uniform
+        // host constant (the interface is alignas(16), 368 + sizeof is 16-aligned, and the
+        // console seat 142544 is 16-aligned too -- the drift preserves every relative spacing).
+        // The pre-drift seats stay absolute pins; the post-drift seats are pinned RELATIVE
+        // (console offset + KU_DRIFT), which still fails on any wrong pad run -- the gate keeps
+        // its teeth.
         static_assert(offsetof(InputBuffer, mCameraInput)                  == 16,     "mCameraInput @16");
         static_assert(offsetof(InputBuffer, mVehicleInputInterface)       == 368,    "mVehicleInputInterface @368");
-        static_assert(offsetof(InputBuffer, mVehicleDriverInterface)      == 142544, "mVehicleDriverInterface @142544");
-        static_assert(offsetof(InputBuffer, mVehicleEffectsInputInterface)== 147840, "mVehicleEffectsInputInterface @147840");
-        static_assert(offsetof(InputBuffer, mRCEntityOutputInterface)     == 149632, "mRCEntityOutputInterface @149632");
-        static_assert(offsetof(InputBuffer, mTimerInterface)              == 327152, "mTimerInterface @327152");
-        static_assert(offsetof(InputBuffer, mSolverMaxIterations)         == 327200, "mSolverMaxIterations @327200");
-        static_assert(offsetof(InputBuffer, mPropManagerInputInterface)   == 327216, "mPropManagerInputInterface @327216");
-        static_assert(offsetof(InputBuffer, mGameActionQueue)             == 338496, "mGameActionQueue @338496");
+        {
+            constexpr size_t KU_DRIFT =
+                (368 + sizeof(VehicleInputInterfaceStorage)) - 142544;   // host growth of the vehicle-input span
+            static_assert(sizeof(VehicleInputInterfaceStorage) >= 142176,
+                          "vehicle-input span smaller than the console span -- retype regressed");
+            static_assert(offsetof(InputBuffer, mVehicleDriverInterface)       == 142544 + KU_DRIFT, "mVehicleDriverInterface @142544+D");
+            static_assert(offsetof(InputBuffer, mVehicleEffectsInputInterface) == 147840 + KU_DRIFT, "mVehicleEffectsInputInterface @147840+D");
+            static_assert(offsetof(InputBuffer, mRCEntityOutputInterface)      == 149632 + KU_DRIFT, "mRCEntityOutputInterface @149632+D");
+            static_assert(offsetof(InputBuffer, mTimerInterface)               == 327152 + KU_DRIFT, "mTimerInterface @327152+D");
+            static_assert(offsetof(InputBuffer, mSolverMaxIterations)          == 327200 + KU_DRIFT, "mSolverMaxIterations @327200+D");
+            static_assert(offsetof(InputBuffer, mPropManagerInputInterface)    == 327216 + KU_DRIFT, "mPropManagerInputInterface @327216+D");
+            static_assert(offsetof(InputBuffer, mGameActionQueue)              == 338496 + KU_DRIFT, "mGameActionQueue @338496+D");
+        }
         // The game-action queue member must be the real 13328-byte queue, not a stand-in: it is
         // the LAST member and WorldModule::BridgeActionsToPhysicsModule AddEvents into it.
         static_assert(sizeof(InputBuffer::GameActionQueueStorage) == 13328,

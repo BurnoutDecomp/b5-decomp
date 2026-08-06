@@ -166,6 +166,12 @@ namespace PhysicsSimulationIO
         const InRemoveRigidBodyQueue*        GetRemoveRigidBodyQueue()        const;  // @0x8289E6A8  ⚠️ export HOLE
         const InRemoveAllRigidBodiesQueue*   GetRemoveAllRigidBodiesQueue()   const;  // @0x8289E750
         const InAddContactQueue*             GetAddContactQueue()             const;  // @0x8289E7F8
+        // ⭐ ADDED 2026-08-06 (BridgeContactsToSimulation wave): the WRITE-side twin
+        // @0x8259EF28 -- write-lock guard ("Not locked for writing\n", DWARF decl :1073 per the
+        // PS3 DecFIGS assert path) then &mAddContactQueue. It is what the bridge calls before
+        // every CheckContactQueueSize/AddEventSafe pair and before the two BridgeSimpleTraffic*
+        // forwards.
+        InAddContactQueue*                   GetAddContactQueue();                    // @0x8259EF28
         const InAddJointQueue*               GetAddJointQueue()               const;  // @0x8289E8A0
         const InRemoveJointQueue*            GetRemoveJointQueue()            const;  // @0x8289E948
         const InUpdateJointFramesQueue*      GetUpdateJointFramesQueue()      const;  // @0x8289E9F0

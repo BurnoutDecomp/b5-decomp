@@ -12,6 +12,7 @@
 #include "GameSource/Physics/ContactSpies/BrnContactSpyQueue.h"               // ContactSpyQueue<T,N>::SortAndCreateRunList<K> (decl)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyRunList.h"             // ContactSpyRunList<N>
 #include "GameSource/World/BrnEntityTypes.h"                                  // BrnWorld::EEntityTypeID enumerators
+#include "rw/math/vpu/vector3_operation.h"                                    // Normalize / Magnitude / IsValid (BridgeContactsToSimulation)
 
 // =====================================================================================================
 // BrnPhysics::PhysicsModule -- contact-spy bridge slice (X360 ARTIST build).
@@ -562,5 +563,393 @@ namespace BrnPhysics
         // Publish: bind the output buffer's contact-spy interface to mContactData
         // (SetData carries the "lpData != NULL" tripwire, BrnContactSpyInterface.h:264).
         lpOutputBuffer->GetContactSpyInterface()->SetData(&mContactData);
+    }
+
+    namespace
+    {
+        // The console's per-lane NaN self-compares (vcmpeqfp v,v): a lane is valid iff it equals
+        // itself. IsValid(Vector3) is the vendor vpu tree's own three-lane self-compare.
+        inline bool IsValidLane(f32 lfValue) { return lfValue == lfValue; }
+        inline bool IsValidVec3Lanes(const Vector3& lrV) { return rw::math::vpu::IsValid(lrV); }
+
+        // The console's renormalisation length check (loops [7]/[13]/[8] of the bridge driver):
+        // |mNormal| computed by vmsum3fp128 + two-step Newton-Raphson vrsqrtefp (+ the vsel
+        // zero-guard the committed Magnitude reproduces), then | |n| - 1 | > 0.01 fires the
+        // "Un-normalised ..." assert. Diagnostics only -- no store back.
+        inline bool IsUnitLength(const Vector3& lrV)
+        {
+            const f32 lfDelta = rw::math::vpu::Magnitude(lrV) - 1.0f;
+            return (lfDelta < 0.0f ? -lfDelta : lfDelta) <= 0.0099999998f;
+        }
+    }
+
+    // =================================================================================================
+    // BrnPhysics::PhysicsModule::BridgeContactsToSimulation  @0x825A99E8   (TU lines :49..:463)
+    //
+    // The producer bridge of PhysicsModule::Update: turn this frame's potential contacts into
+    // simulation add-contact events, then drain the five typed custom queues into the deformation
+    // sensors. Reconstructed from the BURNOUT_X360_ARTIST.XEX asm with the PS3 DecFIGS out-of-line
+    // build @0x6999C0 as the structural oracle (it keeps every accessor the X360 inlines
+    // out-of-line, with the debug parameter names used below).
+    //
+    //   1) merged external contacts (GetLength(): mpQueue + custom queue [0]): entity-pair
+    //      tripwires (:91..:103, :139/:140), InAddPotentialContact build (muTag = event index;
+    //      frictions 0.4/0.5/0.5; WORLD ids -> mWorldRigidBodyId, deformation-local owners
+    //      {6,7,9,10} keep the full packed id, every other owner keeps only its entity word),
+    //      the PROP gate (owner 3 on either side: part/wheel frozen-flag lookup +
+    //      PropManager::SetupAndValidatePropContact, false == drop), the per-material friction
+    //      overrides ({9,10} -> 0.8/0.8/0.2, {6,7} -> 0.4/0.6/0.05), the IsValid tripwires
+    //      (:274..:278), CheckContactQueueSize, then AddEventSafe into the sim queue.
+    //   2) custom queue [6] (vehicle-world): normalize the COPY's mNormal in place, then
+    //      ReadPotentialVehicleWorldContact with ContactId (i | 0x6000000).
+    //   3) custom queue [9] (traffic-world): owner tripwires :334/:335, the
+    //      VehicleManager::ValidateTrafficContact gate, then normalize + Read... (i | 0x9000000).
+    //   4) the two simple-traffic bridges (world then car).
+    //   5) custom queue [7] (racecar-racecar): unit-length tripwire (:384), ReadPotentialContact
+    //      (i | 0x7000000).
+    //   6) custom queue [13] (traffic-traffic): owner tripwires :410/:411, the
+    //      PhysicalTrafficManager::ValidateAndFixUpTrafficTrafficContact gate (global->physical
+    //      rewrite inside), unit-length tripwire (:422), ReadPotentialContact (i | 0xD000000).
+    //   7) custom queue [8] (racecar-traffic): owner tripwires :447/:448, the traffic B id
+    //      rewritten global->physical (GetPhysicsEntityIDFromGlobalEntityID + the high-dword
+    //      splice, `sldi 32 ; clrldi 32 ; or` @0x825AB0F0), unit-length tripwire (:463),
+    //      ReadPotentialContact (i | 0x8000000).
+    //   8) DeformationManager::BridgeBodyPartCarContactsToSimulation +
+    //      BridgeDetachedWheelCarContactsToSimulation, then ValidateSimulationContacts.
+    //
+    // The per-queue ContactId owner byte EQUALS the walked queue's index everywhere ([6]/[7]/
+    // [8]/[9]/[13]) -- five independent confirmations of the accessor/index binding.
+    // =================================================================================================
+    void PhysicsModule::BridgeContactsToSimulation(
+        CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
+        const PhysicsModuleIO::InputBuffer* lpInputBuffer,
+        PhysicsModuleIO::PotentialContactInterface* lpContactInterface,
+        Props::PropRaceCarContactBuffer* lpPropRaceCarContactBuffer )
+    {
+        typedef PhysicsModuleIO::PotentialContactInterface::CustomPotentialContactQueue Queue;
+
+        CGS_ASSERT(lpSimModuleInputBuffer != nullptr, "lpSimModuleInputBuffer != NULL");   // :49
+        CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer != NULL");                     // :50
+
+        // Write-locked GetTimeStep (the accessor's own "Not locked for writing" +
+        // "mfTimeStep > 0.0f" tripwires, CgsPhysicsSimulationModuleIO.h:848/:849).
+        const f32 lfTimeStep = lpSimModuleInputBuffer->GetTimeStep();
+
+        // The vehicle-input tri-cache (GetVehicleInputInterface @0x8259F8A0 + the inlined
+        // mTriangleCacheInterface seat -- X360 +128016 into the storage, PS3 buffer+128384).
+        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface =
+            lpInputBuffer->GetVehicleInputInterface()->GetTriangleCacheInterface();
+
+        const s32 liNumPotentialContacts = lpContactInterface->GetLength();
+
+        // The opening `stw 0` at module+179760 == mVehicleManager.miNonPhysicalContactCount.
+        mVehicleManager.ResetNonPhysicalContacts();
+
+        // ---- (1) merged external potential contacts -> sim add-contact events -----------------
+        for (s32 liEventIndex = 0; liEventIndex < liNumPotentialContacts; ++liEventIndex)
+        {
+            // 76-byte stack copy (the console's ctr=10 qword copy / PS3 sub_4C1E88 memcpy).
+            const PotentialContact lContact = lpContactInterface->GetEvent(liEventIndex);
+
+            // Inlined ContactId construction tripwire (BrnContactId.h:122).
+            CGS_ASSERT(liEventIndex >= 0 && liEventIndex < 65535,
+                       "liEventIndex >= 0 && liEventIndex < 65535");                        // BrnContactId.h:122
+
+            const u64 luIdA    = lContact.muVolumeInstanceIdA.muId;
+            const u64 luIdB    = lContact.muVolumeInstanceIdB.muId;
+            const u32 luOwnerA = GetIdOwner(luIdA);
+            const u32 luOwnerB = GetIdOwner(luIdB);
+
+            // Pair-legality tripwires (fire-and-continue diagnostics).
+            CGS_ASSERT(!(luOwnerA == 1u && luOwnerB == 1u),
+                       "!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR && "
+                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR)");           // :91
+            CGS_ASSERT(!(luOwnerA == 0u && luOwnerB == 2u),
+                       "!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_WORLD && "
+                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE)");   // :94
+            CGS_ASSERT(!(luOwnerA == 2u && luOwnerB == 0u),
+                       "!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE && "
+                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_WORLD)");             // :97
+            CGS_ASSERT(!(luOwnerA == 1u && luOwnerB == 2u),
+                       "!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR && "
+                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE)");   // :100
+            CGS_ASSERT(!(luOwnerA == 2u && luOwnerB == 2u),
+                       "!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE && "
+                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE)");   // :103
+            CGS_ASSERT(luOwnerA != 8u,
+                       "lVolumeInstanceIDA.GetEntityIDOwner() != BrnWorld::E_ENTITYTYPE_RACECAR_WHEEL");      // :139
+            CGS_ASSERT(luOwnerB != 8u,
+                       "lVolumeInstanceIDB.GetEntityIDOwner() != BrnWorld::E_ENTITYTYPE_RACECAR_WHEEL");      // :140
+
+            InAddPotentialContact lAddContactEvent;
+            lAddContactEvent.muTag            = static_cast<u32>(liEventIndex);
+            lAddContactEvent.mRestitution     = 0.5f;
+            lAddContactEvent.mDynamicFriction = 0.40000001f;
+            lAddContactEvent.mStaticFriction  = 0.5f;
+
+            // Rigid-body id resolution: WORLD -> the world body; the deformation-local owners
+            // ({6,7,9,10}: parts / detached wheels) keep the full packed id; every other owner
+            // keeps only its entity word (`sldi hi,32` @0x825A9DA8/@0x825A9DE4).
+            if (luOwnerA == 0u)
+            {
+                lAddContactEvent.mIDA = mWorldRigidBodyId;
+            }
+            else if (luOwnerA == 6u || luOwnerA == 7u || luOwnerA == 9u || luOwnerA == 10u)
+            {
+                lAddContactEvent.mIDA = luIdA;
+            }
+            else
+            {
+                lAddContactEvent.mIDA = (luIdA >> 32) << 32;
+            }
+
+            if (luOwnerB == 0u)
+            {
+                lAddContactEvent.mIDB = mWorldRigidBodyId;
+            }
+            else if (luOwnerB == 6u || luOwnerB == 7u || luOwnerB == 9u || luOwnerB == 10u)
+            {
+                lAddContactEvent.mIDB = luIdB;
+            }
+            else
+            {
+                lAddContactEvent.mIDB = (luIdB >> 32) << 32;
+            }
+
+            lAddContactEvent.mNormal   = lContact.mNormal;
+            lAddContactEvent.mPointOnA = lContact.mPointOnA;
+            lAddContactEvent.mPointOnB = lContact.mPointOnB;
+
+            // ---- the PROP gate (owner 3 on either side) ---------------------------------------
+            if (luOwnerA == 3u || luOwnerB == 3u)
+            {
+                // The deformation-part / detached-wheel frozen flag rides into the prop
+                // validation (part+486 / wheel+128 == the mbFrozen bools, read through the
+                // pools' own out-of-line accessors @0x825A0758/@0x825A0858/@0x825A0A10/
+                // @0x825A0B10).
+                bool lbFrozen = false;
+
+                Deformation::DetachedPartManager&  lrPartManager  = mDeformationManager.GetDetachedPartManager();
+                Deformation::DetachedWheelManager& lrWheelManager = mDeformationManager.GetDetachedWheelManager();
+
+                if (luOwnerA == 6u)
+                {
+                    if (lrPartManager.IsPartIndexUsed(static_cast<s32>(luIdA & 0xFFFFu)))
+                    {
+                        lbFrozen = lrPartManager.GetPartFromIndex(static_cast<u16>(luIdA & 0xFFFFu))->IsFrozen();
+                    }
+                }
+                else if (luOwnerB == 6u)
+                {
+                    if (lrPartManager.IsPartIndexUsed(static_cast<s32>(luIdB & 0xFFFFu)))
+                    {
+                        lbFrozen = lrPartManager.GetPartFromIndex(static_cast<u16>(luIdB & 0xFFFFu))->IsFrozen();
+                    }
+                }
+
+                if (luOwnerA == 9u)
+                {
+                    if (lrWheelManager.IsSlotUsed(static_cast<u16>(luIdA & 0xFFFFu)))
+                    {
+                        lbFrozen = lrWheelManager.GetWheel(static_cast<u16>(luIdA & 0xFFFFu))->IsFrozen();
+                    }
+                }
+                else if (luOwnerB == 9u)
+                {
+                    if (lrWheelManager.IsSlotUsed(static_cast<u16>(luIdB & 0xFFFFu)))
+                    {
+                        lbFrozen = lrWheelManager.GetWheel(static_cast<u16>(luIdB & 0xFFFFu))->IsFrozen();
+                    }
+                }
+
+                if (!mPropManager.SetupAndValidatePropContact(&lAddContactEvent,
+                                                              &lContact,
+                                                              &mVehicleManager,
+                                                              lpSimModuleInputBuffer,
+                                                              lpPropRaceCarContactBuffer,
+                                                              mWorldRigidBodyId,
+                                                              lbFrozen,
+                                                              lfTimeStep))
+                {
+                    continue;   // validation dropped the contact
+                }
+            }
+
+            // ---- per-material friction overrides ----------------------------------------------
+            if (luOwnerA == 9u || luOwnerA == 10u || luOwnerB == 9u || luOwnerB == 10u)
+            {
+                lAddContactEvent.mStaticFriction  = 0.80000001f;
+                lAddContactEvent.mDynamicFriction = 0.80000001f;
+                lAddContactEvent.mRestitution     = 0.2f;
+            }
+            if (luOwnerA == 6u || luOwnerA == 7u || luOwnerB == 6u || luOwnerB == 7u)
+            {
+                lAddContactEvent.mDynamicFriction = 0.40000001f;
+                lAddContactEvent.mStaticFriction  = 0.60000002f;
+                lAddContactEvent.mRestitution     = 0.050000001f;
+            }
+
+            // Validity tripwires (the console's vcmpeqfp self-compares).
+            CGS_ASSERT(IsValidLane(lAddContactEvent.mDynamicFriction),
+                       "rw::math::IsValid( lAddContactEvent.mDynamicFriction)");           // :274
+            CGS_ASSERT(IsValidLane(lAddContactEvent.mStaticFriction),
+                       "rw::math::IsValid( lAddContactEvent.mStaticFriction )");           // :275
+            CGS_ASSERT(IsValidVec3Lanes(lAddContactEvent.mNormal),
+                       "rw::math::IsValid( lAddContactEvent.mNormal)");                    // :276
+            CGS_ASSERT(IsValidVec3Lanes(lAddContactEvent.mPointOnA),
+                       "rw::math::IsValid( lAddContactEvent.mPointOnA)");                  // :277
+            CGS_ASSERT(IsValidVec3Lanes(lAddContactEvent.mPointOnB),
+                       "rw::math::IsValid( lAddContactEvent.mPointOnB)");                  // :278
+
+            // Full-queue diagnostics, then the bounds-gated append (the console's separate
+            // CheckContactQueueSize call + EventQueue<...,1024>::AddEventSafe @0x8259D308).
+            CheckContactQueueSize(lpSimModuleInputBuffer->GetAddContactQueue());
+            lpSimModuleInputBuffer->GetAddContactQueue()->AddEventSafe(lAddContactEvent);
+        }
+
+        // ---- (2) custom queue [6]: vehicle-world contacts -> the deformation sensors ----------
+        {
+            const Queue& lrQueue = lpContactInterface->GetRaceCarWithWorldQueueValidated();
+            for (s32 liIndex = 0; liIndex < lrQueue.GetLength(); ++liIndex)
+            {
+                PotentialContact lContact = lrQueue.GetEvent(liIndex);   // stack copy
+
+                // Normalize the COPY's normal in place (vmsum3fp128 + double Newton-Raphson
+                // vrsqrtefp + the vsel zero-guard -- the committed Normalize reproduces all of
+                // it); the queue record itself is NOT written back.
+                lContact.mNormal = rw::math::vpu::Normalize(lContact.mNormal);
+
+                CGS_ASSERT(liIndex >= 0 && liIndex < 65535,
+                           "liEventIndex >= 0 && liEventIndex < 65535");                    // BrnContactId.h:122
+                mDeformationManager.ReadPotentialVehicleWorldContact(
+                    lContact, ContactId(static_cast<u32>(liIndex) | 0x06000000u), lpSimModuleInputBuffer);
+            }
+        }
+
+        // ---- (3) custom queue [9]: traffic-world contacts, validated ---------------------------
+        {
+            const Queue& lrQueue = lpContactInterface->GetTrafficWithWorldQueue();
+            for (s32 liIndex = 0; liIndex < lrQueue.GetLength(); ++liIndex)
+            {
+                PotentialContact lContact = lrQueue.GetEvent(liIndex);   // stack copy
+
+                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdA.muId) == 2u,
+                           "lContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE"); // :334
+                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdB.muId) == 0u,
+                           "lContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_WORLD");           // :335
+                CGS_ASSERT(liIndex >= 0 && liIndex < 65535,
+                           "liEventIndex >= 0 && liEventIndex < 65535");                    // BrnContactId.h:122
+
+                if (mVehicleManager.ValidateTrafficContact(&lContact, lpTriangleCacheInterface, lfTimeStep))
+                {
+                    lContact.mNormal = rw::math::vpu::Normalize(lContact.mNormal);
+                    mDeformationManager.ReadPotentialVehicleWorldContact(
+                        lContact, ContactId(static_cast<u32>(liIndex) | 0x09000000u), lpSimModuleInputBuffer);
+                }
+            }
+        }
+
+        // ---- (4) the two simple-traffic bridges ------------------------------------------------
+        BridgeSimpleTrafficWithWorldContactsToSimulation(lpSimModuleInputBuffer->GetAddContactQueue(),
+                                                         lpContactInterface);
+        mVehicleManager.BridgeSimpleTrafficWithCarContactsToSimulation(
+            lpSimModuleInputBuffer->GetAddContactQueue(), lpContactInterface);
+
+        // ---- (5) custom queue [7]: racecar-racecar ---------------------------------------------
+        {
+            const Queue& lrQueue = lpContactInterface->GetRaceCarWithRaceCarQueue();
+            for (s32 liIndex = 0; liIndex < lrQueue.GetLength(); ++liIndex)
+            {
+                const PotentialContact lContact = lrQueue.GetEvent(liIndex);   // stack copy
+
+                CGS_ASSERT(liIndex >= 0 && liIndex < 65535,
+                           "liEventIndex >= 0 && liEventIndex < 65535");                    // BrnContactId.h:122
+                CGS_ASSERT(IsUnitLength(lContact.mNormal),
+                           "Un-normalised race car-race car contact: ");                    // :384
+                mDeformationManager.ReadPotentialContact(
+                    lContact, ContactId(static_cast<u32>(liIndex) | 0x07000000u), lpSimModuleInputBuffer);
+            }
+        }
+
+        // ---- (6) custom queue [13]: traffic-traffic, validated + id-rewritten ------------------
+        {
+            const Queue& lrQueue = lpContactInterface->GetTrafficWithTrafficQueue();
+            for (s32 liIndex = 0; liIndex < lrQueue.GetLength(); ++liIndex)
+            {
+                PotentialContact lContact = lrQueue.GetEvent(liIndex);   // stack copy
+
+                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdA.muId) == 2u,
+                           "lTrafficTrafficContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE"); // :410
+                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdB.muId) == 2u,
+                           "lTrafficTrafficContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE"); // :411
+
+                // The traffic manager's global->physical rewrite of BOTH ids (127 == unmapped
+                // drops the contact); the manager mutates the copy in place.
+                if (mVehicleManager.GetPhysicalTrafficManager().ValidateAndFixUpTrafficTrafficContact(&lContact))
+                {
+                    CGS_ASSERT(liIndex >= 0 && liIndex < 65535,
+                               "liEventIndex >= 0 && liEventIndex < 65535");                // BrnContactId.h:122
+                    CGS_ASSERT(IsUnitLength(lContact.mNormal),
+                               "Un-normalised trafficr-traffic car contact: ");             // :422
+                    mDeformationManager.ReadPotentialContact(
+                        lContact, ContactId(static_cast<u32>(liIndex) | 0x0D000000u), lpSimModuleInputBuffer);
+                }
+            }
+        }
+
+        // ---- (7) custom queue [8]: racecar-traffic, the B id rewritten global->physical --------
+        {
+            const Queue& lrQueue = lpContactInterface->GetRaceCarWithTrafficQueue();
+            for (s32 liIndex = 0; liIndex < lrQueue.GetLength(); ++liIndex)
+            {
+                PotentialContact lContact = lrQueue.GetEvent(liIndex);   // stack copy
+
+                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdA.muId) == 1u,
+                           "lRaceCarTrafficContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR");         // :447
+                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdB.muId) == 2u,
+                           "lRaceCarTrafficContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE"); // :448
+
+                // The traffic B id's entity word becomes its LOCAL PHYSICS id (the X360 inlines
+                // GetPhysicsEntityIDFromGlobalEntityID here; the splice is the same
+                // `sldi 32 ; clrldi 32 ; or` as the Fixup* rewrites).
+                const CgsSceneManager::EntityId lPhysicsIdB =
+                    mVehicleManager.GetPhysicsEntityIDFromGlobalEntityID(
+                        CgsSceneManager::EntityId(static_cast<u32>(lContact.muVolumeInstanceIdB.muId >> 32)));
+                lContact.muVolumeInstanceIdB.muId =
+                    (static_cast<u64>(static_cast<u32>(lPhysicsIdB)) << 32)
+                    | (lContact.muVolumeInstanceIdB.muId & 0x00000000FFFFFFFFull);
+
+                CGS_ASSERT(liIndex >= 0 && liIndex < 65535,
+                           "liEventIndex >= 0 && liEventIndex < 65535");                    // BrnContactId.h:122
+                CGS_ASSERT(IsUnitLength(lContact.mNormal),
+                           "Un-normalised race car-traffic car contact: ");                 // :463
+                mDeformationManager.ReadPotentialContact(
+                    lContact, ContactId(static_cast<u32>(liIndex) | 0x08000000u), lpSimModuleInputBuffer);
+            }
+        }
+
+        // ---- (8) the deformation-part bridges + the validation pass ----------------------------
+        mDeformationManager.BridgeBodyPartCarContactsToSimulation(lpSimModuleInputBuffer,
+                                                                  lpInputBuffer, lpContactInterface);
+        mDeformationManager.BridgeDetachedWheelCarContactsToSimulation(lpSimModuleInputBuffer,
+                                                                       lpInputBuffer, lpContactInterface);
+        ValidateSimulationContacts(lpSimModuleInputBuffer->GetAddContactQueue());
+    }
+
+    // =================================================================================================
+    // BrnPhysics::PhysicsModule::BridgeSimpleTrafficWithWorldContactsToSimulation  @0x825A5618
+    //
+    // ⚠⚠ TRAP STUB (closure enforcement, 2026-08-06 big-five #2 wave) -- the REAL body (484 X360
+    // asm lines; PS3 DecFIGS 0x699594, same TU) is NOT reconstructed yet. Dead code today: the
+    // only caller chain is Update @0x825B0640, still a link stub, so /OPT:REF strips this. The
+    // trap keeps the lie loud if that ever changes. RECONSTRUCT-NEXT.
+    // =================================================================================================
+    void PhysicsModule::BridgeSimpleTrafficWithWorldContactsToSimulation(
+        CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* /*lpContactQueue*/,
+        const PhysicsModuleIO::PotentialContactInterface* /*lpContactInterface*/ )
+    {
+        CGS_ASSERT(false,
+                   "TRAP: PhysicsModule::BridgeSimpleTrafficWithWorldContactsToSimulation @0x825A5618 "
+                   "not reconstructed (big-five #2 closure stub)\n");
     }
 }

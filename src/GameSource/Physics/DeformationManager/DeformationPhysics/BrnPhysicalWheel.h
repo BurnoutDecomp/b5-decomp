@@ -43,7 +43,7 @@ namespace CgsPhysics
 {
 namespace PhysicsSimulationIO
 {
-    class InputBuffer;               // sim-input event buffer (Release/AddToSim)
+    struct InputBuffer;   // ⚠ class-key fixed 2026-08-06 (struct per CgsPhysicsSimulationModuleIO.h:43)               // sim-input event buffer (Release/AddToSim)
 }
 }
 
@@ -145,7 +145,10 @@ namespace Deformation
         // ----- queries / geometry --------------------------------------------------------
 
         // BrnPhysicalWheel.h:186. Whether the wheel is frozen (settled, sim disabled).
-        bool IsFrozen() const;
+        // ⭐ INLINE 2026-08-06 (big-five #2): no out-of-line X360 emission -- the one console
+        // consumer (BridgeContactsToSimulation via DetachedWheelManager::GetWheel) reads the
+        // byte at wheel+128 directly, i.e. the inlined accessor.
+        bool IsFrozen() const { return mbFrozen; }
 
         // BrnPhysicalWheel.h:191. Write the wheel's world collision cylinder out.
         void GetCylinder(CgsGeometric::Cylinder& lCylinderOut) const;

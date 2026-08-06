@@ -105,6 +105,21 @@ namespace PhysicsModuleIO
         const CustomPotentialContactQueue& GetRaceCarWithRaceCarQueue() const { return maCustomEventQueues[7]; }
         const CustomPotentialContactQueue& GetSceneManagerContactQueue() const { return maCustomEventQueues[0]; }
 
+        // ⭐ ADDED 2026-08-06 (BridgeContactsToSimulation wave). Two more custom-queue accessors,
+        // same ADDITIVE pattern -- byte offsets (indices) are asm-proven from PhysicsModule::
+        // BridgeContactsToSimulation @0x825A99E8, which walks:
+        //     ifc+0x168090 == 16 + 9*0x28010  ->  maCustomEventQueues[9]  (loop asserts owner pair
+        //         (TRAFFIC_VEHICLE, WORLD) @BrnPhysicsModuleBridgeFunctions.cpp:334/:335)
+        //     ifc+0x208110 == 16 + 13*0x28010 ->  maCustomEventQueues[13] (loop asserts owner pair
+        //         (TRAFFIC_VEHICLE, TRAFFIC_VEHICLE) @:410/:411)
+        // NAMES: the DWARF accessors whose meaning those owner asserts prove
+        // (GetTrafficWithWorldQueue :83 / GetTrafficWithTrafficQueue :119). ⭐ Note the bridge's
+        // per-queue ContactId owner byte EQUALS the queue index everywhere it walks a queue
+        // ([6]->0x6000000, [7]->0x7..., [8]->0x8..., [9]->0x9..., [13]->0xD...) -- five
+        // independent confirmations of the index<->meaning binding.
+        const CustomPotentialContactQueue& GetTrafficWithWorldQueue() const { return maCustomEventQueues[9]; }
+        const CustomPotentialContactQueue& GetTrafficWithTrafficQueue() const { return maCustomEventQueues[13]; }
+
     private:
         const InPotentialContactQueue* mpQueue;                    // +4  :246 (const source queue)
         CustomPotentialContactQueue    maCustomEventQueues[KI_CUSTOM_QUEUE_COUNT]; // +16 :247

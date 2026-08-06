@@ -14,6 +14,11 @@ namespace CgsPhysics { namespace PhysicsSimulationIO { struct InAddPotentialCont
 namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; } }
 namespace BrnPhysics { namespace ContactSpy { struct PropContact; } }
 namespace CgsMemory { struct SimpleDataStreamProducer; }   // pointer-only member (mpPrimitiveWithTriangleStream)
+// ⭐ ADDED 2026-08-06 (big-five #2): SetupAndValidatePropContact collaborators, pointer use only.
+namespace CgsPhysics { namespace PhysicsSimulationIO { struct InputBuffer; } }  // class key struct, matching CgsPhysicsSimulationModuleIO.h:43
+namespace BrnPhysics { namespace Vehicle { class VehicleManager; } }
+namespace BrnPhysics { namespace Props { struct PropRaceCarContactBuffer; } }   // class key struct, matching BrnPhysicsModule.h:128
+#include "GameShared/GameClasses/Physics/CgsRigidBody.h"                        // CgsPhysics::RigidBodyId (by value)
 // Class key `struct`, matching rw/rwcore_structs.h -- a `class` here mangles differently.
 namespace rw { struct IResourceAllocator; }
 
@@ -188,6 +193,22 @@ namespace Props
         void CreateContactEvent( ContactSpy::PropContact* lpOutPropContact,
                                  const CgsPhysics::PhysicsSimulationIO::OutContactSpy* lpInContact,
                                  const CgsSceneManager::SceneManagerIO::PotentialContact* lpInPotentialContact );
+
+        // ⭐ ADDED 2026-08-06 (big-five #2, contact-generation wave). @0x82628190 (PS3 DecFIGS
+        // 0x79008C -- the mangle is the signature authority). Validate + set up one prop-vs-X
+        // potential contact for the simulation (called by PhysicsModule::
+        // BridgeContactsToSimulation when either owner is a PROP); returns false to drop the
+        // contact. ⚠ FLAG: DECLARED for the bridge driver's closure; body still a TRAP STUB
+        // (572 X360 asm lines / 24 callees -- named, not landed, this wave).
+        bool SetupAndValidatePropContact(
+            CgsPhysics::PhysicsSimulationIO::InAddPotentialContact*        lpAddContactEvent,
+            const CgsSceneManager::SceneManagerIO::PotentialContact*       lpPotentialContact,
+            BrnPhysics::Vehicle::VehicleManager*                           lpVehicleManager,
+            CgsPhysics::PhysicsSimulationIO::InputBuffer*                  lpSimModuleInputBuffer,
+            PropRaceCarContactBuffer*                                      lpPropRaceCarContactBuffer,
+            CgsPhysics::RigidBodyId                                        lWorldRigidBodyId,
+            bool                                                           lbFrozen,
+            f32                                                            lfTimeStep );
 
         // X360 0x82606148 (DWARF BrnPropManager.h:250). Linear-scan the used-prop bit-set;
         // return the slot whose stored PropEntityID matches, else -1.

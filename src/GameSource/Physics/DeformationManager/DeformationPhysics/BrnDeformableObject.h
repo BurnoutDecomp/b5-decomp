@@ -77,7 +77,8 @@ namespace CgsSceneManager
 namespace CgsPhysics
 {
     class CollisionGenerator;                                   // contact-generation arg
-    namespace PhysicsSimulationIO { class InputBuffer; class OutputBuffer; }  // sim IO buffers
+    // ⚠ CLASS-KEYS FIXED 2026-08-06 (big-five #2): `struct` per CgsPhysicsSimulationModuleIO.h.
+    namespace PhysicsSimulationIO { struct InputBuffer; struct OutputBuffer; }  // sim IO buffers
 }
 // NOTE: the DWARF game-mode arg type BrnGameState::GameStateModuleIO::EGameModeType is a PLAIN
 // (unscoped, no fixed underlying type) enum in BrnGameStateSharedIO.h -- it is therefore NOT

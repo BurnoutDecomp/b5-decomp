@@ -764,5 +764,25 @@ void PhysicalTrafficVehicle::SetArticulated(const CreatePhysicalTrafficEvent& lr
     // full-physics TU rather than guessed.
 }
 
+// =================================================================================================
+// PhysicalTrafficManager::ValidateTrafficContact  @0x825CACB8  (PS3 DecFIGS 0x6E5DF8)
+//
+// ⚠⚠ TRAP STUB (closure enforcement, 2026-08-06 big-five #2 wave) -- the REAL body (169 X360 asm
+// lines, 6 callees: validate one traffic-vs-world potential contact against the vehicle-input
+// triangle cache) is NOT reconstructed yet. Dead code today: the only caller chain is
+// VehicleManager::ValidateTrafficContact <- PhysicsModule::BridgeContactsToSimulation <-
+// Update @0x825B0640, still a link stub, so /OPT:REF strips this. RECONSTRUCT-NEXT.
+// =================================================================================================
+bool PhysicalTrafficManager::ValidateTrafficContact(
+    CgsSceneManager::SceneManagerIO::PotentialContact* /*lpContact*/,
+    const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* /*lpTriCacheInterface*/,
+    f32 /*lfTimeStep*/)
+{
+    CGS_ASSERT(false,
+               "TRAP: PhysicalTrafficManager::ValidateTrafficContact @0x825CACB8 "
+               "not reconstructed (big-five #2 closure stub)\n");
+    return false;
+}
+
 }   // namespace Vehicle
 }   // namespace BrnPhysics
