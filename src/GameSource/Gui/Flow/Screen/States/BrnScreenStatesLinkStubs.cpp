@@ -18,7 +18,9 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavEnterOnlineMod.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineCustomMatch.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"
+#include "GameSource/Gui/Flow/Screen/States/BrnOnlinePlay.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineScoreboards.h"
+#include "GameSource/Gui/Flow/Screen/States/BrnOnlineSelectRoute.h"
 #include "GameSource/Gui/Flow/Screen/Components/BrnGuiNetworkRouteInfo.h"
 #include "GameSource/Gui/Flow/Shared/Components/BrnHelpBar.h"
 
@@ -269,4 +271,48 @@ namespace BrnGui
     void OnlineCustomMatch::OnLeave() {}
     // FLAG link scaffold: no definition anywhere in src/ (@0x824AC808, foreign ledger TU).
     void OnlineCustomMatch::Update() {}
+
+    // =====================================================================================
+    // ⛔ THE SAME REGRESSION, A FOURTH TIME -- ONLINE_PLAY / ON_SELECT_ROUTE, ADDED 2026-08-07
+    // (the dev->physics merge).
+    //
+    // dev 4ee3195e ("Gui: restore two screen headers a merge resolved to the wrong side")
+    // grew BrnOnlinePlay.h / BrnOnlineSelectRoute.h back to their full shapes, declaring
+    // out-of-line ctors (and, for OnlinePlay, the OnEnter/OnLeave/Update virtuals).
+    // BrnScreenFlow.cpp's NewPoolState<T> materialises both, so the exe needs the symbols.
+    // Real reconstructions exist -- BrnOnlinePlay.cpp (dev 2b505a01) and
+    // BrnOnlineSelectRoute.cpp -- but NEITHER TU closes at link (2026-08-07, trial-mounted):
+    //     BrnOnlinePlay.cpp     -> OnlinePlay::Update + OnlinePlay::ShowFriendsMenu have no
+    //                              definition anywhere in src/ (the header's "body links from
+    //                              another slice" note is not yet true), and it also needs
+    //                              GuiCache::IsMultiplayerAllowed, NetworkPlayerStats::Construct
+    //                              and MenuComponent::AppendExpectedAptComponent, all undefined.
+    //     BrnOnlineSelectRoute.cpp -> its ctor writes through eight BrnGui::gp*VTable image
+    //                              globals (gpOnlineSelectRouteVTable et al.) that no TU
+    //                              defines, and runs the unmounted MapManager ctor.
+    // Same rationale as the three blocks above, same zero behaviour change: both screens are
+    // online-only and unreachable on this build, and their pre-4ee3195e shapes had no
+    // user-declared ctor. Both states' static resource tables already live in
+    // BrnScreenStatesDataLinkStubs.cpp (no data stubs needed here).
+    //
+    // ⚠️ DELETE-WHEN, PER SYMBOL (LNK2005 otherwise): mounting BrnOnlinePlay.cpp requires
+    // deleting the four OnlinePlay stubs below; mounting BrnOnlineSelectRoute.cpp requires
+    // deleting the OnlineSelectRoute ctor stub.
+    // =====================================================================================
+
+    // ---- ONLINE_PLAY --------------------------------------------------------------------
+    // FLAG link scaffold: REAL BODY EXISTS, unmounted -- BrnOnlinePlay.cpp:126 (@0x82508B40).
+    // Base + member default-construction is the recovered effect of the real ctor anyway.
+    OnlinePlay::OnlinePlay() {}
+    // FLAG link scaffold: REAL BODY EXISTS, unmounted -- BrnOnlinePlay.cpp:136 (@0x8249BC18).
+    void OnlinePlay::OnEnter() { LogUnreconstructedState("OnlinePlay", "OnEnter"); }
+    // FLAG link scaffold: REAL BODY EXISTS, unmounted -- BrnOnlinePlay.cpp:181 (@0x8249BDA8).
+    void OnlinePlay::OnLeave() {}
+    // FLAG link scaffold: no definition anywhere in src/ (declared-only in BrnOnlinePlay.h).
+    void OnlinePlay::Update() {}
+
+    // ---- ON_SELECT_ROUTE ----------------------------------------------------------------
+    // FLAG link scaffold: REAL BODY EXISTS, unmounted -- BrnOnlineSelectRoute.cpp:87
+    // (@0x8251AE30; blocked on the undefined gp*VTable image globals it stores).
+    OnlineSelectRoute::OnlineSelectRoute() {}
 }
