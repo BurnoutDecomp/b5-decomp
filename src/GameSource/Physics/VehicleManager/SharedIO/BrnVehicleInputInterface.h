@@ -102,6 +102,14 @@ namespace Vehicle
         // out-of-line symbol), so host addressing stays layout-correct without the X360 byte offset.
         const InTriangleCacheInterface* GetTriangleCacheInterface() const { return &mTriangleCacheInterface; }
 
+        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). Both accessors are DWARF-attested
+        // (BrnVehicleInputInterface.h:186 GetLineTestResults / :216 GetImpactEventQueue); the
+        // X360 inlines them as `this + 0` and `this + 141376` at the UpdateVehiclePhysics call
+        // sites (asm 0x82645640 / 0x826452A0..B0). ADDITIVE header-only inlines -- host
+        // addressing stays layout-correct without the console byte offsets.
+        const InLineTestResultQueue* GetLineTestResults() const { return &mLineTestResultsQueue; }
+        const ImpactEventQueue*      GetImpactEventQueue() const { return &mImpactEventQueue; }
+
     private:
         InLineTestResultQueue                 mLineTestResultsQueue;                     // :261
         InTriangleCacheInterface              mTriangleCacheInterface;                   // :262

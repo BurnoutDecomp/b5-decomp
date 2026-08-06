@@ -81,6 +81,19 @@ namespace Vehicle
         // DWARF member set; no field reordered/retyped).
         VehicleOutputInterface& operator=(const VehicleOutputInterface& lOther);
 
+        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). The game-event queue @0x65F0 as its
+        // LIVE type -- DWARF :386 types the member GameEventQueue == CgsModule::
+        // VariableEventQueue<1536,16>; the storage stays the size-correct opaque span until the
+        // queue is homed as a typed member, and this accessor is the one sanctioned span-cast
+        // seam (same pattern as VehicleManager::Construct's maRaceCarDebugComponent store).
+        // The X360 reaches it as a bare `addi this, 0x65F0` at its AddEvent sites
+        // (0x826437A4 / 0x82643B48) and at UpdateVehiclePhysics' ProcessAftertouchEvents call.
+        CgsModule::VariableEventQueue<1536, 16>* GetGameEventQueue()
+        {
+            return reinterpret_cast<CgsModule::VariableEventQueue<1536, 16>*>(
+                &mGameEventQueueStorage[0]);
+        }
+
     private:
         CgsContainers::BitArray<8u> mUsedRaceCars;            // @0x0000  (DWARF :382)
         RaceCarState                maRaceCarStates[8];       // @0x0010  (DWARF :383, stride 1120)
@@ -203,6 +216,15 @@ namespace Vehicle
         // assignment. Called by *::InputBuffer_PostPhysics::SetVehicleManagerOutputInterface and
         // WorldModule::BridgePhysicsToOutput.
         VehicleManagerOutputInterface& operator=(const VehicleManagerOutputInterface& lOther);
+
+        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). DWARF-attested accessor
+        // (BrnVehicleOutputInterface.h:256 `void SetPlayerWheelFFSpring(const CgsInput::
+        // Device::WheelFFSpring&)`); the X360 inlines it as the two-word copy into +0x874
+        // (UpdateVehiclePhysics @0x82645FB8..C4).
+        void SetPlayerWheelFFSpring(const CgsInput::Device::WheelFFSpring& lrSpring)
+        {
+            mWheelFFSpring = lrSpring;
+        }
 
     private:
         TrafficCrashedEventQueue     mCrashedTrafficEventQueue;     // @0x0000  (DWARF :176)

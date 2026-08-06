@@ -1,4 +1,5 @@
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
+#include "GameSource/Physics/VehicleManager/BrnVehicleManagerPerfMonHandles.h" // the 13 handles hoisted to external linkage (UpdateVehiclePhysics slice reads them)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"     // CgsDev::PerfMonCpu::AddMonitor -- Construct's thirty monitors
 #include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT -- the assert Construct fires in the eight-car loop
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                  // K_INVALID_ENTITY_ID (dword_82F2A3A4)
@@ -52,6 +53,10 @@ namespace Vehicle
     // the committed sentinel this tree already uses for an unregistered handle, and it is also what
     // AddMonitor itself returns when the registry is full. The other twenty-two are unconditional,
     // so their initial value is never read; they are seeded identically for uniformity.
+    // ⚠️ HOIST 2026-08-06 (UpdateVehiclePhysics wave): the THIRTEEN handles the per-frame
+    // conductor brackets with (14C..19C) are now EXTERNAL (declared in
+    // BrnVehicleManagerPerfMonHandles.h) because the UpdateVehiclePhysics slice TU reads them --
+    // on the console both functions share one TU's file-scope statics. The rest stay static here.
     // ⚠️ These are file-scope HERE because nothing else in the tree registers them yet. On the
     // console the seven guarded slots are shared with the VehiclePhysics timing sites; when those
     // land they must bind to THESE symbols, not declare their own.
@@ -63,9 +68,9 @@ namespace Vehicle
     static const f32 KF_VMAN_PERFMON_BUDGET = 10.0f;
 
     static s32 gs_iUpdateStuntOffencesPM     = KI_PERFMON_UNREGISTERED;   // dword_82F2A1A0
-    static s32 gs_iUpdateVehicleImpactsPM    = KI_PERFMON_UNREGISTERED;   // dword_82F2A14C
-    static s32 gs_iProcessAboveGroundLTsPM   = KI_PERFMON_UNREGISTERED;   // dword_82F2A150
-    static s32 gs_iTractionLTsPM             = KI_PERFMON_UNREGISTERED;   // dword_82F2A154
+    s32 gs_iUpdateVehicleImpactsPM    = KI_PERFMON_UNREGISTERED;   // dword_82F2A14C
+    s32 gs_iProcessAboveGroundLTsPM   = KI_PERFMON_UNREGISTERED;   // dword_82F2A150
+    s32 gs_iTractionLTsPM             = KI_PERFMON_UNREGISTERED;   // dword_82F2A154
     static s32 gs_iTractionGetLinesPM        = KI_PERFMON_UNREGISTERED;   // dword_82F2A158
     static s32 gs_iTractionLineTestsPM       = KI_PERFMON_UNREGISTERED;   // dword_82F2A15C
     static s32 gs_iLineTestsBeginPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A168
@@ -74,10 +79,10 @@ namespace Vehicle
     static s32 gs_iLineTestsEndPM            = KI_PERFMON_UNREGISTERED;   // dword_82F2A174
     static s32 gs_iTractionProcessResultsPM  = KI_PERFMON_UNREGISTERED;   // dword_82F2A160
     static s32 gs_iTractionTrafficPM         = KI_PERFMON_UNREGISTERED;   // dword_82F2A164
-    static s32 gs_iCrashFatalPM              = KI_PERFMON_UNREGISTERED;   // dword_82F2A178
-    static s32 gs_iUpdateRaceCarsPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A17C
-    static s32 gs_iUpdateDriversPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A180
-    static s32 gs_iUpdateVehiclesPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A184
+    s32 gs_iCrashFatalPM              = KI_PERFMON_UNREGISTERED;   // dword_82F2A178
+    s32 gs_iUpdateRaceCarsPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A17C
+    s32 gs_iUpdateDriversPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A180
+    s32 gs_iUpdateVehiclesPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A184
     static s32 gs_iVPhysUpdatePM             = KI_PERFMON_UNREGISTERED;   // dword_82F2A278   [GUARDED]
     static s32 gs_iVPhysSwitchAttribsPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A27C   [GUARDED]
     static s32 gs_iVPhysUpdateCrashingPM     = KI_PERFMON_UNREGISTERED;   // dword_82F2A280   [GUARDED]
@@ -85,12 +90,12 @@ namespace Vehicle
     static s32 gs_iVPhysUpdateSpinPM         = KI_PERFMON_UNREGISTERED;   // dword_82F2A288   [GUARDED]
     static s32 gs_iVPhysUpdateDrivingPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A28C   [GUARDED]
     static s32 gs_iVPhysUpdateLVPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A290   [GUARDED]
-    static s32 gs_iRBChangePM                = KI_PERFMON_UNREGISTERED;   // dword_82F2A188
-    static s32 gs_iAfterTouchPM              = KI_PERFMON_UNREGISTERED;   // dword_82F2A18C
-    static s32 gs_iUpdateTrafficPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A190
-    static s32 gs_iUpdateAggressiveDrivingPM = KI_PERFMON_UNREGISTERED;   // dword_82F2A194
-    static s32 gs_iUpdateCrashesPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A198
-    static s32 gs_iUpdatePassBysPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A19C
+    s32 gs_iRBChangePM                = KI_PERFMON_UNREGISTERED;   // dword_82F2A188
+    s32 gs_iAfterTouchPM              = KI_PERFMON_UNREGISTERED;   // dword_82F2A18C
+    s32 gs_iUpdateTrafficPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A190
+    s32 gs_iUpdateAggressiveDrivingPM = KI_PERFMON_UNREGISTERED;   // dword_82F2A194
+    s32 gs_iUpdateCrashesPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A198
+    s32 gs_iUpdatePassBysPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A19C
 
     // ==============================================================================================
     // VehicleManager::Construct  @0x8263B7C8 -- 943 instructions.

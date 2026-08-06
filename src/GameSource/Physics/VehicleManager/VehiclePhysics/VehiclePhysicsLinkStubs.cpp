@@ -65,5 +65,55 @@ namespace Vehicle
         CGS_ASSERT(false, "VehiclePhysics::UpdateCrashing: link stub (TrafficPhysics de-fork mount) "
                           "-- reconstruct from X360 @0x82638810");
     }
+    // =============================================================================================
+    // ⭐ 2026-08-06 (big-five #3, UpdateVehiclePhysics wave) -- the RaceCarPhysics.cpp MOUNT set.
+    // RaceCarPhysics.cpp's own banner measured its five LNK2019s; this wave mounts that TU (the
+    // manager's per-car dispatch needs RaceCarPhysics::Update), resolves the GetAftertouchValues
+    // overload fork and the gbVehicleBounceBoosting home properly, and carries the remaining
+    // TWO orchestrator holes as the same loud trap-stub pattern as above:
+    //
+    //   VehiclePhysics::Update         @0x826412C0 -- THE per-car conductor of the 54 force
+    //       leaves ([[vehicle-physics-is-the-wall]]'s named seam). Signature is the DWARF's
+    //       (VehiclePhysics.h:1084), spelled per the conformed declaration.
+    //   VehiclePhysics::UpdateSteering @0x825D3720 -- the follow-up steering pass. ⚠️ The DWARF
+    //       declares a FOUR-argument form (:1499 `(float32_t, float32_t, VecFloat, bool)`); the
+    //       committed 2-arg declaration came off the RaceCarPhysics::Update call-site asm. The
+    //       stub matches the COMMITTED declaration so the one real call site links; the
+    //       reconstruction wave owns reconciling the arity against the DWARF.
+    //
+    // ⛔ Same rule as above: NEVER ADD BEHAVIOUR HERE. A silent Update no-op would be the
+    // invisible-forever handling bug -- every car frozen mid-air with plausible state. Trap.
+    // =============================================================================================
+
+    // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
+    void VehiclePhysics::Update(const rw::math::vpu::Matrix44Affine*,
+                                const BrnPlayerDriverControls*, bool, bool, bool,
+                                CgsNumeric::Random&, Vector3, Vector3)
+    {
+        CGS_ASSERT(false, "VehiclePhysics::Update: link stub (the 54-leaf per-car conductor) -- "
+                          "reconstruct from X360 @0x826412C0 before PhysicsModule::Update lands");
+    }
+
+    // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
+    void VehiclePhysics::UpdateSteering(s8, f32)
+    {
+        CGS_ASSERT(false, "VehiclePhysics::UpdateSteering: link stub -- reconstruct from X360 "
+                          "@0x825D3720 (DWARF declares a 4-arg form; see the stub banner)");
+    }
+
+    // (gbVehicleBounceBoosting needs NO home: the extern was a data fork of
+    //  msPlayerParams.mbLaunchActive -- retired at the mount; see RaceCarPhysics.cpp.)
+
+    // LINK STUB (UpdateVehiclePhysics wave; the MEASURED last unresolved of the RaceCarPhysics.cpp
+    // mount): the two-argument traction-point entry RaceCarPhysics::AddTractionPoint @0x825FFAE8
+    // chains into (`bl` with (this, wheel, tag)). The VehiclePhysics.h:389 declaration models it
+    // at VehiclePhysics level over the minimal slice; the real base body resolves the wheel's
+    // contact position/normal and forwards to the 4-arg SimpleVehiclePhysics::AddTractionPoint
+    // (DWARF BrnSimpleVehiclePhysics.h:205). Reconstruct with the traction/integrator wave.
+    void VehiclePhysics::AddTractionPoint(s32, u32)
+    {
+        CGS_ASSERT(false, "VehiclePhysics::AddTractionPoint(s32,u32): link stub -- the base "
+                          "traction-point entry; reconstruct with the integrator wave");
+    }
 }
 }

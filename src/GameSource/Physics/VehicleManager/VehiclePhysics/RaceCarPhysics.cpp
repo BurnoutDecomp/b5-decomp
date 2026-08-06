@@ -57,11 +57,15 @@ namespace Vehicle
 {
     namespace vpu = rw::math::vpu;
 
-    // The global bounce-boosting flag IsCrashingNormally consults (X360 byte_82FB84B2, adjacent to
-    // the bounce-boost state at lbBounceBoosting). Un-homed here: owned by a future showtime/bounce
-    // TU. Declared extern so this leaf resolves it BY NAME; FLAGGED (not fabricated). A weak
-    // tentative definition is provided ONLY in the embed check so the compile gate links cleanly.
-    extern bool gbVehicleBounceBoosting;   // FLAG: un-homed module static
+    // ⭐⭐ DATA FORK RETIRED 2026-08-06 (UpdateVehiclePhysics wave). This file used to declare
+    //     extern bool gbVehicleBounceBoosting;   // "X360 byte_82FB84B2, un-homed"
+    // -- but byte_82FB84B2 is a byte THIS FILE ALREADY MODELS: the showtime singleton's
+    // mbLaunchActive (PlayerParameters +0x32; base lbBounceBoosting @0x82FB8480; the layout is
+    // committed in RaceCarPhysics.h with that exact address on the member). One console byte,
+    // two PC names -- IsCrashingNormally read the extern while every writer stores
+    // MS.mbLaunchActive, so the moment this TU mounted, the read and the writes would have
+    // silently diverged (the invisible wrong-but-plausible class). IsCrashingNormally now reads
+    // the singleton member; the extern (and its tentative definition in the embed check) is gone.
 
     // ---------------------------------------------------------------------------------------
     // IsCrashingNormally  @0x827E42B8
@@ -70,7 +74,7 @@ namespace Vehicle
     {
         if (!mbPlayerCarInShowtime)
             return true;
-        if (!gbVehicleBounceBoosting)
+        if (!msPlayerParams.mbLaunchActive)   // byte_82FB84B2 (was the forked extern -- see above)
             return true;
         return false;
     }
@@ -266,8 +270,10 @@ namespace Vehicle
     //   stores v127 (== v1) -- not v126 (== v2) -- into the scratch it adds at 0x826418CC
     //   (mfUncappedSpeedTimer), 0x826418E4 (mfTimeSinceTookDownPlayer) and 0x826419CC (+0x1408).
     // ---------------------------------------------------------------------------------------
-    void RaceCarPhysics::Update(s32 a2, const BrnPlayerDriverControls* lpControls,
-                                bool lbApplyAftertouch, s32 a5, s32 a6, s32 a7,
+    void RaceCarPhysics::Update(const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
+                                const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
+                                bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed,
+                                CgsNumeric::Random& lrRandom,
                                 Vector3 lrPassThroughV1, Vector3 lrTimeStep)
     {
         // ⭐⭐ THE ZERO TIMESTEP IS GONE (2026-08-01, physics wave 1). This used to read
@@ -353,7 +359,8 @@ namespace Vehicle
 
         // The asm restores BOTH vectors verbatim before this call (`vmr128 v2,v126 ;
         // vmr128 v1,v127` @0x8264185C), i.e. they are pass-through arguments.
-        VehiclePhysics::Update(a2, lpControls, lbApplyAftertouch, a5, a6, a7,
+        VehiclePhysics::Update(lpCameraMatrix, lpControls, lbImpactTime,
+                               lbPlayerAftertouchForceAdditive, lbShowtimeAllowed, lrRandom,
                                lrPassThroughV1, lrTimeStep);
 
         // ⭐⭐ RE-POINTED 2026-08-03 (VehiclePhysics own-block wave). The console gates this
@@ -393,7 +400,11 @@ namespace Vehicle
         // Latch aftertouch-active for this frame: needs the request flag (a5), an aftertouch-enable
         // input ( > 0 ) and the virtual "can use aftertouch" query (vtbl+20).
         bool lbUsing = true;
-        if (!lbApplyAftertouch || lpControls->GetAftertouchEnable() <= 0.0f /* (a3+32) */
+        // ⭐ RE-BOUND at the signature conform: the latch reads the AFTERTOUCH request flag --
+        // r7 == lbPlayerAftertouchForceAdditive under the recovered arg map (the old binding
+        // read r6, which is the manager's mbImpactTime byte; this body's own comment already
+        // said "the request flag (a5)").
+        if (!lbPlayerAftertouchForceAdditive || lpControls->GetAftertouchEnable() <= 0.0f /* (a3+32) */
             || !IsPlayerVehicleActuallyInShowtime() /* the (*+20) virtual on this path */)
             lbUsing = false;
         mbUsingAftertouch = lbUsing;
@@ -1012,7 +1023,11 @@ namespace Vehicle
         if (lbDoForceAdditiveAftertouch && lfEnable > 0.0f)
         {
             f32 lfYaw = 0.0f, lfPitch = 0.0f, lfScalar = 0.0f;
-            lpControls->GetAftertouchValues(&lfYaw, &lfPitch, &lfScalar);
+            // ⭐ FORK RESOLVED 2026-08-06 (UpdateVehiclePhysics wave): the console leaf
+            // @0x825B2E88 is the 4-arg reference form; THIS call site passes the bool as a
+            // literal FALSE (`li r7, 0` @0x8262EE64, bl @0x8262EE78 -- raw image bytes).
+            // The 3-pointer declaration is deleted (BrnVehicleDriverControls.h).
+            lpControls->GetAftertouchValues(lfYaw, lfPitch, lfScalar, false);
 
             // optional SIXAXIS pitch contribution when the downforce flag is set and |tilt| >= thresh.
             if (mbUsingAftertouch /* *(v6+4944) downforce flag */)

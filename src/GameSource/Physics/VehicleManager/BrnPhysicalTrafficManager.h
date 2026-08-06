@@ -216,6 +216,9 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnArticulatedJointPool.h"
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManagerIO.h"
 
+// UpdateVehiclePhysics-wave collaborator (pointer-only on this surface).
+namespace BrnPhysics { namespace Vehicle { struct VehicleManagerOutputInterface; } }
+
 // ⭐ ADDED 2026-08-06 (big-five #2): ValidateTrafficContact collaborators, pointer use only.
 // Class key `struct`, matching CgsPotentialContact.h / the TriangleCacheInterface home.
 namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact;
@@ -579,6 +582,23 @@ public:
 
     // X360 0x825E8808: reset the above-ground (down-ray) test results for every used vehicle.
     void ResetAboveGroundTestResults();
+
+    // ⭐ ADDED 2026-08-06 (big-five #3, UpdateVehiclePhysics wave). Two DWARF-attested
+    // per-frame members the manager's conductor calls (BrnPhysicalTrafficManager.h:152/:155).
+    // Both DECLARED for the conductor's closure; bodies are named FLAG TRAP STUBS in
+    // BrnVehicleManagerLinkStubs.cpp (dead until PhysicsModule::Update lands):
+    //   * UpdateTrafficPhysics @0x82644418 is an .ida-exports HOLE (image-only; the
+    //     VehiclePhysicsLinkStubs banner already records it as the console caller of the
+    //     traffic Update leaves) -- its body is its own wave.
+    //   * PassNearbyCrashingTrafficIdsToRaceCarModule's X360 address is not yet pinned
+    //     (absent from this TU's dossier; recover by caller set at its own wave).
+    // Conductor call sites: asm 0x82645E1C..44 (f1/f2 = sim/game dt, r6 = &mCameraMatrix,
+    // r7 = mbImpactTime, r8 = 0) and 0x82645EB0..D0 (r4 = manager-out, v1 = player pos).
+    void UpdateTrafficPhysics(f32 lfSimTimeStep, f32 lfGameTimeStep,
+                              const Matrix44Affine* lpCameraMatrix,
+                              bool lbImpactTime, bool lbUnknownFalse);
+    void PassNearbyCrashingTrafficIdsToRaceCarModule(
+        VehicleManagerOutputInterface* lpVehicleManagerOutputInterface, Vector3 lPlayerPosition);
 
     // X360 0x8259BD10: validate (and fix up) a traffic-vs-traffic potential contact.
     bool ValidateAndFixUpTrafficTrafficContact(void* lpContact) const;

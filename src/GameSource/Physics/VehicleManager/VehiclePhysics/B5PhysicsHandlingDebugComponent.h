@@ -26,6 +26,13 @@ namespace Vehicle
         // debug overlay. Copies the whole 80-byte AOSTriangle into mLastWallTriangle @+0x350.
         void SetLastWallTriangle(const CgsGeometric::Triangle4::AOSTriangle* lpTriangle);
 
+        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). The per-frame tick
+        // VehicleManager::UpdateVehiclePhysics calls once per live car (bl @0x82645A78,
+        // f1 = the sim timestep). Declaration-only here -- the body is a named FLAG trap
+        // stub in BrnVehicleManagerLinkStubs.cpp until this component's own reconstruction
+        // pass lands (this TU is not mounted).
+        void Update(f32 lfTimeStep);
+
     protected:
         // @0x825DB0D0: the debug-menu path under which this component is grouped.
         //   asm: lis r11,aPhysics@ha ; addi r3,r11,aPhysics@l "Physics" ; blr

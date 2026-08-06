@@ -261,5 +261,46 @@ namespace Vehicle
                    "SimpleVehiclePhysics::SetCrashing is a vtable-closure gate, not a body -- "
                    "reconstruct it before anything calls it");
     }
+    // -------------------------------------------------------------------------------------------
+    // AboveGroundTestResult::Reset  (declared "owned by this TU" at the struct; the byte source is
+    // the whole-block inline inside VehicleManager::UpdateVehiclePhysics @0x82645430..0x82645444:
+    // stvx128 zero at +0x00 (position) and +0x10 (normal), stfs 0 at +0x20 (distance), the two
+    // CollisionTag halfwords 0xFFFF/0x8000 at +0x24/+0x26 -- the same "invalid surface" default
+    // CollisionTag::Construct stamps -- and the valid byte cleared at +0x28.)
+    // -------------------------------------------------------------------------------------------
+    void AboveGroundTestResult::Reset()
+    {
+        mIntersectionPosition = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // stvx128 v127(0), +0x00
+        mIntersectionNormal   = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // stvx128 v127(0), +0x10
+        mfVerticalDistance    = 0.0f;                                // stfs f31(0), +0x20
+        // Big-endian halfword pair {hi=0xFFFF, lo=0x8000} packs to the invalid-surface tag word
+        // (same packing SetAboveGroundTestResult documents).
+        mCollisionTag.muValue = (0xFFFFu << 16) | 0x8000u;           // sth 0xFFFF/+0x24, 0x8000/+0x26
+        mbValid               = false;                               // stb 0, +0x28
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // SimpleVehiclePhysics::ResetAboveGroundTestResult  (DWARF h:193)
+    // Byte source: the inlined copy in VehicleManager::UpdateVehiclePhysics' live-car loop
+    // (asm 0x826453B0..0x82645444; the identical stores appear per wheel at +0x130/+0x210/
+    // +0x2F0/+0x3D0 sub-offsets 0x28..0x2B / 0xD4 / 0xD6, then the AboveGroundTestResult
+    // block at +0x570). PhysicalTrafficManager::ResetAboveGroundTestResults @0x825E8808 runs
+    // the same reset per used traffic vehicle (its deferred hook -- see that body's FLAG).
+    // -------------------------------------------------------------------------------------------
+    void SimpleVehiclePhysics::ResetAboveGroundTestResult()
+    {
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            Wheel& lrWheel = maWheels[liWheel];
+            const bool lbWasOnGround = lrWheel.mRoadContact.mbIsOnGround;   // lbz +0x28
+            lrWheel.mi8NumContacts                     = 0;                 // stb 0, +0xD4
+            lrWheel.mRoadContact.mbIsOnGround          = false;             // stb 0, +0x28
+            lrWheel.mRoadContact.mbIsCloseToGround     = false;             // stb 0, +0x2A
+            lrWheel.mRoadContact.mbLineTestIsValid     = false;             // stb 0, +0x2B
+            lrWheel.mRoadContact.mbWasOnGroundLastUpdate = lbWasOnGround;   // stb prev, +0x29
+            lrWheel.mbHasTraction                      = false;             // stb 0, +0xD6
+        }
+        mAboveGroundTestResult.Reset();
+    }
 }
 }
