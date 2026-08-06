@@ -144,6 +144,15 @@ namespace Vehicle
         void SetAboveGroundTestResult(Vector3 lvPosition, Vector3 lvNormal,
                                       u16 lu16TagHi, u16 lu16TagLo);
 
+        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). DWARF BrnSimpleVehiclePhysics.h:193.
+        // Per-frame reset of the wheel/road latch set + the car-level above-ground result. The
+        // X360 inlines it whole into VehicleManager::UpdateVehiclePhysics' live-car loop
+        // (asm 0x826453B0..0x82645444), which is the byte source for the body: per wheel
+        // {shift mbIsOnGround into mbWasOnGroundLastUpdate; clear mbIsOnGround /
+        // mbIsCloseToGround / mbLineTestIsValid / mi8NumContacts / mbHasTraction}, then
+        // mAboveGroundTestResult.Reset(). Bodied in BrnSimpleVehiclePhysics.cpp.
+        void ResetAboveGroundTestResult();
+
         // @0x825B8EA8: clear the crash master flag (mbCrashing) + mbStartedFatallyCrashing. Bodied.
         // Virtual in the DWARF (BrnSimpleVehiclePhysics.cpp:786).
         virtual void ClearCrashing();

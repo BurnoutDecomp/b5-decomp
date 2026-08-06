@@ -9,7 +9,8 @@ namespace Vehicle
 {
     // Tentative definition of the un-homed bounce-boost flag so the gate links cleanly. This is
     // ONLY a placeholder for the compile check; the real home is a future showtime/bounce TU.
-    bool gbVehicleBounceBoosting = false;   // FLAG: un-homed module static (placeholder)
+    // (gbVehicleBounceBoosting tentative definition REMOVED 2026-08-06 -- the extern was a data
+    //  fork of msPlayerParams.mbLaunchActive; see RaceCarPhysics.cpp.)
 }
 }
 

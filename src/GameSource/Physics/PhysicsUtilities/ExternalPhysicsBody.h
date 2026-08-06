@@ -191,6 +191,12 @@ namespace BrnPhysics
         // site (a single f32 mass arg).
         void SetMass(f32 lfMass);
 
+        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). Read accessor over mfMass -- the
+        // console reaches the register directly (`lvx128 v10, body, 0xD0` in the manager's
+        // shipped-dead inertia recompute @0x82645AAC); exposed BY NAME so that read stays
+        // named on the host. Trivial inline, no console address of its own.
+        VecFloat GetMass() const { return mfMass; }
+
     protected:
         Matrix33 mLocalInverseInertia;   // :241
         Matrix33 mWorldInverseInertia;   // :242

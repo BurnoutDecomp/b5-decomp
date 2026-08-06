@@ -127,8 +127,18 @@ namespace Vehicle
         f32  GetAftertouchEnable() const { return mfAftertouchLevel; }   // *(controls + 0x20)
         f32  GetSixaxisTilt() const      { return mfSpin; }              // *(controls + 0x18)
         bool GetButton63() const         { return mbBoostBounce; }       // *(controls + 0x3F)
-        // overload the X360 standalone leaf takes; reads the aftertouch stick deflection.
-        bool GetAftertouchValues(f32* lpYaw, f32* lpPitch, f32* lpScalar) const;
+
+        // ⭐⭐ FORK RESOLVED 2026-08-06 (UpdateVehiclePhysics wave). The 3-pointer overload
+        //   `bool GetAftertouchValues(f32*, f32*, f32*) const;`
+        // that used to be declared here is DELETED. It was the overload fork the
+        // RaceCarPhysics.cpp mount banner flagged (a symbol no TU defines or ever could).
+        // Decided from the asm, both call sites:
+        //   * VehicleManager::ProcessAftertouchEvents @0x82633E18..44 calls the out-of-line
+        //     leaf @0x825B2E88 with THREE out-pointers AND the bool r7 (= meShowtimeBehaviour
+        //     == 2) -- the 4-arg reference form above, bodied at BrnPlayerDriverControls.cpp:39.
+        //   * RaceCarPhysics::UpdateAftertouch @0x8262EE64/EE78 calls the SAME leaf with
+        //     r7 = 0 (raw image bytes) -- re-pointed to the 4-arg form with `false`.
+        // One leaf, one declaration.
     };
 
     // ⭐⭐ RE-TYPED 2026-08-03. All three variants were opaque byte blobs sized to the record-size

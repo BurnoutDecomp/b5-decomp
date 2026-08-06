@@ -32,6 +32,8 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"        // CgsContainers::BitArray<N> (live-car bitset, crash-data free-list, taken-down bitset)
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"      // CgsSceneManager::EntityId + K_INVALID_ENTITY_ID (GetPhysicsEntityIDFromGlobalEntityID)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"             // CgsNumeric::Random (mRandom @+16)
+#include "GameShared/GameClasses/System/Timer/CgsTime.h"          // CgsSystem::Time (mCurrentTime/mStartModeTime @+172364 -- carved 2026-08-06)
+#include "SharedClasses/BrnSharedConstants.h"                     // BrnUpdateSet (UpdateVehiclePhysics arg)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h" // VehicleDriver (maRaceCarDrivers @+64, mPlayerAiDriver @+171968)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"  // BrnPhysics::Vehicle::RaceCarPhysics (maRaceCarVehicles @+1856 -- the REAL type as of 2026-08-03; that header does not include this one, so this is not a cycle)
 #include "GameSource/Physics/VehicleManager/StuntOffences/BrnStuntOffencesManager.h" // BrnPhysics::StuntOffencesManager (mStuntOffencesManager @+44240 -- the ONE contained sub-object whose real x64 type fits its X360 span exactly)
@@ -50,6 +52,7 @@ namespace BrnGameState { namespace GameStateModuleIO { class VehicleOutputInterf
 namespace BrnPhysics { namespace PhysicsModuleIO { struct PotentialContactInterface; } }
 namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface; } }
 namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; struct TriangleCacheInterface;
+                                                       struct OutEventLineTestNearestResult;  // line-test result queue element (UpdateVehiclePhysics wave)
                                                       struct InputBuffer_Update; } }
 // Class key `struct`, matching rw/rwcore_structs.h -- a `class` here mangles differently.
 namespace rw { struct IResourceAllocator; }
@@ -210,7 +213,105 @@ namespace Vehicle
         // ADDITIVE (WorldModule::Prepare @0x827D53B0 stage-8 success path reads the
         // surface-property table once the world entity module prepared). Static on the
         // X360 (a global manager pair). Declaration-only; body with this manager's TU.
+        // ⚠️⚠️ SIGNATURE FORK, FLAGGED 2026-08-06 (UpdateVehiclePhysics wave): the DWARF
+        // (BrnVehicleManager.h:1085) declares ONE ReadSurfaceProperties -- the NON-static
+        // one-argument member below -- and the X360 caller in UpdateVehiclePhysics
+        // @0x8264513C passes this + the 64-bit key. This static no-arg form exists only in
+        // this tree (WorldLinkStubs.cpp's simplified stub + BrnWorldModule.cpp's call).
+        // The WorldModule wave owns re-pointing that call to the real member; do not add
+        // more callers to this overload.
         static void ReadSurfaceProperties();
+
+        // ==================================================================================
+        // ⭐⭐ ADDED 2026-08-06 (big-five #3, UpdateVehiclePhysics wave). The per-frame FORCE
+        // PRODUCER and its sibling surface. DWARF lines cited per member; bodies either in
+        // BrnVehicleManager_UpdateVehiclePhysics.cpp (slice TU) or named FLAG trap stubs in
+        // BrnVehicleManagerLinkStubs.cpp (dead until PhysicsModule::Update lands).
+        // ==================================================================================
+
+        // DWARF h:896; X360 @0x82644FA8 (1,038 insns). The manager-level per-frame conductor.
+        // BODIED in BrnVehicleManager_UpdateVehiclePhysics.cpp.
+        void UpdateVehiclePhysics(
+            CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsModule::IOBufferStack* lpOutputBufferStack,
+            BrnUpdateSet lUpdateSet,
+            CgsSystem::Time& lrCurrentTime,
+            f32 lfSimTimerTimeStep,
+            f32 lfGameTimerTimeStep,
+            const VehicleInputInterface* lpInputInterface,
+            VehicleOutputInterface* lpVehicleOutputInterface,
+            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+            bool lbIsOnlineGameMode,
+            CgsSceneManager::EntityId lWorldEntityId);
+
+        // DWARF h:947; X360 @0x825B5690. BODIED in the slice TU.
+        bool IsRaceCarCrashing(s32 liRaceCarIndex);
+
+        // DWARF h:1239 -- the FIVE-argument overload; X360 @0x82635B78 (the unnamed sub the
+        // export set skipped; identity proof in the slice TU banner). BODIED in the slice TU.
+        // (The 6-arg + EntityId overload @0x82635B00, DWARF h:1242, is CrashFatalRaceCars'
+        // callee and lands with that body.)
+        void ForceRaceCarCrash(
+            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
+            VehicleOutputInterface* lpVehicleOutputInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+            EActiveRaceCarIndex leRaceCarIndex);
+
+        // DWARF h:866; X360 @0x826183F8. BODIED in the slice TU. (Raw EventQueue
+        // instantiation spelling == VehicleInputInterface::InLineTestResultQueue; the
+        // typedef does not change the type -- same precedent as ValidateSimulationContacts.)
+        void ProcessAboveGroundLineTestsResults(
+            const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult, 2000>* lpLineTestResults);
+
+        // DWARF h:1113 (second param spelled BrnGameState::GameStateModuleIO::GameEventQueue*
+        // there == this VariableEventQueue instantiation; the GameState header keeps the
+        // class incomplete, so the instantiation is named directly). X360 @0x82633DE8.
+        // BODIED in the slice TU.
+        void ProcessAftertouchEvents(s32 liRaceCarIndex,
+                                     CgsModule::VariableEventQueue<1536, 16>* lpOutputQueue);
+
+        // ---- named FLAG trap stubs (BrnVehicleManagerLinkStubs.cpp) until their bodies land:
+        // DWARF h:953; X360 @0x82635C00 (322 insns).
+        void UpdateVehicleImpacts(
+            const CgsModule::EventQueue<ImpactEvent, 16>* lpImpactEventQueue,   // == VehicleInputInterface::ImpactEventQueue
+            VehicleOutputInterface* lpVehicleOutputInterface,
+            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // DWARF h:1236; X360 @0x82640690 (264 insns).
+        void UpdateAggressiveDriving(
+            f32 lfTimeStep,
+            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
+            VehicleOutputInterface* lpVehicleOutputInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // DWARF h:1224; X360 address not in this TU's dossier (the ledger mis-keys it to the
+        // CgsBitArray.h TU -- re-derive at its own wave).
+        void UpdateCrashes(f32 lfTimeStep);
+
+        // DWARF h:893; X360 body is an export-set hole (absent-from-JSON, not absent-from-image).
+        void EndVehicleTractionLineTests(CgsModule::IOBufferStack* lpInputBufferStack,
+                                         const VehicleInputInterface* lpInputInterface);
+
+        // DWARF h:1287; X360 body is an export-set hole (image-only).
+        void CrashFatalRaceCars(
+            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
+            VehicleOutputInterface* lpVehicleOutputInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+            CgsSceneManager::EntityId lWorldEntityId);
+
+        // DWARF h:1085 `void ReadSurfaceProperties(Attribute::Key)`; X360 @0x825C7BB8
+        // (187 insns, AttribSys walk). ⚠️ WIDTH: the caller loads the key with a 64-bit `ld`
+        // (qword_82FB7F10) while the committed Attribute::Key typedef is u32 -- the
+        // parameter is spelled u64 off the asm; the typedef conflict is FLAGGED here, not
+        // resolved (attribhash64 keys are 64-bit; the u32 typedef has its own note).
+        void ReadSurfaceProperties(u64 luSurfaceListKey);
 
         // ADDITIVE 2026-08-04 (task #135) -- X360 @0x82633568, the stage-6 arm of
         // BrnPhysics::PhysicsModule::Prepare @0x825ADB68 (`bl` at 0x825ADDFC, result tested
@@ -1524,11 +1625,15 @@ namespace Vehicle
         s32 miPlayerControl;                        // +172356   (not seeded)
         s32 miPlayerBoost;                          // +172360   (not seeded; ends 172364)
 
-        // [I] +172364..+172380 is the DWARF's `Time mCurrentTime` / `Time mStartModeTime` pair
-        // (:1010/:1011). Left OPAQUE deliberately: Construct never writes either, so nothing pins
-        // sizeof(Time) here, and both the 4-byte and 8-byte readings can be made to fit this 16-byte
-        // span. The next member IS asm-proven, so a wrong split inside this span cannot leak out.
-        unsigned char        mPad2A0EC[172380 - 172364];
+        // ⭐ CARVED 2026-08-06 (UpdateVehiclePhysics wave). +172364..+172380 is the DWARF's
+        // `Time mCurrentTime` / `Time mStartModeTime` pair (:1010/:1011). The old note left the
+        // span OPAQUE because "nothing pins sizeof(Time) here" -- UpdateVehiclePhysics
+        // @0x8264514C..0x82645170 now pins it: `stw lrCurrentTime+0 -> this+172364` then
+        // `lfs/stfs lrCurrentTime+4 -> this+172368`, i.e. Time == {s32 miSeconds, f32 mfFraction}
+        // == 8 bytes, exactly the committed CgsSystem::Time. Two 8-byte Times fill the 16-byte
+        // span with zero slack; the next member stays asm-proven.
+        CgsSystem::Time      mCurrentTime;     // +172364 (:1010)
+        CgsSystem::Time      mStartModeTime;   // +172372 (:1011; never written by the recovered set)
 
         // FLAG: BrnGameState::GameStateModuleIO::EGameModeType has no committed home; kept as s32.
         // Construct seeds -1 ("no mode"), asm-proven (`stwx` of 0xFFFFFFFF).

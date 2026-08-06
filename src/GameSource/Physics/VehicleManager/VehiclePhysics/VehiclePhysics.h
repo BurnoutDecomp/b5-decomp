@@ -108,7 +108,11 @@
 // here. That header includes only BrnCommonTypes/types/CgsVariableEventQueue -- no cycle.
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"   // BrnPlayerDriverControls (0x48)
 
-namespace CgsNumeric { struct Random; }   // UpdateRoadNoise draws from the shared Random ring (CgsRandom.h)
+// ⚠️ CLASS-KEY FIX 2026-08-06 (UpdateVehiclePhysics wave): this fwd-decl said `struct Random`
+// while CgsRandom.h defines `class Random` -- the silent ?AU/?AV mangling fork the moment any
+// TU references Random through only this declaration (Update now takes a Random&). Keyed to
+// match the definition.
+namespace CgsNumeric { class Random; }   // UpdateRoadNoise draws from the shared Random ring (CgsRandom.h)
 
 namespace BrnPhysics
 {
@@ -296,8 +300,24 @@ namespace Vehicle
         // Carries the same two pass-through vector arguments its caller restores into v1/v2
         // before chaining (`vmr128 v2,v126 ; vmr128 v1,v127` @0x8264185C in RaceCarPhysics::Update);
         // lrTimeStep.x is the frame dt -- see RaceCarPhysics.h for the recovery.
-        void Update(s32 a2, const BrnPlayerDriverControls* lpControls, bool lbApplyAftertouch,
-                    s32 a5, s32 a6, s32 a7,
+        //
+        // ⭐⭐ SIGNATURE CONFORMED 2026-08-06 (UpdateVehiclePhysics wave). The DWARF declares
+        // this VIRTUAL (VehiclePhysics.h:1084, vtable slot +0xC -- exactly the slot
+        // VehicleManager::UpdateVehiclePhysics dispatches through at 0x82645A34/0x82645A5C)
+        // with `(VecFloat, VecFloat, const Matrix44Affine*, const BrnPlayerDriverControls*,
+        // bool, bool, bool, Random&)`. The four `s32 a2/a5/a6/a7` placeholders are now
+        // RECOVERED from that call site: a2 = the manager's camera matrix, a5 = the
+        // player-aftertouch-additive flag, a6 = (meShowtimeBehaviour == 2), a7 = the
+        // manager's CgsNumeric::Random. The two vector args KEEP this tree's trailing
+        // position (an established documented deviation: the console passes them in v1/v2
+        // regardless of declaration order) and lbApplyAftertouch is re-named to what the
+        // caller actually passes (the manager's mbImpactTime byte, r6). Kept NON-virtual as
+        // modelled -- every call site's static type is the exact dynamic type, and the
+        // vtable head carries its own open flags (do not grow it silently).
+        void Update(const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
+                    const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
+                    bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed,
+                    CgsNumeric::Random& lrRandom,
                     Vector3 lrPassThroughV1, Vector3 lrTimeStep);
 
         // ----- ADDITIVE GROW (C11 group): the crash master-gate accessors the TrafficPhysics layer
@@ -1145,6 +1165,23 @@ namespace Vehicle
         //   .w = CurrentDriftAngle (the speed-blend authority lane GetSteeringAngle uses).
         Vector4 mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle;
 
+        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). Two DWARF-attested inlines over the
+        // steering bank, both recovered from the stationary-wheel-pose tail of
+        // VehicleManager::UpdateVehiclePhysics @0x82645F58..0x82645FA0:
+        //   GetMaxSteeringAngle (DWARF :1745; `lvx +0x1030 ; vspltw lane 2` -- the .z lane,
+        //   de-SIMD'd to f32 per the project convention for VecFloat returns), and
+        //   OverrideWheelAngle (DWARF :1144, VecFloat arg; its console inline is
+        //   SetPackedSteeringAngle+SetX -- write lane .x of the +0xFE0 steering register,
+        //   `vrlimi128 v13, v0, 8, 0 ; stvx128`).
+        f32  GetMaxSteeringAngle() const
+        {
+            return mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.z;
+        }
+        void OverrideWheelAngle(f32 lfAngleRadians)
+        {
+            mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x = lfAngleRadians;
+        }
+
         // @+0x1050 (4176): lane .x = PropSpeedMaintainAlongZ, .y = PropSpeedMaintainAlongVel
         //   (MaintainDriftSpeed blends the impulse along Z vs velocity by these).
         Vector4 mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor;
@@ -1264,6 +1301,11 @@ namespace Vehicle
         // mbIsUsingAIDonutAttribs (:948), which Reset does NOT touch and which is not declared here.
         bool mbForceFrozen;
         bool mbGivenAftertouchAirBoost;
+
+        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). DWARF :1381 `void SetForceFrozen(bool)`;
+        // the X360 inlines it as the single byte store at +0x10F6 (UpdateVehiclePhysics
+        // @0x826458EC `stb r11, 0x1836(this+5216*player)`).
+        void SetForceFrozen(bool lbFrozen) { mbForceFrozen = lbFrozen; }
 
         // @+0x1150 (4432, DWARF :966). The last car this one touched; Reset seeds -1 ("none").
         s8 mi8LastContactedRaceCar;

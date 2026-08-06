@@ -164,8 +164,14 @@ namespace Vehicle
         // X360 ABI, so their place in the C++ parameter list cannot be read off the asm. They are
         // appended here. (Hex-Rays renders this function as 7 all-integer arguments and drops
         // both vectors outright -- the twelfth instance of that failure in this project.)
-        void Update(s32 a2, const BrnPlayerDriverControls* lpControls, bool lbApplyAftertouch,
-                    s32 a5, s32 a6, s32 a7,
+        // ⭐⭐ SIGNATURE CONFORMED 2026-08-06 (UpdateVehiclePhysics wave) -- the DWARF's own
+        // declaration order and the manager call site @0x82645A10..5C recover the four
+        // placeholder args: a2 = the camera matrix, a5 = player-aftertouch-additive,
+        // a6 = (meShowtimeBehaviour == 2), a7 = the manager's Random. See VehiclePhysics.h.
+        void Update(const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
+                    const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
+                    bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed,
+                    CgsNumeric::Random& lrRandom,
                     Vector3 lrPassThroughV1, Vector3 lrTimeStep);
 
         // @0x825FFBD8: the showtime bounce-boost state machine, run each frame from UpdateAftertouch
