@@ -39,6 +39,10 @@ namespace CgsMemory { struct SimpleDataStreamProducer; }
 
 namespace EA { namespace Jobs { struct Job; } }
 
+// ⭐ ADDED 2026-08-06 (big-five #2): the collide-stream family's collaborators, pointer use
+// only. Class keys match their homes (CgsDebugRenderStreamReader.h:23 -- class, in CgsDev).
+namespace CgsDev { class DebugRenderStreamReader; }
+
 namespace CgsSceneManager
 {
 namespace CgsCollision
@@ -47,6 +51,10 @@ namespace CgsCollision
     // lives in Collision/Primitives/CgsCollisionResult.h). Forward-declared to avoid a header
     // cascade for a pointer-only member.
     struct CollisionResultList;
+
+    // CollidePrimitivePairList's list argument (home: Primitives/CgsPrimitivePairList.h:32,
+    // class key struct). Pointer use only here.
+    struct PrimitivePairList;
 
     // DWARF CgsCollisionGenerator.h:63.
     struct BaseCollisionGenerator : public CgsModule::IOBuffer
@@ -74,6 +82,30 @@ namespace CgsCollision
         // producer-factory it names). Sizes both the command and result buffers via
         // SimpleDataStreamProducer::GetRequiredBufferSizes before constructing.
         CgsMemory::SimpleDataStreamProducer* CreateStreamProducer(s32 liMaxCommands);
+
+        // ==========================================================================================
+        // ⭐ ADDED 2026-08-06 (big-five #2, contact-generation wave): the collide-stream family
+        // VehicleManager::StartVehicleContactGeneration @0x8262AEE8 consumes. Names are the DWARF's
+        // (CgsCollisionGenerator.h :96/:99/:108/:111/:120/:123/:144); the X360 addresses bind
+        // Create/Run pairs adjacently in the image, and the driver's store seats match the DWARF
+        // member names 1:1 (mpSphereSphereStreamProducer <- @0x82811A78, mpSphereTriangleStream-
+        // Producer <- @0x828113C8, mpSweptSphereTriangleStreamProducer <- @0x82811720; the three
+        // Run* results land in the matching *StreamJob members).
+        // ⚠ FLAG: all seven bodies are TRAP STUBS this wave (CgsCollisionGenerator_StreamStubs.cpp)
+        // -- named, not landed. The DebugRenderStreamReader parameter is spelled bare in the DWARF;
+        // bound to CgsDev::DebugRenderStreamReader (the one committed type of that name) -- FLAG if
+        // a second home ever appears.
+        // ==========================================================================================
+        CgsMemory::SimpleDataStreamProducer* CreateCollideSphereListWithTriangleListStream(s32 liMaxCommands);   // @0x828113C8 (:96)
+        EA::Jobs::Job* RunCollideSphereListWithTriangleListStream(CgsMemory::SimpleDataStreamProducer* lpProducer,
+                                                                  CgsDev::DebugRenderStreamReader* lpDebugReader); // @0x82811550 (:99)
+        CgsMemory::SimpleDataStreamProducer* CreateCollideSweptSphereListWithTriangleListStream(s32 liMaxCommands); // @0x82811720 (:108)
+        EA::Jobs::Job* RunCollideSweptSphereListWithTriangleListStream(CgsMemory::SimpleDataStreamProducer* lpProducer,
+                                                                       CgsDev::DebugRenderStreamReader* lpDebugReader); // @0x828118A8 (:111)
+        CgsMemory::SimpleDataStreamProducer* CreateCollideSphereListWithSphereListStream(s32 liMaxCommands);     // @0x82811A78 (:120)
+        EA::Jobs::Job* RunCollideSphereListWithSphereListStream(CgsMemory::SimpleDataStreamProducer* lpProducer); // @0x82811C00 (:123)
+        u16 CollidePrimitivePairList(const PrimitivePairList* lpPairList, u16 lu16MaxResults,
+                                     u32 luFlags, u16 lu16Tag);                                                  // @0x82814138 (:144)
 
     private:
         u16  CreateNewBatch();                   // h:350 / X360 0x82810960
@@ -111,7 +143,12 @@ namespace CgsCollision
     // Prepare; declare-only until its own TU lands (X360 body not yet identified).
     struct CollisionGenerator : public BaseCollisionGenerator
     {
-        bool Prepare();                                            // DWARF :386
+        // ⭐ BODIED 2026-08-06 (big-five #2 wave): the "X360 body not yet identified" note is
+        // retired -- VehicleManager::StartVehicleContactGeneration @0x8262AFE4 INLINES it:
+        // `addis/addi -> generator + 0x12400 (the arena seat); lis 0x20 (0x200000); bl
+        // BaseCollisionGenerator::Prepare`. The derived no-arg override just feeds the embedded
+        // 2 MB arena to the base's two-arg Prepare, exactly as this banner always predicted.
+        bool Prepare() { return BaseCollisionGenerator::Prepare(mau8CollisionResultsMemory, KI_RESULTS_MEMORY_SIZE); }
 
     private:
         static const s32 KI_RESULTS_MEMORY_SIZE = 2097152;         // DWARF :390

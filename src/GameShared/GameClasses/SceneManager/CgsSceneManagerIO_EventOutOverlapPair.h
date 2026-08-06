@@ -20,10 +20,18 @@
 //     So sizeof(OutOverlapPair) == 0x18 (24), 8-byte aligned (three qwords; no SIMD lane).
 //
 // LAYOUT: no field-level DWARF covers this element, and neither AddEvent nor Append reads the
-// element interior, so the payload is modelled as an OPAQUE 24-byte / 8-byte-aligned byte span
-// -- field names are NOT fabricated (HARD RULE 3).
+// element interior -- but a CONSUMER now does: VehicleManager::StartVehicleContactGeneration
+// @0x8262AEE8 (big-five #2 wave, 2026-08-06) decodes the leading two qwords as packed 64-bit
+// volume-instance ids (`ld 0(rec)` / `ld 8(rec)`, then the standard entity-word geometry --
+// owner at bits [56..63], 14-bit index at bit 10 of the high dword -- and the FULL qwords are
+// forwarded to DeformationManager::AddRaceCar*Pair as CgsSceneManager::VolumeInstanceId values
+// per the PS3 mangles). So the first two fields are PROMOTED to real members; the third qword
+// stays opaque (nothing in scope reads it). ⚠ FLAG: the two NAMES follow the PotentialContact
+// convention (muVolumeInstanceIdA/B) -- the types/geometry are asm-proven, the spellings are not
+// (no field DWARF).
 
 #include "types.hpp"
+#include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"   // CgsSceneManager::VolumeInstanceId (8B, u64 muId)
 
 namespace CgsSceneManager
 {
@@ -34,11 +42,13 @@ namespace SceneManagerIO
     // with the bases defined by the other per-element queue homes.
     struct EventBaseOutOverlapPair {};
 
-    // BaseEventQueue<OutOverlapPair> element. 8-byte aligned, X360-attested stride 24 (0x18)
-    // -- opaque payload, no field layout recovered in scope.
+    // BaseEventQueue<OutOverlapPair> element. 8-byte aligned, X360-attested stride 24 (0x18).
+    // First two qwords promoted 2026-08-06 (see the banner); the tail qword stays opaque.
     struct OutOverlapPair : public EventBaseOutOverlapPair
     {
-        u64 maOpaquePayload[3]; // +0x00  opaque (X360-attested 24-byte stride; three qwords)
+        VolumeInstanceId muVolumeInstanceIdA;  // +0x00  packed id of overlap volume A (⚠ name inferred)
+        VolumeInstanceId muVolumeInstanceIdB;  // +0x08  packed id of overlap volume B (⚠ name inferred)
+        u64              maOpaquePayload[1];   // +0x10  opaque tail qword (nothing in scope reads it)
     };
 }
 }

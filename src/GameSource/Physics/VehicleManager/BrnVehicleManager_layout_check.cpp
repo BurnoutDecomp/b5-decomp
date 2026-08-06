@@ -350,13 +350,33 @@ namespace Vehicle
                       "console +172468; +4 = host 8-alignment of the pointer pair");
         static_assert(offsetof(VehicleManager, mpContactGenerator)  == 172472 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 8,
                       "console +172472; +8 = the alignment pad + mpContactGenList's own 4->8 widening");
-        static_assert(offsetof(VehicleManager, miContactStreamCounterA)  == 172580 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx 0 @+172580");
-        static_assert(offsetof(VehicleManager, miContactStreamCounterB)  == 172584 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx 0 @+172584");
-        static_assert(offsetof(VehicleManager, mStuckInCollisionTestCacheSphere) == 172592 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
+        // ⭐⭐ REBASED 2026-08-06 (big-five #2): the +172476..+172592 span is CARVED IN FULL now
+        // (see the header banner over the block) -- five real PrimitivePairListBuilders, nine
+        // pointers, the BitArray<64> and the two renamed tail members (miContactStreamCounterA/B's
+        // role-neutral FLAG retired: the DWARF sequence pins +172580 as
+        // miNumTrafficSphereWorldTests and +172584 as the console POINTER
+        // mpTractionLineStreamProducer). The block's host growth is one more named drift term.
+        static_assert(offsetof(VehicleManager, mDetachedPartPrimPairBuilder)
+                          == 172476 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 12,
+                      "block head: console +172476; +12 = the pointer-pair carve's own growth above");
+        static_assert(offsetof(VehicleManager, miNumTrafficSphereWorldTests)
+                          == 172580 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 68,
+                      "console +172580; +68 = the growth ACCUMULATED BY THIS SEAT (the block's "
+                      "full +76 lands only after the tail's own 4-byte alignment pad before "
+                      "mpTractionLineStreamProducer -- the sphere pin below carries the full term)");
+        static_assert(offsetof(VehicleManager, mpTractionLineStreamProducer)
+                          >  offsetof(VehicleManager, miNumTrafficSphereWorldTests)
+                      && offsetof(VehicleManager, miNumSPUTractionLineTests)
+                          >  offsetof(VehicleManager, mpTractionLineStreamProducer),
+                      "the DWARF :1072/:1075/:1076 tail order");
+        static_assert(offsetof(VehicleManager, mStuckInCollisionTestCacheSphere)
+                          == 172592 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK,
                       "asm stvx128 v127,r31,r11 with r11 == 172592 (DWARF :1087 Sphere)");
-        static_assert(offsetof(VehicleManager, mbPlayerCarStuckInCollision) == 172608 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
+        static_assert(offsetof(VehicleManager, mbPlayerCarStuckInCollision)
+                          == 172608 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK,
                       "172592 + 16 == 172608: the Sphere/bool pair closes to the byte (DWARF :1087/:1088)");
-        static_assert(offsetof(VehicleManager, muTakedownEventsThisFrame) == 172612 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx 0 @+172612");
+        static_assert(offsetof(VehicleManager, muTakedownEventsThisFrame)
+                          == 172612 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK, "asm stwx 0 @+172612");
 
         // ---- shape guards the offsets alone cannot catch ---------------------------------------
         // `sizeof` is permutation-blind and tail padding can absorb a grown array, so pin the END of
@@ -376,8 +396,10 @@ namespace Vehicle
         // term did.
         // ⭐ THREE TIMES NOW: 172816 -> 172848 -> 171184 -> 167024, and every move followed a named
         // drift term, never the other way round. This one is the TrafficPhysics de-fork.
-        static_assert(sizeof(VehicleManager) == 167024,
-                      "MEASURED total. X360 end 172616 + (-5600) drift == 167016 -> 16-aligned 167024");
+        // ⭐ FOUR: 167024 -> 167104 (2026-08-06, the contact-generation block carve's +76 term;
+        // 172616 + (-5600) + 76 == 167092 -> 16-aligned 167104).
+        static_assert(sizeof(VehicleManager) == 167104,
+                      "MEASURED total. X360 end 172616 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK == 167092 -> 16-aligned 167104");
         static_assert(sizeof(VehicleManager::maeImpactType) == 32, "EImpactType[8]");
         static_assert(sizeof(VehicleManager::mauImpactScore) == 8, "uint8[8]");
         static_assert(sizeof(VehicleManager::mafPlayerGrindingOtherDurationSeconds) == 32, "f32[8] -- NOT a scalar threshold");
