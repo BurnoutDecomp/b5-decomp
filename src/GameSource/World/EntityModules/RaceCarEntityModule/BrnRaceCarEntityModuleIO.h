@@ -446,11 +446,15 @@ namespace RaceCarEntityModuleIO
         {
             CgsModule::IOBuffer::Construct();
             mVehicleInputInterface.Construct();
+            // ⭐ 2026-08-06 (PhysicsModule::Update leaves wave): the air-ram/spin queues are no
+            // longer sized-opaque -- VehicleEffectsInputInterface was promoted to its real DWARF
+            // layout, so the real Construct (the two queue Constructs the old FLAG below already
+            // attested the X360 runs here) is callable by name.
+            mVehicleEffectsInterface.Construct();
             mGameEventQueue.Construct();
             mGameEventQueue.Clear();
-            // [FLAG] VehicleDriverInputInterface::Construct, the air-ram/spin queues and
-            // their two counters, and the +149280/+149296 block: those members are still
-            // sized-opaque here.
+            // [FLAG] VehicleDriverInputInterface::Construct, the two effects counters, and the
+            // +149280/+149296 block: those members are still sized-opaque here.
         }
         const OutputBuffer_PreScene::VehicleInputInterface* GetVehicleInputInterface() const; // :470
         OutputBuffer_PreScene::VehicleInputInterface*       GetVehicleInputInterface();       // :471 W (0x822B5C00)

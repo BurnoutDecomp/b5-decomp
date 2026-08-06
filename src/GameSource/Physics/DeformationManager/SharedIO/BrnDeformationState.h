@@ -108,7 +108,13 @@ namespace Deformation
         // live-slot BitArray; for each live slot whose maCarIds[slot] equals luCarId, returns
         // &maCarStates[slot]. Returns nullptr when no live slot owns that car id. Each visited
         // slot index is asserted < KU_MAX_DEFORMATION_MODELS (a non-gating tripwire).
-        CarStateRecord* GetCarStateF(u32 luCarId);
+        // ⭐ CONST-CORRECTED 2026-08-06 (PhysicsModule::Update leaves wave): VehicleManager::
+        // ProcessDeformationStates @0x825EA580 calls this through DeformationOutputInterface::
+        // mpDeformationState, a `const DeformationState*` (DWARF), and the DWARF's sibling
+        // getter GetCarStateFromEntityId is declared const -- so this lookup is const. The
+        // record pointer it returns is handed to RaceCarPhysics::UpdateShowtimeBounceModifiers,
+        // which takes it as `const void*`, so a const return loses nothing.
+        const CarStateRecord* GetCarStateF(u32 luCarId) const;
 
         static void _AssertLayout();
 

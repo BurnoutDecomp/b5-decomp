@@ -29,6 +29,10 @@
 #include "rw/physics/rigidbody.h"   // rw::physics::InputSpace
 #include "GameSource/Physics/PhysicsUtilities/ExternallySimulatedBody.h"
 
+// ReadPropertiesFromChangeInertiaEvent's event arg (class key `struct`, matching
+// CgsPhysicsSimulationIO_Events.h; pointer-only use here -- the body's TU includes the home).
+namespace CgsPhysics { namespace PhysicsSimulationIO { struct InChangeRigidBodyInertia; } }
+
 namespace BrnPhysics
 {
     class ExternalPhysicsBody : public ExternallySimulatedBody
@@ -168,6 +172,16 @@ namespace BrnPhysics
         void Release();
 
         void ReadPropertiesFromRenderware(const rw::physics::RigidBody* lpRigidBody);
+
+        // @0x825A2388. Reseat this body's mass/inertia from a queued sim ChangeRigidBodyInertia
+        // event (VehicleManager::ReadUpdatedBodyProperties @0x825C5520 is the only caller).
+        // Gated on BOTH the mInvTens (bit 1) and mInvMass (bit 2) flags being present; builds
+        // mLocalInverseInertia as the diagonal of the event's inverse-inertia vector, sets
+        // mfMass = splat(1 / inverse-mass), then re-derives the world tensor. Bodied 2026-08-06
+        // in ExternalPhysicsBody.cpp (this class's own mounted TU). Signature is DWARF-
+        // authoritative (ExternalPhysicsBody.h:592 -- the qualified sim-IO event type).
+        void ReadPropertiesFromChangeInertiaEvent(
+            const CgsPhysics::PhysicsSimulationIO::InChangeRigidBodyInertia* lpEvent);
 
         // ADDITIVE GROW (Deformation PhysicalBodyPart::Construct caller): DECLARE-ONLY. Set the body's
         // mass (mfMass @ +208). The deformation part Construct @0x825B4178 stores 5.0 into the body's

@@ -99,5 +99,23 @@ namespace CgsCollision
         static bool _mbInitializedPerfMons;      // h:329
         static s32  _miStartJobsPerfMon;         // h:330
     };
+
+    // ⭐ ADDED 2026-08-06 (PhysicsModule::Update leaves wave). The FULL-SIZE derived generator --
+    // the type VehicleManager owns through mpContactGenerator and destroys in FreeAllocations
+    // @0x8261BAE0 (whose bl target's mangled name pins the exact qualified type:
+    // ??$DestroyIOBuffer@VCollisionGenerator@CgsCollision@CgsSceneManager@@@...). Verbatim from the
+    // DecFIGS DWARF (CgsCollisionGenerator.h:382..:391): the base plus one 2 MB results arena.
+    // CROSS-CHECK: the console DestroyIOBuffer<CollisionGenerator> instantiation @0x8259DE50 frees
+    // exactly 2171904 bytes == 0x12400 (base span) + 0x200000 (this arena) -- the two sources agree.
+    // Prepare (DWARF :386) is the no-arg override that feeds the arena to the base's two-arg
+    // Prepare; declare-only until its own TU lands (X360 body not yet identified).
+    struct CollisionGenerator : public BaseCollisionGenerator
+    {
+        bool Prepare();                                            // DWARF :386
+
+    private:
+        static const s32 KI_RESULTS_MEMORY_SIZE = 2097152;         // DWARF :390
+        u8 mau8CollisionResultsMemory[KI_RESULTS_MEMORY_SIZE];     // DWARF :391
+    };
 }
 }
