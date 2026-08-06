@@ -79,6 +79,18 @@ enum EGameActionType
     E_ACTION_WORLD_STUNT_PERFORMED      = 122,   // DWARF BrnGameActions.h:132
     E_ACTION_POWER_PARK_RESULT          = 139,   // DWARF BrnGameActions.h:149
 
+    // X360-ATTESTED value (NOT a DWARF-only import -- both ends agree on 15):
+    //   producer  GameStateModule::ProcessGameEvents @0x823A0A18, the E_EVENT_COMPLETED_STUNT
+    //             (case 119) arm: `li r5, 0xF` + `li r6, 0x20` @0x823A1964/0x823A195C into
+    //             VariableEventQueue<13312,16>::AddEvent @0x823A19A0.
+    //   consumer  RaceCarEntityModule::HandleGameActions @0x8230BE08 `case 15`, which asserts
+    //             "lpCompletedStuntAction != NULL" (BrnRaceCarEntityModule.cpp:6744) and then
+    //             calls vtable +0xC0 (== slot 48, BoostStrategy::UpdateStuntBoost) on the boost
+    //             manager, handing it the event payload unchanged.
+    // The PS3 DWARF enumerator is also 15 (BrnGameActions.h:25), i.e. no X360 shift here --
+    // consistent with every other sub-53 slot in this enum.
+    E_ACTION_COMPLETED_STUNT            = 15,    // DWARF BrnGameActions.h:25 (X360-attested)
+
     // X360-ATTESTED value: the DWARF (PS3) enumerator is 74, but every X360 producer posts
     // `li r5, 0x4F` (79) with size 8, and the X360 consumer is HandleGameActions' `case 79`.
     // That is the SAME +5 shift this enum already records for NEW_CAR_UNLOCKED (DWARF 57 ->
@@ -697,5 +709,85 @@ struct RoadRulesBatchQueryAction : public GameAction<E_ACTION_ROAD_RULES_BATCH_Q
     bool    mabPlayerBestOnlineCrash[64];  // +708  (:4812) HasPlayerBeatenFriendScore(i, CRASH) == BEATEN
     bool    mbPlayerOwnsAllRoadsOffline;   // +772  (:4814) ProgressionManager complete-roads tally >= 64
 };
+
+// ===== Completed-stunt action (id 15) =====
+// The one-shot "the player just finished a stunt" record. DWARF home BrnGameActions.h:782
+// (`struct CompletedStuntAction : public GameAction<E_ACTION_COMPLETED_STUNT>`), which is this
+// file -- so this is the TRUE owning home, not a re-home.
+//
+// It is a straight repack of the physics-side CompletedStuntEvent (BrnGameEvents.h) down to the
+// eight fields the game-side consumers actually need. Every offset below is attested at BOTH ends.
+//
+// PRODUCER -- GameStateModule::ProcessGameEvents @0x823A0A18, the `case 119`
+// (E_EVENT_COMPLETED_STUNT) arm. r25 == the incoming CompletedStuntEvent*, r1+var_1C60 == the
+// 32-byte payload base handed to AddEvent (`addi r4, r1, var_1C60` @0x823A196C):
+//     0x823A1950  lwz  r11, 0x00(r25)  -> 0x823A1978  stw  +0x00
+//     0x823A1954  lfs  f0,  0x58(r25)  -> 0x823A1958  stfs +0x04
+//     0x823A1960  lfs  f0,  0x5C(r25)  -> 0x823A1968  stfs +0x08   (event mfCompletedAirSpinAngle)
+//     0x823A1970  lfs  f0,  0x60(r25)  -> 0x823A197C  stfs +0x0C
+//     0x823A1984  lfs  f0,  0x64(r25)  -> 0x823A1988  stfs +0x10
+//     0x823A198C  lfs  f0,  0x68(r25)  -> 0x823A1990  stfs +0x14   (event mfCompletedDriftDistance)
+//     0x823A1998  lwz  r11, 0x50(r25)  -> 0x823A199C  stw  +0x18   (event miCompletedBarrelRolls)
+//     0x823A1980  lbz  r11, 0x80(r25)  -> 0x823A1994  stb  +0x1C   (event mbSuccessfulLanding)
+//   then `li r5, 0xF` (action id 15) + `li r6, 0x20` (SIZE 32) -> AddEvent @0x823A19A0.
+//   Two of those source offsets are already NAMED on the committed CompletedStuntEvent
+//   (+0x5C mfCompletedAirSpinAngle, +0x68 mfCompletedDriftDistance, +0x50 miCompletedBarrelRolls,
+//   +0x80 mbSuccessfulLanding), and they land on the DWARF members of the same name here -- which
+//   is what pins the ORDER of the float run, not just its extent.
+//
+// CONSUMERS -- the three BoostStrategy::UpdateStuntBoost overrides (vtable slot 48), which are
+// byte-identical in shape: BoostBurnout2 @0x822A6478, BoostBurnout3 @0x822A6708,
+// BoostBurnout5 @0x822A6F98. Taking BoostBurnout2 (r30 == the action, r31 == this):
+//     0x822A64BC  lwz  r11, 0x00(r30)  -- the FIRST member; the empty GameAction<> base adds no
+//                                         offset, exactly as for every sibling in this file
+//     0x822A64C0  clrlwi r11, r11, 31          bit 0 -> pays mfBarrelRollEarning
+//     0x822A64CC  lwz  r11, 0x18(r30) ; 0x822A64DC extsw   -- a SIGN-EXTENDED WORD, i.e. int32
+//     0x822A6504  rlwinm r11, r11, 0,30,30     bit 1
+//     0x822A6518  lfs  f13, 0x08(r30)          -> pays mfAirSpinEarning
+//     0x822A6534  rlwinm r11, r11, 0,29,29     bit 2
+//     0x822A6548  lfs  f13, 0x0C(r30)          -> pays mfHandbrake180Earning
+//     0x822A6564  rlwinm r11, r11, 0,28,28     bit 3 (flat award, reads no payload)
+//   (BoostBurnout3 does the same reads at 0x822A675C / 0x822A67A8 / 0x822A67D8; BoostBurnout5 at
+//    0x822A6FEC / 0x822A7038 / 0x822A7068.)
+//
+// ORDER NOTE -- a real X360-vs-DWARF divergence. The PS3 DWARF lists `bool mbSuccessfulLanding`
+// (:791) BEFORE `int32_t miCompletedBarrelRolls` (:793), which would put the bool at +0x18 and the
+// int at +0x1C. The X360 build is the other way round and says so twice, independently: the
+// producer `stb`s the landing byte to +0x1C and `stw`s the roll count to +0x18 (0x823A1994 /
+// 0x823A199C), and all three consumers `lwz`+`extsw` a full word from +0x18. The X360 order below
+// is therefore authoritative (rung 1 over rung 2); do not "correct" it back to the DWARF.
+//
+// muStuntActionComplete is left as the raw u32 the DWARF declares -- it is the physics detector's
+// bitfield and its enumerators already have a recovered home in
+// GameSource/Physics/VehicleManager/StuntOffences/BrnStuntOffencesManagerShared.h
+// (`BrnPhysics::EStuntActionComplete`, DWARF-verbatim), whose BARREL_ROLL/AIR_SPIN/HANDBREAK_TURN/
+// CLEANLANDING == 1/2/4/8 are exactly the four bits the consumers above test. Consumers mask with
+// that enum (or with the literals) -- no parallel enum is minted here.
+struct CompletedStuntAction : public GameAction<E_ACTION_COMPLETED_STUNT>
+{
+    u32  muStuntActionComplete;         // +0x00 (:784) BrnPhysics::EStuntActionComplete bitfield
+    f32  mfCompletedBarrelRollAngle;    // +0x04 (:786)
+    f32  mfCompletedAirSpinAngle;       // +0x08 (:787)
+    f32  mfCompletedHandbreakTurnAngle; // +0x0C (:788)
+    f32  mfCompletedDriftTime;          // +0x10 (:789)
+    f32  mfCompletedDriftDistance;      // +0x14 (:790)
+    s32  miCompletedBarrelRolls;        // +0x18 (:793) X360 order -- see the ORDER NOTE above
+    bool mbSuccessfulLanding;           // +0x1C (:791) X360 order -- see the ORDER NOTE above
+                                        // +0x1D..+0x1F tail pad of the 32-byte AddEvent image
+};
+
+// Pointer-free -> the X360 offsets are absolute on the x64 gate too.
+static_assert(sizeof(CompletedStuntAction) == 32,
+              "CompletedStuntAction must be the 32-byte image AddEvent(.., 15, 32) posts");
+static_assert(offsetof(CompletedStuntAction, muStuntActionComplete) == 0x00,
+              "the stunt bitfield is the first member (BoostBurnout2::UpdateStuntBoost lwz 0(r30))");
+static_assert(offsetof(CompletedStuntAction, mfCompletedAirSpinAngle) == 0x08,
+              "air-spin angle at +0x08 (UpdateStuntBoost lfs f13, 8(r30))");
+static_assert(offsetof(CompletedStuntAction, mfCompletedHandbreakTurnAngle) == 0x0C,
+              "handbrake-turn angle at +0x0C (UpdateStuntBoost lfs f13, 0xC(r30))");
+static_assert(offsetof(CompletedStuntAction, miCompletedBarrelRolls) == 0x18,
+              "barrel-roll COUNT at +0x18 (UpdateStuntBoost lwz+extsw 0x18(r30)) -- not the DWARF's bool");
+static_assert(offsetof(CompletedStuntAction, mbSuccessfulLanding) == 0x1C,
+              "landing flag at +0x1C (ProcessGameEvents stb @0x823A1994)");
 }
 }
