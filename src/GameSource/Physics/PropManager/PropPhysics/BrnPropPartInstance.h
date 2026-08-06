@@ -38,7 +38,9 @@ namespace Props
         void            Destruct();                         // :59
         BrnWorld::PropEntityID GetEntityId();               // :62
         void            SetEntityId(BrnWorld::PropEntityID); // :65
-        u32             GetType();                          // :68
+        // :68. INLINE 2026-08-06 (bridge de-facade wave): no out-of-line emission exists;
+        // PropManager::CreateContactEvent @0x825A53A0 inlines the +0x34 read directly.
+        u32             GetType() { return muTypeId; }      // :68
         u8              GetPartId();                        // :71
         void            SetType(u32);                       // :74
         void            SetPartId(u8);                      // :77

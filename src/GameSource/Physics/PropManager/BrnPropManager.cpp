@@ -113,6 +113,11 @@
 
 #include "GameSource/Resource/BrnResourceAllocator.h"   // BrnResource::GetDebugAllocator
 #include "rw/rwcore_structs.h"                          // rw::Resource / rw::ResourceDescriptor
+#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT (CreateContactEvent tripwires)
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h" // CgsPhysics::PhysicsSimulationIO::OutContactSpy
+#include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact
+#include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"          // ContactSpy::{BaseContact, PropContact}
+#include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h"         // PropPhysicsDataHeader::GetType (graphics-id flag bits)
 
 namespace BrnPhysics
 {
@@ -280,6 +285,102 @@ void PropManager::ConstructPreScenePerfMonitors()
     miProcessRemovePartPM      = 0;
     miProcessAddPropInstancePM = 0;
     miProcessAddPartInstancePM = 0;
+}
+
+// =========================================================================================
+// BrnPhysics::Props::PropManager::CreateContactEvent @ 0x825A53A0  (DWARF BrnPropManager.h:172)
+// ADDED 2026-08-06 (bridge de-facade wave). Sole caller: PhysicsModule::StoreContact
+// @0x825A5DB0 (the E_ENTITYTYPE_PROP arm). The console body was header-inline (its FireAsserts
+// bake BrnPropManager.h:529/530/533/534/550/563); the 0x825A53A0 emission is its out-of-line
+// copy, reconstructed branch-for-branch.
+//
+// Shape (X360 asm):
+//   * null tripwires on the out record (:529) and the in spy (:530);
+//   * owner tripwires: spy mIDA's high-dword owner byte (:533) and the potential contact's
+//     muVolumeInstanceIdA owner byte (:534) must both be E_ENTITYTYPE_PROP (3);
+//   * BaseContact::Construct(out, spy rows, potential contact) -- the shared stamp;
+//   * out->mEntityIdA = mIDA's HIGH dword (overwriting the Construct seed -- the prop side
+//     keys the event by its PropEntityID word; `stw` at out+0); muFlags = 0; the PropEntityID
+//     owner tripwire ("mEntityId.GetOwner() == E_ENTITYTYPE_PROP", BrnPropEntityID.h:278);
+//     muBeganMoving = 0;
+//   * PART id (the id word's low-10-bit part field != 0 -- PropEntityID::GetPartIndex()):
+//       muType = mpaPartInstances[low 16 bits of mIDA's LOW dword].muTypeId
+//       (asm `(low << 6) & 0x3FFFC0` == (low & 0xFFFF) * sizeof(PropPartInstance)==64; the
+//       type word is the part instance's +0x34), tripwired < 1000 (:550); muState = 1;
+//   * WHOLE-PROP id: the instance is mpaPropInstances[mIDA's LOW dword] (112-byte stride);
+//       muType = instance.muTypeId (+0x64), tripwired < 1000 (:563); if the instance's
+//       muMovementState < E_PROP_MOVESTATE_MOVING it is promoted to MOVING and
+//       muBeganMoving = 1; muState = 0;
+//   * if muType != KU_UNKNOWN_PROP_TYPE (0xFFFF): look the type up through the physics-data
+//     resource header (mpPhysicsData->GetType; operator-> carries its own null assert) and
+//     set muFlags bit KU_FLAG_SMASH_GATE when the type's graphics id is 396075, bit
+//     KU_FLAG_BILLBOARD when it is 428180 or 428152 (asm-literal graphics ids, read via the
+//     committed PropTypeData::GetGraphicsId over the console +0x58 word).
+// =========================================================================================
+void PropManager::CreateContactEvent( ContactSpy::PropContact* lpOutPropContact,
+                                      const CgsPhysics::PhysicsSimulationIO::OutContactSpy* lpInContact,
+                                      const CgsSceneManager::SceneManagerIO::PotentialContact* lpInPotentialContact )
+{
+    CGS_ASSERT(lpOutPropContact != nullptr, "lpOutPropContact != NULL");   // :529
+    CGS_ASSERT(lpInContact != nullptr, "lpInContact != NULL");             // :530
+
+    const u32 luSpyIdAHigh = static_cast<u32>(lpInContact->mIDA >> 32);
+    CGS_ASSERT((luSpyIdAHigh >> 24) == 3u,
+               "lpInContact->mIDA.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_PROP");   // :533
+    CGS_ASSERT(static_cast<u32>(lpInPotentialContact->muVolumeInstanceIdA.muId >> 56) == 3u,
+               "lpInPotentialContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_PROP");   // :534
+
+    // Shared BaseContact stamp (entity words from the potential contact, the five spy rows,
+    // the poly-tag swap/sentinel) -- then the prop-specific overrides below.
+    ContactSpy::BaseContact::Construct(lpOutPropContact,
+                                       &lpInContact->mFrictionStress,   // the spy's five leading rows
+                                       lpInPotentialContact);
+
+    // The prop side keys the event by the spy's own PropEntityID word (mIDA's high dword),
+    // overwriting the Construct seed (the asm's `stw` at out+0).
+    lpOutPropContact->mEntityIdA.muValue = luSpyIdAHigh;
+    lpOutPropContact->muFlags = 0;
+    CGS_ASSERT((luSpyIdAHigh >> 24) == 3u,
+               "mEntityId.GetOwner() == E_ENTITYTYPE_PROP");   // BrnPropEntityID.h:278 (inlined PropEntityID tripwire)
+    lpOutPropContact->muBeganMoving = 0;
+
+    const u32 luSpyIdALow = static_cast<u32>(lpInContact->mIDA & 0xFFFFFFFFu);
+
+    if ((luSpyIdAHigh & 0x3FFu) != 0u)
+    {
+        // PART id: the part-instance table, 64-byte stride, index = the id's low 16 bits.
+        const u32 luTypeId = mpaPartInstances[luSpyIdALow & 0xFFFFu].GetType();
+        CGS_ASSERT(luTypeId < 1000u, "luTypeId < 1000");   // :550
+        lpOutPropContact->muType  = static_cast<u16>(luTypeId);
+        lpOutPropContact->muState = 1;
+    }
+    else
+    {
+        // Whole-prop id: the prop-instance table, 112-byte stride, index = the id's low dword.
+        PropInstance& lrInstance = mpaPropInstances[luSpyIdALow];
+        const u32 luTypeId = lrInstance.muTypeId;
+        CGS_ASSERT(luTypeId < 1000u, "luTypeId < 1000");   // :563
+        lpOutPropContact->muType = static_cast<u16>(luTypeId);
+        if (lrInstance.muMovementState < static_cast<u8>(E_PROP_MOVESTATE_MOVING))
+        {
+            lrInstance.muMovementState      = static_cast<u8>(E_PROP_MOVESTATE_MOVING);
+            lpOutPropContact->muBeganMoving = 1;
+        }
+        lpOutPropContact->muState = 0;
+    }
+
+    if (lpOutPropContact->muType != ContactSpy::PropContact::KU_UNKNOWN_PROP_TYPE)
+    {
+        const PropTypeData* lpType = mpPhysicsData->GetType(lpOutPropContact->muType);
+        if (lpType->GetGraphicsId() == 396075u)
+        {
+            lpOutPropContact->muFlags |= ContactSpy::PropContact::KU_FLAG_SMASH_GATE;
+        }
+        if (lpType->GetGraphicsId() == 428180u || lpType->GetGraphicsId() == 428152u)
+        {
+            lpOutPropContact->muFlags |= ContactSpy::PropContact::KU_FLAG_BILLBOARD;
+        }
+    }
 }
 
 }

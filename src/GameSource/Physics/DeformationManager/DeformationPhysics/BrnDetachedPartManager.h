@@ -56,6 +56,10 @@ namespace SceneManagerIO
 }
 }
 
+// The REAL potential-contact interface (home BrnPhysicsModuleIO_PotentialContactInterface.h;
+// class key `struct`). Pointer-only here.
+namespace BrnPhysics { namespace PhysicsModuleIO { struct PotentialContactInterface; } }
+
 namespace CgsPhysics
 {
 namespace PhysicsSimulationIO
@@ -138,10 +142,15 @@ namespace Deformation
         // BrnDetachedPartManager.h:98. Post-physics pass: forward each post-physics rigid-body
         // update to its part, resolve the still-joined parts' contacts and recompute one bbox.
         // (DWARF arg2 type: OutputBuffer::SceneInputInterface* == InSceneUpdateInterface*.)
+        // ⭐ RETYPED 2026-08-06: the fourth arg used to bind to the pool header's local
+        // PotentialContactInterface model (now renamed ...Model, see its fork-retirement note);
+        // it binds to the REAL forward-declared PhysicsModuleIO::PotentialContactInterface now,
+        // which is what the DWARF spells. The body TU (unmounted) still passes the model through
+        // to the pool -- reconcile when it mounts.
         void UpdatePostPhysics(const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer,
                                CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
                                ContactSpyData* lpContactSpyData,
-                               const PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface);
+                               const BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface);
 
         // BrnDetachedPartManager.h:103. Update each live part's entry in the scene triangle cache
         // (swept-sphere position/radius from its velocity).
@@ -153,12 +162,28 @@ namespace Deformation
 
         // ----- queries / accessors -------------------------------------------------------
 
-        // BrnDetachedPartManager.h:110 / :114. The detached part in a given pool slot (const + mutable).
-        const PhysicalBodyPart* GetPartFromIndex(u16 lu16Index) const;
-        PhysicalBodyPart*       GetPartFromIndex(u16 lu16Index);
+        // BrnDetachedPartManager.h:110 / :114. The detached part in a given pool slot (const +
+        // mutable). ⭐ INLINE 2026-08-06 (bridge de-facade wave): the console emits NO
+        // out-of-line bodies for these wrappers -- both callers in the image (DeformationManager
+        // ::CreateDetachedPartContactEvent @0x825DD770, Fixup* @0x825A0B88/0x825A0D98) go
+        // STRAIGHT to the pool's own out-of-line GetPart/IsPartIndexUsed with the manager
+        // address as `this` (mPartPool is this manager's one member, at +0) -- i.e. the
+        // wrappers were header-inline forwards. Spelled that way here.
+        const PhysicalBodyPart* GetPartFromIndex(u16 lu16Index) const
+        {
+            return mPartPool.GetPart(static_cast<s16>(lu16Index));
+        }
+        PhysicalBodyPart* GetPartFromIndex(u16 lu16Index)
+        {
+            return mPartPool.GetPart(static_cast<s16>(lu16Index));
+        }
 
         // BrnDetachedPartManager.h:117. Whether the given pool slot index is currently in use.
-        bool IsPartIndexUsed(s32 liIndex);
+        // ⭐ INLINE (same evidence as above).
+        bool IsPartIndexUsed(s32 liIndex)
+        {
+            return mPartPool.IsPartIndexUsed(liIndex);
+        }
 
         // BrnDetachedPartManager.h:124. Test the joint of the part in slot liPartIndex for
         // breaking this frame (consults the post-physics body update), detaching it if the

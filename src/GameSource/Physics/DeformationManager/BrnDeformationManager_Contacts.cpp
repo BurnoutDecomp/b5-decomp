@@ -28,6 +28,8 @@
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"                                       // CgsModule::IOBufferStack::CreateIOBuffer<T>
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                          // CgsDev::PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"                     // CgsSceneManager::SceneManagerIO::PotentialContact (FLAG: newly homed)
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"                          // CgsPhysics::PhysicsSimulationIO::OutContactSpy (CreateDetached* in-spy)
+#include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"                                   // ContactSpy::PhysicalCarPartContact (+EBodyParts placeholder)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"         // DeformableObject (+ DeformationSensor via its includes)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPenetrationSolver.h"        // PenetrationSolver
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPart.h"         // PhysicalBodyPart
@@ -53,6 +55,7 @@ namespace Deformation
         const u32 KU_OWNER_RACECAR                 = 1;  // BrnWorld::E_ENTITYTYPE_RACECAR
         const u32 KU_OWNER_TRAFFIC_VEHICLE         = 2;  // BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE
         const u32 KU_OWNER_RACECAR_DEFORMABLE_PART = 6;  // BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART
+        const u32 KU_OWNER_TRAFFIC_DEFORMABLE_PART = 7;  // BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART
         const u32 KU_OWNER_DETACHED_RACECAR_WHEEL  = 9;  // BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL
         const u32 KU_OWNER_DETACHED_TRAFFIC_WHEEL  = 10; // BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL
 
@@ -270,106 +273,16 @@ namespace Deformation
     }
 
     // ==========================================================================================
-    // FixupBodyPartVehicleContact @ 0x825A0B88
-    //
-    // Repair a potential DETACHED-BODY-PART-vs-VEHICLE contact so the detached part collides with
-    // the live deformable vehicle: validate the owner tags + the part-slot bound, then (if the part
-    // slot and its owning model slot are both live) re-key the contact's A id to the part's volume
-    // instance and its B id to the owning car model's handling-body word. Returns true iff re-keyed,
-    // false otherwise (slot not live -> contact dropped).
+    // FixupBodyPartVehicleContact @0x825A0B88 / FixupWheelVehicleContact @0x825A0D98 /
+    // CreateDetachedWheelContactEvent @0x825B95B0 / CreateDetachedPartContactEvent @0x825DD628
+    // MOVED 2026-08-06 (bridge de-facade wave) to the mounted slice TU
+    // BrnDeformationManager_ContactFixups.cpp: the de-facaded contact-spy bridge
+    // (PhysicsModule::ProcessContactSpy / StoreContact) links against exactly these four, while
+    // the REST of this TU (ReadPotentialVehicleWorldContact / SolvePenetration /
+    // UpdateTriangleCache / the spatial queries) still carries ~19 unresolved externals of its
+    // own (DeformableObject / PenetrationSolver / DeformationSensor / detached-manager
+    // update methods). Bodies are verbatim there; fold back when this TU mounts.
     // ==========================================================================================
-    bool DeformationManager::FixupBodyPartVehicleContact(
-        CgsSceneManager::SceneManagerIO::PotentialContact* lpContact)
-    {
-        CGS_ASSERT(GetVolumeInstanceOwner(lpContact->muVolumeInstanceIdA) == KU_OWNER_RACECAR_DEFORMABLE_PART,
-                   "lpPotContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART");
-        CGS_ASSERT(GetVolumeInstanceOwner(lpContact->muVolumeInstanceIdB) == KU_OWNER_RACECAR,
-                   "lpPotContact->muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR");
-        CGS_ASSERT(lpContact->muPolyTagA < KU_MAX_DETACHED_PARTS,
-                   "lpPotContact->muPolyTagA < KU_MAX_DETACHED_PARTS");
-
-        // The destination detached-part pool slot (poly tag A). If the slot is not live -> drop.
-        const s32 liPartIndex = static_cast<s32>(lpContact->muPolyTagA);
-        if (!mDetachedPartManager.IsPartIndexUsed(liPartIndex))
-        {
-            return false;
-        }
-
-        // The owning car model slot (poly tag B). Tripwire-bound, then tested live.
-        const u32 luModelIndex = lpContact->muPolyTagB;
-        CGS_ASSERT(luModelIndex < static_cast<u32>(KI_MAX_DEFORMATION_MODELS), "invalid index : ");
-        if (!mModelsAdded.IsBitSet(luModelIndex))
-        {
-            return false;
-        }
-
-        // Re-key the contact. The X360 reads a packed {volumeInstanceId, owningModelIndex} word off
-        // the physical part record (+464), stores it whole into muVolumeInstanceIdA, then writes the
-        // owning model's handling-body word (mpaModels[owningModelIndex] +26384) into
-        // muVolumeInstanceIdB.
-        //
-        // FLAG (unrecovered packed-record reads -- NOT fabricated): the part's volume-instance id +
-        // owning-model index live in a packed word at PhysicalBodyPart +464 that the part's public
-        // API does NOT expose (GetVolumeInstanceId() is private; there is no GetDeformableObjectIndex()).
-        // The owning model's handling-body word at DeformableObject +26384 is reachable
-        // (GetHandlingBodyID()) but is a 32-bit RigidBodyId, whereas muVolumeInstanceIdB is a 64-bit
-        // VolumeInstanceId. The exact byte values are therefore deferred: the control flow, asserts
-        // and boolean return above are byte-faithful; the two id writes are left as flagged
-        // placeholders pending public part accessors (GetVolumeInstanceId() / owning-model index) and
-        // the DeformableObject +26384 handling-body word being homed as a VolumeInstanceId.
-        // PLACEHOLDER (flagged): muVolumeInstanceIdA / muVolumeInstanceIdB rewrite not emitted.
-        return true;
-    }
-
-    // ==========================================================================================
-    // FixupWheelVehicleContact @ 0x825A0D98
-    //
-    // The detached-WHEEL sibling of FixupBodyPartVehicleContact: validate the owner tags + the
-    // wheel-slot bound, then (if the wheel slot and its owning model slot are both live) re-key the
-    // contact's A id to the detached wheel's volume instance and its B id to the owning car model's
-    // handling-body word. Returns true iff re-keyed.
-    // ==========================================================================================
-    bool DeformationManager::FixupWheelVehicleContact(
-        CgsSceneManager::SceneManagerIO::PotentialContact* lpContact)
-    {
-        const u32 luOwnerA = GetVolumeInstanceOwner(lpContact->muVolumeInstanceIdA);
-        CGS_ASSERT(luOwnerA == KU_OWNER_DETACHED_RACECAR_WHEEL || luOwnerA == KU_OWNER_DETACHED_TRAFFIC_WHEEL,
-                   "lpPotContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL || "
-                   "lpPotContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL");
-        CGS_ASSERT(GetVolumeInstanceOwner(lpContact->muVolumeInstanceIdB) == KU_OWNER_RACECAR,
-                   "lpPotContact->muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR");
-        CGS_ASSERT(lpContact->muPolyTagA < KU_MAX_DETACHED_WHEELS,
-                   "lpPotContact->muPolyTagA < KU_MAX_DETACHED_WHEELS");
-
-        const u16 lu16Slot = static_cast<u16>(lpContact->muPolyTagA);
-        if (!mDetachedWheelManager.IsSlotUsed(lu16Slot))
-        {
-            return false;
-        }
-
-        const u32 luModelIndex = lpContact->muPolyTagB;
-        CGS_ASSERT(luModelIndex < static_cast<u32>(KI_MAX_DEFORMATION_MODELS), "invalid index : ");
-        if (!mModelsAdded.IsBitSet(luModelIndex))
-        {
-            return false;
-        }
-
-        // Re-key the contact off the live detached wheel + its owning car model. The wheel's
-        // volume-instance id IS publicly reachable (PhysicalWheel::GetVolumeInstanceId()), so A is
-        // re-keyed faithfully; B is the owning model's handling-body word.
-        const PhysicalWheel* lpWheel = mDetachedWheelManager.GetWheel(lu16Slot);
-        lpContact->muVolumeInstanceIdA = lpWheel->GetVolumeInstanceId();
-
-        // FLAG (unrecovered packed-record reads -- NOT fabricated): the wheel's owning-model index
-        // lives in a packed word at PhysicalWheel +112 that the wheel's public API does not expose,
-        // and the owning model's handling-body word at DeformableObject +26384 (GetHandlingBodyID(),
-        // a 32-bit RigidBodyId) does not match muVolumeInstanceIdB's 64-bit VolumeInstanceId shape.
-        // The muVolumeInstanceIdB rewrite is therefore deferred (flagged placeholder); the control
-        // flow, asserts, the A-id rewrite and the boolean return are byte-faithful.
-        // PLACEHOLDER (flagged): muVolumeInstanceIdB rewrite not emitted pending the owning-model
-        // index accessor + the +26384 handling-body word being homed as a VolumeInstanceId.
-        return true;
-    }
 
     // ==========================================================================================
     // GetSweptSpheresForCar @ 0x825C22D0
@@ -441,40 +354,6 @@ namespace Deformation
         CGS_ASSERT(lu16TrafficGlobalIndex < KU_MAX_TOTAL_TRAFFIC,
                    "lu16TrafficGlobalIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");
         return ma8GlobalTrafficToModelIndex[lu16TrafficGlobalIndex];
-    }
-
-    // ==========================================================================================
-    // CreateDetachedWheelContactEvent @ 0x825B95B0
-    //
-    // Build a detached-WHEEL contact event from a spy + potential contact. Asserts every input is
-    // non-null and that the spy's / potential contact's A id owner is a detached racecar/traffic
-    // wheel, then writes the event header: a zeroed contact vector at +96, the contact-event type
-    // tag 91 at +112, and a zeroed trailing scalar at +116.
-    //
-    // FLAG (cross-TU records not homed -- gate-blocked, NOT fabricated): the out-record
-    // (PhysicalCarPartContact == BrnPhysics::ContactSpy::PhysicalCarPartContact : BaseContact, with
-    // mVelocity), the in-spy (OutContactSpy) and the BrnPhysics-side PotentialContact are all only
-    // FORWARD-DECLARED in the frozen header (the whole BrnPhysics::ContactSpy event family is not
-    // homed in-tree). Their members therefore cannot be read/written here: the spy/potential
-    // owner-byte asserts (HIBYTE(*(spy+80)) / HIBYTE(*(potential+48))) and the three event-header
-    // stores (+96 / +112 / +116) await those records being homed. Only the two pointer-NULL asserts
-    // (which need no member access) are emitted; everything else is left as a flagged placeholder.
-    // ==========================================================================================
-    void DeformationManager::CreateDetachedWheelContactEvent(
-        PhysicalCarPartContact* lpOutPhysicalCarPartContact,
-        const OutContactSpy* lpInContact,
-        const PotentialContact* /*lpInPotentialContact*/)
-    {
-        CGS_ASSERT(lpOutPhysicalCarPartContact != nullptr, "lpOutPhysicalCarPartContact != NULL");
-        CGS_ASSERT(lpInContact != nullptr, "lpInContact != NULL");
-
-        // PLACEHOLDER (flagged): the spy/potential-contact owner-byte asserts
-        //   ("...mIDA.GetEntityId().GetOwner() == E_ENTITYTYPE_DETACHED_RACECAR_WHEEL || ... DETACHED_TRAFFIC_WHEEL",
-        //    "...muVolumeInstanceIdA.GetEntityIDOwner() == E_ENTITYTYPE_DETACHED_RACECAR_WHEEL || ... DETACHED_TRAFFIC_WHEEL")
-        // and the event-header writes (zero +96, type tag 91 @ +112, zero +116) are NOT emitted:
-        // PhysicalCarPartContact / OutContactSpy / PotentialContact (BrnPhysics::ContactSpy event
-        // family) are forward-declared incomplete types here, so no member access is possible.
-        // Re-emit them once the ContactSpy event records are homed.
     }
 
     // ==========================================================================================

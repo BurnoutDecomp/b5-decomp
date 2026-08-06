@@ -76,6 +76,18 @@ namespace PhysicsSimulationIO
         return &mContactSpyQueue;
     }
 
+    // X360 0x8259F078. READ-lock (bit 4) guarded const twin of the accessor above -- it sits
+    // one 0xA8 slot BEFORE 0x8259F120 in the uniform spy-accessor block and returns the same
+    // &mContactSpyQueue (`return a1 + 38432`), with the read-side "Not locked for reading\n"
+    // tripwire (CgsPhysicsSimulationModuleIO.h:1366). ADDED 2026-08-06 (bridge de-facade wave):
+    // its one caller is PhysicsModule::BridgeSimulationToOutput @0x825B0540, which drains the
+    // spy queue out of the CONST sim-module output buffer.
+    const OutputBuffer::OutContactSpyQueue* OutputBuffer::GetContactSpyQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mContactSpyQueue;
+    }
+
     // X360 0x8289F130. Write-lock (bit 3) guarded accessor returning the first embedded
     // output queue, &mUpdateRigidBodyQueue (+0x10). Both OutUpdateRigidBody emitters
     // (AddActiveBodiesToOutputQueue @0x828A6CDC, ActivateAndFreezeAsNeeded @0x828A6DE8)

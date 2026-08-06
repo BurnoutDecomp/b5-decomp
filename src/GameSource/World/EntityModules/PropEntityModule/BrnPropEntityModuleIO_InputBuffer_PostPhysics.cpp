@@ -29,8 +29,16 @@ namespace PropEntityIO
 {
     void InputBuffer_PostPhysics::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer_PostPhysics, mContactSpyInterface) == 0x04,
-                      "mContactSpyInterface @ +0x04");
+        // ⚠️ ADJACENCY FORM (retyped 2026-08-06, bridge de-facade wave): the console pins were
+        // mContactSpyInterface @ +0x04 and mUpdatedPropQueue @ +0x10 on 4-byte pointers.
+        // ContactSpyInterface's slot is now the DWARF's real `ContactSpyData* mpData`, which
+        // widens to 8 and raises the struct's alignment to 8, seating the member at +0x08 on
+        // this host (first 8-aligned offset after the 1-byte IOBuffer status). mUpdatedPropQueue
+        // still lands at the console's +0x10 (8 + sizeof(ContactSpyInterface)==8), pinned below.
+        static_assert(offsetof(InputBuffer_PostPhysics, mContactSpyInterface)
+                          == (offsetof(InputBuffer_PostPhysics, mUpdatedPropQueue)
+                              - sizeof(BrnPhysics::ContactSpy::ContactSpyInterface)),
+                      "mContactSpyInterface right before mUpdatedPropQueue (console +0x04 on 4-byte pointers)");
         static_assert(offsetof(InputBuffer_PostPhysics, mUpdatedPropQueue) == 0x10,
                       "mUpdatedPropQueue @ +0x10");
     }

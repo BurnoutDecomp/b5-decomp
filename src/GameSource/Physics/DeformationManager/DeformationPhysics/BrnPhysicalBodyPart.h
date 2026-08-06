@@ -200,7 +200,10 @@ namespace Deformation
                       Vector3 lLinearVelocity, Vector3 lAngularVelocity);
 
         // BrnPhysicalBodyPart.h:188. The part's current linear velocity.
-        Vector3 GetLinearVelocity() const;
+        // ⭐ INLINE 2026-08-06 (bridge de-facade wave): no out-of-line emission exists --
+        // DeformationManager::CreateDetachedPartContactEvent @0x825DD7BC lvx's the body row
+        // (mRwBody base +0x40) directly. Forwards to the body's own public inline.
+        Vector3 GetLinearVelocity() const { return mRwBody.GetLinearVelocity(); }
 
         // BrnPhysicalBodyPart.h:193. Push the part's transform into RenderWare for this timestep.
         void UpdateRW(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput, VecFloat lvfTimeStep);
@@ -230,7 +233,9 @@ namespace Deformation
         // ----- spec / state accessors ----------------------------------------------------
 
         // BrnPhysicalBodyPart.h:218. The static IK spec backing this part.
-        const IKBodyPart* GetIKPart() const;
+        // ⭐ INLINE 2026-08-06: no out-of-line emission -- the same creator @0x825DD79C lwz's
+        // mpIKPart (console +476) directly.
+        const IKBodyPart* GetIKPart() const { return mpIKPart; }
 
         // BrnPhysicalBodyPart.h:222. Whether the part is frozen (sim disabled, settled).
         bool IsFrozen() const;
@@ -250,7 +255,9 @@ namespace Deformation
         // ----- joint model (attached-part deformation) -----------------------------------
 
         // BrnPhysicalBodyPart.h:242. Whether the part is still joined to its vehicle (vs detached).
-        bool IsJoinedToVehicle() const;
+        // ⭐ INLINE 2026-08-06: no out-of-line emission -- the creator @0x825DD7B4 lbz's
+        // mbJoinedToVehicle (console +484) directly.
+        bool IsJoinedToVehicle() const { return mbJoinedToVehicle; }
 
         // BrnPhysicalBodyPart.h:250. Join the part to the vehicle as an active joint: seed the
         // local joint position (v1) and the max-joint-angle from the COM arg's w lane (v3), then the

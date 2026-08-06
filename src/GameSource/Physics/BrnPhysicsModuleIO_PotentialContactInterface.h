@@ -45,6 +45,7 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                        // CgsModule::IOBuffer
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                      // CgsModule::EventQueue
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact
+#include "GameSource/Physics/ContactSpies/BrnContactId.h"                     // BrnPhysics::ContactId (GetEvent(ContactId) key)
 
 namespace BrnPhysics
 {
@@ -67,6 +68,14 @@ namespace PhysicsModuleIO
         void AddEvent(const CgsSceneManager::SceneManagerIO::PotentialContact& lEvent); // @0x825E72F0 :47 (:142) write-lock
         s32  GetLength() const;                                    // @0x825A0498  :59 (:150) read-lock
         const CgsSceneManager::SceneManagerIO::PotentialContact& GetEvent(s32 liIndex) const; // @0x825A0578 :62 (:154) read-lock
+
+        // ⭐ ADDED 2026-08-06 (bridge de-facade wave). DWARF :65 (:159): the ContactId-keyed
+        // accessor @0x825A06A0 -- resolve a contact spy's muTag back to its potential-contact
+        // record. Queue id 0 (E_QUEUE_TYPE_EXTERNAL_FROM_SCENE_CONTACTS) routes through
+        // GetEvent(s32) (the mpQueue/custom split); any other id indexes maCustomEventQueues
+        // [queue id] directly with its own bounds tripwire (BrnPhysicsModuleIO.h:674). Called by
+        // PhysicsModule::ProcessContactSpy @0x825AB5A4. Bodied in the sibling .cpp.
+        const CgsSceneManager::SceneManagerIO::PotentialContact& GetEvent(ContactId lContactId) const; // @0x825A06A0 :65 (:159)
 
         // Read access to the custom sub-queue the race-car-vs-world crash-prediction pass consumes.
         // The X360 crash-prediction driver (VehicleManager::HandleCrashPredictionForRaceCarAndWorld

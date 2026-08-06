@@ -81,7 +81,20 @@ namespace BrnPhysics
             // empty when so. DEFINED in BrnContactSpyData.cpp.
             bool IsEmpty() const;
 
-            void SortQueuesByEntityId();
+            // INLINE (attested 2026-08-06, bridge de-facade wave): PhysicsModule::
+            // ProcessContactSpies @0x825B03E8..0x825B0434 inlines this aggregate pass as four
+            // back-to-back SortAndCreateRunList calls on the queue/run-list pairs at their
+            // pinned seats (+0x00000/+0x198D0, +0x070A0/+0x19B70, +0x106C0/+0x1AF90,
+            // +0x167E0/+0x1BF50) -- the console body was header-inline (no out-of-line
+            // emission). The four callees are the explicit instantiation TUs
+            // (ContactSpyQueue_*_SortAndCreateRunList_*.cpp).
+            void SortQueuesByEntityId()
+            {
+                mRaceCarContactQueue.SortAndCreateRunList<KI_MAX_COLLIDING_RACECAR_ENTITIES>(&mRaceCarContactRunList);
+                mTrafficContactQueue.SortAndCreateRunList<KI_MAX_COLLIDING_TRAFFIC_ENTITIES>(&mTrafficContactRunList);
+                mPhysicalCarPartContactQueue.SortAndCreateRunList<KI_MAX_COLLIDING_DEFORMABLE_ENTITIES>(&mPhysicalCarPartContactRunList);
+                mPropContactQueue.SortAndCreateRunList<KI_MAX_COLLIDING_PROP_ENTITIES>(&mPropContactRunList);
+            }
             void Append(const ContactSpyData* lpOther);
             ContactSpyData& operator=(const ContactSpyData& lrOther);
 
@@ -91,7 +104,10 @@ namespace BrnPhysics
             const HingedCarPartContactQueue*   GetHingedPartContacts() const;
             const PropContactQueue*            GetPropContacts() const;
             const DiscardedContactQueue*       GetDiscardedContacts() const;
-            const RaceCarContactRunList*         GetRaceCarContactRunList() const;
+            // INLINE (attested): ContactSpyInterface::GetRaceCarContactRunList @0x82355BF0
+            // inlines this accessor as bare offset math (mpData + 0x198D0) -- the console body
+            // was header-inline. Defined here so the interface's retyped accessor can call it.
+            const RaceCarContactRunList*         GetRaceCarContactRunList() const { return &mRaceCarContactRunList; }
             const TrafficContactRunList*         GetTrafficContactRunList() const;
             const PhysicalCarPartContactRunList* GetPhysicalCarPartContactRunList() const;
             const PropContactRunList*            GetPropContactRunList() const;

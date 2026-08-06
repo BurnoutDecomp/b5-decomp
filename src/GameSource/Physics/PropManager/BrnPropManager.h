@@ -10,7 +10,9 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                    // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"          // CgsResource::ResourcePtr<T>
 
-namespace CgsPhysics { namespace PhysicsSimulationIO { struct InAddPotentialContact; } }
+namespace CgsPhysics { namespace PhysicsSimulationIO { struct InAddPotentialContact; struct OutContactSpy; } }
+namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; } }
+namespace BrnPhysics { namespace ContactSpy { struct PropContact; } }
 namespace CgsMemory { struct SimpleDataStreamProducer; }   // pointer-only member (mpPrimitiveWithTriangleStream)
 // Class key `struct`, matching rw/rwcore_structs.h -- a `class` here mangles differently.
 namespace rw { struct IResourceAllocator; }
@@ -175,6 +177,17 @@ namespace Props
         void RoutePropVsRaceCarContactToDummyCar(
             bool                                             lbPropIsEntityA,
             CgsPhysics::PhysicsSimulationIO::InAddPotentialContact* lpOutContact );
+
+        // ⭐ ADDED 2026-08-06 (bridge de-facade wave). DWARF BrnPropManager.h:172; X360 emission
+        // @0x825A53A0 (bl target of PhysicsModule::StoreContact @0x825A5FA0 -- the console body
+        // was header-inline here, its asserts bake BrnPropManager.h:529/530/533/534/550/563).
+        // Build a ContactSpy::PropContact from a resolved prop spy + its potential contact:
+        // BaseContact::Construct, entity word/type/state/flags from the prop or prop-part
+        // instance tables, and the smash-gate / billboard graphics-id flag bits. Defined in
+        // BrnPropManager.cpp.
+        void CreateContactEvent( ContactSpy::PropContact* lpOutPropContact,
+                                 const CgsPhysics::PhysicsSimulationIO::OutContactSpy* lpInContact,
+                                 const CgsSceneManager::SceneManagerIO::PotentialContact* lpInPotentialContact );
 
         // X360 0x82606148 (DWARF BrnPropManager.h:250). Linear-scan the used-prop bit-set;
         // return the slot whose stored PropEntityID matches, else -1.

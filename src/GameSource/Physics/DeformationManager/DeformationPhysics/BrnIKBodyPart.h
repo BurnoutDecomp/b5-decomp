@@ -114,7 +114,10 @@ namespace Deformation
         bool CheckSensorForcesForJointDetachment(bool lbIsToughCheck) const;
 
         // ---- classification / queries (DWARF :111-114, :120, :162-170) -------------------
-        EBodyParts GetPartType() const;   // forwards to mpSpec (console spec+476)
+        // ⭐ INLINE 2026-08-06 (bridge de-facade wave): no out-of-line emission -- the
+        // detached-part creator @0x825DD7A8/0x825DD7AC chains part->mpIKPart (+8) -> spec
+        // (+476) directly. Forwards to the spec's own committed inline.
+        EBodyParts GetPartType() const { return mpSpec->GetPartType(); }   // console spec+476
         s32        GetMeshId() const;     // forwards to mpSpec
         void       Reset();
 
