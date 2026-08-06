@@ -294,15 +294,31 @@ namespace PhysicsSimulationIO
         return mUpdateExternalBodyQueue.Append(*lpSourceQueue);
     }
 
-    // Minimal leading slice of the physics-simulation output buffer.
-    //
-    // GROWN in place (ODR-safe): mUpdateRigidBodyQueue == EventQueue<OutUpdateRigidBody,200>
-    // (DWARF :713, [16 .. 38432)) is the first embedded queue at +0x10, then mContactSpyQueue ==
-    // EventQueue<OutContactSpy,800> (DWARF :720) at +0x9620 (+38432). Remaining output queues omitted.
+    // The physics-simulation output buffer -- COMPLETE as of 2026-08-06 (the spy wave): all
+    // FOUR embedded output queues are named members (DWARF :743..:746), and the console
+    // offset chain closes exactly:
+    //     +0x00010 mUpdateRigidBodyQueue  16 + 200*192 == 38416
+    //     +0x09620 mContactSpyQueue       16 + 800*112 == 89616   (GetContactSpyQueue @0x8259F120)
+    //     +0x1F430 mJointSpyQueue         16 +  64*48  ==  3088   (GetJointSpyQueue   @0x8259F1C8)
+    //     +0x20040 mDriveSpyQueue         16 +   1*64  ==    80   (GetDriveSpyQueue   @0x8259F270)
+    // The three spy-queue accessors are a uniform write-lock-guarded block at 0x8259F120 +
+    // k*0xA8, exactly the InputBuffer accessor-block shape; each closing addi IS the member
+    // offset. ⚠️ The HOST offsets differ (OutUpdateRigidBody carries a full RigidBody whose
+    // pointer lanes widen), so the pins in the .cpp are the ADJACENCY form and the old raw
+    // `this + 0x20040` return in GetOutDriveSpyQueue is RETIRED with the typed member.
     struct OutputBuffer : public CgsModule::IOBuffer
     {
-        typedef CgsModule::EventQueue<OutUpdateRigidBody, 200> OutUpdateRigidBodyQueue; // DWARF :713 (16 + 200*192 == 38416)
-        typedef CgsModule::EventQueue<OutContactSpy,      800> OutContactSpyQueue;      // DWARF :720 (+0x9620 / +38432)
+        typedef CgsModule::EventQueue<OutUpdateRigidBody, 200> OutUpdateRigidBodyQueue; // DWARF :713 (console 16 + 200*192)
+        typedef CgsModule::EventQueue<OutContactSpy,      800> OutContactSpyQueue;      // DWARF :720 (+0x9620)
+        typedef CgsModule::EventQueue<OutJointSpy,         64> OutJointSpyQueue;        // DWARF :727 (+0x1F430)
+        typedef CgsModule::EventQueue<OutDriveSpy,          1> OutDriveSpyQueue;        // DWARF :734 (+0x20040)
+
+        // X360 0x828A5F38 (DWARF :693): zero the two scalar controls, Clear() all four
+        // queues, chain to IOBuffer::Destruct (which this non-virtual member HIDES, as the
+        // console's does). Declared 2026-08-06 so its body TU
+        // (CgsPhysicsSimulationModuleIO.cpp) could retire its local slice-fork of this class
+        // -- see the rewrite banner there.
+        void Destruct();
 
         // X360 0x825BD0A8: read-lock (bit 4) guarded; returns the post-step time-step-used scalar.
         f32  GetTimeStepUsed() const;
@@ -311,13 +327,26 @@ namespace PhysicsSimulationIO
         // X360 0x8289EFD8: write-lock (bit 3) guarded; stores mfTimeStepUsed.
         void SetTimeStepUsed(f32 fTimeStepUsed);
 
-        // X360 0x8259F120: write-lock (bit 3) guarded; returns &mContactSpyQueue (this+0x9620).
+        // X360 0x8289F130: write-lock (bit 3) guarded; returns &mUpdateRigidBodyQueue (+0x10).
+        // (DWARF :728. The non-const producer-side accessor AddActiveBodiesToOutputQueue /
+        // ActivateAndFreezeAsNeeded open with -- `bl sub_8289F130` in both emitters.)
+        OutUpdateRigidBodyQueue* GetUpdateRigidBodyQueue();
+
+        // X360 0x8259F120: write-lock (bit 3) guarded; returns &mContactSpyQueue (console +0x9620).
         OutContactSpyQueue* GetContactSpyQueue();
 
-        // X360 0x8259F270: write-lock (bit 3) guarded; returns the embedded OutDriveSpy queue
-        // slice at +0x20040 (131136). The queue interior is owned by its callers, so a raw byte
-        // pointer to the attested offset is returned.
-        void* GetOutDriveSpyQueue();
+        // X360 0x8259F1C8: write-lock (bit 3) guarded; returns &mJointSpyQueue (console +0x1F430).
+        // (DWARF :734... the :731/:734/:737 non-const trio; AddJointSpiesToOutputQueue opens
+        // with `bl sub_8259F1C8`.)
+        OutJointSpyQueue* GetJointSpyQueue();
+
+        // X360 0x8259F270: write-lock (bit 3) guarded; returns &mDriveSpyQueue (console +0x20040).
+        // ⭐ RETYPED 2026-08-06: this was `void* GetOutDriveSpyQueue()` returning a raw
+        // `this + 0x20040` byte pointer -- a CONSOLE offset that would have silently pointed
+        // into the middle of the widened mContactSpyQueue the moment OutUpdateRigidBody's
+        // payload grew (which this wave does). The DWARF name (:737 GetDriveSpyQueue) and the
+        // typed member replace it; no other caller existed.
+        OutDriveSpyQueue* GetDriveSpyQueue();
 
         // Byte-offset pins (never called).
         static void _AssertLayout();
@@ -326,9 +355,10 @@ namespace PhysicsSimulationIO
         u8  maStatusPad[3];        // +0x0001..+0x0003 (force mfTimeStepUsed to +0x0004 like the X360)
         f32 mfTimeStepUsed;        // +0x0004
         s32 muMaxIterationsUsed;   // +0x0008  (pads to +0x0010 before the queues)
-        OutUpdateRigidBodyQueue mUpdateRigidBodyQueue;  // +0x0010 [16 .. 38432)
-        OutContactSpyQueue      mContactSpyQueue;       // +0x9620 (+38432)
-        // ... remaining output queues omitted (incomplete slice) ...
+        OutUpdateRigidBodyQueue mUpdateRigidBodyQueue;  // console +0x00010 (host: wider -- RigidBody payload)
+        OutContactSpyQueue      mContactSpyQueue;       // console +0x09620
+        OutJointSpyQueue        mJointSpyQueue;         // console +0x1F430  DWARF :745
+        OutDriveSpyQueue        mDriveSpyQueue;         // console +0x20040  DWARF :746
     };
 }
 }

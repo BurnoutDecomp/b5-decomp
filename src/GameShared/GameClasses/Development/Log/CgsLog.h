@@ -20,6 +20,13 @@ namespace Log
     // engine's `gpDebugPrint << ...` logging lands in the log file.
     struct DebugPrint : public StrStreamBase
     {
+        // Un-hide the inherited scalar formatting overloads (s32/u32/u64/f32/void*/PrintMode):
+        // overriding operator<<(const char*) below would otherwise hide every base-class
+        // overload by name -- the same fix CgsStrStream.h's StrStream carries, needed here
+        // since 2026-08-06 when a log chain first STARTS with a scalar
+        // (PhysicsSimulationModule::AddContactSpiesToOutputQueue's contact-dump lines).
+        using StrStreamBase::operator<<;
+
         StrStreamBase& operator<<(const char* lpcText) override;
     };
 

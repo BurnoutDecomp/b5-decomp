@@ -303,6 +303,61 @@ public:
     // -------------------------------------------------------------------------------------
     static Simulation* Initialize(void** lpMemory, int liNumBodies, int liNumJoints, int liNumDrives);
 
+    // -------------------------------------------------------------------------------------
+    // ⭐ ADDITIVE GROW 2026-08-06 (the game-side closure/spy wave): the DWARF spy/list
+    // accessors (simulation.h:463..:495, :294, :286, :503), each witnessed as a console
+    // inline inside the CgsPhysics::PhysicsSimulationModule functions that land with them:
+    //   * GetContactSpy @0x828A4F.. (AddContactSpiesToOutputQueue): guard on m_CS_Count
+    //     (`lwz 0x68`), then m_CJ_Stack + 112*i (host: the spy emit-cursor stride ==
+    //     sizeof(ContactJacobianSpy), matching SpyContactJacobians' own emit walk);
+    //   * GetJointSpy @0x828A5A94 (AddJointSpiesToOutputQueue): guard on m_JS_Count
+    //     (`lwz 0x70`), then m_JJ_Stack + 48*i;
+    //   * GetDriveSpy @0x828A5D64 (AddDriveSpiesToOutputQueue): ⚠️ guard on m_DR_COUNT
+    //     (`lwz 0x74`), NOT the spy count -- the asymmetry is the console's, kept;
+    //   * HackResetSpyCountHack (:294): PhysicsSimulationModule::Update @0x828A7608 zeroes
+    //     +0x68/+0x78/+0x70 before SimulationUpdate -- the three spy counters;
+    //   * ResetContactStack (:286): the same Update @0x828A76A0 zeroes +0x64/+0x68 after
+    //     the spy drains -- the contact stack's count + spy count;
+    //   * GetActiveBodyAnchor (:503): QuerySimulationToSetFlags @0x828A0470 reads +0x28 and
+    //     ring-walks GetRight() until back at the anchor.
+    // NULL-when-empty on the three GetXxxSpy accessors is the console's own shape (each
+    // inline materialises 0 when its guard count is zero) -- kept, though every caller is
+    // count-bounded and never dereferences the NULL.
+    // ⚠️ DWARF NAMING NOTE: the DWARF types these rw::physics::ContactSpy / JointSpy /
+    // DriveSpy (SDKs/.../contactspy.h, jointspy.h, drivespy.h -- fields mFrame/mNimp/mFric/
+    // mBodyA/mBodyB/mTag, mLstress/mAstress/...). The committed spy records above landed as
+    // ContactJacobianSpy/JointJacobianSpy/DriveJacobianSpy one wave earlier; the rename is
+    // deliberately NOT folded into this wave (the pairset.h no-rename precedent) -- recorded
+    // here so the divergence is a decision, not an oversight.
+    // -------------------------------------------------------------------------------------
+    u32 GetContactSpyCount() const { return m_CS_Count; }   // :463
+    u32 GetJointSpyCount() const   { return m_JS_Count; }   // :467
+    u32 GetDriveSpyCount() const   { return m_DS_Count; }   // :471
+
+    ContactJacobianSpy* GetContactSpy(u32 luIndex) const    // :487 (DWARF: ContactSpy*)
+    {
+        return m_CS_Count ? reinterpret_cast<ContactJacobianSpy*>(m_CJ_Stack) + luIndex : 0;
+    }
+    JointJacobianSpy* GetJointSpy(u32 luIndex) const        // :491 (DWARF: JointSpy*)
+    {
+        return m_JS_Count ? reinterpret_cast<JointJacobianSpy*>(m_JJ_Stack) + luIndex : 0;
+    }
+    DriveJacobianSpy* GetDriveSpy(u32 luIndex) const        // :495 (DWARF: DriveSpy*)
+    {
+        return m_DR_Count ? reinterpret_cast<DriveJacobianSpy*>(m_DJ_Stack) + luIndex : 0;
+    }
+
+    // :294 -- the DWARF's own name. Zero the three spy counters (Update's pre-step stores).
+    void HackResetSpyCountHack() { m_CS_Count = 0; m_DS_Count = 0; m_JS_Count = 0; }
+
+    // :286 -- reset the per-frame contact stack: jacobian count + spy count (Update's
+    // post-drain stores).
+    void ResetContactStack() { m_CT_Count = 0; m_CS_Count = 0; }
+
+    // :503 -- the active-list ring anchor (the list is circular; iteration is
+    // `for (b = anchor->GetRight(); b != anchor; b = b->GetRight())`).
+    const RigidBody* GetActiveBodyAnchor() const { return m_ActiveRB_Anchor; }
+
     // DWARF accessors (simulation.h:351..371 / :548). All inlined away on the console.
     f32                           GetTimeStep() const       { return m_TimeStep; }
     const rw::math::vpu::Vector3& GetGravity() const        { return m_Gravity; }
@@ -315,6 +370,9 @@ public:
     u32                           GetFreeBodyCount() const  { return m_FreeRB_Count; }
     u32                           GetActiveBodyCount() const { return m_ActiveRB_Count; }
     u32                           GetFreeJointCount() const { return m_FreeJT_Count; }
+    // :447 -- added 2026-08-06 (witness: AddJointSpiesToOutputQueue's sanity compare,
+    // `lwz 0x50(sim)` vs the spy count).
+    u32                           GetActiveJointCount() const { return m_ActiveJT_Count; }
     u32                           GetFreeDriveCount() const { return m_FreeDR_Count; }
 
     // DWARF mutators (simulation.h:383..399). All inlined away on the console -- they are

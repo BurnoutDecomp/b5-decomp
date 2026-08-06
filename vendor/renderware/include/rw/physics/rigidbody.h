@@ -243,6 +243,18 @@ namespace physics
         const rw::math::vpu::Vector3& GetLocalInvInertiaDiagonal() const
         { return mInertia->GetInverseInertia(); }
 
+        // DWARF rigidbody.h:137 / :185. ⭐ ADDITIVE GROW 2026-08-06 (the game-side spy wave):
+        // witnessed as the inline in PhysicsSimulationModule::AddActiveBodiesToOutputQueue
+        // @0x828A6D5C..0x828A6D7C -- the world-bounds clamp of the mCom row, whose
+        // `vrlimi128 vD,vOld,1,0` before the store-back is exactly "xyz only, keep w":
+        // on the console the mCom w lane packs mId, and the xyz-only setter below IS that
+        // preservation on the host (mId is its own member here).
+        rw::math::vpu::Vector3 GetPosition() const
+        { return rw::math::vpu::Vector3{ mCom.x, mCom.y, mCom.z, 0.0f }; }
+
+        void SetPosition(const rw::math::vpu::Vector3& lrPosition)
+        { mCom.x = lrPosition.x; mCom.y = lrPosition.y; mCom.z = lrPosition.z; }
+
     private:
         // The SDK keeps everything private and reaches it through Simulation, the two
         // jacobian builders, and (since 2026-08-05) Contact -- whose GenerateFromCollision
