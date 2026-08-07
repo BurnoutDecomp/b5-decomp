@@ -10,11 +10,10 @@
 // All reuse already-reconstructed pieces (Get_ToString, setVariable, the stack
 // primitives, AptInteger/AptString::Create, AptArray) -- no new subsystem coupling.
 //
-// FLAG -- deferred leaf dependencies:
-//   * AptRand() -- the host RNG (console AptRand); Random's modulus only.
-//   * AptValue::Append_ToString -- the value->string renderer (declared, body is
-//     the same value-layer follow-on as toString); StringAdd's concatenation.
-//   * Random: the console traps (twllei) when the modulus is <= 0; PC guards instead.
+// Dependencies (all homed): AptRand @0x82AE04F0 (AptRandom.cpp -- the X360
+// MT19937); AptValue::Append_ToString @0x82AF9668 (AptValueConvert.cpp;
+// StringAdd's concatenation). Random: the console traps (twllei) when the
+// modulus is <= 0; PC guards instead (platform-behaviour note, not debt).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -28,7 +27,7 @@
 
 #include <cstdint>
 
-// FLAG (host RNG -- console AptRand): the random source Random draws from.
+// The random source Random draws from (AptRand @0x82AE04F0, homed in AptRandom.cpp).
 extern unsigned int AptRand();
 
 // ---------------------------------------------------------------------------
@@ -69,7 +68,7 @@ void AptActionInterpreter::_FunctionAptActionStringAdd(AptActionInterpreter* pIn
     AptValue* pSecond = pInterp->mpStack[pInterp->mnStackTop - 1];   // top
     AptValue* pFirst  = pInterp->mpStack[pInterp->mnStackTop - 2];   // under
     AptString* pResult = AptString::Create("");
-    pFirst->Append_ToString(pResult->GetInternalString());    // FLAG: renderer
+    pFirst->Append_ToString(pResult->GetInternalString());    // Append_ToString @0x82AF9668 (AptValueConvert.cpp)
     pSecond->Append_ToString(pResult->GetInternalString());
     pInterp->stackPop(2);
     pInterp->mpStack[pInterp->mnStackTop++] = pResult;
@@ -88,7 +87,7 @@ void AptActionInterpreter::_FunctionAptActionRandom(AptActionInterpreter* pInter
     if (pTop->getIsDefined())
     {
         const unsigned int nRange = static_cast<unsigned int>(pTop->toInteger());
-        nResult = (nRange > 0) ? static_cast<int>(AptRand() % nRange) : 0;   // FLAG: console traps if <=0
+        nResult = (nRange > 0) ? static_cast<int>(AptRand() % nRange) : 0;   // console twllei-traps when <=0; PC guards
     }
     pInterp->stackPop();
     AptInteger* pResult = AptInteger::Create(nResult);

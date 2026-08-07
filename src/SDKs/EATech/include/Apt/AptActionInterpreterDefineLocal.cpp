@@ -11,8 +11,8 @@
 // declares -- it leaves an existing binding untouched.
 //
 // Wired to the AptScriptFunctionBase keystone (SetInLocalScope / ExistsInLocalScope,
-// public; they delegate to the static frame stack). No FLAGs beyond the shared
-// gpUndefinedValue.
+// public; they delegate to the static frame stack). gpUndefinedValue is the homed
+// AptGlobals.cpp singleton (built at AptInit).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -23,7 +23,7 @@
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"   // mpCurrentFunction->SetInLocalScope/ExistsInLocalScope
 #include "SDKs/EATech/include/Apt/AptCIH.h"                  // ctx->mpCIH -> AptValue* upcast
 
-extern AptValue* gpUndefinedValue;   // FLAG (wired at AptInit)
+extern AptValue* gpUndefinedValue;   // off_8324D814 (AptGlobals.cpp; wired at AptInit)
 
 // ---------------------------------------------------------------------------
 // DefineLocal @0x82B03EB8 (0x3C) -- `var name = value`. Stack: [name, value].

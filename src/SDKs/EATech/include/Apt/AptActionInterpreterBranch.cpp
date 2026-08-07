@@ -21,10 +21,10 @@
 // done on the full pointer width (`& ~(uintptr_t)3`). The offset is a byte delta
 // within the stream, so PC + offset stays correct without a transcode.
 //
-// FLAG: the console then flushes the GC deferred-release vector (gpValuesToRelease)
-// when the operand stack empties. That vector + its ReleaseValues (a layout
-// distinct from AptValueVector) is not reconstructed yet, so the flush is deferred
-// here -- it is GC housekeeping and does not affect branch control flow.
+// The console then flushes the GC deferred-release vector (gValuesToRelease @
+// off_8324E51C) when the operand stack empties -- wired below through the homed
+// AptFlushDeferredReleases (AptGC.cpp), the same stack-empty-guarded drain the
+// sibling Control/Var/Member opcode handlers emit.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -33,6 +33,12 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 
 #include <cstdint>   // uintptr_t / int32_t
+
+// The AptGC deferred-release drain (AptValueVector::ReleaseValues over
+// off_8324E51C == gValuesToRelease): drain once the operand stack empties.
+// Shared with the Control/Var/Member opcodes (declared there too); homed in
+// AptGC.cpp. Empty-vector safe (the count guard is folded inside).
+extern void AptFlushDeferredReleases();
 
 namespace
 {
@@ -52,11 +58,12 @@ namespace
 // ---------------------------------------------------------------------------
 // _FunctionAptActionBranchAlways @0x7F1C44 -- unconditional jump.
 // ---------------------------------------------------------------------------
-void AptActionInterpreter::_FunctionAptActionBranchAlways(AptActionInterpreter* /*pInterp*/, LocalContextT* pCtx)
+void AptActionInterpreter::_FunctionAptActionBranchAlways(AptActionInterpreter* pInterp, LocalContextT* pCtx)
 {
     int32_t offset = ReadBranchOffset(pCtx);
     pCtx->mpProgramCounter += offset;
-    // FLAG: console flushes gpValuesToRelease here when the operand stack is empty.
+    if (pInterp->mnStackTop == 0)
+        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
 }
 
 // ---------------------------------------------------------------------------
@@ -68,7 +75,8 @@ void AptActionInterpreter::_FunctionAptActionBranchIfTrue(AptActionInterpreter* 
     if (pInterp->mpStack[pInterp->mnStackTop - 1]->toBool())
         pCtx->mpProgramCounter += offset;
     pInterp->stackPop();   // release the condition
-    // FLAG: console flushes gpValuesToRelease here when the operand stack is empty.
+    if (pInterp->mnStackTop == 0)
+        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
 }
 
 // ---------------------------------------------------------------------------
@@ -80,5 +88,6 @@ void AptActionInterpreter::_FunctionAptActionBranchIfFalse(AptActionInterpreter*
     if (!pInterp->mpStack[pInterp->mnStackTop - 1]->toBool())
         pCtx->mpProgramCounter += offset;
     pInterp->stackPop();   // release the condition
-    // FLAG: console flushes gpValuesToRelease here when the operand stack is empty.
+    if (pInterp->mnStackTop == 0)
+        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
 }

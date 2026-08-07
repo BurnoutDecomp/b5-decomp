@@ -23,7 +23,7 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"   // AptInteger::Create
 #include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"     // AptFloat::Create
 
-// FLAG (wired at AptInit; see AptValueConvert.cpp).
+// gpUndefinedValue: AptGlobals.cpp (built at AptInit). AptGetSwfVersion: AptLinker.cpp.
 extern AptValue*    gpUndefinedValue;
 extern unsigned int AptGetSwfVersion();
 

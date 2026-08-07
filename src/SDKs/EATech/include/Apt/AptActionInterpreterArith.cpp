@@ -33,7 +33,7 @@
 
 #include <cmath>   // fmodf
 
-// FLAG (wired at AptInit; see AptValueConvert.cpp).
+// gpUndefinedValue: AptGlobals.cpp (built at AptInit). AptGetSwfVersion: AptLinker.cpp.
 extern AptValue*    gpUndefinedValue;
 extern unsigned int AptGetSwfVersion();
 
