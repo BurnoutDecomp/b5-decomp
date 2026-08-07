@@ -40,10 +40,11 @@
 // colour). De-optimised here to endian-safe 32-bit masked bitfield math + named
 // members so the x64 build is correct (the colour occupies bits 8-31 logically).
 //
-// FLAG: this header reconstructs only the text-instance surface (the data members
-// the AptCharacterTextInst facade touches + their inline accessors). The render
-// item's own ctor / Render / the AptValue-backed TextFormat type are follow-ons.
-// mpTextFormat is therefore an opaque AptValue* pass-through (forward-declared).
+// This header models the text-instance surface (the data members the
+// AptCharacterTextInst facade touches + their inline accessors); the ctors /
+// Render / SetZID / SetTextFormat bodies are homed in AptRenderItemDynamicText.cpp.
+// mpTextFormat stays an opaque AptValue* pass-through HERE (the TextFormat record
+// type lives in AptTextFormat.h; the .cpp casts at the deep-copy/teardown sites).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -176,9 +177,9 @@ struct AptRenderItemDynamicText : public AptRenderItem
 
     // ---- z id -------------------------------------------------------------
     intptr_t GetZID() const { return mZID; }                   // @0x82AD5830 (facade reads mpRenderItem+0x3C; XB1 8-byte load)
-    // FLAG: the facade SetZID (@0x82AE1E20) calls this OUT-OF-LINE render-item method
-    // (not inlined), so its body lives with the render-item TU; declared here so the
-    // facade can name it. (Its effect is the mZID write; body deferred, not guessed.)
+    // The facade SetZID (@0x82AE1E20) calls this OUT-OF-LINE render-item method;
+    // body HOMED in AptRenderItemDynamicText.cpp (@0x82ADB578: release the old
+    // handle through the host hook, then store the new one).
     void SetZID(intptr_t nZID);                                 // (callee of AptCharacterTextInst::SetZID)
 
     // ---- font -------------------------------------------------------------
@@ -200,8 +201,8 @@ struct AptRenderItemDynamicText : public AptRenderItem
     void ClearStateFlags(uint32_t uFlags) { mStateFlags &= ~uFlags; }              // @0x82AE2078
 
     // ---- text-format (delegated to the formatting object) -----------------
-    // FLAG: AptRenderItemDynamicText::SetTextFormat (the @0x82AECE08-callee) writes
-    // mpTextFormat through the TextFormat layer; its body is the formatting follow-on.
-    // Declared so the facade can name it.
+    // AptRenderItemDynamicText::SetTextFormat (the @0x82AECE08-callee) -- body
+    // HOMED in AptRenderItemDynamicText.cpp (@0x82AEC1D0: release + pool-free the
+    // old record, then store the new one).
     void SetTextFormat(AptValue* pTextFormat);   // (callee of AptCharacterTextInst::SetTextFormat)
 };

@@ -15,35 +15,36 @@
 //     SetMember additionally marks the object as class-bearing (SetHasClass) when
 //     the assigned member is the prototype key (__proto__ == StringPool::saConstant)
 //     and the object is _global (19) / a CIH (12) / tag 37.
-//   * EXTERN (type 11) -> the host extern-object interface (FLAG'd, see below).
+//   * EXTERN (type 11) -> the host extern-object interface (PC-platform leaf, see below).
 //   * otherwise / undefined operands -> GetMember pushes `undefined`.
 //
 // The member name is coerced from the key via AptValue::Get_ToString (string keys
-// hand back their own EAStringC; others render via toString). FLAG (extern path): for
-// an EXTERN (type 11) object the console inlines a raw string-ONLY key extraction
-// (assumes the key is already a string: type-1 -> &key.mString, else *(key+0x20)) rather
-// than Get_ToString. Get_ToString is byte-identical for the common defined-string key;
-// it diverges only for a non-string extern key (Get_ToString materialises a temp via
-// toString, the console reads the boxed string slot). Kept as the PC abstraction since
-// the whole AptExtern_* interface is itself a FLAG'd host-edge reconstruction. vtable slots used:
+// hand back their own EAStringC; others render via toString). Extern path: for an
+// EXTERN (type 11) object the console inlines a raw string-ONLY key extraction
+// (assumes the key is already a string: a tag-1 key IS the AptString, any other key
+// is read as a boxed AptStringObject) rather than Get_ToString -- reproduced exactly
+// below on both the GetMember and SetMember extern arms (the SetMember VALUE renders
+// via Get_ToString, matching the console). vtable slots used:
 // ContainsNativeHashVirtual() = vtbl[3], SetHasClass() = vtbl[5] (both declared on
 // AptValue). GetMember ignores the execution context; SetMember uses its target
 // slot (mpPendingReleaseValue, normally null) as the setVariable target, matching
 // the console (ctx+8).
 //
-// FLAG -- the host extern-object interface (AptVFT_Extern type 11): the console
-// reads/writes extern members through fn-ptrs dword_8324E858 (get) / dword_8324E854
-// (set). The extern subsystem is host-provided and not reconstructed, so the two
-// hooks are encapsulated as AptExtern_GetMember/SetMember. Also FLAG'd: the
-// deferred-release vector drain on stack-empty (AptFlushDeferredReleases, the
-// AptGC layer; the stack-empty guard is faithful + engine-side).
+// The host extern-object interface (AptVFT_Extern type 11): the console reads/
+// writes extern members through the host fn-ptr slots dword_8324E858 (get) /
+// dword_8324E854 (set), encapsulated as AptExtern_GetMember/SetMember -- PC-platform
+// leaves at their AptRenderLinkStubs.cpp definitions (no extern objects register on
+// the PC title path, so the un-installed slots answer null/no-op, matching the
+// console null fn-ptrs). The deferred-release drain on stack-empty is the homed
+// AptFlushDeferredReleases (AptGC.cpp).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
-#include "SDKs/EATech/include/Apt/AptValue/AptString.h"    // AptString::Create / GetInternalString (TypeOf)
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"       // AptString::Create / GetInternalString (TypeOf)
+#include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h" // the tag-33 boxed-string form (extern-arm keys)
 #include "SDKs/EATech/include/Apt/AptArray.h"              // AptArray::get/set + gpUndefinedValue
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"         // StringPool::saConstant (the __proto__ key)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC
@@ -52,14 +53,13 @@
 
 #include <cstdint>
 
-// FLAG (host extern-object interface -- AptVFT_Extern type 11; console fn-ptrs
-// dword_8324E858 get / dword_8324E854 set): the extern subsystem is host-provided
-// and not reconstructed; the member get/set route through these hooks.
+// The host extern-object member hooks (console fn-ptr slots dword_8324E858 get /
+// dword_8324E854 set) -- PC-platform leaves, defined in AptRenderLinkStubs.cpp.
 extern AptValue* AptExtern_GetMember(const char* szName);                       // dword_8324E858
 extern void      AptExtern_SetMember(const char* szName, const char* szValue);  // dword_8324E854
 
-// FLAG (AptGC layer -- AptValueVector): drain the deferred-release value vector
-// (off_8324E51C) once the operand stack empties. See AptActionInterpreterVarOps.cpp.
+// Drain the deferred-release value vector (off_8324E51C) once the operand stack
+// empties -- homed in AptGC.cpp over the real gValuesToRelease vector.
 extern void AptFlushDeferredReleases();
 
 namespace
@@ -94,12 +94,16 @@ void AptActionInterpreter::_FunctionAptActionGetMember(AptActionInterpreter* pIn
             return;
         }
 
-        // Extern object -> the host extern interface.
+        // Extern object -> the host extern interface. The console inlines a string-
+        // ONLY key read (a tag-1 key IS the AptString, any other key is read as a
+        // boxed AptStringObject) -- no Get_ToString materialisation on this arm.
         if (eObj == AptVFT_Extern)
         {
-            EAStringC scratch;
-            const EAStringC* pName = AptValue::Get_ToString(pKey, &scratch);
-            AptValue* pElem = AptExtern_GetMember(pName->GetBuffer());   // FLAG: dword_8324E858
+            AptString* pKeyStr = (eKey == AptVFT_StringValue)
+                ? reinterpret_cast<AptString*>(pKey)
+                : static_cast<AptString*>(static_cast<AptStringObject*>(pKey)->GetBoxedString());
+            AptValue* pElem = AptExtern_GetMember(
+                pKeyStr->GetInternalString()->GetBuffer());   // dword_8324E858 (host slot; leaf in AptRenderLinkStubs.cpp)
             pInterp->stackPopAndPush(2, pElem);
             return;
         }
@@ -168,18 +172,23 @@ void AptActionInterpreter::_FunctionAptActionSetMember(AptActionInterpreter* pIn
         }
         else if (pObject->getVtblIndex() == AptVFT_Extern && pObject->getIsDefined())
         {
-            // 3) Extern object -> the host extern interface.
-            EAStringC keyScratch, valScratch;
-            const EAStringC* pKeyStr = AptValue::Get_ToString(pKey, &keyScratch);
+            // 3) Extern object -> the host extern interface. The VALUE renders via
+            // Get_ToString; the KEY uses the console's string-only read (a tag-1 key
+            // IS the AptString, any other key is read as a boxed AptStringObject).
+            EAStringC valScratch;
             const EAStringC* pValStr = AptValue::Get_ToString(pValue, &valScratch);
-            AptExtern_SetMember(pKeyStr->GetBuffer(), pValStr->GetBuffer());   // FLAG: dword_8324E854
+            AptString* pKeyStr = (pKey->getVtblIndex() == AptVFT_StringValue)
+                ? reinterpret_cast<AptString*>(pKey)
+                : static_cast<AptString*>(static_cast<AptStringObject*>(pKey)->GetBoxedString());
+            AptExtern_SetMember(pKeyStr->GetInternalString()->GetBuffer(),
+                                pValStr->GetBuffer());   // dword_8324E854 (host slot; leaf in AptRenderLinkStubs.cpp)
         }
         // else: not a settable target -> nothing stored (matches the console).
     }
 
     pInterp->stackPop(3);                                 // pop object + key + value
     if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // off_8324E51C drain (homed, AptGC.cpp)
 }
 
 // ===========================================================================
@@ -201,34 +210,29 @@ void AptActionInterpreter::_FunctionAptActionSetMember(AptActionInterpreter* pIn
 // (`instanceof`): a matching object stays on the stack, a non-match collapses to
 // `undefined`. TypeOf renders the operand's value type into a fresh AptString.
 //
-// FLAG -- engine rodata + the un-homed object coercion:
-//   * AptActionInterpreter_valueToObject (the un-homed member shim, matching the
-//     sibling SpecialOps / CIHNativeFunctionHelper TUs) coerces an operand to the
-//     object it designates under (scope, target).
-//   * gAptPropertyNameTable / gAptPropertyIndexRemap are the engine's static
-//     property-name string table + id->table-index remap (console dword_8324E580 /
-//     dword_82F73010); the table data is the data-segment follow-on.
-//   * gAptTypeName_* are entries of that same EAStringC table holding the AS
-//     typeof() type-name literals ("undefined"/"number"/"boolean"/"string"/
-//     "object"/"movieclip"/"null"/"function"); wired by the engine constant table.
+// Dependencies, all landed:
+//   * AptActionInterpreter::valueToObject @0x82B07FB8 is a homed member
+//     (AptActionInterpreterInterpHelpers.cpp).
+//   * gAptPropertyNameTable / gAptPropertyIndexRemap (console dword_8324E580 /
+//     dword_82F73010) are defined in AptGlobals.cpp, which carries the remaining
+//     table-contents FLAG for the un-recovered rodata.
+//   * gAptTypeName_* are defined in AptGlobals.cpp with the literal AS typeof()
+//     type-name strings ("undefined"/"number"/"boolean"/"string"/"object"/
+//     "movieclip"/"null"/"function").
 // ===========================================================================
 
-// FLAG (un-homed AptActionInterpreter::valueToObject -- declared as an extern shim,
-// matching the sibling AptActionInterpreterSpecialOps.cpp): coerce pValue to the
-// object it designates under (pScope, pTarget), writing the result through *ppOut.
-//   AptActionInterpreter::valueToObject @0x82B0... (X360).
-// AptActionInterpreter::valueToObject is now a member (declared in AptActionInterpreter.h).
+// AptActionInterpreter::valueToObject @0x82B07FB8 -- a homed member (declared in
+// AptActionInterpreter.h, body in AptActionInterpreterInterpHelpers.cpp).
 
-// FLAG (engine rodata -- the static AS builtin-property name table + its id remap;
-// console dword_8324E580[dword_82F73010[index]]): gAptPropertyIndexRemap maps a
-// property id (0..N) to its slot in gAptPropertyNameTable, the engine's array of
-// class/property name EAStringC literals. Declared here so Get/SetProperty can name
-// the looked-up name; the table data itself is the data-segment follow-on.
+// The static AS builtin-property name table + its id remap (console
+// dword_8324E580[dword_82F73010[index]]): gAptPropertyIndexRemap maps a property id
+// to its slot in gAptPropertyNameTable. Storage is defined in AptGlobals.cpp, which
+// carries the remaining table-contents FLAG for the un-recovered rodata.
 extern const EAStringC gAptPropertyNameTable[];   // dword_8324E580
 extern const int       gAptPropertyIndexRemap[];  // dword_82F73010
 
-// FLAG (engine rodata -- the AS typeof() type-name literals; entries of the same
-// dword_8324E580 EAStringC table). Wired by the engine constant-string table.
+// The AS typeof() type-name literals (entries of the same dword_8324E580 EAStringC
+// table) -- defined with their literal contents in AptGlobals.cpp.
 extern const EAStringC gAptTypeName_Undefined;   // dword_8324E6C8 "undefined"
 extern const EAStringC gAptTypeName_Number;      // dword_8324E64C "number"
 extern const EAStringC gAptTypeName_Boolean;     // dword_8324E608 "boolean"
@@ -253,12 +257,12 @@ void AptActionInterpreter::_FunctionAptActionGetProperty(AptActionInterpreter* p
 
     AptValue* pObject = nullptr;
     pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
-                                       pObjectOper, &pObject);   // FLAG: un-homed valueToObject
+                                       pObjectOper, &pObject);   // homed member (InterpHelpers.cpp)
 
     if (pObject)
     {
         const int nProperty = pIndexValue->toInteger();
-        const EAStringC* pName = &gAptPropertyNameTable[gAptPropertyIndexRemap[nProperty]];   // FLAG: rodata
+        const EAStringC* pName = &gAptPropertyNameTable[gAptPropertyIndexRemap[nProperty]];   // AptGlobals.cpp tables
         AptValue* pResult = pInterp->getVariable(pObject, pContext->mpPendingReleaseValue,
                                                  pName, 1, 1, 0);
         pInterp->stackPop(2);
@@ -288,12 +292,12 @@ void AptActionInterpreter::_FunctionAptActionSetProperty(AptActionInterpreter* p
 
     AptValue* pObject = nullptr;
     pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
-                                       pObjectOper, &pObject);   // FLAG: un-homed valueToObject
+                                       pObjectOper, &pObject);   // homed member (InterpHelpers.cpp)
 
     const int nProperty = pIndexValue->toInteger();
     if (pObject)
     {
-        const EAStringC* pName = &gAptPropertyNameTable[gAptPropertyIndexRemap[nProperty]];   // FLAG: rodata
+        const EAStringC* pName = &gAptPropertyNameTable[gAptPropertyIndexRemap[nProperty]];   // AptGlobals.cpp tables
         pInterp->setVariable(pObject, pContext->mpPendingReleaseValue,
                              pName, pValue, 1, 1, 0);
     }
@@ -367,7 +371,7 @@ void AptActionInterpreter::_FunctionAptActionTypeOf(AptActionInterpreter* pInter
 {
     AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];   // TOS = the operand
 
-    AptString* pResult = AptString::Create("");   // FLAG: seed const, overwritten below
+    AptString* pResult = AptString::Create("");   // console seed @0x820046A7 ("" -- overwritten below)
     const EAStringC* pTypeName = nullptr;
 
     if (!pTop->getIsDefined())

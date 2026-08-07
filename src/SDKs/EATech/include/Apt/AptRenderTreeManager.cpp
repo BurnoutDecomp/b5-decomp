@@ -86,7 +86,7 @@ AptRenderItem* AptRenderItem::Manager_CreateItem(AptCharacter* pCharacter, int n
 }
 
 // ---------------------------------------------------------------------------
-// The render-tree-manager helpers AptCharacterInst calls (were FLAG'd externs).
+// The render-tree-manager helpers AptCharacterInst calls (formerly deferred externs).
 // ---------------------------------------------------------------------------
 
 // AptCurrentRenderTreeManager -- the current target's render-tree manager. The console

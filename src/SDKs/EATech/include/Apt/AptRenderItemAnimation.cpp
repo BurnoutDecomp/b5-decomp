@@ -8,7 +8,8 @@
 AptRenderItemAnimation::AptRenderItemAnimation(AptCharacter* pCharacter, int nCreatedOnTick)
     : AptRenderItemSprite(pCharacter, nCreatedOnTick)
 {
-    // FLAG: console rotate-masks mFlags; 0x240000 is the animation render-type bits.
+    // Console encoding: rotate-mask of mFlags, 0x240000 == 9 << 18 (the X360
+    // render-type field); the x64 twin is the bits-8-13 field, XB1-verified.
     mFlags = (mFlags & ~0x3F00u) | 0x900u;   // animation=9; x64 type field (XB1 ctor 0x140826AC0 `or 900h`)
 }
 

@@ -48,8 +48,8 @@
 // mouse-wheel flag stamped into a fresh field.
 // gAptEmptyTextRenderDataZID (&unk_82F72DB0) is the "unresolved/empty handle"
 // sentinel -- a field whose handle equals it has nothing to draw / release.
-// FLAG: on x64 the render-data handle is a 32-bit host id (the console stored a
-// 32-bit pointer in this slot); kept as the header's int32_t mZID.
+// The render-data handle is POINTER-WIDTH on x64 (the console stored a 32-bit
+// pointer; XB1 ?GetZID does an 8-byte load) -- the header's intptr_t mZID.
 // ---------------------------------------------------------------------------
 extern void (*gpfnAptDrawTextRenderData)(intptr_t nZId, AptMaskRenderOperation eOp, int nTick);  // dword_8324E868
 extern void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp);                        // dword_8324E864
@@ -105,13 +105,10 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(AptCharacter* pCharacter, int
 // render-type flag. The strings / colours / bounds / font copy from the source.
 // VERIFIED vs the asm (sub_82AEF678 @0x82AEF678 IS present in .ida-exports/ARTIST):
 // mStateFlags is hard-coded to 4 (li r7,4 -> stw 0x6C), NOT copied; mZID resets to 0.
-// FLAG (deferred, NOT guessed): the console DEEP-COPIES mpTextFormat -- 0x82AEF80C: if
-// source->mpTextFormat (0x68) != null it Allocates a 0x20 block from gpNonGCPoolManager
-// and copy-constructs a fresh TextFormat from the source's, else leaves null. Kept null
-// here because the TextFormat value type is still opaque (an AptValue* that SetTextFormat
-// tears down as an EAStringC 0x20 block); a wrong deep-copy would double-free. Re-home
-// with the TextFormat layer. Effect today: cloning a text field with active formatting
-// loses its format until the next resolve -- safe (no UB), just not yet faithful.
+// The mpTextFormat DEEP COPY (asm tail @0x82AEF80C) is now faithful: the TextFormat
+// record type is homed (AptTextFormat.cpp), so the clone pool-allocates a fresh
+// record and copy-constructs it through TextFormat::TextFormat(const TextFormat*)
+// @0x82AEC320 -- the copy the earlier pass deferred while the type was opaque.
 // ---------------------------------------------------------------------------
 AptRenderItemDynamicText::AptRenderItemDynamicText(const AptRenderItemDynamicText* pSource,
                                                    int nCreatedOnTick, bool bCopyExtended)
@@ -130,8 +127,22 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(const AptRenderItemDynamicTex
     mFontID              = pSource->mFontID;
     mStateFlags          = 4;          // console (sub_82AEF678 @0x82AEF7F8) hard-codes 4, NOT a source copy
 
-    mZID         = 0;          // asm stores 0 to 0x3C (the render-data handle re-resolves)
-    mpTextFormat = nullptr;    // FLAG (see header note above): asm deep-copies; deferred with the TextFormat layer
+    mZID = 0;                  // asm stores 0 to 0x3C (the render-data handle re-resolves)
+
+    // Deep-copy the source's TextFormat record (asm tail @0x82AEF80C): non-null
+    // source -> pool-Allocate a fresh record (console 0x20 == its sizeof) and
+    // copy-construct via TextFormat::TextFormat(const TextFormat*) @0x82AEC320;
+    // pool exhaustion (or a null source) leaves null.
+    if (pSource->mpTextFormat)
+    {
+        void* pMem = gpNonGCPoolManager->Allocate(sizeof(TextFormat));
+        mpTextFormat = pMem
+            ? reinterpret_cast<AptValue*>(
+                  new (pMem) TextFormat(reinterpret_cast<const TextFormat*>(pSource->mpTextFormat)))
+            : nullptr;
+    }
+    else
+        mpTextFormat = nullptr;
 }
 
 // ---------------------------------------------------------------------------

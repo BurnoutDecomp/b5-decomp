@@ -37,11 +37,11 @@
 #include <cmath>     // fabsf, fabs
 #include <cstring>   // strcmp
 
-// FLAG (wired at AptInit; see AptValueConvert.cpp).
+// gpUndefinedValue: AptGlobals.cpp (built at AptInit). AptGetSwfVersion: AptLinker.cpp.
 extern AptValue*    gpUndefinedValue;
 extern unsigned int AptGetSwfVersion();
-// FLAG (value NaN test -- console isNaN; the value-layer follow-on, shared with the
-// string/number opcode TUs).
+// The value NaN test (console isNaN @0x82AF9768); homed in
+// AptActionInterpreterBuiltins.cpp.
 extern bool         isNaN(AptValue* pValue);
 
 namespace
@@ -244,7 +244,7 @@ void AptActionInterpreter::_FunctionAptActionLessThan2(AptActionInterpreter* pIn
             const char* sTop   = pTop->c_string()->GetInternalString()->GetBuffer();
             pResult = AptBoolean::Create(strcmp(sUnder, sTop) < 0);
         }
-        else if (isNaN(pTop) || isNaN(pUnder))   // FLAG: isNaN (value-layer follow-on)
+        else if (isNaN(pTop) || isNaN(pUnder))   // isNaN @0x82AF9768 (Builtins.cpp)
         {
             pResult = gpUndefinedValue;
         }
@@ -282,7 +282,7 @@ void AptActionInterpreter::_FunctionAptActionLessThan2(AptActionInterpreter* pIn
 // AptBoolean::Create(b)); the result `bEqual` mirrors the asm's r31 latch and the
 // two operands are collapsed via the shared pop-2 + push helper.
 //
-// FLAG: faithfully transliterated from the X360 ARTIST pseudocode/asm; the string
+// Faithfully transliterated from the X360 ARTIST pseudocode/asm; the string
 // equality the console performs through Burnout_X360_Artist_0040_0 on the embedded
 // EAStringC is the EAStringC operator==, and the '.' scan (sub_82AD8B80) is
 // EAStringC::UTF8_Find(".") -- both reached via the established c_string() path.
@@ -373,9 +373,9 @@ MixedCompare:
         const bool bUnderIsNumberType = (nUnder == AptVFT_Integer || nUnder == AptVFT_Float);
 
         bool bStringLadder = false;
-        if (!bTopIsNumberType || isNaN(pUnder))   // FLAG: isNaN -- outer guard
+        if (!bTopIsNumberType || isNaN(pUnder))   // isNaN -- outer guard
         {
-            if (!bUnderIsNumberType || isNaN(pTop))   // FLAG: isNaN -- inner guard
+            if (!bUnderIsNumberType || isNaN(pTop))   // isNaN -- inner guard
                 bStringLadder = true;
         }
 

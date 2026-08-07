@@ -26,9 +26,9 @@
 // ---------------------------------------------------------------------------
 // The Apt render-tree revision lock (X360 unk_8324E7CC) -- a single-word test-and-
 // set spin lock bracketing a render-item revision swap. Defined by the Apt runtime;
-// declared here. FLAG: the console uses the lwarx/stwcx. interrupt-masked idiom;
-// modelled as an interlocked test-and-set (host-portable). Uncontended on the
-// single-threaded bring-up path.
+// declared here. The console uses the lwarx/stwcx. interrupt-masked idiom;
+// modelled as an interlocked test-and-set (host-portable; the PC-platform leaf
+// markers sit on the shims below). Uncontended on the single-threaded bring-up path.
 // ---------------------------------------------------------------------------
 extern volatile long gAptRenderTreeRevisionLock;   // X360 unk_8324E7CC
 
@@ -153,14 +153,15 @@ AptRenderItem* AptRenderItemCustomControl::CopyFromSprite(AptRenderItem* pSource
 // ---------------------------------------------------------------------------
 void AptRenderItemCustomControl::Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const
 {
-    // FLAG (deferred -- Wave 5/6): the console first refreshes the render-tree
-    // first-child link to the content node's current revision
-    // (AptRenderItem::Manager_GetRenderRevision / Manager_UpdateFirstChild --
-    // part of the render-tree-manager double-buffering, single-buffered + stubbed
-    // on the current bring-up path), then hands the content character's host
-    // payload (character +0x20, an un-homed content-character member) to the
-    // gpfnAptDrawCustomControl[ById] hooks. Deferred until the render-revision API
-    // + the content-character payload layout are homed; draws nothing until then.
+    // FLAG (parked -- payload slot only): the console (@0x82AEF8F8) refreshes the
+    // first-child link (Manager_GetRenderRevision @0x82ADAC58 + Manager_UpdateFirstChild,
+    // both now HOMED in AptRenderItem.cpp), double-pushes the matrices (this, then
+    // the content node), and hands the content character's host payload -- the
+    // console word at character+0x20, PAST the 0x10-byte base -- to
+    // gpfnAptDrawCustomControl (type/target/properties buffers) or ...ById (mZId)
+    // under the byte_82F733F6 + empty-type gate, then double-pops. Still deferred:
+    // the payload's x64 offset needs the custom-control character record's
+    // serialized 1:7:8 layout (.apt parse follow-on); everything else is ready.
     (void)pCtx; (void)eOp; (void)nTick;
 }
 

@@ -5,6 +5,7 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptRenderItemSprite.h"
+#include "SDKs/EATech/include/Apt/AptRenderHooks.h"   // the host render-data notify slots (dword_8324E8CC/D0)
 #include "SDKs/EATech/include/Apt/AptDefine.h"   // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"             // DOGMA_PoolManager
 #include <new>                                     // placement new
@@ -15,8 +16,8 @@ AptRenderItemSprite::AptRenderItemSprite(AptCharacter* pCharacter, int nCreatedO
     : AptRenderItem(pCharacter, nCreatedOnTick)
     // mInstanceName default-constructs to the shared empty string.
 {
-    // FLAG: the console also rotate-masks mFlags; 0x140000 is the sprite
-    // render-type bits.
+    // Console encoding: rotate-mask of mFlags, 0x140000 == 5 << 18 (the X360
+    // render-type field); the x64 twin is the bits-8-13 field, XB1-verified.
     mFlags |= 0x500u;   // sprite=5; x64 type field (XB1 factory 0x14083C0D0 `or 500h`)
 }
 
@@ -43,25 +44,33 @@ AptRenderItem* AptRenderItemSprite::Clone(int nCreatedOnTick, bool bCopyExtended
 // children render through the render tree.
 void AptRenderItemSprite::Render(AptRenderingContext*, AptMaskRenderOperation, int) const {}
 
-// PushRenderData @0x7F249C -- bracket the children's render with the sprite's
-// transforms. (FLAG: the console first notifies a render-data-tracking hook
-// keyed on the instance name -- dword_1059C6FC; null/no-op here.)
+// PushRenderData @0x7F249C (X360 @0x82AEF300) -- notify the host render-data push
+// hook (dword_8324E8CC; the PS3 twin slot is dword_1059C6FC) for a NAMED sprite --
+// the shared-empty instance name (unk_82F72FF8) is skipped via the pointer-identity
+// EAStringC::IsEmpty, the same guard + slots the custom-control siblings use --
+// then bracket the children's render with the transforms.
 void AptRenderItemSprite::PushRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation, int) const
 {
+    if (!mInstanceName.IsEmpty() && gpfnAptCustomControlPushRenderData)
+        gpfnAptCustomControlPushRenderData(mInstanceName.GetBuffer());
     PushMatrices(pCtx, this);
 }
 
-// PopRenderData @0x7ECAD0
+// PopRenderData @0x7ECAD0 (X360 @0x82AEBFD0) -- pop the transforms, then notify the
+// host render-data pop hook (dword_8324E8D0) for a named sprite.
 void AptRenderItemSprite::PopRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation, int) const
 {
     PopMatrices(pCtx, this);
-    // FLAG: the console then notifies dword_1059C700 with the instance name.
+    if (!mInstanceName.IsEmpty() && gpfnAptCustomControlPopRenderData)
+        gpfnAptCustomControlPopRenderData(mInstanceName.GetBuffer());
 }
 
-// PushRenderDataAbsolute @0x7F2958
+// PushRenderDataAbsolute @0x7F2958 (X360 @0x82AEF378) -- the push-hook notify, then
+// the absolute (world-space) matrix push.
 void AptRenderItemSprite::PushRenderDataAbsolute(AptRenderingContext* pCtx) const
 {
-    // FLAG: the console first notifies the render-data hook (dword_1059C6FC).
+    if (!mInstanceName.IsEmpty() && gpfnAptCustomControlPushRenderData)
+        gpfnAptCustomControlPushRenderData(mInstanceName.GetBuffer());
     PushMatricesAbsolute(pCtx, this);
 }
 

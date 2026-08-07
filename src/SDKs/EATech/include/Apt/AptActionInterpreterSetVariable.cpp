@@ -12,14 +12,12 @@
 //   4. otherwise the frame-context / frame-stack store.
 // bRemoving = the value is null or undefined (clearing the member).
 //
-// FLAG -- deferred to the value/frame layer (Adriwin's class:Apt* TUs) + AptInit:
-//   the scope-chain store (AptFrameStack::SetWhereExistsInScopeChain) and the
-//   frame-context fallback (the interpreter frame context + AptFrameStack::
-//   CreateFrameStack + the type-12/37 CIH paths) are encapsulated in the
-//   AptInterp_Set* helpers; the _global object's __proto__ reset (dword_8324D830 /
-//   Set__Proto__) for a function/class value is noted but deferred. The faithful
-//   common paths (member set + the context native-hash store) are reconstructed
-//   here; getContext is the (reconstructed) path parser.
+// All layers are landed: the scope-chain store (SetInScopeChain -> AptFrameStack::
+// SetWhereExistsInScopeChain) and the node/frame-context fallback
+// (SetVariableFallback) are homed members in AptActionInterpreterInterpHelpers.cpp;
+// getContext is the homed path parser (AptActionInterpreterContext.cpp). The
+// root-target-MC prototype sever (dword_8324D830), the shape-instance store bail
+// and the no-scope-chain frame-stack store are reconstructed below from @0x82B03048.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -28,14 +26,14 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
+#include "SDKs/EATech/include/Apt/AptCIH.h"            // AptCIH::GetCharacterInst (the shape-inst bail)
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"  // GetTypeTag (shape == 1)
+#include "SDKs/EATech/include/Apt/AptFrameStack.h"     // the active local-variable frame (no-scope-chain store)
 
-// FLAG (AptFrameStack -- Adriwin's class:AptFrameStack TU; wired at AptInit): store
-// the value where the name already exists in the function scope chain. Returns true
-// if stored. Encapsulates the frame-stack + interpreter frame-context access.
-// AptActionInterpreter::SetInScopeChain is now a member (declared in the header).
-// FLAG: the frame-context fallback store (the no-scope-chain / type-12-37 / CIH
-// paths -- the interpreter frame context + AptFrameStack::CreateFrameStack).
-// AptActionInterpreter::SetVariableFallback is now a member (declared in the header).
+extern AptValue* gpAptRootTargetMC;   // dword_8324D830 (AptGlobals.cpp; the root target MC)
+
+// SetInScopeChain (the scope-chain store) and SetVariableFallback (the node/frame-
+// context fallback) are homed members in AptActionInterpreterInterpHelpers.cpp.
 
 int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
     const EAStringC* pName, AptValue* pValue, int nAllowScopeChain, int nSearchScopeChain, int nDirect)
@@ -58,6 +56,19 @@ int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
     if (!pContext)
         return 0;
 
+    // A CIH (12, defined) / CIHNone (37) context whose character instance is a
+    // SHAPE (type tag 1) refuses the store outright -- console @0x82B03048 bails
+    // with 0 on (inst->mTypeFlags tag) == 1 before the member-set probe.
+    const AptVirtualFunctionTable_Indices eCtx = pContext->getVtblIndex();
+    const bool bNodeContext =
+        (eCtx == AptVFT_CharacterInstHandle && pContext->getIsDefined()) || eCtx == AptVFT_CIHNone;
+    if (bNodeContext)
+    {
+        const AptCharacterInst* const pInst = static_cast<AptCIH*>(pContext)->GetCharacterInst();
+        if (pInst && pInst->GetTypeTag() == 1)   // shape inst -> not a variable target
+            return 0;
+    }
+
     const bool bRemoving = (!pValue || !pValue->getIsDefined());
 
     // 1) the context object's member set (registered members / AS setters).
@@ -67,7 +78,7 @@ int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
     if (nAllowScopeChain)
     {
         // 2) store where the name lives in the function scope chain.
-        if (nSearchScopeChain && SetInScopeChain(&name, pValue))   // FLAG: AptFrameStack
+        if (nSearchScopeChain && SetInScopeChain(&name, pValue))   // homed member (InterpHelpers.cpp)
             return 1;
 
         // 3) the context's own native hash.
@@ -78,18 +89,42 @@ int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
         {
             pHash->Set(name, pValue);
             pHash->UpdateObjectMethods(pContext, &name, bRemoving);
-            // FLAG: console also resets the _global object's __proto__ for a
-            // function/class value here (dword_8324D830 / Set__Proto__) -- deferred.
+            // Storing a script function (tag 34..36, defined) onto the root target
+            // MC (console dword_8324D830) severs the new class's prototype from the
+            // inheritance chain: value hash -> prototype -> its hash -> __proto__ = 0
+            // (console @0x82B03048's root-MC arm: Set__Proto__(protoHash, 0)).
+            if (pContext == gpAptRootTargetMC && pValue)
+            {
+                const unsigned int eVal = static_cast<unsigned int>(pValue->getVtblIndex());
+                if (eVal - 34u <= 2u && pValue->getIsDefined())
+                {
+                    AptValue* const pProto = pValue->GetNativeHashVirtual()->GetPrototype();
+                    if (pProto)   // console derefs unconditionally; null-guarded for x64 bring-up
+                        pProto->GetNativeHashVirtual()->Set__Proto__(0);
+                }
+            }
             return 1;
         }
 
-        // FLAG: CIH (type 12/37) + frame-context hash fallback (AptFrameStack layer).
+        // CIH (type 12/37) + frame-context hash fallback -- homed member (InterpHelpers.cpp).
         return SetVariableFallback(pContext, &name, pValue, nDirect) ? 1 : 0;
     }
 
-    // No scope-chain search: store in the context's native hash directly. (FLAG: the
-    // console routes to the frame stack when an interpreter frame context exists --
-    // that branch is the AptFrameStack-layer follow-on.)
+    // No scope-chain search: with a script function executing the store lands in the
+    // current activation's frame-stack locals (console off_8324E3DC + 8, lazily built
+    // via CreateFrameStack @0x82AF1260 -- the same pattern as the Try catch-name
+    // bind); otherwise in the context's native hash directly.
+    if (mpCurrentFunction)
+    {
+        AptFrameStack* pFrame = AptScriptFunctionBase::GetActiveFrameStack();   // off_8324E3DC
+        if (!pFrame)
+        {
+            mpCurrentFunction->CreateFrameStack();
+            pFrame = AptScriptFunctionBase::GetActiveFrameStack();
+        }
+        pFrame->GetNativeHashVirtual()->Set(name, pValue);   // console AptNativeHash::Set(frame + 8, ...)
+        return 1;
+    }
     AptNativeHash* pHash = pContext->GetNativeHashVirtual();
     if (pHash)
     {

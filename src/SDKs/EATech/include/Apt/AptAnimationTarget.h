@@ -55,8 +55,8 @@ class AptActionQueueC;    // +0x0C -- the deferred-action queue (AptActionQueue.
 // small fixed table of AptValue* listeners/inputs: a live count, a slot capacity and
 // the slot array. Proven from the count16/count16/slots access pattern the
 // register/process passes use (lhz +0/+2, lwz +4). GetListenerSet/GetInputSet hand
-// back the address of one of these. FLAG: the ctor/dtor helper bodies that fill the
-// table live in a sibling TU (sub_82AE16xx/17xx) -- modelled here by NAMED members.
+// back the address of one of these. The ctor/dtor helper bodies that fill the
+// table (sub_82AE16xx/17xx) are HOMED in AptAnimationTarget.cpp -- NAMED members.
 // ---------------------------------------------------------------------------
 struct AptAnimationTargetSet
 {

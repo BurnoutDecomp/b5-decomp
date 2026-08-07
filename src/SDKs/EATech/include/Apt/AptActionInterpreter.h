@@ -34,8 +34,9 @@ struct AptCIH;             // SDKs/EATech/include/Apt/AptCIH.h (the movie-clip s
 struct AptCharacterInst;   // SDKs/EATech/include/Apt/AptCharacterInst.h
 class EAStringC;          // SDKs/EATech/include/Apt/AptString/EAString.h (path/name buffers)
 
-// FLAG (runtime-only AptActionInterpreter init parameters -- the block initialize()
-// reads; not serialised, so it is modelled by its console field offsets). DEFINED
+// Runtime-only AptActionInterpreter init parameters -- the block initialize() reads.
+// The host (AptUpdateInitialize) hands the console-layout parameter block through
+// unchanged, so it is deliberately modelled by its console field offsets. DEFINED
 // here (was a TU-local struct in AptActionInterpreterStackOps.cpp; promoted to the
 // header so the GUI Apt host -- BrnGuiAptRuntime.cpp -- can construct one to call
 // AptActionInterpreter::initialize, the X360 AptUpdateInitialize's job). Layout is
@@ -115,8 +116,8 @@ public:
                           int nAllowSelf, int nSearchScopeChain, int nDirect);
 
     // getContext @0x8194CC -- parse a variable PATH (slash/dot syntax) into its
-    // (context object, leaf name) and return the context kind. FLAG: the 115-line
-    // path parser is its own follow-on TU; declared so getVariable can call it.
+    // (context object, leaf name) and return the context kind. The 115-line path
+    // parser is homed in AptActionInterpreterContext.cpp.
     int getContext(AptValue* pScope, AptValue* pTarget, const EAStringC* pPath,
                    AptValue** ppOutContext, EAStringC* pOutName);
 
@@ -181,8 +182,9 @@ public:
 
     // GetDictEntry -- fetch string-constant dictionary slot nIndex (mpConstantPool[i],
     // console *(4*idx + a1[17])). The console reads the slot inline at each Push*Dict*
-    // op; homed here with a null guard (FLAG hardening: an x64 pool miss can leave a
-    // slot null where the console pre-seeds -- returns gpUndefinedValue then). Body in
+    // op; homed here with a null guard (deliberate x64 hardening, 2026-07-05 MAIN
+    // init-action AV: a pool miss can leave a slot null where the console pre-seeds
+    // -- returns gpUndefinedValue then). Body in
     // AptActionInterpreterInterpHelpers.cpp.
     AptValue*  GetDictEntry(unsigned int nIndex);
 
@@ -299,7 +301,7 @@ public:
 
     // getName @0x82AF75C8 / getName2 @0x82AF7540 -- build the slash/dot path name of
     // a value into pOut (getName2 also appends a trailing "/" for an empty path).
-    // FLAG: the core path walk (sub_82AF7400) is the path-builder follow-on.
+    // The core path walk (sub_82AF7400) is AptBuildPathName, InterpHelpers.cpp.
     void getName (AptValue* pValue, EAStringC* pOut);
     void getName2(AptValue* pValue, EAStringC* pOut);
 

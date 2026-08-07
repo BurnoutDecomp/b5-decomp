@@ -17,15 +17,11 @@
 // interned/handle string tag 33) hands back its embedded EAStringC directly (no
 // allocation); any other value is rendered into the caller's scratch via toString.
 //
-// FLAG -- deferred dependencies (the value/GC layer + the string renderer):
-//   * AptValue::toString (the StringPool/Append renderer) backs the non-string
-//     Get_ToString path; declared, body is the value-layer follow-on.
-//   * the meValueType-33 boxed-string pointer (at +0x20) is an unnamed 7-bit type
-//     tag for an indirect string; the raw offset is noted at its one use.
-//   * the deferred-release value-vector drain after a SetVariable empties the
-//     operand stack (console off_8324E51C / AptValueVector::ReleaseValues) is the
-//     AptGC layer (Adriwin's TU); encapsulated in AptFlushDeferredReleases.
-//     The stack-empty guard that triggers it is faithful + engine-side.
+// All former deferrals are landed: AptValue::toString (AptValueConvert.cpp
+// @0x82AF8FA0) backs the non-string Get_ToString path; the tag-33 boxed string is
+// the named AptStringObject::GetBoxedString member; the deferred-release drain is
+// the homed AptFlushDeferredReleases over gValuesToRelease (AptGC.cpp,
+// off_8324E51C). The stack-empty guard that triggers it is engine-side.
 //
 // The member opcodes GetMember/SetMember (0x4E/0x4F) are the follow-on: they add
 // the array / string / __proto__ fast paths and lean on the value-layer type tags
@@ -36,15 +32,14 @@
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
-#include "SDKs/EATech/include/Apt/AptValue/AptString.h"   // AptString::GetInternalString
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"       // AptString::GetInternalString
+#include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h" // the tag-33 boxed-string form
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC
 #include "SDKs/EATech/include/Apt/AptCIH.h"               // AptCIH : AptValueGC (mpCIH -> AptValue* upcast)
 
-// FLAG (AptGC layer -- Adriwin's AptValueVector TU): once the operand stack
-// drains, the console flushes the deferred-release value vector (off_8324E51C:
-// `if (vector.count) vector.ReleaseValues()`). The vector type + global are not
-// reconstructed yet, so the flush is encapsulated here; SetVariable's stack-empty
-// guard (faithful, engine-side) decides when to call it.
+// The deferred-release drain over off_8324E51C (`if (vector.count)
+// vector.ReleaseValues()`) -- homed in AptGC.cpp over the real gValuesToRelease
+// vector; SetVariable's stack-empty guard decides when to call it.
 extern void AptFlushDeferredReleases();
 
 // ---------------------------------------------------------------------------
@@ -59,16 +54,17 @@ const EAStringC* AptValue::Get_ToString(AptValue* pValue, EAStringC* pScratch)
 
     // String values expose their EAStringC directly -- no conversion. Type 1 is
     // the AptString itself; tag 33 boxes the AptString behind a pointer at +0x20.
-    if ((eType == AptVFT_StringValue || eType == static_cast<AptVirtualFunctionTable_Indices>(33))
+    if ((eType == AptVFT_StringValue || eType == AptVFT_StringObject)
         && pValue->getIsDefined())
     {
         AptString* pString = (eType == AptVFT_StringValue)
             ? reinterpret_cast<AptString*>(pValue)
-            : *reinterpret_cast<AptString**>(reinterpret_cast<char*>(pValue) + 0x20);  // FLAG: type-33 box
+            : static_cast<AptString*>(
+                  static_cast<AptStringObject*>(pValue)->GetBoxedString());   // tag 33: mpValue [c:+0x20]
         return pString->GetInternalString();
     }
 
-    pValue->toString(pScratch);   // FLAG: toString deferred (StringPool/Append)
+    pValue->toString(pScratch);   // homed renderer (AptValueConvert.cpp @0x82AF8FA0)
     return pScratch;
 }
 
@@ -115,5 +111,5 @@ void AptActionInterpreter::_FunctionAptActionSetVariable(AptActionInterpreter* p
     pInterp->stackPop(2);                                 // pop name + value
 
     if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // off_8324E51C drain (homed, AptGC.cpp)
 }
