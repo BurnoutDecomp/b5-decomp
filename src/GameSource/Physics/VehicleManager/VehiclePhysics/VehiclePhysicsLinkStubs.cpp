@@ -94,13 +94,42 @@ namespace Vehicle
     // UpdateBrakesAndGetBrakingFactor / LimitDifferential (never stubbed here: nothing else
     // called them, so they carried no link pressure until this wave).
 
-    // LINK STUB (orchestrator wave): X360 @0x825D0BE8, 809 instructions -- the in-air attitude
-    // controller (pitch/yaw/roll damping-on-takeoff, mPitchYawRollFromTakeOff integration,
-    // mbRollingInAir). Its own wave.
+    // LINK STUB (orchestrator wave; FULL CENSUS added by the in-air + powertrain wave 2026-08-07):
+    // X360 @0x825D0BE8, 809 instructions -- the in-air attitude controller. Closure is CLEAN (its
+    // only callees, ExternalPhysicsBody::DampPitchYawRoll and AddWorldSpaceTorque, are bodied in
+    // ExternalPhysicsBody.cpp) and every constant is recovered -- but it is 809 instructions of the
+    // densest VMX128 in the cluster (reciprocal-refined divisions, vsel sign ladders, and a
+    // ~240-instruction cross-product restoring-torque tail across three conditional paths), all
+    // DORMANT until PhysicsModule::Update so unverifiable at runtime. Bodying it is its own wave with
+    // dedicated verification, not a bolt-on; a rushed body risks a silent sign/lane error -- the
+    // exact hollow-shell / silent-drop defect this cluster keeps producing. Decoded structure:
+    //
+    //   GATE: if (!mbHasAir @+0x1350) { mPitchYawRollFromTakeOff @+0x13C0 = 0; mbRollingInAir
+    //         @+0x13D8 = 0; return; }
+    //   rollRate = dot3(mAngularVelocity, zAxis);  yawRate = dot3(mAngularVelocity, yAxis).
+    //   BRANCH on mbHadAirLastFrame @+0x1351:
+    //     A) JUST TOOK OFF (==0): rollAmt = |xAxis.y|; rollDampFactor = piecewise(rollAmt) rising
+    //        0->0.3 across [0, kfFullDampThreshold 0.125] then 0.3->1.0 across [0.125,
+    //        kfNoDampThreshold 0.25], clamped 1.0 above (kfMinRollFactor 0.3). yawDamp =
+    //        kYawDamp_Target 0.05 + (kYawDamp_Min 0.01 - 0.05) * rollDampFactor; mvDampRollVel
+    //        @+0x1080 .x = yawDamp * kDamp_BlendRate 60.0 * dt. DampPitchYawRoll(pitch =
+    //        attribs+0xC0 .x, yaw = 0, roll = 1 - rollDampFactor, dt) -- yaw 0 kills yaw on the
+    //        takeoff frame. Then capture mPitchYawRollFromTakeOff @+0x13C0 (flt_82001D9C 2.0,
+    //        flt_8208F5FC PI, attribs+0xC0).
+    //     B) ALREADY AIRBORNE (!=0): if (|xAxis.y| > kfMinRollToAllowCorrection 0.3) mbRollingInAir
+    //        = 1; when rolling, correct mAngularVelocity (kfLandingAssistDamping 0.14, flt_820037C8
+    //        -1.0, flt_82092BC4 60.0).
+    //   SHARED TAIL: fwdSpeed = dot3(linvel, zAxis); latSpeed = dot3(linvel, xAxis). Branch on
+    //   (zAxis*fwdSpeed).y > 0 (climb vs dive); each path builds a cross-product restoring torque
+    //   (cross(velInPlane, xAxis) scaled by mfMass @+0xE0, minus pitchRate*mass*10) and calls
+    //   AddWorldSpaceTorque up to 3x (unk_82FB9310 0.0, unk_82FB9230 0.1, unk_82FB9330 10.0,
+    //   unk_82FB8B60 1.0, unk_82FB9190 0.25); the dive path also drives the landing assist and
+    //   mWheelFFSpring @+0x13D0. Cross-product idiom = `vpermwi128 v,v,0x63 ; vnmsubfp`.
     void VehiclePhysics::UpdateInAirBehaviour(const BrnPlayerDriverControls*, VecFloat)
     {
         CGS_ASSERT(false, "VehiclePhysics::UpdateInAirBehaviour: link stub -- reconstruct from "
-                          "X360 @0x825D0BE8 (809 insns, the in-air attitude controller)");
+                          "X360 @0x825D0BE8 (809 insns; clean closure + constants recovered, see "
+                          "the full census banner above -- its own wave)");
     }
 
     // LINK STUB (in-air + powertrain wave, 2026-08-07): X360 @0x825CB288 -- Engine::Update, THE
