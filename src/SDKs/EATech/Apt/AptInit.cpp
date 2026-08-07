@@ -16,10 +16,12 @@
 //   * The console stores 4-byte pointers into its .data slots; on x64 those slots
 //     hold sizeof(ptr) -- the pervasive Apt x64-port rule. All storage here is
 //     x64-native (the globals are C++ objects, not a serialised image).
-//   * StringPool::Initialize populates the interned AS-name table from an
-//     un-recovered rodata block (unk_82F733FC); that string-content copy is FLAG'd
-//     (matching the AptGlobals.cpp FLAG on gAptASNameTable) while the structural
-//     pool-array allocation stays faithful.
+//   * StringPool::Initialize points the interned AS-name table at the 264-byte
+//     StaticStringHelperT record block sStringPoolData @0x82F733FC -- contents
+//     RECOVERED (the 0x82F733FC dump confirms record 0 == {refCount 1, length 9,
+//     flags 1, 0} + "__proto__"; the CRT initializer sub_82C71F10 fills records
+//     1..87 at runtime) and statically interned at the saConstant definition
+//     (AptStringPool.cpp); the structural pool-array allocation stays faithful.
 //   * AptValueInitialize @0x82B02800 (the AS value-singleton bootstrap) is homed
 //     here IN FULL (befriended into the value classes): the value singletons, the
 //     nine-entry AS builtin class table + prototype seeding (the console's
@@ -221,9 +223,10 @@ extern void*              gpAptValueGCPool;        // off_8324D834 (type-erased 
 // The Apt TEARDOWN leaves AptRenderShutdown reaches. The un-homed siblings are
 // declared here at the call site (the codebase pattern for not-yet-homed deps).
 // ---------------------------------------------------------------------------
-// AptMath::ClipStackShutdown -- free the render clip stack (the counterpart of
-// ClipStackInit @0x82AE2470); returns the freed base in the console r3, so
-// intptr_t on x64 (matching the other ClipStack* accessors). Not yet homed.
+// AptMath::ClipStackShutdown @0x82AE24E8 -- free the render clip stack (the
+// ClipStackInit inverse). HOMED in AptMath.cpp (targeted export 2026-08-07);
+// declared at the call site because AptMath.h's interpreter-adjacent include
+// set stays out of this TU.
 namespace AptMath { intptr_t ClipStackShutdown(); }
 
 // AptCommonShutdown -- the once-only shared static-data teardown (counterpart of
@@ -253,11 +256,12 @@ extern void AptFreeFontUnit(void* pUnit);   // dword_8324E870 thunk
 // dword_8324E818(48) is gAptFuncs.pfnMemAlloc (CgsGui::AptCallbackMemory::Alloc
 // @0x828491C8, installed by AptAux::ConstructApt before InitializeApt chains here);
 // console 48 covers the 32-bit object, x64 allocates sizeof. Neither object is ever
-// freed -- process-lifetime, matching the console. FLAG (x64): byte_82144A18 (the
-// per-VFT object-size table, AptValueGCPoolManager.cpp) is zeroed so StaticInitialize
-// leaves the GC min/max 0 -> override the GC size statics with x64-correct values
-// (4/256) before the GC pool ctor reads them, else AptValue allocs take the invalid
-// 0-bucket path and AV; parked until that table is populated. WireAllocatorGlobals
+// freed -- process-lifetime, matching the console. The GC min/max statics come
+// straight from StaticInitialize's scan of the per-VFT size table (byte_82144A18
+// rodata RECOVERED -- 0x82144A18 dump: the console-shipped scan yields min 0x00 /
+// max 0x44; StaticInitialize regenerates the x64 table contents from the
+// reconstructed class set before scanning -- AptValueGCPoolManager.cpp), so the
+// old x64 4/256 override FLAG is retired. WireAllocatorGlobals
 // sets off_8324D808/off_8324D834 (+ the operand/pseudo/render/shared/single-list
 // aliases the engine reads off the non-GC pool). The DOGMA fixed-size params
 // (minSize 4, maxSize 256, 0/0/0, bTrackOutsideAllocations 1) are transcribed from
@@ -291,8 +295,6 @@ namespace
 void* AptAllocatorInitialize(int nGcMain, int nGcOvf, int nDogmaMain, int nDogmaOvf)
 {
     AptValueGC_PoolManager::StaticInitialize();
-    gAptValueGCMinItemSize = 4u;      // FLAG (x64): override the byte_82144A18-derived 0
-    gAptValueGCMaxItemSize = 256u;    // FLAG (x64): "                                   "
 
     // mem = dword_8324E818(48); off_8324D808 = DOGMA_PoolManager(mem, ...).
     void* lpDogmaMem = gAptFuncs.pfnMemAlloc(sizeof(DOGMA_PoolManager));   // console 48; x64 sizeof

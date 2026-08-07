@@ -339,8 +339,9 @@ int AptDisplayList::GeneralisedProcess(int nFlags, int nDepthLayerMask, uint8_t 
 // AptFramePlacementDispatch (sub_82B0B080) -- the frame-placement dispatcher:
 //     creates/re-uses the AptCIH for the placement and returns it. A REAL standalone
 //     X360 function (AddToDisplayList @0x82B0B150 does `bl sub_82B0B080`), HOMED at
-//     the bottom of this TU (role-reconstruction; see the FLAG at its body).
-//     Forward-declared here for AddToDisplayList, which consumes its result.
+//     the bottom of this TU (ATTESTED 2026-08-07 against its per-address dossier;
+//     the earlier role reconstruction is retired). Forward-declared here for
+//     AddToDisplayList, which consumes its result.
 // The freshly-placed node's just-instantiated hook -- the X360 calls its vtable[0] with
 // (node, &node->mInstanceName) right after pushing it to the new-instance table -- is
 // AptValue::AddRef (vtbl[0], arg2 discarded), invoked directly at the AddToDisplayList call site.
@@ -355,11 +356,13 @@ extern AptCIH* AptFramePlacementDispatch(AptDisplayList* pThis, void** ppPlaceme
 // name in the parent's property hash, and add it to the target's "new instances to
 // tick this frame" table (running each node's just-instantiated hook).
 //
-// ppPlacement is the .apt frame-placement command: ppPlacement[0] is the placement
-// record (its +0xC dword is the placed character id), ppPlacement[1] is the
-// AptCharacter being placed. The record + the movie import table are serialised .apt
-// data (relocated in place), walked here by their fixed layout; the runtime objects
-// (the owner character / movie / placed node) are reached by named members.
+// ppPlacement is the .apt frame-placement command (an AptMergeSourceNode /
+// AptPseudoCIH_t chain node): ppPlacement[0] is the placement record (its +0xC
+// dword is the placed character id), ppPlacement[1] the AptPseudoData_t snapshot
+// whose mpData is the AptCharacter being placed. The record + the movie import
+// table are serialised .apt data (relocated in place), walked here by their fixed
+// layout; the runtime objects (the owner character / movie / placed node) are
+// reached by named members.
 // ---------------------------------------------------------------------------
 AptCIH* AptDisplayList::AddToDisplayList(AptNativeHash* pParentHash, void** ppPlacement, AptCIH* pParentNode)
 {
@@ -1147,36 +1150,41 @@ AptCIH* AptReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, AptCIH* 
 }
 
 // ---------------------------------------------------------------------------
-// AptFramePlacementDispatch -- sub_82B0B080. A real standalone X360 function
-// (`bl sub_82B0B080` in AddToDisplayList @0x82B0B150) with no per-address dossier in
-// the export set yet, so this body is a ROLE reconstruction: field-for-field it
-// mirrors the fully attested sibling AptDispatchPlaceCommand (sub_82B0AE08), which
-// parses the same native-8 PlaceObject record; the caller's post-dispatch instance-
-// name check proves the dispatcher binds the record's name. Export + decompile
-// sub_82B0B080 to upgrade this to attestation. The dispatcher
-// creates/re-uses the placed node for a serialised .apt frame-placement command and
-// returns it. ppPlacement[1] is the AptFramePlacementProps/pseudo-data overlay; the
-// authored name / clip-depth / clip-actions live in ppPlacement[0]'s raw PlaceObject
-// record, the same native-8 body layout AptDispatchPlaceCommand parses.
-//
-// FLAG: sub_82B0B080's own body is folded (no per-address dossier in the X360 export
-// and absent as a named function in the PS3 DWARF). The faithful observable behaviour
-// -- materialise the placed node at the command's depth and return it -- is
-// reconstructed through the homed placeObject, reading the placement command's named
-// fields (the same AptFramePlacementProps the sibling ReplaceDisplyListItem reads).
+// AptFramePlacementDispatch -- sub_82B0B080 (ATTESTED 2026-08-07: the per-address
+// X360 dossier landed; the earlier role reconstruction is retired). The frame-
+// placement dispatcher AddToDisplayList invokes: build the instance name from the
+// serialised .apt PlaceObject record (flags bit5 + the resolve64-relocated name
+// pointer), placeObjectNCXForm the pseudo-snapshot's captured state at the merge
+// chain node's depth, then stamp the placed node's createdOnFrame from the
+// snapshot's character id (the rlwimi tail @0x82B0B130 writes the 14-bit field the
+// placement-identity gate1 in mergeState re-checks against AptPseudoData_t::
+// mi16CharacterId on the next merge pass).
+//   X360 arg map (@0x82B0B0DC..0x82B0B11C, stack slots pinned against the attested
+//   sibling call @0x82B0AEC0..0x82B0AEE8): r4 existing=0, r5 depth=ppPlacement[2]
+//   (the AptMergeSourceNode depth word), r6 char=props+0x00, r7 name, r8 parent,
+//   r9 forceRemove=1, r10 clipDepth=extsh(props+0x18 low half == mi16Depth@+0x1A),
+//   f1 frame=(f32)props+0x10; stack: colour=props+0x08 / matrix=props+0x04 /
+//   clipActions=props+0x0C -- all three passed UNGATED (the AptPseudoData_t ctor
+//   already nulled the flag-absent ones).
+// ppPlacement[1] is read through AptPseudoData_t, the console snapshot layout the
+// AptFramePlacementProps pun overlays (mi16Depth is the captured CLIP depth -- the
+// console snapshot ctor copies the record's s16 clip depth, see AptPseudoData.h).
 // ---------------------------------------------------------------------------
 AptCIH* AptFramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, AptCIH* pParentNode)
 {
-    AptFramePlacementProps* const pProps = static_cast<AptFramePlacementProps*>(ppPlacement[1]);
+    const AptMergeSourceNode* const pSrcNode =
+        reinterpret_cast<const AptMergeSourceNode*>(ppPlacement);
     const AptPlaceObjectInfo_t* const pInfo =
-        static_cast<const AptPlaceObjectInfo_t*>(ppPlacement[0]);
+        static_cast<const AptPlaceObjectInfo_t*>(pSrcNode->mpRecord);   // serialised .apt record
+    const AptPseudoData_t* const pProps =
+        reinterpret_cast<const AptPseudoData_t*>(pSrcNode->mpProps);
 
-    const uint32_t nFlags = pInfo->muxFlags;
-    const int32_t  nDepth = pInfo->mi32Depth;
-
+    // The instance name (record flags bit5 HasName; the serialised .apt record's
+    // name pointer was relocated by resolve64 -- null-guarded like the sibling
+    // AptDispatchPlaceCommand; the console InitFromBuffers record+0x34 unguarded).
     EAStringC nameStr;
     const EAStringC* pName = nullptr;
-    if ((nFlags & 0x20u) != 0u)
+    if ((pInfo->muxFlags & 0x20u) != 0u)
     {
         const char* const pNamePtr = pInfo->mpName;
         if (pNamePtr != nullptr)
@@ -1186,20 +1194,24 @@ AptCIH* AptFramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, Apt
         }
     }
 
-    const float* const pPosition =
-        ((pProps->mnFlags & 0x4) != 0) ? pProps->mpPositionMatrix : nullptr;
-    const AptUint32CXForm* const pPackedColor =
-        ((pProps->mnFlags & 0x8) != 0) ? pProps->mpColorTransform : nullptr;
-    const double fFrameValue = static_cast<double>(pInfo->mfRatio);
-    const int16_t nClipDepth = static_cast<int16_t>(pInfo->miClipDepth);
+    // The snapshot's clip-actions slot carries the console's captured 4-byte VALUE;
+    // on the native-8 path the AptPseudoData_t ctor leaves it 0 (the 8-byte pointer
+    // cannot be captured -- see AptPseudoData.h), so placeObject's placement-field
+    // store stays a no-op exactly as shipped.
+    const void* const pClipActions =
+        reinterpret_cast<const void*>(static_cast<intptr_t>(pProps->miClipActionValue));
 
-    const void* pClipActions = nullptr;
-    if ((nFlags & 0x80u) != 0u)
-        pClipActions = pInfo->mpClipActions;
+    AptCIH* const pPlaced = pThis->placeObjectNCXForm(
+        /*pExistingNode*/ nullptr, pSrcNode->mnDepth,
+        static_cast<AptCharacter*>(pProps->mpData), pName, pParentNode,
+        /*bForceRemove*/ 1, pProps->mi16Depth, static_cast<double>(pProps->mfRatio),
+        static_cast<const float*>(pProps->mpMatrix), pClipActions,
+        static_cast<const AptUint32CXForm*>(pProps->mpColorTransform));
 
-    return pThis->placeObjectNCXForm(
-        /*pExistingNode*/ nullptr, nDepth, pProps->mpCharacter, pName, pParentNode,
-        /*bForceRemove*/ 0, nClipDepth, fFrameValue, pPosition, pClipActions, pPackedColor);
+    // The rlwimi tail @0x82B0B130: createdOnFrame(14-bit) <- the snapshot's character
+    // id (the console writes the field blindly; SetCreatedOnFrame masks the same 0x3FFF).
+    pPlaced->SetCreatedOnFrame(pProps->mi16CharacterId);
+    return pPlaced;
 }
 
 // (AptCharInst_Get/SetPlacementField18 RETIRED 2026-07-07: the console inlines a single

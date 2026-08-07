@@ -6,6 +6,7 @@
 //                                               sub_82AEF678 = the clone copy-ctor)
 //   Render                        0x82AEFAD0   / SetZID 0x82ADB578
 //   SetTextFormat                 0x82AEC1D0
+//   ~AptRenderItemDynamicText     0x82AEF850   (the real dtor; targeted export)
 //   `vector deleting destructor'  0x82AF4E78   (compiler thunk; the base sized
 //                                               operator delete frees the pool block)
 //
@@ -146,21 +147,41 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(const AptRenderItemDynamicTex
 }
 
 // ---------------------------------------------------------------------------
-// dtor -- the two EAStringC members destruct automatically (the compiler emits the
-// refcount drop) and the base ~AptRenderItem runs.
-// FLAG: the real ~AptRenderItemDynamicText is OUT OF SCOPE for this TU -- the
-// dossier marks it [external/unknown] (only the vector-deleting-destructor
-// @0x82AF4E78 is in scope, and it just calls this dtor then the sized base delete).
-// Its body is NOT in the asm, so the owned-resource teardown (the mpTextFormat
-// 0x20-byte pool block + the render-data handle release) is DEFERRED rather than
-// guessed -- a fabricated free here could double-free or release out of order vs
-// the real console dtor. Bodied as an empty stub so the class is destroyable and
-// the vector-deleting-destructor synthesizes; the resource teardown is the
-// out-of-scope follow-on (see SetTextFormat/SetZID for the per-resource teardown
-// the real dtor is expected to mirror).
+// dtor @0x82AEF850 (targeted export 2026-08-07; called by the vector-deleting
+// destructor @0x82AF4E78). The formerly-deferred owned-resource teardown,
+// store-for-store -- and it mirrors the SetTextFormat/SetZID release idioms
+// exactly, as predicted:
+//   * mpTextFormat (console +0x68): drop the record's embedded string ref
+//     (EAStringC::DecreaseInternalRefCount on its word 0) + return the record to
+//     the off_8324D808 pool (console Deallocate size 0x20 == its sizeof), null it.
+//   * mZID (console +0x3C): release through the host hook dword_8324E864(zid, 2)
+//     unless null/the empty sentinel (&unk_82F72DB0), then null it (the hook stays
+//     null-guarded on PC, matching Render/SetZID above).
+//   * mVarValue (+0x38) then mTextValue (+0x34): the console's two trailing
+//     DecreaseInternalRefCount calls ARE the compiler-emitted EAStringC member
+//     dtors in reverse declaration order -- implicit here.
+//   * then the base ~AptRenderItem @0x82AEBCE0 -- implicit.
 // ---------------------------------------------------------------------------
 AptRenderItemDynamicText::~AptRenderItemDynamicText()
 {
+    if (mpTextFormat)                                        // lwz 0x68; beq
+    {
+        // The TextFormat record embeds an EAStringC at offset 0; its dtor drops that
+        // shared string's internal refcount, then the record block returns to the
+        // pool (x64 sizeof(TextFormat) == the console 0x20 size-class).
+        reinterpret_cast<EAStringC*>(mpTextFormat)->~EAStringC();
+        gpNonGCPoolManager->Deallocate(mpTextFormat, sizeof(TextFormat));
+        mpTextFormat = nullptr;                              // stw 0 -> +0x68
+    }
+
+    if (mZID && mZID != gAptEmptyTextRenderDataZID)          // lwz 0x3C; the sentinel compare
+    {
+        if (gpfnAptReleaseTextRenderData)
+            gpfnAptReleaseTextRenderData(mZID, 2);           // dword_8324E864(zid, 2)
+        mZID = 0;                                            // stw 0 -> +0x3C
+    }
+    // mVarValue / mTextValue drop their string refs via their implicit dtors, then
+    // the base ~AptRenderItem runs.
 }
 
 // ---------------------------------------------------------------------------

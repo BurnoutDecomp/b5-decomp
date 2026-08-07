@@ -361,11 +361,12 @@ struct AptCIH : public AptValueGC
     // GetProceduralProperty @0x82AE2D10 -- read a built-in AS "procedural" property
     // (scale/rotation/x/y/alpha/colour/visible/width/height) by selector and return
     // it as a float; out-of-range -> -1. Derives from the node's position + colour
-    // transforms (the AS getProperty reader). FLAG: the case-label integers are
-    // inferred from an unexported remap table (byte_82145248 -- referenced by the
-    // 0x82AE2D10 asm but its bytes are not in the dump set; only index 11 == _visible
-    // is confirmed, via IsVisible); _width/_height go through GetBoundingRect
-    // (HOMED in AptCIHBehaviour.cpp).
+    // transforms (the AS getProperty reader). Case labels ATTESTED (2026-08-07) from
+    // the dumped byte_82145248 remap table (0x82145240 rodata block @+0x08: 4F 51 2B
+    // 40 00 09 0E 53 57 59 5B 5D; arm = loc_82AE2D80 + 4*byte): the selector order
+    // matches the SetProceduralProperty jump table above exactly (0 _x .. 11
+    // _visible); _width/_height go through GetBoundingRect (HOMED in
+    // AptCIHBehaviour.cpp).
     float GetProceduralProperty(uint32_t nPropertyIndex) const;   // @0x82AE2D10
 
     // IsVisible @0x82AE2F30 -- true iff this node AND every display-list ancestor is

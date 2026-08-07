@@ -139,11 +139,13 @@ void AptRenderItemStaticText::Render(AptRenderingContext* pCtx, AptMaskRenderOpe
             glyphMatrix.tx = fAdvance + para.mfX;
             glyphMatrix.ty = para.mfY;
 
-            // FLAG: when (gAptOptFlags & 4) the console takes the _drawCharacterInstOpti
-            // clip-stack fast-path here (sub_82ADFDB0 pushes a clip entry; the matching
-            // gsnClipStackIndex pop runs after the draw). Deferred exactly as
-            // AptRenderItem::PushMatrices defers it; the standard append/draw path below
-            // renders the glyph correctly in the default configuration.
+            // RESOLVED (2026-08-07): when (dword_82F73008 & 4) the console takes the
+            // _drawCharacterInstOpti clip-stack fast-path here (sub_82ADFDB0 pushes a
+            // clip entry; the matching gsnClipStackIndex pop runs after the draw). The
+            // gate word SHIPS as 0x2 (bit2 clear -- the _data_opti_flags_word dump; see
+            // AptRenderItem.cpp KU_AptOptiFlagsWord), so the fast path is dead on the
+            // shipped build and the standard append/draw path below IS the shipped
+            // behaviour.
             pCtx->pushVertexMatrix();
             pCtx->appendVertexMatrix(&glyphMatrix);
             AptCharacter* pGlyphChar = AptResolveFontGlyph(pFontChar, glyph.miGlyphIndex);

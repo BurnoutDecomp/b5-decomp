@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"        // CgsDev::PerfMonCpu (the Update phase brackets)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // CgsCore::SPrintf (the "_level%d" target path)
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"                          // BrnFlapt::TextFieldRef (its GetLanguageManager is bridged here)
+#include "GameSource/Gui/BrnGuiPerfmons.h"                                      // BrnGui::GuiPerfmons (the AptAux perfmon tree handles, Initialise @0x824EF050)
 
 #include "SDKs/EATech/Apt/AptInit.h"                                            // Apt bring-up entry points (InitializeApt callees)
 #include "SDKs/EATech/include/Apt/AptTarget.h"                                  // AptCreateTargetInstance / AptChangeTargetInstance
@@ -321,13 +322,14 @@ namespace CgsGui
         }
     }
 
-    // The per-frame CPU monitors AptAux::Update/Render bracket their phases with
-    // (X360 dword_82F33138 "AptAux - Upd Comps" / dword_82F33134 the movie-tick
-    // phase / dword_82F33130 the render walk). Registered by the un-homed
-    // perf-monitor setup TU; -1 handles no-op Start/StopMonitor until it lands.
-    static s32 giAptAuxUpdateComponentsMonitor = -1;   // dword_82F33138
-    static s32 giAptAuxUpdateTargetMonitor     = -1;   // dword_82F33134
-    static s32 giAptAuxRenderMonitor           = -1;   // dword_82F33130
+    // The per-frame CPU monitors AptAux::Update/Render/UpdateFlashComponent bracket
+    // their phases with are the GUI perfmon tree handles GuiPerfmons::Initialise
+    // @0x824EF050 (BrnGuiPerfmons.cpp) registers. The console's dword_82F33138
+    // ("AptAux - Upd Comps") / dword_82F33134 ("AptAux - Upd Tgt") / dword_82F33130
+    // ("AptAux - Rndr Tgt") / dword_82F33140 ("AptAux - Upd Flsh Res") /
+    // dword_82F3313C ("AptAux - Upd Flsh NRes") are alias copies of those handles;
+    // read here by name through BrnGuiPerfmons.h (zero until Initialise runs -- the
+    // console's zero-init alias state; boot registers the tree before the GUI ticks).
 
     // -------------------------------------------------------------------------
     // AptAux::LoadFlashAnimation - X360 0x82849080. Load a movie onto a GUI level:
@@ -357,15 +359,15 @@ namespace CgsGui
     {
         CGS_ASSERT(miState0 == 3, "Update being called before Prepare is finished.");
 
-        CgsDev::PerfMonCpu::StartMonitor(giAptAuxUpdateComponentsMonitor);
+        CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateComponents);
         UpdateComponents();
-        CgsDev::PerfMonCpu::StopMonitor(giAptAuxUpdateComponentsMonitor);
+        CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateComponents);
 
-        CgsDev::PerfMonCpu::StartMonitor(giAptAuxUpdateTargetMonitor);
+        CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateTarget);
         mAptMutex.Lock();
         AptUpdateTarget(mpAptTargetInstance, liDeltaMs, -1, 16);
         mAptMutex.Unlock();
-        CgsDev::PerfMonCpu::StopMonitor(giAptAuxUpdateTargetMonitor);
+        CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateTarget);
     }
 
     // -------------------------------------------------------------------------
@@ -382,9 +384,9 @@ namespace CgsGui
     {
         CGS_ASSERT(miState0 == 3, "Render being called before Prepare is finished.");
 
-        CgsDev::PerfMonCpu::StartMonitor(giAptAuxRenderMonitor);
+        CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miAptAuxRenderTarget);
         AptRenderTarget(mpAptTargetInstance, liDeltaMs, -1);
-        CgsDev::PerfMonCpu::StopMonitor(giAptAuxRenderMonitor);
+        CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miAptAuxRenderTarget);
     }
 
     // -------------------------------------------------------------------------
@@ -403,24 +405,47 @@ namespace CgsGui
     }
 
     // -------------------------------------------------------------------------
-    // AptAux::UpdateFlashComponent - X360 0x82853C28 (not exported; semantics pinned
-    // by the XB1 x64 arbiter, which INLINES this hop at every call site to
-    // AptCommunicator::UpdateComponent(componentName, key, value) -- e.g. XB1
-    // sub_1401AF470's UpdateComponent(this, this->macName[+8], "SignName", value)).
-    // Mirror the (key, value) pair onto the named component's key/value store; the
-    // per-frame UpdateComponents flush then pushes it to the movie AS ("UpdateAll").
-    // lbImmediate is the console's queued-vs-immediate hint; both orderings land
-    // before the same frame's flush on the single-threaded host (see the header
-    // note; the Res/NRes timer-format split is off the boot flow).
+    // AptAux::UpdateFlashComponent - X360 0x82853C28 (callers: GuiComponent::
+    // FillAptViewMessage @0x828583A8, ViewModule::ProcessIncomingLanguageEvent
+    // @0x8285ED00). Mirror one (key, value) pair onto the named component's
+    // key/value store: assert the name / key / value and the communicator ext
+    // object (the console fires them at CgsAptAux.cpp:629/630/631/633), then
+    // lbReserved selects the communicator entry --
+    //   TRUE  => AptCommunicator::UpdateComponentReserved @0x82851408 under the
+    //            "AptAux - Upd Flsh Res" monitor (dword_82F33140),
+    //   FALSE => AptCommunicator::UpdateComponent @0x82850958 under the
+    //            "AptAux - Upd Flsh NRes" monitor (dword_82F3313C).
+    // The console does not null-guard the AptAux* itself (it derefs +0x1AC60
+    // unconditionally); the communicator null-guard mirrors the UpdateComponents
+    // assert-then-guard house pattern above.
     // -------------------------------------------------------------------------
     void AptAux::UpdateFlashComponent(AptAux* lpAptAux, const char* lpacAptName,
                                       const char* lpacViewState, const char* lpacParam,
-                                      bool /*lbImmediate*/)
+                                      bool lbReserved)
     {
-        CGS_ASSERT(lpAptAux != nullptr, "Invalid AptAux in AptAux::UpdateFlashComponent");
-        if (lpAptAux == nullptr || lpAptAux->mpAptCommunicator == nullptr)
+        CGS_ASSERT(lpacAptName != nullptr,
+                   "Invalid Name sent to AptAux::UpdateFlashComponent");
+        CGS_ASSERT(lpacViewState != nullptr,
+                   "Invalid key sent to AptAux::UpdateFlashComponent");
+        CGS_ASSERT(lpacParam != nullptr,
+                   "Invalid value sent to AptAux::UpdateFlashComponent");
+        CGS_ASSERT(lpAptAux->mpAptCommunicator != nullptr,
+                   "Invalid pointer to apt communicator in AptAux::UpdateFlashComponent");
+        if (lpAptAux->mpAptCommunicator == nullptr)
             return;
-        lpAptAux->mpAptCommunicator->UpdateComponent(lpacAptName, lpacViewState, lpacParam);
+
+        if (lbReserved)
+        {
+            CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateFlashComponentRes);
+            lpAptAux->mpAptCommunicator->UpdateComponentReserved(lpacAptName, lpacViewState, lpacParam);
+            CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateFlashComponentRes);
+        }
+        else
+        {
+            CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateFlashComponentNRes);
+            lpAptAux->mpAptCommunicator->UpdateComponent(lpacAptName, lpacViewState, lpacParam);
+            CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateFlashComponentNRes);
+        }
     }
 
     // =========================================================================

@@ -655,15 +655,21 @@ void GetBoundingRectClamped(const AptCIH* pThis, float* afRect)   // float* (not
 }
 
 // GetProceduralProperty @0x82AE2D10 -- the AS getProperty reader. The X360 indexes a
-// 12-entry remap table (byte_82145248, unexported) to select one of twelve arms; the
-// case-label integers below are inferred to match SetProceduralProperty's arm order
-// (only index 11 == _visible is confirmed, by IsVisible). Each arm's behaviour IS
-// proven from the asm.
+// 12-entry remap table (byte_82145248) to select one of twelve arms; the table bytes
+// are ATTESTED from the 0x82145240 rodata dump (@+0x08: 4F 51 2B 40 00 09 0E 53 57
+// 59 5B 5D, arm = loc_82AE2D80 + 4*byte), pinning every case label below -- 0 _x /
+// 1 _y / 2 _xscale / 3 _yscale / 4 _width / 5 _height / 6 _rotation / 7 _alpha /
+// 8-10 colour-translate R/G/B / 11 _visible, the same order SetProceduralProperty's
+// word_82145258 jump table encodes. Each arm's behaviour is proven from the asm.
 float AptCIH::GetProceduralProperty(uint32_t nPropertyIndex) const
 {
     const AptMatrix* pPos = GetPositionMatrixConst();
     const AptCXForm* pCx  = GetColorMatrixConst();
-    const float kSkewEpsilon = 1.1754944e-38f;   // FLT_MIN; FLAG: exact bits unread
+    // flt_82002540 == 9.99999975e-05f -- the shared near-zero scale floor (the SAME
+    // rodata constant SetProceduralProperty reads as KF_AptProcScaleFloor below); the
+    // 0x82AE2D10 asm compares |b|/|c| against flt_82002540 at 0x82AE2DD8 / 0x82AE2E38
+    // / 0x82AE2E8C. (The FLT_MIN stand-in "exact bits unread" park is retired.)
+    const float kSkewEpsilon = 9.99999975e-05f;
 
     switch (nPropertyIndex)
     {
@@ -703,9 +709,11 @@ float AptCIH::GetProceduralProperty(uint32_t nPropertyIndex) const
     case 1:   // _y -- translation Y
         return pPos->ty;
     case 7:   // _alpha -- colour scale alpha (stored 0..255) as percent
-        // flt_82145600 = 0.3921569 == 100/255 (the scale-alpha field is 0..255, not 0..1;
-        // cross-checked vs SetProceduralProperty's inverse percent->0..255 store).
-        return pCx->scale.GetValuef(AptColorHelper::Alpha) * 0.3921569f;
+        // flt_82145600 == 0x3EC8C8C9 == 0.392156869f (100/255), ATTESTED from the
+        // 0x82145240 rodata dump @+0x3C0. (The old 0.3921569f literal rounds to
+        // 0x3EC8C8CA -- one ulp ABOVE the console constant.) The scale-alpha field is
+        // 0..255, not 0..1; cross-checked vs SetProceduralProperty's inverse store.
+        return pCx->scale.GetValuef(AptColorHelper::Alpha) * 0.392156869f;
     case 8:   // colour translate Red (additive)
         return pCx->translate.GetValuef(AptColorHelper::Red);
     case 9:   // colour translate Green

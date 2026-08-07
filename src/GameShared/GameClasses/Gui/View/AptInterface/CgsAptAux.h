@@ -130,20 +130,21 @@ namespace CgsGui
         void UpdateComponents();
 
         // X360 0x82853C28 (CgsGui::AptAux::UpdateFlashComponent) -- mirror one component
-        // (key, value) pair into the communicator's key/value store. The X360 call site
-        // (GuiComponent::FillAptViewMessage @0x828583A8) passes the AptAux* explicitly as
-        // the first argument, so it is modelled static. The XB1 x64 arbiter INLINES this
-        // whole hop: every game-side caller collapses to AptCommunicator::UpdateComponent
-        // (component macName, key, value) -- e.g. sub_1401AF470's UpdateComponent(this,
-        // this+8, "SignName", value) -- pinning the semantic contract reproduced here.
-        // lbImmediate is the console's queued-vs-immediate hint; on the single-threaded
-        // host both orderings land before the same frame's UpdateComponents flush, which
-        // is the observable contract (FLAG: the X360 Res/NRes perfmon split -- resolve
-        // formatting of timer-style values -- lives in the un-exported @0x82853C28 body;
-        // the timer path is not on the boot flow).
+        // (key, value) pair into the communicator's key/value store. The X360 call sites
+        // (GuiComponent::FillAptViewMessage @0x828583A8 and ViewModule::
+        // ProcessIncomingLanguageEvent @0x8285ED00) pass the AptAux* explicitly as the
+        // first argument, so it is modelled static. Body grounded on the @0x82853C28
+        // export (park retired 2026-08-07): assert the name/key/value and the
+        // communicator ext object (console CgsAptAux.cpp:629/630/631/633), then
+        // lbReserved selects the communicator entry -- TRUE routes through
+        // AptCommunicator::UpdateComponentReserved (the reserved-variable table) under
+        // the "AptAux - Upd Flsh Res" monitor (dword_82F33140); FALSE through
+        // UpdateComponent (the plain key/value store) under "AptAux - Upd Flsh NRes"
+        // (dword_82F3313C). So the Res/NRes perfmon split IS the reserved/non-reserved
+        // component-update split, not a timer-format path. Body in CgsAptAux.cpp.
         static void UpdateFlashComponent(AptAux* lpAptAux, const char* lpacAptName,
                                          const char* lpacViewState, const char* lpacParam,
-                                         bool lbImmediate);
+                                         bool lbReserved);
 
         // ---- AptAux head (guest offsets recovered from AptAux::Construct @0x5C4B6C) -------
         // The two leading state words AptAux::Construct seeds (`*a1 = 0; *(a1+4) = 3`). Their
