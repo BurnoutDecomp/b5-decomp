@@ -171,7 +171,7 @@ void AptValue::ForceDelete()
 
 // ---------------------------------------------------------------------------
 // The Apt GC globals this TU reads (all defined in AptGlobals.cpp):
-//   gpAptDeferredReleaseVector -- the GC "deferred release" vector pointer
+//   gpValuesToRelease -- the GC "deferred release" vector pointer
 //       (X360 off_8324E51C, an AptValueVector*). The base ctor and Release queue
 //       a value into it (instead of deleting immediately) when running on the GC
 //       thread and the value's type opts into delayed deletion.
@@ -185,7 +185,7 @@ void AptValue::ForceDelete()
 //       the ctor (X360 dword_8324E500) and Release (X360 dword_8324E504) compare
 //       the current thread against. Distinct globals in the binary; kept distinct.
 // ---------------------------------------------------------------------------
-extern AptValueVector* gpAptDeferredReleaseVector;   // off_8324E51C
+extern AptValueVector* gpValuesToRelease;   // off_8324E51C
 extern uint32_t        gnAptGCThreadId_Ctor;         // dword_8324E500
 extern uint32_t        gnAptGCThreadId_Release;      // dword_8324E504
 
@@ -245,7 +245,7 @@ AptValue::AptValue(AptVirtualFunctionTable_Indices eType)
         // (or unwired) vector rolls the queue intent back (X360 0x82AE30A8 bge ->
         // loc_82AE30C8 ClearReleaseAtEnd).
         SetReleaseAtEnd();
-        AptValueVector* lpVec = gpAptDeferredReleaseVector;   // off_8324E51C (see the parked unification FLAG above)
+        AptValueVector* lpVec = gpValuesToRelease;   // off_8324E51C (see the parked unification FLAG above)
         if (lpVec != 0 && lpVec->mnCapacity < lpVec->mnTop)
         {
             lpVec->mppItems[lpVec->mnCapacity] = this;
@@ -372,7 +372,7 @@ void AptValue::Release()
         return;
     }
 
-    AptValueVector* lpVec = gpAptDeferredReleaseVector;   // off_8324E51C (see the parked unification FLAG above)
+    AptValueVector* lpVec = gpValuesToRelease;   // off_8324E51C (see the parked unification FLAG above)
     // X360: if top(+4) < capacity(+0) there is room. (Family-(B) layout: capacity is
     // the +0 member mnTop, the live top is the +4 member mnCapacity.)
     if (lpVec == 0 || lpVec->mnCapacity >= lpVec->mnTop)
@@ -383,7 +383,7 @@ void AptValue::Release()
 
     SetReleaseAtEnd();
     // X360 reloads off_8324E51C after SetReleaseAtEnd and re-checks for room.
-    AptValueVector* lpVec2 = gpAptDeferredReleaseVector;
+    AptValueVector* lpVec2 = gpValuesToRelease;
     if (lpVec2->mnCapacity >= lpVec2->mnTop)
     {
         ClearReleaseAtEnd();           // full now -> roll back the queue intent

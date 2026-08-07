@@ -483,7 +483,8 @@ void StringPool::Teardown()
             bReleasedAny = true;
         }
         if (bReleasedAny)
-            gValuesToRelease.ReleaseValues();
+            if (gpValuesToRelease != nullptr)
+                gpValuesToRelease->ReleaseValues();
     }
 
     gpAptPseudoDataPool->Deallocate(gpAptStringPoolBuckets, sizeof(void*) * nCount);

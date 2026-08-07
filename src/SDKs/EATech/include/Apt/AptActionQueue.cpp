@@ -455,9 +455,9 @@ bool AptActionQueueC::IsLastItemOrBeyond(AptAnimationPoolData* pSlot) const
 }
 
 // ---- SetCurItem @ 0x82AD5E60 ---------------------------------------------
-// Set the "current item" cursor. Returns *this (X360 fastcall return value).
-AptActionQueueC* AptActionQueueC::SetCurItem(AptAnimationPoolData* pSlot)
+// Set the "current item" cursor. VOID per the x64 mangling (?SetCurItem@
+// AptActionQueueC@@QEAAXPEAUAptActionPool@1@@Z @0x140841240: `mov [rcx+18h],rdx / retn`).
+void AptActionQueueC::SetCurItem(AptAnimationPoolData* pSlot)
 {
     mpCurItem = pSlot;
-    return this;
 }

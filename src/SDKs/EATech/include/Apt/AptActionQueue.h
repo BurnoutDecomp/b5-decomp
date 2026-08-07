@@ -187,7 +187,7 @@ public:
 
     // @ 0x82AD5E60 -- set the "current item" cursor (mpCurItem). Returns *this
     // (X360 fastcall return value).
-    AptActionQueueC* SetCurItem(AptAnimationPoolData* pSlot);
+    void SetCurItem(AptAnimationPoolData* pSlot);   // x64 QEAAX...: void
 
     AptAnimationPoolData* mpBegin;     // +0x00
     AptAnimationPoolData* mpFront;     // +0x04

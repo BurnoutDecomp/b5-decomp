@@ -559,8 +559,11 @@ AptString* AptString::Create(const char* szValue)
     // Queue the recycled node in the GC deferred-release vector (or back it out
     // when the vector is full) -- the X360's SetReleaseAtEnd / push-or-clear.
     pNode->SetReleaseAtEnd();
-    if (gValuesToRelease.mnTop < gValuesToRelease.mnCapacity)
-        gValuesToRelease.mppItems[gValuesToRelease.mnTop++] = pNode;
+    // family-(B) push: live count (mnCapacity member) bounded by capacity (mnTop
+    // member) -- the zombie-vector idiom. Null pre-init: nothing to defer into.
+    if (gpValuesToRelease != nullptr &&
+        gpValuesToRelease->mnCapacity < gpValuesToRelease->mnTop)
+        gpValuesToRelease->mppItems[gpValuesToRelease->mnCapacity++] = pNode;
     else
         pNode->ClearReleaseAtEnd();
 

@@ -264,6 +264,10 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
             if (pArg->isString())
             {
                 // Both string forms end at the embedded EAStringC (object +8).
+                // X360 @0x82B0D2F0 guards the BOXED form: `if (v6 != 1) v6 = *(v6+32);
+                // if (v6 == -8 || Lookup(...) == 0) v12 = -1` -- a StringObject whose
+                // boxed value slot is null short-circuits to label-not-found instead
+                // of dereferencing it.
                 AptString* const pStr =
                     (pArg->getVtblIndex() == AptVFT_StringValue)
                         ? static_cast<AptString*>(pArg)
@@ -277,7 +281,9 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
                     reinterpret_cast<const char*>(pChar) + KU_AptEmbeddedMovieOff);
                 AptNativeHash* const pLabels = pMovie->mpLabelHash;
                 AptValue* const pHit =
-                    pLabels ? pLabels->Lookup(*pStr->GetInternalString()) : nullptr;
+                    (pStr != nullptr && pLabels != nullptr)
+                        ? pLabels->Lookup(*pStr->GetInternalString())
+                        : nullptr;
                 nFrame = (pHit ? pHit->toInteger() : -1) + 1;
             }
             else

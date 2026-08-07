@@ -24,7 +24,7 @@
 //   gValuesToRelease -- the deferred-release vector instance (X360 off_8324E51C).
 //   gAptValueGCPool  -- the live-AptValue pool manager  (X360 off_8324D834).
 // ---------------------------------------------------------------------------
-extern AptGCReleaseVector      gValuesToRelease;
+extern AptValueVector*         gpValuesToRelease;   // off_8324E51C (AptGlobals.cpp)
 extern AptValueGC_PoolManager  gAptValueGCPool;
 extern int                     gbAptSavedInputActive;
 
@@ -49,7 +49,8 @@ void* AptGC::sReferenceRegistrationCb(const AptValue* /*pOwner*/, void* pSlot,
 void AptGC::CleanAll()
 {
     // 1. Flush anything queued for deferred release.
-    gValuesToRelease.ReleaseValues();
+    if (gpValuesToRelease != nullptr)
+        gpValuesToRelease->ReleaseValues();
 
     // 2. Pre-destroy every live value (drop its GC pointers) with refcount-driven
     //    deletion suspended, so the graph stays walkable while it is dismantled.
@@ -65,7 +66,8 @@ void AptGC::CleanAll()
 
     // 3. Flush again (PreDestroy may have queued more), then delete every value
     //    (fetching the next link before deleting the current one).
-    gValuesToRelease.ReleaseValues();
+    if (gpValuesToRelease != nullptr)
+        gpValuesToRelease->ReleaseValues();
     for (AptValue* pValue = gAptValueGCPool.GetFirstAptValue(); pValue; )
     {
         AptValue* pNext = gAptValueGCPool.GetNextAptValue(pValue);
@@ -74,7 +76,8 @@ void AptGC::CleanAll()
     }
 
     // 4. Final flush, then clear the value free-lists / temporary string pool.
-    gValuesToRelease.ReleaseValues();
+    if (gpValuesToRelease != nullptr)
+        gpValuesToRelease->ReleaseValues();
     AptInteger::ClearPool();
     AptFloat::ClearPool();
     StringPool::ClearTemporaryPool();
@@ -186,7 +189,8 @@ void* AptUpdateZombieVector(char bClear)
 // ---------------------------------------------------------------------------
 void AptFlushDeferredReleases()
 {
-    gValuesToRelease.ReleaseValues();
+    if (gpValuesToRelease != nullptr)
+        gpValuesToRelease->ReleaseValues();
 }
 
 // ---------------------------------------------------------------------------

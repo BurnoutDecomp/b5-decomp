@@ -1,4 +1,4 @@
-// ===========================================================================
+﻿// ===========================================================================
 // EATech Apt -- AptAnimationTarget class-static data layer.
 //
 // A small set of FILE-STATIC tables the Apt input/update layer shares across all
@@ -24,6 +24,8 @@
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"    // GetCIH (the timer callback's bound clip)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"   // DOGMA_PoolManager::Allocate/Deallocate
 
+#include "SDKs/EATech/include/Apt/Apt.h"   // AptUserFunctions (the gAptFuncs recorder-sink slot)
+
 #include <cstring>   // memset
 #include <cstdint>   // intptr_t (the X360 fastcall `return r3` / array-cookie math)
 #include <new>       // placement new (inline-construct the queue / timers / display list)
@@ -44,7 +46,10 @@ extern DOGMA_PoolManager* gpAptPseudoDataPool;   // off_8324D808
 // serialization (reproduced verbatim).
 // ---------------------------------------------------------------------------
 extern int  gAptInputRecorderEnabled;                    // dword_8324E518
-extern int  (*gpAptInputRecorderSink)(void*, int);       // dword_8324E830
+// The recorder sink is NOT a standalone global: dword_8324E830 == gAptFuncs+0x18,
+// the pfnDebugAddSavedInput member of the host user-function table (installed by
+// AptAux::ConstructApt). Declared via Apt.h; null-guarded at each use.
+extern AptUserFunctions gAptFuncs;                        // dword_8324E818 (CgsAptAux.cpp)
 extern u32  gAptInputRecorderTag;                         // dword_8324D820
 
 namespace
@@ -133,7 +138,8 @@ int AptAnimationTarget::AddInput(int nPackedInput)
         u32 record[2];
         record[0] = gAptInputRecorderTag;
         record[1] = evBE;
-        gpAptInputRecorderSink(record, 8);
+        if (gAptFuncs.pfnDebugAddSavedInput)   // dword_8324E830 == gAptFuncs+0x18
+            gAptFuncs.pfnDebugAddSavedInput(reinterpret_cast<AptSavedInputRecord*>(record), 8);
     }
     return 1;
 }
@@ -1148,7 +1154,8 @@ int AptAnimationTarget::AddAnalogInput(const AptAnalogInputEvent& rEvent)
                 lauRecord[0] = gAptInputRecorderTag;   // dword_8324D820
                 lauRecord[1] = 0x0B000000u;            // 184549376
                 std::memcpy(&lauRecord[2], &rEvent, sizeof(AptAnalogInputEvent));
-                gpAptInputRecorderSink(lauRecord, 24);
+                if (gAptFuncs.pfnDebugAddSavedInput)
+                gAptFuncs.pfnDebugAddSavedInput(reinterpret_cast<AptSavedInputRecord*>(lauRecord), 24);
             }
             break;
         }
@@ -1166,7 +1173,8 @@ int AptAnimationTarget::AddAnalogInput(const AptAnalogInputEvent& rEvent)
             lauRecord[0] = gAptInputRecorderTag;
             lauRecord[1] = 0x0B000000u;
             std::memcpy(&lauRecord[2], &rEvent, sizeof(AptAnalogInputEvent));
-            gpAptInputRecorderSink(lauRecord, 24);
+            if (gAptFuncs.pfnDebugAddSavedInput)
+                gAptFuncs.pfnDebugAddSavedInput(reinterpret_cast<AptSavedInputRecord*>(lauRecord), 24);
             break;
         }
 
@@ -1197,8 +1205,13 @@ int AptAnimationTarget::AddAnalogInput(const AptAnalogInputEvent& rEvent)
         liResult = AddInput(static_cast<int>(lnPacked));
         if (gAptInputRecorderEnabled && liResult)
         {
-            // Recorder path (host sink): log the raw 16-byte stick sample.
-            liResult = gpAptInputRecorderSink(const_cast<AptAnalogInputEvent*>(&rEvent), 16);
+            // Recorder path (host sink): log the raw 16-byte stick sample. The slot
+            // (dword_8324E830 == gAptFuncs.pfnDebugAddSavedInput) is VOID on both the
+            // console host (@0x82849528) and Apt.h -- the old `liResult = sink(...)`
+            // modelled the PPC r3 leftover; the AddInput result is what returns.
+            if (gAptFuncs.pfnDebugAddSavedInput)
+                gAptFuncs.pfnDebugAddSavedInput(
+                    reinterpret_cast<AptSavedInputRecord*>(const_cast<AptAnalogInputEvent*>(&rEvent)), 16);
         }
     }
     return liResult;

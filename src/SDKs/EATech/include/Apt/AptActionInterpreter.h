@@ -136,7 +136,7 @@ public:
     // Pop the top value, Release the stack's ref, and return it (the returned
     // pointer has already been Release()'d -- callers use it before it can die,
     // matching the console). Returns null on an empty stack.
-    AptValue*  stackPop();                            // @0x7F3248
+    void       stackPop();                            // @0x7F3248 (x64 QEAAXXZ: void)
     // Pop nCount values, releasing each (no-op unless mnStackTop >= nCount).
     void       stackPop(int nCount);                  // @0x7FDB68
     // As stackPop(nCount) but with the extra nCount>0 guard (bounds-safe form).

@@ -419,7 +419,9 @@ AptCXForm* AptCIH::GetColorMatrixWritable()
 // render item (a halfword store of the 16-bit depth); returns that render item.
 AptRenderItem* AptCIH::SetDepth(int16_t nDepth)
 {
-    return GetCharacterInst()->GetRenderItemWritable()->SetDepth(nDepth);
+    AptRenderItem* pItem = GetCharacterInst()->GetRenderItemWritable();
+    pItem->SetDepth(nDepth);   // x64 QEAAXH@Z: void -- the item pointer is this fn's return
+    return pItem;
 }
 
 // GetIsPlaying @0x82AD5C00 -- the movie-clip play-head state (bIsPlaying, x64 bit 25
@@ -1763,7 +1765,7 @@ extern bool            gbAptZombiesDirty;
 extern void          (*gpAptZombieNotifyHook)(int bImmediate, int nReserved,
                                               const char* pInstanceName,
                                               const char* pFileName);
-extern AptValueVector* gpAptDeferredReleaseVector;   // off_8324E51C
+extern AptValueVector* gpValuesToRelease;   // off_8324E51C
 extern AptCIH*         AptGetAnimationAtLevel(int nLevel);
 
 // AptClearCIHDrainQueuesAndZombie -- ClearCIH's director-table DRAIN
@@ -1983,9 +1985,9 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
                 ->mDisplayList.clear(true);                     // charInst+28, arg 1
             if (AptNativeHash* pHash = GetNativeHashVirtual())  // vtbl[2]
                 pHash->ClearData();
-            if (gpAptDeferredReleaseVector != nullptr &&
-                gpAptDeferredReleaseVector->mnCapacity != 0)    // family-(B) live count
-                gpAptDeferredReleaseVector->ReleaseValues();
+            if (gpValuesToRelease != nullptr &&
+                gpValuesToRelease->mnCapacity != 0)    // family-(B) live count
+                gpValuesToRelease->ReleaseValues();
 
             if (GetZombieCount() > 0)   // re-check: the scrub may have drained it
             {

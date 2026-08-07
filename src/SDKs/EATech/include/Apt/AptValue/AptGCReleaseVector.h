@@ -1,59 +1,42 @@
 #pragma once
 
 // ===========================================================================
-// EATech Apt -- AptGCReleaseVector: the Apt GC deferred-release vector
-// (X360 global gValuesToRelease @ off_8324E51C).
+// EATech Apt -- the Apt GC deferred-release vector (X360 console symbol
+// gValuesToRelease @ off_8324E51C).
 //
 // A LIFO stack of AptValue* whose release was deferred (queued instead of freed
 // inline). AptGC::CleanAll flushes it three times during teardown.
 //
-// DISTINCT TYPE from the operand-stack AptValueVector: its live count sits at
-// +0x04, whereas the operand vector's mnTop is at +0x00 -- proven by the X360
-// bodies ReleaseValues@0x82ADCF60 (count @ +4) vs PopAndPush@0x82ADBAB8 /
-// SafePop@0x82ADBB58 (mnTop @ +0). LAYOUT:
-//   [+0x00] mnCapacity   INFERRED -- the grow-capacity; NOT read by ReleaseValues,
-//                         so its exact role awaits the vector's Add/grow method
-//                         (a different TU). Documented placeholder, never poked.
-//   [+0x04] mnTop        live count (the stack top)
-//   [+0x08] mppItems     AptValue** slot array
+// UNIFIED 2026-08-07 (the one-console-slot/three-reconstruction-homes fix): the
+// console slot is a POINTER to a pool-allocated AptValueVector -- X360
+// AptCommonInitialize @0x82AE91F0 does `Allocate(off_8324D808, 12);
+// AptValueVector::AptValueVector(mem, cfg[10]); off_8324E51C = mem` with the
+// FAMILY-(B) ctor @0x82AE32F0 {capacity@+0 (mnTop member), live count@+4
+// (mnCapacity member), items@+8}. ReleaseValues @0x82ADCF60 is that family's
+// drain. The earlier reconstruction carried THREE homes for this slot (a static
+// distinct-type instance, AptInit's file-local common pointer, and a null
+// AptValue.cpp view); all now read the ONE global below.
+//
+// Family-(B) member map reminder (AptValueVector.h): capacity == mnTop (+0x00),
+// live count == mnCapacity (+0x04), slots == mppItems (+0x08). Push =
+// `if (mnCapacity < mnTop) mppItems[mnCapacity++] = v` -- the zombie-vector idiom.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-#include <cstdint>
+#include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"
 
-#include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
-
-struct AptGCReleaseVector
-{
-    int32_t    mnCapacity;   // [+0x00] inferred; unread by ReleaseValues
-    int32_t    mnTop;        // [+0x04] live count
-    AptValue** mppItems;     // [+0x08] slot array
-
-    // ReleaseValues @0x82ADCF60 -- pop every deferred value off the stack: a value
-    // still referenced elsewhere just gets its deferred flag cleared; an
-    // unreferenced one is ForceDelete()'d (PreDestroy + DestroyGCPointers + delete).
-    void ReleaseValues()
-    {
-        while (mnTop)
-        {
-            AptValue* pValue = mppItems[--mnTop];
-            if (pValue->getRefCount() != 0)
-                pValue->ClearReleaseAtEnd();
-            else
-                pValue->ForceDelete();
-        }
-    }
-};
-
-// The single Apt GC deferred-release vector instance (X360 off_8324E51C). Defined
-// by the Apt GC startup data; declared here for the helpers that query it.
-extern AptGCReleaseVector gValuesToRelease;
+// The single deferred-release vector pointer (X360 off_8324E51C == the console
+// symbol gValuesToRelease). Null until AptCommonInitialize allocates + constructs
+// it; nulled again by AptCommonShutdown. Defined in AptGlobals.cpp.
+extern AptValueVector* gpValuesToRelease;
 
 // AptIsDeferredVectorFull @0x82ADD238 -- whether the deferred-release vector is at
-// capacity (mnTop >= mnCapacity). This read confirms the layout (mnTop@+4 vs
-// mnCapacity@+0). Used by CgsAptCommunicator::UpdateComponentReserved.
+// capacity (family-(B): live count (mnCapacity) >= capacity (mnTop)). A null
+// vector (pre-init) reports full, so pushers defer nothing -- the console never
+// reaches this pre-init. Used by CgsAptCommunicator::UpdateComponentReserved.
 inline bool AptIsDeferredVectorFull()
 {
-    return gValuesToRelease.mnTop >= gValuesToRelease.mnCapacity;
+    return gpValuesToRelease == nullptr ||
+           gpValuesToRelease->mnCapacity >= gpValuesToRelease->mnTop;
 }

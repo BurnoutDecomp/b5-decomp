@@ -59,7 +59,7 @@
 #include <cstdint>
 
 extern AptValue*          gpUndefinedValue;    // off_8324D814 / xb1 qword_14147A010
-extern AptGCReleaseVector gValuesToRelease;    // off_8324E51C / xb1 qword_14147A410
+extern AptValueVector* gpValuesToRelease;      // off_8324E51C / xb1 qword_14147A410 (AptGlobals.cpp)
 
 // The per-string return to the temporary string pool (xb1 sub_14083F2A0), homed in
 // Apt/AptStringPool.cpp (the FindOrCreate hit-path inverse); reached only on movie
@@ -176,7 +176,8 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
     const bool bUnresolve = (pConstCtx == 0);
 
     if (bUnresolve)
-        gValuesToRelease.ReleaseValues();   // xb1: sub_14083ED90(&vector) on entry
+        if (gpValuesToRelease != nullptr)
+            gpValuesToRelease->ReleaseValues();   // xb1: sub_14083ED90(vector) on entry
 
     unsigned char* pc = pStream;
     unsigned int   nOp = *pc++;
@@ -382,7 +383,8 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                         pValue->AddRef();
 
                     if ((i % 16) == 0)
-                        gValuesToRelease.ReleaseValues();   // the periodic drain
+                        if (gpValuesToRelease != nullptr)
+                            gpValuesToRelease->ReleaseValues();   // the periodic drain
                 }
                 break;
             }
@@ -393,7 +395,8 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
         }
 
         if (bDrain)
-            gValuesToRelease.ReleaseValues();   // LABEL_69: the per-op resolve drain
+            if (gpValuesToRelease != nullptr)
+                gpValuesToRelease->ReleaseValues();   // LABEL_69: the per-op resolve drain
 
         nOp = *pc++;
         if (nOp == 0)
