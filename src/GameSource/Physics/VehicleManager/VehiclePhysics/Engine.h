@@ -83,10 +83,31 @@ namespace Vehicle
         // Vector4 (the X360 stores it via stvx128 into the caller's result buffer).
         Vector4 GetMaxWheelAngularVelocity() const;
 
-        // @0x825CB288: integrate the flywheel + recompute RPM + ComputeGear. Ships on X360 as a
-        // debug Opt-vs-Unopt assert harness (degenerate pseudocode) -- owned/BLOCKED by this group's
-        // ledger, declared only here so ApplyEngineForces can call it without an ODR clash.
-        void Update(/* dt + control/contact args; see ApplyEngineForces call site */);
+        // @0x825CB288: integrate the flywheel + recompute RPM + ComputeGear -- THE POWERTRAIN
+        // TORQUE CORE (throttle -> clutch -> flywheel -> gearbox -> drive force). ⛔ STILL A LOUD
+        // TRAP (VehiclePhysicsLinkStubs.cpp), deferred to its own wave: this function ships on
+        // BOTH readable consoles as a debug Opt-vs-Unopt assert harness -- X360 @0x825CB288 is
+        // 3937 asm lines whose only callees are CgsDev::Assert / StrStream / GetVaultArray /
+        // BasePriorityQueue::Clear, and the PS3 DecFIGS copy @0x712834 is 10324 lines with 1173
+        // assert references. Reconstructing the real torque math out of that harness is a whole
+        // wave; ApplyEngineForces (bodied) calls it and OntoWheels (bodied) reads the mvEngineDrive
+        // lane it produces, so the *application* layer is real while the torque model stays deferred
+        // behind the trap. The 9-arg signature is the PS3 mangled name
+        // (_ZN...6Engine6UpdateEN2rw4math3vpu8VecFloatES5_S5_bS5_S5_bS5_S5_) laid against the X360
+        // ApplyEngineForces @0x8261FC10 register map (v1..v7 + r4/r5), so ApplyEngineForces emits
+        // the call the console had and no future body will ODR-clash.
+        void Update(VecFloat lvfWheelAngularVelocity, VecFloat lvfGas, VecFloat lvfBrake,
+                    bool lbHandBrake, VecFloat lvfSteering, VecFloat lvfRearWheelRadius,
+                    bool lbAllowReverseDrive, VecFloat lvfForwardSpeed, VecFloat lvfTimeStep);
+
+        // [PC-leaf accessor] ApplyEngineForcesOntoWheels @0x825FB000 reads the engine's drive-force
+        // lane directly off the embedded engine (`lvx128 v0, this+0xFA0 ; vspltw v0,v0,0` == mEngine
+        // (+0xF00) + 0xA0 lane0). Engine::Update (the trapped powertrain core) writes it. Exposed as
+        // a named getter so the host reads the named member instead of an offset cast.
+        f32 GetEngineDrive() const
+        {
+            return mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.x;
+        }
 
         // @0x825CF130..0x825CF274 (82 items): seed the running-state registers from a wheel
         // angular velocity -- zero the drive/torque/clutch lanes, park the flywheel at idle
