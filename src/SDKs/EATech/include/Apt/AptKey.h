@@ -102,14 +102,14 @@ public:
     static AptValue* sMethod_getAnalogStickInfo();
     static AptValue* sMethod_getAnalogTriggerInfo();
 
-    // removeListener / getAscii: declared so objectMemberLookup can take their
-    // address; bodies not in this TU's dossier (see header note). FLAG.
+    // removeListener / getAscii: bodies HOMED in AptKey.cpp (decompiled from the
+    // PS3 DecFIGS EXTERNAL twins @0xF303D8 / @0xF3E078 -- see the .cpp headers).
     static AptValue* sMethod_removeListener(AptKey* pThis, int nArgCount);
     static AptValue* sMethod_getAscii();
 
 private:
     // +0x1C -- class / implemented-object flags (the same bitfield family as
-    // AptObject::mClassFlags). The ctor starts it cleared. FLAG: the X360 ctor only
+    // AptObject::mClassFlags). The ctor starts it cleared. Note: the X360 ctor only
     // partially clears the word (zero the low byte, clear bits 22-23 via
     // `rlwinm 0,10,7`) rather than zeroing it whole -- that is the optimizer's
     // codegen of a logical flags-zero-init on freshly pooled memory; modelled here

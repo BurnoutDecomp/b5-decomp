@@ -19,8 +19,8 @@
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"           // queued-input counter clear
 
 // ---------------------------------------------------------------------------
-// The Apt GC globals. FLAG: defined by the Apt GC startup data (AptInit); declared
-// here so this TU compiles + links against them.
+// The Apt GC globals: defined in AptGlobals.cpp (populated at Apt bring-up by
+// AptInit.cpp); declared here so this TU compiles + links against them.
 //   gValuesToRelease -- the deferred-release vector instance (X360 off_8324E51C).
 //   gAptValueGCPool  -- the live-AptValue pool manager  (X360 off_8324D834).
 // ---------------------------------------------------------------------------
@@ -107,8 +107,9 @@ bool gbAptZombiesDirty = false;
 
 // dword_8324E8C8 / XB1 qword_14147AB10 -- the host-installed zombie notify hook
 // (fired with (bImmediate, 0, instanceName, fileName) when a node zombifies or
-// is dropped without a vector slot). FLAG: null until a host installs it (no
-// installer exists in the PC bring-up yet); the null check is the shipped form.
+// is dropped without a vector slot). Null until a host installs it -- a
+// customization hook that defaults OFF on the console too; the null check is
+// the shipped form.
 void (*gpAptZombieNotifyHook)(int bImmediate, int nReserved,
                               const char* pInstanceName, const char* pFileName) = nullptr;
 

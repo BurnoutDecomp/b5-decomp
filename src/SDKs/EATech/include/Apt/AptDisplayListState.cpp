@@ -7,8 +7,8 @@
 // A depth-sorted doubly-linked list whose links live in the AptCIHs (the render
 // spine's mpDisplayListPrevious/Next/Parent). The list holds one counted
 // reference per node (AptValue AddRef on insert, Release on remove) and notifies
-// the render-tree manager as it mutates (guarded -- the notifies are FLAG'd no-ops
-// until a target sim/manager is wired; see AptRenderTreeManager.h).
+// the render-tree manager as it mutates (guarded; the notify facades are the
+// homed single-buffer bring-up stubs -- see AptRenderTreeManager.h).
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"
@@ -142,9 +142,9 @@ void AptDisplayListState::findInst(int nDepth, const EAStringC* pName,
         AptCIH* pPrev = 0;
         for (AptCIH* p = mpFirst; p; pPrev = p, p = p->GetDisplayListNext())
         {
-            // FLAG: the console also skips nodes flagged "pending remove"; the
-            // name match is on the node's instance name.
-            if (p->GetInstanceName() == *pName)
+            // The console skips nodes flagged "pending remove" (mFlagsA inRemList
+            // bit 5 -- GetInRemList); the name match is on the node's instance name.
+            if (!p->GetInRemList() && p->GetInstanceName() == *pName)
             {
                 *ppOutMatch = p;
                 *ppOutPrev  = pPrev;
@@ -175,8 +175,9 @@ void AptDisplayListState::RegisterReferences(const AptValue* pOwner) const
         AptValue::sReferenceRegistrationCb(pOwner, &p, "AptDisplayListState::DisplayListItem", 2);
 }
 
-// FLAG: the global current-update tick (X360 dword_8324E520), wired by the Apt
-// update loop; the render-tree notifications stamp the revision being built.
+// The global current-update tick (X360 dword_8324E520), defined in AptGlobals.cpp
+// and advanced by the Apt update drive; the render-tree notifications stamp the
+// revision being built.
 extern int gnCurrUpdateTick;
 
 // ---------------------------------------------------------------------------

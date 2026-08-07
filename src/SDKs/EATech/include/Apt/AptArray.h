@@ -118,6 +118,7 @@ private:
     void toString(EAStringC* pOut, const char* pSeparator) const;
 };
 
-// FLAG (homed by the AS-globals TU): the shared "undefined" value get() returns
-// for out-of-range indices. Null until the AS globals are built.
+// The shared "undefined" value get() returns for out-of-range indices (X360
+// off_8324D814). Defined in AptGlobals.cpp; built by AptValueInitialize
+// (AptInit.cpp) -- null only before that bring-up runs.
 extern AptValue* gpUndefinedValue;

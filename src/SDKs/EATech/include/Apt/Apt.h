@@ -132,7 +132,7 @@ struct AptAllocateStringParameters
 // CgsGui::AptCallbackRender free function. The engine then calls them as it walks a
 // movie's render tree (the render context's pfnSetVertexMatrix/pfnSetColourTransform,
 // AptCharacter::render's pfnDrawRenderingUnit). The non-render families' slots are
-// installed by the same body once those host callbacks land (FLAG'd in ConstructApt).
+// installed by the same body as those hosts land (see CgsAptAux.cpp ConstructApt's per-slot notes).
 // ============================================================================
 struct AptUserFunctions
 {

@@ -55,7 +55,8 @@ struct AptConstFile
     // 8 => verbatim in-place relocate).
     //
     // The version byte offsets are from GetSwfVersion (authoritative); the pointer-size
-    // offsets follow the confirmed "n:v:p" format. FLAG: the signature is assumed to start
+    // offsets follow the confirmed "n:v:p" format. FLAG (parked: no .apt fixture in the
+    // tree to glance at): the signature is assumed to start
     // at the file image (this+0) -- worth a glance at a real .apt header. Both accessors
     // fall back to the console defaults (version 6 / 4-byte) when the markers are absent,
     // so unknown headers behave exactly as today.

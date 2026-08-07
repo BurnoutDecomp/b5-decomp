@@ -60,7 +60,7 @@ AptActionQueueC::AptActionQueueC(u32 nCapacity)
 {
     mnCapacity = nCapacity;
 
-    // FLAG (x64 native stride -- same fix as SetupStaticData's tables): the console
+    // x64 native stride (the committed port rule; same fix as SetupStaticData's tables): the console
     // allocates 20-byte slots (KU_X360_SLOT_STRIDE); the x64 AptAnimationPoolData is
     // pointer-widened (sizeof == 40), and every walker (enqueue/drain/WrapForward)
     // indexes by element -- allocating the console byte size would let the ring roam

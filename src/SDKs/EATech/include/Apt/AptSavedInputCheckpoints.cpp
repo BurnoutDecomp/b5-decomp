@@ -11,7 +11,7 @@
 // AptFileSavedInputStateVector, = the X360 BasicString<StringAsVectorEncoding<
 // AptFileSavedInputState>>); each takes the list as the implicit `this` / first
 // __fastcall arg. See AptSavedInputCheckpoints.h for the container lineage + the
-// named-member (x64 semantic-parity) FLAG; the console grows the backing array
+// named-member (x64 semantic-parity) treatment; the console grows the backing array
 // through StringAsVectorPolicy<AptFileSavedInputState>::ReAlloc, whose own
 // allocator (sub_82C08C00) is the global `operator new` -- so the typed-vector
 // reconstruction below manages its storage with global new/delete + explicit
@@ -28,13 +28,14 @@
 #include <new>        // placement new (element construction in raw storage)
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed global, owned by the saved-input system boot TU): the current
-// AptTarget the saved-input system runs against (ARTIST off_8324E574 -- the same
-// global AptLinker::Update reads). Its loader is reached through the AptLoader.h
-// accessor AptTarget_GetLoader (console: target+0x1C) rather than the literal
-// offset, so the x64 layout stays correct. Null during bring-up.
+// The current AptTarget the saved-input system runs against (ARTIST off_8324E574
+// -- the same global AptLinker::Update reads). off_8324E574's LIVE definition is
+// `gpAptTarget` (AptTarget.cpp, declared by the included AptTarget.h, stamped by
+// AptInit's target bring-up + AptUpdate); the old `gpCurrentAptTarget` extern
+// bound AptGlobals.cpp's dead never-written duplicate of the same console slot,
+// so Checkpoint dereferenced null. The loader is reached through the named
+// GetLoader accessor (console: target+0x1C).
 // ---------------------------------------------------------------------------
-extern AptTarget* gpCurrentAptTarget;   // off_8324E574
 
 // The single global checkpoint list (declared in the header; homed by the boot TU).
 AptFileSavedInputStateVector* gpAptSavedInputCheckpoints = nullptr;   // dword_8324D810
@@ -175,7 +176,7 @@ void Checkpoint(AptFileSavedInputStateVector& rList, const EAStringC& name)
     }
 
     // 2. Not present -- is the file already loaded?
-    AptLoader*  pLoader = gpCurrentAptTarget->GetLoader();
+    AptLoader*  pLoader = gpAptTarget->GetLoader();
     AptFilePtr  loaded  = pLoader->IsLoaded(name);
     const bool  bLoaded = (loaded.pData != nullptr);
 

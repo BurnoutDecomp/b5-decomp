@@ -137,7 +137,7 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
     // banked-credit divide) -- a 0-period movie cannot be paced (both this loop
     // and the console's would never bank down). The MAIN framework bundle carries
     // an authored 0 in this field -- a known bundle-data defect (see the GUIAPT
-    // bundle-defect notes). FLAG (PC guard, host-driver precedent): pace an
+    // bundle-defect notes). FLAG PC-platform leaf (data-defect guard, host-driver precedent): pace an
     // invalid period at the 30fps stand-in the retired host driver used. (A
     // CGS_ASSERT here PAUSES the game loop on the dev-assert screen every boot, so
     // the guard is silent by design.)

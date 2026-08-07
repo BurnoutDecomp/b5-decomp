@@ -29,7 +29,7 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptCIH.h"   // AddRef/Release on the CIH
 
-// FLAG (wired at AptInit; see AptValueConvert.cpp).
+// Defined in AptGlobals.cpp (off_8324D814); built by AptInit's AptValueInitialize @0x82B02800.
 extern AptValue* gpUndefinedValue;
 
 // The per-stream context resolve key -- console unk_8324E6B8, the AS "super"
@@ -38,6 +38,10 @@ extern AptValue* gpUndefinedValue;
 // "this" (gpAptThisKey), which broke CallMethod's supercall identity test (it
 // compares call receivers against this slot) -- see AptGlobals.cpp gAptKeySuper.
 extern const EAStringC gAptKeySuper;   // unk_8324E6B8 -- "super"
+
+// The GC deferred-release drain (gValuesToRelease.ReleaseValues), homed in
+// AptGC.cpp; runStream's exit flush calls it under the console's stack-empty gate.
+extern void AptFlushDeferredReleases();
 
 const unsigned char* AptActionInterpreter::runStream(
     const unsigned char* pStream, AptCIH* pCIH, int nLength, AptCharacterInst* pCharInst)
@@ -152,9 +156,13 @@ const unsigned char* AptActionInterpreter::runStream(
         mnCIHStackTop = nSavedCIHTop;
     }
 
-    // FLAG: the console then flushes the GC deferred-release vector
-    // (gpValuesToRelease) when the operand stack is empty (or holds only the
-    // undefined result). Deferred with the GC layer; does not affect control flow.
+    // The console exit flush (@0x82ADD440 tail): drain the GC deferred-release
+    // vector when the operand stack is empty or holds only the undefined result
+    // (`!*a1 || *a1 == 1 && *a1[2] == off_8324D814`, then the count-guarded
+    // ReleaseValues(off_8324E51C)). AptFlushDeferredReleases (AptGC.cpp, over the
+    // real gValuesToRelease) is empty-vector safe, subsuming the count guard.
+    if (mnStackTop == 0 || (mnStackTop == 1 && mpStack[0] == gpUndefinedValue))
+        AptFlushDeferredReleases();
 
     return ctx.mpProgramCounter;
 }

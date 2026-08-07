@@ -46,9 +46,9 @@
 #include "SDKs/EATech/Apt/AptValueGCAllocator.h"            // AptValueGC_MemItem
 #include "SDKs/EATech/Apt/AptTextFormatMembersIndex.h"      // the gperf member recognizer
 
-// FLAG (homed by the AS-globals layer): the shared `undefined` singleton
-// (X360 off_8324D814). objectMemberLookup returns it for any field at its inherit
-// sentinel. Declared extern here exactly as the sibling Apt TUs do (wired at AptInit).
+// The shared `undefined` singleton (X360 off_8324D814). objectMemberLookup returns
+// it for any field at its inherit sentinel. Defined in AptGlobals.cpp, built by
+// AptValueInitialize (AptInit.cpp); declared extern here exactly as the sibling Apt TUs do.
 extern AptValue* gpUndefinedValue;
 
 // ---------------------------------------------------------------------------
@@ -193,7 +193,7 @@ AptValue* AptTextFormat::objectMemberLookup(AptValue* const pThis,
     {
         // X360: AptString::Create("") then operator=(StaticStringHelperT&) the
         // alignment keyword; >=3 is the inherit sentinel -> undefined.
-        // FLAG: the X360 assigns a precompiled StaticStringHelperT constant
+        // The X360 assigns a precompiled StaticStringHelperT constant
         // (unk_8324E638/6A4/60C); restored to the equivalent literal assignment.
         if (mFormat.mnAlign >= 3)
             return gpUndefinedValue;
@@ -222,7 +222,7 @@ AptValue* AptTextFormat::objectMemberLookup(AptValue* const pThis,
     {
         // X360 compares mFontName.m_pData against the empty-string sentinel
         // (&s_EmptyInternalData, unk_82F72FF8). The empty font has an empty buffer.
-        // FLAG: pointer-identity sentinel test restored to the equivalent
+        // Pointer-identity sentinel test restored to the equivalent
         // empty-buffer test (s_EmptyInternalData is private to EAStringC).
         if (mFormat.mFontName.GetBuffer()[0] == '\0')
             return gpUndefinedValue;
@@ -285,7 +285,7 @@ AptValue* AptTextFormat::objectMemberLookup(AptValue* const pThis,
 //            "center" -> 2, "right" -> 1, anything else -> 3 (inherit); when the
 //            align value is undefined, mnAlign = 3 (inherit).
 //
-// FLAG (faithful): the console seeds mnStyleFlags with a base `2` bit
+// Faithful: the console seeds mnStyleFlags with a base `2` bit
 // (`*(a1+16)=2`) before the per-attribute OR-s; that low bit is dead state the
 // objectMemberLookup masks never read (it only tests the *_DEFINED/*_VALUE bits), so
 // it is reproduced by the explicit base store to keep the word bit-identical.

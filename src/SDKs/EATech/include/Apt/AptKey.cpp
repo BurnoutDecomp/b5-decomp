@@ -28,6 +28,8 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"   // AptInteger::Create
 #include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"     // AptFloat::Create
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"   // AptBoolean::Create (the true/false singletons)
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"  // mnInput (== X360 dword_8324E7A8) + the VM singleton
+#include "SDKs/EATech/include/Apt/AptAnimationTarget.h"    // GetAStickLeft/GetAStickRight (the live analog snapshots)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC keys
 #include "SDKs/EATech/Apt/AptKeyMembersIndex.h"            // KeyMembersIndex::in_word_set
 #include "SDKs/EATech/include/Apt/AptDefine.h"             // gpGCPoolManager
@@ -39,34 +41,37 @@
 #include <ctype.h>    // toupper (the key-code case fold)
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the AS-globals layer, not yet reconstructed): the shared AS
-// "undefined" value `Key.addListener` returns (X360 global off_8324D814). Null
-// until the AS globals are built.
+// The shared AS "undefined" value `Key.addListener` returns (X360 global
+// off_8324D814). Defined in AptGlobals.cpp; built by AptInit's
+// AptValueInitialize @0x82B02800.
 // ---------------------------------------------------------------------------
 extern AptValue* gpUndefinedValue;   // off_8324D814
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the apt VM native-call dispatch, not yet reconstructed): the
-// native ActionScript method argument stack. isDown / addListener read their
+// The native ActionScript method argument stack. isDown / addListener read their
 // single argument off the top of this stack (X360 globals dword_8324E760 =
-// count, off_8324E768 = array). Modelled as named externs (the project rule for
-// module statics without a home yet); the dispatch layer pushes the call args
-// here before invoking the method.
+// count, off_8324E768 = array). Defined in AptGlobals.cpp; the interpreter's
+// native-call dispatch (AptActionInterpreterInterpHelpers.cpp) publishes the
+// operand stack through them around each native call.
 // ---------------------------------------------------------------------------
 extern AptValue** gppAptNativeArgStack;   // off_8324E768
 extern int        gnAptNativeArgCount;    // dword_8324E760
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the Apt input subsystem, not yet reconstructed): the packed
-// most-recent input event the `Key` methods report on (X360 dword_8324E7A8).
+// The packed most-recent input event the `Key` methods report on: X360
+// dword_8324E7A8 IS the interpreter member gAptActionInterpreter.mnInput
+// (interpreter base dword_8324E760 + 0x48), stamped per queued slot by the
+// action/input drains (AptAnimationTarget::RunActions @0x82B0C9B0 /
+// ProcessInputs). The old separate `gAptKeyLastEvent` extern bound a dead
+// second view of the same console slot that no drain ever wrote (every Key
+// method read a permanent zero); the methods now read the live member.
 // Bit layout recovered from the X360 shifts/masks:
 //   bits [0..1]   event type      (1 == a key/button DOWN event)   (& 3)
 //   bits [2..9]   controller index ( >> 2  & 0xFF )
 //   bits [17..31] virtual key code ( >> 17 )
-// Zero when no event is pending. Defined here (null until the input layer wires
-// it) so the `Key` methods compile and read the event by name.
+// Zero when no event is pending.
 // ---------------------------------------------------------------------------
-extern uint32_t gAptKeyLastEvent;   // dword_8324E7A8
+extern AptActionInterpreter gAptActionInterpreter;   // dword_8324E760 (AptGlobals.cpp)
 
 // ---------------------------------------------------------------------------
 // Virtual-key-code translation table (X360 dword_82143400, 20 entries). Maps the
@@ -88,37 +93,35 @@ static const int32_t kAptKeyCodeTranslate[20] =
 };
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the Apt input subsystem, not yet reconstructed): the per-pad
-// analog snapshot tables the getAnalog* methods read (X360 .data; populated by
-// the input layer each frame). Each is an array of 16-byte (4-float) records
-// indexed by the pad index:
-//   gAptKeyAnalogStickL / gAptKeyAnalogStickR (unk_8324D750 / unk_8324E2D8) --
-//       the left / right stick {x, y, ...} per pad (getAnalogStickInfo selects
-//       by the event's stick id 501/502 and reads [0]=x, [1]=y).
-//   gAptKeyAnalogTrigger (flt_8324E200) -- the {leftTrigger, rightTrigger, ...}
-//       per pad (getAnalogTriggerInfo reads [0]=left, [1]=right).
-// Declared as named externs (null/zero until the input layer fills them) so the
-// methods read the snapshot by name rather than by raw console offset.
+// The per-pad analog snapshot tables the getAnalog* methods read -- the LIVE
+// tables AptAnimationTarget::AddAnalogInput @0x82ADEA28 writes each frame
+// (16-byte records, pad stride 16):
+//   unk_8324D750 / unk_8324E2D8 -- the left/right stick AptAnalogInputEvent
+//       snapshots (gAptAStickLeft/gAptAStickRight), reached through the homed
+//       accessors GetAStickLeft/GetAStickRight; record {x@+0, y@+4}.
+//   flt_8324E200 -- the per-pad axis records: axis0 (left trigger) @+0 and
+//       axis1 (right trigger) @+4 (the gAptAnalogAxis0/gAptAnalogAxis1 views
+//       AddAnalogInput stores through).
+// The old gAptKeyAnalogStickL/R / gAptKeyAnalogTrigger externs bound the dead
+// zeroed-const duplicates in AptGlobals.cpp -- second views of the same console
+// addresses that AddAnalogInput never writes -- so the methods read permanent
+// zeros; they now read the live tables.
 // ---------------------------------------------------------------------------
-extern const float gAptKeyAnalogStickL[];     // unk_8324D750  (stick id 501)
-extern const float gAptKeyAnalogStickR[];     // unk_8324E2D8  (stick id 502)
-extern const float gAptKeyAnalogTrigger[];    // flt_8324E200
+extern float gAptAnalogAxis0[];   // flt_8324E200 (axis0 @+0; pad stride 16 bytes)
+extern float gAptAnalogAxis1[];   // flt_8324E204 (axis1 view @+4 of the same records)
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the Apt input subsystem, not yet reconstructed): the interned
-// "controller" property key the getAnalog* methods store the pad index under
-// (X360 unk_8324E614, an EAStringC constant). Declared extern so Set compiles.
+// The interned "controller" property key the getAnalog* methods store the pad
+// index under (X360 unk_8324E614). Defined in AptGlobals.cpp ("controller").
 // ---------------------------------------------------------------------------
 extern const EAStringC gAptKeyControllerKey;   // unk_8324E614
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the Apt input subsystem, not yet reconstructed): registering a
-// Key listener. addListener's X360 body reaches the input/Key manager
-// (off_8324E574) and walks a small membership vector ({count, array} at a fixed
-// offset) to add pListener iff it is not already registered. The manager + its
-// listener-vector type are not yet reconstructed, so the raw-offset walk is
-// expressed here through this named helper (declared extern, defined by the input
-// TU); it performs the "add if absent" the X360 inlines.
+// Registering a Key listener: addListener's X360 body reaches the current
+// target (off_8324E574 == gpAptTarget) and walks the director's mListenerSet to
+// add pListener iff it is not already registered. HOMED in
+// AptRenderLinkStubs.cpp over the real AptAnimationTargetSet (membership scan
+// @0x82ADC764 + the shared set `add` @0x82ADBCE0).
 // ---------------------------------------------------------------------------
 extern void AptKeyManagerAddListener(AptValue* pListener);
 
@@ -139,8 +142,9 @@ AptNativeFunction* AptKey::spMethod_getAnalogTriggerInfo = 0;   // off_8324E3B4
 // Allocate the AptKey block from the GC pool and mark its AptValueGC_MemItem
 // "allocated" flag -- exactly the AptGlobal / AptObject GC-new path. The X360
 // calls DOGMA_PoolManager::Allocate directly on the GC pool (off_8324D834 ==
-// gpGCPoolManager) then SetIsAllocated(block, gAptValueGCSizeOffset, 1). Guarded
-// for a null pool until the Apt runtime startup wires gpGCPoolManager (FLAG).
+// gpGCPoolManager) then SetIsAllocated(block, gAptValueGCSizeOffset, 1). The
+// null guard covers the pre-init window before AptInit's AptAllocatorInitialize
+// @0x82ADD118 wires the pool.
 // ---------------------------------------------------------------------------
 void* AptKey::operator new(size_t size)
 {
@@ -342,10 +346,10 @@ AptValue* AptKey::sMethod_isDown()
 {
     AptValue* pQueried = gppAptNativeArgStack[gnAptNativeArgCount - 1];
 
-    if ((gAptKeyLastEvent & 3) != 1)
+    if ((gAptActionInterpreter.mnInput & 3) != 1)
         return AptBoolean::Create(false);
 
-    int nCode = AptKeyTranslateCode((int)(gAptKeyLastEvent >> 17));
+    int nCode = AptKeyTranslateCode((int)(gAptActionInterpreter.mnInput >> 17));
 
     return AptBoolean::Create(nCode == pQueried->toInteger());
 }
@@ -365,7 +369,7 @@ AptValue* AptKey::sMethod_isToggled()
 // ---------------------------------------------------------------------------
 AptValue* AptKey::sMethod_getCode()
 {
-    int nCode = AptKeyTranslateCode((int)(gAptKeyLastEvent >> 17));
+    int nCode = AptKeyTranslateCode((int)(gAptActionInterpreter.mnInput >> 17));
     return AptInteger::Create(nCode);
 }
 
@@ -376,7 +380,7 @@ AptValue* AptKey::sMethod_getCode()
 // ---------------------------------------------------------------------------
 AptValue* AptKey::sMethod_getController()
 {
-    int nController = (int)((gAptKeyLastEvent >> 2) & 0xFF) - 2;
+    int nController = (int)((gAptActionInterpreter.mnInput >> 2) & 0xFF) - 2;
     return AptInteger::Create(nController);
 }
 
@@ -387,8 +391,8 @@ AptValue* AptKey::sMethod_getController()
 // with exactly one argument). It is registered only when it is a defined value of
 // a CIH-like type (the X360 tests `mbIsDefined` and value-type 12 (CIH) or 37
 // (CIHNone), and rejects a CIH whose flags carry the 0x60000000 marker). The
-// actual "add if not already present" walk over the input/Key manager's listener
-// vector is the un-homed input subsystem (see the AptKeyManagerAddListener FLAG).
+// actual "add if not already present" walk over the director's listener set is
+// the homed AptKeyManagerAddListener (AptRenderLinkStubs.cpp).
 // Always returns the AS undefined value.
 // ---------------------------------------------------------------------------
 AptValue* AptKey::sMethod_addListener(AptKey* /*pThis*/, int nArgCount)
@@ -437,22 +441,25 @@ AptValue* AptKey::sMethod_getAnalogStickInfo()
 {
     int          nPad     = 0;
     unsigned int nStickId = 501;
-    if (gAptKeyLastEvent)
+    if (gAptActionInterpreter.mnInput)
     {
-        nStickId = gAptKeyLastEvent >> 17;
-        nPad     = (int)((gAptKeyLastEvent >> 2) & 0xFF);
+        nStickId = gAptActionInterpreter.mnInput >> 17;
+        nPad     = (int)((gAptActionInterpreter.mnInput >> 2) & 0xFF);
     }
 
     AptObject* pResult = AptObject::Create(8);
 
     pResult->Set(gAptKeyControllerKey, AptInteger::Create(nPad - 2));
 
-    // Select the left (501) or right (502) stick table, indexed by pad.
+    // Select the left (501) or right (502) stick snapshot record, indexed by pad
+    // -- the live 16-byte AptAnalogInputEvent records AddAnalogInput memcpy's
+    // (record {x@+0, y@+4}), reached through the homed accessors (X360:
+    // &unk_8324D750/&unk_8324E2D8 + 16*pad).
     const float* pStick = 0;
     if (nStickId == 501)
-        pStick = &gAptKeyAnalogStickL[4 * nPad];
+        pStick = reinterpret_cast<const float*>(AptAnimationTarget::GetAStickLeft(nPad));
     else if (nStickId == 502)
-        pStick = &gAptKeyAnalogStickR[4 * nPad];
+        pStick = reinterpret_cast<const float*>(AptAnimationTarget::GetAStickRight(nPad));
 
     AptValue* pXValue = AptFloat::Create(pStick[0]);
     AptValue* pYValue = AptFloat::Create(pStick[1]);
@@ -476,30 +483,28 @@ AptValue* AptKey::sMethod_getAnalogStickInfo()
 AptValue* AptKey::sMethod_getAnalogTriggerInfo()
 {
     int nPad = 2;
-    if (gAptKeyLastEvent)
-        nPad = (int)((gAptKeyLastEvent >> 2) & 0xFF);
+    if (gAptActionInterpreter.mnInput)
+        nPad = (int)((gAptActionInterpreter.mnInput >> 2) & 0xFF);
 
     AptObject* pResult = AptObject::Create(8);
 
     pResult->Set(gAptKeyControllerKey, AptInteger::Create(nPad - 2));
 
-    const float* pTrigger = &gAptKeyAnalogTrigger[4 * nPad];
-
-    pResult->Set("fLeftTrigger",  AptFloat::Create(pTrigger[0]));
-    pResult->Set("fRightTrigger", AptFloat::Create(pTrigger[1]));
+    // The per-pad axis record (X360 &flt_8324E200[4*pad]): axis0 @+0 is the left
+    // trigger, axis1 @+4 the right -- the live gAptAnalogAxis0/1 views
+    // AddAnalogInput stores through (pad stride 16 bytes == 4 floats).
+    pResult->Set("fLeftTrigger",  AptFloat::Create(gAptAnalogAxis0[4 * nPad]));
+    pResult->Set("fRightTrigger", AptFloat::Create(gAptAnalogAxis1[4 * nPad]));
 
     return pResult;
 }
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the Apt input subsystem, not yet reconstructed): the sibling of
-// AptKeyManagerAddListener -- remove pListener from the input/Key manager's
-// listener membership vector (off_8324E574 / the gpCurrentTargetSim +0x18 manager,
-// vector at +16). The X360/PS3 inline the {count, array} scan-and-remove (PS3
-// 0xF303D8: find the entry == pListener, Release it (vtbl[1]), null the slot, and
-// decrement the count). The manager + its listener-vector type are not yet
-// reconstructed, so the raw-offset walk is expressed through this named helper
-// (declared extern, defined by the input TU). Returns true iff it removed one.
+// The sibling of AptKeyManagerAddListener -- remove pListener from the
+// director's listener set (off_8324E574 == gpAptTarget; the shared set `remove`
+// @0x82ADBC28: find the entry == pListener, Release it (vtbl[1]), null the
+// slot, decrement the count). HOMED in AptRenderLinkStubs.cpp over the real
+// AptAnimationTargetSet. Returns true iff it removed one.
 // ---------------------------------------------------------------------------
 extern bool AptKeyManagerRemoveListener(AptValue* pListener);
 
@@ -512,8 +517,8 @@ extern bool AptKeyManagerRemoveListener(AptValue* pListener);
 // top of the native arg stack; it is removed only when it carries the listener
 // marker bit (PS3 `*(value+4) & 0x8000000` -- the same packed value-flag word the
 // add path tests, here AptValue::mnValueData bit 27). The actual {count, array}
-// scan-find-Release-null-and-decrement over the manager's listener vector is the
-// un-homed input subsystem (see the AptKeyManagerRemoveListener FLAG above).
+// scan-find-Release-null-and-decrement runs in the homed
+// AptKeyManagerRemoveListener (AptRenderLinkStubs.cpp, see above).
 // Returns the AS true/false singleton (true iff a listener was removed; every early
 // bail returns false).
 // ---------------------------------------------------------------------------
@@ -554,8 +559,8 @@ AptValue* AptKey::sMethod_removeListener(AptKey* /*pThis*/, int nArgCount)
 // ---------------------------------------------------------------------------
 AptValue* AptKey::sMethod_getAscii()
 {
-    int nCode = (int)(gAptKeyLastEvent >> 17);
-    if ((gAptKeyLastEvent >> 2) != 0)
+    int nCode = (int)(gAptActionInterpreter.mnInput >> 17);
+    if ((gAptActionInterpreter.mnInput >> 2) != 0)
     {
         if ((unsigned int)nCode <= 0x13u)
             nCode = kAptKeyCodeTranslate[nCode];

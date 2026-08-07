@@ -81,7 +81,7 @@ protected:
 
 private:
     // +0x1C -- class / implemented-object flags (the same bitfield family as
-    // AptObject::mClassFlags). The ctor starts it cleared. FLAG: the X360 ctor only
+    // AptObject::mClassFlags). The ctor starts it cleared. The X360 ctor only
     // partially clears the word (zero the low byte, clear bits 22-23 via
     // `rlwinm 0,10,7`) rather than zeroing it whole -- that is the optimizer's
     // codegen of a logical flags-zero-init on freshly pooled memory; modelled here

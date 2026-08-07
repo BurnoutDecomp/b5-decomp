@@ -19,7 +19,7 @@
 // Console layout is 28 bytes (7 x 32-bit); the named members below let the x64
 // PC build compute the correct (wider) sizeof/offsets -- the Apt engine is
 // written with 32-bit pointers + hard-coded offsets, so reconstructing with
-// named members (not the literal console offsets) is the pervasive PC-port FLAG.
+// named members (not the literal console offsets) is the pervasive PC-port rule.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -48,8 +48,9 @@ struct AptFile
     // data" (the ~AptFile teardown branch). Advanced by the async completion path.
     int32_t   mnState;
 
-    // +12: set to 1 at creation. (FLAG: precise role not yet pinned -- a
-    // generation/owner flag; preserved verbatim from the Load init.)
+    // +12: the PREVIOUS load state (set to 1 at creation; every state advance --
+    // AptLoader::Update's 1->2, CompleteLoad's ->3, Update's link 3->4 -- records
+    // the outgoing mnState here before overwriting it).
     int32_t   mnField12;
 
     // +16: the AptCharacterAnimation resolve context (0 until loaded); passed to
@@ -89,7 +90,7 @@ AptFile* MakeAptFile(void* pMem, EAStringC* pName);
 // ---------------------------------------------------------------------------
 // The loaded .apt movie root view (AptFile::mpData points here once loaded). This
 // names only the AptFile/AptLoader-touched members; the [c:] notes are the console
-// byte offsets the asm uses (widths are x64, the PC-port FLAG). RECONCILE POINT
+// byte offsets the asm uses (widths are x64, the PC-port rule). RECONCILE POINT
 // with class:AptCharacterAnimation: mpCharacterTable / mnImportCount / mpImportTable
 // are that struct's members (the AptCharacterAnimation embedded at root+0x20 on
 // native-8); the export table is the def-base initList slot the X360 FindExport /
@@ -109,8 +110,9 @@ AptFile* MakeAptFile(void* pMem, EAStringC* pName);
 // unblocks FindExport / GetIDFromImportFile / AllImportsAvailable / isFileImported /
 // CancelPreloadedAnimation on the native-8 bundle (previously they read the console
 // offsets off the ROOT header -- e.g. mnImportCount landed on the 0x09876543 sig).
-// // FLAG (x64 native-8 fork): the def-base-relative offsets + the widened
-// AptImportEntry(0x20)/AptExportEntry(0x10) strides are the converter's native-8 form.
+// x64 native-8 fork (the committed .apt serialized-data regime): the def-base-
+// relative offsets + the widened AptImportEntry(0x20)/AptExportEntry(0x10)
+// strides are the converter's native-8 form.
 // ---------------------------------------------------------------------------
 struct AptExportEntry            // native-8 record = 16 bytes {name@+0, id@+8}
 {

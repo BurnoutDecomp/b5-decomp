@@ -39,11 +39,12 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"          // DOGMA_PoolManager
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed, owned by the Apt allocator boot TU): the shared DOGMA pool the
-// 20-byte display-list nodes are allocated from. The X360 loads it from
-// off_8324D808 (the same slot AptPseudoCIH.h / AptValueVector / AptSingleListPolicy
-// reference). gpAptPseudoDataPool (declared in AptPseudoCIH.h) IS that slot;
-// reused here by name so the same underlying pool object backs every Apt family.
+// The shared DOGMA pool the 20-byte display-list nodes are allocated from. The
+// X360 loads it from off_8324D808 (the same slot AptPseudoCIH.h / AptValueVector
+// / AptSingleListPolicy reference). gpAptPseudoDataPool (declared in
+// AptPseudoCIH.h) IS that slot -- constructed + wired by AptInit's
+// AptAllocatorInitialize @0x82ADD118 -- reused here by name so the same
+// underlying pool object backs every Apt family.
 // ---------------------------------------------------------------------------
 
 class AptPseudoDisplayList

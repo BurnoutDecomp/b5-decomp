@@ -473,8 +473,10 @@ void AptNativeHash::UpdateObjectMethods(const AptValue* pKeyValue,
 // collector's registration callback, attributed to pOwner.
 void AptNativeHash::RegisterReferences(const AptValue* pOwner)
 {
-    // FLAG: only meaningful once the Apt GC is up (it installs the callback);
-    // guarded so the walk is inert during bring-up / before AptInit.
+    // The callback is installed at Apt bring-up (AptInit.cpp: AptValue::
+    // sReferenceRegistrationCb = &AptGC::sReferenceRegistrationCb, reproducing
+    // the console's .data-initialised slot dword_8324E4E8); null-guarded so the
+    // walk is inert before that bring-up.
     if (!AptValue::sReferenceRegistrationCb)
         return;
 

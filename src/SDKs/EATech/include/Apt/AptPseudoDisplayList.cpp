@@ -143,7 +143,7 @@ AptPseudoDisplayList::~AptPseudoDisplayList()
 // result==this; its a3 is the predecessor out-param and a4 the existing-match out-
 // param -- here written to the header's ppPred / ppExisting respectively (Insert's
 // caller order). The key is compared as a signed intptr_t (the console `int` compare)
-// since the context is a raw pointer/id used purely as an ordering key (FLAG: raw-ptr
+// since the context is a raw pointer/id used purely as an ordering key (raw-ptr
 // ordering key, faithful to the asm's signed scalar compare).
 // ---------------------------------------------------------------------------
 void AptPseudoDisplayList::FindInst(void* lpKey, AptPseudoCIH_t** ppExisting,
