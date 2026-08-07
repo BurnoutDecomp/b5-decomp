@@ -183,6 +183,12 @@ namespace Vehicle
                               u32 lu32CollisionTag);
         Matrix44Affine GetWheelsWorldTransfrom(EVehicleDrivenWheel leWheel, bool lbApplySteer) const;
         void GetSimpleVehicleBox(/* Box& */ void* lpOutBox) const;
+
+        // ⭐ OUT of the BLOCKED list 2026-08-07 (wheel-cluster wave): BODIED in
+        // BrnSimpleVehiclePhysics.cpp from @0x82602CB8 -- the min-height plane fit over the four
+        // wheels' line-test contacts, publishing mWheelPlanePosAndHeight / mbMinWheelDistValid /
+        // mbAnyWheelsDetatched. Every lane it touches was already a named member; the exported
+        // PSEUDOCODE (not the asm) was the only degenerate thing about it.
         void CalculateNewWheelPlane();
         virtual void SetCrashing();
 

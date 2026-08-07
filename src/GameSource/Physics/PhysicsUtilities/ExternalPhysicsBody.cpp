@@ -106,6 +106,31 @@ namespace BrnPhysics
         mTotalAngularImpulse = vpu::Add(mTotalAngularImpulse, lvImpulse);
     }
 
+    // ---------------------------------------------------------------------------------------
+    // AddLocalSpaceForce  @0x825BE7E8  (67 insns)
+    // ⭐ BODIED 2026-08-07 (wheel-cluster wave; was DECLARE-ONLY, and its .ida-exports JSON is
+    // a hole -- pulled fresh from the .i64). Same tripwire shape as the world-space adders
+    // (the NaN sweep fires "Bad force added " @ExternalPhysicsBody.h:457 and the add runs
+    // unconditionally), but the force arrives in the body's LOCAL frame and is rotated out
+    // first: world = xAxis*F.x + yAxis*F.y + zAxis*F.z (the two-vmaddfp cascade over the
+    // mTransform rows at this+0x00/0x10/0x20), then mTotalLinearForce (+0xE0) += world.
+    // ---------------------------------------------------------------------------------------
+    void ExternalPhysicsBody::AddLocalSpaceForce(Vector3 lvForce)
+    {
+        CGS_ASSERT(vpu::IsValid(lvForce), "Bad force added ");
+
+        const Vector3 lvWorld{
+            mTransform.xAxis.x * lvForce.x + mTransform.yAxis.x * lvForce.y
+                + mTransform.zAxis.x * lvForce.z,
+            mTransform.xAxis.y * lvForce.x + mTransform.yAxis.y * lvForce.y
+                + mTransform.zAxis.y * lvForce.z,
+            mTransform.xAxis.z * lvForce.x + mTransform.yAxis.z * lvForce.y
+                + mTransform.zAxis.z * lvForce.z,
+            0.0f };
+
+        mTotalLinearForce = vpu::Add(mTotalLinearForce, lvWorld);
+    }
+
     // =======================================================================================
     // ⭐ THE INTEGRATOR
     //
