@@ -7,7 +7,7 @@
 //     lfs f1, 0x14(r3)  ;  blr        // load a 32-bit float at +0x14, return it
 //
 // The current interpolated value is stored at byte offset 0x14 as a 32-bit FLOAT
-// and loaded with lfs (load float single), not lfd. (FLAG: the Hex-Rays
+// and loaded with lfs (load float single), not lfd. (Evidence: the Hex-Rays
 // pseudocode types the load as `double` at +0x14, but the ARTIST asm @0x824E5BC8
 // is `lfs` and DecFIGS @0xBB3D08 demangles to a `float32_t`-returning
 // GetCurrentValue with the same `lfs 0x14` -- so the member is an f32, loaded as

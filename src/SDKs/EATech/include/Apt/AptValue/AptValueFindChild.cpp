@@ -13,8 +13,8 @@
 //        18=super  1=_target  (38=AlternateInput / unknown -> default)
 //      These resolvers walk the interpreter's TARGET state (current target + the
 //      CIH/level stacks @ the dword_8324E760 globals) and the global-object
-//      singletons -- none of which are reconstructed yet -- so they are delegated
-//      to AptResolveSpecialName (FLAG, the follow-on; see below).
+//      singletons; they are delegated to AptResolveSpecialName, homed below in
+//      this TU.
 //   2. GENERIC -- otherwise, if this value is defined, look the name up in this
 //      value's native hash (GetNativeHashVirtual), then walk the __proto__ chain
 //      (each proto's native hash), then the global-extension object, then the
@@ -22,10 +22,9 @@
 //      GetNativeHashVirtual() (returns the same &mHash) -- x64-correct, no offset.
 //
 // EXTRACTION NOTE: the jump table (word_821453C0) and ObjectIndex's name->id
-// wordlist were recovered from the decrypted XEX (the rodata technique). Filling
-// ObjectIndex's own data tables (so in_word_set actually recognises the names) is
-// the ObjectIndex TU's follow-on -- until then in_word_set returns null and
-// findChild takes the generic path (still correct for ordinary property lookups).
+// wordlist were recovered from the decrypted XEX (the rodata technique).
+// ObjectIndex's gperf data tables are filled in AptObjectIndex.cpp (the same
+// rodata extraction), so in_word_set recognises the special names live.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -67,11 +66,11 @@ extern AptValueWithHash* gpAptGlobalFallback;  // off_8324E380 (_global; LIVE sy
 extern AptValue* gpAptGlobalExtensionObject;   // off_8324E37C (the _global extension object)
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the AS-globals/AptValueInitialize boot TU): the special-name target
-// singletons the resolver hands back directly. Each is a permanent runtime AptValue*
-// the AS VM exposes by name. Console addresses noted; declared extern here (the same
-// way the sibling Apt TUs declare gpUndefinedValue). gpAptGlobalFallback (off_8324E380)
-// already covers the _global arm above.
+// The special-name target singletons the resolver hands back directly. Each is a
+// permanent runtime AptValue* the AS VM exposes by name -- defined in
+// AptGlobals.cpp and built by AptValueInitialize (AptInit.cpp @0x82B02800).
+// Console addresses noted. gpAptGlobalFallback (off_8324E380) already covers the
+// _global arm above.
 extern AptValue* gpAptKeyObject;        // off_8324E2A8  (Key)
 extern AptValue* gpAptStringObject;     // off_8324D82C  (String)
 extern AptValue* gpAptExternObject;     // off_8324E2CC  (extern)
@@ -95,7 +94,7 @@ AptValue* AptValue::findChild(const EAStringC* pName, AptValue* pTarget)
     const ObjectIndex::Entry* pEntry =
         ObjectIndex::in_word_set(pName->GetBuffer(), pName->GetLength());
     if (pEntry)
-        return AptResolveSpecialName(pEntry->miData, this, pName, pTarget);   // FLAG
+        return AptResolveSpecialName(pEntry->miData, this, pName, pTarget);   // homed below
 
     // Generic: this value's native hash, then the __proto__ chain.
     if (!getIsDefined())
@@ -140,13 +139,13 @@ AptValue* AptValue::findChild(const EAStringC* pName, AptValue* pTarget)
 // wordlist): 1=_target 2=this 3=_root 4=Key 5/20/37=Mouse/Stage/AlternateInput
 // 6..15,21..35=_level0.._level24 16=_parent 17=extern 18=super 19=_global 36=String.
 //
-// FLAG (dead path at present): findChild only reaches here when ObjectIndex::
-// in_word_set recognises pName, which it cannot until the ObjectIndex data tables are
-// filled (its own follow-on). Decompiled faithfully against the X360 asm; the two
-// deep walkers (`this`/`super`) reproduce the interpreter CIH-stack + prototype-chain
-// navigation verbatim through the gAptActionInterpreter named members + the AptValue
-// GetNativeHashVirtual/mp__Proto__ chain. The Math/Mouse/Stage names currently route
-// to the `undefined` singleton (their console arms return off_8324D814) -- faithful.
+// LIVE since the ObjectIndex gperf tables landed (AptObjectIndex.cpp): findChild
+// reaches here whenever in_word_set recognises pName. Decompiled faithfully against
+// the X360 asm; the two deep walkers (`this`/`super`) reproduce the interpreter
+// CIH-stack + prototype-chain navigation verbatim through the gAptActionInterpreter
+// named members + the AptValue GetNativeHashVirtual/mp__Proto__ chain. The
+// Math/Mouse/Stage names route to the `undefined` singleton (their console arms
+// return off_8324D814) -- faithful.
 // ===========================================================================
 
 namespace
@@ -279,10 +278,9 @@ AptValue* AptResolveSpecialName(int nObjectTypeId, AptValue* pScope,
         // returns either that prototype (loc_82B01370) or its own proto's hash member
         // (loc_82B016D4), falling back to `undefined` (loc_82B01744) when no native
         // hash / proto exists. The full per-tag branch lattice is reproduced below
-        // from the asm; FLAG: this `super` arm is exercised only once the AS call-
-        // method/inheritance opcodes are brought up (not on the current boot trace),
-        // and the interpreter target-stack semantics are reproduced through the
-        // recovered member offsets rather than a runtime-verified trace.
+        // from the asm through the recovered gAptActionInterpreter members; the AS
+        // call-method/inheritance opcodes that exercise this arm are live in the
+        // interpreter TUs.
         AptValue* pTopTarget = CurrentTargetCIH();           // r31
 
         AptNativeHash* pHash = pTopTarget->GetNativeHashVirtual();   // vtbl[2]

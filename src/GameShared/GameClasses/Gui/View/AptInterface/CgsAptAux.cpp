@@ -18,6 +18,10 @@
 
 #include <cstring>   // memset (zero-install the gAptFuncs slots)
 #include <cstdint>   // uintptr_t / uint64_t (x64 header-field resolution)
+#include <cstdarg>   // va_list (AptCallbackDebug::Print)
+#include <cstdio>    // vsnprintf (AptCallbackDebug::Print)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // CgsDev::Log::gpDebugPrint (Print)
+#include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h"   // gxMessageFilterFlags (the Print gate)
 
 // Dynamic-text render-data hooks: the Apt engine stores these next to the render
 // callback slots and AptRenderItemDynamicText calls them directly.
@@ -60,8 +64,8 @@ namespace
 // EATech Apt user-function table, Apt.h) -- so the Apt engine's render dispatch reaches the
 // committed CgsGui::AptCallbackRender free functions (DrawRenderingUnit / SetVertexMatrix / ...).
 // The remaining families (Memory / Debug / File / Variable / Custom / Deprecated) are installed
-// by the same ConstructApt body but are FLAG'd below -- their host callback functions are not
-// reconstructed yet.
+// by the same ConstructApt body; most hosts are homed below -- the leftover un-reconstructed
+// slots are listed (and FLAG'd) at the install site.
 // =============================================================================
 
 // -----------------------------------------------------------------------------
@@ -131,9 +135,9 @@ namespace CgsGui
         // Publish this as the AptAux singleton the render callbacks resolve through.
         AptAuxPointer::mpAptAuxInst = this;
 
-        // FLAG: the data-handler mutex (guest EA::Thread::Mutex::Init at a1+109672) is owned by the
-        // AptDataHandler bring-up; not initialised in this slice (no concurrent data-handler access
-        // exists until that TU lands).
+        // The apt mutex (guest EA::Thread::Mutex::Init at a1+109672): on the host the mAptMutex
+        // member's default constructor performs that Init (EAThread's self-initialising Mutex ctor,
+        // eathread_mutex.h), so no explicit call is needed; Update locks it around AptUpdateTarget.
 
         // Install the Apt host callback table (the render family into gAptFuncs).
         ConstructApt();
@@ -172,7 +176,10 @@ namespace CgsGui
         gpfnAptReleaseTextRenderData = &ReleaseTextRenderData;
 
         // ---- the non-render families this TU now homes (their hosts above) -------------------
+        gAptFuncs.pfnMemAlloc              = &AptCallbackMemory::Alloc;
         gAptFuncs.pfnMemFree               = &AptCallbackMemory::Free;
+        gAptFuncs.pfnMemFreeSize           = &AptCallbackMemory::FreeSize;
+        gAptFuncs.pfnDebugPrint            = &AptCallbackDebug::Print;
         gAptFuncs.pfnDebugAddSavedInput    = &AptCallbackDebug::AddSavedInput;
         gAptFuncs.pfnDebugSetScreenGrabPending = &AptCallbackDebug::SetScreenGrabPending;
         gAptFuncs.pfnFreeAnimation          = &AptCallbackFile::FreeAnimation;
@@ -190,8 +197,7 @@ namespace CgsGui
         gpAptFreeAnimationHook              = &AptCallbackFile::FreeAnimation;
 
         // FLAG: the remaining gAptFuncs slots ConstructApt @0x5BA0F8 also installs --
-        //   Memory      (pfnMemAlloc / pfnMemFreeSize)
-        //   Debug       (pfnAssertFail / pfnDebugPrint)
+        //   Debug       (pfnAssertFail -- its host body is not in the ARTIST export set)
         //   File        (pfnLoadAnimation / pfnFreeConstantTable)
         //   Variable    (pfnLoadVariables)
         //   Custom      (pfnCustomControlRender / pfnCustomControlUpdate / the Zid family)
@@ -439,6 +445,26 @@ namespace CgsGui
         lpAptAux->mAptDataHandler.AptFree(lpBlock);
     }
 
+    // X360 0x828491C8 (CgsGui::AptCallbackMemory::Alloc). Allocate an Apt block through the
+    // singleton AptAux's embedded data-handler allocator (the guest loads off_8305A6C8 + 12 ==
+    // &mAptDataHandler, asserting the singleton, console CgsAptAux.cpp:708), then asserts the
+    // returned block ("lpMemory != NULL", console cpp:712).
+    void* AptCallbackMemory::Alloc(size_t lnSize)
+    {
+        AptAux* lpAptAux = AptAuxPointer::mpAptAuxInst;
+        CGS_ASSERT(lpAptAux != nullptr, "Invalid AptDataHandler in AptCallbackMemory::Alloc");
+        void* lpMemory = lpAptAux->mAptDataHandler.AptAlloc(lnSize);
+        CGS_ASSERT(lpMemory != nullptr, "lpMemory != NULL");
+        return lpMemory;
+    }
+
+    // X360 0x82849358 (the pfnMemFreeSize host). The whole body is a tail-call to Free: the
+    // size argument is dropped and the block freed through the same data-handler path.
+    void AptCallbackMemory::FreeSize(void* lpBlock, size_t /*lnSize*/)
+    {
+        Free(lpBlock);
+    }
+
     // ---- Debug --------------------------------------------------------------
     // X360 0x82849528 (CgsGui::AptCallbackDebug::AddSavedInput). Guarded not-yet-implemented.
     void AptCallbackDebug::AddSavedInput(AptSavedInputRecord* /*lpRecord*/, s32 /*liCount*/)
@@ -450,6 +476,25 @@ namespace CgsGui
     void AptCallbackDebug::SetScreenGrabPending(const char* /*lpacName*/)
     {
         CGS_ASSERT(false, "AptCallbackDebug::SetScreenGrabPending() has not been implemented but is being used, please implement before utilising.");
+    }
+
+    // X360 0x82849470 (CgsGui::AptCallbackDebug::Print, gAptFuncs pfnDebugPrint). Format the
+    // varargs into a 2048-byte buffer (a >= 2048 result fires the inlined CgsStringUtils.h:96
+    // overflow assert), then stream the text through gpDebugPrint when the debug message
+    // filter (gxMessageFilterFlags & 1) is on.
+    void AptCallbackDebug::Print(const char* lpacFormat, ...)
+    {
+        char lacBuffer[2048];
+        va_list lArgs;
+        va_start(lArgs, lpacFormat);
+        const int liCopied = vsnprintf(lacBuffer, sizeof(lacBuffer), lpacFormat, lArgs);
+        va_end(lArgs);
+        CGS_ASSERT(liCopied < static_cast<int>(sizeof(lacBuffer)), "lNumBytesCopied<(int32_t)luBytes");
+
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+        {
+            *CgsDev::Log::gpDebugPrint << lacBuffer;
+        }
     }
 
     // ---- File ---------------------------------------------------------------
@@ -515,7 +560,7 @@ namespace CgsGui
     // AptData[1]/AptData[2] are the header's mpAptData / mpConstData; AptData (the header)
     // is threaded as a5 all the way to Fixup (LoadRenderingUnit reads AptData+12 = geometry).
     //
-    // FLAG (x64 fork): the console's mpAptData/mpConstData are relocated 32-bit pointers; our
+    // FLAG PC-platform leaf (.apt blob offset access): the console's mpAptData/mpConstData are relocated 32-bit pointers; our
     // converted header keeps them as raw file OFFSETS in 8-byte fields (the no-op FixUp -- see
     // CgsAptDataHeader.cpp). The resource base == the header address (the header sits at the
     // resource start), so they resolve as headerAddr + offset. The reloc base passed as pBase
@@ -534,7 +579,7 @@ namespace CgsGui
         if (lpAptData == nullptr)
             return;
 
-        // FLAG (x64 native-8 bundle): the console asserts AptData[5] (meCurrentState) is
+        // FLAG PC-platform leaf (.apt native-8 bundle): the console asserts AptData[5] (meCurrentState) is
         // LOADED(1)/ACTIVE(2) and then sets it to ACTIVE(2). The native-8 header is 8-byte-widened,
         // so meCurrentState does NOT sit at the u32-struct's +20 (that overlaps mpConstData's high
         // half at +16); its real offset is ambiguous in the widened layout. The state precondition
@@ -544,13 +589,13 @@ namespace CgsGui
         // avoid corrupting the widened mpConstData field. The rest of the control flow is faithful.
 
         // Resolve the header's serialised offset fields to real pointers (x64 substitute for the
-        // console's relocated mpAptData/mpConstData -- FLAG). The header sits at the resource base,
+        // console's relocated mpAptData/mpConstData -- see the leaf note above). The header sits at the resource base,
         // so base == the header address.
         //
         // UN-COLLAPSED (2026-07-01): the native-8 (libapt2 SerializeChunks) header carries SIX
         // 8-byte fields [name@0, baseName@8, aptData@0x10, const@0x18, geom@0x20, size@0x28] -- the
         // extra baseName shifts every field one slot past the console's [name, aptData, const, ...]
-        // order (FLAG: native-8 header field order, see APT_CONVERTER_BUGS.md #2). pBase = the
+        // order (native-8 header field order, see APT_CONVERTER_BUGS.md #2). pBase = the
         // "Apt Data:1:7:8" chunk (every serialised offset is chunk-relative), pConstFile = the
         // "Apt constant file" chunk (movieOffset@+0x18 locates the root; itemStart@+0x28 is the
         // constant-record table _parseStream resolves Push/DefineDictionary entries through) --
@@ -566,7 +611,7 @@ namespace CgsGui
                                 : lpBase;   // degenerate header: keep the old collapse
 
         // Publish the resource span for the native-8 relocation walk's bounds checks
-        // (FLAG x64; see the gAptResourceSpan* note): base = the header (== the resource
+        // (see the gAptResourceSpan* leaf note in CgsAptAux.h): base = the header (== the resource
         // start), size = the converted 6-field header's size slot @+0x28. Restored after
         // the completion so nested loads (the import graph) re-derive their own span.
         const uintptr_t luPrevSpanBase = gAptResourceSpanBase;
@@ -589,7 +634,7 @@ namespace CgsGui
         gAptResourceSpanBase = luPrevSpanBase;
         gAptResourceSpanSize = luPrevSpanSize;
 
-        // (The console then sets AptData[5] = 2 (ACTIVE). FLAG-skipped -- see the state note above:
+        // (The console then sets AptData[5] = 2 (ACTIVE). Skipped -- see the leaf note above:
         // the widened header's state slot is ambiguous and the host's load-once guard covers it.)
 
         // Drop the caller's original handle reference (the asm's trailing DecRef + null on *a2).

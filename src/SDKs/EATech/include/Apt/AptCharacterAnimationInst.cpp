@@ -31,12 +31,11 @@
 // AptGetMovieCharacterAnimation -- a movie/animation AptCharacter embeds its
 // AptCharacterAnimation movie root by value immediately after the AptCharacter base
 // (X360: `addi r3, mpCharacter, 0x10; blr` -- the embedded timeline, the same embedded
-// movie AptMovie.h documents). The owning character-subtype that would carry it as a
-// named `AptCharacterAnimation mAnimation;` member has no home header yet, so -- per the
-// header FLAG -- the embedded root is reached through this single accessor instead of a
-// raw cast at the call sites.
+// movie AptMovie.h documents). The serialized record has no owning character-subtype
+// header (the blob IS the runtime layout), so the embedded root is reached through
+// this single accessor instead of a raw cast at the call sites.
 //
-// FLAG (x64 fork): the console embeds it at the literal +0x10 (== console
+// x64 fork (VERIFIED): the console embeds it at the literal +0x10 (== console
 // sizeof(AptCharacter)); on the x64 gate the SERIALIZED header widens to 0x20 under the
 // 8-byte pointer rule (the .apt converter's GUIAPT64 "1:7:8" layout). The embedded-root
 // offset is therefore KU_AptEmbeddedMovieOff (0x20 -- the SAME def-base offset
@@ -85,7 +84,7 @@ void AptCharacterAnimationInst::PreDestroy()
 //
 // The movie root the two AptCharacterAnimation calls operate on is the
 // AptCharacterAnimation embedded at char+0x10 (reached by name through
-// AptGetMovieCharacterAnimation -- see the header FLAG). The first call reads the
+// AptGetMovieCharacterAnimation -- see the header note). The first call reads the
 // CURRENT render item's character directly (this->mpRenderItem); the init-indicator
 // reset uses the tick-WRITABLE render item (GetRenderItemWritable, evaluated twice
 // in the asm: once for the null guard, once for the character pointer).
@@ -183,7 +182,7 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // AptSharedPtr<AptFile>::operator=(character+0xC, &held). The PS3 lift gates this
     // ref-counted store on the source not already being the destination slot
     // (`if (v5 != a3)`, v5 = a2+12) -- the standard AptSharedPtr self-assign guard.
-    // FLAG (native-8 fork -- x64 serialised .apt): a2+0xC is the console (4-byte) offset of the
+    // Native-8 fork (VERIFIED): a2+0xC is the console (4-byte) offset of the
     // AptCharacter's embedded animation-file slot -- on the console 0x10-byte header that IS
     // mpAnimationFile (type@0, sig@4, shapeID@8, mpAnimationFile@0xC). On the native-8 (widened)
     // record the header is 0x20 and mpAnimationFile sits at +0x18 (the AptCharacter struct locks

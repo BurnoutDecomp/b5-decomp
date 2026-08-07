@@ -132,7 +132,7 @@ namespace CgsGui
     // are the two stage-resolution lanes (GetStageHeight == mAptResolution.x, GetStageWidth ==
     // mAptResolution.y) and the seeded pointers; those are reproduced here. The intermediate
     // reciprocal vectors the transform uses are recomputed at draw time by the Im2d path, so the
-    // SIMD scratch is not retained. FLAG: the stage-resolution aspect-fold is reconstructed from
+    // SIMD scratch is not retained. FLAG PC-platform leaf (VMX bit-exactness): the stage-resolution aspect-fold is reconstructed from
     // the {1280,720} base + the display aspect (height lane 720 exact; width lane == height*aspect);
     // the bit-exact VMX reciprocal-estimate sequence that produces the width is the platform leaf.
     // -------------------------------------------------------------------------
@@ -160,7 +160,7 @@ namespace CgsGui
         // 16:9 display passes aspect 1.7777..., giving width 720 * 1.7777 == 1280 (the base width);
         // a wider/narrower display rescales the width about that base. lfAspectRatio is the true
         // display W/H the caller forwards (NOT 1.0 for 16:9).
-        // FLAG: the aspect-fold SEMANTICS (width = height * displayAspect) is reconstructed from the
+        // FLAG PC-platform leaf (VMX bit-exactness): the aspect-fold SEMANTICS (width = height * displayAspect) is reconstructed from the
         // {1280,720} base; the guest computes it with a bit-exact VMX reciprocal-estimate chain
         // (vrefp/vnmsubfp/vmaddfp) that is the platform leaf and is not reproduced bit-for-bit. The
         // height lane (720, read by GetStageHeight) is exact; the width lane tracks the passed aspect.
@@ -400,7 +400,7 @@ namespace CgsGui
         // mpTexture, mpTexturePtr, muNumberOfVerticies, mppVerticies}. (The console reads the table
         // as 32-bit words; on the x64 host the resource fix-up has already rebased them into real
         // pointers, so they are read through the typed table.)
-        // The mesh pointer table. FLAG (x64 native-8 fork): the table is 8-byte-strided (each entry a
+        // The mesh pointer table. FLAG PC-platform leaf (.apt native-8 blob): the table is 8-byte-strided (each entry a
         // GuiGeometryPtrTableEntry -- a rebased pointer in the low 8 bytes), and mppGeometryMeshes is an
         // 8-byte field (rebased offset->pointer by AptFixupGeometryFileNative8 at resolve time). Indexed
         // as uintptr_t entries -- NOT the console's 4-byte u32 table.
@@ -450,7 +450,7 @@ namespace CgsGui
             //   >= 3 -> invalid. (X360 routes mode 1/2 through SetState(TextureState*), mode 0
             //   through SetTexture(white).)
             const s32 liTextureMode = lpMesh->miTextureMode;
-            // FLAG (x64 native-8 fork): mpTexture is the 8-byte GuiTexture pointer (mesh+0x10), already
+            // FLAG PC-platform leaf (.apt native-8 blob): mpTexture is the 8-byte GuiTexture pointer (mesh+0x10), already
             // resolved by the converter (not the console's 4-byte id at mesh+0xC). The texture-state
             // cache is keyed by this value (id/raster key); carried as uintptr_t.
             const uintptr_t luTextureId = lpMesh->mpTexture;
@@ -481,8 +481,8 @@ namespace CgsGui
             }
 
             // Draw the mesh's static vertex run (the vertices already live in the resource's vertex
-            // buffer, so RenderFromStaticVertexBuffer points straight at them -- no copy). FLAG (x64
-            // native-8 fork): the vertex pointer TABLE (mesh+0x20, mppVerticies, now a live pointer via
+            // buffer, so RenderFromStaticVertexBuffer points straight at them -- no copy). FLAG
+            // PC-platform leaf (.apt native-8 blob): the vertex pointer TABLE (mesh+0x20, mppVerticies, now a live pointer via
             // AptFixupGeometryFileNative8) is 8-byte-strided; its FIRST entry (rebased) is the contiguous
             // vertex run. muNumberOfVerticies (mesh+0x18) is the count. The vertex format is the 20-byte
             // Basic2dColouredTexturedVertex (pos8 + rgba8_4 + uv8), matching the native run stride.

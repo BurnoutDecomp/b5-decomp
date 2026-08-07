@@ -54,7 +54,9 @@ namespace CgsGui
     // relocate on the current bundle REGRESSES the boot (verified: garbage
     // pointer -> AV), so it is gated behind KB_APT_DATAHEADER_INPLACE_FIXUP,
     // which the converter fix (uniformly-64-bit header + correct field order +
-    // an untruncated 64-bit base) flips on. // FLAG (x64 fork + converter BUG 2)
+    // an untruncated 64-bit base) flips on. // FLAG PC-platform leaf: .apt blob offset
+    // regime (converter BUG 2). The XB1 x64 twins sub_1400CD0E0/sub_1400CD110 DO relocate
+    // the FIVE widened 8-byte header fields in place -- that is the gated faithful path.
     // =========================================================================
     namespace
     {
@@ -117,7 +119,7 @@ namespace CgsGui
         // mpGeomStruct as raw file offsets. The consumer resolves them via
         // realBase64 + offset (it cannot use the truncated u32 base this idiom
         // passes). Descending into GuiGeometryObject::FixUp here is what AV'd on the
-        // 4-byte/mis-shaped bundle, so it is intentionally NOT done. // FLAG (x64 fork)
+        // 4-byte/mis-shaped bundle, so it is intentionally NOT done. // FLAG PC-platform leaf: .apt blob offset regime
     }
 
     void AptDataHeader::FixDown(u32 luDelta, bool lbEndianSwap)
@@ -127,6 +129,6 @@ namespace CgsGui
             AptDataHeaderUnrelocateInPlace(this, luDelta, lbEndianSwap);
         }
         // else (x64, current bundle): symmetric no-op (the fields were never
-        // relocated, so there is nothing to un-relocate). // FLAG (x64 fork)
+        // relocated, so there is nothing to un-relocate). // FLAG PC-platform leaf: .apt blob offset regime
     }
 }

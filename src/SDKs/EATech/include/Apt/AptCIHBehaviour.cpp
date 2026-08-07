@@ -155,16 +155,14 @@ void AptCIH::ForceCleanNativeHash()
 // 8-byte {eventMask, nameIndex} pairs, EXTRACTED from the decrypted XEX below). For
 // each descriptor whose event bit is not already set in this node's native-hash event
 // mask AND that names a real handler (mask & 0x201C7), it resolves the named child
-// against the runtime AS-name table (AptValue::findChild(&gAptEventNameTable[index]));
+// against the interned AS-name pool (AptValue::findChild(&StringPool::saConstant[index]));
 // when the child exists the event bit is OR'd into the hash mask. The return is 1 iff
 // any of the "needs a per-frame update tick" events (mask 0x200C0) was newly bound.
 // ---------------------------------------------------------------------------
 
-// FLAG (homed elsewhere -- the AS-name registration boot TU; console dword_8324E580):
-// the runtime table of registered ActionScript handler-name strings (EAStringC). The
-// descriptors index into it by name id. x64-native: an array of EAStringC (8 bytes
-// each), indexed by element -- NOT the console 4-byte stride.
-extern EAStringC* gAptEventNameTable;
+// (The handler-name strings live in the interned AS-name pool StringPool::saConstant
+// -- console dword_8324E580; the earlier zeroed gAptEventNameTable alias is retired
+// from this reader, see the note inside FindAndSetEvents.)
 
 namespace
 {
@@ -274,9 +272,9 @@ void AptCIH::SetCharacterInst(AptCharacterInst* pCharacterInst, bool bMoveRender
         gpNonGCPoolManager->Deallocate(pOld, sizeof(AptCharacterInst));
     }
 
-    // Notify the render tree the node's render item moved (FLAG: the X360 reads the
-    // manager + tick from gpAptTarget; the established convention resolves the same
-    // manager through AptCurrentRenderTreeManager() + gnCurrUpdateTick).
+    // Notify the render tree the node's render item moved (the X360 reads the
+    // manager + tick from gpAptTarget; the established project convention resolves
+    // the same manager through AptCurrentRenderTreeManager() + gnCurrUpdateTick).
     if (AptRenderTreeManager* pManager = AptCurrentRenderTreeManager())
         pManager->Update_ItemMoved(this, gnCurrUpdateTick);
 }
@@ -311,7 +309,7 @@ float AptCIH::GetCosAngle(const AptMatrix* pMatrix)
 void AptCIH::Remove(bool bClearGCRoots)
 {
     // Cancel any in-flight asset load + drop the queued ActionScript actions
-    // (through the Apt context singleton -- see the FLAG'd accessors above).
+    // (through the Apt context singleton gpAptTarget, as the X360 inlines them).
     gpAptTarget->mpLinker->CancelLoad(this);   // X360 @0x82AFC0C8 (inlined accessor)
     gpAptTarget->mpAnimationTarget->mpActionQueue->RemoveActionFor(this);   // X360 @0x82AFC0D8 (inlined accessor; AptValue* return discarded)
 
@@ -625,14 +623,12 @@ void AptCIH::SetMask(AptCIH* pMaskSlave)
 // Behavioural batch 4 -- procedural-property reader + visibility.
 // ===========================================================================
 
-// FLAG (deferred): the X360 static-local bounding-rect helper (sub_82AE2C58) seeds
-// the rect, expands it via AptCIH::GetBoundingRect (@0x82AE2B30 -- not yet homed; it
-// needs the AptCharacterShape glyph/geometry bounds layout), then zeroes the rect if
-// nothing expanded. Until GetBoundingRect lands this returns an empty rect, so the
-// _width/_height procedural properties read 0; every other property is fully faithful.
-// FLAG: the bounding-rect mode threaded through GetBoundingRect (X360 dword_8324E2AC);
-// it is plumbed through the recursion but not read for the bounds math. Defined by
-// the Apt runtime; declared here so the clamp helper passes it faithfully.
+// The X360 static-local bounding-rect helper (sub_82AE2C58): seed the rect, expand
+// it via AptCIH::GetBoundingRect (@0x82AE2B30, HOMED below in this TU), then zero
+// the rect if nothing expanded.
+// The bounding-rect mode threaded through GetBoundingRect (X360 dword_8324E2AC) is
+// plumbed through the recursion but never read by the bounds math; storage HOMED in
+// AptGlobals.cpp, declared here so the clamp helper passes it faithfully.
 extern int gAptBoundingRectMode;
 
 // GetBoundingRectClamped -- sub_82AE2C58: seed the rect to the empty (+/-FLT_MAX)
@@ -868,9 +864,11 @@ bool AptCIH::HasMouseEvent()
 // FLAG (Apt runtime scratch -- console dword_8324E53C; a process-wide fixed buffer
 // the runtime uses to stage this node's display-list ancestor pointers while it
 // folds their transforms). x64-native: a buffer of AptCIH* (8-byte pointers), NOT
-// the console 4. Owned + sized by the Apt runtime boot TU; declared here so the
-// mask-matrix fold can stage into it faithfully (one mask is processed at a time,
-// so the buffer is never re-entered).
+// the console 4. Storage is homed NULL in AptGlobals.cpp but the boot-TU ALLOCATION
+// that sizes it is still un-homed -- a mask with ancestors would dereference null
+// until it lands (only reachable through the AptUpdate slot install). Declared here
+// so the mask-matrix fold stages into it faithfully (one mask is processed at a
+// time, so the buffer is never re-entered).
 extern AptCIH** gAptMaskAncestorScratch;
 
 // The minimum colour-scale alpha a mask render item is allowed to carry (console
@@ -1147,7 +1145,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
         // Cache the authored angle in the lazily-allocated mpAssetString slot (the
         // X360 reuses it as a single-float store; allocated from the DOGMA pool).
         if (mpAssetString == nullptr)
-            mpAssetString = gpNonGCPoolManager->Allocate(4);   // FLAG: console off_8324D808 (DOGMA pool)
+            mpAssetString = gpNonGCPoolManager->Allocate(4);   // console off_8324D808 == gpNonGCPoolManager (AptInit wires both DOGMA-pool aliases to the same pool)
         *reinterpret_cast<float*>(mpAssetString) = f31;
 
         // Rebuild the first two columns from the cached scales + the new angle.
@@ -1169,8 +1167,9 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
         AptCXForm* pCx = GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
         if (f31 < KF_AptProcZero)
         {
-            // FLAG: the X360 folds the negative-alpha path into a shared store epilogue
-            // (loc_82AE7808); reconstructed as the plain clamp-and-store of the raw value.
+            // The X360 folds the negative-alpha path into a shared store epilogue
+            // (loc_82AE7808); the plain clamp-and-store of the raw value is that
+            // epilogue's exact effect on this arm.
             float fClamped = f31;
             if (!(fClamped >= KF_AptProcColorMin)) fClamped = KF_AptProcColorMin;
             if (fClamped > KF_AptProcColorMax)     fClamped = KF_AptProcColorMax;
@@ -1232,12 +1231,12 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
 // ActionScript native-function singletons. Each non-null slot has its value Released
 // (AptValue vtable slot 1, the deleting destructor path) and is nulled. The X360
 // unrolls the 27 slots in a fixed (non-address) order; reproduced verbatim so the
-// teardown sequence matches. The slots are owned by the AS-builtin registration boot
-// TU, so they are FLAG'd extern here.
+// teardown sequence matches. Slot storage is HOMED in AptGlobals.cpp.
 // ---------------------------------------------------------------------------
-// FLAG (homed elsewhere -- the AS-builtin registration boot TU; console
-// off_8324E42C..0x8324E494): the per-built-in native-function singletons. Each is an
-// AptValueGC (AptNativeFunction) torn down through the AptValue Release virtual.
+// The per-built-in native-function singletons (console off_8324E42C..0x8324E494;
+// storage in AptGlobals.cpp, created lazily by AptCIHMembers.cpp's
+// LookupMethodSingleton). Each is an AptValueGC (AptNativeFunction) torn down
+// through the AptValue Release virtual.
 extern AptValue* gpAptNativeFn_8324E440;
 extern AptValue* gpAptNativeFn_8324E43C;
 extern AptValue* gpAptNativeFn_8324E48C;
@@ -1296,9 +1295,9 @@ void AptCIH::CleanNativeFunctions()
 // Behavioural batch 7 -- per-frame dynamic-text refresh.
 // ===========================================================================
 
-// FLAG (homed with the dynamic-text render-item TU; console &unk_82F72DB0): the
-// "unresolved/empty text render-data handle" sentinel. mZID equal to it (or 0) means
-// the field has no resolved render data yet. Mirrors AptRenderItemDynamicText.cpp.
+// The "unresolved/empty text render-data handle" sentinel (console &unk_82F72DB0;
+// storage HOMED in AptGlobals.cpp). mZID equal to it (or 0) means the field has no
+// resolved render data yet. Mirrors AptRenderItemDynamicText.cpp.
 extern intptr_t gAptEmptyTextRenderDataZID;
 
 // ---------------------------------------------------------------------------
@@ -1369,20 +1368,20 @@ void AptRunGeneralisedTextProcess(AptCIH* pRoot)
 // TUs (AptDisplayList / AptLinker / AptAnimationTarget / AptCIHNativeFunctionHelper)
 // reference by name. DECOMPILED from the PS3 EXTERNAL ELF (DWARF-named) + the X360
 // ARTIST.XEX, cross-checked. EnsureStringAllocated (the deep dynamic-text/glyph layout
-// engine) stays a FLAG stub -- its body belongs with the Apt text/font subsystem TU.
+// engine) is HOMED in AptCIHText.cpp.
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // (cluster shim types)
 
-// ---- FLAG (un-homed runtime singletons referenced by the deep cluster bodies; each
-// declared verbatim by its console-name equivalent, bodies/storage owned by the
-// AS-interpreter, GC, and Apt-runtime boot TUs) ------------------------------------
-// AddToRemList (console AptAnimationTarget::AddToRemList @0x82B...): queue a node that
-// is still externally referenced onto the animation director's removal list.
+// ---- runtime callees / hook slots referenced by the deep cluster bodies ----------
+// AddToRemList (console AptAnimationTarget::AddToRemList @0x82AEE3F8; HOMED in
+// AptAnimationTarget.cpp): queue a node that is still externally referenced onto the
+// animation director's removal list.
 void AptAnimationTargetAddToRemList(AptAnimationTarget* pAnim, AptCIH* pItem);
 
-// PreDestroy hook (console dword_8324E8A0): the optional process-wide pre-destroy notify
-// callback; null until a host installs it. Owned by the Apt-runtime boot TU.
+// PreDestroy hook (console dword_8324E8A0; storage in AptRenderLinkStubs.cpp): the
+// optional process-wide pre-destroy notify callback -- a host-installable boundary,
+// faithfully null until a host installs it.
 extern void (*gpAptCIHPreDestroyHook)(AptCIH* pCIH);   // dword_8324E8A0
 
 // ---------------------------------------------------------------------------
@@ -1440,8 +1439,8 @@ bool AptCIH::HasEvent(int nEventMask)
 // enterFrame mask 2 / the keyframe-id-gated 0x20000 path, back otherwise), stamped with
 // nFrameId. The byte-code-block construction + AS-interpreter execution of a matched
 // record entry (masks 512 / 4 -> a fresh AptScriptFunctionByteCodeBlock run through
-// gAptActionInterpreter) and the bDeferred __proto__-member dispatch are the deferred
-// AS-execution sub-paths -- FLAG'd to the cluster callee below until that engine is homed.
+// gAptActionInterpreter) and the bDeferred __proto__-member dispatch are BOTH live in
+// the cluster callee below (un-staged 2026-07-01).
 // ---------------------------------------------------------------------------
 
 // The clip-event record scan + enqueue (HOMED 2026-07-01 from the PS3 body @0x815BD0;
@@ -1452,7 +1451,7 @@ bool AptCIH::HasEvent(int nEventMask)
 //   mask 2 (enterFrame)          -> AddActionFront(..., gAptNullInputId)
 //   mask 0x20000 (keyframe)      -> AddActionFront(..., nFrameId) when the record's
 //                                   keyframe id == nFrameId >> 17
-//   masks 512 / 4 / 0x40000      -> the immediate BYTE-CODE-BLOCK run (FLAG below)
+//   masks 512 / 4 / 0x40000      -> the immediate BYTE-CODE-BLOCK run (live below)
 //   anything else (incl. 1 load) -> AddActionBack(..., nFrameId)
 //
 // UN-STAGED (2026-07-01, with the recovered StringPool table + the extracted
@@ -1651,7 +1650,7 @@ AptValue* AptCIH::queueClipEvents(int nEventMask, unsigned int nFrameId, int bDe
         return reinterpret_cast<AptValue*>(0);
 
     // The faithful record-table scan + the AS byte-code execution / __proto__ dispatch
-    // live in the deferred AS-execution sub-path (FLAG). The integer result the X360
+    // live in AptQueueClipEventsRunMatched above. The integer result the X360
     // returns (0 / 1) is what every caller treats truthily; carried back as the shared
     // value pointer's int role.
     const int nRan = AptQueueClipEventsRunMatched(this, nEventMask, nFrameId, bDeferred);
@@ -1669,10 +1668,11 @@ AptValue* AptCIH::queueClipEvents(int nEventMask, unsigned int nFrameId, int bDe
 // The fold is written back into the subtree-dirty bit (mFlagsA bit 8) and returned (0/1).
 // ---------------------------------------------------------------------------
 
-// FLAG (un-homed Apt-runtime generalised-process state; console AptCIH::bEarlyReturn /
+// The Apt-runtime generalised-process state (console AptCIH::bEarlyReturn /
 // AptCIH::sCIHProcessCb[0..2] / AptCIH::nTreeDepth): the process gate flag, the up-to-three
-// registered per-node process callbacks, and the recursion-depth counter. Owned + installed
-// by the Apt generalised-process boot TU; declared here so the homed pass names them.
+// registered per-node process callbacks, and the recursion-depth counter. Storage in
+// AptRenderLinkStubs.cpp; installed/swapped live per frame by the AptUpdate driver
+// (AptUpdate.cpp).
 extern bool AptCIH_sbGeneralisedProcessEarlyReturn;                                   // bEarlyReturn
 extern unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*);                 // sCIHProcessCb
 extern unsigned int (*AptCIH_sCIHProcessCb1)(AptCIH*, AptCIH*, void*);                // sCIHProcessCb1
@@ -1739,16 +1739,16 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
 // a fresh "none" character instance (bClearGCRoots) or null the slot, GC-tear-down + free
 // the old instance, and run the value teardown.
 //
-// FLAG: the deferred AS-execution tail (the type-5/16 unload-event dispatch +
-// callFunction, the zombie-vector push + partial GC, and the host render hook
-// dword_8324E8C8) is the deep AS-interpreter / GC sub-path -- routed through the cluster
-// callee below until that engine is homed. The observable state teardown (the mask
-// unwiring + the char-inst swap/free) is reconstructed faithfully here.
+// The unload-event tail (the type-5/16 unload dispatch + callFunction), the zombie
+// decision (vector push / CIHState staging / notify hook dword_8324E8C8 / deferred-
+// release flush / zombies-dirty raise), and the observable state teardown (the mask
+// unwiring + the char-inst swap/free) are ALL implemented inline below in the shipped
+// order; the director-table drain is the cluster callee AptClearCIHDrainQueuesAndZombie.
+// (The zombies-dirty consumer AptGC::CleanUnreachable is tracked in AptRenderLinkStubs.cpp.)
 // ===========================================================================
 
-// FLAG (un-homed action-queue / new-inst / input-target / GC sub-paths of ClearCIH;
-// console sub_82ADBD50 + __::remove + the off_8324E528 zombie vector + dword_8324E8C8
-// render hook + AptPartialGarbageCollection). Drops this node from every deferred queue
+// ClearCIH's director-table drain (console sub_82ADBD50 + __::remove + the shared
+// new-insts table scrub; HOMED below). Drops this node from every deferred queue
 // the director / input target hold it in. The unload-event tail + the zombie
 // decision live in ClearCIH itself (shipped order); the helper's int return is
 // vestigial (always 0) and ignored.
@@ -1776,8 +1776,8 @@ extern AptCIH*         AptGetAnimationAtLevel(int nLevel);
 // slot). The UNLOAD-EVENT tail + the zombie decision live in ClearCIH itself,
 // in the shipped order (both consoles run the unload tail AFTER the mask
 // master/slave teardown -- X360 bl chain @0x82AF6374, XB1 sub_1408333D0).
-// Returns nonzero when the node became a zombie -- the zombie arm is still a
-// staged FLAG (see the note at the ClearCIH call site), so 0 for now.
+// Returns 0 always -- the zombie decision runs inline in ClearCIH (below), so
+// the helper's int return is vestigial.
 int AptClearCIHDrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
 {
     // ---- the director-set / event-slot / new-inst DRAIN --------------------
@@ -1829,7 +1829,7 @@ int AptClearCIHDrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
         }
     }
 
-    // ---- the zombie decision: FLAG (staged) -- see the ClearCIH call site ---
+    // ---- the zombie decision runs inline in ClearCIH (below) ---------------
     return 0;
 }
 
@@ -1843,10 +1843,10 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
 
     SetDirtyState(false, false);
 
-    // Drop the node from the director's deferred-action / new-instance tables, the input
-    // target's drag/focus slots, the new-insts table, and (when it became externally
-    // referenced) the zombie vector + partial GC; run the unload-event tail. Returns
-    // nonzero when the node was queued as a zombie (the instance is NOT freed below).
+    // Drop the node from the director's input/listener sets, the press/roll-over
+    // event slots, and the shared new-instances table (the drain helper above).
+    // The unload-event tail + the zombie decision follow inline below, in the
+    // shipped order.
     AptClearCIHDrainQueuesAndZombie(this, bClearGCRoots);
 
     // Animation node (type tag 9) -> remove its per-frame timer functions.
@@ -2162,7 +2162,7 @@ void AptCIH_PreDestroyHook(AptCIH* pCIH)
 // EnsureStringAllocated @0x82B06F08 is now HOMED in AptCIHText.cpp (the deep dynamic-text
 // build/layout path -- AptCharacterTextInst::UpdateText + the AptAllocateStringParameters
 // build + the host pfnAllocateString call + the SetZID/box-align/measure fold). The prior
-// FLAG no-op stub here is retired.
+// no-op stub here is retired.
 
 AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
 {

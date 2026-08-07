@@ -26,7 +26,7 @@
 //   gAptValueGCStoreSizeFlag(byte_8324D806) -- bStoreFreeBlockSize seed (0).
 //   gAptValueGCMaxItemSize  (dword_8324E2A4)-- max AptValue object size.
 // The per-VFT object-size table (byte_82144A18[AptVFT_NumVFTs]) lives in
-// .rdata; see the FLAG below.
+// .rdata; defined (zeroed) in AptGlobals.cpp -- see the note below.
 //
 // This is vendor/SDK code reconstructed beside its DOGMA base. Per
 // CXX_NAMING_CONVENTIONS.md the EA SDK identifiers are kept verbatim.
@@ -48,14 +48,14 @@ extern uint8_t  gAptValueGCStoreSizeFlag; // byte_8324D806
 extern uint32_t gAptValueGCMaxItemSize;   // dword_8324E2A4
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed, owned by the Apt VFT-registry TU): the per-virtual-function-
-// table object-size table the X360 reaches as byte_82144A18[idx]. It maps an
-// AptVirtualFunctionTable_Indices to the byte size of that concrete AptValue
-// subclass. StaticInitialize scans entries [1, AptVFT_NumVFTs) for the min/max
-// object size; the GC walk uses it to step item-to-item. The table contents
-// are not recoverable from the dossier pseudocode (they live in .rdata and are
-// generated from the class set) -- declared here as an extern so this TU
-// compiles; the definition belongs to the registry TU.
+// The per-virtual-function-table object-size table the X360 reaches as
+// byte_82144A18[idx]. It maps an AptVirtualFunctionTable_Indices to the byte
+// size of that concrete AptValue subclass. StaticInitialize scans entries
+// [1, AptVFT_NumVFTs) for the min/max object size; the GC walk uses it to step
+// item-to-item. Defined (zeroed) in AptGlobals.cpp -- the .rdata contents are
+// class-set-generated and unrecovered there, so AptAllocatorInitialize
+// (AptInit.cpp) overrides the table-derived min/max statics with the
+// x64-correct 4/256 before the GC pool ctor reads them.
 // ---------------------------------------------------------------------------
 extern uint8_t byte_82144A18[AptVFT_NumVFTs];
 

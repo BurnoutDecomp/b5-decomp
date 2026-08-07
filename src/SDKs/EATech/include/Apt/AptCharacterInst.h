@@ -35,26 +35,23 @@ struct AptRenderItem;
 struct AptCIH;
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the AptRenderTreeManager TU; not declared on the manager facade
-// yet): the two render-tree-manager UPDATE entry points the static helpers below
-// route through. Decompiled faithfully from the X360 ARTIST.XEX:
+// The two render-tree-manager UPDATE entry points the static helpers below route
+// through. HOMED in AptRenderTreeManager.cpp against the real facade members:
 //   CloneItem -> AptRenderTreeManager::Update_CloneItem(mgr, pItem, a2, nTick) @0x82AE1C98
 //   ItemMoved -> AptRenderTreeManager::Update_ItemMoved (mgr, pNode, nTick)    @0x82AECD50
-// Declared as free functions taking the manager (rather than members) so the
-// home file can reference them without editing the manager header; the live
-// double-buffer bodies are deferred (single-buffer bring-up).
+// Declared as free functions taking the manager (rather than members) so this
+// header need not include the manager facade.
 // ---------------------------------------------------------------------------
 struct AptCIH* AptCloneManagedItem(AptRenderTreeManager* pMgr, struct AptCIH* pNode,
                                 int nSourceArg, int nTick);
 struct AptCIH* AptManagedItemMoved(AptRenderTreeManager* pMgr, struct AptCIH* pNode, int nTick);
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the AptRenderTreeManager / AptTargetSim TUs, not yet built):
-// the render items are owned + double-buffered by the current target sim's
-// render-tree manager. Routed through helpers (rather than the console literal
-// gpCurrentTargetSim+0x2C offset) so the x64 layout stays correct. Null until a
-// target sim is active.
-//   AptCurrentRenderTreeManager() -> gpCurrentTargetSim's manager, or null.
+// HOMED in AptRenderTreeManager.cpp: the render items are owned + double-buffered
+// by the current target's render-tree manager. Routed through helpers (rather than
+// the console literal gpCurrentTargetSim+0x2C offset) so the x64 layout stays
+// correct. Null until an Apt target is active.
+//   AptCurrentRenderTreeManager() -> the current target's manager, or null.
 //   AptGetTickItemWritable   -> AptRenderTreeManager::Update_GetTickItemWritable
 // (AptRTM_CreateItem removed -- unused; the manager path calls Update_CreateItem directly.)
 // ---------------------------------------------------------------------------
@@ -94,8 +91,7 @@ struct AptCharacterInst
     // ItemInserted @0x82AECD70 -- render-tree "item (re)inserted" notification.
     // Static helper: it takes the scene NODE (re-reads mpCharacterInst from it),
     // clears the item's deletion mark, and notifies the render-tree manager.
-    // FLAG: behavioural body in its own TU; declared so AptCIH::SetIsInserted
-    // compiles. (struct AptCIH is forward-declared below.)
+    // Body in AptCharacterInst.cpp. (struct AptCIH is forward-declared below.)
     static struct AptCIH* ItemInserted(struct AptCIH* pNode);
 
     AptRenderItem*       GetRenderItem() const;          // @0x7DF008

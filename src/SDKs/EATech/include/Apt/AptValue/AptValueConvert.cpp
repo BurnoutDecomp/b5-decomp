@@ -22,7 +22,7 @@
 // else default) and the default body (`this != gpUndefinedValue ? 1 : 0`). The
 // per-case bodies are reconstructed from toBool's verbatim value access (the
 // payload offsets are identical across the three) and the standard primitive
-// conversion; each such spot is FLAG'd below.
+// conversion; each such spot is noted below.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -32,8 +32,10 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h"   // the boxed String (the c_string / toString unwrap)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"   // AptNativeHash / AptHashItem (urlEncode walk)
+#include "SDKs/EATech/include/Apt/AptNativeFunction.h"   // the wrapped-callback read (toString native-function arm)
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"   // gAptActionInterpreter.getName (MC name path)
 #include "SDKs/EATech/include/Apt/AptMovie.h"   // homes the AptValue_toInteger thunk
 #include "SDKs/EATech/include/Apt/AptCIH.h"            // GetCharacterInst (the CIH toString arm)
@@ -46,15 +48,14 @@
 #include <cstdlib>   // strtol
 
 // ---------------------------------------------------------------------------
-// FLAG (wired by the Apt runtime / the loaded movie, not yet reconstructed):
-//   gpUndefinedValue   -- the shared `undefined` value singleton (declared by
-//                         AptArray.h; the conversions compare identity against it).
+// The runtime symbols this TU reads, and their homes:
+//   gpUndefinedValue   -- the shared `undefined` value singleton (defined in
+//                         AptGlobals.cpp; built by AptValueInitialize, AptInit.cpp).
 //   AptGetSwfVersion() -- the active movie's SWF version (string->bool differs for
-//                         version 7); symbol _Z16AptGetSwfVersionv @0x7E29C0.
+//                         version 7); symbol _Z16AptGetSwfVersionv @0x7E29C0,
+//                         homed in AptLinker.cpp.
 //   Apt_atoff()        -- Apt's string->float parse; symbol _Z9Apt_atoffPKc
-//                         @0x7E2990. Bodied with the Apt number helpers (follow-on).
-// These are declared (not defined) here; the per-TU gate is compile-only, and the
-// Apt subsystem is wired into the game at AptInit (a later phase).
+//                         @0x7E2990, homed just below.
 // ---------------------------------------------------------------------------
 extern AptValue*    gpUndefinedValue;
 extern unsigned int AptGetSwfVersion();
@@ -76,12 +77,15 @@ AptString* AptValue::c_string() const
     if (getVtblIndex() == AptVFT_StringValue)
         return reinterpret_cast<AptString*>(const_cast<AptValue*>(this));
 
-    // FLAG: the console returns the linked AptString* a boxed-string value
-    // (AptStringObject, type 0x21) keeps at a type-specific slot (PS3 +0x20). That
-    // offset is layout-specific and its x64 owner (AptStringObject) is not
-    // reconstructed yet, so return null until then rather than bake in the 32-bit
-    // offset. No StringObject values exist before the VM/AptInit are live, so this
-    // branch is dormant.
+    // The console returns the linked AptString* the boxed-string value keeps at
+    // its type-specific slot (PS3/X360 +0x20 == AptStringObject::mpValue) -- read
+    // here through the named member (x64-correct). Every caller reaches this arm
+    // only for type 0x21 (the call sites all guard 1/0x21), so the typed downcast
+    // is the console's blind +0x20 read with the type made explicit; any other
+    // receiver yields null rather than a garbage slot.
+    if (getVtblIndex() == AptVFT_StringObject)
+        return reinterpret_cast<AptString*>(
+            static_cast<const AptStringObject*>(this)->GetBoxedString());
     return nullptr;
 }
 
@@ -110,7 +114,7 @@ bool AptValue::toBool() const
                 return strtol(buf, 0, 16) != 0;
             return Apt_atoff(buf) != 0.0f;
         }
-        // dormant boxed-string fall-through (see c_string FLAG): treat as object.
+        // null-unwrap fall-through (non-1/0x21 receiver only): treat as object.
     }
 
     switch (eType)
@@ -139,7 +143,7 @@ int AptValue::toInteger() const
         AptString* pStr = c_string();
         if (pStr)
         {
-            // FLAG: string case body past the export's jump-table truncation;
+            // String case body past the export's jump-table truncation --
             // reconstructed from toBool's verbatim string parse, yielding the
             // integer value (hex "0x.." -> base-16, else the numeric value).
             const EAStringC& s = *pStr->GetInternalString();
@@ -152,7 +156,7 @@ int AptValue::toInteger() const
 
     switch (eType)
     {
-    // FLAG: bodies past the truncation; the payload access matches toBool verbatim.
+    // Bodies past the truncation; the payload access matches toBool verbatim.
     case AptVFT_Boolean: return c_boolean()->GetBool() ? 1 : 0;
     case AptVFT_Float:   return static_cast<int>(c_float()->GetFloat());
     case AptVFT_Integer: return c_integer()->GetInt();
@@ -178,7 +182,7 @@ float AptValue::toFloat() const
         AptString* pStr = c_string();
         if (pStr)
         {
-            // FLAG: string case body past the export's jump-table truncation;
+            // String case body past the export's jump-table truncation --
             // reconstructed from toBool's verbatim string parse, yielding the float.
             const EAStringC& s = *pStr->GetInternalString();
             const char* buf = s.GetBuffer();
@@ -190,7 +194,7 @@ float AptValue::toFloat() const
 
     switch (eType)
     {
-    // FLAG: bodies past the truncation; the payload access matches toBool verbatim.
+    // Bodies past the truncation; the payload access matches toBool verbatim.
     case AptVFT_Boolean: return c_boolean()->GetBool() ? 1.0f : 0.0f;
     case AptVFT_Float:   return c_float()->GetFloat();
     case AptVFT_Integer: return static_cast<float>(c_integer()->GetInt());
@@ -219,15 +223,15 @@ float AptValue::toFloat() const
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// FLAG (wired by the Apt runtime / the loaded movie + the EAStringC subsystem,
-// not yet reconstructed here):
-//   gAptActionInterpreter  -- the shared AS interpreter (X360 dword_8324E760); the
-//       MovieClip-instance-name path renders through its getName() path builder.
+// The renderer's runtime symbols, and their treatment:
+//   gAptActionInterpreter  -- the shared AS interpreter (X360 dword_8324E760,
+//       defined in AptGlobals.cpp); the MovieClip-instance-name path renders
+//       through its getName() path builder.
 //   The EAStringC `true`/`false`/`undefined` runtime string singletons the X360
 //       assigns from StaticStringHelperT statics (dword_8324E6C4 / dword_8324E620 /
-//       dword_8324E6C8) are modelled here by assigning the literal text -- the same
+//       dword_8324E6C8) are modelled by assigning the literal text -- the same
 //       observable string -- rather than referencing the private empty-string
-//       sentinel s_EmptyInternalData. (FLAG per use below.)
+//       sentinel s_EmptyInternalData (noted per use below).
 //   AptArray::toString is private; the X360 calls it directly across the inlined
 //       TU -- modelled by the AptValue friendship in AptArray.h (called directly below).
 // ---------------------------------------------------------------------------
@@ -253,7 +257,7 @@ void AptValue::toString(EAStringC* pOut) const
         // X360 0x82AF8FC8: undefined render. dword_8324E530 is the active SWF
         // version (same global AptGetSwfVersion() reads); v7 spells "undefined".
         if (AptGetSwfVersion() == 7)
-            *pOut = "undefined";   // FLAG: console assigns the &dword_8324E6C8 "undefined" singleton
+            *pOut = "undefined";   // console assigns the &dword_8324E6C8 "undefined" singleton (same text)
         else
             *pOut = "";            // X360: *a2 = &unk_82F72FF8 (the empty string)
         return;
@@ -268,18 +272,18 @@ void AptValue::toString(EAStringC* pOut) const
     case AptVFT_StringValue:        // 1
     case AptVFT_StringObject:       // 0x21
     {
-        AptString* pStr = (eType == AptVFT_StringValue)
-            ? reinterpret_cast<AptString*>(pThis)
-            // X360: r30 = *(r30+0x20); r4 = r30+8 -- the boxed string's linked value.
-            : reinterpret_cast<AptString*>(*reinterpret_cast<AptValue**>(
-                  reinterpret_cast<char*>(pThis) + 0x20));
+        // X360: r30 = *(r30+0x20); r4 = r30+8 -- the boxed string's linked value
+        // (AptStringObject::mpValue). c_string() is exactly this unwrap (self for
+        // the primitive, the NAMED +0x20 member for the boxed form) -- the raw
+        // console byte offset does not survive the x64 widening.
+        AptString* pStr = pThis->c_string();
         *pOut = *pStr->GetInternalString();
         return;
     }
 
     // --- BOOL (loc_82AF9058): the bool payload byte at +8 -> "true"/"false".
     case AptVFT_Boolean:            // 5
-        // FLAG: console assigns the &dword_8324E6C4 / &dword_8324E620 runtime
+        // console assigns the &dword_8324E6C4 / &dword_8324E620 runtime string
         // singletons; modelled by the same literal text.
         *pOut = c_boolean()->GetBool() ? "true" : "false";
         return;
@@ -314,12 +318,14 @@ void AptValue::toString(EAStringC* pOut) const
         static_cast<AptArray*>(pThis)->toString(pOut, ",");   // unk_82144058 = ","
         return;
 
-    // --- NATIVE FUNCTION (loc_82AF9114): "[native function 0x%p]" of the fn ptr@+0x20.
+    // --- NATIVE FUNCTION (loc_82AF9114): "[native function 0x%p]" of the wrapped
+    //     callback (the console's +0x20 == AptNativeFunction::mpFunction; read
+    //     through the named accessor -- the raw byte offset is console-only).
     case AptVFT_NativeFunction:     // 9
     {
         char szBuf[136];
         snprintf(szBuf, sizeof(szBuf), "[native function 0x%p]",
-                 *reinterpret_cast<void**>(reinterpret_cast<char*>(pThis) + 0x20));
+                 static_cast<AptNativeFunction*>(pThis)->GetFunction());
         *pOut = szBuf;
         return;
     }
@@ -461,7 +467,7 @@ void AptValue::Append_ToString(EAStringC* pOut) const
     if (lbAppendableString)
     {
         // X360: a primitive string appends *(this+8); a boxed string indirects
-        // through *(this+0x20) first. FLAG (x64 offset fix): those are CONSOLE byte
+        // through *(this+0x20) first. x64 OFFSET FIX: those are CONSOLE byte
         // offsets -- the embedded EAStringC lives at the console's +8 only because
         // AptValue is 8 bytes there (4-byte vtbl + 4-byte mnValueData). On x64 the base
         // is 16 bytes (8-byte vtbl + mnValueData + pad), so the string is at +0x10; the

@@ -44,8 +44,8 @@
 // kept verbatim per CXX_NAMING_CONVENTIONS (external/middleware API exception).
 // ============================================================================
 
-// FLAG: un-homed type referenced only by pointer in this TU's data/decls. The apt
-// native-method descriptor; the six psMethod_* slots in the DWARF hold these by ptr.
+// The apt native-method descriptor (homed: SDKs/EATech/include/Apt/AptNativeFunction.h);
+// the six psMethod_* slots hold it by pointer only, so a forward declaration suffices here.
 class AptNativeFunction;
 
 namespace CgsGui
@@ -74,7 +74,7 @@ namespace CgsGui
     // GuiEventAptTrigger - the 20-byte event record SendAptEvent pushes onto the
     // out queue (DWARF CgsAptCommunicator.h:49, `: public GuiEvent<21>`).
     //
-    // FLAG: in the X360 build the record actually queued is the 5-field, 20-byte
+    // X360-grounded: in the X360 build the record actually queued is the 5-field, 20-byte
     // PAYLOAD only (AddEvent is called with liSize==20 and a pointer to a bare 5-word
     // struct of exactly these fields). The DWARF `: public GuiEvent<21>` base carries
     // no extra stored words in front of the payload in this build, so the queued
@@ -120,7 +120,7 @@ namespace CgsGui
     // GuiEventSoundTrigger - the 100-byte record SendAptSoundEvent pushes (DWARF
     // CgsAptCommunicator.h:83, `: public GuiEvent<22>`). The X360 queues exactly the
     // 100-byte payload (AddEvent liSize==100): three 32-byte fixed strings + a layer.
-    // Same GuiEvent<22> base note as GuiEventAptTrigger above (FLAG).
+    // Same GuiEvent<22> base note as GuiEventAptTrigger above.
     // ------------------------------------------------------------------------
     struct GuiEventSoundTrigger : public GuiEvent<22>
     {

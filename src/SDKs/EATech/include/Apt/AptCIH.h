@@ -47,7 +47,7 @@ struct AptCXForm;
 struct AptRect;
 struct AptNativeHash;
 
-// FLAG (x64 fork): the offset of the AptMovie/AptCharacterAnimation body embedded by value inside a
+// FLAG PC-platform leaf (.apt native-8 blob offset): the offset of the AptMovie/AptCharacterAnimation body embedded by value inside a
 // sprite/animation AptCharacter. The console reaches it at char+0x10 (== the console sizeof(AptCharacter)
 // header); on the x64 gate the serialised AptCharacter header widens under the 8-byte pointer rule
 // (GUIAPT64 "1:7:8" layout) so the embedded body lands at char+0x20 (VERIFIED vs TITLE_SCREEN02.bundle:
@@ -331,7 +331,8 @@ struct AptCIH : public AptValueGC
     // enqueued on the deferred-action queue stamped with nFrameId; when bDeferred and an
     // AS __proto__ event member matches, the named child handler is enqueued instead.
     // Returns the shared 0/`undefined`-as-int the callers ignore. Body in
-    // AptCIHBehaviour.cpp (FLAG: the AS bytecode-execution sub-path is deferred).
+    // AptCIHBehaviour.cpp (the immediate byte-code run + __proto__ dispatch are live;
+    // only the cross-CIH handler-rebind sub-branch remains deferred there).
     AptValue* queueClipEvents(int nEventMask, unsigned int nFrameId, int bDeferred);   // @0x82B0...
 
     // GeneralisedProcess @0x82AE01B0(per-node) -- the per-node generalised-process pass
@@ -361,8 +362,10 @@ struct AptCIH : public AptValueGC
     // (scale/rotation/x/y/alpha/colour/visible/width/height) by selector and return
     // it as a float; out-of-range -> -1. Derives from the node's position + colour
     // transforms (the AS getProperty reader). FLAG: the case-label integers are
-    // inferred from an unexported remap table (only index 11 == _visible is
-    // confirmed, via IsVisible); _width/_height defer to the un-homed GetBoundingRect.
+    // inferred from an unexported remap table (byte_82145248 -- referenced by the
+    // 0x82AE2D10 asm but its bytes are not in the dump set; only index 11 == _visible
+    // is confirmed, via IsVisible); _width/_height go through GetBoundingRect
+    // (HOMED in AptCIHBehaviour.cpp).
     float GetProceduralProperty(uint32_t nPropertyIndex) const;   // @0x82AE2D10
 
     // IsVisible @0x82AE2F30 -- true iff this node AND every display-list ancestor is
@@ -407,10 +410,9 @@ struct AptCIH : public AptValueGC
     // so inherited TextFormat resolves). Returns true if the node is dynamic text.
     bool ProcessTextInst();   // @0x82B076F0
 
-    // EnsureStringAllocated @0x82B06F08 -- FLAG (declared-only): the deep dynamic-text
-    // build/layout path (AptCharacterTextInst::UpdateText + the glyph/TextFormat layout
-    // engine that bakes the field's render data). Its body belongs with the Apt text/font
-    // engine TU; declared here so ProcessTextInst / the AS createTextField path can name
-    // it. pParent is the display-list parent (inherited TextFormat source).
+    // EnsureStringAllocated @0x82B06F08 -- the deep dynamic-text build/layout path
+    // (AptCharacterTextInst::UpdateText + the host string-layout call that bakes the
+    // field's render data). Body HOMED in AptCIHText.cpp; pParent is the display-list
+    // parent (inherited TextFormat source).
     void EnsureStringAllocated(AptCIH* pParent);   // @0x82B06F08
 };
