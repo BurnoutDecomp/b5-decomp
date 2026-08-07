@@ -3795,6 +3795,133 @@ namespace Vehicle
                           lpControls->mfBoostMaxSpeedScale, mbHandBrake, lvfTimeStep);
     }
 
+// [clean] ApplyEngineForces  @0x8261FC10
+    // @0x8261FC10  BrnPhysics::Vehicle::VehiclePhysics::ApplyEngineForces  (178 insns)
+    //
+    // The applier UpdateEngine hands off to. Three observable steps, register-traced from the asm
+    // (the intermediate stack-vec staging + broadcasts are register scheduling, not state):
+    //
+    //   1. COUNTER-STEER TRACTION CUT (0x8261FC80..0x8261FD5C). Forward speed as the vector
+    //      IsCounterSteeringAtLowSpeed reads is dot3(mTransform.zAxis, mLinearVelocity)
+    //      (vmsum3fp128); when that test passes, the drive scale (1.0f == flt_82001C98) is reduced
+    //      by  LowSpeedThrottleTractionControl(+0x90 .w) * 0.01f(flt_82002138)
+    //          * clamp(|mAngularVelocity.y| * 0.5f(flt_82001DA0), 0.25f(flt_8208F834), 1.0f).
+    //      Only the drive SCALE survives this block (the console's f31); it feeds OntoWheels.
+    //
+    //   2. REVERSE SWAP (0x8261FD60..0x8261FD70). When the selected gear is reverse
+    //      (mEngine.GetCurrentGear() == 0) the gas and brake handed to Engine::Update swap, so
+    //      "throttle" drives the car backwards.
+    //
+    //   3. HAND OFF (0x8261FD74..0x8261FEAC). Engine::Update (the trapped powertrain core) gets the
+    //      min of the rear wheels' angular velocity (min(maWheels[2/3].mIntegrationVariables.x)),
+    //      the (swapped) gas/brake, handbrake, steering, the rear wheel radius
+    //      (maWheels[eRearLeftWheel].mSlipVariables.w @+0x330 .w), a "can drive in reverse" bool
+    //      ((TimeStandingStill > 0) || (mfSpeedMPH < -0.2f == flt_82020A84)), the forward speed and
+    //      dt. Then, only when NOT frozen (+0x70 == mbFrozen), ApplyEngineForcesOntoWheels puts the
+    //      drive on the wheels.
+    void VehiclePhysics::ApplyEngineForces(f32 lfGas, f32 lfBrake, f32 lfSteering, f32 lfForwardSpeed,
+                                           f32 lfBoostMaxSpeedScale, bool lbHandBrake,
+                                           VecFloat lvfTimeStep)
+    {
+        // --- 1. counter-steer traction cut --------------------------------------------------------
+        f32 lfDriveScale = 1.0f;                                        // f31 = flt_82001C98
+        const f32 lfFwd = vpu::Dot(mTransform.zAxis, mLinearVelocity);
+        if (IsCounterSteeringAtLowSpeed(VecFloat{ lfFwd, lfFwd, lfFwd, lfFwd }, lfSteering, lfGas))
+        {
+            f32 lfYawTerm = std::fabs(mAngularVelocity.y) * 0.5f;      // |angvel.y| * flt_82001DA0
+            if (lfYawTerm > 1.0f)  lfYawTerm = 1.0f;                   // fsel vs 1.0
+            if (lfYawTerm < 0.25f) lfYawTerm = 0.25f;                  // fsel vs flt_8208F834
+            const f32 lfCut = mpAttribs->mBaseAttribs
+                                  .mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.w
+                              * 0.01f * lfYawTerm;                     // flt_82002138 == 0.01
+            lfDriveScale = 1.0f - lfCut;
+        }
+
+        // --- 2. reverse gas/brake swap ------------------------------------------------------------
+        f32 lfEngineGas   = lfGas;
+        f32 lfEngineBrake = lfBrake;
+        if (mEngine.GetCurrentGear() == 0)                            // KU8_REVERSE_GEAR
+        {
+            lfEngineGas   = lfBrake;
+            lfEngineBrake = lfGas;
+        }
+
+        // --- 3. hand off to the powertrain, then the wheels --------------------------------------
+        const f32 lfWheelAngularVelocity =
+            std::min(maWheels[eRearLeftWheel ].mIntegrationVariables.x,
+                     maWheels[eRearRightWheel].mIntegrationVariables.x);   // vminfp of the rear pair
+
+        const bool lbAllowReverseDrive =
+            (mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.x > 0.0f)
+            || (mfSpeedMPH.x < -0.2f);                                 // flt_82020A84 == -0.2
+
+        const f32 lfOmega  = lfWheelAngularVelocity;
+        const f32 lfRadius = maWheels[eRearLeftWheel].mSlipVariables.w;   // +0x330 .w
+        mEngine.Update(VecFloat{ lfOmega, lfOmega, lfOmega, lfOmega },
+                       VecFloat{ lfEngineGas, lfEngineGas, lfEngineGas, lfEngineGas },
+                       VecFloat{ lfEngineBrake, lfEngineBrake, lfEngineBrake, lfEngineBrake },
+                       lbHandBrake,
+                       VecFloat{ lfSteering, lfSteering, lfSteering, lfSteering },
+                       VecFloat{ lfRadius, lfRadius, lfRadius, lfRadius },
+                       lbAllowReverseDrive,
+                       VecFloat{ lfForwardSpeed, lfForwardSpeed, lfForwardSpeed, lfForwardSpeed },
+                       lvfTimeStep);
+
+        if (!mbFrozen)                                                 // lbz +0x70 ; bne skip
+            ApplyEngineForcesOntoWheels(lfDriveScale, lfForwardSpeed, lfBoostMaxSpeedScale,
+                                        lbHandBrake);
+    }
+
+// [clean] ApplyEngineForcesOntoWheels  @0x825FB000
+    // @0x825FB000  BrnPhysics::Vehicle::VehiclePhysics::ApplyEngineForcesOntoWheels  (128 insns)
+    //
+    // Register-traced. The drive force is mEngine.GetEngineDrive() (mvEngineDrive lane, +0xFA0)
+    // scaled by the counter-steer factor. It is zeroed above the max speed -- the cap is the boost
+    // MaxBoostSpeed (mBoostAttribs +0x290 .y) while a boost is running (TimeBoosting == +0x1040 .y
+    // > 0), else the attribs MaxSpeed (mvMass_..._MaxSpeed_... +0x70 .z), each times the
+    // boost-max-speed scale. Then the drive lands on the wheels' angular-velocity integration
+    // accumulators (maWheels[i].mIntegrationVariables .z):
+    //   * no handbrake, OR handbrake below 5 mph (unk_8208FB14 == KF_SPEED_TO_ALLOW_LOCKING_WHEELS):
+    //     all four wheels, split PowerToRear(+0xB0 .z) for the rear pair / PowerToFront(+0xB0 .y)
+    //     for the front pair;
+    //   * handbrake at/above 5 mph: the raw drive is added into the REAR pair only (wheel lock).
+    void VehiclePhysics::ApplyEngineForcesOntoWheels(f32 lfDriveScale, f32 lfForwardSpeed,
+                                                     f32 lfBoostMaxSpeedScale, bool lbHandBrake)
+    {
+        f32 lfDrive = mEngine.GetEngineDrive() * lfDriveScale;         // mvEngineDrive.x * f1
+
+        // over-max-speed cut (boost raises the cap while a boost is running).
+        const bool lbBoosting =
+            mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.y > 0.0f;
+        const f32 lfMaxSpeed =
+            lbBoosting
+                ? mpAttribs->mBoostAttribs
+                      .mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.y
+                : mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z;
+        if (mfSpeedMPH.x > lfMaxSpeed * lfBoostMaxSpeedScale)
+            lfDrive = 0.0f;                                            // vmr v0, 0
+
+        const VehicleAttribs::VehicleBaseAttribs& lrBase = mpAttribs->mBaseAttribs;
+        const f32 lfPowerToFront =
+            lrBase.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.y;   // +0xB0 .y
+        const f32 lfPowerToRear =
+            lrBase.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z;   // +0xB0 .z
+
+        if (lbHandBrake && !(5.0f > lfForwardSpeed))                  // unk_8208FB14 == 5.0
+        {
+            // wheel lock: raw drive into the rear pair only.
+            maWheels[eRearLeftWheel ].mIntegrationVariables.z += lfDrive;
+            maWheels[eRearRightWheel].mIntegrationVariables.z += lfDrive;
+            return;
+        }
+
+        // normal distribution: rear pair scaled by PowerToRear, front pair by PowerToFront.
+        maWheels[eRearLeftWheel  ].mIntegrationVariables.z += lfDrive * lfPowerToRear;
+        maWheels[eRearRightWheel ].mIntegrationVariables.z += lfDrive * lfPowerToRear;
+        maWheels[eFrontLeftWheel ].mIntegrationVariables.z += lfDrive * lfPowerToFront;
+        maWheels[eFrontRightWheel].mIntegrationVariables.z += lfDrive * lfPowerToFront;
+    }
+
 // [clean] UpdateDownForce  @0x825F6338
     // @0x825F6338  BrnPhysics::Vehicle::VehiclePhysics::UpdateDownForce  (195 insns)
     //   TWO regimes on mbHasAir (+0x1350):

@@ -747,13 +747,23 @@ namespace Vehicle
         // ApplyEngineForces. The forward speed is dot3(mTransform.zAxis, mLinearVelocity).
         void UpdateEngine(const BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep);
 
-        // @0x8261FC10 (178): TRAP. The engine-force applier: IsCounterSteeringAtLowSpeed traction
-        // scaling, Engine::Update (the powertrain -- ITS OWN WAVE), then
-        // ApplyEngineForcesOntoWheels when not frozen. Register map recovered at the UpdateEngine
-        // call site: f1..f5 = gas/brake/steering/fwdSpeed/mfBoostMaxSpeedScale, r6 = mbHandBrake,
-        // v1 = dt.
+        // @0x8261FC10 (178): the engine-force applier (BODIED). IsCounterSteeringAtLowSpeed traction
+        // scaling of the drive, gas<->brake swap in reverse gear, then Engine::Update (the powertrain
+        // torque core -- STILL A LOUD TRAP, its own wave) and, when not frozen,
+        // ApplyEngineForcesOntoWheels. Register map recovered at the UpdateEngine call site: f1..f5 =
+        // gas/brake/steering/fwdSpeed/mfBoostMaxSpeedScale, r6 = mbHandBrake, v1 = dt.
         void ApplyEngineForces(f32 lfGas, f32 lfBrake, f32 lfSteering, f32 lfForwardSpeed,
                                f32 lfBoostMaxSpeedScale, bool lbHandBrake, VecFloat lvfTimeStep);
+
+        // @0x825FB000 (128): distribute the engine drive force onto the wheels' angular-velocity
+        // integration accumulators (BODIED). Scales mEngine.GetEngineDrive() by the counter-steer
+        // traction factor, zeroes it above the (boost-aware) max speed, and either adds it into all
+        // four maWheels[i].mIntegrationVariables.z split by PowerToFront/PowerToRear, or -- under
+        // handbrake above 5 mph -- locks the drive into the rear pair only. Register map from the
+        // ApplyEngineForces call site: f1 = drive scale, f2 = forward speed, f3 = boost max-speed
+        // scale, r5 = handbrake.
+        void ApplyEngineForcesOntoWheels(f32 lfDriveScale, f32 lfForwardSpeed,
+                                         f32 lfBoostMaxSpeedScale, bool lbHandBrake);
 
         // @0x825D0A50 (102): shift mbHasAir into mbHadAirLastFrame, then re-derive mbHasAir: no
         // wheel has traction, the (in-water && above-ground-valid) depth test passes

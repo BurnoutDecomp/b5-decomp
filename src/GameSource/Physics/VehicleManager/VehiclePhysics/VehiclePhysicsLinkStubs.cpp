@@ -103,15 +103,25 @@ namespace Vehicle
                           "X360 @0x825D0BE8 (809 insns, the in-air attitude controller)");
     }
 
-    // LINK STUB (orchestrator wave): X360 @0x8261FC10, 178 instructions -- the engine-force
-    // applier UpdateEngine hands off to. Cascades into Engine::Update (the powertrain,
-    // UNBODIED) and ApplyEngineForcesOntoWheels; the ENGINE CLUSTER is its own wave.
-    // Signature is the recovered UpdateEngine call-site register map (f1..f5 = gas/brake/
-    // steering/fwdSpeed/boostMaxSpeedScale, r6 = handbrake, v1 = dt).
-    void VehiclePhysics::ApplyEngineForces(f32, f32, f32, f32, f32, bool, VecFloat)
+    // LINK STUB (in-air + powertrain wave, 2026-08-07): X360 @0x825CB288 -- Engine::Update, THE
+    // POWERTRAIN TORQUE CORE (throttle -> clutch -> flywheel -> gearbox -> drive force). It is
+    // trapped, not bodied, because it ships as a debug Opt-vs-Unopt ASSERT HARNESS on BOTH readable
+    // consoles: X360 @0x825CB288 is 3937 asm lines whose only callees are CgsDev::Assert /
+    // StrStream / AttribSysModule::GetVaultArray / BasePriorityQueue::Clear, and the PS3 DecFIGS
+    // copy @0x712834 is 10324 lines with 1173 assert references. Reconstructing the real torque math
+    // out of that harness is a whole wave. ApplyEngineForces (bodied this wave) calls it and
+    // ApplyEngineForcesOntoWheels (also bodied) reads the mvEngineDrive lane it is meant to produce
+    // -- so the engine-force APPLICATION layer is real while the torque MODEL stays deferred here.
+    // The 9-arg signature is the PS3 mangled name laid against the X360 ApplyEngineForces register
+    // map (see Engine.h). A silent no-op here would leave every driven wheel with a stale/zero drive
+    // force that OntoWheels would then apply as plausible zeros -- exactly the invisible-forever bug
+    // the trap exists to prevent.
+    void Engine::Update(VecFloat, VecFloat, VecFloat, bool, VecFloat, VecFloat, bool, VecFloat,
+                        VecFloat)
     {
-        CGS_ASSERT(false, "VehiclePhysics::ApplyEngineForces: link stub -- reconstruct from X360 "
-                          "@0x8261FC10 with the Engine::Update powertrain cluster");
+        CGS_ASSERT(false, "Engine::Update: link stub (the powertrain torque core) -- reconstruct "
+                          "from X360 @0x825CB288; ships as a debug opt-vs-unopt assert harness in "
+                          "both console builds, so it is its own wave");
     }
 
     // LINK STUB (orchestrator wave): X360 @0x82601978, 458 instructions -- the base attribute
