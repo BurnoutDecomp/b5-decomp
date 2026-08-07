@@ -42,8 +42,8 @@ struct AptCIH;
 // Declared as free functions taking the manager (rather than members) so this
 // header need not include the manager facade.
 // ---------------------------------------------------------------------------
-struct AptCIH* AptCloneManagedItem(AptRenderTreeManager* pMgr, struct AptCIH* pNode,
-                                int nSourceArg, int nTick);
+struct AptCIH* AptCloneManagedItem(AptRenderTreeManager* pMgr, struct AptCIH* pSourceNode,
+                                struct AptCIH* pDestNode, int nTick);
 struct AptCIH* AptManagedItemMoved(AptRenderTreeManager* pMgr, struct AptCIH* pNode, int nTick);
 
 // ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ struct AptCharacterInst
     // Each re-derives a render-tree link from the changed AptCIH and notifies the
     // current target sim's render-tree manager. They take the scene node directly
     // (the X360 passes it in r3, no `this`) and route through AptCurrentRenderTreeManager().
-    static AptCIH* CloneItem(AptCIH* pNode, int nArg);            // @0x82AE1C98
+    static void CloneItem(const AptCIH* pSrc, AptCIH* pDst);  // @0x82AE1C98 (x64 ?CloneItem@@SAXPEBVAptCIH@@PEAV2@@Z: void return, BOTH params CIH pointers; the old `int` came from the X360 r4 and truncates a pointer on x64)
     static AptCIH* ItemFirstChildChanged(AptCIH* pNode);          // @0x82AE1C78
     static AptCIH* ItemMoved(AptCIH* pNode);                      // @0x82AECD50
     static AptCIH* SetMaskedItem(AptCIH* pNode, bool bIsMask);    // @0x82AE1C50

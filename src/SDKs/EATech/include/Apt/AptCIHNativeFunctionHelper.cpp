@@ -239,7 +239,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_setMask(AptValue* pContext, int nA
 //   * otherwise frame = toInteger(arg);
 //   * AS frames are 1-based: frame -= 1; a negative result is a no-op;
 //   * jumpToFrame(frame); the sprite's playing bit (bIsPlaying, x64 bit 25)
-//     := bPlay; a STOP additionally calls SetDirtyState(1, 1).
+//     := bPlay; a PLAY additionally calls SetDirtyState(1, 1) (X360 @0x82B0D3F8:
+//     `if (v14 == 1) SetDirtyState(1,1)` where v14 = bPlay != 0).
 // Returns the shared undefined singleton (off_8324D814) either way.
 // ---------------------------------------------------------------------------
 extern AptActionInterpreter gAptActionInterpreter;   // dword_8324E760 (the AS VM)

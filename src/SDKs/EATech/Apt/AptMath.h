@@ -73,7 +73,7 @@ namespace AptMath
     // ClipStackMakeUnit yields.
     intptr_t ClipStackInit(int nDepth);
 
-    // Pointer (as intptr_t) to the current top entry: base + 0x70 * index.
+    // Pointer (as intptr_t) to the current top entry: base + 0x80 * index (x64 `shl rax,7`).
     intptr_t ClipStackGetTop();
 
     // Pre-increment the index, return the new top-entry pointer.

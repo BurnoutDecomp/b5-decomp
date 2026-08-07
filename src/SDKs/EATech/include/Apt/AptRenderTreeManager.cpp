@@ -220,7 +220,7 @@ AptRenderTreeManager::_AptRenderItemRootList::Get(int nTick)
         // which the prune predicate does not test (that would mis-keep a look-ahead
         // root created this tick with bit 25 clear).
         const bool lbExpired = (nTick - lpItem->GetCreatedOnTick()) >= 0
-                            && (lpItem->mFlags & 0x02000000u) == 0;
+                            && (lpItem->mFlags & 0x40u) == 0;   // x64 bit 6 (0x14083B330 `test [rcx+2Ch], 40h`)
         if (!lbExpired)
             break;
 
@@ -755,7 +755,7 @@ AptRenderItem* AptRenderTreeManager::Render_GetRoot(_AptRenderItemRootList** ppH
     // @0x82AE560C-0x82AE5630: aged-in (nTick - mCreatedOnTick >= 0) AND NOT the
     // writable revision (mFlags bit25 clear). When that does NOT hold, return null.
     const bool lbRenderable = (nTick - lpRoot->GetCreatedOnTick()) >= 0
-                           && (lpRoot->mFlags & 0x02000000u) == 0;
+                           && (lpRoot->mFlags & 0x40u) == 0;   // x64 bit 6 (0x14083B330 `test [rcx+2Ch], 40h`)
     if (!lbRenderable)
         return nullptr;
 
@@ -776,14 +776,14 @@ AptRenderItem* AptRenderTreeManager::Render_GetRoot(_AptRenderItemRootList** ppH
 // helpers route through (declared as free functions in AptCharacterInst.h so that
 // header need not include the manager facade). Decompiled @0x82AE1C98 / 0x82AECD50.
 // ---------------------------------------------------------------------------
-struct AptCIH* AptCloneManagedItem(AptRenderTreeManager* pMgr, struct AptCIH* pNode,
-                                int nSourceArg, int nTick)
+struct AptCIH* AptCloneManagedItem(AptRenderTreeManager* pMgr, struct AptCIH* pSourceNode,
+                                struct AptCIH* pDestNode, int nTick)
 {
-    // a2 (the clone source) = pNode; a3 (the destination node) arrives as the raw
-    // pointer-as-int nSourceArg in the X360 ABI. FLAG: nSourceArg is a CIH* widened
-    // to int at the console call site -- reconstructed back to the 8-byte pointer.
-    pMgr->Update_CloneItem(pNode, reinterpret_cast<AptCIH*>(static_cast<intptr_t>(nSourceArg)), nTick);
-    return pNode;
+    // Both nodes carried pointer-width end-to-end (x64 ?CloneItem@@SAXPEBVAptCIH@@
+    // PEAV2@@Z proves the CIH-pointer pair; the console squeezed the dest through
+    // r4 as an int -- the old int param truncated it on x64).
+    pMgr->Update_CloneItem(pSourceNode, pDestNode, nTick);
+    return pSourceNode;
 }
 
 struct AptCIH* AptManagedItemMoved(AptRenderTreeManager* pMgr, struct AptCIH* pNode, int nTick)

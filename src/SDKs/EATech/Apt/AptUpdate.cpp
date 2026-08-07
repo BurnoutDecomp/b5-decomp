@@ -202,7 +202,7 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
         // single-threaded, so a plain add reproduces the observable state.
         // (The X360 also traps on nMsPerFrame == 0 -- twllei -- before the divide.)
         if (nMsPerFrame != 0
-            && (gnCurrUpdateTick - gnCurrRenderTickConsumed) / static_cast<int>(nMsPerFrame)
+            && static_cast<int>(static_cast<unsigned int>(gnCurrUpdateTick - gnCurrRenderTickConsumed) / nMsPerFrame)
                    < nMaxBankedFrames)
         {
             gnCurrUpdateTick += nMsPerFrame;

@@ -296,7 +296,9 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                 {
                     Rebase(Slot(pRec, 0x10), nBase, true);         // arg table (unresolve last)
                     // xb1 poison stamps over the (now-dead) runtime slots.
-                    Slot64(pRec, 0x20) = static_cast<int64_t>(0x98BADCF2u);
+                    // xb1 0x14084ADCD: `mov dword ptr [r8+20h], 98765432h` -- a DWORD stamp
+                    // (only +0x20..0x23; +0x24..0x27 stays untouched).
+                    *reinterpret_cast<uint32_t*>(pRec + 0x20) = 0x98765432u;   // serialized .apt record poison stamp
                     Slot64(pRec, 0x28) = 0x12345678;
                 }
                 break;

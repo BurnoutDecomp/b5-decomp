@@ -419,10 +419,11 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
         {
             // Create + push a thingy linking pLinkedFile to pValue.
             AptLinkerThingy* pThingy = nullptr;
-            if (gpAptSharedPtrPool->Allocate(16) != nullptr)
             {
                 AptSharedPtrIncRef(pLinkedFile);
                 AptFilePtr held; held.pData = pLinkedFile;
+                // MakeLinkerThingy owns the 16-byte pool Allocate (the X360's
+                // Allocate(off_8324D808,16) r3 threads straight into the ctor).
                 pThingy = MakeLinkerThingy(held, pValue);                  // AptLinkerThingy::AptLinkerThingy(&file, value)
             }
             if (pThingy != nullptr)
@@ -596,9 +597,10 @@ void AptLinker::Update()
                 }
                 pCIH->SetCharacterInst(pInst, true);                       // AptCIH::SetCharacterInst(v24, v29, 1)
                 pCIH->mpCharacterInst->GetRenderItemWritable()->SetDepth(nDepth);
-                ListErase(&mpThingyListHead, &mpThingyListHead);          // sub_82AF83A0(a1, &v82) -- drop head
+                ListErase(&mpThingyListHead, &pNode);                     // sub_82AF83A0(a1, &v82) -- v82 == the CURRENT node
             }
-            if (mpThingyListHead == nullptr)
+            pNode = mpThingyListHead;                                      // v5 = *a1 (the console RELOADS the head after handling; the handled node was just erased)
+            if (pNode == nullptr)
                 break;
         }
 
@@ -630,12 +632,12 @@ void AptLinker::Update()
 
             if (bMatch)
             {
-                AptCharacterAnimationInst* pAnimInst = nullptr;
-                if (gpAptSharedPtrPool->Allocate(44) != nullptr)
-                {
-                    if (pFile != nullptr) AptSharedPtrIncRef(pFile);
-                    pAnimInst = MakeCharacterAnimationInst(pFile);         // AptCharacterAnimationInst::AptCharacterAnimationInst()
-                }
+                // The X360's Allocate(off_8324D808, 44) IS the ctor's memory (its r3
+                // threads straight into the ctor) and the r5 IncRef is the held-copy
+                // build MakeCharacterAnimationInst models internally -- a separate
+                // probe Allocate leaks a pool block and a second IncRef leaks one
+                // AptFile ref per link.
+                AptCharacterAnimationInst* pAnimInst = MakeCharacterAnimationInst(pFile);
                 AptCIH* pCIH = static_cast<AptCIH*>(pThingy->mpValue);     // v61 = *(_R29+8)
 
                 EnsureAnimFrameRateCached(pAnimInst);                      // dword_8324E530 lazy init (the SWF-version cache, homed below)
@@ -664,12 +666,14 @@ void AptLinker::Update()
                 // The console saves the pending vector's data base before firing the
                 // host notify hooks (whose re-entrant Notify can grow / reallocate
                 // mPendingFiles) and restarts the scan when the base moved (`v7 != *v6`).
-                AptFilePtr* const lpDataSnapshot = mPendingFiles.mpData;   // v7 (pre-notify base)
+                const int32_t lnSizeSnapshot = mPendingFiles.mnSize;       // v7 == *(a1+4): the SIZE word, not the data base
                 FireLinkNotifyCallbacks(pFile, pCIH);                     // dword_8324E844 / dword_8324E830 hooks (PC leaf below)
 
-                // If the pending vector reallocated mid-link, restart its scan.
-                if (lpDataSnapshot != mPendingFiles.mpData)               // v7 != *v6
+                // If the pending vector's COUNT changed mid-link, restart the scan
+                // from the (possibly reallocated) base (X360: v7 != *v6 -> v8 = *(a1+12)).
+                if (lnSizeSnapshot != mPendingFiles.mnSize)               // v7 != *v6
                 {
+                    pEntry = mPendingFiles.begin();                       // v8 = *(a1+12) (bAdvance=false keeps it at begin)
                     bAdvance = false;
                     if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
                         pThingy->ScalarDeletingDestructor(1);
