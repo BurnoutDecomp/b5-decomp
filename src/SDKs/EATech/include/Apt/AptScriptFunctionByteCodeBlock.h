@@ -34,13 +34,13 @@
 //                                             (GetByteCodeBase returns it directly,
 //                                             c.f. AptScriptFunction1 which returns
 //                                             record+24)
-//   mnByteCodeSize  int32_t .......... +0x34  byte-code extent (ctor a3; FLAG: the
+//   mnByteCodeSize  int32_t .......... +0x34  byte-code extent (ctor a3; the
 //                                             companion size to mpByteCode -- no
 //                                             accessor in this TU exposes it, so the
 //                                             name is the natural inference)
-//   mnArgumentInfo  int32_t .......... +0x38  ctor a5 (FLAG: argument/flags word;
-//                                             role not attested by any accessor in
-//                                             this TU -- named conservatively)
+//   mpFunctionName  const char* ...... +0x38  ctor a5 -- the clip-event handler-name
+//                                             chars (ATTESTED 2026-07-01 by the PS3
+//                                             queueClipEvents call site @0x815BD0)
 //   mConstantPool   AptConstantPool .. +0x3C  the constant-pool descriptor
 //                                             {entries, count}, stored as one 8-byte
 //                                             value (ctor `std`); GetConstantPool
@@ -76,12 +76,12 @@ public:
     // + size, the argument/flags word, and the constant-pool descriptor) and install
     // the AptScriptFunctionByteCodeBlock vtable.
     //   pByteCode     : the byte-code stream base (a2).
-    //   nByteCodeSize : byte-code extent (a3; see FLAG in the layout note).
+    //   nByteCodeSize : byte-code extent (a3; see the layout note).
     //   constantPool  : the {entries, count} constant-pool descriptor (a4, passed by
     //                   value -- one 8-byte register on the console).
     //   pFunctionName : the handler-name chars (a5 -- ATTESTED 2026-07-01 by the
     //                   PS3 queueClipEvents call site @0x815BD0, which passes
-    //                   saConstant[code]'s data chars; was FLAG "argument/flags").
+    //                   saConstant[code]'s data chars; formerly guessed "argument/flags").
     //   pCIH          : the creating character-instance-handle value (a6 -> base "CIH").
     //   pCallContext  : the enclosing call/scope context (a7 -> base pCallContext).
     AptScriptFunctionByteCodeBlock(void* pByteCode,
@@ -115,7 +115,7 @@ protected:
 private:
     // +0x30 -- the inline byte-code stream base (ctor a2).
     void*           mpByteCode;
-    // +0x34 -- the byte-code extent (ctor a3; FLAG: inferred companion size).
+    // +0x34 -- the byte-code extent (ctor a3; the natural companion-size name).
     int32_t         mnByteCodeSize;
     // +0x38 -- the handler-name chars (ctor a5; console 4-byte slot, pointer on
     // x64 -- attested as the clip-event handler name by the queueClipEvents site).

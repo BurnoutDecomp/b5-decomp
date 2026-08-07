@@ -33,17 +33,17 @@
 #include <new>       // placement new (the lazily-built method singletons)
 #include <string.h>  // _stricmp (the case-insensitive member-name compare)
 
-// FLAG (homed by the AS-globals layer, not yet reconstructed): the shared "undefined"
-// value the AS Color methods return when there is nothing to hand back (X360 global
-// off_8324D814). Null until the AS globals are built. (gpUndefinedValue is also
-// declared by AptArray.h, but this TU does not include it -- declare it here.)
+// The shared "undefined" value the AS Color methods return when there is nothing
+// to hand back (X360 global off_8324D814). Defined in AptGlobals.cpp; built by
+// AptInit's AptValueInitialize @0x82B02800. (gpUndefinedValue is also declared by
+// AptArray.h, but this TU does not include it -- declare it here.)
 extern AptValue* gpUndefinedValue;
 
-// FLAG (homed by the apt VM native-call dispatch, not yet reconstructed): the native
-// ActionScript method argument stack. setTransform reads its single Object argument
-// off the top of this stack (X360 globals dword_8324E760 = count, off_8324E768 =
-// array). Modelled as named externs (the project rule for module statics without a
-// home yet); the dispatch layer pushes the call args here before invoking the method.
+// The native ActionScript method argument stack. setTransform reads its single
+// Object argument off the top of this stack (X360 globals dword_8324E760 = count,
+// off_8324E768 = array). Defined in AptGlobals.cpp; the interpreter's native-call
+// dispatch (AptActionInterpreterInterpHelpers.cpp) publishes the operand stack
+// through them around each native call.
 extern AptValue** gppAptNativeArgStack;   // off_8324E768
 extern int        gnAptNativeArgCount;    // dword_8324E760
 

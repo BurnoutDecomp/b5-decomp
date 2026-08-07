@@ -20,8 +20,9 @@
 
 #include "SDKs/EATech/include/Apt/AptValueWithHash.h"
 
-// FLAG (homed by the AS-globals TU): the native "registerClass" method value
-// returned by objectMemberLookup. Null until the AS globals are built.
+// The native "registerClass" method value returned by objectMemberLookup (X360
+// off_8324D748). Defined in AptGlobals.cpp; built + GC-rooted by
+// AptValueInitialize (AptInit.cpp) -- null only before that bring-up runs.
 extern AptValue* gpObjRegistrationFunc;
 
 struct AptObject : public AptValueWithHash

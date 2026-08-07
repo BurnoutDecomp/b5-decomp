@@ -26,15 +26,13 @@
 #include "SDKs/EATech/include/Apt/AptDefine.h"                   // gpGCPoolManager
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"               // AptValueGC_PoolManager + gAptValueGCSizeOffset
 #include "SDKs/EATech/Apt/AptValueGCAllocator.h"                 // AptValueGC_MemItem (alloc bookkeeping)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"       // FLAG bring-up probe log sink
-#include <cstdio>                                                // snprintf (FLAG bring-up probe)
 
 // ---------------------------------------------------------------------------
-// FLAG (homed elsewhere; declared here like the rest of the interpreter):
-//   gpUndefinedValue   (off_8324D814) -- the shared AS `undefined` singleton, used
-//                       as the value for an absent _parent / a preloaded super.
-//   gpAptGlobalFallback(off_8324E380) -- the _global fallback scope value.
-// Both are wired by the Apt runtime startup; null until then.
+// Homed elsewhere; declared here like the rest of the interpreter:
+//   gpUndefinedValue   (off_8324D814, AptGlobals.cpp) -- the shared AS `undefined`
+//                       singleton, used for an absent _parent / a preloaded super.
+//   gpAptGlobalFallback(off_8324E380, AptGlobal.cpp) -- the _global fallback scope.
+// Both are built + wired by AptInit's AptValueInitialize @0x82B02800.
 // ---------------------------------------------------------------------------
 extern AptValue* gpUndefinedValue;
 // LIVE symbol note (2026-07-05): off_8324E380's live definition is AptGlobal.cpp's
@@ -213,25 +211,6 @@ void AptScriptFunction2::SetupBeforeExecution(SavedExecutionState* pSaved,
             pSuper = mpCIH->findChild(&gAptKeySuper, 0);
         if (!pSuper)
             pSuper = gpUndefinedValue;     // miss -> the undefined singleton
-        // FLAG (bring-up probe, temporary): trace the super-register binding for
-        // the super-preload functions (flags 0x119/0x1a) -- the licence card's
-        // dead super.Update() investigation.
-        {
-            static int snSuperRegProbe = 0;
-            if (snSuperRegProbe < 100 &&
-                (mpByteCode->muPreloadFlags == 0x119 || mpByteCode->muPreloadFlags == 0x1a))
-            {
-                ++snSuperRegProbe;
-                char lacProbe[192];
-                std::snprintf(lacProbe, sizeof(lacProbe),
-                              "[AptSuper] Setup flags=0x%X preloadSuper=%p bound=%p def=%d\n",
-                              static_cast<unsigned>(mpByteCode->muPreloadFlags),
-                              static_cast<void*>(pPreloadSuper),
-                              static_cast<void*>(pSuper),
-                              (pSuper && ((pSuper->mnValueData >> 27) & 1)) ? 1 : 0);
-                CgsDev::Log::WriteToLog(lacProbe);
-            }
-        }
         AptScriptFunctionBase::SetRegisterValue(nReg++, pSuper);
     }
 

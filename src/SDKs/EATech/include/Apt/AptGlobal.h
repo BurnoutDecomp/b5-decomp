@@ -66,17 +66,16 @@ struct AptGlobal : public AptObject
 };
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed, owned by the AS-globals registry / Apt runtime startup TU,
-// not yet reconstructed): the two global scope objects _global member resolution
-// consults. Each is an AptValueWithHash whose embedded property hash holds the
-// registered members; AptGlobal reaches them through the public Lookup/Set
+// The two global scope objects _global member resolution consults, DEFINED in
+// AptGlobal.cpp and built + wired by AptInit's AptValueInitialize @0x82B02800
+// (the _global fallback scope and its extension object, both AddRef'd there).
+// Each is an AptValueWithHash whose embedded property hash holds the registered
+// members; AptGlobal reaches them through the public Lookup/Set
 // (== the X360's AptNativeHash::Lookup(table + 8 /*mHash*/, name)).
 //   gpAptNativeGlobals  (X360 off_8324E37C) -- the native/built-in globals.
 //       Looked up first; objectMemberSet refuses to shadow a name found here.
 //   gpAptGlobalFallback (X360 off_8324E380) -- the fallback scope consulted by
 //       objectMemberLookup when the native lookup misses / is undefined.
-// Declared extern so this TU compiles; the definitions belong to the registry
-// TU that builds the AS globals. Null until then.
 // ---------------------------------------------------------------------------
 extern AptValueWithHash* gpAptNativeGlobals;
 extern AptValueWithHash* gpAptGlobalFallback;

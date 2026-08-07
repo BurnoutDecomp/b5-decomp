@@ -22,9 +22,8 @@
 //   AptValueGC_MemItem::SetIsAllocated(v1, byte_8324D804, 1);      // byte_8324D804 = gAptValueGCSizeOffset
 //   return v1;
 // The Allocate + SetIsAllocated(.,1) pair is the GC allocator's alloc operation
-// (AllocateAptValueGC), folded inline by the X360. Guarded for null until the
-// Apt runtime startup (AptInit) wires the pool (FLAG: gpGCPoolManager is null
-// until then).
+// (AllocateAptValueGC), folded inline by the X360. Guarded for null before
+// AptAllocatorInitialize @0x82ADD118 (AptInit.cpp) wires gpGCPoolManager.
 // ---------------------------------------------------------------------------
 void* AptGlobalExtensionObject::operator new(size_t size)
 {

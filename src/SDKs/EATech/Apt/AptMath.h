@@ -60,7 +60,7 @@ struct AptClipMatrixEntry
 
 namespace AptMath
 {
-    // FLAG (x64): the console carries the clip-stack entry pointers as 32-bit ints
+    // x64 widening (the committed Phase-0 port rule): the console carries the clip-stack entry pointers as 32-bit ints
     // (base + 0x70*index). On x64 the heap base is a 64-bit address, so these MUST be
     // pointer-width (intptr_t) -- a 32-bit int would TRUNCATE the base and the makeUnit
     // write would corrupt memory. Widened to intptr_t (the pervasive Apt x64-port rule);

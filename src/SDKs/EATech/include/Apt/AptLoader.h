@@ -42,14 +42,13 @@ struct AptLoaderNode
 };
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the AptTarget TU, not yet reconstructed): ~AptFile unregisters
-// itself through the *current* target's loader. GetTarget() is the per-thread
-// current AptTarget (TLS, _Z9GetTargetv @0x7E49B8); AptTarget_GetLoader returns
-// the AptLoader the target holds (console: *(target+28)) -- routed through an
-// accessor rather than the literal offset so the x64 layout stays correct. Both
-// are extern until the AptTarget TU lands; during bring-up GetTarget() yields
-// null and the target-driven unregister is skipped (the AptFile still releases
-// its name + any loaded data).
+// ~AptFile unregisters itself through the *current* target's loader. GetTarget()
+// is the per-thread current AptTarget (TLS, _Z9GetTargetv @0x7E49B8), HOMED in
+// AptTarget.cpp; AptTarget::GetLoader() returns the AptLoader the target holds
+// (console: *(target+28)) -- routed through the accessor rather than the literal
+// offset so the x64 layout stays correct. Before the target TLS is populated
+// GetTarget() yields null and the target-driven unregister is skipped (the
+// AptFile still releases its name + any loaded data).
 // ---------------------------------------------------------------------------
 struct AptTarget;
 AptTarget* GetTarget();

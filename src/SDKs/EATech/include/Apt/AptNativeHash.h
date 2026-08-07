@@ -57,17 +57,16 @@ struct AptHashItem
 };
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the Apt string-pool TU, not yet built): the two magic property
-// keys the table routes to the fast-slots. StringPool::saConstant is the
-// __proto__ key (hash 27581 -> mp__Proto__); gAptKeyPrototype is the prototype
-// key (the binary's dword_8324E580/0x8324E698 key bodies, hash 1689 ->
-// mpPrototype). Declared extern so Set/Lookup's special-case compiles; the hash
-// literals are their case-folded FNV.
+// The two magic property keys the table routes to the fast-slots, both HOMED:
+// StringPool::saConstant (defined in AptStringPool.cpp) carries the __proto__
+// key (hash 27581 -> mp__Proto__); gAptKeyPrototype (AptGlobals.cpp,
+// "prototype") is the prototype key (the binary's dword_8324E580/0x8324E698 key
+// bodies, hash 1689 -> mpPrototype). The hash literals are their case-folded FNV.
 // ---------------------------------------------------------------------------
 // StringPool is the AS string recycler/pool -- a CLASS (AptString.h declares
 // `friend class StringPool`), not a namespace. Only its saConstant key (the
-// __proto__ key) is needed here; the full class + the static's definition are the
-// string-pool TU's follow-on.
+// __proto__ key) is needed here; the mini declaration below matches the full
+// class (AptString/StringPool.h), whose saConstant is defined in AptStringPool.cpp.
 class StringPool { public: enum { KU_CONSTANT_COUNT = 88 }; static EAStringC saConstant[KU_CONSTANT_COUNT]; };
 extern const EAStringC gAptKeyPrototype;
 

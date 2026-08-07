@@ -140,11 +140,13 @@ namespace
     }
 }
 
-// FLAG: the string-pool TABLE spin lock (X360 unk_8324E7D4) -- a SEPARATE lock from
-// the free-list lock (unk_8324E8E8) above. GetFromPool / RemoveFromPool / Teardown
-// bracket their bucket-array mutations with the console's lwarx/stwcx. interrupt-
-// masked test-and-set idiom; modelled here as a host-portable interlocked TAS
-// (uncontended on the single-thread bring-up path).
+// The string-pool TABLE lock (X360 unk_8324E7D4 == XB1 dword_14147A5A0): ONE lock
+// guards the bucket table on every rung (GetFromPool/FindOrCreate, RemoveFromPool/
+// ReleaseString, Teardown); the free-list lock (unk_8324E8E8) below is separate.
+// The console brackets the mutations with the lwarx/stwcx. interrupt-masked
+// test-and-set idiom; the XB1 x64 build spins _InterlockedCompareExchange /
+// _InterlockedExchange on the same word (sub_140838AE0 / sub_14083F2A0) -- the
+// interlocked TAS below is that exact idiom.
 namespace
 {
     volatile long gStringPoolTableLock = 0;
@@ -171,10 +173,12 @@ namespace
 // in the rodata block unk_82F733FC (stride 0x108), then off_8324E4F4 = pool->Allocate(
 // 4 * nCount); memset(0); dword_8324E4F8 = nCount.
 //
-// FLAG (rodata): the AS-name table CONTENTS come from the un-recovered rodata block
-// unk_82F733FC (the same table AptGlobals.cpp defines as gAptASNameTable + FLAGs as
-// engine/rodata-generated). The string-record population is FLAG'd (left to the
-// constant-string data); the STRUCTURAL bucket-array allocation below is faithful.
+// The AS-name table CONTENTS are RECOVERED (no open rodata gap remains): the 88
+// literals were read out of the CRT initializer sub_82C71F10's store set into the
+// record block sStringPoolData @0x82F733FC and are statically interned at the
+// saConstant definition above; this Initialize collapses the console's per-record
+// pointer assignment to that static interning (the same observable content). The
+// STRUCTURAL bucket-array allocation below is faithful.
 // `nBucketCount` == the config bucket count (config word[11]).
 // ---------------------------------------------------------------------------
 void StringPool::Initialize(int nBucketCount)
@@ -204,11 +208,13 @@ void AptStringPool_Initialize(int nBucketCount)
 // shutdown (AptInit.cpp AptCommonShutdown) reaches StringPool::Teardown @0x82AE3720 /
 // StringPool::ClearTemporaryPool @0x82AD8E20 through, for the same reason as
 // AptStringPool_Initialize above (AptInit.cpp cannot pull in the full StringPool.h).
+// FLAG PC-platform leaf: header-decoupling forwarder, no console counterpart.
 void AptStringPool_Teardown()
 {
     StringPool::Teardown();
 }
 
+// FLAG PC-platform leaf: header-decoupling forwarder, no console counterpart.
 void AptStringPool_ClearTemporaryPool()
 {
     StringPool::ClearTemporaryPool();
@@ -227,77 +233,23 @@ void AptStringPool_ClearTemporaryPool()
 // storm: onLoad's method names resolved to recycled corpses, so component
 // registration broke after the first drain).
 //
-// XB1 walk (under the string-pool intern lock, XB1 dword_14147A5A0):
-//   * a case-INSENSITIVE 16-bit hash (h = 403 * (h ^ tolower(c)), seed 0x9DC5;
-//     a zero result collapses to 0x4567) selects the bucket (h % bucket count);
-//   * the bucket chain (linked through AptString::mpNext) is searched by EXACT
-//     byte compare (the XB1 short-circuits on a 16-bit hash cached in the
-//     string record at m_pData+6 -- a lookup accelerator only; the equality
-//     decision is the byte compare, reproduced here without the cache);
-//   * HIT: bump the GC-root count (XB1 sub_14084EF70; incGCRoot clamps) and
-//     return the interned node;
-//   * MISS: build a fresh AptString holding the text, LINK it at the bucket
-//     head, AddRef it (the chain's owning reference) and GC-root it (the XB1
-//     +0x40000 GCRootCount bump under the GC flag lock).
+// TWIN PROOF (2026-08-07 audit): XB1 sub_140838AE0 IS StringPool::GetFromPool
+// @0x82AF2F68 on the x64 rung. Same lock word (dword_14147A5A0 == X360
+// unk_8324E7D4), same probe (bucket = hash % count; the 16-bit hash cached at
+// record+6 short-circuits, the byte compare decides), same miss path (fresh
+// node + cached hash + bucket-head link + vtbl[0] AddRef + GCRootCount+1 under
+// the GC flag lock), same clamped incGCRoot on a hit. The hash the XB1 inlines
+// (h = 403 * (h ^ tolower(c)), seed 0x9DC5, zero collapses to 0x4567) is
+// exactly EAStringC::CalculateHashValue's 16-bit fold (403 == low-16 of the
+// FNV prime 0x01000193, 0x9DC5 == low-16 of the FNV basis), which the X360
+// body calls by name. ONE body (GetFromPool below) serves both names; the XB1
+// probes the table unconditionally (StringPool::Initialize, from
+// AptCommonInitialize, precedes the first intern on every rung), so no
+// pre-Initialize arm exists to model.
 // ---------------------------------------------------------------------------
-namespace
-{
-    volatile long gStringPoolInternLock = 0;   // XB1 dword_14147A5A0
-
-    inline unsigned short StringPoolHashName(const char* pName)
-    {
-        unsigned short h = 0x9DC5u;             // XB1 seed (-25147 as i16)
-        for (const char* p = pName; *p != '\0'; ++p)
-        {
-            int c = static_cast<unsigned char>(*p);
-            if (c >= 'A' && c <= 'Z')
-                c += 32;                        // the XB1 lowercase fold
-            h = static_cast<unsigned short>(403u * (static_cast<unsigned>(h) ^ static_cast<unsigned>(c)));
-        }
-        if (h == 0)
-            h = 0x4567u;                        // XB1 zero-hash collapse
-        return h;
-    }
-}
-
 AptString* StringPool::FindOrCreate(const char* pName)
 {
-    // No bucket table yet (pre-Initialize): fall back to a plain string so the
-    // caller still gets a value. FLAG hardening: Initialize always precedes the
-    // first movie load on the console, so this arm should not run.
-    AptString** const ppBuckets = static_cast<AptString**>(gpAptStringPoolBuckets);
-    if (ppBuckets == nullptr || gnAptStringPoolCount == 0 || pName == nullptr)
-        return AptString::Create(pName != nullptr ? pName : "");
-
-    while (_InterlockedExchange(&gStringPoolInternLock, 1) != 0) {}
-
-    const unsigned short h = StringPoolHashName(pName);
-    const unsigned int nBucket = h % gnAptStringPoolCount;
-
-    for (AptString* pNode = ppBuckets[nBucket]; pNode != nullptr; pNode = pNode->GetNext())
-    {
-        const char* pText = pNode->str.GetBuffer();
-        if (pText != nullptr && std::strcmp(pText, pName) == 0)
-        {
-            pNode->incGCRoot();                 // XB1 hit path: root-count bump (clamped)
-            _InterlockedExchange(&gStringPoolInternLock, 0);
-            return pNode;
-        }
-    }
-
-    // Miss: intern a fresh node at the bucket head; the chain owns one reference
-    // (AddRef) and the node is GC-rooted (the XB1 GCRootCount+1 under the flag lock).
-    AptString* const pNew = AptString::Create(pName);
-    if (pNew != nullptr)
-    {
-        pNew->SetNext(ppBuckets[nBucket]);
-        ppBuckets[nBucket] = pNew;
-        pNew->AddRef();
-        pNew->incGCRoot();
-    }
-
-    _InterlockedExchange(&gStringPoolInternLock, 0);
-    return pNew;
+    return GetFromPool(pName);
 }
 
 // The free forwarder the _parseStream TU calls (same header-decoupling pattern as
@@ -311,59 +263,22 @@ AptString* AptStringPool_FindOrCreate(const char* pName)
 // ---------------------------------------------------------------------------
 // ReleaseString (XB1 sub_14083F2A0) -- HOMED 2026-07-10 (retiring the {} stub):
 // the INVERSE of FindOrCreate's hit path, called by _parseStream's unresolve
-// direction per released pool string. Under the intern lock:
-//   * a PINNED node (GC-root count == 63, the clamp) is left alone;
-//   * otherwise decGCRoot (the XB1 (v4-1)<<18 merge under the GC flag lock);
-//   * when the PRE-decrement count was 1 (the last rooted use), UNLINK the node
-//     from its intern bucket chain (the XB1 walks the chain via the +24 next
-//     link) and drop the chain's owning reference (vtbl[1] Release).
-// The bucket is re-derived through the same case-insensitive hash FindOrCreate
-// uses (the XB1 short-cuts through the 16-bit hash cached in the string record;
-// the equality is the chain-pointer identity either way).
+// direction per released pool string.
+//
+// TWIN PROOF (2026-08-07 audit): XB1 sub_14083F2A0 IS StringPool::RemoveFromPool
+// @0x82AD8C98 on the x64 rung. Same lock word (dword_14147A5A0 == X360
+// unk_8324E7D4), same pinned check (GC-root count 63 left alone), same decGCRoot
+// (the (v4-1)<<18 merge under the GC flag lock), and on the last rooted use
+// (pre-decrement count 1) the same bucket unlink -- bucket derived from the
+// 16-bit hash CACHED in the string record (XB1 *(m_pData+6) % count; every
+// interned node stores it on insert) -- then the chain's owning Release (vtbl[1],
+// the XB1 (*(*a1+8))(a1)). One body (RemoveFromPool below) serves both names.
 // ---------------------------------------------------------------------------
 void StringPool::ReleaseString(AptString* pString)
 {
-    if (pString == nullptr)
+    if (pString == nullptr)   // host guard: the engine never unresolves a null slot
         return;
-
-    while (_InterlockedExchange(&gStringPoolInternLock, 1) != 0) {}   // XB1 dword_14147A5A0
-
-    const uint32_t nRoot = pString->getGCRoot();      // (v3 = bits 18-23 of the value word)
-    if (nRoot != 63u)                                  // pinned/clamped nodes are permanent
-    {
-        pString->decGCRoot();                          // the (v4-1)<<18 merge (GC flag lock inside)
-
-        if (nRoot == 1u)                               // the last rooted use -> unchain + Release
-        {
-            AptString** const ppBuckets = static_cast<AptString**>(gpAptStringPoolBuckets);
-            if (ppBuckets != nullptr && gnAptStringPoolCount != 0)
-            {
-                const char* const pText = pString->str.GetBuffer();
-                const unsigned int nBucket =
-                    StringPoolHashName(pText != nullptr ? pText : "") % gnAptStringPoolCount;
-
-                if (ppBuckets[nBucket] == pString)     // head hit (XB1 *v5 == a1)
-                {
-                    ppBuckets[nBucket] = pString->GetNext();
-                    pString->Release();                // (*(*a1+8))(a1) -- the chain's ref
-                }
-                else if (ppBuckets[nBucket] != nullptr)
-                {
-                    // Walk to the predecessor whose next is pString (XB1 do/while).
-                    AptString* pPrev = ppBuckets[nBucket];
-                    while (pPrev->GetNext() != nullptr && pPrev->GetNext() != pString)
-                        pPrev = pPrev->GetNext();
-                    if (pPrev->GetNext() == pString)
-                    {
-                        pPrev->SetNext(pString->GetNext());
-                        pString->Release();
-                    }
-                }
-            }
-        }
-    }
-
-    _InterlockedExchange(&gStringPoolInternLock, 0);
+    RemoveFromPool(pString);
 }
 
 // The free forwarder the _parseStream TU calls (the same header-decoupling
@@ -382,10 +297,12 @@ void AptStringPoolReleaseString(AptString* pString)
 // ---------------------------------------------------------------------------
 extern AptString* gpStringPoolFreeList;   // off_8324E4FC (defined in AptGlobals.cpp)
 
-// FLAG: the string-pool free-list spin lock (X360 unk_8324E8E8 / PS3
-// AptMutexStringPoolFirstFree). The console brackets the free-list teardown with
-// the lwarx/stwcx. interrupt-masked test-and-set idiom; modelled as a host-portable
-// interlocked TAS (uncontended on the single-thread bring-up path).
+// The string-pool FREE-LIST spin lock (X360 unk_8324E8E8 / PS3
+// AptMutexStringPoolFirstFree) -- a separate lock from the bucket-table lock above.
+// The console brackets the free-list teardown with the lwarx/stwcx. interrupt-
+// masked test-and-set idiom; the interlocked TAS below is that idiom's direct
+// host equivalent (the XB1 x64 build spins _Interlocked* on its lock words the
+// same way).
 namespace
 {
     volatile long gStringPoolFreeListLock = 0;
@@ -441,7 +358,8 @@ void StringPool::ClearTemporaryPool()
 // and return it. On a MISS, allocate a fresh pooled AptString holding pName, cache
 // its hash, prepend it to the chain, AddRef + incGCRoot it, and return it.
 //
-// The whole probe/insert runs under the pool-table lock (X360 unk_8324E7D4).
+// The whole probe/insert runs under the pool-table lock (X360 unk_8324E7D4 ==
+// XB1 dword_14147A5A0 -- see the FindOrCreate twin proof above).
 // ---------------------------------------------------------------------------
 AptString* StringPool::GetFromPool(const char* pName)
 {

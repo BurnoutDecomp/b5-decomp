@@ -33,12 +33,12 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"          // DOGMA_PoolManager
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed global): off_8324D808 is the DOGMA_PoolManager* that backs the
-// fixed-size Apt display-list node allocations (AptPseudoData_t here, and the
+// off_8324D808 is the DOGMA_PoolManager* that backs the fixed-size Apt
+// display-list node allocations (AptPseudoData_t here, and the
 // AptSharedPtr<AptFile>/AptValue families elsewhere -- all reference the same
-// off_8324D808 slot). The pool instance is constructed by the Apt startup TU;
-// declared as an extern hook so this TU links. (Sibling TUs declare the same
-// global under their own name; the single underlying object is shared.)
+// off_8324D808 slot). Defined in AptGlobals.cpp; constructed + wired by
+// AptAllocatorInitialize @0x82ADD118 (AptInit.cpp). (Sibling TUs declare the
+// same global under their own name; the single underlying object is shared.)
 // ---------------------------------------------------------------------------
 extern DOGMA_PoolManager* gpAptPseudoDataPool;   // off_8324D808
 

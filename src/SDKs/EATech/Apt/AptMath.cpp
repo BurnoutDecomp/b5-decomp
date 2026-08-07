@@ -19,9 +19,10 @@
 namespace
 {
     // X360 .data: the single global clip stack.
-    // FLAG (x64): the console stores the entry-array pointers as 32-bit ints; on x64
-    // the heap base is 64-bit, so the base/raw pointer slots are widened to intptr_t
-    // (a 32-bit int would truncate the base -> the makeUnit write corrupts memory).
+    // (x64 widening, Phase-0 regime): the console stores the entry-array pointers as
+    // 32-bit ints; on x64 the heap base is 64-bit, so the base/raw pointer slots are
+    // widened to intptr_t (a 32-bit int would truncate the base -> the makeUnit write
+    // corrupts memory).
     u16      gsnClipStackIndex = 0;   // word_8324E390
     intptr_t giClipStackBase   = 0;   // dword_8324E384  (16-aligned entry array)
     intptr_t giClipStackRaw    = 0;   // dword_8324E388  (raw allocation pointer)
@@ -101,8 +102,8 @@ intptr_t ClipStackInit(int nDepth)
     const u16 lsnDepth = static_cast<u16>(nDepth);
 
     // pool->Allocate(stride*nDepth + 16); x64 stride 0x80 (XB1 shl 7; console was 112). the raw pointer is kept then 16-aligned up.
-    // FLAG (x64): the raw pointer is captured as intptr_t (not int) so the 64-bit heap
-    // base is not truncated; the 16-align math is identical.
+    // (x64 widening, Phase-0 regime): the raw pointer is captured as intptr_t (not
+    // int) so the 64-bit heap base is not truncated; the 16-align math is identical.
     intptr_t liRaw = reinterpret_cast<intptr_t>(
         gpAptSharedPtrPool->Allocate(static_cast<size_t>(sizeof(AptClipMatrixEntry) * nDepth + 0x10)));
 

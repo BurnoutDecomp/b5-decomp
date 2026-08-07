@@ -16,8 +16,8 @@
 #include <cstring>   // strcmp
 #include <new>       // placement new (Create)
 
-// FLAG (homed by the AS-globals layer; null until the Apt runtime startup wires
-// it): the shared "undefined" singleton (X360 off_8324D814). DoesImplementObject
+// The shared "undefined" singleton (X360 off_8324D814), defined in AptGlobals.cpp
+// and built by AptInit's AptValueInitialize @0x82B02800. DoesImplementObject
 // reads it as the past-the-end fallback when its loop walks beyond the implemented
 // array's length -- it will not match a real target, so the probe simply fails.
 extern AptValue* gpUndefinedValue;
@@ -25,8 +25,8 @@ extern AptValue* gpUndefinedValue;
 // GC-pool operator new/delete -- AptObject is a garbage-collected value
 // (AptValueGC base), so its block comes from the GC pool. AllocateAptValueGC =
 // DOGMA Allocate + AptValueGC_MemItem::SetIsAllocated (the X360 inlines that pair
-// into every GC type's operator new). Guarded for null until AptInit wires the
-// pool (FLAG: gpGCPoolManager is null until then).
+// into every GC type's operator new). The null guard covers the pre-init window
+// before AptInit's AptAllocatorInitialize @0x82ADD118 wires the pool.
 void* AptObject::operator new(size_t size)
 {
     return (gpGCPoolManager != nullptr) ? gpGCPoolManager->AllocateAptValueGC(size) : nullptr;
@@ -59,8 +59,8 @@ bool AptObject::GetHasClass() const
 
 void AptObject::SetHasClass(int bHasClass)
 {
-    // Clear bit 23, then set it iff bHasClass != 0 (the console's rotate+mask
-    // idiom expressed on the whole word).
+    // Clear the hasClass bit, then set it iff bHasClass != 0 (the console's
+    // rotate+mask idiom expressed on the whole word).
     mClassFlags = (mClassFlags & ~0x100u) | (bHasClass ? 0x100u : 0u);   // x64 bit 8
 }
 

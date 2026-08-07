@@ -26,7 +26,7 @@
 //   (mfmsr/mtmsree/lwarx/stwcx.): increment the incoming object's count, then
 //   decrement the outgoing object's count and delete it when the count reaches
 //   zero. Dispose() routes the same decrement/free through two out-of-line
-//   shared primitives (see FLAG below).
+//   shared primitives (see the debug-hook note below).
 // ===========================================================================
 
 #include <cstdint>
@@ -52,20 +52,19 @@ int AptSharedPtrDecRef(AptFile* pData);
 int AptSharedPtrDelete(AptFile* pData);
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed debug hook): Dispose @0x8284D158 brackets its work with two
-// argument-passing `STUB` calls (entry and exit). In the shipped X360 ARTIST
-// build these are a debug/instrumentation thunk (allocation-tracking counter
-// pair) whose body is not recoverable from the dossier. Modelled as an inline
-// no-op so the store/branch ORDER around it is preserved without fabricating a
-// body.
-// ---------------------------------------------------------------------------
+// Dispose @0x8284D158 brackets its work with two argument-passing `STUB` calls
+// (entry and exit). In the shipped X360 ARTIST build these are a debug/
+// instrumentation thunk (allocation-tracking counter pair) whose body is not in
+// the export set and which carries no engine behaviour; the inline no-op
+// preserves the store/branch ORDER around it without fabricating a body.
+// FLAG PC-platform leaf: X360 debug-instrumentation thunk (no PC counterpart; body absent from the export set).
 inline void AptSharedPtrDisposeDebugHook(const void* /*a1*/, int /*a2*/, const char* /*a3*/) {}
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed global): off_8324D808 is the DOGMA_PoolManager* that backs the
-// AptSharedPtr<AptFile> heap-array allocations (the `vector deleting destructor`
-// frees its backing block through it). The pool instance is constructed by the
-// Apt startup TU; declared here as an extern hook so this TU links.
+// off_8324D808 -- the DOGMA_PoolManager* that backs the AptSharedPtr<AptFile>
+// heap-array allocations (the `vector deleting destructor` frees its backing
+// block through it). Defined in AptGlobals.cpp; constructed + wired by AptInit's
+// AptAllocatorInitialize @0x82ADD118.
 // ---------------------------------------------------------------------------
 extern DOGMA_PoolManager* gpAptSharedPtrPool;   // off_8324D808
 

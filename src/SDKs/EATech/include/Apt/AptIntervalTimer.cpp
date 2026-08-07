@@ -68,7 +68,7 @@ s32 AptIntervalTimer::GenerateId()
 // block -- which begins one dword before that count, sized cookie+4 -- is freed.
 // The non-array branch destroys a single element and (bit0) frees its 36 bytes.
 //
-// FLAG (x64 widening): the X360 cookie/stride are console 4-byte/36-byte; on PC
+// x64 widening (the committed port rule): the X360 cookie/stride are console 4-byte/36-byte; on PC
 // AptIntervalTimer is wider (8-byte AptValue*/AptValueVector), so the genuine PC
 // new[] cookie + element stride differ from the console 36. We honour the X360's
 // SEMANTICS (count cookie one dword ahead; destroy every element; free the block)
