@@ -116,12 +116,16 @@ AptTarget::AptTarget(const u32* pParams)
     mnConfigF = 256;
 
     // ---- the live config values, copied from the AptUpdateParams block ----
-    mnConfigA = pParams[4];   // lwz r10,0x10(r11)
-    mnConfigB = pParams[7];   // lwz r10,0x1C(r11)
-    mnConfigC = pParams[2];   // lwz r10,0x08(r11)
-    mnConfigD = pParams[1];   // lwz r10,0x04(r11)
-    mnConfigE = pParams[0];   // lwz r10,0x00(r11)
-    mnConfigF = pParams[3];   // lwz r11,0x0C(r11)
+    // x64 ctor sub_140827670: a STRAIGHT 24-byte copy (vmovups params[0..3] +
+    // vmovsd params[4..5]); params[6]/[7] are never read. (The earlier scattered
+    // [4]/[7]/[2]/[1]/[0]/[3] mapping was a mis-read of the X360 rlwinm-scheduled
+    // loads; the x64 rung-1 asm arbitrates.)
+    mnConfigA = pParams[0];
+    mnConfigB = pParams[1];
+    mnConfigC = pParams[2];
+    mnConfigD = pParams[3];
+    mnConfigE = pParams[4];
+    mnConfigF = pParams[5];
 
     // ---- mpAnimationTarget (+0x18): the 88-byte director ----
     void* pAnimMem = gpAptPseudoDataPool->Allocate(sizeof(AptAnimationTarget));   // Allocate(pool, 88)
@@ -172,8 +176,8 @@ AptTarget::AptTarget(const u32* pParams)
     }
 
     // ---- the two TBD slots (+0x24 / +0x28), zeroed last (asm order) ----
-    mpField24 = nullptr;
-    mpField28 = nullptr;
+    mpNext = nullptr;
+    mpPrevious = nullptr;
 }
 
 // AptTarget::GetAnimationTarget @0x82AD5770 (`lwz r3,0x18(r3); blr`) and
@@ -190,7 +194,7 @@ AptTarget::AptTarget(const u32* pParams)
 //  AptTarget TU (it owns the target globals + the ctor these drive).
 //
 //  LIST: off_8324E570 (gpAptTargetCurrent) is the HEAD of the instance list; each
-//  AptTarget is linked through +0x24 (mpField24 == NEXT) / +0x28 (mpField28 == PREV)
+//  AptTarget is linked through +0x24 (mpNext == NEXT) / +0x28 (mpPrevious == PREV)
 //  -- so the two "role TBD" slots in AptTarget.h are now KNOWN to be the instance-
 //  list next/prev. (Member access by name; the console offsets are documentation.)
 // =====================================================================
@@ -236,10 +240,10 @@ AptTarget* AptCreateTargetInstance(const u32* pParams)
     else
     {
         AptTarget* pTail = gpAptTargetCurrent;
-        while (pTail->mpField24)                       // walk +0x24 (NEXT) to the tail
-            pTail = static_cast<AptTarget*>(pTail->mpField24);
-        pTail->mpField24    = pResult;                 // tail->+0x24 = result (link NEXT)
-        pResult->mpField28  = pTail;                   // result->+0x28 = tail (link PREV)
+        while (pTail->mpNext)                       // walk +0x24 (NEXT) to the tail
+            pTail = static_cast<AptTarget*>(pTail->mpNext);
+        pTail->mpNext    = pResult;                 // tail->+0x24 = result (link NEXT)
+        pResult->mpPrevious  = pTail;                   // result->+0x28 = tail (link PREV)
     }
 
     // FLAG: spin-unlock unk_8324E7D0 elided.
@@ -286,7 +290,7 @@ AptTarget* AptChangeTargetInstance(AptTarget* pTarget)
 // single-threaded PC bring-up (the Apt context list is edited only on the main thread);
 // both are elided -- matching AptCreateTargetInstance above. The unlink + the 48-byte
 // Deallocate are reproduced faithfully against the named AptTarget list slots
-// (mpField24 == NEXT / mpField28 == PREV, per the list note above).
+// (mpNext == NEXT / mpPrevious == PREV, per the list note above).
 // ---------------------------------------------------------------------
 bool AptDestroyTargetInstance(AptTarget* pTarget)
 {
@@ -294,8 +298,8 @@ bool AptDestroyTargetInstance(AptTarget* pTarget)
 
     --gAptTargetInstanceCount;   // --dword_8324E57C
 
-    AptTarget* pNext = static_cast<AptTarget*>(pTarget->mpField24);   // v9  = *(a1+0x24) NEXT
-    AptTarget* pPrev = static_cast<AptTarget*>(pTarget->mpField28);   // v10 = *(a1+0x28) PREV
+    AptTarget* pNext = static_cast<AptTarget*>(pTarget->mpNext);   // v9  = *(a1+0x24) NEXT
+    AptTarget* pPrev = static_cast<AptTarget*>(pTarget->mpPrevious);   // v10 = *(a1+0x28) PREV
 
     // Detach from the three context globals if they still point at this instance.
     if (pTarget == gpAptTarget)         // off_8324E574 -> NEXT
@@ -307,9 +311,9 @@ bool AptDestroyTargetInstance(AptTarget* pTarget)
 
     // Splice out of the doubly-linked instance list.
     if (pPrev)
-        pPrev->mpField24 = pNext;       // *(v10+0x24) = v9   prev->NEXT = this->NEXT
+        pPrev->mpNext = pNext;       // *(v10+0x24) = v9   prev->NEXT = this->NEXT
     if (pNext)
-        pNext->mpField28 = pPrev;       // *(v9+0x28)  = v10  next->PREV = this->PREV
+        pNext->mpPrevious = pPrev;       // *(v9+0x28)  = v10  next->PREV = this->PREV
 
     // Tear the context down and free the 48-byte block.
     pTarget->Shutdown();                // AptTarget::Shutdown(a1)

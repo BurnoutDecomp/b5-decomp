@@ -254,14 +254,14 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
 
             case 3:   // "backgroundColor" @0x82B0E09C -- the packed RGB above the flag byte
                 return AptInteger::Create(
-                    static_cast<int>((pText->mFlagsAndBackColor >> 8) & 0x00FFFFFFu));
+                    static_cast<int>(pText->mFlagsAndBackColor & 0x00FFFFFFu));   // x64 low-24
 
             case 4:   // "border" @0x82B0E0B8
                 return AptBoolean::Create(pText->GetDrawsBorder());
 
             case 5:   // "borderColor" @0x82B0E0CC
                 return AptInteger::Create(
-                    static_cast<int>((pText->mFlagsAndBorderColor >> 8) & 0x00FFFFFFu));
+                    static_cast<int>(pText->mFlagsAndBorderColor & 0x00FFFFFFu));   // x64 low-24
 
             case 7:   // "length" @0x82B0E0D8 -- refresh the bound text, then its length
                 pTextInst->UpdateText(pNode);
@@ -331,7 +331,7 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
             {         // else the laid-out text height + the 4.0 box gutter (flt_82004EF4)
                 if ((pText->mStateFlags & 4u) != 0)
                     pNode->EnsureStringAllocated(pNode->mpDisplayListParent);
-                if ((pText->mFlagsAndBorderColor & 0x3Cu) == 0x0Cu || pText->GetWordWrap())
+                if ((pText->mFlagsAndBorderColor & 0x3C000000u) == 0x0C000000u || pText->GetWordWrap())
                 {
                     float afRect[4];
                     GetBoundingRectClamped(pNode, afRect);
@@ -345,7 +345,7 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
             {
                 if ((pText->mStateFlags & 4u) != 0)
                     pNode->EnsureStringAllocated(pNode->mpDisplayListParent);
-                if ((pText->mFlagsAndBorderColor & 0x3Cu) == 0x0Cu || pText->GetWordWrap())
+                if ((pText->mFlagsAndBorderColor & 0x3C000000u) == 0x0C000000u || pText->GetWordWrap())
                 {
                     float afRect[4];
                     GetBoundingRectClamped(pNode, afRect);
@@ -596,7 +596,7 @@ bool AptCIH::objectMemberSet(AptValue* const pThis,
                 // The relayout-direction flag: bit 3 when the box is CURRENTLY None-
                 // aligned (the SDK's `szBuf != "false" || szBuf != "none"` condition is
                 // always true -- the asm compiles that shape verbatim), bit 4 otherwise.
-                if ((pText->mFlagsAndBorderColor & 0x3Cu) == 0x0Cu
+                if ((pText->mFlagsAndBorderColor & 0x3C000000u) == 0x0C000000u
                     && (!(strValue == EAStringC("false")) || !(strValue == EAStringC("none"))))
                     pWritable->SetStateFlags(8u);
                 else
@@ -849,7 +849,7 @@ bool AptCIH::objectMemberSet(AptValue* const pThis,
                     // node leaves the input set.
                     AptCharacterSpriteInstBase* const pSpriteInst =
                         static_cast<AptCharacterSpriteInstBase*>(pInst);
-                    if ((pSpriteInst->mnClipActionFlags & 0x0200C000u) == 0
+                    if ((pSpriteInst->mnClipActionFlags & 0x200C0u) == 0   // x64 low-24 mask (X360 <<8 form 0x200C000)
                         && pNode->HasEventMember(0x200C0) == 0)
                         RemoveNodeFromInputSet(pNode);
                 }

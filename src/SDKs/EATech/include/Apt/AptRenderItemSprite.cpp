@@ -17,7 +17,7 @@ AptRenderItemSprite::AptRenderItemSprite(AptCharacter* pCharacter, int nCreatedO
 {
     // FLAG: the console also rotate-masks mFlags; 0x140000 is the sprite
     // render-type bits.
-    mFlags |= 0x00140000u;
+    mFlags |= 0x500u;   // sprite=5; x64 type field (XB1 factory 0x14083C0D0 `or 500h`)
 }
 
 // Clone copy-ctor @0x82AEC040 -- base copy + the instance name + (re)stamp the
@@ -27,7 +27,7 @@ AptRenderItemSprite::AptRenderItemSprite(const AptRenderItemSprite* pSource, int
     : AptRenderItem(pSource, nCreatedOnTick, bCopyExtended)
     , mInstanceName(pSource->mInstanceName)
 {
-    mFlags = (mFlags & 0xFF03FFFFu) | 0x00140000u;
+    mFlags = (mFlags & ~0x3F00u) | 0x500u;   // sprite=5; x64 type field
 }
 
 // Clone @0x82AEC890 -- pool-allocate a fresh sprite copy-initialised from this one.

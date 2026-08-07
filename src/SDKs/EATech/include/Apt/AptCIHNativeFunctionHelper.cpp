@@ -105,9 +105,9 @@ static inline bool IsClipHandleOrCIHNone(const AptValue* pValue)
         || eType == AptVFT_CIHNone;
 }
 
-// The clip's play-head "playing" bit (mnClipActionFlags bit 6 / 0x40); set by
+// The clip's play-head "playing" bit (bIsPlaying, x64 mnClipActionFlags bit 25); set by
 // sMethod_play, cleared by sMethod_nextFrame. (Console *(spriteBase+0x14) & 0x40.)
-static const uint32_t KU_CLIP_PLAYING = 0x40u;
+static const uint32_t KU_CLIP_PLAYING = 0x2000000u;   // bIsPlaying, x64 bit 25 (X360 reversed bit 6)
 
 // ===========================================================================
 // sMethod_getDepth @0x82AED6D8 -- AS getDepth(): the node's display depth (the
@@ -183,7 +183,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_stop(AptValue* pContext, int /*nAr
 // ===========================================================================
 // sMethod_nextFrame @0x82B0D568 -- AS nextFrame(): advance the play-head one frame
 // (jumpToFrame(mnGotoFrame + 1)) and clear the clip's "playing" bit
-// (mnClipActionFlags &= ~0x40). Always returns undefined.
+// (mnClipActionFlags &= ~KU_CLIP_PLAYING; x64 bit 25). Always returns undefined.
 // ===========================================================================
 AptValue* AptCIHNativeFunctionHelper::sMethod_nextFrame(AptValue* pContext, int /*nArgCount*/)
 {
@@ -240,7 +240,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_setMask(AptValue* pContext, int nA
 //     (an AptInteger) + 1, or 0 on a miss (-1 + 1);
 //   * otherwise frame = toInteger(arg);
 //   * AS frames are 1-based: frame -= 1; a negative result is a no-op;
-//   * jumpToFrame(frame); the sprite's playing bit (mnClipActionFlags bit 6)
+//   * jumpToFrame(frame); the sprite's playing bit (bIsPlaying, x64 bit 25)
 //     := bPlay; a STOP additionally calls SetDirtyState(1, 1).
 // Returns the shared undefined singleton (off_8324D814) either way.
 // ---------------------------------------------------------------------------
@@ -259,7 +259,7 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
             gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - 1];
 
         AptCharacterInst* const pInst = pNode->GetCharacterInst();   // +0x20
-        if ((pInst->mTypeFlags & 0xFC000000u) != 0x3C000000u)        // tag 15 -> no-op
+        if ((pInst->mTypeFlags & 0x3Fu) != 15u)        // tag 15 -> no-op (x64 low-6-bit tag)
         {
             int32_t nFrame;
             if (pArg->isString())
@@ -290,11 +290,11 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
             if (nFrame >= 0)
             {
                 pNode->jumpToFrame(nFrame);
-                // playing := bPlay (the sprite-base inst's bit 6).
+                // playing := bPlay (bIsPlaying, x64 bit 25).
                 AptCharacterSpriteInstBase* const pSprite =
                     static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
                 pSprite->mnClipActionFlags =
-                    (pSprite->mnClipActionFlags & ~0x40u) | (bPlay ? 0x40u : 0u);
+                    (pSprite->mnClipActionFlags & ~KU_CLIP_PLAYING) | (bPlay ? KU_CLIP_PLAYING : 0u);
                 // X360 @0x82B0D3F8: `if (v14 == 1) SetDirtyState(1, 1)` where v14 IS the
                 // play flag -- a gotoAndPlay must RE-DIRTY the node so tick() picks the
                 // playing clip back up (tick early-outs on a clean node; without this a
@@ -1041,7 +1041,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_attachMovie(AptValue* pContext, in
     // A node flagged "resolve symbols against the parent's library" (render-item
     // mFlags bit 27) looks the symbol up in its display-list parent instead.
     AptCIH* pScope = pNode;
-    if ((pNode->GetCharacterInst()->GetRenderItem()->mFlags >> 27) & 1u)
+    if (pNode->GetCharacterInst()->GetRenderItem()->mFlags & 0x10u)   // x64 bit 4 (X360 bit27)
         pScope = pNode->GetDisplayListParent();
 
     AptCharacter* const pCharacter = findCharacterInLibrary(pScope, &lLibName, 1);
@@ -1218,7 +1218,7 @@ static void OverlayFieldTextAttributes(AptCIH* pNode, AptRenderItemDynamicText* 
     }
 
     // Alignment = the field's packed alignment (mFlagsAndBackColor bits 3-6, signed).
-    pResult->mFormat.mnAlign = static_cast<int32_t>(pField->mFlagsAndBackColor << 25) >> 28;
+    pResult->mFormat.mnAlign = static_cast<int32_t>(pField->mFlagsAndBackColor << 3) >> 28;
     pResult->mFormat.mfSize  = pField->mFontSize;
 }
 

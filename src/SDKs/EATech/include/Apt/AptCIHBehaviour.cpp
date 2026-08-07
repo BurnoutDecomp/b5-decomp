@@ -424,22 +424,22 @@ AptRenderItem* AptCIH::SetDepth(int16_t nDepth)
     return GetCharacterInst()->GetRenderItemWritable()->SetDepth(nDepth);
 }
 
-// GetIsPlaying @0x82AD5C00 -- the movie-clip play-head state (bit 6 of the sprite-
-// base inst's mnClipActionFlags low byte). Only valid on a sprite-base node; the
-// X360 reads mpCharacterInst unconditionally (no null/type guard).
+// GetIsPlaying @0x82AD5C00 -- the movie-clip play-head state (bIsPlaying, x64 bit 25
+// of the sprite-base inst's mnClipActionFlags; X360 reversed bit 6). Only valid on a
+// sprite-base node; the X360 reads mpCharacterInst unconditionally (no null/type guard).
 bool AptCIH::GetIsPlaying() const
 {
     const AptCharacterSpriteInstBase* pSpriteInst =
         static_cast<const AptCharacterSpriteInstBase*>(mpCharacterInst);
-    return ((pSpriteInst->mnClipActionFlags >> 6) & 1u) != 0;
+    return (pSpriteInst->mnClipActionFlags & 0x2000000u) != 0;
 }
 
 // SetIsPlaying (PS3 @0x7EE474 -- the X360 build INLINES this member into each of its
 // callers, so it has no ARTIST address of its own; the PS3 external ships it as the
 // real out-of-line `AptCIH::SetIsPlaying(bool)` the source declares). Write the
-// movie-clip play-head bit (bit 6 of the sprite-base inst's mnClipActionFlags) and,
+// movie-clip play-head bit (bIsPlaying, x64 bit 25; X360 reversed bit 6) and,
 // ONLY when starting playback, re-dirty the node so the next tick picks it up:
-//     flags = ROL(ROR(flags,7) & 0x7FFFFFFF, 7) | ((b << 6) & 0x40)   <- clear bit 6, OR b
+//     (the X360 rotate idiom cleared/OR'd its reversed bit 6; x64 uses mask 0x2000000)
 //     if (b == 1) SetDirtyState(1, 1)
 // The asymmetry is deliberate and load-bearing: a STOP must not dirty the node.
 // Callers on the console: sMethod_play / sMethod_stop / _gotoAndX / GotoFrame /
@@ -449,7 +449,7 @@ void AptCIH::SetIsPlaying(bool bPlaying)
     AptCharacterSpriteInstBase* const pSpriteInst =
         static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);
     pSpriteInst->mnClipActionFlags =
-        (pSpriteInst->mnClipActionFlags & ~0x40u) | (bPlaying ? 0x40u : 0u);
+        (pSpriteInst->mnClipActionFlags & ~0x2000000u) | (bPlaying ? 0x2000000u : 0u);
     if (bPlaying)
         SetDirtyState(true, true);
 }
@@ -736,11 +736,12 @@ bool AptCIH::IsVisible() const
 
 // ---------------------------------------------------------------------------
 // SetGeneralizedProcessDirtyState @0x82ADCA50 -- mark/clear this node's
-// generalized-process-dirty state (mFlagsA bit24 = self, bit23 = subtree).
+// generalized-process-dirty state (mFlagsA bit 7 = self, bit 8 = subtree; x64
+// positions -- the old bit24/bit23 were the X360 big-endian reversal).
 //
-// SET (bDirty): set bit24 on this node, then walk up mpDisplayListParent setting
-//   each ancestor's bit23 until one already has it. CLEAR: clear bit24; if the
-//   subtree bit (bit23) is not set, scan this node's children for one still flagged
+// SET (bDirty): set bit 7 on this node, then walk up mpDisplayListParent setting
+//   each ancestor's bit 8 until one already has it. CLEAR: clear bit 7; if the
+//   subtree bit (bit 8) is not set, scan this node's children for one still flagged
 //   dirty and return it (the X360's outer parent-walk re-scans the same child list,
 //   so it is a single scan gated on having a parent). The return is `this` on every
 //   path except a found dirty child; the sole callers (SetMask/InsertChild) discard
@@ -752,26 +753,26 @@ AptCIH* AptCIH::SetGeneralizedProcessDirtyState(bool bDirty)
 {
     if (bDirty)
     {
-        mFlagsA |= 0x01000000u;   // self generalized-process-dirty (bit24)
+        mFlagsA |= 0x80u;   // self generalized-process-dirty (bit 7)
         for (AptCIH* pAncestor = mpDisplayListParent; pAncestor; )
         {
-            if (pAncestor->mFlagsA & 0x00800000u)   // subtree bit already set -> stop
+            if (pAncestor->mFlagsA & 0x100u)   // subtree bit already set -> stop
                 break;
             AptCIH* pNext = pAncestor->mpDisplayListParent;
-            pAncestor->mFlagsA |= 0x00800000u;       // propagate subtree dirty (bit23)
+            pAncestor->mFlagsA |= 0x100u;       // propagate subtree dirty (bit 8)
             pAncestor = pNext;
         }
         return this;
     }
 
-    mFlagsA &= 0xFEFFFFFFu;   // clear the self bit (bit24)
-    if (!(mFlagsA & 0x00800000u))
+    mFlagsA &= ~0x80u;   // clear the self bit (bit 7)
+    if (!(mFlagsA & 0x100u))
     {
         for (AptCIH* pAncestor = mpDisplayListParent; pAncestor; pAncestor = pAncestor->mpDisplayListParent)
         {
             for (AptCIH* pChild = GetFirstChild(); pChild; pChild = pChild->mpDisplayListNext)
             {
-                if (pChild->mFlagsA & 0x01800000u)   // child still dirty (bit23 | bit24)
+                if (pChild->mFlagsA & 0x180u)   // child still dirty (bit 8 | bit 7)
                     return pChild;
             }
         }
@@ -838,15 +839,15 @@ AptRect* AptCIH::GetBoundingRect(int nMode, const AptMatrix* pParentTransform, A
 // ---------------------------------------------------------------------------
 // HasMouseEvent @0x82AE2268 -- does this node respond to any mouse event? OR of two
 // sources: (1) the sprite/movie-clip's packed clip-event flags carry a mouse-event
-// bit (mnClipActionFlags & the shifted mouse-event mask), and (2) an ActionScript
+// bit (mnClipActionFlags & the mouse-event mask), and (2) an ActionScript
 // mouse handler is registered in this value's __proto__ chain (HasEventMember with
-// the same mouse-event set un-shifted). mnClipActionFlags stores the clip-event mask
-// in its high 24 bits, so the two literals are the one mouse-event set in its two
-// storage positions.
+// the same mouse-event set). x64: mnClipActionFlags stores the clip-event mask in
+// its LOW 24 bits, so the one mouse-event set serves both tests directly (the X360
+// kept the clip copy <<8 in its big-endian allocation).
 // ---------------------------------------------------------------------------
 namespace
 {
-    const uint32_t KU_AptMouseEventClipMask    = 0x09FC3800u;  // mouse bits, shifted clip-event position
+    const uint32_t KU_AptMouseEventClipMask    = 0x0009FC38u;  // mouse bits, low-24 clip-event position (x64)
     const uint32_t KU_AptMouseEventHandlerMask = 0x0009FC38u;  // same bits, native-hash handler position
 }
 
@@ -954,7 +955,7 @@ bool AptCIH::ProcessMaskMatricies()
 // 12-entry jump table (word_82145258); the selectors decoded from that table are:
 //   0 _x   1 _y   2 _xscale   3 _yscale   4 _width   5 _height   6 _rotation
 //   7 _alpha   8 colour-translate Red   9 Green   10 Blue   11 _visible
-// Every arm first stamps the AS-changed flag (mFlagsA bit31) from bASChanged, then
+// Every arm first stamps the AS-changed flag (mFlagsA bit 0; x64 position) from bASChanged, then
 // writes through the char inst's WRITABLE position/colour matrix (or SetIsVisible).
 //
 // The console float constants (read from the decrypted XEX rodata):
@@ -991,10 +992,10 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     if (nSelector > 11u)
         return;
 
-    // Stamp the AS-changed flag (mFlagsA bit31) from bASChanged on every arm.
+    // Stamp the AS-changed flag (mFlagsA bit 0; x64 position) from bASChanged on every arm.
     auto markASChanged = [this, bASChanged]()
     {
-        mFlagsA = (mFlagsA & 0x7FFFFFFFu) | (bASChanged ? 0x80000000u : 0u);
+        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
     };
 
     float f31 = fValue;
@@ -1408,15 +1409,17 @@ AptCIH* AptCIH::GetMask() const
 }
 
 // ---------------------------------------------------------------------------
-// HasClipEvent @0x82B027C0 -- the sprite-base clip-event flag set (the high 24 bits of
-// mnClipActionFlags, read here `>> 8`) intersected with nEventMask. The X360 reads the
-// char inst's +0x14 word unconditionally (only valid on a sprite-base node).
+// HasClipEvent @0x82B027C0 -- the sprite-base clip-event flag set (x64: the LOW 24
+// bits of mnClipActionFlags, sign-extended `(v<<8)>>8`) intersected with nEventMask.
+// The X360 reads the char inst's flags word unconditionally (only valid on a
+// sprite-base node).
 // ---------------------------------------------------------------------------
 bool AptCIH::HasClipEvent(int nEventMask)
 {
     const AptCharacterSpriteInstBase* pSpriteInst =
         static_cast<const AptCharacterSpriteInstBase*>(mpCharacterInst);
-    return ((pSpriteInst->mnClipActionFlags >> 8) & static_cast<uint32_t>(nEventMask)) != 0;
+    return (((static_cast<int32_t>(pSpriteInst->mnClipActionFlags << 8)) >> 8)
+            & nEventMask) != 0;
 }
 
 // HasEvent @0x82B02838 -- a packed clip-event flag OR an AS __proto__ handler matches.
@@ -1660,10 +1663,10 @@ AptValue* AptCIH::queueClipEvents(int nEventMask, unsigned int nFrameId, int bDe
 //
 // When the early-return gate is armed (AptCIH::sbGeneralisedProcessEarlyReturn) the node
 // is skipped unless it is a defined, non-dead (CIHState != 3), subtree-or-self-dirty
-// (mFlagsA bits 23/24) node whose render item is flagged dirty (mFlags bit31 set, or the
-// 0x40000000 process bit). The registered process callbacks (sCIHProcessCb[0..2]) run and
-// their results are OR'd; a sprite(5)/animation(9) recurses its child display list. The
-// fold is written back into the subtree-dirty bit (mFlagsA bit23) and returned (0/1).
+// (mFlagsA bits 8/7; x64 positions) node whose render item is flagged dirty (mFlags bit31
+// set, or the 0x40000000 process bit). The registered process callbacks (sCIHProcessCb[0..2])
+// run and their results are OR'd; a sprite(5)/animation(9) recurses its child display list.
+// The fold is written back into the subtree-dirty bit (mFlagsA bit 8) and returned (0/1).
 // ---------------------------------------------------------------------------
 
 // FLAG (un-homed Apt-runtime generalised-process state; console AptCIH::bEarlyReturn /
@@ -1682,13 +1685,13 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
     {
         if (!getIsDefined())
             return 0;
-        if (((mFlagsA >> 29) & 3u) == 3u)         // CIHState 3 == dead
+        if (((mFlagsA >> 1) & 3u) == 3u)          // CIHState 3 == dead (x64 bits 1-2)
             return 0;
-        if ((mFlagsA & 0x01800000u) == 0u)         // neither subtree (bit23) nor self (bit24) dirty
+        if ((mFlagsA & 0x180u) == 0u)             // neither subtree (bit 8) nor self (bit 7) dirty
             return 0;
         const uint32_t nItemFlags = mpCharacterInst->GetRenderItem()->mFlags;
         // X360: v5 >= 0 && (v5 & 0x40000000) == 0  ->  skip  (a non-dirty render item).
-        if ((nItemFlags & 0x80000000u) == 0u && (nItemFlags & 0x40000000u) == 0u)
+        if ((nItemFlags & 0x1u) == 0u && (nItemFlags & 0x2u) == 0u)   // neither visible nor a mask (x64 bits 0/1)
             return 0;
     }
 
@@ -1717,17 +1720,17 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
         --AptCIH_snGeneralisedProcessTreeDepth;
     }
 
-    // Fold the OR'd result into the subtree-dirty bit (mFlagsA bit23), leaving every
+    // Fold the OR'd result into the subtree-dirty bit (mFlagsA bit 8), leaving every
     // other bit untouched (the X360 rotate-mask idiom).
-    mFlagsA = (mFlagsA & 0xFF7FFFFFu) | ((nResult << 23) & 0x00800000u);
-    return (mFlagsA >> 23) & 1u;
+    mFlagsA = (mFlagsA & ~0x100u) | ((nResult << 8) & 0x100u);
+    return (mFlagsA >> 8) & 1u;
 }
 
 // ===========================================================================
 // ClearCIH @0x82AF6020 -- tear down this node's placed character state.
 //
 // FAITHFUL (from the X360 ARTIST.XEX + PS3 DWARF): early-out on a transitioning
-// (CIHState == 1) or never-constructed (mFlagsA bit27 clear) node. Clear the dirty
+// (CIHState == 1) or never-constructed (mFlagsA bit 4 / IsInCtor clear) node. Clear the dirty
 // bit, drop the node from the animation director's pending action/new-instance tables
 // and the input-target's drag/focus slots, drop its per-frame timer functions when it
 // is an animation (type tag 9), then -- when it is a mask master or slave -- unwire the
@@ -1833,9 +1836,9 @@ int AptClearCIHDrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
 void AptCIH::ClearCIH(bool bClearGCRoots)
 {
     // Transitioning (CIHState == 1) or not defined -> no-op. NB the second test reads the
-    // AptValue base bitfield at +4 (mnValueData bit27 == mbIsDefined), NOT mFlagsA at +0xC.
+    // AptValue base bitfield at +8 (x64: mbIsDefined = bit 4), NOT mFlagsA.
     // console @0x82AF6020: `lwz r11,0xC` CIHState==1, then `lwz r11,4; extrwi. r11,r11,1,4`.
-    if (((mFlagsA & 0x60000000u) == 0x20000000u) || !getIsDefined())
+    if (((mFlagsA & 0x6u) == 0x2u) || !getIsDefined())
         return;
 
     SetDirtyState(false, false);
@@ -1911,7 +1914,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
         {
             AptCharacterSpriteInstBase* const pSprite =
                 static_cast<AptCharacterSpriteInstBase*>(pInstU);
-            if ((pSprite->mnClipActionFlags & 0x400u) != 0u ||
+            if ((pSprite->mnClipActionFlags & 0x4u) != 0u ||   // unload clip event; x64 low-24 mask
                 HasEventMember(4) != 0)
             {
                 queueClipEvents(4, 0, 0);
@@ -1942,14 +1945,13 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
     // removal as an AS-visible ZOMBIE instead of being torn down: the AS side
     // still holds live references (IncZombieCount) against the loaded movie.
     // NOT-zombie preconditions (any -> the immediate clear below): in shutdown;
-    // zombie count <= 0 (the X360 tests the SIGNED int16 `(flagsA<<9)&0xFFFF0000
-    // <= 0` -- sign bit == our count field's top bit); not an animation node
-    // (charInst mTypeFlags tag 9, mask 0xFC000000 == 0x24000000); or the root
-    // level-0 animation itself.
+    // zombie count <= 0 (the X360 tests the SIGNED int16 sign bit of the count
+    // field); not an animation node (charInst tag 9, x64 low-6-bit tag); or the
+    // root level-0 animation itself.
     bool bBecameZombie = false;
     if (!gbAptInShutdown
         && GetZombieCount() > 0
-        && (mpCharacterInst->mTypeFlags & 0xFC000000u) == 0x24000000u
+        && (mpCharacterInst->mTypeFlags & 0x3Fu) == 9u
         && this != AptGetAnimationAtLevel(0))
     {
         if (gpAptZombieVector == nullptr ||
@@ -1987,7 +1989,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
 
             if (GetZombieCount() > 0)   // re-check: the scrub may have drained it
             {
-                mFlagsA &= ~0x80000000u;   // AS-changed clear (the X360 rlwinm 1,31)
+                mFlagsA &= ~0x1u;   // AS-changed clear (x64 bit 0; the X360 rlwinm 1,31)
                 SetHasClass(0);            // vtable slot 5
                 SetReleaseAtEnd();
                 // Push onto the zombie vector (family-(B): count == mnCapacity,
@@ -1997,7 +1999,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
                         static_cast<AptValue*>(this);
                 else
                     ClearReleaseAtEnd();
-                SetCIHState(1);            // X360 `flagsA & 0x9FFFFFFF | 0x20000000`
+                SetCIHState(1);            // x64: `flagsA & ~6 | 2` (X360 reversed form 0x20000000)
 
                 AptFile* pFile =
                     static_cast<AptCharacterAnimationInst*>(mpCharacterInst)
@@ -2023,13 +2025,13 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
     AptCharacterInst* pOld = mpCharacterInst;
     if (pOld == nullptr)
     {
-        // X360/XB1 tail: clear the AS-changed flag inline (mFlagsA bit 31, the
+        // X360/XB1 tail: clear the AS-changed flag inline (x64 mFlagsA bit 0, the
         // X360 `rlwinm 1,31`), then tail-call vtable slot 5 == SetHasClass(0)
-        // (X360 0x82AD7418 `insrwi ..,1,3` = our bit 28; XB1 sub_140841530, the
-        // same slot on its LE flag layout). The previous transcription mislabeled
+        // (X360 0x82AD7418 `insrwi ..,1,3`; XB1 sub_140841530 mask 0x8, the
+        // same slot on the LE flag layout). The previous transcription mislabeled
         // the slot-5 call as Release(), which fabricated an extra reference drop
         // on every cleared node.
-        mFlagsA &= ~0x80000000u;
+        mFlagsA &= ~0x1u;
         SetHasClass(0);
         return;
     }
@@ -2067,9 +2069,9 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
         pOld->~AptCharacterInst();
         gpNonGCPoolManager->Deallocate(pOld, sizeof(AptCharacterInst));
 
-        // AS-changed clear + vtable slot 5 == SetHasClass(0) (see the null-inst
-        // arm note above).
-        mFlagsA &= ~0x80000000u;
+        // AS-changed clear (x64 bit 0) + vtable slot 5 == SetHasClass(0) (see the
+        // null-inst arm note above).
+        mFlagsA &= ~0x1u;
         SetHasClass(0);
     }
 }

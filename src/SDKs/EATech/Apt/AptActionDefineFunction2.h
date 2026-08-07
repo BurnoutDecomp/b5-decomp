@@ -18,7 +18,9 @@
 
 namespace AptAction_DefineFunction2
 {
-    // @0x82AD5230 -- test one of the DefineFunction2 flags.
+    // @0x82AD5230 (X360) / x64 @0x14084E310 -- test one of the DefineFunction2
+    // flags. x64: the signed 16-bit flags word is at record +0x0E (the console's
+    // +0x0A plus the widened leading szName pointer).
     //
     // The record's flags live in a SIGNED 16-bit word at +0x0A (X360 `lha`).
     // Returns the masked bit: flags & (1 << nFlagBit). `pRecord` is the raw

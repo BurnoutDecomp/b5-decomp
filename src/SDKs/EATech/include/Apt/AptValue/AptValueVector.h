@@ -31,6 +31,7 @@
 // kept verbatim; the reconstructed members follow the mpX/mnX prefixes.
 // ===========================================================================
 
+#include <cstddef>   // offsetof (_AssertLayout)
 #include <cstdint>
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
@@ -162,5 +163,15 @@ public:
 
     int32_t     mnTop;        // +0x00
     int32_t     mnCapacity;   // +0x04
+
+    // Layout pinned against the x64 XB1 accessors (never called; member body gives
+    // complete-class offsetof context). Family-(B) semantics: capacity@+0, count@+4.
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptValueVector, mnTop)      == 0x0, "x64: capacity dword at +0 (IsVectorFull @0x14083B3E0)");
+        static_assert(offsetof(AptValueVector, mnCapacity) == 0x4, "x64: live count dword at +4 (GetNumValues @0x140839680)");
+        static_assert(offsetof(AptValueVector, mppItems)   == 0x8, "x64: slot array at +8, 8-byte stride (GetAt @0x140838220)");
+        static_assert(sizeof(AptValueVector) == 0x10, "natural x64 layout of {i32,i32,ptr}");
+    }
     AptValue**  mppItems;     // +0x08
 };

@@ -68,7 +68,7 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(AptCharacter* pCharacter, int
     const AptCharacterDynamicText* pText = static_cast<const AptCharacterDynamicText*>(pCharacter);
 
     // Dynamic-text render-type flag: bit 19 (console __ROR4__(1,13) & 0x00FC0000).
-    mFlags = (mFlags & 0xFF03FFFFu) | 0x00080000u;
+    mFlags = (mFlags & ~0x3F00u) | 0x200u;   // dynamic-text=2; x64 type field bits 8-13
 
     mZID         = 0;          // no render-data handle yet
     mScroll      = 1;          // console seeds the scroll offset to 1
@@ -81,14 +81,14 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(AptCharacter* pCharacter, int
     mFontID    = pText->mnDefaultGlyphIndex;                          // char +0x20
 
     // Packed back-colour dword: background colour forced white (bits 8-31), the
-    // alignment field (bits 3-6) from the character's authored align dword. The
-    // console preserved the (uninitialised) low/draws-background bits here; they
-    // are initialised deterministically to 0 (the portable de-opt).
-    mFlagsAndBackColor = 0xFFFFFF00u;                                 // backColor = 0xFFFFFF
-    SetAlignment(pText->mnAuthoredReserved0);                         // char +0x24, bits 3-6
+    // alignment field (x64 bits 25-28) from the character's authored align dword.
+    // The console preserved the (uninitialised) draws-background bit here; it is
+    // initialised deterministically to 0 (the portable de-opt).
+    mFlagsAndBackColor = 0x00FFFFFFu;                                 // backColor = 0xFFFFFF (x64 low-24)
+    SetAlignment(pText->mnAuthoredReserved0);                         // char +0x24
 
     // Packed border-colour dword: border colour + draws-border 0, box alignment 3
-    // (bits 2-5), mouse-wheel flag (bit 6) from the global authored default.
+    // (x64 bits 26-29), mouse-wheel flag (x64 bit 25) from the global authored default.
     mFlagsAndBorderColor = 0u;
     SetBoxAlignment(3);
     SetMouseWheelEnabled(gAptDefaultTextMouseWheelEnabled);
@@ -117,7 +117,7 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(const AptRenderItemDynamicTex
                                                    int nCreatedOnTick, bool bCopyExtended)
     : AptRenderItem(pSource, nCreatedOnTick, bCopyExtended)
 {
-    mFlags = (mFlags & 0xFF03FFFFu) | 0x00080000u;
+    mFlags = (mFlags & ~0x3F00u) | 0x200u;   // dynamic-text=2; x64 type field bits 8-13
 
     mTextValue           = pSource->mTextValue;
     mVarValue            = pSource->mVarValue;

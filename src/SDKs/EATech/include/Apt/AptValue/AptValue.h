@@ -29,6 +29,7 @@
 // than fabricated.
 // ===========================================================================
 
+#include <cstddef>   // offsetof (_AssertLayout)
 #include <cstdint>
 
 class EAStringC;                  // SDKs/EATech/include/Apt/AptString/EAString.h
@@ -254,11 +255,12 @@ public:
         return getVtblIndex() == AptVFT_Extern && getIsDefined();
     }
 
+    // x64 ?isCIH@AptValue@@QEBA_N_N@Z @0x1400C1540: ONLY type 12 (CharacterInstHandle)
+    // gated on (bUndefOK || defined). The earlier CIHNone(37) second clause does not
+    // exist in the x64 body -- callers that accept CIHNone test it themselves.
     bool isCIH(bool bUndefOK = false) const
     {
-        AptVirtualFunctionTable_Indices eType = getVtblIndex();
-        return (eType == AptVFT_CharacterInstHandle && (bUndefOK || getIsDefined()))
-            || eType == AptVFT_CIHNone;
+        return getVtblIndex() == AptVFT_CharacterInstHandle && (bUndefOK || getIsDefined());
     }
 
     bool isSound() const
@@ -469,6 +471,16 @@ public:
 
         uint32_t mnValueData;
     };
+
+    // Layout pinned against the x64 XB1 accessors (never called; member body gives
+    // complete-class offsetof context). The LSB-first bitfield order above matches
+    // the x64 truth bit-for-bit (getVtblIndex @0x1400C1510 `sar eax,19h`,
+    // getIsDefined @0x1400C1520 `shr 4`, getRefCount @0x14084E5C0 `shr 6, and 0xFFF`).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptValue, mnValueData) == 0x08, "x64: flags dword at [this+8] (getVtblIndex @0x1400C1510)");
+        static_assert(sizeof(AptValue) == 0x10, "x64: memberless AptExtern allocates 0x10 (AptValueInitialize @0x140830BA0); all leaf payloads at +0x10");
+    }
 
 protected:
 

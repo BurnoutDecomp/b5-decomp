@@ -32,9 +32,18 @@ struct AptArray : public AptObject
     static void* operator new(size_t size);
     static void  operator delete(void* p, size_t size);
 
-    AptValue** mpArray;     // [8]  element storage (ref-counted AptValue*s)
-    int32_t    mnCapacity;  // [9]  allocated slots
-    int32_t    mnLength;    // [10] logical length
+    AptValue** mpArray;     // x64 +0x40  element storage (ref-counted AptValue*s; 8-byte slots; B4 mpValues)
+    int32_t    mnCapacity;  // x64 +0x48  allocated slots
+    int32_t    mnLength;    // x64 +0x4C  logical length
+
+    // Layout pinned against the x64 XB1 export (never called).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptArray, mpArray)    == 0x40, "x64: ctor zeroes qword [this+40h] @0x140825450");
+        static_assert(offsetof(AptArray, mnCapacity) == 0x48, "x64: ctor zeroes [this+48h]");
+        static_assert(offsetof(AptArray, mnLength)   == 0x4C, "x64: length() mov eax,[rcx+4Ch] @0x140850370");
+        static_assert(sizeof(AptArray) == 0x50, "x64: Create allocates 80 from the GC pool @0x1408353A0");
+    }
 
     AptArray();                                  // @0x82D978
     AptArray(int nCount, AptValue** ppItems);    // @0x82D728

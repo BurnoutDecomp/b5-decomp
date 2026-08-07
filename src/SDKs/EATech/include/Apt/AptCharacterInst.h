@@ -7,11 +7,12 @@
 // instance's current render item (double-buffered by AptRenderTreeManager) and an
 // optional per-instance property hash.
 //
-// SHAPE + BODIES from the PS3 EXTERNAL ELF. LAYOUT (console 16 bytes / 4 dwords):
-//   [0] vtable
-//   [1] mpRenderItem   the current AptRenderItem (ref-counted)
-//   [2] mTypeFlags     packed; high 6 bits (>>26) = the AptCharacter type tag
-//   [3] mpProperties   optional per-instance AptNativeHash* (20 bytes; lazy)
+// SHAPE + BODIES from the PS3 EXTERNAL ELF; layout pinned against the x64 XB1
+// export (sizeof 0x20; console was 16 bytes / 4 dwords):
+//   +0x00 vptr           (x64: real per-class vtables, off_140C17D88..DE0)
+//   +0x08 mpRenderItem   the current AptRenderItem (ref-counted)
+//   +0x10 mTypeFlags     packed; LOW 6 bits (& 0x3F) = the AptCharacter type tag
+//   +0x18 mpProperties   optional per-instance AptNativeHash* (0x28 bytes; lazy)
 //
 // The const accessors read straight through mpRenderItem; the ctor + the
 // *Writable paths go through the render-tree manager (Update_CreateItem /
@@ -20,6 +21,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include <cstddef>   // offsetof (_AssertLayout)
 #include <cstdint>
 
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"   // mpRenderItem + delegated accessors
@@ -62,14 +64,26 @@ extern int            gnCurrUpdateTick;
 
 struct AptCharacterInst
 {
-    void*          mpVTable_unused;   // [0]
-    AptRenderItem* mpRenderItem;      // [1]
-    uint32_t       mTypeFlags;        // [2] (char type tag in bits 26-31)
-    AptNativeHash* mpProperties;      // [3]
+    void*          mpVTable_unused;   // +0x00 (x64: a REAL per-class vptr -- the ctors/dtors
+                                      //  stamp off_140C17D88..DE0; modelled manually)
+    AptRenderItem* mpRenderItem;      // +0x08
+    uint32_t       mTypeFlags;        // +0x10 (x64: char type tag in the LOW 6 bits)
+    AptNativeHash* mpProperties;      // +0x18
     // (the base ends here -- console word[4]+ belong to the SPRITE subclass:
     // AptCharacterSpriteInstBase::mnGotoFrame [4] / mnClipActionFlags [5] /
     // mpClipEventHandlers [6] ... mnLastActionFrame [8]. The per-frame drains'
     // charInst+0x10/+0x20 reads are those sprite fields, gated on type tag 5/16.)
+
+    // Layout pinned against the x64 XB1 export (never called; member body gives
+    // complete-class offsetof context).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptCharacterInst, mpVTable_unused) == 0x00, "x64: vptr slot (ctors stamp off_140C17D88 here)");
+        static_assert(offsetof(AptCharacterInst, mpRenderItem)    == 0x08, "x64: GetRenderItem 'mov rax,[rcx+8]' @0x140839860");
+        static_assert(offsetof(AptCharacterInst, mTypeFlags)      == 0x10, "x64: AptCIH::IsSpriteInst reads [charInst+10h] & 0x3F @0x14083B370");
+        static_assert(offsetof(AptCharacterInst, mpProperties)    == 0x18, "x64: DestroyGCPointers frees [this+18h] @0x1408360C0");
+        static_assert(sizeof(AptCharacterInst) == 0x20, "x64: factory Allocate(0x20) for leaf insts @0x140835410");
+    }
 
     explicit AptCharacterInst(AptCharacter* pCharacter);   // @0x81431C
     ~AptCharacterInst();                                    // @0x7F8414
@@ -101,10 +115,12 @@ struct AptCharacterInst
     AptRenderItem*       GetRenderItemDynamicTextWritable() { return GetRenderItemWritable(); }
     AptRenderItem*       SetRenderItem(AptRenderItem* pItem);   // @0x7E20E8
 
-    // The character type tag (mTypeFlags bits 26..31): 1 shape / 2 dynamic-text /
-    // 4 button / 5 sprite(movie-clip) / 8 morph / 9 animation / 15 level /
-    // 16 custom-control. Drives the AptCIH::IsXxxInst predicates.
-    uint32_t GetTypeTag() const { return mTypeFlags >> 26; }
+    // The character type tag (x64: mTypeFlags LOW 6 bits -- every IsXxxInst does
+    // `and ecx,3Fh` on [charInst+0x10]; the old >>26 was the X360 big-endian
+    // reversal): 1 shape / 2 dynamic-text / 4 button / 5 sprite(movie-clip) /
+    // 8 morph / 9 animation / 10 static-text / 15 level / 16 custom-control.
+    // Drives the AptCIH::IsXxxInst predicates.
+    uint32_t GetTypeTag() const { return mTypeFlags & 0x3Fu; }
 
     AptCharacter*        SetCharacter(AptCharacter* pCharacter); // @0x80F324
 

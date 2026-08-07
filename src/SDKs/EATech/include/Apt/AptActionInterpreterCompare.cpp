@@ -105,7 +105,7 @@ namespace
         {
             const AptCharacterInst* pInst =
                 static_cast<const AptCIH*>(pV)->GetCharacterInst();
-            if ((pInst->mTypeFlags & 0xFC000000u) == 0x3C000000u)
+            if ((pInst->mTypeFlags & 0x3Fu) == 15u)   // x64 low-6-bit tag (X360 form 0x3C000000)
                 return gpUndefinedValue;
         }
         return pV;

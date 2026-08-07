@@ -152,8 +152,13 @@ AptValue* AptValue::findChild(const EAStringC* pName, AptValue* pTarget)
 namespace
 {
     // The console's repeated "is value a CIH-like (CharacterInstHandle/CIHNone)"
-    // test: (tag == 0xC && defined) || tag == 0x25  (== AptValue::isCIH()).
-    inline bool IsCIHLike(const AptValue* pValue) { return pValue->isCIH(); }
+    // test: (tag == 0xC && defined) || tag == 0x25. NB AptValue::isCIH (x64
+    // @0x1400C1540) tests ONLY type 12 -- the CIHNone clause lives at each call
+    // site like this one, so it is spelled out here.
+    inline bool IsCIHLike(const AptValue* pValue)
+    {
+        return pValue->isCIH() || pValue->getVtblIndex() == AptVFT_CIHNone;
+    }
 
     // Walk pStart's __proto__ chain (GetNativeHashVirtual()->mp__Proto__) looking for
     // pTargetNode; return pTargetNode if found, else null. (The console's shared

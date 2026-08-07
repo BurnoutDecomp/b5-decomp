@@ -408,11 +408,11 @@ AptValue* AptKey::sMethod_addListener(AptKey* /*pThis*/, int nArgCount)
 
             // A CIH-like listener (type 12 or 37) that carries the CIHState marker in
             // mFlagsA is rejected (the X360 `lwz r11, 0xC(r4); rlwinm. 0,1,2` reads
-            // AptCIH::mFlagsA bits 1-2 == 0x60000000 and bails). A non-CIH value skips
-            // the marker test entirely (the X360 flag is 0) and proceeds to the
-            // membership scan / add. So: add unless it is a marked CIH.
+            // the CIHState pair and bails; x64 position bits 1-2, mask 0x6). A non-CIH
+            // value skips the marker test entirely (the X360 flag is 0) and proceeds to
+            // the membership scan / add. So: add unless it is a marked CIH.
             const bool bRejected =
-                bIsCIH && (static_cast<AptCIH*>(pListener)->mFlagsA & 0x60000000u) != 0;
+                bIsCIH && (static_cast<AptCIH*>(pListener)->mFlagsA & 0x6u) != 0;
 
             if (!bRejected)
                 AptKeyManagerAddListener(pListener);   // add iff not already present

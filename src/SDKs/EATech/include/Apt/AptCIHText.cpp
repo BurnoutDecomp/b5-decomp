@@ -176,14 +176,14 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         // empty pass.
         AptRenderItemDynamicText* pItem2 =
             static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItem());
-        const int nBoxAlign = (static_cast<int32_t>(pItem2->mFlagsAndBorderColor << 26)) >> 28;
+        const int nBoxAlign = (static_cast<int32_t>(pItem2->mFlagsAndBorderColor << 2)) >> 28;
         if (nBoxAlign != 3)   // != AptStringAlignment_None (X360: (flags & 0x3C) != 0xC)
         {
             // The console collapses the empty auto-sized field's box to a fixed 4-pixel edge
             // inset: right = left + 4.0 (unless word-wrapped), bottom = top + 4.0 (always --
             // flt_82004EF4 == 4.0; the literal is inline in the X360 pseudocode).
             const float fEdgeInset = 4.0f;   // flt_82004EF4
-            if (((pItem2->mFlagsAndBorderColor >> 1) & 1u) == 0u)   // not word-wrapped
+            if ((pItem2->mFlagsAndBorderColor & 0x40000000u) == 0u)   // not word-wrapped
             {
                 pWritable->mBounds.fRight = pItem2->mBounds.fLeft + fEdgeInset;
             }
@@ -203,14 +203,14 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
 
         // Alignment fields (from the render item's two packed flag dwords).
         const int nAlignment =
-            (static_cast<int32_t>(pItem->mFlagsAndBackColor << 25)) >> 28;   // GetAlignment
+            (static_cast<int32_t>(pItem->mFlagsAndBackColor << 3)) >> 28;   // GetAlignment
         const int nBoxAlignment =
-            (static_cast<int32_t>(pItem->mFlagsAndBorderColor << 26)) >> 28; // box alignment (bits 2-5)
+            (static_cast<int32_t>(pItem->mFlagsAndBorderColor << 2)) >> 28; // box alignment (bits 2-5)
         params.eAlignment    = static_cast<AptStringAlignment>(nAlignment);
         params.eBoxAlignment = static_cast<AptStringAlignment>(nBoxAlignment);
 
-        params.bMultiline = static_cast<int>(pItem->mFlagsAndBorderColor & 1u);         // GetMultiline
-        params.bWordWrap  = static_cast<int>((pItem->mFlagsAndBorderColor >> 1) & 1u);  // GetWordWrap
+        params.bMultiline = static_cast<int>((pItem->mFlagsAndBorderColor >> 31) & 1u); // GetMultiline (x64 bit 31)
+        params.bWordWrap  = static_cast<int>((pItem->mFlagsAndBorderColor >> 30) & 1u);  // GetWordWrap (x64 bit 30)
 
         // Text colour: overridden by the TextFormat record when it carries a valid
         // colour (console +8 == mnColor; -1 == "no override"), else the render item's
@@ -222,10 +222,10 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             nColour = static_cast<unsigned int>(pFmt->mnColor) | 0xFF000000u;
         params.nColour = nColour;
 
-        params.nBackColor   = (pItem->mFlagsAndBackColor   >> 8) | 0xFF000000u;   // GetBackgroundColor
-        params.nBorderColor = (pItem->mFlagsAndBorderColor >> 8) | 0xFF000000u;   // GetBorderColor
-        params.bBackground  = static_cast<int>((pItem->mFlagsAndBackColor  >> 7) & 1u); // GetDrawsBackground
-        params.bBorder      = static_cast<int>((pItem->mFlagsAndBorderColor >> 7) & 1u); // GetDrawsBorder
+        params.nBackColor   = (pItem->mFlagsAndBackColor   & 0xFFFFFFu) | 0xFF000000u;   // GetBackgroundColor (x64 low-24)
+        params.nBorderColor = (pItem->mFlagsAndBorderColor & 0xFFFFFFu) | 0xFF000000u;   // GetBorderColor (x64 low-24)
+        params.bBackground  = static_cast<int>((pItem->mFlagsAndBackColor  >> 24) & 1u); // GetDrawsBackground (x64 bit 24)
+        params.bBorder      = static_cast<int>((pItem->mFlagsAndBorderColor >> 24) & 1u); // GetDrawsBorder (x64 bit 24)
 
         // Field-edge rect (the layout bounds; console x0=left y0=top x1=right y1=bottom).
         params.x0 = pItem->mBounds.fLeft;
@@ -356,7 +356,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         AptRenderItemDynamicText* pItem2 =
             static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItem());
         const int nBoxAlign2 =
-            (static_cast<int32_t>(pItem2->mFlagsAndBorderColor << 26)) >> 28;
+            (static_cast<int32_t>(pItem2->mFlagsAndBorderColor << 2)) >> 28;
         if (hHandle != nullptr && nBoxAlign2 != 3)
         {
             // X360 fold operands:

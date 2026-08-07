@@ -33,7 +33,7 @@
 //   if ( off_8324E574 )                                // if (gpAptTarget)  -- the create-item guard
 //       Item = AptRenderItem::Manager_CreateItem(pCharacter, dword_8324E520);
 //   mpRenderItem = Item;                               // a1[1] (this+0x4)
-//   mTypeFlags = ((pCharacter ? pCharacter->mnType : 15) << 26) | (mTypeFlags & 0x3FFFFFF);
+//   mTypeFlags = (mTypeFlags & ~0x3F) | (pCharacter ? pCharacter->mnType : 15);   // x64: tag in the LOW 6 bits
 //   if ( Item ) Item->AddReference();                  // atomic ++Item[9] (render item ref count)
 //
 // FAITHFUL create-item dispatch (was an invented AptRTM_CreateItem null-manager fallback): the
@@ -52,9 +52,10 @@ AptCharacterInst::AptCharacterInst(AptCharacter* pCharacter)
         pItem = AptRenderItem::Manager_CreateItem(pCharacter, gnCurrUpdateTick);
     mpRenderItem = pItem;
 
-    // High 6 bits of mTypeFlags = the character's type tag (15 when none).
+    // LOW 6 bits of mTypeFlags = the character's type tag (15 when none).
+    // x64 ctor 0x140825A00: `and dword ptr [rbx+10h],0FFFFFFC0h / or [rbx+10h],ecx`.
     const uint32_t uType = pCharacter ? static_cast<uint32_t>(pCharacter->mnType) : 15u;
-    mTypeFlags = (mTypeFlags & 0x03FFFFFFu) | (uType << 26);
+    mTypeFlags = (mTypeFlags & ~0x3Fu) | (uType & 0x3Fu);
 
     if (pItem)
         pItem->AddReference();

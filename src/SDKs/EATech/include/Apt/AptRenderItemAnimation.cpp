@@ -9,14 +9,14 @@ AptRenderItemAnimation::AptRenderItemAnimation(AptCharacter* pCharacter, int nCr
     : AptRenderItemSprite(pCharacter, nCreatedOnTick)
 {
     // FLAG: console rotate-masks mFlags; 0x240000 is the animation render-type bits.
-    mFlags = (mFlags & ~0x003C0000u) | 0x00240000u;
+    mFlags = (mFlags & ~0x3F00u) | 0x900u;   // animation=9; x64 type field (XB1 ctor 0x140826AC0 `or 900h`)
 }
 
 // Clone copy-ctor -- sprite copy then re-stamp the animation render-type bits.
 AptRenderItemAnimation::AptRenderItemAnimation(const AptRenderItemAnimation* pSource, int nCreatedOnTick, bool bCopyExtended)
     : AptRenderItemSprite(pSource, nCreatedOnTick, bCopyExtended)
 {
-    mFlags = (mFlags & 0xFF03FFFFu) | 0x00240000u;
+    mFlags = (mFlags & ~0x3F00u) | 0x900u;   // animation=9; x64 type field
 }
 
 // Clone @0x82AEFD70

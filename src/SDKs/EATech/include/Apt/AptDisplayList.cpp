@@ -188,7 +188,7 @@ AptDisplayListState* AptDisplayList::AsState() const
 
 // ---------------------------------------------------------------------------
 // removeObject @0x82AFD0B0
-//   if (pItem && ((pItem->mFlagsBitfield >> 27) & 1)) {   // a real placed node
+//   if (pItem && pItem->getIsDefined()) {   // a real placed node (x64: value bitfield bit 4)
 //     parent = pItem->mpDisplayListParent;                // pItem[7]
 //     if (parent) {
 //       hash = parent->GetNativeHashVirtual();            // (*(*parent+8))(parent) vtbl[2]
@@ -277,7 +277,7 @@ AptRect* AptDisplayList::GetBoundingRect(int nMode, const AptMatrix* pTransform,
 // (the per-frame movie-clip update walk). For each listed AptCIH:
 //   * gate: when bUseDepthLayerMask, only nodes whose render-item depth layer is
 //     set in nDepthLayerMask ((1 << GetDepth()) & nDepthLayerMask); otherwise
-//     skip nodes whose CIHState == 3 (mFlagsA bits 29-30 both set: a fully
+//     skip nodes whose CIHState == 3 (mFlagsA bits 1-2 both set, x64: a fully
 //     removed / dead node);
 //   * type gate: only sprite (5) / animation (9) / button (4) character instances
 //     actually tick (those are the only AS-driven container/interactive types);
@@ -299,8 +299,8 @@ int AptDisplayList::tick(int nDepthLayerMask, uint8_t bUseDepthLayerMask)
             if (((1 << pNode->GetCharacterInst()->GetRenderItem()->GetDepth()) & nDepthLayerMask) == 0)
                 continue;
         }
-        // (mFlagsA bits 29-30) == CIHState 3 == a dead/removed node -> skip.
-        else if ((pNode->mFlagsA & 0x60000000u) == 0x60000000u)
+        // (mFlagsA bits 1-2, x64) == CIHState 3 == a dead/removed node -> skip.
+        else if ((pNode->mFlagsA & 0x6u) == 0x6u)
         {
             continue;
         }
@@ -308,8 +308,8 @@ int AptDisplayList::tick(int nDepthLayerMask, uint8_t bUseDepthLayerMask)
         AptCharacterInst* pCharInst = pNode->GetCharacterInst();
         const uint32_t nTypeTag = pCharInst->GetTypeTag();
         bool bTick = (nTypeTag == 5 || nTypeTag == 9);
-        // (charInst->mTypeFlags & 0xFC000000) == 0x10000000  <=>  GetTypeTag() == 4 (button).
-        if (bTick || (pCharInst->mTypeFlags & 0xFC000000u) == 0x10000000u)
+        // GetTypeTag() == 4 (button); x64 low-6-bit tag (X360 form 0xFC000000/0x10000000).
+        if (bTick || (pCharInst->mTypeFlags & 0x3Fu) == 4u)
             nResult |= pNode->tick();   // AptCIH::tick
     }
 
@@ -499,7 +499,7 @@ AptCIH* AptDisplayList::ReplaceDisplyListItem(AptNativeHash* pParentHash, AptCIH
     }
 
     // No new character: keep the existing node, merge its visual state. An AS write
-    // (mFlagsA bit31, ASChanged) owns the transform -- never clobber it from a frame.
+    // (mFlagsA bit 0, ASChanged; x64 position) owns the transform -- never clobber it from a frame.
     if (pExisting->GetASChanged())
         return nullptr;
 
@@ -566,15 +566,16 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
     }
 
 
-    // Fold each registered handler's event mask into mnClipActionFlags' high 24 bits,
-    // and note whether any handler registers a load/unload event.
+    // Fold each registered handler's event mask into mnClipActionFlags' LOW 24 bits
+    // (x64 position; X360 kept the clip copy <<8), and note whether any handler
+    // registers a load/unload event.
     bool bHasLoadUnload = false;
     for (int32_t i = 0; i < pHandlers->mnCount; ++i)
     {
         const uint32_t nEventFlags = pHandlers->mpHandlers[i].mnEventFlags;
         if (nEventFlags & 0x201C7u)
         {
-            pSprite->mnClipActionFlags |= (nEventFlags << 8);
+            pSprite->mnClipActionFlags |= (nEventFlags & 0xFFFFFFu);
             if (nEventFlags & 0x200C0u)
                 bHasLoadUnload = true;
         }
@@ -627,10 +628,10 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
     // On the placing frame, queue this node's load + init clip events.
     if (bRunLoad)
     {
-        pSprite->mnClipActionFlags |= 0x4020000u;
-                pNode->queueClipEvents(512,     gnAptActionFrameId, 1);
+        pSprite->mnClipActionFlags |= 0x40200u;   // events 0x200|0x40000; x64 low-24 mask (X360 <<8 form 0x4020000)
+        pNode->queueClipEvents(512,     gnAptActionFrameId, 1);
         pNode->queueClipEvents(0x40000, gnAptActionFrameId, 1);
-        pSprite->mnClipActionFlags &= 0xFBFDFFFFu;
+        pSprite->mnClipActionFlags &= ~0x40200u;
     }
 }
 
@@ -852,7 +853,7 @@ AptCIH* AptDisplayList::placeObject(AptCIH* pExistingNode, int nDepth, AptCharac
             static_cast<AptClipEventHandlerList*>(const_cast<void*>(pPlacementClipActions));   // console stw 0x18(charInst)
 
     // A morph instance (type tag 8) takes the AS frame value as its blend amount.
-    if ((pInst->mTypeFlags & 0xFC000000u) == 0x20000000u)
+    if ((pInst->mTypeFlags & 0x3Fu) == 8u)   // morph; x64 low-6-bit tag (X360 form 0x20000000)
         *reinterpret_cast<float*>(&static_cast<AptCharacterMorphInst*>(pInst)->mMorphState_unknown) =
             static_cast<float>(fFrameValue);
 
@@ -955,7 +956,7 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
             const bool bSpriteOrAnim = (nTag == 5 || nTag == 9);
 
             // An AS-owned sprite/animation node (render-item bit27) is left as-is.
-            if (bSpriteOrAnim && ((pRenderItem->mFlags >> 27) & 1u) != 0u)
+            if (bSpriteOrAnim && (pRenderItem->mFlags & 0x10u) != 0u)
             {
                 pNode = pNode->GetDisplayListNext();
                 pSrc  = pSrc->mpNext;
@@ -984,7 +985,7 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
 
             // Placement-identity gate (evaluated BEFORE any in-place merge).
             const bool bGate1 = (pProps->mi16CharacterId == pNode->GetCreatedOnFrame());
-            const bool bGate2 = ((pInst->mTypeFlags & 0xFC000000u) == 0x24000000u);
+            const bool bGate2 = ((pInst->mTypeFlags & 0x3Fu) == 9u);   // animation; x64 low-6-bit tag
             if (!bGate1 && !bGate2)
             {
                 pResult = ReplaceDisplyListItem(pParentHash, pNode,
@@ -1286,11 +1287,11 @@ int AptCIH::AssociateInstToClass()
     // (mTypeFlags 0xFC000000 == 0x24000000), that is NOT created-dynamic
     // (item->mFlags bit27 == AptRenderItem::mbCreatedDynamic -- a runtime
     // createEmptyMovieClip/createTextField child has no library export name to bind).
-    const uint32_t nTag = pInst->mTypeFlags >> 26;            // v2[2] >> 26
+    const uint32_t nTag = pInst->mTypeFlags & 0x3Fu;          // x64 low-6-bit tag (X360 v2[2] >> 26)
     const bool bSpriteLike = (nTag == 5u || nTag == 16u);
-    if (!bSpriteLike && (pInst->mTypeFlags & 0xFC000000u) != 0x24000000u)
+    if (!bSpriteLike && (pInst->mTypeFlags & 0x3Fu) != 9u)   // x64 low-6-bit tag
         return 0;
-    if (((pInst->GetRenderItem()->mFlags >> 27) & 1u) != 0u)   // already class-bound
+    if ((pInst->GetRenderItem()->mFlags & 0x10u) != 0u)   // already class-bound (x64 bit 4; X360 bit27)
         return 0;
 
     // ---- the class-binding tail (UN-DEFERRED 2026-07-05: the AS framework is live,
@@ -1384,9 +1385,9 @@ int AptCIH::AssociateInstToClass()
     pNode->AddRef();
     gAptActionInterpreter.mpCallStackE[gAptActionInterpreter.mnCallStackE_Count++] = pNode;
     pNode->AddRef();
-    pNode->mFlagsA |= 0x8000000u;
+    pNode->mFlagsA |= 0x10u;    // IsInCtor (x64 bit 4; X360 reversed form 0x8000000)
     gAptActionInterpreter.callFunction(static_cast<AptValue*>(pNode), pClass, 0, nullptr, nullptr);
-    pNode->mFlagsA &= ~0x8000000u;
+    pNode->mFlagsA &= ~0x10u;
 
     if (gAptActionInterpreter.mnCallStackE_Count > 0)
     {

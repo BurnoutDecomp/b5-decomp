@@ -820,7 +820,7 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
             if (eCIHType == AptVFT_CharacterInstHandle || eCIHType == AptVFT_CIHNone)
             {
                 AptCIH* const  pCIHNode = static_cast<AptCIH*>(pBoundCIH);
-                const uint32_t nState   = pCIHNode->GetCIHState();                       // (mFlagsA>>29)&3
+                const uint32_t nState   = pCIHNode->GetCIHState();                       // x64 (mFlagsA>>1)&3
                 if (nState == 3)
                     bReduced = true;
                 else if (pCIHNode->GetCharacterInst()->GetTypeTag() == 0xFu &&
