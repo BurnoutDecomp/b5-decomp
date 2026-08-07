@@ -1,6 +1,7 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
+#include <cmath>                                        // std::sqrt (AddTractionPoint's line distance)
 #include "rw/math/vpu/vector3_operation.h"             // rw::math::vpu::{IsValid, operator+/-, Mult, Dot}
 
 // BrnPhysics::Vehicle::SimpleVehiclePhysics -- the 3 functions owned by the BrnPhysics-bodies
@@ -301,6 +302,78 @@ namespace Vehicle
             lrWheel.mbHasTraction                      = false;             // stb 0, +0xD6
         }
         mAboveGroundTestResult.Reset();
+    }
+
+    // ===========================================================================================
+    //  SimpleVehiclePhysics::AddTractionPoint   @0x825D9608  (185 insns)
+    // ===========================================================================================
+    // ⭐ BODIED 2026-08-07 (orchestrator wave) -- this had sat in this header's BLOCKED list as
+    // "deep VMX whose math cannot be faithfully reproduced BY NAME"; the claim was UNVERIFIED
+    // and false: every lane it touches was already a named member. The traction-line
+    // ingestion point: VehicleManager::ReadRaceCarTractionLineTestResults /
+    // DoPlayerTractionLineTestsPostSimulation feed each wheel's line-test hit through
+    // RaceCarPhysics::AddTractionPoint (a register-transparent chain into here).
+    //
+    //   0x825D9638  skip entirely while maWheels[leWheel].mu8State (+0xD7) == 2
+    //   0x825D9654  split the collision tag: hi = tag >> 16 (r23), lo = tag & 0xFFFF (r22)
+    //   0x825D965C  debug NaN sweep over the wheel's local mPosition (xyz vcmpeqfp chain);
+    //               on failure the console streams "Invalid wheel position: " << pos <<
+    //               ", please tell Graham D." and fires (VehiclePhysics.h-adjacent file, :412)
+    //   0x825D9764  worldWheelPos = mTransform * wheel.mPosition (the three vmaddfp rows +
+    //               translation, vmaddfp vD,vA,vB,vC == vA*vC + vB with the wAxis seed)
+    //   0x825D97CC  lineDist = |worldWheelPos - lvPosition|   (vmsum3fp128 + rsqrt NR chain,
+    //               vsel 0-guard; rounded through the var_90 store -- kept f32 here)
+    //   0x825D9834  lbIsOnGround      = (wheel.mPosition.y
+    //                                    - wheel.mSuspensionAndInertiaVariables.x
+    //                                    + wheel.mSlipVariables.w) > lineDist
+    //   0x825D98AC  lbIsCloseToGround = (same sum + mSimpleAttribs.mCOMOffset.w) > lineDist
+    //               (the +0x5A0 register's .w lane -- the attribs block's leading vector; the
+    //               committed slice names it mCOMOffset, and the console reads ITS spare .w)
+    //   0x825D98D0  Wheel::SetRoadContact(onGround, close, position, normal, tagHi, tagLo,
+    //               lineDist)  -- f1 still holds the distance at the bl, v1/v2 pass through
+    void SimpleVehiclePhysics::AddTractionPoint(EVehicleDrivenWheel leWheel, Vector3 lvPosition,
+                                                Vector3 lvNormal, u32 lu32CollisionTag)
+    {
+        Wheel& lrWheel = maWheels[leWheel];
+
+        if (lrWheel.mu8State == 2)   // lbz +0x207 (wheel*0xE0 + 0xD7)
+            return;
+
+        const u16 lu16TagHi = static_cast<u16>(lu32CollisionTag >> 16);
+        const u16 lu16TagLo = static_cast<u16>(lu32CollisionTag & 0xFFFFu);
+
+        CGS_ASSERT(lrWheel.mPosition.x == lrWheel.mPosition.x &&
+                   lrWheel.mPosition.y == lrWheel.mPosition.y &&
+                   lrWheel.mPosition.z == lrWheel.mPosition.z,
+                   "Invalid wheel position: , please tell Graham D.");   // vcmpeqfp NaN sweep
+
+        // world position of the wheel: the three rotation rows scaled by the local lanes,
+        // seeded with the translation row (exactly the console's vmaddfp cascade).
+        const Vector3 lvWorldWheelPos{
+            mTransform.xAxis.x * lrWheel.mPosition.x + mTransform.yAxis.x * lrWheel.mPosition.y
+                + mTransform.zAxis.x * lrWheel.mPosition.z + mTransform.wAxis.x,
+            mTransform.xAxis.y * lrWheel.mPosition.x + mTransform.yAxis.y * lrWheel.mPosition.y
+                + mTransform.zAxis.y * lrWheel.mPosition.z + mTransform.wAxis.y,
+            mTransform.xAxis.z * lrWheel.mPosition.x + mTransform.yAxis.z * lrWheel.mPosition.y
+                + mTransform.zAxis.z * lrWheel.mPosition.z + mTransform.wAxis.z,
+            0.0f };
+
+        const Vector3 lvDelta{ lvWorldWheelPos.x - lvPosition.x,
+                               lvWorldWheelPos.y - lvPosition.y,
+                               lvWorldWheelPos.z - lvPosition.z, 0.0f };
+        const f32 lfDistSq   = vpu::MagnitudeSquared(lvDelta);
+        const f32 lfLineDist = (lfDistSq > 0.0f) ? std::sqrt(lfDistSq) : 0.0f;   // vsel 0-guard
+
+        // the two reach tests: the wheel's local height minus its suspension seat plus its
+        // radius lane, against the measured line distance.
+        const f32 lfReach = lrWheel.mPosition.y
+                          - lrWheel.mSuspensionAndInertiaVariables.x
+                          + lrWheel.mSlipVariables.w;
+        const bool lbIsOnGround      = lfReach > lfLineDist;
+        const bool lbIsCloseToGround = (lfReach + mSimpleAttribs.mCOMOffset.w) > lfLineDist;
+
+        lrWheel.SetRoadContact(lbIsOnGround, lbIsCloseToGround, lvPosition, lvNormal,
+                               lu16TagHi, lu16TagLo, lfLineDist);
     }
 }
 }

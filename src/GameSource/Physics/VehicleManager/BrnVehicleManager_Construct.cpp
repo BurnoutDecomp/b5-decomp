@@ -83,13 +83,17 @@ namespace Vehicle
     s32 gs_iUpdateRaceCarsPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A17C
     s32 gs_iUpdateDriversPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A180
     s32 gs_iUpdateVehiclesPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A184
-    static s32 gs_iVPhysUpdatePM             = KI_PERFMON_UNREGISTERED;   // dword_82F2A278   [GUARDED]
-    static s32 gs_iVPhysSwitchAttribsPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A27C   [GUARDED]
-    static s32 gs_iVPhysUpdateCrashingPM     = KI_PERFMON_UNREGISTERED;   // dword_82F2A280   [GUARDED]
-    static s32 gs_iVPhysUpdateAirRamsPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A284   [GUARDED]
-    static s32 gs_iVPhysUpdateSpinPM         = KI_PERFMON_UNREGISTERED;   // dword_82F2A288   [GUARDED]
-    static s32 gs_iVPhysUpdateDrivingPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A28C   [GUARDED]
-    static s32 gs_iVPhysUpdateLVPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A290   [GUARDED]
+    // ⭐ HOISTED 2026-08-07 (orchestrator wave): the seven guarded VPhys sub-monitors gained a
+    // second reader (VehiclePhysics::Update @0x826412C0 brackets its stages with them), so per
+    // the handles header's rule they move to external linkage there. [GUARDED] registration
+    // below is unchanged.
+    s32 gs_iVPhysUpdatePM             = KI_PERFMON_UNREGISTERED;   // dword_82F2A278   [GUARDED]
+    s32 gs_iVPhysSwitchAttribsPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A27C   [GUARDED]
+    s32 gs_iVPhysUpdateCrashingPM     = KI_PERFMON_UNREGISTERED;   // dword_82F2A280   [GUARDED]
+    s32 gs_iVPhysUpdateAirRamsPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A284   [GUARDED]
+    s32 gs_iVPhysUpdateSpinPM         = KI_PERFMON_UNREGISTERED;   // dword_82F2A288   [GUARDED]
+    s32 gs_iVPhysUpdateDrivingPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A28C   [GUARDED]
+    s32 gs_iVPhysUpdateLVPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A290   [GUARDED]
     s32 gs_iRBChangePM                = KI_PERFMON_UNREGISTERED;   // dword_82F2A188
     s32 gs_iAfterTouchPM              = KI_PERFMON_UNREGISTERED;   // dword_82F2A18C
     s32 gs_iUpdateTrafficPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A190
