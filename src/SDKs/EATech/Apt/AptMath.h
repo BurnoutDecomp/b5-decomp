@@ -24,6 +24,7 @@
 //      AptMath::ClipStackPop      @ 0x82AD5CD8
 //      AptMath::ClipStackMakeUnit @ 0x82ADC548
 //      AptMath::ClipStackInit     @ 0x82AE2470
+//      AptMath::ClipStackShutdown @ 0x82AE24E8
 //      AptMath::MatMul2d          @ 0x82AD5D40
 // ===========================================================================
 
@@ -72,6 +73,14 @@ namespace AptMath
     // entry the unit transform. Returns the bottom-entry pointer that
     // ClipStackMakeUnit yields.
     intptr_t ClipStackInit(int nDepth);
+
+    // Free the clip stack (the ClipStackInit inverse; AptRenderShutdown @0x82B0C2F0
+    // calls it first). X360 @0x82AE24E8: live base -> pool-Deallocate the RAW
+    // allocation at the init-matching size, then zero the base UNCONDITIONALLY (the
+    // raw pointer / depth / index words are left stale, exactly as the console
+    // leaves them). Returns the console r3 (the Deallocate result, or 0 when the
+    // stack was already down).
+    intptr_t ClipStackShutdown();
 
     // Pointer (as intptr_t) to the current top entry: base + 0x80 * index (x64 `shl rax,7`).
     intptr_t ClipStackGetTop();

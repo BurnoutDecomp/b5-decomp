@@ -334,11 +334,12 @@ extern const int gAptListenerEventDescriptorCount = 0;                          
 
 // ===========================================================================
 // 10. The per-VFT object-size table the GC pool's StaticInitialize scans
-//     (X360 byte_82144A18[AptVFT_NumVFTs]).  FLAG: rodata contents generated from
-//     the class set, un-recovered; X360 vaddr 0x82144A18.  Zeroed -> the min/max
-//     object-size scan yields 0 until extracted (the engine resizes the pool then).
+//     (X360 byte_82144A18[AptVFT_NumVFTs]).  Zeroed STORAGE only: the contents
+//     are FILLED by AptValueGC_PoolManager::StaticInitialize from sizeof() of the
+//     reconstructed x64 classes (the console .rdata bytes are RECOVERED -- the
+//     0x82144A18 dump -- and recorded per entry there as the 32-bit cross-check).
 // ===========================================================================
-uint8_t byte_82144A18[AptVFT_NumVFTs] = {};   // 0x82144A18
+uint8_t byte_82144A18[AptVFT_NumVFTs] = {};   // 0x82144A18 (filled at StaticInitialize)
 
 // ===========================================================================
 // 11. Analog-input tables (X360 .data / rodata; the input layer fills them each

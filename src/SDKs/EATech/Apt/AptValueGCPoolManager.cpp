@@ -15,6 +15,41 @@
 
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"
 
+// ---- the reconstructed AptValue class set (per-VFT size-table generation:
+//      StaticInitialize fills byte_82144A18 from sizeof() -- see the note there) ----
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptNone.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptLookup.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptExtern.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h"
+#include "SDKs/EATech/include/Apt/AptNativeFunction.h"
+#include "SDKs/EATech/include/Apt/AptFrameStack.h"
+#include "SDKs/EATech/include/Apt/AptCIH.h"
+#include "SDKs/EATech/include/Apt/AptCIHNone.h"
+#include "SDKs/EATech/include/Apt/AptSound.h"
+#include "SDKs/EATech/include/Apt/AptArray.h"
+#include "SDKs/EATech/include/Apt/AptMathObj.h"
+#include "SDKs/EATech/include/Apt/AptKey.h"
+#include "SDKs/EATech/include/Apt/AptGlobal.h"
+#include "SDKs/EATech/include/Apt/AptScriptColour.h"
+#include "SDKs/EATech/include/Apt/AptObject.h"
+#include "SDKs/EATech/include/Apt/AptPrototype.h"
+#include "SDKs/EATech/include/Apt/AptDate.h"
+#include "SDKs/EATech/include/Apt/AptMovieClip.h"
+#include "SDKs/EATech/include/Apt/AptXmlNode.h"
+#include "SDKs/EATech/include/Apt/AptXml.h"
+#include "SDKs/EATech/include/Apt/AptTextFormat.h"
+#include "SDKs/EATech/include/Apt/AptGlobalExtensionObject.h"
+#include "SDKs/EATech/include/Apt/AptStage.h"
+#include "SDKs/EATech/include/Apt/AptError.h"
+#include "SDKs/EATech/include/Apt/AptScriptFunction1.h"
+#include "SDKs/EATech/include/Apt/AptScriptFunction2.h"
+#include "SDKs/EATech/include/Apt/AptScriptFunctionByteCodeBlock.h"
+
 // ---------------------------------------------------------------------------
 // Allocator tuning statics (X360 .data). Zero-init; StaticInitialize() sets
 // the live values. byte_8324D804 ends up 4 (== sizeof(void*) on X360), which
@@ -107,11 +142,88 @@ AptValueGC_PoolManager::AptValueGC_PoolManager(size_t mainPoolSizeBytes,
 }
 
 // ---------------------------------------------------------------------------
+// The per-VFT object-size table CONTENTS (byte_82144A18; storage in
+// AptGlobals.cpp). The X360 .rdata bytes are RECOVERED (0x82144A18 dump):
+//   00 04 00 08 0c 0c 0c 0c 0c 24 20 08 28 20 2c 20 20 20 24 20
+//   20 20 20 20 20 20 20 20 20 40 10 20 20 28 24 34 34 44
+// -- the CONSOLE 32-bit per-type allocation sizes, cross-checked in-tree:
+// [12] CharacterInstHandle 0x28 == AptCIH::operator new(40), [14] Array 0x2C
+// == AptArray::operator new(44). The console links these bytes at build time
+// (class-set-generated); the x64 twin (XB1 sub_14082D9F0) scans its OWN
+// x64-size table (byte_140C13B48 -- x64 sizes, contents not in the export
+// set), so the host regenerates the contents by the vendor's rule -- sizeof()
+// over the reconstructed class set -- filled by StaticInitialize before its
+// scan (live C++ objects, not a serialized image; the console byte is cited
+// per entry below).
+//
+// Entries with no reconstructed class stay 0: a zero entry is inside the
+// shipped scan's behaviour (console [2] Property == 0 IS scanned, so the
+// shipped min is 0x00; the DOGMA ctor clamps a below-bookkeeping minimum).
+// [29] Extension (console 0x40) is the dynamic-size type -- GetNextAptValue
+// special-cases it to read the per-item size, so its entry is scan-input only.
+// ---------------------------------------------------------------------------
+namespace
+{
+    template <typename T>
+    inline uint8_t VFTObjectSize()
+    {
+        static_assert(sizeof(T) <= 0xFF, "per-VFT size-table entry must fit its byte slot");
+        return static_cast<uint8_t>(sizeof(T));
+    }
+
+    void PopulateVFTObjectSizeTable()
+    {
+        // [0] AptVFT_xxx: console 0x00 (never allocated; outside the scan).
+        byte_82144A18[AptVFT_StringValue]         = VFTObjectSize<AptString>();          // console 0x04 (non-GC pooled; Create() sizes the real alloc)
+        // [2] AptVFT_Property: console 0x00 (the shipped zero the min scan lands on).
+        byte_82144A18[AptVFT_None]                = VFTObjectSize<AptNone>();            // console 0x08
+        byte_82144A18[AptVFT_Register]            = VFTObjectSize<AptRegister>();        // console 0x0C
+        byte_82144A18[AptVFT_Boolean]             = VFTObjectSize<AptBoolean>();         // console 0x0C
+        byte_82144A18[AptVFT_Float]               = VFTObjectSize<AptFloat>();           // console 0x0C
+        byte_82144A18[AptVFT_Integer]             = VFTObjectSize<AptInteger>();         // console 0x0C
+        byte_82144A18[AptVFT_Lookup]              = VFTObjectSize<AptLookup>();          // console 0x0C
+        byte_82144A18[AptVFT_NativeFunction]      = VFTObjectSize<AptNativeFunction>();  // console 0x24
+        byte_82144A18[AptVFT_FrameStack]          = VFTObjectSize<AptFrameStack>();      // console 0x20
+        byte_82144A18[AptVFT_Extern]              = VFTObjectSize<AptExtern>();          // console 0x08
+        byte_82144A18[AptVFT_CharacterInstHandle] = VFTObjectSize<AptCIH>();             // console 0x28 (== AptCIH::operator new(40))
+        byte_82144A18[AptVFT_Sound]               = VFTObjectSize<AptSound>();           // console 0x20
+        byte_82144A18[AptVFT_Array]               = VFTObjectSize<AptArray>();           // console 0x2C (== AptArray::operator new(44))
+        byte_82144A18[AptVFT_Math]                = VFTObjectSize<AptMathObj>();         // console 0x20
+        byte_82144A18[AptVFT_Key]                 = VFTObjectSize<AptKey>();             // console 0x20
+        byte_82144A18[AptVFT_Global]              = VFTObjectSize<AptGlobal>();          // console 0x20
+        byte_82144A18[AptVFT_ScriptColour]        = VFTObjectSize<AptScriptColour>();    // console 0x24
+        byte_82144A18[AptVFT_Object]              = VFTObjectSize<AptObject>();          // console 0x20
+        byte_82144A18[AptVFT_Prototype]           = VFTObjectSize<AptPrototype>();       // console 0x20
+        byte_82144A18[AptVFT_Date]                = VFTObjectSize<AptDate>();            // console 0x20
+        byte_82144A18[AptVFT_MovieClip]           = VFTObjectSize<AptMovieClip>();       // console 0x20
+        // [23] AptVFT_Mouse: console 0x20 -- no reconstructed class; never allocated on the host.
+        byte_82144A18[AptVFT_XmlNode]             = VFTObjectSize<AptXmlNode>();         // console 0x20
+        byte_82144A18[AptVFT_Xml]                 = VFTObjectSize<AptXml>();             // console 0x20
+        // [26] AptVFT_XmlAttributes: console 0x20 -- no reconstructed class.
+        // [27] AptVFT_LoadVars: console 0x20 -- no reconstructed class.
+        byte_82144A18[AptVFT_TextFormat]          = VFTObjectSize<AptTextFormat>();      // console 0x20
+        // [29] AptVFT_Extension: console 0x40 -- dynamic-size (the walk reads the per-item size).
+        byte_82144A18[AptVFT_GlobalExtension]     = VFTObjectSize<AptGlobalExtensionObject>(); // console 0x10
+        byte_82144A18[AptVFT_Stage]               = VFTObjectSize<AptStage>();           // console 0x20
+        byte_82144A18[AptVFT_Error]               = VFTObjectSize<AptError>();           // console 0x20
+        byte_82144A18[AptVFT_StringObject]        = VFTObjectSize<AptStringObject>();    // console 0x28
+        byte_82144A18[AptVFT_ScriptFunction1]     = VFTObjectSize<AptScriptFunction1>(); // console 0x24
+        byte_82144A18[AptVFT_ScriptFunction2]     = VFTObjectSize<AptScriptFunction2>(); // console 0x34
+        byte_82144A18[AptVFT_ScriptFunctionByteCodeBlock] = VFTObjectSize<AptScriptFunctionByteCodeBlock>(); // console 0x34
+        byte_82144A18[AptVFT_CIHNone]             = VFTObjectSize<AptCIHNone>();         // console 0x44
+    }
+}
+
+// ---------------------------------------------------------------------------
 // StaticInitialize @ 0x82ADB7E0
 //
 // byte_8324D806 = 0; byte_8324D804 = 4; then scan byte_82144A18[1..37] for the
 // min/max object size -> dword_8324E2A4 = max; byte_8324D805 = min.
-// (min seed = 1000000 == 0xF4240; loop index < 38.)
+// (min seed = 1000000 == 0xF4240; loop index < 38.) The console scan result is
+// ground truth (0x82144A18 dump): the shipped statics are min 0x00 (entry [2]
+// Property is 0 and IS scanned -- dossier 0x82ADB7E0 has no zero-skip) / max
+// 0x44 ([37] CIHNone); the same faithful scan over the regenerated x64 table
+// yields the x64-widened pair (retiring AptInit's old 4/256 override FLAG).
 //
 // x64 (Burnout_External_Xbox_One sub_14082D9F0, the arbiter): byte_141479FB3 = 0
 // (the store-next offset stays 0) but byte_141479FB6 = **8** -- the size/alloc-flag
@@ -123,6 +235,10 @@ AptValueGC_PoolManager::AptValueGC_PoolManager(size_t mainPoolSizeBytes,
 // ---------------------------------------------------------------------------
 void AptValueGC_PoolManager::StaticInitialize()
 {
+    // Fill byte_82144A18 (the console's .rdata image is class-set-generated at
+    // build time; the x64 generation runs here, before the scan reads it).
+    PopulateVFTObjectSizeTable();
+
     gAptValueGCStoreSizeFlag = 0;
     gAptValueGCSizeOffset = 8;   // x64: XB1 byte_141479FB6 = 8 (was 4 on the consoles)
 

@@ -916,10 +916,11 @@ static int       nTemp1                 = 0;         // dword_8324E560 (pool-wal
 static int       nTemp2                 = 0;         // dword_8324E564 (table-walk visit counter)
 
 // dword_82F7337C -- the "use the snapshot table" mode gate ReplaceReferences
-// reads (its only referencer in the ARTIST dump). FLAG: the rodata VALUE is
-// un-extracted; 1 matches the shipped caller (CleanRemList snapshots + frees the
-// live-value table purely to feed this path).
-static int snUseNewWay = 1;   // dword_82F7337C
+// reads (its only referencer in the ARTIST dump). Rodata VALUE RECOVERED (the
+// 0x82F7337C dump): the shipped word is 0x00000001, so snUseNewWay == 1 --
+// matching the shipped caller (CleanRemList snapshots + frees the live-value
+// table purely to feed this path).
+static int snUseNewWay = 1;   // dword_82F7337C (dump-pinned: 0x00000001)
 
 // The GC live-value pool + the shared sentinels/registry (AptGlobals.cpp /
 // AptObject.cpp).

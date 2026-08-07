@@ -123,6 +123,28 @@ intptr_t ClipStackInit(int nDepth)
     return ClipStackGetTop();            // the unit-entry pointer (base + 0)
 }
 
+// @0x82AE24E8 -- free the clip stack (the ClipStackInit inverse; AptRenderShutdown
+// @0x82B0C2F0 calls it first). Live stack (non-null base): return the RAW allocation
+// to the shared Apt pool with the init-matching size -- x64 stride
+// sizeof(AptClipMatrixEntry) (the console mulli's 0x70 * depth + 0x10; the raw
+// console stride on the x64 host would return the wrong size-class to the pool).
+// Then the base is zeroed UNCONDITIONALLY (stw 0 -> dword_8324E384); the raw
+// pointer / depth / index words stay stale, exactly as the console leaves them.
+intptr_t ClipStackShutdown()
+{
+    intptr_t liResult = 0;
+    if (giClipStackBase)                 // lwz dword_8324E384; beq -> skip the free
+    {
+        liResult = gpAptSharedPtrPool->Deallocate(
+                       reinterpret_cast<void*>(giClipStackRaw),
+                       sizeof(AptClipMatrixEntry) * gsnClipStackDepth + 0x10)
+                       ? 1
+                       : 0;              // the console r3 = the Deallocate result
+    }
+    giClipStackBase = 0;                 // only the base clears (raw/depth/index stay)
+    return liResult;
+}
+
 // @0x82AD5D40 -- 2D affine matrix multiply of two 4x4 (16-float) clip matrices.
 //
 // The X360 first copies both 16-float sources into locals, then composes the

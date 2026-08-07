@@ -521,12 +521,16 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
         case 127: return LookupMethodSingleton(gpAptNativeFn_8324E438,
                       reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_localToGlobal));          // @0x82B0EF68
 
-        // FLAG (deferred natives -- the console creators bind sMethod_ bodies not yet
-        // reconstructed in AptCIHNativeFunctionHelper.cpp; a null return continues the
-        // findChild resolution, so the member reads `undefined` until they land):
-        //   108 "prevFrame"      @0x82B0EA04 (off_8324E48C)
-        //   111 "getBytesLoaded" @0x82B0EB18 (off_8324E494)
-        //   121 "unloadMovie"    @0x82B0EC88 (off_8324E44C)
+        // FLAG (deferred natives -- creator ARMS now ATTESTED from the full
+        // 0x82B0DF70 dossier, 2026-08-07: each is the IDENTICAL create-once
+        // AptNativeFunction singleton shape as the cases above -- operator new(0x24)
+        // + ctor over the helper native, setGCRoot(1), vtbl[0] AddRef pin -- so ONLY
+        // the three sMethod_ bodies remain unreconstructed in
+        // AptCIHNativeFunctionHelper.cpp; a null return continues the findChild
+        // resolution, so the member reads `undefined` until they land):
+        //   108 "prevFrame"      @0x82B0EA04 -> sMethod_prevFrame      (off_8324E48C)
+        //   111 "getBytesLoaded" @0x82B0EB18 -> sMethod_getBytesLoaded (off_8324E494)
+        //   121 "unloadMovie"    @0x82B0EC88 -> sMethod_unloadMovie    (off_8324E44C)
         // ⚠️ "nothing calls it yet" is a claim with an expiry date -- 110 "stop" sat in
         // this list and WAS live (B5ComplexBar.Done calls this.stop(); dropping it made
         // every GUI bar oscillate forever and storm BrnComplexBar.cpp:67). Verified

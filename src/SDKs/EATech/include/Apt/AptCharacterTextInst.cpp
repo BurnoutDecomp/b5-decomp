@@ -190,7 +190,7 @@ void AptCharacterTextInst::SetText(AptCIH* pScope)
     {
         // Undefined -> seed from the asset's default text, store it, and write the
         // variable back so the binding has a value.
-        AptString* pSeed = AptString::Create("");   // FLAG [unrecoverable literal @0x820046A7]
+        AptString* pSeed = AptString::Create("");   // "" ATTESTED: 0x820046A7 is a NUL byte in the rodata literal pool (dump 0x82004690..0x820046CF -- between "%s%s%s%s%s" @0x8200469C and "::" @0x820046A8), i.e. the shared empty-string terminator
 
         const char* pDefaultText =
             static_cast<AptCharacterDynamicText*>(mpRenderItem->mpCharacter)->mpDefaultText;

@@ -1010,17 +1010,25 @@ AptRenderItem* AptRenderItem::SetIsMask(bool bIsMask, const AptMatrix* pMaskMatr
 // matrix onto the render context; Pop: restore both. The subtypes bracket their
 // geometry draw with these.
 //
-// FLAG (parked): the console PushMatrices @0x82AEF150 gates on dword_82F73008 & 4 ->
-// drawCharacterInstOpti @0x82ADFA90 (a clip-stack fast path; the PopMatrices twin
-// just decrements the clip index). The gate word is un-exported .data (no writer
-// exists in the export set -- it is a build-config constant of unknown boot value)
-// and the fast path's clip entries are consumed by draw-side twins not yet
-// reconstructed, so only the standard push/append path is reconstructed here.
+// RESOLVED (2026-08-07, the _data_opti_flags_word dump): the console PushMatrices
+// @0x82AEF150 gates on dword_82F73008 & 4 -> drawCharacterInstOpti @0x82ADFA90 (a
+// clip-stack fast path; the PopMatrices twin just decrements the clip index). The
+// gate word's SHIPPED .data value is 0x2 (the neighbouring dumped words are the
+// "FSCommand:" string pointer + its 0x17/0x1A literal lengths, anchoring the read)
+// and no writer exists in the export set, so bit2 is clear for the whole run: the
+// opti fast path is DEAD on the shipped ARTIST build, and the standard push/append
+// path below IS the shipped behaviour (not a de-opt). Gate constant pinned below.
 // (Identity-singleton note: the item's null-matrix sentinels here are
 // gIdentityMatrix/gIdentityCXForm, distinct from the context's gAptIdentityMatrix/
 // gAptNullCXForm -- the concat still yields the correct result, just without the
 // pointer-identity short-circuit; the two singleton sets should be unified.)
 // ---------------------------------------------------------------------------
+
+// dword_82F73008 -- the Apt render opti-flags config word, pinned at its shipped
+// .data value (the _data_opti_flags_word dump; bit2 == the dead
+// drawCharacterInstOpti gate -- see the note above).
+static const unsigned int KU_AptOptiFlagsWord = 0x2u;   // dword_82F73008 (shipped)
+
 void PushMatrices(AptRenderingContext* pCtx, const AptRenderItem* pItem)
 {
     pCtx->pushColourTransform();
@@ -1043,10 +1051,10 @@ void PopMatrices(AptRenderingContext* pCtx, const AptRenderItem* /*pItem*/)
 // draws at an absolute screen transform independent of its parents' matrices. Used
 // by PushRenderDataAbsolute (sprite/button/etc.).
 //
-// FLAG (parked): the console fast-paths dword_82F73008&4 -> _drawCharacterInstAbsoluteOpti
-// @0x82AE00A8 (see PushMatrices above -- the same un-exported gate word + draw-side
-// coupling); the standard push/append path is reconstructed (matching the committed
-// PushMatrices, whose opti fast-path is likewise folded out).
+// RESOLVED (2026-08-07): the console fast-paths dword_82F73008&4 -> _drawCharacterInstAbsoluteOpti
+// @0x82AE00A8 -- dead on the shipped build (the gate word ships as 0x2, bit2 clear;
+// see KU_AptOptiFlagsWord above), so the standard push/append path IS the shipped
+// behaviour (matching PushMatrices, whose opti fast-path is likewise dead config).
 void PushMatricesAbsolute(AptRenderingContext* pCtx, const AptRenderItem* pItem)
 {
     pCtx->pushColourTransform();
