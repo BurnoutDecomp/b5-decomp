@@ -4,6 +4,7 @@
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu::{IsValid, operator+, Dot, Cross, Mult, ...}
 #include "rw/math/vpu/matrix44affine_operation.h"           // rw::math::vpu::OrthoNormalize3x3
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"  // InChangeRigidBodyInertia (ReadPropertiesFromChangeInertiaEvent)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags (CheckState's failure print)
 
 #include <cmath>   // std::pow (models the VMX exp2/log2 pow-curve in the damp funcs)
 
@@ -680,4 +681,85 @@ namespace BrnPhysics
     // is byte-identical and its declared home is unchanged. Re-merge when the packed lane gets its
     // PC-side storage answer in the SDK reconstruction. (Same idiom as ICEFileClose.cpp.)
     // ---------------------------------------------------------------------------------------
+
+    // @0x825A24B0  BrnPhysics::ExternalPhysicsBody::CheckState  (607 insns; bodied 2026-08-07,
+    // orchestrator wave -- the driving spine brackets every stage with it)
+    //
+    // Ten NaN sweeps over the body state, in the console's exact member order (each `li rN` /
+    // `addi rN` below is the asm's own offset, rel. the EPB base):
+    //   +0x00..0x30  mTransform, 4 rows, xyz lanes    -> "Bad transform"            (:679)
+    //   +0x70        mLocalInverseInertia, 3 rows xyz -> "Bad local inverse inertia"
+    //   +0xA0        mWorldInverseInertia, 3 rows xyz -> "Bad world inverse inertia" (:0x2B3)
+    //   +0xD0        mfMass          (whole register) -> "Bad mass"
+    //   +0xE0        mTotalLinearForce                -> "Bad total linear force"
+    //   +0xF0        mTotalTorque                     -> "Bad total torque"
+    //   +0x100       mTotalLinearImpulse              -> "Bad total linear impulse"
+    //   +0x110       mTotalAngularImpulse             -> "Bad total angular impulse"
+    //   +0x40        mLinearVelocity                  -> "Bad linear velocity"
+    //   +0x50        mAngularVelocity                 -> "Bad angular velocity"
+    // The console's test is `vcmpeqfp. v, v` -- a lane self-compare that fails only on NaN --
+    // per xyz lane for the matrices and whole-register for the scalars/accumulators. On a
+    // failure the caller's stage string goes through gpDebugPrint (gated on
+    // gxMessageFilterFlags bit 0) and the console's own assert text fires.
+    namespace
+    {
+        inline bool IsLaneNaN(f32 lfValue) { return !(lfValue == lfValue); }   // vcmpeqfp self-test
+
+        template <typename TRow>
+        inline bool AnyNaN3(const TRow& lrRow)
+        {
+            return IsLaneNaN(lrRow.x) || IsLaneNaN(lrRow.y) || IsLaneNaN(lrRow.z);
+        }
+
+        template <typename TRow>
+        inline bool AnyNaN4(const TRow& lrRow)
+        {
+            return AnyNaN3(lrRow) || IsLaneNaN(lrRow.w);
+        }
+
+        void CheckStateFail(const char* lpcContext, const char* lpcWhat)
+        {
+            // the console's failure path: print the stage string, then assert.
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << lpcContext;
+            CGS_ASSERT(false, lpcWhat);
+        }
+    }
+
+    void ExternalPhysicsBody::CheckState(const char* lpcContext) const
+    {
+        // mTransform -- four rows, xyz lanes each.
+        if (AnyNaN3(mTransform.xAxis) || AnyNaN3(mTransform.yAxis) ||
+            AnyNaN3(mTransform.zAxis) || AnyNaN3(mTransform.wAxis))
+            CheckStateFail(lpcContext, "Bad transform");
+
+        if (AnyNaN3(mLocalInverseInertia.xAxis) || AnyNaN3(mLocalInverseInertia.yAxis) ||
+            AnyNaN3(mLocalInverseInertia.zAxis))
+            CheckStateFail(lpcContext, "Bad local inverse inertia");
+
+        if (AnyNaN3(mWorldInverseInertia.xAxis) || AnyNaN3(mWorldInverseInertia.yAxis) ||
+            AnyNaN3(mWorldInverseInertia.zAxis))
+            CheckStateFail(lpcContext, "Bad world inverse inertia");
+
+        if (AnyNaN4(mfMass))
+            CheckStateFail(lpcContext, "Bad mass");
+
+        if (AnyNaN4(mTotalLinearForce))
+            CheckStateFail(lpcContext, "Bad total linear force");
+
+        if (AnyNaN4(mTotalTorque))
+            CheckStateFail(lpcContext, "Bad total torque");
+
+        if (AnyNaN4(mTotalLinearImpulse))
+            CheckStateFail(lpcContext, "Bad total linear impulse");
+
+        if (AnyNaN4(mTotalAngularImpulse))
+            CheckStateFail(lpcContext, "Bad total angular impulse");
+
+        if (AnyNaN4(mLinearVelocity))
+            CheckStateFail(lpcContext, "Bad linear velocity");
+
+        if (AnyNaN4(mAngularVelocity))
+            CheckStateFail(lpcContext, "Bad angular velocity");
+    }
 }

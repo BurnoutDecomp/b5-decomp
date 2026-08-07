@@ -263,7 +263,14 @@ namespace Vehicle
         // to mAngularVelocity (+0x60). That math is NOT fabricated here; it is delegated to the
         // committed VehiclePhysics::UpdateCrashing, which owns the crash-damping curve in the full
         // physics TU.
-        VehiclePhysics::UpdateCrashing(lfTimeStep, lpControls);
+        // ⚠️ 2026-08-07 (orchestrator wave): UpdateCrashing's declaration now carries its REAL
+        // console signature (dt, camera, controls, 3 bools -- recovered at the
+        // VehiclePhysics::Update call site @0x826414EC). This PC-side delegation has no camera
+        // matrix or player flags -- the console TrafficPhysics inlines the curve instead of
+        // calling -- so the extra arguments are the null/false stand-ins of a delegation site,
+        // stated as such, not console-attested values.
+        VehiclePhysics::UpdateCrashing(lfTimeStep, 0 /* no camera on the traffic leg */,
+                                       lpControls, false, false, false);
     }
 }
 }

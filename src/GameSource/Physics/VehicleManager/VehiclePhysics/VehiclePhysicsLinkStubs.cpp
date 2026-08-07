@@ -1,8 +1,9 @@
 // =================================================================================================
-// VehiclePhysicsLinkStubs.cpp -- FLAG (TrafficPhysics de-fork link-mount stubs, 2026-08-03).
+// VehiclePhysicsLinkStubs.cpp -- FLAG (TrafficPhysics de-fork link-mount stubs, 2026-08-03;
+// re-measured 2026-08-07 by the orchestrator wave -- see the mid-file banner for the current set).
 //
-// TWO stubs. Both are LOUD (CGS_ASSERT(false) traps), both are dead today, and both exist for one
-// measured reason.
+// Every stub is LOUD (a CGS_ASSERT(false) trap), dead until its caller's path goes live, and
+// exists for one measured link-closure reason.
 //
 // ⭐ WHY THEY EXIST. `PhysicalTrafficManager::maFullTrafficPhysics[20]` was folded from a byte-pinned
 // `u8[5168]` stand-in to the real `BrnPhysics::Vehicle::TrafficPhysics` (the ODR de-fork -- see
@@ -56,64 +57,109 @@ namespace Vehicle
                           "reconstruct from X360 @0x825FC748");
     }
 
-    // LINK STUB (TrafficPhysics de-fork 2026-08-03): body not reconstructed yet.
+    // LINK STUB (TrafficPhysics de-fork 2026-08-03; SIGNATURE conformed 2026-08-07 to the real
+    // @0x82638810 register map -- f1=dt, r5=camera, r6=controls, r7/r8/r9 the impact/aftertouch/
+    // showtime bools; see VehiclePhysics.h): body not reconstructed yet.
     // X360 @0x82638810, 732 instructions. The crash-damping spine: the per-axis vlogefp/vexptefp
     // angular-velocity curve driven by the rodata coefficient tables unk_82014AC0..82014AF0 that
     // TrafficPhysics::Update's own banner already records as un-homed. Its own wave.
-    void VehiclePhysics::UpdateCrashing(f32, const BrnPlayerDriverControls*)
+    void VehiclePhysics::UpdateCrashing(f32, const rw::math::vpu::Matrix44Affine*,
+                                        const BrnPlayerDriverControls*, bool, bool, bool)
     {
         CGS_ASSERT(false, "VehiclePhysics::UpdateCrashing: link stub (TrafficPhysics de-fork mount) "
                           "-- reconstruct from X360 @0x82638810");
     }
+
     // =============================================================================================
-    // ⭐ 2026-08-06 (big-five #3, UpdateVehiclePhysics wave) -- the RaceCarPhysics.cpp MOUNT set.
-    // RaceCarPhysics.cpp's own banner measured its five LNK2019s; this wave mounts that TU (the
-    // manager's per-car dispatch needs RaceCarPhysics::Update), resolves the GetAftertouchValues
-    // overload fork and the gbVehicleBounceBoosting home properly, and carries the remaining
-    // TWO orchestrator holes as the same loud trap-stub pattern as above:
+    // ⭐⭐ 2026-08-07 (ORCHESTRATOR WAVE). The three stubs this file carried for the conductor
+    // set -- Update @0x826412C0, UpdateSteering @0x825D3720, AddTractionPoint(s32,u32) -- are
+    // GONE: Update and UpdateSteering are BODIED in VehiclePhysics.cpp, and the 2-arg
+    // AddTractionPoint never existed on the console (the real 4-arg chain
+    // RaceCarPhysics::AddTractionPoint -> SimpleVehiclePhysics::AddTractionPoint is bodied in
+    // RaceCarPhysics.cpp / BrnSimpleVehiclePhysics.cpp).
     //
-    //   VehiclePhysics::Update         @0x826412C0 -- THE per-car conductor of the 54 force
-    //       leaves ([[vehicle-physics-is-the-wall]]'s named seam). Signature is the DWARF's
-    //       (VehiclePhysics.h:1084), spelled per the conformed declaration.
-    //   VehiclePhysics::UpdateSteering @0x825D3720 -- the follow-up steering pass. ⚠️ The DWARF
-    //       declares a FOUR-argument form (:1499 `(float32_t, float32_t, VecFloat, bool)`); the
-    //       committed 2-arg declaration came off the RaceCarPhysics::Update call-site asm. The
-    //       stub matches the COMMITTED declaration so the one real call site links; the
-    //       reconstruction wave owns reconciling the arity against the DWARF.
+    // What follows is the MEASURED remainder of the driving spine's closure -- the leaves
+    // UpdateDriving/Update now call that have no reconstructed body. Same contract as ever:
+    // every stub is a LOUD trap, each names its console address and size, and bodying one
+    // FAILS LNK2005 until its stub is deleted in the same commit.
     //
-    // ⛔ Same rule as above: NEVER ADD BEHAVIOUR HERE. A silent Update no-op would be the
-    // invisible-forever handling bug -- every car frozen mid-air with plausible state. Trap.
+    // ⛔ NEVER ADD BEHAVIOUR HERE. Each of these is a force- or state-producer; a silent no-op
+    // would be the invisible-forever handling bug.
     // =============================================================================================
 
-    // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
-    void VehiclePhysics::Update(const rw::math::vpu::Matrix44Affine*,
-                                const BrnPlayerDriverControls*, bool, bool, bool,
-                                CgsNumeric::Random&, Vector3, Vector3)
+    // LINK STUB (orchestrator wave): X360 @0x8261E4F0, 1130 instructions -- the per-wheel
+    // traction/grip orchestrator (per-wheel slip, adhesive limits, drive/brake torque
+    // distribution). THE largest remaining leaf; its own wave.
+    void VehiclePhysics::UpdateWheels(const BrnPlayerDriverControls*, VecFloat)
     {
-        CGS_ASSERT(false, "VehiclePhysics::Update: link stub (the 54-leaf per-car conductor) -- "
-                          "reconstruct from X360 @0x826412C0 before PhysicsModule::Update lands");
+        CGS_ASSERT(false, "VehiclePhysics::UpdateWheels: link stub -- reconstruct from X360 "
+                          "@0x8261E4F0 (1130 insns, the per-wheel grip orchestrator)");
     }
 
-    // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
-    void VehiclePhysics::UpdateSteering(s8, f32)
+    // LINK STUB (orchestrator wave): X360 @0x825D0BE8, 809 instructions -- the in-air attitude
+    // controller (pitch/yaw/roll damping-on-takeoff, mPitchYawRollFromTakeOff integration,
+    // mbRollingInAir). Its own wave.
+    void VehiclePhysics::UpdateInAirBehaviour(const BrnPlayerDriverControls*, VecFloat)
     {
-        CGS_ASSERT(false, "VehiclePhysics::UpdateSteering: link stub -- reconstruct from X360 "
-                          "@0x825D3720 (DWARF declares a 4-arg form; see the stub banner)");
+        CGS_ASSERT(false, "VehiclePhysics::UpdateInAirBehaviour: link stub -- reconstruct from "
+                          "X360 @0x825D0BE8 (809 insns, the in-air attitude controller)");
     }
 
-    // (gbVehicleBounceBoosting needs NO home: the extern was a data fork of
-    //  msPlayerParams.mbLaunchActive -- retired at the mount; see RaceCarPhysics.cpp.)
-
-    // LINK STUB (UpdateVehiclePhysics wave; the MEASURED last unresolved of the RaceCarPhysics.cpp
-    // mount): the two-argument traction-point entry RaceCarPhysics::AddTractionPoint @0x825FFAE8
-    // chains into (`bl` with (this, wheel, tag)). The VehiclePhysics.h:389 declaration models it
-    // at VehiclePhysics level over the minimal slice; the real base body resolves the wheel's
-    // contact position/normal and forwards to the 4-arg SimpleVehiclePhysics::AddTractionPoint
-    // (DWARF BrnSimpleVehiclePhysics.h:205). Reconstruct with the traction/integrator wave.
-    void VehiclePhysics::AddTractionPoint(s32, u32)
+    // LINK STUB (orchestrator wave): X360 @0x8261FC10, 178 instructions -- the engine-force
+    // applier UpdateEngine hands off to. Cascades into Engine::Update (the powertrain,
+    // UNBODIED) and ApplyEngineForcesOntoWheels; the ENGINE CLUSTER is its own wave.
+    // Signature is the recovered UpdateEngine call-site register map (f1..f5 = gas/brake/
+    // steering/fwdSpeed/boostMaxSpeedScale, r6 = handbrake, v1 = dt).
+    void VehiclePhysics::ApplyEngineForces(f32, f32, f32, f32, f32, bool, VecFloat)
     {
-        CGS_ASSERT(false, "VehiclePhysics::AddTractionPoint(s32,u32): link stub -- the base "
-                          "traction-point entry; reconstruct with the integrator wave");
+        CGS_ASSERT(false, "VehiclePhysics::ApplyEngineForces: link stub -- reconstruct from X360 "
+                          "@0x8261FC10 with the Engine::Update powertrain cluster");
+    }
+
+    // LINK STUB (orchestrator wave): X360 @0x82601978, 458 instructions -- the base attribute
+    // re-derivation (mass/box-extent asserts, per-wheel Wheel::SwitchAttribs, the inverse-
+    // inertia rebuild, SimpleVehicleAttribs::SetupAttribs). BLOCKED for real this time: it
+    // needs the full 240-byte SimpleVehicleAttribs, which this tree still models as the
+    // 20-byte {mCOMOffset, mbIsValid} slice.
+    void SimpleVehiclePhysics::SwitchAttribs(VehicleAttribs*)
+    {
+        CGS_ASSERT(false, "SimpleVehiclePhysics::SwitchAttribs: link stub -- reconstruct from "
+                          "X360 @0x82601978 (needs the full SimpleVehicleAttribs, 240 bytes)");
+    }
+
+    // LINK STUB (orchestrator wave): X360 @0x8262DE58, 185 instructions -- the post-reset
+    // attribs re-derivation (chains into SimpleVehiclePhysics::SetAttributes @0x826020A0,
+    // 503 insns, same SimpleVehicleAttribs dependency as SwitchAttribs above).
+    void VehiclePhysics::SetAttributes()
+    {
+        CGS_ASSERT(false, "VehiclePhysics::SetAttributes: link stub -- reconstruct from X360 "
+                          "@0x8262DE58 (+ SimpleVehiclePhysics::SetAttributes @0x826020A0)");
+    }
+
+    // LINK STUB (orchestrator wave): X360 @0x825D0008, 139 instructions -- the dev reset /
+    // fly-around handler (gated on controls->mbReset; teleports and re-seats the car).
+    void VehiclePhysics::HackedResetAndFlyAround(const BrnPlayerDriverControls*, VecFloat)
+    {
+        CGS_ASSERT(false, "VehiclePhysics::HackedResetAndFlyAround: link stub -- reconstruct "
+                          "from X360 @0x825D0008");
+    }
+
+    // LINK STUB (orchestrator wave): X360 @0x82602CB8, 171 instructions -- re-derive the wheel
+    // contact plane (the four contact points -> plane fit UpdateDriving runs each frame).
+    void SimpleVehiclePhysics::CalculateNewWheelPlane()
+    {
+        CGS_ASSERT(false, "SimpleVehiclePhysics::CalculateNewWheelPlane: link stub -- "
+                          "reconstruct from X360 @0x82602CB8");
+    }
+
+    // LINK STUB (orchestrator wave): X360 @0x825F58E0, 622 instructions -- derive the plain-AI
+    // attribute set from a source set (the donut-LEAVE leg of SwitchAIDonuttingAttribs; its
+    // sibling SetupAttribsForDonutAI @0x825F6298 is bodied in VehicleAttribs.cpp). The attribs
+    // TU's own wave.
+    void VehicleAttribs::SetupAttribsForAI(VehicleAttribs*)
+    {
+        CGS_ASSERT(false, "VehicleAttribs::SetupAttribsForAI: link stub -- reconstruct from "
+                          "X360 @0x825F58E0 (622 insns, the AI attrib derivation)");
     }
 }
 }

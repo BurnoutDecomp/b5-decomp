@@ -173,6 +173,16 @@ namespace BrnPhysics
 
         void ReadPropertiesFromRenderware(const rw::physics::RigidBody* lpRigidBody);
 
+        // @0x825A24B0 (607 insns; bodied 2026-08-07, orchestrator wave): the dev-build state
+        // validator the driving spine brackets every stage with. Ten NaN sweeps in the
+        // console's own order -- mTransform (4 rows, xyz lanes), mLocalInverseInertia,
+        // mWorldInverseInertia (3 rows each, xyz), then whole-register checks on mfMass, the
+        // four force/impulse accumulators, mLinearVelocity and mAngularVelocity. On a failure
+        // it prints the caller's stage string through gpDebugPrint (gated on
+        // gxMessageFilterFlags bit 0, exactly as the asm does) and fires the console's own
+        // assert text ("Bad transform" ... "Bad angular velocity").
+        void CheckState(const char* lpcContext) const;
+
         // @0x825A2388. Reseat this body's mass/inertia from a queued sim ChangeRigidBodyInertia
         // event (VehicleManager::ReadUpdatedBodyProperties @0x825C5520 is the only caller).
         // Gated on BOTH the mInvTens (bit 1) and mInvMass (bit 2) flags being present; builds

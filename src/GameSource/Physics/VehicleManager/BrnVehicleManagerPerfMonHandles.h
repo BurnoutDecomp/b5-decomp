@@ -39,5 +39,17 @@ namespace Vehicle
     extern s32 gs_iUpdateAggressiveDrivingPM; // dword_82F2A194
     extern s32 gs_iUpdateCrashesPM;           // dword_82F2A198
     extern s32 gs_iUpdatePassBysPM;           // dword_82F2A19C
+
+    // ⭐ ADDITIVE HOIST 2026-08-07 (orchestrator wave), per this header's own rule: the seven
+    // GUARDED VPhys sub-monitors stop being Construct-TU statics because VehiclePhysics::Update
+    // @0x826412C0 brackets its stages with exactly these ids (the console reads the same seven
+    // file-scope slots: dword_82F2A278..dword_82F2A290).
+    extern s32 gs_iVPhysUpdatePM;             // dword_82F2A278
+    extern s32 gs_iVPhysSwitchAttribsPM;      // dword_82F2A27C
+    extern s32 gs_iVPhysUpdateCrashingPM;     // dword_82F2A280
+    extern s32 gs_iVPhysUpdateAirRamsPM;      // dword_82F2A284
+    extern s32 gs_iVPhysUpdateSpinPM;         // dword_82F2A288
+    extern s32 gs_iVPhysUpdateDrivingPM;      // dword_82F2A28C
+    extern s32 gs_iVPhysUpdateLVPM;           // dword_82F2A290
 }
 }

@@ -380,8 +380,16 @@ namespace Vehicle
         // ⭐ RE-NAMED 2026-08-03: the byte at controls+0x41 is mbIsSteeringWheel, not a "car type"
         // (UpdateDriving @0x82638348 passes the same +0x41 byte to UpdateSteering, and
         // ModifyControlsForSteeringWheelInput is gated on it @0x826381A8).
+        // ⭐⭐ RE-POINTED 2026-08-07 (orchestrator wave) to the real 4-arg signature. The asm
+        // @0x82641890..0x826418A4: f1 = controls->mfSteering (+0x10), f2 = f31 which this
+        // function loads from flt_82001CC0 == 0.0f (no gas on the frozen path), v1 = v127
+        // (the sim timestep, slow-mo scaled), r6 = mbIsSteeringWheel.
         if (IsFrozen())   // asm @0x82641884: lbz r11, 0x70(r31) == ExternallySimulatedBody::mbFrozen
-            VehiclePhysics::UpdateSteering(lpControls->mbIsSteeringWheel ? 1 : 0, lfSteer);
+            VehiclePhysics::UpdateSteering(
+                lfSteer, 0.0f,
+                VecFloat{ lrPassThroughV1.x, lrPassThroughV1.y,
+                          lrPassThroughV1.z, lrPassThroughV1.w },
+                lpControls->mbIsSteeringWheel);
 
         // Decay the uncapped-speed window timer while it is positive.
         // ⭐ v1, NOT v2: asm 0x826418CC stores v127 (the sim timestep, slow-mo scaled) into the
@@ -530,36 +538,39 @@ namespace Vehicle
     }
 
     // ---------------------------------------------------------------------------------------
-    // RaceCarPhysics::AddTractionPoint  @0x825FFAE8
-    //   Chain to the base, then -- if the launch-push timer has elapsed (gap1408 >= unk_82FB9180) --
-    //   snapshot the wheel's 56-byte road-contact record and, if its byte[42] is set, flag +344.
-    //   FLAG: the threshold unk_82FB9180 is un-homed rodata (placeholder); the 6x8-byte copy + the
-    //   byte[42]->flag step are exact.
+    // RaceCarPhysics::AddTractionPoint  @0x825FFAE8  (49 insns)
+    // ⭐⭐ RE-SIGNATURED 2026-08-07 (orchestrator wave). The committed 2-arg form and its
+    //   "chains to a 2-argument VehiclePhysics entry" reading were a slice artefact: the asm
+    //   at 0x825FFB04 does `bl SimpleVehiclePhysics::AddTractionPoint` with EVERY incoming
+    //   register untouched (r4 = wheel, r5 = tag, v1 = position, v2 = normal), and the PS3
+    //   DecFIGS mangles this override as the same 4-arg
+    //   (EVehicleDrivenWheel, Vector3, Vector3, u32) as the base (@0x6E77E4 -> @0x6E742C).
+    //   The base body is now real (BrnSimpleVehiclePhysics.cpp), so the chain is closed
+    //   end to end, and the previously ELIDED tail is modelled BY NAME:
+    //     0x825FFB0C  if (mfBeachedTime (+0x1408) >= 0.5 [unk_82FB9180 <- flt_82001DA0,
+    //                 static-init splat @0x82C5D030])
+    //     0x825FFB54    snapshot maWheels[leWheel]'s 48-byte record from +0x130 rel (i.e. the
+    //                   whole RoadContact through +0x2F) -- the copy exists only to read ONE
+    //                   byte out of it:
+    //     0x825FFB80    if (byte +0x2A of the copy -- RoadContact::mbIsCloseToGround)
+    //     0x825FFB90      maWheels[leWheel].mRoadContact.mbIsOnGround (+0x158 rel this) = 1
+    //   i.e. after the beached/launch window, a merely CLOSE wheel is promoted to grounded.
     // ---------------------------------------------------------------------------------------
-    void RaceCarPhysics::AddTractionPoint(s32 leWheel, u32 luSurfaceTag)
+    void RaceCarPhysics::AddTractionPoint(EVehicleDrivenWheel leWheel, Vector3 lvPosition,
+                                          Vector3 lvNormal, u32 lu32CollisionTag)
     {
-        // unk_82FB9180 <- flt_82001DA0 (0.5), static-init splat @0x82C5D030. ⚠️ At 0.0f the gate read
-        // `if (0 >= pushTimer)`, i.e. INVERTED -- it fired whenever the timer was non-positive.
-        static const f32 KF_TRACTION_PUSH_THRESHOLD = 0.5f;   // unk_82FB9180
+        static const f32 KF_TRACTION_PUSH_THRESHOLD = 0.5f;   // unk_82FB9180 (attested)
 
-        // chains to the base SimpleVehiclePhysics::AddTractionPoint -- declared as an additive base
-        // method on VehiclePhysics (this minimal slice has no real SimpleVehiclePhysics base type).
-        VehiclePhysics::AddTractionPoint(leWheel, luSurfaceTag);
+        SimpleVehiclePhysics::AddTractionPoint(leWheel, lvPosition, lvNormal, lu32CollisionTag);
 
-        // ⭐ RE-POINTED 2026-08-03 (own-block recovery). This read `mfSlamSteerEnvelope` while its
-        // own comment said "the +0x1408 timer (un-modelled separately)" -- i.e. it knew the console
-        // offset and used the member that did not live there (+0x1430). +0x1408 is mfBeachedTime,
-        // now a declared member; the asm is `lfs f0, 0x1408(r31)` @0x825FFB0C. Still gated on a
-        // placeholder threshold (unk_82FB9180 unread), which is FLAGGED above, not hidden.
-        const f32 lfPushTimer = mfBeachedTime;   // asm: lfs f0, 0x1408(r31)
-        if (KF_TRACTION_PUSH_THRESHOLD >= lfPushTimer)
+        // asm: lfs f0, 0x1408(r31) ; vcmpgefp. against the 0.5 splat.
+        if (mfBeachedTime >= KF_TRACTION_PUSH_THRESHOLD)
         {
-            // The 56-byte (6x8) road-contact snapshot + the byte[42] -> +344 flag step are structural
-            // (they copy the wheel record at this+224*leWheel+304). Modelled BY NAME would need the
-            // full Wheel/RoadContact slice writeback; the copy is a faithful no-op against state this
-            // slice does not own. ELIDED as faithful-but-inert (it writes only into scratch the C10
-            // group does not model), preserving the gate condition above.
-            (void)leWheel;
+            // the 6x8-byte stack snapshot reads RoadContact::mbIsCloseToGround (+0x2A of the
+            // copied record) and promotes the on-ground flag.
+            Wheel& lrWheel = maWheels[leWheel];
+            if (lrWheel.mRoadContact.mbIsCloseToGround)
+                lrWheel.mRoadContact.mbIsOnGround = true;   // stb 1, 0x158(r8)
         }
     }
 

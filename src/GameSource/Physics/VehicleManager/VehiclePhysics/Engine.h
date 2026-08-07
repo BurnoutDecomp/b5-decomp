@@ -96,6 +96,16 @@ namespace Vehicle
         // instrs so it ends exactly at 0x825CF130, and the next indexed symbol is 0x825CF278.
         void Reset(VecFloat lvfWheelAngularVelocity);
 
+        // [PC-leaf accessor] The console's UpdateDriving @0x82638248 pokes the two allow-change
+        // bytes of the embedded engine directly (`stb rX, 0xFC4(r31) ; stb rX, 0xFC5(r31)` --
+        // always the SAME value, 1 on the ground / 0 in the air). Exposed as one named setter
+        // so the host write stays on the named members instead of an offset cast.
+        void SetAllowGearChanges(bool lbAllow)
+        {
+            mbAllowToChangeUpGear   = lbAllow;   // +0xC4
+            mbAllowToChangeDownGear = lbAllow;   // +0xC5
+        }
+
         // --- Remaining Engine API: owned by separate future TUs -- declared only (no body). ---
 
     private:

@@ -175,6 +175,10 @@ namespace Vehicle
         void SwitchAttribs(VehicleAttribs* lpAttribs);
         bool SetAttributes(VehicleAttribs* lpAttribs, const Vector3* lpWheelPositions,
                            const f32* lpafWheelRadii);
+
+        // ⭐ OUT of the BLOCKED list 2026-08-07 (orchestrator wave): BODIED in
+        // BrnSimpleVehiclePhysics.cpp from @0x825D9608 -- the "cannot be reproduced BY NAME"
+        // claim was unverified and false (every lane it touches was already a named member).
         void AddTractionPoint(EVehicleDrivenWheel leWheel, Vector3 lvPosition, Vector3 lvNormal,
                               u32 lu32CollisionTag);
         Matrix44Affine GetWheelsWorldTransfrom(EVehicleDrivenWheel leWheel, bool lbApplySteer) const;
