@@ -10,7 +10,8 @@
 
 // The register file (X360 off_8324E4B0 / dword_8324E4B4) + the configured count
 // (X360 dword_82F733E8). Null/zero until Initialize runs; gnAptRegisterCount is
-// published by the Apt runtime startup (FLAG -- not yet reconstructed).
+// published from the config block (word 12) by AptUpdateInitialize (AptInit.cpp
+// @0x82B02D08).
 AptRegister* AptRegister::spRegisters     = 0;
 s32          AptRegister::snRegisterCount = 0;
 s32          gnAptRegisterCount           = 0;

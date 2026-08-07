@@ -32,15 +32,13 @@
 #include <new>   // placement new (the in-place AptNativeHash construct)
 
 // ---------------------------------------------------------------------------
-// FLAG (module-static, owned by the Apt class-registry / startup TU, not yet
-// homed): the class-name key the ctor looks up in the _global fallback scope to
-// find the sprite/movie-clip class whose prototype seeds this instance's
-// __proto__. X360 dword_8324E640 -- an .rdata EAStringC literal (the class name);
-// declared extern by name so the proto wiring compiles. (The neighbouring
-// dword_8324E580/0x8324E698 are the "prototype" key bodies -- see AptNativeHash.h
-// -- this is a distinct adjacent key.)
+// The class-name key the ctor looks up in the _global fallback scope to find the
+// sprite/movie-clip class whose prototype seeds this instance's __proto__. X360
+// dword_8324E640 -- an .rdata EAStringC literal; HOMED in AptGlobals.cpp
+// ("MovieClip"). (The neighbouring dword_8324E580/0x8324E698 are the "prototype"
+// key bodies -- see AptNativeHash.h -- this is a distinct adjacent key.)
 // ---------------------------------------------------------------------------
-extern const EAStringC gAptSpriteClassKey;   // X360 dword_8324E640
+extern const EAStringC gAptSpriteClassKey;   // X360 dword_8324E640 ("MovieClip", AptGlobals.cpp)
 
 // ---------------------------------------------------------------------------
 // ctor @0x82AFF820
@@ -89,12 +87,12 @@ AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(AptCharacter* pCharacter)
     // the _global fallback scope by its class-name key, take its native property hash, and copy that
     // hash's "prototype" slot into our __proto__.
     //
-    // NULL-SAFE (x64 bring-up): the X360 derefs gpAptGlobalFallback unguarded because the sprite class
-    // is registered (by the un-homed AS-builtin registration) before any sprite instance is built. In
-    // our partial bring-up that registration has NOT run, so gpAptGlobalFallback (and the looked-up
-    // class value / its hash) are null. Skip the __proto__ wiring when any link is null -- the instance
-    // is built structurally without the AS prototype. FLAG: __proto__ wiring resumes once the AS-builtin
-    // class registry lands. Also requires mpProperties (null if the pool alloc above failed).
+    // NULL-SAFE (host): the X360 derefs gpAptGlobalFallback unguarded because the sprite class is
+    // registered before any sprite instance is built. That registration IS live (AptInit.cpp
+    // registers the MovieClip/Object/String classes into gpAptGlobalFallback at Apt init), so the
+    // __proto__ wiring runs on the normal path; the guards only cover an inst built before Apt init
+    // (then the instance is built structurally without the AS prototype). Also requires mpProperties
+    // (null if the pool alloc above failed).
     if (gpAptGlobalFallback != nullptr && mpProperties != nullptr)
     {
         AptValue* pClassValue = gpAptGlobalFallback->Lookup(gAptSpriteClassKey);

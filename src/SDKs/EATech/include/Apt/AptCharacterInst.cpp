@@ -90,10 +90,11 @@ AptCharacterInst::~AptCharacterInst()
 // +0x20 (mnGotoFrame / mDisplayList / ...) -- if a type-5 char got only the 16-byte base, those
 // accesses fell OUTSIDE the allocation and CORRUPTED the heap (non-deterministic AVs during the
 // first frame-0 place). Allocates from the DOGMA pool (off_8324D808 == gpAptPseudoDataPool), the
-// console's pool. FLAG: the per-type console VTABLE (off_82145FE0 etc.) is the family's manual
-// mpVTable_unused slot the reconstruction does not model (dispatch is via mTypeFlags), so it is
-// not written -- the type tag (mTypeFlags high 6 bits) still identifies the type. Text/button
-// subtype BEHAVIOUR beyond the base remains a follow-on; the render item stays type-correct.
+// console's pool. NOTE (permanent modelling decision): the per-type console VTABLE
+// (off_82145FE0 etc.) is the family's manual mpVTable_unused slot the reconstruction
+// does not model (dispatch is via the type tag, x64 mTypeFlags LOW 6 bits), so it is
+// not written. Text/button subtype BEHAVIOUR beyond the base remains a follow-on; the
+// render item stays type-correct.
 AptCharacterInst* AptCharacterInst::CreateCharacterInst(AptCharacter* pCharacter)
 {
     const int32_t nType = pCharacter ? pCharacter->mnType : -1;
@@ -178,10 +179,11 @@ AptCharacter* AptCharacterInst::SetCharacter(AptCharacter* pCharacter)
 }
 
 // ---- const reads (through the render item) --------------------------------
-// NULL-SAFE (x64 bring-up): mpRenderItem is null when the render-tree manager is the FLAG'd null stub
-// (no render item was created). The console always has a render item; on our partial bring-up these
-// return safe defaults instead of dereferencing null. FLAG: remove the guards once the render-tree
-// manager lands (every AptCharacterInst will then own a render item).
+// NULL-SAFE (host): the console always has a render item; on x64 mpRenderItem is
+// legitimately null when the inst was built before an Apt target was active (the
+// ctor's gpAptTarget guard, faithful to the X360 ctor), when the pool is exhausted,
+// or for a character type Manager_CreateItem does not build (e.g. button). These
+// return safe defaults instead of dereferencing null.
 const AptCharacter* AptCharacterInst::GetCharacterConst() const { return mpRenderItem ? mpRenderItem->GetCharacterConst() : nullptr; }
 int16_t AptCharacterInst::GetDepth() const     { return mpRenderItem ? mpRenderItem->GetDepth() : static_cast<int16_t>(0); }
 int16_t AptCharacterInst::GetClipDepth() const { return mpRenderItem ? mpRenderItem->GetClipDepth() : static_cast<int16_t>(0); }
@@ -206,13 +208,12 @@ void AptCharacterInst::SetClipDepth(int nClipDepth)
 }
 void AptCharacterInst::SetIsVisible(bool bVisible)
 {
-    // FLAG: AptRenderItem::SetIsVisible (visibility propagation @0x7ED720) is a
-    // follow-on; the writable item + the flag bit are set here.
-    AptRenderItem* pItem = GetRenderItemWritable();
-    if (pItem == nullptr)
-        return;
-    if (bVisible) pItem->mFlags |= 0x80000000u;
-    else          pItem->mFlags &= ~0x80000000u;
+    // Route through the homed AptRenderItem::SetIsVisible (@0x82AE0708 / PS3
+    // @0x7ED720 -- sets the x64 is-visible bit 0 and recomputes the subtree's
+    // mask-driven visibility). The old direct 0x80000000 poke wrote the CONSOLE
+    // bit position, which the x64 GetIsVisible (mFlags & 1) never read.
+    if (AptRenderItem* pItem = GetRenderItemWritable())
+        pItem->SetIsVisible(bVisible);
 }
 
 // ===========================================================================
@@ -238,8 +239,8 @@ extern AptCIH* AptManagedItemMoved(AptRenderTreeManager* pMgr, AptCIH* pNode, in
 //   return AptRenderTreeManager::Update_CloneItem(gpCurrentTargetSim[11], a1, a2,
 //                                                 dword_8324E520);
 // Tail-call into the manager's clone entry point; passes the scene node, the
-// source argument (r4->r5), and the current update tick. FLAG: the live
-// double-buffer clone is deferred -- AptCloneManagedItem is the manager facade.
+// source argument (r4->r5), and the current update tick. AptCloneManagedItem routes
+// to the real AptRenderTreeManager::Update_CloneItem @0x82AE0B38 (AptRenderTreeManager.cpp).
 // ---------------------------------------------------------------------------
 AptCIH* AptCharacterInst::CloneItem(AptCIH* pNode, int nArg)
 {
@@ -364,9 +365,10 @@ AptCIH* AptCharacterInst::ItemMoved(AptCIH* pNode)
 // ---------------------------------------------------------------------------
 void AptCharacterInst::MoveRenderDataFrom(AptCharacterInst* pSource)
 {
-    // NULL-SAFE (x64 bring-up): render items are null when the render-tree manager is the null stub.
-    // The console always has both items; here we move the render data only when both exist, else just
-    // transfer the property-hash ownership below. FLAG: render-data move resumes once the RTM lands.
+    // NULL-SAFE (host): the console always has both items; on x64 either render item is
+    // legitimately null when its inst was built with no active Apt target (the ctor's
+    // gpAptTarget guard). Move the render data only when both exist; the property-hash
+    // ownership below transfers either way.
     AptRenderItem* pDst = GetRenderItemWritable();
     if (pDst != nullptr && pSource->mpRenderItem != nullptr)
     {

@@ -86,11 +86,12 @@ extern const int32_t gAptMemberIndexToEventBit[];     // dword_82143BA8 (event i
 // AptCIHBehaviour.cpp).
 extern void GetBoundingRectClamped(const AptCIH* pThis, float* pOutRect);
 
-// FLAG (un-homed AS global-function singletons; created by the deferred
-// sub_82AF6B68 builtin-table init -- see the AptInit.cpp note): the console
-// lookup returns these registered globals for the setInterval/clearInterval/
-// isNaN/unescape/escape/Boolean member names. Null until that init homes
-// (a null return simply continues the findChild resolution).
+// The AS global-function singletons (storage HOMED in AptGlobals.cpp; created by
+// sub_82AF6B68's still-deferred un-named builtin-table slice -- that deferral is
+// tracked at its home, AptInit.cpp): the console lookup returns these registered
+// globals for the setInterval/clearInterval/isNaN/unescape/escape/Boolean member
+// names. Null until that init slice lands (a null return simply continues the
+// findChild resolution).
 extern AptValue* gpAptFnSetInterval;     // off_8324D828
 extern AptValue* gpAptFnClearInterval;   // off_8324D81C
 extern AptValue* gpAptFnIsNaN;           // off_8324D824
@@ -100,9 +101,9 @@ extern AptValue* gpAptFnBoolean;         // off_8324D74C
 
 // ---------------------------------------------------------------------------
 // The AptMovie timeline embedded inside a sprite/animation AptCharacter --
-// the same FLAGged reinterpret AptCIH.cpp's play-head methods centralise
-// (console char+0x10; the 8-byte GUIAPT64 layout lands it at char+0x20 ==
-// KU_AptEmbeddedMovieOff).
+// the same serialised-blob reinterpret AptCIH.cpp's play-head methods centralise
+// (PC-platform leaf there: console char+0x10; the 8-byte GUIAPT64 layout lands it
+// at char+0x20 == KU_AptEmbeddedMovieOff).
 // ---------------------------------------------------------------------------
 static AptMovie* GetClipMovieEmbedded(const AptCharacterInst* pInst)
 {

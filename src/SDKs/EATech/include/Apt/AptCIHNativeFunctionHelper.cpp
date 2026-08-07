@@ -62,33 +62,31 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                       // gpAptPseudoDataPool (the TextFormat pool)
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed Apt behavioural callees -- bodies in their own TUs; declared so
-// the AS movie-management methods below compile against the same entry points):
-//   AptCIH::InsertChild @0x82B09CA0 -- place pCharacter into pNode's child display
-//     list at nDepth under name pName (pSource = the cloned-from node or null,
-//     pInitObject = an optional init object). Returns the inserted child CIH.
-//   findCharacterInLibrary @0x82AD... -- resolve an exported library symbol name to
-//     a character in pNode's movie (a3 = "search imports" flag).
-//   AptAnimationTarget::TickNewInsts -- tick the just-inserted instances so they are
-//     live this frame (drains the new-instance table off_8324E544).
-//   AptHook_GetBytesTotal (gAptFuncs slot, X360 dword_8324E8AC) -- host query: total
-//     byte size of a loaded .apt by file path.
+// Behavioural callees of the AS movie-management methods below -- all HOMED:
+//   AptCIH::InsertChild @0x82B09CA0 -- member (declared in AptCIH.h, included above;
+//     body in AptCIHBehaviour.cpp).
+//   findCharacterInLibrary @0x82AFDF58 -- resolve an exported library symbol name to
+//     a character in pNode's movie (a3 = "search imports" flag); defined BELOW in
+//     this TU (forward-declared for the earlier sMethods).
+//   AptAnimationTarget::TickNewInsts -- static member (drains the new-instance
+//     table off_8324E544).
+//   AptHook_GetBytesTotal (gAptFuncs slot, X360 dword_8324E8AC) -- host query,
+//     defined below (PC host-callback boundary leaf).
 // ---------------------------------------------------------------------------
-// AptCIH::InsertChild is now a member (declared in AptCIH.h, included above).
 extern AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, char bSearchImports);
 extern int  AptHook_GetBytesTotal(const char* pcFilePath, int a2, double a3);             // dword_8324E8AC
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the apt VM native-call dispatch): the global native-method arg
-// stack (X360 off_8324E768 = gAptActionInterpreter.mpStack, dword_8324E760 = its
-// mnStackTop). The i-th AS argument (i=0 = last pushed) is
-// gppAptNativeArgStack[gnAptNativeArgCount - 1 - i]. (Committed externs in the
-// sibling AptActionInterpreterBuiltins.cpp.)
+// The global native-method arg stack (X360 off_8324E768 = gAptActionInterpreter.
+// mpStack, dword_8324E760 = its mnStackTop). Storage HOMED in AptGlobals.cpp; the
+// VM native-call dispatch (AptActionInterpreterInterpHelpers.cpp) fills them around
+// each native call. The i-th AS argument (i=0 = last pushed) is
+// gppAptNativeArgStack[gnAptNativeArgCount - 1 - i].
 // ---------------------------------------------------------------------------
 extern AptValue** gppAptNativeArgStack;   // off_8324E768
 extern int        gnAptNativeArgCount;    // dword_8324E760
 
-// FLAG (homed by the AS-globals layer): the shared "undefined" value (off_8324D814).
+// The shared "undefined" value (off_8324D814; storage HOMED in AptGlobals.cpp).
 extern AptValue* gpUndefinedValue;
 
 // ---------------------------------------------------------------------------
@@ -341,7 +339,8 @@ int AptHook_GetBytesTotal(const char* pcFilePath, int a2, double /*a3*/)
 // dispatch: `gAptFuncs.pfnPointHitTest(x, y, node)` (dword_8324E8A4 == the
 // user-function table +0x8C; PPC f1/f2 + r5 == the (float, float, clip) C
 // signature). The engine itself has no shape rasterisation -- precise hit
-// testing is the host renderer's job. FLAG (PC bring-up boundary): the X360
+// testing is the host renderer's job. FLAG PC-platform leaf: the host
+// point-hit-test callback boundary (gAptFuncs.pfnPointHitTest) -- the X360
 // calls the slot unguarded (CgsAptAux always installs the full table); our
 // bring-up has not installed a point-hit-test callback yet, so a null slot
 // answers 0 (miss) -- the honest un-installed-host state, same convention as
@@ -353,10 +352,10 @@ int AptShapeHitTest(AptValue* pNode, float fX, float fY)
 {
     if (gAptFuncs.pfnPointHitTest != nullptr)
     {
-        // FLAG (x64 handle width): AptAssetMoiveClip is the DWARF 'int' handle --
-        // console-width for the clip pointer. No PC host installs this slot yet;
-        // when one does, the typedef must widen (intptr_t) with the host. The
-        // truncating cast documents the boundary rather than hiding it.
+        // FLAG PC-platform leaf (x64 handle width): AptAssetMoiveClip is the DWARF
+        // 'int' handle -- console-width for the clip pointer. No PC host installs
+        // this slot yet; when one does, the typedef must widen (intptr_t) with the
+        // host. The truncating cast documents the boundary rather than hiding it.
         return gAptFuncs.pfnPointHitTest(
             fX, fY,
             static_cast<AptAssetMoiveClip>(reinterpret_cast<uintptr_t>(pNode)));
@@ -467,9 +466,9 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_gotoAndStop(AptValue* pContext, in
 // ===========================================================================
 AptValue* AptCIHNativeFunctionHelper::sMethod_startDrag(AptValue* pContext, int /*nArgCount*/)
 {
-    // FLAG: the X360 dispatches through pContext's vtbl[0] verbatim. On PC the first
-    // virtual is AddRef; the faithful call is the same indirect dispatch expressed
-    // through the named virtual.
+    // The X360 dispatches through pContext's vtbl[0] verbatim; vtbl[0] IS AddRef on
+    // every shipped AptValue vtable (X360 CIH vtbl[+0] = 0x82ADCF20 = AddRef), so the
+    // named virtual is the same dispatch.
     pContext->AddRef();
     return gpUndefinedValue;
 }
@@ -512,8 +511,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_removeTextField(AptValue* pContext
 }
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by AptActionInterpreter, not yet built): the process-wide AS VM.
-// The X360 passes its base address (&dword_8324E760 == the interpreter's
+// The process-wide AS VM (storage HOMED in AptGlobals.cpp; the interpreter TUs are
+// built). The X360 passes its base address (&dword_8324E760 == the interpreter's
 // mnStackTop slot [c:0x00]) as the `this` to the clone/loadVariables behavioural
 // entry points below; declared as the extern global so the calls keep the exact
 // shape. (The same singleton whose stacks back gppAptNativeArgStack /
@@ -571,16 +570,17 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_loadVariables(AptValue* pContext, 
 }
 
 // ---------------------------------------------------------------------------
-// FLAG: AptCIH::GetWorldBounds (X360 sub_82AE2C58, un-homed) -- compute a scene
-// node's world-space AABB into pOutRect (left,top,right,bottom). Declared as an
-// extern shim so the AS hitTest / getBounds keep the exact (node, &rect) call shape.
+// The shared world-bounds helper (X360 sub_82AE2C58, HOMED in AptCIHBehaviour.cpp
+// as GetBoundingRectClamped) -- compute a scene node's world-space AABB into
+// pOutRect (left,top,right,bottom); the AS hitTest / getBounds keep the exact
+// (node, &rect) call shape.
 // ---------------------------------------------------------------------------
 extern void GetBoundingRectClamped(const AptCIH* pThis, float* pOutRect);   // sub_82AE2C58 (AptCIHBehaviour.cpp) -- the shared world-bounds helper; the AS clip AptValue* IS an AptCIH*
 
-// FLAG: the shape-precise point hit-test (X360 indirect through dword_8324E8A4, an
-// AptCharacter render-method slot) -- "is local point (x,y) inside the node's drawn
-// shape?". Declared as an extern shim (the indirect target is a render-data method
-// not yet homed), preserving the (node, x, y) call shape.
+// The shape-precise point hit-test (X360 indirect through dword_8324E8A4) -- "is
+// local point (x,y) inside the node's drawn shape?". HOMED above in this TU as the
+// gAptFuncs.pfnPointHitTest host-callback dispatch (PC-platform leaf boundary),
+// preserving the (node, x, y) call shape.
 extern int AptShapeHitTest(AptValue* pNode, float fX, float fY);   // (*dword_8324E8A4)
 
 // Local: the X360 hitTest receiver/arg type gate -- value type 12 (CharacterInst
@@ -665,9 +665,9 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_localToGlobal(AptValue* pContext, 
     EAStringC strKeyX("x");
     EAStringC strKeyY("y");
 
-    // FLAG: the point's embedded per-instance native hash (the X360 reads it at the
-    // value's +8 -- an AptValueWithHash's hash sub-object). Declared as an extern
-    // shim so the key lookups/stores stay typed without re-narrowing the value here.
+    // The point's embedded per-instance native hash (the X360 reads it at the
+    // value's +8 -- an AptValueWithHash's hash sub-object), reached through the
+    // named GetNativeHashVirtual accessor (the earlier extern shim is retired).
     AptNativeHash* const pHash = static_cast<AptValueWithHash*>(pPoint)->GetNativeHashVirtual();
 
     AptValue* const pValX = pHash->Lookup(strKeyX);
@@ -698,10 +698,10 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_localToGlobal(AptValue* pContext, 
 }
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the AS fixed-size pool layer): the shared Apt pseudo-data DOGMA
-// pool (X360 off_8324D808) the text-format records are allocated from -- the same
-// gpAptPseudoDataPool the sibling Apt TUs (AptActionQueue / AptAnimationTarget)
-// declare. Wired at AptInit.
+// The shared Apt pseudo-data DOGMA pool (X360 off_8324D808; storage HOMED in
+// AptGlobals.cpp, wired at AptInit) the text-format records are allocated from --
+// the same gpAptPseudoDataPool the sibling Apt TUs (AptActionQueue /
+// AptAnimationTarget) declare.
 // ---------------------------------------------------------------------------
 extern DOGMA_PoolManager* gpAptPseudoDataPool;   // off_8324D808
 
@@ -1059,10 +1059,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_attachMovie(AptValue* pContext, in
     return pInserted ? pInserted : gpUndefinedValue;
 }
 
-// FLAG (un-homed AptCIH behavioural callee): set a procedural display property
-// (_x/_y/_rotation/_alpha/...) by id on the node. @0x82AE... -- declared so the AS
-// creation/positioning methods compile against the same entry point.
-// AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASChanged) is called
+// AptCIH::SetProceduralProperty @0x82AE73C0 (HOMED in AptCIHBehaviour.cpp) is called
 // directly on the member (shim retired); the X360 4th arg bASChanged is r6 (the float fValue skips
 // the r5 GPR slot), NOT visible in the pseudocode -- createTextField passes 0.
 

@@ -24,8 +24,8 @@
 //                       per-type flags (SetupCharacter twiddles these). The packed
 //                       arithmetic is endian-independent on the full 32-bit word;
 //                       only halfword *addressing* would be endian-specific, so we
-//                       operate on the whole word. (FLAG: console atomic -> host
-//                       interlocked / single-threaded.)
+//                       operate on the whole word. (Console lwarx/stwcx. atomic ->
+//                       host _InterlockedExchangeAdd on the whole word.)
 //   +12 mpAnimationFile the owning .apt's AptFilePtr (a counted AptFile*); released
 //                       by ReleaseAnimationFile/SetupCharacter.
 //

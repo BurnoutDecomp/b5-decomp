@@ -30,6 +30,8 @@
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"         // AptCharacterInst::mpRenderItem
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"            // AptRenderItem::mpCharacter
 #include "SDKs/EATech/include/Apt/AptCIH.h"                   // AptCIH::mpCharacterInst / operator new / ctor
+#include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"    // the serialized-64 movie def-base (default-font walk)
+#include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h" // AptGetMovieCharacterAnimation (char -> embedded def-base)
 #include "SDKs/EATech/include/Apt/AptDefine.h"                // gpNonGCPoolManager (off_8324D808)
 #include "SDKs/EATech/include/Apt/AptTarget.h"                // gpAptTarget, mpAnimationTarget
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"       // GetRootDisplayList
@@ -94,8 +96,8 @@ AptCIH* AptCharacterHelper::CreateTextCharacterInst()
         pLevel0->mpCharacterInst->mpRenderItem->mpCharacter->mpFixupLink;
 
     // Take the default font character + its default glyph index from that owner's
-    // serialised glyph list (deferred helper -- the glyph-list record has no C++
-    // home). The font character is stored in the template's mpFixupLink slot (the
+    // embedded movie def-base (AptResolveDefaultTextFont -- the native-8 named-member
+    // walk). The font character is stored in the template's mpFixupLink slot (the
     // AptCharacter back-link), the glyph index in mnDefaultGlyphIndex.
     pTemplate->mpFixupLink =
         AptResolveDefaultTextFont(pFontOwner, &pTemplate->mnDefaultGlyphIndex);
@@ -152,13 +154,14 @@ AptCIH* AptCharacterHelper::CreateMovieCharacterInst()
     AptCharacter* pSpineChar =
         pLevel0->mpCharacterInst->mpRenderItem->mpCharacter->mpFixupLink;
 
-    // mpFixupLink = **(pSpineChar + 0x20): the default character stored at the spine
-    // character's +0x20 slot (a pointer to a pointer; the double-deref reads through
-    // it). FLAG (x64 fork): the console reads the 32-bit slot; on x64 the slot holds a
-    // host pointer, read here as AptCharacter*const* through the named base.
-    AptCharacter** pDefaultSlot =
-        *reinterpret_cast<AptCharacter***>(reinterpret_cast<char*>(pSpineChar) + 0x20);
-    pTemplate->mpFixupLink = *pDefaultSlot;                      // [c:0x04] **(.+0x20)
+    // mpFixupLink = **(pSpineChar + 0x20): on the console, char+0x20 is the charTable
+    // slot of the movie root embedded at char+0x10 (console def-base charTable@0x10),
+    // so the double-deref reads mpCharacterTable[0] -- the movie's own root character.
+    // Native-8: the embed is at char+0x20 (KU_AptEmbeddedMovieOff) and the table at
+    // def+0x20 (static_assert-locked), so the same read is the NAMED def-base walk
+    // (the old raw char+0x20 read landed on the widened frame-count/pad slots).
+    AptCharacterAnimation* const pMovieRoot = AptGetMovieCharacterAnimation(pSpineChar);
+    pTemplate->mpFixupLink = pMovieRoot->mpCharacterTable[0];    // [c:0x04] **(.+0x20)
 
     // The per-type flag the builder OR-s into the low half of the packed ref/flags word.
     pTemplate->mnRefAndFlags |= 0x8000u;                         // [c:0x08] |= 0x8000
@@ -257,7 +260,7 @@ AptCIH* AptGetAnimationAtLevel(int nLevel)
     // runs AptCharacterInst::CreateCharacterInst -> the render-tree manager (AptRTM_CreateItem). If the
     // render-tree manager is not initialised (AptRenderInitialize is un-homed in our bring-up) this is
     // where it can AV.
-    // FLAG (x64 size): the console allocates 40 bytes (10 console dwords) for an AptCIH; on x64
+    // x64 size (FIXED): the console allocates 40 bytes (10 console dwords) for an AptCIH; on x64
     // the node is sizeof(AptCIH) (8-byte pointers widen it well past 40). The hardcoded 40 here
     // under-allocated the ROOT level node, so its later members (mpDisplayListParent [7] /
     // mpCharacterInst [8]) fell OUTSIDE the allocation and overlapped adjacent pool objects --
@@ -276,11 +279,11 @@ AptCIH* AptGetAnimationAtLevel(int nLevel)
         return nullptr;
 
     AptRenderItem* pRI = pNew->mpCharacterInst->GetRenderItemWritable();
-    // FLAG (x64 bring-up): the render-tree manager is a null stub (AptCurrentRenderTreeManager==0),
-    // so no render item is created and pRI is null. The console always has one (SetDepth stamps the
-    // render item's depth). We still create + GC-root + INSERT the root node so the display tree
-    // exists + the instantiation chain proceeds; only the render-item depth stamp is skipped (the
-    // node's depth defaults). When the render-tree manager lands, SetDepth runs faithfully.
+    // The render-tree manager is LIVE (AptCurrentRenderTreeManager reads the target's
+    // anchor slot) and the AptCIH ctor built a real level render item (gpAptTarget was
+    // checked at entry), so SetDepth stamps the render item's depth faithfully. pRI is
+    // null only when the pool alloc failed -- then the node is still created +
+    // GC-rooted + inserted so the display tree survives the exhaustion.
     if (pRI != nullptr)
         pRI->SetDepth(nLevel);
     pNew->setGCRoot(1);
@@ -306,46 +309,38 @@ AptCIH* AptGetAnimationAtLevel(int nLevel)
 //   }
 //   return the resolved font character (mpFixupLink result).
 //
-// FLAG (deferred serialised-.apt layer -- raw-offset access on an un-homed type):
-// pFontOwner+16 is the serialised movie-root record embedded in the AptCharacter; its
-// layout (count@+12 / table@+16 / fixup-source@+0x10) is the .apt serialised form, NOT
-// the transcoded AptCharacterAnimation (whose named members live at +0/+4) -- so there
-// is no C++ home to name it by (no header in b5-decomp/src, no Feb-2007 source; the PS3
-// DWARF names the surrounding function but still walks these raw offsets). Reconstructed
-// faithfully BYTE-FOR-BYTE from the X360 + PS3 disasm with the offsets documented in
-// [c:0xNN] form; promote to named members when the serialised movie-root type is homed.
-// The font character is returned (stored into the template's mpFixupLink slot by the
-// caller), and the default glyph index is written through pnDefaultGlyphIndex (the X360
-// seeds it to -1 first; this routine only sets it when a type-3 font character is found).
+// GUIAPT64 native-8 (transcoded): pFontOwner+16 is the CONSOLE embedded movie root
+// (console header 0x10; count@+12 / table@+16 are the console def-base charCount@0x0C
+// / charTable@0x10). On the native-8 gate the embed is at char+0x20
+// (KU_AptEmbeddedMovieOff) and the def-base IS the serialized-64 AptCharacterAnimation
+// (charCount@0x18 / charTable@0x20, static_assert-locked) -- so the walk goes by NAMED
+// members; the old console offsets landed on the widened record's frames/pad slots
+// (a garbage count + pointer). The font character (charTable[0], the console
+// **(v2+0x10)) is returned (stored into the template's mpFixupLink slot by the
+// caller), and the default glyph index is written through pnDefaultGlyphIndex (the
+// X360 seeds it to -1 first; this routine only sets it when a type-3 font character
+// is found).
 // ---------------------------------------------------------------------------
 AptCharacter* AptResolveDefaultTextFont(AptCharacter* pFontOwner, int32_t* pnDefaultGlyphIndex)
 {
     if (pFontOwner == nullptr)
         return nullptr;
 
-    // v2 = the serialised movie root embedded at pFontOwner+0x10 [c:0x10].
-    char* const pMovieRoot = reinterpret_cast<char*>(pFontOwner) + 16;
+    // v2 = the movie def-base embedded at pFontOwner + KU_AptEmbeddedMovieOff [c:0x10].
+    AptCharacterAnimation* const pMovieRoot = AptGetMovieCharacterAnimation(pFontOwner);
 
-    // mpFixupLink result = **(v2 + 0x10): the character-table base held at
-    // [c:movieRoot+0x10], dereferenced twice to its first AptCharacter* entry.
-    AptCharacter* const* const ppDefaultTable =
-        *reinterpret_cast<AptCharacter* const* const*>(pMovieRoot + 0x10);   // *(v2 + 0x10) serialized .apt movie-root char table
-    AptCharacter* const pFontCharacter = *ppDefaultTable;                    // **(v2 + 0x10)
+    // **(v2 + 0x10): the character table's first entry (the movie's own root character).
+    AptCharacter* const pFontCharacter = pMovieRoot->mpCharacterTable[0];
 
     // Walk the character table for the first font character (mnType == 3) and record
     // its index as the default glyph index.
-    const int32_t nCount = *reinterpret_cast<const int32_t*>(pMovieRoot + 12);   // *(v2 + 12) serialized .apt movie-root char count
-    if (nCount > 0)
+    const int32_t nCount = pMovieRoot->mnCharacterCount;         // *(v2 + 12) console
+    for (int32_t i = 0; i < nCount; ++i)
     {
-        AptCharacter* const* const pTable =
-            *reinterpret_cast<AptCharacter* const* const*>(pMovieRoot + 16);     // *(v2 + 16) serialized .apt movie-root char table
-        for (int32_t i = 0; i < nCount; ++i)
+        if (pMovieRoot->mpCharacterTable[i]->mnType == 3)        // **(table + 4*idx) == 3 (font)
         {
-            if (pTable[i]->mnType == 3)   // **(4*idx + table) == 3 (font character type)
-            {
-                *pnDefaultGlyphIndex = i;
-                break;
-            }
+            *pnDefaultGlyphIndex = i;
+            break;
         }
     }
 

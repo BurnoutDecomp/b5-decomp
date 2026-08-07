@@ -21,10 +21,10 @@ AptBoolean* AptBoolean::Create(const bool bValue)
     return bValue ? spBooleanTrue : spBooleanFalse;
 }
 
-// Create the two shared singletons. The X360 calls this from the Apt startup.
-// FLAG: AptInit (the runtime startup that wires gpNonGCPoolManager) is not yet
-// reconstructed, so this is guarded for a null pool; the singletons come up when
-// the runtime starts.
+// Create the two shared singletons -- called by AptValueInitialize (AptInit.cpp
+// @0x82B02800) after AptAllocatorInitialize wires gpNonGCPoolManager; the
+// null-pool guard keeps a pre-boot call inert (the singletons come up with the
+// runtime).
 void AptBoolean::Initialize()
 {
     if (gpNonGCPoolManager == 0)

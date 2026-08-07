@@ -204,15 +204,29 @@ namespace CgsGui
 
     namespace AptCallbackMemory
     {
+        // X360 0x828491C8. Allocate an Apt block through the singleton AptAux's embedded
+        // data-handler allocator: assert the singleton is live, forward to
+        // AptDataHandler::AptAlloc, then assert the result ("lpMemory != NULL").
+        // (matches gAptFuncs pfnMemAlloc(size_t).)
+        void* Alloc(size_t lnSize);
+
         // X360 0x828492A8. Free an Apt allocation through the singleton AptAux's embedded
         // data-handler allocator: assert the singleton is live, then forward to
         // AptDataHandler::AptFree(&mpAptAuxInst->mAptDataHandler, lpBlock). (matches gAptFuncs
         // pfnMemFree(void*).)
         void Free(void* lpBlock);
+
+        // X360 0x82849358 (the pfnMemFreeSize host): tail-calls Free, dropping the size.
+        void FreeSize(void* lpBlock, size_t lnSize);
     }
 
     namespace AptCallbackDebug
     {
+        // X360 0x82849470 (gAptFuncs pfnDebugPrint). vsnprintf the varargs into a 2048-byte
+        // buffer (the inlined CgsStringUtils.h:96 overflow assert), then stream it through
+        // CgsDev::Log::gpDebugPrint when the debug message filter (gxMessageFilterFlags & 1) is on.
+        void Print(const char* lpacFormat, ...);
+
         // X360 0x82849528 / 0x82849568. Guarded not-yet-implemented debug callbacks.
         void AddSavedInput(AptSavedInputRecord* lpRecord, s32 liCount);
         void SetScreenGrabPending(const char* lpacName);
@@ -247,7 +261,7 @@ namespace CgsGui
         void LoadAnimation(const char* lpacName, AptFilePtr* lpHandle);
     }
 
-    // FLAG (x64 native-8 relocation bounds): the AptData resource span LoadAnimation derives
+    // FLAG PC-platform leaf (.apt native-8 relocation bounds): the AptData resource span LoadAnimation derives
     // from the registered header (base == the header address; size == the converted 6-field
     // header's size slot @+0x28) before driving the completion, so the native-8
     // AptMovie::resolve64 relocation walk (driven by AptCharacterAnimation::Fixup) can

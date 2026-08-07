@@ -29,19 +29,15 @@
 //
 // LAYOUT (console; reconstructed with NAMED members so x64 widths stay correct):
 //   AptCharacterSpriteInstBase base ......... 0x24 (36 bytes)
-//   +0x24  mAnimationState_unknown  u32   one extra console dword beyond the sprite
-//                                          base; NEITHER reconstructed body reads or
-//                                          writes it (the dtor touches only +0x28),
-//                                          and there is no ctor in the X360 ledger,
-//                                          so its name/type/role is unattested by the
-//                                          ledger, Feb-2007, the DWARF, or the wiki.
-//                                          Reserved by name (a single explicit
-//                                          placeholder, no offset poke) to keep the
-//                                          +0x28 member at its asm-pinned offset.
-//                                          (FLAG: rename to the real member when a TU
-//                                          that uses it -- the animation
-//                                          CreateCharacterInst branch / drive path --
-//                                          is recovered.)
+//   +0x24  mnAccumulatedUpdateMs    u32   the banked update milliseconds the
+//                                          AptUpdate frame pacer accumulates
+//                                          (AptUpdate @0x82B0DB68 / its per-target
+//                                          driver @0x82B0D608 read it, add the
+//                                          elapsed ms, subtract one authored frame
+//                                          per tick, store the remainder back).
+//                                          ATTESTED -- renamed from the old
+//                                          mAnimationState_unknown placeholder when
+//                                          the AptUpdate pacer landed.
 //   +0x28  mAnimationFilePtr  AptFilePtr   the ref-counted source .apt file the
 //                                          animation was imported from (an
 //                                          AptSharedPtr<AptFile>, one pointer). The
@@ -75,21 +71,18 @@ struct AptCharacter;
 struct AptCharacterAnimation;
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed accessor -- the owning character-subclass type is not in the
-// ledger yet): an animation/movie AptCharacter embeds its AptCharacterAnimation
-// movie root by value immediately after the AptCharacter base (AptMovie.h documents
-// the same embedded timeline). The destructor + ctor drive that embedded movie's
-// table teardown/registration. The owning character-subtype that would carry it as a
-// named `AptCharacterAnimation mAnimation;` member has no home header / ledger entry
-// yet, so -- exactly like the AptCharacterInst.h render-tree-manager helpers (AptRTM_*)
-// that route the un-homed gpCurrentTargetSim+offset access by name -- the embedded
-// movie is reached through this single named accessor instead of a raw cast.
+// AptGetMovieCharacterAnimation (HOMED in AptCharacterAnimationInst.cpp): an
+// animation/movie AptCharacter embeds its AptCharacterAnimation movie root by value
+// immediately after the AptCharacter base (AptMovie.h documents the same embedded
+// timeline). The destructor + ctor drive that embedded movie's table teardown/
+// registration. The serialized record has no owning character-subtype header (the
+// blob IS the runtime layout), so the embedded movie is reached through this single
+// named accessor instead of a raw cast at the call sites.
 //
-// FLAG (x64 fork): the console reaches it as `addi r3, mpCharacter, 0x10` (the console
-// sizeof(AptCharacter)). On the x64 gate the serialised AptCharacter header widens
-// under the 8-byte pointer rule (GUIAPT64 "1:7:8" layout) so the embedded body lands
-// at char+0x20 -- the same def-base offset AptGetClipMovie uses (KU_AptEmbeddedMovieOff,
-// AptCIH.h). Where the fixed-up character table / frame count live. Null-safe.
+// x64 fork (VERIFIED): the console reaches it as `addi r3, mpCharacter, 0x10` (the
+// console sizeof(AptCharacter)); on the native-8 gate the serialised header widens to
+// 0x20, so the embedded body is at char + KU_AptEmbeddedMovieOff (AptCIH.h; the same
+// def-base offset AptGetClipMovie uses, verified vs TITLE_SCREEN02.bundle). Null-safe.
 // ---------------------------------------------------------------------------
 AptCharacterAnimation* AptGetMovieCharacterAnimation(AptCharacter* pCharacter);
 

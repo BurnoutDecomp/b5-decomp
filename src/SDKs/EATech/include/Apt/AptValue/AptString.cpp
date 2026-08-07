@@ -24,17 +24,18 @@
 #include <new>       // placement new (construct an AptString into pooled storage)
 #include <stdio.h>   // sprintf (charCodeAt renders the code as decimal text)
 #include <cstdint>   // uintptr_t (the StringMembersIndex wordlist member-id payload)
-#include <cstring>   // strcmp (FLAG bring-up probe canary)
 
-// FLAG (homed by the apt VM native-call dispatch): the global native-method
-// argument stack -- the dispatch layer pushes the AS call args here before
-// invoking the native (X360 globals dword_8324E760 = count = the shared
-// gAptActionInterpreter.mnStackTop, off_8324E768 = array = its mpStack). The
-// i-th argument (i=0 = the last pushed) is gppAptNativeArgStack[gnAptNativeArgCount-1-i].
+// The global native-method argument stack -- the AS interpreter's native-call
+// dispatch (AptActionInterpreterInterpHelpers.cpp) publishes the call args here
+// before invoking the native (X360 globals dword_8324E760 = count = the shared
+// gAptActionInterpreter.mnStackTop, off_8324E768 = array = its mpStack). Defined
+// in AptGlobals.cpp. The i-th argument (i=0 = the last pushed) is
+// gppAptNativeArgStack[gnAptNativeArgCount-1-i].
 extern AptValue** gppAptNativeArgStack;   // off_8324E768
 extern int        gnAptNativeArgCount;    // dword_8324E760
 
-// FLAG (homed by the AS-globals layer): the shared "undefined" value (off_8324D814).
+// The shared "undefined" value (off_8324D814). Defined in AptGlobals.cpp; built
+// by AptValueInitialize (AptInit.cpp @0x82B02800).
 extern AptValue* gpUndefinedValue;
 
 // ---------------------------------------------------------------------------
@@ -488,16 +489,16 @@ AptValue* AptString::sMethod_split(AptString* pThis, int nArgCount)
 // unk_8324E8E8 -- a separate lock from the GC flag lock in AptValue.cpp).
 // ===========================================================================
 
-// FLAG (homed by the StringPool TU): the AptString recycle free-list head
-// (X360 off_8324E4FC). Null until a node is ever freed; nodes are chained
-// through AptString::mpNext (the +0xC link). Declared here so Create/Destroy can
-// pop/push by name; the StringPool that also manages it is the follow-on.
+// The AptString recycle free-list head (X360 off_8324E4FC). Null until a node is
+// ever freed; nodes are chained through AptString::mpNext (the +0xC link).
+// Defined in AptGlobals.cpp; the StringPool that also manages it (Teardown /
+// ClearTemporaryPool) is homed in AptStringPool.cpp.
 extern AptString* gpStringPoolFreeList;   // off_8324E4FC
 
-// FLAG: the non-GC value-pool free-list spin lock (X360 unk_8324E8E8). The
-// console brackets the free-list mutation with the lwarx/stwcx. interrupt-masked
-// test-and-set idiom; modelled as a host-portable interlocked TAS (uncontended on
-// the single-thread bring-up path).
+// FLAG PC-platform leaf: the non-GC value-pool free-list spin lock (X360
+// unk_8324E8E8) -- the console's lwarx/stwcx. interrupt-masked test-and-set idiom
+// modelled as a host-portable interlocked TAS (threading primitive, not an engine
+// method; uncontended on the single-thread bring-up path).
 namespace
 {
     volatile long gNonGCPoolFreeListLock = 0;
@@ -530,9 +531,10 @@ AptString* AptString::Create(const char* szValue)
     // lock/pop work to do -- go straight to a fresh pool allocation.
     if (gpStringPoolFreeList == 0)
     {
-        // FLAG: the X360 calls DOGMA_PoolManager::Allocate(off_8324D808, 16)
-        // directly; off_8324D808 is gpNonGCPoolManager (same global the header's
-        // operator new/delete route through). sizeof(AptString) == 16 on X360.
+        // X360: DOGMA_PoolManager::Allocate(off_8324D808, 16) directly;
+        // off_8324D808 IS gpNonGCPoolManager (wired to the shared DOGMA pool by
+        // AptAllocatorInitialize, AptInit.cpp @0x82ADD118). sizeof(AptString) == 16
+        // on X360; the x64 sizeof is the widened equivalent.
         void* pMem = gpNonGCPoolManager->Allocate(sizeof(AptString));
         if (pMem == 0)
             return 0;
@@ -605,10 +607,10 @@ void AptString::Destroy()
     gpStringPoolFreeList = this;
 
     // X360: if (str.m_pData->m_uMaxSize > 0x21) { release the buffer; reset to the
-    // empty sentinel }. GetInternalMaxSize() reads that same m_uMaxSize field.
-    // FLAG: the X360 does a raw m_pData swap to the empty sentinel after a private
-    // DecreaseInternalRefCount; the public equivalent (assigning an empty value)
-    // performs the same buffer release + empty-reset.
+    // empty sentinel }. GetInternalMaxSize() reads that same m_uMaxSize field; the
+    // X360's private DecreaseInternalRefCount + raw m_pData swap IS the assignment
+    // of an empty value (buffer release + empty-sentinel reset), spelled through
+    // the public operator= -- observably identical.
     if (str.GetInternalMaxSize() > 0x21u)
         str = EAStringC();
 
@@ -626,9 +628,9 @@ void AptString::Destroy()
 // keeps it alive). A miss (or no name) returns 0.
 // ===========================================================================
 
-// FLAG (homed by the StringPool/Apt-globals TU): the 12 cached AS String method
-// values (X360 off_8324E4B8 .. off_8324E4E4, one per method). Null until first
-// lazily built by objectMemberLookup; Released + nulled by CleanNativeFunctions.
+// The 12 cached AS String method values (X360 off_8324E4B8 .. off_8324E4E4, one
+// per method), OWNED by this TU (defined just below). Null until first lazily
+// built by objectMemberLookup; Released + nulled by CleanNativeFunctions.
 // Indexed by E_StringMethodCache below (declaration order == the X360 address
 // order of the cache globals).
 enum E_StringMethodCache
@@ -652,15 +654,13 @@ namespace
         if (rpCache != 0)
             return rpCache;
 
-        // FLAG: the X360 does not null-guard the operator-new result (it would
-        // setGCRoot/AddRef through a null `this`); guarded here so a dry pool
-        // cannot crash the bring-up. The success path is byte-faithful.
+        // X360: no null-guard on the operator-new result -- the GC pool is live on
+        // every path that reaches a String method lookup (AptAllocatorInitialize
+        // precedes any movie load), so the unconditional root+ref is the shipped
+        // form, transcribed verbatim.
         rpCache = new AptNativeFunction(pFn);
-        if (rpCache != 0)
-        {
-            rpCache->setGCRoot(1);   // AptValue::setGCRoot(this, 1)
-            rpCache->AddRef();       // vtable slot 0
-        }
+        rpCache->setGCRoot(1);   // AptValue::setGCRoot(this, 1)
+        rpCache->AddRef();       // vtable slot 0
         return rpCache;
     }
 }

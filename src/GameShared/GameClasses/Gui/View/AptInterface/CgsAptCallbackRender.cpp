@@ -75,7 +75,7 @@ namespace CgsGui
         Im2dCommandBuffer*            lpBuffer = lrHandler.GetCommandBuffer();
         const CgsGraphics::Im2dTransform& lrTransform = lrHandler.GetVertexTransform();
 
-        // FLAG (x64 native-8 fork): 8-byte-strided mesh table + 8-byte mppGeometryMeshes (rebased
+        // FLAG PC-platform leaf (.apt native-8 blob): 8-byte-strided mesh table + 8-byte mppGeometryMeshes (rebased
         // offset->pointer by AptFixupGeometryFileNative8), indexed as uintptr_t entries.
         const uintptr_t* lpMeshTable =
             reinterpret_cast<const uintptr_t*>(lpFile->mppGeometryMeshes);
@@ -196,7 +196,7 @@ namespace CgsGui
         // command at the head of AptRenderHandler::Render). Dispatch folds the transform into
         // every glyph vertex, so the field's local-space layout box lands exactly where the apt
         // matrix places it -- and the glyph draw keeps its walk-order depth among the shapes.
-        // FLAG (PC fold): on the console the Im2dRenderBuffer this path drives IS this buffered
+        // FLAG PC-platform leaf (render-backend fold): on the console the Im2dRenderBuffer this path drives IS this buffered
         // command buffer (RenderStart @0x57E0A0 / RenderEnd @0x57E5DC); the PC debug fold made the
         // Im2dRenderBuffer typedef the IMMEDIATE Im2d wrapper, so the text renderer is driven
         // through its buffered entry (TextRenderer::RenderStringBuffered) here.

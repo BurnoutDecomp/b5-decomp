@@ -312,7 +312,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             }
         }
 
-        // FLAG (bring-up fallback): CgsAptString::Prepare requires a NON-NULL font name (FindFont
+        // FLAG PC-platform leaf (bring-up fallback): CgsAptString::Prepare requires a NON-NULL font name (FindFont
         // asserts + strstr's it). When the walk could not resolve one (no parent / a non-font slot),
         // pass the empty string -- FindFont then falls through its fallback table to the first
         // registered typeface, which is the faithful degenerate result of its X360 body.
@@ -346,7 +346,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             static_cast<AptRenderItemDynamicText*>(GetCharacterInst()->GetRenderItemWritable());
         pWritable->SetZID(reinterpret_cast<intptr_t>(hHandle));
 
-        // FLAG (bring-up boundary): when the host could NOT lay the string out (hHandle == 0 --
+        // FLAG PC-platform leaf (host layout boundary): when the host could NOT lay the string out (hHandle == 0 --
         // no FontCollection wired yet), Prepare never ran, so there is no measured geometry to
         // fold and no box nudge to apply. Skip the fold entirely -- doing it off unmeasured
         // params would move the field by a bogus offset (and the field has no glyphs to draw
