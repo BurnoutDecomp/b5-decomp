@@ -365,6 +365,24 @@ namespace Vehicle
     //      and accumulate the linear residual at this+0x240 scaled by mvfWheelFrictionLinearMultiplier
     //      (this+0x4048). A grip-curve-layout selector at this+0x1294 (+4946) chooses normal vs drift packing.
     // ---------------------------------------------------------------------------------------------
+    // ⭐⭐ ORACLE RECOVERED 2026-08-07 (tyre-math wave). The clean-C algorithm twin is BPR
+    //   BrnPhysics::Vehicle::RoadVehiclePhysics::UpdateWheels @0xBA1420 -> sub_B9BD60, called TWICE
+    //   with (2,3) then (0,1) -- the exact X360 UpdateWheels call shape -- and it decompiles to a
+    //   fully legible _mm_* body. Its structure matches this skeleton STEP FOR STEP: TLS-guarded
+    //   lazy cap init (dword_15E6654 / xmmword_15E6700), rsqrt+Newton Gram-Schmidt long/lat unit
+    //   directions, the a x b cross products, the friction cone (max(v,-v) vs 1.0 + reciprocal
+    //   renormalise), the crash-flag branch (this+4464), Wheel friction-reaction (sub_B90DB0), and
+    //   the r x F torque + linear accumulate (sub_50F210 into this+5216). So the algorithm the prior
+    //   waves called "not recoverable" IS recoverable -- from the twin, not from the X360 export.
+    //   ⛔ STILL BLOCKED for commit: (1) BPR is RoadVehiclePhysics, a DIVERGED sibling class whose
+    //   member offsets are NOT this class's, so nothing may be copied -- only the algorithm is an
+    //   oracle; (2) the X360 pseudocode is degenerate ("local variable allocation has failed", args
+    //   render as int a1..a19, the VMX128 regs are invisible), so the per-slot lane routing must be
+    //   read from the X360 VMX ASM (~1142 instrs) and matched to the BPR lanes ONE AT A TIME -- a
+    //   multi-wave cross-map, and VMX lane order != SSE lane order so a shuffle cannot be transcribed
+    //   blind. NOT emitted this wave: no guessed lanes, and it is functionally unverifiable until
+    //   PhysicsModule::Update lands (nothing consumes these forces yet).
+    // ---------------------------------------------------------------------------------------------
     // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave) to the DWARF 9-arg form -- see the
     // header note. The skeleton stays FIDELITY: BLOCKED; only the shape changed.
     void VehiclePhysics::HandleWheelPairFriction(EVehicleDrivenWheel /*leWheelA*/,
@@ -398,6 +416,14 @@ namespace Vehicle
     //     lane routing -> NOT emitted (fabrication forbidden).
     // The decay branch is reproduced as a faithful comment; without the named wheel friction-register lane
     // it cannot be applied store-for-store either, so the whole body is left as a structural skeleton.
+    // ---------------------------------------------------------------------------------------------
+    // ⭐⭐ ORACLE RECOVERED 2026-08-07 (tyre-math wave). The clean-C algorithm twin is BPR sub_B9B9C0
+    //   -- BPR UpdateWheels @0xBA1420 calls it FOUR times, order (2,3,0,1), gated by
+    //   (this+4464 && crash-mass), the exact X360 shape -- and it confirms the inactive-decay vs
+    //   active-scrub split this skeleton documents. Same commit block as HandleWheelPairFriction:
+    //   BPR is the DIVERGED RoadVehiclePhysics (offsets are not this class's) and the X360 pseudocode
+    //   is degenerate, so the active-scrub path needs a VMX-asm <-> SSE lane cross-map. NOT emitted
+    //   this wave (no guessed lanes; unverifiable until PhysicsModule::Update lands).
     // ---------------------------------------------------------------------------------------------
     // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): + VecFloat dt per the DWARF and the
     // four UpdateWheels call sites (`vmr128 v1, v127` before each bl).
