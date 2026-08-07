@@ -10,11 +10,10 @@
 // rule: with version 7 and an undefined operand, the result is `undefined`
 // (StringEquals: a lone undefined -> undefined, two undefineds -> true).
 //
-// FLAG -- deferred leaf dependencies:
-//   * AptValue::Append_ToString -- the value->string renderer (Add2's concat,
-//     declared; body is the value-layer follow-on, like toString).
-//   * gpUndefinedValue / AptGetSwfVersion -- wired at AptInit (already used by the
-//     arithmetic/comparison opcode TUs).
+// Dependencies (all homed): AptValue::Append_ToString -- the value->string
+// renderer (Add2's concat) -- @0x82AF9668 in AptValueConvert.cpp; gpUndefinedValue
+// is the AptGlobals.cpp singleton (built at AptInit); AptGetSwfVersion is
+// AptLinker.cpp.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -27,7 +26,7 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"     // AptFloat::Create
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC::operator==
 
-// FLAG (wired at AptInit; shared with the arith/compare opcode TUs).
+// gpUndefinedValue: AptGlobals.cpp (built at AptInit). AptGetSwfVersion: AptLinker.cpp.
 extern AptValue*    gpUndefinedValue;
 extern unsigned int AptGetSwfVersion();
 
@@ -91,7 +90,7 @@ void AptActionInterpreter::_FunctionAptActionAdd2(AptActionInterpreter* pInterp,
     {
         // String concatenation: under ++ top.
         AptString* pStr = AptString::Create("");
-        pUnder->Append_ToString(pStr->GetInternalString());   // FLAG: renderer
+        pUnder->Append_ToString(pStr->GetInternalString());   // Append_ToString @0x82AF9668 (AptValueConvert.cpp)
         pTop->Append_ToString(pStr->GetInternalString());
         pInterp->stackPop(2);
         pResult = pStr;

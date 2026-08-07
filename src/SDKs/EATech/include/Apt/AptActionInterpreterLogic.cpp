@@ -29,8 +29,8 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"   // c_integer()->GetInt()
 
-// FLAG (wired at AptInit; see AptValueConvert.cpp): the `undefined` singleton and
-// the active movie's SWF version.
+// The `undefined` singleton (AptGlobals.cpp, built at AptInit) and the active
+// movie's SWF version (AptGetSwfVersion, AptLinker.cpp).
 extern AptValue*    gpUndefinedValue;
 extern unsigned int AptGetSwfVersion();
 

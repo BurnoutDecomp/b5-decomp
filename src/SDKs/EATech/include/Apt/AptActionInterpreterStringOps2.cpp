@@ -11,11 +11,10 @@
 // string and parsed -- an AptInteger when there is no '.' , else an AptFloat;
 // non-numeric -> undefined.
 //
-// FLAG -- deferred leaf dependencies:
-//   * isNaN(AptValue*) -- the value NaN test (console isNaN); encapsulated.
-//   * EAStringC::UTF8_Mid / UTF8_Find are the committed EAStringC text suite
-//     (declared; bodies are that TU's follow-on). gpUndefinedValue / AptGetSwfVersion
-//     are wired at AptInit (shared with the arith/compare opcode TUs).
+// Dependencies (all homed): isNaN(AptValue*) -- the value NaN test -- lives in
+// AptActionInterpreterBuiltins.cpp; EAStringC::UTF8_Mid / UTF8_Find are the
+// EAString.cpp text suite; gpUndefinedValue is the AptGlobals.cpp singleton
+// (built at AptInit); AptGetSwfVersion is AptLinker.cpp.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -27,10 +26,10 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"     // AptFloat::Create
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC::UTF8_Mid / UTF8_Find
 
-// FLAG (wired at AptInit; shared with the arith/compare opcode TUs).
+// gpUndefinedValue: AptGlobals.cpp (built at AptInit). AptGetSwfVersion: AptLinker.cpp.
 extern AptValue*    gpUndefinedValue;
 extern unsigned int AptGetSwfVersion();
-// FLAG (value NaN test -- console isNaN; the value-layer follow-on).
+// The value NaN test (console isNaN; homed in AptActionInterpreterBuiltins.cpp).
 extern bool         isNaN(AptValue* pValue);
 
 // ---------------------------------------------------------------------------
@@ -75,7 +74,7 @@ void AptActionInterpreter::_FunctionAptActionToNumber(AptActionInterpreter* pInt
         return;   // already a number -> nothing to do
 
     AptValue* pResult = gpUndefinedValue;
-    if (!isNaN(pTop) && (AptGetSwfVersion() != 7 || pTop->getIsDefined()))   // FLAG: isNaN
+    if (!isNaN(pTop) && (AptGetSwfVersion() != 7 || pTop->getIsDefined()))   // isNaN (AptActionInterpreterBuiltins.cpp)
     {
         EAStringC scratch;
         const EAStringC* pStr = AptValue::Get_ToString(pTop, &scratch);
