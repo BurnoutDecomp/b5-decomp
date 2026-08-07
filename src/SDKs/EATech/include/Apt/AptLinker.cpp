@@ -244,9 +244,9 @@ AptCIH* AptLinker::ConvertToZombie(AptValue* pValue)
     AptCIH* pCIH = static_cast<AptCIH*>(pValue);
     const uint32_t nFlags = pCIH->mFlagsA;                            // v4 = *(a2+12)
 
-    if ((nFlags & 0x60000000u) != 0x20000000u)                       // not transitioning
+    if ((nFlags & 0x6u) != 0x2u)                                     // not transitioning (x64 CIHState bits 1-2)
     {
-        pCIH->mFlagsA = nFlags | 0x60000000u;                        // *(a2+12) = v4 | 0x60000000
+        pCIH->mFlagsA = nFlags | 0x6u;                               // CIHState = 3 (X360 reversed form 0x60000000)
         return pCIH;                                                  // result = a2
     }
 
@@ -404,7 +404,7 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
 
         // Mark the placeholder value defined + transitioning, dirty it.
         pValue->setIsDefined(true);                                        // AptValue::setIsDefined(v8,1)
-        static_cast<AptCIH*>(pValue)->mFlagsA |= 0x60000000u;              // *(v8+12) |= 0x60000000
+        static_cast<AptCIH*>(pValue)->mFlagsA |= 0x6u;                     // CIHState = 3 (x64 bits 1-2; X360 form 0x60000000)
         static_cast<AptCIH*>(pValue)->SetDirtyState(false, false);         // AptCIH::SetDirtyState(IsDefined,0,0)
 
         // Drop any existing thingy keyed on this value (re-load supersedes it).
@@ -563,10 +563,10 @@ void AptLinker::Update()
             AptCIH* pCIH = static_cast<AptCIH*>(pThingy->mpValue);          // v24 = *(_R28+8)
             const int16_t nDepth =
                 pCIH->mpCharacterInst->mpRenderItem->GetDepth();            // v25 = *(*(*(v24+32)+4)+20)
-            pCIH->mFlagsA &= 0x9FFFFFFFu;                                   // clear transition bits
+            pCIH->mFlagsA &= ~0x6u;                                        // clear transition bits (x64 CIHState bits 1-2)
             pCIH->ClearCIH(false);                                         // AptCIH::ClearCIH(v24,0)
 
-            if ((pCIH->mFlagsA & 0x60000000u) == 0x20000000u)             // still transitioning
+            if ((pCIH->mFlagsA & 0x6u) == 0x2u)                           // still transitioning
             {
                 AptCIH* pZombie = ConvertToZombie(pCIH);                   // AptLinker::ConvertToZombie(a1, v24)
                 pZombie->mpCharacterInst->GetRenderItemWritable()->SetDepth(nDepth);
@@ -645,18 +645,17 @@ void AptLinker::Update()
                     pCIH->ClearCIH(true);                                  // AptCIH::ClearCIH(v61,1)
                     pCIH->ForceCleanNativeHash();                          // AptCIH::ForceCleanNativeHash(v61)
                 }
-                pCIH->mFlagsA &= 0x9FFFFFFFu;                              // v61[3] &= 0x9FFFFFFF
+                pCIH->mFlagsA &= ~0x6u;                                    // clear CIHState (x64 bits 1-2; X360 form &=0x9FFFFFFF)
                 pCIH->SetCharacterInst(/*as inst*/reinterpret_cast<AptCharacterInst*>(pAnimInst), true);
                 pCIH->setIsDefined(true);                                  // AptValue::setIsDefined(v61,1)
                 // SetCharacterInst installed the new AptCharacterAnimationInst -- an
                 // AptCharacterSpriteInstBase. Reset its pending goto-frame to "none"
-                // (-1) and OR in sprite state-flag bit 7. The console writes both
-                // through mpCharacterInst (v61[8]): *(v61[8]+16) = -1 is mnGotoFrame,
-                // *(v61[8]+20) |= 0x80 is mnClipActionFlags -- both named members now.
+                // (-1) and OR in bJustLoaded (x64 bit 24; the console's reversed bit 7).
+                // The console writes both through mpCharacterInst (v61[8]).
                 AptCharacterSpriteInstBase* pSpriteInst =
                     static_cast<AptCharacterSpriteInstBase*>(pCIH->mpCharacterInst);
-                pSpriteInst->mnGotoFrame        = -1;       // *(v61[8]+16) = -1
-                pSpriteInst->mnClipActionFlags |= 0x80u;    // *(v61[8]+20) |= 0x80
+                pSpriteInst->mnGotoFrame        = -1;           // *(v61[8]+16) = -1
+                pSpriteInst->mnClipActionFlags |= 0x1000000u;   // bJustLoaded (X360 form |= 0x80)
                 pCIH->SetDirtyState(false, false);                        // AptCIH::SetDirtyState(...,0)
                 pCIH->tick();                                            // AptCIH::tick
                 pCIH->SetDirtyState(true, true);                          // AptCIH::SetDirtyState(v61,1,1)

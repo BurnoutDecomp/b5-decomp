@@ -701,8 +701,9 @@ static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void*
     // re-place it (pExistingNode set, no character, no name, depth 0, clipDepth -1) so the
     // record's matrix/colour land on the live item -- these charId==-1 records are every
     // animation's tween keyframes (dropping them froze all the title transitions after
-    // their discrete PLACE frames). Only a node whose mFlagsA bit31 is clear moves (the
-    // console `*(v18+12) >= 0` pending-remove gate); a missing node falls through to the
+    // their discrete PLACE frames). Only a node whose ASChanged flag is clear moves (the
+    // console `*(v18+12) >= 0` sign test on the reversed X360 bit31; x64 bit 0); a
+    // missing node falls through to the
     // fresh-place path (which the null-character guard below then skips, as the console's
     // charTable[-1] junk-place never composes on our bring-up either).
     if (bMove && !bHasCharacter)
@@ -714,7 +715,7 @@ static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void*
             pState->findInst(nDepth, nullptr, &pPrev, &pMatch);
         if (pMatch != nullptr)
         {
-            if (static_cast<int32_t>(pMatch->mFlagsA) >= 0)
+            if (!pMatch->GetASChanged())   // x64 bit 0 (X360: sign test on reversed bit31)
             {
                 return pDisplayList->placeObjectNCXForm(
                     /*pExistingNode*/ pMatch, /*nDepth*/ 0, /*pCharacter*/ nullptr,

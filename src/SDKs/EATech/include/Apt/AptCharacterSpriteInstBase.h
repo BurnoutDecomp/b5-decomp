@@ -39,10 +39,14 @@
 //                                  -1 (no pending goto). [role inferred from the
 //                                  -1 sentinel + the sprite/movie-clip context;
 //                                  not read within this TU's eight functions.]
-//   +0x14  mnClipActionFlags u32   packed: the HIGH 24 bits (>>8) are the AS
-//                                  clip-event-handler mask (Has/Set/RemoveClipAction);
-//                                  the LOW 8 bits are sprite state flags, which the
-//                                  ctor seeds to 0xC0 (bits 6,7).
+//   +0x14  mnClipActionFlags u32   packed (x64 truth, B4 bitfield order): the LOW
+//                                  24 bits are the AS clip-event-handler mask
+//                                  (Has/Set/RemoveClipAction; x64 HasClipAction
+//                                  sign-extends `(v<<8)>>8`); bit 24 = bJustLoaded,
+//                                  bit 25 = bIsPlaying, bits 26-27 = nIsCustomControl.
+//                                  Ctor seeds 0x03000000 (justLoaded|isPlaying).
+//                                  (The old high-24/low-byte-0xC0 form was the X360
+//                                  big-endian allocation order.)
 //   +0x18  mpClipEventHandlers  ptr  the registered clip-event-handler list (null-
 //                                  init). RECONCILED from int32 mnCurrentFrame: the
 //                                  slot is only ever zero-initialised, never read as a
@@ -56,6 +60,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include <cstddef>   // offsetof (_AssertLayout)
 #include <cstdint>
 
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"   // AptCharacterInst base
@@ -89,16 +94,29 @@ struct AptClipEventHandlerList
 
 struct AptCharacterSpriteInstBase : public AptCharacterInst
 {
-    int32_t        mnGotoFrame;        // +0x10  (-1 = none)
-    uint32_t       mnClipActionFlags;  // +0x14  high 24 bits = clip-event mask
+    int32_t        mnGotoFrame;        // +0x20 x64 (-1 = none; console +0x10)
+    uint32_t       mnClipActionFlags;  // +0x24 x64: LOW 24 bits = clip-event mask, bit24 justLoaded, bit25 isPlaying
     // +0x18: the registered clip-event-handler list (null until handlers are set).
     // RECONCILED: this slot was modelled as `int32_t mnCurrentFrame`, but it is only
     // ever zero-initialised (never read as a frame) and AptDisplayList::_addToSetCaches
     // dereferences it as a pointer to the handler list -- so it is the handler-list
     // pointer, not a frame counter.
-    AptClipEventHandlerList* mpClipEventHandlers;   // +0x18
-    AptDisplayList mDisplayList;       // +0x1C  child display list (4 bytes)
-    int32_t        mnLastActionFrame;  // +0x20
+    AptClipEventHandlerList* mpClipEventHandlers;   // +0x28 x64 (console +0x18)
+    AptDisplayList mDisplayList;       // +0x30 x64  child display list (8 bytes on x64)
+    int32_t        mnLastActionFrame;  // +0x38 x64 (console +0x20)
+
+    // Layout pinned against the x64 XB1 export (never called; member body gives
+    // complete-class offsetof context).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptCharacterSpriteInstBase, mnGotoFrame)         == 0x20, "x64 ctor: mov dword ptr [rbx+20h],-1 @0x140825A00");
+        static_assert(offsetof(AptCharacterSpriteInstBase, mnClipActionFlags)   == 0x24, "x64 HasClipAction: mov eax,[rcx+24h] @0x140839F70");
+        static_assert(offsetof(AptCharacterSpriteInstBase, mpClipEventHandlers) == 0x28, "x64 ctor: qword zero at [rbx+28h] @0x140825A00");
+        static_assert(offsetof(AptCharacterSpriteInstBase, mDisplayList)        == 0x30, "x64 ctor: head node at [rbx+30h]; dtor destroys this+0x30 @0x1408287C0");
+        static_assert(offsetof(AptCharacterSpriteInstBase, mnLastActionFrame)   == 0x38, "x64 ctor: mov [rbx+38h],esi @0x140825A00");
+        static_assert(sizeof(AptCharacterSpriteInstBase) == 0x40, "x64: factory type-5 Allocate(0x40) @0x140835410; deleting dtor Deallocate(0x40) @0x14082B800");
+        static_assert(sizeof(AptDisplayList) == 8, "x64: display-list head-node pool alloc/free size 8");
+    }
 
     // @0x82AFF820 -- construct a sprite/movie-clip instance over pCharacter:
     // chain the AptCharacterInst base ctor, default-construct the child display
@@ -121,7 +139,7 @@ struct AptCharacterSpriteInstBase : public AptCharacterInst
     // for the same reason as the destructor (manual-vtable family).
     void PreDestroy();
 
-    // ---- packed clip-event handlers (the high 24 bits of mnClipActionFlags) ----
+    // ---- packed clip-event handlers (the LOW 24 bits of mnClipActionFlags, x64) ----
     // @0x82AD50B8 -- true (nMask-masked) when any of the queried clip-event bits
     // are registered.
     int32_t HasClipAction(int32_t nMask) const;     // @0x82AD50B8

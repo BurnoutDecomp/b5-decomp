@@ -60,14 +60,14 @@ static const float KF_GLYPH_ADVANCE_SCALE = 0.05f;
 AptRenderItemStaticText::AptRenderItemStaticText(AptCharacter* pCharacter, int nCreatedOnTick)
     : AptRenderItem(pCharacter, nCreatedOnTick)
 {
-    mFlags = (mFlags & 0xFF03FFFFu) | 0x00280000u;
+    mFlags = (mFlags & ~0x3F00u) | 0xA00u;   // static-text=10; x64 type field (XB1 ctor 0x140826F50 `or 0A00h`)
 }
 
 // Clone copy-ctor -- base clone copy + re-stamp the static-text render-type flag.
 AptRenderItemStaticText::AptRenderItemStaticText(const AptRenderItemStaticText* pSource, int nCreatedOnTick, bool bCopyExtended)
     : AptRenderItem(pSource, nCreatedOnTick, bCopyExtended)
 {
-    mFlags = (mFlags & 0xFF03FFFFu) | 0x00280000u;
+    mFlags = (mFlags & ~0x3F00u) | 0xA00u;   // static-text=10; x64 type field (XB1 ctor 0x140826F50 `or 0A00h`)
 }
 
 // Clone @0x82AEC950 -- pool-allocate a fresh static-text render item copy-init'd

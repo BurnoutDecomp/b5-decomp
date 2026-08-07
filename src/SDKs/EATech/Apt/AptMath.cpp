@@ -1,4 +1,4 @@
-#include "SDKs/EATech/Apt/AptMath.h"
+﻿#include "SDKs/EATech/Apt/AptMath.h"
 
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"   // gpAptSharedPtrPool (off_8324D808)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"          // DOGMA_PoolManager::Allocate
@@ -31,24 +31,24 @@ namespace
 namespace AptMath
 {
 
-// @0x82AD5D08 -- base + 0x70 * top index.
+// @0x82AD5D08 -- base + stride * top index (x64 stride 0x80: XB1 `shl rax,7` @0x140834240).
 intptr_t ClipStackGetTop()
 {
-    return 0x70 * gsnClipStackIndex + giClipStackBase;
+    return sizeof(AptClipMatrixEntry) * gsnClipStackIndex + giClipStackBase;
 }
 
 // @0x82AD5CB0 -- pre-increment index, return new top pointer.
 intptr_t ClipStackPush()
 {
     gsnClipStackIndex = static_cast<u16>(gsnClipStackIndex + 1);
-    return 0x70 * gsnClipStackIndex + giClipStackBase;
+    return sizeof(AptClipMatrixEntry) * gsnClipStackIndex + giClipStackBase;
 }
 
 // @0x82AD5CD8 -- pre-decrement index, return new top pointer.
 intptr_t ClipStackPop()
 {
     gsnClipStackIndex = static_cast<u16>(gsnClipStackIndex - 1);
-    return 0x70 * gsnClipStackIndex + giClipStackBase;
+    return sizeof(AptClipMatrixEntry) * gsnClipStackIndex + giClipStackBase;
 }
 
 // @0x82ADC548 -- write the unit transform + opaque-white colour to the top entry.
@@ -61,7 +61,7 @@ intptr_t ClipStackPop()
 void ClipStackMakeUnit()
 {
     AptClipMatrixEntry* lpEntry =
-        reinterpret_cast<AptClipMatrixEntry*>(0x70 * gsnClipStackIndex + giClipStackBase);
+        reinterpret_cast<AptClipMatrixEntry*>(sizeof(AptClipMatrixEntry) * gsnClipStackIndex + giClipStackBase);
 
     const f32 lfOne  = 1.0f;   // flt_82001C98
     const f32 lfZero = 0.0f;   // flt_82001CC0
@@ -100,11 +100,11 @@ intptr_t ClipStackInit(int nDepth)
 {
     const u16 lsnDepth = static_cast<u16>(nDepth);
 
-    // pool->Allocate(112*nDepth + 16); the raw pointer is kept then 16-aligned up.
+    // pool->Allocate(stride*nDepth + 16); x64 stride 0x80 (XB1 shl 7; console was 112). the raw pointer is kept then 16-aligned up.
     // FLAG (x64): the raw pointer is captured as intptr_t (not int) so the 64-bit heap
     // base is not truncated; the 16-align math is identical.
     intptr_t liRaw = reinterpret_cast<intptr_t>(
-        gpAptSharedPtrPool->Allocate(static_cast<size_t>(0x70 * nDepth + 0x10)));
+        gpAptSharedPtrPool->Allocate(static_cast<size_t>(sizeof(AptClipMatrixEntry) * nDepth + 0x10)));
 
     giClipStackRaw = liRaw;
 

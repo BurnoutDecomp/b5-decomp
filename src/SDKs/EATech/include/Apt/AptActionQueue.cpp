@@ -1,4 +1,4 @@
-#include "SDKs/EATech/include/Apt/AptActionQueue.h"
+﻿#include "SDKs/EATech/include/Apt/AptActionQueue.h"
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AptValue::AddRef/Release + sReferenceRegistrationCb
 #include "SDKs/EATech/include/Apt/AptCIH.h"               // AptCIH (the queued action target)
@@ -170,7 +170,7 @@ AptValue* AptActionQueueC::AddActionBack(const void* pEventStreamSlot, AptCIH* p
     lpBack->action.mpEventStreamSlot = pEventStreamSlot;
     lpBack->action.mpCIH     = pCIH;
     pCIH->AddRef();
-    lpBack->action.miContext = iContext;
+    lpBack->mnInput = iContext;
 
     mpBack = lpNextBack;
     return pCIH;
@@ -200,7 +200,7 @@ AptValue* AptActionQueueC::AddActionFront(const void* pEventStreamSlot, AptCIH* 
     lpNewFront->action.mpEventStreamSlot = pEventStreamSlot;
     lpNewFront->action.mpCIH     = pCIH;
     pCIH->AddRef();
-    lpNewFront->action.miContext = iContext;
+    lpNewFront->mnInput = iContext;
 
     return pCIH;
 }
@@ -223,7 +223,7 @@ AptValue* AptActionQueueC::AddFunctionBack(AptValue* pContext, AptValue* pFuncDe
     }
 
     lpBack->mnType             = AptAnimationPoolData::E_ACTION_TYPE_FUNCTION;
-    lpBack->function.miArgCount = iArgCount;
+    lpBack->mnInput = iArgCount;
     lpBack->function.mpContext  = pContext;
     pContext->AddRef();
     lpBack->function.mpFuncDef  = pFuncDef;
@@ -253,7 +253,7 @@ AptValue* AptActionQueueC::AddFunctionFront(AptValue* pContext, AptValue* pFuncD
 
     mpFront = lpNewFront;
     lpNewFront->mnType             = AptAnimationPoolData::E_ACTION_TYPE_FUNCTION;
-    lpNewFront->function.miArgCount = iArgCount;
+    lpNewFront->mnInput = iArgCount;
     lpNewFront->function.mpContext  = pContext;
     pContext->AddRef();
     lpNewFront->function.mpFuncDef  = pFuncDef;

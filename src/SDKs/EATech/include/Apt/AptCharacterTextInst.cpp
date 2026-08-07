@@ -70,7 +70,7 @@ intptr_t AptCharacterTextInst::GetZID() const { return GetTextItemConst()->GetZI
 // runtime marker) read straight through the const item.
 bool AptCharacterTextInst::GetCreatedDynamic() const
 {
-    return ((mpRenderItem->mFlags >> 27) & 1u) != 0;
+    return (mpRenderItem->mFlags & 0x10u) != 0;   // x64 bit 4 (X360 bit27)
 }
 
 const EAStringC* AptCharacterTextInst::GetTextValueConst() const { return GetTextItemConst()->GetTextValueConst(); }  // @0x82AD5810

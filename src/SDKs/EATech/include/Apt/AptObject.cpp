@@ -52,14 +52,16 @@ AptObject* AptObject::Create(int nHashCapacity)
 
 bool AptObject::GetHasClass() const
 {
-    return ((mClassFlags >> 23) & 1) != 0;
+    // x64: bit 8 (mask 0x100; B4 mbHasClass) -- the old bit-23 form was the X360
+    // big-endian bit-numbering reversal.
+    return (mClassFlags & 0x100u) != 0;
 }
 
 void AptObject::SetHasClass(int bHasClass)
 {
     // Clear bit 23, then set it iff bHasClass != 0 (the console's rotate+mask
     // idiom expressed on the whole word).
-    mClassFlags = (mClassFlags & ~0x00800000u) | (bHasClass ? 0x00800000u : 0u);
+    mClassFlags = (mClassFlags & ~0x100u) | (bHasClass ? 0x100u : 0u);   // x64 bit 8
 }
 
 AptValue* AptObject::objectMemberLookup(AptValue* const /*pThis*/,

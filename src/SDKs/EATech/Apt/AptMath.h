@@ -8,10 +8,14 @@
 //  stack used by the APT renderer when it pushes/pops nested transform+colour
 //  state for masked / clipped display objects.
 //
-//  Each clip-stack entry is 0x70 (112) bytes -- the per-entry stride proven by
-//  the `mulli rN, idx, 0x70` in every ClipStack* accessor. Within an entry the
-//  first 0x40 bytes are a 4x4 (16-float, row stride 4) transform matrix and the
-//  tail holds a colour transform (an ARGB scale + ARGB translate block).
+//  Each clip-stack entry is 0x80 (128) bytes ON x64 -- the XB1 rung-1 accessors
+//  (ClipStackGetTop/Push/Pop @0x140834240/0x140834350/0x140834320) all scale the
+//  index with `shl rax,7`. (The X360's stride was 0x70 / `mulli 0x70`; using the
+//  console stride on x64 mis-strides the whole stack -- the recurring
+//  console-stride corruption class.) Within an entry the first 0x40 bytes are a
+//  4x4 (16-float, row stride 4) transform matrix and the tail holds a colour
+//  transform (an ARGB scale + ARGB translate block). The x64 top index is a
+//  16-bit word (word_141479FB4) over an 8-byte base pointer (qword_141479F98).
 //
 //  NO DWARF exists for AptMath (X360-only; not in the PS3 DecFIGS dump). The
 //  shapes below are derived STRICTLY from the X360 binary:
@@ -25,16 +29,19 @@
 
 #include "types.hpp"
 
-// One clip-stack entry, 0x70 (112) bytes.
+// One clip-stack entry, 0x80 (128) bytes on x64 (stride: `shl rax,7` in every
+// XB1 ClipStack* accessor; B4Extern names the type AptMath::ClipTransform_t).
 //
-// Field offsets are exactly the displacements the X360 ClipStackMakeUnit
-// (@0x82ADC548) writes:
+// Interior field offsets follow the X360 ClipStackMakeUnit (@0x82ADC548) writes;
+// the x64 MakeUnit twin is an unnamed sub not yet analysed, so only the matrix
+// base and the total stride are hard x64 facts (the colour block positions are
+// X360-derived and B4-bracketed -- B4 puts the colour vectors at 0x40/0x50):
 //   matrix     [+0x00 .. +0x3C]  16 floats, 4x4 row-major (row stride 4 floats)
-//   (+0x40)    gap, never written by MakeUnit
+//   (+0x40)    gap, never written by the X360 MakeUnit
 //   scaleArgb  [+0x44 .. +0x50]  4 floats, set to 255.0 by the unit ctor
 //   (+0x54)    gap, never written by MakeUnit
 //   transArgb  [+0x58 .. +0x64]  4 floats, set to 0.0 by the unit ctor
-//   (+0x68 .. +0x6F) tail padding to the 0x70 stride
+//   (+0x68 .. +0x7F) tail padding out to the x64 0x80 stride
 struct AptClipMatrixEntry
 {
     f32 mafMatrix[16];      // [+0x00] 4x4 transform (row stride = 4 floats)
@@ -42,7 +49,13 @@ struct AptClipMatrixEntry
     f32 mafScaleArgb[4];    // [+0x44] colour scale  (A,R,G,B)
     f32 mfPad54;            // [+0x54] unwritten gap
     f32 mafTransArgb[4];    // [+0x58] colour translate (A,R,G,B)
-    f32 mafTailPad[2];      // [+0x68] padding out to 0x70
+    f32 mafTailPad[6];      // [+0x68] padding out to the x64 0x80 stride
+
+    // Stride pinned against the x64 XB1 accessors (never called).
+    static void _AssertLayout()
+    {
+        static_assert(sizeof(AptClipMatrixEntry) == 0x80, "x64: ClipStack* accessors scale the index by `shl rax,7` (NOT the X360 0x70)");
+    }
 };
 
 namespace AptMath

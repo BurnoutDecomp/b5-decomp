@@ -154,9 +154,9 @@ void AptActionInterpreter::_FunctionAptActionReturn(AptActionInterpreter* /*pInt
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-// The clip's play-head "playing" bit (mnClipActionFlags bit 6 / 0x40): set by Play,
+// The clip's play-head "playing" bit (bIsPlaying, x64 mnClipActionFlags bit 25): set by Play,
 // cleared by Stop / NextFrame / GotoFrame. (Console *(spriteBase + 0x14) & 0x40.)
-static const uint32_t KU_CLIP_PLAYING = 0x40u;
+static const uint32_t KU_CLIP_PLAYING = 0x2000000u;   // bIsPlaying, x64 bit 25 (X360 reversed bit 6)
 
 // The level-instance character type tag (mTypeFlags >> 26 == 15): the timeline ops
 // are no-ops on it. (Console: (mTypeFlags & 0xFC000000) == 0x3C000000.)

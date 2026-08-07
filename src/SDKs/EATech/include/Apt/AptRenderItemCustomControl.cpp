@@ -69,7 +69,7 @@ AptRenderItemCustomControl::AptRenderItemCustomControl(const AptRenderItemCustom
     mCustomPropertiesStr = pSource->mCustomPropertiesStr;
 
     // Custom-control render-type flag: bit 22 (console __ROR4__(1,10) & 0xFC0000).
-    mFlags = (mFlags & 0xFF03FFFFu) | 0x00400000u;
+    mFlags = (mFlags & ~0x3F00u) | 0x1000u;   // custom-control=16; x64 type field (XB1 ctor 0x140826B00 `or 1000h`)
     mZId = 0;
 }
 
@@ -85,7 +85,7 @@ AptRenderItemCustomControl::AptRenderItemCustomControl(const AptRenderItemSprite
     // mTypeStr / mTargetStr / mCustomPropertiesStr default-construct to the shared
     // empty string -- left empty (a plain sprite has no descriptor).
 {
-    mFlags = (mFlags & 0xFF03FFFFu) | 0x00400000u;
+    mFlags = (mFlags & ~0x3F00u) | 0x1000u;   // custom-control=16; x64 type field (XB1 ctor 0x140826B00 `or 1000h`)
     mZId = 0;
 }
 

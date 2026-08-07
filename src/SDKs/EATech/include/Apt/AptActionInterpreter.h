@@ -681,11 +681,27 @@ public:
     // Value / spRegBlock*). (Renamed from field_40/mpRegisters "register window".)
     uint32_t   mnConstantPoolCount; // [c:0x40] dictionary/constant-pool entry count
     AptValue** mpConstantPool;      // [c:0x44] dictionary/constant-pool base (AptValue* table)
-    uint32_t   field_48[6];       // [c:0x48..0x5C] unmapped
-    AptValue*  mpAbortValue;      // [c:0x60] the thrown value (null = no abort) -- Throw sets it,
-                                  // runStream checks it after each op and unwinds. x64: a pointer
-                                  // (the console int slot held the 32-bit AptValue*), not an int.
-    int        mnStackBase;       // [c:0x64] operand-stack base this run unwinds to (Pop won't go below it)
-    uint8_t    mbSkipTraceBytecodes; // [c:0x68]
-    uint8_t    field_69;          // [c:0x69]
+    // The [c:0x48..0x5C] region decoded per the B4Extern PDB (apt 0.19.02 names
+    // 'input' / 'apRegisters[4]' / 'nThisCount'), the ONLY decomposition that lands
+    // mpAbortValue on the x64-proven +0x98 (getThrownValue @0x14084E5D0 reads
+    // [this+98h]; the old `uint32_t field_48[6]` left it 0x18 bytes short):
+    uint32_t   mnInput;             // [c:0x48] (B4 'input')
+    AptValue*  mapRegisters[4];     // [c:0x4C..0x58] (B4 'apRegisters')
+    int        mnThisCount;         // [c:0x5C] (B4 'nThisCount')
+    AptValue*  mpAbortValue;      // [c:0x60] x64 +0x98: the thrown value (null = no abort;
+                                  // B4 name mpThrownValue) -- Throw sets it, runStream
+                                  // checks it after each op and unwinds. x64: a pointer.
+    int        mnStackBase;       // [c:0x64] x64 +0xA0: operand-stack base this run unwinds to
+    uint8_t    mbSkipTraceBytecodes; // [c:0x68] x64 +0xA4
+    uint8_t    field_69;          // [c:0x69] x64 +0xA5
+
+    // Layout pinned against the x64 XB1 export (never called; member body gives
+    // complete-class offsetof context).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptActionInterpreter, mnStackTop)   == 0x00, "x64 stackAt: count at [this+0] @0x14085D300");
+        static_assert(offsetof(AptActionInterpreter, mpStack)      == 0x08, "x64 stackAt: array at [this+8]");
+        static_assert(offsetof(AptActionInterpreter, mpAbortValue) == 0x98, "x64 getThrownValue @0x14084E5D0: [this+98h]");
+        static_assert(offsetof(AptActionInterpreter, mnStackBase)  == 0xA0, "x64: follows the thrown value");
+    }
 };

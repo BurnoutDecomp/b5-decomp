@@ -252,16 +252,16 @@ void AptAnimationTargetSetDestruct2(AptAnimationTargetSet* pSet)
 // AptAnimationTarget::AddToRemList @0x82AEE3F8 -- HOMED 2026-07-10 (retiring the
 // {} link-stub, which dropped every delay-released clip on the floor). Queue a
 // CIH on the shared delayed-release table:
-//   * a node already queued (mFlagsA bit26) is a no-op;
+//   * a node already queued (the InRemList flag, x64 mFlagsA bit 5) is a no-op;
 //   * a full table (size >= the table element count) flushes via CleanRemList;
 //   * find the first FREE (null) slot within the current fill run (else append);
-//   * AddRef the node, mark it queued (bit26), store it; appending bumps the fill.
+//   * AddRef the node, mark it queued (InRemList), store it; appending bumps the fill.
 // (The console never reads its r3/pAnim arg -- CleanRemList is static.)
 // ---------------------------------------------------------------------------
 void AptAnimationTargetAddToRemList(AptAnimationTarget* /*pAnim (console r3, unread)*/,
                                     AptCIH* pItem)
 {
-    if (((pItem->mFlagsA >> 26) & 1u) != 0)          // lwz 0xC(r30); extrwi 1,5
+    if (pItem->GetInRemList())                        // x64 bit 5 (X360 lwz 0xC(r30); extrwi 1,5)
         return;                                       // already queued
 
     if (snDelayedReleaseListSize >= snMaxNewMovieClips)   // dword_8324E550 >= dword_8324E540
@@ -277,7 +277,7 @@ void AptAnimationTargetAddToRemList(AptAnimationTarget* /*pAnim (console r3, unr
     }
 
     pItem->AddRef();                                  // vtbl[0]
-    pItem->mFlagsA |= 0x04000000u;                    // oris 0x400 -- the queued bit26
+    pItem->SetInRemList(true);                        // x64 bit 5 (X360 oris 0x400, reversed bit26)
     static_cast<AptValue**>(spDelayedReleaseList)[liSlot] = static_cast<AptValue*>(pItem);
     if (liSlot == snDelayedReleaseListSize)
         ++snDelayedReleaseListSize;                   // appended past the fill run
@@ -352,7 +352,7 @@ extern u8  gAptAStickRight[];    // unk_8324E2D8 (player stride 16 bytes)
 // (mnCIHStackTop/mnCIHStackCapacity/mpCIHStack) -- both AptValueVector-shaped
 // {count,capacity,array} triples, which the X360 pops via AptValueVector::pop().
 // The "current event id" scratch field the drains stamp before a run is at +0x48
-// (field_48[0] == dword_8324E7A8). The VM + these globals are owned by the (not-
+// (mnInput == dword_8324E7A8; B4 'input'). The VM + these globals are owned by the (not-
 // yet-homed) AptActionInterpreter boot TU; declared here so the bodies stay faithful.
 // ---------------------------------------------------------------------------
 extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
@@ -686,12 +686,12 @@ void AptAnimationTarget::CleanRemList()
         }
 
         // Only act on a defined CIH / CIH-none value that is not a "None" (type 3) and
-        // whose CIH state (mFlagsA bits 29-30) is not the protected 0x20000000 form.
+        // whose CIH state (x64 mFlagsA bits 1-2) is not the protected transitioning (1) form.
         const AptVirtualFunctionTable_Indices leType = lpValue->getVtblIndex();
         const bool lbIsCIH =
             (leType == AptVFT_CharacterInstHandle || leType == AptVFT_CIHNone);
         if (!lbIsCIH
-            || (reinterpret_cast<AptCIH*>(lpValue)->mFlagsA & 0x60000000u) == 0x20000000u  // *(v4+12)
+            || (reinterpret_cast<AptCIH*>(lpValue)->mFlagsA & 0x6u) == 0x2u  // *(v4+12)
             || leType == AptVFT_None)
         {
             continue;
@@ -1409,8 +1409,8 @@ int AptAnimationTarget::RunActions()
         if (lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_ACTION)   // *v3 == 1
         {
             // Stamp the interpreter's "current event id" scratch with the slot's
-            // queued context handle (dword_8324E7A8 == gAptActionInterpreter.field_48[0]).
-            gAptActionInterpreter.field_48[0] = static_cast<u32>(lpSlot->action.miContext);  // *(v3+4)
+            // queued context handle (dword_8324E7A8 == gAptActionInterpreter.mnInput).
+            gAptActionInterpreter.mnInput = static_cast<u32>(lpSlot->mnInput);  // *(v3+4)
 
             AptValue* lpCIH = lpSlot->action.mpCIH;      // v4 = *(v3+16)
             AptCIH*   lpNode = reinterpret_cast<AptCIH*>(lpCIH);
@@ -1423,18 +1423,18 @@ int AptAnimationTarget::RunActions()
             const uintptr_t luCIH = reinterpret_cast<uintptr_t>(lpNode);
             const bool lbCIHPlausible =
                 luCIH >= 0x10000u && (luCIH >> 47) == 0u;
-            if (lbCIHPlausible && ((lpNode->mnValueData >> 27) & 1u) != 0u)
+            if (lbCIHPlausible && lpNode->getIsDefined())   // x64: value bitfield bit 4 (X360 reversed bit27)
             {
                 // Named members (2026-07-01; were the console raw offsets on x64
-                // objects): the bound character instance (CIH word[8]) must not be
-                // the "dead" 0x3C type form, and the CIH state (mFlagsA bits 29-30,
-                // CIH word[3]) must not be the protected 0x60000000 form.
+                // objects): the bound character instance (CIH +0x38) must not be
+                // the "empty" type-15 form (x64 tag = LOW 6 bits of mTypeFlags),
+                // and the CIH state (x64 mFlagsA bits 1-2) must not be dead (3).
                 AptCharacterInst* lpCharInst = lpNode->mpCharacterInst;   // v5 = v4[8]
                 const u32 lnCharType = (lpCharInst != nullptr)
-                    ? (lpCharInst->mTypeFlags & 0xFC000000u) : 0x3C000000u;
-                const u32 lnCIHState = lpNode->mFlagsA & 0x60000000u;     // v4[3]
+                    ? (lpCharInst->mTypeFlags & 0x3Fu) : 0xFu;
+                const u32 lnCIHState = lpNode->mFlagsA & 0x6u;            // v4[3]
 
-                if (lnCharType != 0x3C000000u && lnCIHState != 0x60000000u)
+                if (lnCharType != 0xFu && lnCIHState != 0x6u)
                 {
                     // The queued instance depth gate: a non-negative depth always runs;
                     // a negative depth runs only when the char inst is absent or its
@@ -1539,7 +1539,7 @@ int AptAnimationTarget::RunActions()
         }
         else if (lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_FUNCTION)   // *v3 == 2
         {
-            gAptActionInterpreter.field_48[0] = static_cast<u32>(lpSlot->function.miArgCount);  // dword_8324E7A8 = *(v3+4)
+            gAptActionInterpreter.mnInput = static_cast<u32>(lpSlot->mnInput);  // dword_8324E7A8 = *(v3+4)
 
             // Push the call context onto the interpreter's CIH/target stack (the X360
             // stamps it then AddRefs it via vtbl[0]). v13 = *(v3+8) == function.mpContext.
@@ -1688,7 +1688,7 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
                 AptCharacterInst* lpBoundInst =
                     static_cast<AptCIH*>(lpBound)->GetCharacterInst();
                 lbFire = lpBoundInst != nullptr &&
-                         (static_cast<u32>(lpBoundInst->mTypeFlags) & 0xFC000000u) != 0x3C000000u;
+                         (static_cast<u32>(lpBoundInst->mTypeFlags) & 0x3Fu) != 15u;   // x64 low-6-bit tag
             }
         }
 

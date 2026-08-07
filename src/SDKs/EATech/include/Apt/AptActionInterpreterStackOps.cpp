@@ -1229,9 +1229,10 @@ void AptActionInterpreter::_FunctionAptActionGotoLabel(AptActionInterpreter* /*p
     if (nFrame >= 0)
     {
         pNode->jumpToFrame(nFrame);                             // real member (play-head seek)
-        // clear the "playing" bit on the node's sprite instance (console *(node+0x20)+0x14 &= ~0x40).
+        // clear the "playing" bit on the node's sprite instance (bIsPlaying, x64 bit 25;
+        // console form *(node+0x20)+0x14 &= ~0x40).
         static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst())->mnClipActionFlags
-            &= ~0x40u;
+            &= ~0x2000000u;
     }
 }
 
@@ -1305,7 +1306,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pI
         AptCharacterSpriteInstBase* const pSprite =
             static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
         // set/clear bit 6 (0x40, "playing") from the play flag.
-        pSprite->mnClipActionFlags = (pSprite->mnClipActionFlags & ~0x40u) | (bPlay ? 0x40u : 0u);
+        pSprite->mnClipActionFlags = (pSprite->mnClipActionFlags & ~0x2000000u) | (bPlay ? 0x2000000u : 0u);   // bIsPlaying, x64 bit 25
         if (bPlay)
             pNode->SetDirtyState(true, true);              // real member (dirty latch)
     }
