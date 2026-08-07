@@ -33,7 +33,7 @@
 //  list. The ctor's v7[3]=v7+4 (mpData -> +0x10) + two zero slots pins the
 //  2-element inline capacity. Modelled (per the AptFileSavedInputStateVector
 //  precedent) as a clean typed vector with NAMED members -- semantic parity, not
-//  the console's literal SBO offsets (the pervasive x64 PC-port FLAG).
+//  the console's literal SBO offsets (the pervasive x64 PC-port widening rule).
 //
 //  EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // =====================================================================

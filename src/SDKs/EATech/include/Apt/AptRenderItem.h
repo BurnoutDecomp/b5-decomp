@@ -41,10 +41,11 @@ struct AptCharacter;
 struct AptMatrix;
 struct AptCXForm;
 class AptRenderingContext;
-enum AptMaskRenderOperation : int;   // values reconstructed with the render path (FLAG)
+enum AptMaskRenderOperation : int;   // values in CgsAptCallbackRender.h (Subtract=-1 / Normal=0 / Add=1)
 
-// FLAG (homed elsewhere): the shared identity transforms returned when an item
-// has no own matrix, and the global render-item teardown latch + alloc counter.
+// The shared identity transforms returned when an item has no own matrix (DEFINED
+// in AptGlobals.cpp) and the global render-item teardown latch (DEFINED in
+// AptRenderItem.cpp, X360 byte_8324E56C).
 extern AptMatrix gIdentityMatrix;
 extern AptCXForm gIdentityCXForm;
 extern bool      gbRenderItemShuttingDown;
@@ -176,11 +177,12 @@ struct AptRenderItem
     // (defined in AptRenderTreeManager.cpp, where the subtype headers are visible).
     static AptRenderItem* Manager_CreateItem(AptCharacter* pCharacter, int nTick);
 
-    // FLAG (bodies are [todo] in their own render-item revision TU; declared here
-    // decl-only so the AptRenderTreeManager Render_*/Update_* facade compiles
-    // against them by name). These are the per-item revision/link mutators the
-    // render-tree manager drives -- the writable-revision chase + the
-    // first-child / next-sibling / mask link writes for the double-buffered tree.
+    // The per-item revision/link mutators the render-tree manager drives -- the
+    // writable-revision chase + the first-child / next-sibling / mask link writes
+    // for the double-buffered tree. ALL BODIES HOMED in AptRenderItem.cpp
+    // (@0x82ADAAE8 / @0x82ADABA0 / @0x82ADAC58 / @0x82ADACA8 / @0x82ADB1B8 /
+    // @0x82ADAF58 / @0x82ADAD90, plus the symmetry-reconstructed
+    // Manager_UpdateFirstChild).
     //   Manager_GetRenderRevision  @ (called from Render_GetChildInvisible/...) --
     //     resolve THIS item's render revision for nTick (chases the revision chain).
     AptRenderItem* Manager_GetRenderRevision(int nTick);
@@ -209,7 +211,7 @@ struct AptRenderItem
     bool IsWritableForThisTick(int nTick) const;
     bool Manager_IsDeletionMark() const;            // @0x7DEEBC (x64 mFlags bit 3)
     void Manager_SetNextRevision(AptRenderItem* pNext);   // @0x7DEF00
-    void Manager_SetDeletionMark(bool bMark);             // @0x7E48DC (simplified)
+    void Manager_SetDeletionMark(bool bMark);             // @0x82ADB138 (full link-release form)
 
     // Manager_GetMask @0x82AD4F48 -- the mask render item (manager-side accessor).
     AptRenderItem* Manager_GetMask() const { return mpMask; }

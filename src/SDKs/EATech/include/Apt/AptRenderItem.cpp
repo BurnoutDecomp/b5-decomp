@@ -31,10 +31,11 @@ int AptRenderItem::sItemsAllocated = 0;
 // shutdown latch (X360 byte_8324E56C). The base render-item TU is their home;
 // the subtype TUs (e.g. AptRenderItemCustomControl) declare them extern.
 //
-// FLAG: the console brackets each revision-link swap with the lwarx/stwcx.
+// The console brackets each revision-link swap with the lwarx/stwcx.
 // interrupt-masked test-and-set on unk_8324E7CC; modelled here as an
 // interlocked test-and-set (host-portable, uncontended on the single-threaded
-// bring-up path). byte_8324E56C gates the manager-link teardown in the dtor
+// bring-up path -- see the PC-platform leaf markers below). byte_8324E56C gates
+// the manager-link teardown in the dtor
 // (true once the render system is shutting down -> skip the revision teardown).
 // ---------------------------------------------------------------------------
 volatile long gAptRenderTreeRevisionLock = 0;   // X360 unk_8324E7CC
@@ -257,13 +258,67 @@ void AptRenderItem::CopyRenderDataFrom(const AptRenderItem* pSource)
     mFlags = (mFlags & ~0x1u) | (pSource->mFlags & 0x1u);
 }
 
-// dtor @0x80F860
+// dtor @0x80F860 (X360 twin @0x82AEBCE0 -- manager-chain teardown decompiled from
+// the ARTIST asm).
 AptRenderItem::~AptRenderItem()
 {
-    // FLAG: the manager next-revision/sibling/child chain teardown ([10]/[11]/[12])
-    // is the AptRenderTreeManager double-buffering cleanup, deferred with that
-    // subsystem. Those links are null until the manager populates them, so there
-    // is nothing to tear down in the current (pre-manager) phase.
+    // The manager next-revision / next-sibling / first-child chain teardown
+    // (console a1[10]/[11]/[12]), skipped once the render system is shutting down
+    // (byte_8324E56C). Each chain collapses through its own same-kind link: pop
+    // links this dtor holds the LAST reference to (mRefCount <= 1) and delete them
+    // directly (the console's virtual deleting-dtor call, flags=1), re-linking to
+    // the popped link's own next; stop at the first link someone else still
+    // references and Release it instead.
+    if (!gbRenderItemShuttingDown)
+    {
+        while (AptRenderItem* pRev = mpManagerNextRevision)
+        {
+            if (pRev->mRefCount > 1)
+                break;
+            AptRenderItem* pNext = pRev->mpManagerNextRevision;   // the link's own [c:0x28]
+            pRev->mpManagerNextRevision = nullptr;
+            delete pRev;                                          // (*vtbl)(link, 1)
+            mpManagerNextRevision = pNext;
+        }
+        if (mpManagerNextRevision)
+        {
+            AptRenderItem* pOld = mpManagerNextRevision;
+            mpManagerNextRevision = nullptr;
+            pOld->ReleaseReference();
+        }
+
+        while (AptRenderItem* pSib = mpManagerNextSibling)
+        {
+            if (pSib->mRefCount > 1)
+                break;
+            AptRenderItem* pNext = pSib->mpManagerNextSibling;    // the link's own [c:0x2C]
+            pSib->mpManagerNextSibling = nullptr;
+            delete pSib;
+            mpManagerNextSibling = pNext;
+        }
+        if (mpManagerNextSibling)
+        {
+            AptRenderItem* pOld = mpManagerNextSibling;
+            mpManagerNextSibling = nullptr;
+            pOld->ReleaseReference();
+        }
+
+        while (AptRenderItem* pChild = mpManagerFirstChild)
+        {
+            if (pChild->mRefCount > 1)
+                break;
+            AptRenderItem* pNext = pChild->mpManagerFirstChild;   // the link's own [c:0x30]
+            pChild->mpManagerFirstChild = nullptr;
+            delete pChild;
+            mpManagerFirstChild = pNext;
+        }
+        if (mpManagerFirstChild)
+        {
+            AptRenderItem* pOld = mpManagerFirstChild;
+            mpManagerFirstChild = nullptr;
+            pOld->ReleaseReference();
+        }
+    }
 
     if (mpCharacter)
     {
@@ -410,21 +465,50 @@ bool AptRenderItem::Manager_IsDeletionMark() const { return (mFlags & 0x8u) != 0
 // Manager_SetNextRevision @0x7DEF00
 void AptRenderItem::Manager_SetNextRevision(AptRenderItem* pNext) { mpManagerNextRevision = pNext; }
 
-// Manager_SetDeletionMark @0x7E48DC -- set the deletion-mark flag (bit 28).
-// FLAG: the console also releases this revision's child/sibling references here
-// (the full revision teardown); deferred with the concurrent double-buffering.
+// Manager_SetDeletionMark @0x82ADB138 (PS3 @0x7E48DC) -- mark/unmark this revision
+// for deletion (x64 mFlags bit 3; console bit 28). When MARKING, first release the
+// whole revision link set in the console's store order -- first-child (+0x30),
+// next-sibling (+0x2C), next-revision (+0x28), mask (+0x1C) -- nulling each slot
+// before its ReleaseReference.
 void AptRenderItem::Manager_SetDeletionMark(bool bMark)
 {
-    if (bMark) mFlags |= 0x8u;
-    else       mFlags &= ~0x8u;
+    if (bMark)
+    {
+        if (mpManagerFirstChild)
+        {
+            AptRenderItem* pOld = mpManagerFirstChild;
+            mpManagerFirstChild = nullptr;
+            pOld->ReleaseReference();
+        }
+        if (mpManagerNextSibling)
+        {
+            AptRenderItem* pOld = mpManagerNextSibling;
+            mpManagerNextSibling = nullptr;
+            pOld->ReleaseReference();
+        }
+        if (mpManagerNextRevision)
+        {
+            AptRenderItem* pOld = mpManagerNextRevision;
+            mpManagerNextRevision = nullptr;
+            pOld->ReleaseReference();
+        }
+        if (mpMask)
+        {
+            AptRenderItem* pOld = mpMask;
+            mpMask = nullptr;
+            pOld->ReleaseReference();
+        }
+    }
+    // console: v2[6] = (bMark << 28) & 0x10000000 | (v2[6] & 0xEFFFFFFF) -> x64 bit 3.
+    mFlags = (bMark ? 0x8u : 0u) | (mFlags & ~0x8u);
 }
 
 // ===========================================================================
 // Render-tree double-buffering (DECOMPILED from the X360 ARTIST.XEX -- the full
-// revision-tree mutators the AptRenderTreeManager facade drives). These were left
-// deferred-by-FLAG on the earlier bring-up; now decompiled faithfully.
+// revision-tree mutators the AptRenderTreeManager facade drives), decompiled
+// faithfully after the earlier bring-up deferral.
 //
-// FLAG (x64 fork): the console mutates mRefCount with the lwarx/stwcx. atomic and
+// x64 fork (PC-platform threading): the console mutates mRefCount with the lwarx/stwcx. atomic and
 // brackets the revision-link swaps with the unk_8324E7CC interrupt-masked spin
 // lock; both are modelled host-portably (AddReference/ReleaseReference =
 // _Interlocked*; the lock = _InterlockedExchange). Behaviour is identical on the
@@ -622,10 +706,11 @@ void AptRenderItem::Manager_UpdateMask(AptRenderItem* pRevision)
 }
 
 // Manager_UpdateFirstChild -- the first-child counterpart of the two above
-// ([c:0x30]); the AptRenderTreeManager render walk drives it.
-// FLAG: the dedicated X360 leaf for the first-child update is not in this TU's
-// dossier; reconstructed identically to its committed Update_NextSibling/Mask
-// siblings (deletion-mark collapse + ref-counted link swap under the lock).
+// ([c:0x30]); the AptRenderTreeManager render walk and the custom-control Render
+// (@0x82AEF8F8, its verified X360 caller) drive it. The dedicated X360 leaf has no
+// per-address export; reconstructed identically to its committed
+// Update_NextSibling/Mask instruction-twin siblings (deletion-mark collapse +
+// ref-counted link swap under the lock).
 void AptRenderItem::Manager_UpdateFirstChild(AptRenderItem* pRevision)
 {
     AptRenderItem* v2 = pRevision;
@@ -930,8 +1015,12 @@ AptRenderItem* AptRenderItem::SetIsMask(bool bIsMask, const AptMatrix* pMaskMatr
 // matrix onto the render context; Pop: restore both. The subtypes bracket their
 // geometry draw with these.
 //
-// FLAG: the console PushMatrices has an "optimised" fast-path (gAptOptFlags & 4 ->
-// _drawCharacterInstOpti); the standard push/append path is reconstructed here.
+// FLAG (parked): the console PushMatrices @0x82AEF150 gates on dword_82F73008 & 4 ->
+// drawCharacterInstOpti @0x82ADFA90 (a clip-stack fast path; the PopMatrices twin
+// just decrements the clip index). The gate word is un-exported .data (no writer
+// exists in the export set -- it is a build-config constant of unknown boot value)
+// and the fast path's clip entries are consumed by draw-side twins not yet
+// reconstructed, so only the standard push/append path is reconstructed here.
 // (Identity-singleton note: the item's null-matrix sentinels here are
 // gIdentityMatrix/gIdentityCXForm, distinct from the context's gAptIdentityMatrix/
 // gAptNullCXForm -- the concat still yields the correct result, just without the
@@ -959,9 +1048,10 @@ void PopMatrices(AptRenderingContext* pCtx, const AptRenderItem* /*pItem*/)
 // draws at an absolute screen transform independent of its parents' matrices. Used
 // by PushRenderDataAbsolute (sprite/button/etc.).
 //
-// FLAG (x64 fork): the console fast-paths gAptOptFlags&4 -> _drawCharacterInstAbsoluteOpti;
-// the standard push/append path is reconstructed (matching the committed PushMatrices,
-// whose opti fast-path is likewise folded out).
+// FLAG (parked): the console fast-paths dword_82F73008&4 -> _drawCharacterInstAbsoluteOpti
+// @0x82AE00A8 (see PushMatrices above -- the same un-exported gate word + draw-side
+// coupling); the standard push/append path is reconstructed (matching the committed
+// PushMatrices, whose opti fast-path is likewise folded out).
 void PushMatricesAbsolute(AptRenderingContext* pCtx, const AptRenderItem* pItem)
 {
     pCtx->pushColourTransform();

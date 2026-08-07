@@ -7,8 +7,8 @@
 // applied to the shape's geometry sub-field (the AptCharacter word at +0x20). That
 // slot is installed by CgsGui::AptAux::ConstructApt @0x5BA0F8 to
 // CgsGui::AptCallbackRender::DrawRenderingUnit, which (for the Normal op) draws the
-// rendering unit through CgsGui::AptRenderHandler::Render. So this hook is NOT a
-// dangling FLAG: it reads the geometry handle off the shape and dispatches through
+// rendering unit through CgsGui::AptRenderHandler::Render. So this hook is a LIVE
+// boundary: it reads the geometry handle off the shape and dispatches through
 // the installed gAptFuncs slot, reaching the committed DrawRenderingUnit.
 //
 // The geometry handle lives at AptCharacter +0x20 (console v6[8]); the AptCharacter
@@ -51,17 +51,8 @@ void AptHook_DrawShape(AptCharacter* pShape, AptMaskRenderOperation eOp, int nTi
         gAptFuncs.pfnDrawRenderingUnit(lpRenderingUnit, eOp, nTick);
 }
 
-// AptHookDrawImportGlyph / AptHookResolveImport -- the imported-sub-character draw/resolve
-// path. FLAG: deferred with the .apt parse (the import-resolution branch in AptCharacter::render
-// couples to the full loaded-.apt data layout). Homed as no-ops so the link is satisfied; the
-// common (non-importing) shape path -- the boot-UI case -- renders correctly through DrawShape.
-void AptHookDrawImportGlyph(AptCharacter* /*pImport*/, int /*nIndex*/, void* /*pGlyphData*/)
-{
-    // FLAG: imported-glyph draw deferred (the .apt import table is reconstructed with the parse).
-}
-
-int AptHookResolveImport(void* /*pImportFileData*/, int /*nImportId*/)
-{
-    // FLAG: imported-id resolution deferred (the .apt import table is reconstructed with the parse).
-    return 0;
-}
+// The former AptHookDrawImportGlyph / AptHookResolveImport no-op shims are DELETED
+// (2026-08-07): no caller references them anywhere in the tree, and the real
+// import-id resolution is the homed member AptCharacterAnimation::GetIDFromImportFile
+// @0x82ADE998 (AptCharacterAnimation.cpp) that the AptCharacter::render import
+// branch will call when it lands with the .apt parse.

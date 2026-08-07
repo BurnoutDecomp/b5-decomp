@@ -18,8 +18,8 @@
 AptRenderItemShape::AptRenderItemShape(AptCharacter* pCharacter, int nCreatedOnTick)
     : AptRenderItem(pCharacter, nCreatedOnTick)
 {
-    // FLAG: the console additionally rotate-masks mFlags; 0x40000 is the shape
-    // render-type bit (the part that matters for dispatch).
+    // Console encoding: rotate-mask of mFlags, 0x40000 == 1 << 18 (the X360
+    // render-type field); the x64 twin is the bits-8-13 field, XB1-verified.
     mFlags |= 0x100u;   // shape=1; x64 type field (XB1 ctor 0x140826F20 `or 100h`)
 }
 

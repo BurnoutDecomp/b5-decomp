@@ -137,8 +137,8 @@
 #include "SDKs/EATech/include/Nicotine/SnapshotMixer.hpp" // Nicotine::SnapshotMixer
 #include "SDKs/EATech/include/Nicotine/SnapshotChannel.hpp" // Nicotine::SnapshotVolumeCurve
 #include "SDKs/EATech/include/NFSMix/NFSMixMaster.hpp"    // NFSMixMaster
+#include "SDKs/EATech/include/NFSMix/NFSMixMap.hpp"       // NFSMixMap (AssignSFXCallbacks forward)
 
-struct AptDragState;  // FLAG fwd-decl (pointer-only use)
 
     // AptResolveFontGlyph RETIRED (2026-07-02): homed in AptRenderItemStaticText.cpp.
     // AptResolveTextFontCharacter RETIRED (2026-07-02): homed in AptRenderItemStaticText.cpp.
@@ -263,8 +263,21 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // Host URL-fetch callback slot (dword_8324E84C/..850), null on the PC title path (no host
     // loadVariables installed) -- the same host boundary as AptExtern_SetMember above.
     // FLAG PC-platform leaf: host callback slot, faithfully null on PC.
-    AptValue* AptApt_LoadVariablesFetch(const char* pUrl) { return 0; }   // FLAG link-stub (host URL fetch; null until installed)
-    void AptApt_GetDragTargetTranslate(AptValue* pDragTarget, float* pOutX, float* pOutY) {}   // FLAG link-stub
+    AptValue* AptApt_LoadVariablesFetch(const char* pUrl) { return 0; }   // dword_8324E84C/850 un-installed -> null
+
+    // AptApt_GetDragTargetTranslate -- the drag target's clip matrix translation
+    // (X360 StartDragMovie @0x82B03A20: v11 = *(*(*(Variable+0x20)+4)+8) -- the
+    // CIH -> mpCharacterInst -> render item's position matrix, with the null-matrix
+    // fallback to the identity flt_8324E2B0 == gAptIdentityMatrix; translate =
+    // v11[4]/v11[5] == tx/ty). The homed AptRenderItem::GetPositionMatrixConst
+    // performs exactly that raw read + identity fallback.
+    void AptApt_GetDragTargetTranslate(AptValue* pDragTarget, float* pOutX, float* pOutY)
+    {
+        const AptMatrix* pPos = static_cast<AptCIH*>(pDragTarget)->GetCharacterInst()
+                                    ->GetRenderItem()->GetPositionMatrixConst();
+        *pOutX = pPos->tx;   // matrix +0x10 (console v11[4])
+        *pOutY = pPos->ty;   // matrix +0x14 (console v11[5])
+    }
     // AptApt_PopValues RETIRED: it IS AptActionInterpreter::stackPop(int) (AptActionInterpreter.cpp:65,
     // @0x7FDB68 -- "pop nCount values, releasing each"; ICF-folded as Burnout_X360_Artist_01e3_0). The
     // ControlOps/StackOps call sites call the member directly; the {} shim skipped every collapse.
@@ -280,27 +293,33 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // faithful play-head seek) called directly at all 5 VM sites; the {} stub dropped every seek.
     // AptCIH_tick is now homed faithfully in AptCIHBehaviour.cpp (forwards to AptCIH::tick).
 
-    // ---- AptCIH "link cluster" deferred sub-paths: the deep callees the now-homed
+    // ---- AptCIH "link cluster" statics: the .data slots the homed
     // AptCIHBehaviour.cpp bodies (queueClipEvents / GeneralisedProcess / ClearCIH /
-    // AddToDelayReleaseList / PreDestroyHook) FLAG out. Faithful "deferred subsystem"
-    // defaults until the AS-interpreter execution / generalised-process gate / GC zombie
-    // subsystems land. -------------------------------------------------------------------
+    // AddToDelayReleaseList / PreDestroyHook) reach. All boot zero/null on the
+    // console exactly as defined here -- these ARE the faithful homes. ------------------
     // AptAnimationTargetAddToRemList RETIRED (2026-07-10): homed in
     // AptAnimationTarget.cpp (@0x82AEE3F8 -- queue on the shared delayed-release
     // table with the bit26 latch + CleanRemList overflow flush; the {} stub
     // dropped every delay-released clip).
-    void (*gpAptCIHPreDestroyHook)(AptCIH* pCIH) = nullptr;   // FLAG link-stub (dword_8324E8A0; null until installed)
+    // The host-installable CIH pre-destroy hook (X360 dword_8324E8A0). The console
+    // slot boots null and stays null unless a host installs it -- the null default
+    // IS the faithful home (AptCIHBehaviour.cpp dispatches it iff non-null).
+    void (*gpAptCIHPreDestroyHook)(AptCIH* pCIH) = nullptr;   // dword_8324E8A0
     // AptQueueClipEventsRunMatched RETIRED (2026-07-01): homed faithfully in
     // AptCIHBehaviour.cpp from the PS3 body @0x815BD0 (the clip-event record scan +
     // AddActionFront/Back enqueues; the byte-code-block + __proto__ tails staged there).
     // AptClearCIHDrainQueuesAndZombie RETIRED (2026-07-02): homed in
     // AptCIHBehaviour.cpp (the director-set/new-inst drain + the unload-event tail;
-    // the zombie-vector decision stays a documented staged FLAG there).
-    bool AptCIH_sbGeneralisedProcessEarlyReturn = false;   // FLAG link-stub (bEarlyReturn; gate off by default)
-    unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*)  = nullptr;   // FLAG link-stub
-    unsigned int (*AptCIH_sCIHProcessCb1)(AptCIH*, AptCIH*, void*) = nullptr;   // FLAG link-stub
-    unsigned int (*AptCIH_sCIHProcessCb2)(AptCIH*, AptCIH*, void*) = nullptr;   // FLAG link-stub
-    int  AptCIH_snGeneralisedProcessTreeDepth = 0;   // FLAG link-stub (nTreeDepth)
+    // the zombie-vector decision stays documented + staged there).
+    // The GeneralisedProcess gate + callback statics (AptCIH::bEarlyReturn /
+    // sCIHProcessCb[0..2] / nTreeDepth). All boot zero/null on the console exactly
+    // as here; AptUpdate.cpp installs/swaps the three callbacks around its process
+    // pass and AptCIHBehaviour.cpp reads them -- faithful .data homes.
+    bool AptCIH_sbGeneralisedProcessEarlyReturn = false;   // bEarlyReturn (boot 0)
+    unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*)  = nullptr;   // dword_8324E41C
+    unsigned int (*AptCIH_sCIHProcessCb1)(AptCIH*, AptCIH*, void*) = nullptr;   // dword_8324E420
+    unsigned int (*AptCIH_sCIHProcessCb2)(AptCIH*, AptCIH*, void*) = nullptr;   // dword_8324E424
+    int  AptCIH_snGeneralisedProcessTreeDepth = 0;   // nTreeDepth (boot 0)
 
     // AptCIH::ProcessCustomControls -- the per-frame custom-control refresh pass the
     // AptUpdate slot install (dword_8324E420) targets. Its X360 body has no
@@ -324,9 +343,72 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
 
     // Host debug-output sink (console dword_8324E82C, a printf-style hook the host installs).
     // FLAG PC-platform leaf: host debug sink, faithfully a no-op until the host wires it.
-    void AptHook_Trace(const char* szFormat, const char* szMessage) {}   // FLAG link-stub
-    void AptKeyManagerAddListener(AptValue* pListener) {}   // FLAG link-stub
-    bool AptKeyManagerRemoveListener(AptValue* pListener) { return false; }   // FLAG link-stub
+    void (*gpAptHookTraceFn)(const char* szFormat, const char* szMessage) = nullptr;   // dword_8324E82C
+    void AptHook_Trace(const char* szFormat, const char* szMessage)
+    {
+        if (gpAptHookTraceFn)
+            gpAptHookTraceFn(szFormat, szMessage);
+    }
+
+    // AptKeyManagerAddListener -- the Key-listener registration tail of
+    // sMethod_addListener (X360 @0x82ADC6E0): scan the director's mListenerSet
+    // (gpAptTarget->mpAnimationTarget+0x10; scan bound = mnCapacity, @0x82ADC764) --
+    // already present -> no-op -- else the shared set `add` (__::add @0x82ADBCE0):
+    // store head = count+1, probe forward from slots[head] for the first free slot
+    // (wrapping at capacity: `li r10,-1; addi r10,r10,1`), store the listener and
+    // AddRef it (vtbl[0] tail-call). The modulo probe is the committed sibling idiom
+    // (AptCIHMembers.cpp AddNodeToInputSet) -- identical slot choice for head < cap,
+    // in-bounds where the console's raw slots[cap] read is UB.
+    void AptKeyManagerAddListener(AptValue* pListener)
+    {
+        AptAnimationTargetSet* const pSet = &gpAptTarget->GetAnimationTarget()->mListenerSet;
+
+        const u32 luCap = pSet->mnCapacity;                    // lhz +2
+        for (u32 lu = 0; lu < luCap; ++lu)
+            if (pSet->mppSlots[lu] == pListener)               // membership scan @0x82ADC770
+                return;
+        if (luCap == 0)
+            return;                                            // un-built set: nothing to add into
+
+        const u16 nHead = static_cast<u16>(pSet->mnCount + 1u);
+        pSet->mnCount = nHead;                                 // sth head (stored before the probe)
+        u32 luNext = static_cast<u32>(nHead) % luCap;
+        u32 luScanned = 0u;
+        while (luScanned < luCap && pSet->mppSlots[luNext] != nullptr)
+        {
+            luNext = (luNext + 1u) % luCap;                    // wrap at capacity
+            ++luScanned;
+        }
+        if (pSet->mppSlots[luNext] == nullptr)
+        {
+            pSet->mppSlots[luNext] = pListener;
+            pListener->AddRef();                               // vtbl[0] tail-call
+        }
+    }
+
+    // AptKeyManagerRemoveListener -- the shared set `remove` (__::remove @0x82ADBC28)
+    // over the same director mListenerSet: empty (count 0) -> false; linear-scan the
+    // slots (bound = capacity) for pListener; on a hit decrement the count, Release
+    // the slot's value (vtbl[1]) and null the slot. True iff one was removed.
+    bool AptKeyManagerRemoveListener(AptValue* pListener)
+    {
+        AptAnimationTargetSet* const pSet = &gpAptTarget->GetAnimationTarget()->mListenerSet;
+
+        if (pSet->mnCount == 0)                                // lhz +0; beq -> 0
+            return false;
+
+        const u32 luCap = pSet->mnCapacity;                    // lhz +2
+        u32 luIndex = 0;
+        while (luIndex < luCap && pSet->mppSlots[luIndex] != pListener)
+            ++luIndex;
+        if (luIndex >= luCap)
+            return false;                                      // not found
+
+        pSet->mnCount = static_cast<u16>(pSet->mnCount - 1);   // sth (count-1)
+        pSet->mppSlots[luIndex]->Release();                    // vtbl[1]
+        pSet->mppSlots[luIndex] = nullptr;
+        return true;
+    }
     // AptLinkerGetUrlLoad RETIRED (2026-07-10): the getURL/getURL2 .swf arm calls
     // the homed member AptLinker::Load(EAStringC*, EAStringC*) @0x82B06660 directly
     // (the {} forwarder dropped every getURL movie load).
@@ -336,7 +418,7 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void AptLoaderCancelAsyncLoad(void* pDataBlock) {}
     // AptLoaderStartAsyncLoad is HOMED in BrnGuiAptRuntime.cpp (the platform stream hook: it
     // synchronously content-loads the import bundle + drives AptCompleteAnimationAsyncLoad). The
-    // FLAG link-stub that used to live here is removed so the strong host definition is the only one.
+    // former link-stub here was removed so the strong host definition is the only one.
     // AptMovie_runFrameActions RETIRED (2026-07-01): homed as the real const member
     // AptMovie::runFrameActions(AptCIH*, int) (AptMovie.cpp, PS3 @0x820FA4 -- the invented
     // void* shim shape was wrong); the CallFrame handler calls it on the clip's embedded movie.
@@ -352,9 +434,11 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // target's linker pending list. The {} stub silently dropped every async movie
     // load completion (nothing ever mounted through the engine linker).
     void Mutex_Lock(void* pMutex, void* pName) {}   // FLAG PC-platform leaf: single-threaded PC (no lock needed)
-    // AptMath::ClipStackShutdown -- referenced by the (dev-wave) AptRenderShutdown;
-    // the clip-stack free's real body is un-reconstructed and the PC boot never shuts
-    // the Apt renderer down mid-run. FLAG link-stub until the AptMath TU lands.
+    // AptMath::ClipStackShutdown @0x82AE24E8 -- referenced by AptRenderShutdown
+    // (@0x82B0C2F0 calls it first). The body is ABSENT from the ARTIST export set
+    // (and the XB1 name index has no twin), so the inverse-of-ClipStackInit free is
+    // not asm-reconstructable yet; the PC boot never shuts the Apt renderer down
+    // mid-run. FLAG link-stub (X360 body un-exported).
     namespace AptMath { intptr_t ClipStackShutdown() { return 0; } }
     void Mutex_Unlock(void* pMutex) {}   // FLAG PC-platform leaf: single-threaded PC (no lock needed)
     // TextFormat_copyTextFormatObj RETIRED (2026-07-10): homed as the real member
@@ -457,9 +541,11 @@ namespace rw { namespace core { namespace filesys {
     int Device::ChangeOpPriority(AsyncOp* lpOp, int liPriority)               // FLAG PC-platform leaf: PC bundle FS is the DeviceManager replay path
     { (void)lpOp; (void)liPriority; return 0; }
 
-    Manager* gpFileSysManager = nullptr;                                      // FLAG link-stub (off_8327F078)
+    // FLAG PC-platform leaf: PC bundle FS is the DeviceManager replay path (off_8327F078 manager unused)
+    Manager* gpFileSysManager = nullptr;
     // extern: namespace-scope const defaults to internal linkage; force external.
-    extern const DeviceDriverVTable gDeviceDriverVTable = {};                 // FLAG link-stub (zero-init driver vtable)
+    // FLAG PC-platform leaf: PC bundle FS is the DeviceManager replay path (zero-init driver vtable)
+    extern const DeviceDriverVTable gDeviceDriverVTable = {};
 
 }}}
 
@@ -525,7 +611,7 @@ namespace EA { namespace Thread {
     { (void)pThreadReturnValue; (void)pTimeoutAbsolute; return kStatusEnded; }   // FLAG PC-platform leaf: single-threaded PC (thread already ended)
 
     // One file-scope slot mirroring the single TLS value the bring-up needs.
-    static void* gThreadLocalStorageSlot = nullptr;   // FLAG link-stub (single-threaded TLS)
+    static void* gThreadLocalStorageSlot = nullptr;   // FLAG PC-platform leaf: single-threaded TLS (one slot)
     bool  ThreadLocalStorage::SetValue(const void* pData)
     { gThreadLocalStorageSlot = const_cast<void*>(pData); return true; }         // FLAG PC-platform leaf: single-threaded TLS (one slot)
     void* ThreadLocalStorage::GetValue() { return gThreadLocalStorageSlot; }     // FLAG PC-platform leaf: single-threaded TLS (one slot)
@@ -538,7 +624,8 @@ namespace EA { namespace Thread {
 // wants it at GLOBAL scope (?gAptTargetTls@@3V...), NOT in EA::Thread -- it is a global
 // variable whose TYPE is EA::Thread::ThreadLocalStorage. Default-constructed via the
 // inline ctor -- FLAG: zeroed storage, no TlsAlloc (single-threaded bring-up).
-EA::Thread::ThreadLocalStorage gAptTargetTls;   // FLAG link-stub
+// FLAG PC-platform leaf: single-threaded TLS (zeroed storage; the faithful ctor does TlsAlloc)
+EA::Thread::ThreadLocalStorage gAptTargetTls;
 
 // ---- EA::Jobs ----------------------------------------------------------------------
 // FLAG: jobs run synchronously on the main thread (PC bring-up). The two LocalBackend
@@ -553,12 +640,25 @@ namespace EA { namespace Jobs {
     { (void)pBackend; (void)uHandle; }
     JobThreadHandle::JobThreadHandle() {}   // FLAG PC-platform leaf: synchronous jobs on PC
 
-    JobAffinity    EntryPoint::GetAffinity()    const { return JOB_AFFINITY_NONE; }    // FLAG link-stub
-    JobEnvironment EntryPoint::GetEnvironment() const { return JOB_ENVIRONMENT_LOCAL; }// FLAG link-stub
-    JobPriority    EntryPoint::GetPriority()    const { return JOB_PRIORITY_HIGH; }    // FLAG link-stub
+    // The vendor accessors (declaration-only in entry_point.h): each returns its
+    // member (DWARF entry_point.h:80-82; layout ARTIST-verified via SetAffinity
+    // @0x82BC98B0 storing mAffinity at +20). Trivial reads, inlined on the console.
+    JobAffinity    EntryPoint::GetAffinity()    const { return mAffinity; }
+    JobEnvironment EntryPoint::GetEnvironment() const { return mEnvironment; }
+    JobPriority    EntryPoint::GetPriority()    const { return mPriority; }
     void           EntryPoint::SetName(const char* lpcName) { (void)lpcName; }         // FLAG PC-platform leaf: synchronous jobs on PC (no worker names)
 
-    int Job::GetNumDependencies() const { return 0; }   // FLAG PC-platform leaf: synchronous jobs on PC (no dependencies)
+    // The mDependencies twin of the homed Job::GetNumDependents @0x82BCA390
+    // (job.cpp): this node's bucket count + the overflow chain's ListSize
+    // (@0x82BCA030). The 0 stub starved JobScheduler::AddTree's dependency walk
+    // (job_scheduler.cpp:199) of every real dependency.
+    int Job::GetNumDependencies() const
+    {
+        u32 luOverflow = 0;
+        if (mDependencies.mNext)
+            luOverflow = mDependencies.mNext->ListSize();
+        return static_cast<int>(mDependencies.mSize + luOverflow);
+    }
 
     // Minimal LocalBackend-scope decls for the two worker entry points (jobs run
     // synchronously on the main thread, so both are no-ops).
@@ -582,16 +682,34 @@ namespace EA { namespace Allocator {
 }}
 
 // ---- audio (Nicotine / NFSMixMaster) -----------------------------------------------
-// FLAG: audio mix deferred; wire after render. Mixer snapshot/map setup is no-op'd and
-// the volume curve returns unity gain until the audio path is brought up.
+// Partially homed (2026-08-07): AssignSFXCallbacks is the real @0x82B45A80 forward;
+// the remaining stubs are parked on un-exported X360 bodies / the un-exported volume
+// LUT (see each). FLAG: audio mix bring-up incomplete.
 namespace Nicotine {
-    void SnapshotMixer::InitSnapshots()    {}   // FLAG link-stub (audio mix deferred)
-    void SnapshotMixer::DestroySnapshots() {}   // FLAG link-stub (audio mix deferred)
-    void SnapshotMixer::SetSnapshot()      {}   // FLAG link-stub (audio mix deferred)
-    double SnapshotVolumeCurve(double lfRatio, int liCurveType)                  // FLAG link-stub
+    // The three IDynamicMixer-driven bodies live at X360 0x82B47350 (InitSnapshots) /
+    // 0x82B46D20 (DestroySnapshots) / SetSnapshot (no-arg; un-addressed) -- none are
+    // in the export set, so the stubs stay honest link-stubs until exported.
+    void SnapshotMixer::InitSnapshots()    {}   // FLAG link-stub (X360 0x82B47350 un-exported)
+    void SnapshotMixer::DestroySnapshots() {}   // FLAG link-stub (X360 0x82B46D20 un-exported)
+    void SnapshotMixer::SetSnapshot()      {}   // FLAG link-stub (X360 body un-exported)
+    // sub_82B453C0 IS exported but indexes a 512-entry volume-curve LUT
+    // (unk_82F86F88, index = ratio*511) absent from the data exports; unity gain
+    // until the table lands.
+    double SnapshotVolumeCurve(double lfRatio, int liCurveType)                  // FLAG link-stub (needs the unk_82F86F88 LUT)
     { (void)lfRatio; (void)liCurveType; return 1.0; }   // unity gain
 }
 
-void NFSMixMaster::InitMixMap()                  {}   // FLAG link-stub (audio mix deferred)
-void NFSMixMaster::DestroyMainMainMap()          {}   // FLAG link-stub (audio mix deferred)
-void NFSMixMaster::AssignSFXCallbacks(void* lpOwner) { (void)lpOwner; }   // FLAG link-stub (audio mix deferred)
+// NFSMixMaster::InitMixMap @0x82B45920 -- the asm is exported and decoded, but its
+// callees NFSMixMap::CreateMainMapState @0x82B49680 / InitMainMapStates @0x82B4ABD0
+// are declared-only in NFSMixMap.hpp (bodies deferred in the NFSMix cluster), so a
+// faithful body here would only trade a stub for unresolved externals.
+void NFSMixMaster::InitMixMap()                  {}   // FLAG link-stub (blocked on the NFSMixMap builder bodies)
+// NFSMixMaster::DestroyMainMainMap @0x82B457E0 -- body absent from the export set.
+void NFSMixMaster::DestroyMainMainMap()          {}   // FLAG link-stub (X360 body un-exported)
+// NFSMixMaster::AssignSFXCallbacks @0x82B45A80 -- forward the SFX-callback owner into
+// the main map (tail-call NFSMixMap::AssignSFXCallbacks @0x82B481B8, homed; the
+// console derefs m_pMainMixMap unguarded -- reproduced).
+void NFSMixMaster::AssignSFXCallbacks(void* lpOwner)
+{
+    m_pMainMixMap->AssignSFXCallbacks(lpOwner);
+}

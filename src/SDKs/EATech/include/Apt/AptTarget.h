@@ -122,8 +122,8 @@ extern int gAptTargetInstanceCount;     // X360 dword_8324E57C
 // ---------------------------------------------------------------------------
 // The target-instance create / select-current orchestration (X360
 // AptCreateTargetInstance @0x82B003B0 + AptChangeTargetInstance @0x82ADB768). The
-// host bring-up calls these (in lieu of the un-homed AptUpdateInitialize chain) to
-// stand up + select the per-process Apt context. Bodies in AptTarget.cpp.
+// host bring-up calls these (alongside the AptUpdateInitialize chain, AptInit.cpp)
+// to stand up + select the per-process Apt context. Bodies in AptTarget.cpp.
 //   AptCreateTargetInstance(params) -- allocate+construct an AptTarget from the
 //       AptUpdateParams block, append it to the instance list, return it.
 //   AptChangeTargetInstance(target)  -- make `target` the current context (sets

@@ -27,9 +27,9 @@
 // The Allocate + SetIsAllocated(.,1) pair is the GC allocator's alloc operation
 // (AllocateAptValueGC), folded inline by the X360 (gpGCPoolManager's Allocate is
 // the inherited DOGMA_PoolManager::Allocate). Guarded for null until the Apt
-// runtime startup (AptInit) wires the pool (FLAG: gpGCPoolManager is null until
-// then). Same shape as the AptArray / AptPrototype / AptGlobalExtensionObject GC
-// siblings.
+// runtime startup (AptInit.cpp, homed) wires the pool -- gpGCPoolManager's null
+// is the faithful pre-init state. Same shape as the AptArray / AptPrototype /
+// AptGlobalExtensionObject GC siblings.
 // ---------------------------------------------------------------------------
 void* AptMovieClip::operator new(size_t size)
 {

@@ -73,9 +73,9 @@ int AptMovie::labelToFrame(const EAStringC* pLabel) const
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed globals / callees owned by the Apt VM + display-list boot TUs):
-// declared extern so this TU links. Names reused from the sibling Apt TUs that
-// already home them; the single underlying object is shared.
+// Sibling-owned globals / callees (all HOMED -- AptGlobals.cpp for the globals,
+// noted per symbol for the callees): declared extern so this TU links; the
+// single underlying object is shared.
 // ---------------------------------------------------------------------------
 
 // off_8324D808 -- the shared Apt DOGMA pool the 20-byte pseudo nodes come from
@@ -87,10 +87,10 @@ int AptMovie::labelToFrame(const EAStringC* pLabel) const
 
 // dword_8324E514 -- the current frame's queued-action sequence id passed as
 // AddActionBack's 4th arg.
-extern int   gnAptActionFrameId;                // dword_8324E514 (FLAG)
+extern int   gnAptActionFrameId;                // dword_8324E514 (AptGlobals.cpp)
 
 // &dword_8324E760 -- the process-wide AS action interpreter instance.
-extern AptActionInterpreter gAptActionInterpreter;   // off_8324E760  (FLAG)
+extern AptActionInterpreter gAptActionInterpreter;   // off_8324E760  (AptGlobals.cpp)
 
 // byte_8324D807 -- the BACKGROUND-COLOUR once-latch: a tag-5 (BackgroundColour)
 // frame command fires the host callback at most once per loaded animation

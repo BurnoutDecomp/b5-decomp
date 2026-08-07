@@ -8,8 +8,9 @@
 AptRenderItemButton::AptRenderItemButton(AptCharacter* pCharacter, int nCreatedOnTick)
     : AptRenderItemSprite(pCharacter, nCreatedOnTick)
 {
-    // FLAG: console rotate-masks mFlags; 0x100000 is the button render-type bits
-    // (replacing the sprite's, set by the base ctor).
+    // Console encoding: rotate-mask of mFlags, 0x100000 == 4 << 18 (the X360
+    // render-type field, replacing the sprite's set by the base ctor); the x64
+    // twin is the bits-8-13 field, XB1-verified.
     mFlags = (mFlags & ~0x3F00u) | 0x400u;   // button=4; x64 type field bits 8-13
 }
 
