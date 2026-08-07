@@ -80,8 +80,9 @@ void AptActionInterpreter::_FunctionAptActionPop(AptActionInterpreter* pInterp, 
     // X360 @0x82ADDDE8: when the stack held exactly one element (cmpwi v1, 1) the
     // GC deferred-release vector is drained, mnTop-guarded like the console
     // (off_8324E51C -> lwz r11,4(r3) -- the same drain the Branch* handlers emit).
-    if (nHadDepth == 1 && gValuesToRelease.mnTop != 0)
-        gValuesToRelease.ReleaseValues();
+    // family-(B): the live count is the mnCapacity member (see AptValueVector.h).
+    if (nHadDepth == 1 && gpValuesToRelease != nullptr && gpValuesToRelease->mnCapacity != 0)
+        gpValuesToRelease->ReleaseValues();
 }
 
 // ---------------------------------------------------------------------------

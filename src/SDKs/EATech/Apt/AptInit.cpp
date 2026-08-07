@@ -122,8 +122,8 @@ namespace
     // ---- the render-item pointer pool (off_8324E2C8) -----------------------
     void* gpAptRenderItemPool = nullptr;   // off_8324E2C8
 
-    // ---- the shared deferred-release AptValueVector pointers ---------------
-    AptValueVector* gpAptDeferredVecCommon = nullptr;   // off_8324E51C (common-init side)
+    // (the deferred-release vector: the ONE off_8324E51C global gpValuesToRelease
+    //  lives in AptGlobals.cpp -- declared below, OUTSIDE this anonymous namespace.)
 
     // (the saved-input checkpoint list dword_8324D810 == gpAptSavedInputCheckpoints
     //  is owned by AptSavedInputCheckpoints.cpp; AptUpdateInitialize constructs it.)
@@ -184,6 +184,11 @@ namespace
 
 // The shared fixed-size pool handle (off_8324D808). Defined in AptGlobals.cpp.
 extern DOGMA_PoolManager* gpAptPseudoDataPool;   // off_8324D808
+
+// The ONE deferred-release vector pointer (off_8324E51C; console symbol
+// gValuesToRelease). Defined in AptGlobals.cpp; allocated + family-(B)-constructed
+// by AptCommonInitialize below, nulled by AptCommonShutdown.
+extern AptValueVector* gpValuesToRelease;   // off_8324E51C
 
 // The DOGMA sized-free hook (dword_8324E820) the update-init installs when null.
 extern void (*gpAptGCTableFree)(void* p, unsigned nBytes);   // dword_8324E820 (AptGlobals.cpp)
@@ -378,10 +383,10 @@ void* AptCommonInitialize(void* pConfig)
     {
         AptValueVector* lpVec = static_cast<AptValueVector*>(lpVecMem);
         *lpVec = AptValueVector::ConstructAptValueVector(static_cast<int>(lpCfg[10]));
-        gpAptDeferredVecCommon = lpVec;
+        gpValuesToRelease = lpVec;
         return lpVec;
     }
-    gpAptDeferredVecCommon = nullptr;
+    gpValuesToRelease = nullptr;
     return nullptr;
 }
 
@@ -559,7 +564,7 @@ int AptValueInitialize()
         AptNativeHash* const pGlobals = gpAptGlobalFallback->GetNativeHashVirtual();
         if (pGlobals != nullptr && pGlobals->Lookup(gAptObjectClassName) == nullptr)
         {
-            gpAptDeferredVecCommon->ReleaseValues();   // bootstrap-entry drain (off_8324E51C)
+            gpValuesToRelease->ReleaseValues();   // bootstrap-entry drain (off_8324E51C)
 
             // The nine-entry builtin class table, in the console's Set order
             // (E650, E5FC, E610, E618, E6BC, E640, E6D4, E61C, E6B4).
@@ -651,7 +656,7 @@ int AptValueInitialize()
                 }
             }
 
-            gpAptDeferredVecCommon->ReleaseValues();   // bootstrap-exit drain (off_8324E51C)
+            gpValuesToRelease->ReleaseValues();   // bootstrap-exit drain (off_8324E51C)
         }
     }
 
@@ -698,7 +703,7 @@ int AptValueInitialize()
 
     // The function-final drain (the console's r3 == this ReleaseValues result, dead
     // in every caller; non-null on the live init path -- AptCommonInitialize ran).
-    gpAptDeferredVecCommon->ReleaseValues();
+    gpValuesToRelease->ReleaseValues();
     return 0;
 }
 
@@ -928,8 +933,8 @@ int AptCommonShutdown()
     // Drain + free the shared common-init deferred-release vector (off_8324E51C). The console
     // calls ReleaseValues unconditionally (the pointer is non-null on the live init path),
     // then frees the item array (4*capacity) + the 12-byte header when present.
-    gpAptDeferredVecCommon->ReleaseValues();          // AptValueVector::ReleaseValues(off_8324E51C)
-    AptValueVector* lpVec = gpAptDeferredVecCommon;   // v5 = off_8324E51C
+    gpValuesToRelease->ReleaseValues();          // AptValueVector::ReleaseValues(off_8324E51C)
+    AptValueVector* lpVec = gpValuesToRelease;   // v5 = off_8324E51C
     if (lpVec != nullptr)
     {
         // Family-(B) vector (AptValueVector.h): the +0 word (mnTop member) holds the
@@ -937,7 +942,7 @@ int AptCommonShutdown()
         gpAptPseudoDataPool->Deallocate(lpVec->mppItems, sizeof(AptValue*) * lpVec->mnTop);  // 4 * *v5
         gpAptPseudoDataPool->Deallocate(lpVec, sizeof(AptValueVector));                       // 12
     }
-    gpAptDeferredVecCommon = nullptr;   // off_8324E51C = 0
+    gpValuesToRelease = nullptr;   // off_8324E51C = 0
 
     // Clear the integer/float free pools (befriended) + the temporary string pool. The
     // console threads r3 through the two ClearPool calls (both void) into ClearTemporaryPool.
@@ -1299,7 +1304,7 @@ int AptUpdateShutdown(int /*a1*/)
 
     // Drain the shared common-init deferred-release vector (off_8324E51C), unconditional
     // (non-null on the live path).
-    gpAptDeferredVecCommon->ReleaseValues();   // AptValueVector::ReleaseValues(off_8324E51C)
+    gpValuesToRelease->ReleaseValues();   // AptValueVector::ReleaseValues(off_8324E51C)
 
     // Free the per-target zombie vector (off_8324E528): item array (4*capacity) + 12-byte
     // header (family-(B) vector -- the +0 word / mnTop member holds the capacity).

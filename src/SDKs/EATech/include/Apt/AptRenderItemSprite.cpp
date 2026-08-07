@@ -82,17 +82,16 @@ AptRenderItemSprite::~AptRenderItemSprite()
 {
 }
 
-// GetRenderPropertiesString @0x82AD5030 -- the sprite's render-properties string is
-// its instance name (console returns &this->mInstanceName, item+0x34).
-EAStringC* AptRenderItemSprite::GetRenderPropertiesString()
+// GetRenderPropertiesStr @0x82AD5030 -- the sprite's render-properties string is
+// its instance name (x64 @0x140839A30 `lea rax,[rcx+58h]`; const, const-ref return).
+const EAStringC& AptRenderItemSprite::GetRenderPropertiesStr() const
 {
-    return &mInstanceName;
+    return mInstanceName;
 }
 
-// SetRenderPropertiesString @0x82AE5A80 -- assign the instance name through the
-// refcount-shared EAStringC::operator= (the console tail-calls it, returning the
-// assigned string).
-EAStringC& AptRenderItemSprite::SetRenderPropertiesString(const EAStringC& rString)
+// SetRenderPropertiesStr @0x82AE5A80 -- assign the instance name through the
+// refcount-shared EAStringC::operator= (x64 @0x140842F80: void return).
+void AptRenderItemSprite::SetRenderPropertiesStr(const EAStringC& rString)
 {
-    return mInstanceName = rString;
+    mInstanceName = rString;
 }

@@ -130,7 +130,12 @@ AptValue* gpAptNativeFn_8324E494 = nullptr;
 //  AptScriptFunctionBase::spRegBlockCurrentFrameBase -- the one canonical global.)
 AptValue**      gppAptNativeArgStack        = nullptr;   // off_8324E768
 AptString*      gpStringPoolFreeList        = nullptr;   // off_8324E4FC (string-pool free list head)
-AptValueVector* gpAptDeferredReleaseVector  = nullptr;   // off_8324E51C
+// The ONE deferred-release vector pointer (console symbol gValuesToRelease @
+// off_8324E51C; pool-allocated + family-(B)-constructed by AptCommonInitialize).
+// UNIFIED 2026-08-07 -- replaces the former trio {gpAptDeferredReleaseVector,
+// AptInit's file-local gpAptDeferredVecCommon, the static AptGCReleaseVector
+// gValuesToRelease instance} that modelled this one console slot.
+AptValueVector* gpValuesToRelease           = nullptr;   // off_8324E51C
 
 // ===========================================================================
 // 4. The interpreter VM singletons (value objects) + the GC live-value pool.
@@ -163,10 +168,10 @@ DOGMA_PoolManager* gpAptSharedPtrPool     = nullptr;   // off_8324D808 (shared-p
 DOGMA_PoolManager* gpAptSingleListPool    = nullptr;   // off_8324D808 (single-list nodes)
 
 // ===========================================================================
-// 6. Value-typed engine objects (the GC deferred-release vector + the render
-//    manager draw queue).  Zero-initialized aggregates -- the engine fills them.
+// 6. Value-typed engine objects (the render manager draw queue).
+//    (The deferred-release vector is the section-3 gpValuesToRelease POINTER --
+//    the static instance here was one of the three retired off_8324E51C homes.)
 // ===========================================================================
-AptGCReleaseVector    gValuesToRelease       = { 0, 0, nullptr };   // off_8324E51C
 AptRenderManagerQueue gAptRenderManagerQueue = { nullptr, nullptr };// dword_8324E7D8
 
 // ===========================================================================
@@ -363,9 +368,11 @@ void (*gpAptFSCommandHook)(const char* pCommand, const char* pArgs)      = nullp
 //  The tag-5 arm in AptMovie::doFrameControls now calls the table slot directly.)
 void (*gpAptGCTableFree)(void* p, unsigned nBytes)                       = nullptr;   // dword_8324E820
 AptVarNotFoundCb gpAptVarNotFoundCb                                      = nullptr;
-int  (*gpAptInputRecorderSink)(void*, int)                               = nullptr;   // dword_8324E830
-// The recorder's text-tag sink (AptUpdate's per-frame "%06d" stamp goes through it).
-void (*gpAptInputRecorderTagSink)(const char*)                           = nullptr;   // dword_8324E834
+// (gpAptInputRecorderSink / gpAptInputRecorderTagSink RETIRED 2026-08-07: like
+//  dword_8324E828 above, dword_8324E830/834 are NOT standalone hooks -- they are
+//  &gAptFuncs (dword_8324E818) + 0x18/+0x1C == pfnDebugAddSavedInput /
+//  pfnDebugSetScreenGrabPending. AptUpdate + AptAnimationTarget call the table
+//  slots directly.)
 void (*gpfnAptDestroyCustomControl)(intptr_t nZId)                       = nullptr;   // dword_8324E898
 void (*gpfnAptCustomControlPushRenderData)(const char* pInstanceName)    = nullptr;   // dword_8324E8CC
 void (*gpfnAptCustomControlPopRenderData)(const char* pInstanceName)     = nullptr;   // dword_8324E8D0

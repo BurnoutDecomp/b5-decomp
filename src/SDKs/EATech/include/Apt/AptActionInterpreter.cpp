@@ -42,20 +42,18 @@ void AptActionInterpreter::stackPushNoInc(AptValue* pValue)
 }
 
 // ---------------------------------------------------------------------------
-// stackPop @0x7F3248 -- release + pop the top value, returning it. The returned
-// pointer has already been Release()'d (the console returns it regardless); null
-// on an empty stack.
+// stackPop @0x7F3248 -- release + pop the top value. VOID per the x64 mangling
+// (?stackPop@AptActionInterpreter@@QEAAXXZ @0x14085D380 -- the body releases and
+// decrements without returning; the old AptValue* return modelled a PPC r3
+// leftover and exposed an already-Release()'d pointer the real API never did).
 // ---------------------------------------------------------------------------
-AptValue* AptActionInterpreter::stackPop()
+void AptActionInterpreter::stackPop()
 {
-    AptValue* pValue = 0;
     if (mnStackTop > 0)
     {
-        pValue = mpStack[mnStackTop - 1];
-        pValue->Release();
+        mpStack[mnStackTop - 1]->Release();
         --mnStackTop;
     }
-    return pValue;
 }
 
 // ---------------------------------------------------------------------------

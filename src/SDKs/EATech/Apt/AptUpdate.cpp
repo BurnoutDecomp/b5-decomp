@@ -32,6 +32,7 @@
 #include "SDKs/EATech/include/Apt/AptCIH.h"                       // ProcessTextInst / ProcessCustomControls / ProcessMaskMatricies
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"  // gValuesToRelease (deferred-release flush)
 #include "SDKs/EATech/include/Apt/AptGC.h"                        // AptGC::CleanUnreachable (the partial sweep)
+#include "SDKs/EATech/include/Apt/Apt.h"                          // AptUserFunctions (the gAptFuncs recorder-sink slots)
 
 // ---- collaborator globals (all defined elsewhere; console addresses noted) ----------
 extern bool gbAptZombiesDirty;                  // byte_8324E38F (AptGC.cpp; raised by AptPartialGarbageCollection)
@@ -40,8 +41,10 @@ extern int  gbAptSavedInputActive;              // dword_8324D7F0 (AptGlobals.cp
 extern uint32_t gAptInputRecorderTag;           // dword_8324D820 (AptGlobals.cpp; advanced per banked frame)
 extern int  gnCurrUpdateTick;                   // dword_8324E520 (AptGlobals.cpp; the update-side tick bank)
 extern int  gnCurrRenderTickConsumed;           // dword_8324E524 (AptGlobals.cpp; the render-side consumed tick)
-extern int  (*gpAptInputRecorderSink)(void*, int);          // dword_8324E830 (AptGlobals.cpp)
-extern void (*gpAptInputRecorderTagSink)(const char*);      // dword_8324E834 (AptGlobals.cpp)
+// The two recorder sinks are NOT standalone globals: dword_8324E830/834 are
+// gAptFuncs+0x18/+0x1C -- the pfnDebugAddSavedInput / pfnDebugSetScreenGrabPending
+// members of the host user-function table (installed by AptAux::ConstructApt).
+extern AptUserFunctions gAptFuncs;                          // dword_8324E818 (CgsAptAux.cpp)
 
 // The three per-node generalised-process callback slots the update pass installs
 // around AptDisplayList::GeneralisedProcess (dword_8324E41C/420/424; defined in
@@ -98,14 +101,14 @@ static void AptUpdateRecordFrame()
     {
         char lacTag[24];
         std::snprintf(lacTag, sizeof(lacTag), "%06d", gAptInputRecorderTag);
-        if (gpAptInputRecorderTagSink)
-            gpAptInputRecorderTagSink(lacTag);
+        if (gAptFuncs.pfnDebugSetScreenGrabPending)   // dword_8324E834 == gAptFuncs+0x1C
+            gAptFuncs.pfnDebugSetScreenGrabPending(lacTag);
 
         int laRecord[2];
         laRecord[0] = static_cast<int>(gAptInputRecorderTag);
         laRecord[1] = 0x03000000;
-        if (gpAptInputRecorderSink)
-            gpAptInputRecorderSink(laRecord, 8);
+        if (gAptFuncs.pfnDebugAddSavedInput)          // dword_8324E830 == gAptFuncs+0x18
+            gAptFuncs.pfnDebugAddSavedInput(reinterpret_cast<AptSavedInputRecord*>(laRecord), 8);
     }
 }
 
@@ -246,7 +249,8 @@ void AptUpdate(int nElapsedMs, int nDepthLayerMask, int nMaxBankedFrames)
         }
     }
 
-    gValuesToRelease.ReleaseValues();
+    if (gpValuesToRelease != nullptr)
+        gpValuesToRelease->ReleaseValues();
     if (gbAptZombiesDirty)
     {
         AptGC::CleanUnreachable();

@@ -78,10 +78,13 @@ struct AptRenderItemCustomControl : public AptRenderItemSprite
     const EAStringC& GetTypeStr() const   { return mTypeStr; }     // @0x82AD5038
     const EAStringC& GetTargetStr() const { return mTargetStr; }   // @0x82AD5040
 
-    EAStringC& SetTypeStr(const EAStringC& strType)             { return (mTypeStr = strType); }              // @0x82AE5A90
-    EAStringC& SetCustomPropertiesStr(const EAStringC& strProp) { return (mCustomPropertiesStr = strProp); }  // @0x82AE5A88
+    // x64 ?SetTypeStr@ @0x140843470 / ?SetCustomPropertiesStr@ @0x140841250:
+    // both QEAAXAEBVEAStringC@@@Z -- void returns.
+    void SetTypeStr(const EAStringC& strType)             { mTypeStr = strType; }              // @0x82AE5A90
+    void SetCustomPropertiesStr(const EAStringC& strProp) { mCustomPropertiesStr = strProp; }  // @0x82AE5A88
 
     // ---- render-data handle (Z-id) ---------------------------------------
     intptr_t GetZId() const { return mZId; }   // @0x82AD5048 (XB1: 8-byte load)
-    AptRenderItemCustomControl* SetZId(intptr_t nZId) { mZId = nZId; return this; }   // @0x82AD5050
+    // x64 ?SetZId@...@@QEAAXPEAX@Z @0x1408436B0 (`mov [rcx+78h],rdx / retn`): void return.
+    void SetZId(intptr_t nZId) { mZId = nZId; }   // @0x82AD5050
 };
