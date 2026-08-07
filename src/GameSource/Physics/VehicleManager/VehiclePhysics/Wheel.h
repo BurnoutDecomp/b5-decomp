@@ -198,11 +198,26 @@ namespace Vehicle
                            f32 lfMinSuspensionHeight, f32 lfRadiusSeed, f32 lfTwistSeed,
                            const TireAttribs* lpTireAttribs);
 
-        // @0x825D7008: clamp + integrate the wheel's own angular velocity for the frame (the long
-        // friction-cone-shaped wheelspin clamp UpdateWheels calls per wheel). Bodied in Wheel.cpp.
-        // FLAG (rodata): the several un-homed scratch globals (unk_82FB9CF0/8BC0/8B40/8327F240) the
-        // clamp masks read are absent from the exports -> faithful-but-inert.
-        void UpdateVelocity(VecFloat lvfMaxAngularVelocity, bool lbStraightLine, bool lbCrashing);
+        // @0x825D7008: integrate the accumulated wheel torque into the wheel's angular velocity,
+        // then resolve it against the brakes (the per-wheel spin/brake/lock-up step UpdateWheels
+        // runs per wheel). Bodied in Wheel.cpp.
+        //
+        // ⭐⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave). The previous 3-arg
+        // (maxAngVel, bool, bool) form was a SLICE ARTIFACT: the callee asm CONSUMES v1..v5
+        // (`vmulfp128 v31,v9,v1` dt; `vmulfp128 v7,v3,v4` brakeFactor*capacityScale;
+        // `vmulfp128 v5,v5,v3` decelScale*brakeFactor; the clamp vs v2), and the DWARF spells
+        // Wheel.h:332 `UpdateVelocity(VecFloat, VecFloat, VecFloat, VecFloat, VecFloat, bool,
+        // bool)`. UpdateWheels' register map names the lanes: v1 = dt, v2 = maxAngVel (engine
+        // rev limit, negative in reverse), v3 = the axle brake factor, v4 = unk_82FB9E10 ==
+        // 100.0 (the brake-capacity scale), v5 = unk_82FB9380 == 1000.0 (the brake-decel
+        // scale), r4 = (gas < 0.1), r5 = (reversing || gear 0).
+        // ⭐ The old FLAG called unk_82FB9CF0/8BC0/8B40/8327F240 "un-homed / absent from the
+        // exports": FALSE (another absence banner down). All four are static-init'd BSS with
+        // rdata-attested writers -- 9000.0 / 100.0 / 500.0 / the shared FALSE|TRUE vsel mask
+        // pair (see Wheel.cpp).
+        void UpdateVelocity(VecFloat lvfTimeStep, VecFloat lvfMaxAngularVelocity,
+                            VecFloat lvfBrakeFactor, VecFloat lvfBrakeCapacityScale,
+                            VecFloat lvfBrakeDecelScale, bool lbGasReleased, bool lbInReverse);
 
         // PRE-EXISTING accessor -- UNTOUCHED. Returns by const-ref (the committed RoadContact-only
         // consumers depend on this signature; the DWARF spells it by-value but that is not changed

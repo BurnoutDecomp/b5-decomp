@@ -87,14 +87,12 @@ namespace Vehicle
     // would be the invisible-forever handling bug.
     // =============================================================================================
 
-    // LINK STUB (orchestrator wave): X360 @0x8261E4F0, 1130 instructions -- the per-wheel
-    // traction/grip orchestrator (per-wheel slip, adhesive limits, drive/brake torque
-    // distribution). THE largest remaining leaf; its own wave.
-    void VehiclePhysics::UpdateWheels(const BrnPlayerDriverControls*, VecFloat)
-    {
-        CGS_ASSERT(false, "VehiclePhysics::UpdateWheels: link stub -- reconstruct from X360 "
-                          "@0x8261E4F0 (1130 insns, the per-wheel grip orchestrator)");
-    }
+    // ⭐ 2026-08-07 (WHEEL-CLUSTER WAVE): the UpdateWheels @0x8261E4F0 and
+    // SimpleVehiclePhysics::CalculateNewWheelPlane @0x82602CB8 stubs are GONE -- both are
+    // BODIED (VehiclePhysics.cpp / BrnSimpleVehiclePhysics.cpp), along with their four
+    // exclusive helper callees UpdateBurnout / UpdateWheelInertia /
+    // UpdateBrakesAndGetBrakingFactor / LimitDifferential (never stubbed here: nothing else
+    // called them, so they carried no link pressure until this wave).
 
     // LINK STUB (orchestrator wave): X360 @0x825D0BE8, 809 instructions -- the in-air attitude
     // controller (pitch/yaw/roll damping-on-takeoff, mPitchYawRollFromTakeOff integration,
@@ -142,14 +140,6 @@ namespace Vehicle
     {
         CGS_ASSERT(false, "VehiclePhysics::HackedResetAndFlyAround: link stub -- reconstruct "
                           "from X360 @0x825D0008");
-    }
-
-    // LINK STUB (orchestrator wave): X360 @0x82602CB8, 171 instructions -- re-derive the wheel
-    // contact plane (the four contact points -> plane fit UpdateDriving runs each frame).
-    void SimpleVehiclePhysics::CalculateNewWheelPlane()
-    {
-        CGS_ASSERT(false, "SimpleVehiclePhysics::CalculateNewWheelPlane: link stub -- "
-                          "reconstruct from X360 @0x82602CB8");
     }
 
     // LINK STUB (orchestrator wave): X360 @0x825F58E0, 622 instructions -- derive the plain-AI

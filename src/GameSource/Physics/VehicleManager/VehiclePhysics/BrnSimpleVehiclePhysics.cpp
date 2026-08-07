@@ -375,5 +375,112 @@ namespace Vehicle
         lrWheel.SetRoadContact(lbIsOnGround, lbIsCloseToGround, lvPosition, lvNormal,
                                lu16TagHi, lu16TagLo, lfLineDist);
     }
+
+    // ===========================================================================================
+    //  SimpleVehiclePhysics::CalculateNewWheelPlane   @0x82602CB8  (171 insns)
+    // ===========================================================================================
+    // ⭐ BODIED 2026-08-07 (wheel-cluster wave). Derive the frame's wheel/road plane from the
+    // four wheels' line-test contacts: keep the contact whose wheel-bottom sits LOWEST above it
+    // (measured along the body up axis) and publish {contact.xyz, max(minHeight, 0)} into
+    // mWheelPlanePosAndHeight (+0x6B0) -- the register IsContactBelowWheelPlane consumes.
+    //
+    // ⚠️ The exported pseudocode mis-renders the whole loop (base "this+108", stride 56); the
+    // ASM is unambiguous: `addi r29, r20, 0x1B0` (= &maWheels[0].mPosition) and `addi r29, r29,
+    // 0xE0` -- the standard wheel stride. Decoded from the asm:
+    //
+    //   0x82602CCC  best = splat(1000.0 [flt_82009E10]); bestPoint = 0; v125 = mTransform.Up
+    //               (+0x20); mbAnyWheelsDetatched (+0x715) = 0
+    //   0x82602D48  per wheel (0..3): mu8State == 2 -> EARLY OUT: mbMinWheelDistValid = 0,
+    //               mbAnyWheelsDetatched = 1, return (one detached wheel aborts the whole fit)
+    //   0x82602D54  copy the 48-byte RoadContact to the stack (the ld/std x6 loop), then:
+    //               [mbLineTestIsValid +0x2B] -> the wheel VOTES (r14 latches 1):
+    //                 [mbIsOnGround +0x28]  best = 0, bestPoint = contact.mPosition
+    //                 else: NaN sweep of wheel.mPosition (the same "Invalid wheel position: "
+    //                       << pos << ", please tell Graham D." stream, Wheel.h:412 == 0x19C);
+    //                       localBottom = mPosition with .y -= mSlipVariables.w (radius --
+    //                       vrlimi mask 4 == lane y); worldBottom = mTransform * localBottom;
+    //                       h = dot3(worldBottom - contact.mPosition, Up);
+    //                       h <= best (the vnot'd vcmpgtfp + two vsel) -> best = h,
+    //                       bestPoint = contact.mPosition
+    //   0x82602F14  mWheelPlanePosAndHeight = {bestPoint.xyz, w = max(best, 0)} (two stvx: the
+    //               first preserves the old .w, the second inserts the vmaxfp'd height --
+    //               vrlimi mask 1 == lane w); mbMinWheelDistValid (+0x714) = the vote latch
+    void SimpleVehiclePhysics::CalculateNewWheelPlane()
+    {
+        static const f32 KF_NO_CONTACT_HEIGHT = 1000.0f;   // flt_82009E10
+
+        const Vector3& lvUp = mTransform.yAxis;   // v125 = lvx this+0x20
+
+        f32     lfBestHeight = KF_NO_CONTACT_HEIGHT;   // v127
+        Vector3 lvBestPoint{ 0.0f, 0.0f, 0.0f, 0.0f }; // v126
+        bool    lbAnyValid = false;                    // r14
+
+        mbAnyWheelsDetatched = false;   // stb 0 -> +0x715 (before the loop)
+
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            Wheel& lrWheel = maWheels[liWheel];
+
+            if (lrWheel.mu8State == 2)   // a detached wheel aborts the whole plane fit
+            {
+                mbMinWheelDistValid  = false;   // stb 0 -> +0x714
+                mbAnyWheelsDetatched = true;    // stb 1 -> +0x715
+                return;
+            }
+
+            const Wheel::RoadContact& lrContact = lrWheel.GetRoadContact();   // the 48-byte copy
+            if (!lrContact.mbLineTestIsValid)
+                continue;
+
+            lbAnyValid = true;
+
+            if (lrContact.mbIsOnGround)
+            {
+                lfBestHeight = 0.0f;                  // vmr128 v127, v124 (zero)
+                lvBestPoint  = lrContact.mPosition;   // lvx of the stack copy
+                continue;
+            }
+
+            // close-but-not-touching: how high does this wheel's lowest point sit above its
+            // contact, along the body up axis?
+            CGS_ASSERT(lrWheel.mPosition.x == lrWheel.mPosition.x &&
+                       lrWheel.mPosition.y == lrWheel.mPosition.y &&
+                       lrWheel.mPosition.z == lrWheel.mPosition.z,
+                       "Invalid wheel position: , please tell Graham D.");   // Wheel.h:412
+
+            // localBottom = wheel.mPosition with the y lane dropped by the radius
+            // (mSlipVariables.w) -- the vsubfp + vrlimi(mask 4) pair.
+            const Vector3 lvLocalBottom{ lrWheel.mPosition.x,
+                                         lrWheel.mPosition.y - lrWheel.mSlipVariables.w,
+                                         lrWheel.mPosition.z, 0.0f };
+
+            // worldBottom = mTransform * localBottom (the same vmaddfp cascade as
+            // AddTractionPoint above).
+            const Vector3 lvWorldBottom{
+                mTransform.xAxis.x * lvLocalBottom.x + mTransform.yAxis.x * lvLocalBottom.y
+                    + mTransform.zAxis.x * lvLocalBottom.z + mTransform.wAxis.x,
+                mTransform.xAxis.y * lvLocalBottom.x + mTransform.yAxis.y * lvLocalBottom.y
+                    + mTransform.zAxis.y * lvLocalBottom.z + mTransform.wAxis.y,
+                mTransform.xAxis.z * lvLocalBottom.x + mTransform.yAxis.z * lvLocalBottom.y
+                    + mTransform.zAxis.z * lvLocalBottom.z + mTransform.wAxis.z,
+                0.0f };
+
+            const f32 lfHeight =
+                (lvWorldBottom.x - lrContact.mPosition.x) * lvUp.x +
+                (lvWorldBottom.y - lrContact.mPosition.y) * lvUp.y +
+                (lvWorldBottom.z - lrContact.mPosition.z) * lvUp.z;   // vmsum3fp128 vs v125
+
+            if (!(lfHeight > lfBestHeight))   // the vnot'd vcmpgtfp: keep the MINIMUM
+            {
+                lfBestHeight = lfHeight;
+                lvBestPoint  = lrContact.mPosition;
+            }
+        }
+
+        // publish: {bestPoint.xyz, w = max(best, 0)} -- the two-store vrlimi sequence.
+        mWheelPlanePosAndHeight.SetVector3(lvBestPoint);
+        mWheelPlanePosAndHeight.SetPlus((lfBestHeight > 0.0f) ? lfBestHeight : 0.0f);   // vmaxfp 0
+        mbMinWheelDistValid = lbAnyValid;   // stb r14 -> +0x714
+    }
 }
 }

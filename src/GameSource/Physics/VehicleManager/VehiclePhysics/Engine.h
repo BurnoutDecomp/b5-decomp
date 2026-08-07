@@ -106,6 +106,14 @@ namespace Vehicle
             mbAllowToChangeDownGear = lbAllow;   // +0xC5
         }
 
+        // [PC-leaf accessor] The console's wheel cluster reads the embedded engine's gear word
+        // directly off the owner (`lwz rX, 0xFC0(r31)` in UpdateWheels @0x8261E7B4 /
+        // UpdateWheelInertia @0x825F67xx / UpdateBrakesAndGetBrakingFactor @0x825D02xx --
+        // VehiclePhysics base +0xF00 == mEngine, +0xC0 == mu8CurrentGear). Gear 0 is
+        // reverse/neutral (ComputeGear's `< -0.01` leg); Prepare seeds ku8FirstGear == 1.
+        // Exposed as one named getter so those hosts read the named member, not an offset cast.
+        u32 GetCurrentGear() const { return mu8CurrentGear; }
+
         // --- Remaining Engine API: owned by separate future TUs -- declared only (no body). ---
 
     private:

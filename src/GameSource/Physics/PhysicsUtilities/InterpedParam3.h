@@ -32,9 +32,23 @@ namespace BrnPhysics
             return (&mvParams.x)[liParamIndex];
         }
 
-        // @unbodied -- DWARF InterpedParam3.h:57 `VecFloat GetInterped(VecFloat) const`. Declared
-        // only; no body in the tree yet and nothing in the build calls it.
-        VecFloat GetInterped(VecFloat lvfI) const;
+        // DWARF InterpedParam3.h:57 `VecFloat GetInterped(VecFloat) const`.
+        // ⭐ BODIED 2026-08-07 (wheel-cluster wave) from the copy the console INLINES into
+        // VehiclePhysics::UpdateBrakesAndGetBrakingFactor @0x825D0510..0x825D0574 (a header
+        // inline on the console -- no out-of-line copy exists in the image, which is why the
+        // decl sat unbodied). The asm is one de Casteljau step pair over the three params:
+        //   vsubfp  v10 = B - A ; vsubfp v9 = C - B
+        //   vmaddfp v13 = (B-A)*t + A ; vmaddfp v12 = (C-B)*t + B
+        //   vsubfp/vmaddfp result = (v12-v13)*t + v13
+        // i.e. a quadratic Bezier through A (t=0) and C (t=1) with B as the control point.
+        VecFloat GetInterped(VecFloat lvfI) const
+        {
+            const f32 lfT = lvfI.x;
+            const f32 lfAB = mvParams.x + (mvParams.y - mvParams.x) * lfT;   // lerp(A, B, t)
+            const f32 lfBC = mvParams.y + (mvParams.z - mvParams.y) * lfT;   // lerp(B, C, t)
+            const f32 lfResult = lfAB + (lfBC - lfAB) * lfT;                 // lerp(AB, BC, t)
+            return VecFloat{ lfResult, lfResult, lfResult, lfResult };
+        }
 
     private:
         Vector3 mvParams;   // +0x00 (.x = ParamA, .y = ParamB, .z = ParamC; .w unused)

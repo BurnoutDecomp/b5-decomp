@@ -284,44 +284,99 @@ namespace Vehicle
     }
 
     // ===========================================================================================
-    //  Wheel::UpdateVelocity   @0x825D7008
+    //  Wheel::UpdateVelocity   @0x825D7008   (97 insns, leaf)
     // ===========================================================================================
-    // Clamp + integrate the wheel's own angular velocity for the frame. UpdateWheels calls this per
-    // wheel after computing the engine rev-limit max (lvfMaxAngularVelocity) and two booleans
-    // (lbStraightLine, lbCrashing). The asm builds a friction-cone-shaped clamp: it reads the wheel's
-    // current angular-velocity lane (+0x30 lane1) and torque lane (+0x60 lane3 region), forms the
-    // candidate new velocity, applies a chain of min/max + masked selects against several un-homed
-    // scratch globals (unk_82FB9CF0 / 82FB8BC0 / 82FB8B40 / 8327F240) and the supplied max, then
-    // stores the clamped angular velocity back into the integration (+0x30) and suspension (+0x60)
-    // registers.
+    // ⭐⭐ REBODIED 2026-08-07 (wheel-cluster wave). The previous body was a SLICE ARTIFACT twice
+    // over: its 3-arg signature dropped the five VecFloat args the callee consumes (see Wheel.h),
+    // and it read/wrote the WRONG LANE (+0x30 lane .y -- the torque accumulator -- where the asm's
+    // final `vrlimi128 v7,v13,8,0` writes lane .x, the angular velocity). Its "un-homed globals"
+    // FLAG was also false: every constant is a static-init'd BSS splat with an rdata-attested
+    // writer in the 0x82C5Cxxx initializer bank, all read this wave (x360rd, self-test 10/10):
+    //   unk_82FB9CF0 = 9000.0  (flt_8209D728, writer @0x82C5CDB0)  -- the hard spin clamp
+    //   unk_82FB8BC0 =  100.0  (flt_820049E0, writer @0x82C5CE00)  -- momentum-test scale
+    //   unk_82FB8B40 =  500.0  (flt_8200A034, writer @0x82C5CDD8)  -- freewheel decel rate
+    //   unk_8327F240 = the shared {FALSE(0x0..0), TRUE(0xF..F)} vsel mask pair (writer
+    //   @0x82C74368) -- the bool->vector-mask idiom (cntlzw/rlwinm row select), NOT a data table.
     //
-    // FLAG (rodata): the clamp tables/masks (unk_82FB9CF0/8BC0/8B40, the permute table 8327F240
-    // indexed by the cntlzw-derived selectors from the two bools + mu8State) are un-homed runtime/
-    // .rdata scratch globals absent from the export -> carried as honest flagged-inert. The control
-    // flow (selector derivation, the min/max clamp against lvfMaxAngularVelocity, the writeback
-    // lanes) is faithful; the masked table contributions stay inert until the globals are recovered.
-    // The two booleans select harsher vs softer clamp rows; mu8State == eWheelInertiaTypeLocked
-    // forces the angular velocity toward zero (the `*(result+215)-1` cntlzw branch).
-    void Wheel::UpdateVelocity(VecFloat lvfMaxAngularVelocity, bool lbStraightLine, bool lbCrashing)
+    // The asm, in order (register-traced):
+    //   1. candidate = mIntegrationVariables.x + mIntegrationVariables.y * dt *
+    //      mSuspensionAndInertiaVariables.w        (torque -> velocity integrate, invInertia lane)
+    //   2. candidate = clamp(candidate, +/-9000.0)          (vmaxfp/vminfp vs unk_82FB9CF0)
+    //   3. sign = {+1, 0, -1}(candidate)                    (the two-vsel sign select)
+    //   4. momentum  = |candidate * mSuspensionAndInertiaVariables.z|   (inertia lane)
+    //      keepSpin  = momentum > brakeFactor * 100.0       (vcmpgtfp v8 > v7)
+    //   5. decel = brakeFactor > 0 ? 1000.0 * brakeFactor   (braking)
+    //            : (gasReleased ? 500.0 : 0.0)              (engine-off freewheel drag)
+    //      slowed = max(|candidate| - decel * dt * invInertia, 0) * sign
+    //   6. result = keepSpin ? slowed : 0                   (brake capacity stops the wheel dead)
+    //   7. if (!inReverse) result = max(result, 0)          (no backwards spin in forward gear)
+    //   8. rev limit: maxAngVel >= 0 ? min(result, maxAngVel) : max(result, maxAngVel)
+    //   9. mu8State == eWheelInertiaTypeLocked -> result = 0
+    //  10. mIntegrationVariables.x = result; .y = 0         (vrlimi 8,0 then vrlimi 4,3)
+    //  11. lockInertia = !(keepSpin || |candidate| < 100.0):
+    //      mSuspensionAndInertiaVariables.z/.w are KEPT when the wheel keeps spinning or is slow,
+    //      and ZEROED otherwise (the braked wheel stops accepting torque until UpdateWheelInertia
+    //      re-seeds the lanes next frame)  (vor v13,v8,v10 ; vsel ; vrlimi 2,2 / 1,1)
+    void Wheel::UpdateVelocity(VecFloat lvfTimeStep, VecFloat lvfMaxAngularVelocity,
+                               VecFloat lvfBrakeFactor, VecFloat lvfBrakeCapacityScale,
+                               VecFloat lvfBrakeDecelScale, bool lbGasReleased, bool lbInReverse)
     {
-        (void)lbStraightLine;   // selects a clamp row via the 8327F240 permute (flagged-inert here)
-        (void)lbCrashing;       // ditto
+        static const f32 KF_SPIN_HARD_CLAMP     = 9000.0f;   // unk_82FB9CF0 <- flt_8209D728
+        static const f32 KF_FREEWHEEL_DECEL     = 500.0f;    // unk_82FB8B40 <- flt_8200A034
+        static const f32 KF_SLOW_SPIN_THRESHOLD = 100.0f;    // unk_82FB8BC0 <- flt_820049E0
 
-        // Current wheel angular velocity (integration register lane 1) and the per-wheel limit lane.
-        f32 lfAngular = mIntegrationVariables.y;
+        const f32 lfDt         = lvfTimeStep.x;
+        const f32 lfInertia    = mSuspensionAndInertiaVariables.z;
+        const f32 lfInvInertia = mSuspensionAndInertiaVariables.w;
+
+        // 1-2. integrate the accumulated torque, hard-clamp the candidate spin.
+        f32 lfCandidate = mIntegrationVariables.x
+                        + mIntegrationVariables.y * lfDt * lfInvInertia;
+        if (lfCandidate >  KF_SPIN_HARD_CLAMP) lfCandidate =  KF_SPIN_HARD_CLAMP;
+        if (lfCandidate < -KF_SPIN_HARD_CLAMP) lfCandidate = -KF_SPIN_HARD_CLAMP;
+
+        // 3. sign select {+1, 0, -1} (vsel chain -- exactly zero stays zero).
+        const f32 lfSign = (lfCandidate > 0.0f) ? 1.0f : ((lfCandidate >= 0.0f) ? 0.0f : -1.0f);
+
+        // 4. does the wheel's angular momentum exceed what the brakes can absorb this frame?
+        const f32 lfMomentum      = std::fabs(lfCandidate * lfInertia);
+        const f32 lfBrakeCapacity = lvfBrakeFactor.x * lvfBrakeCapacityScale.x;   // * 100.0
+        const bool lbKeepSpinning = lfMomentum > lfBrakeCapacity;
+
+        // 5. deceleration: braking beats freewheeling beats driven.
+        const f32 lfDecel = (lvfBrakeFactor.x > 0.0f)
+                                ? lvfBrakeDecelScale.x * lvfBrakeFactor.x     // 1000.0 * factor
+                                : (lbGasReleased ? KF_FREEWHEEL_DECEL : 0.0f);
+        f32 lfSlowed = std::fabs(lfCandidate) - lfDecel * lfDt * lfInvInertia;
+        if (lfSlowed < 0.0f) lfSlowed = 0.0f;
+        lfSlowed *= lfSign;
+
+        // 6. within brake capacity the wheel stops dead this frame.
+        f32 lfResult = lbKeepSpinning ? lfSlowed : 0.0f;
+
+        // 7. forward gear cannot spin the wheel backwards.
+        if (!lbInReverse && lfResult < 0.0f)
+            lfResult = 0.0f;
+
+        // 8. the engine rev limit, sign-aware (maxAngVel is negative in reverse gear).
         const f32 lfMax = lvfMaxAngularVelocity.x;
+        if (lfMax >= 0.0f) { if (lfResult > lfMax) lfResult = lfMax; }
+        else               { if (lfResult < lfMax) lfResult = lfMax; }
 
-        // Clamp to the engine-derived max (vmaxfp/vminfp against the supplied limit). The masked
-        // table contributions (surface/skid rows) are flagged-inert (un-homed globals) and add 0.
-        if (lfAngular >  lfMax) lfAngular =  lfMax;
-        if (lfAngular < -lfMax) lfAngular = -lfMax;
-
-        // A locked wheel (braked/handbrake) is driven toward zero spin -- the `*(this+215)-1` branch
-        // (mu8State == eWheelInertiaTypeLocked) selects the zero row.
+        // 9. a locked wheel (handbrake/brake lock selected by UpdateWheelInertia) does not spin.
         if (mu8State == eWheelInertiaTypeLocked)
-            lfAngular = 0.0f;
+            lfResult = 0.0f;
 
-        mIntegrationVariables.y = lfAngular;          // writeback -> +0x30 lane1 (vrlimi128 8,0)
+        // 10. writeback: velocity lane .x, torque accumulator .y cleared.
+        mIntegrationVariables.x = lfResult;   // vrlimi128 mask 8 (x)
+        mIntegrationVariables.y = 0.0f;       // vrlimi128 mask 4 (y)
+
+        // 11. the lock-up latch: a fast wheel fully absorbed by the brakes loses its inertia
+        // lanes (stops integrating torque) until UpdateWheelInertia re-seeds them next frame.
+        const bool lbKeepInertia = lbKeepSpinning
+                                || std::fabs(lfCandidate) < KF_SLOW_SPIN_THRESHOLD;
+        mSuspensionAndInertiaVariables.z = lbKeepInertia ? lfInertia    : 0.0f;   // vrlimi 2 (z)
+        mSuspensionAndInertiaVariables.w = lbKeepInertia ? lfInvInertia : 0.0f;   // vrlimi 1 (w)
     }
 
     // ===========================================================================================

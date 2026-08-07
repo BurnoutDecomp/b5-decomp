@@ -659,7 +659,8 @@ namespace Vehicle
 
         // ----- ADDITIVE GROW (C04 wheels/tire group): two per-frame wheel-geometry funcs bodied in
         //       VehiclePhysics.cpp (CalculateBodyVelocityAtWheelContact, StoreLocalWheelPositions).
-        //       The wheels orchestrator UpdateWheels @0x8261E4F0 is still BLOCKED.
+        //       ⭐ 2026-08-07 (wheel-cluster wave): the wheels orchestrator UpdateWheels
+        //       @0x8261E4F0 is BODIED (no longer BLOCKED -- see the driving spine below).
         //       ⚠️ This note used to lump SetWheelVelocities @0x825FD218 in with it as
         //       "un-recoverable degenerate VMX128 + a dozen un-committed helpers / un-homed rodata".
         //       That was wrong on all three counts -- it is bodied below as of 2026-08-03. Treat the
@@ -670,7 +671,12 @@ namespace Vehicle
         // r_contact = the wheel's road-contact position when on the ground, else its streamed
         // position (mStreamedPositionPlusTwistAmount). Stored into maWheels[leWheel].mBodyPointVelocity
         // (+0xA0 within the wheel). (mAngularVelocity is the +0x60 register, here mLocalVelocity.)
-        void CalculateBodyVelocityAtWheelContact(EVehicleDrivenWheel leWheel);
+        // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): DWARF VehiclePhysics.cpp:5148
+        // spells (EVehicleDrivenWheel, Vector3, VecFloat). Both extra args are DEAD in the callee
+        // (the only v1 mention in @0x825FB200 is a WRITE at 0x825FB390) -- the SetWheelVelocities
+        // dead-parameter precedent. UpdateWheels passes the pair roll direction + dt as shipped.
+        void CalculateBodyVelocityAtWheelContact(EVehicleDrivenWheel leWheel,
+                                                 Vector3 lvRollDirection, VecFloat lvfTimeStep);
 
         // @0x825B7FC0: project the four wheels' world positions into the body's local frame
         //   local_i = transpose(orthonormal3x3(mTransform)) * (worldWheelPos_i - mTransform.Pos())
@@ -770,8 +776,37 @@ namespace Vehicle
                            const BrnPlayerDriverControls* lpControls,
                            CgsNumeric::Random& lrRandom, VecFloat lvfTimeStep);
 
-        // @0x8261E4F0 (1130): TRAP -- the per-wheel traction/grip orchestrator, its own wave.
+        // @0x8261E4F0 (1130): ⭐⭐ THE WHEEL ORCHESTRATOR -- BODIED 2026-08-07 (wheel-cluster
+        // wave) in VehiclePhysics.cpp, with its four exclusive helper callees below. The full
+        // stage list is transcribed at the body.
         void UpdateWheels(const BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep);
+
+        // ----- The four helpers only UpdateWheels calls (X360 xref sets are exactly
+        //       {UpdateWheels}), bodied with it 2026-08-07. DWARF signatures. -----
+
+        // @0x825D05F0 (146): the burnout latch. Both pedals floored (> 0.97), both rear wheels
+        // spinning forward, rear-pair average spin at least 1.0 rad/s over the front pair, and
+        // the car (near) stationary (|v|^2 < 0.25) or already doing a burnout: scale the rear
+        // spin up 3%/frame while the fronts are slow (< 70 rad/s) and latch mbDoingBurnout.
+        void UpdateBurnout(const BrnPlayerDriverControls* lpControls);
+
+        // @0x825F6648 (205): re-seed each wheel's spin inertia lanes
+        // (mSuspensionAndInertiaVariables.z = 30.0, .w = 1/30 -- 200.0/(1/200) during a
+        // burnout), then apply the handbrake lock: below 5 m/s the DRIVEN axle locks
+        // (rear when PowerToRear != 0), above it the rear locks in forward gear and the
+        // front locks in reverse (mIntegrationVariables.x = 0 + both inertia lanes zeroed;
+        // Wheel::UpdateVelocity's mu8State lock path finishes the job).
+        void UpdateWheelInertia();
+
+        // @0x825D0238 (236): maintain the running brake amount (the +0x1010 .w BrakeScale lane)
+        // from the handbrake/pedal state and return the braking factor -- the BrakeScaleToFactor
+        // curve (attribs +0x60, InterpedParam3::GetInterped) evaluated at the ramped pedal.
+        VecFloat UpdateBrakesAndGetBrakingFactor(const BrnPlayerDriverControls* lpControls,
+                                                 VecFloat lvfTimeStep);
+
+        // @0x825D0940 (67): the open-differential coupling -- clamp both driven wheels' spin
+        // (mIntegrationVariables.x) into a +/-10% band around their average.
+        void LimitDifferential(EVehicleDrivenWheel leWheelA, EVehicleDrivenWheel leWheelB);
 
         // @0x825D0BE8 (809): TRAP -- the in-air damping/rotation controller, its own wave.
         void UpdateInAirBehaviour(const BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep);
@@ -873,8 +908,18 @@ namespace Vehicle
         // FLAG (blocked): the X360 body is a degenerate VMX128 routine ("local variable allocation has
         // failed") with ~200 unnamed stack temps and a dozen un-homed rodata permute/limit vectors whose
         // per-lane semantics are not recoverable store-faithfully; bodied as a structural skeleton, not
-        // fabricated math. Signature is the de-SIMD'd shape (the two wheel indices + the per-axle inputs).
-        void HandleWheelPairFriction(EVehicleDrivenWheel leWheelA, EVehicleDrivenWheel leWheelB);
+        // fabricated math.
+        // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): the old 2-arg form was a slice
+        // artifact. DWARF VehiclePhysics.h (decl :5377 block) spells the 9-arg form, and UpdateWheels'
+        // register map @0x8261F2CC-0x8261F2F4 names every slot: r4/r5 = the two wheel indices,
+        // v1 = the pair's roll direction (mTransform.At() for the rear pair, mSteeringDirection for
+        // the front pair), v2 = the downforce-derived grip scale, v3 = dt, v4/v5 = GetSurfaceGrip of
+        // wheelA/wheelB, r6 = "3+ wheels have traction", r7 = false (constant at every call site).
+        void HandleWheelPairFriction(EVehicleDrivenWheel leWheelA, EVehicleDrivenWheel leWheelB,
+                                     Vector3 lvRollDirection, VecFloat lvfDownForce,
+                                     VecFloat lvfTimeStep, VecFloat lvfSurfaceGripA,
+                                     VecFloat lvfSurfaceGripB, bool lbMostWheelsHaveTraction,
+                                     bool lbUnusedFalse);
 
         // @0x825D41A8: single-wheel scrub path used ONLY while crashing (asserts IsCrashing() @+0x710).
         // Inactive contacts decay the stored friction by 0.95; active contacts compute slip-driven scrub
@@ -885,7 +930,9 @@ namespace Vehicle
         // scrub math depends on un-homed rodata limit vectors (unk_82FBA180..82FBA110) and unrecoverable
         // SIMD lane routing; bodied as a structural skeleton. The 0.95 inactive-decay branch IS faithfully
         // recovered (constants are inline immediates).
-        void HandleWheelFrictionCrashing(EVehicleDrivenWheel leWheel);
+        // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): DWARF VehiclePhysics.h spells
+        // (EVehicleDrivenWheel, VecFloat) -- UpdateWheels passes v1 = dt at all four call sites.
+        void HandleWheelFrictionCrashing(EVehicleDrivenWheel leWheel, VecFloat lvfTimeStep);
 
         // @0x825B2EF8: the transform delta from the previous frame to the current frame, expressed
         // in the previous frame's local space:
@@ -916,30 +963,34 @@ namespace Vehicle
         // @0x825BFEF0: true when the car is being counter-steered while moving slowly -- used by
         // UpdateWheels / ApplyEngineForces to soften the handling at low speed. Logic recovered
         // store-for-store from the asm:
-        //   * a one-time static feature gate (the X360 computes a cached splat constant compared
-        //     against zero -> a build/tunable enable). Carried as KB_COUNTER_STEER_LOW_SPEED_ENABLED.
-        //   * requires speed above a small threshold (asm: a3 <= 0.2 -> false).
-        //   * if the lateral velocity component (mLocalVelocity.y) is clearly positive (> 0.5) and
-        //     steering is not strongly opposite (>= -0.1) -> counter-steering: true.
-        //   * else if that component is NOT below -0.5 (i.e. not clearly negative) -> false.
-        //   * else (lateral < -0.5) counter-steering iff steering is mild (<= 0.1).
-        // lfSteering = the steering input lane (f1 / a2); lfSpeed = the speed lane (f2 / a3).
+        //   * requires LOW forward speed: `vcmpgtfp. unk_82FB9FC0, v1` -- the VecFloat arg is the
+        //     forward speed and the gate is a lazily-cached splat of flt_8208F9D4 == 20.0
+        //     (x360rd-read 2026-08-07 -- the old "un-homed rodata" enable-flag FLAG is RETIRED,
+        //     another absence banner down). fwdSpeed >= 20.0 -> false.
+        //   * requires throttle: `fcmpu f2 vs flt_82004744(0.2); ble -> false` -- the second f32
+        //     arg is the GAS input (the caller's `lfs f2, 4(controls)`), not a speed.
+        //   * if the yaw rate (mAngularVelocity.y) is clearly positive (> 0.5) and steering is not
+        //     strongly opposite (>= -0.1) -> counter-steering: true.
+        //   * else if the yaw rate is NOT below -0.5 -> false.
+        //   * else (yaw < -0.5) counter-steering iff steering is mild (<= 0.1).
         //
-        // FLAG (rodata): the comparison literals 0.2 (flt_82004744) / -0.1 (flt_8200D530) / 0.1
-        // (flt_82004014) / 0.5 (flt_82001DA0) are resolved X360 rodata. The SECOND lateral-velocity
-        // compare loads a DISTINCT rodata symbol -- flt_82004C78 -- not a reuse of the first 0.5
-        // constant; flt_82004C78 is homed elsewhere in this codebase (BrnBehaviourGameplayExternal.cpp,
-        // CgsAptRenderHandler.cpp) as -0.5f. With the (bugged) same +0.5f reused here, the final
-        // `return lfSteering <= 0.1f` was dead code (unreachable, since `!(0.5f > lfLateral)` already
-        // returns false for every value the first branch didn't catch) -- a correctness tell confirming
-        // the two constants differ. The feature-gate constant (flt_8208F9D4 splat, lazily cached at
-        // unk_82FB9FC0) is un-homed rodata and is carried as an honest enable flag rather than a
-        // fabricated numeric value.
-        bool IsCounterSteeringAtLowSpeed(f32 lfSteering, f32 lfSpeed) const
+        // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave). The old 2-arg (steering, speed)
+        // form was a slice artifact: DWARF VehiclePhysics.h:2069 spells (VecFloat, float32_t,
+        // float32_t), and UpdateWheels' call site @0x8261F19C-0x8261F1C4 maps v1 = splat(dot3(
+        // mLinearVelocity, At)) [the forward speed], f1 = controls->mfSteering, f2 = controls->
+        // mfGas. The old body's `lfSpeed <= 0.2f` was really the GAS test; the true low-SPEED gate
+        // (vs 20.0) was mis-filed as an un-homed feature enable.
+        //
+        // FLAG (rodata, resolved): 20.0 (flt_8208F9D4 via unk_82FB9FC0) / 0.2 (flt_82004744) /
+        // -0.1 (flt_8200D530) / 0.1 (flt_82004014) / 0.5 (flt_82001DA0) / -0.5 (flt_82004C78 --
+        // a DISTINCT symbol from the +0.5, confirmed by its other homes in this codebase).
+        bool IsCounterSteeringAtLowSpeed(VecFloat lvfForwardSpeed, f32 lfSteering, f32 lfGas) const
         {
-            // One-time static feature gate (lazy-cached on X360). Honest placeholder: enabled.
-            static const bool KB_COUNTER_STEER_LOW_SPEED_ENABLED = true;   // FLAG: un-homed rodata
-            if (!KB_COUNTER_STEER_LOW_SPEED_ENABLED || lfSpeed <= 0.2f)
+            static const f32 KF_LOW_SPEED_GATE = 20.0f;   // unk_82FB9FC0 <- flt_8208F9D4
+
+            if (lvfForwardSpeed.x >= KF_LOW_SPEED_GATE)   // !(gate > fwdSpeed) -> false
+                return false;
+            if (lfGas <= 0.2f)                            // flt_82004744
                 return false;
 
             // lane 1 of the +0x60 register == base+0x50 == mAngularVelocity.y == the YAW RATE

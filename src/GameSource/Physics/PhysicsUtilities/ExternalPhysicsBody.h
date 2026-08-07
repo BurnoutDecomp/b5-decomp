@@ -92,14 +92,15 @@ namespace BrnPhysics
         void DampPitchYawRoll(VecFloat lvfPitchDamping, VecFloat lvfYawDamping,
                               VecFloat lvfRollDamping, VecFloat lvfDeltaTime);            // h:200 @0x825BE210
 
-        // ADDITIVE GROW (PhysicalBodyPartPool::UpdateRWBodies caller): DECLARE-ONLY.
         // Accumulate a force expressed in the body's LOCAL frame (rotated by the body's
         // current orientation before being added to the linear-force accumulator). The X360
         // UpdateRWBodies builds a local-space gravity force vector (0, KF_PART_EXTRA_GRAVITY,
-        // 0, 0) scaled by a transform row and calls this on each detached part's body. Its body
-        // lives in a separate (not-yet-homed) TU, so only the declaration is needed for the
-        // per-TU `cl /c` gate. FLAG: signature reconstructed from the call site (a single
-        // Vector3 force arg); the X360 Hex-Rays dropped the arg list.
+        // 0, 0) scaled by a transform row and calls this on each detached part's body;
+        // VehiclePhysics::UpdateWheels' magic brake force is the second caller.
+        // ⭐ BODIED 2026-08-07 (wheel-cluster wave) from @0x825BE7E8, pulled fresh from the
+        // .i64 (its .ida-exports JSON is a HOLE -- the old "body lives in a separate
+        // not-yet-homed TU" framing was a placeholder; the single-Vector3 signature the call
+        // site implied is exactly what the callee consumes). See ExternalPhysicsBody.cpp.
         void AddLocalSpaceForce(Vector3 lvForce);
 
         // ⭐ THE INTEGRATOR -- the two functions the whole vehicle force model integrates through.

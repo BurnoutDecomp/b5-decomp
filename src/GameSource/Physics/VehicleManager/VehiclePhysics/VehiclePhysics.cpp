@@ -365,8 +365,17 @@ namespace Vehicle
     //      and accumulate the linear residual at this+0x240 scaled by mvfWheelFrictionLinearMultiplier
     //      (this+0x4048). A grip-curve-layout selector at this+0x1294 (+4946) chooses normal vs drift packing.
     // ---------------------------------------------------------------------------------------------
+    // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave) to the DWARF 9-arg form -- see the
+    // header note. The skeleton stays FIDELITY: BLOCKED; only the shape changed.
     void VehiclePhysics::HandleWheelPairFriction(EVehicleDrivenWheel /*leWheelA*/,
-                                                 EVehicleDrivenWheel /*leWheelB*/)
+                                                 EVehicleDrivenWheel /*leWheelB*/,
+                                                 Vector3 /*lvRollDirection*/,
+                                                 VecFloat /*lvfDownForce*/,
+                                                 VecFloat /*lvfTimeStep*/,
+                                                 VecFloat /*lvfSurfaceGripA*/,
+                                                 VecFloat /*lvfSurfaceGripB*/,
+                                                 bool /*lbMostWheelsHaveTraction*/,
+                                                 bool /*lbUnusedFalse*/)
     {
         // FIDELITY: BLOCKED -- structural skeleton only; see the block comment above. No fabricated math.
         // The faithful body requires named tyre-curve/direction lanes + the un-homed friction rodata
@@ -390,7 +399,10 @@ namespace Vehicle
     // The decay branch is reproduced as a faithful comment; without the named wheel friction-register lane
     // it cannot be applied store-for-store either, so the whole body is left as a structural skeleton.
     // ---------------------------------------------------------------------------------------------
-    void VehiclePhysics::HandleWheelFrictionCrashing(EVehicleDrivenWheel /*leWheel*/)
+    // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): + VecFloat dt per the DWARF and the
+    // four UpdateWheels call sites (`vmr128 v1, v127` before each bl).
+    void VehiclePhysics::HandleWheelFrictionCrashing(EVehicleDrivenWheel /*leWheel*/,
+                                                     VecFloat /*lvfTimeStep*/)
     {
         // FIDELITY: BLOCKED -- structural skeleton only; see the block comment above.
         //   Inactive contact -> wheelFrictionRegister *= 0.95f;   (faithful; pending the named wheel lane)
@@ -413,7 +425,11 @@ namespace Vehicle
     //   (+0xA0). bodyPos is the body world position (mTransform.Pos(), base +0x40); omega is the
     //   angular-velocity register at +0x60 (here mAngularVelocity). The cross-product is the X360's
     //   vpermwi/vmulfp/vnmsubfp lane-rotated `a x b`.
-    void VehiclePhysics::CalculateBodyVelocityAtWheelContact(EVehicleDrivenWheel leWheel)
+    // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave) to the DWARF 3-arg form; both extra
+    // args are DEAD in the console callee (see the header note).
+    void VehiclePhysics::CalculateBodyVelocityAtWheelContact(EVehicleDrivenWheel leWheel,
+                                                             Vector3 /*lvRollDirection*/,
+                                                             VecFloat /*lvfTimeStep*/)
     {
         Wheel& lrWheel = maWheels[leWheel];
 
@@ -3890,6 +3906,613 @@ namespace Vehicle
         mbIsUsingAIDonutAttribs = false;
     }
 
+    // ==============================================================================================
+    // ⭐⭐ THE WHEEL CLUSTER (wheel-cluster wave, 2026-08-07). UpdateWheels @0x8261E4F0 (1130
+    // insns) + its four exclusive helper callees (X360 xrefs-to are exactly {UpdateWheels} for
+    // all four). Every constant below is image-attested: the 0x82FBxxxx names are static-init'd
+    // BSS splats whose writer thunks (the 0x82C5C5F0..0x82C5CE3x initializer bank) each name one
+    // rdata source scalar, read via x360rd (self-test 10/10). NOTHING here is tuned or guessed.
+    // ==============================================================================================
+
+    // @0x825D05F0  BrnPhysics::Vehicle::VehiclePhysics::UpdateBurnout  (146 insns)
+    // The burnout latch + rear spin-up. Conditions, in the console's order:
+    //   * both pedals near-floored: mfGas > 0.97 AND mfBrake > 0.97  (unk_82FB9010 <- flt_82094B68)
+    //   * both rear wheels spinning forward (mIntegrationVariables.x > 0)
+    //   * rear-pair average spin exceeds the front-pair average by more than 1.0 rad/s
+    //     (max(rearAvg - frontAvg, 0) > unk_82FB9EB0 <- flt_82001C98; the 0.5 averaging factor
+    //     is the inline `vcfsx v0,1,1`)
+    //   * near-stationary (|mLinearVelocity|^2 < 0.25 == unk_82FB9250 <- flt_8208F834) OR the
+    //     latch is already set (a running burnout survives the speed gate)
+    // When all hold: while the FRONT-LEFT wheel is slow (70.0 == unk_82FB90E0 <- flt_820051BC
+    // > maWheels[0].x -- the console tests only wheel 0), both rear spins are scaled by 1.03
+    // (unk_82FB8DD0 <- flt_8209D724) and mbDoingBurnout latches. When the entry conditions fail,
+    // the latch clears; when they hold but the car is already moving, the latch is left as-is.
+    void VehiclePhysics::UpdateBurnout(const BrnPlayerDriverControls* lpControls)
+    {
+        static const f32 KF_PEDAL_THRESHOLD  = 0.97f;   // unk_82FB9010 <- flt_82094B68
+        static const f32 KF_SPIN_DELTA       = 1.0f;    // unk_82FB9EB0 <- flt_82001C98
+        static const f32 KF_SPEEDSQ_LIMIT    = 0.25f;   // unk_82FB9250 <- flt_8208F834
+        static const f32 KF_FRONT_SPIN_GATE  = 70.0f;   // unk_82FB90E0 <- flt_820051BC
+        static const f32 KF_REAR_SPIN_SCALE  = 1.03f;   // unk_82FB8DD0 <- flt_8209D724
+
+        CGS_ASSERT(lpControls != NULL, "lpControls != NULL");   // VehiclePhysics.cpp:2139
+
+        const f32 lfFrontLeft  = maWheels[eFrontLeftWheel ].mIntegrationVariables.x;
+        const f32 lfFrontRight = maWheels[eFrontRightWheel].mIntegrationVariables.x;
+        const f32 lfRearLeft   = maWheels[eRearLeftWheel  ].mIntegrationVariables.x;
+        const f32 lfRearRight  = maWheels[eRearRightWheel ].mIntegrationVariables.x;
+
+        const bool lbBothPedals = lpControls->mfGas   > KF_PEDAL_THRESHOLD &&
+                                  lpControls->mfBrake > KF_PEDAL_THRESHOLD;
+        const bool lbRearsForward = lfRearLeft > 0.0f && lfRearRight > 0.0f;
+
+        // rearAvg - frontAvg, floored at 0 (vmaxfp vs the zero splat), vs the 1.0 gate.
+        const f32 lfRearAvg  = (lfRearLeft  + lfRearRight ) * 0.5f;   // vcfsx v0,1,1 == 0.5
+        const f32 lfFrontAvg = (lfFrontLeft + lfFrontRight) * 0.5f;
+        f32 lfSpinDelta = lfRearAvg - lfFrontAvg;
+        if (lfSpinDelta < 0.0f) lfSpinDelta = 0.0f;
+
+        if (!lbBothPedals || !lbRearsForward || !(lfSpinDelta > KF_SPIN_DELTA))
+        {
+            mbDoingBurnout = false;   // the LABEL_17 store with r11 == 0
+            return;
+        }
+
+        // dot3(mLinearVelocity, mLinearVelocity) vs the 0.25 splat.
+        if (mbDoingBurnout || vpu::MagnitudeSquared(mLinearVelocity) < KF_SPEEDSQ_LIMIT)
+        {
+            if (KF_FRONT_SPIN_GATE > lfFrontLeft)   // only wheel 0 is tested (vspltw of its .x)
+            {
+                maWheels[eRearLeftWheel ].mIntegrationVariables.x = lfRearLeft  * KF_REAR_SPIN_SCALE;
+                maWheels[eRearRightWheel].mIntegrationVariables.x = lfRearRight * KF_REAR_SPIN_SCALE;
+            }
+            mbDoingBurnout = true;
+        }
+        // else: entry conditions hold but the car is moving and no burnout was running --
+        // the console leaves the latch untouched (the store is skipped entirely).
+    }
+
+    // @0x825F6648  BrnPhysics::Vehicle::VehiclePhysics::UpdateWheelInertia  (205 insns)
+    // Re-seed every wheel's spin-inertia lanes for the frame, then apply the handbrake lock.
+    //   * normal:  mSuspensionAndInertiaVariables.z = 30.0 (unk_82FB9F60 <- flt_82004F5C),
+    //              .w = 1/30 (the vrefp + two-Newton exact reciprocal)   -- wheels 2,3,0,1
+    //   * burnout: .z = 200.0 (unk_82FB9BB0 <- flt_8201A1F0), .w = 1/200 (unk_82FB9CD0, the
+    //              initializer's own fdivs)                              -- wheels 0,1,2,3; return
+    //   * else, handbrake held (mbHandBrake): clear mbDoingBurnout, then LOCK one axle --
+    //     zero its wheels' spin (mIntegrationVariables.x) and both inertia lanes:
+    //       speed < 5.0 m/s (|mLinearVelocity| vs unk_8208FB14): the DRIVEN axle
+    //         (rear when PowerToRear != 0 -- the FLT_EPSILON IsZero band -- else front);
+    //       speed >= 5.0: rear in a forward gear, front in reverse (mu8CurrentGear == 0).
+    //     (Wheel::UpdateVelocity's eWheelInertiaTypeLocked path is the other half of the lock.)
+    void VehiclePhysics::UpdateWheelInertia()
+    {
+        static const f32 KF_WHEEL_INERTIA          = 30.0f;    // unk_82FB9F60 <- flt_82004F5C
+        static const f32 KF_BURNOUT_WHEEL_INERTIA  = 200.0f;   // unk_82FB9BB0 <- flt_8201A1F0
+        static const f32 KF_HANDBRAKE_LOCK_SPEED   = 5.0f;     // unk_8208FB14 (.rdata, direct)
+
+        // Normal re-seed, console order 2, 3, 0, 1 (rear pair first).
+        static const EVehicleDrivenWheel kaeSeedOrder[eNumDrivenWheels] = {
+            eRearLeftWheel, eRearRightWheel, eFrontLeftWheel, eFrontRightWheel };
+        for (s32 li = 0; li < eNumDrivenWheels; ++li)
+        {
+            Wheel& lrWheel = maWheels[kaeSeedOrder[li]];
+            lrWheel.mSuspensionAndInertiaVariables.z = KF_WHEEL_INERTIA;          // vrlimi 2 (z)
+            lrWheel.mSuspensionAndInertiaVariables.w = 1.0f / KF_WHEEL_INERTIA;   // vrlimi 1 (w)
+        }
+
+        if (mbDoingBurnout)
+        {
+            for (s32 li = 0; li < eNumDrivenWheels; ++li)   // console order 0, 1, 2, 3 here
+            {
+                maWheels[li].mSuspensionAndInertiaVariables.z = KF_BURNOUT_WHEEL_INERTIA;
+                maWheels[li].mSuspensionAndInertiaVariables.w = 1.0f / KF_BURNOUT_WHEEL_INERTIA;
+            }
+            return;
+        }
+
+        if (!mbHandBrake)
+            return;
+
+        mbDoingBurnout = false;
+
+        // |mLinearVelocity| -- the vrsqrtefp/Newton magnitude with the vcmpeqfp zero guard.
+        const f32 lfSpeedSq = vpu::MagnitudeSquared(mLinearVelocity);
+        const f32 lfSpeed   = (lfSpeedSq > 0.0f) ? std::sqrt(lfSpeedSq) : 0.0f;
+
+        bool lbLockRear;
+        if (lfSpeed < KF_HANDBRAKE_LOCK_SPEED)
+        {
+            // the driven axle locks: rear unless PowerToRear is (epsilon-)zero.
+            lbLockRear = !rw::math::fpu::IsZero(
+                mpAttribs->mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z);
+        }
+        else
+        {
+            lbLockRear = mEngine.GetCurrentGear() != 0;   // forward gear -> rear; reverse -> front
+        }
+
+        const EVehicleDrivenWheel leA = lbLockRear ? eRearLeftWheel  : eFrontLeftWheel;
+        const EVehicleDrivenWheel leB = lbLockRear ? eRearRightWheel : eFrontRightWheel;
+        maWheels[leA].mIntegrationVariables.x            = 0.0f;   // vrlimi 8 (x)
+        maWheels[leA].mSuspensionAndInertiaVariables.z   = 0.0f;
+        maWheels[leA].mSuspensionAndInertiaVariables.w   = 0.0f;
+        maWheels[leB].mIntegrationVariables.x            = 0.0f;
+        maWheels[leB].mSuspensionAndInertiaVariables.z   = 0.0f;
+        maWheels[leB].mSuspensionAndInertiaVariables.w   = 0.0f;
+    }
+
+    // @0x825D0238  BrnPhysics::Vehicle::VehiclePhysics::UpdateBrakesAndGetBrakingFactor  (236 insns)
+    // Maintain the running brake amount (the .w BrakeScale lane of +0x1010) and return the braking
+    // factor. Three entry regimes select the working pedal:
+    //   * HANDBRAKE (mbHandBrake): only while not drifting and not airborne -- damp the yaw
+    //     (DampPitchYawRoll(0, attribs +0xC0 lane .z, 0, dt) -- the lane the asm splats is .z,
+    //     RollDampingOnTakeOff by the DWARF lane naming; reproduced as shipped) and brake by
+    //     1 - |mfSteering|. Drifting or airborne with the handbrake -> factor 0.
+    //   * FORWARD GEAR: pedal = mfBrake; rolling backwards -> 0. Colliding at speed
+    //     (mfSpeedMPH > MinSpeedForDrift && mi8NumWorldCollisions > 0) caps BrakeScale at 0.2
+    //     (unk_82FB9280 <- flt_82004744); below 5 mph (unk_82FB9240 <- flt_8200426C) with both
+    //     pedals released BrakeScale is SET to 0.2 (the parking creep-stop).
+    //   * REVERSE (gear 0): pedal = mfGas; rolling forwards -> 0; the creep-stop mirror uses
+    //     mfSpeedMPH > -5.
+    // Common tail: pedal <= 0.1 -> BrakeScale = 0 and factor 0. Else BrakeScale ramps up by
+    // dt * pedal * TimeForFullBrakeRecip while the pedal exceeds it (snaps down to the pedal
+    // otherwise), clamps at 1, and the factor is mBrakeScaleToFactorCurve.GetInterped(BrakeScale).
+    VecFloat VehiclePhysics::UpdateBrakesAndGetBrakingFactor(
+        const BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep)
+    {
+        static const f32 KF_COLLISION_BRAKE_CAP = 0.2f;   // unk_82FB9280 <- flt_82004744
+        static const f32 KF_CREEP_STOP_MPH      = 5.0f;   // unk_82FB9240 <- flt_8200426C
+        static const VecFloat KV_ZERO{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+        f32& lrfBrakeScale =
+            mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.w;   // +0x1010 .w
+
+        const bool lbPedalsReleased = lpControls->mfGas   < 0.1f &&
+                                      lpControls->mfBrake < 0.1f;      // flt_82004014
+
+        f32 lfPedal;
+        if (mbHandBrake)
+        {
+            if (mu8DriftState != 0 || mbHasAir)
+                return KV_ZERO;
+
+            // Yaw damping while the handbrake locks an axle. The asm splats lane .z of the
+            // attribs +0xC0 register into the YAW slot (v2); pitch (v1) and roll (v3) are zero.
+            { const f32 lfYawDamp = mpAttribs->mBaseAttribs
+                  .mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.z;
+              DampPitchYawRoll(KV_ZERO,
+                               VecFloat{ lfYawDamp, lfYawDamp, lfYawDamp, lfYawDamp },
+                               KV_ZERO, lvfTimeStep); }
+
+            lfPedal = 1.0f - std::fabs(lpControls->mfSteering);   // vsubfp(1.0, |steer|)
+        }
+        else if (mEngine.GetCurrentGear() != 0)   // forward gear
+        {
+            if (0.0f > mfSpeedMPH.x)              // rolling backwards in a forward gear
+                return KV_ZERO;
+
+            lfPedal = lpControls->mfBrake;
+
+            if (mfSpeedMPH.x > mpAttribs->mDriftAttribs
+                    .mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x
+                && mi8NumWorldCollisions > 0)
+            {
+                if (lrfBrakeScale > KF_COLLISION_BRAKE_CAP)      // vminfp
+                    lrfBrakeScale = KF_COLLISION_BRAKE_CAP;
+            }
+
+            if (KF_CREEP_STOP_MPH > mfSpeedMPH.x && lbPedalsReleased)
+                lrfBrakeScale = KF_COLLISION_BRAKE_CAP;          // the creep-stop SET
+        }
+        else                                      // reverse (gear 0)
+        {
+            if (mfSpeedMPH.x > 0.0f)              // rolling forwards in reverse
+                return KV_ZERO;
+
+            lfPedal = lpControls->mfGas;          // the gas pedal brakes the reverse roll
+
+            if (mfSpeedMPH.x > -KF_CREEP_STOP_MPH && lbPedalsReleased)   // vxor sign flip
+                lrfBrakeScale = KF_COLLISION_BRAKE_CAP;
+        }
+
+        // ----- common tail (LABEL_22) -----
+        if (lfPedal <= 0.1f)
+        {
+            lrfBrakeScale = 0.0f;
+            return KV_ZERO;
+        }
+
+        if (lfPedal > lrfBrakeScale)
+        {
+            // ramp toward full brake: += dt * pedal * TimeForFullBrakeRecip (+0x70 lane .y).
+            lrfBrakeScale += lvfTimeStep.x * lfPedal *
+                mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.y;
+        }
+        else
+        {
+            lrfBrakeScale = lfPedal;              // snap down to the pedal
+        }
+        if (lrfBrakeScale > 1.0f)                 // vminfp vs the vcfsx 1.0
+            lrfBrakeScale = 1.0f;
+
+        // the BrakeScaleToFactor curve (attribs +0x60) at the ramped amount -- the inlined
+        // InterpedParam3::GetInterped de Casteljau pair.
+        return mpAttribs->mBaseAttribs.mBrakeScaleToFactorCurve.GetInterped(
+            VecFloat{ lrfBrakeScale, lrfBrakeScale, lrfBrakeScale, lrfBrakeScale });
+    }
+
+    // @0x825D0940  BrnPhysics::Vehicle::VehiclePhysics::LimitDifferential  (67 insns, leaf)
+    // The open-differential coupling: clamp both driven wheels' spin (mIntegrationVariables.x)
+    // into a +/-(10% of |average|) band around their average. Both constants are the function's
+    // own lazy-init statics (unk_82FBA0F0 <- flt_82001DA0 == 0.5, guard bit 0 of dword_82FBA100;
+    // unk_82FBA0E0 <- flt_82004014 == 0.1, guard bit 1).
+    void VehiclePhysics::LimitDifferential(EVehicleDrivenWheel leWheelA, EVehicleDrivenWheel leWheelB)
+    {
+        static const f32 KF_HALF = 0.5f;   // unk_82FBA0F0 <- flt_82001DA0
+        static const f32 KF_BAND = 0.1f;   // unk_82FBA0E0 <- flt_82004014
+
+        f32& lrfSpinA = maWheels[leWheelA].mIntegrationVariables.x;
+        f32& lrfSpinB = maWheels[leWheelB].mIntegrationVariables.x;
+
+        const f32 lfAverage = (lrfSpinA + lrfSpinB) * KF_HALF;
+        const f32 lfBandHalf = std::fabs(lfAverage) * KF_BAND;   // vandc sign mask == fabs
+        const f32 lfLo = lfAverage - lfBandHalf;
+        const f32 lfHi = lfAverage + lfBandHalf;
+
+        lrfSpinA = (lrfSpinA < lfLo) ? lfLo : ((lrfSpinA > lfHi) ? lfHi : lrfSpinA);   // vmaxfp/vminfp
+        lrfSpinB = (lrfSpinB < lfLo) ? lfLo : ((lrfSpinB > lfHi) ? lfHi : lrfSpinB);
+    }
+
+// [clean] UpdateWheels  @0x8261E4F0
+    // @0x8261E4F0  BrnPhysics::Vehicle::VehiclePhysics::UpdateWheels  (1130 insns)
+    // ⭐⭐ THE PER-WHEEL TRACTION/CONTACT CORE -- the stage UpdateDriving runs between the
+    // suspension virtual and UpdateInAirBehaviour. Register-traced end to end; the stage list:
+    //
+    //   0x8261E518  UpdateBurnout(controls) ; UpdateWheelInertia()
+    //   0x8261E524  mSteeringDirection (+0x10E0) = R(Up, mvSteeringAngle .x) * At -- one inlined
+    //               XMVectorSinCos over unk_82000BD0..C60 (the table three waves decoded;
+    //               std::sin/std::cos are the exact forms, same de-optimisation as
+    //               SetWheelVelocities') + the Rodrigues rows, applied to mTransform.At()
+    //   0x8261E7A4  lbInReverse   = (0 > mfSpeedMPH) || mEngine.mu8CurrentGear == 0  (r22)
+    //   0x8261E7CC  lbGasReleased = controls->mfGas < 0.1 [flt_82004014]             (r23)
+    //   0x8261E7E8  CalculateBodyVelocityAtWheelContact x4, order 2,3,0,1 -- v1 carries the
+    //               pair's roll direction (At for the rear pair, mSteeringDirection front),
+    //               v2 = dt; both DEAD in the callee
+    //   0x8261E838  JUST-LANDED SPIN-UP x4 (order 2,3,0,1): wheels with mbIsOnGround set and
+    //               mbWasOnGroundLastUpdate clear get mIntegrationVariables.y = 0 [vrlimi 4],
+    //               .x = dot3(mBodyPointVelocity, rollDir) / mSlipVariables.w (radius; vrefp +
+    //               two Newton) [vrlimi 8], mbBrokenAdhesiveLimit = false -- the SetWheelVelocities
+    //               per-wheel idiom, re-seeded from the touchdown velocity
+    //   0x8261EA58  TORQUE INTEGRATE x4 (order 1,0,3,2): mIntegrationVariables.x +=
+    //               .y * dt * mSuspensionAndInertiaVariables.w (invInertia); .y = 0
+    //   0x8261EB68  v124 = UpdateBrakesAndGetBrakingFactor(controls, dt)
+    //   0x8261EB6C  THE MAGIC BRAKE FORCE (only while mu8DriftState == 0 && !mbHasAir):
+    //               t = min(|mfSteering|, 1.0); blend = lerp(MagicBrakeFactorStraightLine [.z
+    //               lane], MagicBrakeFactorTurning [.y lane], t) (asserts IsValid of both,
+    //               :1928/:1929); force.z = -brakeFactor * mfMass * blend * sign(mfSpeedMPH) *
+    //               clamp01(|dot3(mLinearVelocity, At)|); lane-finite assert ("Invalid brake
+    //               force: ...", :1951); AddLocalSpaceForce({0,0,z})
+    //   0x8261EDF8  THE DRIVEN-AXLE FACTOR v126: while driving (gas > 0 || brake < 0.9
+    //               [flt_82005450]) = clamp((mfSpeedMPH - 60 [unk_82FB9E20]) / 10 [unk_82FB83C0,
+    //               vrefp+Newton recip], 0 [unk_82FB91A0], 0.75 [unk_82FB9D00]) * v124; else v124
+    //   0x8261EE94  PowerToRear < 0.1 (FWD car) -> SWAP v124/v126 (the reduced factor follows
+    //               the driven axle)
+    //   0x8261EF0C  a front wheel spinning faster than its rear counterpart (w1 > w3 || w0 > w2)
+    //               -> v126 = 0
+    //   0x8261EF80  front pair maxAngVel = Engine::GetMaxWheelAngularVelocity().x, or 10000.0
+    //               [flt_82005D9C] when PowerToFront is (eps-)zero; rear pair reloads the engine
+    //               vector fresh before EACH wheel
+    //   0x8261F038  Wheel::UpdateVelocity x4 (order 1,0 with v124; 3,2 with v126; v4/v5 =
+    //               unk_82FB9E10 == 100.0 / unk_82FB9380 == 1000.0)
+    //   0x8261F0C4  LimitDifferential(REAR pair)
+    //   0x8261F0D4  count wheels with (mbIsOnGround && mbHasTraction) -> r27
+    //   0x8261F14C  CalculateNewVelocity(dt)
+    //   0x8261F158  [+0x14 vcall == IsPlayerVehicleActuallyInShowtime -> skip friction]
+    //   0x8261F180  GetDownForce(); fwd = dot3(mLinearVelocity, At)
+    //   0x8261F1C4  IsCounterSteeringAtLowSpeed(splat(fwd), mfSteering, mfGas):
+    //                 YES -> boosted = (|min(yawRate, 3.0 [flt_82004270])| *
+    //                        LowSpeedTyreFrictionTractionControl [+0x90 .z] + 1.0) * downforce;
+    //                        rear grip = (fwd >= -5.0 [flt_82094774]) ? boosted : downforce;
+    //                        front grip = boosted
+    //                 NO  -> both = downforce
+    //   0x8261F2F4  HandleWheelPairFriction(2,3, At, rearGrip, dt, grip(2), grip(3), r27>2, 0);
+    //               CalculateNewVelocity(dt);
+    //               HandleWheelPairFriction(0,1, mSteeringDirection, frontGrip, dt, grip(0),
+    //               grip(1), r27>2, 0)  [GetSurfaceGrip call order per pair: B then A]
+    //   0x8261F410  CalculateNewVelocity(dt)
+    //   0x8261F414  [mbCrashing && 3500.0 [unk_82FB90C0] > attribs Mass]
+    //               HandleWheelFrictionCrashing(2)(3)(0)(1) with v1 = dt
+    //   0x8261F494  [!mbFrozen || controls->mbIsOnStartLine] ROTATION ADVANCE x4 (order 1,0,3,2):
+    //               mIntegrationVariables.z = wrap(.z + .x * dt) into [-pi, pi) via
+    //               unk_82FB9260 == 1/(2pi), unk_82FB92A0 == 2pi, unk_82FB92C0 == pi
+    void VehiclePhysics::UpdateWheels(const BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep)
+    {
+        static const f32 KF_PEDAL_DEADZONE      = 0.1f;      // flt_82004014
+        static const f32 KF_BRAKE_DRIVING_GATE  = 0.9f;      // flt_82005450
+        static const f32 KF_FACTOR_MPH_OFFSET   = 60.0f;     // unk_82FB9E20 <- flt_82092BC4
+        static const f32 KF_FACTOR_MPH_DIVISOR  = 10.0f;     // unk_82FB83C0 <- flt_82004A20
+        static const f32 KF_FACTOR_LO           = 0.0f;      // unk_82FB91A0 <- flt_82001CC0
+        static const f32 KF_FACTOR_HI           = 0.75f;     // unk_82FB9D00 <- flt_82004018
+        static const f32 KF_UNDRIVEN_MAX_SPIN   = 10000.0f;  // flt_82005D9C
+        static const f32 KF_BRAKE_CAPACITY_SCALE= 100.0f;    // unk_82FB9E10 <- flt_820049E0
+        static const f32 KF_BRAKE_DECEL_SCALE   = 1000.0f;   // unk_82FB9380 <- flt_82009E10
+        static const f32 KF_CRASH_SCRUB_MASS    = 3500.0f;   // unk_82FB90C0 <- flt_8205878C
+        static const f32 KF_YAW_RATE_CAP        = 3.0f;      // flt_82004270
+        static const f32 KF_REVERSE_SPEED_GATE  = -5.0f;     // flt_82094774
+        static const f32 KF_TWO_PI              = 6.2831854820251465f;    // unk_82FB92A0 <- flt_82001C94
+        static const f32 KF_PI                  = 3.1415927410125732f;    // unk_82FB92C0 <- flt_8208F5FC
+        static const f32 KF_EPSILON             = 1.1920928955078125e-07f;   // stru_8208F620[0]
+
+        UpdateBurnout(lpControls);
+        UpdateWheelInertia();
+
+        // ---- 0x8261E524: mSteeringDirection = R(Up, steeringAngle) * At ----------------------
+        // The same inlined XMVectorSinCos + Rodrigues block SetWheelVelocities carries; the store
+        // target here is the member (+0x10E0). std::sin/std::cos are the exact forms of the
+        // console's shared minimax polynomial (tighter, never looser).
+        {
+            const Vector3& lvUp = mTransform.Up();
+            const Vector3& lvAt = mTransform.At();
+
+            const f32 lfSteerAngle =
+                mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x;
+            const f32 lfSin = std::sin(lfSteerAngle);
+            const f32 lfCos = std::cos(lfSteerAngle);
+            const f32 lfOneMinusCos = 1.0f - lfCos;
+
+            const Vector3 lvCol0{ lfCos + lfOneMinusCos * lvUp.x * lvUp.x,
+                                  lfOneMinusCos * lvUp.x * lvUp.y + lfSin * lvUp.z,
+                                  lfOneMinusCos * lvUp.x * lvUp.z - lfSin * lvUp.y, 0.0f };
+            const Vector3 lvCol1{ lfOneMinusCos * lvUp.y * lvUp.x - lfSin * lvUp.z,
+                                  lfCos + lfOneMinusCos * lvUp.y * lvUp.y,
+                                  lfOneMinusCos * lvUp.y * lvUp.z + lfSin * lvUp.x, 0.0f };
+            const Vector3 lvCol2{ lfOneMinusCos * lvUp.z * lvUp.x + lfSin * lvUp.y,
+                                  lfOneMinusCos * lvUp.z * lvUp.y - lfSin * lvUp.x,
+                                  lfCos + lfOneMinusCos * lvUp.z * lvUp.z, 0.0f };
+
+            mSteeringDirection = Vector3{
+                lvCol0.x * lvAt.x + lvCol1.x * lvAt.y + lvCol2.x * lvAt.z,
+                lvCol0.y * lvAt.x + lvCol1.y * lvAt.y + lvCol2.y * lvAt.z,
+                lvCol0.z * lvAt.x + lvCol1.z * lvAt.y + lvCol2.z * lvAt.z, 0.0f };
+        }
+
+        const Vector3& lvAt = mTransform.At();
+
+        // r22 / r23: reverse and gas-released, computed once beside the sincos block.
+        const bool lbInReverse   = (0.0f > mfSpeedMPH.x) || (mEngine.GetCurrentGear() == 0);
+        const bool lbGasReleased = lpControls->mfGas < KF_PEDAL_DEADZONE;
+
+        // ---- 0x8261E7E8: body velocity at each wheel contact (order 2,3,0,1) -----------------
+        CalculateBodyVelocityAtWheelContact(eRearLeftWheel,   lvAt,               lvfTimeStep);
+        CalculateBodyVelocityAtWheelContact(eRearRightWheel,  lvAt,               lvfTimeStep);
+        CalculateBodyVelocityAtWheelContact(eFrontLeftWheel,  mSteeringDirection, lvfTimeStep);
+        CalculateBodyVelocityAtWheelContact(eFrontRightWheel, mSteeringDirection, lvfTimeStep);
+
+        // ---- 0x8261E838: just-landed spin-up (order 2,3,0,1) ---------------------------------
+        static const EVehicleDrivenWheel kaeLandOrder[eNumDrivenWheels] = {
+            eRearLeftWheel, eRearRightWheel, eFrontLeftWheel, eFrontRightWheel };
+        for (s32 li = 0; li < eNumDrivenWheels; ++li)
+        {
+            Wheel& lrWheel = maWheels[kaeLandOrder[li]];
+            if (!lrWheel.GetRoadContact().mbIsOnGround ||
+                lrWheel.GetRoadContact().mbWasOnGroundLastUpdate)
+                continue;
+
+            const Vector3& lvRollDir =
+                (kaeLandOrder[li] == eFrontLeftWheel || kaeLandOrder[li] == eFrontRightWheel)
+                    ? mSteeringDirection : lvAt;
+
+            lrWheel.mIntegrationVariables.y = 0.0f;                        // vrlimi 4 (y)
+            lrWheel.mIntegrationVariables.x =                              // vrlimi 8 (x)
+                vpu::Dot(lrWheel.mBodyPointVelocity, lvRollDir) / lrWheel.mSlipVariables.w;
+            lrWheel.mbBrokenAdhesiveLimit = false;                         // stb 0 -> +0xD5
+        }
+
+        // ---- 0x8261EA58: integrate the accumulated torque (order 1,0,3,2) --------------------
+        static const EVehicleDrivenWheel kaeIntegrateOrder[eNumDrivenWheels] = {
+            eFrontRightWheel, eFrontLeftWheel, eRearRightWheel, eRearLeftWheel };
+        for (s32 li = 0; li < eNumDrivenWheels; ++li)
+        {
+            Wheel& lrWheel = maWheels[kaeIntegrateOrder[li]];
+            lrWheel.mIntegrationVariables.x += lrWheel.mIntegrationVariables.y * lvfTimeStep.x
+                                             * lrWheel.mSuspensionAndInertiaVariables.w;
+            lrWheel.mIntegrationVariables.y = 0.0f;
+        }
+
+        // ---- 0x8261EB68: the braking factor + the magic brake force --------------------------
+        VecFloat lvfBrakeFactor = UpdateBrakesAndGetBrakingFactor(lpControls, lvfTimeStep);
+
+        if (mu8DriftState == 0 && !mbHasAir)
+        {
+            // t = min(|steering|, 1.0) (the fsel vs f29 == 1.0).
+            f32 lfT = std::fabs(lpControls->mfSteering);
+            if (lfT > 1.0f) lfT = 1.0f;
+
+            const Vector4& lvMagic = mpAttribs->mBaseAttribs
+                .mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels;
+            CGS_ASSERT(lvMagic.z == lvMagic.z,
+                       "IsValid( mpAttribs->mBaseAttribs.GetMagicBrakeFactorStraightLine() )");   // :1928
+            CGS_ASSERT(lvMagic.y == lvMagic.y,
+                       "IsValid( mpAttribs->mBaseAttribs.GetMagicBrakeFactorTurning() )");        // :1929
+            const f32 lfBlend = lvMagic.z + lfT * (lvMagic.y - lvMagic.z);   // lerp(Straight, Turning, t)
+
+            // sign(mfSpeedMPH) as the {+1, 0, -1} vsel chain.
+            const f32 lfSgn = (mfSpeedMPH.x > 0.0f) ? 1.0f
+                             : ((mfSpeedMPH.x >= 0.0f) ? 0.0f : -1.0f);
+
+            // clamp01(|forward speed|).
+            f32 lfFwdScale = std::fabs(vpu::Dot(mLinearVelocity, lvAt));
+            if (lfFwdScale > 1.0f) lfFwdScale = 1.0f;
+
+            const f32 lfForceZ = -lvfBrakeFactor.x * mfMass.x * lfBlend * lfSgn * lfFwdScale;
+
+            CGS_ASSERT(lfForceZ == lfForceZ,
+                       "Invalid brake force: lfBrakeFactor, mfMass, lvfSteeringBrakeFactor, "
+                       "lvfSgnSpeedMph");   // the gpcMessageBuffer stream, :1951 -- lowered
+            AddLocalSpaceForce(Vector3{ 0.0f, 0.0f, lfForceZ, 0.0f });   // vrlimi 2 (z) of zero
+        }
+
+        // ---- 0x8261EDF8: the driven-axle brake factor ----------------------------------------
+        f32 lfFrontFactor = lvfBrakeFactor.x;   // v124
+        f32 lfRearFactor;                       // v126
+        if (lpControls->mfGas > 0.0f || lpControls->mfBrake < KF_BRAKE_DRIVING_GATE)
+        {
+            f32 lfRamp = (mfSpeedMPH.x - KF_FACTOR_MPH_OFFSET) / KF_FACTOR_MPH_DIVISOR;
+            if (lfRamp < KF_FACTOR_LO) lfRamp = KF_FACTOR_LO;
+            if (lfRamp > KF_FACTOR_HI) lfRamp = KF_FACTOR_HI;
+            lfRearFactor = lfRamp * lvfBrakeFactor.x;
+        }
+        else
+        {
+            lfRearFactor = lvfBrakeFactor.x;
+        }
+
+        // FWD car (PowerToRear < 0.1): the reduced factor follows the driven axle.
+        if (KF_PEDAL_DEADZONE > mpAttribs->mBaseAttribs
+                .mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z)
+        {
+            const f32 lfSwap = lfRearFactor;
+            lfRearFactor  = lfFrontFactor;
+            lfFrontFactor = lfSwap;
+        }
+
+        // A front wheel spinning faster than its rear counterpart zeroes the rear factor.
+        if (maWheels[eFrontRightWheel].mIntegrationVariables.x >
+                maWheels[eRearRightWheel].mIntegrationVariables.x ||
+            maWheels[eFrontLeftWheel].mIntegrationVariables.x >
+                maWheels[eRearLeftWheel].mIntegrationVariables.x)
+        {
+            lfRearFactor = 0.0f;
+        }
+
+        // ---- 0x8261EF80: per-axle rev limits + the four Wheel::UpdateVelocity calls ----------
+        f32 lfFrontMax = mEngine.GetMaxWheelAngularVelocity().x;
+        if (std::fabs(mpAttribs->mBaseAttribs
+                .mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.y) <= KF_EPSILON)
+            lfFrontMax = KF_UNDRIVEN_MAX_SPIN;   // undriven front: effectively unlimited
+
+        const VecFloat lvfFrontMax{ lfFrontMax, lfFrontMax, lfFrontMax, lfFrontMax };
+        const VecFloat lvfFrontFactor{ lfFrontFactor, lfFrontFactor, lfFrontFactor, lfFrontFactor };
+        const VecFloat lvfRearFactor{ lfRearFactor, lfRearFactor, lfRearFactor, lfRearFactor };
+        const VecFloat lvfCapScale{ KF_BRAKE_CAPACITY_SCALE, KF_BRAKE_CAPACITY_SCALE,
+                                    KF_BRAKE_CAPACITY_SCALE, KF_BRAKE_CAPACITY_SCALE };
+        const VecFloat lvfDecelScale{ KF_BRAKE_DECEL_SCALE, KF_BRAKE_DECEL_SCALE,
+                                      KF_BRAKE_DECEL_SCALE, KF_BRAKE_DECEL_SCALE };
+
+        maWheels[eFrontRightWheel].UpdateVelocity(lvfTimeStep, lvfFrontMax, lvfFrontFactor,
+                                                  lvfCapScale, lvfDecelScale,
+                                                  lbGasReleased, lbInReverse);
+        maWheels[eFrontLeftWheel ].UpdateVelocity(lvfTimeStep, lvfFrontMax, lvfFrontFactor,
+                                                  lvfCapScale, lvfDecelScale,
+                                                  lbGasReleased, lbInReverse);
+        // the rear pair reloads the engine vector FRESH before each wheel (two calls, as shipped).
+        maWheels[eRearRightWheel].UpdateVelocity(lvfTimeStep, mEngine.GetMaxWheelAngularVelocity(),
+                                                 lvfRearFactor, lvfCapScale, lvfDecelScale,
+                                                 lbGasReleased, lbInReverse);
+        maWheels[eRearLeftWheel ].UpdateVelocity(lvfTimeStep, mEngine.GetMaxWheelAngularVelocity(),
+                                                 lvfRearFactor, lvfCapScale, lvfDecelScale,
+                                                 lbGasReleased, lbInReverse);
+
+        LimitDifferential(eRearLeftWheel, eRearRightWheel);
+
+        // ---- 0x8261F0D4: wheels with real traction -------------------------------------------
+        s32 liTractionCount = 0;
+        for (s32 li = 0; li < eNumDrivenWheels; ++li)
+        {
+            if (maWheels[li].GetRoadContact().mbIsOnGround && maWheels[li].mbHasTraction)
+                ++liTractionCount;
+        }
+
+        CalculateNewVelocity(lvfTimeStep);
+
+        // ---- 0x8261F158: the tyre-friction pass (skipped entirely in showtime) ---------------
+        if (!IsPlayerVehicleActuallyInShowtime())   // the +0x14 vcall
+        {
+            const f32 lfDownForce = GetDownForce().x;
+            const f32 lfFwdSpeed  = vpu::Dot(mLinearVelocity, lvAt);
+            const bool lbMostWheels = liTractionCount > 2;
+
+            f32 lfRearGrip;
+            f32 lfFrontGrip;
+            if (IsCounterSteeringAtLowSpeed(
+                    VecFloat{ lfFwdSpeed, lfFwdSpeed, lfFwdSpeed, lfFwdSpeed },
+                    lpControls->mfSteering, lpControls->mfGas))
+            {
+                // boosted = (|min(yawRate, 3.0)| * LowSpeedTyreFrictionTractionControl + 1.0)
+                //           * downforce   (fsel min, fabs, fmadds vs f29 == 1.0, fmuls)
+                f32 lfYaw = mAngularVelocity.y;
+                if (lfYaw > KF_YAW_RATE_CAP) lfYaw = KF_YAW_RATE_CAP;
+                const f32 lfBoosted =
+                    (std::fabs(lfYaw) * mpAttribs->mBaseAttribs
+                         .mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.z
+                     + 1.0f) * lfDownForce;
+
+                lfRearGrip  = (lfFwdSpeed >= KF_REVERSE_SPEED_GATE) ? lfBoosted : lfDownForce;
+                lfFrontGrip = lfBoosted;
+            }
+            else
+            {
+                lfRearGrip  = lfDownForce;
+                lfFrontGrip = lfDownForce;
+            }
+
+            // rear axle (GetSurfaceGrip call order per pair: B then A, as shipped).
+            { const Vector3 lvGripRR = GetSurfaceGrip(eRearRightWheel);
+              const Vector3 lvGripRL = GetSurfaceGrip(eRearLeftWheel);
+              HandleWheelPairFriction(eRearLeftWheel, eRearRightWheel, lvAt,
+                                      VecFloat{ lfRearGrip, lfRearGrip, lfRearGrip, lfRearGrip },
+                                      lvfTimeStep,
+                                      VecFloat{ lvGripRL.x, lvGripRL.y, lvGripRL.z, lvGripRL.w },
+                                      VecFloat{ lvGripRR.x, lvGripRR.y, lvGripRR.z, lvGripRR.w },
+                                      lbMostWheels, false); }
+
+            CalculateNewVelocity(lvfTimeStep);
+
+            // front axle.
+            { const Vector3 lvGripFR = GetSurfaceGrip(eFrontRightWheel);
+              const Vector3 lvGripFL = GetSurfaceGrip(eFrontLeftWheel);
+              HandleWheelPairFriction(eFrontLeftWheel, eFrontRightWheel, mSteeringDirection,
+                                      VecFloat{ lfFrontGrip, lfFrontGrip, lfFrontGrip, lfFrontGrip },
+                                      lvfTimeStep,
+                                      VecFloat{ lvGripFL.x, lvGripFL.y, lvGripFL.z, lvGripFL.w },
+                                      VecFloat{ lvGripFR.x, lvGripFR.y, lvGripFR.z, lvGripFR.w },
+                                      lbMostWheels, false); }
+        }
+
+        CalculateNewVelocity(lvfTimeStep);
+
+        // ---- 0x8261F414: the crash scrub (light cars only) -----------------------------------
+        if (mbCrashing &&
+            KF_CRASH_SCRUB_MASS >
+                mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x)
+        {
+            HandleWheelFrictionCrashing(eRearLeftWheel,   lvfTimeStep);
+            HandleWheelFrictionCrashing(eRearRightWheel,  lvfTimeStep);
+            HandleWheelFrictionCrashing(eFrontLeftWheel,  lvfTimeStep);
+            HandleWheelFrictionCrashing(eFrontRightWheel, lvfTimeStep);
+        }
+
+        // ---- 0x8261F494: advance the wheel rotation angles (order 1,0,3,2) -------------------
+        // Runs unless the body is frozen -- except on the start line, where the wheels animate
+        // through the freeze (controls->mbIsOnStartLine).
+        if (!IsFrozen() || lpControls->mbIsOnStartLine)
+        {
+            for (s32 li = 0; li < eNumDrivenWheels; ++li)
+            {
+                Wheel& lrWheel = maWheels[kaeIntegrateOrder[li]];   // 1,0,3,2
+
+                // angle' = z + x*dt, wrapped into [-pi, pi): subtract floor(angle/(2pi))*2pi,
+                // then the two compare/select steps against +pi / -pi.
+                f32 lfAngle = lrWheel.mIntegrationVariables.z
+                            + lrWheel.mIntegrationVariables.x * lvfTimeStep.x;
+                lfAngle -= std::floor(lfAngle * (1.0f / KF_TWO_PI)) * KF_TWO_PI;   // vrfim
+                if (lfAngle >= KF_PI)  lfAngle -= KF_TWO_PI;
+                if (lfAngle < -KF_PI)  lfAngle += KF_TWO_PI;
+                lrWheel.mIntegrationVariables.z = lfAngle;   // vrlimi 2 (z)
+            }
+        }
+    }
+
 // [clean] UpdateDriving  @0x82638148
     // @0x82638148  BrnPhysics::Vehicle::VehiclePhysics::UpdateDriving  (433 insns)
     // ⭐⭐ THE ORDERER -- the phase chain the whole campaign has been aimed at. Transcribed
@@ -3933,7 +4556,7 @@ namespace Vehicle
     //               call is dispatch-identical)
     //   0x826383B0  mbAllWheelsHaveTraction (+0x135B) = AND of the four wheels' mbIsOnGround
     //   0x826383FC  CheckState "After update suspension"
-    //   0x8263840C  UpdateWheels(&copy, dt)                  [TRAP until its wave]
+    //   0x8263840C  UpdateWheels(&copy, dt)                  [BODIED 2026-08-07]
     //   0x8263841C  CheckState "After update Wheels"
     //   0x8263842C  UpdateInAirBehaviour(&copy, dt)          [TRAP until its wave]
     //   0x82638438  UpdateInWaterBehaviour(dt)
@@ -3957,7 +4580,7 @@ namespace Vehicle
     //   0x82638604  [copy.mbReset] SetAttributes() + HackedResetAndFlyAround(&copy, dt) [TRAPS]
     //               ELSE: mbContactingWall (+0x1362) = (0.4 [flt_8200473C] >
     //                     SecondsSinceLastWallContact (+0x1070.w)); then .w += dt
-    //   0x82638690  SimpleVehiclePhysics::CalculateNewWheelPlane()  [TRAP until its wave]
+    //   0x82638690  SimpleVehiclePhysics::CalculateNewWheelPlane()  [BODIED 2026-08-07]
     //   0x826386A4  TimeCrashing (+0xEF0.y) = 0
     //   0x826386A8  force-feedback springs:
     //                 mWheelFFSpring.mfSpringCoefficient (+0x13D0) =
