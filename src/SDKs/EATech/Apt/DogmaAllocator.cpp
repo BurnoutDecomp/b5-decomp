@@ -419,7 +419,7 @@ bool DOGMA_PoolManager::Deallocate(void* pNowFree, size_t nAllocatedSize)
         size_t nFreeSize;                                   // v7
         if (mbTrackOutsideAllocations)
         {
-            nFreeSize = nAllocatedSize + 8;
+            nFreeSize = nAllocatedSize + OutsideAllocationT::GetStructOverHead();   // console a3+8 == payload + 2*sizeof(ptr); x64 node overhead is 16 -- must mirror Allocate's widened node
 
             // Recover the list node sitting in front of the returned pointer.
             OutsideAllocationT* pNode =

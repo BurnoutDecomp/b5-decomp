@@ -397,8 +397,8 @@ AptCXForm* AptRenderItem::GetColorMatrixWritable()
 // ---- depth / clip depth ---------------------------------------------------
 int16_t AptRenderItem::GetDepth() const     { return mDepth; }
 int16_t AptRenderItem::GetClipDepth() const { return mClipDepth; }
-AptRenderItem* AptRenderItem::SetDepth(int nDepth)         { mDepth = static_cast<int16_t>(nDepth); return this; }
-AptRenderItem* AptRenderItem::SetClipDepth(int nClipDepth) { mClipDepth = static_cast<int16_t>(nClipDepth); return this; }
+void AptRenderItem::SetDepth(int nDepth)         { mDepth = static_cast<int16_t>(nDepth); }      // x64 QEAAXH@Z: void
+void AptRenderItem::SetClipDepth(int nClipDepth) { mClipDepth = static_cast<int16_t>(nClipDepth); }   // x64 QEAAXH@Z: void
 
 // ---- flags ----------------------------------------------------------------
 bool AptRenderItem::GetIsVisible() const { return (mFlags & 0x1u) != 0; }
@@ -547,9 +547,9 @@ AptRenderItem* AptRenderItem::PropagateTreeIsVisible(int nVisibleMode)
             pChild = LatestRevision(pChild);        // chase [c:0x28]
             uint32_t v6 = pChild->mFlags;           // [c:0x18]
 
-            if (((v6 >> 30) & 1u) == 0)             // not an isMask node
+            if ((v6 & 0x2u) == 0)                   // not an isMask node (x64 bit 1; sub_14083DD80 `v8 & 2`)
             {
-                uint32_t v7 = v6 >> 31;             // isVisible bit
+                uint32_t v7 = v6 & 0x1u;            // isVisible bit (x64 bit 0; sub_14083DD80 `v8 & 1`)
                 if (nVisibleMode == 1)
                 {
                     if (v7 == 1)
@@ -745,21 +745,16 @@ AptRenderItem* AptRenderItem::Manager_SetFirstChild(AptRenderItem* pChild)
     {
         pChild->AddReference();                          // atomic ++mRefCount [c:0x24]
         uint32_t v11 = pChild->mFlags;                   // [c:0x18]
-        if ((int)v11 < 0)                                // child isVisible (bit31)
+        if ((v11 & 0x1u) != 0)                           // child isVisible (x64 bit 0: sub_14083C4A0 `flags & 1`)
         {
             uint32_t v15 = v11 & ~0x80u;            // clear bit24
             pChild->mFlags = v15;
             uint32_t v16 = mFlags;                       // parent [c:0x18]
-            bool bParentVisible;
-            if ((int)v16 < 0)                            // parent isVisible set
-            {
-                bParentVisible = ((v16 & 0x20u) == 0x20u) ||
-                                 ((v16 & 0x40u) == 0x40u);
-            }
-            else
-            {
-                bParentVisible = false;                  // parent invisible -> child stays
-            }
+            // x64 sub_14083C4A0 / X360 0x82ADAF58: the set-0x20 + Propagate(0) arm runs when
+            // the parent is INVISIBLE (bit 0 clear) OR its tree-state bits (0x60) are set.
+            bool bParentVisible = ((v16 & 0x1u) == 0) ||
+                                  ((v16 & 0x20u) == 0x20u) ||
+                                  ((v16 & 0x40u) == 0x40u);
 
             if (bParentVisible)
             {
@@ -820,7 +815,7 @@ AptRenderItem* AptRenderItem::Manager_SetNextSibling(AptRenderItem* pSibling)
     {
         pSibling->AddReference();                        // atomic ++mRefCount [c:0x24]
         uint32_t v11 = pSibling->mFlags;                 // [c:0x18]
-        if ((int)v11 < 0)                                // sibling isVisible (bit31)
+        if ((v11 & 0x1u) != 0)                           // sibling isVisible (x64 bit 0: sub_14083C590 `flags & 1`)
         {
             uint32_t v16 = v11 & ~0x80u;            // clear bit24
             pSibling->mFlags = v16;
@@ -828,17 +823,7 @@ AptRenderItem* AptRenderItem::Manager_SetNextSibling(AptRenderItem* pSibling)
             bool bSelfVisible = ((v17 & 0x20u) == 0x20u) ||
                                 ((v17 & 0x40u) == 0x40u);
             uint32_t v20 = v16 & 0x20u;
-            if (bSelfVisible)
-            {
-                bool bSibTreeVis = (v20 == 0x20u) ||
-                                   ((v16 & 0x40u) == 0x40u);
-                if (bSibTreeVis)
-                {
-                    pSibling->mFlags = v16 & ~0x60u; // clear bits 25+26
-                    pSibling->PropagateTreeIsVisible(1);
-                }
-            }
-            else
+            if (bSelfVisible)   // self 0x60 bits set (x64 sub_14083C590: `(flags & 0x60) != 0` arm)
             {
                 bool bSibTreeVis = (v20 == 0x20u) ||
                                    ((v16 & 0x40u) == 0x40u);
@@ -846,6 +831,16 @@ AptRenderItem* AptRenderItem::Manager_SetNextSibling(AptRenderItem* pSibling)
                 {
                     pSibling->mFlags = v16 | 0x20u; // set bit26
                     pSibling->PropagateTreeIsVisible(0);
+                }
+            }
+            else                // self 0x60 bits clear
+            {
+                bool bSibTreeVis = (v20 == 0x20u) ||
+                                   ((v16 & 0x40u) == 0x40u);
+                if (bSibTreeVis)
+                {
+                    pSibling->mFlags = v16 & ~0x60u; // clear bits 25+26
+                    pSibling->PropagateTreeIsVisible(1);
                 }
             }
         }
@@ -881,7 +876,7 @@ AptRenderItem* AptRenderItem::SetIsVisible(bool bVisible)
 {
     AptRenderItem* result = this;
     uint32_t v4 = mFlags;                                // [c:0x18]
-    if ((unsigned)bVisible != (v4 >> 31))                // bit changed
+    if ((unsigned)bVisible != (v4 & 0x1u))               // bit changed (x64 bit 0: sub_140841B00 `a2 != (flags & 1)`)
     {
         bool bSkipPropagate = false;
         int v6 = 0;
@@ -895,7 +890,7 @@ AptRenderItem* AptRenderItem::SetIsVisible(bool bVisible)
             {
                 uint32_t v5 = v4 & ~0x80u;          // clear bit24
                 mFlags = v5;
-                if (((v5 >> 30) & 1u) != 0)              // isMask -> no propagate
+                if ((v5 & 0x2u) != 0)                    // isMask (x64 bit 1) -> no propagate
                     bSkipPropagate = true;
                 else
                     v6 = 1;
@@ -913,7 +908,7 @@ AptRenderItem* AptRenderItem::SetIsVisible(bool bVisible)
             {
                 uint32_t v8 = (v4 & ~0xE0u) | 0x80u;  // set bit24, clear 25+26
                 mFlags = v8;
-                if (((v8 >> 30) & 1u) != 0)
+                if ((v8 & 0x2u) != 0)                    // isMask (x64 bit 1)
                     bSkipPropagate = true;
                 else
                     v6 = 0;
@@ -950,7 +945,7 @@ AptRenderItem* AptRenderItem::SetHasMask(bool bHasMask, AptRenderItem* pMask)
             uint32_t v15;
             bool bTreeVis = ((v11 & 0x20u) == 0x20u) ||
                             ((v11 & 0x40u) == 0x40u);
-            if ((int)v11 >= 0 || bTreeVis)               // self invisible, or tree-hidden
+            if ((v11 & 0x1u) == 0 || bTreeVis)           // self invisible (x64 bit 0), or tree-hidden
             {
                 v14 = 0;
                 v15 = (pMask->mFlags & ~0xA0u) | 0x20u; // set bit26, clear bit25

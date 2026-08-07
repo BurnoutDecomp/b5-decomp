@@ -223,7 +223,7 @@ AptValue::AptValue(AptVirtualFunctionTable_Indices eType)
     setGCRoot(0);                    // X360 setGCRoot(r4) -- r4 == 0 here (leftover
                                      // from setGCMark's `li r4,0`); a fresh value
                                      // has no GC roots.
-    SetAllowDelayedDeletion(false);  // X360: r4==0 (leftover from setGCMark's li r4,0) -> false
+    SetAllowDelayedDeletion(true);   // X360 0x82AE3048 `li r4,1`; x64 sub_1408279A0 `or [rcx+8],20h`
 
     // X360: the five "no delayed deletion" types skip the deferred-vector path and
     // go straight to ClearReleaseAtEnd.
@@ -234,10 +234,16 @@ AptValue::AptValue(AptVirtualFunctionTable_Indices eType)
         (eType == AptVFT_NativeFunction)   ||   // 0x09
         (eType == AptVFT_Extension);            // 0x1D
 
-    if (!lbSkipDefer && gnAptGCThreadId_Ctor == AptCurrentThreadId())
+    if (lbSkipDefer)
+    {
+        ClearReleaseAtEnd();   // X360 loc_82AE30C8
+    }
+    else if (gnAptGCThreadId_Ctor == AptCurrentThreadId())
     {
         // On the GC thread: queue into the deferred-release vector if it has room
-        // (X360 family-(B) layout: top(+4)=mnCapacity < capacity(+0)=mnTop).
+        // (X360 family-(B) layout: top(+4)=mnCapacity < capacity(+0)=mnTop); a full
+        // (or unwired) vector rolls the queue intent back (X360 0x82AE30A8 bge ->
+        // loc_82AE30C8 ClearReleaseAtEnd).
         SetReleaseAtEnd();
         AptValueVector* lpVec = gpAptDeferredReleaseVector;   // off_8324E51C (see the parked unification FLAG above)
         if (lpVec != 0 && lpVec->mnCapacity < lpVec->mnTop)
@@ -245,11 +251,13 @@ AptValue::AptValue(AptVirtualFunctionTable_Indices eType)
             lpVec->mppItems[lpVec->mnCapacity] = this;
             ++lpVec->mnCapacity;
         }
+        else
+        {
+            ClearReleaseAtEnd();
+        }
     }
-    else
-    {
-        ClearReleaseAtEnd();
-    }
+    // OFF the GC thread (non-skip types): NO store -- X360 0x82AE3088
+    // `bne cr6, loc_82AE30D0` skips ClearReleaseAtEnd entirely; x64 same shape.
 
     // X360 `a1[1] &= ~0x80` -- clear the max-refcount-hit flag set by setRefCount's
     // clamp path (rlwinm r11,r11,0,25,23 keeps every bit except bit 24 == 0x80).

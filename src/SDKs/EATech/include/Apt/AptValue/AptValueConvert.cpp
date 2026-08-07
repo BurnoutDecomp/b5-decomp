@@ -395,9 +395,12 @@ void AptValue::toString(EAStringC* pOut) const
         return;
 
     // --- the embedded-string path (loc_82AF91E8, table type 0x20 == AptVFT_Error):
-    //     the embedded EAStringC sits at +0x20.
+    //     the console reads the EAStringC at +0x20 == AptError::mMessage; on x64 it
+    //     sits at +0x40 (x64 toString sub_14085DC50 case 32 reads [this+64]; the
+    //     AptObject base is 0x40 there). The raw console +0x20 lands on the property
+    //     hash's mp__Proto__ slot on the host.
     case AptVFT_Error:              // 0x20 (32)
-        *pOut = *reinterpret_cast<EAStringC*>(reinterpret_cast<char*>(pThis) + 0x20);
+        *pOut = *reinterpret_cast<EAStringC*>(reinterpret_cast<char*>(pThis) + 0x40);
         return;
 
     // --- MovieClip instance name (loc_82AF91F0, table type 0xC ==

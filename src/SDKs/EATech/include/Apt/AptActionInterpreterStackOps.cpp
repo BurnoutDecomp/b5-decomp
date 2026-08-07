@@ -716,11 +716,11 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
             // slot (AptPrototype::mpSuperConstructor; x64 +0x38,
             // GetSuperConstructor @0x140839C70).
             pMethod = static_cast<AptPrototype*>(pMethodName)->GetSuperConstructor();
-            const int nReg = pInterp->mnCallStackB_Count;          // console a1[12] (+0x30)
+            const int nReg = pInterp->mnCallStackE_Count;          // console a1[12] (+0x30 == stack #5/E count)
             if (nReg)
             {
-                // the register-window top entry (console *(4*reg + a1[14] - 4))
-                pSavedFrame = reinterpret_cast<AptValue*>(pInterp->mpCallStackB[nReg - 1]);  // v13
+                // the stack-#5 top entry (console *(4*reg + a1[14] - 4); a1[14] = +0x38 == mpCallStackE)
+                pSavedFrame = reinterpret_cast<AptValue*>(pInterp->mpCallStackE[nReg - 1]);  // v13
                 // keep it only when it is a defined string-object (tag 19 == AptVFT_Object)
                 if (!(pSavedFrame->getVtblIndex() == AptVFT_Object && pSavedFrame->getIsDefined()))
                     pSavedFrame = nullptr;

@@ -341,36 +341,38 @@ AptCIH* AptCIH::GetRootAnimation()
 }
 
 // ---------------------------------------------------------------------------
-// SetDirtyState @0x82AD76B8 -- set/clear the per-node dirty bit (mFlagsA bit 25).
-// Clearing, or a non-renderable character type (shape 1 / dynamic-text 2 /
-// static-text 10) or the empty AptCIHNone placeholder, leaves it clear. When a
-// renderable node is dirtied with bPropagate, the dirty bit is pushed up the
-// display-list parent chain, stopping at the first already-dirty ancestor.
+// SetDirtyState @0x82AD76B8 -- set/clear the per-node dirty bit (x64 mFlagsA bit 6,
+// mask 0x40 -- x64 GetDirtyState @0x140838870 `shr eax,6`, XB1 ctor 0x140825520
+// propagates `|= 0x40`; the console `oris 0x200` = 0x02000000 was the same field's
+// X360 big-endian position). Clearing, or a non-renderable character type (shape 1 /
+// dynamic-text 2 / static-text 10) or the empty AptCIHNone placeholder, leaves it
+// clear. When a renderable node is dirtied with bPropagate, the dirty bit is pushed
+// up the display-list parent chain, stopping at the first already-dirty ancestor.
 // ---------------------------------------------------------------------------
 void AptCIH::SetDirtyState(bool bDirty, bool bPropagate)
 {
     if (!bDirty)
     {
-        mFlagsA &= ~0x02000000u;
+        mFlagsA &= ~0x40u;
         return;
     }
 
     const uint32_t nType = mpCharacterInst->GetTypeTag();
     if (nType == 1 || nType == 2 || nType == 10 || IsNone())
     {
-        mFlagsA &= ~0x02000000u;
+        mFlagsA &= ~0x40u;
         return;
     }
 
-    mFlagsA |= 0x02000000u;
+    mFlagsA |= 0x40u;
     if (bPropagate)
     {
         for (AptCIH* pAncestor = mpDisplayListParent; pAncestor; )
         {
-            if ((pAncestor->mFlagsA & 0x02000000u) != 0)
+            if ((pAncestor->mFlagsA & 0x40u) != 0)
                 break;
             AptCIH* pNext = pAncestor->mpDisplayListParent;
-            pAncestor->mFlagsA |= 0x02000000u;
+            pAncestor->mFlagsA |= 0x40u;
             pAncestor = pNext;
         }
     }
@@ -502,8 +504,10 @@ int AptCIH::jumpToFrame(int nFrame)
 
 int AptCIH::tick()
 {
-    // Only a dirtied node ticks (mFlagsA bit25).
-    if ((mFlagsA & 0x02000000u) == 0)
+    // Only a dirtied node ticks (the dirty bit, x64 mFlagsA bit 6 -- XB1 tick
+    // sub_14085D620 `(*(a1+24) & 0x40) == 0`; the console 0x02000000 was the same
+    // field's X360 big-endian position).
+    if ((mFlagsA & 0x40u) == 0)
         return 0;
 
     AptCharacterSpriteInstBase* pInst =

@@ -21,6 +21,7 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"   // the sprite/movie-clip subtype (type 5)
 #include "SDKs/EATech/include/Apt/AptCharacterTextInst.h"          // the dynamic-text subtype (type 2)
+#include "SDKs/EATech/include/Apt/AptCharacterMorphInst.h"          // the morph subtype (type 8)
 #include "SDKs/EATech/include/Apt/AptPseudoCIH.h"                 // gpAptPseudoDataPool (off_8324D808, the ctor's pool)
 
 #include <new>   // placement new (factory)
@@ -84,7 +85,9 @@ AptCharacterInst::~AptCharacterInst()
 //                               mnClipActionFlags / mpClipEventHandlers / mDisplayList / etc.)
 //   type 2 (dynamic text): Allocate(32) + base AptCharacterInst
 //   type 4 (button): return null (built elsewhere)
-//   type 1/10/other/null: Allocate(16) + base AptCharacterInst
+//   type 8 (morph): Allocate(20 console / 0x28 x64) + base ctor in the morph-sized block
+//   type 1/10/null: Allocate(16 console / 0x20 x64) + base AptCharacterInst
+//   any other type: return null (BOTH binaries; no base fallback)
 // This MUST allocate the sprite subtype for type 5: the placement path (instantiateCharacter /
 // placeObject / _addToSetCaches / AptCIH::tick) reads/writes the sprite-base members at +0x10..
 // +0x20 (mnGotoFrame / mDisplayList / ...) -- if a type-5 char got only the 16-byte base, those
@@ -124,8 +127,10 @@ AptCharacterInst* AptCharacterInst::CreateCharacterInst(AptCharacter* pCharacter
             return nullptr;
         AptCharacterTextInst* const pTextInst =
             static_cast<AptCharacterTextInst*>(::new (pMem) AptCharacterInst(pCharacter));
-        // Seed the cached layout scalars (the console text-inst ctor's seeds; the render
-        // item's own ctor seeds its scroll to 1 the same way).
+        // Seed the cached layout scalars. HOST ADDITION (deterministic bring-up):
+        // NEITHER binary initialises these -- X360 @0x82AFFF70 case 2 runs the plain
+        // base ctor and x64 0x140825BE0 writes only the vtable, leaving them as pool
+        // garbage until the first layout pass writes them.
         pTextInst->mMaxScroll  = 1;
         pTextInst->mTextWidth  = 0.0f;
         pTextInst->mTextHeight = 0.0f;
@@ -133,11 +138,30 @@ AptCharacterInst* AptCharacterInst::CreateCharacterInst(AptCharacter* pCharacter
         return pTextInst;
     }
 
-    // Every other type (1 / 10 / null / etc.) is the plain base.
-    void* const pMem = gpAptPseudoDataPool->Allocate(sizeof(AptCharacterInst));
-    if (pMem == nullptr)
-        return nullptr;
-    return ::new (pMem) AptCharacterInst(pCharacter);
+    if (nType == 8)
+    {
+        // Morph: base + the one extra morph dword (X360 @0x82AFFF70 case 8 Allocate(20);
+        // x64 factory 0x140835410 `case 8: Allocate(0x28)` + ctor 0x140825900, which runs
+        // only the base-ctor body). The block MUST be morph-sized: a plain-base 0x20
+        // alloc leaves the +0x20 morph member outside the allocation (pool corruption).
+        void* const pMem = gpAptPseudoDataPool->Allocate(sizeof(AptCharacterMorphInst));
+        if (pMem == nullptr)
+            return nullptr;
+        return static_cast<AptCharacterMorphInst*>(::new (pMem) AptCharacterInst(pCharacter));
+    }
+
+    if (nType == 1 || nType == 10 || pCharacter == nullptr)
+    {
+        // Shape / static text / null character: the plain base (console 16; x64 0x20).
+        void* const pMem = gpAptPseudoDataPool->Allocate(sizeof(AptCharacterInst));
+        if (pMem == nullptr)
+            return nullptr;
+        return ::new (pMem) AptCharacterInst(pCharacter);
+    }
+
+    // Any OTHER type: BOTH binaries return null (X360 @0x82AFFF70 switch default;
+    // x64 0x140835410 falls through to `return 0`) -- no base-inst fallback exists.
+    return nullptr;
 }
 
 // ---- render item ----------------------------------------------------------
@@ -225,8 +249,8 @@ void AptCharacterInst::SetIsVisible(bool bVisible)
 // AptRenderTreeManager.cpp (AptRTM_*). Declared extern here (this TU calls them);
 // the earlier no-op stubs were removed to resolve the LNK2005 double-definition.
 // ---------------------------------------------------------------------------
-extern AptCIH* AptCloneManagedItem(AptRenderTreeManager* pMgr, AptCIH* pNode,
-                                int nSourceArg, int nTick);
+extern AptCIH* AptCloneManagedItem(AptRenderTreeManager* pMgr, AptCIH* pSourceNode,
+                                AptCIH* pDestNode, int nTick);
 extern AptCIH* AptManagedItemMoved(AptRenderTreeManager* pMgr, AptCIH* pNode, int nTick);
 
 // The X360 render-tree helpers read the live manager through gpCurrentTargetSim's
@@ -242,9 +266,13 @@ extern AptCIH* AptManagedItemMoved(AptRenderTreeManager* pMgr, AptCIH* pNode, in
 // source argument (r4->r5), and the current update tick. AptCloneManagedItem routes
 // to the real AptRenderTreeManager::Update_CloneItem @0x82AE0B38 (AptRenderTreeManager.cpp).
 // ---------------------------------------------------------------------------
-AptCIH* AptCharacterInst::CloneItem(AptCIH* pNode, int nArg)
+void AptCharacterInst::CloneItem(const AptCIH* pSrc, AptCIH* pDst)
 {
-    return AptCloneManagedItem(AptCurrentRenderTreeManager(), pNode, nArg, gnCurrUpdateTick);
+    // x64 SAX(PEBV,PEAV): void return, (const src, dest) CIH pair -- carried
+    // pointer-width through the whole chain (the old int second arg truncated
+    // the dest pointer on x64).
+    AptCloneManagedItem(AptCurrentRenderTreeManager(), const_cast<AptCIH*>(pSrc),
+                        pDst, gnCurrUpdateTick);
 }
 
 // ---------------------------------------------------------------------------

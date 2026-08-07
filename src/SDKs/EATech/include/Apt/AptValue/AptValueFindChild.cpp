@@ -248,7 +248,7 @@ AptValue* AptResolveSpecialName(int nObjectTypeId, AptValue* pScope,
         // otherwise resolve level 0 directly.
         AptScriptFunctionBase* pCurFn = gAptActionInterpreter.mpCurrentFunction;   // off_8324E79C
         AptValue* pBound = pCurFn
-            ? *reinterpret_cast<AptValue**>(reinterpret_cast<char*>(pCurFn) + 0x24)   // 0x24(r11)
+            ? pCurFn->GetParentAnim()   // console 0x24(r11) == mpParentAnim; x64 +0x48
             : nullptr;
         if (!pBound || !IsCIHLike(pBound))
             return AptGetAnimationAtLevel(0);   // loc_82B01488

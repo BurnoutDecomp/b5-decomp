@@ -32,28 +32,29 @@ namespace
     //   offset 4 -> word = item[1];  offset 0 -> word = item[0];  else 0.
     // The high bit is the "allocated" flag; the low 31 bits are the size.
 
+    inline uintptr_t ItemSizeWord(const uint32_t* pItem)
+    {
+        if (gAptValueGCSizeOffset == sizeof(void*))     // x64: 8 (byte_141479FB6)
+            return *reinterpret_cast<const uintptr_t*>(
+                reinterpret_cast<const uint8_t*>(pItem) + sizeof(void*));
+        if (gAptValueGCSizeOffset == 0)
+            return *reinterpret_cast<const uintptr_t*>(pItem);
+        return 0;
+    }
+
     inline bool ItemIsAllocated(const uint32_t* pItem)
     {
-        uint32_t word;
-        if (gAptValueGCSizeOffset == 4)
-            word = pItem[1];
-        else if (gAptValueGCSizeOffset == 0)
-            word = pItem[0];
-        else
+        if (gAptValueGCSizeOffset != sizeof(void*) && gAptValueGCSizeOffset != 0)
             return false;                 // LOBYTE(v5) = 0
-        return (word >> 31) != 0;
+        // x64 sub_140838950: the allocated flag is BIT 0 of the size word
+        // (== AptValue::mbIsAllocated when the item is a live value).
+        return (ItemSizeWord(pItem) & 1u) != 0;
     }
 
     inline uintptr_t ItemStepSize(const uint32_t* pItem)
     {
-        uint32_t word;
-        if (gAptValueGCSizeOffset == 4)
-            word = pItem[1];
-        else if (gAptValueGCSizeOffset == 0)
-            word = pItem[0];
-        else
-            return 0;
-        return word & 0x7FFFFFFF;
+        // x64: size = word & ~1 (GetSize @0x140839B80 `and rax,...FFFEh`).
+        return ItemSizeWord(pItem) & ~static_cast<uintptr_t>(1);
     }
 
     // Advance an item cursor by ItemStepSize, which is a BYTE count. The X360 does
@@ -222,18 +223,39 @@ AptValue* AptValueGC_PoolManager::GetNextAptValue(AptValue* pCurrent)
 
     if (!pPool)
     {
-        // pCurrent is an outside allocation: the list link sits 8 bytes before
-        // the returned pointer; its prev/next chain head is *(pCur - 2).
-        const uint32_t* pNode = *reinterpret_cast<const uint32_t* const*>(pCur - 2);
+        // pCurrent is an outside allocation: the TWO-POINTER list node sits
+        // 2*sizeof(void*) before the user pointer, and the user pointer is
+        // node + 2*sizeof(void*) (x64 sub_1408394C0: `v4 = *(a2 - 16);
+        // return v4 + 16;`; console: -8/+8).
+        const uint8_t* pNode = *reinterpret_cast<const uint8_t* const*>(
+            reinterpret_cast<const uint8_t*>(pCur) - 2 * sizeof(void*));
         if (pNode)
             return reinterpret_cast<AptValue*>(
-                const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(pNode) + 8));
+                const_cast<uint8_t*>(pNode + 2 * sizeof(void*)));
         return nullptr;
     }
 
-    // Step to the slot following pCurrent within its pool, then scan forward
-    // (across pools) for the next allocated item.
-    const uint32_t* pItem = AdvanceItem(pCur);
+    // Step past pCurrent: an ALLOCATED item's word at the size offset is the live
+    // AptValue bitfield (not a size) -- both binaries step it by the per-type size
+    // table (X360 0x82AE0BE0 byte_82144A18[type]; x64 sub_1408394C0
+    // byte_140C13B48[type]), with type 29 == AptVFT_Extension reading its dynamic
+    // size at item qword +3 (x64 *(a2+24)). Only a FREE item steps by its size word.
+    const uint32_t* pItem;
+    if (ItemIsAllocated(pCur))
+    {
+        const int nType = static_cast<int>(
+            reinterpret_cast<const AptValue*>(pCur)->getVtblIndex());
+        const uintptr_t nStep = (nType == AptVFT_Extension)
+            ? *reinterpret_cast<const uintptr_t*>(
+                  reinterpret_cast<const uint8_t*>(pCur) + 3 * sizeof(void*))
+            : byte_82144A18[nType];
+        pItem = reinterpret_cast<const uint32_t*>(
+            reinterpret_cast<const uint8_t*>(pCur) + nStep);
+    }
+    else
+    {
+        pItem = AdvanceItem(pCur);
+    }
 
     while (pPool)
     {
@@ -254,8 +276,8 @@ AptValue* AptValueGC_PoolManager::GetNextAptValue(AptValue* pCurrent)
 
     const void* pFirstOutside = GetFirstOutsideAllocationRaw();
     if (pFirstOutside)
-        return reinterpret_cast<AptValue*>(
-            const_cast<uint8_t*>(static_cast<const uint8_t*>(pFirstOutside) + 8));
+        return reinterpret_cast<AptValue*>(const_cast<uint8_t*>(
+            static_cast<const uint8_t*>(pFirstOutside) + 2 * sizeof(void*)));   // x64: node + 16
     return nullptr;
 }
 

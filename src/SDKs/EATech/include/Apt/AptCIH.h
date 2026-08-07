@@ -318,8 +318,8 @@ struct AptCIH : public AptValueGC
     AptCIH* GetMask() const;                                    // @0x82AE7B48
 
     // HasClipEvent @0x82B027C0 -- does this node's sprite-base clip-event flag set
-    // (mnClipActionFlags high bits) carry any handler in nEventMask? Body in
-    // AptCIHBehaviour.cpp.
+    // (x64: the LOW 24 bits of mnClipActionFlags; the high-24 form was the X360
+    // layout) carry any handler in nEventMask? Body in AptCIHBehaviour.cpp.
     bool HasClipEvent(int nEventMask);                          // @0x82B027C0
     // HasEvent @0x82B02838 -- HasClipEvent(nEventMask) OR HasEventMember(nEventMask):
     // the node responds to nEventMask via either a packed clip-event flag or an AS

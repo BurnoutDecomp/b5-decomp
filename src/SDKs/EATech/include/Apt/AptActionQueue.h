@@ -41,7 +41,9 @@
 //     +0x0C mpCurItem   "current item" cursor (SetCurItem)     (a1[3])
 //     +0x10 mnCapacity  slot capacity (== a2 of the ctor)      (a1[4])
 //
-// The ring is allocated with capacity+1 slots (front == back means empty), from
+// The ring is allocated with exactly `capacity` slots (X360 ctor @0x82AE6780:
+// Allocate(20 * capacity + 4)); front == back means empty and the full-check
+// sacrifices one slot, so the usable depth is capacity-1. Allocated from
 // the shared Apt fixed-size DOGMA pool (gpAptPseudoDataPool == X360 off_8324D808,
 // the same pool the other Apt display-list nodes use); the allocation stores its
 // own slot-count in the dword preceding mpBegin and is freed by the pool.

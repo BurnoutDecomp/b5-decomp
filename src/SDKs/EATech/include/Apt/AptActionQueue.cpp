@@ -62,7 +62,7 @@ AptActionQueueC::AptActionQueueC(u32 nCapacity)
 
     // x64 native stride (the committed port rule; same fix as SetupStaticData's tables): the console
     // allocates 20-byte slots (KU_X360_SLOT_STRIDE); the x64 AptAnimationPoolData is
-    // pointer-widened (sizeof == 40), and every walker (enqueue/drain/WrapForward)
+    // pointer-widened (sizeof == 32/0x20 -- the x64 deque accessors' `shl reg,5`), and every walker (enqueue/drain/WrapForward)
     // indexes by element -- allocating the console byte size would let the ring roam
     // past its block once the cursors pass slot (20*cap)/sizeof.
     s32 liByteSize = static_cast<s32>(sizeof(AptAnimationPoolData) * nCapacity);

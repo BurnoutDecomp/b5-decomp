@@ -412,7 +412,7 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
             // ---- shared node render (LABEL_11) --------------------------------------------
             {
                 const u32 luFlags = lpNode->mFlags;   // *(v15+24)
-                if (static_cast<int>(luFlags) >= 0)
+                if ((luFlags & 0x1u) == 0)   // isVisible (x64 bit 0, ?GetIsVisible @0x1408391B0) clear
                 {
                     // isVisible bit (bit31) clear -> node invisible: run the invisible-RI cleanup.
                     AptDecoupleTreeCleanUpInvisibleRI(lpNode, nTick);
@@ -421,7 +421,7 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
                 {
                     // ---- mask (if hasMask bit29 set AND the mask link is non-null) ----
                     AptRenderItem* lpMaskItem = nullptr;
-                    if (((luFlags >> 29) & 1u) != 0 && lpNode->mpMask != nullptr)   // *(v15+28)
+                    if ((luFlags & 0x4u) != 0 && lpNode->mpMask != nullptr)   // hasMask (x64 bit 2) + *(v15+28)
                     {
                         AptRenderItem* lpMaskRev = lpNode->mpMask->Manager_GetRenderRevision(nTick);
                         lpNode->Manager_UpdateMask(lpMaskRev);
@@ -444,7 +444,7 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
                     }
 
                     // ---- the node's own children, unless the skip-children bit (bit1) is set ----
-                    if (((luFlags >> 30) & 1u) == 0)   // *(v15+24) bit30 clear
+                    if ((luFlags & 0x2u) == 0)   // isMask (x64 bit 1, ?GetIsMask @0x140839180) clear
                     {
                         AptRenderItem* lpChildRev = lpNode->mpManagerFirstChild
                             ? lpNode->mpManagerFirstChild->Manager_GetRenderRevision(nTick) : nullptr;

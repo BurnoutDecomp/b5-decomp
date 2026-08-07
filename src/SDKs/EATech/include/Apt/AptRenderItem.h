@@ -136,8 +136,8 @@ struct AptRenderItem
     // (Used by AptCIH::ReplaceZombieChild to carry a swapped node's look over.)
     void CopyRenderDataFrom(const AptRenderItem* pSource);
 
-    int16_t GetDepth() const;       AptRenderItem* SetDepth(int nDepth);          // @0x7DEE14/0x7DEEA0
-    int16_t GetClipDepth() const;   AptRenderItem* SetClipDepth(int nClipDepth);  // @0x7DEDF8/0x7DEEA8
+    int16_t GetDepth() const;       void SetDepth(int nDepth);          // @0x7DEE14/0x7DEEA0 (x64 ?SetDepth@...@@QEAAXH@Z: void)
+    int16_t GetClipDepth() const;   void SetClipDepth(int nClipDepth);  // @0x7DEDF8/0x7DEEA8 (x64 ?SetClipDepth@...@@QEAAXH@Z: void)
 
     // SetIsVisible @0x82AE0708 -- set the is-visible flag (x64 bit 0) + recompute the
     // subtree's mask-driven visibility (PropagateTreeIsVisible) when the bit changes.
@@ -203,7 +203,8 @@ struct AptRenderItem
 
     // PropagateTreeIsVisible @0x82ADA8B8 -- recompute the mask-driven "tree visible"
     // state (x64 mFlags bits 5/7) down this item's first-child + next-sibling subtree.
-    // nVisibleMode: 1 = becoming hidden by a mask, 0 = becoming shown. Recursive.
+    // nVisibleMode: 0 = becoming hidden, 1 = becoming shown (x64 sub_140841B00: SetIsVisible(true)
+    // propagates 1 clearing the 0x60 bits; SetIsVisible(false) propagates 0 setting 0x20). Recursive.
     AptRenderItem* PropagateTreeIsVisible(int nVisibleMode);
 
     // True when this item is already the writable revision for nTick (its
