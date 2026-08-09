@@ -227,6 +227,43 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
     // generic PC template placement-news only (same restoration as LoadWorldModule).
     lpWorldInput->Construct();
 
+    // ⛔⛔ THE WORLD'S FRAME TIMER IS THE NEXT GATE, AND IT HAS BEEN MEASURED -- 2026-08-09.
+    // The console stages it here (X360 DoUpdate_World @0x823E8BD0:
+    //     UpdateInputBuffer::SetTimerStatusInterface(worldIn, gm+10095372)),
+    // and gm+10095372 is BrnGameModule::mTimerStatusInterface, which is REAL and already live
+    // on this build -- UpdateTimers @0x823BCFD0 ticks mGameTimer/mSimTimer once per sim
+    // sub-step and BridgeTimers @0x823BD150 snapshots the pair into it (it is what makes every
+    // director camera behaviour advance). So the call is a ONE-LINER over real data:
+    //     lpWorldInput->LockForWrite();
+    //     lpWorldInput->SetTimerStatusInterface(reinterpret_cast<const
+    //         BrnWorldIO::TimerStatusInterface*>(lpGameModule->GetTimerStatusInterface()));
+    //     lpWorldInput->UnlockForWrite();
+    // (the accessor exists: BrnGameModule::GetTimerStatusInterface, added with this note; both
+    // blocks are the same 48-byte pointer-free X360 member, so the cast is size-exact.)
+    //
+    // ⚠️ IT IS DELIBERATELY NOT MADE YET, AND THIS IS WHY. WorldModule::Update hands this block
+    // to WorldModule::BridgeInputToPhysicsModule @0x827AB830, which copies it into the physics
+    // input buffer; PhysicsModule::Update @0x825B0640 exits early while the sim timer is
+    // stopped. RUN THE LINE ABOVE and the physics module proceeds -- straight into 906 asserts
+    // per session and a boot that never reaches the fly-by (MEASURED, full run, not predicted).
+    // Six distinct gate identities fire, in this order, every one inside PhysicsModule::Update:
+    //   1. "Not locked for writing"  BrnVehicleManagerIO.cpp:60
+    //        VehicleManagerOutputBuffer::GetVehicleOutputRequestInterface
+    //   2. "luMaxIterations > 0"     CgsPhysicsSimulationModuleIO_InputBuffer.cpp:174
+    //        PhysicsSimulationIO::InputBuffer::SetMaxIterations <- BridgeUpdatedVehiclesToSimulation
+    //   3. "muMaxIterations > 0"     CgsPhysicsSimulationModuleIO_InputBuffer.cpp:144
+    //        PhysicsSimulationIO::InputBuffer::GetMaxIterations <- PhysicsSimulationModule::Update
+    //   4. "lpInput->GetMaxIterations() > 0"  CgsPhysicsSimulationModule.cpp:2969
+    //   5. "Not locked for writing"  PhysicsSimulationIO::OutputBuffer::GetUpdateRigidBodyQueue
+    //   6. "Not Constructed"  CgsVariableEventQueue.h:759
+    //        VariableEventQueue<13440,16>::Append <- VehicleOutputRequestInterface::Append
+    //        <- BridgeVehicleManagerToOutput
+    // Two root causes behind all six: (a) the SOLVER ITERATION COUNT is zero -- nothing calls
+    // PhysicsModuleIO::InputBuffer::SetSolverMaxIterations @0x8279F240, so the whole
+    // MaxIterations chain asserts; (b) the VehicleManager / PhysicsSimulation IO buffers repeat
+    // the partial-Construct + missing-write-lock family that this same wave fixed for
+    // PhysicsModuleIO::InputBuffer. Fix those first, THEN uncomment the staging.
+
     // ⭐ THE OUTPUT BUFFER IS THE GAME MODULE'S, not this function's (2026-08-01, camera wave).
     // The console's DoUpdate @0x823F0AF8 creates ONE BrnWorldIO::UpdateOutputBuffer per
     // sub-step and threads it through DoUpdate_World, DoUpdate_Director and every other leg.
