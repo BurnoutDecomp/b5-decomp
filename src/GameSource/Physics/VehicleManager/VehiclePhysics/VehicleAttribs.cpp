@@ -3,6 +3,12 @@
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"             // the handling wrapper (SetupAttribs' source)
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclebaseattribs.h"          // the base-attribs sub-record wrapper
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclesuspensionattribs.h"    // the suspension sub-record wrapper
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclesteeringattribs.h"      // the steering sub-record wrapper (SetupAttribs(handling))
+#include "GameSource/AttribSys/Generated/classes/physicsvehicledriftattribs.h"         // the drift sub-record wrapper (SetupAttribs(handling))
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclecollisionattribs.h"     // the collision sub-record wrapper (SetupAttribs(handling))
+#include "GameSource/AttribSys/Generated/classes/physicsvehicleboostattribs.h"         // the boost sub-record wrapper (SetupAttribs(handling))
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclebodyrollattribs.h"      // the body-roll sub-record wrapper (SetupAttribs(handling))
+#include "GameSource/AttribSys/Generated/classes/physicsvehicleengineattribs.h"        // the engine sub-record wrapper (SetupAttribs(handling))
 
 #include "types.hpp"
 
@@ -602,6 +608,425 @@ void VehicleAttribs::Construct()
     mbIsValid = false;                                                // 0x825F4CC0  stb r28,0x360(r31)
 }
 
+// @0x825F4CD8 (770 instrs)  BrnPhysics::Vehicle::VehicleAttribs::SetupAttribs(handling)
+//
+// THE STREAMED-ATTRIBUTE LOADER (attribs-data wave, 2026-08-09). Streams the whole per-car
+// tuning set out of a loaded AttribSys handling record: for each of the eight sub-record
+// RefSpecs it constructs the generated wrapper from the RefSpec's collection and lane-scatters
+// the record into the packed destination registers (the same lvlx/vspltw/vrlimi128 single-lane
+// insert idiom as EngineAttribs::InitializeFromAttribs; each insert de-SIMDs to one scalar copy).
+//
+// PROVENANCE: the whole body was symbolically emulated instruction-by-instruction from the raw
+// image bytes (per-lane provenance tags on every store to `this`), so every source byte offset
+// below is asm-EXACT, and the destination lane names are this type's own DWARF names. Source
+// field names in the comments are the schema's names at those offsets (schema.vlt); two lanes
+// where the shipped read disagrees with the schema's primary offset are flagged inline.
+// The function is STRAIGHT-LINE except one branch (the CarAngularImpulseScale clamp below).
+//
+// ⚠️ LANES THE CONSOLE DOES NOT STREAM (left at their Construct values -- do NOT "complete"):
+//   * mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.y  (AngularDrag)
+//   * mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.w
+//   * mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.x / .y
+//   * the body-roll spring block (record +0x10..0x1C) and mBoostAttribs.miBoostRule
+//   * miRaceCarID / mAttribsKey
+//
+// The DWARF passes the handling BY VALUE (PS3 6D41E0 `..12SetupAttribsEN6Attrib3Gen22
+// physicsvehiclehandlingE`); spelled const-ref per the SimpleVehicleAttribs precedent -- the
+// caller owns the explicit copy, and the console's tail-destroy of the by-value parameter
+// becomes the caller's copy destroying at its own scope end.
+void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrHandling)
+{
+    using Attrib::Gen::physicsvehiclebaseattribs;
+    using Attrib::Gen::physicsvehiclecollisionattribs;
+    using Attrib::Gen::physicsvehicleboostattribs;
+    using Attrib::Gen::physicsvehiclebodyrollattribs;
+    using Attrib::Gen::physicsvehiclesuspensionattribs;
+    using Attrib::Gen::physicsvehiclesteeringattribs;
+    using Attrib::Gen::physicsvehicledriftattribs;
+    using Attrib::Gen::physicsvehicleengineattribs;
+
+    #define BP_VA_SRC_F(base, byteOff) ((base)[(byteOff) >> 2])
+
+    // ---- the base-attribs record (data+0xA8 RefSpec) ---------------------------------------
+    {
+        physicsvehiclebaseattribs lBase(
+            const_cast<Attrib::Collection*>(
+                const_cast<Attrib::RefSpec&>(lrHandling.PhysicsVehicleBaseAttribs())
+                    .GetCollection()),
+            NULL);
+        const f32* lpData = static_cast<const f32*>(lBase.GetLayoutPointer());
+
+        // 0x825F4D14/0x825F4D64: the brake curve (record +0x30 BrakeScaleToFactor x/y/z).
+        mBaseAttribs.mBrakeScaleToFactorCurve.Construct();
+        mBaseAttribs.mBrakeScaleToFactorCurve.Prepare(BP_VA_SRC_F(lpData, 0x30),
+                                                      BP_VA_SRC_F(lpData, 0x34),
+                                                      BP_VA_SRC_F(lpData, 0x38));
+
+        mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x
+            = BP_VA_SRC_F(lpData, 0x104);                             // DrivingMass
+        // the single fdivs (f31 == 1.0, loaded @0x825F4D98): the reciprocal is LIVE, not baked.
+        mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.y
+            = 1.0f / BP_VA_SRC_F(lpData, 0x48);                       // 1 / TimeForFullBrake
+        mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z
+            = BP_VA_SRC_F(lpData, 0xA8);                              // MaxSpeed
+        mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.w
+            = BP_VA_SRC_F(lpData, 0x11C);                             // DownForce
+
+        // the wheel positions come through SWAPPED relative to the record (same as the
+        // SimpleVehicleAttribs streamer): dest FRONT <- record+0x10, dest REAR <- record+0x00.
+        mBaseAttribs.mFrontRightWheelPos = *reinterpret_cast<const Vector3*>(lpData + (0x10 >> 2)); // FrontRightWheelPosition
+        mBaseAttribs.mRearRightWheelPos  = *reinterpret_cast<const Vector3*>(lpData + (0x00 >> 2)); // RearRightWheelPosition
+
+        mBaseAttribs.mCOMOffset = *reinterpret_cast<const Vector3*>(lpData + (0x20 >> 2));          // CoMOffset
+        mBaseAttribs.mCOMOffset.x = 0.0f;   // the x lane is FORCED to 0 (stack round-trip), as in the SVA streamer
+
+        mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.x
+            = BP_VA_SRC_F(lpData, 0x118);                             // DownForceZOffset
+        mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.y
+            = BP_VA_SRC_F(lpData, 0xAC);                              // MagicBrakeFactorTurning
+        mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.z
+            = BP_VA_SRC_F(lpData, 0xB0);                              // MagicBrakeFactorStraightLine
+        mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.w
+            = BP_VA_SRC_F(lpData, 0xC0);                              // LockBrakeScale
+
+        // fsel: negative traction-line lengths clamp to 0 (same idiom as the SVA streamer).
+        {
+            const f32 lfLen = BP_VA_SRC_F(lpData, 0x44);              // TractionLineLength
+            mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.x
+                = (lfLen >= 0.0f) ? lfLen : 0.0f;
+        }
+        mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.y
+            = BP_VA_SRC_F(lpData, 0xBC);                              // LowSpeedDrivingSpeed
+        mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.z
+            = BP_VA_SRC_F(lpData, 0xB4);                              // LowSpeedTyreFrictionTractionControl
+        mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.w
+            = BP_VA_SRC_F(lpData, 0xB8);                              // LowSpeedThrottleTractionControl
+
+        // ⚠️ record +0xC4 is LinearDrag's shipped seat (the schema's ALT offset 196; the primary
+        // +0x04 seat is NOT what the console reads). The .y lane (AngularDrag) is NOT streamed.
+        mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.x
+            = BP_VA_SRC_F(lpData, 0xC4);                              // LinearDrag (ALT seat 0xC4)
+        mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.z
+            = BP_VA_SRC_F(lpData, 0xC8);                              // HighSpeedAngularDamping
+        mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.w
+            = BP_VA_SRC_F(lpData, 0xCC);                              // FrontWheelMass
+
+        mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.x
+            = BP_VA_SRC_F(lpData, 0x64);                              // RearWheelMass
+        mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.y
+            = BP_VA_SRC_F(lpData, 0xA0);                              // PowerToFront
+        mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z
+            = BP_VA_SRC_F(lpData, 0x9C);                              // PowerToRear
+        // (.w DownForceLiftCo is streamed from the DRIFT record below.)
+
+        mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.x
+            = BP_VA_SRC_F(lpData, 0xA4);                              // PitchDampingOnTakeOff
+        mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.y
+            = BP_VA_SRC_F(lpData, 0x40);                              // YawDampingOnTakeOff
+        mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.z
+            = BP_VA_SRC_F(lpData, 0x60);                              // RollDampingOnTakeOff
+        mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.w
+            = BP_VA_SRC_F(lpData, 0x5C);                              // RollLimitOnTakeOff
+
+        mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.x
+            = BP_VA_SRC_F(lpData, 0x54);                              // SurfaceFrontGripFactor
+        mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.y
+            = BP_VA_SRC_F(lpData, 0x50);                              // SurfaceRearGripFactor
+        mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.z
+            = BP_VA_SRC_F(lpData, 0x4C);                              // SurfaceRoughnessFactor
+        mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.w
+            = BP_VA_SRC_F(lpData, 0x58);                              // SurfaceDragFactor
+
+        // crash-extra factors: the x (pitch) lane is loaded from record +0x128, then
+        // OVERWRITTEN with 0 -- both stores are the console's own.
+        mBaseAttribs.mCrashExtraVelocityFactors.x = BP_VA_SRC_F(lpData, 0x128);   // CrashExtraPitchVelocityFactor
+        mBaseAttribs.mCrashExtraVelocityFactors.y = BP_VA_SRC_F(lpData, 0x120);   // CrashExtraYawVelocityFactor
+        mBaseAttribs.mCrashExtraVelocityFactors.z = BP_VA_SRC_F(lpData, 0x124);   // CrashExtraRollVelocityFactor
+        mBaseAttribs.mCrashExtraVelocityFactors.w = BP_VA_SRC_F(lpData, 0x12C);   // CrashExtraLinearVelocityFactor
+        mBaseAttribs.mCrashExtraVelocityFactors.x = 0.0f;                          // the pitch lane is zeroed
+
+        mBaseAttribs.mDrivetimeDeformLimits.x = BP_VA_SRC_F(lpData, 0x108);       // DriveTimeDeformLimitX
+        mBaseAttribs.mDrivetimeDeformLimits.y = BP_VA_SRC_F(lpData, 0x114);       // DriveTimeDeformLimitNegY
+        mBaseAttribs.mDrivetimeDeformLimits.z = BP_VA_SRC_F(lpData, 0x10C);       // DriveTimeDeformLimitPosZ
+        mBaseAttribs.mDrivetimeDeformLimits.w = BP_VA_SRC_F(lpData, 0x110);       // DriveTimeDeformLimitNegZ
+
+        // ⚠️ AS SHIPPED: the drift block's TorqueKickFromGasLetOff lane is streamed from the
+        // BASE record's word +0x20 -- the word the schema names CoMOffset.x (whose own dest
+        // lane above is force-zeroed). Transcribed exactly; do not "fix" to a drift field.
+        mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.z
+            = BP_VA_SRC_F(lpData, 0x20);
+
+        // 0x825F5138/0x825F5144: the two per-car tire scatters (REAL -- Wheel.cpp).
+        mFrontTireAttribs.PrepareFrontTire(lBase);                    // this+0x2D0
+        mRearTireAttribs.PrepareRearTire(lBase);                      // this+0x310
+    }
+
+    // ---- the collision record (data+0x60 RefSpec) ------------------------------------------
+    {
+        physicsvehiclecollisionattribs lColl(
+            const_cast<Attrib::Collection*>(
+                const_cast<Attrib::RefSpec&>(lrHandling.PhysicsVehicleCollisionAttribs())
+                    .GetCollection()),
+            NULL);
+        const f32* lpData = static_cast<const f32*>(lColl.GetLayoutPointer());
+
+        // 0x825F51A0 `vmulfp128 v0, splat(record+0x00), [unk_83017FE0]`: the record's crash
+        // speed is authored in MPH and stored in m/s. unk_83017FE0 is HOMED: .bss, splatted at
+        // static-init by the writer @0x82C6D160 from flt_82F31928 == 0.44704 == KF_MPH_TO_MPS.
+        mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.x
+            = BP_VA_SRC_F(lpData, 0x00) * KF_MPH_TO_MPS;              // CrashSpeed (MPH -> m/s)
+
+        // the ONE branch in the whole function (vcmpgtfp/beq @0x825F51E0): an authored scale
+        // above the 0.01 epsilon (flt_82002138) is clamped to [0,1]; otherwise the default 1.0
+        // (f31) stands -- i.e. "unset" records get full scale.
+        {
+            const f32 lfScale = BP_VA_SRC_F(lpData, 0x04);            // CarAngularImpulseScale
+            f32 lfLane;
+            if (lfScale > 0.01f)                                      // flt_82002138
+            {
+                lfLane = lfScale;
+                if (lfLane < 0.0f) lfLane = 0.0f;                     // vmaxfp vs vspltisw 0
+                if (lfLane > 1.0f) lfLane = 1.0f;                     // vminfp vs vcfsx(1)
+            }
+            else
+            {
+                lfLane = 1.0f;                                        // f31 == flt_82001C98
+            }
+            mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.y = lfLane;
+        }
+    }
+
+    // ---- the boost record (data+0x78 RefSpec) ----------------------------------------------
+    {
+        physicsvehicleboostattribs lBoost(
+            const_cast<Attrib::Collection*>(
+                const_cast<Attrib::RefSpec&>(lrHandling.PhysicsVehicleBoostAttribs())
+                    .GetCollection()),
+            NULL);
+        const f32* lpData = static_cast<const f32*>(lBoost.GetLayoutPointer());
+
+        mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.x
+            = BP_VA_SRC_F(lpData, 0x28);                              // BoostBase
+        mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.y
+            = BP_VA_SRC_F(lpData, 0x00);                              // MaxBoostSpeed
+        // (.z BoostLinearDrag is DERIVED below, after the drift block, from the streamed
+        //  LinearDrag; .w here:)
+        mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.w
+            = BP_VA_SRC_F(lpData, 0x24);                              // BoostHeightOffset
+
+        mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.x
+            = BP_VA_SRC_F(lpData, 0x2C);                              // BoostAcceleration
+        mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.y
+            = BP_VA_SRC_F(lpData, 0x14);                              // BoostKickMaxStartSpeed
+        mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.z
+            = BP_VA_SRC_F(lpData, 0x10);                              // BoostKickMaxTime
+        mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.w
+            = BP_VA_SRC_F(lpData, 0x0C);                              // BoostKickMinTime
+
+        mBoostAttribs.mvBoostKickAcceleration_BoostKickHeightOffset.x
+            = BP_VA_SRC_F(lpData, 0x1C);                              // BoostKickAcceleration
+        mBoostAttribs.mvBoostKickAcceleration_BoostKickHeightOffset.y
+            = BP_VA_SRC_F(lpData, 0x18);                              // BoostKickHeightOffset
+        // (miBoostRule / BoostKickTime / BoostKick / the Blue* block are NOT streamed.)
+    }
+
+    // ---- the body-roll record (data+0x90 RefSpec) ------------------------------------------
+    {
+        physicsvehiclebodyrollattribs lRoll(
+            const_cast<Attrib::Collection*>(
+                const_cast<Attrib::RefSpec&>(lrHandling.PhysicsVehicleBodyRollAttribs())
+                    .GetCollection()),
+            NULL);
+        const f32* lpData = static_cast<const f32*>(lRoll.GetLayoutPointer());
+
+        mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.x
+            = BP_VA_SRC_F(lpData, 0x0C);                              // WeightTransferDecayX
+        mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.y
+            = BP_VA_SRC_F(lpData, 0x08);                              // WeightTransferDecayZ
+        mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.z
+            = BP_VA_SRC_F(lpData, 0x24);                              // FactorOfWeightX
+        mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.w
+            = BP_VA_SRC_F(lpData, 0x20);                              // FactorOfWeightZ
+
+        mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.x
+            = BP_VA_SRC_F(lpData, 0x00);                              // WheelLongForceHeightOffset
+        mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.y
+            = BP_VA_SRC_F(lpData, 0x04);                              // WheelLatForceHeightOffset
+        // (the spring block, record +0x10..0x1C, is NOT streamed.)
+    }
+
+    // ---- the suspension record (data+0x00 RefSpec) -----------------------------------------
+    {
+        physicsvehiclesuspensionattribs lSusp(
+            const_cast<Attrib::Collection*>(
+                const_cast<Attrib::RefSpec&>(lrHandling.PhysicsVehicleSuspensionAttribs())
+                    .GetCollection()),
+            NULL);
+        const f32* lpData = static_cast<const f32*>(lSusp.GetLayoutPointer());
+
+        mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.x
+            = BP_VA_SRC_F(lpData, 0x0C);                              // SpringLength
+        mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.y
+            = BP_VA_SRC_F(lpData, 0x30);                              // Dampening
+        mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.z
+            = BP_VA_SRC_F(lpData, 0x00);                              // UpwardMovement
+        mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.w
+            = BP_VA_SRC_F(lpData, 0x2C);                              // DownwardMovement
+
+        mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.x
+            = BP_VA_SRC_F(lpData, 0x28);                              // FrontHeight
+        mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.y
+            = BP_VA_SRC_F(lpData, 0x10);                              // RearHeight
+        mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.z
+            = BP_VA_SRC_F(lpData, 0x24);                              // InAirDamping
+        mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.w
+            = BP_VA_SRC_F(lpData, 0x20);                              // MaxPitchDampingOnLanding
+
+        mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.x
+            = BP_VA_SRC_F(lpData, 0x14);                              // MaxYawDampingOnLanding
+        mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.y
+            = BP_VA_SRC_F(lpData, 0x1C);                              // MaxRollDampingOnLanding
+        mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.z
+            = BP_VA_SRC_F(lpData, 0x18);                              // MaxVertVelocityDampingOnLanding
+        mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.w
+            = BP_VA_SRC_F(lpData, 0x04);                              // TimeToDampAfterLanding
+        // (record +0x08 Strength is NOT streamed.)
+    }
+
+    // ---- the steering record (data+0x18 RefSpec) -------------------------------------------
+    {
+        physicsvehiclesteeringattribs lSteer(
+            const_cast<Attrib::Collection*>(
+                const_cast<Attrib::RefSpec&>(lrHandling.PhysicsVehicleSteeringAttribs())
+                    .GetCollection()),
+            NULL);
+        const f32* lpData = static_cast<const f32*>(lSteer.GetLayoutPointer());
+
+        mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.y
+            = BP_VA_SRC_F(lpData, 0x08);                              // SpeedForMinAngle
+        mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.w
+            = BP_VA_SRC_F(lpData, 0x10);                              // MinAngle
+        // the two LIVE fdivs (f31 == 1.0): the reaction rate is 1/TimeForLock, and the
+        // min-angle speed's reciprocal rides in its own lane.
+        mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.z
+            = 1.0f / BP_VA_SRC_F(lpData, 0x08);                       // 1 / SpeedForMinAngle
+        mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.x
+            = 1.0f / BP_VA_SRC_F(lpData, 0x00);                       // 1 / TimeForLock
+
+        mSteeringAttribs.mvMaxAngle_StraightReactionBias.x
+            = BP_VA_SRC_F(lpData, 0x14);                              // MaxAngle
+        mSteeringAttribs.mvMaxAngle_StraightReactionBias.y
+            = BP_VA_SRC_F(lpData, 0x04);                              // StraightReactionBias
+    }
+
+    // ---- the drift record (data+0x48 RefSpec) ----------------------------------------------
+    {
+        physicsvehicledriftattribs lDrift(
+            const_cast<Attrib::Collection*>(
+                const_cast<Attrib::RefSpec&>(lrHandling.PhysicsVehicleDriftAttribs())
+                    .GetCollection()),
+            NULL);
+        const f32* lpData = static_cast<const f32*>(lDrift.GetLayoutPointer());
+
+        mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.w
+            = BP_VA_SRC_F(lpData, 0x10);   // ⚠️ AS SHIPPED: DownForceLiftCo <- the drift record's
+                                           // +0x10 (the word the schema names WheelSlip)
+
+        mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x
+            = BP_VA_SRC_F(lpData, 0x4C);                              // MinSpeedForDrift
+        mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.y
+            = BP_VA_SRC_F(lpData, 0x1C);                              // SteeringDriftScaleFactor
+        mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.z
+            = BP_VA_SRC_F(lpData, 0x88);                              // CounterSteeringDriftScaleFactor
+        mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.w
+            = BP_VA_SRC_F(lpData, 0x94);                              // BaseCounterSteeringDriftScaleFactor
+
+        mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.x
+            = BP_VA_SRC_F(lpData, 0x90);                              // BrakingDriftScaleFactor
+        mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.y
+            = BP_VA_SRC_F(lpData, 0x6C);                              // GasDriftScaleFactor
+        mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.z
+            = BP_VA_SRC_F(lpData, 0x14);                              // TimeToCapScale
+        mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.w
+            = BP_VA_SRC_F(lpData, 0x8C);                              // CappedScale
+
+        mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.x
+            = BP_VA_SRC_F(lpData, 0x78);                              // DriftTorqueFallOff
+        mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.y
+            = BP_VA_SRC_F(lpData, 0x60);                              // GripFromSteering
+        mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.z
+            = BP_VA_SRC_F(lpData, 0x68);                              // GripFromBrake
+        mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.w
+            = BP_VA_SRC_F(lpData, 0x18);                              // TimeForNaturalDrift
+
+        mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.x
+            = BP_VA_SRC_F(lpData, 0x34);                              // NeutralTimeToReduceDrift
+        mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.y
+            = BP_VA_SRC_F(lpData, 0x30);                              // SideForceDirftScaleCutOff [sic]
+        mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.z
+            = BP_VA_SRC_F(lpData, 0x2C);                              // SideForceDriftAngleCutOff
+        mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.w
+            = BP_VA_SRC_F(lpData, 0x28);                              // SideForceDriftSpeedCutOff
+
+        mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.x
+            = BP_VA_SRC_F(lpData, 0x20);                              // SideForcePeakDriftAngle
+        mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.y
+            = BP_VA_SRC_F(lpData, 0x24);                              // SideForceMagnitude
+        mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.z
+            = BP_VA_SRC_F(lpData, 0x48);                              // NaturalDriftScaleDecay
+        // (.w NaturalDriftDecayPower is NOT streamed.)
+
+        mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.x
+            = BP_VA_SRC_F(lpData, 0x3C);                              // NaturalYawTorque
+        mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.y
+            = BP_VA_SRC_F(lpData, 0x38);                              // NaturalYawTorqueCutOffAngle
+        // (.z TorqueKickFromGasLetOff was streamed from the BASE record above.)
+        mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.w
+            = BP_VA_SRC_F(lpData, 0x7C);                              // DriftSidewaysDamping
+
+        mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.x
+            = BP_VA_SRC_F(lpData, 0x84);                              // DriftAngularDamping
+        mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.y
+            = BP_VA_SRC_F(lpData, 0x80);                              // DriftMaxAngle
+        mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.z
+            = BP_VA_SRC_F(lpData, 0x74);                              // ForcedDriftStartSlip
+        mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.w
+            = BP_VA_SRC_F(lpData, 0x50);                              // InitialDriftPushTime
+
+        mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.z
+            = BP_VA_SRC_F(lpData, 0x58);                              // InitialDriftPushDynamicInc
+        // (.x DriftPushScaleLimit / .y DriftPushBaseFactor are NOT streamed.)
+
+        // 0x825F5578/0x825F5580: the drift yaw-torque curve (record +0x00 DriftScaleToYawTorque x/y/z).
+        mDriftAttribs.mDriftScaleToYawTorque.Construct();
+        mDriftAttribs.mDriftScaleToYawTorque.Prepare(BP_VA_SRC_F(lpData, 0x00),
+                                                     BP_VA_SRC_F(lpData, 0x04),
+                                                     BP_VA_SRC_F(lpData, 0x08));
+    }
+
+    // 0x825F5888 `vmulfp128`: BoostLinearDrag is DERIVED, not authored -- 0.75 (flt_82004018)
+    // of the LinearDrag lane streamed above.
+    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.z
+        = mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.x * 0.75f;
+
+    // ---- the engine record (data+0x30 RefSpec) ---------------------------------------------
+    {
+        physicsvehicleengineattribs lEng(
+            const_cast<Attrib::Collection*>(
+                const_cast<Attrib::RefSpec&>(lrHandling.PhysicsVehicleEngineAttribs())
+                    .GetCollection()),
+            NULL);
+        // the console passes the WRAPPER and the callee reads *(a2+4); the committed
+        // InitializeFromAttribs body takes the data pointer directly, so hand it the
+        // wrapper's layout block -- behaviour-identical.
+        mEngineAttribs.InitializeFromAttribs(lEng.GetLayoutPointer());
+    }
+
+    #undef BP_VA_SRC_F
+
+    mbIsValid = true;                                                 // li 1; stb -> +0x360
+}
+
 // @0x825F6298 (40 instrs)  BrnPhysics::Vehicle::VehicleAttribs::SetupAttribsForDonutAI
 //
 // ⚠️ CORRECTED with the layout de-fork. The whole function is five stores, and the asm names its
@@ -991,9 +1416,8 @@ void SimpleVehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandlin
         // The stack round-trip that zeroes the COM x lane (stvx -> stfs 0.0 -> lvx -> stvx).
         mCOMOffset.x = 0.0f;
 
-        // ⚠️ The two tire scatters are committed as FLAGGED-INERT stubs (Wheel.cpp: the rodata
-        // permute table that places the per-car scalars is un-homed) -- called by name as the
-        // console does; the inertness is their existing, loudly-flagged state, not this body's.
+        // ⭐ 2026-08-09 (attribs-data wave): the two tire scatters are REAL (the permute table
+        // is homed and both bodies are image-emulated -- see the Wheel.cpp banner).
         mFrontTireAttribs.PrepareFrontTire(lBase);                    // this+0x20
         mRearTireAttribs.PrepareRearTire(lBase);                      // this+0x60
     }

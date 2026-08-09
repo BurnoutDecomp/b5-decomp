@@ -38,8 +38,9 @@ namespace Vehicle
     // real physicsvehiclebaseattribs type lands") -- the real generated wrapper is committed at
     // GameSource/AttribSys/Generated/classes/physicsvehiclebaseattribs.h. The tire scatters take
     // it by const-ref (fwd-declared; the X360 reads the record via the wrapper's data pointer,
-    // `lwz +4`). The scatters themselves remain FLAGGED-INERT (the rodata permute table that
-    // places the per-car scalars is still un-homed).
+    // `lwz +4`). ⭐ 2026-08-09 (attribs-data wave): the scatters are REAL -- the permute table
+    // 0x8327F140 is homed (static-init writer bank @0x82C74000) and all eight bodies are
+    // image-emulated; see the Wheel.cpp banner.
     // Forward decl only -- the full generated header is pulled by the TUs that construct one.
 
     // Wheel: full layout. The RoadContact (and its accessor) are the pre-existing committed slice;
@@ -107,12 +108,12 @@ namespace Vehicle
         {
             // ----- C04 group: the eight tire-preset scatter routines (bodies in Wheel.cpp) -----
             // Each is a pure VMX permute-scatter that lays a handful of scalar inputs across the
-            // three curves + the packed register via the rodata permute table unk_8327F140. They
-            // differ only in their source numbers, not logic. The attrib-driven pair take the
-            // per-car base-attribs block; the Default/AI/DonutAI presets source un-homed .rdata
-            // tuning constants. FLAG (rodata): the permute table + preset constants are un-homed
-            // .rdata absent from the exports -> faithful-but-inert (the scatter shape is exact, the
-            // laid-out numbers stay 0). NEVER fabricated.
+            // three curves + the packed register via the lane-insert permute table @0x8327F140.
+            // They differ only in their source numbers, not logic. The attrib-driven pair take
+            // the per-car base-attribs record; the Default/AI/DonutAI presets lay out .rdata
+            // tuning constants. ⭐ 2026-08-09 (attribs-data wave): table homed + all eight bodies
+            // REAL (image-emulated, values exact -- see the Wheel.cpp banner). ⚠️ The DonutAI
+            // pair deliberately PRESERVES maPackedVariables.w (15 vperms, not 16).
             void PrepareDefaultFrontTire();
             void PrepareDefaultRearTire();
             void PrepareFrontTire(const Attrib::Gen::physicsvehiclebaseattribs& lrAttribs);

@@ -19,6 +19,11 @@ namespace Gen
     {
     public:
         explicit physicsvehiclebodyrollattribs(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        // Re-exposed from the private Instance base (attribs-data wave, 2026-08-09): the X360
+        // consumer (VehicleAttribs::SetupAttribs @0x825F4CD8) reads the record through
+        // `lwz +4` == mpAttributeData, which is what GetLayoutPointer returns.
+        using Instance::GetLayoutPointer;
     };
 
     // Chain the Instance ctor, assert the collection's class is
