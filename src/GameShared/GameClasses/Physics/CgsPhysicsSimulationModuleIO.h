@@ -344,6 +344,20 @@ namespace PhysicsSimulationIO
         // ActivateAndFreezeAsNeeded open with -- `bl sub_8289F130` in both emitters.)
         OutUpdateRigidBodyQueue* GetUpdateRigidBodyQueue();
 
+        // ⭐ X360 0x8259EFD0: READ-lock (bit 4) guarded const twin, returning the SAME
+        // &mUpdateRigidBodyQueue (+0x10). ADDED 2026-08-10 (root-cause wave).
+        // Recovered from the image: `extrwi r11,r11,1,27` (status bit 4) + "Not locked for
+        // reading\n" + `addi r3, r28, 0x10`, assert source line 0x54F == 1359. It sits exactly
+        // 0xA8 BELOW the const contact-spy twin @0x8259F078 -- the same uniform accessor block
+        // that accessor's note already documents.
+        // Its console callers are precisely the CONSUMER sites: PhysicsModule::Update
+        // @0x825B0640 (`bl 0x8259EFD0` with r3 = the sim output buffer, immediately before
+        // BOTH VehicleManager::ReadUpdatedBodies and PropManager::ReadUpdatedBodies),
+        // DetachedPartManager::UpdatePostPhysics and DetachedWheelManager::UpdatePostPhysics.
+        // Those legs run with the buffer READ-locked, so calling the mutable overload there
+        // fired "Not locked for writing" every frame -- the gate this retires.
+        const OutUpdateRigidBodyQueue* GetUpdateRigidBodyQueue() const;
+
         // X360 0x8259F120: write-lock (bit 3) guarded; returns &mContactSpyQueue (console +0x9620).
         OutContactSpyQueue* GetContactSpyQueue();
 

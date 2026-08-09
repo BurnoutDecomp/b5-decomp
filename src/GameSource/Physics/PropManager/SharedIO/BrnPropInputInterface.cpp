@@ -93,5 +93,79 @@ namespace Props
 
         mRemovePartQueue.AddEvent(lEvent);
     }
+
+    // ---------------------------------------------------------------------------------------
+    // PropInputInterface::Construct (DWARF :42)                 NEW 2026-08-10 (root-cause wave)
+    //
+    // X360-attested INLINE in PhysicsModuleIO::InputBuffer::Construct @0x825ABA18
+    // (0x825ABAA0..0x825ABAE4), where r30 == buffer + 327216 == this:
+    //     bl AddPhysicalPropEvent<50>::Construct      (r30 + 0)
+    //     bl RemovePhysicalPropEvent<300>::Construct  (r30 + 0x1F60)
+    //     bl RemovePhysicalPartEvent<100>::Construct  (r30 + 0x28CC)
+    //     bl AddPhysicalPartEvent<50>::Construct      (r30 + 0xFB0)
+    //     stb 0, 0x2C00(r30)                          -- mbRemoveAllPropsAndParts = false
+    //     stw 0, 8 / 0x1F68 / 0x28D4 / 0xFB8 (r30)    ) == Clear(), inlined behind it
+    //     stb 0, 0x2C00(r30)                          )
+    // The queue seats are reached BY NAME here; the console displacements are documentation.
+    // ---------------------------------------------------------------------------------------
+    void PropInputInterface::Construct()
+    {
+        mAddPropQueue.Construct();
+        mRemovePropQueue.Construct();
+        mRemovePartQueue.Construct();
+        mAddPartQueue.Construct();
+
+        mbRemoveAllPropsAndParts = false;
+
+        Clear();
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // PropInputInterface::Clear (DWARF :60)                     NEW 2026-08-10 (root-cause wave)
+    //
+    // The four `stw 0, queue+8` length resets plus the flag byte, in the console's queue order
+    // (add-prop, remove-prop, remove-part, add-part). BaseEventQueue<T>::Clear IS that store
+    // (miLength = 0, backing buffer untouched).
+    // ---------------------------------------------------------------------------------------
+    void PropInputInterface::Clear()
+    {
+        mAddPropQueue.Clear();
+        mRemovePropQueue.Clear();
+        mRemovePartQueue.Clear();
+        mAddPartQueue.Clear();
+
+        mbRemoveAllPropsAndParts = false;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // PropInputInterface::Append (DWARF :57)                    NEW 2026-08-10 (root-cause wave)
+    //
+    // Reconstructed store-for-store from X360 0x827A9CA8 (33 instructions), r3 == this,
+    // r4 == lpOther:
+    //     0x827A9CC4  the two-word copy at +0x2BF8       -- mpPhysicsData = other's
+    //     0x827A9CDC  bl AddPhysicalPropEvent::Append    (this+0,      other+0)
+    //     0x827A9CE8  bl RemovePhysicalPropEvent::Append (this+0x1F60, other+0x1F60)
+    //     0x827A9CF4  bl RemovePhysicalPartEvent::Append (this+0x28CC, other+0x28CC)
+    //     0x827A9D00  bl AddPhysicalPartEvent::Append    (this+0xFB0,  other+0xFB0)
+    //     0x827A9D04  lbz/lbz/or/stb at +0x2C00          -- the flag is OR-merged, not copied
+    // The physics-data handle is ASSIGNED (the source wins outright); only the flag merges.
+    // The X360 emits the handle copy first because the compiler hoisted it out of the call
+    // run; it is kept in that position, which is also the only order in which it is
+    // observable (nothing between reads it).
+    // ⚠️ The handle is two 4-byte words on the console and two 8-byte pointers on the host --
+    // copied by NAME as a whole ResourceHandle, so the width difference is absorbed.
+    // ---------------------------------------------------------------------------------------
+    void PropInputInterface::Append(const PropInputInterface* lpOther)
+    {
+        mpPhysicsData = lpOther->mpPhysicsData;
+
+        mAddPropQueue.Append(lpOther->mAddPropQueue);
+        mRemovePropQueue.Append(lpOther->mRemovePropQueue);
+        mRemovePartQueue.Append(lpOther->mRemovePartQueue);
+        mAddPartQueue.Append(lpOther->mAddPartQueue);
+
+        mbRemoveAllPropsAndParts =
+            static_cast<bool>(mbRemoveAllPropsAndParts | lpOther->mbRemoveAllPropsAndParts);
+    }
 }
 }

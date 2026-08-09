@@ -286,6 +286,14 @@ namespace BrnPhysics
         lpOutputBufferStack->CreateIOBuffer(&lpPropRaceCarContacts, "PropRaceCarContacts"); // @0x825AC4A0
         lpPropRaceCarContacts->Construct();
 
+        // ⭐ 2026-08-10 (root-cause wave): a const VIEW of the sim output buffer, nothing more.
+        // The post-step read-back legs run with that buffer READ-locked, and the console reads
+        // its update-rigid-body queue there through the CONST accessor @0x8259EFD0. Naming the
+        // const view once is how those two call sites select that overload; it aliases the same
+        // object and changes no lifetime, no lock and no order.
+        const CgsPhysics::PhysicsSimulationIO::OutputBuffer* const lpConstSimOutputBuffer =
+            lpSimOutputBuffer;
+
         lpPhysicsModuleInputBuffer->LockForRead();
         lpPhysicsModuleOutputBuffer->LockForWrite();
 
@@ -509,8 +517,21 @@ namespace BrnPhysics
             CGS_ASSERT(lpPropRaceCarContacts != 0, "lpInputBuffer");                     // CgsModuleUtils.h:238
             lpPropRaceCarContacts->LockForWrite();
             lpVehManagerBuffer->LockForRead();
-            BridgeVehicleManagerRequestsToSimulation(
-                lpSimInputBuffer, lpVehManagerBuffer->GetVehicleOutputRequestInterface());
+            // ⛔ 2026-08-10 (root-cause wave): this used to read `lpVehManagerBuffer->
+            // GetVehicleOutputRequestInterface()` directly, and because lpVehManagerBuffer is a
+            // NON-const pointer, C++ overload resolution picked the MUTABLE accessor -- whose
+            // tripwire is IsBufferLockedForWriting(). The buffer is READ-locked on this leg, so
+            // it fired "Not locked for writing" (BrnVehicleManagerIO.cpp:60) on every frame the
+            // physics module actually ran. The console calls the CONST accessor @0x825A0FB0
+            // here. Selecting it explicitly through a const view is the entire fix: no lock
+            // invented, no lock moved, no behaviour changed.
+            {
+                const Vehicle::VehicleManagerOutputBuffer* const lpConstVehManagerBuffer =
+                    lpVehManagerBuffer;
+                BridgeVehicleManagerRequestsToSimulation(
+                    lpSimInputBuffer,
+                    lpConstVehManagerBuffer->GetVehicleOutputRequestInterface());
+            }
             lpVehManagerBuffer->UnlockForRead();
 
             lpSimInputBuffer->SetTimeStep(lfSimTimerTimeStep);
@@ -621,8 +642,13 @@ namespace BrnPhysics
 
             // ---- read the stepped bodies back ------------------------------------------------
             CgsDev::PerfMonCpu::StartMonitor(miPhysicsUpdateReadUpdatedBodiesPM);        // +433104
+            // ⛔ 2026-08-10 (root-cause wave): the sim output buffer is READ-locked here
+            // (LockForRead above), so the mutable GetUpdateRigidBodyQueue() this used to select
+            // fired "Not locked for writing" every frame. The console calls the CONST twin
+            // @0x8259EFD0 at exactly this site; it is declared now, and both ReadUpdatedBodies
+            // consumers already take a const queue pointer.
             mVehicleManager.ReadUpdatedBodies(
-                lpSimOutputBuffer->GetUpdateRigidBodyQueue(),
+                lpConstSimOutputBuffer->GetUpdateRigidBodyQueue(),
                 VecFloat{ lfSimTimerTimeStep, lfSimTimerTimeStep, lfSimTimerTimeStep, lfSimTimerTimeStep });
             CgsDev::PerfMonCpu::StopMonitor(miPhysicsUpdateReadUpdatedBodiesPM);
 
@@ -694,8 +720,10 @@ namespace BrnPhysics
         {
             // ---- prop read-back --------------------------------------------------------------
             CgsDev::PerfMonCpu::StartMonitor(miPropManagerPM);                           // +433172
+            // (same const-twin selection as the vehicle read-back above -- the sim output
+            //  buffer is still read-locked on this leg.)
             mPropManager.ReadUpdatedBodies(
-                lpSimOutputBuffer->GetUpdateRigidBodyQueue(),
+                lpConstSimOutputBuffer->GetUpdateRigidBodyQueue(),
                 reinterpret_cast<CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*>(
                     lpPhysicsModuleOutputBuffer->GetSceneInputInterface()),
                 lpSimInputBuffer,

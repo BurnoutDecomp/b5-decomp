@@ -589,20 +589,12 @@ void BrnPhysics::PhysicsModule::PropPrepareTypes(class BrnPhysics::PhysicsModule
 // -------------------------------------------------------------------------
 // BrnPhysics::Props::PropInputInterface
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnPhysics::Props::PropInputInterface::Append(struct BrnPhysics::Props::PropInputInterface const &)
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the prop->physics prepare
-    // bridge (WorldModule::Prepare prop stage). The physics module is boot-gated
-    // inert, so the staged prop-type merge is dropped consistently. One-shot log.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropInputInterface::Append: inert [FLAG PC boot gate]\n";
-    }
-}
+// (PropInputInterface::Append gate RETIRED 2026-08-10, root-cause wave: the real
+//  body @0x827A9CA8 now lives in its own home TU
+//  GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.cpp, alongside the
+//  Construct/Clear pair the console inlines into PhysicsModuleIO::InputBuffer::Construct.
+//  ⚠️ The stub's parameter was a REFERENCE; the DWARF and the PS3 mangle both say
+//  pointer -- corrected with the body.)
 
 // -------------------------------------------------------------------------
 // BrnPhysics::Vehicle::VehicleManager
@@ -3179,21 +3171,12 @@ void WorldModule::BridgeCrashModuleToOutput(void *,struct BrnWorldIO::UpdateOutp
 //  culling wave: the real body @0x827AB608 now lives in its X360 home TU
 //  GameSource/World/Bridges/WorldBridgeEntityModulesToScene.cpp.)
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AADB8 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeEntityModulesToPhysicsModule_PreScene(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *,class BrnWorld::PropEntityIO::OutputBuffer_PreScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeEntityModulesToPhysicsModule_PreScene: inert [FLAG PC boot gate]\n";
-    }
-}
+// (WorldModule::BridgeEntityModulesToPhysicsModule_PreScene gate RETIRED 2026-08-10,
+//  root-cause wave: the real body @0x827AADB8 now lives in its X360 home TU
+//  GameSource/World/Bridges/WorldBridgeEntityModulesToPhysics.cpp. It is the ONLY
+//  caller in the image of PhysicsModuleIO::InputBuffer::SetSolverMaxIterations
+//  @0x8279F240, so while it was inert the solver iteration cap stayed at 0 and the
+//  whole MaxIterations chain inside PhysicsModule::Update asserted.)
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.

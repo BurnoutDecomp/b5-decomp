@@ -73,12 +73,30 @@ namespace Props
         // @0x822CCE20: enqueue a remove-physical-part request.
         void RemovePartInstance(BrnWorld::PropEntityID lEntityId, s32 liPhysicalIndex);
 
-        // ADDITIVE GROW (FLAG -- declared-only, body owned by the per-queue Append
-        // instantiations in CgsBaseEventQueue.h): the whole-interface merge that appends
-        // another PropInputInterface's four request queues onto this one. Driven by the
-        // world prop->physics bridges (WorldModule::BridgePropModuleToPhysicsModule_Prepare
-        // @0x827AB410 and BridgeEntityModulesToPhysicsModule_PrePhysics).
-        void Append(const PropInputInterface& lrOther);
+        // DWARF :42. The console emits this INLINE inside
+        // PhysicsModuleIO::InputBuffer::Construct @0x825ABA18 (r30 = buffer + 327216 == this):
+        // the four queue Constructs in the order below, then mbRemoveAllPropsAndParts = false,
+        // then Clear(). Bodied 2026-08-10 (root-cause wave) -- the destination interface of
+        // both prop bridges was reached with its four queues un-Constructed.
+        // ⚠️ AS SHIPPED: mpPhysicsData is NOT cleared here (the console zeroes no word at
+        // +0x2BF8); left alone rather than invented.
+        void Construct();
+
+        // DWARF :60. The console's tail of Construct: the four queue length resets
+        // (+8 / +0x1F68 / +0x28D4 / +0xFB8 -- each queue's miLength) and the flag byte.
+        void Clear();
+
+        // DWARF :57 -- `void Append(const PropInputInterface *)`.
+        // ⚠️ SIGNATURE CORRECTED 2026-08-10: this was committed taking a REFERENCE. Two
+        // independent witnesses say pointer -- the DecFIGS DWARF renders it `*` (and renders
+        // real references as `&` elsewhere in the same dump, so it discriminates), and the PS3
+        // mangled symbol is `_ZN10BrnPhysics5Props18PropInputInterface6AppendEPKS1_` whose
+        // `PK` is pointer-to-const (a reference would mangle `RK`).
+        // Reconstructed store-for-store from X360 0x827A9CA8 (33 instructions).
+        // Driven by the world prop->physics bridges
+        // (WorldModule::BridgePropModuleToPhysicsModule_Prepare @0x827AB410,
+        //  BridgeEntityModulesToPhysicsModule_PreScene @0x827AADB8 and _PrePhysics @0x827AAEC0).
+        void Append(const PropInputInterface* lpOther);
 
     private:
         AddPhysicalPropEventQueue mAddPropQueue;             // +0x0000   (:125)

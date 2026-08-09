@@ -65,7 +65,20 @@ namespace PhysicsModuleIO
             static_assert(offsetof(InputBuffer, mTimerInterface)               == 327152 + KU_DRIFT, "mTimerInterface @327152+D");
             static_assert(offsetof(InputBuffer, mSolverMaxIterations)          == 327200 + KU_DRIFT, "mSolverMaxIterations @327200+D");
             static_assert(offsetof(InputBuffer, mPropManagerInputInterface)    == 327216 + KU_DRIFT, "mPropManagerInputInterface @327216+D");
-            static_assert(offsetof(InputBuffer, mGameActionQueue)              == 338496 + KU_DRIFT, "mGameActionQueue @338496+D");
+            // ⭐ 2026-08-10 (root-cause wave): mPropManagerInputInterface is the REAL
+            // Props::PropInputInterface now, and -- unlike the driver interface -- it DOES grow
+            // on the host (four embedded event queues with an 8-byte mpEvents, plus a
+            // two-pointer ResourceHandle), so mGameActionQueue takes a SECOND uniform drift.
+            // Computing it from sizeof keeps the gate's teeth: any wrong pad run still fails.
+            {
+                constexpr size_t KU_PROP_DRIFT =
+                    sizeof(PropInputInterfaceStorage) - (338496 - 327216);  // host growth of the prop-input span
+                static_assert(sizeof(PropInputInterfaceStorage) >= 338496 - 327216,
+                              "prop-input span smaller than the console span -- retype regressed");
+                static_assert(offsetof(InputBuffer, mGameActionQueue)
+                                  == 338496 + KU_DRIFT + KU_PROP_DRIFT,
+                              "mGameActionQueue @338496+D+PD");
+            }
         }
         // The game-action queue member must be the real 13328-byte queue, not a stand-in: it is
         // the LAST member and WorldModule::BridgeActionsToPhysicsModule AddEvents into it.
@@ -108,12 +121,16 @@ namespace PhysicsModuleIO
     //   +0x4F1E0  SceneManagerIO::OutOverlapPair<128>::Construct     -> mOverlapPairsQueue
     //   +0x4FE20  mSolverMaxIterations = 0
     //
-    // ⚠️ FIVE of those calls CANNOT be emitted yet and are NOT faked: mCreateWorldEventQueue is
+    // ⚠️ FOUR of those calls CANNOT be emitted yet and are NOT faked: mCreateWorldEventQueue is
     // still a 96-byte pad, and mVehicleEffectsInputInterface / mRCEntityOutputInterface /
-    // mPropManagerInputInterface / mCameraInput are still correctly-sized opaque *Storage spans
-    // with no members to construct. They are listed above by console seat so the next wave that
-    // retypes any of them knows exactly which call to restore -- and any consumer that reaches
-    // one of those spans will fire the same loud "Not Constructed" this one did, by design.
+    // mCameraInput are still correctly-sized opaque *Storage spans with no members to
+    // construct. They are listed above by console seat so the next wave that retypes any of
+    // them knows exactly which call to restore -- and any consumer that reaches one of those
+    // spans will fire the same loud "Not Constructed" this one did, by design.
+    // ⭐ 2026-08-10 (root-cause wave): the PROP leg is off that blocked list. The four console
+    // calls at +0x4FE30 / +0x51D90 / +0x526FC / +0x50DE0 (and their five zero stores) are
+    // exactly PropInputInterface::Construct, now that the member holds the real type -- see
+    // that body for the asm. Three committed bridges Append into this member every frame.
     void InputBuffer::Construct()
     {
         CgsModule::IOBuffer::Construct();
@@ -122,6 +139,7 @@ namespace PhysicsModuleIO
         mVehicleDriverInterface.Construct();     // +0x22CD0
         mPotentialContactQueue.Construct();      // +0x271D0
         mTimerInterface.Clear();                 // +0x4FDF0
+        mPropManagerInputInterface.Construct();  // +0x4FE30 (the four prop queues + the flag)
         mGameActionQueue.Construct();            // +0x52A40
         mOverlapPairsQueue.Construct();          // +0x4F1E0
         mSolverMaxIterations = 0;                // +0x4FE20
