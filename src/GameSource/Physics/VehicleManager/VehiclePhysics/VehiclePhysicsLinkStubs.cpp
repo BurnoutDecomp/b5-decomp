@@ -108,26 +108,13 @@ namespace Vehicle
                           "the full census banner above -- its own wave)");
     }
 
-    // LINK STUB (in-air + powertrain wave, 2026-08-07): X360 @0x825CB288 -- Engine::Update, THE
-    // POWERTRAIN TORQUE CORE (throttle -> clutch -> flywheel -> gearbox -> drive force). It is
-    // trapped, not bodied, because it ships as a debug Opt-vs-Unopt ASSERT HARNESS on BOTH readable
-    // consoles: X360 @0x825CB288 is 3937 asm lines whose only callees are CgsDev::Assert /
-    // StrStream / AttribSysModule::GetVaultArray / BasePriorityQueue::Clear, and the PS3 DecFIGS
-    // copy @0x712834 is 10324 lines with 1173 assert references. Reconstructing the real torque math
-    // out of that harness is a whole wave. ApplyEngineForces (bodied this wave) calls it and
-    // ApplyEngineForcesOntoWheels (also bodied) reads the mvEngineDrive lane it is meant to produce
-    // -- so the engine-force APPLICATION layer is real while the torque MODEL stays deferred here.
-    // The 9-arg signature is the PS3 mangled name laid against the X360 ApplyEngineForces register
-    // map (see Engine.h). A silent no-op here would leave every driven wheel with a stale/zero drive
-    // force that OntoWheels would then apply as plausible zeros -- exactly the invisible-forever bug
-    // the trap exists to prevent.
-    void Engine::Update(VecFloat, VecFloat, VecFloat, bool, VecFloat, VecFloat, bool, VecFloat,
-                        VecFloat)
-    {
-        CGS_ASSERT(false, "Engine::Update: link stub (the powertrain torque core) -- reconstruct "
-                          "from X360 @0x825CB288; ships as a debug opt-vs-unopt assert harness in "
-                          "both console builds, so it is its own wave");
-    }
+    // ⭐ 2026-08-09 (powertrain wave): the Engine::Update @0x825CB288 trap is GONE -- BODIED in
+    // Engine.cpp. The 3937-line X360 debug Opt-vs-Unopt assert harness turned out to be ONE
+    // algorithm run in two register files (branchy member leg + branchless vsel leg, cross-
+    // asserted with tolerance 0.01); the body reproduces the branchless leg the epilogue commits,
+    // cross-checked against the branchy leg and against the BPR x86 twin sub_BA63A0. All ~19
+    // constants recovered from the X360 image (rdata floats + the 0x82C5Bxxx init-thunk bank);
+    // provenance banner on the body.
 
     // ⭐ 2026-08-09 (attribs-setup wave): the SimpleVehiclePhysics::SwitchAttribs @0x82601978
     // stub is GONE -- BODIED in BrnSimpleVehiclePhysics.cpp. The blocker fell with it: the full

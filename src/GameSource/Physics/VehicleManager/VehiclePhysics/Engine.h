@@ -83,26 +83,28 @@ namespace Vehicle
         // Vector4 (the X360 stores it via stvx128 into the caller's result buffer).
         Vector4 GetMaxWheelAngularVelocity() const;
 
-        // @0x825CB288: integrate the flywheel + recompute RPM + ComputeGear -- THE POWERTRAIN
-        // TORQUE CORE (throttle -> clutch -> flywheel -> gearbox -> drive force). ⛔ STILL A LOUD
-        // TRAP (VehiclePhysicsLinkStubs.cpp), deferred to its own wave: this function ships on
-        // BOTH readable consoles as a debug Opt-vs-Unopt assert harness -- X360 @0x825CB288 is
-        // 3937 asm lines whose only callees are CgsDev::Assert / StrStream / GetVaultArray /
-        // BasePriorityQueue::Clear, and the PS3 DecFIGS copy @0x712834 is 10324 lines with 1173
-        // assert references. Reconstructing the real torque math out of that harness is a whole
-        // wave; ApplyEngineForces (bodied) calls it and OntoWheels (bodied) reads the mvEngineDrive
-        // lane it produces, so the *application* layer is real while the torque model stays deferred
-        // behind the trap. The 9-arg signature is the PS3 mangled name
+        // @0x825CB288: THE POWERTRAIN TORQUE CORE (throttle -> clutch -> flywheel -> gearbox ->
+        // drive force). ⭐ BODIED 2026-08-09 (powertrain wave) in Engine.cpp -- the trap stub is
+        // gone. Both console copies ship as a debug Opt-vs-Unopt assert harness (X360 3937 asm
+        // lines, 62 FireAsserts, "Mismatch: Opt/Unopt ... Tell Graham D and include the TTY!");
+        // the harness turned out to be ONE algorithm run in two register files (a branchy
+        // member-mutating leg + a branchless mask leg) cross-asserted at six source-line clusters
+        // with tolerance 0.01, NOT two different algorithms. The reconstruction follows the
+        // branchless leg (whose values the epilogue commits), was cross-checked lane-by-lane
+        // against the branchy leg, and independently against the BPR x86 twin sub_BA63A0
+        // (UpdateDriving -> UpdateEngine @0x7A28210 -> ApplyEngineForces @0x79DFB80 -> it), which
+        // shares this exact Engine layout. The 9-arg signature is the PS3 mangled name
         // (_ZN...6Engine6UpdateEN2rw4math3vpu8VecFloatES5_S5_bS5_S5_bS5_S5_) laid against the X360
-        // ApplyEngineForces @0x8261FC10 register map (v1..v7 + r4/r5), so ApplyEngineForces emits
-        // the call the console had and no future body will ODR-clash.
+        // ApplyEngineForces @0x8261FC10 register map (v1..v7 + r4/r5).
+        // ⚠️ AS-SHIPPED: lvfRearWheelRadius (v5) is DEAD on both X360 and BPR -- the prologue
+        // overwrites v5 before any read. Kept for signature fidelity.
         void Update(VecFloat lvfWheelAngularVelocity, VecFloat lvfGas, VecFloat lvfBrake,
                     bool lbHandBrake, VecFloat lvfSteering, VecFloat lvfRearWheelRadius,
                     bool lbAllowReverseDrive, VecFloat lvfForwardSpeed, VecFloat lvfTimeStep);
 
         // [PC-leaf accessor] ApplyEngineForcesOntoWheels @0x825FB000 reads the engine's drive-force
         // lane directly off the embedded engine (`lvx128 v0, this+0xFA0 ; vspltw v0,v0,0` == mEngine
-        // (+0xF00) + 0xA0 lane0). Engine::Update (the trapped powertrain core) writes it. Exposed as
+        // (+0xF00) + 0xA0 lane0). Engine::Update (the powertrain core, bodied) writes it. Exposed as
         // a named getter so the host reads the named member instead of an offset cast.
         f32 GetEngineDrive() const
         {

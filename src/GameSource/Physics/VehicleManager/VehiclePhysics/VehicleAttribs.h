@@ -171,6 +171,17 @@ namespace Vehicle
             f32 GetGearRatio(s32 liGear) const { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].x; }
             f32 GetGearUpRPM(s32 liGear) const { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].z; }
 
+            // The lanes Engine::Update @0x825CB288 reads (powertrain wave, 2026-08-09). Every
+            // accessor name is the DWARF's (the PS3 DecFIGS Engine.cpp dump calls each of these
+            // by name inside Update); the lane bindings are the X360 asm's splat indices.
+            f32 GetTransmissionEfficiency() const { return mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.y; }   // +0x10.y (vspltw .. ,1)
+            f32 GetGearDownRPM() const            { return mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.w; }   // +0x10.w (vspltw .. ,3)
+            f32 GetTorqueFallOffRPM() const       { return mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.y; }      // +0x20.y
+            f32 GetFlyWheelInertia() const        { return mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.x; }                    // +0x30.x
+            f32 GetFlyWheelFriction() const       { return mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.y; }                    // +0x30.y
+            f32 GetGearChangeTime() const         { return mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.z; }                    // +0x30.z
+            f32 GetTorqueScale(s32 liGear) const  { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].y; }                        // gear[g].y
+
             InterpedParam3 mTorqueCurve;                                                        // +0x00
             Vector4 mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM;          // +0x10
             Vector4 mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges;             // +0x20
