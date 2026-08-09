@@ -7,15 +7,20 @@
 // precedent. Every stub below is DEAD today: the conductor's only caller is
 // BrnPhysics::PhysicsModule::Update, which is not landed.
 //
-// ⚠️⚠️ THEY ALL BECOME LIVE THE MOMENT PhysicsModule::Update LANDS. That wave must resolve every
-// stub in this file (reconstruct, or provably-dead-gate) -- the same standing obligation as the
-// #17 Bridge*/Do*ContactGeneration tails.
+// ⭐ 2026-08-09 (conductor wave): PhysicsModule::Update IS LANDED, so this file's census split
+// in two. The stubs REACHED UNCONDITIONALLY EVERY FRAME by the landed UpdateVehiclePhysics
+// (UpdateVehicleImpacts, EndVehicleTractionLineTests, UpdateAggressiveDriving, UpdateCrashes,
+// CrashFatalRaceCars [mbCrashRaceCarWhenFatal is Construct-seeded TRUE], PTM::UpdateTrafficPhysics,
+// PTM::PassNearbyCrashingTrafficIdsToRaceCarModule) are converted from CGS_ASSERT(false) traps --
+// which would block the sim on frame one -- to the sanctioned LOUD one-shot boot-gate shape:
+// one log line per boot naming symbol/address/insns, then inert. The rest stay ASSERT TRAPS
+// because their call sites are genuinely input/state-gated on a default run (SetRaceCarCrashing:
+// takedown chain; ReadSurfaceProperties: player reset button behind a != -1 guard;
+// VehicleDriver::UpdateVehicle + DebugComponent::Update: per-LIVE-car, and the create path is
+// still inert so the live set is empty).
 //
-// ⛔ NEVER ADD BEHAVIOUR HERE. Silent no-ops for these are the invisible-forever handling class:
-// UpdateVehicleImpacts is the slam/shunt applier, UpdateCrashes the crash sequencer,
-// EndVehicleTractionLineTests the wheel-traction harvest -- a quiet drop leaves plausible frozen
-// physics with nothing to report. Reconstruct the real body in its own TU and DELETE the stub
-// (duplicate-definition LNK2005 is the intended tripwire).
+// ⛔ NEVER make a gate silent. The log-once IS the loudness. Reconstruct the real body in its
+// own TU and DELETE the stub (duplicate-definition LNK2005 is the intended tripwire).
 //
 // Per-symbol status (insn counts from the X360 dossier):
 //   SetRaceCarCrashing @0x82634C90 (923)      -- REAL BODY EXISTS in the unmounted
@@ -49,6 +54,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags (the boot gates)
 
 namespace BrnPhysics
 {
@@ -58,7 +64,7 @@ namespace Vehicle
     void VehicleManager::SetRaceCarCrashing(
         EntityId /*lVictimEntityId*/, EntityId /*lAggressorEntityId*/,
         Vector3 /*lCollisionNormal*/, Vector3 /*lContactPoint*/,
-        BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* /*lpRequestOutputInterface*/,
+        BrnPhysics::Vehicle::VehicleOutputRequestInterface* /*lpRequestOutputInterface*/,
         VehicleManagerOutputInterface* /*lpManagerOutputInterface*/,
         BrnGameState::GameStateModuleIO::VehicleOutputInterface* /*lpVehicleOutputInterface*/,
         BrnPhysics::Deformation::DeformationInputInterface* /*lpDeformationInterface*/,
@@ -73,48 +79,82 @@ namespace Vehicle
     void VehicleManager::UpdateVehicleImpacts(
         const CgsModule::EventQueue<ImpactEvent, 16>*,
         VehicleOutputInterface*,
-        BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface*,
+        BrnPhysics::Vehicle::VehicleOutputRequestInterface*,
         VehicleManagerOutputInterface*,
         BrnPhysics::Deformation::DeformationInputInterface*)
     {
-        CGS_ASSERT(false, "VehicleManager::UpdateVehicleImpacts: link stub -- reconstruct from "
-                          "X360 @0x82635C00 (322 insns) before PhysicsModule::Update lands");
+        // BOOT GATE (conductor wave 2026-08-09): reached every frame by the landed
+        // UpdateVehiclePhysics. Reconstruct and DELETE this gate.
+        static bool s_bLogged = false;
+        if (!s_bLogged)
+        {
+            s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::UpdateVehicleImpacts @0x82635C00 (322) inert [FLAG PC boot gate]\n";
+        }
     }
 
     // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
     void VehicleManager::UpdateAggressiveDriving(
-        f32, BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface*,
+        f32, BrnPhysics::Vehicle::VehicleOutputRequestInterface*,
         VehicleManagerOutputInterface*, VehicleOutputInterface*,
         BrnPhysics::Deformation::DeformationInputInterface*)
     {
-        CGS_ASSERT(false, "VehicleManager::UpdateAggressiveDriving: link stub -- reconstruct from "
-                          "X360 @0x82640690 (264 insns) before PhysicsModule::Update lands");
+        // BOOT GATE (conductor wave 2026-08-09): reached every frame by the landed
+        // UpdateVehiclePhysics. Reconstruct and DELETE this gate.
+        static bool s_bLogged = false;
+        if (!s_bLogged)
+        {
+            s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::UpdateAggressiveDriving @0x82640690 (264) inert [FLAG PC boot gate]\n";
+        }
     }
 
     // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
     void VehicleManager::UpdateCrashes(f32)
     {
-        CGS_ASSERT(false, "VehicleManager::UpdateCrashes: link stub -- re-derive the X360 address "
-                          "(the ledger mis-keys this symbol) and reconstruct before "
-                          "PhysicsModule::Update lands");
+        // BOOT GATE (conductor wave 2026-08-09): reached every frame by the landed
+        // UpdateVehiclePhysics. Reconstruct and DELETE this gate.
+        static bool s_bLogged = false;
+        if (!s_bLogged)
+        {
+            s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::UpdateCrashes (address to re-derive; ledger mis-key) inert [FLAG PC boot gate]\n";
+        }
     }
 
     // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet (.ida-exports hole).
     void VehicleManager::EndVehicleTractionLineTests(CgsModule::IOBufferStack*,
                                                      const VehicleInputInterface*)
     {
-        CGS_ASSERT(false, "VehicleManager::EndVehicleTractionLineTests: link stub -- image-only "
-                          "body (export-set hole); reconstruct before PhysicsModule::Update lands");
+        // BOOT GATE (conductor wave 2026-08-09): reached every frame by the landed
+        // UpdateVehiclePhysics. Reconstruct and DELETE this gate.
+        static bool s_bLogged = false;
+        if (!s_bLogged)
+        {
+            s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::EndVehicleTractionLineTests (export hole; the traction harvest) inert [FLAG PC boot gate]\n";
+        }
     }
 
     // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet (.ida-exports hole).
     void VehicleManager::CrashFatalRaceCars(
-        BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface*,
+        BrnPhysics::Vehicle::VehicleOutputRequestInterface*,
         VehicleManagerOutputInterface*, VehicleOutputInterface*,
         BrnPhysics::Deformation::DeformationInputInterface*, CgsSceneManager::EntityId)
     {
-        CGS_ASSERT(false, "VehicleManager::CrashFatalRaceCars: link stub -- image-only body "
-                          "(export-set hole); reconstruct before PhysicsModule::Update lands");
+        // BOOT GATE (conductor wave 2026-08-09): reached every frame by the landed
+        // UpdateVehiclePhysics. Reconstruct and DELETE this gate.
+        static bool s_bLogged = false;
+        if (!s_bLogged)
+        {
+            s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::CrashFatalRaceCars (export hole; mbCrashRaceCarWhenFatal seeds TRUE) inert [FLAG PC boot gate]\n";
+        }
     }
 
     // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
@@ -143,16 +183,30 @@ namespace Vehicle
     // X360 @0x82644418 -- the traffic-side conductor).
     void PhysicalTrafficManager::UpdateTrafficPhysics(f32, f32, const Matrix44Affine*, bool, bool)
     {
-        CGS_ASSERT(false, "PhysicalTrafficManager::UpdateTrafficPhysics: link stub -- reconstruct "
-                          "from the image @0x82644418 before PhysicsModule::Update lands");
+        // BOOT GATE (conductor wave 2026-08-09): reached every frame by the landed
+        // UpdateVehiclePhysics. Reconstruct and DELETE this gate.
+        static bool s_bLogged = false;
+        if (!s_bLogged)
+        {
+            s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalTrafficManager::UpdateTrafficPhysics @0x82644418 (export hole) inert [FLAG PC boot gate]\n";
+        }
     }
 
     // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
     void PhysicalTrafficManager::PassNearbyCrashingTrafficIdsToRaceCarModule(
         VehicleManagerOutputInterface*, Vector3)
     {
-        CGS_ASSERT(false, "PhysicalTrafficManager::PassNearbyCrashingTrafficIdsToRaceCarModule: "
-                          "link stub -- pin the X360 address by caller set, then reconstruct");
+        // BOOT GATE (conductor wave 2026-08-09): reached every frame by the landed
+        // UpdateVehiclePhysics. Reconstruct and DELETE this gate.
+        static bool s_bLogged = false;
+        if (!s_bLogged)
+        {
+            s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalTrafficManager::PassNearbyCrashingTrafficIdsToRaceCarModule (address unpinned) inert [FLAG PC boot gate]\n";
+        }
     }
 }
 }

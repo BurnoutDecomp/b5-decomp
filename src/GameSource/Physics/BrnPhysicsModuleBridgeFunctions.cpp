@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact (+SwapEntityOrder)
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"                            // PhysicsModuleIO::OutputBuffer (GetContactSpyInterface)
 #include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"  // PhysicsModuleIO::PotentialContactInterface (GetEvent(ContactId))
+#include "GameSource/Physics/VehicleManager/BrnVehicleManagerIO.h"            // Vehicle::VehicleManagerOutputBuffer (the two _PostPhysics/ToOutput bridges, 2026-08-09)
 #include "GameSource/Physics/ContactSpies/BrnContactId.h"                     // BrnPhysics::ContactId
 #include "GameSource/Physics/ContactSpies/BrnContactSpyData.h"                // ContactSpyData (typed queues + run lists + AddContact)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"              // BaseContact/RaceCarContact/... event records
@@ -948,8 +949,97 @@ namespace BrnPhysics
         CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* /*lpContactQueue*/,
         const PhysicsModuleIO::PotentialContactInterface* /*lpContactInterface*/ )
     {
-        CGS_ASSERT(false,
-                   "TRAP: PhysicsModule::BridgeSimpleTrafficWithWorldContactsToSimulation @0x825A5618 "
-                   "not reconstructed (big-five #2 closure stub)\n");
+        // BOOT GATE (conductor wave 2026-08-09): REACHED every frame by
+        // BridgeContactsToSimulation now that PhysicsModule::Update is real. Was a
+        // CGS_ASSERT(false) trap while the caller chain was dead; a per-frame assert would
+        // block the sim, so the deferral is a one-shot log instead -- the simple-traffic
+        // world contacts are DROPPED until the real 484-insn body (@0x825A5618, PS3 DecFIGS
+        // 0x699594) lands. Reconstruct and DELETE this gate.
+        static bool s_bLogged = false;
+        if (!s_bLogged)
+        {
+            s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "PhysicsModule::BridgeSimpleTrafficWithWorldContactsToSimulation:"
+                                              " inert [FLAG PC boot gate @0x825A5618, 484 insns]\n";
+        }
+    }
+
+    // =================================================================================================
+    // ⭐ THE THREE REMAINING UPDATE BRIDGES -- landed 2026-08-09 (conductor wave), full bodies.
+    // =================================================================================================
+
+    // BrnPhysics::PhysicsModule::BridgeUpdatedVehiclesToSimulation @0x825ADEA8 (45 insns;
+    // PS3 DecFIGS 0x691CFC, mangled signature authoritative). Console order kept 1:1:
+    // construct a 60-slot InUpdateExternalBody queue on the stack, read (and DROP -- as
+    // shipped, the result is dead in r3) the sim time step, push the module input's solver
+    // iteration cap into the sim input, harvest the live vehicle bodies, append the queue.
+    void PhysicsModule::BridgeUpdatedVehiclesToSimulation(
+        CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
+        const PhysicsModuleIO::InputBuffer* lpInputBuffer )
+    {
+        CGS_ASSERT(lpSimModuleInputBuffer != 0, "lpSimModuleInputBuffer != NULL");   // :795
+        CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");                     // :796
+
+        CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InUpdateExternalBody, 60>
+            lUpdatedBodyQueue;
+        lUpdatedBodyQueue.Construct();                            // @0x825A8370
+
+        // As shipped: GetTimeStep's result is discarded (the call exists only for its
+        // write-lock tripwire).
+        (void)lpSimModuleInputBuffer->GetTimeStep();              // @0x8259ECD8
+
+        lpSimModuleInputBuffer->SetMaxIterations(
+            static_cast<int>(*lpInputBuffer->GetSolverMaxIterations()) );   // @0x8259EDB0 / @0x8259FD38
+
+        mVehicleManager.GetUpdatedVehicleBodies(&lUpdatedBodyQueue);        // @0x82619340
+
+        lpSimModuleInputBuffer->AppendUpdateExternalBodyQueue<60>(&lUpdatedBodyQueue); // @0x825AC208
+    }
+
+    // BrnPhysics::PhysicsModule::BridgeVehicleManagerToSimulation_PostPhysics @0x825ADF60
+    // (44 insns). Drain the vehicle manager's three simulation-request queues into the sim
+    // input, in the console's order: removes first, then adds, then inertia changes.
+    void PhysicsModule::BridgeVehicleManagerToSimulation_PostPhysics(
+        CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
+        const Vehicle::VehicleManagerOutputBuffer* lpVehManagerOutputBuffer )
+    {
+        CGS_ASSERT(lpSimModuleInputBuffer != 0, "lpSimModuleInputBuffer != NULL");   // :993
+        CGS_ASSERT(lpVehManagerOutputBuffer != 0, "lpVehManagerOutputBuffer != NULL"); // :994
+
+        // ⚠ FLAG (const seam, deliberate): the console reads the queues through the
+        // READ-locked buffer's const request interface (accessor @0x825A0FB0), yet the three
+        // sim Append*Queue templates were committed with NON-const source params (their own
+        // mangle note). Append only reads the source (BaseEventQueue<T>::Append takes const&),
+        // so the const_cast is behaviour-free; reconcile the template params at their own wave.
+        Vehicle::VehicleOutputRequestInterface* lpRequests =
+            const_cast<Vehicle::VehicleOutputRequestInterface*>(
+                lpVehManagerOutputBuffer->GetVehicleOutputRequestInterface());
+
+        lpSimModuleInputBuffer->AppendRemoveRigidBodyQueue<50>(lpRequests->GetRemoveRigidBodyQueue());
+        lpSimModuleInputBuffer->AppendAddRigidBodyQueue<50>(lpRequests->GetRequiredRigidBodiesQueue());
+        lpSimModuleInputBuffer->AppendChangeRigidBodyInertiaQueue<200>(lpRequests->GetChangeRigidBodyInertiaQueue());
+    }
+
+    // BrnPhysics::PhysicsModule::BridgeVehicleManagerToOutput (PS3 DecFIGS keeps it out of
+    // line; the X360 inlines the whole body into Update @0x825B2408..0x825B2510, whose baked
+    // asserts cite THIS file's :1025/:1026). Lock both buffers, forward the request
+    // interface (VehicleOutputRequestInterface::Append -- five queue appends, the inertia
+    // queue deliberately excluded), release in reverse.
+    void PhysicsModule::BridgeVehicleManagerToOutput(
+        PhysicsModuleIO::OutputBuffer* lpOutputBuffer,
+        const Vehicle::VehicleManagerOutputBuffer* lpVehManagerOutputBuffer )
+    {
+        CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");                   // :1025
+        CGS_ASSERT(lpVehManagerOutputBuffer != 0, "lpVehManagerOutputBuffer != NULL"); // :1026
+
+        lpOutputBuffer->LockForWrite();
+        lpVehManagerOutputBuffer->LockForRead();
+
+        lpOutputBuffer->GetVehicleOutputRequestInterface()->Append(
+            lpVehManagerOutputBuffer->GetVehicleOutputRequestInterface());
+
+        lpVehManagerOutputBuffer->UnlockForRead();
+        lpOutputBuffer->UnlockForWrite();
     }
 }

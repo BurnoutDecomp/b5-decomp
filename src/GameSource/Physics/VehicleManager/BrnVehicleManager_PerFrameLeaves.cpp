@@ -22,6 +22,7 @@
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint / gxMessageFilterFlags (the boot gate, 2026-08-09)
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"               // IOBufferStack::DestroyIOBuffer<T>
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h" // InChangeRigidBodyInertia (80B; mID/mInertia/mu32Flags)
 #include "GameSource/Physics/BrnContactGenerationList.h"                  // BrnPhysics::ContactGenList (complete for ~T()/sizeof)
@@ -211,17 +212,25 @@ namespace Vehicle
     // ------------------------------------------------------------------------------------
     // VehicleManager::BridgeSimpleTrafficWithCarContactsToSimulation @0x825C83B0
     //
-    // ⚠⚠ TRAP STUB (closure enforcement, 2026-08-06 big-five #2 wave) -- the REAL body (375
-    // X360 asm lines / 9 callees; PS3 DecFIGS 0x70DB6C) is NOT reconstructed yet. Dead code
-    // today (Update @0x825B0640 is still a link stub; /OPT:REF strips this). RECONSTRUCT-NEXT.
+    // BOOT GATE (conductor wave 2026-08-09; was a trap while Update was a link stub):
+    // REACHED every frame by the landed BridgeContactsToSimulation. The REAL body (375
+    // X360 asm lines / 9 callees; PS3 DecFIGS 0x70DB6C) is NOT reconstructed yet -- the
+    // simple-traffic car contacts are DROPPED, one log line per boot says so.
+    // Reconstruct and DELETE this gate.
     // ------------------------------------------------------------------------------------
     void VehicleManager::BridgeSimpleTrafficWithCarContactsToSimulation(
         CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InAddPotentialContact, 1024>* /*lpContactQueue*/,
         const BrnPhysics::PhysicsModuleIO::PotentialContactInterface* /*lpContactInterface*/)
     {
-        CGS_ASSERT(false,
-                   "TRAP: VehicleManager::BridgeSimpleTrafficWithCarContactsToSimulation @0x825C83B0 "
-                   "not reconstructed (big-five #2 closure stub)\n");
+        static bool s_bLogged = false;
+        if (!s_bLogged)
+        {
+            s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::"
+                                              "BridgeSimpleTrafficWithCarContactsToSimulation "
+                                              "@0x825C83B0 (375) inert [FLAG PC boot gate]\n";
+        }
     }
 }
 }

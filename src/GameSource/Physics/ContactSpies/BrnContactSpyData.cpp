@@ -174,5 +174,26 @@ void ContactSpyData::AddContact(const DiscardedContact& lrContact)
     }
 }
 
+// ContactSpyData::Clear (DWARF :77-region decl)          NEW 2026-08-09 (conductor wave)
+//
+// X360-attested INLINE at the top of PhysicsModule::Update @0x825B0640: ten `stw 0`
+// stores at module+191736/+220568/+259000/+278232/+283864/+295096/+296392/+297064/
+// +302216/+306248 == mContactData (+191728) + each container's miLength seat (+8 into
+// each of the six queues and four run lists, in member order). Each container derives
+// EventQueue, whose base Clear() is exactly `miLength = 0`.
+void ContactSpyData::Clear()
+{
+    mRaceCarContactQueue.Clear();            // module+191736 == +0x00008
+    mTrafficContactQueue.Clear();            // module+220568 == +0x070A8
+    mPhysicalCarPartContactQueue.Clear();    // module+259000 == +0x106C8
+    mHingedPartContactQueue.Clear();         // module+278232 == +0x151E8
+    mPropContactQueue.Clear();               // module+283864 == +0x167E8
+    mDiscardedContactQueue.Clear();          // module+295096 == +0x193C8
+    mRaceCarContactRunList.Clear();          // module+296392 == +0x198D8
+    mTrafficContactRunList.Clear();          // module+297064 == +0x19B78
+    mPhysicalCarPartContactRunList.Clear();  // module+302216 == +0x1AF98
+    mPropContactRunList.Clear();             // module+306248 == +0x1BF58
+}
+
 }
 }

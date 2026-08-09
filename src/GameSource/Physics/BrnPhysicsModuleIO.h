@@ -40,8 +40,13 @@
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"  // CgsModule::IOBuffer
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<13312,16> (mGameActionQueue)
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface (mTimerInterface, retyped 2026-08-09)
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"                 // CgsModule::EventQueue<T,N> (the two unfolded input queues, 2026-08-09)
+#include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"          // SceneManagerIO::PotentialContact (mPotentialContactQueue element)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventOutOverlapPair.h" // SceneManagerIO::OutOverlapPair (mOverlapPairsQueue element)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h" // ContactSpy::ContactSpyInterface (real member @ +998192, promoted 2026-08-06)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h" // Vehicle::VehicleInputInterface (mVehicleInputInterface, retyped 2026-08-06)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // Vehicle::VehicleOutputRequestInterface / VehicleManagerOutputInterface / VehicleOutputInterface (promoted 2026-08-09)
 
 namespace BrnPhysics
 {
@@ -52,10 +57,21 @@ namespace PhysicsModuleIO
     public:
         // Opaque foreign-type storages (see FLAG above). Each is a 1-byte placeholder; the
         // member offsets are pinned by the explicit padding arrays in the private section.
-        struct VehicleOutputRequestInterfaceStorage { unsigned char maBytes[1]; };
-        struct VehicleOutputInterfaceStorage        { unsigned char maBytes[1]; };
+        // ⭐ PROMOTED 2026-08-09 (conductor wave): the first THREE seats are the REAL committed
+        // types now (BrnVehicleOutputInterface.h) -- PhysicsModule::Update @0x825B0640 hands
+        // +16 to the request-queue Append run, +41952 (the previously PAD-BURIED
+        // mVehicleManagerOutputInterface, accessor 0x8259FFD8) to DoCrashPrediction /
+        // UpdateDrivers / ProcessContactSpies / ProcessResetEvents, and +44128 to
+        // UpdateVehiclePhysics -- each callee declared over the real type. All three are
+        // pointer-free queue/POD bundles whose host sizeof equals the console span
+        // (41936 / 2176-aligned / 27664), so every downstream pin below is UNCHANGED --
+        // and _AssertLayout still gates exactly that.
+        // The typedefs keep the pre-promotion accessor signatures compiling.
+        typedef Vehicle::VehicleOutputRequestInterface VehicleOutputRequestInterfaceStorage;
+        typedef Vehicle::VehicleOutputInterface        VehicleOutputInterfaceStorage;
         struct PropOutputInterfaceStorage           { unsigned char maBytes[1]; };
         struct DeformationOutputInterfaceStorage    { unsigned char maBytes[1]; };
+        struct DeformationOutputInterfaceForEntityModulesStorage { unsigned char maBytes[1]; }; // :384 (unfolded 2026-08-09)
         struct SceneInputInterfaceStorage           { unsigned char maBytes[1]; };
         // mContactSpyInterface PROMOTED 2026-08-06 (bridge de-facade wave): the real
         // ContactSpy::ContactSpyInterface (one ContactSpyData* + SetData/IsEmpty), consumed by
@@ -80,22 +96,41 @@ namespace PhysicsModuleIO
         const DeformationOutputInterfaceStorage*    GetDeformationOutputInterface() const;     // +148656, read  (0x8279F6E8, DWARF :322)
         SceneInputInterfaceStorage*                 GetSceneInputInterface();                  // +179424, write (0x825A0278, DWARF :337)
 
+        // ---- ADDITIVE 2026-08-09 (conductor wave) --------------------------------------
+        // The manager-output accessor pair (DWARF :351/:352), X360 @0x8279F4F0(const-read
+        // sibling block) / @0x8259FFD8 (write; the accessor PhysicsModule::Update calls
+        // five times). Returns the :378 member the pre-promotion layout buried in padding.
+        const Vehicle::VehicleManagerOutputInterface* GetVehicleManagerOutputInterface() const; // +41952, read
+        Vehicle::VehicleManagerOutputInterface*       GetVehicleManagerOutputInterface();       // +41952, write (0x8259FFD8)
+        DeformationOutputInterfaceForEntityModulesStorage*
+                                                      GetDeformationOutputInterfaceForEntityModules(); // +159648, write (0x825A01D0, DWARF :364)
+
         static void _AssertLayout();
 
     private:
         u8                                   maStatusPad[15];                 // +1..+15 (force +16)
-        VehicleOutputRequestInterfaceStorage mVehicleOutputRequestInterface;  // +16     :376
-        // mVehicleManagerOutputInterface (:378) folded into this padding: +17 .. +44128.
-        unsigned char                        maVehicleManagerAndPad[44128 - 17]; // ...  :378
-        VehicleOutputInterfaceStorage        mVehicleOutputInterface;          // +44128  :379
-        // gap to mPropManagerOutputInterface: +44129 .. +71792.
-        unsigned char                        maPropMgrPad[71792 - 44129];      // ...
-        PropOutputInterfaceStorage           mPropManagerOutputInterface;      // +71792  :381
+        VehicleOutputRequestInterfaceStorage mVehicleOutputRequestInterface;  // +16     :376 (real type, 41936 both targets -> ends 41952)
+        // ⚠ HOST GROWTH from here down (the InputBuffer precedent): the manager/vehicle
+        // interfaces contain event queues whose CONSOLE header is 12 bytes (4+4+4) where the
+        // host's is 16 (8-byte mpEvents), so their host sizeof EXCEEDS the console span and
+        // every later member sits at console+drift. The trailing comments keep the CONSOLE
+        // offsets as documentation; _AssertLayout gates the console DELTAS between the
+        // pad-separated seats (relative gates -- the "parity by NAMED MEMBERS" rule).
+        Vehicle::VehicleManagerOutputInterface mVehicleManagerOutputInterface; // console +41952 :378 (console span 2176)
+        VehicleOutputInterfaceStorage        mVehicleOutputInterface;          // console +44128 :379 (console span 27664)
+        PropOutputInterfaceStorage           mPropManagerOutputInterface;      // console +71792 :381
         // gap to mDeformationOutputInterface: +71793 .. +148656.
         unsigned char                        maDeformationPad[148656 - 71793]; // ...
         DeformationOutputInterfaceStorage    mDeformationOutputInterface;      // +148656 :383
-        // mDeformationOutputInterfaceForEntityModules (:384) folded: +148657 .. +179423.
-        unsigned char                        maEntityModulesPad[179424 - 148657];     // ... :384
+        // gap to mDeformationOutputInterfaceForEntityModules: +148657 .. +159647.
+        unsigned char                        maDeformOutPad[159648 - 148657];  //
+        // ⭐ 2026-08-09 (conductor wave): unfolded -- its own accessor @0x825A01D0 returns
+        // `addis 2; addi 28576` == +159648 (148656 + the 10992-byte deformation output span,
+        // zero slack).
+        DeformationOutputInterfaceForEntityModulesStorage
+                                             mDeformationOutputInterfaceForEntityModules; // +159648 :384
+        // gap to mSceneInputInterface: +159649 .. +179423.
+        unsigned char                        maEntityModulesPad[179424 - 159649];     // ...
         SceneInputInterfaceStorage           mSceneInputInterface;             // +179424 :385 (0x8279F838)
         // gap to mContactSpyInterface: +179425 .. +998191.
         unsigned char                        maScenePad[998192 - 179425];      // ...
@@ -162,7 +197,12 @@ namespace PhysicsModuleIO
         struct VehicleDriverInputInterfaceStorage   { unsigned char maBytes[1]; };
         struct VehicleEffectsInputInterfaceStorage  { unsigned char maBytes[1]; };
         struct RCEntityOutputInterfaceStorage       { unsigned char maBytes[0x28F0]; }; // 10480
-        struct TimerStatusInterfaceStorage          { unsigned char maBytes[0x30]; };   // 48
+        // ⭐ RETYPED 2026-08-09 (conductor wave; same typedef pattern as the vehicle-input
+        // span): the real CgsSystem::TimerStatusInterface -- 48 bytes on both targets (two
+        // pointer-free 24-byte TimerStatus blocks), so the seat and every pin below are
+        // unchanged. PhysicsModule::Update @0x825B0640 reads both sub-statuses through it
+        // (sim step = [+32]*[+28], game step = [+8]*[+4], sim Time = [+40..47]).
+        typedef CgsSystem::TimerStatusInterface     TimerStatusInterfaceStorage;         // 48
         struct PropInputInterfaceStorage            { unsigned char maBytes[1]; };
         // ⛔⛔ CORRECTED 2026-08-01 (BridgeGameStateToWorld wave) -- THIS WAS A ONE-BYTE MEMBER
         // THAT A COMMITTED BRIDGE WRITES A 13328-BYTE QUEUE INTO.
@@ -187,6 +227,11 @@ namespace PhysicsModuleIO
         const VehicleDriverInputInterfaceStorage*   GetVehicleDriverInterface() const;      // 0x8259F948 :278
         const VehicleEffectsInputInterfaceStorage*  GetVehicleEffectsInputInterface() const;// 0x8259F9F0 :281
         const TimerStatusInterfaceStorage*          GetTimerInterface() const;              // 0x8259FC90 :295
+        // ---- ADDITIVE 2026-08-09 (conductor wave): the two unfolded queue getters ------
+        const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>*
+                                                    GetPotentialContactQueue() const;       // 0x8259FB40 :289
+        const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>*
+                                                    GetOverlapPairsQueue() const;           // 0x8259FBE8 :292
         const u32*                                  GetSolverMaxIterations() const;         // 0x8259FD38 :298
         const PropInputInterfaceStorage*            GetPropManagerInputInterface() const;   // 0x8259FDE0 :301
         const GameActionQueueStorage*               GetGameActionQueue() const;             // 0x8259FE88 :304
@@ -232,9 +277,23 @@ namespace PhysicsModuleIO
         // gap to mRCEntityOutputInterface: +147841 .. +149631.
         unsigned char                       maRCEntityPad[149632 - 147841];  //
         RCEntityOutputInterfaceStorage      mRCEntityOutputInterface;        // +149632  :314 (0x28F0)
-        // mCreateWorldEventQueue/mPotentialContactQueue/mOverlapPairsQueue (:316-:318) folded:
-        // +160112 (0x24880+0x28F0) .. +327151.
-        unsigned char                       maQueuesPad[327152 - 160112];    //          :316-:318
+        // ⭐ 2026-08-09 (conductor wave): two of the three folded queues are REAL members now,
+        // seated by their own X360 accessor returns (GetPotentialContactQueue @0x8259FB40
+        // `addis 2; addi 0x71D0` -> +160208; GetOverlapPairsQueue @0x8259FBE8 `addis 5;
+        // addi -0xE20` -> +324064). The spans close with zero slack on both sides:
+        //   mCreateWorldEventQueue (:316, still folded)   +160112 .. +160208  (96)
+        //   mPotentialContactQueue (:317)                 +160208 .. +324064  (16 + 2048*80)
+        //   mOverlapPairsQueue     (:318)                 +324064 .. +327152  (16 + 128*24)
+        // (Console offsets; the host adds this buffer's uniform KU_DRIFT after the grown
+        // mVehicleInputInterface, exactly like every member below it -- the layout gate in
+        // BrnPhysicsModuleIO_InputBuffer.cpp pins both new seats at console+KU_DRIFT.)
+        // Both element types are pointer-free and the queue header is 16 bytes on both
+        // targets, so the RELATIVE spans equal the console's.
+        unsigned char                       maCreateWorldQueuePad[160208 - 160112];   // :316 (folded)
+        CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>
+                                            mPotentialContactQueue;          // +160208  :317
+        CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>
+                                            mOverlapPairsQueue;              // +324064  :318
         TimerStatusInterfaceStorage         mTimerInterface;                 // +327152  :319 (0x30)
         u32                                 mSolverMaxIterations;            // +327200  :320
         // gap to mPropManagerInputInterface: +327204 .. +327215.

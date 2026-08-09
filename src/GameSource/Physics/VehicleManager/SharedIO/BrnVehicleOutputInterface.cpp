@@ -213,6 +213,43 @@ namespace Vehicle
         mAddJointQueue.AddEvent(lAddJointEvent);
     }
 
+    // ---------------------------------------------------------------------------------------
+    // VehicleOutputRequestInterface::Construct (DWARF :204)          NEW 2026-08-09 (conductor)
+    //
+    // X360-attested through CreateIOBuffer<VehicleManagerOutputBuffer> @0x8259DAF0, which runs
+    // the buffer Construct after the stack alloc (the PS3 DecFIGS build keeps
+    // VehicleManagerOutputBuffer::Construct out of line, and this is its payload): construct
+    // all six request queues over their inline storage.
+    // ---------------------------------------------------------------------------------------
+    void VehicleOutputRequestInterface::Construct()
+    {
+        mRequiredRigidBodiesQueue.Construct();
+        mRemoveRigidBodyQueue.Construct();
+        mRequestFineLineQueue.Construct();
+        mChangeRigidBodyInertiaQueue.Construct();
+        mAddJointQueue.Construct();
+        mRemoveJointQueue.Construct();
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // VehicleOutputRequestInterface::Append (DWARF :201)             NEW 2026-08-09 (conductor)
+    //
+    // X360-attested INLINE in PhysicsModule::Update @0x825B0640 (0x825B2480..0x825B24C0):
+    // merge the source interface's request queues onto this one, five appends in the
+    // console's order. ⚠️ mChangeRigidBodyInertiaQueue is deliberately NOT appended --
+    // Update drains that queue into the SIM input buffer through
+    // BridgeVehicleManagerToSimulation_PostPhysics @0x825ADF60 instead; appending it here
+    // too would double-apply every inertia change.
+    // ---------------------------------------------------------------------------------------
+    void VehicleOutputRequestInterface::Append(const VehicleOutputRequestInterface* lpSource)
+    {
+        mRequiredRigidBodiesQueue.Append(lpSource->mRequiredRigidBodiesQueue);   // @0x825A3898
+        mRemoveRigidBodyQueue.Append(lpSource->mRemoveRigidBodyQueue);           // @0x825A3988
+        mRequestFineLineQueue.Append(lpSource->mRequestFineLineQueue);           // @0x825AC068 (<13440,16>)
+        mAddJointQueue.Append(lpSource->mAddJointQueue);                         // @0x825A3A68
+        mRemoveJointQueue.Append(lpSource->mRemoveJointQueue);                   // @0x825A3B58
+    }
+
     // @0x823625C0  CrashingRaceCarInterface::SetFromVehicleOutputInterface
     //   For every race-car slot in use (mUsedRaceCars bit set) copy that car's
     //   RaceCarState::mbResetCarTransform flag (byte @1098) into mabCrashingRaceCars[]. The
