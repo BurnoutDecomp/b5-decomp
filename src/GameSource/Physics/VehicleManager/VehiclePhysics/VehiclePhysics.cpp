@@ -4666,6 +4666,97 @@ namespace Vehicle
         }
     }
 
+// [clean] HackedResetAndFlyAround  @0x825D0008
+    // @0x825D0008  BrnPhysics::Vehicle::VehiclePhysics::HackedResetAndFlyAround  (139 insns,
+    // 0x825D0008..0x825D0230, leaf -- no callee but the GPR save/restore thunks)
+    // The dev reset / fly-around handler, gated on copy.mbReset by UpdateDriving @0x82638604.
+    // Levels the car onto a world-up basis, flies the position from the stick, kills all
+    // motion, and re-seats the wall-contact/slam/shunt/air-ram state.
+    //
+    // Constants (x360rd image reads, 10/10 self-test): flt_82001CC0 = 0.0f,
+    // flt_82001C98 = 1.0f, flt_82004014 = 0.1f, unk_8208FADC = 0.4f.
+    //
+    // ⚠️ dt (v1) is never read by the body -- the fly speeds are per-CALL, not per-second.
+    void VehiclePhysics::HackedResetAndFlyAround(const BrnPlayerDriverControls* lpControls,
+                                                 VecFloat lvfTimeStep)
+    {
+        (void)lvfTimeStep;   // carried but unused, as shipped
+
+        static const f32 KF_FLY_RISE_PER_CALL   = 0.1f;   // flt_82004014 (image-read)
+        static const f32 KF_WALL_CONTACT_RESEED = 0.4f;   // unk_8208FADC (image-read) -- the
+                                                          // same window UpdateDriving's else-leg
+                                                          // compares against (flt_8200473C)
+
+        // ---- 0x825D0010..0x825D00AC: re-level the basis about world up -----------------------
+        // up = {0,1,0,0} is built on the stack (raw stack decode: words at r1-0x70/-0x6C/-0x68/
+        // -0x64 = {0,1,0,0} -- the w word IS zeroed, via `stw r11,0(r1-0x64)`).
+        //   yAxis <- up
+        //   xAxis <- cross(up, old zAxis)        (shifted-permwi idiom: vpermwi128 0x63 +
+        //   zAxis <- cross(new xAxis, up)         vnmsubfp, twice; nothing is normalised)
+        const Vector3 lvUp    = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+        const Vector3 lvOldAt = mTransform.zAxis;
+        mTransform.yAxis = lvUp;                                    // stvx128 -> +0x20
+        mTransform.xAxis = vpu::Cross(lvUp, lvOldAt);               // stvx128 -> +0x10
+        mTransform.zAxis = vpu::Cross(mTransform.xAxis, lvUp);      // stvx128 -> +0x30
+
+        // ---- 0x825D00B0..0x825D0178: fly the position from the controls ----------------------
+        //   pos += xAxis * -mfSteering           (lfs 0x10(r4), fneg, splat, vmaddfp)
+        //   pos += zAxis * (mfGas - mfBrake)     (lfs 4(r4) - lfs 8(r4), splat, vmaddfp)
+        //   pos += yAxis * 0.1f                  (the constant per-call rise)
+        mTransform.wAxis = vpu::Add(vpu::Mult(mTransform.xAxis, -lpControls->mfSteering),
+                                    mTransform.wAxis);
+        mTransform.wAxis = vpu::Add(vpu::Mult(mTransform.zAxis,
+                                              lpControls->mfGas - lpControls->mfBrake),
+                                    mTransform.wAxis);
+        mTransform.wAxis = vpu::Add(vpu::Mult(mTransform.yAxis, KF_FLY_RISE_PER_CALL),
+                                    mTransform.wAxis);
+
+        // ---- 0x825D0180..0x825D0194: kill all motion and pending forces ----------------------
+        static const Vector3 KV_ZERO = { 0.0f, 0.0f, 0.0f, 0.0f };   // vspltisw v0, 0
+        mLinearVelocity      = KV_ZERO;   // +0x50   == base+0x40
+        mAngularVelocity     = KV_ZERO;   // +0x60   == base+0x50
+        mTotalLinearImpulse  = KV_ZERO;   // +0x110  == base+0x100
+        mTotalAngularImpulse = KV_ZERO;   // +0x120  == base+0x110
+        mTotalLinearForce    = KV_ZERO;   // +0xF0   == base+0xE0
+        mTotalTorque         = KV_ZERO;   // +0x100  == base+0xF0
+
+        // ---- 0x825D0198..0x825D022C: re-seat the contact/effect state ------------------------
+        mbContactingWall = false;                                        // stb 0 -> +0x1362
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w
+            = KF_WALL_CONTACT_RESEED;                                    // vrlimi(1) -> +0x1070.w
+
+        // Partial SlamEffect clear -- the same five fields Reset(Vector3) seats (mForce, mfDecay
+        // and mfRecoveryTime are NOT written).
+        mSlamEffect.mi8SlamNumber      = -1;      // stb -1  -> +0x1128
+        mSlamEffect.mfSteering         = 0.0f;    // stfs 0  -> +0x1114
+        mSlamEffect.mfOriginalSteering = 0.0f;    // stfs 0  -> +0x1118
+        mSlamEffect.mfTotalSlamTime    = 0.0f;    // stfs 0  -> +0x1120
+        mSlamEffect.mfSlamLife         = 0.0f;    // stfs 0  -> +0x111C
+
+        // Shunt clear, the Reset(Vector3) shape: direction+speed zeroed whole; Life = -1
+        // (vspltisw -1 + vcfsx), SpeedIncreaseToQuit = 0; z/w lanes untouched.
+        mShuntEffect.mDirectionPlusDesiredSpeed = Vector3Plus{ 0.0f, 0.0f, 0.0f, 0.0f };
+                                                                         // stvx128 0 -> +0x1130
+        mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y = 0.0f;              // vrlimi(4) -> +0x1140.y
+        mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = -1.0f;             // vrlimi(8) -> +0x1140.x
+
+        // ⚠️ AS SHIPPED: the image stores +0x1158 TWICE (two consecutive `std r11,0x1158(r3)`,
+        // raw bytes 0xF9631158 x2 @0x825D01EC/0x825D01F0). Reset(Vector3) zeroes mUsedAirRams
+        // AND mUsedSpins (+0x1220) here, so the second store is plausibly a source-level typo
+        // that was meant for mUsedSpins -- but the shipped bytes hit mUsedAirRams both times,
+        // so mUsedSpins is NOT cleared by this function. Transcribed as shipped; flagged.
+        mUsedAirRams.UnSetAll();                                         // std 0 -> +0x1158
+        mUsedAirRams.UnSetAll();                                         // std 0 -> +0x1158 (again)
+
+        // Timer lane re-seats (lane-inserts of 0.0f).
+        mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z = 0.0f;
+                                                                         // vrlimi(2) -> +0x1060.z
+        mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.w = 0.0f;
+                                                                         // vrlimi(1) -> +0x1060.w
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.x
+            = 0.0f;                                                      // vrlimi(8) -> +0x1070.x
+    }
+
 // [clean] UpdateDriving  @0x82638148
     // @0x82638148  BrnPhysics::Vehicle::VehiclePhysics::UpdateDriving  (433 insns)
     // ⭐⭐ THE ORDERER -- the phase chain the whole campaign has been aimed at. Transcribed

@@ -173,13 +173,8 @@ namespace Vehicle
                           "@0x8262DE58 (+ SimpleVehiclePhysics::SetAttributes @0x826020A0)");
     }
 
-    // LINK STUB (orchestrator wave): X360 @0x825D0008, 139 instructions -- the dev reset /
-    // fly-around handler (gated on controls->mbReset; teleports and re-seats the car).
-    void VehiclePhysics::HackedResetAndFlyAround(const BrnPlayerDriverControls*, VecFloat)
-    {
-        CGS_ASSERT(false, "VehiclePhysics::HackedResetAndFlyAround: link stub -- reconstruct "
-                          "from X360 @0x825D0008");
-    }
+    // ⭐ 2026-08-09 (attribs-setup wave): the HackedResetAndFlyAround @0x825D0008 stub is
+    // GONE -- BODIED in VehiclePhysics.cpp (139 insns, leaf, full transcription).
 
     // LINK STUB (orchestrator wave): X360 @0x825F58E0, 622 instructions -- derive the plain-AI
     // attribute set from a source set (the donut-LEAVE leg of SwitchAIDonuttingAttribs; its
