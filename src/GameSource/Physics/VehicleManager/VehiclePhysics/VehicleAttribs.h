@@ -219,9 +219,12 @@ namespace Vehicle
         // VehiclePhysics::Construct calls it twice (mAIVehicleAttribs / mPlayerVehicleAttribs).
         void Construct();
 
-        // @0x825F4CD8 (770 instrs) / @0x825F58E0 (622) -- the streamed-attribute loaders. Owned by
-        // future TUs; declared only.
+        // @0x825F4CD8 (770 instrs) -- the streamed-attribute loader. Owned by a future TU;
+        // declared only.
         void SetupAttribs(const PhysicsVehicleHandling& lrHandling);
+
+        // @0x825F58E0 (622 instrs) -- derive the plain-AI set from a source set. ⭐ BODIED in
+        // VehicleAttribs.cpp (attribs-setup wave, 2026-08-09).
         void SetupAttribsForAI(VehicleAttribs* lpSource);
 
         // @0x825F6298 (40 instrs) -- bodied in VehicleAttribs.cpp.

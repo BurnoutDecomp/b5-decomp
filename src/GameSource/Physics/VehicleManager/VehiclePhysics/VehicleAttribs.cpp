@@ -3,6 +3,7 @@
 #include "types.hpp"
 
 #include <cstddef>
+#include <cstring>   // std::memcpy (SetupAttribsForAI's engine-block re-copy)
 
 // This TU used to carry a private, self-contained copy of five types the tree already owns
 // (rw::math::vpu::VecFloat/Vector3/Vector4, BrnPhysics::InterpedParam3, Wheel::TireAttribs) plus
@@ -652,6 +653,212 @@ VehicleAttribs& VehicleAttribs::operator=(const VehicleAttribs& lrSource)
     mAttribsKey        = lrSource.mAttribsKey;   // ld/std   @0x358
     mbIsValid          = true;                   // li 1; stb @0x360 (set unconditionally)
     return *this;
+}
+
+// @0x825F58E0 (622 instrs)  BrnPhysics::Vehicle::VehicleAttribs::SetupAttribsForAI
+//
+// Derive the plain-AI attribute set from a source set (the donut-LEAVE leg of
+// SwitchAIDonuttingAttribs; VehiclePhysics::Prepare's AI seat). Shape: operator=(source)
+// first, then a long fixed-constant respray of the base/steering/drift/bodyroll lanes with a
+// handful of source-derived scalings, the two AI tire preps, and the engine block re-copied.
+//
+// Decoded from the X360 asm store-for-store (every `lfs`+`lvlx`/`vspltw`+`vrlimi128` lane
+// insert dataflow-tracked through its stack slot; vrlimi masks 8/4/2/1 == lanes x/y/z/w).
+// Every constant below was read out of the shipped image with the self-calibrating .id1
+// reader (10/10 self-test). ⚠️ SEVERAL STORES ARE REDUNDANT BY CONSTRUCTION: operator=
+// already copied the whole 0x370 block, and the console then RE-copies individual source
+// lanes (+0xD0 surface factors, the whole suspension block, the boost block, the engine
+// memcpy) -- inlined SetX(source.GetX()) patterns. They are transcribed as shipped, marked
+// [re-copy]; removing them would not change the result.
+namespace AIDefaults
+{
+const f32 KF_AI_DOWNFORCE                 = 30.0f;           // flt_82004F5C
+const f32 KF_AI_MASS_PRESEED              = 2000.0f;         // stru_8208F640 (overwritten below
+                                                             //   by source Mass -- as shipped)
+const f32 KF_AI_MAX_SPEED_PRESEED         = 200.0f;          // flt_8201A1F0 (overwritten below
+                                                             //   by 1.2 * source MaxSpeed)
+const f32 KF_AI_TIME_FOR_FULL_BRAKE_RECIP = 0.666666687f;    // flt_8200AECC
+const f32 KF_AI_BRAKE_SCALE_TO_LOCK       = 1.0f;            // flt_82001C98
+const f32 KF_AI_TRACTION_LINE_LENGTH      = 0.100000001f;    // flt_82004014
+const f32 KF_AI_LOW_SPEED_DRIVING_MPH     = 70.0f;           // flt_820051BC
+const f32 KF_AI_LOW_SPEED_TYRE_FRICTION_TC = 25.0f;          // flt_82004FD8
+const f32 KF_AI_LOW_SPEED_THROTTLE_TC     = 20.0f;           // flt_8208F9D4
+const f32 KF_AI_HIGH_SPEED_ANGULAR_DAMPING = 0.100000001f;   // flt_82004014
+const f32 KF_AI_WHEEL_MASS                = 20.0f;           // flt_8208F9D4 (front AND rear)
+const f32 KF_AI_PITCH_DAMPING_ON_TAKEOFF  = 0.699999988f;    // flt_82004C68
+const f32 KF_AI_YAW_DAMPING_ON_TAKEOFF    = 0.100000001f;    // flt_82004014
+const f32 KF_AI_ROLL_DAMPING_ON_TAKEOFF   = 0.25f;           // flt_8208F834
+const f32 KF_AI_CRASH_EXTRA_VEL_FACTOR    = 0.300000012f;    // flt_82004740 (lanes y/z/w)
+const f32 KF_AI_DEFORM_LIMIT_X            = 0.300000012f;    // flt_82004740
+const f32 KF_AI_DEFORM_LIMIT_Y            = 0.200000003f;    // flt_82004744
+const f32 KF_AI_DEFORM_LIMIT_ZW           = 0.400000006f;    // flt_8200473C
+const f32 KF_AI_MAX_SPEED_SCALE           = 1.20000005f;     // flt_82009B84
+const f32 KF_AI_MAX_BOOST_SPEED_SCALE     = 1.10000002f;     // flt_82004A1C
+const f32 KF_AI_BOOST_LINEAR_DRAG_SCALE   = 0.75f;           // flt_82004018 (x this LinearDrag)
+const f32 KF_AI_DOWNFORCE_LIFT_CO         = 0.239999995f;    // flt_8200D57C
+const f32 KF_AI_STEERING_MIN_ANGLE        = 5.0f;            // flt_8200426C
+const f32 KF_AI_STEERING_MAX_ANGLE        = 30.0f;           // flt_82004F5C
+const f32 KF_AI_SPEED_FOR_MIN_ANGLE       = 70.0f;           // flt_820051BC
+const f32 KF_AI_STEERING_REACTION_PER_SEC = 10.0f;           // flt_82004A20
+const f32 KF_AI_MIN_SPEED_FOR_DRIFT       = 20.0f;           // flt_8208F9D4
+const f32 KF_AI_STEERING_DRIFT_SCALE      = 0.800000012f;    // flt_8208F9C8
+const f32 KF_AI_COUNTER_STEERING_DRIFT_SCALE = 2.4000001f;   // flt_82097A34
+const f32 KF_AI_BASE_COUNTER_STEERING_DRIFT_SCALE = 0.400000006f;  // flt_8200473C
+const f32 KF_AI_DRIFT_TORQUE_FALL_OFF     = 0.100000001f;    // flt_82004014
+const f32 KF_AI_NEUTRAL_TIME_TO_REDUCE_DRIFT = 0.5f;         // flt_82001DA0
+const f32 KF_AI_SIDE_FORCE_DRIFT_SCALE_CUTOFF = 15.0f;       // flt_820047C4
+const f32 KF_AI_SIDE_FORCE_MAGNITUDE      = 0.699999988f;    // flt_82004C68
+const f32 KF_AI_NATURAL_DRIFT_DECAY       = 0.939999998f;    // flt_8200D58C
+const f32 KF_AI_DRIFT_SIDEWAYS_DAMPING    = 0.0199999996f;   // flt_82005574
+const f32 KF_AI_DRIFT_ANGULAR_DAMPING     = 0.159999996f;    // flt_82097A3C
+const f32 KF_AI_COUNTER_STEER_TORQUE_SCALE = 0.5f;           // flt_82001DA0
+// The two InterpedParam3 curve domains (parameters named lParamA/B/C in the DWARF).
+const f32 KF_AI_BRAKE_CURVE_A             = 0.0f;            // flt_82001CC0
+const f32 KF_AI_BRAKE_CURVE_B             = 5.0f;            // flt_8200426C
+const f32 KF_AI_BRAKE_CURVE_C             = 10.0f;           // flt_82004A20
+const f32 KF_AI_DRIFT_YAW_TORQUE_CURVE_A  = 20000.0f;        // flt_820468AC
+const f32 KF_AI_DRIFT_YAW_TORQUE_CURVE_B  = 35000.0f;        // flt_82097A40
+const f32 KF_AI_DRIFT_YAW_TORQUE_CURVE_C  = 50000.0f;        // flt_82097A44
+}
+
+void VehicleAttribs::SetupAttribsForAI(VehicleAttribs* lpSource)
+{
+    using namespace AIDefaults;
+
+    // 0x825F5900: copy the whole block, then respray.
+    *this = *lpSource;
+
+    // 0x825F5908..0x825F5938: the brake-scale curve (this+0x60).
+    mBaseAttribs.mBrakeScaleToFactorCurve.Construct();
+    mBaseAttribs.mBrakeScaleToFactorCurve.Prepare(KF_AI_BRAKE_CURVE_A, KF_AI_BRAKE_CURVE_B,
+                                                  KF_AI_BRAKE_CURVE_C);
+
+    // ---- mBaseAttribs (+0x70..+0xD0) -- fixed AI lanes -------------------------------------
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.w = KF_AI_DOWNFORCE;      // vrlimi(1)
+    mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.x = 0.0f;
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x = KF_AI_MASS_PRESEED;   // (overwritten below)
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z = KF_AI_MAX_SPEED_PRESEED;  // (overwritten below)
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.y = KF_AI_TIME_FOR_FULL_BRAKE_RECIP;
+    mBaseAttribs.mCOMOffset = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // 0x825F5A34 (re-copied below)
+    mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.w = KF_AI_BRAKE_SCALE_TO_LOCK;
+    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.x = KF_AI_TRACTION_LINE_LENGTH;
+    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.y = KF_AI_LOW_SPEED_DRIVING_MPH;
+    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.z = KF_AI_LOW_SPEED_TYRE_FRICTION_TC;
+    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.w = KF_AI_LOW_SPEED_THROTTLE_TC;
+    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.z = KF_AI_HIGH_SPEED_ANGULAR_DAMPING;
+    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.w = KF_AI_WHEEL_MASS;
+    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.x = KF_AI_WHEEL_MASS;
+    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.y = 0.0f;   // PowerToFront
+    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z = 1.0f;   // PowerToRear
+    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.x = 0.0f;  // LinearDrag
+    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.x = KF_AI_PITCH_DAMPING_ON_TAKEOFF;
+    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.y = KF_AI_YAW_DAMPING_ON_TAKEOFF;
+    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.z = KF_AI_ROLL_DAMPING_ON_TAKEOFF;
+
+    // 0x825F5BE4..0x825F5C90: [re-copy] the four surface-factor lanes from the source, one
+    // vspltw/vrlimi pair per lane (redundant after operator= -- transcribed as shipped).
+    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.x
+        = lpSource->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.x;
+    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.y
+        = lpSource->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.y;
+    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.z
+        = lpSource->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.z;
+    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.w
+        = lpSource->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.w;
+
+    // 0x825F5C94..0x825F5CD0: the source-derived seats.
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x
+        = lpSource->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;   // Mass [re-copy]
+    mBaseAttribs.mCOMOffset = lpSource->mBaseAttribs.mCOMOffset;                      // [re-copy]
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z
+        = lpSource->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z
+          * KF_AI_MAX_SPEED_SCALE;                              // MaxSpeed = 1.2 * source's
+    mBaseAttribs.mCrashExtraVelocityFactors = Vector3Plus{ 0.0f, KF_AI_CRASH_EXTRA_VEL_FACTOR,
+                                                           KF_AI_CRASH_EXTRA_VEL_FACTOR,
+                                                           KF_AI_CRASH_EXTRA_VEL_FACTOR };  // +0x30
+    mBaseAttribs.mDrivetimeDeformLimits = Vector4{ KF_AI_DEFORM_LIMIT_X, KF_AI_DEFORM_LIMIT_Y,
+                                                   KF_AI_DEFORM_LIMIT_ZW, KF_AI_DEFORM_LIMIT_ZW };  // +0x40
+
+    // 0x825F5CD0..0x825F5CD8: the AI tire preps.
+    mFrontTireAttribs.PrepareFrontTireForAI();                  // this+0x2D0
+    mRearTireAttribs.PrepareRearTireForAI();                    // this+0x310
+
+    // 0x825F5CDC..0x825F5D00: [re-copy] the whole BoostAttribs block (8 x ld/std, 0x40 bytes).
+    mBoostAttribs = lpSource->mBoostAttribs;
+
+    // 0x825F5D04..0x825F5DB8: MaxBoostSpeed = 1.1 * source's (the vspltw-lane-1 * splat(1.1)).
+    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.y
+        = lpSource->mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.y
+          * KF_AI_MAX_BOOST_SPEED_SCALE;
+    mBoostAttribs.mvBoostKickAcceleration_BoostKickHeightOffset.y = 0.0f;   // +0x2B0 vrlimi(4)
+
+    // ---- mBodyRollAttribs (+0x260/+0x270): all six live lanes zeroed ------------------------
+    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.w = 0.0f;
+    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.z = 0.0f;
+    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.y = 0.0f;
+    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.x = 0.0f;
+    mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.x = 0.0f;
+    mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.y = 0.0f;
+
+    // 0x825F5E18..0x825F5F36: [re-copy] the whole SuspensionAttribs block, lane by lane
+    // (twelve vspltw/vrlimi pairs -- redundant after operator=, transcribed as shipped).
+    mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement
+        = lpSource->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement;
+    mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding
+        = lpSource->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding;
+    mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding
+        = lpSource->mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding;
+
+    // ---- mSteeringAttribs (+0xE0/+0xF0) ----------------------------------------------------
+    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.w = KF_AI_STEERING_MIN_ANGLE;
+    mSteeringAttribs.mvMaxAngle_StraightReactionBias.x = KF_AI_STEERING_MAX_ANGLE;
+    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.y = KF_AI_SPEED_FOR_MIN_ANGLE;
+    // 0x825F5F64..0x825F5F7C: recip computed from the lane just written (fdivs 1.0 / 70.0).
+    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.z
+        = 1.0f / mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.y;
+    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.x = KF_AI_STEERING_REACTION_PER_SEC;
+
+    // ---- mBaseAttribs DownForceLiftCo + mDriftAttribs --------------------------------------
+    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.w = KF_AI_DOWNFORCE_LIFT_CO;
+    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x = KF_AI_MIN_SPEED_FOR_DRIFT;
+    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.y = KF_AI_STEERING_DRIFT_SCALE;
+    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.w = KF_AI_BASE_COUNTER_STEERING_DRIFT_SCALE;
+    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.z = KF_AI_COUNTER_STEERING_DRIFT_SCALE;
+    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.x = 1.0f;
+    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.y = 1.0f;
+    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.z = 1.0f;
+    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.w = 1.0f;
+    mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.x = KF_AI_DRIFT_TORQUE_FALL_OFF;
+    mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.x = KF_AI_NEUTRAL_TIME_TO_REDUCE_DRIFT;
+    mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.z = KF_AI_NATURAL_DRIFT_DECAY;
+    mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.y = KF_AI_SIDE_FORCE_DRIFT_SCALE_CUTOFF;
+    mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.y = KF_AI_SIDE_FORCE_MAGNITUDE;
+
+    // 0x825F6164..0x825F6184: the drift-scale-to-yaw-torque curve (this+0x100).
+    mDriftAttribs.mDriftScaleToYawTorque.Construct();
+    mDriftAttribs.mDriftScaleToYawTorque.Prepare(KF_AI_DRIFT_YAW_TORQUE_CURVE_A,
+                                                 KF_AI_DRIFT_YAW_TORQUE_CURVE_B,
+                                                 KF_AI_DRIFT_YAW_TORQUE_CURVE_C);
+
+    // 0x825F6188..0x825F6254: the remaining drift lanes.
+    mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.w = KF_AI_DRIFT_SIDEWAYS_DAMPING;
+    mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.x = KF_AI_DRIFT_ANGULAR_DAMPING;
+    mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.z = KF_AI_COUNTER_STEER_TORQUE_SCALE;
+    mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.z = 0.0f;  // TorqueKickFromGasLetOff
+    mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.z = 0.0f;       // MaxPowerSlideFactor
+
+    // 0x825F6258..0x825F6274: BoostLinearDrag = 0.75 * this LinearDrag. ⚠️ AS SHIPPED this is
+    // 0.75 * 0.0 == 0.0 -- LinearDrag was zeroed above -- but the console computes the product
+    // from the live lane, so the dependence is kept.
+    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.z
+        = mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.x
+          * KF_AI_BOOST_LINEAR_DRAG_SCALE;
+
+    // 0x825F6278: [re-copy] the whole EngineAttribs block (memcpy 0xA0 == sizeof, verified
+    // against the host layout -- NOT a carried console literal: static_assert below pins 0xA0).
+    std::memcpy(&mEngineAttribs, &lpSource->mEngineAttribs, sizeof(EngineAttribs));
+
+    mbIsValid = true;   // li 1 ; stb -> +0x360
 }
 }
 }
