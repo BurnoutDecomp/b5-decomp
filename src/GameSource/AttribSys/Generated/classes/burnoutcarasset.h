@@ -45,6 +45,11 @@ namespace Gen
         static const u32 KU_BUMPER_CAM_REFSPEC_OFFSET   = 0x1B8;  // 440 -> camerabumperbehaviour
         static const u32 KU_EXTERNAL_CAM_REFSPEC_OFFSET = 0x1A0;  // 416 -> cameraexternalbehaviour
         static const u32 KU_ASSET_NAME_OFFSET           = 0x1E8;  // 488 -> const char* (assert text)
+        // ⭐ ADDED 2026-08-09 (attribs-setup wave): the handling-asset RefSpec. Attested by
+        // SimpleVehiclePhysics::SetAttributes @0x8262064C / VehiclePhysics::SetAttributes
+        // @0x8262E04C -- both do `addi r3, dataArea, 0x158 ; bl RefSpec::GetCollection` and
+        // feed the result to the physicsvehiclehandling ctor.
+        static const u32 KU_PHYSICS_VEHICLE_HANDLING_REFSPEC_OFFSET = 0x158;  // 344 -> physicsvehiclehandling
 
         // ⭐ THE KEY CTOR -- X360 sub_82204998 (out-of-line here, inlined into
         // ProcessNewVehicleEvents). Resolve this car's burnoutcarasset collection by its
@@ -70,6 +75,8 @@ namespace Gen
         // rather than by a raw offset at each call site.
         RefSpec* GetBumperCamRefSpec() const   { return RefSpecAt(KU_BUMPER_CAM_REFSPEC_OFFSET); }
         RefSpec* GetExternalCamRefSpec() const { return RefSpecAt(KU_EXTERNAL_CAM_REFSPEC_OFFSET); }
+        RefSpec* GetPhysicsVehicleHandlingRefSpec() const
+        { return RefSpecAt(KU_PHYSICS_VEHICLE_HANDLING_REFSPEC_OFFSET); }
         const char* GetAssetName() const
         {
             const u8* lpData = static_cast<const u8*>(GetLayoutPointer());

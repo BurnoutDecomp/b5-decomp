@@ -25,29 +25,22 @@
 #include "BrnCommonTypes.h"   // Vector3, Vector3Plus, Vector4, VecFloat, CollisionTag
 #include "types.hpp"          // f32, s8, u8, u16
 
+// Forward decl: the generated AttribSys base-attribs wrapper (full type in
+// GameSource/AttribSys/Generated/classes/physicsvehiclebaseattribs.h).
+namespace Attrib { namespace Gen { class physicsvehiclebaseattribs; } }
+
 namespace BrnPhysics
 {
 namespace Vehicle
 {
-    // ----- ADDITIVE GROW (C04 group): a MINIMAL OWNING SLICE of the per-car base attribs block
-    //       the attrib-driven Prepare{Front,Rear}Tire scatter through. The full
-    //       physicsvehiclebaseattribs (the DWARF arg type of PrepareFrontTire/PrepareRearTire) is
-    //       owned by the VehicleAttribs TU and has no committed header; the two attrib-driven
-    //       scatter routines only consume it as a source-of-scalars through a rodata permute
-    //       table, so it is carried opaquely here. When VehicleAttribs gets a real header this
-    //       slice should be REPLACED by an include of the committed type.
-    struct PhysicsVehicleBaseAttribs
-    {
-        // The block is read only as a source of packed scalars by the tire-scatter; its full field
-        // map belongs to the VehicleAttribs TU. FLAG (offsets NOT pinned): the X360 scatter does
-        // NOT lvx128 this block at +0x00/+0x10 -- it dereferences a sub-pointer (lwz +4) then reads
-        // SCALAR floats deep inside it (lfs +0xE0/+0xE4/+0xE8/+0xEC ...). These two registers are a
-        // MINIMAL OPAQUE placeholder so the inert scatter routines have a typed source argument;
-        // the lane offsets here are provisional, not console-pinned, and MUST be reconciled when the
-        // real physicsvehiclebaseattribs type lands. Inert today (the permute table is un-homed).
-        Vector4 mvTireScalarsLong;   // provisional placeholder lane (offset NOT pinned)
-        Vector4 mvTireScalarsLat;    // provisional placeholder lane (offset NOT pinned)
-    };
+    // ⭐ 2026-08-09 (attribs-setup wave): the `PhysicsVehicleBaseAttribs` MINIMAL OWNING SLICE
+    // that stood here is RETIRED, exactly per its own contract ("MUST be reconciled when the
+    // real physicsvehiclebaseattribs type lands") -- the real generated wrapper is committed at
+    // GameSource/AttribSys/Generated/classes/physicsvehiclebaseattribs.h. The tire scatters take
+    // it by const-ref (fwd-declared; the X360 reads the record via the wrapper's data pointer,
+    // `lwz +4`). The scatters themselves remain FLAGGED-INERT (the rodata permute table that
+    // places the per-car scalars is still un-homed).
+    // Forward decl only -- the full generated header is pulled by the TUs that construct one.
 
     // Wheel: full layout. The RoadContact (and its accessor) are the pre-existing committed slice;
     // the rest is ADDITIVE GROW (C04 group), pinned BY NAME + SEQUENCE per the DWARF (stride 0xE0).
@@ -122,8 +115,8 @@ namespace Vehicle
             // laid-out numbers stay 0). NEVER fabricated.
             void PrepareDefaultFrontTire();
             void PrepareDefaultRearTire();
-            void PrepareFrontTire(const PhysicsVehicleBaseAttribs& lrAttribs);
-            void PrepareRearTire(const PhysicsVehicleBaseAttribs& lrAttribs);
+            void PrepareFrontTire(const Attrib::Gen::physicsvehiclebaseattribs& lrAttribs);
+            void PrepareRearTire(const Attrib::Gen::physicsvehiclebaseattribs& lrAttribs);
             void PrepareFrontTireForAI();
             void PrepareRearTireForAI();
             void PrepareFrontTireForDonutAI();
