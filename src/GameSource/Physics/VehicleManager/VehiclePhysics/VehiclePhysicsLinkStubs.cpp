@@ -166,25 +166,10 @@ namespace Vehicle
     // SimpleVehicleAttribs::SetupAttribs(handling) @0x825E6778 in VehicleAttribs.cpp. ONE leg of
     // that web is still a trap -- the stub below.
 
-    // LINK STUB (attribs-setup wave, 2026-08-09): X360 @0x825F4CD8, 770 instructions --
-    // VehicleAttribs::SetupAttribs(physicsvehiclehandling), THE STREAMED-ATTRIBUTE LOADER.
-    // FULL CENSUS: closure is CLEAN -- every callee exists in the tree (the eight generated
-    // sub-record wrapper ctors are inline in their committed headers; InterpedParam3::
-    // Construct/Prepare, EngineAttribs::InitializeFromAttribs, TireAttribs::PrepareFront/
-    // RearTire are bodied; RefSpec::GetCollection + Instance dtor are the mounted AttribSys
-    // SDK). What remains is 770 instructions of per-lane record->attrib scatter (the
-    // base/steering/engine/drift/collision/boost/bodyroll/suspension blocks) whose source byte
-    // offsets each need the same dataflow tracking the 622-insn SetupAttribsForAI got -- its
-    // own wave, not a bolt-on. Called by VehiclePhysics::SetAttributes' re-stream leg (dormant
-    // until the driving spine goes live) and by VehiclePhysics::Prepare's chain when that
-    // lands. A silent no-op here would leave a reset car driving on STALE attribs -- plausible
-    // and invisible -- hence the trap.
-    void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling&)
-    {
-        CGS_ASSERT(false, "VehicleAttribs::SetupAttribs(handling): link stub -- reconstruct "
-                          "from X360 @0x825F4CD8 (770 insns, the streamed-attribute loader; "
-                          "closure clean, its own wave)");
-    }
+    // ⭐ 2026-08-09 (attribs-data wave): the VehicleAttribs::SetupAttribs(handling) @0x825F4CD8
+    // stub is GONE -- BODIED in VehicleAttribs.cpp (770 insns, the streamed-attribute loader;
+    // every lane recovered by symbolic emulation of the raw image bytes, and the tire permute
+    // table + the two per-car tire scatters landed REAL in Wheel.cpp in the same commit).
 
     // ⭐ 2026-08-09 (attribs-setup wave): the HackedResetAndFlyAround @0x825D0008 stub is
     // GONE -- BODIED in VehiclePhysics.cpp (139 insns, leaf, full transcription).

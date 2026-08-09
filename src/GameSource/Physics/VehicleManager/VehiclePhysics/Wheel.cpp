@@ -1,4 +1,5 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclebaseattribs.h"   // the base-attribs wrapper (Prepare{Front,Rear}Tire's source record)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Wheel::Prepare's lpTireAttribs gate, Wheel.cpp:478)
 
 #include <cmath>   // std::fabs, std::sqrt
@@ -397,81 +398,241 @@ namespace Vehicle
     // ===========================================================================================
     // Pure VMX permute-scatter routines. Each lays a handful of scalar inputs out across the three
     // grip curves (mLongGripCurve @+0x00, mLatGripCurve @+0x10, mDriftLatGripCurve @+0x20) and the
-    // packed register (maPackedVariables @+0x30) by `vperm`-ing the scalars through one rodata
-    // permute table (unk_8327F140, four 16-byte permute rows at +0x00/+0x40/+0x80/+0xC0). They are
-    // logically identical and differ only in their SOURCE numbers:
-    //   * PrepareDefault{Front,Rear}Tire / Prepare{Front,Rear}TireForAI / ...ForDonutAI source the
-    //     preset tuning constants from un-homed .rdata (the eight stack spills v33..v41 are loaded
-    //     from those seeds before the scatter);
-    //   * Prepare{Front,Rear}Tire source the per-car numbers from the supplied base-attribs block.
+    // packed register (maPackedVariables @+0x30) by `vperm`-ing the scalars through the permute
+    // table at 0x8327F140.
     //
-    // FLAG (rodata): BOTH the permute table unk_8327F140 AND the per-preset source constants are
-    // un-homed .rdata absent from the function exports. The scatter STRUCTURE (which lane of which
-    // curve/packed register each source feeds) is faithful, but the laid-out numbers cannot be
-    // reconstructed without the table/seeds, so every preset is carried as faithful-but-INERT:
-    // the three curves + packed register are zero-initialised (the honest flagged-0 placeholder),
-    // never fabricated. The attrib-driven pair additionally read the source block by reference so
-    // the data-flow is pinned even while the lane numbers stay inert. When the permute table + seeds
-    // are recovered from the XEX .rdata these bodies fill in without touching the layout.
+    // ⭐ 2026-08-09 (attribs-data wave): the table is HOMED and the scatters are REAL. The table
+    // is .bss (all-zero in the image), splatted at static-init by the constant-pool writer bank
+    // 0x82C74000..0x82C743F4 (an export hole; individual stvx writers at 0x82C741E0..0x82C74360),
+    // recovered by instruction-level emulation of the writer bank directly against the image
+    // bytes. Its sixteen rows sit at [0x8327F140 + lane*0x40 + srcword*0x10] and are vperm
+    // lane-INSERT controls: the identity selector 00010203 04050607 08090A0B 0C0D0E0F with word
+    // `lane` replaced by the src2 selector (0x10+4*srcword ..). Each scatter loads the dest
+    // vector, vperms one splatted scalar into one lane, and stores it back -- i.e. every vperm is
+    // exactly `dest.lane = scalar`, and every lane the console writes is spelled below as a plain
+    // per-lane assignment (per-lane routing + all values recovered by full vperm/lvx128/stvx128/
+    // lfs emulation of all eight bodies against the image; source offsets cross-checked against
+    // the attribsys schema's named fields, which also fixed the lane SEMANTICS:
+    //   TireGripCurve      {x=peakSlipRatio, y=floorSlipRatio, z=peakCoefficient, w=fallCoefficient}
+    //   maPackedVariables  {x=staticFrictionCo, y=dynamicFrictionCo, z=adhesiveLimit, w=longForceBias}).
+    //
+    //   * Prepare{Front,Rear}Tire source the per-car numbers from the supplied base-attribs
+    //     record (through the wrapper's data pointer, `lwz +4` == GetLayoutPointer);
+    //   * the Default/AI/DonutAI presets source .rdata tuning constants (each spelled with its
+    //     image address at its use);
+    //   * ⚠️ the DonutAI pair runs 15 vperms, not 16: maPackedVariables.w (the long-force-bias
+    //     lane) is DELIBERATELY PRESERVED, not written. See the note on the pair.
 
-    // Shared honest placeholder: zero the three curves + packed register (faithful-but-inert until
-    // the permute table + preset seeds are recovered).
-    static inline void ScatterTireInert(Wheel::TireGripCurve& lrLong,
-                                        Wheel::TireGripCurve& lrLat,
-                                        Wheel::TireGripCurve& lrDriftLat,
-                                        Vector4& lrPacked)
-    {
-        lrLong.maGripVariables.SetZero();       // +0x00  FLAG: scatter target (numbers un-homed)
-        lrLat.maGripVariables.SetZero();        // +0x10
-        lrDriftLat.maGripVariables.SetZero();   // +0x20
-        lrPacked.SetZero();                     // +0x30
-    }
+    // The attrib-driven pair read the record as a byte-addressed float array, same convention as
+    // SimpleVehicleAttribs::SetupAttribs(handling) (offsets asm-exact; the name in each comment is
+    // the schema's field name at that offset).
+    #define BP_TIRE_SRC_F(base, byteOff) ((base)[(byteOff) >> 2])
 
+    // @0x825D5500  Wheel::TireAttribs::PrepareDefaultFrontTire
     void Wheel::TireAttribs::PrepareDefaultFrontTire()
     {
-        ScatterTireInert(mLongGripCurve, mLatGripCurve, mDriftLatGripCurve, maPackedVariables);
+        mLongGripCurve.maGripVariables.x = 0.2f;       // peakSlipRatio    flt_82004744
+        mLongGripCurve.maGripVariables.y = 1.0f;       // floorSlipRatio   flt_82001C98
+        mLongGripCurve.maGripVariables.z = 1.0f;       // peakCoefficient
+        mLongGripCurve.maGripVariables.w = 1.0f;       // fallCoefficient
+
+        mLatGripCurve.maGripVariables.x = 1.0f;        // peakSlipRatio
+        mLatGripCurve.maGripVariables.y = 1.0f;        // floorSlipRatio
+        mLatGripCurve.maGripVariables.z = 1.5f;        // peakCoefficient  flt_820945DC
+        mLatGripCurve.maGripVariables.w = 1.5f;        // fallCoefficient
+
+        mDriftLatGripCurve.maGripVariables.x = 1.0f;   // peakSlipRatio
+        mDriftLatGripCurve.maGripVariables.y = 1.0f;   // floorSlipRatio
+        mDriftLatGripCurve.maGripVariables.z = 1.5f;   // peakCoefficient
+        mDriftLatGripCurve.maGripVariables.w = 1.5f;   // fallCoefficient
+
+        maPackedVariables.x = 4.0f;                    // staticFrictionCo  flt_8208FA0C
+        maPackedVariables.y = 4.0f;                    // dynamicFrictionCo
+        maPackedVariables.z = 14000.0f;                // adhesiveLimit     flt_82094C74
+        maPackedVariables.w = 0.0f;                    // longForceBias     flt_82001CC0
     }
 
+    // @0x825D57D8  Wheel::TireAttribs::PrepareDefaultRearTire
     void Wheel::TireAttribs::PrepareDefaultRearTire()
     {
-        ScatterTireInert(mLongGripCurve, mLatGripCurve, mDriftLatGripCurve, maPackedVariables);
+        mLongGripCurve.maGripVariables.x = 0.2f;       // peakSlipRatio    flt_82004744
+        mLongGripCurve.maGripVariables.y = 1.0f;       // floorSlipRatio   flt_82001C98
+        mLongGripCurve.maGripVariables.z = 1.0f;       // peakCoefficient
+        mLongGripCurve.maGripVariables.w = 0.7f;       // fallCoefficient  flt_82004C68
+
+        mLatGripCurve.maGripVariables.x = 0.5f;        // peakSlipRatio    flt_82001DA0
+        mLatGripCurve.maGripVariables.y = 3.0f;        // floorSlipRatio   flt_82004270
+        mLatGripCurve.maGripVariables.z = 4.0f;        // peakCoefficient  flt_8208FA0C
+        mLatGripCurve.maGripVariables.w = 0.9f;        // fallCoefficient  flt_82005450
+
+        mDriftLatGripCurve.maGripVariables.x = 1.0f;   // peakSlipRatio (own value; rest shared with lat)
+        mDriftLatGripCurve.maGripVariables.y = 3.0f;   // floorSlipRatio
+        mDriftLatGripCurve.maGripVariables.z = 4.0f;   // peakCoefficient
+        mDriftLatGripCurve.maGripVariables.w = 0.9f;   // fallCoefficient
+
+        maPackedVariables.x = 4.0f;                    // staticFrictionCo
+        maPackedVariables.y = 3.0f;                    // dynamicFrictionCo
+        maPackedVariables.z = 14000.0f;                // adhesiveLimit     flt_82094C74
+        maPackedVariables.w = 0.1f;                    // longForceBias     flt_82004014
     }
 
-    // ⭐ 2026-08-09 (attribs-setup wave): signatures conformed to the REAL generated wrapper
-    // (the retired PhysicsVehicleBaseAttribs stand-in's own contract). Still FLAGGED-INERT: the
-    // per-car source scalars live behind the wrapper's data pointer (`lwz +4`, lfs +0xE0..) and
-    // the rodata permute table that places them is un-homed, so the scatter stays the inert
-    // curve-zeroing until that table is recovered.
+    // @0x825D5AC8  Wheel::TireAttribs::PrepareFrontTire
+    // Per-car scatter from the base-attribs record's Front* fields (source offsets asm-exact,
+    // names from the schema).
     void Wheel::TireAttribs::PrepareFrontTire(const Attrib::Gen::physicsvehiclebaseattribs& lrAttribs)
     {
-        (void)lrAttribs;
-        ScatterTireInert(mLongGripCurve, mLatGripCurve, mDriftLatGripCurve, maPackedVariables);
+        const f32* lpData = static_cast<const f32*>(lrAttribs.GetLayoutPointer());
+
+        mLongGripCurve.maGripVariables.x = BP_TIRE_SRC_F(lpData, 0xE0);       // FrontLongGripCurvePeakSlipRatio
+        mLongGripCurve.maGripVariables.y = BP_TIRE_SRC_F(lpData, 0xE8);       // FrontLongGripCurveFloorSlipRatio
+        mLongGripCurve.maGripVariables.z = BP_TIRE_SRC_F(lpData, 0xE4);       // FrontLongGripCurvePeakCoefficient
+        mLongGripCurve.maGripVariables.w = BP_TIRE_SRC_F(lpData, 0xEC);       // FrontLongGripCurveFallCoefficient
+
+        mLatGripCurve.maGripVariables.x = BP_TIRE_SRC_F(lpData, 0xF0);        // FrontLatGripCurvePeakSlipRatio
+        mLatGripCurve.maGripVariables.y = BP_TIRE_SRC_F(lpData, 0xF8);        // FrontLatGripCurveFloorSlipRatio
+        mLatGripCurve.maGripVariables.z = BP_TIRE_SRC_F(lpData, 0xF4);        // FrontLatGripCurvePeakCoefficient
+        mLatGripCurve.maGripVariables.w = BP_TIRE_SRC_F(lpData, 0xFC);        // FrontLatGripCurveFallCoefficient
+
+        // The drift curve has its own peak slip ratio and shares the lat curve's other three lanes.
+        mDriftLatGripCurve.maGripVariables.x = BP_TIRE_SRC_F(lpData, 0x100);  // FrontLatGripCurveDriftPeakSlipRatio
+        mDriftLatGripCurve.maGripVariables.y = BP_TIRE_SRC_F(lpData, 0xF8);   // FrontLatGripCurveFloorSlipRatio
+        mDriftLatGripCurve.maGripVariables.z = BP_TIRE_SRC_F(lpData, 0xF4);   // FrontLatGripCurvePeakCoefficient
+        mDriftLatGripCurve.maGripVariables.w = BP_TIRE_SRC_F(lpData, 0xFC);   // FrontLatGripCurveFallCoefficient
+
+        maPackedVariables.x = BP_TIRE_SRC_F(lpData, 0xD0);                    // FrontTireStaticFrictionCoefficient
+        maPackedVariables.y = BP_TIRE_SRC_F(lpData, 0xD8);                    // FrontTireDynamicFrictionCoefficient
+        maPackedVariables.z = BP_TIRE_SRC_F(lpData, 0xDC);                    // FrontTireAdhesiveLimit
+        maPackedVariables.w = BP_TIRE_SRC_F(lpData, 0xD4);                    // FrontTireLongForceBias
     }
 
+    // @0x825D5DC8  Wheel::TireAttribs::PrepareRearTire
     void Wheel::TireAttribs::PrepareRearTire(const Attrib::Gen::physicsvehiclebaseattribs& lrAttribs)
     {
-        (void)lrAttribs;
-        ScatterTireInert(mLongGripCurve, mLatGripCurve, mDriftLatGripCurve, maPackedVariables);
+        const f32* lpData = static_cast<const f32*>(lrAttribs.GetLayoutPointer());
+
+        mLongGripCurve.maGripVariables.x = BP_TIRE_SRC_F(lpData, 0x78);       // RearLongGripCurvePeakSlipRatio
+        mLongGripCurve.maGripVariables.y = BP_TIRE_SRC_F(lpData, 0x80);       // RearLongGripCurveFloorSlipRatio
+        mLongGripCurve.maGripVariables.z = BP_TIRE_SRC_F(lpData, 0x7C);       // RearLongGripCurvePeakCoefficient
+        mLongGripCurve.maGripVariables.w = BP_TIRE_SRC_F(lpData, 0x84);       // RearLongGripCurveFallCoefficient
+
+        mLatGripCurve.maGripVariables.x = BP_TIRE_SRC_F(lpData, 0x88);        // RearLatGripCurvePeakSlipRatio
+        mLatGripCurve.maGripVariables.y = BP_TIRE_SRC_F(lpData, 0x90);        // RearLatGripCurveFloorSlipRatio
+        mLatGripCurve.maGripVariables.z = BP_TIRE_SRC_F(lpData, 0x8C);        // RearLatGripCurvePeakCoefficient
+        mLatGripCurve.maGripVariables.w = BP_TIRE_SRC_F(lpData, 0x94);        // RearLatGripCurveFallCoefficient
+
+        mDriftLatGripCurve.maGripVariables.x = BP_TIRE_SRC_F(lpData, 0x98);   // RearLatGripCurveDriftPeakSlipRatio
+        mDriftLatGripCurve.maGripVariables.y = BP_TIRE_SRC_F(lpData, 0x90);   // RearLatGripCurveFloorSlipRatio
+        mDriftLatGripCurve.maGripVariables.z = BP_TIRE_SRC_F(lpData, 0x8C);   // RearLatGripCurvePeakCoefficient
+        mDriftLatGripCurve.maGripVariables.w = BP_TIRE_SRC_F(lpData, 0x94);   // RearLatGripCurveFallCoefficient
+
+        maPackedVariables.x = BP_TIRE_SRC_F(lpData, 0x68);                    // RearTireStaticFrictionCoefficient
+        maPackedVariables.y = BP_TIRE_SRC_F(lpData, 0x70);                    // RearTireDynamicFrictionCoefficient
+        maPackedVariables.z = BP_TIRE_SRC_F(lpData, 0x74);                    // RearTireAdhesiveLimit
+        maPackedVariables.w = BP_TIRE_SRC_F(lpData, 0x6C);                    // RearTireLongForceBias
     }
 
+    // @0x825D60C8  Wheel::TireAttribs::PrepareFrontTireForAI
     void Wheel::TireAttribs::PrepareFrontTireForAI()
     {
-        ScatterTireInert(mLongGripCurve, mLatGripCurve, mDriftLatGripCurve, maPackedVariables);
+        mLongGripCurve.maGripVariables.x = 0.2f;       // peakSlipRatio    flt_82004744
+        mLongGripCurve.maGripVariables.y = 1.0f;       // floorSlipRatio   flt_82001C98
+        mLongGripCurve.maGripVariables.z = 1.0f;       // peakCoefficient
+        mLongGripCurve.maGripVariables.w = 0.2f;       // fallCoefficient
+
+        mLatGripCurve.maGripVariables.x = 0.5f;        // peakSlipRatio    flt_82001DA0
+        mLatGripCurve.maGripVariables.y = 3.0f;        // floorSlipRatio   flt_82004270
+        mLatGripCurve.maGripVariables.z = 2.0f;        // peakCoefficient  flt_82001D9C
+        mLatGripCurve.maGripVariables.w = 1.0f;        // fallCoefficient
+
+        mDriftLatGripCurve.maGripVariables.x = 0.5f;   // peakSlipRatio
+        mDriftLatGripCurve.maGripVariables.y = 3.0f;   // floorSlipRatio
+        mDriftLatGripCurve.maGripVariables.z = 2.0f;   // peakCoefficient
+        mDriftLatGripCurve.maGripVariables.w = 1.0f;   // fallCoefficient
+
+        maPackedVariables.x = 20.0f;                   // staticFrictionCo  flt_8208F9D4
+        maPackedVariables.y = 5.0f;                    // dynamicFrictionCo flt_8200426C
+        maPackedVariables.z = 100000.0f;               // adhesiveLimit     flt_820080E8
+        maPackedVariables.w = 0.0f;                    // longForceBias     flt_82001CC0
     }
 
+    // @0x825D63B8  Wheel::TireAttribs::PrepareRearTireForAI
     void Wheel::TireAttribs::PrepareRearTireForAI()
     {
-        ScatterTireInert(mLongGripCurve, mLatGripCurve, mDriftLatGripCurve, maPackedVariables);
+        mLongGripCurve.maGripVariables.x = 0.4f;       // peakSlipRatio    flt_8200473C
+        mLongGripCurve.maGripVariables.y = 1.0f;       // floorSlipRatio   flt_82001C98
+        mLongGripCurve.maGripVariables.z = 1.0f;       // peakCoefficient
+        mLongGripCurve.maGripVariables.w = 0.2f;       // fallCoefficient  flt_82004744
+
+        mLatGripCurve.maGripVariables.x = 0.5f;        // peakSlipRatio    flt_82001DA0
+        mLatGripCurve.maGripVariables.y = 3.0f;        // floorSlipRatio   flt_82004270
+        mLatGripCurve.maGripVariables.z = 4.0f;        // peakCoefficient  flt_8208FA0C
+        mLatGripCurve.maGripVariables.w = 2.5f;        // fallCoefficient  flt_82005548
+
+        mDriftLatGripCurve.maGripVariables.x = 0.5f;   // peakSlipRatio
+        mDriftLatGripCurve.maGripVariables.y = 3.0f;   // floorSlipRatio
+        mDriftLatGripCurve.maGripVariables.z = 4.0f;   // peakCoefficient
+        mDriftLatGripCurve.maGripVariables.w = 2.5f;   // fallCoefficient
+
+        maPackedVariables.x = 20.0f;                   // staticFrictionCo  flt_8208F9D4
+        maPackedVariables.y = 4.5f;                    // dynamicFrictionCo flt_820139F0
+        maPackedVariables.z = 100000.0f;               // adhesiveLimit     flt_820080E8
+        maPackedVariables.w = 0.0f;                    // longForceBias     flt_82001CC0
     }
 
+    // @0x825D66B8  Wheel::TireAttribs::PrepareFrontTireForDonutAI
+    //
+    // ⚠️⚠️ FIDELITY: the DonutAI pair is 15 vperms, NOT 16 -- there is no insert into
+    // maPackedVariables.w. The long-force-bias lane KEEPS whatever the tire already carried
+    // (image-proven: the dest tag survives full emulation of both bodies). DO NOT "complete"
+    // the scatter by writing w; the preservation is the shipped behaviour.
     void Wheel::TireAttribs::PrepareFrontTireForDonutAI()
     {
-        ScatterTireInert(mLongGripCurve, mLatGripCurve, mDriftLatGripCurve, maPackedVariables);
+        mLongGripCurve.maGripVariables.x = 0.2f;       // peakSlipRatio    flt_82004744
+        mLongGripCurve.maGripVariables.y = 1.0f;       // floorSlipRatio   flt_82001C98
+        mLongGripCurve.maGripVariables.z = 1.0f;       // peakCoefficient
+        mLongGripCurve.maGripVariables.w = 1.0f;       // fallCoefficient
+
+        mLatGripCurve.maGripVariables.x = 1.0f;        // peakSlipRatio
+        mLatGripCurve.maGripVariables.y = 1.0f;        // floorSlipRatio
+        mLatGripCurve.maGripVariables.z = 1.5f;        // peakCoefficient  flt_820945DC
+        mLatGripCurve.maGripVariables.w = 1.5f;        // fallCoefficient
+
+        mDriftLatGripCurve.maGripVariables.x = 1.0f;   // peakSlipRatio
+        mDriftLatGripCurve.maGripVariables.y = 1.0f;   // floorSlipRatio
+        mDriftLatGripCurve.maGripVariables.z = 1.5f;   // peakCoefficient
+        mDriftLatGripCurve.maGripVariables.w = 1.5f;   // fallCoefficient
+
+        maPackedVariables.x = 2.0f;                    // staticFrictionCo  flt_82001D9C
+        maPackedVariables.y = 2.0f;                    // dynamicFrictionCo
+        maPackedVariables.z = 10000.0f;                // adhesiveLimit     flt_82005D9C
+        // maPackedVariables.w (longForceBias) DELIBERATELY NOT WRITTEN -- see the banner above.
     }
 
+    // @0x825D6958  Wheel::TireAttribs::PrepareRearTireForDonutAI
+    // Same w-lane preservation as the front variant -- see the ⚠️⚠️ note above.
     void Wheel::TireAttribs::PrepareRearTireForDonutAI()
     {
-        ScatterTireInert(mLongGripCurve, mLatGripCurve, mDriftLatGripCurve, maPackedVariables);
+        mLongGripCurve.maGripVariables.x = 0.3f;       // peakSlipRatio    flt_82004740
+        mLongGripCurve.maGripVariables.y = 1.5f;       // floorSlipRatio   flt_820945DC
+        mLongGripCurve.maGripVariables.z = 3.0f;       // peakCoefficient  flt_82004270
+        mLongGripCurve.maGripVariables.w = 2.25f;      // fallCoefficient  flt_82009A74
+
+        mLatGripCurve.maGripVariables.x = 0.3f;        // peakSlipRatio
+        mLatGripCurve.maGripVariables.y = 3.0f;        // floorSlipRatio
+        mLatGripCurve.maGripVariables.z = 2.25f;       // peakCoefficient
+        mLatGripCurve.maGripVariables.w = 1.5f;        // fallCoefficient
+
+        mDriftLatGripCurve.maGripVariables.x = 1.0f;   // peakSlipRatio (own value; rest shared with lat)  flt_82001C98
+        mDriftLatGripCurve.maGripVariables.y = 3.0f;   // floorSlipRatio
+        mDriftLatGripCurve.maGripVariables.z = 2.25f;  // peakCoefficient
+        mDriftLatGripCurve.maGripVariables.w = 1.5f;   // fallCoefficient
+
+        maPackedVariables.x = 2.0f;                    // staticFrictionCo  flt_82001D9C
+        maPackedVariables.y = 2.0f;                    // dynamicFrictionCo
+        maPackedVariables.z = 10000.0f;                // adhesiveLimit     flt_82005D9C
+        // maPackedVariables.w (longForceBias) DELIBERATELY NOT WRITTEN -- see the banner above.
     }
+
+    #undef BP_TIRE_SRC_F
 }
 }

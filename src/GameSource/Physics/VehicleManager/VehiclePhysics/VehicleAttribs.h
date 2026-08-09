@@ -224,11 +224,11 @@ namespace Vehicle
         // @0x825F4CD8 (770 instrs) -- the streamed-attribute loader: per-sub-block generated
         // wrappers (base/steering/engine/drift/collision/boost/bodyroll/suspension) streamed
         // into the packed lanes + the two tire scatters + EngineAttribs::InitializeFromAttribs.
-        // ⚠️ TRAP STUB in VehiclePhysicsLinkStubs.cpp (census there) until its own wave; the
-        // signature is conformed to the committed generated wrapper (DWARF/PS3 take it BY
-        // VALUE -- 6D41E0 `..12SetupAttribsEN6Attrib3Gen22physicsvehiclehandlingE`; spelled
-        // const-ref per the SimpleVehicleAttribs precedent, with the explicit checked copy at
-        // each call site).
+        // ⭐ BODIED in VehicleAttribs.cpp (attribs-data wave, 2026-08-09; full per-lane map
+        // recovered by symbolic emulation of the raw image bytes). The signature is conformed
+        // to the committed generated wrapper (DWARF/PS3 take it BY VALUE -- 6D41E0
+        // `..12SetupAttribsEN6Attrib3Gen22physicsvehiclehandlingE`; spelled const-ref per the
+        // SimpleVehicleAttribs precedent, with the explicit checked copy at each call site).
         void SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrHandling);
 
         // @0x825F58E0 (622 instrs) -- derive the plain-AI set from a source set. ⭐ BODIED in
@@ -281,6 +281,14 @@ namespace Vehicle
     static_assert(sizeof(VehicleAttribs::CollisionAttribs)   == 0x10, "CollisionAttribs size drift");
     static_assert(sizeof(VehicleAttribs::BoostAttribs)       == 0x40, "BoostAttribs size drift");
     static_assert(sizeof(Wheel::TireAttribs)                 == 0x40, "TireAttribs size drift");
+
+    // the tire-scatter targets (attribs-data wave, 2026-08-09): the eight Prepare*Tire routines
+    // stvx128 to r3 / r3+16 / r3+32 / r3+48, so the four registers must sit exactly there.
+    static_assert(sizeof(Wheel::TireGripCurve)                    == 0x10, "TireGripCurve is one 16-byte register");
+    static_assert(offsetof(Wheel::TireAttribs, mLongGripCurve)     == 0x00, "mLongGripCurve @+0x00 (stvx128 r3)");
+    static_assert(offsetof(Wheel::TireAttribs, mLatGripCurve)      == 0x10, "mLatGripCurve @+0x10 (stvx128 r3+16)");
+    static_assert(offsetof(Wheel::TireAttribs, mDriftLatGripCurve) == 0x20, "mDriftLatGripCurve @+0x20 (stvx128 r3+32)");
+    static_assert(offsetof(Wheel::TireAttribs, maPackedVariables)  == 0x30, "maPackedVariables @+0x30 (stvx128 r3+48; DonutAI preserves its w lane)");
 
     // top-level placement
     static_assert(offsetof(VehicleAttribs, mBaseAttribs)       == 0x000, "mBaseAttribs @0x000");
