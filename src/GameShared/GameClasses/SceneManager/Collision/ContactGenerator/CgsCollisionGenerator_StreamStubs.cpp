@@ -16,6 +16,7 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint (the boot gates, 2026-08-09)
 
 namespace CgsSceneManager
 {
@@ -24,8 +25,11 @@ namespace CgsCollision
     CgsMemory::SimpleDataStreamProducer*
     BaseCollisionGenerator::CreateCollideSphereListWithTriangleListStream(s32 /*liMaxCommands*/)
     {
-        CGS_ASSERT(false, "TRAP: BaseCollisionGenerator::CreateCollideSphereListWithTriangleListStream "
-                          "@0x828113C8 not reconstructed (big-five #2 closure stub)\n");
+        do { static bool s_bLogged = false;
+        if (!s_bLogged) { s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate (was TRAP): BaseCollisionGenerator::CreateCollideSphereListWithTriangleListStream "
+                          "@0x828113C8 not reconstructed (big-five #2 closure stub)\n"; } } while (0);
         return 0;
     }
 
@@ -33,16 +37,22 @@ namespace CgsCollision
     BaseCollisionGenerator::RunCollideSphereListWithTriangleListStream(
         CgsMemory::SimpleDataStreamProducer* /*lpProducer*/, CgsDev::DebugRenderStreamReader* /*lpDebugReader*/)
     {
-        CGS_ASSERT(false, "TRAP: BaseCollisionGenerator::RunCollideSphereListWithTriangleListStream "
-                          "@0x82811550 not reconstructed (big-five #2 closure stub)\n");
+        do { static bool s_bLogged = false;
+        if (!s_bLogged) { s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate (was TRAP): BaseCollisionGenerator::RunCollideSphereListWithTriangleListStream "
+                          "@0x82811550 not reconstructed (big-five #2 closure stub)\n"; } } while (0);
         return 0;
     }
 
     CgsMemory::SimpleDataStreamProducer*
     BaseCollisionGenerator::CreateCollideSweptSphereListWithTriangleListStream(s32 /*liMaxCommands*/)
     {
-        CGS_ASSERT(false, "TRAP: BaseCollisionGenerator::CreateCollideSweptSphereListWithTriangleListStream "
-                          "@0x82811720 not reconstructed (big-five #2 closure stub)\n");
+        do { static bool s_bLogged = false;
+        if (!s_bLogged) { s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate (was TRAP): BaseCollisionGenerator::CreateCollideSweptSphereListWithTriangleListStream "
+                          "@0x82811720 not reconstructed (big-five #2 closure stub)\n"; } } while (0);
         return 0;
     }
 
@@ -50,16 +60,22 @@ namespace CgsCollision
     BaseCollisionGenerator::RunCollideSweptSphereListWithTriangleListStream(
         CgsMemory::SimpleDataStreamProducer* /*lpProducer*/, CgsDev::DebugRenderStreamReader* /*lpDebugReader*/)
     {
-        CGS_ASSERT(false, "TRAP: BaseCollisionGenerator::RunCollideSweptSphereListWithTriangleListStream "
-                          "@0x828118A8 not reconstructed (big-five #2 closure stub)\n");
+        do { static bool s_bLogged = false;
+        if (!s_bLogged) { s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate (was TRAP): BaseCollisionGenerator::RunCollideSweptSphereListWithTriangleListStream "
+                          "@0x828118A8 not reconstructed (big-five #2 closure stub)\n"; } } while (0);
         return 0;
     }
 
     CgsMemory::SimpleDataStreamProducer*
     BaseCollisionGenerator::CreateCollideSphereListWithSphereListStream(s32 /*liMaxCommands*/)
     {
-        CGS_ASSERT(false, "TRAP: BaseCollisionGenerator::CreateCollideSphereListWithSphereListStream "
-                          "@0x82811A78 not reconstructed (big-five #2 closure stub)\n");
+        do { static bool s_bLogged = false;
+        if (!s_bLogged) { s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate (was TRAP): BaseCollisionGenerator::CreateCollideSphereListWithSphereListStream "
+                          "@0x82811A78 not reconstructed (big-five #2 closure stub)\n"; } } while (0);
         return 0;
     }
 
@@ -67,16 +83,22 @@ namespace CgsCollision
     BaseCollisionGenerator::RunCollideSphereListWithSphereListStream(
         CgsMemory::SimpleDataStreamProducer* /*lpProducer*/)
     {
-        CGS_ASSERT(false, "TRAP: BaseCollisionGenerator::RunCollideSphereListWithSphereListStream "
-                          "@0x82811C00 not reconstructed (big-five #2 closure stub)\n");
+        do { static bool s_bLogged = false;
+        if (!s_bLogged) { s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate (was TRAP): BaseCollisionGenerator::RunCollideSphereListWithSphereListStream "
+                          "@0x82811C00 not reconstructed (big-five #2 closure stub)\n"; } } while (0);
         return 0;
     }
 
     u16 BaseCollisionGenerator::CollidePrimitivePairList(const PrimitivePairList* /*lpPairList*/,
                                                          u16 /*lu16MaxResults*/, u32 /*luFlags*/, u16 /*lu16Tag*/)
     {
-        CGS_ASSERT(false, "TRAP: BaseCollisionGenerator::CollidePrimitivePairList "
-                          "@0x82814138 not reconstructed (big-five #2 closure stub)\n");
+        do { static bool s_bLogged = false;
+        if (!s_bLogged) { s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate (was TRAP): BaseCollisionGenerator::CollidePrimitivePairList "
+                          "@0x82814138 not reconstructed (big-five #2 closure stub)\n"; } } while (0);
         return 0;
     }
 }

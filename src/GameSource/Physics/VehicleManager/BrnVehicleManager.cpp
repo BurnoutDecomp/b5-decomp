@@ -105,7 +105,7 @@ namespace Vehicle
     // VMX refinement steps are modelled, not reproduced register-for-register.
     // -------------------------------------------------------------------------------------------
     void VehicleManager::HandleRaceCarRaceCarContact(BrnPhysics::ContactSpy::RaceCarContact lContact,
-                                                     BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                                     BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
                                                      BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
                                                      VehicleManagerOutputInterface* lpManagerOutputInterface,
                                                      BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
@@ -501,7 +501,7 @@ namespace Vehicle
                                          Vector3 lCollisionNormal,
                                          Vector3 lContactPoint,
                                          f32 lfNormalStressSq,
-                                         BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                         BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
                                          VehicleManagerOutputInterface* lpManagerOutputInterface,
                                          BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
                                          BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
@@ -568,7 +568,7 @@ namespace Vehicle
                                             EntityId lAggressorEntityId,
                                             Vector3 lCollisionNormal,
                                             Vector3 lContactPoint,
-                                            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
                                             VehicleManagerOutputInterface* lpManagerOutputInterface,
                                             BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
                                             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,

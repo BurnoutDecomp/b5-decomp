@@ -123,7 +123,7 @@ namespace Vehicle
     //   0x82635BE8     bl SetRaceCarCrashing @0x82634C90
     // ------------------------------------------------------------------------------------
     void VehicleManager::ForceRaceCarCrash(
-        BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+        BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
         VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
         VehicleOutputInterface* lpVehicleOutputInterface,
         BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
@@ -306,7 +306,7 @@ namespace Vehicle
         f32 lfGameTimerTimeStep,
         const VehicleInputInterface* lpInputInterface,
         VehicleOutputInterface* lpVehicleOutputInterface,
-        BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+        BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
         VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
         BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
         bool lbIsOnlineGameMode,

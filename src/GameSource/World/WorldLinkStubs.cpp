@@ -3566,21 +3566,10 @@ void BrnPhysics::PhysicsModule::GenerateSceneQueries(class BrnPhysics::PhysicsMo
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the physics step (@0x825B0640).
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnPhysics::PhysicsModule::Update(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnPhysics::PhysicsModuleIO::InputBuffer const *,class BrnPhysics::PhysicsModuleIO::OutputBuffer *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PhysicsModule::Update: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⭐⭐ 2026-08-09 (conductor wave): the PhysicsModule::Update boot gate that stood here for
+// thirteen days is DELETED -- the real 1,999-insn body @0x825B0640 is landed in
+// BrnPhysicsModuleUpdateFunctions.cpp, and the deferrals it still carries are each their own
+// NAMED one-shot gate in BrnPhysicsConductorGates.cpp.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. the network catch-up step WorldModule::UpdatePhysicsNetworkCatchup @0x827B06E0 forwards to.

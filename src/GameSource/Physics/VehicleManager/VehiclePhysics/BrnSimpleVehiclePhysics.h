@@ -349,6 +349,13 @@ namespace Vehicle
         bool         mbCrashedThisFrame;              // :371  @0x713
         bool         mbMinWheelDistValid;             // :372  @0x714 (gates IsContactBelowWheelPlane)
         bool         mbAnyWheelsDetatched;            // :373  @0x715
+
+    public:
+        // DWARF :283. ⭐ ADDED 2026-08-09 (conductor wave): X360-attested by
+        // PhysicsModule::Update @0x825B0640's slow-motion block, which inlines the read
+        // (`lbz 0x713(car)`) against the car GetRaceCarPhysics resolved. Placed after the
+        // member run so the access-specifier does not split the layout block.
+        bool HasCrashedThisFrame() const { return mbCrashedThisFrame; }
     };
 
     // ⭐ The console sizes this block closes on, exported so the layout gate and the VehiclePhysics

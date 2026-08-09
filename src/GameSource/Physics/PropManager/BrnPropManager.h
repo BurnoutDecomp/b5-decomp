@@ -8,6 +8,7 @@
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropEvents.h"          // UpdatePropEvent
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                  // CgsContainers::BitArray
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                    // CgsModule::EventQueue<T,N>
+#include "GameShared/GameClasses/Module/CgsIOBuffer.h"                      // CgsModule::IOBuffer (PropRaceCarContactBuffer base, 2026-08-09)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"          // CgsResource::ResourcePtr<T>
 
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InAddPotentialContact; struct OutContactSpy; } }
@@ -17,16 +18,61 @@ namespace CgsMemory { struct SimpleDataStreamProducer; }   // pointer-only membe
 // ⭐ ADDED 2026-08-06 (big-five #2): SetupAndValidatePropContact collaborators, pointer use only.
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InputBuffer; } }  // class key struct, matching CgsPhysicsSimulationModuleIO.h:43
 namespace BrnPhysics { namespace Vehicle { class VehicleManager; } }
-namespace BrnPhysics { namespace Props { struct PropRaceCarContactBuffer; } }   // class key struct, matching BrnPhysicsModule.h:128
+// (PropRaceCarContactBuffer is DEFINED below as of 2026-08-09 -- DWARF home
+//  BrnPropManager.h:47; the old fwd-decl line stood here.)
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"                        // CgsPhysics::RigidBodyId (by value)
 // Class key `struct`, matching rw/rwcore_structs.h -- a `class` here mangles differently.
 namespace rw { struct IResourceAllocator; }
+
+// ⭐ ADDED 2026-08-09 (conductor wave) -- collaborators of the four per-frame prop legs,
+// pointer/element use only. Class keys match each committed home.
+namespace CgsSceneManager { namespace SceneManagerIO { struct TriangleCacheInterface;
+                                                       struct InSceneUpdateInterface; } }
+namespace CgsSceneManager { namespace CgsCollision { struct CollisionGenerator; } }
+// (CgsSceneManager::EntityId arrives complete through CgsRigidBody.h -> CgsEntityId.h.)
+namespace CgsMemory { class LinearMalloc; }
+namespace CgsPhysics { namespace PhysicsSimulationIO { struct OutUpdateRigidBody; } }
+namespace BrnPhysics { namespace PhysicsModuleIO { class OutputBuffer; struct PotentialContactInterface; } }
 
 namespace BrnPhysics
 {
 namespace Props
 {
     class PropPhysicsDataHeader;      // ResourcePtr referent only (SharedClasses/Physics/Props)
+
+    // ======================================================================================
+    // PropRaceCarContactBuffer -- DWARF home BrnPropManager.h:47.       NEW 2026-08-09
+    // (conductor wave). The per-frame prop-vs-racecar contact IO buffer PhysicsModule::
+    // Update @0x825B0640 pushes on the output stack ("PropRaceCarContacts"). Console
+    // attestation: CreateIOBuffer<PropRaceCarContactBuffer> @0x825AC4A0 allocates 992
+    // bytes (`li r4,0x3E0`) and runs Construct, which constructs ONE
+    // EventQueue<PropRaceCarContact,30> at +16 (`addi r3,r11,0x10 ; bl
+    // EventQueue<PropRaceCarContact,30>::Construct @0x825A81B8`) -- 16 + (16 + 30*32)
+    // == 992 with zero slack, and both spans are pointer-free-identical on the host
+    // (the queue header pads to 16 on both targets).
+    // ======================================================================================
+    struct PropRaceCarContactBuffer : public CgsModule::IOBuffer
+    {
+        typedef CgsModule::EventQueue<PropRaceCarContact, 30> PropRaceCarContactQueue;  // :62
+
+        // :78 -- raise the buffer status, construct the queue (the X360 stack template's
+        // inline; the PC stack template placement-news only, so Update calls this).
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mPropRaceCarContactQueue.Construct();
+        }
+
+        // :81.
+        void Destruct()
+        {
+            CgsModule::IOBuffer::Destruct();
+        }
+
+    private:
+        u8                      maStatusPad[15];           // +1..+15 (force +16)
+        PropRaceCarContactQueue mPropRaceCarContactQueue;  // +16  (:85)
+    };
 
     // ---- The prop-physics tuning globals ------------------------------------------------
     // Namespace-scope, defined in BrnPropManager.cpp -- which is exactly where the DecFIGS
@@ -95,6 +141,34 @@ namespace Props
         // WorldLinkStubs.cpp until this manager's own prepare pass lands, so the drop is one
         // greppable symbol rather than a silent `return true` for the whole physics module.
         bool Prepare( rw::IResourceAllocator* lpAllocator );
+
+        // ==========================================================================
+        // ⭐ ADDED 2026-08-09 (conductor wave -- PhysicsModule::Update @0x825B0640's
+        // prop legs). Signatures per the PS3 DecFIGS mangles (0x77F694 names
+        // OutputUpdatedProps; the generation pair and ReadUpdatedBodies carry their
+        // param lists in the same export set). ⚠ FLAG: DECLARED for the conductor's
+        // closure; all four bodies are LOUD one-shot gates in
+        // BrnPhysicsConductorGates.cpp until reconstructed.
+        // ==========================================================================
+        void BeginPropWorldContactGeneration(
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
+            CgsSceneManager::CgsCollision::CollisionGenerator* lpCollisionGenerator,
+            CgsMemory::LinearMalloc* lpLinearMalloc,
+            VecFloat lvfTimeStep );                              // @0x82628CB0
+
+        void EndPropWorldContactGeneration(
+            BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContactInterface,
+            CgsSceneManager::CgsCollision::CollisionGenerator* lpCollisionGenerator,
+            CgsSceneManager::EntityId lWorldEntityId );          // @0x82628E18
+
+        void ReadUpdatedBodies(
+            const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody, 200>* lpUpdatedBodyQueue,
+            CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
+            CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInputBuffer,
+            VecFloat lvfTimeStep );                              // @0x82632918
+
+        void OutputUpdatedProps(
+            BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutputBuffer ); // @0x82627EC8
         static const s32 KI_PROP_INDEX_NOT_FOUND     = -1;    // DWARF BrnPropManager.h:245
 
         typedef CgsModule::EventQueue<UpdatePropEvent, 200> UpdatePropEventQueue;

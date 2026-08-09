@@ -126,6 +126,7 @@ namespace BrnPhysics
 {
 namespace PhysicsModuleIO { class InputBuffer; class OutputBuffer; struct PotentialContactInterface; }
 namespace Props           { struct PropRaceCarContactBuffer; }   // DWARF BrnPropManager.h:47 (class key struct; IOBuffer-derived, not yet homed)
+namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehicleManagerIO.h (the "VehManager" stack buffer Update creates)
 
     // ==============================================================================================
     // The X360 literals this class's layout is derived from. Consumed by
@@ -344,6 +345,43 @@ namespace Props           { struct PropRaceCarContactBuffer; }   // DWARF BrnPro
         // sim input buffer (remove-joint only; the add-joint queue must already be empty).
         void BridgeVehicleManagerRequestsToSimulation( CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
                                                        const Vehicle::VehicleOutputRequestInterface* lpRequestInterface );
+
+        // ==========================================================================
+        // ⭐ ADDED 2026-08-09 (conductor wave -- PhysicsModule::Update @0x825B0640
+        // lands). Signatures per the PS3 DecFIGS mangles; home TU
+        // BrnPhysicsModuleBridgeFunctions.cpp for the two bridges (their baked
+        // asserts cite :795/:796 and :993/:994 of that file).
+        // ==========================================================================
+
+        // :795 @0x825ADEA8 (PS3 0x691CFC). Construct a 60-slot InUpdateExternalBody queue,
+        // read the module input's solver-iteration cap into the sim input, harvest every
+        // live vehicle body (VehicleManager::GetUpdatedVehicleBodies) and append the queue.
+        void BridgeUpdatedVehiclesToSimulation( CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
+                                                const PhysicsModuleIO::InputBuffer* lpInputBuffer );
+
+        // :993 @0x825ADF60. Drain the vehicle manager's remove-rigid-body / add-rigid-body /
+        // change-inertia request queues into the sim input buffer (that exact console order).
+        void BridgeVehicleManagerToSimulation_PostPhysics( CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
+                                                           const Vehicle::VehicleManagerOutputBuffer* lpVehManagerOutputBuffer );
+
+        // :1025 (PS3 `PhysicsModule::BridgeVehicleManagerToOutput`; the X360 inlines the whole
+        // body into Update @0x825B2408..0x825B2510). Lock both buffers, then forward the
+        // request interface with VehicleOutputRequestInterface::Append (five queue appends;
+        // the inertia queue is deliberately excluded -- the _PostPhysics bridge owns it).
+        void BridgeVehicleManagerToOutput( PhysicsModuleIO::OutputBuffer* lpOutputBuffer,
+                                           const Vehicle::VehicleManagerOutputBuffer* lpVehManagerOutputBuffer );
+
+        // @0x825A72F0 (PS3 0x69CD60: HandleGameActions(const BaseGameActionQueue<13312>*,
+        // OutputBuffer*)). The per-frame game-action dispatch (mode prepare/stop, impact
+        // time, showtime, player stats, ...). The queue type is the committed
+        // GameStateModuleIO::GameActionQueue (== the DWARF's BaseGameActionQueue<13312>
+        // == VariableEventQueue<13312,16>; see BrnGameStateSharedIO.h's collapse note),
+        // which is byte-compatible with the InputBuffer's GameActionQueueStorage member the
+        // caller feeds it. ⚠ FLAG: DECLARED for Update's closure; body still a LOUD
+        // one-shot gate (BrnPhysicsConductorGates.cpp) -- its 185-insn switch drags ~10
+        // VehicleManager mode/showtime methods that are not reconstructed yet.
+        void HandleGameActions( const BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue,
+                                PhysicsModuleIO::OutputBuffer* lpOutputBuffer );
 
         // ===================================================================
         // DWARF member set (BrnPhysicsModule.h:189..241), in declaration order --

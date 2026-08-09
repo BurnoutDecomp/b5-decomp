@@ -47,3 +47,31 @@ namespace PhysicsModuleIO
     }
 }
 }
+
+// ⭐ ADDED 2026-08-09 (conductor wave): the two queue getters PhysicsModule::Update
+// @0x825B0640 consumes -- the potential-contact queue feeds
+// PotentialContactInterface::SetConstQueue, the overlap-pairs queue feeds
+// Start/EndVehicleContactGeneration. Same lock-tripwire pattern as every getter above.
+namespace BrnPhysics
+{
+namespace PhysicsModuleIO
+{
+    // X360 0x8259FB40 (DWARF :289): read-lock; return &mPotentialContactQueue (console
+    // this+160208 -- `addis r3,r28,2 ; addi r3,r3,0x71D0`).
+    const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>*
+    InputBuffer::GetPotentialContactQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mPotentialContactQueue;
+    }
+
+    // X360 0x8259FBE8 (DWARF :292): read-lock; return &mOverlapPairsQueue (console
+    // this+324064 -- `addis r3,r28,5 ; addi r3,r3,-0xE20`).
+    const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>*
+    InputBuffer::GetOverlapPairsQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mOverlapPairsQueue;
+    }
+}
+}
