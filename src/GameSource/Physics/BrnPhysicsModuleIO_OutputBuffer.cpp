@@ -50,6 +50,53 @@ namespace PhysicsModuleIO
                       "scene -> contact-spy console delta (>=: the spy seat 8-aligns)");
     }
 
+    // ⛔⛔ 2026-08-10 (root-cause wave) -- THIS BUFFER HAD NO Construct AT ALL.
+    // The X360 CreateIOBuffer<T> stack template runs T::Construct after the alloc; the PC
+    // template placement-news only. So every embedded queue in the physics module's OUTPUT
+    // buffer stayed un-Constructed, and the moment PhysicsModule::Update actually ran,
+    // BridgeVehicleManagerToOutput's `GetVehicleOutputRequestInterface()->Append(...)` hit an
+    // unconstructed VariableEventQueue<13440,16> (mRequestFineLineQueue) and fired
+    // "Not Constructed" (CgsVariableEventQueue.h:759) every frame. Exactly the InputBuffer
+    // partial-Construct family fixed on 2026-08-09.
+    //
+    // Console body X360 0x825ABB10 (64 instructions), read from the asm. r30 == this;
+    // r28/r29 are re-bases the compiler hoisted. Full call list with each member's seat:
+    //   stb 1, 0(r30)                                        status = 1
+    //   +148656  Deformation::DeformationOutputInterface::Construct
+    //   +171552  Deformation::DetachedPartRenderEvent<50>::Construct   ) inside
+    //   +175568  Deformation::GlassSmashOrCrackEvent<20>::Construct    ) mDeformationOutput-
+    //            + zero stores at +159648/+171072/+171300/+171560/+175576 ) InterfaceForEntityModules
+    //   +53888   Vehicle::PhysicalTrafficState<20>::Construct  ) inside
+    //   +53104   Vehicle::ImpactEvent<16>::Construct           ) mVehicleOutputInterface
+    //   +70224   VariableEventQueue<1536,16>::Construct        ) (+44128)
+    //            + `std 0` at +44128 and five zero bytes at +71776 )
+    //   +16      InAddRigidBody<50> / VariableEventQueue<13440,16> / InRemoveRigidBody<50> /
+    //            InChangeRigidBodyInertia<200> / InAddJoint<10> / InRemoveJoint<10>
+    //            == Vehicle::VehicleOutputRequestInterface::Construct, inlined
+    //   +41952   Vehicle::VehicleManagerOutputInterface::Construct
+    //   +179424  SceneManagerIO::InSceneUpdateInterface::Construct
+    //   +71792   Props::PropOutputInterface::Construct
+    //   +998192  stwx 0        == mContactSpyInterface (drop the data pointer)
+    //
+    // ⚠️ SIX of those legs CANNOT be emitted yet and are NOT faked:
+    //   * mPropManagerOutputInterface (+71792), mDeformationOutputInterface (+148656),
+    //     mDeformationOutputInterfaceForEntityModules (+159648) and mSceneInputInterface
+    //     (+179424) are still 1-byte opaque *Storage spans with no members to construct;
+    //   * mVehicleOutputInterface (+44128) and mVehicleManagerOutputInterface (+41952) ARE
+    //     the real committed types, but neither declares a Construct member yet -- the
+    //     console inlines both. Their seats and exact queue lists are transcribed above so
+    //     the next wave restores them in minutes. (mVehicleOutputInterface additionally holds
+    //     its game-event queue as an opaque size-pinned span, so its Construct needs that
+    //     seam decided first.) Any consumer reaching one of those will fire the same loud
+    //     "Not Constructed" this one did, by design.
+    void OutputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();            // status = 1
+
+        mVehicleOutputRequestInterface.Construct();  // +16      (the six sim-request queues)
+        mContactSpyInterface.Construct();            // +998192  (the console's trailing stwx 0)
+    }
+
     // X360 0x8279F4F0 (read sibling block): read-lock; return this + 41952.
     const Vehicle::VehicleManagerOutputInterface* OutputBuffer::GetVehicleManagerOutputInterface() const
     {

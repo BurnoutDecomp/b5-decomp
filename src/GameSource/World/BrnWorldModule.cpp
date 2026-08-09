@@ -2187,6 +2187,11 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     // PC Construct restoration (see WorldModule::Prepare's SCENE stage; the X360
     // CreateIOBuffer<T> stack template runs T::Construct after the alloc).
     lpPhysicsInput->Construct();
+    // ⛔ 2026-08-10 (root-cause wave): the OUTPUT half was never Constructed. Its console
+    // Construct is X360 0x825ABB10 and it is what leaves the vehicle-output REQUEST
+    // interface's queues live; without it PhysicsModule::Update's BridgeVehicleManagerToOutput
+    // appended into an unconstructed VariableEventQueue<13440,16> every frame.
+    lpPhysicsOutput->Construct();
     lpPhysicsOutput->Construct();
     lpSceneOutput->Construct();
     lpTriggerInput_PreScene->Construct();
