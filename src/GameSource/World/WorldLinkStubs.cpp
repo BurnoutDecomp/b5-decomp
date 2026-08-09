@@ -3039,21 +3039,12 @@ void WorldModule::BridgeTrafficToCrashModule_PostPhysics(void *,struct BrnWorld:
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 the Update input fan-out -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeInputToPhysicsModule(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct BrnWorldIO::UpdateInputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeInputToPhysicsModule: inert [FLAG PC boot gate]\n";
-    }
-}
+// RETIRED 2026-08-09 (feed wave): WorldModule::BridgeInputToPhysicsModule is REAL in
+// GameSource/World/Bridges/WorldBridgeInputToPhysicsModule.cpp. Its X360 address --
+// 0x827AB830 -- is a HOLE in the IDA export set and was recovered by decoding the `bl`
+// at the WorldModule::Update call site out of the image; see that TU's banner. The gate
+// that used to sit here said "X360 the Update input fan-out" precisely because no wave
+// had been able to name an address for it.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.

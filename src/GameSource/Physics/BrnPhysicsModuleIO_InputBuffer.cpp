@@ -52,6 +52,12 @@ namespace PhysicsModuleIO
             static_assert(sizeof(VehicleInputInterfaceStorage) >= 142176,
                           "vehicle-input span smaller than the console span -- retype regressed");
             static_assert(offsetof(InputBuffer, mVehicleDriverInterface)       == 142544 + KU_DRIFT, "mVehicleDriverInterface @142544+D");
+            // ⭐ 2026-08-09 (feed wave): mVehicleDriverInterface is the REAL
+            // Vehicle::VehicleDriverInputInterface now. Unlike the vehicle-input span it does NOT
+            // grow on the host -- every member is pointer-free -- so it must land EXACTLY on the
+            // console span or the members below it would need a second drift constant. Pin it.
+            static_assert(sizeof(VehicleDriverInputInterfaceStorage) == 147840 - 142544,
+                          "vehicle-driver span must equal the console 5296 (host type is pointer-free)");
             static_assert(offsetof(InputBuffer, mVehicleEffectsInputInterface) == 147840 + KU_DRIFT, "mVehicleEffectsInputInterface @147840+D");
             static_assert(offsetof(InputBuffer, mRCEntityOutputInterface)      == 149632 + KU_DRIFT, "mRCEntityOutputInterface @149632+D");
             static_assert(offsetof(InputBuffer, mPotentialContactQueue)        == 160208 + KU_DRIFT, "mPotentialContactQueue @160208+D (0x8259FB40)");
@@ -75,10 +81,50 @@ namespace PhysicsModuleIO
     // BridgeActionsToPhysicsModule AddEvent fired "Not Constructed"
     // (CgsVariableEventQueue.h:454 / :728). Measured live the moment BridgeGameStateToWorld
     // started delivering game actions to the world.
+    // ⛔⛔ 2026-08-09 (feed wave) -- THE BODY ABOVE WAS A TWO-LINE PARTIAL AND IT COST 913
+    // ASSERTS THE MOMENT THE INPUT FEED LANDED.
+    // The console body (X360 0x825ABA18) is SIXTY-ONE instructions and constructs FIFTEEN
+    // members; the 2026-08-01 wave added only the one member it needed. The first frame
+    // WorldModule::BridgeInputToPhysicsModule @0x827AB830 ran, VehicleDriverInputInterface::
+    // Append hit an unconstructed VariableEventQueue<5040,16> and fired "Not Constructed"
+    // (CgsVariableEventQueue.h:759) every frame for the whole session.
+    // Console call order, with each member's console seat:
+    //   status = 1
+    //   +0x00170  Vehicle::VehicleInputInterface::Construct          -> mVehicleInputInterface
+    //   +0x22CD0  Vehicle::VehicleDriverInputInterface::Construct    -> mVehicleDriverInterface
+    //   +0x27170  Vehicle::CreateWorldEvent<1>::Construct            -> mCreateWorldEventQueue
+    //   +0x271D0  SceneManagerIO::PotentialContact<2048>::Construct  -> mPotentialContactQueue
+    //   +0x24180  Vehicle::CreateAirRamEvent<20>::Construct    ) the two queues inside
+    //   +0x24690  Vehicle::CreateSpinEvent<10>::Construct      ) mVehicleEffectsInputInterface
+    //             + zero stores at +0x24188 / +0x24698
+    //   +0x24880  RCEntityActiveRaceCarOutputInterface::Clear        -> mRCEntityOutputInterface
+    //   +0x4FDF0  CgsSystem::TimerStatusInterface::Clear             -> mTimerInterface
+    //   +0x00010  BrnDirector::Camera::Camera::Construct             -> mCameraInput
+    //   +0x4FE30  Props::AddPhysicalPropEvent<50>::Construct   ) the four queues inside
+    //   +0x50D90  Props::RemovePhysicalPropEvent<300>::Construct )  mPropManagerInputInterface
+    //   +0x526FC  Props::RemovePhysicalPartEvent<100>::Construct )  + five zero stores
+    //   +0x50DE0  Props::AddPhysicalPartEvent<50>::Construct    )
+    //   +0x52A40  VariableEventQueue<13312,16>::Construct            -> mGameActionQueue
+    //   +0x4F1E0  SceneManagerIO::OutOverlapPair<128>::Construct     -> mOverlapPairsQueue
+    //   +0x4FE20  mSolverMaxIterations = 0
+    //
+    // ⚠️ FIVE of those calls CANNOT be emitted yet and are NOT faked: mCreateWorldEventQueue is
+    // still a 96-byte pad, and mVehicleEffectsInputInterface / mRCEntityOutputInterface /
+    // mPropManagerInputInterface / mCameraInput are still correctly-sized opaque *Storage spans
+    // with no members to construct. They are listed above by console seat so the next wave that
+    // retypes any of them knows exactly which call to restore -- and any consumer that reaches
+    // one of those spans will fire the same loud "Not Constructed" this one did, by design.
     void InputBuffer::Construct()
     {
         CgsModule::IOBuffer::Construct();
-        mGameActionQueue.Construct();
+
+        mVehicleInputInterface.Construct();      // +0x00170
+        mVehicleDriverInterface.Construct();     // +0x22CD0
+        mPotentialContactQueue.Construct();      // +0x271D0
+        mTimerInterface.Clear();                 // +0x4FDF0
+        mGameActionQueue.Construct();            // +0x52A40
+        mOverlapPairsQueue.Construct();          // +0x4F1E0
+        mSolverMaxIterations = 0;                // +0x4FE20
     }
 
     // ---- getters (read-lock: status bit 4) ------------------------------------------

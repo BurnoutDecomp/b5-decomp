@@ -425,6 +425,16 @@ namespace BrnWorld
                       BrnWorldIO::UpdateOutputBuffer* lpUpdateOutputBuffer,
                       BrnResource::GameDataIO::AllocatorList* lpAllocatorList );
 
+        // ⭐ ADDITIVE 2026-08-09 (feed wave; header-only inline, no out-of-line symbol).
+        // WorldModule::BridgeInputToPhysicsModule @0x827AB830 hands the module's last director
+        // camera to the physics input buffer, reaching it as the raw `this + 0x5E1CC0`
+        // (`addis r4,r29,0x5E / addi r4,r4,0x1CC0` -- 6167744, the console seat this header
+        // already documents for mLastCameraInput). Same pattern as
+        // Vehicle::VehicleInputInterface::GetLineTestResults: expose it BY NAME so host
+        // addressing stays layout-correct instead of poking a console byte offset through a
+        // void*, which on the x64 layout would not land on this member at all.
+        const BrnDirector::Camera::Camera* GetLastCameraInput() const { return &mLastCameraInput; }
+
     private:
         // @0x827C96D8 -- the shadow-map dispatch feed (three cascades over the
         // filtered world/racecar/traffic/prop sets). DECODE PENDING: declared with

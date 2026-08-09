@@ -25,6 +25,18 @@ namespace PhysicsModuleIO
         return &mVehicleDriverInterface;
     }
 
+    // X360 0x8279EDD0 (DWARF :279): write-lock; return &mVehicleDriverInterface (this+142544).
+    // ⭐ ADDED 2026-08-09 (feed wave). This function is a HOLE in the IDA export set -- it is
+    // named at its one call site (WorldModule::BridgeInputToPhysicsModule @0x827AB830,
+    // `bl 0x8279EDD0`) but has no per-function export; the body below was recovered by
+    // disassembling the image bytes directly: status bit 3 test (`rlwinm r11,r11,0x1d,0x1f,0x1f`),
+    // FireAssert line 0x117 == 279, then `addis r3,r28,2 / addi r3,r3,0x2CD0` == this+142544.
+    InputBuffer::VehicleDriverInputInterfaceStorage* InputBuffer::GetVehicleDriverInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mVehicleDriverInterface;
+    }
+
     // X360 0x8259F9F0 (DWARF :281): read-lock; return &mVehicleEffectsInputInterface (this+147840).
     const InputBuffer::VehicleEffectsInputInterfaceStorage* InputBuffer::GetVehicleEffectsInputInterface() const
     {

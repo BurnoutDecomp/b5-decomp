@@ -63,6 +63,12 @@ namespace Vehicle
         // arrays) from another interface into this one.
         void CopyBaseDeformationParams(const VehicleDriverInputInterface* lpInterfaceToCopy);
 
+        // @0x823DB640  Merge another interface's staged driver state into this one: append its
+        // update-driver queue, then adopt its target-assist list when we have none of our own.
+        // ⭐ ADDED 2026-08-09 (feed wave) -- the callee of
+        // WorldModule::BridgeInputToPhysicsModule @0x827AB830.
+        void Append(const VehicleDriverInputInterface* lpInterfaceToAppend);
+
         // @0x825B3588  Per-active-race-car base-deformation amount accessor.
         f32 GetBaseDeformationAmount(EActiveRaceCarIndex leRaceCarIndex) const;
 
@@ -71,6 +77,12 @@ namespace Vehicle
         // ledger canonical for this leaf is therefore "Ge". It is the s32 counterpart to
         // GetBaseDeformationAmount (reads maBaseDeformationFrames[leRaceCarIndex]).
         s32 Ge(EActiveRaceCarIndex leRaceCarIndex) const;
+
+        // ADDITIVE 2026-08-09: attested by the Append @0x823DB640 assert string in the X360
+        // .rdata -- "miTargetAssistCount==0 || lpInterfaceToAppend->GetTargetAssistCount()==0"
+        // (0x82039118). The console inlines it (Append reads `lwz r11,0x1460(r30)` directly), so
+        // there is no out-of-line symbol; header-only inline keeps the read layout-correct.
+        s32 GetTargetAssistCount() const { return miTargetAssistCount; }
 
         // Accessors for the inline driver-update queue (producers push UpdatePlayer/Network/AI/
         // Traffic driver records into it; the VehicleManager drains it).
