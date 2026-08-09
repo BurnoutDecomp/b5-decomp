@@ -222,8 +222,14 @@ namespace Vehicle
         // impulse, (3) local pitch impulses. Magnitudes differ for showtime vs normal flight, with an
         // extra IsBounceBoosting multiplier. From showtime it chains UpdateTargetAssist +
         // UpdateShowtimePhysics. Gated on the car being airborne (mbIsCrashing here means in-air-ish).
+        // ⭐⭐ WIDENED 2026-08-09 (crash/shunt wave) to the 5-arg DWARF virtual form so it
+        // OVERRIDES VehiclePhysics's image-attested slot +0x28 (the RaceCarPhysics vtable
+        // @0x820D1034 carries this @0x8262EBE8 there). The old 4-arg form dropped the VecFloat
+        // dt the asm saves at entry -- a base-pointer dispatch would have reached the empty
+        // traffic default instead of this body (the hollow-shell class of defect).
         void UpdateAftertouch(const BrnPlayerDriverControls* lpControls,
                               const Matrix44Affine* lpCameraMatrix,
+                              VecFloat lvfTimeStep,
                               bool lbDoForceAdditiveAftertouch, bool lbUseSixaxis);
 
         // @0x825B8C88: trivial getter -- true while aftertouch air-steer is active this frame.

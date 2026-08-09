@@ -691,6 +691,43 @@ namespace Vehicle
         void SetPlayerCarToShowtimeMode(bool lbInShowtime);
 
         // ==========================================================================================
+        // ⭐⭐ DoCrashPrediction @0x82645FE0 (814 insns) -- CENSUS BANKED 2026-08-09 (crash/shunt
+        // wave), NOT BODIED. The decode-and-bank rule applies on both counts:
+        //   1. Its middle (0x82646540..0x82646AF8) is a ~410-insn dense VMX128 prediction loop
+        //      walking stride-0xE0 vehicle records (cross/dot ladders, vsel lane logic, plus the
+        //      lazy-init constant splats dword_82FBA370 / unk_82FBA350/360 seeded from
+        //      flt_82004018/flt_82004C68) -- force-prediction math whose correctness cannot be
+        //      checked until the sim ticks.
+        //   2. Its MEASURED missing closure is a web, not a leaf. Level 1 (all absent from the
+        //      tree): DoCrashPredictionForRaceCarAndTrafficVehicle @0x82643D30 (159),
+        //      HandleCrashPredictionForRaceCarAndTrafficVehicle @0x82640AB0 (93),
+        //      HandleTrafficCarTrafficCarPotentialContact @0x8263EC90 (279),
+        //      HandleTrafficCarWorldPotentialContact @0x8263F0F0 (220), sub_8259D670 (43, shared
+        //      with FixUpVehicleContacts / DoTrafficWorldContactOrdering),
+        //      PhysicalTrafficManager::{Allocate,Deallocate}InternalBuffers (@0x82615958 / hole),
+        //      ArticulatedJointPool::SendCreateRemoveJointEvents @0x826013C0,
+        //      CgsContainers::BasePriorityQueue::Clear @0x82815E58. Level 2:
+        //      PotentialContactAverager (type + AddContactPair + GetAveragedContactPoint),
+        //      HandleRaceCarTrafficCarPotentialContact, PredictCarCarIntersection,
+        //      GetTrafficInterest_0, SetTrafficVehicleCrashing/-Slammed,
+        //      BrnTraffic::GetVehicleSpecies, sub_82203F70 -- and this slice's own
+        //      PredictCarWorldContactTime / HandleRaceCarWorldPotentialContact declare-onlys.
+        // Its ONLY caller is PhysicsModule::Update @0x82645FE0's xref -- itself still the
+        // WorldLinkStubs trap -- so the body is neither runtime-reachable nor link-demanded
+        // today. DWARF signature (BrnVehicleManager.h:899), for the conductor wave that lands it:
+        //     void DoCrashPrediction(IOBufferStack*, IOBufferStack*, float32_t,
+        //         const VehicleInputInterface*, VehicleOutputInterface*,
+        //         VehicleOutputRequestInterface*, VehicleManagerOutputInterface*,
+        //         DeformationInputInterface*, PotentialContactInterface*);
+        // Spine (calls in asm order): asserts, AllocateInternalBuffers, sub_8259D670, two
+        // BasePriorityQueue::Clear + bctrl drains, HandleTrafficCarTrafficCarPotentialContact,
+        // the VMX prediction loop, DoCrashPredictionForRaceCarAndTrafficVehicle,
+        // HandleCrashPredictionForRaceCarAndTrafficVehicle,
+        // HandleCrashPredictionForRaceCarAndWorld, HandleTrafficCarWorldPotentialContact,
+        // SendCreateRemoveJointEvents, DeallocateInternalBuffers.
+        // ==========================================================================================
+
+        // ==========================================================================================
         // Race-car-vs-world crash-prediction slice (X360 @0x82640C28). DWARF-authoritative
         // signatures (BrnVehicleManager.h:1296/1200/1215). HandleCrashPredictionForRaceCarAndWorld
         // walks the interface's already-validated race-car-world potential-contact queue, groups the
@@ -773,9 +810,10 @@ namespace Vehicle
         //    ⚠️ AND IT HAD A COST THE TABLE DID NOT ANTICIPATE: embedding a POLYMORPHIC class by
         //    value made the already-mounted BrnPhysicsModule.cpp (which embeds a VehicleManager)
         //    odr-use the whole RaceCarPhysics vtable, which turned two long-standing DECLARE-ONLY
-        //    virtuals into link errors -- SimpleVehiclePhysics::SetCrashing and
-        //    VehiclePhysics::IsIgnoringPassedOnImpulses. Both now have vtable-closure GATES (loud
-        //    asserts, not quiet no-ops) in their own TUs; read those banners before touching them.
+        //    virtuals into link errors -- SimpleVehiclePhysics::SetCrashing and the +0x10 slot
+        //    (then role-named "IsIgnoringPassedOnImpulses"; image-settled 2026-08-09 as
+        //    VehiclePhysics::IsPlayerVehicleInShowtime, whose recovered default retires that
+        //    trap). SetCrashing's vtable-closure GATE still stands in its own TU.
         //
         // ⭐ WHAT WAS STILL MISSING FOR `VehicleManager::Construct` @0x8263B7C8 -- MEASURED 2026-08-03,
         //    not estimated. The layout wave above mined this function for OFFSETS; this note records
