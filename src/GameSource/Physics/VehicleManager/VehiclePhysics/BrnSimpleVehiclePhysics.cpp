@@ -1,4 +1,5 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"  // the full VehicleAttribs (SwitchAttribs reads its base/suspension lanes)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
 #include <cmath>                                        // std::sqrt (AddTractionPoint's line distance)
@@ -107,22 +108,41 @@ namespace Vehicle
     static const Vector3 KV_ZERO = { 0.0f, 0.0f, 0.0f, 0.0f };
 
     // -------------------------------------------------------------------------------------------
-    // Construct @0x826203E8 lives in its own TU, BrnSimpleVehiclePhysics_Construct.cpp --
-    // SPLIT 2026-08-02 (physics wave 3). BUILD-MECHANICS SPLIT ONLY (byte-identical body,
-    // unchanged declared home).
+    // Construct @0x826203E8 -- ⭐ RE-MERGED 2026-08-09 (attribs-setup wave), exactly per the
+    // split TU's own contract ("TO RE-MERGE: body SimpleVehicleAttribs::Construct, then move
+    // this body back and delete the TU"). SimpleVehicleAttribs::Construct @0x825E6580 is now
+    // BODIED in VehicleAttribs.cpp (every constant image-read), so the 2026-08-02 build-mechanics
+    // split (BrnSimpleVehiclePhysics_Construct.cpp, never mounted) is retired. The body below is
+    // the split TU's, byte-identical.
     //
-    // WHY: it is the only function in this TU that calls SimpleVehicleAttribs::Construct
-    // @0x825E6580, which has NO BODY anywhere in the tree. That console function is a ~120-line
-    // lane-write initialiser over ~15 unresolved .rdata float constants (flt_82096C9C /
-    // flt_8200473C / flt_82004F5C / flt_82013A78 / flt_8200D538 / flt_82020A84 / flt_82004A1C /
-    // flt_82012EF8 / flt_82004740 / flt_820047C0 / flt_82004010 ...) writing offsets +0x00 .. +0xE4
-    // of a type this tree still models as a TWO-MEMBER minimal slice (mCOMOffset / mbIsValid) --
-    // it cannot be bodied until the real VehicleAttribs layout pass lands, and inventing the
-    // constants is forbidden. Keeping Construct here made the whole TU -- including
-    // GetGraphicsVehicleTransform, the function VehicleOutputInterface::UpdateRaceCarState needs
-    // to publish the car's render pose -- unlinkable for the sake of one blocked callee.
-    // Re-merge when SimpleVehicleAttribs::Construct lands.
+    //   base Construct, Wheel::Clear each of the 4 wheels (the do/while walks +304 stride 224
+    //   until Wheel::Clear returns the sentinel), SimpleVehicleAttribs::Construct, zero
+    //   mHandlingBodyOffset(+1680)/mHalfExtent(+1696)/the two AABBs, then Reset, then the
+    //   base frozen gate cleared.
     // -------------------------------------------------------------------------------------------
+    void SimpleVehiclePhysics::Construct()
+    {
+        // The X360 calls the DIRECT base's Construct on the base subobject (`this+16`):
+        // `bl BrnPhysics__ExternalPhysicsBody__Construct`.
+        ExternalPhysicsBody::Construct();
+        for (int liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+            maWheels[liWheel].Clear();
+        mSimpleAttribs.Construct();
+
+        mHandlingBodyOffset = KV_ZERO;                           // +1680
+        mHalfExtent         = KV_ZERO;                           // +1696
+        mDeformableAABB.mMin = KV_ZERO;                          // the stvx128 v1 zero pair
+        mDeformableAABB.mMax = KV_ZERO;
+        mOriginalAABB.mMin   = KV_ZERO;
+        mOriginalAABB.mMax   = KV_ZERO;
+
+        // FLAG: the X360 seeds raw scratch words *(+1430)=0x8000 / *(+1428)=-1 / *(+1424)=0.0 /
+        // *(+1432)=0 that sit in the deform/crash-flag/wheel-plane region. In the BY-NAME home the
+        // faithful intent is the post-construct reset state, applied by Reset() below.
+        Reset();
+        // *(this+112)=0 -- the base sleep/engine-only-update gate (mbFrozen region), cleared.
+        SetFrozen(false);
+    }
 
     // -------------------------------------------------------------------------------------------
     // Destruct  @0x826206D0
@@ -481,6 +501,106 @@ namespace Vehicle
         mWheelPlanePosAndHeight.SetVector3(lvBestPoint);
         mWheelPlanePosAndHeight.SetPlus((lfBestHeight > 0.0f) ? lfBestHeight : 0.0f);   // vmaxfp 0
         mbMinWheelDistValid = lbAnyValid;   // stb r14 -> +0x714
+    }
+
+    // ===========================================================================================
+    //  SimpleVehiclePhysics::SwitchAttribs   @0x82601978   (458 insns)
+    // ===========================================================================================
+    // ⭐ BODIED 2026-08-09 (attribs-setup wave) -- the "BLOCKED on the 240-byte
+    // SimpleVehicleAttribs" stub is retired: the full type now lives in the header. Decoded
+    // store-for-store from the X360 asm. Four phases:
+    //   1. mfMass = splat(new attribs Mass), asserted positive        (0x826019B0..0x82601A18)
+    //   2. mLocalInverseInertia = the solid-box diagonal inverse tensor from
+    //      lBoxExtent = 2 * mHalfExtent (flt_82001D9C == 2.0, flt_82094724 == 1/12), with
+    //      IsValid + per-axis positivity asserts on the extent        (0x82601A1C..0x82601F10)
+    //   3. per-wheel Wheel::SwitchAttribs with a POSITION DELTA built against the OLD
+    //      mSimpleAttribs (COM delta + per-axle height-offset delta), the wheel's own current
+    //      radius, the .data integration seed, and the new suspension travel bounds
+    //                                                                 (0x82601F14..0x82602074)
+    //   4. mSimpleAttribs.SetupAttribs(lpAttribs) -- the old set is only replaced AFTER the
+    //      deltas were computed from it                               (0x82602078..0x82602080)
+    //
+    // The X360 computes the three tensor diagonals with vrefp + two Newton refines; the host
+    // spells the same quantity as a division (established convention, see UpdateWheels).
+    void SimpleVehiclePhysics::SwitchAttribs(VehicleAttribs* lpAttribs)
+    {
+        // .data scalars (static-init'd BSS, zero in the image; writers found in the
+        // 0x82C5Cxxx initializer bank and their .rdata sources image-read, x360rd 10/10):
+        //   unk_82FB8BB0 <- flt_82004F5C == 30.0   (writer @0x82C5D190)
+        //   unk_82FB8440 <- flt_8209AE88 == 0.025  (writer @0x82C5D1B8)
+        static const f32 KF_WHEEL_INTEGRATION_SEED     = 30.0f;
+        static const f32 KF_MIN_SUSPENSION_TRAVEL_DOWN = 0.025f;
+        static const f32 KF_ONE_TWELFTH = 0.0833333358f;   // flt_82094724 (the box-tensor 1/12)
+
+        // ---- phase 1: the mass ----------------------------------------------------------------
+        const f32 lfMass = lpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+        mfMass = VecFloat{ lfMass, lfMass, lfMass, lfMass };   // stvx128 -> +0xE0 (base mfMass)
+        CGS_ASSERT(lfMass > 0.0f, "mfMass > 0.0f");            // console line 0xA5
+
+        // ---- phase 2: the solid-box inverse inertia --------------------------------------------
+        const Vector3 lBoxExtent = vpu::Mult(mHalfExtent, 2.0f);   // flt_82001D9C
+        CGS_ASSERT(vpu::IsValid(lBoxExtent), "RwMath::IsValid( lBoxExtent )");   // 0xAB
+        CGS_ASSERT(lBoxExtent.x > 0.0f, "lBoxExtent.X() > 0.0f");                // 0xAD
+        CGS_ASSERT(lBoxExtent.y > 0.0f, "lBoxExtent.Y() > 0.0f");                // 0xAE
+        CGS_ASSERT(lBoxExtent.z > 0.0f, "lBoxExtent.Z() > 0.0f");                // 0xAF
+
+        {
+            const f32 lfMassOver12 = lfMass * KF_ONE_TWELFTH;   // v126 = splat(1/12) * splat(mass)
+            const f32 lfX2 = lBoxExtent.x * lBoxExtent.x;
+            const f32 lfY2 = lBoxExtent.y * lBoxExtent.y;
+            const f32 lfZ2 = lBoxExtent.z * lBoxExtent.z;
+            // vrefp + two Newton refines on each -> the diagonal inverse tensor.
+            const f32 lfIxx = 1.0f / (lfMassOver12 * (lfY2 + lfZ2));
+            const f32 lfIyy = 1.0f / (lfMassOver12 * (lfX2 + lfZ2));
+            const f32 lfIzz = 1.0f / (lfMassOver12 * (lfX2 + lfY2));
+            mLocalInverseInertia.xAxis = Vector3{ lfIxx, 0.0f, 0.0f, 0.0f };   // -> +0x80
+            mLocalInverseInertia.yAxis = Vector3{ 0.0f, lfIyy, 0.0f, 0.0f };   // -> +0x90
+            mLocalInverseInertia.zAxis = Vector3{ 0.0f, 0.0f, lfIzz, 0.0f };   // -> +0xA0
+        }
+        CGS_ASSERT(vpu::IsValid(mLocalInverseInertia.xAxis) &&
+                   vpu::IsValid(mLocalInverseInertia.yAxis) &&
+                   vpu::IsValid(mLocalInverseInertia.zAxis),
+                   "RwMath::IsValid( mLocalInverseInertia )");                   // 0xB9
+
+        // ---- phase 3: the per-wheel re-seat, deltas computed against the OLD simple set --------
+        // COM delta: old - new (`vsubfp v0, [this+0x670], [attribs+0x20]`).
+        const Vector3 lvCOMDelta =
+            vpu::Subtract(mSimpleAttribs.mCOMOffset, lpAttribs->mBaseAttribs.mCOMOffset);
+
+        // Per-axle height-offset deltas: new (VehicleAttribs suspension lanes x/y) minus old
+        // (the CURRENT mSimpleAttribs lanes z/w) -- read BEFORE SetupAttribs overwrites them.
+        const f32 lfFrontHeightDelta =
+            lpAttribs->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.x
+            - mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z;
+        const f32 lfRearHeightDelta =
+            lpAttribs->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.y
+            - mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w;
+
+        // The new suspension travel bounds; travel-down floored at the .data 0.025 (vmaxfp).
+        const f32 lfTravelUp = lpAttribs->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.z;
+        const f32 lfTravelDownRaw = lpAttribs->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.w;
+        const f32 lfTravelDown = (lfTravelDownRaw > KF_MIN_SUSPENSION_TRAVEL_DOWN)
+                                     ? lfTravelDownRaw : KF_MIN_SUSPENSION_TRAVEL_DOWN;
+
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            // Front pair gets the front height delta + front tire attribs; rear pair the rear's
+            // (the caller's stacked pointer table var_110..var_104: 2D0, 2D0, 310, 310).
+            const bool lbFront = (liWheel < 2);
+            Vector3 lvDelta = lvCOMDelta;
+            lvDelta.y += lbFront ? lfFrontHeightDelta : lfRearHeightDelta;   // vrlimi(4)
+
+            maWheels[liWheel].SwitchAttribs(
+                lvDelta,
+                maWheels[liWheel].mSlipVariables.w,   // the wheel's CURRENT radius, preserved
+                KF_WHEEL_INTEGRATION_SEED,
+                lfTravelUp,
+                lfTravelDown,
+                lbFront ? &lpAttribs->mFrontTireAttribs : &lpAttribs->mRearTireAttribs);
+        }
+
+        // ---- phase 4: replace the simple set ---------------------------------------------------
+        mSimpleAttribs.SetupAttribs(lpAttribs);   // this+0x5A0, the LAST thing the function does
     }
 }
 }

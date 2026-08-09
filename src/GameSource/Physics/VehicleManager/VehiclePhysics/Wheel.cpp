@@ -253,34 +253,47 @@ namespace Vehicle
     }
 
     // ===========================================================================================
-    //  Wheel::SwitchAttribs   @0x825D6D38
+    //  Wheel::SwitchAttribs   @0x825D6D38   (83 insns, leaf)
     // ===========================================================================================
-    // The in-place sibling of Prepare: re-point mpTireAttribs and re-derive the suspension lanes
-    // WITHOUT clearing the running state. Same scatter, same destination offsets; additionally the
-    // asm subtracts the new streamed position from the existing +0x80 / +0x90 registers (vsubfp128
-    // v0,v0,v127) so the running position tracks the attrib swap.
-    //
-    // FLAG: same inferred suspension-lane scatter as Prepare. The pointer store + streamed-position
-    // delta are EXACT; the per-lane suspension math is faithful-to-the-stores but partial.
-    void Wheel::SwitchAttribs(Vector3 lStreamedPosition, f32 lfMaxSuspensionHeight,
-                              f32 lfMinSuspensionHeight, f32 lfRadiusSeed, f32 lfTwistSeed,
+    // ⭐⭐ REBODIED 2026-08-09 (attribs-setup wave) from its OWN asm -- the standing FLAG on the
+    // old body ("inherits Prepare's disproven scatter, re-verify before anything consumes it")
+    // was right to demand it: every derived lane was wrong. The real scatter MIRRORS Prepare's
+    // PROVEN map (f1 -> mSlipVariables.w == radius; f2 -> mIntegrationVariables.w;
+    // f3/f4 -> mSuspensionAndInertiaVariables .y/.x travel bounds), and v1 is NOT an absolute
+    // position: it is a POSITION DELTA that is SUBTRACTED from both +0x90 and +0x80 (the sole
+    // caller, SimpleVehiclePhysics::SwitchAttribs @0x82601978, builds it as
+    // (oldCOM - newCOM) + (new - old heightOffset) * yhat against the OLD mSimpleAttribs).
+    // The suspension bounds are derived from the NEW streamed hub height
+    // (+0x90.y - delta.y), computed BEFORE the +0x90 commit -- `vsubfp128 v0,v0,v127` @0x825D6DD0,
+    // `vspltw v0,v0,1` @0x825D6E14. The +0x90 w lane (twist) is PRESERVED
+    // (`vrlimi128 v9,v0,1,0` re-inserts the OLD w); +0x80 is decremented whole.
+    void Wheel::SwitchAttribs(Vector3 lPositionDelta, f32 lfWheelRadius, f32 lfIntegrationSeed,
+                              f32 lfSuspensionTravelUp, f32 lfSuspensionTravelDown,
                               const TireAttribs* lpTireAttribs)
     {
-        // CgsDev::Assert( lpTireAttribs != NULL ) -- elided (debug-only).
-        mpTireAttribs = lpTireAttribs;                                  // *(this+208) = a6
+        CGS_ASSERT(lpTireAttribs != NULL, "lpTireAttribs != NULL");     // Wheel.cpp:516 (0x204)
+        mpTireAttribs = lpTireAttribs;                                  // stw r30, 0xD0(r31)
 
-        // Re-seed the streamed position + twist (the asm reloads +0x90 then subtracts v127 = the new
-        // streamed position so the suspension register tracks the swap).
-        mStreamedPositionPlusTwistAmount.SetVector3(lStreamedPosition);
-        mStreamedPositionPlusTwistAmount.SetPlus(lfTwistSeed);
+        // The new streamed hub height, from the running +0x90 register minus the delta.
+        const f32 lfNewHubY = mStreamedPositionPlusTwistAmount.y - lPositionDelta.y;
 
-        mIntegrationVariables.y = lfRadiusSeed - lfMinSuspensionHeight;
-        mSlipVariables.y        = lfRadiusSeed + lfMaxSuspensionHeight;
+        // +0x60: the suspension bounds around the new hub height (same lanes as Prepare).
+        mSuspensionAndInertiaVariables.x = lfNewHubY - lfSuspensionTravelDown;  // vrlimi(8)
+        mSuspensionAndInertiaVariables.y = lfNewHubY + lfSuspensionTravelUp;    // vrlimi(4)
 
-        // vsubfp128 v0,v0,v127 at +0x80: the running position is offset by the new streamed position.
-        mPosition.x -= lStreamedPosition.x;
-        mPosition.y -= lStreamedPosition.y;
-        mPosition.z -= lStreamedPosition.z;
+        // +0x30 lane w / +0x40 lane w -- exactly Prepare's scatter.
+        mIntegrationVariables.w = lfIntegrationSeed;                    // vrlimi128 (+0x30), 1, 1
+        mSlipVariables.w        = lfWheelRadius;                        // vrlimi128 (+0x40), 1, 1
+
+        // +0x90: xyz -= delta, w (twist amount) PRESERVED.
+        mStreamedPositionPlusTwistAmount.x -= lPositionDelta.x;
+        mStreamedPositionPlusTwistAmount.y -= lPositionDelta.y;
+        mStreamedPositionPlusTwistAmount.z -= lPositionDelta.z;
+
+        // +0x80: the running position, decremented whole (vsubfp128 v0,v0,v127).
+        mPosition.x -= lPositionDelta.x;
+        mPosition.y -= lPositionDelta.y;
+        mPosition.z -= lPositionDelta.z;
     }
 
     // ===========================================================================================
