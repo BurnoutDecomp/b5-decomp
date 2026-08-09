@@ -3429,32 +3429,11 @@ namespace Vehicle
     // mWeightTransferRow(+0xEF0) = bodyAxes * lfScale  (lane-by-lane vrlimi insert)
     }
 
-    // -------------------------------------------------------------------------------------------
-    // ⛔ IsIgnoringPassedOnImpulses -- VTABLE-CLOSURE GATE, added 2026-08-03. Vtable slot +0x10.
-    //
-    // Same cause as SimpleVehiclePhysics::SetCrashing (see the long ⛔⛔ banner there): embedding
-    // `RaceCarPhysics maRaceCarVehicles[8]` by value in VehicleManager made the mounted
-    // BrnPhysicsModule.cpp odr-use this class's vtable, so every virtual now needs a definition.
-    // These two were the only ones missing.
-    //
-    // ⚠️ THIS ONE CANNOT BE A PURE ASSERT: it has to RETURN something, and the return VALUE is the
-    // gate. VehicleRigidBody::RecievePassedOnImpulse early-outs WITHOUT applying the impulse when
-    // this is true, so `true` would be a silent-drop -- every passed-on deformation impulse
-    // swallowed, plausibly, forever. `false` is the pass-through, and it is also the state the
-    // object is in immediately after Construct (not crashing), so it is the conservative answer
-    // rather than a guess dressed as one.
-    // ⚠️ FLAG: the console body is NOT recovered -- neither the address nor the method NAME is
-    // pinned (VehiclePhysics.h calls the name role-inferred). It is unreachable in the mounted tree
-    // today: both call sites (BrnVehicleRigidBody.cpp, BrnDeformableObject_Update.cpp) are
-    // unmounted. The assert is what says so out loud if that changes.
-    // -------------------------------------------------------------------------------------------
-    bool VehiclePhysics::IsIgnoringPassedOnImpulses() const
-    {
-        CGS_ASSERT(false,
-                   "VehiclePhysics::IsIgnoringPassedOnImpulses is a vtable-closure gate, not a "
-                   "body -- reconstruct it before the deformation impulse path is mounted");
-        return false;   // pass-through: apply the impulse. NEVER flip this without the real body.
-    }
+    // ⭐⭐ 2026-08-09 (crash/shunt wave): the vtable-closure gate `IsIgnoringPassedOnImpulses`
+    // that lived here is RETIRED. The +0x10 slot is now image-settled as the DWARF virtual
+    // IsPlayerVehicleInShowtime (both concrete vtables read off the image -- see the header's
+    // banner), and the base default `return false` in VehiclePhysics.h IS the recovered console
+    // default (`li r3,0 ; blr`), so there is no missing body left for a trap to guard.
 
     // flt_8208FB0C -- the seat's tyre-compression allowance, read from the image (x360rd, the
     // calibrated .id1 reader): 0.03500000014901161f. The seat plants the car this much LOW and the
@@ -4842,7 +4821,7 @@ namespace Vehicle
     //   0x82638238  UpdateInAirStats(f1 = dt.x)
     //   0x82638248  mEngine.mbAllowToChangeUpGear = mbAllowToChangeDownGear = !mbHasAir
     //   0x82638268  UpdateSlam(&copy, dt)
-    //   0x82638270  UpdateShunt(&copy)                       [TRAP until its wave]
+    //   0x82638270  UpdateShunt(&copy, dt)                   [BODIED 2026-08-09; v1 = v126 dt]
     //   0x82638280  CheckState "After update slam"
     //   0x82638290  CheckState "After LayOffGasWhilstInAir"  (the stage itself is inlined into
     //               the slam/shunt pair on this build -- two brackets, back to back)
@@ -4927,7 +4906,7 @@ namespace Vehicle
         mEngine.SetAllowGearChanges(!mbHasAir);   // stb 0xFC4 / 0xFC5
 
         UpdateSlam(reinterpret_cast<f32*>(&lCopy), lvfTimeStep.x);
-        UpdateShunt(&lCopy);
+        UpdateShunt(&lCopy, lvfTimeStep);   // v1 = v126 (the dt splat), restored before the bl
         CheckState("After update slam");
         CheckState("After LayOffGasWhilstInAir");
 
@@ -5066,6 +5045,339 @@ namespace Vehicle
         }
 
         CheckState("End of driving update");
+    }
+
+// [clean] UpdateShunt  @0x825FC748
+    // @0x825FC748  BrnPhysics::Vehicle::VehiclePhysics::UpdateShunt  (100 insns, read line by
+    // line; the LOUD TRAP in VehiclePhysicsLinkStubs.cpp is deleted in this commit).
+    //
+    // Consume the queued shunt effect: while a shunt is active (the inlined
+    // ShuntEffect::IsActive() lane pair -- desired speed w > 0 AND life x > 0), and the car
+    // still has traction, close the horizontal-speed deficit along the shunt direction with a
+    // single world-space impulse, floor the gas, drop brake + handbrake, and decay the life.
+    // The X360, store for store:
+    //   0x825FC778..0x825FC7C8  the active pair (vspltw 3 of +0x1130 / vspltw 0 of +0x1140,
+    //                           both vcmpgtfp vs 0) -- inactive -> plain return, NO clear
+    //   0x825FC7CC  `lbz 0x135B` mbAllWheelsHaveTraction -- zero -> CLEAR the effect
+    //   0x825FC7D8..0x825FC818  the deficit: horiz = v - up*dot3(up, v)  (up = mTransform.yAxis
+    //                           @this+0x20, v = mLinearVelocity @this+0x50);
+    //                           deficit = desiredSpeed - dot3(dir, horiz); if deficit >
+    //                           SpeedIncreaseToQuit (+0x1140 lane y) -> CLEAR (quit: the car
+    //                           has fallen too far behind the shunt's desired speed)
+    //   0x825FC82C..0x825FC84C  impulse = dir * deficit * mfMass (+0xE0, the splat register),
+    //                           minus its up-axis component (the same project-out), fed to
+    //                           ExternalPhysicsBody::AddWorldSpaceImpulse (r3 = this+0x10)
+    //   0x825FC850..0x825FC874  controls: mfBrake(+8) = mfHandBrake(+0xC) = 0.0
+    //                           [flt_82001CC0]; mfGas(+4) = fsel-max(mfGas, 0.8
+    //                           [flt_8208F9C8 == 0x3F4CCCCD, image-read x360rd])
+    //   0x825FC878  `stb 0x1358` mbHandBrake = false
+    //   0x825FC87C..0x825FC890  life -= dt (the v127-saved v1 argument; vrlimi mask 8 = x lane)
+    //   CLEAR (0x825FC8A4..): mDirectionPlusDesiredSpeed = 0; then +0x1140 .y = 0 (vrlimi 4)
+    //                         and .x = -1.0f (vcfsx of vspltisw -1; vrlimi 8) -- the ctor's
+    //                         partial-clear pattern, reproduced store for store.
+    void VehiclePhysics::UpdateShunt(BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep)
+    {
+        static const f32 KF_SHUNT_GAS_FLOOR = 0.8f;   // flt_8208F9C8 (image-read: 0x3F4CCCCD)
+
+        // The inlined ShuntEffect::IsActive() pair. Inactive -> return WITHOUT clearing.
+        if (!(mShuntEffect.mDirectionPlusDesiredSpeed.w > 0.0f) ||
+            !(mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x > 0.0f))
+            return;
+
+        bool lbClear = true;   // both early legs fall into the clear block
+        if (mbAllWheelsHaveTraction)
+        {
+            // horizontal velocity = v - up * dot3(up, v)
+            const Vector3& lvUp  = mTransform.yAxis;                    // this+0x20
+            const Vector3& lvVel = mLinearVelocity;                     // this+0x50
+            const f32 lfUpDot = vpu::Dot(lvUp, lvVel);
+            const Vector3 lvHoriz = { lvVel.x - lvUp.x * lfUpDot,
+                                      lvVel.y - lvUp.y * lfUpDot,
+                                      lvVel.z - lvUp.z * lfUpDot, 0.0f };
+
+            const f32 lfAlong   = vpu::Dot(mShuntEffect.mDirectionPlusDesiredSpeed.GetVector3(),
+                                           lvHoriz);
+            const f32 lfDeficit = mShuntEffect.mDirectionPlusDesiredSpeed.w - lfAlong;
+
+            if (!(lfDeficit > mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y))
+            {
+                // live branch: impulse = (dir * deficit * mass) with the up component
+                // projected out, then the control/latch writes and the life decay.
+                const f32 lfMass = mfMass.x;   // +0xE0, a splat register -- lane-wise multiply
+                Vector3 lvImpulse = { mShuntEffect.mDirectionPlusDesiredSpeed.x * lfDeficit * lfMass,
+                                      mShuntEffect.mDirectionPlusDesiredSpeed.y * lfDeficit * lfMass,
+                                      mShuntEffect.mDirectionPlusDesiredSpeed.z * lfDeficit * lfMass,
+                                      0.0f };
+                const f32 lfUpComp = vpu::Dot(lvUp, lvImpulse);
+                lvImpulse = Vector3{ lvImpulse.x - lvUp.x * lfUpComp,
+                                     lvImpulse.y - lvUp.y * lfUpComp,
+                                     lvImpulse.z - lvUp.z * lfUpComp, 0.0f };
+                AddWorldSpaceImpulse(lvImpulse);
+
+                lpControls->mfBrake     = 0.0f;                          // stfs +8
+                lpControls->mfHandBrake = 0.0f;                          // stfs +0xC
+                lpControls->mfGas       = (lpControls->mfGas >= KF_SHUNT_GAS_FLOOR)
+                                              ? lpControls->mfGas
+                                              : KF_SHUNT_GAS_FLOOR;      // fsel-max
+                mbHandBrake = false;                                     // stb 0x1358
+
+                mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x -= lvfTimeStep.x;   // vrlimi 8
+                lbClear = false;
+            }
+        }
+
+        if (lbClear)
+        {
+            // The ctor's partial clear, store for store (NOT a call -- the console inlines it):
+            mShuntEffect.mDirectionPlusDesiredSpeed = Vector3Plus{ 0.0f, 0.0f, 0.0f, 0.0f };
+            mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y = 0.0f;    // vrlimi mask 4
+            mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = -1.0f;   // vrlimi mask 8
+        }
+    }
+
+// [clean] UpdateCrashing  @0x82638810
+    // @0x82638810  BrnPhysics::Vehicle::VehiclePhysics::UpdateCrashing  (732 insns, read line
+    // by line; the LOUD TRAP in VehiclePhysicsLinkStubs.cpp is deleted in this commit).
+    //
+    // THE CRASH-STATE ORCHESTRATOR -- UpdateDriving's twin for a crashing car. Same per-frame
+    // phase chain (air stats, air rams, spins, engine, steering, suspension, wheels, velocity
+    // passes, the CheckState brackets), plus the crash-specific work: the exponential
+    // velocity damping pair, the per-body-axis angular clamp, the synthetic crash mass, the
+    // aftertouch dispatch and the down-force leg. Callers: VehiclePhysics::Update @0x826414F8
+    // (race cars) and TrafficPhysics::Update @0x82639CA4 (traffic).
+    //
+    // ⭐ The three vcalls are IMAGE-SETTLED slots (vtables @0x820D0C68/@0x820D0C98/@0x820D1034
+    // read via x360rd): +0x18 = IsCrashingNormally (twice), +0x28 = UpdateAftertouch,
+    // +0x10 = IsPlayerVehicleInShowtime. +0x2C (UpdateSuspension) has no override in the
+    // image, so the direct call is dispatch-identical (the UpdateDriving precedent).
+    //
+    // Damping constants, image-read (x360rd) from the .data block @0x82F2A5xx (already valued
+    // in the image, no initialiser):
+    //     IsCrashingNormally():  linear 0.995  [flt_82F2A530]   angular 0.995  [flt_82F2A52C]
+    //     else:                  linear 0.9999 [flt_82F2A528]   angular 0.992  [flt_82F2A524]
+    // The exponent scale 60.0 [flt_82092BC4] makes the decay frame-rate-correct against a
+    // 60 Hz reference: v *= damp^(60*dt).
+    // FLAG (modelled, not bit-verified): the console computes the pow via the EARenderWare
+    // vlogefp/vexptefp polynomial (coefficient tables unk_82014AC0..82014AF0); per the
+    // committed DampenAngularVelocity/DampPitchYawRoll precedent the recovered DATA FLOW is
+    // reproduced with std::pow and the polynomial's bit pattern is intentionally not
+    // fabricated.
+    //
+    // The angular clamp: omega -> body axes (R^T via the vmrghw/vmrglw transpose), clamp each
+    // lane to +/-6.5, back to world (R). The 6.5 splat is unk_82FB9DA0 -- BSS, seeded by the
+    // static-init thunk @0x82C5C5B0 from flt_82054378 == 6.5 (image-read), and debug-registered
+    // as "Max X/Y/Z Angular Velocity" by VehicleManagerDebugComponent::OnActivate @0x825B61C4.
+    //
+    // The synthetic crash mass (the non-normal leg): t = clamp01((Mass - 721) / (3250 - 721));
+    // mfMass = splat(1400 + t*(2100 - 1400)). All four scalars are BSS splats seeded by the
+    // init-thunk bank @0x82C5C410..0x82C5C4A0 from rdata @0x8209D710..1C (721 / 3250 / 1400 /
+    // 2100, image-read). The asm stores the clamped t into mfMass and overwrites it with the
+    // lerp on the very next store -- the intermediate is dead and not reproduced.
+    void VehiclePhysics::UpdateCrashing(f32 lfTimeStep,
+                                        const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
+                                        const BrnPlayerDriverControls* lpControls,
+                                        bool lbImpactTime,
+                                        bool lbPlayerAftertouchForceAdditive,
+                                        bool lbShowtimeAllowed)
+    {
+        static const f32 KF_CRASH_LIN_DAMP_NORMAL = 0.995f;    // flt_82F2A530 (0x3F7EB852)
+        static const f32 KF_CRASH_ANG_DAMP_NORMAL = 0.995f;    // flt_82F2A52C (0x3F7EB852)
+        static const f32 KF_CRASH_LIN_DAMP_OTHER  = 0.9999f;   // flt_82F2A528 (0x3F7FF972)
+        static const f32 KF_CRASH_ANG_DAMP_OTHER  = 0.992f;    // flt_82F2A524 (0x3F7DF3B6)
+        static const f32 KF_DAMP_RATE_SCALE       = 60.0f;     // flt_82092BC4
+        static const f32 KF_MAX_CRASH_ANGVEL      = 6.5f;      // unk_82FB9DA0 <- flt_82054378
+        static const f32 KF_CRASHMASS_IN_LO       = 721.0f;    // unk_82FB9270 <- 0x8209D710
+        static const f32 KF_CRASHMASS_IN_HI       = 3250.0f;   // unk_82FB9DC0 <- 0x8209D714
+        static const f32 KF_CRASHMASS_OUT_LO      = 1400.0f;   // unk_82FB9030 <- 0x8209D718
+        static const f32 KF_CRASHMASS_OUT_HI      = 2100.0f;   // unk_82FB9EA0 <- 0x8209D71C
+        static const f32 KF_WALL_CONTACT_WINDOW   = 0.4f;      // flt_8200473C (image-read)
+
+        (void)lbImpactTime;   // DEAD in the body (never read; the caller's register map only)
+
+        const VecFloat lvfTimeStep{ lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep };
+
+        CheckState("Start of update crashing");
+
+        BrnPlayerDriverControls lCopy;
+        std::memcpy(&lCopy, lpControls, sizeof(BrnPlayerDriverControls));   // the 0x48 memcpy
+
+        CheckState("After update slam");   // the console REUSES the slam bracket string here
+
+        // ----- the crash damping pair (asm 0x82638888..0x82638C5C) -----
+        {
+            f32 lfLinDamp, lfAngDamp;
+            if (IsCrashingNormally())              // vcall +0x18, first dispatch
+            {
+                lfLinDamp = KF_CRASH_LIN_DAMP_NORMAL;
+                lfAngDamp = KF_CRASH_ANG_DAMP_NORMAL;
+            }
+            else
+            {
+                lfLinDamp = KF_CRASH_LIN_DAMP_OTHER;
+                lfAngDamp = KF_CRASH_ANG_DAMP_OTHER;
+            }
+            const f32 lfExponent = KF_DAMP_RATE_SCALE * lfTimeStep;
+            { const f32 lfF = std::pow(lfLinDamp, lfExponent);
+              mLinearVelocity  = vpu::Mult(mLinearVelocity, lfF); }    // stvx this+0x50
+            { const f32 lfF = std::pow(lfAngDamp, lfExponent);
+              mAngularVelocity = vpu::Mult(mAngularVelocity, lfF); }   // stvx this+0x60
+        }
+
+        // ----- clamp omega per BODY axis (asm 0x82638C60..0x82638CE8) -----
+        {
+            f32 lfLx = vpu::Dot(mTransform.xAxis, mAngularVelocity);   // R^T * omega, the
+            f32 lfLy = vpu::Dot(mTransform.yAxis, mAngularVelocity);   // vmrghw/vmrglw transpose
+            f32 lfLz = vpu::Dot(mTransform.zAxis, mAngularVelocity);
+            if (lfLx < -KF_MAX_CRASH_ANGVEL) lfLx = -KF_MAX_CRASH_ANGVEL;   // vmaxfp -limit
+            if (lfLx >  KF_MAX_CRASH_ANGVEL) lfLx =  KF_MAX_CRASH_ANGVEL;   // vminfp +limit
+            if (lfLy < -KF_MAX_CRASH_ANGVEL) lfLy = -KF_MAX_CRASH_ANGVEL;
+            if (lfLy >  KF_MAX_CRASH_ANGVEL) lfLy =  KF_MAX_CRASH_ANGVEL;
+            if (lfLz < -KF_MAX_CRASH_ANGVEL) lfLz = -KF_MAX_CRASH_ANGVEL;
+            if (lfLz >  KF_MAX_CRASH_ANGVEL) lfLz =  KF_MAX_CRASH_ANGVEL;
+            mAngularVelocity = Vector3{
+                mTransform.xAxis.x * lfLx + mTransform.yAxis.x * lfLy + mTransform.zAxis.x * lfLz,
+                mTransform.xAxis.y * lfLx + mTransform.yAxis.y * lfLy + mTransform.zAxis.y * lfLz,
+                mTransform.xAxis.z * lfLx + mTransform.yAxis.z * lfLy + mTransform.zAxis.z * lfLz,
+                0.0f };
+        }
+
+        // ----- the mass regime (asm 0x82638CF4..0x82638DA0) -----
+        if (IsCrashingNormally())                  // vcall +0x18, second dispatch
+        {
+            const f32 lfM = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+            mfMass = VecFloat{ lfM, lfM, lfM, lfM };                    // splat, this+0xE0
+        }
+        else
+        {
+            const f32 lfM = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+            f32 lfT = (lfM - KF_CRASHMASS_IN_LO) / (KF_CRASHMASS_IN_HI - KF_CRASHMASS_IN_LO);
+            if (lfT < 0.0f) lfT = 0.0f;                                 // vmaxfp 0
+            if (lfT > 1.0f) lfT = 1.0f;                                 // vminfp 1
+            const f32 lfMass = lfT * (KF_CRASHMASS_OUT_HI - KF_CRASHMASS_OUT_LO)
+                               + KF_CRASHMASS_OUT_LO;                   // vmaddfp lerp
+            mfMass = VecFloat{ lfMass, lfMass, lfMass, lfMass };
+        }
+
+        mLastLinearVelocity = mLinearVelocity;     // stvx this+0x13B0 (before UpdateInAirStats)
+
+        UpdateInAirStats(lfTimeStep);
+
+        mEngine.SetAllowGearChanges(!mbHasAir);    // stb 0xFC4 / 0xFC5
+
+        lCopy.mfGas *= 0.5f;                       // flt_82001DA0 -- the crash gas halving
+
+        CalculateWorldIntertia();
+
+        UpdateAirRam(lvfTimeStep);
+        CheckState("After update air ram");
+
+        UpdateSpinEffects(lvfTimeStep);
+
+        if (lbPlayerAftertouchForceAdditive)
+        {
+            // vcall +0x28 -- RaceCarPhysics::UpdateAftertouch on race cars, the empty default
+            // on traffic. Register map @0x82638E3C: r4 = &copy, r5 = camera, r6 = additive,
+            // r7 = showtime, v1 = dt.
+            UpdateAftertouch(&lCopy, lpCameraMatrix, lvfTimeStep,
+                             lbPlayerAftertouchForceAdditive, lbShowtimeAllowed);
+            CheckState("After aftertouch");
+        }
+
+        if (IsCrashingNormally())                  // vcall +0x18, third dispatch
+        {
+            // down force, applied along body -Y at the body origin (asm 0x82638E9C..0x82638F00:
+            // force = {0, -GetDownForce().x, 0}, position = {0,0,0}, both tags `li 1` ==
+            // BODY_SPACE).
+            const Vector3 lvDown = GetDownForce();
+            AddLocalForce(Vector3{ 0.0f, -lvDown.x, 0.0f, 0.0f }, rw::physics::BODY_SPACE,
+                          Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, rw::physics::BODY_SPACE);
+        }
+        CheckState("After Update down force");
+
+        UpdateEngine(&lCopy, lvfTimeStep);
+        CheckState("After update engine");
+
+        CalculateNewVelocity(lvfTimeStep);
+
+        UpdateSteering(lCopy.mfSteering, lCopy.mfGas, lvfTimeStep, lCopy.mbIsSteeringWheel);
+
+        UpdateSuspension(lfTimeStep);              // vcall +0x2C; no override in the image ->
+                                                   // direct call is dispatch-identical
+
+        // mbAllWheelsHaveTraction: the four road-contact bytes AND the +0x10 vcall
+        // (IsPlayerVehicleInShowtime -- image-settled; traffic defaults false, so a crashing
+        // traffic car never reports traction here). Short-circuit order preserved.
+        mbAllWheelsHaveTraction =
+            maWheels[0].GetRoadContact().mbIsOnGround &&    // lbz +0x158
+            maWheels[1].GetRoadContact().mbIsOnGround &&    // lbz +0x238
+            maWheels[2].GetRoadContact().mbIsOnGround &&    // lbz +0x318
+            maWheels[3].GetRoadContact().mbIsOnGround &&    // lbz +0x3F8
+            IsPlayerVehicleInShowtime();                    // vcall +0x10
+
+        UpdateWheels(lpControls, lvfTimeStep);     // ⭐ the ORIGINAL pointer (r22), NOT the
+                                                   // copy -- UpdateDriving passes the copy;
+                                                   // this function does not. As shipped.
+        SimpleVehiclePhysics::CalculateNewWheelPlane();
+        CheckState("After update wheels");
+
+        CalculateNewVelocity(lvfTimeStep);
+
+        // ----- per-wheel body-point velocities (asm 0x82639030..0x826391CC, unrolled x4) -----
+        // maWheels[i].mBodyPointVelocity = v + omega x (R * streamedLocalPos). The console
+        // computes the cross with the vpermwi128-0x63 (yzx) idiom; wheel base +0x130, stride
+        // 0xE0: inputs +0x1C0/+0x2A0/+0x380/+0x460, outputs +0x1D0/+0x2B0/+0x390/+0x470.
+        for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+        {
+            const Vector3Plus& lrLocal = maWheels[liWheel].mStreamedPositionPlusTwistAmount;
+            const Vector3 lvR = {
+                mTransform.xAxis.x * lrLocal.x + mTransform.yAxis.x * lrLocal.y + mTransform.zAxis.x * lrLocal.z,
+                mTransform.xAxis.y * lrLocal.x + mTransform.yAxis.y * lrLocal.y + mTransform.zAxis.y * lrLocal.z,
+                mTransform.xAxis.z * lrLocal.x + mTransform.yAxis.z * lrLocal.y + mTransform.zAxis.z * lrLocal.z,
+                0.0f };
+            const Vector3 lvCross = vpu::Cross(mAngularVelocity, lvR);
+            maWheels[liWheel].mBodyPointVelocity = Vector3{ mLinearVelocity.x + lvCross.x,
+                                                            mLinearVelocity.y + lvCross.y,
+                                                            mLinearVelocity.z + lvCross.z, 0.0f };
+        }
+
+        { const f32 lfMPH = vpu::Dot(mLinearVelocity, mTransform.zAxis) * 2.2369363f;
+        mfSpeedMPH = VecFloat{ lfMPH, lfMPH, lfMPH, lfMPH }; }   // splat, KF_MPS_TO_MPH
+        mbCrashedThisFrame = false;                              // stb 0 -> +0x713
+
+        // ----- the start-line velocity re-seat (asm 0x826391E8..0x82639250) -----
+        // Gated on the ORIGINAL controls' mbIsOnStartLine (+0x40, r22) and the above-ground
+        // test being valid. Unfreezes and keeps only the velocity component along the ground
+        // normal (the asm negates BOTH factors -- (-n) * dot3(v, -n) == n * dot3(v, n)).
+        if (lpControls->mbIsOnStartLine && mAboveGroundTestResult.mbValid)
+        {
+            mbFrozen = false;                                    // stb 0 -> +0x70
+            const Vector3& lvN = mAboveGroundTestResult.mIntersectionNormal;   // +0x580
+            const f32 lfAlong = vpu::Dot(mLinearVelocity, lvN);
+            mLinearVelocity = Vector3{ lvN.x * lfAlong, lvN.y * lfAlong,
+                                       lvN.z * lfAlong, 0.0f };
+        }
+
+        // ----- the wall-contact window (asm 0x82639254..0x826392D8; unconditional here,
+        //       unlike UpdateDriving's else-of-mbReset placement) -----
+        mbContactingWall =
+            KF_WALL_CONTACT_WINDOW >
+            mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w;
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w
+            += lfTimeStep;                                       // vrlimi mask 1 = w lane
+
+        // ----- the water hard-kill (asm 0x826392DC..0x82639334) -----
+        // The console INLINES UpdateInWaterBehaviour's exact gate + six zero stores here
+        // (same surface-table test, same 2.0 depth constant, same store order +0x50/+0x60/
+        // +0xF0/+0x110/+0x120/+0x100); the committed function is behaviour-identical, so the
+        // call replaces the inline.
+        UpdateInWaterBehaviour(&lCopy, lvfTimeStep);
+
+        // TimeCrashing += dt (asm 0x82639338..0x82639358; vrlimi mask 4 = y lane). Note
+        // UpdateDriving ZEROES this lane each frame -- the two bodies are each other's
+        // complement on it.
+        mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y += lfTimeStep;
+
+        // No trailing CheckState -- the console body ends here.
     }
 
 // [clean] UpdateSteering  @0x825D3720

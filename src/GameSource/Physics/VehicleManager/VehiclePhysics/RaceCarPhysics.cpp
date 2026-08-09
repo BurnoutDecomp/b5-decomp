@@ -996,11 +996,19 @@ namespace Vehicle
     //   UpdateShowtimePhysics. FLAG: all magnitude rodata are un-homed placeholders; the camera-axis
     //   normalisation, the yaw/pitch channels and the showtime chaining are faithful.
     // ---------------------------------------------------------------------------------------
+    // ⭐⭐ WIDENED 2026-08-09 (crash/shunt wave) to the 5-arg DWARF virtual form
+    // (VehiclePhysics.h:1514) so it OVERRIDES the base slot +0x28 that UpdateCrashing
+    // dispatches -- the committed 4-arg form was the dropped-VecFloat trap (the @0x8262EBE8
+    // prologue saves v1, `vmr128 v121, v1` @0x8262EC08, and restores it before the showtime
+    // chain calls). The dt lane is consumed only as that pass-through on this build; the
+    // magnitudes this minimal slice models do not read it -> carried, documented, unused here.
     void RaceCarPhysics::UpdateAftertouch(const BrnPlayerDriverControls* lpControls,
                                           const Matrix44Affine* lpCameraMatrix,
+                                          VecFloat lvfTimeStep,
                                           bool lbDoForceAdditiveAftertouch, bool lbUseSixaxis)
     {
         (void)lbUseSixaxis;
+        (void)lvfTimeStep;   // v1 pass-through (see the widening banner)
         // gate: airborne/crash (this+1808). The minimal slice models this via the aftertouch latch.
         if (!mbUsingAftertouch /* *(this+1808): in-air/crash */)
             return;

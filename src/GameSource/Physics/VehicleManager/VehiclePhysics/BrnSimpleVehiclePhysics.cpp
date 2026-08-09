@@ -266,8 +266,9 @@ namespace Vehicle
     // constructor, which writes eight vptrs, which requires the WHOLE vtable to be defined.
     // Exactly the standing lesson that a mount's closure is its STATIC reference graph and not its
     // live-call graph: this function has no caller anywhere in the mounted tree and is still
-    // link-required. It and VehiclePhysics::IsIgnoringPassedOnImpulses were the only two symbols
-    // of the entire RaceCarPhysics vtable still missing.
+    // link-required. It and the +0x10 slot (then role-named IsIgnoringPassedOnImpulses;
+    // image-settled 2026-08-09 as IsPlayerVehicleInShowtime) were the only two symbols of the
+    // entire RaceCarPhysics vtable still missing.
     //
     // ⛔ WHAT IT MUST NOT BECOME. A quiet `{}` here is the silent-drop-stub failure class this
     // project keeps paying for: crash arming would be dropped and every downstream reader would see

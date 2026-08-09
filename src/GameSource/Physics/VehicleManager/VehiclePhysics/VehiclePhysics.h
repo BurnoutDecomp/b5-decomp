@@ -610,15 +610,28 @@ namespace Vehicle
         bool Prepare(const Matrix44Affine* lpTransform, const StreamedDeformationSpec* lpDeformSpec,
                      VehicleAttribs* lpAttribs, const Vector3* lpWheelPositions,
                      const f32* lpafWheelRadii);
-        void UpdateShunt(const BrnPlayerDriverControls* lpControls);
+        // ⭐⭐ SIGNATURE CONFORMED 2026-08-09 (crash/shunt wave). The committed 1-arg const form
+        // was a slice artifact off the delegation guess. The real @0x825FC748 prologue consumes
+        // v1 (saved into v127 and SUBTRACTED from the shunt life lane at 0x825FC888 -- the dt
+        // splat) and WRITES the control block through r4 (`stfs` to +4/+8/+0xC -- mfGas floored
+        // to 0.8, mfBrake/mfHandBrake zeroed), so the pointer is non-const. The DWARF spells it
+        // exactly (references\DecFIGS\...\VehiclePhysics.h:1505):
+        //     void UpdateShunt(BrnPlayerDriverControls *, VecFloat);
+        // BODIED 2026-08-09 in VehiclePhysics.cpp (100 insns, store-for-store); the LOUD TRAP in
+        // VehiclePhysicsLinkStubs.cpp is deleted in the same commit.
+        void UpdateShunt(BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep);
 
         // ⭐ SIGNATURE CONFORMED 2026-08-07 (orchestrator wave). The committed 2-arg form
         // `(f32, const BrnPlayerDriverControls*)` came off TrafficPhysics's PC-side delegation,
         // not the console. The real @0x82638810 prologue consumes f1=dt (r4 slot), r5=camera
         // matrix (saved r21), r6=controls (r22), r8=lbPlayerAftertouchForceAdditive (r24),
         // r9=lbShowtimeAllowed (r20), with the r7 slot (lbImpactTime) carried by the caller
-        // (VehiclePhysics::Update @0x826414F8 `mr r7, r23`). Body remains a LOUD TRAP in
-        // VehiclePhysicsLinkStubs.cpp -- 732 insns, its own wave.
+        // (VehiclePhysics::Update @0x826414F8 `mr r7, r23`).
+        // ⭐⭐ BODIED 2026-08-09 (crash/shunt wave) in VehiclePhysics.cpp -- the 732-insn
+        // crash-state orchestrator, read line-by-line from the X360 asm; the LinkStubs trap is
+        // deleted in the same commit. lbImpactTime (the r7 slot) is DEAD in the body (never
+        // read -- the first r7 mention is the block-local `li r7, 0x390`); it exists so the
+        // caller's register map stays 1:1.
         void UpdateCrashing(f32 lfTimeStep, const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
                             const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
                             bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed);
@@ -1849,17 +1862,43 @@ namespace Vehicle
         // The name is now inherited from ExternalPhysicsBody.
 
         // ===== ADDITIVE GROW (deformation impulse-passing group) =====
-        // The vtable-slot query VehicleRigidBody::RecievePassedOnImpulse calls on its attached vehicle
-        // before forwarding a passed-on impulse: the asm is a virtual dispatch through the vehicle's
-        // vptr at slot +0x10 (`(*(**(this+4) + 16))(*(this+4))`) whose result GATES the apply (a
-        // non-zero return makes RecievePassedOnImpulse early-out without applying the impulse). The
-        // gate is true while the body is swallowing further impulses (e.g. already crashing). Returns
-        // a u8 0/1 like the X360 boolean. DECLARE-ONLY -- the body lives in the VehiclePhysics /
-        // SimpleVehiclePhysics TU; declared here so the deformation TU resolves it BY NAME under the
-        // per-TU compile gate.
-        // FLAG: this slice does not pin the precise vtable-slot method NAME (the +0x10 slot is not
-        // separately homed); the role is recovered from the call's gating use, the name is inferred.
-        virtual bool IsIgnoringPassedOnImpulses() const;   // vtable +0x10 (role-inferred name)
+        // ⭐⭐ SETTLED 2026-08-09 (crash/shunt wave): the +0x10 slot's role-inferred name
+        // `IsIgnoringPassedOnImpulses` was WRONG. Both concrete vtables are now read off the
+        // image: the VehiclePhysics/TrafficPhysics vtable @0x820D0C68/@0x820D0C98 carries
+        // `li r3,0 ; blr` at +0x10, and the RaceCarPhysics vtable @0x820D1034 carries
+        // @0x825D7B68 == RaceCarPhysics::IsPlayerVehicleInShowtime in the same slot. So slot
+        // +0x10 IS the DWARF virtual IsPlayerVehicleInShowtime (VehiclePhysics.h:1192), and
+        // VehicleRigidBody::RecievePassedOnImpulse's gate reads "do not re-apply passed-on
+        // deformation impulses to the player's showtime vehicle". The default body below IS the
+        // recovered console default (the ICF-folded return-false), so the old vtable-closure
+        // trap in VehiclePhysics.cpp is retired with it. UpdateCrashing @0x82638FC0 dispatches
+        // the same slot when it AND-folds the wheels-on-ground run into mbAllWheelsHaveTraction.
+        // RaceCarPhysics.h's existing declaration is the override.
+        virtual bool IsPlayerVehicleInShowtime() const { return false; }   // vtable +0x10
+
+        // ⭐⭐ VIRTUAL, IMAGE-ATTESTED (crash/shunt wave, 2026-08-09). Vtable slot +0x18 (DWARF
+        // VehiclePhysics.h:1204). The base/traffic default @0x82C296C8 is `li r3,1 ; blr` (an
+        // ICF fold aliased in the IDB as CgsSound Content::DoOnPostLoad): a crashing vehicle
+        // crashes "normally" unless a subclass says otherwise. The RaceCarPhysics vtable
+        // carries @0x827E42B8 in this slot (its showtime-aware override, RaceCarPhysics.h:89).
+        // UpdateCrashing dispatches it twice: to select the crash damping pair and to gate the
+        // down-force + the synthetic-mass regime.
+        virtual bool IsCrashingNormally() const { return true; }   // vtable +0x18
+
+        // ⭐⭐ VIRTUAL, IMAGE-ATTESTED (crash/shunt wave, 2026-08-09). Vtable slot +0x28 (DWARF
+        // VehiclePhysics.h:1514: `void UpdateAftertouch(const BrnPlayerDriverControls *,
+        // const rw::math::vpu::Matrix44Affine *, VecFloat, bool, bool)`). The base/traffic
+        // default @0x8284CB38 is `blr` (the ICF-folded empty function) -- traffic cars have no
+        // aftertouch. The RaceCarPhysics vtable carries @0x8262EBE8 (the committed
+        // RaceCarPhysics::UpdateAftertouch, widened to this 5-arg DWARF form in the same
+        // commit -- its asm SAVES v1 at entry, `vmr128 v121, v1` @0x8262EC08, the dropped
+        // dt-argument trap again). UpdateCrashing dispatches it under
+        // lbPlayerAftertouchForceAdditive.
+        virtual void UpdateAftertouch(const BrnPlayerDriverControls* /*lpControls*/,
+                                      const rw::math::vpu::Matrix44Affine* /*lpCameraMatrix*/,
+                                      VecFloat /*lvfTimeStep*/,
+                                      bool /*lbDoForceAdditiveAftertouch*/,
+                                      bool /*lbShowtimeAllowed*/) {}   // vtable +0x28
 
         // ⚠️ NOT A CONSOLE FUNCTION. The layout gate for the two own-member blocks recovered above.
         // It is a STATIC MEMBER so that offsetof() reaches the protected members this class
