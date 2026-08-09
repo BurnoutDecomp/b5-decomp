@@ -176,14 +176,7 @@ namespace Vehicle
     // ⭐ 2026-08-09 (attribs-setup wave): the HackedResetAndFlyAround @0x825D0008 stub is
     // GONE -- BODIED in VehiclePhysics.cpp (139 insns, leaf, full transcription).
 
-    // LINK STUB (orchestrator wave): X360 @0x825F58E0, 622 instructions -- derive the plain-AI
-    // attribute set from a source set (the donut-LEAVE leg of SwitchAIDonuttingAttribs; its
-    // sibling SetupAttribsForDonutAI @0x825F6298 is bodied in VehicleAttribs.cpp). The attribs
-    // TU's own wave.
-    void VehicleAttribs::SetupAttribsForAI(VehicleAttribs*)
-    {
-        CGS_ASSERT(false, "VehicleAttribs::SetupAttribsForAI: link stub -- reconstruct from "
-                          "X360 @0x825F58E0 (622 insns, the AI attrib derivation)");
-    }
+    // ⭐ 2026-08-09 (attribs-setup wave): the SetupAttribsForAI @0x825F58E0 stub is GONE --
+    // BODIED in VehicleAttribs.cpp (622 insns, full store-for-store transcription).
 }
 }
