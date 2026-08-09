@@ -437,15 +437,18 @@ namespace Vehicle
         ScatterTireInert(mLongGripCurve, mLatGripCurve, mDriftLatGripCurve, maPackedVariables);
     }
 
-    void Wheel::TireAttribs::PrepareFrontTire(const PhysicsVehicleBaseAttribs& lrAttribs)
+    // ⭐ 2026-08-09 (attribs-setup wave): signatures conformed to the REAL generated wrapper
+    // (the retired PhysicsVehicleBaseAttribs stand-in's own contract). Still FLAGGED-INERT: the
+    // per-car source scalars live behind the wrapper's data pointer (`lwz +4`, lfs +0xE0..) and
+    // the rodata permute table that places them is un-homed, so the scatter stays the inert
+    // curve-zeroing until that table is recovered.
+    void Wheel::TireAttribs::PrepareFrontTire(const Attrib::Gen::physicsvehiclebaseattribs& lrAttribs)
     {
-        // FLAG: the per-car source lanes (lrAttribs.mvTireScalars{Long,Lat}) feed the scatter; the
-        // permute table that places them is un-homed, so the result stays inert. Reference pinned.
         (void)lrAttribs;
         ScatterTireInert(mLongGripCurve, mLatGripCurve, mDriftLatGripCurve, maPackedVariables);
     }
 
-    void Wheel::TireAttribs::PrepareRearTire(const PhysicsVehicleBaseAttribs& lrAttribs)
+    void Wheel::TireAttribs::PrepareRearTire(const Attrib::Gen::physicsvehiclebaseattribs& lrAttribs)
     {
         (void)lrAttribs;
         ScatterTireInert(mLongGripCurve, mLatGripCurve, mDriftLatGripCurve, maPackedVariables);

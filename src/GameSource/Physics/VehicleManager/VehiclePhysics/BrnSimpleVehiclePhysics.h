@@ -23,7 +23,17 @@ namespace Vehicle
     // bakes the class-key into the mangling (?AU vs ?AV): a `class` forward-decl here made
     // SimpleVehicleAttribs::SetupAttribs(const VehicleAttribs*) mangle to a symbol no TU defines.
     struct VehicleAttribs;
+}
+}
 
+// Forward decl: the generated AttribSys handling wrapper (full type in
+// GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h).
+namespace Attrib { namespace Gen { class physicsvehiclehandling; } }
+
+namespace BrnPhysics
+{
+namespace Vehicle
+{
     // DWARF BrnSimpleVehiclePhysics.h:52 -- the driven-wheel index enum used across the vehicle
     // physics. Reproduced here for the shared vocabulary (the bodies index maWheels by it).
     enum EVehicleDrivenWheel
@@ -86,6 +96,15 @@ namespace Vehicle
         // masses/heights/wheel positions/COM/tires/key; sets mbIsValid = true; miRaceCarID is
         // NOT copied). Bodied in VehicleAttribs.cpp.
         void SetupAttribs(const VehicleAttribs* lpSource);
+
+        // @0x825E6778 (104 insns) -- stream the simple set out of a loaded AttribSys handling
+        // record (the physicsvehiclebaseattribs + physicsvehiclesuspensionattribs sub-records).
+        // Bodied in VehicleAttribs.cpp. ⚠️ The DWARF/PS3 signature takes the wrapper BY VALUE
+        // (the console call site runs the checked copy-ctor @0x825BDB88 then passes the copy,
+        // and the callee destroys it); spelled const-ref here with the explicit copy transcribed
+        // at each call site -- identical semantics without dragging the generated header into
+        // this one.
+        void SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrHandling);
     };
 
     // The grown type is pointer-free and width-identical host vs console, so its interior IS
@@ -207,7 +226,24 @@ namespace Vehicle
                      Vector3 lHandlingBodyOffset, Vector3 lHalfExtent, const AxisAlignedBox& lrAABB,
                      VehicleAttribs* lpAttribs, const Vector3* lpWheelPositions,
                      const f32* lpafWheelRadii);
+
+        // ⭐ OUT of the BLOCKED list 2026-08-09 (attribs-setup wave): BODIED in
+        // BrnSimpleVehiclePhysics.cpp from @0x82601978 (458 insns) -- the blocker (the 20-byte
+        // SimpleVehicleAttribs slice) fell with the full 240-byte type above.
         void SwitchAttribs(VehicleAttribs* lpAttribs);
+
+        // The three DWARF overloads (BrnSimpleVehiclePhysics.h:163/:166/:170; the PS3 export set
+        // carries all three mangled names -- 7355CC/734B10/734274). ALL return bool.
+        //   0-arg @0x82620498 (142): refresh mSimpleAttribs from the AttribSys handling record
+        //     keyed by mSimpleAttribs.mAttribsKey, then chain to the 2-arg. ⭐ BODIED 2026-08-09
+        //     (was the unnamed sub_82620498 -- recovered by caller set + the
+        //     "mSimpleAttribs.IsValid()" assert's __FILE__/__LINE__).
+        //   2-arg @0x826020A0 (503): the shared tail -- mass/inertia from mSimpleAttribs +
+        //     per-wheel Wheel::Prepare. ⭐ BODIED 2026-08-09.
+        //   3-arg: declared for the class surface (the PS3 attests it); no X360 body recovered
+        //     to it yet.
+        bool SetAttributes();
+        bool SetAttributes(const Vector3* lpaWheelPositions, const f32* lpafWheelRadii);
         bool SetAttributes(VehicleAttribs* lpAttribs, const Vector3* lpWheelPositions,
                            const f32* lpafWheelRadii);
 

@@ -821,12 +821,16 @@ namespace Vehicle
         // @0x825D0BE8 (809): TRAP -- the in-air damping/rotation controller, its own wave.
         void UpdateInAirBehaviour(const BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep);
 
-        // @0x8262DE58 (185): TRAP -- re-derive the attribs-dependent state after a reset
-        // (chains into SimpleVehiclePhysics::SetAttributes @0x826020A0, which needs the full
-        // 240-byte SimpleVehicleAttribs this tree still models as a 20-byte slice).
-        void SetAttributes();
+        // @0x8262DE58 (185): re-derive the attribs-dependent state after a reset: base 0-arg
+        // SetAttributes, the wheel position/radius capture against mpAttribs, the AttribSys
+        // handling re-stream (VehicleAttribs::SetupAttribs -- TRAP until its wave), the COM
+        // nudge, the 2-arg chain, the engine re-prepare and SetupSuspension. ⭐ BODIED
+        // 2026-08-09 in VehiclePhysics.cpp. ⚠️ Returns bool (DWARF VehiclePhysics.h:1072) --
+        // the committed `void` was a slice artifact; the console returns a literal true.
+        bool SetAttributes();
 
-        // @0x825D0008 (139): TRAP -- the debug reset/fly-around handler (gated on mbReset).
+        // @0x825D0008 (139): the debug reset/fly-around handler (gated on mbReset). ⭐ BODIED
+        // 2026-08-09 in VehiclePhysics.cpp.
         void HackedResetAndFlyAround(const BrnPlayerDriverControls* lpControls,
                                      VecFloat lvfTimeStep);
 
@@ -1255,8 +1259,11 @@ namespace Vehicle
         // frame by Update via SwitchAttribs). GetDownForce reads mpAttribs->mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo (asm:
         // `lwz r11,0x720(r4)`). Pinned BY NAME (the intervening handling state is not reproduced as
         // padding; mpAttribs points at one of the two embedded VehicleAttribs sets owned by the
-        // full VehiclePhysics TU). Typed against the minimal VehicleAttribs slice above.
-        const VehicleAttribs* mpAttribs;
+        // full VehiclePhysics TU). ⚠️ NON-const, per the DWARF (VehiclePhysics.h:837
+        // `VehicleAttribs * mpAttribs`) -- and the console MUTATES through it:
+        // VehiclePhysics::SetAttributes @0x8262E070/@0x8262E098 re-streams the pointed-to set
+        // and nudges its COM. The `const` that stood here was a reconstruction guess.
+        VehicleAttribs* mpAttribs;
 
         // ===== ADDITIVE GROW (Construct wave, 2026-08-03): the TWO EMBEDDED ATTRIBUTE SETS =====
         // @+0x730 (1840) and @+0xAA0 (2720). Names and types VERBATIM from the DecFIGS DWARF
@@ -1770,7 +1777,11 @@ namespace Vehicle
         DebugComponent* mpDebugComponent;
 
         // ----- C03 suspension phases (bodies in VehiclePhysics.cpp) -----
-        void SetupSuspension(f64 lfTimeStep);               // @0x825CF718 BLOCKED (VMX permute scatter)
+        // ⚠️ ARITY CONFORMED 2026-08-09 (attribs-setup wave): the DWARF (VehiclePhysics.h:1646)
+        // spells `void SetupSuspension()` -- NO parameter -- and the @0x8262E10C call site sets
+        // no f1. The committed `f64 lfTimeStep` was a slice artifact; the blocked skeleton and
+        // its call sites are re-pointed.
+        void SetupSuspension();                             // @0x825CF718 BLOCKED (VMX permute scatter)
         void ApplyWheelWeight();                            // @0x825F7898 PARTIAL
         void CalculateWeightTransfer();                     // @0x825F9DD0 PARTIAL (units 0.10193679)
         void ApplySuspensionForces();                       // @0x825D1EE8 PARTIAL

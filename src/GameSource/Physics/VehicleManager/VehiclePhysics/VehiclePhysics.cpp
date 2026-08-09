@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h" // CgsNumeric::Random (the shared LCG ring)
 #include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT (UpdateDownForce's attribsys guard)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu::Start/StopMonitor (Update's stage brackets)
+#include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"        // the car-asset wrapper (SetAttributes' key chase)
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h" // the handling wrapper + its checked copy ctor
 #include "GameSource/Physics/VehicleManager/BrnVehicleManagerPerfMonHandles.h" // the seven gs_iVPhys* monitor ids (hoisted, orchestrator wave)
 #include "rw/math/vpu/vector3_operation.h"            // rw::math::vpu::{MagnitudeSquared, Normalize, Dot, operator*}
 #include "rw/math/vpu/matrix44affine_operation.h"     // rw::math::vpu::{InverseOfMatrixWithOrthonormal3x3, operator*}
@@ -2834,7 +2836,7 @@ namespace Vehicle
     // certain; the numeric inputs are not. A faithful body would fabricate both the permute tables and the
     // displacement math -> forbidden. No fabricated math emitted.
     // ---------------------------------------------------------------------------------------------
-    void VehiclePhysics::SetupSuspension(f64 /*lfTimeStep*/)
+    void VehiclePhysics::SetupSuspension()
     {
         // FIDELITY: BLOCKED -- see the block comment above. The 4-spring SuspensionSpring::Prepare loop
         // depends on the un-homed permute table unk_8327F140 + the dword_8208FAFC/AEC wheel-index tables;
@@ -4030,7 +4032,7 @@ namespace Vehicle
         SimpleVehiclePhysics::SwitchAttribs(lpAttribs);
         mpAttribs = lpAttribs;
         std::memcpy(&mEngine, &lpAttribs->mEngineAttribs, sizeof(VehicleAttribs::EngineAttribs));
-        SetupSuspension(0.0);
+        SetupSuspension();
     }
 
 // [clean] SwitchAIDonuttingAttribs  @0x8261FED8
@@ -4055,7 +4057,7 @@ namespace Vehicle
         mpAttribs = &mPlayerVehicleAttribs;
         std::memcpy(&mEngine, &mPlayerVehicleAttribs.mEngineAttribs,
                     sizeof(VehicleAttribs::EngineAttribs));
-        SetupSuspension(0.0);
+        SetupSuspension();
         mbIsUsingAIDonutAttribs = false;
     }
 
@@ -4666,6 +4668,71 @@ namespace Vehicle
         }
     }
 
+// [clean] SetAttributes  @0x8262DE58
+    // @0x8262DE58  BrnPhysics::Vehicle::VehiclePhysics::SetAttributes  (185 insns)
+    // The post-reset attribs re-derivation (UpdateDriving's copy.mbReset branch, before
+    // HackedResetAndFlyAround). Decoded store-for-store:
+    //   1. SimpleVehiclePhysics::SetAttributes()           (result discarded -- bl @0x8262DE70)
+    //   2. capture radii (each wheel's mSlipVariables.w) and positions
+    //      (streamed pos + mpAttribs COM, y -= mpAttribs suspension height offset) -- ⚠️ the
+    //      console DEREFERENCES mpAttribs during this capture BEFORE asserting it non-null;
+    //      order preserved
+    //   3. assert mpAttribs != NULL (0x17A) / mpAttribs->IsValid() (0x17B)
+    //   4. the AttribSys chase: burnoutcarasset(mpAttribs->mAttribsKey) ->
+    //      handling RefSpec (data+0x158) -> physicsvehiclehandling -> checked copy @0x825BDB88
+    //      -> VehicleAttribs::SetupAttribs(handling)        [TRAP until its wave -- see the
+    //      link-stubs census; the re-stream is the one leg of this function not yet real]
+    //   5. mpAttribs->mBaseAttribs.mCOMOffset += mHandlingBodyOffset
+    //   6. SimpleVehiclePhysics::SetAttributes(positions, radii)   (result discarded)
+    //   7. mEngine.Prepare(&mpAttribs->mEngineAttribs) -- the X360 INLINES Engine::Prepare
+    //      @0x825F3F38 here (the 0xA0 memcpy + clutch lane zero + gear 1 + Engine::Reset(0));
+    //      the named call is that function instruction-for-instruction
+    //   8. SetupSuspension(); return true (li r3,1)
+    bool VehiclePhysics::SetAttributes()
+    {
+        SimpleVehiclePhysics::SetAttributes();   // the 0-arg base refresh, result unused
+
+        // ---- the capture (mpAttribs dereferenced before the null assert -- as shipped) --------
+        f32 lafRadii[eNumDrivenWheels];
+        Vector3 laPositions[eNumDrivenWheels];
+        {
+            const f32 lfFrontOffset =
+                mpAttribs->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.x;
+            const f32 lfRearOffset =
+                mpAttribs->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.y;
+            for (s32 li = 0; li < eNumDrivenWheels; ++li)
+            {
+                lafRadii[li] = maWheels[li].mSlipVariables.w;
+                laPositions[li] = vpu::Add(maWheels[li].mStreamedPositionPlusTwistAmount.GetVector3(),
+                                           mpAttribs->mBaseAttribs.mCOMOffset);
+                laPositions[li].y -= (li < 2) ? lfFrontOffset : lfRearOffset;   // vrlimi(4)
+            }
+        }
+
+        CGS_ASSERT(mpAttribs != NULL,     "mpAttribs != NULL");       // console line 0x17A
+        CGS_ASSERT(mpAttribs->IsValid(),  "mpAttribs->IsValid()");    // console line 0x17B
+
+        // ---- the AttribSys handling re-stream -------------------------------------------------
+        {
+            Attrib::Gen::burnoutcarasset lCarAsset(mpAttribs->mAttribsKey, NULL);
+            Attrib::Gen::physicsvehiclehandling lHandling(
+                const_cast<Attrib::Collection*>(
+                    lCarAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), NULL);
+            Attrib::Gen::physicsvehiclehandling lHandlingCopy(lHandling);   // @0x825BDB88
+            mpAttribs->SetupAttribs(lHandlingCopy);
+        }
+
+        // mpAttribs COM nudge ([mpAttribs+0x20] += [this+0x690]).
+        mpAttribs->mBaseAttribs.mCOMOffset =
+            vpu::Add(mpAttribs->mBaseAttribs.mCOMOffset, mHandlingBodyOffset);
+
+        SimpleVehiclePhysics::SetAttributes(laPositions, lafRadii);   // result unused
+
+        mEngine.Prepare(&mpAttribs->mEngineAttribs);   // the inlined Engine::Prepare @0x825F3F38
+        SetupSuspension();
+        return true;   // li r3, 1
+    }
+
 // [clean] HackedResetAndFlyAround  @0x825D0008
     // @0x825D0008  BrnPhysics::Vehicle::VehiclePhysics::HackedResetAndFlyAround  (139 insns,
     // 0x825D0008..0x825D0230, leaf -- no callee but the GPR save/restore thunks)
@@ -5272,7 +5339,7 @@ namespace Vehicle
             mpAttribs = &mAIVehicleAttribs;
             std::memcpy(&mEngine, &mAIVehicleAttribs.mEngineAttribs,
                         sizeof(VehicleAttribs::EngineAttribs));
-            SetupSuspension(0.0);
+            SetupSuspension();
         }
 
         CgsDev::PerfMonCpu::StopMonitor(gs_iVPhysSwitchAttribsPM);

@@ -67,6 +67,12 @@
 
 #include <cstddef>
 
+// Forward decl: the generated AttribSys handling wrapper (full type in
+// GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h). The un-homed
+// `PhysicsVehicleHandling` stand-in that used to carry SetupAttribs' parameter is RETIRED
+// (2026-08-09) -- the wrapper type is committed now.
+namespace Attrib { namespace Gen { class physicsvehiclehandling; } }
+
 namespace BrnPhysics
 {
 // InterpedParam3 used to be declared privately HERE. It is retired in favour of its DecFIGS home,
@@ -76,10 +82,6 @@ namespace BrnPhysics
 
 namespace Vehicle
 {
-    // The `physicsvehiclehandling` data wrapper VehicleAttribs::SetupAttribs streams from. Its
-    // own type is un-homed; forward-declared so the SetupAttribs signature can name it.
-    struct PhysicsVehicleHandling;
-
     struct VehicleAttribs
     {
         // ---- +0x000 (0xE0) -------------------------------------------------------------------
@@ -219,9 +221,15 @@ namespace Vehicle
         // VehiclePhysics::Construct calls it twice (mAIVehicleAttribs / mPlayerVehicleAttribs).
         void Construct();
 
-        // @0x825F4CD8 (770 instrs) -- the streamed-attribute loader. Owned by a future TU;
-        // declared only.
-        void SetupAttribs(const PhysicsVehicleHandling& lrHandling);
+        // @0x825F4CD8 (770 instrs) -- the streamed-attribute loader: per-sub-block generated
+        // wrappers (base/steering/engine/drift/collision/boost/bodyroll/suspension) streamed
+        // into the packed lanes + the two tire scatters + EngineAttribs::InitializeFromAttribs.
+        // ⚠️ TRAP STUB in VehiclePhysicsLinkStubs.cpp (census there) until its own wave; the
+        // signature is conformed to the committed generated wrapper (DWARF/PS3 take it BY
+        // VALUE -- 6D41E0 `..12SetupAttribsEN6Attrib3Gen22physicsvehiclehandlingE`; spelled
+        // const-ref per the SimpleVehicleAttribs precedent, with the explicit checked copy at
+        // each call site).
+        void SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrHandling);
 
         // @0x825F58E0 (622 instrs) -- derive the plain-AI set from a source set. ⭐ BODIED in
         // VehicleAttribs.cpp (attribs-setup wave, 2026-08-09).

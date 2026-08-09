@@ -1,5 +1,8 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"  // SimpleVehicleAttribs (DWARF home: this TU)
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"             // the handling wrapper (SetupAttribs' source)
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclebaseattribs.h"          // the base-attribs sub-record wrapper
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclesuspensionattribs.h"    // the suspension sub-record wrapper
 
 #include "types.hpp"
 
@@ -937,6 +940,88 @@ void SimpleVehicleAttribs::SetupAttribs(const VehicleAttribs* lpSource)
     mRearTireAttribs  = lpSource->mRearTireAttribs;                                      // +0x60 <- src+0x310
 
     mbIsValid = true;                                                                    // stb 1 -> +0xE4
+}
+
+// @0x825E6778 (104 instrs)  BrnPhysics::Vehicle::SimpleVehicleAttribs::SetupAttribs(handling)
+//
+// Stream the simple set out of a loaded AttribSys handling record: construct the
+// physicsvehiclebaseattribs wrapper from the handling's BaseAttribs RefSpec (data+0xA8 ==
+// KU_PHYSICSVEHICLEBASEATTRIBS_OFFSET) and the suspension wrapper from data+0x00
+// (KU_PHYSICSVEHICLESUSPENSIONATTRIBS_OFFSET), then lane-scatter their records. Source byte
+// offsets are asm-exact; the records' own field names are not recovered (same convention as
+// EngineAttribs::InitializeFromAttribs above -- byte-addressed float source, offsets EXACT).
+// The destination lane names that follow are this type's own DWARF names, so every read is
+// role-named on the destination side.
+void SimpleVehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrHandling)
+{
+    using Attrib::Gen::physicsvehiclebaseattribs;
+    using Attrib::Gen::physicsvehiclesuspensionattribs;
+
+    #define BP_SVA_SRC_F(base, byteOff) ((base)[(byteOff) >> 2])
+
+    // ---- the base-attribs record (data+0xA8 RefSpec) ---------------------------------------
+    {
+        // The DWARF passes the handling BY VALUE, so the console callee owns a mutable copy and
+        // the RefSpec resolve caches into it; with the const-ref spelling that mutability is
+        // restored explicitly (GetCollection resolves + AddRefs + caches -- it is non-const).
+        physicsvehiclebaseattribs lBase(
+            const_cast<Attrib::Collection*>(
+                const_cast<Attrib::RefSpec&>(lrHandling.PhysicsVehicleBaseAttribs())
+                    .GetCollection()),
+            NULL);
+        const f32* lpData = static_cast<const f32*>(lBase.GetLayoutPointer());
+
+        mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.z
+            = BP_SVA_SRC_F(lpData, 0x104);                            // Mass        <- data+0x104
+        mFrontRightWheelPos = *reinterpret_cast<const Vector3*>(lpData + (0x10 >> 2));  // <- data+0x10
+        mRearRightWheelPos  = *reinterpret_cast<const Vector3*>(lpData + (0x00 >> 2));  // <- data+0x00
+        mCOMOffset          = *reinterpret_cast<const Vector3*>(lpData + (0x20 >> 2));  // <- data+0x20
+
+        // fsel f0,f0,f0,0.0 -- negative traction-line lengths clamp to 0.
+        {
+            const f32 lfLen = BP_SVA_SRC_F(lpData, 0x44);
+            mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w
+                = (lfLen >= 0.0f) ? lfLen : 0.0f;                     // TractionLineLength
+        }
+        mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.x
+            = BP_SVA_SRC_F(lpData, 0xCC);                             // FrontWheelMass
+        mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.y
+            = BP_SVA_SRC_F(lpData, 0x64);                             // RearWheelMass
+
+        // The stack round-trip that zeroes the COM x lane (stvx -> stfs 0.0 -> lvx -> stvx).
+        mCOMOffset.x = 0.0f;
+
+        // ⚠️ The two tire scatters are committed as FLAGGED-INERT stubs (Wheel.cpp: the rodata
+        // permute table that places the per-car scalars is un-homed) -- called by name as the
+        // console does; the inertness is their existing, loudly-flagged state, not this body's.
+        mFrontTireAttribs.PrepareFrontTire(lBase);                    // this+0x20
+        mRearTireAttribs.PrepareRearTire(lBase);                      // this+0x60
+    }
+
+    // ---- the suspension record (data+0x00 RefSpec) -----------------------------------------
+    {
+        physicsvehiclesuspensionattribs lSusp(
+            const_cast<Attrib::Collection*>(
+                const_cast<Attrib::RefSpec&>(lrHandling.PhysicsVehicleSuspensionAttribs())
+                    .GetCollection()),
+            NULL);
+        const f32* lpData = static_cast<const f32*>(lSusp.GetLayoutPointer());
+
+        mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z
+            = BP_SVA_SRC_F(lpData, 0x28);                             // FrontWheelHeightOffset
+        mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w
+            = BP_SVA_SRC_F(lpData, 0x10);                             // RearWheelHeightOffset
+        mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.x
+            = BP_SVA_SRC_F(lpData, 0x00);                             // UpwardMovement
+        mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.y
+            = BP_SVA_SRC_F(lpData, 0x2C);                             // DownwardMovement
+    }
+
+    #undef BP_SVA_SRC_F
+
+    mbIsValid = true;                                                 // stb 1 -> +0xE4
+    // (The console callee also destroys its BY-VALUE handling parameter here; with the
+    // const-ref spelling the caller's explicit copy is destroyed at its own scope end.)
 }
 }
 }

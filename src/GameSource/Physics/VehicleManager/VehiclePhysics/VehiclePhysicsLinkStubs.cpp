@@ -39,6 +39,7 @@
 // =================================================================================================
 
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"  // VehicleAttribs (the SetupAttribs(handling) trap below)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
@@ -158,13 +159,31 @@ namespace Vehicle
     // 240-byte SimpleVehicleAttribs now lives in BrnSimpleVehiclePhysics.h, and its Construct
     // @0x825E6580 + SetupAttribs @0x825BE0C8 are bodied in VehicleAttribs.cpp.
 
-    // LINK STUB (orchestrator wave): X360 @0x8262DE58, 185 instructions -- the post-reset
-    // attribs re-derivation (chains into SimpleVehiclePhysics::SetAttributes @0x826020A0,
-    // 503 insns, same SimpleVehicleAttribs dependency as SwitchAttribs above).
-    void VehiclePhysics::SetAttributes()
+    // ⭐ 2026-08-09 (attribs-setup wave): the VehiclePhysics::SetAttributes @0x8262DE58 stub is
+    // GONE -- BODIED in VehiclePhysics.cpp, together with the whole overload web it drags:
+    // SimpleVehiclePhysics::SetAttributes() @0x82620498 (the former sub_82620498) and
+    // SetAttributes(const Vector3*, const f32*) @0x826020A0 in BrnSimpleVehiclePhysics.cpp, and
+    // SimpleVehicleAttribs::SetupAttribs(handling) @0x825E6778 in VehicleAttribs.cpp. ONE leg of
+    // that web is still a trap -- the stub below.
+
+    // LINK STUB (attribs-setup wave, 2026-08-09): X360 @0x825F4CD8, 770 instructions --
+    // VehicleAttribs::SetupAttribs(physicsvehiclehandling), THE STREAMED-ATTRIBUTE LOADER.
+    // FULL CENSUS: closure is CLEAN -- every callee exists in the tree (the eight generated
+    // sub-record wrapper ctors are inline in their committed headers; InterpedParam3::
+    // Construct/Prepare, EngineAttribs::InitializeFromAttribs, TireAttribs::PrepareFront/
+    // RearTire are bodied; RefSpec::GetCollection + Instance dtor are the mounted AttribSys
+    // SDK). What remains is 770 instructions of per-lane record->attrib scatter (the
+    // base/steering/engine/drift/collision/boost/bodyroll/suspension blocks) whose source byte
+    // offsets each need the same dataflow tracking the 622-insn SetupAttribsForAI got -- its
+    // own wave, not a bolt-on. Called by VehiclePhysics::SetAttributes' re-stream leg (dormant
+    // until the driving spine goes live) and by VehiclePhysics::Prepare's chain when that
+    // lands. A silent no-op here would leave a reset car driving on STALE attribs -- plausible
+    // and invisible -- hence the trap.
+    void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling&)
     {
-        CGS_ASSERT(false, "VehiclePhysics::SetAttributes: link stub -- reconstruct from X360 "
-                          "@0x8262DE58 (+ SimpleVehiclePhysics::SetAttributes @0x826020A0)");
+        CGS_ASSERT(false, "VehicleAttribs::SetupAttribs(handling): link stub -- reconstruct "
+                          "from X360 @0x825F4CD8 (770 insns, the streamed-attribute loader; "
+                          "closure clean, its own wave)");
     }
 
     // ⭐ 2026-08-09 (attribs-setup wave): the HackedResetAndFlyAround @0x825D0008 stub is

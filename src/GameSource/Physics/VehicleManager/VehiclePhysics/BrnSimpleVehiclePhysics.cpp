@@ -1,5 +1,7 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"  // the full VehicleAttribs (SwitchAttribs reads its base/suspension lanes)
+#include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"           // the car-asset wrapper (SetAttributes' key chase)
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"    // the handling wrapper + its checked copy ctor
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
 #include <cmath>                                        // std::sqrt (AddTractionPoint's line distance)
@@ -601,6 +603,152 @@ namespace Vehicle
 
         // ---- phase 4: replace the simple set ---------------------------------------------------
         mSimpleAttribs.SetupAttribs(lpAttribs);   // this+0x5A0, the LAST thing the function does
+    }
+
+    // ===========================================================================================
+    //  SimpleVehiclePhysics::SetAttributes()   @0x82620498   (142 insns)
+    // ===========================================================================================
+    // ⭐ BODIED 2026-08-09 (attribs-setup wave). This was the unnamed `sub_82620498`; identity
+    // recovered from its caller set (VehiclePhysics::SetAttributes' first call, `this` in r3)
+    // and its own "mSimpleAttribs.IsValid()" assert -- it is the DWARF's 0-arg overload
+    // (BrnSimpleVehiclePhysics.h:163, PS3 mangled 7355CC).
+    //
+    // Refresh mSimpleAttribs from the car's AttribSys handling record, then chain to the 2-arg
+    // with wheel positions/radii captured from the CURRENT (pre-refresh) state:
+    //   positions[i] = maWheels[i].mStreamedPositionPlusTwistAmount + OLD mSimpleAttribs.mCOMOffset,
+    //                  .y -= OLD height offset (front lanes for wheels 0/1, rear for 2/3)
+    //   radii[i]     = maWheels[i].mSlipVariables.w  (the current radius, preserved)
+    // The AttribSys chase is the inlined generated-ctor chain: burnoutcarasset(key) ->
+    // PhysicsVehicleHandlingAsset RefSpec (data+0x158) -> physicsvehiclehandling -> the checked
+    // COPY (@0x825BDB88, the by-value argument) -> SimpleVehicleAttribs::SetupAttribs.
+    bool SimpleVehiclePhysics::SetAttributes()
+    {
+        // ---- capture the pre-refresh state ----------------------------------------------------
+        f32 lafRadii[eNumDrivenWheels];
+        Vector3 laPositions[eNumDrivenWheels];
+        {
+            const f32 lfFrontOffset =
+                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z;
+            const f32 lfRearOffset =
+                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w;
+            for (s32 li = 0; li < eNumDrivenWheels; ++li)
+            {
+                lafRadii[li] = maWheels[li].mSlipVariables.w;
+                laPositions[li] = vpu::Add(maWheels[li].mStreamedPositionPlusTwistAmount.GetVector3(),
+                                           mSimpleAttribs.mCOMOffset);
+                laPositions[li].y -= (li < 2) ? lfFrontOffset : lfRearOffset;   // vrlimi(4)
+            }
+        }
+
+        CGS_ASSERT(mSimpleAttribs.IsValid(), "mSimpleAttribs.IsValid()");   // console line 0x10D
+
+        // ---- the AttribSys chase (each generated ctor is the console's inlined sequence) ------
+        {
+            Attrib::Gen::burnoutcarasset lCarAsset(mSimpleAttribs.mAttribsKey, NULL);
+            Attrib::Gen::physicsvehiclehandling lHandling(
+                const_cast<Attrib::Collection*>(
+                    lCarAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), NULL);
+            // The checked copy @0x825BDB88 -- the console's by-value argument.
+            Attrib::Gen::physicsvehiclehandling lHandlingCopy(lHandling);
+            mSimpleAttribs.SetupAttribs(lHandlingCopy);
+        }
+
+        // mCOMOffset += mHandlingBodyOffset ([this+0x670] += [this+0x690]).
+        mSimpleAttribs.mCOMOffset = vpu::Add(mSimpleAttribs.mCOMOffset, mHandlingBodyOffset);
+
+        return SetAttributes(laPositions, lafRadii);
+    }
+
+    // ===========================================================================================
+    //  SimpleVehiclePhysics::SetAttributes(const Vector3*, const f32*)  @0x826020A0  (503 insns)
+    // ===========================================================================================
+    // ⭐ BODIED 2026-08-09 (attribs-setup wave). The shared tail of every SetAttributes wrapper:
+    // mass + solid-box inverse inertia from the (freshly re-streamed) mSimpleAttribs, then a
+    // per-wheel Wheel::Prepare. The Wheel.h Prepare lane map (proven 2026-08-05) named this
+    // function's asm (0x826027F4..0x82602840) as its caller witness; the register roles here
+    // match it exactly.
+    bool SimpleVehiclePhysics::SetAttributes(const Vector3* lpaWheelPositions,
+                                             const f32* lpafWheelRadii)
+    {
+        // .data scalars -- same two as SwitchAttribs (bank writers @0x82C5D190/@0x82C5D1B8,
+        // sources image-read: flt_82004F5C == 30.0, flt_8209AE88 == 0.025).
+        static const f32 KF_WHEEL_INTEGRATION_SEED     = 30.0f;
+        static const f32 KF_MIN_SUSPENSION_TRAVEL_DOWN = 0.025f;
+        static const f32 KF_ONE_TWELFTH = 0.0833333358f;   // flt_82094724
+
+        CGS_ASSERT(lpaWheelPositions != NULL, "lpaWheelPositions");   // 0x149
+        CGS_ASSERT(lpafWheelRadii != NULL,    "lpafWheelRadii");      // 0x14A
+
+        // ---- the mass, with the console's zero-mass diagnostic --------------------------------
+        // On mass <= 0 the X360 dumps the vault array through a stack StrStream into
+        // gpcMessageBuffer and FireAsserts it (console line 0x152); modelled as the assert it
+        // fires, with the console's own message text.
+        const f32 lfMass = mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.z;
+        mfMass = VecFloat{ lfMass, lfMass, lfMass, lfMass };          // stvx128 -> +0xE0
+        CGS_ASSERT(lfMass > 0.0f,
+                   "\n\nZero vehicle mass. Please tell Graham D and include the TTY!");
+
+        // ---- the solid-box inverse inertia (identical machinery to SwitchAttribs) -------------
+        const Vector3 lBoxExtent = vpu::Mult(mHalfExtent, 2.0f);      // flt_82001D9C
+        CGS_ASSERT(vpu::IsValid(lBoxExtent), "RwMath::IsValid( lBoxExtent )");   // 0x15A
+        CGS_ASSERT(lBoxExtent.x > 0.0f, "lBoxExtent.X() > 0.0f");                // 0x15C
+        CGS_ASSERT(lBoxExtent.y > 0.0f, "lBoxExtent.Y() > 0.0f");                // 0x15D
+        CGS_ASSERT(lBoxExtent.z > 0.0f, "lBoxExtent.Z() > 0.0f");                // 0x15E
+        {
+            const f32 lfMassOver12 = lfMass * KF_ONE_TWELFTH;
+            const f32 lfX2 = lBoxExtent.x * lBoxExtent.x;
+            const f32 lfY2 = lBoxExtent.y * lBoxExtent.y;
+            const f32 lfZ2 = lBoxExtent.z * lBoxExtent.z;
+            // vrefp + two Newton refines each -> the diagonal inverse tensor.
+            const f32 lfIxx = 1.0f / (lfMassOver12 * (lfY2 + lfZ2));
+            const f32 lfIyy = 1.0f / (lfMassOver12 * (lfX2 + lfZ2));
+            const f32 lfIzz = 1.0f / (lfMassOver12 * (lfX2 + lfY2));
+            mLocalInverseInertia.xAxis = Vector3{ lfIxx, 0.0f, 0.0f, 0.0f };   // -> +0x80
+            mLocalInverseInertia.yAxis = Vector3{ 0.0f, lfIyy, 0.0f, 0.0f };   // -> +0x90
+            mLocalInverseInertia.zAxis = Vector3{ 0.0f, 0.0f, lfIzz, 0.0f };   // -> +0xA0
+        }
+        CGS_ASSERT(vpu::IsValid(mLocalInverseInertia.xAxis) &&
+                   vpu::IsValid(mLocalInverseInertia.yAxis) &&
+                   vpu::IsValid(mLocalInverseInertia.zAxis),
+                   "RwMath::IsValid( mLocalInverseInertia )");                   // 0x168
+
+        // ---- the per-wheel prepare, from the NEW mSimpleAttribs -------------------------------
+        // Local position copy (the 8 x ld/std loop), then the height-offset raise on the y lane
+        // (front lanes for wheels 0/1, rear for 2/3) -- the RIDE-HEIGHT ADD that the callers'
+        // capture step subtracted.
+        Vector3 laPositions[eNumDrivenWheels];
+        {
+            const f32 lfFrontOffset =
+                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z;
+            const f32 lfRearOffset =
+                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w;
+            for (s32 li = 0; li < eNumDrivenWheels; ++li)
+            {
+                laPositions[li] = lpaWheelPositions[li];
+                laPositions[li].y += (li < 2) ? lfFrontOffset : lfRearOffset;   // vrlimi(4)
+            }
+        }
+
+        const f32 lfTravelUp = mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.x;
+        const f32 lfTravelDownRaw = mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.y;
+        const f32 lfTravelDown = (lfTravelDownRaw > KF_MIN_SUSPENSION_TRAVEL_DOWN)
+                                     ? lfTravelDownRaw : KF_MIN_SUSPENSION_TRAVEL_DOWN;   // vmaxfp
+
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            // The stacked tire-pointer table: 5C0, 5C0, 600, 600 == front, front, rear, rear.
+            const Wheel::TireAttribs* lpTire = (liWheel < 2) ? &mSimpleAttribs.mFrontTireAttribs
+                                                             : &mSimpleAttribs.mRearTireAttribs;
+            maWheels[liWheel].Prepare(
+                vpu::Subtract(laPositions[liWheel], mSimpleAttribs.mCOMOffset),  // vsubfp v1
+                lpafWheelRadii[liWheel],
+                KF_WHEEL_INTEGRATION_SEED,
+                lfTravelUp,
+                lfTravelDown,
+                lpTire);
+        }
+
+        return true;   // li r3, 1
     }
 }
 }
