@@ -193,10 +193,11 @@ namespace Vehicle
                       "the entity-id array must abut maFullTrafficPhysics[20] with no pad -- this is "
                       "what fires if the array bound changes or TrafficPhysics grows an alignment "
                       "that inserts one");
-        static_assert(offsetof(PhysicalTrafficManager, maTrafficEntityIDs) == 99200,
-                      "MEASURED host seat (X360 103360 + the array's 20 * (4960 - 5168) == -4160). A "
-                      "literal, so it is a tripwire in both directions rather than a restatement of "
-                      "the line above.");
+        static_assert(offsetof(PhysicalTrafficManager, maTrafficEntityIDs) == 103360,
+                      "MEASURED host seat == the X360's 103360 exactly (TrafficPhysics is "
+                      "width-identical at 5168 since the 240-byte SimpleVehicleAttribs landed, "
+                      "2026-08-09). A literal, so it is a tripwire in both directions rather than a "
+                      "restatement of the line above.");
         static_assert(sizeof(PhysicalTrafficManager::maTrafficEntityIDs) == 20 * 4,
                       "EntityId[20] -- SetRaceCarCrashing's owner==2 branch indexes it with a traffic "
                       "index, so the old [8] model was an out-of-bounds read for slots 8..19");
@@ -398,8 +399,11 @@ namespace Vehicle
         // drift term, never the other way round. This one is the TrafficPhysics de-fork.
         // ⭐ FOUR: 167024 -> 167104 (2026-08-06, the contact-generation block carve's +76 term;
         // 172616 + (-5600) + 76 == 167092 -> 16-aligned 167104).
-        static_assert(sizeof(VehicleManager) == 167104,
-                      "MEASURED total. X360 end 172616 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK == 167092 -> 16-aligned 167104");
+        // ⭐ FIVE: 167104 -> 172928 (2026-08-09, the 240-byte SimpleVehicleAttribs landed and BOTH
+        // negative array terms vanished -- see BrnVehicleManager.h; 172616 + 300 == 172916 ->
+        // 16-aligned 172928).
+        static_assert(sizeof(VehicleManager) == 172928,
+                      "MEASURED total. X360 end 172616 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK (+300) == 172916 -> 16-aligned 172928");
         static_assert(sizeof(VehicleManager::maeImpactType) == 32, "EImpactType[8]");
         static_assert(sizeof(VehicleManager::mauImpactScore) == 8, "uint8[8]");
         static_assert(sizeof(VehicleManager::mafPlayerGrindingOtherDurationSeconds) == 32, "f32[8] -- NOT a scalar threshold");
@@ -427,10 +431,11 @@ namespace Vehicle
         // from, and that the array still starts on the asm-literal +1856 at 16 alignment. Those are
         // checkable and they are checked. Tamper-tested: changing either constant fires.
         // =========================================================================================
-        static_assert(sizeof(RaceCarPhysics) == 5008,
-                      "host sizeof(RaceCarPhysics). NOT an X360 number -- the console class is 5216 "
-                      "(`mulli r11,r22,0x1460`). This line exists so the class cannot change size "
-                      "without the drift term below being revisited");
+        static_assert(sizeof(RaceCarPhysics) == 5216,
+                      "host sizeof(RaceCarPhysics) -- width-identical with the console's 0x1460 "
+                      "stride since the 240-byte SimpleVehicleAttribs landed (2026-08-09). This "
+                      "line exists so the class cannot change size without the drift term below "
+                      "being revisited");
         static_assert(8 * (5216 - static_cast<std::ptrdiff_t>(sizeof(RaceCarPhysics)))
                           == -KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
                       "⭐ KU_HOST_DRIFT_AFTER_RACECAR_ARRAY must BE 8 * (console stride - host "

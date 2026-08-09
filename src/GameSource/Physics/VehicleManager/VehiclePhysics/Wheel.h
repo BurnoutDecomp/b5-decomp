@@ -187,15 +187,17 @@ namespace Vehicle
                      f32 lfSuspensionTravelUp, f32 lfSuspensionTravelDown,
                      const TireAttribs* lpTireAttribs);
 
-        // @0x825D6D38: re-point the tire attribs + re-derive the suspension lanes WITHOUT clearing
-        // the running state (the in-place sibling of Prepare). Bodied in Wheel.cpp.
-        // ⚠️ FLAG (seat wave 2026-08-05): Prepare's lane scatter -- which this body's comments cite
-        // as its own authority -- was proven WRONG against the asm (see Prepare above). This body's
-        // scalar->lane assignment therefore inherits a disproven inference and MUST be re-verified
-        // against @0x825D6D38's own asm before anything consumes it. Not corrected here because no
-        // PC path calls it yet and its asm was not read this wave.
-        void SwitchAttribs(Vector3 lStreamedPosition, f32 lfMaxSuspensionHeight,
-                           f32 lfMinSuspensionHeight, f32 lfRadiusSeed, f32 lfTwistSeed,
+        // @0x825D6D38: re-point the tire attribs + re-derive the suspension lanes WITHOUT
+        // clearing the running state (the in-place sibling of Prepare). Bodied in Wheel.cpp.
+        // ⭐⭐ RE-VERIFIED against its own asm 2026-08-09 (attribs-setup wave), exactly as the
+        // old FLAG here demanded -- the old parameter roles WERE the disproven inference. The
+        // real scatter mirrors Prepare's proven map (f1 = radius -> mSlipVariables.w,
+        // f2 = integration seed -> mIntegrationVariables.w, f3/f4 = travel up/down ->
+        // mSuspensionAndInertiaVariables .y/.x), and v1 is a POSITION DELTA subtracted from
+        // the running +0x80/+0x90 registers, not an absolute position (the sole caller,
+        // SimpleVehiclePhysics::SwitchAttribs, passes (oldCOM - newCOM) + dHeight * yhat).
+        void SwitchAttribs(Vector3 lPositionDelta, f32 lfWheelRadius, f32 lfIntegrationSeed,
+                           f32 lfSuspensionTravelUp, f32 lfSuspensionTravelDown,
                            const TireAttribs* lpTireAttribs);
 
         // @0x825D7008: integrate the accumulated wheel torque into the wheel's angular velocity,

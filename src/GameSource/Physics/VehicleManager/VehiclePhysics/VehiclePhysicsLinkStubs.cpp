@@ -153,16 +153,10 @@ namespace Vehicle
                           "both console builds, so it is its own wave");
     }
 
-    // LINK STUB (orchestrator wave): X360 @0x82601978, 458 instructions -- the base attribute
-    // re-derivation (mass/box-extent asserts, per-wheel Wheel::SwitchAttribs, the inverse-
-    // inertia rebuild, SimpleVehicleAttribs::SetupAttribs). BLOCKED for real this time: it
-    // needs the full 240-byte SimpleVehicleAttribs, which this tree still models as the
-    // 20-byte {mCOMOffset, mbIsValid} slice.
-    void SimpleVehiclePhysics::SwitchAttribs(VehicleAttribs*)
-    {
-        CGS_ASSERT(false, "SimpleVehiclePhysics::SwitchAttribs: link stub -- reconstruct from "
-                          "X360 @0x82601978 (needs the full SimpleVehicleAttribs, 240 bytes)");
-    }
+    // ⭐ 2026-08-09 (attribs-setup wave): the SimpleVehiclePhysics::SwitchAttribs @0x82601978
+    // stub is GONE -- BODIED in BrnSimpleVehiclePhysics.cpp. The blocker fell with it: the full
+    // 240-byte SimpleVehicleAttribs now lives in BrnSimpleVehiclePhysics.h, and its Construct
+    // @0x825E6580 + SetupAttribs @0x825BE0C8 are bodied in VehicleAttribs.cpp.
 
     // LINK STUB (orchestrator wave): X360 @0x8262DE58, 185 instructions -- the post-reset
     // attribs re-derivation (chains into SimpleVehiclePhysics::SetAttributes @0x826020A0,

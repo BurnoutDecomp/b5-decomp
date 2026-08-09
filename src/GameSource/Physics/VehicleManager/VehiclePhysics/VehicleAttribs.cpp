@@ -1,4 +1,5 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"  // SimpleVehicleAttribs (DWARF home: this TU)
 
 #include "types.hpp"
 
@@ -859,6 +860,83 @@ void VehicleAttribs::SetupAttribsForAI(VehicleAttribs* lpSource)
     std::memcpy(&mEngineAttribs, &lpSource->mEngineAttribs, sizeof(EngineAttribs));
 
     mbIsValid = true;   // li 1 ; stb -> +0x360
+}
+
+// @0x825E6580 (125 instrs, leaf)  BrnPhysics::Vehicle::SimpleVehicleAttribs::Construct
+//
+// The default simple-attribs initialiser. NOT just a zero-fill: it seeds a default car
+// geometry. Every constant image-read (x360rd, 10/10 self-test); every lane insert
+// dataflow-tracked (vrlimi masks 8/4/2/1 == x/y/z/w). mAttribsKey is NOT initialised here --
+// as shipped.
+void SimpleVehicleAttribs::Construct()
+{
+    const f32 KF_DEFAULT_MASS                = 1560.0f;    // flt_82096C9C
+    const f32 KF_DEFAULT_TRACTION_LINE       = 0.4f;       // flt_8200473C (0.400000006)
+    const f32 KF_DEFAULT_WHEEL_MASS          = 30.0f;      // flt_82004F5C (front AND rear)
+    const f32 KF_DEFAULT_WHEEL_X             = 0.85f;      // flt_82013A78 (0.850000024)
+    const f32 KF_DEFAULT_WHEEL_Y             = -0.2f;      // flt_82020A84 (-0.200000003)
+    const f32 KF_DEFAULT_FRONT_WHEEL_Z       = 1.1f;       // flt_82004A1C (1.10000002)
+    const f32 KF_DEFAULT_REAR_WHEEL_Z        = -1.5f;      // flt_8200D538
+    const f32 KF_DEFAULT_COM_Y               = -0.4f;      // flt_82012EF8 (-0.400000006)
+    const f32 KF_DEFAULT_COM_Z               = 0.3f;       // flt_82004740 (0.300000012)
+    const f32 KF_DEFAULT_UPWARD_MOVEMENT     = 0.11f;      // flt_820047C0 (0.109999999)
+    const f32 KF_DEFAULT_DOWNWARD_MOVEMENT   = 0.125f;     // flt_82004010
+
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.z = KF_DEFAULT_MASS;
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w = KF_DEFAULT_TRACTION_LINE;
+    miRaceCarID = 0;                                                       // stw 0 -> +0xE0
+    mFrontRightWheelPos = Vector3{ KF_DEFAULT_WHEEL_X, KF_DEFAULT_WHEEL_Y,
+                                   KF_DEFAULT_FRONT_WHEEL_Z, 0.0f };       // +0xB0
+    mRearRightWheelPos  = Vector3{ KF_DEFAULT_WHEEL_X, KF_DEFAULT_WHEEL_Y,
+                                   KF_DEFAULT_REAR_WHEEL_Z, 0.0f };        // +0xC0
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.x = KF_DEFAULT_WHEEL_MASS;
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.y = KF_DEFAULT_WHEEL_MASS;
+    mCOMOffset = Vector3{ 0.0f, KF_DEFAULT_COM_Y, KF_DEFAULT_COM_Z, 0.0f };  // +0xD0
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z = 0.0f;
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w = 0.0f;
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.x = KF_DEFAULT_UPWARD_MOVEMENT;
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.y = KF_DEFAULT_DOWNWARD_MOVEMENT;
+
+    // 0x825E6748..0x825E6764: eight stvx128 of the zero vector -- both tires cleared whole.
+    std::memset(&mFrontTireAttribs, 0, sizeof(mFrontTireAttribs));         // +0x20..+0x5F
+    std::memset(&mRearTireAttribs,  0, sizeof(mRearTireAttribs));          // +0x60..+0x9F
+
+    mbIsValid = false;                                                     // stb 0 -> +0xE4
+}
+
+// @0x825BE0C8 (81 instrs, leaf)  BrnPhysics::Vehicle::SimpleVehicleAttribs::SetupAttribs
+//
+// Stream the simple set out of a full VehicleAttribs. Callers: SimpleVehiclePhysics::Prepare,
+// SimpleVehiclePhysics::SwitchAttribs, VehiclePhysics::SetAttributes(3-arg) @0x8262E140.
+// miRaceCarID is NOT copied -- as shipped.
+void SimpleVehicleAttribs::SetupAttribs(const VehicleAttribs* lpSource)
+{
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.z
+        = lpSource->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;      // Mass
+    mFrontRightWheelPos = lpSource->mBaseAttribs.mFrontRightWheelPos;                    // +0xB0 <- src+0x00
+    mRearRightWheelPos  = lpSource->mBaseAttribs.mRearRightWheelPos;                     // +0xC0 <- src+0x10
+    mCOMOffset          = lpSource->mBaseAttribs.mCOMOffset;                             // +0xD0 <- src+0x20
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w
+        = lpSource->mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.x;
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.x
+        = lpSource->mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.w;
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.y
+        = lpSource->mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.x;
+    mAttribsKey = lpSource->mAttribsKey;                                                 // ld/std +0xA0 <- src+0x358
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z
+        = lpSource->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.x;
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w
+        = lpSource->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.y;
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.x
+        = lpSource->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.z;
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.y
+        = lpSource->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.w;
+
+    // The two 8 x ld/std copy loops (0x40 bytes each).
+    mFrontTireAttribs = lpSource->mFrontTireAttribs;                                     // +0x20 <- src+0x2D0
+    mRearTireAttribs  = lpSource->mRearTireAttribs;                                      // +0x60 <- src+0x310
+
+    mbIsValid = true;                                                                    // stb 1 -> +0xE4
 }
 }
 }
