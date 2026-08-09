@@ -186,10 +186,13 @@ const VehicleInputInterface* UpdateInputBuffer::GetVehicleInputInterface() const
 }
 
 // X360 0x823C8AD0 (:260 W) -- merge the source vehicle-input interface into ours (+96).
+// 2026-08-09 (feed wave): the member is the REAL BrnPhysics::Vehicle::VehicleInputInterface now
+// and its Append @0x823C87C0 is bodied, so this dispatches to the X360's own symbol rather than
+// to the retired slice's memcpy stand-in.
 void UpdateInputBuffer::AppendVehicleInputInterface(const VehicleInputInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-    mVehicleInputInterface.Append(lpInterface);
+    mVehicleInputInterface.Append(*lpInterface);
 }
 
 // X360 0x827A3660 (:262 R, GetVehicl) -- const vehicle-driver-input accessor (+142272).
@@ -229,6 +232,17 @@ void UpdateInputBuffer::AppendGameActionQueue(const GameActionQueue* lpQueue)
 }
 
 // ---- timer status -----------------------------------------------------------
+
+// X360 0x827A37B0 (:271 R) -- read-lock; return &mTimerStatusInterface (this+160900).
+// ⭐ ADDED 2026-08-09 (feed wave): this accessor was DECLARATION-ONLY. Recovered from the image
+// (`lbz r11,0(r28)` / `rlwinm r11,r11,0x1c,0x1f,0x1f` == read-lock bit 4, FireAssert line 0x10D,
+// then `addis r3,r28,2 / addi r3,r3,0x7484` == this+160900). Its one caller is
+// WorldModule::BridgeInputToPhysicsModule @0x827AB830.
+const TimerStatusInterface* UpdateInputBuffer::GetTimerStatusInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mTimerStatusInterface;
+}
 
 // X360 0x823B47E0 (:270 W) -- copy the source timer-status block into +160900..+160948.
 void UpdateInputBuffer::SetTimerStatusInterface(const TimerStatusInterface* lpInterface)

@@ -154,6 +154,38 @@ namespace Vehicle
         mSetTrafficCrashingEventQueue.AddEvent(lEvent);
     }
 
+    // @0x823C87C0  VehicleInputInterface::Append
+    //
+    // ⭐ RECONSTRUCTED 2026-08-09 (feed wave). This was DECLARATION-ONLY -- no body existed
+    // anywhere -- while two committed callers already named it
+    // (UpdateInputBuffer::AppendVehicleInputInterface @0x823C8AD0 and
+    // WorldModule::BridgeInputToPhysicsModule @0x827AB830).
+    //
+    // The 79-instruction X360 body is a flat fan-out: FOURTEEN per-queue Append merges and
+    // nothing else. Unlike operator= it does NOT Clear first, and it does NOT touch the two
+    // non-queue members (mTriangleCacheInterface, mRaceCarsAddedForCollision) -- the console
+    // emits no store for either. Each `bl` names its element type, which pins the member
+    // unambiguously; the member order below is the console's CALL order (which is not the
+    // declaration order), with each console byte offset quoted for cross-reference.
+    void VehicleInputInterface::Append(const VehicleInputInterface& lrOther)
+    {
+        mLineTestResultsQueue.Append(lrOther.mLineTestResultsQueue);                            // +0
+        mCreateRaceCarEventQueue.Append(lrOther.mCreateRaceCarEventQueue);                      // +0x1F420
+        mRemoveRaceCarEventQueue.Append(lrOther.mRemoveRaceCarEventQueue);                      // +0x1F930
+        mResetRaceCarEventQueue.Append(lrOther.mResetRaceCarEventQueue);                        // +0x1F980
+        mCreateTrafficEventQueue.Append(lrOther.mCreateTrafficEventQueue);                      // +0x20770
+        mSetTrafficCrashingEventQueue.Append(lrOther.mSetTrafficCrashingEventQueue);            // +0x22040
+        mRemoveCrashedTrafficEventQueue.Append(lrOther.mRemoveCrashedTrafficEventQueue);        // +0x22118
+        mUpdateNetworkTrafficEventQueue.Append(lrOther.mUpdateNetworkTrafficEventQueue);        // +0x221F0
+        mImpactEventQueue.Append(lrOther.mImpactEventQueue);                                    // +0x22840
+        mValidateRaceCarEventQueue.Append(lrOther.mValidateRaceCarEventQueue);                  // +0x20190
+        mSetRaceCarCollisionEventQueue.Append(lrOther.mSetRaceCarCollisionEventQueue);          // +0x202A0
+        mSetRaceCarCullingGroupEventQueue.Append(lrOther.mSetRaceCarCullingGroupEventQueue);    // +0x202FC
+        mCreateArticulatedTrafficEventQueue.Append(lrOther.mCreateArticulatedTrafficEventQueue);// +0x21590
+        mNetworkCarsAddedRemovedForCollisionQueue.Append(
+            lrOther.mNetworkCarsAddedRemovedForCollisionQueue);                                 // +0x20358
+    }
+
     // @0x82592FD0  VehicleInputInterface::operator=
     //   Hand-written copy-assignment (called from BrnNetworkModule::ProcessBeforeSimulation). For
     //   each embedded EventQueue member it Clear()s this side then Append()s the source's live

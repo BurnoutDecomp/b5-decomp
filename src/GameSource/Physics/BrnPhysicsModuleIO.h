@@ -47,6 +47,7 @@
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h" // ContactSpy::ContactSpyInterface (real member @ +998192, promoted 2026-08-06)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h" // Vehicle::VehicleInputInterface (mVehicleInputInterface, retyped 2026-08-06)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // Vehicle::VehicleOutputRequestInterface / VehicleManagerOutputInterface / VehicleOutputInterface (promoted 2026-08-09)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h" // Vehicle::VehicleDriverInputInterface (mVehicleDriverInterface, retyped 2026-08-09)
 
 namespace BrnPhysics
 {
@@ -194,7 +195,15 @@ namespace PhysicsModuleIO
         // express. The pad after the member absorbs the host-size difference (compile fails if
         // the real host type ever outgrows the console span -- the intended tripwire).
         typedef BrnPhysics::Vehicle::VehicleInputInterface VehicleInputInterfaceStorage;
-        struct VehicleDriverInputInterfaceStorage   { unsigned char maBytes[1]; };
+        // ⭐ RETYPED 2026-08-09 (feed wave; third use of the typedef pattern). The real
+        // BrnPhysics::Vehicle::VehicleDriverInputInterface -- host sizeof 5296 == the console
+        // span (142544..147840), because every member is pointer-free (the inline
+        // VariableEventQueue<5040,16> plus the SIMD target-assist arrays), so the seat and every
+        // pin below are UNCHANGED. WorldModule::BridgeInputToPhysicsModule @0x827AB830 calls
+        // Vehicle::VehicleDriverInputInterface::Append @0x823DB640 on this member -- an opaque
+        // one-byte span cannot express that, and casting one to the real type would walk the
+        // driver-update queue 5 KB past the slice.
+        typedef BrnPhysics::Vehicle::VehicleDriverInputInterface VehicleDriverInputInterfaceStorage;
         struct VehicleEffectsInputInterfaceStorage  { unsigned char maBytes[1]; };
         struct RCEntityOutputInterfaceStorage       { unsigned char maBytes[0x28F0]; }; // 10480
         // ⭐ RETYPED 2026-08-09 (conductor wave; same typedef pattern as the vehicle-input
@@ -238,6 +247,12 @@ namespace PhysicsModuleIO
 
         // ---- getters (write-lock: status bit 3 -- mutable overloads test the WRITE bit) ----
         VehicleInputInterfaceStorage*               GetVehicleInputInterface();             // 0x8279ED28 :276
+        // ⭐ ADDITIVE 2026-08-09 (feed wave): the MUTABLE driver-interface handle. Recovered by
+        // disassembling 0x8279EDD0 out of the image (the function is a HOLE in the IDA export
+        // set): write-lock bit 3 (`rlwinm r11,r11,0x1d,0x1f,0x1f`), assert line 279, then
+        // `addis r3,r28,2 / addi r3,r3,0x2CD0` == return &mVehicleDriverInterface (this+142544).
+        // The ONLY caller is WorldModule::BridgeInputToPhysicsModule @0x827AB830.
+        VehicleDriverInputInterfaceStorage*         GetVehicleDriverInterface();            // 0x8279EDD0 :279
         VehicleEffectsInputInterfaceStorage*        GetVehicleEffectsInputInterface();      // 0x8279EE78 :282
         PropInputInterfaceStorage*                  GetPropManagerInputInterface();         // 0x8279F2F8 :302
         GameActionQueueStorage*                     GetGameActionQueue();                   // 0x8279F3A0 :305
@@ -270,9 +285,11 @@ namespace PhysicsModuleIO
         // console offsets in the trailing comments stay as console documentation only. (The old
         // `maDriverPad[142176 - sizeof(...)]` tripwire fired with a negative subscript on the
         // first build, which is how the growth was measured rather than assumed.)
-        VehicleDriverInputInterfaceStorage  mVehicleDriverInterface;         // +142544  :312
-        // gap to mVehicleEffectsInputInterface: +142545 .. +147839.
-        unsigned char                       maEffectsPad[147840 - 142545];   //
+        VehicleDriverInputInterfaceStorage  mVehicleDriverInterface;         // +142544  :312 (real type)
+        // No pad here any more: the real driver interface's host sizeof IS the console span
+        // (5296 == 147840 - 142544 -- it is entirely pointer-free), so the next seat lands
+        // exactly where the console's does. Pinned by _AssertLayout; if that equality ever
+        // breaks the gate fails rather than silently re-drifting everything below.
         VehicleEffectsInputInterfaceStorage mVehicleEffectsInputInterface;   // +147840  :313
         // gap to mRCEntityOutputInterface: +147841 .. +149631.
         unsigned char                       maRCEntityPad[149632 - 147841];  //
