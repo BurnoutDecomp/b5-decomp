@@ -156,13 +156,38 @@ namespace CgsCollision
         // RunLineWithTriangleListStream above. Its 82 instructions are the familiar dispatcher
         // shape (AllocateJob / per batch { CreateNewBatch, Job::Clear, EntryPoint::SetName,
         // SetCode(<entry>), SetData, DependsOn } / JobScheduler::AddTree), but what it installs is
-        // a JOB ENTRY POINT whose worker is absent from this tree: PolygonSoupTesterEntry
-        // @0x829157B8 (80) -> PolygonSoupTesterJob::Execute @0x82915930 (107) ->
-        // ExecuteFillTriangleCacheStream @0x82915D88 (145) -> ExecuteFillTriangleCache @0x82915AE0
-        // (170) -> FillTriangleCache @0x82915FD0 (219) -> PolygonSoupListSpatialMap::RunQuery
-        // @0x82843A80 (261). Writing the dispatcher without the worker would hand
-        // EndUpdateTriangleCaches a stream of zero-batch results, i.e. "every cached object has no
-        // triangles" -- the silent-drop shape, indistinguishable from a working empty cache.
+        // a JOB ENTRY POINT whose worker is absent from this tree. Writing the dispatcher without
+        // the worker would hand EndUpdateTriangleCaches a stream of zero-batch results, i.e.
+        // "every cached object has no triangles" -- the silent-drop shape, indistinguishable from
+        // a working empty cache.
+        //
+        // ⭐ THE WORKER FAMILY, RE-COSTED 2026-08-10 (fill-worker wave) from the X360 export JSONs
+        // -- machine-counted, and the previously-published list was missing the half that does the
+        // actual work. The 82 instructions of the dispatcher itself were read this wave: it writes
+        // JobDesc+0x00 = the spatial map, +0x04 = the producer, +0xFF = 3
+        // (E_COLLISION_TYPE_FILL_TRIANGLE_CACHE_STREAM), +0xF4 = 0.0f, entry = PolygonSoupTesterEntry,
+        // Job::SetData(job, batch+0x3D0, 256), clamped to 3 batches, and -- unlike its Line sibling
+        // -- it does NOT write the per-batch flag array at generator+0x123C0.
+        //   PolygonSoupTesterEntry                      @0x829157B8   80   this = unk_83123940 +
+        //                                                                  spuId*0x19040, spuId<6
+        //   PolygonSoupTesterJob::Execute               @0x82915930  107   switch on GetType():
+        //                                                                  2/3/4 -> FillTriangleCache /
+        //                                                                  ...Stream / LineTest
+        //   ...::ExecuteFillTriangleCacheStream         @0x82915D88  145   the ReadCommand loop
+        //   ...::FillTriangleCache                      @0x82915FD0  219   sphere -> AABB -> box query
+        //                                                                  -> per-leaf extract
+        //   ...::AllocateMemory                         @0x82916B98   99   bump allocator in the job
+        //   ...::RunBoxQuery                            @0x82916D28   46   wraps RunQuery
+        //   ...::LoadPrimitive                          @0x82916AB8    8
+        //   PolygonSoupListSpatialMap::RunQuery         @0x82843A80  261   the spatial traversal
+        //   ⭐ ExtractTriangle4ListIntersectingSphere    @0x82844C80  602   THE FUNCTION THAT ACTUALLY
+        //                                                                  PRODUCES THE TRIANGLES --
+        //                                                                  omitted from every earlier
+        //                                                                  costing of this leg
+        //   + the three JobDesc/type accessors (28), the leaf-cache Get (46), the three
+        //     SimpleDataStreamConsumer entry points (~19, AddResult @0x82868550 is an export hole)
+        // TOTAL ~1,650 across ~17. Every one of them carries an IDA symbol; there are no holes in
+        // the family itself.
         EA::Jobs::Job* RunFillTriangleCacheStream(
             const CgsGeometric::PolygonSoupListSpatialMap* lpPolySoupListSpacialMap,
             CgsMemory::SimpleDataStreamProducer* lpProducer);                                                    // @0x82810D38

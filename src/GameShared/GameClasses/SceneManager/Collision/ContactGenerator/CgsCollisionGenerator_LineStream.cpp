@@ -146,8 +146,10 @@ namespace CgsCollision
                        "@0x82810D38 (82) inert -- the triangle-cache FILL WORKER is absent: "
                        "PolygonSoupTesterEntry @0x829157B8 (80) / PolygonSoupTesterJob::Execute "
                        "@0x82915930 (107) / ExecuteFillTriangleCacheStream @0x82915D88 (145) / "
-                       "ExecuteFillTriangleCache @0x82915AE0 (170) / FillTriangleCache @0x82915FD0 "
-                       "(219) / PolygonSoupListSpatialMap::RunQuery @0x82843A80 (261) "
+                       "FillTriangleCache @0x82915FD0 (219) / AllocateMemory @0x82916B98 (99) / "
+                       "RunBoxQuery @0x82916D28 (46) / LoadPrimitive @0x82916AB8 (8) / "
+                       "PolygonSoupListSpatialMap::RunQuery @0x82843A80 (261) / "
+                       "ExtractTriangle4ListIntersectingSphere @0x82844C80 (602) "
                        "[FLAG PC boot gate]\n";
         }
         return 0;
