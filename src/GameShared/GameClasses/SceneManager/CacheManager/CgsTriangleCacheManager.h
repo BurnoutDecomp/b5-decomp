@@ -6,6 +6,20 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h" // CgsContainers::BitArray<N>
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h" // CgsGeometric::Triangle4
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (inlined GetCachedTriangle guard)
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"  // CgsModule::EventQueue<T, N>
+#include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManagerIO.h" // InEvent{AddToCache,UpdateCachedPosition}
+
+namespace CgsSceneManager
+{
+namespace SceneManagerIO
+{
+    // The per-frame scene-update input interface (CgsSceneManagerIO_SceneUpdate.h).
+    // ProcessRemoveFromCacheEvents takes the WHOLE interface rather than just its own
+    // queue -- see the declaration below for why. Forward-declared to keep this header
+    // off the 200KB scene-update aggregate; the .cpp includes it.
+    struct InSceneUpdateInterface;
+}
+}
 
 // ============================================================================
 // GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager.h
@@ -19,10 +33,23 @@
 // window into the shared triangle cache. The slot array is allocated through the
 // RenderWare resource allocator (Prepare) and tracked by a BitArray<298>.
 //
-// SCOPE: this header models the slice the recovered Prepare touches plus the
-// DWARF-attested member set. Members NOT exercised by Prepare keep their DWARF
-// names/types as honest placeholders; per-method bodies other than Prepare live
-// in their own TUs (this TU's ledger holds exactly one function: Prepare).
+// SCOPE: this header models the slice the recovered bodies touch plus the
+// DWARF-attested member set. Members not yet exercised keep their DWARF
+// names/types as honest placeholders.
+//
+// BODIES, and where they live (updated 2026-08-10, triangle-cache wave -- the
+// previous note here said "this TU's ledger holds exactly one function: Prepare",
+// which had already gone stale):
+//   CgsTriangleCacheManager.cpp         Prepare @0x828BE738,
+//                                       GetTrianglesForCachedObject @0x82277790
+//   CgsTriangleCacheManager_Events.cpp  ProcessAddToCacheEvents @0x828B2C78,
+//                                       ProcessRemoveFromCacheEvents @0x828B2710,
+//                                       ProcessUpdateCachedPositionEvents @0x828BE898,
+//                                       CacheSlot::UpdateCachedObject @0x828BE660
+//   NOT RECONSTRUCTED                   StartUpdateTriangleCaches @0x828BECF8 (278),
+//                                       EndUpdateTriangleCaches @0x828BF150 (475)
+//                                       -- the FILL half; both are WorldLinkStubs gates
+//                                       reached every frame by WorldModule::Update.
 // ============================================================================
 
 namespace rw
@@ -38,6 +65,15 @@ namespace CgsSceneManager
     // Capacity of the cache-slot pool. 298 slots * 48 bytes == 0x37E0 (14304),
     // the byte size the X360 Prepare passes to the allocator and the loop bound.
     const u32 KU_MAX_CACHED_OBJECTS = 298u;
+
+    // ProcessUpdateCachedPositionEvents only folds a slot's radius into
+    // mvfMaxRadiusSoFar when the slot index is below this bound (X360
+    // `cmpwi cr6, r11, 8 ; bge` at 0x828BEC40). Carried as the literal the image
+    // holds. ⚠️ INFERRED, flagged: 8 is also the race-car capacity elsewhere in this
+    // tree (VehicleOutputInterface::mUsedRaceCars is a BitArray<8>), so the shipped
+    // spelling was plausibly that constant -- but nothing in this function's rodata
+    // or asserts names it, so no cross-subsystem constant is asserted here.
+    const s32 KI_MAX_RADIUS_TRACKED_SLOTS = 8;
 
     // ------------------------------------------------------------------------
     // CgsSceneManager::CacheSlot (CgsTriangleCacheManager.h:78). sizeof == 48.
@@ -74,6 +110,13 @@ namespace CgsSceneManager
         s32         miNumCachedTriangleBatches;     // +0x28  batches owned by this slot
         s16         miOverflow;                     // +0x2C  overflow batch count
         bool        mbIsDirty;                      // +0x2E  needs re-cache
+
+        // @ X360 0x828BE660 (54 insns) -- reposition this slot's cached object and decide
+        // whether its triangle set has to be re-cached. Called by TriangleCacheManager::
+        // ProcessUpdateCachedPositionEvents (that call site is how the symbol was found:
+        // it is a `bl CgsSceneManager__CacheSlot__UpdateCachedObject`, NOT open-coded).
+        // Body in CgsTriangleCacheManager_Events.cpp.
+        void UpdateCachedObject(const TriangleCacheManagerIO::InEventUpdateCachedPosition& lrEvent);
     };
 
     // ------------------------------------------------------------------------
@@ -142,10 +185,52 @@ namespace CgsSceneManager
         // the .cpp (mirrors the single inlined X360 function).
         const CgsGeometric::Triangle4* GetTrianglesForCachedObject(s32 liObjectIndex) const;
 
-        // @ X360 0x828C7508 (tail-called from SceneManagerModule::EndUpdateTriangleCache)
-        // -- finish this frame's triangle-cache update against the supplied collision
-        // generator + the triangle-collision scene. Declared here (its home); body owned
-        // by the cache-manager TU.
+        // ------------------------------------------------------------------
+        // The per-frame SLOT BOOKKEEPING trio. All three are driven by
+        // SceneManagerModule::StartUpdateTriangleCache @0x828C73D8, in THIS order
+        // (proven by that function's asm at 0x828C7474/0x828C7484/0x828C74D8):
+        //     ProcessRemoveFromCacheEvents(lrSceneUpdate)
+        //     ProcessAddToCacheEvents(lrSceneUpdate.mAddToCacheQueue)
+        //     ProcessUpdateCachedPositionEvents(lrSceneUpdate.mUpdateCachedPositionQueue)
+        // ⚠️ AS-SHIPPED ASYMMETRY, not a reconstruction slip: the caller folds the
+        // member offset into the argument for the last two (`addis r4,r31,0xC; addi
+        // r4,r4,0x4930` == mAddToCacheQueue @+0xC4930, and +0x5290 ==
+        // mUpdateCachedPositionQueue @+0xC5290) but passes the WHOLE interface to
+        // ProcessRemoveFromCacheEvents, which re-derives its own queue at +0xC77E0.
+        // The reason is in the body: Remove also walks mAddToCacheQueue (+0xC4930) for
+        // its "Trying to add and remove triangle cache slot in same frame" cross-check,
+        // so it genuinely needs both queues. Bodies in CgsTriangleCacheManager_Events.cpp.
+        // ------------------------------------------------------------------
+
+        // @ X360 0x828B2C78 (222). Claim each event's slot: stamp the bounding-sphere
+        // radius, reset the batch count, and set the slot's used bit.
+        void ProcessAddToCacheEvents(
+            const CgsModule::EventQueue<TriangleCacheManagerIO::InEventAddToCache,
+                                        KU_MAX_CACHED_OBJECTS>& lrQueue);
+
+        // @ X360 0x828B2710 (346). Release each event's slot: clear the dirty/overflow
+        // state, drop the cached radius to zero, and clear the slot's used bit. Takes the
+        // whole interface because its dev cross-checks scan the ADD queue as well.
+        void ProcessRemoveFromCacheEvents(const SceneManagerIO::InSceneUpdateInterface& lrSceneUpdate);
+
+        // @ X360 0x828BE898 (279). Reposition each event's cached object (delegating the
+        // re-cache decision to CacheSlot::UpdateCachedObject) and track the largest cache
+        // radius seen this frame across the first KI_MAX_RADIUS_TRACKED_SLOTS slots.
+        void ProcessUpdateCachedPositionEvents(
+            const CgsModule::EventQueue<TriangleCacheManagerIO::InEventUpdateCachedPosition,
+                                        KU_MAX_CACHED_OBJECTS>& lrQueue);
+
+        // @ X360 **0x828BF150** (475 insns) -- finish this frame's triangle-cache update
+        // against the supplied collision generator + the triangle-collision scene.
+        // ⚠️ CORRECTED 2026-08-10: this comment previously read "@ X360 0x828C7508".
+        // 0x828C7508 is MID-INSTRUCTION inside SceneManagerModule::EndUpdateTriangleCache
+        // @0x828C7500 (the 10-insn thunk's `ori r10, r10, 0x84D0`), not a function head.
+        // The real body is 0x828BF150, which is exactly what that thunk tail-branches to.
+        // ⚠️ AS-SHIPPED: the ARTIST body reads ONLY r3 -- its 475 instructions never touch
+        // the incoming r4/r5 (the sole `arg_` stack slot is a spill of `this`). The two
+        // parameters are kept because the CALL SITE demonstrably materialises them
+        // (r4 = the generator StartUpdateTriangleCache stashed at module+0x3A84D0).
+        // Body NOT reconstructed -- currently the WorldLinkStubs.cpp one-shot log.
         void EndUpdateTriangleCaches(void* lpCollisionGenerator, void* lpTriangleCollisionScene);
     };
 }

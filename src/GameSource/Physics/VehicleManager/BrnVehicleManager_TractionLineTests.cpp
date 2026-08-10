@@ -21,8 +21,17 @@
 //   * AddRaceCarTractionLineTests @0x825E9640 and PhysicalTrafficManager::AddTrafficTraction-
 //     LineTests @0x8261D580 build each command around a TRIANGLE LIST taken from a per-object
 //     triangle cache -- they assert "lpCacheInterface != NULL" / "mpTriangleCacheManager != NULL" /
-//     "mpaTriangleCache != NULL" and then dereference it. CgsSceneManager::TriangleCacheManager is
-//     absent here (~1,688 console insns), as is SimpleVehiclePhysics::GetTractionLine @0x825D85C0.
+//     "mpaTriangleCache != NULL" and then dereference it.
+//     ⚠️ CORRECTED 2026-08-10: "CgsSceneManager::TriangleCacheManager is absent here (~1,688
+//     console insns)" was wrong. The manager is present and mounted; its READ side (Prepare /
+//     GetTrianglesForCachedObject / the TriangleCacheInterface accessors, 178 insns) was already
+//     bodied and its slot bookkeeping (901 insns) landed 2026-08-10. What is missing is the FILL
+//     half -- StartUpdateTriangleCaches 278 + EndUpdateTriangleCaches 475 + the module's
+//     StartUpdateTriangleCache 73 (all WorldLinkStubs gates on an ALREADY-LIVE per-frame path),
+//     VehicleManager::UpdateTriangleCache 240 / PrepareTriangleCache 37, and the
+//     PolygonSoupTesterJob fill path -- so the cache is allocated but empty.
+//     SimpleVehiclePhysics::GetTractionLine @0x825D85C0 is still absent: a genuine export hole of
+//     **174 instructions** (dir gap 0x825D8490+76 -> 0x825D8878; no hit in 30,084 exports).
 //   * the tests themselves run in ContactGeneratorJob::ExecuteLineWithTriangleListStream
 //     @0x82921968 (589) over CgsGeometric::IntersectLinePolygonSoup* -- also absent.
 // So these four are mounted for LINK CLOSURE, not for effect: the mount proves every symbol they

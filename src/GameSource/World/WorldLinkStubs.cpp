@@ -2376,6 +2376,21 @@ void CgsSceneManager::SceneManagerModule::ProcessSceneQueries(struct CgsModule::
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
+// ⭐ ADDRESS PINNED 2026-08-10 (triangle-cache wave): the body to reconstruct is
+// **0x828BF150**, 475 instructions. (CgsTriangleCacheManager.h used to cite
+// "0x828C7508" for it; that is mid-instruction inside the 10-insn thunk
+// SceneManagerModule::EndUpdateTriangleCache @0x828C7500, which tail-branches here.)
+// ⚠️ Unlike EndVehicleTractionLineTests, this one opens with a NULL GUARD --
+// `lwz r11, 0x30(this)` (mpUpdateTriangleCacheStream) then `beq` straight to the
+// epilogue -- so it is SAFE to body before its Start partner exists: it would simply
+// do nothing until StartUpdateTriangleCaches @0x828BECF8 allocates the producer.
+// ⚠️ AS-SHIPPED: the ARTIST body never reads its two parameters (r4/r5 are written
+// before any read; the only arg_ stack slot is a spill of `this`). They are kept in
+// the signature because the call site demonstrably materialises them.
+// NOTE the sibling gate SceneManagerModule::StartUpdateTriangleCache (this file,
+// further down) is what drives the cache's slot bookkeeping -- and THAT bookkeeping
+// is now real (CgsTriangleCacheManager_Events.cpp, 2026-08-10). These two gates are
+// the only things between the cache and actually holding triangles.
 void CgsSceneManager::TriangleCacheManager::EndUpdateTriangleCaches(void *,void *)
 {
     static bool s_bLogged = false;

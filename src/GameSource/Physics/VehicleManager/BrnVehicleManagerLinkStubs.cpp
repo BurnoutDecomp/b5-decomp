@@ -172,7 +172,7 @@ namespace Vehicle
         {
             s_bLogged = true;
             if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::EndVehicleTractionLineTests @0x82633CD8 (68; NOT an export hole -- claim RETRACTED 2026-08-10; arity CORRECTED to 1 param 2026-08-10) inert -- blocked with StartVehicleTractionLineTests on the absent TriangleCacheManager [FLAG PC boot gate]\n";
+                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::EndVehicleTractionLineTests @0x82633CD8 (68; NOT an export hole -- claim RETRACTED 2026-08-10; arity CORRECTED to 1 param 2026-08-10) inert -- blocked with StartVehicleTractionLineTests on the triangle-cache FILL half (StartUpdateTriangleCaches 278 + EndUpdateTriangleCaches 475, both WorldLinkStubs gates) and on GetTractionLine @0x825D85C0 (174, export hole); the cache manager itself is NOT absent -- claim CORRECTED 2026-08-10 [FLAG PC boot gate]\n";
         }
     }
 
