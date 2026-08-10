@@ -61,14 +61,31 @@
 //     command whose payload is {4x line start, 4x line end, Triangle4* lpTriangles, s32
 //     miNumTriangles, s32 numLines=4}, taking the triangle list from a per-object TRIANGLE CACHE
 //     -- it asserts "lpCacheInterface != NULL" / "mpTriangleCacheManager != NULL" /
-//     "mpaTriangleCache != NULL" and then dereferences it. CgsSceneManager::TriangleCacheManager
-//     is ABSENT here: Prepare 88 / ProcessAddToCacheEvents 222 / ProcessRemoveFromCacheEvents 346 /
-//     ProcessUpdateCachedPositionEvents 279 / StartUpdateTriangleCaches 278 /
-//     EndUpdateTriangleCaches 475, plus VehicleManager::UpdateTriangleCache 240 and the
-//     PolygonSoupTesterJob fill path (FillTriangleCache 219, ExecuteFillTriangleCache 170,
-//     ExecuteFillTriangleCacheStream 145).
-//   * SimpleVehiclePhysics::GetTractionLine @0x825D85C0 -- another export hole (identity recovered
-//     from DoPlayerTractionLineTestsPostSimulation's xrefs_from), also absent.
+//     "mpaTriangleCache != NULL" and then dereferences it.
+//     ⚠️ CORRECTED 2026-08-10 (triangle-cache wave): the previous text here said
+//     "CgsSceneManager::TriangleCacheManager is ABSENT" and listed all six methods as missing.
+//     That was WRONG IN BOTH DIRECTIONS and re-measured against the name index over all 30,084
+//     X360 exports. The manager's TU has been mounted since before this note was written, and
+//     the whole READ side -- the API AddRaceCarTractionLineTests actually calls -- is bodied:
+//         Prepare 88 [LANDED, and REACHED via SceneManagerModule::Prepare's CACHE_MANAGER stage]
+//         GetTrianglesForCachedObject 32 [LANDED] · TriangleCacheInterface::GetCache 27 [LANDED]
+//         GetNumCachedTriangleBatches 31 [LANDED] · Append [LANDED, inlined]
+//     and as of this wave the SLOT BOOKKEEPING is bodied too (CgsTriangleCacheManager_Events.cpp):
+//         ProcessAddToCacheEvents 222 · ProcessRemoveFromCacheEvents 346 ·
+//         ProcessUpdateCachedPositionEvents 279 · CacheSlot::UpdateCachedObject 54
+//     What is ACTUALLY missing is the FILL half -- the part that puts triangles in the cache:
+//         StartUpdateTriangleCaches 278 · EndUpdateTriangleCaches **0x828BF150** 475
+//         (both still WorldLinkStubs gates, and both REACHED EVERY FRAME by WorldModule::Update
+//          through SceneManagerModule::Start/EndUpdateTriangleCache -- so they are inert stubs on
+//          a live path, not unreachable code), plus SceneManagerModule::StartUpdateTriangleCache
+//         73, VehicleManager::UpdateTriangleCache 240 / PrepareTriangleCache 37, and the
+//         PolygonSoupTesterJob fill path (FillTriangleCache 219, ExecuteFillTriangleCache 170,
+//         ExecuteFillTriangleCacheStream 145).
+//   * SimpleVehiclePhysics::GetTractionLine @0x825D85C0 -- a GENUINE export hole, re-verified this
+//     wave the way the rule demands rather than repeated: the export dir goes
+//     GetIndexOfOtherHalf @0x825D8490 (76 insns, so it ENDS exactly at 0x825D85C0) -> the next
+//     export at 0x825D8878, and a name-index sweep over all 30,084 exports returns no
+//     GetTractionLine at all. Span 0x825D85C0..0x825D8874 == **174 instructions**, image-only.
 //   * THE TEST ITSELF is a job: RunTractionLineTestJobs -> BaseCollisionGenerator::RunLineWith-
 //     TriangleListStream @0x82810E80 (90; export hole, address proved by decoding the bl word at
 //     0x825B5248) -> ContactGeneratorJob::ExecuteLineWithTriangleListStream @0x82921968 (589) over

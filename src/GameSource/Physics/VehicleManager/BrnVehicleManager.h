@@ -642,12 +642,25 @@ namespace Vehicle
         // (AddRaceCarTractionLineTests @0x825E9640, PhysicalTrafficManager::AddTrafficTraction-
         // LineTests @0x8261D580) read the triangles they test against out of a per-object TRIANGLE
         // CACHE -- they assert "lpCacheInterface != NULL" / "mpTriangleCacheManager != NULL" /
-        // "mpaTriangleCache != NULL" and then dereference it. CgsSceneManager::TriangleCacheManager
-        // is NOT in this tree (~1,688 console insns across Prepare/ProcessAddToCacheEvents/
-        // ProcessRemoveFromCacheEvents/ProcessUpdateCachedPositionEvents/StartUpdateTriangleCaches/
-        // EndUpdateTriangleCaches), nor is SimpleVehiclePhysics::GetTractionLine @0x825D85C0
-        // (another export hole, identity recovered from DoPlayerTractionLineTestsPostSimulation's
-        // xrefs). Landing this without them is a null dereference, not a partial.
+        // "mpaTriangleCache != NULL" and then dereference it.
+        // ⚠️ CORRECTED 2026-08-10 (triangle-cache wave): the previous text claimed
+        // "CgsSceneManager::TriangleCacheManager is NOT in this tree (~1,688 console insns
+        // across [all six methods])". It IS in the tree and its TU has been mounted throughout;
+        // the whole READ side these two callers use (Prepare 88 / GetTrianglesForCachedObject 32 /
+        // TriangleCacheInterface::GetCache 27 / GetNumCachedTriangleBatches 31) was already
+        // bodied, and the slot bookkeeping (ProcessAddToCacheEvents 222 /
+        // ProcessRemoveFromCacheEvents 346 / ProcessUpdateCachedPositionEvents 279 /
+        // CacheSlot::UpdateCachedObject 54) landed this wave.
+        // The real blocker is narrower and is the FILL half: StartUpdateTriangleCaches 278 +
+        // EndUpdateTriangleCaches 475 (@0x828BF150) + SceneManagerModule::StartUpdateTriangleCache
+        // 73 -- all still WorldLinkStubs gates -- plus VehicleManager::UpdateTriangleCache 240 /
+        // PrepareTriangleCache 37 (which is what would register a CAR with the cache at all) and
+        // the PolygonSoupTesterJob fill path. Until those run, the cache is allocated but holds
+        // ZERO batches, so this would read a valid pointer and get an empty triangle list --
+        // a [[silent-drop-stubs]] result, not a crash. Still not landable.
+        // SimpleVehiclePhysics::GetTractionLine @0x825D85C0 remains genuinely absent: re-verified
+        // as a true export hole (dir gap 0x825D8490+76insns -> 0x825D8878; no name-index hit in
+        // 30,084 exports), **174 instructions**, image-only.
         void StartVehicleTractionLineTests(CgsModule::IOBufferStack* lpInputBufferStack,
                                            const VehicleInputInterface* lpInputInterface,
                                            Deformation::DeformationManager* lpDeformationManager,
