@@ -12,14 +12,17 @@
 // Class shape from the DecFIGS DWARF (CgsPolygonSoupListSpatialMap.h members).
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle (members accessed)
+// ⭐ 2026-08-10 (spatial-partition wave): the two node types are now COMPLETE (they were
+// forward-declared while nothing could build them). BuildSpacialPartition carves both, so
+// it needs their real 48-byte layouts -- and completing them here is what lets
+// GetPolygonSoup's hard-coded 0x30 element step be static_assert-gated instead of trusted.
+#include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupSpacialNode.h"
 
 namespace CgsMemory { class LinearMalloc; }   // BuildSpacialPartition allocator (by pointer)
 
 namespace CgsGeometric
 {
-    struct PolygonSoupList;         // forward-decl (GetPolySoupList return type; defined in CgsPolygonSoupList.cpp)
-    struct PolygonSoupSpacialNode;  // forward-decl (pointer member only; own TU, embeds AxisAlignedBox)
-    struct PolygonSoupLeafNode;     // forward-decl (pointer member only; own TU, embeds AxisAlignedBox)
+    struct PolygonSoupList;         // forward-decl (GetPolySoupList return type; CgsPolygonSoupList.h)
 
     struct PolygonSoupListSpatialMap
     {
@@ -54,10 +57,22 @@ namespace CgsGeometric
         // TriangleCollisionManager::ProcessAddPolySoupListEvents to assert its own count matches.
         s32 GetNumPolySoupLists() const { return miNumSoupLists; }
 
-        // (Re)build the multi-level spatial partition over the active soup lists, carving node
-        // storage from lpAllocator (liListsPerNode cap, liItemBudget item budget). Declaration-only
-        // here; body lives in the spatial-partition build TU.
-        void BuildSpacialPartition(CgsMemory::LinearMalloc* lpAllocator, s32 liListsPerNode, s32 liItemBudget);
+        // BuildSpacialPartition @0x82841740 — (re)build the multi-level spatial partition over
+        // the active soup lists, carving all node/index/query storage from lpAllocator.
+        // Body in CgsPolygonSoupListSpatialMap_Build.cpp.
+        //
+        // ⚠️ PARAMETER NAMES CORRECTED 2026-08-10 (spatial-partition wave). They previously read
+        // `liListsPerNode` / `liItemBudget` and were commented as a per-node list cap and an item
+        // budget. That was a fabricated reading of the call site's literal `(…, 8, 2048)`. The PS3
+        // DWARF names them, and the body agrees with DWARF on both counts:
+        //   ._ZN12CgsGeometric25PolygonSoupListSpatialMap21BuildSpacialPartition
+        //     EPN9CgsMemory12LinearMallocEii   @0xB605EC
+        //   void BuildSpacialPartition(LinearMalloc* lpAllocator, int32_t liNumLevels,
+        //                              int32_t liQueryBufferSize)
+        // liNumLevels is asserted 1..8 by the body's own "Num levels must be between 1 and 8"
+        // (i.e. it is KI_MAX_LEVELS, hence the 8), and liQueryBufferSize is stored verbatim into
+        // miQueryBufferSize after sizing both mapQueryBuffers (hence the 2048).
+        void BuildSpacialPartition(CgsMemory::LinearMalloc* lpAllocator, s32 liNumLevels, s32 liQueryBufferSize);
 
         // GetNumLeafNodes @0x82917018 — return the leaf-node count (result[19] / +0x4C).
         s32 GetNumLeafNodes() const;

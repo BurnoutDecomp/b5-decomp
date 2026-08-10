@@ -26,5 +26,14 @@ namespace SceneManagerIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return &mInSceneUpdateInterface;
     }
+
+    // X360 0x828AF1C8: the CONST twin -- READ-lock (bit 4) handle to the same aggregate.
+    // Same `return this + 16`, different tripwire; see the header for why the pair exists and
+    // which caller takes which. StartUpdateTriangleCache @0x828C73D8 is the read-lock caller.
+    const InSceneUpdateInterface* InputBuffer_Update::GetInSceneUpdateInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mInSceneUpdateInterface;
+    }
 }
 }
