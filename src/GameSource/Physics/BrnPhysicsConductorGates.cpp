@@ -23,6 +23,44 @@
 //     non-catchup path. Deferral list = the L1/L2 web banked in BrnVehicleManager.h's banner.
 //   * deformation Update/post/sensors/verify -- no deformation this wave.
 //   * CheckState -- pure validation sweep; skipping it validates nothing (170 insns).
+//
+// ⭐⭐ THE TRACTION-LINE CHAIN, RESOLVED BY NAME 2026-08-10 (create-path wave) -- READ THIS
+// BEFORE PLANNING THE CREATE PATH. The line above about contact generation ("land the generation
+// family BEFORE the create path, or the first body added will drop through the world") is right
+// about the ORDER and wrong about WHICH family. A Burnout car does not rest on contacts: contacts
+// are the body-shell/crash path. The wheels rest on TRACTION LINE TESTS. The chain that ends in
+// a wheel knowing it is on the ground is, per BrnSimpleVehiclePhysics.cpp:336 and the asm:
+//     StartVehicleTractionLineTests -> {alloc, add tests, run jobs}
+//       -> EndVehicleTractionLineTests -> ReadRaceCarTractionLineTestResults
+//       -> RaceCarPhysics::AddTractionPoint -> SimpleVehiclePhysics::AddTractionPoint
+//       -> Wheel::SetRoadContact   (which is what sets mRoadContact.mbIsOnGround)
+// and only then does the landed UpdateSuspensionSprings have anything to push against.
+//
+// All thirteen members are in the export set (a name index over all 30,084 JSONs, 2026-08-10 --
+// two of these were previously written off as holes, see BrnVehicleManagerLinkStubs.cpp):
+//     0x82629CE0   78  VehicleManager::StartVehicleTractionLineTests            [gated below]
+//     0x825B5098   52  VehicleManager::DoVehicleTractionLineAllocations
+//     0x825E9640  313  VehicleManager::AddRaceCarTractionLineTests
+//     0x8261D580  418  PhysicalTrafficManager::AddTrafficTractionLineTests
+//     0x825E9B28  171  VehicleManager::AddPlayerStuckInCollisionLineTests
+//     0x825E9DD8   87  VehicleManager::UpdatePlayerStuckInCollisionTest
+//     0x825B5168   64  VehicleManager::RunTractionLineTestJobs
+//     0x82633CD8   68  VehicleManager::EndVehicleTractionLineTests   [link stub, NOT a hole]
+//     0x82618058  231  VehicleManager::ReadRaceCarTractionLineTestResults
+//     0x8262D2B8  291  PhysicalTrafficManager::ReadTrafficTractionLineTestResults
+//     0x825C3898  118  VehicleManager::ReadPlayerStuckTractionLineTestResults
+//     0x825B5268   37  VehicleManager::DoVehicleTractionLineDecallocations
+//     0x826185A0  548  VehicleManager::DoPlayerTractionLineTestsPostSimulation
+// ⚠️ StartVehicleTractionLineTests calls its six callees UNCONDITIONALLY (pseudocode read, not
+// inferred), so there is no cheap partial: bodying it alone would trade one gate for six. Treat
+// the chain as one wave. Its two out-of-family dependencies are EA::Jobs (WaitOn is already
+// mounted) and CgsMemory::DataStreamCommandPoster/SimpleDataStreamProducer.
+//
+// ⭐ ReadUpdatedBodies is NO LONGER in this file: it is real (BrnVehicleManager_ReadUpdatedBodies
+// .cpp) and it is the gravity + integration step, not a read-back. Note what that means for
+// sequencing -- with it landed and the traction chain still gated, a body in the sim would
+// accelerate downward with nothing to stop it. THE GROUND IS THE TRACTION CHAIN; land it before
+// the create path.
 //   * ReadUpdatedBodies -- ⭐ DELETED 2026-08-10, it is real now (see
 //     BrnVehicleManager_ReadUpdatedBodies.cpp). ⛔ AND THE LINE THAT WAS HERE WAS WRONG: it
 //     called it "THE transform read-back". It reads no transform back from anywhere. It is the
