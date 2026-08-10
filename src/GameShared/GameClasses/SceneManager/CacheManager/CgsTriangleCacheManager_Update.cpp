@@ -52,18 +52,28 @@
 //        tree" -- Prepare and ProcessAddPolySoupListEvents were in fact FULLY RECONSTRUCTED the
 //        whole time and merely UNMOUNTED; only BuildSpacialPartition was genuinely missing.
 //
-//  * ⛔ WHAT STILL STARVES IT, measured not guessed: the partition is only built when an
-//    InEventAddPolySoupList arrives, whose one producer chain
-//    (WorldEntityModule::AddCollisionZoneToSceneManager @0x822D8130 <- PrepareWorldCollision
-//    @0x823068F8, both already bodied) is never entered, because the scripted boot spine defers
-//    the stage that starts it -- BrnGameMainFlowStates.cpp:532 logs
-//    `ScriptedLoad: stage 7 (LoadWorldCollision [deferred])` and jumps to stage 8. Remaining:
-//    LoadingScriptedState::LoadWorldCollision @0x823E73E0 (55) + WorldModule::
-//    PrepareWorldCollision @0x827C9478 (152, an IO-buffer + streaming round trip).
-//    ⭐ Until then this function's OWN first act after its two asserts takes the same exit the
-//    console would: `if (lpPolySoupListSpacialMap->mpLeafNodes == NULL) return;` (0x828BED68
-//    `lwz r11, 0x48(r29)` / `beq` straight to the epilogue) -- a fact about the world DATA not
-//    being loaded, not about this reconstruction.
+//  * ⭐⭐ THE PARTITION IS NOW BUILT. SUPERSEDED 2026-08-10 (world-collision wave): the
+//    paragraph that used to sit here said the poly-soup registration was starved because the
+//    scripted boot spine deferred stage 7. Stage 7 is real now
+//    (LoadingScriptedState::LoadWorldCollision @0x823E73E0 -> WorldModule::PrepareWorldCollision
+//    @0x827C9478 -> WorldEntityModule::PrepareWorldCollision/PrepareZoneCollision ->
+//    AddCollisionZoneToSceneManager), WORLDCOL.BIN streams, all 396 "TRK_CLIL<n>" zone lists are
+//    acquired 20 per frame, and the last batch's rebuild flag reaches
+//    TriangleCollisionManager::ProcessAddPolySoupListEvents. RUNTIME-WITNESSED:
+//        Allocated 23645 leaf nodes, Used: 2183520, Free: 2104992
+//        Spacial map complete, Used: 2840336, Free: 1448176
+//        PROBE StartUpdateTriangleCaches: leafNodes=1 numLeafNodes=23645 usedSlots=0 slots=1
+//    (23,645 is exactly the shipped soup count the world support transcoder asserts over.)
+//    So the `GetLeafNodes() == NULL` early-out below is NO LONGER TAKEN, and the fill really
+//    opens each frame.
+//
+//  * ⛔ WHAT STILL STARVES THE FILL, measured not guessed: `usedSlots` is 0 because NOTHING
+//    REGISTERS A CACHED OBJECT. That is the PRODUCER side, not this leg:
+//    PhysicsModule::UpdateCachedPositions @0x8259C370 (34) is still a WorldLinkStubs gate, and
+//    behind it VehicleManager::PrepareTriangleCache @0x82615BA0 (37 -- the 8 race-car slots at
+//    radius 5.0f) plus the six per-manager UpdateTriangleCache bodies, ~1,139 insns across 9.
+//    And even with slots used, the fill WORKER (PolygonSoupTesterJob + RunQuery, ~1,183 across
+//    11) is still an inert conductor gate. Both are named, neither is here.
 //
 // -------------------------------------------------------------------------------------------------
 // METHOD (standing discipline: read the ASM, not the pseudocode). Both Hex-Rays listings are

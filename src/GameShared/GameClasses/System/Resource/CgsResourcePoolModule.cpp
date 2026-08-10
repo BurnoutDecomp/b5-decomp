@@ -5,6 +5,9 @@
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"  // CreateResourceRequest/Response + MemoryIO buffers (async dispatch)
 #include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h"  // PoolIO::OutputBuffer (request target)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"  // AcquireResourceRequest/Response
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"    // ResourceHandle (acquire-list output array)
+#include "GameShared/GameClasses/System/Resource/CgsResourceIdList.h"    // ResourceIdList (acquire-list payload)
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"       // ResourcePtr<ResourceIdList>
 
 // CgsResource::PoolModule - see the header. This pass reconstructs the rw-allocator-
 // INDEPENDENT spine (GetPoolIndex / FindResourceType / Prepare / Release / Destruct).
@@ -272,6 +275,11 @@ namespace CgsResource
             {
                 DoAcquireResourceRequest(reinterpret_cast<const Events::AcquireResourceRequest*>(lpEvent), lpOut);
             }
+            else if (liId == 5)   // AcquireResourceList (the per-zone collision protocol)
+            {
+                DoAcquireResourceListRequest(
+                    reinterpret_cast<const Events::AcquireResourceListRequest*>(lpEvent), lpOut);
+            }
             const CgsModule::Event* lpNext = 0;
             liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;
@@ -327,6 +335,80 @@ namespace CgsResource
         }
 
         lpOutput->GetPoolOutputQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResponse), 6,
+                                                 static_cast<s32>(sizeof(lResponse)));
+    }
+
+    // @ 0x828FCE40 - acquire EVERY resource named by a resource-ID-LIST resource into the caller's handle
+    // array, then echo the request back with the count it filled. This is the protocol the world's
+    // per-zone collision uses: WorldEntityModule::PrepareZoneCollision @0x82302C38 posts one
+    // AcquireResourceListRequest per zone naming "TRK_CLIL<n>", and the reply's handles are what
+    // AddCollisionZoneToSceneManager turns into InEventAddPolySoupList events.
+    //
+    // Faithful to the X360 spine, read from the ASM (the pseudocode fuses the 64-bit id across the
+    // register pair and mis-attributes it as a status-mask argument -- both FindResource calls in fact
+    // take r5=0 / r6=2 / r7=0, r6 being loaded ONCE at 0x828FCE98 and reused by the loop):
+    //     listEntry = maPools[GetPoolIndex(req->miPoolId)].FindResource(req->mListResourceId, 0, 2, 0)
+    //     ResourcePtr<ResourceIdList> ptr(listEntry's handle)
+    //     count = ptr->GetNumIds();  assert(count <= req->miMaxHandles)
+    //     for i: e = pool.FindResource(ptr->GetId(i), 0, 2, 0); req->mpHandles[i] = e's handle
+    //     reply {req echoed, miNumHandles = count} on the pool output queue, tag 7, 32 bytes
+    // The X360 re-runs GetPoolIndex inside the loop (0x828FD0A0); kept, since the pool table is
+    // mutable across the call in principle and the cost is a 128-entry scan the console also pays.
+    void PoolModule::DoAcquireResourceListRequest(const Events::AcquireResourceListRequest* lpRequest,
+                                                  PoolIO::OutputBuffer* lpOutput)
+    {
+        CGS_ASSERT(lpOutput != 0, "lpOutputBuffer");   // X360 CgsPoolModule.cpp:1371
+        if (lpOutput == 0)
+            return;
+
+        // -- resolve the LIST resource itself -------------------------------------------------
+        const s32 liListPoolIndex = GetPoolIndex(lpRequest->miPoolId);
+        Entry* lpListEntry = (liListPoolIndex >= 0)
+            ? maPools[liListPoolIndex].FindResource(lpRequest->mListResourceId, false, 2, 0)
+            : 0;
+        // X360 line 1377, message "Failed to find list resouce " << id [sic -- the console's own
+        // spelling; the streamed id is dropped from the stringized condition per house convention].
+        CGS_ASSERT(lpListEntry != 0, "Failed to find list resouce ");
+        if (lpListEntry == 0)
+            return;
+
+        ResourceHandle lListHandle;
+        lListHandle.mpResourceMemory = &lpListEntry->mResource.m_baseResources[E_MEMTYPE_MAINMEMORY];
+        lListHandle.mpSourceEntry    = lpListEntry;
+        ResourcePtr<ResourceIdList> lList(lListHandle);
+
+        ResourceHandle* const lpaHandles = lpRequest->mpHandles;
+        const u32 luNumIds = lList->GetNumIds();
+        CGS_ASSERT(static_cast<s32>(luNumIds) <= lpRequest->miMaxHandles,
+                   "Too many handles in list\n");      // X360 line 1388
+
+        // -- resolve every listed resource into the caller's array ----------------------------
+        for (u32 lu = 0; lu < luNumIds; ++lu)
+        {
+            const ID lId = lList->GetId(lu);           // bounds assert CgsResourceIdList.h:145
+
+            const s32 liPoolIndex = GetPoolIndex(lpRequest->miPoolId);
+            Entry* lpEntry = (liPoolIndex >= 0)
+                ? maPools[liPoolIndex].FindResource(lId, false, 2, 0)
+                : 0;
+            // X360 line 1395, "Failed to find resouce <16 hex digits> from list\n" [sic].
+            CGS_ASSERT(lpEntry != 0, "Failed to find resouce  from list\n");
+
+            if (lpaHandles != 0 && lpEntry != 0)
+            {
+                lpaHandles[lu].mpResourceMemory = &lpEntry->mResource.m_baseResources[E_MEMTYPE_MAINMEMORY];
+                lpaHandles[lu].mpSourceEntry    = lpEntry;
+            }
+        }
+
+        // -- echo the request back, with the count it filled ----------------------------------
+        Events::AcquireResourceListResponse lResponse;
+        static_cast<Events::PoolEvent&>(lResponse) = static_cast<const Events::PoolEvent&>(*lpRequest);
+        lResponse.mListResourceId = lpRequest->mListResourceId;
+        lResponse.mpHandles       = lpaHandles;
+        lResponse.miNumHandles    = static_cast<s32>(luNumIds);
+
+        lpOutput->GetPoolOutputQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResponse), 7,
                                                  static_cast<s32>(sizeof(lResponse)));
     }
 
