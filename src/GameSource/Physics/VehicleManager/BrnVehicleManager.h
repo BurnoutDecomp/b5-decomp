@@ -567,10 +567,23 @@ namespace Vehicle
         void ProcessWheelContacts(f32 lfTimeStep,
                                   BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContactInterface);
 
-        // @0x82619A10 (DWARF :366). Read back this frame's simulation results: first the
-        // fallback integration for live cars NOT owned by the sim this frame (gravity into
-        // the velocity y-lane, then ExternalPhysicsBody::IntegrateTransform), then drain the
-        // sim's OutUpdateRigidBody queue into the owning cars.
+        // @0x82619A10 (DWARF :366). ⭐ BODIED 2026-08-10 (create-path wave) in
+        // BrnVehicleManager_ReadUpdatedBodies.cpp -- the conductor gate is deleted.
+        //
+        // ⛔ THE DESCRIPTION THAT USED TO SIT HERE WAS WRONG IN BOTH CLAUSES, and it is worth
+        // saying why rather than just replacing it. It read: "first the fallback integration for
+        // live cars NOT owned by the sim this frame ..., then drain the sim's OutUpdateRigidBody
+        // queue into the owning cars." The X360 body does NEITHER. There is no ownership test --
+        // the only per-car guard is ExternallySimulatedBody::mbFrozen -- and the queue is never
+        // dereferenced here at all: it arrives in r4, is stashed at var_1C and is forwarded
+        // untouched to PhysicalTrafficManager::ReadUpdatedBodies, whose only use of it is a dev
+        // duplicate-id assert. Nothing in this call chain reads a transform back from rw::physics.
+        //
+        // What it IS: the per-frame **gravity + integration step** for every live race car --
+        //     mLinearVelocity.y -= KF_GRAVITY * dt ;  ExternalPhysicsBody::IntegrateTransform(dt)
+        // -- then the same for traffic. Because a race car is an ExternalPhysicsBody the game
+        // integrates itself, this is the ONLY place gravity enters a car and the only place a
+        // car's pose advances. See the TU banner for the full asm decode.
         void ReadUpdatedBodies(
             const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody, 200>* lpUpdatedBodyQueue,
             VecFloat lvfTimeStep);

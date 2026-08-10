@@ -23,8 +23,12 @@
 //     non-catchup path. Deferral list = the L1/L2 web banked in BrnVehicleManager.h's banner.
 //   * deformation Update/post/sensors/verify -- no deformation this wave.
 //   * CheckState -- pure validation sweep; skipping it validates nothing (170 insns).
-//   * ReadUpdatedBodies -- THE transform read-back. Gated => even a stepping body would not
-//     move the game-side car; this is the first gate the witness wave must delete (198 insns).
+//   * ReadUpdatedBodies -- ⭐ DELETED 2026-08-10, it is real now (see
+//     BrnVehicleManager_ReadUpdatedBodies.cpp). ⛔ AND THE LINE THAT WAS HERE WAS WRONG: it
+//     called it "THE transform read-back". It reads no transform back from anywhere. It is the
+//     per-frame gravity + ExternalPhysicsBody::IntegrateTransform step -- which makes the
+//     conclusion ("even a stepping body would not move the game-side car") accidentally right
+//     for the wrong reason: gated, a car had no gravity and no integration at all.
 // =================================================================================================
 
 #include "GameSource/Physics/BrnPhysicsModule.h"
@@ -138,12 +142,11 @@ namespace Vehicle
         BRN_CONDUCTOR_GATE("VehicleManager::ClearSnappedNetworkCarContacts @0x8261A8D0 (217)");
     }
 
-    void VehicleManager::ReadUpdatedBodies(
-        const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody, 200>*,
-        VecFloat)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::ReadUpdatedBodies @0x82619A10 (198) -- THE READ-BACK");
-    }
+    // ⭐⭐ GATE DELETED 2026-08-10 (create-path wave): VehicleManager::ReadUpdatedBodies
+    // @0x82619A10 is REAL, in BrnVehicleManager_ReadUpdatedBodies.cpp, together with the
+    // PhysicalTrafficManager::ReadUpdatedBodies @0x825EF608 it tail-calls. It is the per-frame
+    // gravity + IntegrateTransform step, not a read-back -- see that TU's banner. If a gate for
+    // it ever reappears here the link will say so (LNK2005).
 
     void VehicleManager::GetUpdatedVehicleBodies(
         CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InUpdateExternalBody, 60>*)
