@@ -19,6 +19,9 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                            // gpDebugPrint (the two named gates)
 #include "GameShared/GameClasses/Containers/CgsReadOnlyObjectCache.h"                 // ReadOnlyObjectCache<>
 #include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"               // TestAxisAlignedBoxAxisAlignedBox
+#include "GameShared/GameClasses/Geometric/Intersection/CgsPolygonSoupTests.h"        // ExtractTriangle4ListIntersectingSphere
+#include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoup.h"   // PolygonSoup
+#include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"                 // Triangle4
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"            // AxisAlignedBox
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap.h"
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupSpacialNode.h"
@@ -228,30 +231,22 @@ u16 PolygonSoupTesterJob::FillTriangleCache(
 
         if (CgsGeometric::TestAxisAlignedBoxAxisAlignedBox(lpLeaf->mBox, lQueryBox))
         {
-            // ⛔⛔ THE ONE REMAINING GATE OF THIS LEG, AND IT IS NAMED, NOT SILENT.
-            // CgsGeometric::ExtractTriangle4ListIntersectingSphere @0x82844C80 (602) is
-            // the function that actually produces the triangles, and it is 1,475
-            // instructions of dense hand-vectorised VMX once its exclusive callees are
-            // counted (LoadEdgeCosines 534 / TestSphereTriangle4SOA 144 /
-            // UnpackPolygonSoupVertices 40 / PolySoupCopyTriangleBufferIntoTriangle4 97 /
-            // GetPolygon 29 / GetVertex 29). NOT reconstructed this wave.
-            //
-            // Everything AROUND it is real: the sphere reaches here, the box query runs
-            // against the live Paradise City partition, and this leaf passed the AABB
-            // test. What is missing is only the extraction, and while it is missing the
-            // batch count folded back by EndUpdateTriangleCaches is a HONEST ZERO --
-            // reported as such rather than dressed up.
-            do { static bool s_bLogged = false;
-            if (!s_bLogged) { s_bLogged = true;
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint
-                        << "conductor gate: CgsGeometric::ExtractTriangle4ListIntersectingSphere "
-                           "@0x82844C80 (602) not reconstructed -- the triangle-cache fill reaches "
-                           "real leaf nodes and stops here; every slot folds back 0 batches "
-                           "[FLAG PC boot gate]\n"; } } while (0);
-
-            (void)lu16MaxBatches;
-            (void)lpaDestinationTriangles;
+            // ⭐⭐⭐ 2026-08-11: THE GATE IS GONE AND THE EXTRACTOR IS REAL.
+            //   0x829162A0  subf r6, r10, r11       ; liBufferSize = max - written
+            //   0x829162A8  mulli r11, r11, 0xE0    ; &dest[written]
+            //   0x829162BC  bl ExtractTriangle4ListIntersectingSphere
+            //   0x829162C4  add r11, r11, r3        ; written += return
+            //   0x829162D4  add r11, r11, var_3C    ; overrun += out-param
+            s32 liLeafOverrun = 0;
+            lu16BatchesWritten = static_cast<u16>(
+                lu16BatchesWritten
+                + CgsGeometric::ExtractTriangle4ListIntersectingSphere(
+                      *lpLeaf->mpPolygonSoup,
+                      lQuerySphere,
+                      lpaDestinationTriangles + lu16BatchesWritten,
+                      static_cast<s32>(lu16MaxBatches) - static_cast<s32>(lu16BatchesWritten),
+                      &liLeafOverrun));
+            liTotalOverflow += liLeafOverrun;
         }
 
         lpLeafCache->Release(lpLeaf);
