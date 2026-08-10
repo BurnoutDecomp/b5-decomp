@@ -92,6 +92,17 @@
 //    The console's setter is VehicleManager::ProcessCreateEvents @0x82616770 (1,067), absent.
 //    So the true ordering of the remaining work is: CREATE a car -> position it -> fill worker
 //    (PolygonSoupTesterJob + RunQuery, ~1,183 across 11, still an inert conductor gate).
+//    ⭐ UPDATED 2026-08-10 (create-path wave). ProcessCreateEvents is now DECLARED and REACHABLE --
+//    its caller chain is real (PhysicsModule::PostSceneUpdate @0x825ABC10 ->
+//    VehicleManager::ProcessVehicleMaintenanceEvents @0x8264AB38), and it is a named one-shot gate
+//    in BrnVehicleManager_MaintenanceEvents.cpp instead of a missing symbol. Two measured facts
+//    from that wave change what "CREATE a car" costs, and both live in that TU's banner:
+//      1. its INPUT queue is empty -- the create events die in the RaceCarEntityModule
+//         PrePhysics output because WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics
+//         @0x827AAEC0 (271) is still a WorldLinkStubs gate. That bridge, not the drain, is next.
+//      2. the bit itself is the fall: mUsedRaceCars also switches on the MOUNTED
+//         BrnVehicleManager_ReadUpdatedBodies.cpp gravity+integrate loop, so the traction chain
+//         must land before the create body, not after it.
 //
 // -------------------------------------------------------------------------------------------------
 // METHOD (standing discipline: read the ASM, not the pseudocode). Both Hex-Rays listings are

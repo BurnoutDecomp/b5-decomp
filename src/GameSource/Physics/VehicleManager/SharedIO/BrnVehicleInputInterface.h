@@ -110,6 +110,16 @@ namespace Vehicle
         const InLineTestResultQueue* GetLineTestResults() const { return &mLineTestResultsQueue; }
         const ImpactEventQueue*      GetImpactEventQueue() const { return &mImpactEventQueue; }
 
+        // ⭐ ADDED 2026-08-10 (create-path wave). Same ADDITIVE header-only inline as the two
+        // above: the X360 reaches this queue as a raw `this + 128032` -- the pair
+        // `addis r3,r4,2 ; addi r3,r3,-0xBE0` at the head of
+        // VehicleManager::ProcessCreateEvents @0x82616770, which then reads the length at
+        // +128040 (`lwz r11, 8(r3)`, i.e. BaseEventQueue::miLength) to bound its drain loop.
+        // 128032 == 16 (InLineTestResultQueue header) + 2000*64 (its payload) + 16
+        // (mTriangleCacheInterface) == the seat of mCreateRaceCarEventQueue, so the accessor is
+        // the same member the console addresses, reached by name instead of by that offset.
+        const CreateRaceCarEventQueue* GetCreateRaceCarEventQueue() const { return &mCreateRaceCarEventQueue; }
+
     private:
         InLineTestResultQueue                 mLineTestResultsQueue;                     // :261
         InTriangleCacheInterface              mTriangleCacheInterface;                   // :262

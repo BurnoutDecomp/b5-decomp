@@ -62,6 +62,13 @@ namespace BrnPhysics
                          | (lrId.muId & 0x00000000FFFFFFFFull);
             return lResult;
         }
+
+        // ⚠ [FLAG PC bring-up] PostSceneUpdate's player-index EDGE. NOT console state -- see the
+        // PC-BUILD GUARD #1 banner at its use site. A file-scope static rather than a member
+        // because PhysicsModule's layout is offset-pinned and this state is not the console's
+        // (the same device, and the same reason, as
+        // RaceCarEntityModule::PublishNewVehicleToDirectorWithoutPhysicsBringUp's edge flag).
+        EActiveRaceCarIndex gs_ePublishedPlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     }
 
     // ==========================================================================================
@@ -809,5 +816,274 @@ namespace BrnPhysics
         lpOutputBufferStack->DestroyIOBuffer(&lpVehManagerBuffer);
         lpOutputBufferStack->DestroyIOBuffer(&lpSimOutputBuffer);
         mVehicleManager.CheckState();
+    }
+
+    // =============================================================================================
+    // PostSceneUpdate  @0x825ABC10  (278 insns; own asserts BrnPhysicsModuleUpdateFunctions.cpp
+    // :68..:71). ⭐ LANDED 2026-08-10 (create-path wave) -- the WorldLinkStubs boot gate that stood
+    // at WorldLinkStubs.cpp:3529 since 2026-07-27 is DELETED.
+    //
+    // ⭐⭐ WHY THIS FUNCTION AND NOT THE CREATE PATH. The campaign brief named
+    // VehicleManager::ProcessCreateEvents @0x82616770 as the head of the list. It is the only
+    // writer in the XEX that SETS a bit in mUsedRaceCars, so that is right about the destination --
+    // but `xrefs_to` on it is a ONE-element set (ProcessVehicleMaintenanceEvents), and `xrefs_to`
+    // on THAT is a one-element set: this function, which was a boot gate. The create body had no
+    // caller. Reachability first.
+    //
+    // Two consequences of this function going live are worth stating where the code is:
+    //   1. mVehicleManager.SetPlayerActiveRaceCarIndex STARTS BEING CALLED. Until today the
+    //      physics vehicle manager's mePlayerActiveRaceCarIndex was whatever Construct left it
+    //      (-1) forever, and the mounted UpdateVehiclePhysics indexes maRaceCarDrivers with it
+    //      UNGUARDED (`maRaceCarDrivers[mePlayerActiveRaceCarIndex].meDriverType`). This leg is
+    //      what the console uses to make that index valid.
+    //   2. mSimulationModule.ProcessInput runs here, on a Simulation buffer created and destroyed
+    //      inside this call. Its add-rigid-body queue is EMPTY, because the only thing that fills
+    //      it is BridgeVehicleManagerToSimulation_PostScene below -- deliberately still a gate.
+    //
+    // Console structure, statement for statement (asm 0x825ABC10..0x825AC060):
+    //   StartMonitor(miPhysicsPreSceneUpdatePM)   [+433096, `addis r16,r30,7 ; addi -0x6438`]
+    //   4 null asserts, CheckState
+    //   CreateIOBuffer "Simulation" (input stack) + "VehManager" (output stack)
+    //   LockForWrite(out) / LockForRead(in) / LockForWrite(vehManager)
+    //   ProcessVehicleMaintenanceEvents(<the four interfaces + both stacks + mDeformationInput>)
+    //   LockForWrite(sim)
+    //   HandleGameActionsPostScene
+    //   StartMonitor(miDeformationManagerPM)      [+433132, `addi -0x6414`]
+    //     VerifyPartIndices / DeformationManager::PostSceneUpdate / VerifyPartIndices
+    //   StopMonitor ; UnlockForWrite(vehManager)
+    //   StartMonitor(miPropManagerPM)             [+433172, `addi -0x63EC`]
+    //     PropManager::ProcessInputsPreScene(..., lUpdateSet & 1, sim)
+    //   StopMonitor ; UnlockForWrite(out) ; LockForRead(out) ; LockForRead(vehManager)
+    //   BridgeVehicleManagerToSimulation_PostScene ; UnlockForRead x2 ; UnlockForWrite(sim)
+    //   the player-index / player-model-index arm
+    //   UnlockForRead(in) ; mSimulationModule.ProcessInput(sim) ; DestroyIOBuffer x2
+    //   CheckState ; StopMonitor
+    //
+    // ⭐ Every `this`-relative operand above was resolved to a NAMED member before it was written:
+    // 0x4AA0 -> mVehicleManager, `addis 5/-0x3460` -> mDeformationManager, `addis 6/-0x890` ->
+    // mDeformationInput, `addis 6/+0x3630` -> mPropManager, 0x230 -> mSimulationModule, and the
+    // three perf handles to their names in BrnPhysicsModule.h's 27-handle run. No console byte
+    // offset survives into the code.
+    // =============================================================================================
+    void PhysicsModule::PostSceneUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                                         CgsModule::IOBufferStack* lpOutputBufferStack,
+                                         const PhysicsModuleIO::InputBuffer* lpPhysicsModuleInputBuffer,
+                                         PhysicsModuleIO::OutputBuffer* lpPhysicsModuleOutputBuffer,
+                                         BrnUpdateSet lUpdateSet )
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miPhysicsPreSceneUpdatePM);                     // +433096
+
+        CGS_ASSERT(lpInputBufferStack  != 0, "lpInputBufferStack != NULL");              // :68
+        CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");             // :69
+        CGS_ASSERT(lpPhysicsModuleInputBuffer  != 0, "lpInput != NULL");                 // :70
+        CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, "lpOutput != NULL");                // :71
+
+        mVehicleManager.CheckState();
+
+        // ---- the two per-frame IO buffers ----------------------------------------------------
+        // Same PC-vs-X360 note as Update above: the console stack template runs T::Construct after
+        // the alloc, the host template placement-news only, so Construct is explicit here.
+        CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInputBuffer   = 0;
+        Vehicle::VehicleManagerOutputBuffer*          lpVehManagerBuffer = 0;
+
+        lpInputBufferStack->CreateIOBuffer(&lpSimInputBuffer, "Simulation");             // @0x8259D940
+        lpSimInputBuffer->Construct();
+        lpOutputBufferStack->CreateIOBuffer(&lpVehManagerBuffer, "VehManager");          // @0x8259DAF0
+        lpVehManagerBuffer->Construct();
+
+        lpPhysicsModuleOutputBuffer->LockForWrite();
+        lpPhysicsModuleInputBuffer->LockForRead();
+        lpVehManagerBuffer->LockForWrite();
+
+        // The four interface handles, fetched in the console's own evaluation order (each is a
+        // lock-tripwire call, so the order is behaviour, and C++ leaves argument evaluation order
+        // unspecified -- hence the locals).
+        Vehicle::VehicleOutputInterface* const lpVehicleOutputInterface =
+            lpPhysicsModuleOutputBuffer->GetVehicleOutputInterface();                    // @0x825A0080
+        Vehicle::VehicleManagerOutputInterface* const lpManagerOutputInterface =
+            lpPhysicsModuleOutputBuffer->GetVehicleManagerOutputInterface();             // @0x8259FFD8
+        Vehicle::VehicleOutputRequestInterface* const lpOutputRequestInterface =
+            lpVehManagerBuffer->GetVehicleOutputRequestInterface();                      // @0x825A1058
+        const Vehicle::VehicleInputInterface* const lpVehicleInputInterface =
+            lpPhysicsModuleInputBuffer->GetVehicleInputInterface();                      // @0x8259F8A0
+
+        mVehicleManager.ProcessVehicleMaintenanceEvents(
+            lpInputBufferStack, lpOutputBufferStack,
+            lpVehicleInputInterface, lpOutputRequestInterface,
+            lpManagerOutputInterface, lpVehicleOutputInterface,
+            &mDeformationInput);
+
+        CGS_ASSERT(lpSimInputBuffer != 0, "lpInputBuffer");                              // CgsModuleUtils.h:238
+        lpSimInputBuffer->LockForWrite();
+
+        // Same reinterpret_cast seam the mounted prop read-back in Update already uses: the module
+        // output buffer's mSceneInputInterface is still an opaque 1-byte storage in
+        // BrnPhysicsModuleIO.h, and its real type is what the DWARF calls
+        // PhysicsModuleIO::OutputBuffer::SceneInputInterface. Not a new fork -- the identical cast
+        // sits at BrnPhysicsModuleUpdateFunctions.cpp's PropManager::ReadUpdatedBodies call.
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* const lpSceneInputInterface =
+            reinterpret_cast<CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*>(
+                lpPhysicsModuleOutputBuffer->GetSceneInputInterface());                  // @0x825A0278
+
+        HandleGameActionsPostScene(lpPhysicsModuleInputBuffer->GetGameActionQueue(),      // @0x8259FE88
+                                   lpSimInputBuffer,
+                                   lpSceneInputInterface);
+
+        // ---- deformation post-scene, bracketed by the two real VerifyPartIndices sweeps --------
+        CgsDev::PerfMonCpu::StartMonitor(miDeformationManagerPM);                        // +433132
+        mDeformationManager.VerifyPartIndices();
+        mDeformationManager.PostSceneUpdate(lpSimInputBuffer, &mDeformationInput,
+                                            lpSceneInputInterface);
+        mDeformationManager.VerifyPartIndices();
+        CgsDev::PerfMonCpu::StopMonitor(miDeformationManagerPM);
+
+        lpVehManagerBuffer->UnlockForWrite();
+
+        // ---- props -----------------------------------------------------------------------------
+        CgsDev::PerfMonCpu::StartMonitor(miPropManagerPM);                               // +433172
+        mPropManager.ProcessInputsPreScene(
+            lpPhysicsModuleInputBuffer->GetPropManagerInputInterface(),                  // @0x8259FDE0
+            lpSceneInputInterface,
+            (lUpdateSet & 1) != 0,                                                       // `rlwinm r7, a6, 0, 31, 31`
+            lpSimInputBuffer);
+        CgsDev::PerfMonCpu::StopMonitor(miPropManagerPM);
+
+        lpPhysicsModuleOutputBuffer->UnlockForWrite();
+
+        // ⛔ THE SIM FIREWALL. Gate-bodied on purpose -- see its banner in
+        // BrnPhysicsConductorGates.cpp. The call and its lock bracket are the console's; what is
+        // deferred is the callee, which is the ONLY thing that would move the vehicle manager's
+        // mRequiredRigidBodiesQueue into the simulation.
+        lpPhysicsModuleOutputBuffer->LockForRead();
+        lpVehManagerBuffer->LockForRead();
+        BridgeVehicleManagerToSimulation_PostScene(lpSimInputBuffer, lpVehManagerBuffer);
+        lpVehManagerBuffer->UnlockForRead();
+        lpPhysicsModuleOutputBuffer->UnlockForRead();
+
+        CGS_ASSERT(lpSimInputBuffer != 0, "lpInputBuffer");                              // CgsModuleUtils.h:248
+        lpSimInputBuffer->UnlockForWrite();
+
+        // ---- publish the player's active-race-car slot + deformation model slot -----------------
+        // The console re-fetches the interface three times through the read-locked accessor rather
+        // than caching it; each fetch is a lock tripwire, so the repetition is reproduced.
+        bool lbPlayerCarActive = false;
+        {
+            const PhysicsModuleIO::InputBuffer::RCEntityOutputInterfaceStorage* const lpRCEntity =
+                lpPhysicsModuleInputBuffer->GetRCEntityOutputInterface();                // @0x8259FA98
+            CGS_ASSERT(lpRCEntity->GetPlayerActiveRaceCarIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");    // BrnRaceCarEntityModuleOutputInterface.h:967
+            if (lpRCEntity->GetPlayerActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+            {
+                lbPlayerCarActive = lpRCEntity->IsPlayerCarActive();
+            }
+        }
+
+        // ⚠ TWO DIFFERENT EntityId TYPES LIVE IN THIS TREE and this leg touches both: the packed
+        // CgsSceneManager::EntityId class (which owns the K_INVALID_ENTITY_ID constant == the
+        // console's dword_82F2A07C) and the plain ::EntityId storage word from BrnCommonTypes.h,
+        // which is what both GetPlayerRaceCarEntityId and FindModelIndexByEntityID deal in. The
+        // sentinel is taken from the named constant rather than written as a literal.
+        EntityId lPlayerHandlingEntityId;
+        lPlayerHandlingEntityId.muValue = static_cast<u32>(CgsSceneManager::K_INVALID_ENTITY_ID);
+
+        if (lbPlayerCarActive)
+        {
+            const PhysicsModuleIO::InputBuffer::RCEntityOutputInterfaceStorage* const lpRCEntity =
+                lpPhysicsModuleInputBuffer->GetRCEntityOutputInterface();
+            CGS_ASSERT(lpRCEntity->GetPlayerActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                       "Player car index hasn't been set");                              // ...OutputInterface.h:980
+            gs_ePublishedPlayerActiveRaceCarIndex = lpRCEntity->GetPlayerActiveRaceCarIndex();
+            mVehicleManager.SetPlayerActiveRaceCarIndex(lpRCEntity->GetPlayerActiveRaceCarIndex());
+
+            lPlayerHandlingEntityId =
+                lpPhysicsModuleInputBuffer->GetRCEntityOutputInterface()->GetPlayerRaceCarEntityId();  // @0x8259BB58
+        }
+        else
+        {
+            // The console INLINED SetPlayerActiveRaceCarIndex here with the constant -1, which is
+            // why its own range assert (BrnVehicleManager.h:1667 / the committed body at
+            // BrnVehicleManagerPlayerStats.cpp:251) is emitted at this site -- passing -1 ALWAYS
+            // fails that range test, so the console fires the dialog on every frame this arm runs.
+            //
+            // ⚠⚠ PC-BUILD GUARD #1 (create-path wave 2026-08-10). MEASURED on the first boot with
+            // this function live: 267 dialogs from this one line before the flow even reached the
+            // junkyard handover. The console's flow does not conduct physics in menus at all, so
+            // this arm is transient there; the PC world spine drives WorldModule::Update from BOOT,
+            // ~200 s of it. The store is IDEMPOTENT (-1 over -1), so running it only on the edge is
+            // byte-identical -- what is held is the redundant repeat of a shipped tripwire, not the
+            // behaviour. The edge is a function-local static rather than a member for the same
+            // reason PublishNewVehicleToDirectorWithoutPhysicsBringUp uses one: this state is not
+            // the console's and the surrounding layout is offset-pinned.
+            // DELETE WHEN the PC boot flow stops driving world updates before there is a car.
+            if (gs_ePublishedPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+            {
+                gs_ePublishedPlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+                mVehicleManager.SetPlayerActiveRaceCarIndex(E_ACTIVE_RACE_CAR_INDEX_INVALID);
+            }
+        }
+
+        mDeformationManager.SetPlayerModelIndex(-1);   // `li r11,-1 ; stw r11, 0(&miPlayerModelIndex)` on BOTH arms
+
+        // ⚠⚠ PC-BUILD GUARD #2 (create-path wave 2026-08-10), and this one is a DIRECT CONSEQUENCE
+        // OF THIS WAVE'S DELIBERATE DEFERRAL -- worth stating exactly, because the assert it holds
+        // is a real one that found a real fact.
+        //
+        // The console's own test is `!= K_INVALID_ENTITY_ID`, and it is written that way because on
+        // the console maRaceCarStates[player].mEntityId is either a live car id or that sentinel.
+        // On THIS build it is neither: it is IDENTICALLY ZERO. RCEntityActiveRaceCarOutputInterface
+        // ::SetRaceCarState memcpy's the whole RaceCarState out of ActiveRaceCar::mPhysicsState, and
+        // the only thing that ever fills mPhysicsState here is the bring-up stand-in
+        // SeedPhysicsStateFromCreateEventBringUp, which writes mTransform and nothing else -- the
+        // real producer, RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics @0x822E87B8,
+        // is absent, and behind it VehicleManager::ProcessCreateEvents (this wave's gate).
+        // So a zero sails through the console's sentinel test and FindModelIndexByEntityID asserts
+        // on owner byte 0: MEASURED 663 dialogs in one run, every one after the junkyard handover.
+        // That is the textbook silent-drop-stub signature -- plausible zeros arriving where real
+        // data should -- caught by a shipped tripwire rather than by a wrong picture.
+        // The owner test below is the PC guard; it is NOT a fix, it is the honest consequence of
+        // the deferral, and it is scoped to exactly the ids the console can never produce.
+        // DELETE WHEN ProcessCreateEvents + ReadUpdatedActiveRaceCarDataFromPhysics land.
+        const u32 luHandlingOwner = (lPlayerHandlingEntityId.muValue >> 24) & 0xFFu;
+        const bool lbHandlingIdNamesAVehicle = (luHandlingOwner == 1u) || (luHandlingOwner == 2u);
+
+        if (lPlayerHandlingEntityId.muValue != static_cast<u32>(CgsSceneManager::K_INVALID_ENTITY_ID))
+        {
+            if (lbHandlingIdNamesAVehicle)
+            {
+                mDeformationManager.SetPlayerModelIndex(
+                    mDeformationManager.FindModelIndexByEntityID(lPlayerHandlingEntityId));
+            }
+            else
+            {
+                static bool s_bLoggedZeroHandlingId = false;
+                if (!s_bLoggedZeroHandlingId)
+                {
+                    s_bLoggedZeroHandlingId = true;
+                    if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "PhysicsModule::PostSceneUpdate: player RaceCarState.mEntityId is 0x"
+                            << static_cast<s32>(lPlayerHandlingEntityId.muValue)
+                            << " (owner " << static_cast<s32>(luHandlingOwner)
+                            << ") -- no physics readback fills it yet, so the deformation model "
+                               "lookup is skipped [FLAG PC boot gate]\n";
+                    }
+                }
+            }
+        }
+
+        lpPhysicsModuleInputBuffer->UnlockForRead();
+
+        // `lwz r11, 0x230(r30) ; addi r3, r30, 0x230 ; lwz r11, 0x48(r11) ; bctrl` -- the
+        // simulation module's vtable slot 18. Slots 16/17/18 are Prepare/Update/ProcessInput per
+        // CgsPhysicsSimulationModule.h's slot-by-slot read of off_820CF7D0, so this is
+        // ProcessInput: the drain-only entry, no solver step.
+        mSimulationModule.ProcessInput(lpSimInputBuffer);
+
+        lpInputBufferStack->DestroyIOBuffer(&lpSimInputBuffer);
+        lpOutputBufferStack->DestroyIOBuffer(&lpVehManagerBuffer);
+
+        mVehicleManager.CheckState();
+        CgsDev::PerfMonCpu::StopMonitor(miPhysicsPreSceneUpdatePM);
     }
 }

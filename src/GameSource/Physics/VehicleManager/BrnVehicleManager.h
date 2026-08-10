@@ -627,6 +627,62 @@ namespace Vehicle
             VecFloat lvfTimeStep);
 
         // ==========================================================================================
+        // ⭐⭐ THE VEHICLE MAINTENANCE FAMILY -- ADDED 2026-08-10 (create-path wave).
+        //
+        // ProcessVehicleMaintenanceEvents @0x8264AB38 (118 insns) is BODIED for real in
+        // BrnVehicleManager_MaintenanceEvents.cpp. It is pure orchestration: seven null asserts
+        // (BrnVehicleManager.cpp:1141..:1147, in parameter order) then six calls with no branch
+        // between them. Its ONLY console caller is PhysicsModule::PostSceneUpdate @0x825ABC10,
+        // which is why nothing in this family has ever executed on this build.
+        //
+        // ⛔ THE FIVE ARMS BELOW ARE ONE-SHOT GATES, and the middle one is the point of the whole
+        // campaign: ProcessCreateEvents @0x82616770 is the ONLY writer anywhere in the XEX that
+        // SETS a bit in mUsedRaceCars (the tree's only other write is Construct's UnSetAll()).
+        // Until it lands, no race car exists to the physics vehicle manager.
+        //
+        // ⚠️⚠️ AND IT MUST NOT LAND BEFORE THE GROUND DOES. Setting one bit of mUsedRaceCars
+        // turns on FOUR already-mounted, already-called per-frame loops that walk that bitset --
+        // ReadUpdatedBodies (gravity + IntegrateTransform, i.e. the fall itself),
+        // UpdateVehiclePhysics (both loops, including RaceCarPhysics::Update),
+        // StartVehicleContactGeneration and the traction-line harvest. See the ground-cost census
+        // in BrnPhysicsConductorGates.cpp: the ORDER is traction chain -> create path.
+        // ==========================================================================================
+        void ProcessVehicleMaintenanceEvents(
+            CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsModule::IOBufferStack* lpOutputBufferStack,
+            const VehicleInputInterface* lpInputInterface,
+            VehicleOutputRequestInterface* lpOutputInterface,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            VehicleOutputInterface* lpVehicleOutputInterface,
+            Deformation::DeformationInputInterface* lpDeformationInterface);   // @0x8264AB38
+
+        // @0x825C7EA8 (321). Arm 1: record which NETWORK race cars were added for collision this
+        // frame. GATE.
+        void RecordNetworkRaceCarsAddedForCollision(const VehicleInputInterface* lpInputInterface);
+
+        // @0x826160C8 (426). Arm 2: drain the remove-race-car queue. GATE.
+        void ProcessRemoveEvents(const VehicleInputInterface* lpInputInterface,
+                                 VehicleOutputRequestInterface* lpOutputInterface,
+                                 VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                 Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // ⛔⛔ @0x82616770 (1,067). Arm 3: THE CREATE PATH. GATE -- see the banner above and the
+        // measured split point in BrnVehicleManager_MaintenanceEvents.cpp.
+        void ProcessCreateEvents(const VehicleInputInterface* lpInputInterface,
+                                 VehicleOutputRequestInterface* lpOutputInterface,
+                                 VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                 Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // @0x825E9010 (65). Arm 4: drain the validate-race-car queue. GATE.
+        void ProcessValidationEvents(const VehicleInputInterface* lpInputInterface,
+                                     Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // @0x825E8F28 (export hole -- no per-function JSON; named only at this one call site).
+        // Arm 5: drain the set-race-car-collision queue. GATE.
+        void ProcessCollisionEvents(const VehicleInputInterface* lpInputInterface,
+                                    Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // ==========================================================================================
         // ⭐ TRACTION-LINE CHAIN, the four members bodied for real 2026-08-10 (ground wave), in
         // BrnVehicleManager_TractionLineTests.cpp. A Burnout car does NOT rest on contacts --
         // contacts are the body-shell/crash path; it rests on TRACTION LINE TESTS, and this is the

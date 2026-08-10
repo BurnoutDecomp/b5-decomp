@@ -577,6 +577,21 @@ namespace Deformation
         // private member cannot express.
     public:
         s32 FindModelIndexByEntityID(EntityId lEntityId) const;
+
+        // ⭐ ADDITIVE 2026-08-10 (create-path wave), header-only inline -- no out-of-line symbol,
+        // exactly like BrnVehicleInputInterface.h's GetTriangleCacheInterface / GetLineTestResults.
+        // PhysicsModule::PostSceneUpdate @0x825ABC10 writes miPlayerModelIndex from OUTSIDE this
+        // class, twice, as a raw `stw` at this+76040 (`addis r31,r26,1 ; addi r31,r31,0x2908` with
+        // r26 == &mDeformationManager): -1 on both arms of the player-active branch, then the
+        // FindModelIndexByEntityID result if the player's handling entity id is valid.
+        // ⚠ INFERRED, and flagged as such: the DecFIGS DWARF lists miPlayerModelIndex under the
+        // dumper's leading `private:` and declares NO setter for it, yet the shipped console code
+        // stores to it from another class -- so either the dumper is printing the DWARF *class*
+        // default rather than this struct's real (public) default, or the shipped header had a
+        // friend/inline setter DWARF does not emit. Rather than widen the member's access or
+        // invent a friendship, the store is expressed through this named inline, which is
+        // byte-identical to the console's and keeps every existing access rule intact.
+        void SetPlayerModelIndex(s32 liModelIndex) { miPlayerModelIndex = liModelIndex; }
     private:
         s32 FindModelIndexByGlobalEntityID(EntityId lGlobalEntityId);
         s32 FindModelIndexByPartID(CgsPhysics::RigidBodyId lPartBodyId);   // ⚠️ qualified -- see header note

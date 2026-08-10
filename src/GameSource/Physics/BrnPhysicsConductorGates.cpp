@@ -19,6 +19,14 @@
 //     family. With the create path (Phase 2) still inert there are no bodies in the sim, so
 //     nothing falls yet -- land the generation family BEFORE the create path, or the first
 //     body added will drop through the world.
+//     ⛔⛔ CORRECTED 2026-08-10 (create-path wave), and the correction matters for sequencing:
+//     "no bodies in the sim, so nothing falls yet" understates it in one direction and
+//     overstates it in another. The SIM is not the mechanism -- BrnVehicleManager_ReadUpdatedBodies
+//     .cpp's gravity + IntegrateTransform loop is, it is MOUNTED, it is called every frame from
+//     PhysicsModule::Update, and its only gate is a set bit in mUsedRaceCars. So the first body to
+//     FALL will not need rw::physics at all; it will need only VehicleManager::ProcessCreateEvents
+//     to set that bit. The traction chain is still the prerequisite; the reason is one function
+//     earlier than this note said.
 //   * DoCrashPrediction -- NOT dead-gated on the console: it runs unconditionally in the
 //     non-catchup path. Deferral list = the L1/L2 web banked in BrnVehicleManager.h's banner.
 //   * deformation Update/post/sensors/verify -- no deformation this wave.
@@ -147,6 +155,89 @@ namespace BrnPhysics
     {
         BRN_CONDUCTOR_GATE("PhysicsModule::HandleGameActions @0x825A72F0 (185)");
     }
+
+    // =============================================================================================
+    // ⭐ ADDED 2026-08-10 (create-path wave): the three PostSceneUpdate callees whose own closures
+    // are not reconstructed, plus THE SIM FIREWALL. PhysicsModule::PostSceneUpdate @0x825ABC10 is
+    // REAL as of this wave (its WorldLinkStubs boot gate is deleted), so every one of these is now
+    // REACHED EVERY FRAME -- which is exactly why each gets a named, logged deferral rather than a
+    // silent no-op or a trap.
+    // =============================================================================================
+
+    // @0x825A70C0 (63 insns). The POST-scene game-action dispatch. Distinct from HandleGameActions
+    // above and much smaller: DeformationManager::ProcessDebugResetDeformationModels, then a switch
+    // over the same VariableEventQueue<13312,16> with four arms -- 23 OnPrepareGameMode,
+    // 34 OnStartGameMode, 97 ProcessResetDeformationModelEvent (bracketed by two VerifyPartIndices
+    // sweeps), 99 OnJunkYardDriveThru. None of those five callees is reconstructed.
+    void PhysicsModule::HandleGameActionsPostScene(
+        const BrnGameState::GameStateModuleIO::GameActionQueue*,
+        CgsPhysics::PhysicsSimulationIO::InputBuffer*,
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*)
+    {
+        BRN_CONDUCTOR_GATE("PhysicsModule::HandleGameActionsPostScene @0x825A70C0 (63)");
+    }
+
+    // ⛔⛔ @0x825AB408 (52 insns). THE SIM FIREWALL -- READ BEFORE TOUCHING.
+    //
+    // This is the ONLY road from the vehicle manager's rigid-body request queues into the
+    // simulation input buffer. Four appends, in the console's own order, with the four source
+    // offsets cross-checked against BrnVehicleOutputInterface.h's own queue seats:
+    //     AppendRemoveRigidBodyQueue<50>(simIn, vehOut + 9616)
+    //     AppendAddRigidBodyQueue   <50>(simIn, vehOut + 0)       == mRequiredRigidBodiesQueue
+    //     AppendAddJointQueue       <10>(simIn, vehOut + 39904)
+    //     AppendRemoveJointQueue    <10>(simIn, vehOut + 41840)
+    //
+    // VehicleManager::ProcessCreateEvents @0x82616770 -- the create path this whole campaign is
+    // aiming at -- posts its InAddRigidBody event into mRequiredRigidBodiesQueue. While this
+    // function stays inert, that event is written into the "VehManager" stack IO buffer that
+    // PostSceneUpdate creates and destroys in the SAME call, and no rigid body can ever reach the
+    // simulation. That is the deliberate split for the create path: the cut is at a console
+    // function boundary, so nothing is faked and nothing is dropped mid-body.
+    //
+    // ⛔ DO NOT LAND THIS UNTIL THE TRACTION-LINE CHAIN IS CLOSED (the ground-cost census at the
+    // top of this file). A body that enters the simulation before the wheels can find the road
+    // falls forever. Note also that this is only the SECOND road to a falling body -- the first is
+    // mUsedRaceCars itself, via the already-mounted ReadUpdatedBodies gravity+integrate loop; see
+    // BrnVehicleManager_MaintenanceEvents.cpp.
+    void PhysicsModule::BridgeVehicleManagerToSimulation_PostScene(
+        CgsPhysics::PhysicsSimulationIO::InputBuffer*,
+        const Vehicle::VehicleManagerOutputBuffer*)
+    {
+        BRN_CONDUCTOR_GATE("PhysicsModule::BridgeVehicleManagerToSimulation_PostScene @0x825AB408 "
+                           "(52) -- HELD INERT ON PURPOSE: it is the only path from "
+                           "mRequiredRigidBodiesQueue into the simulation");
+    }
+
+namespace Deformation
+{
+    // @0x82644F40 (26 insns). The deformation manager's own post-scene tick -- drains its
+    // add/remove/deactivate/validate model queues and pushes new models into the scene. Its arms
+    // are unreconstructed; PostSceneUpdate brackets it between two VerifyPartIndices sweeps, both
+    // of which ARE real and DO run.
+    void DeformationManager::PostSceneUpdate(
+        CgsPhysics::PhysicsSimulationIO::InputBuffer*,
+        DeformationInputInterface*,
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*)
+    {
+        BRN_CONDUCTOR_GATE("DeformationManager::PostSceneUpdate @0x82644F40 (26)");
+    }
+}
+
+namespace Props
+{
+    // @0x8263AF30 (209 insns). Drains the prop input interface's add/remove prop-and-part instance
+    // queues and re-runs the jointed-prop update. All six of its callees
+    // (ProcessRemove/AddPropInstanceEvents, ProcessRemove/AddPartInstanceEvents,
+    // RemoveAllPropsAndParts, UpdateJointedProps) are unreconstructed.
+    void PropManager::ProcessInputsPreScene(
+        const BrnPhysics::Props::PropInputInterface*,
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*,
+        bool,
+        CgsPhysics::PhysicsSimulationIO::InputBuffer*)
+    {
+        BRN_CONDUCTOR_GATE("PropManager::ProcessInputsPreScene @0x8263AF30 (209)");
+    }
+}
 
 namespace Vehicle
 {

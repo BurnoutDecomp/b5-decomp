@@ -383,6 +383,36 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
         void HandleGameActions( const BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue,
                                 PhysicsModuleIO::OutputBuffer* lpOutputBuffer );
 
+        // ---- ADDITIVE 2026-08-10 (create-path wave): the two PostSceneUpdate callees ----
+        // @0x825A70C0 (63 insns). The POST-SCENE game-action dispatch -- a second, smaller
+        // switch over the same queue than HandleGameActions above: ids 23/34/99 reach
+        // VehicleManager::OnPrepareGameMode / OnStartGameMode / OnJunkYardDriveThru, id 97
+        // reaches DeformationManager::ProcessResetDeformationModelEvent between two
+        // VerifyPartIndices sweeps, and the whole loop is preceded by
+        // DeformationManager::ProcessDebugResetDeformationModels. ⚠ FLAG: DECLARED for
+        // PostSceneUpdate's closure; body is a LOUD one-shot gate (BrnPhysicsConductorGates.cpp)
+        // -- every one of its four arms is itself unreconstructed.
+        void HandleGameActionsPostScene( const BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue,
+                                         CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
+                                         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface );
+
+        // ⛔⛔ @0x825AB408 (52 insns). THE SIM FIREWALL, AND IT IS DELIBERATELY INERT.
+        // This is the ONLY road from the vehicle manager's rigid-body request queues into the
+        // simulation input buffer -- four appends, in the console's order:
+        //     AppendRemoveRigidBodyQueue<50>(simIn, vehOut->...mRemoveBodiesQueue  /* +9616  */)
+        //     AppendAddRigidBodyQueue   <50>(simIn, vehOut->...mRequiredRigidBodiesQueue /* +0 */)
+        //     AppendAddJointQueue       <10>(simIn, vehOut->...  /* +39904 */)
+        //     AppendRemoveJointQueue    <10>(simIn, vehOut->...  /* +41840 */)
+        // (offsets cross-checked against BrnVehicleOutputInterface.h's own queue seats).
+        // VehicleManager::ProcessCreateEvents @0x82616770 posts its InAddRigidBody event into
+        // mRequiredRigidBodiesQueue, which lives in the "VehManager" stack IO buffer that
+        // PostSceneUpdate creates AND destroys in the same call. While this function stays a
+        // gate, that event is written and thrown away: NO RIGID BODY CAN REACH THE SIMULATION.
+        // ⛔ DO NOT LAND THIS UNTIL THE TRACTION-LINE CHAIN IS CLOSED -- see the ground-cost
+        // census in BrnPhysicsConductorGates.cpp. A body added before then falls forever.
+        void BridgeVehicleManagerToSimulation_PostScene( CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
+                                                         const Vehicle::VehicleManagerOutputBuffer* lpVehManagerOutputBuffer );
+
         // ===================================================================
         // DWARF member set (BrnPhysicsModule.h:189..241), in declaration order --
         // which is also ascending X360 offset order. Every member is now a REAL
