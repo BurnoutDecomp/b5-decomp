@@ -61,6 +61,14 @@ namespace CgsGeometric
 
         // GetNumLeafNodes @0x82917018 — return the leaf-node count (result[19] / +0x4C).
         s32 GetNumLeafNodes() const;
+
+        // The leaf-node array itself (result[18] / +0x48), i.e. "has a spatial partition been
+        // built?". ⚠️ FLAG (header grow, 2026-08-10 cache-fill wave): the console reads the
+        // member DIRECTLY at its one attested consumer -- TriangleCacheManager::
+        // StartUpdateTriangleCaches @0x828BED68 `lwz r11, 0x48(r29) ; beq <epilogue>` -- so no
+        // symbol attests this accessor's name. It is added for the same reason (and by the same
+        // precedent) as GetNumPolySoupLists above: a private member read by another class.
+        const PolygonSoupLeafNode* GetLeafNodes() const { return mpLeafNodes; }
         // GetPolygonSoup @0x8280FFD0 — return &mpLeafNodes[index] (base +0x48, asm element
         // stride 0x30). The leaf-node element type is declared-only, so the 0x30 stride is
         // honoured explicitly (opaque-element-stride precedent; see dep_flags).

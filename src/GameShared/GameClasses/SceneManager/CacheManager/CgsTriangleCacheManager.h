@@ -46,10 +46,15 @@ namespace SceneManagerIO
 //                                       ProcessRemoveFromCacheEvents @0x828B2710,
 //                                       ProcessUpdateCachedPositionEvents @0x828BE898,
 //                                       CacheSlot::UpdateCachedObject @0x828BE660
-//   NOT RECONSTRUCTED                   StartUpdateTriangleCaches @0x828BECF8 (278),
-//                                       EndUpdateTriangleCaches @0x828BF150 (475)
-//                                       -- the FILL half; both are WorldLinkStubs gates
-//                                       reached every frame by WorldModule::Update.
+//   CgsTriangleCacheManager_Update.cpp  ⭐ 2026-08-10 (cache-fill wave) -- THE FILL HALF:
+//                                       StartUpdateTriangleCaches @0x828BECF8 (278),
+//                                       EndUpdateTriangleCaches   @0x828BF150 (475).
+//                                       Both WorldLinkStubs gates are DELETED. End is on a
+//                                       LIVE path (SceneManagerModule::EndUpdateTriangleCache
+//                                       @0x828C7500 is real and WorldModule::Update calls it
+//                                       every frame); Start is still reached only through
+//                                       SceneManagerModule::StartUpdateTriangleCache, which
+//                                       remains gated -- see the note on Start below.
 // ============================================================================
 
 namespace rw
@@ -59,6 +64,13 @@ namespace rw
     // pointer and dispatches one virtual allocate through it.
     struct IResourceAllocator;
 }
+
+// The fill half's collaborators, all pointer-use only in this header (their homes are
+// included by CgsTriangleCacheManager_Update.cpp).
+namespace CgsMemory  { struct SimpleDataStreamProducer; }
+namespace EA { namespace Jobs { struct Job; } }
+namespace CgsGeometric { struct PolygonSoupListSpatialMap; }
+namespace CgsSceneManager { namespace CgsCollision { struct BaseCollisionGenerator; } }
 
 namespace CgsSceneManager
 {
@@ -74,6 +86,13 @@ namespace CgsSceneManager
     // spelling was plausibly that constant -- but nothing in this function's rodata
     // or asserts names it, so no cross-subsystem constant is asserted here.
     const s32 KI_MAX_RADIUS_TRACKED_SLOTS = 8;
+
+    // How many SoA triangle batches each cached object owns in the shared triangle cache.
+    // ⭐ NOT a guessed literal and NOT single-sourced: StartUpdateTriangleCaches stamps it into
+    // every fill command (`li r10, 0x2C ; sth r10, 0x14(cmd)` @0x828BEEC8/0x828BEEDC), Prepare
+    // advances each slot's miIndexIntoTriangleCache by exactly 44, and Prepare sizes the shared
+    // store at CachedTriangleList::Prepare(alloc, 13112) -- and 298 * 44 == 13112 exactly.
+    const u16 KU_TRIANGLE_BATCHES_PER_CACHED_OBJECT = 44u;
 
     // ------------------------------------------------------------------------
     // CgsSceneManager::CacheSlot (CgsTriangleCacheManager.h:78). sizeof == 48.
@@ -168,10 +187,16 @@ namespace CgsSceneManager
         CachedTriangleList         mTrianglesForCachedObjects;  // +0x00
         CacheSlot*                 mpaCachedObjectSlots;        // +0x04
         CgsContainers::BitArray<KU_MAX_CACHED_OBJECTS> mUsedCacheSlots;
-        void*                      mpUpdateTriangleCacheStream; // CgsMemory::SimpleDataStreamProducer*
-        void*                      mpUpdateTriangleCacheJob;    // EA::Jobs::Job*
-        Vector3Plus                mvfMaxRadiusSoFar;
-        bool                       mbDEBUGForceAllDirty;
+        // ⭐ TYPED 2026-08-10 (cache-fill wave): both were `void*` placeholders. The console
+        // types are now attested, not guessed -- Start stores CreateStreamProducer's result in
+        // the first (`stw r3, 0x30(this)`) and RunFillTriangleCacheStream's in the second
+        // (`stw r3, 0x34(this)`), and the PS3 DWARF mangle
+        // `..BaseCollisionGenerator26RunFillTriangleCacheStreamEPKN12CgsGeometric25Polygon
+        //   SoupListSpatialMapEPN9CgsMemory24SimpleDataStreamProducerE` types both ends.
+        CgsMemory::SimpleDataStreamProducer* mpUpdateTriangleCacheStream;  // +0x30
+        EA::Jobs::Job*             mpUpdateTriangleCacheJob;               // +0x34
+        Vector3Plus                mvfMaxRadiusSoFar;                      // +0x40
+        bool                       mbDEBUGForceAllDirty;                   // +0x50
 
         // This TU's single recovered function.
         bool Prepare(rw::IResourceAllocator* lpAllocator);
@@ -220,9 +245,35 @@ namespace CgsSceneManager
             const CgsModule::EventQueue<TriangleCacheManagerIO::InEventUpdateCachedPosition,
                                         KU_MAX_CACHED_OBJECTS>& lrQueue);
 
-        // @ X360 **0x828BF150** (475 insns) -- finish this frame's triangle-cache update
-        // against the supplied collision generator + the triangle-collision scene.
-        // ⚠️ CORRECTED 2026-08-10: this comment previously read "@ X360 0x828C7508".
+        // ------------------------------------------------------------------
+        // ⭐ THE FILL HALF (bodies in CgsTriangleCacheManager_Update.cpp, 2026-08-10).
+        // ------------------------------------------------------------------
+
+        // @ X360 0x828BECF8 (278 insns). Open this frame's cache fill: carve a
+        // SimpleDataStreamProducer out of the collision generator, walk every USED cache
+        // slot and post one 32-byte fill command per DIRTY slot (the slot's cached sphere,
+        // its window into the shared triangle cache, and the per-slot batch cap), then Begin
+        // the stream and dispatch the fill job.
+        //
+        // Parameter names are the console's own assert text (CgsTriangleCacheManager.cpp
+        // :361 "lpCollisionGenerator != NULL", :362 "lpPolySoupListSpacialMap != NULL" --
+        // the misspelling is AS-SHIPPED). The spatial-map type/constness is the PS3 DWARF's
+        // (RunFillTriangleCacheStream takes `const PolygonSoupListSpatialMap*`).
+        //
+        // ⛔ NOT REACHED TODAY, and the reason is NOT this function: its sole caller
+        // SceneManagerModule::StartUpdateTriangleCache @0x828C73D8 is still a WorldLinkStubs
+        // gate because the same caller must first run TriangleCollisionManager::
+        // ProcessAddPolySoupListEvents, whose own manager is un-prepared (
+        // TriangleCollisionManager::Prepare @0x828D0C40 is inert) and whose rebuild path
+        // needs PolygonSoupListSpatialMap::BuildSpacialPartition @0x82841740 (2,255 insns,
+        // absent). See the wave note in CgsTriangleCacheManager_Update.cpp.
+        void StartUpdateTriangleCaches(CgsCollision::BaseCollisionGenerator* lpCollisionGenerator,
+                                       const CgsGeometric::PolygonSoupListSpatialMap* lpPolySoupListSpacialMap);
+
+        // @ X360 **0x828BF150** (475 insns) -- close this frame's triangle-cache update:
+        // wait on the fill job, end the command stream, and fold each dirty slot's result
+        // (batch count + overflow) back into the slot table.
+        // ⚠️ ADDRESS CORRECTED 2026-08-10: this comment previously read "@ X360 0x828C7508".
         // 0x828C7508 is MID-INSTRUCTION inside SceneManagerModule::EndUpdateTriangleCache
         // @0x828C7500 (the 10-insn thunk's `ori r10, r10, 0x84D0`), not a function head.
         // The real body is 0x828BF150, which is exactly what that thunk tail-branches to.
@@ -230,7 +281,6 @@ namespace CgsSceneManager
         // the incoming r4/r5 (the sole `arg_` stack slot is a spill of `this`). The two
         // parameters are kept because the CALL SITE demonstrably materialises them
         // (r4 = the generator StartUpdateTriangleCache stashed at module+0x3A84D0).
-        // Body NOT reconstructed -- currently the WorldLinkStubs.cpp one-shot log.
         void EndUpdateTriangleCaches(void* lpCollisionGenerator, void* lpTriangleCollisionScene);
     };
 }

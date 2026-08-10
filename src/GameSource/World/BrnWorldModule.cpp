@@ -2210,8 +2210,24 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
 
     // ---- the frame's triangle-cache collision generator --------------------
     // ONE carve from the per-frame world allocator: the generator object at the
-    // base + its 0x40000-byte collision result region (74752 + 0x40000 == 336896).
-    void* lpCollisionGeneratorMemory = lpFrameAllocator->Malloc( 336896 );
+    // base + its 0x40000-byte collision result region. The console literal is
+    // 336896 == 74752 + 0x40000, and 74752 == 0x12400 is precisely the X360
+    // sizeof(BaseCollisionGenerator).
+    // ⚠️⚠️ FIXED 2026-08-10 (cache-fill wave): the two byte literals are now a
+    // `sizeof`. THIS OBJECT IS CARVED AT RUNTIME, NOT DESERIALISED, so on x64 every
+    // one of its pointers widens (64 embedded CollisionBatch, each holding an
+    // EA::Jobs::Job, plus a 200-entry pointer array) and it is materially LARGER than
+    // 74752 bytes. Until this wave the generator was never Construct()ed or Prepare()d
+    // (both were WorldLinkStubs gates), so nothing had ever written past +74752 and the
+    // console offset was harmless; mounting the real Prepare -- which placement-
+    // constructs all 64 batches -- would have walked straight off the end of the object
+    // and into the result region it is about to hand the bump allocator.
+    // (Standing rule: console size literals become `sizeof`, and a runtime-carved
+    // struct's console byte offsets must never be pinned on the host.)
+    const size_t lnCollisionGeneratorBytes =
+        sizeof( CgsSceneManager::CgsCollision::BaseCollisionGenerator );
+    void* lpCollisionGeneratorMemory =
+        lpFrameAllocator->Malloc( lnCollisionGeneratorBytes + 0x40000 );
     CgsSceneManager::CgsCollision::BaseCollisionGenerator* lpCollisionGenerator =
         static_cast<CgsSceneManager::CgsCollision::BaseCollisionGenerator*>(
             lpCollisionGeneratorMemory );
@@ -2442,7 +2458,7 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     PerfMonCpu::StartMonitor( miSceneModuleUpdateContactsPM );
 
     lpCollisionGenerator->Prepare(
-        static_cast<u8*>( lpCollisionGeneratorMemory ) + 74752, 0x40000 );
+        static_cast<u8*>( lpCollisionGeneratorMemory ) + lnCollisionGeneratorBytes, 0x40000 );
     mSceneModule.StartUpdateTriangleCache( lpInputBufferStack, lpOutputBufferStack,
                                            lpSceneInput_Update, lpCollisionGenerator );
 

@@ -39,6 +39,10 @@ namespace CgsMemory { struct SimpleDataStreamProducer; }
 
 namespace EA { namespace Jobs { struct Job; } }
 
+// RunFillTriangleCacheStream's query structure (pointer use only). Full home:
+// GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap.h.
+namespace CgsGeometric { struct PolygonSoupListSpatialMap; }
+
 // ⭐ ADDED 2026-08-06 (big-five #2): the collide-stream family's collaborators, pointer use
 // only. Class keys match their homes (CgsDebugRenderStreamReader.h:23 -- class, in CgsDev).
 namespace CgsDev { class DebugRenderStreamReader; }
@@ -136,6 +140,32 @@ namespace CgsCollision
         // ==========================================================================================
         CgsMemory::SimpleDataStreamProducer* CreateLineWithTriangleListStream(s32 liMaxCommands);                 // @0x82810B98
         EA::Jobs::Job* RunLineWithTriangleListStream(CgsMemory::SimpleDataStreamProducer* lpProducer);            // @0x82810E80 (export hole)
+
+        // ==========================================================================================
+        // ⭐ ADDED 2026-08-10 (cache-fill wave): the TRIANGLE-CACHE FILL stream dispatcher, the
+        // Run* half TriangleCacheManager::StartUpdateTriangleCaches @0x828BF130 calls (its Create*
+        // half is the general CreateStreamProducer above, which that same function calls with 298).
+        //
+        // Signature is DWARF-SETTLED, not read off the call site alone -- the PS3 mangle
+        //   _ZN15CgsSceneManager12CgsCollision22BaseCollisionGenerator26RunFillTriangleCacheStreamE
+        //     PKN12CgsGeometric25PolygonSoupListSpatialMapEPN9CgsMemory24SimpleDataStreamProducerE
+        // gives (const PolygonSoupListSpatialMap*, SimpleDataStreamProducer*), matching the X360
+        // call site's r4/r5 exactly.
+        //
+        // ⛔ BODY NOT RECONSTRUCTED -- named boot gate, same precedent and same reason as
+        // RunLineWithTriangleListStream above. Its 82 instructions are the familiar dispatcher
+        // shape (AllocateJob / per batch { CreateNewBatch, Job::Clear, EntryPoint::SetName,
+        // SetCode(<entry>), SetData, DependsOn } / JobScheduler::AddTree), but what it installs is
+        // a JOB ENTRY POINT whose worker is absent from this tree: PolygonSoupTesterEntry
+        // @0x829157B8 (80) -> PolygonSoupTesterJob::Execute @0x82915930 (107) ->
+        // ExecuteFillTriangleCacheStream @0x82915D88 (145) -> ExecuteFillTriangleCache @0x82915AE0
+        // (170) -> FillTriangleCache @0x82915FD0 (219) -> PolygonSoupListSpatialMap::RunQuery
+        // @0x82843A80 (261). Writing the dispatcher without the worker would hand
+        // EndUpdateTriangleCaches a stream of zero-batch results, i.e. "every cached object has no
+        // triangles" -- the silent-drop shape, indistinguishable from a working empty cache.
+        EA::Jobs::Job* RunFillTriangleCacheStream(
+            const CgsGeometric::PolygonSoupListSpatialMap* lpPolySoupListSpacialMap,
+            CgsMemory::SimpleDataStreamProducer* lpProducer);                                                    // @0x82810D38
 
     private:
         u16  CreateNewBatch();                   // h:350 / X360 0x82810960
