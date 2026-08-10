@@ -772,39 +772,20 @@ void BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch::Construct()
 // -------------------------------------------------------------------------
 // BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-struct BrnResource::GameDataIO::RequestInterface<4096> const * BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare::GetResourceRequestInterface() const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "GetResourceRequestInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-struct BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare::SceneInputInterface const * BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare::GetSceneInputInterface() const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "GetSceneInputInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
+// ⛔⛔ TWO GATES RETIRED 2026-08-10 (pre-physics bridge wave), AND THEY WERE
+//     SILENT-DROP STUBS, NOT PLACEHOLDERS.
+//     `OutputBuffer_Prepare::GetResourceRequestInterface() const` @0x8279FA30 and
+//     `::GetSceneInputInterface() const` @0x8279F988 have had REAL committed bodies in
+//     GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.cpp all
+//     along -- that TU had simply never been on the build list, so the copies that LINKED
+//     were these two, each `return 0`. Their own banner said "REACHED every frame", so every
+//     caller has been handed a NULL interface and has been silently doing nothing with it.
+//     Found by MOUNTING the real TU (for the pre-physics OutputBuffer this wave): the link
+//     immediately produced LNK2005 on both, which is the whole point of mounting a
+//     re-parented TU even when the wave does not call it.
+//     ⚠️ This is a real behaviour change on a live path -- both accessors now return a valid
+//     pointer where they returned NULL. Gates re-run and clean; recorded here so a later
+//     regression is attributed correctly.
 
 // -------------------------------------------------------------------------
 // BrnTraffic::TrafficEntityModule
@@ -3186,21 +3167,16 @@ void WorldModule::BridgeCrashModuleToOutput(void *,struct BrnWorldIO::UpdateOutp
 //  @0x8279F240, so while it was inert the solver iteration cap stayed at 0 and the
 //  whole MaxIterations chain inside PhysicsModule::Update asserted.)
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AAEC0 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PrePhysics const *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics const *,class BrnWorld::PropEntityIO::OutputBuffer_PrePhysics const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics: inert [FLAG PC boot gate]\n";
-    }
-}
+// (WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics gate RETIRED 2026-08-10,
+//  pre-physics bridge wave: the real body @0x827AAEC0 now lives in its X360 home TU
+//  GameSource/World/Bridges/WorldBridgeEntityModulesToPhysics.cpp. It is the ONLY thing in
+//  the image that carries a staged CreateRaceCarEvent from the race-car entity module into
+//  the physics module's input buffer, so while it was inert VehicleManager::ProcessCreateEvents
+//  had an empty queue at every drain of a 275 s run -- MEASURED by the previous wave's census.
+//  Landing it also forced two latent memory bugs out of hiding: BrnTrafficIO::
+//  OutputBuffer_PrePhysics modelled its vehicle-driver interface as `unsigned char[1]`, and
+//  PhysicsModuleIO::InputBuffer did the same for its vehicle-effects interface -- this bridge
+//  Appends 5,284 and 1,792 bytes into them respectively.)
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
@@ -3742,17 +3718,11 @@ struct BrnWorldIO::PlayerVehicleControls const * BrnWorldIO::UpdateInputBuffer::
     return 0;
 }
 
-struct BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene::TrafficToRaceCarInterface_PreScene const * BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene::GetTrafficToRaceCarInterface_PreScene(void) const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "OutputBuffer_PreScene::GetTrafficToRaceCarInterface_PreScene: inert [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
+// ⛔ THIRD SILENT-DROP STUB RETIRED 2026-08-10 (same mount, same mechanism as the two
+//    OutputBuffer_Prepare accessors above): `OutputBuffer_PreScene::
+//    GetTrafficToRaceCarInterface_PreScene() const` has a real body in
+//    BrnTrafficEntityModuleIO.cpp; the `return 0` copy here is what linked while that TU was
+//    off the build list. LNK2005 on mounting.
 
 // ---- the six unmounted sibling bridge TUs' entry points ----------------------
 // Each of these has a REAL committed body in its own home TU; those TUs are not

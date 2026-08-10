@@ -48,6 +48,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h" // Vehicle::VehicleInputInterface (mVehicleInputInterface, retyped 2026-08-06)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // Vehicle::VehicleOutputRequestInterface / VehicleManagerOutputInterface / VehicleOutputInterface (promoted 2026-08-09)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h" // Vehicle::VehicleDriverInputInterface (mVehicleDriverInterface, retyped 2026-08-09)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEffectsInputInterface.h" // Vehicle::VehicleEffectsInputInterface (mVehicleEffectsInputInterface, retyped 2026-08-10)
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h" // Props::PropInputInterface (mPropManagerInputInterface, retyped 2026-08-10)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface (mRCEntityOutputInterface, retyped 2026-08-10)
 
@@ -216,7 +217,20 @@ namespace PhysicsModuleIO
         // one-byte span cannot express that, and casting one to the real type would walk the
         // driver-update queue 5 KB past the slice.
         typedef BrnPhysics::Vehicle::VehicleDriverInputInterface VehicleDriverInputInterfaceStorage;
-        struct VehicleEffectsInputInterfaceStorage  { unsigned char maBytes[1]; };
+        // ⭐ RETYPED 2026-08-10 (pre-physics bridge wave; SIXTH use of the typedef pattern, after
+        // the vehicle-input / vehicle-driver / game-action / prop-input / RCEntity seats), and it
+        // was the SAME latent memory bug the other five were:
+        // WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics @0x827AAEC0 merges the
+        // race-car AND traffic effects interfaces into this member twice per frame
+        // (0x827AB138/0x827AB144 and 0x827AB164/0x827AB170 -- an air-ram queue Append at +0 and a
+        // spin queue Append at +0x510), i.e. it writes up to 1,792 bytes through what was a
+        // one-byte span. Invisible only because the bridge was an inert boot gate.
+        // The real type is byte-identical in extent on both targets: EventQueue<CreateAirRamEvent,
+        // 20> is 16 + 20*64 == 1296 and EventQueue<CreateSpinEvent,10> is 16 + 10*48 == 496
+        // (console 12-byte queue headers pad to 16, host 8+4+4 IS 16), so 1792 == the span this
+        // member already reserved and NOTHING below it moves. Pinned exactly in _AssertLayout --
+        // if that equality ever breaks the gate fails instead of silently re-drifting the tail.
+        typedef BrnPhysics::Vehicle::VehicleEffectsInputInterface VehicleEffectsInputInterfaceStorage;
         // ⭐ RETYPED 2026-08-10 (create-path wave; FIFTH use of the typedef pattern, after the
         // vehicle-input / vehicle-driver / game-action / prop-input seats). This was
         // `unsigned char[0x28F0]` and it is about to go LIVE:
@@ -337,8 +351,10 @@ namespace PhysicsModuleIO
         // exactly where the console's does. Pinned by _AssertLayout; if that equality ever
         // breaks the gate fails rather than silently re-drifting everything below.
         VehicleEffectsInputInterfaceStorage mVehicleEffectsInputInterface;   // +147840  :313
-        // gap to mRCEntityOutputInterface: +147841 .. +149631.
-        unsigned char                       maRCEntityPad[149632 - 147841];  //
+        // No pad here any more (2026-08-10): the real effects interface's host sizeof IS the
+        // console span (1792 == 149632 - 147840 -- the two inline EventQueues' 12-byte console
+        // headers already pad to 16, which is exactly what the host's 8-byte mpEvents + two s32
+        // occupy), so the next seat lands where the console's does. Pinned by _AssertLayout.
         RCEntityOutputInterfaceStorage      mRCEntityOutputInterface;        // +149632  :314 (0x28F0)
         // ⭐ 2026-08-09 (conductor wave): two of the three folded queues are REAL members now,
         // seated by their own X360 accessor returns (GetPotentialContactQueue @0x8259FB40

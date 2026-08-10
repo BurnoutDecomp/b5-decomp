@@ -426,22 +426,78 @@ namespace BrnTrafficIO
     }
 
     // ========================================================================
-    // OutputBuffer_PrePhysics accessors (wave35 new home).
+    // OutputBuffer_PrePhysics (wave35 new home; the three interfaces made REAL 2026-08-10 --
+    // see the retype banner in the header for why the 1-byte slice was a memory bug and why
+    // the console-offset static_assert had to go with it).
     // ========================================================================
-    void OutputBuffer_PrePhysics::_AssertLayout()
+
+    // ⭐ @0x827618A0 (DWARF :307) -- NEW 2026-08-10 (pre-physics bridge wave).
+    // Was inherited base-only (`lpTrafficOutput_PrePhysics->Construct()` in WorldModule::Update
+    // resolved to CgsModule::IOBuffer::Construct), which left every embedded queue's mpEvents
+    // NULL. Harmless while nothing read the buffer; fatal the moment
+    // BridgeEntityModulesToPhysicsModule_PrePhysics started merging all three interfaces --
+    // the exact "mpEvents != NULL" + "Reached Max length" death the race-car pre-physics buffer
+    // already suffered once (BrnVehicleInputInterface.h's Construct banner). 25 X360
+    // instructions, read verbatim; every member reached BY NAME, not by the console offset the
+    // comment records:
+    //   0x827618B8  stb  1, 0(this)                          -- IOBuffer::Construct (status = 1)
+    //   0x827618BC  bl   VehicleInputInterface::Construct     (this+16)
+    //   0x827618CC  bl   CreateAirRamEvent<20>::Construct     (this+142192)  \  == the effects
+    //   0x827618D4  bl   CreateSpinEvent<10>::Construct       (this+143488)  /     interface
+    //   0x827618E4  stw  0, 8(this+142192) ; stw 0, 0x518(this+142192)  -- the two queue lengths
+    //   0x826718EC  bl   VehicleDriverInputInterface::Construct(this+143984)
+    //   0x827618F8  stbx 0, this, 0x24720                     -- mbPlayingShowtime = false
+    // ⭐ The two explicit length stores are what VehicleEffectsInputInterface::Construct's two
+    // queue Constructs already do (EventQueue::Construct writes mpEvents AND clears miLength);
+    // the X360 emits them separately because it inlined both Constructs and the compiler kept
+    // the redundant zeroing. Calling the named Construct reproduces the end state exactly.
+    void OutputBuffer_PrePhysics::Construct()
     {
-        static_assert(offsetof(OutputBuffer_PrePhysics, mVehicleDriverInterface) == 143984,
-                      "mVehicleDriverInterface @143984");
+        CgsModule::IOBuffer::Construct();
+
+        mVehicleInputInterface.Construct();
+        mVehicleEffectsInterface.Construct();
+        mVehicleDriverInterface.Construct();
+
+        mbPlayingShowtime = false;
     }
 
-    // X360 0x827A04C8 (:326): read-lock; return &mVehicleDriverInterface (this + 143984).
+    // X360 0x827A0378 (:310): read-lock; return &mVehicleInputInterface (this + 16).
+    const OutputBuffer_PrePhysics::VehicleInputInterface* OutputBuffer_PrePhysics::GetVehicleInputInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mVehicleInputInterface;
+    }
+
+    // (:311): write-lock; return &mVehicleInputInterface (this + 16).
+    OutputBuffer_PrePhysics::VehicleInputInterface* OutputBuffer_PrePhysics::GetVehicleInputInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mVehicleInputInterface;
+    }
+
+    // X360 0x827A0420 (:313): read-lock; return &mVehicleEffectsInterface (this + 142192).
+    const OutputBuffer_PrePhysics::VehicleEffectsInputInterface* OutputBuffer_PrePhysics::GetVehicleEffectsInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mVehicleEffectsInterface;
+    }
+
+    // (:314): write-lock; return &mVehicleEffectsInterface (this + 142192).
+    OutputBuffer_PrePhysics::VehicleEffectsInputInterface* OutputBuffer_PrePhysics::GetVehicleEffectsInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mVehicleEffectsInterface;
+    }
+
+    // X360 0x827A04C8 (:316): read-lock; return &mVehicleDriverInterface (this + 143984).
     const OutputBuffer_PrePhysics::VehicleDriverInputInterface* OutputBuffer_PrePhysics::GetVehicleDriverInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
         return &mVehicleDriverInterface;
     }
 
-    // X360 0x82711508 (:448): write-lock; return &mVehicleDriverInterface (this + 143984).
+    // X360 0x82711508 (:317): write-lock; return &mVehicleDriverInterface (this + 143984).
     OutputBuffer_PrePhysics::VehicleDriverInputInterface* OutputBuffer_PrePhysics::GetVehicleDriverInterface()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
