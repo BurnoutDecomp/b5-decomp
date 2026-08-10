@@ -556,7 +556,20 @@ namespace EA { namespace Jobs {
     JobAffinity    EntryPoint::GetAffinity()    const { return JOB_AFFINITY_NONE; }    // FLAG link-stub
     JobEnvironment EntryPoint::GetEnvironment() const { return JOB_ENVIRONMENT_LOCAL; }// FLAG link-stub
     JobPriority    EntryPoint::GetPriority()    const { return JOB_PRIORITY_HIGH; }    // FLAG link-stub
-    void           EntryPoint::SetName(const char* lpcName) { (void)lpcName; }         // FLAG PC-platform leaf: synchronous jobs on PC (no worker names)
+    // ⛔⛔ SILENT-DROP STUB DELETED 2026-08-10 (fill-worker wave 2). What stood here was
+    //     void EntryPoint::SetName(const char* lpcName) { (void)lpcName; }
+    // labelled "FLAG PC-platform leaf: synchronous jobs on PC (no worker names)". The REAL
+    // 22-instruction body (X360 0x82BC9858) was in entrypoint.cpp the whole time -- but that
+    // TU declared its own forked `class EntryPoint` whose SetName returned `char*`, so it
+    // mangled to a DIFFERENT symbol and this stub won every link, silently, for every caller.
+    // Retiring ODR fork #3 (entrypoint.cpp's local class) is what made the two collide and
+    // exposed it. Deleted; the real body serves now.
+    //
+    // ⚠️ FLAGGED, NOT FIXED, and it is the same shape: `Job::GetNumDependencies() const
+    // { return 0; }` below is also a hard-coded answer, and JobScheduler::AddTree @0x82BCB540
+    // bounds its dependency walk with it -- so the day anything calls AddTree, the closure walk
+    // will silently visit no dependencies. Nothing calls AddTree today (this wave's dispatcher
+    // runs its entry inline instead), but whoever wires the real scheduler must fix it first.
 
     int Job::GetNumDependencies() const { return 0; }   // FLAG PC-platform leaf: synchronous jobs on PC (no dependencies)
 

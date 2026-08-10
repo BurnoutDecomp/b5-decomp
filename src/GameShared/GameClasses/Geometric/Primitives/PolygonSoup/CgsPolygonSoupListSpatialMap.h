@@ -17,6 +17,8 @@
 // it needs their real 48-byte layouts -- and completing them here is what lets
 // GetPolygonSoup's hard-coded 0x30 element step be static_assert-gated instead of trusted.
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupSpacialNode.h"
+// RunJobQuery's fifth parameter (the DWARF types it; the X360 body never dereferences it).
+#include "GameShared/GameClasses/Containers/CgsReadOnlyObjectCache.h"
 
 namespace CgsMemory { class LinearMalloc; }   // BuildSpacialPartition allocator (by pointer)
 
@@ -88,5 +90,44 @@ namespace CgsGeometric
         // stride 0x30). The leaf-node element type is declared-only, so the 0x30 stride is
         // honoured explicitly (opaque-element-stride precedent; see dep_flags).
         PolygonSoupLeafNode* GetPolygonSoup(s32 liIndex) const;
+
+        // =========================================================================================
+        // ⭐⭐ ADDED 2026-08-10 (fill-worker wave 2): the JOB-SIDE box query — the function the
+        // triangle-cache fill worker actually runs, and the one every previous costing of this leg
+        // missed while naming its sibling.
+        //
+        // ⚠️ THE NAME IS RECOVERED, NOT INVENTED. X360 @0x82844680 (316) carries NO IDA symbol.
+        // Its single caller is PolygonSoupTesterJob::RunBoxQuery @0x82916D28, and the PS3 DWARF
+        // mangle types every one of the six arguments:
+        //   _ZNK12CgsGeometric25PolygonSoupListSpatialMap11RunJobQueryERKNS_14AxisAlignedBoxE
+        //     PNS_25PolygonSoupJobQueryParamsEPPtPiPN13CgsContainers19ReadOnlyObjectCache
+        //     INS_22PolygonSoupSpacialNodeEEE                                   @0xB63F20 (405)
+        //
+        // ⭐ It is the CONST, job-side twin of RunQuery @0x82843A80 (261, asserts at
+        // CgsPolygonSoupListSpatialMap.cpp:447; this one asserts at :614 — same file, two
+        // overloads). The difference is entirely about ownership: RunQuery ping-pongs through the
+        // map's OWN mapQueryBuffers and publishes into mpOutputQueryBuffer/miLastQueryResultCount,
+        // which a job running off a read-only DMA'd copy of the map cannot do. RunJobQuery takes
+        // the two scratch buffers in a params block and returns its answer through out-params, so
+        // the map stays const.
+        //
+        // ⚠️ The sixth argument is a ReadOnlyObjectCache<PolygonSoupSpacialNode>* the caller
+        // carves (8 bytes). The X360 body never dereferences it: it indexes the level's node array
+        // directly. It is threaded through faithfully (the SPU build fetches nodes through it) and
+        // named UNUSED-AS-SHIPPED rather than dropped, per the standing "prefer the DWARF arity"
+        // rule.
+        // =========================================================================================
+        struct PolygonSoupJobQueryParams
+        {
+            u16* mpaQueryBufferA;   // +0x00  ping  (RunBoxQuery carves 4096 B == 2048 u16)
+            u16* mpaQueryBufferB;   // +0x04  pong
+            s32  miQueryBufferSize; // +0x08  capacity in ENTRIES (RunBoxQuery passes 2048)
+        };
+
+        s32 RunJobQuery(const AxisAlignedBox&                                      lrQueryBox,
+                        PolygonSoupJobQueryParams*                                 lpParams,
+                        u16**                                                      lppaOutResults,
+                        s32*                                                       lpiOutNumResults,
+                        CgsContainers::ReadOnlyObjectCache<PolygonSoupSpacialNode>* lpNodeCache) const;
     };
 }

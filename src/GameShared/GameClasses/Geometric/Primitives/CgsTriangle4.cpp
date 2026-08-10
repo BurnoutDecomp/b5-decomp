@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the two AssertIsValid bodies)
+
 #include <cmath>
 
 // ============================================================================
@@ -139,5 +141,74 @@ namespace CgsGeometric
         if (!(mfEdgeCosine2 > -1.1f && mfEdgeCosine2 < 1.1f))        return false;
 
         return true;
+    }
+
+    // ============================================================================
+    // ⭐ ADDED 2026-08-10 (fill-worker wave 2) -- the two AssertIsValid bodies, which
+    // this header has declared as "bodied in its own TU" since the class landed and
+    // which nothing in the tree defined. Their absence is what kept ODR FORK #2 alive
+    // (see CgsTriangleList.h): a second, namespace-scoped `CgsGeometric::Triangle4::
+    // AssertIsValid(void*)` was declared and wired to a `{ return 0; }` in
+    // CgsTriangleList_embed_check.cpp because the real member had nothing behind it.
+    //
+    // ⚠️ THE PREVIOUS WAVE RECORDED THIS SYMBOL AS "CALLED ABSENT". IT IS NOT.
+    // A name-index pass over all 30,084 X360 export JSONs finds it at 0x825BD808 with
+    // a full 46-instruction body, and its two collaborators GetAOSTriangle @0x825B2808
+    // and AOSTriangle::IsValid @0x825BD208 were ALREADY BODIED in this very file --
+    // the TU was simply never on the build list. Fourth stale "absent" banner.
+    // ============================================================================
+
+    // ------------------------------------------------------------------------
+    // Triangle4::AOSTriangle::AssertIsValid @0x825BD648 (112)
+    //
+    // `if (!IsValid()) <fire>`. The X360 arm is a streamed assert that dumps the
+    // whole triangle through StrStreamBase -- " Edge Cos 0: ", " Edge Cos 1: ",
+    // " Edge Cos 2: ", " Normal: ", " Vert 0: ", " Vert 1: ", " Vert 2: " and a newline
+    // -- and fires at CgsTriangle4.h:0xE5 == 229 (`li r5, 0xE5` @0x825BD7EC).
+    // Lowered to this file family's CGS_ASSERT convention: the leading literal is
+    // carried, the per-field stream is not (same precedent as the streamed asserts
+    // in CgsTriangleCacheManager_Events.cpp).
+    // ------------------------------------------------------------------------
+    void Triangle4::AOSTriangle::AssertIsValid() const
+    {
+        CGS_ASSERT(IsValid(), " Edge Cos 0: ");   // CgsTriangle4.h:229
+    }
+
+    // ------------------------------------------------------------------------
+    // Triangle4::AssertIsValid @0x825BD808 (46)
+    //
+    //   0x825BD838  addi r30, r27, 0x90        -> &mValidMasks
+    //   0x825BD840  cmpwi r31, 4 ; blt         -> the lane accessor's bounds assert,
+    //                                             "liIndex < 4", CgsTriangle4.h:0x83 == 131
+    //   0x825BD860  slwi r11, r31, 2 ; lvsl / vspltw / vperm
+    //               vcmpeqfp128. v0, v0, v127  -> lane r31 of mValidMasks == 0.0f ?
+    //   0x825BD888  bne -> skip                -> a ZERO lane holds no triangle
+    //   0x825BD898  GetAOSTriangle(r31, &stack)
+    //   0x825BD8A0  AOSTriangle::AssertIsValid(&stack)
+    //
+    // ⚠️ The console peels the bounds assert: the back-edge at 0x825BD8AC re-enters at
+    // 0x825BD860, AFTER it, so it executes only on lane 0. That is the compiler
+    // hoisting a loop-invariant check out of the inlined lane accessor; the SOURCE
+    // shape is the assert inside the loop, which is what is written here.
+    // ------------------------------------------------------------------------
+    void Triangle4::AssertIsValid() const
+    {
+        const f32* lpaValidLanes = reinterpret_cast<const f32*>(&mValidMasks);
+
+        for (s32 liIndex = 0; liIndex < 4; ++liIndex)
+        {
+            CGS_ASSERT(liIndex < 4, "liIndex < 4");   // CgsTriangle4.h:131
+
+            // vcmpeqfp against the zero register: an all-zero lane mask means the
+            // lane carries no triangle, and the console skips it.
+            if (lpaValidLanes[liIndex] == 0.0f)
+            {
+                continue;
+            }
+
+            AOSTriangle lTriangle;
+            GetAOSTriangle(liIndex, lTriangle);
+            lTriangle.AssertIsValid();
+        }
     }
 }

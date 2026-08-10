@@ -17,12 +17,40 @@ namespace CgsSceneManager
 {
 namespace CgsCollision
 {
-    // The 256-byte job-data descriptor the worker reads (SetData is handed 256). Opaque here
-    // (its interior is filled by the Prepare* family, which own their TUs); modelled as a raw
-    // slot so SetupJob can hand &mJobDescription to Job::SetData.
-    struct CollisionJobDescription
+    // ⭐⭐ ODR FORK #1 RETIRED 2026-08-10 (fill-worker wave 2).
+    //
+    // This header used to declare a SECOND, 256-byte-opaque
+    // `CgsSceneManager::CgsCollision::CollisionJobDescription`, while
+    // JobDescription/CgsCollisionJobDescription.h declared the real bookkeeping struct of
+    // the same qualified name -- and CollisionBatch embeds it BY VALUE, so
+    // `sizeof(CollisionBatch)` (and therefore `BaseCollisionGenerator`'s 64-element batch
+    // array, and therefore every offset in the generator) differed between translation
+    // units depending on which header they had seen. That links SILENTLY: the mangled name
+    // of a method encodes neither class-key nor member layout. [[odr-forks-link-silently]]
+    //
+    // It is retired here rather than flagged again because this wave makes the batch's
+    // descriptor slot LIVE for the first time: RunFillTriangleCacheStream writes the
+    // FillTriangleCacheStreamJobDesc payload into it and PolygonSoupTesterJob::Execute
+    // reads CollisionJobDescription::GetType() back out of the same bytes.
+    //
+    // The slot is now a DISTINCTLY NAMED raw storage blob -- one name, one definition. It
+    // is storage, not a type: the Prepare* family placement-writes whichever concrete
+    // descriptor a given job needs into it, exactly as the console does.
+    //
+    // ⚠️ THE CONSOLE'S 256 IS A COUNT OF CONSOLE BYTES, NOT A HOST SIZE. Every concrete
+    // descriptor derives from CollisionJobDescription, whose pointers widen on x64, so the
+    // storage is sized from the host types themselves (see CgsCollisionBatch.cpp's
+    // static_asserts) and only floored at the console's 256 so Job::SetData's declared
+    // 256-byte window always fits.
+    struct CollisionJobDescriptionStorage
     {
-        u8 macBuffer[256];
+        static const u32 KU_CONSOLE_BYTES = 256;
+
+        // 16-aligned: the descriptors embed Sphere/Vector4 members.
+        alignas(16) u8 macBuffer[KU_CONSOLE_BYTES];
+
+        void*       GetBuffer()       { return macBuffer; }
+        const void* GetBuffer() const { return macBuffer; }
     };
 
     // DWARF CgsCollisionBatch.h:63.
@@ -43,9 +71,18 @@ namespace CgsCollision
         // inlines it to a direct Job::WaitOn on the batch, mJob being at +0).
         void WaitOn() { mJob.WaitOn(); }
 
+        // ⭐ ADDED 2026-08-10 (fill-worker wave 2). The Run* dispatch family reaches both
+        // subobjects of the batch it just claimed. The console does it with byte offsets off
+        // the generator (`1152*index + this`, then +0x80 for the job and +0x3D0 for the
+        // descriptor); these two named accessors are what let the dispatcher be written
+        // against MEMBERS instead -- the standing "reach members by NAME, never console byte
+        // offset" rule. Additive: layout/sizeof unchanged.
+        EA::Jobs::Job*                  GetJob()               { return &mJob; }
+        CollisionJobDescriptionStorage& GetJobDescription()    { return mJobDescription; }
+
     private:
-        EA::Jobs::Job           mJob;              // +0x000  h:189
-        CollisionJobDescription mJobDescription;   // +0x350  h:190 (256-byte job-data slot)
+        EA::Jobs::Job                  mJob;             // +0x000  h:189
+        CollisionJobDescriptionStorage mJobDescription;  // +0x350  h:190 (job-data slot)
     };
 }
 }
