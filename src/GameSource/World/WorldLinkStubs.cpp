@@ -2384,23 +2384,16 @@ void CgsSceneManager::SceneManagerModule::ProcessSceneQueries(struct CgsModule::
 // -------------------------------------------------------------------------
 // CgsSceneManager::TriangleCollisionManager
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool CgsSceneManager::TriangleCollisionManager::Prepare(class CgsMemory::LinearMalloc *,int)
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare chain
-    // (SceneManagerModule::Prepare / the world stage machine). One-shot log +
-    // report success so the scripted load advances; the sub-manager stays
-    // inert (zero-initialised storage) and its consumers keep their traps.
-    // Reconstruct from X360 0x828D0C40 (TriangleCollisionManager::Prepare; see ledger).
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TriangleCollisionManager::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// (GATE RETIRED 2026-08-10, spatial-partition wave: TriangleCollisionManager::Prepare now has
+//  its REAL body in GameShared/GameClasses/SceneManager/TriangleCollision/
+//  CgsTriangleCollisionManager.cpp, together with ProcessAddPolySoupListEvents @0x828B3160 and
+//  ProcessClearPolySoupListEvents. BOTH were already fully reconstructed and had simply never
+//  been MOUNTED -- [[mount-gap-is-the-bottleneck]]; this wave supplied the one body they were
+//  missing, BuildSpacialPartition @0x82841740, and put the TU on the link.
+//  ⚠️ THE ADDRESS IN THIS GATE'S OWN COMMENT WAS WRONG: it read "Reconstruct from X360
+//  0x828D0C40", and NO EXPORT LIVES AT 0x828D0C40 -- checked against all 30,084 X360 export
+//  JSONs. The real address is 0x828B2FF0 (91 insns), which the class header had right all
+//  along. A committed address is a claim. LNK2005 is the tripwire if this stub is restored.)
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::VolumeManager
@@ -3591,21 +3584,13 @@ void BrnWorld::WorldDebugComponent::Update(struct BrnWorldIO::DebugController co
 //  in its own TU, GameSource/World/EnvironmentMap/BrnEnvironmentMap.cpp, which is
 //  on the build list -- WorldModule::Update's env-map refresh is REAL.)
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the per-frame triangle-cache kick (@0x828C73D8).
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void CgsSceneManager::SceneManagerModule::StartUpdateTriangleCache(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,struct CgsSceneManager::CgsCollision::BaseCollisionGenerator *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "SceneManagerModule::StartUpdateTriangleCache: inert [FLAG PC boot gate]\n";
-    }
-}
+// (GATE RETIRED 2026-08-10, spatial-partition wave: SceneManagerModule::StartUpdateTriangleCache
+//  @0x828C73D8 (73) now has its REAL body in GameShared/GameClasses/SceneManager/
+//  CgsSceneManagerModule.cpp, next to its End partner @0x828C7500. It is REACHED EVERY FRAME
+//  from WorldModule::Update (BrnWorldModule.cpp:2446), so the real body runs from the frame it
+//  lands. Six of its seven callees were already bodied; the one that was not --
+//  PolygonSoupListSpatialMap::BuildSpacialPartition @0x82841740 (2,255) -- landed this wave,
+//  which is the whole reason this gate could go. LNK2005 is the tripwire if it is restored.)
 
 
 

@@ -38,19 +38,32 @@
 //    (BrnWorldModule.cpp:2471). This body therefore RUNS, and takes its own opening null guard on
 //    mpUpdateTriangleCacheStream -- exactly as the console does whenever a frame posted no fill.
 //
-//  * StartUpdateTriangleCaches IS NOT REACHED, and the blocker is NOT this function or its
-//    866-instruction neighbourhood. Its sole caller SceneManagerModule::StartUpdateTriangleCache
-//    @0x828C73D8 must, BEFORE it gets here, run TriangleCollisionManager::ProcessAddPolySoupList-
-//    Events @0x828B3160, which opens with an unconditional CGS_ASSERT on mpaPolySoupListHandles --
-//    and that pointer is null because TriangleCollisionManager::Prepare @0x828D0C40 is still a
-//    WorldLinkStubs gate. Behind that sits PolygonSoupListSpatialMap::BuildSpacialPartition
-//    @0x82841740, **2,255 instructions**, absent from this tree. Bodying the module entry today
-//    would fire a brand-new assert every frame, so it stays gated and says so.
-//    ⭐ This function's OWN first act after its two asserts is the same news from the console's
-//    side: `if (lpPolySoupListSpacialMap->mpLeafNodes == NULL) return;` (0x828BED68 `lwz r11,
-//    0x48(r29)` / `beq` straight to the epilogue). Until something builds the spatial partition,
-//    the SHIPPED code fills nothing either. That is a fact about the world data, not about this
-//    reconstruction.
+//  * StartUpdateTriangleCaches IS NOW REACHED TOO -- ⭐ UPDATED 2026-08-10 (spatial-partition
+//    wave); the paragraph that used to sit here is superseded and two of its claims were wrong.
+//    Its sole caller SceneManagerModule::StartUpdateTriangleCache @0x828C73D8 is no longer a
+//    WorldLinkStubs gate: it has its real body in CgsSceneManagerModule.cpp, and the chain it
+//    needed first -- TriangleCollisionManager::Prepare, ProcessAddPolySoupListEvents
+//    @0x828B3160, and PolygonSoupListSpatialMap::BuildSpacialPartition @0x82841740 (2,255) --
+//    is all present and mounted. RUNTIME-WITNESSED entering this function every frame.
+//    ⚠️ TWO CORRECTIONS to what this banner used to assert:
+//      - "TriangleCollisionManager::Prepare @0x828D0C40" -- NO EXPORT LIVES AT 0x828D0C40
+//        (checked against all 30,084 X360 export JSONs). The real address is 0x828B2FF0 (91).
+//      - "Prepare is still a WorldLinkStubs gate ... BuildSpacialPartition absent from this
+//        tree" -- Prepare and ProcessAddPolySoupListEvents were in fact FULLY RECONSTRUCTED the
+//        whole time and merely UNMOUNTED; only BuildSpacialPartition was genuinely missing.
+//
+//  * ⛔ WHAT STILL STARVES IT, measured not guessed: the partition is only built when an
+//    InEventAddPolySoupList arrives, whose one producer chain
+//    (WorldEntityModule::AddCollisionZoneToSceneManager @0x822D8130 <- PrepareWorldCollision
+//    @0x823068F8, both already bodied) is never entered, because the scripted boot spine defers
+//    the stage that starts it -- BrnGameMainFlowStates.cpp:532 logs
+//    `ScriptedLoad: stage 7 (LoadWorldCollision [deferred])` and jumps to stage 8. Remaining:
+//    LoadingScriptedState::LoadWorldCollision @0x823E73E0 (55) + WorldModule::
+//    PrepareWorldCollision @0x827C9478 (152, an IO-buffer + streaming round trip).
+//    ⭐ Until then this function's OWN first act after its two asserts takes the same exit the
+//    console would: `if (lpPolySoupListSpacialMap->mpLeafNodes == NULL) return;` (0x828BED68
+//    `lwz r11, 0x48(r29)` / `beq` straight to the epilogue) -- a fact about the world DATA not
+//    being loaded, not about this reconstruction.
 //
 // -------------------------------------------------------------------------------------------------
 // METHOD (standing discipline: read the ASM, not the pseudocode). Both Hex-Rays listings are
@@ -100,6 +113,7 @@ namespace CgsSceneManager
         // message is the console's own.
         CGS_ASSERT(lpCollisionGenerator != NULL, "lpCollisionGenerator != NULL");
         CGS_ASSERT(lpPolySoupListSpacialMap != NULL, "lpPolySoupListSpacialMap != NULL");
+
 
         // 0x828BED68: no spatial partition built -> nothing to query against, so no stream is
         // created and no command is posted. The matching End then takes ITS null guard.
