@@ -107,6 +107,36 @@ namespace CgsCollision
         u16 CollidePrimitivePairList(const PrimitivePairList* lpPairList, u16 lu16MaxResults,
                                      u32 luFlags, u16 lu16Tag);                                                  // @0x82814138 (:144)
 
+        // ==========================================================================================
+        // ⭐ ADDED 2026-08-10 (ground wave): the LINE-vs-triangle-list stream pair -- the floor of
+        // the vehicle traction-line chain. VehicleManager::DoVehicleTractionLineAllocations
+        // @0x825B5098 calls the Create and seats the result in mpTractionLineStreamProducer;
+        // RunTractionLineTestJobs @0x825B5168 calls the Run and seats the returned job in
+        // mpTractionLineTestsJob.
+        //
+        // ⚠️ Neither carries an IDA symbol -- this is the "missing body == a NAME search failing"
+        // shape, not an absence:
+        //   * Create @0x82810B98 is exported as the unnamed `sub_82810B98`; identity is pinned by
+        //     its two asserts (CgsCollisionGenerator.cpp :533 "Failed to allocate stream producer\n"
+        //     / :550 "Failed to allocate stream buffers\n" -- the same pair CreateStreamProducer
+        //     @0x828109F8 carries at other lines) and by its single caller/consumer seat.
+        //   * Run @0x82810E80 is a GENUINE export-set hole: the export dir jumps from
+        //     RunFillTriangleCacheStream @0x82810D38 (ends 0x82810E7C) straight to 0x82810FE8.
+        //     The address is proved by DECODING the `bl` word at the call site
+        //     (0x825B5248 = 0x4825BC39 -> 0x82810E80), with the decoder proved on four
+        //     independently-named neighbours in the same run. Its 90 instructions read out of the
+        //     image are the exact call sequence of its exported twin RunFillTriangleCacheStream:
+        //     AllocateJob / CreateNewBatch / Job::Clear / EntryPoint::SetName / EntryPoint::SetCode
+        //     / Job::SetData / Job::DependsOn / JobScheduler::AddTree.
+        // The Run BODY is NOT reconstructed (its job entry point and the
+        // ContactGeneratorJob::ExecuteLineWithTriangleListStream @0x82921968 worker behind it are
+        // not in the tree) -- it is a named boot gate in CgsCollisionGenerator_LineStream.cpp.
+        // ⚠️ Run takes NO DebugRenderStreamReader (unlike the three collide-stream Run*): the call
+        // site loads r3=generator, r4=producer and nothing else.
+        // ==========================================================================================
+        CgsMemory::SimpleDataStreamProducer* CreateLineWithTriangleListStream(s32 liMaxCommands);                 // @0x82810B98
+        EA::Jobs::Job* RunLineWithTriangleListStream(CgsMemory::SimpleDataStreamProducer* lpProducer);            // @0x82810E80 (export hole)
+
     private:
         u16  CreateNewBatch();                   // h:350 / X360 0x82810960
         void FinishBatch(u16 lu16BatchIndex);    // h:353 / X360 0x82810718

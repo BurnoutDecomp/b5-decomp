@@ -394,7 +394,11 @@ namespace Vehicle
 
         // ---- STAGE: traction line tests (dword_82F2A154) -------------------------------
         CgsDev::PerfMonCpu::StartMonitor(gs_iTractionLTsPM);
-        EndVehicleTractionLineTests(lpInputBufferStack, lpInputInterface);   // r4=stack, r5=iface
+        // ⭐ RE-POINTED 2026-08-10 (ground wave): ONE argument. The old second argument was a
+        // fabricated parameter -- the callee's 68 instructions never touch r5 (proof at the
+        // declaration in BrnVehicleManager.h); r4 alone is forwarded to
+        // DoVehicleTractionLineDecallocations, whose assert names it lpInputBufferStack.
+        EndVehicleTractionLineTests(lpInputBufferStack);                     // r4=stack (only)
         CgsDev::PerfMonCpu::StopMonitor(gs_iTractionLTsPM);
 
         // ---- STAGE: fatal crashes (dword_82F2A178) -------------------------------------

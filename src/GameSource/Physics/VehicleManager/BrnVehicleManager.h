@@ -86,6 +86,7 @@ namespace CgsModule { struct IOBufferStack; }                              // Cg
 // template-arg use only in this header.
 namespace CgsMemory { class LinearMalloc; }
 namespace CgsMemory { struct SimpleDataStreamProducer; }   // stream-producer members (pointers)
+namespace CgsMemory { struct SimpleDataStreamResultIterator; }  // traction harvest cursor (pointer)
 namespace EA { namespace Jobs { struct Job; } }            // job members (pointers)
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairListBuilder.h" // PrimitivePairListBuilder (five BY-VALUE members)
 namespace CgsSceneManager { namespace SceneManagerIO { struct OutOverlapPair; } }
@@ -325,9 +326,20 @@ namespace Vehicle
         // CgsBitArray.h TU -- re-derive at its own wave).
         void UpdateCrashes(f32 lfTimeStep);
 
-        // DWARF h:893; X360 body is an export-set hole (absent-from-JSON, not absent-from-image).
-        void EndVehicleTractionLineTests(CgsModule::IOBufferStack* lpInputBufferStack,
-                                         const VehicleInputInterface* lpInputInterface);
+        // DWARF h:893; X360 @0x82633CD8 (68 insns).
+        // ⛔⛔ ARITY CORRECTED 2026-08-10 (ground wave) -- THE SECOND PARAMETER WAS FABRICATED.
+        // The committed declaration took (IOBufferStack*, const VehicleInputInterface*) and the
+        // one call site passed both. The emitted body reads exactly TWO incoming registers:
+        //     0x82633CE8  mr r31, r3   <- this
+        //     0x82633CF0  mr r26, r4   <- the one parameter
+        // and r5 is never touched in any of the 68 instructions. r26 is consumed once, at the tail:
+        //     0x82633DCC  mr r4, r26 ; 0x82633DD4  bl DoVehicleTractionLineDecallocations
+        // whose own r4 assert is "lpInputBufferStack != NULL" (BrnVehicleManager.cpp:2296) -- the
+        // SAME argument StartVehicleTractionLineTests hands DoVehicleTractionLineAllocations in r4.
+        // So the single parameter is the IOBufferStack, and the interface argument never existed.
+        // (Also RETRACTED here: the old "export-set hole" claim -- the body is exported, with
+        // pseudocode. That correction was already made in the link-stub banner on 2026-08-10.)
+        void EndVehicleTractionLineTests(CgsModule::IOBufferStack* lpInputBufferStack);
 
         // DWARF h:1287; X360 body is an export-set hole (image-only).
         void CrashFatalRaceCars(
@@ -588,9 +600,54 @@ namespace Vehicle
             const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody, 200>* lpUpdatedBodyQueue,
             VecFloat lvfTimeStep);
 
+        // ==========================================================================================
+        // ⭐ TRACTION-LINE CHAIN, the four members bodied for real 2026-08-10 (ground wave), in
+        // BrnVehicleManager_TractionLineTests.cpp. A Burnout car does NOT rest on contacts --
+        // contacts are the body-shell/crash path; it rests on TRACTION LINE TESTS, and this is the
+        // producer lifecycle plus the race-car harvest that ends in Wheel::mRoadContact.mbIsOnGround.
+        // ⚠ ALL FOUR ARE UNREACHED TODAY: their only callers are StartVehicleTractionLineTests
+        // (gate-bodied below) and EndVehicleTractionLineTests (link stub) -- see those two for why
+        // the generation half cannot land yet. They are mounted so the LINK closure is enforced.
+        // ==========================================================================================
+
+        // @0x825B5098 (52 insns). Carve the traction-line command stream out of the contact
+        // generator's result arena and seat it in mpTractionLineStreamProducer.
+        void DoVehicleTractionLineAllocations(
+            CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen);
+
+        // @0x825B5168 (64 insns). Publish the stream's geometry (SimpleDataStreamProducer::Begin,
+        // which the console inlines here) and dispatch the line-test job tree.
+        void RunTractionLineTestJobs(
+            CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen);
+
+        // @0x825B5268 (37 insns). Release the seat. The stream memory itself is arena-owned by the
+        // generator, so this is a pointer null-store, not a free.
+        void DoVehicleTractionLineDecallocations(CgsModule::IOBufferStack* lpInputBufferStack);
+
+        // @0x82618058 (231 insns). ⭐ THE PAYOFF: per live race car, per wheel that reported a hit,
+        // feed {position, normal, surface tag} into RaceCarPhysics::AddTractionPoint -- which is
+        // what sets Wheel::mRoadContact.mbIsOnGround and so what UpdateSuspensionSprings pushes
+        // against. Takes the result cursor BY POINTER: EndVehicleTractionLineTests copies the
+        // producer's own iterator to its stack (`ld r11, 0x38(producer)`, one 8-byte value) and
+        // hands the same copy to all three harvests in turn, so each resumes where the last stopped.
+        void ReadRaceCarTractionLineTestResults(
+            CgsMemory::SimpleDataStreamResultIterator* lpResultIterator);
+
         // ---- ⚠ FLAG: gate-bodied (BrnPhysicsConductorGates.cpp) from here down ------------------
 
         // @0x82629CE0 (DWARF :308; 78 insns).
+        // ⛔ STILL GATED 2026-08-10 (ground wave) and here is the measurement, so nobody re-derives
+        // it: this calls its six callees UNCONDITIONALLY, and the two that build the commands
+        // (AddRaceCarTractionLineTests @0x825E9640, PhysicalTrafficManager::AddTrafficTraction-
+        // LineTests @0x8261D580) read the triangles they test against out of a per-object TRIANGLE
+        // CACHE -- they assert "lpCacheInterface != NULL" / "mpTriangleCacheManager != NULL" /
+        // "mpaTriangleCache != NULL" and then dereference it. CgsSceneManager::TriangleCacheManager
+        // is NOT in this tree (~1,688 console insns across Prepare/ProcessAddToCacheEvents/
+        // ProcessRemoveFromCacheEvents/ProcessUpdateCachedPositionEvents/StartUpdateTriangleCaches/
+        // EndUpdateTriangleCaches), nor is SimpleVehiclePhysics::GetTractionLine @0x825D85C0
+        // (another export hole, identity recovered from DoPlayerTractionLineTestsPostSimulation's
+        // xrefs). Landing this without them is a null dereference, not a partial.
         void StartVehicleTractionLineTests(CgsModule::IOBufferStack* lpInputBufferStack,
                                            const VehicleInputInterface* lpInputInterface,
                                            Deformation::DeformationManager* lpDeformationManager,

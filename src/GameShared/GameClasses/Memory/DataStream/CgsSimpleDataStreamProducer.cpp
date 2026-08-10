@@ -1,3 +1,10 @@
+// ⭐ THIS TU MOUNTS as of 2026-08-10 (ground wave). It was held off the link since 2026-08-06 by a
+// single unresolved edge -- its Construct calls DataStreamCommandPoster::Construct @0x82869E08,
+// which is an export-set hole -- and that edge is now carried by the loud dead trap in
+// CgsDataStreamCommandPoster_LinkStub.cpp, exactly as CgsCollisionGenerator_StreamStubs.cpp carries
+// the collide-stream family's. Nothing here is reachable yet; the mount is for LINK CLOSURE.
+// GetCurrent/GetNext live in the sibling slice CgsSimpleDataStreamProducer_ResultIterator.cpp.
+
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
@@ -75,32 +82,11 @@ namespace CgsMemory
             (luAlignedResultSize * static_cast<u32>(liMaxResults) + 0x7Fu) & ~0x7Fu;
     }
 
-    // X360 0x825B29A0.
-    // Returns a pointer to the result record the iterator currently points at.
-    // The record address is mpResultBuffer + miAlignedResultSize * miResultIndex
-    // (results are stored at the aligned stride). If the cursor has reached the
-    // end (miResultIndex >= parent->miNumAddedCommands) the cursor is clamped to
-    // the count and a null pointer is returned.
-    //
-    // Asm: a1[1]=mpParent checked non-null ('No parent'); mpParent+0x100=mbIsStreaming
-    // checked false ('Parent is streaming'); then compares miResultIndex (a1[0]) with
-    // mpParent[0x104]=miNumAddedCommands; else-branch computes
-    // miAlignedResultSize(0x30)*miResultIndex + mpResultBuffer(0x34).
-    const void* SimpleDataStreamResultIterator::GetCurrent()
-    {
-        CGS_ASSERT(mpParent != nullptr, "No parent\n");
-        CGS_ASSERT(!mpParent->mbIsStreaming, "Parent is streaming\n");
-
-        SimpleDataStreamProducer* const lpParent = mpParent;
-        const s32 liNumAddedCommands = lpParent->miNumAddedCommands;
-
-        if (miResultIndex >= liNumAddedCommands)
-        {
-            miResultIndex = liNumAddedCommands;
-            return nullptr;
-        }
-
-        return reinterpret_cast<const char*>(lpParent->mpResultBuffer)
-             + lpParent->miAlignedResultSize * miResultIndex;
-    }
+    // ⭐ MOVED OUT 2026-08-10 (ground wave): SimpleDataStreamResultIterator::GetCurrent
+    // (X360 0x825B29A0) now lives in the mountable slice
+    // CgsSimpleDataStreamProducer_ResultIterator.cpp, alongside GetNext, because the traction-line
+    // harvest needs it and THIS home TU is still unmountable (its Construct calls the
+    // declared-only DataStreamCommandPoster::Construct). Same reason CgsSimpleDataStream-
+    // Producer_Begin.cpp exists. It was MOVED, not copied -- one definition, no LNK2005 --
+    // and folds back here when this TU mounts.
 }

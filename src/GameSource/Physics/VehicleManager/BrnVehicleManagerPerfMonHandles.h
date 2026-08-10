@@ -51,5 +51,12 @@ namespace Vehicle
     extern s32 gs_iVPhysUpdateSpinPM;         // dword_82F2A288
     extern s32 gs_iVPhysUpdateDrivingPM;      // dword_82F2A28C
     extern s32 gs_iVPhysUpdateLVPM;           // dword_82F2A290
+
+    // ⭐ ADDITIVE HOIST 2026-08-10 (ground wave), per this header's own rule: two of the traction
+    // sub-stage handles gain a second reader because VehicleManager::RunTractionLineTestJobs
+    // @0x825B5168 brackets its two stages with exactly these ids (the console reads the same two
+    // file-scope slots). The rest of the traction sub-stages stay Construct-TU statics.
+    extern s32 gs_iLineTestsBeginPM;          // dword_82F2A168  ("           Begin")
+    extern s32 gs_iLineTestsRunStreamPM;      // dword_82F2A16C  ("           RunStream")
 }
 }
