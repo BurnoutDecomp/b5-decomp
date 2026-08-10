@@ -59,6 +59,13 @@ namespace PhysicsModuleIO
             static_assert(sizeof(VehicleDriverInputInterfaceStorage) == 147840 - 142544,
                           "vehicle-driver span must equal the console 5296 (host type is pointer-free)");
             static_assert(offsetof(InputBuffer, mVehicleEffectsInputInterface) == 147840 + KU_DRIFT, "mVehicleEffectsInputInterface @147840+D");
+            // ⭐ 2026-08-10 (pre-physics bridge wave): mVehicleEffectsInputInterface is the REAL
+            // Vehicle::VehicleEffectsInputInterface now (it was a 1-byte span the pre-physics
+            // bridge Appends up to 1792 bytes into -- see the header). Like the driver interface
+            // and unlike the vehicle-input span it does NOT grow on the host, so it must land
+            // EXACTLY on the console span or every member below would need another drift. Pin it.
+            static_assert(sizeof(VehicleEffectsInputInterfaceStorage) == 149632 - 147840,
+                          "vehicle-effects span must equal the console 1792 (both queue headers are 16 on both targets)");
             static_assert(offsetof(InputBuffer, mRCEntityOutputInterface)      == 149632 + KU_DRIFT, "mRCEntityOutputInterface @149632+D");
             // ⭐ 2026-08-10 (create-path wave): mRCEntityOutputInterface is the REAL
             // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface now, and like
@@ -154,6 +161,12 @@ namespace PhysicsModuleIO
 
         mVehicleInputInterface.Construct();      // +0x00170
         mVehicleDriverInterface.Construct();     // +0x22CD0
+        // ⭐ 2026-08-10 (pre-physics bridge wave): now that the effects seat is the REAL type it
+        // can -- and MUST -- be Constructed. It was omitted only because a 1-byte span has no
+        // Construct; leaving it out now would hand the pre-physics bridge two event queues with
+        // a NULL mpEvents, which is the "mpEvents != NULL" + "Reached Max length" death the
+        // race-car pre-physics buffer already suffered once.
+        mVehicleEffectsInputInterface.Construct(); // +0x24180
         mPotentialContactQueue.Construct();      // +0x271D0
         mTimerInterface.Clear();                 // +0x4FDF0
         mPropManagerInputInterface.Construct();  // +0x4FE30 (the four prop queues + the flag)

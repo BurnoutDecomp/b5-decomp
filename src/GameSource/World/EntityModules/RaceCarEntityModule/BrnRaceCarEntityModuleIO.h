@@ -446,6 +446,15 @@ namespace RaceCarEntityModuleIO
         {
             CgsModule::IOBuffer::Construct();
             mVehicleInputInterface.Construct();
+            // ⭐⭐ 2026-08-10 (pre-physics bridge wave) -- ADDED, AND IT HAD BECOME MANDATORY.
+            // The X360 Construct @0x822EA7B0 calls `VehicleDriverInputInterface::Construct(
+            // this+142192)` as its SECOND act; the PC slice skipped it while the member was
+            // unread. WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics @0x827AAEC0
+            // now drains this interface's VariableEventQueue<5040,16> every frame
+            // (GetFirstEvent/GetNextEvent), and that queue asserts "Not Constructed" -- and then
+            // walks a NULL buffer -- if Construct never ran. Same defect class as the
+            // mVehicleInputInterface line above, which cost a whole wave in 2026-08-01.
+            mVehicleDriverInterface.Construct();
             // ⭐ 2026-08-06 (PhysicsModule::Update leaves wave): the air-ram/spin queues are no
             // longer sized-opaque -- VehicleEffectsInputInterface was promoted to its real DWARF
             // layout, so the real Construct (the two queue Constructs the old FLAG below already
@@ -453,18 +462,25 @@ namespace RaceCarEntityModuleIO
             mVehicleEffectsInterface.Construct();
             mGameEventQueue.Construct();
             mGameEventQueue.Clear();
-            // [FLAG] VehicleDriverInputInterface::Construct, the two effects counters, and the
-            // +149280/+149296 block: those members are still sized-opaque here.
+            // [FLAG] the two effects counters and the +149280/+149296 block (mPlayerResetInterface):
+            // those members are still sized-opaque here. The counters are redundant with the two
+            // queue Constructs above (EventQueue::Construct clears miLength); the X360 emits them
+            // separately only because it inlined both Constructs.
         }
-        const OutputBuffer_PreScene::VehicleInputInterface* GetVehicleInputInterface() const; // :470
+        // ⚠️ THE :4xx NUMBERS BELOW ARE **PS3 DWARF** DECL LINES. The X360 bodies' baked
+        // __LINE__ for the same five const accessors is +9 (479/482/485/488/491) -- do NOT use
+        // the line to identify an export here, use the OFFSET IT RETURNS. Getting this wrong is
+        // what put 0x8279E070 on GetGameEventQueue for months (corrected 2026-08-10; the full
+        // offset table is in BrnRaceCarEntityModuleIO.cpp above the accessors).
+        const OutputBuffer_PreScene::VehicleInputInterface* GetVehicleInputInterface() const; // :470 R (0x8279DFC8, +16)
         OutputBuffer_PreScene::VehicleInputInterface*       GetVehicleInputInterface();       // :471 W (0x822B5C00)
-        const VehicleDriverInputInterface*  GetVehicleDriverInterface() const;             // :473
+        const VehicleDriverInputInterface*  GetVehicleDriverInterface() const;             // :473 R (0x8279E070, +142192)
         VehicleDriverInputInterface*        GetVehicleDriverInterface();                   // :474
-        const VehicleEffectsInputInterface* GetVehicleEffectsInterface() const;            // :476
+        const VehicleEffectsInputInterface* GetVehicleEffectsInterface() const;            // :476 R (0x8279E118, +147488)
         VehicleEffectsInputInterface*       GetVehicleEffectsInterface();                  // :477
-        const RCEntityPlayerResetInterface* GetPlayerResetInterface() const;               // :479
+        const RCEntityPlayerResetInterface* GetPlayerResetInterface() const;               // :479 R (0x8279E1C0, +149280)
         RCEntityPlayerResetInterface*       GetPlayerResetInterface();                     // :480
-        const GameEventQueue* GetGameEventQueue() const;                                   // :482 R (0x8279E070)
+        const GameEventQueue* GetGameEventQueue() const;                                   // :482 R (0x8279E268, +149312)
         GameEventQueue*       GetGameEventQueue();                                         // :483 W (0x822B5CA8)
     private:
         OutputBuffer_PreScene::VehicleInputInterface mVehicleInputInterface;               // :487

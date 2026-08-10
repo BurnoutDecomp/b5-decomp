@@ -20,8 +20,10 @@
 // No standalone X360 symbol exists for ANY method of this type (name-indexed sweep of the
 // export set, 2026-08-06) -- everything is inlined at the call sites, so Construct is defined
 // inline here as the only shape it can have: the two queue Constructs, in member order.
-// CreateAirRam/CreateSpin/Append/Clear (DWARF :88..:117) are NOT declared yet -- declaring
-// them without recovered bodies would be dead API; add them when their inline sites are read.
+// CreateAirRam/CreateSpin/Clear (DWARF :94..:117) are NOT declared yet -- declaring them
+// without recovered bodies would be dead API; add them when their inline sites are read.
+// ⭐ Append (DWARF :88) IS declared as of 2026-08-10 (pre-physics bridge wave), because its
+// inline site HAS now been read -- see the body below.
 
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // CreateAirRamEvent (64B) / CreateSpinEvent (48B)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                  // CgsModule::EventQueue
@@ -42,6 +44,21 @@ namespace Vehicle
         {
             mAirRamQueue.Construct();
             mSpinQueue.Construct();
+        }
+
+        // DWARF :88. ⭐ ADDED 2026-08-10 (pre-physics bridge wave). No out-of-line symbol -- the
+        // console inlines it, and WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics
+        // @0x827AAEC0 inlines it TWICE, once per source (race-car then traffic), each time as
+        // exactly this pair of queue merges:
+        //   0x827AB138  bl BaseEventQueue<CreateAirRamEvent>::Append (dst+0,      src+0)
+        //   0x827AB144  bl BaseEventQueue<CreateSpinEvent>::Append   (dst+0x510,  src+0x510)
+        // 0x510 == 1296 == the console gap between mAirRamQueue and mSpinQueue (the same gap
+        // BrnTrafficIO::OutputBuffer_PrePhysics::Construct @0x827618A0 walks: air-ram Construct
+        // at +142192, spin Construct at +143488). Reached BY MEMBER here, not by that offset.
+        void Append(const VehicleEffectsInputInterface* lpInterfaceToAppend)
+        {
+            mAirRamQueue.Append(lpInterfaceToAppend->mAirRamQueue);
+            mSpinQueue.Append(lpInterfaceToAppend->mSpinQueue);
         }
 
         // DWARF :97/:100 -- the read accessors UpdateVehicleEffects' inlined queue walk proves.

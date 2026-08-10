@@ -63,6 +63,27 @@ namespace Vehicle
         // arrays) from another interface into this one.
         void CopyBaseDeformationParams(const VehicleDriverInputInterface* lpInterfaceToCopy);
 
+        // ⭐ ADDED 2026-08-10 (pre-physics bridge wave). DWARF-ATTESTED, NOT INVENTED:
+        // DecFIGS `BrnVehicleDriverInputInterface.h:102` declares
+        //   `void CopyTargetAssistParams(const VehicleDriverInputInterface *)`.
+        // It has no out-of-line X360 symbol because every caller inlines it; the one call site
+        // the PC build reaches is WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics
+        // @0x827AAEC0, whose 0x827AB054..0x827AB0C8 run is EXACTLY this body inlined:
+        //   0x827AB054  lwz  r11, 0x1460(src) / stw r11, 0x1460(dst)      -- count first
+        //   0x827AB078  ble  -> skip                                      -- if (count > 0)
+        //   0x827AB088  the "miTargetAssistCount <= KI_MAX_STOMPED_CARS" tripwire (:260)
+        //   0x827AB0B0  memcpy(dst+0x13C0, src+0x13C0, 16 * count)        -- positions
+        //   0x827AB0C4  memcpy(dst+0x1440, src+0x1440, 4  * count)        -- ids
+        // i.e. `lpInterfaceToCopy->GetTargetAssistParams(<our three members>)` -- the SAME
+        // callee Append's zero-count arm uses, but UNCONDITIONAL (Append guards on
+        // `miTargetAssistCount == 0`; this one always overwrites). Bodied here rather than in
+        // the .cpp so the emitted code stays inline exactly as shipped.
+        void CopyTargetAssistParams(const VehicleDriverInputInterface* lpInterfaceToCopy)
+        {
+            lpInterfaceToCopy->GetTargetAssistParams(mTargetAssistPositions, mTargetAssistIDs,
+                                                     &miTargetAssistCount);
+        }
+
         // @0x823DB640  Merge another interface's staged driver state into this one: append its
         // update-driver queue, then adopt its target-assist list when we have none of our own.
         // ⭐ ADDED 2026-08-09 (feed wave) -- the callee of

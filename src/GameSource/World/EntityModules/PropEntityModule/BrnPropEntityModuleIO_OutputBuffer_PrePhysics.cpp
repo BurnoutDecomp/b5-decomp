@@ -25,8 +25,26 @@ namespace PropEntityIO
 {
     void OutputBuffer_PrePhysics::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer_PrePhysics, mPropInputInterface)     == 4,     "mPropInputInterface @4");
-        static_assert(offsetof(OutputBuffer_PrePhysics, mPropToTrafficInterface) == 11296, "mPropToTrafficInterface @11296");
+        // ⭐⭐ REBASED 2026-08-10 (pre-physics bridge wave). This gate used to pin BOTH members
+        // at their console byte offsets (+4 and +11296). mPropInputInterface is the REAL
+        // Props::PropInputInterface now (see the header for why the opaque span was unsound),
+        // and that type is **8-ALIGNED on the host** -- its four embedded event queues carry an
+        // 8-byte mpEvents and its ResourceHandle is two pointers -- so it CANNOT sit at the
+        // console's +4; the compiler pads the status-byte run out to 8. That is the correct x64
+        // outcome, not a regression, and it is precisely the case the standing rule covers:
+        // parity is BY NAMED MEMBER + SEQUENCE, and a console byte offset is only ever a bonus
+        // pin on a chain that happens to allow it. This one no longer does.
+        // What is still gated, and still has teeth: the member ORDER, that nothing is inserted
+        // between the two, and that the interface has not silently shrunk back below its
+        // console extent.
+        static_assert(offsetof(OutputBuffer_PrePhysics, mPropInputInterface) >= 4,
+                      "mPropInputInterface must follow the status byte (console +4)");
+        static_assert(sizeof(PropInputInterfaceStorage) >= 11296 - 4 - 12,
+                      "prop-input span smaller than the console span -- retype regressed");
+        static_assert(offsetof(OutputBuffer_PrePhysics, mPropToTrafficInterface)
+                          == offsetof(OutputBuffer_PrePhysics, mPropInputInterface)
+                             + sizeof(PropInputInterfaceStorage),
+                      "mPropToTrafficInterface must immediately follow mPropInputInterface (console +11296)");
     }
 
     // X360 0x827A1B68 (own TU): read-lock; return this + 4.

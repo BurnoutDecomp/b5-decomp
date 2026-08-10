@@ -15,6 +15,7 @@
 // ============================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT (SetRaceCarsAddedForCollision's tripwire)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                          // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                        // CgsContainers::BitArray<N>
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModuleIO.h"          // CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult
@@ -119,6 +120,24 @@ namespace Vehicle
         // (mTriangleCacheInterface) == the seat of mCreateRaceCarEventQueue, so the accessor is
         // the same member the console addresses, reached by name instead of by that offset.
         const CreateRaceCarEventQueue* GetCreateRaceCarEventQueue() const { return &mCreateRaceCarEventQueue; }
+
+        // ⭐ ADDED 2026-08-10 (pre-physics bridge wave). BOTH ARE DWARF-DECLARED, not invented:
+        // DecFIGS BrnVehicleInputInterface.h:245 `const RaceCarBitArray* GetRaceCarsAddedForCollision() const`
+        // and :252 `void SetRaceCarsAddedForCollision(const RaceCarBitArray*)`. Neither has an
+        // out-of-line X360 symbol; the pair is inlined at the tail of
+        // WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics @0x827AAEC0:
+        //   0x827AB2B0  ori  r31, r10, 0x2B50            -- 142160, the member's console seat
+        //   0x827AB2C4  cmplwi r30, 0 / bne              -- the SETTER's own tripwire...
+        //   0x827AB2CC  "lpRaceCarsAddedForCollision != NULL"  (X360 BrnVehicleInputInterface.h:254)
+        //   0x827AB2EC  ld r11, 0(src) ; stdx r11, dst, r31   -- one 8-byte BitArray<8> copy
+        // The console's assert sits INSIDE the setter (its parameter is what is tested), which is
+        // why it fires on an address that can never be null -- reproduced as shipped.
+        const RaceCarBitArray* GetRaceCarsAddedForCollision() const { return &mRaceCarsAddedForCollision; }
+        void SetRaceCarsAddedForCollision(const RaceCarBitArray* lpRaceCarsAddedForCollision)
+        {
+            CGS_ASSERT(lpRaceCarsAddedForCollision != 0, "lpRaceCarsAddedForCollision != NULL");
+            mRaceCarsAddedForCollision = *lpRaceCarsAddedForCollision;
+        }
 
     private:
         InLineTestResultQueue                 mLineTestResultsQueue;                     // :261

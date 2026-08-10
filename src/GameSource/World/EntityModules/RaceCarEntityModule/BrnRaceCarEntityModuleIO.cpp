@@ -238,7 +238,62 @@ OutputBuffer_PrePhysics::GetVehicleInputInterface()
     return &mVehicleInputInterface;
 }
 
-// X360 0x8279E070 (R, :482) -- const game-event queue accessor.
+// ============================================================================================
+// ⛔⛔ MISATTRIBUTION CORRECTED 2026-08-10 (pre-physics bridge wave).
+//
+// This block used to read "X360 0x8279E070 (R, :482) -- const game-event queue accessor" over
+// GetGameEventQueue() const. It is WRONG, and the proof is the returned offset:
+//     0x8279E070   addis r3, r28, 2 ; addi r3, r3, 0x2B70   ->  this + 142192
+// and 142192 is mVehicleDriverInterface -- the offset this class's own Construct comment names
+// (`VehicleDriverInputInterface::Construct(+142192)`). mGameEventQueue lives at +149312.
+//
+// The five READ-lock accessors of this buffer (all five test `extrwi r11,r11,1,27` and carry
+// "Not locked for reading"), keyed by the ONLY reliable discriminator -- the offset returned --
+// and cross-read against the DecFIGS DWARF member order (mVehicleInputInterface /
+// mVehicleDriverInterface / mVehicleEffectsInterface / mPlayerResetInterface / mGameEventQueue):
+//     0x8279DFC8 -> +16      GetVehicleInputInterface()   const
+//     0x8279E070 -> +142192  GetVehicleDriverInterface()  const     <- was called GameEventQueue
+//     0x8279E118 -> +147488  GetVehicleEffectsInterface() const
+//     0x8279E1C0 -> +149280  GetPlayerResetInterface()    const
+//     0x8279E268 -> +149312  GetGameEventQueue()          const     <- the real one
+//
+// ⚠️ WHY THIS WAS EASY TO GET WRONG, recorded so the next reader does not repeat it: the
+// `:470/:473/:476/:479/:482` annotations in the header are **PS3 DWARF** declaration lines, and
+// the X360 bodies' baked __LINE__ values for the same five accessors are 479/482/485/488/491 --
+// a uniform +9. Matching on the line number therefore names the accessor exactly three
+// const/non-const pairs too late. (The PhysicsModuleIO::InputBuffer block a few files over
+// matches its DWARF lines EXACTLY, 276/279/282/302, which is why the drift went unnoticed.)
+// ============================================================================================
+
+// X360 0x8279DFC8 (R) -- const vehicle-input accessor (this + 16). ⭐ NEW 2026-08-10: the READ
+// end of the create-event pipe. WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics
+// @0x827AAEC0 calls this, and PlaceOnTrackManager::PrePhysicsUpdate ->
+// RaceCarEntityModule::ResetActiveRaceCar -> ActiveRaceCar::AddHandlingModel ->
+// VehicleInputInterface::CreateRaceCar is what fills the interface it returns.
+const OutputBuffer_PreScene::VehicleInputInterface*
+OutputBuffer_PrePhysics::GetVehicleInputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mVehicleInputInterface;
+}
+
+// X360 0x8279E070 (R) -- const vehicle-driver accessor (this + 142192).
+const OutputBuffer_PrePhysics::VehicleDriverInputInterface*
+OutputBuffer_PrePhysics::GetVehicleDriverInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mVehicleDriverInterface;
+}
+
+// X360 0x8279E118 (R) -- const vehicle-effects accessor (this + 147488).
+const OutputBuffer_PrePhysics::VehicleEffectsInputInterface*
+OutputBuffer_PrePhysics::GetVehicleEffectsInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mVehicleEffectsInterface;
+}
+
+// X360 0x8279E268 (R, :482) -- const game-event queue accessor (this + 149312).
 const OutputBuffer_PrePhysics::GameEventQueue*
 OutputBuffer_PrePhysics::GetGameEventQueue() const
 {
