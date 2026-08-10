@@ -616,17 +616,17 @@ void SceneManagerModule::UpdateContactGeneration(CgsModule::IOBufferStack* lpInp
 // Note the X360 calls the partition DIRECTLY (module+0x280) for the add leg rather than
 // routing it through the spatial-partition update queue -- reproduced.
 //
-// SCOPE NOTE: the volume / culling-group / triangle-cache / poly-soup legs (the other 21
-// queues) are the VolumeManager + TriangleCache collaborators' territory and are not
-// reconstructed here; they feed no part of the frustum path. Their producers are already
-// live, so the events simply stay queued and are dropped with the frame's buffer -- the
-// same observable those managers' own gates already have.
+// SCOPE NOTE (updated 2026-08-10): the volume / culling-group legs are the VolumeManager's
+// territory and are still not reconstructed here; they feed no part of the frustum path, so
+// their events stay queued and are dropped with the frame's buffer. The TRIANGLE-CACHE and
+// POLY-SOUP legs ARE reconstructed, behind the console's own `lbPrepare` guard -- see the long
+// note at the call itself for why that guard is the whole mechanism.
 // ===========================================================================
 void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     OverlapGenerationIO::InputBuffer* /*lpOverlapGenerationInput*/,
     SpatialPartitionIO::InputBuffer_Update* /*lpSpatialPartitionInput*/,
     SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
-    bool /*lbPrepare*/)
+    bool lbPrepare)
 {
     CGS_ASSERT(lpSceneInputBuffer != NULL, "lpSceneInputBuffer != NULL");
     if (lpSceneInputBuffer == NULL)
@@ -654,15 +654,52 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     // Placed BEFORE the entity legs' partition guard on purpose: the poly-soup partition is
     // the TriangleCollisionManager's own quadtree and has nothing to do with the entity
     // octree, so an absent SpatialPartition must not suppress it.
-    // ⚠️ The console bridge (1,614 insns) also carries the cache/collision-body legs
-    // (ProcessAdd/RemoveForCollisionEvent, ProcessAdd/RemoveFromCacheEvents,
-    // ProcessUpdateCachedPositionEvents, UpdateCollisionBody). Those are NOT reconstructed
-    // here -- they are the dynamic-object side and are already driven per frame by
-    // StartUpdateTriangleCache; only the static-world leg is added, because only the static
-    // world is staged through a buffer that dies before the frame pass runs.
-    if (lpScene != NULL)
+    //
+    // ⭐⭐ CORRECTED + EXTENDED 2026-08-10 (producer wave). The previous wave added the soup leg
+    // UNCONDITIONALLY and explicitly declined to add the three TRIANGLE-CACHE legs, reasoning
+    // that they "are already driven per frame by StartUpdateTriangleCache". That reasoning is
+    // right for the per-frame path and WRONG for the Prepare path, and the console spells the
+    // distinction out itself: all four legs sit behind ONE condition, the bridge's own
+    // `lbPrepare` argument --
+    //     0x828D1FA4  stb r7, arg_37(r1)                      <- lbPrepare, the 5th register arg
+    //     0x828D290C  lbz r11, arg_37 ; beq -> skip           -> ProcessRemoveFromCacheEvents
+    //     0x828D2D44  lwz r11, var_188 ; beq -> skip          -> ProcessAddToCacheEvents
+    //                                                         -> ProcessAddPolySoupListEvents
+    //     0x828D388C  lwz r11, var_188 ; beq -> skip          -> ProcessUpdateCachedPositionEvents
+    // i.e. the bridge owns the cache queues on the PREPARE passes and StartUpdateTriangleCache
+    // owns them per frame. Nothing double-drains.
+    //
+    // WHY IT MATTERS: VehicleManager::PrepareTriangleCache @0x82615BA0 posts the 8 race-car +
+    // 20 traffic InEventAddToCache into a scene input buffer that WorldModule::Prepare's
+    // eWorldPreparePhysicsModule stage creates AND destroys inside the same call, with
+    // UpdateScene(..., lbPrepare = TRUE) the only consumer in between -- the same shape as the
+    // 396 world-collision events. Without these legs the 28 registrations were dropped and
+    // TriangleCacheManager::mUsedCacheSlots could never become non-zero.
+    //
+    // ORDER: the console's relative order is Remove(0x828D292C) ... Add(0x828D2D5C) ...
+    // AddPolySoup(0x828D2D74) ... UpdateCachedPosition(0x828D38A8), and that order is preserved
+    // below. What is NOT preserved is their absolute position: the console interleaves ~700
+    // instructions of volume/entity work between them, none of which touches the cache, so the
+    // four are grouped here and kept ahead of the entity legs' partition guard for the same
+    // reason the soup leg is (an absent entity octree must not suppress the triangle cache).
+    // ⚠️ Still NOT reconstructed from this bridge: ProcessAdd/RemoveForCollisionEvent and
+    // UpdateCollisionBody -- volume-collision legs, unrelated to the triangle cache.
+    //
+    // ⚠️ The soup leg's `lbPrepare` guard is NEW here and is a behaviour change to a working
+    // path, so it was proved safe before being added rather than after: its sole producer,
+    // WorldEntityModule::AddCollisionZoneToSceneManager, is reached only from
+    // WorldModule::PrepareWorldCollision, whose own UpdateScene (BrnWorldModule.cpp:1226) passes
+    // TRUE. Every UpdateScene call site in the tree passes TRUE except the per-frame one at
+    // :2565, which posts no soup events. Runtime-checked: the 23,645-leaf partition still builds.
+    if (lpScene != NULL && lbPrepare)
     {
+        // Slot bookkeeping first: free, then claim (Remove's dev cross-checks depend on it).
+        mTriangleCacheManager.ProcessRemoveFromCacheEvents(*lpScene);
+        mTriangleCacheManager.ProcessAddToCacheEvents(lpScene->mAddToCacheQueue);
+
         mTriangleCollisionManager.ProcessAddPolySoupListEvents(lpScene->mAddPolySoupListQueue);
+
+        mTriangleCacheManager.ProcessUpdateCachedPositionEvents(lpScene->mUpdateCachedPositionQueue);
     }
 
     SpatialPartition* lpPartition = mSpatialPartitionManager.GetSpatialPartition();

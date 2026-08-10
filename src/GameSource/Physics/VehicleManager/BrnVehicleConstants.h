@@ -125,5 +125,21 @@ namespace Vehicle
         eCrashTrafficType_Slammed     = 3,
         eCrashTrafficType_Invalid     = 255
     };
+
+    // ⭐ ADDED 2026-08-10 (producer wave). The bounding-sphere radius every vehicle -- race car
+    // AND traffic -- claims its triangle-cache slot with. ONE datum, TWO readers: both
+    // VehicleManager::PrepareTriangleCache @0x82615BE4 and PhysicalTrafficManager::
+    // PrepareTriangleCache @0x825EE5E8 load the SAME .rdata slot `flt_8200426C`, which is why it
+    // is homed here (the shared vehicle-constants header) rather than duplicated at either site.
+    //
+    // ⭐ READ FROM THE IMAGE, not from Hex-Rays: x360rd.py at 0x8200426C returns
+    // `40a00000` == 5.0f, on a read whose 10-point calibration passed. (The neighbouring word
+    // is 0x40400000 == 3.0f, so the slot is not ambiguous.)
+    //
+    // WHAT IT MEANS: TriangleCacheManager::ProcessAddToCacheEvents stamps it into the slot's
+    // mLastCachedSphere.w, and StartUpdateTriangleCaches then copies that sphere verbatim as the
+    // PolygonSoupListSpatialMap query -- so this is the radius of the world-triangle neighbourhood
+    // kept live around every car.
+    const f32 KF_TRIANGLE_CACHE_SPHERE_RADIUS = 5.0f;   // X360 flt_8200426C
 }
 }

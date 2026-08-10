@@ -360,12 +360,38 @@ namespace Vehicle
         // BrnPhysics::PhysicsModule::Prepare @0x825ADB68 (`bl` at 0x825ADDFC, result tested
         // with a `bne` so the return is a bool). Arguments are the physics resource allocator
         // (bank 23) and the scene input buffer PhysicsModule::Prepare was handed.
-        // Declaration-only; the body is a named LINK STUB in WorldLinkStubs.cpp until this
-        // manager's own prepare pass lands. It is declared here rather than left implicit so
-        // the drop is one greppable symbol instead of a silent `return true` for the whole
-        // physics module.
+        // ⭐⭐ BODIED 2026-08-10 (producer wave) in BrnVehicleManager_Prepare.cpp; the
+        // WorldLinkStubs gate is DELETED. A resumable three-stage fall-through FSM over
+        // mePrepareStage: PrepareData -> PrepareTriangleCache -> done. Every store in its tail
+        // arm is reached BY NAME (meReleaseStage +4, mn8RoundRobinControlWord +172464,
+        // mbTrafficCheckingAllowed +172313 -- all three already mapped in this header).
         bool Prepare( rw::IResourceAllocator* lpAllocator,
                       CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer );
+
+        // ⛔ X360 @0x82633568 (161 insns). Prepare's stage-1 arm: the per-car data build --
+        // 8x VehiclePhysics::Construct + 8x { VehicleDriver::Prepare, VehiclePhysics::Construct,
+        // Vehicle::DebugComponent::Construct }, then PhysicalTrafficManager::Prepare
+        // @0x8262CA48, VehicleDriver::Prepare on the 9th (traffic) driver, and ~30 scalar seeds.
+        // NOT RECONSTRUCTED 2026-08-10 -- a named LINK STUB in WorldLinkStubs.cpp, deliberately,
+        // for two measured reasons rather than one felt one:
+        //   (1) its own callee closure is ~470 further instructions across four functions of
+        //       which only VehiclePhysics::Construct exists in this tree, and
+        //   (2) the Hex-Rays view degenerates into `_R28`/`_R31` inline-asm with every store at a
+        //       raw console byte offset past mPhysicalTrafficManager -- i.e. past the +224 host
+        //       drift this header documents -- so reproducing it from the pseudocode would be
+        //       exactly the offset hack the project forbids.
+        // It always returns 1 on the console (there is no failure path in the body), which is what
+        // makes the FSM above landable without it; the drop is one greppable symbol.
+        bool PrepareData( rw::IResourceAllocator* lpPhysicsAllocator );
+
+        // ⭐ BODIED 2026-08-10 (producer wave). X360 @0x82615BA0 (37 insns); home
+        // BrnVehicleManager.cpp:891 per its own baked assert path. Prepare's stage-2 arm and
+        // **the function that registers a car with the triangle cache at all**: 8 InEventAddToCache
+        // (slots 0..7, radius KF_TRIANGLE_CACHE_SPHERE_RADIUS) into the scene input's
+        // mAddToCacheQueue, then the 20 traffic slots via
+        // PhysicalTrafficManager::PrepareTriangleCache @0x825EE5A0.
+        bool PrepareTriangleCache(
+            CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update );
 
         // ⭐ ADDED 2026-08-06 (bridge de-facade wave). DWARF BrnVehicleManager.h:667; X360
         // @0x825C8990 (home BrnVehicleManager.cpp:9877 per its own baked assert path). Debug
@@ -651,13 +677,21 @@ namespace Vehicle
         // bodied, and the slot bookkeeping (ProcessAddToCacheEvents 222 /
         // ProcessRemoveFromCacheEvents 346 / ProcessUpdateCachedPositionEvents 279 /
         // CacheSlot::UpdateCachedObject 54) landed this wave.
-        // The real blocker is narrower and is the FILL half: StartUpdateTriangleCaches 278 +
-        // EndUpdateTriangleCaches 475 (@0x828BF150) + SceneManagerModule::StartUpdateTriangleCache
-        // 73 -- all still WorldLinkStubs gates -- plus VehicleManager::UpdateTriangleCache 240 /
-        // PrepareTriangleCache 37 (which is what would register a CAR with the cache at all) and
-        // the PolygonSoupTesterJob fill path. Until those run, the cache is allocated but holds
-        // ZERO batches, so this would read a valid pointer and get an empty triangle list --
-        // a [[silent-drop-stubs]] result, not a crash. Still not landable.
+        // The real blocker is narrower and is the FILL half. ⭐ RE-MEASURED 2026-08-10 (producer
+        // wave) -- three of the five names this paragraph used to list have LANDED since:
+        // StartUpdateTriangleCaches 278, EndUpdateTriangleCaches 475 and SceneManagerModule::
+        // StartUpdateTriangleCache 73 are all bodied and run every frame, and PrepareTriangleCache
+        // 37 (the one that registers a CAR with the cache at all) is bodied too -- `usedSlots=28`
+        // is runtime-witnessed. What is left, in the order it must happen:
+        //   1. VehicleManager::ProcessCreateEvents @0x82616770 (1,067) -- nothing sets
+        //      mUsedRaceCars today (its only write in this tree is Construct's UnSetAll), so no
+        //      car exists to be positioned;
+        //   2. PhysicsModule::UpdateCachedPositions @0x8259C370 (34) + the six per-manager
+        //      UpdateTriangleCache bodies (~1,029) -- what marks a slot DIRTY;
+        //   3. the PolygonSoupTesterJob fill path (~1,183 across 11) -- what puts triangles in it.
+        // Until those run, the cache is allocated and CLAIMED but holds ZERO batches, so this
+        // would read a valid pointer and get an empty triangle list -- a [[silent-drop-stubs]]
+        // result, not a crash. Still not landable.
         // SimpleVehiclePhysics::GetTractionLine @0x825D85C0 remains genuinely absent: re-verified
         // as a true export hole (dir gap 0x825D8490+76insns -> 0x825D8878; no name-index hit in
         // 30,084 exports), **174 instructions**, image-only.

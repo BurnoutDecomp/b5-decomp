@@ -21,15 +21,23 @@
 // SceneManagerIO::TriangleCacheInterface accessors) was already reconstructed and is
 // what AddRaceCarTractionLineTests calls.
 //
-// ⛔ REACHABILITY, stated plainly so nobody reads more into this TU than is there:
-// the sole caller, SceneManagerModule::StartUpdateTriangleCache, is still a link stub
-// (WorldLinkStubs.cpp:3605), as is TriangleCacheManager::EndUpdateTriangleCaches
-// (WorldLinkStubs.cpp:2379). These four bodies therefore run ZERO times today. They
-// are mounted so the link closure over them is enforced (the shadowing-redeclaration
-// rule: a per-TU compile gate cannot catch a mismatched redeclaration, only a LINK
-// can), and /OPT:REF keeps their bytes out of the exe until something reaches them.
-// Nothing here fills the cache with triangles either -- that is StartUpdateTriangleCaches
-// @0x828BECF8 + the PolygonSoupTesterJob fill path, neither of which exists yet.
+// ⭐⭐ REACHABILITY -- SUPERSEDED TWICE, so the whole history is here rather than a bare claim.
+// This banner used to say "the sole caller, SceneManagerModule::StartUpdateTriangleCache, is
+// still a link stub ... These four bodies therefore run ZERO times today." Both halves are now
+// false, and each was corrected by a measurement rather than by reading:
+//   * 2026-08-10 (spatial-partition wave): StartUpdateTriangleCache @0x828C73D8 got its real body
+//     in CgsSceneManagerModule.cpp, so all three Process* run EVERY FRAME.
+//   * 2026-08-10 (producer wave): `xrefs_to` showed each of them has a SECOND console caller --
+//     SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules @0x828D1F88 -- which the PC
+//     bridge did not wire. That is the caller the PREPARE path uses (the bridge runs these three
+//     only when its lbPrepare argument is set), and it is the one that drains
+//     VehicleManager::PrepareTriangleCache's 28 InEventAddToCache out of a scene input buffer that
+//     is destroyed in the same call. Wired now.
+// RUNTIME-WITNESSED: ProcessAddToCacheEvents claims 28 slots (8 race cars + 20 traffic) during
+// WorldModule::Prepare's physics stage; `usedSlots=28` thereafter, every frame.
+// ⚠️ Nothing here fills the cache with TRIANGLES -- that is StartUpdateTriangleCaches @0x828BECF8
+// (bodied) + the PolygonSoupTesterJob fill path (still absent), and it only runs for slots marked
+// DIRTY, which needs the position half (PhysicsModule::UpdateCachedPositions, still gated).
 //
 // ---------------------------------------------------------------------------
 // SOURCES / METHOD (per the standing discipline: read the ASM, not the pseudocode)

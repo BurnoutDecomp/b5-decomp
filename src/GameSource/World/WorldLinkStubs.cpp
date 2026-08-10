@@ -535,16 +535,42 @@ bool BrnPhysics::Props::PropManager::Prepare(struct rw::IResourceAllocator *)
     return true;
 }
 
-// LINK STUB (task #135, 2026-08-04): X360 @0x82633568. Called from
-// PhysicsModule::Prepare stage 6 (E_PREPARESTAGE_VEHICLEMODULE).
-bool BrnPhysics::Vehicle::VehicleManager::Prepare(struct rw::IResourceAllocator *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *)
+// ⭐⭐ RETIRED 2026-08-10 (producer wave): BrnPhysics::Vehicle::VehicleManager::Prepare
+// @0x8263C688 IS BODIED, in GameSource/Physics/VehicleManager/BrnVehicleManager_Prepare.cpp.
+// It was the stub that kept every car out of the triangle cache: its stage-2 arm,
+// PrepareTriangleCache @0x82615BA0, is the ONLY filler of the scene input's mAddToCacheQueue on
+// the race-car path, and that queue is the only setter of TriangleCacheManager::mUsedCacheSlots.
+// The stub below is what is LEFT of it -- its stage-1 arm.
+//
+// LINK STUB (producer wave, 2026-08-10): X360 @0x82633568 (161 insns). Called from
+// VehicleManager::Prepare's case 0/1 arm.
+//
+// ⛔ WHAT IS DROPPED, stated plainly rather than hidden behind `return true`: the per-car DATA
+// build -- 8x VehiclePhysics::Construct @0x8262DBD0 (the only one of its four callees that
+// exists in this tree), then 8x { VehicleDriver::Prepare @0x825B8680, VehiclePhysics::Construct,
+// Vehicle::DebugComponent::Construct @0x82602F68 }, PhysicalTrafficManager::Prepare @0x8262CA48,
+// VehicleDriver::Prepare on the traffic driver, and ~30 scalar seeds.
+// ⛔ WHY IT IS NOT RECONSTRUCTED HERE: (a) ~470 further instructions across four functions, three
+// of them absent, i.e. a wave of its own; and (b) Hex-Rays degenerates the body into `_R28`/`_R31`
+// inline asm with every store at a raw console byte offset PAST mPhysicalTrafficManager -- past
+// the +224 host drift BrnVehicleManager.h documents -- so writing it from the pseudocode would be
+// the offset hack the project forbids. It must be re-derived from the raw asm with every member
+// reached by name.
+// ⭐ WHY THE FSM ABOVE IS STILL LANDABLE WITHOUT IT: the console body has NO failure path -- it
+// returns the constant 1 -- so `return true` here is the console's own control flow, not a
+// convenient one. What is genuinely absent is vehicle DATA, not the stage transition.
+// ⚠️ CONSEQUENCE TO EXPECT: the 8 race-car cache slots are claimed with no VehiclePhysics behind
+// them. That is harmless today (ProcessAddToCacheEvents stamps a radius and a used bit and does
+// not touch mbIsDirty, and StartUpdateTriangleCaches skips every non-dirty slot), and it becomes
+// load-bearing the moment UpdateCachedPositions lands.
+bool BrnPhysics::Vehicle::VehicleManager::PrepareData(struct rw::IResourceAllocator *)
 {
     static bool s_bLogged = false;
     if (!s_bLogged)
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "VehicleManager::Prepare: inert [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "VehicleManager::PrepareData: inert [FLAG PC boot gate]\n";
     }
     return true;
 }
