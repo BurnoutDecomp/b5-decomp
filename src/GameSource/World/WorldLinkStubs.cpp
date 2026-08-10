@@ -1995,23 +1995,18 @@ void CgsGraphics::DispatchBin::HandleMemoryOverflow(unsigned int)
 // -------------------------------------------------------------------------
 // CgsSceneManager::CachedTriangleList
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool CgsSceneManager::CachedTriangleList::Prepare(struct rw::IResourceAllocator *,int)
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare chain
-    // (SceneManagerModule::Prepare / the world stage machine). One-shot log +
-    // report success so the scripted load advances; the sub-manager stays
-    // inert (zero-initialised storage) and its consumers keep their traps.
-    // Reconstruct from X360 (triangle-cache cluster).
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "CachedTriangleList::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// ⭐⭐ GATE DELETED 2026-08-10 (fill-worker wave). CachedTriangleList::Prepare
+// @0x828BE520 (79 insns) is now a real body in
+// GameShared/GameClasses/SceneManager/CacheManager/CgsCachedTriangleList.cpp.
+// This gate was NOT harmless: it returned true without allocating, so the shared
+// triangle-cache arena was a NULL pointer that all 298 cache-slot windows indexed
+// into. The shipped tripwire that says so (CgsTriangleCacheManager.h:172,
+// "mpaTriangleCache != NULL") had never once executed, because no slot had ever
+// been marked dirty -- it fired the first time this wave forced the console's own
+// mbDEBUGForceAllDirty switch for one instrumented boot.
+// ⚠️ 0x828BE520 is an X360 export-set HOLE; the name came from the xrefs_from of
+// its only caller, TriangleCacheManager::Prepare @0x828BE738, and the PS3 DWARF
+// mangle @0xC7B30C types the signature.
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::EntityManager

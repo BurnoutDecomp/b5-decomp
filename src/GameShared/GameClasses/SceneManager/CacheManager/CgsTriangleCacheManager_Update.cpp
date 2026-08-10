@@ -81,6 +81,38 @@
 //        PROBE StartUpdateTriangleCaches: usedSlots=28 dirtySlots=0 leafNodes=1 ...
 //    28 == KI_MAX_ACTIVE_RACE_CARS(8) + KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC(20).
 //
+//  * ⭐⭐⭐ THE ARENA EXISTS NOW. ADDED 2026-08-10 (fill-worker wave). Until this wave the shared
+//    triangle cache had NO BACKING STORE: CachedTriangleList::Prepare @0x828BE520 was a
+//    WorldLinkStubs gate that returned true without allocating, so mpaTriangleCache was NULL and
+//    all 298 slot windows indexed off a null base. Nothing had ever noticed because no slot had
+//    ever been DIRTY, so the loop below had never allocated a command and GetCachedTriangle had
+//    never been called. Forcing the console's own mbDEBUGForceAllDirty for one instrumented boot
+//    fired the shipped tripwire "mpaTriangleCache != NULL" (CgsTriangleCacheManager.h:172) 862
+//    times in 275 s. The real body is now in CgsCachedTriangleList.cpp and the console's own dev
+//    report confirms the size at runtime:
+//        CachedTriangleList: Total triangle cache requires 2937088 bytes    (== 13112 * 224)
+//    ⇒ **there is now somewhere to put the triangles.** That was the blocker UNDERNEATH the worker.
+//
+//  * ⛔⛔⛔ AND THE ORDER "fill the cache BEFORE creating a car" IS A CIRCULAR DEPENDENCY, not an
+//    ordering. Established this wave by enumerating the dirty-setters rather than reasoning:
+//    a slot is dirtied through exactly two doors. Door 1 is CacheSlot::UpdateCachedObject, reached
+//    only from an InEventUpdateCachedPosition, and `xrefs_to` on that queue's AddEvent @0x825E4768
+//    gives exactly FIVE producers -- PhysicalTrafficManager / DetachedPartManager /
+//    DetachedWheelManager / PropManager / VehicleManager ::UpdateTriangleCache -- and EVERY ONE is
+//    a loop over LIVE PHYSICS OBJECTS, of which this build has none. Door 2 is the dev switch
+//    mbDEBUGForceAllDirty below. There is no third.
+//    ⇒ the triangle cache is filled AROUND live objects; it cannot be filled before one exists.
+//    ⭐ MITIGATING, and it is the cheap part: UpdateCachedObject dirties unconditionally while
+//    miNumCachedTriangleBatches == 0 (true for all 28 slots today), so the FIRST position event a
+//    car ever posts dirties its slot -- no distance threshold has to be crossed.
+//
+//  * ⚠️ AND `UpdateCachedPositions` @0x8259C370 CALLS THREE MANAGERS, NOT SIX -- read from the asm
+//    at 0x8259C3BC/CC/DC: VehicleManager::UpdateTriangleCache @0x82615C38, PropManager:: @0x826119A0
+//    and DeformationManager:: @0x826230E8. The other three are CALLEES (DeformationManager's 35
+//    instructions are a pure conductor onto DetachedPart + DetachedWheel; PhysicalTraffic hangs off
+//    the vehicle one). Three prior logs list them as six siblings. Its only console caller is
+//    WorldModule::Update @0x827D63E8 -- NOT PhysicsModule::Update.
+//
 //  * ⛔ WHAT STILL STARVES THE FILL, measured not guessed: every claimed slot is CLEAN
 //    (`dirtySlots=0`), and the loop below allocates a command only for a DIRTY slot. A slot is
 //    dirtied exclusively by CacheSlot::UpdateCachedObject, i.e. by an InEventUpdateCachedPosition,
@@ -218,6 +250,7 @@ namespace CgsSceneManager
             // 0x828BEEC8/0x828BEEDC: `li r10, 0x2C ; sth r10, 0x14(cmd)`.
             lpCommand->mu16MaxNumTriangleBatches = KU_TRIANGLE_BATCHES_PER_CACHED_OBJECT;
         }
+
 
         if (s_miBuildCacheCommandsPerfMon > -1)
         {
