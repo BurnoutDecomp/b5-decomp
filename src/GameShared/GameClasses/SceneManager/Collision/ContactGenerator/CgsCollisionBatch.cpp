@@ -29,7 +29,8 @@ EA::Jobs::Job* CollisionBatch::SetupJob()
     mJob.SetName("CollisionBatch");
     mJob.SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
                  reinterpret_cast<const void*>(&ContactGeneratorEntry), 0);
-    mJob.SetData(&mJobDescription, 256);
+    mJob.SetData(mJobDescription.GetBuffer(),
+                 static_cast<int>(CollisionJobDescriptionStorage::KU_CONSOLE_BYTES));
     mJob.SetCodeRecycle(EA::Jobs::EntryPoint::CODE_RECYCLE_ON);
     return &mJob;
 }

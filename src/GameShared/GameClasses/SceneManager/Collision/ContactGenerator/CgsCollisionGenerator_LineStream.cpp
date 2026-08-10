@@ -45,11 +45,23 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint (boot gate)
 
 #include "SDKs/EATech/eajobs/job.h"                         // EA::Jobs::Job (return type)
+#include "SDKs/EATech/eajobs/job_types.h"                   // EA::Jobs::Param / JOB_ENVIRONMENT_LOCAL
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpu::Start/StopMonitor
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsFillTriangleCacheStreamJobDesc.h" // the descriptor RunFillTriangleCacheStream prepares
+
+// The polygon-soup tester job entry every fill batch is wired to
+// (GameShared/Jobs/PolygonSoupTester/PolygonSoupTester.cpp; X360 rodata PolygonSoupTesterEntry).
+void PolygonSoupTesterEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param);
 
 namespace CgsSceneManager
 {
 namespace CgsCollision
 {
+    // dword_82F310B4 -- the perf-monitor id RunFillTriangleCacheStream brackets its per-batch
+    // wiring with (0x82810DE4 StartMonitor / 0x82810E4C StopMonitor). Same shape and same
+    // "-1 means unregistered" convention as CgsTriangleCacheManager_Update.cpp's three ids.
+    static s32 s_miFillTriangleCacheStreamPerfMon = -1;   // dword_82F310B4
+
     // The stream's fixed record geometry, read out of the X360 asm at 0x82810C5C..0x82810D1C
     // (`li r4, 0xB0` / `li r6, 0xC0` into GetRequiredBufferSizes, then `li r5, 0xB0` / `li r8, 0xC0`
     // into Construct). Both are DATA-LAYOUT constants of the line-test command/result records, not
@@ -125,34 +137,117 @@ namespace CgsCollision
         return 0;
     }
 
-    // X360 0x82810D38 (82 insns, EXPORTED -- unlike its Line sibling this one is not a hole; the
-    // body was read, and it is the same dispatcher shape). ⛔ NOT RECONSTRUCTED: see the
-    // declaration note in CgsCollisionGenerator.h. Returning null is the console's own "nothing
-    // dispatched" answer (its first act is `lwz r11, 260(producer) ; cmpi 0 ; li r3, 0` -- an
-    // empty stream returns null), and TriangleCacheManager::EndUpdateTriangleCaches' `if (job)
-    // WaitOn(job)` handles null exactly as shipped. But a null returned because THE WORKER IS
-    // MISSING is not the same fact, so it says so once.
+    // =============================================================================================
+    // ⭐⭐⭐ BaseCollisionGenerator::RunFillTriangleCacheStream @0x82810D38 (82) -- LANDED
+    // 2026-08-10 (fill-worker wave 2). This is the FIRST EA::Jobs dispatch this PC port has ever
+    // performed: `grep AddTree` over the whole tree outside SDKs/EATech/eajobs found ZERO call
+    // sites before this one.
+    //
+    // The console body, read instruction for instruction:
+    //   0x82810D54  lwz  r11, 0x104(producer)   -> miNumAddedCommands; 0 => return null
+    //   0x82810D70  li   r21, 3 ; clamp numBatches = min(numCommands, 3)
+    //   0x82810D88  AllocateJob()                                       -> the parent job
+    //   per batch:
+    //   0x82810DB4  CreateNewBatch()             -> index into maCollisionBatches
+    //   0x82810DDC  stw r22, 0x3D0(batch)        -> desc.mpSpatialMap
+    //   0x82810DE0  stw r23, 0x3D4(batch)        -> desc.mpStreamProducer
+    //   0x82810DD4  stw r27, 0x4C0 / 0x82810DCC stfs f31, 0x4C4 (flt_82001CC0 == 0.0f)
+    //   0x82810DD8  stw r27, 0x4C8 / 0x82810DD0 stb r21, 0x4CF  -> the CollisionJobDescription
+    //                                                              bookkeeping, type = 3
+    //   0x82810DF4  Job::Clear(batch + 0x80)
+    //   0x82810E04  EntryPoint::SetName(job.mEntryPoint, "CollisionBatch")
+    //   0x82810E1C  EntryPoint::SetCode(job.mEntryPoint, 0, PolygonSoupTesterEntry, 0)
+    //   0x82810E2C  Job::SetData(job, batch + 0x3D0, 256)
+    //   0x82810E38  <STUB>(job.mEntryPoint, 1)   -> SetCodeRecycle(CODE_RECYCLE_ON), the same
+    //                                              ICF-folded call CollisionBatch::SetupJob makes
+    //   0x82810E48  Job::DependsOn(parent, job, 1)
+    //   0x82810E6C  JobScheduler::AddTree(&unk_830EA650, parent)
+    //   0x82810E70  return parent
+    //
+    // ⚠️⚠️ FLAG PC-platform leaf: THE DISPATCH, AND ONLY THE DISPATCH.
+    // `unk_830EA650` is the global EA::Jobs::JobScheduler singleton, and on this build it DOES
+    // NOT EXIST -- CgsHardwareInitPC.cpp:40 has it commented out
+    // (`//JobScheduler CgsSystem::HardwareInit::mJobManager; // TODO: Implement HardwareInit`),
+    // while the PS3 leaf declares it for real (CgsHardwareInitPS3.cpp:66). There is no scheduler
+    // to AddTree to and no job thread to run the tree on. So the AddTree call -- and ONLY that
+    // call -- is replaced by running the batch's entry point inline, which is precisely the
+    // precedent CgsLooseOctree::StartFrustumTestJobs @0x828B23E0 set for the same reason
+    // (CgsLooseOctree.cpp:997: "the JobScheduler::AddJobs call is replaced by running the job's
+    // queries inline ... and only that call is replaced").
+    //
+    // ⭐ AND THE RETURNED JOB IS STILL SAFE TO WaitOn -- CHECKED, NOT ASSUMED.
+    // TriangleCacheManager::EndUpdateTriangleCaches calls `mpUpdateTriangleCacheJob->WaitOn()`.
+    // EA::Jobs::Job::WaitOn @0x82BCB238 opens with the console's own liveness guard
+    // (`if (mJobInstanceHandle.mSchedulerBackend != 0 && ...)`), and a job that was never
+    // submitted has a null backend, so it returns immediately. No spin, no hang.
+    //
+    // ⚠️ ONE CONSEQUENCE, STATED PLAINLY: running inline means the batches execute SEQUENTIALLY
+    // inside StartUpdateTriangleCaches instead of concurrently before EndUpdateTriangleCaches.
+    // The results are identical (each batch drains from the same command stream and posts into
+    // the same result buffer, and both walks are ordered by the same slot scan), but the COST
+    // lands in a different place in the frame. Measured, not assumed -- see the wave's fps table.
+    // =============================================================================================
     EA::Jobs::Job*
     BaseCollisionGenerator::RunFillTriangleCacheStream(
-        const CgsGeometric::PolygonSoupListSpatialMap*, CgsMemory::SimpleDataStreamProducer*)
+        const CgsGeometric::PolygonSoupListSpatialMap* lpPolySoupListSpacialMap,
+        CgsMemory::SimpleDataStreamProducer*           lpProducer)
     {
-        static bool s_bLogged = false;
-        if (!s_bLogged)
+        // 0x82810D54: an empty stream dispatches nothing. This is the console's own null.
+        if (lpProducer->GetNumCommands() == 0)
         {
-            s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "conductor gate: BaseCollisionGenerator::RunFillTriangleCacheStream "
-                       "@0x82810D38 (82) inert -- the triangle-cache FILL WORKER is absent: "
-                       "PolygonSoupTesterEntry @0x829157B8 (80) / PolygonSoupTesterJob::Execute "
-                       "@0x82915930 (107) / ExecuteFillTriangleCacheStream @0x82915D88 (145) / "
-                       "FillTriangleCache @0x82915FD0 (219) / AllocateMemory @0x82916B98 (99) / "
-                       "RunBoxQuery @0x82916D28 (46) / LoadPrimitive @0x82916AB8 (8) / "
-                       "PolygonSoupListSpatialMap::RunQuery @0x82843A80 (261) / "
-                       "ExtractTriangle4ListIntersectingSphere @0x82844C80 (602) "
-                       "[FLAG PC boot gate]\n";
+            return 0;
         }
-        return 0;
+
+        // 0x82810D70..0x82810D80: at most KI_MAX_FILL_BATCHES batches, one per command below that.
+        const s32 KI_MAX_FILL_BATCHES = 3;
+
+        s32 liNumBatches = lpProducer->GetNumCommands();
+        if (liNumBatches > KI_MAX_FILL_BATCHES)
+        {
+            liNumBatches = KI_MAX_FILL_BATCHES;
+        }
+
+        EA::Jobs::Job* lpParentJob = AllocateJob();
+
+        for (s32 liBatch = 0; liBatch < liNumBatches; ++liBatch)
+        {
+            CollisionBatch& lrBatch = maCollisionBatches[CreateNewBatch()];
+
+            // The batch's 256-byte descriptor slot, filled through the named Prepare rather than
+            // at the console's byte offsets (see CgsFillTriangleCacheStreamJobDesc.h).
+            FillTriangleCacheStreamJobDesc* lpDesc =
+                reinterpret_cast<FillTriangleCacheStreamJobDesc*>(lrBatch.GetJobDescription().GetBuffer());
+            lpDesc->Prepare(lpPolySoupListSpacialMap, lpProducer);
+
+            if (s_miFillTriangleCacheStreamPerfMon > -1)
+            {
+                CgsDev::PerfMonCpu::StartMonitor(s_miFillTriangleCacheStreamPerfMon);
+            }
+
+            EA::Jobs::Job* lpJob = lrBatch.GetJob();
+            lpJob->Clear();
+            lpJob->SetName("CollisionBatch");
+            lpJob->SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+                           reinterpret_cast<const void*>(&PolygonSoupTesterEntry), 0);
+            lpJob->SetData(lpDesc,
+                           static_cast<int>(CollisionJobDescriptionStorage::KU_CONSOLE_BYTES));
+            lpJob->SetCodeRecycle(EA::Jobs::EntryPoint::CODE_RECYCLE_ON);
+            lpParentJob->DependsOn(*lpJob, EA::Jobs::Event::EVENT_WHEN_JOB_END);   // 0x82810E3C `li r5, 1`
+
+            if (s_miFillTriangleCacheStreamPerfMon > -1)
+            {
+                CgsDev::PerfMonCpu::StopMonitor(s_miFillTriangleCacheStreamPerfMon);
+            }
+
+            // ---- FLAG PC-platform leaf: run the job body here ----
+            // X360: JobScheduler::AddTree(&unk_830EA650, lpParentJob) after the loop.
+            PolygonSoupTesterEntry(EA::Jobs::Param(static_cast<void*>(lpDesc)),
+                                   EA::Jobs::Param(static_cast<void*>(lpDesc)),
+                                   EA::Jobs::Param(),
+                                   EA::Jobs::Param());
+        }
+
+        return lpParentJob;
     }
 }
 }

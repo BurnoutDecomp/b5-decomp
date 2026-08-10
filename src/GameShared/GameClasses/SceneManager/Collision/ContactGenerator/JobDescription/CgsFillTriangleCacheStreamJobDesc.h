@@ -21,8 +21,24 @@
 //     (CollisionBatch) differs between TUs depending on which header they saw;
 //   * `CgsGeometric::Triangle4` is a NAMESPACE in CgsTriangleList.h:20 and a STRUCT in
 //     CgsTriangle4.h:50.
-// The stream descriptor does NOT derive from CollisionJobDescription (its two members are its
-// whole object, per the accessors above), so nothing is lost by homing it apart.
+// ⚠️⚠️ CORRECTED 2026-08-10 (fill-worker wave 2): "The stream descriptor does NOT derive from
+// CollisionJobDescription (its two members are its whole object, per the accessors above)" was
+// WRONG, and the dispatcher's own stores say so. RunFillTriangleCacheStream @0x82810D38 writes
+// SIX fields into the one 256-byte batch descriptor slot:
+//     stw  r22, 0x3D0(batch)   -> +0x00  mpSpatialMap        (this type)
+//     stw  r23, 0x3D4(batch)   -> +0x04  mpStreamProducer    (this type)
+//     stw  r27, 0x4C0(batch)   -> +0xF0  mpResultsList  = 0  (CollisionJobDescription)
+//     stfs f31, 0x4C4(batch)   -> +0xF4  mfRadius     = 0.0f (CollisionJobDescription)
+//     stw  r27, 0x4C8(batch)   -> +0xF8  miStatus     = 0    (CollisionJobDescription)
+//     stb  r21, 0x4CF(batch)   -> +0xFF  muJobType    = 3    (CollisionJobDescription)
+// and PolygonSoupTesterJob::Execute then reads muJobType back off the SAME object through
+// CollisionJobDescription::GetType @0x82916E98 (`lbz r11, 0xFF(r11)`) to pick its arm. Those are
+// exactly the four bookkeeping fields CgsCollisionJobDescription.h already documents at exactly
+// those offsets, on the same object as this descriptor's two. It derives. Corrected.
+//
+// (Homing it in its own header is still right, for the include reason above; it just includes
+// the base now. ODR fork #2 -- the CgsTriangleList.h `namespace Triangle4` -- is RETIRED this
+// wave, so the CgsTriangle4.h collision the original note worried about no longer exists.)
 //
 // ⚠️ The two NESTED record names are BY ANALOGY, flagged: the attested sibling
 // `LineWithTriangleListStreamJobDesc::StreamResult` (from the PS3 mangle of
@@ -37,6 +53,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"   // CgsGeometric::Sphere (by value)
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsCollisionJobDescription.h" // CollisionJobDescription (BASE -- see the correction above)
 
 namespace CgsGeometric
 {
@@ -55,7 +72,7 @@ namespace CgsSceneManager
 {
 namespace CgsCollision
 {
-    struct FillTriangleCacheStreamJobDesc
+    struct FillTriangleCacheStreamJobDesc : public CollisionJobDescription
     {
         // One posted fill request. sizeof == 32, which is not inferred: the factory
         // BaseCollisionGenerator::CreateStreamProducer @0x828109F8 hands
@@ -92,8 +109,36 @@ namespace CgsCollision
             u32 mauUnread08[2];                // +0x08  never read by EndUpdateTriangleCaches
         };
 
-        const CgsGeometric::PolygonSoupListSpatialMap* mpSpatialMap;     // +0x00
-        CgsMemory::SimpleDataStreamProducer*           mpStreamProducer; // +0x04
+        const CgsGeometric::PolygonSoupListSpatialMap* mpSpatialMap;     // X360 +0x00
+        CgsMemory::SimpleDataStreamProducer*           mpStreamProducer; // X360 +0x04
+
+        // GetSpacialMap @0x82916F78 (11) / GetStreamProducer @0x82916FA8 (11). Both are the
+        // ICF-folded "return this" shim + one load (`bl <identity> ; lwz r3, 0(r3)` and
+        // `... ; lwz r3, 4(r3)`); the misspelling of "Spacial" is the console's own, kept so a
+        // future name-join lands. Called by ExecuteFillTriangleCacheStream and, for the map,
+        // again by FillTriangleCache.
+        const CgsGeometric::PolygonSoupListSpatialMap* GetSpacialMap() const { return mpSpatialMap; }
+        CgsMemory::SimpleDataStreamProducer* GetStreamProducer() const { return mpStreamProducer; }
+
+        // Prepare -- PS3 DWARF
+        //   _ZN15CgsSceneManager12CgsCollision30FillTriangleCacheStreamJobDesc7PrepareE
+        //     PKN12CgsGeometric25PolygonSoupListSpatialMapEPN9CgsMemory24SimpleDataStreamProducerE
+        //   @0xB0A2D8 (24)
+        // The X360 build INLINES this into RunFillTriangleCacheStream (the six stores quoted in
+        // the banner), so it carries no X360 symbol of its own; it is named here because the
+        // DWARF names it and because it keeps the dispatcher writing MEMBERS rather than the
+        // console's byte offsets.
+        void Prepare(const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
+                     CgsMemory::SimpleDataStreamProducer*           lpStreamProducer)
+        {
+            mpSpatialMap     = lpSpatialMap;
+            mpStreamProducer = lpStreamProducer;
+
+            mpResultsList = NULL;   // 0x82810DD4  stw  r27, 0x4C0
+            mfRadius      = 0.0f;   // 0x82810DCC  stfs f31, 0x4C4  (flt_82001CC0)
+            miStatus      = 0;      // 0x82810DD8  stw  r27, 0x4C8
+            muJobType     = static_cast<u8>(E_COLLISIONJOB_FILL_TRIANGLE_CACHE_STREAM); // 0x82810DD0
+        }
     };
 }
 }

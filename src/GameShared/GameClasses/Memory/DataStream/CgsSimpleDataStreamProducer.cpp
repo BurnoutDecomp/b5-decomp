@@ -129,4 +129,14 @@ namespace CgsMemory
     // declared-only DataStreamCommandPoster::Construct). Same reason CgsSimpleDataStream-
     // Producer_Begin.cpp exists. It was MOVED, not copied -- one definition, no LNK2005 --
     // and folds back here when this TU mounts.
+
+    // ⭐ GetNumCommands -- ADDED 2026-08-10 (fill-worker wave 2). Declared since the class
+    // landed, never bodied; nothing called it until RunFillTriangleCacheStream did.
+    // The console does not call an accessor at all -- it reads the member inline
+    // (`lwz r11, 0x104(producer)` @0x82810D54, and the same +0x104 the result iterator
+    // reads) -- so the name comes from the DWARF declaration and the body is that load.
+    s32 SimpleDataStreamProducer::GetNumCommands() const
+    {
+        return miNumAddedCommands;
+    }
 }

@@ -3,11 +3,16 @@
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsTriangleList.h"
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoup.h"
 
-// Provide the external Triangle4 validator that ValidateTriangles calls (homed in
-// another group's TU). Stubbed here so the embed check links its symbol shape.
-namespace CgsGeometric { namespace Triangle4 {
-    int AssertIsValid(void* lpTriangle) { (void)lpTriangle; return 0; }
-} }
+// ⭐⭐ ODR FORK #2's DEFINITION SITE, DELETED 2026-08-10 (fill-worker wave 2).
+// What stood here was
+//     namespace CgsGeometric { namespace Triangle4 {
+//         int AssertIsValid(void* lpTriangle) { (void)lpTriangle; return 0; } } }
+// -- a definition of a NAMESPACE free function that merely shared a spelling with
+// `struct Triangle4`'s real const member. It satisfied the link while validating
+// nothing, and it is exactly the [[odr-forks-link-silently]] shape: the mangled name
+// encodes neither class-key nor signature, so nothing could ever have caught it but a
+// human reading both headers. ValidateTriangles now calls the real member, whose body
+// lives in CgsTriangle4.cpp (X360 0x825BD808) and whose TU is now mounted.
 
 namespace
 {
