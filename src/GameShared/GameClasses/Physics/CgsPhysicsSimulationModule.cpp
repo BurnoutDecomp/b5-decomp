@@ -2983,6 +2983,13 @@ namespace CgsPhysics
 
         CgsDev::PerfMonCpu::StopMonitor(miTimeInSim2);
         CgsDev::PerfMonCpu::StartMonitor(miTimeInSim3);        // "Sim update"
+        // ⭐⭐ 2026-08-10 (root-cause wave): THIS LINE NOW RUNS. With the world frame timer
+        // staged in DriveWorldUpdateFrame and both root causes closed, the first tick was
+        // witnessed here as `dt=0.016667 iters=2 bodySlotsUsed=0 bodiesACTIVE=0` -- the real
+        // 1/60 s step, carrying the solver cap the console's
+        // BridgeEntityModulesToPhysicsModule_PreScene delivers, over an EMPTY body set
+        // (the vehicle create path is still absent). The temporary witness prints that
+        // recorded it were removed after observation, as briefed.
         mpSimulation->HackResetSpyCountHack();                 // `stw 0, 0x68/0x78/0x70`
         mpSimulation->SimulationUpdate(lfNewStep);
         CgsDev::PerfMonCpu::StopMonitor(miTimeInSim3);
