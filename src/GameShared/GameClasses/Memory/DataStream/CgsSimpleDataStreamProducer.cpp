@@ -82,6 +82,46 @@ namespace CgsMemory
             (luAlignedResultSize * static_cast<u32>(liMaxResults) + 0x7Fu) & ~0x7Fu;
     }
 
+    // ⭐ ADDED 2026-08-10 (cache-fill wave). Both are INLINED by the X360 at every call
+    // site, so neither carries a symbol; the shapes are read off the sites the triangle-cache
+    // fill uses.
+    //
+    // AllocateCommand -- TriangleCacheManager::StartUpdateTriangleCaches @0x828BEE84..0x828BEE8C:
+    //     addi r3, producer, 0x80          <- &mCommandPoster
+    //     bl   DataStreamCommandPoster::AllocateCommand
+    //     stw  r3, 0x104(producer)         <- miNumAddedCommands = <the poster's new count>
+    // ⚠️ FLAG: the producer-level RETURN value is not observed at that site (the console drops
+    // r3 after the store). Modelled as the freshly stored count, mirroring the sibling
+    // AddCommand shape; nothing in this tree reads it yet.
+    s32 SimpleDataStreamProducer::AllocateCommand(void** lppOutBuffer)
+    {
+        miNumAddedCommands = mCommandPoster.AllocateCommand(lppOutBuffer);
+        return miNumAddedCommands;
+    }
+
+    // End -- TriangleCacheManager::EndUpdateTriangleCaches @0x828BF1AC..0x828BF1B8:
+    //     lwz r31, 0x30(this) ; addi r3, r31, 0x80 ; bl DataStreamCommandPoster::End
+    //     li  r20, 0          ; stb r20, 0x100(r31)
+    // i.e. the exact mirror of Begin() (which is CgsSimpleDataStreamProducer_Begin.cpp): close the
+    // embedded poster, then drop the streaming flag. Unlike Begin it publishes nothing -- the
+    // shared snapshot is left as the streaming side last saw it, which is what lets the result
+    // iterator still size itself afterwards.
+    void SimpleDataStreamProducer::End()
+    {
+        mCommandPoster.End();
+        mbIsStreaming = false;
+    }
+
+    // GetResultIterator -- TriangleCacheManager::EndUpdateTriangleCaches @0x828BF1F0:
+    //     ld  r11, 0x38(producer) ; std r11, <local>
+    // i.e. an 8-byte BY-VALUE copy of mResultIterator (s32 miResultIndex + the 4-byte console
+    // parent pointer) into the caller's frame. The caller then walks the COPY, so the
+    // producer's own cursor is left untouched.
+    SimpleDataStreamResultIterator SimpleDataStreamProducer::GetResultIterator() const
+    {
+        return mResultIterator;
+    }
+
     // ⭐ MOVED OUT 2026-08-10 (ground wave): SimpleDataStreamResultIterator::GetCurrent
     // (X360 0x825B29A0) now lives in the mountable slice
     // CgsSimpleDataStreamProducer_ResultIterator.cpp, alongside GetNext, because the traction-line

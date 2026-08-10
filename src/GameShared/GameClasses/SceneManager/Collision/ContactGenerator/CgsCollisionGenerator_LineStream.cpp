@@ -124,5 +124,33 @@ namespace CgsCollision
         }
         return 0;
     }
+
+    // X360 0x82810D38 (82 insns, EXPORTED -- unlike its Line sibling this one is not a hole; the
+    // body was read, and it is the same dispatcher shape). ⛔ NOT RECONSTRUCTED: see the
+    // declaration note in CgsCollisionGenerator.h. Returning null is the console's own "nothing
+    // dispatched" answer (its first act is `lwz r11, 260(producer) ; cmpi 0 ; li r3, 0` -- an
+    // empty stream returns null), and TriangleCacheManager::EndUpdateTriangleCaches' `if (job)
+    // WaitOn(job)` handles null exactly as shipped. But a null returned because THE WORKER IS
+    // MISSING is not the same fact, so it says so once.
+    EA::Jobs::Job*
+    BaseCollisionGenerator::RunFillTriangleCacheStream(
+        const CgsGeometric::PolygonSoupListSpatialMap*, CgsMemory::SimpleDataStreamProducer*)
+    {
+        static bool s_bLogged = false;
+        if (!s_bLogged)
+        {
+            s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint
+                    << "conductor gate: BaseCollisionGenerator::RunFillTriangleCacheStream "
+                       "@0x82810D38 (82) inert -- the triangle-cache FILL WORKER is absent: "
+                       "PolygonSoupTesterEntry @0x829157B8 (80) / PolygonSoupTesterJob::Execute "
+                       "@0x82915930 (107) / ExecuteFillTriangleCacheStream @0x82915D88 (145) / "
+                       "ExecuteFillTriangleCache @0x82915AE0 (170) / FillTriangleCache @0x82915FD0 "
+                       "(219) / PolygonSoupListSpatialMap::RunQuery @0x82843A80 (261) "
+                       "[FLAG PC boot gate]\n";
+        }
+        return 0;
+    }
 }
 }

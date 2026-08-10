@@ -2371,36 +2371,15 @@ void CgsSceneManager::SceneManagerModule::ProcessSceneQueries(struct CgsModule::
 // -------------------------------------------------------------------------
 // CgsSceneManager::TriangleCacheManager
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-// ⭐ ADDRESS PINNED 2026-08-10 (triangle-cache wave): the body to reconstruct is
-// **0x828BF150**, 475 instructions. (CgsTriangleCacheManager.h used to cite
-// "0x828C7508" for it; that is mid-instruction inside the 10-insn thunk
-// SceneManagerModule::EndUpdateTriangleCache @0x828C7500, which tail-branches here.)
-// ⚠️ Unlike EndVehicleTractionLineTests, this one opens with a NULL GUARD --
-// `lwz r11, 0x30(this)` (mpUpdateTriangleCacheStream) then `beq` straight to the
-// epilogue -- so it is SAFE to body before its Start partner exists: it would simply
-// do nothing until StartUpdateTriangleCaches @0x828BECF8 allocates the producer.
-// ⚠️ AS-SHIPPED: the ARTIST body never reads its two parameters (r4/r5 are written
-// before any read; the only arg_ stack slot is a spill of `this`). They are kept in
-// the signature because the call site demonstrably materialises them.
-// NOTE the sibling gate SceneManagerModule::StartUpdateTriangleCache (this file,
-// further down) is what drives the cache's slot bookkeeping -- and THAT bookkeeping
-// is now real (CgsTriangleCacheManager_Events.cpp, 2026-08-10). These two gates are
-// the only things between the cache and actually holding triangles.
-void CgsSceneManager::TriangleCacheManager::EndUpdateTriangleCaches(void *,void *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TriangleCacheManager: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// (GATE RETIRED 2026-08-10, cache-fill wave: TriangleCacheManager::EndUpdateTriangleCaches
+//  @0x828BF150 (475) now has its REAL body in
+//  GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager_Update.cpp,
+//  together with its Start partner @0x828BECF8 (278). This one is REACHED EVERY FRAME --
+//  SceneManagerModule::EndUpdateTriangleCache @0x828C7500 is real and WorldModule::Update
+//  calls it at BrnWorldModule.cpp:2471 -- so the real body runs from the frame it lands.
+//  It opens with a null guard on mpUpdateTriangleCacheStream and takes it while the Start
+//  side is still gated, which is exactly what the console does on a frame that posted no
+//  fill. LNK2005 is the tripwire if this stub is ever restored.)
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::TriangleCollisionManager
@@ -3731,38 +3710,17 @@ void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene::Construct()
 
 
 // ---- the collision generator the frame carves -------------------------------
-// WorldModule::Update carves ONE 336896-byte BaseCollisionGenerator out of the
-// world frame allocator (object + a 0x40000 result region) and hands it to
-// SceneManagerModule::StartUpdateTriangleCache. The REAL bodies (Construct
-// @0x828105F8 / Prepare @0x82810660) live in
-// GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.cpp,
-// which is NOT on the build list (it drags the EA::Jobs job-system + collision
-// batch closure -- cost rule). Gated here: the generator's only consumer,
-// StartUpdateTriangleCache, is itself gated, so an unconstructed generator is
-// never dereferenced. Mount that TU (and delete these two) with the contact-
-// generation wave.
-void CgsSceneManager::CgsCollision::BaseCollisionGenerator::Construct()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BaseCollisionGenerator::Construct: inert [FLAG PC boot gate]\n";
-    }
-}
-
-bool CgsSceneManager::CgsCollision::BaseCollisionGenerator::Prepare(void *, int)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BaseCollisionGenerator::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// (BOTH GATES RETIRED 2026-08-10, cache-fill wave.) WorldModule::Update carves ONE
+// BaseCollisionGenerator (object + a 0x40000 result region) out of the world frame
+// allocator each frame and hands it to SceneManagerModule::StartUpdateTriangleCache.
+// Its REAL bodies -- Construct @0x828105F8 and Prepare @0x82810660 -- had been fully
+// reconstructed since 2026-08-06 in
+// GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.cpp;
+// that TU is simply not mounted, so the generator was carved and left UNINITIALISED
+// behind these two one-shot logs. The TU is now on the build list and both stubs are
+// deleted: the frame's generator is really constructed (the shared "StartJobs" perfmon
+// latch) and really prepared (bump allocator over the result region + all 64 collision
+// batches placement-constructed). LNK2005 is the tripwire if either stub is restored.
 
 // ---- two read accessors the drive reads through ------------------------------
 // BrnWorldIO::UpdateInputBuffer::GetPlayerVehicleControls (X360 read-lock, the
