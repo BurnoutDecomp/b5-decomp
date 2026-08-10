@@ -224,6 +224,10 @@ namespace BrnPhysics { namespace Vehicle { struct VehicleManagerOutputInterface;
 namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact;
                                                        struct TriangleCacheInterface; } }
 
+// ⭐ ADDED 2026-08-10 (producer wave): PrepareTriangleCache's parameter, pointer use only.
+// Class key `struct`, matching the single home CgsSceneManagerIO.h:31.
+namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Update; } }
+
 namespace BrnPhysics
 {
 // Forward decl of the streamed deformation model spec (real home
@@ -501,6 +505,16 @@ public:
     // both the const and non-const GetTrafficVehicle return &mpaTrafficVehicles[idx].
     PhysicalTrafficVehicle*       GetTrafficVehicle(s32 liVehicle);
     const PhysicalTrafficVehicle* GetTrafficVehicle(s32 liVehicle) const;
+
+    // ⭐ ADDED 2026-08-10 (producer wave). X360 @0x825EE5A0 (39 insns); home
+    // BrnPhysicalTrafficManager.cpp:244 per its own baked assert path. Claims this manager's
+    // 20 triangle-cache slots (indices 8..27, i.e. immediately after the 8 race cars) by
+    // posting one InEventAddToCache each into the scene input's mAddToCacheQueue.
+    // Sole caller: VehicleManager::PrepareTriangleCache @0x82615BA0.
+    // ⚠️ `this` IS UNUSED in the console body -- r3 is never read after the prologue. Kept as a
+    // non-static member because that is what the console's `bl` with r3 = this + 44768 is.
+    bool PrepareTriangleCache(
+        CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update);
 
     // ⭐ ADDED 2026-08-10 (create-path wave). X360 0x825EF608 (334 insns), bodied in
     // GameSource/Physics/VehicleManager/BrnVehicleManager_ReadUpdatedBodies.cpp alongside its

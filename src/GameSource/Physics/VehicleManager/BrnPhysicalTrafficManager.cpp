@@ -17,6 +17,10 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"  // Deformation::StreamedDeformationSpec::GetBoundingBox + CgsGeometric::AxisAlignedBox
 #include "rw/math/vpu/vector3_operation.h"                               // rw::math::vpu::IsValid(Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"                        // rw::math::vpu::IsValid(Matrix44Affine), TransformPoint
+// ⭐ 2026-08-10 (producer wave) -- PrepareTriangleCache's collaborators.
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"             // SceneManagerIO::InputBuffer_Update::GetInSceneUpdateInterface (@0x825BD8C0, write-lock twin)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // InSceneUpdateInterface::mAddToCacheQueue (X360 +0xC4930)
+#include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"               // VehicleManager::KI_MAX_ACTIVE_RACE_CARS (the +8 slot bias)
 
 namespace BrnPhysics
 {
@@ -782,6 +786,55 @@ bool PhysicalTrafficManager::ValidateTrafficContact(
                "TRAP: PhysicalTrafficManager::ValidateTrafficContact @0x825CACB8 "
                "not reconstructed (big-five #2 closure stub)\n");
     return false;
+}
+
+// =================================================================================================
+// PhysicalTrafficManager::PrepareTriangleCache  @0x825EE5A0  (39 insns)
+//
+// ⭐ ADDED 2026-08-10 (producer wave). Claims this manager's 20 triangle-cache slots. Decoded off
+// the ASM (the Hex-Rays view is faithful here, but the two stack slots are what carry the record):
+//
+//   0x825EE5B8  cmplwi r31, 0  -> assert "lpSceneInputBuffer_Update != NULL"
+//                                 BrnPhysicalTrafficManager.cpp:244  (li r5, 0xF4)
+//   0x825EE5E4  bl  CgsSceneManager::SceneManagerIO::InputBuffer_Update::
+//                   GetInSceneUpdateInterface      <- @0x825BD8C0, the NON-CONST (write-lock,
+//                                                     bit 3) twin. Correct: the whole Prepare
+//                                                     stage runs under lpSceneInput->LockForWrite().
+//   0x825EE5EC  addis r30, r3, 0xC ; addi r30, r30, 0x4930   -> +0xC4930 == mAddToCacheQueue
+//   0x825EE5F8  lfs   f0, flt_8200426C ; stfs f0, var_1C(r1) -> the radius, hoisted OUT of the loop
+//   0x825EE600  addi  r11, r31, 8      ; stw r11, var_20(r1) -> miCacheSlot = i + 8
+//   0x825EE610  bl    BaseEventQueue<InEventAddToCache>::AddEvent
+//   0x825EE618  cmpwi r31, 0x14        -> 20 iterations == KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC
+//   return true
+//
+// ⭐ THE RADIUS IS READ FROM THE IMAGE, NOT FROM HEX-RAYS: `flt_8200426C` == 0x40A00000 == 5.0f
+// (x360rd.py, whose 10-point calibration passed on the same read).
+// ⭐ THE +8 BIAS IS THE RACE-CAR BLOCK: VehicleManager::PrepareTriangleCache claims 0..7 first and
+// then calls this, so traffic owns 8..27. Spelled as KI_MAX_ACTIVE_RACE_CARS rather than the
+// literal 8 -- that is what the bias IS, and the two counts are the same two array bounds.
+//
+// ⚠️ AS-SHIPPED: `this` is never read (r3 is dead after the prologue) and the return value is the
+// constant 1. Both are reproduced rather than "cleaned up": the caller tests the return.
+// =================================================================================================
+bool PhysicalTrafficManager::PrepareTriangleCache(
+    CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update)
+{
+    CGS_ASSERT(lpSceneInputBuffer_Update != NULL, "lpSceneInputBuffer_Update != NULL");   // :244
+
+    CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdate =
+        lpSceneInputBuffer_Update->GetInSceneUpdateInterface();
+
+    for (s32 liTrafficVehicle = 0;
+         liTrafficVehicle < static_cast<s32>(KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC);
+         ++liTrafficVehicle)
+    {
+        CgsSceneManager::TriangleCacheManagerIO::InEventAddToCache lEvent;
+        lEvent.miCacheSlot         = liTrafficVehicle + VehicleManager::KI_MAX_ACTIVE_RACE_CARS;
+        lEvent.mfCacheSphereRadius = KF_TRIANGLE_CACHE_SPHERE_RADIUS;
+        lpSceneUpdate->mAddToCacheQueue.AddEvent(lEvent);
+    }
+
+    return true;
 }
 
 }   // namespace Vehicle

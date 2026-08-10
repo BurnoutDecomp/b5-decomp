@@ -67,13 +67,31 @@
 //    So the `GetLeafNodes() == NULL` early-out below is NO LONGER TAKEN, and the fill really
 //    opens each frame.
 //
-//  * ⛔ WHAT STILL STARVES THE FILL, measured not guessed: `usedSlots` is 0 because NOTHING
-//    REGISTERS A CACHED OBJECT. That is the PRODUCER side, not this leg:
-//    PhysicsModule::UpdateCachedPositions @0x8259C370 (34) is still a WorldLinkStubs gate, and
-//    behind it VehicleManager::PrepareTriangleCache @0x82615BA0 (37 -- the 8 race-car slots at
-//    radius 5.0f) plus the six per-manager UpdateTriangleCache bodies, ~1,139 insns across 9.
-//    And even with slots used, the fill WORKER (PolygonSoupTesterJob + RunQuery, ~1,183 across
-//    11) is still an inert conductor gate. Both are named, neither is here.
+//  * ⭐⭐ THE SLOTS ARE NOW CLAIMED. SUPERSEDED 2026-08-10 (producer wave): the paragraph that
+//    used to sit here said `usedSlots` is 0 because nothing registers a cached object, and named
+//    PhysicsModule::UpdateCachedPositions as the leg. **That was the wrong half.** `usedSlots` is
+//    the popcount of mUsedCacheSlots, whose only setter is ProcessAddToCacheEvents draining
+//    mAddToCacheQueue -- and that queue is filled on the PREPARE path by
+//    VehicleManager::PrepareTriangleCache @0x82615BA0 (8 race cars) ->
+//    PhysicalTrafficManager::PrepareTriangleCache @0x825EE5A0 (20 traffic), both now bodied, both
+//    reached through VehicleManager::Prepare @0x8263C688 (its WorldLinkStubs gate deleted).
+//    UpdateCachedPositions fills a DIFFERENT queue whose consumer asserts the used bit is ALREADY
+//    set, so it could never have moved this number. RUNTIME-WITNESSED:
+//        PROBE bridge(lbPrepare=1): draining AddToCache=28 RemoveFromCache=0 UpdateCachedPosition=0
+//        PROBE StartUpdateTriangleCaches: usedSlots=28 dirtySlots=0 leafNodes=1 ...
+//    28 == KI_MAX_ACTIVE_RACE_CARS(8) + KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC(20).
+//
+//  * ⛔ WHAT STILL STARVES THE FILL, measured not guessed: every claimed slot is CLEAN
+//    (`dirtySlots=0`), and the loop below allocates a command only for a DIRTY slot. A slot is
+//    dirtied exclusively by CacheSlot::UpdateCachedObject, i.e. by an InEventUpdateCachedPosition,
+//    i.e. by PhysicsModule::UpdateCachedPositions @0x8259C370 (34, still a WorldLinkStubs gate) and
+//    the six per-manager UpdateTriangleCache bodies behind it (~1,063 insns across 7).
+//    ⭐ AND THOSE SEVEN WOULD POST NOTHING TODAY: VehicleManager::UpdateTriangleCache walks
+//    mUsedRaceCars, and the ONLY write to that bitset in this tree is
+//    BrnVehicleManager_Construct.cpp:212 `mUsedRaceCars.UnSetAll()` -- no SetBit exists anywhere.
+//    The console's setter is VehicleManager::ProcessCreateEvents @0x82616770 (1,067), absent.
+//    So the true ordering of the remaining work is: CREATE a car -> position it -> fill worker
+//    (PolygonSoupTesterJob + RunQuery, ~1,183 across 11, still an inert conductor gate).
 //
 // -------------------------------------------------------------------------------------------------
 // METHOD (standing discipline: read the ASM, not the pseudocode). Both Hex-Rays listings are
