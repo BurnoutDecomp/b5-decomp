@@ -106,6 +106,15 @@ protected:
     bool LoadWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                          const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
 
+    // X360 0x823E73E0 -- one frame of the WORLD COLLISION load (scripted stage 7): create a
+    // scratch BrnWorldIO::UpdateOutputBuffer on the update output stack, drive
+    // WorldModule::PrepareWorldCollision @0x827C9478, and -- while it reports "still
+    // preparing" -- forward the world's staged resource requests into the GameData input.
+    // Returns true once the whole world collision is prepared. (The console's true arm also
+    // runs EffectsModule::PostWorldPreparePrepare @0x822902F0; deferred -- see the .cpp.)
+    bool LoadWorldCollision(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                            const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
+
     // The per-frame world UPDATE leg of the spine (X360 0x823F22D8's `stage > 5` block,
     // inlined there): FreeAll the world frame allocator, drive WorldModule::Update
     // (vtable +76) with the frame's world IO pair and the loading update set, then run

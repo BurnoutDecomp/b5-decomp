@@ -425,6 +425,18 @@ namespace BrnWorld
                       BrnWorldIO::UpdateOutputBuffer* lpUpdateOutputBuffer,
                       BrnResource::GameDataIO::AllocatorList* lpAllocatorList );
 
+        // @0x827C9478 -- one frame of the WORLD COLLISION prepare (the scripted load's
+        // stage 7, LoadingScriptedState::LoadWorldCollision @0x823E73E0). Drives
+        // WorldEntityModule::PrepareWorldCollision through the same buffer trio Prepare's
+        // WORLDENTITY stage uses. Resumable: false = call again next frame.
+        // Arity + parameter NAMES confirmed against the DecFIGS DWARF
+        // (BrnWorldModule.h:349 -- `bool PrepareWorldCollision(IOBufferStack*,
+        // IOBufferStack*, UpdateOutputBuffer*)`, body BrnWorldUnity.cpp:11577 naming them
+        // lpInputBufferStack / lpOutputBufferStack / lpOutput).
+        bool PrepareWorldCollision( CgsModule::IOBufferStack* lpInputBufferStack,
+                                    CgsModule::IOBufferStack* lpOutputBufferStack,
+                                    BrnWorldIO::UpdateOutputBuffer* lpOutput );
+
         // ⭐ ADDITIVE 2026-08-09 (feed wave; header-only inline, no out-of-line symbol).
         // WorldModule::BridgeInputToPhysicsModule @0x827AB830 hands the module's last director
         // camera to the physics input buffer, reaching it as the raw `this + 0x5E1CC0`

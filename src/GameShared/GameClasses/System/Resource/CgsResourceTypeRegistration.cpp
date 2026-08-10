@@ -16,6 +16,7 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultResourceType.h"   // CgsResource::AttribSysVaultResourceType (0x1C)
 #include "GameShared/GameClasses/World/Resources/CgsWorldPainter2DResourceType.h"    // CgsResource::WorldPainter2DResourceType (0x30)
 #include "GameShared/GameClasses/SceneManager/Zones/Resources/ZoneListResourceType.h" // CgsResource::ZoneListResourceType (0xB000)
+#include "GameShared/GameClasses/System/Resource/CgsResourceIdListResourceType.h"     // CgsResource::IdListResourceType (0x25)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsAptDataHeaderType.h"
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"   // CgsResource::LuaCodeResourceType (0x22)
 #include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResourceType (0x27)
@@ -124,6 +125,16 @@ namespace CgsResource
         // and AllocateMemoryForResource null-derefs it (GetCachedCanDefrag).
         static ZoneListResourceType        sZoneList;          // 0xB000 ZoneList (PVS zone grid)
         TypeRegistry::Register(&sZoneList);
+        // World-collision wave (2026-08-10). WORLDCOL.BIN is 396 PolygonSoupLists (0x43,
+        // registered just above) PAIRED with 396 IdLists (0x25) -- the "TRK_CLIL<n>" per-zone
+        // lists WorldEntityModule::PrepareZoneCollision acquires. With no handler the loader
+        // logged "[bundle] UNREGISTERED resource type id 37 in 'worldcol.bin'" and skipped
+        // FixUp, so mpaIds stayed the on-disk offset 0x10 and the first acquire AV'd. Same
+        // failure mode ZoneList and PlayerCarColours were added for; the type existed, it was
+        // just a partial hollow shell (GetTypeID/GetSerialisedResourceDescriptor unbodied) so
+        // it could not be instantiated here. Both are bodied now.
+        static IdListResourceType          sIdList;            // 0x25 (37) IdList (zone-collision lists)
+        TypeRegistry::Register(&sIdList);
         // The three world-prop/sound types (X360 GameDataModule::RegisterResourceTypes
         // @0x82667EA8 registers all three; exact [game #] positions pending that
         // function's order decode -- id-keyed lookup is order-independent).

@@ -214,6 +214,14 @@ namespace BrnResource
         void ProcessLoadPVSRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                    const GameDataIO::GameDataAssetEvent* lpEvent,
                                    s32 liEventId, s32 liSlotIndex);                    // 0x8266F9C0
+        // The world-collision LOAD leg (dispatch id 32). ProcessLoadPVSRequest's shape plus the
+        // collision-world invalidation guard; note there is NO paired GET -- case 32 of
+        // ProcessInternalLoadBundleResponse is terminal, and the console's own case-57 assert
+        // says so ("GETWORLDCOLLISION request not supported - use Load world collision and then
+        // Acquire zone collision"). The zones arrive through AcquireZoneCollision instead.
+        void ProcessLoadWorldCollisionRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                              const GameDataIO::GameDataAssetEvent* lpEvent,
+                                              s32 liEventId, s32 liSlotIndex);         // 0x8266F830
         // The vehicle pair (dispatch ids 27 / 50). GET's SOUND leg re-enters itself through
         // ProcessInternalLoadBundleResponse's case 27 -- see the .cpp.
         void ProcessLoadVehicleRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,

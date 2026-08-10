@@ -158,6 +158,72 @@ bool LoadingScriptedState::LoadWorldModule(BrnResource::GameDataIO::InputBuffer*
     return lbPrepared;
 }
 
+// @ 0x823E73E0 -- one frame of the WORLD COLLISION load (scripted-load stage 7). Same shape
+// as LoadWorldModule above: create a scratch BrnWorldIO::UpdateOutputBuffer on the update
+// output stack ("World"), drive WorldModule::PrepareWorldCollision with the update IO stacks,
+// and -- while it reports "still preparing" -- forward the world's staged resource requests
+// into the GameData input buffer. That forward is what carries the "TRK_COLL" LoadBundle and
+// then the 396 "TRK_CLIL<n>" AcquireResourceList requests into the GameData pump.
+//
+// The X360's true arm calls BrnEffects::EffectsModule::PostWorldPreparePrepare @0x822902F0
+// (136 insns). NOT LANDED: that body is 100% AttribSys reads (GetCollectionWithDefault /
+// GetAttributePointer / GetCollection) storing into EffectsModule's members, and the PC
+// EffectsModule is still `u8 mOpaqueBody[0x2F550]` -- writing into an opaque slice at console
+// byte offsets is the memory-bug class this project forbids. It configures debris/particle
+// attributes and feeds nothing on the collision path, so its absence cannot block the load.
+// [deferred: EffectsModule::PostWorldPreparePrepare -- EffectsModule layout is opaque]
+// ⭐ ARITY from the DecFIGS DWARF (BrnGameMainFlowStates.h:52 --
+// `bool LoadWorldCollision(InputBuffer*, const OutputBuffer*)`), NOT from the IDA export
+// prototype, which reports only `(a1, a2)`: the console body never reads the GameData
+// OUTPUT buffer (unlike LoadWorldModule, which pulls the allocator list out of it), so
+// Hex-Rays dropped the unread parameter. The call site @0x823F22D8 passes three registers.
+// The parameter is kept, and kept unused, so the signature matches the shipped one.
+bool LoadingScriptedState::LoadWorldCollision(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                                              const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer)
+{
+    (void)lpGameDataOutputBuffer;   // read by neither the console body nor this one
+
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    CgsModule::IOBufferStack* lpUpdateInputStack  = lpGameModule->GetUpdateInputBufferStack();
+    CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
+
+    BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = 0;
+    lpUpdateOutputStack->CreateIOBuffer(&lpWorldOutput, "World");
+    // PC Construct restoration -- see LoadWorldModule.
+    lpWorldOutput->Construct();
+
+    const bool lbPrepared = lpGameModule->GetWorldModule().PrepareWorldCollision(
+        lpUpdateInputStack, lpUpdateOutputStack, lpWorldOutput);
+
+    if (lbPrepared)
+    {
+        static bool s_bLoggedPostWorldPrepare = false;
+        if (!s_bLoggedPostWorldPrepare)
+        {
+            s_bLoggedPostWorldPrepare = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint
+                    << "LoadWorldCollision: EffectsModule::PostWorldPreparePrepare (0x822902F0) "
+                       "skipped -- EffectsModule body is opaque [FLAG PC boot gate]\n";
+        }
+    }
+    else if (lpGameDataInputBuffer != 0)
+    {
+        lpWorldOutput->LockForRead();
+        // The X360 reads through the CONST accessor (0x823B5780) under the read lock -- the
+        // same pair LoadWorldModule uses.
+        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputRead = lpWorldOutput;
+        lpGameDataInputBuffer->AppendRequestInterface<4096>(
+            *lpWorldOutputRead->GetResourceRequestResourceInterface());
+        lpGameDataInputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
+            lpWorldOutputRead->GetAttribSysVaultRequestInterface()->mRequestQueue);
+        lpWorldOutput->UnlockForRead();
+    }
+
+    lpUpdateOutputStack->DestroyIOBuffer(&lpWorldOutput);
+    return lbPrepared;
+}
+
 // The per-frame world UPDATE leg of the scripted-load spine (X360 0x823F22D8, the
 // `dword_82FAE4B0 > 5` block). Split out of Update() for readability; the X360 inlines it.
 //
@@ -531,11 +597,12 @@ void LoadingScriptedState::Update()
                 break;
             case 7:
                 gBrnScriptedLoadStage = 7;
-                // X360: LoadWorldCollision @0x823E73E0 (WorldModule::PrepareWorldCollision
-                // + EffectsModule::PostWorldPreparePrepare on completion). [deferred:
-                // WorldModule::PrepareWorldCollision (0x827C9478) is not reconstructed
-                // yet; log + advance so the flow cannot wedge]
-                LogScriptedStageOnce(7, "LoadWorldCollision [deferred]");
+                // X360: LoadWorldCollision @0x823E73E0 -- WorldModule::PrepareWorldCollision,
+                // then EffectsModule::PostWorldPreparePrepare on completion (that last hop
+                // is still deferred; see LoadWorldCollision's own note).
+                LogScriptedStageOnce(7, "LoadWorldCollision -- real");
+                if (!LoadWorldCollision(&s_GameDataInput, &s_GameDataOutput))
+                    break;
                 gBrnScriptedLoadStage = 8;
                 break;
             case 8:
@@ -1087,19 +1154,50 @@ void MainGameFlowStateCompleteLoading::Update()
         return;
     if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete())
     {
-        if (mbIsCollisionWorldPrepared)
+        // ⭐ RESTORED 2026-08-10 to the console gate. The X360 @0x823F2E08 tests
+        // `guiPhaseComplete && meLoadingStateStage == 8` on BOTH passes:
+        //     pass 1  stage==8, latch clear  -> stage = 7, latch = 1
+        //     passes 2..N  stage==7          -> the whole `if` is FALSE: the state HOLDS
+        //                                       here while LoadingScriptedState::Update()
+        //                                       (called at the top of this function every
+        //                                       frame) drives the world-collision load
+        //     pass N+1  stage back to 8, latch set -> SendEvent(E_MGE_STATEEND)
+        // The PC had made the gate permissive because stage 7 was a no-op deferral and a
+        // strict gate would have hung the boot. Stage 7 is real now, and the hold is the
+        // whole point: it is the only place the collision load gets its frames (nothing
+        // drives LoadingScriptedState::Update() once the flow reaches IN_GAME).
+        //
+        // ⚠️ [marked deviation -- anti-wedge bound] the console can hold here forever; a PC
+        // build that fails to stream WORLDCOL.BIN would then never boot. The budget below
+        // releases the flow after KI_MAX_COLLISION_LOAD_FRAMES and logs loudly, so a broken
+        // collision load costs the collision, not the session. It is not hit on a good boot.
+        static const s32 KI_MAX_COLLISION_LOAD_FRAMES = 1800;   // ~30 s at 60 Hz
+        static s32 s_iCollisionLoadFrames = 0;
+
+        if (gBrnScriptedLoadStage == 8)
         {
-            if (BrnGameMainFlowController::gpMainGameFlowController != 0)
-                BrnGameMainFlowController::gpMainGameFlowController->SendEvent(
-                    BrnGameMainFlowController::E_MGE_STATEEND);
-        }
-        else
-        {
-            // X360: only with the scripted load DONE; the PC keeps the latch permissive
-            // (stand-in gate above) so the flow cannot wedge while the world load holds.
-            if (gBrnScriptedLoadStage == 8)
+            s_iCollisionLoadFrames = 0;
+            if (mbIsCollisionWorldPrepared)
+            {
+                if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+                    BrnGameMainFlowController::gpMainGameFlowController->SendEvent(
+                        BrnGameMainFlowController::E_MGE_STATEEND);
+            }
+            else
+            {
                 gBrnScriptedLoadStage = 7;   // kick LoadWorldCollision
-            mbIsCollisionWorldPrepared = true;
+                mbIsCollisionWorldPrepared = true;
+            }
+        }
+        else if (mbIsCollisionWorldPrepared && ++s_iCollisionLoadFrames > KI_MAX_COLLISION_LOAD_FRAMES)
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint
+                    << "CompleteLoading: world-collision load did not finish in "
+                    << KI_MAX_COLLISION_LOAD_FRAMES
+                    << " frames (stage " << gBrnScriptedLoadStage
+                    << ") -- releasing the flow [FLAG PC anti-wedge bound]\n";
+            gBrnScriptedLoadStage = 8;
         }
     }
 }

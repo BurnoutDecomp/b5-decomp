@@ -636,6 +636,35 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
 
     SceneManagerIO::InSceneUpdateInterface* lpScene =
         lpSceneInputBuffer->GetInSceneUpdateInterface();
+
+    // ---- the STATIC-WORLD collision leg ---------------------------------------------------
+    // ⭐ ADDED 2026-08-10 (world-collision wave), and it is the console's, not an invention:
+    // `xrefs_to` of TriangleCollisionManager::ProcessAddPolySoupListEvents @0x828B3160 lists
+    // exactly TWO callers -- SceneManagerModule::StartUpdateTriangleCache @0x828C73D8 (the
+    // per-frame one, already committed) and THIS bridge @0x828D1F88.
+    //
+    // WHY IT MATTERS HERE: WorldModule::PrepareWorldCollision @0x827C9478 stages the world's
+    // 396 InEventAddPolySoupList events into a scene input buffer it creates AND DESTROYS
+    // inside the same call, with UpdateScene (-> this bridge) as the only consumer in
+    // between. Without this leg those events were dropped on the floor every frame of the
+    // load, the last one carrying mbRebuildSpacialPartitioning -- so BuildSpacialPartition
+    // never ran and the triangle cache stayed empty even with the whole streaming round trip
+    // working. RUNTIME-WITNESSED: 396 zones acquired, numLeafNodes still 0.
+    //
+    // Placed BEFORE the entity legs' partition guard on purpose: the poly-soup partition is
+    // the TriangleCollisionManager's own quadtree and has nothing to do with the entity
+    // octree, so an absent SpatialPartition must not suppress it.
+    // ⚠️ The console bridge (1,614 insns) also carries the cache/collision-body legs
+    // (ProcessAdd/RemoveForCollisionEvent, ProcessAdd/RemoveFromCacheEvents,
+    // ProcessUpdateCachedPositionEvents, UpdateCollisionBody). Those are NOT reconstructed
+    // here -- they are the dynamic-object side and are already driven per frame by
+    // StartUpdateTriangleCache; only the static-world leg is added, because only the static
+    // world is staged through a buffer that dies before the frame pass runs.
+    if (lpScene != NULL)
+    {
+        mTriangleCollisionManager.ProcessAddPolySoupListEvents(lpScene->mAddPolySoupListQueue);
+    }
+
     SpatialPartition* lpPartition = mSpatialPartitionManager.GetSpatialPartition();
     if (lpPartition == NULL)
     {

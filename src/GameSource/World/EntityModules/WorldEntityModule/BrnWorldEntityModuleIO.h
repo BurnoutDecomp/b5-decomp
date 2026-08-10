@@ -77,9 +77,14 @@ namespace WorldEntityIO
         // 0x827A2728 — read-lock tripwire ("Not locked for reading").
         const ResourceRequestInterface* GetResourceRequestInterface() const;
 
-        // ATTESTED 2026-07-24 by WorldModule::Prepare @0x827D53B0 (stage-8 fail path
-        // appends this buffer's staged scene requests into the live scene input).
+        // 0x827BBC50 — write-lock tripwire ("Not locked for writing"), DWARF :76.
+        // 0x827BBBA8 — read-lock tripwire ("Not locked for reading"), DWARF :75.
+        // Both return &mSceneInputInterface (X360 this+0x1020). WorldModule::
+        // PrepareWorldCollision @0x827C9478 calls BOTH: the non-const one under its own
+        // LockForWrite bracket (to hand the module its scene sink), the const one under
+        // the LockBuffersForIO read bracket (to append the staged requests out).
         SceneInputInterface* GetSceneInputInterface();
+        const SceneInputInterface* GetSceneInputInterface() const;
 
         static void _AssertLayout();
 

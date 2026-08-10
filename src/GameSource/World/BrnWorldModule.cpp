@@ -942,8 +942,14 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
                 CgsModule::UnlockBuffersForIO( lpUpdateOutputBuffer, lpWorldEntityOutput );
 
                 CgsModule::LockBuffersForIO( lpSceneInput, lpWorldEntityOutput );
-                lpSceneInput->GetInSceneUpdateInterface()->Append(
-                    *lpWorldEntityOutput->GetSceneInputInterface() );
+                // The world-entity output is the SOURCE of this bracket, i.e. READ-locked,
+                // so the read has to go through the CONST twin (0x827BBBA8, bit 4) --
+                // the non-const one (0x827BBC50, bit 3) asserts the WRITE lock.
+                {
+                    const WorldEntityIO::OutputBuffer_Prepare* lpWorldEntityRead = lpWorldEntityOutput;
+                    lpSceneInput->GetInSceneUpdateInterface()->Append(
+                        *lpWorldEntityRead->GetSceneInputInterface() );
+                }
                 CgsModule::UnlockBuffersForIO( lpSceneInput, lpWorldEntityOutput );
 
                 mSceneModule.UpdateScene( lpInputBufferStack, lpOutputBufferStack,
@@ -1139,6 +1145,96 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
     }
 
     return false;
+}
+
+
+// ============================================================================
+// PrepareWorldCollision  @ 0x827C9478
+//
+// One frame of the WORLD COLLISION prepare -- the scripted load's stage 7. Same
+// shape as Prepare's eWorldPrepareWorldEntityModule stage, but driving
+// WorldEntityModule::PrepareWorldCollision instead of ::Prepare: create the
+// world-entity prepare output + the scene IO pair, run one step of the collision
+// prepare under the world-entity buffer's own write lock, and -- while it reports
+// "still working" -- bridge the staged resource requests out to the caller's
+// update output and push the staged scene requests through the scene manager.
+//
+// Returns the sub-module's own answer: TRUE == the whole world collision is
+// prepared. (LoadingScriptedState::LoadWorldCollision inverts nothing -- it takes
+// the true arm to fire EffectsModule::PostWorldPreparePrepare, and the false arm
+// to forward the requests, so a "false" here means "call me again next frame".)
+//
+// ⚠️ Two lock brackets, three accessors, and the console picks a DIFFERENT overload
+// in each: under its own LockForWrite it takes the NON-CONST scene-input accessor
+// (0x827BBC50, bit 3) and the NON-CONST request accessor (0x822BA180); under the
+// LockBuffersForIO read bracket it takes the CONST scene-input accessor
+// (0x827BBBA8, bit 4). Getting that wrong is what cost the previous wave 927
+// asserts on the sibling scene-manager pair.
+// ============================================================================
+bool
+WorldModule::PrepareWorldCollision( CgsModule::IOBufferStack* lpInputBufferStack,
+                                    CgsModule::IOBufferStack* lpOutputBufferStack,
+                                    BrnWorldIO::UpdateOutputBuffer* lpOutput )
+{
+    WorldEntityIO::OutputBuffer_Prepare*                  lpWorldEntityOutput = 0;
+    CgsSceneManager::SceneManagerIO::InputBuffer_Update*  lpSceneInput        = 0;
+    CgsSceneManager::SceneManagerIO::OutputBuffer*        lpSceneOutput       = 0;
+
+    // The X360 asserts each CreateIOBuffer through the CgsModuleIOHelper.h:52 wrapper
+    // ("mpStack->CreateIOBuffer( &mpBuffer, lpcName )"); the PC stack template returns the
+    // same bool, so the guard is kept verbatim.
+    CGS_ASSERT( lpOutputBufferStack->CreateIOBuffer( &lpWorldEntityOutput, "WorldEntityPrepare" ),
+                "mpStack->CreateIOBuffer( &mpBuffer, lpcName )" );
+    CGS_ASSERT( lpInputBufferStack->CreateIOBuffer( &lpSceneInput, "Scene" ),
+                "mpStack->CreateIOBuffer( &mpBuffer, lpcName )" );
+    CGS_ASSERT( lpOutputBufferStack->CreateIOBuffer( &lpSceneOutput, "Scene" ),
+                "mpStack->CreateIOBuffer( &mpBuffer, lpcName )" );
+
+    // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs T::Construct
+    // after the alloc; the generic PC template placement-news only) -- the same restoration
+    // Prepare's WORLDENTITY stage does for this exact buffer trio.
+    lpWorldEntityOutput->Construct();
+    lpSceneInput->Construct();
+    lpSceneOutput->Construct();
+
+    lpWorldEntityOutput->LockForWrite();
+    // Both reached through the NON-CONST overloads: this buffer is WRITE-locked here.
+    WorldEntityIO::SceneInputInterface*    lpSceneInterface   = lpWorldEntityOutput->GetSceneInputInterface();
+    WorldEntityIO::ResourceRequestInterface* lpRequestInterface = lpWorldEntityOutput->GetResourceRequestInterface();
+    const bool lbPrepared =
+        mWorldEntityModule.PrepareWorldCollision( lpRequestInterface, lpSceneInterface, true );
+    lpWorldEntityOutput->UnlockForWrite();
+
+    if ( !lbPrepared )
+    {
+        CgsModule::LockBuffersForIO( lpOutput, lpWorldEntityOutput );
+        ::WorldModule::BridgeWorldResourceRequestsToOutput_Prepare(
+            this, lpOutput, lpWorldEntityOutput );
+        CgsModule::UnlockBuffersForIO( lpOutput, lpWorldEntityOutput );
+
+        CgsModule::LockBuffersForIO( lpSceneInput, lpWorldEntityOutput );
+        {
+            // READ-locked here -> the CONST twin (0x827BBBA8).
+            const WorldEntityIO::OutputBuffer_Prepare* lpWorldEntityRead = lpWorldEntityOutput;
+            lpSceneInput->GetInSceneUpdateInterface()->Append(
+                *lpWorldEntityRead->GetSceneInputInterface() );
+        }
+        CgsModule::UnlockBuffersForIO( lpSceneInput, lpWorldEntityOutput );
+
+        // The X360 reaches this through the module's vtable +0x40 on this + 2002304
+        // (== &mSceneModule); named here, same as Prepare's WORLDENTITY stage.
+        mSceneModule.UpdateScene( lpInputBufferStack, lpOutputBufferStack,
+                                  lpSceneInput, lpSceneOutput, true );
+    }
+
+    CGS_ASSERT( lpOutputBufferStack->DestroyIOBuffer( &lpSceneOutput ),
+                "mpStack->DestroyIOBuffer( &mpBuffer )" );       // CgsModuleIOHelper.h:57
+    CGS_ASSERT( lpInputBufferStack->DestroyIOBuffer( &lpSceneInput ),
+                "mpStack->DestroyIOBuffer( &mpBuffer )" );
+    CGS_ASSERT( lpOutputBufferStack->DestroyIOBuffer( &lpWorldEntityOutput ),
+                "mpStack->DestroyIOBuffer( &mpBuffer )" );
+
+    return lbPrepared;
 }
 
 
