@@ -52,9 +52,38 @@
 //     0x825B5268   37  VehicleManager::DoVehicleTractionLineDecallocations
 //     0x826185A0  548  VehicleManager::DoPlayerTractionLineTestsPostSimulation
 // ⚠️ StartVehicleTractionLineTests calls its six callees UNCONDITIONALLY (pseudocode read, not
-// inferred), so there is no cheap partial: bodying it alone would trade one gate for six. Treat
-// the chain as one wave. Its two out-of-family dependencies are EA::Jobs (WaitOn is already
-// mounted) and CgsMemory::DataStreamCommandPoster/SimpleDataStreamProducer.
+// inferred), so there is no cheap partial: bodying it alone would trade one gate for six.
+//
+// ⭐⭐ WHAT THE GROUND ACTUALLY COSTS -- measured 2026-08-10 (ground wave), so that the sentence
+// above ("treat the chain as one wave") is not read as an estimate. The thirteen are ~2,500 insns;
+// they are NOT the job. Four of them bottom out in machinery this tree does not have:
+//   * THE COMMANDS CARRY TRIANGLES. AddRaceCarTractionLineTests @0x825E9640 builds a 176-byte
+//     command whose payload is {4x line start, 4x line end, Triangle4* lpTriangles, s32
+//     miNumTriangles, s32 numLines=4}, taking the triangle list from a per-object TRIANGLE CACHE
+//     -- it asserts "lpCacheInterface != NULL" / "mpTriangleCacheManager != NULL" /
+//     "mpaTriangleCache != NULL" and then dereferences it. CgsSceneManager::TriangleCacheManager
+//     is ABSENT here: Prepare 88 / ProcessAddToCacheEvents 222 / ProcessRemoveFromCacheEvents 346 /
+//     ProcessUpdateCachedPositionEvents 279 / StartUpdateTriangleCaches 278 /
+//     EndUpdateTriangleCaches 475, plus VehicleManager::UpdateTriangleCache 240 and the
+//     PolygonSoupTesterJob fill path (FillTriangleCache 219, ExecuteFillTriangleCache 170,
+//     ExecuteFillTriangleCacheStream 145).
+//   * SimpleVehiclePhysics::GetTractionLine @0x825D85C0 -- another export hole (identity recovered
+//     from DoPlayerTractionLineTestsPostSimulation's xrefs_from), also absent.
+//   * THE TEST ITSELF is a job: RunTractionLineTestJobs -> BaseCollisionGenerator::RunLineWith-
+//     TriangleListStream @0x82810E80 (90; export hole, address proved by decoding the bl word at
+//     0x825B5248) -> ContactGeneratorJob::ExecuteLineWithTriangleListStream @0x82921968 (589) over
+//     CgsGeometric::IntersectLinePolygonSoupNearestSingleSided 575 /
+//     PolygonSoupListSpatialMap::RunQuery 261. All absent.
+// ⇒ the ground is ~6,000 insns across ~40 functions in four subsystems: several waves, not one.
+//
+// ⭐ LANDED 2026-08-10 (ground wave), real bodies, mounted for link closure but NOT wired in --
+// BrnVehicleManager_TractionLineTests.cpp has DoVehicleTractionLineAllocations,
+// RunTractionLineTestJobs, DoVehicleTractionLineDecallocations and ReadRaceCarTractionLineTest-
+// Results; CgsCollisionGenerator_LineStream.cpp has CreateLineWithTriangleListStream.
+// ⛔ AND THE TWO HALVES ARE LIFETIME-COUPLED, which is why neither can go live alone:
+// mpTractionLineStreamProducer is allocated inside Start and nulled inside End, and End
+// dereferences it with no null guard while the mounted UpdateVehiclePhysics reaches End every
+// frame. Land Start and End in the SAME wave, after the triangle cache.
 //
 // ⭐ ReadUpdatedBodies is NO LONGER in this file: it is real (BrnVehicleManager_ReadUpdatedBodies
 // .cpp) and it is the gravity + integration step, not a read-back. Note what that means for

@@ -150,9 +150,20 @@ namespace Vehicle
         }
     }
 
-    // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet (.ida-exports hole).
-    void VehicleManager::EndVehicleTractionLineTests(CgsModule::IOBufferStack*,
-                                                     const VehicleInputInterface*)
+    // LINK STUB. ⭐ ARITY CORRECTED 2026-08-10 (ground wave): ONE parameter, not two -- see the
+    // declaration in BrnVehicleManager.h for the register proof. The second (interface) argument
+    // this stub used to take was fabricated, and the one call site passed it.
+    //
+    // ⛔ WHY THIS IS STILL A GATE WITH THE WHOLE BODY IN HAND. Its four harvest callees are real as
+    // of this wave (BrnVehicleManager_TractionLineTests.cpp), but the body's SECOND act is
+    // `DataStreamCommandPoster::End(mpTractionLineStreamProducer + 0x80)` with NO null guard, and
+    // mpTractionLineStreamProducer is only ever non-null between DoVehicleTractionLineAllocations
+    // and DoVehicleTractionLineDecallocations -- i.e. only if StartVehicleTractionLineTests ran.
+    // That one is gated (its command builders dereference an absent TriangleCacheManager), and
+    // UpdateVehiclePhysics reaches THIS function unconditionally every frame. Bodying it now is a
+    // null+0x80 write per frame. The two halves are lifetime-coupled by the producer: they land
+    // together or not at all.
+    void VehicleManager::EndVehicleTractionLineTests(CgsModule::IOBufferStack*)
     {
         // BOOT GATE (conductor wave 2026-08-09): reached every frame by the landed
         // UpdateVehiclePhysics. Reconstruct and DELETE this gate.
@@ -161,7 +172,7 @@ namespace Vehicle
         {
             s_bLogged = true;
             if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::EndVehicleTractionLineTests @0x82633CD8 (68; NOT an export hole -- claim RETRACTED 2026-08-10) inert [FLAG PC boot gate]\n";
+                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::EndVehicleTractionLineTests @0x82633CD8 (68; NOT an export hole -- claim RETRACTED 2026-08-10; arity CORRECTED to 1 param 2026-08-10) inert -- blocked with StartVehicleTractionLineTests on the absent TriangleCacheManager [FLAG PC boot gate]\n";
         }
     }
 
