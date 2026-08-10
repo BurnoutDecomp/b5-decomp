@@ -29,6 +29,9 @@ namespace rw { struct IResourceAllocator; }
 namespace CgsSceneManager { namespace SceneManagerIO { struct TriangleCacheInterface;
                                                        struct InSceneUpdateInterface; } }
 namespace CgsSceneManager { namespace CgsCollision { struct CollisionGenerator; } }
+// ⭐ ADDED 2026-08-10 (create-path wave): ProcessInputsPreScene's first parameter, pointer only.
+// Class key `struct`, matching the single home SharedIO/BrnPropInputInterface.h:54.
+namespace BrnPhysics { namespace Props { struct PropInputInterface; } }
 // (CgsSceneManager::EntityId arrives complete through CgsRigidBody.h -> CgsEntityId.h.)
 namespace CgsMemory { class LinearMalloc; }
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct OutUpdateRigidBody; } }
@@ -169,6 +172,20 @@ namespace Props
 
         void OutputUpdatedProps(
             BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutputBuffer ); // @0x82627EC8
+
+        // ⭐ ADDED 2026-08-10 (create-path wave -- PhysicsModule::PostSceneUpdate @0x825ABC10's
+        // prop leg, its fifth call). @0x8263AF30 (209 insns). Drains the prop input interface's
+        // add/remove prop-and-part instance queues and re-runs the jointed-prop update; its own
+        // callees (ProcessRemovePropInstanceEvents / ProcessRemovePartInstanceEvents /
+        // RemoveAllPropsAndParts / ProcessAddPropInstanceEvents / ProcessAddPartInstanceEvents /
+        // UpdateJointedProps) are none of them reconstructed. ⚠ FLAG: DECLARED for
+        // PostSceneUpdate's closure; body is a LOUD one-shot gate (BrnPhysicsConductorGates.cpp).
+        // The bool is PostSceneUpdate's own `lUpdateSet & 1` (the network-catchup flag).
+        void ProcessInputsPreScene(
+            const BrnPhysics::Props::PropInputInterface* lpPropInputInterface,
+            CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
+            bool lbNetworkCatchup,
+            CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInputBuffer ); // @0x8263AF30
         static const s32 KI_PROP_INDEX_NOT_FOUND     = -1;    // DWARF BrnPropManager.h:245
 
         typedef CgsModule::EventQueue<UpdatePropEvent, 200> UpdatePropEventQueue;

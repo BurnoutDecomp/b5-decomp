@@ -3521,21 +3521,15 @@ void BrnPhysics::PhysicsModule::UpdateCachedPositions(struct CgsSceneManager::Sc
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the physics post-scene tick (@0x825ABC10).
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnPhysics::PhysicsModule::PostSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnPhysics::PhysicsModuleIO::InputBuffer const *,class BrnPhysics::PhysicsModuleIO::OutputBuffer *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PhysicsModule::PostSceneUpdate: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⭐⭐ 2026-08-10 (create-path wave): the PhysicsModule::PostSceneUpdate boot gate that stood here
+// since 2026-07-27 is DELETED -- the real 278-insn body @0x825ABC10 is landed in
+// BrnPhysicsModuleUpdateFunctions.cpp. It was the last link in the chain that made
+// VehicleManager::ProcessVehicleMaintenanceEvents (and behind it the whole create path)
+// unreachable: `xrefs_to` on that function is a one-element set naming only this stub.
+// The four callees of PostSceneUpdate whose own closures are absent are each their own NAMED
+// one-shot gate in BrnPhysicsConductorGates.cpp -- including
+// BridgeVehicleManagerToSimulation_PostScene, which is HELD INERT DELIBERATELY because it is the
+// only path from the vehicle manager's rigid-body request queues into the simulation.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. the physics scene-query producer (@0x825A1428).

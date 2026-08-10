@@ -57,6 +57,21 @@ namespace PhysicsModuleIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         return &mGameActionQueue;
     }
+
+    // ⭐ ADDED 2026-08-10 (create-path wave). X360 0x8259FA98: read-lock; return
+    // &mRCEntityOutputInterface (this+149632). Both facts are read off the image rather than
+    // inferred from the neighbours: the lock test is `rlwinm r11,r11,0x1c,0x1f,0x1f` (bit 4 ==
+    // READ, with the "Not locked for reading\n" literal), the assert line is `li r5, 0x11C` ==
+    // DWARF BrnPhysicsModuleIO.h:284, and the return is
+    // `addis r3,r28,2 / addi r3,r3,0x4880` == 131072 + 18560 == 149632.
+    // Its only console caller is PhysicsModule::PostSceneUpdate @0x825ABC10, which calls it
+    // three times (the player-index read, the re-read inside the active arm, and the
+    // entity-id fetch) -- each one a separate lock check on the console, reproduced as such.
+    const InputBuffer::RCEntityOutputInterfaceStorage* InputBuffer::GetRCEntityOutputInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mRCEntityOutputInterface;
+    }
 }
 }
 

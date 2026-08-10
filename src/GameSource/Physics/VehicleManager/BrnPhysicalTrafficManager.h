@@ -219,6 +219,15 @@
 // UpdateVehiclePhysics-wave collaborator (pointer-only on this surface).
 namespace BrnPhysics { namespace Vehicle { struct VehicleManagerOutputInterface; } }
 
+// ⭐ ADDED 2026-08-10 (create-path wave): ProcessTrafficMaintenanceEvents' remaining parameter
+// types, pointer use only. CLASS KEYS CHECKED AGAINST THE SINGLE HOME OF EACH BEFORE WRITING
+// THEM, per the standing ODR-fork rule -- BrnVehicleInputInterface.h:28 and
+// BrnVehicleOutputInterface.h:62 both spell `struct alignas(16)` (the alignment belongs to the
+// definition, not the declaration), and BrnDeformationInputInterface.h:20 spells `class`.
+namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface;
+                                           struct VehicleOutputInterface; } }
+namespace BrnPhysics { namespace Deformation { class DeformationInputInterface; } }
+
 // ⭐ ADDED 2026-08-06 (big-five #2): ValidateTrafficContact collaborators, pointer use only.
 // Class key `struct`, matching CgsPotentialContact.h / the TriangleCacheInterface home.
 namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact;
@@ -526,6 +535,22 @@ public:
     void ReadUpdatedBodies(
         const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody, 200>* lpUpdatedBodies,
         VecFloat lvfTimeStep);
+
+    // ⭐ ADDED 2026-08-10 (create-path wave). X360 0x82649768 (246 insns) -- the traffic twin of
+    // VehicleManager::ProcessVehicleMaintenanceEvents and its sixth and last call, taking that
+    // function's whole argument list verbatim (r3 = &mPhysicalTrafficManager, i.e. the vehicle
+    // manager + 44768). ⚠ FLAG: DECLARED for the maintenance closure; body is a LOUD one-shot
+    // gate (BrnVehicleManager_MaintenanceEvents.cpp) -- its own create/remove/crash arms over
+    // mUsedTrafficVehicles are unreconstructed, and the same ground ordering applies to traffic
+    // as to race cars.
+    void ProcessTrafficMaintenanceEvents(
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        const VehicleInputInterface* lpInputInterface,
+        VehicleOutputRequestInterface* lpOutputInterface,
+        VehicleManagerOutputInterface* lpManagerOutputInterface,
+        VehicleOutputInterface* lpVehicleOutputInterface,
+        BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface); // @0x82649768
 
     // X360 0x825B4900: &mpaTrafficDrivers[idx] (stride 224).
     VehicleDriver* GetTrafficDriver(s32 liVehicle);

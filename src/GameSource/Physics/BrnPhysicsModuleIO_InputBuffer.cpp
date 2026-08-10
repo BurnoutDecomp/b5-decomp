@@ -60,11 +60,28 @@ namespace PhysicsModuleIO
                           "vehicle-driver span must equal the console 5296 (host type is pointer-free)");
             static_assert(offsetof(InputBuffer, mVehicleEffectsInputInterface) == 147840 + KU_DRIFT, "mVehicleEffectsInputInterface @147840+D");
             static_assert(offsetof(InputBuffer, mRCEntityOutputInterface)      == 149632 + KU_DRIFT, "mRCEntityOutputInterface @149632+D");
-            static_assert(offsetof(InputBuffer, mPotentialContactQueue)        == 160208 + KU_DRIFT, "mPotentialContactQueue @160208+D (0x8259FB40)");
-            static_assert(offsetof(InputBuffer, mOverlapPairsQueue)            == 324064 + KU_DRIFT, "mOverlapPairsQueue @324064+D (0x8259FBE8)");
-            static_assert(offsetof(InputBuffer, mTimerInterface)               == 327152 + KU_DRIFT, "mTimerInterface @327152+D");
-            static_assert(offsetof(InputBuffer, mSolverMaxIterations)          == 327200 + KU_DRIFT, "mSolverMaxIterations @327200+D");
-            static_assert(offsetof(InputBuffer, mPropManagerInputInterface)    == 327216 + KU_DRIFT, "mPropManagerInputInterface @327216+D");
+            // ⭐ 2026-08-10 (create-path wave): mRCEntityOutputInterface is the REAL
+            // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface now, and like
+            // the vehicle-input and prop-input spans it GROWS on the host (its eight
+            // CgsResource::ResourceHandle slots and the WorldMap2D carry x64-widened pointers), so
+            // every member below it takes a THIRD uniform drift. Computing it from sizeof keeps the
+            // gate's teeth: any wrong pad run still fails.
+            // ⚠️ THE OLD 0x28F0 OPAQUE SPAN WAS A LATENT TRUNCATION, not a neutral placeholder --
+            // WorldBridgeEntityModulesToPhysics.cpp memcpy's sizeof(RCEntityOutputInterfaceStorage)
+            // bytes out of a host source object that is LARGER than that, so the copy stopped
+            // short of the tail members. Its own banner said so and said "retype the seat when a
+            // consumer needs it"; PhysicsModule::PostSceneUpdate is that consumer as of today, and
+            // the three members it reads (mePlayerActiveRaceCarIndex, mbIsPlayerCarActive,
+            // maRaceCarStates[player].mEntityId) are only reachable by NAME once the seat is typed.
+            constexpr size_t KU_RCENTITY_DRIFT =
+                sizeof(RCEntityOutputInterfaceStorage) - (160112 - 149632);  // host growth of the RCEntity span
+            static_assert(sizeof(RCEntityOutputInterfaceStorage) >= 160112 - 149632,
+                          "RCEntity span smaller than the console span -- retype regressed");
+            static_assert(offsetof(InputBuffer, mPotentialContactQueue)        == 160208 + KU_DRIFT + KU_RCENTITY_DRIFT, "mPotentialContactQueue @160208+D+RD (0x8259FB40)");
+            static_assert(offsetof(InputBuffer, mOverlapPairsQueue)            == 324064 + KU_DRIFT + KU_RCENTITY_DRIFT, "mOverlapPairsQueue @324064+D+RD (0x8259FBE8)");
+            static_assert(offsetof(InputBuffer, mTimerInterface)               == 327152 + KU_DRIFT + KU_RCENTITY_DRIFT, "mTimerInterface @327152+D+RD");
+            static_assert(offsetof(InputBuffer, mSolverMaxIterations)          == 327200 + KU_DRIFT + KU_RCENTITY_DRIFT, "mSolverMaxIterations @327200+D+RD");
+            static_assert(offsetof(InputBuffer, mPropManagerInputInterface)    == 327216 + KU_DRIFT + KU_RCENTITY_DRIFT, "mPropManagerInputInterface @327216+D+RD");
             // ⭐ 2026-08-10 (root-cause wave): mPropManagerInputInterface is the REAL
             // Props::PropInputInterface now, and -- unlike the driver interface -- it DOES grow
             // on the host (four embedded event queues with an 8-byte mpEvents, plus a
@@ -76,8 +93,8 @@ namespace PhysicsModuleIO
                 static_assert(sizeof(PropInputInterfaceStorage) >= 338496 - 327216,
                               "prop-input span smaller than the console span -- retype regressed");
                 static_assert(offsetof(InputBuffer, mGameActionQueue)
-                                  == 338496 + KU_DRIFT + KU_PROP_DRIFT,
-                              "mGameActionQueue @338496+D+PD");
+                                  == 338496 + KU_DRIFT + KU_RCENTITY_DRIFT + KU_PROP_DRIFT,
+                              "mGameActionQueue @338496+D+RD+PD");
             }
         }
         // The game-action queue member must be the real 13328-byte queue, not a stand-in: it is

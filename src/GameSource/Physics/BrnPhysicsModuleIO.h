@@ -49,6 +49,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // Vehicle::VehicleOutputRequestInterface / VehicleManagerOutputInterface / VehicleOutputInterface (promoted 2026-08-09)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h" // Vehicle::VehicleDriverInputInterface (mVehicleDriverInterface, retyped 2026-08-09)
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h" // Props::PropInputInterface (mPropManagerInputInterface, retyped 2026-08-10)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface (mRCEntityOutputInterface, retyped 2026-08-10)
 
 namespace BrnPhysics
 {
@@ -216,7 +217,23 @@ namespace PhysicsModuleIO
         // driver-update queue 5 KB past the slice.
         typedef BrnPhysics::Vehicle::VehicleDriverInputInterface VehicleDriverInputInterfaceStorage;
         struct VehicleEffectsInputInterfaceStorage  { unsigned char maBytes[1]; };
-        struct RCEntityOutputInterfaceStorage       { unsigned char maBytes[0x28F0]; }; // 10480
+        // ⭐ RETYPED 2026-08-10 (create-path wave; FIFTH use of the typedef pattern, after the
+        // vehicle-input / vehicle-driver / game-action / prop-input seats). This was
+        // `unsigned char[0x28F0]` and it is about to go LIVE:
+        // PhysicsModule::PostSceneUpdate @0x825ABC10 reads THREE members straight out of it --
+        // mePlayerActiveRaceCarIndex (+0x2858 == 10328), mbIsPlayerCarActive (+0x2860 == 10336)
+        // and maRaceCarStates[player].mEntityId (`mulli 0x460` + `lwz 0x6F8`) -- and feeds the
+        // first to VehicleManager::SetPlayerActiveRaceCarIndex and the third to
+        // DeformationManager::FindModelIndexByEntityID. Reaching those through an opaque byte
+        // span means three raw console byte offsets on a live path, which is the offset hack this
+        // project forbids AND the memory-bug shape the standing rule names.
+        // The real type is byte-identical in extent: BrnWorldModuleIO.h:685 pins
+        // RCEntityActiveRaceCarOutputInterface at 10480 B == 0x28F0, which is exactly the span
+        // this member already reserved, so the seat, every pad below and the existing
+        // SetRCEntityOutputInterface memcpy are UNCHANGED (the _AssertLayout static_asserts are
+        // the tripwire if that ever stops being true).
+        typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface
+                                                    RCEntityOutputInterfaceStorage;      // 10480
         // ⭐ RETYPED 2026-08-09 (conductor wave; same typedef pattern as the vehicle-input
         // span): the real CgsSystem::TimerStatusInterface -- 48 bytes on both targets (two
         // pointer-free 24-byte TimerStatus blocks), so the seat and every pin below are
@@ -258,6 +275,12 @@ namespace PhysicsModuleIO
         const VehicleInputInterfaceStorage*         GetVehicleInputInterface() const;       // 0x8259F8A0 :275
         const VehicleDriverInputInterfaceStorage*   GetVehicleDriverInterface() const;      // 0x8259F948 :278
         const VehicleEffectsInputInterfaceStorage*  GetVehicleEffectsInputInterface() const;// 0x8259F9F0 :281
+        // ⭐ ADDITIVE 2026-08-10 (create-path wave). Read-lock accessor for the race-car entity
+        // output interface. The DWARF line is READ FROM THE IMAGE, not guessed: the body at
+        // 0x8259FA98 fires `li r5, 0x11C` == 284 into FireAssert, and returns
+        // `addis r3,r28,2 / addi r3,r3,0x4880` == this+149632 == &mRCEntityOutputInterface.
+        // Its one console caller is PhysicsModule::PostSceneUpdate @0x825ABC10 (three times).
+        const RCEntityOutputInterfaceStorage*       GetRCEntityOutputInterface() const;     // 0x8259FA98 :284
         const TimerStatusInterfaceStorage*          GetTimerInterface() const;              // 0x8259FC90 :295
         // ---- ADDITIVE 2026-08-09 (conductor wave): the two unfolded queue getters ------
         const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>*
