@@ -65,7 +65,13 @@ namespace PhysicsModuleIO
     //   +148656  Deformation::DeformationOutputInterface::Construct
     //   +171552  Deformation::DetachedPartRenderEvent<50>::Construct   ) inside
     //   +175568  Deformation::GlassSmashOrCrackEvent<20>::Construct    ) mDeformationOutput-
-    //            + zero stores at +159648/+171072/+171300/+171560/+175576 ) InterfaceForEntityModules
+    //            + zero stores at +159648/+171088/+171316/+171560/+175576 ) InterfaceForEntityModules
+    //            (⚠ TWO SEATS CORRECTED 2026-08-10: this line read +171072/+171300. r28 is
+    //             `addis 2; addi 0x6FA0` == this+159648, and the two stores are `stw r31,
+    //             0x2CB0(r28)` and `stw r31, 0x2D94(r28)` -- 11440 and 11668, i.e. 171088 and
+    //             171316. Both sit inside the opaque entity-modules span, so nothing consumed
+    //             the wrong numbers; corrected so the next wave that unfolds that span does not
+    //             inherit them.)
     //   +53888   Vehicle::PhysicalTrafficState<20>::Construct  ) inside
     //   +53104   Vehicle::ImpactEvent<16>::Construct           ) mVehicleOutputInterface
     //   +70224   VariableEventQueue<1536,16>::Construct        ) (+44128)
@@ -78,23 +84,31 @@ namespace PhysicsModuleIO
     //   +71792   Props::PropOutputInterface::Construct
     //   +998192  stwx 0        == mContactSpyInterface (drop the data pointer)
     //
-    // ⚠️ SIX of those legs CANNOT be emitted yet and are NOT faked:
-    //   * mPropManagerOutputInterface (+71792), mDeformationOutputInterface (+148656),
-    //     mDeformationOutputInterfaceForEntityModules (+159648) and mSceneInputInterface
-    //     (+179424) are still 1-byte opaque *Storage spans with no members to construct;
-    //   * mVehicleOutputInterface (+44128) and mVehicleManagerOutputInterface (+41952) ARE
-    //     the real committed types, but neither declares a Construct member yet -- the
-    //     console inlines both. Their seats and exact queue lists are transcribed above so
-    //     the next wave restores them in minutes. (mVehicleOutputInterface additionally holds
-    //     its game-event queue as an opaque size-pinned span, so its Construct needs that
-    //     seam decided first.) Any consumer reaching one of those will fire the same loud
-    //     "Not Constructed" this one did, by design.
+    // ⭐ 2026-08-10 (create-path wave): TWO OF THE SIX BLOCKED LEGS ARE NOW EMITTED.
+    // mVehicleManagerOutputInterface (+41952) and mVehicleOutputInterface (+44128) were never
+    // opaque -- both are real committed types that simply had no Construct member. They have
+    // one now, recovered from the console: VehicleManagerOutputInterface::Construct is an
+    // out-of-line symbol at X360 0x822E6790, and VehicleOutputInterface::Construct is the
+    // inline block this very function emits at 0x825ABB58..0x825ABBA0. Both are DWARF-declared
+    // (BrnVehicleOutputInterface.h:86 and :312), so neither name is minted here.
+    // The game-event-queue leg inside VehicleOutputInterface runs through that class's
+    // sanctioned span cast, gated by a static_assert on the span size -- see its .cpp.
+    //
+    // ⚠️ FOUR legs still CANNOT be emitted and are NOT faked: mPropManagerOutputInterface
+    // (+71792), mDeformationOutputInterface (+148656),
+    // mDeformationOutputInterfaceForEntityModules (+159648) and mSceneInputInterface (+179424)
+    // are 1-byte opaque *Storage spans (each size-pinned by the pad that follows it) with no
+    // members to construct. Their seats and exact console call lists are transcribed above.
+    // Any consumer reaching one of those will fire the same loud "Not Constructed" this
+    // buffer did before it had a Construct at all, by design.
     void OutputBuffer::Construct()
     {
-        CgsModule::IOBuffer::Construct();            // status = 1
+        CgsModule::IOBuffer::Construct();               // status = 1
 
-        mVehicleOutputRequestInterface.Construct();  // +16      (the six sim-request queues)
-        mContactSpyInterface.Construct();            // +998192  (the console's trailing stwx 0)
+        mVehicleOutputRequestInterface.Construct();     // +16      (the six sim-request queues)
+        mVehicleOutputInterface.Construct();            // +44128   (X360-inline @0x825ABB58)
+        mVehicleManagerOutputInterface.Construct();     // +41952   (X360 0x822E6790)
+        mContactSpyInterface.Construct();               // +998192  (the console's trailing stwx 0)
     }
 
     // X360 0x8279F4F0 (read sibling block): read-lock; return this + 41952.

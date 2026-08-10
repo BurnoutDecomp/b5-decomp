@@ -502,6 +502,17 @@ public:
     PhysicalTrafficVehicle*       GetTrafficVehicle(s32 liVehicle);
     const PhysicalTrafficVehicle* GetTrafficVehicle(s32 liVehicle) const;
 
+    // ⭐ ADDED 2026-08-10 (create-path wave). X360 0x825EF608 (334 insns), bodied in
+    // GameSource/Physics/VehicleManager/BrnVehicleManager_ReadUpdatedBodies.cpp alongside its
+    // only caller, VehicleManager::ReadUpdatedBodies @0x82619A10 (xrefs_to == that one entry).
+    // Despite the name it reads no body state back: the queue feeds a dev duplicate-id assert
+    // and nothing else, and the real work is the per-vehicle
+    // `mLinearVelocity.y -= KF_GRAVITY*dt ; IntegrateTransform(dt)` over the fully-physical
+    // entries of mUsedTrafficVehicles.
+    void ReadUpdatedBodies(
+        const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody, 200>* lpUpdatedBodies,
+        VecFloat lvfTimeStep);
+
     // X360 0x825B4900: &mpaTrafficDrivers[idx] (stride 224).
     VehicleDriver* GetTrafficDriver(s32 liVehicle);
 

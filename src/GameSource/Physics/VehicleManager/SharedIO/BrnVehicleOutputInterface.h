@@ -64,6 +64,13 @@ namespace Vehicle
         typedef CgsModule::EventQueue<ImpactEvent, 16>          ImpactEventQueue;           // BrnVehicleEvents.h:575
         typedef CgsModule::EventQueue<PhysicalTrafficState, 20> PhysicalTrafficStateQueue;  // BrnVehicleEvents.h:574
 
+        // ⭐ ADDED 2026-08-10 (create-path wave). DWARF BrnVehicleOutputInterface.h:312.
+        // X360-ATTESTED as the INLINED body of PhysicsModuleIO::OutputBuffer::Construct
+        // @0x825ABB10 over its +44128 seat -- see the .cpp for the instruction-by-instruction
+        // decode. Constructs the two event queues and the game-event queue, then zeroes the
+        // used-cars bitset and the aggressive-driving flags.
+        void Construct();
+
         // @0x825EC390 (declaration-only in this ledger; see BrnPhysicsVehicle_FlaggedUnhomed.cpp /
         // the .cpp FLAG): a deep VMX128 per-wheel projection routine reaching SimpleVehiclePhysics
         // internals not homed in a committed header, so it is intentionally NOT bodied here.
@@ -202,6 +209,12 @@ namespace Vehicle
         typedef CgsModule::EventQueue<CreateVehicleResult, 8>  CreateVehicleResultQueue;      // :54
         typedef CgsModule::EventQueue<u16, 32>                 TrafficTypeRequestQueue;       // BrnTrafficTypeInterface.h:50
         typedef CgsModule::EventQueue<TrafficRemovedEvent, 25> RemovedTrafficEventQueue;      // :60
+
+        // ⭐ ADDED 2026-08-10 (create-path wave). DWARF BrnVehicleOutputInterface.h:86, and an
+        // OUT-OF-LINE X360 symbol at 0x822E6790 (25 instructions) -- not an inline, so the body
+        // in the .cpp is a direct transcription rather than an inference. Called by
+        // PhysicsModuleIO::OutputBuffer::Construct @0x825ABB10 over its +41952 seat.
+        void Construct();
 
         // @0x825C0658: queue a "physical-traffic vehicle crashed" event and return its slot index.
         s32 AddCrashedTrafficEvent(VolumeInstanceId lVolumeInstanceID, EntityId lCrasherEntityID);
