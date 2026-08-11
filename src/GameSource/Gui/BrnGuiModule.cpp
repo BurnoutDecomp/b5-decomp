@@ -255,7 +255,9 @@ extern DOGMA_PoolManager* gpAptPseudoDataPool;     // off_8324D808
 extern DOGMA_PoolManager* gpAptRenderManagerPool;  // off_8324D808
 extern DOGMA_PoolManager* gpAptSharedPtrPool;      // off_8324D808
 extern DOGMA_PoolManager* gpAptSingleListPool;     // off_8324D808
-extern void*              gpAptValueGCPool;        // off_8324D834 (type-erased GC-pool view)
+// gpAptValueGCPool extern RETIRED (2026-08-11): off_8324D834's three homes were
+// unified onto AptDefine.h's gpGCPoolManager; this never-referenced alias
+// declaration pointed at the deleted void* view.
 
 // The interpreter VM singleton (X360 &dword_8324E760) -- defined in AptGlobals.cpp.
 extern AptActionInterpreter gAptActionInterpreter;
