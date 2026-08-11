@@ -3701,17 +3701,10 @@ void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene::Construct()
 // here as read-lock-checked null returns -- the drive tolerates null on both
 // paths (the copy and the snapshot are skipped) because the producing modules
 // are boot-gated.
-struct BrnWorldIO::PlayerVehicleControls const * BrnWorldIO::UpdateInputBuffer::GetPlayerVehicleControls(void) const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "UpdateInputBuffer::GetPlayerVehicleControls: inert [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
+// GetPlayerVehicleControls RETIRED (driving-input wave 2026-08-11): the real
+// read-lock accessor is homed beside its writer in BrnWorldModuleIO.cpp. The
+// null-return gate here is what kept the per-frame controls copy skipped and
+// the player car deaf to input once the world went live.
 
 // ⛔ THIRD SILENT-DROP STUB RETIRED 2026-08-10 (same mount, same mechanism as the two
 //    OutputBuffer_Prepare accessors above): `OutputBuffer_PreScene::
@@ -3725,17 +3718,23 @@ struct BrnWorldIO::PlayerVehicleControls const * BrnWorldIO::UpdateInputBuffer::
 // the bat note next to the world-fleet block). Gated here so the real drive links
 // TODAY; delete each gate when its home TU is mounted.
 
-// BOOT GATE -- real body @0x827ADF88 in its own home TU (not mounted: IO accessor closure).
-void WorldModule::BridgeInputToEntityModules(void *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PreScene *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PostScene *,class BrnTraffic::BrnTrafficIO::InputBuffer_PreScene *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PreScene *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics *,struct BrnWorld::WorldEntityIO::InputBuffer_PreScene *,class BrnWorld::PropEntityIO::InputBuffer_PreScene *,struct BrnWorldIO::UpdateInputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeInputToEntityModules: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⛔⛔ STUB RETIRED 2026-08-11 (driving-input wave). The real body @0x827ADF88 is now
+// MOUNTED, out of GameSource/World/Bridges/WorldBridgeInputToEntityModules.cpp.
+// This inert copy was the ONLY definition in the link, and it sat on the LAST hop of the
+// player-input path: BridgeInputToEntityModules is the only caller in the image of
+// RaceCarEntityModuleIO::InputBuffer_PreScene::SetPlayerVehicleControls, so with this gate
+// linked the freshly-wired keyboard/pad controls reached the world's UpdateInputBuffer and
+// stopped dead there -- the race-car module's own pre-scene buffer never saw a control
+// frame. Nothing else in the image runs these hand-offs either, so the whole
+// per-active-race-car latch set (colour, paint finish, lost/regained contact,
+// car-select) never reached the race-car buffer, nor did the camera hand-off, the
+// takedown / scoring / online-scoring feeds, the trigger add+remove and query queues,
+// the world-entity request interface, or the prop game-action fan-out.
+// What it took to retire: the 21 declaration-only IO accessors it referenced (4 world
+// UpdateInputBuffer const getters, 15 RaceCarEntityModuleIO PreScene/PrePhysics setters,
+// the prop replay-status setter, and the trigger pre-scene GetInputInterface, whose home
+// TU was simply never on the build list) -- see the wave notes in BrnWorldModuleIO.cpp,
+// BrnRaceCarEntityModuleIO.h/.cpp and BrnPropEntityModuleIO_InputBuffer_PreScene.cpp.
 
 // BOOT GATE -- real body @0x827ABA40 in its own home TU (not mounted: IO accessor closure).
 void WorldModule::BridgePhysicsSceneUpdateToScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)

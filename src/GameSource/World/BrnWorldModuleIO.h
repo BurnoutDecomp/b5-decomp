@@ -360,8 +360,8 @@ namespace BrnWorldIO
         //     resolved by the member each returns / the setter each pairs with.
         const TimerStatusInterface*             GetTimerStatusInterface() const;             // :271 R (asm-named)
         const PlayerVehicleControls*            GetPlayerVehicleControls() const;            // :283 R (asm-named)
-        BrnNetwork::EPaybackType                GetActivePaybackType() const;                // :316 R (asm-named)
-        EActiveRaceCarIndex                     GetActivePaybackAggressor() const;           // :318 R (asm-named)
+        BrnNetwork::EPaybackType                GetActivePaybackType() const;                // :316 R (0x827A40E8, asm-named)
+        EActiveRaceCarIndex                     GetActivePaybackAggressor() const;           // :318 R (0x827A4198, X360 baked line 319)
         const TakedownEventQueue*               GetTakedownEventQueue() const;               // :272 R (IDA "UpdateInputBuffer_")
         const OnlineScoringInterface*           GetOnlineScoringInterface() const;           // :300 R (IDA sub_827A3D98)
         const TriggerManagementInputInterface*  GetTriggerManagementInputInterface() const;  // :276 R (IDA "UpdateInputB")

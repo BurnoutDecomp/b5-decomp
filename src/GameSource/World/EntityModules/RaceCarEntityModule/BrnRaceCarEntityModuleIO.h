@@ -37,6 +37,7 @@
 
 #include "types.hpp"
 #include <cstring>   // memset (partial-slice Constructs)                                                       // s8/s32/u8/u16/u32/f32
+#include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT (per-race-car header-inline setters)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                      // CgsModule::IOBuffer base
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"    // CgsSystem::TimerStatusInterface (by value)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                    // CgsModule::EventQueue<T,N>
@@ -215,18 +216,81 @@ namespace RaceCarEntityModuleIO
         AudioCarLoadedDataQueue*       GetAudioCarLoadedDataQueue();                        // :176
         const AudioCarLoadedDataQueue* GetAudioCarLoadedDataQueue() const;                 // :177
         bool                           GetReceivedNetworkDriverControls(EActiveRaceCarIndex) const; // :181
-        void                           SetReceivedNetworkDriverControls(EActiveRaceCarIndex); // :185
-        void                           SetRaceCarColourIndex(EActiveRaceCarIndex, u16);    // :190
+
+        // ---- per-active-race-car latch SETTERS: X360 HEADER-INLINES -------------------
+        // (bodied 2026-08-11, WorldBridgeInputToEntityModules mount). These six carry no
+        // out-of-line symbol in the ARTIST image: WorldModule::BridgeInputToEntityModules
+        // @0x827ADF88 has NO `bl` for them -- it inlines each one, and the inlined copies
+        // are exactly the range-assert pair + the store(s) reproduced below, with the
+        // X360-baked __LINE__ of THIS header on every assert (705/706, 760/761, 808/809,
+        // 826/827, 845/846). The store offsets in that inlined code pin the leading arrays
+        // one-for-one against the member list below (colour@+2, paint@+18, received@+34,
+        // colourValid@+42, paintValid@+50, lost@+58, regained@+66, select@+74,
+        // selectValid@+82). Modelled as header inlines to match the console, exactly as the
+        // producing side's twins are in BrnWorldModuleIO.h.
+        //
+        // NOTE on the assert shape: unlike the WORLD buffer's combined-form guards, the
+        // race-car side fires TWO SEPARATE asserts on every one of these (>= _INDEX_0 then
+        // < _INDEX_COUNT), each its own BeginAssert/FireAssert/EndAssert in the asm --
+        // including SetLostContact/SetRegainedContact, where the world twin uses one
+        // combined assert. Reproduced faithfully.
+
+        // :185 -- latch "this car's network driver controls arrived this frame".
+        // The only producer is WorldModule::CheckForNetworkDriverControlsReceived
+        // @0x827A8C58 (a HOLE in the .ida-exports dump; the store `racecar byte[34 + idx]
+        // = 1` is the PS3-asm-attested shape recorded on the bridge's own reconstruction),
+        // and +34 is mabReceivedNetworkDriverControls -- the offset the surrounding
+        // inlined per-car block independently pins.
+        void SetReceivedNetworkDriverControls(EActiveRaceCarIndex leActiveRaceCarIndex)
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            mabReceivedNetworkDriverControls[leActiveRaceCarIndex] = true;
+        }
+        // :190 -- X360 h:705/:706; stores the u16 at +2+2*idx then the valid flag at +42+idx.
+        void SetRaceCarColourIndex(EActiveRaceCarIndex leActiveRaceCarIndex, u16 lu16ColourIndex)
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            mau16RaceCarColourIndex[leActiveRaceCarIndex]    = lu16ColourIndex;
+            mabRaceCarColourIndexValid[leActiveRaceCarIndex] = true;
+        }
         u16                            GetRaceCarColourIndex(EActiveRaceCarIndex) const;   // :194
         bool                           IsRaceCarColourIndexValid(EActiveRaceCarIndex) const; // :198
-        void                           SetRaceCarPaintFinishIndex(EActiveRaceCarIndex, u16); // :203
+        // :203 -- X360 h:760/:761; stores the u16 at +18+2*idx then the valid flag at +50+idx.
+        void SetRaceCarPaintFinishIndex(EActiveRaceCarIndex leActiveRaceCarIndex, u16 lu16PaintIndex)
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            mau16RaceCarPaintFinishIndex[leActiveRaceCarIndex]    = lu16PaintIndex;
+            mabRaceCarPaintFinishIndexValid[leActiveRaceCarIndex] = true;
+        }
         u16                            GetRaceCarPaintFinishIndex(EActiveRaceCarIndex) const; // :207
         bool                           IsRaceCarPaintFinishIndexValid(EActiveRaceCarIndex) const; // :211
-        void                           SetLostContact(EActiveRaceCarIndex);                // :215
+        // :215 -- X360 h:808/:809; `a5[idx + 58] = 1`.
+        void SetLostContact(EActiveRaceCarIndex leActiveRaceCarIndex)
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            mabLostContactThisFrame[leActiveRaceCarIndex] = true;
+        }
         bool                           GetLostContact(EActiveRaceCarIndex) const;          // :219
-        void                           SetRegainedContact(EActiveRaceCarIndex);            // :223
+        // :223 -- X360 h:826/:827; `a5[idx + 66] = 1`.
+        void SetRegainedContact(EActiveRaceCarIndex leActiveRaceCarIndex)
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            mabRegainedContactThisFrame[leActiveRaceCarIndex] = true;
+        }
         bool                           GetRegainedContact(EActiveRaceCarIndex) const;      // :227
-        void                           SetCarSelectStatus(EActiveRaceCarIndex, bool);      // :232
+        // :232 -- X360 h:845/:846; `a5[idx + 74] = status` then `a5[idx + 82] = 1`.
+        void SetCarSelectStatus(EActiveRaceCarIndex leActiveRaceCarIndex, bool lbStatus)
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            mabCarSelectStatus[leActiveRaceCarIndex]      = lbStatus;
+            mabCarSelectStatusValid[leActiveRaceCarIndex] = true;
+        }
         bool                           GetCarSelectStatus(EActiveRaceCarIndex) const;      // :236
         bool                           IsCarSelectStatusValid(EActiveRaceCarIndex) const;  // :240
     private:
@@ -381,6 +445,15 @@ namespace RaceCarEntityModuleIO
         {
             CgsModule::IOBuffer::Construct();
             mSceneResultQueue.Construct();
+            // ⭐⭐ 2026-08-11 (WorldBridgeInputToEntityModules mount) -- ADDED, AND IT HAD
+            // BECOME MANDATORY. The X360 Construct's own list above names
+            // "TakedownEvent<8>::Construct(+208976)"; the PC slice skipped it while the
+            // member was a 256-byte blob nothing wrote. BridgeInputToEntityModules
+            // @0x827ADF88 now drives SetTakedownEventQueue every frame, and that body
+            // Clear()s + Append()s the member queue -- which asserts "Not Constructed" and
+            // then walks a NULL mpEvents if Construct never ran. Same defect class as the
+            // mVehicleDriverInterface line in the OutputBuffer_PrePhysics twin below.
+            mTakedownEventQueue.Construct();
             mbControllerActive  = false;
             mbInHardStopCamera  = false;
         }
@@ -399,9 +472,9 @@ namespace RaceCarEntityModuleIO
         void                      SetTakedownEventQueue(const TakedownEventQueue*);        // :422
         const ScoringInterface* GetScoringInterface() const;                              // :424
         void                    SetScoringInterface(const ScoringInterface*);             // :425
-        const OnlineScoringInterface* GetOnlineScoringInterface() const;                  // :427 R (0x822B5800)
-        void                          SetOnlineScoringInterface(const OnlineScoringInterface*); // :428
-        const TrafficToRaceCarInterface_PostScene* GetTrafficToRaceCarInterface_PostScene() const; // :430 R (0x822B5950)
+        const OnlineScoringInterface* GetOnlineScoringInterface() const;                  // :427 R (0x822B59F8, X360 line 436)
+        void                          SetOnlineScoringInterface(const OnlineScoringInterface*); // :428 W (0x8279DCF8, X360 line 437)
+        const TrafficToRaceCarInterface_PostScene* GetTrafficToRaceCarInterface_PostScene() const; // :430 R (0x822B5A48, export hole)
         void                                       SetTrafficToRaceCarInterface_PostScene(const TrafficToRaceCarInterface_PostScene*); // :431
         bool GetControllerActive() const;                                                 // :433
         void SetControllerActive(bool);                                                   // :434
