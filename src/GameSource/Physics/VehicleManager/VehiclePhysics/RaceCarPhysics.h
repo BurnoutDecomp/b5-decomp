@@ -25,7 +25,7 @@
 #include "BrnCommonTypes.h"   // Vector3, EntityId
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"   // base + Wheel
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::{Dot, Subtract}
-#include "rw/physics/inertia.h"              // rw::physics::Inertia -- Prepare's by-value param
+#include "rw/physics/inertia.h"              // rw::physics::Inertia -- Prepare's by-value 7th parameter
 // BrnPlayerDriverControls has ONE definition -- the canonical owning home in SharedIO. (A prior
 // duplicate minimal slice lived here and clashed (ODR) with that home; removed. The typed control
 // accessors the showtime/aftertouch bodies call are declared on the canonical struct.)
@@ -120,15 +120,15 @@ namespace Vehicle
         //     stack@0xBF (a byte)            -> lu8StrengthStat  (the event's miCarStrengthStat)
         //     lwz r11,0(r3) ; lwz r11,0x30(r11) ; mtctr ; bctrl
         //
-        // ⚠️ Reached BY NAME, deliberately NOT virtual. The console dispatches through slot +0x30,
-        // but the only console call site (ProcessCreateEvents) makes the vcall on
-        // maRaceCarVehicles[idx] -- static type RaceCarPhysics -- so a by-name call on the exact
-        // type reproduces the dispatch exactly, and this tree's rule is to reach members BY NAME
-        // and never by console slot (the host vtable's numbering is the compiler's, not the
-        // console's; see the [[vtable-slot0-Create-shim]] precedent). NOTE this is NOT an override
-        // of VehiclePhysics::Prepare (nine params) -- it is a distinct eleven-param function that
-        // FORWARDS into it; the park note that stood here planned a virtual override, which two
-        // different signatures cannot form.
+        // ⚠️ Reached BY NAME, and `virtual` -- see the VIRTUAL note at the end of this banner.
+        // The console dispatches through slot +0x30, but the only console call site
+        // (ProcessCreateEvents) makes the vcall on maRaceCarVehicles[idx] -- static type
+        // RaceCarPhysics -- so a by-name call on the exact type reproduces the dispatch exactly,
+        // and this tree's rule is to reach members BY NAME and never by console slot (the host
+        // vtable's numbering is the compiler's, not the console's; see the
+        // [[vtable-slot0-Create-shim]] precedent). NOTE this is NOT an override of
+        // VehiclePhysics::Prepare (nine params) -- it is a distinct eleven-param function that
+        // FORWARDS into it. It therefore introduces its OWN slot rather than replacing one.
         // ⚠️ The old "rw::physics::Inertia has NO type in this tree" line is STALE and deleted:
         // vendor/renderware/include/rw/physics/inertia.h has owned the record since task #141
         // (DWARF-named members, X360-attested offsets, 48-byte array stride pinned).
@@ -161,14 +161,58 @@ namespace Vehicle
         //     it -- and is deliberately unnamed in the definition.
         //   * RETURN: the callee's bool, verbatim (mr r28,r3 ... mr r3,r28), named
         //     lbPreparedVehiclePhysics after the pseudocode's own register role.
+        //
+        // ==========================================================================================
+        // ⭐⭐⭐ INDEPENDENTLY CONFIRMED BY A SECOND, DIFFERENT DERIVATION (2026-08-11, the other
+        // create-drain wave, merged here). That wave could not get the X360 bytes and instead
+        // derived the body STRUCTURALLY from the PS3 DecFIGS twin -- **PS3 0x73648C, 89 insns**,
+        // symbolled and decompiled -- then mapped its stores onto this class through the UNIFORM
+        // Δ = +16 that this header's own member table already establishes for the region (attested
+        // three ways: IsPlayerVehicleActuallyInShowtime 0x13FC/0x140C, IsUsingAftertouch
+        // 0x13FD/0x140D, Construct's Z-lane insert 0x1060/0x1070). The two derivations were done
+        // from different binaries, on different days, and they land on the SAME body:
+        //     PS3 0x13FE -> +0x140E  mu8StrengthStat            X360 `stb r29, 0x140E`      ✓
+        //     PS3 0x13F4 -> +0x1404  mfSlamSteering             X360 `stfs f0, 0x1404`      ✓
+        //     PS3 0x134F -> +0x135F  mbIsWedgedInWorld          X360 `stb 0, 0x135F`        ✓
+        //     PS3 0x13F8 -> +0x1408  mfBeachedTime              X360 `stfs f0, 0x1408`      ✓
+        //     PS3 0x1425 -> +0x1435  mbWroteIntoRWInSlowMo      X360 `stb 0, 0x1435`        ✓
+        //     PS3 0x13E0 -> +0x13F0  mPropCollisionImpulseSum   X360 `stvx128 v0, 0x13F0`   ✓
+        //     PS3 0x1424 -> +0x1434  mbAISlowMo                 X360 `stb 0, 0x1434`        ✓
+        //     PS3 0x1426 -> +0x1436  mbDeformedBeyond...InCrash X360 `stb 0, 0x1436`        ✓
+        // Same forward-first ordering, same seven-member zeroing tail, same verbatim return of the
+        // callee's bool. Only the STORE ORDER inside the tail differs, which is compiler scheduling.
+        // ⭐ AND THE ASSERT BOUND CONVERGES TOO, from two different encodings: X360 is
+        // `cmplwi r11, 0xB ; blt` (fires at >= 11, i.e. asserts `< 11`) and PS3 is
+        // `cmplwi cr7, 0xA ; ble` (skips at <= 10, i.e. asserts `<= 10`). For an unsigned byte those
+        // are the SAME predicate, so KU8_MAX_STRENGTH == 11 is doubly attested. The X360 stream is
+        // what the body reproduces (rung 1); the PS3 is the corroboration, not the source.
+        // ⚠️ Where the two ever disagree, the X360 wins and this note is the audit trail.
+        //
+        // ⭐⭐ VIRTUAL -- ADOPTED FROM THE PS3-DERIVED WAVE. The console reaches this through vtable
+        // slot +0x30 of a statically known `RaceCarPhysics*` (`lwz r11,0(r3) ; lwz r11,0x30(r11) ;
+        // bctrl`), which only happens if the function is virtual. It is declared virtual HERE
+        // rather than in VehiclePhysics because the arities differ (11 vs 9), so it introduces its
+        // OWN slot; the host compiler assigns the number and nothing anywhere reaches it by index
+        // (⛔ per [[vtable-slot0-Create-shim-bug]], no console slot number is spelled in code).
+        // ⚠️ IT COSTS NOTHING IN LAYOUT: SimpleVehiclePhysics already introduces the virtuals for
+        // this hierarchy, so the vptr exists either way and `sizeof(RaceCarPhysics) == 5216` (the
+        // console's 0x1460 stride) is unchanged -- which BrnVehicleManager_layout_check.cpp asserts.
+        // ⚠️ OVERLOAD-HIDING CHECKED: declaring any `Prepare` here hides the base's nine-parameter
+        // `VehiclePhysics::Prepare` (that was already true before `virtual`). Swept the tree -- the
+        // only calls to the nine-parameter form are explicitly qualified (`VehiclePhysics::Prepare`
+        // in this class's own body and in TrafficPhysics::PreparePhysical, which is a SIBLING
+        // subclass, not a RaceCarPhysics). No call site invokes the 9-param form ON a RaceCarPhysics
+        // object, so no `using VehiclePhysics::Prepare;` is needed. Add one if that ever changes.
         // ==========================================================================================
         static const u8 KU8_MAX_STRENGTH = 11;   // asm-attested: Prepare's `cmplwi 0xB` guard
+                                                 // (PS3 twin's `cmplwi 0xA ; ble` agrees)
 
-        bool Prepare(Matrix44Affine lOnRoadTransform, Vector3 lLinearVelocity,
-                     Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset, Vector3 lHalfExtent,
-                     const AxisAlignedBox& lrAABB, rw::physics::Inertia lInertia,
-                     VehicleAttribs* lpAttribs, const Vector3* lpaWheelPositions,
-                     const f32* lpafWheelRadii, u8 lu8StrengthStat);   // @0x82639CB8 (41)
+        virtual bool Prepare(Matrix44Affine lOnRoadTransform, Vector3 lLinearVelocity,
+                             Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset,
+                             Vector3 lHalfExtent, const AxisAlignedBox& lrAABB,
+                             rw::physics::Inertia lInertia, VehicleAttribs* lpAttribs,
+                             const Vector3* lpaWheelPositions, const f32* lpafWheelRadii,
+                             u8 lu8StrengthStat);   // @0x82639CB8 (41)
 
         // @0x825B3998: the (signed) height of the car above the road, taken as the MINIMUM over the
         // driven wheels whose road-contact line test is valid AND that are on the ground (the

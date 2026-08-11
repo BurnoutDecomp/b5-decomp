@@ -36,6 +36,24 @@ namespace BrnPhysics
                                     DeformationResetType leBaseDeformationType,
                                     bool lbUseSweptSphereTests);
 
+            // ⭐ ADDED 2026-08-11 (create-drain wave). Both are DWARF-declared on this class
+            // (DecFIGS BrnDeformationInputInterface.h:58 `uint32_t RemoveDeformationModel(RigidBodyId)`
+            // and :76 `uint32_t DeactivateDeformationModel(RigidBodyId, float32_t,
+            // BrnPhysics::Deformation::DeformationResetType)`), and neither has a standalone X360
+            // symbol -- the console INLINES both inside VehicleManager::ProcessRemoveEvents
+            // @0x826160C8, at the two raw seats this class already documents:
+            //     0x826163CC  addi r3, lpDeformationInterface, 0xD40   == +3392, the deactivate queue
+            //     0x826164AC  addi r3, lpDeformationInterface, 0xC90   == +3216, the remove queue
+            // each followed by a 16-byte stack event and a BaseEventQueue<T>::AddEvent. Reached
+            // BY NAME here so the drain never spells those two offsets.
+            // The return is the queue length after insertion minus one -- the same "slot index"
+            // convention AddDeformationModel already uses (and ProcessRemoveEvents discards it,
+            // exactly as the console does).
+            u32 RemoveDeformationModel(RigidBodyId lHandlingBodyID);
+            u32 DeactivateDeformationModel(RigidBodyId lHandlingBodyID,
+                                           f32 lfInitialDamageAmount,
+                                           DeformationResetType leDeformationResetType);
+
             // ADDITIVE GROW (flagged by DeformationManager mgr-core group): the manager's
             // per-frame event processors (DeformationManager::ProcessAdd/Remove/Deactivate-
             // DeformationModelEvents, ProcessEvents) drain these request queues every scene
@@ -74,13 +92,27 @@ namespace BrnPhysics
             //     +4592  ProcessCollisionEvents @0x825E8FB8 (`addi r29,r27,0x11F0`)
             // Reached BY NAME here so those console byte offsets never appear in a body.
             //
-            // ⛔ WHY NOT THE DWARF's TYPED MUTATORS (RemoveDeformationModel / Deactivate...
-            // / ValidateDeformationModel / SetDeformationModelCollision / ...): three of the five
-            // console call sites DO NOT WRITE EVERY FIELD of the event they post -- the deactivate
-            // post writes only mHandlingBodyID, and the validate post writes only mbValidate /
-            // mVolumeInstanceID / mModelHandle. A typed mutator would have to invent values for the
-            // rest, which is the "compensating for a partial reconstruction" shape. The call sites
-            // build the event exactly as the console does instead, and say so.
+            // ⛔ WHY NOT THE DWARF's TYPED MUTATORS at these five seats: some of the console call
+            // sites DO NOT WRITE EVERY FIELD of the event they post -- the validate post writes
+            // only mbValidate / mVolumeInstanceID / mModelHandle. A typed mutator would have to
+            // invent values for the rest, which is the "compensating for a partial reconstruction"
+            // shape. The call sites build the event exactly as the console does instead, and say so.
+            // Note also that the console itself reaches the QUEUE at these seats -- every one of
+            // the five is a bare `addi r3,<interface>,<offset>` + `bl BaseEventQueue<T>::AddEvent`,
+            // with no wrapper frame -- so a queue accessor is the literal shape, not a shortcut.
+            //
+            // ⚠️ ONE HALF OF THAT ARGUMENT WAS RETIRED 2026-08-11 (merge of the two create-drain
+            // waves). It used to also claim "the deactivate post writes only mHandlingBodyID". It
+            // does not: mfInitialDamageAmount (0.0f) and meDeformationResetType (-1) are
+            // LOOP-INVARIANT and the compiler HOISTED their stores out of the drain loop into
+            // ProcessRemoveEvents' prologue (`lfs f31, flt_82001CC0` @0x82616118 / `li r11,-1`
+            // @0x8261611C, stored to var_C8/var_C4 @0x82616128/0x82616138 -- the same 16-byte
+            // stack event var_D0 the loop then fills field 0 of). The console posts a FULLY
+            // initialised deactivate event, and the caller now writes all three fields. That makes
+            // `DeactivateDeformationModel` above -- the DWARF's own typed mutator, taking exactly
+            // those three -- a faithful alternative spelling for that one seat, not an inventing
+            // one. It is kept declared and bodied; the drain's queue-accessor spelling is left as
+            // committed and boot-verified, and the two must not both be used for the same post.
             CgsModule::EventQueue<RemoveDeformationModelEvent, 20>& GetRemoveDeformationModelQueue()
             {
                 return mRemoveDeformationModelQueue;

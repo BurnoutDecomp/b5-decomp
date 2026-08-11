@@ -454,38 +454,12 @@ namespace Vehicle
             // Byte for byte the SAME inlined VehicleDriver::ClearControls as ProcessRemoveEvents
             // (0x82617420..0x8261748C vs 0x826163D4..0x82616444): the identical store set with the
             // identical two omissions (+0x3A mbToggle, +0x44 meDriverType).
-            // DELETE-WHEN VehicleDriver::ClearControls gets a body of its own.
-            {
-                BrnAIDriverControls& lrControls = maRaceCarDrivers[luRaceCar].mControls;
-                lrControls.miVehicleID              = -1;
-                lrControls.mfGas                    = 0.0f;
-                lrControls.mfBrake                  = 0.0f;
-                lrControls.mfHandBrake              = 0.0f;
-                lrControls.mfSteering               = 0.0f;
-                lrControls.mfForwardSteering        = 0.0f;
-                lrControls.mfSpin                   = 0.0f;
-                lrControls.mfRequestedGas           = 0.0f;
-                lrControls.mfAftertouchLevel        = 0.0f;
-                lrControls.mfXSensor                = 0.0f;
-                lrControls.mfYSensor                = 0.0f;
-                lrControls.mfZSensor                = 0.0f;
-                lrControls.mfGSensor                = 0.0f;
-                lrControls.mfBoostMaxSpeedScale     = 1.0f;
-                lrControls.miVehicleIDToMerge       = -1;
-                lrControls.mbReset                  = false;
-                lrControls.mbBoost                  = false;
-                lrControls.mbIsInvulnerableToVehicles = false;
-                lrControls.mbIsInvulnerableToWorld  = false;
-                lrControls.mbForceDrift             = false;
-                lrControls.mbBoostBounce            = false;
-                lrControls.mbIsOnStartLine          = false;
-                lrControls.mbIsSteeringWheel        = false;
-                lrControls.mbHorn                   = false;
-                lrControls.mfSpeedMatchSpeed        = 0.0f;
-                lrControls.mbDoSpeedMatch           = false;
-                lrControls.mbForceComeOutOfDrift    = false;
-                lrControls.mbSlamPlayer             = false;
-            }
+            // ⭐ DELETE-WHEN HONOURED 2026-08-11 (merge of the two create-drain waves):
+            // VehicleDriver::ClearControls now HAS a body (BrnVehicleDriver.cpp), recovered from
+            // these two inline sites together. The 28-store block that stood open here was checked
+            // field-for-field against it before the swap -- identical, omissions included -- and the
+            // call sits exactly where the console's inlined run did.
+            maRaceCarDrivers[luRaceCar].ClearControls();
 
             if (CgsDev::Message::gxMessageFilterFlags & 1)
             {
