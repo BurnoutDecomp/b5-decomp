@@ -305,10 +305,12 @@
     // AptAnimationTarget.cpp (@0x82AEE3F8 -- queue on the shared delayed-release
     // table with the bit26 latch + CleanRemList overflow flush; the {} stub
     // dropped every delay-released clip).
-    // The host-installable CIH pre-destroy hook (X360 dword_8324E8A0). The console
-    // slot boots null and stays null unless a host installs it -- the null default
-    // IS the faithful home (AptCIHBehaviour.cpp dispatches it iff non-null).
-    void (*gpAptCIHPreDestroyHook)(AptCIH* pCIH) = nullptr;   // dword_8324E8A0
+    // gpAptCIHPreDestroyHook RETIRED (2026-08-11): console dword_8324E8A0 is not a
+    // standalone global -- it is gAptFuncs+0x88 == gAptFuncs.pfnOnUnload (the slot
+    // AptAux::ConstructApt installs with CgsGui::AptCallbackFile::OnUnload). The
+    // parallel never-installed global meant AptCIH::PreDestroy never released the
+    // AptCommunicator component registrations (256-entry table overflow at the
+    // menus); AptCIHBehaviour.cpp now dispatches gAptFuncs.pfnOnUnload directly.
     // AptQueueClipEventsRunMatched RETIRED (2026-07-01): homed faithfully in
     // AptCIHBehaviour.cpp from the PS3 body @0x815BD0 (the clip-event record scan +
     // AddActionFront/Back enqueues; the byte-code-block + __proto__ tails staged there).

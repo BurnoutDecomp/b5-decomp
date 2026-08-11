@@ -80,9 +80,9 @@ static AptMovie* AptGetClipMovie(const AptCharacterSpriteInstBase* pInst)
     return reinterpret_cast<AptMovie*>(reinterpret_cast<char*>(pCharacter) + KU_AptEmbeddedMovieOff);
 }
 
-// The pre-destroy notify shim (HOMED in AptCIHBehaviour.cpp; a PC host-callback
-// boundary -- dispatches the host-installable gpAptCIHPreDestroyHook slot, console
-// dword_8324E8A0, faithfully null until a host installs it).
+// The pre-destroy notify shim (HOMED in AptCIHBehaviour.cpp): dispatches
+// gAptFuncs.pfnOnUnload (console dword_8324E8A0 == gAptFuncs+0x88, installed by
+// AptAux::ConstructApt -> CgsGui::AptCallbackFile::OnUnload).
 void AptCIH_PreDestroyHook(AptCIH* pCIH);
 
 // The zombie-vector reap (XB1 sub_140830A40; X360 name AptUpdateZombieVector) --
