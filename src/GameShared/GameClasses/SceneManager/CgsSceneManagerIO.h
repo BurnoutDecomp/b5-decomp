@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT (lock tripwires)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // VariableEventQueue<32768,16>
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"  // InSceneUpdateInterface (canonical home)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_TriangleCache.h" // TriangleCacheInterface (OutputBuffer::mTriangleCacheInterface)
 
 // CgsSceneManager::SceneManagerIO - the scene-manager module's IO buffer slices
 // the world bridges drive. FLAG: MINIMAL slices -- only the accessors the bridges
@@ -191,9 +192,40 @@ namespace SceneManagerIO
             return &mSceneQueryResultsQueue;
         }
 
+        // ⭐ ADDED 2026-08-11 (triangle-cache wiring wave). THE HANDOFF SEAT OF THE WHOLE
+        // TRIANGLE-CACHE CHAIN: the scene manager publishes &mTriangleCacheManager here, and
+        // every physics/effects consumer downstream reaches the cache only through a copy of
+        // this pointer. Both overloads are DWARF-declared (CgsSceneManagerModuleIO.h:628 const,
+        // :634 non-const) and both have real out-of-line X360 symbols whose baked assert LINE
+        // is the identification:
+        //   const:     0x8279C1E8  bit-4 test -> "Not locked for reading\n"  :628 (0x274)
+        //   non-const: 0x828AFAF8  bit-3 test -> "Not locked for writing\n"  :634 (0x27A)
+        // Both `return this + 217164` (0x3504C) on the console.
+        //
+        // ⚠️ WHICH OVERLOAD A CALLER GETS IS DECIDED BY ITS LOCK, exactly like the
+        // InputBuffer_Update::GetInSceneUpdateInterface pair above: the SEEDERS
+        // (SceneManagerModule::ProcessSceneQueries @0x828D57D0 / UpdateScene @0x828D4C28) hold
+        // a WRITE lock, the CARRIERS (WorldModule::BridgeSceneQueryResultsToPhysics @0x827A8E88
+        // / BridgeSceneModuleToOutput @0x827A5700) hold a READ lock.
+        const TriangleCacheInterface* GetTriangleCacheInterface() const
+        {
+            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            return &mTriangleCacheInterface;
+        }
+        TriangleCacheInterface* GetTriangleCacheInterface()
+        {
+            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+            return &mTriangleCacheInterface;
+        }
+
     private:
         u8                     maStatusPad[3];            // +1..+3 (force +4)
         SceneQueryResultsQueue mSceneQueryResultsQueue;   // +4
+        // DWARF CgsSceneManagerModuleIO.h:652. Console seat +217164; placed by NAME after the
+        // results ring because this whole buffer is the documented MINIMAL slice above (the
+        // overlap-pair / error queues that fill the gap belong to their own TUs). Nothing
+        // addresses it by offset -- both accessors take its address.
+        TriangleCacheInterface mTriangleCacheInterface;   // X360 +217164 (0x3504C)
     };
 }
 }

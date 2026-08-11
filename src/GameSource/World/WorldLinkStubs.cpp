@@ -2347,16 +2347,14 @@ void CgsSceneManager::SceneManagerModule::ExternalSceneQueriesUpdate()
 // Both query passes walk the coarse/fine query queues; on the PC build those
 // queues are empty (no entity is registered with the scene manager while the
 // partition managers are gated), so the pass is a no-op with or without this gate.
-void CgsSceneManager::SceneManagerModule::ProcessSceneQueries(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,struct CgsSceneManager::SceneManagerIO::OutputBuffer *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "SceneManagerModule::ProcessSceneQueries: inert [FLAG PC boot gate]\n";
-    }
-}
+//
+// ⛔ GATE RETIRED 2026-08-11 (triangle-cache wiring wave) -- AND IT WAS NOT A NO-OP AFTER
+// ALL. The banner above was right about steps 3/4 and WRONG about step 5: that publish is
+// the ONLY write of a TriangleCacheManager* into a TriangleCacheInterface anywhere in the
+// program, so gating this function left every downstream consumer's mpTriangleCacheManager
+// NULL -- which is exactly what killed the traction-line leg the first time a race car
+// existed ("mpTriangleCacheManager != NULL" + an AV in GetTrianglesForCachedObject).
+// The real body now lives in CgsSceneManagerModule.cpp; steps 3/4 stay FLAGGED there.
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::SpatialPartitionManager
@@ -3118,21 +3116,11 @@ void WorldModule::BridgePhysicsToOutput(void *,struct BrnWorldIO::UpdateOutputBu
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 the scene-output leg of the query round trip -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeSceneModuleToOutput(void *,struct BrnWorldIO::UpdateOutputBuffer *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeSceneModuleToOutput: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⛔ GATE RETIRED 2026-08-11 (triangle-cache wiring wave): WorldModule::
+// BridgeSceneModuleToOutput @0x827A5700 now has its REAL body in
+// GameSource/World/Bridges/WorldBridgeSceneToOutput.cpp (the console's own file name, from
+// the assert rodata). It is the ONLY caller of the already-landed
+// BrnWorldIO::UpdateOutputBuffer::AppendTriangleCacheInterface @0x8279BAF8.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
@@ -3290,21 +3278,13 @@ void WorldModule::BridgePhysicsSceneQueriesToScene(void *,struct CgsSceneManager
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827A8E88 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeSceneQueryResultsToPhysics(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeSceneQueryResultsToPhysics: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⛔ GATE RETIRED 2026-08-11 (triangle-cache wiring wave): WorldModule::
+// BridgeSceneQueryResultsToPhysics @0x827A8E88 now has its REAL body in
+// GameSource/World/Bridges/WorldBridgeSceneToPhysics.cpp. Its tail
+// (VehicleInputInterface::AppendTriangleCacheInterface @0x8279B978) is the ONLY code that
+// ever hands the physics vehicle input its triangle-cache manager -- the note that used to
+// stand here ("the module/interface it would feed is itself gated inert, so dropping the
+// transfer is the consistent observable") was FALSE: the consumer was live and crashing.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
