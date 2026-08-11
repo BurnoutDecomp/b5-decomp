@@ -178,3 +178,79 @@ namespace Vehicle
     }
 }
 }
+
+namespace BrnPhysics
+{
+namespace Vehicle
+{
+    // =============================================================================================
+    // VehicleDriver::ClearControls -- NO STANDALONE X360 SYMBOL. Recovered 2026-08-11 from the TWO
+    // places the console INLINES it, which is the strongest form of evidence this project accepts
+    // for an inlined leaf: the same 27-store block appears verbatim in
+    //     VehicleManager::ProcessCreateEvents @0x82617404..0x82617490   and
+    //     VehicleManager::ProcessRemoveEvents @0x826163B0..0x82616444
+    // both addressed as `mulli r11, idx, 0xE0 ; add r11, r11, this` and then offsets 0x40..0x8E --
+    // i.e. `maRaceCarDrivers[idx]` (+64) plus in-record 0x00..0x4E, which is exactly the span of
+    // `BrnAIDriverControls mControls`. The two copies are store-for-store identical (only the FPR
+    // holding 0.0f/1.0f differs: create has f30=0.0f/f31=1.0f, remove has f31=0.0f/f30=1.0f -- both
+    // read from flt_82001CC0 / flt_82001C98, values read from the image, not guessed).
+    //
+    // ⭐ THE SIGNATURE OF AN INLINED `ClearControls` RATHER THAN A MEMSET: the block writes 28 of
+    // BrnAIDriverControls' 30 scalar fields and SKIPS EXACTLY TWO -- `mbToggle` (+0x3A) and
+    // `meDriverType` (+0x44). Both gaps are visible as holes in the store run (create: 0x79 then
+    // 0x7B, no 0x7A) and both make sense only for a *semantic* clear: the driver's TYPE must
+    // survive a control reset, and mbToggle is a latch the input layer owns. A memset or a
+    // defaulted ctor would have written them. That is what makes this ClearControls (declared in
+    // BrnVehicleDriver.h, DWARF-attested) and not something invented to hold the block.
+    //
+    // ⭐⭐ VERIFIED AGAINST A SECOND, INDEPENDENT TRANSCRIPTION (2026-08-11 merge). The other
+    // create-drain wave wrote the same block out INLINE at both console call sites rather than
+    // recovering it as a function, and its two copies are FIELD-FOR-FIELD identical to this body:
+    // same 28 writes, same two omissions (mbToggle, meDriverType), same lone non-zero (1.0f into
+    // mfBoostMaxSpeedScale). The only discrepancy was arithmetic in the prose -- "27 of 29" here
+    // vs "28 stores" there. Counted against the committed struct: BrnPlayerDriverControls has 26
+    // scalars (miVehicleID + 13 floats + miVehicleIDToMerge + 10 bools + meDriverType) and
+    // BrnAIDriverControls adds 4, so it is **28 of 30**, corrected above. Nothing about the
+    // recovered store SET was in dispute. This body is now the single home; both inline copies
+    // are retired to a call, per their own DELETE-WHEN markers.
+    //
+    // ⚠️ mfBoostMaxSpeedScale (+0x34) is seeded to 1.0f, not 0.0f -- the ONE non-zero float, and the
+    // reason this cannot be spelled as a zero-fill.
+    // =============================================================================================
+    void VehicleDriver::ClearControls()
+    {
+        mControls.miVehicleID         = -1;     // +0x00  (`li r10,-1 ; stw r10,0x40(r11)`)
+        mControls.mfGas               = 0.0f;   // +0x04
+        mControls.mfBrake             = 0.0f;   // +0x08
+        mControls.mfHandBrake         = 0.0f;   // +0x0C
+        mControls.mfSteering          = 0.0f;   // +0x10
+        mControls.mfForwardSteering   = 0.0f;   // +0x14
+        mControls.mfSpin              = 0.0f;   // +0x18
+        mControls.mfRequestedGas      = 0.0f;   // +0x1C
+        mControls.mfAftertouchLevel   = 0.0f;   // +0x20
+        mControls.mfXSensor           = 0.0f;   // +0x24
+        mControls.mfYSensor           = 0.0f;   // +0x28
+        mControls.mfZSensor           = 0.0f;   // +0x2C
+        mControls.mfGSensor           = 0.0f;   // +0x30
+        mControls.mfBoostMaxSpeedScale = 1.0f;  // +0x34  (`stfs f31, 0x74(r11)` -- flt_82001C98)
+
+        mControls.miVehicleIDToMerge  = -1;     // +0x38  (`stb r10, 0x78(r11)`)
+        mControls.mbReset             = false;  // +0x39
+        // +0x3A mbToggle: NOT WRITTEN by either console copy -- see the banner.
+        mControls.mbBoost                    = false;  // +0x3B
+        mControls.mbIsInvulnerableToVehicles = false;  // +0x3C
+        mControls.mbIsInvulnerableToWorld    = false;  // +0x3D
+        mControls.mbForceDrift               = false;  // +0x3E
+        mControls.mbBoostBounce              = false;  // +0x3F
+        mControls.mbIsOnStartLine            = false;  // +0x40
+        mControls.mbIsSteeringWheel          = false;  // +0x41
+        mControls.mbHorn                     = false;  // +0x42
+        // +0x44 meDriverType: NOT WRITTEN by either console copy -- see the banner.
+
+        mControls.mfSpeedMatchSpeed      = 0.0f;   // +0x48
+        mControls.mbDoSpeedMatch         = false;  // +0x4C
+        mControls.mbForceComeOutOfDrift  = false;  // +0x4D
+        mControls.mbSlamPlayer           = false;  // +0x4E
+    }
+}
+}

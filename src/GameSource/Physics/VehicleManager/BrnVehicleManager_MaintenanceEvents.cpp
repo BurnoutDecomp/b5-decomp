@@ -70,6 +70,47 @@
 // ⚠ It is also lossless on this build: ProcessCreateEvents is the only writer of
 // maRaceCarHandlingBodyIDs and it stores `((u64)entityWord) << 32`, i.e. the low dword is always
 // zero. If that ever stops being true, these three posts lose information silently.
+//
+// -------------------------------------------------------------------------------------------------
+// ⭐⭐ THE HAZARD ABOVE WAS INDEPENDENTLY MEASURED BY THE SIBLING WAVE (2026-08-11), which recovered
+// these same two functions, saw the same fork, and PARKED rather than shipped. Its evidence is
+// folded in here because it CONFIRMS the reading above from the other direction -- and because its
+// conclusion (which this file does not share) is the follow-up flag:
+//
+//   (a) Every access to maRaceCarHandlingBodyIDs is EIGHT bytes wide, in both directions --
+//         ProcessRemoveEvents         0x82616444  ldx r11, r9, r25  ; 0x82616448 std r11, var_D0
+//                                     0x826164B0  ldx r11, r11, r25 ; std r11, var_E8
+//         AddRaceCarDeformationModel  0x825E9324  ldx r8,  r23, r29 ; std r8,  var_C8
+//                                     0x825E9358  ld  r5,  0(r22)   -- AddDeformationModel's arg
+//                                     0x825E932C  ldx r4,  r20, r29 -- its ResourceHandle, ALSO 8
+//       and the 32-bit forms (lwzx/stw/lwz) appear all over both bodies for the genuinely 32-bit
+//       fields, so this is a CONTRAST WITHIN ONE BODY, not one isolated instruction. ⇒ the
+//       "handling-body handle is 64-bit" question BrnDeformationManager.h left open is DECIDED.
+//
+//   (b) It also settles that header's other open contradiction -- why the committed
+//       BrnDeformationManager.cpp bodies do `muValue >> 24` / `(muValue >> 10) & 0x3FFF` when
+//       CgsRigidBody.h documents the packing as (high dword = EntityId, low dword = index).
+//       AddRaceCarDeformationModel does the SAME two extractions, but on the HIGH DWORD FIRST:
+//         0x825E9218 srdi r11,r11,32 ; 0x825E9220 clrlwi r28,r11,0
+//         0x825E9224 srwi r11,r28,24        <- the owner byte
+//         0x825E9240 extrwi r11,r28,14,8    <- the 14-bit index
+//       i.e. the ARITHMETIC in those consumers is right and only the WIDTH is short. Which is
+//       exactly the "assign the ENTITY WORD, never a truncating cast" rule stated above.
+//
+//   ⚠️ THE SIBLING WAVE DREW THE OPPOSITE CONCLUSION -- that these two bodies must not land at all,
+//   because passing the u64 through the 4-byte stand-in "delivers ZERO with nothing asserting".
+//   That failure mode is REAL for a truncating cast (`static_cast<u32>(theWholeHandle)` takes the
+//   low dword, which for a race car is identically zero). It is NOT what these bodies do: every
+//   post goes through GetEntityId(), which takes the HIGH dword -- the half that carries the value.
+//   The bodies stay. What the sibling wave is right about is the DEBT: while `::RigidBodyId` is
+//   4 bytes, this file is carrying a fork by hand at every seat.
+//
+//   ⛔ FOLLOW-UP FLAG, and it is NOT this file's change to make: `::RigidBodyId` in
+//   BrnCommonTypes.h:28 should be widened to match CgsPhysics::RigidBodyId, per the fork
+//   BrnDeformationManager.h documents. That moves five `mHandlingBodyID` fields, the
+//   BrnDeformationManager.cpp bodies that shift them, and those event records' field offsets --
+//   all in a MOUNTED subsystem. Its own wave, with its own boot test. When it lands, every
+//   `GetEntityId()` seat in this file should be revisited to pass the whole handle instead.
 // =================================================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
@@ -248,10 +289,9 @@ namespace Vehicle
     // That is the identical store set (identical omissions included) as the out-of-line
     // BrnNetworkDriverControls::Clear @0x82581200 this tree already documents, so it is the same
     // "clear the controls, keep the driver type" routine inlined here. `VehicleDriver::ClearControls`
-    // IS declared (BrnVehicleDriver.h:66) but has NO body anywhere and no X360 address of its own
-    // (it is not in progress/identity.json), so calling it would be an LNK2019. Written out by
-    // NAME here, with a DELETE-WHEN marker, rather than either poking offsets or minting a body in
-    // another slice's header.
+    // IS declared (BrnVehicleDriver.h:66) and, as of 2026-08-11, HAS a body -- BrnVehicleDriver.cpp,
+    // recovered from these same two inline sites by the sibling wave. The block is therefore no
+    // longer written out here: this drain CALLS it, at the console's own call position.
     // ⚠️ 0.0f is flt_82001CC0 and 1.0f is flt_82001C98, both read out of the image, not assumed.
     // =============================================================================================
     void VehicleManager::ProcessRemoveEvents(const VehicleInputInterface* lpInputInterface,
@@ -276,40 +316,13 @@ namespace Vehicle
                        "Trying to remove an unused race car");                                          // :1203
 
             // ---- the inlined VehicleDriver::ClearControls (see the banner) --------------------
-            // DELETE-WHEN VehicleDriver::ClearControls gets a body of its own.
-            {
-                BrnAIDriverControls& lrControls = maRaceCarDrivers[luRaceCar].mControls;
-                lrControls.miVehicleID              = -1;
-                lrControls.mfGas                    = 0.0f;
-                lrControls.mfBrake                  = 0.0f;
-                lrControls.mfHandBrake              = 0.0f;
-                lrControls.mfSteering               = 0.0f;
-                lrControls.mfForwardSteering        = 0.0f;
-                lrControls.mfSpin                   = 0.0f;
-                lrControls.mfRequestedGas           = 0.0f;
-                lrControls.mfAftertouchLevel        = 0.0f;
-                lrControls.mfXSensor                = 0.0f;
-                lrControls.mfYSensor                = 0.0f;
-                lrControls.mfZSensor                = 0.0f;
-                lrControls.mfGSensor                = 0.0f;
-                lrControls.mfBoostMaxSpeedScale     = 1.0f;
-                lrControls.miVehicleIDToMerge       = -1;
-                lrControls.mbReset                  = false;
-                // ⚠️ mbToggle (+0x3A) is NOT stored by the console -- omission reproduced.
-                lrControls.mbBoost                  = false;
-                lrControls.mbIsInvulnerableToVehicles = false;
-                lrControls.mbIsInvulnerableToWorld  = false;
-                lrControls.mbForceDrift             = false;
-                lrControls.mbBoostBounce            = false;
-                lrControls.mbIsOnStartLine          = false;
-                lrControls.mbIsSteeringWheel        = false;
-                lrControls.mbHorn                   = false;
-                // ⚠️ meDriverType (+0x44) is NOT stored either -- the driver keeps its type.
-                lrControls.mfSpeedMatchSpeed        = 0.0f;
-                lrControls.mbDoSpeedMatch           = false;
-                lrControls.mbForceComeOutOfDrift    = false;
-                lrControls.mbSlamPlayer             = false;
-            }
+            // ⭐ DELETE-WHEN HONOURED 2026-08-11 (merge of the two create-drain waves). The 28-store
+            // block that stood open here is now VehicleDriver::ClearControls, an out-of-line body
+            // in BrnVehicleDriver.cpp recovered from BOTH console inline sites at once. Its store
+            // set was checked field-for-field against this copy before the swap: identical, same
+            // two omissions (mbToggle, meDriverType), same lone 1.0f. The call goes exactly where
+            // the console's inlined run sat.
+            maRaceCarDrivers[luRaceCar].ClearControls();
 
             // ---- the two deformation posts ---------------------------------------------------
             // Both take maRaceCarHandlingBodyIDs[slot]; see this file's console-value banner for
@@ -318,13 +331,32 @@ namespace Vehicle
 
             {
                 // `ldx r11,r9,r25 ; std r11,var_D0 ; bl DeactivateDeformationModelEvent::AddEvent`
-                // ⚠️ ONLY mHandlingBodyID IS WRITTEN. The console leaves mfInitialDamageAmount and
-                // meDeformationResetType at whatever the stack held -- one 8-byte store into a
-                // 16-byte local and nothing else. Reproduced, not "completed": zeroing them here
-                // would be inventing input for the deformation drain.
+                //
+                // ⚠️⚠️ CORRECTED 2026-08-11 AT THE MERGE, and this one was a real bug in the
+                // committed body. It used to write ONLY mHandlingBodyID, with a note claiming "the
+                // console leaves mfInitialDamageAmount and meDeformationResetType at whatever the
+                // stack held". THAT IS WRONG, and the sibling wave caught it: the other two fields
+                // are LOOP-INVARIANT CONSTANTS, so the compiler hoisted their stores OUT of the
+                // drain loop, into the prologue -- which is why a read that only scanned the loop
+                // body could not see them. Re-read from the ARTIST asm, addresses and values:
+                //     0x82616118  lfs  f31, flt_82001CC0   <- 0.0f, read out of the image
+                //     0x8261611C  li   r11, -1
+                //     0x82616128  stfs f31, var_C8(r1)     <- event +8  mfInitialDamageAmount = 0.0f
+                //     0x82616138  stw  r11, var_C4(r1)     <- event +12 meDeformationResetType = -1
+                //     ...loop...
+                //     0x82616444  ldx  r11, r9, r25        <- maRaceCarHandlingBodyIDs[slot]
+                //     0x82616448  std  r11, var_D0(r1)     <- event +0  mHandlingBodyID
+                // var_D0 is the 16-byte event base and var_C8/var_C4 are its other two fields, so
+                // the console posts a FULLY initialised event every iteration. All three are
+                // written here now. (-1 is not a named DeformationResetType enumerator; it is the
+                // literal the image stores, so it is spelled as a cast of that literal and not
+                // rounded to the nearest named value.)
                 Deformation::DeactivateDeformationModelEvent lDeactivate;
                 lDeactivate.mHandlingBodyID.muValue =
                     static_cast<u32>(lHandlingBodyId.GetEntityId());
+                lDeactivate.mfInitialDamageAmount  = 0.0f;                                  // flt_82001CC0
+                lDeactivate.meDeformationResetType =
+                    static_cast<Deformation::DeformationResetType>(-1);                     // li r11, -1
                 lpDeformationInterface->GetDeactivateDeformationModelQueue().AddEvent(lDeactivate);
             }
 

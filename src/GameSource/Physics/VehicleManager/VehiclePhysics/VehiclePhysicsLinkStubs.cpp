@@ -95,6 +95,15 @@ namespace Vehicle
     // fired once per driving car per frame the moment a car existed.
 
 
+    // ⭐⭐ THE VehiclePhysics::Prepare @0x82637C80 TRAP IS GONE -- BODIED (2026-08-11,
+    // VehiclePhysics.cpp, 306 insns). A LOUD one-shot trap for it stood here, installed by the
+    // create-drain wave that landed RaceCarPhysics::Prepare without its callee and used the
+    // resulting LNK2019 to hold the link closure. That wave was right about the shape of the
+    // problem -- this IS the only thing that seats mTransform / mHalfExtent / mSimpleAttribs on
+    // a race car, so every observable the campaign chases hangs off it -- and the other wave
+    // landed the real body the same day. Keeping both would be an LNK2005 and the trap would
+    // SHADOW a real function, so it is deleted, per this file's own standing rule.
+
     // ⭐ 2026-08-09 (powertrain wave): the Engine::Update @0x825CB288 trap is GONE -- BODIED in
     // Engine.cpp. The 3937-line X360 debug Opt-vs-Unopt assert harness turned out to be ONE
     // algorithm run in two register files (branchy member leg + branchless vsel leg, cross-

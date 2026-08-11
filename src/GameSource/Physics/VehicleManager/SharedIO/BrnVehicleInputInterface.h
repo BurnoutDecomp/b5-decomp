@@ -191,6 +191,15 @@ namespace Vehicle
         {
             return &mNetworkCarsAddedRemovedForCollisionQueue;
         }
+        // ⭐ THE REMOVE QUEUE'S SEAT WAS DERIVED TWICE, 2026-08-11, by two independent waves reading
+        // the same three instructions -- and the cross-check caught an arithmetic slip. The second
+        // wave quoted the same `addis r3,r4,2 ; addi r3,r3,-0x6D0 ; lwz r11,8(r3)` prologue but
+        // evaluated it as +130352 (and as mCreateRaceCarEventQueue's +128032 plus a 2320-byte
+        // queue). Both are wrong by 1024: 0x20000 == 131072, 131072 - 0x6D0 (1744) == **129328**,
+        // which is 128032 + (16 + 8*160) == +1296, the create queue's real size. The seat above is
+        // the correct one, and it is the only one either body reaches -- BY NAME, through
+        // GetRemoveRaceCarEvents(), which is the DWARF's own spelling (:192). No second accessor
+        // under a different name is added: one member, one attested name.
 
         // ⭐ ADDED 2026-08-10 (pre-physics bridge wave). BOTH ARE DWARF-DECLARED, not invented:
         // DecFIGS BrnVehicleInputInterface.h:245 `const RaceCarBitArray* GetRaceCarsAddedForCollision() const`

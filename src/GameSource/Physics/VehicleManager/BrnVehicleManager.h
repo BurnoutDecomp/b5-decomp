@@ -40,7 +40,7 @@
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h" // BrnPhysics::Vehicle::PhysicalTrafficManager (mPhysicalTrafficManager @+44768 -- embedded BY NAME as of 2026-08-03; see the drift note below)
 #include "GameSource/Physics/VehicleManager/BrnVehicleManagerDebugComponent.h" // BrnPhysics::Vehicle::VehicleManagerDebugComponent (mDebugComponent @+161968 -- embedded BY NAME as of 2026-08-03; that header only forward-declares VehicleManager, so this is not a cycle)
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"          // CgsPhysics::RigidBodyId (GetRigidBodyId/GetRaceCarPhysics, 2026-08-09)
-#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle (maRaceCarModelHandles / maRaceCarGraphicsModelHandles @+43616 -- split out of mPadAA60, 2026-08-11)
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle (maRaceCarModelHandles / maRaceCarGraphicsModelHandles @+43616/+43680 -- split out of mPadAA60, 2026-08-11)
 
 // Pointer-only collaborators in RaceCarResponseInfo -- forward-declared in their real namespaces
 // (homed by their own TUs; the classifier never dereferences them here).
@@ -166,13 +166,25 @@ namespace Vehicle
     //
     // There are now THREE drift terms, because there are three embedded sub-objects whose host
     // width differs from the console's. They apply to disjoint address ranges and they ACCUMULATE:
-    //     X360 +0        .. +43616    ->  0               (nothing up to the handle arrays moves;
-    //                                                      ⭐ the boundary is +43616, not +43584 --
-    //                                                      corrected 2026-08-11, see the term below)
-    //     X360 +43616    .. +44768    ->  +128            KU_HOST_DRIFT_AFTER_RACECAR_ARRAY
+    //     X360 +0        .. +43616    ->  0               KU_HOST_DRIFT_AFTER_RACECAR_ARRAY
+    //                                                      (the race-car array itself is now
+    //                                                      width-identical, so this term is ZERO;
+    //                                                      ⭐ its range ENDS at +43616, not +43584)
+    //     X360 +43616    .. +44768    ->  +128            KU_HOST_DRIFT_AFTER_MODEL_HANDLES
     //     X360 +44768    .. +163264   ->  +320            KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER
     //     X360 +163264   .. +172465   ->  +352            KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT
     //     X360 +172465   .. end       ->  +428            KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK
+    //
+    // ⭐⭐ NAMING CONVERGED 2026-08-11 (the merge of the two independent create-drain waves). Both
+    // waves split `mPadAA60[128]` into the two real ResourceHandle arrays and both measured the
+    // same +128; they disagreed only on WHERE to put it. One folded the +128 into
+    // KU_HOST_DRIFT_AFTER_RACECAR_ARRAY (leaving a constant whose name no longer described its
+    // cause); the other added KU_HOST_DRIFT_AFTER_MODEL_HANDLES as its own term and left the
+    // race-car term at its true 0. **The second form is what survives**, because the two costs are
+    // independently derived from two different sizeofs and each is separately asserted in
+    // BrnVehicleManager_layout_check.cpp -- neither can absorb an error in the other. The zone
+    // boundary at +43616 is what makes them separable at all: maRaceCarEntityIDs (+43584) is
+    // BEFORE the split and takes the race-car term; everything from +43744 on takes the handle one.
     //
     // ⚠️ TABLE CORRECTED 2026-08-11 (consolidation wave). It used to read -1664 / -5632 / -5600,
     // which were the values from the 2026-08-03 record-fold wave and have been dead since
@@ -215,21 +227,47 @@ namespace Vehicle
     // the host == the X360's literal stride (`mulli r11, r22, 0x1460`), and the array term
     // vanishes. MEASURED with the compiler via the gate below, not carried from this note.
     //
-    // ⭐⭐ RE-DERIVED AGAIN 2026-08-11 (the create-drain wave): the term is now **+128**, and the
-    // 128 has nothing to do with the race-car array. It is `mPadAA60[128]` -- the opaque span the
-    // header carried at +43616..+43744 -- becoming the two REAL arrays the DWARF names there,
-    // `CgsResource::ResourceHandle maRaceCarModelHandles[8]` and `maRaceCarGraphicsModelHandles[8]`.
-    // sizeof(CgsResource::ResourceHandle) is 16 on the host ({void*, Entry*}) against the console's
-    // 8, so 2 * 8 * 16 == 256 replaces 2 * 8 * 8 == 128: **+128**, and 128 % 16 == 0 so every
-    // 16-aligned member behind it keeps its alignment. The +128 was MEASURED on a real boot before
-    // the split (create-drain probe: `offPad=43616 sizeofRH=16`), so it is a checked number.
+    // ⚠️ IT STAYS **0** THROUGH THE 2026-08-11 CREATE-DRAIN WAVE. One of the two waves that landed
+    // that day folded the model-handle split's +128 into THIS constant; that is not done here,
+    // because the +128 has nothing to do with the race-car array and hiding it behind this name
+    // would make the constant undiagnosable the next time either component moves. It has its own
+    // term, immediately below.
+    const std::ptrdiff_t KU_HOST_DRIFT_AFTER_RACECAR_ARRAY = 0;
+
+    // ⭐⭐ NEW TERM 2026-08-11 (the create-drain wave): **+128**, and it is the FIRST widening this
+    // class has ever taken that is a pure pointer-width cost rather than a folded stand-in.
+    // `mPadAA60[128]` -- the opaque span the header has carried at +43616 since 2026-08-03 -- is
+    // the DWARF's two `ResourceHandle[8]` arrays (maRaceCarModelHandles then
+    // maRaceCarGraphicsModelHandles, BrnVehicleManager.h:824/:825). They are now REAL, because
+    // ProcessCreateEvents @0x82616770 stores into both (`stdx` at this+43616+8i and
+    // this+43680+8i) and then double-dereferences the first as a StreamedDeformationSpec: that
+    // cannot be spelled against a byte span without the offset-poke this project forbids.
+    //   CgsResource::ResourceHandle is 8 bytes on console ({u32 mpResourceMemory, u32 mpSourceEntry})
+    //   and 16 on the host (two real pointers) -- MEASURED at runtime last wave, `sizeofRH=16`.
+    //   2 arrays * 8 elements * (16 - 8) == +128.
+    // ⚠️ THIS IS *NOT* A SERIALIZED RECORD. VehicleManager is carved at runtime by Construct and
+    // never streamed, so the [[serialized-slots-stay-32-bit]] rule does NOT apply here and the
+    // handles widen -- the opposite call from the one a bundle record takes.
+    // 128 % 16 == 0, so every 16-aligned member behind it keeps its alignment.
+    // ⚠️ Members between +43584 and +43616 (maRaceCarEntityIDs) are BEFORE the split and keep
+    // KU_HOST_DRIFT_AFTER_RACECAR_ARRAY; everything from +43744 on takes this one.
     //
-    // WHY THE SPLIT HAD TO HAPPEN: three of this wave's bodies -- ProcessCreateEvents (which is the
-    // only writer of both arrays), ProcessValidationEvents and AddRaceCarDeformationModel -- reach
-    // those two arrays by element. Against an opaque `u8[128]` that can only be spelled as a raw
-    // offset cast, which is the offset-poke this project forbids and the exact family of live
-    // corruption (console stride 8 vs host stride 16) that would have hidden inside it.
-    const std::ptrdiff_t KU_HOST_DRIFT_AFTER_RACECAR_ARRAY = 128;
+    // ⭐⭐ DERIVED TWICE, INDEPENDENTLY, AND THE TWO AGREE. The second create-drain wave reached the
+    // same +128 from a different direction: it MEASURED the handle on a real boot before writing
+    // the split (`offPad=43616 sizeofRH=16` from the create-drain probe) rather than reading the
+    // host layout out of the compiler, and it read the same two `stdx` seats plus the same
+    // double-dereference. Two derivations, one number, and the compile-time gate in
+    // BrnVehicleManager_layout_check.cpp ties it to `sizeof(CgsResource::ResourceHandle)` so it
+    // cannot drift from either.
+    //
+    // WHY THE SPLIT HAD TO HAPPEN, stated once: FOUR bodies that landed this day --
+    // ProcessCreateEvents (the only writer of both arrays), ProcessValidationEvents,
+    // ProcessRemoveEvents and AddRaceCarDeformationModel -- reach these arrays BY ELEMENT. Against
+    // an opaque `u8[128]` that can only be spelled as a raw offset cast, which is the offset-poke
+    // this project forbids AND the exact family of live corruption (console stride 8 vs host
+    // stride 16) that would have hidden inside it with nothing asserting.
+    const std::ptrdiff_t KU_HOST_DRIFT_AFTER_MODEL_HANDLES =
+        KU_HOST_DRIFT_AFTER_RACECAR_ARRAY + 128;   // step +128 -> cumulative +128
 
     // ⭐⭐ RE-MEASURED 2026-08-03 (the TrafficPhysics de-fork wave): the second term is now **-3968**,
     // not +192. `maFullTrafficPhysics` inside PhysicalTrafficManager was folded from a byte-pinned
@@ -250,7 +288,9 @@ namespace Vehicle
     // so the only remaining widening in the traffic manager is its own +192 (pointer members +
     // the 48-vs-32 debug component span).
     const std::ptrdiff_t KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER =
-        KU_HOST_DRIFT_AFTER_RACECAR_ARRAY + 192;   // step +192 -> cumulative +320
+        KU_HOST_DRIFT_AFTER_MODEL_HANDLES + 192;   // step +192 -> cumulative +320 (rebased 2026-08-11
+                                                   // onto the model-handle split, which sits in
+                                                   // front of the traffic manager)
 
     // ⭐ The third term, added 2026-08-03 in an earlier wave. VehicleManagerDebugComponent is 1328
     // bytes on the host against the 1296-byte X360 span at +161968..+163264 -- +32, because its
@@ -1214,6 +1254,17 @@ namespace Vehicle
         // mHiddenNetworkRaceCars and stores luFrames into maHiddenForFrames[index]).
         void SetNetworkRaceCarHidden(EActiveRaceCarIndex leActiveRaceCarIndex, s32 liFrames);
 
+        // ⭐ SetAllNetworkRaceCarsHidden @0x825E9380 (175 insns) and AddRaceCarDeformationModel
+        // @0x825E9118 (153) are BOTH DECLARED ABOVE, with the create arm's other callees -- see the
+        // block above maRaceCarDrivers. A duplicate declaration of the first, and a note explaining
+        // why the second was deliberately left undeclared, stood here after the 2026-08-11 merge of
+        // the two create-drain waves; both are retired. The second wave's reason for not declaring
+        // AddRaceCarDeformationModel (that DeformationInputInterface::AddDeformationModel's first
+        // two parameters are 4-byte `Deformation::ResourceHandle` / `RigidBodyId` slices while the
+        // console loads EIGHT bytes for each) is REAL and is now recorded where the body lives, in
+        // BrnVehicleManager_MaintenanceEvents.cpp -- with the reason our body is not the truncating
+        // cast that concern describes.
+
         // @0x8259C028: store the local player's active-race-car slot (gated 0..7).
         void SetPlayerActiveRaceCarIndex(EActiveRaceCarIndex lePlayerActiveRaceCarIndex);
 
@@ -1795,22 +1846,27 @@ namespace Vehicle
         // note saying "CgsResource::ResourceHandle has no committed home in this tree yet ...
         // DELETE-WHEN ResourceHandle lands". BOTH halves of that note were stale: the type HAS had
         // a committed home (GameShared/GameClasses/System/Resource/CgsResourceHandle.h) since the
-        // resource-handle wave, and three bodies landed this wave reach these arrays by element.
+        // resource-handle wave, and four bodies landed this wave reach these arrays by element.
         //
         // The DWARF names them at BrnVehicleManager.h:824/825, and the X360 addresses both by the
         // same pair of console strides in ProcessCreateEvents @0x82616A58..0x82616A68:
         //     addi r9, r27, 0x154C ; slwi r28, r9, 3 ; stdx <modelHandle>, r28, r24
         //     addi r8, r27, 0x1554 ; slwi r9,  r8, 3 ; stdx <gfxHandle>,   r9,  r24
         // 8 * 0x154C == 43616 and 8 * 0x1554 == 43680 -- two 8-element arrays at CONSOLE stride 8,
-        // back to back. ProcessValidationEvents @0x825E9078..0x825E90B0 writes the same two seats,
-        // and AddRaceCarDeformationModel @0x825E91A0 double-derefs the model one
-        // (`lwzx r11,r20,r29 ; lwz r11,0(r11)` -- the SafeResourceHandle shape, mpResourceMemory
-        // then the SmallResource's main-memory pointer).
+        // back to back, closing on 43744 exactly. ProcessValidationEvents @0x825E9078..0x825E90B0
+        // writes the same two seats, and AddRaceCarDeformationModel @0x825E91A0 double-derefs the
+        // model one (`lwzx r11,r20,r29 ; lwz r11,0(r11)` -- the SafeResourceHandle shape,
+        // mpResourceMemory then the SmallResource's main-memory pointer).
+        //
+        // ⭐ THE SECOND WAVE READ THE SAME DOUBLE-DEREFERENCE AT A DIFFERENT SEAT and reached the
+        // same conclusion: `lwzx r11,r28,r24 ; lwz r28,0(r11)` @0x82616CF4/CFC, feeding the wheel
+        // loop's StreamedDeformationSpec. Two call sites, one shape -- and a byte span cannot carry
+        // either of them without an offset poke.
         //
         // ⚠️ THE HOST STRIDE IS 16, NOT 8 ({void* mpResourceMemory, Entry* mpSourceEntry}), which
         // is exactly why these must be reached BY NAME: a body carrying the console's stride-8
         // arithmetic over an opaque span would index the wrong element with no diagnostic. The
-        // +128 that costs is carried explicitly in KU_HOST_DRIFT_AFTER_RACECAR_ARRAY above.
+        // +128 that costs is carried explicitly in KU_HOST_DRIFT_AFTER_MODEL_HANDLES above.
         CgsResource::ResourceHandle maRaceCarModelHandles[8];          // +43616 (console 64B, host 128B)
         CgsResource::ResourceHandle maRaceCarGraphicsModelHandles[8];  // console +43680 (host +43744)
 
