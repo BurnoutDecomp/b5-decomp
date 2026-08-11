@@ -821,7 +821,12 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
 // SpatialPartitionIO::InputBuffer_Update, so that buffer -- a 135 KB VEQ pushed on the
 // input stack every frame -- is not created; and the overlap generator is a documented
 // inert gate whose input buffer would only be filled by the volume legs the bridge does
-// not reconstruct. The triangle-cache publish (step 7) has no committed consumer.
+// not reconstruct.
+//
+// ⭐ STEP 7 IS LIVE AS OF 2026-08-11 (triangle-cache wiring wave). The note that used to
+// stand here -- "the triangle-cache publish (step 7) has no committed consumer" -- is
+// RETIRED: WorldModule::BridgeSceneQueryResultsToPhysics @0x827A8E88 and
+// BridgeSceneModuleToOutput @0x827A5700 are both bodied now and both read this seat.
 // ===========================================================================
 bool SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStack,
                                      CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -858,7 +863,77 @@ bool SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStac
         lpPartition->Update();
     }
 
+    // Step 7 (X360 0x828D4D8C..0x828D4DC4, byte-identical to ProcessSceneQueries' tail):
+    // write-lock the scene output and publish &mTriangleCacheManager on it, so every scene
+    // output buffer this module fills carries the cache handle -- not just the query one.
+    lpSceneOutputBuffer->LockForWrite();
+    lpSceneOutputBuffer->GetTriangleCacheInterface()->SetTriangleCacheManager(&mTriangleCacheManager);
+    lpSceneOutputBuffer->UnlockForWrite();
+
     return true;
+}
+
+// ===========================================================================
+// SceneManagerModule::ProcessSceneQueries @ 0x828D57D0  (X360 vtbl+68)
+//
+// ⭐ RECONSTRUCTED 2026-08-11 (triangle-cache wiring wave); RETIRES the inert boot gate
+// that stood at WorldLinkStubs.cpp:2350.
+//
+// THIS FUNCTION IS THE SOURCE OF THE ENTIRE TRIANGLE-CACHE CHAIN. Its last step is the
+// ONLY write of a TriangleCacheManager* into a TriangleCacheInterface that reaches the
+// physics module: every hop after it is an Append that ADOPTS an already-set pointer, so
+// while this body was inert the physics side read an interface whose mpTriangleCacheManager
+// had never been written -- the "mpTriangleCacheManager != NULL" assert plus the AV inside
+// GetTrianglesForCachedObject that the traction-line leg was dying on.
+//
+// The X360 shell (CgsSceneManagerModule.cpp:806..), step for step:
+//   1. StartMonitor(dword_82F33ECC);
+//   2. four null tripwires (:806/:807/:808/:809);
+//   3. StartMonitor(dword_82F33ED0); ProcessCoarseQueries @0x828CE770; StopMonitor;
+//   4. StartMonitor(dword_82F33ED4); ProcessFineQueries   @0x828D5608; StopMonitor;
+//   5. LockForWrite(sceneOut);
+//      GetTriangleCacheInterface()          -- 0x828D592C -> SceneManagerIO::Output
+//                                              @0x828AFAF8 (write-locked, +217164)
+//      SetTriangleCacheManager(&mTriangleCacheManager)
+//                                           -- 0x828D5920 addis r31,r28,0x3B ;
+//                                              0x828D5928 addi r31,r31,-0x7DA0  == this+0x3A8260
+//                                              0x828D5934 the inlined ":1268" tripwire
+//                                              0x828D5960 stw r31, 0(r30)
+//      UnlockForWrite(sceneOut); StopMonitor.
+//
+// FLAG (honest park, unchanged by this wave): steps 3 and 4 are NOT landed --
+// ProcessCoarseQueries @0x828CE770 and ProcessFineQueries @0x828D5608 are their own console
+// functions with their own TUs and neither is reconstructed. They are a no-op on this build
+// anyway (both walk the coarse/fine query queues, and BridgePhysicsSceneQueriesToScene --
+// the only producer that would fill them -- is still an inert gate), which is precisely why
+// the publish can be landed on its own: it does not depend on either pass. DELETE-WHEN both
+// query passes land; this body then calls them where the banner marks them.
+// ===========================================================================
+void SceneManagerModule::ProcessSceneQueries(CgsModule::IOBufferStack* lpInputBufferStack,
+                                             CgsModule::IOBufferStack* lpOutputBufferStack,
+                                             SceneManagerIO::InputBuffer_Query* lpQueryInput,
+                                             SceneManagerIO::OutputBuffer* lpQueryOutput)
+{
+    ScopedPerfMon lProcessSceneQueries(siProcessSceneQueriesPerfMon);
+
+    CGS_ASSERT(lpInputBufferStack != NULL,  "lpInputBufferStack != NULL");    // :806
+    CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");   // :807
+    CGS_ASSERT(lpQueryInput != NULL,        "lpSceneInputBuffer != NULL");    // :808
+    CGS_ASSERT(lpQueryOutput != NULL,       "lpSceneOutputBuffer != NULL");   // :809
+
+    if (lpQueryOutput == NULL)
+    {
+        return;
+    }
+
+    // (steps 3/4 -- ProcessCoarseQueries @0x828CE770 / ProcessFineQueries @0x828D5608 --
+    //  go here when they land; see the FLAG above.)
+
+    // Step 5: publish the triangle-cache manager on the scene output. This is the handoff
+    // the world bridges then carry into the physics vehicle input and the world output.
+    lpQueryOutput->LockForWrite();
+    lpQueryOutput->GetTriangleCacheInterface()->SetTriangleCacheManager(&mTriangleCacheManager);
+    lpQueryOutput->UnlockForWrite();
 }
 
 // ===========================================================================

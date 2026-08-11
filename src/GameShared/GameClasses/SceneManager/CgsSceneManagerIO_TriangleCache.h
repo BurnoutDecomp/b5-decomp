@@ -40,6 +40,29 @@ namespace SceneManagerIO
         // up, then returns the cached-slot's miNumCachedTriangleBatches for the given slot index.
         s32 GetNumCachedTriangleBatches(s32 liCacheSlotIndex) const;
 
+        // ⭐ ADDED 2026-08-11 (triangle-cache wiring wave). THE ONLY SEEDER OF THIS
+        // INTERFACE IN THE WHOLE PROGRAM -- every other hop is an Append that adopts an
+        // already-seeded pointer, which is why nothing downstream had a manager until now.
+        // DWARF-declared (CgsSceneManagerModuleIO.h, `void SetTriangleCacheManager(const
+        // TriangleCacheManager*)`); the X360 INLINES it into both of its call sites, and both
+        // inlined copies bake the SAME tripwire text/line, which is what identifies it:
+        //   SceneManagerModule::ProcessSceneQueries @0x828D5934..0x828D5960
+        //       cmplwi cr6, r31, 0            (r31 == &mTriangleCacheManager, this+0x3A8260)
+        //       bne    -> skip
+        //       FireAssert("lpTriangleCacheManager != NULL",
+        //                  "..CgsSceneManagerModuleIO.h", 0x4F4 == 1268)
+        //       stw    r31, 0(r30)            (r30 == the interface returned by the getter)
+        //   SceneManagerModule::UpdateScene @0x828D4C28 -- byte-identical, same :1268.
+        // Taken non-const here to match this struct's committed non-const member (the DWARF
+        // spells the parameter `const TriangleCacheManager*`; GetTrianglesForCachedObject is
+        // const-qualified either way, so the constness is not load-bearing -- de-forking the
+        // member's constness is a separate, tree-wide change).
+        void SetTriangleCacheManager(TriangleCacheManager* lpTriangleCacheManager)
+        {
+            CGS_ASSERT(lpTriangleCacheManager != nullptr, "lpTriangleCacheManager != NULL");
+            mpTriangleCacheManager = lpTriangleCacheManager;
+        }
+
         // Append == adopt the source interface's manager pointer. Defined at
         // CgsSceneManagerModuleIO.h:1277 in the original tree (the assert's baked
         // file/line); the X360 build inlines it into the world buffer's
