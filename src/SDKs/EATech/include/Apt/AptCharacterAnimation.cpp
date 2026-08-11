@@ -367,9 +367,16 @@ void AptCharacterAnimation::Link(void* pData, void* pDataBlock)
 //   Fixup();
 //   v8 = *(a3+28); if (v8) v8 -= a3; *(a3+28) = v8;   // un-relocate mnSecondaryOffset
 //
-// x64 (matches the console `*(a1+48)=0` 4-byte stw): mnResolveScratch is the 4-byte int
-// at the serialised def-base +0x30 (the "ms" slot); importCount sits at +0x34 right after
-// it, so this clears exactly the scratch word without touching importCount.
+// x64 LAYOUT CORRECTION (2026-08-11 -- the console offset must be WIDENED, not copied):
+// the console `*(a1+48)=0` is def+0x30 on the 4-BYTE def, i.e. the dword AFTER
+// initList@+0x2C -- the resolve walk's parsed-value accumulator. On the native-8 def
+// initList widens to the 8-byte pointer @+0x48, so that slot is +0x50, and the XB1 twin
+// proves it: CompleteLoad sub_1408348B0 (which INLINES Resolve) does
+//   lea r10, [rax+20h]                 ; def = movie root + 0x20
+//   mov qword ptr [r10+50h], 0         ; an 8-BYTE store at def+0x50
+// def+0x30 on native-8 is the AUTHORED msPerFrame (16/33/83 in every one of the 290
+// shipped GUIAPT bundles) that AptUpdate paces the timeline from -- clearing it here
+// zeroed every movie's frame period on load.
 //
 // x64: the console's 32-bit in-place `*(a3+28) += a3` widens to the uintptr_t slot below
 // (idempotence-guarded); AptMovie::resolve64 (case-5/9, LIVE) reads it as the constant-
@@ -393,8 +400,9 @@ AptCharacterAnimation* AptCharacterAnimation::Resolve(void* pBase, AptConstFile*
             pnItemStart = nullptr;                             // absent/already live: no un-relocate
     }
 
-    // Clear the resolve-state scratch at the serialised def-base +0x30 (console `*(a1+48)=0`).
-    mnResolveScratch = 0;
+    // Clear the resolve walk's parsed-value accumulator (console `*(a1+48)=0` == def+0x30
+    // on the 4-byte def == def+0x50 native-8; XB1 `mov qword ptr [r10+50h], 0`).
+    mnParsedValueCount = 0;
     AptCharacterAnimation* pResult = Fixup(pBase, pConstFile, pBlock);
 
     // Un-relocate after Fixup (console `*(a3+28) -= a3`): the ctx table is live only
