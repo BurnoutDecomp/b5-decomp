@@ -171,6 +171,35 @@ namespace InputIO
         u32 muStatus;   // +0x04 bit0 held, bit1 pressed-this-frame, bit2 released-this-frame
     };
 
+    // ⭐ 2026-08-11 (driving-input wave) -- THE DWARF NAMES ARE NOW KNOWN and they confirm the
+    // byte layout below exactly. references/DecFIGS/dwarfdump/GameShared/GameClasses/System/
+    // Input/CgsInputModuleIO.h:345 declares
+    //     struct PadOutputInformation {
+    //         AnalogueAxisInformation mAxisInfo;      // float32_t mafAxisValue[N]
+    //         ActionInfo              maActions[N2];
+    //         int32_t                 miPlayerId;
+    //         CgsInput::Device::EType meControllerType;
+    //         bool                    mbPadIdle;
+    //     };
+    // The DWARF is the PS3 build (N=10 axes, N2=136 actions); the X360 build is narrower and
+    // its counts fall out of the attested 932-byte (0x3A4) stride and the bridges' +0x18 action
+    // base: N = 6 axes (0x18/4) and N2 = 112 actions, since 0x18 + 112*8 = 0x398 and the three
+    // tail members then close the record at 0x3A4. So the three tail fields below are, by name:
+    //     +0x398 muConnectionWord  == miPlayerId        (GetPadInfoForPlayer0's "== 0" gate is
+    //                                                    "this pad is bound to player 0")
+    //     +0x39C meControllerState == meControllerType  (CgsInput::Device::EType; the "== 2"
+    //                                                    tests in the bridges are the WHEEL arm)
+    //     +0x3A0 mbDisconnected    == mbPadIdle         (set by InputPads::Update's SetPadIdle)
+    // and the six leading floats are CgsInput::EPadAxis (CgsInputDevicePS3Pad.h:84):
+    //     0 E_PADAXIS_0_X, 1 E_PADAXIS_0_Y (left stick), 2 E_PADAXIS_1_X, 3 E_PADAXIS_1_Y
+    //     (right stick), 4 E_WHEELAXIS_STEERING, 5 E_WHEELAXIS_PEDALS -- the last two written
+    //     only by DeviceX360Pad::Update's wheel arm, which is why the bridges read mfAxis10 /
+    //     mfAxis14 exclusively under their meControllerState == 2 branches.
+    // NOT RENAMED HERE: every consumer of these three names lives outside this wave's file scope
+    // (GameSource/Game/GameBridgeControllerToX.cpp and the GUI screens). The rename + the grow
+    // from maActionInfo[96]+pad to maActions[112] is mechanical and belongs to the TU that owns
+    // those callers; nothing addressed today sits above action id 59, so the byte layout is
+    // unaffected either way.
     struct PadOutputInformation
     {
         // ---- leading analogue axes ---------------------------------------------------------------
