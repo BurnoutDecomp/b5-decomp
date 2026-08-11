@@ -25,6 +25,18 @@ namespace BrnGui
         // The one concrete DLC1 profile version this build understands.
         static const s32 KI_VERSION_CURRENT = 1;
 
+        // OUTLINED from BrnGui::GuiCache::Construct @0x82505860 (asm 0x825060EC..
+        // 0x82506110), which initialises the cache's live DLC1 options block at
+        // cache+76776 inline:
+        //     stw r29(1), 0(r11)          -> miVersion  = 1
+        //     stw r30(0), 4(r11)          -> miReserved = 0
+        //     stb r30(0), 8..0xF(r11)     -> maFlags[0..7] = 0
+        // (Hex-Rays folds the first two into `*(v47 + 76776) = 0x100000000LL` -- the
+        // big-endian 64-bit form of {1, 0}.) ProfileManager::ReadProfileData @0x824FF298
+        // copies those four words straight into the stored image, so this is what makes a
+        // FIRST boot present a version-current DLC1 options segment to ValidateProfiles.
+        void Construct();
+
         // 0x824F0C38 - validate/migrate the DLC1 profile after load. If the
         // version is the uninitialised sentinel, warn and reset to defaults
         // (version 1, all flags clear) and report success. If it is already the

@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/Core/CgsID.h"     // CgsID (u64) -- mPursuedCarID / mShutdownCarID
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT (GetCurrentCarSelectType inline)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"   // BrnGui::GuiFlow (AppendExpectedAptComponent selector)
+#include "GameSource/Gui/BrnGuiOptionsDataProfileDLC1.h" // BrnGui::OptionsDataProfileDLC1 (live DLC1 options block @+0x12BE8; self-contained header, no clashing slices)
 #include "GameSource/BurnoutConstants.h"          // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT
 #include "BrnCommonTypes.h"                        // Vector3 / Vector4 (event-position / camera accessors)
 #include "GameSource/GameState/BrnCgsPlayerName.h" // CgsNetwork::PlayerName (COMPLETE: value member of ReplayPlayerActive below)
@@ -603,6 +604,10 @@ namespace BrnGui
         // OnlineGameRoomPlayerInfo::ShowSettingsOptions @0x82485140 inline the fetch).
         // DECLARATION-ONLY per the far-member convention (body links from the GuiCache TU).
         OptionsDataProfile* GetOptionsDataProfile();   // X360 far member @0xB878
+
+        // The live DLC1 options block that sits directly after it (X360 far member
+        // @0x12BE8/76776; ReadProfileData @0x824FF298 inlines the fetch the same way).
+        OptionsDataProfileDLC1* GetOptionsDataProfileDLC1() { return &mOptionsDataProfileDLC1; }
         const BurnoutSkillsManager* GetBurnoutSkillsManager() const { return mpSkillsManager; }
 
         // DWARF h:1203 -- the checkpoint count for the current event (muCheckpointsInEvent).
@@ -1132,6 +1137,13 @@ namespace BrnGui
         bool mbIsOnlineHost;                             // +0xB864 (47204)
         u8 mPad_B865[19];                                // +0xB865..+0xB877
         u8 mOptionsDataProfileStorage[0x8000];           // +0xB878 (X360 object: 0x7370 bytes)
+        // +0x12BE8 (76776) -- the live DLC-pack-1 options block, which the X360 lays
+        // immediately after the options profile (47224 + 0x7370 == 76776). Unlike the block
+        // above this type has no clashing includes, so it is modelled by name here.
+        // GuiCache::Construct @0x82505860 seeds it and ProfileManager::ReadProfileData
+        // @0x824FF298 reads its four words (`v5 = cache + 76776; field_2EEE8 = v5[0]; ..
+        // = v5[3]`) into the stored image's mOptionsDataProfileDLC1 segment.
+        OptionsDataProfileDLC1 mOptionsDataProfileDLC1;  // +0x12BE8 (76776)
         // ---- mPreRaceData: fly-by pre-event messages (GetPreEventInfo @0x824827D8) ----
         u8  maPreEventInfoStorage[3][580];               // +0x12F0C (77580) PreEventInfo maPreEventInfo[3] (stride 580)
         s32 miNumMessages;                               // +0x135D8 (79320) mPreRaceData.miNumMessages (GetPreEventInfo bound)
