@@ -328,8 +328,11 @@ namespace
     CgsResource::Pool            s_AptLanguagePool;      // the resident LANGUAGE bundle pool
     // The AptAux data-handler allocator (AptAlloc/AptFree service the engine's
     // pfnMemFree + the data-handler loads through it). Host heap for the faithful
-    // AptAux::Prepare drive (step 5).
-    unsigned char                s_aAptDataHeap[256 * 1024];
+    // AptAux::Prepare drive (step 5). Host-sized: 256K OOM'd composing
+    // Title_Screen02 + B5HelperComponents once the audited real allocation paths
+    // went live (AptAlloc 16384-byte failure, boot-measured 2026-08-10); 8M holds
+    // the full title-flow set with headroom.
+    unsigned char                s_aAptDataHeap[8 * 1024 * 1024];
     CgsMemory::HeapMalloc        s_AptDataAllocator;
     bool s_bTextSystemReady = false;                     // fonts + strings loaded (one-shot)
 
