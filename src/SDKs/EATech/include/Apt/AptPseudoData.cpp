@@ -27,7 +27,14 @@ AptPseudoData_t::AptPseudoData_t(const AptPlaceObjectInfo_t* lpSource,
     mpData          = lpData;
     mi16CharacterId = li16CharacterId;
     muxFlags        = luxFlags;
-    mi16Depth       = static_cast<s16>(lpSource->mi32Depth);   // native-8 i32 depth
+    // X360 ctor @0x82AD9910: `lwz r10, 0x38(r4); sth r10, 0x1A(r3)` -- the captured
+    // halfword is the record's CLIP depth (console record+0x38 == body+0x34), NOT the
+    // display depth at body+0x04. On the native-8 record the clip depth sits at
+    // body+0x38 (miClipDepth). AptFramePlacementDispatch feeds this slot straight into
+    // placeObjectNCXForm's nClipDepth, so capturing the display depth here turned every
+    // merge-path placement into a clip-start (AptRenderWalk's `mClipDepth < 0x8000`
+    // gate) and rendered it as mask geometry instead of a visible quad.
+    mi16Depth       = static_cast<s16>(lpSource->miClipDepth);   // native-8 clip depth
 
     mpMatrix         = (luxFlags & 0x04u)
                            ? const_cast<u8*>(lpSource->maMatrix)
