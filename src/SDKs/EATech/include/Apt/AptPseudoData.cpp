@@ -22,7 +22,12 @@ AptPseudoData_t::AptPseudoData_t(const AptPlaceObjectInfo_t* lpSource,
                                  s16                          li16CharacterId,
                                  void*                        lpData)
 {
-    const u32 luxFlags = lpSource->muxFlags;
+    // The body is align8(record+4), not a fixed record+8 (2.1% of the shipped tag-3
+    // records start 4 (mod 8) -- see AptPlaceObjectInfo_t::GetBody). On the console this
+    // is unconditionally record+4, which is what the X360 ctor's `v4 = (a2 + 4)` reads.
+    const AptPlaceObjectBody_t* const lpBody = lpSource->GetBody();
+
+    const u32 luxFlags = lpBody->muxFlags;
 
     mpData          = lpData;
     mi16CharacterId = li16CharacterId;
@@ -34,16 +39,16 @@ AptPseudoData_t::AptPseudoData_t(const AptPlaceObjectInfo_t* lpSource,
     // placeObjectNCXForm's nClipDepth, so capturing the display depth here turned every
     // merge-path placement into a clip-start (AptRenderWalk's `mClipDepth < 0x8000`
     // gate) and rendered it as mask geometry instead of a visible quad.
-    mi16Depth       = static_cast<s16>(lpSource->miClipDepth);   // native-8 clip depth
+    mi16Depth       = static_cast<s16>(lpBody->miClipDepth);   // native-8 clip depth
 
     mpMatrix         = (luxFlags & 0x04u)
-                           ? const_cast<u8*>(lpSource->maMatrix)
+                           ? const_cast<u8*>(lpBody->maMatrix)
                            : nullptr;
     mpColorTransform = (luxFlags & 0x08u)
-                           ? const_cast<u8*>(lpSource->maColorTransform)
+                           ? const_cast<u8*>(lpBody->maColorTransform)
                            : nullptr;
     // The console captured its 4-byte clip-actions value; the native-8 pointer
     // does not fit and the slot is unread by the merge overlay -- see the header.
     miClipActionValue = 0;
-    mfRatio           = (luxFlags & 0x10u) ? lpSource->mfRatio           : 0.0f;
+    mfRatio           = (luxFlags & 0x10u) ? lpBody->mfRatio             : 0.0f;
 }

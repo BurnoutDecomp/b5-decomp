@@ -48,13 +48,15 @@ extern DOGMA_PoolManager* gpAptPseudoDataPool;   // off_8324D808
 // type -- for a snapshot to be built); the AptPseudoData_t ctor then consumes
 // the rest of the record as an AptPlaceObjectInfo_t. The leading tag aliases
 // AptPlaceObjectInfo_t::maPad00 (offset 0), so the same record type serves
-// both reads.
+// both reads -- and the optional fields are reached through GetBody(), which
+// applies the align8(record+4) body rule.
 // ---------------------------------------------------------------------------
 struct AptCharacterInfo_t : public AptPlaceObjectInfo_t
 {
-    // Type tag lives at offset 0 (== AptPlaceObjectInfo_t::maPad00[0..3]). The
-    // value 3 selects the placeable display-object path.
-    u32 GetTypeTag() const { return *reinterpret_cast<const u32*>(maPad00); }
+    // Type tag lives at offset 0 (== AptPlaceObjectInfo_t::muTag) on both ABIs --
+    // it is written before the body alignment pad. The value 3 selects the
+    // placeable display-object path.
+    u32 GetTypeTag() const { return muTag; }
 
     enum { KU_TypePlaceableDisplayObject = 3 };
 };
