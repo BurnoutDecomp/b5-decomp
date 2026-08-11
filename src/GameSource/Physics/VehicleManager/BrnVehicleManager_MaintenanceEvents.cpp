@@ -207,16 +207,92 @@ namespace Vehicle
     // The count is logged only when it CHANGES, so a queue that fills every frame does not flood
     // the log and a queue that is always empty prints exactly once.
     //
-    // ⛔ WHAT MUST HAPPEN BEFORE THE 1,067-instruction body replaces this gate, measured, in order:
-    //   1. the traction-line chain (~2,500 insns / 13 fns + the triangle-cache FILL worker
-    //      ~1,183/11) -- otherwise the first registered car free-falls inside ReadUpdatedBodies;
-    //   2. the create body's own absent callees: VehicleAttribs::Construct (export hole),
-    //      sub_825BDB88 (42), physicsvehiclehandling ctor (export hole; the generated header
-    //      DOES exist -- the old "does not exist in the tree" banner is STALE and retracted),
-    //      StreamedDeformationSpec::TransformToNewCOMSpace (106) and ::GetBoundingBox (28),
-    //      VehicleManager::AddRaceCarDeformationModel (153), SetAllNetworkRaceCarsHidden (175);
-    //   3. the result consumer RaceCarEntityModule::ProcessCreateVehicleEvents @0x822FF620 (182),
-    //      which today is stood in for by PublishNewVehicleToDirectorWithoutPhysicsBringUp.
+    // =============================================================================================
+    // ⭐⭐⭐ RE-MEASURED 2026-08-11 (create-path wave 3). THIS REPLACES the old "what must happen
+    // first" list, which was stale on four counts. Read it before planning the drain.
+    //
+    // (1) THE CLOSURE, machine-walked over all 30,084 X360 export JSONs BY ADDRESS (a name walk
+    //     omits, with no diagnostic, the callees whose names collide), checked against the tree AND
+    //     build_game_exe.bat: transitive closure of @0x82616770 = 4,370 insns / 47 nodes,
+    //     CRT + DebugUI filtered.
+    //     ALREADY BODIED **AND MOUNTED**: VehicleAttribs::SetupAttribs @0x825F4CD8 (770);
+    //     VehicleAttribs::Construct @0x825F3FB8 (VehicleAttribs.cpp:439 -- the old banner's
+    //     "export hole" is RETRACTED); EngineAttribs::InitializeFromAttribs (296);
+    //     Wheel::TireAttribs::PrepareFrontTire / PrepareRearTire (192 + 192);
+    //     AddRaceCarDeformationModel (153); SetNetworkRaceCarHidden (118);
+    //     StreamedDeformationSpec::TransformToNewCOMSpace (106) and ::GetBoundingBox (28); and the
+    //     whole AttribSys layer -- including the INLINE physicsvehiclehandling ctor
+    //     (physicsvehiclehandling.h:170), its out-of-line copy ctor (`sub_825BDB88`), all eight
+    //     Attrib::Gen::physicsvehicle*attribs ctors, and Attrib::AssertOnClassCheck.
+    //     ⇒ GENUINELY MISSING: this 1,067-insn body plus VehicleManager::SetAllNetworkRaceCarsHidden
+    //       @0x825E9380 (175). That is all of it -- 1,242 instructions, two functions.
+    //     The four event-queue instantiations the body reaches (GetEvent @0x825BB7F0, the truncated
+    //     export "BrnPhysics::Vehic", console element stride 0xA0; CreateVehicleResult::AddEvent;
+    //     AddDeformationModelEvent::AddEvent; InAddRigidBody::AddEvent) are MOUNTED as of this wave
+    //     and link clean -- the closure is already enforced.
+    //
+    // (2) ⭐⭐ THE TWO PRECONDITIONS THAT MADE THIS BODY IMPOSSIBLE ARE FIXED (this wave), and both
+    //     were invisible until somebody PRINTED the event instead of reasoning about it. Measured
+    //     BEFORE, read-only dump of create event 0 on a real boot:
+    //         owner=0 idx=0 pos=(2986.933105,-3.525000,-2011.417969) model=0 gfx=0 ... strength=5
+    //     * model=0 / gfx=0: the body does `lwzx r11,maRaceCarModelHandles[i] ; lwz r28,0(r11)`
+    //       (@0x82616CF4 / @0x82616CFC) and then dereferences r28 as the StreamedDeformationSpec
+    //       for the wheel loop, TransformToNewCOMSpace and GetBoundingBox. A null handle is an AV,
+    //       not a soft failure. ROOT CAUSE: BaseResourcePtr::GetResourceHandle() returned mHandle
+    //       (+0x04/+0x08) -- the CACHED IDENTITY of the resolved resource, which for a
+    //       main-memory-only resource is legitimately {0,0}. The handle is the +0x14/+0x18 pair.
+    //       FIXED in CgsBaseResourcePtr.cpp; four independent witnesses in its banner.
+    //     * owner=0: ActiveRaceCar::Attach was skipping the console's mHandlingBodyVolumeId seed,
+    //       so the id this body takes BOTH its owner assert (:1303) and its race-car SLOT INDEX
+    //       (`extrwi r27,r9,14,8`) from was all zeroes. FIXED in BrnActiveRaceCar.cpp.
+    //     Measured AFTER, same probe, same flow: owner=1 idx=0 ... model=1 gfx=1.
+    //     ⇒ THE INPUT IS NOW COMPLETE, and the event carries a real Junkyard world position whose
+    //       y (-3.525000) is the junkyard floor plane the traction line already returns hits on.
+    //
+    // (3) THE GROUND IS READY -- re-confirmed on this build, not inherited: world collision
+    //     (23,645 leaves), the 2,937,088-byte arena, 28 cache slots, the fill worker, the
+    //     traction-line producer lifetime and the drain all run every frame, and everything from a
+    //     result record to Wheel::SetRoadContact -> mbIsOnGround is mounted.
+    //
+    // (4) WHAT THE NEXT WAVE HAS TO WRITE, in the body's own order (asm from @0x82616770):
+    //       head      fetch event i, copy the 0xA0-byte record to a local, store both handles into
+    //                 maRaceCarModelHandles / maRaceCarGraphicsModelHandles (@0x82616A64/A68, the
+    //                 two stdx at this+43616+8i and this+43680+8i), three asserts.
+    //                 ⚠️ those two arrays are still the opaque `mPadAA60[128]` in
+    //                 BrnVehicleManager.h and MUST be split into real ResourceHandle[8] pairs --
+    //                 which GROWS them 64 -> 128 bytes each on x64, so the layout gate's host-drift
+    //                 constants move with them.
+    //       attribs   Attrib::FindCollection(hash64("burnoutcarasset") == 0x52B81656F3ADF675,
+    //                 event.mCarAssetAttribKey) -> Instance -> DefaultDataArea(0x228) ->
+    //                 RefSpec::GetCollection(+0x158) -> physicsvehiclehandling ->
+    //                 VehicleAttribs::Construct -> copy ctor -> SetupAttribs.
+    //       wheels    TransformToNewCOMSpace, then a four-iteration loop over the spec's WheelSpecs
+    //                 accumulating the COM vector (v125) and four scalars. SKIPPED ENTIRELY when
+    //                 event.mbDisablePhysicsStateReset (@0x82616D38).
+    //       inertia   ~200 insns of vrefp / vmaddfp Newton-Raphson building the mass + inertia
+    //                 triple, then memcpy(0xC0) -> InAddRigidBody::AddEvent. ⚠️ its only consumer
+    //                 is PhysicsModule::BridgeVehicleManagerToSimulation_PostScene @0x825AB408, a
+    //                 DELIBERATELY INERT gate, and PostSceneUpdate destroys the VehManager buffer
+    //                 in the same call -- so on this build that post is a producer into a buffer
+    //                 nothing drains BY THE CONSOLE'S OWN DESIGN. ⛔ BUT DO NOT SUB-GATE THE MATH:
+    //                 three of its outputs (the stack slots the asm calls var_900 / var_908 /
+    //                 var_910..var_920) are ALSO arguments to the Prepare vcall below.
+    //       seat      GetBoundingBox -> vcall vtable slot +0x30 == RaceCarPhysics::Prepare
+    //                 @0x82639CB8 (EXPORT HOLE; its 40 instructions were lifted in create2_log).
+    //                 ⚠️ NOT DECLARED ANYWHERE IN THIS TREE YET, and it is the ONLY thing that
+    //                 seats mTransform / mHalfExtent / mSimpleAttribs -- every observable except
+    //                 the bitset hangs off this one vcall. Also skipped when
+    //                 mbDisablePhysicsStateReset.
+    //       register  DebugComponent::Register, then the INLINED mUsedRaceCars.SetBit
+    //                 (@0x826173C8 ldx / or / stdx) -- the observable this gate is named for.
+    //       publish   CreateVehicleResult::AddEvent, AddRaceCarDeformationModel, the per-car scalar
+    //                 seeds at stride 0xE0, SetNetworkRaceCarHidden / SetAllNetworkRaceCarsHidden,
+    //                 two Attrib::Instance dtors.
+    //
+    // (5) and the result consumer RaceCarEntityModule::ProcessCreateVehicleEvents @0x822FF620 (182)
+    //     -- today stood in for by PublishNewVehicleToDirectorWithoutPhysicsBringUp -- is still the
+    //     only thing that would make RaceCarState::mEntityId non-zero.
+    // =============================================================================================
     void VehicleManager::ProcessCreateEvents(const VehicleInputInterface* lpInputInterface,
                                              VehicleOutputRequestInterface*,
                                              VehicleManagerOutputInterface*,
