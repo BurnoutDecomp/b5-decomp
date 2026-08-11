@@ -891,6 +891,41 @@ namespace Vehicle
     }
 
     // ===============================================================================================
+    // SimpleVehiclePhysics::SetAttributes(VehicleAttribs*, const Vector3*, const f32*)
+    //
+    // ⭐ BODIED 2026-08-11 (the VehiclePhysics::Prepare wave). This header's own note said
+    // "3-arg: declared for the class surface (the PS3 attests it); no X360 body recovered to it
+    // yet" -- i.e. a DECLARED-BUT-UNDEFINED member, which is the [[shadowing-redeclarations]]
+    // landmine: it mangles fine, no per-TU gate can see it, and the first real caller turns into
+    // an LNK2019. VehiclePhysics::SetAttributes @0x8262E140 is exactly that first real caller,
+    // so the symbol is closed here rather than routed around.
+    //
+    // ⚠️ There is no out-of-line X360 body to read: the console INLINES this at every site. It is
+    // recovered from TWO independent inlined copies that agree statement for statement, which is
+    // the same evidence standard the VehicleDriver::ClearControls recovery used last wave:
+    //   * VehiclePhysics::SetAttributes @0x8262E16C..0x8262E1A0 --
+    //         assert(lpAttribs) [aLpattribs, aDP4B5MainBurno_219, line 0x12B == 299]
+    //         bl SimpleVehicleAttribs::SetupAttribs   r3 = this+0x5A0 == &mSimpleAttribs, r4 = lpAttribs
+    //         bl SimpleVehiclePhysics::SetAttributes  r4 = positions, r5 = radii  (the 2-arg)
+    //   * SimpleVehiclePhysics::Prepare @0x8262FC90..0x8262FCC4 -- the SAME three, same string,
+    //     same file symbol, same line 0x12B. That copy is already spelled out inline in Prepare
+    //     below (it was written before this overload had a body); it is left as it is, because
+    //     what the console emits there IS the inline.
+    // ⭐ The PS3 build carries the overload out of line and NAMED (0x734B10,
+    // `_ZN10BrnPhysics7Vehicle20SimpleVehiclePhysics13SetAttributesEPNS0_14VehicleAttribsE...`),
+    // which is what identifies the three-statement run as one function rather than three
+    // statements of the caller.
+    // ===============================================================================================
+    bool SimpleVehiclePhysics::SetAttributes(VehicleAttribs* lpAttribs,
+                                             const Vector3* lpWheelPositions,
+                                             const f32* lpafWheelRadii)
+    {
+        CGS_ASSERT(lpAttribs != 0, "lpAttribs");                 // BrnSimpleVehiclePhysics.cpp:299
+        mSimpleAttribs.SetupAttribs(lpAttribs);                  // bl @0x8262E190
+        return SetAttributes(lpWheelPositions, lpafWheelRadii);  // bl @0x8262E1A0 (the 2-arg)
+    }
+
+    // ===============================================================================================
     // SimpleVehiclePhysics::Prepare  @0x8262F620 (554 insns)
     //
     // OUT OF THE "BLOCKED (fidelity:blocked)" LIST, 2026-08-11 (the create-drain wave). The header
