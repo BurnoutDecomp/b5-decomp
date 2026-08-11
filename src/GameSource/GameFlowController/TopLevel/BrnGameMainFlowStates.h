@@ -115,6 +115,12 @@ protected:
     bool LoadWorldCollision(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                             const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
 
+    // ⭐ X360 0x823EF4D8 -- one frame of the GAME-STATE SECOND PREPARE (scripted stage 3):
+    // drive GameStateModule::Prepare2 @0x8239ED10 and -- while it reports "still preparing" --
+    // forward the module's staged resource requests into the GameData input
+    // (AppendRequestInterface<3072>). This is the console's PROGRESSION.DAT load path.
+    bool LoadGameState2(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer);
+
     // The per-frame world UPDATE leg of the spine (X360 0x823F22D8's `stage > 5` block,
     // inlined there): FreeAll the world frame allocator, drive WorldModule::Update
     // (vtable +76) with the frame's world IO pair and the loading update set, then run

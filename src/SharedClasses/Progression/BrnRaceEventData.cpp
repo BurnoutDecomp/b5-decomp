@@ -27,9 +27,12 @@ const CheckpointData* RaceEventData::GetCheckpointData(s32 liCheckpointIndex) co
 {
     CGS_ASSERT(liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount,
                "liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount");
-    // CheckpointData is now a complete 40-byte type (static_assert in the header), so the
-    // console's `40 * index + base` is plain element indexing -- no byte arithmetic needed.
-    return mpaCheckpoints + liCheckpointIndex;
+    // CheckpointData is a complete 40-byte type (static_assert in the header), so the console's
+    // `40 * index + base` is plain element indexing once the SERIALISED 32-bit table slot has
+    // been turned into a host address (see the slot banner in BrnRaceEventData.h).
+    const CheckpointData* lpaCheckpoints =
+        reinterpret_cast<const CheckpointData*>(static_cast<uintptr_t>(muaCheckpointsOffset));
+    return lpaCheckpoints + liCheckpointIndex;
 }
 
 // X360 0x823543D0. Returns the target score for rank luRank. The X360 build asserts the rank is

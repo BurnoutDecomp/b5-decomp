@@ -4,6 +4,8 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // CgsID
 
+#include <cstdint>            // uintptr_t (the serialised 32-bit array-base slots below)
+
 // =============================================================================
 // BrnProgressionData.h  (OWNING HEADER for BrnProgression::ProgressionData)
 //
@@ -119,40 +121,81 @@ struct ProgressionData
     int FixDown(int liDelta);
 
 private:
-    // Full DWARF-faithful layout (BrnProgressionData.h:249-277): a flat list of {pointer, count}
-    // pairs. The padding the minimal slice used has been replaced in place by the real named
-    // members at their console offsets (additive growth -- offsets/sizeof preserved). NOTE: the
-    // pointer members are 32-bit on the console and 64-bit on the host, so the byte offsets in the
-    // comments are the X360 offsets and are NOT asserted across the pointer members on the gate.
-    u32                    muVersionNumber;         // 0x00  (DWARF :249)
-    u32                    muSize;                  // 0x04  (DWARF :250)
-    CgsID*                 mpaPlayerCarIds;         // 0x08  (DWARF :252)
-    u32                    muPlayerCarIdCount;      // 0x0C  (DWARF :253)
+    // ========================================================================================
+    // SERIALISED 32-BIT ARRAY-BASE SLOTS (corrected 2026-08-11).
+    //
+    // ProgressionData is the raw payload of PROGRESSION.DAT's single 0x1000E resource. Its nine
+    // array bases are FILE-RELATIVE OFFSETS stored in FOUR-byte slots, which FixUp rebases by
+    // adding the resource's 32-bit load base (CgsResource::GetLoadBase) -- so the record is
+    // 0x50 bytes on the x64 host exactly as it is on the console. This is the same rule already
+    // proven for VehicleListResource::muEntriesOffset / PlayerCarColours / the AttribSys vault.
+    //
+    // THE PREVIOUS DECLARATION WIDENED THEM TO HOST POINTERS AND WAS A LIVE CORRUPTION: it made
+    // the record 0x98 bytes and moved every count word (muProgressionRankCount 0x14 -> 0x1C,
+    // miRivalCount 0x2C -> 0x44, ...), so every accessor would have read a different field than
+    // the one the shipped data holds.
+    //
+    // TWO INDEPENDENT PROOFS OF THE CONSOLE WIDTHS:
+    //   * ProgressionData::FixDown @0x8267F220 reads the whole root as u32 WORDS -- `result[2]`,
+    //     `result[4]`, `result[6]` ... `result[18]` are the nine bases and the odd words between
+    //     them are the counts (20 words == 0x50).
+    //   * tools/assets/bundles/progression_transcode.py ports the retail X360 bundle keeping every
+    //     one of these widths, and its --verify contest reproduces EA's own little-endian port
+    //     byte-for-byte over ~19.4 KB.
+    //
+    // Access is BY NAME through the private helpers below -- no raw offset arithmetic.
+    // ========================================================================================
+    u32 muVersionNumber;         // 0x00  (DWARF :249)  word 0
+    u32 muSize;                  // 0x04  (DWARF :250)  word 1
+    u32 muaPlayerCarIds;         // 0x08  (DWARF :252)  word 2   CgsID[]
+    u32 muPlayerCarIdCount;      // 0x0C  (DWARF :253)  word 3
 
-    ProgressionRankData*   mpaProgressionRanks;     // 0x10  (DWARF :255)
-    u32                    muProgressionRankCount;  // 0x14  (DWARF :256)
+    u32 muaProgressionRanks;     // 0x10  (DWARF :255)  word 4   ProgressionRankData[]
+    u32 muProgressionRankCount;  // 0x14  (DWARF :256)  word 5
 
-    EventJunction*         mpaEventJunctions;       // 0x18  (DWARF :258)
-    u32                    muEventJunctionCount;    // 0x1C  (DWARF :259)
+    u32 muaEventJunctions;       // 0x18  (DWARF :258)  word 6   EventJunction[]
+    u32 muEventJunctionCount;    // 0x1C  (DWARF :259)  word 7
 
-    RaceEventData*         mpaEvents;               // 0x20  (DWARF :261)
-    u32                    muEventCount;            // 0x24  (DWARF :262)
+    u32 muaEvents;               // 0x20  (DWARF :261)  word 8   RaceEventData[]
+    u32 muEventCount;            // 0x24  (DWARF :262)  word 9
 
-    Rival*                 mpaRivals;               // 0x28  (DWARF :264)
-    s32                    miRivalCount;            // 0x2C  (DWARF :265)
+    u32 muaRivals;               // 0x28  (DWARF :264)  word 10  Rival[]
+    s32 miRivalCount;            // 0x2C  (DWARF :265)  word 11
 
-    OpponentBalanceData*   mpaAIBalances;           // 0x30  (DWARF :267)
-    u32                    muAIBalanceCount;        // 0x34  (DWARF :268)
+    u32 muaAIBalances;           // 0x30  (DWARF :267)  word 12  OpponentBalanceData[]
+    u32 muAIBalanceCount;        // 0x34  (DWARF :268)  word 13
 
-    EventRacerPersonality* mpaPersonalities;        // 0x38  (DWARF :270)
-    u32                    muPersonalityCount;      // 0x3C  (DWARF :271)
+    u32 muaPersonalities;        // 0x38  (DWARF :270)  word 14  EventRacerPersonality[]
+    u32 muPersonalityCount;      // 0x3C  (DWARF :271)  word 15
 
-    TrophyUnlockData*      mpaTrophyUnlocks;        // 0x40  (DWARF :273)
-    u32                    muTrophyUnlockCount;     // 0x44  (DWARF :274)
+    u32 muaTrophyUnlocks;        // 0x40  (DWARF :273)  word 16  TrophyUnlockData[]
+    u32 muTrophyUnlockCount;     // 0x44  (DWARF :274)  word 17
 
-    CarOpponentSet*        mpaCarOpponentSet;       // 0x48  (DWARF :276)
-    u32                    muCarOpponentsCount;     // 0x4C  (DWARF :277)
+    u32 muaCarOpponentSet;       // 0x48  (DWARF :276)  word 18  CarOpponentSet[]
+    u32 muCarOpponentsCount;     // 0x4C  (DWARF :277)  word 19
+
+    // Serialised slot -> host address. Post-FixUp each slot holds the absolute address of its
+    // table; the GameData heap is carved below 4 GB, which is the same guarantee
+    // VehicleListResource::GetEntry and the ICE take dictionary already rely on.
+    template <typename T>
+    static T* TableFromSlot(u32 luSlot)
+    {
+        return reinterpret_cast<T*>(static_cast<uintptr_t>(luSlot));
+    }
+
+    ProgressionRankData*   GetProgressionRanks() const { return TableFromSlot<ProgressionRankData>(muaProgressionRanks); }
+    EventJunction*         GetEventJunctions() const   { return TableFromSlot<EventJunction>(muaEventJunctions); }
+    RaceEventData*         GetEvents() const           { return TableFromSlot<RaceEventData>(muaEvents); }
+    Rival*                 GetRivals() const           { return TableFromSlot<Rival>(muaRivals); }
+    OpponentBalanceData*   GetAIBalances() const       { return TableFromSlot<OpponentBalanceData>(muaAIBalances); }
+    TrophyUnlockData*      GetTrophyUnlocks() const    { return TableFromSlot<TrophyUnlockData>(muaTrophyUnlocks); }
+    CarOpponentSet*        GetCarOpponentSets() const  { return TableFromSlot<CarOpponentSet>(muaCarOpponentSet); }
 };
+
+// The 0x50 (80-byte) root ProgressionData::FixDown @0x8267F220 reads as 20 u32 words, and the
+// root progression_transcode.py ports (SIZEOF['ROOT'] == 0x50). A host-pointer widening of any
+// base slot breaks this.
+static_assert(sizeof(ProgressionData) == 0x50, "BrnProgression::ProgressionData is an 0x50 serialised record");
 }
 
 #endif // BRN_PROGRESSION_DATA_H

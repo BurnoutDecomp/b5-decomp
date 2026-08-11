@@ -467,8 +467,9 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
 
         LogPrepareStageOnce(26, "car-select list publish REAL; DriveThruManager::Prepare [deferred] -- prepare DONE");
         // X360 tail: `*(this + 552) = 1; *(this + 560) = 0;` -- the machine re-arms at MANAGER
-        // for a later re-prepare and clears the second-pass stage word (which this slice does
-        // not model yet). Reproduced for the stage word it does have.
+        // for a later re-prepare and clears the +560 flag. (CORRECTION 2026-08-11: +560 is NOT
+        // Prepare2's stage word, as an earlier note here claimed -- Prepare2 @0x8239ED10 switches
+        // on this+556 (`lwz r11, 0x22C(r31)`). +560 is a separate flag this slice does not model.)
         mePrepareStage = E_PREPARESTAGE_MANAGER;
         lbDone = true;
         break;
@@ -480,6 +481,113 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
 
     lpOutputBuffer->UnlockForWrite();
     mbIsUpdating = false;
+    return lbDone;
+}
+
+// ----------------------------------------------------------------------------
+// ⭐ X360 0x8239ED10 -- GameStateModule::Prepare2, the SECOND-pass prepare.
+//
+// THE SHAPE (console, instruction for instruction off 0x8239ED10):
+//     LockForWrite(lpOutputBuffer);
+//     switch (mePrepare2Stage /* this+0x22C */) {
+//       case 0: case 1:
+//           mePrepare2Stage = 1;
+//           if (!mProgressionManager.Prepare2(lpOutputBuffer,          // r4
+//                                             &mModeManager,           // r5 == this + 0x1020
+//                                             &mReceiverQueue,         // r6 == this + 0x38BC0
+//                                             mTriggerQueryManager.GetTriggerData(),  // r7
+//                                             achievementManager))     // r8 == this + 181680
+//               break;
+//           // fall through
+//       case 2:
+//           mePrepare2Stage = 2;
+//           if (!mStreetManager.Prepare2(lpOutputBuffer, &mReceiverQueue, &mTriggerQueryManager))
+//               break;
+//           // fall through
+//       case 3: lbDone = true; break;
+//     }
+//     UnlockForWrite(lpOutputBuffer);
+//
+// ⭐ THE PROGRESSION LEG IS REAL. This is what the whole junkyard -> car-select handover was
+// missing: ProgressionManager::LoadProgressionData @0x82399ED0 is the ONLY writer of
+// mpProgressionData in the entire image, and nothing on PC had ever driven it, so
+// GetProgressionData() answered NULL and OnPlayerCarChange fired the console's own
+// "lpProgressionData != NULL" assert at BrnGameStateModule.cpp:4636.
+//
+// ⚠️ TWO HONEST DEVIATIONS, both named at the call site below:
+//   * the ACHIEVEMENT MANAGER (X360 this+181680, AchievementManagerX360). This module does not
+//     model it -- GetAchievementManager() is a declare-only accessor with no member behind it --
+//     so 0 is passed and ProgressionManager::Prepare2's own console assert
+//     ("lpAchievementManager", BrnProgressionManager.cpp:265) reports it exactly once. That is a
+//     FAITHFUL console assert firing on a real PC data gap, the same shape as the assert this
+//     wave removes; it is NOT silenced.
+//   * the STREET MANAGER leg (case 2). BrnGameStateStreetManager.cpp is not mounted in
+//     tools/build/build_game_exe.bat and StreetManager is not an embedded member of this module's
+//     slice, so the stage logs once and advances rather than being faked.
+// ----------------------------------------------------------------------------
+bool GameStateModule::Prepare2(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
+{
+    if (lpOutputBuffer == 0)
+    {
+        CGS_ASSERT(false, "lpOutputBuffer");
+        return false;
+    }
+
+    lpOutputBuffer->LockForWrite();
+
+    bool lbDone = false;
+
+    switch (mePrepare2Stage)
+    {
+    case E_PREPARE2STAGE_START:
+    case E_PREPARE2STAGE_PROGRESSION:
+    {
+        mePrepare2Stage = E_PREPARE2STAGE_PROGRESSION;
+
+        // X360 `BrnTrigger::TriggerData_::GetMemor(this + 43888)` -- the trigger RESOURCE MEMORY
+        // pointer, which is exactly what GetTriggerData() hands back. The manager stores it as an
+        // opaque back-pointer (its own member is typed void*), hence the const strip.
+        void* lpTriggerData =
+            const_cast<void*>(static_cast<const void*>(mTriggerQueryManager.GetTriggerData()));
+
+        // [FLAG PC bring-up] achievement manager: see the banner. DELETE-WHEN the module models
+        // the AchievementManagerX360 sub-object at this+181680.
+        BrnGameState::AchievementManagerBase* lpAchievementManager = 0;
+
+        if (!mProgressionManager.Prepare2(lpOutputBuffer,
+                                          &mModeManager,
+                                          &mReceiverQueue,
+                                          lpTriggerData,
+                                          lpAchievementManager))
+        {
+            break;
+        }
+    }
+        // fall through
+
+    case E_PREPARE2STAGE_STREET_MANAGER:
+        mePrepare2Stage = E_PREPARE2STAGE_STREET_MANAGER;
+        // X360: `if (!StreetManager::Prepare2(this + 284520, out, &mReceiverQueue,
+        //           &mTriggerQueryManager)) break;` -- LoadStreetData + SetupParRivals.
+        // [deferred] see the banner: the StreetManager TU is unmounted and the sub-object is not
+        // in this slice. Logged, not faked.
+        LogPrepareStageOnce(27, "Prepare2: StreetManager::Prepare2 (LoadStreetData + SetupParRivals) [deferred]");
+        // fall through
+
+    case E_PREPARE2STAGE_DONE:
+        // The console does NOT write 3 into the stage word here (case 3 is only `li r28, 1`), so
+        // a later re-entry re-runs the street leg -- which is idempotent once loaded. Reproduced:
+        // no store.
+        lbDone = true;
+        break;
+
+    default:
+        // The console's jump table sends anything > 3 straight to the unlock tail with lbDone
+        // still false -- there is no assert on this switch.
+        break;
+    }
+
+    lpOutputBuffer->UnlockForWrite();
     return lbDone;
 }
 

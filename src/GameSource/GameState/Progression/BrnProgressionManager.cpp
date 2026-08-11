@@ -23,6 +23,11 @@
 #include "SharedClasses/Progression/BrnProgressionData.h"             // BrnProgression::ProgressionData (rank count)
 #include "SharedClasses/DataLists/VehicleList.h"                      // BrnResource::VehicleList (GetVehicleIndex / GetVehicleData)
 #include "SharedClasses/DataLists/VehicleListEntry.h"                 // BrnResource::VehicleListEntry (livery type / parent id)
+#include "GameSource/GameState/BrnGameStateModuleIO.h"                // OutputBuffer::GetResourceRequestInterface
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"     // RequestInterface<3072>::LoadBundle / AcquireResource
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"  // CgsModule::EventReceiverQueue<3072,16>
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // CgsResource::Events::AcquireResourceResponse
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle
 
 #include <string.h>   // memcpy (X360 XMemCpy)
 
@@ -80,6 +85,153 @@ ProgressionManager::ProgressionManager()
 }
 
 // ------------------------------------------------------------------------------------
+// ProgressionManager::LoadProgressionData  @ 0x82399ED0   ⭐ THE PROGRESSION.DAT LOADER
+//
+// The resumable five-stage machine Prepare2 gates on. Structurally the twin of
+// TriggerQueryManager::Prepare @0x82398218 (LoadBundle -> acquire -> bind), and it is what
+// makes ProgressionManager::GetProgressionData() answer non-null: nothing else in the whole
+// image writes mpProgressionData (X360 `a1 + 133348`).
+//
+//   0 NOT_STARTED       : queue.Clear(); LoadBundle(&queue, 1, pool 5,
+//                         byte_82FFA7F1 ? "BttProgression.dat" : "Progression.dat", useHDCache 0);
+//                         stage = 1; FALL THROUGH into case 1 (the console `goto LABEL_6`)
+//   1 BUNDLE_REQUESTED  : reply not in yet -> return false. Otherwise stage = 2 and fall through.
+//   2 BUNDLE_LOADED     : queue.Clear(); AcquireResource(&queue, 1, pool 5, "ProgressionData");
+//                         stage = 3; FALL THROUGH into case 3 (the console `goto LABEL_11`) --
+//                         which then finds the queue empty on this tick and returns false.
+//   3 ACQUIRE_REQUESTED : reply not in yet -> return false. Otherwise walk EVERY queued event and
+//                         CreateFromHandle(&mpProgressionData, &response.mHandle); stage = 4;
+//                         return true.
+//   4 DONE              : return true.
+//   default             : assert "ProgressionManager::meLoadStage in a weird state" (line 2799)
+//                         then return TRUE (the console falls into LABEL_17, not into a false).
+//
+// ⚠️ The Hex-Rays `HashString("ProgressionData") | 0x500000000LL` is the same known store-fusion
+// artifact TriggerQueryManager::Prepare's note documents: pool id 5 and the zero-extended 32-bit
+// resource id are two INDEPENDENT stores into the acquire record. AcquireResource(...) builds it.
+// ------------------------------------------------------------------------------------
+namespace
+{
+    // The console's bundle/resource names, read off the X360 rodata the switch loads.
+    const char* const KPC_PROGRESSION_FILE_NAME     = "Progression.dat";
+    const char* const KPC_BTT_PROGRESSION_FILE_NAME = "BttProgression.dat";
+    const char* const KPC_PROGRESSION_RESOURCE_NAME = "ProgressionData";
+
+    // Both legs use event id 1 (`li r28, 1`); pool 5 == the GameData pool.
+    const s32 KI_PROGRESSION_EVENT_ID = 1;
+    const s32 KI_PROGRESSION_POOL_ID  = 5;
+
+    // X360 byte_82FFA7F1 -- the "Beat the team" mode flag. It is a PROGRAM-WIDE console global,
+    // not a ProgressionManager member: its other three readers are DLCDebugComponent::RenderHUD
+    // @0x826629C8 (which draws the literal "Beat the team mode") and the two
+    // DeveloperChallengeManager entry points @0x8238D698 / @0x823674B8. None of those TUs is
+    // reconstructed, so the flag has no shared home yet and is modelled here at its retail
+    // default (clear -> the retail Progression.dat, not the BTT variant).
+    // FLAG: promote this to the shared home when the DeveloperChallengeManager TU lands.
+    bool gbBeatTheTeamMode = false;
+}
+
+bool ProgressionManager::LoadProgressionData(BrnGameState::GameStateModuleIO::OutputBuffer* lpOutput,
+                                             CgsModule::EventReceiverQueue<3072, 16>* lpReceiverQueue)
+{
+    switch (meLoadStage)
+    {
+    case E_LOADSTAGE_NOT_STARTED:
+    {
+        const char* const lpcFileName =
+            gbBeatTheTeamMode ? KPC_BTT_PROGRESSION_FILE_NAME : KPC_PROGRESSION_FILE_NAME;
+
+        lpReceiverQueue->Clear();
+        lpOutput->GetResourceRequestInterface()->LoadBundle(
+            lpReceiverQueue, KI_PROGRESSION_EVENT_ID, KI_PROGRESSION_POOL_ID,
+            lpcFileName, /*lbUseHDCache*/ false);
+        meLoadStage = E_LOADSTAGE_BUNDLE_REQUESTED;
+    }
+        // fall through -- the X360 `goto LABEL_6` drops into the poll on the same tick.
+
+    case E_LOADSTAGE_BUNDLE_REQUESTED:
+        if (lpReceiverQueue->GetCount() == 0)
+            return false;
+        meLoadStage = E_LOADSTAGE_BUNDLE_LOADED;
+        // fall through.
+
+    case E_LOADSTAGE_BUNDLE_LOADED:
+        lpReceiverQueue->Clear();
+        lpOutput->GetResourceRequestInterface()->AcquireResource(
+            lpReceiverQueue, KI_PROGRESSION_EVENT_ID, KI_PROGRESSION_POOL_ID,
+            KPC_PROGRESSION_RESOURCE_NAME);
+        meLoadStage = E_LOADSTAGE_ACQUIRE_REQUESTED;
+        // fall through -- the console does NOT return here (`goto LABEL_11`); the queue it just
+        // cleared is empty, so the poll below returns false on this tick.
+
+    case E_LOADSTAGE_ACQUIRE_REQUESTED:
+    {
+        if (lpReceiverQueue->GetCount() <= 0)
+            return false;
+
+        const CgsModule::Event* lpEvent = 0;
+        s32                     liSize  = 0;
+        lpReceiverQueue->GetFirstEvent(&lpEvent, &liSize);
+
+        while (lpEvent != 0)
+        {
+            // reinterpret_cast, not static_cast: CgsResource::Events::Event and CgsModule::Event
+            // are unrelated roots and the receiver queue hands out the module one (the same idiom
+            // TriggerQueryManager::Prepare uses for its own acquire reply).
+            const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+
+            // X360 `CreateFromHandle(a1 + 133348, v13 + 24)` -- payload +0x18 is the response's
+            // {mpResourceMemory, mpSourceEntry} pair, i.e. a ResourceHandle. Read BY MEMBER: the
+            // host handle is 16 bytes where the console's is 8, so every literal offset shifts.
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+            lHandle.mpSourceEntry    = lpResponse->mpSourceEntry;
+            mpProgressionData = lHandle;   // ResourcePtr::operator=(handle) -> CreateFromHandle
+
+            const CgsModule::Event* lpNext = 0;
+            lpReceiverQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+
+        meLoadStage = E_LOADSTAGE_DONE;
+
+        // [diagnostic, one-shot] the same shape as TriggerQueryManager's LOADED line. RESIDENT IS
+        // NOT USABLE: the counts are what prove the platform-4 port + FixUp landed (every table
+        // base in the payload is a serialised 32-bit offset only FixUp rebases), and the rank
+        // count in particular is what ProgressionManager::GetProgressionRank clamps against.
+        // Delete with the rest of the bring-up diagnostics.
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[ProgressionManager] LOADED -- progressionData="
+                << (mpProgressionData.HasMemoryResource() ? 1 : 0) << "\n";
+            if (mpProgressionData.HasMemoryResource())
+            {
+                const ProgressionData* lpData = mpProgressionData.operator->();
+                *CgsDev::Log::gpDebugPrint
+                    << "[ProgressionManager] ranks="    << lpData->GetProgressionRankCount()
+                    << " junctions=" << lpData->GetEventJunctionCount()
+                    << " rivals="    << lpData->GetRivalCount() << "\n";
+            }
+        }
+        return true;
+    }
+
+    case E_LOADSTAGE_DONE:
+        return true;
+
+    default:
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("ProgressionManager::meLoadStage in a weird state",
+                                   KAC_PROGMGR_FILE, 2799);
+        CgsDev::Assert::EndAssert();
+        // The console falls into LABEL_17 -- `result = 1` -- so a corrupt stage word reports DONE.
+        return true;
+    }
+}
+
+// ------------------------------------------------------------------------------------
 // ProgressionManager::Prepare2  @ 0x8239DC98
 //
 // Two-phase load. Asserts the output + receiver-queue pointers, loads the progression data;
@@ -87,24 +239,30 @@ ProgressionManager::ProgressionManager()
 // the landmark AI-section indices, processes the loaded preset races, constructs + registers
 // the debug component, and sets up the roaming sections. Returns true iff the load succeeded.
 //
-// FLAG: LoadProgressionData / ComputeLandmarkAISectionIndices / ProcessLoadedPresetRaces /
+// ⭐ THE LOAD IS REAL NOW (2026-08-11): LoadProgressionData above is reconstructed, so this
+// function's `if (LoadProgressionData(...))` gate is the console's gate, not a pass-through.
+// FLAG (still deferred): ComputeLandmarkAISectionIndices / ProcessLoadedPresetRaces /
 // ProgressionDebugComponent::Construct / DebugComponent::Register / SetupRoamingSections are
-// sibling functions in other (not-yet-reconstructed) ProgressionManager TUs. The ASM proves
-// the call sequence + the three stores; the helper bodies are out of scope for this slice, so
-// the orchestration is documented rather than dispatched (calling undeclared siblings would not
+// sibling functions in other (not-yet-reconstructed) ProgressionManager TUs. The ASM proves the
+// call sequence + the three stores; the helper bodies are out of scope for this slice, so the
+// orchestration is documented rather than dispatched (calling undeclared siblings would not
 // compile). The three back-pointer stores -- the observable side effects -- are reproduced.
 // ------------------------------------------------------------------------------------
-bool ProgressionManager::Prepare2(void* lpOutput, void* lpGameStateModule,
-                                  BrnGameState::GameStateModuleIO::GameActionQueue* lpReceiverQueue,
+bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer* lpOutput,
+                                  void* lpGameStateModule,
+                                  CgsModule::EventReceiverQueue<3072, 16>* lpReceiverQueue,
                                   void* lpTriggerData,
                                   BrnGameState::AchievementManagerBase* lpAchievementManager)
 {
-    CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-    CGS_ASSERT(lpReceiverQueue != nullptr, "lpReceiverQueue");
+    CGS_ASSERT(lpOutput != nullptr, "lpOutput");            // X360 BrnProgressionManager.cpp:249
+    CGS_ASSERT(lpReceiverQueue != nullptr, "lpReceiverQueue");  // X360 :250
 
     // X360: if ( LoadProgressionData(this, lpOutput, lpReceiverQueue) ) { ... } else return false;
-    // LoadProgressionData lives in another ProgressionManager TU; its result gates the wiring.
-    // Until it is reconstructed this slice records the back-pointers Prepare2 installs on success.
+    if (!LoadProgressionData(lpOutput, lpReceiverQueue))
+    {
+        return false;
+    }
+
     CGS_ASSERT(lpTriggerData != nullptr, "lpTriggerData");
     mpTriggerData     = lpTriggerData;           // X360 +0x20924 (a5)
     mpGameStateModule = lpGameStateModule;       // X360 +0x2093C (a3)
