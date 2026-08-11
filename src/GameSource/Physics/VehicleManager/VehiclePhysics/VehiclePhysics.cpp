@@ -3148,31 +3148,153 @@ namespace Vehicle
         //    which is faithful-but-inert: the window/grounded gate is exact, only the curve is pending.
     }
 
-// [blocked] SetupSuspension  @0x825CF718 FLAGS: blocked: dense VMX128 permute scatter through un-homed rodata (unk_8327F140 permute table, byte_8327F240 loop bound, dword_8208FAFC/dword_8208FAEC wheel-index tables) feeding SuspensionSpring::Prepare per spring; the per-lane data routing + the rest-displacement math are not store-faithfully recoverable without fabricating the permute semantics
-    // @0x825CF718  BrnPhysics::Vehicle::VehiclePhysics::SetupSuspension
-    // ---------------------------------------------------------------------------------------------
-    // FIDELITY: BLOCKED -- structural skeleton only. Called from Update on a car-type/attribs switch to
-    // (re)build the four suspension springs from the streamed wheel geometry. STRUCTURE (from the asm):
-    //   1. A VMX permute pre-pass: load four packed wheel-geometry registers, lane-merge/permute them
-    //      through the rodata table unk_8327F140 (with the dword_8208FAFC / dword_8208FAEC wheel-index
-    //      tables selecting source lanes) into per-wheel rest-displacement + reciprocal-rest registers,
-    //      looping `while (r11 < byte_8327F240)` (a rodata loop bound). The reciprocals use vrefp+Newton
-    //      (vnmsubfp/vmaddfp); the negated-displacement masks use vandc against vslw all-ones.
-    //   2. A per-spring pass (4 springs, this+3600 stride 48; this+3792 base, +64/spring): permute each
-    //      spring's inputs (lvsl/vperm dynamic shuffle) and call SuspensionSpring::Prepare(spring, ...,
-    //      dt) -- the X360 passes the same scratch buffer for stiffness/damping/mass plus the rest
-    //      displacement and dt (the a2 double).
-    // WHY BLOCKED: the per-lane routing through unk_8327F140 / byte_8327F240 / the dword index tables is
-    // un-homed rodata absent from the export; the rest-displacement arithmetic is a dense VMX cascade whose
-    // lane semantics are not recoverable store-faithfully. The Prepare call shape + the 4-spring loop are
-    // certain; the numeric inputs are not. A faithful body would fabricate both the permute tables and the
-    // displacement math -> forbidden. No fabricated math emitted.
-    // ---------------------------------------------------------------------------------------------
+// [clean] SetupSuspension  @0x825CF718
+    // @0x825CF718  BrnPhysics::Vehicle::VehiclePhysics::SetupSuspension   (190 insns)
+    // =============================================================================================
+    // ⭐⭐ BODIED 2026-08-11 (ground-contact wave). ⛔ THE 2026-08-03 "BLOCKED" VERDICT THAT STOOD
+    // HERE IS RETRACTED, AND IT WAS WRONG FOR A REASON WORTH RECORDING: it rested on four
+    // "un-homed rodata" symbols. Three of them are not rodata VALUES at all, and the fourth is now
+    // readable. Re-derived from the image this wave, nothing assumed:
+    //   * `flt_8208F83C`  = **9.8100004196167**  -- GRAVITY. (A third independent witness for
+    //     KF_GRAVITY, alongside BrnVehicleConstants.h:10-46 and the ReadUpdatedBodies wave.)
+    //   * `flt_82001C98`  = **1.0**
+    //   * `dword_8208FAFC[0..3]` = **{2, 3, 0, 1}** -- the SAME-SIDE, OTHER-AXLE wheel (FL<->RL,
+    //     FR<->RR).
+    //   * `dword_8208FAEC[0..3]` = **{1, 0, 3, 2}** -- the SAME-AXLE, OTHER-SIDE wheel (FL<->FR,
+    //     RL<->RR).
+    //   * `byte_8327F240` IS NOT A LOOP BOUND VALUE -- it is the END ADDRESS the walker is compared
+    //     against (`cmpw cr6, r11, r6` with r11 stepping +0x40 from `unk_8327F140`), so the loop
+    //     runs (0x8327F240 - 0x8327F140)/0x40 == **4** times: once per wheel. The old banner read
+    //     it as a value.
+    //   * `unk_8327F140` is a 4-entry (stride 0x40) table of `vperm` CONTROL vectors consumed as
+    //     `vperm v0, <current mvSpringMassScalers>, <splat of the new scalar>, control` and stored
+    //     straight back to +0xED0. Its SEMANTICS are pinned by that dataflow and by the destination's
+    //     own DWARF name: **it inserts lane i**. Expressed here as the named lane write it is; no
+    //     permute table is fabricated and none is needed.
+    //
+    // ⭐ THE DESTINATION NAMES THE ALGORITHM. `this+0xED0` is `mvSpringMassScalers` (DWARF
+    // VehiclePhysics.h:849, already declared) -- "the per-spring mass scalers" -- and what loop 1
+    // builds is exactly a four-lane weight distribution that sums to 1 for a symmetric car.
+    //
+    // LOOP 1 (0x825CF824..0x825CF94C) -- the per-wheel weight split, read store-for-store.
+    // The four staged vectors are built in the prologue from `maWheels[i] + 0x90`
+    // (== Wheel::mStreamedPositionPlusTwistAmount; the four `lvx128` bases 0x1C0/0x2A0/0x380/0x460
+    // are 0x130 + i*0xE0 + 0x90, i.e. the committed maWheels seat and stride):
+    //     staged[i].lane0 = pos[i].x   (`vrlimi128 vD, vB, 8, 0`  -> lane 0, no rotate)
+    //     staged[i].lane1 = pos[i].z   (`vrlimi128 vD, vB, 4, 1`  -> lane 1 of vB rotated left 1)
+    // then, per wheel:
+    //     dz     = staged[ FAFC[i] ].lane1 - staged[i].lane1      (0x825CF868 vsubfp + vspltw ,1)
+    //     dx     = staged[ FAEC[i] ].lane0 - staged[i].lane0      (0x825CF870 vsubfp + vspltw ,0)
+    //     ratioZ = | staged[i].lane1 * (1/dz) |                   (vrefp + TWO Newton refinements,
+    //     ratioX = | staged[i].lane0 * (1/dx) |                    then `vandc` against a 0x80000000
+    //                                                              splat == fabsf)
+    //     mvSpringMassScalers[i] = (1 - ratioX) * (1 - ratioZ)    (0x825CF928 fmuls, then the vperm
+    //                                                              lane insert at 0x825CF944/48)
+    // ⭐ SANITY, CHECKED BY HAND BEFORE WRITING: for a symmetric car (x = -+a, z = -+b) every ratio
+    // is |-+a / (2*-+a)| = 0.5, so every lane is 0.25 and the four scalers sum to 1. An asymmetric
+    // wheelbase biases the split toward the heavier end. That is what a mass scaler must do.
+    //
+    // LOOP 2 (0x825CF958..0x825CFA04) -- four springs, `maSprings[i]` at +0xE10 stride 0x30 (the
+    // console spells the seat `(0x4B + i) * 0x30` == 3600 + i*48; both are the committed member).
+    // The three arguments are recovered from the INTERLEAVE of the stores to var_F0 and the three
+    // `lvlx`+`vspltw` reads of it -- read in address order, not source order:
+    //     0x825CF9B4 var_F0 = scaler[i] * mpAttribs->mBaseAttribs.mv...Mass...x
+    //     0x825CF9C8/CC  v3 (arg3, MASS)      <- that value
+    //     0x825CF9D0 var_F0 = MASS * 9.81 / mSuspensionAttribs.mv...RestDisplacement...x
+    //     0x825CF9DC/E4  v1 (arg1, STIFFNESS) <- that value
+    //     0x825CF9E8 var_F0 = mSuspensionAttribs.mv...Dampening...y
+    //     0x825CF9EC/F0  v2 (arg2, DAMPING)   <- that value
+    //     0x825CF9F4 bl SuspensionSpring::Prepare(stiffness, damping, mass)   [that parameter order
+    //                is asm-literal and is already recorded in SuspensionSpring.cpp:79-83]
+    // ⭐ `stiffness = mass * g / restDisplacement` is the textbook "the spring settles by exactly
+    // its rest displacement under its own share of the weight" -- which is why the constant at
+    // flt_8208F83C is gravity and not a tuning number.
+    //
+    // ⚠️ THE `a2 double` IN THE HEX-RAYS PROTOTYPE IS NOT A PARAMETER OF THIS FUNCTION. Nothing in
+    // the 190 instructions reads f1/f2; the old banner's "plus the rest displacement and dt (the a2
+    // double)" described an argument the body never touches. The committed declaration is already
+    // `void SetupSuspension()` and stays that way.
+    // ⚠️ Faithful, NOT bit-exact: the console's `vrefp` + two Newton-Raphson refinements and its
+    // `fdivs` are both spelled as C division here (more accurate, not identical in the last ulp) --
+    // the same standing allowance the traction-line drain records for its `1/sqrt`.
+    //
+    // ⛔ WHAT THIS DOES **NOT** DO, measured, so nobody reads more into it than is there: it makes
+    // `maSprings[i].mvStiffness_Damping_Mass_Position` real, but `ApplySuspensionForces`
+    // (:3096 below) multiplies the MASS lane by the ACCELERATION lane, and the acceleration lane's
+    // only writer is `UpdateSuspensionSprings` @0x825F7AF0, still an empty [blocked] body. So the
+    // push magnitude stays 0 and this changes no behaviour today. It is the SEED, not the solve.
+    // =============================================================================================
     void VehiclePhysics::SetupSuspension()
     {
-        // FIDELITY: BLOCKED -- see the block comment above. The 4-spring SuspensionSpring::Prepare loop
-        // depends on the un-homed permute table unk_8327F140 + the dword_8208FAFC/AEC wheel-index tables;
-        // not store-faithfully recoverable. No fabricated math.
+        // flt_8208F83C, read out of the X360 image this wave.
+        static const f32 KF_SETUP_SUSPENSION_GRAVITY = 9.8100004196167f;
+        // flt_82001C98, ditto (the `1 -` in each ratio).
+        static const f32 KF_ONE = 1.0f;
+
+        // dword_8208FAFC / dword_8208FAEC, read out of the X360 image this wave.
+        static const s32 KAI_OTHER_AXLE_SAME_SIDE[eNumDrivenWheels] = { 2, 3, 0, 1 };
+        static const s32 KAI_SAME_AXLE_OTHER_SIDE[eNumDrivenWheels] = { 1, 0, 3, 2 };
+
+        // ---- the prologue's four staged vectors: each wheel's streamed rest position, x in lane
+        //      0 and z in lane 1 (the two `vrlimi128` passes at 0x825CF76C..0x825CF80C).
+        f32 lafWheelX[eNumDrivenWheels];
+        f32 lafWheelZ[eNumDrivenWheels];
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            lafWheelX[liWheel] = maWheels[liWheel].mStreamedPositionPlusTwistAmount.x;
+            lafWheelZ[liWheel] = maWheels[liWheel].mStreamedPositionPlusTwistAmount.z;
+        }
+
+        // ---- LOOP 1: the per-wheel mass split into mvSpringMassScalers (this+0xED0).
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            const s32 liAxlePartner = KAI_OTHER_AXLE_SAME_SIDE[liWheel];
+            const s32 liSidePartner = KAI_SAME_AXLE_OTHER_SIDE[liWheel];
+
+            const f32 lfDeltaZ = lafWheelZ[liAxlePartner] - lafWheelZ[liWheel];
+            const f32 lfDeltaX = lafWheelX[liSidePartner] - lafWheelX[liWheel];
+
+            // `vandc <value>, <0x80000000 splat>` is fabsf; the reciprocal is vrefp + 2 NR.
+            const f32 lfRatioZ = std::fabs(lafWheelZ[liWheel] / lfDeltaZ);
+            const f32 lfRatioX = std::fabs(lafWheelX[liWheel] / lfDeltaX);
+
+            const f32 lfScaler = (KF_ONE - lfRatioX) * (KF_ONE - lfRatioZ);
+
+            // the `vperm` lane insert at 0x825CF944 + the `stvx128 v0, r0, r28` at 0x825CF948.
+            switch (liWheel)
+            {
+            case 0: mvSpringMassScalers.x = lfScaler; break;
+            case 1: mvSpringMassScalers.y = lfScaler; break;
+            case 2: mvSpringMassScalers.z = lfScaler; break;
+            default: mvSpringMassScalers.w = lfScaler; break;
+            }
+        }
+
+        // ---- LOOP 2: seed the four springs.
+        const f32 lfBodyMass =
+            mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;   // attribs+0x70 .x
+        const f32 lfRestDisplacement =
+            mpAttribs->mSuspensionAttribs
+                     .mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.x;    // attribs+0x230 .x
+        const f32 lfDampening =
+            mpAttribs->mSuspensionAttribs
+                     .mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.y;    // attribs+0x230 .y
+
+        for (s32 liSpring = 0; liSpring < eNumDrivenWheels; ++liSpring)
+        {
+            // `vperm v0, <mvSpringMassScalers>, <same>, vspltw(lvsl(0, i*4), 0)` == lane i, splatted.
+            const f32 lfScaler = (liSpring == 0) ? mvSpringMassScalers.x
+                               : (liSpring == 1) ? mvSpringMassScalers.y
+                               : (liSpring == 2) ? mvSpringMassScalers.z
+                                                 : mvSpringMassScalers.w;
+
+            const f32 lfSpringMass = lfScaler * lfBodyMass;
+            const f32 lfStiffness  = (lfSpringMass * KF_SETUP_SUSPENSION_GRAVITY) / lfRestDisplacement;
+
+            maSprings[liSpring].Prepare(VecFloat{ lfStiffness, lfStiffness, lfStiffness, lfStiffness },
+                                        VecFloat{ lfDampening, lfDampening, lfDampening, lfDampening },
+                                        VecFloat{ lfSpringMass, lfSpringMass, lfSpringMass, lfSpringMass });
+        }
     }
 
 // [blocked] UpdateSuspensionSprings  @0x825F7AF0 FLAGS: blocked: Hex-Rays 'local variable allocation has failed, the output may be wrong' -- a degenerate VMX128 giant with ~800 lines of CgsDev::Assert finite-value plumbing wrapping ~25 un-pinned SuspensionSpring setters (SetStiffness/SetMass/SetDamping/SetVelocity/SetPosition/SetDampingForce/SetSpringForce/SetAcceleration/SetExternalForce); the per-spring lane math is not recoverable store-faithfully
@@ -3192,12 +3314,77 @@ namespace Vehicle
     // setter inputs are dense VMX through un-pinned wheel lanes + un-homed rodata, and several setters
     // (SetDampingForce/SetSpringForce/SetAcceleration) are not even in the committed SuspensionSpring slice.
     // A faithful body would fabricate the per-spring lane math -> forbidden. No fabricated math emitted.
+    //
+    // =============================================================================================
+    // ⭐⭐⭐ 2026-08-11 (ground-contact wave) -- THIS IS THE CAMPAIGN BLOCKER, AND HALF OF IT IS
+    // NOW DECODED. STILL NOT WRITTEN -- ON PURPOSE -- BUT THE NEXT WAVE STARTS FROM HERE, NOT FROM
+    // THE ASM. Two of the "several setters ... not even in the committed SuspensionSpring slice" ARE
+    // in it now (SuspensionSpring.cpp has all eight plus Prepare and Reset, every one @-cited), so
+    // that clause of the verdict is already stale.
+    //
+    // ⭐ WHY IT MATTERS EXACTLY, MEASURED THIS WAVE, NOT REASONED: the traction chain is CLOSED.
+    // An instrumented boot logged, on frame 2 of the player car's life:
+    //     PROBE gc/read #4239 car 0 hits 1111 onGround 1111
+    //           w0hit (2986.091797,-3.525000,-2012.752808) nrm (0.000000,1.000000,0.000000)
+    // -- all four wheels on the junkyard floor, through the real console chain, on real triangles.
+    // The car still falls because ApplySuspensionForces (:3096) needs
+    //   maSprings[w].mvStiffness_Damping_Mass_Position.z (MASS -- now seeded by SetupSuspension)
+    // x maSprings[w].mvVelocity_Acceleration_DampingForce_SpringForce.y (ACCELERATION)
+    // and THIS FUNCTION is the acceleration lane's only writer in the image. Both lanes measured
+    // identically 0 on all four wheels across 90 samples. **This body is the last dry hop.**
+    //
+    // ⭐⭐ THREE FORMULAS RECOVERED EXACTLY, AND THEY ARE IMMUNE TO THE VMX+32 HAZARD.
+    // [[ida-vmx-plus32-and-rdata-unlock]] warns that IDA prints VMX128 SOURCE registers 32 too high,
+    // which is why the hoisted v111..v127 prologue registers below are NOT trusted here. These three
+    // are safe because every operand is a lane of the SPRING itself, addressed through a GPR
+    // (r26 == &maSprings[i], r27 == r26+0x20 == &mvExternalForce) and selected with the NON-128
+    // `vspltw` form, which the +32 skew does not touch:
+    //
+    //   0x825F8F98..0x825F8FC4   SetDampingForce( -stack[0] * reg0.y * reg0.z )
+    //                            == -velocity * damping * mass      (`vxor` with the 0x80000000
+    //                            splat from `vslw v127,v127` is the negate)
+    //   0x825F8FC8..0x825F8FE4   SetSpringForce ( -reg0.x * reg0.w )
+    //                            == -stiffness * position           -- HOOKE'S LAW, exactly.
+    //   0x825F8FE8..0x825F9044   SetAcceleration( (stack[2] + stack[3] + externalForce.x) * (1/reg0.z) )
+    //                            == (dampingForce + springForce + externalForce) / mass -- NEWTON.
+    //                            (`vrefp` + two Newton refinements is the reciprocal; the two stack
+    //                            lanes are the two values the previous two setters just wrote.)
+    //   0x825F9048..0x825F905C   SetVelocity( stack[0] + stack[1]*dt )   -- semi-implicit Euler
+    //   0x825F9060..0x825F9078   SetPosition( reg0.w + stack[0]*dt )
+    //   0x825F907C..0x825F9084   SetExternalForce( <hoisted reg> )
+    // where `stack` is the 16-byte scratch at r28 that the body re-loads from the spring's
+    // mvVelocity_Acceleration_DampingForce_SpringForce after each setter.
+    // ⇒ **mag in ApplySuspensionForces reduces to `springForce + dampingForce + externalForce`.**
+    //
+    // ⭐ THE LOOP SHAPE, ALSO PINNED:
+    //   0x825F81AC  r30 = &maWheels[i]      (`mulli r11, r10, 0xE0` off the committed 0x130 seat)
+    //   0x825F81B4  if (maWheels[i].mu8State (+0xD7 -> abs 0x207) == 2) skip the wheel entirely
+    //   0x825F81DC  r26 = &maSprings[i]     (`(idx + 0x4B) * 0x30` == +0xE10 + i*0x30 -- the SAME
+    //               committed seat SetupSuspension above walks; the two agree, which is itself a
+    //               cross-check on the maSprings offset)
+    //   0x825F81F0  **`lbz r11, 0x158(r30)` == maWheels[i].mRoadContact.mbIsOnGround** (the identical
+    //               seat RaceCarPhysics::AddTractionPoint writes with `stb 1, 0x158(r8)`), and the
+    //               body FORKS on it: the grounded arm seeds mass/damping at 0x825F8208/0x825F8214,
+    //               the airborne arm at 0x825F89FC/0x825F8A08.
+    //   0x825F9BE8  `blt cr6, loc_825F81AC` -- four iterations.
+    //
+    // ⛔ WHAT IS STILL GENUINELY OPEN, so the next wave does not think it is done: the ~20 hoisted
+    // prologue registers (v111..v127 as IDA prints them) that feed stiffness, mass, damping,
+    // position and the external force, and the 24 CgsDev::Assert blocks interleaved between the
+    // setters (24 x BeginAssert/AppendFormat/FireAssert/EndAssert -- ~840 of the 2,231 instructions
+    // are assert plumbing, so the real body is ~1,390). Resolve the +32 skew on each `*128` source
+    // BEFORE trusting any of them. Cost measured this wave with cost4.py: **2,231 instructions, and
+    // everything it calls is already MOUNTED and real** (all eight SuspensionSpring setters +
+    // Prepare); the only not-in-tree weight in its whole closure is 85 instructions across three
+    // unnamed `sub_`.
+    // =============================================================================================
     // ---------------------------------------------------------------------------------------------
     void VehiclePhysics::UpdateSuspensionSprings()
     {
         // FIDELITY: BLOCKED -- see the block comment above. Hex-Rays "local variable allocation has failed";
         // the per-spring SuspensionSpring setter cascade is not store-faithfully recoverable. No fabricated
-        // math.
+        // math. ⭐ The three CORE formulas (Hooke / damping / Newton) and the loop shape ARE recovered
+        // and banked in the banner; what is missing is the ~20 hoisted VMX inputs, not the algebra.
     }
 
 // [blocked] UpdateSuspensionPostSimulation  @0x825F6BB0 FLAGS: blocked: Hex-Rays 'local variable allocation has failed, the output may be wrong' -- a ~6600-line degenerate VMX128 giant (re-derive per-wheel suspension velocities post-solve, find the most-loaded wheel, inject penetration-recovery impulses via CalculateCollisionImpulseWithInanimateOb/AddLocalImpulse, conditionally clear the hard-landing latch, call StabiliseAfterHardLanding); the per-lane routing + un-homed rodata are not recoverable
