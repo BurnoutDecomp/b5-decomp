@@ -1332,16 +1332,25 @@ WorldModule::HandleGameActions(
                 // bounds check here either; its index simply is not -1 by the time an action 7
                 // arrives.
                 //
-                // ⚠️ BANNER CORRECTED 2026-08-01 (physics wave 1) -- IT WAS STALE AND IT MISLED.
-                // This block used to say the index is "ALWAYS -1" because
-                // WorldModule::BridgeRaceCarModuleToWorldModule_PreScene "is not reconstructed".
-                // ⛔ THAT BRIDGE HAS LANDED: it is real, it is MOUNTED
-                // (WorldBridgeRaceCarToWorldModule.cpp, build_game_exe.bat line 137), and the
-                // car-select wave measured the player active-race-car index published as 0.
-                // KEEP THE GUARD ANYWAY: the assert still fires exactly once per boot, on the
-                // ONE-FRAME TRANSIENT at the slot-0 -> slot-1 car swap, before the bridge has
-                // republished the new slot. (Measured again this wave: exactly one
-                // "[ASSERT 1] Unable to set the player car under AI control ..." per boot.)
+                // ⚠️ BANNER CORRECTED TWICE. Read the history before touching this.
+                // (2026-08-01) It first said the index is "ALWAYS -1" because
+                //   WorldModule::BridgeRaceCarModuleToWorldModule_PreScene "is not reconstructed".
+                //   That bridge then landed and was MOUNTED (WorldBridgeRaceCarToWorldModule.cpp,
+                //   build_game_exe.bat), so the banner was rewritten to blame a harmless
+                //   "ONE-FRAME TRANSIENT at the slot-0 -> slot-1 car swap".
+                // ⛔ (2026-08-11) THAT SECOND STORY WAS ALSO WRONG, and it cost a wave. The
+                //   mounted bridge was writing the index through the X360 BYTE OFFSET +6167272
+                //   applied to the x64 PC object; the real member is at PC offset 6234776
+                //   (compile-time offsetof probe, this build), so meLocalPlayerActiveRaceCarIndex
+                //   was NEVER written and stayed at Prepare's -1 for the whole session -- exactly
+                //   the original "always -1", just re-hidden behind a mount. The bridge's own
+                //   one-shot "player active race-car index published = 0" diag printed the SOURCE
+                //   interface value, not this member, which is why it read as proof. The bridge is
+                //   now a WorldModule METHOD and writes both outputs BY NAME; see its banner.
+                // KEEP THE GUARD: it is PC hardening for the console's unbounded index, not a
+                //   placeholder. If this assert fires again it is a REAL producer failure -- check
+                //   that the pre-scene bridge ran and that IsPlayerCarActive() was true; do NOT
+                //   write another "harmless transient" banner.
                 //
                 // ⛔ AND THE INDEX EXPRESSION BELOW IS NOT A TRANSCRIPTION BUG -- do not "fix" it.
                 // X360 HandleGameActions @0x827C44D8, jump-table case 0 (== action 7):
@@ -1854,8 +1863,10 @@ WorldModule::EntityModulePreSceneUpdate(
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
 
     CgsModule::LockBuffersForIO( lpWorldInputBuffer_PreScene, lpRaceCarOutputBuffer_PreScene );
-    ::WorldModule::BridgeRaceCarModuleToWorldModule_PreScene(
-        this, lpWorldInputBuffer_PreScene, lpRaceCarOutputBuffer_PreScene );
+    // A WorldModule METHOD (DWARF BrnWorldModule.h:473), not a `void* lpWorldModule`
+    // namespace bridge -- see its banner in Bridges/WorldBridgeRaceCarToWorldModule.cpp.
+    BridgeRaceCarModuleToWorldModule_PreScene(
+        lpWorldInputBuffer_PreScene, lpRaceCarOutputBuffer_PreScene );
     CgsModule::UnlockBuffersForIO( lpWorldInputBuffer_PreScene, lpRaceCarOutputBuffer_PreScene );
 
     // v1 = the last director camera's position row (X360 lvx128 this+6167792).
