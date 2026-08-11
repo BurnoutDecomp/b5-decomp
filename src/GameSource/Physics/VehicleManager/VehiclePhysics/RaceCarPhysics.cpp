@@ -1131,3 +1131,93 @@ namespace Vehicle
     }
 }
 }
+
+namespace BrnPhysics
+{
+namespace Vehicle
+{
+    // =============================================================================================
+    // RaceCarPhysics::Prepare @0x82639CB8 -- the create leg's vtable-slot-+0x30 target.
+    //
+    // ⛔⛔ THE X360 EXPORT IS A HOLE: there is no per-function JSON for 0x82639CB8, and the "~40
+    // instructions" every previous brief quoted for it was itself a guess. What settles the body is
+    // the PS3 DecFIGS export, which is symbolled AND decompiled: **PS3 0x73648C, 89 insns**, whose
+    // mangled name carries the eleven parameters with their own names. Read verbatim:
+    //
+    //   0x736520  bl   VehiclePhysics::Prepare(Matrix44Affine, Vector3, Vector3, Vector3, Vector3,
+    //                                          const CgsGeometric::AxisAlignedBox&, VehicleAttribs*,
+    //                                          const Vector3*, const float*)     ; r28 = its result
+    //   0x736524  cmplwi cr7, lu8StrengthStat, 0xA ; ble -> skip
+    //   0x736540  "lu8StrengthStat < KU8_MAX_STRENGTH"   (BrnRaceCarPhysics.cpp:192)
+    //   0x736554  stb  lu8StrengthStat, 0x13FE(this)
+    //   0x736590  bl   VehiclePhysics::SetTransformFromPositionOnRoad(lOnRoadTransform)
+    //   0x7365AC  stb  0, 0x1426(this)
+    //   0x7365B0  stvx v0(zero), this, 0x13E0
+    //   0x7365B8  stfs 0.0, 0x13F8(this)
+    //   0x7365BC  stb  0, 0x134F(this)
+    //   0x7365C4  stb  0, 0x1425(this)
+    //   0x7365C8  stb  0, 0x1424(this)
+    //   0x7365CC  stfs 0.0, 0x13F4(this)
+    //   0x7365A4  extsw r3, r28                          ; return the forwarded result
+    // (the two float stores' constant is dword_100A564; the PS3 pseudocode prints them as
+    //  `*(this + 5112) = 0.0` / `*(this + 5108) = 0.0`, i.e. the value is READ, not assumed.)
+    //
+    // ⭐ AND THE PS3 OFFSETS ARE NOT USED AS OFFSETS. This class's own member table already
+    // establishes a UNIFORM Δ = +16 from PS3 FIGS to X360 ARTIST in this region, attested three
+    // ways (IsPlayerVehicleActuallyInShowtime 0x13FC/0x140C, IsUsingAftertouch 0x13FD/0x140D,
+    // Construct's Z-lane insert 0x1060/0x1070), and the table was written before this wave. Applying
+    // it names every store above BY MEMBER -- and the two the table had ALREADY credited to this
+    // very function land exactly where it said they would:
+    //     PS3 0x13FE -> +0x140E  mu8StrengthStat            ("PS3 Prepare @0x736554 stores it")
+    //     PS3 0x1425 -> +0x1435  mbWroteIntoRWInSlowMo      ("PS3 Prepare @0x7365C4")
+    //     PS3 0x13E0 -> +0x13F0  mPropCollisionImpulseSum
+    //     PS3 0x13F8 -> +0x1408  mfBeachedTime
+    //     PS3 0x13F4 -> +0x1404  mfSlamSteering
+    //     PS3 0x1424 -> +0x1434  mbAISlowMo
+    //     PS3 0x1426 -> +0x1436  mbDeformedBeyondDriveableLimit
+    //     PS3 0x134F -> +0x135F  mbIsWedgedInWorld          (a VehiclePhysics member)
+    // Two independent predictions confirmed by a source neither was derived from. ⚠️ Still: this is
+    // a CROSS-BUILD reconstruction. If a future wave recovers the X360 bytes for 0x82639CB8 and they
+    // disagree, the X360 wins and this note is the audit trail.
+    //
+    // ⚠️ THE ASSERT'S MESSAGE AND ITS CODE DISAGREE, and the CODE is what is reproduced: the branch
+    // is `ble` on `<= 0xA`, so the test is `lu8StrengthStat <= 10` even though the string says "<".
+    // KU8_MAX_STRENGTH has no in-tree home, so the 10 is spelled as the literal the compare uses.
+    // =============================================================================================
+    bool RaceCarPhysics::Prepare(Matrix44Affine lOnRoadTransform, Vector3 lLinearVelocity,
+                                 Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset,
+                                 Vector3 lHalfExtent, const AxisAlignedBox& lrAABB,
+                                 rw::physics::Inertia lInertia, VehicleAttribs* lpAttribs,
+                                 const Vector3* lpaWheelPositions, const f32* lpafWheelRadii,
+                                 u8 lu8StrengthStat)
+    {
+        // ⚠️ lInertia is consumed by the CALLER's other arm, not here: ProcessCreateEvents builds it
+        // once and posts a copy through InAddRigidBody (memcpy 0xC0 -> the AddRigidBody queue) in the
+        // same breath as this call. The PS3 body never reads its own copy -- checked instruction by
+        // instruction across all 89. It is in the signature because the console passes it (six
+        // doublewords, r6..r10 + stack@0x98), not because this function uses it.
+        (void)lInertia;
+
+        const bool lbPrepared = VehiclePhysics::Prepare(lOnRoadTransform, lLinearVelocity,
+                                                        lAngularVelocity, lHandlingBodyOffset,
+                                                        lHalfExtent, lrAABB, lpAttribs,
+                                                        lpaWheelPositions, lpafWheelRadii);
+
+        CGS_ASSERT(lu8StrengthStat <= 10, "lu8StrengthStat < KU8_MAX_STRENGTH");   // :192
+
+        mu8StrengthStat = lu8StrengthStat;
+
+        SetTransformFromPositionOnRoad(lOnRoadTransform);
+
+        mbDeformedBeyondDriveTimeLimitsInCrash = false;
+        mPropCollisionImpulseSum       = Vector3();
+        mfBeachedTime                  = 0.0f;
+        mbIsWedgedInWorld              = false;
+        mbWroteIntoRWInSlowMo          = false;
+        mbAISlowMo                     = false;
+        mfSlamSteering                 = 0.0f;
+
+        return lbPrepared;
+    }
+}
+}

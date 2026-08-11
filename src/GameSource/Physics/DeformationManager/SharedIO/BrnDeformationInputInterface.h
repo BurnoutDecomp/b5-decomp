@@ -36,6 +36,24 @@ namespace BrnPhysics
                                     DeformationResetType leBaseDeformationType,
                                     bool lbUseSweptSphereTests);
 
+            // ⭐ ADDED 2026-08-11 (create-drain wave). Both are DWARF-declared on this class
+            // (DecFIGS BrnDeformationInputInterface.h:58 `uint32_t RemoveDeformationModel(RigidBodyId)`
+            // and :76 `uint32_t DeactivateDeformationModel(RigidBodyId, float32_t,
+            // BrnPhysics::Deformation::DeformationResetType)`), and neither has a standalone X360
+            // symbol -- the console INLINES both inside VehicleManager::ProcessRemoveEvents
+            // @0x826160C8, at the two raw seats this class already documents:
+            //     0x826163CC  addi r3, lpDeformationInterface, 0xD40   == +3392, the deactivate queue
+            //     0x826164AC  addi r3, lpDeformationInterface, 0xC90   == +3216, the remove queue
+            // each followed by a 16-byte stack event and a BaseEventQueue<T>::AddEvent. Reached
+            // BY NAME here so the drain never spells those two offsets.
+            // The return is the queue length after insertion minus one -- the same "slot index"
+            // convention AddDeformationModel already uses (and ProcessRemoveEvents discards it,
+            // exactly as the console does).
+            u32 RemoveDeformationModel(RigidBodyId lHandlingBodyID);
+            u32 DeactivateDeformationModel(RigidBodyId lHandlingBodyID,
+                                           f32 lfInitialDamageAmount,
+                                           DeformationResetType leDeformationResetType);
+
             // ADDITIVE GROW (flagged by DeformationManager mgr-core group): the manager's
             // per-frame event processors (DeformationManager::ProcessAdd/Remove/Deactivate-
             // DeformationModelEvents, ProcessEvents) drain these request queues every scene

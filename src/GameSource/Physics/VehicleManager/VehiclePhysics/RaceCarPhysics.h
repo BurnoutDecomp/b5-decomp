@@ -25,6 +25,7 @@
 #include "BrnCommonTypes.h"   // Vector3, EntityId
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"   // base + Wheel
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::{Dot, Subtract}
+#include "rw/physics/inertia.h"              // rw::physics::Inertia (Prepare's by-value 7th parameter)
 // BrnPlayerDriverControls has ONE definition -- the canonical owning home in SharedIO. (A prior
 // duplicate minimal slice lived here and clashed (ODR) with that home; removed. The typed control
 // accessors the showtime/aftertouch bodies call are declared on the canonical struct.)
@@ -125,18 +126,30 @@ namespace Vehicle
         // (see the [[vtable-slot0-Create-shim]] precedent). When the body lands it must be declared
         // `virtual` in VehiclePhysics and overridden here, so that the create drain's
         // `maRaceCarVehicles[i].Prepare(...)` dispatches the way the console's bctrl does.
-        // ⚠️ `rw::physics::Inertia` has NO type in this tree yet. The 48-byte / three-row shape is
-        // measured from the call site's six-doubleword pass and is consistent with Matrix33 (the
-        // type ExternalPhysicsBody already uses for m{Local,World}InverseInertia), but the member
-        // names are NOT recovered, so the type is NOT fabricated here -- the parameter is spelled
-        // in the declaration below only when that type lands.
-        // DELETE-WHEN @0x82639CB8 lands.
+        // ⭐⭐ BOTH BLOCKERS IN THE NOTE ABOVE ARE RETIRED (2026-08-11, create-drain wave 2).
+        //
+        // (a) "`rw::physics::Inertia` has NO type in this tree yet" is STALE. It has had one since
+        //     2026-08-04 (task #141): vendor/renderware/include/rw/physics/inertia.h, DWARF member
+        //     names, X360-attested offsets, and it is what CgsPhysics::NewRigidBody::mInertia is
+        //     typed with. ⭐ AND THE CREATE BODY CONFIRMS IT INDEPENDENTLY: the ~200-insn VMX block
+        //     that produces this argument writes +0x10/+0x14/+0x18/+0x1C/+0x20/+0x24 with
+        //     1/mass, 1/min3(invTens), 120000.0f, 30.0f, 0.1f, 0.1f -- exactly that class's
+        //     mInvMass / mSpherical / mMaxVelocity / mMaxOmega / mLinearDrag / mAngularDrag, with
+        //     the two clamp constants landing on the two fields RigidBody::DynamicUpdate squares.
+        //     Six fields, six agreements, zero fabrication.
+        // (b) It is `virtual`. The console reaches it through vtable slot +0x30 of a statically
+        //     known `RaceCarPhysics*` (`lwz r11,0(r3) ; lwz r11,0x30(r11) ; bctrl`), which only
+        //     happens if the function is virtual. Declared virtual HERE rather than in
+        //     VehiclePhysics because the arities differ (11 vs 9): this introduces its own slot,
+        //     the host compiler assigns the number, and nothing anywhere reaches it by index.
+        //     ⛔ Per [[vtable-slot0-Create-shim-bug]], no console slot number is spelled in code.
         // ==========================================================================================
-        // bool Prepare(Matrix44Affine lOnRoadTransform, Vector3 lLinearVelocity,
-        //              Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset, Vector3 lHalfExtent,
-        //              const CgsGeometric::AxisAlignedBox& lrAABB, rw::physics::Inertia lInertia,
-        //              VehicleAttribs* lpAttribs, const Vector3* lpaWheelPositions,
-        //              const f32* lpafWheelRadii, u8 lu8StrengthStat);
+        virtual bool Prepare(Matrix44Affine lOnRoadTransform, Vector3 lLinearVelocity,
+                             Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset,
+                             Vector3 lHalfExtent, const AxisAlignedBox& lrAABB,
+                             rw::physics::Inertia lInertia, VehicleAttribs* lpAttribs,
+                             const Vector3* lpaWheelPositions, const f32* lpafWheelRadii,
+                             u8 lu8StrengthStat);
 
         // @0x825B3998: the (signed) height of the car above the road, taken as the MINIMUM over the
         // driven wheels whose road-contact line test is valid AND that are on the ground (the

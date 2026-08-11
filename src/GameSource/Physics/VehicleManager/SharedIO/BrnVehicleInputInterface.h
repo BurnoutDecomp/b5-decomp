@@ -121,6 +121,16 @@ namespace Vehicle
         // the same member the console addresses, reached by name instead of by that offset.
         const CreateRaceCarEventQueue* GetCreateRaceCarEventQueue() const { return &mCreateRaceCarEventQueue; }
 
+        // ⭐ ADDED 2026-08-11 (create-drain wave), the sibling of the accessor above and reached the
+        // same way. VehicleManager::ProcessRemoveEvents @0x826160C8 opens with
+        //     0x826160E4  addis r3, lpInputInterface, 2
+        //     0x826160EC  addi  r3, r3, -0x6D0          -- 0x20000 - 0x6D0 == +130352
+        //     0x826160F4  lwz   r11, 8(r3)              -- BaseEventQueue::miLength, the loop bound
+        // and +130352 == 128032 (mCreateRaceCarEventQueue, pinned by the accessor above) + 2320
+        // (that queue's own size) == the seat of mRemoveRaceCarEventQueue. ADDITIVE header-only
+        // inline; the drain reaches the member by name instead of by that offset.
+        const RemoveRaceCarEventQueue* GetRemoveRaceCarEventQueue() const { return &mRemoveRaceCarEventQueue; }
+
         // ⭐ ADDED 2026-08-10 (pre-physics bridge wave). BOTH ARE DWARF-DECLARED, not invented:
         // DecFIGS BrnVehicleInputInterface.h:245 `const RaceCarBitArray* GetRaceCarsAddedForCollision() const`
         // and :252 `void SetRaceCarsAddedForCollision(const RaceCarBitArray*)`. Neither has an

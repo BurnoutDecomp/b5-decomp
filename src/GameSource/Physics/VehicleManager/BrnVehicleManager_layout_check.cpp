@@ -138,9 +138,37 @@ namespace Vehicle
         //
         // The three numbers are tied together here so none of them can drift alone.
         // ==========================================================================================
-        static_assert(offsetof(VehicleManager, mPhysicalTrafficManager) == 44768 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
+        // ⭐⭐ REBASED 2026-08-11 (the create-drain wave), and this assert FIRED, exactly as designed.
+        // It used to read `44768 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY`, which was correct only while
+        // maRaceCarModelHandles / maRaceCarGraphicsModelHandles were the opaque `mPadAA60[128]`.
+        // Splitting them into the real CgsResource::ResourceHandle[8] pair (see BrnVehicleManager.h)
+        // widened 8 -> 16 per element, 16 elements, == +128, and everything from +43744 on moved
+        // with it. The correct term for this member is now KU_HOST_DRIFT_AFTER_MODEL_HANDLES.
+        static_assert(offsetof(VehicleManager, mPhysicalTrafficManager) == 44768 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,
                       "asm: addis r3,r31,1 ; addi r3,r3,-0x5120 ; bl PhysicalTrafficManager::Construct "
-                      "@0x8263BF9C -- the embedded manager keeps its X360 seat (nothing before it moved)");
+                      "@0x8263BF9C -- the embedded manager keeps its X360 seat plus the model-handle split");
+
+        // ---- the model-handle split itself, pinned at both ends ------------------------------------
+        // The two `stdx` in ProcessCreateEvents are the only writers, and they are at
+        // this + 8*(idx + 0x154C) and this + 8*(idx + 0x1554) -- 43616 and 43680 on the console.
+        // Nothing before +43616 moved, so those two seats hold verbatim on the host.
+        static_assert(offsetof(VehicleManager, maRaceCarModelHandles) == 43616 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
+                      "asm @0x82616A58/A64: addi r9,r27,0x154C ; slwi r28,r9,3 ; stdx r11,r28,r24");
+        static_assert(offsetof(VehicleManager, maRaceCarGraphicsModelHandles)
+                          == offsetof(VehicleManager, maRaceCarModelHandles) + 8 * sizeof(CgsResource::ResourceHandle),
+                      "asm @0x826169E0/A60/A68: addi r8,r27,0x1554 ; slwi r9,r8,3 ; stdx r10,r9,r24 -- "
+                      "the graphics array abuts the model array, one 8-element run later");
+        static_assert(sizeof(CgsResource::ResourceHandle) == 16,
+                      "host ResourceHandle is two real pointers (console 8). MEASURED at runtime as "
+                      "sizeofRH=16 by the drain probe before this split was written.");
+        static_assert(KU_HOST_DRIFT_AFTER_MODEL_HANDLES - KU_HOST_DRIFT_AFTER_RACECAR_ARRAY
+                          == 2 * 8 * (static_cast<std::ptrdiff_t>(sizeof(CgsResource::ResourceHandle)) - 8),
+                      "the +128 term IS the two arrays' widening and nothing else -- if this fires, the "
+                      "handle changed width and every offset behind it needs re-deriving, not a bump");
+        static_assert(offsetof(VehicleManager, maRaceCarHandlingBodyIDs) == 43744 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,
+                      "the first member BEHIND the split: X360 +43744 (Construct's `addi r26,r26,-0x5520`)");
+        static_assert(offsetof(VehicleManager, mUsedRaceCars) == 44224 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,
+                      "the live-car bitset: X360 +44224 (ProcessCreateEvents `addi r10,r25,0x1598 ; slwi 3`)");
         // ⭐ 2026-08-03 (the record-fold wave): this used to read
         // `KU_X360_SIZEOF_... + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER`, which was right only while
         // that term was the FIRST drift zone. It is now the SECOND (the race-car array's -1664 sits
@@ -151,11 +179,11 @@ namespace Vehicle
         // bump the literal. The right one is here.
         static_assert(sizeof(PhysicalTrafficManager)
                           == KU_X360_SIZEOF_PHYSICAL_TRAFFIC_MANAGER
-                             + (KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER - KU_HOST_DRIFT_AFTER_RACECAR_ARRAY),
+                             + (KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER - KU_HOST_DRIFT_AFTER_MODEL_HANDLES),
                       "MEASURED host size 101680 == DERIVED X360 size 105648 + the -3968 step this "
                       "sub-object contributes. If this fires, one of the three has moved: re-derive, "
                       "do not just bump the drift.");
-        static_assert((KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER - KU_HOST_DRIFT_AFTER_RACECAR_ARRAY) % 16 == 0
+        static_assert((KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER - KU_HOST_DRIFT_AFTER_MODEL_HANDLES) % 16 == 0
                       && KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER % 16 == 0,
                       "the drift MUST be a multiple of 16, or every 16-aligned member after the traffic "
                       "manager (mCameraMatrix, mCachedCarCarPredictionNormal, the Sphere) would need a "
@@ -402,8 +430,12 @@ namespace Vehicle
         // ⭐ FIVE: 167104 -> 172928 (2026-08-09, the 240-byte SimpleVehicleAttribs landed and BOTH
         // negative array terms vanished -- see BrnVehicleManager.h; 172616 + 300 == 172916 ->
         // 16-aligned 172928).
-        static_assert(sizeof(VehicleManager) == 172928,
-                      "MEASURED total. X360 end 172616 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK (+300) == 172916 -> 16-aligned 172928");
+        // ⭐ SIX: 172928 -> 173056 (2026-08-11, the create-drain wave's model-handle split;
+        // KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK is +428 now that it is rebased on the split's +128;
+        // 172616 + 428 == 173044 -> 16-aligned 173056). Six moves, six named drift terms, never a
+        // bumped literal -- and this one fired the moment the split landed, exactly as intended.
+        static_assert(sizeof(VehicleManager) == 172928 + 128,
+                      "MEASURED total. X360 end 172616 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK (+428) == 173044 -> 16-aligned 173056");
         static_assert(sizeof(VehicleManager::maeImpactType) == 32, "EImpactType[8]");
         static_assert(sizeof(VehicleManager::mauImpactScore) == 8, "uint8[8]");
         static_assert(sizeof(VehicleManager::mafPlayerGrindingOtherDurationSeconds) == 32, "f32[8] -- NOT a scalar threshold");

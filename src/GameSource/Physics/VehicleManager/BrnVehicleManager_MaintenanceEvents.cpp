@@ -188,12 +188,23 @@ namespace Vehicle
         BRN_MAINTENANCE_GATE("VehicleManager::RecordNetworkRaceCarsAddedForCollision @0x825C7EA8 (321)");
     }
 
+    // ⛔⛔ STILL A GATE, AND THE REASON CHANGED ON 2026-08-11 (create-drain wave 2). The 426-insn
+    // body was WRITTEN this wave, compiled, and then DELETED rather than shipped, because writing
+    // it surfaced a blocker no previous wave had located -- see the "THE HANDLING-BODY HANDLE IS
+    // EIGHT BYTES" block in BrnVehicleManager_CreateRemoveEvents.cpp. In one line: this body's
+    // three deformation calls pass `maRaceCarHandlingBodyIDs[i]` (a u64 whose ENTIRE value lives in
+    // its high dword) through `BrnPhysics::Deformation::RigidBodyId`, which this tree still
+    // resolves to the 4-byte global stand-in in BrnCommonTypes.h:28. Every id would arrive as
+    // ZERO, the deformation manager would find no model, and nothing would assert -- the exact
+    // [[silent-drop-stubs]] shape. Landing it would have been worse than not landing it.
+
     void VehicleManager::ProcessRemoveEvents(const VehicleInputInterface*,
                                              VehicleOutputRequestInterface*,
                                              VehicleManagerOutputInterface*,
                                              Deformation::DeformationInputInterface*)
     {
-        BRN_MAINTENANCE_GATE("VehicleManager::ProcessRemoveEvents @0x826160C8 (426)");
+        BRN_MAINTENANCE_GATE("VehicleManager::ProcessRemoveEvents @0x826160C8 (426) -- "
+                             "BLOCKED on the 4-byte Deformation::RigidBodyId fork, not on recovery");
     }
 
     // ⭐⭐ THE MEASUREMENT. This gate is the only one in the tree that reports a queue LENGTH
