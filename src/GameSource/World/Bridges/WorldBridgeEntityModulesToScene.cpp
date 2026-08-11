@@ -36,13 +36,16 @@ void BridgePropModuleToPhysicsModule_Prepare(
 
     // asm order: fetch the prop output's prop-input interface first, then the physics
     // prop-manager's, then merge source into destination.
-    const BrnPhysics::Props::PropInputInterface& lrPropSource =
-        reinterpret_cast<const BrnPhysics::Props::PropInputInterface&>(
-            *lpPropOutputBuffer_Prepare->GetPropInputInterface());
-    BrnPhysics::Props::PropInputInterface* lpPropManagerInputInterface =
-        reinterpret_cast<BrnPhysics::Props::PropInputInterface*>(
-            lpPhysicsModuleInputBuffer->GetPropManagerInputInterface());
-    lpPropManagerInputInterface->Append(lrPropSource);
+    // ⭐ 2026-08-10 (root-cause wave): the DESTINATION cast is GONE. PhysicsModuleIO::
+    // InputBuffer::mPropManagerInputInterface was an `unsigned char[1]` slice and this Append
+    // wrote the real ~12 KB interface straight through it and out into mGameActionQueue --
+    // latent only because no prop is physically registered yet. The member now holds the real
+    // type, so the destination is same-type. (The SOURCE stays a documented cross-home cast:
+    // PropEntityIO::OutputBuffer_Prepare still exposes its interface as opaque *Storage.)
+    const BrnPhysics::Props::PropInputInterface* lpPropSource =
+        reinterpret_cast<const BrnPhysics::Props::PropInputInterface*>(
+            lpPropOutputBuffer_Prepare->GetPropInputInterface());
+    lpPhysicsModuleInputBuffer->GetPropManagerInputInterface()->Append(lpPropSource);
 }
 
 // @ 0x827AB388

@@ -1,5 +1,4 @@
-#include "types.hpp"
-#include <cstdint>
+#include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupList.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x... (CgsGeometric::PolygonSoupList::FixUp)
 // First-pass reconstruction: behaviour-faithful to the X360 pseudocode. FixUp is a
@@ -8,27 +7,15 @@
 // names/types per burnout.wiki (Polygon Soup List -> CgsGeometric::PolygonSoupList);
 // offsets are from the 32-bit source and are not byte-matched on a 64-bit host, so
 // the relocation arithmetic keeps the pointer fields as uintptr_t.
+//
+// ⭐ FORK RETIRED 2026-08-10 (spatial-partition wave): the struct definitions that used
+// to sit here -- duplicated token-for-token in CgsPolygonSoupListResourceType.cpp, and
+// about to be copied a third time by the spatial-partition build TU -- now live in the
+// single home CgsPolygonSoupList.h, included above. No layout change: the header is a
+// verbatim lift of what was here.
 
 namespace CgsGeometric
 {
-    struct PolygonSoupEntry // a PolygonSoup
-    {
-        u32       _0[4];     // 0x00 leading data
-        uintptr_t mpField16; // 0x10 relocated pointer
-        uintptr_t mpField20; // 0x14 relocated pointer
-    };
-
-    struct PolygonSoupList
-    {
-        float     mOverallAabb[8];  // 0x00 AxisAlignedBox
-        uintptr_t mpapPolySoups;    // 0x20 PolygonSoup** (base of the pointer table)
-        uintptr_t mpaPolySoupBoxes; // 0x24 AxisAlignedBox4*
-        s32       miNumPolySoups;   // 0x28
-        s32       miDataSize;       // 0x2C
-
-        PolygonSoupList* FixUp(int delta);
-    };
-
     PolygonSoupList* PolygonSoupList::FixUp(int delta)
     {
         mpaPolySoupBoxes += delta;

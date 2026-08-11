@@ -535,16 +535,42 @@ bool BrnPhysics::Props::PropManager::Prepare(struct rw::IResourceAllocator *)
     return true;
 }
 
-// LINK STUB (task #135, 2026-08-04): X360 @0x82633568. Called from
-// PhysicsModule::Prepare stage 6 (E_PREPARESTAGE_VEHICLEMODULE).
-bool BrnPhysics::Vehicle::VehicleManager::Prepare(struct rw::IResourceAllocator *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *)
+// ⭐⭐ RETIRED 2026-08-10 (producer wave): BrnPhysics::Vehicle::VehicleManager::Prepare
+// @0x8263C688 IS BODIED, in GameSource/Physics/VehicleManager/BrnVehicleManager_Prepare.cpp.
+// It was the stub that kept every car out of the triangle cache: its stage-2 arm,
+// PrepareTriangleCache @0x82615BA0, is the ONLY filler of the scene input's mAddToCacheQueue on
+// the race-car path, and that queue is the only setter of TriangleCacheManager::mUsedCacheSlots.
+// The stub below is what is LEFT of it -- its stage-1 arm.
+//
+// LINK STUB (producer wave, 2026-08-10): X360 @0x82633568 (161 insns). Called from
+// VehicleManager::Prepare's case 0/1 arm.
+//
+// ⛔ WHAT IS DROPPED, stated plainly rather than hidden behind `return true`: the per-car DATA
+// build -- 8x VehiclePhysics::Construct @0x8262DBD0 (the only one of its four callees that
+// exists in this tree), then 8x { VehicleDriver::Prepare @0x825B8680, VehiclePhysics::Construct,
+// Vehicle::DebugComponent::Construct @0x82602F68 }, PhysicalTrafficManager::Prepare @0x8262CA48,
+// VehicleDriver::Prepare on the traffic driver, and ~30 scalar seeds.
+// ⛔ WHY IT IS NOT RECONSTRUCTED HERE: (a) ~470 further instructions across four functions, three
+// of them absent, i.e. a wave of its own; and (b) Hex-Rays degenerates the body into `_R28`/`_R31`
+// inline asm with every store at a raw console byte offset PAST mPhysicalTrafficManager -- past
+// the +224 host drift BrnVehicleManager.h documents -- so writing it from the pseudocode would be
+// the offset hack the project forbids. It must be re-derived from the raw asm with every member
+// reached by name.
+// ⭐ WHY THE FSM ABOVE IS STILL LANDABLE WITHOUT IT: the console body has NO failure path -- it
+// returns the constant 1 -- so `return true` here is the console's own control flow, not a
+// convenient one. What is genuinely absent is vehicle DATA, not the stage transition.
+// ⚠️ CONSEQUENCE TO EXPECT: the 8 race-car cache slots are claimed with no VehiclePhysics behind
+// them. That is harmless today (ProcessAddToCacheEvents stamps a radius and a used bit and does
+// not touch mbIsDirty, and StartUpdateTriangleCaches skips every non-dirty slot), and it becomes
+// load-bearing the moment UpdateCachedPositions lands.
+bool BrnPhysics::Vehicle::VehicleManager::PrepareData(struct rw::IResourceAllocator *)
 {
     static bool s_bLogged = false;
     if (!s_bLogged)
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "VehicleManager::Prepare: inert [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "VehicleManager::PrepareData: inert [FLAG PC boot gate]\n";
     }
     return true;
 }
@@ -589,20 +615,12 @@ void BrnPhysics::PhysicsModule::PropPrepareTypes(class BrnPhysics::PhysicsModule
 // -------------------------------------------------------------------------
 // BrnPhysics::Props::PropInputInterface
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnPhysics::Props::PropInputInterface::Append(struct BrnPhysics::Props::PropInputInterface const &)
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the prop->physics prepare
-    // bridge (WorldModule::Prepare prop stage). The physics module is boot-gated
-    // inert, so the staged prop-type merge is dropped consistently. One-shot log.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropInputInterface::Append: inert [FLAG PC boot gate]\n";
-    }
-}
+// (PropInputInterface::Append gate RETIRED 2026-08-10, root-cause wave: the real
+//  body @0x827A9CA8 now lives in its own home TU
+//  GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.cpp, alongside the
+//  Construct/Clear pair the console inlines into PhysicsModuleIO::InputBuffer::Construct.
+//  ⚠️ The stub's parameter was a REFERENCE; the DWARF and the PS3 mangle both say
+//  pointer -- corrected with the body.)
 
 // -------------------------------------------------------------------------
 // BrnPhysics::Vehicle::VehicleManager
@@ -754,39 +772,20 @@ void BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch::Construct()
 // -------------------------------------------------------------------------
 // BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-struct BrnResource::GameDataIO::RequestInterface<4096> const * BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare::GetResourceRequestInterface() const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "GetResourceRequestInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-struct BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare::SceneInputInterface const * BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare::GetSceneInputInterface() const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "GetSceneInputInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
+// ⛔⛔ TWO GATES RETIRED 2026-08-10 (pre-physics bridge wave), AND THEY WERE
+//     SILENT-DROP STUBS, NOT PLACEHOLDERS.
+//     `OutputBuffer_Prepare::GetResourceRequestInterface() const` @0x8279FA30 and
+//     `::GetSceneInputInterface() const` @0x8279F988 have had REAL committed bodies in
+//     GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.cpp all
+//     along -- that TU had simply never been on the build list, so the copies that LINKED
+//     were these two, each `return 0`. Their own banner said "REACHED every frame", so every
+//     caller has been handed a NULL interface and has been silently doing nothing with it.
+//     Found by MOUNTING the real TU (for the pre-physics OutputBuffer this wave): the link
+//     immediately produced LNK2005 on both, which is the whole point of mounting a
+//     re-parented TU even when the wave does not call it.
+//     ⚠️ This is a real behaviour change on a live path -- both accessors now return a valid
+//     pointer where they returned NULL. Gates re-run and clean; recorded here so a later
+//     regression is attributed correctly.
 
 // -------------------------------------------------------------------------
 // BrnTraffic::TrafficEntityModule
@@ -1977,23 +1976,18 @@ void CgsGraphics::DispatchBin::HandleMemoryOverflow(unsigned int)
 // -------------------------------------------------------------------------
 // CgsSceneManager::CachedTriangleList
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool CgsSceneManager::CachedTriangleList::Prepare(struct rw::IResourceAllocator *,int)
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare chain
-    // (SceneManagerModule::Prepare / the world stage machine). One-shot log +
-    // report success so the scripted load advances; the sub-manager stays
-    // inert (zero-initialised storage) and its consumers keep their traps.
-    // Reconstruct from X360 (triangle-cache cluster).
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "CachedTriangleList::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// ⭐⭐ GATE DELETED 2026-08-10 (fill-worker wave). CachedTriangleList::Prepare
+// @0x828BE520 (79 insns) is now a real body in
+// GameShared/GameClasses/SceneManager/CacheManager/CgsCachedTriangleList.cpp.
+// This gate was NOT harmless: it returned true without allocating, so the shared
+// triangle-cache arena was a NULL pointer that all 298 cache-slot windows indexed
+// into. The shipped tripwire that says so (CgsTriangleCacheManager.h:172,
+// "mpaTriangleCache != NULL") had never once executed, because no slot had ever
+// been marked dirty -- it fired the first time this wave forced the console's own
+// mbDEBUGForceAllDirty switch for one instrumented boot.
+// ⚠️ 0x828BE520 is an X360 export-set HOLE; the name came from the xrefs_from of
+// its only caller, TriangleCacheManager::Prepare @0x828BE738, and the PS3 DWARF
+// mangle @0xC7B30C types the signature.
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::EntityManager
@@ -2379,42 +2373,29 @@ void CgsSceneManager::SceneManagerModule::ProcessSceneQueries(struct CgsModule::
 // -------------------------------------------------------------------------
 // CgsSceneManager::TriangleCacheManager
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void CgsSceneManager::TriangleCacheManager::EndUpdateTriangleCaches(void *,void *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TriangleCacheManager: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// (GATE RETIRED 2026-08-10, cache-fill wave: TriangleCacheManager::EndUpdateTriangleCaches
+//  @0x828BF150 (475) now has its REAL body in
+//  GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager_Update.cpp,
+//  together with its Start partner @0x828BECF8 (278). This one is REACHED EVERY FRAME --
+//  SceneManagerModule::EndUpdateTriangleCache @0x828C7500 is real and WorldModule::Update
+//  calls it at BrnWorldModule.cpp:2471 -- so the real body runs from the frame it lands.
+//  It opens with a null guard on mpUpdateTriangleCacheStream and takes it while the Start
+//  side is still gated, which is exactly what the console does on a frame that posted no
+//  fill. LNK2005 is the tripwire if this stub is ever restored.)
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::TriangleCollisionManager
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool CgsSceneManager::TriangleCollisionManager::Prepare(class CgsMemory::LinearMalloc *,int)
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare chain
-    // (SceneManagerModule::Prepare / the world stage machine). One-shot log +
-    // report success so the scripted load advances; the sub-manager stays
-    // inert (zero-initialised storage) and its consumers keep their traps.
-    // Reconstruct from X360 0x828D0C40 (TriangleCollisionManager::Prepare; see ledger).
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TriangleCollisionManager::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// (GATE RETIRED 2026-08-10, spatial-partition wave: TriangleCollisionManager::Prepare now has
+//  its REAL body in GameShared/GameClasses/SceneManager/TriangleCollision/
+//  CgsTriangleCollisionManager.cpp, together with ProcessAddPolySoupListEvents @0x828B3160 and
+//  ProcessClearPolySoupListEvents. BOTH were already fully reconstructed and had simply never
+//  been MOUNTED -- [[mount-gap-is-the-bottleneck]]; this wave supplied the one body they were
+//  missing, BuildSpacialPartition @0x82841740, and put the TU on the link.
+//  ⚠️ THE ADDRESS IN THIS GATE'S OWN COMMENT WAS WRONG: it read "Reconstruct from X360
+//  0x828D0C40", and NO EXPORT LIVES AT 0x828D0C40 -- checked against all 30,084 X360 export
+//  JSONs. The real address is 0x828B2FF0 (91 insns), which the class header had right all
+//  along. A committed address is a claim. LNK2005 is the tripwire if this stub is restored.)
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::VolumeManager
@@ -3039,21 +3020,12 @@ void WorldModule::BridgeTrafficToCrashModule_PostPhysics(void *,struct BrnWorld:
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 the Update input fan-out -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeInputToPhysicsModule(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct BrnWorldIO::UpdateInputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeInputToPhysicsModule: inert [FLAG PC boot gate]\n";
-    }
-}
+// RETIRED 2026-08-09 (feed wave): WorldModule::BridgeInputToPhysicsModule is REAL in
+// GameSource/World/Bridges/WorldBridgeInputToPhysicsModule.cpp. Its X360 address --
+// 0x827AB830 -- is a HOLE in the IDA export set and was recovered by decoding the `bl`
+// at the WorldModule::Update call site out of the image; see that TU's banner. The gate
+// that used to sit here said "X360 the Update input fan-out" precisely because no wave
+// had been able to name an address for it.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
@@ -3188,37 +3160,23 @@ void WorldModule::BridgeCrashModuleToOutput(void *,struct BrnWorldIO::UpdateOutp
 //  culling wave: the real body @0x827AB608 now lives in its X360 home TU
 //  GameSource/World/Bridges/WorldBridgeEntityModulesToScene.cpp.)
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AADB8 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeEntityModulesToPhysicsModule_PreScene(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *,class BrnWorld::PropEntityIO::OutputBuffer_PreScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeEntityModulesToPhysicsModule_PreScene: inert [FLAG PC boot gate]\n";
-    }
-}
+// (WorldModule::BridgeEntityModulesToPhysicsModule_PreScene gate RETIRED 2026-08-10,
+//  root-cause wave: the real body @0x827AADB8 now lives in its X360 home TU
+//  GameSource/World/Bridges/WorldBridgeEntityModulesToPhysics.cpp. It is the ONLY
+//  caller in the image of PhysicsModuleIO::InputBuffer::SetSolverMaxIterations
+//  @0x8279F240, so while it was inert the solver iteration cap stayed at 0 and the
+//  whole MaxIterations chain inside PhysicsModule::Update asserted.)
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AAEC0 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PrePhysics const *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics const *,class BrnWorld::PropEntityIO::OutputBuffer_PrePhysics const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics: inert [FLAG PC boot gate]\n";
-    }
-}
+// (WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics gate RETIRED 2026-08-10,
+//  pre-physics bridge wave: the real body @0x827AAEC0 now lives in its X360 home TU
+//  GameSource/World/Bridges/WorldBridgeEntityModulesToPhysics.cpp. It is the ONLY thing in
+//  the image that carries a staged CreateRaceCarEvent from the race-car entity module into
+//  the physics module's input buffer, so while it was inert VehicleManager::ProcessCreateEvents
+//  had an empty queue at every drain of a 275 s run -- MEASURED by the previous wave's census.
+//  Landing it also forced two latent memory bugs out of hiding: BrnTrafficIO::
+//  OutputBuffer_PrePhysics modelled its vehicle-driver interface as `unsigned char[1]`, and
+//  PhysicsModuleIO::InputBuffer did the same for its vehicle-effects interface -- this bridge
+//  Appends 5,284 and 1,792 bytes into them respectively.)
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
@@ -3518,37 +3476,26 @@ void BrnAI::AIModule::PostPhysicsUpdate(struct BrnAI::AIModuleIO::InputBuffer_Po
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the cached-position restage into the scene input (@0x8259C370).
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnPhysics::PhysicsModule::UpdateCachedPositions(struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PhysicsModule::UpdateCachedPositions: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⭐⭐ 2026-08-11 (lifetime wave): the PhysicsModule::UpdateCachedPositions @0x8259C370 boot gate
+// that stood here since 2026-07-27 is DELETED. The real 34-instruction body is in
+// BrnPhysicsModule.cpp, next to the module's other own-TU bodies.
+// This one mattered far beyond its size: it is the ONLY writer of a triangle-cache slot's sphere
+// CENTRE in the whole XEX, so while it was inert every claimed slot sat at the WORLD ORIGIN and
+// the fill worker cached geometry from there. It lands in the same commit as the traction-line
+// producer lifetime, because a car tested against triangles cached three kilometres away would be
+// valid, green and wrong -- this project's signature failure.
+// Arms 2 and 3 (PropManager:: / DeformationManager::UpdateTriangleCache) are named gates in
+// BrnPhysicsConductorGates.cpp; arm 1 (VehicleManager, plus the traffic pool behind it) is real.
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the physics post-scene tick (@0x825ABC10).
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnPhysics::PhysicsModule::PostSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnPhysics::PhysicsModuleIO::InputBuffer const *,class BrnPhysics::PhysicsModuleIO::OutputBuffer *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PhysicsModule::PostSceneUpdate: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⭐⭐ 2026-08-10 (create-path wave): the PhysicsModule::PostSceneUpdate boot gate that stood here
+// since 2026-07-27 is DELETED -- the real 278-insn body @0x825ABC10 is landed in
+// BrnPhysicsModuleUpdateFunctions.cpp. It was the last link in the chain that made
+// VehicleManager::ProcessVehicleMaintenanceEvents (and behind it the whole create path)
+// unreachable: `xrefs_to` on that function is a one-element set naming only this stub.
+// The four callees of PostSceneUpdate whose own closures are absent are each their own NAMED
+// one-shot gate in BrnPhysicsConductorGates.cpp -- including
+// BridgeVehicleManagerToSimulation_PostScene, which is HELD INERT DELIBERATELY because it is the
+// only path from the vehicle manager's rigid-body request queues into the simulation.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. the physics scene-query producer (@0x825A1428).
@@ -3566,21 +3513,10 @@ void BrnPhysics::PhysicsModule::GenerateSceneQueries(class BrnPhysics::PhysicsMo
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the physics step (@0x825B0640).
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnPhysics::PhysicsModule::Update(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnPhysics::PhysicsModuleIO::InputBuffer const *,class BrnPhysics::PhysicsModuleIO::OutputBuffer *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PhysicsModule::Update: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⭐⭐ 2026-08-09 (conductor wave): the PhysicsModule::Update boot gate that stood here for
+// thirteen days is DELETED -- the real 1,999-insn body @0x825B0640 is landed in
+// BrnPhysicsModuleUpdateFunctions.cpp, and the deferrals it still carries are each their own
+// NAMED one-shot gate in BrnPhysicsConductorGates.cpp.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. the network catch-up step WorldModule::UpdatePhysicsNetworkCatchup @0x827B06E0 forwards to.
@@ -3634,21 +3570,13 @@ void BrnWorld::WorldDebugComponent::Update(struct BrnWorldIO::DebugController co
 //  in its own TU, GameSource/World/EnvironmentMap/BrnEnvironmentMap.cpp, which is
 //  on the build list -- WorldModule::Update's env-map refresh is REAL.)
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the per-frame triangle-cache kick (@0x828C73D8).
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void CgsSceneManager::SceneManagerModule::StartUpdateTriangleCache(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,struct CgsSceneManager::CgsCollision::BaseCollisionGenerator *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "SceneManagerModule::StartUpdateTriangleCache: inert [FLAG PC boot gate]\n";
-    }
-}
+// (GATE RETIRED 2026-08-10, spatial-partition wave: SceneManagerModule::StartUpdateTriangleCache
+//  @0x828C73D8 (73) now has its REAL body in GameShared/GameClasses/SceneManager/
+//  CgsSceneManagerModule.cpp, next to its End partner @0x828C7500. It is REACHED EVERY FRAME
+//  from WorldModule::Update (BrnWorldModule.cpp:2446), so the real body runs from the frame it
+//  lands. Six of its seven callees were already bodied; the one that was not --
+//  PolygonSoupListSpatialMap::BuildSpacialPartition @0x82841740 (2,255) -- landed this wave,
+//  which is the whole reason this gate could go. LNK2005 is the tripwire if it is restored.)
 
 
 
@@ -3753,38 +3681,17 @@ void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene::Construct()
 
 
 // ---- the collision generator the frame carves -------------------------------
-// WorldModule::Update carves ONE 336896-byte BaseCollisionGenerator out of the
-// world frame allocator (object + a 0x40000 result region) and hands it to
-// SceneManagerModule::StartUpdateTriangleCache. The REAL bodies (Construct
-// @0x828105F8 / Prepare @0x82810660) live in
-// GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.cpp,
-// which is NOT on the build list (it drags the EA::Jobs job-system + collision
-// batch closure -- cost rule). Gated here: the generator's only consumer,
-// StartUpdateTriangleCache, is itself gated, so an unconstructed generator is
-// never dereferenced. Mount that TU (and delete these two) with the contact-
-// generation wave.
-void CgsSceneManager::CgsCollision::BaseCollisionGenerator::Construct()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BaseCollisionGenerator::Construct: inert [FLAG PC boot gate]\n";
-    }
-}
-
-bool CgsSceneManager::CgsCollision::BaseCollisionGenerator::Prepare(void *, int)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BaseCollisionGenerator::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// (BOTH GATES RETIRED 2026-08-10, cache-fill wave.) WorldModule::Update carves ONE
+// BaseCollisionGenerator (object + a 0x40000 result region) out of the world frame
+// allocator each frame and hands it to SceneManagerModule::StartUpdateTriangleCache.
+// Its REAL bodies -- Construct @0x828105F8 and Prepare @0x82810660 -- had been fully
+// reconstructed since 2026-08-06 in
+// GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.cpp;
+// that TU is simply not mounted, so the generator was carved and left UNINITIALISED
+// behind these two one-shot logs. The TU is now on the build list and both stubs are
+// deleted: the frame's generator is really constructed (the shared "StartJobs" perfmon
+// latch) and really prepared (bump allocator over the result region + all 64 collision
+// batches placement-constructed). LNK2005 is the tripwire if either stub is restored.
 
 // ---- two read accessors the drive reads through ------------------------------
 // BrnWorldIO::UpdateInputBuffer::GetPlayerVehicleControls (X360 read-lock, the
@@ -3806,17 +3713,11 @@ struct BrnWorldIO::PlayerVehicleControls const * BrnWorldIO::UpdateInputBuffer::
     return 0;
 }
 
-struct BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene::TrafficToRaceCarInterface_PreScene const * BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene::GetTrafficToRaceCarInterface_PreScene(void) const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "OutputBuffer_PreScene::GetTrafficToRaceCarInterface_PreScene: inert [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
+// ⛔ THIRD SILENT-DROP STUB RETIRED 2026-08-10 (same mount, same mechanism as the two
+//    OutputBuffer_Prepare accessors above): `OutputBuffer_PreScene::
+//    GetTrafficToRaceCarInterface_PreScene() const` has a real body in
+//    BrnTrafficEntityModuleIO.cpp; the `return 0` copy here is what linked while that TU was
+//    off the build list. LNK2005 on mounting.
 
 // ---- the six unmounted sibling bridge TUs' entry points ----------------------
 // Each of these has a REAL committed body in its own home TU; those TUs are not

@@ -61,7 +61,16 @@ namespace CgsGeometric
         f32 mfScale;          // +0x0C  world = (miPos* + vertex_s16) * mfScale
         u8* mpPolygons;       // +0x10  base of the inline polygon array (byte cursor)
         u8* mpVertices;       // +0x14  base of the inline packed-vertex array (byte cursor)
-        u8  m_18[2];          // +0x18  the u16 soup byte size
+        // +0x18 X360 / +0x20 x64 -- the soup's own serialised byte size.
+        // ⭐ 2026-08-10 (spatial-partition wave): was `u8 m_18[2]` with the comment "the
+        // u16 soup byte size". Given its real u16 type because it now has a CONSUMER --
+        // BuildSpacialPartition @0x82841740 copies it into every leaf node
+        // (`lhz r11, 0x18(r11) ; sth r11, 0x24(r31)`) -- and a two-byte array would have
+        // forced that consumer to hand-assemble the halfword, which on this LITTLE-endian
+        // host is the opposite byte order from the console `lhz` it was copying. Same
+        // offset, same width; the porter writes exactly one u16 here
+        // (world_support_transcode.py: `struct.pack_into(e + 'H', out, so + shdr - 8, sz)`).
+        u16 mu16SoupSize;
         u8  mu8NumPolygons;   // +0x1A  polygon count
         u8  mu8NumQuads;      // +0x1B  how many of them are QUADS (they come first)
         u8  mu8NumVertices;   // +0x1C  vertex count

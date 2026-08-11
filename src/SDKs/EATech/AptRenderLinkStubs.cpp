@@ -645,10 +645,20 @@ namespace EA { namespace Jobs {
     // The vendor accessors (declaration-only in entry_point.h): each returns its
     // member (DWARF entry_point.h:80-82; layout ARTIST-verified via SetAffinity
     // @0x82BC98B0 storing mAffinity at +20). Trivial reads, inlined on the console.
+    // (Merge 2026-08-11: these real member reads supersede origin/dev's hard-coded
+    // JOB_AFFINITY_NONE/LOCAL/HIGH link-stub answers.)
     JobAffinity    EntryPoint::GetAffinity()    const { return mAffinity; }
     JobEnvironment EntryPoint::GetEnvironment() const { return mEnvironment; }
     JobPriority    EntryPoint::GetPriority()    const { return mPriority; }
-    void           EntryPoint::SetName(const char* lpcName) { (void)lpcName; }         // FLAG PC-platform leaf: synchronous jobs on PC (no worker names)
+    // ⛔⛔ SILENT-DROP STUB DELETED 2026-08-10 (fill-worker wave 2). What stood here was
+    //     void EntryPoint::SetName(const char* lpcName) { (void)lpcName; }
+    // labelled "FLAG PC-platform leaf: synchronous jobs on PC (no worker names)". The REAL
+    // 22-instruction body (X360 0x82BC9858) was in entrypoint.cpp the whole time -- but that
+    // TU declared its own forked `class EntryPoint` whose SetName returned `char*`, so it
+    // mangled to a DIFFERENT symbol and this stub won every link, silently, for every caller.
+    // Retiring ODR fork #3 (entrypoint.cpp's local class) is what made the two collide and
+    // exposed it. Deleted; the real body serves now. (origin/dev's matching ⚠ about the
+    // GetNumDependencies 0-stub is retired by the real body below, from this branch.)
 
     // The mDependencies twin of the homed Job::GetNumDependents @0x82BCA390
     // (job.cpp): this node's bucket count + the overflow chain's ListSize

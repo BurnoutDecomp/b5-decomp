@@ -39,11 +39,13 @@
 //    argument register is left at its incoming value, which Hex-Rays does not track) -> passed false,
 //    the faithful default for an unset register. FLAG: this is the only value the asm does not pin.
 //  * RecievePassedOnImpulse's gate is the virtual dispatch `(*(**(this+4)+16))(*(this+4))` -- a query
-//    on the attached vehicle through its vptr slot +0x10; a non-zero return early-outs (the impulse is
-//    NOT applied). Modelled as VehiclePhysics::IsIgnoringPassedOnImpulses() (role-inferred name; the
-//    +0x10 slot is not separately homed -- see the GROW decl in VehiclePhysics.h). The second VecFloat
-//    param (the chain's passed-on magnitude) is carried by the signature but, like the X360, is not
-//    consumed by the gate/apply path here.
+//    on the attached vehicle through its vptr slot +0x10. ⭐⭐ SETTLED 2026-08-09 (crash/shunt wave):
+//    the slot is IsPlayerVehicleInShowtime -- both concrete vtables were read off the image
+//    (traffic default `li r3,0` @0x827E2F38; RaceCarPhysics override @0x825D7B68 in vtbl
+//    @0x820D1034). The gate therefore reads "never re-apply passed-on deformation impulses to the
+//    player's showtime vehicle"; the old role-inferred name IsIgnoringPassedOnImpulses is retired.
+//    The second VecFloat param (the chain's passed-on magnitude) is carried by the signature but,
+//    like the X360, is not consumed by the gate/apply path here.
 
 namespace BrnPhysics
 {
@@ -115,9 +117,10 @@ namespace Deformation
     void VehicleRigidBody::RecievePassedOnImpulse(const ImpulseParams* lpImpulseParams,
                                                   VecFloat /*lvfPassedMagnitude*/)
     {
-        // Gate: the attached vehicle's impulse-passing query (virtual dispatch, vptr slot +0x10).
-        // A non-zero return means the body is swallowing further passed-on impulses -> do not apply.
-        if ( mpAttachedVehicle->IsIgnoringPassedOnImpulses() )
+        // Gate: virtual dispatch through the attached vehicle's vptr slot +0x10 -- image-settled
+        // as IsPlayerVehicleInShowtime (see the banner). A non-zero return means the player's
+        // showtime car swallows further passed-on impulses -> do not apply.
+        if ( mpAttachedVehicle->IsPlayerVehicleInShowtime() )
             return;
 
         ApplyImpulseToVehicle(mpAttachedVehicle, lpImpulseParams);

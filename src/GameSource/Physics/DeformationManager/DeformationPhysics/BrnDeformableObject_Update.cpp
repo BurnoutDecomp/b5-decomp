@@ -398,7 +398,8 @@ namespace Deformation
     //
     //  1) Seed the ImpulseParams block (v215) from the relative-motion / impulse-dir / magnitude args
     //     and the contact id. The impulse-magnitude lane is max-folded with the relative-motion w lane.
-    //  2) If the vehicle is in showtime (vehiclePhysics->IsIgnoringPassedOnImpulses(), vtable +0x10),
+    //  2) If the vehicle is in showtime (vehiclePhysics->IsPlayerVehicleInShowtime(), vtable +0x10 --
+    //     image-settled 2026-08-09; the old role-inferred name IsIgnoringPassedOnImpulses is retired),
     //     pre-apply a showtime contact impulse (ApplyShowtimeContactImpulse) using the impulse-dir
     //     scaled by the relative motion.
     //  3) Pick the allowed-compression budget: if the handling-body-id high byte == 2
@@ -445,10 +446,10 @@ namespace Deformation
             lParams.mvfImpulseMagnitude.x = (lfMag > lfRelW) ? lfMag : lfRelW;   // vmaxfp
         }
 
-        // (2) showtime pre-apply: when the vehicle's vtable+0x10 predicate is set (showtime/ignoring
-        // passed-on impulses), pre-apply a showtime contact impulse (impulse-dir scaled by the relative
-        // motion). Call order + gate preserved; the scaled vectors are modelled per-lane.
-        const bool lbIgnoringPassedOn = (lpVehicle != nullptr) && lpVehicle->IsIgnoringPassedOnImpulses();
+        // (2) showtime pre-apply: when the vehicle's vtable+0x10 predicate is set (image-settled as
+        // IsPlayerVehicleInShowtime), pre-apply a showtime contact impulse (impulse-dir scaled by the
+        // relative motion). Call order + gate preserved; the scaled vectors are modelled per-lane.
+        const bool lbIgnoringPassedOn = (lpVehicle != nullptr) && lpVehicle->IsPlayerVehicleInShowtime();
         if ( lbIgnoringPassedOn )
         {
             const Vector3 lShowtimeImpulse = vpu::Mult(lImpulseDir, lRelativeMotion);

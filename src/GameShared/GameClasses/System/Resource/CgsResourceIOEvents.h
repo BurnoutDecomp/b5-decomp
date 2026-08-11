@@ -215,6 +215,27 @@ namespace Events
         s32             miMaxHandles;      // :453 (X360 +0x1C)
     };
 
+    // Reply to an AcquireResourceListRequest (pool output queue, tag 7 -> receiver id 5). The X360
+    // PoolModule::DoAcquireResourceListRequest @0x828FCE40 builds a 32-byte record that is the REQUEST
+    // echoed field-for-field ({mpUser@0, miEventId@4, miPoolId@8, mListResourceId@0x10, mpHandles@0x18})
+    // with the last word carrying the number of handles it actually filled instead of the cap:
+    //     0x828FCEF8..  stw mpUser@+0 / stw miEventId@+4 / stw miPoolId@+8
+    //                   std mListResourceId@+0x10 / stw mpHandles@+0x18 / stw count@+0x1C
+    //     AddEvent(poolOutputQueue, tag 7, 32)
+    // The caller's handle array has already been written in place, so the consumer
+    // (WorldEntityModule::PrepareZoneCollision @0x82302C38) reads mpHandles/the count straight off the
+    // echo. Kept as its own type rather than reusing the request so the last word is named for what it
+    // means on the way back.
+    // ⭐ The three member NAMES and their order are DecFIGS-DWARF conformant
+    // (CgsResourceIOEvents.h:683/:684/:685) -- they were derived from the asm first and the
+    // DWARF then matched them exactly, so this layout is attested twice over.
+    struct AcquireResourceListResponse : public PoolEvent
+    {
+        ID              mListResourceId;   // :683 (X360 +0x10) echoed
+        ResourceHandle* mpHandles;         // :684 (X360 +0x18) echoed -- the caller's array, now filled
+        s32             miNumHandles;      // :685 (X360 +0x1C) how many entries were resolved
+    };
+
     // Reply to an AcquireResourceRequest (pool output queue, tag 6): the resolved resource handle -- the
     // ResourceHandle pair (mpResourceMemory -> the entry's main-memory SmallResource slot; mpSourceEntry ->
     // the entry), or both null if the resource is absent.

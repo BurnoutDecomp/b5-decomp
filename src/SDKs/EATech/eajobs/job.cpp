@@ -388,5 +388,33 @@ namespace Jobs
             }
         }
     }
+
+    // ------------------------------------------------------------------------
+    // ⭐ ADDED 2026-08-10 (fill-worker wave 2) -- the three EntryPoint forwarders.
+    // job.h has declared all three since the class landed ("forwards to
+    // mEntryPoint.*"); none was ever bodied, because nothing in this port had ever
+    // wired a job's entry point. RunFillTriangleCacheStream is the first thing that
+    // does, and the LINK is what found them -- no per-TU gate could.
+    //
+    // None carries a standalone X360 symbol: the console inlines all three at both
+    // dispatchers (0x82810E04 SetName / 0x82810E1C SetCode / 0x82810E38 SetCodeRecycle
+    // call the EntryPoint bodies directly with `entrypoint = job + 4`). The forwarder
+    // shape is the DWARF's (job.h:81 / :83 / :173), and mEntryPoint at Job+0x04 is what
+    // makes `job + 4` the same address.
+    // ------------------------------------------------------------------------
+    void Job::SetCode(JobEnvironment leEnvironment, const void* lpvCode, int liSize)
+    {
+        mEntryPoint.SetCode(leEnvironment, lpvCode, liSize);
+    }
+
+    void Job::SetName(const char* lpcName)
+    {
+        mEntryPoint.SetName(lpcName);
+    }
+
+    void Job::SetCodeRecycle(EntryPoint::CodeRecycle leRecycle)
+    {
+        mEntryPoint.SetCodeRecycle(leRecycle);
+    }
 }
 }

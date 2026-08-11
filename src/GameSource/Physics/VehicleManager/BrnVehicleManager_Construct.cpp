@@ -71,25 +71,35 @@ namespace Vehicle
     s32 gs_iUpdateVehicleImpactsPM    = KI_PERFMON_UNREGISTERED;   // dword_82F2A14C
     s32 gs_iProcessAboveGroundLTsPM   = KI_PERFMON_UNREGISTERED;   // dword_82F2A150
     s32 gs_iTractionLTsPM             = KI_PERFMON_UNREGISTERED;   // dword_82F2A154
-    static s32 gs_iTractionGetLinesPM        = KI_PERFMON_UNREGISTERED;   // dword_82F2A158
-    static s32 gs_iTractionLineTestsPM       = KI_PERFMON_UNREGISTERED;   // dword_82F2A15C
-    static s32 gs_iLineTestsBeginPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A168
-    static s32 gs_iLineTestsRunStreamPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A16C
-    static s32 gs_iLineTestsFinishPM         = KI_PERFMON_UNREGISTERED;   // dword_82F2A170
-    static s32 gs_iLineTestsEndPM            = KI_PERFMON_UNREGISTERED;   // dword_82F2A174
-    static s32 gs_iTractionProcessResultsPM  = KI_PERFMON_UNREGISTERED;   // dword_82F2A160
+    // ⭐ HOISTED 2026-08-11 (lifetime wave): Start/EndVehicleTractionLineTests are real bodies now
+    // and bracket their stages with these five, so per the handles header's rule they move to
+    // external linkage there rather than being re-declared locally.
+    s32 gs_iTractionGetLinesPM        = KI_PERFMON_UNREGISTERED;   // dword_82F2A158
+    s32 gs_iTractionLineTestsPM       = KI_PERFMON_UNREGISTERED;   // dword_82F2A15C
+    // ⭐ HOISTED 2026-08-10 (ground wave): RunTractionLineTestJobs @0x825B5168 brackets its Begin /
+    // RunStream stages with these two ids, so per the handles header's rule they move to external
+    // linkage there rather than being re-declared locally.
+    s32 gs_iLineTestsBeginPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A168
+    s32 gs_iLineTestsRunStreamPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A16C
+    s32 gs_iLineTestsFinishPM         = KI_PERFMON_UNREGISTERED;   // dword_82F2A170
+    s32 gs_iLineTestsEndPM            = KI_PERFMON_UNREGISTERED;   // dword_82F2A174
+    s32 gs_iTractionProcessResultsPM  = KI_PERFMON_UNREGISTERED;   // dword_82F2A160
     static s32 gs_iTractionTrafficPM         = KI_PERFMON_UNREGISTERED;   // dword_82F2A164
     s32 gs_iCrashFatalPM              = KI_PERFMON_UNREGISTERED;   // dword_82F2A178
     s32 gs_iUpdateRaceCarsPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A17C
     s32 gs_iUpdateDriversPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A180
     s32 gs_iUpdateVehiclesPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A184
-    static s32 gs_iVPhysUpdatePM             = KI_PERFMON_UNREGISTERED;   // dword_82F2A278   [GUARDED]
-    static s32 gs_iVPhysSwitchAttribsPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A27C   [GUARDED]
-    static s32 gs_iVPhysUpdateCrashingPM     = KI_PERFMON_UNREGISTERED;   // dword_82F2A280   [GUARDED]
-    static s32 gs_iVPhysUpdateAirRamsPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A284   [GUARDED]
-    static s32 gs_iVPhysUpdateSpinPM         = KI_PERFMON_UNREGISTERED;   // dword_82F2A288   [GUARDED]
-    static s32 gs_iVPhysUpdateDrivingPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A28C   [GUARDED]
-    static s32 gs_iVPhysUpdateLVPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A290   [GUARDED]
+    // ⭐ HOISTED 2026-08-07 (orchestrator wave): the seven guarded VPhys sub-monitors gained a
+    // second reader (VehiclePhysics::Update @0x826412C0 brackets its stages with them), so per
+    // the handles header's rule they move to external linkage there. [GUARDED] registration
+    // below is unchanged.
+    s32 gs_iVPhysUpdatePM             = KI_PERFMON_UNREGISTERED;   // dword_82F2A278   [GUARDED]
+    s32 gs_iVPhysSwitchAttribsPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A27C   [GUARDED]
+    s32 gs_iVPhysUpdateCrashingPM     = KI_PERFMON_UNREGISTERED;   // dword_82F2A280   [GUARDED]
+    s32 gs_iVPhysUpdateAirRamsPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A284   [GUARDED]
+    s32 gs_iVPhysUpdateSpinPM         = KI_PERFMON_UNREGISTERED;   // dword_82F2A288   [GUARDED]
+    s32 gs_iVPhysUpdateDrivingPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A28C   [GUARDED]
+    s32 gs_iVPhysUpdateLVPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A290   [GUARDED]
     s32 gs_iRBChangePM                = KI_PERFMON_UNREGISTERED;   // dword_82F2A188
     s32 gs_iAfterTouchPM              = KI_PERFMON_UNREGISTERED;   // dword_82F2A18C
     s32 gs_iUpdateTrafficPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A190

@@ -395,4 +395,41 @@ namespace BrnPhysics
             return true;
         }
     }
+
+    // ================================================================================================
+    // PhysicsModule::UpdateCachedPositions  @0x8259C370  (34 insns)
+    // ⭐⭐ BODIED 2026-08-11 (lifetime wave). Its WorldLinkStubs boot gate is DELETED.
+    //
+    // WHY IT MATTERS, and it is not the 34 instructions: this is the ONLY writer of a triangle-cache
+    // slot's SPHERE CENTRE anywhere in the XEX. Until it runs, all 28 claimed slots sit at the WORLD
+    // ORIGIN, and the fill worker caches whatever geometry is near (0,0,0). A car at the Junkyard
+    // would then be traction-tested against triangles three kilometres away -- valid, green, and
+    // wrong. That is why it lands WITH the traction-line lifetime rather than after it.
+    //
+    // ⚠️ THREE ARMS, NOT SIX -- read off the asm at 0x8259C3BC / CC / DC, because three earlier logs
+    // in this tree say six. The other three (PhysicalTrafficManager, DetachedPartManager,
+    // DetachedWheelManager) are CALLEES of these, not siblings. The member offsets the console folds
+    // into each `addi` are this tree's members by name and they check out exactly:
+    //     this + 0x4AA0  == 19104  == mVehicleManager
+    //     this + 0x63630 == 407088 == mPropManager
+    //     this + 0x4CBA0 == 314272 == mDeformationManager
+    //
+    // ⚠️ AND ITS ONE CALLER IS WorldModule::Update @0x827D63E8, NOT PhysicsModule::Update -- `xrefs_to`
+    // is a one-element set. It is already wired that way (BrnWorldModule.cpp, under LockForWrite).
+    //
+    // ⚠️ ARMS 2 AND 3 ARE NAMED GATES THIS WAVE (BrnPhysicsConductorGates.cpp). That is a matched
+    // split, not a partial: the five per-manager producers write INDEPENDENT per-slot events into one
+    // queue whose consumer is per-slot, and props/deformation own ZERO cache slots today
+    // (usedSlots == 28 == 8 race cars + 20 traffic, runtime-witnessed). A manager that does not push
+    // leaves its own unclaimed slots exactly where they already are.
+    // ================================================================================================
+    void PhysicsModule::UpdateCachedPositions(
+        CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer )
+    {
+        CGS_ASSERT( lpSceneInputBuffer != NULL, "lpSceneInputBuffer_Update != NULL" );   // :617
+
+        mVehicleManager.UpdateTriangleCache( lpSceneInputBuffer );
+        mPropManager.UpdateTriangleCache( lpSceneInputBuffer );
+        mDeformationManager.UpdateTriangleCache( lpSceneInputBuffer );
+    }
 }

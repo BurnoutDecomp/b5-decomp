@@ -29,6 +29,7 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"  // CgsModule::EventQueue (InputBuffer_PostPhysics::mUpdatedPropQueue)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"  // BrnPhysics::ContactSpy::ContactSpyInterface (mContactSpyInterface, by value)
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropEvents.h"   // BrnPhysics::Props::UpdatePropEvent (queue element)
+#include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h" // BrnPhysics::Props::PropInputInterface (OutputBuffer_PrePhysics::mPropInputInterface, retyped 2026-08-10)
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"  // CgsSceneManager::SceneManagerIO::PotentialContact (InputBuffer_PrePhysics::mPotentialContactQueue element)
 #include "GameSource/World/AI/SharedIO/BrnAIModuleResultInterface.h"           // BrnAI::AIModuleIO::AIModuleResultInterface::ResetOnTrackResultQueue (InputBuffer_PrePhysics::mResetOnTrackResultQueue)
 
@@ -336,8 +337,18 @@ namespace PropEntityIO
     class OutputBuffer_PrePhysics : public CgsModule::IOBuffer
     {
     public:
-        // Opaque foreign-type storages (see FLAG above).
-        struct PropInputInterfaceStorage     { unsigned char maBytes[11296 - 4]; }; // +4..+11295
+        // ⭐ RETYPED 2026-08-10 (pre-physics bridge wave; SEVENTH use of the storage-typedef
+        // pattern). mPropInputInterface was a correctly-CONSOLE-sized opaque span, and
+        // WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics @0x827AAEC0 hands it
+        // straight to Props::PropInputInterface::Append. On the host that type is LARGER than
+        // its console span (four embedded event queues with an 8-byte mpEvents, plus a
+        // two-pointer ResourceHandle -- the physics input buffer already carries a
+        // KU_PROP_DRIFT for exactly this), so reading a host-shaped PropInputInterface out of
+        // an 11292-byte console-sized span walks off the end of the member and reads whatever
+        // follows as a queue length. Naming the real type makes both ends the same type: no
+        // cast, no overrun, and mPropToTrafficInterface simply moves down by the host growth
+        // (the layout gate below computes that drift from sizeof, so it keeps its teeth).
+        typedef BrnPhysics::Props::PropInputInterface PropInputInterfaceStorage;
         struct PropToTrafficInterfaceStorage { unsigned char maBytes[1]; };         // trailing +11296
 
         // X360 0x827A1B68 (own TU): read-lock handle, returns this + 4 (mPropInputInterface).

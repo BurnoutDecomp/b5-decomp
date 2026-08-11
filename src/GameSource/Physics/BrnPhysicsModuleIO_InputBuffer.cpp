@@ -52,12 +52,57 @@ namespace PhysicsModuleIO
             static_assert(sizeof(VehicleInputInterfaceStorage) >= 142176,
                           "vehicle-input span smaller than the console span -- retype regressed");
             static_assert(offsetof(InputBuffer, mVehicleDriverInterface)       == 142544 + KU_DRIFT, "mVehicleDriverInterface @142544+D");
+            // ⭐ 2026-08-09 (feed wave): mVehicleDriverInterface is the REAL
+            // Vehicle::VehicleDriverInputInterface now. Unlike the vehicle-input span it does NOT
+            // grow on the host -- every member is pointer-free -- so it must land EXACTLY on the
+            // console span or the members below it would need a second drift constant. Pin it.
+            static_assert(sizeof(VehicleDriverInputInterfaceStorage) == 147840 - 142544,
+                          "vehicle-driver span must equal the console 5296 (host type is pointer-free)");
             static_assert(offsetof(InputBuffer, mVehicleEffectsInputInterface) == 147840 + KU_DRIFT, "mVehicleEffectsInputInterface @147840+D");
+            // ⭐ 2026-08-10 (pre-physics bridge wave): mVehicleEffectsInputInterface is the REAL
+            // Vehicle::VehicleEffectsInputInterface now (it was a 1-byte span the pre-physics
+            // bridge Appends up to 1792 bytes into -- see the header). Like the driver interface
+            // and unlike the vehicle-input span it does NOT grow on the host, so it must land
+            // EXACTLY on the console span or every member below would need another drift. Pin it.
+            static_assert(sizeof(VehicleEffectsInputInterfaceStorage) == 149632 - 147840,
+                          "vehicle-effects span must equal the console 1792 (both queue headers are 16 on both targets)");
             static_assert(offsetof(InputBuffer, mRCEntityOutputInterface)      == 149632 + KU_DRIFT, "mRCEntityOutputInterface @149632+D");
-            static_assert(offsetof(InputBuffer, mTimerInterface)               == 327152 + KU_DRIFT, "mTimerInterface @327152+D");
-            static_assert(offsetof(InputBuffer, mSolverMaxIterations)          == 327200 + KU_DRIFT, "mSolverMaxIterations @327200+D");
-            static_assert(offsetof(InputBuffer, mPropManagerInputInterface)    == 327216 + KU_DRIFT, "mPropManagerInputInterface @327216+D");
-            static_assert(offsetof(InputBuffer, mGameActionQueue)              == 338496 + KU_DRIFT, "mGameActionQueue @338496+D");
+            // ⭐ 2026-08-10 (create-path wave): mRCEntityOutputInterface is the REAL
+            // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface now, and like
+            // the vehicle-input and prop-input spans it GROWS on the host (its eight
+            // CgsResource::ResourceHandle slots and the WorldMap2D carry x64-widened pointers), so
+            // every member below it takes a THIRD uniform drift. Computing it from sizeof keeps the
+            // gate's teeth: any wrong pad run still fails.
+            // ⚠️ THE OLD 0x28F0 OPAQUE SPAN WAS A LATENT TRUNCATION, not a neutral placeholder --
+            // WorldBridgeEntityModulesToPhysics.cpp memcpy's sizeof(RCEntityOutputInterfaceStorage)
+            // bytes out of a host source object that is LARGER than that, so the copy stopped
+            // short of the tail members. Its own banner said so and said "retype the seat when a
+            // consumer needs it"; PhysicsModule::PostSceneUpdate is that consumer as of today, and
+            // the three members it reads (mePlayerActiveRaceCarIndex, mbIsPlayerCarActive,
+            // maRaceCarStates[player].mEntityId) are only reachable by NAME once the seat is typed.
+            constexpr size_t KU_RCENTITY_DRIFT =
+                sizeof(RCEntityOutputInterfaceStorage) - (160112 - 149632);  // host growth of the RCEntity span
+            static_assert(sizeof(RCEntityOutputInterfaceStorage) >= 160112 - 149632,
+                          "RCEntity span smaller than the console span -- retype regressed");
+            static_assert(offsetof(InputBuffer, mPotentialContactQueue)        == 160208 + KU_DRIFT + KU_RCENTITY_DRIFT, "mPotentialContactQueue @160208+D+RD (0x8259FB40)");
+            static_assert(offsetof(InputBuffer, mOverlapPairsQueue)            == 324064 + KU_DRIFT + KU_RCENTITY_DRIFT, "mOverlapPairsQueue @324064+D+RD (0x8259FBE8)");
+            static_assert(offsetof(InputBuffer, mTimerInterface)               == 327152 + KU_DRIFT + KU_RCENTITY_DRIFT, "mTimerInterface @327152+D+RD");
+            static_assert(offsetof(InputBuffer, mSolverMaxIterations)          == 327200 + KU_DRIFT + KU_RCENTITY_DRIFT, "mSolverMaxIterations @327200+D+RD");
+            static_assert(offsetof(InputBuffer, mPropManagerInputInterface)    == 327216 + KU_DRIFT + KU_RCENTITY_DRIFT, "mPropManagerInputInterface @327216+D+RD");
+            // ⭐ 2026-08-10 (root-cause wave): mPropManagerInputInterface is the REAL
+            // Props::PropInputInterface now, and -- unlike the driver interface -- it DOES grow
+            // on the host (four embedded event queues with an 8-byte mpEvents, plus a
+            // two-pointer ResourceHandle), so mGameActionQueue takes a SECOND uniform drift.
+            // Computing it from sizeof keeps the gate's teeth: any wrong pad run still fails.
+            {
+                constexpr size_t KU_PROP_DRIFT =
+                    sizeof(PropInputInterfaceStorage) - (338496 - 327216);  // host growth of the prop-input span
+                static_assert(sizeof(PropInputInterfaceStorage) >= 338496 - 327216,
+                              "prop-input span smaller than the console span -- retype regressed");
+                static_assert(offsetof(InputBuffer, mGameActionQueue)
+                                  == 338496 + KU_DRIFT + KU_RCENTITY_DRIFT + KU_PROP_DRIFT,
+                              "mGameActionQueue @338496+D+RD+PD");
+            }
         }
         // The game-action queue member must be the real 13328-byte queue, not a stand-in: it is
         // the LAST member and WorldModule::BridgeActionsToPhysicsModule AddEvents into it.
@@ -73,10 +118,61 @@ namespace PhysicsModuleIO
     // BridgeActionsToPhysicsModule AddEvent fired "Not Constructed"
     // (CgsVariableEventQueue.h:454 / :728). Measured live the moment BridgeGameStateToWorld
     // started delivering game actions to the world.
+    // ⛔⛔ 2026-08-09 (feed wave) -- THE BODY ABOVE WAS A TWO-LINE PARTIAL AND IT COST 913
+    // ASSERTS THE MOMENT THE INPUT FEED LANDED.
+    // The console body (X360 0x825ABA18) is SIXTY-ONE instructions and constructs FIFTEEN
+    // members; the 2026-08-01 wave added only the one member it needed. The first frame
+    // WorldModule::BridgeInputToPhysicsModule @0x827AB830 ran, VehicleDriverInputInterface::
+    // Append hit an unconstructed VariableEventQueue<5040,16> and fired "Not Constructed"
+    // (CgsVariableEventQueue.h:759) every frame for the whole session.
+    // Console call order, with each member's console seat:
+    //   status = 1
+    //   +0x00170  Vehicle::VehicleInputInterface::Construct          -> mVehicleInputInterface
+    //   +0x22CD0  Vehicle::VehicleDriverInputInterface::Construct    -> mVehicleDriverInterface
+    //   +0x27170  Vehicle::CreateWorldEvent<1>::Construct            -> mCreateWorldEventQueue
+    //   +0x271D0  SceneManagerIO::PotentialContact<2048>::Construct  -> mPotentialContactQueue
+    //   +0x24180  Vehicle::CreateAirRamEvent<20>::Construct    ) the two queues inside
+    //   +0x24690  Vehicle::CreateSpinEvent<10>::Construct      ) mVehicleEffectsInputInterface
+    //             + zero stores at +0x24188 / +0x24698
+    //   +0x24880  RCEntityActiveRaceCarOutputInterface::Clear        -> mRCEntityOutputInterface
+    //   +0x4FDF0  CgsSystem::TimerStatusInterface::Clear             -> mTimerInterface
+    //   +0x00010  BrnDirector::Camera::Camera::Construct             -> mCameraInput
+    //   +0x4FE30  Props::AddPhysicalPropEvent<50>::Construct   ) the four queues inside
+    //   +0x50D90  Props::RemovePhysicalPropEvent<300>::Construct )  mPropManagerInputInterface
+    //   +0x526FC  Props::RemovePhysicalPartEvent<100>::Construct )  + five zero stores
+    //   +0x50DE0  Props::AddPhysicalPartEvent<50>::Construct    )
+    //   +0x52A40  VariableEventQueue<13312,16>::Construct            -> mGameActionQueue
+    //   +0x4F1E0  SceneManagerIO::OutOverlapPair<128>::Construct     -> mOverlapPairsQueue
+    //   +0x4FE20  mSolverMaxIterations = 0
+    //
+    // ⚠️ FOUR of those calls CANNOT be emitted yet and are NOT faked: mCreateWorldEventQueue is
+    // still a 96-byte pad, and mVehicleEffectsInputInterface / mRCEntityOutputInterface /
+    // mCameraInput are still correctly-sized opaque *Storage spans with no members to
+    // construct. They are listed above by console seat so the next wave that retypes any of
+    // them knows exactly which call to restore -- and any consumer that reaches one of those
+    // spans will fire the same loud "Not Constructed" this one did, by design.
+    // ⭐ 2026-08-10 (root-cause wave): the PROP leg is off that blocked list. The four console
+    // calls at +0x4FE30 / +0x51D90 / +0x526FC / +0x50DE0 (and their five zero stores) are
+    // exactly PropInputInterface::Construct, now that the member holds the real type -- see
+    // that body for the asm. Three committed bridges Append into this member every frame.
     void InputBuffer::Construct()
     {
         CgsModule::IOBuffer::Construct();
-        mGameActionQueue.Construct();
+
+        mVehicleInputInterface.Construct();      // +0x00170
+        mVehicleDriverInterface.Construct();     // +0x22CD0
+        // ⭐ 2026-08-10 (pre-physics bridge wave): now that the effects seat is the REAL type it
+        // can -- and MUST -- be Constructed. It was omitted only because a 1-byte span has no
+        // Construct; leaving it out now would hand the pre-physics bridge two event queues with
+        // a NULL mpEvents, which is the "mpEvents != NULL" + "Reached Max length" death the
+        // race-car pre-physics buffer already suffered once.
+        mVehicleEffectsInputInterface.Construct(); // +0x24180
+        mPotentialContactQueue.Construct();      // +0x271D0
+        mTimerInterface.Clear();                 // +0x4FDF0
+        mPropManagerInputInterface.Construct();  // +0x4FE30 (the four prop queues + the flag)
+        mGameActionQueue.Construct();            // +0x52A40
+        mOverlapPairsQueue.Construct();          // +0x4F1E0
+        mSolverMaxIterations = 0;                // +0x4FE20
     }
 
     // ---- getters (read-lock: status bit 4) ------------------------------------------

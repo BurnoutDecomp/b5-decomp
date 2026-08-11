@@ -396,14 +396,46 @@ RCEntityActiveRaceCarOutputInterface::GetDeformationModelResourcePtr(EActiveRace
         maDeformationModelResourceHandles[leActiveRaceCarIndex]);
 }
 
-// X360 0x8259BB58 -- GetPlayerSpeedMPH: the player car's current speed (mfSpeedMPH @968 in
-// the player's RaceCarState). Asserts the player index has been set. (Additive accessor;
-// the export demangled name was fully truncated -- mapped from the asm: it reads
-// maRaceCarStates[mePlayerActiveRaceCarIndex] + 968 and returns the single 4-byte field.)
+// ⛔⛔ ADDRESS ATTRIBUTION CORRECTED 2026-08-10 (create-path wave). The banner that stood here
+// said "X360 0x8259BB58 -- GetPlayerSpeedMPH ... (mfSpeedMPH @968)". BOTH halves were wrong, and
+// the ABI settles it without any judgement call:
+//   * 0x8259BB58's prototype is `_DWORD* __fastcall(_DWORD* sret, int this)` and its last act is
+//     `stw r11, 0(r30)` into that sret buffer. A PPC function returning f32 returns in f1 and
+//     takes NO sret pointer. So 0x8259BB58 returns a 4-byte CLASS type by value -- it cannot be
+//     GetPlayerSpeedMPH.
+//   * the field it loads is `mulli r11, idx, 0x460 ; add r11,r11,this ; lwz r11, 0x6F8(r11)`
+//     == maRaceCarStates[player] + (1784 - 816) == RaceCarState + 968, and BrnVehicleEvents.h:112
+//     names offset 968 mEntityId. mfSpeedMPH is the NEXT slot, @972.
+// The function at 0x8259BB58 is GetPlayerRaceCarEntityId (DWARF :293), bodied immediately below;
+// its one console caller is PhysicsModule::PostSceneUpdate @0x825ABC10.
+// GetPlayerSpeedMPH keeps its body -- it always read the right member BY NAME, which is why the
+// wrong address and the off-by-one-slot comment never produced a wrong byte -- but its X360
+// address is now honestly UNKNOWN rather than borrowed from its neighbour.
+//
+// GetPlayerSpeedMPH: the player car's current speed (mfSpeedMPH @972 in the player's
+// RaceCarState). Asserts the player index has been set. X360 address not identified.
 f32 RCEntityActiveRaceCarOutputInterface::GetPlayerSpeedMPH() const
 {
     CGS_ASSERT(mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID, "Player car index hasn't been set");
     return maRaceCarStates[mePlayerActiveRaceCarIndex].mfSpeedMPH;
+}
+
+// X360 0x8259BB58 (30 insns) -- GetPlayerRaceCarEntityId (DWARF
+// BrnRaceCarEntityModuleOutputInterface.h:293). The player car's HANDLING entity id, read out of
+// its RaceCarState. Statement for statement from the asm:
+//     lwz  r11, 0x2858(this)                    ; mePlayerActiveRaceCarIndex
+//     cmpwi r11, -1 ; bne -> skip
+//       FireAssert("Player car index hasn't been set", <this header>, 0x3DB == 987)
+//     lwz  r11, 0x2858(this)                    ; re-read, exactly as shipped
+//     mulli r11, r11, 0x460 ; add r11, r11, this ; lwz r11, 0x6F8(r11)
+//     stw  r11, 0(sret)
+// Its sole console caller is PhysicsModule::PostSceneUpdate @0x825ABC10, which feeds the result to
+// DeformationManager::FindModelIndexByEntityID.
+EntityId RCEntityActiveRaceCarOutputInterface::GetPlayerRaceCarEntityId() const
+{
+    CGS_ASSERT(mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
+               "Player car index hasn't been set");                     // this header :987
+    return maRaceCarStates[mePlayerActiveRaceCarIndex].mEntityId;
 }
 
 // ============================================================================

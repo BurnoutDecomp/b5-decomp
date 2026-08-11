@@ -61,6 +61,23 @@ OutputBuffer_PreScene::GetActiveRaceCarOutputInterface() const
     return &mActiveRaceCarOutputInterface;
 }
 
+// X360 0x8279D3B0 (R, :282) -- const vehicle-input-interface accessor of
+// OutputBuffer_PreScene. Read-lock ((status>>4)&1, eStatusLockedForRead) =>
+// IsBufferLockedForReading(). X360 epilogue == `addi r3, r28, 0x10` (this+16);
+// reproduced by-name as &mVehicleInputInterface. Pairs with the non-const overload
+// (:283, X360 0x822B4ED0) at the identical member offset (in the catch-all IO.cpp).
+// The DecFIGS PS3 build inlines this accessor into
+// WorldModule::BridgeEntityModulesToPhysicsModule_PreScene and its baked assert cites
+// BrnRaceCarEntityModuleIO.h:282 -- the same line the declaration carries here.
+// SOLE caller: that bridge (X360 0x827AADB8), which merges this interface into the
+// physics module input buffer's own VehicleInputInterface.
+const OutputBuffer_PreScene::VehicleInputInterface*
+OutputBuffer_PreScene::GetVehicleInputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mVehicleInputInterface;
+}
+
 // X360 0x822B5758 (R, :424) -- const scoring-output interface accessor of
 // InputBuffer_PrePhysics. Read-lock ((status>>4)&1, eStatusLockedForRead) =>
 // IsBufferLockedForReading(). X360 epilogue == this + 0x28020 (163872); reproduced

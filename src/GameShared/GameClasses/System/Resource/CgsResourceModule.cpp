@@ -169,6 +169,8 @@ namespace CgsResource
                 mBundleLoaderModule.EnqueueUnloadRequest(*reinterpret_cast<const Events::UnloadBundleRequest*>(lpEvent));
             else if (liId == 4)   // AcquireResource -> pool input (X360 routes id 4 -> pool tag 4)
                 lpPoolQ->AddEvent(lpEvent, 4, liSize);
+            else if (liId == 5)   // AcquireResourceList -> pool input (X360 routes id 5 -> pool tag 5)
+                lpPoolQ->AddEvent(lpEvent, 5, liSize);
             const CgsModule::Event* lpNext = 0;
             liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;
@@ -196,7 +198,12 @@ namespace CgsResource
                 reinterpret_cast<const Events::PoolEvent*>(lpEvent)->mpUser;
             if (lpUser != 0)
             {
-                const s32 liUserId = (liId == 6) ? 4 /*AcquireResource response*/ : liId;
+                // dword_820F7194[tag]: [6] == 4 (acquire), [7] == 5 (acquire-list). Both values are
+                // read straight out of the ARTIST image's translation table, so the acquire mapping
+                // that was already committed here doubles as the calibration for the new one.
+                const s32 liUserId = (liId == 6) ? 4 /*AcquireResource response*/
+                                   : (liId == 7) ? 5 /*AcquireResourceList response*/
+                                                 : liId;
                 lpUser->AddEvent(lpEvent, liUserId, liSize);
             }
             const CgsModule::Event* lpNext = 0;

@@ -1,3 +1,10 @@
+// ⭐ THIS TU MOUNTS as of 2026-08-10 (ground wave). It was held off the link since 2026-08-06 by a
+// single unresolved edge -- its Construct calls DataStreamCommandPoster::Construct @0x82869E08,
+// which is an export-set hole -- and that edge is now carried by the loud dead trap in
+// CgsDataStreamCommandPoster_LinkStub.cpp, exactly as CgsCollisionGenerator_StreamStubs.cpp carries
+// the collide-stream family's. Nothing here is reachable yet; the mount is for LINK CLOSURE.
+// GetCurrent/GetNext live in the sibling slice CgsSimpleDataStreamProducer_ResultIterator.cpp.
+
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
@@ -75,32 +82,61 @@ namespace CgsMemory
             (luAlignedResultSize * static_cast<u32>(liMaxResults) + 0x7Fu) & ~0x7Fu;
     }
 
-    // X360 0x825B29A0.
-    // Returns a pointer to the result record the iterator currently points at.
-    // The record address is mpResultBuffer + miAlignedResultSize * miResultIndex
-    // (results are stored at the aligned stride). If the cursor has reached the
-    // end (miResultIndex >= parent->miNumAddedCommands) the cursor is clamped to
-    // the count and a null pointer is returned.
+    // ⭐ ADDED 2026-08-10 (cache-fill wave). Both are INLINED by the X360 at every call
+    // site, so neither carries a symbol; the shapes are read off the sites the triangle-cache
+    // fill uses.
     //
-    // Asm: a1[1]=mpParent checked non-null ('No parent'); mpParent+0x100=mbIsStreaming
-    // checked false ('Parent is streaming'); then compares miResultIndex (a1[0]) with
-    // mpParent[0x104]=miNumAddedCommands; else-branch computes
-    // miAlignedResultSize(0x30)*miResultIndex + mpResultBuffer(0x34).
-    const void* SimpleDataStreamResultIterator::GetCurrent()
+    // AllocateCommand -- TriangleCacheManager::StartUpdateTriangleCaches @0x828BEE84..0x828BEE8C:
+    //     addi r3, producer, 0x80          <- &mCommandPoster
+    //     bl   DataStreamCommandPoster::AllocateCommand
+    //     stw  r3, 0x104(producer)         <- miNumAddedCommands = <the poster's new count>
+    // ⚠️ FLAG: the producer-level RETURN value is not observed at that site (the console drops
+    // r3 after the store). Modelled as the freshly stored count, mirroring the sibling
+    // AddCommand shape; nothing in this tree reads it yet.
+    s32 SimpleDataStreamProducer::AllocateCommand(void** lppOutBuffer)
     {
-        CGS_ASSERT(mpParent != nullptr, "No parent\n");
-        CGS_ASSERT(!mpParent->mbIsStreaming, "Parent is streaming\n");
+        miNumAddedCommands = mCommandPoster.AllocateCommand(lppOutBuffer);
+        return miNumAddedCommands;
+    }
 
-        SimpleDataStreamProducer* const lpParent = mpParent;
-        const s32 liNumAddedCommands = lpParent->miNumAddedCommands;
+    // End -- TriangleCacheManager::EndUpdateTriangleCaches @0x828BF1AC..0x828BF1B8:
+    //     lwz r31, 0x30(this) ; addi r3, r31, 0x80 ; bl DataStreamCommandPoster::End
+    //     li  r20, 0          ; stb r20, 0x100(r31)
+    // i.e. the exact mirror of Begin() (which is CgsSimpleDataStreamProducer_Begin.cpp): close the
+    // embedded poster, then drop the streaming flag. Unlike Begin it publishes nothing -- the
+    // shared snapshot is left as the streaming side last saw it, which is what lets the result
+    // iterator still size itself afterwards.
+    void SimpleDataStreamProducer::End()
+    {
+        mCommandPoster.End();
+        mbIsStreaming = false;
+    }
 
-        if (miResultIndex >= liNumAddedCommands)
-        {
-            miResultIndex = liNumAddedCommands;
-            return nullptr;
-        }
+    // GetResultIterator -- TriangleCacheManager::EndUpdateTriangleCaches @0x828BF1F0:
+    //     ld  r11, 0x38(producer) ; std r11, <local>
+    // i.e. an 8-byte BY-VALUE copy of mResultIterator (s32 miResultIndex + the 4-byte console
+    // parent pointer) into the caller's frame. The caller then walks the COPY, so the
+    // producer's own cursor is left untouched.
+    SimpleDataStreamResultIterator SimpleDataStreamProducer::GetResultIterator() const
+    {
+        return mResultIterator;
+    }
 
-        return reinterpret_cast<const char*>(lpParent->mpResultBuffer)
-             + lpParent->miAlignedResultSize * miResultIndex;
+    // ⭐ MOVED OUT 2026-08-10 (ground wave): SimpleDataStreamResultIterator::GetCurrent
+    // (X360 0x825B29A0) now lives in the mountable slice
+    // CgsSimpleDataStreamProducer_ResultIterator.cpp, alongside GetNext, because the traction-line
+    // harvest needs it and THIS home TU is still unmountable (its Construct calls the
+    // declared-only DataStreamCommandPoster::Construct). Same reason CgsSimpleDataStream-
+    // Producer_Begin.cpp exists. It was MOVED, not copied -- one definition, no LNK2005 --
+    // and folds back here when this TU mounts.
+
+    // ⭐ GetNumCommands -- ADDED 2026-08-10 (fill-worker wave 2). Declared since the class
+    // landed, never bodied; nothing called it until RunFillTriangleCacheStream did.
+    // The console does not call an accessor at all -- it reads the member inline
+    // (`lwz r11, 0x104(producer)` @0x82810D54, and the same +0x104 the result iterator
+    // reads) -- so the name comes from the DWARF declaration and the body is that load.
+    s32 SimpleDataStreamProducer::GetNumCommands() const
+    {
+        return miNumAddedCommands;
     }
 }

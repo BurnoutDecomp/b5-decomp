@@ -39,10 +39,19 @@
 #include "GameSource/Physics/VehicleManager/StuntOffences/BrnStuntOffencesManager.h" // BrnPhysics::StuntOffencesManager (mStuntOffencesManager @+44240 -- the ONE contained sub-object whose real x64 type fits its X360 span exactly)
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h" // BrnPhysics::Vehicle::PhysicalTrafficManager (mPhysicalTrafficManager @+44768 -- embedded BY NAME as of 2026-08-03; see the drift note below)
 #include "GameSource/Physics/VehicleManager/BrnVehicleManagerDebugComponent.h" // BrnPhysics::Vehicle::VehicleManagerDebugComponent (mDebugComponent @+161968 -- embedded BY NAME as of 2026-08-03; that header only forward-declares VehicleManager, so this is not a cycle)
+#include "GameShared/GameClasses/Physics/CgsRigidBody.h"          // CgsPhysics::RigidBodyId (GetRigidBodyId/GetRaceCarPhysics, 2026-08-09)
 
 // Pointer-only collaborators in RaceCarResponseInfo -- forward-declared in their real namespaces
 // (homed by their own TUs; the classifier never dereferences them here).
-namespace BrnPhysics { namespace PhysicsModuleIO { class VehicleOutputRequestInterface; } }
+// ⭐ FORK RETIRED 2026-08-09 (conductor wave). This line used to forward-declare
+// `PhysicsModuleIO::VehicleOutputRequestInterface` (class key CLASS) and every request-
+// interface parameter below was typed on it -- but the REAL committed type is
+// `BrnPhysics::Vehicle::VehicleOutputRequestInterface` (struct, BrnVehicleOutputInterface.h),
+// and the PS3 DecFIGS mangles put it in Vehicle:: for every one of these methods
+// (`PNS0_29VehicleOutputRequestInterfaceE`, NS0_ == BrnPhysics::Vehicle). The old
+// wrong-namespace opaque decl forced reinterpret_casts at the seams (UpdateVehiclePhysics'
+// SetRaceCarCrashing call carried one); all 21 uses are re-typed and the casts retired.
+namespace BrnPhysics { namespace Vehicle { struct VehicleOutputRequestInterface; } }
 namespace BrnPhysics { namespace Deformation { class DeformationInputInterface; } }
 namespace BrnGameState { namespace GameStateModuleIO { class VehicleOutputInterface; } }
 
@@ -61,6 +70,14 @@ namespace rw { struct IResourceAllocator; }
 // class key `struct`, matching CgsPhysicsSimulationIO_Events.h).
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InAddPotentialContact; } }
 
+// ⭐ ADDED 2026-08-09 (conductor wave) -- collaborators of the new per-frame surface, pointer
+// use only here. Class keys match each committed home exactly (struct OutputBuffer ==
+// CgsPhysicsSimulationModuleIO.h:321; struct ContactSpyData == BrnContactSpyData.h:60;
+// class VehicleDriverInputInterface == BrnVehicleDriverInputInterface.h:44).
+namespace CgsPhysics { namespace PhysicsSimulationIO { struct OutputBuffer; } }
+namespace BrnPhysics { namespace ContactSpy { struct ContactSpyData; } }
+namespace BrnPhysics { namespace Vehicle { class VehicleDriverInputInterface; } }
+
 // ⭐ ADDED 2026-08-06 (PhysicsModule::Update leaves wave) -- the collaborators of the four
 // per-frame leaves (FreeAllocations / UpdateVehicleEffects / ReadUpdatedBodyProperties /
 // ProcessDeformationStates). Class keys match each type's committed home exactly.
@@ -69,6 +86,7 @@ namespace CgsModule { struct IOBufferStack; }                              // Cg
 // template-arg use only in this header.
 namespace CgsMemory { class LinearMalloc; }
 namespace CgsMemory { struct SimpleDataStreamProducer; }   // stream-producer members (pointers)
+namespace CgsMemory { struct SimpleDataStreamResultIterator; }  // traction harvest cursor (pointer)
 namespace EA { namespace Jobs { struct Job; } }            // job members (pointers)
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairListBuilder.h" // PrimitivePairListBuilder (five BY-VALUE members)
 namespace CgsSceneManager { namespace SceneManagerIO { struct OutOverlapPair; } }
@@ -159,7 +177,14 @@ namespace Vehicle
     // RaceCarPhysics_layout_check.cpp and VehiclePhysics_layout_check.cpp assert the same seats as
     // CONSOLE ARITHMETIC over the X360Layout literals, and their chain closes on this very 5216.
     // That is the same trade VehiclePhysics_layout_check.cpp already argued for its own block.
-    const std::ptrdiff_t KU_HOST_DRIFT_AFTER_RACECAR_ARRAY = -1664;
+    //
+    // ⭐⭐ RE-DERIVED 2026-08-09 (attribs-setup wave): the term is now **0**. The whole -1664 was
+    // 8 * -208, and the -208 per element was EXACTLY the SimpleVehicleAttribs gap (the tree's
+    // 32-byte {mCOMOffset, mbIsValid} slice against the console's 240). That slice is now the
+    // full width-identical 240 (BrnSimpleVehiclePhysics.h), so sizeof(RaceCarPhysics) is 5216 on
+    // the host == the X360's literal stride (`mulli r11, r22, 0x1460`), and the array term
+    // vanishes. MEASURED with the compiler via the gate below, not carried from this note.
+    const std::ptrdiff_t KU_HOST_DRIFT_AFTER_RACECAR_ARRAY = 0;
 
     // ⭐⭐ RE-MEASURED 2026-08-03 (the TrafficPhysics de-fork wave): the second term is now **-3968**,
     // not +192. `maFullTrafficPhysics` inside PhysicalTrafficManager was folded from a byte-pinned
@@ -172,8 +197,15 @@ namespace Vehicle
     //     101680 - 105648 == -3968     (and -3968 % 16 == 0, so every 16-aligned member behind it
     //                                   keeps its alignment)
     // MEASURED with the compiler (`char (*p)[sizeof(T)] = 1;`), not carried forward from a note.
+    //
+    // ⭐⭐ RE-DERIVED 2026-08-09 (attribs-setup wave): the step is back to **+192**, the value it
+    // had before the TrafficPhysics de-fork -- because the de-fork's -4160 was 20 * -208, and the
+    // -208 per element was the SimpleVehicleAttribs slice gap, now closed (see the race-car term
+    // above). sizeof(TrafficPhysics) is 5168 on the host == the console's `mulli 0x1430` stride,
+    // so the only remaining widening in the traffic manager is its own +192 (pointer members +
+    // the 48-vs-32 debug component span).
     const std::ptrdiff_t KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER =
-        KU_HOST_DRIFT_AFTER_RACECAR_ARRAY + -3968;   // -5632
+        KU_HOST_DRIFT_AFTER_RACECAR_ARRAY + 192;   // +192
 
     // ⭐ The third term, added 2026-08-03 in an earlier wave. VehicleManagerDebugComponent is 1328
     // bytes on the host against the 1296-byte X360 span at +161968..+163264 -- +32, because its
@@ -182,7 +214,7 @@ namespace Vehicle
     // the stride-1024 walk from +163264), so the +32 is real and the only honest answer is to carry
     // it. 32 % 16 == 0, so every 16-aligned member past it keeps its alignment.
     const std::ptrdiff_t KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT =
-        KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER + 32;  // -5600
+        KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER + 32;  // +224 (re-derived 2026-08-09)
 
     // ⭐ The fourth term, added 2026-08-06 (big-five #2): the contact-generation block carve
     // (+172465..+172592 console -> real members). Growth = the pointer-pair carve's +12 (4
@@ -191,7 +223,7 @@ namespace Vehicle
     // and one before the traction-line pointer (+4): +12+20+36+4+4 == +76. MEASURED against the
     // compiled layout by the gate's own seat asserts (BrnVehicleManager_layout_check.cpp).
     const std::ptrdiff_t KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK =
-        KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 76;  // -5524
+        KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 76;  // +300 (re-derived 2026-08-09)
 
     class VehicleManager
     {
@@ -240,7 +272,7 @@ namespace Vehicle
             f32 lfGameTimerTimeStep,
             const VehicleInputInterface* lpInputInterface,
             VehicleOutputInterface* lpVehicleOutputInterface,
-            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
             VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
             bool lbIsOnlineGameMode,
@@ -254,7 +286,7 @@ namespace Vehicle
         // (The 6-arg + EntityId overload @0x82635B00, DWARF h:1242, is CrashFatalRaceCars'
         // callee and lands with that body.)
         void ForceRaceCarCrash(
-            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
             VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
             VehicleOutputInterface* lpVehicleOutputInterface,
             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
@@ -278,14 +310,14 @@ namespace Vehicle
         void UpdateVehicleImpacts(
             const CgsModule::EventQueue<ImpactEvent, 16>* lpImpactEventQueue,   // == VehicleInputInterface::ImpactEventQueue
             VehicleOutputInterface* lpVehicleOutputInterface,
-            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
             VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
 
         // DWARF h:1236; X360 @0x82640690 (264 insns).
         void UpdateAggressiveDriving(
             f32 lfTimeStep,
-            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
             VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
             VehicleOutputInterface* lpVehicleOutputInterface,
             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
@@ -294,13 +326,31 @@ namespace Vehicle
         // CgsBitArray.h TU -- re-derive at its own wave).
         void UpdateCrashes(f32 lfTimeStep);
 
-        // DWARF h:893; X360 body is an export-set hole (absent-from-JSON, not absent-from-image).
+        // DWARF h:893; X360 @0x82633CD8 (68 insns).
+        // ⛔⛔ THE 2026-08-10 "ARITY CORRECTED TO ONE PARAMETER" IS ITSELF RETRACTED, 2026-08-11
+        // (lifetime wave). That note reasoned entirely from the CALLEE ("r5 is never touched in
+        // any of the 68 instructions ... the interface argument never existed") and concluded the
+        // second parameter was fabricated. An unread argument is not an absent one, and the
+        // CALLER settles it:
+        //     0x8264565C  mr   r5, r29                 <- UpdateVehiclePhysics DOES set r5
+        //     0x82645660  lwz  r4, arg_1C(r1)
+        //     0x82645664  mr   r3, r24
+        //     0x82645668  bl   VehicleManager::EndVehicleTractionLineTests
+        // and r29 is loaded fresh from an incoming argument slot at 0x82645638. The PS3 DWARF
+        // types it:  ..VehicleManager27EndVehicleTractionLineTestsEPN9CgsModule13IOBufferStackE
+        //            PKNS0_21VehicleInputInterfaceE
+        // i.e. (IOBufferStack*, const VehicleInputInterface*) -- and UpdateVehiclePhysics has
+        // exactly one VehicleInputInterface parameter in scope. RESTORED to two.
+        // ⭐ This is the standing "prefer the DWARF arity when the console never reads an
+        // argument" rule; nothing behavioural changes, the declaration just stops claiming
+        // something the image contradicts.
+        // (Still RETRACTED, correctly: the old "export-set hole" claim -- the body IS exported.)
         void EndVehicleTractionLineTests(CgsModule::IOBufferStack* lpInputBufferStack,
                                          const VehicleInputInterface* lpInputInterface);
 
         // DWARF h:1287; X360 body is an export-set hole (image-only).
         void CrashFatalRaceCars(
-            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
             VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
             VehicleOutputInterface* lpVehicleOutputInterface,
             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
@@ -317,12 +367,38 @@ namespace Vehicle
         // BrnPhysics::PhysicsModule::Prepare @0x825ADB68 (`bl` at 0x825ADDFC, result tested
         // with a `bne` so the return is a bool). Arguments are the physics resource allocator
         // (bank 23) and the scene input buffer PhysicsModule::Prepare was handed.
-        // Declaration-only; the body is a named LINK STUB in WorldLinkStubs.cpp until this
-        // manager's own prepare pass lands. It is declared here rather than left implicit so
-        // the drop is one greppable symbol instead of a silent `return true` for the whole
-        // physics module.
+        // ⭐⭐ BODIED 2026-08-10 (producer wave) in BrnVehicleManager_Prepare.cpp; the
+        // WorldLinkStubs gate is DELETED. A resumable three-stage fall-through FSM over
+        // mePrepareStage: PrepareData -> PrepareTriangleCache -> done. Every store in its tail
+        // arm is reached BY NAME (meReleaseStage +4, mn8RoundRobinControlWord +172464,
+        // mbTrafficCheckingAllowed +172313 -- all three already mapped in this header).
         bool Prepare( rw::IResourceAllocator* lpAllocator,
                       CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer );
+
+        // ⛔ X360 @0x82633568 (161 insns). Prepare's stage-1 arm: the per-car data build --
+        // 8x VehiclePhysics::Construct + 8x { VehicleDriver::Prepare, VehiclePhysics::Construct,
+        // Vehicle::DebugComponent::Construct }, then PhysicalTrafficManager::Prepare
+        // @0x8262CA48, VehicleDriver::Prepare on the 9th (traffic) driver, and ~30 scalar seeds.
+        // NOT RECONSTRUCTED 2026-08-10 -- a named LINK STUB in WorldLinkStubs.cpp, deliberately,
+        // for two measured reasons rather than one felt one:
+        //   (1) its own callee closure is ~470 further instructions across four functions of
+        //       which only VehiclePhysics::Construct exists in this tree, and
+        //   (2) the Hex-Rays view degenerates into `_R28`/`_R31` inline-asm with every store at a
+        //       raw console byte offset past mPhysicalTrafficManager -- i.e. past the +224 host
+        //       drift this header documents -- so reproducing it from the pseudocode would be
+        //       exactly the offset hack the project forbids.
+        // It always returns 1 on the console (there is no failure path in the body), which is what
+        // makes the FSM above landable without it; the drop is one greppable symbol.
+        bool PrepareData( rw::IResourceAllocator* lpPhysicsAllocator );
+
+        // ⭐ BODIED 2026-08-10 (producer wave). X360 @0x82615BA0 (37 insns); home
+        // BrnVehicleManager.cpp:891 per its own baked assert path. Prepare's stage-2 arm and
+        // **the function that registers a car with the triangle cache at all**: 8 InEventAddToCache
+        // (slots 0..7, radius KF_TRIANGLE_CACHE_SPHERE_RADIUS) into the scene input's
+        // mAddToCacheQueue, then the 20 traffic slots via
+        // PhysicalTrafficManager::PrepareTriangleCache @0x825EE5A0.
+        bool PrepareTriangleCache(
+            CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update );
 
         // ⭐ ADDED 2026-08-06 (bridge de-facade wave). DWARF BrnVehicleManager.h:667; X360
         // @0x825C8990 (home BrnVehicleManager.cpp:9877 per its own baked assert path). Debug
@@ -475,12 +551,370 @@ namespace Vehicle
         // to the player car's RaceCarPhysics::UpdateShowtimeBounceModifiers.
         void ProcessDeformationStates(const Deformation::DeformationOutputInterface* lpDeformationInterface);
 
+        // ==========================================================================================
+        // ⭐ ADDED 2026-08-09 (conductor wave -- PhysicsModule::Update @0x825B0640 lands for real).
+        // The remaining per-frame surface Update calls. Signatures are DWARF-authoritative
+        // (references/DecFIGS/dwarfdump/.../BrnVehicleManager.h) and corroborated by the PS3
+        // DecFIGS out-of-line mangles. Split by status:
+        //   REAL THIS WAVE (bodied in BrnVehicleManager_ConductorLeaves.cpp): CheckState,
+        //     UpdateCameraMatrix, GetForceNoSlowMo, ResetForceNoSlowMo, ProcessWheelContacts,
+        //     ReadUpdatedBodies.
+        //   ⚠ FLAG -- DECLARED FOR THE CONDUCTOR'S CLOSURE, body still a LOUD one-shot gate in
+        //     BrnPhysicsConductorGates.cpp (each gate names its X360 address + insn count):
+        //     the rest. Reconstruct each and DELETE its gate (LNK2005 is the tripwire).
+        // ==========================================================================================
+
+        // @0x825EADA8 (DWARF dump :977). Debug validation sweep: for every live race car
+        // (mUsedRaceCars) run ExternalPhysicsBody::CheckState on its physics body; a failure
+        // streams the car's entity id into the assert buffer. Called FIFTEEN times per
+        // Update as stage brackets.
+        void CheckState();
+
+        // DWARF :264. Latch this frame's camera matrix (Update copies the input buffer's
+        // camera block here; the per-car force model reads it for camera-relative effects).
+        void UpdateCameraMatrix(const Matrix44Affine* lpCameraMatrix);
+
+        // DWARF :656 / :660 (both non-const there; kept verbatim). The super-slow-motion
+        // inhibit latch (Update's crashed-car slow-mo block reads it, then resets it).
+        bool GetForceNoSlowMo()   { return mbForceNoSlowMo; }
+        void ResetForceNoSlowMo() { mbForceNoSlowMo = false; }
+
+        // DWARF :989. The per-slot handling-body handle. X360-attested by Update's
+        // slow-motion block, which inlines slot 0's read (`ldx` this+43744).
+        CgsPhysics::RigidBodyId GetRigidBodyId(s32 liRaceCarIndex)
+        {
+            return CgsPhysics::RigidBodyId(maRaceCarHandlingBodyIDs[liRaceCarIndex]);
+        }
+
+        // DWARF :995. Resolve a handling-body id to its race car: linear-search the
+        // per-car EntityId table for the id's entity word; miss returns NULL. X360-attested
+        // by Update's slow-motion block, which inlines exactly this loop
+        // (0x825B0C5C..0x825B0C94: 8 x `lwz`/`cmplw` over this+43584, then
+        // `mulli 0x1460` + `addi 0x740` into maRaceCarVehicles).
+        RaceCarPhysics* GetRaceCarPhysics(CgsPhysics::RigidBodyId lRigidBodyId)
+        {
+            const u32 luEntityId = static_cast<u32>(lRigidBodyId.GetEntityId());
+            for (s32 liCar = 0; liCar < 8; ++liCar)
+            {
+                if (maRaceCarEntityIDs[liCar].muValue == luEntityId)
+                {
+                    return &maRaceCarVehicles[liCar];
+                }
+            }
+            return 0;
+        }
+
+        // DWARF :375, X360 @0x8284CB38. ⭐ EMPTY AS SHIPPED: the retail X360 body is a single
+        // `blr`, ICF-folded with BaseCollisionGenerator::Destruct (which is why the Update
+        // call site's `bl` appears to target that symbol with r3 == &mVehicleManager and
+        // f1 == the timestep). The PS3 DecFIGS build keeps the (equally empty) function
+        // out of line under its own name. Reconstructed as the empty member it is.
+        void ProcessWheelContacts(f32 lfTimeStep,
+                                  BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContactInterface);
+
+        // @0x82619A10 (DWARF :366). ⭐ BODIED 2026-08-10 (create-path wave) in
+        // BrnVehicleManager_ReadUpdatedBodies.cpp -- the conductor gate is deleted.
+        //
+        // ⛔ THE DESCRIPTION THAT USED TO SIT HERE WAS WRONG IN BOTH CLAUSES, and it is worth
+        // saying why rather than just replacing it. It read: "first the fallback integration for
+        // live cars NOT owned by the sim this frame ..., then drain the sim's OutUpdateRigidBody
+        // queue into the owning cars." The X360 body does NEITHER. There is no ownership test --
+        // the only per-car guard is ExternallySimulatedBody::mbFrozen -- and the queue is never
+        // dereferenced here at all: it arrives in r4, is stashed at var_1C and is forwarded
+        // untouched to PhysicalTrafficManager::ReadUpdatedBodies, whose only use of it is a dev
+        // duplicate-id assert. Nothing in this call chain reads a transform back from rw::physics.
+        //
+        // What it IS: the per-frame **gravity + integration step** for every live race car --
+        //     mLinearVelocity.y -= KF_GRAVITY * dt ;  ExternalPhysicsBody::IntegrateTransform(dt)
+        // -- then the same for traffic. Because a race car is an ExternalPhysicsBody the game
+        // integrates itself, this is the ONLY place gravity enters a car and the only place a
+        // car's pose advances. See the TU banner for the full asm decode.
+        void ReadUpdatedBodies(
+            const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody, 200>* lpUpdatedBodyQueue,
+            VecFloat lvfTimeStep);
+
+        // ==========================================================================================
+        // ⭐⭐ THE VEHICLE MAINTENANCE FAMILY -- ADDED 2026-08-10 (create-path wave).
+        //
+        // ProcessVehicleMaintenanceEvents @0x8264AB38 (118 insns) is BODIED for real in
+        // BrnVehicleManager_MaintenanceEvents.cpp. It is pure orchestration: seven null asserts
+        // (BrnVehicleManager.cpp:1141..:1147, in parameter order) then six calls with no branch
+        // between them. Its ONLY console caller is PhysicsModule::PostSceneUpdate @0x825ABC10,
+        // which is why nothing in this family has ever executed on this build.
+        //
+        // ⛔ THE FIVE ARMS BELOW ARE ONE-SHOT GATES, and the middle one is the point of the whole
+        // campaign: ProcessCreateEvents @0x82616770 is the ONLY writer anywhere in the XEX that
+        // SETS a bit in mUsedRaceCars (the tree's only other write is Construct's UnSetAll()).
+        // Until it lands, no race car exists to the physics vehicle manager.
+        //
+        // ⚠️⚠️ AND IT MUST NOT LAND BEFORE THE GROUND DOES. Setting one bit of mUsedRaceCars
+        // turns on FOUR already-mounted, already-called per-frame loops that walk that bitset --
+        // ReadUpdatedBodies (gravity + IntegrateTransform, i.e. the fall itself),
+        // UpdateVehiclePhysics (both loops, including RaceCarPhysics::Update),
+        // StartVehicleContactGeneration and the traction-line harvest. See the ground-cost census
+        // in BrnPhysicsConductorGates.cpp: the ORDER is traction chain -> create path.
+        // ==========================================================================================
+        void ProcessVehicleMaintenanceEvents(
+            CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsModule::IOBufferStack* lpOutputBufferStack,
+            const VehicleInputInterface* lpInputInterface,
+            VehicleOutputRequestInterface* lpOutputInterface,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            VehicleOutputInterface* lpVehicleOutputInterface,
+            Deformation::DeformationInputInterface* lpDeformationInterface);   // @0x8264AB38
+
+        // @0x825C7EA8 (321). Arm 1: record which NETWORK race cars were added for collision this
+        // frame. GATE.
+        void RecordNetworkRaceCarsAddedForCollision(const VehicleInputInterface* lpInputInterface);
+
+        // @0x826160C8 (426). Arm 2: drain the remove-race-car queue. GATE.
+        void ProcessRemoveEvents(const VehicleInputInterface* lpInputInterface,
+                                 VehicleOutputRequestInterface* lpOutputInterface,
+                                 VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                 Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // ⛔⛔ @0x82616770 (1,067). Arm 3: THE CREATE PATH. GATE -- see the banner above and the
+        // measured split point in BrnVehicleManager_MaintenanceEvents.cpp.
+        void ProcessCreateEvents(const VehicleInputInterface* lpInputInterface,
+                                 VehicleOutputRequestInterface* lpOutputInterface,
+                                 VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                 Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // @0x825E9010 (65). Arm 4: drain the validate-race-car queue. GATE.
+        void ProcessValidationEvents(const VehicleInputInterface* lpInputInterface,
+                                     Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // @0x825E8F28 (export hole -- no per-function JSON; named only at this one call site).
+        // Arm 5: drain the set-race-car-collision queue. GATE.
+        void ProcessCollisionEvents(const VehicleInputInterface* lpInputInterface,
+                                    Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // ==========================================================================================
+        // ⭐ TRACTION-LINE CHAIN, the four members bodied for real 2026-08-10 (ground wave), in
+        // BrnVehicleManager_TractionLineTests.cpp. A Burnout car does NOT rest on contacts --
+        // contacts are the body-shell/crash path; it rests on TRACTION LINE TESTS, and this is the
+        // producer lifecycle plus the race-car harvest that ends in Wheel::mRoadContact.mbIsOnGround.
+        // ⚠ ALL FOUR ARE UNREACHED TODAY: their only callers are StartVehicleTractionLineTests
+        // (gate-bodied below) and EndVehicleTractionLineTests (link stub) -- see those two for why
+        // the generation half cannot land yet. They are mounted so the LINK closure is enforced.
+        // ==========================================================================================
+
+        // @0x825B5098 (52 insns). Carve the traction-line command stream out of the contact
+        // generator's result arena and seat it in mpTractionLineStreamProducer.
+        void DoVehicleTractionLineAllocations(
+            CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen);
+
+        // @0x825B5168 (64 insns). Publish the stream's geometry (SimpleDataStreamProducer::Begin,
+        // which the console inlines here) and dispatch the line-test job tree.
+        void RunTractionLineTestJobs(
+            CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen);
+
+        // @0x825B5268 (37 insns). Release the seat. The stream memory itself is arena-owned by the
+        // generator, so this is a pointer null-store, not a free.
+        void DoVehicleTractionLineDecallocations(CgsModule::IOBufferStack* lpInputBufferStack);
+
+        // @0x82618058 (231 insns). ⭐ THE PAYOFF: per live race car, per wheel that reported a hit,
+        // feed {position, normal, surface tag} into RaceCarPhysics::AddTractionPoint -- which is
+        // what sets Wheel::mRoadContact.mbIsOnGround and so what UpdateSuspensionSprings pushes
+        // against. Takes the result cursor BY POINTER: EndVehicleTractionLineTests copies the
+        // producer's own iterator to its stack (`ld r11, 0x38(producer)`, one 8-byte value) and
+        // hands the same copy to all three harvests in turn, so each resumes where the last stopped.
+        void ReadRaceCarTractionLineTestResults(
+            CgsMemory::SimpleDataStreamResultIterator* lpResultIterator);
+
+        // ⭐⭐ @0x825E9640 (313 insns) -- BODIED 2026-08-11 (lifetime wave). THE GENERATION HALF
+        // of the race-car leg: one 176-byte stream command per LIVE race car, carrying that car's
+        // window into the shared triangle cache and its four wheels' suspension probes.
+        // Signature from the PS3 DWARF (..VehicleManager27AddRaceCarTractionLineTestsE
+        // PN15CgsSceneManager12CgsCollision18CollisionGeneratorEPKNS2_14SceneManagerIO22Triangle
+        // CacheInterfaceE) and matched by the X360 asserts, which name both arguments.
+        // Returns the number of commands posted (the caller accumulates it).
+        s32 AddRaceCarTractionLineTests(
+            CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen,
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpCacheInterface);
+
+        // ⭐⭐ @0x82615C38 (240 insns) -- BODIED 2026-08-11 (lifetime wave). THE POSITION HALF:
+        // per live race car, post one InEventUpdateCachedPosition carrying {world position,
+        // bounding radius} for that car's triangle-cache slot, then chain to the traffic pool.
+        // Without it every claimed cache slot's sphere stays at the WORLD ORIGIN and the fill
+        // worker caches triangles from the wrong place entirely.
+        void UpdateTriangleCache(
+            CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update);
+
+        // ---- ⚠ FLAG: gate-bodied (BrnPhysicsConductorGates.cpp) from here down ------------------
+
+        // ⭐ THE TWO SIDE LEGS OF THE TRACTION-LINE PRODUCER, GATED IN MATCHED Add<->Read PAIRS
+        // 2026-08-11 (lifetime wave). StartVehicleTractionLineTests and
+        // EndVehicleTractionLineTests are REAL as of this wave and run every frame; these six are
+        // the traffic and player-stuck legs, which a race car on the ground does not need
+        // (1,319 console instructions measured). ⛔ THEY MUST STAY PAIRED: each Add posts one
+        // command per live object and the matching Read consumes exactly that many records off a
+        // SHARED cursor. Landing an Add without its Read leaks records into the next harvest;
+        // landing a Read without its Add makes it consume the race-car leg's answers. Reconstruct
+        // a PAIR at a time and delete both gates together.
+        //   0x825E9B28 (171) AddPlayerStuckInCollisionLineTests   <-> 0x825C3898 (118) ReadPlayerStuck...
+        //   0x825E9DD8  (87) UpdatePlayerStuckInCollisionTest      (same leg; drives the spheres)
+        //   0x825C4AB8 (147) UpdatePlayerStuckInCollisionSpheres   (same leg)
+        // (the traffic pair lives on PhysicalTrafficManager -- see BrnPhysicalTrafficManager.h)
+        // ⚠ Returns the command count, like its two siblings -- StartVehicleTractionLineTests
+        // accumulates all three returns into miNumSPUTractionLineTests (`add r11, r3, r11 ;
+        // stw r11, 0(r30)` after each of the three `bl`s at 0x82629D8C/DB8/DD8).
+        s32 AddPlayerStuckInCollisionLineTests(
+            CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen,
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpCacheInterface,
+            BrnPhysics::Deformation::DeformationManager* lpDeformationManager);
+        void UpdatePlayerStuckInCollisionTest(
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpCacheInterface,
+            f32 lfTimeStep);
+        void UpdatePlayerStuckInCollisionSpheres(f32 lfTimeStep);
+        void ReadPlayerStuckTractionLineTestResults(
+            CgsMemory::SimpleDataStreamResultIterator* lpResultIterator);
+
+        // @0x82629CE0 (DWARF :308; 78 insns).
+        // ⛔ STILL GATED 2026-08-10 (ground wave) and here is the measurement, so nobody re-derives
+        // it: this calls its six callees UNCONDITIONALLY, and the two that build the commands
+        // (AddRaceCarTractionLineTests @0x825E9640, PhysicalTrafficManager::AddTrafficTraction-
+        // LineTests @0x8261D580) read the triangles they test against out of a per-object TRIANGLE
+        // CACHE -- they assert "lpCacheInterface != NULL" / "mpTriangleCacheManager != NULL" /
+        // "mpaTriangleCache != NULL" and then dereference it.
+        // ⚠️ CORRECTED 2026-08-10 (triangle-cache wave): the previous text claimed
+        // "CgsSceneManager::TriangleCacheManager is NOT in this tree (~1,688 console insns
+        // across [all six methods])". It IS in the tree and its TU has been mounted throughout;
+        // the whole READ side these two callers use (Prepare 88 / GetTrianglesForCachedObject 32 /
+        // TriangleCacheInterface::GetCache 27 / GetNumCachedTriangleBatches 31) was already
+        // bodied, and the slot bookkeeping (ProcessAddToCacheEvents 222 /
+        // ProcessRemoveFromCacheEvents 346 / ProcessUpdateCachedPositionEvents 279 /
+        // CacheSlot::UpdateCachedObject 54) landed this wave.
+        // The real blocker is narrower and is the FILL half. ⭐ RE-MEASURED 2026-08-10 (producer
+        // wave) -- three of the five names this paragraph used to list have LANDED since:
+        // StartUpdateTriangleCaches 278, EndUpdateTriangleCaches 475 and SceneManagerModule::
+        // StartUpdateTriangleCache 73 are all bodied and run every frame, and PrepareTriangleCache
+        // 37 (the one that registers a CAR with the cache at all) is bodied too -- `usedSlots=28`
+        // is runtime-witnessed. What is left, in the order it must happen:
+        //   1. VehicleManager::ProcessCreateEvents @0x82616770 (1,067) -- nothing sets
+        //      mUsedRaceCars today (its only write in this tree is Construct's UnSetAll), so no
+        //      car exists to be positioned;
+        //   2. PhysicsModule::UpdateCachedPositions @0x8259C370 (34) + the six per-manager
+        //      UpdateTriangleCache bodies (~1,029) -- what marks a slot DIRTY;
+        //   3. the PolygonSoupTesterJob fill path (~1,183 across 11) -- what puts triangles in it.
+        // Until those run, the cache is allocated and CLAIMED but holds ZERO batches, so this
+        // would read a valid pointer and get an empty triangle list -- a [[silent-drop-stubs]]
+        // result, not a crash. Still not landable.
+        // SimpleVehiclePhysics::GetTractionLine @0x825D85C0 remains genuinely absent: re-verified
+        // as a true export hole (dir gap 0x825D8490+76insns -> 0x825D8878; no name-index hit in
+        // 30,084 exports), **174 instructions**, image-only.
+        void StartVehicleTractionLineTests(CgsModule::IOBufferStack* lpInputBufferStack,
+                                           const VehicleInputInterface* lpInputInterface,
+                                           Deformation::DeformationManager* lpDeformationManager,
+                                           f32 lfTimeStep);
+
+        // @0x8261AC38 (DWARF dump :1055; 661 insns -- the async-generation harvest half of
+        // StartVehicleContactGeneration; same seven parameters).
+        void EndVehicleContactGeneration(
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
+            const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>* lpOverlapPairs,
+            f32 lfTimeStep,
+            BrnPhysics::Deformation::DeformationManager* lpDeformationManager,
+            CgsModule::IOBufferStack* lpIOBufferStack,
+            CgsMemory::LinearMalloc* lpLinearMalloc,
+            BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpPotentialContactInterface);
+
+        // @0x8262C220 (DWARF :1058; 114 insns).
+        void StartPartContactGeneration(
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
+            f32 lfTimeStep,
+            BrnPhysics::Deformation::DeformationManager* lpDeformationManager,
+            CgsModule::IOBufferStack* lpIOBufferStack,
+            BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpPotentialContactInterface,
+            CgsMemory::LinearMalloc* lpLinearMalloc);
+
+        // @0x8261B690 (DWARF :1061; 276 insns).
+        void EndPartContactGeneration(f32 lfTimeStep,
+                                      BrnPhysics::Deformation::DeformationManager* lpDeformationManager,
+                                      CgsModule::IOBufferStack* lpIOBufferStack,
+                                      BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpPotentialContactInterface);
+
+        // @0x825EB6C8 (DWARF :1064; 416 insns).
+        void DoRaceCarWorldContactValidation(
+            BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContactInterface,
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
+            f32 lfTimeStep,
+            BrnPhysics::Deformation::DeformationManager* lpDeformationManager);
+
+        // @0x825C8F18 (DWARF :1067; 143 insns).
+        void DoTrafficWorldContactOrdering(
+            BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContactInterface);
+
+        // @0x82645FE0 (DWARF :341; 814 insns + the L1/L2 web -- see the census banner below).
+        void DoCrashPrediction(CgsModule::IOBufferStack* lpInputBufferStack,
+                               CgsModule::IOBufferStack* lpOutputBufferStack,
+                               f32 lfTimeStep,
+                               const VehicleInputInterface* lpInputInterface,
+                               VehicleOutputInterface* lpVehicleOutputInterface,
+                               BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                               VehicleManagerOutputInterface* lpManagerOutputInterface,
+                               BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+                               BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContactInterface);
+
+        // @0x82642C68 (DWARF :273; 120 insns -- the per-driver-type control dispatch).
+        void UpdateDrivers(f32 lfTimeStep,
+                           const VehicleDriverInputInterface* lpDriverInputInterface,
+                           BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                           VehicleManagerOutputInterface* lpManagerOutputInterface,
+                           BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+                           VehicleOutputInterface* lpVehicleOutputInterface);
+
+        // @0x8261A8D0 (DWARF :679; 217 insns).
+        void ClearSnappedNetworkCarContacts(Deformation::DeformationManager* lpDeformationManager);
+
+        // @0x82619340 (DWARF :361 -- ⚠ .ida-exports HOLE, image-only). Harvest every live
+        // vehicle body into the sim's InUpdateExternalBody queue.
+        void GetUpdatedVehicleBodies(
+            CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InUpdateExternalBody, 60>* lpUpdatedBodyQueue);
+
+        // @0x826426E0 (DWARF :353; 354 insns -- the post-sim per-car pass; the seam that
+        // publishes each car's stepped transform back to the game side).
+        void UpdateVehiclePhysicsPostSimulation(
+            const VehicleInputInterface* lpInputInterface,
+            const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutputBuffer,
+            f32 lfTimeStep,
+            CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue);  // DWARF spells GameStateModuleIO::GameEventQueue (same type)
+
+        // @0x8263C7C0 (DWARF :235 -- ⚠ .ida-exports HOLE, image-only).
+        void ProcessCrashingNetworkCars(const VehicleDriverInputInterface* lpDriverInputInterface,
+                                        BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                        VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                        BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+                                        VehicleOutputInterface* lpVehicleOutputInterface);
+
+        // @0x8263F460 (DWARF :393; 380 insns).
+        void WriteOutVehicleStats(VehicleOutputInterface* lpVehicleOutputInterface);
+
+        // @0x82617820 (DWARF :220; 526 insns).
+        void ProcessResetEvents(const VehicleInputInterface* lpInputInterface,
+                                BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // @0x82646C98 (DWARF :385; 118 insns -- the driver over the four typed contact runs).
+        void ProcessContactSpies(const ContactSpy::ContactSpyData* lpContactSpyData,
+                                 BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                 VehicleOutputInterface* lpVehicleOutputInterface,
+                                 VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                 BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+                                 Deformation::DeformationManager* lpDeformationManager,
+                                 f32 lfTimeStep);
+
+        // @0x825EA970 (DWARF :397; 173 insns).
+        void UpdateFatalCrashFlags(VehicleOutputInterface* lpVehicleOutputInterface);
+
         // The per-contact working set the impact classifiers read/populate. Verbatim DWARF
         // layout (BrnVehicleManager.h:763). Pointer members use the forward-declared collaborators.
         struct RaceCarResponseInfo
         {
             BrnPhysics::ContactSpy::RaceCarContact*           mpContact;                  // +0x00
-            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* mpRequestOutputInterface; // +0x04
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* mpRequestOutputInterface; // +0x04
             BrnGameState::GameStateModuleIO::VehicleOutputInterface*    mpVehicleOutputInterface; // +0x08
             VehicleManagerOutputInterface*                    mpManagerOutputInterface;   // +0x0C
             BrnPhysics::Deformation::DeformationInputInterface* mpDeformationInterface;    // +0x10
@@ -526,7 +960,7 @@ namespace Vehicle
         // (the interface order is Request, Vehicle, Manager, Deformation -- note it differs from the
         // RaceCarResponseInfo member order).
         void HandleRaceCarRaceCarContact(BrnPhysics::ContactSpy::RaceCarContact lContact,
-                                         BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                         BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
                                          BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
                                          VehicleManagerOutputInterface* lpManagerOutputInterface,
                                          BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
@@ -560,7 +994,7 @@ namespace Vehicle
                              Vector3 lCollisionNormal,
                              Vector3 lContactPoint,
                              f32 lfNormalStressSq,
-                             BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                             BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
                              VehicleManagerOutputInterface* lpManagerOutputInterface,
                              BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
                              BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
@@ -572,7 +1006,7 @@ namespace Vehicle
                                 EntityId lAggressorEntityId,
                                 Vector3 lCollisionNormal,
                                 Vector3 lContactPoint,
-                                BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
                                 VehicleManagerOutputInterface* lpManagerOutputInterface,
                                 BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
                                 BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
@@ -677,6 +1111,43 @@ namespace Vehicle
         void SetPlayerCarToShowtimeMode(bool lbInShowtime);
 
         // ==========================================================================================
+        // ⭐⭐ DoCrashPrediction @0x82645FE0 (814 insns) -- CENSUS BANKED 2026-08-09 (crash/shunt
+        // wave), NOT BODIED. The decode-and-bank rule applies on both counts:
+        //   1. Its middle (0x82646540..0x82646AF8) is a ~410-insn dense VMX128 prediction loop
+        //      walking stride-0xE0 vehicle records (cross/dot ladders, vsel lane logic, plus the
+        //      lazy-init constant splats dword_82FBA370 / unk_82FBA350/360 seeded from
+        //      flt_82004018/flt_82004C68) -- force-prediction math whose correctness cannot be
+        //      checked until the sim ticks.
+        //   2. Its MEASURED missing closure is a web, not a leaf. Level 1 (all absent from the
+        //      tree): DoCrashPredictionForRaceCarAndTrafficVehicle @0x82643D30 (159),
+        //      HandleCrashPredictionForRaceCarAndTrafficVehicle @0x82640AB0 (93),
+        //      HandleTrafficCarTrafficCarPotentialContact @0x8263EC90 (279),
+        //      HandleTrafficCarWorldPotentialContact @0x8263F0F0 (220), sub_8259D670 (43, shared
+        //      with FixUpVehicleContacts / DoTrafficWorldContactOrdering),
+        //      PhysicalTrafficManager::{Allocate,Deallocate}InternalBuffers (@0x82615958 / hole),
+        //      ArticulatedJointPool::SendCreateRemoveJointEvents @0x826013C0,
+        //      CgsContainers::BasePriorityQueue::Clear @0x82815E58. Level 2:
+        //      PotentialContactAverager (type + AddContactPair + GetAveragedContactPoint),
+        //      HandleRaceCarTrafficCarPotentialContact, PredictCarCarIntersection,
+        //      GetTrafficInterest_0, SetTrafficVehicleCrashing/-Slammed,
+        //      BrnTraffic::GetVehicleSpecies, sub_82203F70 -- and this slice's own
+        //      PredictCarWorldContactTime / HandleRaceCarWorldPotentialContact declare-onlys.
+        // Its ONLY caller is PhysicsModule::Update @0x82645FE0's xref -- itself still the
+        // WorldLinkStubs trap -- so the body is neither runtime-reachable nor link-demanded
+        // today. DWARF signature (BrnVehicleManager.h:899), for the conductor wave that lands it:
+        //     void DoCrashPrediction(IOBufferStack*, IOBufferStack*, float32_t,
+        //         const VehicleInputInterface*, VehicleOutputInterface*,
+        //         VehicleOutputRequestInterface*, VehicleManagerOutputInterface*,
+        //         DeformationInputInterface*, PotentialContactInterface*);
+        // Spine (calls in asm order): asserts, AllocateInternalBuffers, sub_8259D670, two
+        // BasePriorityQueue::Clear + bctrl drains, HandleTrafficCarTrafficCarPotentialContact,
+        // the VMX prediction loop, DoCrashPredictionForRaceCarAndTrafficVehicle,
+        // HandleCrashPredictionForRaceCarAndTrafficVehicle,
+        // HandleCrashPredictionForRaceCarAndWorld, HandleTrafficCarWorldPotentialContact,
+        // SendCreateRemoveJointEvents, DeallocateInternalBuffers.
+        // ==========================================================================================
+
+        // ==========================================================================================
         // Race-car-vs-world crash-prediction slice (X360 @0x82640C28). DWARF-authoritative
         // signatures (BrnVehicleManager.h:1296/1200/1215). HandleCrashPredictionForRaceCarAndWorld
         // walks the interface's already-validated race-car-world potential-contact queue, groups the
@@ -691,7 +1162,7 @@ namespace Vehicle
             BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContactInterface,
             const VehicleInputInterface* lpVehicleInputInterface,
             BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
-            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
             VehicleManagerOutputInterface* lpManagerOutputInterface,
             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
 
@@ -700,7 +1171,7 @@ namespace Vehicle
         // which is CgsSceneManager::SceneManagerIO::TriangleCacheInterface.
         void HandleRaceCarWorldPotentialContact(
             CgsSceneManager::SceneManagerIO::PotentialContact lContact,
-            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
             BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
             VehicleManagerOutputInterface* lpManagerOutputInterface,
             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
@@ -759,9 +1230,10 @@ namespace Vehicle
         //    ⚠️ AND IT HAD A COST THE TABLE DID NOT ANTICIPATE: embedding a POLYMORPHIC class by
         //    value made the already-mounted BrnPhysicsModule.cpp (which embeds a VehicleManager)
         //    odr-use the whole RaceCarPhysics vtable, which turned two long-standing DECLARE-ONLY
-        //    virtuals into link errors -- SimpleVehiclePhysics::SetCrashing and
-        //    VehiclePhysics::IsIgnoringPassedOnImpulses. Both now have vtable-closure GATES (loud
-        //    asserts, not quiet no-ops) in their own TUs; read those banners before touching them.
+        //    virtuals into link errors -- SimpleVehiclePhysics::SetCrashing and the +0x10 slot
+        //    (then role-named "IsIgnoringPassedOnImpulses"; image-settled 2026-08-09 as
+        //    VehiclePhysics::IsPlayerVehicleInShowtime, whose recovered default retires that
+        //    trap). SetCrashing's vtable-closure GATE still stands in its own TU.
         //
         // ⭐ WHAT WAS STILL MISSING FOR `VehicleManager::Construct` @0x8263B7C8 -- MEASURED 2026-08-03,
         //    not estimated. The layout wave above mined this function for OFFSETS; this note records

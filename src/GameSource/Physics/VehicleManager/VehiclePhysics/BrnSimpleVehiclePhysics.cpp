@@ -1,6 +1,10 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"  // the full VehicleAttribs (SwitchAttribs reads its base/suspension lanes)
+#include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"           // the car-asset wrapper (SetAttributes' key chase)
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"    // the handling wrapper + its checked copy ctor
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
+#include <cmath>                                        // std::sqrt (AddTractionPoint's line distance)
 #include "rw/math/vpu/vector3_operation.h"             // rw::math::vpu::{IsValid, operator+/-, Mult, Dot}
 
 // BrnPhysics::Vehicle::SimpleVehiclePhysics -- the 3 functions owned by the BrnPhysics-bodies
@@ -105,23 +109,51 @@ namespace Vehicle
 
     static const Vector3 KV_ZERO = { 0.0f, 0.0f, 0.0f, 0.0f };
 
+    // ⭐ The two GetTractionLine @0x825D85C0 scalars, READ OUT OF THE X360 IMAGE at the addresses
+    // its own `lfs` instructions name (x360rd, 10/10 self-calibration) rather than guessed:
+    //   0x825D87D4  lfs f0, 7320(0x82000000)   -> *0x82001C98 == 1.0f
+    //   0x825D87E8  lfs f0, 18236(0x82000000)  -> *0x8200473C == 0.4f
+    // Descriptive names: the console gives them none (they are anonymous .rdata floats), and the
+    // roles are unambiguous from the two expressions they enter.
+    static const f32 KF_TRACTION_LINE_EXTRA_LENGTH = 1.0f;   // added to the probe's reach
+    static const f32 KF_TRACTION_LINE_START_LIFT   = 0.4f;   // start point, up the body Y axis
+
     // -------------------------------------------------------------------------------------------
-    // Construct @0x826203E8 lives in its own TU, BrnSimpleVehiclePhysics_Construct.cpp --
-    // SPLIT 2026-08-02 (physics wave 3). BUILD-MECHANICS SPLIT ONLY (byte-identical body,
-    // unchanged declared home).
+    // Construct @0x826203E8 -- ⭐ RE-MERGED 2026-08-09 (attribs-setup wave), exactly per the
+    // split TU's own contract ("TO RE-MERGE: body SimpleVehicleAttribs::Construct, then move
+    // this body back and delete the TU"). SimpleVehicleAttribs::Construct @0x825E6580 is now
+    // BODIED in VehicleAttribs.cpp (every constant image-read), so the 2026-08-02 build-mechanics
+    // split (BrnSimpleVehiclePhysics_Construct.cpp, never mounted) is retired. The body below is
+    // the split TU's, byte-identical.
     //
-    // WHY: it is the only function in this TU that calls SimpleVehicleAttribs::Construct
-    // @0x825E6580, which has NO BODY anywhere in the tree. That console function is a ~120-line
-    // lane-write initialiser over ~15 unresolved .rdata float constants (flt_82096C9C /
-    // flt_8200473C / flt_82004F5C / flt_82013A78 / flt_8200D538 / flt_82020A84 / flt_82004A1C /
-    // flt_82012EF8 / flt_82004740 / flt_820047C0 / flt_82004010 ...) writing offsets +0x00 .. +0xE4
-    // of a type this tree still models as a TWO-MEMBER minimal slice (mCOMOffset / mbIsValid) --
-    // it cannot be bodied until the real VehicleAttribs layout pass lands, and inventing the
-    // constants is forbidden. Keeping Construct here made the whole TU -- including
-    // GetGraphicsVehicleTransform, the function VehicleOutputInterface::UpdateRaceCarState needs
-    // to publish the car's render pose -- unlinkable for the sake of one blocked callee.
-    // Re-merge when SimpleVehicleAttribs::Construct lands.
+    //   base Construct, Wheel::Clear each of the 4 wheels (the do/while walks +304 stride 224
+    //   until Wheel::Clear returns the sentinel), SimpleVehicleAttribs::Construct, zero
+    //   mHandlingBodyOffset(+1680)/mHalfExtent(+1696)/the two AABBs, then Reset, then the
+    //   base frozen gate cleared.
     // -------------------------------------------------------------------------------------------
+    void SimpleVehiclePhysics::Construct()
+    {
+        // The X360 calls the DIRECT base's Construct on the base subobject (`this+16`):
+        // `bl BrnPhysics__ExternalPhysicsBody__Construct`.
+        ExternalPhysicsBody::Construct();
+        for (int liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+            maWheels[liWheel].Clear();
+        mSimpleAttribs.Construct();
+
+        mHandlingBodyOffset = KV_ZERO;                           // +1680
+        mHalfExtent         = KV_ZERO;                           // +1696
+        mDeformableAABB.mMin = KV_ZERO;                          // the stvx128 v1 zero pair
+        mDeformableAABB.mMax = KV_ZERO;
+        mOriginalAABB.mMin   = KV_ZERO;
+        mOriginalAABB.mMax   = KV_ZERO;
+
+        // FLAG: the X360 seeds raw scratch words *(+1430)=0x8000 / *(+1428)=-1 / *(+1424)=0.0 /
+        // *(+1432)=0 that sit in the deform/crash-flag/wheel-plane region. In the BY-NAME home the
+        // faithful intent is the post-construct reset state, applied by Reset() below.
+        Reset();
+        // *(this+112)=0 -- the base sleep/engine-only-update gate (mbFrozen region), cleared.
+        SetFrozen(false);
+    }
 
     // -------------------------------------------------------------------------------------------
     // Destruct  @0x826206D0
@@ -243,8 +275,9 @@ namespace Vehicle
     // constructor, which writes eight vptrs, which requires the WHOLE vtable to be defined.
     // Exactly the standing lesson that a mount's closure is its STATIC reference graph and not its
     // live-call graph: this function has no caller anywhere in the mounted tree and is still
-    // link-required. It and VehiclePhysics::IsIgnoringPassedOnImpulses were the only two symbols
-    // of the entire RaceCarPhysics vtable still missing.
+    // link-required. It and the +0x10 slot (then role-named IsIgnoringPassedOnImpulses;
+    // image-settled 2026-08-09 as IsPlayerVehicleInShowtime) were the only two symbols of the
+    // entire RaceCarPhysics vtable still missing.
     //
     // ⛔ WHAT IT MUST NOT BECOME. A quiet `{}` here is the silent-drop-stub failure class this
     // project keeps paying for: crash arming would be dropped and every downstream reader would see
@@ -301,6 +334,552 @@ namespace Vehicle
             lrWheel.mbHasTraction                      = false;             // stb 0, +0xD6
         }
         mAboveGroundTestResult.Reset();
+    }
+
+    // ===========================================================================================
+    //  SimpleVehiclePhysics::AddTractionPoint   @0x825D9608  (185 insns)
+    // ===========================================================================================
+    // ⭐ BODIED 2026-08-07 (orchestrator wave) -- this had sat in this header's BLOCKED list as
+    // "deep VMX whose math cannot be faithfully reproduced BY NAME"; the claim was UNVERIFIED
+    // and false: every lane it touches was already a named member. The traction-line
+    // ingestion point: VehicleManager::ReadRaceCarTractionLineTestResults /
+    // DoPlayerTractionLineTestsPostSimulation feed each wheel's line-test hit through
+    // RaceCarPhysics::AddTractionPoint (a register-transparent chain into here).
+    //
+    //   0x825D9638  skip entirely while maWheels[leWheel].mu8State (+0xD7) == 2
+    //   0x825D9654  split the collision tag: hi = tag >> 16 (r23), lo = tag & 0xFFFF (r22)
+    //   0x825D965C  debug NaN sweep over the wheel's local mPosition (xyz vcmpeqfp chain);
+    //               on failure the console streams "Invalid wheel position: " << pos <<
+    //               ", please tell Graham D." and fires (VehiclePhysics.h-adjacent file, :412)
+    //   0x825D9764  worldWheelPos = mTransform * wheel.mPosition (the three vmaddfp rows +
+    //               translation, vmaddfp vD,vA,vB,vC == vA*vC + vB with the wAxis seed)
+    //   0x825D97CC  lineDist = |worldWheelPos - lvPosition|   (vmsum3fp128 + rsqrt NR chain,
+    //               vsel 0-guard; rounded through the var_90 store -- kept f32 here)
+    //   0x825D9834  lbIsOnGround      = (wheel.mPosition.y
+    //                                    - wheel.mSuspensionAndInertiaVariables.x
+    //                                    + wheel.mSlipVariables.w) > lineDist
+    //   0x825D98AC  lbIsCloseToGround = (same sum + the +0x5A0 register's .w lane) > lineDist
+    //
+    // ⛔⛔ CORRECTED 2026-08-11 (lifetime wave) -- A LIVE STALE-MEMBER BUG, not a comment fix.
+    // This body used to spell that .w lane `mSimpleAttribs.mCOMOffset.w`, and the note here said
+    // "the attribs block's leading vector; the committed slice names it mCOMOffset". That was
+    // true when it was written: SimpleVehicleAttribs was then a 20-byte slice whose LEADING
+    // member was mCOMOffset. The attribs-setup wave (2026-08-09) grew the type to the full
+    // 240-byte DWARF layout and moved mCOMOffset to +0xD0 -- so from that day this line has been
+    // reading `this + 0x5A0 + 0xD0 + 12`, **208 bytes past the seat the console reads**. It
+    // compiled, linked and ran; the member still existed and was still a Vector3, so nothing
+    // could catch it.
+    // The console is unambiguous (0x825D9880 `lvx128 v13, r0, r10` with r10 = this+0x5A0, then
+    // 0x825D988C `vspltw v13, v13, 3`): it is the LEADING vector's .w, which the grown type
+    // names `mvUpwardMovement_DownwardMovement_Mass_TractionLineLength` -- i.e. the attribute is
+    // literally TractionLineLength. ⭐ Independently corroborated by
+    // SimpleVehiclePhysics::GetTractionLine @0x825D85C0 (bodied this wave), which adds the SAME
+    // lane to the SAME three-term reach to size the suspension probe it shoots.
+    //   0x825D98D0  Wheel::SetRoadContact(onGround, close, position, normal, tagHi, tagLo,
+    //               lineDist)  -- f1 still holds the distance at the bl, v1/v2 pass through
+    void SimpleVehiclePhysics::AddTractionPoint(EVehicleDrivenWheel leWheel, Vector3 lvPosition,
+                                                Vector3 lvNormal, u32 lu32CollisionTag)
+    {
+        Wheel& lrWheel = maWheels[leWheel];
+
+        if (lrWheel.mu8State == 2)   // lbz +0x207 (wheel*0xE0 + 0xD7)
+            return;
+
+        const u16 lu16TagHi = static_cast<u16>(lu32CollisionTag >> 16);
+        const u16 lu16TagLo = static_cast<u16>(lu32CollisionTag & 0xFFFFu);
+
+        CGS_ASSERT(lrWheel.mPosition.x == lrWheel.mPosition.x &&
+                   lrWheel.mPosition.y == lrWheel.mPosition.y &&
+                   lrWheel.mPosition.z == lrWheel.mPosition.z,
+                   "Invalid wheel position: , please tell Graham D.");   // vcmpeqfp NaN sweep
+
+        // world position of the wheel: the three rotation rows scaled by the local lanes,
+        // seeded with the translation row (exactly the console's vmaddfp cascade).
+        const Vector3 lvWorldWheelPos{
+            mTransform.xAxis.x * lrWheel.mPosition.x + mTransform.yAxis.x * lrWheel.mPosition.y
+                + mTransform.zAxis.x * lrWheel.mPosition.z + mTransform.wAxis.x,
+            mTransform.xAxis.y * lrWheel.mPosition.x + mTransform.yAxis.y * lrWheel.mPosition.y
+                + mTransform.zAxis.y * lrWheel.mPosition.z + mTransform.wAxis.y,
+            mTransform.xAxis.z * lrWheel.mPosition.x + mTransform.yAxis.z * lrWheel.mPosition.y
+                + mTransform.zAxis.z * lrWheel.mPosition.z + mTransform.wAxis.z,
+            0.0f };
+
+        const Vector3 lvDelta{ lvWorldWheelPos.x - lvPosition.x,
+                               lvWorldWheelPos.y - lvPosition.y,
+                               lvWorldWheelPos.z - lvPosition.z, 0.0f };
+        const f32 lfDistSq   = vpu::MagnitudeSquared(lvDelta);
+        const f32 lfLineDist = (lfDistSq > 0.0f) ? std::sqrt(lfDistSq) : 0.0f;   // vsel 0-guard
+
+        // the two reach tests: the wheel's local height minus its suspension seat plus its
+        // radius lane, against the measured line distance.
+        const f32 lfReach = lrWheel.mPosition.y
+                          - lrWheel.mSuspensionAndInertiaVariables.x
+                          + lrWheel.mSlipVariables.w;
+        const bool lbIsOnGround      = lfReach > lfLineDist;
+        const bool lbIsCloseToGround =
+            (lfReach +
+             mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w)
+            > lfLineDist;
+
+        lrWheel.SetRoadContact(lbIsOnGround, lbIsCloseToGround, lvPosition, lvNormal,
+                               lu16TagHi, lu16TagLo, lfLineDist);
+    }
+
+    // ===========================================================================================
+    //  SimpleVehiclePhysics::GetTractionLine   @0x825D85C0  (174 insns)   ⭐⭐ THE SUSPENSION PROBE
+    // ===========================================================================================
+    // BODIED 2026-08-11 (lifetime wave). One wheel's downward traction line, in WORLD space --
+    // the two points VehicleManager::AddRaceCarTractionLineTests drops into the stream command's
+    // maLineStart[w] / maLineEnd[w].
+    //
+    // ⚠️ EXPORT HOLE: no per-function JSON in the 30,084-file X360 set (directory gap
+    // 0x825D8490+76 -> 0x825D8878), re-verified this wave by a name index over all of them.
+    // Recovered TWO ways that agree, neither of them guesswork:
+    //
+    //  (1) THE IMAGE BYTES, 0x825D85C0..0x825D8874, read with x360rd (10/10 calibration) and
+    //      decoded with a VMX128 decoder FITTED AND SELF-TESTED against an exported twin
+    //      (VehicleManager::UpdateTriangleCache @0x82615C38 carries full VMX128 mnemonics in its
+    //      export, so its 24 vector instructions are ground truth for the field layout:
+    //      VD128 = D|(bits28..29<<5), VA128 = A|(bit26<<5)|(bit21<<6), VB128 = B|(bits30..31<<5);
+    //      op5 opcode bits {22,23,24,25,27}: 0x010 vaddfp128 / 0x050 vsubfp128 / 0x090 vmulfp128 /
+    //      0x0D0 vmaddfp128 / 0x150 vnmsubfp128 / 0x190 vmsum3fp128 / 0x2D0 vor128).
+    //      ⚠️⚠️ AND THE TRAP THAT COMES WITH IT, because it changes the arithmetic: for the op-4
+    //      A-form IDA prints operands in ENCODING order vD,vA,vB,vC, not the assembler's
+    //      vD,vA,vC,vB. `vmaddfp v13, v7, v13, v6` (0x11A769AE: A=7,B=13,C=6) is
+    //      v13 = v7*v6 + v13, NOT v7*v13 + v6. Read the natural way it turns the standard
+    //      vrsqrtefp Newton-Raphson refinement into nonsense -- which is how it was caught.
+    //
+    //  (2) THE PS3 EXPORT @0x6E894C (251 insns), which supplies the signature the X360 image
+    //      cannot: `_ZNK..SimpleVehiclePhysics15GetTractionLineENS0_19EVehicleDrivenWheelE
+    //      RN2rw4math3vpu7Vector3ES7_` -- CONST, (wheel, Vector3& lOutSusLineStart,
+    //      Vector3& lOutSusLineEnd), and the parameter names are its own. Its member offsets are
+    //      the X360's byte for byte (maWheels +0x130 stride 0xE0, mTransform +0x10,
+    //      mSimpleAttribs +0x5A0 with the IsValid byte at +0xE4 inside it).
+    //
+    // ⭐⭐ THE PROBE LENGTH IS CORROBORATED BY A DIFFERENT CONSOLE FUNCTION ALREADY IN THIS TREE.
+    // AddTractionPoint above (bodied 2026-08-07 from @0x825D9608, an unrelated body) computes
+    // exactly `mPosition.y - mSuspensionAndInertiaVariables.x + mSlipVariables.w` and then adds
+    // the same mSimpleAttribs leading-vector .w lane for its close-to-ground test. This function
+    // adds that same sum, that same lane, and one metre. Two console functions agreeing on a
+    // four-term expression, with the attribute's own generated name reading
+    // ...Mass_TractionLineLength, is as strong as recovery gets here.
+    //
+    // BOTH FLOAT CONSTANTS READ OUT OF THE IMAGE, NOT GUESSED:
+    //   0x825D87D4  lfs f0, 0x82001C98   ==  1.0f   -> added to the probe length
+    //   0x825D87E8  lfs f0, 0x8200473C   ==  0.4f   -> the start point's lift up the body Y axis
+    // ⚠️ FLAG -- A BUILD DIVERGENCE, reproduced as the X360 has it: the PS3 body uses 0.4f for
+    // BOTH terms (it materialises one stack vector, 0x3ECCCCCD in all lanes, and uses it twice).
+    // The X360 loads two DIFFERENT .rdata floats. The X360 image is the reconstruction target.
+    //
+    // AS SHIPPED, all four lanes travel: the console loads/stores with lvx128/stvx128 and this
+    // tree's Vector3 is the same 16-byte four-lane register, so the w lane is carried rather
+    // than dropped (it falls out as mTransform.wAxis.w, exactly as on the console).
+    void SimpleVehiclePhysics::GetTractionLine(EVehicleDrivenWheel leWheel,
+                                               Vector3& lOutSusLineStart,
+                                               Vector3& lOutSusLineEnd) const
+    {
+        // 0x825D85E8 / 0x825D8610 -- the two range tripwires, baked lines 501 and 502.
+        CGS_ASSERT(leWheel >= eFrontLeftWheel,  "leWheel >= eFrontLeftWheel");     // :501
+        CGS_ASSERT(leWheel <  eNumDrivenWheels, "leWheel < eNumDrivenWheels");     // :502
+
+        const Wheel& lrWheel = maWheels[leWheel];
+
+        // 0x825D8650..0x825D86B8 -- the same three-lane NaN sweep AddTractionPoint runs, with
+        // the same console-authored message (Wheel.h:368).
+        CGS_ASSERT(lrWheel.mPosition.x == lrWheel.mPosition.x &&
+                   lrWheel.mPosition.y == lrWheel.mPosition.y &&
+                   lrWheel.mPosition.z == lrWheel.mPosition.z,
+                   "Invalid wheel position: , please tell Graham D.");
+
+        // 0x825D8774 `lbz r9, 1668(r26)` == mSimpleAttribs (+0x5A0) + mbIsValid (+0xE4).
+        CGS_ASSERT(GetSimpleAttribs()->IsValid(), "GetSimpleAttribs()->IsValid()");  // :511
+
+        // 0x825D8778..0x825D8798 -- worldWheelPos = mTransform * wheel.mPosition. Same cascade
+        // as AddTractionPoint (three rows scaled by the local lanes, seeded with the wAxis row).
+        const Vector3 lvWorldWheelPos{
+            mTransform.xAxis.x * lrWheel.mPosition.x + mTransform.yAxis.x * lrWheel.mPosition.y
+                + mTransform.zAxis.x * lrWheel.mPosition.z + mTransform.wAxis.x,
+            mTransform.xAxis.y * lrWheel.mPosition.x + mTransform.yAxis.y * lrWheel.mPosition.y
+                + mTransform.zAxis.y * lrWheel.mPosition.z + mTransform.wAxis.y,
+            mTransform.xAxis.z * lrWheel.mPosition.x + mTransform.yAxis.z * lrWheel.mPosition.y
+                + mTransform.zAxis.z * lrWheel.mPosition.z + mTransform.wAxis.z,
+            mTransform.xAxis.w * lrWheel.mPosition.x + mTransform.yAxis.w * lrWheel.mPosition.y
+                + mTransform.zAxis.w * lrWheel.mPosition.z + mTransform.wAxis.w };
+
+        // 0x825D87CC..0x825D8854 -- the probe length: the wheel's own reach (hub height above
+        // its lowest suspension seat, plus the tyre radius), plus the car's TractionLineLength
+        // attribute, plus one metre of margin.
+        const f32 lfProbeLength =
+            (lrWheel.mPosition.y
+             - lrWheel.mSuspensionAndInertiaVariables.x
+             + lrWheel.mSlipVariables.w)
+            + mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w
+            + KF_TRACTION_LINE_EXTRA_LENGTH;
+
+        // 0x825D8850 `vmaddfp128 v8, v0, v9` : start = worldWheelPos + yAxis * 0.4
+        lOutSusLineStart.x = lvWorldWheelPos.x + mTransform.yAxis.x * KF_TRACTION_LINE_START_LIFT;
+        lOutSusLineStart.y = lvWorldWheelPos.y + mTransform.yAxis.y * KF_TRACTION_LINE_START_LIFT;
+        lOutSusLineStart.z = lvWorldWheelPos.z + mTransform.yAxis.z * KF_TRACTION_LINE_START_LIFT;
+        lOutSusLineStart.w = lvWorldWheelPos.w + mTransform.yAxis.w * KF_TRACTION_LINE_START_LIFT;
+
+        // 0x825D885C/0x825D8860 `vmulfp128` + `vsubfp128` : end = worldWheelPos - yAxis * length
+        lOutSusLineEnd.x = lvWorldWheelPos.x - mTransform.yAxis.x * lfProbeLength;
+        lOutSusLineEnd.y = lvWorldWheelPos.y - mTransform.yAxis.y * lfProbeLength;
+        lOutSusLineEnd.z = lvWorldWheelPos.z - mTransform.yAxis.z * lfProbeLength;
+        lOutSusLineEnd.w = lvWorldWheelPos.w - mTransform.yAxis.w * lfProbeLength;
+    }
+
+    // ===========================================================================================
+    //  SimpleVehiclePhysics::CalculateNewWheelPlane   @0x82602CB8  (171 insns)
+    // ===========================================================================================
+    // ⭐ BODIED 2026-08-07 (wheel-cluster wave). Derive the frame's wheel/road plane from the
+    // four wheels' line-test contacts: keep the contact whose wheel-bottom sits LOWEST above it
+    // (measured along the body up axis) and publish {contact.xyz, max(minHeight, 0)} into
+    // mWheelPlanePosAndHeight (+0x6B0) -- the register IsContactBelowWheelPlane consumes.
+    //
+    // ⚠️ The exported pseudocode mis-renders the whole loop (base "this+108", stride 56); the
+    // ASM is unambiguous: `addi r29, r20, 0x1B0` (= &maWheels[0].mPosition) and `addi r29, r29,
+    // 0xE0` -- the standard wheel stride. Decoded from the asm:
+    //
+    //   0x82602CCC  best = splat(1000.0 [flt_82009E10]); bestPoint = 0; v125 = mTransform.Up
+    //               (+0x20); mbAnyWheelsDetatched (+0x715) = 0
+    //   0x82602D48  per wheel (0..3): mu8State == 2 -> EARLY OUT: mbMinWheelDistValid = 0,
+    //               mbAnyWheelsDetatched = 1, return (one detached wheel aborts the whole fit)
+    //   0x82602D54  copy the 48-byte RoadContact to the stack (the ld/std x6 loop), then:
+    //               [mbLineTestIsValid +0x2B] -> the wheel VOTES (r14 latches 1):
+    //                 [mbIsOnGround +0x28]  best = 0, bestPoint = contact.mPosition
+    //                 else: NaN sweep of wheel.mPosition (the same "Invalid wheel position: "
+    //                       << pos << ", please tell Graham D." stream, Wheel.h:412 == 0x19C);
+    //                       localBottom = mPosition with .y -= mSlipVariables.w (radius --
+    //                       vrlimi mask 4 == lane y); worldBottom = mTransform * localBottom;
+    //                       h = dot3(worldBottom - contact.mPosition, Up);
+    //                       h <= best (the vnot'd vcmpgtfp + two vsel) -> best = h,
+    //                       bestPoint = contact.mPosition
+    //   0x82602F14  mWheelPlanePosAndHeight = {bestPoint.xyz, w = max(best, 0)} (two stvx: the
+    //               first preserves the old .w, the second inserts the vmaxfp'd height --
+    //               vrlimi mask 1 == lane w); mbMinWheelDistValid (+0x714) = the vote latch
+    void SimpleVehiclePhysics::CalculateNewWheelPlane()
+    {
+        static const f32 KF_NO_CONTACT_HEIGHT = 1000.0f;   // flt_82009E10
+
+        const Vector3& lvUp = mTransform.yAxis;   // v125 = lvx this+0x20
+
+        f32     lfBestHeight = KF_NO_CONTACT_HEIGHT;   // v127
+        Vector3 lvBestPoint{ 0.0f, 0.0f, 0.0f, 0.0f }; // v126
+        bool    lbAnyValid = false;                    // r14
+
+        mbAnyWheelsDetatched = false;   // stb 0 -> +0x715 (before the loop)
+
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            Wheel& lrWheel = maWheels[liWheel];
+
+            if (lrWheel.mu8State == 2)   // a detached wheel aborts the whole plane fit
+            {
+                mbMinWheelDistValid  = false;   // stb 0 -> +0x714
+                mbAnyWheelsDetatched = true;    // stb 1 -> +0x715
+                return;
+            }
+
+            const Wheel::RoadContact& lrContact = lrWheel.GetRoadContact();   // the 48-byte copy
+            if (!lrContact.mbLineTestIsValid)
+                continue;
+
+            lbAnyValid = true;
+
+            if (lrContact.mbIsOnGround)
+            {
+                lfBestHeight = 0.0f;                  // vmr128 v127, v124 (zero)
+                lvBestPoint  = lrContact.mPosition;   // lvx of the stack copy
+                continue;
+            }
+
+            // close-but-not-touching: how high does this wheel's lowest point sit above its
+            // contact, along the body up axis?
+            CGS_ASSERT(lrWheel.mPosition.x == lrWheel.mPosition.x &&
+                       lrWheel.mPosition.y == lrWheel.mPosition.y &&
+                       lrWheel.mPosition.z == lrWheel.mPosition.z,
+                       "Invalid wheel position: , please tell Graham D.");   // Wheel.h:412
+
+            // localBottom = wheel.mPosition with the y lane dropped by the radius
+            // (mSlipVariables.w) -- the vsubfp + vrlimi(mask 4) pair.
+            const Vector3 lvLocalBottom{ lrWheel.mPosition.x,
+                                         lrWheel.mPosition.y - lrWheel.mSlipVariables.w,
+                                         lrWheel.mPosition.z, 0.0f };
+
+            // worldBottom = mTransform * localBottom (the same vmaddfp cascade as
+            // AddTractionPoint above).
+            const Vector3 lvWorldBottom{
+                mTransform.xAxis.x * lvLocalBottom.x + mTransform.yAxis.x * lvLocalBottom.y
+                    + mTransform.zAxis.x * lvLocalBottom.z + mTransform.wAxis.x,
+                mTransform.xAxis.y * lvLocalBottom.x + mTransform.yAxis.y * lvLocalBottom.y
+                    + mTransform.zAxis.y * lvLocalBottom.z + mTransform.wAxis.y,
+                mTransform.xAxis.z * lvLocalBottom.x + mTransform.yAxis.z * lvLocalBottom.y
+                    + mTransform.zAxis.z * lvLocalBottom.z + mTransform.wAxis.z,
+                0.0f };
+
+            const f32 lfHeight =
+                (lvWorldBottom.x - lrContact.mPosition.x) * lvUp.x +
+                (lvWorldBottom.y - lrContact.mPosition.y) * lvUp.y +
+                (lvWorldBottom.z - lrContact.mPosition.z) * lvUp.z;   // vmsum3fp128 vs v125
+
+            if (!(lfHeight > lfBestHeight))   // the vnot'd vcmpgtfp: keep the MINIMUM
+            {
+                lfBestHeight = lfHeight;
+                lvBestPoint  = lrContact.mPosition;
+            }
+        }
+
+        // publish: {bestPoint.xyz, w = max(best, 0)} -- the two-store vrlimi sequence.
+        mWheelPlanePosAndHeight.SetVector3(lvBestPoint);
+        mWheelPlanePosAndHeight.SetPlus((lfBestHeight > 0.0f) ? lfBestHeight : 0.0f);   // vmaxfp 0
+        mbMinWheelDistValid = lbAnyValid;   // stb r14 -> +0x714
+    }
+
+    // ===========================================================================================
+    //  SimpleVehiclePhysics::SwitchAttribs   @0x82601978   (458 insns)
+    // ===========================================================================================
+    // ⭐ BODIED 2026-08-09 (attribs-setup wave) -- the "BLOCKED on the 240-byte
+    // SimpleVehicleAttribs" stub is retired: the full type now lives in the header. Decoded
+    // store-for-store from the X360 asm. Four phases:
+    //   1. mfMass = splat(new attribs Mass), asserted positive        (0x826019B0..0x82601A18)
+    //   2. mLocalInverseInertia = the solid-box diagonal inverse tensor from
+    //      lBoxExtent = 2 * mHalfExtent (flt_82001D9C == 2.0, flt_82094724 == 1/12), with
+    //      IsValid + per-axis positivity asserts on the extent        (0x82601A1C..0x82601F10)
+    //   3. per-wheel Wheel::SwitchAttribs with a POSITION DELTA built against the OLD
+    //      mSimpleAttribs (COM delta + per-axle height-offset delta), the wheel's own current
+    //      radius, the .data integration seed, and the new suspension travel bounds
+    //                                                                 (0x82601F14..0x82602074)
+    //   4. mSimpleAttribs.SetupAttribs(lpAttribs) -- the old set is only replaced AFTER the
+    //      deltas were computed from it                               (0x82602078..0x82602080)
+    //
+    // The X360 computes the three tensor diagonals with vrefp + two Newton refines; the host
+    // spells the same quantity as a division (established convention, see UpdateWheels).
+    void SimpleVehiclePhysics::SwitchAttribs(VehicleAttribs* lpAttribs)
+    {
+        // .data scalars (static-init'd BSS, zero in the image; writers found in the
+        // 0x82C5Cxxx initializer bank and their .rdata sources image-read, x360rd 10/10):
+        //   unk_82FB8BB0 <- flt_82004F5C == 30.0   (writer @0x82C5D190)
+        //   unk_82FB8440 <- flt_8209AE88 == 0.025  (writer @0x82C5D1B8)
+        static const f32 KF_WHEEL_INTEGRATION_SEED     = 30.0f;
+        static const f32 KF_MIN_SUSPENSION_TRAVEL_DOWN = 0.025f;
+        static const f32 KF_ONE_TWELFTH = 0.0833333358f;   // flt_82094724 (the box-tensor 1/12)
+
+        // ---- phase 1: the mass ----------------------------------------------------------------
+        const f32 lfMass = lpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+        mfMass = VecFloat{ lfMass, lfMass, lfMass, lfMass };   // stvx128 -> +0xE0 (base mfMass)
+        CGS_ASSERT(lfMass > 0.0f, "mfMass > 0.0f");            // console line 0xA5
+
+        // ---- phase 2: the solid-box inverse inertia --------------------------------------------
+        const Vector3 lBoxExtent = vpu::Mult(mHalfExtent, 2.0f);   // flt_82001D9C
+        CGS_ASSERT(vpu::IsValid(lBoxExtent), "RwMath::IsValid( lBoxExtent )");   // 0xAB
+        CGS_ASSERT(lBoxExtent.x > 0.0f, "lBoxExtent.X() > 0.0f");                // 0xAD
+        CGS_ASSERT(lBoxExtent.y > 0.0f, "lBoxExtent.Y() > 0.0f");                // 0xAE
+        CGS_ASSERT(lBoxExtent.z > 0.0f, "lBoxExtent.Z() > 0.0f");                // 0xAF
+
+        {
+            const f32 lfMassOver12 = lfMass * KF_ONE_TWELFTH;   // v126 = splat(1/12) * splat(mass)
+            const f32 lfX2 = lBoxExtent.x * lBoxExtent.x;
+            const f32 lfY2 = lBoxExtent.y * lBoxExtent.y;
+            const f32 lfZ2 = lBoxExtent.z * lBoxExtent.z;
+            // vrefp + two Newton refines on each -> the diagonal inverse tensor.
+            const f32 lfIxx = 1.0f / (lfMassOver12 * (lfY2 + lfZ2));
+            const f32 lfIyy = 1.0f / (lfMassOver12 * (lfX2 + lfZ2));
+            const f32 lfIzz = 1.0f / (lfMassOver12 * (lfX2 + lfY2));
+            mLocalInverseInertia.xAxis = Vector3{ lfIxx, 0.0f, 0.0f, 0.0f };   // -> +0x80
+            mLocalInverseInertia.yAxis = Vector3{ 0.0f, lfIyy, 0.0f, 0.0f };   // -> +0x90
+            mLocalInverseInertia.zAxis = Vector3{ 0.0f, 0.0f, lfIzz, 0.0f };   // -> +0xA0
+        }
+        CGS_ASSERT(vpu::IsValid(mLocalInverseInertia.xAxis) &&
+                   vpu::IsValid(mLocalInverseInertia.yAxis) &&
+                   vpu::IsValid(mLocalInverseInertia.zAxis),
+                   "RwMath::IsValid( mLocalInverseInertia )");                   // 0xB9
+
+        // ---- phase 3: the per-wheel re-seat, deltas computed against the OLD simple set --------
+        // COM delta: old - new (`vsubfp v0, [this+0x670], [attribs+0x20]`).
+        const Vector3 lvCOMDelta =
+            vpu::Subtract(mSimpleAttribs.mCOMOffset, lpAttribs->mBaseAttribs.mCOMOffset);
+
+        // Per-axle height-offset deltas: new (VehicleAttribs suspension lanes x/y) minus old
+        // (the CURRENT mSimpleAttribs lanes z/w) -- read BEFORE SetupAttribs overwrites them.
+        const f32 lfFrontHeightDelta =
+            lpAttribs->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.x
+            - mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z;
+        const f32 lfRearHeightDelta =
+            lpAttribs->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.y
+            - mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w;
+
+        // The new suspension travel bounds; travel-down floored at the .data 0.025 (vmaxfp).
+        const f32 lfTravelUp = lpAttribs->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.z;
+        const f32 lfTravelDownRaw = lpAttribs->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.w;
+        const f32 lfTravelDown = (lfTravelDownRaw > KF_MIN_SUSPENSION_TRAVEL_DOWN)
+                                     ? lfTravelDownRaw : KF_MIN_SUSPENSION_TRAVEL_DOWN;
+
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            // Front pair gets the front height delta + front tire attribs; rear pair the rear's
+            // (the caller's stacked pointer table var_110..var_104: 2D0, 2D0, 310, 310).
+            const bool lbFront = (liWheel < 2);
+            Vector3 lvDelta = lvCOMDelta;
+            lvDelta.y += lbFront ? lfFrontHeightDelta : lfRearHeightDelta;   // vrlimi(4)
+
+            maWheels[liWheel].SwitchAttribs(
+                lvDelta,
+                maWheels[liWheel].mSlipVariables.w,   // the wheel's CURRENT radius, preserved
+                KF_WHEEL_INTEGRATION_SEED,
+                lfTravelUp,
+                lfTravelDown,
+                lbFront ? &lpAttribs->mFrontTireAttribs : &lpAttribs->mRearTireAttribs);
+        }
+
+        // ---- phase 4: replace the simple set ---------------------------------------------------
+        mSimpleAttribs.SetupAttribs(lpAttribs);   // this+0x5A0, the LAST thing the function does
+    }
+
+    // ===========================================================================================
+    //  SimpleVehiclePhysics::SetAttributes()   @0x82620498   (142 insns)
+    // ===========================================================================================
+    // ⭐ BODIED 2026-08-09 (attribs-setup wave). This was the unnamed `sub_82620498`; identity
+    // recovered from its caller set (VehiclePhysics::SetAttributes' first call, `this` in r3)
+    // and its own "mSimpleAttribs.IsValid()" assert -- it is the DWARF's 0-arg overload
+    // (BrnSimpleVehiclePhysics.h:163, PS3 mangled 7355CC).
+    //
+    // Refresh mSimpleAttribs from the car's AttribSys handling record, then chain to the 2-arg
+    // with wheel positions/radii captured from the CURRENT (pre-refresh) state:
+    //   positions[i] = maWheels[i].mStreamedPositionPlusTwistAmount + OLD mSimpleAttribs.mCOMOffset,
+    //                  .y -= OLD height offset (front lanes for wheels 0/1, rear for 2/3)
+    //   radii[i]     = maWheels[i].mSlipVariables.w  (the current radius, preserved)
+    // The AttribSys chase is the inlined generated-ctor chain: burnoutcarasset(key) ->
+    // PhysicsVehicleHandlingAsset RefSpec (data+0x158) -> physicsvehiclehandling -> the checked
+    // COPY (@0x825BDB88, the by-value argument) -> SimpleVehicleAttribs::SetupAttribs.
+    bool SimpleVehiclePhysics::SetAttributes()
+    {
+        // ---- capture the pre-refresh state ----------------------------------------------------
+        f32 lafRadii[eNumDrivenWheels];
+        Vector3 laPositions[eNumDrivenWheels];
+        {
+            const f32 lfFrontOffset =
+                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z;
+            const f32 lfRearOffset =
+                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w;
+            for (s32 li = 0; li < eNumDrivenWheels; ++li)
+            {
+                lafRadii[li] = maWheels[li].mSlipVariables.w;
+                laPositions[li] = vpu::Add(maWheels[li].mStreamedPositionPlusTwistAmount.GetVector3(),
+                                           mSimpleAttribs.mCOMOffset);
+                laPositions[li].y -= (li < 2) ? lfFrontOffset : lfRearOffset;   // vrlimi(4)
+            }
+        }
+
+        CGS_ASSERT(mSimpleAttribs.IsValid(), "mSimpleAttribs.IsValid()");   // console line 0x10D
+
+        // ---- the AttribSys chase (each generated ctor is the console's inlined sequence) ------
+        {
+            Attrib::Gen::burnoutcarasset lCarAsset(mSimpleAttribs.mAttribsKey, NULL);
+            Attrib::Gen::physicsvehiclehandling lHandling(
+                const_cast<Attrib::Collection*>(
+                    lCarAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), NULL);
+            // The checked copy @0x825BDB88 -- the console's by-value argument.
+            Attrib::Gen::physicsvehiclehandling lHandlingCopy(lHandling);
+            mSimpleAttribs.SetupAttribs(lHandlingCopy);
+        }
+
+        // mCOMOffset += mHandlingBodyOffset ([this+0x670] += [this+0x690]).
+        mSimpleAttribs.mCOMOffset = vpu::Add(mSimpleAttribs.mCOMOffset, mHandlingBodyOffset);
+
+        return SetAttributes(laPositions, lafRadii);
+    }
+
+    // ===========================================================================================
+    //  SimpleVehiclePhysics::SetAttributes(const Vector3*, const f32*)  @0x826020A0  (503 insns)
+    // ===========================================================================================
+    // ⭐ BODIED 2026-08-09 (attribs-setup wave). The shared tail of every SetAttributes wrapper:
+    // mass + solid-box inverse inertia from the (freshly re-streamed) mSimpleAttribs, then a
+    // per-wheel Wheel::Prepare. The Wheel.h Prepare lane map (proven 2026-08-05) named this
+    // function's asm (0x826027F4..0x82602840) as its caller witness; the register roles here
+    // match it exactly.
+    bool SimpleVehiclePhysics::SetAttributes(const Vector3* lpaWheelPositions,
+                                             const f32* lpafWheelRadii)
+    {
+        // .data scalars -- same two as SwitchAttribs (bank writers @0x82C5D190/@0x82C5D1B8,
+        // sources image-read: flt_82004F5C == 30.0, flt_8209AE88 == 0.025).
+        static const f32 KF_WHEEL_INTEGRATION_SEED     = 30.0f;
+        static const f32 KF_MIN_SUSPENSION_TRAVEL_DOWN = 0.025f;
+        static const f32 KF_ONE_TWELFTH = 0.0833333358f;   // flt_82094724
+
+        CGS_ASSERT(lpaWheelPositions != NULL, "lpaWheelPositions");   // 0x149
+        CGS_ASSERT(lpafWheelRadii != NULL,    "lpafWheelRadii");      // 0x14A
+
+        // ---- the mass, with the console's zero-mass diagnostic --------------------------------
+        // On mass <= 0 the X360 dumps the vault array through a stack StrStream into
+        // gpcMessageBuffer and FireAsserts it (console line 0x152); modelled as the assert it
+        // fires, with the console's own message text.
+        const f32 lfMass = mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.z;
+        mfMass = VecFloat{ lfMass, lfMass, lfMass, lfMass };          // stvx128 -> +0xE0
+        CGS_ASSERT(lfMass > 0.0f,
+                   "\n\nZero vehicle mass. Please tell Graham D and include the TTY!");
+
+        // ---- the solid-box inverse inertia (identical machinery to SwitchAttribs) -------------
+        const Vector3 lBoxExtent = vpu::Mult(mHalfExtent, 2.0f);      // flt_82001D9C
+        CGS_ASSERT(vpu::IsValid(lBoxExtent), "RwMath::IsValid( lBoxExtent )");   // 0x15A
+        CGS_ASSERT(lBoxExtent.x > 0.0f, "lBoxExtent.X() > 0.0f");                // 0x15C
+        CGS_ASSERT(lBoxExtent.y > 0.0f, "lBoxExtent.Y() > 0.0f");                // 0x15D
+        CGS_ASSERT(lBoxExtent.z > 0.0f, "lBoxExtent.Z() > 0.0f");                // 0x15E
+        {
+            const f32 lfMassOver12 = lfMass * KF_ONE_TWELFTH;
+            const f32 lfX2 = lBoxExtent.x * lBoxExtent.x;
+            const f32 lfY2 = lBoxExtent.y * lBoxExtent.y;
+            const f32 lfZ2 = lBoxExtent.z * lBoxExtent.z;
+            // vrefp + two Newton refines each -> the diagonal inverse tensor.
+            const f32 lfIxx = 1.0f / (lfMassOver12 * (lfY2 + lfZ2));
+            const f32 lfIyy = 1.0f / (lfMassOver12 * (lfX2 + lfZ2));
+            const f32 lfIzz = 1.0f / (lfMassOver12 * (lfX2 + lfY2));
+            mLocalInverseInertia.xAxis = Vector3{ lfIxx, 0.0f, 0.0f, 0.0f };   // -> +0x80
+            mLocalInverseInertia.yAxis = Vector3{ 0.0f, lfIyy, 0.0f, 0.0f };   // -> +0x90
+            mLocalInverseInertia.zAxis = Vector3{ 0.0f, 0.0f, lfIzz, 0.0f };   // -> +0xA0
+        }
+        CGS_ASSERT(vpu::IsValid(mLocalInverseInertia.xAxis) &&
+                   vpu::IsValid(mLocalInverseInertia.yAxis) &&
+                   vpu::IsValid(mLocalInverseInertia.zAxis),
+                   "RwMath::IsValid( mLocalInverseInertia )");                   // 0x168
+
+        // ---- the per-wheel prepare, from the NEW mSimpleAttribs -------------------------------
+        // Local position copy (the 8 x ld/std loop), then the height-offset raise on the y lane
+        // (front lanes for wheels 0/1, rear for 2/3) -- the RIDE-HEIGHT ADD that the callers'
+        // capture step subtracted.
+        Vector3 laPositions[eNumDrivenWheels];
+        {
+            const f32 lfFrontOffset =
+                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z;
+            const f32 lfRearOffset =
+                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w;
+            for (s32 li = 0; li < eNumDrivenWheels; ++li)
+            {
+                laPositions[li] = lpaWheelPositions[li];
+                laPositions[li].y += (li < 2) ? lfFrontOffset : lfRearOffset;   // vrlimi(4)
+            }
+        }
+
+        const f32 lfTravelUp = mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.x;
+        const f32 lfTravelDownRaw = mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.y;
+        const f32 lfTravelDown = (lfTravelDownRaw > KF_MIN_SUSPENSION_TRAVEL_DOWN)
+                                     ? lfTravelDownRaw : KF_MIN_SUSPENSION_TRAVEL_DOWN;   // vmaxfp
+
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            // The stacked tire-pointer table: 5C0, 5C0, 600, 600 == front, front, rear, rear.
+            const Wheel::TireAttribs* lpTire = (liWheel < 2) ? &mSimpleAttribs.mFrontTireAttribs
+                                                             : &mSimpleAttribs.mRearTireAttribs;
+            maWheels[liWheel].Prepare(
+                vpu::Subtract(laPositions[liWheel], mSimpleAttribs.mCOMOffset),  // vsubfp v1
+                lpafWheelRadii[liWheel],
+                KF_WHEEL_INTEGRATION_SEED,
+                lfTravelUp,
+                lfTravelDown,
+                lpTire);
+        }
+
+        return true;   // li r3, 1
     }
 }
 }

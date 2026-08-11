@@ -105,7 +105,7 @@ namespace Vehicle
     // VMX refinement steps are modelled, not reproduced register-for-register.
     // -------------------------------------------------------------------------------------------
     void VehicleManager::HandleRaceCarRaceCarContact(BrnPhysics::ContactSpy::RaceCarContact lContact,
-                                                     BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                                     BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
                                                      BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
                                                      VehicleManagerOutputInterface* lpManagerOutputInterface,
                                                      BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
@@ -501,7 +501,7 @@ namespace Vehicle
                                          Vector3 lCollisionNormal,
                                          Vector3 lContactPoint,
                                          f32 lfNormalStressSq,
-                                         BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                         BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
                                          VehicleManagerOutputInterface* lpManagerOutputInterface,
                                          BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
                                          BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
@@ -568,7 +568,7 @@ namespace Vehicle
                                             EntityId lAggressorEntityId,
                                             Vector3 lCollisionNormal,
                                             Vector3 lContactPoint,
-                                            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
                                             VehicleManagerOutputInterface* lpManagerOutputInterface,
                                             BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
                                             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
@@ -1533,9 +1533,10 @@ namespace Vehicle
         // What CAN still be asserted here is the part that is a claim about THIS class: that the
         // element type is the real one and that its host size is the number the drift term carries.
         // If either changes without the drift term changing, this fails.
-        static_assert(sizeof(RaceCarPhysics) == 5008,
-                      "host sizeof(RaceCarPhysics) -- the number KU_HOST_DRIFT_AFTER_RACECAR_ARRAY "
-                      "is derived from (8 * (5216 - 5008) == 1664)");
+        static_assert(sizeof(RaceCarPhysics) == 5216,
+                      "host sizeof(RaceCarPhysics) == the console's 0x1460 stride (width-identical "
+                      "since the 240-byte SimpleVehicleAttribs landed, 2026-08-09) -- the number "
+                      "KU_HOST_DRIFT_AFTER_RACECAR_ARRAY (now 0) is derived from");
         static_assert(8 * (5216 - static_cast<std::ptrdiff_t>(sizeof(RaceCarPhysics)))
                           == -KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
                       "the drift term must BE the array's host/console difference -- if the class "

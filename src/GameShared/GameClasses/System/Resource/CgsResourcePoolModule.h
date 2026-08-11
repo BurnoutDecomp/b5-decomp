@@ -18,6 +18,7 @@
 namespace CgsMemory { namespace MemoryIO { struct InputBuffer; struct CreateResourceResponse; } }
 namespace CgsResource { namespace PoolIO { struct OutputBuffer; } }   // SendCreatePoolMemoryRequest target
 namespace CgsResource { namespace Events { struct AcquireResourceRequest; } }   // DoAcquireResourceRequest
+namespace CgsResource { namespace Events { struct AcquireResourceListRequest; } } // DoAcquireResourceListRequest
 // Defrag distribution/relocation records (pointer members only; full layouts live in the deferred
 // defrag subsystem -- forward-declared to avoid a transitive cascade for pointer-only storage).
 namespace CgsResource { struct DistributionEntry; struct RelocationEntry; }
@@ -192,6 +193,14 @@ namespace CgsResource
         // resolved handle (or null if absent) on the pool output queue (tag 6). Dispatched by
         // ProcessInputBuffer for resource request id 4.
         void DoAcquireResourceRequest(const Events::AcquireResourceRequest* lpRequest, PoolIO::OutputBuffer* lpOutput);
+
+        // @ 0x828FCE40 - acquire every resource named by a ResourceIdList resource into the caller's
+        // handle array and echo the request back with the filled count (pool output tag 7 -> receiver
+        // id 5, per the console's translation table dword_820F7194[7] == 5). Dispatched by
+        // ProcessInputBuffer for resource request id 5. This is the per-zone collision protocol
+        // (WorldEntityModule::PrepareZoneCollision's "TRK_CLIL<n>" acquires).
+        void DoAcquireResourceListRequest(const Events::AcquireResourceListRequest* lpRequest,
+                                          PoolIO::OutputBuffer* lpOutput);
 
         // ---- dispatch (deferred) ------------------------------------------------------
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);

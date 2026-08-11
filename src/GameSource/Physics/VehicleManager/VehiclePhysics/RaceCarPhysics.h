@@ -222,8 +222,14 @@ namespace Vehicle
         // impulse, (3) local pitch impulses. Magnitudes differ for showtime vs normal flight, with an
         // extra IsBounceBoosting multiplier. From showtime it chains UpdateTargetAssist +
         // UpdateShowtimePhysics. Gated on the car being airborne (mbIsCrashing here means in-air-ish).
+        // ⭐⭐ WIDENED 2026-08-09 (crash/shunt wave) to the 5-arg DWARF virtual form so it
+        // OVERRIDES VehiclePhysics's image-attested slot +0x28 (the RaceCarPhysics vtable
+        // @0x820D1034 carries this @0x8262EBE8 there). The old 4-arg form dropped the VecFloat
+        // dt the asm saves at entry -- a base-pointer dispatch would have reached the empty
+        // traffic default instead of this body (the hollow-shell class of defect).
         void UpdateAftertouch(const BrnPlayerDriverControls* lpControls,
                               const Matrix44Affine* lpCameraMatrix,
+                              VecFloat lvfTimeStep,
                               bool lbDoForceAdditiveAftertouch, bool lbUseSixaxis);
 
         // @0x825B8C88: trivial getter -- true while aftertouch air-steer is active this frame.
@@ -260,10 +266,15 @@ namespace Vehicle
         // catapult the car, then zeroing the accumulator.
         void ApplyPropCollisionImpulseSum();
 
-        // @0x825FFAE8: record a wheel/surface traction point. Chains to the base
-        // SimpleVehiclePhysics::AddTractionPoint, then -- if the showtime push timer has elapsed --
-        // snapshots the wheel's road-contact record and flags it.
-        void AddTractionPoint(s32 leWheel, u32 luSurfaceTag);
+        // @0x825FFAE8: record a wheel/surface traction point. Chains register-transparently to
+        // the base SimpleVehiclePhysics::AddTractionPoint, then -- once mfBeachedTime has
+        // passed the 0.5s window -- promotes a close-to-ground wheel to on-ground.
+        // ⭐ RE-SIGNATURED 2026-08-07 (orchestrator wave) to the console's 4-arg form: the asm
+        // passes r4/r5/v1/v2 through untouched and the PS3 mangled name agrees
+        // (_ZN...16AddTractionPointENS0_19EVehicleDrivenWheelEN2rw4math3vpu7Vector3ES6_j).
+        // The old 2-arg spelling (s32, u32) existed nowhere in the image.
+        void AddTractionPoint(EVehicleDrivenWheel leWheel, Vector3 lvPosition, Vector3 lvNormal,
+                              u32 lu32CollisionTag);
 
         // ----- ADDITIVE GROW (stunt-offences group): seven declare-only race-car stunt-state
         //       accessors BrnPhysics::StuntOffencesManager reads by name (drift / convoy /

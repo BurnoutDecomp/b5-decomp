@@ -1,6 +1,11 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/TrafficPhysics.h"
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"  // BrnPlayerDriverControls (Update's 72-byte copy)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT (Update's default arm)
+#include "rw/math/vpu/vector3_operation.h"             // rw::math::vpu::Mult (the heavy-crash damping)
+
+#include <cmath>    // std::pow (the vlogefp/vexptefp pair -> DampenAngularVelocity precedent)
+#include <cstring>  // std::memcpy (the 0x48 control-block copy)
 
 // =================================================================================================
 // BrnPhysics::Vehicle::TrafficPhysics -- Construct + SetFreakedOut + Update.
@@ -29,11 +34,13 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    namespace vpu = rw::math::vpu;
     // The four freak-out FSM constants (moved here with Update, 2026-08-03; they were in
     // TrafficPhysics.cpp and Update is their only consumer).
-    // The traffic over-speed gate: above this the scripted throttle/steer are halved
-    // (the asm compares an mpAttribs maxSpeed-region lane vs the local `v95 = 5000.0`).
-    static const f32 KF_TRAFFIC_CONTROL_HALVE_SPEED = 5000.0f;
+    // ⭐ RE-NAMED 2026-08-09 (crash/shunt wave): the gate's operand is splat(mpAttribs Mass .x)
+    // -- the SAME +0x70 lane UpdateCrashing's mass regime reads -- vs flt_82019638 == 5000.0.
+    // It is a heavy-vehicle MASS gate, not a speed gate.
+    static const f32 KF_TRAFFIC_CONTROL_HALVE_MASS = 5000.0f;   // flt_82019638
     static const f32 KF_FREAKOUT_SPINOUT_TIMEOUT    = 4.0f;   // SPIN_OUT times out at 4.0s
     static const f32 KF_FREAKOUT_TURNROLL_MAX       = 2.0f;   // TURN_AND_ROLL window <= 2.0s
     static const f32 KF_FREAKOUT_SEVERITY_GATE      = 0.5f;   // entry gated on control-severity > 0.5
@@ -134,7 +141,8 @@ namespace Vehicle
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Update  @0x82639590  (PARTIAL)
+    // Update  @0x82639590  ⭐⭐ RECONCILED FULL 2026-08-09 (crash/shunt wave; 457 insns read
+    // line by line -- every flagged stand-in below is gone).
     //
     // ⚠️⚠️ WHY THIS BODY IS IN THE **MOUNTED** TU RATHER THAN NEXT TO PreparePhysical. It is
     // `virtual`, and it is the only virtual TrafficPhysics introduces. Folding
@@ -145,103 +153,126 @@ namespace Vehicle
     //     BrnPhysicsModule.obj : error LNK2001: unresolved external symbol
     //       ?Update@TrafficPhysics@Vehicle@BrnPhysics@@UEAAXMMPEBU...
     // That is faithful, not incidental: the console constructor @0x827E42E8 writes those vtables
-    // too. So the body has to be here, and its two VehiclePhysics callees have to resolve -- see
-    // VehiclePhysicsLinkStubs.cpp for the two that do not yet have real bodies.
+    // too. Both VehiclePhysics callees (UpdateShunt / UpdateCrashing) are now BODIED in
+    // VehiclePhysics.cpp -- the VehiclePhysicsLinkStubs traps died with this wave.
     //
-    //   ingests a 72-byte scripted control block (copied to a local), halves throttle/steer over the
-    //   speed gate, advances the freak-out FSM, then forwards into VehiclePhysics::UpdateShunt and
-    //   VehiclePhysics::UpdateCrashing. The callee set is the function's own `xrefs_from`:
-    //   memcpy, the assert trio, SetFreakedOut, UpdateShunt, UpdateCrashing -- and nothing else, so
-    //   the LCG draw below really is inlined rather than a call.
+    // What the 2026-08-03 slice had WRONG, all settled off the asm this wave:
+    //   * "speed > 5000" -- the gate reads splat(mpAttribs Mass .x) > 5000.0 [flt_82019638]: a
+    //     MASS gate (heavy traffic), and it halves GAS always + BRAKE only in gear 0
+    //     (`lwz 0xFC0` == mEngine.mu8CurrentGear word, reverse/neutral) -- not throttle+steer.
+    //   * the control mirrors were inert locals -- the real body memcpy's the 72-byte block and
+    //     the FSM WRITES the copy (mfGas/mfBrake/mfSteering/mfHandBrake), which then feeds the
+    //     shared solvers.
+    //   * missed entirely: mLastLinearVelocity (+0x13B0) and mPreviousTransform (+0x1370, four
+    //     stvx128 rows) are snapshotted every frame (asm 0x8263964C..0x8263968C).
+    //   * the FSM severity is the copy's mfHandBrake channel (the traffic driver packs its
+    //     severity there), the direction handed to SetFreakedOut is the copy's mfSteering, and
+    //     every case writes the wheel-friction multiplier register (+0xFD0,
+    //     mvfWheelFrictionLinearMultiplier).
+    //   * UpdateShunt receives the COPY + the dt splat (v1), not the caller's block.
+    //   * before UpdateCrashing, a crashing HEAVY car (mass >= 3500 [unk_82FB9300 <- init thunk
+    //     @0x82C5CF18]) gets an extra exponential damping pair: v *= 0.99^(60*dt) on both
+    //     velocity registers (bases unk_82FB9100/unk_82FB9BD0 <- flt_820224B0 == 0.99, thunks
+    //     @0x82C5CEBC/@0x82C5CEE0; the 60.0 is flt_82092BC4). std::pow per the
+    //     DampenAngularVelocity precedent (the console inlines the vlogefp/vexptefp polynomial).
+    //   * UpdateCrashing receives the REAL pass-through args (r5 camera, the copy, r7/r8/r9
+    //     bools verbatim) -- not null/false stand-ins.
     // ---------------------------------------------------------------------------------------------
-    void TrafficPhysics::Update(f32 lfTimeStep, f32 lfArg2, const Matrix44Affine* lpReferenceTransform,
-                                const BrnPlayerDriverControls* lpControls, bool lbArg5, bool lbArg6,
-                                bool lbArg7)
+    void TrafficPhysics::Update(f32 lfTimeStep, f32 lfUnused, const Matrix44Affine* lpCameraMatrix,
+                                const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
+                                bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed)
     {
-        (void)lfArg2; (void)lpReferenceTransform; (void)lbArg5; (void)lbArg6; (void)lbArg7;
+        // The traffic heavy-crash damping bank (image-recovered; see the banner).
+        static const f32 KF_TRAFFIC_CRASH_DAMP_MIN_MASS = 3500.0f;   // unk_82FB9300 <- 0x8205878C
+        static const f32 KF_TRAFFIC_CRASH_DAMP_BASE     = 0.99f;     // unk_82FB9100/9BD0 <- 0x820224B0
+        static const f32 KF_DAMP_RATE_SCALE             = 60.0f;     // flt_82092BC4
+        // The TURN_AND_ROLL wheel-friction multiplier: the console lazily splats flt_82004744 ==
+        // 0.2 into unk_82FBA2C0 behind the dword_82FBA2D0 bit-0 latch; the latch is a
+        // static-init idiom with no observable state, so the constant lands directly.
+        static const f32 KF_TURNROLL_WHEEL_FRICTION     = 0.2f;      // flt_82004744
 
-        // The X360 memcpy's the 72-byte control block into a local (v99) so the modifiers below don't
-        // corrupt the caller's input. We work on a local copy of the throttle/steer scalars. FLAG:
-        // the control block is opaque here (owned by the input TU); the two modified fields are the
-        // throttle (offset +4 in the local, `v99[1]`) and steer (`v99[2]`). They are read/written via
-        // a local mirror -- the full block is forwarded unchanged into UpdateShunt/UpdateCrashing.
-        f32 lfLocalThrottle = 0.0f;   // v99[1] mirror
-        f32 lfLocalSteer    = 0.0f;   // v99[2] mirror
+        (void)lfUnused;   // the f2 slot is never read (its first mention is the FSM's own load)
 
-        // --- over-speed control halving (the `if (speed > v95=5000.0)` branch) ---
-        // The gate compares mpAttribs maxSpeed-region lane vs KF_TRAFFIC_CONTROL_HALVE_SPEED.
-        // FLAG: the speed source is read from the attribs lane (un-homed in this slice); the halving
-        // shape (throttle *= 0.5 always, steer *= 0.5 only when `*(this+4032)==0`) is reproduced.
-        const bool lbOverSpeed = false;   // FLAG: gate result from un-homed attribs lane (inert)
-        const bool lbHalveSteer = true;   // `!*(this+4032)` -- the freak-out-active suppressor
-        if (lbOverSpeed)
+        const VecFloat lvfTimeStep{ lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep };
+
+        // 0x826395A8..0x826395C8: the 72-byte control block, copied so the FSM's writes do not
+        // corrupt the caller's input. The COPY is what feeds UpdateShunt/UpdateCrashing.
+        BrnPlayerDriverControls lCopy;
+        std::memcpy(&lCopy, lpControls, sizeof(BrnPlayerDriverControls));
+
+        // --- the heavy-vehicle control halving (asm 0x826395CC..0x82639648) ---
         {
-            lfLocalThrottle *= 0.5f;
-            if (lbHalveSteer)
-                lfLocalSteer *= 0.5f;
+            const f32 lfMass =
+                mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+            if (lfMass > KF_TRAFFIC_CONTROL_HALVE_MASS)          // vcmpgtfp vs 5000.0
+            {
+                lCopy.mfGas *= 0.5f;                             // flt_82001DA0
+                if (mEngine.GetCurrentGear() == 0)               // lwz 0xFC0 == 0 (rev/neutral)
+                    lCopy.mfBrake *= 0.5f;
+            }
         }
 
-        // --- the freak-out FSM (mu8FreakOutState @ +0x13F4) ---
+        // --- the per-frame previous-state snapshots (asm 0x8263964C..0x8263968C) ---
+        mLastLinearVelocity = mLinearVelocity;                   // stvx -> +0x13B0
+        mPreviousTransform  = mTransform;                        // 4x stvx -> +0x1370..+0x13A0
+
+        // --- the freak-out FSM (mu8FreakOutState @ +0x13F4; asm 0x82639690..0x826398B8) ---
+        // The LCG-draw archaeology (the divide-by-101 magic reciprocal, the RandomUInt inline)
+        // is unchanged from the 2026-08-03 correction -- see git history; the draw is
+        // `RandomUInt() % 101 >= 50`.
         f32 lfNewFreakOutTime = 0.0f;
         switch (mu8FreakOutState)
         {
         case E_FREAK_OUT_STATE_OFF:
         {
-            // Entry: when the control severity (`v99[3]`) exceeds the gate, draw from the per-car
-            // random ring and SetFreakedOut.
-            //
-            // ⚠️⚠️ CORRECTED 2026-08-03 (this wave). What stood here was
-            //     mRandom.muState = mRandom.muState * 1148159575u + 1u;
-            //     const f32 lfDir = ((mRandom.muState >> 6) & 1u) ? 0.0f : 0.0f;
-            // and BOTH lines were wrong. Re-read off the X360 asm at 0x82639804..0x8263987C:
-            //   * 1148159575 == 0x446F8657 is NOT an LCG multiplier. It is the MSVC magic reciprocal
-            //     for an unsigned divide by 101 -- `mulhwu ; subf ; srwi 1 ; add ; srwi 6 ;
-            //     mulli 0x65 ; subf` is the textbook add-shift correction sequence, and 0x65 == 101.
-            //     The actual multiplier three instructions earlier is the ordinary console LCG
-            //     constant, `insrdi` of 0x5851F42D : 0x4C957F2D == 0x5851F42D4C957F2D.
-            //   * the draw is therefore `hi % 101 >= 50`, a near-even coin flip, not a bit test on
-            //     bit 6 of the state.
-            //   * and the ternary picked between 0.0f and 0.0f, i.e. it could not have had an effect
-            //     even if the constants had been right.
-            // The LCG step itself -- read muSeed, seed = seed * M + 1, return the OLD seed's HIGH
-            // word -- is CgsNumeric::Random::RandomUInt(), which the X360 inlines here. That is a
-            // THIRD independent witness for the body CgsRandom.cpp already committed from
-            // Vehicle::SetFlashingHeadlights @0x827537D0: draw the high word, THEN step.
-            const f32 lfSeverity = 0.0f;   // FLAG: v99[3] severity (un-homed control lane, inert)
-            if (lfSeverity > KF_FREAKOUT_SEVERITY_GATE)
+            // Entry (asm 0x826397F8..0x82639898): the severity channel is the COPY's
+            // mfHandBrake (+0xC -- the traffic driver packs its severity there); the direction
+            // handed to SetFreakedOut is the COPY's mfSteering (var_80 == copy+0x10).
+            if (lCopy.mfHandBrake > KF_FREAKOUT_SEVERITY_GATE)   // fcmpu vs 0.5
             {
                 const u32 luDraw = mRandom.RandomUInt();
-                SetFreakedOut(/*direction*/ 0.0f,   // FLAG: f1 is a stack local built from the
-                                                    // un-homed control lanes (inert here)
+                SetFreakedOut(lCopy.mfSteering,
                               (luDraw % 101u) >= 50u ? KF_FREAKOUT_SEVERITY_HIGH_DRAW
                                                      : KF_FREAKOUT_SEVERITY_LOW_DRAW);
+                if (!IsCrashing())                               // lbz +0x710 == 0
+                    SetCrashing();                               // vcall +0x08
             }
-            lfNewFreakOutTime = 0.0f;
+            // Both legs converge on loc_8263989C: full wheel friction + a ZEROED timer.
+            mvfWheelFrictionLinearMultiplier = VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f };   // +0xFD0
+            lfNewFreakOutTime = 0.0f;                            // flt_82001CC0
             break;
         }
         case E_FREAK_OUT_STATE_INITIAL:
             // INITIAL -> SPIN_OUT immediately; if not already crashing, fire the crash virtual.
-            mu8FreakOutState = E_FREAK_OUT_STATE_SPIN_OUT;
+            mu8FreakOutState = E_FREAK_OUT_STATE_SPIN_OUT;       // stb 3 -> +0x13F4
+            mvfWheelFrictionLinearMultiplier = VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f };
             if (!IsCrashing())
                 SetCrashing();
             lfNewFreakOutTime = mfFreakOutTime + lfTimeStep;
             break;
 
         case E_FREAK_OUT_STATE_TURN_AND_ROLL:
-            // TURN_AND_ROLL holds for up to KF_FREAKOUT_TURNROLL_MAX seconds, forcing throttle to 1.
-            lfLocalThrottle = 1.0f;   // v99[1] = 1.0
-            if (mfFreakOutTime < KF_FREAKOUT_TURNROLL_MAX)
-                lfNewFreakOutTime = mfFreakOutTime + lfTimeStep;
-            else
-                lfNewFreakOutTime = mfFreakOutTime + lfTimeStep;
+            // asm 0x8263972C..0x826397B0: steer to the stored freak-out direction, handbrake
+            // hard on, wheel friction down to 0.2; full gas only inside the 2.0 s window.
+            lCopy.mfSteering  = mfFreakOutDirection;             // stfs +0x13F8 -> copy+0x10
+            lCopy.mfHandBrake = 1.0f;                            // flt_82001C98 -> copy+0xC
+            mvfWheelFrictionLinearMultiplier =
+                VecFloat{ KF_TURNROLL_WHEEL_FRICTION, KF_TURNROLL_WHEEL_FRICTION,
+                          KF_TURNROLL_WHEEL_FRICTION, KF_TURNROLL_WHEEL_FRICTION };
+            if (mfFreakOutTime < KF_FREAKOUT_TURNROLL_MAX)       // fcmpu vs 2.0 [flt_82001D9C]
+                lCopy.mfGas = 1.0f;
+            lfNewFreakOutTime = mfFreakOutTime + lfTimeStep;
             break;
 
         case E_FREAK_OUT_STATE_SPIN_OUT:
-            // SPIN_OUT times out at KF_FREAKOUT_SPINOUT_TIMEOUT; force throttle+steer to 1.
-            if (mfFreakOutTime > KF_FREAKOUT_SPINOUT_TIMEOUT)
+            // asm 0x826396E0..0x82639728: times out at 4.0 s; steer to the freak-out direction
+            // with gas AND brake pinned to 1 (not "throttle+steer" as the old slice had it).
+            if (mfFreakOutTime > KF_FREAKOUT_SPINOUT_TIMEOUT)    // fcmpu vs 4.0 [flt_8208FA0C]
                 mu8FreakOutState = E_FREAK_OUT_STATE_OFF;
-            lfLocalThrottle = 1.0f;   // v99[1] = 1.0
-            lfLocalSteer    = 1.0f;   // v99[2] = 1.0
+            lCopy.mfSteering = mfFreakOutDirection;
+            lCopy.mfBrake    = 1.0f;
+            lCopy.mfGas      = 1.0f;
+            mvfWheelFrictionLinearMultiplier = VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f };
             lfNewFreakOutTime = mfFreakOutTime + lfTimeStep;
             break;
 
@@ -250,20 +281,33 @@ namespace Vehicle
             lfNewFreakOutTime = mfFreakOutTime + lfTimeStep;
             break;
         }
-        mfFreakOutTime = lfNewFreakOutTime;   // *(this+0x13FC) = v44
+        mfFreakOutTime = lfNewFreakOutTime;   // stfs -> +0x13FC (the common tail)
 
-        (void)lfLocalThrottle; (void)lfLocalSteer;
+        // The shared shunt solver -- the SAME entry the player uses -- fed the COPY and the dt
+        // splat (asm 0x826398B4..0x826398CC: r4 = &copy, v1 = dt).
+        VehiclePhysics::UpdateShunt(&lCopy, lvfTimeStep);
 
-        // Forward into the shared shunt + crashing solvers (the SAME entries the player uses).
-        VehiclePhysics::UpdateShunt(lpControls);
+        // --- the heavy-traffic crash damping (asm 0x826398D0..0x82639C84) ---
+        // While crashing AND heavy (mass >= 3500), both velocity registers decay by
+        // 0.99^(60*dt) -- the inlined vlogefp/vexptefp pair, landed as std::pow over the
+        // image-recovered constants (see the banner).
+        if (IsCrashing())
+        {
+            const f32 lfMass =
+                mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+            if (lfMass >= KF_TRAFFIC_CRASH_DAMP_MIN_MASS)        // vcmpgefp
+            {
+                const f32 lfFactor =
+                    std::pow(KF_TRAFFIC_CRASH_DAMP_BASE, KF_DAMP_RATE_SCALE * lfTimeStep);
+                mLinearVelocity  = vpu::Mult(mLinearVelocity,  lfFactor);   // stvx +0x50
+                mAngularVelocity = vpu::Mult(mAngularVelocity, lfFactor);   // stvx +0x60
+            }
+        }
 
-        // FLAG (BLOCKED math, faithful delegation): when crashing the X360 runs an inlined per-axis
-        // vlogefp/vexptefp angular-velocity damping curve directly in this function, driven by the
-        // un-homed rodata coefficient tables unk_82014AC0..82014AF0 (a powf polynomial) and applied
-        // to mAngularVelocity (+0x60). That math is NOT fabricated here; it is delegated to the
-        // committed VehiclePhysics::UpdateCrashing, which owns the crash-damping curve in the full
-        // physics TU.
-        VehiclePhysics::UpdateCrashing(lfTimeStep, lpControls);
+        // The shared crash solver with the REAL pass-through arguments (asm 0x82639C88..
+        // 0x82639CA4: r5 = incoming camera, r6 = &copy, r7/r8/r9 = the incoming bools).
+        VehiclePhysics::UpdateCrashing(lfTimeStep, lpCameraMatrix, &lCopy, lbImpactTime,
+                                       lbPlayerAftertouchForceAdditive, lbShowtimeAllowed);
     }
 }
 }

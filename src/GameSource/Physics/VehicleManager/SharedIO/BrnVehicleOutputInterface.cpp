@@ -213,6 +213,137 @@ namespace Vehicle
         mAddJointQueue.AddEvent(lAddJointEvent);
     }
 
+    // ---------------------------------------------------------------------------------------
+    // VehicleOutputRequestInterface::Construct (DWARF :204)          NEW 2026-08-09 (conductor)
+    //
+    // X360-attested through CreateIOBuffer<VehicleManagerOutputBuffer> @0x8259DAF0, which runs
+    // the buffer Construct after the stack alloc (the PS3 DecFIGS build keeps
+    // VehicleManagerOutputBuffer::Construct out of line, and this is its payload): construct
+    // all six request queues over their inline storage.
+    // ---------------------------------------------------------------------------------------
+    void VehicleOutputRequestInterface::Construct()
+    {
+        mRequiredRigidBodiesQueue.Construct();
+        mRemoveRigidBodyQueue.Construct();
+        mRequestFineLineQueue.Construct();
+        mChangeRigidBodyInertiaQueue.Construct();
+        mAddJointQueue.Construct();
+        mRemoveJointQueue.Construct();
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // AggressiveDrivingFlags::Clear (DWARF :287)                   NEW 2026-08-10 (create path)
+    //
+    // X360-attested as the five `stb r31, 0x6C00..0x6C04(r29)` stores PhysicsModuleIO::
+    // OutputBuffer::Construct @0x825ABB88..0x825ABBA0 emits over the VehicleOutputInterface
+    // seat, r31 == 0. The struct is exactly five bools and the DWARF gives the class a Clear();
+    // FLAG: that the five stores ARE this Clear() rather than five open-coded stores inside
+    // VehicleOutputInterface::Construct is an inference from the DWARF declaring both -- the
+    // emitted code is identical either way, so nothing downstream depends on the split.
+    // ---------------------------------------------------------------------------------------
+    void AggressiveDrivingFlags::Clear()
+    {
+        mbPlayerWonSlamThisFrame      = false;
+        mbPlayerLostSlamThisFrame     = false;
+        mbPlayerWonGrindingThisFrame  = false;
+        mbPlayerLostGrindingThisFrame = false;
+        mbRubbingThisFrame            = false;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // VehicleOutputInterface::Construct (DWARF :312)               NEW 2026-08-10 (create path)
+    //
+    // The console keeps this one INLINE: PhysicsModuleIO::OutputBuffer::Construct @0x825ABB10
+    // emits it over its own +44128 seat, with r29 == this. Read from the asm, in the console's
+    // own emission order (which is NOT member order -- kept as shipped):
+    //   0x825ABB58/70  addi r3, r29, 0x2620 ; bl PhysicalTrafficState,20>::Construct
+    //   0x825ABB74/78  addi r3, r29, 0x2310 ; bl ImpactEvent,16>::Construct
+    //   0x825ABB7C/80  addi r3, r29, 0x65F0 ; bl VariableEventQueue<1536,16>::Construct
+    //   0x825ABB84     std  r31, 0(r29)                  <- mUsedRaceCars, ONE 8-byte zero
+    //   0x825ABB88..A0 stb  r31, 0x6C00..0x6C04(r29)     <- mAggressiveDrivingFlags, five bools
+    // The single `std` is the whole of BitArray<8u>: one 64-bit field (kuNumberOfBitFields == 1),
+    // which is the same one-word image VehicleManager::ReadUpdatedBodies @0x82619A10 scans with
+    // a single `ld`. Expressed as the container's own named UnSetAll(), not a raw store.
+    // ---------------------------------------------------------------------------------------
+    void VehicleOutputInterface::Construct()
+    {
+        // ⭐ THE OPAQUE SPAN IS GATED BEFORE IT IS CONSTRUCTED THROUGH. mGameEventQueue is
+        // still modelled as a size-pinned storage array, and GetGameEventQueue() is this file's
+        // sanctioned cast seam; running a Construct through that cast is only sound if the real
+        // queue fits the span EXACTLY. It does, on the host as on the console:
+        //   1 (mbIsConstructed) + 1536 (macData) + 3 pad + 4 + 4 + 4 == 1552 == 0x610.
+        // If VariableEventQueue ever grows a pointer this fails to COMPILE instead of writing
+        // past mGameEventQueueStorage into mAggressiveDrivingFlags.
+        static_assert(sizeof(CgsModule::VariableEventQueue<1536, 16>) == 0x610,
+                      "GameEventQueue must fit its size-pinned storage span exactly");
+
+        mTrafficStateQueue.Construct();       // +0x2620
+        mImpactEventQueue.Construct();        // +0x2310
+        GetGameEventQueue()->Construct();     // +0x65F0
+        mUsedRaceCars.UnSetAll();             // +0      (the single `std 0`)
+        mAggressiveDrivingFlags.Clear();      // +0x6C00 (the five `stb 0`)
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // VehicleManagerOutputInterface::Construct (DWARF :86)         NEW 2026-08-10 (create path)
+    //
+    // X360 0x822E6790, 25 instructions, OUT OF LINE -- transcribed leg for leg:
+    //   +0x6C0 CreateVehicleResult,8>      +0     TrafficCrashedEvent,20>
+    //   +0x150 TrafficSlammedEvent,20>     +0x2F0 TrafficCrashedEvent,10>
+    //   +0x3A0 RaceCarCrashEvent,8>        +0x5B0 RaceCarResetEvent,8>
+    //   +0x750 short,32>                   +0x7A0 TrafficRemovedEvent,25>
+    //   sth r11(=0), 0x79C   +  stb r11, 0x79E     == mVehicleGuiOutputMessages (3 bools)
+    //   stfs f0, 0x874       +  stfs f0, 0x878     == mWheelFFSpring, f0 = flt_82001CC0
+    //
+    // ⭐ AS-SHIPPED ODDITY, reproduced rather than tidied: the console constructs
+    // mCreateVehicleResultQueue (+0x6C0) FIRST, before the queue that sits at offset 0. The
+    // remaining seven then run in member order. No `bl` is reordered here.
+    //
+    // ⭐ flt_82001CC0 == 0.0f, read out of the X360 image (x360rd.py, DELTA -1594), with the
+    // reader self-tested in the same run against two constants this tree already names by other
+    // means: flt_8208F83C -> 9.8100004196167 (KF_GRAVITY) and flt_82001D9C -> 2.0f (the
+    // handbrake drift window). Its neighbours read as live data (1.875 / 176.0 / -176.0, then
+    // the ASCII "Monitor already started: " four words later), so the zero is a pooled 0.0f
+    // literal and not an unmapped read. Both spring lanes therefore start at zero.
+    // ---------------------------------------------------------------------------------------
+    void VehicleManagerOutputInterface::Construct()
+    {
+        mCreateVehicleResultQueue.Construct();      // +0x6C0  (console emits this first)
+        mCrashedTrafficEventQueue.Construct();      // +0
+        mSlammedTrafficEventQueue.Construct();      // +0x150
+        mFineTrafficCrashedEventQueue.Construct();  // +0x2F0
+        mRaceCarCrashEventQueue.Construct();        // +0x3A0
+        mRaceCarResetEventQueue.Construct();        // +0x5B0
+        mTrafficTypeRequestQueue.Construct();       // +0x750
+        mRemovedTrafficEventQueue.Construct();      // +0x7A0
+
+        mVehicleGuiOutputMessages.mbPlayerGrindingOther = false;   // +0x79C ) the `sth` covers
+        mVehicleGuiOutputMessages.mbOtherGrindingPlayer = false;   // +0x79D ) these two
+        mVehicleGuiOutputMessages.mbRubbing             = false;   // +0x79E (the `stb`)
+
+        mWheelFFSpring.mfSpringCoefficient = 0.0f;  // +0x874
+        mWheelFFSpring.mfSpringSaturation  = 0.0f;  // +0x878
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // VehicleOutputRequestInterface::Append (DWARF :201)             NEW 2026-08-09 (conductor)
+    //
+    // X360-attested INLINE in PhysicsModule::Update @0x825B0640 (0x825B2480..0x825B24C0):
+    // merge the source interface's request queues onto this one, five appends in the
+    // console's order. ⚠️ mChangeRigidBodyInertiaQueue is deliberately NOT appended --
+    // Update drains that queue into the SIM input buffer through
+    // BridgeVehicleManagerToSimulation_PostPhysics @0x825ADF60 instead; appending it here
+    // too would double-apply every inertia change.
+    // ---------------------------------------------------------------------------------------
+    void VehicleOutputRequestInterface::Append(const VehicleOutputRequestInterface* lpSource)
+    {
+        mRequiredRigidBodiesQueue.Append(lpSource->mRequiredRigidBodiesQueue);   // @0x825A3898
+        mRemoveRigidBodyQueue.Append(lpSource->mRemoveRigidBodyQueue);           // @0x825A3988
+        mRequestFineLineQueue.Append(lpSource->mRequestFineLineQueue);           // @0x825AC068 (<13440,16>)
+        mAddJointQueue.Append(lpSource->mAddJointQueue);                         // @0x825A3A68
+        mRemoveJointQueue.Append(lpSource->mRemoveJointQueue);                   // @0x825A3B58
+    }
+
     // @0x823625C0  CrashingRaceCarInterface::SetFromVehicleOutputInterface
     //   For every race-car slot in use (mUsedRaceCars bit set) copy that car's
     //   RaceCarState::mbResetCarTransform flag (byte @1098) into mabCrashingRaceCars[]. The

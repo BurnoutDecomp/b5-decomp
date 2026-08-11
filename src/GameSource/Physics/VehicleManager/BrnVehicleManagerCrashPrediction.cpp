@@ -35,7 +35,7 @@ namespace Vehicle
         BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContactInterface,
         const VehicleInputInterface* lpVehicleInputInterface,
         BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
-        BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+        BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
         VehicleManagerOutputInterface* lpManagerOutputInterface,
         BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface)
     {

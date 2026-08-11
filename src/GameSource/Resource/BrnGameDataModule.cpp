@@ -1721,7 +1721,7 @@ namespace BrnResource
             if (memcmp(lacName + 4, "UNIT", 4) == 0)
                 ProcessLoadWorldUnitRequest(lpResourceInput, lpEvent, 31, liIndex);
             else if (memcmp(lacName + 4, "COLL", 4) == 0)
-                DeferredGameDataRequest("LoadWorldCollision (0x8266F830, id 32)", lpSlot);
+                ProcessLoadWorldCollisionRequest(lpResourceInput, lpEvent, 32, liIndex);
             else if (memcmp(lacName + 4, "ZONE", 4) == 0)
                 ProcessLoadPVSRequest(lpResourceInput, lpEvent, 33, liIndex);
             else
@@ -2382,6 +2382,48 @@ namespace BrnResource
         lRequest.miPoolId            = lpEvent->miPoolId;
         lRequest.mbAllowFailiure     = lpEvent->mbFailFlag;
         lRequest.mbUseHDCache        = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x8266F830 -- service a LOAD world-collision request: stream "worldcol.bin" into the
+    // request's pool. Response id staged at the slot (32); ProcessInternalLoadBundleResponse's
+    // case 32 is TERMINAL (bump the ref count, reply id 32) -- there is deliberately no paired
+    // GET, and the case-57 assert spells out why: the per-zone geometry is acquired afterwards
+    // through WorldEntityModule::PrepareZoneCollision's "TRK_CLIL<n>" AcquireResourceList calls.
+    //
+    // Structurally ProcessLoadPVSRequest with the same 148-byte type-2 LoadBundleRequest build
+    // and the same `li r5,2 / li r6,0x94` AddEvent tail, plus one extra leading guard: the
+    // collision world must not currently be invalidated (the swap-out/swap-in path sets that
+    // flag while the bundle is being replaced).
+    void GameDataModule::ProcessLoadWorldCollisionRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                          const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                          s32 liEventId, s32 liSlotIndex)
+    {
+        // X360 line 4326. The flag is a1+475940 -- committed as miWorldCollisionValidatePending
+        // with a FLAGged role name; this assert text is the first real attestation of what it
+        // means ("invalidated"), so the role is now confirmed even though the identifier is not.
+        CGS_ASSERT(miWorldCollisionValidatePending == 0,
+                   "Attempted collision world operation when it is invalidated\n");
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_PHYSICS,
+                   "Invalid asset type for world collision\n");   // X360 line 4327
+
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        CgsResource::Events::LoadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.SetFileName(KPC_WORLD_COLLISION_FILE_NAME);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId            = lpEvent->miPoolId;
+        lRequest.mbAllowFailiure     = lpEvent->mbFailFlag;
+        // ⚠️ NOT the PVS/lanes tail: the X360 stores 1 here (`li r11,1; stb r11,0x91(sp)` --
+        // v26 = 1 in the decompilation), i.e. worldcol.bin IS routed through the HD cache.
+        // It is the only one of the five LoadBundle builders in this file that sets it.
+        lRequest.mbUseHDCache        = true;
 
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),

@@ -425,6 +425,49 @@ namespace BrnWorld
                       BrnWorldIO::UpdateOutputBuffer* lpUpdateOutputBuffer,
                       BrnResource::GameDataIO::AllocatorList* lpAllocatorList );
 
+        // @0x827C9478 -- one frame of the WORLD COLLISION prepare (the scripted load's
+        // stage 7, LoadingScriptedState::LoadWorldCollision @0x823E73E0). Drives
+        // WorldEntityModule::PrepareWorldCollision through the same buffer trio Prepare's
+        // WORLDENTITY stage uses. Resumable: false = call again next frame.
+        // Arity + parameter NAMES confirmed against the DecFIGS DWARF
+        // (BrnWorldModule.h:349 -- `bool PrepareWorldCollision(IOBufferStack*,
+        // IOBufferStack*, UpdateOutputBuffer*)`, body BrnWorldUnity.cpp:11577 naming them
+        // lpInputBufferStack / lpOutputBufferStack / lpOutput).
+        bool PrepareWorldCollision( CgsModule::IOBufferStack* lpInputBufferStack,
+                                    CgsModule::IOBufferStack* lpOutputBufferStack,
+                                    BrnWorldIO::UpdateOutputBuffer* lpOutput );
+
+        // ⭐ ADDITIVE 2026-08-09 (feed wave; header-only inline, no out-of-line symbol).
+        // WorldModule::BridgeInputToPhysicsModule @0x827AB830 hands the module's last director
+        // camera to the physics input buffer, reaching it as the raw `this + 0x5E1CC0`
+        // (`addis r4,r29,0x5E / addi r4,r4,0x1CC0` -- 6167744, the console seat this header
+        // already documents for mLastCameraInput). Same pattern as
+        // Vehicle::VehicleInputInterface::GetLineTestResults: expose it BY NAME so host
+        // addressing stays layout-correct instead of poking a console byte offset through a
+        // void*, which on the x64 layout would not land on this member at all.
+        const BrnDirector::Camera::Camera* GetLastCameraInput() const { return &mLastCameraInput; }
+
+        // ⭐ ADDITIVE 2026-08-10 (pre-physics bridge wave; header-only inlines, no out-of-line
+        // symbols) -- EXACTLY the GetLastCameraInput pattern one line above, for exactly the
+        // same reason. The DecFIGS DWARF makes BridgeEntityModulesToPhysicsModule_PrePhysics a
+        // MEMBER of this class (BrnWorldModule.h:578, four parameters -- which is why the X360
+        // passes the WorldModule in r3: it is the implicit `this`), and its driver-controls
+        // filter reads these two members directly:
+        //     0x827AAFEC  add r11, r11, 1541820 ; slwi 2 ; lwzx r11, r11, r20   -> maeCarControls[id]
+        //     0x827AB000  lbzx r11, r20, 0x5E1B10                               -> mbDEBUG... (+6167312)
+        // The PC tree models the bridge layer as free functions taking the r3 seat explicitly,
+        // so it needs a named door. A friend declaration was tried first and is NOT usable here:
+        // naming the global `WorldModule` namespace from this header makes
+        // `using BrnWorld::WorldModule;` (BrnGameModule.hpp:63) ambiguous.
+        // ⛔ THE ALTERNATIVE IS THE REAL HAZARD: the Bridges layer's existing habit is to poke
+        // these members at their CONSOLE byte offsets through the void* (see
+        // WorldBridgeRaceCarToWorldModule.cpp's KU_WORLD_MODULE_* constants) -- which cannot be
+        // right on an x64 WorldModule layout. Named access is the point of these two lines.
+        // AS SHIPPED: the console indexes maeCarControls with the event's raw miVehicleID and
+        // range-guards nothing here, so neither does this accessor.
+        s32  GetCarControl(s32 liActiveRaceCarIndex) const { return maeCarControls[liActiveRaceCarIndex]; }
+        bool IsDEBUGPlayerCarAlwaysUnderAIControl() const  { return mbDEBUGPlayerCarAlwaysUnderAIControl; }
+
     private:
         // @0x827A52B0 (DWARF BrnWorldModule.h:473 -- `void BridgeRaceCarModuleToWorldModule_
         // PreScene(InputBuffer_PreScene*, const OutputBuffer_PreScene*)`, i.e. a WorldModule

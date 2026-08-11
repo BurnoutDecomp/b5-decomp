@@ -47,6 +47,7 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h"                          // CgsAttribSys::AttribSysIO::AttribSysRequestInterface (<2048>-shaped)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"                  // BrnPhysics::Vehicle::VehicleOutputInterface / VehicleManagerOutputInterface
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"             // BrnPhysics::Vehicle::VehicleDriverInputInterface
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"                   // BrnPhysics::Vehicle::VehicleInputInterface (mVehicleInputInterface, retyped 2026-08-09)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"                                // BrnPhysics::ContactSpy::ContactSpyInterface
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h"          // BrnPhysics::Deformation::DeformationOutputInterface
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropEvents.h"                                 // BrnPhysics::Props::PropUpdateNotification
@@ -92,28 +93,22 @@ namespace BrnWorldIO
     // Real layouts/sizes are grown by each payload's own TU; sizes here are NOMINAL.
     // ------------------------------------------------------------------------
 
-    // VehicleInputInterface (BrnPhysics::Vehicle home not yet exposing the X360-attested
-    // AppendVehicleInputInterface entry point). AppendVehicleInputInterface calls a distinct
-    // "VehicleInputInterface::Append" symbol -- separate from the committed operator= (Clear()+
-    // Append() per queue) -- whose full per-queue merge body has not been recovered yet. Modelled
-    // as a sized slice with that single by-name entry point until Append() is grown onto the
-    // canonical BrnPhysics::Vehicle::VehicleInputInterface home.
-    struct VehicleInputInterface
-    {
-        void Append(const VehicleInputInterface* lpSource)
-        {
-            // Faithful merge: copy the source payload image (store-for-store).
-            if (lpSource && lpSource != this)
-                std::memcpy(maPayload, lpSource->maPayload, sizeof(maPayload));
-        }
-        // X360 UpdateInputBuffer::Construct @0x827C9E90 calls
-        // BrnPhysics::Vehicle::VehicleInputInterface::Construct on this member (+96). That
-        // interior (three per-car input queues + head words) belongs to the canonical
-        // BrnVehicleInputInterface TU; until it lands the slice's construct is the zero-fill
-        // stand-in the sibling UpdateOutputBuffer::Construct already uses [marked deviation].
-        void Construct() { std::memset(maPayload, 0, sizeof(maPayload)); }
-        u8 maPayload[256];   // NOMINAL -- grown by BrnVehicleInputInterface TU
-    };
+    // ⭐⭐ RETYPED 2026-08-09 (feed wave) -- THIS WAS A 256-BYTE NOMINAL SLICE STANDING IN FOR A
+    // ~142 KB INTERFACE, AND IT WAS ABOUT TO BE Append()ED THROUGH.
+    // The canonical home IS committed (BrnPhysics::Vehicle::VehicleInputInterface, the same type
+    // the physics module's own InputBuffer already typedefs), and its X360-attested Append
+    // @0x823C87C0 -- the "distinct VehicleInputInterface::Append symbol" the old note said had
+    // not been recovered -- is bodied now (14 per-queue merges out to console byte +141376).
+    // WorldModule::BridgeInputToPhysicsModule @0x827AB830 does
+    //     physicsInput->GetVehicleInputInterface()->Append( worldInput->GetVehicleInputInterface() )
+    // so the two sides MUST be the same type: reinterpret_cast'ing the 256-byte slice to the real
+    // interface would have walked fourteen queue headers ~138 KB past the end of the slice.
+    // Retyping also restores what the old note itself said the console does -- X360
+    // UpdateInputBuffer::Construct @0x827C9E90 calls the REAL
+    // BrnPhysics::Vehicle::VehicleInputInterface::Construct on this member (+96), which seats the
+    // fifteen embedded EventQueues' mpEvents; the zero-fill stand-in never did.
+    // The update input buffer stack is 16 MB, so the buffer growth is absorbed.
+    typedef BrnPhysics::Vehicle::VehicleInputInterface VehicleInputInterface;
 
     // VehicleDriverInputInterface: canonical home is committed
     // (GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h). X360

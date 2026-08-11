@@ -28,6 +28,7 @@
 // ============================================================================
 
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags (the two boot gates, 2026-08-09)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"             // PotentialContact
@@ -299,9 +300,18 @@ namespace Deformation
         const BrnPhysics::PhysicsModuleIO::InputBuffer* /*lpInputBuffer*/,
         PhysicsModuleIO::PotentialContactInterface* /*lpContacts*/)
     {
-        CGS_ASSERT(false,
-                   "TRAP: DeformationManager::BridgeBodyPartCarContactsToSimulation @0x825DD7D0 "
-                   "not reconstructed (big-five #2 closure stub)\n");
+        // BOOT GATE (conductor wave 2026-08-09; was a trap while the caller chain was dead):
+        // reached every frame by the landed BridgeContactsToSimulation. Reconstruct and
+        // DELETE this gate.
+        static bool s_bLogged = false;
+        if (!s_bLogged)
+        {
+            s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate: DeformationManager::"
+                                              "BridgeBodyPartCarContactsToSimulation @0x825DD7D0 "
+                                              "inert [FLAG PC boot gate]\n";
+        }
     }
 
     // =================================================================================================
@@ -315,9 +325,18 @@ namespace Deformation
         const BrnPhysics::PhysicsModuleIO::InputBuffer* /*lpInputBuffer*/,
         PhysicsModuleIO::PotentialContactInterface* /*lpContacts*/)
     {
-        CGS_ASSERT(false,
-                   "TRAP: DeformationManager::BridgeDetachedWheelCarContactsToSimulation @0x825DDD48 "
-                   "not reconstructed (big-five #2 closure stub)\n");
+        // BOOT GATE (conductor wave 2026-08-09; was a trap while the caller chain was dead):
+        // reached every frame by the landed BridgeContactsToSimulation. Reconstruct and
+        // DELETE this gate.
+        static bool s_bLogged = false;
+        if (!s_bLogged)
+        {
+            s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "conductor gate: DeformationManager::"
+                                              "BridgeDetachedWheelCarContactsToSimulation @0x825DDD48 "
+                                              "inert [FLAG PC boot gate]\n";
+        }
     }
 
     // =================================================================================================
