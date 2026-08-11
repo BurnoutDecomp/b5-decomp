@@ -132,5 +132,34 @@ namespace PhysicsSimulationIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         return &mDriveSpyQueue;
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Construct @0x828A72E8 -- LANDED 2026-08-11 (create-drain wave, conductor). The InputBuffer
+    // sibling's story exactly (see its banner in ..._InputBuffer.cpp): the "future OutputBuffer::
+    // Construct TU" was never written, the call resolved to the base IOBuffer::Construct, and the
+    // first live AddActiveBodiesToOutputQueue hit NULL mpEvents (tripwires "mpEvents != NULL" /
+    // "Reached Max length", then an AV writing 0 at AddActiveBodiesToOutputQueue+0x1C7 --
+    // BrnCrash.png banked). Console body verbatim: status byte = 1, four queue Constructs
+    // (console +16 / +38432 / +128048 / +131136, reached BY NAME -- host offsets differ because
+    // OutUpdateRigidBody widened), then the scalar+length zeroing tail
+    // (+4 mfTimeStepUsed, +131144 / +24 / +38440 / +128056 == the four miLengths, +8
+    // muMaxIterationsUsed -- console store order kept).
+    // ---------------------------------------------------------------------------------------------
+    void OutputBuffer::Construct()
+    {
+        IOBuffer::Construct();                 // *this = 1 (clear flags + eStatusConstructed)
+
+        mUpdateRigidBodyQueue.Construct();     // console +16
+        mContactSpyQueue.Construct();          // console +38432
+        mJointSpyQueue.Construct();            // console +128048
+        mDriveSpyQueue.Construct();            // console +131136
+
+        mfTimeStepUsed = 0.0f;                 // *(a1+4)      = 0.0
+        mDriveSpyQueue.Clear();                // *(a1+131144) = 0
+        mUpdateRigidBodyQueue.Clear();         // *(a1+24)     = 0
+        mContactSpyQueue.Clear();              // *(a1+38440)  = 0
+        mJointSpyQueue.Clear();                // *(a1+128056) = 0
+        muMaxIterationsUsed = 0;               // *(a1+8)      = 0
+    }
 }
 }

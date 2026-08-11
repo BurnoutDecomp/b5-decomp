@@ -2,7 +2,14 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"             // rw::math::vpu::{Add, Mult}
+#include "rw/math/vpu/matrix44affine_operation.h"      // rw::math::vpu::TransformPoint (COM spawn seat)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // CreatePhysicalTrafficEvent (real layout)
+// ⚠️ ADDED 2026-08-11 (prepare-chain wave): PreparePhysical dereferences lpDeformSpec for the
+// lHalfExtent argument (mHandlingBodyDimensions @+0x40), and VehiclePhysics.h only FORWARD-declares
+// StreamedDeformationSpec. The 2026-08-11 create-drain commit that introduced that dereference left
+// this TU un-compilable (incomplete type -> the 9-argument call silently reported as 8); this is
+// the missing definition, not a new dependency.
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"
 
 // BrnPhysics::Vehicle::TrafficPhysics -- C11_simple_traffic_attribs group.
 //   PreparePhysical: bodied (de-SIMD'd from 0x82639380).
@@ -43,7 +50,13 @@ namespace Vehicle
         for (int liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
             lvWheelPosSum = vpu::Add(lvWheelPosSum, lpWheelPositions[liWheel]);
 
-        // mean = (1/4) * sum  (the asm forms vrefp(4.0) + one Newton step, then `v3 = recip * sum`).
+        // mean = (1/4) * sum. The asm forms the reciprocal as `vrefp` + TWO Newton-Raphson
+        // refinement steps, then `v3 = recip * sum` (⚠ corrected 2026-08-11: this note used to say
+        // ONE step). Verbatim: 0x826394B8 vrefp v0,v0 ; 0x826394BC vnmsubfp v11,v0,v13,v11 +
+        // 0x826394C0 vmaddfp v0,v0,v0,v11 (step 1) ; 0x826394C4 vnmsubfp v13,v0,v13,v10 +
+        // 0x826394C8 vmaddfp v0,v0,v0,v13 (step 2) ; 0x826394CC vmulfp128 v3,v0,v12. Two steps of
+        // Newton on a vrefp seed is full f32 precision, which is why the exact 0.25f below is a
+        // faithful de-SIMD and not a tightening of the console's answer.
         const Vector3 lvWheelPosMean = vpu::Mult(lvWheelPosSum, 0.25f);
 
         // ⭐⭐ CORRECTED 2026-08-11 (create-drain wave). The old note here said the wheel-mean was
@@ -61,7 +74,28 @@ namespace Vehicle
         //   0x8263950C  lvx128 v1, r0, r29       <- r29 == lpEvent + 0x50 == mInitialVelocity.
         //   0x8263951C  lvx128 v2, r30, 0x60     <- lpEvent + 0x60 == mAngularVelocity.
         //   0x826394E0  addi  r4, r1, var_90     <- the local transform built from the spawn event.
-        VehiclePhysics::Prepare(lpEvent->mInitialTransform,
+        //
+        // ⭐⭐ VERIFIER CATCH, CORRECTED 2026-08-11 (adversarial verify of this wave): the three
+        // instructions the note above stopped short of were console BEHAVIOUR, not scaffolding,
+        // and the first pass omitted both:
+        //   0x8263949C  lvx128 v9, r0, r10       <- r10 = lpAttribs + 0x20 == mBaseAttribs.mCOMOffset
+        //   0x826394D0  vaddfp v0, v9, v3        <- COM += wheelMean
+        //   0x826394D4  stvx128 v0, r0, r10      <- WRITE-BACK into the attribs record (a `+=`,
+        //                                           reproduced verbatim -- if the record is shared
+        //                                           across spawns the console accumulates; that is
+        //                                           the console's own semantics either way).
+        //   0x82639520..48  row0*P.x + row1*P.y + row2*P.z + event.row3, P = the UPDATED COM
+        //                   -> the r4 handed to Prepare is the event transform with its
+        //                   TRANSLATION REPLACED by TransformPoint(event, COM) -- NOT
+        //                   lpEvent->mInitialTransform verbatim.
+        lpAttribs->mBaseAttribs.mCOMOffset =
+            vpu::Add(lpAttribs->mBaseAttribs.mCOMOffset, lvWheelPosMean);      // @0x826394D4
+
+        Matrix44Affine lSpawnTransform = lpEvent->mInitialTransform;
+        lSpawnTransform.wAxis = vpu::TransformPoint(lpEvent->mInitialTransform,
+                                                    lpAttribs->mBaseAttribs.mCOMOffset); // @0x82639548
+
+        VehiclePhysics::Prepare(lSpawnTransform,
                                 lpEvent->mInitialVelocity,
                                 lpEvent->mAngularVelocity,
                                 lvWheelPosMean,

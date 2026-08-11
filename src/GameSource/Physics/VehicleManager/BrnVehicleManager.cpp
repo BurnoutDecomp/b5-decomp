@@ -1,4 +1,4 @@
-#include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
+﻿#include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"  // RaceCarPhysics::SetCrashing (declare-only callee)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                    // CgsContainers::BitArray<N> (crash-data free-list + taken-down bitset)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"     // CgsDev::PerfMonCpu::AddMonitor -- Construct's thirty monitors
@@ -106,7 +106,7 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     void VehicleManager::HandleRaceCarRaceCarContact(BrnPhysics::ContactSpy::RaceCarContact lContact,
                                                      BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
-                                                     BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
+                                                     BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
                                                      VehicleManagerOutputInterface* lpManagerOutputInterface,
                                                      BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
                                                      f32 lfTimestep)
@@ -473,75 +473,12 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
 
     // -------------------------------------------------------------------------------------------
-    // InstantTakedown  @0x82636108
-    //
-    // The takedown COMMIT routine the impact classifiers call once a takedown is decided. It:
-    //   1. decodes the victim and aggressor EntityIds to active-car indices (the recurring
-    //      `(muValue >> 10) & 0x3FFF` packing used TU-wide);
-    //   2. does nothing unless takedowns are enabled (the master gate at mbSlamsAndShuntsOn);
-    //   3. crashes the victim via SetRaceCarCrashing -- UNLESS the victim is already in the fatal
-    //      crash state -- forwarding the collision normal + contact point, the four output/
-    //      deformation interfaces, and the takedown type (lfNormalStressSq is NOT forwarded);
-    //   4. if the victim is the local player, zeroes the aggressor's per-car recovery timer;
-    //   5. records the aggressor (via mfMinSecondsBetweenImpacts) as the victim's last attacker, and marks
-    //      the aggressor's "taken down this frame" status byte.
-    //
-    // INDEXING NOTE (asm-authoritative, surprising): the car-type check and the last-attacker
-    // write are indexed by the VICTIM slot, while the recovery-timer zero and the taken-down status
-    // byte are indexed by the AGGRESSOR slot. This matches the X360 exactly (5216*v39 and 224*v39
-    // use the aggressor index v39; 4*(v38+...) use the victim index v38) -- reproduced verbatim.
-    //
-    // FLAG (signature): the X360 Hex-Rays rendered this with a 37-arg `int(...)` prototype -- an
-    // artefact of SIMD-spilled Vector3s and pass-through registers. The DWARF (BrnVehicleManager.h
-    // :1257) gives the true 10-parameter shape used here; the returned `HIDWORD(a1)` the pseudocode
-    // produces is the SetRaceCarCrashing result threaded back through r4, which the void return drops.
+    // InstantTakedown @0x82636108 -- BODY NOT HERE. Split into the mounted slice TU
+    // BrnVehicleManager_InstantTakedown.cpp on 2026-08-11 (create-drain wave; the
+    // RaceCarPhysics_Construct precedent) because DoHornTakedowns needs it linkable while this
+    // home TU is unmountable. Byte-identical move, full banner travels with the body.
+    // TO RE-MERGE: mount this TU, move the body back, delete the slice.
     // -------------------------------------------------------------------------------------------
-    void VehicleManager::InstantTakedown(EntityId lVictimEntityId,
-                                         EntityId lAggressorEntityId,
-                                         Vector3 lCollisionNormal,
-                                         Vector3 lContactPoint,
-                                         f32 lfNormalStressSq,
-                                         BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
-                                         VehicleManagerOutputInterface* lpManagerOutputInterface,
-                                         BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
-                                         BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
-                                         BrnGameState::ETakedownType leTakedownType)
-    {
-        // lfNormalStressSq is decided by the classifier but not used by the commit (the X360 never
-        // forwards a3); reference it so the unused parameter is explicit rather than a warning.
-        (void)lfNormalStressSq;
-
-        // Decode both entities to their active-car slots (TU-wide packing: bits 10..23 of muValue).
-        const s32 liVictimActiveRaceCarIndex    = static_cast<s32>((lVictimEntityId.muValue    >> 10) & 0x3FFF);
-        const s32 liAggressorActiveRaceCarIndex = static_cast<s32>((lAggressorEntityId.muValue >> 10) & 0x3FFF);
-
-        // Master gate: do nothing at all unless takedowns are currently enabled.
-        if (!mbSlamsAndShuntsOn)
-            return;
-
-        // Crash the victim, unless it is a NETWORK car (the X360 `!= 2`; see the maeRaceCarTypes
-        // note above -- this used to read as "already in the fatal crash state").
-        if (maeRaceCarTypes[liVictimActiveRaceCarIndex] != BrnWorld::E_RACE_CAR_TYPE_NETWORK)
-        {
-            SetRaceCarCrashing(lVictimEntityId,
-                               lAggressorEntityId,
-                               lCollisionNormal,
-                               lContactPoint,
-                               lpRequestOutputInterface,
-                               lpManagerOutputInterface,
-                               lpVehicleOutputInterface,
-                               lpDeformationInterface,
-                               leTakedownType);
-        }
-
-        // If the player was the one taken down, reset the aggressor's recovery timer.
-        if (mePlayerActiveRaceCarIndex == liVictimActiveRaceCarIndex)
-            maRaceCarVehicles[liAggressorActiveRaceCarIndex].mfTimeSinceTookDownPlayer = 0.0f;
-
-        // Record who took the victim down, and flag the aggressor as having scored a takedown this frame.
-        mafNoImpactTimeSeconds[liVictimActiveRaceCarIndex]   = mfMinSecondsBetweenImpacts;
-        maRaceCarDrivers[liAggressorActiveRaceCarIndex].mControls.mbIsInvulnerableToVehicles = true;
-    }
 
     // -------------------------------------------------------------------------------------------
     // SetRaceCarCrashing  @0x82634C90  -- STAGE 3b, the UNIVERSAL crash-commit sink.
@@ -570,7 +507,7 @@ namespace Vehicle
                                             Vector3 lContactPoint,
                                             BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
                                             VehicleManagerOutputInterface* lpManagerOutputInterface,
-                                            BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
+                                            BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
                                             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
                                             BrnGameState::ETakedownType leTakedownType)
     {
@@ -1537,18 +1474,33 @@ namespace Vehicle
                       "host sizeof(RaceCarPhysics) == the console's 0x1460 stride (width-identical "
                       "since the 240-byte SimpleVehicleAttribs landed, 2026-08-09) -- the number "
                       "KU_HOST_DRIFT_AFTER_RACECAR_ARRAY (now 0) is derived from");
-        static_assert(8 * (5216 - static_cast<std::ptrdiff_t>(sizeof(RaceCarPhysics)))
-                          == -KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
-                      "the drift term must BE the array's host/console difference -- if the class "
-                      "grows or shrinks and this constant is not updated, every seat past +43584 "
-                      "moves and this line is what says so");
+        // ⭐ RE-STATED 2026-08-11 (create-drain wave): the term is no longer the race-car array's
+        // difference ALONE. Its range (X360 +43584..+44768) now also contains the two real
+        // `CgsResource::ResourceHandle[8]` arrays that replaced `mPadAA60[128]`, which are 16 bytes
+        // per element on the host against the console's 8. Both components are asserted, so neither
+        // can absorb an error in the other. Mirrors the mounted gate's form.
+        static_assert(8 * (static_cast<std::ptrdiff_t>(sizeof(RaceCarPhysics)) - 5216)
+                          + 2 * 8 * (static_cast<std::ptrdiff_t>(sizeof(CgsResource::ResourceHandle)) - 8)
+                          == KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
+                      "the drift term must BE the sum of the race-car array's and the two "
+                      "resource-handle arrays' host/console differences -- if either changes and "
+                      "this constant is not updated, every seat past +43744 moves and this line is "
+                      "what says so");
         static_assert(alignof(RaceCarPhysics) == 16 && (1856 % 16) == 0,
                       "element 0 keeps the asm-literal +1856 base and every element stays 16-aligned");
         static_assert(sizeof(RaceCarCrashData)     == 12,   "RaceCarCrashData stride (asm: 12)");
 
         static_assert(offsetof(VehicleManager, maRaceCarDrivers)         == 64,     "maRaceCarDrivers (asm addi r25, r31, 0x40) -- was WRONGLY seated at 0");
         static_assert(offsetof(VehicleManager, maRaceCarVehicles)        == 1856,   "maRaceCarVehicles (asm r29 - 0x140D)");
-        static_assert(offsetof(VehicleManager, maRaceCarEntityIDs)       == 43584 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,  "maRaceCarEntityIDs (asm base 43584)");
+        // ⚠️ NO DRIFT TERM ON THIS ONE (corrected 2026-08-11). The +128 in
+        // KU_HOST_DRIFT_AFTER_RACECAR_ARRAY arises at +43616 -- the head of maRaceCarModelHandles,
+        // which sits AFTER this array. Nothing before +43616 moves.
+        static_assert(offsetof(VehicleManager, maRaceCarEntityIDs)       == 43584,  "maRaceCarEntityIDs (asm base 43584)");
+        static_assert(offsetof(VehicleManager, maRaceCarModelHandles)    == 43616,  "maRaceCarModelHandles (asm 8 * 0x154C; ProcessCreateEvents/ProcessValidationEvents)");
+        static_assert(offsetof(VehicleManager, maRaceCarGraphicsModelHandles)
+                          == offsetof(VehicleManager, maRaceCarModelHandles)
+                             + sizeof(VehicleManager::maRaceCarModelHandles),
+                      "the two handle arrays abut (console 8 * 0x154C then 8 * 0x1554)");
         static_assert(offsetof(VehicleManager, maRaceCarHandlingBodyIDs) == 43744 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,  "maRaceCarHandlingBodyIDs (asm addi r26,r26,-0x5520)");
         static_assert(sizeof(VehicleManager::maRaceCarHandlingBodyIDs) == 64,
                       "RigidBodyId is 8 bytes -- the ctor's `std` + `addi r26, r26, 8`, and 43744 + 64 == 43808");
@@ -1654,12 +1606,20 @@ namespace Vehicle
         static_assert(offsetof(VehicleManager, meShowtimeBehaviour)   == 172456 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "meShowtimeBehaviour (asm +172456; seeded 2)");
         static_assert(offsetof(VehicleManager, miRaceCarWorldContactValidationPM) == 172460 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
                       "miRaceCarWorldContactValidationPM (asm +172460; named by the console's own assert at BrnVehicleManager.cpp:778)");
-        static_assert(offsetof(VehicleManager, miNumTrafficSphereWorldTests) == 172580 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK - 12, "renamed at the 2026-08-06 carve (asm +172580; see the mounted gate)");
+        // ⛔ THESE FOUR WERE STALE, AND NOT BECAUSE OF THIS WAVE (corrected 2026-08-11). They
+        // carried KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT for seats that sit PAST the 2026-08-06
+        // contact-generation carve, so each was 76 bytes short -- and nothing ever said so, because
+        // this whole TU is UNMOUNTED (that is exactly the hole BrnVehicleManager_layout_check.cpp
+        // was created to close). Conformed to the mounted gate's expressions, verbatim.
+        static_assert(offsetof(VehicleManager, miNumTrafficSphereWorldTests)
+                          == 172580 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 68,
+                      "console +172580; +68 = the growth ACCUMULATED BY THIS SEAT (the block's full "
+                      "+76 lands only after the tail's own 4-byte alignment pad)");
         static_assert(offsetof(VehicleManager, mpTractionLineStreamProducer) > offsetof(VehicleManager, miNumTrafficSphereWorldTests), "renamed at the 2026-08-06 carve (console +172584 pointer; host seat via the mounted gate)");
-        static_assert(offsetof(VehicleManager, mStuckInCollisionTestCacheSphere) == 172592 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mStuckInCollisionTestCacheSphere (asm stvx128 v127,r31,r11 with r11 == 172592)");
-        static_assert(offsetof(VehicleManager, mbPlayerCarStuckInCollision) == 172608 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
+        static_assert(offsetof(VehicleManager, mStuckInCollisionTestCacheSphere) == 172592 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK, "mStuckInCollisionTestCacheSphere (asm stvx128 v127,r31,r11 with r11 == 172592)");
+        static_assert(offsetof(VehicleManager, mbPlayerCarStuckInCollision) == 172608 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK,
                       "172592 + 16 == 172608: the Sphere/bool pair (DWARF :1087/:1088) closes to the byte");
-        static_assert(offsetof(VehicleManager, muTakedownEventsThisFrame) == 172612 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "muTakedownEventsThisFrame (asm +172612)");
+        static_assert(offsetof(VehicleManager, muTakedownEventsThisFrame) == 172612 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK, "muTakedownEventsThisFrame (asm +172612)");
     }
 }
 }

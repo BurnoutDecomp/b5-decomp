@@ -60,6 +60,22 @@ namespace Vehicle
     //     @0x82746808 bakes `li r6, 0x48` == sizeof. That is an independent witness of the 72.
     struct BrnPlayerDriverControls : public CgsModule::Event
     {
+        // ⭐ DEFAULT CTOR ADDED 2026-08-11 (player-input wave, RaceCarEntityModule::
+        // ProcessPlayerVehicleInput @0x822FFE30). DWARF-attested (BrnVehicleDriverControls.h:63
+        // declares the ctor) and X360-attested at the CONSTRUCTION SITE: the very first thing
+        // ProcessPlayerVehicleInput does with its stack record is
+        //     0x822FFE50  li  r26, 0
+        //     0x822FFE68  stw r26, 0x170+var_BC(r1)      <- record +0x44 == meDriverType
+        // i.e. instruction #14, BEFORE the lpInput assert and before any control field is
+        // touched -- which is exactly where a compiler emits a default ctor for a stack POD.
+        // E_DRIVER_TYPE_PLAYER == 0 is the stored value.
+        //
+        // It stays standard-layout (empty base + members, no virtuals), so the offsetof()
+        // pins in this header, in BrnVehicleManager.cpp and in VehiclePhysics_layout_check.cpp
+        // are unaffected. The derived AI/Network/Traffic variants inherit it and overwrite
+        // meDriverType through their own paths, exactly as the console does.
+        BrnPlayerDriverControls() : meDriverType(E_DRIVER_TYPE_PLAYER) {}
+
         // Quarter-scale modifier applied to the stick/steering inputs when deriving aftertouch
         // (named in the DWARF as KF_STICK_AFTERTOUCH_MODIFIER, BrnVehicleDriverControls.h:34).
         // The X360 GetAftertouchValues leaf multiplies by +/-0.25 (this magnitude).
@@ -115,6 +131,17 @@ namespace Vehicle
         // ctor @ BrnVehicleDriverControls.h:63, Clear :67, ResetType :70, GetType :74.
         E_DRIVER_TYPE GetType() const { return meDriverType; }
 
+        // ⭐ ADDED 2026-08-11 (prepare-chain wave). DWARF-attested by NAME
+        // (references/DecFIGS/.../BrnVehicleDriverControls.h:107 `void ResetType()`), and its BODY
+        // is recovered from the only X360 emission of it -- VehiclePhysics::Prepare @0x826380F0
+        // `stw r30, 0x10D4(r31)` with r30 == 0, i.e. a literal store of E_DRIVER_TYPE_PLAYER into
+        // mPreviousControls.meDriverType (+0x1090 + 0x44). The console has no out-of-line symbol
+        // for it (every call site inlines it), so it is header-inline here to match.
+        // ⚠️ FLAG: the ZERO is asm-literal; that zero == E_DRIVER_TYPE_PLAYER is this enum's own
+        // committed value. If a second write site ever turns up storing something else, this is
+        // the declaration to revisit -- the member stays protected precisely so there is one door.
+        void ResetType() { meDriverType = E_DRIVER_TYPE_PLAYER; }
+
         // ----- Project-local convenience accessors (NOT console functions). They existed as
         //       declare-only stubs while the interior of this struct was unrecovered; every one of
         //       them is now a plain read of a NAMED member at the console offset it documents, so
@@ -139,6 +166,55 @@ namespace Vehicle
         //   * RaceCarPhysics::UpdateAftertouch @0x8262EE64/EE78 calls the SAME leaf with
         //     r7 = 0 (raw image bytes) -- re-pointed to the 4-arg form with `false`.
         // One leaf, one declaration.
+
+        // ⭐⭐ FULL-RECORD LAYOUT ORACLE (player-input wave 2026-08-11). The file-scope
+        // static_asserts below this class pin five offsets; this one pins ALL TWENTY-SIX, and it
+        // has to, because RaceCarEntityModule::ProcessPlayerVehicleInput @0x822FFE30 -- the ONLY
+        // producer of the player record -- fills every single field and the record then crosses a
+        // MODULE BOUNDARY by memcpy (VariableEventQueue<5040,16>::AddEvent copies 0x48 bytes into
+        // the driver queue; VehiclePhysics::UpdateDriving @0x82638198 memcpy's 0x48 back out). A
+        // one-field slip there is live corruption that nothing else would catch.
+        //
+        // Every offset below is the frame slot ProcessPlayerVehicleInput stores into, read off the
+        // ARTIST asm (frame size 0x170, record base var_100 == sp+0x70, so record offset ==
+        // 0x170 - |var_XX| - 0x70):
+        //   var_100 +0x00  var_FC +0x04  var_F8 +0x08  var_F4 +0x0C  var_F0 +0x10  var_EC +0x14
+        //   var_E8  +0x18  var_E4 +0x1C  var_E0 +0x20  var_DC +0x24  var_D8 +0x28  var_D4 +0x2C
+        //   var_D0  +0x30  var_CC +0x34  var_C8 +0x38  var_C7 +0x39  var_C6 +0x3A  var_C5 +0x3B
+        //   var_C4  +0x3C  var_C3 +0x3D  var_C2 +0x3E  var_C1 +0x3F  var_C0 +0x40  var_BF +0x41
+        //   var_BE  +0x42  var_BC +0x44
+        // meDriverType is protected, so offsetof on it needs the complete-class context a member
+        // function body provides (same idiom as CarScoreData::_AssertLayout). Never called.
+        static void _AssertLayout()
+        {
+            static_assert(sizeof(BrnPlayerDriverControls) == 0x48, "record is 72 bytes");
+            static_assert(offsetof(BrnPlayerDriverControls, miVehicleID)                == 0x00, "miVehicleID @+0x00 (stw var_100)");
+            static_assert(offsetof(BrnPlayerDriverControls, mfGas)                      == 0x04, "mfGas @+0x04 (stfs var_FC)");
+            static_assert(offsetof(BrnPlayerDriverControls, mfBrake)                    == 0x08, "mfBrake @+0x08 (stfs var_F8)");
+            static_assert(offsetof(BrnPlayerDriverControls, mfHandBrake)                == 0x0C, "mfHandBrake @+0x0C (stfs var_F4)");
+            static_assert(offsetof(BrnPlayerDriverControls, mfSteering)                 == 0x10, "mfSteering @+0x10 (stfs var_F0)");
+            static_assert(offsetof(BrnPlayerDriverControls, mfForwardSteering)          == 0x14, "mfForwardSteering @+0x14 (stfs var_EC)");
+            static_assert(offsetof(BrnPlayerDriverControls, mfSpin)                     == 0x18, "mfSpin @+0x18 (stfs var_E8)");
+            static_assert(offsetof(BrnPlayerDriverControls, mfRequestedGas)             == 0x1C, "mfRequestedGas @+0x1C (stfs var_E4)");
+            static_assert(offsetof(BrnPlayerDriverControls, mfAftertouchLevel)          == 0x20, "mfAftertouchLevel @+0x20 (stfs var_E0)");
+            static_assert(offsetof(BrnPlayerDriverControls, mfXSensor)                  == 0x24, "mfXSensor @+0x24 (stfs var_DC)");
+            static_assert(offsetof(BrnPlayerDriverControls, mfYSensor)                  == 0x28, "mfYSensor @+0x28 (stfs var_D8)");
+            static_assert(offsetof(BrnPlayerDriverControls, mfZSensor)                  == 0x2C, "mfZSensor @+0x2C (stfs var_D4)");
+            static_assert(offsetof(BrnPlayerDriverControls, mfGSensor)                  == 0x30, "mfGSensor @+0x30 (stfs var_D0)");
+            static_assert(offsetof(BrnPlayerDriverControls, mfBoostMaxSpeedScale)       == 0x34, "mfBoostMaxSpeedScale @+0x34 (stfs var_CC)");
+            static_assert(offsetof(BrnPlayerDriverControls, miVehicleIDToMerge)         == 0x38, "miVehicleIDToMerge @+0x38 (stb var_C8)");
+            static_assert(offsetof(BrnPlayerDriverControls, mbReset)                    == 0x39, "mbReset @+0x39 (stb var_C7)");
+            static_assert(offsetof(BrnPlayerDriverControls, mbToggle)                   == 0x3A, "mbToggle @+0x3A (stb var_C6)");
+            static_assert(offsetof(BrnPlayerDriverControls, mbBoost)                    == 0x3B, "mbBoost @+0x3B (stb var_C5)");
+            static_assert(offsetof(BrnPlayerDriverControls, mbIsInvulnerableToVehicles) == 0x3C, "mbIsInvulnerableToVehicles @+0x3C (stb var_C4)");
+            static_assert(offsetof(BrnPlayerDriverControls, mbIsInvulnerableToWorld)    == 0x3D, "mbIsInvulnerableToWorld @+0x3D (stb var_C3)");
+            static_assert(offsetof(BrnPlayerDriverControls, mbForceDrift)               == 0x3E, "mbForceDrift @+0x3E (stb var_C2)");
+            static_assert(offsetof(BrnPlayerDriverControls, mbBoostBounce)              == 0x3F, "mbBoostBounce @+0x3F (stb var_C1)");
+            static_assert(offsetof(BrnPlayerDriverControls, mbIsOnStartLine)            == 0x40, "mbIsOnStartLine @+0x40 (stb var_C0)");
+            static_assert(offsetof(BrnPlayerDriverControls, mbIsSteeringWheel)          == 0x41, "mbIsSteeringWheel @+0x41 (stb var_BF)");
+            static_assert(offsetof(BrnPlayerDriverControls, mbHorn)                     == 0x42, "mbHorn @+0x42 (stb var_BE)");
+            static_assert(offsetof(BrnPlayerDriverControls, meDriverType)               == 0x44, "meDriverType @+0x44 (stw var_BC, the ctor's store)");
+        }
     };
 
     // ⭐⭐ RE-TYPED 2026-08-03. All three variants were opaque byte blobs sized to the record-size

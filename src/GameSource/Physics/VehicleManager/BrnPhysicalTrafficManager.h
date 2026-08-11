@@ -557,6 +557,15 @@ public:
     void ReadTrafficTractionLineTestResults(
         CgsMemory::SimpleDataStreamResultIterator* lpResultIterator);
 
+    // ⭐ ADDED 2026-08-11 (prepare-chain wave). @0x825CA8A0 (169 insns). The TRAFFIC arm of
+    // VehicleManager::UpdateDrivers' four-way control dispatch -- case 3 of the switch, reached
+    // with `add r3, r31, r28` where r28 == 0xAEE0 == 44768 == the manager's own
+    // mPhysicalTrafficManager seat, so the `this` really is this class and not the vehicle manager.
+    // DWARF-attested verbatim (references/DecFIGS/.../BrnPhysicalTrafficManager.h:158).
+    // ⛔ STILL BODYLESS -- a named BRN_CONDUCTOR_GATE in BrnPhysicsConductorGates.cpp.
+    void UpdateTrafficDriver(const BrnTrafficDriverControls* lpControls,
+                             CgsContainers::BitArray<8u>& lrUpdatedCars);
+
     // ⭐ ADDED 2026-08-10 (create-path wave). X360 0x825EF608 (334 insns), bodied in
     // GameSource/Physics/VehicleManager/BrnVehicleManager_ReadUpdatedBodies.cpp alongside its
     // only caller, VehicleManager::ReadUpdatedBodies @0x82619A10 (xrefs_to == that one entry).

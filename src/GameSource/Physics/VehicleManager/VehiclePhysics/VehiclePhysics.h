@@ -625,11 +625,18 @@ namespace Vehicle
         // register for register: r4 = &transform, v1..v4 = the four vectors in declaration order,
         // r5 = the AABB, r6/r7/r8 = attribs / wheel positions / wheel radii.
         //
-        // ⚠️ DECLARE-ONLY still: the 306-insn body @0x82637C80 is NOT bodied yet (it forwards to
-        // SimpleVehiclePhysics::Prepare -- landed this wave -- then runs VehicleAttribs::operator=,
-        // SetupAttribsForAI, SetupSuspension, Engine::Prepare and ~40 own-block member seeds at
-        // +0x10D4/+0x1114..+0x1128/+0x1359..+0x1362/+0x13DC/+0xFD0 that still need naming).
-        // DELETE THIS NOTE WHEN @0x82637C80 lands.
+        // ⭐⭐ BODIED 2026-08-11 (prepare-chain wave). The 306-insn body @0x82637C80 is in
+        // VehiclePhysics.cpp, store for store: VehicleAttribs::operator= into
+        // mPlayerVehicleAttribs, mpAttribs, the nine-parameter forward into
+        // SimpleVehiclePhysics::Prepare, the 3-arg SetAttributes @0x8262E140 (also landed this
+        // wave -- the console's unnamed `sub_8262E140`), Construct + SetupAttribsForAI +
+        // mAttribsKey into mAIVehicleAttribs, Reset(lLinearVelocity), then the ~40 own-block
+        // seeds at +0xFD0/+0xFF0/+0x1050/+0x1060/+0x1070/+0x10D4/+0x1114..+0x1140/+0x1158/
+        // +0x1220/+0x1359..+0x1362/+0x1370/+0x13B0/+0x13DC. Every one lands on a member this
+        // header already names; nothing new was invented to hold a store.
+        // ⭐ THE +0x1050 .w SEED IS NOW GROUND TRUTH: `unk_8208FB18` was read out of the ARTIST
+        // database by the conductor's targeted IDA export (2026-08-11, same day) -- 0x3F800000
+        // == exactly 1.0f, confirming the role-derived stand-in. See the .cpp.
         //
         // ⚠️⚠️ ODR FORK FLAGGED, NOT FIXED (found by this correction). The PS3 mangle spells the
         // AABB parameter `RKN12CgsGeometric14AxisAlignedBoxE` == `const CgsGeometric::
@@ -744,8 +751,10 @@ namespace Vehicle
         //       185 insns of abs/max/dot timer bookkeeping, every member it touches was already
         //       named, and the one vcall (+0x14) is IsPlayerVehicleActuallyInShowtime -- the same
         //       slot the committed RaceCarPhysics::Update had already identified. It is DECLARED
-        //       below with the driving spine and BODIED in VehiclePhysics.cpp. UpdateInAirBehaviour
-        //       (809 insns) remains a loud trap -- see VehiclePhysicsLinkStubs.cpp. -----
+        //       below with the driving spine and BODIED in VehiclePhysics.cpp.
+        //       ⭐ 2026-08-11 (driving-path wave): UpdateInAirBehaviour (809 insns) is no longer a
+        //       trap either -- BODIED in VehiclePhysics.cpp, stub deleted from
+        //       VehiclePhysicsLinkStubs.cpp. -----
 
         // @0x825B81A8: the water "hard kill". When the representative contact's surface id maps to a
         // water surface AND the depth scalar (mfWaterDepth, +0x590) is below a threshold, zeroes the
@@ -870,7 +879,12 @@ namespace Vehicle
         // (mIntegrationVariables.x) into a +/-10% band around their average.
         void LimitDifferential(EVehicleDrivenWheel leWheelA, EVehicleDrivenWheel leWheelB);
 
-        // @0x825D0BE8 (809): TRAP -- the in-air damping/rotation controller, its own wave.
+        // @0x825D0BE8 (809): ⭐ BODIED 2026-08-11 (driving-path wave) in VehiclePhysics.cpp -- the
+        // ACTIVE airborne attitude controller (the reason jumps feel good): a one-shot take-off
+        // damp whose roll strength scales with how rolled the car already was, a per-frame landing
+        // assist driven by steering-against-the-roll, and a restoring torque that pitches/rolls the
+        // body towards its own velocity vector (or bleeds that component out of mAngularVelocity,
+        // mTotalTorque AND mTotalAngularImpulse when diving). Early-returns on !mbHasAir.
         void UpdateInAirBehaviour(const BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep);
 
         // @0x8262DE58 (185): re-derive the attribs-dependent state after a reset: base 0-arg
@@ -880,6 +894,25 @@ namespace Vehicle
         // 2026-08-09 in VehiclePhysics.cpp. ⚠️ Returns bool (DWARF VehiclePhysics.h:1072) --
         // the committed `void` was a slice artifact; the console returns a literal true.
         bool SetAttributes();
+
+        // ⭐⭐ @0x8262E140 (48 insns) -- ADDED AND BODIED 2026-08-11 (prepare-chain wave). The
+        // THREE-ARG SetAttributes: DWARF-attested (references/DecFIGS/.../VehiclePhysics.h:1075
+        // `bool SetAttributes(VehicleAttribs *, const rw::math::vpu::Vector3 *, const float32_t *)`)
+        // and the ONLY consumer of the console's `sub_8262E140` -- an export the IDA database leaves
+        // UNNAMED, whose identity is settled by three independent facts rather than by its role:
+        //   * its ONLY caller is VehiclePhysics::Prepare @0x82637CC8 (`bl` at 0x82637DC8), which is
+        //     exactly where the DWARF's Prepare calls SetAttributes;
+        //   * its second assert is baked with __FILE__ == VehiclePhysics.cpp and __LINE__ == 410,
+        //     i.e. it IS a VehiclePhysics.cpp function, not a SimpleVehiclePhysics one;
+        //   * its callee set (SimpleVehicleAttribs::SetupAttribs, SimpleVehiclePhysics::
+        //     SetAttributes, Engine::Prepare, VehiclePhysics::SetupSuspension) is the 0-arg
+        //     SetAttributes' tail with the attribs pointer supplied instead of chased.
+        // Its first three statements are the INLINED SimpleVehiclePhysics::SetAttributes(
+        // VehicleAttribs*, const Vector3*, const f32*) -- the same block the committed
+        // SimpleVehiclePhysics::Prepare spells flat (its :299 assert); spelled flat here too, for
+        // the same reason (that overload has no out-of-line emission on either build).
+        bool SetAttributes(VehicleAttribs* lpAttribs, const Vector3* lpaWheelPositions,
+                           const f32* lpafWheelRadii);
 
         // @0x825D0008 (139): the debug reset/fly-around handler (gated on mbReset). ⭐ BODIED
         // 2026-08-09 in VehiclePhysics.cpp.

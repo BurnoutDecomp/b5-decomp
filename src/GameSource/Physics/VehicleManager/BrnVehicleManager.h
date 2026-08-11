@@ -40,6 +40,7 @@
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h" // BrnPhysics::Vehicle::PhysicalTrafficManager (mPhysicalTrafficManager @+44768 -- embedded BY NAME as of 2026-08-03; see the drift note below)
 #include "GameSource/Physics/VehicleManager/BrnVehicleManagerDebugComponent.h" // BrnPhysics::Vehicle::VehicleManagerDebugComponent (mDebugComponent @+161968 -- embedded BY NAME as of 2026-08-03; that header only forward-declares VehicleManager, so this is not a cycle)
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"          // CgsPhysics::RigidBodyId (GetRigidBodyId/GetRaceCarPhysics, 2026-08-09)
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle (maRaceCarModelHandles / maRaceCarGraphicsModelHandles @+43616 -- split out of mPadAA60, 2026-08-11)
 
 // Pointer-only collaborators in RaceCarResponseInfo -- forward-declared in their real namespaces
 // (homed by their own TUs; the classifier never dereferences them here).
@@ -51,6 +52,28 @@
 // (`PNS0_29VehicleOutputRequestInterfaceE`, NS0_ == BrnPhysics::Vehicle). The old
 // wrong-namespace opaque decl forced reinterpret_casts at the seams (UpdateVehiclePhysics'
 // SetRaceCarCrashing call carried one); all 21 uses are re-typed and the casts retired.
+//
+// ⭐ THE SAME FORK, SECOND HALF, RETIRED 2026-08-11 (consolidation wave) -- this time for
+// `VehicleOutputInterface` itself. `InstantTakedown`, `SetRaceCarCrashing`,
+// `HandleRaceCarRaceCarContact` and `RaceCarResponseInfo::mpVehicleOutputInterface` were typed
+// on a `BrnGameState::GameStateModuleIO::VehicleOutputInterface` that DOES NOT EXIST in the
+// DecFIGS DWARF at all. The PS3 mangles are unambiguous (NS0_ == BrnPhysics::Vehicle):
+//   _ZN10BrnPhysics7Vehicle14VehicleManager15InstantTakedownE...PNS0_22VehicleOutputInterfaceE...
+//   _ZN10BrnPhysics7Vehicle14VehicleManager18SetRaceCarCrashingE...PNS0_22VehicleOutputInterfaceE...
+//   _ZN10BrnPhysics7Vehicle14VehicleManager27HandleRaceCarRaceCarContactE...PNS0_22VehicleOutputInterfaceE...
+// and the only declaration of the type anywhere in the DWARF is
+// `struct BrnPhysics::Vehicle::VehicleOutputInterface` (BrnVehicleConstants.h:385), homed here
+// in SharedIO/BrnVehicleOutputInterface.h:62. Both reinterpret_cast seams that the fork forced
+// (BrnVehicleManager_DriverArms.cpp's `lpVehicleOutForTakedown`, and the SetRaceCarCrashing call
+// in BrnVehicleManager_UpdateVehiclePhysics.cpp) are deleted with it.
+//
+// ⚠️ REMAINING FORK DEBT (NOT this wave's scope, but the same mangle evidence applies):
+// `HandleCrashPredictionForRaceCarAndWorld` (:1296) and `HandleRaceCarWorldPotentialContact`
+// (:1200) below still carry the GameStateModuleIO spelling, and so does
+// BrnGameState::MugshotManager (BrnMugshotManager.h). Their DWARF mangles are
+// `...PNS0_22VehicleOutputInterfaceE...` and `PKN10BrnPhysics7Vehicle22VehicleOutputInterfaceE`
+// respectively -- i.e. the SAME wrong-namespace fork -- but they were not in the verified set,
+// so the forward declaration below stays alive until their own wave retires them.
 namespace BrnPhysics { namespace Vehicle { struct VehicleOutputRequestInterface; } }
 namespace BrnPhysics { namespace Deformation { class DeformationInputInterface; } }
 namespace BrnGameState { namespace GameStateModuleIO { class VehicleOutputInterface; } }
@@ -143,18 +166,25 @@ namespace Vehicle
     //
     // There are now THREE drift terms, because there are three embedded sub-objects whose host
     // width differs from the console's. They apply to disjoint address ranges and they ACCUMULATE:
-    //     X360 +0        .. +43584    ->  0               (nothing before the race-car array moves)
-    //     X360 +43584    .. +44768    ->  -1664           KU_HOST_DRIFT_AFTER_RACECAR_ARRAY
-    //     X360 +44768    .. +163264   ->  -5632           KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER
-    //     X360 +163264   .. end       ->  -5600           KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT
+    //     X360 +0        .. +43616    ->  0               (nothing up to the handle arrays moves;
+    //                                                      ⭐ the boundary is +43616, not +43584 --
+    //                                                      corrected 2026-08-11, see the term below)
+    //     X360 +43616    .. +44768    ->  +128            KU_HOST_DRIFT_AFTER_RACECAR_ARRAY
+    //     X360 +44768    .. +163264   ->  +320            KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER
+    //     X360 +163264   .. +172465   ->  +352            KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT
+    //     X360 +172465   .. end       ->  +428            KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK
     //
-    // ⚠️ THE TERMS ARE SIGNED AND THE FIRST IS NEGATIVE. The old shape of this block predicted
-    // exactly that ("a third one will appear the day RaceCarVehicleRecord becomes a real
-    // RaceCarPhysics -- and that one will be NEGATIVE"), which is why they were never folded into
-    // one number. That day is 2026-08-03. The old note's arithmetic is stale, though: it said the
-    // host class was 4816. It is **5008** -- the VehiclePhysics/SimpleVehiclePhysics own-member
-    // blocks grew it between the two waves -- so the term is -1664, not -3200. MEASURED with the
-    // compiler, not carried forward from the note.
+    // ⚠️ TABLE CORRECTED 2026-08-11 (consolidation wave). It used to read -1664 / -5632 / -5600,
+    // which were the values from the 2026-08-03 record-fold wave and have been dead since
+    // 2026-08-09: closing the SimpleVehicleAttribs slice gap (240 vs 32 per element) took the
+    // race-car and traffic arrays back to their console strides, which retired the whole negative
+    // side of the table. THE TERMS ARE STILL SIGNED -- nothing here assumes they are positive --
+    // but as of today all four are positive, and each is defined below as the previous term plus
+    // its own MEASURED step: +128 (handle arrays, ResourceHandle 16 vs 8), +192 (traffic manager's
+    // pointers + debug-component span), +32 (debug component's vptr + back-pointer), +76 (the
+    // contact-generation block carve). Every number in this table is the cumulative constant that
+    // the offsetof asserts in BrnVehicleManager_layout_check.cpp actually add, so read them from
+    // the four `const std::ptrdiff_t` definitions below, never from this comment.
     // ==========================================================================================
 
     // ⭐⭐ THE THIRD TERM, added 2026-08-03 (the record-fold wave). `maRaceCarVehicles` is now
@@ -184,7 +214,22 @@ namespace Vehicle
     // full width-identical 240 (BrnSimpleVehiclePhysics.h), so sizeof(RaceCarPhysics) is 5216 on
     // the host == the X360's literal stride (`mulli r11, r22, 0x1460`), and the array term
     // vanishes. MEASURED with the compiler via the gate below, not carried from this note.
-    const std::ptrdiff_t KU_HOST_DRIFT_AFTER_RACECAR_ARRAY = 0;
+    //
+    // ⭐⭐ RE-DERIVED AGAIN 2026-08-11 (the create-drain wave): the term is now **+128**, and the
+    // 128 has nothing to do with the race-car array. It is `mPadAA60[128]` -- the opaque span the
+    // header carried at +43616..+43744 -- becoming the two REAL arrays the DWARF names there,
+    // `CgsResource::ResourceHandle maRaceCarModelHandles[8]` and `maRaceCarGraphicsModelHandles[8]`.
+    // sizeof(CgsResource::ResourceHandle) is 16 on the host ({void*, Entry*}) against the console's
+    // 8, so 2 * 8 * 16 == 256 replaces 2 * 8 * 8 == 128: **+128**, and 128 % 16 == 0 so every
+    // 16-aligned member behind it keeps its alignment. The +128 was MEASURED on a real boot before
+    // the split (create-drain probe: `offPad=43616 sizeofRH=16`), so it is a checked number.
+    //
+    // WHY THE SPLIT HAD TO HAPPEN: three of this wave's bodies -- ProcessCreateEvents (which is the
+    // only writer of both arrays), ProcessValidationEvents and AddRaceCarDeformationModel -- reach
+    // those two arrays by element. Against an opaque `u8[128]` that can only be spelled as a raw
+    // offset cast, which is the offset-poke this project forbids and the exact family of live
+    // corruption (console stride 8 vs host stride 16) that would have hidden inside it.
+    const std::ptrdiff_t KU_HOST_DRIFT_AFTER_RACECAR_ARRAY = 128;
 
     // ⭐⭐ RE-MEASURED 2026-08-03 (the TrafficPhysics de-fork wave): the second term is now **-3968**,
     // not +192. `maFullTrafficPhysics` inside PhysicalTrafficManager was folded from a byte-pinned
@@ -205,7 +250,7 @@ namespace Vehicle
     // so the only remaining widening in the traffic manager is its own +192 (pointer members +
     // the 48-vs-32 debug component span).
     const std::ptrdiff_t KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER =
-        KU_HOST_DRIFT_AFTER_RACECAR_ARRAY + 192;   // +192
+        KU_HOST_DRIFT_AFTER_RACECAR_ARRAY + 192;   // step +192 -> cumulative +320
 
     // ⭐ The third term, added 2026-08-03 in an earlier wave. VehicleManagerDebugComponent is 1328
     // bytes on the host against the 1296-byte X360 span at +161968..+163264 -- +32, because its
@@ -214,7 +259,9 @@ namespace Vehicle
     // the stride-1024 walk from +163264), so the +32 is real and the only honest answer is to carry
     // it. 32 % 16 == 0, so every 16-aligned member past it keeps its alignment.
     const std::ptrdiff_t KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT =
-        KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER + 32;  // +224 (re-derived 2026-08-09)
+        KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER + 32;  // step +32 -> cumulative +352 (was mislabelled
+                                                   // +224 until 2026-08-11: that was the cumulative
+                                                   // value from BEFORE the race-car term became +128)
 
     // ⭐ The fourth term, added 2026-08-06 (big-five #2): the contact-generation block carve
     // (+172465..+172592 console -> real members). Growth = the pointer-pair carve's +12 (4
@@ -223,7 +270,9 @@ namespace Vehicle
     // and one before the traction-line pointer (+4): +12+20+36+4+4 == +76. MEASURED against the
     // compiled layout by the gate's own seat asserts (BrnVehicleManager_layout_check.cpp).
     const std::ptrdiff_t KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK =
-        KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 76;  // +300 (re-derived 2026-08-09)
+        KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 76;  // step +76 -> cumulative +428 (same stale-label
+                                                   // fix as the term above; +428 is the number
+                                                   // BrnVehicleManager_layout_check.cpp:411 quotes)
 
     class VehicleManager
     {
@@ -664,30 +713,70 @@ namespace Vehicle
             Deformation::DeformationInputInterface* lpDeformationInterface);   // @0x8264AB38
 
         // @0x825C7EA8 (321). Arm 1: record which NETWORK race cars were added for collision this
-        // frame. GATE.
+        // frame. ⭐ BODIED 2026-08-11 (create-drain wave), BrnVehicleManager_MaintenanceEvents.cpp.
         void RecordNetworkRaceCarsAddedForCollision(const VehicleInputInterface* lpInputInterface);
 
-        // @0x826160C8 (426). Arm 2: drain the remove-race-car queue. GATE.
+        // @0x826160C8 (426). Arm 2: drain the remove-race-car queue.
+        // ⭐ BODIED 2026-08-11, BrnVehicleManager_MaintenanceEvents.cpp. It is part of the CREATE
+        // wave, not a later one: the three create events on one boot name race-car slots 0, 1 and 2
+        // in turn, and ProcessCreateEvents' own "Race Car Index Already Used" assert says the
+        // console expects the slot to be free before it is claimed.
         void ProcessRemoveEvents(const VehicleInputInterface* lpInputInterface,
                                  VehicleOutputRequestInterface* lpOutputInterface,
                                  VehicleManagerOutputInterface* lpManagerOutputInterface,
                                  Deformation::DeformationInputInterface* lpDeformationInterface);
 
-        // ⛔⛔ @0x82616770 (1,067). Arm 3: THE CREATE PATH. GATE -- see the banner above and the
-        // measured split point in BrnVehicleManager_MaintenanceEvents.cpp.
+        // ⛔⛔ @0x82616770 (1,067). Arm 3: THE CREATE PATH -- the only writer in the whole XEX that
+        // SETS a bit in mUsedRaceCars. Bodied 2026-08-11 in its OWN slice TU,
+        // BrnVehicleManager_ProcessCreateEvents.cpp, which is deliberately kept out of
+        // build_game_exe.bat until RaceCarPhysics::Prepare @0x82639CB8 has a declaration -- see
+        // that file's banner for why the seat and the bit-set cannot be separated.
         void ProcessCreateEvents(const VehicleInputInterface* lpInputInterface,
                                  VehicleOutputRequestInterface* lpOutputInterface,
                                  VehicleManagerOutputInterface* lpManagerOutputInterface,
                                  Deformation::DeformationInputInterface* lpDeformationInterface);
 
-        // @0x825E9010 (65). Arm 4: drain the validate-race-car queue. GATE.
+        // @0x825E9010 (65). Arm 4: drain the validate-race-car queue.
+        // ⭐ BODIED 2026-08-11, BrnVehicleManager_MaintenanceEvents.cpp.
         void ProcessValidationEvents(const VehicleInputInterface* lpInputInterface,
                                      Deformation::DeformationInputInterface* lpDeformationInterface);
 
-        // @0x825E8F28 (export hole -- no per-function JSON; named only at this one call site).
-        // Arm 5: drain the set-race-car-collision queue. GATE.
+        // @0x825E8F28 (57). Arm 5: drain the set-race-car-collision + set-culling-group queues.
+        // ⭐ BODIED 2026-08-11, BrnVehicleManager_MaintenanceEvents.cpp.
+        // ⭐⭐ THE "EXPORT HOLE" IS RETIRED. Every previous banner recorded this address as "a HOLE
+        // in the IDA export set -- no per-function JSON, insn count genuinely unknown". It is a
+        // fully analysed, correctly NAMED function in the ARTIST .i64: start 0x825E8F28, end
+        // 0x825E900C, 57 instructions, Hex-Rays clean, one caller. It was simply MISSING FROM THE
+        // EXPORT RUN (the exporter walks idautils.Functions() and writes one JSON per function;
+        // this one's file was never written). Recovered with the targeted headless-idat technique
+        // of commit b53e2523. ⇒ "absent from .ida-exports" is not evidence about the database.
         void ProcessCollisionEvents(const VehicleInputInterface* lpInputInterface,
                                     Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // ⭐ @0x825E9118 (153) -- ADDED 2026-08-11 (create-drain wave). DWARF-attested shape
+        // (BrnVehicleManager.h:1131 `void AddRaceCarDeformationModel(DeformationInputInterface*,
+        // int32_t, Matrix44Affine, float32_t, DeformationResetType)`), and the X360 prologue agrees
+        // with the PPC float-arg rule exactly: r4 = interface, r5 = index, r6 = the transform (a
+        // large by-value struct passed by hidden reference), f1 = the damage amount -- which SKIPS
+        // r7 -- and r8 = the reset type.
+        // Its only caller is ProcessCreateEvents. Bodied in BrnVehicleManager_MaintenanceEvents.cpp.
+        void AddRaceCarDeformationModel(Deformation::DeformationInputInterface* lpDeformationInterface,
+                                        s32 liVehicleIndex,
+                                        Matrix44Affine lInitialWorldSpaceTransform,
+                                        f32 lfInitialDamageAmount,
+                                        Deformation::DeformationResetType leBaseDeformationType);
+
+        // ⭐ @0x825E9380 (175) -- ADDED 2026-08-11 (create-drain wave). DWARF BrnVehicleManager.h
+        // :1335. Walk the live-car bitset and hide every NETWORK car for at least liFrames frames.
+        // Its only caller is ProcessCreateEvents. Bodied in BrnVehicleManager_MaintenanceEvents.cpp.
+        void SetAllNetworkRaceCarsHidden(s32 liFrames);
+
+        // ⭐ ADDED 2026-08-11 (create-drain wave). DWARF BrnVehicleManager.h:986
+        // `EntityId GetEntityId(RigidBodyId)`. Inline on the console -- its body is what
+        // AddRaceCarDeformationModel @0x825E9210..0x825E931C is, asserts and all
+        // (BrnVehicleManager.h:1985 "Entity id X does not match stored entity id Y").
+        // Defined out-of-line below this class so it can see the private tables.
+        EntityId GetEntityId(CgsPhysics::RigidBodyId lRigidBodyId);
 
         // ==========================================================================================
         // ⭐ TRACTION-LINE CHAIN, the four members bodied for real 2026-08-10 (ground wave), in
@@ -865,6 +954,29 @@ namespace Vehicle
                            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
                            VehicleOutputInterface* lpVehicleOutputInterface);
 
+        // ⭐ ADDED 2026-08-11 (prepare-chain wave): UpdateDrivers' own four callees. Every one is
+        // DWARF-attested VERBATIM (references/DecFIGS/.../BrnVehicleManager.h:875/:878/:881/:1254)
+        // and every one is X360-attested with the SAME register map the DWARF implies, read off
+        // UpdateDrivers @0x82642D38..0x82642E28. ⛔ ALL FOUR ARE STILL BODYLESS -- they are named
+        // BRN_CONDUCTOR_GATEs in BrnPhysicsConductorGates.cpp (401 / 185 / 258 / 333 console
+        // instructions), so declaring them here buys the drain's compile, not its behaviour.
+        // The `BitArray<8u>&` is the per-frame "which race cars did a driver update touch" set that
+        // UpdateDrivers builds on its own stack and hands to all four in turn.
+        void UpdatePlayerDriver(const BrnPlayerDriverControls* lpControls,
+                                CgsContainers::BitArray<8u>& lrUpdatedCars);   // @0x825E9F38 (401)
+        void UpdateNetworkDriver(const BrnNetworkDriverControls* lpControls,
+                                 CgsContainers::BitArray<8u>& lrUpdatedCars);  // @0x825C4D08 (258)
+        void UpdateAIDriver(const BrnAIDriverControls* lpControls,
+                            CgsContainers::BitArray<8u>& lrUpdatedCars);       // @0x825C5110 (185)
+
+        // @0x8263CC68 (DWARF :1254; 333 insns). The horn-triggered instant-takedown sweep
+        // UpdateDrivers runs after the queue drain. The four pointers are r4..r7 at the console
+        // call site @0x82642E14..0x82642E24, which is exactly the DWARF's declaration order.
+        void DoHornTakedowns(BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                             VehicleOutputInterface* lpVehicleOutputInterface,
+                             VehicleManagerOutputInterface* lpManagerOutputInterface,
+                             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
         // @0x8261A8D0 (DWARF :679; 217 insns).
         void ClearSnappedNetworkCarContacts(Deformation::DeformationManager* lpDeformationManager);
 
@@ -915,7 +1027,10 @@ namespace Vehicle
         {
             BrnPhysics::ContactSpy::RaceCarContact*           mpContact;                  // +0x00
             BrnPhysics::Vehicle::VehicleOutputRequestInterface* mpRequestOutputInterface; // +0x04
-            BrnGameState::GameStateModuleIO::VehicleOutputInterface*    mpVehicleOutputInterface; // +0x08
+            // ⭐ RE-TYPED 2026-08-11: DWARF (BrnVehicleManager.h:766) spells this member
+            // `VehicleOutputInterface*` unqualified inside BrnPhysics::Vehicle::VehicleManager,
+            // and no GameStateModuleIO::VehicleOutputInterface exists in the DWARF at all.
+            BrnPhysics::Vehicle::VehicleOutputInterface*      mpVehicleOutputInterface;  // +0x08
             VehicleManagerOutputInterface*                    mpManagerOutputInterface;   // +0x0C
             BrnPhysics::Deformation::DeformationInputInterface* mpDeformationInterface;    // +0x10
             EntityId             mRaceCarAEntityID;            // +0x14
@@ -961,7 +1076,7 @@ namespace Vehicle
         // RaceCarResponseInfo member order).
         void HandleRaceCarRaceCarContact(BrnPhysics::ContactSpy::RaceCarContact lContact,
                                          BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
-                                         BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
+                                         BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
                                          VehicleManagerOutputInterface* lpManagerOutputInterface,
                                          BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
                                          f32 lfTimestep);
@@ -996,7 +1111,7 @@ namespace Vehicle
                              f32 lfNormalStressSq,
                              BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
                              VehicleManagerOutputInterface* lpManagerOutputInterface,
-                             BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
+                             BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
                              BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
                              BrnGameState::ETakedownType leTakedownType);
 
@@ -1008,7 +1123,7 @@ namespace Vehicle
                                 Vector3 lContactPoint,
                                 BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
                                 VehicleManagerOutputInterface* lpManagerOutputInterface,
-                                BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
+                                BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
                                 BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
                                 BrnGameState::ETakedownType leTakedownType);
 
@@ -1676,15 +1791,28 @@ namespace Vehicle
         // (`EntityId[8] maRaceCarEntityIDs`).
         EntityId             maRaceCarEntityIDs[8];   // +43584 (4 * 8 = 32; ends 43616)
 
-        // ⭐ The 128 bytes at +43616..+43744 are the DWARF's two ResourceHandle arrays
-        // (`ResourceHandle[8] maRaceCarModelHandles` then `ResourceHandle[8]
-        // maRaceCarGraphicsModelHandles`, BrnVehicleManager.h:824/825). They fill the gap exactly at
-        // **8 bytes per handle** -- 43616 + 64 = 43680, + 64 = 43744 -- which is the independent
-        // confirmation that ResourceHandle is 8 bytes here. Modelled as an opaque span because
-        // CgsResource::ResourceHandle has no committed home in this tree yet and Construct does not
-        // touch either array; the two names + the 8-byte width are recorded so the next wave can
-        // split it without re-deriving anything. DELETE-WHEN ResourceHandle lands.
-        unsigned char        mPadAA60[43744 - 43616];  // maRaceCarModelHandles / maRaceCarGraphicsModelHandles
+        // ⭐⭐ SPLIT 2026-08-11 (create-drain wave). This was `unsigned char mPadAA60[128]` with a
+        // note saying "CgsResource::ResourceHandle has no committed home in this tree yet ...
+        // DELETE-WHEN ResourceHandle lands". BOTH halves of that note were stale: the type HAS had
+        // a committed home (GameShared/GameClasses/System/Resource/CgsResourceHandle.h) since the
+        // resource-handle wave, and three bodies landed this wave reach these arrays by element.
+        //
+        // The DWARF names them at BrnVehicleManager.h:824/825, and the X360 addresses both by the
+        // same pair of console strides in ProcessCreateEvents @0x82616A58..0x82616A68:
+        //     addi r9, r27, 0x154C ; slwi r28, r9, 3 ; stdx <modelHandle>, r28, r24
+        //     addi r8, r27, 0x1554 ; slwi r9,  r8, 3 ; stdx <gfxHandle>,   r9,  r24
+        // 8 * 0x154C == 43616 and 8 * 0x1554 == 43680 -- two 8-element arrays at CONSOLE stride 8,
+        // back to back. ProcessValidationEvents @0x825E9078..0x825E90B0 writes the same two seats,
+        // and AddRaceCarDeformationModel @0x825E91A0 double-derefs the model one
+        // (`lwzx r11,r20,r29 ; lwz r11,0(r11)` -- the SafeResourceHandle shape, mpResourceMemory
+        // then the SmallResource's main-memory pointer).
+        //
+        // ⚠️ THE HOST STRIDE IS 16, NOT 8 ({void* mpResourceMemory, Entry* mpSourceEntry}), which
+        // is exactly why these must be reached BY NAME: a body carrying the console's stride-8
+        // arithmetic over an opaque span would index the wrong element with no diagnostic. The
+        // +128 that costs is carried explicitly in KU_HOST_DRIFT_AFTER_RACECAR_ARRAY above.
+        CgsResource::ResourceHandle maRaceCarModelHandles[8];          // +43616 (console 64B, host 128B)
+        CgsResource::ResourceHandle maRaceCarGraphicsModelHandles[8];  // console +43680 (host +43744)
 
         // ⭐ CORRECTED 2026-08-03: this was committed as `EntityId
         // maAggressiveDrivingVictimEntityId[8]` at **stride 4**, which left 32 bytes of the span
@@ -2256,6 +2384,47 @@ namespace Vehicle
         // irrelevant. Keep this TU mounted.
         static void _AssertLayoutTuningBank();
     };
+
+    // ==========================================================================================
+    // GetEntityId(RigidBodyId) -- header-inline definition, ADDED 2026-08-11 (create-drain wave).
+    //
+    // The console has NO out-of-line symbol for this; the body below IS what
+    // VehicleManager::AddRaceCarDeformationModel @0x825E9210..0x825E931C compiles to, read
+    // instruction for instruction. The handle's OWNER byte selects the arm:
+    //   * RACECAR (1): the id is returned UNCHANGED, and the pass is pure VALIDATION -- the console
+    //     asserts the stored maRaceCarEntityIDs[index] equals it (`lwzx r11,r25,r29 ; cmplw r11,r28
+    //     ; beq` -> BrnVehicleManager.h:1985). The message is streamed through gpcMessageBuffer on
+    //     the console ("Entity id %d does not match stored entity id %d\n"); lowered to the static
+    //     prefix per the standing rule.
+    //   * TRAFFIC_VEHICLE (2): remap through the contained manager's own table --
+    //     `extrwi r11,r28,14,8 ; addis r11,r11,1 ; addi r11,r11,-0x6F58 ; slwi r11,r11,2 ; lwzx`
+    //     == this + 148128 + 4*index == &mPhysicalTrafficManager.maTrafficEntityIDs[index], reached
+    //     BY NAME here (the friendship that already exists for exactly this read).
+    //   * anything else: the id is returned unchanged.
+    // ⚠️ The console tests owner==2 TWICE in a row (`cmpwi r11,2 ; bne ... ; cmplwi r11,2 ; bne`);
+    // the duplicate is a compiler artifact of the two-arm if/else and is not reproduced.
+    // ==========================================================================================
+    inline EntityId VehicleManager::GetEntityId(CgsPhysics::RigidBodyId lRigidBodyId)
+    {
+        // The embedded entity word is the handle's HIGH dword (`ld ; srdi r11,r11,32`).
+        const u32 luEntityWord = static_cast<u32>(lRigidBodyId.GetEntityId());
+        const u32 luOwner      = luEntityWord >> 24;                    // EntityId::GetOwner()
+        const u32 luIndex      = (luEntityWord >> 10) & 0x3FFFu;        // GetEntityIndex()
+
+        if (luOwner == 1u)   // BrnWorld::E_ENTITYTYPE_RACECAR -- VALIDATION-ONLY arm
+        {
+            CGS_ASSERT(maRaceCarEntityIDs[luIndex].muValue == luEntityWord,
+                       "Entity id does not match stored entity id");   // BrnVehicleManager.h:1985
+        }
+        else if (luOwner == 2u)   // BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE
+        {
+            return mPhysicalTrafficManager.maTrafficEntityIDs[luIndex];
+        }
+
+        EntityId lResult;
+        lResult.muValue = luEntityWord;
+        return lResult;
+    }
 
     // ==========================================================================================
     // GetPhysicsEntityIDFromGlobalEntityID -- header-inline definition (see the declaration's

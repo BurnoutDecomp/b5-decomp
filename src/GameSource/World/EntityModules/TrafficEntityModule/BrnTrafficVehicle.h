@@ -236,4 +236,32 @@ private:
     f32 mfManoeuvreTime;
     Vector3 mTargetPos;
 };
+
+// ⭐ ADDED 2026-08-11 (driver-arms wave). BrnTraffic::GetVehicleSpecies @0x821F4648 (32 insns) --
+// the ONE absent callee of PhysicalTrafficManager::UpdateTrafficDriver @0x825CA8A0, landed rather
+// than parked because it is a genuine leaf (xrefs_from is the assert triple and nothing else).
+//
+// It classifies a GLOBAL traffic-vehicle index into the three pools the module lays out
+// back-to-back, purely by range -- there is no per-vehicle read at all:
+//     [0, 400)    -> E_SPECIES_STANDARD   (TrafficEntityModule::KU_MAX_STANDARD_TRAFFIC)
+//     [400, 599)  -> E_SPECIES_STATIC     (400 + KU_MAX_STATIC_TRAFFIC(199) == 599)
+//     599         -> E_SPECIES_TRAILER    (the single trailer slot GetTrailerVehicle asserts on)
+// The X360 spells the last two arms branchlessly (`li r11,0x257 ; subfc ; subfe ; addi r11,r11,2`
+// == `(idx >= 599) ? 2 : 1`); de-optimised back to the range ladder it came from.
+//
+// The console DEFINES it in this header (its baked assert cites BrnTrafficVehicle.h:578) and the
+// compiler ALSO emitted an out-of-line copy at 0x821F4648 -- so header-inline here matches both.
+// Returns Vehicle::Species; the console's return type is a plain int and the one call site
+// (UpdateTrafficDriver) only tests it against zero.
+inline Vehicle::Species GetVehicleSpecies(u32 luIndex)
+{
+    // BrnTrafficVehicle.h:578 -- the pool-wide bound (TrafficEntityModule::KU_MAX_TOTAL_TRAFFIC).
+    CGS_ASSERT(luIndex < 0x258u, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+
+    if (luIndex < 0x190u)        // < 400
+        return Vehicle::E_SPECIES_STANDARD;
+    if (luIndex < 0x257u)        // < 599
+        return Vehicle::E_SPECIES_STATIC;
+    return Vehicle::E_SPECIES_TRAILER;
+}
 }

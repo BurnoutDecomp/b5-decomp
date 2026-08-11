@@ -177,36 +177,14 @@ namespace BrnPhysics
         BRN_CONDUCTOR_GATE("PhysicsModule::HandleGameActionsPostScene @0x825A70C0 (63)");
     }
 
-    // ⛔⛔ @0x825AB408 (52 insns). THE SIM FIREWALL -- READ BEFORE TOUCHING.
-    //
-    // This is the ONLY road from the vehicle manager's rigid-body request queues into the
-    // simulation input buffer. Four appends, in the console's own order, with the four source
-    // offsets cross-checked against BrnVehicleOutputInterface.h's own queue seats:
-    //     AppendRemoveRigidBodyQueue<50>(simIn, vehOut + 9616)
-    //     AppendAddRigidBodyQueue   <50>(simIn, vehOut + 0)       == mRequiredRigidBodiesQueue
-    //     AppendAddJointQueue       <10>(simIn, vehOut + 39904)
-    //     AppendRemoveJointQueue    <10>(simIn, vehOut + 41840)
-    //
-    // VehicleManager::ProcessCreateEvents @0x82616770 -- the create path this whole campaign is
-    // aiming at -- posts its InAddRigidBody event into mRequiredRigidBodiesQueue. While this
-    // function stays inert, that event is written into the "VehManager" stack IO buffer that
-    // PostSceneUpdate creates and destroys in the SAME call, and no rigid body can ever reach the
-    // simulation. That is the deliberate split for the create path: the cut is at a console
-    // function boundary, so nothing is faked and nothing is dropped mid-body.
-    //
-    // ⛔ DO NOT LAND THIS UNTIL THE TRACTION-LINE CHAIN IS CLOSED (the ground-cost census at the
-    // top of this file). A body that enters the simulation before the wheels can find the road
-    // falls forever. Note also that this is only the SECOND road to a falling body -- the first is
-    // mUsedRaceCars itself, via the already-mounted ReadUpdatedBodies gravity+integrate loop; see
-    // BrnVehicleManager_MaintenanceEvents.cpp.
-    void PhysicsModule::BridgeVehicleManagerToSimulation_PostScene(
-        CgsPhysics::PhysicsSimulationIO::InputBuffer*,
-        const Vehicle::VehicleManagerOutputBuffer*)
-    {
-        BRN_CONDUCTOR_GATE("PhysicsModule::BridgeVehicleManagerToSimulation_PostScene @0x825AB408 "
-                           "(52) -- HELD INERT ON PURPOSE: it is the only path from "
-                           "mRequiredRigidBodiesQueue into the simulation");
-    }
+    // ⭐⭐ GATE DELETED 2026-08-11 (prepare-chain wave): PhysicsModule::
+    // BridgeVehicleManagerToSimulation_PostScene @0x825AB408 -- THE SIM FIREWALL -- is REAL, in
+    // BrnPhysicsModuleBridgeFunctions.cpp next to its PostPhysics sibling. The ⛔ precondition
+    // that held it here ("do not land until the traction-line chain is closed") was CHECKED, not
+    // assumed: StartVehicleTractionLineTests @0x82629CE0 and EndVehicleTractionLineTests
+    // @0x82633CD8 both carry real bodies in BrnVehicleManager_TractionLineTests.cpp as of the
+    // 2026-08-11 lifetime wave. If a gate for it ever reappears here the link will say so
+    // (LNK2005).
 
 namespace Deformation
 {
@@ -345,14 +323,32 @@ namespace Vehicle
         BRN_CONDUCTOR_GATE("VehicleManager::DoCrashPrediction @0x82645FE0 (814 + the L1/L2 web)");
     }
 
-    void VehicleManager::UpdateDrivers(f32, const VehicleDriverInputInterface*,
-                                       BrnPhysics::Vehicle::VehicleOutputRequestInterface*,
-                                       VehicleManagerOutputInterface*,
-                                       BrnPhysics::Deformation::DeformationInputInterface*,
-                                       VehicleOutputInterface*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::UpdateDrivers @0x82642C68 (120)");
-    }
+    // ⭐⭐ 2026-08-11 (prepare-chain wave): the VehicleManager::UpdateDrivers @0x82642C68 gate that
+    // stood here is DELETED. The real 120-instruction body is in
+    // BrnVehicleManager_UpdateDrivers.cpp -- it drains the driver-control queue, runs the
+    // fixed-step steering decay and publishes the target-assist list.
+    //
+    // ⭐⭐ ...AND AS OF 2026-08-11 (driver-arms wave) ALL FIVE OF ITS ARMS ARE GONE FROM HERE TOO.
+    // The five gates that stood at this seat for one wave are DELETED; every one has a real body:
+    //     UpdatePlayerDriver   @0x825E9F38  401 -> BrnVehicleManager_DriverArms.cpp
+    //     UpdateNetworkDriver  @0x825C4D08  258 -> BrnVehicleManager_DriverArms.cpp
+    //     UpdateAIDriver       @0x825C5110  185 -> BrnVehicleManager_DriverArms.cpp
+    //     DoHornTakedowns      @0x8263CC68  333 -> BrnVehicleManager_DriverArms.cpp
+    //     UpdateTrafficDriver  @0x825CA8A0  169 -> BrnPhysicalTrafficManager_UpdateTrafficDriver.cpp
+    //                          ------------ 1,346 console instructions, all landed, none parked.
+    // The one absent callee across the five (BrnTraffic::GetVehicleSpecies @0x821F4648, 32 insns)
+    // was landed with them, in its own console home BrnTrafficVehicle.h. If a gate for any of the
+    // five ever reappears here the link will say so (LNK2005).
+    //
+    // ⭐ THE HONEST CONSEQUENCE, RE-UPDATED (conductor, same day). The record LANDS in
+    // VehicleManager::maRaceCarDrivers[car].mControls -- and the "one more seam"
+    // (VehicleDriver::UpdateVehicle as a missing controls-installer) was a MIS-DIAGNOSIS:
+    // that function is landed (BrnVehicleDriver.cpp, @0x825D7290) and is the slerp-transform
+    // applier, never touching mControls. No installer exists or is needed -- the mounted
+    // per-car loop passes maRaceCarDrivers[liCar].GetControls() straight into
+    // VehiclePhysics::Update (BrnVehicleManager_UpdateVehiclePhysics.cpp:504), which memcpy's
+    // it into mPreviousControls itself. The controls chain is CLOSED end to end as of this
+    // wave. See the corrected closing banner in BrnVehicleManager_DriverArms.cpp.
 
     void VehicleManager::ClearSnappedNetworkCarContacts(Deformation::DeformationManager*)
     {
@@ -433,6 +429,11 @@ namespace Vehicle
                            "(291) -- PAIRED with AddTrafficTractionLineTests @0x8261D580; leaving "
                            "it inert is CORRECT while the Add posts nothing");
     }
+
+    // ---- 2026-08-11 (driver-arms wave): the TRAFFIC arm gate that stood here for one wave is
+    // DELETED. PhysicalTrafficManager::UpdateTrafficDriver @0x825CA8A0 (169) is REAL, in
+    // BrnPhysicalTrafficManager_UpdateTrafficDriver.cpp, together with the four VehicleManager arms
+    // noted in the Vehicle namespace above. LNK2005 if it ever comes back.
 
     // ---- 2026-08-11 (lifetime wave): the two NON-VEHICLE arms of
     // PhysicsModule::UpdateCachedPositions @0x8259C370 (bodied this wave in BrnPhysicsModule.cpp).

@@ -1,14 +1,23 @@
 // BrnPhysics::Vehicle::VehicleDriver -- the per-car driver.
 //
-// This TU holds the one function with a recovered body: Construct @0x825B83C8 (96 instructions,
-// ZERO callees). Everything else on the class is declare-only in the header.
+// This TU holds Construct @0x825B83C8 (96 instructions, ZERO callees) and -- since the
+// 2026-08-11 driving-path wave -- UpdateVehicle @0x825D7290 (219 instructions). Everything
+// else on the class is declare-only in the header.
 
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h"
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"   // VehiclePhysics (Get/SetTransform, IsFrozen)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                             // CGS_ASSERT (the two slerp-transform tripwires)
+#include "rw/math/vpu/vector3_operation.h"                                     // rw::math::vpu::{Dot, MagnitudeSquared}
+#include "rw/math/vpu/matrix44affine_operation.h"                              // rw::math::vpu::operator* (the affine concat)
+
+#include <cmath>   // std::fabs (the vandc sign-mask lowering)
 
 namespace BrnPhysics
 {
 namespace Vehicle
 {
+    namespace vpu = rw::math::vpu;
+
     // @0x825B83C8  BrnPhysics::Vehicle::VehicleDriver::Construct
     //
     // Callers: VehicleManager::Construct @0x8263B7C8 (the eight-car maRaceCarDrivers array at
@@ -63,6 +72,109 @@ namespace Vehicle
         meDriverType        = E_NUM_E_DRIVER_TYPE_EVENTS;   // +0xD0
         mi8NumOfInterpSteps = 0;                            // +0xD4
         mbSnappedThisFrame  = false;                        // +0xD5
+    }
+
+    // =============================================================================================
+    // @0x825D7290  BrnPhysics::Vehicle::VehicleDriver::UpdateVehicle  (219 instructions)
+    //
+    // ⭐⭐ THE TRAP THIS REPLACES CARRIED A WRONG COMMENT, AND THE WRONG COMMENT IS THE LESSON.
+    // BrnVehicleManagerLinkStubs.cpp:196 described this function as "the driver-type dispatch into
+    // the four Update(controls) overloads". It is nothing of the sort -- there is no `meDriverType`
+    // read, no switch, and no call to any Update overload anywhere in the 219 instructions. It is
+    // the NETWORK CATCH-UP SLERP APPLIER: one step of the interpolation VehicleDriver::
+    // StartCatchupInterpolation arms, applied to the vehicle it is handed.
+    //
+    // Callers (both per-live-car, every frame): VehicleManager::UpdateVehiclePhysics @0x82644FA8
+    // and PhysicalTrafficManager::UpdateTrafficPhysics @0x82644418.
+    //
+    // ⭐ IT IS A NO-OP ON A NORMAL DRIVING FRAME. `lbz r11,0xD4(r3) ; extsb ; cmpwi ; ble` gates the
+    // WHOLE body on mi8NumOfInterpSteps > 0, and Construct seeds that byte to 0. Only a network snap
+    // (StartCatchupInterpolation, which seats mSlerpTransform and loads the counter with
+    // ki8NumNetworkSlerpSteps == 10) ever makes it do work. That is why the trap did not fire in the
+    // boot-drive harness and why it WOULD have fired the moment a networked car existed.
+    //
+    // BODY, register-traced:
+    //   0x825D72A8  if ((s8)this->mi8NumOfInterpSteps <= 0) return;                 // the gate
+    //   0x825D72B8  if (!lpVehicle->mbFrozen)                                       // base +0x60 == VP +0x70
+    //   0x825D72CC     vehicle mTransform (VP +0x10..+0x40, i.e. base +0x00..+0x30)
+    //                  = mSlerpTransform (this +0x90..+0xC0) * itself.
+    //                  The four `stvx128` write BACK over the vehicle's rows, and the vmaddfp
+    //                  cascade is the canonical row-major affine concat: out.row_i =
+    //                  A[i].x*B.row0 + A[i].y*B.row1 + A[i].z*B.row2 (+ B.row3 for the w row,
+    //                  which the asm seeds with `vmaddfp v0, v2, v0, v7` == A[3].x*B.row0 + B.row3).
+    //                  That is exactly rw::math::vpu::Mult(mSlerpTransform, vehicleTransform).
+    //   0x825D7368  DEV TRIPWIRE 1 (BrnVehicleDriver.cpp:219) -- "not normalised".
+    //                  d_i = |row_i|^2 - 1 for i in {0,1,2}; err = d0^2+d1^2+d2^2 (the second
+    //                  vmsum3fp128 over the gathered triple); assert |err| <= 0.01f
+    //                  (flt_82002138, image-read). `vandc v0,v0,vslw(-1,-1)` is fabs.
+    //   0x825D7488  DEV TRIPWIRE 2 (BrnVehicleDriver.cpp:220) -- "not orthogonal".
+    //                  P = M3 * M3^T (the vmrghw/vmrglw block IS the transpose: it gathers
+    //                  col0/col1/col2 out of rows 0/1/2); E = P - I, with the identity rows read
+    //                  from w::math::vpu::detail::gIVector {1,0,0,0} @0x82181500, {0,1,0,0}
+    //                  @0x82181510 and {0,0,1,0} @0x82181520 (image-read); err = |E.row0|^2 +
+    //                  |E.row1|^2 + |E.row2|^2; assert |err| <= 0.1f (flt_82004014, image-read).
+    //   0x825D75E0  --this->mi8NumOfInterpSteps;                                    // lbz/addi -1/stb
+    //
+    // ⚠️ BOTH tripwires are UNCONDITIONAL side-effect-free asserts on the console -- they run even
+    // when the concat was skipped because the vehicle was frozen (the `beq` at 0x825D7434 /
+    // 0x825D7590 skips only the Fire, never the maths). Reproduced in that position.
+    //
+    // ⚠️ The console builds its assert text through CgsDev::StrStream over
+    // CgsDev::Assert::gpcMessageBuffer (the `BasePriorityQueue::Clear` in the pseudocode is the
+    // ICF-folded StrStream constructor). Per house style that is lowered to CGS_ASSERT with the
+    // console's own literal message; no values are streamed in either of these two.
+    // =============================================================================================
+    void VehicleDriver::UpdateVehicle(VehiclePhysics* lpVehicle)
+    {
+        // flt_82002138 / flt_82004014 -- both read out of the X360 image, not guessed.
+        static const f32 KF_NORMALISED_TOLERANCE = 0.0099999998f;   // flt_82002138 (0x3C23D70A)
+        static const f32 KF_ORTHOGONAL_TOLERANCE = 0.1f;            // flt_82004014 (0x3DCCCCCD)
+
+        if (mi8NumOfInterpSteps <= 0)
+            return;
+
+        if (!lpVehicle->IsFrozen())
+            lpVehicle->SetTransform(vpu::Mult(mSlerpTransform, lpVehicle->GetTransform()));
+
+        const Matrix44Affine lTransform = lpVehicle->GetTransform();
+        const Vector3& lvRow0 = lTransform.xAxis;
+        const Vector3& lvRow1 = lTransform.yAxis;
+        const Vector3& lvRow2 = lTransform.zAxis;
+
+        // ----- tripwire 1: the three rotation rows are unit length (BrnVehicleDriver.cpp:219) -----
+        {
+            const f32 lfD0 = vpu::MagnitudeSquared(lvRow0) - 1.0f;
+            const f32 lfD1 = vpu::MagnitudeSquared(lvRow1) - 1.0f;
+            const f32 lfD2 = vpu::MagnitudeSquared(lvRow2) - 1.0f;
+            const f32 lfError = lfD0 * lfD0 + lfD1 * lfD1 + lfD2 * lfD2;
+            CGS_ASSERT(!(std::fabs(lfError) > KF_NORMALISED_TOLERANCE),
+                       "Slerped race car transform is not normalised");
+        }
+
+        // ----- tripwire 2: the 3x3 is orthogonal, i.e. M*M^T == I (BrnVehicleDriver.cpp:220) -----
+        {
+            // P = M3 * M3^T, row by row. The console reaches the transpose columns with
+            // vmrghw/vmrglw; the dot form below is the same three numbers per row.
+            const f32 lfP00 = vpu::Dot(lvRow0, lvRow0) - 1.0f;   // - gIVector      {1,0,0,0}
+            const f32 lfP01 = vpu::Dot(lvRow0, lvRow1);
+            const f32 lfP02 = vpu::Dot(lvRow0, lvRow2);
+
+            const f32 lfP10 = vpu::Dot(lvRow1, lvRow0);
+            const f32 lfP11 = vpu::Dot(lvRow1, lvRow1) - 1.0f;   // - unk_82181510  {0,1,0,0}
+            const f32 lfP12 = vpu::Dot(lvRow1, lvRow2);
+
+            const f32 lfP20 = vpu::Dot(lvRow2, lvRow0);
+            const f32 lfP21 = vpu::Dot(lvRow2, lvRow1);
+            const f32 lfP22 = vpu::Dot(lvRow2, lvRow2) - 1.0f;   // - unk_82181520  {0,0,1,0}
+
+            const f32 lfError = (lfP00 * lfP00 + lfP01 * lfP01 + lfP02 * lfP02)
+                              + (lfP10 * lfP10 + lfP11 * lfP11 + lfP12 * lfP12)
+                              + (lfP20 * lfP20 + lfP21 * lfP21 + lfP22 * lfP22);
+            CGS_ASSERT(!(std::fabs(lfError) > KF_ORTHOGONAL_TOLERANCE),
+                       "Slerped race car transform is not orthogonal");
+        }
+
+        --mi8NumOfInterpSteps;
     }
 }
 }

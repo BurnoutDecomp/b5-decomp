@@ -279,5 +279,73 @@ namespace PhysicsSimulationIO
     // it merely was not EMITTED inside the uniform 0x8289E408+k*0xA8 block.
     const InputBuffer::InChangeRigidBodyInertiaQueue* InputBuffer::GetChangeRigidBodyInertiaQueue() const
     { CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n"); return &mChangeRigidBodyInertiaQueue; }
+
+    // ---------------------------------------------------------------------------------------------
+    // Construct @0x828A71B8 -- LANDED 2026-08-11 (create-drain wave, conductor). See the header
+    // banner for why this was missing and what it cost (a NULL-mpEvents memcpy AV on the first
+    // rigid-body append the create drain ever produced). The console body verbatim: status byte
+    // = 1, the nineteen queue Constructs at their pinned offsets (each wires the base
+    // BaseEventQueue::mpEvents at its inline maEvents and zeroes the length), both scalars,
+    // then the Clear() tail. Console offsets cited per line; every one matches the
+    // _AssertLayout pin for that member.
+    // ---------------------------------------------------------------------------------------------
+    void InputBuffer::Construct()
+    {
+        IOBuffer::Construct();                        // *this = 1 (clear flags + eStatusConstructed)
+
+        mAddRigidBodyQueue.Construct();               // +16
+        mUpdateRigidBodyQueue.Construct();            // +38432
+        mApplyForceQueue.Construct();                 // +76848
+        mChangeRigidBodyInertiaQueue.Construct();     // +84864
+        mSetRigidBodySpyQueue.Construct();            // +100880
+        mRemoveRigidBodyQueue.Construct();            // +104096
+        mRemoveAllRigidBodiesQueue.Construct();       // +107312
+        mAddContactQueue.Construct();                 // +107344 (InAddPotentialContact_1024)
+        mAddJointQueue.Construct();                   // +189280
+        mRemoveJointQueue.Construct();                // +196208
+        mUpdateJointFramesQueue.Construct();          // +196512
+        mUpdateJointLimitsQueue.Construct();          // +199984
+        mSetJointSpyQueue.Construct();                // +202880
+        mAddDriveQueue.Construct();                   // +203472
+        mRemoveDriveQueue.Construct();                // +203632
+        mUpdateDriveFramesQueue.Construct();          // +203664
+        mUpdateDriveDynamicsQueue.Construct();        // +203760
+        mSetDriveSpyQueue.Construct();                // +203824
+        mUpdateExternalBodyQueue.Construct();         // +203856
+
+        mfTimeStep      = 0.0f;                       // *(a1+4)  = 0.0
+        muMaxIterations = 0;                          // *(a1+8)  = 0
+
+        Clear();                                      // the console's tail call
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Clear @0x828A1A88 -- mfTimeStep = 0 and every queue length = 0 (each console store lands at
+    // queueOffset+8 == BaseEventQueue::miLength). ⚠️ muMaxIterations is NOT touched -- console.
+    // ---------------------------------------------------------------------------------------------
+    void InputBuffer::Clear()
+    {
+        mfTimeStep = 0.0f;                            // *(a1+4) = 0.0
+
+        mAddRigidBodyQueue.Clear();                   // +24     (16+8)
+        mChangeRigidBodyInertiaQueue.Clear();         // +84872
+        mUpdateRigidBodyQueue.Clear();                // +38440
+        mApplyForceQueue.Clear();                     // +76856
+        mSetRigidBodySpyQueue.Clear();                // +100888
+        mRemoveAllRigidBodiesQueue.Clear();           // +107320
+        mRemoveRigidBodyQueue.Clear();                // +104104
+        mAddContactQueue.Clear();                     // +107352
+        mAddJointQueue.Clear();                       // +189288
+        mRemoveJointQueue.Clear();                    // +196216
+        mUpdateJointFramesQueue.Clear();              // +196520
+        mUpdateJointLimitsQueue.Clear();              // +199992
+        mSetJointSpyQueue.Clear();                    // +202888
+        mAddDriveQueue.Clear();                       // +203480
+        mRemoveDriveQueue.Clear();                    // +203640
+        mUpdateDriveFramesQueue.Clear();              // +203672
+        mUpdateDriveDynamicsQueue.Clear();            // +203768
+        mSetDriveSpyQueue.Clear();                    // +203832
+        mUpdateExternalBodyQueue.Clear();             // +203864
+    }
 }
 }

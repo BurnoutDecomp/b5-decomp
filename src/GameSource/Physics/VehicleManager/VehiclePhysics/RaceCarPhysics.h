@@ -25,6 +25,7 @@
 #include "BrnCommonTypes.h"   // Vector3, EntityId
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"   // base + Wheel
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::{Dot, Subtract}
+#include "rw/physics/inertia.h"              // rw::physics::Inertia -- Prepare's by-value param
 // BrnPlayerDriverControls has ONE definition -- the canonical owning home in SharedIO. (A prior
 // duplicate minimal slice lived here and clashed (ODR) with that home; removed. The typed control
 // accessors the showtime/aftertouch bodies call are declared on the canonical struct.)
@@ -119,24 +120,55 @@ namespace Vehicle
         //     stack@0xBF (a byte)            -> lu8StrengthStat  (the event's miCarStrengthStat)
         //     lwz r11,0(r3) ; lwz r11,0x30(r11) ; mtctr ; bctrl
         //
-        // ⚠️ DECLARE-ONLY, and deliberately NOT virtual here. The console reaches it through slot
-        // +0x30 of the console vtable; this tree's rule is to reach members BY NAME and never by
-        // console slot, and the host vtable's slot numbering is the compiler's, not the console's
-        // (see the [[vtable-slot0-Create-shim]] precedent). When the body lands it must be declared
-        // `virtual` in VehiclePhysics and overridden here, so that the create drain's
-        // `maRaceCarVehicles[i].Prepare(...)` dispatches the way the console's bctrl does.
-        // ⚠️ `rw::physics::Inertia` has NO type in this tree yet. The 48-byte / three-row shape is
-        // measured from the call site's six-doubleword pass and is consistent with Matrix33 (the
-        // type ExternalPhysicsBody already uses for m{Local,World}InverseInertia), but the member
-        // names are NOT recovered, so the type is NOT fabricated here -- the parameter is spelled
-        // in the declaration below only when that type lands.
-        // DELETE-WHEN @0x82639CB8 lands.
+        // ⚠️ Reached BY NAME, deliberately NOT virtual. The console dispatches through slot +0x30,
+        // but the only console call site (ProcessCreateEvents) makes the vcall on
+        // maRaceCarVehicles[idx] -- static type RaceCarPhysics -- so a by-name call on the exact
+        // type reproduces the dispatch exactly, and this tree's rule is to reach members BY NAME
+        // and never by console slot (the host vtable's numbering is the compiler's, not the
+        // console's; see the [[vtable-slot0-Create-shim]] precedent). NOTE this is NOT an override
+        // of VehiclePhysics::Prepare (nine params) -- it is a distinct eleven-param function that
+        // FORWARDS into it; the park note that stood here planned a virtual override, which two
+        // different signatures cannot form.
+        // ⚠️ The old "rw::physics::Inertia has NO type in this tree" line is STALE and deleted:
+        // vendor/renderware/include/rw/physics/inertia.h has owned the record since task #141
+        // (DWARF-named members, X360-attested offsets, 48-byte array stride pinned).
+        //
         // ==========================================================================================
-        // bool Prepare(Matrix44Affine lOnRoadTransform, Vector3 lLinearVelocity,
-        //              Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset, Vector3 lHalfExtent,
-        //              const CgsGeometric::AxisAlignedBox& lrAABB, rw::physics::Inertia lInertia,
-        //              VehicleAttribs* lpAttribs, const Vector3* lpaWheelPositions,
-        //              const f32* lpafWheelRadii, u8 lu8StrengthStat);
+        // ⭐⭐ LANDED 2026-08-11 (create-drain wave). The 42-instruction stream was recovered by a
+        // TARGETED IDA EXPORT over BURNOUT_X360_ARTIST.XEX.i64 (the b53e2523 technique, re-run by
+        // the conductor on a DB copy: the per-function JSON hole is real, but the DATABASE carries
+        // the bytes -- the function was materialised at 0x82639CB8..0x82639D5B and decompiled
+        // cleanly). The park block that stood here (prepare-chain wave, same day) is retired per
+        // its own DELETE-WHEN; its three findings -- the 42-insn extent, the five-entry callee set
+        // (VehiclePhysics::Prepare @0x82637C80, SetTransformFromPositionOnRoad @0x825D1C00, the
+        // Begin/Fire/EndAssert trio), both callees real -- are all CONFIRMED by the recovered
+        // stream, instruction for instruction. The full decode is in the body's banner
+        // (RaceCarPhysics.cpp).
+        //
+        // What the stream settled -- the park's four open questions:
+        //   * ORDER: VehiclePhysics::Prepare FIRST (bl @0x82639CD8, return captured in r28), then
+        //     the strength assert, the strength store, SetTransformFromPositionOnRoad, then a
+        //     seven-member zeroing tail.
+        //   * ASSERT: "lu8StrengthStat < KU8_MAX_STRENGTH", RaceCarPhysics.cpp line 0xC0 == 192;
+        //     the guard is `cmplwi r11, 0xB ; blt` -- fires at >= 11, so KU8_MAX_STRENGTH == 11,
+        //     asm-attested (constant defined below).
+        //   * lInertia IS NEVER READ on X360. The body reloads the three trailing pointers from
+        //     its own incoming stack slots (a48/a50/a52 -> r6/r7/r8) for the VehiclePhysics::
+        //     Prepare call, and the inertia's r6..r10 + stack doubleword are simply dropped. The
+        //     "where is lInertia stored" intuition came from the PS3's 89-insn body; on X360 the
+        //     inertia's consumer is elsewhere on the create path (the drain hands it to the
+        //     rigid-body request). The parameter STAYS in the signature -- the call site marshals
+        //     it -- and is deliberately unnamed in the definition.
+        //   * RETURN: the callee's bool, verbatim (mr r28,r3 ... mr r3,r28), named
+        //     lbPreparedVehiclePhysics after the pseudocode's own register role.
+        // ==========================================================================================
+        static const u8 KU8_MAX_STRENGTH = 11;   // asm-attested: Prepare's `cmplwi 0xB` guard
+
+        bool Prepare(Matrix44Affine lOnRoadTransform, Vector3 lLinearVelocity,
+                     Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset, Vector3 lHalfExtent,
+                     const AxisAlignedBox& lrAABB, rw::physics::Inertia lInertia,
+                     VehicleAttribs* lpAttribs, const Vector3* lpaWheelPositions,
+                     const f32* lpafWheelRadii, u8 lu8StrengthStat);   // @0x82639CB8 (41)
 
         // @0x825B3998: the (signed) height of the car above the road, taken as the MINIMUM over the
         // driven wheels whose road-contact line test is valid AND that are on the ground (the
@@ -598,11 +630,28 @@ namespace Vehicle
         f32   mfTimeUntilPush;         // +0x44  flt_82FB84C4 (launch-push delay countdown)
         f32   mfPlayerCarStrength;     // +0x48  lfShowtimePlayerCarStrength
 
-        // ---- +0x50..+0xD0 : showtime aim/timer scratch the asm splats (not read by name here) ----
-        u8    maReserved4C[0xD0 - 0x4C];   // +0x4C..+0xD0 (incl. unk_82FB84D0 target-pos list base)
+        // ---- +0x4C : the last 4 bytes of the scalar block before the target-position array ----
+        u8    maReserved4C[0x50 - 0x4C];   // +0x4C..+0x50
+
+        // ⭐ NAMED 2026-08-11 (prepare-chain wave). +0x50..+0xD0 == unk_82FB84D0, the per-candidate
+        // target-assist POSITION array, parallel to maTargetIds below (8 slots, 16-byte stride).
+        // It used to be buried in a `maReserved4C[0x84]` blob with a note saying UpdateTargetAssist
+        // reaches it "via a raw offset rather than a named member". It is not a blob: VehicleManager
+        // ::UpdateDrivers @0x82642C68 (⚠ corrected 2026-08-11: this used to cite @0x82642E40, which
+        // is the address of the `addi` INSIDE the body that forms this very `+ 0x50`, not the
+        // function's entry point) passes `lbBounceBoosting + 0x50` as the FIRST argument of
+        // VehicleDriverInputInterface::GetTargetAssistParams, whose committed signature types that
+        // parameter `Vector3* lpOutTargetAssistPositions` -- and the next two arguments are
+        // +0xD0 == maTargetIds and +0xF0 == &miNumTargets, both already named here. One call site
+        // types all three seats at once. 8 * 16 == 0x80 closes the run exactly on maTargetIds.
+        Vector3 maTargetPositions[8];      // +0x50..+0xD0  (unk_82FB84D0)
 
         // ---- +0xD0..+0x110 : target-assist candidate list (filled by a game-side TU) ----
-        s32   maTargetIds[8];          // +0xD0  dword_82FB8550 (per-candidate id, 8 slots)
+        // ⚠️ RE-TYPED 2026-08-11 (prepare-chain wave), s32 -> EntityId (both 4 bytes, no layout
+        // change): VehicleManager::UpdateDrivers passes this exact seat as the SECOND argument of
+        // VehicleDriverInputInterface::GetTargetAssistParams, whose committed signature types it
+        // `EntityId* lpOutTargetAssistIDs`. They are entity ids, not bare ints.
+        EntityId maTargetIds[8];       // +0xD0  dword_82FB8550 (per-candidate id, 8 slots)
         s32   miNumTargets;            // +0xF0  dword_82FB8570
         s32   miCurrentTargetId;       // +0xF4  dword_82FB8574 (Reset -> -1)
         u8    maReservedF8[0x110 - 0xF8];  // +0xF8..+0x110
@@ -616,9 +665,11 @@ namespace Vehicle
     // The +0x00..+0x4C scalar block and the +0xD0.. target block are ONE contiguous singleton
     // (0x4C < 0xD0, no overlap). The maReserved* gaps bridge the unread interior so every named
     // member lands at its true console offset; verified by offsetof asserts in RaceCarPhysics.cpp's
-    // never-called _AssertPlayerParamsLayout(). The X360 also keeps per-candidate target POSITIONS
-    // at +0x50 (unk_82FB84D0, 16B stride) inside maReserved4C -- read there by UpdateTargetAssist via
-    // a raw offset rather than a named member (the position array is parallel to maTargetIds).
+    // never-called _AssertPlayerParamsLayout(). ⭐ The per-candidate target POSITIONS at +0x50
+    // (unk_82FB84D0, 16B stride) are NO LONGER inside the reserved blob -- they are the named
+    // maTargetPositions[8] above, typed by VehicleManager::UpdateDrivers' GetTargetAssistParams
+    // call site. UpdateTargetAssist's raw-offset read of the same run should be re-pointed at the
+    // named array when that body is next touched.
 
     // The single process-wide showtime singleton (X360 msPlayerParams; base = lbBounceBoosting).
     extern PlayerParameters msPlayerParams;

@@ -51,8 +51,9 @@
 //       name; its callee, the 6-arg ForceRaceCarCrash @0x82635B00, lands with it.
 //   ReadSurfaceProperties(u64) @0x825C7BB8 (187) -- AttribSys walk; two unidentified callees
 //       (Attrib::FindCollectionWithDefault [external], sub_8227FB58).
-//   VehicleDriver::UpdateVehicle              -- recovered-to BrnVehicleDriver.cpp but NOT bodied
-//       there; the driver-controls dispatch is its own wave.
+//   VehicleDriver::UpdateVehicle @0x825D7290 (219) -- ⭐ BODIED 2026-08-11 in BrnVehicleDriver.cpp;
+//       the stub AND its (wrong) "driver-controls dispatch" description are gone. See the
+//       deletion note below.
 //   DebugComponent::Update                    -- recovered-to B5PhysicsHandlingDebugComponent.cpp
 //       (unmounted TU, body not reconstructed).
 //   PTM::UpdateTrafficPhysics @0x82644418     -- .ida-exports HOLE, RE-CONFIRMED 2026-08-10 (no
@@ -91,7 +92,7 @@ namespace Vehicle
         Vector3 /*lCollisionNormal*/, Vector3 /*lContactPoint*/,
         BrnPhysics::Vehicle::VehicleOutputRequestInterface* /*lpRequestOutputInterface*/,
         VehicleManagerOutputInterface* /*lpManagerOutputInterface*/,
-        BrnGameState::GameStateModuleIO::VehicleOutputInterface* /*lpVehicleOutputInterface*/,
+        BrnPhysics::Vehicle::VehicleOutputInterface* /*lpVehicleOutputInterface*/,
         BrnPhysics::Deformation::DeformationInputInterface* /*lpDeformationInterface*/,
         BrnGameState::ETakedownType /*leTakedownType*/)
     {
@@ -190,19 +191,38 @@ namespace Vehicle
                           "reconstruct from X360 @0x825C7BB8 (187 insns; AttribSys walk)");
     }
 
-    // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet. The per-car driver
-    // dispatch (BrnVehicleDriver.h declares it; BrnVehicleDriver.cpp does not body it).
-    void VehicleDriver::UpdateVehicle(VehiclePhysics*)
-    {
-        CGS_ASSERT(false, "VehicleDriver::UpdateVehicle: link stub -- the driver-type dispatch "
-                          "into the four Update(controls) overloads; its own wave");
-    }
+    // ⭐⭐ 2026-08-11 (driving-path wave): the VehicleDriver::UpdateVehicle @0x825D7290 LINK STUB
+    // THAT STOOD HERE IS DELETED -- the real 219-instruction body is in BrnVehicleDriver.cpp.
+    // ⚠️ AND ITS COMMENT WAS WRONG, which is worth keeping on the record. It said "the driver-type
+    // dispatch into the four Update(controls) overloads". The asm contains no meDriverType read, no
+    // switch, and no call to any Update overload: the function is the network catch-up SLERP
+    // APPLIER -- gated on mi8NumOfInterpSteps (+0xD4) > 0, it concatenates mSlerpTransform (+0x90)
+    // into the vehicle's own mTransform (unless the vehicle is frozen), runs the two
+    // "Slerped race car transform is not normalised/orthogonal" dev tripwires
+    // (BrnVehicleDriver.cpp:219/:220) and decrements the counter. Construct seeds the counter to 0,
+    // so it is a NO-OP on every non-networked frame -- the stub's own claim that it was
+    // "per-LIVE-car" gated was right for the wrong reason.
+    // LESSON: a stub's prose is a HYPOTHESIS, not a finding. This one had been quoted forward
+    // through three banners without anyone reading the 219 instructions it was describing.
 
     // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
+    // ⚠️ DEGRADED trap -> log-once gate (conductor, 2026-08-11, create-drain wave): the hard
+    // CGS_ASSERT(false) was written when no car existed and the stub was unreachable. The create
+    // drain went live this wave, so this is now reached PER LIVE CAR PER FRAME -- the hard trap
+    // halted the boot once a second (measured). Loudness preserved via the standard one-shot log.
+    // Reconstruct with the B5PhysicsHandlingDebugComponent pass and DELETE this gate.
     void DebugComponent::Update(f32)
     {
-        CGS_ASSERT(false, "BrnPhysics::Vehicle::DebugComponent::Update: link stub -- per-car debug "
-                          "tick; reconstruct with the B5PhysicsHandlingDebugComponent pass");
+        static bool sbLogged = false;
+        if (!sbLogged)
+        {
+            sbLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint
+                    << "conductor gate: BrnPhysics::Vehicle::DebugComponent::Update -- per-car "
+                       "debug tick inert (reconstruct with the B5PhysicsHandlingDebugComponent "
+                       "pass) [FLAG PC boot gate]\n";
+        }
     }
 
     // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet (.ida-exports hole;

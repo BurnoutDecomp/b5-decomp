@@ -138,13 +138,14 @@ namespace Vehicle
             const u32 luEntityId =
                 static_cast<u32>(maRaceCarHandlingBodyIDs[leRaceCarIndex] >> 32);
 
-            // ⚠️ FLAG (namespace fork, cast at the one seam): SetRaceCarCrashing's committed
-            // declaration types its output-interface parameter
-            // BrnGameState::GameStateModuleIO::VehicleOutputInterface* while the DWARF
-            // (BrnVehicleManager.h:1218) and this function's own DWARF signature use the
-            // BrnPhysics::Vehicle::VehicleOutputInterface this TU carries. The takedown
-            // chain's mount wave owns reconciling the declaration; this cast documents the
-            // seam instead of forking the declaration further.
+            // ⭐ CAST RETIRED 2026-08-11 (consolidation wave). SetRaceCarCrashing's committed
+            // declaration used to type its output-interface parameter
+            // BrnGameState::GameStateModuleIO::VehicleOutputInterface* -- a fork type that does
+            // not exist in the DWARF at all -- while the DWARF (BrnVehicleManager.h:1218) and
+            // this function's own signature use the BrnPhysics::Vehicle::VehicleOutputInterface
+            // this TU carries (mangle `...PNS0_22VehicleOutputInterfaceE...`, NS0_ ==
+            // BrnPhysics::Vehicle). The declaration is re-typed, so the pointer passes straight
+            // through.
             // The manager decl's EntityId is BrnCommonTypes' packed-id POD (`{ u32 muValue; }`).
             EntityId lVictimId;
             lVictimId.muValue = luEntityId;
@@ -155,8 +156,7 @@ namespace Vehicle
                 Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },
                 lpRequestOutputInterface,
                 lpVehicleManagerOutputInterface,
-                reinterpret_cast<BrnGameState::GameStateModuleIO::VehicleOutputInterface*>(
-                    lpVehicleOutputInterface),
+                lpVehicleOutputInterface,
                 lpDeformationInterface,
                 static_cast<BrnGameState::ETakedownType>(-1));               // li r10, -1
         }
