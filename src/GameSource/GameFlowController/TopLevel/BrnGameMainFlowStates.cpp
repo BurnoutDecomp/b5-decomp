@@ -380,6 +380,27 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
             lpGameModule->GetTimerStatusInterface()));
     lpWorldInput->UnlockForWrite();
 
+    // ⭐⭐ THE CONTROLLER -> WORLD BRIDGE (X360 BridgeControllerToWorld @0x823CD890), first of
+    // DoUpdate_World's five source bridges and the ONLY producer of the world input's
+    // PlayerVehicleControls -- the block BridgeInputToEntityModules hands the race car as
+    // the player's steering/throttle. Until this line (driving-input wave 2026-08-11) the
+    // block stayed Construct-cleared every frame and the player car was deaf to input.
+    // FLAG PC placement: staged here for exactly the reason the game-state block below
+    // gives -- DoUpdate_World is reconstructed but reached from nowhere; this function is
+    // the live world drive, and both sites carry the same call and move together. The pad
+    // fill (InputPadsPC::UpdatePlayer0) ran earlier this sub-step under GameMain's GUI
+    // staging, so the buffer carries this frame's controls; the console's DoUpdate locks
+    // all five sources in one LockBuffersForIO, reproduced here as the per-source bracket
+    // this file already uses for the game-state leg.
+    {
+        CgsInput::InputIO::OutputBuffer* lpInputOutput = lpGameModule->GetPcInputOutputBuffer();
+        lpInputOutput->LockForRead();
+        lpWorldInput->LockForWrite();
+        lpGameModule->BridgeControllerToWorld(lpWorldInput, lpInputOutput);
+        lpWorldInput->UnlockForWrite();
+        lpInputOutput->UnlockForRead();
+    }
+
     // ⭐ THE OUTPUT BUFFER IS THE GAME MODULE'S, not this function's (2026-08-01, camera wave).
     // The console's DoUpdate @0x823F0AF8 creates ONE BrnWorldIO::UpdateOutputBuffer per
     // sub-step and threads it through DoUpdate_World, DoUpdate_Director and every other leg.

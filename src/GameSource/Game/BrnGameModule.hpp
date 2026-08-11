@@ -232,6 +232,10 @@ namespace BrnGame
         // Fold into the real DoUpdate cascade when the module scheduler moves under the game
         // module's own spines.
         BrnWorldIO::UpdateOutputBuffer* GetWorldUpdateOutputBuffer() { return mpWorldUpdateOutputBuffer; }
+        // The PC pad fill's output buffer (driving-input wave 2026-08-11): the live world
+        // drive (DriveWorldUpdateFrame) needs it to run BridgeControllerToWorld, exactly as
+        // GetWorldUpdateOutputBuffer above serves the same caller.
+        CgsInput::InputIO::OutputBuffer* GetPcInputOutputBuffer() { return &mPcInputOutputBuffer; }
 
         enum EGameUpdateStage   // h:248
         {

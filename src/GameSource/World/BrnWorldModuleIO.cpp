@@ -439,6 +439,16 @@ void UpdateInputBuffer::SetPlayerVehicleControls(const PlayerVehicleControls* lp
     std::memcpy(&mPlayerVehicleControls, lpControls, sizeof(PlayerVehicleControls));
 }
 
+// The read twin (X360 read-lock accessor): the controls block Update copies into the
+// world spine. Homed here beside its writer (driving-input wave 2026-08-11; retires
+// the WorldLinkStubs inert null-return that kept every frame's copy skipped and the
+// player car deaf to input).
+const PlayerVehicleControls* UpdateInputBuffer::GetPlayerVehicleControls() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mPlayerVehicleControls;
+}
+
 // ---- active payback ---------------------------------------------------------
 
 // X360 0x823B4F50 (:317 W) -- set the active payback type.
@@ -493,6 +503,62 @@ const RaceCarRaceDistanceInterface* UpdateInputBuffer::GetRaceCarRaceDistanceInt
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
     return &mRaceCarRaceDistanceInterface;
+}
+
+// ---- ADDITIVE GROW (2026-08-11, WorldBridgeInputToEntityModules mount) --------
+// The last four consumer-side const getters BridgeInputToEntityModules @0x827ADF88
+// drains the buffer through. Same read-lock shape as every sibling above; each was
+// declaration-only and each was a measured unresolved external of that bridge's obj.
+
+// X360 0x827A40E8 (:316 R) -- const active-payback-type read.
+// Body: `lbz r11,0(r28) / extrwi r11,r11,1,27` == read-lock bit 4 ("Not locked for
+// reading", FireAssert line 0x13C == 316), then `lis r11,4 / ori r11,r11,0x8A34 /
+// lwzx r3,r28,r11` == the 4-byte load at this+0x48A34 (297524) == meActivePaybackType
+// (the slot UpdateInputBuffer::Construct seeds to the literal 3).
+BrnNetwork::EPaybackType UpdateInputBuffer::GetActivePaybackType() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return meActivePaybackType;
+}
+
+// X360 0x827A4198 (:319 R) -- const active-payback-aggressor read.
+// Identical shape (FireAssert line 0x13F == 319); the tail loads this+0x48A38 (297528)
+// == meActivePaybackAggressor, i.e. the word right after the payback type.
+// (The declaration comment in the header cited the PS3 DWARF line :318; the X360 body's
+// own baked line is 319 -- the X360 header is one line further on for this decl.)
+EActiveRaceCarIndex UpdateInputBuffer::GetActivePaybackAggressor() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return meActivePaybackAggressor;
+}
+
+// X360 0x827A39A8 (:278 R, IDA leaves it sub_827A39A8) -- const trigger-query queue
+// accessor. Read-lock bit 4 ("Not locked for reading", FireAssert line 278 citing THIS
+// header), then `return this + 293412` == &mTriggerQueryInputInterface (the same
+// VariableEventQueue<4096,16> UpdateInputBuffer::Construct brings up at +293412 and
+// AppendTriggerQueryInputInterface @0x823C8CF0 merges into).
+const TriggerQueryInputInterface* UpdateInputBuffer::GetTriggerQueryInputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mTriggerQueryInputInterface;
+}
+
+// X360 0x827A3D98 (:300 R) -- const online-scoring accessor (+322384).
+// [EVIDENCE NOTE] 0x827A3D98 is a HOLE in the .ida-exports dump (no per-function json;
+// the bridge's xref table names it only as sub_827A3D98). It is pinned three ways:
+//   * it is the exact midpoint of the uniform 0xA8-stride run of this buffer's read-lock
+//     accessors -- 0x827A3CF0 GetScoringInterface (:297) + 0xA8 == 0x827A3D98,
+//     + 0xA8 == 0x827A3E40 GetControllerActive (:303);
+//   * :300 is the only remaining const getter slot in that run, and it pairs with
+//     SetOnlineScoringInterface (:301, X360 0x823B4BE0, member +322384);
+//   * BridgeInputToEntityModules feeds its result straight into
+//     RaceCarEntityModuleIO::InputBuffer_PrePhysics::SetOnlineScoringInterface
+//     @0x8279DCF8, whose body memcpys 164 bytes -- exactly this member's size.
+// Modelled with the family's read-lock shape; no offset is hardcoded (returns &member).
+const OnlineScoringInterface* UpdateInputBuffer::GetOnlineScoringInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mOnlineScoringInterface;
 }
 
 // X360 0x827A3510 (:255 R, IDA "Upda") -- const AI race-route-request-queue accessor (+322240).
