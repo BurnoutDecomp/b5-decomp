@@ -339,10 +339,10 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
     AptCharacterAnimation* pCharAnim =
         reinterpret_cast<AptCharacterAnimation*>(static_cast<char*>(pRoot) + luHdrSize);
 
-    // x64 `*(v10+80) = 0`: zero the def's parsed-value accumulator before the resolve walk
-    // (every _parseStream inside Fixup threads ++s into it).
-    if (liPtrSize == 8)
-        pCharAnim->mnParsedValueCount = 0;
+    // (The XB1's `mov qword ptr [r10+50h], 0` appears in ITS CompleteLoad only because that
+    // build INLINED Resolve into it. The X360 CompleteLoad @0x82AFF9E8 has no such store --
+    // it is the first thing Resolve @0x82AFF5E0 does, and that is where we keep it, so the
+    // def+0x50 accumulator has exactly one writer.)
 
     // Resolve the (serialised) movie root against the load base. a5 (pBlock == the
     // AptDataHeader) is threaded through Resolve -> Fixup faithfully.

@@ -90,7 +90,14 @@ struct AptCharacterAnimation
     AptCharacter** mpCharacterTable;  // +0x20  console [4]  charTable
     int32_t        mnScreenW;         // +0x28  console [5]  screen width
     int32_t        mnScreenH;         // +0x2C              screen height
-    int32_t        mnResolveScratch;  // +0x30  console [6]/[12]  ms / the AptMovie::resolve scratch (Resolve clears it)
+    // +0x30 -- the AUTHORED frame period in milliseconds; the SAME slot AptFile.h's
+    // AptMovieData view names mnMillisecondsPerFrame (root+0x50), and the only thing
+    // AptUpdateRunTargetFrames paces the timeline from. MEASURED over all 290 shipped
+    // GUIAPT bundles: the value is only ever 16 / 33 / 83 (60 / 30 / 12 fps) and NEVER 0
+    // -- authored data, not scratch. (It was mis-named mnResolveScratch and cleared by
+    // Resolve: the console's `*(a1+48)=0` is def+0x30 on the 4-BYTE def -- the dword after
+    // initList@+0x2C -- which widens to def+0x50 here. See mnParsedValueCount below.)
+    int32_t        mnMillisecondsPerFrame;  // +0x30  console [7] @def+0x1C
     int32_t        mnImportCount;     // +0x34  console [8]  importCount
     AptImportEntry* mpImportTable;    // +0x38  console [9]  importTable (stride 0x20)
     int32_t        mnInitListCount;   // +0x40  console [10] initCount
@@ -184,3 +191,8 @@ static_assert(offsetof(AptCharacterAnimation, mnImportCount)    == 0x34, "AptCha
 static_assert(offsetof(AptCharacterAnimation, mpImportTable)    == 0x38, "AptCharacterAnimation.importTable@0x38");
 static_assert(offsetof(AptCharacterAnimation, mnInitListCount)  == 0x40, "AptCharacterAnimation.initCount@0x40");
 static_assert(offsetof(AptCharacterAnimation, mpInitList)       == 0x48, "AptCharacterAnimation.initList@0x48");
+// The two slots the console/x64 offset widening used to collide (see the members above):
+// def+0x30 is the authored frame period, def+0x50 the resolve walk's accumulator -- the
+// XB1 CompleteLoad sub_1408348B0 clears ONLY the latter (`mov qword ptr [r10+50h], 0`).
+static_assert(offsetof(AptCharacterAnimation, mnMillisecondsPerFrame) == 0x30, "AptCharacterAnimation.msPerFrame@0x30");
+static_assert(offsetof(AptCharacterAnimation, mnParsedValueCount)     == 0x50, "AptCharacterAnimation.parsedValues@0x50");
