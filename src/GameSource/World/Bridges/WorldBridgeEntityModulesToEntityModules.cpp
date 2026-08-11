@@ -12,18 +12,6 @@
 namespace WorldModule
 {
 
-namespace
-{
-    // WorldModule (the X360 r3 context) member offsets this bridge writes through.
-    // FLAG: the WorldModule class layout is not reconstructed; the two members are
-    // accessed at their X360 byte offsets pending the module's own home.
-    const u32 KU_WORLD_MODULE_PLAYER_ACTIVE_RACE_CAR_INDEX_OFFSET = 6167272; // 0x5E1AE8 -- EActiveRaceCarIndex
-    const u32 KU_WORLD_MODULE_RACE_CAR_TYPE_ARRAY_OFFSET          = 6167280; // 0x5E1AF0 -- s32[8] per active-car type
-    // FLAG: the per-car "type" enum's home is not reconstructed; the X360 stores the
-    // literal 2 for a rival car (DWARF names the gate IsRaceCarRival()).
-    const s32 KI_WORLD_MODULE_RACE_CAR_TYPE_RIVAL = 2;
-}
-
 // ⛔ MOVED OUT 2026-08-01 (car-select hand-off wave): BridgeRaceCarModuleToWorldModule_PreScene
 // @0x827A52B0 now lives in its own TU, GameSource/World/Bridges/WorldBridgeRaceCarToWorldModule.cpp,
 // so it can be MOUNTED. This TU cannot be: its two remaining bridges reference three IO accessors
@@ -31,7 +19,14 @@ namespace
 //   TriggerEntityModuleIO::InputBuffer_PreScene::GetInputInterface,
 //   BrnTrafficIO::OutputBuffer_PostScene::GetTrafficToRaceCarInterface_PostScene,
 //   BrnTrafficIO::OutputBuffer_PreScene::GetTriggerManagementInputInterface),
-// and the moved bridge needs none of them. Fold it back here when they land.
+// and the moved bridge needs none of them. Fold it back here when they land -- as the
+// WorldModule METHOD it now is, NOT as a namespace function.
+//
+// ⛔ ITS X360-OFFSET CONSTANTS ARE DELETED WITH IT (2026-08-11). They read
+//   KU_WORLD_MODULE_PLAYER_ACTIVE_RACE_CAR_INDEX_OFFSET = 6167272 / ..._TYPE_ARRAY = 6167280,
+// which are the X360 offsets of meLocalPlayerActiveRaceCarIndex / maeCarControls. On the x64
+// PC layout those members sit at 6234776 / 6234784 (compile-time offsetof probe), so the
+// constants were a live corruption, not a stopgap. Do not reintroduce them here.
 
 // @ 0x827A51F0 -- WorldBridgeEntityModulesToEntityModules.cpp:69. Latch the traffic
 // module's post-scene traffic->race-car interface into the race-car module's pre-physics
