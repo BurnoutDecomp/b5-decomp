@@ -637,6 +637,14 @@ namespace Vehicle
         // ⭐ THE +0x1050 .w SEED IS NOW GROUND TRUTH: `unk_8208FB18` was read out of the ARTIST
         // database by the conductor's targeted IDA export (2026-08-11, same day) -- 0x3F800000
         // == exactly 1.0f, confirming the role-derived stand-in. See the .cpp.
+        // ⭐⭐ AND IT WAS DERIVED TWICE. The sibling wave reached the same body independently by
+        // cross-reading the PS3 build of the same source (export 0x735DEC, 424 insns) store for
+        // store and lane for lane -- X360 `vrlimi128` masks 8/4/2/1 against PS3
+        // `VectorPermuteConstant<4,1,2,3>/<0,5,2,3>/<0,1,6,3>/<0,1,2,7>`. The two agree on every
+        // store, every callee and every lane. What the PS3 added: the eighth callee's NAME
+        // (`sub_8262E140` == VehiclePhysics::SetAttributes, exported at 0x735D20), PS3 names for
+        // four of the five rodata constants, and the fact that the two `std` at +0x1158/+0x1220
+        // are `BitArray<N>::Prepare()` calls rather than raw zero stores. All folded into the body.
         //
         // ⚠️⚠️ ODR FORK FLAGGED, NOT FIXED (found by this correction). The PS3 mangle spells the
         // AABB parameter `RKN12CgsGeometric14AxisAlignedBoxE` == `const CgsGeometric::
@@ -907,10 +915,21 @@ namespace Vehicle
         //   * its callee set (SimpleVehicleAttribs::SetupAttribs, SimpleVehiclePhysics::
         //     SetAttributes, Engine::Prepare, VehiclePhysics::SetupSuspension) is the 0-arg
         //     SetAttributes' tail with the attribs pointer supplied instead of chased.
-        // Its first three statements are the INLINED SimpleVehiclePhysics::SetAttributes(
-        // VehicleAttribs*, const Vector3*, const f32*) -- the same block the committed
-        // SimpleVehiclePhysics::Prepare spells flat (its :299 assert); spelled flat here too, for
-        // the same reason (that overload has no out-of-line emission on either build).
+        // ⭐⭐ AND THE IDENTIFICATION IS NOW BY SYMBOL, NOT BY ELIMINATION (2026-08-11 merge). The
+        // PS3 build EXPORTS IT NAMED at 0x735D20 -- `_ZN10BrnPhysics7Vehicle14VehiclePhysics13Set`
+        // `AttributesEPNS0_14VehicleAttribsEPKN2rw4math3vpu7Vector3EPKf` -- and the PS3 body of
+        // VehiclePhysics::Prepare @0x735DEC calls it by that name with `this + 2704 ==
+        // &mPlayerVehicleAttribs`, exactly the `addi r4,r31,0xAA0` the X360 passes. The three
+        // circumstantial facts above are corroboration now.
+        // Its first three statements are the console-INLINED SimpleVehiclePhysics::SetAttributes(
+        // VehicleAttribs*, const Vector3*, const f32*). ⭐ THAT OVERLOAD IS NO LONGER DECLARE-ONLY:
+        // it is bodied in BrnSimpleVehiclePhysics.cpp (recovered from this inline plus the matching
+        // one in SimpleVehiclePhysics::Prepare, PS3-attested at 0x734B10), so the body below CALLS
+        // it instead of spelling the block flat -- the inlining-reversal this project's rules ask
+        // for, and it closes a declared-but-undefined symbol no per-TU gate could see.
+        // ⚠️ The 2-arg base overload really is called TWICE (0x8262E1A0 inside the inlined 3-arg,
+        // then 0x8262E1D8 after mpAttribs is re-seated) -- the same doubled-call shape
+        // SimpleVehiclePhysics::Prepare already carries for SetupAttribs. Not a transcription slip.
         bool SetAttributes(VehicleAttribs* lpAttribs, const Vector3* lpaWheelPositions,
                            const f32* lpafWheelRadii);
 

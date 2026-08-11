@@ -134,6 +134,24 @@ public:
     // X360 bodies inline. Header-inline, matching the X360 inlined bit math; zero-risk additive
     // (no layout change, no behaviour change to existing IsBitSet/SetBit/UnSetBit users).
 
+    // ADDITIVE GROW (VehiclePhysics::Prepare wave, 2026-08-11). `Prepare()` is a REAL method of
+    // this template, not a synonym invented here: the PS3 build exports it out of line for at
+    // least eight instantiations, mangled -- BitArray<1u>, <2u>, <3u>, <4u>, <8u>, <28u>, <46u>,
+    // <50u>, <64u> all carry `_ZN13CgsContainers8BitArrayILj..EE7PrepareEv`. The X360 inlines
+    // every one of them; VehiclePhysics::Prepare @0x82638080/84 is two such inlines side by side
+    // (`std r30,0x1158` / `std r30,0x1220` -- one 64-bit zero per single-field array), and the
+    // PS3 build of that same source calls `CgsContainers::BitArray<4u>::Prepare(this+0x1148)`
+    // and its BitArray<8u> sibling at the matching two offsets. Same clearing semantics as
+    // UnSetAll above; kept as a separate name because the console source distinguishes them and
+    // the call sites should read the way the console source reads.
+    void Prepare()
+    {
+        for (u32 luField = 0; luField < kuNumberOfBitFields; ++luField)
+        {
+            maxBits[luField] = 0;
+        }
+    }
+
     // Clear every bit (the X360 `*this = 0` of the single-field BitArray<16>).
     void UnSetAll()
     {

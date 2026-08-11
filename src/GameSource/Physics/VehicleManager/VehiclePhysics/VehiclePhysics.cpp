@@ -5066,28 +5066,40 @@ namespace Vehicle
     //   0x8262E1F0  bl VehiclePhysics::SetupSuspension
     //   0x8262E1F4  li r3, 1
     //
-    // ⚠️ The first three statements are the INLINED
-    // `SimpleVehiclePhysics::SetAttributes(VehicleAttribs*, const Vector3*, const f32*)` -- the same
-    // block the committed SimpleVehiclePhysics::Prepare spells flat around its own :299 assert. That
-    // overload has no out-of-line emission on either build, so it is spelled flat here too rather
-    // than calling a symbol nothing defines. (Its declaration exists at
-    // BrnSimpleVehiclePhysics.h:267 and stays declare-only.)
+    // ⭐⭐ THE IDENTIFICATION IS NO LONGER CIRCUMSTANTIAL -- CONFIRMED 2026-08-11 by the sibling
+    // wave: the PS3 build EXPORTS THIS FUNCTION NAMED at 0x735D20
+    // (`_ZN10BrnPhysics7Vehicle14VehiclePhysics13SetAttributesEPNS0_14VehicleAttribsE`
+    // `PKN2rw4math3vpu7Vector3EPKf` -- verified in references/DecFIGS/decfigs_func_files.json),
+    // and the PS3 body of VehiclePhysics::Prepare @0x735DEC calls it BY THAT NAME with
+    // `this + 2704 == &mPlayerVehicleAttribs` -- exactly the `addi r4,r31,0xAA0` the X360 passes.
+    // The three circumstantial facts above still hold; they are corroboration now, not the proof.
+    //
+    // ⚠️ The first three statements are the console-INLINED
+    // `SimpleVehiclePhysics::SetAttributes(VehicleAttribs*, const Vector3*, const f32*)`. That
+    // overload was DECLARE-ONLY when this body first landed, so it was spelled flat here. It is no
+    // longer: the sibling wave bodied it (BrnSimpleVehiclePhysics.cpp, recovered from this very
+    // inline plus the matching one in SimpleVehiclePhysics::Prepare, PS3-attested at 0x734B10), so
+    // the inline is REVERSED back into the call the original source wrote. That is this project's
+    // own de-optimization rule, and it closes a declared-but-undefined symbol no per-TU gate could
+    // see (the [[shadowing-redeclarations]] landmine).
     // ==============================================================================================
     bool VehiclePhysics::SetAttributes(VehicleAttribs* lpAttribs,
                                        const Vector3* lpaWheelPositions,
                                        const f32* lpafWheelRadii)
     {
-        // ---- the inlined SimpleVehiclePhysics::SetAttributes(attribs, positions, radii) --------
-        CGS_ASSERT(lpAttribs != 0, "lpAttribs");                 // BrnSimpleVehiclePhysics.cpp:299
-        mSimpleAttribs.SetupAttribs(lpAttribs);                  // bl @0x8262E190
-        SimpleVehiclePhysics::SetAttributes(lpaWheelPositions, lpafWheelRadii);   // bl @0x8262E1A0
+        // ---- the base 3-arg overload, which the console INLINES here (0x8262E16C..0x8262E1A0):
+        //      the :299 assert, SimpleVehicleAttribs::SetupAttribs @0x8262E190, then the 2-arg
+        //      SetAttributes @0x8262E1A0. Reached BY NAME now that it has a body of its own.
+        SimpleVehiclePhysics::SetAttributes(lpAttribs, lpaWheelPositions, lpafWheelRadii);
 
         // ---- this function's own body ----------------------------------------------------------
-        CGS_ASSERT(lpAttribs != 0, "lpAttribs");                 // VehiclePhysics.cpp:410
+        CGS_ASSERT(lpAttribs != 0, "lpAttribs");                 // VehiclePhysics.cpp:410 (0x19A)
         mpAttribs = lpAttribs;                                   // stw r30, 0x720(r31)
         SimpleVehiclePhysics::SetAttributes(lpaWheelPositions, lpafWheelRadii);   // bl @0x8262E1D8
 
-        mEngine.Prepare(&mpAttribs->mEngineAttribs);             // bl @0x8262E1E8 (mpAttribs re-read)
+        mEngine.Prepare(&mpAttribs->mEngineAttribs);             // bl @0x8262E1E8 -- the console
+                                                                 // RE-READS mpAttribs from +0x720
+                                                                 // rather than reusing r30
         SetupSuspension();                                       // bl @0x8262E1F0
         return true;                                             // li r3, 1
     }
@@ -5167,6 +5179,66 @@ namespace Vehicle
     //   +0x13DC = 3            meCarType
     //   +0xFD0  = 1.0f splat   mvfWheelFrictionLinearMultiplier (stvx128 of the same v13)
     //   li r3, 1               returns true
+    //
+    // ---- ⭐⭐ CROSS-READ AGAINST THE PS3 BUILD OF THE SAME SOURCE (folded in at the 2026-08-11
+    //      merge, from the sibling wave that derived this body independently) ------------------
+    // The PS3 twin is export 0x735DEC, 424 insns, symbolled. It was read store for store, lane
+    // for lane, against the X360 stream above and AGREES on every store, every lane and every
+    // callee. Four things it settled that the X360 alone could not:
+    //   * `sub_8262E140` is `VehiclePhysics::SetAttributes` -- named in the PS3 export (0x735D20)
+    //     and called by that name from the PS3 Prepare. The X360-side identification above was
+    //     by elimination; this is by symbol.
+    //   * the `bl Reset` really does CONSUME the incoming v1 (PS3 spells `Reset(_R19, v104)`),
+    //     so unlike the SimpleVehiclePhysics::Reset case this is NOT a dropped-argument trap.
+    //     ✅ RE-ARBITRATED AGAINST THE X360 ASM AT THE MERGE and it holds: `vmr128 v1, v124`
+    //     @0x82637FA4 sits immediately before `bl Reset` @0x82637FB0, and v124 is the incoming
+    //     v1 saved at 0x82637C98 -- i.e. lLinearVelocity. `VehiclePhysics::Reset(Vector3)` is
+    //     itself a PS3 symbol (`...VehiclePhysics5ResetEN2rw4math3vpu7Vector3E`), distinct from
+    //     the 0-arg `...5ResetEv`. Both bodies already called the Vector3 overload; no divergence.
+    //   * `std r30,0x1158` / `std r30,0x1220` are `CgsContainers::BitArray<N>::Prepare()` calls,
+    //     not raw `= 0`: the PS3 emits `BitArray<4u>::Prepare(this+0x1148)` and its BitArray<8u>
+    //     sibling at the matching (Δ = -0x10) offsets. ⭐ CORROBORATED HERE INDEPENDENTLY: this
+    //     class declares KU_MAX_AIR_RAMS == 4 and KU_MAX_SPINS == 8, so the two instantiations
+    //     the PS3 names are exactly mUsedAirRams and mUsedSpins. `Prepare()` is a real DWARF
+    //     method of the template (11 instantiations carry `..EE7PrepareEv` out of line in the
+    //     PS3 export); `UnSetAll()` is DWARF-declared too but is inlined at every site, so the
+    //     name the console source used HERE is Prepare(). Changed to match -- same semantics
+    //     (one 64-bit zero per single-field array), console-attested name.
+    //   * FOUR of the five rodata slots have real PS3 NAMES:
+    //     KF_DEFAULT_PROP_SPEED_MAINTAIN_ALONG_Z / _ALONG_VEL, KF_WALL_CONTACT_TIME_SECONDS and
+    //     KF_DEFAULT_SOLVE_PENETRATION_WEIGHT_FACTOR -- each landing on the lane whose own name
+    //     matches it (`..._SolvePenetrationWeightFactor` .w, `..._SecondsSinceLastWallContact`
+    //     .w). ✅ All four verified present in references/DecFIGS at the merge; adopted below in
+    //     place of the role-derived names this body first carried.
+    //
+    // ---- THE CONSTANTS, READ FROM THE IMAGE (x360rd), not guessed ----------------------------
+    //   flt_82001CC0 = 0x00000000 = 0.0f     unk_8208FADC = 0x3ECCCCCD = 0.4f
+    //   unk_8208FAE4 = 0xBDCCCCCD = -0.1f    unk_8208FAE8 = 0x3F800000 = 1.0f
+    //   unk_8208FB18 = 0x3F800000 = 1.0f
+    // The same read returns 0x8208FB0C == 0.035f, which is the analytic-seat constant this file
+    // already homes -- an in-band calibration check of the reader on this very rodata page.
+    // unk_8208FAE4/E8 are the SAME two slots VehiclePhysics::Reset already seeds into the same two
+    // lanes (see Reset above), and unk_8208FADC is the same slot HackedResetAndFlyAround already
+    // homes as KF_WALL_CONTACT_RESEED. Three independent prior witnesses, no new guessing.
+    //
+    // ⚠️ THE SEED BLOCK LEGITIMATELY REPEATS WORK Reset JUST DID (both seed mSlamEffect,
+    // mShuntEffect, the air-ram/spin allocators and the +0x1050 pair). That is not a
+    // transcription error and it is not a scheduling artifact: the redundancy is present in the
+    // PS3 build too, and it is the same shape SimpleVehiclePhysics::Prepare already carries
+    // (it clears mbCrashing/mbStartedDeforming, and this function clears them AGAIN at
+    // 0x82638088/8C). Reproduced as shipped.
+    //
+    // ⚠️ mLastLinearVelocity (+0x13B0) IS WRITTEN TWICE -- zeroed at 0x826380D8, then assigned
+    // lLinearVelocity at 0x82638120, both `stvx128 ... r0, r5` with r5 == this+0x13B0. Checked
+    // rather than "optimised away": the PS3 emits BOTH stores as well (`stvx v26,this,r4` then
+    // `stvx v25,this,r4`, r4 == 5024 == its own mLastLinearVelocity), so the dead first store is
+    // a real source statement on two compilers. Kept.
+    //
+    // ⚠️ ONE PS3/X360 DISAGREEMENT, and the X360 wins. Every byte seed maps between the builds at
+    // a clean Δ = -0x10, except meDriverType: X360 `stw r30,0x10D4`, PS3 `*(this+0x10C0)` -- Δ =
+    // -0x14. So BrnPlayerDriverControls differs by four bytes between the two builds ahead of
+    // that field, which this tree's own BrnVehicleDriverControls.h already records (the X360's
+    // THIRTEENTH control float at +0x34 pushes meDriverType from +0x40 to +0x44). Reached BY NAME.
     // ==============================================================================================
     bool VehiclePhysics::Prepare(Matrix44Affine lTransform, Vector3 lLinearVelocity,
                                  Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset,
@@ -5174,24 +5246,32 @@ namespace Vehicle
                                  VehicleAttribs* lpAttribs, const Vector3* lpaWheelPositions,
                                  const f32* lpafWheelRadii)
     {
-        // ⭐ VALUE CONFIRMED BY IMAGE READ 2026-08-11 (same-day follow-up to the flag that stood
-        // here). The conductor's targeted IDA export over BURNOUT_X360_ARTIST.XEX.i64 (the
-        // b53e2523 technique, run for the RaceCarPhysics::Prepare hole) also dumped the sixteen
-        // bytes at 0x8208FB18: `3f800000 3e800000 3e19999a c1200000` -- the first big-endian
-        // word is 0x3F800000 == exactly 1.0f. The role-derived stand-in the prepare-chain wave
-        // carried was correct; this is now GROUND TRUTH, not a guess.
-        static const f32 KF_SOLVE_PENETRATION_WEIGHT_FACTOR_SEED = 1.0f;  // unk_8208FB18 (READ: 0x3F800000)
-        // Already homed in this file, re-stated locally so the seeds read as seeds.
-        static const f32 KF_PROP_SPEED_MAINTAIN_ALONG_Z   = -0.1f;   // unk_8208FAE4
-        static const f32 KF_PROP_SPEED_MAINTAIN_ALONG_VEL =  1.0f;   // unk_8208FAE8
-        static const f32 KF_WALL_CONTACT_RESEED_ON_PREPARE = 0.4f;   // unk_8208FADC
+        // ⭐ THE NAMES ARE PS3-ATTESTED, not role-derived (adopted at the 2026-08-11 merge from the
+        // sibling wave; all four verified present in references/DecFIGS). They replace the
+        // KF_..._SEED / KF_..._RESEED_ON_PREPARE stand-ins this body first carried.
+        // ⭐ AND THE VALUE OF THE FOURTH IS GROUND TRUTH, not inference: the conductor's targeted IDA
+        // export over BURNOUT_X360_ARTIST.XEX.i64 (the b53e2523 technique, run for the
+        // RaceCarPhysics::Prepare hole) dumped the sixteen bytes at 0x8208FB18 --
+        // `3f800000 3e800000 3e19999a c1200000` -- and the first big-endian word is 0x3F800000 ==
+        // exactly 1.0f. Two waves reached 1.0f from two directions; the image settles it.
+        static const f32 KF_DEFAULT_PROP_SPEED_MAINTAIN_ALONG_Z      = -0.1f;  // unk_8208FAE4
+        static const f32 KF_DEFAULT_PROP_SPEED_MAINTAIN_ALONG_VEL    =  1.0f;  // unk_8208FAE8
+        static const f32 KF_WALL_CONTACT_TIME_SECONDS                =  0.4f;  // unk_8208FADC
+        static const f32 KF_DEFAULT_SOLVE_PENETRATION_WEIGHT_FACTOR  =  1.0f;  // unk_8208FB18 (READ)
         static const s32 KI_PREPARE_CAR_TYPE = 3;                    // `li r8,3 ; stw r8,0x13DC`
+                                                                     // ⚠ FLAG: role-derived name --
+                                                                     // the 3 is asm-literal, the
+                                                                     // NAME has no console witness.
 
         CGS_ASSERT(lpAttribs != 0, "lpAttribs != NULL");                                    // :538
 
+        // Take a private copy of the incoming set and point the live pointer at it.
         mPlayerVehicleAttribs = *lpAttribs;          // bl VehicleAttribs::operator= @0x82637CF4
         mpAttribs             = &mPlayerVehicleAttribs;                     // stw r29, 0x720(r31)
 
+        // Every one of the nine parameters is forwarded UNCHANGED (r4/v1..v4/r5/r6/r7/r8 are all
+        // straight `mr`/`vmr128` moves out of the prologue saves at 0x82637CF8..0x82637D20). Note
+        // the base gets the CALLER's lpAttribs, not the copy -- checked, r6 == r25.
         SimpleVehiclePhysics::Prepare(lTransform, lLinearVelocity, lAngularVelocity,
                                       lHandlingBodyOffset, lHalfExtent, lrAABB,
                                       lpAttribs, lpaWheelPositions, lpafWheelRadii);   // @0x82637D24
@@ -5213,7 +5293,9 @@ namespace Vehicle
         mAIVehicleAttribs.SetupAttribsForAI(lpAttribs);                           // @0x82637F9C
         mAIVehicleAttribs.mAttribsKey = lpAttribs->mAttribsKey;   // ld 0x358(r25); std 0xA88(r31)
 
-        Reset(lLinearVelocity);                                                   // @0x82637FB0
+        Reset(lLinearVelocity);   // bl @0x82637FB0 -- `vmr128 v1,v124` @0x82637FA4 puts the
+                                  // incoming lLinearVelocity in v1; the Vector3 overload CONSUMES it
+                                  // (PS3 twin agrees: `Reset(_R19, v104)`). Not a dropped argument.
 
         // ---- the own-block seed tail ----------------------------------------------------------
         mvPlayerStatSpeed_PlayerStatStrength_PlayerStatControl_PlayerStatBoost.x = 1.0f;  // +0xFF0
@@ -5222,9 +5304,9 @@ namespace Vehicle
         mvPlayerStatSpeed_PlayerStatStrength_PlayerStatControl_PlayerStatBoost.w = 1.0f;
 
         mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.x
-            = KF_PROP_SPEED_MAINTAIN_ALONG_Z;                                          // +0x1050 .x
+            = KF_DEFAULT_PROP_SPEED_MAINTAIN_ALONG_Z;                                          // +0x1050 .x
         mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.y
-            = KF_PROP_SPEED_MAINTAIN_ALONG_VEL;                                        // +0x1050 .y
+            = KF_DEFAULT_PROP_SPEED_MAINTAIN_ALONG_VEL;                                        // +0x1050 .y
 
         // The same PARTIAL slam clear Reset does (mForce / mfDecay / mfRecoveryTime kept).
         mSlamEffect.mi8SlamNumber      = -1;                                           // +0x1128
@@ -5237,8 +5319,8 @@ namespace Vehicle
         mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y =  0.0f;                           // +0x1140 .y
         mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = -1.0f;                           // +0x1140 .x
 
-        mUsedAirRams.UnSetAll();                                                       // +0x1158
-        mUsedSpins.UnSetAll();                                                         // +0x1220
+        mUsedAirRams.Prepare();                                                         // +0x1158   <- BitArray<4u>::Prepare (PS3-named; see banner)
+        mUsedSpins.Prepare();                                                           // +0x1220   <- BitArray<8u>::Prepare
 
         mbCrashing                 = false;                                            // +0x710
         mbStartedDeforming         = false;                                            // +0x712
@@ -5250,7 +5332,7 @@ namespace Vehicle
         mbContactingWall           = false;                                            // +0x1362
 
         mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w
-            = KF_WALL_CONTACT_RESEED_ON_PREPARE;                                       // +0x1070 .w
+            = KF_WALL_CONTACT_TIME_SECONDS;                                       // +0x1070 .w
         mbOverrideSteering = false;                                                    // +0x135E
         mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.y
             = 0.0f;                                                                    // +0x1070 .y
@@ -5269,7 +5351,7 @@ namespace Vehicle
         mLastLinearVelocity = lLinearVelocity;                                         // +0x13B0
 
         mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.w
-            = KF_SOLVE_PENETRATION_WEIGHT_FACTOR_SEED;                                 // +0x1050 .w
+            = KF_DEFAULT_SOLVE_PENETRATION_WEIGHT_FACTOR;                                 // +0x1050 .w
 
         return true;                                                                   // li r3, 1
     }

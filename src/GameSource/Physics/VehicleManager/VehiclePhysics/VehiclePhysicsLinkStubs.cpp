@@ -94,15 +94,71 @@ namespace Vehicle
     // (VehiclePhysics.cpp:5181 area) and the console body early-returns on !mbHasAir, so the trap
     // fired once per driving car per frame the moment a car existed.
 
-
-    // ⭐⭐ THE VehiclePhysics::Prepare @0x82637C80 TRAP IS GONE -- BODIED (2026-08-11,
-    // VehiclePhysics.cpp, 306 insns). A LOUD one-shot trap for it stood here, installed by the
-    // create-drain wave that landed RaceCarPhysics::Prepare without its callee and used the
-    // resulting LNK2019 to hold the link closure. That wave was right about the shape of the
-    // problem -- this IS the only thing that seats mTransform / mHalfExtent / mSimpleAttribs on
-    // a race car, so every observable the campaign chases hangs off it -- and the other wave
-    // landed the real body the same day. Keeping both would be an LNK2005 and the trap would
-    // SHADOW a real function, so it is deleted, per this file's own standing rule.
+    // =============================================================================================
+    // ⭐⭐ THE TRAP THAT STOOD HERE IS GONE -- 2026-08-11 (the VehiclePhysics::Prepare wave).
+    // ⭐ DELETED TWICE, INDEPENDENTLY -- which is the point. The trap was installed by the wave
+    // that landed RaceCarPhysics::Prepare without its callee and used the resulting LNK2019 to
+    // hold the link closure; two different waves then landed the real body on the same day and
+    // both removed it. Keeping either copy would be an LNK2005 and would SHADOW a real function.
+    // `VehiclePhysics::Prepare` @0x82637C80 is BODIED in VehiclePhysics.cpp, read off the X360 asm
+    // and cross-read against the PS3 build of the same source (0x735DEC) store for store; the
+    // 3-arg `VehiclePhysics::SetAttributes` @0x8262E140 that used to be `sub_8262E140` landed with
+    // it, and so did the declared-but-undefined `SimpleVehiclePhysics::SetAttributes(VehicleAttribs*,
+    // const Vector3*, const f32*)` it calls. The census below is preserved because it is the record
+    // of how the blocker was found -- the LNK2019 in it is what NAMED the function.
+    //
+    // ⚠️⚠️ CORRECTED AT THE MERGE. The note that landed with this body said "nothing calls it at
+    // runtime yet: the only two callers are ProcessCreateEvents (a LOUD gate) and
+    // TrafficPhysics::PreparePhysical (an UNMOUNTED TU)". That was true in the wave that wrote it
+    // and is NOT true in this tree: VehicleManager::ProcessCreateEvents @0x82616770 is BODIED and
+    // MOUNTED (BrnVehicleManager_ProcessCreateEvents.cpp, in build_game_exe.bat), and it makes the
+    // vtable-slot-+0x30 call into RaceCarPhysics::Prepare, which forwards straight into this. ⇒
+    // THIS BODY IS LIVE ON THE CREATE PATH. TrafficPhysics::PreparePhysical @0x82639380 remains the
+    // one caller in an unmounted TU. Anything that lands here now runs on a real boot.
+    //
+    // ---- the census as it stood, for the record -------------------------------------------------
+    //
+    // RaceCarPhysics::Prepare @0x82639CB8 LANDED this wave (RaceCarPhysics.cpp, recovered from the
+    // PS3 export 0x73648C at the Δ=+16 member mapping this class's own table already establishes).
+    // Its FIRST statement forwards into VehiclePhysics::Prepare @0x82637C80, and the link
+    // immediately said what a hundred greps had not: nothing in this tree defines it.
+    //     RaceCarPhysics.obj : error LNK2019: unresolved external symbol
+    //       "public: bool VehiclePhysics::Prepare(Matrix44Affine, Vector3, Vector3, Vector3,
+    //        Vector3, AxisAlignedBox const&, VehicleAttribs*, Vector3 const*, float const*)"
+    // That LNK2019 is the point: last wave corrected this declaration from a five-parameter FORK to
+    // the DWARF's nine, and the fork's whole danger was that no per-TU gate could see it. The
+    // moment a real caller existed, the linker named it. Trap installed so the closure STAYS
+    // enforced while the body is recovered.
+    //
+    // ⭐ IT IS UNREACHABLE TODAY, and that is measured, not hoped: the only two callers are
+    // VehicleManager::ProcessCreateEvents @0x82616770 (a LOUD gate AT THE TIME; bodied and
+    // mounted since) and TrafficPhysics::PreparePhysical @0x82639380
+    // (in an UNMOUNTED TU). `grep -c` for either in the mounted set: zero live call sites.
+    //
+    // ⛔⛔ THE 306 INSTRUCTIONS ARE THE WHOLE REASON THE CAR IS NOT IN THE WORLD YET. This is the
+    // ONLY thing that seats mTransform / mHalfExtent / mSimpleAttribs on a race car, so every
+    // observable the campaign is chasing -- the cache sphere leaving the origin, the slot filling
+    // with batches, mbIsOnGround -- hangs off it. Read from @0x82637C80:
+    //     VehicleAttribs::operator=            @0x82637CF4   (the incoming attribs, by value)
+    //     mpAttribs = <the copy>               @0x82637D18   (`stw r29, 0x720(r31)`)
+    //     SimpleVehiclePhysics::Prepare        @0x82637D24   ⭐ BODIED (2026-08-11, 554 insns)
+    //     sub_8262E140                         @0x82637DC8   (the AttribSys handling re-stream)
+    //     VehicleAttribs::Construct            @0x82637F90   ⭐ BODIED
+    //     VehicleAttribs::SetupAttribsForAI    @0x82637F9C   ⭐ BODIED
+    //     VehiclePhysics::Reset                @0x82637FB0   ⭐ BODIED
+    //   then ~40 own-block seeds, every one at an offset this class's header ALREADY NAMES:
+    //     +0x1114/+0x1118/+0x111C/+0x1120 = 0.0f · +0x1128 = <the bool arg> · +0x1158/+0x1220 = 0
+    //     +0x710/+0x712/+0x1359/+0x10F7/+0x135A/+0x135D/+0x135E/+0x1362 = 0 · +0x135C = <arg>
+    //     +0x10D4 = 0 · +0x13DC = <arg> · plus a dozen 16-byte VMX stores.
+    // ⇒ SEVEN of its eight callees are already bodied and mounted. What is left is transcription
+    // plus naming the VMX lanes -- big, but NOT blocked on anything. That is the next wave.
+    //
+    // ⭐ AND THAT IS WHAT HAPPENED: the eighth callee (`sub_8262E140`) turned out to be
+    // `VehiclePhysics::SetAttributes`, the "~40 own-block seeds" are all named members of this
+    // class, and every lane was confirmed twice (X360 `vrlimi128` masks 8/4/2/1 vs PS3
+    // `VectorPermuteConstant<4,1,2,3>/<0,5,2,3>/<0,1,6,3>/<0,1,2,7>`). The body is in
+    // VehiclePhysics.cpp; the trap is deleted.
+    // =============================================================================================
 
     // ⭐ 2026-08-09 (powertrain wave): the Engine::Update @0x825CB288 trap is GONE -- BODIED in
     // Engine.cpp. The 3937-line X360 debug Opt-vs-Unopt assert harness turned out to be ONE

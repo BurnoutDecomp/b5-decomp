@@ -128,18 +128,33 @@ namespace Vehicle
         void GetAftertouchValues(f32& lrfOutX, f32& lrfOutY, f32& lrfOutZ, bool lbUseRequestedGas) const;
 
         // The remaining members are owned by future TUs (no X360 address in this ledger):
-        // ctor @ BrnVehicleDriverControls.h:63, Clear :67, ResetType :70, GetType :74.
+        // ctor @ BrnVehicleDriverControls.h:63, Clear :67, GetType :74.
         E_DRIVER_TYPE GetType() const { return meDriverType; }
 
-        // ⭐ ADDED 2026-08-11 (prepare-chain wave). DWARF-attested by NAME
-        // (references/DecFIGS/.../BrnVehicleDriverControls.h:107 `void ResetType()`), and its BODY
-        // is recovered from the only X360 emission of it -- VehiclePhysics::Prepare @0x826380F0
-        // `stw r30, 0x10D4(r31)` with r30 == 0, i.e. a literal store of E_DRIVER_TYPE_PLAYER into
-        // mPreviousControls.meDriverType (+0x1090 + 0x44). The console has no out-of-line symbol
-        // for it (every call site inlines it), so it is header-inline here to match.
-        // ⚠️ FLAG: the ZERO is asm-literal; that zero == E_DRIVER_TYPE_PLAYER is this enum's own
-        // committed value. If a second write site ever turns up storing something else, this is
-        // the declaration to revisit -- the member stays protected precisely so there is one door.
+        // ⭐ ADDED 2026-08-11 (landed independently by BOTH create-path waves; banners merged).
+        // DWARF-attested by NAME -- references/DecFIGS/dwarfdump/.../BrnVehicleDriverControls.h:107
+        // `void ResetType()` on BrnPlayerDriverControls (and again at :148/:174/:191 on the three
+        // derived variants). ⚠ The sibling wave cited :70 for this; :70 is a different declaration --
+        // :107 is the one, verified at the merge. Header-inline because the console INLINES it at
+        // every site: there is no out-of-line body in either export set.
+        //
+        // BODY: the only X360 emission is VehiclePhysics::Prepare @0x826380F0 `stw r30, 0x10D4(r31)`
+        // with r30 == 0 -- a 4-byte zero into mPreviousControls + 0x44 == meDriverType. The PS3 build
+        // of the same statement emits the same bare store (at its own +0x10C0; see the Δ note in
+        // VehiclePhysics.cpp -- this field is one of the two places the two builds' offsets differ).
+        //
+        // ⭐ WHY A METHOD AND NOT A DIRECT WRITE, which is what the asm literally shows: **meDriverType
+        // is `protected`** (the DWARF says so, not this tree's guess), and VehiclePhysics neither
+        // derives from nor befriends this class, so the source of that store cannot be a direct
+        // assignment. Of the four methods the DWARF attests, three are excluded -- the ctor and
+        // GetType are the wrong shapes, and Clear is independently pinned by
+        // BrnNetworkDriverControls::Clear @0x82581200, which walks +0x00..+0x42 and STOPS, never
+        // touching +0x44. ResetType is what is left, and its name means exactly this.
+        //
+        // ⚠️ INFERRED, and labelled so. The STORE is verbatim on two ISAs and 0 ==
+        // E_DRIVER_TYPE_PLAYER is this enum's own committed value; which METHOD emits it is the
+        // inferred step. If a second write site ever turns up storing something else, this is the
+        // declaration to revisit -- the member stays protected precisely so there is one door.
         void ResetType() { meDriverType = E_DRIVER_TYPE_PLAYER; }
 
         // ----- Project-local convenience accessors (NOT console functions). They existed as
