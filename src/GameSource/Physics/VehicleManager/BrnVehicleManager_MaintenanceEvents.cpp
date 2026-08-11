@@ -223,6 +223,26 @@ namespace Vehicle
     // ⚠️ The two "invalid index : %u < %u" / "Index: %u, Number of bits: %u" streams are console
     // gpcMessageBuffer formatting inside those same container asserts -- see the container header.
     // =============================================================================================
+    // ---------------------------------------------------------------------------------------------
+    // (E)/(F) RECONCILED (merge, 2026-08-11): the physics campaign's same-day re-measure (85ba9eb0,
+    // written against ITS pre-wave tree) landed two findings whose DELETE-WHENs both fired within
+    // hours -- kept here in corrected form because each carries a live lesson:
+    //  (E) said the drain's one remaining hole was AddRaceCarDeformationModel @0x825E9118, held
+    //      back over the 8-byte handling-body handle. In THIS tree it is BODIED with the
+    //      entity-word-through-GetEntityId() discipline (see the hazard banner above); the 4-byte
+    //      ::RigidBodyId widening remains flagged follow-up debt. Its false-negative list (the
+    //      Attrib ctors exercised by SetAttributes) stands and is worth keeping.
+    //  (F) proved the render pose (ActiveRaceCar::mRenderParams.mBodyTransform) is fed ONLY via
+    //      ActiveRaceCar::UpdatePhysicsState <- ReadUpdatedActiveRaceCarDataFromPhysics @0x822E87B8
+    //      -- absent in THEIR tree, LANDED in this one, so their conclusion inverts: the
+    //      compensating pair is now REAL and the readback is what carries physics onto the screen.
+    //      ⚠️ Their trap warning SURVIVES and is the operative one for the no-movement diagnosis:
+    //      a stable-looking frame is NOT evidence the car rests -- the readback only runs for
+    //      slots set in VehicleOutputInterface::mUsedRaceCars and only copies what the physics->
+    //      output publish leg (GetUpdatedVehicleBodies @0x82619340 / UpdateVehiclePhysicsPost-
+    //      Simulation @0x826426E0 / WriteOutVehicleStats @0x8263F460 -- ALL still gates) writes.
+    //      Measure motion with a VehicleManager-side probe, never off the screen.
+    // ---------------------------------------------------------------------------------------------
     void VehicleManager::RecordNetworkRaceCarsAddedForCollision(
         const VehicleInputInterface* lpInputInterface)
     {
