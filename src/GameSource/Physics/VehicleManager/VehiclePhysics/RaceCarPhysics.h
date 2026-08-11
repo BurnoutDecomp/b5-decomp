@@ -88,6 +88,56 @@ namespace Vehicle
         // bounce TU) -- declared extern so this leaf resolves it BY NAME.
         bool IsCrashingNormally() const;
 
+        // ==========================================================================================
+        // ⭐⭐ THE CREATE LEG'S VCALL TARGET -- @0x82639CB8, X360 vtable slot +0x30.
+        //
+        // Declared here for the FIRST TIME (2026-08-11, create-drain wave). Every previous wave
+        // recorded this as "an export hole with no declaration anywhere in this tree" and planned to
+        // lift it from the image. It did not have to be lifted: the X360 hole is covered by the PS3
+        // export set, which carries the full mangled name with parameter names --
+        //     PS3 0x73648C  _ZN10BrnPhysics7Vehicle14RaceCarPhysics7PrepareE
+        //         N2rw4math3vpu14Matrix44AffineE NS4_7Vector3E S6_ S6_ S6_
+        //         RKN12CgsGeometric14AxisAlignedBoxE NS2_7physics7InertiaE
+        //         PNS0_14VehicleAttribsE PKS6_ PKf h        (89 insns)
+        // i.e. VehiclePhysics::Prepare's nine parameters plus `rw::physics::Inertia lInertia` after
+        // the AABB and `u8 lu8StrengthStat` at the tail.
+        //
+        // ⭐ AND THE X360 CALL SITE CONFIRMS ALL ELEVEN, register for register -- read from
+        // VehicleManager::ProcessCreateEvents @0x826171D8..0x8261724C:
+        //     r3 = &maRaceCarVehicles[idx]   (mulli r11,r27,0x1460 ; addi r3,r11,0x740)
+        //     r4 = &var_8C0                  -> lOnRoadTransform
+        //     v1/v2/v3/v4                    -> lLinearVelocity / lAngularVelocity /
+        //                                       lHandlingBodyOffset / lHalfExtent.
+        //                                       ⭐ v3 is v125, the COM vector the create body's
+        //                                       four-wheel loop accumulates.
+        //     r5 = &var_760                  -> lAABB -- the buffer StreamedDeformationSpec::
+        //                                       GetBoundingBox filled one instruction earlier.
+        //     r6..r10 + stack@0x98           -> lInertia BY VALUE: six doublewords == 48 bytes ==
+        //                                       three 16-byte rows, the output of the create body's
+        //                                       ~200-insn VMX Newton-Raphson inertia block.
+        //     stack@0xA4/0xAC/0xB4           -> lpAttribs / lpaWheelPositions / lpafWheelRadii
+        //     stack@0xBF (a byte)            -> lu8StrengthStat  (the event's miCarStrengthStat)
+        //     lwz r11,0(r3) ; lwz r11,0x30(r11) ; mtctr ; bctrl
+        //
+        // ⚠️ DECLARE-ONLY, and deliberately NOT virtual here. The console reaches it through slot
+        // +0x30 of the console vtable; this tree's rule is to reach members BY NAME and never by
+        // console slot, and the host vtable's slot numbering is the compiler's, not the console's
+        // (see the [[vtable-slot0-Create-shim]] precedent). When the body lands it must be declared
+        // `virtual` in VehiclePhysics and overridden here, so that the create drain's
+        // `maRaceCarVehicles[i].Prepare(...)` dispatches the way the console's bctrl does.
+        // ⚠️ `rw::physics::Inertia` has NO type in this tree yet. The 48-byte / three-row shape is
+        // measured from the call site's six-doubleword pass and is consistent with Matrix33 (the
+        // type ExternalPhysicsBody already uses for m{Local,World}InverseInertia), but the member
+        // names are NOT recovered, so the type is NOT fabricated here -- the parameter is spelled
+        // in the declaration below only when that type lands.
+        // DELETE-WHEN @0x82639CB8 lands.
+        // ==========================================================================================
+        // bool Prepare(Matrix44Affine lOnRoadTransform, Vector3 lLinearVelocity,
+        //              Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset, Vector3 lHalfExtent,
+        //              const CgsGeometric::AxisAlignedBox& lrAABB, rw::physics::Inertia lInertia,
+        //              VehicleAttribs* lpAttribs, const Vector3* lpaWheelPositions,
+        //              const f32* lpafWheelRadii, u8 lu8StrengthStat);
+
         // @0x825B3998: the (signed) height of the car above the road, taken as the MINIMUM over the
         // driven wheels whose road-contact line test is valid AND that are on the ground (the
         // contact normal points up: dot(normal, up) > 0.5). For each such wheel the height is the

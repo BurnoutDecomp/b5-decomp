@@ -601,15 +601,54 @@ namespace Vehicle
         // TrafficPhysics::Construct.
         void Construct();
 
-        // ----- ADDITIVE GROW (C11_simple_traffic_attribs group): the three VehiclePhysics entries the
-        //       TrafficPhysics layer forwards into. DECLARE-ONLY -- each is bodied by its own (full
-        //       VehiclePhysics / driving-spine) TU; declared here so TrafficPhysics::PreparePhysical /
-        //       Update resolve them BY NAME under the per-TU gate. Signatures recovered from the
-        //       TrafficPhysics call sites (X360 passes the control block + transform by pointer). FLAG:
-        //       arg shapes inferred from the forwarding call (the X360 Hex-Rays dropped the full lists).
-        bool Prepare(const Matrix44Affine* lpTransform, const StreamedDeformationSpec* lpDeformSpec,
-                     VehicleAttribs* lpAttribs, const Vector3* lpWheelPositions,
-                     const f32* lpafWheelRadii);
+        // ==========================================================================================
+        // ⛔⛔ SIGNATURE CORRECTED 2026-08-11 (the create-drain wave). THIS DECLARATION WAS A FORK.
+        //
+        // What was here, since the C11_simple_traffic_attribs group:
+        //     bool Prepare(const Matrix44Affine*, const StreamedDeformationSpec*, VehicleAttribs*,
+        //                  const Vector3*, const f32*);
+        // Its own banner said "arg shapes inferred from the forwarding call". They were wrong: five
+        // parameters instead of nine, and a `StreamedDeformationSpec*` standing where the console
+        // has FOUR Vector3s and an AxisAlignedBox&. That is the [[shadowing-redeclarations]] shape --
+        // it mangles to a symbol no TU can ever define, and no per-TU compile gate can see it,
+        // because the only caller (TrafficPhysics::PreparePhysical) lives in an UNMOUNTED TU. It
+        // would have surfaced as an LNK2019 the first time anything mounted that file.
+        //
+        // ⭐ THE REAL SIGNATURE IS DWARF-ATTESTED, not inferred. PS3 export 0x735DEC:
+        //     _ZN10BrnPhysics7Vehicle14VehiclePhysics7PrepareE
+        //       N2rw4math3vpu14Matrix44AffineE NS4_7Vector3E S6_ S6_ S6_
+        //       RKN12CgsGeometric14AxisAlignedBoxE PNS0_14VehicleAttribsE PKS6_ PKf
+        // and it is identical, parameter for parameter, to the SimpleVehiclePhysics::Prepare
+        // declaration this tree has carried correctly all along (PS3 0x734D58) -- which is the
+        // strongest possible cross-check, since VehiclePhysics::Prepare's whole job is to forward
+        // into it. The X360 call site inside TrafficPhysics::PreparePhysical @0x82639380 agrees
+        // register for register: r4 = &transform, v1..v4 = the four vectors in declaration order,
+        // r5 = the AABB, r6/r7/r8 = attribs / wheel positions / wheel radii.
+        //
+        // ⚠️ DECLARE-ONLY still: the 306-insn body @0x82637C80 is NOT bodied yet (it forwards to
+        // SimpleVehiclePhysics::Prepare -- landed this wave -- then runs VehicleAttribs::operator=,
+        // SetupAttribsForAI, SetupSuspension, Engine::Prepare and ~40 own-block member seeds at
+        // +0x10D4/+0x1114..+0x1128/+0x1359..+0x1362/+0x13DC/+0xFD0 that still need naming).
+        // DELETE THIS NOTE WHEN @0x82637C80 lands.
+        //
+        // ⚠️⚠️ ODR FORK FLAGGED, NOT FIXED (found by this correction). The PS3 mangle spells the
+        // AABB parameter `RKN12CgsGeometric14AxisAlignedBoxE` == `const CgsGeometric::
+        // AxisAlignedBox&`, but this class hierarchy carries its OWN
+        // `BrnPhysics::Vehicle::AxisAlignedBox` (BrnSimpleVehiclePhysics.h:147, a "MINIMAL OWNING
+        // SLICE" of {Vector3 mMin, Vector3 mMax}) and types mDeformableAABB / mOriginalAABB with it.
+        // The two are the same 32 bytes and the same two fields; the real one
+        // (CgsAxisAlignedBox.h:28) spells them Vector4 mMin/mMax and adds Set/ContainsPoint. The
+        // parameter below is spelled with the IN-NAMESPACE slice so that it matches the sibling
+        // SimpleVehiclePhysics::Prepare declaration this function forwards into -- a mismatch there
+        // would be the [[odr-forks-link-silently]] defect, where a body written against one class
+        // links cleanly against a call site using the other. Re-homing the slice onto
+        // CgsGeometric::AxisAlignedBox is a geometry-group change and is recorded here rather than
+        // done inside a physics wave.
+        // ==========================================================================================
+        bool Prepare(Matrix44Affine lTransform, Vector3 lLinearVelocity, Vector3 lAngularVelocity,
+                     Vector3 lHandlingBodyOffset, Vector3 lHalfExtent,
+                     const AxisAlignedBox& lrAABB, VehicleAttribs* lpAttribs,
+                     const Vector3* lpaWheelPositions, const f32* lpafWheelRadii);
         // ⭐⭐ SIGNATURE CONFORMED 2026-08-09 (crash/shunt wave). The committed 1-arg const form
         // was a slice artifact off the delegation guess. The real @0x825FC748 prologue consumes
         // v1 (saved into v127 and SUBTRACTED from the shunt life lane at 0x825FC888 -- the dt

@@ -292,6 +292,68 @@ namespace Vehicle
     // (5) and the result consumer RaceCarEntityModule::ProcessCreateVehicleEvents @0x822FF620 (182)
     //     -- today stood in for by PublishNewVehicleToDirectorWithoutPhysicsBringUp -- is still the
     //     only thing that would make RaceCarState::mEntityId non-zero.
+    //
+    // =============================================================================================
+    // ⭐⭐⭐ RE-MEASURED AGAIN 2026-08-11 (create-drain wave). THREE CORRECTIONS TO (1)-(4) ABOVE,
+    // each checked here rather than inherited. Read this block, not the one above it, when planning.
+    //
+    // (A) ⛔ THE COST IN (1) IS LOW BY 1.85x, AND IT IS LOW FOR TWO INDEPENDENT REASONS.
+    //     * `VehicleManager::AddRaceCarDeformationModel` @0x825E9118 (153) is listed above as
+    //       "ALREADY BODIED AND MOUNTED". It is **ABSENT** -- `grep -rn` over the whole tree finds
+    //       the name in exactly two places, both of them comment lines in this banner. Its
+    //       `xrefs_to` is a one-element set: this function.
+    //     * The `Prepare` vcall chain contributes **ZERO** to the 4,370-instruction closure, because
+    //       it is an INDIRECT call through vtable slot +0x30 and no `xrefs_from` walk can see it.
+    //       Costed separately (seed @0x82637C80): 4,147 insns / 35 nodes, of which everything is
+    //       already mounted EXCEPT the three Prepare bodies themselves.
+    //     MEASURED total for a complete drain, by address, presence-checked against the tree AND
+    //     build_game_exe.bat:
+    //         ProcessCreateEvents            @0x82616770  1067   absent
+    //         SetAllNetworkRaceCarsHidden    @0x825E9380   175   absent
+    //         AddRaceCarDeformationModel     @0x825E9118   153   absent   <- the correction
+    //         RaceCarPhysics::Prepare        @0x82639CB8  ~40    absent (X360 export hole)
+    //         VehiclePhysics::Prepare        @0x82637C80   306   absent (declare-only)
+    //         SimpleVehiclePhysics::Prepare  @0x8262F620   554   ⭐ LANDED THIS WAVE
+    //     = 2,295 insns / 6 functions, of which 554 are now done and 1,741 remain.
+    //
+    // (B) ⭐⭐ THE "EXPORT HOLE WITH NO DECLARATION ANYWHERE" IS CLOSED, AND IT DID NOT NEED THE
+    //     IMAGE. A name index over all 35,902 DecFIGS PS3 export JSONs carries all three Prepares
+    //     mangled, with parameter names: RaceCarPhysics 0x73648C (89 insns), VehiclePhysics
+    //     0x735DEC (424), SimpleVehiclePhysics 0x734D58 (541). See RaceCarPhysics.h's new banner for
+    //     the eleven-parameter signature and the register-by-register agreement with this function's
+    //     own call site @0x826171D8..0x8261724C. Every one of the eleven arguments now has a named
+    //     producer, including `lInertia` (six doublewords == 48 bytes == the inertia block's output)
+    //     and `lHandlingBodyOffset` (== v125, the four-wheel COM accumulator).
+    //     ⛔ En route: VehiclePhysics::Prepare's committed declaration was a FIVE-parameter
+    //     arity+type FORK against the real nine. Corrected; see VehiclePhysics.h:610.
+    //
+    // (C) ⭐⭐ RUN THE PATH FIRST -- a read-only probe at this exact point, three drains on one boot
+    //     (2026-08-11T12:22:28, 1211 frames, both gates PASS, asserts=3), verbatim:
+    //         PROBE drA idx=0 usedBits=0x0 sizeofVM=172928 offPad=43616 offUsed=44224
+    //                       offCars=1856 sizeofRH=16 sizeofRCP=5216
+    //         PROBE drA car vptr=951984048 pos=(0,0,0) half=(0,0,0) frozen=0 simpleValid=0
+    //         PROBE drA spec=86050768 gfxMem=89927120
+    //         PROBE drA mesh=(-0.000000,0.740575,-0.170226)
+    //         PROBE drA wheel0 pos=(-0.829000,-0.409029,1.342442) scale=(0.259968,0.662665,0.662665)
+    //         PROBE drA coll=417505728
+    //     * `coll` non-null: Attrib::FindCollection(hash64("burnoutcarasset"), event.key) RESOLVES
+    //       on this build. The attribs act will run; that was the largest untested assumption.
+    //     * `spec`/`gfxMem` non-null and the spec's geometry is the real Hunter Cavalry data.
+    //     * the car object IS constructed (non-null vptr) and nothing is seated yet.
+    //     * `offPad=43616` -- the host layout matches the console byte for byte through mPadAA60
+    //       (1856 + 8*5216 + 32), and `sizeofRH=16`, so splitting the pad into the two real
+    //       ResourceHandle[8] arrays costs **+128 bytes** and moves every host-drift constant past
+    //       it. Measured, so the next wave does not have to guess at it.
+    //     * ⚠️ `frozen=0`: the car is NOT frozen, so the already-mounted gravity+integrate loop
+    //       starts the instant the bit is set.
+    //
+    // (D) ⛔⛔ A HAZARD NO PREVIOUS WAVE RECORDED. The three drains report **idx=0, then 1, then 2**
+    //     -- the create events name THREE DIFFERENT race-car slots over one boot, not one car three
+    //     times. A drain that only creates would leave three live cars in mUsedRaceCars at the same
+    //     world point. On console ProcessRemoveEvents @0x826160C8 (426, the gate above) frees the
+    //     previous slot first, and this body's own assert list contains "Race Car Index Already
+    //     Used" -- the console expects the slot to be free. ⇒ **ProcessRemoveEvents is part of the
+    //     drain wave, not a later one.** That is a seventh function and it is not in the 2,295.
     // =============================================================================================
     void VehicleManager::ProcessCreateEvents(const VehicleInputInterface* lpInputInterface,
                                              VehicleOutputRequestInterface*,
