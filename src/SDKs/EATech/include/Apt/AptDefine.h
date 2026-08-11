@@ -16,8 +16,8 @@
 class DOGMA_PoolManager;       // SDKs/EATech/Apt/DogmaAllocator.h
 class AptValueGC_PoolManager;  // SDKs/EATech/Apt/AptValueGCPoolManager.h
 
-// leak AptDefine.h:480-481 -- the value pools. Wired by the Apt runtime startup
-// (AptInit); null until then (FLAG: AptInit is not yet reconstructed).
+// leak AptDefine.h:480-481 -- the value pools. Wired by AptAllocatorInitialize
+// @0x82ADD118 (AptInit.cpp, WireAllocatorGlobals); null until that bring-up runs.
 extern DOGMA_PoolManager*      gpNonGCPoolManager;
 extern AptValueGC_PoolManager* gpGCPoolManager;
 

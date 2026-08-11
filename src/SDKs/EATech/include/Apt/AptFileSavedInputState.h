@@ -27,8 +27,8 @@
 // an E_APT_SAVED_INPUT_STATE enum, not the earlier unattested placeholder.
 //
 // Console layout is 8 bytes (2 x 32-bit); the named members let the x64 PC build
-// compute the correct (wider) sizeof/offsets -- the pervasive PC-port FLAG also
-// used by AptFile (named members, not literal console offsets).
+// compute the correct (wider) sizeof/offsets -- the pervasive x64 PC-port rule
+// (Phase-0 regime) also used by AptFile (named members, not literal console offsets).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================

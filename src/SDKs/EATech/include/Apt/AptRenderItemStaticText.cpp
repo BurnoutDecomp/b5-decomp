@@ -60,14 +60,14 @@ static const float KF_GLYPH_ADVANCE_SCALE = 0.05f;
 AptRenderItemStaticText::AptRenderItemStaticText(AptCharacter* pCharacter, int nCreatedOnTick)
     : AptRenderItem(pCharacter, nCreatedOnTick)
 {
-    mFlags = (mFlags & 0xFF03FFFFu) | 0x00280000u;
+    mFlags = (mFlags & ~0x3F00u) | 0xA00u;   // static-text=10; x64 type field (XB1 ctor 0x140826F50 `or 0A00h`)
 }
 
 // Clone copy-ctor -- base clone copy + re-stamp the static-text render-type flag.
 AptRenderItemStaticText::AptRenderItemStaticText(const AptRenderItemStaticText* pSource, int nCreatedOnTick, bool bCopyExtended)
     : AptRenderItem(pSource, nCreatedOnTick, bCopyExtended)
 {
-    mFlags = (mFlags & 0xFF03FFFFu) | 0x00280000u;
+    mFlags = (mFlags & ~0x3F00u) | 0xA00u;   // static-text=10; x64 type field (XB1 ctor 0x140826F50 `or 0A00h`)
 }
 
 // Clone @0x82AEC950 -- pool-allocate a fresh static-text render item copy-init'd
@@ -139,11 +139,13 @@ void AptRenderItemStaticText::Render(AptRenderingContext* pCtx, AptMaskRenderOpe
             glyphMatrix.tx = fAdvance + para.mfX;
             glyphMatrix.ty = para.mfY;
 
-            // FLAG: when (gAptOptFlags & 4) the console takes the _drawCharacterInstOpti
-            // clip-stack fast-path here (sub_82ADFDB0 pushes a clip entry; the matching
-            // gsnClipStackIndex pop runs after the draw). Deferred exactly as
-            // AptRenderItem::PushMatrices defers it; the standard append/draw path below
-            // renders the glyph correctly in the default configuration.
+            // RESOLVED (2026-08-07): when (dword_82F73008 & 4) the console takes the
+            // _drawCharacterInstOpti clip-stack fast-path here (sub_82ADFDB0 pushes a
+            // clip entry; the matching gsnClipStackIndex pop runs after the draw). The
+            // gate word SHIPS as 0x2 (bit2 clear -- the _data_opti_flags_word dump; see
+            // AptRenderItem.cpp KU_AptOptiFlagsWord), so the fast path is dead on the
+            // shipped build and the standard append/draw path below IS the shipped
+            // behaviour.
             pCtx->pushVertexMatrix();
             pCtx->appendVertexMatrix(&glyphMatrix);
             AptCharacter* pGlyphChar = AptResolveFontGlyph(pFontChar, glyph.miGlyphIndex);

@@ -22,11 +22,12 @@
 //            mFontID@0x94 (mpTextFormat@0x98/mStateFlags@0xA0 re-sync).
 //   [c:0x40] mTextColor        u32   (text-colour read straight)
 //   [c:0x44] mScroll           i32   (scroll offset)
-//   [c:0x48] mFlagsAndBackColor PACKED: bits 3-6 alignment(signed) / bit 7
-//                              drawsBackground / bits 8-31 background RGB
-//   [c:0x4C] mFlagsAndBorderColor PACKED: bit 0 multiline / bit 1 wordWrap /
-//                              bits 2-5 boxAlignment / bit 6 mouseWheelEnabled /
-//                              bit 7 drawsBorder / bits 8-31 border RGB
+//   [c:0x48] mFlagsAndBackColor PACKED (x64, @+0x78): bits 0-23 background RGB /
+//                              bit 24 drawsBackground / bits 25-28 alignment(signed)
+//   [c:0x4C] mFlagsAndBorderColor PACKED (x64, @+0x7C): bits 0-23 border RGB /
+//                              bit 24 drawsBorder / bit 25 mouseWheelEnabled /
+//                              bits 26-29 boxAlignment(signed) / bit 30 wordWrap /
+//                              bit 31 multiline
 //   [c:0x50] mBounds           AptRect (4 floats, 16 bytes)
 //   [c:0x60] mFontSize         f32
 //   [c:0x64] mFontID           i32
@@ -39,10 +40,11 @@
 // colour). De-optimised here to endian-safe 32-bit masked bitfield math + named
 // members so the x64 build is correct (the colour occupies bits 8-31 logically).
 //
-// FLAG: this header reconstructs only the text-instance surface (the data members
-// the AptCharacterTextInst facade touches + their inline accessors). The render
-// item's own ctor / Render / the AptValue-backed TextFormat type are follow-ons.
-// mpTextFormat is therefore an opaque AptValue* pass-through (forward-declared).
+// This header models the text-instance surface (the data members the
+// AptCharacterTextInst facade touches + their inline accessors); the ctors /
+// Render / SetZID / SetTextFormat bodies are homed in AptRenderItemDynamicText.cpp.
+// mpTextFormat stays an opaque AptValue* pass-through HERE (the TextFormat record
+// type lives in AptTextFormat.h; the .cpp casts at the deep-copy/teardown sites).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -93,77 +95,80 @@ struct AptRenderItemDynamicText : public AptRenderItem
     int      GetTextColor() const { return static_cast<int>(mTextColor); }              // @0x82AD5840
 
     // Background colour lives in bits 8-31; reads force full alpha (0xFF000000).
-    uint32_t GetBackgroundColor() const { return (mFlagsAndBackColor >> 8) | 0xFF000000u; }   // @0x82AD5870
+    // x64 packing (?GetBackgroundColor@ @0x140838230 etc.): colour RGB in the LOW 24
+    // bits, flags in the HIGH byte. (The old low-byte-flags form was the X360
+    // big-endian allocation.) Colour reads force full alpha (| 0xFF000000).
+    uint32_t GetBackgroundColor() const { return (mFlagsAndBackColor & 0xFFFFFFu) | 0xFF000000u; }   // @0x82AD5870
     void     SetBackgroundColor(uint32_t uColor)                                               // @0x82AE1EB8
     {
-        mFlagsAndBackColor = (mFlagsAndBackColor & 0x000000FFu) | (uColor << 8);
+        mFlagsAndBackColor = (mFlagsAndBackColor & 0xFF000000u) | (uColor & 0xFFFFFFu);
     }
 
-    uint32_t GetBorderColor() const { return (mFlagsAndBorderColor >> 8) | 0xFF000000u; }     // @0x82AD5888
+    uint32_t GetBorderColor() const { return (mFlagsAndBorderColor & 0xFFFFFFu) | 0xFF000000u; }     // @0x82AD5888
     void     SetBorderColor(uint32_t uColor)                                                   // @0x82AE1EF8
     {
-        mFlagsAndBorderColor = (mFlagsAndBorderColor & 0x000000FFu) | (uColor << 8);
+        mFlagsAndBorderColor = (mFlagsAndBorderColor & 0xFF000000u) | (uColor & 0xFFFFFFu);
     }
 
-    // ---- alignment (signed 4-bit field at bits 3-6) -----------------------
+    // ---- alignment (x64: SIGNED 4-bit field at bits 25-28) ----------------
     int  GetAlignment() const                                                                 // @0x82AD58B8
     {
-        // (x << 25) >> 28 : sign-extend bits 3..6.
-        return static_cast<int32_t>(mFlagsAndBackColor << 25) >> 28;
+        // x64 ?GetAlignment@ @0x140838080: `shl 3 / sar 28` -- sign-extend bits 25..28.
+        return static_cast<int32_t>(mFlagsAndBackColor << 3) >> 28;
     }
     void SetAlignment(int nAlignment)                                                          // @0x82AE1F70
     {
-        mFlagsAndBackColor = ((static_cast<uint32_t>(nAlignment) << 3) & 0x78u)
-                           | (mFlagsAndBackColor & 0xFFFFFF87u);
+        mFlagsAndBackColor = ((static_cast<uint32_t>(nAlignment) & 0xFu) << 25)
+                           | (mFlagsAndBackColor & ~0x1E000000u);
     }
 
-    // ---- background / border draw flags -----------------------------------
-    bool GetDrawsBackground() const { return ((mFlagsAndBackColor >> 7) & 1u) != 0; }          // @0x82AD5970
+    // ---- background / border draw flags (x64 bit 24 of each word) ---------
+    bool GetDrawsBackground() const { return (mFlagsAndBackColor & 0x1000000u) != 0; }          // @0x82AD5970
     void SetDrawsBackground(bool bDraw)                                                         // @0x82AE2170
     {
-        mFlagsAndBackColor = ((static_cast<uint32_t>(bDraw ? 1u : 0u) << 7) & 0x80u)
-                           | (mFlagsAndBackColor & 0xFFFFFF7Fu);
+        mFlagsAndBackColor = (bDraw ? 0x1000000u : 0u)
+                           | (mFlagsAndBackColor & ~0x1000000u);
     }
 
-    bool GetDrawsBorder() const { return ((mFlagsAndBorderColor >> 7) & 1u) != 0; }            // @0x82AD5960
+    bool GetDrawsBorder() const { return (mFlagsAndBorderColor & 0x1000000u) != 0; }            // @0x82AD5960
     void SetDrawsBorder(bool bDraw)                                                             // @0x82AE2130
     {
-        mFlagsAndBorderColor = ((static_cast<uint32_t>(bDraw ? 1u : 0u) << 7) & 0x80u)
-                             | (mFlagsAndBorderColor & 0xFFFFFF7Fu);
+        mFlagsAndBorderColor = (bDraw ? 0x1000000u : 0u)
+                             | (mFlagsAndBorderColor & ~0x1000000u);
     }
 
-    // ---- box flags (offset 0x4C) ------------------------------------------
-    bool GetMultiline() const { return (mFlagsAndBorderColor & 1u) != 0; }                     // @0x82AD59A0
-    void SetMultiline(bool bMultiline)                                                          // @0x82AE2230
+    // ---- box flags (x64 high bits of the border word) ---------------------
+    bool GetMultiline() const { return (mFlagsAndBorderColor & 0x80000000u) != 0; }            // @0x82AD59A0 (x64 bit 31)
+    void SetMultiline(bool bMultiline)
     {
-        mFlagsAndBorderColor = (mFlagsAndBorderColor & 0xFFFFFFFEu)
-                             | (static_cast<uint32_t>(bMultiline ? 1u : 0u) & 1u);
+        mFlagsAndBorderColor = (mFlagsAndBorderColor & ~0x80000000u)
+                             | (bMultiline ? 0x80000000u : 0u);
     }
 
-    bool GetWordWrap() const { return ((mFlagsAndBorderColor >> 1) & 1u) != 0; }               // @0x82AD5990
-    void SetWordWrap(bool bWrap)                                                                // @0x82AE21F0
+    bool GetWordWrap() const { return (mFlagsAndBorderColor & 0x40000000u) != 0; }             // @0x82AD5990 (x64 bit 30)
+    void SetWordWrap(bool bWrap)
     {
-        mFlagsAndBorderColor = ((static_cast<uint32_t>(bWrap ? 1u : 0u) << 1) & 0x2u)
-                             | (mFlagsAndBorderColor & 0xFFFFFFFDu);
+        mFlagsAndBorderColor = (bWrap ? 0x40000000u : 0u)
+                             | (mFlagsAndBorderColor & ~0x40000000u);
     }
 
     void SetBoxAlignment(int nBoxAlignment)                                                     // @0x82AE1F38
     {
-        mFlagsAndBorderColor = ((static_cast<uint32_t>(nBoxAlignment) << 2) & 0x3Cu)
-                             | (mFlagsAndBorderColor & 0xFFFFFFC3u);
+        mFlagsAndBorderColor = ((static_cast<uint32_t>(nBoxAlignment) & 0xFu) << 26)
+                             | (mFlagsAndBorderColor & ~0x3C000000u);
     }
-    // Sign-extended read of the 4-bit box-align field (the X360 `(x << 26) >> 28`
-    // idiom in AptCIH::objectMemberLookup's autoSize/_x/_y arms).
+    // Sign-extended read of the 4-bit box-align field (x64 ?GetBoxAlignment@
+    // @0x1408384C0: `shl 2 / sar 28` -- bits 26..29).
     int GetBoxAlignment() const
     {
-        return static_cast<int32_t>(mFlagsAndBorderColor << 26) >> 28;
+        return static_cast<int32_t>(mFlagsAndBorderColor << 2) >> 28;
     }
 
-    bool GetMouseWheelEnabled() const { return ((mFlagsAndBorderColor >> 6) & 1u) != 0; }       // @0x82AD5980
+    bool GetMouseWheelEnabled() const { return (mFlagsAndBorderColor & 0x2000000u) != 0; }       // @0x82AD5980 (x64 bit 25)
     void SetMouseWheelEnabled(bool bEnabled)                                                     // @0x82AE21B0
     {
-        mFlagsAndBorderColor = ((static_cast<uint32_t>(bEnabled ? 1u : 0u) << 6) & 0x40u)
-                             | (mFlagsAndBorderColor & 0xFFFFFFBFu);
+        mFlagsAndBorderColor = (bEnabled ? 0x2000000u : 0u)
+                             | (mFlagsAndBorderColor & ~0x2000000u);
     }
 
     // ---- scroll -----------------------------------------------------------
@@ -172,9 +177,9 @@ struct AptRenderItemDynamicText : public AptRenderItem
 
     // ---- z id -------------------------------------------------------------
     intptr_t GetZID() const { return mZID; }                   // @0x82AD5830 (facade reads mpRenderItem+0x3C; XB1 8-byte load)
-    // FLAG: the facade SetZID (@0x82AE1E20) calls this OUT-OF-LINE render-item method
-    // (not inlined), so its body lives with the render-item TU; declared here so the
-    // facade can name it. (Its effect is the mZID write; body deferred, not guessed.)
+    // The facade SetZID (@0x82AE1E20) calls this OUT-OF-LINE render-item method;
+    // body HOMED in AptRenderItemDynamicText.cpp (@0x82ADB578: release the old
+    // handle through the host hook, then store the new one).
     void SetZID(intptr_t nZID);                                 // (callee of AptCharacterTextInst::SetZID)
 
     // ---- font -------------------------------------------------------------
@@ -196,8 +201,8 @@ struct AptRenderItemDynamicText : public AptRenderItem
     void ClearStateFlags(uint32_t uFlags) { mStateFlags &= ~uFlags; }              // @0x82AE2078
 
     // ---- text-format (delegated to the formatting object) -----------------
-    // FLAG: AptRenderItemDynamicText::SetTextFormat (the @0x82AECE08-callee) writes
-    // mpTextFormat through the TextFormat layer; its body is the formatting follow-on.
-    // Declared so the facade can name it.
+    // AptRenderItemDynamicText::SetTextFormat (the @0x82AECE08-callee) -- body
+    // HOMED in AptRenderItemDynamicText.cpp (@0x82AEC1D0: release + pool-free the
+    // old record, then store the new one).
     void SetTextFormat(AptValue* pTextFormat);   // (callee of AptCharacterTextInst::SetTextFormat)
 };

@@ -5,7 +5,7 @@
 // The reference count lives in the HIGH 16 bits of mnRefAndFlags; the console
 // mutates it with the interrupt-masked lwarx/stwcx. +/-0x10000 idiom. Operating
 // on the full 32-bit word is endian-independent, so the host interlocked add on
-// the whole word is the faithful equivalent (FLAG: console atomic).
+// the whole word (_InterlockedExchangeAdd) is the faithful equivalent.
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptCharacter.h"

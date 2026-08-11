@@ -76,8 +76,10 @@ void AptActionInterpreter::_FunctionAptActionStub(AptActionInterpreter*, LocalCo
 
 // Fill sGlobalTable from the extracted opcode->handler map. Every slot defaults to
 // the stub; the reconstructed handlers are wired at their real opcodes. As more
-// handlers are built they are added here.  FLAG: called from AptInit (the console's
-// equivalent is the static initialiser of the data table).
+// handlers are built they are added here.  Called from the Apt update bring-up
+// (AptInit.cpp calls AptActionInterpreter::InitDispatchTable before the
+// interpreter comes up); the console's equivalent is the static initialiser of
+// the data table.
 void AptActionInterpreter::InitDispatchTable()
 {
     for (int i = 0; i < 256; ++i)

@@ -25,6 +25,8 @@
 #include "SDKs/EATech/include/Apt/AptMovie.h"                    // doFrameControls / queueFrameActions / DoTemporaryFrameControls + AptValue_toInteger
 
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"              // child-list recursion (AptDisplayList::tick)
+#include "SDKs/EATech/include/Apt/AptDisplayListState.h"         // AsState()->RegisterReferences (GC mark of the child list)
+#include "SDKs/EATech/include/Apt/AptRenderTreeManager.h"        // AptCurrentRenderTreeManager + Update_ItemRemoved (DestroyGCPointers)
 #include "SDKs/EATech/include/Apt/AptPseudoDisplayList.h"        // scratch state for the multi-frame skip path
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"        // gAptActionInterpreter operand stack (_gotoAndX)
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
@@ -36,8 +38,8 @@
 #include <new>   // placement new (the scratch AptPseudoDisplayList over pool memory)
 #include <cstring>   // std::strcmp (the `_name` property-name compare)
 
-// FLAG (un-homed AS/runtime singletons -- declared verbatim by their console name
-// equivalents; bodies/definitions land with their owning TUs):
+// Shared AS/runtime singletons (storage HOMED in AptGlobals.cpp; declared per-TU
+// by their console-name equivalents, the established Apt convention):
 //   gAptActionInterpreter (console &dword_8324E760) -- the AS interpreter context
 //     (its operand stack is mpStack[mnStackTop]); declared in AptActionInterpreter.h.
 //   gnAptActionFrameId    (console dword_8324E514)  -- the running AS-action frame id
@@ -49,48 +51,42 @@ extern int gnAptActionFrameId;       // console dword_8324E514
 extern unsigned char gbAptRecorderGate;   // console byte_82F733F7
 extern AptValue* gpUndefinedValue;   // console off_8324D814
 
-// FLAG (un-homed AS interpreter singleton; console &dword_8324E760): the operand
-// stack _gotoAndX reads the goto target from. Declared per-TU like its siblings
-// (AptCIHNativeFunctionHelper.cpp / AptMovie.cpp).
+// The AS interpreter singleton (console &dword_8324E760; storage HOMED in
+// AptGlobals.cpp): the operand stack _gotoAndX reads the goto target from.
+// Declared per-TU like its siblings (AptCIHNativeFunctionHelper.cpp / AptMovie.cpp).
 extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 
-// FLAG (homed by AptCIH's event/AS-action follow-on TU; console AptCIH::queueClipEvents
-// @0x82AD...): queue this node's clip-event handlers (nEventMask) for deferred AS
-// execution, stamping them with nFrameId. A free-function shim (matches the
-// AptCIH_queueClipEvents AptAnimationTarget.cpp already declares).
-// Canonical sig: X360/PS3 AptCIH::queueClipEvents(int, unsigned int, int) -- a3 (the
-// frame id) is UNSIGNED; reconciled across all three declaring TUs.
-// AptCIH::queueClipEvents is now called directly as a member (AptCIH.h is included above).
+// AptCIH::queueClipEvents (canonical X360/PS3 sig (int, unsigned int, int); a3 the
+// UNSIGNED frame id) is HOMED in AptCIHBehaviour.cpp and called directly as a member
+// (AptCIH.h is included above); the free-function shim is retired.
 
-// FLAG (un-homed AptDisplayList behavioural follow-on; console AptDisplayList::mergeState
-// @0x82B0B438 -- explicitly BLOCKED in AptDisplayList.h's note): merge a rebuilt scratch
-// pseudo display list into this live child list. Declared as a free function taking the
-// child list so the home file can name it without editing AptDisplayList.h.
-// AptDisplayList::mergeState is now called directly as a member (AptDisplayList.h is included above).
+// AptDisplayList::mergeState @0x82B0B438 (HOMED in AptDisplayList.cpp) is called
+// directly as a member (AptDisplayList.h is included above); the free-function
+// forwarder is retired.
 
 // ---------------------------------------------------------------------------
 // AptGetClipMovie -- the AptMovie timeline embedded inside a sprite/animation
-// AptCharacter subclass. The X360 reaches it as `mpRenderItem->mpCharacter + 0x10`;
-// the project models that un-homed subclass field with the same FLAGged reinterpret
-// AptCharacterAnimation.cpp uses (the AptCharacter base header stops before it).
+// AptCharacter record. The X360 reaches it as `mpRenderItem->mpCharacter + 0x10`;
+// the same reinterpret AptCharacterAnimation.cpp / AptCIHMembers.cpp use.
 // Centralised here so the three play-head methods name it once.
-// FLAG (un-homed sprite/animation AptCharacter subclass): the embedded AptMovie is a
-// fixed member the AptCharacter base type does not yet model.
-// FLAG (x64 fork): the console reaches it at char+0x10; the 8-byte GUIAPT64 "1:7:8"
-// layout widens the AptCharacter header so it lands at char+0x20 (KU_AptEmbeddedMovieOff,
-// AptCIH.h). We ship only the 8-byte format, so this is the single native-64 offset.
+// FLAG PC-platform leaf: serialised .apt blob offset access -- the character table
+// is native-8 "1:7:8" FILE data (relocated live by Fixup), not a modelled C++
+// member; the widened header lands the embedded body at char+0x20
+// (KU_AptEmbeddedMovieOff, AptCIH.h -- console char+0x10). We ship only the 8-byte
+// format, so this is the single native-64 offset.
 static AptMovie* AptGetClipMovie(const AptCharacterSpriteInstBase* pInst)
 {
     AptCharacter* pCharacter = pInst->mpRenderItem->mpCharacter;
     return reinterpret_cast<AptMovie*>(reinterpret_cast<char*>(pCharacter) + KU_AptEmbeddedMovieOff);
 }
 
-// FLAG (homed elsewhere): the optional pre-destroy notify hook (console
-// dword_1059C6D0); null until installed.
+// The pre-destroy notify shim (HOMED in AptCIHBehaviour.cpp): dispatches
+// gAptFuncs.pfnOnUnload (console dword_8324E8A0 == gAptFuncs+0x88, installed by
+// AptAux::ConstructApt -> CgsGui::AptCallbackFile::OnUnload).
 void AptCIH_PreDestroyHook(AptCIH* pCIH);
 
 // The zombie-vector reap (XB1 sub_140830A40; X360 name AptUpdateZombieVector) --
-// currently the AptRenderLinkStubs no-op until the zombie vector homes.
+// HOMED in AptGC.cpp (the real gpAptZombieVector reap; AptInit builds the vector).
 extern void* AptUpdateZombieVector(char bClear);
 
 // ctor @0x824C7C
@@ -98,10 +94,12 @@ AptCIH::AptCIH(AptCharacter* pCharacter, AptCIH* pParent)
     : AptValueGC(AptVFT_CharacterInstHandle, CO_CIH)
     // mInstanceName default-constructs to the shared empty string.
 {
-    // FLAG: the console masks pool garbage into mFlagsA/mFlagsB (0xB80007F /
-    // |0xFFFC0000); zero-initialised on PC, then the deterministic bits applied.
+    // x64 ctor sub_140825520: mFlagsA masked (`and [rbx+18h],0FE0001D0h` -- the
+    // deterministic bits then applied), mFlagsB createdOnFrame inited to -1 via
+    // `or [rbx+1Ch],3FFFh` (LOW 14 bits). Zero-initialised here, then the
+    // deterministic bits applied.
     mFlagsA = 0;
-    mFlagsB = 0xFFFC0000u;
+    mFlagsB = 0x3FFFu;
 
     mpDisplayListParent = pParent;
     if (pParent)
@@ -121,14 +119,14 @@ AptCIH::AptCIH(AptCharacter* pCharacter, AptCIH* pParent)
     //   SetDirtyState(bDirty, bDirty)  -- bDirty when the character is a sprite(5) /
     //     button(4) / morph(8) / animation(9) / custom-control(16), or is null. Both
     //     the dirty and propagate args carry the SAME value (asm sets r4==r5). This
-    //     sets the tick-dirty bit25 and pushes it up the display-list parent chain, so
+    //     sets the tick-dirty bit 6 and pushes it up the display-list parent chain, so
     //     a freshly-placed sprite/animation child is BORN dirty and ticks on its own
     //     placement frame (SetDirtyState's internal shape/text/None gate still applies).
     //   SetGeneralizedProcessDirtyState(bGenDirty) -- bGenDirty when the character is a
-    //     text(2) / button(4) / sprite(5); sets bit24 (self) + propagates bit23 up.
+    //     text(2) / button(4) / sprite(5); sets bit 7 (self) + propagates bit 8 up.
     // This is the real mechanism that composes nested content -- NOT a later render-tree
-    // propagation pass. (Replaces the deferred `mFlagsA |= 0x01000000` stand-in, which
-    // both hard-set bit24 unconditionally and omitted the bit25 that fresh children need.)
+    // propagation pass. (Replaces the deferred hard-set stand-in, which both hard-set
+    // the self bit unconditionally and omitted the tick-dirty bit fresh children need.)
     const int32_t nCharType = pCharacter ? pCharacter->mnType : -1;
     const bool bDirty = (pCharacter == nullptr) ||
         nCharType == 5 || nCharType == 4 || nCharType == 8 ||
@@ -157,7 +155,7 @@ AptCIH::~AptCIH()
 void AptCIH::RegisterReferences()
 {
     if (!AptValue::sReferenceRegistrationCb)
-        return;   // GC not up (FLAG)
+        return;   // GC registration callback not installed (the same gate every sibling RegisterReferences body uses)
 
     AptNativeHash* pCharProps = nullptr;
     if (mpCharacterInst)
@@ -168,9 +166,20 @@ void AptCIH::RegisterReferences()
     if (pCharProps)
         pCharProps->RegisterReferences(this);
 
-    // FLAG: sprite/movie nodes (char type 5/9) also mark their display-list
-    // state (AptDisplayListState::RegisterReferences) -- deferred with the
-    // display-list subsystem.
+    // Sprite/movie nodes (char type 5/9) also GC-mark their child display-list
+    // state (AptDisplayListState::RegisterReferences @0x7E68FC, HOMED in
+    // AptDisplayListState.cpp) -- the child links keep placed children reachable.
+    if (mpCharacterInst)
+    {
+        const uint32_t nType = mpCharacterInst->GetTypeTag();
+        if (nType == 5u || nType == 9u)
+        {
+            AptDisplayListState* pChildren =
+                static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst)->mDisplayList.AsState();
+            if (pChildren)
+                pChildren->RegisterReferences(this);
+        }
+    }
 }
 
 // DestroyGCPointers @0x80553C -- release the parent + tear down the char inst.
@@ -186,10 +195,23 @@ void AptCIH::DestroyGCPointers()
 
     if (pCI)
     {
-        // FLAG: the console first removes the char inst's render item from the
-        // render-tree manager (Update_ItemRemoved) + destroys the inst's property
-        // hash; deferred with the render-tree manager. The char inst's own
-        // destructor releases its render item.
+        // The console first unhooks the inst's render item from the render-tree
+        // manager (Update_ItemRemoved) and destroys the inst's property hash --
+        // the same retire sequence ClearCIH's immediate-free path runs
+        // (AptCIHBehaviour.cpp). The char inst's own destructor then releases
+        // its render item.
+        if (pCI->mpRenderItem != nullptr)
+        {
+            if (AptRenderTreeManager* pManager = AptCurrentRenderTreeManager())
+                pManager->Update_ItemRemoved(pCI->GetRenderItemWritable(), gnCurrUpdateTick);
+        }
+        if (pCI->mpProperties != nullptr)
+        {
+            pCI->mpProperties->DestroyGCPointers();
+            pCI->mpProperties->~AptNativeHash();
+            gpNonGCPoolManager->Deallocate(pCI->mpProperties, sizeof(AptNativeHash));
+            pCI->mpProperties = nullptr;
+        }
         pCI->~AptCharacterInst();
         gpNonGCPoolManager->Deallocate(pCI, sizeof(AptCharacterInst));
     }
@@ -205,41 +227,49 @@ void AptCIH::PreDestroy()
 int16_t AptCIH::GetDepth() const { return mpCharacterInst->GetDepth(); }
 
 // ---- packed state / flags (mFlagsA) ---------------------------------------
-uint32_t AptCIH::GetCIHState() const { return (mFlagsA >> 29) & 3u; }
+// x64 GetCIHState @0x140838580: `shr eax,1; and eax,3` -- bits 1-2.
+uint32_t AptCIH::GetCIHState() const { return (mFlagsA >> 1) & 3u; }
 void AptCIH::SetCIHState(uint32_t eState)
 {
-    mFlagsA = (mFlagsA & ~0x60000000u) | ((eState << 29) & 0x60000000u);
+    // x64 SetCIHState @0x140840FD0: `and [rcx+18h],0FFFFFFF9h; add edx,edx`.
+    mFlagsA = (mFlagsA & ~0x6u) | ((eState << 1) & 0x6u);
 }
 
-int16_t AptCIH::GetZombieCount() const { return static_cast<int16_t>(mFlagsA >> 7); }
+// x64 GetZombieCount @0x140839E80: `shl eax,7; sar eax,10h` -- SIGNED 16-bit
+// field in bits 9-24 (mask 0x01FFFE00).
+int16_t AptCIH::GetZombieCount() const { return static_cast<int16_t>(static_cast<uint16_t>(mFlagsA >> 9)); }
 void AptCIH::IncZombieCount()
 {
-    const int16_t n = static_cast<int16_t>((mFlagsA >> 7) + 1);
-    mFlagsA = (mFlagsA & ~0x007FFF80u) | ((static_cast<uint32_t>(n) << 7) & 0x007FFF80u);
+    // x64 IncZombieCount @0x14083A630: mask 0x1FFFE00, +0x200.
+    const int16_t n = static_cast<int16_t>(GetZombieCount() + 1);
+    mFlagsA = (mFlagsA & ~0x01FFFE00u) | ((static_cast<uint32_t>(static_cast<uint16_t>(n)) << 9) & 0x01FFFE00u);
 }
 void AptCIH::DecZombieCount()
 {
-    const int16_t n = static_cast<int16_t>((mFlagsA >> 7) - 1);
-    mFlagsA = (mFlagsA & ~0x007FFF80u) | ((static_cast<uint32_t>(n) << 7) & 0x007FFF80u);
+    const int16_t n = static_cast<int16_t>(GetZombieCount() - 1);
+    mFlagsA = (mFlagsA & ~0x01FFFE00u) | ((static_cast<uint32_t>(static_cast<uint16_t>(n)) << 9) & 0x01FFFE00u);
     // XB1 sub_140835B50 (the arbiter's DecZombieCount): when the count reaches
-    // zero, reap the dead zombies immediately -- AptUpdateZombieVector(0).
-    // (The reap body is the staged zombie-vector tier; the current link-stub is
-    // a no-op, faithful while the vector itself is un-homed.)
-    if ((mFlagsA & 0x007FFF80u) == 0u)
+    // zero, reap the dead zombies immediately -- AptUpdateZombieVector(0)
+    // (HOMED in AptGC.cpp; AptInit builds gpAptZombieVector).
+    if ((mFlagsA & 0x01FFFE00u) == 0u)
         AptUpdateZombieVector(0);
 }
 
-bool AptCIH::IsInCtor() const { return ((mFlagsA >> 27) & 1u) != 0; }
+// x64 IsInCtor @0x14083B140 / SetInCtor @0x1408417C0: bit 4 (mask 0x10).
+bool AptCIH::IsInCtor() const { return (mFlagsA & 0x10u) != 0; }
 void AptCIH::SetInCtor(uint32_t b)
 {
-    mFlagsA = (mFlagsA & ~0x08000000u) | ((b << 27) & 0x08000000u);
+    mFlagsA = (mFlagsA & ~0x10u) | (b ? 0x10u : 0u);
 }
 
 // ---- packed state / flags (mFlagsB) ---------------------------------------
-int  AptCIH::GetCreatedOnFrame() const { return static_cast<int32_t>(mFlagsB) >> 18; }   // srawi: signed/arithmetic shift (sign-extends the 14-bit field)
+// x64 GetCreatedOnFrame @0x1408387E0: `shl eax,12h; sar eax,12h` -- SIGNED
+// 14-bit field in the LOW bits (mask 0x3FFF); SetCreatedOnFrame @0x140841220
+// clears with `and [rcx+1Ch],0FFFFC000h`.
+int  AptCIH::GetCreatedOnFrame() const { return (static_cast<int32_t>(mFlagsB << 18)) >> 18; }
 void AptCIH::SetCreatedOnFrame(int nFrame)
 {
-    mFlagsB = (mFlagsB & 0x0003FFFFu) | (static_cast<uint32_t>(nFrame) << 18);
+    mFlagsB = (mFlagsB & ~0x3FFFu) | (static_cast<uint32_t>(nFrame) & 0x3FFFu);
 }
 
 // ---------------------------------------------------------------------------
@@ -293,7 +323,7 @@ bool AptCIH::HasMask() const { return mpCharacterInst->GetRenderItem()->GetHasMa
 // GetRootAnimation @PS3 0x820F3C -- the nearest enclosing ANIMATION node. The empty
 // CIHNone placeholder (tag 0x25) resolves to the lazily-created level-0 root; any
 // other node walks its display-list parent chain ([7] mpDisplayListParent) until the
-// character-inst type tag ([8]->mTypeFlags >> 26) is 9 (animation) or 15.
+// character-inst type tag (x64: mTypeFlags & 0x3F) is 9 (animation) or 15.
 // ---------------------------------------------------------------------------
 AptCIH* AptCIH::GetRootAnimation()
 {
@@ -311,36 +341,38 @@ AptCIH* AptCIH::GetRootAnimation()
 }
 
 // ---------------------------------------------------------------------------
-// SetDirtyState @0x82AD76B8 -- set/clear the per-node dirty bit (mFlagsA bit 25).
-// Clearing, or a non-renderable character type (shape 1 / dynamic-text 2 /
-// static-text 10) or the empty AptCIHNone placeholder, leaves it clear. When a
-// renderable node is dirtied with bPropagate, the dirty bit is pushed up the
-// display-list parent chain, stopping at the first already-dirty ancestor.
+// SetDirtyState @0x82AD76B8 -- set/clear the per-node dirty bit (x64 mFlagsA bit 6,
+// mask 0x40 -- x64 GetDirtyState @0x140838870 `shr eax,6`, XB1 ctor 0x140825520
+// propagates `|= 0x40`; the console `oris 0x200` = 0x02000000 was the same field's
+// X360 big-endian position). Clearing, or a non-renderable character type (shape 1 /
+// dynamic-text 2 / static-text 10) or the empty AptCIHNone placeholder, leaves it
+// clear. When a renderable node is dirtied with bPropagate, the dirty bit is pushed
+// up the display-list parent chain, stopping at the first already-dirty ancestor.
 // ---------------------------------------------------------------------------
 void AptCIH::SetDirtyState(bool bDirty, bool bPropagate)
 {
     if (!bDirty)
     {
-        mFlagsA &= ~0x02000000u;
+        mFlagsA &= ~0x40u;
         return;
     }
 
     const uint32_t nType = mpCharacterInst->GetTypeTag();
     if (nType == 1 || nType == 2 || nType == 10 || IsNone())
     {
-        mFlagsA &= ~0x02000000u;
+        mFlagsA &= ~0x40u;
         return;
     }
 
-    mFlagsA |= 0x02000000u;
+    mFlagsA |= 0x40u;
     if (bPropagate)
     {
         for (AptCIH* pAncestor = mpDisplayListParent; pAncestor; )
         {
-            if ((pAncestor->mFlagsA & 0x02000000u) != 0)
+            if ((pAncestor->mFlagsA & 0x40u) != 0)
                 break;
             AptCIH* pNext = pAncestor->mpDisplayListParent;
-            pAncestor->mFlagsA |= 0x02000000u;
+            pAncestor->mFlagsA |= 0x40u;
             pAncestor = pNext;
         }
     }
@@ -353,14 +385,15 @@ void AptCIH::SetDirtyState(bool bDirty, bool bPropagate)
 // The play-head state lives in the node's AptCharacterSpriteInstBase (the sprite/
 // movie-clip + animation char instances): the asm reaches it as mpCharacterInst's
 // dwords [4]/[5]/[8] and its embedded child list [7]. The named members are:
-//   mnGotoFrame       (+0x10, dword[4]) -- the LIVE current play-head frame. FLAG:
-//                     the header's role label (a -1 "pending goto" sentinel) is
-//                     refined here; these three functions PROVE +0x10 is the active
-//                     current-frame counter the timeline driver reads/advances.
-//   mnClipActionFlags (+0x14, dword[5]) -- the low 8 bits are sprite STATE flags:
-//                     bit6 (0x40) = "needs a frame action this tick", bit7 (0x80) =
-//                     "auto-play / freshly placed". (The high 24 bits are the AS
-//                     clip-event mask, untouched here.)
+//   mnGotoFrame       (+0x10, dword[4]) -- the LIVE current play-head frame (the
+//                     header's earlier "-1 pending goto sentinel" label was refined:
+//                     these three functions PROVE +0x10 is the active current-frame
+//                     counter the timeline driver reads/advances).
+//   mnClipActionFlags (x64 +0x24) -- x64 bit layout: bit 25 (0x2000000, bIsPlaying) =
+//                     "needs a frame action this tick", bit 24 (0x1000000, bJustLoaded)
+//                     = "auto-play / freshly placed". (The LOW 24 bits are the AS
+//                     clip-event mask, untouched here. X360 kept these reversed:
+//                     state bits 6/7, mask high-24.)
 //   mnLastActionFrame (+0x20, dword[8]) -- the frame id stamped for queueFrameActions.
 //   mDisplayList      (+0x1C, dword[7]) -- the clip's child display list.
 // ===========================================================================
@@ -417,8 +450,8 @@ int AptCIH::jumpToFrame(int nFrame)
 
             const char bForward = (pInst->mnGotoFrame < nFrame) ? 1 : 0;
 
-            // A freshly-placed clip (state bit7) restarts from frame 0.
-            if ((pInst->mnClipActionFlags & 0x80u) == 0x80u)
+            // A freshly-placed clip (bJustLoaded, x64 bit 24) restarts from frame 0.
+            if ((pInst->mnClipActionFlags & 0x1000000u) != 0u)
                 pInst->mnGotoFrame = 0;
             // Never replay forward FROM a frame already at/after the target.
             if (pInst->mnGotoFrame >= nFrame)
@@ -431,10 +464,10 @@ int AptCIH::jumpToFrame(int nFrame)
             {
                 if (pInst->mnGotoFrame >= AptGetClipMovie(pInst)->mnFrameCount)
                     break;
-                // FLAG: the X360 call site (sub_82B0BE60) only fills r3 (the AptMovie)
-                // and r4 (the scratch list); the frame index + trailing args are not
-                // re-loaded into r5/r6 at the call. Passed faithfully as the current
-                // replay frame for the AptMovie::DoTemporaryFrameControls signature.
+                // The X360 call site (sub_82B0BE60) only re-fills r3 (the AptMovie)
+                // and r4 (the scratch list); r5/r6 still hold the current replay
+                // frame + trailing args from the loop, so they are passed here
+                // explicitly for the AptMovie::DoTemporaryFrameControls signature.
                 pMovie->DoTemporaryFrameControls(pScratch, pInst->mnGotoFrame, 0, nullptr);
                 ++pInst->mnGotoFrame;
             }
@@ -451,9 +484,9 @@ int AptCIH::jumpToFrame(int nFrame)
         }
 
         pInst->mnLastActionFrame = pInst->mnGotoFrame;
-        // FLAG (x64 narrowing): the X360 returns r3 -- the queueFrameActions result
-        // pointer -- as the int result the callers ignore. Carried as a non-zero
-        // "ran" marker to avoid an 8->4-byte pointer truncation on x64.
+        // x64 narrowing (resolved): the X360 returns r3 -- the queueFrameActions
+        // result pointer -- as the int result the callers ignore. Carried as a
+        // non-zero "ran" marker so no 8->4-byte pointer truncation exists on x64.
         nResult = pMovie->queueFrameActions(this, pInst->mnGotoFrame) != nullptr;
     }
     return nResult;
@@ -461,7 +494,7 @@ int AptCIH::jumpToFrame(int nFrame)
 
 // tick @0x82B0BED8 -- advance the movie-clip node one frame.
 //
-// FLAG (x64 bring-up -- deferred, not gated): the console tick dereferences the char
+// FLAG PC-platform leaf (host tick gating): the console tick dereferences the char
 // inst (a1+32), its render item (v6[1]), the render item's character and the embedded
 // clip movie (char + embed) WITHOUT null guards -- everything is always live in the
 // shipped game. On our partial bring-up the render-tree / AS scope is not fully stood up
@@ -471,8 +504,10 @@ int AptCIH::jumpToFrame(int nFrame)
 
 int AptCIH::tick()
 {
-    // Only a dirtied node ticks (mFlagsA bit25).
-    if ((mFlagsA & 0x02000000u) == 0)
+    // Only a dirtied node ticks (the dirty bit, x64 mFlagsA bit 6 -- XB1 tick
+    // sub_14085D620 `(*(a1+24) & 0x40) == 0`; the console 0x02000000 was the same
+    // field's X360 big-endian position).
+    if ((mFlagsA & 0x40u) == 0)
         return 0;
 
     AptCharacterSpriteInstBase* pInst =
@@ -482,13 +517,13 @@ int AptCIH::tick()
     // Only sprite(5)/animation(9) clips have a play-head (v6[2] >> 26 == 5 or 9).
     const uint32_t nType = pInst->GetTypeTag();
     if (nType != 5 && nType != 9)
-        return (mFlagsA >> 25) & 1u;   // LABEL_44
+        return (mFlagsA >> 6) & 1u;   // LABEL_44 (dirty bit; x64 bit 6)
 
     const uint32_t nFlags = pInst->mnClipActionFlags;   // v11 = v6[5]
     pInst->mnLastActionFrame = 0;                        // v6[8] = 0
 
-    const bool bNeedsAction = ((nFlags >> 6) & 1u) != 0;   // v12 = (v11 >> 6) & 1  (state bit6 0x40)
-    const bool bFreshPlaced = (nFlags & 0x80u) != 0;       // state bit7 (0x80)
+    const bool bNeedsAction = (nFlags & 0x2000000u) != 0;   // bIsPlaying (x64 bit 25; X360 bit6)
+    const bool bFreshPlaced = (nFlags & 0x1000000u) != 0;   // bJustLoaded (x64 bit 24; X360 bit7)
 
     AptMovie* const pClipMovie = AptGetClipMovie(pInst);   // *(v6[1]+4) + embed
 
@@ -502,7 +537,7 @@ int AptCIH::tick()
         AptRenderItem* pRenderItem = pInst->mpRenderItem;   // v14 = v6[1]
         // A stopped render item (mFlags bit 0x08000000; console *(v14+24) bit27) holds
         // frame 0; else step to the next frame.
-        if (((pRenderItem->mFlags >> 27) & 1u) != 0)
+        if ((pRenderItem->mFlags & 0x10u) != 0)   // x64 bit 4 (X360 bit27)
             pInst->mnGotoFrame = 0;
         else
             ++pInst->mnGotoFrame;
@@ -549,7 +584,7 @@ int AptCIH::tick()
     // end-wrap paths jump PAST this block to the enterFrame stage (label_27 below).
     {
         const uint32_t nFlags2 = pInst->mnClipActionFlags;   // v16 = v6[5]
-        if (((nFlags2 & 0x40u) != 0) || (((nFlags2 & 0x80u) != 0) && gbAptRecorderGate != 0))
+        if (((nFlags2 & 0x2000000u) != 0) || (((nFlags2 & 0x1000000u) != 0) && gbAptRecorderGate != 0))
         {
             // Negate the stamped frame while the actions are queued (the X360's
             // running-frame marker), then restore it.
@@ -564,44 +599,44 @@ label_27:
     // (3) enterFrame clip event: a non-fresh clip (or the 0x24 custom-control family)
     // with an onEnterFrame handler (clip-event mask bit 0x200 or a __proto__ event
     // member) queues its enterFrame handlers.
-    if ((((pInst->mnClipActionFlags & 0x80u) == 0) ||
-         ((pInst->mTypeFlags & 0xFC000000u) == 0x24000000u)) &&
-        (((pInst->mnClipActionFlags & 0x200u) != 0) || HasEventMember(2)))
+    if ((((pInst->mnClipActionFlags & 0x1000000u) == 0) ||   // not freshly placed (bJustLoaded)
+         ((pInst->mTypeFlags & 0x3Fu) == 9u)) &&   // animation; x64 low-6-bit tag
+        (((pInst->mnClipActionFlags & 0x2u) != 0) || HasEventMember(2)))   // enterFrame; x64 low-24 mask
     {
         queueClipEvents(2, gnAptActionFrameId, 1);
     }
     // (4) construct/load clip event on first placement; then clear the freshly-placed bit.
-    if ((pInst->mnClipActionFlags & 0x80u) != 0)
+    if ((pInst->mnClipActionFlags & 0x1000000u) != 0)
     {
-        if (((pInst->mnClipActionFlags & 0x100u) != 0) || HasEventMember(1))
+        if (((pInst->mnClipActionFlags & 0x1u) != 0) || HasEventMember(1))   // load; x64 low-24 mask
             queueClipEvents(1, gnAptActionFrameId, 1);
-        pInst->mnClipActionFlags &= ~0x80u;
+        pInst->mnClipActionFlags &= ~0x1000000u;
     }
 
     // ---- (5) recurse the child display list -------------------------------
     const int nChildTick = pInst->mDisplayList.tick(-1, 0);
 
     // ---- (6) recompute the dirty bit --------------------------------------
-    // The node stays dirty (forces bit25) when it carries an enterFrame handler;
-    // otherwise it inherits the child-list tick result -- unless it is a
-    // pending-action multi-frame clip (state bit6 set, frame count != 1), which
-    // leaves the dirty bit untouched.
-    if (((pInst->mnClipActionFlags & 0x200u) != 0) || HasEventMember(2))
+    // The node stays dirty (forces the x64 bit-6 dirty flag) when it carries an
+    // enterFrame handler; otherwise it inherits the child-list tick result --
+    // unless it is a playing multi-frame clip (bIsPlaying set, frame count != 1),
+    // which leaves the dirty bit untouched.
+    if (((pInst->mnClipActionFlags & 0x2u) != 0) || HasEventMember(2))
     {
-        mFlagsA |= 0x02000000u;
+        mFlagsA |= 0x40u;
     }
     else
     {
-        if ((pInst->mnClipActionFlags & 0x40u) != 0 &&
+        if ((pInst->mnClipActionFlags & 0x2000000u) != 0 &&
             AptGetClipMovie(pInst)->mnFrameCount != 1)
         {
-            return (mFlagsA >> 25) & 1u;
+            return (mFlagsA >> 6) & 1u;
         }
-        mFlagsA = (mFlagsA & 0xFDFFFFFFu) |
-                  ((static_cast<uint32_t>(nChildTick) << 25) & 0x02000000u);
+        mFlagsA = (mFlagsA & ~0x40u) |
+                  ((static_cast<uint32_t>(nChildTick) << 6) & 0x40u);
     }
 
-    return (mFlagsA >> 25) & 1u;
+    return (mFlagsA >> 6) & 1u;   // dirty bit; x64 bit 6
 }
 
 // (AptCIH::_gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core -- is the

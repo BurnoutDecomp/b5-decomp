@@ -19,10 +19,11 @@
 #include "SDKs/EATech/Apt/AptValueGCAllocator.h"             // AptValueGC_MemItem
 #include "SDKs/EATech/include/Apt/AptDefine.h"               // gpGCPoolManager
 
-// FLAG: the two global scope tables _global member resolution consults; homed by
-// the AS-globals registry / Apt runtime startup TU (not yet reconstructed), so
-// they are null until then -- _global resolution is inert until the globals are
-// built. (See AptGlobal.h.)
+// The two global scope tables _global member resolution consults, built by
+// AptValueInitialize (AptInit.cpp): gpAptGlobalFallback is the AptGlobal fallback
+// scope (off_8324E380), gpAptNativeGlobals aliases the _global extension object
+// (off_8324E37C) -- null only before that bring-up runs, when _global resolution
+// is inert. (See AptGlobal.h.)
 AptValueWithHash* gpAptNativeGlobals  = 0;   // X360 off_8324E37C
 AptValueWithHash* gpAptGlobalFallback = 0;   // X360 off_8324E380
 
@@ -32,8 +33,8 @@ AptValueWithHash* gpAptGlobalFallback = 0;   // X360 off_8324E380
 // Allocate the AptGlobal block from the GC pool and mark its AptValueGC_MemItem
 // "allocated" flag. The X360 calls DOGMA_PoolManager::Allocate directly on the
 // GC pool (off_8324D834 == gpGCPoolManager), then SetIsAllocated(block,
-// gAptValueGCSizeOffset /*byte_8324D804*/, 1). Guarded for a null pool until the
-// Apt runtime startup (AptInit) wires gpGCPoolManager (FLAG).
+// gAptValueGCSizeOffset /*byte_8324D804*/, 1). Guarded for a null pool before
+// AptAllocatorInitialize @0x82ADD118 (AptInit.cpp) wires gpGCPoolManager.
 // ---------------------------------------------------------------------------
 void* AptGlobal::operator new(size_t size)
 {
@@ -92,12 +93,12 @@ AptGlobal::~AptGlobal()
 // if that misses (null) or the found value is not a defined value, fall back to
 // the secondary global table.
 //
-// FLAG (faithful note): the X360 brackets the global-table access with an
+// FLAG PC-platform leaf: the X360 brackets the global-table access with an
 // interrupt-masking atomic test-and-set spinlock (mfmsr/mtmsree/lwarx/stwcx. on
-// the lock global unk_8324E71C) so the registries are read consistently across
-// threads. The PC boot path is single-threaded and that lock is part of the
-// not-yet-reconstructed Apt runtime, so this reconstructs the observable lookup;
-// the lock would simply serialise concurrent readers.
+// the lock global unk_8324E71C). On the single-threaded PC bring-up path the TAS
+// is elided (threading primitive, not an engine method -- the same unk_8324E71C
+// treatment AptInit.cpp applies); the lock would only serialise concurrent
+// readers of the observable lookup below.
 // ---------------------------------------------------------------------------
 AptValue* AptGlobal::objectMemberLookup(AptValue* const /*pThis*/,
                                         const AptNativeString* const pName) const
@@ -124,8 +125,9 @@ AptValue* AptGlobal::objectMemberLookup(AptValue* const /*pThis*/,
 // only if the name is not already a native global (a native global must not be
 // shadowed by an assignment). Always reports success.
 //
-// FLAG: same single-threaded note as objectMemberLookup -- the X360's atomic
-// spinlock around the registry read is omitted on the single-threaded PC path.
+// FLAG PC-platform leaf: same single-threaded note as objectMemberLookup -- the
+// X360's interrupt-masked TAS around the registry read is elided (threading
+// primitive) on the single-threaded PC path.
 // ---------------------------------------------------------------------------
 bool AptGlobal::objectMemberSet(AptValue* const /*pThis*/,
                                 const AptNativeString* const pName,

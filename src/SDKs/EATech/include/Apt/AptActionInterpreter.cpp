@@ -20,7 +20,6 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptLookup.h"       // AptLookup::GetIndex (Lookup indirection)
 #include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"     // AptRegister::GetIndex (Register indirection)
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"    // GetRegisterValue (Register indirection)
-#include "SDKs/EATech/include/Apt/AptValue/AptString.h"       // AptString peek (FLAG bring-up trace)
 
 // ---------------------------------------------------------------------------
 // stackPush @0x7F1790 -- store at top, advance, AddRef.
@@ -43,20 +42,18 @@ void AptActionInterpreter::stackPushNoInc(AptValue* pValue)
 }
 
 // ---------------------------------------------------------------------------
-// stackPop @0x7F3248 -- release + pop the top value, returning it. The returned
-// pointer has already been Release()'d (the console returns it regardless); null
-// on an empty stack.
+// stackPop @0x7F3248 -- release + pop the top value. VOID per the x64 mangling
+// (?stackPop@AptActionInterpreter@@QEAAXXZ @0x14085D380 -- the body releases and
+// decrements without returning; the old AptValue* return modelled a PPC r3
+// leftover and exposed an already-Release()'d pointer the real API never did).
 // ---------------------------------------------------------------------------
-AptValue* AptActionInterpreter::stackPop()
+void AptActionInterpreter::stackPop()
 {
-    AptValue* pValue = 0;
     if (mnStackTop > 0)
     {
-        pValue = mpStack[mnStackTop - 1];
-        pValue->Release();
+        mpStack[mnStackTop - 1]->Release();
         --mnStackTop;
     }
-    return pValue;
 }
 
 // ---------------------------------------------------------------------------
@@ -180,18 +177,19 @@ void AptActionInterpreter::stackPushIndirect(AptValue* pValue)
 // dispatch handlers and the builtins reuse it; declared extern here too.
 extern AptValue* gpUndefinedValue;
 
-// FLAG (homed by the apt VM native-call dispatch): the global native-method arg stack
-// (X360 off_8324E768 = gAptActionInterpreter.mpStack, dword_8324E760 = its mnStackTop).
-// The i-th AS argument (i=0 = last pushed) is gppAptNativeArgStack[gnAptNativeArgCount-1-i].
+// The global native-method arg stack (X360 off_8324E768 = gAptActionInterpreter.mpStack,
+// dword_8324E760 = its mnStackTop; defined in AptGlobals.cpp, published per native call
+// by CallFunctionDispatch). The i-th AS argument (i=0 = last pushed) is
+// gppAptNativeArgStack[gnAptNativeArgCount-1-i].
 extern AptValue** gppAptNativeArgStack;   // off_8324E768
 extern int        gnAptNativeArgCount;    // dword_8324E760
 
-// FLAG (host FSCommand sink -- console dword_8324E848, installed by the host): the
+// The host FSCommand sink (console dword_8324E848, installed by the host): the
 // getURL("FSCommand:...") callback. Invoked as hook(command, args). Null until the
-// host installs it; the AS path is faithful, the sink is the host boundary.
+// host installs it, exactly as on the console; defined in AptGlobals.cpp.
 extern void (*gpAptFSCommandHook)(const char* pCommand, const char* pArgs);
 
-// FLAG: the "FSCommand:" url prefix literal (console off_82F7300C). A plain C string
+// The "FSCommand:" url prefix literal (console off_82F7300C). A plain C string
 // constant in the X360 .rodata; reproduced verbatim.
 static const char* const kAptFSCommandPrefix = "FSCommand:";
 
@@ -268,30 +266,30 @@ bool AptActionInterpreter::isFSCommand(const char* pUrl)
 int AptActionInterpreter::doFSCommand(const char* pUrl, const char* pArgs)
 {
     const size_t nPrefix = std::strlen(kAptFSCommandPrefix);
-    gpAptFSCommandHook(pUrl + nPrefix, pArgs);   // FLAG: host FSCommand sink (null until installed)
+    gpAptFSCommandHook(pUrl + nPrefix, pArgs);   // host FSCommand sink (AptGlobals.cpp; host-installed, unguarded as on console)
     return 1;
 }
 
 // ---------------------------------------------------------------------------
 // getName @0x82AF75C8 / getName2 @0x82AF7540 -- build pValue's slash/dot path name
 // into pOut. getName seeds pOut empty (path mode 1); getName2 seeds it empty (mode 0)
-// and, when the produced path is empty, falls back to "/". FLAG: the actual path
-// walk (console sub_82AF7400, the (value, out, mode) builder) is the path-builder
-// follow-on; declared extern so this entry layer is faithful and links.
+// and, when the produced path is empty, falls back to "/". The path walk (console
+// sub_82AF7400, the (value, out, mode) builder) is AptBuildPathName, homed in
+// AptActionInterpreterInterpHelpers.cpp.
 // ---------------------------------------------------------------------------
 extern int AptBuildPathName(AptActionInterpreter* pInterp,
-                                              AptValue* pValue, EAStringC* pOut, int nMode);  // FLAG: sub_82AF7400
+                                              AptValue* pValue, EAStringC* pOut, int nMode);  // sub_82AF7400 (InterpHelpers.cpp)
 
 void AptActionInterpreter::getName(AptValue* pValue, EAStringC* pOut)
 {
     *pOut = "";   // EAStringC::operator= from the empty seed (console InitFromBuffer + assign)
-    AptBuildPathName(this, pValue, pOut, 1);   // FLAG: path-builder follow-on
+    AptBuildPathName(this, pValue, pOut, 1);   // the sub_82AF7400 path walk
 }
 
 void AptActionInterpreter::getName2(AptValue* pValue, EAStringC* pOut)
 {
     *pOut = "";
-    AptBuildPathName(this, pValue, pOut, 0);   // FLAG: path-builder follow-on
+    AptBuildPathName(this, pValue, pOut, 0);   // the sub_82AF7400 path walk
     if (pOut->GetLength() == 0)
         *pOut = "/";
 }
@@ -322,7 +320,7 @@ AptValue* AptActionInterpreter::getObject(AptValue* pScope, AptValue* pTarget, c
     AptValue* pResult = 0;
     if (pContext)
     {
-        AptValue* pChild = pContext->findChild(&leaf, pTarget);   // FLAG: findChild body deferred (AptValue.h)
+        AptValue* pChild = pContext->findChild(&leaf, pTarget);   // findChild @0x82B01298 (AptValueFindChild.cpp)
         if (pChild && pChild->getIsDefined() && pChild->getVtblIndex() == AptVFT_Object)
             pResult = pChild;
     }
@@ -332,11 +330,9 @@ AptValue* AptActionInterpreter::getObject(AptValue* pScope, AptValue* pTarget, c
 // ---------------------------------------------------------------------------
 // isObjectOfType @0x82AEA5B8 -- AS `instanceof`: is pObject an instance of pClass?
 // When both are objects, fetch pClass's prototype and walk pObject's prototype /
-// interface chain looking for it; otherwise fall back to a type-tag comparison
-// (a defined Object value of the same value-type matches). FLAG: the prototype /
-// interface chain walk reads console vtable slots + the AptObject prototype links
-// that are not yet reconstructed as named members; the walk is declared extern so
-// this entry layer is faithful and links.
+// interface chain looking for it (instanceOfChainWalk below, over the NAMED
+// AptNativeHash::mpPrototype/mp__Proto__ links); otherwise fall back to a type-tag
+// comparison (a defined Object value of the same value-type matches).
 // ---------------------------------------------------------------------------
 // AptActionInterpreter_InstanceOfChainWalk -- HOMED 2026-07-02 from the X360
 // isObjectOfType @0x82AEA5B8's object arm (retiring the return-0 link-stub).
@@ -527,10 +523,10 @@ const char* AptActionInterpreter::urlDecode(const char* pStream, EAStringC* pOut
 // _doEnumerate @0x82B036D8 -- AS `for..in`: resolve the enumeration target (the
 // stack top, or its variable when it is a name), replace the top with the null/
 // undefined enumeration marker, then push each enumerable member name held in the
-// target's native hash (skipping the two reserved internal keys). FLAG: the native-
-// hash key iteration walks AptNativeHash + the reserved-key set; the per-key string
-// construction reuses AptString/EAStringC, but the resolve + walk read console
-// globals (the reserved-key sentinels) not yet reconstructed -- declared extern.
+// target's native hash (skipping the two reserved internal keys). The key walk is
+// EnumerateMembers (AptActionInterpreterInterpHelpers.cpp); the reserved-key
+// sentinels (console dword_8324E580 / dword_8324E698) are the named
+// StringPool::saConstant[0] / gAptKeyPrototype globals.
 // ---------------------------------------------------------------------------
 // AptActionInterpreter::EnumerateMembers is now a member (declared in the header);
 // _doEnumerate() below forwards to it.
@@ -538,24 +534,22 @@ const char* AptActionInterpreter::urlDecode(const char* pStream, EAStringC* pOut
 void AptActionInterpreter::_doEnumerate(AptValue* pScope, AptValue* pTarget)
 {
     // The full body resolves the enumeration target, pushes the marker, and emits one
-    // AptString per enumerable member key. The key-walk + reserved-key sentinels read
-    // console data globals (dword_8324E580 / dword_8324E698) that are not yet
-    // reconstructed as named symbols here; deferred to the enumerate-walk helper so
-    // this stays faithful and links.
+    // AptString per enumerable member key; the reserved-key sentinels (console
+    // dword_8324E580 / dword_8324E698) are the named StringPool::saConstant[0] /
+    // gAptKeyPrototype globals the walk reads.
     EnumerateMembers(pScope, pTarget);  // the native-hash enumerate walk (this member)
 }
 
 // ---------------------------------------------------------------------------
 // callFunction @0x82AE3C08 -- invoke an AS callable value (function body run /
 // native callback / `new` dispatch) with nArgs operands already on the stack.
-// FLAG: the faithful body drives AptScriptFunctionBase::SetupBeforeExecution /
+// The faithful body drives AptScriptFunctionBase::SetupBeforeExecution /
 // CleanupAfterExecution + runStream over the captured scope, saving/restoring the
 // interpreter's current function (mpCurrentFunction) + string-constant-dictionary pair
-// (mnConstantPoolCount / mpConstantPool, which GetConstantPool installs per-function) and
-// driving the AptScriptFunctionBase register/frame machinery. Deferred to the call-dispatch
-// helper (see AptInterp_ExecuteScriptFunction's FLAG for the exact branch + open items) so this entry
-// layer is faithful and links; the operand-stack collapse the console performs around
-// it (Burnout_X360_Artist_01e3_0 == the pop-N primitive) is part of that helper.
+// (mnConstantPoolCount / mpConstantPool, which GetConstantPool installs per-function):
+// CallFunctionDispatch / ExecuteScriptFunction, both homed + LIVE in
+// AptActionInterpreterInterpHelpers.cpp (including the post-call abort collapse --
+// Burnout_X360_Artist_01e3_0, the pop-N primitive).
 // ---------------------------------------------------------------------------
 // AptActionInterpreter::CallFunctionDispatch is now a member (declared in the header);
 // callFunction() below forwards to it.
@@ -597,13 +591,11 @@ const unsigned char* AptActionInterpreter::_parseStream(const unsigned char* pSt
 // cbCallMethod_clearInterval @0x82AE3AE0 -- clearInterval(id): tear down the timer
 // slot whose id matches the integer argument.
 //
-// FLAG: both index the AptIntervalTimer slot by its setup-path fields (the in-use
-// flag, the callback/method value slots at +0x04/+0x10, the period/elapsed floats and
-// the id at +0x20) which the AptIntervalTimer header still leaves as opaque
-// placeholders (it documents that THESE TUs name them). Naming those members requires
-// editing AptIntervalTimer.h, which is out of this task's edit scope; so the slot
-// manipulation is deferred to the interval-table helpers and the entry layer here
-// reads the args off the native-arg stack faithfully.
+// Both index the AptIntervalTimer slot by its setup-path fields -- now the NAMED
+// AptIntervalTimer.h members mpCBFunction (+0x04) / mpContext (+0x10) / miId (+0x20).
+// The slot manipulation lives with the timer table (SetIntervalImpl /
+// ClearIntervalImpl, AptIntervalTimer.cpp); the entry layer here reads the args off
+// the native-arg stack faithfully.
 // ---------------------------------------------------------------------------
 
 AptValue* AptActionInterpreter::cbCallMethod_setInterval(AptValue* /*pThis*/, int nArgCount)

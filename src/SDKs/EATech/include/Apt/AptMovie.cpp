@@ -73,9 +73,9 @@ int AptMovie::labelToFrame(const EAStringC* pLabel) const
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed globals / callees owned by the Apt VM + display-list boot TUs):
-// declared extern so this TU links. Names reused from the sibling Apt TUs that
-// already home them; the single underlying object is shared.
+// Sibling-owned globals / callees (all HOMED -- AptGlobals.cpp for the globals,
+// noted per symbol for the callees): declared extern so this TU links; the
+// single underlying object is shared.
 // ---------------------------------------------------------------------------
 
 // off_8324D808 -- the shared Apt DOGMA pool the 20-byte pseudo nodes come from
@@ -87,10 +87,10 @@ int AptMovie::labelToFrame(const EAStringC* pLabel) const
 
 // dword_8324E514 -- the current frame's queued-action sequence id passed as
 // AddActionBack's 4th arg.
-extern int   gnAptActionFrameId;                // dword_8324E514 (FLAG)
+extern int   gnAptActionFrameId;                // dword_8324E514 (AptGlobals.cpp)
 
 // &dword_8324E760 -- the process-wide AS action interpreter instance.
-extern AptActionInterpreter gAptActionInterpreter;   // off_8324E760  (FLAG)
+extern AptActionInterpreter gAptActionInterpreter;   // off_8324E760  (AptGlobals.cpp)
 
 // byte_8324D807 -- the BACKGROUND-COLOUR once-latch: a tag-5 (BackgroundColour)
 // frame command fires the host callback at most once per loaded animation
@@ -701,8 +701,9 @@ static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void*
     // re-place it (pExistingNode set, no character, no name, depth 0, clipDepth -1) so the
     // record's matrix/colour land on the live item -- these charId==-1 records are every
     // animation's tween keyframes (dropping them froze all the title transitions after
-    // their discrete PLACE frames). Only a node whose mFlagsA bit31 is clear moves (the
-    // console `*(v18+12) >= 0` pending-remove gate); a missing node falls through to the
+    // their discrete PLACE frames). Only a node whose ASChanged flag is clear moves (the
+    // console `*(v18+12) >= 0` sign test on the reversed X360 bit31; x64 bit 0); a
+    // missing node falls through to the
     // fresh-place path (which the null-character guard below then skips, as the console's
     // charTable[-1] junk-place never composes on our bring-up either).
     if (bMove && !bHasCharacter)
@@ -714,7 +715,7 @@ static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void*
             pState->findInst(nDepth, nullptr, &pPrev, &pMatch);
         if (pMatch != nullptr)
         {
-            if (static_cast<int32_t>(pMatch->mFlagsA) >= 0)
+            if (!pMatch->GetASChanged())   // x64 bit 0 (X360: sign test on reversed bit31)
             {
                 return pDisplayList->placeObjectNCXForm(
                     /*pExistingNode*/ pMatch, /*nDepth*/ 0, /*pCharacter*/ nullptr,

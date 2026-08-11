@@ -296,6 +296,36 @@ extern "C" unsigned long XGetOverlappedResult(void* /*lpOverlapped*/,
                                               unsigned long* /*lpdwResult*/,
                                               int /*bWait*/) { return 0; }
 
+// FLAG PC-platform leaf: XDK overlapped EXTENDED-error query -- the twin of the call
+// above, and the only other XDK import in CgsSystem::CgsXOverlapped (achievement-manager
+// wave, 2026-08-11: CgsXOverlappedX360.cpp joins the exe so AchievementManagerX360::
+// Prepare/Release can construct the module's embedded overlapped). Its ONLY caller is
+// CgsXOverlapped::GetResultString @0x823557F0, which only reaches it on a code the three
+// named cases (0 / 996 / 997) did not cover; 0 keeps that diagnostic string honest on a
+// platform where no overlapped I/O is ever started.
+extern "C" unsigned long XGetOverlappedExtendedError(void* /*lpOverlapped*/) { return 0; }
+
+// ---- StreetManagerDebugComponent vtable gate (street wave, 2026-08-11) ------------------
+// GameStateModule now embeds StreetManager (X360 this+284520) whose embedded debug
+// component's vtable is emitted by the module ctor chain -- so its two out-of-line
+// virtuals must link. The component's REAL TUs (BrnStreetManagerDebugComponent.cpp +
+// _wO_01.cpp, bodies on disk) stay unmounted: they close over the road-rules cheat set
+// (StreetManager::SetChallengeUserScore / ScoreList::KAI_MIN/MAX_SCORES /
+// ProgressionManager trophy hooks -- 16 link-measured externals). Until that wave:
+// GetName is the real one-line body (@0x823175F0, same string); OnActivate is an inert
+// gate (the console registers the six debug-menu cheat callbacks here; activating the
+// menu on PC logs instead of registering dead pointers).
+#include "GameSource/GameState/StreetData/BrnStreetManagerDebugComponent.h"
+namespace BrnGameState
+{
+    const char* StreetManagerDebugComponent::GetName() const { return "Street Manager"; }
+    void StreetManagerDebugComponent::OnActivate()
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "StreetManagerDebugComponent::OnActivate: inert [FLAG PC boot gate]\n";
+    }
+}
+
 // FLAG PC-platform leaf: XDK notification-listener creation; a null handle makes
 // SystemUserProfile::Update early-return (no sign-in/storage/invite events on PC).
 extern "C" void* XNotifyCreateListener(unsigned long long /*qwAreas*/) { return 0; }

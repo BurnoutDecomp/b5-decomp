@@ -25,29 +25,30 @@
 
 #include <cstdint>   // uintptr_t
 
-// FLAG (homed by the apt VM native-call dispatch): the global native-method arg
-// stack (X360 off_8324E768 = gAptActionInterpreter.mpStack, dword_8324E760 = its
-// mnStackTop). The i-th AS argument (i=0 = last pushed) is
-// gppAptNativeArgStack[gnAptNativeArgCount - 1 - i].
+// The global native-method arg stack (X360 off_8324E768 = gAptActionInterpreter.
+// mpStack, dword_8324E760 = its mnStackTop). Storage is defined in AptGlobals.cpp;
+// the native-call dispatch (AptActionInterpreterInterpHelpers.cpp) publishes the
+// operand-stack window into the pair around each callback. The i-th AS argument
+// (i=0 = last pushed) is gppAptNativeArgStack[gnAptNativeArgCount - 1 - i].
 extern AptValue** gppAptNativeArgStack;   // off_8324E768
 extern int        gnAptNativeArgCount;    // dword_8324E760
 
-// FLAG (homed by the AS-globals layer): the shared "undefined" value (off_8324D814).
+// The shared "undefined" value (off_8324D814) -- defined in AptGlobals.cpp, built
+// at AptInit.
 extern AptValue* gpUndefinedValue;
 
 // The escape/unescape codecs are the homed members AptActionInterpreter::escape
 // @0x82AEE008 / ::unEscape @0x82AEE110 (percent-encode / decode an EAStringC in
 // place; AptActionInterpreter.cpp).
 
-// FLAG (wired at AptInit; committed externs in the sibling AptActionInterpreter*Ops TUs):
-// the running .swf version (only v7 makes a non-empty string coerce to boolean true).
+// The running .swf version (only v7 makes a non-empty string coerce to boolean
+// true) -- homed in AptLinker.cpp (the dword_8324E530 SWF-version cache parsed from
+// the .apt header at first link).
 extern unsigned int AptGetSwfVersion();
 
-// FLAG (AS loadVariables core @0x82B07DF8 -- not yet homed; the same extern shim the
-// loadVariables native method drives, preserving the (interpreter, node, pendingRelease,
-// &url) call shape -- r5 = *(pContext+8) = mpPendingReleaseValue). The GetUrl2
-// loadVariables branch forwards to it.
-// AptActionInterpreter::loadVariables is now a member (declared in the header).
+// AptActionInterpreter::loadVariables @0x82B07DF8 (the AS loadVariables core) is a
+// homed member (AptActionInterpreterInterpHelpers.cpp); the GetUrl2 loadVariables
+// branch calls it with the console (node, mpPendingReleaseValue, &url) shape.
 
 // ---------------------------------------------------------------------------
 // isNaN (the value test) @0x82AF9768 -- HOMED 2026-07-02, retiring the
@@ -290,11 +291,11 @@ void AptActionInterpreter::_FunctionAptActionAsciiToChar(AptActionInterpreter* p
 void AptActionInterpreter::_FunctionAptActionGetUrl(AptActionInterpreter* pInterp,
                                                     LocalContextT* pContext)
 {
-    // Two inline string-pointer operands at the next 4-byte-aligned position; the PC
-    // then advances past both. Console operands are 4-byte; the resolved x64 stream
-    // stores 8-byte pointers (the _parseStream transcode), so they are read at the
-    // host pointer width here -- the same x64-native PC model as the branch ops.
-    // FLAG: 8-byte (vs console 4-byte) inline operand width -- _parseStream transcode.
+    // Two inline string-pointer operands at the next aligned position; the PC then
+    // advances past both. Console operands are 4-byte; the x64 stream is the
+    // _parseStream transcode of the serialized .apt action stream and stores native
+    // 8-byte pointers (phase-0 native-8 regime) -- the same x64-native PC model as
+    // the branch ops.
     const char* const* pOperands = reinterpret_cast<const char* const*>(
         (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));   // 8-aligned (GUIAPT64)
     pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pOperands + 2);
@@ -370,10 +371,9 @@ void AptActionInterpreter::_FunctionAptActionGetUrl2(AptActionInterpreter* pInte
             pNode = pTargetValue;
         }
 
-        // Drive the AS loadVariables core (interpreter, node, mpPendingReleaseValue,
-        // &url). loadVariables is not an AptActionInterpreter member; the homed core is
-        // the same extern shim the loadVariables native method (AptCIHNativeFunctionHelper)
-        // drives. FLAG: AptActionInterpreter::loadVariables (@0x82B07DF8) not yet homed.
+        // Drive the AS loadVariables core (@0x82B07DF8, the homed member in
+        // AptActionInterpreterInterpHelpers.cpp) -- the same core the loadVariables
+        // native method (AptCIHNativeFunctionHelper) drives.
         pInterp->loadVariables(pNode, pContext->mpPendingReleaseValue, &strUrl);
         pInterp->stackPop(2);
         return;

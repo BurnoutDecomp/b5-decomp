@@ -24,7 +24,8 @@
 // analogue of the non-GC leaves' gpNonGCPoolManager route. AllocateAptValueGC =
 // DOGMA Allocate + AptValueGC_MemItem::SetIsAllocated (the X360 inlines that pair
 // into every GC type's operator new). Reached as AptArray::operator new(44) from
-// AptValueFactory::CreateArray. (FLAG: gpGCPoolManager is null until AptInit wires it.)
+// AptValueFactory::CreateArray. (gpGCPoolManager is wired by AptInit's
+// AptAllocatorInitialize @0x82ADD118; the null guard covers the pre-init window.)
 void* AptArray::operator new(size_t size)
 {
     return (gpGCPoolManager != nullptr) ? gpGCPoolManager->AllocateAptValueGC(size) : nullptr;
@@ -198,14 +199,16 @@ void AptArray::DestroyGCPointers()
 #include "SDKs/EATech/include/Apt/AptNativeFunction.h"     // AptNativeFunction (lazy native methods)
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"         // AptNativeHash::Lookup (sortOn member fetch)
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"  // the global VM (scriptFunctionSortFunc)
-// FLAG: the global VM instance (off_8324E760), owned by the Apt boot TU; declared extern.
+#include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h" // PushStaticData + GetCIH (the sort-comparator VM call)
+// The global VM instance (off_8324E760), defined in AptGlobals.cpp.
 extern AptActionInterpreter gAptActionInterpreter;
 
 #include <cstdlib>   // qsort / atoi / strtol
 
-// FLAG (homed by the apt VM native-call dispatch): the global native-method arg
-// stack (X360 off_8324E768 = gAptActionInterpreter.mpStack, dword_8324E760 = its
-// mnStackTop). The i-th AS argument (i=0 = last pushed) is
+// The global native-method arg stack, defined in AptGlobals.cpp and published by
+// the interpreter's native-call dispatch (AptActionInterpreterInterpHelpers.cpp
+// saves/installs X360 off_8324E768 = gAptActionInterpreter.mpStack, dword_8324E760
+// = its mnStackTop around each native call). The i-th AS argument (i=0 = last pushed) is
 // gppAptNativeArgStack[gnAptNativeArgCount - 1 - i].
 extern AptValue** gppAptNativeArgStack;   // off_8324E768
 extern int        gnAptNativeArgCount;    // dword_8324E760
@@ -548,13 +551,14 @@ static AptNativeFunction* gpArrayMethod_splice   = nullptr;   // off_8324E40C
 static AptNativeFunction* gpArrayMethod_slice    = nullptr;   // off_8324E410
 
 // Sort-state for a user (script) compare function: the AS function value
-// (dword_8324E3F8) and its bound context (dword_8324E3FC, == the function's
-// mpScopeVariable at +0x20). sMethod_sort latches them, scriptFunctionSortFunc
-// reads them.
+// (dword_8324E3F8) and its bound context (dword_8324E3FC == the function's
+// mpCIH at console +0x20, the bound character-instance handle). sMethod_sort
+// latches them, scriptFunctionSortFunc reads them.
 static AptValue* gpSortScriptFunction = nullptr;   // dword_8324E3F8
 static AptValue* gpSortScriptContext  = nullptr;   // dword_8324E3FC
 
-// FLAG (homed by the Apt string-pool / sort TU): the "sortOn" field-name string,
+// Homed HERE with the sort natives (its only console xrefs are this TU's
+// sortOn path + comparator): the "sortOn" field-name string,
 // a global EAStringC the sortOn path renders the field name into and the
 // comparator reads back. The X360 stores it as the bare m_pData pointer
 // off_82F73384 (seeded to the empty-string sentinel unk_82F72FF8); modelled here
@@ -663,18 +667,27 @@ int AptArray::scriptFunctionSortFunc(AptValue* const* ppA, AptValue* const* ppB)
     AptValue* pA = *ppA;   // r30
     AptValue* pB = *ppB;   // r3
 
-    // FLAG (deferred -- AptActionInterpreter::callFunction / CleanupAfterExecution
-    // are unhomed members of a class this TU does not own, and AptValue<>::Pop is
-    // external): the script-comparator invocation drives the global VM call path.
-    // The faithful operand-stack push order is preserved here (push pB then pA, the
-    // X360's argument order), but the actual VM dispatch + result read is left to
-    // the interpreter when callFunction/CleanupAfterExecution are homed. Returning
-    // 0 keeps the sort stable (no reordering) until then.
-    (void)gAptActionInterpreter;
-    (void)pA;
-    (void)pB;
-    (void)gpSortScriptContext;
-    return 0;
+    // @0x82AED2A8: push a fresh register-block window (the console inlines
+    // PushStaticData: v5 = off_8324E3D0; base += 4*count; count = 0), push pB then
+    // pA onto the VM operand stack (the X360 argument order) AddRef'ing each
+    // (vtbl[0] on the pushed value), invoke the latched script comparator over its
+    // bound context (callFunction(ctx, func, 2, 0, 0)), read the integer result
+    // off the stack top, pop it, then pop the register-block window (the console's
+    // CleanupAfterExecution over the saved base).
+    AptValue** const lppSavedRegs = AptScriptFunctionBase::PushStaticData();
+
+    gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop++] = pB;
+    pB->AddRef();
+    gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop++] = pA;
+    pA->AddRef();
+
+    gAptActionInterpreter.callFunction(gpSortScriptContext, gpSortScriptFunction,
+                                       2, nullptr, nullptr);
+    const int nResult =
+        gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - 1]->toInteger();
+    gAptActionInterpreter.stackPop();
+    gAptActionInterpreter.CleanupAfterExecution(lppSavedRegs);
+    return nResult;
 }
 
 // ---------------------------------------------------------------------------
@@ -699,13 +712,12 @@ AptValue* AptArray::sMethod_sort(AptArray* pThis, int nArgCount)
         pfnCompare = reinterpret_cast<int (*)(const void*, const void*)>(&AptArray::scriptFunctionSortFunc);
         // Latch the script compare function (top of the native-arg stack).
         gpSortScriptFunction = gppAptNativeArgStack[gnAptNativeArgCount - 1];
-        // FLAG (deferred): the X360 also caches the function value's bound context
-        // (its member at console [c:0x20]) into gpSortScriptContext. That field is
-        // the script-function scope, owned by the AptScriptFunction* layer this TU
-        // does not home; reading it by name needs that type. Left null until the
-        // script-comparator path (scriptFunctionSortFunc) is brought online, which
-        // is itself deferred on the unhomed VM call path.
-        gpSortScriptContext = nullptr;   // [c:0x20] mpScopeVariable -- deferred
+        // X360 @0x82AED448: dword_8324E3FC = *(func + 0x20) -- the function value's
+        // bound CIH (AptScriptFunctionBase::mpCIH, console +0x20), read by name
+        // through GetCIH(); scriptFunctionSortFunc passes it to callFunction as the
+        // call scope.
+        gpSortScriptContext =
+            static_cast<AptScriptFunctionBase*>(gpSortScriptFunction)->GetCIH();
     }
 
     qsort(pThis->mpArray, pThis->mnLength, sizeof(AptValue*), pfnCompare);
@@ -749,11 +761,12 @@ AptValue* AptArray::sMethod_sortOn(AptArray* pThis, int nArgCount)
 AptValue* AptArray::objectMemberLookup(AptValue* const /*pThis*/,
                                        const AptNativeString* const pName) const
 {
-    // FLAG (ArrayMembersIndex is a separate, currently-blocked gperf TU -- its
-    // asso/lookup/wordlist .rdata tables are not in the code-only exports): the
-    // perfect-hash recognizer that maps a member name to its method index. Declared
-    // extern so the dispatch below compiles; until that TU lands the recognizer
-    // returns null and only the numeric-index / own-property fallbacks are live.
+    // The console dispatch is a gperf perfect hash (ArrayMembersIndex) whose
+    // asso/wordlist .rdata is not in the code-only exports; the strcmp ladder
+    // below reproduces its name -> method mapping exactly (gperf itself confirms
+    // each candidate with the same strcmp, so accept/reject sets are identical) --
+    // the recognised-name set is transcribed from the lazy-method cache slots
+    // above, and the recognizer TU is behaviourally subsumed.
     const char* szName = pName->GetBuffer();
 
     // --- Lazily build + return a recognised array native method. Each is the X360

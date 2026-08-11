@@ -11,9 +11,9 @@
 // are shared by refcount; the empty string points at s_EmptyInternalData. The
 // inline ctors/dtor/buffer accessors are the leak's; the large out-of-line method
 // set (operator=/==/+, Append/Format, Find/Replace/Trim, UTF8_*, the refcount +
-// buffer helpers) is DECLARED here and bodied from the X360/PS3 asm as the engine
-// brings each path online (FLAG: bodies are a follow-on -- this header defines the
-// type so AptLoader's signature, AptString, and the data format can reference it).
+// buffer helpers) is DECLARED here and bodied in EAString.cpp from the X360/PS3/
+// XB1 asm; members no engine path references yet stay declared-only (the linker
+// only needs bodies for what is actually called).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================

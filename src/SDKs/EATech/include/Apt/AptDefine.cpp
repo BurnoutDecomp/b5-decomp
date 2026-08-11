@@ -8,10 +8,10 @@
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"   // AptValueGC_PoolManager (gpGCPoolManager type)
 
 // The Apt value pools. They are wired to their backing DOGMA pools by the Apt
-// runtime startup (AptInit -> the SDK creates the pools); they are null until
-// then. FLAG: AptInit is not yet reconstructed, so allocations through these are
-// guarded for null and the value leaves cannot actually allocate until the
-// startup lands. (This is the leaf foundation; the pool bring-up is a follow-on.)
+// runtime startup: AptInit.cpp's AptAllocatorInitialize @0x82ADD118 constructs
+// both pool objects (via the host base-alloc hook) and WireAllocatorGlobals
+// stores them here. They stay null only across the pre-init window, which the
+// allocation-path null guards cover.
 DOGMA_PoolManager*      gpNonGCPoolManager = 0;
 AptValueGC_PoolManager* gpGCPoolManager    = 0;
 

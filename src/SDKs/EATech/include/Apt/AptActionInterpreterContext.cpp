@@ -17,12 +17,14 @@
 // writes the leaf name into a raw char-buffer out-param. Here the segment buffer is
 // kept (a local char[]), but the leaf-name out-param is an EAStringC (matching the
 // getVariable call site + the rest of the value layer) -- assigned from the segment
-// buffer rather than raw-copied. (FLAG: out-name modelled as EAStringC, not the
-// console's raw char buffer.)
+// buffer rather than raw-copied -- a deliberate x64 interface adaptation (the
+// console's raw char out-buffer only ever feeds string construction at the call
+// sites), not a layout change.
 //
-// FLAG (follow-on / AptInit): AptValue::findChild (the per-segment resolver, its own
-// TU) is declared; the console root global (off_8324E574 -> the current target's root)
-// is resolved inline in getContext as AptGetAnimationAtLevel(0), matching the console.
+// AptValue::findChild (the per-segment resolver) is homed in AptValueFindChild.cpp
+// (X360 @0x82B01298); the console root global (off_8324E574 -> the current target's
+// root) is resolved inline in getContext as AptGetAnimationAtLevel(0), matching the
+// console.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -91,7 +93,7 @@ int AptActionInterpreter::getContext(AptValue* pScope, AptValue* pTarget,
                     *w = 0;
                     ++p;                   // consume the '.'
                     EAStringC name(seg);
-                    pContext = pContext->findChild(&name, pTarget);   // FLAG: findChild
+                    pContext = pContext->findChild(&name, pTarget);   // findChild @0x82B01298 (AptValueFindChild.cpp)
                     pTarget = 0;
                     if (!pContext)
                     {
@@ -112,7 +114,7 @@ int AptActionInterpreter::getContext(AptValue* pScope, AptValue* pTarget,
             {
                 *w = 0;
                 EAStringC name(seg);
-                AptValue* pCtx = pContext->findChild(&name, pTarget);   // FLAG: findChild
+                AptValue* pCtx = pContext->findChild(&name, pTarget);   // findChild @0x82B01298 (AptValueFindChild.cpp)
                 pTarget = 0;
                 if (!pCtx)
                 {

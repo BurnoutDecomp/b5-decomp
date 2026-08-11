@@ -46,23 +46,23 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"              // DOGMA_PoolManager (the shared Apt pool)
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed global): off_8324D808 is the shared Apt fixed-size DOGMA pool
-// that backs AptExtern's 8-byte block (the X360 ctor's caller allocates from it
-// and the deleting destructor frees back to it). Declared as the same extern the
-// sibling Apt pool nodes use (AptSharedPtr.h / AptLinkerThingy.h); the pool
-// instance is constructed by the Apt runtime startup TU.
+// off_8324D808 -- the shared Apt fixed-size DOGMA pool that backs AptExtern's
+// 8-byte block (the X360 ctor's caller allocates from it and the deleting
+// destructor frees back to it). The same extern the sibling Apt pool nodes use
+// (AptSharedPtr.h / AptLinkerThingy.h); defined in AptGlobals.cpp and wired by
+// AptAllocatorInitialize (AptInit.cpp @0x82ADD118).
 // ---------------------------------------------------------------------------
 extern DOGMA_PoolManager* gpAptSharedPtrPool;   // off_8324D808
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed host callback): the Apt host installs a user-function table
-// (gAptFuncs == X360 dword_8324E818, the Apt.h AptUserFunctions struct). Member
-// pfnSetExternVariable (table +0x3C -> X360 dword_8324E854) receives a name +
-// value string pair when AS code writes an extern variable. It is reached through
-// a single indirect call; modelled here -- like the DOGMA heap hooks in
-// DogmaAllocator.h -- as a named host function representing that one table slot,
-// rather than offset-indexing the table. Its body is installed by the host /
-// Apt startup (another TU); declared so objectMemberSet links.
+// The Apt host user-function table hop (gAptFuncs == X360 dword_8324E818, the
+// Apt.h AptUserFunctions struct; defined + installed in CgsAptAux.cpp --
+// AptAux::ConstructApt stamps pfnSetExternVariable with AptCallbackVariable::
+// SetExternVariable). Member pfnSetExternVariable (table +0x3C -> X360
+// dword_8324E854) receives a name + value string pair when AS code writes an
+// extern variable. It is reached through a single indirect call; modelled --
+// like the DOGMA heap hooks in DogmaAllocator.h -- as a named free function
+// representing that one table slot, homed in AptExtern.cpp.
 //   leak Apt.h: void (*pfnSetExternVariable)(const char *szVar, const char *szValue);
 // ---------------------------------------------------------------------------
 void AptHostSetExternVariable(const char* szVar, const char* szValue);

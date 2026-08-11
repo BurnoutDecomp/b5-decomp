@@ -5,7 +5,8 @@
 // Faithful de-optimisation of the X360 BURNOUT_X360_ARTIST.XEX:
 //   BrnGameState::StreetManager::Construct  @ 0x82335978
 //   BrnGameState::StreetManager::Destruct   @ 0x82335D40
-//   BrnGameState::StreetManager::Prepare    @ 0x82350900
+//   (BrnGameState::StreetManager::Prepare @0x82350900 was split out 2026-08-11 into the
+//    sibling BrnGameStateStreetManager_Prepare.cpp -- see the note at the bottom of this file.)
 // Every store / branch has an asm counterpart; members are the frozen-header
 // named fields (BrnGameStateStreetManager.h), never raw-offset casts.
 // ===========================================================================
@@ -160,22 +161,12 @@ namespace BrnGameState
     }
 
     // -----------------------------------------------------------------------
-    // @ 0x82350900. Streamed prepare: pump LoadAIData then LoadDistrictMap; once
-    // both complete, (re)construct + register the debug component and report done.
+    // @ 0x82350900. StreetManager::Prepare MOVED OUT (2026-08-11, district-map wave) to the
+    // sibling TU BrnGameStateStreetManager_Prepare.cpp -- it is the ONE function of this group
+    // GameStateModule::Prepare stage 23 needs, and this partfile costs one unresolved external
+    // (BrnStreetData::operator++(ScoreType&, int), the street-DATA side's
+    // SharedClasses/StreetData/BrnChallengeData.cpp) through Construct's and Destruct's
+    // score-type loops. MEASURED with cl /c + dumpbin /SYMBOLS; see that file's banner. Fold
+    // it back here when that symbol lands.
     // -----------------------------------------------------------------------
-    bool StreetManager::Prepare( GameStateModuleIO::OutputBuffer* lpOutput,
-                                 CgsModule::EventReceiverQueue<3072,16>* lpReceiverQueue )
-    {
-        CGS_ASSERT( lpOutput, "lpOutput" );
-        CGS_ASSERT( lpReceiverQueue, "lpReceiverQueue" );
-
-        if ( LoadAIData( lpOutput, lpReceiverQueue ) && LoadDistrictMap( lpOutput, lpReceiverQueue ) )
-        {
-            mStreetManagerDebugComponent.Construct( this );
-            mStreetManagerDebugComponent.Register();
-            return true;
-        }
-
-        return false;
-    }
 }

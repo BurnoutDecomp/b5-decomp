@@ -31,10 +31,11 @@ int AptRenderItem::sItemsAllocated = 0;
 // shutdown latch (X360 byte_8324E56C). The base render-item TU is their home;
 // the subtype TUs (e.g. AptRenderItemCustomControl) declare them extern.
 //
-// FLAG: the console brackets each revision-link swap with the lwarx/stwcx.
+// The console brackets each revision-link swap with the lwarx/stwcx.
 // interrupt-masked test-and-set on unk_8324E7CC; modelled here as an
 // interlocked test-and-set (host-portable, uncontended on the single-threaded
-// bring-up path). byte_8324E56C gates the manager-link teardown in the dtor
+// bring-up path -- see the PC-platform leaf markers below). byte_8324E56C gates
+// the manager-link teardown in the dtor
 // (true once the render system is shutting down -> skip the revision teardown).
 // ---------------------------------------------------------------------------
 volatile long gAptRenderTreeRevisionLock = 0;   // X360 unk_8324E7CC
@@ -97,7 +98,7 @@ AptRenderItem::AptRenderItem(AptCharacter* pCharacter, int nCreatedOnTick)
 
     // Flags: set isVisible (bit31), clear the rest. (Console: (flags|0x80000000)
     // rotated through the 19-bit field; the net effect for a fresh item.)
-    mFlags = 0x80000000u;
+    mFlags = 0x1u;
 
     if (pCharacter)
         pCharacter->AddCharacterReference();
@@ -138,7 +139,7 @@ AptRenderItem::AptRenderItem(const AptRenderItem* pSource, int nCreatedOnTick, b
 
     // isVisible (bit31) set; render-type bits (18..23) cleared for the subtype to
     // stamp; bit27 carried over from the source.
-    mFlags = 0x80000000u | (pSource->mFlags & 0x08000000u);
+    mFlags = 0x1u | (pSource->mFlags & 0x10u);
 
     // Deep-copy the lazily-allocated transforms.
     if (pSource->mpPositionMatrix)
@@ -162,11 +163,11 @@ AptRenderItem::AptRenderItem(const AptRenderItem* pSource, int nCreatedOnTick, b
     {
         mDepth     = pSource->mDepth;
         mClipDepth = pSource->mClipDepth;
-        mFlags = (mFlags & 0x7FFFFFFFu) | (pSource->mFlags & 0x80000000u);   // isVisible (bit31)
-        mFlags = (mFlags & 0xBFFFFFFFu) | (pSource->mFlags & 0x40000000u);   // isMask   (bit30)
-        mFlags = (mFlags & 0xDFFFFFFFu) | (pSource->mFlags & 0x20000000u);   // hasMask  (bit29)
+        mFlags = (mFlags & ~0x1u) | (pSource->mFlags & 0x1u);   // isVisible (bit31)
+        mFlags = (mFlags & ~0x2u) | (pSource->mFlags & 0x2u);   // isMask   (bit30)
+        mFlags = (mFlags & ~0x4u) | (pSource->mFlags & 0x4u);   // hasMask  (bit29)
         SetMaskMatrix(pSource->mpMaskPositionMatrix);
-        mFlags = (mFlags & 0xEFFFFFFFu) | (pSource->mFlags & 0x10000000u);   // deletion mark (bit28)
+        mFlags = (mFlags & ~0x8u) | (pSource->mFlags & 0x8u);   // deletion mark (bit28)
 
         mpMask                = LatestRevision(pSource->mpMask);
         mpManagerNextRevision = nullptr;
@@ -177,9 +178,9 @@ AptRenderItem::AptRenderItem(const AptRenderItem* pSource, int nCreatedOnTick, b
         if (mpManagerFirstChild)  mpManagerFirstChild->AddReference();
         if (mpMask)               mpMask->AddReference();
 
-        if (pSource->mFlags & 0x04000000u)
-            mFlags |= 0x02000000u;                                          // writable-revision (bit25) from source bit26
-        mFlags = (mFlags & 0xFEFFFFFFu) | (pSource->mFlags & 0x01000000u);  // bit24
+        if (pSource->mFlags & 0x20u)
+            mFlags |= 0x40u;                                          // writable-revision (bit25) from source bit26
+        mFlags = (mFlags & ~0x80u) | (pSource->mFlags & 0x80u);  // bit24
     }
 
     if (mpCharacter)
@@ -254,16 +255,70 @@ void AptRenderItem::CopyRenderDataFrom(const AptRenderItem* pSource)
 
     // Carry the clip depth + the isVisible flag (bit 31) from the source.
     mClipDepth = pSource->mClipDepth;
-    mFlags = (mFlags & 0x7FFFFFFFu) | (pSource->mFlags & 0x80000000u);
+    mFlags = (mFlags & ~0x1u) | (pSource->mFlags & 0x1u);
 }
 
-// dtor @0x80F860
+// dtor @0x80F860 (X360 twin @0x82AEBCE0 -- manager-chain teardown decompiled from
+// the ARTIST asm).
 AptRenderItem::~AptRenderItem()
 {
-    // FLAG: the manager next-revision/sibling/child chain teardown ([10]/[11]/[12])
-    // is the AptRenderTreeManager double-buffering cleanup, deferred with that
-    // subsystem. Those links are null until the manager populates them, so there
-    // is nothing to tear down in the current (pre-manager) phase.
+    // The manager next-revision / next-sibling / first-child chain teardown
+    // (console a1[10]/[11]/[12]), skipped once the render system is shutting down
+    // (byte_8324E56C). Each chain collapses through its own same-kind link: pop
+    // links this dtor holds the LAST reference to (mRefCount <= 1) and delete them
+    // directly (the console's virtual deleting-dtor call, flags=1), re-linking to
+    // the popped link's own next; stop at the first link someone else still
+    // references and Release it instead.
+    if (!gbRenderItemShuttingDown)
+    {
+        while (AptRenderItem* pRev = mpManagerNextRevision)
+        {
+            if (pRev->mRefCount > 1)
+                break;
+            AptRenderItem* pNext = pRev->mpManagerNextRevision;   // the link's own [c:0x28]
+            pRev->mpManagerNextRevision = nullptr;
+            delete pRev;                                          // (*vtbl)(link, 1)
+            mpManagerNextRevision = pNext;
+        }
+        if (mpManagerNextRevision)
+        {
+            AptRenderItem* pOld = mpManagerNextRevision;
+            mpManagerNextRevision = nullptr;
+            pOld->ReleaseReference();
+        }
+
+        while (AptRenderItem* pSib = mpManagerNextSibling)
+        {
+            if (pSib->mRefCount > 1)
+                break;
+            AptRenderItem* pNext = pSib->mpManagerNextSibling;    // the link's own [c:0x2C]
+            pSib->mpManagerNextSibling = nullptr;
+            delete pSib;
+            mpManagerNextSibling = pNext;
+        }
+        if (mpManagerNextSibling)
+        {
+            AptRenderItem* pOld = mpManagerNextSibling;
+            mpManagerNextSibling = nullptr;
+            pOld->ReleaseReference();
+        }
+
+        while (AptRenderItem* pChild = mpManagerFirstChild)
+        {
+            if (pChild->mRefCount > 1)
+                break;
+            AptRenderItem* pNext = pChild->mpManagerFirstChild;   // the link's own [c:0x30]
+            pChild->mpManagerFirstChild = nullptr;
+            delete pChild;
+            mpManagerFirstChild = pNext;
+        }
+        if (mpManagerFirstChild)
+        {
+            AptRenderItem* pOld = mpManagerFirstChild;
+            mpManagerFirstChild = nullptr;
+            pOld->ReleaseReference();
+        }
+    }
 
     if (mpCharacter)
     {
@@ -342,13 +397,13 @@ AptCXForm* AptRenderItem::GetColorMatrixWritable()
 // ---- depth / clip depth ---------------------------------------------------
 int16_t AptRenderItem::GetDepth() const     { return mDepth; }
 int16_t AptRenderItem::GetClipDepth() const { return mClipDepth; }
-AptRenderItem* AptRenderItem::SetDepth(int nDepth)         { mDepth = static_cast<int16_t>(nDepth); return this; }
-AptRenderItem* AptRenderItem::SetClipDepth(int nClipDepth) { mClipDepth = static_cast<int16_t>(nClipDepth); return this; }
+void AptRenderItem::SetDepth(int nDepth)         { mDepth = static_cast<int16_t>(nDepth); }      // x64 QEAAXH@Z: void
+void AptRenderItem::SetClipDepth(int nClipDepth) { mClipDepth = static_cast<int16_t>(nClipDepth); }   // x64 QEAAXH@Z: void
 
 // ---- flags ----------------------------------------------------------------
-bool AptRenderItem::GetIsVisible() const { return (mFlags >> 31) != 0; }
-bool AptRenderItem::GetIsMask() const    { return ((mFlags >> 30) & 1) != 0; }
-bool AptRenderItem::GetHasMask() const   { return (mFlags & 0x20000000u) != 0 && mpMask != nullptr; }
+bool AptRenderItem::GetIsVisible() const { return (mFlags & 0x1u) != 0; }
+bool AptRenderItem::GetIsMask() const    { return (mFlags & 0x2u) != 0; }
+bool AptRenderItem::GetHasMask() const   { return (mFlags & 0x4u) != 0 && mpMask != nullptr; }
 AptRenderItem* AptRenderItem::GetMask() const { return mpMask; }
 
 // ---- character ------------------------------------------------------------
@@ -391,7 +446,7 @@ AptRenderItem* AptRenderItem::Manager_GetNextRevision() const { return mpManager
 // IsWritableForThisTick @0x7DEF54 -- already the writable revision for nTick?
 bool AptRenderItem::IsWritableForThisTick(int nTick) const
 {
-    return mCreatedOnTick == nTick || (mFlags & 0x02000000u) != 0;
+    return mCreatedOnTick == nTick || (mFlags & 0x40u) != 0;
 }
 
 // IsRenderableForThisTick @0x82AD4FC8 -- drawable on nTick: aged in (created on or
@@ -401,30 +456,59 @@ bool AptRenderItem::IsRenderableForThisTick(int nTick) const
 {
     if ((nTick - mCreatedOnTick) < 0)
         return false;
-    return (mFlags & 0x02000000u) == 0;
+    return (mFlags & 0x40u) == 0;
 }
 
 // Manager_IsDeletionMark @0x7DEEBC -- mFlags bit 28.
-bool AptRenderItem::Manager_IsDeletionMark() const { return ((mFlags >> 28) & 1u) != 0; }
+bool AptRenderItem::Manager_IsDeletionMark() const { return (mFlags & 0x8u) != 0; }
 
 // Manager_SetNextRevision @0x7DEF00
 void AptRenderItem::Manager_SetNextRevision(AptRenderItem* pNext) { mpManagerNextRevision = pNext; }
 
-// Manager_SetDeletionMark @0x7E48DC -- set the deletion-mark flag (bit 28).
-// FLAG: the console also releases this revision's child/sibling references here
-// (the full revision teardown); deferred with the concurrent double-buffering.
+// Manager_SetDeletionMark @0x82ADB138 (PS3 @0x7E48DC) -- mark/unmark this revision
+// for deletion (x64 mFlags bit 3; console bit 28). When MARKING, first release the
+// whole revision link set in the console's store order -- first-child (+0x30),
+// next-sibling (+0x2C), next-revision (+0x28), mask (+0x1C) -- nulling each slot
+// before its ReleaseReference.
 void AptRenderItem::Manager_SetDeletionMark(bool bMark)
 {
-    if (bMark) mFlags |= 0x10000000u;
-    else       mFlags &= ~0x10000000u;
+    if (bMark)
+    {
+        if (mpManagerFirstChild)
+        {
+            AptRenderItem* pOld = mpManagerFirstChild;
+            mpManagerFirstChild = nullptr;
+            pOld->ReleaseReference();
+        }
+        if (mpManagerNextSibling)
+        {
+            AptRenderItem* pOld = mpManagerNextSibling;
+            mpManagerNextSibling = nullptr;
+            pOld->ReleaseReference();
+        }
+        if (mpManagerNextRevision)
+        {
+            AptRenderItem* pOld = mpManagerNextRevision;
+            mpManagerNextRevision = nullptr;
+            pOld->ReleaseReference();
+        }
+        if (mpMask)
+        {
+            AptRenderItem* pOld = mpMask;
+            mpMask = nullptr;
+            pOld->ReleaseReference();
+        }
+    }
+    // console: v2[6] = (bMark << 28) & 0x10000000 | (v2[6] & 0xEFFFFFFF) -> x64 bit 3.
+    mFlags = (bMark ? 0x8u : 0u) | (mFlags & ~0x8u);
 }
 
 // ===========================================================================
 // Render-tree double-buffering (DECOMPILED from the X360 ARTIST.XEX -- the full
-// revision-tree mutators the AptRenderTreeManager facade drives). These were left
-// deferred-by-FLAG on the earlier bring-up; now decompiled faithfully.
+// revision-tree mutators the AptRenderTreeManager facade drives), decompiled
+// faithfully after the earlier bring-up deferral.
 //
-// FLAG (x64 fork): the console mutates mRefCount with the lwarx/stwcx. atomic and
+// x64 fork (PC-platform threading): the console mutates mRefCount with the lwarx/stwcx. atomic and
 // brackets the revision-link swaps with the unk_8324E7CC interrupt-masked spin
 // lock; both are modelled host-portably (AddReference/ReleaseReference =
 // _Interlocked*; the lock = _InterlockedExchange). Behaviour is identical on the
@@ -448,10 +532,10 @@ AptRenderItem* AptRenderItem::PropagateTreeIsVisible(int nVisibleMode)
     {
         pMask = LatestRevision(pMask);             // chase [c:0x28] next-revision
         // bit26 (0x04000000) := (nVisibleMode == 0); clears bit25-adjacent slot.
-        uint32_t v5 = ((nVisibleMode == 0) ? 0x04000000u : 0u) | (pMask->mFlags & 0xFBFFFFFFu);
+        uint32_t v5 = ((nVisibleMode == 0) ? 0x20u : 0u) | (pMask->mFlags & ~0x20u);
         pMask->mFlags = v5;
         if (nVisibleMode)
-            pMask->mFlags = v5 & 0xFDFFFFFFu;       // also clear bit25 (0x02000000)
+            pMask->mFlags = v5 & ~0x40u;       // also clear bit25 (0x02000000)
         result = pMask->PropagateTreeIsVisible(nVisibleMode);
     }
 
@@ -463,55 +547,55 @@ AptRenderItem* AptRenderItem::PropagateTreeIsVisible(int nVisibleMode)
             pChild = LatestRevision(pChild);        // chase [c:0x28]
             uint32_t v6 = pChild->mFlags;           // [c:0x18]
 
-            if (((v6 >> 30) & 1u) == 0)             // not an isMask node
+            if ((v6 & 0x2u) == 0)                   // not an isMask node (x64 bit 1; sub_14083DD80 `v8 & 2`)
             {
-                uint32_t v7 = v6 >> 31;             // isVisible bit
+                uint32_t v7 = v6 & 0x1u;            // isVisible bit (x64 bit 0; sub_14083DD80 `v8 & 1`)
                 if (nVisibleMode == 1)
                 {
                     if (v7 == 1)
                     {
-                        bool bTreeVis = ((v6 & 0x04000000u) == 0x04000000u) ||
-                                        ((v6 & 0x02000000u) == 0x02000000u);
+                        bool bTreeVis = ((v6 & 0x20u) == 0x20u) ||
+                                        ((v6 & 0x40u) == 0x40u);
                         if (bTreeVis)
                         {
-                            uint32_t v9 = v6 & 0xF9FFFFFFu;  // clear bits 25+26
+                            uint32_t v9 = v6 & ~0x60u;  // clear bits 25+26
                             pChild->mFlags = v9;
                             result = pChild->PropagateTreeIsVisible(1);
                         }
                     }
                     else
                     {
-                        pChild->mFlags = (v6 & 0xF8FFFFFFu) | 0x01000000u; // set bit24
+                        pChild->mFlags = (v6 & ~0xE0u) | 0x80u; // set bit24
                     }
                 }
                 else
                 {
                     if (v7 == 1)
                     {
-                        bool bTreeVis = ((v6 & 0x04000000u) == 0x04000000u) ||
-                                        ((v6 & 0x02000000u) == 0x02000000u);
+                        bool bTreeVis = ((v6 & 0x20u) == 0x20u) ||
+                                        ((v6 & 0x40u) == 0x40u);
                         if (!bTreeVis)
                         {
-                            uint32_t v9 = v6 | 0x04000000u;  // set bit26
+                            uint32_t v9 = v6 | 0x20u;  // set bit26
                             pChild->mFlags = v9;
                             result = pChild->PropagateTreeIsVisible(0);
                         }
                     }
                     else
                     {
-                        pChild->mFlags = (v6 & 0xFAFFFFFFu) | 0x04000000u; // set bit26, clear bit25
+                        pChild->mFlags = (v6 & ~0xA0u) | 0x20u; // set bit26, clear bit25
                     }
                 }
 
                 // If this child has its own mask (bit29) bound, recurse into it.
-                bool bHasOwnMask = (((pChild->mFlags >> 29) & 1u) != 0) && (pChild->mpMask != nullptr);
+                bool bHasOwnMask = ((pChild->mFlags & 0x4u) != 0) && (pChild->mpMask != nullptr);
                 if (bHasOwnMask)
                 {
                     AptRenderItem* pi = LatestRevision(pChild->mpMask);  // [c:0x1C] -> [c:0x28]
-                    uint32_t v15 = ((nVisibleMode == 0) ? 0x04000000u : 0u) | (pi->mFlags & 0xFBFFFFFFu);
+                    uint32_t v15 = ((nVisibleMode == 0) ? 0x20u : 0u) | (pi->mFlags & ~0x20u);
                     pi->mFlags = v15;
                     if (nVisibleMode)
-                        pi->mFlags = v15 & 0xFDFFFFFFu;
+                        pi->mFlags = v15 & ~0x40u;
                     result = pi->PropagateTreeIsVisible(nVisibleMode);
                 }
             }
@@ -564,7 +648,7 @@ AptRenderItem* AptRenderItem::Manager_GetRenderRevision(int nTick)
     for (AptRenderItem* i = result->mpManagerNextRevision; i; i = i->mpManagerNextRevision) // [c:0x28]
     {
         char bRenderable;
-        if ((nTick - i->mCreatedOnTick) < 0 || (bRenderable = 1, (i->mFlags & 0x02000000u) != 0)) // [c:0x20]/[c:0x18]
+        if ((nTick - i->mCreatedOnTick) < 0 || (bRenderable = 1, (i->mFlags & 0x40u) != 0)) // [c:0x20]/[c:0x18]
             bRenderable = 0;
         if (!bRenderable)
             break;
@@ -579,7 +663,7 @@ AptRenderItem* AptRenderItem::Manager_GetRenderRevision(int nTick)
 void AptRenderItem::Manager_UpdateNextSibling(AptRenderItem* pRevision)
 {
     AptRenderItem* v2 = pRevision;
-    if (pRevision && (pRevision->mFlags & 0x10000000u) != 0)  // [c:0x18] deletion mark
+    if (pRevision && (pRevision->mFlags & 0x8u) != 0)  // [c:0x18] deletion mark
         v2 = nullptr;
     if (v2 != mpManagerNextSibling)                           // [c:0x2C]
     {
@@ -603,7 +687,7 @@ void AptRenderItem::Manager_UpdateNextSibling(AptRenderItem* pRevision)
 void AptRenderItem::Manager_UpdateMask(AptRenderItem* pRevision)
 {
     AptRenderItem* v2 = pRevision;
-    if (pRevision && (pRevision->mFlags & 0x10000000u) != 0)  // [c:0x18] deletion mark
+    if (pRevision && (pRevision->mFlags & 0x8u) != 0)  // [c:0x18] deletion mark
         v2 = nullptr;
     if (v2 != mpMask)                                         // [c:0x1C]
     {
@@ -622,14 +706,15 @@ void AptRenderItem::Manager_UpdateMask(AptRenderItem* pRevision)
 }
 
 // Manager_UpdateFirstChild -- the first-child counterpart of the two above
-// ([c:0x30]); the AptRenderTreeManager render walk drives it.
-// FLAG: the dedicated X360 leaf for the first-child update is not in this TU's
-// dossier; reconstructed identically to its committed Update_NextSibling/Mask
-// siblings (deletion-mark collapse + ref-counted link swap under the lock).
+// ([c:0x30]); the AptRenderTreeManager render walk and the custom-control Render
+// (@0x82AEF8F8, its verified X360 caller) drive it. The dedicated X360 leaf has no
+// per-address export; reconstructed identically to its committed
+// Update_NextSibling/Mask instruction-twin siblings (deletion-mark collapse +
+// ref-counted link swap under the lock).
 void AptRenderItem::Manager_UpdateFirstChild(AptRenderItem* pRevision)
 {
     AptRenderItem* v2 = pRevision;
-    if (pRevision && (pRevision->mFlags & 0x10000000u) != 0)  // [c:0x18] deletion mark
+    if (pRevision && (pRevision->mFlags & 0x8u) != 0)  // [c:0x18] deletion mark
         v2 = nullptr;
     if (v2 != mpManagerFirstChild)                           // [c:0x30]
     {
@@ -660,39 +745,34 @@ AptRenderItem* AptRenderItem::Manager_SetFirstChild(AptRenderItem* pChild)
     {
         pChild->AddReference();                          // atomic ++mRefCount [c:0x24]
         uint32_t v11 = pChild->mFlags;                   // [c:0x18]
-        if ((int)v11 < 0)                                // child isVisible (bit31)
+        if ((v11 & 0x1u) != 0)                           // child isVisible (x64 bit 0: sub_14083C4A0 `flags & 1`)
         {
-            uint32_t v15 = v11 & 0xFEFFFFFFu;            // clear bit24
+            uint32_t v15 = v11 & ~0x80u;            // clear bit24
             pChild->mFlags = v15;
             uint32_t v16 = mFlags;                       // parent [c:0x18]
-            bool bParentVisible;
-            if ((int)v16 < 0)                            // parent isVisible set
-            {
-                bParentVisible = ((v16 & 0x04000000u) == 0x04000000u) ||
-                                 ((v16 & 0x02000000u) == 0x02000000u);
-            }
-            else
-            {
-                bParentVisible = false;                  // parent invisible -> child stays
-            }
+            // x64 sub_14083C4A0 / X360 0x82ADAF58: the set-0x20 + Propagate(0) arm runs when
+            // the parent is INVISIBLE (bit 0 clear) OR its tree-state bits (0x60) are set.
+            bool bParentVisible = ((v16 & 0x1u) == 0) ||
+                                  ((v16 & 0x20u) == 0x20u) ||
+                                  ((v16 & 0x40u) == 0x40u);
 
             if (bParentVisible)
             {
-                bool bChildTreeVis = ((v15 & 0x04000000u) == 0x04000000u) ||
-                                     ((v15 & 0x02000000u) == 0x02000000u);
+                bool bChildTreeVis = ((v15 & 0x20u) == 0x20u) ||
+                                     ((v15 & 0x40u) == 0x40u);
                 if (!bChildTreeVis)
                 {
-                    pChild->mFlags = v15 | 0x04000000u;  // set bit26
+                    pChild->mFlags = v15 | 0x20u;  // set bit26
                     pChild->PropagateTreeIsVisible(0);
                 }
             }
             else
             {
-                bool bChildTreeVis = ((v15 & 0x04000000u) == 0x04000000u) ||
-                                     ((v15 & 0x02000000u) == 0x02000000u);
+                bool bChildTreeVis = ((v15 & 0x20u) == 0x20u) ||
+                                     ((v15 & 0x40u) == 0x40u);
                 if (bChildTreeVis)
                 {
-                    pChild->mFlags = v15 & 0xF9FFFFFFu;  // clear bits 25+26
+                    pChild->mFlags = v15 & ~0x60u;  // clear bits 25+26
                     pChild->PropagateTreeIsVisible(1);
                 }
             }
@@ -701,13 +781,13 @@ AptRenderItem* AptRenderItem::Manager_SetFirstChild(AptRenderItem* pChild)
         {
             // child invisible: stamp its tree-invisible state from the parent's flags.
             uint32_t v12 = mFlags;                       // parent [c:0x18]
-            bool bParentTreeVis = ((v12 & 0x04000000u) == 0x04000000u) ||
-                                  ((v12 & 0x02000000u) == 0x02000000u);
+            bool bParentTreeVis = ((v12 & 0x20u) == 0x20u) ||
+                                  ((v12 & 0x40u) == 0x40u);
             uint32_t v14;
-            if (bParentTreeVis || (v12 & 0x01000000u) != 0)
-                v14 = (v11 & 0xFAFFFFFFu) | 0x04000000u; // set bit26, clear bit25
+            if (bParentTreeVis || (v12 & 0x80u) != 0)
+                v14 = (v11 & ~0xA0u) | 0x20u; // set bit26, clear bit25
             else
-                v14 = (v11 & 0xF8FFFFFFu) | 0x01000000u; // set bit24, clear bits 25+26
+                v14 = (v11 & ~0xE0u) | 0x80u; // set bit24, clear bits 25+26
             pChild->mFlags = v14;
         }
     }
@@ -735,45 +815,45 @@ AptRenderItem* AptRenderItem::Manager_SetNextSibling(AptRenderItem* pSibling)
     {
         pSibling->AddReference();                        // atomic ++mRefCount [c:0x24]
         uint32_t v11 = pSibling->mFlags;                 // [c:0x18]
-        if ((int)v11 < 0)                                // sibling isVisible (bit31)
+        if ((v11 & 0x1u) != 0)                           // sibling isVisible (x64 bit 0: sub_14083C590 `flags & 1`)
         {
-            uint32_t v16 = v11 & 0xFEFFFFFFu;            // clear bit24
+            uint32_t v16 = v11 & ~0x80u;            // clear bit24
             pSibling->mFlags = v16;
             uint32_t v17 = mFlags;                       // this [c:0x18]
-            bool bSelfVisible = ((v17 & 0x04000000u) == 0x04000000u) ||
-                                ((v17 & 0x02000000u) == 0x02000000u);
-            uint32_t v20 = v16 & 0x04000000u;
-            if (bSelfVisible)
+            bool bSelfVisible = ((v17 & 0x20u) == 0x20u) ||
+                                ((v17 & 0x40u) == 0x40u);
+            uint32_t v20 = v16 & 0x20u;
+            if (bSelfVisible)   // self 0x60 bits set (x64 sub_14083C590: `(flags & 0x60) != 0` arm)
             {
-                bool bSibTreeVis = (v20 == 0x04000000u) ||
-                                   ((v16 & 0x02000000u) == 0x02000000u);
-                if (bSibTreeVis)
-                {
-                    pSibling->mFlags = v16 & 0xF9FFFFFFu; // clear bits 25+26
-                    pSibling->PropagateTreeIsVisible(1);
-                }
-            }
-            else
-            {
-                bool bSibTreeVis = (v20 == 0x04000000u) ||
-                                   ((v16 & 0x02000000u) == 0x02000000u);
+                bool bSibTreeVis = (v20 == 0x20u) ||
+                                   ((v16 & 0x40u) == 0x40u);
                 if (!bSibTreeVis)
                 {
-                    pSibling->mFlags = v16 | 0x04000000u; // set bit26
+                    pSibling->mFlags = v16 | 0x20u; // set bit26
                     pSibling->PropagateTreeIsVisible(0);
+                }
+            }
+            else                // self 0x60 bits clear
+            {
+                bool bSibTreeVis = (v20 == 0x20u) ||
+                                   ((v16 & 0x40u) == 0x40u);
+                if (bSibTreeVis)
+                {
+                    pSibling->mFlags = v16 & ~0x60u; // clear bits 25+26
+                    pSibling->PropagateTreeIsVisible(1);
                 }
             }
         }
         else
         {
             uint32_t v12 = mFlags;                       // this [c:0x18]
-            bool bSelfTreeVis = ((v12 & 0x04000000u) == 0x04000000u) ||
-                                ((v12 & 0x02000000u) == 0x02000000u);
+            bool bSelfTreeVis = ((v12 & 0x20u) == 0x20u) ||
+                                ((v12 & 0x40u) == 0x40u);
             uint32_t v15;
             if (bSelfTreeVis)
-                v15 = (v11 & 0xFAFFFFFFu) | 0x04000000u; // set bit26, clear bit25
+                v15 = (v11 & ~0xA0u) | 0x20u; // set bit26, clear bit25
             else
-                v15 = (v11 & 0xF8FFFFFFu) | 0x01000000u; // set bit24, clear bits 25+26
+                v15 = (v11 & ~0xE0u) | 0x80u; // set bit24, clear bits 25+26
             pSibling->mFlags = v15;
         }
     }
@@ -796,21 +876,21 @@ AptRenderItem* AptRenderItem::SetIsVisible(bool bVisible)
 {
     AptRenderItem* result = this;
     uint32_t v4 = mFlags;                                // [c:0x18]
-    if ((unsigned)bVisible != (v4 >> 31))                // bit changed
+    if ((unsigned)bVisible != (v4 & 0x1u))               // bit changed (x64 bit 0: sub_140841B00 `a2 != (flags & 1)`)
     {
         bool bSkipPropagate = false;
         int v6 = 0;
         if (bVisible)
         {
-            if ((v4 & 0x01000000u) == 0)                 // bit24 (tree-invisible-by-parent) clear
+            if ((v4 & 0x80u) == 0)                 // bit24 (tree-invisible-by-parent) clear
             {
                 bSkipPropagate = true;
             }
             else
             {
-                uint32_t v5 = v4 & 0xFEFFFFFFu;          // clear bit24
+                uint32_t v5 = v4 & ~0x80u;          // clear bit24
                 mFlags = v5;
-                if (((v5 >> 30) & 1u) != 0)              // isMask -> no propagate
+                if ((v5 & 0x2u) != 0)                    // isMask (x64 bit 1) -> no propagate
                     bSkipPropagate = true;
                 else
                     v6 = 1;
@@ -818,17 +898,17 @@ AptRenderItem* AptRenderItem::SetIsVisible(bool bVisible)
         }
         else
         {
-            bool bTreeVis = ((v4 & 0x04000000u) == 0x04000000u) ||
-                            ((v4 & 0x02000000u) == 0x02000000u);
+            bool bTreeVis = ((v4 & 0x20u) == 0x20u) ||
+                            ((v4 & 0x40u) == 0x40u);
             if (bTreeVis)
             {
                 bSkipPropagate = true;
             }
             else
             {
-                uint32_t v8 = (v4 & 0xF8FFFFFFu) | 0x01000000u;  // set bit24, clear 25+26
+                uint32_t v8 = (v4 & ~0xE0u) | 0x80u;  // set bit24, clear 25+26
                 mFlags = v8;
-                if (((v8 >> 30) & 1u) != 0)
+                if ((v8 & 0x2u) != 0)                    // isMask (x64 bit 1)
                     bSkipPropagate = true;
                 else
                     v6 = 0;
@@ -838,7 +918,7 @@ AptRenderItem* AptRenderItem::SetIsVisible(bool bVisible)
             result = PropagateTreeIsVisible(v6);
 
         // bit31 := bVisible (console cntlzw idiom).
-        mFlags = (bVisible ? 0x80000000u : 0u) | (mFlags & 0x7FFFFFFFu);
+        mFlags = (bVisible ? 0x1u : 0u) | (mFlags & ~0x1u);
     }
     return result;
 }
@@ -853,7 +933,7 @@ AptRenderItem* AptRenderItem::SetHasMask(bool bHasMask, AptRenderItem* pMask)
     AptRenderItem* v5 = mpMask;                          // [c:0x1C]
 
     // bit29 := bHasMask.
-    mFlags = ((bHasMask ? 0x20000000u : 0u)) | (mFlags & 0xDFFFFFFFu);
+    mFlags = ((bHasMask ? 0x4u : 0u)) | (mFlags & ~0x4u);
 
     if (v5 != pMask)
     {
@@ -863,17 +943,17 @@ AptRenderItem* AptRenderItem::SetHasMask(bool bHasMask, AptRenderItem* pMask)
             uint32_t v11 = mFlags;                       // [c:0x18]
             int v14;
             uint32_t v15;
-            bool bTreeVis = ((v11 & 0x04000000u) == 0x04000000u) ||
-                            ((v11 & 0x02000000u) == 0x02000000u);
-            if ((int)v11 >= 0 || bTreeVis)               // self invisible, or tree-hidden
+            bool bTreeVis = ((v11 & 0x20u) == 0x20u) ||
+                            ((v11 & 0x40u) == 0x40u);
+            if ((v11 & 0x1u) == 0 || bTreeVis)           // self invisible (x64 bit 0), or tree-hidden
             {
                 v14 = 0;
-                v15 = (pMask->mFlags & 0xFAFFFFFFu) | 0x04000000u; // set bit26, clear bit25
+                v15 = (pMask->mFlags & ~0xA0u) | 0x20u; // set bit26, clear bit25
             }
             else
             {
                 v14 = 1;
-                v15 = pMask->mFlags & 0xF8FFFFFFu;       // clear bits 24..26
+                v15 = pMask->mFlags & ~0xE0u;       // clear bits 24..26
             }
             pMask->mFlags = v15;
             pMask->PropagateTreeIsVisible(v14);
@@ -891,7 +971,7 @@ AptRenderItem* AptRenderItem::SetHasMask(bool bHasMask, AptRenderItem* pMask)
     }
 
     if (!v3->mpMask)
-        v3->mFlags &= ~0x20000000u;                      // no mask -> clear bit29
+        v3->mFlags &= ~0x4u;                      // no mask -> clear bit29
     return result;
 }
 
@@ -905,7 +985,7 @@ AptRenderItem* AptRenderItem::SetIsMask(bool bIsMask, const AptMatrix* pMaskMatr
     unsigned v4 = bIsMask ? 1u : 0u;
 
     // change iff the bit30 state differs, or the mask matrix pointer differs.
-    if (((unsigned)bIsMask != ((mFlags >> 30) & 1u)) ||
+    if (((unsigned)bIsMask != ((mFlags & 0x2u) ? 1u : 0u)) ||
         (mpMaskPositionMatrix != pMaskMatrix))           // [c:0x10]
     {
         if (bIsMask)
@@ -919,7 +999,7 @@ AptRenderItem* AptRenderItem::SetIsMask(bool bIsMask, const AptMatrix* pMaskMatr
             v3->mpMaskPositionMatrix = nullptr;
         }
         // bit30 := bIsMask.
-        v3->mFlags = ((v4 != 0) ? 0x40000000u : 0u) | (v3->mFlags & 0xBFFFFFFFu);
+        v3->mFlags = ((v4 != 0) ? 0x2u : 0u) | (v3->mFlags & ~0x2u);
     }
     return result;
 }
@@ -930,13 +1010,25 @@ AptRenderItem* AptRenderItem::SetIsMask(bool bIsMask, const AptMatrix* pMaskMatr
 // matrix onto the render context; Pop: restore both. The subtypes bracket their
 // geometry draw with these.
 //
-// FLAG: the console PushMatrices has an "optimised" fast-path (gAptOptFlags & 4 ->
-// _drawCharacterInstOpti); the standard push/append path is reconstructed here.
+// RESOLVED (2026-08-07, the _data_opti_flags_word dump): the console PushMatrices
+// @0x82AEF150 gates on dword_82F73008 & 4 -> drawCharacterInstOpti @0x82ADFA90 (a
+// clip-stack fast path; the PopMatrices twin just decrements the clip index). The
+// gate word's SHIPPED .data value is 0x2 (the neighbouring dumped words are the
+// "FSCommand:" string pointer + its 0x17/0x1A literal lengths, anchoring the read)
+// and no writer exists in the export set, so bit2 is clear for the whole run: the
+// opti fast path is DEAD on the shipped ARTIST build, and the standard push/append
+// path below IS the shipped behaviour (not a de-opt). Gate constant pinned below.
 // (Identity-singleton note: the item's null-matrix sentinels here are
 // gIdentityMatrix/gIdentityCXForm, distinct from the context's gAptIdentityMatrix/
 // gAptNullCXForm -- the concat still yields the correct result, just without the
 // pointer-identity short-circuit; the two singleton sets should be unified.)
 // ---------------------------------------------------------------------------
+
+// dword_82F73008 -- the Apt render opti-flags config word, pinned at its shipped
+// .data value (the _data_opti_flags_word dump; bit2 == the dead
+// drawCharacterInstOpti gate -- see the note above).
+static const unsigned int KU_AptOptiFlagsWord = 0x2u;   // dword_82F73008 (shipped)
+
 void PushMatrices(AptRenderingContext* pCtx, const AptRenderItem* pItem)
 {
     pCtx->pushColourTransform();
@@ -959,9 +1051,10 @@ void PopMatrices(AptRenderingContext* pCtx, const AptRenderItem* /*pItem*/)
 // draws at an absolute screen transform independent of its parents' matrices. Used
 // by PushRenderDataAbsolute (sprite/button/etc.).
 //
-// FLAG (x64 fork): the console fast-paths gAptOptFlags&4 -> _drawCharacterInstAbsoluteOpti;
-// the standard push/append path is reconstructed (matching the committed PushMatrices,
-// whose opti fast-path is likewise folded out).
+// RESOLVED (2026-08-07): the console fast-paths dword_82F73008&4 -> _drawCharacterInstAbsoluteOpti
+// @0x82AE00A8 -- dead on the shipped build (the gate word ships as 0x2, bit2 clear;
+// see KU_AptOptiFlagsWord above), so the standard push/append path IS the shipped
+// behaviour (matching PushMatrices, whose opti fast-path is likewise dead config).
 void PushMatricesAbsolute(AptRenderingContext* pCtx, const AptRenderItem* pItem)
 {
     pCtx->pushColourTransform();

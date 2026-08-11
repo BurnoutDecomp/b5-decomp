@@ -469,6 +469,25 @@ namespace BrnWorld
         bool IsDEBUGPlayerCarAlwaysUnderAIControl() const  { return mbDEBUGPlayerCarAlwaysUnderAIControl; }
 
     private:
+        // @0x827A52B0 (DWARF BrnWorldModule.h:473 -- `void BridgeRaceCarModuleToWorldModule_
+        // PreScene(InputBuffer_PreScene*, const OutputBuffer_PreScene*)`, i.e. a WorldModule
+        // METHOD with `this` implicit). Latch the race-car module's pre-scene active-race-car
+        // output interface into the world-entity pre-scene input buffer, then publish the
+        // player active-race-car index + the per-car rival control markers into THIS object.
+        //
+        // ⛔ IT IS DECLARED AS A MEMBER ON PURPOSE (2026-08-11). The rest of the WorldBridge*
+        // family is modelled as namespace functions taking the X360 r3 as a leading `void*
+        // lpWorldModule`; this one is the ONLY bridge that dereferences that pointer, and under
+        // the void* model it reached meLocalPlayerActiveRaceCarIndex / maeCarControls through
+        // the X360 BYTE OFFSETS -- which are 67,504 bytes wrong on the x64 PC layout, so the
+        // publish silently missed and corrupted the embedded sub-module fleet instead. Body +
+        // measurements: Bridges/WorldBridgeRaceCarToWorldModule.cpp. Keep it a member so the
+        // members are reached by NAME. (A global `namespace WorldModule` cannot be introduced
+        // into this header: BrnGameModule.hpp does `using BrnWorld::WorldModule;`.)
+        void BridgeRaceCarModuleToWorldModule_PreScene(
+            WorldEntityIO::InputBuffer_PreScene* lpWorldInputBuffer_PreScene,
+            const RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutputBuffer_PreScene );
+
         // @0x827C96D8 -- the shadow-map dispatch feed (three cascades over the
         // filtered world/racecar/traffic/prop sets). DECODE PENDING: declared with
         // the buffer set the dispatch pass hands it; body next.

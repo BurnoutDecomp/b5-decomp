@@ -32,15 +32,13 @@
 #include <new>   // placement new (the in-place AptNativeHash construct)
 
 // ---------------------------------------------------------------------------
-// FLAG (module-static, owned by the Apt class-registry / startup TU, not yet
-// homed): the class-name key the ctor looks up in the _global fallback scope to
-// find the sprite/movie-clip class whose prototype seeds this instance's
-// __proto__. X360 dword_8324E640 -- an .rdata EAStringC literal (the class name);
-// declared extern by name so the proto wiring compiles. (The neighbouring
-// dword_8324E580/0x8324E698 are the "prototype" key bodies -- see AptNativeHash.h
-// -- this is a distinct adjacent key.)
+// The class-name key the ctor looks up in the _global fallback scope to find the
+// sprite/movie-clip class whose prototype seeds this instance's __proto__. X360
+// dword_8324E640 -- an .rdata EAStringC literal; HOMED in AptGlobals.cpp
+// ("MovieClip"). (The neighbouring dword_8324E580/0x8324E698 are the "prototype"
+// key bodies -- see AptNativeHash.h -- this is a distinct adjacent key.)
 // ---------------------------------------------------------------------------
-extern const EAStringC gAptSpriteClassKey;   // X360 dword_8324E640
+extern const EAStringC gAptSpriteClassKey;   // X360 dword_8324E640 ("MovieClip", AptGlobals.cpp)
 
 // ---------------------------------------------------------------------------
 // ctor @0x82AFF820
@@ -69,8 +67,11 @@ AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(AptCharacter* pCharacter)
     // mDisplayList default-constructed here (X360: AptDisplayList::AptDisplayList(this+7))
 {
     mnGotoFrame         = -1;
-    mnClipActionFlags   = 0xC0u;   // low-byte sprite state flags (bits 6,7); clip-event mask clear
-    mpClipEventHandlers = nullptr; // +0x18 (no registered clip-event handlers yet)
+    // x64 ctor 0x140825A00: `(v & 0xF3000000) | 0x03000000` -- bJustLoaded (bit 24)
+    // + bIsPlaying (bit 25) set, clip-event mask (low 24) clear. (The old 0xC0 seed
+    // was the X360 big-endian allocation order.)
+    mnClipActionFlags   = 0x03000000u;
+    mpClipEventHandlers = nullptr; // x64 +0x28 (no registered clip-event handlers yet)
     mnLastActionFrame   = 0;
 
     // Per-instance property hash (AptNativeHash, capacity 8) from the shared Apt
@@ -78,7 +79,7 @@ AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(AptCharacter* pCharacter)
     // 20-byte block; reconstructed as a placement-new of the same ctor. (Guarded
     // for the null-pool case exactly as the asm guards the Allocate result.)
     AptNativeHash* pProperties = nullptr;
-    if (void* pMem = gpAptPseudoDataPool->Allocate(sizeof(AptNativeHash)))   // 20 bytes
+    if (void* pMem = gpAptPseudoDataPool->Allocate(sizeof(AptNativeHash)))   // x64: 0x28 bytes (console 20)
         pProperties = ::new (pMem) AptNativeHash(8);
     mpProperties = pProperties;
 
@@ -86,12 +87,12 @@ AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(AptCharacter* pCharacter)
     // the _global fallback scope by its class-name key, take its native property hash, and copy that
     // hash's "prototype" slot into our __proto__.
     //
-    // NULL-SAFE (x64 bring-up): the X360 derefs gpAptGlobalFallback unguarded because the sprite class
-    // is registered (by the un-homed AS-builtin registration) before any sprite instance is built. In
-    // our partial bring-up that registration has NOT run, so gpAptGlobalFallback (and the looked-up
-    // class value / its hash) are null. Skip the __proto__ wiring when any link is null -- the instance
-    // is built structurally without the AS prototype. FLAG: __proto__ wiring resumes once the AS-builtin
-    // class registry lands. Also requires mpProperties (null if the pool alloc above failed).
+    // NULL-SAFE (host): the X360 derefs gpAptGlobalFallback unguarded because the sprite class is
+    // registered before any sprite instance is built. That registration IS live (AptInit.cpp
+    // registers the MovieClip/Object/String classes into gpAptGlobalFallback at Apt init), so the
+    // __proto__ wiring runs on the normal path; the guards only cover an inst built before Apt init
+    // (then the instance is built structurally without the AS prototype). Also requires mpProperties
+    // (null if the pool alloc above failed).
     if (gpAptGlobalFallback != nullptr && mpProperties != nullptr)
     {
         AptValue* pClassValue = gpAptGlobalFallback->Lookup(gAptSpriteClassKey);
@@ -134,7 +135,8 @@ void AptCharacterSpriteInstBase::PreDestroy()
 // ---------------------------------------------------------------------------
 int32_t AptCharacterSpriteInstBase::HasClipAction(int32_t nMask) const
 {
-    return (static_cast<int32_t>(mnClipActionFlags) >> 8) & nMask;
+    // x64 @0x140839F70: sign-extend the LOW 24-bit mask (`shl eax,8; sar eax,8`), then AND.
+    return ((static_cast<int32_t>(mnClipActionFlags << 8)) >> 8) & nMask;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +148,8 @@ int32_t AptCharacterSpriteInstBase::HasClipAction(int32_t nMask) const
 // ---------------------------------------------------------------------------
 AptCharacterSpriteInstBase* AptCharacterSpriteInstBase::SetClipAction(int32_t nMask)
 {
-    mnClipActionFlags |= (static_cast<uint32_t>(nMask) << 8);
+    // x64 @0x1408411B0: `and edx,0FFFFFFh / or [rcx+24h],edx` -- mask into the LOW 24 bits.
+    mnClipActionFlags |= (static_cast<uint32_t>(nMask) & 0xFFFFFFu);
     return this;
 }
 
@@ -158,7 +161,9 @@ AptCharacterSpriteInstBase* AptCharacterSpriteInstBase::SetClipAction(int32_t nM
 // ---------------------------------------------------------------------------
 AptCharacterSpriteInstBase* AptCharacterSpriteInstBase::RemoveClipAction(int32_t nMask)
 {
-    mnClipActionFlags &= ((~static_cast<uint32_t>(nMask)) << 8) | 0xFFu;
+    // x64 @0x14083F260: `not edx / or edx,0FF000000h / and [rcx+24h],edx` -- clear LOW-24
+    // bits, preserve the high state byte.
+    mnClipActionFlags &= (~static_cast<uint32_t>(nMask)) | 0xFF000000u;
     return this;
 }
 

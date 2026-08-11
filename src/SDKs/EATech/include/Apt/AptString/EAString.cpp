@@ -12,18 +12,23 @@
 // needs it (leaf-first) -- the linker only needs bodies for what is actually
 // called.
 //
-// TWO PC-PORT FLAGS (faithful-shape, leaf-localised):
-//  1. ATOMIC REFCOUNT: the console stores the refcount in the HIGH 16 bits of the
-//     first 32-bit word (big-endian m_uRefCount-first) and mutates it with an
-//     lwarx/stwcx. atomic (+/-0x10000). PC is little-endian + single-threaded, so
-//     the named m_uRefCount field IS the faithful equivalent and a plain ++/-- is
-//     used. Marked // FLAG at each site.
-//  2. POOL NOT YET WIRED: buffer alloc routes through gpNonGCPoolManager (the
-//     non-GC Apt value pool), which AptInit has not built yet (it is null until
-//     then -- see AptDefine.cpp). Until AptInit lands, the leaf falls back to the
-//     C runtime heap (the established PC-IO-at-the-leaf pattern, as used by the
-//     movie pool / debug-font pool). Once AptInit wires gpNonGCPoolManager the
-//     fallback is dead. Marked // FLAG at each site.
+// TWO PC-PORT NOTES (faithful-shape, leaf-localised; 2026-08-07 audit):
+//  1. ATOMIC REFCOUNT: the console mutates the refcount half of StringDataC's
+//     first 32-bit word with an lwarx/stwcx. atomic (+/-0x10000; big-endian puts
+//     m_uRefCount in the high half). The XB1 x64 build mutates the SAME word
+//     with _Interlocked* ops (inlined in sub_140838AE0 / sub_140831FA0:
+//     _InterlockedExchangeAdd(+/-1), then Deallocate(pData, m_uMaxSize + 9) at
+//     zero). The host mirrors both with _InterlockedIncrement16 /
+//     _InterlockedDecrement16 on the named m_uRefCount field -- the identical
+//     observable atomic on either endianness.
+//  2. PRE-INIT POOL FALLBACK: buffer alloc routes through gpNonGCPoolManager,
+//     wired by AptAllocatorInitialize at the Apt bring-up (AptInit.cpp). Static-
+//     init strings (the 88 saConstant AS-name literals, AptStringPool.cpp)
+//     construct at CRT init BEFORE that wiring; on the console they were rodata
+//     StaticStringHelperT records and never allocated at all. That pre-init
+//     window (and only it) takes a CRT-heap fallback, leaf-marked at each site
+//     and padded to the pool's 8-byte rounding so a post-wire release of such a
+//     block free-lists it in-bounds.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -34,7 +39,8 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"        // DOGMA_PoolManager::Allocate/Deallocate
 
 #include <cstring>   // strlen/strcmp/memcpy/memmove/memset/memcmp/strstr/strchr
-#include <cstdlib>   // malloc/free (the AptInit-not-yet-wired bring-up fallback)
+#include <cstdlib>   // malloc/free (the pre-AptInit static-init fallback)
+#include <intrin.h>  // _InterlockedIncrement16/_InterlockedDecrement16 (the refcount atomic)
 #include <cctype>    // tolower/toupper (the UTF8_Make{Lower,Upper} case fold)
 #include <cstdarg>   // va_start/va_end (the Format varargs collection)
 #include <cstdio>    // vsnprintf (the Format/vsFormat printf core)
@@ -56,19 +62,23 @@ AptUserFunctions* EAStringC::sAptCallbacks              = 0;
 // ---------------------------------------------------------------------------
 void EAStringC::IncreaseInternalRefCount()
 {
-    // FLAG: console = lwarx/stwcx. atomic +0x10000 on the first 32-bit word (the
-    // high-half holds m_uRefCount on big-endian); PC = plain ++ on the named field.
+    // Console: lwarx/stwcx. atomic +0x10000 on the first 32-bit word (big-endian
+    // holds m_uRefCount in the high half). XB1 x64: _InterlockedExchangeAdd(+1)
+    // on the same word (inlined in sub_140838AE0). Host: the equivalent 16-bit
+    // interlocked bump on the named field.
     if (m_pData != reinterpret_cast<DebugDataC*>(&s_EmptyInternalData))
-        ++m_pData->m_uRefCount;
+        _InterlockedIncrement16(reinterpret_cast<volatile short*>(&m_pData->m_uRefCount));
 }
 
 void EAStringC::DecreaseInternalRefCount(StringDataC* const pData)
 {
     if (pData == reinterpret_cast<StringDataC*>(&s_EmptyInternalData))
         return;
-    // FLAG: console = lwarx/stwcx. atomic -0x10000, then test the high-half ==0;
-    // PC = plain -- on the named field.
-    if (--pData->m_uRefCount == 0)
+    // Console: lwarx/stwcx. atomic -0x10000, then test the high half == 0. XB1
+    // x64: interlocked decrement of the same word, then Deallocate(pData,
+    // m_uMaxSize + 9) at zero (inlined in sub_140838AE0 / sub_140831FA0). Host:
+    // the equivalent 16-bit interlocked decrement on the named field.
+    if (_InterlockedDecrement16(reinterpret_cast<volatile short*>(&pData->m_uRefCount)) == 0)
     {
         // Block size = header(8) + maxsize + null(1) = m_uMaxSize + 9, matching
         // AllocateBuffer's (len+12)&~3 rounding.
@@ -76,7 +86,7 @@ void EAStringC::DecreaseInternalRefCount(StringDataC* const pData)
         if (gpNonGCPoolManager)
             gpNonGCPoolManager->Deallocate(pData, nAllocatedSize);
         else
-            ::free(pData);   // FLAG: bring-up fallback until AptInit wires the pool
+            ::free(pData);   // FLAG PC-platform leaf: pre-AptInit window only (the block came from AllocateBuffer's CRT fallback)
     }
 }
 
@@ -94,7 +104,12 @@ void EAStringC::AllocateBuffer(const uint32_t uSize)
     if (gpNonGCPoolManager)
         result = static_cast<DebugDataC*>(gpNonGCPoolManager->Allocate(nBlock));
     else
-        result = static_cast<DebugDataC*>(::malloc(nBlock));   // FLAG: bring-up fallback
+        // FLAG PC-platform leaf: pre-AptInit static-init window (static EAStringC
+        // construction -- the 88 saConstant literals -- runs before
+        // AptAllocatorInitialize wires the pool; the console kept those as rodata
+        // records and never allocated). Padded to the pool's 8-byte rounding so a
+        // post-wire Deallocate can free-list this block in-bounds.
+        result = static_cast<DebugDataC*>(::malloc((nBlock + 7) & ~7u));
 
     m_pData              = result;
     result->m_uRefCount  = 1;
@@ -106,7 +121,7 @@ void EAStringC::DeallocateBuffer(const void* const pBuffer, const uint32_t uSize
     if (gpNonGCPoolManager)
         gpNonGCPoolManager->Deallocate(const_cast<void*>(pBuffer), uSize);
     else
-        ::free(const_cast<void*>(pBuffer));   // FLAG: bring-up fallback
+        ::free(const_cast<void*>(pBuffer));   // FLAG PC-platform leaf: pre-AptInit window only (CRT-fallback block)
 }
 
 void EAStringC::InitFromBuffer(const char* const pStrText)
@@ -130,9 +145,14 @@ void EAStringC::InitFromBuffer(const char* const pStrText)
 }
 
 // The grow/copy-on-write workhorse behind ReserveSize/Append/Insert/etc.
-// PS3 External 0x7F49FC. In-place when we exclusively own the block (refcount==1)
-// and it already fits; otherwise reallocate (with 12.5% slack) and copy-out, or
-// drop to the empty string when reserving zero.
+// PS3 External 0x7F49FC == XB1 sub_140831FA0 (the x64 twin corroborates every
+// width: the 16-bit refcount==1 exclusive-owner test, the (size+size/8+12)&~3
+// block rounding, maxsize = block-9, and the dec-old free of m_uMaxSize+9
+// through gpNonGCPoolManager). In-place when we exclusively own the block
+// (refcount==1) and it already fits; otherwise reallocate (with 12.5% slack)
+// and copy-out, or drop to the empty string when reserving zero (the XB1
+// stores the empty sentinel without a refcount bump -- matching
+// IncreaseInternalRefCount's empty-block guard).
 void EAStringC::ChangeBuffer(const uint32_t uSizeToReserve, const uint32_t uOffsetCopy,
                              const uint32_t uSizeCopy, const CBPushZero ePushZero,
                              const uint32_t uInternalSize)
@@ -329,7 +349,7 @@ bool EAStringC::IsValid() const
 void EAStringC::Validate(const EAStringC& strText)
 {
     m_pData = strText.m_pData;
-    IncreaseInternalRefCount();   // FLAG: console = lwarx/stwcx. +0x10000; PC = plain ++
+    IncreaseInternalRefCount();   // the interlocked refcount bump (see IncreaseInternalRefCount)
 }
 
 EAStringC& EAStringC::Duplicate(const EAStringC& strText)
@@ -492,8 +512,8 @@ void EAStringC::MemUninitialize()                                { sAptCallbacks
 // which name the StringDataC fields directly). Addresses are noted per group.
 //
 // All counts/lengths are the named 16-bit StringDataC fields (m_uSize/m_uMaxSize)
-// widened to int; the refcount machinery reuses the leaf helpers above (the same
-// console-atomic-vs-PC-plain FLAG already documented at IncreaseInternalRefCount).
+// widened to int; the refcount machinery reuses the leaf helpers above (the
+// interlocked refcount atomic documented at IncreaseInternalRefCount).
 // The substring builders (Left/Mid/Right) follow the console shape exactly: take
 // a private reference on the source block, ChangeBuffer the desired slice into a
 // throw-away string, then hand its block to *this and release the temp.

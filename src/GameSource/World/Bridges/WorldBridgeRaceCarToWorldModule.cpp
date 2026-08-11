@@ -1,6 +1,6 @@
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToEntityModules.h"
+#include "GameSource/World/BrnWorldModule.h"   // BrnWorld::WorldModule -- the members, BY NAME
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::gpDebugPrint
 
 // ============================================================================
 // GameSource/World/Bridges/WorldBridgeRaceCarToWorldModule.cpp
@@ -33,30 +33,55 @@
 // GameSource/Director/BrnDirectorICEWrapperPrepare.cpp.
 // DELETE-WHEN: the three accessors above are bodied and
 // WorldBridgeEntityModulesToEntityModules.cpp can be mounted whole -- then fold this back.
+//
+// ⛔⛔ SECOND BUG, FIXED 2026-08-11 (junkyard-entry wave). Mounting this TU was necessary but
+// NOT sufficient: the body wrote its two WorldModule outputs through the X360 BYTE OFFSETS
+//     +6167272 (meLocalPlayerActiveRaceCarIndex) and +6167280 (maeCarControls)
+// applied to the x64 PC object. MEASURED with a compile-time offsetof probe on this build:
+//     PC offsetof(WorldModule, meLocalPlayerActiveRaceCarIndex) == 6234776  (X360 6167272)
+//     PC offsetof(WorldModule, maeCarControls)                  == 6234784  (X360 6167280)
+//     PC sizeof  (WorldModule)                                  == 6243504
+// -- WorldModule embeds the whole sub-module fleet BY VALUE (RaceCar/Traffic/World/Prop/
+// Trigger/Physics/EnvironmentManager/Scene/AI/Crash), every one an independently reconstructed
+// x64 layout, so the console offsets drift by 67,504 bytes here. Consequences:
+//   * the real meLocalPlayerActiveRaceCarIndex was NEVER written -- it stayed at Prepare's -1
+//     for the whole session, so WorldModule::HandleGameActions case 7 (the junkyard drive-thru
+//     "put the player car under AI control" action posted by
+//     CarSelectManager::ReallyEnterJunkyardAtStartOfGame) asserted
+//     "Unable to set the player car under AI control, as we don't know who they are yet"
+//     (BrnWorldModule.cpp:1327) and bailed -- the junkyard entry never handed the car over;
+//   * and the 4 + 32 bytes it did write landed 67,504 bytes short, INSIDE the embedded
+//     sub-module fleet -- a silent live corruption every pre-scene frame.
+// The old one-shot "[bridge] ... player active race-car index published = 0" diag hid this:
+// it printed the SOURCE interface value, never the WorldModule member, so it read as proof the
+// hand-off worked. It is removed with the offsets.
+//
+// Both outputs are now written BY NAME. The DWARF settles the model: BrnWorldModule.h:473
+// declares this as a WorldModule METHOD
+//     void BridgeRaceCarModuleToWorldModule_PreScene(InputBuffer_PreScene*,
+//                                                    const OutputBuffer_PreScene*);
+// -- `this` == the X360 r3 -- so it is reconstructed as a member here. (The rest of the
+// WorldBridge* family stays namespace functions with an explicit `void* lpWorldModule`; this
+// is the only one of them that ever dereferences it. A global `namespace WorldModule` cannot
+// be pulled into BrnWorldModule.h either: BrnGameModule.hpp does `using BrnWorld::WorldModule`.)
 // ============================================================================
 
-namespace WorldModule
+namespace BrnWorld
 {
 
 namespace
 {
-    // WorldModule (the X360 r3 context) member offsets this bridge writes through.
-    // FLAG: the WorldModule class layout is not reconstructed *in this TU's include set*
-    // (BrnWorldModule.h is not reachable from the Bridges layer), so the two members are
-    // accessed at their X360 byte offsets. Both are cross-checked against the committed
-    // BrnWorldModule.h member comments: meLocalPlayerActiveRaceCarIndex @+6167272 (:307) and
-    // maeCarControls @+6167280 (:309).
-    const u32 KU_WORLD_MODULE_PLAYER_ACTIVE_RACE_CAR_INDEX_OFFSET = 6167272; // 0x5E1AE8 -- EActiveRaceCarIndex
-    const u32 KU_WORLD_MODULE_RACE_CAR_TYPE_ARRAY_OFFSET          = 6167280; // 0x5E1AF0 -- s32[8] per active-car type
-    // FLAG: the per-car "type" enum's home is not reconstructed; the X360 stores the
-    // literal 2 for a rival car (DWARF names the gate IsRaceCarRival()).
-    const s32 KI_WORLD_MODULE_RACE_CAR_TYPE_RIVAL = 2;
+    // The per-car control mode the X360 stores for a rival: literal 2, into the same
+    // maeCarControls[8] (DWARF BrnWorldModule.h:309) that HandleGameActions cases 7/23/34
+    // drive -- case 23 writes exactly this 2 on its own rival arm. (DWARF names the gate
+    // IsRaceCarRival().)
+    const s32 KI_WORLD_MODULE_CAR_CONTROL_RIVAL = 2;
 }
 
 // @ 0x827A52B0 -- WorldBridgeEntityModulesToEntityModules.cpp:88. Latch the race-car
 // module's pre-scene active-race-car output interface into the world-entity module's
 // pre-scene input buffer, then publish the player index + per-car "is rival" markers
-// into the WorldModule (the X360 r3 context) member state.
+// into this WorldModule's own member state.
 //
 // The interior range asserts the pseudocode inlines ("mePlayerActiveRaceCarIndex <
 // E_ACTIVE_RACE_CAR_INDEX_COUNT" :967, "Player car index hasn't been set" :980,
@@ -67,15 +92,14 @@ namespace
 // EActiveRaceCarIndex's committed range-guarded operator++. They are NOT re-emitted here.
 //
 // The X360 tail returns the last EndAssert artifact in r3; the logical return type is void.
-void BridgeRaceCarModuleToWorldModule_PreScene(
-    void* lpWorldModule,
-    BrnWorld::WorldEntityIO::InputBuffer_PreScene* lpWorldInputBuffer_PreScene,
-    const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutputBuffer_PreScene)
+void WorldModule::BridgeRaceCarModuleToWorldModule_PreScene(
+    WorldEntityIO::InputBuffer_PreScene* lpWorldInputBuffer_PreScene,
+    const RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutputBuffer_PreScene)
 {
     CGS_ASSERT(lpWorldInputBuffer_PreScene != 0, "lpWorldInputBuffer_PreScene");           // :94
     CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, "lpRaceCarOutputBuffer_PreScene");     // :95
 
-    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpRaceCarEntityOutputInterface =
+    const RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpRaceCarEntityOutputInterface =
         lpRaceCarOutputBuffer_PreScene->GetActiveRaceCarOutputInterface();
     CGS_ASSERT(lpRaceCarEntityOutputInterface != 0, "lpRaceCarEntityOutputInterface");     // :100
 
@@ -87,41 +111,20 @@ void BridgeRaceCarModuleToWorldModule_PreScene(
         *lpRaceCarOutputBuffer_PreScene->GetActiveRaceCarOutputInterface());
 
     // ---- publish the player active-race-car index into the WorldModule -------------------
-    u8* lpWorldModuleBytes = static_cast<u8*>(lpWorldModule);
+    // The X360 gate is `(mePlayerActiveRaceCarIndex != -1) && mbIsPlayerCarActive`, which is
+    // exactly what the committed IsPlayerCarActive() returns; its interior "Player car index
+    // hasn't been set" assert (:980) lives inside that getter pair, not here.
     if (lpRaceCarEntityOutputInterface->IsPlayerCarActive())
     {
-        *reinterpret_cast<EActiveRaceCarIndex*>(
-            lpWorldModuleBytes + KU_WORLD_MODULE_PLAYER_ACTIVE_RACE_CAR_INDEX_OFFSET) =
+        meLocalPlayerActiveRaceCarIndex =
             lpRaceCarEntityOutputInterface->GetPlayerActiveRaceCarIndex();
-
-        // [diag, one-shot -- NOT console code] this bridge spent the whole project inert (see
-        // the banner); the line proves the index really crosses the module boundary rather
-        // than the mount merely linking. Same shape/gate as the sibling bring-up diags.
-        // Remove with the FLAG above.
-        {
-            static bool sbReported = false;
-            if (!sbReported && (CgsDev::Message::gxMessageFilterFlags & 1) &&
-                CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbReported = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[bridge] BridgeRaceCarModuleToWorldModule_PreScene: player active"
-                       " race-car index published = "
-                    << static_cast<s32>(lpRaceCarEntityOutputInterface->GetPlayerActiveRaceCarIndex())
-                    << "\n";
-            }
-        }
     }
     else
     {
-        *reinterpret_cast<EActiveRaceCarIndex*>(
-            lpWorldModuleBytes + KU_WORLD_MODULE_PLAYER_ACTIVE_RACE_CAR_INDEX_OFFSET) =
-            E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        meLocalPlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     }
 
-    // ---- mark each active rival car in the WorldModule per-car type array ----------------
-    s32* lpRaceCarType = reinterpret_cast<s32*>(
-        lpWorldModuleBytes + KU_WORLD_MODULE_RACE_CAR_TYPE_ARRAY_OFFSET);
+    // ---- mark each active rival car in the WorldModule per-car control array --------------
     for (EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
          leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
          leActiveRaceCarIndex++)
@@ -129,9 +132,9 @@ void BridgeRaceCarModuleToWorldModule_PreScene(
         if (lpRaceCarEntityOutputInterface->IsRaceCarActive(leActiveRaceCarIndex))
         {
             if (lpRaceCarEntityOutputInterface->IsRaceCarRival(leActiveRaceCarIndex))
-                lpRaceCarType[leActiveRaceCarIndex] = KI_WORLD_MODULE_RACE_CAR_TYPE_RIVAL;
+                maeCarControls[leActiveRaceCarIndex] = KI_WORLD_MODULE_CAR_CONTROL_RIVAL;
         }
     }
 }
 
-}
+}   // namespace BrnWorld

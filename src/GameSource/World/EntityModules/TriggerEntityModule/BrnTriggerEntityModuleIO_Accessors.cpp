@@ -25,10 +25,30 @@ namespace BrnWorld
 {
 namespace TriggerEntityModuleIO
 {
+    // ⛔ CONSOLE-OFFSET PIN CORRECTED 2026-08-11 (driving-input wave).
+    // This body used to assert `offsetof(InputBuffer_PreScene, mInputInterface) == 4` --
+    // the X360 getter's `addi r3, this, 4`. That is a 32-BIT-POINTER offset and it CANNOT
+    // hold on the x64 host: mInputInterface is the 131 KB TriggerManagementInputInterface,
+    // whose leading VariableEventQueue<131072,16> begins with an event POINTER, so
+    // alignof == 8 here (4 on the console) and MSVC lands the member at +8 behind the
+    // 1-byte IOBuffer status. MEASURED on this host: alignof(InputInterface) == 8,
+    // sizeof(InputInterface) == 132128, sizeof(InputBuffer_PreScene) == 132136.
+    // The assert therefore FAILED TO COMPILE, which is why this whole TU had never been on
+    // the build list and why InputBuffer_PreScene::GetInputInterface() -- committed here
+    // since the trigger wave -- was still an unresolved external for every caller.
+    // Parity in this project is by named member, not by byte offset (same rule the sibling
+    // UpdateOutputBuffer::_AssertLayout states), so pin what IS invariant: the interface is
+    // the buffer's only payload, seated at its own alignment right after the status byte.
     void InputBuffer_PreScene::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer_PreScene, mInputInterface) == 4,
-                      "mInputInterface @4");
+        static_assert(offsetof(InputBuffer_PreScene, mInputInterface)
+                          == alignof(InputBuffer_PreScene::InputInterface),
+                      "mInputInterface must sit at its own alignment immediately after the IOBuffer status byte "
+                      "(X360: +4 with 4-byte pointers; x64 host: +8)");
+        static_assert(sizeof(InputBuffer_PreScene)
+                          == offsetof(InputBuffer_PreScene, mInputInterface)
+                             + sizeof(InputBuffer_PreScene::InputInterface),
+                      "mInputInterface must be the buffer's only payload member");
     }
 
     // X360 0x827A31C8 (R, :90) -- const scene-input-interface accessor; returns

@@ -14,7 +14,7 @@
 //   (GetNumValues @0x82AD5228 / IsVectorFull @0x82ADC130 are inline in the .h.)
 //
 // The two families share this 12-byte storage but swap the role of +0/+4; see
-// the layout-collision FLAG in AptValueVector.h. No leak/DWARF body exists for
+// the layout-collision NOTE in AptValueVector.h. No leak/DWARF body exists for
 // either class.
 // ===========================================================================
 
@@ -109,6 +109,17 @@ AptValue* AptValueVector::pop()
 }
 
 // ---------------------------------------------------------------------------
+// PopValue -- the x64 export's pop-WITHOUT-Release twin of pop @0x82ADBBD0
+// (phase-0 signature-parity item): pre-decrement the live top and hand the
+// popped value to the caller, who now owns the reference (no vtbl Release call
+// -- the ONE difference from pop()). No bounds check, matching pop().
+// ---------------------------------------------------------------------------
+AptValue* AptValueVector::PopValue()
+{
+    return mppItems[--mnTop];
+}
+
+// ---------------------------------------------------------------------------
 // Shutdown @ 0x82AE14F0
 //
 // asm:
@@ -157,7 +168,7 @@ void AptValueVector::shutdown()
 //   *(+0) = nCapacity            // family-(B) capacity -> mnTop member (+0)
 //   *(+4) = 0                    // family-(B) top      -> mnCapacity member (+4)
 //   *(+8) = Allocate(pool, 4*nCapacity)
-// FLAG: family-(B) layout (capacity@+0, top@+4) -- the OPPOSITE of the
+// Family-(B) layout (capacity@+0, top@+4) -- the OPPOSITE of the
 // `AptValue>` operand-stack class; see the AptValueVector.h collision note.
 // Allocation order matches the binary: store capacity, store top=0, then the
 // allocated pointer (the X360 zeroes +8 first then overwrites; the visible
@@ -179,7 +190,7 @@ AptValueVector AptValueVector::ConstructAptValueVector(int32_t nCapacity)
 // asm:
 //   r11 = *(+8) (items); r10 = 4*nIndex; r3 = items[nIndex]
 // ---------------------------------------------------------------------------
-AptValue* AptValueVector::GetAt(int32_t nIndex) const
+AptValue* AptValueVector::GetAt(int32_t nIndex)
 {
     return mppItems[nIndex];   // [c:+0x08]
 }
@@ -212,7 +223,7 @@ void AptValueVector::SetAt(int32_t nIndex, AptValue* pValue)
 //   }
 //   return result;
 //
-// FLAG: family-(B) live count lives at +0x04 (the mnCapacity member). The
+// Family-(B) live count lives at +0x04 (the mnCapacity member). The
 // `rlwinm. r11, r11, 0, 6, 17` masks PPC bits 6..17 of mValueData -- the
 // 12-bit mnReferenceCount field -- so the branch is "refcount != 0"; rendered
 // via getRefCount() to stay endianness-agnostic on x64. The else branch's
@@ -264,7 +275,7 @@ AptValue* AptValueVector::ReleaseValues()
 //   items = *(+8); items[*(+4)] = 0                  // clear vacated top slot
 //
 // Does not Release the removed value -- the caller owns it (matches X360).
-// FLAG: family-(B) live count is +0x04 (mnCapacity member), not +0x00.
+// Family-(B) live count is +0x04 (mnCapacity member), not +0x00.
 // ---------------------------------------------------------------------------
 void AptValueVector::RemoveAt(int32_t nIndex)
 {

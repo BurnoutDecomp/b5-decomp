@@ -86,11 +86,12 @@ extern const int32_t gAptMemberIndexToEventBit[];     // dword_82143BA8 (event i
 // AptCIHBehaviour.cpp).
 extern void GetBoundingRectClamped(const AptCIH* pThis, float* pOutRect);
 
-// FLAG (un-homed AS global-function singletons; created by the deferred
-// sub_82AF6B68 builtin-table init -- see the AptInit.cpp note): the console
-// lookup returns these registered globals for the setInterval/clearInterval/
-// isNaN/unescape/escape/Boolean member names. Null until that init homes
-// (a null return simply continues the findChild resolution).
+// The AS global-function singletons (storage HOMED in AptGlobals.cpp; created by
+// sub_82AF6B68's still-deferred un-named builtin-table slice -- that deferral is
+// tracked at its home, AptInit.cpp): the console lookup returns these registered
+// globals for the setInterval/clearInterval/isNaN/unescape/escape/Boolean member
+// names. Null until that init slice lands (a null return simply continues the
+// findChild resolution).
 extern AptValue* gpAptFnSetInterval;     // off_8324D828
 extern AptValue* gpAptFnClearInterval;   // off_8324D81C
 extern AptValue* gpAptFnIsNaN;           // off_8324D824
@@ -100,9 +101,9 @@ extern AptValue* gpAptFnBoolean;         // off_8324D74C
 
 // ---------------------------------------------------------------------------
 // The AptMovie timeline embedded inside a sprite/animation AptCharacter --
-// the same FLAGged reinterpret AptCIH.cpp's play-head methods centralise
-// (console char+0x10; the 8-byte GUIAPT64 layout lands it at char+0x20 ==
-// KU_AptEmbeddedMovieOff).
+// the same serialised-blob reinterpret AptCIH.cpp's play-head methods centralise
+// (PC-platform leaf there: console char+0x10; the 8-byte GUIAPT64 layout lands it
+// at char+0x20 == KU_AptEmbeddedMovieOff).
 // ---------------------------------------------------------------------------
 static AptMovie* GetClipMovieEmbedded(const AptCharacterInst* pInst)
 {
@@ -254,14 +255,14 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
 
             case 3:   // "backgroundColor" @0x82B0E09C -- the packed RGB above the flag byte
                 return AptInteger::Create(
-                    static_cast<int>((pText->mFlagsAndBackColor >> 8) & 0x00FFFFFFu));
+                    static_cast<int>(pText->mFlagsAndBackColor & 0x00FFFFFFu));   // x64 low-24
 
             case 4:   // "border" @0x82B0E0B8
                 return AptBoolean::Create(pText->GetDrawsBorder());
 
             case 5:   // "borderColor" @0x82B0E0CC
                 return AptInteger::Create(
-                    static_cast<int>((pText->mFlagsAndBorderColor >> 8) & 0x00FFFFFFu));
+                    static_cast<int>(pText->mFlagsAndBorderColor & 0x00FFFFFFu));   // x64 low-24
 
             case 7:   // "length" @0x82B0E0D8 -- refresh the bound text, then its length
                 pTextInst->UpdateText(pNode);
@@ -331,7 +332,7 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
             {         // else the laid-out text height + the 4.0 box gutter (flt_82004EF4)
                 if ((pText->mStateFlags & 4u) != 0)
                     pNode->EnsureStringAllocated(pNode->mpDisplayListParent);
-                if ((pText->mFlagsAndBorderColor & 0x3Cu) == 0x0Cu || pText->GetWordWrap())
+                if ((pText->mFlagsAndBorderColor & 0x3C000000u) == 0x0C000000u || pText->GetWordWrap())
                 {
                     float afRect[4];
                     GetBoundingRectClamped(pNode, afRect);
@@ -345,7 +346,7 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
             {
                 if ((pText->mStateFlags & 4u) != 0)
                     pNode->EnsureStringAllocated(pNode->mpDisplayListParent);
-                if ((pText->mFlagsAndBorderColor & 0x3Cu) == 0x0Cu || pText->GetWordWrap())
+                if ((pText->mFlagsAndBorderColor & 0x3C000000u) == 0x0C000000u || pText->GetWordWrap())
                 {
                     float afRect[4];
                     GetBoundingRectClamped(pNode, afRect);
@@ -520,12 +521,16 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
         case 127: return LookupMethodSingleton(gpAptNativeFn_8324E438,
                       reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_localToGlobal));          // @0x82B0EF68
 
-        // FLAG (deferred natives -- the console creators bind sMethod_ bodies not yet
-        // reconstructed in AptCIHNativeFunctionHelper.cpp; a null return continues the
-        // findChild resolution, so the member reads `undefined` until they land):
-        //   108 "prevFrame"      @0x82B0EA04 (off_8324E48C)
-        //   111 "getBytesLoaded" @0x82B0EB18 (off_8324E494)
-        //   121 "unloadMovie"    @0x82B0EC88 (off_8324E44C)
+        // FLAG (deferred natives -- creator ARMS now ATTESTED from the full
+        // 0x82B0DF70 dossier, 2026-08-07: each is the IDENTICAL create-once
+        // AptNativeFunction singleton shape as the cases above -- operator new(0x24)
+        // + ctor over the helper native, setGCRoot(1), vtbl[0] AddRef pin -- so ONLY
+        // the three sMethod_ bodies remain unreconstructed in
+        // AptCIHNativeFunctionHelper.cpp; a null return continues the findChild
+        // resolution, so the member reads `undefined` until they land):
+        //   108 "prevFrame"      @0x82B0EA04 -> sMethod_prevFrame      (off_8324E48C)
+        //   111 "getBytesLoaded" @0x82B0EB18 -> sMethod_getBytesLoaded (off_8324E494)
+        //   121 "unloadMovie"    @0x82B0EC88 -> sMethod_unloadMovie    (off_8324E44C)
         // ⚠️ "nothing calls it yet" is a claim with an expiry date -- 110 "stop" sat in
         // this list and WAS live (B5ComplexBar.Done calls this.stop(); dropping it made
         // every GUI bar oscillate forever and storm BrnComplexBar.cpp:67). Verified
@@ -596,7 +601,7 @@ bool AptCIH::objectMemberSet(AptValue* const pThis,
                 // The relayout-direction flag: bit 3 when the box is CURRENTLY None-
                 // aligned (the SDK's `szBuf != "false" || szBuf != "none"` condition is
                 // always true -- the asm compiles that shape verbatim), bit 4 otherwise.
-                if ((pText->mFlagsAndBorderColor & 0x3Cu) == 0x0Cu
+                if ((pText->mFlagsAndBorderColor & 0x3C000000u) == 0x0C000000u
                     && (!(strValue == EAStringC("false")) || !(strValue == EAStringC("none"))))
                     pWritable->SetStateFlags(8u);
                 else
@@ -849,7 +854,7 @@ bool AptCIH::objectMemberSet(AptValue* const pThis,
                     // node leaves the input set.
                     AptCharacterSpriteInstBase* const pSpriteInst =
                         static_cast<AptCharacterSpriteInstBase*>(pInst);
-                    if ((pSpriteInst->mnClipActionFlags & 0x0200C000u) == 0
+                    if ((pSpriteInst->mnClipActionFlags & 0x200C0u) == 0   // x64 low-24 mask (X360 <<8 form 0x200C000)
                         && pNode->HasEventMember(0x200C0) == 0)
                         RemoveNodeFromInputSet(pNode);
                 }

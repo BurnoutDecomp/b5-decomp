@@ -25,8 +25,43 @@
 #include "BrnProgressionRivalData.h"      // BrnProgression::RivalData (maRivals element)
 #include "GameSource/Gui/SaveLoad/BrnGuiSaveLoadProfileRecords.h"  // BrnGuiSaveLoad::{Car,Livery,Rival,ProfileEvent}Data (SplitArray save-image twins)
 
+// The two serialised save images Profile::Serialise / ::Deserialise codec between.
+// FORWARD-DECLARED (documented exception (b)): the use here is pointer-only, and this
+// header is included by most of the Progression/Gui tree -- pulling the GameSource/Gui
+// SaveLoad headers in from it would cascade the whole save-image surface into every
+// Profile consumer. The codec TU (BrnProfile_SaveImage.cpp) includes them for real.
+namespace BrnGuiSaveLoad { class Profile; class ProfileDLC1; }
+
 namespace BrnProgression
 {
+
+// ------------------------------------------------------------------------------------
+// ProfileUpgradeTable -- the fixed-up PROFILEUPG resource body.
+//
+// The "profile upgrade" resource (BrnProgression::ProfileUpgradeResourceType, whose
+// GetSerialisedResourceDescriptor sizes the block at (count + 1) * 8 and whose FixUp
+// rebases the self-relative table offset at +4) is a prop-hit bit-index TRANSLATION table:
+// when a content patch renumbers the world's props, it maps each moved bit between the
+// index the SAVE IMAGE uses and the index THIS BUILD's live profile uses.
+// Profile::Serialise / ::Deserialise are its only consumers -- ProfileManager::
+// ReadProfileData @0x824FF298 and ::ReportTaskCompleted @0x82513EC0 pass it straight
+// through (NULL unless the DLC entitlement gate passes) -- so it is homed here.
+//
+// X360-attested shape: the head is read as `lwz 0(r24)` / `lwz 4(r24)` (count, table) and
+// each record as `lwz 0(r11)` / `lwz 4(r11)` at an 8-byte stride. The head's pointer slot
+// widens on x64; only the RECORDS are a serialised layout, and they are pointer-free.
+// ------------------------------------------------------------------------------------
+struct ProfileUpgradeTable
+{
+    struct Entry
+    {
+        u32 muImageBitIndex;   // +0x00 the bit's index in the SAVE IMAGE's prop-hit array
+        u32 muLiveBitIndex;    // +0x04 the bit's index in the LIVE profile's prop-hit array
+    };
+
+    s32          miCount;      // +0x00 number of Entry records
+    const Entry* mpaEntries;   // +0x04 on console (self-relative until ProfileUpgradeResourceType::FixUp)
+};
 
 // ------------------------------------------------------------------------------------
 // SplitArray<TSrc, TDst>  -- Profile::Serialise's save-image splitter.
@@ -74,6 +109,26 @@ private:
     u16 muFlags;     // BrnProfile.h:336  (+4)
     // 2 bytes trailing pad -> 8-byte stride (X360 GetItem: 8*index)
 };
+
+// The four explicit SplitArray specialisations (bodies in BrnProfile.cpp). Declared here so
+// the save-image codec TU that calls them binds to the specialisation rather than implicitly
+// instantiating the (deliberately undefined) primary template.
+template<> void SplitArray<CarData, BrnGuiSaveLoad::CarData>(
+        s32 liCount, const CarData* lpSrc,
+        s32* lpiBaseCount, BrnGuiSaveLoad::CarData* lpBase,
+        s32* lpiDlcCount,  BrnGuiSaveLoad::CarData* lpDlc, s32 liMaxDlcCount);
+template<> void SplitArray<LiveryData, BrnGuiSaveLoad::LiveryData>(
+        s32 liCount, const LiveryData* lpSrc,
+        s32* lpiBaseCount, BrnGuiSaveLoad::LiveryData* lpBase,
+        s32* lpiDlcCount,  BrnGuiSaveLoad::LiveryData* lpDlc, s32 liMaxDlcCount);
+template<> void SplitArray<RivalData, BrnGuiSaveLoad::RivalData>(
+        s32 liCount, const RivalData* lpSrc,
+        s32* lpiBaseCount, BrnGuiSaveLoad::RivalData* lpBase,
+        s32* lpiDlcCount,  BrnGuiSaveLoad::RivalData* lpDlc, s32 liMaxDlcCount);
+template<> void SplitArray<ProfileEvent, BrnGuiSaveLoad::ProfileEvent>(
+        s32 liCount, const ProfileEvent* lpSrc,
+        s32* lpiBaseCount, BrnGuiSaveLoad::ProfileEvent* lpBase,
+        s32* lpiDlcCount,  BrnGuiSaveLoad::ProfileEvent* lpDlc, s32 liMaxDlcCount);
 
 // Minimal owning slice for BrnProgression::MugshotInfo -- the element type of
 // Array<BrnProgression::MugshotInfo, 20>. The X360 BINARY proves N=20 and a 56-byte stride
@@ -167,6 +222,24 @@ public:
     // Functions reconstructed in this TU (BrnProfile.cpp).
     // ------------------------------------------------------------------------
     void Construct();
+
+    // ------------------------------------------------------------------------
+    // The save-image codec (bodies in BrnProfile_SaveImage.cpp -- a per-function split of
+    // this class's BrnProfile.cpp, the console's own home for both).
+    //
+    //   Serialise   @0x8237C1F0 -- live profile -> the two console save images.
+    //   Deserialise @0x8237D308 -- the exact inverse.
+    //
+    // Argument order/roles are the X360 asm's (r3 = this, r4 = the progression image,
+    // r5 = the optional PROFILEUPG table, r6 = the DLC1 image); ProfileManager::
+    // ReadProfileData @0x824FF298 and ::ReportTaskCompleted @0x82513EC0 are the callers.
+    // ------------------------------------------------------------------------
+    void Serialise(BrnGuiSaveLoad::Profile* lpImage,
+                   const ProfileUpgradeTable* lpUpgrade,
+                   BrnGuiSaveLoad::ProfileDLC1* lpImageDLC1);
+    void Deserialise(const BrnGuiSaveLoad::Profile* lpImage,
+                     const ProfileUpgradeTable* lpUpgrade,
+                     const BrnGuiSaveLoad::ProfileDLC1* lpImageDLC1);
 
     CarData*   AddCar(CgsID lCarId, CarData::UnlockType leUnlockType);
     void       SetCarUnlockAlreadyShown(CgsID lCarId);

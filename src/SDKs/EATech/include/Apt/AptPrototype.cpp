@@ -28,8 +28,8 @@
 // off_8324D834 AptValueGC_PoolManager; its Allocate is the inherited
 // DOGMA_PoolManager::Allocate, and byte_8324D804 is gAptValueGCSizeOffset). The
 // delete is the mirror through the GC pool (same shape as the AptArray /
-// AptNativeFunction GC siblings). Guarded for null until the Apt runtime startup
-// (AptInit) wires the pool (FLAG: gpGCPoolManager is null until then).
+// AptNativeFunction GC siblings). The null guard covers the pre-init window
+// before AptInit's AptAllocatorInitialize @0x82ADD118 wires the pool.
 // ---------------------------------------------------------------------------
 void* AptPrototype::operator new(size_t size)
 {

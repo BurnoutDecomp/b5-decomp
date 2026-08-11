@@ -24,9 +24,9 @@
 // pointer lives at ctx+0x28 [xb1:+40] (itemStart, relocated to absolute around
 // Fixup by Resolve), records are 16-byte {u32 type + pad, 8-byte payload}, and
 // string payloads are ctx-relative. Layout == libapt2 Const::Write (verified).
-// FLAG: the const-chunk header is not yet a recovered type, so the ctx is walked
-// with the documented serialised-blob offset idiom (the same exception Fixup/
-// resolve64 use); home it when the header type lands.
+// The const-chunk header is a serialised .apt blob, so the ctx is walked with the
+// documented serialised-blob offset idiom (the same exception Fixup/resolve64 use;
+// AptConstFile.h still models only the 32-bit header fields).
 //
 // Constant-record types (the Push/DefineDictionary entry resolution):
 //   1 string   : payload = ctx-relative offset -> rebase, AptString::Create
@@ -59,11 +59,11 @@
 #include <cstdint>
 
 extern AptValue*          gpUndefinedValue;    // off_8324D814 / xb1 qword_14147A010
-extern AptGCReleaseVector gValuesToRelease;    // off_8324E51C / xb1 qword_14147A410
+extern AptValueVector* gpValuesToRelease;      // off_8324E51C / xb1 qword_14147A410 (AptGlobals.cpp)
 
-// FLAG (dormant unresolve path): the per-string return to the temporary string pool
-// (xb1 sub_14083F2A0). The pool's per-string release entry point is not yet homed
-// (StringPool exposes only ClearTemporaryPool); reached only on movie UNLOAD.
+// The per-string return to the temporary string pool (xb1 sub_14083F2A0), homed in
+// Apt/AptStringPool.cpp (the FindOrCreate hit-path inverse); reached only on movie
+// UNLOAD (the unresolve direction).
 extern void AptStringPoolReleaseString(AptString* pString);
 
 // The pool-string INTERNER (xb1 sub_140838AE0 == StringPool::FindOrCreate; free
@@ -176,7 +176,8 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
     const bool bUnresolve = (pConstCtx == 0);
 
     if (bUnresolve)
-        gValuesToRelease.ReleaseValues();   // xb1: sub_14083ED90(&vector) on entry
+        if (gpValuesToRelease != nullptr)
+            gpValuesToRelease->ReleaseValues();   // xb1: sub_14083ED90(vector) on entry
 
     unsigned char* pc = pStream;
     unsigned int   nOp = *pc++;
@@ -296,7 +297,9 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                 {
                     Rebase(Slot(pRec, 0x10), nBase, true);         // arg table (unresolve last)
                     // xb1 poison stamps over the (now-dead) runtime slots.
-                    Slot64(pRec, 0x20) = static_cast<int64_t>(0x98BADCF2u);
+                    // xb1 0x14084ADCD: `mov dword ptr [r8+20h], 98765432h` -- a DWORD stamp
+                    // (only +0x20..0x23; +0x24..0x27 stays untouched).
+                    *reinterpret_cast<uint32_t*>(pRec + 0x20) = 0x98765432u;   // serialized .apt record poison stamp
                     Slot64(pRec, 0x28) = 0x12345678;
                 }
                 break;
@@ -346,28 +349,28 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                 unsigned char* pTable = reinterpret_cast<unsigned char*>(Slot(pRec, 0x08));
                 unsigned char* pCtx   = static_cast<unsigned char*>(pConstCtx);
                 unsigned char* pConstTable =
-                    reinterpret_cast<unsigned char*>(Slot(pCtx, 0x28));   // [xb1: ctx+40] FLAG: blob idiom
+                    reinterpret_cast<unsigned char*>(Slot(pCtx, 0x28));   // [xb1: ctx+40] serialized .apt const-chunk record table (blob idiom)
 
                 for (int32_t i = 0; i < nCount; ++i)
                 {
                     int64_t nConstIndex = Slot64(pTable + i * 8, 0);
                     ++*pnValueCount;
 
-                    // FLAG (GUIAPT64 packing, same family as the frame-table bug): a
-                    // misaligned emitter record stores the serialized index in the
-                    // HIGH dword of the 8-byte slot (observed 0x1fc00000000 == index
-                    // 0x1FC << 32 in MAIN.bundle). Decode it; the offline
-                    // apt8_fix_frametables repair owns the permanent data fix.
+                    // GUIAPT64 packing tolerance (deliberate; same family as the
+                    // frame-table bug): a misaligned emitter record stores the
+                    // serialized index in the HIGH dword of the 8-byte slot (observed
+                    // 0x1fc00000000 == index 0x1FC << 32 in MAIN.bundle). Decode it;
+                    // the offline apt8_fix_frametables repair owns the permanent data fix.
                     if (nConstIndex > 0xFFFF && (nConstIndex & 0xFFFFFFFFll) == 0
                         && (nConstIndex >> 32) <= 0xFFFF)
                     {
                         nConstIndex >>= 32;
                     }
 
-                    // FLAG (x64 wild-slot guard): a slot holding neither a sane index
-                    // form is a live pointer from a prior resolve pass or garbage --
-                    // `pConstTable + 16 * <pointer>` AV'd MAIN's Fixup (2026-07-05,
-                    // cdb-verified). Keep it as-is rather than crash.
+                    // x64 wild-slot hardening (deliberate): a slot holding neither a
+                    // sane index form is a live pointer from a prior resolve pass or
+                    // garbage -- `pConstTable + 16 * <pointer>` AV'd MAIN's Fixup
+                    // (2026-07-05, cdb-verified). Keep it as-is rather than crash.
                     if (nConstIndex < 0 || nConstIndex > 0xFFFF)
                         continue;
 
@@ -380,7 +383,8 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                         pValue->AddRef();
 
                     if ((i % 16) == 0)
-                        gValuesToRelease.ReleaseValues();   // the periodic drain
+                        if (gpValuesToRelease != nullptr)
+                            gpValuesToRelease->ReleaseValues();   // the periodic drain
                 }
                 break;
             }
@@ -391,7 +395,8 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
         }
 
         if (bDrain)
-            gValuesToRelease.ReleaseValues();   // LABEL_69: the per-op resolve drain
+            if (gpValuesToRelease != nullptr)
+                gpValuesToRelease->ReleaseValues();   // LABEL_69: the per-op resolve drain
 
         nOp = *pc++;
         if (nOp == 0)

@@ -78,10 +78,18 @@ OutputBuffer_PreScene::GetVehicleInputInterface() const
     return &mVehicleInputInterface;
 }
 
-// X360 0x822B5758 (R, :424) -- const scoring-output interface accessor of
-// InputBuffer_PrePhysics. Read-lock ((status>>4)&1, eStatusLockedForRead) =>
-// IsBufferLockedForReading(). X360 epilogue == this + 0x28020 (163872); reproduced
+// X360 0x822B5950 (R, DWARF :424 / X360 baked line 433) -- const scoring-output interface
+// accessor of InputBuffer_PrePhysics. Read-lock ((status>>4)&1, eStatusLockedForRead) =>
+// IsBufferLockedForReading(). X360 epilogue == this + 0x33180 (209312); reproduced
 // by-name as &mScoringInterface. Caller: BrnWorld::PlaceOnTrackManager::PrePhysicsUpdate.
+// ⚠️ ADDRESS CORRECTED 2026-08-11: this body previously cited 0x822B5758/+163872. That
+// address is the CONST GetSceneResultQueue (X360 line 424, returns +163872 ==
+// mSceneResultQueue) -- the PS3-DWARF-line-vs-X360-baked-line skew this header warns about
+// (+9 for this buffer) had slid the whole read-lock run one slot. The body itself was and
+// is correct (it returns &member by name); only the citation was wrong. Proven: 0x822B58A8
+// (line 430) -> +208976 mTakedownEventQueue, 0x822B5950 (line 433) -> +209312
+// mScoringInterface, 0x822B59F8 (line 436) -> +212048 mOnlineScoringInterface, 0x822B5AA0
+// (line 442) -> byte 212213 mbControllerActive.
 const InputBuffer_PrePhysics::ScoringInterface*
 InputBuffer_PrePhysics::GetScoringInterface() const
 {

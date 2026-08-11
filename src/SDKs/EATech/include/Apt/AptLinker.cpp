@@ -16,24 +16,24 @@
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"    // getVariable
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"      // AptGetAnimationAtLevel
 #include "SDKs/EATech/include/Apt/AptSavedInputCheckpoints.h"// gpAptSavedInputCheckpoints, CanLinkPendingFiles, AllLinked
+#include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"   // GetParentAnim (the ReplaceReferences owner tests)
+#include "SDKs/EATech/include/Apt/AptNativeHash.h"           // gpAptClassRegistry->RegisterReferences
+#include "SDKs/EATech/Apt/AptValueGCPoolManager.h"           // AptValueGC_PoolManager (the live-value walk)
+#include "SDKs/EATech/include/Apt/AptDefine.h"               // gpGCPoolManager (off_8324D834)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
 
 // =====================================================================
-//  Un-homed callees/globals referenced below (declared by name + FLAG'd in the
-//  newTypes list). Bodies are separate TUs; declared here so this TU links.
+//  Sibling-owned callees/globals referenced below; declared here so this TU
+//  links against their single homes (noted per symbol).
 // =====================================================================
 
-// The shared Apt action interpreter instance (X360 &dword_8324E760). FLAG:
-// global owned by the Apt boot TU; declared extern.
+// The shared Apt action interpreter instance (X360 &dword_8324E760). Defined in
+// AptGlobals.cpp.
 extern AptActionInterpreter gAptActionInterpreter;            // &dword_8324E760
 
-// FLAG (un-homed): @0x82AD85D8 Burnout name-classification predicate -- returns
-// true when the requested name must NOT be linked (a special/non-file name; the
-// AptFileSavedInputState name test the saved-input TU also names). Verbatim IDA
-// symbol; body its own TU.
-// (Verified against the asm @0x82AD85D8: BOTH params are EAStringC* -- the body
-//  dereferences each as a string (length@+2, buffer@+8) and compares them; it is a
-//  string-equality test, NOT an int-level argument.)
+// @0x82AD85D8 -- the case-sensitive EAStringC equality test (the ICF-folded
+// EAStringC::operator== twin, called here by its IDA name: length@+2 compare then
+// a bytewise buffer scan). HOMED in AptString/EAString.cpp.
 bool Burnout_X360_Artist_0040_0(EAStringC* pName, EAStringC* pReference);
 
 // FLAG (un-homed AptCIH behavioural surface): set the character instance on a CIH
@@ -42,12 +42,10 @@ bool Burnout_X360_Artist_0040_0(EAStringC* pName, EAStringC* pReference);
 // AptCIH::SetCharacterInst is now called directly as a member (AptCIH.h is included).
 // AptCIH::tick is now called directly as a member (AptCIH.h is included).
 
-// FLAG (un-homed GC primitive): @0x82AE4DF0 / PS3 _Z17ReplaceReferences...
-// ReplaceReferences(pOld, pNew, ppTable, nCount) -- retarget every live reference
-// from pOld to pNew across the value graph. CANONICAL signature reconciled to the
-// PS3 DecFIGS export `ReplaceReferences(AptValue*,AptValue*,AptValue**,int)` (was
-// mistyped here as (...,int,int); the call sites pass (val,new,0,0) which still
-// binds: 0 -> (AptValue**)nullptr, 0 -> nCount). Body its own GC TU.
+// @0x82AE4DF0 / PS3 _Z17ReplaceReferencesP8AptValueS0_PS0_i --
+// ReplaceReferences(pOld, pNew, ppTable, nCount): retarget every live reference
+// from pOld to pNew across the value graph. HOMED at the bottom of this TU (with
+// the ReferenceReplaceCb / AptRegisterGlobalReferences machinery it drives).
 int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nCount);
 
 // AptAnimationTarget::RunActions @0x82B0C9B0 -- flush the queued deferred ActionScript
@@ -58,16 +56,19 @@ int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nC
 // swap; the reconstructed C++ calls the named AptRenderItem members directly
 // (GetDepth()/SetDepth()/CopyRenderDataFrom()).
 
-// FLAG (un-homed saved-input debug gate): dword_8324D7F0 -- nonzero when the
-// saved-input record/replay system is active (gates Update's checkpoint logic).
+// dword_8324D7F0 -- nonzero when the saved-input record/replay system is active
+// (gates Update's checkpoint logic). Defined in AptGlobals.cpp (0 = replay off,
+// the shipped default).
 extern int gbAptSavedInputActive;                              // dword_8324D7F0
 
-// FLAG (un-homed intrusive refcount on AptLinkerThingy, mirroring AptSharedPtrIncRef/
-// DecRef for AptFile -- the thingy carries its count at +0x00). Bodies their own TU.
+// The intrusive refcount on AptLinkerThingy (mirroring AptSharedPtrIncRef/DecRef
+// for AptFile -- the thingy carries its count at +0x00). Bodies BELOW in this TU
+// (the out-of-line helper section).
 int  AptSharedPtrIncRefThingy(AptLinkerThingy* pThingy);
 int  AptSharedPtrDecRefThingy(AptLinkerThingy* pThingy);
 
-// FLAG (un-homed singly-linked thingy-list ops; the compiler-emitted SingleList<>):
+// The singly-linked thingy-list ops (the compiler-emitted SingleList<>); bodies
+// below in this TU:
 //   ListPushFront == AptSingleLis @0x82AF4F88 (alloc 8-byte node, AddRef thingy, link head)
 //   ListErase     == sub_82AF83A0 (find+unlink the node, release its thingy, free the node)
 void ListPushFront(AptSingleListNode** ppHead, AptLinkerThingy* pThingy);
@@ -84,7 +85,6 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile);          
 void InstallEmptyCharacterInstVtbl(AptCharacterInst* pInst);                        // *inst = &off_82145FD0
 void EnsureAnimFrameRateCached(AptCharacterAnimationInst* pInst);                   // dword_8324E530 lazy init
 void FireLinkNotifyCallbacks(AptFile* pFile, AptCIH* pCIH);                         // dword_8324E844/E830 hooks
-bool RestartPendingScanIfGrew(AptFilePtr* pEntry, AptFile* pFile);                  // pending-vector realloc guard
 
 
 // ---------------------------------------------------------------------
@@ -244,9 +244,9 @@ AptCIH* AptLinker::ConvertToZombie(AptValue* pValue)
     AptCIH* pCIH = static_cast<AptCIH*>(pValue);
     const uint32_t nFlags = pCIH->mFlagsA;                            // v4 = *(a2+12)
 
-    if ((nFlags & 0x60000000u) != 0x20000000u)                       // not transitioning
+    if ((nFlags & 0x6u) != 0x2u)                                     // not transitioning (x64 CIHState bits 1-2)
     {
-        pCIH->mFlagsA = nFlags | 0x60000000u;                        // *(a2+12) = v4 | 0x60000000
+        pCIH->mFlagsA = nFlags | 0x6u;                               // CIHState = 3 (X360 reversed form 0x60000000)
         return pCIH;                                                  // result = a2
     }
 
@@ -404,7 +404,7 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
 
         // Mark the placeholder value defined + transitioning, dirty it.
         pValue->setIsDefined(true);                                        // AptValue::setIsDefined(v8,1)
-        static_cast<AptCIH*>(pValue)->mFlagsA |= 0x60000000u;              // *(v8+12) |= 0x60000000
+        static_cast<AptCIH*>(pValue)->mFlagsA |= 0x6u;                     // CIHState = 3 (x64 bits 1-2; X360 form 0x60000000)
         static_cast<AptCIH*>(pValue)->SetDirtyState(false, false);         // AptCIH::SetDirtyState(IsDefined,0,0)
 
         // Drop any existing thingy keyed on this value (re-load supersedes it).
@@ -420,10 +420,11 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
         {
             // Create + push a thingy linking pLinkedFile to pValue.
             AptLinkerThingy* pThingy = nullptr;
-            if (gpAptSharedPtrPool->Allocate(16) != nullptr)
             {
                 AptSharedPtrIncRef(pLinkedFile);
                 AptFilePtr held; held.pData = pLinkedFile;
+                // MakeLinkerThingy owns the 16-byte pool Allocate (the X360's
+                // Allocate(off_8324D808,16) r3 threads straight into the ctor).
                 pThingy = MakeLinkerThingy(held, pValue);                  // AptLinkerThingy::AptLinkerThingy(&file, value)
             }
             if (pThingy != nullptr)
@@ -563,10 +564,10 @@ void AptLinker::Update()
             AptCIH* pCIH = static_cast<AptCIH*>(pThingy->mpValue);          // v24 = *(_R28+8)
             const int16_t nDepth =
                 pCIH->mpCharacterInst->mpRenderItem->GetDepth();            // v25 = *(*(*(v24+32)+4)+20)
-            pCIH->mFlagsA &= 0x9FFFFFFFu;                                   // clear transition bits
+            pCIH->mFlagsA &= ~0x6u;                                        // clear transition bits (x64 CIHState bits 1-2)
             pCIH->ClearCIH(false);                                         // AptCIH::ClearCIH(v24,0)
 
-            if ((pCIH->mFlagsA & 0x60000000u) == 0x20000000u)             // still transitioning
+            if ((pCIH->mFlagsA & 0x6u) == 0x2u)                           // still transitioning
             {
                 AptCIH* pZombie = ConvertToZombie(pCIH);                   // AptLinker::ConvertToZombie(a1, v24)
                 pZombie->mpCharacterInst->GetRenderItemWritable()->SetDepth(nDepth);
@@ -574,7 +575,7 @@ void AptLinker::Update()
             else
             {
                 AptCharacterInst* pInst = nullptr;
-                // FLAG (x64 widening): the console allocates its literal sizeof
+                // x64 widening (settled; Phase-0 native-8 rule): the console allocates its literal sizeof
                 // (16 == 4 dwords: vtable / mpRenderItem / mTypeFlags / mpProperties).
                 // On x64 the same record is 32 bytes, so the literal under-allocated by
                 // half and the ctor's `mTypeFlags` read-modify-write ran PAST the block
@@ -590,15 +591,17 @@ void AptLinker::Update()
                 if (pMem != nullptr)
                 {
                     pInst = ::new (pMem) AptCharacterInst(nullptr);          // AptCharacterInst::AptCharacterInst(v27,0)
-                    // *v28 = &off_82145FD0 : install the concrete vtable (FLAG: the
-                    // empty-placeholder AptCharacterInst vtable, un-homed data sym).
+                    // *v28 = &off_82145FD0 : install the concrete vtable (the
+                    // empty-placeholder AptCharacterInst vtable -- modelled by the
+                    // placement-new vtable install; see the helper below).
                     InstallEmptyCharacterInstVtbl(pInst);
                 }
                 pCIH->SetCharacterInst(pInst, true);                       // AptCIH::SetCharacterInst(v24, v29, 1)
                 pCIH->mpCharacterInst->GetRenderItemWritable()->SetDepth(nDepth);
-                ListErase(&mpThingyListHead, &mpThingyListHead);          // sub_82AF83A0(a1, &v82) -- drop head
+                ListErase(&mpThingyListHead, &pNode);                     // sub_82AF83A0(a1, &v82) -- v82 == the CURRENT node
             }
-            if (mpThingyListHead == nullptr)
+            pNode = mpThingyListHead;                                      // v5 = *a1 (the console RELOADS the head after handling; the handled node was just erased)
+            if (pNode == nullptr)
                 break;
         }
 
@@ -630,43 +633,48 @@ void AptLinker::Update()
 
             if (bMatch)
             {
-                AptCharacterAnimationInst* pAnimInst = nullptr;
-                if (gpAptSharedPtrPool->Allocate(44) != nullptr)
-                {
-                    if (pFile != nullptr) AptSharedPtrIncRef(pFile);
-                    pAnimInst = MakeCharacterAnimationInst(pFile);         // AptCharacterAnimationInst::AptCharacterAnimationInst()
-                }
+                // The X360's Allocate(off_8324D808, 44) IS the ctor's memory (its r3
+                // threads straight into the ctor) and the r5 IncRef is the held-copy
+                // build MakeCharacterAnimationInst models internally -- a separate
+                // probe Allocate leaks a pool block and a second IncRef leaks one
+                // AptFile ref per link.
+                AptCharacterAnimationInst* pAnimInst = MakeCharacterAnimationInst(pFile);
                 AptCIH* pCIH = static_cast<AptCIH*>(pThingy->mpValue);     // v61 = *(_R29+8)
 
-                EnsureAnimFrameRateCached(pAnimInst);                      // dword_8324E530 lazy init (FLAG)
+                EnsureAnimFrameRateCached(pAnimInst);                      // dword_8324E530 lazy init (the SWF-version cache, homed below)
 
                 if (pCIH->mpCharacterInst->mpProperties != nullptr)        // *(v61[8]+12)
                 {
                     pCIH->ClearCIH(true);                                  // AptCIH::ClearCIH(v61,1)
                     pCIH->ForceCleanNativeHash();                          // AptCIH::ForceCleanNativeHash(v61)
                 }
-                pCIH->mFlagsA &= 0x9FFFFFFFu;                              // v61[3] &= 0x9FFFFFFF
+                pCIH->mFlagsA &= ~0x6u;                                    // clear CIHState (x64 bits 1-2; X360 form &=0x9FFFFFFF)
                 pCIH->SetCharacterInst(/*as inst*/reinterpret_cast<AptCharacterInst*>(pAnimInst), true);
                 pCIH->setIsDefined(true);                                  // AptValue::setIsDefined(v61,1)
                 // SetCharacterInst installed the new AptCharacterAnimationInst -- an
                 // AptCharacterSpriteInstBase. Reset its pending goto-frame to "none"
-                // (-1) and OR in sprite state-flag bit 7. The console writes both
-                // through mpCharacterInst (v61[8]): *(v61[8]+16) = -1 is mnGotoFrame,
-                // *(v61[8]+20) |= 0x80 is mnClipActionFlags -- both named members now.
+                // (-1) and OR in bJustLoaded (x64 bit 24; the console's reversed bit 7).
+                // The console writes both through mpCharacterInst (v61[8]).
                 AptCharacterSpriteInstBase* pSpriteInst =
                     static_cast<AptCharacterSpriteInstBase*>(pCIH->mpCharacterInst);
-                pSpriteInst->mnGotoFrame        = -1;       // *(v61[8]+16) = -1
-                pSpriteInst->mnClipActionFlags |= 0x80u;    // *(v61[8]+20) |= 0x80
+                pSpriteInst->mnGotoFrame        = -1;           // *(v61[8]+16) = -1
+                pSpriteInst->mnClipActionFlags |= 0x1000000u;   // bJustLoaded (X360 form |= 0x80)
                 pCIH->SetDirtyState(false, false);                        // AptCIH::SetDirtyState(...,0)
                 pCIH->tick();                                            // AptCIH::tick
                 pCIH->SetDirtyState(true, true);                          // AptCIH::SetDirtyState(v61,1,1)
                 pThingy->mbLinked = true;                                 // *(_R29+12) = 1
 
-                FireLinkNotifyCallbacks(pFile, pCIH);                     // dword_8324E844 / dword_8324E830 hooks (FLAG)
+                // The console saves the pending vector's data base before firing the
+                // host notify hooks (whose re-entrant Notify can grow / reallocate
+                // mPendingFiles) and restarts the scan when the base moved (`v7 != *v6`).
+                const int32_t lnSizeSnapshot = mPendingFiles.mnSize;       // v7 == *(a1+4): the SIZE word, not the data base
+                FireLinkNotifyCallbacks(pFile, pCIH);                     // dword_8324E844 / dword_8324E830 hooks (PC leaf below)
 
-                // If the pending vector reallocated mid-link, restart its scan.
-                if (RestartPendingScanIfGrew(pEntry, pFile))
+                // If the pending vector's COUNT changed mid-link, restart the scan
+                // from the (possibly reallocated) base (X360: v7 != *v6 -> v8 = *(a1+12)).
+                if (lnSizeSnapshot != mPendingFiles.mnSize)               // v7 != *v6
                 {
+                    pEntry = mPendingFiles.begin();                       // v8 = *(a1+12) (bAdvance=false keeps it at begin)
                     bAdvance = false;
                     if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
                         pThingy->ScalarDeletingDestructor(1);
@@ -711,8 +719,9 @@ void AptLinker::Update()
 //   _Z18AptSharedPtrDecRefP15AptLinkerThingy @0xF1F5B4 (lwarx/-1/stwcx., ret new)
 // The console runs a true interrupt-masked load-linked / store-conditional atomic;
 // on the single-threaded x64 Apt gate that folds to a plain ++/-- on the counter.
-// FLAG: atomicity dropped (no PC equivalent needed; the Apt runtime is single-thread
-// for the linker pass). Returns the NEW count, exactly as the asm leaves it in r9.
+// FLAG PC-platform leaf (threading): atomicity dropped (no PC equivalent needed; the
+// Apt runtime is single-thread for the linker pass). Returns the NEW count, exactly
+// as the asm leaves it in r9.
 // ---------------------------------------------------------------------
 int AptSharedPtrIncRefThingy(AptLinkerThingy* pThingy)
 {
@@ -791,7 +800,7 @@ void ListErase(AptSingleListNode** ppHead, AptSingleListNode** ppNode)
 // AptCharacterInst (`*inst = &off_82145FD0`). On the x64 PC gate the object is
 // built with `::new (mem) AptCharacterInst(nullptr)`, so the C++ compiler has
 // already installed the concrete vtable for this type; the raw .data vtable symbol
-// has no homed method set to point at. FLAG: console raw-vtable poke expressed by
+// has no homed method set to point at. The console raw-vtable poke is expressed by
 // the C++ virtual-dispatch model -- no-op on PC (the empty-placeholder behaviour is
 // the default-constructed AptCharacterInst the caller just placement-new'd).
 // ---------------------------------------------------------------------
@@ -883,45 +892,275 @@ bool AptLinker::isFileImported(AptFilePtr* ppCandidate)
     return bImported;
 }
 
-// ---------------------------------------------------------------------
-// RestartPendingScanIfGrew -- the pending-vector realloc guard at the tail of the
-// per-pending-file inner link loop. The X360 saves the vector's data base before
-// firing FireLinkNotifyCallbacks (whose host notify can re-enter Notify and grow /
-// reallocate mPendingFiles) and, when the base changed (`if (v7 != *v6)`), bails out
-// of the inner scan -- releasing the current thingy -- so the outer loop restarts
-// against the moved storage. Returns true when a restart is required.
+// RestartPendingScanIfGrew RETIRED (this pass): the real console guard -- snapshot
+// mPendingFiles.mpData before FireLinkNotifyCallbacks, restart the scan when the
+// base moved (`v7 != *v6`) -- is inlined at the Update call site above.
+
+// =====================================================================
+// ReplaceReferences @0x82AE4DF0 / PS3 _Z17ReplaceReferencesP8AptValueS0_PS0_i
+// @0xF219B4 -- retarget every live reference from pOld to pNew across the GC
+// value graph, plus the ReferenceReplaceCb / AptRegisterGlobalReferences
+// machinery it drives. HOMED here (the same B4 module region as AptGetSwfVersion
+// above -- B4 PDB 0x004268b0 sits beside it). Decompiled faithfully from the
+// X360 ARTIST.XEX; every layout-bearing access goes through the x64-pinned named
+// members/accessors (AptValue bitfield, AptCIH zombie/CIHState fields,
+// AptScriptFunctionBase::GetParentAnim).
+// =====================================================================
+
+// The staging globals the swapped-in callback consumes (X360 .bss
+// dword_8324E554..dword_8324E564; the PS3 external-ELF symbol spellings are kept
+// verbatim, including the 'Refernce' typo).
+static AptValue* gpRefernceValue        = nullptr;   // dword_8324E554 (the value being replaced)
+static AptValue* gpRefernceValueReplace = nullptr;   // off_8324E558  (the replacement; null = drop)
+static int       pnRefCount             = 0;         // dword_8324E55C (old references still to retarget)
+static int       nTemp1                 = 0;         // dword_8324E560 (pool-walk visit counter)
+static int       nTemp2                 = 0;         // dword_8324E564 (table-walk visit counter)
+
+// dword_82F7337C -- the "use the snapshot table" mode gate ReplaceReferences
+// reads (its only referencer in the ARTIST dump). Rodata VALUE RECOVERED (the
+// 0x82F7337C dump): the shipped word is 0x00000001, so snUseNewWay == 1 --
+// matching the shipped caller (CleanRemList snapshots + frees the live-value
+// table purely to feed this path).
+static int snUseNewWay = 1;   // dword_82F7337C (dump-pinned: 0x00000001)
+
+// The GC live-value pool POINTER (off_8324D834) is gpGCPoolManager, declared by
+// AptDefine.h (included above) and wired by AptAllocatorInitialize @0x82ADD118.
+// UNIFIED 2026-08-11: this walk used to run over the namespace-scope
+// `AptValueGC_PoolManager gAptValueGCPool` object -- a second C++ home for the one
+// console slot that was permanently EMPTY (its (0,0) ctor takes the DogmaAllocator
+// static-init early-out), so the live-value arm below never visited a value. The
+// console loads the slot as a pointer and passes it as `this`: ReplaceReferences
+// @0x82AE4E24 `lwz r3, off_8324D834@l(r28); bl ...GetFirstAptValue` and @0x82AE4F3C
+// for GetNextAptValue -- with no null test (the slot is live between
+// AptAllocatorInitialize and AptAllocatorShutdown @0x82AE9298).
 //
-// FLAG (PC simplification): FireLinkNotifyCallbacks is deferred (its host hooks are
-// null during bring-up), so no re-entrant Notify can push a new pending file mid-link
-// and the vector never reallocates inside the loop. With no reallocation possible the
-// guard can never trip, so this faithfully returns false. When the host notify hooks
-// (and their re-entrant Notify path) are homed, this must compare a per-iteration
-// snapshot of mPendingFiles.mpData against its current value.
+// The shared sentinels/registry (AptGlobals.cpp / AptObject.cpp).
+extern AptCIH*                gpAptEmptyCIH;      // dword_8324D700 (the pinned EmptyCIH)
+extern AptValue*              gpUndefinedValue;   // off_8324D814 (the shared undefined)
+extern AptNativeHash*         gpAptClassRegistry; // dword_8324E2D4 (AptObject.cpp)
+
 // ---------------------------------------------------------------------
-bool RestartPendingScanIfGrew(AptFilePtr* /*pEntry*/, AptFile* /*pFile*/)
+// AptRegisterGlobalReferences @0x82AE38B8 (B4 PDB: `void __cdecl
+// AptRegisterGlobalReferences()`) -- run RegisterReferences over the process-
+// global holders: every target instance's animation director (the off_8324E570
+// list through mpNext == i[9]) and the Object.registerClass registry hash.
+// ---------------------------------------------------------------------
+void AptRegisterGlobalReferences()
 {
-    return false;   // v7 == *v6 (no mid-link reallocation while the notify hooks are deferred)
+    for (AptTarget* lpTarget = gpAptTargetCurrent; lpTarget != nullptr;
+         lpTarget = lpTarget->mpNext)                                   // i = i[9]
+    {
+        lpTarget->mpAnimationTarget->RegisterReferences();              // (i[6] == +0x18)
+    }
+    if (gpAptClassRegistry != nullptr)                                  // dword_8324E2D4
+        gpAptClassRegistry->RegisterReferences(nullptr);
 }
 
 // ---------------------------------------------------------------------
-// ReplaceReferences -- BLOCKED FLAG stub. @0x82AE4DF0 / PS3 _Z17ReplaceReferences
-// P8AptValueS0_PS0_i @0xF219B4: retarget every live reference from pOld to pNew
-// across the GC value graph by re-running the per-value reference-registration
-// callback with a replace callback installed, then fixing pNew's refcount.
-//
-// GENUINELY BLOCKED: the body depends on the un-homed GC reference-registration
-// subsystem -- the globals gpRefernceValue / gpRefernceValueReplace / pnRefCount /
-// snUseNewWay / nTemp1 / nTemp2, the swappable AptValue::sReferenceRegistrationCb +
-// ReferenceReplaceCb, and AptRegisterGlobalReferences -- NONE of which exist in the
-// tree (verified absent from the X360 + PS3 + BurnoutPR dumps' homed surface). A
-// faithful body cannot be written without fabricating that subsystem, so this is a
-// documented no-op stub (listed in functions_blocked) so the linker resolves it; the
-// reference-remap is deferred to the GC reference-registration TU. Call sites pass
-// (val, new, nullptr, 0); the remap is a behavioural refinement, not boot-critical.
+// ReferenceReplaceCb @0x82AE4B28 -- the reference-registration callback
+// ReplaceReferences swaps into AptValue::sReferenceRegistrationCb
+// (dword_8324E4E8). Every RegisterReferences pass then routes each held slot
+// here: a slot still holding gpRefernceValue is repointed at the replacement (or
+// a sentinel) with the refcounts / zombie counts balanced. Signature matches
+// AptValue::ReferenceRegistrationCb; the return value is the slot's value (every
+// caller discards it, exactly like AptGC::sReferenceRegistrationCb).
 // ---------------------------------------------------------------------
-int ReplaceReferences(AptValue* /*pOld*/, AptValue* /*pNew*/, AptValue** /*ppTable*/, int /*nCount*/)
+static void* ReferenceReplaceCb(const AptValue* pOwner, void* pSlot,
+                                const char* /*pDebugName*/, int nFlag)
 {
-    return 0;   // FLAG BLOCKED: un-homed GC reference-registration subsystem
+    AptValue** const lppSlot = static_cast<AptValue**>(pSlot);
+    AptValue*  const lpOld   = *lppSlot;
+
+    // Only a slot still holding the value under replacement is touched; the
+    // flag-2 registration class (the display-list-item weak form) never is.
+    if (lpOld != gpRefernceValue || nFlag == 2)
+        return lpOld;
+
+    const AptVirtualFunctionTable_Indices leOldType = lpOld->getVtblIndex();
+    const bool lbOldIsCIH = (leOldType == AptVFT_CharacterInstHandle
+                          || leOldType == AptVFT_CIHNone);
+
+    // Is the registering owner a defined script function (type 34..36)?
+    const AptScriptFunctionBase* lpOwnerFn = nullptr;
+    if (pOwner != nullptr
+        && (static_cast<u32>(pOwner->getVtblIndex()) - AptVFT_ScriptFunction1) <= 2u
+        && pOwner->getIsDefined())
+    {
+        lpOwnerFn = static_cast<const AptScriptFunctionBase*>(pOwner);
+    }
+
+    AptValue* const lpNew = gpRefernceValueReplace;
+
+    if (lbOldIsCIH)
+    {
+        if (lpNew == nullptr)
+        {
+            // Dropping a CIH reference. A script function whose ParentAnim slot
+            // this is balances the animation's zombie count (DecZombieCount reaps
+            // at zero -- the console's inline dec + AptUpdateZombieVector(0)); the
+            // slot falls back to the pinned EmptyCIH, or -- for a plain non-flag-1
+            // holder -- the shared undefined sentinel.
+            if (lpOwnerFn != nullptr)
+            {
+                if (lpOwnerFn->GetParentAnim() == lpOld)                 // v5[9] == v6
+                    static_cast<AptCIH*>(lpOld)->DecZombieCount();
+                *lppSlot = gpAptEmptyCIH;                                // dword_8324D700
+            }
+            else
+            {
+                *lppSlot = (nFlag == 1)
+                    ? static_cast<AptValue*>(gpAptEmptyCIH)
+                    : gpUndefinedValue;                                  // off_8324D814
+            }
+        }
+        else
+        {
+            // Is the replacement itself a live CIH-family value?
+            const AptVirtualFunctionTable_Indices leNewType = lpNew->getVtblIndex();
+            const bool lbNewIsCIH =
+                (leNewType == AptVFT_CharacterInstHandle && lpNew->getIsDefined())
+                || leNewType == AptVFT_CIHNone;
+
+            if (lpOwnerFn != nullptr)
+            {
+                // A script function's CIH reference: only its ParentAnim slot is
+                // retargeted, and never while the old node is zombie-pinned
+                // (console (v6[3] & 0x60000000) == 0x20000000 == CIHState 1).
+                if (lpOwnerFn->GetParentAnim() != lpOld
+                    || static_cast<AptCIH*>(lpOld)->GetCIHState() == 1u)
+                    return lpOld;                                        // untouched exit
+
+                static_cast<AptCIH*>(lpOld)->DecZombieCount();           // dec + reap-at-0
+
+                if (lbNewIsCIH)
+                {
+                    *lppSlot = lpNew;
+                    lpNew->AddRef();                                     // vtbl[0]
+                }
+                else
+                {
+                    *lppSlot = gpAptEmptyCIH;                            // stand-in
+                }
+            }
+            else
+            {
+                // Plain CIH slot: flag 1 accepts only a live CIH-family value.
+                if (nFlag != 1 || lbNewIsCIH)
+                {
+                    *lppSlot = lpNew;                                    // LABEL_51
+                    lpNew->AddRef();
+                    --pnRefCount;                                        // one reference retargeted
+                }
+                else
+                {
+                    *lppSlot = gpAptEmptyCIH;
+                }
+            }
+        }
+    }
+    else
+    {
+        // Non-CIH value: straight swap (or drop to the undefined sentinel).
+        if (lpNew != nullptr)
+        {
+            *lppSlot = lpNew;
+            lpNew->AddRef();
+        }
+        else
+        {
+            *lppSlot = gpUndefinedValue;                                 // LABEL_53
+        }
+    }
+
+    // Every path that repointed the slot releases the old reference (LABEL_57).
+    if (*lppSlot != lpOld)
+        lpOld->Release();                                                // vtbl[1]
+    return *lppSlot;
+}
+
+// ---------------------------------------------------------------------
+// ReplaceReferences @0x82AE4DF0 -- the remap driver: stage {old, new, count},
+// swap the registration callback for the replace form, re-register the directors
+// + globals, then drive RegisterReferences (console AptValue vtbl slot 13) over
+// the live values -- the snapshot table when the caller supplies one
+// (CleanRemList), else the whole GC pool -- until the old value's references
+// drain. Finally the replacement inherits the retargeted count and the mark
+// callback is restored.
+// ---------------------------------------------------------------------
+int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nCount)
+{
+    const u32 lnOldRefs = pOld->getRefCount();               // console (v+4 >> 14) & 0xFFF
+    gpRefernceValue        = pOld;                           // dword_8324E554
+    gpRefernceValueReplace = pNew;                           // off_8324E558
+    pnRefCount             = static_cast<int>(lnOldRefs);    // dword_8324E55C
+
+    // The console fetches the pool head HERE, unconditionally, before the mode branch
+    // (@0x82AE4E24 `lwz r3, off_8324D834`; @0x82AE4E30 `bl ...GetFirstAptValue`). The
+    // null test is the PC pre-init guard only (see the gpGCPoolManager note above); a
+    // null pool yields a null head, so the pool-mode loop below simply does not run and
+    // needs no further test.
+    AptValue* lpWalk = (gpGCPoolManager != nullptr)
+                           ? gpGCPoolManager->GetFirstAptValue()   // off_8324D834
+                           : nullptr;
+
+    // Swap in the replace callback (dword_8324E4E8), saving the mark form.
+    AptValue::ReferenceRegistrationCb const lpSavedCb = AptValue::sReferenceRegistrationCb;
+    AptValue::sReferenceRegistrationCb = &ReferenceReplaceCb;
+
+    // The non-pool-resident holders first: the current director's own slots +
+    // the process globals (every target's director + the class registry).
+    gpAptTarget->mpAnimationTarget->RemoveCIHReferences();   // *(off_8324E574 + 0x18)
+    AptRegisterGlobalReferences();
+
+    nTemp1 = 0;                                              // dword_8324E560
+    nTemp2 = 0;                                              // dword_8324E564
+
+    if (pOld->getRefCount() > 1u)                            // console (bits & 0x3FFC000) > 0x4000
+    {
+        if (snUseNewWay && ppTable != nullptr)
+        {
+            // Snapshot-table mode: visit only the captured live values.
+            for (int liIndex = 0; liIndex < nCount; ++ppTable)
+            {
+                AptValue* const lpEntry = *ppTable;
+                if (lpEntry != nullptr && lpEntry->mValueBitfield.mbIsAllocated)   // v15[1] < 0
+                {
+                    lpEntry->RegisterReferences();           // vtbl[13] -> the swapped cb
+                    ++nTemp2;
+                    if (pOld->getRefCount() == 1u || pnRefCount == 0)
+                        break;                               // drained
+                }
+                if (lpEntry == pOld)
+                    *ppTable = nullptr;                      // scrub the snapshot's own entry
+                ++liIndex;
+            }
+        }
+        else
+        {
+            // Pool mode: walk every live value until the references drain.
+            while (lpWalk != nullptr && pnRefCount > 0)
+            {
+                lpWalk->RegisterReferences();
+                lpWalk = gpGCPoolManager->GetNextAptValue(lpWalk);   // off_8324D834 (reloaded, as the asm does)
+                ++nTemp1;
+                if (pOld->getRefCount() == 1u)
+                    break;
+            }
+        }
+    }
+
+    // The replacement inherits the retargeted references' count
+    // (newCount = new - remaining + old).
+    if (pNew != nullptr)
+        pNew->setRefCount(pNew->getRefCount()
+                          - static_cast<u32>(pnRefCount) + lnOldRefs);
+
+    // Restore the mark callback + clear the staging state.
+    AptValue::sReferenceRegistrationCb = lpSavedCb;
+    gpRefernceValue        = nullptr;
+    gpRefernceValueReplace = nullptr;
+    pnRefCount             = 0;
+    return 0;   // console r3 pass-through; every caller discards it
 }
 
 // =====================================================================

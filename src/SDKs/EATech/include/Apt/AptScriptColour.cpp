@@ -33,17 +33,17 @@
 #include <new>       // placement new (the lazily-built method singletons)
 #include <string.h>  // _stricmp (the case-insensitive member-name compare)
 
-// FLAG (homed by the AS-globals layer, not yet reconstructed): the shared "undefined"
-// value the AS Color methods return when there is nothing to hand back (X360 global
-// off_8324D814). Null until the AS globals are built. (gpUndefinedValue is also
-// declared by AptArray.h, but this TU does not include it -- declare it here.)
+// The shared "undefined" value the AS Color methods return when there is nothing
+// to hand back (X360 global off_8324D814). Defined in AptGlobals.cpp; built by
+// AptInit's AptValueInitialize @0x82B02800. (gpUndefinedValue is also declared by
+// AptArray.h, but this TU does not include it -- declare it here.)
 extern AptValue* gpUndefinedValue;
 
-// FLAG (homed by the apt VM native-call dispatch, not yet reconstructed): the native
-// ActionScript method argument stack. setTransform reads its single Object argument
-// off the top of this stack (X360 globals dword_8324E760 = count, off_8324E768 =
-// array). Modelled as named externs (the project rule for module statics without a
-// home yet); the dispatch layer pushes the call args here before invoking the method.
+// The native ActionScript method argument stack. setTransform reads its single
+// Object argument off the top of this stack (X360 globals dword_8324E760 = count,
+// off_8324E768 = array). Defined in AptGlobals.cpp; the interpreter's native-call
+// dispatch (AptActionInterpreterInterpHelpers.cpp) publishes the operand stack
+// through them around each native call.
 extern AptValue** gppAptNativeArgStack;   // off_8324E768
 extern int        gnAptNativeArgCount;    // dword_8324E760
 
@@ -75,11 +75,11 @@ AptScriptColour::AptScriptColour(AptValue* pTarget)
     {
         // The character type tag lives in the top 6 bits of the char inst's flags.
         AptCharacterInst* pCharInst = static_cast<AptCIH*>(pTarget)->mpCharacterInst;
-        const uint32_t nCharType = pCharInst->mTypeFlags >> 26;
+        const uint32_t nCharType = pCharInst->mTypeFlags & 0x3Fu;   // x64 low-6-bit tag
 
         // Accept movie-clip-like characters only (sprite / movieclip / type 2).
         bBind = (nCharType == 5) || (nCharType == 16)
-                || (pCharInst->mTypeFlags & 0xFC000000u) == 0x08000000u;
+                || (pCharInst->mTypeFlags & 0x3Fu) == 2u;   // dyn-text; x64 low-6-bit tag (X360 form 0x08000000)
     }
 
     if (bBind)
@@ -222,7 +222,7 @@ AptValue* AptScriptColour::objectMemberLookup(AptValue* const /*pThis*/,
 // DECOMPILED from the PS3 body: the packed colour is toInteger(top-of-arg-stack);
 // the byte extraction is the PS3 v6/BYTE1/BYTE2 (blue = code & 0xFF, green =
 // (code >> 8) & 0xFF, red = (code >> 16) & 0xFF); the fsel pair is the [0, 255]
-// clamp; the three translate writes + the scale zero + the mFlagsA bit-31 dirty set
+// clamp; the three translate writes + the scale zero + the mFlagsA AS-changed set (x64 bit 0)
 // match getRGB's inverse (translate = additive colour, scale = 0).
 // ---------------------------------------------------------------------------
 AptValue* AptScriptColour::sMethod_setRGB(AptScriptColour* pThis, int /*nArgCount*/)
@@ -254,8 +254,8 @@ AptValue* AptScriptColour::sMethod_setRGB(AptScriptColour* pThis, int /*nArgCoun
         pColorMatrix->scale.SetValuef(AptColorHelper::Green, 0.0f);   // ColorMatrix[3] = 0
         pColorMatrix->scale.SetValuef(AptColorHelper::Blue,  0.0f);   // ColorMatrix[4] = 0
 
-        // Mark the clip's render/colour state dirty (mFlagsA bit 31).
-        static_cast<AptCIH*>(pTarget)->mFlagsA |= 0x80000000u;        // *(v2 + 12) |= 0x80000000
+        // Mark the clip's render/colour state AS-changed (x64 mFlagsA bit 0).
+        static_cast<AptCIH*>(pTarget)->mFlagsA |= 0x1u;               // X360 reversed form |= 0x80000000
     }
 
     return gpUndefinedValue;
@@ -444,8 +444,8 @@ AptValue* AptScriptColour::sMethod_setTransform(AptScriptColour* pThis, int nArg
             const bool bAnySet = pRa || pRb || pGa || pGb || pBa || pBb || pAa || pAb;
             if (bAnySet)
             {
-                // Mark the clip's render/colour state dirty (mFlagsA bit 31).
-                pTargetCIH->mFlagsA |= 0x80000000u;
+                // Mark the clip's render/colour state AS-changed (x64 mFlagsA bit 0).
+                pTargetCIH->mFlagsA |= 0x1u;
             }
         }
     }

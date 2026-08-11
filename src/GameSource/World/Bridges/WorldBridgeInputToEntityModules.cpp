@@ -1,5 +1,6 @@
 #include "GameSource/World/Bridges/WorldBridgeInputToEntityModules.h"
 
+#include "GameSource/World/BrnWorldModule.h"                                                                  // BrnWorld::WorldModule (the typed r3 seat: GetLastCameraInput)
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // TriggerManagementInputInterface (real aggregate)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"                        // VehicleDriverInputInterface::UpdateDriverEventQueue
 #include "GameSource/World/EntityModules/WorldEntityModule/SharedIO/BrnWorldEntityRequestInterface.h"         // WorldEntityIO::RequestInterface (real type)
@@ -20,12 +21,17 @@ namespace WorldModule
 
 namespace
 {
-    // WorldModule (the X360 r3 context) member offsets this bridge reads through.
-    // FLAG: the WorldModule class layout is not reconstructed; the two members are
-    // accessed at their X360 byte offsets pending the module's own home.
-    const u32 KU_WORLD_MODULE_CAMERA_OFFSET = 6167744;   // 0x5E1CC0 -- BrnDirector::Camera::Camera member (SetCameraInput source)
-    const u32 KU_WORLD_MODULE_FLAGS_OFFSET  = 6168064;   // 0x5E1E00 -- u64 flag word; bit 0x100 == "in hard-stop camera"
-    const u64 KU_WORLD_MODULE_FLAG_IN_HARD_STOP_CAMERA = 0x100;
+    // The two WorldModule reads this bridge does through the r3 seat resolve BY NAME
+    // (converted 2026-08-11 from raw X360 byte offsets -- the RaceCar-bridge bug class:
+    // console offsets 6167744/6168064 do NOT land on these members under the x64
+    // layout, boot-measured 67,504 bytes adrift for this region):
+    //   +0x5E1CC0 (6167744) == mLastCameraInput            -> GetLastCameraInput()
+    //   +0x5E1E00 (6168064) == mLastCameraInput + 0x140    -> its Camera::mState_uFlags
+    // The "flag word" was never a WorldModule member at all: 0x5E1E00 - 0x5E1CC0 ==
+    // 0x140 == the camera-state current-flag set inside the embedded camera (the low
+    // word the committed Camera.h exposes as the mState_uFlags alias; the PS3 DWARF
+    // accordingly shows NO member between mLastCameraInput and mEnvironmentMap).
+    const s32 KI_CAMERA_STATE_FLAG_IN_HARD_STOP_CAMERA = 0x100;   // bit 0x100 of mState_uFlags
 
     // GameActionQueue event-type ids the bridge reacts to (the game-action enum's
     // own home is not reconstructed; ids pinned by the X360 jump table
@@ -148,11 +154,10 @@ void BridgeInputToEntityModules(
     }
 
     // ---- race car (camera + network driver controls) -------------------------------
-    // FLAG: the director camera is the WorldModule member @ +0x5E1CC0 (the module's
-    // own layout is not reconstructed; see KU_WORLD_MODULE_CAMERA_OFFSET).
-    lpRaceCarInputBuffer_PreScene->SetCameraInput(
-        reinterpret_cast<const BrnDirector::Camera::Camera*>(
-            static_cast<const u8*>(lpWorldModule) + KU_WORLD_MODULE_CAMERA_OFFSET));
+    // The director camera is the WorldModule's mLastCameraInput (X360 +0x5E1CC0),
+    // reached by name through the typed seat (see the namespace note above).
+    const BrnWorld::WorldModule* lpModule = static_cast<const BrnWorld::WorldModule*>(lpWorldModule);
+    lpRaceCarInputBuffer_PreScene->SetCameraInput(lpModule->GetLastCameraInput());
     CheckForNetworkDriverControlsReceived(lpWorldModule, lpRaceCarInputBuffer_PreScene, lpWorldInput);
 
     // ---- race car (pre-physics) -----------------------------------------------------
@@ -168,11 +173,11 @@ void BridgeInputToEntityModules(
         reinterpret_cast<const BrnGameState::GameStateModuleIO::OnlineScoringOutputInterface*>(
             lpWorldInput->GetOnlineScoringInterface()));
     lpRaceCarInputBuffer_PrePhysics->SetControllerActive(lpWorldInput->GetControllerActive());
-    // FLAG: the hard-stop flag is bit 0x100 of the WorldModule u64 flag word @ +0x5E1E00.
-    const u64 luWorldModuleFlags = *reinterpret_cast<const u64*>(
-        static_cast<const u8*>(lpWorldModule) + KU_WORLD_MODULE_FLAGS_OFFSET);
+    // The hard-stop flag is bit 0x100 of the embedded camera's state-flag low word
+    // (X360 +0x5E1E00 == mLastCameraInput + 0x140 == Camera::mState_uFlags; see the
+    // namespace note above).
     lpRaceCarInputBuffer_PrePhysics->SetInHardStopCamera(
-        (luWorldModuleFlags & KU_WORLD_MODULE_FLAG_IN_HARD_STOP_CAMERA) != 0);
+        (lpModule->GetLastCameraInput()->mState_uFlags & KI_CAMERA_STATE_FLAG_IN_HARD_STOP_CAMERA) != 0);
 
     // ---- trigger management (add + remove queues) -------------------------------------
     // Both sides are now the real BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface

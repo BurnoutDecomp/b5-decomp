@@ -55,8 +55,8 @@ class AptActionQueueC;    // +0x0C -- the deferred-action queue (AptActionQueue.
 // small fixed table of AptValue* listeners/inputs: a live count, a slot capacity and
 // the slot array. Proven from the count16/count16/slots access pattern the
 // register/process passes use (lhz +0/+2, lwz +4). GetListenerSet/GetInputSet hand
-// back the address of one of these. FLAG: the ctor/dtor helper bodies that fill the
-// table live in a sibling TU (sub_82AE16xx/17xx) -- modelled here by NAMED members.
+// back the address of one of these. The ctor/dtor helper bodies that fill the
+// table (sub_82AE16xx/17xx) are HOMED in AptAnimationTarget.cpp -- NAMED members.
 // ---------------------------------------------------------------------------
 struct AptAnimationTargetSet
 {
@@ -105,8 +105,28 @@ struct AptAnimationTarget
                                                 //        (?GetTopMostSprite@AptAnimationTarget reads x64 +0x68,
                                                 //        the widened twin of this slot; was "role TBD")
     void*                 mpDragMC;             // +0x3C  (Get/SetDragMC; ctor sentinel)
-    f32                   mConstrain[4];        // +0x40  drag constrain L/T/R/B (was mDragPos+maTail,
-    f32                   mGrabOffset[2];       // +0x50  drag grab offset X/Y     roles resolved 2026-07-02)
+    f32                   mConstrain[4];        // x64 +0x78  drag constrain L/T/R/B (was mDragPos+maTail,
+    f32                   mGrabOffset[2];       // x64 +0x88  drag grab offset X/Y     roles resolved 2026-07-02)
+
+    // Layout pinned against the x64 XB1 export (never called; member body gives
+    // complete-class offsetof context). All 16 members land on the x64 accessor
+    // offsets; sizeof 0x90 (pool-alloc 144 at sub_140827500/sub_140827670).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptAnimationTarget, mpActionQueue)       == 0x10, "x64 ?GetActionPool: mov rax,[rcx+10h]");
+        static_assert(offsetof(AptAnimationTarget, mListenerSet)        == 0x18, "x64 ?GetListenerSet: lea rax,[rcx+18h]");
+        static_assert(offsetof(AptAnimationTarget, mInputSet)           == 0x28, "x64 ?GetInputSet: lea rax,[rcx+28h]");
+        static_assert(offsetof(AptAnimationTarget, mDisplayList)        == 0x38, "x64 ?GetDisplayList: lea rax,[rcx+38h]");
+        static_assert(offsetof(AptAnimationTarget, mpIntervalTimers)    == 0x40, "x64 ?GetIntervalTimers: mov rax,[rcx+40h]");
+        static_assert(offsetof(AptAnimationTarget, mnQueuedInputsCount) == 0x48, "x64 ?GetQueuedInputsSize: mov eax,[rcx+48h]");
+        static_assert(offsetof(AptAnimationTarget, mpOnPressObject)     == 0x58, "x64 ?GetOnPressObject: [rcx+58h]");
+        static_assert(offsetof(AptAnimationTarget, mpDragMC)            == 0x70, "x64 ?GetDragMC: [rcx+70h]");
+        static_assert(offsetof(AptAnimationTarget, mConstrain)          == 0x78, "x64 ?GetDragPos: lea rax,[rcx+78h]");
+        static_assert(offsetof(AptAnimationTarget, mGrabOffset)         == 0x88, "x64 StartDragMovie 0x14081D7E0: 88h/8Ch");
+        static_assert(sizeof(AptAnimationTarget) == 0x90, "x64: pool-alloc 144 before the ctor");
+        static_assert(offsetof(AptAnimationTargetSet, mppSlots) == 0x08, "x64 ctor: slot ptr 8 past the count");
+        static_assert(sizeof(AptAnimationTargetSet) == 0x10, "x64: the set pair spans 0x18..0x38");
+    }
 
     // ctor @0x82AFF648 -- build the director from the sizing params: copy the timer
     // count + input cap, build the two listener/input sets, pool-allocate the action

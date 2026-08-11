@@ -220,10 +220,19 @@ protected:
     virtual bool IsAchievementEarnt(EAchievement leAchievement)      = 0;       // DWARF :224 (vtable slot 1)
 
 protected:
-    BrnProgression::ProgressionManager* mpProgressionManager;                   // this+0x04 (DWARF :228)
-    StreetManager*                      mpStreetManager;                        // this+0x08 (DWARF :229)
-    ScoringSystem*                      mpScoringSystem;                         // this+0x0C (DWARF :230)
-    GameStateModule*                    mpGameStateModule;                       // this+0x10 (DWARF :231)
+    // ⚠️ [FLAG PC bring-up] the four back-pointers carry `= 0` in-class initialisers. GameStateModule
+    // now embeds this manager BY VALUE (X360 this+181680, DWARF BrnGameStateModule.h:226) but does
+    // NOT yet call Construct: mounting this TU costs eight unresolved externals that have no
+    // definition anywhere in the tree (five ScoringSystem + three ProgressionManager accessors the
+    // gameplay-event hooks below call), and /OPT:REF does not excuse an unresolved external from an
+    // unreferenced COMDAT -- verified with a minimal LNK2019 repro. Without the initialisers the
+    // embedded subobject's back-pointers would be INDETERMINATE rather than merely unset; `0` is
+    // also what every consumer's CGS_ASSERT is written to catch. They do not change the layout.
+    // DELETE-WHEN GameStateModule::Construct calls Construct for real (see its DELETE-WHEN block).
+    BrnProgression::ProgressionManager* mpProgressionManager = 0;               // this+0x04 (DWARF :228)
+    StreetManager*                      mpStreetManager      = 0;               // this+0x08 (DWARF :229)
+    ScoringSystem*                      mpScoringSystem      = 0;                // this+0x0C (DWARF :230)
+    GameStateModule*                    mpGameStateModule    = 0;                // this+0x10 (DWARF :231)
 };
 
 // ---------------------------------------------------------------------------

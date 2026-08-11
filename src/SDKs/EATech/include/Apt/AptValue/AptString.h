@@ -12,12 +12,13 @@
 // AptValue::c_string() can hand the conversion layer the string contents.
 //
 // SCOPE: the data layout + the inline accessors the value-conversion layer needs
-// (GetInternalString / the pool new/delete). The pooled lifecycle (Create /
-// Destroy / the StringPool), objectMemberLookup (the gperf StringMembersIndex
-// recognizer in the Packages tree), and the ActionScript String methods
-// (sMethod_charAt/indexOf/split/...) need StringPool + AptNativeFunction and are
-// the follow-on -- declared where cheap, FLAG'd otherwise. The conversions only
-// READ str, so the layout + GetInternalString is what is required here.
+// (GetInternalString / the pool new/delete). The pooled lifecycle (Create
+// @0x82AEDC18 / Destroy @0x82AE8218), objectMemberLookup (the gperf
+// StringMembersIndex recognizer) and the ActionScript String methods
+// (sMethod_charAt/indexOf/split/...) are homed in AptString.cpp; the StringPool
+// recycler itself (Initialize/GetFromPool/Teardown/...) is homed in
+// AptStringPool.cpp. The conversions only READ str, so the layout +
+// GetInternalString is what is required here.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -28,7 +29,7 @@
 #include "SDKs/EATech/include/Apt/AptDefine.h"           // gpNonGCPoolManager + AptNonGC*SaveSize
 #include "SDKs/EATech/Apt/DogmaAllocator.h"              // DOGMA_PoolManager::Allocate/Deallocate
 
-class StringPool;   // the recycler that owns the free list (mpNext); follow-on
+class StringPool;   // the recycler that owns the free list (mpNext); homed in AptStringPool.cpp
 
 class AptString : public AptValueNoGC
 {
@@ -42,8 +43,8 @@ public:
     // layers read/parse it).
     AptNativeString* GetInternalString() { return &str; }
 
-    // leak: pooled construction (recycled via the StringPool free list). FLAG:
-    // bodies + the StringPool are the follow-on; declared so callers can name them.
+    // leak: pooled construction (recycled via the StringPool free list). Body in
+    // AptString.cpp (@0x82AEDC18); the StringPool recycler is AptStringPool.cpp.
     static AptString* Create(const char* szValue);
     static AptString* Create() { return Create(""); }
 
@@ -73,19 +74,18 @@ public:
     static AptValue* sMethod_slice(AptString* pThis, int nArgCount);
     static AptValue* sMethod_substring(AptString* pThis, int nArgCount);
     static AptValue* sMethod_split(AptString* pThis, int nArgCount);
-    // FLAG: sMethod_substr (the legacy AS String.substr(start, length)) is referenced
-    // by objectMemberLookup (X360 @0x82AFCE5C) but is a SEPARATE symbol/TU not part of
-    // this class's recovered function set -- declared so the lookup can name its
-    // address; its body is the follow-on (not in this dossier).
+    // sMethod_substr (the legacy AS String.substr(start, length)) -- X360
+    // @0x82AFCE5C / PS3 DecFIGS 0xF41074; a separate symbol from the slice/
+    // substring pair. Body in AptString.cpp (decompiled from the PS3 export).
     static AptValue* sMethod_substr(AptString* pThis, int nArgCount);
 
 protected:
     virtual void DeleteThis()  { Destroy(); }
     virtual void ForceDelete() { Destroy(); }
-    void Destroy();   // FLAG: returns the value to the StringPool free list (follow-on)
+    void Destroy();   // @0x82AE8218 -- push back onto the StringPool free list (AptString.cpp)
 
     // leak: resolve a JS member/method name through the gperf StringMembersIndex
-    // recognizer. FLAG: body is the follow-on (needs the native-method table).
+    // recognizer. Body in AptString.cpp (@0x82AFCAB0, with the method-value caches).
     virtual AptValue* objectMemberLookup(AptValue* const pContext,
                                          const AptNativeString* const pName) const;
 

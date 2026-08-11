@@ -12,12 +12,12 @@
 // pool-allocates 48 bytes and by AptTarget::Shutdown @0x82B02328 which frees the
 // sub-objects). The constructor first stores defaults (64/64/64/512/512/256) into
 // the six leading dwords then overwrites them from the AptUpdateParams block:
-//     +0x00 mnConfigA   = params[4]   ) capacity/config values the context keeps
-//     +0x04 mnConfigB   = params[7]   ) for its sub-pools; copied verbatim from
+//     +0x00 mnConfigA   = params[0]   ) capacity/config values the context keeps
+//     +0x04 mnConfigB   = params[1]   ) for its sub-pools; copied STRAIGHT from
 //     +0x08 mnConfigC   = params[2]   ) the AptUpdateParams passed to
-//     +0x0C mnConfigD   = params[1]   ) AptUpdateInitialize. FLAG: the exact
-//     +0x10 mnConfigE   = params[0]   ) per-field pool meaning is not yet pinned;
-//     +0x14 mnConfigF   = params[3]   ) carried as named config dwords.
+//     +0x0C mnConfigD   = params[3]   ) AptUpdateInitialize (x64 ctor vmovups+
+//     +0x10 mnConfigE   = params[4]   ) vmovsd copy). FLAG: the exact per-field
+//     +0x14 mnConfigF   = params[5]   ) pool meaning is not yet pinned.
 //     +0x18 mpAnimationTarget  AptAnimationTarget*  (88-byte director; pool-alloc'd
 //                                in the ctor; GetAnimationTarget @0x82AD5770 returns it)
 //     +0x1C mpLoader            AptLoader*           (4-byte loader wrapper; ~AptLoader
@@ -25,9 +25,9 @@
 //                                AptLoader::Update(off_8324E574->mpLoader))
 //     +0x20 mpLinker            AptLinker*           (24-byte file linker; constructed
 //                                inline in the ctor; AptLinker scalar-deleting-dtor in Shutdown)
-//     +0x24 mpField24           void*  (zeroed at construction)        FLAG: role TBD
-//     +0x28 mpField28           void*  (zeroed at construction)        FLAG: role TBD
-//     +0x2C mpField2C           void*  (4-byte zeroed alloc in the ctor) FLAG: role TBD
+//     +0x30 mpNext              AptTarget*  the target instance-list NEXT link
+//     +0x38 mpPrevious          AptTarget*  the target instance-list PREV link
+//     +0x40 mppRenderRootAnchor the render-root anchor cell (pool-alloc'd, zeroed)
 //
 // Member access is BY NAME; the X360 byte offsets above are documentation only.
 // AptAnimationTarget (88 bytes) and AptLinker (24 bytes) are forward-declared here
@@ -47,32 +47,52 @@ struct AptLinker;            // +0x20 -- the 24-byte file linker (own TU)
 struct AptTarget
 {
     // ---- capacity/config block (copied from the AptUpdateParams) ----
-    u32 mnConfigA;   // +0x00  (= params[4])
-    u32 mnConfigB;   // +0x04  (= params[7])
+    // x64 ctor sub_140827670: a STRAIGHT copy of params[0..5] (vmovups+vmovsd);
+    // params[6]/[7] never read. Defaults 64/64/64/512/512/256 stored first.
+    u32 mnConfigA;   // +0x00  (= params[0])
+    u32 mnConfigB;   // +0x04  (= params[1])
     u32 mnConfigC;   // +0x08  (= params[2])
-    u32 mnConfigD;   // +0x0C  (= params[1])
-    u32 mnConfigE;   // +0x10  (= params[0])
-    u32 mnConfigF;   // +0x14  (= params[3])
+    u32 mnConfigD;   // +0x0C  (= params[3])
+    u32 mnConfigE;   // +0x10  (= params[4])
+    u32 mnConfigF;   // +0x14  (= params[5])
 
-    // ---- the context's owned sub-objects ----
+    // ---- the context's owned sub-objects (x64 offsets) ----
     AptAnimationTarget* mpAnimationTarget;   // +0x18
-    AptLoader*          mpLoader;            // +0x1C
-    AptLinker*          mpLinker;            // +0x20
-    void*               mpField24;           // +0x24  FLAG: role TBD (zeroed at ctor; SetNext writes it)
-    void*               mpField28;           // +0x28  FLAG: role TBD (zeroed at ctor)
-    // +0x2C -- the render-root ANCHOR cell: a one-pointer slot (pool-allocated +
+    AptLoader*          mpLoader;            // +0x20
+    AptLinker*          mpLinker;            // +0x28
+    // x64 ?GetNext/?SetNext/?GetPrevious/?SetPrevious (@0x1408394B0/0x1408426E0/
+    // 0x140839800/0x140842710) type these AptTarget* -- the target instance-list links.
+    AptTarget*          mpNext;              // +0x30
+    AptTarget*          mpPrevious;          // +0x38
+    // +0x40 -- the render-root ANCHOR cell: a one-pointer slot (pool-allocated +
     // zeroed by the ctor) holding the head of the per-target _AptRenderItemRootList
     // chain. Shutdown frees it (inline on the owning thread, else deferred to the
-    // render-manager queue). Console 4-byte slot; on x64 it is sizeof(ptr).
-    AptRenderTreeManager::_AptRenderItemRootList** mppRenderRootAnchor;   // +0x2C
+    // render-manager queue). x64 ?GetRenderManager@ @0x140839A20 reads it.
+    AptRenderTreeManager::_AptRenderItemRootList** mppRenderRootAnchor;   // +0x40
+
+    // Layout pinned against the x64 XB1 export (never called; member body gives
+    // complete-class offsetof context).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptTarget, mnConfigF)           == 0x14, "x64 ctor: [rcx+14h]=100h default");
+        static_assert(offsetof(AptTarget, mpAnimationTarget)   == 0x18, "x64 GetAnimationTarget @0x1408381F0");
+        static_assert(offsetof(AptTarget, mpLoader)            == 0x20, "x64 GetLoader @0x140839220");
+        static_assert(offsetof(AptTarget, mpLinker)            == 0x28, "x64 GetLinker @0x140839200");
+        static_assert(offsetof(AptTarget, mpNext)              == 0x30, "x64 GetNext @0x1408394B0");
+        static_assert(offsetof(AptTarget, mpPrevious)          == 0x38, "x64 GetPrevious @0x140839800");
+        static_assert(offsetof(AptTarget, mppRenderRootAnchor) == 0x40, "x64 GetRenderManager @0x140839A20");
+        static_assert(sizeof(AptTarget) == 0x48, "x64: alloc 72 @sub_14082ED90, free 0x48 @sub_14082FBB0");
+    }
 
     // GetAnimationTarget @0x82AD5770 -- the active animation director (+0x18).
     // X360 body: `lwz r3,0x18(r3); blr`.
     AptAnimationTarget* GetAnimationTarget() const { return mpAnimationTarget; }
 
-    // SetNext @0x82B6BEA0 -- store a pointer into the +0x24 slot and return this.
-    // X360 body: `stw r4,0x24(r3); blr`.
-    AptTarget* SetNext(void* pNext) { mpField24 = pNext; return this; }
+    // SetNext (x64 @0x1408426E0, void return) -- store the next instance-list link.
+    void SetNext(AptTarget* pNext) { mpNext = pNext; }
+    AptTarget* GetNext() const { return mpNext; }                 // x64 @0x1408394B0
+    void SetPrevious(AptTarget* pPrev) { mpPrevious = pPrev; }    // x64 @0x140842710
+    AptTarget* GetPrevious() const { return mpPrevious; }         // x64 @0x140839800
 
 
     // GetLoader @PS3 _ZN9AptTarget9GetLoaderEv @0xF15E60 -- the loader the target
@@ -102,8 +122,8 @@ extern int gAptTargetInstanceCount;     // X360 dword_8324E57C
 // ---------------------------------------------------------------------------
 // The target-instance create / select-current orchestration (X360
 // AptCreateTargetInstance @0x82B003B0 + AptChangeTargetInstance @0x82ADB768). The
-// host bring-up calls these (in lieu of the un-homed AptUpdateInitialize chain) to
-// stand up + select the per-process Apt context. Bodies in AptTarget.cpp.
+// host bring-up calls these (alongside the AptUpdateInitialize chain, AptInit.cpp)
+// to stand up + select the per-process Apt context. Bodies in AptTarget.cpp.
 //   AptCreateTargetInstance(params) -- allocate+construct an AptTarget from the
 //       AptUpdateParams block, append it to the instance list, return it.
 //   AptChangeTargetInstance(target)  -- make `target` the current context (sets

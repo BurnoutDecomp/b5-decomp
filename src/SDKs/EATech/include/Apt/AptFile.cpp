@@ -53,17 +53,18 @@ void AptFile_FreeLoadedBlock(void* pDataBlock)
 
 AptFile::~AptFile()
 {
-    // 1. Unregister from the current target's loader (skipped during bring-up
-    //    while GetTarget() is null -- see the FLAG in AptLoader.h).
+    // 1. Unregister from the current target's loader (null-guarded: a file torn
+    //    down after the target instance is destroyed sees GetTarget() null).
     if (AptTarget* pTarget = GetTarget())
     {
         if (AptLoader* pLoader = pTarget->GetLoader())
             pLoader->Invalidate(this);
     }
 
-    // 2. Loaded-data teardown (only after the async load resolved). FLAG: the
-    //    parser + completion path that set mnState/mpData are a follow-on, so
-    //    this branch is currently unreachable and its ops are extern hooks.
+    // 2. Loaded-data teardown (only after the async load resolved). mnState/mpData
+    //    are set by AptLoader::CompleteLoad (driven through the homed host stream
+    //    hook AptLoaderStartAsyncLoad -> AptCompleteAnimationAsyncLoad), so this
+    //    branch is LIVE.
     if (mnState >= 3 && mnState <= 6 && mpData)
     {
         // Inverse of the load-time Fixup: run AptCharacterAnimation::Unresolve on the
@@ -181,8 +182,8 @@ bool AptFile::isFileImported(AptFile** ppCandidate) const
         // candidate's name. The temp's ctor InitFromBuffer's the buffer and its dtor
         // DecreaseInternalRefCount's it -- exactly the asm's per-iteration InitFromBuffer
         // / compare / DecreaseInternalRefCount bracket.
-        // FLAG: the asm comparator (IDA-unnamed sub @...0040_0, (EAStringC,EAStringC) ->
-        // bool) is the EAStringC equality operator.
+        // The asm comparator (the IDA-unnamed (EAStringC,EAStringC) -> bool sub
+        // @...0040_0) is the EAStringC equality operator -- identified and wired.
         EAStringC importName(pMovie->mpImportTable[iImport].mpImportFileName);
         bImported = (importName == (*ppCandidate)->mFileName);
         if (bImported)

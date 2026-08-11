@@ -20,18 +20,20 @@
 
 #include <intrin.h>   // _InterlockedExchange (the Apt GC flag lock)
 
-// The Apt GC reference-registration callback -- wired by the Apt GC startup
-// (AptInit); null until then (FLAG). The GC value types' RegisterReferences call
-// through it, so the mark walk is inert until the collector is up.
+// The Apt GC reference-registration callback. The GC value types' RegisterReferences
+// call through it, so the mark walk is inert while it is null. The callback BODY is
+// AptGC::sReferenceRegistrationCb (AptGC.cpp @0x82AD9C80). FLAG (parked): the console
+// installer that stamps this slot (dword_8324E4E8) -- the partial-GC mark/sweep tier,
+// XB1 sub_140832E70 -- is un-homed; the install lands with that sweep TU.
 AptValue::ReferenceRegistrationCb AptValue::sReferenceRegistrationCb = 0;
 
 // AptGC::CleanAll sets this while it tears the value graph down (X360 byte_8324E38E).
 bool AptValue::sbSuspendRefcountDeletions = false;
 
 // The Apt GC lock (X360 unk_8324E75C) -- a single-word spin lock guarding the GC
-// mark / deferred-release flag bit mutations. FLAG: the console uses the
-// lwarx/stwcx. interrupt-masked idiom; modelled as an interlocked test-and-set
-// (host-portable, uncontended on the single-thread bring-up path).
+// mark / deferred-release flag bit mutations; the console's lwarx/stwcx.
+// interrupt-masked idiom modelled as an interlocked test-and-set (see the leaf
+// FLAG below; host-portable, uncontended on the single-thread bring-up path).
 namespace
 {
     volatile long gAptGCFlagLock = 0;
@@ -168,32 +170,38 @@ void AptValue::ForceDelete()
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// FLAG (deferred Apt GC subsystem -- wired at AptInit, not yet reconstructed):
-//   gpAptDeferredReleaseVector -- the GC "deferred release" / zombie vector
+// The Apt GC globals this TU reads (all defined in AptGlobals.cpp):
+//   gpValuesToRelease -- the GC "deferred release" vector pointer
 //       (X360 off_8324E51C, an AptValueVector*). The base ctor and Release queue
 //       a value into it (instead of deleting immediately) when running on the GC
 //       thread and the value's type opts into delayed deletion.
+//       FLAG (parked): AptCommonInitialize (AptInit.cpp) builds the off_8324E51C
+//       vector but publishes it only to its file-local alias (gpAptDeferredVecCommon),
+//       and AptGlobals.cpp carries a THIRD view (the embedded AptGCReleaseVector
+//       gValuesToRelease) of the same console address; until the three off_8324E51C
+//       homes are unified this pointer stays null and the ctor/Release defer arms
+//       stay inert (out-of-cluster fix: AptGlobals.cpp + AptInit.cpp).
 //   gnAptGCThreadId_Ctor / gnAptGCThreadId_Release -- the captured GC thread ids
 //       the ctor (X360 dword_8324E500) and Release (X360 dword_8324E504) compare
 //       the current thread against. Distinct globals in the binary; kept distinct.
-//   the current-target globals back isMCInParentChain.
-// These are declared (not defined) here; the per-TU gate is compile-only and the
-// Apt GC is brought up in a later phase, so each remains null/inert until then.
 // ---------------------------------------------------------------------------
-extern AptValueVector* gpAptDeferredReleaseVector;   // off_8324E51C
+extern AptValueVector* gpValuesToRelease;   // off_8324E51C
 extern uint32_t        gnAptGCThreadId_Ctor;         // dword_8324E500
 extern uint32_t        gnAptGCThreadId_Release;      // dword_8324E504
 
-// AptCurrentThreadId -- EA::Thread::GetThreadId() (the GC-thread guard).
-// FLAG: the threading subsystem id is host-portable but the captured GC-thread
-// snapshot is not live until AptInit; returns 0 here so the GC-thread branch is
-// dormant (matching the inert ctor path before the collector is up).
+// AptCurrentThreadId -- the GC-thread guard's current-thread query. Defined in
+// AptRenderLinkStubs.cpp as a PC-platform leaf (single-threaded host: one thread
+// id, 0), so the GC-thread compares below resolve the same way the console's
+// single-sim-thread boot path does.
 extern uint32_t AptCurrentThreadId();
 
 
 // The active script "current target" MovieClips the parent-chain walk stops at
 // (X360 dword_8324D818 = the highlighted/current target, dword_8324D830 = the
-// chain terminator / root). FLAG: set by the AS interpreter once a movie is live.
+// chain terminator / root). Defined in AptGlobals.cpp. FLAG (parked): the
+// interpreter-side stores that publish them once a movie is live are owned by
+// the interpreter/target TUs (outside this cluster); null here makes the walk
+// run the full chain -- the faithful pre-publish result.
 extern AptValue* gpAptCurrentTargetMC;     // dword_8324D818
 extern AptValue* gpAptRootTargetMC;        // dword_8324D830
 
@@ -215,7 +223,7 @@ AptValue::AptValue(AptVirtualFunctionTable_Indices eType)
     setGCRoot(0);                    // X360 setGCRoot(r4) -- r4 == 0 here (leftover
                                      // from setGCMark's `li r4,0`); a fresh value
                                      // has no GC roots.
-    SetAllowDelayedDeletion(false);  // X360: r4==0 (leftover from setGCMark's li r4,0) -> false
+    SetAllowDelayedDeletion(true);   // X360 0x82AE3048 `li r4,1`; x64 sub_1408279A0 `or [rcx+8],20h`
 
     // X360: the five "no delayed deletion" types skip the deferred-vector path and
     // go straight to ClearReleaseAtEnd.
@@ -226,22 +234,30 @@ AptValue::AptValue(AptVirtualFunctionTable_Indices eType)
         (eType == AptVFT_NativeFunction)   ||   // 0x09
         (eType == AptVFT_Extension);            // 0x1D
 
-    if (!lbSkipDefer && gnAptGCThreadId_Ctor == AptCurrentThreadId())
+    if (lbSkipDefer)
+    {
+        ClearReleaseAtEnd();   // X360 loc_82AE30C8
+    }
+    else if (gnAptGCThreadId_Ctor == AptCurrentThreadId())
     {
         // On the GC thread: queue into the deferred-release vector if it has room
-        // (X360 family-(B) layout: top(+4)=mnCapacity < capacity(+0)=mnTop).
+        // (X360 family-(B) layout: top(+4)=mnCapacity < capacity(+0)=mnTop); a full
+        // (or unwired) vector rolls the queue intent back (X360 0x82AE30A8 bge ->
+        // loc_82AE30C8 ClearReleaseAtEnd).
         SetReleaseAtEnd();
-        AptValueVector* lpVec = gpAptDeferredReleaseVector;   // FLAG: null pre-AptInit
+        AptValueVector* lpVec = gpValuesToRelease;   // off_8324E51C (see the parked unification FLAG above)
         if (lpVec != 0 && lpVec->mnCapacity < lpVec->mnTop)
         {
             lpVec->mppItems[lpVec->mnCapacity] = this;
             ++lpVec->mnCapacity;
         }
+        else
+        {
+            ClearReleaseAtEnd();
+        }
     }
-    else
-    {
-        ClearReleaseAtEnd();
-    }
+    // OFF the GC thread (non-skip types): NO store -- X360 0x82AE3088
+    // `bne cr6, loc_82AE30D0` skips ClearReleaseAtEnd entirely; x64 same shape.
 
     // X360 `a1[1] &= ~0x80` -- clear the max-refcount-hit flag set by setRefCount's
     // clamp path (rlwinm r11,r11,0,25,23 keeps every bit except bit 24 == 0x80).
@@ -319,10 +335,11 @@ void AptValue::Release()
         return;
 
     // During a GC CleanAll the collector drives destruction via the scalar-deleting
-    // destructor (vtbl +0x30). X360: `if (DeleteThis(this) != 0) return;`. FLAG: our
-    // DeleteThis is void (always deletes), so after the call `this` is gone and we
-    // return; the "destructor declined (null result) -> fall through" case needs the
-    // typed return and does not arise pre-collector (CleanAll is not yet live).
+    // destructor (vtbl +0x30). X360: `if (DeleteThis(this) != 0) return;` -- a
+    // scalar-deleting destructor always returns its (non-null) receiver, so the
+    // console's null test is vestigial codegen and the branch is always taken; the
+    // void DeleteThis + unconditional return is behaviour-identical. (CleanAll is
+    // live -- AptGC.cpp @0x82AE4A40 -- and drives this path at shutdown.)
     if (sbSuspendRefcountDeletions)
     {
         DeleteThis();   // X360 `result = (*(*this+0x30))(this)`; non-null -> return
@@ -355,7 +372,7 @@ void AptValue::Release()
         return;
     }
 
-    AptValueVector* lpVec = gpAptDeferredReleaseVector;   // FLAG: null pre-AptInit
+    AptValueVector* lpVec = gpValuesToRelease;   // off_8324E51C (see the parked unification FLAG above)
     // X360: if top(+4) < capacity(+0) there is room. (Family-(B) layout: capacity is
     // the +0 member mnTop, the live top is the +4 member mnCapacity.)
     if (lpVec == 0 || lpVec->mnCapacity >= lpVec->mnTop)
@@ -366,7 +383,7 @@ void AptValue::Release()
 
     SetReleaseAtEnd();
     // X360 reloads off_8324E51C after SetReleaseAtEnd and re-checks for room.
-    AptValueVector* lpVec2 = gpAptDeferredReleaseVector;
+    AptValueVector* lpVec2 = gpValuesToRelease;
     if (lpVec2->mnCapacity >= lpVec2->mnTop)
     {
         ClearReleaseAtEnd();           // full now -> roll back the queue intent

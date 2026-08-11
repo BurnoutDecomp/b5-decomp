@@ -8,16 +8,17 @@
 AptRenderItemButton::AptRenderItemButton(AptCharacter* pCharacter, int nCreatedOnTick)
     : AptRenderItemSprite(pCharacter, nCreatedOnTick)
 {
-    // FLAG: console rotate-masks mFlags; 0x100000 is the button render-type bits
-    // (replacing the sprite's, set by the base ctor).
-    mFlags = (mFlags & ~0x003C0000u) | 0x00100000u;
+    // Console encoding: rotate-mask of mFlags, 0x100000 == 4 << 18 (the X360
+    // render-type field, replacing the sprite's set by the base ctor); the x64
+    // twin is the bits-8-13 field, XB1-verified.
+    mFlags = (mFlags & ~0x3F00u) | 0x400u;   // button=4; x64 type field bits 8-13
 }
 
 // Clone copy-ctor -- sprite copy then re-stamp the button render-type bits.
 AptRenderItemButton::AptRenderItemButton(const AptRenderItemButton* pSource, int nCreatedOnTick, bool bCopyExtended)
     : AptRenderItemSprite(pSource, nCreatedOnTick, bCopyExtended)
 {
-    mFlags = (mFlags & 0xFF03FFFFu) | 0x00100000u;
+    mFlags = (mFlags & ~0x3F00u) | 0x400u;   // button=4; x64 type field bits 8-13
 }
 
 // Clone @0x814C78 -- pool-allocate a fresh button render item copy-initialised from this

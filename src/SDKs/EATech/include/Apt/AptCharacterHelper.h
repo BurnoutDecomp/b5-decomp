@@ -18,14 +18,13 @@
 // this helper). The two bodies attested in the X360 ledger:
 //     AptCharacterHelper::CreateTextCharacterInst @ 0x82B010C0
 //     AptCharacterHelper::Shutdown                @ 0x82AE2FA0
-// (the sibling CreateMovieCharacterInst @0x82B0BC.. -- the off_8324E49C builder --
-//  is its own follow-on TU; only the text builder + Shutdown live here.)
+// (the sibling CreateMovieCharacterInst @0x82B0BC.. / PS3 @0xF56FC4 -- the
+//  off_8324E49C builder -- is bodied in AptCharacterHelper.cpp too.)
 //
 // MODULE-STATIC SINGLETONS: the X360 caches the two templates in the .data globals
 // off_8324E498 (text) / off_8324E49C (movie). They are modelled here as the class
-// statics spDefaultTextCharacter / spDefaultMovieCharacter (declared by name with a
-// FLAG -- the movie template is written by the sibling builder, so it is referenced
-// here only for Shutdown). No raw dword_XXXX pokes: access is by the named static.
+// statics spDefaultTextCharacter / spDefaultMovieCharacter (both written by their
+// builders in this TU). No raw dword_XXXX pokes: access is by the named static.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -76,15 +75,14 @@ public:
     //   CreateMovieCharacterInst; referenced here only so Shutdown frees it).
     // Both null until first use; reset to null by Shutdown / AptValueInitialize.
     static AptCharacterDynamicText* spDefaultTextCharacter;
-    static AptCharacter*            spDefaultMovieCharacter;   // FLAG: written by CreateMovieCharacterInst
+    static AptCharacter*            spDefaultMovieCharacter;   // written by CreateMovieCharacterInst (this TU)
 };
 
 // ---------------------------------------------------------------------------
-// FLAG (callee homed elsewhere -- the .apt timeline / level layer): fetch the
-// runtime animation node currently mounted at display level `nLevel` (the X360
-// _AptGetAnimationAtLevel @0x82B00788, which lazily creates the level-0 root CIH
-// on first use). Declared so CreateTextCharacterInst can walk it for the default
-// font; null when no movie is mounted.
+// Fetch the runtime animation node currently mounted at display level `nLevel`
+// (the X360 _AptGetAnimationAtLevel @0x82B00788, which lazily creates the level-0
+// root CIH on first use). HOMED in AptCharacterHelper.cpp; null when no movie is
+// mounted.
 // ---------------------------------------------------------------------------
 AptCIH* AptGetAnimationAtLevel(int nLevel);
 
@@ -96,18 +94,15 @@ AptCIH* AptGetAnimationAtLevel(int nLevel);
 AptCIH* AptFindAnimationAtLevel(int nLevel);
 
 // ---------------------------------------------------------------------------
-// FLAG (callee homed with the .apt FONT layer -- NOT yet reconstructed): resolve
-// the default font for a freshly-created text field from `pFontOwner` (the level-0
-// movie's font-list-bearing character, reached by named members:
+// Resolve the default font for a freshly-created text field from `pFontOwner` (the
+// level-0 movie's font-list-bearing character, reached by named members:
 // AptGetAnimationAtLevel(0)->mpCharacterInst->mpRenderItem->mpCharacter->mpFixupLink).
 //
-// The X360 walks that owner's embedded glyph-list (count + glyph-pointer array at
-// fixed offsets in the serialised .apt font record) to (a) take the first glyph as
-// the default font handle and (b) find the index of the first glyph tagged 3,
-// returned via *pnDefaultGlyphIndex (left at -1 when none). That glyph-list record
-// is a serialised .apt structure with NO reconstructable C++ home (no header in
-// b5-decomp/src, no Feb-2007 source, no DecFIGS DWARF), so its walk is deferred to
-// this declared helper rather than offset-poked here. Returns the default font
-// character (stored into the template's mpFixupLink slot), or null.
+// HOMED in AptCharacterHelper.cpp: the walk is the owner's embedded movie def-base
+// (AptGetMovieCharacterAnimation -> the serialized-64 AptCharacterAnimation, whose
+// charCount/charTable offsets are static_assert-locked) -- take charTable[0] as the
+// default font handle and find the index of the first type-3 (font) character,
+// returned via *pnDefaultGlyphIndex (left at -1 when none). Returns the default
+// font character (stored into the template's mpFixupLink slot), or null.
 // ---------------------------------------------------------------------------
 AptCharacter* AptResolveDefaultTextFont(AptCharacter* pFontOwner, int32_t* pnDefaultGlyphIndex);

@@ -21,16 +21,12 @@
 // big-endian bitfield; here it is the endian-safe getIsDefined()). The member
 // virtual at vtbl+0x18 is objectMemberLookup (index 6).
 //
-// FLAG -- follow-on TUs / AptInit globals (this TU is the orchestration; its deep
-// leaves are declared and stubbed, the work `stubs` pattern):
-//   getContext (the path parser, ~115 lines) and AptValue::findChild (the special-
-//   name + display-tree resolver, ~190 asm-only insns) -- their own TUs;
-//   AptLookupScopeChain (the AptFrameStack function-local lookup) and
-//   AptInterp_LookupGlobalFallback (the _level / global-frame lookup) encapsulate
-//   the AptScriptFunctionBase frame state (not reconstructed) -- x64-native helpers
-//   so no console frame-context offsets are baked in;
-//   gpUndefinedCIH, gpAptVarNotFoundCb -- wired at AptInit;
-//   AptString::Create's seed prefix const.
+// Every deep leaf is landed in its own TU: getContext (the path parser,
+// AptActionInterpreterContext.cpp), AptValue::findChild (AptValueFindChild.cpp),
+// AptLookupScopeChain (AptFrameStack.cpp) and LookupGlobalFallback
+// (AptActionInterpreterInterpHelpers.cpp). The empty-scope sentinel is the pinned
+// EmptyCIH placeholder (dword_8324D700, built at AptInit); gpAptVarNotFoundCb is
+// defined in AptGlobals.cpp, null until a host installs it.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -39,33 +35,37 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
+#include "SDKs/EATech/include/Apt/AptCIH.h"   // AptCIH : AptValueGC (gpAptEmptyCIH -> AptValue* upcast)
 
 extern AptValue* gpUndefinedValue;   // (AptValueConvert.cpp)
-extern AptValue* gpUndefinedCIH;     // FLAG: the undefined-CIH sentinel (AptInit)
+extern AptCIH*   gpAptEmptyCIH;      // dword_8324D700 -- the pinned "EmptyCIH" placeholder (built at AptInit)
 
-// FLAG: the function-local scope chain (walks AptScriptFunctionBase::spFrameStack
-// via the interpreter's current frame context). Returns the found value or null.
+// The function-local scope chain (walks AptScriptFunctionBase::spFrameStack, falling
+// back to the running function's captured parent scope) -- homed in AptFrameStack.cpp.
 extern AptValue* AptLookupScopeChain(AptActionInterpreter* pInterp, const EAStringC* pName);
 
-// FLAG: the _level / global-object fallback for CIH contexts (the global frame's
-// AptNativeHash). Returns the found value or null.
-// AptActionInterpreter::LookupGlobalFallback is now a member (declared in the header).
+// LookupGlobalFallback (the _level / global-frame lookup) is a homed member
+// (AptActionInterpreterInterpHelpers.cpp).
 
-// FLAG: the "variable not found" diagnostic callback (null until AptInit).
+// The "variable not found" diagnostic callback (storage in AptGlobals.cpp; null
+// until a host installs it -- the console's indirect dword_8324E8B4 slot).
 typedef void (*AptVarNotFoundCb)(const char* pName);
 extern AptVarNotFoundCb gpAptVarNotFoundCb;
 
 AptValue* AptActionInterpreter::getVariable(AptValue* pScope, AptValue* pTarget,
     const EAStringC* pName, int nAllowSelf, int nSearchScopeChain, int nDirect)
 {
-    // The scope is the undefined-CIH sentinel -> the variable is undefined.
-    if (pScope == gpUndefinedCIH)
+    // The scope is the pinned EmptyCIH placeholder -> the variable is undefined.
+    // (console getVariable @0x82B03430 head: a2 == dword_8324D700. The old
+    // never-assigned gpUndefinedCIH duplicate compared against null here, letting
+    // EmptyCIH scopes fall through into the resolver.)
+    if (pScope == static_cast<AptValue*>(gpAptEmptyCIH))
         return gpUndefinedValue;
 
     // "$name": a dynamically-named variable -> an AptString naming it.
     if (pName->GetBuffer()[0] == '$')
     {
-        AptString* pDyn = AptString::Create("");          // FLAG: console seed-prefix const
+        AptString* pDyn = AptString::Create("");          // console seed @0x820046A7 ("" -- overwritten below)
         *pDyn->GetInternalString() = *pName;
         return pDyn;
     }
@@ -82,7 +82,7 @@ AptValue* AptActionInterpreter::getVariable(AptValue* pScope, AptValue* pTarget,
     }
     else
     {
-        nKind = getContext(pScope, pTarget, pName, &pContext, &ctxName);   // FLAG: path parser
+        nKind = getContext(pScope, pTarget, pName, &pContext, &ctxName);   // homed path parser (AptActionInterpreterContext.cpp)
         pLeaf = &ctxName;
     }
 
@@ -93,9 +93,9 @@ AptValue* AptActionInterpreter::getVariable(AptValue* pScope, AptValue* pTarget,
     // 1) plain-name child of the resolved context; 2) the function scope chain.
     AptValue* pFound = 0;
     if (nKind == 1 && pContext)
-        pFound = pContext->findChild(pLeaf, pTarget);                      // FLAG: findChild
+        pFound = pContext->findChild(pLeaf, pTarget);                      // homed (AptValueFindChild.cpp)
     if (!pFound && nSearchScopeChain)
-        pFound = AptLookupScopeChain(this, pLeaf);                  // FLAG: frame stack
+        pFound = AptLookupScopeChain(this, pLeaf);                  // homed (AptFrameStack.cpp)
 
     if (!pFound)
     {
@@ -106,7 +106,7 @@ AptValue* AptActionInterpreter::getVariable(AptValue* pScope, AptValue* pTarget,
             if (!pFound)
             {
                 AptValue* pTgt = (nAllowSelf && nDirect) ? pContext : pTarget;
-                pFound = pContext->findChild(pLeaf, pTgt);                 // FLAG: findChild
+                pFound = pContext->findChild(pLeaf, pTgt);                 // homed (AptValueFindChild.cpp)
             }
             // 5) the _level / global-object fallback (only when not targeting).
             if (!pFound && !pTarget)

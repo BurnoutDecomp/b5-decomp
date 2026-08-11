@@ -1,7 +1,7 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
 
 #include <cstring>   // memset
-#include <cstdlib>   // malloc / free (the PC heap leaf -- see DOGMA_Malloc below)
+#include <cstdlib>   // (the retired CRT-heap leaf backing; kept for the debug/guard paths)
 #include <intrin.h>  // _Interlocked* (MSVC)
 
 // TEMPORARY DEBUG: guard-page allocator for the DOGMA pool -- every Allocate gets
@@ -44,40 +44,41 @@ void DogmaGuard_QueueRevoke(void* p)
 }
 #endif
 
+// The host user-function table the heap-leaf hook slots live in (Apt.h; defined
+// in CgsAptAux.cpp -- the console dword_8324E818 object).
+#include "SDKs/EATech/include/Apt/Apt.h"
+extern AptUserFunctions gAptFuncs;   // dword_8324E818 (CgsAptAux.cpp)
+
 // ---------------------------------------------------------------------------
 // DOGMA heap leaf primitives -- the bottom of the DOGMA pool allocator.
 //
-// On X360 these are three install-hook function pointers (dword_8324E818 /
-// dword_8324E81C / dword_8324E820) that the boot path points at the active EA
-// general heap; the dispatch is a single indirect call -- DOGMA_Malloc(48) is a
-// plain `malloc(48)` returning an unaligned-but-suitably-aligned block (see
-// AptAllocatorInitialize @ 0x82ADD118, which calls dword_8324E818(48) for the
-// pool-manager objects). The DOGMA_PoolManager above does all the real
-// sub-allocation/free-list bookkeeping; this leaf only has to hand back a raw,
-// at-least-4-byte-aligned block of the requested size and give it back.
-//
-// FLAG (PC boundary): on PC we back the leaf with the C runtime heap directly
-// (the established "PC-IO-at-the-leaf" pattern, as used by the EAStringC
-// bring-up fallback and the NFSMix MixerAllocator). malloc's guaranteed
-// max_align_t alignment (>= 16) comfortably covers DOGMA's per-free-item dword
-// bookkeeping. If/when the EA general heap is wired on PC, these three leaves
-// are the single swap point -- nothing above them changes.
+// On X360 these are the three host-heap hook slots at dword_8324E818 /
+// dword_8324E81C / dword_8324E820 -- the FIRST THREE members of the gAptFuncs
+// host user-function table (Apt.h: pfnMemAlloc +0x00 / pfnMemFree +0x04 /
+// pfnMemFreeSize +0x08; dword_8324E818 == &gAptFuncs), installed by
+// CgsGui::AptAux::ConstructApt @0x5BA0F8 with CgsGui::AptCallbackMemory::Alloc
+// @0x828491C8 / Free @0x828492A8 / FreeSize @0x82849358 (the AptAux data-handler
+// heap). The dispatch is a single indirect call through the slot -- exactly how
+// AptAllocatorInitialize @0x82ADD118 calls dword_8324E818(48) for the
+// pool-manager objects. Every DOGMA pool reach runs inside AptAux::Prepare ->
+// InitializeApt, AFTER ConstructApt installed the hooks and
+// mAptDataHandler.Prepare wired the allocator (CgsAptAux.cpp); the one static
+// DOGMA object, gAptValueGCPool(0,0), early-outs before allocating, so the
+// through-the-table call is live at every reach.
 // ---------------------------------------------------------------------------
 void* DOGMA_Malloc(size_t nSize)
 {
-    return ::malloc(nSize);                  // FLAG: X360 dword_8324E818(size)
+    return gAptFuncs.pfnMemAlloc(nSize);     // X360 dword_8324E818(size) == gAptFuncs.pfnMemAlloc
 }
 
 void DOGMA_Free(void* pBlock)
 {
-    ::free(pBlock);                          // FLAG: X360 dword_8324E81C(ptr)
+    gAptFuncs.pfnMemFree(pBlock);            // X360 dword_8324E81C(ptr) == gAptFuncs.pfnMemFree
 }
 
-void DOGMA_FreeSized(void* pBlock, size_t /*nSize*/)
+void DOGMA_FreeSized(void* pBlock, size_t nSize)
 {
-    // The size is bookkeeping the X360 hook forwards to a sized-free heap; the C
-    // runtime heap tracks the block size itself, so the leaf ignores it.
-    ::free(pBlock);                          // FLAG: X360 dword_8324E820(ptr, size)
+    gAptFuncs.pfnMemFreeSize(pBlock, nSize); // X360 dword_8324E820(ptr, size) == gAptFuncs.pfnMemFreeSize
 }
 
 // ===========================================================================
@@ -179,7 +180,7 @@ DOGMA_PoolManager::DOGMA_PoolManager(size_t mainPoolSizeBytes,
     mnOffsetToStoreNext = nOffsetToStoreNextInFreeItem >> 2;                   // a1[4] = v30 >> 2
     mnOffsetToStoreSize = nOffsetToStoreSizeInFreeItem >> 2;                   // a1[5] = a8 >> 2
 
-    // FLAG (PC static-init accommodation): the X360 never constructs a DOGMA pool with a
+    // PC static-init accommodation (boot-verified): the X360 never constructs a DOGMA pool with a
     // 0-byte main size -- gAptValueGCPool is HEAP-allocated at AptInit (AptAllocatorInitialize
     // @0x82ADD118), AFTER StaticInitialize() sets the item sizes, with real pool sizes. On PC
     // gAptValueGCPool is a static object constructed (0,0) before StaticInitialize runs, so
@@ -194,8 +195,8 @@ DOGMA_PoolManager::DOGMA_PoolManager(size_t mainPoolSizeBytes,
     }
 
     // Per-size free-list head array: one head per 4-byte size bucket up to the
-    // max allocation, plus the zero bucket -- ((maxSize>>2)+1) buckets. FLAG (x64
-    // widening): each bucket is a uintptr_t* (the free-list head), so the array is
+    // max allocation, plus the zero bucket -- ((maxSize>>2)+1) buckets. (x64
+    // widening, Phase-0 regime): each bucket is a uintptr_t* (the free-list head), so the array is
     // sizeof(uintptr_t*) per bucket -- NOT the console literal 4. Allocating 4*N
     // here left buckets 33..64 (for maxSize 256) past the block, read as garbage
     // free-list pointers by Allocate -> returned to the caller -> access violation.
@@ -218,7 +219,19 @@ DOGMA_PoolManager::~DOGMA_PoolManager()
 {
     // Free the per-size free-list head array (same byte count it was allocated --
     // sizeof(uintptr_t*) per bucket on x64; see the ctor).
-    DOGMA_FreeSized(mpaFirstFreeBySize, sizeof(uintptr_t*) * ((mnMaxSizeAllocation >> 2) + 1));
+    //
+    // The console frees it UNCONDITIONALLY (0x82ADB950: `dword_8324E820(*a1, 4 * ((a1[3] >> 2) + 1))`
+    // with no null test) because it never destructs a DEFERRED pool: every X360 DOGMA_PoolManager
+    // is heap-constructed at AptInit (AptAllocatorInitialize @0x82ADD118) with real sizes, so
+    // mpaFirstFreeBySize is always live. This guard is the MIRROR of the ctor's PC static-init
+    // accommodation above -- the (0,0) static AptValueGC_PoolManager takes the ctor's early return
+    // with mpaFirstFreeBySize == 0 / mpFirstPool == 0, and its CRT-exit destructor was handing that
+    // null straight to DOGMA_FreeSized -> gAptFuncs.pfnMemFreeSize -> AptCallbackMemory::FreeSize/
+    // Free -> AptDataHandler::AptFree(null), firing the (faithful) console null-free assert.
+    // Deferred construction must have deferred destruction; the pool-chain loop below already
+    // mirrors it, this is the same fix for the free-list array.
+    if (mpaFirstFreeBySize)
+        DOGMA_FreeSized(mpaFirstFreeBySize, sizeof(uintptr_t*) * ((mnMaxSizeAllocation >> 2) + 1));
 
     // Free every pool in the chain. (while, not do/while: an empty/deferred pool has
     // mpFirstPool == 0 -- see the 0-size guard in the ctor -- and must not be dereffed.)
@@ -267,7 +280,7 @@ void* DOGMA_PoolManager::Allocate(size_t nAllocatedSize)
         return pRegion + nOffset;
     }
 #endif
-    // Round the request up, then clamp to the minimum. FLAG (x64 alignment fix): the
+    // Round the request up, then clamp to the minimum. (x64 alignment fix, Phase-0 regime): the
     // console rounds to a 4-BYTE multiple (v3 = (v3&~3)+4) -- fine for its 32-bit
     // pointers, but the pool CARVES blocks sequentially (ConsumeBytes), so a block
     // whose size is 4-mod-8 (e.g. a 12/20-byte request) leaves every SUBSEQUENT block
@@ -339,7 +352,7 @@ void* DOGMA_PoolManager::Allocate(size_t nAllocatedSize)
     else if (mbTrackOutsideAllocations)
     {
         // -- Tracked outside allocation: wrap with an intrusive list node and
-        //    push it onto the outside-allocation list. FLAG (x64 widening): the node
+        //    push it onto the outside-allocation list. (x64 widening, Phase-0 regime): the node
         //    header is pNext+pPrev = 2*sizeof(ptr) bytes (== GetStructOverHead(), 16 on
         //    x64), and GetReturnedPointer() returns base+16; the console literal `+8`
         //    under-allocated by 8 -> the payload overran the block. Use the real overhead.
@@ -382,7 +395,7 @@ bool DOGMA_PoolManager::Deallocate(void* pNowFree, size_t nAllocatedSize)
         return true;
     }
 #endif
-    // FLAG (x64 alignment fix -- MUST mirror Allocate so the per-size free-list
+    // x64 alignment fix (Phase-0 regime -- MUST mirror Allocate so the per-size free-list
     // buckets match): round to an 8-byte multiple, not the console's 4-byte one.
     size_t nSize = nAllocatedSize;                          // v5
     if (nSize < mnMinimumAllocationSize)
@@ -418,7 +431,7 @@ bool DOGMA_PoolManager::Deallocate(void* pNowFree, size_t nAllocatedSize)
         size_t nFreeSize;                                   // v7
         if (mbTrackOutsideAllocations)
         {
-            nFreeSize = nAllocatedSize + 8;
+            nFreeSize = nAllocatedSize + OutsideAllocationT::GetStructOverHead();   // console a3+8 == payload + 2*sizeof(ptr); x64 node overhead is 16 -- must mirror Allocate's widened node
 
             // Recover the list node sitting in front of the returned pointer.
             OutsideAllocationT* pNode =

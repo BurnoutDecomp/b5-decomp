@@ -34,8 +34,9 @@ struct AptCIH;             // SDKs/EATech/include/Apt/AptCIH.h (the movie-clip s
 struct AptCharacterInst;   // SDKs/EATech/include/Apt/AptCharacterInst.h
 class EAStringC;          // SDKs/EATech/include/Apt/AptString/EAString.h (path/name buffers)
 
-// FLAG (runtime-only AptActionInterpreter init parameters -- the block initialize()
-// reads; not serialised, so it is modelled by its console field offsets). DEFINED
+// Runtime-only AptActionInterpreter init parameters -- the block initialize() reads.
+// The host (AptUpdateInitialize) hands the console-layout parameter block through
+// unchanged, so it is deliberately modelled by its console field offsets. DEFINED
 // here (was a TU-local struct in AptActionInterpreterStackOps.cpp; promoted to the
 // header so the GUI Apt host -- BrnGuiAptRuntime.cpp -- can construct one to call
 // AptActionInterpreter::initialize, the X360 AptUpdateInitialize's job). Layout is
@@ -115,8 +116,8 @@ public:
                           int nAllowSelf, int nSearchScopeChain, int nDirect);
 
     // getContext @0x8194CC -- parse a variable PATH (slash/dot syntax) into its
-    // (context object, leaf name) and return the context kind. FLAG: the 115-line
-    // path parser is its own follow-on TU; declared so getVariable can call it.
+    // (context object, leaf name) and return the context kind. The 115-line path
+    // parser is homed in AptActionInterpreterContext.cpp.
     int getContext(AptValue* pScope, AptValue* pTarget, const EAStringC* pPath,
                    AptValue** ppOutContext, EAStringC* pOutName);
 
@@ -135,7 +136,7 @@ public:
     // Pop the top value, Release the stack's ref, and return it (the returned
     // pointer has already been Release()'d -- callers use it before it can die,
     // matching the console). Returns null on an empty stack.
-    AptValue*  stackPop();                            // @0x7F3248
+    void       stackPop();                            // @0x7F3248 (x64 QEAAXXZ: void)
     // Pop nCount values, releasing each (no-op unless mnStackTop >= nCount).
     void       stackPop(int nCount);                  // @0x7FDB68
     // As stackPop(nCount) but with the extra nCount>0 guard (bounds-safe form).
@@ -181,8 +182,9 @@ public:
 
     // GetDictEntry -- fetch string-constant dictionary slot nIndex (mpConstantPool[i],
     // console *(4*idx + a1[17])). The console reads the slot inline at each Push*Dict*
-    // op; homed here with a null guard (FLAG hardening: an x64 pool miss can leave a
-    // slot null where the console pre-seeds -- returns gpUndefinedValue then). Body in
+    // op; homed here with a null guard (deliberate x64 hardening, 2026-07-05 MAIN
+    // init-action AV: a pool miss can leave a slot null where the console pre-seeds
+    // -- returns gpUndefinedValue then). Body in
     // AptActionInterpreterInterpHelpers.cpp.
     AptValue*  GetDictEntry(unsigned int nIndex);
 
@@ -299,7 +301,7 @@ public:
 
     // getName @0x82AF75C8 / getName2 @0x82AF7540 -- build the slash/dot path name of
     // a value into pOut (getName2 also appends a trailing "/" for an empty path).
-    // FLAG: the core path walk (sub_82AF7400) is the path-builder follow-on.
+    // The core path walk (sub_82AF7400) is AptBuildPathName, InterpHelpers.cpp.
     void getName (AptValue* pValue, EAStringC* pOut);
     void getName2(AptValue* pValue, EAStringC* pOut);
 
@@ -681,11 +683,27 @@ public:
     // Value / spRegBlock*). (Renamed from field_40/mpRegisters "register window".)
     uint32_t   mnConstantPoolCount; // [c:0x40] dictionary/constant-pool entry count
     AptValue** mpConstantPool;      // [c:0x44] dictionary/constant-pool base (AptValue* table)
-    uint32_t   field_48[6];       // [c:0x48..0x5C] unmapped
-    AptValue*  mpAbortValue;      // [c:0x60] the thrown value (null = no abort) -- Throw sets it,
-                                  // runStream checks it after each op and unwinds. x64: a pointer
-                                  // (the console int slot held the 32-bit AptValue*), not an int.
-    int        mnStackBase;       // [c:0x64] operand-stack base this run unwinds to (Pop won't go below it)
-    uint8_t    mbSkipTraceBytecodes; // [c:0x68]
-    uint8_t    field_69;          // [c:0x69]
+    // The [c:0x48..0x5C] region decoded per the B4Extern PDB (apt 0.19.02 names
+    // 'input' / 'apRegisters[4]' / 'nThisCount'), the ONLY decomposition that lands
+    // mpAbortValue on the x64-proven +0x98 (getThrownValue @0x14084E5D0 reads
+    // [this+98h]; the old `uint32_t field_48[6]` left it 0x18 bytes short):
+    uint32_t   mnInput;             // [c:0x48] (B4 'input')
+    AptValue*  mapRegisters[4];     // [c:0x4C..0x58] (B4 'apRegisters')
+    int        mnThisCount;         // [c:0x5C] (B4 'nThisCount')
+    AptValue*  mpAbortValue;      // [c:0x60] x64 +0x98: the thrown value (null = no abort;
+                                  // B4 name mpThrownValue) -- Throw sets it, runStream
+                                  // checks it after each op and unwinds. x64: a pointer.
+    int        mnStackBase;       // [c:0x64] x64 +0xA0: operand-stack base this run unwinds to
+    uint8_t    mbSkipTraceBytecodes; // [c:0x68] x64 +0xA4
+    uint8_t    field_69;          // [c:0x69] x64 +0xA5
+
+    // Layout pinned against the x64 XB1 export (never called; member body gives
+    // complete-class offsetof context).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptActionInterpreter, mnStackTop)   == 0x00, "x64 stackAt: count at [this+0] @0x14085D300");
+        static_assert(offsetof(AptActionInterpreter, mpStack)      == 0x08, "x64 stackAt: array at [this+8]");
+        static_assert(offsetof(AptActionInterpreter, mpAbortValue) == 0x98, "x64 getThrownValue @0x14084E5D0: [this+98h]");
+        static_assert(offsetof(AptActionInterpreter, mnStackBase)  == 0xA0, "x64: follows the thrown value");
+    }
 };

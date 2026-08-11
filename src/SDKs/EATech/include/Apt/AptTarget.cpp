@@ -50,33 +50,34 @@ AptTarget* gpAptTarget        = nullptr;   // off_8324E574
 AptTarget* gpAptTargetTLS     = nullptr;   // off_8324E578
 
 // =====================================================================
-//  Un-homed callees/globals referenced below (declared by name + FLAG'd). Bodies
-//  are separate TUs; declared here so this TU links.
+//  Sibling-owned callees/globals referenced below. Every one is HOMED now
+//  (AptGlobals.cpp / AptGC.cpp / AptRenderLinkStubs.cpp / AptLoader.cpp);
+//  declared extern here so this TU links against the single definitions.
 // =====================================================================
 
-// FLAG (un-homed): the EA TLS slot the Apt context pointer is mirrored into
-// (X360 unk_8324E814). Shutdown re-publishes the active target into it whenever
-// it swaps the global pointers. Defined by the Apt boot TU; declared extern.
+// The EA TLS slot the Apt context pointer is mirrored into (X360 unk_8324E814).
+// Shutdown re-publishes the active target into it whenever it swaps the global
+// pointers. Defined in AptRenderLinkStubs.cpp (the host TLS shim).
 extern EA::Thread::ThreadLocalStorage gAptTargetTls;   // unk_8324E814
 
-// FLAG (un-homed): byte_8324E7C9 -- the "in a shutdown / on the owning thread"
-// guard. Shutdown forces it to 1 across the sub-object teardown, then restores it,
-// and uses its pre-shutdown value to decide whether the render-root anchor can be
-// freed inline (this thread owns it) or must be deferred to the render queue.
+// byte_8324E7C9 -- the "in a shutdown / on the owning thread" guard. Shutdown
+// forces it to 1 across the sub-object teardown, then restores it, and uses its
+// pre-shutdown value to decide whether the render-root anchor can be freed inline
+// (this thread owns it) or must be deferred. Defined in AptGlobals.cpp.
 extern unsigned char gbAptInShutdown;   // byte_8324E7C9
 
-// FLAG (un-homed): dword_8324E504 -- the render/main thread id (a pointer-sized id;
+// dword_8324E504 -- the render/main thread id (a pointer-sized id;
 // EA::Thread::ThreadId == void*). Compared against GetThreadId() to decide if the
-// caller may free the render-root anchor inline. Owned by the Apt boot TU.
+// caller may free the render-root anchor inline. Defined in AptGlobals.cpp.
 extern EA::Thread::ThreadId gAptRenderThreadId;   // dword_8324E504
 
-// FLAG (un-homed): dword_8324E7D8 -- the global render-manager deferred-teardown
-// queue. When Shutdown runs off the render thread it hands the render-root anchor
-// here for the render thread to free later. Owned by the render-manager TU.
+// dword_8324E7D8 -- the global render-manager deferred-teardown queue. When
+// Shutdown runs off the render thread it hands the render-root anchor here for
+// the render thread to free later. Defined in AptGlobals.cpp.
 extern AptRenderManagerQueue gAptRenderManagerQueue;   // dword_8324E7D8
 
-// FLAG (un-homed AptUpdate facade @0x82B0xxxx): walk the per-target zombie vector,
-// retiring the entries flagged this pass. Body its own (Apt update) TU.
+// AptUpdateZombieVector (XB1 sub_140830A40) -- walk the per-target zombie vector,
+// retiring the entries flagged this pass. HOMED in AptGC.cpp.
 void* AptUpdateZombieVector(char bAll);
 
 // MakeAptAnimationTarget (the @0x82AFF648 ctor, built from the AptUpdateParams block)
@@ -91,11 +92,10 @@ void* AptUpdateZombieVector(char bAll);
 // AptAnimationTarget::CleanRemList is now called directly (static member; the AptAnimationTarget_CleanRemList shim is retired).
 // ~AptAnimationTarget is now invoked explicitly on the director (the AptAnimationTarget_Destruct shim is retired).
 
-// FLAG (un-homed): ~AptLoader @0x82B... -- the X360 loader destructor drains the
-// weak loaded-file list before the block is freed. AptLoader has no homed dtor
-// (its request-layer reconstruction added no owned state needing destruction);
-// the list-drain is part of the deferred loader-completion TU. Shutdown calls the
-// explicit `pLoader->~AptLoader()` directly (the console's `~AptLoader; Deallocate`).
+// ~AptLoader @0x82AFF958 -- the loader destructor drains the loaded-file list
+// (cancelling every still-registered preload) before the block is freed. HOMED in
+// AptLoader.cpp; Shutdown calls the explicit `pLoader->~AptLoader()` directly
+// (the console's `~AptLoader; Deallocate` pair).
 
 // ---------------------------------------------------------------------
 // AptTarget::AptTarget @0x82B00160 -- pool-allocate the context's owned
@@ -116,12 +116,16 @@ AptTarget::AptTarget(const u32* pParams)
     mnConfigF = 256;
 
     // ---- the live config values, copied from the AptUpdateParams block ----
-    mnConfigA = pParams[4];   // lwz r10,0x10(r11)
-    mnConfigB = pParams[7];   // lwz r10,0x1C(r11)
-    mnConfigC = pParams[2];   // lwz r10,0x08(r11)
-    mnConfigD = pParams[1];   // lwz r10,0x04(r11)
-    mnConfigE = pParams[0];   // lwz r10,0x00(r11)
-    mnConfigF = pParams[3];   // lwz r11,0x0C(r11)
+    // x64 ctor sub_140827670: a STRAIGHT 24-byte copy (vmovups params[0..3] +
+    // vmovsd params[4..5]); params[6]/[7] are never read. (The earlier scattered
+    // [4]/[7]/[2]/[1]/[0]/[3] mapping was a mis-read of the X360 rlwinm-scheduled
+    // loads; the x64 rung-1 asm arbitrates.)
+    mnConfigA = pParams[0];
+    mnConfigB = pParams[1];
+    mnConfigC = pParams[2];
+    mnConfigD = pParams[3];
+    mnConfigE = pParams[4];
+    mnConfigF = pParams[5];
 
     // ---- mpAnimationTarget (+0x18): the 88-byte director ----
     void* pAnimMem = gpAptPseudoDataPool->Allocate(sizeof(AptAnimationTarget));   // Allocate(pool, 88)
@@ -172,8 +176,8 @@ AptTarget::AptTarget(const u32* pParams)
     }
 
     // ---- the two TBD slots (+0x24 / +0x28), zeroed last (asm order) ----
-    mpField24 = nullptr;
-    mpField28 = nullptr;
+    mpNext = nullptr;
+    mpPrevious = nullptr;
 }
 
 // AptTarget::GetAnimationTarget @0x82AD5770 (`lwz r3,0x18(r3); blr`) and
@@ -190,7 +194,7 @@ AptTarget::AptTarget(const u32* pParams)
 //  AptTarget TU (it owns the target globals + the ctor these drive).
 //
 //  LIST: off_8324E570 (gpAptTargetCurrent) is the HEAD of the instance list; each
-//  AptTarget is linked through +0x24 (mpField24 == NEXT) / +0x28 (mpField28 == PREV)
+//  AptTarget is linked through +0x24 (mpNext == NEXT) / +0x28 (mpPrevious == PREV)
 //  -- so the two "role TBD" slots in AptTarget.h are now KNOWN to be the instance-
 //  list next/prev. (Member access by name; the console offsets are documentation.)
 // =====================================================================
@@ -209,14 +213,15 @@ int gAptTargetInstanceCount = 0;   // dword_8324E57C
 // off_8324E570 is null set it to result, else walk the +0x24 next-chain to the tail and
 // append (tail->+0x24 = result; result->+0x28 = tail); unlock; return result.
 //
-// FLAG: the unk_8324E7D0 spin-lock is a NO-OP on the single-threaded PC boot path (the
-// Apt context is created once, on the main thread); omitted. The 48-byte allocation +
+// FLAG PC-platform leaf (threading): the unk_8324E7D0 spin-lock is a NO-OP on the
+// single-threaded PC boot path (the Apt context is created once, on the main
+// thread); omitted. The 48-byte allocation +
 // the ctor + the list splice are reproduced faithfully against the named AptTarget layout
 // (the console sub_82B002A0 IS the AptTarget::AptTarget ctor already homed above).
 // ---------------------------------------------------------------------
 AptTarget* AptCreateTargetInstance(const u32* pParams)
 {
-    // FLAG: spin-lock unk_8324E7D0 elided (single-threaded PC bring-up).
+    // FLAG PC-platform leaf (threading): spin-lock unk_8324E7D0 elided (single-threaded PC bring-up).
 
     ++gAptTargetInstanceCount;   // ++dword_8324E57C
 
@@ -236,13 +241,13 @@ AptTarget* AptCreateTargetInstance(const u32* pParams)
     else
     {
         AptTarget* pTail = gpAptTargetCurrent;
-        while (pTail->mpField24)                       // walk +0x24 (NEXT) to the tail
-            pTail = static_cast<AptTarget*>(pTail->mpField24);
-        pTail->mpField24    = pResult;                 // tail->+0x24 = result (link NEXT)
-        pResult->mpField28  = pTail;                   // result->+0x28 = tail (link PREV)
+        while (pTail->mpNext)                       // walk +0x24 (NEXT) to the tail
+            pTail = static_cast<AptTarget*>(pTail->mpNext);
+        pTail->mpNext    = pResult;                 // tail->+0x24 = result (link NEXT)
+        pResult->mpPrevious  = pTail;                   // result->+0x28 = tail (link PREV)
     }
 
-    // FLAG: spin-unlock unk_8324E7D0 elided.
+    // FLAG PC-platform leaf (threading): spin-unlock unk_8324E7D0 elided.
     return pResult;
 }
 
@@ -253,20 +258,21 @@ AptTarget* AptCreateTargetInstance(const u32* pParams)
 // unlock; return result. i.e. it stores the target into gpAptTarget (the canonical
 // "current context" every Apt subsystem dereferences) + gpAptTargetTLS.
 //
-// FLAG: the X360 sets only the two GLOBAL pointers here; the per-thread EA TLS mirror
-// (unk_8324E814 == gAptTargetTls) that GetTarget() reads is published by the (un-homed)
-// AptUpdateInitialize / per-thread setup. On the single-threaded PC port we ALSO publish
-// into that TLS mirror here (exactly as AptTarget::Shutdown does) so GetTarget() returns
-// the live context -- otherwise GetTarget() (which reads the TLS slot) would stay null.
-// The spin-lock is elided (single-threaded bring-up).
+// FLAG PC-platform leaf (threading/TLS): the X360 sets only the two GLOBAL pointers
+// here; the per-thread EA TLS mirror (unk_8324E814 == gAptTargetTls) that GetTarget()
+// reads is published by the per-thread setup around AptUpdateInitialize (HOMED in
+// AptInit.cpp). On the single-threaded PC port we ALSO publish into that TLS mirror
+// here (exactly as AptTarget::Shutdown does) so GetTarget() returns the live context
+// -- otherwise GetTarget() (which reads the TLS slot) would stay null. The spin-lock
+// is elided (single-threaded bring-up).
 // ---------------------------------------------------------------------
 AptTarget* AptChangeTargetInstance(AptTarget* pTarget)
 {
     gpAptTarget    = pTarget;   // off_8324E574 = result (the canonical current context)
     gpAptTargetTLS = pTarget;   // off_8324E578 = result
 
-    // PC: mirror into the EA TLS slot GetTarget() reads (FLAG: console does this in the
-    // un-homed AptUpdateInitialize / per-thread setup, not here).
+    // PC: mirror into the EA TLS slot GetTarget() reads (console does this in the
+    // per-thread setup around AptUpdateInitialize -- AptInit.cpp -- not here).
     gAptTargetTls.SetValue(pTarget);
 
     return pTarget;
@@ -282,20 +288,21 @@ AptTarget* AptChangeTargetInstance(AptTarget* pTarget)
 // if (PREV) PREV->+0x24 = NEXT; if (NEXT) NEXT->+0x28 = PREV; AptTarget::Shutdown(a1);
 // result = Deallocate(off_8324D808, a1, 48); unlock; return result.
 //
-// FLAG: the unk_8324E7D0 spin-lock (acquire at top, release at bottom) is a NO-OP on the
-// single-threaded PC bring-up (the Apt context list is edited only on the main thread);
+// FLAG PC-platform leaf (threading): the unk_8324E7D0 spin-lock (acquire at top,
+// release at bottom) is a NO-OP on the single-threaded PC bring-up (the Apt context
+// list is edited only on the main thread);
 // both are elided -- matching AptCreateTargetInstance above. The unlink + the 48-byte
 // Deallocate are reproduced faithfully against the named AptTarget list slots
-// (mpField24 == NEXT / mpField28 == PREV, per the list note above).
+// (mpNext == NEXT / mpPrevious == PREV, per the list note above).
 // ---------------------------------------------------------------------
 bool AptDestroyTargetInstance(AptTarget* pTarget)
 {
-    // FLAG: spin-lock unk_8324E7D0 elided (single-threaded PC bring-up).
+    // FLAG PC-platform leaf (threading): spin-lock unk_8324E7D0 elided (single-threaded PC bring-up).
 
     --gAptTargetInstanceCount;   // --dword_8324E57C
 
-    AptTarget* pNext = static_cast<AptTarget*>(pTarget->mpField24);   // v9  = *(a1+0x24) NEXT
-    AptTarget* pPrev = static_cast<AptTarget*>(pTarget->mpField28);   // v10 = *(a1+0x28) PREV
+    AptTarget* pNext = static_cast<AptTarget*>(pTarget->mpNext);   // v9  = *(a1+0x24) NEXT
+    AptTarget* pPrev = static_cast<AptTarget*>(pTarget->mpPrevious);   // v10 = *(a1+0x28) PREV
 
     // Detach from the three context globals if they still point at this instance.
     if (pTarget == gpAptTarget)         // off_8324E574 -> NEXT
@@ -307,15 +314,15 @@ bool AptDestroyTargetInstance(AptTarget* pTarget)
 
     // Splice out of the doubly-linked instance list.
     if (pPrev)
-        pPrev->mpField24 = pNext;       // *(v10+0x24) = v9   prev->NEXT = this->NEXT
+        pPrev->mpNext = pNext;       // *(v10+0x24) = v9   prev->NEXT = this->NEXT
     if (pNext)
-        pNext->mpField28 = pPrev;       // *(v9+0x28)  = v10  next->PREV = this->PREV
+        pNext->mpPrevious = pPrev;       // *(v9+0x28)  = v10  next->PREV = this->PREV
 
     // Tear the context down and free the 48-byte block.
     pTarget->Shutdown();                // AptTarget::Shutdown(a1)
     bool bResult = gpAptPseudoDataPool->Deallocate(pTarget, sizeof(AptTarget));   // Deallocate(pool, a1, 48)
 
-    // FLAG: spin-unlock unk_8324E7D0 elided.
+    // FLAG PC-platform leaf (threading): spin-unlock unk_8324E7D0 elided.
     return bResult;
 }
 
@@ -425,7 +432,7 @@ AptTarget* GetTarget()
 // AptTarget_GetLoader -- the loader the target holds at +0x1C. PS3
 // _ZN9AptTarget9GetLoaderEv @0xF15E60: `return *(this + 7);` (the 8th pointer word
 // == mpLoader). Routed through the named member so the x64 layout stays correct
-// (the AptLoader.h FLAG that introduced this accessor instead of the literal offset).
+// (the accessor replaced the console literal offset -- the pervasive x64-port rule).
 // ---------------------------------------------------------------------
 AptLoader* AptTarget::GetLoader()
 {

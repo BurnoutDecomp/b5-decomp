@@ -37,6 +37,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include <cstddef>   // offsetof (_AssertLayout)
 #include <cstdint>
 
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC keys (friend access)
@@ -56,27 +57,39 @@ struct AptHashItem
 };
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the Apt string-pool TU, not yet built): the two magic property
-// keys the table routes to the fast-slots. StringPool::saConstant is the
-// __proto__ key (hash 27581 -> mp__Proto__); gAptKeyPrototype is the prototype
-// key (the binary's dword_8324E580/0x8324E698 key bodies, hash 1689 ->
-// mpPrototype). Declared extern so Set/Lookup's special-case compiles; the hash
-// literals are their case-folded FNV.
+// The two magic property keys the table routes to the fast-slots, both HOMED:
+// StringPool::saConstant (defined in AptStringPool.cpp) carries the __proto__
+// key (hash 27581 -> mp__Proto__); gAptKeyPrototype (AptGlobals.cpp,
+// "prototype") is the prototype key (the binary's dword_8324E580/0x8324E698 key
+// bodies, hash 1689 -> mpPrototype). The hash literals are their case-folded FNV.
 // ---------------------------------------------------------------------------
 // StringPool is the AS string recycler/pool -- a CLASS (AptString.h declares
 // `friend class StringPool`), not a namespace. Only its saConstant key (the
-// __proto__ key) is needed here; the full class + the static's definition are the
-// string-pool TU's follow-on.
+// __proto__ key) is needed here; the mini declaration below matches the full
+// class (AptString/StringPool.h), whose saConstant is defined in AptStringPool.cpp.
 class StringPool { public: enum { KU_CONSTANT_COUNT = 88 }; static EAStringC saConstant[KU_CONSTANT_COUNT]; };
 extern const EAStringC gAptKeyPrototype;
 
 struct AptNativeHash
 {
-    int32_t      mnCapacity;          // +0x0
-    AptHashItem* mpTable;             // +0x4
-    AptValue*    mp__Proto__;         // +0x8
-    AptValue*    mpPrototype;         // +0xC
-    int32_t      mnEventHandlerMask;  // +0x10
+    int32_t      mnCapacity;          // +0x00 (x64; console +0x0)
+    AptHashItem* mpTable;             // +0x08 (x64; console +0x4)
+    AptValue*    mp__Proto__;         // +0x10 (x64; console +0x8)
+    AptValue*    mpPrototype;         // +0x18 (x64; console +0xC)
+    int32_t      mnEventHandlerMask;  // +0x20 (x64; console +0x10)
+
+    // Layout pinned against the x64 XB1 accessors (never called; member body gives
+    // complete-class offsetof context).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptNativeHash, mpTable)            == 0x08, "x64: GetAt/IsEmpty read [this+8] (@0x140838200/@0x14083B0A0)");
+        static_assert(offsetof(AptNativeHash, mp__Proto__)        == 0x10, "x64: Get__Proto__ @0x140839E90");
+        static_assert(offsetof(AptNativeHash, mpPrototype)        == 0x18, "x64: GetPrototype @0x140839810");
+        static_assert(offsetof(AptNativeHash, mnEventHandlerMask) == 0x20, "x64: Has/Set/RemoveEventHandler [this+20h]");
+        static_assert(sizeof(AptNativeHash)  == 0x28, "x64: AptExtObject ctor heap-allocs the hash with size 40; embedded at AptValueWithHash+0x10");
+        static_assert(sizeof(AptHashItem)    == 0x10, "x64: GetAt bucket stride 16 (@0x140838200)");
+        static_assert(offsetof(AptHashItem, mpValue) == 0x08, "x64: GetAt reads [bucket+8]");
+    }
 
     explicit AptNativeHash(int32_t nCapacity);   // @0x82AD9EA0
     ~AptNativeHash();                             // X360: dtor folds into DestroyGCPointers

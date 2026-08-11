@@ -96,9 +96,13 @@ namespace TriggerEntityModuleIO
         static void _AssertLayout();
 
     private:
-        // The IOBuffer base is a single status byte; the X360 places mInputInterface at this+4,
-        // so pad bytes +1..+3 explicitly.
-        u8             maStatusPad[3];      // +1..+3 (force +4)
+        // The IOBuffer base is a single status byte; the X360 places mInputInterface at this+4.
+        // NOTE (2026-08-11): that +4 is a 32-BIT-POINTER offset. mInputInterface's leading
+        // VariableEventQueue<131072,16> starts with an event pointer, so on this x64 host
+        // alignof(InputInterface) == 8 and the member lands at +8 whatever this pad says --
+        // the pad is kept only to mirror the console's explicit +1..+3 gap. Access is by name;
+        // see the corrected _AssertLayout in BrnTriggerEntityModuleIO_Accessors.cpp.
+        u8             maStatusPad[3];      // +1..+3 (console: forces +4)
         InputInterface mInputInterface;     // +4
     };
 

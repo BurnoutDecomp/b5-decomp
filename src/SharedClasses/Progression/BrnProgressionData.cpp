@@ -21,7 +21,7 @@ namespace BrnProgression
 const ProgressionRankData* ProgressionData::GetProgressionRankData(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < muProgressionRankCount, "luIndex < muProgressionRankCount");
-    return &mpaProgressionRanks[luIndex];
+    return &GetProgressionRanks()[luIndex];
 }
 
 // The event-junction accessors BrnProgressionData.h:113-114 declares and delegates to this TU
@@ -36,14 +36,14 @@ u32 ProgressionData::GetEventJunctionCount() const
 const EventJunction* ProgressionData::GetEventJunction(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < muEventJunctionCount, "luIndex < muEventJunctionCount");
-    return &mpaEventJunctions[luIndex];
+    return &GetEventJunctions()[luIndex];
 }
 
 // X360 0x823569F0. Bounds-checked accessor into the trophy-unlock table (16-byte stride).
 TrophyUnlockData* ProgressionData::GetTrophyUnlock(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < muTrophyUnlockCount, "luIndex < muTrophyUnlockCount");
-    return &mpaTrophyUnlocks[luIndex];
+    return &GetTrophyUnlocks()[luIndex];
 }
 
 // X360 0x82676820. Returns an OpponentBalanceData whose ahead/behind catch-up graphs are the
@@ -53,10 +53,10 @@ TrophyUnlockData* ProgressionData::GetTrophyUnlock(u32 luIndex) const
 OpponentBalanceData ProgressionData::GetInterpolatedAIBalanceGraph(s32 liIndexA, s32 liIndexB, f32 lfBlend) const
 {
     CGS_ASSERT(static_cast<u32>(liIndexA) < muAIBalanceCount, "luIndex < muAIBalanceCount");
-    const OpponentBalanceData& lrBalanceA = mpaAIBalances[liIndexA];
+    const OpponentBalanceData& lrBalanceA = GetAIBalances()[liIndexA];
 
     CGS_ASSERT(static_cast<u32>(liIndexB) < muAIBalanceCount, "luIndex < muAIBalanceCount");
-    const OpponentBalanceData& lrBalanceB = mpaAIBalances[liIndexB];
+    const OpponentBalanceData& lrBalanceB = GetAIBalances()[liIndexB];
 
     OpponentBalanceData lResult;
     memset(&lResult, 0, sizeof(lResult));
@@ -86,7 +86,7 @@ s32 ProgressionData::FindRivalIndexFromId(CgsID lRivalId) const
     {
         do
         {
-            if (mpaRivals[liRivalIndex].GetId() == lRivalId)
+            if (GetRivals()[liRivalIndex].GetId() == lRivalId)
             {
                 break;
             }
@@ -95,6 +95,41 @@ s32 ProgressionData::FindRivalIndexFromId(CgsID lRivalId) const
         while (liRivalIndex < miRivalCount);
     }
     return liRivalIndex;
+}
+
+// ---- ADDITIVE (SetupParRivals wave, 2026-08-11) -------------------------------------------
+// The by-index rival accessor BrnProgressionData.h:107-108 declares and delegates to this TU.
+// It has NO standalone X360 symbol -- the console folds it into every caller -- so its shape is
+// recovered from two independent inline expansions, which agree instruction for instruction:
+//
+//   StreetManager::FindRivalsByDistrict @0x82336360 (loop body 0x82363D8..0x82363FC)
+//       cmpw  cr6, r29, r11         ; r29 == liIndex, r11 == *(pd + 0x2C) == miRivalCount
+//       blt   cr6, ok               ; ...the bound is a SIGNED `liIndex < miRivalCount`,
+//       bl    BeginAssert           ;    with NO liIndex >= 0 half (unlike GetRoad's)
+//       li    r5, 0x1CC             ; BrnProgressionData.h:460
+//       <"liIndex < miRivalCount", "..\..\..\SharedClasses\Progression/BrnProgressionData.h">
+//     ok: lwz  r11, 0x28(r28)       ; == mpaRivals (console +0x28)
+//         add  r11, r11, r31        ; r31 steps by 0x38 == the 56-byte Rival stride
+//
+//   StreetManager::SetupParRivals @0x8233F560 (fallback leg 0x8233F804..0x8233F838) --
+//   the SAME assert (r5 = 0x1CC, same two literals) followed by `lwz r11, 0x28(r28)` and a
+//   `ld r11, 0(r11)` for GetRival(0)->GetId(). Note the console RE-EVALUATES the whole
+//   accessor (assert included) once per stored id, which is why the assert lives HERE and the
+//   callers never duplicate it -- exactly what the header's note says.
+//
+// The count word is re-read from the object on every evaluation in both sites (never hoisted),
+// so it is read through the member here rather than cached by the caller. Table access is
+// through the serialised-slot helper GetRivals(), so no console byte offset is transcribed.
+const Rival* ProgressionData::GetRival(s32 liIndex) const
+{
+    CGS_ASSERT(liIndex < miRivalCount, "liIndex < miRivalCount");
+    return &GetRivals()[liIndex];
+}
+
+Rival* ProgressionData::GetRival(s32 liIndex)
+{
+    CGS_ASSERT(liIndex < miRivalCount, "liIndex < miRivalCount");
+    return &GetRivals()[liIndex];
 }
 
 // X360 0x82676AC8. Same scan as FindRivalIndexFromId, but returns the matching Rival pointer (or
@@ -106,7 +141,7 @@ const Rival* ProgressionData::FindRival(CgsID lRivalId) const
     {
         do
         {
-            if (mpaRivals[liRivalIndex].GetId() == lRivalId)
+            if (GetRivals()[liRivalIndex].GetId() == lRivalId)
             {
                 break;
             }
@@ -119,7 +154,7 @@ const Rival* ProgressionData::FindRival(CgsID lRivalId) const
     {
         return 0;
     }
-    return &mpaRivals[liRivalIndex];
+    return &GetRivals()[liRivalIndex];
 }
 
 // X360 0x82676B18. Walks the CarOpponentSet table for sets whose player-car id matches lCarModelId.
@@ -132,7 +167,7 @@ CarOpponentSet* ProgressionData::FindCarOpponentSet(CgsID lCarModelId, s32 liPla
 
     for (u32 luIndex = 0; luIndex < muCarOpponentsCount; ++luIndex)
     {
-        CarOpponentSet& lrCarOpponentSet = mpaCarOpponentSet[luIndex];
+        CarOpponentSet& lrCarOpponentSet = GetCarOpponentSets()[luIndex];
         if (lrCarOpponentSet.GetPlayerCarId() == lCarModelId)
         {
             const s32 liOpponentSetRank = lrCarOpponentSet.GetRank();
@@ -151,61 +186,110 @@ CarOpponentSet* ProgressionData::FindCarOpponentSet(CgsID lCarModelId, s32 liPla
     return lpNearestCarOpponentSet;
 }
 
-// X360 0x8267F220. Load-time pointer relocation ("fix down"): converts every stored pointer from
-// an absolute load address back to a serialised offset by subtracting the load-base delta. It
-// rebases the nine top-level array bases, the two event pointers inside every EventJunction and
-// the checkpoint pointer inside every RaceEventData. This is the X360 inverse of FixUp; the
-// returned value (the object itself in the X360 binary) is unused by the resource-type forwarder,
-// so the int-delta contract just returns the delta.
+// X360 0x8267F220. Load-time relocation ("fix down"): converts every stored table address back
+// into a serialised file-relative offset by subtracting the load-base delta. It rebases the nine
+// top-level array-base slots, the two event slots inside every EventJunction and the checkpoint
+// slot inside every RaceEventData. The returned value (the object itself in the X360 binary) is
+// unused by the resource-type forwarder, so the int-delta contract just returns the delta.
 //
-// Pointer relocation is intrinsically address arithmetic, so the rebased pointers are handled as
-// integers here (the established pattern for these resource FixUp/FixDown routines). The pointer
-// members themselves are reached BY NAME; only the within-RaceEventData checkpoint pointer is
-// reached through a local relocation view, because the complete RaceEventData layout cannot be
-// pulled into this TU (a partial BrnProgression::RaceEventData is already visible here via
-// BrnGameActions.h/BrnGameModeParams.h -- see dep_flags). Its checkpoint pointer sits at the
-// console offset +0x18 inside the 248-byte record.
+// EVERY RELOCATED SLOT IS A 32-BIT SERIALISED WORD (see the banner in BrnProgressionData.h): the
+// console reads the whole root as `result[N]` u32 words, `v3 += 16` strides the junction table and
+// `v8 += 248` the event table, touching `+4`/`+8` and `+24` respectively. So the arithmetic below
+// is plain u32 arithmetic on named members -- no host-pointer casts, no relocation views.
+//
+// ORDER MATTERS AND MATCHES THE CONSOLE: the array walks run FIRST (while the base slots are still
+// absolute addresses and the tables are therefore reachable), and only then are the nine bases
+// converted back to offsets.
 int ProgressionData::FixDown(int liDelta)
 {
-    // Per-EventJunction: rebase the two event pointers (by name).
+    const u32 luDelta = static_cast<u32>(liDelta);
+
+    // Per-EventJunction: the two event slots. The console null-tests each one before rebasing
+    // (a junction with no online counterpart stores 0), which must not become `-delta`.
+    EventJunction* lpaEventJunctions = GetEventJunctions();
     for (u32 luEventJunctionIndex = 0; luEventJunctionIndex < muEventJunctionCount; ++luEventJunctionIndex)
     {
-        EventJunction& lrJunction = mpaEventJunctions[luEventJunctionIndex];
-        if (lrJunction.mpOfflineEvent)
+        EventJunction& lrJunction = lpaEventJunctions[luEventJunctionIndex];
+        if (lrJunction.muOfflineEventOffset != 0)
         {
-            lrJunction.mpOfflineEvent = reinterpret_cast<const RaceEventData*>(
-                reinterpret_cast<uintptr_t>(lrJunction.mpOfflineEvent) - liDelta);
+            lrJunction.muOfflineEventOffset -= luDelta;
         }
-        if (lrJunction.mpOnlineEvent)
+        if (lrJunction.muOnlineEventOffset != 0)
         {
-            lrJunction.mpOnlineEvent = reinterpret_cast<const RaceEventData*>(
-                reinterpret_cast<uintptr_t>(lrJunction.mpOnlineEvent) - liDelta);
+            lrJunction.muOnlineEventOffset -= luDelta;
         }
     }
 
-    // Per-RaceEventData: rebase the checkpoint pointer (console offset +0x18 in the 248-byte
-    // record). Reached through a relocation view because the complete type is not visible here.
-    struct EventRelocationView
-    {
-        u32       _0[6];        // 0x00..0x17 leading scalars / id / car id
-        uintptr_t mpaCheckpoints; // 0x18 checkpoint table pointer (32-bit on the console)
-    };
-    EventRelocationView* lpEvents = reinterpret_cast<EventRelocationView*>(mpaEvents);
+    // Per-RaceEventData: the checkpoint-table slot at +0x18. The console does NOT null-test this
+    // one (`*(v9 + 24) -= a2` unconditionally), so neither does this.
+    RaceEventData* lpaEvents = GetEvents();
     for (u32 luEventIndex = 0; luEventIndex < muEventCount; ++luEventIndex)
     {
-        lpEvents[luEventIndex].mpaCheckpoints -= liDelta;
+        lpaEvents[luEventIndex].muaCheckpointsOffset -= luDelta;
     }
 
-    // The nine top-level array bases (by name).
-    mpaPlayerCarIds     = reinterpret_cast<CgsID*>(reinterpret_cast<uintptr_t>(mpaPlayerCarIds) - liDelta);
-    mpaProgressionRanks = reinterpret_cast<ProgressionRankData*>(reinterpret_cast<uintptr_t>(mpaProgressionRanks) - liDelta);
-    mpaEventJunctions   = reinterpret_cast<EventJunction*>(reinterpret_cast<uintptr_t>(mpaEventJunctions) - liDelta);
-    mpaEvents           = reinterpret_cast<RaceEventData*>(reinterpret_cast<uintptr_t>(mpaEvents) - liDelta);
-    mpaRivals           = reinterpret_cast<Rival*>(reinterpret_cast<uintptr_t>(mpaRivals) - liDelta);
-    mpaAIBalances       = reinterpret_cast<OpponentBalanceData*>(reinterpret_cast<uintptr_t>(mpaAIBalances) - liDelta);
-    mpaPersonalities    = reinterpret_cast<EventRacerPersonality*>(reinterpret_cast<uintptr_t>(mpaPersonalities) - liDelta);
-    mpaTrophyUnlocks    = reinterpret_cast<TrophyUnlockData*>(reinterpret_cast<uintptr_t>(mpaTrophyUnlocks) - liDelta);
-    mpaCarOpponentSet   = reinterpret_cast<CarOpponentSet*>(reinterpret_cast<uintptr_t>(mpaCarOpponentSet) - liDelta);
+    // The nine top-level array bases (X360 words 2/4/6/8/10/12/14/16/18).
+    muaPlayerCarIds     -= luDelta;
+    muaProgressionRanks -= luDelta;
+    muaEventJunctions   -= luDelta;
+    muaEvents           -= luDelta;
+    muaRivals           -= luDelta;
+    muaAIBalances       -= luDelta;
+    muaPersonalities    -= luDelta;
+    muaTrophyUnlocks    -= luDelta;
+    muaCarOpponentSet   -= luDelta;
+
+    return liDelta;
+}
+
+// X360 0x8267F338 -- the strict inverse of FixDown above: it turns every serialised offset into an
+// absolute address by ADDING the load-base delta, so the nine base slots must be relocated FIRST
+// (the two per-record walks below can only reach their tables through already-fixed bases).
+//
+// EXPORT GAP, STATED PLAINLY: 0x8267F338 has no per-function JSON in
+// .ida-exports/BURNOUT_X360_ARTIST.XEX (the address is only recoverable from
+// CgsDev::Assert::FireAssert's xref list and from ProgressionResourceType::FixUp @0x8267F490's
+// tail-branch), so this body is derived from its attested inverse rather than read off the
+// console. Two consequences are recorded rather than papered over:
+//   * the console body DOES fire an assert (that is how its address surfaced, via the FireAssert
+//     xref). Its predicate and message could not be read, so NO assert is invented here.
+//   * the relocated set is FixDown's set, on FixDown's evidence.
+int ProgressionData::FixUp(int liDelta)
+{
+    const u32 luDelta = static_cast<u32>(liDelta);
+
+    // The nine top-level array bases first -- everything else is reached through them.
+    muaPlayerCarIds     += luDelta;
+    muaProgressionRanks += luDelta;
+    muaEventJunctions   += luDelta;
+    muaEvents           += luDelta;
+    muaRivals           += luDelta;
+    muaAIBalances       += luDelta;
+    muaPersonalities    += luDelta;
+    muaTrophyUnlocks    += luDelta;
+    muaCarOpponentSet   += luDelta;
+
+    // Per-EventJunction: the two event slots, null-preserving (FixDown's null test).
+    EventJunction* lpaEventJunctions = GetEventJunctions();
+    for (u32 luEventJunctionIndex = 0; luEventJunctionIndex < muEventJunctionCount; ++luEventJunctionIndex)
+    {
+        EventJunction& lrJunction = lpaEventJunctions[luEventJunctionIndex];
+        if (lrJunction.muOfflineEventOffset != 0)
+        {
+            lrJunction.muOfflineEventOffset += luDelta;
+        }
+        if (lrJunction.muOnlineEventOffset != 0)
+        {
+            lrJunction.muOnlineEventOffset += luDelta;
+        }
+    }
+
+    // Per-RaceEventData: the checkpoint-table slot at +0x18 (unconditional, as in FixDown).
+    RaceEventData* lpaEvents = GetEvents();
+    for (u32 luEventIndex = 0; luEventIndex < muEventCount; ++luEventIndex)
+    {
+        lpaEvents[luEventIndex].muaCheckpointsOffset += luDelta;
+    }
 
     return liDelta;
 }

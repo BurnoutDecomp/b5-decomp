@@ -1,4 +1,4 @@
-// ===========================================================================
+﻿// ===========================================================================
 // EATech Apt -- AptAnimationTarget class-static data layer.
 //
 // A small set of FILE-STATIC tables the Apt input/update layer shares across all
@@ -23,6 +23,9 @@
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // mDisplayList head GC mark walk
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"    // GetCIH (the timer callback's bound clip)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"   // DOGMA_PoolManager::Allocate/Deallocate
+#include "SDKs/EATech/include/Apt/AptDefine.h" // gpGCPoolManager (off_8324D834, the GC value pool)
+
+#include "SDKs/EATech/include/Apt/Apt.h"   // AptUserFunctions (the gAptFuncs recorder-sink slot)
 
 #include <cstring>   // memset
 #include <cstdint>   // intptr_t (the X360 fastcall `return r3` / array-cookie math)
@@ -34,16 +37,20 @@
 extern DOGMA_PoolManager* gpAptPseudoDataPool;   // off_8324D808
 
 // ---------------------------------------------------------------------------
-// FLAG (deferred input-recorder subsystem): the Apt input recorder the X360 feeds
-// every accepted input/analog event so a session can be replayed. dword_8324E518 is
-// the "recording enabled" flag, dword_8324E830 the record-sink callback invoked as
-// fn(pBigEndianRecord, nBytes), and dword_8324D820 the record-tag word stamped into
-// the leading dword. The byte/halfword reversal AddInput performs is the X360's
-// big-endian record serialization (reproduced verbatim); the sink itself is a
-// not-yet-homed debug subsystem, declared here as opaque externs.
+// The Apt input recorder the X360 feeds every accepted input/analog event so a
+// session can be replayed. dword_8324E518 is the "recording enabled" flag,
+// dword_8324E830 the host-installed record-sink callback invoked as
+// fn(pBigEndianRecord, nBytes), and dword_8324D820 the record-tag word stamped
+// into the leading dword. All three are DEFINED in AptGlobals.cpp with the
+// shipped defaults (recording OFF, sink null -- a host debug facility); the
+// byte/halfword reversal AddInput performs is the X360's big-endian record
+// serialization (reproduced verbatim).
 // ---------------------------------------------------------------------------
 extern int  gAptInputRecorderEnabled;                    // dword_8324E518
-extern int  (*gpAptInputRecorderSink)(void*, int);       // dword_8324E830
+// The recorder sink is NOT a standalone global: dword_8324E830 == gAptFuncs+0x18,
+// the pfnDebugAddSavedInput member of the host user-function table (installed by
+// AptAux::ConstructApt). Declared via Apt.h; null-guarded at each use.
+extern AptUserFunctions gAptFuncs;                        // dword_8324E818 (CgsAptAux.cpp)
 extern u32  gAptInputRecorderTag;                         // dword_8324D820
 
 namespace
@@ -81,7 +88,7 @@ void AptAnimationTarget::SetupStaticData(int nMaxNewMovieClips)
     memset(spStaticBlock, 0, 80);
 
     snMaxNewMovieClips   = nMaxNewMovieClips;
-    // FLAG (x64 native-8 stride): both tables hold POINTERS (AptValue*/AptCIH*), which the
+    // x64 native-8 stride (settled; Phase-0 widening rule): both tables hold POINTERS (AptValue*/AptCIH*), which the
     // runtime indexes as pointer-width entries (`AptValue** [i]` / `void** [i]`). The console
     // pointer is 4 bytes, so it allocated 4*count; on x64 the pointer is 8 bytes, so the table
     // must be sizeof(void*)*count -- else the 8-byte per-instance writes in instantiateCharacter/
@@ -120,7 +127,7 @@ int AptAnimationTarget::AddInput(int nPackedInput)
 
     if (gAptInputRecorderEnabled)
     {
-        // FLAG (deferred recorder): serialise the event big-endian and hand it to the
+        // Recorder path (host sink; see the header note): serialise the event big-endian and hand it to the
         // record sink. The X360 builds an 8-byte record { tag, byteReversed(event) }
         // via the inline XOR byte-swap + halfword-swap (net: a full 32-bit byte
         // reversal); reproduced here as that reversal.
@@ -132,7 +139,8 @@ int AptAnimationTarget::AddInput(int nPackedInput)
         u32 record[2];
         record[0] = gAptInputRecorderTag;
         record[1] = evBE;
-        gpAptInputRecorderSink(record, 8);
+        if (gAptFuncs.pfnDebugAddSavedInput)   // dword_8324E830 == gAptFuncs+0x18
+            gAptFuncs.pfnDebugAddSavedInput(reinterpret_cast<AptSavedInputRecord*>(record), 8);
     }
     return 1;
 }
@@ -184,17 +192,16 @@ int AptAnimationTarget::ProcessInputs()
 extern AptValue* gpAptNoneValue;   // off_8324D814
 
 // ---------------------------------------------------------------------------
-// FLAG (sibling-owned: the AptAnimationTargetSet ctor/dtor helpers). The two inline
-// listener/input "set" sub-objects are built + torn down by these unnamed X360 subs
-// (sub_82AE16xx build the table, sub_82AE17xx free it). They take the set sub-object
-// + a u16 capacity. Declared as externs so the director ctor/dtor wire them by name;
-// bodied when that small Set TU is homed.
+// The AptAnimationTargetSet ctor/dtor helpers. The two inline listener/input
+// "set" sub-objects are built + torn down by these unnamed X360 subs
+// (sub_82AE16xx build the table, sub_82AE17xx free it). They take the set
+// sub-object + a u16 capacity; all three bodies are HOMED directly below.
 // ---------------------------------------------------------------------------
 // AptAnimationTargetSetConstruct @0x82AE1708 -- HOMED (was a link-stub): build the set's
 // slot table. DECOMPILED FAITHFULLY from the X360 ARTIST.XEX:
 //   *(a1+2) = a2 (mnCapacity); if (a2) { mppSlots = Allocate(4*a2); mnCount = 0; memset(slots,0); }
 //   else { mnCount = 0; mppSlots = 0; }
-// FLAG (x64 native-8 stride): mppSlots is a POINTER array the runtime indexes as AptValue**;
+// x64 native-8 stride (settled; Phase-0 widening rule): mppSlots is a POINTER array the runtime indexes as AptValue**;
 // the console allocates 4*capacity (4-byte pointers), x64 needs sizeof(void*)*capacity so the
 // indexed slot writes (_addToSetCaches' AptListenerSlotList::add) stay in bounds. Without this
 // the set was never built (the stub), so _addToSetCaches over-read/overwrote uninitialised slots.
@@ -252,16 +259,16 @@ void AptAnimationTargetSetDestruct2(AptAnimationTargetSet* pSet)
 // AptAnimationTarget::AddToRemList @0x82AEE3F8 -- HOMED 2026-07-10 (retiring the
 // {} link-stub, which dropped every delay-released clip on the floor). Queue a
 // CIH on the shared delayed-release table:
-//   * a node already queued (mFlagsA bit26) is a no-op;
+//   * a node already queued (the InRemList flag, x64 mFlagsA bit 5) is a no-op;
 //   * a full table (size >= the table element count) flushes via CleanRemList;
 //   * find the first FREE (null) slot within the current fill run (else append);
-//   * AddRef the node, mark it queued (bit26), store it; appending bumps the fill.
+//   * AddRef the node, mark it queued (InRemList), store it; appending bumps the fill.
 // (The console never reads its r3/pAnim arg -- CleanRemList is static.)
 // ---------------------------------------------------------------------------
 void AptAnimationTargetAddToRemList(AptAnimationTarget* /*pAnim (console r3, unread)*/,
                                     AptCIH* pItem)
 {
-    if (((pItem->mFlagsA >> 26) & 1u) != 0)          // lwz 0xC(r30); extrwi 1,5
+    if (pItem->GetInRemList())                        // x64 bit 5 (X360 lwz 0xC(r30); extrwi 1,5)
         return;                                       // already queued
 
     if (snDelayedReleaseListSize >= snMaxNewMovieClips)   // dword_8324E550 >= dword_8324E540
@@ -277,20 +284,23 @@ void AptAnimationTargetAddToRemList(AptAnimationTarget* /*pAnim (console r3, unr
     }
 
     pItem->AddRef();                                  // vtbl[0]
-    pItem->mFlagsA |= 0x04000000u;                    // oris 0x400 -- the queued bit26
+    pItem->SetInRemList(true);                        // x64 bit 5 (X360 oris 0x400, reversed bit26)
     static_cast<AptValue**>(spDelayedReleaseList)[liSlot] = static_cast<AptValue*>(pItem);
     if (liSlot == snDelayedReleaseListSize)
         ++snDelayedReleaseListSize;                   // appended past the fill run
 }
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed GC / interpreter cluster): the module-static interpreter state +
-// helper subsystems the per-frame drains thread through. Each is declared with its
-// X360 symbol so the bodies below stay faithful; they are owned by the (not-yet-
-// homed) AptActionInterpreter / AptGC TUs.
+// GC / interpreter helpers the per-frame drains thread through -- every one is
+// HOMED now: AptReplaceReferences forwards (bottom of this file) to the real
+// ReplaceReferences (AptLinker.cpp); AptUpdateZombieVector is the AptGC.cpp reap;
+// the GC pool snapshot helpers live in AptValueGCPoolManager.cpp; gpAptGCTableFree
+// is the AptGlobals.cpp hook AptInit points at the DOGMA sized-free.
 // ---------------------------------------------------------------------------
+int ReplaceReferences(AptValue* pOld, AptValue* pNew,
+                      AptValue** ppTable, int nCount);                             // @0x82AE4DF0 (AptLinker.cpp)
 extern int   AptReplaceReferences(AptValue* pOld, AptValue* pNew,
-                                  AptValue** ppTable, int nCount);                  // ReplaceReferences
+                                  AptValue** ppTable, int nCount);                  // this TU's local name (forwarder below)
 extern void* AptUpdateZombieVector(char bClear);                                   // AptUpdateZombieVector -- CANONICAL void* (PS3 __int64 status; AptTarget.cpp matches; was AptValue* here)
 // AptValue::setGCRoot is now called directly on the member (the AptValue_setGCRoot shim is retired).
 
@@ -298,29 +308,25 @@ extern void* AptUpdateZombieVector(char bClear);                                
 // remove-list flush remaps references against; the table's element count lives at
 // +0x28 of the pool object. Declared opaque (the pool layout is its own TU).
 extern void** AptValueGC_PoolManager_GetAllAllocatedAptValues(void* pPool);        // ...::GetAllAllocatedAptValues
-extern void*  gpAptValueGCPool;                                                    // off_8324D834
 extern int    AptValueGCPool_GetAllocatedCount(void* pPool);                       // *(pool + 0x28)
+// The pool itself is gpGCPoolManager (off_8324D834), from the AptDefine.h include above.
+// UNIFIED 2026-08-11: the `void* gpAptValueGCPool` alias this file used to read was a
+// second C++ home for that one console slot (it was wired from the same s_pGCPool, so
+// the values matched -- but only gpGCPoolManager survives). CleanRemList @0x82AEAB08
+// loads the slot twice, once as `this` for GetAllAllocatedAptValues (@0x82AEAC50) and
+// once for the +0x28 live count (@0x82AEAC58/AC64), with no null test.
 extern void (*gpAptGCTableFree)(void* p, unsigned nBytes);                         // dword_8324E820 (frees the snapshot)
 
-// FLAG (un-homed AptCIH behavioural TU): per-frame tick of a freshly-created node.
-// AptCIH::tick @0x... is behavioural surface owned by AptCIHBehaviour.cpp; declared
-// as a free-function shim (the X360 calls it with the CIH in r3) so TickNewInsts links.
-// AptCIH::tick is now called directly as a member (AptCIH.h is included above).
-
-// FLAG (un-homed AptCIH behavioural TU): queue a clip-event against a CIH. The X360
-// calls AptCIH::queueClipEvents(pCIH, nEventMask, nPacked, bDeferred) -> AptValue*;
-// declared as a free-function shim so the two input dispatchers (ProcessInputSet /
-// AddListenerToQueue path) link. Its body belongs with AptCIH's event machinery.
-// AptCIH::queueClipEvents is now called directly as a member (AptCIH.h is included above).
+// AptCIH::tick and AptCIH::queueClipEvents are called directly as members
+// (AptCIH.h is included above; bodies in AptCIHBehaviour.cpp).
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed AS event-descriptor rodata + name table). AddListenerToQueue walks
-// a table of {eventMask, nameIndex} pairs (X360 unk_82F7334C..dword_82F73380): for
-// each descriptor whose mask intersects the dispatched event, it looks up the named
-// handler child via the AS-name table (dword_8324E580 -- an EAStringC array indexed
-// by nameIndex). Both arrays live in the interpreter's static-data TU; declared here
-// as opaque externs so the by-name walk links. The descriptor pair stride is 8 bytes
-// (mask at +0, nameIndex at +4) -- the X360 `v15 += 2` (two dwords) step.
+// The AS event-descriptor + name tables AddListenerToQueue walks: {eventMask,
+// nameIndex} pairs (X360 unk_82F7334C..dword_82F73380) resolved through the
+// AS-name table (dword_8324E580, an EAStringC array indexed by nameIndex). The
+// storage is DEFINED in AptGlobals.cpp (which carries the remaining rodata-
+// contents FLAG); declared extern here for the by-name walk. The descriptor pair
+// stride is 8 bytes (mask at +0, nameIndex at +4) -- the X360 `v15 += 2` step.
 // ---------------------------------------------------------------------------
 struct AptListenerEventDescriptor
 {
@@ -332,12 +338,12 @@ extern const int gAptListenerEventDescriptorCount;                        // (82
 extern const class EAStringC gAptASNameTable[];                           // dword_8324E580
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed per-player analog tables, X360 rodata/bss). The analog-input axis
-// values + the raw stick snapshots are kept in fixed per-player tables (stride 16
-// bytes / player). flt_8324E200/flt_8324E204 hold the two axis floats; unk_8324D750/
-// unk_8324E2D8 hold the left/right 16-byte stick samples. Their fixed element bound
-// is not yet recovered (noted in AptAnimationTarget.h), so they are declared as
-// opaque byte tables indexed by 16*player, matching the X360 stride.
+// The per-player analog tables (X360 .data/bss). The analog-input axis values +
+// the raw stick snapshots are kept in fixed per-player tables (stride 16 bytes /
+// player). flt_8324E200/flt_8324E204 hold the two axis floats; unk_8324D750/
+// unk_8324E2D8 hold the left/right 16-byte stick samples. DEFINED in
+// AptGlobals.cpp (sized for 8 pads so the 16*player reads stay in-bounds);
+// declared here as opaque tables indexed by 16*player, matching the X360 stride.
 // ---------------------------------------------------------------------------
 extern f32 gAptAnalogAxis0[];    // flt_8324E200 (player stride 16 bytes)
 extern f32 gAptAnalogAxis1[];    // flt_8324E204 (player stride 16 bytes)
@@ -345,15 +351,15 @@ extern u8  gAptAStickLeft[];     // unk_8324D750 (player stride 16 bytes)
 extern u8  gAptAStickRight[];    // unk_8324E2D8 (player stride 16 bytes)
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed interpreter VM singleton + scratch heap): the per-frame action /
-// timer drains run their action streams + function calls through the global
-// AptActionInterpreter (X360 &dword_8324E760). Its operand stack lives at +0x00
-// (mnStackTop/mnStackCapacity/mpStack) and its CIH/target stack at +0x24
-// (mnCIHStackTop/mnCIHStackCapacity/mpCIHStack) -- both AptValueVector-shaped
-// {count,capacity,array} triples, which the X360 pops via AptValueVector::pop().
-// The "current event id" scratch field the drains stamp before a run is at +0x48
-// (field_48[0] == dword_8324E7A8). The VM + these globals are owned by the (not-
-// yet-homed) AptActionInterpreter boot TU; declared here so the bodies stay faithful.
+// The interpreter VM singleton: the per-frame action / timer drains run their
+// action streams + function calls through the global AptActionInterpreter (X360
+// &dword_8324E760, DEFINED in AptGlobals.cpp; class homed in
+// AptActionInterpreter.cpp). Its operand stack lives at +0x00 (mnStackTop/
+// mnStackCapacity/mpStack) and its CIH/target stack at +0x24 (mnCIHStackTop/
+// mnCIHStackCapacity/mpCIHStack) -- both AptValueVector-shaped {count,capacity,
+// array} triples, which the X360 pops via AptValueVector::pop(). The "current
+// event id" scratch field the drains stamp before a run is at +0x48 (mnInput ==
+// dword_8324E7A8; B4 'input').
 // ---------------------------------------------------------------------------
 extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 
@@ -397,7 +403,7 @@ AptAnimationTarget::AptAnimationTarget(const AptAnimationTargetParams* pParams)
     // Interval-timer array: one pool block with a leading count cookie (a (36*N + 4)-
     // byte alloc, clamped on overflow), each element placement-ctor'd. The block
     // leads with the byte size and the element count, then the N timers.
-    // FLAG (x64 widening): the X360 stride is the console 36; here the genuine PC
+    // x64 widening (settled; Phase-0 rule): the X360 stride is the console 36; here the genuine PC
     // element stride is sizeof(AptIntervalTimer). The block geometry (size dword then
     // count dword then the elements) and the overflow clamp are reproduced faithfully.
     const u32 lnCount = mnNumIntervalTimers;
@@ -573,10 +579,11 @@ int AptAnimationTarget::RemoveTimerFunctions(AptCIH* pContext)
         {
             continue;                                  // *v6 == 0 -> free slot
         }
-        // X360: r8 = *(pContext + 0x20) (the CIH's character-instance); the body is
-        // gated on it, and the function's owner is matched against it (NOT against
-        // pContext itself). FLAG: read through the recovered +0x20 offset.
-        void* lpGate = *reinterpret_cast<void**>(reinterpret_cast<char*>(pContext) + 0x20);
+        // X360: r8 = *(pContext + 0x20) -- CIH word 8 == mpCharacterInst (the same
+        // named member TickNewInsts/CleanRemList read; the raw console offset does
+        // not survive the x64 widening). The body is gated on it, and the function's
+        // owner is matched against it (NOT against pContext itself).
+        AptCharacterInst* const lpGate = pContext->mpCharacterInst;
         if (lpGate == nullptr)
         {
             continue;
@@ -594,17 +601,16 @@ int AptAnimationTarget::RemoveTimerFunctions(AptCIH* pContext)
             continue;
         }
 
-        // The function's owning CIH context (its [+0x20] value's [+0x20]); when the
-        // function is unowned (0) or owned by pContext, this timer is torn down.
-        // FLAG (un-homed value layout): the script-function value's owner pointer at
-        // word +0x20 of the AptValue is interpreter-private; read through the recovered
-        // offset (the AptScriptFunction value type is not yet modelled by name).
-        void* lpFuncOwner =
-            *reinterpret_cast<void**>(
-                reinterpret_cast<char*>(
-                    *reinterpret_cast<void**>(reinterpret_cast<char*>(lpFunc) + 0x20))
-                + 0x20);
-        if (lpFuncOwner != nullptr && lpFuncOwner != lpGate)   // funcOwner vs *(pContext+0x20)
+        // The function's owning character instance (console *(*(fn+0x20)+0x20)):
+        // the script function's bound CIH (AptScriptFunctionBase::mpCIH, console
+        // +0x20 / x64 +0x40 -- GetCIH(), the same named read TickIntervalTimers
+        // uses) dereferenced to ITS character instance (CIH word 8 ==
+        // mpCharacterInst). When the function is unowned (0) or owned by
+        // pContext's instance, this timer is torn down.
+        AptValue* const lpFnCIH = static_cast<AptScriptFunctionBase*>(lpFunc)->GetCIH();
+        AptCharacterInst* const lpFuncOwner =
+            static_cast<AptCIH*>(lpFnCIH)->mpCharacterInst;
+        if (lpFuncOwner != nullptr && lpFuncOwner != lpGate)   // funcOwner vs pContext->mpCharacterInst
         {
             continue;
         }
@@ -686,12 +692,12 @@ void AptAnimationTarget::CleanRemList()
         }
 
         // Only act on a defined CIH / CIH-none value that is not a "None" (type 3) and
-        // whose CIH state (mFlagsA bits 29-30) is not the protected 0x20000000 form.
+        // whose CIH state (x64 mFlagsA bits 1-2) is not the protected transitioning (1) form.
         const AptVirtualFunctionTable_Indices leType = lpValue->getVtblIndex();
         const bool lbIsCIH =
             (leType == AptVFT_CharacterInstHandle || leType == AptVFT_CIHNone);
         if (!lbIsCIH
-            || (reinterpret_cast<AptCIH*>(lpValue)->mFlagsA & 0x60000000u) == 0x20000000u  // *(v4+12)
+            || (reinterpret_cast<AptCIH*>(lpValue)->mFlagsA & 0x6u) == 0x2u  // *(v4+12)
             || leType == AptVFT_None)
         {
             continue;
@@ -736,8 +742,8 @@ void AptAnimationTarget::CleanRemList()
     {
         AptValue** lpAllValues =
             reinterpret_cast<AptValue**>(
-                AptValueGC_PoolManager_GetAllAllocatedAptValues(gpAptValueGCPool));
-        const int liAllCount = AptValueGCPool_GetAllocatedCount(gpAptValueGCPool);  // *(pool + 0x28)
+                AptValueGC_PoolManager_GetAllAllocatedAptValues(gpGCPoolManager));
+        const int liAllCount = AptValueGCPool_GetAllocatedCount(gpGCPoolManager);   // *(pool + 0x28)
 
         for (int liIndex = 0; liIndex < liSurvivors; ++liIndex)
         {
@@ -904,17 +910,17 @@ void* AptAnimationTarget::RemoveCIHReferences()
         {
             continue;
         }
-        // The X360 invokes vtbl[13] (slot +52) on the callback + context here -- the
-        // value-type "remap this reference" virtual. AptValue does not model a +52
-        // virtual by name yet; reproduce the indirect call through the recovered slot.
-        // FLAG (un-homed virtual): vtbl[13] == the GC reference-remap virtual.
-        {
-            using RemapFn = void* (*)(void*);
-            char* lpVtbl = *reinterpret_cast<char**>(lrTimer.mpCBFunction);
-            (*reinterpret_cast<RemapFn*>(lpVtbl + 52))(lrTimer.mpCBFunction);   // FLAG un-homed vtbl[13] GC reference-remap virtual
-            lpVtbl = *reinterpret_cast<char**>(lrTimer.mpContext);
-            lpResult = (*reinterpret_cast<RemapFn*>(lpVtbl + 52))(lrTimer.mpContext);   // FLAG un-homed vtbl[13] GC reference-remap virtual
-        }
+        // The X360 invokes vtbl[13] (byte +52) on the callback + context here --
+        // console AptValue vtbl slot 13 IS RegisterReferences (anchored by the
+        // slot map the tree already uses: Release +4 slot 1, PreDestroy +36 slot 9,
+        // DestroyGCPointers +40 slot 10, ForceDelete +44 slot 11, so +48 =
+        // IsGarbageCollected, +52 = RegisterReferences -- the same slot
+        // ReplaceReferences drives the whole pool through). Re-registering each
+        // value's held references routes them through the swapped-in replace
+        // callback; the named virtual replaces the raw console byte offset (which
+        // is mid-slot on the 8-byte x64 vtable).
+        lrTimer.mpCBFunction->RegisterReferences();
+        lrTimer.mpContext->RegisterReferences();
 
         const s32 liParamCount = lrTimer.mParams.mnTop;
         for (s32 liParam = 0; liParam < liParamCount; ++liParam)
@@ -1147,14 +1153,15 @@ int AptAnimationTarget::AddAnalogInput(const AptAnalogInputEvent& rEvent)
             *reinterpret_cast<f32*>(reinterpret_cast<char*>(gAptAnalogAxis1) + lnByteOffset) = 0.0f;
             if (lbRecord)
             {
-                // FLAG (deferred recorder): log the 24-byte analog record { tag, type,
+                // Recorder path (host sink): log the 24-byte analog record { tag, type,
                 // <the 16-byte event> } via the record sink. (X360 builds {dword_8324D820,
                 // 0x0B000000, event...} and calls sink(rec, 24).)
                 u32 lauRecord[6];
                 lauRecord[0] = gAptInputRecorderTag;   // dword_8324D820
                 lauRecord[1] = 0x0B000000u;            // 184549376
                 std::memcpy(&lauRecord[2], &rEvent, sizeof(AptAnalogInputEvent));
-                gpAptInputRecorderSink(lauRecord, 24);
+                if (gAptFuncs.pfnDebugAddSavedInput)
+                gAptFuncs.pfnDebugAddSavedInput(reinterpret_cast<AptSavedInputRecord*>(lauRecord), 24);
             }
             break;
         }
@@ -1172,7 +1179,8 @@ int AptAnimationTarget::AddAnalogInput(const AptAnalogInputEvent& rEvent)
             lauRecord[0] = gAptInputRecorderTag;
             lauRecord[1] = 0x0B000000u;
             std::memcpy(&lauRecord[2], &rEvent, sizeof(AptAnalogInputEvent));
-            gpAptInputRecorderSink(lauRecord, 24);
+            if (gAptFuncs.pfnDebugAddSavedInput)
+                gAptFuncs.pfnDebugAddSavedInput(reinterpret_cast<AptSavedInputRecord*>(lauRecord), 24);
             break;
         }
 
@@ -1203,8 +1211,13 @@ int AptAnimationTarget::AddAnalogInput(const AptAnalogInputEvent& rEvent)
         liResult = AddInput(static_cast<int>(lnPacked));
         if (gAptInputRecorderEnabled && liResult)
         {
-            // FLAG (deferred recorder): log the raw 16-byte stick sample.
-            liResult = gpAptInputRecorderSink(const_cast<AptAnalogInputEvent*>(&rEvent), 16);
+            // Recorder path (host sink): log the raw 16-byte stick sample. The slot
+            // (dword_8324E830 == gAptFuncs.pfnDebugAddSavedInput) is VOID on both the
+            // console host (@0x82849528) and Apt.h -- the old `liResult = sink(...)`
+            // modelled the PPC r3 leftover; the AddInput result is what returns.
+            if (gAptFuncs.pfnDebugAddSavedInput)
+                gAptFuncs.pfnDebugAddSavedInput(
+                    reinterpret_cast<AptSavedInputRecord*>(const_cast<AptAnalogInputEvent*>(&rEvent)), 16);
         }
     }
     return liResult;
@@ -1409,8 +1422,8 @@ int AptAnimationTarget::RunActions()
         if (lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_ACTION)   // *v3 == 1
         {
             // Stamp the interpreter's "current event id" scratch with the slot's
-            // queued context handle (dword_8324E7A8 == gAptActionInterpreter.field_48[0]).
-            gAptActionInterpreter.field_48[0] = static_cast<u32>(lpSlot->action.miContext);  // *(v3+4)
+            // queued context handle (dword_8324E7A8 == gAptActionInterpreter.mnInput).
+            gAptActionInterpreter.mnInput = static_cast<u32>(lpSlot->mnInput);  // *(v3+4)
 
             AptValue* lpCIH = lpSlot->action.mpCIH;      // v4 = *(v3+16)
             AptCIH*   lpNode = reinterpret_cast<AptCIH*>(lpCIH);
@@ -1423,18 +1436,18 @@ int AptAnimationTarget::RunActions()
             const uintptr_t luCIH = reinterpret_cast<uintptr_t>(lpNode);
             const bool lbCIHPlausible =
                 luCIH >= 0x10000u && (luCIH >> 47) == 0u;
-            if (lbCIHPlausible && ((lpNode->mnValueData >> 27) & 1u) != 0u)
+            if (lbCIHPlausible && lpNode->getIsDefined())   // x64: value bitfield bit 4 (X360 reversed bit27)
             {
                 // Named members (2026-07-01; were the console raw offsets on x64
-                // objects): the bound character instance (CIH word[8]) must not be
-                // the "dead" 0x3C type form, and the CIH state (mFlagsA bits 29-30,
-                // CIH word[3]) must not be the protected 0x60000000 form.
+                // objects): the bound character instance (CIH +0x38) must not be
+                // the "empty" type-15 form (x64 tag = LOW 6 bits of mTypeFlags),
+                // and the CIH state (x64 mFlagsA bits 1-2) must not be dead (3).
                 AptCharacterInst* lpCharInst = lpNode->mpCharacterInst;   // v5 = v4[8]
                 const u32 lnCharType = (lpCharInst != nullptr)
-                    ? (lpCharInst->mTypeFlags & 0xFC000000u) : 0x3C000000u;
-                const u32 lnCIHState = lpNode->mFlagsA & 0x60000000u;     // v4[3]
+                    ? (lpCharInst->mTypeFlags & 0x3Fu) : 0xFu;
+                const u32 lnCIHState = lpNode->mFlagsA & 0x6u;            // v4[3]
 
-                if (lnCharType != 0x3C000000u && lnCIHState != 0x60000000u)
+                if (lnCharType != 0xFu && lnCIHState != 0x6u)
                 {
                     // The queued instance depth gate: a non-negative depth always runs;
                     // a negative depth runs only when the char inst is absent or its
@@ -1522,14 +1535,9 @@ int AptAnimationTarget::RunActions()
                             lpScope);
                         }
 
-                        // CleanupAfterExecution(savedScratch=v7, localState=v19): the
-                        // recovered class method takes only the saved per-call state, so
-                        // the scratch-heap restore the console does through r4 is
-                        // reproduced inline here. FLAG (reconciliation): split of the
-                        // X360's 2-arg CleanupAfterExecution.
                         // Pop the window back to the saved base (X360: the interpreter's
                         // 2-arg CleanupAfterExecution(this, savedBase) -- the earlier
-                        // dummy-SavedExecutionState split is retired).
+                        // dummy-SavedExecutionState split is retired; reconciled).
                         gAptActionInterpreter.CleanupAfterExecution(lpSavedHeap);
 
                         TickNewInsts();
@@ -1539,7 +1547,7 @@ int AptAnimationTarget::RunActions()
         }
         else if (lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_FUNCTION)   // *v3 == 2
         {
-            gAptActionInterpreter.field_48[0] = static_cast<u32>(lpSlot->function.miArgCount);  // dword_8324E7A8 = *(v3+4)
+            gAptActionInterpreter.mnInput = static_cast<u32>(lpSlot->mnInput);  // dword_8324E7A8 = *(v3+4)
 
             // Push the call context onto the interpreter's CIH/target stack (the X360
             // stamps it then AddRefs it via vtbl[0]). v13 = *(v3+8) == function.mpContext.
@@ -1634,10 +1642,10 @@ int AptAnimationTarget::RunActions()
 //   param stack, and disarm the slot (setTimeout / dead callback -> tear down).
 //   Returns the last fired/torn-down result (X360 returns r3).
 //
-//   FLAG (un-homed value/char-inst layouts): the callback value's type tag
-//   (mnValueData low 7 bits) / "defined" bit (bit 27) / bound char inst (value word
-//   +0x20), and that char inst's "dead" 0x3C type form (charInst word +8 top 6 bits),
-//   are interpreter-private value subtypes reproduced through the recovered offsets.
+//   The callback value's type tag / "defined" bit are read from the public
+//   mnValueData bitfield; the bound char inst goes through the named
+//   AptScriptFunctionBase::GetCIH() / AptCIH::GetCharacterInst() members (the
+//   console raw words +0x20/+8 do not survive the x64 widening).
 // ---------------------------------------------------------------------------
 int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
 {
@@ -1688,7 +1696,7 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
                 AptCharacterInst* lpBoundInst =
                     static_cast<AptCIH*>(lpBound)->GetCharacterInst();
                 lbFire = lpBoundInst != nullptr &&
-                         (static_cast<u32>(lpBoundInst->mTypeFlags) & 0xFC000000u) != 0x3C000000u;
+                         (static_cast<u32>(lpBoundInst->mTypeFlags) & 0x3Fu) != 15u;   // x64 low-6-bit tag
             }
         }
 
@@ -1791,20 +1799,15 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
 
 
 // ---------------------------------------------------------------------------
-// AptReplaceReferences -- BLOCKED FLAG stub. This is the AptAnimationTarget TU's
-// local name for the SAME X360/PS3 free function ReplaceReferences
-// (@0x82AE4DF0 / PS3 _Z17ReplaceReferences... @0xF219B4): retarget every live GC
-// reference from pOld to pNew. The director's PreDestroy reference cleanup calls it
-// to drop a value's references (pNew == nullptr).
-//
-// GENUINELY BLOCKED (same as the AptLinker.cpp ReplaceReferences stub): the body
-// needs the un-homed GC reference-registration subsystem (gpRefernceValue /
-// gpRefernceValueReplace / pnRefCount / sReferenceRegistrationCb swap +
-// ReferenceReplaceCb / AptRegisterGlobalReferences), none of which exist in the
-// tree. Documented no-op stub (functions_blocked) so the linker resolves it; the
-// reference remap is deferred to the GC reference-registration TU.
+// AptReplaceReferences -- this TU's local name for the free function
+// ReplaceReferences (@0x82AE4DF0 / PS3 _Z17ReplaceReferencesP8AptValueS0_PS0_i
+// @0xF219B4), HOMED in AptLinker.cpp together with the reference-replace
+// machinery it drives (the sReferenceRegistrationCb swap + ReferenceReplaceCb
+// @0x82AE4B28 + AptRegisterGlobalReferences @0x82AE38B8). CleanRemList's
+// survivor pass calls it with pNew == nullptr against the live-value snapshot
+// to drop a dying value's remaining references.
 // ---------------------------------------------------------------------------
-int AptReplaceReferences(AptValue* /*pOld*/, AptValue* /*pNew*/, AptValue** /*ppTable*/, int /*nCount*/)
+int AptReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nCount)
 {
-    return 0;   // FLAG BLOCKED: un-homed GC reference-registration subsystem
+    return ReplaceReferences(pOld, pNew, ppTable, nCount);
 }

@@ -41,7 +41,7 @@
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"       // AptActionInterpreter (VM singletons)
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"// AptGCReleaseVector (gValuesToRelease)
 #include "SDKs/EATech/include/Apt/AptRenderManagerQueue.h"      // AptRenderManagerQueue (gAptRenderManagerQueue)
-#include "SDKs/EATech/Apt/AptValueGCPoolManager.h"              // AptValueGC_PoolManager + byte_82144A18
+#include "SDKs/EATech/Apt/AptValueGCPoolManager.h"              // byte_82144A18[AptVFT_NumVFTs] (section 10)
 
 // --- pointer-only targets: forward declarations (exact struct/class tags) ---
 class  AptValue;
@@ -130,27 +130,40 @@ AptValue* gpAptNativeFn_8324E494 = nullptr;
 //  AptScriptFunctionBase::spRegBlockCurrentFrameBase -- the one canonical global.)
 AptValue**      gppAptNativeArgStack        = nullptr;   // off_8324E768
 AptString*      gpStringPoolFreeList        = nullptr;   // off_8324E4FC (string-pool free list head)
-AptValueVector* gpAptDeferredReleaseVector  = nullptr;   // off_8324E51C
+// The ONE deferred-release vector pointer (console symbol gValuesToRelease @
+// off_8324E51C; pool-allocated + family-(B)-constructed by AptCommonInitialize).
+// UNIFIED 2026-08-07 -- replaces the former trio {gpAptDeferredReleaseVector,
+// AptInit's file-local gpAptDeferredVecCommon, the static AptGCReleaseVector
+// gValuesToRelease instance} that modelled this one console slot.
+AptValueVector* gpValuesToRelease           = nullptr;   // off_8324E51C
 
 // ===========================================================================
-// 4. The interpreter VM singletons (value objects) + the GC live-value pool.
-//    X360 &dword_8324E760 (the VM) and off_8324D834 (the GC pool).
+// 4. The interpreter VM singleton (a value object).  X360 &dword_8324E760.
 //    The VM has only an implicit default ctor + a dtor: namespace-scope storage
 //    is zero-initialized, faithful to the console .data object the engine inits.
+//    (The GC live-value pool used to live here too -- see the tombstone below.)
 // ===========================================================================
 AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 
-// FLAG: gAptValueGCPool (off_8324D834) is the live-AptValue pool manager. It has
-// NO default ctor (only the 2-arg DOGMA-forwarding ctor), so it is constructed
-// here with (0,0) -- an empty pool the engine RE-SIZES at AptInit via the real
-// per-VFT object-size table (StaticInitialize). The base DOGMA ctor reaches the
-// platform DOGMA heap (DOGMA_Malloc, an external TU); static-init order vs that
-// heap is the existing Apt-allocator-boot concern, not a code defect here.
-AptValueGC_PoolManager gAptValueGCPool(0u, 0u);   // off_8324D834
-
-// gpAptValueGCPool (off_8324D834) -- the type-erased void* view the engine stamps
-// to the same GC pool. Distinct C++ symbol; null until AptInit points it.
-void* gpAptValueGCPool = nullptr;   // off_8324D834
+// (the GC-pool pair {AptValueGC_PoolManager gAptValueGCPool(0,0), void*
+//  gpAptValueGCPool} RETIRED 2026-08-11 -- UNIFIED onto AptDefine.cpp's
+//  `AptValueGC_PoolManager* gpGCPoolManager`, the ONE console slot off_8324D834.
+//  off_8324D834 is a POINTER slot, not an object: every console reach LOADS it
+//  and passes the loaded value as `this` -- AptGC::CleanAll @0x82AE4A40
+//  (`lwz r3, off_8324D834@l(r29); bl GetFirstAptValue`), ReplaceReferences
+//  @0x82AE4DF0, AptAnimationTarget::CleanRemList @0x82AEAB08, AptAllocatorShutdown
+//  @0x82AE9298, and all 30-odd Apt `operator new`/`delete` bodies
+//  (e.g. AptArray::operator new @0x82AE6088 `DOGMA_PoolManager::Allocate(off_8324D834,
+//  size)`). The pointed-to pool is HEAP-constructed by AptAllocatorInitialize
+//  @0x82ADD118 and published by AptInit.cpp's WireAllocatorGlobals.
+//  Consequence of the old trio: the namespace-scope object here was permanently
+//  EMPTY -- its (0,0) ctor takes DogmaAllocator.cpp's static-init early-out and
+//  nothing ever re-sized it (the old FLAG comment claiming StaticInitialize
+//  re-sizes it was wrong: StaticInitialize only computes the item-size statics) --
+//  so AptGC::CleanAll's shutdown walk and AptLinker's ReplaceReferences live-value
+//  walk both iterated an empty pool and had never visited a live AptValue, while
+//  every real GC allocation went through gpGCPoolManager. Same class of defect,
+//  same remedy as the gpValuesToRelease unification above (2026-08-07).)
 
 // ===========================================================================
 // 5. The Apt allocator pool pointers (all alias the shared fixed-size DOGMA pool
@@ -163,10 +176,10 @@ DOGMA_PoolManager* gpAptSharedPtrPool     = nullptr;   // off_8324D808 (shared-p
 DOGMA_PoolManager* gpAptSingleListPool    = nullptr;   // off_8324D808 (single-list nodes)
 
 // ===========================================================================
-// 6. Value-typed engine objects (the GC deferred-release vector + the render
-//    manager draw queue).  Zero-initialized aggregates -- the engine fills them.
+// 6. Value-typed engine objects (the render manager draw queue).
+//    (The deferred-release vector is the section-3 gpValuesToRelease POINTER --
+//    the static instance here was one of the three retired off_8324E51C homes.)
 // ===========================================================================
-AptGCReleaseVector    gValuesToRelease       = { 0, 0, nullptr };   // off_8324E51C
 AptRenderManagerQueue gAptRenderManagerQueue = { nullptr, nullptr };// dword_8324E7D8
 
 // ===========================================================================
@@ -329,11 +342,12 @@ extern const int gAptListenerEventDescriptorCount = 0;                          
 
 // ===========================================================================
 // 10. The per-VFT object-size table the GC pool's StaticInitialize scans
-//     (X360 byte_82144A18[AptVFT_NumVFTs]).  FLAG: rodata contents generated from
-//     the class set, un-recovered; X360 vaddr 0x82144A18.  Zeroed -> the min/max
-//     object-size scan yields 0 until extracted (the engine resizes the pool then).
+//     (X360 byte_82144A18[AptVFT_NumVFTs]).  Zeroed STORAGE only: the contents
+//     are FILLED by AptValueGC_PoolManager::StaticInitialize from sizeof() of the
+//     reconstructed x64 classes (the console .rdata bytes are RECOVERED -- the
+//     0x82144A18 dump -- and recorded per entry there as the 32-bit cross-check).
 // ===========================================================================
-uint8_t byte_82144A18[AptVFT_NumVFTs] = {};   // 0x82144A18
+uint8_t byte_82144A18[AptVFT_NumVFTs] = {};   // 0x82144A18 (filled at StaticInitialize)
 
 // ===========================================================================
 // 11. Analog-input tables (X360 .data / rodata; the input layer fills them each
@@ -363,9 +377,11 @@ void (*gpAptFSCommandHook)(const char* pCommand, const char* pArgs)      = nullp
 //  The tag-5 arm in AptMovie::doFrameControls now calls the table slot directly.)
 void (*gpAptGCTableFree)(void* p, unsigned nBytes)                       = nullptr;   // dword_8324E820
 AptVarNotFoundCb gpAptVarNotFoundCb                                      = nullptr;
-int  (*gpAptInputRecorderSink)(void*, int)                               = nullptr;   // dword_8324E830
-// The recorder's text-tag sink (AptUpdate's per-frame "%06d" stamp goes through it).
-void (*gpAptInputRecorderTagSink)(const char*)                           = nullptr;   // dword_8324E834
+// (gpAptInputRecorderSink / gpAptInputRecorderTagSink RETIRED 2026-08-07: like
+//  dword_8324E828 above, dword_8324E830/834 are NOT standalone hooks -- they are
+//  &gAptFuncs (dword_8324E818) + 0x18/+0x1C == pfnDebugAddSavedInput /
+//  pfnDebugSetScreenGrabPending. AptUpdate + AptAnimationTarget call the table
+//  slots directly.)
 void (*gpfnAptDestroyCustomControl)(intptr_t nZId)                       = nullptr;   // dword_8324E898
 void (*gpfnAptCustomControlPushRenderData)(const char* pInstanceName)    = nullptr;   // dword_8324E8CC
 void (*gpfnAptCustomControlPopRenderData)(const char* pInstanceName)     = nullptr;   // dword_8324E8D0

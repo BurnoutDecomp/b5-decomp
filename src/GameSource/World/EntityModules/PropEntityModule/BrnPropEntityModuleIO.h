@@ -33,9 +33,12 @@
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"  // CgsSceneManager::SceneManagerIO::PotentialContact (InputBuffer_PrePhysics::mPotentialContactQueue element)
 #include "GameSource/World/AI/SharedIO/BrnAIModuleResultInterface.h"           // BrnAI::AIModuleIO::AIModuleResultInterface::ResetOnTrackResultQueue (InputBuffer_PrePhysics::mResetOnTrackResultQueue)
 
-// The replay-status payload InputBuffer_PreScene::SetReplayStatusInterface latches (pointer-only
-// use; home GameSource/Replays/BrnReplayStatusInterface.h).
-namespace BrnReplays { namespace ReplayIO { struct StatusInterface; } }
+// The replay-status payload InputBuffer_PreScene::SetReplayStatusInterface latches.
+// RETYPED 2026-08-11 (WorldBridgeInputToEntityModules mount): the forward declaration that
+// stood here was enough while the setter was declaration-only, but the setter is bodied now
+// and the member is held BY VALUE (see the note on the member), so the real home has to be
+// included.
+#include "GameSource/Replays/BrnReplayStatusInterface.h"   // BrnReplays::ReplayIO::StatusInterface
 
 namespace BrnWorld
 {
@@ -412,6 +415,21 @@ namespace PropEntityIO
         bool mbSendingPropProgression;         // +0x790  (SendingPropProgression latch)
         bool mbHitPropsBitArrayValid;          // +0x791  (set alongside muHitPropsBitArray)
         bool mbResetProps;                     // +0x792  (ResetProps latch)
+
+        // ---- ADDITIVE GROW 2026-08-11 (WorldBridgeInputToEntityModules mount) ----------
+        // The frame's replay status, latched by SetReplayStatusInterface @0x827A1578.
+        // [FLAG unrecovered console offset] 0x827A1578 is a HOLE in the .ida-exports dump
+        // (the bridge's xref table names it, but no per-function json was emitted), so the
+        // member's console byte offset inside this buffer is NOT recovered -- it is placed
+        // at the tail here so the +0x780..+0x792 block above, whose offsets the bridge's
+        // own inlined stores DO pin, is left undisturbed. It is reached only by name.
+        // Held BY VALUE with an operator= copy, matching both of this setter's siblings:
+        // the RaceCar twin (InputBuffer_PreScene::SetReplayStatusInterface @0x8279D258,
+        // called by the bridge on the line immediately before this one, with the SAME
+        // source pointer) and the producing side (BrnWorldIO::UpdateInputBuffer::
+        // SetReplayStatusInterface @0x823B4DF0). The PS3 DWARF for this buffer has neither
+        // the member nor the method -- it is a merge-window delta, X360-only.
+        BrnReplays::ReplayIO::StatusInterface mReplayStatusInterface;
     };
 
     // ========================================================================

@@ -10,11 +10,29 @@
 //   StreetData::GetChallengeParScore @ 0x8230ED48
 //   StreetData::GetStreet            @ 0x8231BAD0
 //
-// Member layout pinned to the X360 binary offsets (which match the DecFIGS
-// version-5 DWARF for BrnStreetData::StreetData exactly):
-//   miVersion +0, miSize +4, mpaStreets +8, mpaJunctions +12, mpaRoads +16,
-//   mpaChallengeParScores +20, miStreetCount +24, miJunctionCount +28,
-//   miRoadCount +32.
+// Member ORDER is pinned to the X360 binary (which matches the DecFIGS version-5
+// DWARF for BrnStreetData::StreetData exactly). The console OFFSETS are
+//   miVersion +0, miSize +4, mpaStreets +8, mpaJunctions +0xC, mpaRoads +0x10,
+//   mpaChallengeParScores +0x14, miStreetCount +0x18, miJunctionCount +0x1C,
+//   miRoadCount +0x20   (sizeof 36; strides Street 16 / Junction 36 / Road 64).
+//
+// ⚠️ THOSE ARE 32-BIT-POINTER OFFSETS AND DO NOT HOLD ON THE x64 HOST. The four
+// pointer members widen 4 -> 8 bytes, so every field behind them shifts and the
+// element strides grow:
+//   miVersion +0, miSize +4, mpaStreets +8, mpaJunctions +0x10, mpaRoads +0x18,
+//   mpaChallengeParScores +0x20, miStreetCount +0x28, miJunctionCount +0x2C,
+//   miRoadCount +0x30   (sizeof 56; strides Street 16 / Junction 48 / Road 72).
+// The _AssertLayout() block at the bottom of this header pins all of it.
+//
+// This matters beyond the C++: STREETDATA.DAT is loaded IN PLACE -- the resource
+// blob IS this object and StreetData::FixUp only adds the load base to the
+// serialised offset slots. The bundle converter
+// (tools/assets/bundles/nonapt_transcode.py::_street_data) therefore emits the
+// NATIVE x64 image above, not the console's compact one. Emitting the console
+// layout is what made FixUp read miRoadCount out of street[0] and fire
+// "The number of roads in the design data doesn't match the code const" at boot
+// (measured 2026-08-11: both the retail X360 file and the converted file carry
+// miRoadCount == 64, exactly the code const -- only the field's ADDRESS was wrong).
 //
 // SpanIndex is int16_t on X360 (GetStreet takes __int16) -- agrees with the
 // version-5 DWARF; the Feb-2007 leak's int32_t form is the older build and is
@@ -25,6 +43,8 @@
 // `struct StreetData` (avoids the MSVC C4099 struct/class tag mismatch). The
 // FixUp/FixDown(int) signatures match that stub's caller contract verbatim.
 // ---------------------------------------------------------------------------
+
+#include <cstddef>                                       // offsetof (the _AssertLayout pins)
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                              // CgsID (u64)
@@ -84,6 +104,11 @@ namespace BrnStreetData
     protected:
         RoadIndex  miRoadIndex;  // +0
         SpanIndex  miSpanIndex;  // +4  (int16; +6..+7 padding)
+        // +8. MEASURED from the retail X360 image: every junction record carries the
+        // bytes `01 00 00 00` here and every street record `00 00 00 00` -- never the
+        // `00 00 00 01` a big-endian 4-byte enum would hold. The console stores this
+        // enum in the low byte of the slot, so the converter copies the four bytes
+        // verbatim and the little-endian host reads back JUNCTION == 1 / STREET == 0.
         ESpanType  meSpanType;   // +8
     };
 
@@ -117,18 +142,28 @@ namespace BrnStreetData
         const Exit* GetExit( int32_t liExitId );
         const Exit* GetExit( float lrAngle );
         int32_t     GetExitCount();
-        void        FixDown( int liDelta );
-        void        FixUp( int liDelta );
+
+        // The X360 folds these into StreetData::FixDown/FixUp (no standalone symbol for
+        // either in the ledger), so a header inline IS the faithful shape -- and it is
+        // what lets StreetData walk the table by NAME instead of by a console byte
+        // offset. Delta is pointer-width: the x64 resource load base does not fit in an
+        // int (same reason CgsLanguageResourceType uses CgsResource::GetLoadBase64).
+        void        FixDown( uintptr_t luDelta );
+        void        FixUp( uintptr_t luDelta );
+
+        // Compile-time-only layout pin (see the block at the bottom of this header).
+        static void _AssertLayout();
     private:
-        Exit*   mpaExits;                // +12
-        int32_t miExitCount;             // +16
-        char    macName[KI_MAX_NAME];    // +20
+        Exit*   mpaExits;                // +0x10 (console +12)
+        int32_t miExitCount;             // +0x18 (console +16)
+        char    macName[KI_MAX_NAME];    // +0x1C (console +20)
     };
 
-    // -- Road (64 bytes) -- stride for GetRoad (i<<6 == 64*i) -------------
+    // -- Road (console 64 bytes / x64 72) -- the console's GetRoad indexed it
+    // with i<<6; on the host it is plain mpaRoads[i] over sizeof(Road) == 72.
     // maReferencePosition is rw::math::fpu::Vector3Template<float> in the real
-    // build; modelled here as a 12-byte placeholder so Road is byte-exact 64
-    // without dragging the RenderWare math header into this slice.
+    // build; modelled here as a 12-byte placeholder without dragging the
+    // RenderWare math header into this slice.
     class Road
     {
     public:
@@ -145,17 +180,23 @@ namespace BrnStreetData
         ChallengeIndex GetChallengeIndex() const;
         const char* GetDebugName() const;
         int32_t     GetSpanCount() const;
-        void        FixDown( int liDelta );
-        void        FixUp( int liDelta );
+
+        // Header-inline for the same reason as Junction::FixDown/FixUp above
+        // (X360-folded into StreetData::FixDown/FixUp; no ledger symbol).
+        void        FixDown( uintptr_t luDelta );
+        void        FixUp( uintptr_t luDelta );
+
+        // Compile-time-only layout pin (see the block at the bottom of this header).
+        static void _AssertLayout();
     private:
-        f32            maReferencePosition[3];   // +0  (Vector3Template<float>)
-        SpanIndex*     mpaSpans;                 // +12
-        CgsID          mId;                       // +16 (8-byte aligned)
-        CgsID          miRoadLimitId0;            // +24
-        CgsID          miRoadLimitId1;            // +32
-        char           macDebugName[KI_MAX_NAME]; // +40
-        ChallengeIndex mChallenge;                // +56
-        int32_t        miSpanCount;               // +60  (sizeof == 64)
+        f32            maReferencePosition[3];   // +0    (Vector3Template<float>)
+        SpanIndex*     mpaSpans;                 // +0x10 (console +12)
+        CgsID          mId;                       // +0x18 (console +16)
+        CgsID          miRoadLimitId0;            // +0x20 (console +24)
+        CgsID          miRoadLimitId1;            // +0x28 (console +32)
+        char           macDebugName[KI_MAX_NAME]; // +0x30 (console +40)
+        ChallengeIndex mChallenge;                // +0x40 (console +56)
+        int32_t        miSpanCount;               // +0x44 (console +60; sizeof 72 / 64)
     };
 
     // -- ChallengeParScoresEntry (40 bytes) -- stride for GetChallengeParScore.
@@ -195,10 +236,17 @@ namespace BrnStreetData
         int32_t GetSize() const;
         void    SetSize( int32_t liSize );
 
-        // X360 BrnStreetDataResourceType.cpp calls FixUp/FixDown with an int
-        // delta (rw::Resource load base); keep the committed stub's signature.
-        int FixUp( int liDelta );
-        int FixDown( int liDelta );
+        // BrnStreetDataResourceType.cpp calls these with the rw::Resource load base.
+        // The X360 passes it as an int because its pointers are 32-bit; on the host it
+        // is a full-width uintptr_t (CgsResource::GetLoadBase64) -- an int truncates the
+        // x64 heap base and would relocate every array to a wild address. void return:
+        // the console's `result` is the this-pointer ABI artifact and no caller reads it
+        // (same call shape as CgsLanguage::LanguageResourceType::FixUp).
+        void FixUp( uintptr_t luDelta );
+        void FixDown( uintptr_t luDelta );
+
+        // Compile-time-only layout pin (see the block at the bottom of this header).
+        static void _AssertLayout();
 
     private:
         JunctionIndex GetJunctionIndexFromSpanIndex( SpanIndex liIndex );
@@ -208,13 +256,13 @@ namespace BrnStreetData
 
         int32_t                  miVersion;              // +0
         int32_t                  miSize;                 // +4
-        Street*                  mpaStreets;             // +8
-        Junction*                mpaJunctions;           // +12
-        Road*                    mpaRoads;               // +16
-        ChallengeParScoresEntry* mpaChallengeParScores;  // +20
-        int32_t                  miStreetCount;          // +24
-        int32_t                  miJunctionCount;        // +28
-        int32_t                  miRoadCount;            // +32
+        Street*                  mpaStreets;             // +8    (console +8)
+        Junction*                mpaJunctions;           // +0x10 (console +0xC)
+        Road*                    mpaRoads;               // +0x18 (console +0x10)
+        ChallengeParScoresEntry* mpaChallengeParScores;  // +0x20 (console +0x14)
+        int32_t                  miStreetCount;          // +0x28 (console +0x18)
+        int32_t                  miJunctionCount;        // +0x2C (console +0x1C)
+        int32_t                  miRoadCount;            // +0x30 (console +0x20)
     };
 
     // ====================================================================
@@ -242,6 +290,112 @@ namespace BrnStreetData
     {
         CGS_ASSERT( liIndex < miRoadCount && liIndex >= 0, "liIndex < miRoadCount && liIndex >= 0" );
         return &mpaChallengeParScores[ liIndex ];
+    }
+
+    // ---- ADDITIVE (street-data load wave, 2026-08-11) -------------------
+    // Three plain field reads that were DECLARED here and defined NOWHERE in the tree
+    // (grep: no out-of-line definition in any .cpp), so every caller was a latent
+    // unresolved external -- invisible under the per-TU `cl /c` gate, and exactly the
+    // "gate-green != linkable" trap. The X360 inlines all three at every call site (no
+    // standalone symbol in the ledger for any of them), so a header inline IS the
+    // faithful shape; same treatment as GetRoad/GetStreet/GetChallengeParScore above.
+    // They read the members the class already pins (Road::mId, Road::macDebugName,
+    // StreetData::miRoadCount) by name, so the x64 relayout carries them for free.
+    inline CgsID       Road::GetId() const          { return mId; }
+    inline const char* Road::GetDebugName() const   { return macDebugName; }
+    inline int32_t     StreetData::GetRoadCount() const { return miRoadCount; }
+
+    // ---- ADDITIVE (SetupParRivals wave, 2026-08-11) ---------------------
+    // The two road-limit ids, in the same declared-here/defined-nowhere state the three
+    // reads above were in. Same treatment (header inline): neither has a standalone
+    // symbol in the X360 ledger -- the console folds them into every caller.
+    //
+    // ⭐ ASM ATTESTATION for GetRoadLimitId0, from its only in-tree caller
+    // StreetManager::SetupParRivals @0x8233F560. The road pointer is built at
+    // 0x8233F720-28 (`lwz r10, 0x10(r31)` == StreetData::mpaRoads, `add r23, r10, r14`
+    // where r14 steps by the console's 0x40 road stride), and the accessor is the single
+    // instruction at 0x8233F758:
+    //     ld  r10, 0x18(r23)          ; == Road::miRoadLimitId0 (console +24)
+    // compared 64-bit-wide (`cmpld cr6, r9, r10`) against the sign-extended 32-bit
+    // GenericRegion::mId at 0x8233F760-68 -- i.e. an 8-byte CgsID load, which is what
+    // pins it to miRoadLimitId0 (console +24) rather than mId (console +16, the slot
+    // Road::GetId already owns) or miRoadLimitId1 (console +32).
+    //
+    // GetRoadLimitId1 has NO attested call site in the current tree; it is bodied here
+    // for symmetry off the same DWARF-declared member pair and the same layout pins, and
+    // is read by name, so the x64 relayout carries both for free.
+    inline CgsID       Road::GetRoadLimitId0() const { return miRoadLimitId0; }
+    inline CgsID       Road::GetRoadLimitId1() const { return miRoadLimitId1; }
+
+    // ---- element relocation (X360-inlined into StreetData::FixDown/FixUp) ------
+    // Each element owns exactly one relocatable slot: Road::mpaSpans and
+    // Junction::mpaExits (the console's `lwz r8, 0xC(r9); add/sub delta; stw`). They
+    // live here so the StreetData loops address the slot by NAME over the element's
+    // own stride, instead of by the console's byte offset and hard-coded 64/36 stride.
+    inline void Road::FixDown( uintptr_t luDelta )
+    {
+        mpaSpans = reinterpret_cast<SpanIndex*>(
+            reinterpret_cast<uintptr_t>( mpaSpans ) - luDelta );
+    }
+
+    inline void Road::FixUp( uintptr_t luDelta )
+    {
+        mpaSpans = reinterpret_cast<SpanIndex*>(
+            reinterpret_cast<uintptr_t>( mpaSpans ) + luDelta );
+    }
+
+    inline void Junction::FixDown( uintptr_t luDelta )
+    {
+        mpaExits = reinterpret_cast<Exit*>(
+            reinterpret_cast<uintptr_t>( mpaExits ) - luDelta );
+    }
+
+    inline void Junction::FixUp( uintptr_t luDelta )
+    {
+        mpaExits = reinterpret_cast<Exit*>(
+            reinterpret_cast<uintptr_t>( mpaExits ) + luDelta );
+    }
+
+    // ---- x64 layout pins ------------------------------------------------------
+    // STREETDATA.DAT is consumed in place, so these offsets are a WIRE CONTRACT with
+    // tools/assets/bundles/nonapt_transcode.py::_street_data. Anything that shifts a
+    // member here must shift the converter's emitted image in the same step; the two
+    // silently disagreeing is what produced the boot-time road-count assert.
+    inline void Junction::_AssertLayout()
+    {
+        static_assert( sizeof( SpanBase ) == 12, "SpanBase is 12 bytes on both targets" );
+        static_assert( sizeof( Street )   == 16, "Street stride is 16 (pointer-free)" );
+        static_assert( sizeof( Exit )     ==  8, "Junction::Exit stride is 8" );
+        static_assert( offsetof( Junction, mpaExits )    == 0x10, "Junction::mpaExits @0x10" );
+        static_assert( offsetof( Junction, miExitCount ) == 0x18, "Junction::miExitCount @0x18" );
+        static_assert( offsetof( Junction, macName )     == 0x1C, "Junction::macName @0x1C" );
+        static_assert( sizeof( Junction ) == 48, "Junction stride is 48 on x64 (console 36)" );
+    }
+
+    inline void Road::_AssertLayout()
+    {
+        static_assert( offsetof( Road, mpaSpans )       == 0x10, "Road::mpaSpans @0x10" );
+        static_assert( offsetof( Road, mId )            == 0x18, "Road::mId @0x18" );
+        static_assert( offsetof( Road, miRoadLimitId0 ) == 0x20, "Road::miRoadLimitId0 @0x20" );
+        static_assert( offsetof( Road, miRoadLimitId1 ) == 0x28, "Road::miRoadLimitId1 @0x28" );
+        static_assert( offsetof( Road, macDebugName )   == 0x30, "Road::macDebugName @0x30" );
+        static_assert( offsetof( Road, mChallenge )     == 0x40, "Road::mChallenge @0x40" );
+        static_assert( offsetof( Road, miSpanCount )    == 0x44, "Road::miSpanCount @0x44" );
+        static_assert( sizeof( Road ) == 72, "Road stride is 72 on x64 (console 64)" );
+    }
+
+    inline void StreetData::_AssertLayout()
+    {
+        static_assert( sizeof( ChallengeParScoresEntry ) == 40,
+                       "ChallengeParScoresEntry stride is 40 (pointer-free)" );
+        static_assert( offsetof( StreetData, mpaStreets )            == 0x08, "mpaStreets @0x08" );
+        static_assert( offsetof( StreetData, mpaJunctions )          == 0x10, "mpaJunctions @0x10" );
+        static_assert( offsetof( StreetData, mpaRoads )              == 0x18, "mpaRoads @0x18" );
+        static_assert( offsetof( StreetData, mpaChallengeParScores ) == 0x20, "mpaChallengeParScores @0x20" );
+        static_assert( offsetof( StreetData, miStreetCount )   == 0x28, "miStreetCount @0x28" );
+        static_assert( offsetof( StreetData, miJunctionCount ) == 0x2C, "miJunctionCount @0x2C" );
+        static_assert( offsetof( StreetData, miRoadCount )     == 0x30, "miRoadCount @0x30" );
+        static_assert( sizeof( StreetData ) == 56, "StreetData header is 56 bytes on x64 (console 36)" );
     }
 }
 

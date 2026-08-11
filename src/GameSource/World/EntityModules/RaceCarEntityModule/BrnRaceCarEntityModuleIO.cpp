@@ -212,7 +212,13 @@ OutputBuffer_PostScene::GetRaceCarToTrafficInterface()
 
 // ---- InputBuffer_PrePhysics -------------------------------------------------
 
-// X360 0x822B5800 (R, :427) -- const online-scoring accessor.
+// X360 0x822B59F8 (R, DWARF :427 / X360 baked line 436) -- const online-scoring accessor
+// (X360 tail `return this + 212048` == &mOnlineScoringInterface, the same 164-byte block
+// SetOnlineScoringInterface @0x8279DCF8 memcpys into).
+// ⚠️ ADDRESS CORRECTED 2026-08-11 (was 0x822B5800, which is the const
+// GetAIModuleResultInterface -- line 427, returns +196656): the PS3-DWARF-line vs
+// X360-baked-line skew (+9 in this buffer) had slid this buffer's read-lock run one slot.
+// Bodies were always right (by-name &member); the citations were not.
 const InputBuffer_PrePhysics::OnlineScoringInterface*
 InputBuffer_PrePhysics::GetOnlineScoringInterface() const
 {
@@ -220,7 +226,12 @@ InputBuffer_PrePhysics::GetOnlineScoringInterface() const
     return &mOnlineScoringInterface;
 }
 
-// X360 0x822B5950 (R, :430) -- const PostScene traffic->racecar accessor.
+// X360 0x822B5A48 (R, DWARF :430 / X360 baked line 439) -- const PostScene
+// traffic->racecar accessor (+212212). That address is a HOLE in the .ida-exports dump;
+// it is the one remaining 0xA8 slot between 0x822B59F8 (line 436) and 0x822B5AA0
+// (line 442, GetControllerActive @byte 212213), and +212212 is the single byte in front
+// of mbControllerActive -- i.e. mTrafficToRaceCarInterface_PostScene's 1-byte payload.
+// (Was cited as 0x822B5950, which is GetScoringInterface -- same +9 skew.)
 const InputBuffer_PrePhysics::TrafficToRaceCarInterface_PostScene*
 InputBuffer_PrePhysics::GetTrafficToRaceCarInterface_PostScene() const
 {
@@ -555,6 +566,56 @@ InputBuffer_PreScene::SetReplayStatusInterface(const InputBuffer_PreScene::Repla
     mReplayStatusInterface = *pStatus;
 }
 
+// ---- ADDITIVE GROW (2026-08-11, WorldBridgeInputToEntityModules mount) -------
+// The four remaining out-of-line InputBuffer_PreScene mutators that bridge drives.
+// Every one is the family shape: write-lock assert (status>>3 &1, "Not locked for
+// writing", the X360 baked line of this buffer's own header) then the member write.
+
+// X360 0x8279CE98 (W, :155) -- snapshot the frame's timer status into the buffer.
+// The console copies FIELD-FOR-FIELD in two 6-field blocks at member+0 and member+0x18
+// (v2[23]=*a2 ... v2[34]=*(a2+44), base = this+0x5C) -- i.e. CgsSystem::
+// TimerStatusInterface::operator= over its two 24-byte TimerStatus sub-blocks, NOT a
+// flat 48-byte memcpy (which would drag each block's trailing bool pad). Same call
+// shape as the traffic twin @0x8279FAD8. Member held BY VALUE (DWARF :53).
+void
+InputBuffer_PreScene::SetTimerStatusInterface(const TimerStatusInterface* lpTimerStatusInterface)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mTimerStatusInterface = *lpTimerStatusInterface;
+}
+
+// X360 0x827A9790 (W, :158) -- latch the director's camera for the frame. The console
+// tail is a single `BrnDirector::Camera::Camera::operator=(this + 144, src)` -- the
+// committed Camera's own copy-assignment -- and +144 (0x90) is mCameraInput, the offset
+// the const twin @0x822B4AE0 returns. Sole producer: BridgeInputToEntityModules
+// @0x827ADF88, which passes WorldModule::GetLastCameraInput().
+void
+InputBuffer_PreScene::SetCameraInput(const BrnDirector::Camera::Camera* lpCameraInput)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mCameraInput = *lpCameraInput;
+}
+
+// X360 0x8279D108 (W, :167) -- store the active payback type (console `v2[3471] = a2`
+// == the word at this+0x363C == meActivePaybackType, the member the const getter
+// @0x822B4CD8 reads).
+void
+InputBuffer_PreScene::SetActivePaybackType(BrnNetwork::EPaybackType lePaybackType)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    meActivePaybackType = lePaybackType;
+}
+
+// X360 0x8279D1B0 (W, :170) -- store the active payback aggressor (console
+// `v2[3472] = a2` == this+0x3640 == meActivePaybackAggressor, read back by
+// @0x822B4D80).
+void
+InputBuffer_PreScene::SetActivePaybackAggressor(EActiveRaceCarIndex leAggressor)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    meActivePaybackAggressor = leAggressor;
+}
+
 // ---- InputBuffer_PostScene --------------------------------------------------
 
 // X360 0x827ACA40 (W, :344) -- publishes the crash module's race-car crash-complete
@@ -644,6 +705,76 @@ InputBuffer_PrePhysics::SetTrafficToRaceCarInterface_PostScene(const TrafficToRa
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
     mTrafficToRaceCarInterface_PostScene = *lpTrafficToRaceCarInterface;
+}
+
+// ---- ADDITIVE GROW (2026-08-11, WorldBridgeInputToEntityModules mount) -------
+// The five remaining out-of-line InputBuffer_PrePhysics mutators that bridge drives.
+// The console offsets they touch pin the tail of this buffer end-to-end and agree with
+// the member list: mTakedownEventQueue @+208976 (336 B) -> mScoringInterface @+209312
+// (2736 B) -> mOnlineScoringInterface @+212048 (164 B) ->
+// mTrafficToRaceCarInterface_PostScene @+212212 (1 B) -> mbControllerActive @+212213 ->
+// mbInHardStopCamera @+212214.
+
+// X360 0x827A98F8 (W, :431) -- replace the standing takedown-event queue with the
+// caller's. The console body is `*(_DWORD *)(this + 208984) = 0` (== member+8 ==
+// BaseEventQueue::miLength, i.e. the inlined Clear()) followed by
+// `BrnGameState::TakedownEvent_::Append(this + 208976, src)` -- the committed
+// CgsModule::EventQueue<BrnGameState::TakedownEvent,8> (== BaseEventQueue<TakedownEvent>)
+// instantiation's own Append merge, called here by name. (The member was a 256-byte
+// opaque blob until this wave -- see the GROWN note in BrnRaceCarEntityModuleIOQueues.h;
+// Appending through the blob would have overrun into mScoringInterface.)
+void
+InputBuffer_PrePhysics::SetTakedownEventQueue(const TakedownEventQueue* lpTakedownEventQueue)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mTakedownEventQueue.Clear();
+    mTakedownEventQueue.Append(*lpTakedownEventQueue);
+}
+
+// X360 0x8279DC40 (W, :434) -- copy the frame's scoring output block into the buffer
+// (console memcpy of the 2736-byte interface into this+209312 == &mScoringInterface).
+// [EVIDENCE NOTE] 0x8279DC40 is a HOLE in the .ida-exports dump. It is the middle member
+// of this buffer's uniform 0xB8-stride setter run -- 0x8279DB98 (the write-lock
+// GetSceneResultQueue, X360 line 425) + 0xA8, and 0x8279DC40 + 0xB8 == 0x8279DCF8
+// (SetOnlineScoringInterface) -- and the 2736-byte block it must fill is exactly the gap
+// the two bracketing offsets leave (212048 - 209312). Shape taken from its immediate
+// sibling below, which is the same memcpy-of-a-flat-interface body.
+void
+InputBuffer_PrePhysics::SetScoringInterface(const ScoringInterface* lpScoringInterface)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    std::memcpy(&mScoringInterface, lpScoringInterface, sizeof(mScoringInterface));
+}
+
+// X360 0x8279DCF8 (W, :437) -- copy the frame's online-scoring output block into the
+// buffer. Console: `addis r3,r28,3 / addi r3,r3,0x3C50` == this+0x33C50 (212048) ==
+// &mOnlineScoringInterface, `li r5,0xA4` == 164 bytes == sizeof the committed
+// BrnGameState::GameStateModuleIO::OnlineScoringOutputInterface.
+void
+InputBuffer_PrePhysics::SetOnlineScoringInterface(const OnlineScoringInterface* lpOnlineScoringInterface)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    std::memcpy(&mOnlineScoringInterface, lpOnlineScoringInterface,
+                sizeof(mOnlineScoringInterface));   // X360: 0xA4 (164) bytes
+}
+
+// X360 0x8279DE68 (W, :443) -- single byte store at this+212213 == mbControllerActive
+// (the flag the const getter @0x822B5AA0 reads back).
+void
+InputBuffer_PrePhysics::SetControllerActive(bool lbControllerActive)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mbControllerActive = lbControllerActive;
+}
+
+// X360 0x8279DF18 (W, :446) -- single byte store at this+212214 == mbInHardStopCamera
+// (read back by @0x822B5B50). The bridge feeds it bit 0x100 of the last camera input's
+// state-flag word.
+void
+InputBuffer_PrePhysics::SetInHardStopCamera(bool lbInHardStopCamera)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mbInHardStopCamera = lbInHardStopCamera;
 }
 
 // ---- InputBuffer_PostPhysics ------------------------------------------------

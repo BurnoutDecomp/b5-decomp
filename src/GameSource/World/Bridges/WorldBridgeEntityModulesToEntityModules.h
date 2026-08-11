@@ -20,22 +20,20 @@
 // On the consoles these are WorldModule methods (DWARF BrnWorldModule.h shows the 2-arg member
 // shape, `this`==WorldModule implicit); per the committed bridge precedent they are modelled as
 // namespace functions whose leading lpWorldModule arg is the X360 r3 (the WorldModule `this`).
-// BridgeRaceCarModuleToWorldModule_PreScene DOES read through it (it writes the player index +
-// per-car rival markers into WorldModule members at their X360 byte offsets, cited in the .cpp);
-// the other two never dereference it.
+// None of the bridges declared BELOW dereferences lpWorldModule.
+//
+// ⛔ MOVED OUT OF THIS NAMESPACE 2026-08-11: BridgeRaceCarModuleToWorldModule_PreScene
+// @0x827A52B0 -- the ONE bridge in this family that DOES write WorldModule member state --
+// is now declared where the DWARF puts it, as a WorldModule METHOD (BrnWorldModule.h:473),
+// and defined in Bridges/WorldBridgeRaceCarToWorldModule.cpp. Under the `void*` model it
+// reached its two members through X360 byte offsets that are 67,504 bytes wrong on the x64
+// PC layout, so the publish missed entirely. Read that file's banner before re-introducing
+// a void*-typed world-module parameter for anything that dereferences it.
 namespace BrnTraffic { namespace BrnTrafficIO { class InputBuffer_PostScene; } }
 namespace BrnWorld { namespace RaceCarEntityModuleIO { class OutputBuffer_PostScene; } }
 
 namespace WorldModule
 {
-    // @ 0x827A52B0 (WorldBridgeEntityModulesToEntityModules.cpp:88; DWARF BrnWorldModule.h:473) --
-    // latch the race-car module's active output interface into the world-entity input buffer, then
-    // publish the player index + per-active-car rival markers into the WorldModule context.
-    void BridgeRaceCarModuleToWorldModule_PreScene(
-        void* lpWorldModule,
-        BrnWorld::WorldEntityIO::InputBuffer_PreScene* lpWorldInputBuffer_PreScene,
-        const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutputBuffer_PreScene);
-
     // @ 0x827A51F0 (WorldBridgeEntityModulesToEntityModules.cpp:69; DWARF BrnWorldModule.h:566) --
     // latch the traffic module's post-scene traffic->race-car interface into the race-car
     // pre-physics input.

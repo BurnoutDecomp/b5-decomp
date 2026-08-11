@@ -33,19 +33,17 @@
 #include <cstdint>
 #include <new>      // placement new (operator new + ctor at the GC-pool slot)
 
-// FLAG (AptObject layer -- Adriwin's class:AptObject TU): record the interface
-// prototypes a class implements (the real member AptObject::SetImplementedObjects,
-// AptObject.cpp) -- called directly below; the free-helper shim is retired.
+// AptObject::SetImplementedObjects (record the interface prototypes a class
+// implements) is the real homed member (AptObject.cpp) -- called directly below.
 
 // AptActionInterpreter::_createObject @0x82B08088 -- the value-materialiser; a real
 // member (declared in AptActionInterpreter.h, homed in AptActionInterpreterStackOps.cpp).
 // The New/Init/Define object handlers below call it directly on the interpreter; the
 // forwarding free-function shim was retired.
 
-// FLAG (engine rodata -- console &dword_8324E650, an entry of the static EAStringC
-// class-name table at dword_8324E580): the generic "Object" class name InitObject
-// hands to _createObject. Provided by the engine's constant-string table; declared
-// here so the handler can name it (the table data itself is the data-segment follow-on).
+// The generic "Object" class name InitObject hands to _createObject (console
+// &dword_8324E650, an entry of the dword_8324E580 class-name table) -- defined
+// with its literal contents ("Object") in AptGlobals.cpp.
 extern const EAStringC gAptObjectClassName;   // &dword_8324E650
 
 namespace
@@ -167,7 +165,7 @@ void AptActionInterpreter::_FunctionAptActionInitObject(AptActionInterpreter* pI
 
         AptValue* pObject = pInterp->_createObject(   // real member @0x82B08088
         static_cast<AptValue*>(pContext->mpCIH),
-        pContext->mpPendingReleaseValue, &gAptObjectClassName, 0, 1);   // FLAG: class-name rodata
+        pContext->mpPendingReleaseValue, &gAptObjectClassName, 0, 1);   // "Object" (AptGlobals.cpp)
 
     if (pObject)
     {
@@ -222,11 +220,12 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction(AptActionInterpreter
         reinterpret_cast<const unsigned char*>(pByteCode) + 48 + pByteCode->mnByteCodeSize;
 
     // Patch the interpreter's constant-pool registers (the movie string dictionary)
-    // into the record. FLAG: the console writes the interpreter's +0x40 slot into the
-    // record's +0x10 field and +0x44 into +0x14; on x64 the dictionary base is an
-    // 8-byte pointer, so it is kept in the pointer-typed mppConstantPool (mpConstantPool)
-    // and the count in mnConstantPoolCount (mnConstantPoolCount) rather than the literal console
-    // slot order, which would truncate the pointer.
+    // into the record. The console writes the interpreter's +0x40 slot into the
+    // record's +0x10 field and +0x44 into +0x14; the record is the x64 _parseStream
+    // transcode of the serialized .apt function record, where the dictionary base is
+    // a native 8-byte pointer -- kept in the pointer-typed mppConstantPool and the
+    // count in mnConstantPoolCount (phase-0 native-8 regime; the literal console
+    // slot order would truncate the pointer).
     pByteCode->mppConstantPool     = reinterpret_cast<const char**>(
                                          reinterpret_cast<uintptr_t>(pInterp->mpConstantPool));
     pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->mnConstantPoolCount);
@@ -276,7 +275,7 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction2(AptActionInterprete
     pContext->mpProgramCounter =
         reinterpret_cast<const unsigned char*>(pByteCode) + 48 + pByteCode->mnBodyLength;
 
-    // Patch the constant-pool registers in (same x64 pointer-width note as v1). FLAG.
+    // Patch the constant-pool registers in (same x64 pointer-width note as v1).
     pByteCode->mppConstantPool     = reinterpret_cast<const char**>(
                                          reinterpret_cast<uintptr_t>(pInterp->mpConstantPool));
     pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->mnConstantPoolCount);
@@ -322,9 +321,10 @@ void AptActionInterpreter::_FunctionAptActionDefineDictionary(AptActionInterpret
     pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pPair + 2);
 
     // mnConstantPoolCount (console +0x40) <- the entry count; mpConstantPool (console +0x44) <- the
-    // string-table base pointer the dictionary-push ops index. FLAG: on x64 the base
-    // is an 8-byte pointer, so it is held in the pointer-typed mpConstantPool slot (the
-    // console's 32-bit slot widths differ -- access is by member name).
+    // string-table base pointer the dictionary-push ops index. The pair is read from
+    // the x64 _parseStream transcode of the serialized .apt stream, where the base is
+    // a native 8-byte pointer -- held in the pointer-typed mpConstantPool slot
+    // (phase-0 native-8 regime; access is by member name).
     pInterp->mnConstantPoolCount    = static_cast<uint32_t>(pPair[0]);
     pInterp->mpConstantPool = reinterpret_cast<AptValue**>(pPair[1]);
 }

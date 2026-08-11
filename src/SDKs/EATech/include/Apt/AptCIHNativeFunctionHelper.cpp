@@ -62,33 +62,31 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                       // gpAptPseudoDataPool (the TextFormat pool)
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed Apt behavioural callees -- bodies in their own TUs; declared so
-// the AS movie-management methods below compile against the same entry points):
-//   AptCIH::InsertChild @0x82B09CA0 -- place pCharacter into pNode's child display
-//     list at nDepth under name pName (pSource = the cloned-from node or null,
-//     pInitObject = an optional init object). Returns the inserted child CIH.
-//   findCharacterInLibrary @0x82AD... -- resolve an exported library symbol name to
-//     a character in pNode's movie (a3 = "search imports" flag).
-//   AptAnimationTarget::TickNewInsts -- tick the just-inserted instances so they are
-//     live this frame (drains the new-instance table off_8324E544).
-//   AptHook_GetBytesTotal (gAptFuncs slot, X360 dword_8324E8AC) -- host query: total
-//     byte size of a loaded .apt by file path.
+// Behavioural callees of the AS movie-management methods below -- all HOMED:
+//   AptCIH::InsertChild @0x82B09CA0 -- member (declared in AptCIH.h, included above;
+//     body in AptCIHBehaviour.cpp).
+//   findCharacterInLibrary @0x82AFDF58 -- resolve an exported library symbol name to
+//     a character in pNode's movie (a3 = "search imports" flag); defined BELOW in
+//     this TU (forward-declared for the earlier sMethods).
+//   AptAnimationTarget::TickNewInsts -- static member (drains the new-instance
+//     table off_8324E544).
+//   AptHook_GetBytesTotal (gAptFuncs slot, X360 dword_8324E8AC) -- host query,
+//     defined below (PC host-callback boundary leaf).
 // ---------------------------------------------------------------------------
-// AptCIH::InsertChild is now a member (declared in AptCIH.h, included above).
 extern AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, char bSearchImports);
 extern int  AptHook_GetBytesTotal(const char* pcFilePath, int a2, double a3);             // dword_8324E8AC
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the apt VM native-call dispatch): the global native-method arg
-// stack (X360 off_8324E768 = gAptActionInterpreter.mpStack, dword_8324E760 = its
-// mnStackTop). The i-th AS argument (i=0 = last pushed) is
-// gppAptNativeArgStack[gnAptNativeArgCount - 1 - i]. (Committed externs in the
-// sibling AptActionInterpreterBuiltins.cpp.)
+// The global native-method arg stack (X360 off_8324E768 = gAptActionInterpreter.
+// mpStack, dword_8324E760 = its mnStackTop). Storage HOMED in AptGlobals.cpp; the
+// VM native-call dispatch (AptActionInterpreterInterpHelpers.cpp) fills them around
+// each native call. The i-th AS argument (i=0 = last pushed) is
+// gppAptNativeArgStack[gnAptNativeArgCount - 1 - i].
 // ---------------------------------------------------------------------------
 extern AptValue** gppAptNativeArgStack;   // off_8324E768
 extern int        gnAptNativeArgCount;    // dword_8324E760
 
-// FLAG (homed by the AS-globals layer): the shared "undefined" value (off_8324D814).
+// The shared "undefined" value (off_8324D814; storage HOMED in AptGlobals.cpp).
 extern AptValue* gpUndefinedValue;
 
 // ---------------------------------------------------------------------------
@@ -105,9 +103,9 @@ static inline bool IsClipHandleOrCIHNone(const AptValue* pValue)
         || eType == AptVFT_CIHNone;
 }
 
-// The clip's play-head "playing" bit (mnClipActionFlags bit 6 / 0x40); set by
+// The clip's play-head "playing" bit (bIsPlaying, x64 mnClipActionFlags bit 25); set by
 // sMethod_play, cleared by sMethod_nextFrame. (Console *(spriteBase+0x14) & 0x40.)
-static const uint32_t KU_CLIP_PLAYING = 0x40u;
+static const uint32_t KU_CLIP_PLAYING = 0x2000000u;   // bIsPlaying, x64 bit 25 (X360 reversed bit 6)
 
 // ===========================================================================
 // sMethod_getDepth @0x82AED6D8 -- AS getDepth(): the node's display depth (the
@@ -183,7 +181,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_stop(AptValue* pContext, int /*nAr
 // ===========================================================================
 // sMethod_nextFrame @0x82B0D568 -- AS nextFrame(): advance the play-head one frame
 // (jumpToFrame(mnGotoFrame + 1)) and clear the clip's "playing" bit
-// (mnClipActionFlags &= ~0x40). Always returns undefined.
+// (mnClipActionFlags &= ~KU_CLIP_PLAYING; x64 bit 25). Always returns undefined.
 // ===========================================================================
 AptValue* AptCIHNativeFunctionHelper::sMethod_nextFrame(AptValue* pContext, int /*nArgCount*/)
 {
@@ -240,8 +238,9 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_setMask(AptValue* pContext, int nA
 //     (an AptInteger) + 1, or 0 on a miss (-1 + 1);
 //   * otherwise frame = toInteger(arg);
 //   * AS frames are 1-based: frame -= 1; a negative result is a no-op;
-//   * jumpToFrame(frame); the sprite's playing bit (mnClipActionFlags bit 6)
-//     := bPlay; a STOP additionally calls SetDirtyState(1, 1).
+//   * jumpToFrame(frame); the sprite's playing bit (bIsPlaying, x64 bit 25)
+//     := bPlay; a PLAY additionally calls SetDirtyState(1, 1) (X360 @0x82B0D3F8:
+//     `if (v14 == 1) SetDirtyState(1,1)` where v14 = bPlay != 0).
 // Returns the shared undefined singleton (off_8324D814) either way.
 // ---------------------------------------------------------------------------
 extern AptActionInterpreter gAptActionInterpreter;   // dword_8324E760 (the AS VM)
@@ -259,12 +258,16 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
             gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - 1];
 
         AptCharacterInst* const pInst = pNode->GetCharacterInst();   // +0x20
-        if ((pInst->mTypeFlags & 0xFC000000u) != 0x3C000000u)        // tag 15 -> no-op
+        if ((pInst->mTypeFlags & 0x3Fu) != 15u)        // tag 15 -> no-op (x64 low-6-bit tag)
         {
             int32_t nFrame;
             if (pArg->isString())
             {
                 // Both string forms end at the embedded EAStringC (object +8).
+                // X360 @0x82B0D2F0 guards the BOXED form: `if (v6 != 1) v6 = *(v6+32);
+                // if (v6 == -8 || Lookup(...) == 0) v12 = -1` -- a StringObject whose
+                // boxed value slot is null short-circuits to label-not-found instead
+                // of dereferencing it.
                 AptString* const pStr =
                     (pArg->getVtblIndex() == AptVFT_StringValue)
                         ? static_cast<AptString*>(pArg)
@@ -278,7 +281,9 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
                     reinterpret_cast<const char*>(pChar) + KU_AptEmbeddedMovieOff);
                 AptNativeHash* const pLabels = pMovie->mpLabelHash;
                 AptValue* const pHit =
-                    pLabels ? pLabels->Lookup(*pStr->GetInternalString()) : nullptr;
+                    (pStr != nullptr && pLabels != nullptr)
+                        ? pLabels->Lookup(*pStr->GetInternalString())
+                        : nullptr;
                 nFrame = (pHit ? pHit->toInteger() : -1) + 1;
             }
             else
@@ -290,11 +295,11 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
             if (nFrame >= 0)
             {
                 pNode->jumpToFrame(nFrame);
-                // playing := bPlay (the sprite-base inst's bit 6).
+                // playing := bPlay (bIsPlaying, x64 bit 25).
                 AptCharacterSpriteInstBase* const pSprite =
                     static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
                 pSprite->mnClipActionFlags =
-                    (pSprite->mnClipActionFlags & ~0x40u) | (bPlay ? 0x40u : 0u);
+                    (pSprite->mnClipActionFlags & ~KU_CLIP_PLAYING) | (bPlay ? KU_CLIP_PLAYING : 0u);
                 // X360 @0x82B0D3F8: `if (v14 == 1) SetDirtyState(1, 1)` where v14 IS the
                 // play flag -- a gotoAndPlay must RE-DIRTY the node so tick() picks the
                 // playing clip back up (tick early-outs on a clean node; without this a
@@ -341,7 +346,8 @@ int AptHook_GetBytesTotal(const char* pcFilePath, int a2, double /*a3*/)
 // dispatch: `gAptFuncs.pfnPointHitTest(x, y, node)` (dword_8324E8A4 == the
 // user-function table +0x8C; PPC f1/f2 + r5 == the (float, float, clip) C
 // signature). The engine itself has no shape rasterisation -- precise hit
-// testing is the host renderer's job. FLAG (PC bring-up boundary): the X360
+// testing is the host renderer's job. FLAG PC-platform leaf: the host
+// point-hit-test callback boundary (gAptFuncs.pfnPointHitTest) -- the X360
 // calls the slot unguarded (CgsAptAux always installs the full table); our
 // bring-up has not installed a point-hit-test callback yet, so a null slot
 // answers 0 (miss) -- the honest un-installed-host state, same convention as
@@ -353,10 +359,10 @@ int AptShapeHitTest(AptValue* pNode, float fX, float fY)
 {
     if (gAptFuncs.pfnPointHitTest != nullptr)
     {
-        // FLAG (x64 handle width): AptAssetMoiveClip is the DWARF 'int' handle --
-        // console-width for the clip pointer. No PC host installs this slot yet;
-        // when one does, the typedef must widen (intptr_t) with the host. The
-        // truncating cast documents the boundary rather than hiding it.
+        // FLAG PC-platform leaf (x64 handle width): AptAssetMoiveClip is the DWARF
+        // 'int' handle -- console-width for the clip pointer. No PC host installs
+        // this slot yet; when one does, the typedef must widen (intptr_t) with the
+        // host. The truncating cast documents the boundary rather than hiding it.
         return gAptFuncs.pfnPointHitTest(
             fX, fY,
             static_cast<AptAssetMoiveClip>(reinterpret_cast<uintptr_t>(pNode)));
@@ -467,9 +473,9 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_gotoAndStop(AptValue* pContext, in
 // ===========================================================================
 AptValue* AptCIHNativeFunctionHelper::sMethod_startDrag(AptValue* pContext, int /*nArgCount*/)
 {
-    // FLAG: the X360 dispatches through pContext's vtbl[0] verbatim. On PC the first
-    // virtual is AddRef; the faithful call is the same indirect dispatch expressed
-    // through the named virtual.
+    // The X360 dispatches through pContext's vtbl[0] verbatim; vtbl[0] IS AddRef on
+    // every shipped AptValue vtable (X360 CIH vtbl[+0] = 0x82ADCF20 = AddRef), so the
+    // named virtual is the same dispatch.
     pContext->AddRef();
     return gpUndefinedValue;
 }
@@ -512,8 +518,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_removeTextField(AptValue* pContext
 }
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by AptActionInterpreter, not yet built): the process-wide AS VM.
-// The X360 passes its base address (&dword_8324E760 == the interpreter's
+// The process-wide AS VM (storage HOMED in AptGlobals.cpp; the interpreter TUs are
+// built). The X360 passes its base address (&dword_8324E760 == the interpreter's
 // mnStackTop slot [c:0x00]) as the `this` to the clone/loadVariables behavioural
 // entry points below; declared as the extern global so the calls keep the exact
 // shape. (The same singleton whose stacks back gppAptNativeArgStack /
@@ -571,16 +577,17 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_loadVariables(AptValue* pContext, 
 }
 
 // ---------------------------------------------------------------------------
-// FLAG: AptCIH::GetWorldBounds (X360 sub_82AE2C58, un-homed) -- compute a scene
-// node's world-space AABB into pOutRect (left,top,right,bottom). Declared as an
-// extern shim so the AS hitTest / getBounds keep the exact (node, &rect) call shape.
+// The shared world-bounds helper (X360 sub_82AE2C58, HOMED in AptCIHBehaviour.cpp
+// as GetBoundingRectClamped) -- compute a scene node's world-space AABB into
+// pOutRect (left,top,right,bottom); the AS hitTest / getBounds keep the exact
+// (node, &rect) call shape.
 // ---------------------------------------------------------------------------
 extern void GetBoundingRectClamped(const AptCIH* pThis, float* pOutRect);   // sub_82AE2C58 (AptCIHBehaviour.cpp) -- the shared world-bounds helper; the AS clip AptValue* IS an AptCIH*
 
-// FLAG: the shape-precise point hit-test (X360 indirect through dword_8324E8A4, an
-// AptCharacter render-method slot) -- "is local point (x,y) inside the node's drawn
-// shape?". Declared as an extern shim (the indirect target is a render-data method
-// not yet homed), preserving the (node, x, y) call shape.
+// The shape-precise point hit-test (X360 indirect through dword_8324E8A4) -- "is
+// local point (x,y) inside the node's drawn shape?". HOMED above in this TU as the
+// gAptFuncs.pfnPointHitTest host-callback dispatch (PC-platform leaf boundary),
+// preserving the (node, x, y) call shape.
 extern int AptShapeHitTest(AptValue* pNode, float fX, float fY);   // (*dword_8324E8A4)
 
 // Local: the X360 hitTest receiver/arg type gate -- value type 12 (CharacterInst
@@ -665,9 +672,9 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_localToGlobal(AptValue* pContext, 
     EAStringC strKeyX("x");
     EAStringC strKeyY("y");
 
-    // FLAG: the point's embedded per-instance native hash (the X360 reads it at the
-    // value's +8 -- an AptValueWithHash's hash sub-object). Declared as an extern
-    // shim so the key lookups/stores stay typed without re-narrowing the value here.
+    // The point's embedded per-instance native hash (the X360 reads it at the
+    // value's +8 -- an AptValueWithHash's hash sub-object), reached through the
+    // named GetNativeHashVirtual accessor (the earlier extern shim is retired).
     AptNativeHash* const pHash = static_cast<AptValueWithHash*>(pPoint)->GetNativeHashVirtual();
 
     AptValue* const pValX = pHash->Lookup(strKeyX);
@@ -698,10 +705,10 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_localToGlobal(AptValue* pContext, 
 }
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the AS fixed-size pool layer): the shared Apt pseudo-data DOGMA
-// pool (X360 off_8324D808) the text-format records are allocated from -- the same
-// gpAptPseudoDataPool the sibling Apt TUs (AptActionQueue / AptAnimationTarget)
-// declare. Wired at AptInit.
+// The shared Apt pseudo-data DOGMA pool (X360 off_8324D808; storage HOMED in
+// AptGlobals.cpp, wired at AptInit) the text-format records are allocated from --
+// the same gpAptPseudoDataPool the sibling Apt TUs (AptActionQueue /
+// AptAnimationTarget) declare.
 // ---------------------------------------------------------------------------
 extern DOGMA_PoolManager* gpAptPseudoDataPool;   // off_8324D808
 
@@ -1041,7 +1048,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_attachMovie(AptValue* pContext, in
     // A node flagged "resolve symbols against the parent's library" (render-item
     // mFlags bit 27) looks the symbol up in its display-list parent instead.
     AptCIH* pScope = pNode;
-    if ((pNode->GetCharacterInst()->GetRenderItem()->mFlags >> 27) & 1u)
+    if (pNode->GetCharacterInst()->GetRenderItem()->mFlags & 0x10u)   // x64 bit 4 (X360 bit27)
         pScope = pNode->GetDisplayListParent();
 
     AptCharacter* const pCharacter = findCharacterInLibrary(pScope, &lLibName, 1);
@@ -1059,10 +1066,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_attachMovie(AptValue* pContext, in
     return pInserted ? pInserted : gpUndefinedValue;
 }
 
-// FLAG (un-homed AptCIH behavioural callee): set a procedural display property
-// (_x/_y/_rotation/_alpha/...) by id on the node. @0x82AE... -- declared so the AS
-// creation/positioning methods compile against the same entry point.
-// AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASChanged) is called
+// AptCIH::SetProceduralProperty @0x82AE73C0 (HOMED in AptCIHBehaviour.cpp) is called
 // directly on the member (shim retired); the X360 4th arg bASChanged is r6 (the float fValue skips
 // the r5 GPR slot), NOT visible in the pseudocode -- createTextField passes 0.
 
@@ -1218,7 +1222,7 @@ static void OverlayFieldTextAttributes(AptCIH* pNode, AptRenderItemDynamicText* 
     }
 
     // Alignment = the field's packed alignment (mFlagsAndBackColor bits 3-6, signed).
-    pResult->mFormat.mnAlign = static_cast<int32_t>(pField->mFlagsAndBackColor << 25) >> 28;
+    pResult->mFormat.mnAlign = static_cast<int32_t>(pField->mFlagsAndBackColor << 3) >> 28;
     pResult->mFormat.mfSize  = pField->mFontSize;
 }
 

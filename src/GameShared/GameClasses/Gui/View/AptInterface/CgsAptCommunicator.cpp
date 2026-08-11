@@ -51,9 +51,9 @@ extern AptActionInterpreter gAptActionInterpreter;   // AptGlobals.cpp (&dword_8
 //   AddNewAptComponent(AptValue*, const char*)   - HOMED below (X360 0x82849B88).
 //   Initialize / CalculateReservedVariableHashes - HOMED below (0x8285F0D8 / 0x8284A1F8).
 //   AptCallFunctionOpti(...)                     - HOMED below (anonymous namespace).
-// FLAG - gbLogGuiAudioTriggers (X360 byte_82FB5098) - GUI-audio debug log gate; the
-// owning debug TU is un-homed, so it is DEFINED here (default false == the X360
-// cold-boot .data value) rather than extern'd, keeping the TU link-clean.
+// gbLogGuiAudioTriggers (X360 byte_82FB5098) - GUI-audio debug log gate. This TU is its
+// only reader, so the byte is HOMED here (default false == the X360 cold-boot .data
+// value); a debug TU that later claims ownership can extern this definition.
 // ============================================================================
 
 class AptArray;
@@ -244,7 +244,11 @@ namespace CgsGui
     //
     // Precompute the reserved-variable name hashes. FLAG: the literal name table is
     // un-exported X360 rodata (see the header); with null entries the hashes stay 0
-    // and UpdateComponentReserved treats every key as "not reserved".
+    // and UpdateComponentReserved treats every key as "not reserved". Slot SEMANTICS
+    // are pinned by the Feb-2007 RESERVEDAPTVARIABLES enum (X, Y, WIDTH, HEIGHT,
+    // VISIBLE, ROTATION, ALPHA, +2 BP-era additions; references/Feb-2007/.../
+    // CgsAptCommunicator.h:142) -- VISIBLE == index 4, exactly the one boolean case in
+    // UpdateComponentReserved's switch; only the literal spellings are still missing.
     // ========================================================================
     void AptCommunicator::CalculateReservedVariableHashes()
     {
@@ -451,7 +455,7 @@ namespace CgsGui
     // ========================================================================
     AptValue* AptCommunicator::sMethod_SetCommunicationObject(AptValue* /*pContext*/, int /*iNumParams*/)
     {
-        AptValue* lpCommunicator = AptExtObject::GetParam(0);   // FLAG: GetParam un-homed
+        AptValue* lpCommunicator = AptExtObject::GetParam(0);   // homed: AptExtObject.cpp @0x82ADC270
 
         const bool lbValid = (lpCommunicator != 0)
             && (lpCommunicator->getVtblIndex() == AptVFT_Object)
@@ -497,7 +501,7 @@ namespace CgsGui
             if (liNumDirty != 0)
             {
                 AptArray* lpArray = AptValueFactory::CreateArray(liNumDirty, lapDirtyRefs);
-                // FLAG: AptCallFunctionOpti body is a separate apt TU.
+                // AptCallFunctionOpti -- homed above (the Opti -> VOpti -> Internal chain).
                 AptCallFunctionOpti("UpdateAll", 0, "gAptCommunicator", 1, lpArray);
             }
         }
@@ -834,7 +838,7 @@ namespace CgsGui
     // ========================================================================
     AptValue* AptCommunicator::sMethod_GetComponentData(AptValue* /*pContext*/, int /*iNumParams*/)
     {
-        AptValue* lpMovieClip = AptExtObject::GetParam(0);   // FLAG: GetParam un-homed
+        AptValue* lpMovieClip = AptExtObject::GetParam(0);   // homed: AptExtObject.cpp @0x82ADC270
         AptValue* lpKeyValue  = AptExtObject::GetParam(1);
         s32       liData      = 0;
 
@@ -846,7 +850,7 @@ namespace CgsGui
             && lpKeyValue->getIsDefined();
         CGS_ASSERT(lbKeyOk, "Invalid data key sent to AptCommunicator::SendAptEvent");
 
-        // FLAG: FindAptComponent(AptValue*) is the movieclip-ref overload (un-homed,
+        // FindAptComponent(AptValue*) is the movieclip-ref overload (homed above,
         // X360 sub_8284A0B8 / DWARF cpp:808); distinct from FindAptComponent(const char*).
         const s32 liComponent = FindAptComponent(lpMovieClip);
         CGS_ASSERT(liComponent >= 0,
@@ -926,7 +930,7 @@ namespace CgsGui
     // ========================================================================
     AptValue* AptCommunicator::sMethod_SendAptEvent(AptValue* /*pContext*/, int /*iNumParams*/)
     {
-        AptValue* lpEventId  = AptExtObject::GetParam(0);   // FLAG: GetParam un-homed
+        AptValue* lpEventId  = AptExtObject::GetParam(0);   // homed: AptExtObject.cpp @0x82ADC270
         AptValue* lpUniqueId = AptExtObject::GetParam(1);
         AptValue* lpNameVal  = AptExtObject::GetParam(2);
 
@@ -1029,8 +1033,7 @@ namespace CgsGui
 
             CGS_ASSERT(lpMovieClip != 0, "Invalid movieclip sent to AptCommunicator::SendAptEvent");
 
-            // FLAG: AddNewAptComponent (DWARF cpp:721) is un-homed.
-            AddNewAptComponent(lpMovieClip, lName.GetBuffer());
+            AddNewAptComponent(lpMovieClip, lName.GetBuffer());   // homed above @0x82849B88
         }
 
         // Build and (for the queued kinds) push the trigger record.
@@ -1072,7 +1075,7 @@ namespace CgsGui
     // ========================================================================
     AptValue* AptCommunicator::sMethod_SendAptSoundEvent(AptValue* /*pContext*/, int /*iNumParams*/)
     {
-        AptValue* lpTypeVal   = AptExtObject::GetParam(0);   // FLAG: GetParam un-homed
+        AptValue* lpTypeVal   = AptExtObject::GetParam(0);   // homed: AptExtObject.cpp @0x82ADC270
         AptValue* lpActionVal = AptExtObject::GetParam(1);
         AptValue* lpLabelVal  = AptExtObject::GetParam(2);
         AptValue* lpNameVal   = AptExtObject::GetParam(3);
@@ -1109,7 +1112,7 @@ namespace CgsGui
 
         const char* lpacName = lNameText.GetBuffer();
 
-        if (gbLogGuiAudioTriggers && (CgsDev::Message::gxMessageFilterFlags & 1))   // FLAG: gbLogGuiAudioTriggers un-homed
+        if (gbLogGuiAudioTriggers && (CgsDev::Message::gxMessageFilterFlags & 1))   // gbLogGuiAudioTriggers homed at the top of this TU
         {
             const char* lpacNameLog = lNameText.GetBuffer();
             *CgsDev::Log::gpDebugPrint

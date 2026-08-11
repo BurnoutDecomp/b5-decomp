@@ -23,8 +23,9 @@
 // the gAptFuncs.pfnDrawRenderingUnit slot, which CgsGui::AptAux::ConstructApt installs
 // to CgsGui::AptCallbackRender::DrawRenderingUnit -> AptRenderHandler::Render. So the
 // hook reads the shape's geometry sub-field (AptCharacter +0x20, the console's v6[8])
-// and calls through the installed slot. AptHookDrawImportGlyph / AptHookResolveImport
-// are the imported-sub-character path -- still deferred with the .apt parse (FLAG).
+// and calls through the installed slot. The imported-sub-character path is served
+// by the homed member AptCharacterAnimation::GetIDFromImportFile @0x82ADE998 when
+// the AptCharacter::render import branch lands -- no free-function shim remains here.
 //
 // (The PC hook takes the whole AptCharacter and reads the geometry from it -- the host
 // owns the loaded-shape layout -- which keeps the AptCharacter base slice free of the
@@ -37,16 +38,13 @@ enum AptMaskRenderOperation : int;
 
 // Wired to gAptFuncs.pfnDrawRenderingUnit (see AptRenderHooks.cpp).
 void AptHook_DrawShape(AptCharacter* pShape, AptMaskRenderOperation eOp, int nTick);
-// FLAG: the imported-sub-character path, homed with the .apt parse.
-void AptHookDrawImportGlyph(AptCharacter* pImport, int nIndex, void* pGlyphData);
-int  AptHookResolveImport(void* pImportFileData, int nImportId);
 
 // ---------------------------------------------------------------------------
 // Custom-control host hooks (AptRenderItemCustomControl). A custom control is a
 // game-supplied widget the Apt player does not draw itself; the host installs
 // these to draw/destroy it and to receive the instance-name render-data
-// notifications. FLAG: homed by the host custom-control integration; declared
-// here so the custom-control render item compiles/links against the boundary.
+// notifications. The slots are DEFINED in AptGlobals.cpp (null until the host
+// installs them); declared here so the render items name the boundary.
 // ---------------------------------------------------------------------------
 extern bool gbAptCustomControlRenderEnabled;                                   // byte_82F733F6
 extern void (*gpfnAptDestroyCustomControl)(intptr_t nZId);                     // dword_8324E898

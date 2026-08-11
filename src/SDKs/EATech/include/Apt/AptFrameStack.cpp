@@ -62,6 +62,26 @@ AptFrameStack::AptFrameStack(AptFrameStack* pEnclosingScope)
         pEnclosingScope->AddRef();
 }
 
+// The next power of two >= nSize (the x64 second ctor's capacity rounding).
+static int AptFrameStackRoundHashSize(int nSize)
+{
+    int nPow2 = 1;
+    while (nPow2 < nSize)
+        nPow2 <<= 1;
+    return nPow2;
+}
+
+// x64 ??0AptFrameStack@@QEAA@PEAV0@H@Z @0x140826010 -- explicit hash capacity,
+// rounded UP to the next power of two before it seeds the embedded hash
+// (B4Extern corroborates the two-ctor set).
+AptFrameStack::AptFrameStack(AptFrameStack* pEnclosingScope, int nHashSize)
+    : AptValueWithHash(AptVFT_FrameStack, AptFrameStackRoundHashSize(nHashSize))
+{
+    mpEnclosingScope = pEnclosingScope;
+    if (pEnclosingScope != 0)
+        pEnclosingScope->AddRef();
+}
+
 // ---------------------------------------------------------------------------
 // dtor @0x82AF0488 -- the X360 body is `if (mHash.mpTable) mHash.DestroyGCPointers()`,
 // i.e. the compiler inlined the embedded-hash teardown into the frame dtor. Here

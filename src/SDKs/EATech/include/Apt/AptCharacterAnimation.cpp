@@ -30,39 +30,35 @@
 #include <cstring>   // strstr (ExportClassDefinitionAssets' __Packages label scan)
 
 // ===========================================================================
-// Fixup walk -- un-homed callees / globals.   The serialised .apt records are the
+// Fixup walk -- serialised-blob access.   The serialised .apt records are the
 // in-place file blob (no recovered runtime struct), so this TU addresses them by
-// their console byte offsets through the BlobI32/BlobPtr accessors below, exactly
+// their [c:0xNN] byte offsets through the BlobI32/BlobPtr accessors below, exactly
 // as the sibling AptMovie::resolve does for the timeline command records. The
-// callees the walk recurses into are owned by their own (still deferred) TUs and
-// declared here with the raw-but-faithful call-site signatures so this TU links.
-// FLAG: each lands when its owning TU is reconstructed.
+// callees the walk recurses into are homed now (AptLoader::Load, AptMovie::resolve64,
+// AptCharacter::SetupCharacter, the VM singleton -- see the notes below).
 // ===========================================================================
 
 // (The X360 AptLoader::Load @0x82AEEA70 by-value-return wrapper extern was
 // DELETED 2026-07-10 -- the import pass below calls the homed member
 // `lpLoader->Load(lName)` directly.)
 
-// FLAG (x64 native-8 relocation bounds): the AptData resource span the host stashes so the
-// Fixup case-5/9 -> AptMovie::resolve64 walk can bounds-check every serialised offset slot
-// (defined in CgsAptAux.cpp). Declared here by name to avoid pulling the heavy CgsAptAux.h.
+// The AptData resource span the host stashes (x64 native-8 relocation bounds) so the
+// Fixup case-5/9 -> AptMovie::resolve64 walk can bounds-check every serialised offset slot.
+// HOMED: defined in CgsAptAux.cpp; declared here by name to avoid the heavy CgsAptAux.h.
 namespace CgsGui { extern uintptr_t gAptResourceSpanBase; extern uint32_t gAptResourceSpanSize; }
 
 // ===========================================================================
-// Init-action execution -- un-homed globals / callees (the ActionScript VM path).
-// The init-action passes (ExportClassDefinitionAssets / ExecuteInitAction(s)) drive
-// the global AptActionInterpreter VM singleton and a global parse-arg scratch heap,
-// both still owned by their own deferred TUs. They are declared here with the raw
-// call-site signatures so this TU links; FLAG: each lands when its TU is rebuilt.
+// Init-action execution (the ActionScript VM path).   The init-action passes
+// (ExportClassDefinitionAssets / ExecuteInitAction(s)) drive the global
+// AptActionInterpreter VM singleton (gAptActionInterpreter, AptGlobals.cpp) and the
+// AS register-block window (AptScriptFunctionBase::PushStaticData) -- both homed
+// and live; see the notes below.
 // ===========================================================================
 
 // AptActionInterpreter VM singleton (dword_8324E760) + its two entry points the init
 // passes call. runStream(pStream, pCIH, frameNo=-1, pScope) parses/executes a class-
 // definition / init action stream; CleanupAfterExecution(savedScratch, &localState)
-// pops the run. Raw (int) call-site forms -- the VM's recovered AptActionInterpreter
-// class (AptActionInterpreter.h) models the same two methods, but the init passes call
-// them on the GLOBAL singleton with the console arg shapes, so they are bridged here.
-// FLAG: gAptActionInterpreterVM + these two thunks land with the VM TU.
+// pops the run. The init passes call the members directly on the GLOBAL singleton.
 // The VM singleton (dword_8324E760) is the real AptActionInterpreter object
 // gAptActionInterpreter (AptGlobals.cpp), initialised at boot by AptUpdateInitialize;
 // the init passes call its runStream/CleanupAfterExecution members directly. (The
@@ -76,37 +72,20 @@ extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 // (PushStaticData) and CleanupAfterExecution pops it back. The old
 // gAptParseArgHeapPtr/Count duplicate globals are retired.
 
-// AptGetAnimationAtLevel @0x82B00788 -- the root AptCIH-at-level resolver the init
-// passes use when the supplied CIH is itself a level (type 0x25). Homed in
-// AptCharacterHelper.cpp; CANONICAL return reconciled to AptCIH* (was void* here --
-// the void* blob walk below still binds via the AptCIH*->void* assignment).
-struct AptCIH;
-extern AptCIH* AptGetAnimationAtLevel(int nLevel);
+// (AptGetAnimationAtLevel @0x82B00788 -- the root AptCIH-at-level resolver -- is
+// reached through AptCIH::GetRootAnimation (AptCIH.cpp), which owns the CIHNone/
+// type-0x25 level-0 fallback; the direct extern here is retired.)
 
-// Unresolve reaches the VM's deferred-release queue + a host free hook for shapes.
-// dword_8324E500 = the VM (owning) thread id; the queue (off_8324E2C8 / count
-// dword_8324E508) is drained under gAptUnresolveMutex; off-thread releases go through
-// the host free thunks (dword_8324E870 for fonts, dword_8324E87C for shapes).
-// FLAG: all owned by the VM / host TUs.
-extern int   gAptVMThreadId;                          // dword_8324E500 (FLAG)
-extern int   gAptDeferredReleaseCount;                // dword_8324E508 (FLAG)
-extern void* gAptDeferredReleaseQueue;                // off_8324E2C8 (FLAG)
-extern void  AptFreeFontUnit(void* pUnit);            // dword_8324E870 thunk (FLAG)
-extern void  AptFreeRenderingUnit(void* pUnit);       // dword_8324E87C thunk (FLAG)
-
-// EA::Thread primitives the case-7 (button) release path uses: the current thread id
-// and the lock guarding the deferred-release queue (unk_8324E728 + its name
-// unk_82143270). FLAG: the genuine EA::Thread::Mutex / GetThreadId live in the vendor
-// EAThread layer; declared here at the call-site shapes the asm uses so this TU links
-// without coupling to the (X360-divergent) vendor mutex global.
-namespace EA { namespace Thread {
-    extern int GetThreadId();
-    struct AptUnresolveMutex;                                          // unk_8324E728 (FLAG)
-    extern void Mutex_Lock(void* pMutex, void* pName);                 // EA::Thread::Mutex::Lock (FLAG)
-    extern void Mutex_Unlock(void* pMutex);                           // EA::Thread::Mutex::Unlock (FLAG)
-} }
-extern void* gAptUnresolveMutex;       // unk_8324E728 (FLAG)
-extern void* gAptUnresolveMutexName;   // unk_82143270 (FLAG)
+// The two host free hooks Unresolve routes released render/font units through
+// (X360 dword_8324E870 / dword_8324E87C == XB1 qword_14147AA60 / qword_14147AA78).
+// HOMED in AptRenderLinkStubs.cpp (PC-platform leaves there: the PC host installs no
+// unit-free callbacks). The console's off-thread deferral apparatus (VM thread id
+// dword_8324E500, the deferred-release queue off_8324E2C8/dword_8324E508 under
+// unk_8324E728) is owned by AptGlobals.cpp/AptInit.cpp/AptRenderWalk.cpp; the XB1
+// Unresolve twin (sub_140845200) frees directly on the single VM thread here, so
+// this TU no longer declares it.
+extern void AptFreeFontUnit(void* pUnit);        // dword_8324E870 host hook
+extern void AptFreeRenderingUnit(void* pUnit);   // dword_8324E87C host hook
 
 // gpAptTarget (off_8324E574) -- the current AS animation target; its import loader
 // is mpLoader [c:+0x1C] (AptTarget.h). The asm reads gpAptTarget[+0x1C].
@@ -130,9 +109,9 @@ namespace
     inline int32_t& BlobI32Ref(void* pRec, int nOff)         { return *reinterpret_cast<int32_t*>(reinterpret_cast<char*>(pRec) + nOff); }
     // BlobPtr reads a (already-relocated) pointer slot from a serialised record.
     // The records are addressed by their console byte offsets; on x64 every host
-    // pointer slot the runtime touches is a full 8-byte word (the transcoded form),
-    // so the slot is read as a void* here. (The 4-byte file-format truncation is the
-    // FLAGged x64 fork already documented for the Fixup walk above.)
+    // pointer slot the runtime touches is a full 8-byte word (the native-8 GUIAPT64
+    // form -- the 4-byte console slot widens under the 8-byte pointer rule, the
+    // same resolved fork the Fixup walk documents).
     inline void*    BlobPtr(void* pRec, int nOff)            { return *reinterpret_cast<void**>(reinterpret_cast<char*>(pRec) + nOff); }
     inline void*&   BlobPtrRef(void* pRec, int nOff)         { return *reinterpret_cast<void**>(reinterpret_cast<char*>(pRec) + nOff); }
     inline char*    BlobAt(void* pRec, int nOff)             { return reinterpret_cast<char*>(pRec) + nOff; }
@@ -236,8 +215,8 @@ void AptCharacterAnimation::IncCharacterList(AptFilePtr filePtr) const
 // a2/a3 (the asm leaves r4/r5 untouched), so the homed free-function form keeps them
 // as the raw pData/pDataBlock the loader passes and the return (`this`, a chaining
 // value the callers ignore) is modelled void -- matching the family's list-walk
-// methods. Two passes over the serialised blob (the FLAGged in-place 32-bit fork,
-// the same one Fixup/Unresolve walk -- console offsets via the Blob* accessors):
+// methods. Two passes over the serialised blob (the native-8 in-place records,
+// the same ones Fixup/Unresolve walk -- [c:0xNN] offsets via the Blob* accessors):
 //
 //   1. import table [c:0x20]/[c:0x24]: for each import, resolve its class name in the
 //      imported movie's export table (AptFile::FindExport), store the resolved
@@ -249,12 +228,11 @@ void AptCharacterAnimation::IncCharacterList(AptFilePtr filePtr) const
 //      two single index fields (+0x10, +0x14), or a type-3 character's index ARRAY
 //      (count @+0x14, array @+0x18). (The inverse of Unresolve's index re-mapping.)
 //
-// FLAG (x64 fork): the resolved-character pointers and the index->pointer rewrites are
-// stored into the in-place 32-bit blob slots -- the same 32-bit-slot-can't-hold-a-
-// 64-bit-pointer impossibility already FLAGged for the Fixup walk. The char table is
-// treated as a host AptCharacter** here (matching Unresolve's slot stores), so the
-// pointer width stays correct on x64; the native-struct transcode lands with the
-// FixupTranscode rebuild. The ref-count bookkeeping is faithful.
+// x64 fork (RESOLVED -- native-8 GUIAPT64): the resolved-character pointers and the
+// index->pointer rewrites are stored into 8-byte blob slots (the widened "1:7:8"
+// form; XB1 Link twin sub_14083B6E0). The char table is a host AptCharacter**
+// (matching Unresolve's slot stores), so the pointer width is correct on x64. The
+// ref-count bookkeeping is faithful.
 // ===========================================================================
 void AptCharacterAnimation::Link(void* pData, void* pDataBlock)
 {
@@ -393,10 +371,9 @@ void AptCharacterAnimation::Link(void* pData, void* pDataBlock)
 // at the serialised def-base +0x30 (the "ms" slot); importCount sits at +0x34 right after
 // it, so this clears exactly the scratch word without touching importCount.
 //
-// FLAG (x64): the pConstFile->mnSecondaryOffset in-place relocate/un-relocate around Fixup
-// is a 32-bit-slot += 64-bit-base write-back that x64 cannot perform; it is a temporary state
-// only AptMovie::resolve (case-5/9, DEFERRED) reads, and nothing reads it between the relocate
-// and un-relocate on this path, so it is omitted (as the prior homing already flagged).
+// x64: the console's 32-bit in-place `*(a3+28) += a3` widens to the uintptr_t slot below
+// (idempotence-guarded); AptMovie::resolve64 (case-5/9, LIVE) reads it as the constant-
+// record table while the Fixup walk parses each stream, and it is un-relocated after.
 AptCharacterAnimation* AptCharacterAnimation::Resolve(void* pBase, AptConstFile* pConstFile, void* pBlock)
 {
     // Relocate the const chunk's record-table slot around Fixup (the console's
@@ -636,7 +613,7 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
                 // and returns that GuiGeometryFile*, which AptCharacter::render later hands to
                 // DrawRenderingUnit -> AptRenderHandler::Render.
                 //
-                // FLAG (x64 native-8 fork): our .apt is native 8-byte, so the GuiGeometryObject is at the
+                // x64 native-8 fork (RESOLVED): our .apt is native 8-byte, so the GuiGeometryObject is at the
                 // AptDataHeader's field[4] (native-8 offset +32) as a FILE-RELATIVE OFFSET (not the console
                 // +12 pointer), and its file/mesh/vertex tables are 4-byte offsets that must be rebased
                 // against the load base. AptResolveShapeGeometry (below) does that rebase once + hands
@@ -789,42 +766,27 @@ int32_t AptCharacterAnimation::GetIDFromImportFile(int32_t nImportIndex)
 
 // ===========================================================================
 // The init-action passes (the "__Packages" class bootstrap + the per-character
-// onClipEvent init streams). Both walk the serialised .apt records by their console
-// byte offsets (via Blob*) -- they reach the AptMovie timeline command records and
-// the global AptActionInterpreter VM scratch heap, neither of which has a recovered
-// runtime struct -- exactly the FLAGged opaque-record handling the Fixup walk uses.
+// onClipEvent init streams). Both walk the serialised .apt timeline command records
+// by their native-8 byte offsets (via Blob*) -- the in-place blob records have no
+// recovered runtime struct, exactly the opaque-record handling the Fixup walk uses.
+// The VM side (gAptActionInterpreter + the AS register-block window) is typed + live.
 // ===========================================================================
 namespace
 {
-    // The AptCIH "scope" the runStream calls bind: the level the supplied CIH lives
-    // at. Shared verbatim by ExportClassDefinitionAssets / ExecuteInitAction (both
-    // copies of the same console level-walk: type 0x25 -> the root level, else walk
-    // the parent chain [c:+0x1C] until a type 9/15 [c:+8]>>26 record). pA2==0 -> 0.
-    void* ResolveAnimationScope(void* pA2)
+    // The scope the runStream calls bind: the character inst of the level the
+    // supplied CIH lives at. Shared verbatim by ExportClassDefinitionAssets /
+    // ExecuteInitAction -- both inline the AptCIH::GetRootAnimation walk (CIHNone
+    // value tag 0x25 -> the level-0 root, else chase the display-list parent
+    // [c:+0x1C] until the char-inst type tag is 9/15), then read the level node's
+    // char inst ([c:+0x20]). The console read the tag as charInst[c:+0x08]>>26 (the
+    // X360 big-endian position); on x64 the tag is mTypeFlags & 0x3F, so the walk
+    // goes through the TYPED members (GetRootAnimation, AptCIH.cpp). pA2==0 -> 0.
+    AptCharacterInst* ResolveAnimationScope(void* pA2)
     {
         if (!pA2)
             return nullptr;
-
-        void* pLevel = pA2;
-        if ((BlobI32(pA2, 0x04) & 0x7F) == 0x25)        // clrlwi r11,r11,25; cmpwi 0x25
-        {
-            pLevel = AptGetAnimationAtLevel(0);
-        }
-        else
-        {
-            // i = *(pA2+0x20); loop: t = *(i+8) >> 26 (arithmetic); 9 or 15 -> stop,
-            // else pLevel = *(pLevel+0x1C), i = *(pLevel+0x20).
-            void* pNode = BlobPtr(pA2, 0x20);
-            for (;;)
-            {
-                int32_t nTag = BlobI32(pNode, 0x08) >> 26;   // srawi ...,0x1A
-                if (nTag == 9 || nTag == 15)
-                    break;
-                pLevel = BlobPtr(pLevel, 0x1C);
-                pNode  = BlobPtr(pLevel, 0x20);
-            }
-        }
-        return BlobPtr(pLevel, 0x20);                       // v14 = *(pLevel+0x20)
+        AptCIH* const pLevel = static_cast<AptCIH*>(pA2)->GetRootAnimation();
+        return pLevel ? pLevel->GetCharacterInst() : nullptr;   // v14 = *(pLevel+0x20)
     }
 }
 
@@ -833,8 +795,8 @@ namespace
 // indicator). this[c:0x28]/[c:0x2C] is the label/indicator list (an AptInitEntry list:
 // {name@+0, indicator@8}); this[c:+4] is the timeline-command table the matching action
 // stream lives in. The def-base head fields are read through the serialized 64-bit struct
-// (initCount@0x40, initList@0x48, framesOffset@0x08). FAITHFUL to the asm; the VM globals
-// are FLAGged externs.
+// (initCount@0x40, initList@0x48, framesOffset@0x08). FAITHFUL to the asm; the VM
+// singleton is the homed gAptActionInterpreter (AptGlobals.cpp).
 void* AptCharacterAnimation::ExportClassDefinitionAssets(void* pA2)
 {
     void* result = nullptr;
@@ -956,9 +918,9 @@ void* AptCharacterAnimation::ExecuteInitAction(void* pA2, int32_t nId)
 // GetIDFromImportFile), then run every pending type-3 init command in that bucket and
 // finally the import-resolved init action. FAITHFUL to the asm; the def-base head fields
 // are read through the serialized 64-bit struct (importCount@0x34, importTable@0x38 stride
-// 0x20). FLAG (deferred sub-record): the deeper import->AptFile->embedded-movie chase keeps
-// the console record offsets pending the AptFile/embedded-movie sub-record recovery -- this
-// init-action VM path is deferred (never runtime-reached in the current bring-up).
+// 0x20), and the import->AptFile->embedded-movie chase is the TYPED native-8 walk below
+// (file->mpData -> def base @root+0x20 -> charTable[id] -> char+0x20), guarded on the
+// real data bounds -- the whole path runs on the widened records.
 void* AptCharacterAnimation::ExecuteInitActions(void* pA2, int32_t nId)
 {
     void* result = nullptr;
@@ -1248,61 +1210,54 @@ void* AptCharacterAnimation::Unresolve(int32_t nBase)
 // embedded movie's pending type-8 label and un-negate it; (2) per init-list entry,
 // un-negate any negative indicator. FAITHFUL to the asm.
 //
-// FLAG (GUIAPT64 transcode pending): like Unresolve, this addresses the def-base + its
-// tables at the CONSOLE record offsets/strides (charCount@0x0C / charTable@0x10 at a
-// 4-byte slot stride, initCount@0x28 / initList@0x2C at stride 8). It runs only on the
-// AptCharacterAnimationInst teardown (deferred with the instantiation), so the console
-// form is kept; the GUIAPT64 offset/stride transcode lands with the un-defer.
+// GUIAPT64 native-8 (transcoded): the def-base + its tables are the NAMED
+// serialized-64 members (charCount@0x18/charTable@0x20, initCount@0x40/initList@0x48
+// stride 0x10 -- the console read them at 0x0C/0x10 and 0x28/0x2C stride 8), and the
+// embedded movie/frame records are the same native-8 shapes the sibling init passes
+// walk: body @char+0x20 (KU_AptEmbeddedMovieOff), movie {fc@0, frames@8}, frame
+// record {i32 count@0, pad, u64 cmds@8} (console body@+0x10, frames@+4, cmds@+4).
+// The old console-offset walk read the widened def-base's pad/frames slots as
+// count/table -- garbage pointers on every real GUIAPT64 bundle.
 void AptCharacterAnimation::ResetInitIndicators()
 {
     // ---- pass 1: the type-5/9 characters' embedded label tables -------------------
-    const int32_t nChars = BlobI32(this, 0x0C);          // *(this+0x0C)
-    if (nChars > 0)
+    for (int32_t i = 0; i < mnCharacterCount; ++i)               // *(this+0x0C) console
     {
-        for (int32_t iByte = 0, n = nChars; n != 0; iByte += 4, --n)
+        AptCharacter* const pChar = mpCharacterTable[i];         // console 4-byte slots @+0x10
+        if (!pChar)
+            continue;
+        if (pChar->mnType != 5 && pChar->mnType != 9)
+            continue;
+
+        // movie = char + 0x20 (native-8; console r11 += 0x10); frame[0] = *(movie+8).
+        void* const pMovie  = reinterpret_cast<char*>(pChar) + KU_AptEmbeddedMovieOff;
+        void* const pFrame0 = BlobPtr(pMovie, 0x08);             // *(movie+4) console
+        if (!pFrame0)
+            continue;
+        void** const pTable = reinterpret_cast<void**>(BlobPtr(pFrame0, 0x08));   // *(mpFrames+4) console
+        if (!pTable)
+            continue;
+        const int32_t nEntries = BlobI32(pFrame0, 0x00);         // *(mpFrames)
+        if (nEntries <= 0)
+            continue;
+
+        // Un-negate the first pending (negative-id) type-8 label of this movie, then stop.
+        for (int32_t iEntry = 0; iEntry < nEntries; ++iEntry)
         {
-            void* pChar = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-            if (!pChar)
-                continue;
-            const int32_t eType = BlobI32(pChar, 0x00);
-            if (eType != 5 && eType != 9)
-                continue;
-
-            // movie = char+0x10; mpFrames = movie[1]=*(char+0x14); table = mpFrames[1].
-            void* pMovie = BlobAt(pChar, 0x10);          // r11 += 0x10
-            void* pFrames = BlobPtr(pMovie, 0x04);       // *(movie+4)
-            if (!pFrames)
-                continue;
-            void** pTable = reinterpret_cast<void**>(BlobPtr(pFrames, 0x04));   // *(mpFrames+4)
-            if (!pTable)
-                continue;
-            const int32_t nEntries = BlobI32(pFrames, 0x00);   // *(mpFrames)
-            if (nEntries <= 0)
-                continue;
-
-            for (int32_t i = 0; i < nEntries; ++i)
+            void* const pEntry = pTable[iEntry];
+            if (pEntry && BlobI32(pEntry, 0x00) == 8 && BlobI32(pEntry, 0x04) < 0)
             {
-                void* pEntry = pTable[i];
-                if (pEntry && BlobI32(pEntry, 0x00) == 8 && BlobI32(pEntry, 0x04) < 0)
-                {
-                    BlobI32Ref(pEntry, 0x04) = -BlobI32(pEntry, 0x04);
-                    break;
-                }
+                BlobI32Ref(pEntry, 0x04) = -BlobI32(pEntry, 0x04);
+                break;
             }
         }
     }
 
     // ---- pass 2: the init-indicator list [c:0x28]/[c:0x2C] ------------------------
-    const int32_t nInit = BlobI32(this, 0x28);
-    if (nInit <= 0)
-        return;
-    for (int32_t iByte = 0, n = nInit; n != 0; iByte += 8, --n)
+    for (int32_t i = 0; i < mnInitListCount; ++i)                // console stride 8, id@+4
     {
-        void* pEntry = BlobAt(BlobPtr(this, 0x2C), iByte);
-        if (!pEntry)
-            continue;
-        int32_t v = BlobI32(pEntry, 0x04);
-        if (v < 0)
-            BlobI32Ref(pEntry, 0x04) = -v;
+        int32_t& rIndicator = mpInitList[i].mnIndicator;
+        if (rIndicator < 0)
+            rIndicator = -rIndicator;
     }
 }

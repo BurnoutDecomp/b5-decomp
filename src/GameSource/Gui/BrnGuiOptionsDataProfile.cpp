@@ -32,6 +32,15 @@ namespace BrnGui
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::Construct()
 {
+    // The FIRST thing the X360 body does (0x824FF568 `li r10, 0xC` / 0x824FF574
+    // `stw r10, 0(r20)`): stamp the version word. GuiCache::Construct @0x82505860 runs
+    // this over the live options block, and ProfileManager::ReadProfileData @0x824FF298
+    // memcpy's that live block into the stored image -- so this store is what makes a
+    // FIRST boot (no save on the memory unit) present a version-current options segment
+    // to ValidateProfiles. It was missing, which is why a fresh PC boot logged
+    // "Options Data Profile version mismatch, expected 12, got 0".
+    miVersionNumber = KI_VERSION_NUMBER;
+
     mTraxAvailableInFreeBurn.Construct();
     mTraxAvailableInEvents.Construct();
     mTraxFullyPlayed.Construct();

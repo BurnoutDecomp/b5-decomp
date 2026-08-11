@@ -62,8 +62,8 @@ namespace CgsGui
         // as header base + offset. Body in CgsAptDataHandler.cpp.
         AptDataHeader* AddAptData(AptDataHeader* lpHeader);
 
-        // The resolved-name form (// FLAG x64: kept for callers whose name string is
-        // already resolved -- the import fallback path).
+        // The resolved-name form (FLAG PC-platform leaf: host .apt blob offset access --
+        // kept for callers whose name string is already resolved; the import fallback path).
         AptDataHeader* AddAptData(AptDataHeader* lpHeader, const char* lpacName);
 
         // The remaining methods (Construct / Prepare / Release / Destruct / RemoveAptData)

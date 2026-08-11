@@ -85,8 +85,11 @@ struct AptRenderTreeManager
         _AptRenderItemRootList* InsertNewRoot(AptRenderItem* pItem);
     };
 
-    // FLAG: the root-revision list + the double-buffer state (used by the Render_*
-    // walk). Minimal here -- the Update_* facade below is stateless.
+    // The manager's storage IS the per-target render-root head-cell slot: the
+    // "manager this" aliases AptTarget::mppRenderRootAnchor (see
+    // AptCurrentRenderTreeManager in the .cpp), so this leading member is the
+    // head-cell pointer the Render_GetRoot / Update_SetRootItem walks address.
+    // The Update_* facade below is otherwise stateless.
     void* mpRootList;
 
     // ---- UPDATE side (called by AptCharacterInst / AptCIH) -----------------
