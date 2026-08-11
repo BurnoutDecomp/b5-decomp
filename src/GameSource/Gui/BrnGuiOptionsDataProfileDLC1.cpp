@@ -5,6 +5,20 @@
 
 namespace BrnGui
 {
+// Outlined from BrnGui::GuiCache::Construct @0x82505860 (asm 0x825060EC..0x82506110):
+// the cache's live DLC1 options block is initialised to {version 1, reserved 0, flags 0}.
+// Identical store set to ValidateProfile's uninitialised-sentinel reset arm below, which
+// is why the X360 emits the sequence twice rather than calling a shared helper.
+void OptionsDataProfileDLC1::Construct()
+{
+    miVersion  = KI_VERSION_CURRENT;
+    miReserved = 0;
+    for (s32 liIndex = 0; liIndex < 8; ++liIndex)
+    {
+        maFlags[liIndex] = 0;
+    }
+}
+
 // 0x824F0C38  BrnGui::OptionsDataProfileDLC1::ValidateProfile
 // Semantic parity with the X360 body:
 //   liVersion = miVersion;                                  // 0(r31)

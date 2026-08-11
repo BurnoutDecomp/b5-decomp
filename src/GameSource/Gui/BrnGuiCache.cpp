@@ -190,6 +190,14 @@ namespace BrnGui
         // the world-load hand-off).
         GetOptionsDataProfile()->Construct();
 
+        // X360 0x825060EC..0x82506110 (immediately after that call): seed the live DLC1
+        // options block that sits directly behind the options profile at cache+76776 --
+        // version 1, reserved 0, all eight flags clear. ReadProfileData @0x824FF298 copies
+        // those four words into the stored image, so this is what lets a FIRST boot (no
+        // save present) pass ProfileManager::ValidateProfiles' DLC1-options check instead
+        // of logging "Options Data Profile version mismatch, expected 1, got 0".
+        mOptionsDataProfileDLC1.Construct();
+
         // ⛔ FLAG GameState stand-in (2026-08-02, car-select wave).
         // CONSOLE CHAIN: meCarSelectType is latched by RecEvent's `case 77` (see the switch
         // below) from a 4-byte GAME-STATE event that carries the running car-select flavour;

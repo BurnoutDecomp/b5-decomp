@@ -16,8 +16,10 @@
 //       word and a fixed set of save-image fields. The X360 stores are:
 //         stw 0 @+0x7B0, stw 0 @+0xAC8, std 0 @+0x2628, std 0 @+0x2630,
 //         XMemSet(+0x2638,0,4), (+0x263C,0,4), (+0x2640,0,4), (+0x2644,0,4).
-//       (Note: the +0 version word is NOT written by Construct; ValidateProfile sets it
-//        implicitly by treating a freshly-Constructed profile as version-current.)
+//       (Note: the +0 version word is NOT written by Construct. Its only writer is
+//        BrnProgression::Profile::Serialise @0x8237C1F0 -- `*a4 = 6` after the field
+//        copies -- which is why a freshly serialised image is already version-current;
+//        see ConstructImage below.)
 //   * IsDLCCarId      @0x824EFF30 - static: true when a car id's top 14 bits == 0x2957
 //       (the DLC marker). Reads the 64-bit id at the start of a CarData record.
 //   * ValidateProfile @0x824FF480 - version-check after load: if the version word is the
@@ -51,6 +53,20 @@ namespace BrnGuiSaveLoad
 
         // @0x824FF400 - reset the DLC1 save image to defaults (clear the tracked fields).
         void Construct();
+
+        // The full serialised DLC1 image width (X360 `memset(a4, 0, 9800)` at the head of
+        // BrnProgression::Profile::Serialise @0x8237C1F0).
+        static const s32 KI_IMAGE_SIZE_BYTES = 9800;
+
+        // OUTLINED from BrnProgression::Profile::Serialise @0x8237C1F0 -- the two stores it
+        // makes to the DLC1 image that do NOT come from the live profile:
+        //     memset(a4, 0, 9800);   // (prologue) clear the whole DLC1 save image
+        //     *a4 = 6;               // (epilogue, after the field copies) the version word
+        // Serialise is the only writer of this version word too, so this is what stops a
+        // console FIRST boot from taking ValidateProfile's "not the same version, resetting"
+        // arm. Distinct from Construct() above, which is a real X360 function that resets
+        // the tracked fields WITHOUT touching the version word.
+        void ConstructImage();
 
         // @0x824FF480 - validate / migrate the DLC1 profile after load. Always returns true.
         bool ValidateProfile();

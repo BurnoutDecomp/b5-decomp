@@ -13,8 +13,23 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStreamBase
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // CgsDev::Log::gpDebugPrint, Message::gxMessageFilterFlags
 
+#include <cstring>   // std::memset (the Serialise image clear)
+
 namespace BrnGuiSaveLoad
 {
+    // Compile-time pin: the object spans the whole serialised DLC1 image, so the clear in
+    // ConstructImage is a plain object-sized memset rather than an over-length write.
+    static_assert(sizeof(ProfileDLC1) == ProfileDLC1::KI_IMAGE_SIZE_BYTES,
+                  "BrnGuiSaveLoad::ProfileDLC1 must span the 9800-byte serialised image");
+
+    // Outlined from BrnProgression::Profile::Serialise @0x8237C1F0 (prologue
+    // `memset(a4, 0, 9800)` + epilogue `*a4 = 6`); see the header note.
+    void ProfileDLC1::ConstructImage()
+    {
+        std::memset(this, 0, KI_IMAGE_SIZE_BYTES);
+        miVersion = KI_VERSION_CURRENT;
+    }
+
     // @0x824EFF30
     bool ProfileDLC1::IsDLCCarId(const BrnProgression::CarData& lrCar)
     {
