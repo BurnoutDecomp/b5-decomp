@@ -984,12 +984,34 @@ namespace BrnGameState
             // writing out[+0xA10 + 4*t] = ScoringSystem::GetTeamStuntScore(t) (asm
             // 0x8232B050 addi r28,r30,0xA10 / 0x8232B0A4 stw r3,0(r28) / 0x8232B0A8 addi
             // r28,r28,4 / 0x8232B0AC cmpwi r29,9). It sits between mabValid[8] (dst +0xA08)
-            // and mePlayerRaceCarIndex (dst +0xA38); 9*4==36 bytes (+0xA10..+0xA34) with 4
-            // bytes natural-alignment pad before the +0xA38 enum. (Not in the recorded DWARF
-            // member list -- X360-only output slot.)
+            // and the two scalars below; 9*4==36 bytes (+0xA10..+0xA34) with NO padding after
+            // it. (Not in the recorded DWARF member list -- X360-only output slot.)
+            //
+            // ⛔ COMMENT CORRECTED 2026-08-11 (player-input wave). The previous revision claimed
+            // "4 bytes natural-alignment pad before the +0xA38 enum" and put mePlayerRaceCarIndex
+            // at +0xA38. There is no pad -- the array ends 4-aligned at +0xA34 and the enum lands
+            // there, which puts miNumPlayersInGame at +0xA38. THE C++ LAYOUT WAS ALREADY RIGHT
+            // (no pad is emitted); only the two offsets in the comments were off by one slot.
+            // A ten-point fit against WriteDataToOutput @0x8232AE98 settles it, and the two
+            // FLOAT stores are what make it unambiguous:
+            //   +0xA38 `lwz 0x4EE8 ; stw`  -> miNumPlayersInGame  (and it is the value
+            //           ProcessPlayerVehicleInput @0x823004C4 divides by for online-race
+            //           catch-up: `(position-1) / (miNumPlayersInGame-1)`, which is nonsense
+            //           for a race-car index)
+            //   +0xA4C/+0xA50 two `stw`    -> miRoadRageNumTakedowns / miRoadRageTakedownTarget
+            //   +0xA54/+0xA58/+0xA5C `stw` -> miShowtimeCarsCrashed / ScoreMultiplier / ComboMultiplier
+            //   +0xA60 `lfs 0x328 ; stfs`  -> mfShowtimeDistanceTravelled   [FLOAT]
+            //   +0xA64/+0xA68 `stw`        -> miCurrentScore / miTargetScore
+            //   +0xA6C/+0xA70/+0xA74/+0xA78 -> miComboScore / miComboMultiplier / muCurrentStunts
+            //                                  / muAllStunts
+            //   +0xA7C `addi r5, r30, 0xA7C` -> maStunts[1]
+            //   +0xA84 `stfs`              -> mfComboWarningTimeActive       [FLOAT]
+            //   +0xA88/+0xA89 two `stb`    -> mbComboWarningActive / mbComboInProgress
+            // Shifting everything one slot later (the old reading) puts both stfs on integer
+            // members and both stb inside maStunts.
             s32                     maiTeamStuntScores[9];      // dst +0xA10 (per-team stunt score)
-            EActiveRaceCarIndex     mePlayerRaceCarIndex;       // :544  (dst +0xA38)
-            s32                     miNumPlayersInGame;         // :545
+            EActiveRaceCarIndex     mePlayerRaceCarIndex;       // :544  (dst +0xA34)
+            s32                     miNumPlayersInGame;         // :545  (dst +0xA38)
             EGameModeType           meGameModeType;             // :546
             bool                    mbIsOnlineGameMode;         // :547
             s32                     miPursuitCarDamageLeft;     // :550

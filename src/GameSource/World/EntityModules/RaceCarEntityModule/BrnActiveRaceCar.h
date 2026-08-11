@@ -226,6 +226,13 @@ public:
     // X360 0x822A2150: assert IsAttached(), then return mPhysicsState.mbCrashing.
     bool IsCrashing() const;
 
+    // ⭐ X360 0x822BFDA0 -- LANDED 2026-08-11 (player-input wave; its consumer is
+    // RaceCarEntityModule::ProcessPlayerVehicleInput @0x822FFE30, which zeroes the driver
+    // controls while `IsCrashing() && IsWrecked()`). "Wrecked" is NOT just the mbIsWrecked
+    // latch: for a PLAYER car it is also derived, every frame, from the physics snapshot.
+    // The console body, branch for branch (see the .cpp for the offset->member map).
+    bool IsWrecked() const;
+
     // X360 0x822A2060: assert IsAttached(), then liState == meRaceStartState.
     bool IsOnRaceStartState(s32 liState) const;
 
@@ -547,6 +554,17 @@ public:
     u16  GetCurrentAISection() const                 { return muCurrAISection; }               // +0x73E
     bool HasCrashedIntoWater() const                 { return mbCrashedIntoWater; }            // +0x783
     bool CanDriveAwayFromCrash() const               { return mbCanDriveAwayFromCrash; }       // +0x779
+
+    // ADDITIVE 2026-08-11 (player-input wave), same rule as the block above: three members
+    // RaceCarEntityModule::ProcessPlayerVehicleInput @0x822FFE30 reads/writes DIRECTLY off the
+    // slot, with no console accessor symbol to name them after --
+    //   `lbz r11, 0x789(r27)` / `stb r26, 0x789(r27)`   -> mbTakenDown  (read AND cleared)
+    //   `lbz r11, 0x788(r27)`                            -> mbIsInShowtime (IsInShowtime above)
+    //   `lfs f0,  0x724(r27)`                            -> mfInvulnerablityTime
+    // Exposed so the producer reads them BY NAME instead of re-deriving offsets.
+    bool IsTakenDown() const                         { return mbTakenDown; }                   // +0x789
+    void SetTakenDown(bool lbTakenDown)              { mbTakenDown = lbTakenDown; }            // +0x789
+    f32  GetInvulnerabilityTime() const              { return mfInvulnerablityTime; }          // +0x724
 
 private:
     // ========================================================================

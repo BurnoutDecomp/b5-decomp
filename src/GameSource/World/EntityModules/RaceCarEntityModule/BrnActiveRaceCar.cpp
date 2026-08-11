@@ -40,6 +40,7 @@
 #include "GameSource/Math/BrnMathUtils.h"                // BrnMath::IsNormal
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h" // VehicleInputInterface::CreateRaceCar
 #include "GameSource/World/BrnEntityTypes.h"              // BrnWorld::E_ENTITYTYPE_RACECAR (the Attach seed)
+#include "SharedClasses/World/BrnCollisionTag.h"          // BrnWorld::KU_COLLISION_FLAG_FATAL (IsWrecked)
 
 #include <cstring>   // memset (the console's own inlined clears)
 
@@ -522,6 +523,94 @@ bool ActiveRaceCar::IsActive() const
 bool ActiveRaceCar::ToBePlacedOnTrack() const
 {
     return mbToBePlacedOnTrack;
+}
+
+// ============================================================================
+// IsWrecked @ 0x822BFDA0   (player-input wave 2026-08-11)
+//
+// LANDED as an absent callee of RaceCarEntityModule::ProcessPlayerVehicleInput @0x822FFE30,
+// which uses `IsCrashing() && IsWrecked()` to decide whether to zero the player's driver
+// controls (and, in Showtime, slam brake + handbrake to 1.0f) for the frame.
+//
+// The console body is a five-stage early-out ladder; every offset it touches maps to a NAMED
+// member of this class or of mPhysicsState (RaceCarState @+224):
+//   0x822BFDB4  lbz  0x782(this)          -> mbIsWrecked                       -> return true
+//   0x822BFDDC  IsAttached() assert       -> BrnActiveRaceCar.h:1089
+//   0x822BFE10  RaceCar::IsPlayerDriven(mpRaceCar)                             -> !player => true
+//   0x822BFE24  IsAttached()              -> not attached => false  (NOT an assert; a test)
+//   0x822BFE3C  lbz  0x44C(state)         -> RaceCarState +0x44C               -> mbIsDriveable
+//                                            == false => true
+//   0x822BFE50  lbz  0x1E8(state)         -> 488-448 == AboveGroundTestResult +40 -> mbValid
+//                                            == false => false
+//   0x822BFE60  lfs  0x4E4(this)          -> 1252-224 == RaceCarState +1028    -> mfTimeInAir
+//                                            > 0.0f => false
+//   0x822BFE88  IsCrashing()              -> false => false
+//   0x822BFEA0  lwz  0x1E4(state) ; the low halfword ; >>14 &1
+//                                         -> 484-448 == AboveGroundTestResult +36 ->
+//                                            mCollisionTag, bit 14 == KU_COLLISION_FLAG_FATAL
+//                                            (16384). Set => true, clear => false.
+// i.e. "a player car counts as wrecked once it is undriveable, or once it is crashing on the
+// ground against a FATAL surface".
+//
+// ⚠️ TWO NOTES FOR THE VERIFIER.
+//  1. The `IsAttached()` at 0x822BFDDC is the ASSERT (BrnActiveRaceCar.h:1089, non-fatal, falls
+//     through) and the one at 0x822BFE24 is a REAL test whose false arm returns false. They are
+//     two different call sites and the pseudocode renders them identically; both are reproduced.
+//  3. ⚠️ THREE CITATIONS CORRECTED 2026-08-11 (consolidation wave): the assert-arm IsAttached was
+//     cited @0x822BFDC8 and IsPlayerDriven @0x822BFE00 -- both off by one call-setup block; the
+//     real sites are 0x822BFDDC and 0x822BFE10. And the mbIsDriveable line read
+//     "`lbz 0x44C(state)` -> 1100-224 == RaceCarState +0x44C", which does not compute
+//     (1100 - 224 == 876, not 1100): 0x44C is ALREADY relative to GetPhysicsState()'s return, so
+//     there is no +224 class offset to take back off it and the "-224" was spurious. (The two
+//     neighbouring lines that DO subtract are correct and untouched: +0x4E4 is `this`-relative,
+//     hence 1252-224 == 1028, and +0x1E8/+0x1E4 subtract the 448-byte AboveGroundTestResult seat
+//     inside RaceCarState.)
+//  2. mAboveGroundTestResult.mCollisionTag is the tree's `::CollisionTag { u32 muValue; }`
+//     storage word, not BrnWorld::CollisionTag, so the fatal bit is tested against the named
+//     BrnWorld::KU_COLLISION_FLAG_FATAL constant (== 16384 == bit 14 of the packed word's
+//     material half, which is what the console's `lhz +2 ; srwi 14` extracts on big-endian).
+// ============================================================================
+bool ActiveRaceCar::IsWrecked() const
+{
+    if( mbIsWrecked )                                                // +0x782
+    {
+        return true;
+    }
+
+    CGS_ASSERT(IsAttached(), "IsAttached()");                        // BrnActiveRaceCar.h:1089
+
+    if( !GetGlobalRaceCar()->IsPlayerDriven() )
+    {
+        return true;
+    }
+
+    if( !IsAttached() )
+    {
+        return false;
+    }
+
+    if( !GetPhysicsState()->mbIsDriveable )
+    {
+        return true;
+    }
+
+    if( !GetPhysicsState()->mAboveGroundTestResult.mbValid )
+    {
+        return false;
+    }
+
+    if( GetPhysicsState()->mfTimeInAir > 0.0f )
+    {
+        return false;
+    }
+
+    if( !IsCrashing() )
+    {
+        return false;
+    }
+
+    return ( GetPhysicsState()->mAboveGroundTestResult.mCollisionTag.muValue
+             & BrnWorld::KU_COLLISION_FLAG_FATAL ) != 0;
 }
 
 // ============================================================================
