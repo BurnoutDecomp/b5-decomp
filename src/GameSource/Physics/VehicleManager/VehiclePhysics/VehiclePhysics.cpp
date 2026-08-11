@@ -3,11 +3,17 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"  // BrnPlayerDriverControls (C07 boost/speed-match)
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"  // KVF_HANDBRAKE_OFF_TIME_TO_ALLOW_DRIFT (CheckForEnteringDrift)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h" // CgsNumeric::Random (the shared LCG ring)
+#include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT (UpdateDownForce's attribsys guard)
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu::Start/StopMonitor (Update's stage brackets)
+#include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"        // the car-asset wrapper (SetAttributes' key chase)
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h" // the handling wrapper + its checked copy ctor
+#include "GameSource/Physics/VehicleManager/BrnVehicleManagerPerfMonHandles.h" // the seven gs_iVPhys* monitor ids (hoisted, orchestrator wave)
 #include "rw/math/vpu/vector3_operation.h"            // rw::math::vpu::{MagnitudeSquared, Normalize, Dot, operator*}
 #include "rw/math/vpu/matrix44affine_operation.h"     // rw::math::vpu::{InverseOfMatrixWithOrthonormal3x3, operator*}
 #include "rw/math/fpu/scalar_operation.h"            // rw::math::fpu::IsZero (SetWheelVelocities' per-axle power gates)
 
 #include <stdint.h>   // uint32_t / uint64_t for the road-noise LCG draw
+#include <algorithm>  // std::min / std::max (the driving spine's vmaxfp/vminfp lowerings)
 #include <cstring>    // std::memcpy (bit-reinterpret the road-noise float)
 #include <cmath>      // std::sqrt / std::sin (boost-kick wheelie-angle limit + speed magnitudes)
 
@@ -361,8 +367,35 @@ namespace Vehicle
     //      and accumulate the linear residual at this+0x240 scaled by mvfWheelFrictionLinearMultiplier
     //      (this+0x4048). A grip-curve-layout selector at this+0x1294 (+4946) chooses normal vs drift packing.
     // ---------------------------------------------------------------------------------------------
+    // ⭐⭐ ORACLE RECOVERED 2026-08-07 (tyre-math wave). The clean-C algorithm twin is BPR
+    //   BrnPhysics::Vehicle::RoadVehiclePhysics::UpdateWheels @0xBA1420 -> sub_B9BD60, called TWICE
+    //   with (2,3) then (0,1) -- the exact X360 UpdateWheels call shape -- and it decompiles to a
+    //   fully legible _mm_* body. Its structure matches this skeleton STEP FOR STEP: TLS-guarded
+    //   lazy cap init (dword_15E6654 / xmmword_15E6700), rsqrt+Newton Gram-Schmidt long/lat unit
+    //   directions, the a x b cross products, the friction cone (max(v,-v) vs 1.0 + reciprocal
+    //   renormalise), the crash-flag branch (this+4464), Wheel friction-reaction (sub_B90DB0), and
+    //   the r x F torque + linear accumulate (sub_50F210 into this+5216). So the algorithm the prior
+    //   waves called "not recoverable" IS recoverable -- from the twin, not from the X360 export.
+    //   ⛔ STILL BLOCKED for commit: (1) BPR is RoadVehiclePhysics, a DIVERGED sibling class whose
+    //   member offsets are NOT this class's, so nothing may be copied -- only the algorithm is an
+    //   oracle; (2) the X360 pseudocode is degenerate ("local variable allocation has failed", args
+    //   render as int a1..a19, the VMX128 regs are invisible), so the per-slot lane routing must be
+    //   read from the X360 VMX ASM (~1142 instrs) and matched to the BPR lanes ONE AT A TIME -- a
+    //   multi-wave cross-map, and VMX lane order != SSE lane order so a shuffle cannot be transcribed
+    //   blind. NOT emitted this wave: no guessed lanes, and it is functionally unverifiable until
+    //   PhysicsModule::Update lands (nothing consumes these forces yet).
+    // ---------------------------------------------------------------------------------------------
+    // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave) to the DWARF 9-arg form -- see the
+    // header note. The skeleton stays FIDELITY: BLOCKED; only the shape changed.
     void VehiclePhysics::HandleWheelPairFriction(EVehicleDrivenWheel /*leWheelA*/,
-                                                 EVehicleDrivenWheel /*leWheelB*/)
+                                                 EVehicleDrivenWheel /*leWheelB*/,
+                                                 Vector3 /*lvRollDirection*/,
+                                                 VecFloat /*lvfDownForce*/,
+                                                 VecFloat /*lvfTimeStep*/,
+                                                 VecFloat /*lvfSurfaceGripA*/,
+                                                 VecFloat /*lvfSurfaceGripB*/,
+                                                 bool /*lbMostWheelsHaveTraction*/,
+                                                 bool /*lbUnusedFalse*/)
     {
         // FIDELITY: BLOCKED -- structural skeleton only; see the block comment above. No fabricated math.
         // The faithful body requires named tyre-curve/direction lanes + the un-homed friction rodata
@@ -386,7 +419,18 @@ namespace Vehicle
     // The decay branch is reproduced as a faithful comment; without the named wheel friction-register lane
     // it cannot be applied store-for-store either, so the whole body is left as a structural skeleton.
     // ---------------------------------------------------------------------------------------------
-    void VehiclePhysics::HandleWheelFrictionCrashing(EVehicleDrivenWheel /*leWheel*/)
+    // ⭐⭐ ORACLE RECOVERED 2026-08-07 (tyre-math wave). The clean-C algorithm twin is BPR sub_B9B9C0
+    //   -- BPR UpdateWheels @0xBA1420 calls it FOUR times, order (2,3,0,1), gated by
+    //   (this+4464 && crash-mass), the exact X360 shape -- and it confirms the inactive-decay vs
+    //   active-scrub split this skeleton documents. Same commit block as HandleWheelPairFriction:
+    //   BPR is the DIVERGED RoadVehiclePhysics (offsets are not this class's) and the X360 pseudocode
+    //   is degenerate, so the active-scrub path needs a VMX-asm <-> SSE lane cross-map. NOT emitted
+    //   this wave (no guessed lanes; unverifiable until PhysicsModule::Update lands).
+    // ---------------------------------------------------------------------------------------------
+    // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): + VecFloat dt per the DWARF and the
+    // four UpdateWheels call sites (`vmr128 v1, v127` before each bl).
+    void VehiclePhysics::HandleWheelFrictionCrashing(EVehicleDrivenWheel /*leWheel*/,
+                                                     VecFloat /*lvfTimeStep*/)
     {
         // FIDELITY: BLOCKED -- structural skeleton only; see the block comment above.
         //   Inactive contact -> wheelFrictionRegister *= 0.95f;   (faithful; pending the named wheel lane)
@@ -409,7 +453,11 @@ namespace Vehicle
     //   (+0xA0). bodyPos is the body world position (mTransform.Pos(), base +0x40); omega is the
     //   angular-velocity register at +0x60 (here mAngularVelocity). The cross-product is the X360's
     //   vpermwi/vmulfp/vnmsubfp lane-rotated `a x b`.
-    void VehiclePhysics::CalculateBodyVelocityAtWheelContact(EVehicleDrivenWheel leWheel)
+    // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave) to the DWARF 3-arg form; both extra
+    // args are DEAD in the console callee (see the header note).
+    void VehiclePhysics::CalculateBodyVelocityAtWheelContact(EVehicleDrivenWheel leWheel,
+                                                             Vector3 /*lvRollDirection*/,
+                                                             VecFloat /*lvfTimeStep*/)
     {
         Wheel& lrWheel = maWheels[leWheel];
 
@@ -2788,7 +2836,7 @@ namespace Vehicle
     // certain; the numeric inputs are not. A faithful body would fabricate both the permute tables and the
     // displacement math -> forbidden. No fabricated math emitted.
     // ---------------------------------------------------------------------------------------------
-    void VehiclePhysics::SetupSuspension(f64 /*lfTimeStep*/)
+    void VehiclePhysics::SetupSuspension()
     {
         // FIDELITY: BLOCKED -- see the block comment above. The 4-spring SuspensionSpring::Prepare loop
         // depends on the un-homed permute table unk_8327F140 + the dword_8208FAFC/AEC wheel-index tables;
@@ -3381,32 +3429,11 @@ namespace Vehicle
     // mWeightTransferRow(+0xEF0) = bodyAxes * lfScale  (lane-by-lane vrlimi insert)
     }
 
-    // -------------------------------------------------------------------------------------------
-    // ⛔ IsIgnoringPassedOnImpulses -- VTABLE-CLOSURE GATE, added 2026-08-03. Vtable slot +0x10.
-    //
-    // Same cause as SimpleVehiclePhysics::SetCrashing (see the long ⛔⛔ banner there): embedding
-    // `RaceCarPhysics maRaceCarVehicles[8]` by value in VehicleManager made the mounted
-    // BrnPhysicsModule.cpp odr-use this class's vtable, so every virtual now needs a definition.
-    // These two were the only ones missing.
-    //
-    // ⚠️ THIS ONE CANNOT BE A PURE ASSERT: it has to RETURN something, and the return VALUE is the
-    // gate. VehicleRigidBody::RecievePassedOnImpulse early-outs WITHOUT applying the impulse when
-    // this is true, so `true` would be a silent-drop -- every passed-on deformation impulse
-    // swallowed, plausibly, forever. `false` is the pass-through, and it is also the state the
-    // object is in immediately after Construct (not crashing), so it is the conservative answer
-    // rather than a guess dressed as one.
-    // ⚠️ FLAG: the console body is NOT recovered -- neither the address nor the method NAME is
-    // pinned (VehiclePhysics.h calls the name role-inferred). It is unreachable in the mounted tree
-    // today: both call sites (BrnVehicleRigidBody.cpp, BrnDeformableObject_Update.cpp) are
-    // unmounted. The assert is what says so out loud if that changes.
-    // -------------------------------------------------------------------------------------------
-    bool VehiclePhysics::IsIgnoringPassedOnImpulses() const
-    {
-        CGS_ASSERT(false,
-                   "VehiclePhysics::IsIgnoringPassedOnImpulses is a vtable-closure gate, not a "
-                   "body -- reconstruct it before the deformation impulse path is mounted");
-        return false;   // pass-through: apply the impulse. NEVER flip this without the real body.
-    }
+    // ⭐⭐ 2026-08-09 (crash/shunt wave): the vtable-closure gate `IsIgnoringPassedOnImpulses`
+    // that lived here is RETIRED. The +0x10 slot is now image-settled as the DWARF virtual
+    // IsPlayerVehicleInShowtime (both concrete vtables read off the image -- see the header's
+    // banner), and the base default `return false` in VehiclePhysics.h IS the recovered console
+    // default (`li r3,0 ; blr`), so there is no missing body left for a trap to guard.
 
     // flt_8208FB0C -- the seat's tyre-compression allowance, read from the image (x360rd, the
     // calibrated .id1 reader): 0.03500000014901161f. The seat plants the car this much LOW and the
@@ -3567,6 +3594,2136 @@ namespace Vehicle
         // The REAL seat.
         lpStaged->SetTransformFromPositionOnRoad(lrPlacementTransform);
         return lpStaged->GetTransform();
+    }
+
+    // ============================================================================================
+    // ⭐⭐ THE ORCHESTRATOR (orchestrator wave, 2026-08-07): VehiclePhysics::Update @0x826412C0
+    // and the driving spine it conducts. Every body below is a full transcription of its X360
+    // asm (addresses cited per stage); the PS3 DecFIGS out-of-line copies corroborate the
+    // signatures (Update @0x748A90 inlines most of these callees -- a different build -- so the
+    // X360 call structure is authoritative throughout).
+    // ============================================================================================
+
+// [clean] UpdateInAirStats  @0x825D0A50
+    // @0x825D0A50  BrnPhysics::Vehicle::VehiclePhysics::UpdateInAirStats  (102 insns)
+    //   mbHadAirLastFrame <- mbHasAir (lbz 0x1350 ; stb 0x1351), then re-derive mbHasAir:
+    //   * any wheel on the ground (+0x158/+0x238/+0x318/+0x3F8, checked in the console's own
+    //     2,3,0,1 order) -> grounded;
+    //   * else if (mi8NumWorldCollisions-adjacent in-water byte +0x1353 && mbValid +0x598):
+    //     grounded when mfWaterDepth (+0x590) <= GetCarGroundDistanceCheck() (fcmpu ble);
+    //   * else airborne only while |mNormLinearVelocityMag.w| (the cached speed magnitude,
+    //     splat lane 3 of +0x1340) > splat(1.8) -- unk_82FB8390, static-init @0x82C5C820 from
+    //     flt_82013A80 == 1.8 (image-read).
+    //   Airborne: TimeWithoutTraction (+0x1060.z) += dt, TimeWithTraction (.w) = 0, mbHasAir=1.
+    //   Grounded: .z = 0, .w += dt, mbHasAir=0.
+    //   ⚠️ +0x1353 is mi8NumWorldCollisions in the member map; this function reads it as a
+    //   BOOLEAN gate in front of the water-depth test (lbz/cmplwi/beq). Read as `!= 0` here --
+    //   the shape the asm has -- not renamed.
+    void VehiclePhysics::UpdateInAirStats(f32 lfTimeStep)
+    {
+        static const f32 KF_AIRBORNE_MIN_SPEED = 1.8f;   // unk_82FB8390 <- flt_82013A80 (read)
+
+        mbHadAirLastFrame = mbHasAir;   // stb 0x1351 <- lbz 0x1350
+
+        const bool lbAnyWheelOnGround =
+            maWheels[eRearLeftWheel].GetRoadContact().mbIsOnGround  ||   // +0x318 (checked first)
+            maWheels[eRearRightWheel].GetRoadContact().mbIsOnGround ||   // +0x3F8
+            maWheels[eFrontLeftWheel].GetRoadContact().mbIsOnGround ||   // +0x158
+            maWheels[eFrontRightWheel].GetRoadContact().mbIsOnGround;    // +0x238
+
+        bool lbAirborne = false;
+        if (!lbAnyWheelOnGround)
+        {
+            lbAirborne = true;
+
+            // The water-depth override (asm 0x825D0AC0..0x825D0AE8).
+            if (mi8NumWorldCollisions != 0 && mAboveGroundTestResult.mbValid)
+            {
+                const f64 lfGroundCheck = GetCarGroundDistanceCheck();
+                if (mAboveGroundTestResult.mfVerticalDistance <= lfGroundCheck)
+                    lbAirborne = false;
+            }
+
+            // The minimum-speed gate (asm 0x825D0AEC..0x825D0B24): slow cars are never "in air".
+            if (lbAirborne &&
+                !(std::fabs(mNormLinearVelocityMag.w) > KF_AIRBORNE_MIN_SPEED))
+                lbAirborne = false;
+        }
+
+        if (lbAirborne)
+        {
+            mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z += lfTimeStep;
+            mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.w  = 0.0f;
+            mbHasAir = true;
+        }
+        else
+        {
+            mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z  = 0.0f;
+            mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.w += lfTimeStep;
+            mbHasAir = false;
+        }
+    }
+
+// [clean] UpdateFreezing  @0x825CFD20
+    // @0x825CFD20  BrnPhysics::Vehicle::VehiclePhysics::UpdateFreezing  (185 insns)
+    //   The freeze latch. Two timers in the +0x1060 register:
+    //     .x (TimeStandingStill): += dt while linVel^2 + angVel^2 <= splat(0.5)
+    //         (unk_82FB8460, static-init @0x82C5C590 from flt_82001DA0 == 0.5), else = 0.
+    //     .y (CoolDown): += dt while (maxWheelSpin + linVel^2 + angVel^2) <= 0.25
+    //         (the vcfsx(1,1)=0.5 squared idiom), else = 0. maxWheelSpin = max over the four
+    //         wheels of |mIntegrationVariables.x| (+0x160/+0x240/+0x320/+0x400, lane 0).
+    //         While that quiet window holds, the CONTROLS can keep the car awake: if
+    //         (mfBrake + mfGas > 0.25 [flt_8208F834] && mfHandBrake > 0.15 [flt_82094574])
+    //         the cooldown keeps counting; otherwise a live throttle+brake input
+    //         (|mfGas + mfBrake| > 0.25 [unk_8208FB1C]) clears it.
+    //   Freeze when CoolDown > 1.0s (vcfsx(1,0)) OR mbIsOnStartLine (+0x40), then
+    //     &&= !mbBoost (+0x3B, the cntlzw/extrwi negate-AND), &&= !IsPlayerVehicleActuallyIn-
+    //     Showtime() (the +0x14 vcall -- the SAME slot the committed RaceCarPhysics::Update
+    //     identified), ||= mbForceFrozen (+0x10F6).
+    //   When frozen: mLinearVelocity = mAngularVelocity = 0 (stvx128 v0=0 to +0x50/+0x60).
+    void VehiclePhysics::UpdateFreezing(const BrnPlayerDriverControls* lpControls,
+                                        VecFloat lvfTimeStep)
+    {
+        static const f32 KF_FREEZE_SPEEDSQ_MAX     = 0.5f;    // unk_82FB8460 <- flt_82001DA0
+        static const f32 KF_FREEZE_QUIET_MAX       = 0.25f;   // vcfsx(1,1)=0.5, squared by vmulfp
+        static const f32 KF_FREEZE_INPUT_SUM_MIN   = 0.25f;   // flt_8208F834 (image-read)
+        static const f32 KF_FREEZE_HANDBRAKE_MIN   = 0.15f;   // flt_82094574 (image-read)
+        static const f32 KF_FREEZE_INPUT_CLEAR_MIN = 0.25f;   // unk_8208FB1C (image-read)
+        static const f32 KF_FREEZE_COOLDOWN_TIME   = 1.0f;    // vcfsx(1,0)
+
+        // max |wheel spin| over the four wheels (lane 0 of each mIntegrationVariables).
+        f32 lfMaxWheelSpin = std::fabs(maWheels[1].mIntegrationVariables.x);   // +0x240 (first)
+        lfMaxWheelSpin = std::max(lfMaxWheelSpin,
+                                  std::fabs(maWheels[0].mIntegrationVariables.x));   // +0x160
+        lfMaxWheelSpin = std::max(lfMaxWheelSpin,
+                                  std::fabs(maWheels[2].mIntegrationVariables.x));   // +0x320
+        lfMaxWheelSpin = std::max(lfMaxWheelSpin,
+                                  std::fabs(maWheels[3].mIntegrationVariables.x));   // +0x400
+
+        const f32 lfSpeedSq = vpu::MagnitudeSquared(mLinearVelocity)
+                            + vpu::MagnitudeSquared(mAngularVelocity);
+
+        Vector4& lrTimers = mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction;
+
+        // .x -- time standing still (asm 0x825CFDE4..0x825CFE34).
+        if (!(std::fabs(lfSpeedSq) > KF_FREEZE_SPEEDSQ_MAX))
+            lrTimers.x += lvfTimeStep.x;
+        else
+            lrTimers.x = 0.0f;
+
+        // .y -- the freeze cooldown (asm 0x825CFE20..0x825CFED4), wheel spin included.
+        bool lbControlsKeepAwake = false;
+        if (!(std::fabs(lfMaxWheelSpin + lfSpeedSq) > KF_FREEZE_QUIET_MAX))
+        {
+            lrTimers.y += lvfTimeStep.x;
+
+            // asm 0x825CFE90..0x825CFEC4: gas+brake sum + handbrake both live.
+            if (lpControls->mfBrake + lpControls->mfGas > KF_FREEZE_INPUT_SUM_MIN &&
+                lpControls->mfHandBrake > KF_FREEZE_HANDBRAKE_MIN)
+                lbControlsKeepAwake = true;
+        }
+        else
+        {
+            lrTimers.y = 0.0f;
+        }
+
+        // asm 0x825CFED8..0x825CFF54: a live throttle+brake input clears the cooldown, unless
+        // the keep-awake combination above is holding it.
+        if (std::fabs(lpControls->mfBrake + lpControls->mfGas) > KF_FREEZE_INPUT_CLEAR_MIN &&
+            !lbControlsKeepAwake)
+            lrTimers.y = 0.0f;
+
+        // The freeze decision (asm 0x825CFF58..0x825CFFE8).
+        bool lbFrozen = (lrTimers.y > KF_FREEZE_COOLDOWN_TIME) || lpControls->mbIsOnStartLine;
+        lbFrozen = lbFrozen && !lpControls->mbBoost;                      // boost wakes the car
+        mbFrozen = lbFrozen;                                              // stb 0x70 (first store)
+        lbFrozen = lbFrozen && !IsPlayerVehicleActuallyInShowtime();      // the +0x14 vcall
+        lbFrozen = lbFrozen || mbForceFrozen;                             // |= +0x10F6
+        mbFrozen = lbFrozen;                                              // stb 0x70 (final)
+
+        if (mbFrozen)
+        {
+            mLinearVelocity  = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // stvx128 0 -> +0x50
+            mAngularVelocity = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // stvx128 0 -> +0x60
+        }
+    }
+
+// [clean] UpdateEngine  @0x8262E848
+    // @0x8262E848  BrnPhysics::Vehicle::VehiclePhysics::UpdateEngine  (77 insns)
+    //   gas   = clamp01(mfGas + flt_82FB7E24). flt_82FB7E24 is a VALUED .data float that SHIPS
+    //           as 0.0 (image-read); its only writer in the whole image is
+    //           VehicleManagerDebugComponent::OnActivate @0x825B6390 -- a dev-menu gas boost.
+    //   brake = mfBrake, then: if (!mbHandBrake && mbBoost) gas = 1.0 (flt_82001C98) --
+    //           boosting forces full throttle.
+    //   Hands off to ApplyEngineForces with f3 = mfSteering, f4 = dot3(mTransform.zAxis,
+    //   mLinearVelocity) (the signed forward speed), f5 = mfBoostMaxSpeedScale (+0x34),
+    //   r6 = mbHandBrake, v1 = dt.
+    void VehiclePhysics::UpdateEngine(const BrnPlayerDriverControls* lpControls,
+                                      VecFloat lvfTimeStep)
+    {
+        static const f32 KF_DEBUG_GAS_ADD = 0.0f;   // flt_82FB7E24 ships 0.0; dev-menu only
+
+        f32 lfGas = lpControls->mfGas + KF_DEBUG_GAS_ADD;
+        if (lfGas < 0.0f) lfGas = 0.0f;             // vmaxfp v0(0)
+        if (lfGas > 1.0f) lfGas = 1.0f;             // vminfp v13(1)
+
+        if (!mbHandBrake && lpControls->mbBoost)
+            lfGas = 1.0f;                            // flt_82001C98
+
+        const f32 lfForwardSpeed = vpu::Dot(mTransform.zAxis, mLinearVelocity);
+
+        ApplyEngineForces(lfGas, lpControls->mfBrake, lpControls->mfSteering, lfForwardSpeed,
+                          lpControls->mfBoostMaxSpeedScale, mbHandBrake, lvfTimeStep);
+    }
+
+// [clean] ApplyEngineForces  @0x8261FC10
+    // @0x8261FC10  BrnPhysics::Vehicle::VehiclePhysics::ApplyEngineForces  (178 insns)
+    //
+    // The applier UpdateEngine hands off to. Three observable steps, register-traced from the asm
+    // (the intermediate stack-vec staging + broadcasts are register scheduling, not state):
+    //
+    //   1. COUNTER-STEER TRACTION CUT (0x8261FC80..0x8261FD5C). Forward speed as the vector
+    //      IsCounterSteeringAtLowSpeed reads is dot3(mTransform.zAxis, mLinearVelocity)
+    //      (vmsum3fp128); when that test passes, the drive scale (1.0f == flt_82001C98) is reduced
+    //      by  LowSpeedThrottleTractionControl(+0x90 .w) * 0.01f(flt_82002138)
+    //          * clamp(|mAngularVelocity.y| * 0.5f(flt_82001DA0), 0.25f(flt_8208F834), 1.0f).
+    //      Only the drive SCALE survives this block (the console's f31); it feeds OntoWheels.
+    //
+    //   2. REVERSE SWAP (0x8261FD60..0x8261FD70). When the selected gear is reverse
+    //      (mEngine.GetCurrentGear() == 0) the gas and brake handed to Engine::Update swap, so
+    //      "throttle" drives the car backwards.
+    //
+    //   3. HAND OFF (0x8261FD74..0x8261FEAC). Engine::Update (the trapped powertrain core) gets the
+    //      min of the rear wheels' angular velocity (min(maWheels[2/3].mIntegrationVariables.x)),
+    //      the (swapped) gas/brake, handbrake, steering, the rear wheel radius
+    //      (maWheels[eRearLeftWheel].mSlipVariables.w @+0x330 .w), a "can drive in reverse" bool
+    //      ((TimeStandingStill > 0) || (mfSpeedMPH < -0.2f == flt_82020A84)), the forward speed and
+    //      dt. Then, only when NOT frozen (+0x70 == mbFrozen), ApplyEngineForcesOntoWheels puts the
+    //      drive on the wheels.
+    void VehiclePhysics::ApplyEngineForces(f32 lfGas, f32 lfBrake, f32 lfSteering, f32 lfForwardSpeed,
+                                           f32 lfBoostMaxSpeedScale, bool lbHandBrake,
+                                           VecFloat lvfTimeStep)
+    {
+        // --- 1. counter-steer traction cut --------------------------------------------------------
+        f32 lfDriveScale = 1.0f;                                        // f31 = flt_82001C98
+        const f32 lfFwd = vpu::Dot(mTransform.zAxis, mLinearVelocity);
+        if (IsCounterSteeringAtLowSpeed(VecFloat{ lfFwd, lfFwd, lfFwd, lfFwd }, lfSteering, lfGas))
+        {
+            f32 lfYawTerm = std::fabs(mAngularVelocity.y) * 0.5f;      // |angvel.y| * flt_82001DA0
+            if (lfYawTerm > 1.0f)  lfYawTerm = 1.0f;                   // fsel vs 1.0
+            if (lfYawTerm < 0.25f) lfYawTerm = 0.25f;                  // fsel vs flt_8208F834
+            const f32 lfCut = mpAttribs->mBaseAttribs
+                                  .mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.w
+                              * 0.01f * lfYawTerm;                     // flt_82002138 == 0.01
+            lfDriveScale = 1.0f - lfCut;
+        }
+
+        // --- 2. reverse gas/brake swap ------------------------------------------------------------
+        f32 lfEngineGas   = lfGas;
+        f32 lfEngineBrake = lfBrake;
+        if (mEngine.GetCurrentGear() == 0)                            // KU8_REVERSE_GEAR
+        {
+            lfEngineGas   = lfBrake;
+            lfEngineBrake = lfGas;
+        }
+
+        // --- 3. hand off to the powertrain, then the wheels --------------------------------------
+        const f32 lfWheelAngularVelocity =
+            std::min(maWheels[eRearLeftWheel ].mIntegrationVariables.x,
+                     maWheels[eRearRightWheel].mIntegrationVariables.x);   // vminfp of the rear pair
+
+        const bool lbAllowReverseDrive =
+            (mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.x > 0.0f)
+            || (mfSpeedMPH.x < -0.2f);                                 // flt_82020A84 == -0.2
+
+        const f32 lfOmega  = lfWheelAngularVelocity;
+        const f32 lfRadius = maWheels[eRearLeftWheel].mSlipVariables.w;   // +0x330 .w
+        mEngine.Update(VecFloat{ lfOmega, lfOmega, lfOmega, lfOmega },
+                       VecFloat{ lfEngineGas, lfEngineGas, lfEngineGas, lfEngineGas },
+                       VecFloat{ lfEngineBrake, lfEngineBrake, lfEngineBrake, lfEngineBrake },
+                       lbHandBrake,
+                       VecFloat{ lfSteering, lfSteering, lfSteering, lfSteering },
+                       VecFloat{ lfRadius, lfRadius, lfRadius, lfRadius },
+                       lbAllowReverseDrive,
+                       VecFloat{ lfForwardSpeed, lfForwardSpeed, lfForwardSpeed, lfForwardSpeed },
+                       lvfTimeStep);
+
+        if (!mbFrozen)                                                 // lbz +0x70 ; bne skip
+            ApplyEngineForcesOntoWheels(lfDriveScale, lfForwardSpeed, lfBoostMaxSpeedScale,
+                                        lbHandBrake);
+    }
+
+// [clean] ApplyEngineForcesOntoWheels  @0x825FB000
+    // @0x825FB000  BrnPhysics::Vehicle::VehiclePhysics::ApplyEngineForcesOntoWheels  (128 insns)
+    //
+    // Register-traced. The drive force is mEngine.GetEngineDrive() (mvEngineDrive lane, +0xFA0)
+    // scaled by the counter-steer factor. It is zeroed above the max speed -- the cap is the boost
+    // MaxBoostSpeed (mBoostAttribs +0x290 .y) while a boost is running (TimeBoosting == +0x1040 .y
+    // > 0), else the attribs MaxSpeed (mvMass_..._MaxSpeed_... +0x70 .z), each times the
+    // boost-max-speed scale. Then the drive lands on the wheels' angular-velocity integration
+    // accumulators (maWheels[i].mIntegrationVariables .z):
+    //   * no handbrake, OR handbrake below 5 mph (unk_8208FB14 == KF_SPEED_TO_ALLOW_LOCKING_WHEELS):
+    //     all four wheels, split PowerToRear(+0xB0 .z) for the rear pair / PowerToFront(+0xB0 .y)
+    //     for the front pair;
+    //   * handbrake at/above 5 mph: the raw drive is added into the REAR pair only (wheel lock).
+    void VehiclePhysics::ApplyEngineForcesOntoWheels(f32 lfDriveScale, f32 lfForwardSpeed,
+                                                     f32 lfBoostMaxSpeedScale, bool lbHandBrake)
+    {
+        f32 lfDrive = mEngine.GetEngineDrive() * lfDriveScale;         // mvEngineDrive.x * f1
+
+        // over-max-speed cut (boost raises the cap while a boost is running).
+        const bool lbBoosting =
+            mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.y > 0.0f;
+        const f32 lfMaxSpeed =
+            lbBoosting
+                ? mpAttribs->mBoostAttribs
+                      .mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.y
+                : mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z;
+        if (mfSpeedMPH.x > lfMaxSpeed * lfBoostMaxSpeedScale)
+            lfDrive = 0.0f;                                            // vmr v0, 0
+
+        const VehicleAttribs::VehicleBaseAttribs& lrBase = mpAttribs->mBaseAttribs;
+        const f32 lfPowerToFront =
+            lrBase.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.y;   // +0xB0 .y
+        const f32 lfPowerToRear =
+            lrBase.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z;   // +0xB0 .z
+
+        if (lbHandBrake && !(5.0f > lfForwardSpeed))                  // unk_8208FB14 == 5.0
+        {
+            // wheel lock: raw drive into the rear pair only.
+            maWheels[eRearLeftWheel ].mIntegrationVariables.z += lfDrive;
+            maWheels[eRearRightWheel].mIntegrationVariables.z += lfDrive;
+            return;
+        }
+
+        // normal distribution: rear pair scaled by PowerToRear, front pair by PowerToFront.
+        maWheels[eRearLeftWheel  ].mIntegrationVariables.z += lfDrive * lfPowerToRear;
+        maWheels[eRearRightWheel ].mIntegrationVariables.z += lfDrive * lfPowerToRear;
+        maWheels[eFrontLeftWheel ].mIntegrationVariables.z += lfDrive * lfPowerToFront;
+        maWheels[eFrontRightWheel].mIntegrationVariables.z += lfDrive * lfPowerToFront;
+    }
+
+// [clean] UpdateDownForce  @0x825F6338
+    // @0x825F6338  BrnPhysics::Vehicle::VehiclePhysics::UpdateDownForce  (195 insns)
+    //   TWO regimes on mbHasAir (+0x1350):
+    //
+    //   AIRBORNE (asm 0x825F6364..0x825F64D8): assert the attribs' MaxSpeed
+    //   (mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z) is a real number
+    //   ("Zero max speed in attribsys data updating downforce", :0x62E), then build the
+    //   world-down stabilising force. Register-traced:
+    //     planarVel   = mLinearVelocity with .y zeroed          (vrlimi128 v13, v2(0), 4, 3)
+    //     planarSpd   = sqrt(dot3(planarVel, planarVel))        (vrsqrtefp + 2 NR, vsel 0-guard)
+    //     ratio       = max(0.3, planarSpd * refined(1/MaxSpeed))   (vmaxfp v31 @0x825F64C0;
+    //                   unk_82F2A514 == 0.3f, VALUED in the image: 0x3E99999A; its ONLY xref in
+    //                   the whole image is this read)
+    //     force.y     = (-Mass * DownForce) * ratio * refined(1/0.3)
+    //                   (vxor v8 = Mass ^ signmask @0x825F6490; vmulfp v9 = -Mass * DownForce.w
+    //                    @0x825F64B0; the third vrefp chain is over the 0.3 CONSTANT itself --
+    //                    a divide by the floor, so the floored ratio normalises to >= 1.0)
+    //     call        = AddLocalForce({0, force.y, 0, 0}, WORLD_SPACE /* r4 = 0 */,
+    //                                 {0,0,0,0} /* v2 is the zero splat, never rewritten */,
+    //                                 BODY_SPACE /* r5 = 1 */)  on the EPB base (r3 = this+0x10)
+    //
+    //   GROUNDED (asm 0x825F64E0..0x825F6610): while the planar |velocity| is above FLT_EPSILON
+    //   (stru_8208F620[0], both lanes of the vrlimi-merged |vel| pair), the relief scale is
+    //     scale = 20.0 [flt_8208F9D4] * (|mTransform.zAxis.y| + |dot3(unit(vel), xAxis)|)
+    //   (pitch + side-slip), else scale = 1.0. Then
+    //     AddWorldSpaceForce({0, -GetDownForce().y * scale, 0, 0})
+    //   -- the vperm control unk_82CDA350 = {A.x, B.y, A.x, A.x} with A = zero builds exactly
+    //   the pure-vertical vector, and the vrlimi(2) zeroes .z again.
+    //
+    //   TAIL (both regimes): mirror the applied magnitude into the handling debug component
+    //   (+0x13E4 -> +0x3F4) when one is attached.
+    void VehiclePhysics::UpdateDownForce()
+    {
+        static const f32 KF_DOWNFORCE_RATIO_FLOOR = 0.3f;    // unk_82F2A514 (image: 0x3E99999A)
+        static const f32 KF_DOWNFORCE_SLIP_SCALE  = 20.0f;   // flt_8208F9D4 (image-read)
+
+        const Vector4& lrBase =
+            mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce;
+
+        f32 lfAppliedMagnitude = 0.0f;
+
+        if (mbHasAir)
+        {
+            CGS_ASSERT(std::fabs(lrBase.z) > 1.1920928955078125e-07f /* FLT_EPSILON, stru_8208F620[0] */,
+                       "Zero max speed in attribsys data updating downforce");
+
+            // planar (y-zeroed) speed.
+            Vector3 lvPlanarVel = mLinearVelocity;
+            lvPlanarVel.y = 0.0f;                        // vrlimi128 v13, v2(0), 4, 3
+            const f32 lfPlanarSpeedSq = vpu::MagnitudeSquared(lvPlanarVel);
+            const f32 lfPlanarSpeed   = (lfPlanarSpeedSq > 0.0f) ? std::sqrt(lfPlanarSpeedSq)
+                                                                 : 0.0f;   // vsel 0-guard
+
+            // ratio of planar speed to the car's max speed, floored at 0.3 and normalised by
+            // the same 0.3 (the vrefp chain over the constant) so the result is >= 1.0.
+            const f32 lfRatio = std::max(KF_DOWNFORCE_RATIO_FLOOR, lfPlanarSpeed / lrBase.z)
+                              / KF_DOWNFORCE_RATIO_FLOOR;
+
+            // the world-down stabilising push, mass-proportional:
+            //   force.y = (-Mass * DownForce) * ratio      (vxor sign flip on the Mass lane)
+            const f32 lfForceY = (-lrBase.x * lrBase.w) * lfRatio;
+
+            // applied at the centre of mass (v2 stays the zero splat; r4=0 WORLD, r5=1 BODY).
+            AddLocalForce(Vector3{ 0.0f, lfForceY, 0.0f, 0.0f }, rw::physics::WORLD_SPACE,
+                          Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },     rw::physics::BODY_SPACE);
+            lfAppliedMagnitude = lfForceY;
+        }
+        else
+        {
+            static const f32 KF_EPSILON = 1.1920928955078125e-07f;   // stru_8208F620[0]
+
+            f32 lfScale = 1.0f;   // vcfsx(1,0) default when not moving
+            // the console gate is COMPONENT-wise: any |velocity lane| > eps (the vrlimi(1,1)
+            // merge duplicates .x into .w before the vcmpgtfp all-false test).
+            if (std::fabs(mLinearVelocity.x) > KF_EPSILON ||
+                std::fabs(mLinearVelocity.y) > KF_EPSILON ||
+                std::fabs(mLinearVelocity.z) > KF_EPSILON)
+            {
+                const Vector3 lvUnitVel = vpu::Normalize(mLinearVelocity);
+                lfScale = KF_DOWNFORCE_SLIP_SCALE *
+                          (std::fabs(mTransform.zAxis.y) +
+                           std::fabs(vpu::Dot(lvUnitVel, mTransform.xAxis)));
+            }
+
+            const Vector3 lvDown = GetDownForce();
+            const f32 lfForceY = -lvDown.y * lfScale;
+            AddWorldSpaceForce(Vector3{ 0.0f, lfForceY, 0.0f, 0.0f });   // vperm unk_82CDA350
+            lfAppliedMagnitude = lfForceY;
+        }
+
+        // Debug mirror (asm 0x825F6614..0x825F6624).
+        if (mpDebugComponent != 0)
+            *reinterpret_cast<f32*>(reinterpret_cast<u8*>(mpDebugComponent) + 0x3F4)
+                = lfAppliedMagnitude;
+    }
+
+// [clean] SwitchAttribs  @0x8261E498
+    // @0x8261E498  BrnPhysics::Vehicle::VehiclePhysics::SwitchAttribs  (21 insns; was an
+    //   export-set JSON hole -- exported fresh from the .i64 this wave)
+    //     bl SimpleVehiclePhysics::SwitchAttribs (this, lpAttribs)
+    //     mpAttribs (+0x720) = lpAttribs
+    //     memcpy(&mEngine (+0xF00), lpAttribs + 0x190 (mEngineAttribs), 0xA0)
+    //     bl SetupSuspension
+    void VehiclePhysics::SwitchAttribs(VehicleAttribs* lpAttribs)
+    {
+        SimpleVehiclePhysics::SwitchAttribs(lpAttribs);
+        mpAttribs = lpAttribs;
+        std::memcpy(&mEngine, &lpAttribs->mEngineAttribs, sizeof(VehicleAttribs::EngineAttribs));
+        SetupSuspension();
+    }
+
+// [clean] SwitchAIDonuttingAttribs  @0x8261FED8
+    // @0x8261FED8  BrnPhysics::Vehicle::VehiclePhysics::SwitchAIDonuttingAttribs  (29 insns)
+    //   Entering (lbDonutting): VehicleAttribs::SetupAttribsForDonutAI(&mAIVehicleAttribs);
+    //     latch mbIsUsingAIDonutAttribs = 1. (The caller -- Update -- follows with the
+    //     SimpleVehiclePhysics::SwitchAttribs / mpAttribs / engine-memcpy / SetupSuspension
+    //     sequence itself.)
+    //   Leaving: VehicleAttribs::SetupAttribsForAI(&mAIVehicleAttribs, &mPlayerVehicleAttribs);
+    //     then the full switch sequence onto mPlayerVehicleAttribs, then clear the latch.
+    void VehiclePhysics::SwitchAIDonuttingAttribs(bool lbDonutting)
+    {
+        if (lbDonutting)
+        {
+            mAIVehicleAttribs.SetupAttribsForDonutAI();
+            mbIsUsingAIDonutAttribs = true;
+            return;
+        }
+
+        mAIVehicleAttribs.SetupAttribsForAI(&mPlayerVehicleAttribs);
+        SimpleVehiclePhysics::SwitchAttribs(&mPlayerVehicleAttribs);
+        mpAttribs = &mPlayerVehicleAttribs;
+        std::memcpy(&mEngine, &mPlayerVehicleAttribs.mEngineAttribs,
+                    sizeof(VehicleAttribs::EngineAttribs));
+        SetupSuspension();
+        mbIsUsingAIDonutAttribs = false;
+    }
+
+    // ==============================================================================================
+    // ⭐⭐ THE WHEEL CLUSTER (wheel-cluster wave, 2026-08-07). UpdateWheels @0x8261E4F0 (1130
+    // insns) + its four exclusive helper callees (X360 xrefs-to are exactly {UpdateWheels} for
+    // all four). Every constant below is image-attested: the 0x82FBxxxx names are static-init'd
+    // BSS splats whose writer thunks (the 0x82C5C5F0..0x82C5CE3x initializer bank) each name one
+    // rdata source scalar, read via x360rd (self-test 10/10). NOTHING here is tuned or guessed.
+    // ==============================================================================================
+
+    // @0x825D05F0  BrnPhysics::Vehicle::VehiclePhysics::UpdateBurnout  (146 insns)
+    // The burnout latch + rear spin-up. Conditions, in the console's order:
+    //   * both pedals near-floored: mfGas > 0.97 AND mfBrake > 0.97  (unk_82FB9010 <- flt_82094B68)
+    //   * both rear wheels spinning forward (mIntegrationVariables.x > 0)
+    //   * rear-pair average spin exceeds the front-pair average by more than 1.0 rad/s
+    //     (max(rearAvg - frontAvg, 0) > unk_82FB9EB0 <- flt_82001C98; the 0.5 averaging factor
+    //     is the inline `vcfsx v0,1,1`)
+    //   * near-stationary (|mLinearVelocity|^2 < 0.25 == unk_82FB9250 <- flt_8208F834) OR the
+    //     latch is already set (a running burnout survives the speed gate)
+    // When all hold: while the FRONT-LEFT wheel is slow (70.0 == unk_82FB90E0 <- flt_820051BC
+    // > maWheels[0].x -- the console tests only wheel 0), both rear spins are scaled by 1.03
+    // (unk_82FB8DD0 <- flt_8209D724) and mbDoingBurnout latches. When the entry conditions fail,
+    // the latch clears; when they hold but the car is already moving, the latch is left as-is.
+    void VehiclePhysics::UpdateBurnout(const BrnPlayerDriverControls* lpControls)
+    {
+        static const f32 KF_PEDAL_THRESHOLD  = 0.97f;   // unk_82FB9010 <- flt_82094B68
+        static const f32 KF_SPIN_DELTA       = 1.0f;    // unk_82FB9EB0 <- flt_82001C98
+        static const f32 KF_SPEEDSQ_LIMIT    = 0.25f;   // unk_82FB9250 <- flt_8208F834
+        static const f32 KF_FRONT_SPIN_GATE  = 70.0f;   // unk_82FB90E0 <- flt_820051BC
+        static const f32 KF_REAR_SPIN_SCALE  = 1.03f;   // unk_82FB8DD0 <- flt_8209D724
+
+        CGS_ASSERT(lpControls != NULL, "lpControls != NULL");   // VehiclePhysics.cpp:2139
+
+        const f32 lfFrontLeft  = maWheels[eFrontLeftWheel ].mIntegrationVariables.x;
+        const f32 lfFrontRight = maWheels[eFrontRightWheel].mIntegrationVariables.x;
+        const f32 lfRearLeft   = maWheels[eRearLeftWheel  ].mIntegrationVariables.x;
+        const f32 lfRearRight  = maWheels[eRearRightWheel ].mIntegrationVariables.x;
+
+        const bool lbBothPedals = lpControls->mfGas   > KF_PEDAL_THRESHOLD &&
+                                  lpControls->mfBrake > KF_PEDAL_THRESHOLD;
+        const bool lbRearsForward = lfRearLeft > 0.0f && lfRearRight > 0.0f;
+
+        // rearAvg - frontAvg, floored at 0 (vmaxfp vs the zero splat), vs the 1.0 gate.
+        const f32 lfRearAvg  = (lfRearLeft  + lfRearRight ) * 0.5f;   // vcfsx v0,1,1 == 0.5
+        const f32 lfFrontAvg = (lfFrontLeft + lfFrontRight) * 0.5f;
+        f32 lfSpinDelta = lfRearAvg - lfFrontAvg;
+        if (lfSpinDelta < 0.0f) lfSpinDelta = 0.0f;
+
+        if (!lbBothPedals || !lbRearsForward || !(lfSpinDelta > KF_SPIN_DELTA))
+        {
+            mbDoingBurnout = false;   // the LABEL_17 store with r11 == 0
+            return;
+        }
+
+        // dot3(mLinearVelocity, mLinearVelocity) vs the 0.25 splat.
+        if (mbDoingBurnout || vpu::MagnitudeSquared(mLinearVelocity) < KF_SPEEDSQ_LIMIT)
+        {
+            if (KF_FRONT_SPIN_GATE > lfFrontLeft)   // only wheel 0 is tested (vspltw of its .x)
+            {
+                maWheels[eRearLeftWheel ].mIntegrationVariables.x = lfRearLeft  * KF_REAR_SPIN_SCALE;
+                maWheels[eRearRightWheel].mIntegrationVariables.x = lfRearRight * KF_REAR_SPIN_SCALE;
+            }
+            mbDoingBurnout = true;
+        }
+        // else: entry conditions hold but the car is moving and no burnout was running --
+        // the console leaves the latch untouched (the store is skipped entirely).
+    }
+
+    // @0x825F6648  BrnPhysics::Vehicle::VehiclePhysics::UpdateWheelInertia  (205 insns)
+    // Re-seed every wheel's spin-inertia lanes for the frame, then apply the handbrake lock.
+    //   * normal:  mSuspensionAndInertiaVariables.z = 30.0 (unk_82FB9F60 <- flt_82004F5C),
+    //              .w = 1/30 (the vrefp + two-Newton exact reciprocal)   -- wheels 2,3,0,1
+    //   * burnout: .z = 200.0 (unk_82FB9BB0 <- flt_8201A1F0), .w = 1/200 (unk_82FB9CD0, the
+    //              initializer's own fdivs)                              -- wheels 0,1,2,3; return
+    //   * else, handbrake held (mbHandBrake): clear mbDoingBurnout, then LOCK one axle --
+    //     zero its wheels' spin (mIntegrationVariables.x) and both inertia lanes:
+    //       speed < 5.0 m/s (|mLinearVelocity| vs unk_8208FB14): the DRIVEN axle
+    //         (rear when PowerToRear != 0 -- the FLT_EPSILON IsZero band -- else front);
+    //       speed >= 5.0: rear in a forward gear, front in reverse (mu8CurrentGear == 0).
+    //     (Wheel::UpdateVelocity's eWheelInertiaTypeLocked path is the other half of the lock.)
+    void VehiclePhysics::UpdateWheelInertia()
+    {
+        static const f32 KF_WHEEL_INERTIA          = 30.0f;    // unk_82FB9F60 <- flt_82004F5C
+        static const f32 KF_BURNOUT_WHEEL_INERTIA  = 200.0f;   // unk_82FB9BB0 <- flt_8201A1F0
+        static const f32 KF_HANDBRAKE_LOCK_SPEED   = 5.0f;     // unk_8208FB14 (.rdata, direct)
+
+        // Normal re-seed, console order 2, 3, 0, 1 (rear pair first).
+        static const EVehicleDrivenWheel kaeSeedOrder[eNumDrivenWheels] = {
+            eRearLeftWheel, eRearRightWheel, eFrontLeftWheel, eFrontRightWheel };
+        for (s32 li = 0; li < eNumDrivenWheels; ++li)
+        {
+            Wheel& lrWheel = maWheels[kaeSeedOrder[li]];
+            lrWheel.mSuspensionAndInertiaVariables.z = KF_WHEEL_INERTIA;          // vrlimi 2 (z)
+            lrWheel.mSuspensionAndInertiaVariables.w = 1.0f / KF_WHEEL_INERTIA;   // vrlimi 1 (w)
+        }
+
+        if (mbDoingBurnout)
+        {
+            for (s32 li = 0; li < eNumDrivenWheels; ++li)   // console order 0, 1, 2, 3 here
+            {
+                maWheels[li].mSuspensionAndInertiaVariables.z = KF_BURNOUT_WHEEL_INERTIA;
+                maWheels[li].mSuspensionAndInertiaVariables.w = 1.0f / KF_BURNOUT_WHEEL_INERTIA;
+            }
+            return;
+        }
+
+        if (!mbHandBrake)
+            return;
+
+        mbDoingBurnout = false;
+
+        // |mLinearVelocity| -- the vrsqrtefp/Newton magnitude with the vcmpeqfp zero guard.
+        const f32 lfSpeedSq = vpu::MagnitudeSquared(mLinearVelocity);
+        const f32 lfSpeed   = (lfSpeedSq > 0.0f) ? std::sqrt(lfSpeedSq) : 0.0f;
+
+        bool lbLockRear;
+        if (lfSpeed < KF_HANDBRAKE_LOCK_SPEED)
+        {
+            // the driven axle locks: rear unless PowerToRear is (epsilon-)zero.
+            lbLockRear = !rw::math::fpu::IsZero(
+                mpAttribs->mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z);
+        }
+        else
+        {
+            lbLockRear = mEngine.GetCurrentGear() != 0;   // forward gear -> rear; reverse -> front
+        }
+
+        const EVehicleDrivenWheel leA = lbLockRear ? eRearLeftWheel  : eFrontLeftWheel;
+        const EVehicleDrivenWheel leB = lbLockRear ? eRearRightWheel : eFrontRightWheel;
+        maWheels[leA].mIntegrationVariables.x            = 0.0f;   // vrlimi 8 (x)
+        maWheels[leA].mSuspensionAndInertiaVariables.z   = 0.0f;
+        maWheels[leA].mSuspensionAndInertiaVariables.w   = 0.0f;
+        maWheels[leB].mIntegrationVariables.x            = 0.0f;
+        maWheels[leB].mSuspensionAndInertiaVariables.z   = 0.0f;
+        maWheels[leB].mSuspensionAndInertiaVariables.w   = 0.0f;
+    }
+
+    // @0x825D0238  BrnPhysics::Vehicle::VehiclePhysics::UpdateBrakesAndGetBrakingFactor  (236 insns)
+    // Maintain the running brake amount (the .w BrakeScale lane of +0x1010) and return the braking
+    // factor. Three entry regimes select the working pedal:
+    //   * HANDBRAKE (mbHandBrake): only while not drifting and not airborne -- damp the yaw
+    //     (DampPitchYawRoll(0, attribs +0xC0 lane .z, 0, dt) -- the lane the asm splats is .z,
+    //     RollDampingOnTakeOff by the DWARF lane naming; reproduced as shipped) and brake by
+    //     1 - |mfSteering|. Drifting or airborne with the handbrake -> factor 0.
+    //   * FORWARD GEAR: pedal = mfBrake; rolling backwards -> 0. Colliding at speed
+    //     (mfSpeedMPH > MinSpeedForDrift && mi8NumWorldCollisions > 0) caps BrakeScale at 0.2
+    //     (unk_82FB9280 <- flt_82004744); below 5 mph (unk_82FB9240 <- flt_8200426C) with both
+    //     pedals released BrakeScale is SET to 0.2 (the parking creep-stop).
+    //   * REVERSE (gear 0): pedal = mfGas; rolling forwards -> 0; the creep-stop mirror uses
+    //     mfSpeedMPH > -5.
+    // Common tail: pedal <= 0.1 -> BrakeScale = 0 and factor 0. Else BrakeScale ramps up by
+    // dt * pedal * TimeForFullBrakeRecip while the pedal exceeds it (snaps down to the pedal
+    // otherwise), clamps at 1, and the factor is mBrakeScaleToFactorCurve.GetInterped(BrakeScale).
+    VecFloat VehiclePhysics::UpdateBrakesAndGetBrakingFactor(
+        const BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep)
+    {
+        static const f32 KF_COLLISION_BRAKE_CAP = 0.2f;   // unk_82FB9280 <- flt_82004744
+        static const f32 KF_CREEP_STOP_MPH      = 5.0f;   // unk_82FB9240 <- flt_8200426C
+        static const VecFloat KV_ZERO{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+        f32& lrfBrakeScale =
+            mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.w;   // +0x1010 .w
+
+        const bool lbPedalsReleased = lpControls->mfGas   < 0.1f &&
+                                      lpControls->mfBrake < 0.1f;      // flt_82004014
+
+        f32 lfPedal;
+        if (mbHandBrake)
+        {
+            if (mu8DriftState != 0 || mbHasAir)
+                return KV_ZERO;
+
+            // Yaw damping while the handbrake locks an axle. The asm splats lane .z of the
+            // attribs +0xC0 register into the YAW slot (v2); pitch (v1) and roll (v3) are zero.
+            { const f32 lfYawDamp = mpAttribs->mBaseAttribs
+                  .mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.z;
+              DampPitchYawRoll(KV_ZERO,
+                               VecFloat{ lfYawDamp, lfYawDamp, lfYawDamp, lfYawDamp },
+                               KV_ZERO, lvfTimeStep); }
+
+            lfPedal = 1.0f - std::fabs(lpControls->mfSteering);   // vsubfp(1.0, |steer|)
+        }
+        else if (mEngine.GetCurrentGear() != 0)   // forward gear
+        {
+            if (0.0f > mfSpeedMPH.x)              // rolling backwards in a forward gear
+                return KV_ZERO;
+
+            lfPedal = lpControls->mfBrake;
+
+            if (mfSpeedMPH.x > mpAttribs->mDriftAttribs
+                    .mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x
+                && mi8NumWorldCollisions > 0)
+            {
+                if (lrfBrakeScale > KF_COLLISION_BRAKE_CAP)      // vminfp
+                    lrfBrakeScale = KF_COLLISION_BRAKE_CAP;
+            }
+
+            if (KF_CREEP_STOP_MPH > mfSpeedMPH.x && lbPedalsReleased)
+                lrfBrakeScale = KF_COLLISION_BRAKE_CAP;          // the creep-stop SET
+        }
+        else                                      // reverse (gear 0)
+        {
+            if (mfSpeedMPH.x > 0.0f)              // rolling forwards in reverse
+                return KV_ZERO;
+
+            lfPedal = lpControls->mfGas;          // the gas pedal brakes the reverse roll
+
+            if (mfSpeedMPH.x > -KF_CREEP_STOP_MPH && lbPedalsReleased)   // vxor sign flip
+                lrfBrakeScale = KF_COLLISION_BRAKE_CAP;
+        }
+
+        // ----- common tail (LABEL_22) -----
+        if (lfPedal <= 0.1f)
+        {
+            lrfBrakeScale = 0.0f;
+            return KV_ZERO;
+        }
+
+        if (lfPedal > lrfBrakeScale)
+        {
+            // ramp toward full brake: += dt * pedal * TimeForFullBrakeRecip (+0x70 lane .y).
+            lrfBrakeScale += lvfTimeStep.x * lfPedal *
+                mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.y;
+        }
+        else
+        {
+            lrfBrakeScale = lfPedal;              // snap down to the pedal
+        }
+        if (lrfBrakeScale > 1.0f)                 // vminfp vs the vcfsx 1.0
+            lrfBrakeScale = 1.0f;
+
+        // the BrakeScaleToFactor curve (attribs +0x60) at the ramped amount -- the inlined
+        // InterpedParam3::GetInterped de Casteljau pair.
+        return mpAttribs->mBaseAttribs.mBrakeScaleToFactorCurve.GetInterped(
+            VecFloat{ lrfBrakeScale, lrfBrakeScale, lrfBrakeScale, lrfBrakeScale });
+    }
+
+    // @0x825D0940  BrnPhysics::Vehicle::VehiclePhysics::LimitDifferential  (67 insns, leaf)
+    // The open-differential coupling: clamp both driven wheels' spin (mIntegrationVariables.x)
+    // into a +/-(10% of |average|) band around their average. Both constants are the function's
+    // own lazy-init statics (unk_82FBA0F0 <- flt_82001DA0 == 0.5, guard bit 0 of dword_82FBA100;
+    // unk_82FBA0E0 <- flt_82004014 == 0.1, guard bit 1).
+    void VehiclePhysics::LimitDifferential(EVehicleDrivenWheel leWheelA, EVehicleDrivenWheel leWheelB)
+    {
+        static const f32 KF_HALF = 0.5f;   // unk_82FBA0F0 <- flt_82001DA0
+        static const f32 KF_BAND = 0.1f;   // unk_82FBA0E0 <- flt_82004014
+
+        f32& lrfSpinA = maWheels[leWheelA].mIntegrationVariables.x;
+        f32& lrfSpinB = maWheels[leWheelB].mIntegrationVariables.x;
+
+        const f32 lfAverage = (lrfSpinA + lrfSpinB) * KF_HALF;
+        const f32 lfBandHalf = std::fabs(lfAverage) * KF_BAND;   // vandc sign mask == fabs
+        const f32 lfLo = lfAverage - lfBandHalf;
+        const f32 lfHi = lfAverage + lfBandHalf;
+
+        lrfSpinA = (lrfSpinA < lfLo) ? lfLo : ((lrfSpinA > lfHi) ? lfHi : lrfSpinA);   // vmaxfp/vminfp
+        lrfSpinB = (lrfSpinB < lfLo) ? lfLo : ((lrfSpinB > lfHi) ? lfHi : lrfSpinB);
+    }
+
+// [clean] UpdateWheels  @0x8261E4F0
+    // @0x8261E4F0  BrnPhysics::Vehicle::VehiclePhysics::UpdateWheels  (1130 insns)
+    // ⭐⭐ THE PER-WHEEL TRACTION/CONTACT CORE -- the stage UpdateDriving runs between the
+    // suspension virtual and UpdateInAirBehaviour. Register-traced end to end; the stage list:
+    //
+    //   0x8261E518  UpdateBurnout(controls) ; UpdateWheelInertia()
+    //   0x8261E524  mSteeringDirection (+0x10E0) = R(Up, mvSteeringAngle .x) * At -- one inlined
+    //               XMVectorSinCos over unk_82000BD0..C60 (the table three waves decoded;
+    //               std::sin/std::cos are the exact forms, same de-optimisation as
+    //               SetWheelVelocities') + the Rodrigues rows, applied to mTransform.At()
+    //   0x8261E7A4  lbInReverse   = (0 > mfSpeedMPH) || mEngine.mu8CurrentGear == 0  (r22)
+    //   0x8261E7CC  lbGasReleased = controls->mfGas < 0.1 [flt_82004014]             (r23)
+    //   0x8261E7E8  CalculateBodyVelocityAtWheelContact x4, order 2,3,0,1 -- v1 carries the
+    //               pair's roll direction (At for the rear pair, mSteeringDirection front),
+    //               v2 = dt; both DEAD in the callee
+    //   0x8261E838  JUST-LANDED SPIN-UP x4 (order 2,3,0,1): wheels with mbIsOnGround set and
+    //               mbWasOnGroundLastUpdate clear get mIntegrationVariables.y = 0 [vrlimi 4],
+    //               .x = dot3(mBodyPointVelocity, rollDir) / mSlipVariables.w (radius; vrefp +
+    //               two Newton) [vrlimi 8], mbBrokenAdhesiveLimit = false -- the SetWheelVelocities
+    //               per-wheel idiom, re-seeded from the touchdown velocity
+    //   0x8261EA58  TORQUE INTEGRATE x4 (order 1,0,3,2): mIntegrationVariables.x +=
+    //               .y * dt * mSuspensionAndInertiaVariables.w (invInertia); .y = 0
+    //   0x8261EB68  v124 = UpdateBrakesAndGetBrakingFactor(controls, dt)
+    //   0x8261EB6C  THE MAGIC BRAKE FORCE (only while mu8DriftState == 0 && !mbHasAir):
+    //               t = min(|mfSteering|, 1.0); blend = lerp(MagicBrakeFactorStraightLine [.z
+    //               lane], MagicBrakeFactorTurning [.y lane], t) (asserts IsValid of both,
+    //               :1928/:1929); force.z = -brakeFactor * mfMass * blend * sign(mfSpeedMPH) *
+    //               clamp01(|dot3(mLinearVelocity, At)|); lane-finite assert ("Invalid brake
+    //               force: ...", :1951); AddLocalSpaceForce({0,0,z})
+    //   0x8261EDF8  THE DRIVEN-AXLE FACTOR v126: while driving (gas > 0 || brake < 0.9
+    //               [flt_82005450]) = clamp((mfSpeedMPH - 60 [unk_82FB9E20]) / 10 [unk_82FB83C0,
+    //               vrefp+Newton recip], 0 [unk_82FB91A0], 0.75 [unk_82FB9D00]) * v124; else v124
+    //   0x8261EE94  PowerToRear < 0.1 (FWD car) -> SWAP v124/v126 (the reduced factor follows
+    //               the driven axle)
+    //   0x8261EF0C  a front wheel spinning faster than its rear counterpart (w1 > w3 || w0 > w2)
+    //               -> v126 = 0
+    //   0x8261EF80  front pair maxAngVel = Engine::GetMaxWheelAngularVelocity().x, or 10000.0
+    //               [flt_82005D9C] when PowerToFront is (eps-)zero; rear pair reloads the engine
+    //               vector fresh before EACH wheel
+    //   0x8261F038  Wheel::UpdateVelocity x4 (order 1,0 with v124; 3,2 with v126; v4/v5 =
+    //               unk_82FB9E10 == 100.0 / unk_82FB9380 == 1000.0)
+    //   0x8261F0C4  LimitDifferential(REAR pair)
+    //   0x8261F0D4  count wheels with (mbIsOnGround && mbHasTraction) -> r27
+    //   0x8261F14C  CalculateNewVelocity(dt)
+    //   0x8261F158  [+0x14 vcall == IsPlayerVehicleActuallyInShowtime -> skip friction]
+    //   0x8261F180  GetDownForce(); fwd = dot3(mLinearVelocity, At)
+    //   0x8261F1C4  IsCounterSteeringAtLowSpeed(splat(fwd), mfSteering, mfGas):
+    //                 YES -> boosted = (|min(yawRate, 3.0 [flt_82004270])| *
+    //                        LowSpeedTyreFrictionTractionControl [+0x90 .z] + 1.0) * downforce;
+    //                        rear grip = (fwd >= -5.0 [flt_82094774]) ? boosted : downforce;
+    //                        front grip = boosted
+    //                 NO  -> both = downforce
+    //   0x8261F2F4  HandleWheelPairFriction(2,3, At, rearGrip, dt, grip(2), grip(3), r27>2, 0);
+    //               CalculateNewVelocity(dt);
+    //               HandleWheelPairFriction(0,1, mSteeringDirection, frontGrip, dt, grip(0),
+    //               grip(1), r27>2, 0)  [GetSurfaceGrip call order per pair: B then A]
+    //   0x8261F410  CalculateNewVelocity(dt)
+    //   0x8261F414  [mbCrashing && 3500.0 [unk_82FB90C0] > attribs Mass]
+    //               HandleWheelFrictionCrashing(2)(3)(0)(1) with v1 = dt
+    //   0x8261F494  [!mbFrozen || controls->mbIsOnStartLine] ROTATION ADVANCE x4 (order 1,0,3,2):
+    //               mIntegrationVariables.z = wrap(.z + .x * dt) into [-pi, pi) via
+    //               unk_82FB9260 == 1/(2pi), unk_82FB92A0 == 2pi, unk_82FB92C0 == pi
+    void VehiclePhysics::UpdateWheels(const BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep)
+    {
+        static const f32 KF_PEDAL_DEADZONE      = 0.1f;      // flt_82004014
+        static const f32 KF_BRAKE_DRIVING_GATE  = 0.9f;      // flt_82005450
+        static const f32 KF_FACTOR_MPH_OFFSET   = 60.0f;     // unk_82FB9E20 <- flt_82092BC4
+        static const f32 KF_FACTOR_MPH_DIVISOR  = 10.0f;     // unk_82FB83C0 <- flt_82004A20
+        static const f32 KF_FACTOR_LO           = 0.0f;      // unk_82FB91A0 <- flt_82001CC0
+        static const f32 KF_FACTOR_HI           = 0.75f;     // unk_82FB9D00 <- flt_82004018
+        static const f32 KF_UNDRIVEN_MAX_SPIN   = 10000.0f;  // flt_82005D9C
+        static const f32 KF_BRAKE_CAPACITY_SCALE= 100.0f;    // unk_82FB9E10 <- flt_820049E0
+        static const f32 KF_BRAKE_DECEL_SCALE   = 1000.0f;   // unk_82FB9380 <- flt_82009E10
+        static const f32 KF_CRASH_SCRUB_MASS    = 3500.0f;   // unk_82FB90C0 <- flt_8205878C
+        static const f32 KF_YAW_RATE_CAP        = 3.0f;      // flt_82004270
+        static const f32 KF_REVERSE_SPEED_GATE  = -5.0f;     // flt_82094774
+        static const f32 KF_TWO_PI              = 6.2831854820251465f;    // unk_82FB92A0 <- flt_82001C94
+        static const f32 KF_PI                  = 3.1415927410125732f;    // unk_82FB92C0 <- flt_8208F5FC
+        static const f32 KF_EPSILON             = 1.1920928955078125e-07f;   // stru_8208F620[0]
+
+        UpdateBurnout(lpControls);
+        UpdateWheelInertia();
+
+        // ---- 0x8261E524: mSteeringDirection = R(Up, steeringAngle) * At ----------------------
+        // The same inlined XMVectorSinCos + Rodrigues block SetWheelVelocities carries; the store
+        // target here is the member (+0x10E0). std::sin/std::cos are the exact forms of the
+        // console's shared minimax polynomial (tighter, never looser).
+        {
+            const Vector3& lvUp = mTransform.Up();
+            const Vector3& lvAt = mTransform.At();
+
+            const f32 lfSteerAngle =
+                mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x;
+            const f32 lfSin = std::sin(lfSteerAngle);
+            const f32 lfCos = std::cos(lfSteerAngle);
+            const f32 lfOneMinusCos = 1.0f - lfCos;
+
+            const Vector3 lvCol0{ lfCos + lfOneMinusCos * lvUp.x * lvUp.x,
+                                  lfOneMinusCos * lvUp.x * lvUp.y + lfSin * lvUp.z,
+                                  lfOneMinusCos * lvUp.x * lvUp.z - lfSin * lvUp.y, 0.0f };
+            const Vector3 lvCol1{ lfOneMinusCos * lvUp.y * lvUp.x - lfSin * lvUp.z,
+                                  lfCos + lfOneMinusCos * lvUp.y * lvUp.y,
+                                  lfOneMinusCos * lvUp.y * lvUp.z + lfSin * lvUp.x, 0.0f };
+            const Vector3 lvCol2{ lfOneMinusCos * lvUp.z * lvUp.x + lfSin * lvUp.y,
+                                  lfOneMinusCos * lvUp.z * lvUp.y - lfSin * lvUp.x,
+                                  lfCos + lfOneMinusCos * lvUp.z * lvUp.z, 0.0f };
+
+            mSteeringDirection = Vector3{
+                lvCol0.x * lvAt.x + lvCol1.x * lvAt.y + lvCol2.x * lvAt.z,
+                lvCol0.y * lvAt.x + lvCol1.y * lvAt.y + lvCol2.y * lvAt.z,
+                lvCol0.z * lvAt.x + lvCol1.z * lvAt.y + lvCol2.z * lvAt.z, 0.0f };
+        }
+
+        const Vector3& lvAt = mTransform.At();
+
+        // r22 / r23: reverse and gas-released, computed once beside the sincos block.
+        const bool lbInReverse   = (0.0f > mfSpeedMPH.x) || (mEngine.GetCurrentGear() == 0);
+        const bool lbGasReleased = lpControls->mfGas < KF_PEDAL_DEADZONE;
+
+        // ---- 0x8261E7E8: body velocity at each wheel contact (order 2,3,0,1) -----------------
+        CalculateBodyVelocityAtWheelContact(eRearLeftWheel,   lvAt,               lvfTimeStep);
+        CalculateBodyVelocityAtWheelContact(eRearRightWheel,  lvAt,               lvfTimeStep);
+        CalculateBodyVelocityAtWheelContact(eFrontLeftWheel,  mSteeringDirection, lvfTimeStep);
+        CalculateBodyVelocityAtWheelContact(eFrontRightWheel, mSteeringDirection, lvfTimeStep);
+
+        // ---- 0x8261E838: just-landed spin-up (order 2,3,0,1) ---------------------------------
+        static const EVehicleDrivenWheel kaeLandOrder[eNumDrivenWheels] = {
+            eRearLeftWheel, eRearRightWheel, eFrontLeftWheel, eFrontRightWheel };
+        for (s32 li = 0; li < eNumDrivenWheels; ++li)
+        {
+            Wheel& lrWheel = maWheels[kaeLandOrder[li]];
+            if (!lrWheel.GetRoadContact().mbIsOnGround ||
+                lrWheel.GetRoadContact().mbWasOnGroundLastUpdate)
+                continue;
+
+            const Vector3& lvRollDir =
+                (kaeLandOrder[li] == eFrontLeftWheel || kaeLandOrder[li] == eFrontRightWheel)
+                    ? mSteeringDirection : lvAt;
+
+            lrWheel.mIntegrationVariables.y = 0.0f;                        // vrlimi 4 (y)
+            lrWheel.mIntegrationVariables.x =                              // vrlimi 8 (x)
+                vpu::Dot(lrWheel.mBodyPointVelocity, lvRollDir) / lrWheel.mSlipVariables.w;
+            lrWheel.mbBrokenAdhesiveLimit = false;                         // stb 0 -> +0xD5
+        }
+
+        // ---- 0x8261EA58: integrate the accumulated torque (order 1,0,3,2) --------------------
+        static const EVehicleDrivenWheel kaeIntegrateOrder[eNumDrivenWheels] = {
+            eFrontRightWheel, eFrontLeftWheel, eRearRightWheel, eRearLeftWheel };
+        for (s32 li = 0; li < eNumDrivenWheels; ++li)
+        {
+            Wheel& lrWheel = maWheels[kaeIntegrateOrder[li]];
+            lrWheel.mIntegrationVariables.x += lrWheel.mIntegrationVariables.y * lvfTimeStep.x
+                                             * lrWheel.mSuspensionAndInertiaVariables.w;
+            lrWheel.mIntegrationVariables.y = 0.0f;
+        }
+
+        // ---- 0x8261EB68: the braking factor + the magic brake force --------------------------
+        VecFloat lvfBrakeFactor = UpdateBrakesAndGetBrakingFactor(lpControls, lvfTimeStep);
+
+        if (mu8DriftState == 0 && !mbHasAir)
+        {
+            // t = min(|steering|, 1.0) (the fsel vs f29 == 1.0).
+            f32 lfT = std::fabs(lpControls->mfSteering);
+            if (lfT > 1.0f) lfT = 1.0f;
+
+            const Vector4& lvMagic = mpAttribs->mBaseAttribs
+                .mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels;
+            CGS_ASSERT(lvMagic.z == lvMagic.z,
+                       "IsValid( mpAttribs->mBaseAttribs.GetMagicBrakeFactorStraightLine() )");   // :1928
+            CGS_ASSERT(lvMagic.y == lvMagic.y,
+                       "IsValid( mpAttribs->mBaseAttribs.GetMagicBrakeFactorTurning() )");        // :1929
+            const f32 lfBlend = lvMagic.z + lfT * (lvMagic.y - lvMagic.z);   // lerp(Straight, Turning, t)
+
+            // sign(mfSpeedMPH) as the {+1, 0, -1} vsel chain.
+            const f32 lfSgn = (mfSpeedMPH.x > 0.0f) ? 1.0f
+                             : ((mfSpeedMPH.x >= 0.0f) ? 0.0f : -1.0f);
+
+            // clamp01(|forward speed|).
+            f32 lfFwdScale = std::fabs(vpu::Dot(mLinearVelocity, lvAt));
+            if (lfFwdScale > 1.0f) lfFwdScale = 1.0f;
+
+            const f32 lfForceZ = -lvfBrakeFactor.x * mfMass.x * lfBlend * lfSgn * lfFwdScale;
+
+            CGS_ASSERT(lfForceZ == lfForceZ,
+                       "Invalid brake force: lfBrakeFactor, mfMass, lvfSteeringBrakeFactor, "
+                       "lvfSgnSpeedMph");   // the gpcMessageBuffer stream, :1951 -- lowered
+            AddLocalSpaceForce(Vector3{ 0.0f, 0.0f, lfForceZ, 0.0f });   // vrlimi 2 (z) of zero
+        }
+
+        // ---- 0x8261EDF8: the driven-axle brake factor ----------------------------------------
+        f32 lfFrontFactor = lvfBrakeFactor.x;   // v124
+        f32 lfRearFactor;                       // v126
+        if (lpControls->mfGas > 0.0f || lpControls->mfBrake < KF_BRAKE_DRIVING_GATE)
+        {
+            f32 lfRamp = (mfSpeedMPH.x - KF_FACTOR_MPH_OFFSET) / KF_FACTOR_MPH_DIVISOR;
+            if (lfRamp < KF_FACTOR_LO) lfRamp = KF_FACTOR_LO;
+            if (lfRamp > KF_FACTOR_HI) lfRamp = KF_FACTOR_HI;
+            lfRearFactor = lfRamp * lvfBrakeFactor.x;
+        }
+        else
+        {
+            lfRearFactor = lvfBrakeFactor.x;
+        }
+
+        // FWD car (PowerToRear < 0.1): the reduced factor follows the driven axle.
+        if (KF_PEDAL_DEADZONE > mpAttribs->mBaseAttribs
+                .mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z)
+        {
+            const f32 lfSwap = lfRearFactor;
+            lfRearFactor  = lfFrontFactor;
+            lfFrontFactor = lfSwap;
+        }
+
+        // A front wheel spinning faster than its rear counterpart zeroes the rear factor.
+        if (maWheels[eFrontRightWheel].mIntegrationVariables.x >
+                maWheels[eRearRightWheel].mIntegrationVariables.x ||
+            maWheels[eFrontLeftWheel].mIntegrationVariables.x >
+                maWheels[eRearLeftWheel].mIntegrationVariables.x)
+        {
+            lfRearFactor = 0.0f;
+        }
+
+        // ---- 0x8261EF80: per-axle rev limits + the four Wheel::UpdateVelocity calls ----------
+        f32 lfFrontMax = mEngine.GetMaxWheelAngularVelocity().x;
+        if (std::fabs(mpAttribs->mBaseAttribs
+                .mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.y) <= KF_EPSILON)
+            lfFrontMax = KF_UNDRIVEN_MAX_SPIN;   // undriven front: effectively unlimited
+
+        const VecFloat lvfFrontMax{ lfFrontMax, lfFrontMax, lfFrontMax, lfFrontMax };
+        const VecFloat lvfFrontFactor{ lfFrontFactor, lfFrontFactor, lfFrontFactor, lfFrontFactor };
+        const VecFloat lvfRearFactor{ lfRearFactor, lfRearFactor, lfRearFactor, lfRearFactor };
+        const VecFloat lvfCapScale{ KF_BRAKE_CAPACITY_SCALE, KF_BRAKE_CAPACITY_SCALE,
+                                    KF_BRAKE_CAPACITY_SCALE, KF_BRAKE_CAPACITY_SCALE };
+        const VecFloat lvfDecelScale{ KF_BRAKE_DECEL_SCALE, KF_BRAKE_DECEL_SCALE,
+                                      KF_BRAKE_DECEL_SCALE, KF_BRAKE_DECEL_SCALE };
+
+        maWheels[eFrontRightWheel].UpdateVelocity(lvfTimeStep, lvfFrontMax, lvfFrontFactor,
+                                                  lvfCapScale, lvfDecelScale,
+                                                  lbGasReleased, lbInReverse);
+        maWheels[eFrontLeftWheel ].UpdateVelocity(lvfTimeStep, lvfFrontMax, lvfFrontFactor,
+                                                  lvfCapScale, lvfDecelScale,
+                                                  lbGasReleased, lbInReverse);
+        // the rear pair reloads the engine vector FRESH before each wheel (two calls, as shipped).
+        maWheels[eRearRightWheel].UpdateVelocity(lvfTimeStep, mEngine.GetMaxWheelAngularVelocity(),
+                                                 lvfRearFactor, lvfCapScale, lvfDecelScale,
+                                                 lbGasReleased, lbInReverse);
+        maWheels[eRearLeftWheel ].UpdateVelocity(lvfTimeStep, mEngine.GetMaxWheelAngularVelocity(),
+                                                 lvfRearFactor, lvfCapScale, lvfDecelScale,
+                                                 lbGasReleased, lbInReverse);
+
+        LimitDifferential(eRearLeftWheel, eRearRightWheel);
+
+        // ---- 0x8261F0D4: wheels with real traction -------------------------------------------
+        s32 liTractionCount = 0;
+        for (s32 li = 0; li < eNumDrivenWheels; ++li)
+        {
+            if (maWheels[li].GetRoadContact().mbIsOnGround && maWheels[li].mbHasTraction)
+                ++liTractionCount;
+        }
+
+        CalculateNewVelocity(lvfTimeStep);
+
+        // ---- 0x8261F158: the tyre-friction pass (skipped entirely in showtime) ---------------
+        if (!IsPlayerVehicleActuallyInShowtime())   // the +0x14 vcall
+        {
+            const f32 lfDownForce = GetDownForce().x;
+            const f32 lfFwdSpeed  = vpu::Dot(mLinearVelocity, lvAt);
+            const bool lbMostWheels = liTractionCount > 2;
+
+            f32 lfRearGrip;
+            f32 lfFrontGrip;
+            if (IsCounterSteeringAtLowSpeed(
+                    VecFloat{ lfFwdSpeed, lfFwdSpeed, lfFwdSpeed, lfFwdSpeed },
+                    lpControls->mfSteering, lpControls->mfGas))
+            {
+                // boosted = (|min(yawRate, 3.0)| * LowSpeedTyreFrictionTractionControl + 1.0)
+                //           * downforce   (fsel min, fabs, fmadds vs f29 == 1.0, fmuls)
+                f32 lfYaw = mAngularVelocity.y;
+                if (lfYaw > KF_YAW_RATE_CAP) lfYaw = KF_YAW_RATE_CAP;
+                const f32 lfBoosted =
+                    (std::fabs(lfYaw) * mpAttribs->mBaseAttribs
+                         .mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.z
+                     + 1.0f) * lfDownForce;
+
+                lfRearGrip  = (lfFwdSpeed >= KF_REVERSE_SPEED_GATE) ? lfBoosted : lfDownForce;
+                lfFrontGrip = lfBoosted;
+            }
+            else
+            {
+                lfRearGrip  = lfDownForce;
+                lfFrontGrip = lfDownForce;
+            }
+
+            // rear axle (GetSurfaceGrip call order per pair: B then A, as shipped).
+            { const Vector3 lvGripRR = GetSurfaceGrip(eRearRightWheel);
+              const Vector3 lvGripRL = GetSurfaceGrip(eRearLeftWheel);
+              HandleWheelPairFriction(eRearLeftWheel, eRearRightWheel, lvAt,
+                                      VecFloat{ lfRearGrip, lfRearGrip, lfRearGrip, lfRearGrip },
+                                      lvfTimeStep,
+                                      VecFloat{ lvGripRL.x, lvGripRL.y, lvGripRL.z, lvGripRL.w },
+                                      VecFloat{ lvGripRR.x, lvGripRR.y, lvGripRR.z, lvGripRR.w },
+                                      lbMostWheels, false); }
+
+            CalculateNewVelocity(lvfTimeStep);
+
+            // front axle.
+            { const Vector3 lvGripFR = GetSurfaceGrip(eFrontRightWheel);
+              const Vector3 lvGripFL = GetSurfaceGrip(eFrontLeftWheel);
+              HandleWheelPairFriction(eFrontLeftWheel, eFrontRightWheel, mSteeringDirection,
+                                      VecFloat{ lfFrontGrip, lfFrontGrip, lfFrontGrip, lfFrontGrip },
+                                      lvfTimeStep,
+                                      VecFloat{ lvGripFL.x, lvGripFL.y, lvGripFL.z, lvGripFL.w },
+                                      VecFloat{ lvGripFR.x, lvGripFR.y, lvGripFR.z, lvGripFR.w },
+                                      lbMostWheels, false); }
+        }
+
+        CalculateNewVelocity(lvfTimeStep);
+
+        // ---- 0x8261F414: the crash scrub (light cars only) -----------------------------------
+        if (mbCrashing &&
+            KF_CRASH_SCRUB_MASS >
+                mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x)
+        {
+            HandleWheelFrictionCrashing(eRearLeftWheel,   lvfTimeStep);
+            HandleWheelFrictionCrashing(eRearRightWheel,  lvfTimeStep);
+            HandleWheelFrictionCrashing(eFrontLeftWheel,  lvfTimeStep);
+            HandleWheelFrictionCrashing(eFrontRightWheel, lvfTimeStep);
+        }
+
+        // ---- 0x8261F494: advance the wheel rotation angles (order 1,0,3,2) -------------------
+        // Runs unless the body is frozen -- except on the start line, where the wheels animate
+        // through the freeze (controls->mbIsOnStartLine).
+        if (!IsFrozen() || lpControls->mbIsOnStartLine)
+        {
+            for (s32 li = 0; li < eNumDrivenWheels; ++li)
+            {
+                Wheel& lrWheel = maWheels[kaeIntegrateOrder[li]];   // 1,0,3,2
+
+                // angle' = z + x*dt, wrapped into [-pi, pi): subtract floor(angle/(2pi))*2pi,
+                // then the two compare/select steps against +pi / -pi.
+                f32 lfAngle = lrWheel.mIntegrationVariables.z
+                            + lrWheel.mIntegrationVariables.x * lvfTimeStep.x;
+                lfAngle -= std::floor(lfAngle * (1.0f / KF_TWO_PI)) * KF_TWO_PI;   // vrfim
+                if (lfAngle >= KF_PI)  lfAngle -= KF_TWO_PI;
+                if (lfAngle < -KF_PI)  lfAngle += KF_TWO_PI;
+                lrWheel.mIntegrationVariables.z = lfAngle;   // vrlimi 2 (z)
+            }
+        }
+    }
+
+// [clean] SetAttributes  @0x8262DE58
+    // @0x8262DE58  BrnPhysics::Vehicle::VehiclePhysics::SetAttributes  (185 insns)
+    // The post-reset attribs re-derivation (UpdateDriving's copy.mbReset branch, before
+    // HackedResetAndFlyAround). Decoded store-for-store:
+    //   1. SimpleVehiclePhysics::SetAttributes()           (result discarded -- bl @0x8262DE70)
+    //   2. capture radii (each wheel's mSlipVariables.w) and positions
+    //      (streamed pos + mpAttribs COM, y -= mpAttribs suspension height offset) -- ⚠️ the
+    //      console DEREFERENCES mpAttribs during this capture BEFORE asserting it non-null;
+    //      order preserved
+    //   3. assert mpAttribs != NULL (0x17A) / mpAttribs->IsValid() (0x17B)
+    //   4. the AttribSys chase: burnoutcarasset(mpAttribs->mAttribsKey) ->
+    //      handling RefSpec (data+0x158) -> physicsvehiclehandling -> checked copy @0x825BDB88
+    //      -> VehicleAttribs::SetupAttribs(handling)        [TRAP until its wave -- see the
+    //      link-stubs census; the re-stream is the one leg of this function not yet real]
+    //   5. mpAttribs->mBaseAttribs.mCOMOffset += mHandlingBodyOffset
+    //   6. SimpleVehiclePhysics::SetAttributes(positions, radii)   (result discarded)
+    //   7. mEngine.Prepare(&mpAttribs->mEngineAttribs) -- the X360 INLINES Engine::Prepare
+    //      @0x825F3F38 here (the 0xA0 memcpy + clutch lane zero + gear 1 + Engine::Reset(0));
+    //      the named call is that function instruction-for-instruction
+    //   8. SetupSuspension(); return true (li r3,1)
+    bool VehiclePhysics::SetAttributes()
+    {
+        SimpleVehiclePhysics::SetAttributes();   // the 0-arg base refresh, result unused
+
+        // ---- the capture (mpAttribs dereferenced before the null assert -- as shipped) --------
+        f32 lafRadii[eNumDrivenWheels];
+        Vector3 laPositions[eNumDrivenWheels];
+        {
+            const f32 lfFrontOffset =
+                mpAttribs->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.x;
+            const f32 lfRearOffset =
+                mpAttribs->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.y;
+            for (s32 li = 0; li < eNumDrivenWheels; ++li)
+            {
+                lafRadii[li] = maWheels[li].mSlipVariables.w;
+                laPositions[li] = vpu::Add(maWheels[li].mStreamedPositionPlusTwistAmount.GetVector3(),
+                                           mpAttribs->mBaseAttribs.mCOMOffset);
+                laPositions[li].y -= (li < 2) ? lfFrontOffset : lfRearOffset;   // vrlimi(4)
+            }
+        }
+
+        CGS_ASSERT(mpAttribs != NULL,     "mpAttribs != NULL");       // console line 0x17A
+        CGS_ASSERT(mpAttribs->IsValid(),  "mpAttribs->IsValid()");    // console line 0x17B
+
+        // ---- the AttribSys handling re-stream -------------------------------------------------
+        {
+            Attrib::Gen::burnoutcarasset lCarAsset(mpAttribs->mAttribsKey, NULL);
+            Attrib::Gen::physicsvehiclehandling lHandling(
+                const_cast<Attrib::Collection*>(
+                    lCarAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), NULL);
+            Attrib::Gen::physicsvehiclehandling lHandlingCopy(lHandling);   // @0x825BDB88
+            mpAttribs->SetupAttribs(lHandlingCopy);
+        }
+
+        // mpAttribs COM nudge ([mpAttribs+0x20] += [this+0x690]).
+        mpAttribs->mBaseAttribs.mCOMOffset =
+            vpu::Add(mpAttribs->mBaseAttribs.mCOMOffset, mHandlingBodyOffset);
+
+        SimpleVehiclePhysics::SetAttributes(laPositions, lafRadii);   // result unused
+
+        mEngine.Prepare(&mpAttribs->mEngineAttribs);   // the inlined Engine::Prepare @0x825F3F38
+        SetupSuspension();
+        return true;   // li r3, 1
+    }
+
+// [clean] HackedResetAndFlyAround  @0x825D0008
+    // @0x825D0008  BrnPhysics::Vehicle::VehiclePhysics::HackedResetAndFlyAround  (139 insns,
+    // 0x825D0008..0x825D0230, leaf -- no callee but the GPR save/restore thunks)
+    // The dev reset / fly-around handler, gated on copy.mbReset by UpdateDriving @0x82638604.
+    // Levels the car onto a world-up basis, flies the position from the stick, kills all
+    // motion, and re-seats the wall-contact/slam/shunt/air-ram state.
+    //
+    // Constants (x360rd image reads, 10/10 self-test): flt_82001CC0 = 0.0f,
+    // flt_82001C98 = 1.0f, flt_82004014 = 0.1f, unk_8208FADC = 0.4f.
+    //
+    // ⚠️ dt (v1) is never read by the body -- the fly speeds are per-CALL, not per-second.
+    void VehiclePhysics::HackedResetAndFlyAround(const BrnPlayerDriverControls* lpControls,
+                                                 VecFloat lvfTimeStep)
+    {
+        (void)lvfTimeStep;   // carried but unused, as shipped
+
+        static const f32 KF_FLY_RISE_PER_CALL   = 0.1f;   // flt_82004014 (image-read)
+        static const f32 KF_WALL_CONTACT_RESEED = 0.4f;   // unk_8208FADC (image-read) -- the
+                                                          // same window UpdateDriving's else-leg
+                                                          // compares against (flt_8200473C)
+
+        // ---- 0x825D0010..0x825D00AC: re-level the basis about world up -----------------------
+        // up = {0,1,0,0} is built on the stack (raw stack decode: words at r1-0x70/-0x6C/-0x68/
+        // -0x64 = {0,1,0,0} -- the w word IS zeroed, via `stw r11,0(r1-0x64)`).
+        //   yAxis <- up
+        //   xAxis <- cross(up, old zAxis)        (shifted-permwi idiom: vpermwi128 0x63 +
+        //   zAxis <- cross(new xAxis, up)         vnmsubfp, twice; nothing is normalised)
+        const Vector3 lvUp    = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+        const Vector3 lvOldAt = mTransform.zAxis;
+        mTransform.yAxis = lvUp;                                    // stvx128 -> +0x20
+        mTransform.xAxis = vpu::Cross(lvUp, lvOldAt);               // stvx128 -> +0x10
+        mTransform.zAxis = vpu::Cross(mTransform.xAxis, lvUp);      // stvx128 -> +0x30
+
+        // ---- 0x825D00B0..0x825D0178: fly the position from the controls ----------------------
+        //   pos += xAxis * -mfSteering           (lfs 0x10(r4), fneg, splat, vmaddfp)
+        //   pos += zAxis * (mfGas - mfBrake)     (lfs 4(r4) - lfs 8(r4), splat, vmaddfp)
+        //   pos += yAxis * 0.1f                  (the constant per-call rise)
+        mTransform.wAxis = vpu::Add(vpu::Mult(mTransform.xAxis, -lpControls->mfSteering),
+                                    mTransform.wAxis);
+        mTransform.wAxis = vpu::Add(vpu::Mult(mTransform.zAxis,
+                                              lpControls->mfGas - lpControls->mfBrake),
+                                    mTransform.wAxis);
+        mTransform.wAxis = vpu::Add(vpu::Mult(mTransform.yAxis, KF_FLY_RISE_PER_CALL),
+                                    mTransform.wAxis);
+
+        // ---- 0x825D0180..0x825D0194: kill all motion and pending forces ----------------------
+        static const Vector3 KV_ZERO = { 0.0f, 0.0f, 0.0f, 0.0f };   // vspltisw v0, 0
+        mLinearVelocity      = KV_ZERO;   // +0x50   == base+0x40
+        mAngularVelocity     = KV_ZERO;   // +0x60   == base+0x50
+        mTotalLinearImpulse  = KV_ZERO;   // +0x110  == base+0x100
+        mTotalAngularImpulse = KV_ZERO;   // +0x120  == base+0x110
+        mTotalLinearForce    = KV_ZERO;   // +0xF0   == base+0xE0
+        mTotalTorque         = KV_ZERO;   // +0x100  == base+0xF0
+
+        // ---- 0x825D0198..0x825D022C: re-seat the contact/effect state ------------------------
+        mbContactingWall = false;                                        // stb 0 -> +0x1362
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w
+            = KF_WALL_CONTACT_RESEED;                                    // vrlimi(1) -> +0x1070.w
+
+        // Partial SlamEffect clear -- the same five fields Reset(Vector3) seats (mForce, mfDecay
+        // and mfRecoveryTime are NOT written).
+        mSlamEffect.mi8SlamNumber      = -1;      // stb -1  -> +0x1128
+        mSlamEffect.mfSteering         = 0.0f;    // stfs 0  -> +0x1114
+        mSlamEffect.mfOriginalSteering = 0.0f;    // stfs 0  -> +0x1118
+        mSlamEffect.mfTotalSlamTime    = 0.0f;    // stfs 0  -> +0x1120
+        mSlamEffect.mfSlamLife         = 0.0f;    // stfs 0  -> +0x111C
+
+        // Shunt clear, the Reset(Vector3) shape: direction+speed zeroed whole; Life = -1
+        // (vspltisw -1 + vcfsx), SpeedIncreaseToQuit = 0; z/w lanes untouched.
+        mShuntEffect.mDirectionPlusDesiredSpeed = Vector3Plus{ 0.0f, 0.0f, 0.0f, 0.0f };
+                                                                         // stvx128 0 -> +0x1130
+        mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y = 0.0f;              // vrlimi(4) -> +0x1140.y
+        mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = -1.0f;             // vrlimi(8) -> +0x1140.x
+
+        // ⚠️ AS SHIPPED: the image stores +0x1158 TWICE (two consecutive `std r11,0x1158(r3)`,
+        // raw bytes 0xF9631158 x2 @0x825D01EC/0x825D01F0). Reset(Vector3) zeroes mUsedAirRams
+        // AND mUsedSpins (+0x1220) here, so the second store is plausibly a source-level typo
+        // that was meant for mUsedSpins -- but the shipped bytes hit mUsedAirRams both times,
+        // so mUsedSpins is NOT cleared by this function. Transcribed as shipped; flagged.
+        mUsedAirRams.UnSetAll();                                         // std 0 -> +0x1158
+        mUsedAirRams.UnSetAll();                                         // std 0 -> +0x1158 (again)
+
+        // Timer lane re-seats (lane-inserts of 0.0f).
+        mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z = 0.0f;
+                                                                         // vrlimi(2) -> +0x1060.z
+        mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.w = 0.0f;
+                                                                         // vrlimi(1) -> +0x1060.w
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.x
+            = 0.0f;                                                      // vrlimi(8) -> +0x1070.x
+    }
+
+// [clean] UpdateDriving  @0x82638148
+    // @0x82638148  BrnPhysics::Vehicle::VehiclePhysics::UpdateDriving  (433 insns)
+    // ⭐⭐ THE ORDERER -- the phase chain the whole campaign has been aimed at. Transcribed
+    // stage by stage from the X360 asm; NOTHING is reordered. Every CheckState string below is
+    // the console's own (each `lis/addi` pair around the bl). The dt vector (v126 == v1) is
+    // restored before every callee that takes it.
+    //
+    //   0x82638194  CheckState "Before driving update"
+    //   0x826381A4  local 0x48-byte copy of the incoming controls (the copy is what most
+    //               stages read; UpdateSpeedMatch and -- for AI -- UpdateDrift read the ORIGINAL)
+    //   0x826381BC  [copy.mbIsSteeringWheel] ModifyControlsForSteeringWheelInput(copy)
+    //   0x826381C8  ModifyControlsForDrift(copy)
+    //   0x82638204  mfSpeedMPH (+0x6C0)   = splat(dot3(mLinearVelocity, mTransform.zAxis)
+    //                                        * KF_MPS_TO_MPH @0x8208F820 == 2.2369363)
+    //   0x82638234  mfMass (+0xE0, base)  = splat(attribs Mass lane .x)  -- refreshed per frame
+    //   0x82638238  UpdateInAirStats(f1 = dt.x)
+    //   0x82638248  mEngine.mbAllowToChangeUpGear = mbAllowToChangeDownGear = !mbHasAir
+    //   0x82638268  UpdateSlam(&copy, dt)
+    //   0x82638270  UpdateShunt(&copy, dt)                   [BODIED 2026-08-09; v1 = v126 dt]
+    //   0x82638280  CheckState "After update slam"
+    //   0x82638290  CheckState "After LayOffGasWhilstInAir"  (the stage itself is inlined into
+    //               the slam/shunt pair on this build -- two brackets, back to back)
+    //   0x826382A0  UpdateRoadNoise(random)
+    //   0x826382B0  CheckState "After update road noise"
+    //   0x826382B8  CalculateWorldIntertia()
+    //   0x826382C8  UpdateSpeedMatch(ORIGINAL controls, dt)
+    //   0x826382D8  CheckState "After update speed match"
+    //   0x826382E0  UpdateDownForce()
+    //   0x826382F0  CheckState "After Update down force"
+    //   0x82638300  UpdateBoost(&copy, dt)
+    //   0x82638310  CheckState "After update boost"
+    //   0x82638320  UpdateEngine(&copy, dt)
+    //   0x82638330  CheckState "After update engine"
+    //   0x8263833C  CalculateNewVelocity(dt)                 [forces -> velocity, pass 1]
+    //   0x82638354  UpdateSteering(copy.mfSteering, copy.mfGas, dt, copy.mbIsSteeringWheel)
+    //   0x82638364  CheckState "After update steering"
+    //   0x82638384  UpdateDrift(meDriverType != PLAYER ? original : &copy, dt)
+    //   0x826383AC  vcall +0x2C == UpdateSuspension(dt)      (DWARF VehiclePhysics.h:1517; no
+    //               override exists in the image -- TrafficPhysics introduces only Update, and
+    //               RaceCarPhysics's DWARF virtual set has no UpdateSuspension -- so the direct
+    //               call is dispatch-identical)
+    //   0x826383B0  mbAllWheelsHaveTraction (+0x135B) = AND of the four wheels' mbIsOnGround
+    //   0x826383FC  CheckState "After update suspension"
+    //   0x8263840C  UpdateWheels(&copy, dt)                  [BODIED 2026-08-07]
+    //   0x8263841C  CheckState "After update Wheels"
+    //   0x8263842C  UpdateInAirBehaviour(&copy, dt)          [TRAP until its wave]
+    //   0x82638438  UpdateInWaterBehaviour(dt)
+    //   0x82638448  CheckState "After in air behavior"
+    //   0x82638454  CalculateNewVelocity(dt)                 [pass 2]
+    //   0x82638458  THE LINEAR-DRAG BLOCK (skipped while mbHasAir):
+    //                 drag = TimeBoosting (+0x1040.y) > 0
+    //                        ? attribs mBoostAttribs ...BoostLinearDrag (lane .z)
+    //                        : attribs mvLinearDrag_... (lane .x)
+    //                 [+0x135B] drag += GetSurfaceLinearDrag()
+    //                 while |mLinearVelocity| > FLT_EPSILON (stru_8208F620[0]):
+    //                   AddWorldSpaceForce(-drag * |v| * v)   (quadratic, along velocity;
+    //                   the vsel/vrsqrt chain is the 0-guarded magnitude)
+    //   0x8263858C  CalculateNewVelocity(dt)                 [pass 3]
+    //   0x8263859C  CheckState "After linear drag"
+    //   0x826385A4  StoreLocalWheelPositions()
+    //   0x826385B4  CheckState "After update wheel effects"
+    //   0x826385F8  mfSpeedMPH recomputed (same formula -- velocity changed since the top)
+    //   0x826385EC  mbCrashedThisFrame (+0x713) = 0
+    //   0x82638600  CheckState "After update freezing"
+    //   0x82638604  [copy.mbReset] SetAttributes() + HackedResetAndFlyAround(&copy, dt) [TRAPS]
+    //               ELSE: mbContactingWall (+0x1362) = (0.4 [flt_8200473C] >
+    //                     SecondsSinceLastWallContact (+0x1070.w)); then .w += dt
+    //   0x82638690  SimpleVehiclePhysics::CalculateNewWheelPlane()  [BODIED 2026-08-07]
+    //   0x826386A4  TimeCrashing (+0xEF0.y) = 0
+    //   0x826386A8  force-feedback springs:
+    //                 mWheelFFSpring.mfSpringCoefficient (+0x13D0) =
+    //                     both FRONT wheels on ground ? clamp01(mfSpeedMPH / 40.0
+    //                     [flt_8208FBD0]) : 0.0 [flt_82001CC0]
+    //                 mWheelFFSpring.mfSpringSaturation (+0x13D4) =
+    //                     |v| > eps ? dot3(unit(mLinearVelocity), mTransform.xAxis) : 0.0
+    //   0x826387E8  CheckState "End of driving update"
+    void VehiclePhysics::UpdateDriving(const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
+                                       const BrnPlayerDriverControls* lpControls,
+                                       CgsNumeric::Random& lrRandom, VecFloat lvfTimeStep)
+    {
+        static const f32 KF_EPSILON = 1.1920928955078125e-07f;   // stru_8208F620[0]
+        (void)lpCameraMatrix;   // r4 is carried for UpdateCrashing's sibling path; this body
+                                // does not read it (the console keeps it in r26 untouched).
+
+        CheckState("Before driving update");
+
+        BrnPlayerDriverControls lCopy;
+        std::memcpy(&lCopy, lpControls, sizeof(BrnPlayerDriverControls));   // the 0x48 memcpy
+
+        if (lCopy.mbIsSteeringWheel)
+            ModifyControlsForSteeringWheelInput(lCopy);
+        ModifyControlsForDrift(lCopy);
+
+        { const f32 lfMPH = vpu::Dot(mLinearVelocity, mTransform.zAxis) * 2.2369363f;
+        mfSpeedMPH = VecFloat{ lfMPH, lfMPH, lfMPH, lfMPH }; }   // splat
+        { const f32 lfM = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+          mfMass = VecFloat{ lfM, lfM, lfM, lfM }; }   // splat (refreshed per frame)
+
+        UpdateInAirStats(lvfTimeStep.x);
+
+        mEngine.SetAllowGearChanges(!mbHasAir);   // stb 0xFC4 / 0xFC5
+
+        UpdateSlam(reinterpret_cast<f32*>(&lCopy), lvfTimeStep.x);
+        UpdateShunt(&lCopy, lvfTimeStep);   // v1 = v126 (the dt splat), restored before the bl
+        CheckState("After update slam");
+        CheckState("After LayOffGasWhilstInAir");
+
+        UpdateRoadNoise(lrRandom);
+        CheckState("After update road noise");
+
+        CalculateWorldIntertia();
+
+        UpdateSpeedMatch(lpControls, lvfTimeStep.x);   // the ORIGINAL controls (r28)
+        CheckState("After update speed match");
+
+        UpdateDownForce();
+        CheckState("After Update down force");
+
+        UpdateBoost(&lCopy, lvfTimeStep.x);
+        CheckState("After update boost");
+
+        UpdateEngine(&lCopy, lvfTimeStep);
+        CheckState("After update engine");
+
+        CalculateNewVelocity(lvfTimeStep);
+
+        UpdateSteering(lCopy.mfSteering, lCopy.mfGas, lvfTimeStep, lCopy.mbIsSteeringWheel);
+        CheckState("After update steering");
+
+        UpdateDrift((lpControls->GetType() != E_DRIVER_TYPE_PLAYER) ? lpControls : &lCopy,
+                    lvfTimeStep);
+        CheckState("After update drift");
+
+        UpdateSuspension(lvfTimeStep.x);   // the +0x2C vcall (see banner)
+
+        mbAllWheelsHaveTraction =
+            maWheels[eFrontLeftWheel].GetRoadContact().mbIsOnGround  &&   // +0x158
+            maWheels[eFrontRightWheel].GetRoadContact().mbIsOnGround &&   // +0x238
+            maWheels[eRearLeftWheel].GetRoadContact().mbIsOnGround   &&   // +0x318
+            maWheels[eRearRightWheel].GetRoadContact().mbIsOnGround;      // +0x3F8
+        CheckState("After update suspension");
+
+        UpdateWheels(&lCopy, lvfTimeStep);
+        CheckState("After update Wheels");
+
+        UpdateInAirBehaviour(&lCopy, lvfTimeStep);
+        UpdateInWaterBehaviour(&lCopy, lvfTimeStep);
+        CheckState("After in air behavior");
+
+        CalculateNewVelocity(lvfTimeStep);
+
+        // ----- the linear-drag block (asm 0x82638458..0x82638580) -----
+        if (!mbHasAir)
+        {
+            f32 lfDrag;
+            if (mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.y > 0.0f)
+                lfDrag = mpAttribs->mBoostAttribs
+                             .mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.z;
+            else
+                lfDrag = mpAttribs->mBaseAttribs
+                             .mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.x;
+
+            Vector3 lvDrag{ lfDrag, lfDrag, lfDrag, lfDrag };
+            if (mbAllWheelsHaveTraction)
+            {
+                const Vector3 lvSurface = GetSurfaceLinearDrag();
+                lvDrag = Vector3{ lvDrag.x + lvSurface.x, lvDrag.y + lvSurface.y,
+                                  lvDrag.z + lvSurface.z, lvDrag.w + lvSurface.w };
+            }
+
+            const f32 lfSpeedSq = vpu::MagnitudeSquared(mLinearVelocity);
+            const f32 lfSpeed   = (lfSpeedSq > 0.0f) ? std::sqrt(lfSpeedSq) : 0.0f;
+            if (std::fabs(lfSpeed) > KF_EPSILON)
+            {
+                // F = -drag * |v| * v  (asm 0x82638564..0x82638580: vmulfp |v|*|v| is folded
+                // through the refined rsqrt -- the emitted product is unitV * (-drag * |v|^2)).
+                AddWorldSpaceForce(Vector3{ -lvDrag.x * lfSpeed * mLinearVelocity.x,
+                                            -lvDrag.y * lfSpeed * mLinearVelocity.y,
+                                            -lvDrag.z * lfSpeed * mLinearVelocity.z, 0.0f });
+            }
+        }
+
+        CalculateNewVelocity(lvfTimeStep);
+        CheckState("After linear drag");
+
+        StoreLocalWheelPositions();
+        CheckState("After update wheel effects");
+
+        { const f32 lfMPH = vpu::Dot(mLinearVelocity, mTransform.zAxis) * 2.2369363f;
+        mfSpeedMPH = VecFloat{ lfMPH, lfMPH, lfMPH, lfMPH }; }   // splat
+        mbCrashedThisFrame = false;   // stb 0 -> +0x713
+        CheckState("After update freezing");
+
+        if (lCopy.mbReset)
+        {
+            SetAttributes();
+            HackedResetAndFlyAround(&lCopy, lvfTimeStep);
+        }
+        else
+        {
+            static const f32 KF_WALL_CONTACT_WINDOW = 0.4f;   // flt_8200473C (image-read)
+            mbContactingWall =
+                KF_WALL_CONTACT_WINDOW >
+                mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w;
+            mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w
+                += lvfTimeStep.x;
+        }
+
+        SimpleVehiclePhysics::CalculateNewWheelPlane();
+
+        mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y = 0.0f;   // vrlimi(4)
+
+        // ----- force-feedback springs (asm 0x826386A8..0x826387D8) -----
+        {
+            static const f32 KF_FF_SPEED_DIVISOR = 40.0f;   // flt_8208FBD0 (image-read)
+
+            if (maWheels[eFrontLeftWheel].GetRoadContact().mbIsOnGround &&
+                maWheels[eFrontRightWheel].GetRoadContact().mbIsOnGround)
+            {
+                f32 lfCoeff = mfSpeedMPH.x / KF_FF_SPEED_DIVISOR;   // vrefp + 2 NR
+                if (lfCoeff < 0.0f) lfCoeff = 0.0f;                 // vmaxfp 0
+                if (lfCoeff > 1.0f) lfCoeff = 1.0f;                 // vminfp 1
+                mWheelFFSpring.mfSpringCoefficient = lfCoeff;
+            }
+            else
+            {
+                mWheelFFSpring.mfSpringCoefficient = 0.0f;          // flt_82001CC0
+            }
+
+            const f32 lfSpeedSq = vpu::MagnitudeSquared(mLinearVelocity);
+            if (std::fabs(lfSpeedSq) > KF_EPSILON)
+            {
+                const Vector3 lvUnitVel = vpu::Normalize(mLinearVelocity);
+                mWheelFFSpring.mfSpringSaturation = vpu::Dot(lvUnitVel, mTransform.xAxis);
+            }
+            else
+            {
+                mWheelFFSpring.mfSpringSaturation = 0.0f;
+            }
+        }
+
+        CheckState("End of driving update");
+    }
+
+// [clean] UpdateShunt  @0x825FC748
+    // @0x825FC748  BrnPhysics::Vehicle::VehiclePhysics::UpdateShunt  (100 insns, read line by
+    // line; the LOUD TRAP in VehiclePhysicsLinkStubs.cpp is deleted in this commit).
+    //
+    // Consume the queued shunt effect: while a shunt is active (the inlined
+    // ShuntEffect::IsActive() lane pair -- desired speed w > 0 AND life x > 0), and the car
+    // still has traction, close the horizontal-speed deficit along the shunt direction with a
+    // single world-space impulse, floor the gas, drop brake + handbrake, and decay the life.
+    // The X360, store for store:
+    //   0x825FC778..0x825FC7C8  the active pair (vspltw 3 of +0x1130 / vspltw 0 of +0x1140,
+    //                           both vcmpgtfp vs 0) -- inactive -> plain return, NO clear
+    //   0x825FC7CC  `lbz 0x135B` mbAllWheelsHaveTraction -- zero -> CLEAR the effect
+    //   0x825FC7D8..0x825FC818  the deficit: horiz = v - up*dot3(up, v)  (up = mTransform.yAxis
+    //                           @this+0x20, v = mLinearVelocity @this+0x50);
+    //                           deficit = desiredSpeed - dot3(dir, horiz); if deficit >
+    //                           SpeedIncreaseToQuit (+0x1140 lane y) -> CLEAR (quit: the car
+    //                           has fallen too far behind the shunt's desired speed)
+    //   0x825FC82C..0x825FC84C  impulse = dir * deficit * mfMass (+0xE0, the splat register),
+    //                           minus its up-axis component (the same project-out), fed to
+    //                           ExternalPhysicsBody::AddWorldSpaceImpulse (r3 = this+0x10)
+    //   0x825FC850..0x825FC874  controls: mfBrake(+8) = mfHandBrake(+0xC) = 0.0
+    //                           [flt_82001CC0]; mfGas(+4) = fsel-max(mfGas, 0.8
+    //                           [flt_8208F9C8 == 0x3F4CCCCD, image-read x360rd])
+    //   0x825FC878  `stb 0x1358` mbHandBrake = false
+    //   0x825FC87C..0x825FC890  life -= dt (the v127-saved v1 argument; vrlimi mask 8 = x lane)
+    //   CLEAR (0x825FC8A4..): mDirectionPlusDesiredSpeed = 0; then +0x1140 .y = 0 (vrlimi 4)
+    //                         and .x = -1.0f (vcfsx of vspltisw -1; vrlimi 8) -- the ctor's
+    //                         partial-clear pattern, reproduced store for store.
+    void VehiclePhysics::UpdateShunt(BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep)
+    {
+        static const f32 KF_SHUNT_GAS_FLOOR = 0.8f;   // flt_8208F9C8 (image-read: 0x3F4CCCCD)
+
+        // The inlined ShuntEffect::IsActive() pair. Inactive -> return WITHOUT clearing.
+        if (!(mShuntEffect.mDirectionPlusDesiredSpeed.w > 0.0f) ||
+            !(mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x > 0.0f))
+            return;
+
+        bool lbClear = true;   // both early legs fall into the clear block
+        if (mbAllWheelsHaveTraction)
+        {
+            // horizontal velocity = v - up * dot3(up, v)
+            const Vector3& lvUp  = mTransform.yAxis;                    // this+0x20
+            const Vector3& lvVel = mLinearVelocity;                     // this+0x50
+            const f32 lfUpDot = vpu::Dot(lvUp, lvVel);
+            const Vector3 lvHoriz = { lvVel.x - lvUp.x * lfUpDot,
+                                      lvVel.y - lvUp.y * lfUpDot,
+                                      lvVel.z - lvUp.z * lfUpDot, 0.0f };
+
+            const f32 lfAlong   = vpu::Dot(mShuntEffect.mDirectionPlusDesiredSpeed.GetVector3(),
+                                           lvHoriz);
+            const f32 lfDeficit = mShuntEffect.mDirectionPlusDesiredSpeed.w - lfAlong;
+
+            if (!(lfDeficit > mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y))
+            {
+                // live branch: impulse = (dir * deficit * mass) with the up component
+                // projected out, then the control/latch writes and the life decay.
+                const f32 lfMass = mfMass.x;   // +0xE0, a splat register -- lane-wise multiply
+                Vector3 lvImpulse = { mShuntEffect.mDirectionPlusDesiredSpeed.x * lfDeficit * lfMass,
+                                      mShuntEffect.mDirectionPlusDesiredSpeed.y * lfDeficit * lfMass,
+                                      mShuntEffect.mDirectionPlusDesiredSpeed.z * lfDeficit * lfMass,
+                                      0.0f };
+                const f32 lfUpComp = vpu::Dot(lvUp, lvImpulse);
+                lvImpulse = Vector3{ lvImpulse.x - lvUp.x * lfUpComp,
+                                     lvImpulse.y - lvUp.y * lfUpComp,
+                                     lvImpulse.z - lvUp.z * lfUpComp, 0.0f };
+                AddWorldSpaceImpulse(lvImpulse);
+
+                lpControls->mfBrake     = 0.0f;                          // stfs +8
+                lpControls->mfHandBrake = 0.0f;                          // stfs +0xC
+                lpControls->mfGas       = (lpControls->mfGas >= KF_SHUNT_GAS_FLOOR)
+                                              ? lpControls->mfGas
+                                              : KF_SHUNT_GAS_FLOOR;      // fsel-max
+                mbHandBrake = false;                                     // stb 0x1358
+
+                mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x -= lvfTimeStep.x;   // vrlimi 8
+                lbClear = false;
+            }
+        }
+
+        if (lbClear)
+        {
+            // The ctor's partial clear, store for store (NOT a call -- the console inlines it):
+            mShuntEffect.mDirectionPlusDesiredSpeed = Vector3Plus{ 0.0f, 0.0f, 0.0f, 0.0f };
+            mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y = 0.0f;    // vrlimi mask 4
+            mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = -1.0f;   // vrlimi mask 8
+        }
+    }
+
+// [clean] UpdateCrashing  @0x82638810
+    // @0x82638810  BrnPhysics::Vehicle::VehiclePhysics::UpdateCrashing  (732 insns, read line
+    // by line; the LOUD TRAP in VehiclePhysicsLinkStubs.cpp is deleted in this commit).
+    //
+    // THE CRASH-STATE ORCHESTRATOR -- UpdateDriving's twin for a crashing car. Same per-frame
+    // phase chain (air stats, air rams, spins, engine, steering, suspension, wheels, velocity
+    // passes, the CheckState brackets), plus the crash-specific work: the exponential
+    // velocity damping pair, the per-body-axis angular clamp, the synthetic crash mass, the
+    // aftertouch dispatch and the down-force leg. Callers: VehiclePhysics::Update @0x826414F8
+    // (race cars) and TrafficPhysics::Update @0x82639CA4 (traffic).
+    //
+    // ⭐ The three vcalls are IMAGE-SETTLED slots (vtables @0x820D0C68/@0x820D0C98/@0x820D1034
+    // read via x360rd): +0x18 = IsCrashingNormally (twice), +0x28 = UpdateAftertouch,
+    // +0x10 = IsPlayerVehicleInShowtime. +0x2C (UpdateSuspension) has no override in the
+    // image, so the direct call is dispatch-identical (the UpdateDriving precedent).
+    //
+    // Damping constants, image-read (x360rd) from the .data block @0x82F2A5xx (already valued
+    // in the image, no initialiser):
+    //     IsCrashingNormally():  linear 0.995  [flt_82F2A530]   angular 0.995  [flt_82F2A52C]
+    //     else:                  linear 0.9999 [flt_82F2A528]   angular 0.992  [flt_82F2A524]
+    // The exponent scale 60.0 [flt_82092BC4] makes the decay frame-rate-correct against a
+    // 60 Hz reference: v *= damp^(60*dt).
+    // FLAG (modelled, not bit-verified): the console computes the pow via the EARenderWare
+    // vlogefp/vexptefp polynomial (coefficient tables unk_82014AC0..82014AF0); per the
+    // committed DampenAngularVelocity/DampPitchYawRoll precedent the recovered DATA FLOW is
+    // reproduced with std::pow and the polynomial's bit pattern is intentionally not
+    // fabricated.
+    //
+    // The angular clamp: omega -> body axes (R^T via the vmrghw/vmrglw transpose), clamp each
+    // lane to +/-6.5, back to world (R). The 6.5 splat is unk_82FB9DA0 -- BSS, seeded by the
+    // static-init thunk @0x82C5C5B0 from flt_82054378 == 6.5 (image-read), and debug-registered
+    // as "Max X/Y/Z Angular Velocity" by VehicleManagerDebugComponent::OnActivate @0x825B61C4.
+    //
+    // The synthetic crash mass (the non-normal leg): t = clamp01((Mass - 721) / (3250 - 721));
+    // mfMass = splat(1400 + t*(2100 - 1400)). All four scalars are BSS splats seeded by the
+    // init-thunk bank @0x82C5C410..0x82C5C4A0 from rdata @0x8209D710..1C (721 / 3250 / 1400 /
+    // 2100, image-read). The asm stores the clamped t into mfMass and overwrites it with the
+    // lerp on the very next store -- the intermediate is dead and not reproduced.
+    void VehiclePhysics::UpdateCrashing(f32 lfTimeStep,
+                                        const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
+                                        const BrnPlayerDriverControls* lpControls,
+                                        bool lbImpactTime,
+                                        bool lbPlayerAftertouchForceAdditive,
+                                        bool lbShowtimeAllowed)
+    {
+        static const f32 KF_CRASH_LIN_DAMP_NORMAL = 0.995f;    // flt_82F2A530 (0x3F7EB852)
+        static const f32 KF_CRASH_ANG_DAMP_NORMAL = 0.995f;    // flt_82F2A52C (0x3F7EB852)
+        static const f32 KF_CRASH_LIN_DAMP_OTHER  = 0.9999f;   // flt_82F2A528 (0x3F7FF972)
+        static const f32 KF_CRASH_ANG_DAMP_OTHER  = 0.992f;    // flt_82F2A524 (0x3F7DF3B6)
+        static const f32 KF_DAMP_RATE_SCALE       = 60.0f;     // flt_82092BC4
+        static const f32 KF_MAX_CRASH_ANGVEL      = 6.5f;      // unk_82FB9DA0 <- flt_82054378
+        static const f32 KF_CRASHMASS_IN_LO       = 721.0f;    // unk_82FB9270 <- 0x8209D710
+        static const f32 KF_CRASHMASS_IN_HI       = 3250.0f;   // unk_82FB9DC0 <- 0x8209D714
+        static const f32 KF_CRASHMASS_OUT_LO      = 1400.0f;   // unk_82FB9030 <- 0x8209D718
+        static const f32 KF_CRASHMASS_OUT_HI      = 2100.0f;   // unk_82FB9EA0 <- 0x8209D71C
+        static const f32 KF_WALL_CONTACT_WINDOW   = 0.4f;      // flt_8200473C (image-read)
+
+        (void)lbImpactTime;   // DEAD in the body (never read; the caller's register map only)
+
+        const VecFloat lvfTimeStep{ lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep };
+
+        CheckState("Start of update crashing");
+
+        BrnPlayerDriverControls lCopy;
+        std::memcpy(&lCopy, lpControls, sizeof(BrnPlayerDriverControls));   // the 0x48 memcpy
+
+        CheckState("After update slam");   // the console REUSES the slam bracket string here
+
+        // ----- the crash damping pair (asm 0x82638888..0x82638C5C) -----
+        {
+            f32 lfLinDamp, lfAngDamp;
+            if (IsCrashingNormally())              // vcall +0x18, first dispatch
+            {
+                lfLinDamp = KF_CRASH_LIN_DAMP_NORMAL;
+                lfAngDamp = KF_CRASH_ANG_DAMP_NORMAL;
+            }
+            else
+            {
+                lfLinDamp = KF_CRASH_LIN_DAMP_OTHER;
+                lfAngDamp = KF_CRASH_ANG_DAMP_OTHER;
+            }
+            const f32 lfExponent = KF_DAMP_RATE_SCALE * lfTimeStep;
+            { const f32 lfF = std::pow(lfLinDamp, lfExponent);
+              mLinearVelocity  = vpu::Mult(mLinearVelocity, lfF); }    // stvx this+0x50
+            { const f32 lfF = std::pow(lfAngDamp, lfExponent);
+              mAngularVelocity = vpu::Mult(mAngularVelocity, lfF); }   // stvx this+0x60
+        }
+
+        // ----- clamp omega per BODY axis (asm 0x82638C60..0x82638CE8) -----
+        {
+            f32 lfLx = vpu::Dot(mTransform.xAxis, mAngularVelocity);   // R^T * omega, the
+            f32 lfLy = vpu::Dot(mTransform.yAxis, mAngularVelocity);   // vmrghw/vmrglw transpose
+            f32 lfLz = vpu::Dot(mTransform.zAxis, mAngularVelocity);
+            if (lfLx < -KF_MAX_CRASH_ANGVEL) lfLx = -KF_MAX_CRASH_ANGVEL;   // vmaxfp -limit
+            if (lfLx >  KF_MAX_CRASH_ANGVEL) lfLx =  KF_MAX_CRASH_ANGVEL;   // vminfp +limit
+            if (lfLy < -KF_MAX_CRASH_ANGVEL) lfLy = -KF_MAX_CRASH_ANGVEL;
+            if (lfLy >  KF_MAX_CRASH_ANGVEL) lfLy =  KF_MAX_CRASH_ANGVEL;
+            if (lfLz < -KF_MAX_CRASH_ANGVEL) lfLz = -KF_MAX_CRASH_ANGVEL;
+            if (lfLz >  KF_MAX_CRASH_ANGVEL) lfLz =  KF_MAX_CRASH_ANGVEL;
+            mAngularVelocity = Vector3{
+                mTransform.xAxis.x * lfLx + mTransform.yAxis.x * lfLy + mTransform.zAxis.x * lfLz,
+                mTransform.xAxis.y * lfLx + mTransform.yAxis.y * lfLy + mTransform.zAxis.y * lfLz,
+                mTransform.xAxis.z * lfLx + mTransform.yAxis.z * lfLy + mTransform.zAxis.z * lfLz,
+                0.0f };
+        }
+
+        // ----- the mass regime (asm 0x82638CF4..0x82638DA0) -----
+        if (IsCrashingNormally())                  // vcall +0x18, second dispatch
+        {
+            const f32 lfM = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+            mfMass = VecFloat{ lfM, lfM, lfM, lfM };                    // splat, this+0xE0
+        }
+        else
+        {
+            const f32 lfM = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+            f32 lfT = (lfM - KF_CRASHMASS_IN_LO) / (KF_CRASHMASS_IN_HI - KF_CRASHMASS_IN_LO);
+            if (lfT < 0.0f) lfT = 0.0f;                                 // vmaxfp 0
+            if (lfT > 1.0f) lfT = 1.0f;                                 // vminfp 1
+            const f32 lfMass = lfT * (KF_CRASHMASS_OUT_HI - KF_CRASHMASS_OUT_LO)
+                               + KF_CRASHMASS_OUT_LO;                   // vmaddfp lerp
+            mfMass = VecFloat{ lfMass, lfMass, lfMass, lfMass };
+        }
+
+        mLastLinearVelocity = mLinearVelocity;     // stvx this+0x13B0 (before UpdateInAirStats)
+
+        UpdateInAirStats(lfTimeStep);
+
+        mEngine.SetAllowGearChanges(!mbHasAir);    // stb 0xFC4 / 0xFC5
+
+        lCopy.mfGas *= 0.5f;                       // flt_82001DA0 -- the crash gas halving
+
+        CalculateWorldIntertia();
+
+        UpdateAirRam(lvfTimeStep);
+        CheckState("After update air ram");
+
+        UpdateSpinEffects(lvfTimeStep);
+
+        if (lbPlayerAftertouchForceAdditive)
+        {
+            // vcall +0x28 -- RaceCarPhysics::UpdateAftertouch on race cars, the empty default
+            // on traffic. Register map @0x82638E3C: r4 = &copy, r5 = camera, r6 = additive,
+            // r7 = showtime, v1 = dt.
+            UpdateAftertouch(&lCopy, lpCameraMatrix, lvfTimeStep,
+                             lbPlayerAftertouchForceAdditive, lbShowtimeAllowed);
+            CheckState("After aftertouch");
+        }
+
+        if (IsCrashingNormally())                  // vcall +0x18, third dispatch
+        {
+            // down force, applied along body -Y at the body origin (asm 0x82638E9C..0x82638F00:
+            // force = {0, -GetDownForce().x, 0}, position = {0,0,0}, both tags `li 1` ==
+            // BODY_SPACE).
+            const Vector3 lvDown = GetDownForce();
+            AddLocalForce(Vector3{ 0.0f, -lvDown.x, 0.0f, 0.0f }, rw::physics::BODY_SPACE,
+                          Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, rw::physics::BODY_SPACE);
+        }
+        CheckState("After Update down force");
+
+        UpdateEngine(&lCopy, lvfTimeStep);
+        CheckState("After update engine");
+
+        CalculateNewVelocity(lvfTimeStep);
+
+        UpdateSteering(lCopy.mfSteering, lCopy.mfGas, lvfTimeStep, lCopy.mbIsSteeringWheel);
+
+        UpdateSuspension(lfTimeStep);              // vcall +0x2C; no override in the image ->
+                                                   // direct call is dispatch-identical
+
+        // mbAllWheelsHaveTraction: the four road-contact bytes AND the +0x10 vcall
+        // (IsPlayerVehicleInShowtime -- image-settled; traffic defaults false, so a crashing
+        // traffic car never reports traction here). Short-circuit order preserved.
+        mbAllWheelsHaveTraction =
+            maWheels[0].GetRoadContact().mbIsOnGround &&    // lbz +0x158
+            maWheels[1].GetRoadContact().mbIsOnGround &&    // lbz +0x238
+            maWheels[2].GetRoadContact().mbIsOnGround &&    // lbz +0x318
+            maWheels[3].GetRoadContact().mbIsOnGround &&    // lbz +0x3F8
+            IsPlayerVehicleInShowtime();                    // vcall +0x10
+
+        UpdateWheels(lpControls, lvfTimeStep);     // ⭐ the ORIGINAL pointer (r22), NOT the
+                                                   // copy -- UpdateDriving passes the copy;
+                                                   // this function does not. As shipped.
+        SimpleVehiclePhysics::CalculateNewWheelPlane();
+        CheckState("After update wheels");
+
+        CalculateNewVelocity(lvfTimeStep);
+
+        // ----- per-wheel body-point velocities (asm 0x82639030..0x826391CC, unrolled x4) -----
+        // maWheels[i].mBodyPointVelocity = v + omega x (R * streamedLocalPos). The console
+        // computes the cross with the vpermwi128-0x63 (yzx) idiom; wheel base +0x130, stride
+        // 0xE0: inputs +0x1C0/+0x2A0/+0x380/+0x460, outputs +0x1D0/+0x2B0/+0x390/+0x470.
+        for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+        {
+            const Vector3Plus& lrLocal = maWheels[liWheel].mStreamedPositionPlusTwistAmount;
+            const Vector3 lvR = {
+                mTransform.xAxis.x * lrLocal.x + mTransform.yAxis.x * lrLocal.y + mTransform.zAxis.x * lrLocal.z,
+                mTransform.xAxis.y * lrLocal.x + mTransform.yAxis.y * lrLocal.y + mTransform.zAxis.y * lrLocal.z,
+                mTransform.xAxis.z * lrLocal.x + mTransform.yAxis.z * lrLocal.y + mTransform.zAxis.z * lrLocal.z,
+                0.0f };
+            const Vector3 lvCross = vpu::Cross(mAngularVelocity, lvR);
+            maWheels[liWheel].mBodyPointVelocity = Vector3{ mLinearVelocity.x + lvCross.x,
+                                                            mLinearVelocity.y + lvCross.y,
+                                                            mLinearVelocity.z + lvCross.z, 0.0f };
+        }
+
+        { const f32 lfMPH = vpu::Dot(mLinearVelocity, mTransform.zAxis) * 2.2369363f;
+        mfSpeedMPH = VecFloat{ lfMPH, lfMPH, lfMPH, lfMPH }; }   // splat, KF_MPS_TO_MPH
+        mbCrashedThisFrame = false;                              // stb 0 -> +0x713
+
+        // ----- the start-line velocity re-seat (asm 0x826391E8..0x82639250) -----
+        // Gated on the ORIGINAL controls' mbIsOnStartLine (+0x40, r22) and the above-ground
+        // test being valid. Unfreezes and keeps only the velocity component along the ground
+        // normal (the asm negates BOTH factors -- (-n) * dot3(v, -n) == n * dot3(v, n)).
+        if (lpControls->mbIsOnStartLine && mAboveGroundTestResult.mbValid)
+        {
+            mbFrozen = false;                                    // stb 0 -> +0x70
+            const Vector3& lvN = mAboveGroundTestResult.mIntersectionNormal;   // +0x580
+            const f32 lfAlong = vpu::Dot(mLinearVelocity, lvN);
+            mLinearVelocity = Vector3{ lvN.x * lfAlong, lvN.y * lfAlong,
+                                       lvN.z * lfAlong, 0.0f };
+        }
+
+        // ----- the wall-contact window (asm 0x82639254..0x826392D8; unconditional here,
+        //       unlike UpdateDriving's else-of-mbReset placement) -----
+        mbContactingWall =
+            KF_WALL_CONTACT_WINDOW >
+            mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w;
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w
+            += lfTimeStep;                                       // vrlimi mask 1 = w lane
+
+        // ----- the water hard-kill (asm 0x826392DC..0x82639334) -----
+        // The console INLINES UpdateInWaterBehaviour's exact gate + six zero stores here
+        // (same surface-table test, same 2.0 depth constant, same store order +0x50/+0x60/
+        // +0xF0/+0x110/+0x120/+0x100); the committed function is behaviour-identical, so the
+        // call replaces the inline.
+        UpdateInWaterBehaviour(&lCopy, lvfTimeStep);
+
+        // TimeCrashing += dt (asm 0x82639338..0x82639358; vrlimi mask 4 = y lane). Note
+        // UpdateDriving ZEROES this lane each frame -- the two bodies are each other's
+        // complement on it.
+        mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y += lfTimeStep;
+
+        // No trailing CheckState -- the console body ends here.
+    }
+
+// [clean] UpdateSteering  @0x825D3720
+    // @0x825D3720  BrnPhysics::Vehicle::VehiclePhysics::UpdateSteering  (577 insns; was an
+    //   export-set JSON hole -- exported fresh from the .i64 this wave)
+    //
+    // THE STEERING MODEL, in four acts, register-traced end to end. All angles in the +0x1030
+    // register's .z (MaxSteeringAngle) are DEGREES (every consumer multiplies by
+    // flt_8208F5F4 == pi/180 at use); the +0xFE0 register's .x (SteeringAngle) is RADIANS,
+    // .y (Steering) is the clamped [-1,1] normalised wheel, .z (PrevSteering) is the
+    // UNCLAMPED integrator the rate limiter advances.
+    //
+    // 1) OVERRIDE + SHIFT (0x825D3784..0x825D3800): if mbOverrideSteering, the working steer
+    //    input becomes SteeringOverride (+0x1070.y) and the latch clears. PrevSteering <-
+    //    Steering (the frame shift).
+    // 2) EFFECTIVE SPEED (0x825D3804..0x825D3874): lfEff = |mfSpeedMPH| * (0.9 + 0.1*gas)
+    //    [flt_82005450/flt_82004014] -- EXCEPT while reversing faster than 5 mph with the
+    //    handbrake on (splat(-5.0) [flt_82094774] > speed && mbHandBrake), where the raw
+    //    signed speed is kept.
+    // 3) THE MAX-STEER TARGET (+0x1030.z), four-way (0x825D3984..0x825D3C40):
+    //    a. rear wheels sliding (both mbBrokenAdhesiveLimit) AND |GetMaxSteeringAngleDuring-
+    //       Drift(steer)| > |currentRad| AND turning into the slide (sideSpeed*30 < 0):
+    //       GROW  -- current + 0.5deg/frame (unk_82FB9090 = splat(0.5 * pi/180), static-init
+    //       @0x82C5CA30 = flt_82001DA0 * flt_8208F5F4), capped at the drift max.
+    //    b. |currentRad| > |attribs MaxAngle in rad|: SHRINK -- current - 0.5deg/frame.
+    //    c. lfEff below 30 mph [flt_82004F5C]: SNAP to attribs MaxAngle.
+    //    d. else THE SPEED FALLOFF (0x825D3AA8..0x825D3C34, the two pow(x, 0.1)
+    //       [dbl_82094AC0] calls through sub_82C09970 == libm pow):
+    //         t1   = pow(1/(MaxSpeed+1), 0.1)
+    //         t2   = pow(1/((lfEff-30) * MaxSpeed/(MaxSpeed-30) + 1), 0.1)
+    //         frac = clamp01((t2 - t1) / (1 - t1))
+    //         target = MinAngle + (MaxAngle - MinAngle) * frac
+    //       (t2 == 1 at 30 mph -> MaxAngle; t2 == t1 at MaxSpeed -> MinAngle: a smooth
+    //       falloff whose endpoints close exactly -- the closure is the correctness check.)
+    // 4) APPLY:
+    //    PAD path (0x825D3C54..0x825D3F54): rate-limited integration.
+    //      step  = clamp(ReactionPerSec * dt * driftScale * e^(deficit/max) * max,
+    //                    +/-MinAngle) / max
+    //        where deficit = maxDeg - |SteeringAngle|*180/pi, driftScale = DriftPushTime
+    //        (+0x170.w) while drifting else 1.0, and the e^x is the exp2 polynomial
+    //        (unk_82181570 = log2(e); unk_8208FBE0/unk_8208FBF0 = the minimax coefficient
+    //        vectors) -- the steer speeds up the further from lock it is;
+    //      while NOT drifting, a direction reversal (PrevSteering moving back toward the
+    //        input) scales the step by StraightReactionBias (+0xF0.y);
+    //      PrevSteering += clamp(input - PrevSteering, +/-step);
+    //      Steering      = clamp(PrevSteering, -1, 1);
+    //      SteeringAngle = Steering * -(1.5 [flt_820945DC] * maxDeg * pi/180).
+    //    WHEEL path (0x825D3F5C..0x825D4008): direct drive, no rate limit.
+    //      Steering      = input;
+    //      SteeringAngle = -clamp(attribs MaxAngle * Steering, +/-(1.5 * maxDeg * pi/180)).
+    void VehiclePhysics::UpdateSteering(f32 lfSteering, f32 lfGas, VecFloat lvfTimeStep,
+                                        bool lbIsSteeringWheel)
+    {
+        static const f32 KF_DEG_TO_RAD        = 0.01745329238474369f;    // flt_8208F5F4
+        static const f32 KF_RAD_TO_DEG        = 57.295780181884766f;     // flt_8208F5F8
+        static const f32 KF_HALF_DEG_RAD      = 0.5f * 0.01745329238474369f; // unk_82FB9090
+        static const f32 KF_REVERSE_SPEED     = -5.0f;                   // flt_82094774
+        static const f32 KF_GAS_BLEND_SCALE   = 0.1f;                    // flt_82004014
+        static const f32 KF_GAS_BLEND_BASE    = 0.9f;                    // flt_82005450
+        static const f32 KF_LOW_SPEED_MPH     = 30.0f;                   // flt_82004F5C
+        static const f64 KF_FALLOFF_EXPONENT  = 0.10000000149011612;     // dbl_82094AC0
+        static const f32 KF_ANGLE_OVERSTEER   = 1.5f;                    // flt_820945DC
+
+        const VehicleAttribs::SteeringAttribs& lrSteer = mpAttribs->mSteeringAttribs;
+        const f32 lfAttribMaxAngleDeg = lrSteer.mvMaxAngle_StraightReactionBias.x;
+        const f32 lfAttribMaxAngleRad = lfAttribMaxAngleDeg * KF_DEG_TO_RAD;
+
+        Vector4& lrReg = mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount;   // +0xFE0
+
+        // 1) override + frame shift.
+        if (mbOverrideSteering)
+        {
+            lfSteering =
+                mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.y;
+            mbOverrideSteering = false;
+        }
+        lrReg.z = lrReg.y;   // PrevSteering <- Steering (vrlimi(2) of the .y splat)
+
+        // 2) effective speed.
+        f32 lfEffSpeed = mfSpeedMPH.x;
+        if (!(KF_REVERSE_SPEED > lfEffSpeed && mbHandBrake))
+            lfEffSpeed = std::fabs(lfEffSpeed) * (lfGas * KF_GAS_BLEND_SCALE + KF_GAS_BLEND_BASE);
+
+        // 3) the max-steer target.
+        const bool lbRearSliding =
+            maWheels[eRearLeftWheel].mbBrokenAdhesiveLimit &&    // +0x3C5
+            maWheels[eRearRightWheel].mbBrokenAdhesiveLimit;     // +0x4A5
+
+        const f32 lfDriftMaxRad = GetMaxSteeringAngleDuringDrift(lfSteering);
+        const f32 lfSideSpeed   = vpu::Dot(mLinearVelocity, mTransform.xAxis);
+        const f32 lfCurrentRad  =
+            mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.z
+            * KF_DEG_TO_RAD;
+
+        f32 lfDriftSteerScale = 1.0f;
+        if (mu8DriftState != 0)
+            lfDriftSteerScale = mpAttribs->mDriftAttribs
+                .mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.w;
+
+        f32 lfMaxSteerDeg;
+        if (lbRearSliding &&
+            std::fabs(lfDriftMaxRad) > std::fabs(lfCurrentRad) &&
+            (0.0f > lfSideSpeed * 30.0f))
+        {
+            // a. grow toward the drift max, 0.5 deg per frame.
+            lfMaxSteerDeg = std::min(lfCurrentRad + KF_HALF_DEG_RAD, std::fabs(lfDriftMaxRad))
+                          * KF_RAD_TO_DEG;
+        }
+        else if (std::fabs(lfCurrentRad) > std::fabs(lfAttribMaxAngleRad))
+        {
+            // b. shrink back toward the attribs max, 0.5 deg per frame.
+            lfMaxSteerDeg = (lfCurrentRad - KF_HALF_DEG_RAD) * KF_RAD_TO_DEG;
+        }
+        else if (KF_LOW_SPEED_MPH > lfEffSpeed)
+        {
+            // c. full lock available at low speed.
+            lfMaxSteerDeg = lfAttribMaxAngleDeg;
+        }
+        else
+        {
+            // d. the pow(x, 0.1) speed falloff.
+            const f32 lfMaxSpeed =
+                mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z;
+            const f32 lfMinAngleDeg =
+                lrSteer.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.w;
+
+            const f32 lfT1 = static_cast<f32>(
+                std::pow(1.0 / (static_cast<f64>(lfMaxSpeed) + 1.0), KF_FALLOFF_EXPONENT));
+            const f32 lfInner = (lfEffSpeed - KF_LOW_SPEED_MPH)
+                              * (lfMaxSpeed / (lfMaxSpeed - KF_LOW_SPEED_MPH)) + 1.0f;
+            const f32 lfT2 = static_cast<f32>(
+                std::pow(1.0 / static_cast<f64>(lfInner), KF_FALLOFF_EXPONENT));
+
+            f32 lfFrac = (lfT2 - lfT1) / (1.0f - lfT1);
+            if (lfFrac < 0.0f) lfFrac = 0.0f;   // vmaxfp 0
+            if (lfFrac > 1.0f) lfFrac = 1.0f;   // vminfp 1
+
+            lfMaxSteerDeg = (lfAttribMaxAngleDeg - lfMinAngleDeg) * lfFrac + lfMinAngleDeg;
+        }
+        mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.z = lfMaxSteerDeg;
+
+        // 4) apply.
+        if (!lbIsSteeringWheel)
+        {
+            // --- the PAD path: rate-limited integration ---
+            const f32 lfMinAngleDeg =
+                lrSteer.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.w;
+            const f32 lfReactionPerSec =
+                lrSteer.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.x;
+
+            // headroom to lock, in degrees; e^(headroom/max) speeds the wheel up off-lock.
+            const f32 lfDeficitDeg = lfMaxSteerDeg - std::fabs(lrReg.x) * KF_RAD_TO_DEG;
+            const f32 lfExp = std::exp(lfDeficitDeg / lfMaxSteerDeg);   // exp2 poly + log2(e)
+
+            f32 lfStep = lfReactionPerSec * lvfTimeStep.x * lfDriftSteerScale
+                       * lfExp * lfMaxSteerDeg;
+            if (lfStep < -lfMinAngleDeg) lfStep = -lfMinAngleDeg;   // vmaxfp -MinAngle
+            if (lfStep >  lfMinAngleDeg) lfStep =  lfMinAngleDeg;   // vminfp +MinAngle
+            lfStep = lfStep / lfMaxSteerDeg;                        // the refined-recip scale
+
+            if (mu8DriftState == 0)
+            {
+                // a reversal back toward the input returns faster.
+                const f32 lfPrev = lrReg.z;
+                const bool lbReturning = (lfPrev > 0.0f) ? (lfPrev > lfSteering)
+                                                         : (lfSteering > lfPrev);
+                if (lbReturning)
+                    lfStep *= lrSteer.mvMaxAngle_StraightReactionBias.y;   // +0xF0.y
+            }
+
+            f32 lfDelta = lfSteering - lrReg.z;
+            if (lfDelta < -lfStep) lfDelta = -lfStep;   // vmaxfp -step
+            if (lfDelta >  lfStep) lfDelta =  lfStep;   // vminfp +step
+            lrReg.z = lrReg.z + lfDelta;                 // the unclamped integrator
+
+            f32 lfWheel = lrReg.z;
+            if (lfWheel < -1.0f) lfWheel = -1.0f;
+            if (lfWheel >  1.0f) lfWheel =  1.0f;
+            lrReg.y = lfWheel;                           // Steering, clamped [-1,1]
+
+            lrReg.x = lfWheel * -(KF_ANGLE_OVERSTEER * lfMaxSteerDeg * KF_DEG_TO_RAD);
+        }
+        else
+        {
+            // --- the WHEEL path: direct drive ---
+            lrReg.y = lfSteering;
+
+            const f32 lfLimitRad = KF_ANGLE_OVERSTEER * lfMaxSteerDeg * KF_DEG_TO_RAD;
+            f32 lfAngle = lfAttribMaxAngleDeg * lrReg.y;   // +0xF0.x * Steering
+            if (lfAngle < -lfLimitRad) lfAngle = -lfLimitRad;
+            if (lfAngle >  lfLimitRad) lfAngle =  lfLimitRad;
+            lrReg.x = -lfAngle;
+        }
+    }
+
+// [clean] Update  @0x826412C0
+    // @0x826412C0  BrnPhysics::Vehicle::VehiclePhysics::Update  (200 insns)
+    // ⭐⭐ THE PER-CAR CONDUCTOR. The DWARF declares it virtual at vtable slot +0xC -- the slot
+    // VehicleManager::UpdateVehiclePhysics dispatches through -- and it is kept NON-virtual
+    // here per the established modelling (every call site's static type is the exact dynamic
+    // type; the vtable head carries its own open flags). The PerfMon ids are the seven hoisted
+    // gs_iVPhys* handles (dword_82F2A278..0x290 -- registered by VehicleManager::Construct with
+    // the console's names "VMan: Update VPhys" etc.).
+    //
+    //   0x82641304  StartMonitor(gs_iVPhysUpdatePM)
+    //   0x82641324  mLastLinearVelocity (+0x13B0)  = mLinearVelocity (+0x50)
+    //   0x8264132C  mPreviousTransform  (+0x1370)  = mTransform (+0x10, four rows)
+    //   0x82641354  StartMonitor(gs_iVPhysSwitchAttribsPM)
+    //   0x82641358  [lpControls->meDriverType != mPreviousControls.meDriverType]
+    //                 SwitchAttribs(type == AI ? &mAIVehicleAttribs : &mPlayerVehicleAttribs)
+    //   0x8264138C  mPreviousControls = *lpControls (the 0x48 memcpy)
+    //   0x82641390  [mbIsUsingAIDonutAttribs] the donut-attrib refresh: SwitchAIDonutting-
+    //               Attribs(true) rebuilds the donut AI set, then the SwitchAttribs sequence is
+    //               run INLINE on the AI set (base SwitchAttribs / mpAttribs / engine memcpy /
+    //               SetupSuspension)
+    //   0x826413D8  StopMonitor(gs_iVPhysSwitchAttribsPM)
+    //   0x826413E8  UpdateFreezing(lpControls, dt)
+    //   0x826413EC  the START-LINE velocity projection: while (lpControls->mbIsOnStartLine &&
+    //               mAboveGroundTestResult.mbValid) un-freeze (mbFrozen = 0) and project:
+    //                 mLinearVelocity = -normal * dot3(mLinearVelocity, -normal)
+    //               (both vxor sign flips are against mIntersectionNormal @+0x580) -- all
+    //               tangential motion dies, the along-normal component survives.
+    //   0x82641470  UpdateHandBrake(lpControls->mfHandBrake, dt)
+    //   0x82641474  [mbFrozen] the ENGINE-ONLY leg:
+    //                 UpdateEngine(lpControls, dt); CheckState("After update engine");
+    //                 [mbCrashing] TimeCrashing (+0xEF0.y) += dt  ELSE  = 0
+    //               [else, mbCrashing] StartMonitor(gs_iVPhysUpdateCrashingPM);
+    //                 UpdateCrashing(dt, camera, controls, impact, aftertouchAdd, showtime)
+    //               [else] the DRIVING leg:
+    //                 UpdateAirRam(dt)      [gs_iVPhysUpdateAirRamsPM]
+    //                 UpdateSpinEffects(dt) [gs_iVPhysUpdateSpinPM]
+    //                 UpdateDriving(camera, controls, random, dt) [gs_iVPhysUpdateDrivingPM]
+    //               then (both non-frozen legs) UpdateLinearVelocityMagnitude()
+    //               [gs_iVPhysUpdateLVPM]
+    //   0x826415A0  miNumCollisions (+0x1354) = 0
+    //   0x826415AC  TimeSinceLastRaceCarContact (+0x1050.z) = min(z + dt, 100.0)
+    //               (unk_82FB9BE0, static-init @0x82C5C540 from flt_820049E0 == 100.0)
+    //   0x826415D0  StopMonitor(gs_iVPhysUpdatePM)
+    void VehiclePhysics::Update(const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
+                                const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
+                                bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed,
+                                CgsNumeric::Random& lrRandom,
+                                Vector3 lrPassThroughV1, Vector3 lrTimeStep)
+    {
+        // ⚠️ ARG NOTE (same deviation the header documents): the console receives the dt vector
+        // in v1 regardless of declaration order; in this tree's spelling that is
+        // lrPassThroughV1. lrTimeStep (v2) is not read by this body -- the X360 saves only v127
+        // == v1 and reloads its .x lane for the crash leg's f1.
+        const f32 lfDT = lrPassThroughV1.x;
+        const VecFloat lvfTimeStep{ lfDT, lfDT, lfDT, lfDT };   // the v127 splat
+
+        CgsDev::PerfMonCpu::StartMonitor(gs_iVPhysUpdatePM);
+
+        mLastLinearVelocity = mLinearVelocity;          // +0x13B0 <- +0x50
+        mPreviousTransform  = mTransform;               // +0x1370 <- +0x10 (four rows)
+
+        CgsDev::PerfMonCpu::StartMonitor(gs_iVPhysSwitchAttribsPM);
+
+        if (lpControls->GetType() != mPreviousControls.GetType())
+            SwitchAttribs((lpControls->GetType() == E_DRIVER_TYPE_AI)
+                              ? &mAIVehicleAttribs : &mPlayerVehicleAttribs);
+
+        std::memcpy(&mPreviousControls, lpControls, sizeof(BrnPlayerDriverControls));
+
+        if (mbIsUsingAIDonutAttribs)
+        {
+            // the per-frame donut-attrib refresh (asm 0x8264139C..0x826413D0): rebuild the
+            // donut set, then run the switch sequence on the AI attribs inline.
+            SwitchAIDonuttingAttribs(true);
+            SimpleVehiclePhysics::SwitchAttribs(&mAIVehicleAttribs);
+            mpAttribs = &mAIVehicleAttribs;
+            std::memcpy(&mEngine, &mAIVehicleAttribs.mEngineAttribs,
+                        sizeof(VehicleAttribs::EngineAttribs));
+            SetupSuspension();
+        }
+
+        CgsDev::PerfMonCpu::StopMonitor(gs_iVPhysSwitchAttribsPM);
+
+        UpdateFreezing(lpControls, lvfTimeStep);
+
+        if (lpControls->mbIsOnStartLine && mAboveGroundTestResult.mbValid)
+        {
+            mbFrozen = false;                            // stb 0 -> +0x70
+            const Vector3 lvNegNormal{ -mAboveGroundTestResult.mIntersectionNormal.x,
+                                       -mAboveGroundTestResult.mIntersectionNormal.y,
+                                       -mAboveGroundTestResult.mIntersectionNormal.z, 0.0f };
+            const f32 lfAlong = vpu::Dot(mLinearVelocity, lvNegNormal);
+            mLinearVelocity = vpu::Mult(lvNegNormal, lfAlong);
+        }
+
+        UpdateHandBrake(lpControls->mfHandBrake, lvfTimeStep.x);
+
+        if (mbFrozen)
+        {
+            UpdateEngine(lpControls, lvfTimeStep);
+            CheckState("After update engine");
+
+            if (mbCrashing)
+                mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y
+                    += lvfTimeStep.x;                    // vrlimi(4): TimeCrashing += dt
+            else
+                mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y = 0.0f;
+        }
+        else
+        {
+            if (mbCrashing)
+            {
+                CgsDev::PerfMonCpu::StartMonitor(gs_iVPhysUpdateCrashingPM);
+                UpdateCrashing(lvfTimeStep.x, lpCameraMatrix, lpControls, lbImpactTime,
+                               lbPlayerAftertouchForceAdditive, lbShowtimeAllowed);
+                CgsDev::PerfMonCpu::StopMonitor(gs_iVPhysUpdateCrashingPM);
+            }
+            else
+            {
+                CgsDev::PerfMonCpu::StartMonitor(gs_iVPhysUpdateAirRamsPM);
+                UpdateAirRam(lvfTimeStep);
+                CgsDev::PerfMonCpu::StopMonitor(gs_iVPhysUpdateAirRamsPM);
+
+                CgsDev::PerfMonCpu::StartMonitor(gs_iVPhysUpdateSpinPM);
+                UpdateSpinEffects(lvfTimeStep);
+                CgsDev::PerfMonCpu::StopMonitor(gs_iVPhysUpdateSpinPM);
+
+                CgsDev::PerfMonCpu::StartMonitor(gs_iVPhysUpdateDrivingPM);
+                UpdateDriving(lpCameraMatrix, lpControls, lrRandom, lvfTimeStep);
+                CgsDev::PerfMonCpu::StopMonitor(gs_iVPhysUpdateDrivingPM);
+            }
+
+            CgsDev::PerfMonCpu::StartMonitor(gs_iVPhysUpdateLVPM);
+            UpdateLinearVelocityMagnitude();
+            CgsDev::PerfMonCpu::StopMonitor(gs_iVPhysUpdateLVPM);
+        }
+
+        miNumCollisions = 0;                             // stw 0 -> +0x1354
+
+        {
+            static const f32 KF_RACECAR_CONTACT_TIME_CAP = 100.0f;   // unk_82FB9BE0 <- flt_820049E0
+            f32 lfTime =
+                mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z
+                + lvfTimeStep.x;
+            if (lfTime > KF_RACECAR_CONTACT_TIME_CAP)    // vminfp
+                lfTime = KF_RACECAR_CONTACT_TIME_CAP;
+            mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z
+                = lfTime;
+        }
+
+        CgsDev::PerfMonCpu::StopMonitor(gs_iVPhysUpdatePM);
     }
 }
 }

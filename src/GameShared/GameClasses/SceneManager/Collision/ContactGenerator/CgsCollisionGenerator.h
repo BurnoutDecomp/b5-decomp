@@ -39,6 +39,10 @@ namespace CgsMemory { struct SimpleDataStreamProducer; }
 
 namespace EA { namespace Jobs { struct Job; } }
 
+// RunFillTriangleCacheStream's query structure (pointer use only). Full home:
+// GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap.h.
+namespace CgsGeometric { struct PolygonSoupListSpatialMap; }
+
 // ⭐ ADDED 2026-08-06 (big-five #2): the collide-stream family's collaborators, pointer use
 // only. Class keys match their homes (CgsDebugRenderStreamReader.h:23 -- class, in CgsDev).
 namespace CgsDev { class DebugRenderStreamReader; }
@@ -106,6 +110,91 @@ namespace CgsCollision
         EA::Jobs::Job* RunCollideSphereListWithSphereListStream(CgsMemory::SimpleDataStreamProducer* lpProducer); // @0x82811C00 (:123)
         u16 CollidePrimitivePairList(const PrimitivePairList* lpPairList, u16 lu16MaxResults,
                                      u32 luFlags, u16 lu16Tag);                                                  // @0x82814138 (:144)
+
+        // ==========================================================================================
+        // ⭐ ADDED 2026-08-10 (ground wave): the LINE-vs-triangle-list stream pair -- the floor of
+        // the vehicle traction-line chain. VehicleManager::DoVehicleTractionLineAllocations
+        // @0x825B5098 calls the Create and seats the result in mpTractionLineStreamProducer;
+        // RunTractionLineTestJobs @0x825B5168 calls the Run and seats the returned job in
+        // mpTractionLineTestsJob.
+        //
+        // ⚠️ Neither carries an IDA symbol -- this is the "missing body == a NAME search failing"
+        // shape, not an absence:
+        //   * Create @0x82810B98 is exported as the unnamed `sub_82810B98`; identity is pinned by
+        //     its two asserts (CgsCollisionGenerator.cpp :533 "Failed to allocate stream producer\n"
+        //     / :550 "Failed to allocate stream buffers\n" -- the same pair CreateStreamProducer
+        //     @0x828109F8 carries at other lines) and by its single caller/consumer seat.
+        //   * Run @0x82810E80 is a GENUINE export-set hole: the export dir jumps from
+        //     RunFillTriangleCacheStream @0x82810D38 (ends 0x82810E7C) straight to 0x82810FE8.
+        //     The address is proved by DECODING the `bl` word at the call site
+        //     (0x825B5248 = 0x4825BC39 -> 0x82810E80), with the decoder proved on four
+        //     independently-named neighbours in the same run. Its 90 instructions read out of the
+        //     image are the exact call sequence of its exported twin RunFillTriangleCacheStream:
+        //     AllocateJob / CreateNewBatch / Job::Clear / EntryPoint::SetName / EntryPoint::SetCode
+        //     / Job::SetData / Job::DependsOn / JobScheduler::AddTree.
+        // ⭐⭐⭐ UPDATED 2026-08-11 (traction-line wave): THE Run BODY IS REAL NOW and its boot
+        // gate is DELETED. The paragraph that used to sit here said the body was not reconstructed
+        // "because its job entry point and the ContactGeneratorJob::ExecuteLineWithTriangleList-
+        // Stream @0x82921968 worker are not in the tree" -- both are, as of this wave, in
+        // GameShared/Jobs/ContactGenerator/ (ContactGenerator.cpp + ContactGeneratorJob.cpp).
+        // The dispatcher's ONE PC divergence is the JobScheduler::AddTree call, replaced by
+        // running the batch entry inline; see the body's banner.
+        // ⚠️ Run takes NO DebugRenderStreamReader (unlike the three collide-stream Run*): the call
+        // site loads r3=generator, r4=producer and nothing else.
+        // ==========================================================================================
+        CgsMemory::SimpleDataStreamProducer* CreateLineWithTriangleListStream(s32 liMaxCommands);                 // @0x82810B98
+        EA::Jobs::Job* RunLineWithTriangleListStream(CgsMemory::SimpleDataStreamProducer* lpProducer);            // @0x82810E80 (export hole)
+
+        // ==========================================================================================
+        // ⭐ ADDED 2026-08-10 (cache-fill wave): the TRIANGLE-CACHE FILL stream dispatcher, the
+        // Run* half TriangleCacheManager::StartUpdateTriangleCaches @0x828BF130 calls (its Create*
+        // half is the general CreateStreamProducer above, which that same function calls with 298).
+        //
+        // Signature is DWARF-SETTLED, not read off the call site alone -- the PS3 mangle
+        //   _ZN15CgsSceneManager12CgsCollision22BaseCollisionGenerator26RunFillTriangleCacheStreamE
+        //     PKN12CgsGeometric25PolygonSoupListSpatialMapEPN9CgsMemory24SimpleDataStreamProducerE
+        // gives (const PolygonSoupListSpatialMap*, SimpleDataStreamProducer*), matching the X360
+        // call site's r4/r5 exactly.
+        //
+        // ⛔ BODY NOT RECONSTRUCTED -- named boot gate, same precedent and same reason as
+        // RunLineWithTriangleListStream above. Its 82 instructions are the familiar dispatcher
+        // shape (AllocateJob / per batch { CreateNewBatch, Job::Clear, EntryPoint::SetName,
+        // SetCode(<entry>), SetData, DependsOn } / JobScheduler::AddTree), but what it installs is
+        // a JOB ENTRY POINT whose worker is absent from this tree. Writing the dispatcher without
+        // the worker would hand EndUpdateTriangleCaches a stream of zero-batch results, i.e.
+        // "every cached object has no triangles" -- the silent-drop shape, indistinguishable from
+        // a working empty cache.
+        //
+        // ⭐ THE WORKER FAMILY, RE-COSTED 2026-08-10 (fill-worker wave) from the X360 export JSONs
+        // -- machine-counted, and the previously-published list was missing the half that does the
+        // actual work. The 82 instructions of the dispatcher itself were read this wave: it writes
+        // JobDesc+0x00 = the spatial map, +0x04 = the producer, +0xFF = 3
+        // (E_COLLISION_TYPE_FILL_TRIANGLE_CACHE_STREAM), +0xF4 = 0.0f, entry = PolygonSoupTesterEntry,
+        // Job::SetData(job, batch+0x3D0, 256), clamped to 3 batches, and -- unlike its Line sibling
+        // -- it does NOT write the per-batch flag array at generator+0x123C0.
+        //   PolygonSoupTesterEntry                      @0x829157B8   80   this = unk_83123940 +
+        //                                                                  spuId*0x19040, spuId<6
+        //   PolygonSoupTesterJob::Execute               @0x82915930  107   switch on GetType():
+        //                                                                  2/3/4 -> FillTriangleCache /
+        //                                                                  ...Stream / LineTest
+        //   ...::ExecuteFillTriangleCacheStream         @0x82915D88  145   the ReadCommand loop
+        //   ...::FillTriangleCache                      @0x82915FD0  219   sphere -> AABB -> box query
+        //                                                                  -> per-leaf extract
+        //   ...::AllocateMemory                         @0x82916B98   99   bump allocator in the job
+        //   ...::RunBoxQuery                            @0x82916D28   46   wraps RunQuery
+        //   ...::LoadPrimitive                          @0x82916AB8    8
+        //   PolygonSoupListSpatialMap::RunQuery         @0x82843A80  261   the spatial traversal
+        //   ⭐ ExtractTriangle4ListIntersectingSphere    @0x82844C80  602   THE FUNCTION THAT ACTUALLY
+        //                                                                  PRODUCES THE TRIANGLES --
+        //                                                                  omitted from every earlier
+        //                                                                  costing of this leg
+        //   + the three JobDesc/type accessors (28), the leaf-cache Get (46), the three
+        //     SimpleDataStreamConsumer entry points (~19, AddResult @0x82868550 is an export hole)
+        // TOTAL ~1,650 across ~17. Every one of them carries an IDA symbol; there are no holes in
+        // the family itself.
+        EA::Jobs::Job* RunFillTriangleCacheStream(
+            const CgsGeometric::PolygonSoupListSpatialMap* lpPolySoupListSpacialMap,
+            CgsMemory::SimpleDataStreamProducer* lpProducer);                                                    // @0x82810D38
 
     private:
         u16  CreateNewBatch();                   // h:350 / X360 0x82810960

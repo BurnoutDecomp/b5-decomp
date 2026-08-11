@@ -38,13 +38,16 @@ namespace CgsCollision
     {
         if (miNumTriangles > 0)
         {
-            s32 liOffset = 0;
-            s32 liCount  = 0;
+            // ⭐ 2026-08-10 (fill-worker wave 2): this called the ODR-forked
+            // NAMESPACE `Triangle4::AssertIsValid(void*)`, which was defined
+            // `{ return 0; }` -- so this whole loop validated NOTHING. It now calls
+            // the real member. The console's 224-byte cursor advance IS the element
+            // stride (static_assert-gated in the header), so the walk is typed.
+            s32 liCount = 0;
             do
             {
-                CgsGeometric::Triangle4::AssertIsValid(mpTriangles + liOffset);
+                mpTriangles[liCount].AssertIsValid();
                 ++liCount;
-                liOffset += KI_TRIANGLE4_STRIDE;
             }
             while (liCount < miNumTriangles);
         }

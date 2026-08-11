@@ -31,6 +31,9 @@
 // ---- InputBuffer_PostScene / InputBuffer_PostPhysics member type homes ----
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleTrafficIOInterfaces.h"     // BrnWorld::CrashIO::TrafficOutputInterface
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"        // VehicleOutputInterface, VehicleManagerOutputInterface
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"         // OutputBuffer_PrePhysics::VehicleInputInterface (retyped 2026-08-10)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEffectsInputInterface.h"  // OutputBuffer_PrePhysics::VehicleEffectsInputInterface
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"   // OutputBuffer_PrePhysics::VehicleDriverInputInterface
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h" // DeformationOutputInterfaceForEntityModules
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"                       // ContactSpyInterface
 
@@ -536,20 +539,67 @@ namespace BrnTrafficIO
     // ============================================================================
     // OutputBuffer_PrePhysics  (DWARF :403, pre-physics output buffer)  -- NEW HOME
     // ============================================================================
-    // Owns the vehicle-driver input interface (@143984, read 0x827A04C8 :326 / write 0x82711508 :321).
+    // ⭐⭐ RETYPED 2026-08-10 (pre-physics bridge wave) -- AND IT WAS A LATENT MEMORY BUG.
+    //
+    // This class used to model ONE member, `mVehicleDriverInterface`, as an opaque
+    // `unsigned char[1]` behind a 143,983-byte pad, with a console-pinned
+    // `static_assert(offsetof(...) == 143984)`. Nothing on the PC build had ever read it, so
+    // the slice was inert -- but WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics
+    // @0x827AAEC0 reads all THREE interfaces this buffer owns and merges them into the physics
+    // input, and `VehicleDriverInputInterface::Append` alone moves 5,284 bytes. Landing that
+    // bridge over the 1-byte slice would have been a ~5.3 KB heap overrun on the first frame.
+    //
+    // THE LAYOUT IS NOT GUESSED. Three independent witnesses agree:
+    //  (1) BrnTrafficIO::OutputBuffer_PrePhysics::Construct @0x827618A0, read instruction for
+    //      instruction: status byte at +0; VehicleInputInterface::Construct(this+16);
+    //      CreateAirRamEvent<20>::Construct(this+142192); CreateSpinEvent<10>::Construct(
+    //      this+143488); the two effect counters at +142200/+143496 zeroed;
+    //      VehicleDriverInputInterface::Construct(this+143984); `stbx 0` at +149280.
+    //  (2) the DecFIGS DWARF for this very class (BrnTrafficEntityModuleIO.h:324..327):
+    //      mVehicleInputInterface, mVehicleEffectsInterface, mVehicleDriverInterface,
+    //      `bool mbPlayingShowtime` -- the +149280 byte, with GetPlayingShowtime/
+    //      SetPlayingShowtime declared at :319/:320.
+    //  (3) arithmetic against the race-car pre-physics buffer, which holds the same three
+    //      interface types: 142192-16 == 142176 == sizeof(VehicleInputInterface);
+    //      143984-142192 == 1792 == sizeof(VehicleEffectsInputInterface); and 143488-142192
+    //      == 1296 == the air-ram -> spin gap the bridge's own `Append(x+0x510)` pair uses.
+    //
+    // ⛔ THE `offsetof == 143984` STATIC_ASSERT IS DELETED, and that is the CORRECT direction,
+    // not a weakening: it pinned a CONSOLE byte offset on an x64 host layout in which
+    // VehicleInputInterface's embedded queues carry widened pointers, so the moment the seat
+    // became real the gate would have failed on a layout that is right. Parity here is BY
+    // NAMED MEMBER + SEQUENCE, per the standing x64 rule. (It had also never once compiled --
+    // this TU has never been on the build list. It is mounted in the same commit.)
     class OutputBuffer_PrePhysics : public CgsModule::IOBuffer
     {
     public:
-        struct VehicleDriverInputInterface { unsigned char maBytes[1]; };   // :423 foreign, opaque
+        // DWARF :79/:80/:81 -- the three typedefs, all naming the REAL physics-side types (the
+        // same three the race-car pre-physics buffer owns).
+        typedef BrnPhysics::Vehicle::VehicleInputInterface        VehicleInputInterface;        // :79
+        typedef BrnPhysics::Vehicle::VehicleEffectsInputInterface VehicleEffectsInputInterface; // :80
+        typedef BrnPhysics::Vehicle::VehicleDriverInputInterface  VehicleDriverInputInterface;  // :81
 
-        const VehicleDriverInputInterface* GetVehicleDriverInterface() const;  // 0x827A04C8 (:326)
-        VehicleDriverInputInterface*       GetVehicleDriverInterface();        // 0x82711508 (:448)
+        // @0x827618A0 (DWARF :307). Bodied in BrnTrafficEntityModuleIO.cpp.
+        void Construct();
 
-        static void _AssertLayout();
+        const VehicleInputInterface*        GetVehicleInputInterface() const;   // :310 R (0x827A0378, +16)
+        VehicleInputInterface*              GetVehicleInputInterface();         // :311 W
+        const VehicleEffectsInputInterface* GetVehicleEffectsInterface() const; // :313 R (0x827A0420, +142192)
+        VehicleEffectsInputInterface*       GetVehicleEffectsInterface();       // :314 W
+        const VehicleDriverInputInterface*  GetVehicleDriverInterface() const;  // :316 R (0x827A04C8, +143984)
+        VehicleDriverInputInterface*        GetVehicleDriverInterface();        // :317 W (0x82711508)
+
+        // DWARF :319/:320. The +149280 byte Construct zeroes. Header inlines -- the console has
+        // no out-of-line symbol for either.
+        bool GetPlayingShowtime() const   { return mbPlayingShowtime; }
+        void SetPlayingShowtime(bool lb)  { mbPlayingShowtime = lb; }
 
     private:
-        u8                          maStatusPadTo143984[143984 - 1];           // +1..+143983
-        VehicleDriverInputInterface mVehicleDriverInterface;                   // +143984
+        u8                           maStatusPadTo16[16 - 1];        // +1..+15 (status byte is the base)
+        VehicleInputInterface        mVehicleInputInterface;         // :324  console +16
+        VehicleEffectsInputInterface mVehicleEffectsInterface;       // :325  console +142192
+        VehicleDriverInputInterface  mVehicleDriverInterface;        // :326  console +143984
+        bool                         mbPlayingShowtime;              // :327  console +149280
     };
 }
 }

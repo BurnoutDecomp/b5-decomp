@@ -83,10 +83,33 @@ namespace Vehicle
         // Vector4 (the X360 stores it via stvx128 into the caller's result buffer).
         Vector4 GetMaxWheelAngularVelocity() const;
 
-        // @0x825CB288: integrate the flywheel + recompute RPM + ComputeGear. Ships on X360 as a
-        // debug Opt-vs-Unopt assert harness (degenerate pseudocode) -- owned/BLOCKED by this group's
-        // ledger, declared only here so ApplyEngineForces can call it without an ODR clash.
-        void Update(/* dt + control/contact args; see ApplyEngineForces call site */);
+        // @0x825CB288: THE POWERTRAIN TORQUE CORE (throttle -> clutch -> flywheel -> gearbox ->
+        // drive force). ⭐ BODIED 2026-08-09 (powertrain wave) in Engine.cpp -- the trap stub is
+        // gone. Both console copies ship as a debug Opt-vs-Unopt assert harness (X360 3937 asm
+        // lines, 62 FireAsserts, "Mismatch: Opt/Unopt ... Tell Graham D and include the TTY!");
+        // the harness turned out to be ONE algorithm run in two register files (a branchy
+        // member-mutating leg + a branchless mask leg) cross-asserted at six source-line clusters
+        // with tolerance 0.01, NOT two different algorithms. The reconstruction follows the
+        // branchless leg (whose values the epilogue commits), was cross-checked lane-by-lane
+        // against the branchy leg, and independently against the BPR x86 twin sub_BA63A0
+        // (UpdateDriving -> UpdateEngine @0x7A28210 -> ApplyEngineForces @0x79DFB80 -> it), which
+        // shares this exact Engine layout. The 9-arg signature is the PS3 mangled name
+        // (_ZN...6Engine6UpdateEN2rw4math3vpu8VecFloatES5_S5_bS5_S5_bS5_S5_) laid against the X360
+        // ApplyEngineForces @0x8261FC10 register map (v1..v7 + r4/r5).
+        // ⚠️ AS-SHIPPED: lvfRearWheelRadius (v5) is DEAD on both X360 and BPR -- the prologue
+        // overwrites v5 before any read. Kept for signature fidelity.
+        void Update(VecFloat lvfWheelAngularVelocity, VecFloat lvfGas, VecFloat lvfBrake,
+                    bool lbHandBrake, VecFloat lvfSteering, VecFloat lvfRearWheelRadius,
+                    bool lbAllowReverseDrive, VecFloat lvfForwardSpeed, VecFloat lvfTimeStep);
+
+        // [PC-leaf accessor] ApplyEngineForcesOntoWheels @0x825FB000 reads the engine's drive-force
+        // lane directly off the embedded engine (`lvx128 v0, this+0xFA0 ; vspltw v0,v0,0` == mEngine
+        // (+0xF00) + 0xA0 lane0). Engine::Update (the powertrain core, bodied) writes it. Exposed as
+        // a named getter so the host reads the named member instead of an offset cast.
+        f32 GetEngineDrive() const
+        {
+            return mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.x;
+        }
 
         // @0x825CF130..0x825CF274 (82 items): seed the running-state registers from a wheel
         // angular velocity -- zero the drive/torque/clutch lanes, park the flywheel at idle
@@ -95,6 +118,24 @@ namespace Vehicle
         // ⚠️ EXPORT-SET HOLE (the fourth): no JSON in .ida-exports; ComputeGear @0x825CF010 is 72
         // instrs so it ends exactly at 0x825CF130, and the next indexed symbol is 0x825CF278.
         void Reset(VecFloat lvfWheelAngularVelocity);
+
+        // [PC-leaf accessor] The console's UpdateDriving @0x82638248 pokes the two allow-change
+        // bytes of the embedded engine directly (`stb rX, 0xFC4(r31) ; stb rX, 0xFC5(r31)` --
+        // always the SAME value, 1 on the ground / 0 in the air). Exposed as one named setter
+        // so the host write stays on the named members instead of an offset cast.
+        void SetAllowGearChanges(bool lbAllow)
+        {
+            mbAllowToChangeUpGear   = lbAllow;   // +0xC4
+            mbAllowToChangeDownGear = lbAllow;   // +0xC5
+        }
+
+        // [PC-leaf accessor] The console's wheel cluster reads the embedded engine's gear word
+        // directly off the owner (`lwz rX, 0xFC0(r31)` in UpdateWheels @0x8261E7B4 /
+        // UpdateWheelInertia @0x825F67xx / UpdateBrakesAndGetBrakingFactor @0x825D02xx --
+        // VehiclePhysics base +0xF00 == mEngine, +0xC0 == mu8CurrentGear). Gear 0 is
+        // reverse/neutral (ComputeGear's `< -0.01` leg); Prepare seeds ku8FirstGear == 1.
+        // Exposed as one named getter so those hosts read the named member, not an offset cast.
+        u32 GetCurrentGear() const { return mu8CurrentGear; }
 
         // --- Remaining Engine API: owned by separate future TUs -- declared only (no body). ---
 

@@ -67,6 +67,12 @@
 
 #include <cstddef>
 
+// Forward decl: the generated AttribSys handling wrapper (full type in
+// GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h). The un-homed
+// `PhysicsVehicleHandling` stand-in that used to carry SetupAttribs' parameter is RETIRED
+// (2026-08-09) -- the wrapper type is committed now.
+namespace Attrib { namespace Gen { class physicsvehiclehandling; } }
+
 namespace BrnPhysics
 {
 // InterpedParam3 used to be declared privately HERE. It is retired in favour of its DecFIGS home,
@@ -76,10 +82,6 @@ namespace BrnPhysics
 
 namespace Vehicle
 {
-    // The `physicsvehiclehandling` data wrapper VehicleAttribs::SetupAttribs streams from. Its
-    // own type is un-homed; forward-declared so the SetupAttribs signature can name it.
-    struct PhysicsVehicleHandling;
-
     struct VehicleAttribs
     {
         // ---- +0x000 (0xE0) -------------------------------------------------------------------
@@ -169,6 +171,17 @@ namespace Vehicle
             f32 GetGearRatio(s32 liGear) const { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].x; }
             f32 GetGearUpRPM(s32 liGear) const { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].z; }
 
+            // The lanes Engine::Update @0x825CB288 reads (powertrain wave, 2026-08-09). Every
+            // accessor name is the DWARF's (the PS3 DecFIGS Engine.cpp dump calls each of these
+            // by name inside Update); the lane bindings are the X360 asm's splat indices.
+            f32 GetTransmissionEfficiency() const { return mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.y; }   // +0x10.y (vspltw .. ,1)
+            f32 GetGearDownRPM() const            { return mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.w; }   // +0x10.w (vspltw .. ,3)
+            f32 GetTorqueFallOffRPM() const       { return mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.y; }      // +0x20.y
+            f32 GetFlyWheelInertia() const        { return mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.x; }                    // +0x30.x
+            f32 GetFlyWheelFriction() const       { return mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.y; }                    // +0x30.y
+            f32 GetGearChangeTime() const         { return mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.z; }                    // +0x30.z
+            f32 GetTorqueScale(s32 liGear) const  { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].y; }                        // gear[g].y
+
             InterpedParam3 mTorqueCurve;                                                        // +0x00
             Vector4 mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM;          // +0x10
             Vector4 mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges;             // +0x20
@@ -219,9 +232,18 @@ namespace Vehicle
         // VehiclePhysics::Construct calls it twice (mAIVehicleAttribs / mPlayerVehicleAttribs).
         void Construct();
 
-        // @0x825F4CD8 (770 instrs) / @0x825F58E0 (622) -- the streamed-attribute loaders. Owned by
-        // future TUs; declared only.
-        void SetupAttribs(const PhysicsVehicleHandling& lrHandling);
+        // @0x825F4CD8 (770 instrs) -- the streamed-attribute loader: per-sub-block generated
+        // wrappers (base/steering/engine/drift/collision/boost/bodyroll/suspension) streamed
+        // into the packed lanes + the two tire scatters + EngineAttribs::InitializeFromAttribs.
+        // ⭐ BODIED in VehicleAttribs.cpp (attribs-data wave, 2026-08-09; full per-lane map
+        // recovered by symbolic emulation of the raw image bytes). The signature is conformed
+        // to the committed generated wrapper (DWARF/PS3 take it BY VALUE -- 6D41E0
+        // `..12SetupAttribsEN6Attrib3Gen22physicsvehiclehandlingE`; spelled const-ref per the
+        // SimpleVehicleAttribs precedent, with the explicit checked copy at each call site).
+        void SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrHandling);
+
+        // @0x825F58E0 (622 instrs) -- derive the plain-AI set from a source set. ⭐ BODIED in
+        // VehicleAttribs.cpp (attribs-setup wave, 2026-08-09).
         void SetupAttribsForAI(VehicleAttribs* lpSource);
 
         // @0x825F6298 (40 instrs) -- bodied in VehicleAttribs.cpp.
@@ -270,6 +292,14 @@ namespace Vehicle
     static_assert(sizeof(VehicleAttribs::CollisionAttribs)   == 0x10, "CollisionAttribs size drift");
     static_assert(sizeof(VehicleAttribs::BoostAttribs)       == 0x40, "BoostAttribs size drift");
     static_assert(sizeof(Wheel::TireAttribs)                 == 0x40, "TireAttribs size drift");
+
+    // the tire-scatter targets (attribs-data wave, 2026-08-09): the eight Prepare*Tire routines
+    // stvx128 to r3 / r3+16 / r3+32 / r3+48, so the four registers must sit exactly there.
+    static_assert(sizeof(Wheel::TireGripCurve)                    == 0x10, "TireGripCurve is one 16-byte register");
+    static_assert(offsetof(Wheel::TireAttribs, mLongGripCurve)     == 0x00, "mLongGripCurve @+0x00 (stvx128 r3)");
+    static_assert(offsetof(Wheel::TireAttribs, mLatGripCurve)      == 0x10, "mLatGripCurve @+0x10 (stvx128 r3+16)");
+    static_assert(offsetof(Wheel::TireAttribs, mDriftLatGripCurve) == 0x20, "mDriftLatGripCurve @+0x20 (stvx128 r3+32)");
+    static_assert(offsetof(Wheel::TireAttribs, maPackedVariables)  == 0x30, "maPackedVariables @+0x30 (stvx128 r3+48; DonutAI preserves its w lane)");
 
     // top-level placement
     static_assert(offsetof(VehicleAttribs, mBaseAttribs)       == 0x000, "mBaseAttribs @0x000");

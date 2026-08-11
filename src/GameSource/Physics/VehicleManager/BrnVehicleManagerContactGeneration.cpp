@@ -380,6 +380,31 @@ namespace Vehicle
         }
 
         // ---- (5) begin the three producers, kick the three collide jobs -------------------------
+        // ⚠⚠ PC-BUILD GUARD (conductor wave 2026-08-09): the three CreateCollide*Stream
+        // factories are still one-shot gates (CgsCollisionGenerator_StreamStubs.cpp) that
+        // return NULL, so Begin() here would AV on the first conducted frame (measured:
+        // 0xC0000005 at SimpleDataStreamProducer::Begin, boot +8s). Until the stream family
+        // lands, a null producer means the collide-stream leg cannot run -- log once, skip
+        // the Begin/Run trio, leave the three job pointers null (EndVehicleContactGeneration
+        // is itself still a gate, so nothing consumes them yet). GUARD TESTS THE EXACT
+        // POINTERS THE STUBS LEAVE NULL. Delete with the stream family.
+        if (mpSphereTriangleStreamProducer == 0 || mpSweptSphereTriangleStreamProducer == 0 ||
+            mpSphereSphereStreamProducer == 0)
+        {
+            static bool s_bLogged = false;
+            if (!s_bLogged)
+            {
+                s_bLogged = true;
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint << "conductor gate: StartVehicleContactGeneration's "
+                                                  "collide-stream leg inert [FLAG PC boot gate -- "
+                                                  "CreateCollide*Stream stubs returned null]\n";
+            }
+            mpSphereTriangleStreamJob      = 0;
+            mpSweptSphereTriangleStreamJob = 0;
+            mpSphereSphereStreamJob        = 0;
+            return;
+        }
         mpSphereTriangleStreamProducer->Begin();        // the three inlined Begin bodies
         mpSweptSphereTriangleStreamProducer->Begin();   // (see CgsSimpleDataStreamProducer_Begin.cpp)
         mpSphereSphereStreamProducer->Begin();

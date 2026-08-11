@@ -18,6 +18,11 @@ namespace Gen
     {
     public:
         explicit physicsvehiclesuspensionattribs(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        // Re-exposed from the private Instance base (attribs-setup wave, 2026-08-09): the X360
+        // consumer (SimpleVehicleAttribs::SetupAttribs @0x825E6778) reads the record through
+        // `lwz +4` == mpAttributeData, which is what GetLayoutPointer returns.
+        using Instance::GetLayoutPointer;
     };
 
     // Chain the Instance ctor, assert the collection's class is

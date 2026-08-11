@@ -11,9 +11,13 @@
 // (records of stride miCommandSize), a variable-size data buffer, and a packed
 // 64-bit status word (mEncodedStatus) that the streaming side updates lock-free.
 //
-// X360 homes (reconstructed in this pass):
-//   AddCommand      @ 0x82867D28
-//   AllocateCommand @ 0x82867E60
+// X360 homes (reconstructed):
+//   AddCommand       @ 0x82867D28
+//   AllocateCommand  @ 0x82867E60
+//   GetEncodedStatus @ 0x82867790
+//   Begin            @ 0x82867AE8
+//   Construct        @ 0x82869E08   ⭐ 2026-08-10 (export-set hole; lifted from the image)
+//   End              @ 0x82867BE8   ⭐ 2026-08-10
 //
 // Layout is X360-authoritative (verified against the pseudocode this->[n] member
 // accesses in AddCommand / AllocateCommand): mEncodedStatus@0 (8B),
@@ -54,13 +58,17 @@ namespace CgsMemory
         s32 AddCommand(void* lpCommand);
         s32 AllocateCommand(void** lppOutBuffer);
 
-        // Declared-only (not reconstructed in this TU pass).
+        // ⭐ BODIED 2026-08-10 (cache-fill wave): Construct @0x82869E08 (178, export-set hole,
+        // lifted from the image) and End @0x82867BE8 (79, exported). The
+        // CgsDataStreamCommandPoster_LinkStub.cpp trap TU is deleted.
         void Construct(void* lpCommandBuffer, s32 liCommandBufferSize, s32 liCommandSize,
                        s32 liInitialCommandCount, void* lpDataBuffer, s32 liDataBufferSize,
                        s32 liInitialDataBufferUsed);
-        void Destruct();
-        void Begin();
         void End();
+        void Begin();   // bodied (X360 0x82867AE8, via the PS3 out-of-line body)
+
+        // Declared-only (not reconstructed in this TU pass).
+        void Destruct();
         void* AllocateData(s32 liSize, s32 liAlignment);
         s32  AddCommands(void* lpCommands, s32 liCommandCount);
         s32  AllocateCommands(s32 liCommandCount, void** lppOutBuffer);

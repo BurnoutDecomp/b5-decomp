@@ -404,14 +404,10 @@ namespace SceneManagerIO
     }
 }
 
-namespace CgsCollision
-{
-    // BaseCollisionGenerator::Destruct @0x8284CB38 -- the console body is a single `blr`
-    // (empty). It is referenced from MainDirector::Destruct through the inherited
-    // CgsDev::DebugComponent teardown. Attested-empty, not a placeholder.
-// FLAG PC-platform leaf: attested-empty console body (@0x8284CB38 is a bare `blr`, corroborated at CgsLanguageManager.cpp:474) standing in for the un-landed CgsCollisionGenerator TU on the PC link (director mount 2026-07-29).
-    void BaseCollisionGenerator::Destruct() {}
-}
+// (BaseCollisionGenerator::Destruct @0x8284CB38 REMOVED 2026-08-10, cache-fill wave: its
+//  owning TU CgsCollisionGenerator.cpp is now on the build list and carries the same
+//  attested-empty body, so this PC-leaf stand-in became an LNK2005 -- which is exactly the
+//  tripwire it was left behind to be.)
 }
 
 // ----------------------------------------------------------------------------

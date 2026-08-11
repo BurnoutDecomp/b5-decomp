@@ -23,7 +23,9 @@ static_assert(std::is_base_of<BrnPhysics::ExternallySimulatedBody, VehiclePhysic
 bool VehiclePhysics_embed_check(const VehiclePhysics& lrPhysics, f32 lfSteering, f32 lfSpeed)
 {
     const f64 lfScale = lrPhysics.GetShowtimeDeformationScale();
-    const bool lbCounter = lrPhysics.IsCounterSteeringAtLowSpeed(lfSteering, lfSpeed);
+    // (signature conformed 2026-08-07 to the DWARF 3-arg form: VecFloat fwdSpeed, steering, GAS)
+    const bool lbCounter = lrPhysics.IsCounterSteeringAtLowSpeed(
+        VecFloat{ lfSpeed, lfSpeed, lfSpeed, lfSpeed }, lfSteering, 1.0f);
     const Vector3 lDownForce = lrPhysics.GetDownForce();   // aero quadratic (flagged-inert)
     // surface-response group (per-wheel grip/roughness + vehicle linear drag; flagged-inert)
     // EVehicleDrivenWheel is homed at NAMESPACE scope (BrnSimpleVehiclePhysics.h:52) per the DWARF;

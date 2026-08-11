@@ -63,6 +63,13 @@ namespace Jobs
         // entry_point.h:58 -- store the affinity mask (X360 0x82BC98B0 writes +20).
         void SetAffinity(JobAffinity leAffinity);
 
+        // ⭐ ADDED 2026-08-10 (fill-worker wave 2). Job::SetCodeRecycle forwards here, and
+        // both X360 call sites resolve to the ICF-folded empty function at 0x82AD5078
+        // (a bare `blr`) -- code recycling is an SPU-loader concept and this build has no
+        // SPUs. Declared here because the enclosing Job declares its forwarder, and bodied
+        // (empty) in the vendor TU so the link closes over both.
+        void SetCodeRecycle(CodeRecycle leRecycle);
+
         // Accessors (declaration-only; bodies live in the vendor entrypoint TU).
         const char*    GetName() const;
         JobEnvironment GetEnvironment() const;

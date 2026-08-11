@@ -51,6 +51,27 @@ public:
         miNumSourceEntries = liNumSourceEntries;
     }
 
+    // ⭐ Get @0x82917218 (46, <PolygonSoupLeafNode> instantiation), ADDED 2026-08-10
+    // (fill-worker wave 2). Bounds-assert then hand back a DIRECT pointer into the
+    // read-only source buffer -- no copy, which is why Release is a no-op.
+    //   0x82917230  cmpwi r11, 0 ; blt  -> index >= 0
+    //   0x82917240  lwz   r11, 4(this)  -> miNumSourceEntries
+    //   0x82917244  cmpw  r10, r11 ; blt -> index < count
+    //   0x8291725C  "Index out of range\n", CgsReadOnlyObjectCache.h:0x109 == 265
+    //   0x829172B0  mulli r11, r11, 0x30 -> the CONSOLE'S element stride
+    //   0x829172B8  lwz   r10, 0(this)  ; add r3, r10, r11
+    // ⚠️ The 0x30 is the console's sizeof(PolygonSoupLeafNode). It is NOT reproduced as
+    // a literal: the host element type is indexed directly, and CgsPolygonSoupSpacialNode.h
+    // already gates both node types at 48 bytes on x64 as well (the alignas(16) inside
+    // AxisAlignedBox absorbs the pointer widening). Both callers of this instantiation --
+    // FillTriangleCache and RunJobQuery -- reach elements by index, never by byte offset.
+    const Type* Get(s32 liIndex) const
+    {
+        CGS_ASSERT(liIndex >= 0 && liIndex < miNumSourceEntries, "Index out of range\n"); // :265
+
+        return &mpSourceBuffer[liIndex];
+    }
+
     // DWARF :190 / :232 / :263 -- declared-only (bodies not attested in this batch).
     s32         StartFetch(s32 liIndex);
     const Type* WaitForFetch(s32 liIndex);

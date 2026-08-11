@@ -102,8 +102,48 @@ void TriangleCollisionManager::ProcessAddPolySoupListEvents(
     if (lbNeedToRebuild)
     {
         mSpacialAllocator.FreeAll();
+        // (lpAllocator, liNumLevels, liQueryBufferSize) -- the parameter NAMES are the PS3
+        // DWARF's; see the corrected declaration in CgsPolygonSoupListSpatialMap.h. 8 is
+        // KI_MAX_LEVELS, so this builds the full 8-level quadtree (a 128x128 bottom grid).
         mPolySoupListSpacialMap.BuildSpacialPartition(&mSpacialAllocator, 8, 2048);
     }
+}
+
+// ProcessClearPolySoupListEvents -- drop the whole partition when any clear event is queued.
+//
+// ⭐ The X360 has no standalone symbol for this: the compiler INLINED it into
+// SceneManagerModule::StartUpdateTriangleCache @0x828C73D8, where it shows up as a bare
+// `if (*(interface + 0xC7DE8) > 0) { FreeAll(mgr+0x7C); Clear(mgr+0x00); *(mgr+0x78) = 0; }`.
+// Rather than reproduce that inlining (and lose the API the header declares), the body is
+// taken from the PS3 twin @0xC49108, which is the SAME THREE STATEMENTS and is a real
+// out-of-line function there:
+//     0xC49120  lwz r0, 8(queue)          ; queue.GetLength()
+//     0xC4912C  ble -> skip
+//     0xC49130  bl  LinearMalloc::FreeAll            (this + 0x7C = mSpacialAllocator)
+//     0xC4913C  bl  PolygonSoupListSpatialMap::Clear (this + 0x00 = mPolySoupListSpacialMap)
+//     0xC49148  stw r0(=0), 0x78(this)               (miNumSoupListsAdded = 0)
+// Both platforms agree store-for-store, so nothing here is inferred.
+//
+// ⚠️ Note it does NOT rebuild: it only tears down. The next add event that sets
+// mbRebuildSpacialPartitioning is what re-runs BuildSpacialPartition.
+void TriangleCollisionManager::ProcessClearPolySoupListEvents(
+    const CgsModule::EventQueue<CgsSceneManager::TriangleCollisionManagerIO::InEventClearPolySoupLists, 20>&
+        lClearPolySoupListsQueue)
+{
+    if (lClearPolySoupListsQueue.GetLength() > 0)
+    {
+        mSpacialAllocator.FreeAll();
+        mPolySoupListSpacialMap.Clear();
+        miNumSoupListsAdded = 0;
+    }
+}
+
+// The collision scene itself. On the console this accessor is free -- the map is the
+// manager's first member, so StartUpdateTriangleCache just passes the manager pointer
+// where a PolygonSoupListSpatialMap* is wanted. Spelled by name here instead.
+const CgsGeometric::PolygonSoupListSpatialMap* TriangleCollisionManager::GetPolySoupListSpacialMap() const
+{
+    return &mPolySoupListSpacialMap;
 }
 
 }

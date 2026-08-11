@@ -123,7 +123,7 @@ namespace Vehicle
     //   0x82635BE8     bl SetRaceCarCrashing @0x82634C90
     // ------------------------------------------------------------------------------------
     void VehicleManager::ForceRaceCarCrash(
-        BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+        BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
         VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
         VehicleOutputInterface* lpVehicleOutputInterface,
         BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
@@ -306,7 +306,7 @@ namespace Vehicle
         f32 lfGameTimerTimeStep,
         const VehicleInputInterface* lpInputInterface,
         VehicleOutputInterface* lpVehicleOutputInterface,
-        BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+        BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
         VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
         BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
         bool lbIsOnlineGameMode,
@@ -394,7 +394,15 @@ namespace Vehicle
 
         // ---- STAGE: traction line tests (dword_82F2A154) -------------------------------
         CgsDev::PerfMonCpu::StartMonitor(gs_iTractionLTsPM);
-        EndVehicleTractionLineTests(lpInputBufferStack, lpInputInterface);   // r4=stack, r5=iface
+        // ⛔ RE-POINTED AGAIN 2026-08-11 (lifetime wave): TWO arguments, restoring what the
+        // 2026-08-10 note removed. That note reasoned from the callee ("the 68 instructions never
+        // touch r5") and concluded the parameter was fabricated -- but an unread argument is not
+        // an absent one, and THIS call site is the proof: the console emits `mr r5, r29` at
+        // 0x8264565C, loading r29 fresh from an incoming argument slot at 0x82645638. The PS3
+        // DWARF types the pair (IOBufferStack*, const VehicleInputInterface*). Nothing
+        // behavioural changes -- the callee still ignores it -- but the declaration stops
+        // claiming something the image contradicts.
+        EndVehicleTractionLineTests(lpInputBufferStack, lpInputInterface);   // r4=stack, r5=input
         CgsDev::PerfMonCpu::StopMonitor(gs_iTractionLTsPM);
 
         // ---- STAGE: fatal crashes (dword_82F2A178) -------------------------------------

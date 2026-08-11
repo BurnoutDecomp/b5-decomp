@@ -298,6 +298,17 @@ namespace BrnGame
         void OnCompletionOfVsyncWait() override;
         void RenderAssert(const AssertData* lpAssertData) override;
 
+        // ⭐ ADDITIVE 2026-08-09 (feed wave; header-only inline, no out-of-line symbol).
+        // The console reads this member as the raw `gm+10095372` when it stages the world
+        // update input buffer's timer status inside DoUpdate_World @0x823E8BD0
+        // (`UpdateInputBuffer::SetTimerStatusInterface(worldIn, gm+10095372)`). Exposed BY NAME
+        // so the live PC world drive can make the same call without a console byte offset --
+        // the x64 layout does not put this member at 10095372.
+        const CgsSystem::TimerStatusInterface* GetTimerStatusInterface() const
+        {
+            return &mTimerStatusInterface;
+        }
+
     private:
         // @ BrnGameModule.cpp:1845 - the per-frame update spine: latch frame-rate stepping,
         // begin the frame-rate frame, tick the debug manager, then run the active flow

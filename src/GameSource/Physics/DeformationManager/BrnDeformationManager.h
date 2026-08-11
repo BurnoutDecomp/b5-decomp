@@ -149,6 +149,10 @@ struct ContactGenList;
 // forward declaration suffices. FLAG: forward-declared.
 namespace Deformation { class DeformationDebugComponent; }
 
+// ⭐ ADDED 2026-08-09 (conductor wave): the REAL contact-spy data block's namespace
+// (UpdatePostPhysics' re-typed param 3). Class key struct, matching BrnContactSpyData.h:60.
+namespace ContactSpy { struct ContactSpyData; }
+
 namespace PhysicsModuleIO
 {
     // The per-frame potential-contact source the bridge/solve/contact-gen methods read the
@@ -163,6 +167,9 @@ namespace PhysicsModuleIO
     // ⭐ ADDED 2026-08-06 (big-five #2): the Bridge* pair's corrected arg-2 type. Class key
     // `class`, matching BrnPhysicsModuleIO.h:147.
     class InputBuffer;
+    // ⭐ ADDED 2026-08-09 (conductor wave): Update/UpdatePostPhysics' corrected module-output
+    // param type. Class key `class`, matching BrnPhysicsModuleIO.h:50.
+    class OutputBuffer;
 }
 
 namespace GameState { namespace GameStateModuleIO {
@@ -201,6 +208,10 @@ namespace Deformation
 
     // Contact-spy debug sink (UpdatePostPhysics forwards it). Owned by the contact-spy TU.
     // FLAG: forward-declared. (Also declared by BrnPhysicalBodyPartPool.h.)
+    // ⚠ 2026-08-09: this Deformation-namespace fwd is a silent FORK of the real
+    // ContactSpy::ContactSpyData -- UpdatePostPhysics is re-typed onto the real one below
+    // (PS3 mangle `PNS_10ContactSpy14ContactSpyDataE`); this local decl stays only for the
+    // other legacy pointer uses until their own conformance pass.
     struct ContactSpyData;
 
     // The shared penetration solver the post-physics pass runs. Owned by BrnPenetrationSolver.h.
@@ -292,10 +303,15 @@ namespace Deformation
         // then the detached part/wheel managers. FLAG: the last arg's DWARF type is
         // BrnGameState::GameStateModuleIO::EGameModeType (a plain enum, not forward-declarable);
         // taken as s32 here, body casts.
+        // ⭐ PARAMS 3/4 CORRECTED 2026-08-09 (conductor wave): they were committed as
+        // "lpPrevSimInput/lpPrevSimOutput" typed on the SIM buffers; the PS3 DecFIGS mangle
+        // (0x765DB0) and the X360 call site (PhysicsModule::Update @0x825B10BC passes the
+        // MODULE IO buffers a4/a5) both type them PhysicsModuleIO::{InputBuffer const*,
+        // OutputBuffer*}. Declared-only -- no body existed to migrate.
         void Update(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
                     CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput,
-                    const CgsPhysics::PhysicsSimulationIO::InputBuffer* lpPrevSimInput,
-                    CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpPrevSimOutput,
+                    const PhysicsModuleIO::InputBuffer* lpInputBuffer,
+                    PhysicsModuleIO::OutputBuffer* lpOutputBuffer,
                     PhysicsModuleIO::PotentialContactInterface* lpContacts, VecFloat lvfTimeStep,
                     s32 leGameMode);
 
@@ -329,9 +345,16 @@ namespace Deformation
 
         // :142. Post-physics pass: add contacts to the penetration solver, solve penetrations,
         // read transforms back, update models + the detached managers, process the joint spies.
+        // ⭐ PARAM 2 CORRECTED 2026-08-09 (conductor wave): committed as a second SIM output
+        // ("lpPrevSimOutput"); the PS3 mangle (0x767800) and the X360 call site
+        // (@0x825B1FF0 passes the module output buffer a5) type it
+        // PhysicsModuleIO::OutputBuffer*. Declared-only -- no body existed to migrate.
+        // (Param 3 is the CONTACT-SPY data block -- ContactSpy::ContactSpyData per the PS3
+        //  mangle `PNS_10ContactSpy14ContactSpyDataE`; the bare `ContactSpyData` here used
+        //  to bind to this namespace's own same-named forward declaration, a silent fork.)
         void UpdatePostPhysics(const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput,
-                               CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpPrevSimOutput,
-                               ContactSpyData* lpContactSpyData, IOBufferStack* lpIOBufferStack,
+                               PhysicsModuleIO::OutputBuffer* lpOutputBuffer,
+                               ContactSpy::ContactSpyData* lpContactSpyData, IOBufferStack* lpIOBufferStack,
                                const PhysicsModuleIO::PotentialContactInterface* lpContacts);
 
         // :147 (dossier OutputData @0x826225D8). Output every live model's deformation/skinned/
@@ -554,6 +577,21 @@ namespace Deformation
         // private member cannot express.
     public:
         s32 FindModelIndexByEntityID(EntityId lEntityId) const;
+
+        // ⭐ ADDITIVE 2026-08-10 (create-path wave), header-only inline -- no out-of-line symbol,
+        // exactly like BrnVehicleInputInterface.h's GetTriangleCacheInterface / GetLineTestResults.
+        // PhysicsModule::PostSceneUpdate @0x825ABC10 writes miPlayerModelIndex from OUTSIDE this
+        // class, twice, as a raw `stw` at this+76040 (`addis r31,r26,1 ; addi r31,r31,0x2908` with
+        // r26 == &mDeformationManager): -1 on both arms of the player-active branch, then the
+        // FindModelIndexByEntityID result if the player's handling entity id is valid.
+        // ⚠ INFERRED, and flagged as such: the DecFIGS DWARF lists miPlayerModelIndex under the
+        // dumper's leading `private:` and declares NO setter for it, yet the shipped console code
+        // stores to it from another class -- so either the dumper is printing the DWARF *class*
+        // default rather than this struct's real (public) default, or the shipped header had a
+        // friend/inline setter DWARF does not emit. Rather than widen the member's access or
+        // invent a friendship, the store is expressed through this named inline, which is
+        // byte-identical to the console's and keeps every existing access rule intact.
+        void SetPlayerModelIndex(s32 liModelIndex) { miPlayerModelIndex = liModelIndex; }
     private:
         s32 FindModelIndexByGlobalEntityID(EntityId lGlobalEntityId);
         s32 FindModelIndexByPartID(CgsPhysics::RigidBodyId lPartBodyId);   // ⚠️ qualified -- see header note

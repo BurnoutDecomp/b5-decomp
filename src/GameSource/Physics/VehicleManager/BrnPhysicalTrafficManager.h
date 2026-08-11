@@ -219,10 +219,29 @@
 // UpdateVehiclePhysics-wave collaborator (pointer-only on this surface).
 namespace BrnPhysics { namespace Vehicle { struct VehicleManagerOutputInterface; } }
 
+// ⭐ ADDED 2026-08-10 (create-path wave): ProcessTrafficMaintenanceEvents' remaining parameter
+// types, pointer use only. CLASS KEYS CHECKED AGAINST THE SINGLE HOME OF EACH BEFORE WRITING
+// THEM, per the standing ODR-fork rule -- BrnVehicleInputInterface.h:28 and
+// BrnVehicleOutputInterface.h:62 both spell `struct alignas(16)` (the alignment belongs to the
+// definition, not the declaration), and BrnDeformationInputInterface.h:20 spells `class`.
+namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface;
+                                           struct VehicleOutputInterface; } }
+namespace BrnPhysics { namespace Deformation { class DeformationInputInterface; } }
+
 // ⭐ ADDED 2026-08-06 (big-five #2): ValidateTrafficContact collaborators, pointer use only.
 // Class key `struct`, matching CgsPotentialContact.h / the TriangleCacheInterface home.
 namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact;
                                                        struct TriangleCacheInterface; } }
+
+// ⭐ ADDED 2026-08-10 (producer wave): PrepareTriangleCache's parameter, pointer use only.
+// Class key `struct`, matching the single home CgsSceneManagerIO.h:31.
+namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Update; } }
+
+// ⭐ ADDED 2026-08-11 (lifetime wave): the traction-line pair's collaborators, pointer use only.
+// Class keys match their single homes -- CgsCollisionGenerator.h spells CollisionGenerator
+// `struct`, CgsSimpleDataStreamProducer.h spells both stream types `struct`.
+namespace CgsSceneManager { namespace CgsCollision { struct CollisionGenerator; } }
+namespace CgsMemory { struct SimpleDataStreamProducer; struct SimpleDataStreamResultIterator; }
 
 namespace BrnPhysics
 {
@@ -501,6 +520,69 @@ public:
     // both the const and non-const GetTrafficVehicle return &mpaTrafficVehicles[idx].
     PhysicalTrafficVehicle*       GetTrafficVehicle(s32 liVehicle);
     const PhysicalTrafficVehicle* GetTrafficVehicle(s32 liVehicle) const;
+
+    // ⭐ ADDED 2026-08-10 (producer wave). X360 @0x825EE5A0 (39 insns); home
+    // BrnPhysicalTrafficManager.cpp:244 per its own baked assert path. Claims this manager's
+    // 20 triangle-cache slots (indices 8..27, i.e. immediately after the 8 race cars) by
+    // posting one InEventAddToCache each into the scene input's mAddToCacheQueue.
+    // Sole caller: VehicleManager::PrepareTriangleCache @0x82615BA0.
+    // ⚠️ `this` IS UNUSED in the console body -- r3 is never read after the prologue. Kept as a
+    // non-static member because that is what the console's `bl` with r3 = this + 44768 is.
+    bool PrepareTriangleCache(
+        CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update);
+
+    // ⭐⭐ @0x825EE640 (261 insns) -- BODIED 2026-08-11 (lifetime wave). The traffic half of the
+    // per-frame cache-position push: per live traffic vehicle, post one
+    // InEventUpdateCachedPosition carrying {world position, bounding radius} for cache slot
+    // 8 + liVehicle (the 8 race-car slots come first -- together they are the 28 slots
+    // TriangleCacheManager reports as used). Sole caller:
+    // VehicleManager::UpdateTriangleCache @0x82615C38.
+    void UpdateTriangleCache(
+        CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update);
+
+    // ---- ⚠ FLAG: gate-bodied (BrnPhysicsConductorGates.cpp) ---------------------------------
+    // The TRAFFIC traction-line pair, gated together 2026-08-11 (lifetime wave). A race car on
+    // the ground needs neither, and they are 709 console instructions. ⛔ KEEP THEM PAIRED: the
+    // Add posts one command per live traffic vehicle and the Read consumes exactly that many
+    // records off the SHARED result cursor EndVehicleTractionLineTests hands all three harvests
+    // in turn. One without the other mis-seats every harvest downstream of it.
+    //   0x8261D580 (418) AddTrafficTractionLineTests <-> 0x8262D2B8 (291) ReadTrafficTraction...
+    // ⚠️ AddTraffic is also the witness that a stream command carries FIVE line slots, not four:
+    // it writes `miNumLines = 5` (0x8261D9F4 `stw r10, 0xA8(r30)`) where both race-car and
+    // player-stuck producers write 4.
+    s32 AddTrafficTractionLineTests(
+        CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen,
+        CgsMemory::SimpleDataStreamProducer* lpStreamProducer,
+        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpCacheInterface);
+    void ReadTrafficTractionLineTestResults(
+        CgsMemory::SimpleDataStreamResultIterator* lpResultIterator);
+
+    // ⭐ ADDED 2026-08-10 (create-path wave). X360 0x825EF608 (334 insns), bodied in
+    // GameSource/Physics/VehicleManager/BrnVehicleManager_ReadUpdatedBodies.cpp alongside its
+    // only caller, VehicleManager::ReadUpdatedBodies @0x82619A10 (xrefs_to == that one entry).
+    // Despite the name it reads no body state back: the queue feeds a dev duplicate-id assert
+    // and nothing else, and the real work is the per-vehicle
+    // `mLinearVelocity.y -= KF_GRAVITY*dt ; IntegrateTransform(dt)` over the fully-physical
+    // entries of mUsedTrafficVehicles.
+    void ReadUpdatedBodies(
+        const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody, 200>* lpUpdatedBodies,
+        VecFloat lvfTimeStep);
+
+    // ⭐ ADDED 2026-08-10 (create-path wave). X360 0x82649768 (246 insns) -- the traffic twin of
+    // VehicleManager::ProcessVehicleMaintenanceEvents and its sixth and last call, taking that
+    // function's whole argument list verbatim (r3 = &mPhysicalTrafficManager, i.e. the vehicle
+    // manager + 44768). ⚠ FLAG: DECLARED for the maintenance closure; body is a LOUD one-shot
+    // gate (BrnVehicleManager_MaintenanceEvents.cpp) -- its own create/remove/crash arms over
+    // mUsedTrafficVehicles are unreconstructed, and the same ground ordering applies to traffic
+    // as to race cars.
+    void ProcessTrafficMaintenanceEvents(
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        const VehicleInputInterface* lpInputInterface,
+        VehicleOutputRequestInterface* lpOutputInterface,
+        VehicleManagerOutputInterface* lpManagerOutputInterface,
+        VehicleOutputInterface* lpVehicleOutputInterface,
+        BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface); // @0x82649768
 
     // X360 0x825B4900: &mpaTrafficDrivers[idx] (stride 224).
     VehicleDriver* GetTrafficDriver(s32 liVehicle);

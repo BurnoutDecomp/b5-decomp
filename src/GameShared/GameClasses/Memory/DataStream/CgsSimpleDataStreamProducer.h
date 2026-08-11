@@ -43,6 +43,13 @@ namespace CgsMemory
         // (Additive: layout/sizeof unchanged.)
         friend struct SimpleDataStreamResultIterator;
 
+        // SimpleDataStreamConsumer::Construct @0x82868508 snapshots the producer's
+        // whole SharedData head (`XMemCpy(this, lpProducer, 0x20)`) and then binds
+        // its reader to mShared.mpPoster. Same precedent and same reason as the
+        // iterator above -- the read side is a dual of this class, not a client.
+        // (Additive: layout/sizeof unchanged.)
+        friend struct SimpleDataStreamConsumer;
+
         // CgsSimpleDataStreamProducer.h:79 — geometry snapshot shared with the
         // streaming side. Not touched by Construct(); homed for completeness.
         struct SharedData

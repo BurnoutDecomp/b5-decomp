@@ -126,6 +126,7 @@ namespace BrnPhysics
 {
 namespace PhysicsModuleIO { class InputBuffer; class OutputBuffer; struct PotentialContactInterface; }
 namespace Props           { struct PropRaceCarContactBuffer; }   // DWARF BrnPropManager.h:47 (class key struct; IOBuffer-derived, not yet homed)
+namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehicleManagerIO.h (the "VehManager" stack buffer Update creates)
 
     // ==============================================================================================
     // The X360 literals this class's layout is derived from. Consumed by
@@ -344,6 +345,73 @@ namespace Props           { struct PropRaceCarContactBuffer; }   // DWARF BrnPro
         // sim input buffer (remove-joint only; the add-joint queue must already be empty).
         void BridgeVehicleManagerRequestsToSimulation( CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
                                                        const Vehicle::VehicleOutputRequestInterface* lpRequestInterface );
+
+        // ==========================================================================
+        // ⭐ ADDED 2026-08-09 (conductor wave -- PhysicsModule::Update @0x825B0640
+        // lands). Signatures per the PS3 DecFIGS mangles; home TU
+        // BrnPhysicsModuleBridgeFunctions.cpp for the two bridges (their baked
+        // asserts cite :795/:796 and :993/:994 of that file).
+        // ==========================================================================
+
+        // :795 @0x825ADEA8 (PS3 0x691CFC). Construct a 60-slot InUpdateExternalBody queue,
+        // read the module input's solver-iteration cap into the sim input, harvest every
+        // live vehicle body (VehicleManager::GetUpdatedVehicleBodies) and append the queue.
+        void BridgeUpdatedVehiclesToSimulation( CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
+                                                const PhysicsModuleIO::InputBuffer* lpInputBuffer );
+
+        // :993 @0x825ADF60. Drain the vehicle manager's remove-rigid-body / add-rigid-body /
+        // change-inertia request queues into the sim input buffer (that exact console order).
+        void BridgeVehicleManagerToSimulation_PostPhysics( CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
+                                                           const Vehicle::VehicleManagerOutputBuffer* lpVehManagerOutputBuffer );
+
+        // :1025 (PS3 `PhysicsModule::BridgeVehicleManagerToOutput`; the X360 inlines the whole
+        // body into Update @0x825B2408..0x825B2510). Lock both buffers, then forward the
+        // request interface with VehicleOutputRequestInterface::Append (five queue appends;
+        // the inertia queue is deliberately excluded -- the _PostPhysics bridge owns it).
+        void BridgeVehicleManagerToOutput( PhysicsModuleIO::OutputBuffer* lpOutputBuffer,
+                                           const Vehicle::VehicleManagerOutputBuffer* lpVehManagerOutputBuffer );
+
+        // @0x825A72F0 (PS3 0x69CD60: HandleGameActions(const BaseGameActionQueue<13312>*,
+        // OutputBuffer*)). The per-frame game-action dispatch (mode prepare/stop, impact
+        // time, showtime, player stats, ...). The queue type is the committed
+        // GameStateModuleIO::GameActionQueue (== the DWARF's BaseGameActionQueue<13312>
+        // == VariableEventQueue<13312,16>; see BrnGameStateSharedIO.h's collapse note),
+        // which is byte-compatible with the InputBuffer's GameActionQueueStorage member the
+        // caller feeds it. ⚠ FLAG: DECLARED for Update's closure; body still a LOUD
+        // one-shot gate (BrnPhysicsConductorGates.cpp) -- its 185-insn switch drags ~10
+        // VehicleManager mode/showtime methods that are not reconstructed yet.
+        void HandleGameActions( const BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue,
+                                PhysicsModuleIO::OutputBuffer* lpOutputBuffer );
+
+        // ---- ADDITIVE 2026-08-10 (create-path wave): the two PostSceneUpdate callees ----
+        // @0x825A70C0 (63 insns). The POST-SCENE game-action dispatch -- a second, smaller
+        // switch over the same queue than HandleGameActions above: ids 23/34/99 reach
+        // VehicleManager::OnPrepareGameMode / OnStartGameMode / OnJunkYardDriveThru, id 97
+        // reaches DeformationManager::ProcessResetDeformationModelEvent between two
+        // VerifyPartIndices sweeps, and the whole loop is preceded by
+        // DeformationManager::ProcessDebugResetDeformationModels. ⚠ FLAG: DECLARED for
+        // PostSceneUpdate's closure; body is a LOUD one-shot gate (BrnPhysicsConductorGates.cpp)
+        // -- every one of its four arms is itself unreconstructed.
+        void HandleGameActionsPostScene( const BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue,
+                                         CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
+                                         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface );
+
+        // ⛔⛔ @0x825AB408 (52 insns). THE SIM FIREWALL, AND IT IS DELIBERATELY INERT.
+        // This is the ONLY road from the vehicle manager's rigid-body request queues into the
+        // simulation input buffer -- four appends, in the console's order:
+        //     AppendRemoveRigidBodyQueue<50>(simIn, vehOut->...mRemoveBodiesQueue  /* +9616  */)
+        //     AppendAddRigidBodyQueue   <50>(simIn, vehOut->...mRequiredRigidBodiesQueue /* +0 */)
+        //     AppendAddJointQueue       <10>(simIn, vehOut->...  /* +39904 */)
+        //     AppendRemoveJointQueue    <10>(simIn, vehOut->...  /* +41840 */)
+        // (offsets cross-checked against BrnVehicleOutputInterface.h's own queue seats).
+        // VehicleManager::ProcessCreateEvents @0x82616770 posts its InAddRigidBody event into
+        // mRequiredRigidBodiesQueue, which lives in the "VehManager" stack IO buffer that
+        // PostSceneUpdate creates AND destroys in the same call. While this function stays a
+        // gate, that event is written and thrown away: NO RIGID BODY CAN REACH THE SIMULATION.
+        // ⛔ DO NOT LAND THIS UNTIL THE TRACTION-LINE CHAIN IS CLOSED -- see the ground-cost
+        // census in BrnPhysicsConductorGates.cpp. A body added before then falls forever.
+        void BridgeVehicleManagerToSimulation_PostScene( CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
+                                                         const Vehicle::VehicleManagerOutputBuffer* lpVehManagerOutputBuffer );
 
         // ===================================================================
         // DWARF member set (BrnPhysicsModule.h:189..241), in declaration order --

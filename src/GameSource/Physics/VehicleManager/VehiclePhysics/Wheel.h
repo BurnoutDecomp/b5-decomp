@@ -25,29 +25,23 @@
 #include "BrnCommonTypes.h"   // Vector3, Vector3Plus, Vector4, VecFloat, CollisionTag
 #include "types.hpp"          // f32, s8, u8, u16
 
+// Forward decl: the generated AttribSys base-attribs wrapper (full type in
+// GameSource/AttribSys/Generated/classes/physicsvehiclebaseattribs.h).
+namespace Attrib { namespace Gen { class physicsvehiclebaseattribs; } }
+
 namespace BrnPhysics
 {
 namespace Vehicle
 {
-    // ----- ADDITIVE GROW (C04 group): a MINIMAL OWNING SLICE of the per-car base attribs block
-    //       the attrib-driven Prepare{Front,Rear}Tire scatter through. The full
-    //       physicsvehiclebaseattribs (the DWARF arg type of PrepareFrontTire/PrepareRearTire) is
-    //       owned by the VehicleAttribs TU and has no committed header; the two attrib-driven
-    //       scatter routines only consume it as a source-of-scalars through a rodata permute
-    //       table, so it is carried opaquely here. When VehicleAttribs gets a real header this
-    //       slice should be REPLACED by an include of the committed type.
-    struct PhysicsVehicleBaseAttribs
-    {
-        // The block is read only as a source of packed scalars by the tire-scatter; its full field
-        // map belongs to the VehicleAttribs TU. FLAG (offsets NOT pinned): the X360 scatter does
-        // NOT lvx128 this block at +0x00/+0x10 -- it dereferences a sub-pointer (lwz +4) then reads
-        // SCALAR floats deep inside it (lfs +0xE0/+0xE4/+0xE8/+0xEC ...). These two registers are a
-        // MINIMAL OPAQUE placeholder so the inert scatter routines have a typed source argument;
-        // the lane offsets here are provisional, not console-pinned, and MUST be reconciled when the
-        // real physicsvehiclebaseattribs type lands. Inert today (the permute table is un-homed).
-        Vector4 mvTireScalarsLong;   // provisional placeholder lane (offset NOT pinned)
-        Vector4 mvTireScalarsLat;    // provisional placeholder lane (offset NOT pinned)
-    };
+    // ⭐ 2026-08-09 (attribs-setup wave): the `PhysicsVehicleBaseAttribs` MINIMAL OWNING SLICE
+    // that stood here is RETIRED, exactly per its own contract ("MUST be reconciled when the
+    // real physicsvehiclebaseattribs type lands") -- the real generated wrapper is committed at
+    // GameSource/AttribSys/Generated/classes/physicsvehiclebaseattribs.h. The tire scatters take
+    // it by const-ref (fwd-declared; the X360 reads the record via the wrapper's data pointer,
+    // `lwz +4`). ⭐ 2026-08-09 (attribs-data wave): the scatters are REAL -- the permute table
+    // 0x8327F140 is homed (static-init writer bank @0x82C74000) and all eight bodies are
+    // image-emulated; see the Wheel.cpp banner.
+    // Forward decl only -- the full generated header is pulled by the TUs that construct one.
 
     // Wheel: full layout. The RoadContact (and its accessor) are the pre-existing committed slice;
     // the rest is ADDITIVE GROW (C04 group), pinned BY NAME + SEQUENCE per the DWARF (stride 0xE0).
@@ -114,16 +108,16 @@ namespace Vehicle
         {
             // ----- C04 group: the eight tire-preset scatter routines (bodies in Wheel.cpp) -----
             // Each is a pure VMX permute-scatter that lays a handful of scalar inputs across the
-            // three curves + the packed register via the rodata permute table unk_8327F140. They
-            // differ only in their source numbers, not logic. The attrib-driven pair take the
-            // per-car base-attribs block; the Default/AI/DonutAI presets source un-homed .rdata
-            // tuning constants. FLAG (rodata): the permute table + preset constants are un-homed
-            // .rdata absent from the exports -> faithful-but-inert (the scatter shape is exact, the
-            // laid-out numbers stay 0). NEVER fabricated.
+            // three curves + the packed register via the lane-insert permute table @0x8327F140.
+            // They differ only in their source numbers, not logic. The attrib-driven pair take
+            // the per-car base-attribs record; the Default/AI/DonutAI presets lay out .rdata
+            // tuning constants. ⭐ 2026-08-09 (attribs-data wave): table homed + all eight bodies
+            // REAL (image-emulated, values exact -- see the Wheel.cpp banner). ⚠️ The DonutAI
+            // pair deliberately PRESERVES maPackedVariables.w (15 vperms, not 16).
             void PrepareDefaultFrontTire();
             void PrepareDefaultRearTire();
-            void PrepareFrontTire(const PhysicsVehicleBaseAttribs& lrAttribs);
-            void PrepareRearTire(const PhysicsVehicleBaseAttribs& lrAttribs);
+            void PrepareFrontTire(const Attrib::Gen::physicsvehiclebaseattribs& lrAttribs);
+            void PrepareRearTire(const Attrib::Gen::physicsvehiclebaseattribs& lrAttribs);
             void PrepareFrontTireForAI();
             void PrepareRearTireForAI();
             void PrepareFrontTireForDonutAI();
@@ -187,22 +181,39 @@ namespace Vehicle
                      f32 lfSuspensionTravelUp, f32 lfSuspensionTravelDown,
                      const TireAttribs* lpTireAttribs);
 
-        // @0x825D6D38: re-point the tire attribs + re-derive the suspension lanes WITHOUT clearing
-        // the running state (the in-place sibling of Prepare). Bodied in Wheel.cpp.
-        // ⚠️ FLAG (seat wave 2026-08-05): Prepare's lane scatter -- which this body's comments cite
-        // as its own authority -- was proven WRONG against the asm (see Prepare above). This body's
-        // scalar->lane assignment therefore inherits a disproven inference and MUST be re-verified
-        // against @0x825D6D38's own asm before anything consumes it. Not corrected here because no
-        // PC path calls it yet and its asm was not read this wave.
-        void SwitchAttribs(Vector3 lStreamedPosition, f32 lfMaxSuspensionHeight,
-                           f32 lfMinSuspensionHeight, f32 lfRadiusSeed, f32 lfTwistSeed,
+        // @0x825D6D38: re-point the tire attribs + re-derive the suspension lanes WITHOUT
+        // clearing the running state (the in-place sibling of Prepare). Bodied in Wheel.cpp.
+        // ⭐⭐ RE-VERIFIED against its own asm 2026-08-09 (attribs-setup wave), exactly as the
+        // old FLAG here demanded -- the old parameter roles WERE the disproven inference. The
+        // real scatter mirrors Prepare's proven map (f1 = radius -> mSlipVariables.w,
+        // f2 = integration seed -> mIntegrationVariables.w, f3/f4 = travel up/down ->
+        // mSuspensionAndInertiaVariables .y/.x), and v1 is a POSITION DELTA subtracted from
+        // the running +0x80/+0x90 registers, not an absolute position (the sole caller,
+        // SimpleVehiclePhysics::SwitchAttribs, passes (oldCOM - newCOM) + dHeight * yhat).
+        void SwitchAttribs(Vector3 lPositionDelta, f32 lfWheelRadius, f32 lfIntegrationSeed,
+                           f32 lfSuspensionTravelUp, f32 lfSuspensionTravelDown,
                            const TireAttribs* lpTireAttribs);
 
-        // @0x825D7008: clamp + integrate the wheel's own angular velocity for the frame (the long
-        // friction-cone-shaped wheelspin clamp UpdateWheels calls per wheel). Bodied in Wheel.cpp.
-        // FLAG (rodata): the several un-homed scratch globals (unk_82FB9CF0/8BC0/8B40/8327F240) the
-        // clamp masks read are absent from the exports -> faithful-but-inert.
-        void UpdateVelocity(VecFloat lvfMaxAngularVelocity, bool lbStraightLine, bool lbCrashing);
+        // @0x825D7008: integrate the accumulated wheel torque into the wheel's angular velocity,
+        // then resolve it against the brakes (the per-wheel spin/brake/lock-up step UpdateWheels
+        // runs per wheel). Bodied in Wheel.cpp.
+        //
+        // ⭐⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave). The previous 3-arg
+        // (maxAngVel, bool, bool) form was a SLICE ARTIFACT: the callee asm CONSUMES v1..v5
+        // (`vmulfp128 v31,v9,v1` dt; `vmulfp128 v7,v3,v4` brakeFactor*capacityScale;
+        // `vmulfp128 v5,v5,v3` decelScale*brakeFactor; the clamp vs v2), and the DWARF spells
+        // Wheel.h:332 `UpdateVelocity(VecFloat, VecFloat, VecFloat, VecFloat, VecFloat, bool,
+        // bool)`. UpdateWheels' register map names the lanes: v1 = dt, v2 = maxAngVel (engine
+        // rev limit, negative in reverse), v3 = the axle brake factor, v4 = unk_82FB9E10 ==
+        // 100.0 (the brake-capacity scale), v5 = unk_82FB9380 == 1000.0 (the brake-decel
+        // scale), r4 = (gas < 0.1), r5 = (reversing || gear 0).
+        // ⭐ The old FLAG called unk_82FB9CF0/8BC0/8B40/8327F240 "un-homed / absent from the
+        // exports": FALSE (another absence banner down). All four are static-init'd BSS with
+        // rdata-attested writers -- 9000.0 / 100.0 / 500.0 / the shared FALSE|TRUE vsel mask
+        // pair (see Wheel.cpp).
+        void UpdateVelocity(VecFloat lvfTimeStep, VecFloat lvfMaxAngularVelocity,
+                            VecFloat lvfBrakeFactor, VecFloat lvfBrakeCapacityScale,
+                            VecFloat lvfBrakeDecelScale, bool lbGasReleased, bool lbInReverse);
 
         // PRE-EXISTING accessor -- UNTOUCHED. Returns by const-ref (the committed RoadContact-only
         // consumers depend on this signature; the DWARF spells it by-value but that is not changed

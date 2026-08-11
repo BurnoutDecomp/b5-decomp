@@ -121,11 +121,14 @@ namespace Vehicle
                              const AxisAlignedBox& lrAABB, const StreamedDeformationSpec* lpDeformSpec,
                              const Vector3* lpWheelPositions, const f32* lpafWheelRadii);
 
-        // @0x82639590: the per-frame traffic update. PARTIAL (see file header). Bodied in
-        // TrafficPhysics.cpp.
-        virtual void Update(f32 lfTimeStep, f32 lfArg2, const Matrix44Affine* lpReferenceTransform,
-                            const BrnPlayerDriverControls* lpControls, bool lbArg5, bool lbArg6,
-                            bool lbArg7);
+        // @0x82639590: the per-frame traffic update. ⭐⭐ RECONCILED FULL 2026-08-09 (crash/shunt
+        // wave) -- the flagged stand-ins are gone; bodied in TrafficPhysics_Construct.cpp (457
+        // insns read line by line). Param roles are the pass-through map into
+        // VehiclePhysics::UpdateCrashing @0x82639C88 (r5/r7/r8/r9 forwarded verbatim); the f2
+        // slot is never read by the body.
+        virtual void Update(f32 lfTimeStep, f32 lfUnused, const Matrix44Affine* lpCameraMatrix,
+                            const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
+                            bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed);
 
         // @0x825B8948 (DWARF TrafficPhysics.cpp:360), 18 instructions -- enter the freak-out FSM.
         // Bodied in TrafficPhysics_Construct.cpp (it is Update's only same-class callee, so it has

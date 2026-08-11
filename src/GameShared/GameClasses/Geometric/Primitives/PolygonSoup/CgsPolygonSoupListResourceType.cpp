@@ -10,25 +10,13 @@
 // FixUp forwards to CgsGeometric::PolygonSoupList::FixUp (own TU), passing the list
 // (the resource) and the relocation delta (the rw::Resource's load base).
 
-namespace CgsGeometric
-{
-    // SEAM (platform-4 widened blob): the converted x64 data carries the widened
-    // PolygonSoupList header (0x38 bytes) matching the type's primary committed FixUp
-    // consumer, CgsPolygonSoupList.cpp -- pointers widen to u64 so the total-size field
-    // moves from the X360 +0x2C (the descriptor asm reads *(resource + 44)) to +0x34.
-    // Mirrored member-for-member from CgsPolygonSoupList.cpp; only miDataSize is
-    // touched by the descriptor body.
-    struct PolygonSoupList
-    {
-        float     mOverallAabb[8];  // +0x00 AxisAlignedBox
-        uintptr_t mpapPolySoups;    // +0x20 (X360 +0x20, u32) PolygonSoup** table base
-        uintptr_t mpaPolySoupBoxes; // +0x28 (X360 +0x24, u32) AxisAlignedBox4*
-        s32       miNumPolySoups;   // +0x30 (X360 +0x28)
-        s32       miDataSize;       // +0x34 (X360 +0x2C) total serialised byte size
-
-        PolygonSoupList* FixUp(int delta);
-    };
-}
+// SEAM (platform-4 widened blob): the converted x64 data carries the widened
+// PolygonSoupList header (0x38 bytes); pointers widen to u64 so the total-size field
+// moves from the X360 +0x2C (the descriptor asm reads *(resource + 44)) to +0x34.
+// ⭐ FORK RETIRED 2026-08-10 (spatial-partition wave): the mirrored copy of the struct
+// that used to sit here is gone; the single home CgsPolygonSoupList.h (included below)
+// carries it, with the porter evidence for the widening quoted in full. No layout change.
+#include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupList.h"
 
 namespace CgsResource
 {

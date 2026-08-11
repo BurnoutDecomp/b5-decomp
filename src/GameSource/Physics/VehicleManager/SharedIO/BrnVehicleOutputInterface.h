@@ -64,6 +64,13 @@ namespace Vehicle
         typedef CgsModule::EventQueue<ImpactEvent, 16>          ImpactEventQueue;           // BrnVehicleEvents.h:575
         typedef CgsModule::EventQueue<PhysicalTrafficState, 20> PhysicalTrafficStateQueue;  // BrnVehicleEvents.h:574
 
+        // ⭐ ADDED 2026-08-10 (create-path wave). DWARF BrnVehicleOutputInterface.h:312.
+        // X360-ATTESTED as the INLINED body of PhysicsModuleIO::OutputBuffer::Construct
+        // @0x825ABB10 over its +44128 seat -- see the .cpp for the instruction-by-instruction
+        // decode. Constructs the two event queues and the game-event queue, then zeroes the
+        // used-cars bitset and the aggressive-driving flags.
+        void Construct();
+
         // @0x825EC390 (declaration-only in this ledger; see BrnPhysicsVehicle_FlaggedUnhomed.cpp /
         // the .cpp FLAG): a deep VMX128 per-wheel projection routine reaching SimpleVehiclePhysics
         // internals not homed in a committed header, so it is intentionally NOT bodied here.
@@ -203,6 +210,12 @@ namespace Vehicle
         typedef CgsModule::EventQueue<u16, 32>                 TrafficTypeRequestQueue;       // BrnTrafficTypeInterface.h:50
         typedef CgsModule::EventQueue<TrafficRemovedEvent, 25> RemovedTrafficEventQueue;      // :60
 
+        // ⭐ ADDED 2026-08-10 (create-path wave). DWARF BrnVehicleOutputInterface.h:86, and an
+        // OUT-OF-LINE X360 symbol at 0x822E6790 (25 instructions) -- not an inline, so the body
+        // in the .cpp is a direct transcription rather than an inference. Called by
+        // PhysicsModuleIO::OutputBuffer::Construct @0x825ABB10 over its +41952 seat.
+        void Construct();
+
         // @0x825C0658: queue a "physical-traffic vehicle crashed" event and return its slot index.
         s32 AddCrashedTrafficEvent(VolumeInstanceId lVolumeInstanceID, EntityId lCrasherEntityID);
 
@@ -295,6 +308,24 @@ namespace Vehicle
         typedef CgsModule::EventQueue<InAddJoint, 10>                                                 AddArticulatedJointQueue;      // BrnVehicleQueues.h:39
         typedef CgsModule::EventQueue<InRemoveJoint, 10>                                              RemoveArticulatedJointQueue;   // BrnVehicleQueues.h:41
 
+        // ⭐ ADDED 2026-08-09 (conductor wave) -- DWARF :204 / :201, both now X360-ATTESTED
+        // by PhysicsModule::Update @0x825B0640, which inlines BOTH bodies:
+        //   * Construct: CreateIOBuffer<VehicleManagerOutputBuffer> @0x8259DAF0 constructs
+        //     the buffer's embedded interface (PS3 keeps VehicleManagerOutputBuffer::
+        //     Construct out of line, which lands here).
+        //   * Append: Update's tail drains the vehicle-manager request buffer into the
+        //     module output buffer's request interface with exactly five queue appends
+        //     (0x825B2480..0x825B24C0): InAddRigidBody<50>::Append @0x825A3898 (+0),
+        //     InRemoveRigidBody<50>::Append @0x825A3988 (+9616), VariableEventQueue
+        //     <13440,16>::Append<13440,16> @0x825AC068 (+10432), InAddJoint<10>::Append
+        //     @0x825A3A68 (+39904), InRemoveJoint<10>::Append @0x825A3B58 (+41840).
+        //     ⚠️ mChangeRigidBodyInertiaQueue (+23888) is NOT appended here -- that queue
+        //     is drained separately by BridgeVehicleManagerToSimulation_PostPhysics
+        //     @0x825ADF60 into the SIM input buffer. Reproduced as-is.
+        // Bodied in BrnVehicleOutputInterface.cpp.
+        void Construct();
+        void Append(const VehicleOutputRequestInterface* lpSource);
+
         // @0x825E7170 (DWARF :236). Validate the event's three handles, then queue it.
         // Bodied in BrnVehicleOutputInterface.cpp -- out of line, exactly as the console emits it.
         void AddJoint(const InAddJoint& lAddJointEvent);
@@ -319,6 +350,14 @@ namespace Vehicle
         // header-inline on the console (no out-of-line emissions); header-inline here.
         const AddArticulatedJointQueue*    GetAddJointQueue()    const { return &mAddJointQueue; }
         const RemoveArticulatedJointQueue* GetRemoveJointQueue() const { return &mRemoveJointQueue; }
+
+        // ⭐ ADDED 2026-08-09 (conductor wave): three more of the DWARF's five Get*Queue
+        // accessors, now X360-ATTESTED by BridgeVehicleManagerToSimulation_PostPhysics
+        // @0x825ADF60, which reads exactly these three seats (+9616 / +0 / +23888) off the
+        // request interface and feeds them to the sim Append*Queue drains.
+        InRemoveRigidBodyQueue*        GetRemoveRigidBodyQueue()        { return &mRemoveRigidBodyQueue; }
+        InAddRigidBodyQueue*           GetRequiredRigidBodiesQueue()    { return &mRequiredRigidBodiesQueue; }
+        InChangeRigidBodyInertiaQueue* GetChangeRigidBodyInertiaQueue() { return &mChangeRigidBodyInertiaQueue; }
 
         // Never called; bodied in BrnVehicleOutputInterface.cpp (a MOUNTED TU) and nothing but
         // static_asserts. Static so it can see the private queue block through offsetof.

@@ -8,7 +8,9 @@
 // it (and its methods Reset/SetFrom/SetValidResult) is a separate future TU. Those methods
 // are declared-only here so that TU can define them later without an ODR clash.
 #include "BrnCommonTypes.h"   // Vector3, Vector3Plus, Matrix44Affine, CollisionTag, VecFloat
-#include "types.hpp"          // f32, u16
+#include "types.hpp"          // f32, u16, u64, s32
+
+#include <cstddef>            // offsetof (the SimpleVehicleAttribs interior gate)
 #include "GameSource/Physics/PhysicsUtilities/ExternalPhysicsBody.h"   // BrnPhysics::ExternalPhysicsBody (base)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"    // BrnPhysics::Vehicle::Wheel (full 0xE0 layout)
 
@@ -17,8 +19,21 @@ namespace BrnPhysics
 namespace Vehicle
 {
     // Forward decl: the per-car tuning block (full type owned by the VehicleAttribs TU).
-    class VehicleAttribs;
+    // ⚠️ struct, not class -- the committed home (VehicleAttribs.h:83) spells `struct`, and MSVC
+    // bakes the class-key into the mangling (?AU vs ?AV): a `class` forward-decl here made
+    // SimpleVehicleAttribs::SetupAttribs(const VehicleAttribs*) mangle to a symbol no TU defines.
+    struct VehicleAttribs;
+}
+}
 
+// Forward decl: the generated AttribSys handling wrapper (full type in
+// GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h).
+namespace Attrib { namespace Gen { class physicsvehiclehandling; } }
+
+namespace BrnPhysics
+{
+namespace Vehicle
+{
     // DWARF BrnSimpleVehiclePhysics.h:52 -- the driven-wheel index enum used across the vehicle
     // physics. Reproduced here for the shared vocabulary (the bodies index maWheels by it).
     enum EVehicleDrivenWheel
@@ -45,23 +60,62 @@ namespace Vehicle
     };
 
     // SimpleVehicleAttribs -- the per-car physics attribute block (DecFIGS DWARF
-    // VehicleAttribs.h:1831). MINIMAL OWNING SLICE (flagged): the full type carries masses,
-    // wheel positions and tyre attribs and is owned by the VehicleAttribs TU. This group only
-    // reads ->IsValid() and ->mCOMOffset, so only those are reconstructed here. The future
-    // VehicleAttribs TU MUST GROW this home ADDITIVELY (add the remaining members in their
-    // DWARF sequence) rather than redefine it -- do NOT fork. mCOMOffset / mbIsValid /
-    // IsValid() match the DWARF (:1861/:1869/:1879). IsValid() body is the trivial getter.
+    // VehicleAttribs.h:1831). ⭐ GROWN TO THE FULL 240-BYTE TYPE (attribs-setup wave,
+    // 2026-08-09) from the 20-byte {mCOMOffset, mbIsValid} slice, additively per the slice's
+    // own contract: every member below is the DWARF's, in DWARF sequence. The console offsets
+    // in the right column CLOSE EXACTLY at 0xF0 == 240 == the 0x690-0x5A0 gap the layout gate
+    // already pinned, and mCOMOffset lands at +0xD0 => SimpleVehiclePhysics+0x670, matching the
+    // long-committed "mSimpleAttribs.mCOMOffset @+1648" witness independently.
+    //
+    // HOST == CONSOLE WIDTH: no pointer, no vptr; TireAttribs is 0x40 on both (static_assert in
+    // VehicleAttribs.h); Attribute::Key is 8 bytes, spelled u64 per the VehicleAttribs.h
+    // precedent (this tree's AttribSys header typedefs Attribute::Key to u32; the console
+    // record is plainly 64-bit -- SimpleVehicleAttribs::SetupAttribs @0x825BE0C8 copies it
+    // with one ld/std pair).
     struct SimpleVehicleAttribs
     {
-        Vector3 mCOMOffset;   // :1861
-        bool    mbIsValid;    // :1869
-        bool    IsValid() const { return mbIsValid; }   // :1879
+        Vector4 mvUpwardMovement_DownwardMovement_Mass_TractionLineLength;                 // :1282 @0x00
+        Vector4 mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset; // :1283 @0x10
+        Wheel::TireAttribs mFrontTireAttribs;   // :1287 @0x20
+        Wheel::TireAttribs mRearTireAttribs;    // :1288 @0x60
+        u64     mAttribsKey;                    // :1289 @0xA0 (Attribute::Key, 8 bytes; see above)
+        Vector3 mFrontRightWheelPos;            // :1290 @0xB0
+        Vector3 mRearRightWheelPos;             // :1291 @0xC0
+        Vector3 mCOMOffset;                     // :1292 @0xD0
+        s32     miRaceCarID;                    // :1301 @0xE0
+        bool    mbIsValid;                      // :1304 @0xE4  -> 16-rounds to 0xF0 == 240
 
-        // Owned by the SimpleVehicleAttribs TU -- declared only (no body here) so SimpleVehiclePhysics
-        // ::Construct can call it BY NAME without an ODR clash. (DWARF: SimpleVehicleAttribs::Construct
-        // zeroes the attribs block + sets mbIsValid false.)
+        bool IsValid() const { return mbIsValid; }   // :1879
+
+        // @0x825E6580 (125 insns) -- the default-attribs initialiser (car geometry defaults,
+        // zeroed tires, mbIsValid = false). Bodied in VehicleAttribs.cpp (the DWARF home file
+        // for this type).
         void Construct();
+
+        // @0x825BE0C8 (81 insns) -- stream the simple set out of a full VehicleAttribs (the
+        // masses/heights/wheel positions/COM/tires/key; sets mbIsValid = true; miRaceCarID is
+        // NOT copied). Bodied in VehicleAttribs.cpp.
+        void SetupAttribs(const VehicleAttribs* lpSource);
+
+        // @0x825E6778 (104 insns) -- stream the simple set out of a loaded AttribSys handling
+        // record (the physicsvehiclebaseattribs + physicsvehiclesuspensionattribs sub-records).
+        // Bodied in VehicleAttribs.cpp. ⚠️ The DWARF/PS3 signature takes the wrapper BY VALUE
+        // (the console call site runs the checked copy-ctor @0x825BDB88 then passes the copy,
+        // and the callee destroys it); spelled const-ref here with the explicit copy transcribed
+        // at each call site -- identical semantics without dragging the generated header into
+        // this one.
+        void SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrHandling);
     };
+
+    // The grown type is pointer-free and width-identical host vs console, so its interior IS
+    // gated with offsetof/sizeof (unlike the owning classes around it).
+    static_assert(sizeof(SimpleVehicleAttribs) == 240, "SimpleVehicleAttribs must be 240 bytes");
+    static_assert(offsetof(SimpleVehicleAttribs, mFrontTireAttribs) == 0x20,
+                  "mFrontTireAttribs @0x20");
+    static_assert(offsetof(SimpleVehicleAttribs, mAttribsKey) == 0xA0, "mAttribsKey @0xA0");
+    static_assert(offsetof(SimpleVehicleAttribs, mCOMOffset) == 0xD0,
+                  "mCOMOffset @0xD0 (SimpleVehiclePhysics +0x670 == the +1648 witness)");
+    static_assert(offsetof(SimpleVehicleAttribs, mbIsValid) == 0xE4, "mbIsValid @0xE4");
 
     // BrnPhysics::Vehicle::SimpleVehiclePhysics -- the lightweight ("simple") vehicle physics
     // body used for traffic/secondary cars. Derives from ExternalPhysicsBody (which derives
@@ -144,6 +198,26 @@ namespace Vehicle
         void SetAboveGroundTestResult(Vector3 lvPosition, Vector3 lvNormal,
                                       u16 lu16TagHi, u16 lu16TagLo);
 
+        // ⭐⭐ @0x825D85C0 (174 insns) -- BODIED 2026-08-11 (lifetime wave). THE SUSPENSION PROBE:
+        // one wheel's downward traction line, in world space. This is the last piece of the
+        // ground chain's GENERATION half -- VehicleManager::AddRaceCarTractionLineTests calls it
+        // once per wheel and drops the two points straight into the stream command's
+        // maLineStart[w] / maLineEnd[w].
+        //
+        // ⚠️ THE X360 EXPORT SET HAS NO JSON FOR IT (a true directory hole, re-verified this wave
+        // by a name index over all 30,084). Recovered TWO independent ways that agree:
+        //   1. the image bytes at 0x825D85C0..0x825D8874, decoded with a VMX128 decoder fitted
+        //      and self-tested against an EXPORTED twin (VehicleManager::UpdateTriangleCache
+        //      @0x82615C38, whose IDA export carries full VMX128 mnemonics);
+        //   2. the PS3 export @0x6E894C, which is what gives the CONST-ness, the three parameter
+        //      names and the argument types:
+        //      _ZNK..SimpleVehiclePhysics15GetTractionLineENS0_19EVehicleDrivenWheelE
+        //          RN2rw4math3vpu7Vector3ES7_
+        //      Its member offsets match the X360 body exactly (maWheels +0x130 stride 0xE0,
+        //      mTransform +0x10, mSimpleAttribs +0x5A0, its IsValid byte at +0xE4 within it).
+        void GetTractionLine(EVehicleDrivenWheel leWheel,
+                             Vector3& lOutSusLineStart, Vector3& lOutSusLineEnd) const;
+
         // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). DWARF BrnSimpleVehiclePhysics.h:193.
         // Per-frame reset of the wheel/road latch set + the car-level above-ground result. The
         // X360 inlines it whole into VehicleManager::UpdateVehiclePhysics' live-car loop
@@ -172,13 +246,40 @@ namespace Vehicle
                      Vector3 lHandlingBodyOffset, Vector3 lHalfExtent, const AxisAlignedBox& lrAABB,
                      VehicleAttribs* lpAttribs, const Vector3* lpWheelPositions,
                      const f32* lpafWheelRadii);
+
+        // ⭐ OUT of the BLOCKED list 2026-08-09 (attribs-setup wave): BODIED in
+        // BrnSimpleVehiclePhysics.cpp from @0x82601978 (458 insns) -- the blocker (the 20-byte
+        // SimpleVehicleAttribs slice) fell with the full 240-byte type above.
         void SwitchAttribs(VehicleAttribs* lpAttribs);
+
+        // The three DWARF overloads (BrnSimpleVehiclePhysics.h:163/:166/:170; the PS3 export set
+        // carries all three mangled names -- 7355CC/734B10/734274). ALL return bool.
+        //   0-arg @0x82620498 (142): refresh mSimpleAttribs from the AttribSys handling record
+        //     keyed by mSimpleAttribs.mAttribsKey, then chain to the 2-arg. ⭐ BODIED 2026-08-09
+        //     (was the unnamed sub_82620498 -- recovered by caller set + the
+        //     "mSimpleAttribs.IsValid()" assert's __FILE__/__LINE__).
+        //   2-arg @0x826020A0 (503): the shared tail -- mass/inertia from mSimpleAttribs +
+        //     per-wheel Wheel::Prepare. ⭐ BODIED 2026-08-09.
+        //   3-arg: declared for the class surface (the PS3 attests it); no X360 body recovered
+        //     to it yet.
+        bool SetAttributes();
+        bool SetAttributes(const Vector3* lpaWheelPositions, const f32* lpafWheelRadii);
         bool SetAttributes(VehicleAttribs* lpAttribs, const Vector3* lpWheelPositions,
                            const f32* lpafWheelRadii);
+
+        // ⭐ OUT of the BLOCKED list 2026-08-07 (orchestrator wave): BODIED in
+        // BrnSimpleVehiclePhysics.cpp from @0x825D9608 -- the "cannot be reproduced BY NAME"
+        // claim was unverified and false (every lane it touches was already a named member).
         void AddTractionPoint(EVehicleDrivenWheel leWheel, Vector3 lvPosition, Vector3 lvNormal,
                               u32 lu32CollisionTag);
         Matrix44Affine GetWheelsWorldTransfrom(EVehicleDrivenWheel leWheel, bool lbApplySteer) const;
         void GetSimpleVehicleBox(/* Box& */ void* lpOutBox) const;
+
+        // ⭐ OUT of the BLOCKED list 2026-08-07 (wheel-cluster wave): BODIED in
+        // BrnSimpleVehiclePhysics.cpp from @0x82602CB8 -- the min-height plane fit over the four
+        // wheels' line-test contacts, publishing mWheelPlanePosAndHeight / mbMinWheelDistValid /
+        // mbAnyWheelsDetatched. Every lane it touches was already a named member; the exported
+        // PSEUDOCODE (not the asm) was the only degenerate thing about it.
         void CalculateNewWheelPlane();
         virtual void SetCrashing();
 
@@ -210,12 +311,12 @@ namespace Vehicle
         //     +0x120 mTotalAngularImpulse                                    -> ends 0x130
         //
         // ⚠️ HOST DIVERGENCE, stated once. The leaf vptr widens 4 -> 8 on x64 but the base is
-        // 16-aligned either way, so the base chain does NOT drift. The sub-types embedded below,
-        // however, are MINIMAL OWNING SLICES in this tree (SweptSphere is an opaque 0x20 --
-        // correct, see the closure note on it -- but SimpleVehicleAttribs is 20 bytes here against
-        // the console's 240, and Wheel/AxisAlignedBox are their own reconstructions). So the
+        // 16-aligned either way, so the base chain does NOT drift. Some sub-types embedded below
+        // are MINIMAL OWNING SLICES in this tree (SweptSphere is an opaque 0x20 -- correct, see
+        // the closure note on it -- and Wheel/AxisAlignedBox are their own reconstructions;
+        // ⭐ SimpleVehicleAttribs is the FULL width-identical 240 as of 2026-08-09). So the
         // absolute console offsets below are NOT reproducible as host offsetofs and are NOT
-        // static_asserted. What IS gated (BrnSimpleVehiclePhysics_layout_check.cpp) is the DWARF
+        // static_asserted. What IS gated (VehiclePhysics_layout_check.cpp) is the DWARF
         // ORDER and every pointer-free RELATIVE run.
         //
         //   X360   member                       first-hand evidence
@@ -268,6 +369,13 @@ namespace Vehicle
         bool         mbCrashedThisFrame;              // :371  @0x713
         bool         mbMinWheelDistValid;             // :372  @0x714 (gates IsContactBelowWheelPlane)
         bool         mbAnyWheelsDetatched;            // :373  @0x715
+
+    public:
+        // DWARF :283. ⭐ ADDED 2026-08-09 (conductor wave): X360-attested by
+        // PhysicsModule::Update @0x825B0640's slow-motion block, which inlines the read
+        // (`lbz 0x713(car)`) against the car GetRaceCarPhysics resolved. Placed after the
+        // member run so the access-specifier does not split the layout block.
+        bool HasCrashedThisFrame() const { return mbCrashedThisFrame; }
     };
 
     // ⭐ The console sizes this block closes on, exported so the layout gate and the VehiclePhysics

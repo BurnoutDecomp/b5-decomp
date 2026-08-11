@@ -97,6 +97,33 @@ namespace Vehicle
         }
     }
 
+    // @0x823DB640  VehicleDriverInputInterface::Append
+    //
+    // ⭐ RECONSTRUCTED 2026-08-09 (feed wave) -- the callee of
+    // WorldModule::BridgeInputToPhysicsModule @0x827AB830, which had no body anywhere in the
+    // tree. Three steps, verbatim from the 31-instruction X360 body:
+    //   1. merge the source's update-driver queue into ours (`bl VariableEventQueue<5040,16>::
+    //      Append`, both sides at +0 -- the queue is the interface's leading member);
+    //   2. assert that at most ONE side carries a target-assist list (the console fires only
+    //      when BOTH counts are non-zero -- `lwz r11,0x1460(r31)` / `lwz r11,0x1460(r30)`,
+    //      X360 BrnVehicleDriverInputInterface.h:164, string @0x82039118);
+    //   3. when OUR count is zero, adopt the source's list wholesale by calling ITS
+    //      GetTargetAssistParams into our own arrays + count (`r3=other, r4=this+0x13C0,
+    //      r5=this+0x1440, r6=this+0x1460`). No copy at all when we already hold one.
+    void VehicleDriverInputInterface::Append(const VehicleDriverInputInterface* lpInterfaceToAppend)
+    {
+        mDriverUpdateQueue.Append(*lpInterfaceToAppend->GetUpdateDriverQueue());
+
+        CGS_ASSERT(miTargetAssistCount == 0 || lpInterfaceToAppend->GetTargetAssistCount() == 0,
+                   "miTargetAssistCount==0 || lpInterfaceToAppend->GetTargetAssistCount()==0");
+
+        if (miTargetAssistCount == 0)
+        {
+            lpInterfaceToAppend->GetTargetAssistParams(mTargetAssistPositions, mTargetAssistIDs,
+                                                       &miTargetAssistCount);
+        }
+    }
+
     // @0x8279C290  VehicleDriverInputInterface::CopyBaseDeformationParams
     //
     // Copies the per-active-race-car base-deformation snapshot (amount + frame arrays) from

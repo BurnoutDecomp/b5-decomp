@@ -37,10 +37,29 @@ namespace CgsCollision
     // (li rN,<id> ; stb rN,0xFF(r3))
     enum E_CollisionJobType
     {
+        // ⭐ 2026-08-10 (fill-worker wave 2): the three PolygonSoupTester ids, read off the
+        // switch in PolygonSoupTesterJob::Execute @0x82915930 (case 2/3/4 dispatching to
+        // ExecuteFillTriangleCache / ExecuteFillTriangleCacheStream / ExecuteLineTest) and,
+        // for 3, corroborated by the writer: RunFillTriangleCacheStream @0x82810DD0
+        // `li r21, 3 ; stb r21, 0x4CF(batch)`.
+        E_COLLISIONJOB_FILL_TRIANGLE_CACHE                = 2,   // -> ExecuteFillTriangleCache
+        E_COLLISIONJOB_FILL_TRIANGLE_CACHE_STREAM         = 3,   // -> ExecuteFillTriangleCacheStream
+        E_COLLISIONJOB_LINE_WITH_POLYSOUP_STREAM          = 4,   // -> ExecuteLineTest
+
         E_COLLISIONJOB_SPHERE_LIST_WITH_TRIANGLE_LIST     = 5,   // @0x82810100
         E_COLLISIONJOB_SPHERE_LIST_WITH_SPHERE_LIST       = 7,   // @0x82810198
         E_COLLISIONJOB_PRIMITIVE_PAIR_LIST                = 10,  // @0x82810478
         E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST  = 11,  // @0x82810278
+
+        // ⭐ 2026-08-11 (traction-line wave). 16 is written by the dispatcher
+        // (BaseCollisionGenerator::RunLineWithTriangleListStream @0x82810F0C `li r21, 16` ->
+        // `stb r21, 0x4CF(batch)`) and read straight back by ContactGeneratorJob::Execute
+        // @0x82926818 (`lbz r11, 0xFF(r4)`; `addi r11, r11, -5`; 12-way `bctr`, index 11).
+        // ⚠️ NAME MISMATCH CARRIED FROM THE CONSOLE: the PS3 DWARF enum member is spelled
+        // `E_COLLISION_TYPE_LINE_TRIANGLE_LIST` -- it DROPS "STREAM" -- while the descriptor
+        // class and the worker both keep it. The class name wins here; the console's own
+        // spelling is recorded in this comment so a future name-join can find either.
+        E_COLLISIONJOB_LINE_WITH_TRIANGLE_LIST_STREAM     = 16,  // @0x82810E80 -> the traction line
     };
 
     struct CollisionJobDescription
@@ -53,6 +72,12 @@ namespace CgsCollision
         // X360 0x82916EB0: `lwz r3, 0xF0(r3)` — return the job's results list.
         // Called by PolygonSoupTesterJob::ExecuteFillTriangleCache.
         CollisionResultList* GetResultsList() const { return mpResultsList; }
+
+        // GetType @0x82916E98 (6): `lbz r11, 0xFF(r11)` — the job-type id the tester's
+        // Execute switches on. ⭐ ADDED 2026-08-10 (fill-worker wave 2): this is the
+        // accessor PolygonSoupTesterJob::Execute calls, and it is what makes the
+        // descriptor slot's identity readable back out of the batch.
+        u8 GetType() const { return muJobType; }
     };
 }
 }

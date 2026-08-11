@@ -315,11 +315,16 @@ public:
     // WorldModule::UpdateForBootUpVideo @0x827CFDE0 calls both cross-class).
     void ProcessValidationRequests( const WorldEntityIO::RequestInterface* lpRequestInterface ); // @0x822A85E0
     void UpdateCollisionValidation( WorldEntityIO::OutputBuffer_PostPhysics* lpOutputBuffer );   // @0x82307FC0
-private:
+    // PUBLIC per the DecFIGS DWARF: BrnWorldEntityModule.h:277 sits in the same `public:`
+    // block as Construct/Prepare/Release/Destruct. It has to be -- WorldModule::
+    // PrepareWorldCollision @0x827C9478 calls it cross-class. (It was committed `private:`
+    // when no caller existed; corrected 2026-08-10 against the DWARF, not by relaxing it
+    // until the compiler stopped complaining.)
     bool PrepareWorldCollision(                                          // @0x823068F8
         WorldEntityIO::ResourceRequestInterface* lpRequestInterface,
         WorldEntityIO::SceneInputInterface* lpSceneInterface,
         bool lbLoadBundle = true );
+private:
     bool PrepareZoneCollision(                                           // @0x82302C38
         WorldEntityIO::ResourceRequestInterface* lpRequestInterface,
         WorldEntityIO::SceneInputInterface* lpSceneInterface );

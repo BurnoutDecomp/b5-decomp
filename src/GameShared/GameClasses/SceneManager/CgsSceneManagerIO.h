@@ -44,6 +44,25 @@ namespace SceneManagerIO
         // @ 0x825BD8C0 -- write-lock tripwire, then the in-scene-update aggregate.
         InSceneUpdateInterface* GetInSceneUpdateInterface();   // +16, write
 
+        // @ 0x828AF1C8 -- the CONST overload, and it is a DIFFERENT FUNCTION with a
+        // DIFFERENT tripwire. Added 2026-08-10 (spatial-partition wave) after the
+        // write-locked one above cost a whole verification run.
+        //
+        // The two are a matched pair in the console and differ in exactly the bit they
+        // test and the message they fire:
+        //   0x828AF1C8  `((*a1 >> 4) & 1) == 0` -> "Not locked for reading\n"
+        //               CgsSceneManagerModuleIO.h:462     <- CONST, read lock  (bit 4)
+        //   0x825BD8C0  `((*a1 >> 3) & 1) == 0` -> "Not locked for writing\n"
+        //               CgsSceneManagerModuleIO.h:463     <- non-const, write lock (bit 3)
+        // Both `return a1 + 16`.
+        //
+        // ⭐ WHICH ONE A CALLER WANTS IS DECIDED BY ITS LOCK, NOT BY ITS CONSTNESS OF
+        // INTENT: SceneManagerModule::StartUpdateTriangleCache @0x828C73D8 takes a READ
+        // lock and therefore calls 0x828AF1C8, while UpdateScene takes a WRITE lock and
+        // calls 0x825BD8C0. Calling the write one under a read lock fires 927 asserts and
+        // wedges the boot in FLYBY -- measured, not hypothesised.
+        const InSceneUpdateInterface* GetInSceneUpdateInterface() const;   // +16, read
+
         // DWARF CgsSceneManagerModuleIO.h:164/:462/:463 -- the nested alias and the plain
         // (unlocked) accessor pair for the same embedded member.
         // ⚠️ MOVED HERE 2026-08-03 (task #123) FROM A DUPLICATE DEFINITION OF THIS WHOLE STRUCT.

@@ -46,16 +46,36 @@ namespace WorldEntityIO
         return &mResourceRequestInterface;
     }
 
-    // The scene-input aggregate accessor (ATTESTED by WorldModule::Prepare @0x827D53B0:
-    // the WORLDENTITY fail path reads the staged scene requests through it under the
-    // scene-input/world-entity LockBuffersForIO bracket, i.e. with THIS buffer
-    // READ-locked -- so the guard is the read-lock tripwire, mirroring the const
-    // request-interface accessor above). Returns &mSceneInputInterface.
+    // X360 0x827BBC50: write-lock; return this + 0x1020. DWARF BrnWorldEntityModuleIO.h:76.
+    // ⭐ DE-FUDGED 2026-08-10. This accessor used to be a SINGLE overload guarded
+    // `IsBufferLockedForReading() || IsBufferLockedForWriting()`, on the reasoning that the
+    // one attested call site (WorldModule::Prepare's stage-8 fail path) reads under a read
+    // lock. The const twin was inferred to exist and then merged away. It DOES exist, and
+    // 0x827BBC50 is the non-const one: IDA has no export record for it at all (an export
+    // hole -- cf. the standing "missing-from-JSON != nonexistent" rule), so it was lifted
+    // straight out of the image after proving the decoder 41/41 against its exported
+    // neighbour. `rlwinm r11,r11,29,31,31` == bit 3 == IsBufferLockedForWriting(), the
+    // string pointer is exactly 24 bytes below the "reading" one
+    // (len("Not locked for writing\n")+1), and it fires against :76.
+    // This is the THIRD time this const/non-const accessor family has been met here; the
+    // previous wave's 927-assert regression was calling the wrong twin of the scene-manager
+    // pair. Both overloads are now real, with the console's own per-overload tripwire.
     SceneInputInterface*
     OutputBuffer_Prepare::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForReading() || IsBufferLockedForWriting(),
-                   "Not locked");
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mSceneInputInterface;
+    }
+
+    // X360 0x827BBBA8: read-lock; return this + 0x1020. DWARF BrnWorldEntityModuleIO.h:75 --
+    // the const overload (`rlwinm r11,r11,28,31,31` == bit 4 == IsBufferLockedForReading(),
+    // "Not locked for reading"). Called by WorldModule::PrepareWorldCollision @0x827C9478
+    // under the scene-input/world-entity LockBuffersForIO bracket, and by
+    // WorldModule::Prepare's stage-8 fail path.
+    const SceneInputInterface*
+    OutputBuffer_Prepare::GetSceneInputInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return &mSceneInputInterface;
     }
 }

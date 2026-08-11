@@ -367,6 +367,99 @@ bool SceneManagerModule::Prepare(SpatialPartitionConstructParams* lpConstructPar
 }
 
 // ===========================================================================
+// SceneManagerModule::StartUpdateTriangleCache @ 0x828C73D8  (73 insns)
+//
+// The frame's whole triangle-collision front end, in the console's order. Landed
+// 2026-08-10 (spatial-partition wave) -- it was a WorldLinkStubs gate purely
+// because ONE of its seven callees did not exist: PolygonSoupListSpatialMap::
+// BuildSpacialPartition @0x82841740. Every other callee was already reconstructed.
+//
+// X360 body, statement for statement:
+//   assert(lpInputBufferStack  != NULL)                    CgsSceneManagerModule.cpp:573
+//   assert(lpOutputBufferStack != NULL)                    CgsSceneManagerModule.cpp:574
+//   *(this + 0x3A84D0) = lpCollisionGenerator      <- mpTriangleCacheCollisionGenerator,
+//                                                     the pointer EndUpdateTriangleCache
+//                                                     reads back later this frame
+//   IOBuffer::LockForRead(lpSceneInputBuffer)
+//   lrScene = lpSceneInputBuffer->GetInSceneUpdateInterface()      (sub_828AF1C8)
+//   mTriangleCacheManager.ProcessRemoveFromCacheEvents(lrScene)                 (+0)
+//   mTriangleCacheManager.ProcessAddToCacheEvents(lrScene.mAddToCacheQueue)     (+0xC4930)
+//   mTriangleCollisionManager.ProcessAddPolySoupListEvents(
+//                                       lrScene.mAddPolySoupListQueue)          (+0xC7C94)
+//   /* ProcessClearPolySoupListEvents, INLINED by the console: */
+//   if (*(lrScene + 0xC7DE8) > 0) { FreeAll(mgr+0x7C); Clear(mgr+0x0); mgr->+0x78 = 0; }
+//   mTriangleCacheManager.ProcessUpdateCachedPositionEvents(
+//                                       lrScene.mUpdateCachedPositionQueue)     (+0xC5290)
+//   mTriangleCacheManager.StartUpdateTriangleCaches(
+//                                       *(this + 0x3A84D0), &the collision scene)
+//   IOBuffer::UnlockForRead(lpSceneInputBuffer)
+//
+// ⭐ THE ORDER IS THE POINT and it is not incidental: the poly-soup registration
+// (and therefore the partition rebuild) runs BEFORE the cache fill in the same
+// call, so the very first frame that registers a soup list also gets a usable
+// spatial map handed to StartUpdateTriangleCaches. Reproduced exactly.
+//
+// ⚠️ +0xC7DE8 is mClearPolySoupListsQueue (+0xC7DE0) PLUS 8 -- the EventQueue's
+// length word, not the queue base. Expressed here as the queue's own GetLength()
+// via the real ProcessClearPolySoupListEvents (PS3 @0xC49108 proves the three
+// inlined statements are exactly that function).
+// ===========================================================================
+void SceneManagerModule::StartUpdateTriangleCache(CgsModule::IOBufferStack* lpInputBufferStack,
+                                                  CgsModule::IOBufferStack* lpOutputBufferStack,
+                                                  SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+                                                  BaseCollisionGenerator* lpCollisionGenerator)
+{
+    CGS_ASSERT(lpInputBufferStack != NULL,  "lpInputBufferStack != NULL");
+    CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");
+
+    // Latch the frame's generator for the End half. The X360 stores it BEFORE the
+    // lock, and unconditionally -- including when it is null.
+    mpTriangleCacheCollisionGenerator = lpCollisionGenerator;
+
+    if (lpSceneInputBuffer == NULL)
+    {
+        // PC GUARD (not console): the console never reaches here with a null buffer
+        // because WorldModule::Update always supplies one. Bail rather than fault if
+        // an earlier stage was skipped.
+        return;
+    }
+
+    lpSceneInputBuffer->LockForRead();
+
+    // ⚠️ THE **CONST** OVERLOAD (X360 0x828AF1C8), and the const is load-bearing: its twin
+    // 0x825BD8C0 tests the WRITE bit and fires "Not locked for writing". Reaching it through a
+    // const reference is what selects the read-lock accessor the console actually calls here.
+    // Getting this wrong cost a full verification run: 927 asserts, boot wedged in FLYBY.
+    const SceneManagerIO::InputBuffer_Update* lpcSceneInputBuffer = lpSceneInputBuffer;
+    const SceneManagerIO::InSceneUpdateInterface* lpScene =
+        lpcSceneInputBuffer->GetInSceneUpdateInterface();
+
+    if (lpScene != NULL)
+    {
+        // Slot bookkeeping first: free, then claim, so a slot released and re-taken in
+        // one frame lands correctly (Remove's own dev cross-checks depend on this order).
+        mTriangleCacheManager.ProcessRemoveFromCacheEvents(*lpScene);
+        mTriangleCacheManager.ProcessAddToCacheEvents(lpScene->mAddToCacheQueue);
+
+        // Then the static world: register any newly-streamed poly-soup lists and, if any
+        // of them asked for it, REBUILD THE SPATIAL PARTITION. This is the call that makes
+        // mpLeafNodes non-null and therefore lets the fill below actually do something.
+        mTriangleCollisionManager.ProcessAddPolySoupListEvents(lpScene->mAddPolySoupListQueue);
+        mTriangleCollisionManager.ProcessClearPolySoupListEvents(lpScene->mClearPolySoupListsQueue);
+
+        // Reposition the cached objects, marking dirty the ones that left their sphere.
+        mTriangleCacheManager.ProcessUpdateCachedPositionEvents(lpScene->mUpdateCachedPositionQueue);
+
+        // And open this frame's fill against the (now built) partition.
+        mTriangleCacheManager.StartUpdateTriangleCaches(
+            mpTriangleCacheCollisionGenerator,
+            mTriangleCollisionManager.GetPolySoupListSpacialMap());
+    }
+
+    lpSceneInputBuffer->UnlockForRead();
+}
+
+// ===========================================================================
 // SceneManagerModule::EndUpdateTriangleCache @ 0x828C7500
 //
 // Forward to the triangle-cache manager with the cached collision generator the
@@ -523,17 +616,17 @@ void SceneManagerModule::UpdateContactGeneration(CgsModule::IOBufferStack* lpInp
 // Note the X360 calls the partition DIRECTLY (module+0x280) for the add leg rather than
 // routing it through the spatial-partition update queue -- reproduced.
 //
-// SCOPE NOTE: the volume / culling-group / triangle-cache / poly-soup legs (the other 21
-// queues) are the VolumeManager + TriangleCache collaborators' territory and are not
-// reconstructed here; they feed no part of the frustum path. Their producers are already
-// live, so the events simply stay queued and are dropped with the frame's buffer -- the
-// same observable those managers' own gates already have.
+// SCOPE NOTE (updated 2026-08-10): the volume / culling-group legs are the VolumeManager's
+// territory and are still not reconstructed here; they feed no part of the frustum path, so
+// their events stay queued and are dropped with the frame's buffer. The TRIANGLE-CACHE and
+// POLY-SOUP legs ARE reconstructed, behind the console's own `lbPrepare` guard -- see the long
+// note at the call itself for why that guard is the whole mechanism.
 // ===========================================================================
 void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     OverlapGenerationIO::InputBuffer* /*lpOverlapGenerationInput*/,
     SpatialPartitionIO::InputBuffer_Update* /*lpSpatialPartitionInput*/,
     SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
-    bool /*lbPrepare*/)
+    bool lbPrepare)
 {
     CGS_ASSERT(lpSceneInputBuffer != NULL, "lpSceneInputBuffer != NULL");
     if (lpSceneInputBuffer == NULL)
@@ -543,6 +636,72 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
 
     SceneManagerIO::InSceneUpdateInterface* lpScene =
         lpSceneInputBuffer->GetInSceneUpdateInterface();
+
+    // ---- the STATIC-WORLD collision leg ---------------------------------------------------
+    // ⭐ ADDED 2026-08-10 (world-collision wave), and it is the console's, not an invention:
+    // `xrefs_to` of TriangleCollisionManager::ProcessAddPolySoupListEvents @0x828B3160 lists
+    // exactly TWO callers -- SceneManagerModule::StartUpdateTriangleCache @0x828C73D8 (the
+    // per-frame one, already committed) and THIS bridge @0x828D1F88.
+    //
+    // WHY IT MATTERS HERE: WorldModule::PrepareWorldCollision @0x827C9478 stages the world's
+    // 396 InEventAddPolySoupList events into a scene input buffer it creates AND DESTROYS
+    // inside the same call, with UpdateScene (-> this bridge) as the only consumer in
+    // between. Without this leg those events were dropped on the floor every frame of the
+    // load, the last one carrying mbRebuildSpacialPartitioning -- so BuildSpacialPartition
+    // never ran and the triangle cache stayed empty even with the whole streaming round trip
+    // working. RUNTIME-WITNESSED: 396 zones acquired, numLeafNodes still 0.
+    //
+    // Placed BEFORE the entity legs' partition guard on purpose: the poly-soup partition is
+    // the TriangleCollisionManager's own quadtree and has nothing to do with the entity
+    // octree, so an absent SpatialPartition must not suppress it.
+    //
+    // ⭐⭐ CORRECTED + EXTENDED 2026-08-10 (producer wave). The previous wave added the soup leg
+    // UNCONDITIONALLY and explicitly declined to add the three TRIANGLE-CACHE legs, reasoning
+    // that they "are already driven per frame by StartUpdateTriangleCache". That reasoning is
+    // right for the per-frame path and WRONG for the Prepare path, and the console spells the
+    // distinction out itself: all four legs sit behind ONE condition, the bridge's own
+    // `lbPrepare` argument --
+    //     0x828D1FA4  stb r7, arg_37(r1)                      <- lbPrepare, the 5th register arg
+    //     0x828D290C  lbz r11, arg_37 ; beq -> skip           -> ProcessRemoveFromCacheEvents
+    //     0x828D2D44  lwz r11, var_188 ; beq -> skip          -> ProcessAddToCacheEvents
+    //                                                         -> ProcessAddPolySoupListEvents
+    //     0x828D388C  lwz r11, var_188 ; beq -> skip          -> ProcessUpdateCachedPositionEvents
+    // i.e. the bridge owns the cache queues on the PREPARE passes and StartUpdateTriangleCache
+    // owns them per frame. Nothing double-drains.
+    //
+    // WHY IT MATTERS: VehicleManager::PrepareTriangleCache @0x82615BA0 posts the 8 race-car +
+    // 20 traffic InEventAddToCache into a scene input buffer that WorldModule::Prepare's
+    // eWorldPreparePhysicsModule stage creates AND destroys inside the same call, with
+    // UpdateScene(..., lbPrepare = TRUE) the only consumer in between -- the same shape as the
+    // 396 world-collision events. Without these legs the 28 registrations were dropped and
+    // TriangleCacheManager::mUsedCacheSlots could never become non-zero.
+    //
+    // ORDER: the console's relative order is Remove(0x828D292C) ... Add(0x828D2D5C) ...
+    // AddPolySoup(0x828D2D74) ... UpdateCachedPosition(0x828D38A8), and that order is preserved
+    // below. What is NOT preserved is their absolute position: the console interleaves ~700
+    // instructions of volume/entity work between them, none of which touches the cache, so the
+    // four are grouped here and kept ahead of the entity legs' partition guard for the same
+    // reason the soup leg is (an absent entity octree must not suppress the triangle cache).
+    // ⚠️ Still NOT reconstructed from this bridge: ProcessAdd/RemoveForCollisionEvent and
+    // UpdateCollisionBody -- volume-collision legs, unrelated to the triangle cache.
+    //
+    // ⚠️ The soup leg's `lbPrepare` guard is NEW here and is a behaviour change to a working
+    // path, so it was proved safe before being added rather than after: its sole producer,
+    // WorldEntityModule::AddCollisionZoneToSceneManager, is reached only from
+    // WorldModule::PrepareWorldCollision, whose own UpdateScene (BrnWorldModule.cpp:1226) passes
+    // TRUE. Every UpdateScene call site in the tree passes TRUE except the per-frame one at
+    // :2565, which posts no soup events. Runtime-checked: the 23,645-leaf partition still builds.
+    if (lpScene != NULL && lbPrepare)
+    {
+        // Slot bookkeeping first: free, then claim (Remove's dev cross-checks depend on it).
+        mTriangleCacheManager.ProcessRemoveFromCacheEvents(*lpScene);
+        mTriangleCacheManager.ProcessAddToCacheEvents(lpScene->mAddToCacheQueue);
+
+        mTriangleCollisionManager.ProcessAddPolySoupListEvents(lpScene->mAddPolySoupListQueue);
+
+        mTriangleCacheManager.ProcessUpdateCachedPositionEvents(lpScene->mUpdateCachedPositionQueue);
+    }
+
     SpatialPartition* lpPartition = mSpatialPartitionManager.GetSpatialPartition();
     if (lpPartition == NULL)
     {

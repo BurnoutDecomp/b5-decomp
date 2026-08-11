@@ -98,6 +98,20 @@ namespace PhysicsSimulationIO
         return &mUpdateRigidBodyQueue;
     }
 
+    // ⭐ X360 0x8259EFD0. READ-lock (bit 4) guarded const twin of the accessor above,
+    // returning the same &mUpdateRigidBodyQueue (+0x10) with the "Not locked for reading\n"
+    // tripwire (CgsPhysicsSimulationModuleIO.h:1359 -- seven lines above the 1366 the const
+    // contact-spy twin cites, and 0xA8 below it in the uniform accessor block).
+    // ADDED 2026-08-10 (root-cause wave): its console callers are the post-step CONSUMERS,
+    // which run with the sim output buffer read-locked -- PhysicsModule::Update @0x825B0640
+    // ahead of both ReadUpdatedBodies calls, plus DetachedPart/DetachedWheelManager::
+    // UpdatePostPhysics. Those sites were calling the write-locked overload and asserting.
+    const OutputBuffer::OutUpdateRigidBodyQueue* OutputBuffer::GetUpdateRigidBodyQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mUpdateRigidBodyQueue;
+    }
+
     // X360 0x8259F1C8. Write-lock (bit 3) guarded accessor returning &mJointSpyQueue
     // (console +0x1F430 -- the middle entry of the 0x8259F120 + k*0xA8 spy-accessor block).
     // Sole in-scope caller: AddJointSpiesToOutputQueue @0x828A5900.
