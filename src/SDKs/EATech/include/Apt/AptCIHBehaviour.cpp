@@ -37,6 +37,7 @@
 #include "SDKs/EATech/include/Apt/AptScriptFunctionByteCodeBlock.h" // the onLoad/onUnload block wrapper
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"            // findChild / getIsDefined
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"      // the operand-stack pop (the unload-call tail)
+#include "SDKs/EATech/include/Apt/Apt.h"                          // AptUserFunctions (gAptFuncs.pfnOnUnload -- the PreDestroy notify slot)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"    // mAnimationFilePtr (the zombie file-state swap)
 #include "SDKs/EATech/include/Apt/AptFile.h"                      // mnState / mnField12 / mFileName
 
@@ -1389,10 +1390,12 @@ void AptRunGeneralisedTextProcess(AptCIH* pRoot)
 // animation director's removal list.
 void AptAnimationTargetAddToRemList(AptAnimationTarget* pAnim, AptCIH* pItem);
 
-// PreDestroy hook (console dword_8324E8A0; storage in AptRenderLinkStubs.cpp): the
-// optional process-wide pre-destroy notify callback -- a host-installable boundary,
-// faithfully null until a host installs it.
-extern void (*gpAptCIHPreDestroyHook)(AptCIH* pCIH);   // dword_8324E8A0
+// PreDestroy hook: console dword_8324E8A0 is NOT a standalone global -- it is
+// gAptFuncs+0x88 == gAptFuncs.pfnOnUnload (base dword_8324E818; the neighbour
+// dword_8324E8A4 == pfnPointHitTest pins the alignment). The host installs
+// CgsGui::AptCallbackFile::OnUnload there (AptAux::ConstructApt), which drops the
+// dying clip's AptCommunicator component registration.
+extern AptUserFunctions gAptFuncs;   // dword_8324E818 (CgsAptAux.cpp)
 
 // ---------------------------------------------------------------------------
 // GetMask @0x82AE7B48 -- the current mask SLAVE of this MASTER node. The X360 first
@@ -2145,12 +2148,17 @@ AptCIH* AptCIH::InsertChild(AptCIH* pSource, AptCharacter* pCharacter,
 // AptDisplayList_mergeState RETIRED: now called directly as the AptDisplayList::mergeState
 // member (defined in AptDisplayList.cpp @ 0x82B0B438); the free-function forwarder is removed.
 
-// AptCIH_PreDestroyHook -- AptCIH::PreDestroy's optional notify hook (console dword_8324E8A0).
-// FLAG PC-platform leaf: the host-installed pre-destroy callback boundary (dispatch when installed, else no-op).
+// AptCIH_PreDestroyHook -- AptCIH::PreDestroy's notify dispatch. X360 @0x82AD7490:
+//   lwz r10, (gAptFuncs+0x88); beqlr-if-0; mtctr; bctr   (r3 == this passed through)
+// i.e. `if (gAptFuncs.pfnOnUnload) gAptFuncs.pfnOnUnload(this)`. The console slot is
+// the pfnOnUnload member of the host callback table, installed by AptAux::ConstructApt
+// (-> CgsGui::AptCallbackFile::OnUnload -> AptCommunicator::RemoveExpiredAptComponent).
+// A previous recon aliased it to a separate never-installed global, so no component
+// registration was ever released and the 256-entry table overflowed at the menus.
 void AptCIH_PreDestroyHook(AptCIH* pCIH)
 {
-    if (gpAptCIHPreDestroyHook)
-        gpAptCIHPreDestroyHook(pCIH);
+    if (gAptFuncs.pfnOnUnload)
+        gAptFuncs.pfnOnUnload(pCIH);
 }
 
 // ===========================================================================
