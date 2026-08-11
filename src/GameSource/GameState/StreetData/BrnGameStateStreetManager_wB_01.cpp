@@ -342,13 +342,33 @@ bool StreetManager::LoadDistrictMap( GameStateModuleIO::OutputBuffer* lpOutput,
             }
             meDistrictMapLoadStage = E_DISTRICT_MAP_DONE;
 
-            // X360: copy the two handle words from <response payload + 0x18> into
-            // mDistrictMapResourceHandle. DEFERRED (not fabricated): the acquire-response event
-            // is a foreign, un-homed shape; the store TARGET is reproduced (both handle pointers),
-            // its value is FLAGGED as sourced from that foreign payload -- mirrors the committed
-            // BrnGameState::StuntManager::LoadDistrictMap precedent (0x82399458).
-            mDistrictMapResourceHandle.mpResourceMemory = 0;   // FLAG: from acquire-response payload+0x18
-            mDistrictMapResourceHandle.mpSourceEntry    = 0;   // FLAG: from acquire-response payload+0x1C
+            // ⭐ THE HANDLE BIND IS REAL NOW (2026-08-11). The console inlines GetFirstEvent
+            // here -- `v8 = (a3[2] <= 0) ? 0 : a3[3] + *a3 + 8` is exactly the queue's
+            // buffer-base + first-event-offset + the 8-byte event header, i.e. the payload
+            // pointer -- and then reads the pair at `v8 + 24`:
+            //     a1[1858] = *(v8+24);   a1[1859] = *(v8+28);
+            // 1858*4 == 0x1D08 == mDistrictMapResourceHandle.mpResourceMemory, 1859*4 == 0x1D0C
+            // == .mpSourceEntry. The record at payload +0x18 IS the AcquireResourceResponse's
+            // {mpResourceMemory, mpSourceEntry} pair (PoolModule::DoAcquireResourceRequest
+            // @0x828FCD48 builds it), so it is read BY MEMBER -- never at the console's literal
+            // +0x18/+0x1C, because the host handle is 16 bytes where the console's is 8 and
+            // every literal past it shifts. Same idiom as LoadStreetData above and
+            // TriggerQueryManager::Prepare's acquire leg.
+            const CgsModule::Event* lpEvent = NULL;
+            s32                     liSize  = 0;
+            lpReceiverQueue->GetFirstEvent( &lpEvent, &liSize );
+
+            if ( lpEvent != NULL )
+            {
+                // reinterpret_cast, not static_cast: CgsResource::Events::Event and
+                // CgsModule::Event are unrelated roots and the receiver queue hands out the
+                // module one.
+                const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                    reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>( lpEvent );
+
+                mDistrictMapResourceHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+                mDistrictMapResourceHandle.mpSourceEntry    = lpResponse->mpSourceEntry;
+            }
             return false;
         }
 

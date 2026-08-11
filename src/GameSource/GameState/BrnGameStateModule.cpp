@@ -170,8 +170,15 @@ void GameStateModule::Destruct()
 // (LoadingScriptedState::LoadGameState2 @0x823EF4D8 is the same bracket for the SECOND pass,
 // GameStateModule::Prepare2 @0x8239ED10 -- Progression + Street. Not this wave.)
 //
-// ⚠️⚠️ RECONSTRUCTED SLICE -- say it plainly. ONE stage is real:
+// ⚠️⚠️ RECONSTRUCTED SLICE -- say it plainly. The REAL stages are:
 //   stage 3  E_PREPARESTAGE_LOAD_TRIGGER_DATA -> TriggerQueryManager::Prepare @0x82398218.
+//   stage 4  E_PREPARESTAGE_STUNT_MANAGER     -> the LoadBundle("Districts.dat") half of
+//            StuntManager::Prepare's LoadDistrictMap (the tally half is still deferred; see
+//            the stage body and mbDistrictsBundleRequested).
+//   stages 7/8 and 9/10 -> the vehicle / wheel list GETs.
+//   stage 23 E_PREPARESTAGE_STREET_MANAGER    -> StreetManager::Prepare @0x82350900
+//            (LoadAIData + LoadDistrictMap -> mDistrictMapResourceHandle), added 2026-08-11.
+//   stage 26 -> the car-select / progression list publish.
 // Every other stage logs once and advances, naming its X360 call. In console order they are:
 //   0  START                    ClearData @(not exported by name) + DebugComponent::Register x2
 //                               (this+208544 / this+208376)
@@ -221,6 +228,13 @@ void GameStateModule::Destruct()
 // DeferredGameDataRequest, so a stage waiting on it would never advance.
 static const s32 KI_REPLY_VEHICLE_LIST = 52;
 static const s32 KI_REPLY_WHEEL_LIST   = 59;
+
+// Stage 4's district-map bundle. The console's own literals, off StuntManager::LoadDistrictMap
+// @0x82399458 (`aDistrictsDat`, event id 1, pool 5 == the GameData pool) -- the same spelling
+// BrnWorldModule::LoadDistrictMap @0x827D11D8 uses for the same file.
+static const char* const KPC_DISTRICTS_FILE_NAME = "Districts.dat";
+static const s32         KI_DISTRICTS_EVENT_ID   = 1;
+static const s32         KI_GAMEDATA_POOL_ID     = 5;
 
 namespace
 {
@@ -355,7 +369,42 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // fall through
 
     case E_PREPARESTAGE_STUNT_MANAGER:
-        LogPrepareStageOnce(4, "StuntManager::Prepare [deferred]");
+        // X360: `if (!StuntManager::Prepare(this + 183952, out)) break;` -- and
+        // StuntManager::Prepare @0x82380F30 opens with `if (!LoadDistrictMap(out)) return false;`
+        // (@0x82399458), i.e. LoadBundle("Districts.dat", pool 5) -> wait -> acquire("Districts")
+        // -> bind. THE TALLY HALF (the county/stunt-element census the rest of that Prepare does)
+        // IS STILL DEFERRED -- this module has no StuntManager sub-object and BrnStuntManager.cpp's
+        // loader is an inert stub.
+        //
+        // ⭐ WHAT IS REAL HERE, and why it has to be: stage 23's
+        // StreetManager::LoadDistrictMap @0x8234FB98 only ACQUIRES "Districts" -- it never loads
+        // the bundle, because on the console THIS stage loaded it 19 stages earlier. Without the
+        // bundle resident, PoolModule::DoAcquireResourceRequest still replies (it always does)
+        // but with a NULL handle, and SetupParRivals would then null-deref. So the console's own
+        // LoadBundle is issued here, with the console's own arguments, latched by
+        // meDistrictsBundleStage (which stands in for StuntManager::meDistrictMapLoadStage --
+        // see its declaration). Same request idiom as stage 3's Triggers.dat leg.
+        mePrepareStage = E_PREPARESTAGE_STUNT_MANAGER;
+        if (meDistrictsBundleStage == E_DISTRICTS_BUNDLE_NOT_REQUESTED)
+        {
+            // Console order, off 0x82399458 case 0: Clear FIRST, then LoadBundle (the mirror
+            // image of LoadStreetData's request-then-clear). `Clear` only drops stale replies.
+            mReceiverQueue.Clear();
+            lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
+                &mReceiverQueue, KI_DISTRICTS_EVENT_ID, KI_GAMEDATA_POOL_ID,
+                KPC_DISTRICTS_FILE_NAME, /*lbUseHDCache*/ false);
+            meDistrictsBundleStage = E_DISTRICTS_BUNDLE_REQUESTED;
+            break;   // the console returns here too (its case 0 ends `result = 0`)
+        }
+        if (meDistrictsBundleStage == E_DISTRICTS_BUNDLE_REQUESTED)
+        {
+            // The console's case 1 (E_DISTRICT_MAP_LOAD_RESPONSE): wait for the load reply.
+            if (mReceiverQueue.GetCount() <= 0)
+                break;
+            mReceiverQueue.Clear();
+            meDistrictsBundleStage = E_DISTRICTS_BUNDLE_LOADED;
+            LogPrepareStageOnce(4, "Districts.dat bundle loaded; StuntManager tally half [deferred]");
+        }
         // fall through
     case E_PREPARESTAGE_REQUEST_CHALLENGE_LIST:
     case E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST:
@@ -411,10 +460,27 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     case E_PREPARESTAGE_PROGRESSION:
     case E_PREPARESTAGE_RICH_PRESENCE:
     case E_PREPARESTAGE_ACHIEVEMENT_MANAGER:
+        LogPrepareStageOnce(13, "the 10 manager prepares (Mode..Achievement) [deferred]");
+        // fall through
+
     case E_PREPARESTAGE_STREET_MANAGER:
+        // ⭐ REAL. X360 LABEL_51: `*(this+552) = 23;
+        //     if (!StreetManager::Prepare(this + 284520, out, this + 232384)) break;`
+        // i.e. mStreetManager.Prepare(out, &mReceiverQueue). StreetManager::Prepare @0x82350900 is
+        //     LoadAIData(out, rq) && LoadDistrictMap(out, rq)
+        //         -> debug component Construct + Register; return true
+        // LoadDistrictMap @0x8234FB98 is the ONLY writer of mDistrictMapResourceHandle, which
+        // SetupParRivals dereferences unconditionally -- so this stage is the precondition for
+        // Prepare2 case 2's SetupParRivals leg. It acquires "Districts" out of pool 5; stage 4
+        // above is what makes that bundle resident.
+        mePrepareStage = E_PREPARESTAGE_STREET_MANAGER;
+        if (!mStreetManager.Prepare(lpOutputBuffer, &mReceiverQueue))
+            break;
+        // fall through
+
     case E_PREPARESTAGE_IMAGE_MANAGER:
     case E_PREPARESTAGE_RUMBLE_MANAGER:
-        LogPrepareStageOnce(13, "the 13 manager prepares (Mode..Rumble) [deferred]");
+        LogPrepareStageOnce(24, "GameStateImageManagerBase / RumbleManager::Prepare [deferred]");
         // fall through
     case E_PREPARESTAGE_DONE:
         // [diagnostic, one-shot] print BOTH ENDS of the two list stages -- a non-null pointer
@@ -571,7 +637,10 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
 // ⚠️ ONE HONEST PARK REMAINS, and it is named at the call site: the console's
 // `StreetManager::Prepare2` is `LoadStreetData(out, &rq) && (SetupParRivals(&tqm), true)`
 // (X360 0x823509D8). Case 2 below calls the LoadStreetData half -- the real thing -- and PARKS
-// the SetupParRivals half. See the block comment there for the precondition that is missing.
+// the SetupParRivals half. As of the 2026-08-11 district-map wave that park is no longer a DATA
+// gap (the district map IS bound now -- Prepare stage 4 loads the bundle, stage 23 pumps
+// StreetManager::Prepare -> LoadDistrictMap, and that bind is real); it is a pure BODY gap, and
+// the block comment there names the four symbols it is waiting on.
 // ----------------------------------------------------------------------------
 bool GameStateModule::Prepare2(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 {
@@ -624,30 +693,42 @@ bool GameStateModule::Prepare2(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
         // in the whole image (LoadBundle "STREETDATA.DAT" -> acquire "StreetData" -> bind), so
         // this is what makes StreetManager::GetStreetData() answer non-null at all.
         //
-        // ⚠️⚠️ PARKED, and said plainly: the SetupParRivals half is NOT called, so
-        // StreetManager::Prepare2 itself is not called either. SetupParRivals @0x8233F560
-        // dereferences the district map UNCONDITIONALLY on its fourth statement
-        // (BrnGameStateStreetManager_wC_02.cpp:109,
-        //  `*(const BinaryFileResource* const*)mDistrictMapResourceHandle.mpResourceMemory`),
-        // and on PC that handle is still NULL for two independent reasons:
-        //   (a) nothing pumps StreetManager::Prepare @0x82350900 -- GameStateModule::Prepare's
-        //       stage 23 (E_PREPARESTAGE_STREET_MANAGER) is still one of the log-and-advance
-        //       stages, so LoadDistrictMap never even starts; and
-        //   (b) LoadDistrictMap's own handle bind is a documented deferral
-        //       (BrnGameStateStreetManager_wB_01.cpp:"FLAG: from acquire-response payload+0x18"),
-        //       so it would store {0,0} even if it did run.
-        // Calling Prepare2 today would therefore null-dereference on the first tick after the
-        // street data lands. That is a REAL data gap, not a missing body: SetupParRivals is fully
-        // reconstructed and DISTRICTS.DAT is present in build/game (bnd2 v2, resource
-        // 0x68E318DC == HashString("Districts"), type 0x30 WorldPainter2D, already registered).
-        // DELETE-WHEN stage 23 pumps mStreetManager.Prepare() and LoadDistrictMap binds its
-        // handle -- then this becomes the single console call
-        // `mStreetManager.Prepare2(lpOutputBuffer, &mReceiverQueue, &mTriggerQueryManager)`.
+        // ⭐ THE DATA GAP IS CLOSED (2026-08-11, district-map wave). What this park used to say
+        // -- "the district map is NULL for two independent reasons" -- is no longer true:
+        //   (a) Prepare stage 23 (E_PREPARESTAGE_STREET_MANAGER) now pumps
+        //       StreetManager::Prepare @0x82350900, so LoadDistrictMap @0x8234FB98 runs, and
+        //       stage 4 makes the DISTRICTS.DAT bundle resident first (its acquire needs that --
+        //       the machine only ACQUIRES "Districts", it never loads the bundle); and
+        //   (b) LoadDistrictMap's handle bind is REAL now -- it reads the acquire response's
+        //       {mpResourceMemory, mpSourceEntry} pair BY MEMBER (X360 payload+0x18).
+        // DISTRICTS.DAT ships in build/game and is a correct platform-4 bundle: bnd2 v2,
+        // platform 4, ONE resource, id 0x68E318DC == HashString("Districts"), type 0x30 ==
+        // WorldPainter2D (registered in CgsResourceTypeRegistration.cpp; its FixUp is
+        // BinaryFileResourceType::FixUp, a genuine no-op -- a binary blob has nothing to
+        // relocate), payload {mu32DataSize = 0x10010, mu32DataOffset = 0x10} over a 256x256
+        // district grid.
+        //
+        // ⚠️ THE PARK THAT REMAINS IS NOW A PURE BODY GAP, and it is FOUR NAMED SYMBOLS.
+        // SetupParRivals @0x8233F560 is fully reconstructed (BrnGameStateStreetManager_wC_02.cpp)
+        // but cannot be LINKED: measured with cl /c (the build's own flags) + dumpbin /SYMBOLS
+        // against the linked obj set, the SetupParRivals body alone still calls
+        //   * BrnStreetData::Road::GetRoadLimitId0()        -- declared-only, SharedClasses/StreetData/BrnStreetData.h:173
+        //   * BrnProgression::ProgressionData::GetRival(s32)-- declared-only, SharedClasses/Progression/BrnProgressionData.h:107
+        //   * CgsNumeric::Random::RandomInt(s32, s32)       -- declared-only, GameShared/GameClasses/Numeric/CgsRandom.h:154
+        //   * StreetManager::FindRivalsByDistrict           -- bodied, but only in the unmounted
+        //                                                      _wC_04 partfile
+        // (its sibling in that partfile, ProcessScoreRequestEvent, adds nine more; splitting it
+        // out is the cheap follow-up, but the three declared-only accessors above are the real
+        // blocker and none of them has a body anywhere in the tree). Mounting anyway would be
+        // LNK2019, not a stripped COMDAT -- /OPT:REF resolves before it discards.
+        // DELETE-WHEN those three accessors are bodied: this becomes the single console call
+        // `mStreetManager.Prepare2(lpOutputBuffer, &mReceiverQueue, &mTriggerQueryManager)`
+        // (@0x823509D8 == `if (LoadStreetData(out, rq)) { SetupParRivals(tqm); return 1; }`).
         if (!mStreetManager.LoadStreetData(lpOutputBuffer, &mReceiverQueue))
         {
             break;
         }
-        LogPrepareStageOnce(27, "Prepare2: StreetManager::SetupParRivals [parked -- no district map]");
+        LogPrepareStageOnce(27, "Prepare2: StreetManager::SetupParRivals [parked -- 3 declared-only callees]");
     }
         // fall through
 
