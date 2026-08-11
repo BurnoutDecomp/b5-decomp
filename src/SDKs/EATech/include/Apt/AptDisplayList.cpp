@@ -384,7 +384,10 @@ AptCIH* AptDisplayList::AddToDisplayList(AptNativeHash* pParentHash, void** ppPl
     // ppPlacement[0] = the serialised PlaceObject record (native-8: charId @ +0x10);
     // ppPlacement[1] = the placement properties (or the pseudo-snapshot pun) whose
     // mpCharacter is the character to place (null when the placement names none).
-    const int32_t nCharId = static_cast<const int32_t*>(ppPlacement[0])[4];   // [c: dword 3]
+    // charId is body+0x08; the body is align8(record+4), not a fixed record+8 (2.1% of the
+    // shipped tag-3 records start 4 (mod 8) -- see AptPlaceObjectInfo_t::GetBody).
+    const int32_t nCharId =
+        static_cast<const AptPlaceObjectInfo_t*>(ppPlacement[0])->GetBody()->mi32CharacterId;  // [c: dword 3]
     AptCharacter* const pPlacedChar =
         static_cast<AptFramePlacementProps*>(ppPlacement[1])->mpCharacter;
 
@@ -463,7 +466,9 @@ AptCIH* AptDisplayList::ReplaceDisplyListItem(AptNativeHash* pParentHash, AptCIH
         // A new character is named: replace the existing node.
         removeObject(pExisting);
 
-        const int32_t nCharId = static_cast<const int32_t*>(ppPlacement[0])[4];   // native-8 +0x10 [c: +0xC]
+        // charId is body+0x08 with body == align8(record+4) (see AptPlaceObjectInfo_t::GetBody).
+        const int32_t nCharId =
+            static_cast<const AptPlaceObjectInfo_t*>(ppPlacement[0])->GetBody()->mi32CharacterId;  // [c: +0xC]
         if (nCharId != -1)
         {
             AptCharacter* const pPlacedChar = pProps->mpCharacter;
@@ -1184,9 +1189,14 @@ AptCIH* AptFramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, Apt
     // AptDispatchPlaceCommand; the console InitFromBuffers record+0x34 unguarded).
     EAStringC nameStr;
     const EAStringC* pName = nullptr;
-    if ((pInfo->muxFlags & 0x20u) != 0u)
+    // The record's fields live at align8(record+4), not a fixed record+8 -- see
+    // AptPlaceObjectInfo_t::GetBody (2.1% of shipped tag-3 records start 4 (mod 8);
+    // reading them 4 bytes late took the depth word as the flags and a straddled
+    // garbage name pointer -- e.g. TITLE_SCREEN02 root frame 0 'esrb_anim').
+    const AptPlaceObjectBody_t* const pBody = pInfo->GetBody();
+    if ((pBody->muxFlags & 0x20u) != 0u)
     {
-        const char* const pNamePtr = pInfo->mpName;
+        const char* const pNamePtr = pBody->mpName;
         if (pNamePtr != nullptr)
         {
             nameStr = EAStringC(pNamePtr);
