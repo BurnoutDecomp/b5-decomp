@@ -311,8 +311,8 @@ namespace Vehicle
         static_assert(sizeof(decltype(VehicleManager::maRaceCarVehicles[0].meCarType)) == 4,
                       "VehiclePhysics::meCarType is the 4-byte `stw` seat ApplyPlayerStats writes "
                       "(asm 0x8259BFE8), not the f32 the retired record modelled");
-        static_assert(offsetof(VehicleManager, mHiddenRaceCars)          == 44704 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,  "mHiddenRaceCars (asm +44704)");
-        static_assert(offsetof(VehicleManager, mauNetworkCarHiddenFramesRemaining)               == 44736 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,  "mauNetworkCarHiddenFramesRemaining (asm base 44736)");
+        static_assert(offsetof(VehicleManager, mHiddenRaceCars)          == 44704 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "mHiddenRaceCars (asm +44704)");
+        static_assert(offsetof(VehicleManager, mauNetworkCarHiddenFramesRemaining)               == 44736 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "mauNetworkCarHiddenFramesRemaining (asm base 44736)");
         // ⭐ RE-SEATED 2026-08-03: the map is the embedded traffic manager's own member, not a
         // sibling of this class. The old assert claimed `offsetof(VehicleManager,
         // mau8GlobalToPhysicalEntityIndexMap) == 149456`; the X360 address is indeed 149456 ==
@@ -320,7 +320,7 @@ namespace Vehicle
         // (16 vs 8, x20) and four 4->8 pointers and EventQueue<s8,50> (72 vs 64) all sit ahead of it
         // inside the manager. What still reproduces exactly is the manager's OWN seat, so that is
         // what is pinned; the map is reached BY NAME through it and needs no offset at all.
-        static_assert(offsetof(VehicleManager, mPhysicalTrafficManager) == 44768 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
+        static_assert(offsetof(VehicleManager, mPhysicalTrafficManager) == 44768 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,
                       "mPhysicalTrafficManager (asm PhysicalTrafficManager::Construct(this + 44768)); "
                       "the global->physical map lives inside it at X360 in-manager +104688");
         static_assert(sizeof(PhysicalTrafficManager::mu8GlobalToPhysicalEntityIndexMap) == 600,

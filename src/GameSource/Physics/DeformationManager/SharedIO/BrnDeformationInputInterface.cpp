@@ -55,5 +55,46 @@ namespace Deformation
         mAddDeformationModelQueue.AddEvent(lEvent);
         return mAddDeformationModelQueue.GetLength() - 1;
     }
+    // =============================================================================================
+    // RemoveDeformationModel / DeactivateDeformationModel -- NO STANDALONE X360 SYMBOL either.
+    // Recovered 2026-08-11 from the one place the console inlines both, VehicleManager::
+    // ProcessRemoveEvents @0x826160C8, read off the asm:
+    //
+    //   deactivate  0x826163C8  addi r4, r1, var_D0            ; a 16-byte stack event
+    //               0x826163CC  addi r3, lpDeformationInterface, 0xD40   (== +3392, this queue)
+    //               0x82616444  ldx  r11, r9, this             ; maRaceCarHandlingBodyIDs[idx]
+    //               0x82616448  std  r11, var_D0(r1)           ; event.mHandlingBodyID
+    //               (var_C8 == flt_82001CC0 == 0.0f and var_C4 == -1 are hoisted OUT of the loop,
+    //                @0x82616128/0x82616138 -- i.e. the two trailing arguments are loop-invariant
+    //                literals, which is exactly what a call with constant arguments looks like)
+    //               0x8261644C  bl   BaseEventQueue<DeactivateDeformationModelEvent>::AddEvent
+    //   remove      0x826164AC  addi r3, lpDeformationInterface, 0xC90   (== +3216, this queue)
+    //               0x826164B0  ldx  r11, r11, this ; std r11, var_E8(r1)
+    //               0x826164B8  bl   BaseEventQueue<RemoveDeformationModelEvent>::AddEvent
+    //
+    // The signatures are the DWARF's (BrnDeformationInputInterface.h:58 / :76), and the bodies are
+    // the same three lines AddDeformationModel above already uses.
+    // =============================================================================================
+    u32 DeformationInputInterface::RemoveDeformationModel(RigidBodyId lHandlingBodyID)
+    {
+        RemoveDeformationModelEvent lEvent;
+        lEvent.mHandlingBodyID = lHandlingBodyID;
+
+        mRemoveDeformationModelQueue.AddEvent(lEvent);
+        return mRemoveDeformationModelQueue.GetLength() - 1;
+    }
+
+    u32 DeformationInputInterface::DeactivateDeformationModel(RigidBodyId lHandlingBodyID,
+                                                              f32 lfInitialDamageAmount,
+                                                              DeformationResetType leDeformationResetType)
+    {
+        DeactivateDeformationModelEvent lEvent;
+        lEvent.mHandlingBodyID        = lHandlingBodyID;
+        lEvent.mfInitialDamageAmount  = lfInitialDamageAmount;
+        lEvent.meDeformationResetType = leDeformationResetType;
+
+        mDeactivateDeformationModelQueue.AddEvent(lEvent);
+        return mDeactivateDeformationModelQueue.GetLength() - 1;
+    }
 }
 }

@@ -108,6 +108,54 @@ namespace Vehicle
                           "the full census banner above -- its own wave)");
     }
 
+    // =============================================================================================
+    // ⛔⛔ NEW 2026-08-11 (create-drain wave 2) -- AND THIS ONE IS THE CAMPAIGN'S CURRENT BLOCKER,
+    // not a bystander. Read this before writing anything else in the create chain.
+    //
+    // RaceCarPhysics::Prepare @0x82639CB8 LANDED this wave (RaceCarPhysics.cpp, recovered from the
+    // PS3 export 0x73648C at the Δ=+16 member mapping this class's own table already establishes).
+    // Its FIRST statement forwards into VehiclePhysics::Prepare @0x82637C80, and the link
+    // immediately said what a hundred greps had not: nothing in this tree defines it.
+    //     RaceCarPhysics.obj : error LNK2019: unresolved external symbol
+    //       "public: bool VehiclePhysics::Prepare(Matrix44Affine, Vector3, Vector3, Vector3,
+    //        Vector3, AxisAlignedBox const&, VehicleAttribs*, Vector3 const*, float const*)"
+    // That LNK2019 is the point: last wave corrected this declaration from a five-parameter FORK to
+    // the DWARF's nine, and the fork's whole danger was that no per-TU gate could see it. The
+    // moment a real caller existed, the linker named it. Trap installed so the closure STAYS
+    // enforced while the body is recovered.
+    //
+    // ⭐ IT IS UNREACHABLE TODAY, and that is measured, not hoped: the only two callers are
+    // VehicleManager::ProcessCreateEvents @0x82616770 (still a LOUD gate in
+    // BrnVehicleManager_MaintenanceEvents.cpp) and TrafficPhysics::PreparePhysical @0x82639380
+    // (in an UNMOUNTED TU). `grep -c` for either in the mounted set: zero live call sites.
+    //
+    // ⛔⛔ THE 306 INSTRUCTIONS ARE THE WHOLE REASON THE CAR IS NOT IN THE WORLD YET. This is the
+    // ONLY thing that seats mTransform / mHalfExtent / mSimpleAttribs on a race car, so every
+    // observable the campaign is chasing -- the cache sphere leaving the origin, the slot filling
+    // with batches, mbIsOnGround -- hangs off it. Read from @0x82637C80:
+    //     VehicleAttribs::operator=            @0x82637CF4   (the incoming attribs, by value)
+    //     mpAttribs = <the copy>               @0x82637D18   (`stw r29, 0x720(r31)`)
+    //     SimpleVehiclePhysics::Prepare        @0x82637D24   ⭐ BODIED (2026-08-11, 554 insns)
+    //     sub_8262E140                         @0x82637DC8   (the AttribSys handling re-stream)
+    //     VehicleAttribs::Construct            @0x82637F90   ⭐ BODIED
+    //     VehicleAttribs::SetupAttribsForAI    @0x82637F9C   ⭐ BODIED
+    //     VehiclePhysics::Reset                @0x82637FB0   ⭐ BODIED
+    //   then ~40 own-block seeds, every one at an offset this class's header ALREADY NAMES:
+    //     +0x1114/+0x1118/+0x111C/+0x1120 = 0.0f · +0x1128 = <the bool arg> · +0x1158/+0x1220 = 0
+    //     +0x710/+0x712/+0x1359/+0x10F7/+0x135A/+0x135D/+0x135E/+0x1362 = 0 · +0x135C = <arg>
+    //     +0x10D4 = 0 · +0x13DC = <arg> · plus a dozen 16-byte VMX stores.
+    // ⇒ SEVEN of its eight callees are already bodied and mounted. What is left is transcription
+    // plus naming the VMX lanes -- big, but NOT blocked on anything. That is the next wave.
+    // =============================================================================================
+    bool VehiclePhysics::Prepare(Matrix44Affine, Vector3, Vector3, Vector3, Vector3,
+                                 const AxisAlignedBox&, VehicleAttribs*, const Vector3*, const f32*)
+    {
+        CGS_ASSERT(false, "VehiclePhysics::Prepare: link stub -- reconstruct from X360 @0x82637C80 "
+                          "(306 insns; seven of its eight callees are already bodied, and this is "
+                          "the ONLY writer of a race car's mTransform on the create path)");
+        return false;
+    }
+
     // ⭐ 2026-08-09 (powertrain wave): the Engine::Update @0x825CB288 trap is GONE -- BODIED in
     // Engine.cpp. The 3937-line X360 debug Opt-vs-Unopt assert harness turned out to be ONE
     // algorithm run in two register files (branchy member leg + branchless vsel leg, cross-

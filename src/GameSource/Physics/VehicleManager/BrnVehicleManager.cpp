@@ -1549,25 +1549,25 @@ namespace Vehicle
         static_assert(offsetof(VehicleManager, maRaceCarDrivers)         == 64,     "maRaceCarDrivers (asm addi r25, r31, 0x40) -- was WRONGLY seated at 0");
         static_assert(offsetof(VehicleManager, maRaceCarVehicles)        == 1856,   "maRaceCarVehicles (asm r29 - 0x140D)");
         static_assert(offsetof(VehicleManager, maRaceCarEntityIDs)       == 43584 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,  "maRaceCarEntityIDs (asm base 43584)");
-        static_assert(offsetof(VehicleManager, maRaceCarHandlingBodyIDs) == 43744 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,  "maRaceCarHandlingBodyIDs (asm addi r26,r26,-0x5520)");
+        static_assert(offsetof(VehicleManager, maRaceCarHandlingBodyIDs) == 43744 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "maRaceCarHandlingBodyIDs (asm addi r26,r26,-0x5520)");
         static_assert(sizeof(VehicleManager::maRaceCarHandlingBodyIDs) == 64,
                       "RigidBodyId is 8 bytes -- the ctor's `std` + `addi r26, r26, 8`, and 43744 + 64 == 43808");
-        static_assert(offsetof(VehicleManager, maRaceCarCrashes)         == 43808 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,  "maRaceCarCrashes (asm base 43808)");
-        static_assert(offsetof(VehicleManager, maeRaceCarTypes)          == 44192 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,  "maeRaceCarTypes (asm base 44192; ctor seeds 3 == E_RACE_CAR_TYPE_INACTIVE)");
+        static_assert(offsetof(VehicleManager, maRaceCarCrashes)         == 43808 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "maRaceCarCrashes (asm base 43808)");
+        static_assert(offsetof(VehicleManager, maeRaceCarTypes)          == 44192 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "maeRaceCarTypes (asm base 44192; ctor seeds 3 == E_RACE_CAR_TYPE_INACTIVE)");
         static_assert(sizeof(CgsContainers::BitArray<8>)  == 8, "BitArray<8> single 64-bit field (8 bytes)");
         static_assert(sizeof(CgsContainers::BitArray<32>) == 8, "BitArray<32> single 64-bit field (8 bytes)");
-        static_assert(offsetof(VehicleManager, mUsedRaceCars)            == 44224 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,  "mUsedRaceCars (asm +44224)");
-        static_assert(offsetof(VehicleManager, mUsedRaceCarCrashesList)  == 44232 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,  "mUsedRaceCarCrashesList (asm +44232)");
-        static_assert(offsetof(VehicleManager, mStuntOffencesManager)    == 44240 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,  "mStuntOffencesManager (asm StuntOffencesManager::Construct(this + 44240))");
-        static_assert(offsetof(VehicleManager, mRaceCarsAddedForCollision)             == 44712 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY, "mRaceCarsAddedForCollision (asm +44712)");
-        static_assert(offsetof(VehicleManager, mNetworkCarsAddedForCollisionThisFrame) == 44720 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY, "mNetworkCarsAddedForCollisionThisFrame (asm +44720)");
-        static_assert(offsetof(VehicleManager, mNetworkCarsRecievedFirstUpdate)        == 44728 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY, "mNetworkCarsRecievedFirstUpdate (asm +44728)");
+        static_assert(offsetof(VehicleManager, mUsedRaceCars)            == 44224 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "mUsedRaceCars (asm +44224)");
+        static_assert(offsetof(VehicleManager, mUsedRaceCarCrashesList)  == 44232 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "mUsedRaceCarCrashesList (asm +44232)");
+        static_assert(offsetof(VehicleManager, mStuntOffencesManager)    == 44240 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "mStuntOffencesManager (asm StuntOffencesManager::Construct(this + 44240))");
+        static_assert(offsetof(VehicleManager, mRaceCarsAddedForCollision)             == 44712 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES, "mRaceCarsAddedForCollision (asm +44712)");
+        static_assert(offsetof(VehicleManager, mNetworkCarsAddedForCollisionThisFrame) == 44720 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES, "mNetworkCarsAddedForCollisionThisFrame (asm +44720)");
+        static_assert(offsetof(VehicleManager, mNetworkCarsRecievedFirstUpdate)        == 44728 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES, "mNetworkCarsRecievedFirstUpdate (asm +44728)");
         // ⭐ RE-SEATED 2026-08-03: the old `maRaceCarEntityIdRemap` sibling at +148128 is really the
         // embedded traffic manager's maTrafficEntityIDs. Same byte, real owner -- and the sum below
         // is a STRONGER assert than the old one, because it also pins the manager's own head.
-        static_assert(offsetof(VehicleManager, mPhysicalTrafficManager) == 44768 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY, "mPhysicalTrafficManager (asm PhysicalTrafficManager::Construct(this + 44768))");
+        static_assert(offsetof(VehicleManager, mPhysicalTrafficManager) == 44768 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES, "mPhysicalTrafficManager (asm PhysicalTrafficManager::Construct(this + 44768))");
         // ⚠️⚠️ CORRECTED 2026-08-03 (task #113), AND IT HAD BEEN FAILING SINCE task #112.
-        // This line used to read `== 148128 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY`, i.e. it applied
+        // This line used to read `== 148128 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES`, i.e. it applied
         // only the race-car array's drift to a seat that also sits behind maFullTrafficPhysics[20].
         // The TrafficPhysics de-fork shrank that array by 20 * (5168 - 4960) == 4160 bytes, so the
         // assert had been false -- by exactly 4160 -- from the moment that wave landed. NOTHING
@@ -1582,7 +1582,7 @@ namespace Vehicle
         // which IS mounted -- that is the pair that makes this a gate rather than a restatement.
         static_assert(offsetof(VehicleManager, mPhysicalTrafficManager)
                           + offsetof(PhysicalTrafficManager, maTrafficEntityIDs)
-                      == 148128 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY
+                      == 148128 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES
                                + (static_cast<std::ptrdiff_t>(20 * sizeof(TrafficPhysics)) - 103360),
                       "44768 + 103360 == 148128 -- the seat SetRaceCarCrashing's owner==2 branch loads");
         static_assert(offsetof(VehicleManager, mDiscardedContacts)       == 160672 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mDiscardedContacts (asm addi r29,r29,0x73A0)");

@@ -40,6 +40,7 @@
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h" // BrnPhysics::Vehicle::PhysicalTrafficManager (mPhysicalTrafficManager @+44768 -- embedded BY NAME as of 2026-08-03; see the drift note below)
 #include "GameSource/Physics/VehicleManager/BrnVehicleManagerDebugComponent.h" // BrnPhysics::Vehicle::VehicleManagerDebugComponent (mDebugComponent @+161968 -- embedded BY NAME as of 2026-08-03; that header only forward-declares VehicleManager, so this is not a cycle)
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"          // CgsPhysics::RigidBodyId (GetRigidBodyId/GetRaceCarPhysics, 2026-08-09)
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle (maRaceCarModelHandles / maRaceCarGraphicsModelHandles @+43616/+43680, split 2026-08-11)
 
 // Pointer-only collaborators in RaceCarResponseInfo -- forward-declared in their real namespaces
 // (homed by their own TUs; the classifier never dereferences them here).
@@ -186,6 +187,26 @@ namespace Vehicle
     // vanishes. MEASURED with the compiler via the gate below, not carried from this note.
     const std::ptrdiff_t KU_HOST_DRIFT_AFTER_RACECAR_ARRAY = 0;
 
+    // ⭐⭐ NEW TERM 2026-08-11 (the create-drain wave): **+128**, and it is the FIRST widening this
+    // class has ever taken that is a pure pointer-width cost rather than a folded stand-in.
+    // `mPadAA60[128]` -- the opaque span the header has carried at +43616 since 2026-08-03 -- is
+    // the DWARF's two `ResourceHandle[8]` arrays (maRaceCarModelHandles then
+    // maRaceCarGraphicsModelHandles, BrnVehicleManager.h:824/:825). They are now REAL, because
+    // ProcessCreateEvents @0x82616770 stores into both (`stdx` at this+43616+8i and
+    // this+43680+8i) and then double-dereferences the first as a StreamedDeformationSpec: that
+    // cannot be spelled against a byte span without the offset-poke this project forbids.
+    //   CgsResource::ResourceHandle is 8 bytes on console ({u32 mpResourceMemory, u32 mpSourceEntry})
+    //   and 16 on the host (two real pointers) -- MEASURED at runtime last wave, `sizeofRH=16`.
+    //   2 arrays * 8 elements * (16 - 8) == +128.
+    // ⚠️ THIS IS *NOT* A SERIALIZED RECORD. VehicleManager is carved at runtime by Construct and
+    // never streamed, so the [[serialized-slots-stay-32-bit]] rule does NOT apply here and the
+    // handles widen -- the opposite call from the one a bundle record takes.
+    // 128 % 16 == 0, so every 16-aligned member behind it keeps its alignment.
+    // ⚠️ Members between +43584 and +43616 (maRaceCarEntityIDs) are BEFORE the split and keep
+    // KU_HOST_DRIFT_AFTER_RACECAR_ARRAY; everything from +43744 on takes this one.
+    const std::ptrdiff_t KU_HOST_DRIFT_AFTER_MODEL_HANDLES =
+        KU_HOST_DRIFT_AFTER_RACECAR_ARRAY + 128;   // +128
+
     // ⭐⭐ RE-MEASURED 2026-08-03 (the TrafficPhysics de-fork wave): the second term is now **-3968**,
     // not +192. `maFullTrafficPhysics` inside PhysicalTrafficManager was folded from a byte-pinned
     // `u8[5168]` stand-in to the real `TrafficPhysics[20]`, for exactly the reason maRaceCarVehicles
@@ -205,7 +226,9 @@ namespace Vehicle
     // so the only remaining widening in the traffic manager is its own +192 (pointer members +
     // the 48-vs-32 debug component span).
     const std::ptrdiff_t KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER =
-        KU_HOST_DRIFT_AFTER_RACECAR_ARRAY + 192;   // +192
+        KU_HOST_DRIFT_AFTER_MODEL_HANDLES + 192;   // +320 as of 2026-08-11 (was +192; rebased onto
+                                                   // the model-handle split, which sits in front of
+                                                   // the traffic manager)
 
     // ⭐ The third term, added 2026-08-03 in an earlier wave. VehicleManagerDebugComponent is 1328
     // bytes on the host against the 1296-byte X360 span at +161968..+163264 -- +32, because its
@@ -1099,6 +1122,25 @@ namespace Vehicle
         // mHiddenNetworkRaceCars and stores luFrames into maHiddenForFrames[index]).
         void SetNetworkRaceCarHidden(EActiveRaceCarIndex leActiveRaceCarIndex, s32 liFrames);
 
+        // @0x825E9380 (175 insns): the same for EVERY live car whose maeRaceCarTypes slot says
+        // NETWORK. The 175 instructions are almost entirely the inlined
+        // GetFirstNonZeroBit/GetNextNonZeroBit walk over mUsedRaceCars plus its bounds assert
+        // (CgsBitArray.h:203); the body itself is the `== E_RACE_CAR_TYPE_NETWORK` test and the
+        // forward. Its single caller is ProcessCreateEvents' tail (`li r4,1`).
+        void SetAllNetworkRaceCarsHidden(s32 liFrames);
+
+        // @0x825E9118 (153 insns): post the AddDeformationModelEvent for a freshly created race
+        // car. RECOVERED 2026-08-11 (parameter order register-exact off the one call site
+        // @0x826173E8 -- r4/r5/r6, then f1 which consumes the r7 slot in the PPC ABI, then r8) and
+        // then DELIBERATELY NOT DECLARED: its one statement is a call to
+        // DeformationInputInterface::AddDeformationModel, whose first two parameters are typed
+        // `BrnPhysics::Deformation::ResourceHandle` (a 4-byte `{u32 muValue}` slice) and
+        // `RigidBodyId` (the 4-byte global stand-in), while the console passes EIGHT bytes for each
+        // (`ldx r4,r20,r29` / `ldx r8,r23,r29` -- 8-byte loads straight out of
+        // maRaceCarModelHandles / maRaceCarHandlingBodyIDs). Declaring it would either force a
+        // truncating cast at the one call site or a cross-group re-typing of the deformation event
+        // records. See BrnVehicleManager_CreateRemoveEvents.cpp for the full evidence.
+
         // @0x8259C028: store the local player's active-race-car slot (gated 0..7).
         void SetPlayerActiveRaceCarIndex(EActiveRaceCarIndex lePlayerActiveRaceCarIndex);
 
@@ -1676,15 +1718,21 @@ namespace Vehicle
         // (`EntityId[8] maRaceCarEntityIDs`).
         EntityId             maRaceCarEntityIDs[8];   // +43584 (4 * 8 = 32; ends 43616)
 
-        // ⭐ The 128 bytes at +43616..+43744 are the DWARF's two ResourceHandle arrays
-        // (`ResourceHandle[8] maRaceCarModelHandles` then `ResourceHandle[8]
-        // maRaceCarGraphicsModelHandles`, BrnVehicleManager.h:824/825). They fill the gap exactly at
-        // **8 bytes per handle** -- 43616 + 64 = 43680, + 64 = 43744 -- which is the independent
-        // confirmation that ResourceHandle is 8 bytes here. Modelled as an opaque span because
-        // CgsResource::ResourceHandle has no committed home in this tree yet and Construct does not
-        // touch either array; the two names + the 8-byte width are recorded so the next wave can
-        // split it without re-deriving anything. DELETE-WHEN ResourceHandle lands.
-        unsigned char        mPadAA60[43744 - 43616];  // maRaceCarModelHandles / maRaceCarGraphicsModelHandles
+        // ⭐⭐ SPLIT 2026-08-11 (the create-drain wave). This was `unsigned char mPadAA60[128]`,
+        // an opaque span with a note saying "the next wave can split it without re-deriving
+        // anything". Split, and nothing had to be re-derived:
+        //   * the DWARF names them `ResourceHandle[8] maRaceCarModelHandles` then
+        //     `ResourceHandle[8] maRaceCarGraphicsModelHandles` (BrnVehicleManager.h:824/:825);
+        //   * ProcessCreateEvents @0x82616770 writes BOTH, one `stdx` each, at
+        //     `this + 8*(idx + 0x154C)` == 43616 + 8i and `this + 8*(idx + 0x1554)` == 43680 + 8i
+        //     -- 8-byte elements, two arrays, 64 bytes apart, closing on 43744 exactly;
+        //   * and it then DOUBLE-DEREFERENCES the first (`lwzx r11,r28,r24 ; lwz r28,0(r11)`
+        //     @0x82616CF4/CFC) as the StreamedDeformationSpec for the wheel loop. A byte span
+        //     cannot carry that without an offset poke.
+        // The host ResourceHandle is 16 bytes (two real pointers) against the console's 8, so this
+        // pair costs +128 -- carried as KU_HOST_DRIFT_AFTER_MODEL_HANDLES, see the head of this file.
+        CgsResource::ResourceHandle maRaceCarModelHandles[8];          // +43616 (X360 8/elem)
+        CgsResource::ResourceHandle maRaceCarGraphicsModelHandles[8];  // +43680 (X360 8/elem)
 
         // ⭐ CORRECTED 2026-08-03: this was committed as `EntityId
         // maAggressiveDrivingVictimEntityId[8]` at **stride 4**, which left 32 bytes of the span
