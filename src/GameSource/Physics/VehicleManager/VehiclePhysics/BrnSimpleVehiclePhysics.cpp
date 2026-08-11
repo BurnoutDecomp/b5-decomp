@@ -109,6 +109,15 @@ namespace Vehicle
 
     static const Vector3 KV_ZERO = { 0.0f, 0.0f, 0.0f, 0.0f };
 
+    // ⭐ The two GetTractionLine @0x825D85C0 scalars, READ OUT OF THE X360 IMAGE at the addresses
+    // its own `lfs` instructions name (x360rd, 10/10 self-calibration) rather than guessed:
+    //   0x825D87D4  lfs f0, 7320(0x82000000)   -> *0x82001C98 == 1.0f
+    //   0x825D87E8  lfs f0, 18236(0x82000000)  -> *0x8200473C == 0.4f
+    // Descriptive names: the console gives them none (they are anonymous .rdata floats), and the
+    // roles are unambiguous from the two expressions they enter.
+    static const f32 KF_TRACTION_LINE_EXTRA_LENGTH = 1.0f;   // added to the probe's reach
+    static const f32 KF_TRACTION_LINE_START_LIFT   = 0.4f;   // start point, up the body Y axis
+
     // -------------------------------------------------------------------------------------------
     // Construct @0x826203E8 -- ⭐ RE-MERGED 2026-08-09 (attribs-setup wave), exactly per the
     // split TU's own contract ("TO RE-MERGE: body SimpleVehicleAttribs::Construct, then move
@@ -349,9 +358,23 @@ namespace Vehicle
     //   0x825D9834  lbIsOnGround      = (wheel.mPosition.y
     //                                    - wheel.mSuspensionAndInertiaVariables.x
     //                                    + wheel.mSlipVariables.w) > lineDist
-    //   0x825D98AC  lbIsCloseToGround = (same sum + mSimpleAttribs.mCOMOffset.w) > lineDist
-    //               (the +0x5A0 register's .w lane -- the attribs block's leading vector; the
-    //               committed slice names it mCOMOffset, and the console reads ITS spare .w)
+    //   0x825D98AC  lbIsCloseToGround = (same sum + the +0x5A0 register's .w lane) > lineDist
+    //
+    // ⛔⛔ CORRECTED 2026-08-11 (lifetime wave) -- A LIVE STALE-MEMBER BUG, not a comment fix.
+    // This body used to spell that .w lane `mSimpleAttribs.mCOMOffset.w`, and the note here said
+    // "the attribs block's leading vector; the committed slice names it mCOMOffset". That was
+    // true when it was written: SimpleVehicleAttribs was then a 20-byte slice whose LEADING
+    // member was mCOMOffset. The attribs-setup wave (2026-08-09) grew the type to the full
+    // 240-byte DWARF layout and moved mCOMOffset to +0xD0 -- so from that day this line has been
+    // reading `this + 0x5A0 + 0xD0 + 12`, **208 bytes past the seat the console reads**. It
+    // compiled, linked and ran; the member still existed and was still a Vector3, so nothing
+    // could catch it.
+    // The console is unambiguous (0x825D9880 `lvx128 v13, r0, r10` with r10 = this+0x5A0, then
+    // 0x825D988C `vspltw v13, v13, 3`): it is the LEADING vector's .w, which the grown type
+    // names `mvUpwardMovement_DownwardMovement_Mass_TractionLineLength` -- i.e. the attribute is
+    // literally TractionLineLength. ⭐ Independently corroborated by
+    // SimpleVehiclePhysics::GetTractionLine @0x825D85C0 (bodied this wave), which adds the SAME
+    // lane to the SAME three-term reach to size the suspension probe it shoots.
     //   0x825D98D0  Wheel::SetRoadContact(onGround, close, position, normal, tagHi, tagLo,
     //               lineDist)  -- f1 still holds the distance at the bl, v1/v2 pass through
     void SimpleVehiclePhysics::AddTractionPoint(EVehicleDrivenWheel leWheel, Vector3 lvPosition,
@@ -393,10 +416,117 @@ namespace Vehicle
                           - lrWheel.mSuspensionAndInertiaVariables.x
                           + lrWheel.mSlipVariables.w;
         const bool lbIsOnGround      = lfReach > lfLineDist;
-        const bool lbIsCloseToGround = (lfReach + mSimpleAttribs.mCOMOffset.w) > lfLineDist;
+        const bool lbIsCloseToGround =
+            (lfReach +
+             mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w)
+            > lfLineDist;
 
         lrWheel.SetRoadContact(lbIsOnGround, lbIsCloseToGround, lvPosition, lvNormal,
                                lu16TagHi, lu16TagLo, lfLineDist);
+    }
+
+    // ===========================================================================================
+    //  SimpleVehiclePhysics::GetTractionLine   @0x825D85C0  (174 insns)   ⭐⭐ THE SUSPENSION PROBE
+    // ===========================================================================================
+    // BODIED 2026-08-11 (lifetime wave). One wheel's downward traction line, in WORLD space --
+    // the two points VehicleManager::AddRaceCarTractionLineTests drops into the stream command's
+    // maLineStart[w] / maLineEnd[w].
+    //
+    // ⚠️ EXPORT HOLE: no per-function JSON in the 30,084-file X360 set (directory gap
+    // 0x825D8490+76 -> 0x825D8878), re-verified this wave by a name index over all of them.
+    // Recovered TWO ways that agree, neither of them guesswork:
+    //
+    //  (1) THE IMAGE BYTES, 0x825D85C0..0x825D8874, read with x360rd (10/10 calibration) and
+    //      decoded with a VMX128 decoder FITTED AND SELF-TESTED against an exported twin
+    //      (VehicleManager::UpdateTriangleCache @0x82615C38 carries full VMX128 mnemonics in its
+    //      export, so its 24 vector instructions are ground truth for the field layout:
+    //      VD128 = D|(bits28..29<<5), VA128 = A|(bit26<<5)|(bit21<<6), VB128 = B|(bits30..31<<5);
+    //      op5 opcode bits {22,23,24,25,27}: 0x010 vaddfp128 / 0x050 vsubfp128 / 0x090 vmulfp128 /
+    //      0x0D0 vmaddfp128 / 0x150 vnmsubfp128 / 0x190 vmsum3fp128 / 0x2D0 vor128).
+    //      ⚠️⚠️ AND THE TRAP THAT COMES WITH IT, because it changes the arithmetic: for the op-4
+    //      A-form IDA prints operands in ENCODING order vD,vA,vB,vC, not the assembler's
+    //      vD,vA,vC,vB. `vmaddfp v13, v7, v13, v6` (0x11A769AE: A=7,B=13,C=6) is
+    //      v13 = v7*v6 + v13, NOT v7*v13 + v6. Read the natural way it turns the standard
+    //      vrsqrtefp Newton-Raphson refinement into nonsense -- which is how it was caught.
+    //
+    //  (2) THE PS3 EXPORT @0x6E894C (251 insns), which supplies the signature the X360 image
+    //      cannot: `_ZNK..SimpleVehiclePhysics15GetTractionLineENS0_19EVehicleDrivenWheelE
+    //      RN2rw4math3vpu7Vector3ES7_` -- CONST, (wheel, Vector3& lOutSusLineStart,
+    //      Vector3& lOutSusLineEnd), and the parameter names are its own. Its member offsets are
+    //      the X360's byte for byte (maWheels +0x130 stride 0xE0, mTransform +0x10,
+    //      mSimpleAttribs +0x5A0 with the IsValid byte at +0xE4 inside it).
+    //
+    // ⭐⭐ THE PROBE LENGTH IS CORROBORATED BY A DIFFERENT CONSOLE FUNCTION ALREADY IN THIS TREE.
+    // AddTractionPoint above (bodied 2026-08-07 from @0x825D9608, an unrelated body) computes
+    // exactly `mPosition.y - mSuspensionAndInertiaVariables.x + mSlipVariables.w` and then adds
+    // the same mSimpleAttribs leading-vector .w lane for its close-to-ground test. This function
+    // adds that same sum, that same lane, and one metre. Two console functions agreeing on a
+    // four-term expression, with the attribute's own generated name reading
+    // ...Mass_TractionLineLength, is as strong as recovery gets here.
+    //
+    // BOTH FLOAT CONSTANTS READ OUT OF THE IMAGE, NOT GUESSED:
+    //   0x825D87D4  lfs f0, 0x82001C98   ==  1.0f   -> added to the probe length
+    //   0x825D87E8  lfs f0, 0x8200473C   ==  0.4f   -> the start point's lift up the body Y axis
+    // ⚠️ FLAG -- A BUILD DIVERGENCE, reproduced as the X360 has it: the PS3 body uses 0.4f for
+    // BOTH terms (it materialises one stack vector, 0x3ECCCCCD in all lanes, and uses it twice).
+    // The X360 loads two DIFFERENT .rdata floats. The X360 image is the reconstruction target.
+    //
+    // AS SHIPPED, all four lanes travel: the console loads/stores with lvx128/stvx128 and this
+    // tree's Vector3 is the same 16-byte four-lane register, so the w lane is carried rather
+    // than dropped (it falls out as mTransform.wAxis.w, exactly as on the console).
+    void SimpleVehiclePhysics::GetTractionLine(EVehicleDrivenWheel leWheel,
+                                               Vector3& lOutSusLineStart,
+                                               Vector3& lOutSusLineEnd) const
+    {
+        // 0x825D85E8 / 0x825D8610 -- the two range tripwires, baked lines 501 and 502.
+        CGS_ASSERT(leWheel >= eFrontLeftWheel,  "leWheel >= eFrontLeftWheel");     // :501
+        CGS_ASSERT(leWheel <  eNumDrivenWheels, "leWheel < eNumDrivenWheels");     // :502
+
+        const Wheel& lrWheel = maWheels[leWheel];
+
+        // 0x825D8650..0x825D86B8 -- the same three-lane NaN sweep AddTractionPoint runs, with
+        // the same console-authored message (Wheel.h:368).
+        CGS_ASSERT(lrWheel.mPosition.x == lrWheel.mPosition.x &&
+                   lrWheel.mPosition.y == lrWheel.mPosition.y &&
+                   lrWheel.mPosition.z == lrWheel.mPosition.z,
+                   "Invalid wheel position: , please tell Graham D.");
+
+        // 0x825D8774 `lbz r9, 1668(r26)` == mSimpleAttribs (+0x5A0) + mbIsValid (+0xE4).
+        CGS_ASSERT(GetSimpleAttribs()->IsValid(), "GetSimpleAttribs()->IsValid()");  // :511
+
+        // 0x825D8778..0x825D8798 -- worldWheelPos = mTransform * wheel.mPosition. Same cascade
+        // as AddTractionPoint (three rows scaled by the local lanes, seeded with the wAxis row).
+        const Vector3 lvWorldWheelPos{
+            mTransform.xAxis.x * lrWheel.mPosition.x + mTransform.yAxis.x * lrWheel.mPosition.y
+                + mTransform.zAxis.x * lrWheel.mPosition.z + mTransform.wAxis.x,
+            mTransform.xAxis.y * lrWheel.mPosition.x + mTransform.yAxis.y * lrWheel.mPosition.y
+                + mTransform.zAxis.y * lrWheel.mPosition.z + mTransform.wAxis.y,
+            mTransform.xAxis.z * lrWheel.mPosition.x + mTransform.yAxis.z * lrWheel.mPosition.y
+                + mTransform.zAxis.z * lrWheel.mPosition.z + mTransform.wAxis.z,
+            mTransform.xAxis.w * lrWheel.mPosition.x + mTransform.yAxis.w * lrWheel.mPosition.y
+                + mTransform.zAxis.w * lrWheel.mPosition.z + mTransform.wAxis.w };
+
+        // 0x825D87CC..0x825D8854 -- the probe length: the wheel's own reach (hub height above
+        // its lowest suspension seat, plus the tyre radius), plus the car's TractionLineLength
+        // attribute, plus one metre of margin.
+        const f32 lfProbeLength =
+            (lrWheel.mPosition.y
+             - lrWheel.mSuspensionAndInertiaVariables.x
+             + lrWheel.mSlipVariables.w)
+            + mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w
+            + KF_TRACTION_LINE_EXTRA_LENGTH;
+
+        // 0x825D8850 `vmaddfp128 v8, v0, v9` : start = worldWheelPos + yAxis * 0.4
+        lOutSusLineStart.x = lvWorldWheelPos.x + mTransform.yAxis.x * KF_TRACTION_LINE_START_LIFT;
+        lOutSusLineStart.y = lvWorldWheelPos.y + mTransform.yAxis.y * KF_TRACTION_LINE_START_LIFT;
+        lOutSusLineStart.z = lvWorldWheelPos.z + mTransform.yAxis.z * KF_TRACTION_LINE_START_LIFT;
+        lOutSusLineStart.w = lvWorldWheelPos.w + mTransform.yAxis.w * KF_TRACTION_LINE_START_LIFT;
+
+        // 0x825D885C/0x825D8860 `vmulfp128` + `vsubfp128` : end = worldWheelPos - yAxis * length
+        lOutSusLineEnd.x = lvWorldWheelPos.x - mTransform.yAxis.x * lfProbeLength;
+        lOutSusLineEnd.y = lvWorldWheelPos.y - mTransform.yAxis.y * lfProbeLength;
+        lOutSusLineEnd.z = lvWorldWheelPos.z - mTransform.yAxis.z * lfProbeLength;
+        lOutSusLineEnd.w = lvWorldWheelPos.w - mTransform.yAxis.w * lfProbeLength;
     }
 
     // ===========================================================================================

@@ -71,16 +71,19 @@ namespace Vehicle
     s32 gs_iUpdateVehicleImpactsPM    = KI_PERFMON_UNREGISTERED;   // dword_82F2A14C
     s32 gs_iProcessAboveGroundLTsPM   = KI_PERFMON_UNREGISTERED;   // dword_82F2A150
     s32 gs_iTractionLTsPM             = KI_PERFMON_UNREGISTERED;   // dword_82F2A154
-    static s32 gs_iTractionGetLinesPM        = KI_PERFMON_UNREGISTERED;   // dword_82F2A158
-    static s32 gs_iTractionLineTestsPM       = KI_PERFMON_UNREGISTERED;   // dword_82F2A15C
+    // ⭐ HOISTED 2026-08-11 (lifetime wave): Start/EndVehicleTractionLineTests are real bodies now
+    // and bracket their stages with these five, so per the handles header's rule they move to
+    // external linkage there rather than being re-declared locally.
+    s32 gs_iTractionGetLinesPM        = KI_PERFMON_UNREGISTERED;   // dword_82F2A158
+    s32 gs_iTractionLineTestsPM       = KI_PERFMON_UNREGISTERED;   // dword_82F2A15C
     // ⭐ HOISTED 2026-08-10 (ground wave): RunTractionLineTestJobs @0x825B5168 brackets its Begin /
     // RunStream stages with these two ids, so per the handles header's rule they move to external
     // linkage there rather than being re-declared locally.
     s32 gs_iLineTestsBeginPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A168
     s32 gs_iLineTestsRunStreamPM      = KI_PERFMON_UNREGISTERED;   // dword_82F2A16C
-    static s32 gs_iLineTestsFinishPM         = KI_PERFMON_UNREGISTERED;   // dword_82F2A170
-    static s32 gs_iLineTestsEndPM            = KI_PERFMON_UNREGISTERED;   // dword_82F2A174
-    static s32 gs_iTractionProcessResultsPM  = KI_PERFMON_UNREGISTERED;   // dword_82F2A160
+    s32 gs_iLineTestsFinishPM         = KI_PERFMON_UNREGISTERED;   // dword_82F2A170
+    s32 gs_iLineTestsEndPM            = KI_PERFMON_UNREGISTERED;   // dword_82F2A174
+    s32 gs_iTractionProcessResultsPM  = KI_PERFMON_UNREGISTERED;   // dword_82F2A160
     static s32 gs_iTractionTrafficPM         = KI_PERFMON_UNREGISTERED;   // dword_82F2A164
     s32 gs_iCrashFatalPM              = KI_PERFMON_UNREGISTERED;   // dword_82F2A178
     s32 gs_iUpdateRaceCarsPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A17C

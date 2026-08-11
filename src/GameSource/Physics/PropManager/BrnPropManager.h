@@ -29,6 +29,9 @@ namespace rw { struct IResourceAllocator; }
 namespace CgsSceneManager { namespace SceneManagerIO { struct TriangleCacheInterface;
                                                        struct InSceneUpdateInterface; } }
 namespace CgsSceneManager { namespace CgsCollision { struct CollisionGenerator; } }
+// ⭐ ADDED 2026-08-11 (lifetime wave): UpdateTriangleCache's parameter, pointer only.
+// Class key `struct`, matching the single home CgsSceneManagerIO.h:31.
+namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Update; } }
 // ⭐ ADDED 2026-08-10 (create-path wave): ProcessInputsPreScene's first parameter, pointer only.
 // Class key `struct`, matching the single home SharedIO/BrnPropInputInterface.h:54.
 namespace BrnPhysics { namespace Props { struct PropInputInterface; } }
@@ -186,6 +189,17 @@ namespace Props
             CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
             bool lbNetworkCatchup,
             CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInputBuffer ); // @0x8263AF30
+
+        // @0x826119A0 (116 insns; 573-instruction closure). Arm 2 of
+        // PhysicsModule::UpdateCachedPositions @0x8259C370: per live prop, post one
+        // InEventUpdateCachedPosition for that prop's triangle-cache slot. Signature from the PS3
+        // DWARF (..PropManager19UpdateTriangleCacheEPN15CgsSceneManager14SceneManagerIO18
+        // InputBuffer_UpdateE). ⚠ FLAG: DECLARED for UpdateCachedPositions' closure; body is a
+        // LOUD one-shot gate (BrnPhysicsConductorGates.cpp) -- props own ZERO triangle-cache
+        // slots today, so a gate here drops nothing.
+        void UpdateTriangleCache(
+            CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update);
+
         static const s32 KI_PROP_INDEX_NOT_FOUND     = -1;    // DWARF BrnPropManager.h:245
 
         typedef CgsModule::EventQueue<UpdatePropEvent, 200> UpdatePropEventQueue;

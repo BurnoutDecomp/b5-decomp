@@ -198,6 +198,26 @@ namespace Vehicle
         void SetAboveGroundTestResult(Vector3 lvPosition, Vector3 lvNormal,
                                       u16 lu16TagHi, u16 lu16TagLo);
 
+        // ⭐⭐ @0x825D85C0 (174 insns) -- BODIED 2026-08-11 (lifetime wave). THE SUSPENSION PROBE:
+        // one wheel's downward traction line, in world space. This is the last piece of the
+        // ground chain's GENERATION half -- VehicleManager::AddRaceCarTractionLineTests calls it
+        // once per wheel and drops the two points straight into the stream command's
+        // maLineStart[w] / maLineEnd[w].
+        //
+        // ⚠️ THE X360 EXPORT SET HAS NO JSON FOR IT (a true directory hole, re-verified this wave
+        // by a name index over all 30,084). Recovered TWO independent ways that agree:
+        //   1. the image bytes at 0x825D85C0..0x825D8874, decoded with a VMX128 decoder fitted
+        //      and self-tested against an EXPORTED twin (VehicleManager::UpdateTriangleCache
+        //      @0x82615C38, whose IDA export carries full VMX128 mnemonics);
+        //   2. the PS3 export @0x6E894C, which is what gives the CONST-ness, the three parameter
+        //      names and the argument types:
+        //      _ZNK..SimpleVehiclePhysics15GetTractionLineENS0_19EVehicleDrivenWheelE
+        //          RN2rw4math3vpu7Vector3ES7_
+        //      Its member offsets match the X360 body exactly (maWheels +0x130 stride 0xE0,
+        //      mTransform +0x10, mSimpleAttribs +0x5A0, its IsValid byte at +0xE4 within it).
+        void GetTractionLine(EVehicleDrivenWheel leWheel,
+                             Vector3& lOutSusLineStart, Vector3& lOutSusLineEnd) const;
+
         // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). DWARF BrnSimpleVehiclePhysics.h:193.
         // Per-frame reset of the wheel/road latch set + the car-level above-ground result. The
         // X360 inlines it whole into VehicleManager::UpdateVehiclePhysics' live-car loop

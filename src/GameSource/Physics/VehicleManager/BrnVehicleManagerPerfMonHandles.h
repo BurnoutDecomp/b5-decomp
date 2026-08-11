@@ -58,5 +58,17 @@ namespace Vehicle
     // file-scope slots). The rest of the traction sub-stages stay Construct-TU statics.
     extern s32 gs_iLineTestsBeginPM;          // dword_82F2A168  ("           Begin")
     extern s32 gs_iLineTestsRunStreamPM;      // dword_82F2A16C  ("           RunStream")
+
+    // ⭐ ADDITIVE HOIST 2026-08-11 (lifetime wave), per this header's own rule: the last five
+    // traction sub-stage handles gain a second reader now that StartVehicleTractionLineTests
+    // @0x82629CE0 and EndVehicleTractionLineTests @0x82633CD8 are real bodies in
+    // BrnVehicleManager_TractionLineTests.cpp -- they bracket their stages with exactly these
+    // ids (the console reads the same five file-scope slots). With these five, every traction
+    // sub-stage handle is now hoisted.
+    extern s32 gs_iTractionGetLinesPM;        // dword_82F2A158  (Start: the three Add* legs)
+    extern s32 gs_iTractionLineTestsPM;       // dword_82F2A15C  (Start: RunTractionLineTestJobs)
+    extern s32 gs_iTractionProcessResultsPM;  // dword_82F2A160  (End: the three harvests)
+    extern s32 gs_iLineTestsFinishPM;         // dword_82F2A170  (End: WaitOn the job)
+    extern s32 gs_iLineTestsEndPM;            // dword_82F2A174  (End: close the stream)
 }
 }

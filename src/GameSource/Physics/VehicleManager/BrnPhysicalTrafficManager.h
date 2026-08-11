@@ -237,6 +237,12 @@ namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact;
 // Class key `struct`, matching the single home CgsSceneManagerIO.h:31.
 namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Update; } }
 
+// ⭐ ADDED 2026-08-11 (lifetime wave): the traction-line pair's collaborators, pointer use only.
+// Class keys match their single homes -- CgsCollisionGenerator.h spells CollisionGenerator
+// `struct`, CgsSimpleDataStreamProducer.h spells both stream types `struct`.
+namespace CgsSceneManager { namespace CgsCollision { struct CollisionGenerator; } }
+namespace CgsMemory { struct SimpleDataStreamProducer; struct SimpleDataStreamResultIterator; }
+
 namespace BrnPhysics
 {
 // Forward decl of the streamed deformation model spec (real home
@@ -524,6 +530,32 @@ public:
     // non-static member because that is what the console's `bl` with r3 = this + 44768 is.
     bool PrepareTriangleCache(
         CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update);
+
+    // ⭐⭐ @0x825EE640 (261 insns) -- BODIED 2026-08-11 (lifetime wave). The traffic half of the
+    // per-frame cache-position push: per live traffic vehicle, post one
+    // InEventUpdateCachedPosition carrying {world position, bounding radius} for cache slot
+    // 8 + liVehicle (the 8 race-car slots come first -- together they are the 28 slots
+    // TriangleCacheManager reports as used). Sole caller:
+    // VehicleManager::UpdateTriangleCache @0x82615C38.
+    void UpdateTriangleCache(
+        CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update);
+
+    // ---- ⚠ FLAG: gate-bodied (BrnPhysicsConductorGates.cpp) ---------------------------------
+    // The TRAFFIC traction-line pair, gated together 2026-08-11 (lifetime wave). A race car on
+    // the ground needs neither, and they are 709 console instructions. ⛔ KEEP THEM PAIRED: the
+    // Add posts one command per live traffic vehicle and the Read consumes exactly that many
+    // records off the SHARED result cursor EndVehicleTractionLineTests hands all three harvests
+    // in turn. One without the other mis-seats every harvest downstream of it.
+    //   0x8261D580 (418) AddTrafficTractionLineTests <-> 0x8262D2B8 (291) ReadTrafficTraction...
+    // ⚠️ AddTraffic is also the witness that a stream command carries FIVE line slots, not four:
+    // it writes `miNumLines = 5` (0x8261D9F4 `stw r10, 0xA8(r30)`) where both race-car and
+    // player-stuck producers write 4.
+    s32 AddTrafficTractionLineTests(
+        CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen,
+        CgsMemory::SimpleDataStreamProducer* lpStreamProducer,
+        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpCacheInterface);
+    void ReadTrafficTractionLineTestResults(
+        CgsMemory::SimpleDataStreamResultIterator* lpResultIterator);
 
     // ⭐ ADDED 2026-08-10 (create-path wave). X360 0x825EF608 (334 insns), bodied in
     // GameSource/Physics/VehicleManager/BrnVehicleManager_ReadUpdatedBodies.cpp alongside its

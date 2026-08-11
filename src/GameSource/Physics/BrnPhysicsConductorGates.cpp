@@ -246,11 +246,53 @@ namespace Vehicle
         BRN_CONDUCTOR_GATE("VehicleManager::CheckState @0x825EADA8 (170)");
     }
 
-    void VehicleManager::StartVehicleTractionLineTests(CgsModule::IOBufferStack*,
-                                                       const VehicleInputInterface*,
-                                                       Deformation::DeformationManager*, f32)
+    // ⭐⭐ 2026-08-11 (lifetime wave): the StartVehicleTractionLineTests @0x82629CE0 gate that
+    // stood here is DELETED. The real 78-instruction body is in
+    // BrnVehicleManager_TractionLineTests.cpp, alongside the matching EndVehicleTractionLineTests
+    // (whose link stub in BrnVehicleManagerLinkStubs.cpp is deleted with it -- they are one
+    // lifetime and can never be split; End dereferences mpTractionLineStreamProducer with no null
+    // guard and UpdateVehiclePhysics reaches it unconditionally every frame).
+    //
+    // What replaces it is SMALLER and PAIRED: six named gates for the two SIDE legs the race-car
+    // ground path does not need (1,319 console instructions measured this wave). ⛔ Each Add is
+    // gated WITH its own Read, because EndVehicleTractionLineTests hands ONE result cursor to the
+    // three harvests in turn -- an Add without its Read leaks records into the next harvest, and a
+    // Read without its Add consumes the race-car leg's answers.
+    //
+    // ⚠️ These six are reached EVERY FRAME as of this wave (the lifetime above them is live), so
+    // each is the repo's log-once boot-gate shape, not a silent no-op. The three that return a
+    // command count return 0, which is the truthful "posted nothing".
+
+    s32 VehicleManager::AddPlayerStuckInCollisionLineTests(
+            CgsSceneManager::CgsCollision::CollisionGenerator*,
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface*,
+            BrnPhysics::Deformation::DeformationManager*)
     {
-        BRN_CONDUCTOR_GATE("VehicleManager::StartVehicleTractionLineTests @0x82629CE0 (78)");
+        BRN_CONDUCTOR_GATE("VehicleManager::AddPlayerStuckInCollisionLineTests @0x825E9B28 (171) "
+                           "-- PAIRED with ReadPlayerStuckTractionLineTestResults @0x825C3898; "
+                           "reconstruct and un-gate BOTH together");
+        return 0;
+    }
+
+    void VehicleManager::UpdatePlayerStuckInCollisionTest(
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface*, f32)
+    {
+        BRN_CONDUCTOR_GATE("VehicleManager::UpdatePlayerStuckInCollisionTest @0x825E9DD8 (87) "
+                           "-- player-stuck leg (drives UpdatePlayerStuckInCollisionSpheres)");
+    }
+
+    void VehicleManager::UpdatePlayerStuckInCollisionSpheres(f32)
+    {
+        BRN_CONDUCTOR_GATE("VehicleManager::UpdatePlayerStuckInCollisionSpheres @0x825C4AB8 (147) "
+                           "-- player-stuck leg");
+    }
+
+    void VehicleManager::ReadPlayerStuckTractionLineTestResults(
+            CgsMemory::SimpleDataStreamResultIterator*)
+    {
+        BRN_CONDUCTOR_GATE("VehicleManager::ReadPlayerStuckTractionLineTestResults @0x825C3898 "
+                           "(118) -- PAIRED with AddPlayerStuckInCollisionLineTests @0x825E9B28; "
+                           "leaving it inert is CORRECT while the Add posts nothing");
     }
 
     void VehicleManager::EndVehicleContactGeneration(
@@ -370,6 +412,42 @@ namespace Vehicle
     {
         BRN_CONDUCTOR_GATE("VehicleManager::UpdateFatalCrashFlags @0x825EA970 (173)");
     }
+
+    // ---- 2026-08-11 (lifetime wave): the TRAFFIC traction-line pair. Same pairing rule as the
+    // player-stuck four above -- Add and Read are one leg and must be un-gated together.
+    s32 PhysicalTrafficManager::AddTrafficTractionLineTests(
+            CgsSceneManager::CgsCollision::CollisionGenerator*,
+            CgsMemory::SimpleDataStreamProducer*,
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface*)
+    {
+        BRN_CONDUCTOR_GATE("PhysicalTrafficManager::AddTrafficTractionLineTests @0x8261D580 (418) "
+                           "-- PAIRED with ReadTrafficTractionLineTestResults @0x8262D2B8; "
+                           "reconstruct and un-gate BOTH together");
+        return 0;
+    }
+
+    void PhysicalTrafficManager::ReadTrafficTractionLineTestResults(
+            CgsMemory::SimpleDataStreamResultIterator*)
+    {
+        BRN_CONDUCTOR_GATE("PhysicalTrafficManager::ReadTrafficTractionLineTestResults @0x8262D2B8 "
+                           "(291) -- PAIRED with AddTrafficTractionLineTests @0x8261D580; leaving "
+                           "it inert is CORRECT while the Add posts nothing");
+    }
+
+    // ---- 2026-08-11 (lifetime wave): the two NON-VEHICLE arms of
+    // PhysicsModule::UpdateCachedPositions @0x8259C370 (bodied this wave in BrnPhysicsModule.cpp).
+    // ⭐ WHY GATING THESE TWO IS NOT THE FORBIDDEN "PARTIAL": the five per-manager
+    // UpdateTriangleCache producers write INDEPENDENT per-slot InEventUpdateCachedPosition
+    // events into ONE queue whose consumer (CacheSlot::UpdateCachedObject, landed and draining
+    // every frame) is per-slot. There is no lifetime pair and no count invariant between
+    // managers. And props/deformation own ZERO triangle-cache slots today -- the runtime witness
+    // is `usedSlots=28`, which is exactly KI_MAX_ACTIVE_RACE_CARS(8) +
+    // KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC(20) -- so no consumer can read a stale prop sphere. A
+    // manager that does not push leaves its own unclaimed slots where they already are.
+    // Their closures are 573 (props: GetTriangleCacheSlotAndRadius 247 + UpdateTriangleCache 116
+    // + UpdatePro 41 + Has{Part,Prop}JustBeenRemoved 2x99 ...) and 585 (deformation:
+    // DetachedWheel 264 + DetachedPart 113 + PhysicalBodyPartPool::GetPart 110 + the conductor 35
+    // + IsPartIndexUsed 63) console instructions.
 }
 
 namespace Deformation
@@ -439,6 +517,27 @@ namespace Props
     void PropManager::OutputUpdatedProps(BrnPhysics::PhysicsModuleIO::OutputBuffer*)
     {
         BRN_CONDUCTOR_GATE("PropManager::OutputUpdatedProps @0x82627EC8 (14)");
+    }
+
+    // 2026-08-11 (lifetime wave) -- arm 2 of PhysicsModule::UpdateCachedPositions. See the note
+    // at the foot of the Vehicle namespace above for why this one is gated while arm 1 is real.
+    void PropManager::UpdateTriangleCache(
+        CgsSceneManager::SceneManagerIO::InputBuffer_Update*)
+    {
+        BRN_CONDUCTOR_GATE("PropManager::UpdateTriangleCache @0x826119A0 (116; 573-insn closure) "
+                           "-- props own ZERO triangle-cache slots today (usedSlots==28==8+20)");
+    }
+}
+
+namespace Deformation
+{
+    // 2026-08-11 (lifetime wave) -- arm 3 of PhysicsModule::UpdateCachedPositions.
+    void DeformationManager::UpdateTriangleCache(
+        CgsSceneManager::SceneManagerIO::InputBuffer_Update*)
+    {
+        BRN_CONDUCTOR_GATE("DeformationManager::UpdateTriangleCache @0x826230E8 (35; 585-insn "
+                           "closure onto DetachedPart/DetachedWheelManager) -- detached parts and "
+                           "wheels own ZERO triangle-cache slots today");
     }
 }
 }
