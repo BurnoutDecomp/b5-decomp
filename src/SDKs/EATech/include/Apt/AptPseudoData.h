@@ -34,13 +34,13 @@ struct AptPlaceObjectInfo_t
 {
     u8  maPad00[8];          // [0x00] tag dword + the align pad to the body
     u32 muxFlags;            // [0x08] body+0x00  PlaceObject flag bits   [c:+0x04]
-    s32 mi32Depth;           // [0x0C] body+0x04  display depth (i32)     [c: s16 @+0x38]
+    s32 mi32Depth;           // [0x0C] body+0x04  display depth (i32)     [c:+0x08]
     s32 mi32CharacterId;     // [0x10] body+0x08  placed character id
     u8  maMatrix[24];        // [0x14] body+0x0C  2D affine (6 floats)    [c:+0x10]
     u8  maColorTransform[8]; // [0x2C] body+0x24  packed colour transform [c:+0x28]
     f32 mfRatio;             // [0x34] body+0x2C  morph/tween ratio       [c:+0x30]
     const char* mpName;      // [0x38] body+0x30  instance-name ptr8
-    s32 miClipDepth;         // [0x40] body+0x38  clip depth
+    s32 miClipDepth;         // [0x40] body+0x38  clip depth              [c: s16 @+0x38]
     u8  maPad44[4];          // [0x44]
     void* mpClipActions;     // [0x48] body+0x40  clipActions block ptr8  [c: value @+0x3C]
 };
