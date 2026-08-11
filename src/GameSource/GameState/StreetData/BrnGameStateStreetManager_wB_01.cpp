@@ -46,6 +46,13 @@ namespace
     const s32         KI_STREET_DATA_EVENT_ID       = 1;
     const s32         KI_STREET_DATA_POOL_ID        = 5;
 
+    // LoadDistrictMap's own literals (asm 0x8234FBF8-FC28: the "Districts" rodata string,
+    // `li r10, 1` == the event id, `li r10, 5` == the GameData pool). Same pool/event id as
+    // the street-data leg above; named separately because they are that function's operands.
+    const char* const KPC_DISTRICT_MAP_RESOURCE_NAME = "Districts";
+    const s32         KI_DISTRICT_MAP_EVENT_ID       = 1;
+    const s32         KI_DISTRICT_MAP_POOL_ID        = 5;
+
     // The X360 baked assert path/line for the meLoadStage default case.
     const char* const KPC_STREET_MANAGER_FILE =
         "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp";
@@ -312,23 +319,51 @@ bool StreetManager::LoadDistrictMap( GameStateModuleIO::OutputBuffer* lpOutput,
         {
             lpReceiverQueue->Clear();
 
-            // Build the "Districts" acquire request on the stack: { mpUser = receiver queue,
-            // miEventId = 1, miPoolId = 5, mResourceId = HashString("Districts") | (5 << 32) }
-            // and AddEvent it (type 4, 24 bytes) onto the request interface's <3072,16> queue
-            // (this+0x3414 == RequestInterface<3072>, its VariableEventQueue<3072,16> at offset 0).
-            CgsResource::Events::AcquireResourceRequest lRequest;
-            lRequest.mpUser    = lpReceiverQueue;
-            lRequest.miEventId = 1;
-            lRequest.miPoolId  = 5;
-            lRequest.mResourceId.SetHash(
-                static_cast<u64>( static_cast<u32>(
-                    CgsResource::ID::HashString( reinterpret_cast<const u8*>( "Districts" ) ) ) )
-                | 0x500000000ULL );
-
-            CgsModule::VariableEventQueue<3072,16>* lpRequestQueue =
-                reinterpret_cast<CgsModule::VariableEventQueue<3072,16>*>(
-                    lpOutput->GetResourceRequestInterface() );
-            lpRequestQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &lRequest ), 4, 24 );
+            // Build the "Districts" acquire request: { mpUser = receiver queue, miEventId = 1,
+            // miPoolId = 5, mResourceId = HashString("Districts") } and AddEvent it (type 4)
+            // onto the request interface's <3072,16> queue (this+0x3414 ==
+            // RequestInterface<3072>, its VariableEventQueue<3072,16> at offset 0).
+            //
+            // CONSOLE attestation (asm 0x8234FC08..0x8234FC38), store for store:
+            //   stw r31, var_40 (+0)     = &the receiver queue
+            //   stw r10(1), var_3C (+4)  = miEventId
+            //   std r11,  var_30 (+0x10) = the RAW HashString("Districts") return value
+            //   stw r10(5), var_38 (+8)  = miPoolId
+            //   li r5,4 / li r6,0x18 -> AddEvent(type 4, size 24 == the 32-BIT sizeof)
+            //
+            // ⚠️⚠️ TWO LIVE BUGS FIXED HERE 2026-08-11 -- this is what printed
+            // `[StreetManager] district map: handle=0` in the last boot log while
+            // DISTRICTS.DAT was demonstrably resident ("LoadBundle 'Districts.dat' -> pool 5:
+            // 1 resources"). Both were console-literal transcriptions that do not survive the
+            // x64 host:
+            //
+            //  (1) THE ID WAS TAGGED `| 0x500000000`. That is a Hex-Rays STORE-FUSION artifact:
+            //      the decompiler folded the separate `li r10, 5 / stw var_38` miPoolId store
+            //      into the `std` of the hash. HashString @0x828D84A8 ends `clrldi r3, r3, 32`,
+            //      so the id's high dword is ZERO, and Pool::FindResource compares the whole
+            //      64-bit value -- a tagged id matches nothing, the pool replies with the
+            //      both-null handle, and the bind below stamps NULL. The same artifact family
+            //      was already retired in RequestInterface<N>::AcquireResource (the `<< 48`
+            //      form), in BrnWorldModule::LoadAttribSysVault (`| 0x700000000`) and, this
+            //      wave, in BrnWorldModule::LoadDistrictMap. The sibling loader in this very
+            //      file -- LoadStreetData -- goes through the untagged AcquireResource builder,
+            //      which is exactly why STREETDATA.DAT binds and the district map did not.
+            //
+            //  (2) THE POST SIZE WAS THE CONSOLE'S LITERAL 24. On x64 the record is 32 bytes
+            //      (8-byte mpUser, 8-aligned CgsID at +0x10, mbCheckRefCount at +0x18), so a
+            //      24-byte copy stopped at the end of mResourceId and left mbCheckRefCount
+            //      reading whatever stale bytes the queue buffer held --
+            //      PoolModule::DoAcquireResourceRequest passes it straight into
+            //      FindResource's ref-count gate. Post sizeof(), the convention every committed
+            //      producer uses (the consumer reads the record BY NAME, so producer and
+            //      consumer agree by construction).
+            //
+            // The request is issued through the de-inlined builder the console folded in
+            // (RequestInterface<3072>::AcquireResource -- same type 4, same four fields, and
+            // it is the identical call LoadStreetData's acquire leg already makes).
+            lpOutput->GetResourceRequestInterface()->AcquireResource(
+                lpReceiverQueue, KI_DISTRICT_MAP_EVENT_ID, KI_DISTRICT_MAP_POOL_ID,
+                KPC_DISTRICT_MAP_RESOURCE_NAME );
 
             meDistrictMapLoadStage = E_DISTRICT_MAP_ACQUIRE_RESPONSE;
             return false;

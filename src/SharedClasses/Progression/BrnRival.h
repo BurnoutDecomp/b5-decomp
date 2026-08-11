@@ -32,13 +32,30 @@ struct Rival
     // X360 reads mId out of this record in the ProgressionData rival lookups.
     CgsID GetId() const { return mId; }
 
+    // ---- ADDITIVE (SetupParRivals wave, 2026-08-11) --------------------------------------
+    // BODIED (it was in the declared-only list below, and defined nowhere in the tree -- the
+    // same latent-unresolved-external state Road::GetId/GetRoadLimitId0 were in). It has no
+    // standalone X360 symbol; the console folds it into its callers, so a header inline IS the
+    // faithful shape (same treatment as GetId above).
+    //
+    // ⭐ ASM ATTESTATION -- StreetManager::FindRivalsByDistrict @0x82336360, at 0x82336400:
+    //     lbz   r10, 0x14(r11)      ; a ONE-BYTE load of miDistrictIndex (console +0x14)
+    //     extsb r10, r10            ; SIGN-extended to 32 bits ...
+    //     cmpw  cr6, r10, r26       ; ... and compared SIGNED against the wanted district
+    // The `lbz`+`extsb` pair is what pins the member to the s8 miDistrictIndex rather than to
+    // any wider neighbour, and the sign extension is why the cast below is from s8 (not u8):
+    // a negative district index stays negative. Read by name, so the x64 layout carries it.
+    BrnWorld::EDistrict GetDistrict() const
+    {
+        return static_cast<BrnWorld::EDistrict>(miDistrictIndex);
+    }
+
     // ---- Remaining X360-attested API (bodies in the Rival TU; declaration-only here) ----
     void           Construct(CgsID lId, CgsID lCarId, s16 liPersonalityIndex, s16 liPursuitTarget, s8 liDistrictIndex);
     void           Construct(CgsID lId);
     void           SetName(const char* lpcName);
     CgsID          GetCarId() const;
     s16            GetPursuitTarget() const;
-    BrnWorld::EDistrict GetDistrict() const;
     const char*    GetName() const;
     s16            GetPersonalityIndex() const;
     s8             GetUnlockRank() const;

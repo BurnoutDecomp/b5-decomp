@@ -305,6 +305,28 @@ namespace BrnStreetData
     inline const char* Road::GetDebugName() const   { return macDebugName; }
     inline int32_t     StreetData::GetRoadCount() const { return miRoadCount; }
 
+    // ---- ADDITIVE (SetupParRivals wave, 2026-08-11) ---------------------
+    // The two road-limit ids, in the same declared-here/defined-nowhere state the three
+    // reads above were in. Same treatment (header inline): neither has a standalone
+    // symbol in the X360 ledger -- the console folds them into every caller.
+    //
+    // ⭐ ASM ATTESTATION for GetRoadLimitId0, from its only in-tree caller
+    // StreetManager::SetupParRivals @0x8233F560. The road pointer is built at
+    // 0x8233F720-28 (`lwz r10, 0x10(r31)` == StreetData::mpaRoads, `add r23, r10, r14`
+    // where r14 steps by the console's 0x40 road stride), and the accessor is the single
+    // instruction at 0x8233F758:
+    //     ld  r10, 0x18(r23)          ; == Road::miRoadLimitId0 (console +24)
+    // compared 64-bit-wide (`cmpld cr6, r9, r10`) against the sign-extended 32-bit
+    // GenericRegion::mId at 0x8233F760-68 -- i.e. an 8-byte CgsID load, which is what
+    // pins it to miRoadLimitId0 (console +24) rather than mId (console +16, the slot
+    // Road::GetId already owns) or miRoadLimitId1 (console +32).
+    //
+    // GetRoadLimitId1 has NO attested call site in the current tree; it is bodied here
+    // for symmetry off the same DWARF-declared member pair and the same layout pins, and
+    // is read by name, so the x64 relayout carries both for free.
+    inline CgsID       Road::GetRoadLimitId0() const { return miRoadLimitId0; }
+    inline CgsID       Road::GetRoadLimitId1() const { return miRoadLimitId1; }
+
     // ---- element relocation (X360-inlined into StreetData::FixDown/FixUp) ------
     // Each element owns exactly one relocatable slot: Road::mpaSpans and
     // Junction::mpaExits (the console's `lwz r8, 0xC(r9); add/sub delta; stw`). They

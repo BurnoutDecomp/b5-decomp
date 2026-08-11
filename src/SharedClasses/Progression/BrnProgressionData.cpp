@@ -97,6 +97,41 @@ s32 ProgressionData::FindRivalIndexFromId(CgsID lRivalId) const
     return liRivalIndex;
 }
 
+// ---- ADDITIVE (SetupParRivals wave, 2026-08-11) -------------------------------------------
+// The by-index rival accessor BrnProgressionData.h:107-108 declares and delegates to this TU.
+// It has NO standalone X360 symbol -- the console folds it into every caller -- so its shape is
+// recovered from two independent inline expansions, which agree instruction for instruction:
+//
+//   StreetManager::FindRivalsByDistrict @0x82336360 (loop body 0x82363D8..0x82363FC)
+//       cmpw  cr6, r29, r11         ; r29 == liIndex, r11 == *(pd + 0x2C) == miRivalCount
+//       blt   cr6, ok               ; ...the bound is a SIGNED `liIndex < miRivalCount`,
+//       bl    BeginAssert           ;    with NO liIndex >= 0 half (unlike GetRoad's)
+//       li    r5, 0x1CC             ; BrnProgressionData.h:460
+//       <"liIndex < miRivalCount", "..\..\..\SharedClasses\Progression/BrnProgressionData.h">
+//     ok: lwz  r11, 0x28(r28)       ; == mpaRivals (console +0x28)
+//         add  r11, r11, r31        ; r31 steps by 0x38 == the 56-byte Rival stride
+//
+//   StreetManager::SetupParRivals @0x8233F560 (fallback leg 0x8233F804..0x8233F838) --
+//   the SAME assert (r5 = 0x1CC, same two literals) followed by `lwz r11, 0x28(r28)` and a
+//   `ld r11, 0(r11)` for GetRival(0)->GetId(). Note the console RE-EVALUATES the whole
+//   accessor (assert included) once per stored id, which is why the assert lives HERE and the
+//   callers never duplicate it -- exactly what the header's note says.
+//
+// The count word is re-read from the object on every evaluation in both sites (never hoisted),
+// so it is read through the member here rather than cached by the caller. Table access is
+// through the serialised-slot helper GetRivals(), so no console byte offset is transcribed.
+const Rival* ProgressionData::GetRival(s32 liIndex) const
+{
+    CGS_ASSERT(liIndex < miRivalCount, "liIndex < miRivalCount");
+    return &GetRivals()[liIndex];
+}
+
+Rival* ProgressionData::GetRival(s32 liIndex)
+{
+    CGS_ASSERT(liIndex < miRivalCount, "liIndex < miRivalCount");
+    return &GetRivals()[liIndex];
+}
+
 // X360 0x82676AC8. Same scan as FindRivalIndexFromId, but returns the matching Rival pointer (or
 // null when the scan runs off the end without a match).
 const Rival* ProgressionData::FindRival(CgsID lRivalId) const
