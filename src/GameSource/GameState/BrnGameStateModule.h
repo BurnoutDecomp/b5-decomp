@@ -669,6 +669,30 @@ private:
     // The base's copy is private, so there is no ambiguity; nothing reads it through this class.
     EPrepareStage mePrepareStage = E_PREPARESTAGE_START;
 
+    // ⚠️ [FLAG PC bring-up] STANDS IN FOR StuntManager::meDistrictMapLoadStage.
+    // Prepare stage 4 is `StuntManager::Prepare(this+183952, out)` @0x82380F30, whose FIRST
+    // statement is StuntManager::LoadDistrictMap @0x82399458 -- the console's own
+    // LoadBundle("Districts.dat", pool 5) -> acquire("Districts") pair. That sub-object is not
+    // reconstructed on this module (there is no mStuntManager member) and the committed
+    // BrnStuntManager.cpp loader is still an inert deferral, so nothing has ever made the
+    // DISTRICTS.DAT bundle resident during Prepare -- which is exactly what stage 23's
+    // StreetManager::LoadDistrictMap needs, because THAT machine only ACQUIRES (it never loads
+    // the bundle; on the console stage 4 loaded it 19 stages earlier).
+    // This latch carries the request/response half of that console machine at the stage that
+    // calls it. It is a SITE deviation, not an invented call: the request is the console's own,
+    // with the console's own arguments. Three states, mirroring the console machine's first
+    // three (LOAD_REQUEST / LOAD_RESPONSE / past-it) -- the DONE state has to be STICKY because
+    // Prepare's terminal stage re-arms mePrepareStage at MANAGER for a later re-prepare, and a
+    // two-state latch would stall stage 4 for ever on that second pass.
+    // DELETE-WHEN GameStateModule embeds a real StuntManager and stage 4 calls its Prepare.
+    enum EDistrictsBundleStage
+    {
+        E_DISTRICTS_BUNDLE_NOT_REQUESTED = 0,
+        E_DISTRICTS_BUNDLE_REQUESTED     = 1,
+        E_DISTRICTS_BUNDLE_LOADED        = 2,
+    };
+    EDistrictsBundleStage meDistrictsBundleStage = E_DISTRICTS_BUNDLE_NOT_REQUESTED;
+
     // X360 this+556 (0x22C) -- Prepare2's OWN stage word, four bytes past mePrepareStage. Proven
     // straight off 0x8239ED10 (`lwz r11, 0x22C(r31)` / three `stw ..., 0x22C(r31)`). It is NOT
     // the word Prepare's tail clears: that one is this+560 (0x230), a different flag.

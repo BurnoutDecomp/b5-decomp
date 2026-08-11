@@ -133,8 +133,30 @@ void StreetManager::SetupParRivals( const TriggerQueryManager* lpTriggerQueryMan
 
             if ( lpGenericRegion->GetId() == lpRoad->GetRoadLimitId0() )
             {
-                // The vperm at 0x8233F7A8 is GetValue(Vector3)'s inlined xz swizzle.
-                const u8 luDistrict = lWorldMap.GetValue( lpGenericRegion->GetBoxRegion()->GetPosition() );
+                // ⚠️ THE SWIZZLE IS THE CALL SITE'S, AND IT IS NOT (x, y).
+                // The console loads the region's three position floats into consecutive stack
+                // slots (0x8233F770/84/88 -> var_100/var_FC/var_F8), lvx128's them into v0, and
+                // then does `vperm v1, v0, v0, v7` (0x8233F7A8) BEFORE the bl to
+                // WorldMap2D::GetValue -- i.e. GetValue(Vector3)'s ground-plane swizzle, inlined
+                // here. GetValue itself reads only lanes 0 and 1 (`vspltw v10,v1,0` /
+                // `vspltw v9,v1,1` @0x82907FF8), so if the wanted lanes were already 0 and 1 the
+                // compiler would have passed v0 straight through and emitted no vperm at all.
+                // The permute therefore PROVES the sampled pair is not (x, y); a 2D world map
+                // over a Y-up world samples (x, z), which is also what the map's own rectangle
+                // says (origin (-4208, -3846), size (8270, 6101) -- Paradise City's x/z extents,
+                // not its height range).
+                // FLAG: the control vector itself (unk_82CDA450) is data the exports do not
+                // carry, so the ORDER (x, z) rather than (z, x) is inferred from that rectangle,
+                // not read out of the image. Built explicitly here rather than through
+                // CgsWorldMap2D.cpp's Vector3 overload, which flattens to (.x, .y).
+                Vector2 lSamplePosition;
+                const Vector3 lRegionPosition = lpGenericRegion->GetBoxRegion()->GetPosition();
+                lSamplePosition.x = lRegionPosition.x;
+                lSamplePosition.y = lRegionPosition.z;
+                lSamplePosition.z = 0.0f;
+                lSamplePosition.w = 0.0f;
+
+                const u8 luDistrict = lWorldMap.GetValue( lSamplePosition );
 
                 ::CgsID laRivalIds[2];
                 s32     liRivalsFound = 0;
