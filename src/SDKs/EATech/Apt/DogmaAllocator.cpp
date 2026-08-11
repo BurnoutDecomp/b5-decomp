@@ -219,7 +219,19 @@ DOGMA_PoolManager::~DOGMA_PoolManager()
 {
     // Free the per-size free-list head array (same byte count it was allocated --
     // sizeof(uintptr_t*) per bucket on x64; see the ctor).
-    DOGMA_FreeSized(mpaFirstFreeBySize, sizeof(uintptr_t*) * ((mnMaxSizeAllocation >> 2) + 1));
+    //
+    // The console frees it UNCONDITIONALLY (0x82ADB950: `dword_8324E820(*a1, 4 * ((a1[3] >> 2) + 1))`
+    // with no null test) because it never destructs a DEFERRED pool: every X360 DOGMA_PoolManager
+    // is heap-constructed at AptInit (AptAllocatorInitialize @0x82ADD118) with real sizes, so
+    // mpaFirstFreeBySize is always live. This guard is the MIRROR of the ctor's PC static-init
+    // accommodation above -- the (0,0) static AptValueGC_PoolManager takes the ctor's early return
+    // with mpaFirstFreeBySize == 0 / mpFirstPool == 0, and its CRT-exit destructor was handing that
+    // null straight to DOGMA_FreeSized -> gAptFuncs.pfnMemFreeSize -> AptCallbackMemory::FreeSize/
+    // Free -> AptDataHandler::AptFree(null), firing the (faithful) console null-free assert.
+    // Deferred construction must have deferred destruction; the pool-chain loop below already
+    // mirrors it, this is the same fix for the free-list array.
+    if (mpaFirstFreeBySize)
+        DOGMA_FreeSized(mpaFirstFreeBySize, sizeof(uintptr_t*) * ((mnMaxSizeAllocation >> 2) + 1));
 
     // Free every pool in the chain. (while, not do/while: an empty/deferred pool has
     // mpFirstPool == 0 -- see the 0-size guard in the ctor -- and must not be dereffed.)
