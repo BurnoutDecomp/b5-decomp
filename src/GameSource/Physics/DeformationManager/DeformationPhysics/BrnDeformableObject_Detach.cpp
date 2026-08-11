@@ -526,9 +526,27 @@ namespace Deformation
         //   (mu32GameModeState), NOT mHandlingBodyID (+26384, which is only read later for the notify at
         //   line 3232/3237). FLAG: MakeDetachedPart is a provisional hook whose 6th param is typed
         //   RigidBodyId; the value is sourced from mu32GameModeState (+26392) wrapped to match, per the asm.
+        // ⚠️⚠️ FLAG SHARPENED 2026-08-11 (handle-widening wave) -- THE WRAP HAD TO CHANGE, AND
+        // NOT CHANGING IT WOULD HAVE BEEN A SILENT DROP I INTRODUCED.
+        // `RigidBodyId` is now the real 8-byte CgsPhysics::RigidBodyId. The old spelling
+        // `RigidBodyId{ mu32GameModeState }` aggregate-initialised the 4-byte stand-in's ONLY
+        // field, so the word landed where every consumer read it. Against the 8-byte type the same
+        // brace-init widens the u32 into the LOW dword -- the half every consumer discards
+        // (they all do `ld` then `srdi 32`; see ProcessAddDeformationModelEvents @0x82644940).
+        // It would have compiled, linked and delivered zero. So the word is promoted into the HIGH
+        // dword, which is what EVERY other producer of a RigidBodyId in this subsystem does
+        // (ProcessCreateEvents `sldi r26,<word>,32`, ProcessCollisionEvents `extldi r,r,64,32`,
+        // DetachedWheelManager's `v13 = (a3<<32)|1`).
+        // ⛔ STILL PROVISIONAL, and now doubly so -- see the mu32GameModeState flag in
+        // BrnDeformableObject.h: at the CONSOLE's real layout (mHandlingBodyID 8 bytes at +26384)
+        // the offset +26392 this argument is sourced from is **mGlobalEntityId**, not a separate
+        // game-mode word, and the seats the banner above quotes (+26388 / +26392) were read
+        // against the narrow layout. This whole call's argument mapping is owed a re-read against
+        // the corrected offsets. UNMOUNTED TU -- nothing shipped depends on it today.
         PhysicalBodyPart* lpPhysicalBodyPart = MakeDetachedPart(
             lpPartMgr, lpInput, mu16DeformableObjectIndex, this, mGlobalEntityId,
-            RigidBodyId{ mu32GameModeState }, liPartIndex, &lrPart);   // 6th arg = *(this+26392) (FLAG)
+            CgsPhysics::RigidBodyId(static_cast<u64>(mu32GameModeState) << 32),
+            liPartIndex, &lrPart);   // 6th arg = *(this+26392) (FLAG -- see above)
 
         if ( lpPhysicalBodyPart != nullptr )
         {

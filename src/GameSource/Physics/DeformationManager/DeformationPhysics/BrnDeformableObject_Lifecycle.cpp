@@ -420,7 +420,12 @@ namespace Deformation
         // Invalidate the ids + drop the spec + clear active/index state (asm tail + DWARF SetInvalid).
         // EntityId / RigidBodyId are plain { u32 muValue } handles on the frozen common-types header; the
         // DWARF SetInvalid sets the handle to its 0xFFFFFFFF "invalid" sentinel (asm: qword_82F2A3A8).
-        mHandlingBodyID.muValue   = 0xFFFFFFFFu;   // RigidBodyId::SetInvalid()
+        // ⭐ 2026-08-11 (handle-widening wave): the member is the real 8-byte
+        // CgsPhysics::RigidBodyId now, so this is its own SetInvalid() -- which writes the full
+        // 64-bit K_INVALID_RIGID_BODY_ID. The old `.muValue = 0xFFFFFFFFu` on the 4-byte stand-in
+        // left the HIGH dword (the half every consumer reads) untouched, so a "released" model
+        // still answered with its old entity word.
+        mHandlingBodyID.SetInvalid();              // RigidBodyId::SetInvalid()
         mGlobalEntityId.muValue   = 0xFFFFFFFFu;   // EntityId::SetInvalid()
         mpDeformationSpec         = nullptr;
         mu16DeformableObjectIndex = 0xFFFFu;   // asm: +26290 = -1 (the index sentinel)

@@ -227,25 +227,33 @@ namespace Deformation
         void UpdateHandlingBody(const OutUpdateRigidBody& lrUpdate);                            // :341
         RigidBodyId GetHandlingBodyID();                                                        // :344
 
-        // The high byte of the handling-body-id word (console +26384). The X360 reads
-        // HIBYTE(*(this+26384)) as the player/game-mode SELECTOR in UpdateAbsorptionSet /
-        // ApplySensorImpulse / the crash gates -- this is the authoritative source for that byte
-        // (distinct from the reconstructed mu32GameModeState at +26392; do NOT use GetGameModeByte()
-        // for the +26384 reads).
-        u8 GetHandlingBodyIdHighByte() const { return static_cast<u8>(mHandlingBodyID.muValue >> 24); }
+        // The OWNER byte of the entity word packed in the handling-body id (console +26384). The
+        // X360 reads it as the player/game-mode SELECTOR in UpdateAbsorptionSet /
+        // ApplySensorImpulse / the crash gates.
+        // ⭐ RE-SPELLED 2026-08-11 (handle-widening wave), same bits, now honestly derived. It used
+        // to be `mHandlingBodyID.muValue >> 24` on a 4-byte stand-in; the member is really the
+        // 8-byte CgsPhysics::RigidBodyId, whose entity word is the HIGH dword, so the console's
+        // HIBYTE(*(this+26384)) is the byte at bits 56..63 == GetEntityId().GetOwner() ==
+        // GetEntityIDOwner(). That accessor already exists and is itself asm-witnessed
+        // (PhysicsSimulationModule::ProcessRemoveAllRigidBodiesQueue @0x8289F274 inlines it as
+        // `srdi r10,r10,32` + `srwi r10,r10,24`) -- the same two shifts, in one place.
+        u8 GetHandlingBodyIdHighByte() const { return mHandlingBodyID.GetEntityIDOwner(); }
 
         // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave): the 8-byte handling-body volume-instance
-        // word both Fixup*VehicleContact bodies re-key a contact's B id from. The console reads
-        // {mHandlingBodyID, mGlobalEntityId} as ONE big-endian 8-byte load (`ld 0x6710(model)`
-        // @0x825A0D78 / @0x825A0F94 -- model+26384..26391 spans exactly the adjacent pair) and
-        // stores it WHOLE into muVolumeInstanceIdB: the pair IS the model's handling volume-
-        // instance id (entity word == the handling-body id in the HIGH dword). Same additive-
-        // accessor pattern as GetHandlingBodyIdHighByte above.
+        // word both Fixup*VehicleContact bodies re-key a contact's B id from -- `ld 0x6710(model)`
+        // @0x825A0D78 / @0x825A0F94, stored WHOLE into muVolumeInstanceIdB.
+        // ⭐⭐ CORRECTED 2026-08-11 (handle-widening wave). This used to read the 8 bytes at +26384
+        // as the PAIR {mHandlingBodyID(4), mGlobalEntityId(4)} and re-pack them. It is not a pair:
+        // DeformableObject::Prepare @0x82642180 writes +26384 with a single `std` (0x826421B0, from
+        // the event's own 8-byte `ld 8(evt)`) and writes the entity id SEPARATELY four bytes later
+        // at +26392 with `stw` (0x826421BC). So model+26384..26391 IS mHandlingBodyID alone, and
+        // the console's `ld` returns it verbatim. Which is also the coherent reading: a rigid-body
+        // id and a volume-instance id are the same shape (entity word in the high dword, index in
+        // the low), so the handle IS the volume-instance id -- no re-packing required.
         CgsSceneManager::VolumeInstanceId GetHandlingBodyVolumeInstanceId() const
         {
             CgsSceneManager::VolumeInstanceId lId;
-            lId.muId = (static_cast<u64>(mHandlingBodyID.muValue) << 32)
-                     | static_cast<u64>(mGlobalEntityId.muValue);
+            lId.muId = static_cast<u64>(mHandlingBodyID);
             return lId;
         }
 
@@ -492,8 +500,16 @@ namespace Deformation
         u8                        mau8WheelToSensorMap[4];      // :639 wheel -> sensor index map
         Vector3                   mDriveTimeBBoxLimitMin;       // :641 drive-time deformed-bbox clamp min
         Vector3                   mDriveTimeBBoxLimitMax;       // :642 drive-time deformed-bbox clamp max
-        RigidBodyId               mHandlingBodyID;              // :644 the handling rigid-body id
-        EntityId                  mGlobalEntityId;              // :645 global scene-entity id (GetGlobalEntityId)
+        // ⭐⭐ EIGHT BYTES as of 2026-08-11 (handle-widening wave), and the widening puts BOTH of
+        // these on their exact console seats for the first time. DeformableObject::Prepare
+        // @0x82642180 writes them as a matched pair, and the widths are three instructions apart:
+        //     0x826421A0  ld  r8,  8(evt)      0x826421B0  std r8,  0x6710(this)   <- +26384, 8B
+        //     0x826421B8  lwz r27, 0x10(evt)   0x826421BC  stw r27, 0x6718(this)   <- +26392, 4B
+        // At the old 4-byte width mGlobalEntityId sat at +26388 -- four bytes short of where the
+        // console writes it. ⛔⛔ SEE THE mu32GameModeState FLAG at that member's declaration below:
+        // that reconstructed member is this mGlobalEntityId, seen through the narrow handle.
+        RigidBodyId               mHandlingBodyID;              // :644 the handling rigid-body id (console +26384)
+        EntityId                  mGlobalEntityId;              // :645 global scene-entity id (GetGlobalEntityId) (console +26392)
         f32                       mfNoDamageTimer;              // :647 no-damage cooldown timer
         s16                       miNumAttachedExhausts;        // :649 attached exhaust count
 
@@ -530,7 +546,26 @@ namespace Deformation
         // HasBouncedThisFrame / SetBounceRandomParity) keeps compiling. Promote / re-home them when the
         // cross-car game-mode + bounce-latch reads are re-derived against their true owners.
         // =========================================================================================
-        u32 mu32GameModeState;     // asm +26392 -- packed game-mode/state word (HIGH byte == game mode)
+        // ⛔⛔⛔ FLAG RAISED 2026-08-11 (handle-widening wave) -- READ BEFORE USING THIS MEMBER.
+        // **mu32GameModeState IS ALMOST CERTAINLY mGlobalEntityId.** It was introduced because the
+        // asm pokes "a packed game-mode word at +26392" that had no named member; +26392 had no
+        // named member only because mHandlingBodyID was four bytes too narrow, which shoved
+        // mGlobalEntityId down to +26388. With the handle at its real 8 bytes, mGlobalEntityId sits
+        // at +26392 -- and DeformableObject::Prepare @0x82642180 writes exactly that seat from the
+        // event's entity id: `0x826421B8 lwz r27, 0x10(evt)` ; `0x826421BC stw r27, 0x6718(this)`.
+        // There is no separate game-mode word in the DWARF and none in Prepare.
+        // ⇒ GetGameModeByte() (`mu32GameModeState >> 24`) is then the entity id's OWNER byte, i.e.
+        //   the same entity-type selector GetHandlingBodyIdHighByte() returns for the other id --
+        //   which is a coherent reading of a "game mode / player selector" byte, and explains why
+        //   the two accessors always looked like duplicates of each other.
+        // ⛔ NOT RETIRED IN THIS WAVE, deliberately: three bodies read it
+        //   (BrnDeformableObject_Detach.cpp:531, _GlassState.cpp:291 and :404) and ALL THREE ARE IN
+        //   UNMOUNTED TUs, so nothing this wave ships depends on the answer and no boot test can
+        //   discriminate. Retiring it means re-reading those three console sites against
+        //   mGlobalEntityId and re-checking _Detach's `RigidBodyId{ mu32GameModeState }` wrap.
+        //   That is its own wave with its own evidence. ⚠️ Until then do NOT "clean this up" by
+        //   deleting the member: the three readers would silently rebind to a different field.
+        u32 mu32GameModeState;     // asm +26392 -- SEE THE FLAG ABOVE: this offset is mGlobalEntityId
         u8  mbBounceRandomParity;  // asm +26413 -- double-bounce random parity flag
         u8  mbHasBouncedThisFrame; // asm +26414 -- bounced-this-frame latch (double-bounce damp gate)
 
