@@ -56,14 +56,50 @@ namespace CgsResource
         *lppResource = mpResourceMemory;   // X360: returns *a1 (offset 0) directly
     }
 
+    // ⭐⭐ CORRECTED 2026-08-11 (create-path wave) -- THIS RETURNED A PLAUSIBLE ZERO FOR EVERY
+    // MAIN-MEMORY-ONLY RESOURCE IN THE BUILD, and the create path is where it finally bit.
+    //
+    // It used to `return mHandle` (+0x04/+0x08). That pair is NOT the resource handle: it is the
+    // CACHED IDENTITY of the already-resolved resource, the region IsEqual @0x8227D298 compares,
+    // and CreateFromHandle fills it from `*(SmallResource+4)` / `*(SmallResource+8)`. But
+    // `SmallResource : rw::BaseResources<3>` is {mainResource, graphicsSystemResource,
+    // graphicsLocalResource} (CgsSmallResourcePS3.h:70), so for a resource that lives only in
+    // main memory -- a StreamedDeformationSpec, for instance -- those two words are LEGITIMATELY
+    // NULL and the accessor handed back a null handle for a perfectly resident resource.
+    //
+    // THE HANDLE IS THE +0x14/+0x18 PAIR, and the X360 says so three independent ways:
+    //   1. ActiveRaceCar::OnResourcesLoaded @0x822EB168 passes the SOURCE ptr's +0x14 straight in
+    //      as the ResourceHandle*:
+    //          0x822EB1F0  addi r4, r31, 0x14
+    //          0x822EB1FC  bl   CgsResource::BaseResourcePtr::CreateFromHandle
+    //      -- and CreateFromHandle's first two stores are `+0x14 <- handle[0]`,
+    //      `+0x18 <- handle[1]` (see its own banner below). Store and load agree.
+    //   2. its callers hand it ResourcePtr POINTERS, one register each (0x822FED98 /
+    //      0x822FEDA8), not two-pointer handles by value.
+    //   3. it CreateFromHandle's into ResourcePtrs at +0x1C90 / +0x1CB0, and
+    //      ActiveRaceCar::AddHandlingModel @0x822D3EC8 reads the handle back at +0x1CA4 / +0x1CC4
+    //      == exactly those two plus 0x14.
+    // RUNTIME WITNESS (the create-path wave's PROBE-CREATE3-B, race car 0):
+    //      mem=0x052107D0  hMem=0  hEntry=0  this=0x05217CB4  tid=0x05217C84
+    //      deref(this)=0x052107D0
+    // -- i.e. the +0x14 pair resolves through the console's own double deref
+    // (`lwz r11,handle ; lwz r28,0(r11)`, VehicleManager::ProcessCreateEvents @0x82616CFC) and
+    // the +0x04 pair does not.
+    //
+    // ⚠️ The two members are still SPELLED mpThis/muThreadId because that is how CreateFromHandle
+    // was reconstructed and its banner explains the console's slot reuse; semantically the pair is
+    // the source handle {SmallResource*, Entry*}. Renaming them is a separate, wider change.
     void BaseResourcePtr::GetResourceHandle(ResourceHandle* lpHandle) const
     {
-        *lpHandle = mHandle;
+        lpHandle->mpResourceMemory = reinterpret_cast<void*>(mpThis);
+        lpHandle->mpSourceEntry    = reinterpret_cast<Entry*>(muThreadId);
     }
 
     ResourceHandle BaseResourcePtr::GetResourceHandle() const
     {
-        return mHandle;
+        ResourceHandle lHandle;
+        GetResourceHandle(&lHandle);
+        return lHandle;
     }
 
     void BaseResourcePtr::SetResource(void* const* lppResource)

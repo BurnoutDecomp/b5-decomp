@@ -39,6 +39,7 @@
 #include "rw/math/vpu/matrix44affine_operation.h"    // rw::math::vpu::Mult
 #include "GameSource/Math/BrnMathUtils.h"                // BrnMath::IsNormal
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h" // VehicleInputInterface::CreateRaceCar
+#include "GameSource/World/BrnEntityTypes.h"              // BrnWorld::E_ENTITYTYPE_RACECAR (the Attach seed)
 
 #include <cstring>   // memset (the console's own inlined clears)
 
@@ -256,7 +257,27 @@ bool ActiveRaceCar::Prepare()
 // ----------------------------------------------------------------------------
 void ActiveRaceCar::Attach(RaceCar* lpRaceCar, bool lbCarSelectDontStreamAudio)
 {
-    // [FLAG PC bring-up] mHandlingBodyVolumeId seed omitted -- see the banner.
+    // ⭐⭐ RESTORED 2026-08-11 (create-path wave). This was the "[FLAG PC bring-up]
+    // mHandlingBodyVolumeId seed omitted" hole in the banner above, and it is NOT optional any
+    // more: AddHandlingModel @0x822D3EC8 publishes this exact id into the create event, and
+    // VehicleManager::ProcessCreateEvents @0x82616770 takes BOTH the owner test
+    // (`srwi r10,..,24 ; cmplwi r10,1` -> assert "lEvent.mVolumeInstanceID.GetEntityIDOwner() ==
+    // BrnWorld::E_ENTITYTYPE_RACECAR", BrnVehicleManager.cpp:1303) AND the race-car SLOT INDEX
+    // (`extrwi r27,r9,14,8`) out of it. MEASURED before this line existed: the create event
+    // reached the drain with owner=0 index=0, i.e. an unpopulated id.
+    //
+    // Verbatim from the X360 Attach @0x822BEEE0 -- the three steps, in order:
+    //   0x822BEF04  std  r30, 0xD0(r31)                    mHandlingBodyVolumeId = 0
+    //   0x822BEF08..0x822BEF28                             SetEntityIDOwner(1) inlined
+    //               (ld ; srdi 32 ; clrlwi r11,r11,8 ; oris r11,r11,0x100 ; sldi 32 ; or ; std)
+    //   0x822BEF2C  lwz  r4, 0x748(r31)                    meActiveRaceCarIndex
+    //   0x822BEF30  bl   VolumeInstanceId::SetEntityIDEntityIndex
+    // The inlined middle step clears the top byte of the entity word and ORs in 0x01000000 ==
+    // E_ENTITYTYPE_RACECAR (BrnEntityTypes.h:34) at KU_OWNER_BASE; it is spelled here through the
+    // container's own out-of-line setter (@0x822B0E00), which reproduces that expression exactly.
+    mHandlingBodyVolumeId.muId = 0;
+    mHandlingBodyVolumeId.SetEntityIDOwner(static_cast<u8>(BrnWorld::E_ENTITYTYPE_RACECAR));
+    mHandlingBodyVolumeId.SetEntityIDEntityIndex(static_cast<u32>(meActiveRaceCarIndex));
 
     CGS_ASSERT(!IsAttached(), "!IsAttached()");
     CGS_ASSERT(lpRaceCar != nullptr, "lpRaceCar != NULL");
