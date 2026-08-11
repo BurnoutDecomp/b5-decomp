@@ -1885,7 +1885,12 @@ namespace Vehicle
         // spells `void SetupSuspension()` -- NO parameter -- and the @0x8262E10C call site sets
         // no f1. The committed `f64 lfTimeStep` was a slice artifact; the blocked skeleton and
         // its call sites are re-pointed.
-        void SetupSuspension();                             // @0x825CF718 BLOCKED (VMX permute scatter)
+        // @0x825CF718 (190) -- ⭐ BODIED 2026-08-11 (ground-contact wave); the 2026-08-03 BLOCKED
+        // verdict is RETRACTED in the .cpp with the four rodata values read out of the image.
+        // Seeds maSprings[i].{stiffness, damping, mass} from mvSpringMassScalers x the body mass.
+        // ⛔ It does NOT make the car hold its height: ApplySuspensionForces multiplies MASS by the
+        // ACCELERATION lane, whose only writer is UpdateSuspensionSprings @0x825F7AF0 (still empty).
+        void SetupSuspension();                             // @0x825CF718
         void ApplyWheelWeight();                            // @0x825F7898 PARTIAL
         void CalculateWeightTransfer();                     // @0x825F9DD0 PARTIAL (units 0.10193679)
         void ApplySuspensionForces();                       // @0x825D1EE8 PARTIAL
