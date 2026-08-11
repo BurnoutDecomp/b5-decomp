@@ -89,6 +89,50 @@ void GameStateModule::Construct()
     // not-yet-constructed subobject is well-defined and the stored value is already final.
     // DELETE-WHEN those two Constructs land: they must then run BEFORE this line.
     mCarSelectManager.Construct(&mTriggerQueryManager, this, &mProgressionManager);
+
+    // ⚠️⚠️ THE TWO PREPARE2 SUB-OBJECTS ARE NOT Construct()ed HERE (2026-08-11), and the reason in
+    // BOTH cases is a MEASURED LINK COST -- not a missing body. The X360 Construct @0x82380388 runs
+    //
+    //   BrnGameState::AchievementManagerBase::Construct(a1 + 181680,   // &mAchievementManager
+    //                                                   a1 + 47920,    // &mProgressionManager
+    //                                                   a1 + 284520,   // &mStreetManager
+    //                                                   a1 + 7632,     // mModeManager.GetScoringSystem()
+    //                                                   a1);           // this
+    //   BrnGameState::StreetManager::Construct(a1 + 284520,            // &mStreetManager
+    //                                          a1,                     // this
+    //                                          a1 + 47920,             // &mProgressionManager
+    //                                          a1 + 183592);           // &mRoadRulesManager
+    //
+    // (`a1 + 7632` is the ScoringSystem EMBEDDED IN mModeManager, not a module member of its own:
+    // mModeManager sits at a1 + 4128 and BrnModeManager.h:303 puts mScoringSystem at ModeManager
+    // +0xDB0 == 3504; 4128 + 3504 == 7632 exactly. So the argument is mModeManager.GetScoringSystem().)
+    //
+    // What blocks each call, MEASURED with `cl /c` + dumpbin /SYMBOLS over the candidate mount set:
+    //   * AchievementManagerBase::Construct lives in BrnGameStateAchievementManagerBase.cpp, and
+    //     mounting that TU costs EIGHT unresolved externals with NO definition anywhere in the
+    //     tree -- ScoringSystem::GetPlayerScore / GetPlayerModeCrashes / GetPlayerModeTakedowns /
+    //     GetNewlyWreckedCarCount / GetNumberOfTakedownsAgainst and ProgressionManager::
+    //     GetCarChallengeWinCount / GetCollectedStuntElementCount / GetProfileTotalTakedowns
+    //     (pulled in by the base's gameplay-event hooks). ⚠️ VERIFIED, because the tree's folklore
+    //     says otherwise: /Gy + /OPT:REF does NOT excuse those. A minimal repro (one COMDAT calling
+    //     an undefined symbol, never referenced, linked with /OPT:REF) still fails LNK2019 -- the
+    //     linker resolves symbols before it discards. So "nothing calls it" is NOT a link defence.
+    //   * StreetManager::Construct's FIRST statement is mStreetManagerDebugComponent.Construct(this),
+    //     which emits StreetManagerDebugComponent's vtable; that vtable hard-references the
+    //     component's virtual Update/OnActivate/RenderHUD, and those pull in ~15 still-unhomed
+    //     StreetManager / ScoringSystem / ProgressionManager / OutputBuffer symbols.
+    //
+    // What stands in, so neither subobject is INDETERMINATE (the thing that would actually bite):
+    // the exact values each Construct writes are carried as in-class initialisers on the members
+    // that the wired path reads -- the achievement manager's four back-pointers
+    // (BrnGameStateAchievementManagerBase.h) and the street manager's three stage words
+    // (BrnGameStateStreetManager.h). Both are FLAGGED at their declarations. Nothing on the wired
+    // path reads any other member of either subobject.
+    // DELETE-WHEN those two closures land (StreetManager::Construct additionally needs a
+    // RoadRulesManager member, DWARF :229 / X360 this+183592, for its third argument):
+    //     mAchievementManager.Construct(&mProgressionManager, &mStreetManager,
+    //                                   mModeManager.GetScoringSystem(), this);
+    //     mStreetManager.Construct(this, &mProgressionManager, &mRoadRulesManager);
 }
 
 void GameStateModule::Destruct()
@@ -514,16 +558,20 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
 // GetProgressionData() answered NULL and OnPlayerCarChange fired the console's own
 // "lpProgressionData != NULL" assert at BrnGameStateModule.cpp:4636.
 //
-// ⚠️ TWO HONEST DEVIATIONS, both named at the call site below:
-//   * the ACHIEVEMENT MANAGER (X360 this+181680, AchievementManagerX360). This module does not
-//     model it -- GetAchievementManager() is a declare-only accessor with no member behind it --
-//     so 0 is passed and ProgressionManager::Prepare2's own console assert
-//     ("lpAchievementManager", BrnProgressionManager.cpp:265) reports it exactly once. That is a
-//     FAITHFUL console assert firing on a real PC data gap, the same shape as the assert this
-//     wave removes; it is NOT silenced.
-//   * the STREET MANAGER leg (case 2). BrnGameStateStreetManager.cpp is not mounted in
-//     tools/build/build_game_exe.bat and StreetManager is not an embedded member of this module's
-//     slice, so the stage logs once and advances rather than being faked.
+// ⭐ BOTH LEGS ARE WIRED NOW (2026-08-11) -- the two "honest deviations" this banner used to
+// list are paid off:
+//   * the ACHIEVEMENT MANAGER (X360 this+181680) is a REAL embedded AchievementManagerX360
+//     subobject (BrnGameStateModule.h, DWARF :226), constructed by this module's Construct with
+//     the console's own four arguments. `&mAchievementManager` is passed as r8, so
+//     ProgressionManager::Prepare2's `lpAchievementManager` assert
+//     (BrnProgressionManager.cpp:265) no longer fires every boot.
+//   * the STREET MANAGER (X360 this+284520) is a REAL embedded StreetManager subobject
+//     (DWARF :425), and case 2 now drives the console's own STREETDATA.DAT load.
+//
+// ⚠️ ONE HONEST PARK REMAINS, and it is named at the call site: the console's
+// `StreetManager::Prepare2` is `LoadStreetData(out, &rq) && (SetupParRivals(&tqm), true)`
+// (X360 0x823509D8). Case 2 below calls the LoadStreetData half -- the real thing -- and PARKS
+// the SetupParRivals half. See the block comment there for the precondition that is missing.
 // ----------------------------------------------------------------------------
 bool GameStateModule::Prepare2(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 {
@@ -550,15 +598,12 @@ bool GameStateModule::Prepare2(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
         void* lpTriggerData =
             const_cast<void*>(static_cast<const void*>(mTriggerQueryManager.GetTriggerData()));
 
-        // [FLAG PC bring-up] achievement manager: see the banner. DELETE-WHEN the module models
-        // the AchievementManagerX360 sub-object at this+181680.
-        BrnGameState::AchievementManagerBase* lpAchievementManager = 0;
-
+        // X360 r8 == `a1 + 181680` -- the embedded achievement manager, by address.
         if (!mProgressionManager.Prepare2(lpOutputBuffer,
                                           &mModeManager,
                                           &mReceiverQueue,
                                           lpTriggerData,
-                                          lpAchievementManager))
+                                          &mAchievementManager))
         {
             break;
         }
@@ -566,12 +611,44 @@ bool GameStateModule::Prepare2(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
         // fall through
 
     case E_PREPARE2STAGE_STREET_MANAGER:
+    {
         mePrepare2Stage = E_PREPARE2STAGE_STREET_MANAGER;
-        // X360: `if (!StreetManager::Prepare2(this + 284520, out, &mReceiverQueue,
-        //           &mTriggerQueryManager)) break;` -- LoadStreetData + SetupParRivals.
-        // [deferred] see the banner: the StreetManager TU is unmounted and the sub-object is not
-        // in this slice. Logged, not faked.
-        LogPrepareStageOnce(27, "Prepare2: StreetManager::Prepare2 (LoadStreetData + SetupParRivals) [deferred]");
+
+        // X360: `if (!StreetManager::Prepare2(this + 284520, out, this + 232384, this + 42320))
+        //           break;` -- i.e. mStreetManager.Prepare2(out, &mReceiverQueue,
+        // &mTriggerQueryManager). StreetManager::Prepare2 @0x823509D8 is exactly two things:
+        //     if (LoadStreetData(this, out, rq)) { SetupParRivals(this, tqm); return 1; }
+        //     return 0;
+        //
+        // ⭐ THE LOAD HALF IS REAL. LoadStreetData @0x8234F630 is the only writer of mpStreetData
+        // in the whole image (LoadBundle "STREETDATA.DAT" -> acquire "StreetData" -> bind), so
+        // this is what makes StreetManager::GetStreetData() answer non-null at all.
+        //
+        // ⚠️⚠️ PARKED, and said plainly: the SetupParRivals half is NOT called, so
+        // StreetManager::Prepare2 itself is not called either. SetupParRivals @0x8233F560
+        // dereferences the district map UNCONDITIONALLY on its fourth statement
+        // (BrnGameStateStreetManager_wC_02.cpp:109,
+        //  `*(const BinaryFileResource* const*)mDistrictMapResourceHandle.mpResourceMemory`),
+        // and on PC that handle is still NULL for two independent reasons:
+        //   (a) nothing pumps StreetManager::Prepare @0x82350900 -- GameStateModule::Prepare's
+        //       stage 23 (E_PREPARESTAGE_STREET_MANAGER) is still one of the log-and-advance
+        //       stages, so LoadDistrictMap never even starts; and
+        //   (b) LoadDistrictMap's own handle bind is a documented deferral
+        //       (BrnGameStateStreetManager_wB_01.cpp:"FLAG: from acquire-response payload+0x18"),
+        //       so it would store {0,0} even if it did run.
+        // Calling Prepare2 today would therefore null-dereference on the first tick after the
+        // street data lands. That is a REAL data gap, not a missing body: SetupParRivals is fully
+        // reconstructed and DISTRICTS.DAT is present in build/game (bnd2 v2, resource
+        // 0x68E318DC == HashString("Districts"), type 0x30 WorldPainter2D, already registered).
+        // DELETE-WHEN stage 23 pumps mStreetManager.Prepare() and LoadDistrictMap binds its
+        // handle -- then this becomes the single console call
+        // `mStreetManager.Prepare2(lpOutputBuffer, &mReceiverQueue, &mTriggerQueryManager)`.
+        if (!mStreetManager.LoadStreetData(lpOutputBuffer, &mReceiverQueue))
+        {
+            break;
+        }
+        LogPrepareStageOnce(27, "Prepare2: StreetManager::SetupParRivals [parked -- no district map]");
+    }
         // fall through
 
     case E_PREPARE2STAGE_DONE:
@@ -678,6 +755,17 @@ bool GameStateModule::IsOnlineGameMode()
 GameStateModuleIO::EGameModeType GameStateModule::GetCurrentGameModeType() const
 {
     return mModeManager.GetCurrentGameModeType();
+}
+
+// ⭐ REAL (2026-08-11). The embedded achievement manager (X360 this+181680). Every console reader
+// spells it as an inline `this + 181680` pointer adjust rather than a call -- BurnoutSkillzManager::
+// Construct @0x82332688 (`*(a1 + 124) = *(a2 + 27992) + 181680`), Prepare2 @0x8239ED10 (r8),
+// ProcessGameEvents @0x823A0A18, ProcessTakedownEvents @0x8238FC50, PostWorldUpdate @0x8238F358,
+// UpdateShowtimeMode @0x82380EF8 and CheckForAllEventsBeingFound @0x82382460 -- so there is no
+// out-of-line X360 symbol to cite for the accessor itself; it is the de-inlined form of that adjust.
+AchievementManagerBase* GameStateModule::GetAchievementManager()
+{
+    return &mAchievementManager;
 }
 
 // X360 @ 0x82311620. Returns the player's GLOBAL race-car index (its slot in the full world race-car

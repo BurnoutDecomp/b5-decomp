@@ -14,6 +14,14 @@
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // BrnGameState::TriggerQueryManager (mTriggerQueryManager, by value)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"         // CgsModule::EventReceiverQueue<3072,16> (mReceiverQueue)
 #include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"      // BrnGameState::CarSelectManager (mCarSelectManager, by value)
+// ---- Prepare2's two sub-objects, both held BY VALUE exactly as the console holds them ----
+// X360 GameStateModule::Construct @0x82380388 constructs both in place:
+//   AchievementManagerBase::Construct(a1 + 181680, a1 + 47920, a1 + 284520, a1 + 7632, a1)
+//   StreetManager::Construct        (a1 + 284520, a1, a1 + 47920, a1 + 183592)
+// and the module ctor @0x827E44B8 seeds the achievement manager's vptr in place
+// (`*(a1 + 181680) = &off_820CE768`) -- an EMBEDDED subobject, not a pointer.
+#include "GameSource/GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.h" // BrnGameState::AchievementManagerX360 (mAchievementManager, by value)
+#include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"                       // BrnGameState::StreetManager (mStreetManager, by value)
 
 // The module's cached read-only snapshot of the active race cars (mLastActiveRaceCarInterface,
 // X360 this+0x397E0) is held BY VALUE exactly as the console holds it, so this is a full include
@@ -22,9 +30,8 @@
 // VehicleList is held by pointer (mpVehicleList, X360 this+0x456E8) -- forward declaration is
 // enough here; the bodies that walk it include the owning header.
 namespace BrnResource { struct VehicleList; struct VehicleListEntry; }
-// The achievement manager the BurnoutSkillzManager grow returns (StuntModeScoring::AchievementManager
-// is a typedef of this; pointer only here).
-namespace BrnGameState { class AchievementManagerPS3; }
+// (The achievement manager is no longer a forward-declared pointer: the module embeds the real
+// AchievementManagerX360 subobject -- see the include above and mAchievementManager below.)
 // For the DriveThruManager additive grow below (pointer-only).
 namespace BrnProgression { class Profile; }
 // The module's OutputBuffer is held by POINTER here so this header does not have to pull the
@@ -328,14 +335,23 @@ public:
     // offset 284512); declared-only here, used by GameStateDebugComponent::ToggleShowtimeCallback.
     void ToggleShowtimeBehaviour();
 
-    // ADDITIVE GROW (declare-only) for the BrnBurnoutSkillzManager TU. FLAG: the X360
-    // BurnoutSkillzManager::Construct (0x82332688) reaches the embedded achievement manager
-    // through the owning GameStateModule (the inlined `*(modeManager->mpGameStateModule) +
-    // 181680` pointer adjust to the achievement-manager subobject). De-inlined to this named
-    // accessor; body + the real embedded-AchievementManager wiring land with the GameStateModule
-    // TU. Returns the StuntModeScoring::AchievementManager (== AchievementManagerPS3) the manager
-    // caches as mpAchievementManager.
-    AchievementManagerPS3* GetAchievementManager();
+    // ⭐ REAL (2026-08-11). The X360 BurnoutSkillzManager::Construct (0x82332688) reaches the
+    // embedded achievement manager through the owning GameStateModule (the inlined
+    // `*(modeManager->mpGameStateModule) + 181680` pointer adjust to the achievement-manager
+    // subobject). De-inlined to this named accessor; it now hands back the REAL embedded
+    // mAchievementManager below.
+    //
+    // ⚠️ RETURN TYPE CORRECTED, and the X360 asm is the reason: the DWARF spells this
+    // `StuntModeScoring::AchievementManager*`, a PLATFORM TYPEDEF that resolves to the SKU's
+    // concrete leaf -- AchievementManagerPS3 on the PS3 DecFIGS build we took the name from, but
+    // **AchievementManagerX360** on the ARTIST spine we are reconstructing. Attested four ways in
+    // the X360: GameStateModule::Prepare @0x8239E578 calls AchievementManagerX360::Prepare
+    // (this+181680), Release @0x823756A8 calls AchievementManagerX360::Release, PreWorldUpdate
+    // @0x823A5328 calls AchievementManagerX360::Update, and the ctor @0x827E44B8 stores that
+    // class's vtable there. Declared as the shared base (the type ProgressionManager already
+    // holds it as -- BrnProgressionManager.h:350 `AchievementManagerBase* mpAchievementManager`),
+    // because every consumer calls base hooks through it.
+    AchievementManagerBase* GetAchievementManager();
 
     // ADDITIVE GROW (declare-only) for the BrnTrainingManager TU.
     // X360 BrnGameState::GameStateModule::RequestPause -- TrainingManager::TriggerAnyFollowOnTrainingTips
@@ -569,6 +585,32 @@ private:
     CgsModule::VariableEventQueue<18432, 16> mOutputGuiEventQueue;
     // X360 SetCarUnlockAlreadyShown @0x82363698 resolves the player Profile through it.
     BrnProgression::ProgressionManager       mProgressionManager;
+
+    // ⭐ DWARF BrnGameStateModule.h:226 -- `StuntModeScoring::AchievementManager mAchievementManager;`
+    // declared immediately after mProgressionManager (:216) and before mRoadRulesManager (:229).
+    // X360 this+181680 (0x2C5B0), embedded BY VALUE: the module ctor @0x827E44B8 writes the leaf's
+    // vptr straight into it (`*(a1 + 181680) = &off_820CE768`) and Construct @0x82380388 runs
+    // `AchievementManagerBase::Construct(a1 + 181680, a1 + 47920, a1 + 284520, a1 + 7632, a1)` --
+    // i.e. (&mProgressionManager, &mStreetManager, mModeManager.GetScoringSystem(), this).
+    // The concrete type is the X360 leaf (see GetAchievementManager above for the four attestations);
+    // the PC build reuses it, the same precedent as CgsNetwork::BuddyManagerX360 standing in as the
+    // platform buddy leaf (BrnNetworkBuddyManagerBase.h:57) and CgsSaveLoadX360.cpp being mounted in
+    // the PC exe -- there is no AchievementManagerPC leaf in any build.
+    AchievementManagerX360                   mAchievementManager;
+
+    // (DWARF BrnGameStateModule.h:229 also declares `RoadRulesManager mRoadRulesManager;` between
+    // these two -- X360 this+183592. NOT modelled yet: its only consumer here would be
+    // StreetManager::Construct's third argument, and that Construct is deferred for the measured
+    // link reason spelled out in BrnGameStateModule.cpp's Construct. Add it with that call.)
+
+    // ⭐ DWARF BrnGameStateModule.h:425 -- `StreetManager mStreetManager;` (X360 this+284520,
+    // 0x457E8). Embedded BY VALUE: GameStateModule::Construct @0x82380388 runs
+    // `StreetManager::Construct(a1 + 284520, a1, a1 + 47920, a1 + 183592)` and FIVE other
+    // subobjects take its address there (ProgressionManager / RoadRulesManager /
+    // AchievementManagerBase / DeveloperChallengeManager Constructs all receive a1 + 284520).
+    // Prepare2's case 2 (`StreetManager::Prepare2(a1 + 284520, a2, a1 + 232384, a1 + 42320)`)
+    // pumps it.
+    StreetManager                            mStreetManager;
 
     // The module's own output buffer -- see GetOutputBuffer() above for the ownership FLAG.
     // Zero-initialised in-class: BrnGameModule embeds this module by value and does NOT list

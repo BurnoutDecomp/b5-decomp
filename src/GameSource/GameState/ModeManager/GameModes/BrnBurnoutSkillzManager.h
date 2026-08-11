@@ -66,9 +66,14 @@ namespace GameStateModuleIO
 
 namespace BrnGameState
 {
-// The achievement manager the manager caches (StuntModeScoring::AchievementManager is a typedef of
-// this; pointer only here).
-class AchievementManagerPS3;
+// The achievement manager the manager caches. The DWARF spells the member's type as the platform
+// typedef `StuntModeScoring::AchievementManager*`, which resolves to the SKU's concrete leaf --
+// AchievementManagerX360 on the ARTIST spine (GameStateModule::Prepare/Release/PreWorldUpdate all
+// call AchievementManagerX360::* on this+181680), AchievementManagerPS3 on DecFIGS. Held as the
+// shared BASE here because the only method this manager calls through it, OnFreeburnSkillzTotalChange
+// (X360 0x8235B500), is a base method -- and that is also how ProgressionManager holds it
+// (BrnProgressionManager.h:350). Pointer only.
+class AchievementManagerBase;
 }
 
 namespace BrnGameState
@@ -196,7 +201,7 @@ private:
     ScoringSystem*                       mpScoringSystem;
     StreetManager*                       mpStreetManager;
     MugshotManager*                      mpMugshotManager;
-    AchievementManagerPS3*               mpAchievementManager;  // == StuntModeScoring::AchievementManager*
+    AchievementManagerBase*              mpAchievementManager;  // == StuntModeScoring::AchievementManager*
 
     // BrnBurnoutSkillzManager.h:142-145 -- per-frame skill-earning scalars (@ +0x80..+0x8C).
     f32                              mfCurrentTimeInAir;
