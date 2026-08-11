@@ -402,8 +402,13 @@ namespace Vehicle
         // ⭐ FIVE: 167104 -> 172928 (2026-08-09, the 240-byte SimpleVehicleAttribs landed and BOTH
         // negative array terms vanished -- see BrnVehicleManager.h; 172616 + 300 == 172916 ->
         // 16-aligned 172928).
-        static_assert(sizeof(VehicleManager) == 172928,
-                      "MEASURED total. X360 end 172616 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK (+300) == 172916 -> 16-aligned 172928");
+        // ⭐ SIX: 172928 -> 173056 (2026-08-11, the create-drain wave). `mPadAA60[128]` became the
+        // two real `CgsResource::ResourceHandle[8]` arrays the DWARF names there; the host handle is
+        // 16 bytes against the console's 8, so 2*8*16 == 256 replaces 2*8*8 == 128 and every drift
+        // term picks up +128. Same rule as the five before it: the literal moved only AFTER
+        // KU_HOST_DRIFT_AFTER_RACECAR_ARRAY did.
+        static_assert(sizeof(VehicleManager) == 173056,
+                      "MEASURED total. X360 end 172616 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK (+428) == 173044 -> 16-aligned 173056");
         static_assert(sizeof(VehicleManager::maeImpactType) == 32, "EImpactType[8]");
         static_assert(sizeof(VehicleManager::mauImpactScore) == 8, "uint8[8]");
         static_assert(sizeof(VehicleManager::mafPlayerGrindingOtherDurationSeconds) == 32, "f32[8] -- NOT a scalar threshold");
@@ -436,11 +441,30 @@ namespace Vehicle
                       "stride since the 240-byte SimpleVehicleAttribs landed (2026-08-09). This "
                       "line exists so the class cannot change size without the drift term below "
                       "being revisited");
-        static_assert(8 * (5216 - static_cast<std::ptrdiff_t>(sizeof(RaceCarPhysics)))
-                          == -KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
-                      "⭐ KU_HOST_DRIFT_AFTER_RACECAR_ARRAY must BE 8 * (console stride - host "
-                      "sizeof). It is written as a literal in the header, deliberately, so this is "
-                      "a tripwire in both directions and not a definition");
+        // ⭐⭐ RE-STATED 2026-08-11 (create-drain wave). This assert used to read
+        //     8 * (5216 - sizeof(RaceCarPhysics)) == -KU_HOST_DRIFT_AFTER_RACECAR_ARRAY
+        // i.e. it assumed the race-car array was the ONLY thing in that drift term's range. It is
+        // not any more: the term covers X360 +43584..+44768, and the two resource-handle arrays at
+        // +43616 are inside it. So the term is now the SUM of two independent, separately-derived
+        // components, and BOTH are asserted here so neither can absorb an error in the other.
+        static_assert(8 * (static_cast<std::ptrdiff_t>(sizeof(RaceCarPhysics)) - 5216)
+                          + 2 * 8 * (static_cast<std::ptrdiff_t>(sizeof(CgsResource::ResourceHandle)) - 8)
+                          == KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
+                      "⭐ KU_HOST_DRIFT_AFTER_RACECAR_ARRAY must BE the sum of 8 * (host sizeof "
+                      "RaceCarPhysics - console stride 5216) and 2 * 8 * (host sizeof "
+                      "CgsResource::ResourceHandle - console 8). It is written as a literal in the "
+                      "header, deliberately, so this is a tripwire in both directions and not a "
+                      "definition");
+        // The two components, separately, so a compensating pair of errors cannot pass the sum.
+        static_assert(sizeof(CgsResource::ResourceHandle) == 16,
+                      "the host handle is {void* mpResourceMemory, Entry* mpSourceEntry}");
+        static_assert(offsetof(VehicleManager, maRaceCarModelHandles) == 43616,
+                      "⭐ the split must NOT move the first handle array: 43616 == 8 * 0x154C is "
+                      "ProcessCreateEvents' own asm literal, and nothing before it drifts");
+        static_assert(offsetof(VehicleManager, maRaceCarGraphicsModelHandles)
+                          == offsetof(VehicleManager, maRaceCarModelHandles)
+                             + sizeof(VehicleManager::maRaceCarModelHandles),
+                      "the two arrays abut (console 8 * 0x154C then 8 * 0x1554, 64 bytes apart)");
         static_assert(alignof(RaceCarPhysics) == 16,
                       "the array element must stay 16-aligned so element 0 keeps the asm-literal "
                       "+1856 base (1856 % 16 == 0)");

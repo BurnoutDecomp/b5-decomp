@@ -1021,6 +1021,58 @@ namespace BrnPhysics
         lpSimModuleInputBuffer->AppendChangeRigidBodyInertiaQueue<200>(lpRequests->GetChangeRigidBodyInertiaQueue());
     }
 
+    // =================================================================================================
+    // BrnPhysics::PhysicsModule::BridgeVehicleManagerToSimulation_PostScene @0x825AB408 (52 insns)
+    // ⭐⭐ THE SIM FIREWALL -- LANDED 2026-08-11 (prepare-chain wave); its BrnPhysicsConductorGates
+    // .cpp boot gate is DELETED in the same commit (LNK2005 is the tripwire if it ever comes back).
+    //
+    // ⛔ THE GATE'S PRECONDITION IS SATISFIED, CHECKED RATHER THAN ASSUMED. The gate banner said
+    // "DO NOT LAND THIS UNTIL THE TRACTION-LINE CHAIN IS CLOSED -- a body that enters the simulation
+    // before the wheels can find the road falls forever." Both halves of that lifetime are now real
+    // bodies in BrnVehicleManager_TractionLineTests.cpp: StartVehicleTractionLineTests @0x82629CE0
+    // (allocations -> three Add legs -> RunTractionLineTestJobs) and EndVehicleTractionLineTests
+    // @0x82633CD8 (WaitOn -> stream End -> ONE result cursor through the three harvests -> release),
+    // landed by the 2026-08-11 lifetime wave. Read, not inferred, before writing this body.
+    //
+    // The console's four appends, in its own order, off the READ-locked request interface. The four
+    // source offsets are the ones the gate banner cross-checked against BrnVehicleOutputInterface.h's
+    // own queue seats, and each is reached BY NAME here:
+    //     AppendRemoveRigidBodyQueue<50>(simIn, vehOut + 9616)   == mRemoveRigidBodyQueue
+    //     AppendAddRigidBodyQueue   <50>(simIn, vehOut + 0)      == mRequiredRigidBodiesQueue
+    //     AppendAddJointQueue       <10>(simIn, vehOut + 39904)  == mAddJointQueue
+    //     AppendRemoveJointQueue    <10>(simIn, vehOut + 41840)  == mRemoveJointQueue
+    //
+    // ⚠ FLAG (call-count, behaviour-free): the console re-issues `BrnPhysics::Vehicle::
+    // VehicleManagerOut` (@0x825A0FB0 -- the read-lock tripwire that returns `buffer + 16`) ONCE PER
+    // APPEND, four times. The already-committed sibling BridgeVehicleManagerToSimulation_PostPhysics
+    // @0x825ADF60 has the identical shape (three calls) and hoists it into one local; that precedent
+    // is followed here so the two bodies read the same. The accessor has no side effect other than
+    // the "Not locked for reading" assert, so the collapse is behaviour-free.
+    //
+    // ⚠ FLAG (const seam): identical to the PostPhysics sibling's -- the console reads the queues
+    // through the const request interface while two of the four sim Append*Queue templates were
+    // committed with NON-const source params. Append only reads the source, so the const_casts are
+    // behaviour-free; reconcile the template params at their own wave.
+    // =================================================================================================
+    void PhysicsModule::BridgeVehicleManagerToSimulation_PostScene(
+        CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
+        const Vehicle::VehicleManagerOutputBuffer* lpVehManagerOutputBuffer )
+    {
+        CGS_ASSERT(lpSimModuleInputBuffer != 0, "lpSimModuleInputBuffer != NULL");       // :870
+        CGS_ASSERT(lpVehManagerOutputBuffer != 0, "lpVehManagerOutputBuffer != NULL");   // :871
+
+        Vehicle::VehicleOutputRequestInterface* lpRequests =
+            const_cast<Vehicle::VehicleOutputRequestInterface*>(
+                lpVehManagerOutputBuffer->GetVehicleOutputRequestInterface());
+
+        lpSimModuleInputBuffer->AppendRemoveRigidBodyQueue<50>(lpRequests->GetRemoveRigidBodyQueue());
+        lpSimModuleInputBuffer->AppendAddRigidBodyQueue<50>(lpRequests->GetRequiredRigidBodiesQueue());
+        lpSimModuleInputBuffer->AppendAddJointQueue<10>(
+            const_cast<Vehicle::VehicleOutputRequestInterface::AddArticulatedJointQueue*>(
+                lpRequests->GetAddJointQueue()));
+        lpSimModuleInputBuffer->AppendRemoveJointQueue<10>(lpRequests->GetRemoveJointQueue());
+    }
+
     // BrnPhysics::PhysicsModule::BridgeVehicleManagerToOutput (PS3 DecFIGS keeps it out of
     // line; the X360 inlines the whole body into Update @0x825B2408..0x825B2510, whose baked
     // asserts cite THIS file's :1025/:1026). Lock both buffers, forward the request

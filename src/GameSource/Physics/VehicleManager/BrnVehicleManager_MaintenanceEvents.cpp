@@ -1,105 +1,83 @@
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnVehicleManager_MaintenanceEvents.cpp
 //
-// VehicleManager::ProcessVehicleMaintenanceEvents @0x8264AB38 (118 insns), plus the five arms it
-// dispatches and the traffic twin, as NAMED one-shot conductor gates.
+// VehicleManager::ProcessVehicleMaintenanceEvents @0x8264AB38 (118 insns) and FOUR of the five arms
+// it dispatches, as REAL BODIES, plus the two create-path helpers those arms share with the create
+// drain. The traffic twin stays a named one-shot gate (it is another wave's function).
+//
+//   ProcessVehicleMaintenanceEvents        @0x8264AB38  (118)  ⭐ bodied (earlier wave)
+//   RecordNetworkRaceCarsAddedForCollision @0x825C7EA8  (321)  ⭐ BODIED THIS WAVE
+//   ProcessRemoveEvents                    @0x826160C8  (426)  ⭐ BODIED THIS WAVE
+//   ProcessValidationEvents                @0x825E9010  ( 65)  ⭐ BODIED THIS WAVE
+//   ProcessCollisionEvents                 @0x825E8F28  ( 57)  ⭐ BODIED THIS WAVE  <- the "export hole"
+//   AddRaceCarDeformationModel             @0x825E9118  (153)  ⭐ BODIED THIS WAVE
+//   SetAllNetworkRaceCarsHidden            @0x825E9380  (175)  ⭐ BODIED THIS WAVE
+//   PhysicalTrafficManager::ProcessTrafficMaintenanceEvents @0x82649768 (246)  ⛔ still a GATE
+//   ProcessCreateEvents                    @0x82616770  (1067) -> its OWN slice TU (see below)
 //
 // Slice TU (home BrnVehicleManager.cpp is still unmounted) -- the same shape as the sibling
 // BrnVehicleManager_Prepare.cpp / _ReadUpdatedBodies.cpp / _TractionLineTests.cpp slices.
 //
 // -------------------------------------------------------------------------------------------------
-// ⭐⭐ WHY THIS TU EXISTS NOW, AND WHY IT IS NOT THE CREATE PATH.
+// ⭐⭐⭐ THE "EXPORT HOLE" AT @0x825E8F28 IS RETIRED, AND IT WAS NEVER A HOLE IN THE DATABASE.
 //
-// The campaign brief named VehicleManager::ProcessCreateEvents @0x82616770 as the head of the
-// list: it is the only writer in the whole XEX that SETS a bit in mUsedRaceCars (the tree's only
-// other write is BrnVehicleManager_Construct.cpp's UnSetAll()), so until it runs the physics
-// vehicle manager believes there are no cars. That is true. But it is not the head of the list,
-// because ProcessCreateEvents HAS NO LIVE CALLER:
+// Every previous banner in this file recorded ProcessCollisionEvents as "a HOLE in the IDA export
+// set -- it has no per-function JSON and is known only by the name IDA prints at this one call
+// site ... the insn count is genuinely unknown and is left unstated rather than guessed."
 //
-//     PhysicsModule::PostSceneUpdate @0x825ABC10     <- WorldLinkStubs boot gate until today
-//       -> VehicleManager::ProcessVehicleMaintenanceEvents @0x8264AB38   <- absent until today
-//            -> RecordNetworkRaceCarsAddedForCollision @0x825C7EA8 (321)
-//            -> ProcessRemoveEvents                    @0x826160C8 (426)
-//            -> ProcessCreateEvents                    @0x82616770 (1067)
-//            -> ProcessValidationEvents                @0x825E9010 (65)
-//            -> ProcessCollisionEvents                 @0x825E8F28 (export hole)
-//            -> PhysicalTrafficManager::ProcessTrafficMaintenanceEvents @0x82649768 (246)
-//
-// `xrefs_to` on ProcessCreateEvents is a ONE-ELEMENT set: ProcessVehicleMaintenanceEvents. And
-// `xrefs_to` on that is a one-element set: PostSceneUpdate. Landing 1,067 instructions of create
-// body first would have produced a function nothing calls -- green gates, observable zero.
+// Retired with the targeted headless-idat technique of commit b53e2523 (one `idat.exe -A -S<script>`
+// run over a private copy of BURNOUT_X360_ARTIST.XEX.i64). The result:
+//     had_function = TRUE.  start 0x825E8F28, end 0x825E900C, 57 instructions,
+//     name = BrnPhysics::Vehicle::VehicleManager::ProcessCollisionEvents,
+//     Hex-Rays decompiles it clean, xrefs_to = the one expected caller.
+// It is a fully analysed, correctly NAMED function that the export RUN simply never wrote a file
+// for -- `tools/ida/export_all.py` walks `idautils.Functions()` and writes one JSON per function,
+// and this one's write did not happen. ⇒ **"absent from .ida-exports" is a fact about the export,
+// not about the database.** Two of this project's standing parks were on that word; anything else
+// still parked "export hole" is worth re-checking the same way before it is planned around.
 //
 // -------------------------------------------------------------------------------------------------
-// ⭐ THE PRODUCER SIDE IS ALREADY LIVE, WHICH IS WHY THE MEASUREMENT BELOW IS WORTH TAKING.
-// VehicleInputInterface::CreateRaceCar @0x822CC1E8 is bodied and mounted
-// (SharedIO/BrnVehicleInputInterface.cpp:55); its console caller ActiveRaceCar::AddHandlingModel
-// @0x822D3EC8 is bodied; and THAT is called from the race-car promote site every boot
-// (BrnRaceCarEntityModule.cpp:817). So create events have been posted into
-// VehicleInputInterface::mCreateRaceCarEventQueue on every boot of this build and drained by
-// nobody. The ProcessCreateEvents gate below PRINTS THAT QUEUE'S LENGTH -- the first direct
-// measurement of the create path's input in this project, rather than an inference from the
-// call graph.
+// ⛔⛔ WHY ProcessCreateEvents IS NOT IN THIS FILE ANY MORE.
+//
+// It is bodied -- completely, all 1,067 instructions -- in the sibling slice
+// BrnVehicleManager_ProcessCreateEvents.cpp, which compiles GREEN. It was split out so that the
+// MOUNTING decision was separable: the four arms below are inert bookkeeping over queues that are
+// empty today, while setting one bit of mUsedRaceCars switches on four already-called per-frame
+// loops against a freshly constructed car. Those two things should not have to be mounted in the
+// same commit, and a single TU would have forced that.
+//
+// ⇒ BOTH FILES ARE MOUNTED AS OF THE BOOT-VERIFIED WAVE. This banner used to say "THIS FILE IS
+//   MOUNTED. The create TU is NOT (yet)"; that is retired -- tools/build/build_game_exe.bat now
+//   echoes BrnVehicleManager_ProcessCreateEvents.cpp too, with the conductor's rationale beside
+//   the line. The split stands on its own merits (separable slices, separable blame); it is no
+//   longer a mount gate.
 //
 // -------------------------------------------------------------------------------------------------
-// ⛔⛔ AND WHY ProcessCreateEvents IS A GATE AND NOT A BODY -- THE MEASURED SPLIT POINT.
+// ⭐ CONSOLE-VALUE HAZARD DECLARED ONCE, HERE, BECAUSE THREE BODIES BELOW HIT IT.
 //
-// Setting one bit of mUsedRaceCars is not bookkeeping on this build. It is the ON-SWITCH for four
-// per-frame loops that are ALREADY MOUNTED AND ALREADY CALLED, every one of which walks that
-// bitset and does nothing today only because it is empty:
-//     BrnVehicleManager_ReadUpdatedBodies.cpp:100   gravity + ExternalPhysicsBody::IntegrateTransform
-//     BrnVehicleManager_UpdateVehiclePhysics.cpp:383  ResetAboveGroundTestResult per car
-//     BrnVehicleManager_UpdateVehiclePhysics.cpp:473  RaceCarPhysics::Update -- the 54 force leaves
-//     BrnVehicleManagerContactGeneration.cpp:340      vehicle contact generation
-// The first of those is the fall. It does not need the simulation and it does not need
-// InAddRigidBody: PhysicsModule::Update reaches ReadUpdatedBodies every frame
-// (BrnPhysicsModuleUpdateFunctions.cpp:650) and the only per-car guard is mbFrozen. So the create
-// path cannot land before the traction-line chain -- exactly the order this repo's own
-// BrnPhysicsConductorGates.cpp banner already states.
+// The vehicle manager's race-car identity is a 64-bit CgsPhysics::RigidBodyId whose HIGH dword is
+// the 32-bit entity word (`ld ; srdi r,r,32` at every read site). The Deformation event structs
+// this file posts into (BrnDeformationEvents.h) type their `mHandlingBodyID` with the GLOBAL
+// 4-byte `::RigidBodyId { u32 muValue }` stand-in, NOT CgsPhysics::RigidBodyId -- a fork
+// BrnDeformationManager.h documents at length and deliberately leaves open.
 //
-// -------------------------------------------------------------------------------------------------
-// ⭐⭐⭐ WHAT THE MEASUREMENT ACTUALLY FOUND, 2026-08-10 -- READ THIS BEFORE PLANNING THE NEXT WAVE.
-//
-// The census below printed, on the first boot with this spine live, and never printed again:
-//     [create-path] CreateRaceCarEvent queue length = 0
-// It logs on CHANGE, so "printed once with 0" means the queue is EMPTY AT EVERY DRAIN, for the
-// whole run -- including the thirteen frames on which the log shows
-// "[PLACEONTRACK] Place on track request complete", i.e. frames on which the producer definitely
-// ran. ⇒ **A fully reconstructed ProcessCreateEvents would drain ZERO events today.**
-//
-// Traced to the seam, not guessed. The producer chain is
-//     RaceCarEntityModule::PrePhysicsUpdate -> PlaceOnTrackManager::PrePhysicsUpdate
-//       -> RaceCarEntityModule::ResetActiveRaceCar( ..., lpOutput->GetVehicleInputInterface() )
-//       -> ActiveRaceCar::AddHandlingModel -> VehicleInputInterface::CreateRaceCar @0x822CC1E8
-//       -> mCreateRaceCarEventQueue.AddEvent
-// so the events are staged in the RaceCarEntityModuleIO **OutputBuffer_PrePhysics**. The only
-// thing that moves that buffer's interface into PhysicsModuleIO::InputBuffer is
-//     WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics @0x827AAEC0 (271 insns)
-// -- and that is a **WorldLinkStubs BOOT GATE, inert** (WorldLinkStubs.cpp:3199). Its PRE-SCENE
-// sibling @0x827AADB8 IS real and DOES `VehicleInputInterface::Append` (which carries
-// mCreateRaceCarEventQueue -- checked in the committed Append body, all fourteen queues), but the
-// pre-scene race-car output is not where the create event is staged.
-//
-// ⇒ **THE NEXT HEAD OF THE LIST IS THE BRIDGE, NOT THE DRAIN.** Same silent-drop shape that ate
-// the 396 world-collision events and the 28 triangle-cache events: a queue filled into a buffer
-// whose only consumer is absent. Landing 1,067 instructions of create body before
-// @0x827AAEC0 would produce a perfect function drinking from an empty pipe.
-// ⚠ @0x827AAEC0 is not free: it also carries the traffic and prop PrePhysics interfaces and the
-// vehicle-driver interface (its own asserts cite BrnVehicleDriverInputInterface.h:164/:260), so it
-// is its own wave, not a line.
-// -------------------------------------------------------------------------------------------------
-//
-// ⭐ The SECOND road to a falling body -- the one the brief named -- is already closed, and it is
-// closed at a console function boundary rather than by anything invented here. ProcessCreateEvents
-// posts its InAddRigidBody event into VehicleOutputRequestInterface::mRequiredRigidBodiesQueue
-// (@+0x0000 of the "VehManager" stack IO buffer). The ONLY thing that ever moves that queue into
-// the simulation is PhysicsModule::BridgeVehicleManagerToSimulation_PostScene @0x825AB408, which
-// is itself a gate (BrnPhysicsConductorGates.cpp) -- and PostSceneUpdate destroys the VehManager
-// buffer in the same call that creates it. See that gate's banner for the four queue offsets.
+// On the console those two are the same bytes: a 32-bit big-endian load of the first word of the
+// 64-bit handle yields the entity word. On x64 they are NOT. So every post below assigns the
+// ENTITY WORD into `.muValue`, spelled through CgsPhysics::RigidBodyId::GetEntityId(), never a
+// truncating cast of the whole handle. That is what the committed consumers already expect
+// (BrnDeformationManager.cpp does `mHandlingBodyID.muValue >> 24` for the owner and
+// `(mHandlingBodyID.muValue >> 10) & 0x3FFF` for the index -- entity-word arithmetic).
+// ⚠ It is also lossless on this build: ProcessCreateEvents is the only writer of
+// maRaceCarHandlingBodyIDs and it stores `((u64)entityWord) << 32`, i.e. the low dword is always
+// zero. If that ever stops being true, these three posts lose information silently.
 // =================================================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
-#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"  // GetCreateRaceCarEventQueue (the measurement)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"  // the five drained queues
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // VehicleOutputRequestInterface (InRemoveRigidBody)
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationInputInterface.h" // the five posted queues
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h"  // BrnWorld::ERaceCarType
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                        // gpDebugPrint / gxMessageFilterFlags
 
@@ -179,225 +157,491 @@ namespace Vehicle
             lpManagerOutputInterface, lpVehicleOutputInterface, lpDeformationInterface);
     }
 
-    // ---- the five arms, as LOUD one-shot gates --------------------------------------------------
-    // ⛔ NEVER silently no-op these: the log-once IS the loudness. Reconstruct each body in its own
-    // TU and DELETE the gate here (duplicate-definition LNK2005 is the intended tripwire).
-
-    void VehicleManager::RecordNetworkRaceCarsAddedForCollision(const VehicleInputInterface*)
-    {
-        BRN_MAINTENANCE_GATE("VehicleManager::RecordNetworkRaceCarsAddedForCollision @0x825C7EA8 (321)");
-    }
-
-    void VehicleManager::ProcessRemoveEvents(const VehicleInputInterface*,
-                                             VehicleOutputRequestInterface*,
-                                             VehicleManagerOutputInterface*,
-                                             Deformation::DeformationInputInterface*)
-    {
-        BRN_MAINTENANCE_GATE("VehicleManager::ProcessRemoveEvents @0x826160C8 (426)");
-    }
-
-    // ⭐⭐ THE MEASUREMENT. This gate is the only one in the tree that reports a queue LENGTH
-    // rather than just a name, because the length is the fact nobody has ever checked: does the
-    // already-live producer chain (RaceCarEntityModule promote -> ActiveRaceCar::AddHandlingModel
-    // @0x822D3EC8 -> VehicleInputInterface::CreateRaceCar @0x822CC1E8 -> mCreateRaceCarEventQueue
-    // .AddEvent) actually put a create event in front of this function?
-    //
-    // It is a READ under the caller's existing read lock, through the CONST accessor, of a length
-    // this build already maintains -- it constructs nothing, consumes nothing and changes no state.
-    // The count is logged only when it CHANGES, so a queue that fills every frame does not flood
-    // the log and a queue that is always empty prints exactly once.
-    //
     // =============================================================================================
-    // ⭐⭐⭐ RE-MEASURED 2026-08-11 (create-path wave 3). THIS REPLACES the old "what must happen
-    // first" list, which was stale on four counts. Read it before planning the drain.
+    // ARM 1 -- RecordNetworkRaceCarsAddedForCollision @0x825C7EA8 (321 insns)
+    //          asserts BrnVehicleManager.cpp:9677 / :9699, CgsBitArray.h:203 / :222
     //
-    // (1) THE CLOSURE, machine-walked over all 30,084 X360 export JSONs BY ADDRESS (a name walk
-    //     omits, with no diagnostic, the callees whose names collide), checked against the tree AND
-    //     build_game_exe.bat: transitive closure of @0x82616770 = 4,370 insns / 47 nodes,
-    //     CRT + DebugUI filtered.
-    //     ALREADY BODIED **AND MOUNTED**: VehicleAttribs::SetupAttribs @0x825F4CD8 (770);
-    //     VehicleAttribs::Construct @0x825F3FB8 (VehicleAttribs.cpp:439 -- the old banner's
-    //     "export hole" is RETRACTED); EngineAttribs::InitializeFromAttribs (296);
-    //     Wheel::TireAttribs::PrepareFrontTire / PrepareRearTire (192 + 192);
-    //     AddRaceCarDeformationModel (153); SetNetworkRaceCarHidden (118);
-    //     StreamedDeformationSpec::TransformToNewCOMSpace (106) and ::GetBoundingBox (28); and the
-    //     whole AttribSys layer -- including the INLINE physicsvehiclehandling ctor
-    //     (physicsvehiclehandling.h:170), its out-of-line copy ctor (`sub_825BDB88`), all eight
-    //     Attrib::Gen::physicsvehicle*attribs ctors, and Attrib::AssertOnClassCheck.
-    //     ⇒ GENUINELY MISSING: this 1,067-insn body plus VehicleManager::SetAllNetworkRaceCarsHidden
-    //       @0x825E9380 (175). That is all of it -- 1,242 instructions, two functions.
-    //     The four event-queue instantiations the body reaches (GetEvent @0x825BB7F0, the truncated
-    //     export "BrnPhysics::Vehic", console element stride 0xA0; CreateVehicleResult::AddEvent;
-    //     AddDeformationModelEvent::AddEvent; InAddRigidBody::AddEvent) are MOUNTED as of this wave
-    //     and link clean -- the closure is already enforced.
+    // Two per-frame bitsets, one queue drain. Read off the asm register for register:
     //
-    // (2) ⭐⭐ THE TWO PRECONDITIONS THAT MADE THIS BODY IMPOSSIBLE ARE FIXED (this wave), and both
-    //     were invisible until somebody PRINTED the event instead of reasoning about it. Measured
-    //     BEFORE, read-only dump of create event 0 on a real boot:
-    //         owner=0 idx=0 pos=(2986.933105,-3.525000,-2011.417969) model=0 gfx=0 ... strength=5
-    //     * model=0 / gfx=0: the body does `lwzx r11,maRaceCarModelHandles[i] ; lwz r28,0(r11)`
-    //       (@0x82616CF4 / @0x82616CFC) and then dereferences r28 as the StreamedDeformationSpec
-    //       for the wheel loop, TransformToNewCOMSpace and GetBoundingBox. A null handle is an AV,
-    //       not a soft failure. ROOT CAUSE: BaseResourcePtr::GetResourceHandle() returned mHandle
-    //       (+0x04/+0x08) -- the CACHED IDENTITY of the resolved resource, which for a
-    //       main-memory-only resource is legitimately {0,0}. The handle is the +0x14/+0x18 pair.
-    //       FIXED in CgsBaseResourcePtr.cpp; four independent witnesses in its banner.
-    //     * owner=0: ActiveRaceCar::Attach was skipping the console's mHandlingBodyVolumeId seed,
-    //       so the id this body takes BOTH its owner assert (:1303) and its race-car SLOT INDEX
-    //       (`extrwi r27,r9,14,8`) from was all zeroes. FIXED in BrnActiveRaceCar.cpp.
-    //     Measured AFTER, same probe, same flow: owner=1 idx=0 ... model=1 gfx=1.
-    //     ⇒ THE INPUT IS NOW COMPLETE, and the event carries a real Junkyard world position whose
-    //       y (-3.525000) is the junkyard floor plane the traction line already returns hits on.
+    //   0x825C7EF0  addis r11,r30,1 ; addi r11,r11,-0x5150 ; std r20(0),0(r11)
+    //               -> this + 44720 == mNetworkCarsAddedForCollisionThisFrame, cleared (one std,
+    //                  i.e. one 8-byte BitArray<8> word).
+    //   0x825C7F00  lis/ori r10 = 0x22B50 (142160) ; ldx r11,r31,r10
+    //   0x825C7F10  lis/ori r9  = 0xAEA8  (44712)  ; stdx r11,r30,r9
+    //               -> mRaceCarsAddedForCollision = *lpInputInterface->GetRaceCarsAddedForCollision()
+    //                  (142160 is that member's console seat -- the very literal
+    //                  BrnVehicleInputInterface.h's accessor banner already quotes).
+    //   0x825C7F08  addis r3,r31,2 ; addi r3,r3,0x358 -> input + 131928 ==
+    //               mNetworkCarsAddedRemovedForCollisionQueue; length re-read at +8 every iteration.
     //
-    // (3) THE GROUND IS READY -- re-confirmed on this build, not inherited: world collision
-    //     (23,645 leaves), the 2,937,088-byte arena, 28 cache slots, the fill worker, the
-    //     traction-line producer lifetime and the drain all run every frame, and everything from a
-    //     result record to Wheel::SetRoadContact -> mbIsOnGround is mounted.
-    //
-    // (4) WHAT THE NEXT WAVE HAS TO WRITE, in the body's own order (asm from @0x82616770):
-    //       head      fetch event i, copy the 0xA0-byte record to a local, store both handles into
-    //                 maRaceCarModelHandles / maRaceCarGraphicsModelHandles (@0x82616A64/A68, the
-    //                 two stdx at this+43616+8i and this+43680+8i), three asserts.
-    //                 ⚠️ those two arrays are still the opaque `mPadAA60[128]` in
-    //                 BrnVehicleManager.h and MUST be split into real ResourceHandle[8] pairs --
-    //                 which GROWS them 64 -> 128 bytes each on x64, so the layout gate's host-drift
-    //                 constants move with them.
-    //       attribs   Attrib::FindCollection(hash64("burnoutcarasset") == 0x52B81656F3ADF675,
-    //                 event.mCarAssetAttribKey) -> Instance -> DefaultDataArea(0x228) ->
-    //                 RefSpec::GetCollection(+0x158) -> physicsvehiclehandling ->
-    //                 VehicleAttribs::Construct -> copy ctor -> SetupAttribs.
-    //       wheels    TransformToNewCOMSpace, then a four-iteration loop over the spec's WheelSpecs
-    //                 accumulating the COM vector (v125) and four scalars. SKIPPED ENTIRELY when
-    //                 event.mbDisablePhysicsStateReset (@0x82616D38).
-    //       inertia   ~200 insns of vrefp / vmaddfp Newton-Raphson building the mass + inertia
-    //                 triple, then memcpy(0xC0) -> InAddRigidBody::AddEvent. ⚠️ its only consumer
-    //                 is PhysicsModule::BridgeVehicleManagerToSimulation_PostScene @0x825AB408, a
-    //                 DELIBERATELY INERT gate, and PostSceneUpdate destroys the VehManager buffer
-    //                 in the same call -- so on this build that post is a producer into a buffer
-    //                 nothing drains BY THE CONSOLE'S OWN DESIGN. ⛔ BUT DO NOT SUB-GATE THE MATH:
-    //                 three of its outputs (the stack slots the asm calls var_900 / var_908 /
-    //                 var_910..var_920) are ALSO arguments to the Prepare vcall below.
-    //       seat      GetBoundingBox -> vcall vtable slot +0x30 == RaceCarPhysics::Prepare
-    //                 @0x82639CB8 (EXPORT HOLE; its 40 instructions were lifted in create2_log).
-    //                 ⚠️ NOT DECLARED ANYWHERE IN THIS TREE YET, and it is the ONLY thing that
-    //                 seats mTransform / mHalfExtent / mSimpleAttribs -- every observable except
-    //                 the bitset hangs off this one vcall. Also skipped when
-    //                 mbDisablePhysicsStateReset.
-    //       register  DebugComponent::Register, then the INLINED mUsedRaceCars.SetBit
-    //                 (@0x826173C8 ldx / or / stdx) -- the observable this gate is named for.
-    //       publish   CreateVehicleResult::AddEvent, AddRaceCarDeformationModel, the per-car scalar
-    //                 seeds at stride 0xE0, SetNetworkRaceCarHidden / SetAllNetworkRaceCarsHidden,
-    //                 two Attrib::Instance dtors.
-    //
-    // (5) and the result consumer RaceCarEntityModule::ProcessCreateVehicleEvents @0x822FF620 (182)
-    //     -- today stood in for by PublishNewVehicleToDirectorWithoutPhysicsBringUp -- is still the
-    //     only thing that would make RaceCarState::mEntityId non-zero.
-    //
+    // ⚠️ THE LOOP BOUND IS RE-READ, NOT CACHED (`lwz r10,8(r10)` at 0x825C8394, inside the loop),
+    // so it is written as a live `GetLength()` test rather than hoisted.
+    // ⚠️ The two CgsBitArray.h asserts (:203 IsBitSet bounds, :222 SetBit bounds) are the
+    // container's own tripwires and fire from inside the named calls; the console emits them
+    // inline because it inlines the container. Not duplicated here.
+    // ⚠️ The two "invalid index : %u < %u" / "Index: %u, Number of bits: %u" streams are console
+    // gpcMessageBuffer formatting inside those same container asserts -- see the container header.
     // =============================================================================================
-    // ⭐⭐⭐ RE-MEASURED AGAIN 2026-08-11 (create-drain wave). THREE CORRECTIONS TO (1)-(4) ABOVE,
-    // each checked here rather than inherited. Read this block, not the one above it, when planning.
-    //
-    // (A) ⛔ THE COST IN (1) IS LOW BY 1.85x, AND IT IS LOW FOR TWO INDEPENDENT REASONS.
-    //     * `VehicleManager::AddRaceCarDeformationModel` @0x825E9118 (153) is listed above as
-    //       "ALREADY BODIED AND MOUNTED". It is **ABSENT** -- `grep -rn` over the whole tree finds
-    //       the name in exactly two places, both of them comment lines in this banner. Its
-    //       `xrefs_to` is a one-element set: this function.
-    //     * The `Prepare` vcall chain contributes **ZERO** to the 4,370-instruction closure, because
-    //       it is an INDIRECT call through vtable slot +0x30 and no `xrefs_from` walk can see it.
-    //       Costed separately (seed @0x82637C80): 4,147 insns / 35 nodes, of which everything is
-    //       already mounted EXCEPT the three Prepare bodies themselves.
-    //     MEASURED total for a complete drain, by address, presence-checked against the tree AND
-    //     build_game_exe.bat:
-    //         ProcessCreateEvents            @0x82616770  1067   absent
-    //         SetAllNetworkRaceCarsHidden    @0x825E9380   175   absent
-    //         AddRaceCarDeformationModel     @0x825E9118   153   absent   <- the correction
-    //         RaceCarPhysics::Prepare        @0x82639CB8  ~40    absent (X360 export hole)
-    //         VehiclePhysics::Prepare        @0x82637C80   306   absent (declare-only)
-    //         SimpleVehiclePhysics::Prepare  @0x8262F620   554   ⭐ LANDED THIS WAVE
-    //     = 2,295 insns / 6 functions, of which 554 are now done and 1,741 remain.
-    //
-    // (B) ⭐⭐ THE "EXPORT HOLE WITH NO DECLARATION ANYWHERE" IS CLOSED, AND IT DID NOT NEED THE
-    //     IMAGE. A name index over all 35,902 DecFIGS PS3 export JSONs carries all three Prepares
-    //     mangled, with parameter names: RaceCarPhysics 0x73648C (89 insns), VehiclePhysics
-    //     0x735DEC (424), SimpleVehiclePhysics 0x734D58 (541). See RaceCarPhysics.h's new banner for
-    //     the eleven-parameter signature and the register-by-register agreement with this function's
-    //     own call site @0x826171D8..0x8261724C. Every one of the eleven arguments now has a named
-    //     producer, including `lInertia` (six doublewords == 48 bytes == the inertia block's output)
-    //     and `lHandlingBodyOffset` (== v125, the four-wheel COM accumulator).
-    //     ⛔ En route: VehiclePhysics::Prepare's committed declaration was a FIVE-parameter
-    //     arity+type FORK against the real nine. Corrected; see VehiclePhysics.h:610.
-    //
-    // (C) ⭐⭐ RUN THE PATH FIRST -- a read-only probe at this exact point, three drains on one boot
-    //     (2026-08-11T12:22:28, 1211 frames, both gates PASS, asserts=3), verbatim:
-    //         PROBE drA idx=0 usedBits=0x0 sizeofVM=172928 offPad=43616 offUsed=44224
-    //                       offCars=1856 sizeofRH=16 sizeofRCP=5216
-    //         PROBE drA car vptr=951984048 pos=(0,0,0) half=(0,0,0) frozen=0 simpleValid=0
-    //         PROBE drA spec=86050768 gfxMem=89927120
-    //         PROBE drA mesh=(-0.000000,0.740575,-0.170226)
-    //         PROBE drA wheel0 pos=(-0.829000,-0.409029,1.342442) scale=(0.259968,0.662665,0.662665)
-    //         PROBE drA coll=417505728
-    //     * `coll` non-null: Attrib::FindCollection(hash64("burnoutcarasset"), event.key) RESOLVES
-    //       on this build. The attribs act will run; that was the largest untested assumption.
-    //     * `spec`/`gfxMem` non-null and the spec's geometry is the real Hunter Cavalry data.
-    //     * the car object IS constructed (non-null vptr) and nothing is seated yet.
-    //     * `offPad=43616` -- the host layout matches the console byte for byte through mPadAA60
-    //       (1856 + 8*5216 + 32), and `sizeofRH=16`, so splitting the pad into the two real
-    //       ResourceHandle[8] arrays costs **+128 bytes** and moves every host-drift constant past
-    //       it. Measured, so the next wave does not have to guess at it.
-    //     * ⚠️ `frozen=0`: the car is NOT frozen, so the already-mounted gravity+integrate loop
-    //       starts the instant the bit is set.
-    //
-    // (D) ⛔⛔ A HAZARD NO PREVIOUS WAVE RECORDED. The three drains report **idx=0, then 1, then 2**
-    //     -- the create events name THREE DIFFERENT race-car slots over one boot, not one car three
-    //     times. A drain that only creates would leave three live cars in mUsedRaceCars at the same
-    //     world point. On console ProcessRemoveEvents @0x826160C8 (426, the gate above) frees the
-    //     previous slot first, and this body's own assert list contains "Race Car Index Already
-    //     Used" -- the console expects the slot to be free. ⇒ **ProcessRemoveEvents is part of the
-    //     drain wave, not a later one.** That is a seventh function and it is not in the 2,295.
-    // =============================================================================================
-    void VehicleManager::ProcessCreateEvents(const VehicleInputInterface* lpInputInterface,
-                                             VehicleOutputRequestInterface*,
-                                             VehicleManagerOutputInterface*,
-                                             Deformation::DeformationInputInterface*)
+    void VehicleManager::RecordNetworkRaceCarsAddedForCollision(
+        const VehicleInputInterface* lpInputInterface)
     {
-        BRN_MAINTENANCE_GATE("VehicleManager::ProcessCreateEvents @0x82616770 (1067) -- "
-                             "the ONLY setter of mUsedRaceCars");
+        CGS_ASSERT(lpInputInterface != 0, "lpInputInterface != NULL");   // :9677
 
-        // The create-queue census (see the banner above).
-        static s32 s_iLastReportedLength = -1;
-        if (lpInputInterface != 0)
+        mNetworkCarsAddedForCollisionThisFrame.UnSetAll();
+        mRaceCarsAddedForCollision = *lpInputInterface->GetRaceCarsAddedForCollision();
+
+        const VehicleInputInterface::NetworkCarsAddRemoveForCollisionQueue* lpQueue =
+            lpInputInterface->GetNetworkCarsAddRemoveForCollisionQueue();
+
+        for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
         {
-            const s32 liPending = lpInputInterface->GetCreateRaceCarEventQueue()->GetLength();
-            if (liPending != s_iLastReportedLength)
+            const VehicleAddedForCollisionEvent& lrEvent = lpQueue->GetEvent(liEvent);
+
+            // `ld r11,0(evt) ; srdi r11,r11,32 ; extrwi r29,r11,14,8` -- the 14-bit entity index
+            // out of the embedded entity word, i.e. the active-race-car slot.
+            const u32 luRaceCar = lrEvent.mRaceCarVolumeInstanceId.GetEntityIDEntityIndex();
+
+            CGS_ASSERT(mUsedRaceCars.IsBitSet(luRaceCar),
+                       "mUsedRaceCars.IsBitSet( liRaceCar )");           // :9699
+
+            // `lbz r11,8(evt)` -- VehicleAddedForCollisionEvent::mbAdded.
+            if (lrEvent.mbAdded)
             {
-                s_iLastReportedLength = liPending;
                 if (CgsDev::Message::gxMessageFilterFlags & 1)
                 {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[create-path] CreateRaceCarEvent queue length = " << liPending
-                        << " (undrained; ProcessCreateEvents is a gate) [FLAG PC boot gate]\n";
+                    *CgsDev::Log::gpDebugPrint << "HIDE_ONLINE: " << "Network race car "
+                        << static_cast<s32>(luRaceCar) << ", type "
+                        << static_cast<s32>(maeRaceCarTypes[luRaceCar])
+                        << " was added for collision\n";
                 }
+                mNetworkCarsAddedForCollisionThisFrame.SetBit(luRaceCar);
             }
         }
     }
 
-    void VehicleManager::ProcessValidationEvents(const VehicleInputInterface*,
-                                                 Deformation::DeformationInputInterface*)
+    // =============================================================================================
+    // ARM 2 -- ProcessRemoveEvents @0x826160C8 (426 insns)
+    //          asserts BrnVehicleManager.cpp:1202 / :1203 / :1639 / :1640, CgsBitArray.h:203 / :241
+    //
+    // ⭐⭐ THIS IS PART OF THE CREATE WAVE, NOT A LATER ONE. A read-only probe at the drain point
+    // (2026-08-11) reported three create events on one boot naming race-car slots **0, then 1, then
+    // 2** -- three different slots, not one car three times. ProcessCreateEvents' own assert list
+    // contains "Race Car Index Already Used", i.e. the console expects the slot to be FREE when it
+    // is claimed, and this function is the only thing that frees one.
+    //
+    // The body, in the console's order (`bl sub_825BB8A0` is BaseEventQueue<RemoveRaceCarEvent>::
+    // GetEvent; queue seat `addis r3,r4,2 ; addi r3,r3,-0x6D0` == input + 129328):
+    //   1. owner + slot out of the event's VolumeInstanceId (`srwi r10,r27,24`, `extrwi r30,r27,14,8`)
+    //   2. two asserts, then the driver-record clear
+    //   3. two deformation posts (deactivate, remove) keyed on maRaceCarHandlingBodyIDs[slot]
+    //   4. maRaceCarEntityIDs[slot] = the invalid sentinel (dword_82F2A3A4 == 0xFFFFFFFF, read out
+    //      of the image), and an InRemoveRigidBody post whose id re-owners the entity word to 0x0B
+    //   5. three per-car seeds inside maRaceCarVehicles[slot]
+    //   6. mUsedRaceCars.UnSetBit(slot), the log, the network-car un-hide, and the type reset
+    //
+    // ⚠️ STEP 2 IS AN INLINED VehicleDriver::ClearControls(). The stores are, relative to
+    // &maRaceCarDrivers[slot] (`mulli r11,r30,0xE0 ; add r11,r11,r24`, then +0x40..+0x8E):
+    //     +0x00 = -1 (word)     +0x04..+0x30 = 0.0f (twelve floats)     +0x34 = 1.0f
+    //     +0x38 = -1 (byte)     +0x39,+0x3B..+0x42 = 0                  +0x48 = 0.0f
+    //     +0x4C,+0x4D,+0x4E = 0
+    // -- which is BrnAIDriverControls in full, EXCEPT +0x3A (mbToggle) and +0x44 (meDriverType).
+    // That is the identical store set (identical omissions included) as the out-of-line
+    // BrnNetworkDriverControls::Clear @0x82581200 this tree already documents, so it is the same
+    // "clear the controls, keep the driver type" routine inlined here. `VehicleDriver::ClearControls`
+    // IS declared (BrnVehicleDriver.h:66) but has NO body anywhere and no X360 address of its own
+    // (it is not in progress/identity.json), so calling it would be an LNK2019. Written out by
+    // NAME here, with a DELETE-WHEN marker, rather than either poking offsets or minting a body in
+    // another slice's header.
+    // ⚠️ 0.0f is flt_82001CC0 and 1.0f is flt_82001C98, both read out of the image, not assumed.
+    // =============================================================================================
+    void VehicleManager::ProcessRemoveEvents(const VehicleInputInterface* lpInputInterface,
+                                             VehicleOutputRequestInterface* lpOutputInterface,
+                                             VehicleManagerOutputInterface*,
+                                             Deformation::DeformationInputInterface* lpDeformationInterface)
     {
-        BRN_MAINTENANCE_GATE("VehicleManager::ProcessValidationEvents @0x825E9010 (65)");
+        const VehicleInputInterface::RemoveRaceCarEventQueue* lpQueue =
+            lpInputInterface->GetRemoveRaceCarEvents();
+
+        for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
+        {
+            const RemoveRaceCarEvent& lrEvent = lpQueue->GetEvent(liEvent);
+
+            const u32 luEntityWord = static_cast<u32>(lrEvent.mVolumeInstanceID.muId >> 32);
+            const u32 luOwner      = luEntityWord >> 24;
+            const u32 luRaceCar    = lrEvent.mVolumeInstanceID.GetEntityIDEntityIndex();
+
+            CGS_ASSERT(luOwner == 1u,
+                "lRaceCarEvent.mVolumeInstanceID.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR"); // :1202
+            CGS_ASSERT(mUsedRaceCars.IsBitSet(luRaceCar),
+                       "Trying to remove an unused race car");                                          // :1203
+
+            // ---- the inlined VehicleDriver::ClearControls (see the banner) --------------------
+            // DELETE-WHEN VehicleDriver::ClearControls gets a body of its own.
+            {
+                BrnAIDriverControls& lrControls = maRaceCarDrivers[luRaceCar].mControls;
+                lrControls.miVehicleID              = -1;
+                lrControls.mfGas                    = 0.0f;
+                lrControls.mfBrake                  = 0.0f;
+                lrControls.mfHandBrake              = 0.0f;
+                lrControls.mfSteering               = 0.0f;
+                lrControls.mfForwardSteering        = 0.0f;
+                lrControls.mfSpin                   = 0.0f;
+                lrControls.mfRequestedGas           = 0.0f;
+                lrControls.mfAftertouchLevel        = 0.0f;
+                lrControls.mfXSensor                = 0.0f;
+                lrControls.mfYSensor                = 0.0f;
+                lrControls.mfZSensor                = 0.0f;
+                lrControls.mfGSensor                = 0.0f;
+                lrControls.mfBoostMaxSpeedScale     = 1.0f;
+                lrControls.miVehicleIDToMerge       = -1;
+                lrControls.mbReset                  = false;
+                // ⚠️ mbToggle (+0x3A) is NOT stored by the console -- omission reproduced.
+                lrControls.mbBoost                  = false;
+                lrControls.mbIsInvulnerableToVehicles = false;
+                lrControls.mbIsInvulnerableToWorld  = false;
+                lrControls.mbForceDrift             = false;
+                lrControls.mbBoostBounce            = false;
+                lrControls.mbIsOnStartLine          = false;
+                lrControls.mbIsSteeringWheel        = false;
+                lrControls.mbHorn                   = false;
+                // ⚠️ meDriverType (+0x44) is NOT stored either -- the driver keeps its type.
+                lrControls.mfSpeedMatchSpeed        = 0.0f;
+                lrControls.mbDoSpeedMatch           = false;
+                lrControls.mbForceComeOutOfDrift    = false;
+                lrControls.mbSlamPlayer             = false;
+            }
+
+            // ---- the two deformation posts ---------------------------------------------------
+            // Both take maRaceCarHandlingBodyIDs[slot]; see this file's console-value banner for
+            // why the ENTITY WORD is what lands in the 4-byte event field.
+            const CgsPhysics::RigidBodyId lHandlingBodyId(maRaceCarHandlingBodyIDs[luRaceCar]);
+
+            {
+                // `ldx r11,r9,r25 ; std r11,var_D0 ; bl DeactivateDeformationModelEvent::AddEvent`
+                // ⚠️ ONLY mHandlingBodyID IS WRITTEN. The console leaves mfInitialDamageAmount and
+                // meDeformationResetType at whatever the stack held -- one 8-byte store into a
+                // 16-byte local and nothing else. Reproduced, not "completed": zeroing them here
+                // would be inventing input for the deformation drain.
+                Deformation::DeactivateDeformationModelEvent lDeactivate;
+                lDeactivate.mHandlingBodyID.muValue =
+                    static_cast<u32>(lHandlingBodyId.GetEntityId());
+                lpDeformationInterface->GetDeactivateDeformationModelQueue().AddEvent(lDeactivate);
+            }
+
+            // The console's inlined VehicleManager::RemoveRaceCarDeformationModel -- its two
+            // asserts are the give-away, and they sit AFTER the deactivate post, exactly here.
+            CGS_ASSERT(lpDeformationInterface != 0, "NULL != lpDeformationInterface");             // :1639
+            CGS_ASSERT(static_cast<s32>(luRaceCar) >= 0 && static_cast<s32>(luRaceCar) < 8,
+                       "(liVehicleIndex >= 0) && (liVehicleIndex < ku8MaxNumRaceCars)");           // :1640
+            {
+                Deformation::RemoveDeformationModelEvent lRemove;
+                lRemove.mHandlingBodyID.muValue = static_cast<u32>(lHandlingBodyId.GetEntityId());
+                lpDeformationInterface->GetRemoveDeformationModelQueue().AddEvent(lRemove);
+            }
+
+            // ---- forget the entity, and ask the simulation to drop the body ------------------
+            // `lwz r11, dword_82F2A3A4 ; stwx r11,r9,r25` -- the sentinel is 0xFFFFFFFF, read out
+            // of the image (not inferred from the name).
+            maRaceCarEntityIDs[luRaceCar].muValue = 0xFFFFFFFFu;
+
+            {
+                // `clrlwi r10,r27,8 ; oris r10,r10,0xB00 ; sldi r11,r10,32`
+                // -- the entity word with its OWNER byte replaced by 0x0B
+                // (BrnWorld::E_ENTITYTYPE_PROP_COLLISION_RACECAR), promoted into the handle's high
+                // dword. That is the id the simulation knows this body by.
+                CgsPhysics::PhysicsSimulationIO::InRemoveRigidBody lRemoveBody;
+                lRemoveBody.mID = static_cast<u64>((luEntityWord & 0x00FFFFFFu) | 0x0B000000u) << 32;
+                lRemoveBody.mbFailIfRigidBodyNotFound = false;   // `stb r28(0), var_B8`
+                lpOutputInterface->GetRemoveRigidBodyQueue()->AddEvent(lRemoveBody);
+            }
+
+            // ---- the three per-car seeds inside the race-car record --------------------------
+            // `mulli r11,r30,0x1460 ; add r11,r11,r25 ; addi r11,r11,0x740` == &maRaceCarVehicles[slot],
+            // then `std 0,0x1158`, `std 0,0x1220`, `stb 0,0x1359` -- i.e. drop every queued air-ram
+            // and spin slot and clear the deformation-model-is-active latch. All three reached BY
+            // NAME (VehiclePhysics.h pins +0x1158 / +0x1220 / +0x1359 to these members).
+            maRaceCarVehicles[luRaceCar].mUsedAirRams.UnSetAll();
+            maRaceCarVehicles[luRaceCar].mUsedSpins.UnSetAll();
+            maRaceCarVehicles[luRaceCar].mbDeformationModelIsActive = false;
+
+            mUsedRaceCars.UnSetBit(luRaceCar);   // CgsBitArray.h:241 bounds tripwire
+
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                *CgsDev::Log::gpDebugPrint << "HIDE_ONLINE: " << "Removing race car "
+                    << static_cast<s32>(luRaceCar) << ", type "
+                    << static_cast<s32>(maeRaceCarTypes[luRaceCar]) << "\n";
+            }
+
+            if (maeRaceCarTypes[luRaceCar] == BrnWorld::E_RACE_CAR_TYPE_NETWORK)
+            {
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                {
+                    *CgsDev::Log::gpDebugPrint << "HIDE_ONLINE: " << "Making network car "
+                        << static_cast<s32>(luRaceCar)
+                        << " not hidden because it was removed\n";
+                }
+                mHiddenRaceCars.UnSetBit(luRaceCar);   // CgsBitArray.h:241 bounds tripwire
+            }
+
+            maeRaceCarTypes[luRaceCar] = BrnWorld::E_RACE_CAR_TYPE_INACTIVE;   // `li r10,3 ; stwx`
+        }
     }
 
-    // ⚠️ @0x825E8F28 is a HOLE in the IDA export set -- it has no per-function JSON and is known
-    // only by the name IDA prints at this one call site inside ProcessVehicleMaintenanceEvents.
-    // Per the standing rule (missing-from-JSON != nonexistent) that is recorded, not treated as
-    // proof of absence; the insn count is genuinely unknown and is left unstated rather than
-    // guessed.
-    void VehicleManager::ProcessCollisionEvents(const VehicleInputInterface*,
-                                                Deformation::DeformationInputInterface*)
+    // =============================================================================================
+    // ARM 4 -- ProcessValidationEvents @0x825E9010 (65 insns)
+    //
+    // The smallest of the five and completely unambiguous. Drain
+    // mValidateRaceCarEventQueue (input + 131472) and, per event, either LATCH the two resource
+    // handles into the manager's own tables or CLEAR them, then forward a ValidateRaceCarEvent onto
+    // the deformation interface's own validate queue (deform + 3856).
+    //
+    //   `ld r10,8(evt) ; srdi ; extrwi r10,r10,14,8`   -- the slot, out of mVolumeInstanceID
+    //   `lbz r9,0(evt)`                                -- mbValidate selects the arm
+    //   validate arm  (0x825E9078..0x825E90C4): maRaceCarModelHandles[slot] = evt.mModelHandle,
+    //       maRaceCarGraphicsModelHandles[slot] = evt.mGraphicsHandle, then the forwarded event is
+    //       {mbValidate = 1, mVolumeInstanceID, mModelHandle}.
+    //   invalidate arm(0x825E90C8..0x825E90F4): both table entries cleared to {0,0}, and the
+    //       forwarded event is {mbValidate = 0, mVolumeInstanceID}.
+    //
+    // ⚠️ NEITHER ARM WRITES THE FORWARDED EVENT'S mGraphicsHandle, and the invalidate arm does not
+    // write its mModelHandle either. Reproduced exactly -- the console posts a partly-uninitialised
+    // stack event, and filling those fields in would be inventing input for the deformation drain.
+    // ⚠️ 8 * (slot + 0x154C) and 8 * (slot + 0x1554) are the two CONSOLE strides into the tables;
+    // they are reached by NAME here because the host stride is 16, not 8 (see BrnVehicleManager.h).
+    // =============================================================================================
+    void VehicleManager::ProcessValidationEvents(const VehicleInputInterface* lpInputInterface,
+                                                 Deformation::DeformationInputInterface* lpDeformationInterface)
     {
-        BRN_MAINTENANCE_GATE("VehicleManager::ProcessCollisionEvents @0x825E8F28 (export hole)");
+        const VehicleInputInterface::ValidateRaceCarEventQueue* lpQueue =
+            lpInputInterface->GetValidateRaceCarEvents();
+
+        for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
+        {
+            const ValidateRaceCarEvent& lrEvent = lpQueue->GetEvent(liEvent);
+            const u32 luRaceCar = lrEvent.mVolumeInstanceID.GetEntityIDEntityIndex();
+
+            ValidateRaceCarEvent lForwarded;
+            if (lrEvent.mbValidate)
+            {
+                maRaceCarModelHandles[luRaceCar]         = lrEvent.mModelHandle;
+                maRaceCarGraphicsModelHandles[luRaceCar] = lrEvent.mGraphicsHandle;
+
+                lForwarded.mbValidate        = true;
+                lForwarded.mVolumeInstanceID = lrEvent.mVolumeInstanceID;
+                lForwarded.mModelHandle      = lrEvent.mModelHandle;
+                // mGraphicsHandle deliberately NOT written -- see the banner.
+            }
+            else
+            {
+                maRaceCarModelHandles[luRaceCar].Clear();
+                maRaceCarGraphicsModelHandles[luRaceCar].Clear();
+
+                lForwarded.mbValidate        = false;
+                lForwarded.mVolumeInstanceID = lrEvent.mVolumeInstanceID;
+                // mModelHandle / mGraphicsHandle deliberately NOT written -- see the banner.
+            }
+
+            lpDeformationInterface->GetValidateDeformationModelEvents().AddEvent(lForwarded);
+        }
     }
 
+    // =============================================================================================
+    // ARM 5 -- ProcessCollisionEvents @0x825E8F28 (57 insns)   ⭐ the retired "export hole"
+    //
+    // Two independent drains, both pure forwarders into the deformation interface:
+    //   loop 1  input + 131744 (mSetRaceCarCollisionEventQueue)   -> deform + 4128
+    //   loop 2  input + 131836 (mSetRaceCarCullingGroupEventQueue)-> deform + 4592
+    //
+    // Each event's 32-bit EntityId is promoted into the HIGH dword of a 64-bit rigid-body handle --
+    // `lwz r11,<scratch> ; extldi r11,r11,64,32` is a rotate-left-32 of the entity word, i.e.
+    // `(u64)entityWord << 32`. The payload byte / word is copied across unchanged
+    // (`lbz var_50+4 ; stb var_38` and `lwz var_50+4 ; stw var_38`).
+    //
+    // ⚠️ Both loops re-read the queue length every iteration (`lwz r11,8(r30)` at 0x825E8F90 /
+    // 0x825E8FF4); written as live GetLength() tests, not hoisted.
+    // ⚠️ `this` IS UNUSED in the console body -- r3 is never read after the prologue. Kept a
+    // non-static member because that is what the console's `bl` with r3 = this is.
+    // =============================================================================================
+    void VehicleManager::ProcessCollisionEvents(const VehicleInputInterface* lpInputInterface,
+                                                Deformation::DeformationInputInterface* lpDeformationInterface)
+    {
+        const VehicleInputInterface::SetRaceCarCollisionEventQueue* lpCollisionQueue =
+            lpInputInterface->GetSetRaceCarCollisionEvents();
+
+        for (s32 liEvent = 0; liEvent < lpCollisionQueue->GetLength(); ++liEvent)
+        {
+            const SetRaceCarCollisionEvent& lrEvent = lpCollisionQueue->GetEvent(liEvent);
+
+            Deformation::SetModelCollisionEvent lPost;
+            lPost.mHandlingBodyID.muValue = lrEvent.mBodyId.muValue;   // the entity word (see banner)
+            lPost.mbCollide               = lrEvent.mbCollide;
+            lpDeformationInterface->GetSetModelCollisionEvents().AddEvent(lPost);
+        }
+
+        const VehicleInputInterface::SetRaceCarCullingGroupEventQueue* lpCullingQueue =
+            lpInputInterface->GetSetRaceCarCullingGroupEvents();
+
+        for (s32 liEvent = 0; liEvent < lpCullingQueue->GetLength(); ++liEvent)
+        {
+            const SetRaceCarCullingGroupEvent& lrEvent = lpCullingQueue->GetEvent(liEvent);
+
+            Deformation::SetModelCullingGroupEvent lPost;
+            lPost.mHandlingBodyID.muValue = lrEvent.mBodyId.muValue;   // the entity word (see banner)
+            lPost.mCullGroup              = lrEvent.mCullingGroup;
+            lpDeformationInterface->GetSetModelCullingGroupEvents().AddEvent(lPost);
+        }
+    }
+
+    // =============================================================================================
+    // AddRaceCarDeformationModel @0x825E9118 (153 insns)
+    //   asserts BrnVehicleManager.cpp:1606 / :1607 / :1611, BrnVehicleManager.h:1985
+    //
+    // ⭐⭐ THIS FUNCTION WAS RECORDED AS "ALREADY BODIED AND MOUNTED" BY AN EARLIER BANNER IN THIS
+    // FILE. It was ABSENT: before this wave the name appeared in exactly two places in the whole
+    // tree, both of them comment lines in that banner. Its `xrefs_to` is a one-element set
+    // (ProcessCreateEvents), which is why nothing ever failed to link.
+    //
+    // The body is a marshaller into DeformationInputInterface::AddDeformationModel. Eleven
+    // arguments, every one of them read off the call-site asm at 0x825E9320..0x8261936C:
+    //     r4 = maRaceCarModelHandles[index]      (`ldx r4,r20,r29`  -- the whole 8-byte handle)
+    //     r5 = maRaceCarHandlingBodyIDs[index]   (`ldx r8,r23,r29 ; std ; ld r5`)
+    //     r6 = GetEntityId(that handle)          (the inlined helper -- see BrnVehicleManager.h)
+    //     r7 = &maRaceCarVehicles[index]         (`mulli r9,r31,0x1460 ; add r24 ; addi r7,r24,0x740`)
+    //     v1 = mpAttribs->mBaseAttribs.mCOMOffset(`lwz r21,0xE60(r24)` == the record's +0x720
+    //                                             pointer, then `lvx128 v1,r21,0x20`)
+    //     r8 = the transform, passed straight through
+    //     v2 = ZERO   (`stfs 0.0f x3 ; lvx128 v2,r0,&var_A0`)
+    //     v3 = ZERO   (`stfs 0.0f x4 ; lvx128 v3,r0,&var_B0`)
+    //     f1 = the damage amount, passed straight through
+    //     r10 = the reset type, passed straight through
+    //     +stack byte = 1  (`li r31,1 ; stb r31,var_D9`) -- lbUseSweptSphereTests
+    //
+    // ⚠️ PPC FLOAT-ARG ABI, AND IT IS LOAD-BEARING ON BOTH SIDES. This function's own prologue
+    // consumes r4,r5,r6 then f1 then r8 -- **r7 is skipped**, because the float argument takes the
+    // slot. Reading the prologue as r4,r5,r6,r7,r8 would have shifted the reset type onto the
+    // transform and the transform onto the index.
+    // ⚠️ The three zeroed stack vectors are 0.0f from flt_82001CC0, read out of the image.
+    // =============================================================================================
+    void VehicleManager::AddRaceCarDeformationModel(
+        Deformation::DeformationInputInterface* lpDeformationInterface,
+        s32 liVehicleIndex,
+        Matrix44Affine lInitialWorldSpaceTransform,
+        f32 lfInitialDamageAmount,
+        Deformation::DeformationResetType leBaseDeformationType)
+    {
+        CGS_ASSERT(lpDeformationInterface != 0, "NULL != lpDeformationInterface");           // :1606
+        CGS_ASSERT(liVehicleIndex >= 0 && liVehicleIndex < 8,
+                   "(liVehicleIndex >= 0) && (liVehicleIndex < ku8MaxNumRaceCars)");         // :1607
+        CGS_ASSERT(maRaceCarModelHandles[liVehicleIndex].mpResourceMemory != 0,
+            "maRaceCarModelHandles[liVehicleIndex].GetResource()->GetMemoryResource() != NULL"); // :1611
+
+        const CgsPhysics::RigidBodyId lHandlingBodyId(maRaceCarHandlingBodyIDs[liVehicleIndex]);
+        const EntityId lGlobalEntityId = GetEntityId(lHandlingBodyId);   // BrnVehicleManager.h:1985 lives inside
+
+        Vector3 lvZero;
+        lvZero.x = 0.0f; lvZero.y = 0.0f; lvZero.z = 0.0f; lvZero.w = 0.0f;
+
+        // ⛔⛔ THE MODEL-HANDLE ARGUMENT IS A LOUD PARK, AND IT IS A TYPE FORK, NOT A GAP IN THE
+        // DECODE. The console passes the WHOLE 8-byte resource handle here
+        // (`ldx r4, r20, r29` -- one doubleword straight out of maRaceCarModelHandles[index]), and
+        // on the host that value is a 16-byte `CgsResource::ResourceHandle {void*, Entry*}`.
+        // `DeformationInputInterface::AddDeformationModel`'s first parameter is spelled
+        // `BrnPhysics::Deformation::ResourceHandle`, which BrnDeformationEvents.h:22 defines as a
+        // FOUR-BYTE stand-in `{ u32 muValue }`. There is no honest projection of a pair of 64-bit
+        // pointers onto one u32, and reinterpret_cast'ing across would hand the deformation add
+        // the low half of a pointer -- exactly the console-value-on-the-host defect this wave
+        // exists to avoid.
+        //
+        // ⚠️ It is INERT TODAY on both ends: this function's only caller is ProcessCreateEvents
+        // (its own TU, unmounted), and the only consumer of the posted event's mModelHandle is
+        // `DeformationManager::ResolveDeformationSpec`, which BrnDeformationManager.cpp:90 marks
+        // DECLARE-ONLY. So nothing reads it -- but a zero handle is still a wrong value, so it is
+        // announced once rather than passed silently.
+        //
+        // DELETE-WHEN the Deformation group de-forks its `ResourceHandle`. That is their change,
+        // not this wave's: retyping it onto CgsResource::ResourceHandle grows
+        // AddDeformationModelEvent past the X360-attested `sizeof == 160` its own mounted
+        // BaseEventQueue TU static_asserts, so it needs the queue stride re-derived with it.
+        {
+            static bool s_bModelHandleForkLogged = false;
+            if (!s_bModelHandleForkLogged)
+            {
+                s_bModelHandleForkLogged = true;
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "conductor park: AddRaceCarDeformationModel @0x825E9118 passes a NULL "
+                           "model handle -- BrnPhysics::Deformation::ResourceHandle is a 4-byte "
+                           "stand-in for the 16-byte CgsResource::ResourceHandle the console hands "
+                           "it [FLAG PC boot gate]\n";
+                }
+            }
+        }
+        Deformation::ResourceHandle lParkedModelHandle;
+        lParkedModelHandle.muValue = 0u;
+
+        // ⚠️ [FLAG PC bring-up] NULL-mpAttribs TRIPWIRE (verifier catch, 2026-08-11): the console
+        // reads mpAttribs unconditionally here, but VehiclePhysics::Construct seeds it NULL and
+        // only Prepare fills it -- and the create drain SKIPS Prepare when the event carries
+        // mbDisablePhysicsStateReset (true for a player-car physics-state reset). On the console
+        // that read survives; on the host it is a frame-one AV at +0x20 that would be misread as
+        // a physics-loop failure. The assert makes the precondition loud; the guard below keeps
+        // the boot alive by skipping only this deformation post (already parked NULL-handle inert).
+        CGS_ASSERT(maRaceCarVehicles[liVehicleIndex].mpAttribs != 0,
+                   "AddRaceCarDeformationModel: mpAttribs != NULL (create skipped Prepare?)");
+        if (maRaceCarVehicles[liVehicleIndex].mpAttribs == 0)
+        {
+            return;
+        }
+
+        // The 4-byte `::RigidBodyId` stand-in carries the ENTITY WORD (see this file's banner).
+        RigidBodyId lHandlingBodyIDField;
+        lHandlingBodyIDField.muValue = static_cast<u32>(lHandlingBodyId.GetEntityId());
+
+        lpDeformationInterface->AddDeformationModel(
+            lParkedModelHandle,
+            lHandlingBodyIDField,
+            lGlobalEntityId,
+            &maRaceCarVehicles[liVehicleIndex],
+            maRaceCarVehicles[liVehicleIndex].mpAttribs->mBaseAttribs.mCOMOffset,
+            lInitialWorldSpaceTransform,
+            lvZero,
+            lvZero,
+            lfInitialDamageAmount,
+            leBaseDeformationType,
+            true);
+    }
+
+    // =============================================================================================
+    // SetAllNetworkRaceCarsHidden @0x825E9380 (175 insns)
+    //
+    // 175 instructions of which almost all are the INLINED CgsContainers::BitArray<8> cursor walk
+    // (`GetFirstNonZeroBit` / `GetNextNonZeroBit`, the `addi r11,r11,-1 ; and ; subf ; cntlzd ;
+    // subf ; addi 0x3F` lowest-set-bit idiom) plus its two bounds asserts. The actual work is three
+    // lines. The bitset seat is `addis r19,r15,1 ; addi r19,r19,-0x5340` == this + 44224 ==
+    // mUsedRaceCars, and the per-car test is `addi r11,r31,0x2B28 ; slwi r11,r11,2 ; lwzx` ==
+    // maeRaceCarTypes[i], compared against 2 == E_RACE_CAR_TYPE_NETWORK.
+    //
+    // ⚠️ The only argument is r4, forwarded verbatim as SetNetworkRaceCarHidden's r5 -- the frame
+    // count, not a bool. Its one call site (ProcessCreateEvents @0x826177CC) passes `li r4, 1`.
+    // =============================================================================================
+    void VehicleManager::SetAllNetworkRaceCarsHidden(s32 liFrames)
+    {
+        for (s32 liCar = mUsedRaceCars.GetFirstNonZeroBit();
+             liCar != CgsContainers::BitArray<8u>::KI_INVALID_BITINDEX;
+             liCar = mUsedRaceCars.GetNextNonZeroBit(liCar))
+        {
+            if (maeRaceCarTypes[liCar] == BrnWorld::E_RACE_CAR_TYPE_NETWORK)
+            {
+                SetNetworkRaceCarHidden(static_cast<EActiveRaceCarIndex>(liCar), liFrames);
+            }
+        }
+    }
+
+    // ---- the traffic twin, still a LOUD one-shot gate --------------------------------------------
+    // ⛔ NEVER silently no-op this: the log-once IS the loudness. @0x82649768 (246) carries its own
+    // create/remove/crash arms over the twenty traffic slots and is its own wave.
     void PhysicalTrafficManager::ProcessTrafficMaintenanceEvents(
         CgsModule::IOBufferStack*, CgsModule::IOBufferStack*,
         const VehicleInputInterface*, VehicleOutputRequestInterface*,

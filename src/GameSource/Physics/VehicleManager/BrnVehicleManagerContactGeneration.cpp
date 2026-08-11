@@ -347,9 +347,29 @@ namespace Vehicle
 
             const s32 liModelIndex = lpDeformationManager->FindModelIndexByEntityID(
                 EntityId{ (static_cast<u32>(liCar) << 10) | 0x01000000u });
-            CGS_ASSERT(liModelIndex != -1, "liIndex != -1");                                     // BrnDeformationManager.h:560
+            // ⚠️ [FLAG PC bring-up] the console CGS_ASSERT(liModelIndex != -1, "liIndex != -1")
+            // (BrnDeformationManager.h:560) is DEGRADED to the log-once below (conductor,
+            // 2026-08-11, create-drain wave, boot-measured: with the first live car it fired per
+            // frame -- 178 halts in 80 s -- because the deformation model table is permanently -1
+            // on this build: ProcessAddDeformationModelEvents lives in the UNMOUNTED
+            // BrnDeformationManager.cpp, and behind that sit the mpAttribs Prepare-skip guard and
+            // the parked NULL model handle. On the console the model is always registered and the
+            // assert never fires. The `continue` is the honest deferral consequence: race-car
+            // world CONTACT generation (the crash/body-shell path) stays off; traction lines do
+            // not need it. RESTORE the console assert WHEN the deformation-manager mount lands.
             if (liModelIndex == -1)
             {
+                static bool sbLoggedNoDeformationModel = false;
+                if (!sbLoggedNoDeformationModel)
+                {
+                    sbLoggedNoDeformationModel = true;
+                    if (CgsDev::Message::gxMessageFilterFlags & 1)
+                        *CgsDev::Log::gpDebugPrint
+                            << "[FLAG PC bring-up] StartVehicleContactGeneration: no deformation "
+                               "model for live race car (table is -1 until the deformation-manager "
+                               "mount) -- car SKIPPED for world contact generation, console assert "
+                               "'liIndex != -1' degraded to this line. Reported once, not per frame\n";
+                }
                 continue;   // host bounds guard; the console's assert is fire-and-continue
             }
 

@@ -975,8 +975,11 @@ namespace Vehicle
     // =====================================================================================
     // C08 airborne/water/freeze/spin group -- BODIES.
     //   UpdateInWaterBehaviour @0x825B81A8, UpdateAirRam @0x825FC8D8, UpdateSpinEffects @0x825FCCF8,
-    //   AddAirRam @0x825FE118 are bodied here. UpdateInAirBehaviour @0x825D0BE8 and
-    //   UpdateFreezing @0x825CFD20 are BLOCKED -- structural skeletons at the bottom of this group.
+    //   AddAirRam @0x825FE118 are bodied here.
+    //   ⭐ 2026-08-11: this banner's "UpdateInAirBehaviour @0x825D0BE8 and UpdateFreezing
+    //   @0x825CFD20 are BLOCKED -- structural skeletons" line is RETRACTED. BOTH are bodied:
+    //   UpdateFreezing since the 2026-08-07 orchestrator wave (@ line ~4011) and
+    //   UpdateInAirBehaviour since the 2026-08-11 driving-path wave (immediately below AddAirRam).
     // =====================================================================================
 
     // FLAG (runtime data): the per-surface "is water" bool table (byte_82FB7DF4) is a runtime-loaded
@@ -1262,24 +1265,353 @@ namespace Vehicle
         mUsedAirRams.SetBit(static_cast<u32>(liSlot));
     }
 
-    // -------------------------------------------------------------------------------------
-    // @0x825D0BE8  VehiclePhysics::UpdateInAirBehaviour -- FIDELITY: BLOCKED (structural skeleton only).
-    //   The active-airborne attitude controller. STRUCTURE (findings doc Section 10): gate on the
-    //   in-air-rotation-enable flag (+0x1350); else clear the roll-correction scratch (+0x13D8) and
-    //   return. Two modes -- TAKE-OFF (+0x1351 set, mPitchYawRollFromTakeOff): hard-damp roll
-    //   (kfLandingAssistDamping, gated by kfMinRollToAllowCorrection) + clamp wheelies (pitch vs a
-    //   max-wheelie angle). STEADY-AIR: a pitch-damp blend from the body X-axis-vs-vertical orientation
-    //   (kfFullDampThreshold / kfNoDampThreshold / kfMinRollFactor) + a yaw-damp interp
-    //   (kYawDamp_Min -> kYawDamp_Target at kDamp_BlendRate), then DampPitchYawRoll. After either: roll
-    //   auto-level (subtract an angular-velocity fraction per body axis, msfInAirRollCorrectionFactor x
-    //   msfInAirIncreaseRollFactor) then AddWorldSpaceTorque.
-    //   WHY BLOCKED: the per-lane SIMD is heavy VMX128 -- the pitch-damp RATIONAL interpolation uses
-    //   vrefp+Newton segment slopes whose exact polynomial form is not algebraically pinned by the asm,
-    //   and EVERY damping constant above is un-homed .rdata absent from the export. A faithful body would
-    //   require fabricating both the interpolation polynomials and the constants -> forbidden. The
-    //   DampPitchYawRoll + AddWorldSpaceTorque call shape is certain; the damping INPUTS are not. No
-    //   fabricated math emitted; the function is intentionally not declared in the header.
-    // -------------------------------------------------------------------------------------
+    // =====================================================================================
+    // @0x825D0BE8  BrnPhysics::Vehicle::VehiclePhysics::UpdateInAirBehaviour  (809 instructions)
+    //
+    // ⭐⭐ THE ACTIVE AIRBORNE ATTITUDE CONTROLLER -- the reason Burnout jumps feel good. It is NOT
+    // "tuned gravity": while the car is off the ground the game actively damps and steers its
+    // rotation so it lands flat, and it does that with three cooperating mechanisms:
+    //   (1) a ONE-SHOT take-off damp that kills the yaw you were carrying and scales the roll damp
+    //       by HOW ROLLED the car already was as it left the ground (a car that took off level gets
+    //       damped hard; a car that took off sideways is left alone so a deliberate barrel roll
+    //       survives), then snapshots the resulting pitch/yaw/roll rates into mPitchYawRollFromTakeOff;
+    //   (2) a per-frame LANDING ASSIST that, once you have rolled past a threshold and come back
+    //       towards level, lets the player's steering-against-the-roll bleed the roll off;
+    //   (3) a per-frame RESTORING TORQUE that pitches/rolls the body towards its own velocity
+    //       vector (climb) or bleeds the corresponding angular component out of the angular
+    //       velocity AND the two pending accumulators (dive).
+    //
+    // ⭐ BODIED 2026-08-11 (driving-path wave). The banner that stood here called it BLOCKED on two
+    // grounds, and BOTH were wrong:
+    //   * "the pitch-damp RATIONAL interpolation uses vrefp+Newton segment slopes whose exact
+    //     polynomial form is not algebraically pinned" -- it is pinned exactly. Every `vrefp` here
+    //     is followed by the compiler's standard TWO Newton-Raphson refinement steps
+    //     (`e1 = e + e*(1 - b*e)` twice), i.e. it is a plain `1.0f / b` and nothing else. The
+    //     "segment slopes" are an ordinary two-segment linear ramp (see the piecewise below).
+    //   * "EVERY damping constant is un-homed .rdata absent from the export" -- every one of the
+    //     SIXTEEN constants is IMAGE-READ below, zero flagged. The eight that read as 0 in a raw
+    //     .bss dump are seeded by the init-thunk bank @0x82C5C4F0..0x82C5C95C, which copies each
+    //     from a named rdata float and vspltw-splats it; the thunk for each is cited inline.
+    //
+    // ARGUMENTS (asm-confirmed): r3 = this, r4 = lpControls (only `lfs f12, 0x10(r4)` ==
+    // mfSteering is read), v1 = lvfTimeStep. ⚠️ PPC float-ABI note for the verifier: the timestep
+    // arrives in a VECTOR register (v1, stashed to v122 at 0x825D0C08), NOT in f1 and NOT in a GPR
+    // slot -- Hex-Rays' `double a9` in the exported prototype is an artifact.
+    //
+    // FRAME NOTE: r22/r23/r20 are this+0x10/+0x20/+0x30 == mTransform's xAxis/yAxis/zAxis rows
+    // (the ExternallySimulatedBody sub-object sits at VehiclePhysics+0x10), r27 = +0x50 ==
+    // mLinearVelocity, r21 = +0x60 == mAngularVelocity, +0xE0 == mfMass, +0x100 == mTotalTorque,
+    // +0x120 == mTotalAngularImpulse. `mr r3, r22` at both call sites is the ExternalPhysicsBody
+    // `this`, which is why the two callees are reached as plain inherited member calls here.
+    //
+    // STAGE MAP:
+    //   0x825D0C0C  GATE: if (!mbHasAir) { mPitchYawRollFromTakeOff = 0; mbRollingInAir = 0; return; }
+    //   0x825D0C44  lfRollVelocity = dot3(mAngularVelocity, zAxis);
+    //               lfYawVelocity  = dot3(mAngularVelocity, yAxis);        [both BEFORE the branch]
+    //   0x825D0C64  branch on mbHadAirLastFrame:
+    //     0x825D0C68  A) THE TAKE-OFF FRAME (flag clear) -- the one-shot damp + snapshot.
+    //     0x825D1208  B) ALREADY AIRBORNE  (flag set)    -- landing assist + roll-limit bleed.
+    //   0x825D1494  SHARED TAIL: the restoring-torque / angular-bleed pair, then
+    //               mWheelFFSpring.mfSpringCoefficient = 0 on every path.
+    // =====================================================================================
+
+    // The two-vsel sign ladder the X360 emits for `sign(x)` (`vcmpgtfp`+`vsel`, then
+    // `vcmpgefp`+`vsel` against -1.0): +1 above zero, 0 AT zero, -1 below (and -1 for NaN).
+    // Used verbatim in four places below; not a std::copysign (which has no zero case).
+    static inline f32 InAirSelectSign(f32 lfValue)
+    {
+        const f32 lfPositive = (lfValue > 0.0f) ? 1.0f : 0.0f;   // vcmpgtfp . vsel
+        return (lfValue >= 0.0f) ? lfPositive : -1.0f;           // vcmpgefp . vsel
+    }
+
+    // @0x82FB7E20, written at 0x825D0E34 (`stfs f29, kfRollDampingUsed@l`). A DEV WATCH ONLY:
+    // VehicleManagerDebugComponent::OnActivate @0x825B5D90 registers this exact address with
+    // CgsDev::DebugComponent::RegisterVariable under the label "Roll damping used". Nothing in the
+    // sim reads it. Kept at namespace scope (not function-static) so that component's own
+    // reconstruction can `extern` it rather than re-inventing a second copy.
+    // FLAG (name): the console symbol is `kfRollDampingUsed`; the `k` prefix is the X360 export's,
+    // not the source's -- the variable is mutable, so it is spelled `g`-prefixed here per
+    // CXX_NAMING_CONVENTIONS. The PS3 DWARF's nearest candidate is `msfTakeoffRollDamping`
+    // (VehiclePhysics.cpp:163); NOT adopted, because that mapping is inference, not attestation.
+    f32 gfRollDampingUsed = 0.0f;
+
+    void VehiclePhysics::UpdateInAirBehaviour(const BrnPlayerDriverControls* lpControls,
+                                              VecFloat lvfTimeStep)
+    {
+        // ----- every constant image-read; NONE guessed, NONE flagged --------------------------
+        // .data tunables (a contiguous run at 0x82F2A258..0x82F2A274, image-read as
+        // 0.14/1.4/0.3/11.0/0.15/0.125/0.25/0.3; the PS3 DWARF names each as
+        // a file-scope `static float32_t` debug tunable, cited per line):
+        static const f32 KF_X_AXIS_Y_FULL_DAMP_THRESHOLD = 0.125f;      // kfFullDampThreshold @0x82F2A26C (0x3E000000); DWARF msfXAxisYFullDampThreshold (:166)
+        static const f32 KF_X_AXIS_Y_NO_DAMP_THRESHOLD   = 0.25f;       // kfNoDampThreshold   @0x82F2A270 (0x3E800000); DWARF msfXAxisYNoDampThreshold  (:167)
+        static const f32 KF_MIN_ROLL_FACTOR              = 0.30000001f; // kfMinRollFactor     @0x82F2A274 (0x3E99999A); DWARF msfMinRollFactor          (:168)
+        static const f32 KF_MIN_ROLL_TO_ALLOW_CORRECTION = 0.30000001f; // kfMinRollToAllowCorrection @0x82F2A260 (0x3E99999A); DWARF msfInAirMinRollToAllowCorrection (:154)
+        static const f32 KF_LANDING_ASSIST_DAMPING       = 0.14f;       // kfLandingAssistDamping     @0x82F2A258 (0x3E0F5C29); DWARF msfInAirLandingAssistDamping    (:148)
+        // .bss splats, each seeded once by the init-thunk bank (thunk address cited):
+        static const f32 KF_YAW_DAMP_TARGET   = 0.050000001f;  // kYawDamp_Target @0x82FB8FF0 <- flt_820047C8 0.05 (thunk 0x82C5C938)
+        static const f32 KF_YAW_DAMP_MIN      = 0.0099999998f; // kYawDamp_Min    @0x82FB91B0 <- flt_82002138 0.01 (thunk 0x82C5C910)
+        static const f32 KF_DAMP_BLEND_RATE   = 60.0f;         // kDamp_BlendRate @0x82FB8470 <- flt_82092BC4 60.0 (thunk 0x82C5C4F0)
+        static const f32 KF_ZERO              = 0.0f;          // unk_82FB9310    <- flt_82001CC0 0.0  (thunk 0x82C5C848)
+        static const f32 KF_ALIGN_TORQUE_SCALE= 1.0f;          // unk_82FB8B60    <- flt_82001C98 1.0  (thunk 0x82C5C870)
+        static const f32 KF_RATE_TORQUE_SCALE = 10.0f;         // unk_82FB9330    <- flt_82004A20 10.0 (thunk 0x82C5C898)
+        static const f32 KF_ANG_BLEED_TIME    = 0.1f;          // unk_82FB9230    <- flt_82004014 0.1  (thunk 0x82C5C8C0)
+        static const f32 KF_TAKEOFF_ROLL_GATE = 0.25f;         // unk_82FB9190    <- flt_8208F834 0.25 (thunk 0x82C5C8E8)
+        // plain rdata:
+        static const f32 KF_REVS_TO_HALF_TURNS = 2.0f;         // flt_82001D9C
+        static const f32 KF_PI                 = 3.1415927f;   // flt_8208F5FC (0x40490FDB)
+        static const f32 KF_DAMP_RATE_SCALE    = 60.0f;        // flt_82092BC4 (path B's own copy of 60)
+
+        // ----- GATE (0x825D0C0C). On the ground this is the whole function -- which is exactly why
+        //       the trap this replaces flooded the assert channel: it fires per driving car per
+        //       frame even though the console body does nothing here. -----
+        if (!mbHasAir)
+        {
+            mPitchYawRollFromTakeOff = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // `stvx128 v0, r30, 0x13C0`
+            mbRollingInAir           = false;                               // `stb r10, 0x13D8`
+            return;
+        }
+
+        const f32 lfTimeStep = lvfTimeStep.x;
+        const Vector3& lvRight = mTransform.Right();   // xAxis, base +0x00 (this +0x10)
+        const Vector3& lvUp    = mTransform.Up();      // yAxis, base +0x10 (this +0x20)
+        const Vector3& lvAt    = mTransform.At();      // zAxis, base +0x20 (this +0x30)
+
+        // Both dots are computed before the mbHadAirLastFrame branch and stashed (var_130/var_140);
+        // only the take-off leg's asserts and the landing assist consume them.
+        const f32 lfRollVelocity = vpu::Dot(mAngularVelocity, lvAt);   // rotation about the FORWARD axis
+        const f32 lfYawVelocity  = vpu::Dot(mAngularVelocity, lvUp);   // rotation about the UP axis
+
+        if (!mbHadAirLastFrame)
+        {
+            // =============================================================================
+            // A) THE TAKE-OFF FRAME (0x825D0C68). Runs exactly once per jump.
+            // =============================================================================
+            const Vector4& lvTakeOff = mpAttribs->mBaseAttribs
+                .mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff;
+
+            // How rolled the car is at the instant it leaves the ground: |right.y| is 0 when the
+            // car is level and 1 when it is on its side.
+            const f32 lfRollAmount = std::fabs(lvRight.y);              // `vandc` with the 0x80000000 splat
+
+            // The two-segment ramp (0x825D0CD4 / 0x825D0D1C / 0x825D0D98). Level -> ramp 0 .. 0.3
+            // over [0, 0.125]; then 0.3 .. 1.0 over [0.125, 0.25]; then flat 1.0.
+            // ⚠️ The asm re-tests `rollAmount > FULL` before the second segment; that test is the
+            // exact complement of the first branch (its only effect is to route NaN to the 1.0
+            // leg), so it is folded into the else-if chain here.
+            f32 lfRollDampFactor;
+            if (KF_X_AXIS_Y_FULL_DAMP_THRESHOLD >= lfRollAmount)
+            {
+                lfRollDampFactor = KF_MIN_ROLL_FACTOR
+                                 * (lfRollAmount / KF_X_AXIS_Y_FULL_DAMP_THRESHOLD);
+            }
+            else if (KF_X_AXIS_Y_NO_DAMP_THRESHOLD >= lfRollAmount)
+            {
+                const f32 lfT = (lfRollAmount - KF_X_AXIS_Y_FULL_DAMP_THRESHOLD)
+                              / (KF_X_AXIS_Y_NO_DAMP_THRESHOLD - KF_X_AXIS_Y_FULL_DAMP_THRESHOLD);
+                lfRollDampFactor = KF_MIN_ROLL_FACTOR + (1.0f - KF_MIN_ROLL_FACTOR) * lfT;
+            }
+            else
+            {
+                lfRollDampFactor = 1.0f;
+            }
+
+            // The yaw damping the ALREADY-AIRBORNE leg's roll-limit bleed will use for the rest of the
+            // jump (it is parked in the member and re-read every later frame):
+            // lerp Target -> Min by the roll factor, pre-multiplied by the blend rate and dt.
+            // Only lane .x is written (`vrlimi128 v12, v13, 8, 0` -- the other three timers survive).
+            const f32 lfYawDamping = KF_YAW_DAMP_TARGET
+                                   + (KF_YAW_DAMP_MIN - KF_YAW_DAMP_TARGET) * lfRollDampFactor;
+            mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.x =
+                lfYawDamping * (KF_DAMP_BLEND_RATE * lfTimeStep);
+
+            // The three damping values handed to the body. Note the YAW one is the literal 0 the
+            // console splats from v126 -- a damping-per-second of ZERO annihilates the yaw rate on
+            // the take-off frame (DampPitchYawRoll multiplies by pow(damping, dt)).
+            const f32 lfPitchDamping = lvTakeOff.x;   // attribs +0xC0 lane .x
+            const f32 lfYawDampingApplied = 0.0f;     // v126 -- a literal, not an attrib
+            const f32 lfRollDamping  = 1.0f - lfRollDampFactor;
+
+            gfRollDampingUsed = lfRollDamping;   // dev watch "Roll damping used" (@0x82FB7E20)
+
+            // The three console tripwires, in order, with their own line numbers. Each is the
+            // `x >= 0.0f && x <= 1.0f` shape built out of flt_82001CC0 (0.0) and flt_82001C98 (1.0).
+            // The second and third stream their values through CgsDev::StrStream over
+            // gpcMessageBuffer -- lowered to the literal message per house style; the streamed
+            // operands are noted so the text still reads as the console's.
+            CGS_ASSERT(lfPitchDamping >= 0.0f && lfPitchDamping <= 1.0f,
+                       "lvfPitchDamping >= 0.0f && lvfPitchDamping <= 1.0f");            // :2497 (0x9C1)
+            CGS_ASSERT(lfYawDampingApplied >= 0.0f && lfYawDampingApplied <= 1.0f,
+                       "Excessive yaw damping on take-off: YawVelocity = ");             // :2498 (0x9C2)
+                       // streams: lfYawVelocity, ", MinYawDamping = " lvTakeOff.y, ", YawDamping = " lfYawDampingApplied, "\n"
+            CGS_ASSERT(lfRollDamping >= 0.0f && lfRollDamping <= 1.0f,
+                       "Excessive roll damping on take-off: RollVelocity = ");           // :2499 (0x9C3)
+                       // streams: lfRollVelocity, ", MinRollDamping = " lvTakeOff.z, ", RollDamping = " lfRollDamping, "\n"
+            (void)lfYawVelocity;   // read only by the (lowered) assert stream above
+
+            DampPitchYawRoll(VecFloat{ lfPitchDamping, lfPitchDamping, lfPitchDamping, lfPitchDamping },
+                             VecFloat{ lfYawDampingApplied, lfYawDampingApplied, lfYawDampingApplied, lfYawDampingApplied },
+                             VecFloat{ lfRollDamping, lfRollDamping, lfRollDamping, lfRollDamping },
+                             lvfTimeStep);
+
+            // ----- snapshot the POST-damp attitude rates (0x825D10E8) -----
+            // The roll limit is an attrib in TURNS; x2 x PI converts it to rad/s.
+            const f32 lfRollLimit = lvTakeOff.w * KF_REVS_TO_HALF_TURNS * KF_PI;
+
+            const f32 lfPitchRate = vpu::Dot(mAngularVelocity, lvRight);
+            const f32 lfYawRate   = vpu::Dot(mAngularVelocity, lvUp);
+            f32       lfRollRate  = vpu::Dot(mAngularVelocity, lvAt);
+
+            if (std::fabs(lfRollRate) > lfRollLimit)
+            {
+                // Clamp the take-off roll rate by removing the excess along the forward axis.
+                const f32 lfClamped = lfRollLimit * InAirSelectSign(lfRollRate);
+                mAngularVelocity = mAngularVelocity - lvAt * (lfRollRate - lfClamped);
+                lfRollRate       = lfClamped;
+            }
+
+            // Three separate lane inserts (`vrlimi128` masks 8/4/2) with a store after each --
+            // the .w lane is deliberately left as it was.
+            mPitchYawRollFromTakeOff.x = lfPitchRate;
+            mPitchYawRollFromTakeOff.y = lfYawRate;
+            mPitchYawRollFromTakeOff.z = lfRollRate;
+        }
+        else
+        {
+            // =============================================================================
+            // B) ALREADY AIRBORNE (0x825D1208).
+            // =============================================================================
+            // Latch "the player has rolled this jump" once |right.y| passes the threshold...
+            if (std::fabs(lvRight.y) > KF_MIN_ROLL_TO_ALLOW_CORRECTION)
+                mbRollingInAir = true;
+
+            // ...and only assist once the car has rolled BACK inside it, is the right way up, and
+            // the player is steering AGAINST the roll (0x825D1240..0x825D1340). Three nested gates
+            // in the asm, each an early exit to the roll-limit bleed below.
+            if (mbRollingInAir
+                && KF_MIN_ROLL_TO_ALLOW_CORRECTION > std::fabs(lvRight.y)
+                && lvUp.y > 0.0f)
+            {
+                const f32 lfSteering = lpControls->mfSteering;   // `lfs f12, 0x10(r4)`
+
+                // `fcmpu` against 0.0 first, then `fsel f0, f12, 1.0, -1.0` -- so a dead stick
+                // yields 0.0, which never matches the +-1 roll sign and therefore still assists.
+                const f32 lfSteerSign = (lfSteering == 0.0f)
+                                            ? 0.0f
+                                            : ((lfSteering >= 0.0f) ? 1.0f : -1.0f);
+
+                if (InAirSelectSign(lfRollVelocity) != lfSteerSign)
+                {
+                    const f32 lfAssist = std::fabs(lfSteering) * KF_LANDING_ASSIST_DAMPING
+                                       * lfTimeStep * KF_DAMP_RATE_SCALE;
+                    mAngularVelocity = mAngularVelocity - lvAt * (lfRollVelocity * lfAssist);
+                }
+            }
+
+            // ----- roll-limit bleed (0x825D13B0). While the car is STILL rolling the same way it
+            //       was at take-off, bleed the roll rate off at the per-frame rate the take-off
+            //       frame parked in mvDampRollVel.x, never overshooting past zero. -----
+            const f32 lfCurrentRoll = vpu::Dot(mAngularVelocity, lvAt);
+            if (InAirSelectSign(mPitchYawRollFromTakeOff.z) == InAirSelectSign(lfCurrentRoll))
+            {
+                const f32 lfRate =
+                    mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.x
+                    * lfTimeStep * KF_DAMP_RATE_SCALE;
+                const f32 lfStep = std::min(lfRate, std::fabs(lfCurrentRoll))   // vminfp
+                                 * InAirSelectSign(lfCurrentRoll);
+                mAngularVelocity = mAngularVelocity - lvAt * lfStep;
+            }
+        }
+
+        // =================================================================================
+        // SHARED TAIL (0x825D1494) -- the restoring-torque / angular-bleed pair.
+        // Two independent axes, each with the same climb-vs-dive shape:
+        //   CLIMBING (the velocity component along that body axis points UP): add a torque that
+        //     rotates the body towards its own velocity vector, minus a rate-proportional brake.
+        //   DIVING: instead bleed that axis's component out of mAngularVelocity AND out of the two
+        //     pending accumulators (mTotalTorque, mTotalAngularImpulse) -- the console damps the
+        //     PENDING torque/impulse too, so a force already banked this frame cannot re-inject
+        //     the rotation the bleed just removed.
+        // =================================================================================
+        const f32 lfForwardSpeed = vpu::Dot(mLinearVelocity, lvAt);
+        const f32 lfLateralSpeed = vpu::Dot(mLinearVelocity, lvRight);
+        const Vector3 lvForwardVel = lvAt * lfForwardSpeed;      // var_120
+        const Vector3 lvLateralVel = lvRight * lfLateralSpeed;   // var_110
+        const f32 lfMass = mfMass.x;                             // base +0xD0 (this +0xE0)
+
+        // ----- PITCH axis (about the body X/right axis) -----
+        if (lvForwardVel.y > KF_ZERO)
+        {
+            // `vcsxwfp128 v11, v123, 0` converts the all-ones splat to -1.0f: the alignment target
+            // flips with the direction of travel so a car flying backwards is not pitched over.
+            const Vector3 lvSignedAt   = (lfForwardSpeed >= 0.0f) ? lvAt : lvAt * -1.0f;
+            const Vector3 lvVelNoLat   = mLinearVelocity - lvLateralVel;
+            const f32     lfPitchRate  = vpu::Dot(mAngularVelocity, lvRight);
+            // cross(velInPlane, right) . +-at -- the console's `vpermwi128 0x63` + `vnmsubfp` +
+            // `vpermwi128 0x63` cross-product idiom (0x63 == the yzx word permute).
+            const f32     lfAlignment  = vpu::Dot(vpu::Cross(lvVelNoLat, lvRight), lvSignedAt);
+
+            const Vector3 lvTorque = lvRight * (lfAlignment * (lfMass * KF_ALIGN_TORQUE_SCALE))
+                                   - lvRight * (lfPitchRate * (lfMass * KF_RATE_TORQUE_SCALE));
+            AddWorldSpaceTorque(lvTorque);
+        }
+        else
+        {
+            // dt / 0.1 -- the console spells the reciprocal as vrefp + two Newton steps.
+            const f32 lfBleed = lfTimeStep / KF_ANG_BLEED_TIME;
+
+            const f32 lfPitchRate = vpu::Dot(lvRight, mAngularVelocity);
+            if (lfPitchRate * lfForwardSpeed > 0.0f)
+                mAngularVelocity = mAngularVelocity - lvRight * (lfPitchRate * lfBleed);
+
+            const f32 lfPitchTorque = vpu::Dot(lvRight, mTotalTorque);
+            if (lfPitchTorque * lfForwardSpeed > 0.0f)
+                mTotalTorque = mTotalTorque - lvRight * (lfPitchTorque * lfBleed);
+
+            const f32 lfPitchImpulse = vpu::Dot(lvRight, mTotalAngularImpulse);
+            if (lfPitchImpulse * lfForwardSpeed > 0.0f)
+                mTotalAngularImpulse = mTotalAngularImpulse - lvRight * (lfPitchImpulse * lfBleed);
+        }
+
+        // ----- ROLL axis (about the body Z/forward axis), gated on the take-off roll snapshot.
+        //       A jump that left the ground already spinning hard about Z (|snapshot| >= 0.25) is
+        //       left alone entirely -- that is the deliberate barrel roll. -----
+        if (KF_TAKEOFF_ROLL_GATE > std::fabs(mPitchYawRollFromTakeOff.z))
+        {
+            if (lvLateralVel.y > KF_ZERO)
+            {
+                const Vector3 lvSignedRight = (lfLateralSpeed >= 0.0f) ? lvRight : lvRight * -1.0f;
+                const Vector3 lvVelNoFwd    = mLinearVelocity - lvForwardVel;
+                const f32     lfRollRate    = vpu::Dot(mAngularVelocity, lvAt);
+                const f32     lfAlignment   = vpu::Dot(vpu::Cross(lvVelNoFwd, lvAt), lvSignedRight);
+
+                const Vector3 lvTorque = lvAt * (lfAlignment * (lfMass * KF_ALIGN_TORQUE_SCALE))
+                                       - lvAt * (lfRollRate  * (lfMass * KF_RATE_TORQUE_SCALE));
+                AddWorldSpaceTorque(lvTorque);
+            }
+            else
+            {
+                const f32 lfBleed = lfTimeStep / KF_ANG_BLEED_TIME;
+
+                // ⚠️ NOTE THE ASYMMETRY, IT IS THE CONSOLE'S: the roll bleed's three gates test the
+                // roll component against lfForwardSpeed (v125), not against lfLateralSpeed.
+                const f32 lfRollRate = vpu::Dot(lvAt, mAngularVelocity);
+                if (lfRollRate * lfForwardSpeed > 0.0f)
+                    mAngularVelocity = mAngularVelocity - lvAt * (lfRollRate * lfBleed);
+
+                const f32 lfRollTorque = vpu::Dot(lvAt, mTotalTorque);
+                if (lfRollTorque * lfForwardSpeed > 0.0f)
+                    mTotalTorque = mTotalTorque - lvAt * (lfRollTorque * lfBleed);
+
+                const f32 lfRollImpulse = vpu::Dot(lvAt, mTotalAngularImpulse);
+                if (lfRollImpulse * lfForwardSpeed > 0.0f)
+                    mTotalAngularImpulse = mTotalAngularImpulse - lvAt * (lfRollImpulse * lfBleed);
+            }
+        }
+
+        // `stfs f30, 0x13D0(r30)` -- reached on EVERY tail path (including the take-off-roll-gated
+        // skip): no force-feedback wheel spring while the car is in the air.
+        mWheelFFSpring.mfSpringCoefficient = 0.0f;
+    }
 
     // -------------------------------------------------------------------------------------
     // @0x825CFD20  VehiclePhysics::UpdateFreezing -- FIDELITY: BLOCKED (structural skeleton only).
@@ -4712,6 +5044,236 @@ namespace Vehicle
         return true;   // li r3, 1
     }
 
+// [clean] SetAttributes(VehicleAttribs*, const Vector3*, const f32*)  @0x8262E140
+    // ==============================================================================================
+    // @0x8262E140  BrnPhysics::Vehicle::VehiclePhysics::SetAttributes  (48 insns)
+    //
+    // ⭐ THE IDA DATABASE LEAVES THIS ONE UNNAMED (`sub_8262E140`); the identification is settled by
+    // three independent facts, not by its role -- see the declaration banner in VehiclePhysics.h.
+    // The decisive one is the second assert's BAKED __FILE__/__LINE__ pair:
+    // ".../VehicleManager/VehiclePhysics/VehiclePhysics.cpp", 0x19A == 410. A SimpleVehiclePhysics
+    // function cannot carry a VehiclePhysics.cpp line number.
+    //
+    // Store/call map, read off the asm:
+    //   0x8262E168  the :299 assert -- file ".../BrnSimpleVehiclePhysics.cpp", line 0x12B == 299
+    //   0x8262E190  bl SimpleVehicleAttribs::SetupAttribs      r3 = this + 0x5A0 == &mSimpleAttribs
+    //   0x8262E1A0  bl SimpleVehiclePhysics::SetAttributes     r4 = positions, r5 = radii
+    //   0x8262E1A8  the :410 assert (VehiclePhysics.cpp), same "lpAttribs" message string
+    //   0x8262E1CC  stw r30, 0x720(r31)                        mpAttribs = lpAttribs
+    //   0x8262E1D8  bl SimpleVehiclePhysics::SetAttributes     the SECOND call, same two arguments
+    //   0x8262E1E8  bl Engine::Prepare  r3 = this+0xF00, r4 = mpAttribs + 0x190 (mEngineAttribs);
+    //               note the console RE-READS mpAttribs from +0x720 rather than reusing r30
+    //   0x8262E1F0  bl VehiclePhysics::SetupSuspension
+    //   0x8262E1F4  li r3, 1
+    //
+    // ⚠️ The first three statements are the INLINED
+    // `SimpleVehiclePhysics::SetAttributes(VehicleAttribs*, const Vector3*, const f32*)` -- the same
+    // block the committed SimpleVehiclePhysics::Prepare spells flat around its own :299 assert. That
+    // overload has no out-of-line emission on either build, so it is spelled flat here too rather
+    // than calling a symbol nothing defines. (Its declaration exists at
+    // BrnSimpleVehiclePhysics.h:267 and stays declare-only.)
+    // ==============================================================================================
+    bool VehiclePhysics::SetAttributes(VehicleAttribs* lpAttribs,
+                                       const Vector3* lpaWheelPositions,
+                                       const f32* lpafWheelRadii)
+    {
+        // ---- the inlined SimpleVehiclePhysics::SetAttributes(attribs, positions, radii) --------
+        CGS_ASSERT(lpAttribs != 0, "lpAttribs");                 // BrnSimpleVehiclePhysics.cpp:299
+        mSimpleAttribs.SetupAttribs(lpAttribs);                  // bl @0x8262E190
+        SimpleVehiclePhysics::SetAttributes(lpaWheelPositions, lpafWheelRadii);   // bl @0x8262E1A0
+
+        // ---- this function's own body ----------------------------------------------------------
+        CGS_ASSERT(lpAttribs != 0, "lpAttribs");                 // VehiclePhysics.cpp:410
+        mpAttribs = lpAttribs;                                   // stw r30, 0x720(r31)
+        SimpleVehiclePhysics::SetAttributes(lpaWheelPositions, lpafWheelRadii);   // bl @0x8262E1D8
+
+        mEngine.Prepare(&mpAttribs->mEngineAttribs);             // bl @0x8262E1E8 (mpAttribs re-read)
+        SetupSuspension();                                       // bl @0x8262E1F0
+        return true;                                             // li r3, 1
+    }
+
+// [clean] Prepare  @0x82637C80
+    // ==============================================================================================
+    // @0x82637C80  BrnPhysics::Vehicle::VehiclePhysics::Prepare  (306 insns)
+    //
+    // ⭐⭐ LANDED 2026-08-11 (prepare-chain wave). The car-PLACEMENT entry point: install the
+    // caller's attribute set as this car's PLAYER set, forward the whole nine-parameter placement
+    // into SimpleVehiclePhysics::Prepare, re-derive everything that depends on the attribs, build
+    // the parallel AI attribute set, full Reset, then seed ~40 own-block members.
+    //
+    // THE SIGNATURE IS DWARF-ATTESTED (PS3 export 0x735DEC / DecFIGS VehiclePhysics.h:1069) and the
+    // X360 PROLOGUE AGREES REGISTER FOR REGISTER -- which matters here because of the PPC float/
+    // vector ABI trap this project keeps paying for. There is NO float scalar in this signature; the
+    // four Vector3s ride v1..v4 and consume NO GPR slot at all, so the GPR sequence is dense:
+    //     r3  = this                                    (r31)
+    //     r4  = &lTransform                             (r28)   -- Matrix44Affine BY VALUE == the
+    //                                                              64-byte hidden-pointer form
+    //     v1/v2/v3/v4 = lLinearVelocity / lAngularVelocity / lHandlingBodyOffset / lHalfExtent
+    //                                                   (v124/v127/v126/v125, saved at entry)
+    //     r5  = &lrAABB                                 (r30)
+    //     r6  = lpAttribs                               (r25)   -- the ONLY asserted parameter
+    //     r7  = lpaWheelPositions                       (r27)
+    //     r8  = lpafWheelRadii                          (r26)
+    // and the forwarding `bl SimpleVehiclePhysics::Prepare` at 0x82637D24 restores exactly those
+    // eight, in the same seats, having touched none of them -- which is the strongest possible
+    // confirmation that the two declarations are the same nine parameters in the same order.
+    //
+    // Asserts, in console order, with the baked line numbers:
+    //   :538 (0x21A) "lpAttribs != NULL"
+    //   :555 (0x22B) "rw::math::IsValid( mHandlingBodyOffset )"          -- reads this+0x690, 3 lanes
+    //   :560 (0x230) "rw::math::IsValid( mLocalInverseInertia )"         -- this+0x80/0x90/0xA0, 3
+    //                                                                      lanes each, short-circuit
+    //   :561 (0x231) "rw::math::IsValid( mfMass )"                       -- this+0xE0, WHOLE register
+    //                                                                      (no vspltw -- all 4 lanes)
+    // ⚠️ Note the message spelling: these say `rw::math::IsValid`, where the SimpleVehiclePhysics
+    // sibling's say `RwMathVPU::IsValid`. Both are reproduced verbatim from their own .rdata.
+    //
+    // Call/store map after the forward:
+    //   0x82637CE8  addi r29, r31, 0xAA0                      r29 = &mPlayerVehicleAttribs
+    //   0x82637CF4  bl VehicleAttribs::operator=              mPlayerVehicleAttribs = *lpAttribs
+    //   0x82637D18  stw r29, 0x720(r31)                       mpAttribs = &mPlayerVehicleAttribs
+    //   0x82637D24  bl SimpleVehiclePhysics::Prepare          all nine parameters, untouched
+    //   0x82637DC8  bl VehiclePhysics::SetAttributes(&mPlayerVehicleAttribs, positions, radii)
+    //               ⚠️ r4 is r29 == the class's OWN copy, NOT the caller's lpAttribs. mpAttribs is
+    //               therefore re-pointed at the same address it already holds -- reproduced as-is.
+    //   0x82637F90  bl VehicleAttribs::Construct(this+0x730)  mAIVehicleAttribs.Construct()
+    //   0x82637F9C  bl VehicleAttribs::SetupAttribsForAI(this+0x730, lpAttribs)   -- r4 is r25, the
+    //               CALLER's set, not the copy
+    //   0x82637FA0  ld r11,0x358(r25) ; std r11,0xA88(r31)    mAIVehicleAttribs.mAttribsKey =
+    //               lpAttribs->mAttribsKey   (0xA88 - 0x730 == 0x358 -- the same field)
+    //   0x82637FB0  bl VehiclePhysics::Reset @0x825FDD78      the Vector3 overload; `vmr128 v1,v124`
+    //               one instruction earlier makes the argument lLinearVelocity
+    //
+    // The seed tail, lane by lane (vrlimi128 mask 8/4/2/1 == x/y/z/w, the convention this class's
+    // Reset decode already proved on two ISAs):
+    //   +0xFF0  .x .y .z .w = 1.0f     FOUR separate insert+store pairs, i.e. four source statements
+    //   +0x1050 .x = unk_8208FAE4, .y = unk_8208FAE8   -- the SAME two rodata floats Reset seeds
+    //           this register with (-0.1f / 1.0f, already homed in this file), and .w =
+    //           unk_8208FB18 at the very end of the function
+    //   +0x1128 = -1  and  +0x1114/+0x1118/+0x1120/+0x111C = flt_82001CC0 (0.0f)   -- the SAME
+    //           PARTIAL mSlamEffect clear Reset does (mForce/mfDecay/mfRecoveryTime untouched)
+    //   +0x1130 = 0 (whole register), +0x1140 .y = 0 then .x = -1.0f (vcfsx of vspltisw -1)
+    //   +0x1158 / +0x1220 = 0 (std)   mUsedAirRams / mUsedSpins
+    //   the eight byte stores 0x710/0x712/0x1359/0x10F7/0x135A/0x135C(=1)/0x135D/0x1362, then
+    //           0x135E after the +0x1070 .w insert -- order preserved below
+    //   +0x1070 .w = unk_8208FADC (0.4f, already homed here as KF_WALL_CONTACT_RESEED), then .y = 0
+    //   +0x13B0 = 0 ... and then +0x13B0 = v124 near the end. ⚠️ TWO STORES TO THE SAME 16 BYTES,
+    //           the second overwriting the first. Reproduced rather than optimised away: the
+    //           console emits both (`stvx128 v0,r0,r5` @0x826380D8 and `stvx128 v124,r0,r5`
+    //           @0x82638120, r5 == this+0x13B0 in both).
+    //   +0x1060 .x = 0, .y = 0
+    //   +0x10D4 = 0            mPreviousControls.meDriverType
+    //   +0x1370 = lTransform   four rows copied straight out of r28 (the by-value parameter)
+    //   +0x13DC = 3            meCarType
+    //   +0xFD0  = 1.0f splat   mvfWheelFrictionLinearMultiplier (stvx128 of the same v13)
+    //   li r3, 1               returns true
+    // ==============================================================================================
+    bool VehiclePhysics::Prepare(Matrix44Affine lTransform, Vector3 lLinearVelocity,
+                                 Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset,
+                                 Vector3 lHalfExtent, const AxisAlignedBox& lrAABB,
+                                 VehicleAttribs* lpAttribs, const Vector3* lpaWheelPositions,
+                                 const f32* lpafWheelRadii)
+    {
+        // ⭐ VALUE CONFIRMED BY IMAGE READ 2026-08-11 (same-day follow-up to the flag that stood
+        // here). The conductor's targeted IDA export over BURNOUT_X360_ARTIST.XEX.i64 (the
+        // b53e2523 technique, run for the RaceCarPhysics::Prepare hole) also dumped the sixteen
+        // bytes at 0x8208FB18: `3f800000 3e800000 3e19999a c1200000` -- the first big-endian
+        // word is 0x3F800000 == exactly 1.0f. The role-derived stand-in the prepare-chain wave
+        // carried was correct; this is now GROUND TRUTH, not a guess.
+        static const f32 KF_SOLVE_PENETRATION_WEIGHT_FACTOR_SEED = 1.0f;  // unk_8208FB18 (READ: 0x3F800000)
+        // Already homed in this file, re-stated locally so the seeds read as seeds.
+        static const f32 KF_PROP_SPEED_MAINTAIN_ALONG_Z   = -0.1f;   // unk_8208FAE4
+        static const f32 KF_PROP_SPEED_MAINTAIN_ALONG_VEL =  1.0f;   // unk_8208FAE8
+        static const f32 KF_WALL_CONTACT_RESEED_ON_PREPARE = 0.4f;   // unk_8208FADC
+        static const s32 KI_PREPARE_CAR_TYPE = 3;                    // `li r8,3 ; stw r8,0x13DC`
+
+        CGS_ASSERT(lpAttribs != 0, "lpAttribs != NULL");                                    // :538
+
+        mPlayerVehicleAttribs = *lpAttribs;          // bl VehicleAttribs::operator= @0x82637CF4
+        mpAttribs             = &mPlayerVehicleAttribs;                     // stw r29, 0x720(r31)
+
+        SimpleVehiclePhysics::Prepare(lTransform, lLinearVelocity, lAngularVelocity,
+                                      lHandlingBodyOffset, lHalfExtent, lrAABB,
+                                      lpAttribs, lpaWheelPositions, lpafWheelRadii);   // @0x82637D24
+
+        CGS_ASSERT(vpu::IsValid(mHandlingBodyOffset),
+                   "rw::math::IsValid( mHandlingBodyOffset )");                             // :555
+
+        SetAttributes(&mPlayerVehicleAttribs, lpaWheelPositions, lpafWheelRadii);   // @0x82637DC8
+
+        CGS_ASSERT(vpu::IsValid(mLocalInverseInertia.xAxis) &&
+                   vpu::IsValid(mLocalInverseInertia.yAxis) &&
+                   vpu::IsValid(mLocalInverseInertia.zAxis),
+                   "rw::math::IsValid( mLocalInverseInertia )");                            // :560
+        CGS_ASSERT(rw::math::fpu::IsValid(mfMass.x) && rw::math::fpu::IsValid(mfMass.y) &&
+                   rw::math::fpu::IsValid(mfMass.z) && rw::math::fpu::IsValid(mfMass.w),
+                   "rw::math::IsValid( mfMass )");                                          // :561
+
+        mAIVehicleAttribs.Construct();                                            // @0x82637F90
+        mAIVehicleAttribs.SetupAttribsForAI(lpAttribs);                           // @0x82637F9C
+        mAIVehicleAttribs.mAttribsKey = lpAttribs->mAttribsKey;   // ld 0x358(r25); std 0xA88(r31)
+
+        Reset(lLinearVelocity);                                                   // @0x82637FB0
+
+        // ---- the own-block seed tail ----------------------------------------------------------
+        mvPlayerStatSpeed_PlayerStatStrength_PlayerStatControl_PlayerStatBoost.x = 1.0f;  // +0xFF0
+        mvPlayerStatSpeed_PlayerStatStrength_PlayerStatControl_PlayerStatBoost.y = 1.0f;
+        mvPlayerStatSpeed_PlayerStatStrength_PlayerStatControl_PlayerStatBoost.z = 1.0f;
+        mvPlayerStatSpeed_PlayerStatStrength_PlayerStatControl_PlayerStatBoost.w = 1.0f;
+
+        mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.x
+            = KF_PROP_SPEED_MAINTAIN_ALONG_Z;                                          // +0x1050 .x
+        mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.y
+            = KF_PROP_SPEED_MAINTAIN_ALONG_VEL;                                        // +0x1050 .y
+
+        // The same PARTIAL slam clear Reset does (mForce / mfDecay / mfRecoveryTime kept).
+        mSlamEffect.mi8SlamNumber      = -1;                                           // +0x1128
+        mSlamEffect.mfSteering         = 0.0f;                                         // +0x1114
+        mSlamEffect.mfOriginalSteering = 0.0f;                                         // +0x1118
+        mSlamEffect.mfTotalSlamTime    = 0.0f;                                         // +0x1120
+        mSlamEffect.mfSlamLife         = 0.0f;                                         // +0x111C
+
+        mShuntEffect.mDirectionPlusDesiredSpeed.SetZero();                             // +0x1130
+        mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y =  0.0f;                           // +0x1140 .y
+        mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = -1.0f;                           // +0x1140 .x
+
+        mUsedAirRams.UnSetAll();                                                       // +0x1158
+        mUsedSpins.UnSetAll();                                                         // +0x1220
+
+        mbCrashing                 = false;                                            // +0x710
+        mbStartedDeforming         = false;                                            // +0x712
+        mbDeformationModelIsActive = false;                                            // +0x1359
+        mbIsUsingAIDonutAttribs    = false;                                            // +0x10F7
+        mbDeformedThisFrame        = false;                                            // +0x135A
+        mbResetCarTransform        = true;                                             // +0x135C
+        mbJustBeenSlammed          = false;                                            // +0x135D
+        mbContactingWall           = false;                                            // +0x1362
+
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w
+            = KF_WALL_CONTACT_RESEED_ON_PREPARE;                                       // +0x1070 .w
+        mbOverrideSteering = false;                                                    // +0x135E
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.y
+            = 0.0f;                                                                    // +0x1070 .y
+
+        mLastLinearVelocity.SetZero();                                                 // +0x13B0
+        mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.x = 0.0f;     // +0x1060 .x
+        mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.y = 0.0f;     // +0x1060 .y
+
+        mPreviousControls.ResetType();                       // +0x10D4 <- 0 == E_DRIVER_TYPE_PLAYER
+        mPreviousTransform             = lTransform;                                   // +0x1370
+        meCarType                      = KI_PREPARE_CAR_TYPE;                          // +0x13DC
+        mvfWheelFrictionLinearMultiplier = VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f };         // +0xFD0
+
+        // ⚠️ The SECOND store to +0x13B0 -- the zero above is overwritten by the argument. Both
+        // instructions are in the console body; neither is dropped.
+        mLastLinearVelocity = lLinearVelocity;                                         // +0x13B0
+
+        mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.w
+            = KF_SOLVE_PENETRATION_WEIGHT_FACTOR_SEED;                                 // +0x1050 .w
+
+        return true;                                                                   // li r3, 1
+    }
+
 // [clean] HackedResetAndFlyAround  @0x825D0008
     // @0x825D0008  BrnPhysics::Vehicle::VehiclePhysics::HackedResetAndFlyAround  (139 insns,
     // 0x825D0008..0x825D0230, leaf -- no callee but the GPR save/restore thunks)
@@ -4848,7 +5410,7 @@ namespace Vehicle
     //   0x826383FC  CheckState "After update suspension"
     //   0x8263840C  UpdateWheels(&copy, dt)                  [BODIED 2026-08-07]
     //   0x8263841C  CheckState "After update Wheels"
-    //   0x8263842C  UpdateInAirBehaviour(&copy, dt)          [TRAP until its wave]
+    //   0x8263842C  UpdateInAirBehaviour(&copy, dt)          [BODIED 2026-08-11]
     //   0x82638438  UpdateInWaterBehaviour(dt)
     //   0x82638448  CheckState "After in air behavior"
     //   0x82638454  CalculateNewVelocity(dt)                 [pass 2]
@@ -5616,6 +6178,37 @@ namespace Vehicle
     //   0x826415AC  TimeSinceLastRaceCarContact (+0x1050.z) = min(z + dt, 100.0)
     //               (unk_82FB9BE0, static-init @0x82C5C540 from flt_820049E0 == 100.0)
     //   0x826415D0  StopMonitor(gs_iVPhysUpdatePM)
+    //
+    // ⭐⭐ RE-VERIFIED 2026-08-11 (orchestrator re-audit wave) against the ARTIST export
+    // 0x826412C0.json -- asm and xrefs_from, not pseudocode. Result: FAITHFUL.
+    //   * CALLEE SET 16/16 EXACT vs xrefs_from -- StartMonitor, VehiclePhysics::SwitchAttribs,
+    //     memcpy, SwitchAIDonuttingAttribs, SimpleVehiclePhysics::SwitchAttribs, SetupSuspension,
+    //     StopMonitor, UpdateFreezing, UpdateHandBrake, UpdateEngine, CheckState, UpdateCrashing,
+    //     UpdateAirRam, UpdateSpinEffects, UpdateDriving, UpdateLinearVelocityMagnitude. No
+    //     absent callee, nothing extra, nothing inlined that the console calls out-of-line.
+    //   * CALL ORDER EXACT against the 29 `bl` sites 0x826412C4..0x826415D0.
+    //   * ARG MAP EXACT off the prologue: r4=r26 camera, r5=r29 controls, r6=r23, r7=r22,
+    //     r8=r21, r9=r25 Random, v1=v127 dt. This is the DWARF order
+    //     (VecFloat, VecFloat, Matrix44Affine*, BrnPlayerDriverControls*, bool, bool, bool,
+    //     Random&) with the two VecFloats moved to the tail per this tree's documented
+    //     deviation -- ABI-identical, because VMX args never consume a GPR slot.
+    //   * PPC FLOAT-ABI CHECK at the UpdateCrashing call (0x826414EC..0x82641508): r4 is
+    //     deliberately UNSET -- f1 (reloaded from the arg_20 spill of v127, i.e. dt.x) owns that
+    //     slot. The committed `UpdateCrashing(lvfTimeStep.x, camera, controls, ...)` is right;
+    //     an author who read Hex-Rays' numbering here would have shifted every later arg by one.
+    //   * PerfMon balance: the crashing leg's StopMonitor is TAIL-MERGED with the driving leg's
+    //     (0x8264150C `lwz r3, dword_82F2A280` then `b loc_8264157C`). It is NOT an unbalanced
+    //     StartMonitor; the explicit StopMonitor written below is correct.
+    //
+    // ⚠️ TWO DIVERGENCES, both flagged as benign -- do not "fix" without re-reading this:
+    //   1. START-LINE PROJECTION W LANE. The console negates and multiplies all FOUR lanes, so
+    //      it commits mLinearVelocity.w = -mIntersectionNormal.w * dot. This body builds
+    //      lvNegNormal with w = 0, so it commits w = 0. Deliberate: rw/math/vpu/types.h types
+    //      Vector3's w as "unused 4th lane", and every other body in this tree honours that
+    //      convention; reproducing the console's garbage-w would be the divergence.
+    //   2. The prose above says "while (lpControls->mbIsOnStartLine && ...)". It is an `if` --
+    //      0x826413F8/0x82641404 are forward `beq`s with no back-edge. Comment-only slip; the
+    //      code below is the `if`.
     void VehiclePhysics::Update(const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
                                 const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
                                 bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed,

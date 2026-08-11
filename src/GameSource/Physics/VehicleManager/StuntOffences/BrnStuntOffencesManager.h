@@ -53,6 +53,23 @@ namespace BrnPhysics
         void OutputStuntsInProgress(RaceCarState* lpRaceCarState,
                                     BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue); // @0x8263B278
 
+        // ⭐ ADDED 2026-08-11 (create-drain wave). DWARF-attested
+        // (BrnStuntOffencesManager.h:232 `void SetCurrentRaceCarState(BrnPhysics::ECurrentCarState)`),
+        // no out-of-line X360 symbol -- the console inlines it. Its one attested emission is inside
+        // VehicleManager::ProcessCreateEvents @0x82616C38..0x82616C48, where the newly-created car
+        // being the local player's raises E_CURRENT_CAR_STATE_CAR_HAS_BEEN_RESET:
+        //     addis r11,r24,1 ; addi r11,r11,-0x5330   ; == &mStuntOffencesManager (this + 44240)
+        //     lwz r10,0x28(r11) ; ori r10,r10,0x20 ; stw r10,0x28(r11)
+        // +0x28 is muCurrentRaceCarState and 0x20 is that flag -- so the emission is the OR-set,
+        // not an assignment. Header-inline here, matching. (The sibling ClearCurrentRaceCarState /
+        // UnSetCurrentRaceCarState / GetCurrentRaceCarState the DWARF also lists are left out: no
+        // X360 site in scope attests them, per the "gate each DWARF declaration on X360
+        // attestation" rule.)
+        void SetCurrentRaceCarState(ECurrentCarState leState)
+        {
+            muCurrentRaceCarState |= static_cast<u32>(leState);
+        }
+
     private:
         void SetCurrentCarInAirStatus(Vehicle::RaceCarPhysics* lpRaceCarPhysics, f32 lfTimeStep);   // @0x826135A8
         void CheckForTakenOffLanding(Vehicle::RaceCarPhysics* lpRaceCarPhysics);                    // @0x825BB078

@@ -239,6 +239,20 @@ namespace Vehicle
             mWheelFFSpring = lrSpring;
         }
 
+        // ⭐ ADDED 2026-08-11 (create-drain wave). DWARF-attested (BrnVehicleOutputInterface.h:214
+        // `int32_t AddCreateVehicleResult(CreateVehicleResult)`), and the X360 inlines it as a bare
+        // `addi r11, <managerOut>, 0x6C0` + `bl BaseEventQueue<CreateVehicleResult>::AddEvent` at
+        // the tail of VehicleManager::ProcessCreateEvents (@0x82616818 / @0x826173E4). 0x6C0 ==
+        // 1728 == mCreateVehicleResultQueue's seat below, so the accessor is the same member the
+        // console addresses, reached by name instead of by that offset.
+        // ⚠️ The DWARF returns int32_t (the slot index -- the queue length after the append, minus
+        // one, the same convention as AddCrashedTrafficEvent). ProcessCreateEvents ignores it.
+        s32 AddCreateVehicleResult(CreateVehicleResult lResult)
+        {
+            mCreateVehicleResultQueue.AddEvent(lResult);
+            return mCreateVehicleResultQueue.GetLength() - 1;
+        }
+
     private:
         TrafficCrashedEventQueue     mCrashedTrafficEventQueue;     // @0x0000  (DWARF :176)
         TrafficSlammedEventQueue     mSlammedTrafficEventQueue;     // @0x0150  (DWARF :177)

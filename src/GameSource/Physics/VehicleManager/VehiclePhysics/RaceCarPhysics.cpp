@@ -12,15 +12,22 @@
 // module-static singleton msPlayerParams (defined below), not per-instance.
 //
 // =============================================================================================
-// ⛔⛔ WHY THIS TU IS STILL UNMOUNTED -- AND WHY THE REASON ON FILE WAS WRONG
-//
-// tools\build\build_game_exe.bat says, next to RaceCarPhysics_Construct.cpp:
-//     "RaceCarPhysics.cpp itself must stay unmounted while flt_820037C8 / unk_82FB8880 are unread"
-// Both are read now (see the Update block below), so by that note this TU should be mountable.
-// It is not, and the note was never the real obstacle. MEASURED 2026-08-03 by actually adding the
-// line to the source list and linking -- not inherited, not reasoned about, because the counts in
-// this campaign have gone 15 -> 13 -> 12 -> 23 -> 14 and were wrong every single time they were
-// inherited. The measurement: 0 compile errors, 0 LNK2005, and exactly FIVE LNK2019:
+// ⭐⭐ THIS TU IS MOUNTED (2026-08-11, prepare-chain wave -- build_game_exe.bat:597) AND THE
+// BANNER THAT STOOD HERE ("WHY THIS TU IS STILL UNMOUNTED ... the orchestrator is the hole")
+// IS RETIRED: it misdirected a whole agent brief into re-landing work that had been done since
+// 2026-08-07. The historical LNK2019 measurement below is KEPT because its method (measure the
+// link, never inherit counts) is the lesson -- but every one of its five holes is now closed:
+// VehiclePhysics::Update @0x826412C0 / UpdateSteering @0x825D3720 are real (VehiclePhysics.cpp
+// :5849/:5661, re-verified callee-exact 2026-08-11); the 2-arg AddTractionPoint never existed
+// (hidden-base decl deleted; the real 4-arg pair is RaceCarPhysics.cpp:619 ->
+// BrnSimpleVehiclePhysics.cpp:388); the GetAftertouchValues overload fork is resolved (the
+// 4-arg ref form @0x825B2E88 is the leaf; BrnPlayerDriverControls.cpp is mounted); and
+// gbVehicleBounceBoosting was retired as a data fork of msPlayerParams.mbLaunchActive.
+// -- The ORIGINAL 2026-08-03 measurement, for the method's sake: --
+// MEASURED by actually adding the line to the source list and linking -- not inherited, not
+// reasoned about, because the counts in this campaign have gone 15 -> 13 -> 12 -> 23 -> 14 and
+// were wrong every single time they were inherited. The measurement: 0 compile errors, 0
+// LNK2005, and exactly FIVE LNK2019:
 //
 //   1-3. VehiclePhysics::Update(int, const BrnPlayerDriverControls*, bool, int, int, int,
 //                               Vector3, Vector3)
@@ -77,6 +84,67 @@ namespace Vehicle
         if (!msPlayerParams.mbLaunchActive)   // byte_82FB84B2 (was the forked extern -- see above)
             return true;
         return false;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Prepare  @0x82639CB8  (41 insns -- verifier-recounted; the "42" included the pad word) -- the create leg's vcall target (console vtable slot
+    // +0x30), called once per created race car by VehicleManager::ProcessCreateEvents
+    // @0x826171D8..0x8261724C. LANDED 2026-08-11 from a targeted IDA export over the ARTIST
+    // database (the export-set JSON hole is real; the DATABASE carries the bytes). The
+    // complete stream, decoded -- every store named:
+    //
+    //   0x82639CC4/CC/D4  lwz r8,a52 ; lwz r7,a50 ; lwz r6,a48   <- reload the THREE trailing
+    //                     pointers (lpAttribs / lpaWheelPositions / lpafWheelRadii) from this
+    //                     function's own incoming stack; the inertia's r6/r7/r8 are OVERWRITTEN and r9/r10 pass
+    //                     into a callee with no 9th/10th GPR parameter -- dropped in effect.
+    //   0x82639CD8        bl VehiclePhysics::Prepare             (r4=&transform r5=&AABB
+    //                     v1..v4 pass through untouched; result -> r28)
+    //   0x82639CDC        lbz r29, a54                           <- the lu8StrengthStat byte
+    //   0x82639CE8..D0C   cmplwi r29,0xB ; blt skip ; Begin/Fire/EndAssert
+    //                     ("lu8StrengthStat < KU8_MAX_STRENGTH", RaceCarPhysics.cpp:192)
+    //   0x82639D14        stb  r29, 0x140E(this)                 mu8StrengthStat
+    //   0x82639D1C        bl VehiclePhysics::SetTransformFromPositionOnRoad(this, &transform)
+    //   0x82639D20..D50   the zeroing tail (f0 = flt_82001CC0 == 0.0f; v0 = vspltisw 0):
+    //       stfs f0, 0x1404    mfSlamSteering           = 0.0f
+    //       stb  0,  0x135F    mbIsWedgedInWorld        = false  (base VehiclePhysics member)
+    //       stfs f0, 0x1408    mfBeachedTime            = 0.0f
+    //       stb  0,  0x1435    mbWroteIntoRWInSlowMo    = false
+    //       stvx128 v0, 0x13F0 mPropCollisionImpulseSum = zero
+    //       stb  0,  0x1434    mbAISlowMo               = false
+    //       stb  0,  0x1436    mbDeformedBeyondDriveTimeLimitsInCrash = false
+    //   0x82639D54/58     epilogue; r3 = r28 (the callee's bool, returned verbatim)
+    //
+    // ⚠️ lInertia: received by value (48 bytes -- r6..r10 plus one stack doubleword at the
+    // call site) and NEVER READ on X360 -- see the header banner. Deliberately unnamed here
+    // so a future reader cannot believe it is consumed.
+    // ---------------------------------------------------------------------------------------
+    bool RaceCarPhysics::Prepare(Matrix44Affine lOnRoadTransform, Vector3 lLinearVelocity,
+                                 Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset,
+                                 Vector3 lHalfExtent, const AxisAlignedBox& lrAABB,
+                                 rw::physics::Inertia /* dropped on X360 -- see banner */,
+                                 VehicleAttribs* lpAttribs, const Vector3* lpaWheelPositions,
+                                 const f32* lpafWheelRadii, u8 lu8StrengthStat)
+    {
+        const bool lbPreparedVehiclePhysics = VehiclePhysics::Prepare(
+            lOnRoadTransform, lLinearVelocity, lAngularVelocity, lHandlingBodyOffset,
+            lHalfExtent, lrAABB, lpAttribs, lpaWheelPositions, lpafWheelRadii);
+
+        CGS_ASSERT(lu8StrengthStat < KU8_MAX_STRENGTH,
+                   "lu8StrengthStat < KU8_MAX_STRENGTH");                            // :192
+
+        mu8StrengthStat = lu8StrengthStat;                                           // stb  0x140E
+
+        SetTransformFromPositionOnRoad(lOnRoadTransform);
+
+        mfSlamSteering                         = 0.0f;                               // stfs 0x1404
+        mbIsWedgedInWorld                      = false;                              // stb  0x135F
+        mfBeachedTime                          = 0.0f;                               // stfs 0x1408
+        mbWroteIntoRWInSlowMo                  = false;                              // stb  0x1435
+        mPropCollisionImpulseSum               = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };  // stvx128 0x13F0
+        mbAISlowMo                             = false;                              // stb  0x1434
+        mbDeformedBeyondDriveTimeLimitsInCrash = false;                              // stb  0x1436
+
+        return lbPreparedVehiclePhysics;                                             // r28
     }
 
     // ---------------------------------------------------------------------------------------
@@ -957,7 +1025,9 @@ namespace Vehicle
             // candidate id matches the current target.
             const f32 lfAlign = vpu::Dot(vpu::Normalize(lvToTarget), vpu::Normalize(lvVel));
             f32 lfWeight = (2.0f - lfAlign) * ((lfDist > 0.0f) ? (1.0f / lfDist) : 0.0f);
-            if (MS.maTargetIds[liT] == MS.miCurrentTargetId)
+            // ⚠️ 2026-08-11: maTargetIds re-typed s32 -> EntityId (the type
+            // GetTargetAssistParams writes into it); the console compares the raw dwords.
+            if (static_cast<s32>(MS.maTargetIds[liT].muValue) == MS.miCurrentTargetId)
                 lfWeight *= 1.0f;   // FLAG: stickiness bonus flt_82F2A32C (un-homed) -> identity
 
             if (lfWeight <= lfBestWeight)
@@ -967,7 +1037,8 @@ namespace Vehicle
             }
         }
 
-        MS.miCurrentTargetId = (liBest >= 0) ? MS.maTargetIds[liBest] : 0;   // dword_82FB8574
+        MS.miCurrentTargetId =
+            (liBest >= 0) ? static_cast<s32>(MS.maTargetIds[liBest].muValue) : 0;  // dword_82FB8574
 
         if (liBest >= 0)
         {
@@ -1124,6 +1195,7 @@ namespace Vehicle
         static_assert(offsetof(PlayerParameters, mfUncappedSpeedTimer) == 0x3C, "flt_82FB84BC");
         static_assert(offsetof(PlayerParameters, mfTimeUntilPush)      == 0x44, "flt_82FB84C4");
         static_assert(offsetof(PlayerParameters, mfPlayerCarStrength)  == 0x48, "lfShowtimePlayerCarStrength");
+        static_assert(offsetof(PlayerParameters, maTargetPositions)    == 0x50, "unk_82FB84D0 (UpdateDrivers' GetTargetAssistParams arg 1)");
         static_assert(offsetof(PlayerParameters, maTargetIds)          == 0xD0, "dword_82FB8550");
         static_assert(offsetof(PlayerParameters, miNumTargets)         == 0xF0, "dword_82FB8570");
         static_assert(offsetof(PlayerParameters, miCurrentTargetId)    == 0xF4, "dword_82FB8574");

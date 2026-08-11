@@ -96,6 +96,29 @@ namespace Vehicle
         // @0x82592FD0: hand-written copy assignment (Clear()+Append() per queue).
         VehicleInputInterface& operator=(const VehicleInputInterface& lrOther);
 
+        // ⭐ ADDED 2026-08-11 (triangle-cache wiring wave) -- THE LAST HOP OF THE CHAIN THAT
+        // FEEDS EVERY VEHICLE LINE TEST. Real out-of-line X360 symbol @0x8279B978 (25 insns),
+        // DWARF-declared at BrnVehicleInputInterface.h:171; body in the sibling .cpp.
+        //
+        // ⚠️ NOTE WHAT DOES **NOT** CARRY IT: VehicleInputInterface::Append @0x823C87C0 is a
+        // FOURTEEN-QUEUE merge that emits NO store for mTriangleCacheInterface (confirmed in
+        // its asm -- the 14 `bl`s are all *Event_::Append). So the four world->physics bridges
+        // that call Append never seed the cache; this dedicated entry point, driven once per
+        // frame by WorldModule::BridgeSceneQueryResultsToPhysics @0x827A8FDC, is the only path.
+        void AppendTriangleCacheInterface(const InTriangleCacheInterface* lpTriangleCacheInterface);
+
+        // ⭐ ADDED 2026-08-11 (triangle-cache wiring wave). DWARF-declared (BrnVehicleInputInterface.h,
+        // `void AddLineTestResult(OutEventLineTestNearestResult)` -- BY VALUE, and the console agrees:
+        // BridgeSceneQueryResultsToPhysics copies the 64-byte event off the variable queue into a
+        // stack temporary (`ld/std` x8 loop @0x827A8F74) before the call). No out-of-line symbol --
+        // the X360 INLINES it to `BaseEventQueue<OutEventLineTestNearestResult>::AddEvent(this+0, &tmp)`
+        // (`bl sub_827A5780` with r3 still the interface base, i.e. &mLineTestResultsQueue at +0), so
+        // it is a header-only inline here, same shape as the accessors above.
+        void AddLineTestResult(CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult lResult)
+        {
+            mLineTestResultsQueue.AddEvent(lResult);
+        }
+
         // Read access to the embedded triangle-cache interface (mTriangleCacheInterface, the second
         // member, at X360 byte +128016 == 16-byte InLineTestResultQueue header + 2000*64). The X360
         // inlines this as a raw `this + 128016` at its call sites (e.g. the crash-prediction driver
@@ -120,6 +143,54 @@ namespace Vehicle
         // (mTriangleCacheInterface) == the seat of mCreateRaceCarEventQueue, so the accessor is
         // the same member the console addresses, reached by name instead of by that offset.
         const CreateRaceCarEventQueue* GetCreateRaceCarEventQueue() const { return &mCreateRaceCarEventQueue; }
+
+        // ⭐ ADDED 2026-08-11 (create-drain wave). FOUR MORE OF THE SAME SHAPE -- every one is
+        // DWARF-declared (BrnVehicleInputInterface.h:192 / :219 / :195 / :198 / :228), every one is
+        // inlined by the X360 as a raw `this + <byte offset>` at the maintenance-arm drain that
+        // reads it, and every offset below is that raw literal reproduced by NAME:
+        //   mRemoveRaceCarEventQueue                  +129328  ProcessRemoveEvents @0x826160E4
+        //                                                      (`addis r3,r4,2 ; addi r3,r3,-0x6D0`)
+        //   mValidateRaceCarEventQueue                +131472  ProcessValidationEvents @0x825E901C
+        //                                                      (`addis r27,r4,2 ; addi r27,r27,0x190`)
+        //   mSetRaceCarCollisionEventQueue            +131744  ProcessCollisionEvents @0x825E8F3C
+        //                                                      (`addis r30,r28,2 ; addi r30,r30,0x2A0`)
+        //   mSetRaceCarCullingGroupEventQueue         +131836  ProcessCollisionEvents @0x825E8FA8
+        //                                                      (`addis r30,r28,2 ; addi r30,r30,0x2FC`)
+        //   mNetworkCarsAddedRemovedForCollisionQueue +131928  RecordNetworkRaceCarsAddedForCollision
+        //                                                      @0x825C7F08 (`addis r3,r31,2 ; addi r3,r3,0x358`)
+        // ⭐ THE FIVE LITERALS CROSS-CHECK THE WHOLE MEMBER RUN, which is why they are quoted: run
+        // the declared element sizes forward from mCreateRaceCarEventQueue's attested +128032 and
+        // every one of them is hit with ZERO slack:
+        //   128032 + (16 + 8*160) = 129328   mRemoveRaceCarEventQueue
+        //          + (16 + 8*8)   = 129408   mResetRaceCarEventQueue
+        //          + (16 + 16*128) = 131472  mValidateRaceCarEventQueue
+        //          + (16 + 8*32)  = 131744   mSetRaceCarCollisionEventQueue
+        //          + 92           = 131836   mSetRaceCarCullingGroupEventQueue   (12 + 10*8)
+        //          + 92           = 131928   mNetworkCarsAddedRemovedForCollisionQueue
+        // ⚠️ CORRECTED 2026-08-11: the reset step used to read `(16 + 16*112) = 131216`, and every
+        // sum after it was mislabelled (131216 + 272 is 131488, not the attested 131472 -- the chain
+        // did not close). sizeof(ResetVehicleEvent) on the console is **128, not 112**: u32 index (4)
+        // + pad to the struct's own 16-byte alignment (16) + Matrix44Affine (64 -> 80) + two Vector3
+        // (32 -> 112) + three bools + f32 + the DeformationResetType enum (-> 124), and the
+        // `alignas(16)` on the struct tail-pads that 124 up to 128. With 128 the reset queue is
+        // (16 + 16*128) = 2064 bytes and lands mValidateRaceCarEventQueue exactly on its attested
+        // +131472. (The 12-byte queue headers are the 4-aligned element types -- BaseEventQueue<T>
+        // is {T*, s32, s32}, so the inline array starts at +12 when T needs no more than 4-byte
+        // alignment and at +16 when it needs 16.)
+        const RemoveRaceCarEventQueue*   GetRemoveRaceCarEvents() const   { return &mRemoveRaceCarEventQueue; }
+        const ValidateRaceCarEventQueue* GetValidateRaceCarEvents() const { return &mValidateRaceCarEventQueue; }
+        const SetRaceCarCollisionEventQueue* GetSetRaceCarCollisionEvents() const
+        {
+            return &mSetRaceCarCollisionEventQueue;
+        }
+        const SetRaceCarCullingGroupEventQueue* GetSetRaceCarCullingGroupEvents() const
+        {
+            return &mSetRaceCarCullingGroupEventQueue;
+        }
+        const NetworkCarsAddRemoveForCollisionQueue* GetNetworkCarsAddRemoveForCollisionQueue() const
+        {
+            return &mNetworkCarsAddedRemovedForCollisionQueue;
+        }
 
         // ⭐ ADDED 2026-08-10 (pre-physics bridge wave). BOTH ARE DWARF-DECLARED, not invented:
         // DecFIGS BrnVehicleInputInterface.h:245 `const RaceCarBitArray* GetRaceCarsAddedForCollision() const`

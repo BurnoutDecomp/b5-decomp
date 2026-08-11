@@ -396,20 +396,23 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
                                          CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
                                          CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface );
 
-        // ⛔⛔ @0x825AB408 (52 insns). THE SIM FIREWALL, AND IT IS DELIBERATELY INERT.
+        // ⭐⭐ @0x825AB408 (52 insns). THE SIM FIREWALL -- BODIED 2026-08-11 (prepare-chain wave)
+        // in BrnPhysicsModuleBridgeFunctions.cpp; its conductor gate is deleted.
         // This is the ONLY road from the vehicle manager's rigid-body request queues into the
         // simulation input buffer -- four appends, in the console's order:
-        //     AppendRemoveRigidBodyQueue<50>(simIn, vehOut->...mRemoveBodiesQueue  /* +9616  */)
-        //     AppendAddRigidBodyQueue   <50>(simIn, vehOut->...mRequiredRigidBodiesQueue /* +0 */)
-        //     AppendAddJointQueue       <10>(simIn, vehOut->...  /* +39904 */)
-        //     AppendRemoveJointQueue    <10>(simIn, vehOut->...  /* +41840 */)
+        //     AppendRemoveRigidBodyQueue<50>(simIn, vehOut->GetRemoveRigidBodyQueue()     /* +9616  */)
+        //     AppendAddRigidBodyQueue   <50>(simIn, vehOut->GetRequiredRigidBodiesQueue() /* +0     */)
+        //     AppendAddJointQueue       <10>(simIn, vehOut->GetAddJointQueue()            /* +39904 */)
+        //     AppendRemoveJointQueue    <10>(simIn, vehOut->GetRemoveJointQueue()         /* +41840 */)
         // (offsets cross-checked against BrnVehicleOutputInterface.h's own queue seats).
         // VehicleManager::ProcessCreateEvents @0x82616770 posts its InAddRigidBody event into
         // mRequiredRigidBodiesQueue, which lives in the "VehManager" stack IO buffer that
-        // PostSceneUpdate creates AND destroys in the same call. While this function stays a
-        // gate, that event is written and thrown away: NO RIGID BODY CAN REACH THE SIMULATION.
-        // ⛔ DO NOT LAND THIS UNTIL THE TRACTION-LINE CHAIN IS CLOSED -- see the ground-cost
-        // census in BrnPhysicsConductorGates.cpp. A body added before then falls forever.
+        // PostSceneUpdate creates AND destroys in the same call -- so this function is what makes
+        // that event reach the simulation at all.
+        // ⛔ THE OLD HOLD ("do not land until the traction-line chain is closed") IS RETIRED: both
+        // halves of that lifetime -- StartVehicleTractionLineTests @0x82629CE0 and
+        // EndVehicleTractionLineTests @0x82633CD8 -- are real bodies in
+        // BrnVehicleManager_TractionLineTests.cpp as of the 2026-08-11 lifetime wave.
         void BridgeVehicleManagerToSimulation_PostScene( CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
                                                          const Vehicle::VehicleManagerOutputBuffer* lpVehManagerOutputBuffer );
 

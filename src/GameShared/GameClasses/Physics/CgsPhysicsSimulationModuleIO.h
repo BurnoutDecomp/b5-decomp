@@ -127,6 +127,18 @@ namespace PhysicsSimulationIO
         // Update tick would have fired "Not locked for writing" every frame -- a false assert
         // armed in a Get. Overload resolution: the drain/Update side holds `const InputBuffer*`,
         // so it binds the const/read one; producers hold a non-const pointer and bind this.
+        // ⭐⭐ X360 0x828A71B8 -- LANDED 2026-08-11 (create-drain wave, conductor; crash-measured:
+        // the first live rigid-body append memcpy'd into a NULL mpEvents because the caller's
+        // `lpSimInputBuffer->Construct()` resolved to the 2-line BASE IOBuffer::Construct, which
+        // wires nothing -- the "future InputBuffer::Construct TU" this header's banner promised
+        // was never written). Status byte = 1 (== base Construct), then the NINETEEN queue
+        // Constructs in the console's order at exactly the member offsets pinned below, both
+        // scalars zeroed, then the Clear() tail call. Body in ..._InputBuffer.cpp.
+        void Construct();   // hides CgsModule::IOBuffer::Construct -- deliberate, console shape
+        // X360 0x828A1A88: mfTimeStep = 0 and every queue's miLength = 0 (each store lands at
+        // queueOffset+8 == BaseEventQueue::miLength; muMaxIterations is NOT touched -- console).
+        void Clear();
+
         f32  GetTimeStep();
         // X360 0x8289E260 (54 insn, exports 0x8289E260.json): read-lock (bit 4) guarded const
         // twin; asserts mfTimeStep > 0 ("mfTimeStep > 0.0f", IO.h:834), returns it.
@@ -331,6 +343,16 @@ namespace PhysicsSimulationIO
         // (CgsPhysicsSimulationModuleIO.cpp) could retire its local slice-fork of this class
         // -- see the rewrite banner there.
         void Destruct();
+
+        // ⭐⭐ X360 0x828A72E8 -- LANDED 2026-08-11 (create-drain wave, conductor; crash-measured
+        // the same hour as the InputBuffer sibling above and for the identical reason: the call
+        // resolved to the 2-line base IOBuffer::Construct, none of the four queues got their
+        // mpEvents wired, and the first live AddActiveBodiesToOutputQueue tripped the mpEvents
+        // tripwires then memcpy'd through NULL). Status byte = 1, the FOUR queue Constructs at
+        // the console offsets (+16 / +38432 / +128048 / +131136 -- console; host offsets differ
+        // because OutUpdateRigidBody widened, reached BY NAME), scalars mfTimeStepUsed /
+        // muMaxIterationsUsed zeroed, all four queue lengths zeroed. Body in ..._OutputBuffer.cpp.
+        void Construct();   // hides CgsModule::IOBuffer::Construct -- deliberate, console shape
 
         // X360 0x825BD0A8: read-lock (bit 4) guarded; returns the post-step time-step-used scalar.
         f32  GetTimeStepUsed() const;

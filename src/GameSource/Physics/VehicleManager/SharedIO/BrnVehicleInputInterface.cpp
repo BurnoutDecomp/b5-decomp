@@ -186,6 +186,34 @@ namespace Vehicle
             lrOther.mNetworkCarsAddedRemovedForCollisionQueue);                                 // +0x20358
     }
 
+    // ========================================================================
+    // @0x8279B978  VehicleInputInterface::AppendTriangleCacheInterface   (25 insns)
+    //
+    // ⭐ RECONSTRUCTED 2026-08-11 (triangle-cache wiring wave). It was MISSING ENTIRELY, and
+    // that is exactly why the traction-line leg crashed the moment a race car existed: the
+    // physics side read GetTriangleCacheInterface()->GetCache(...) on an interface whose
+    // mpTriangleCacheManager had never been written by anything.
+    //
+    // Byte truth (X360 asm):
+    //   0x8279B994  cmplwi cr6, r31, 0        -- lpTriangleCacheInterface != NULL
+    //   0x8279B9A4  li r5, 0x273 == 627       -- ".. GameSource\Physics/VehicleManager/
+    //                                            SharedIO/BrnVehicleInputInterface.h", 627
+    //   0x8279B9BC  lwz r11, 0(r31)
+    //   0x8279B9C4  bne -> skip               -- lpInterfaceToAppend->mpTriangleCacheManager != NULL
+    //   0x8279B9D0  li r5, 0x4FD == 1277      -- ".. SceneManager/CgsSceneManagerModuleIO.h", 1277
+    //   0x8279B9E8  ori r10, r10, 0xF410      -- this + 128016 == mTriangleCacheInterface
+    //   0x8279B9F4  stwx r11, r30, r10        -- the single pointer store
+    // The SECOND tripwire's text/line is the INLINED TriangleCacheInterface::Append (the same
+    // pair the world buffer's twin @0x8279BAF8 bakes), so the outer null check is this
+    // function's own and the inner one belongs to Append -- expressed that way below.
+    // ========================================================================
+    void VehicleInputInterface::AppendTriangleCacheInterface(
+        const InTriangleCacheInterface* lpTriangleCacheInterface)
+    {
+        CGS_ASSERT(lpTriangleCacheInterface != 0, "lpTriangleCacheInterface != NULL");
+        mTriangleCacheInterface.Append(lpTriangleCacheInterface);
+    }
+
     // @0x82592FD0  VehicleInputInterface::operator=
     //   Hand-written copy-assignment (called from BrnNetworkModule::ProcessBeforeSimulation). For
     //   each embedded EventQueue member it Clear()s this side then Append()s the source's live
