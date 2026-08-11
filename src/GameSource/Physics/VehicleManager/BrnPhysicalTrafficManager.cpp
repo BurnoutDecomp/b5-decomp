@@ -21,6 +21,9 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"             // SceneManagerIO::InputBuffer_Update::GetInSceneUpdateInterface (@0x825BD8C0, write-lock twin)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // InSceneUpdateInterface::mAddToCacheQueue (X360 +0xC4930)
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"               // VehicleManager::KI_MAX_ACTIVE_RACE_CARS (the +8 slot bias)
+#include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManagerIO.h" // InEventUpdateCachedPosition (32B)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"  // GetHalfExtent / GetPosition
+#include <cmath>                                                               // std::sqrt (the rsqrt NR chain's answer)
 
 namespace BrnPhysics
 {
@@ -835,6 +838,58 @@ bool PhysicalTrafficManager::PrepareTriangleCache(
     }
 
     return true;
+}
+
+// =================================================================================================
+// PhysicalTrafficManager::UpdateTriangleCache  @0x825EE640  (261 insns)
+// ⭐⭐ BODIED 2026-08-11 (lifetime wave). The traffic sibling of the function above and the second
+// half of VehicleManager::UpdateTriangleCache @0x82615C38: Prepare CLAIMS slots 8..27 once, this
+// MOVES them every frame. Both are arm 1 of PhysicsModule::UpdateCachedPositions @0x8259C370.
+//
+// The body is instruction-for-instruction the vehicle one with three substitutions, which is why
+// it is written to look identical here: the bitset is mUsedTrafficVehicles (bound 20, assert
+// "liVehicle < ku8TotalMaxNumPhysicalTraffic" at BrnPhysicalTrafficManager.cpp:741), the body is
+// reached through mpaTrafficVehicles[i].mpVehicleBody (`slwi r11, r31, 6 ; lwz r11, 0x1C(r11)` --
+// the 64-byte PhysicalTrafficVehicle stride and mpVehicleBody at +28), and the cache slot is
+// i + KI_MAX_ACTIVE_RACE_CARS (`addi r10, r31, 8` at 0x825EE7D4).
+//
+// The two vector reads are at the SAME offsets inside the body as the race car's, because both
+// are SimpleVehiclePhysics: `lvx128 v11, body+0x6A0` == mHalfExtent (r16 = 0x6A0) and
+// `lvx128 v11, body+0x40` == mTransform.wAxis (r17 = 0x40). Radius = |mHalfExtent| through the
+// same vmsum3fp128 + vrsqrtefp + 2 Newton-Raphson chain with the same `lensq == 0 -> 0` vsel, and
+// the same identity add of the zero vector at unk_82FB91D0 (see the note on the vehicle body).
+// =================================================================================================
+void PhysicalTrafficManager::UpdateTriangleCache(
+    CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update)
+{
+    CGS_ASSERT(lpSceneInputBuffer_Update != NULL, "lpSceneInputBuffer_Update != NULL");   // :281
+
+    CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdate =
+        lpSceneInputBuffer_Update->GetInSceneUpdateInterface();
+
+    for (s32 liVehicle = mUsedTrafficVehicles.GetFirstNonZeroBit();
+         liVehicle != TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX;
+         liVehicle = mUsedTrafficVehicles.GetNextNonZeroBit(liVehicle))
+    {
+        CGS_ASSERT(liVehicle < static_cast<s32>(KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC),
+                   "liVehicle < ku8TotalMaxNumPhysicalTraffic");                          // :741
+
+        const SimpleVehiclePhysics* const lpBody = mpaTrafficVehicles[liVehicle].mpVehicleBody;
+
+        const Vector3 lvHalfExtent = lpBody->GetHalfExtent();
+        const f32 lfRadiusSq = rw::math::vpu::MagnitudeSquared(lvHalfExtent);
+        const f32 lfRadius   = (lfRadiusSq != 0.0f) ? std::sqrt(lfRadiusSq) : 0.0f;
+
+        const Vector3& lrPosition = lpBody->GetPosition();
+
+        CgsSceneManager::TriangleCacheManagerIO::InEventUpdateCachedPosition lEvent;
+        lEvent.miCacheSlot             = liVehicle + VehicleManager::KI_MAX_ACTIVE_RACE_CARS;
+        lEvent.mNewPositionAndRadius.x = lrPosition.x;
+        lEvent.mNewPositionAndRadius.y = lrPosition.y;
+        lEvent.mNewPositionAndRadius.z = lrPosition.z;
+        lEvent.mNewPositionAndRadius.w = lfRadius;
+        lpSceneUpdate->mUpdateCachedPositionQueue.AddEvent(lEvent);
+    }
 }
 
 }   // namespace Vehicle

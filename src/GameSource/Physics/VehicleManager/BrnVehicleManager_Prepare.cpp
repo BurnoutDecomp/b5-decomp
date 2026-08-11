@@ -37,6 +37,10 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // InSceneUpdateInterface::mAddToCacheQueue (X360 +0xC4930)
 #include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManagerIO.h" // TriangleCacheManagerIO::InEventAddToCache (8 bytes)
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"             // KF_TRIANGLE_CACHE_SPHERE_RADIUS
+#include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"       // the traffic arm of UpdateTriangleCache
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"   // GetHalfExtent / GetPosition
+#include "rw/math/vpu/vector3_operation.h"                                     // rw::math::vpu::MagnitudeSquared
+#include <cmath>                                                               // std::sqrt (the rsqrt NR chain's answer)
 
 namespace BrnPhysics
 {
@@ -91,6 +95,71 @@ namespace Vehicle
         mPhysicalTrafficManager.PrepareTriangleCache(lpSceneInputBuffer_Update);
 
         return true;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // VehicleManager::UpdateTriangleCache  @0x82615C38  (240 insns)
+    // ⭐⭐ BODIED 2026-08-11 (lifetime wave). THE POSITION HALF, and the sibling of
+    // PrepareTriangleCache above: Prepare CLAIMS the 28 slots (mAddToCacheQueue, once), this
+    // MOVES them (mUpdateCachedPositionQueue, every frame). Arm 1 of
+    // PhysicsModule::UpdateCachedPositions @0x8259C370.
+    //
+    // ⛔ WHY IT IS NOT OPTIONAL: CacheSlot::mLastCachedSphere is written NOWHERE ELSE. Until this
+    // runs, every claimed slot's sphere centre is (0,0,0) and the fill worker caches the geometry
+    // around the world origin -- so a car at the Junkyard would be traction-tested against real,
+    // valid triangles from three kilometres away.
+    //
+    // Read off the ASM (the Hex-Rays is the usual inlined BitArray<8> walk plus its
+    // CgsBitArray.h:203 assert-formatting maze). Per live race car:
+    //   0x82615D48  car = &maRaceCarVehicles[i]            (mulli 0x1460 off the manager base)
+    //   0x82615D6C  lvx128 v11, car+0xDE0                  -> mHalfExtent  (+0x6A0 in the car)
+    //   0x82615D70  vaddfp v0, v11, *unk_82FB91D0          -> see the zero-vector note below
+    //   0x82615D74  lvx128 v11, car+0x780                  -> mTransform.wAxis (+0x40 in the car)
+    //   0x82615D7C  vrlimi128 v11, 0, 1, 0                 -> clear the w lane of that position
+    //   0x82615D90..DCC  vmsum3fp128 + vrsqrtefp + 2 NR    -> radius = |halfExtent|, 0 if zero
+    //   0x82615DD8  stfs into the position vector's w lane -> {pos.xyz, radius}
+    //   0x82615DEC  InEventUpdateCachedPosition::AddEvent, miCacheSlot = the car index
+    // then 0x82615FE0 chains to the traffic pool, whose slots are 8 + liVehicle.
+    //
+    // ⚠️ FLAG -- `unk_82FB91D0` IS A ZERO VECTOR AND THE ADD IS AN IDENTITY. Sixteen bytes of
+    // zero in the image; a full-text scan of all 30,084 X360 export JSONs finds exactly THREE
+    // readers (this function, PhysicalTrafficManager::UpdateTriangleCache and
+    // RaceCarPhysics::ApplyPropCollisionImpulseSum) and NO writer, so it is zero at runtime too.
+    // It is the same shape as this tree's own KV_ZERO. The add is reproduced as the identity it
+    // is rather than modelled as a mystery global; if a later wave finds a writer hiding in an
+    // export hole, this is the line to revisit.
+    //
+    // ⚠️ THE ZERO GUARD IS `== 0`, NOT `> 0`: the console selects the zero vector on
+    // `vcmpeqfp128 v9, 0, lensq` (0x82615DA0) and multiplies otherwise. Kept exactly.
+    // ------------------------------------------------------------------------------------
+    void VehicleManager::UpdateTriangleCache(
+        CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update)
+    {
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdate =
+            lpSceneInputBuffer_Update->GetInSceneUpdateInterface();
+
+        for (s32 liCar = mUsedRaceCars.GetFirstNonZeroBit();
+             liCar != CgsContainers::BitArray<8u>::KI_INVALID_BITINDEX;
+             liCar = mUsedRaceCars.GetNextNonZeroBit(liCar))
+        {
+            const RaceCarPhysics& lrCar = maRaceCarVehicles[liCar];
+
+            const Vector3 lvHalfExtent = lrCar.GetHalfExtent();
+            const f32 lfRadiusSq = rw::math::vpu::MagnitudeSquared(lvHalfExtent);
+            const f32 lfRadius   = (lfRadiusSq != 0.0f) ? std::sqrt(lfRadiusSq) : 0.0f;
+
+            const Vector3& lrPosition = lrCar.GetPosition();
+
+            CgsSceneManager::TriangleCacheManagerIO::InEventUpdateCachedPosition lEvent;
+            lEvent.miCacheSlot                  = liCar;
+            lEvent.mNewPositionAndRadius.x      = lrPosition.x;
+            lEvent.mNewPositionAndRadius.y      = lrPosition.y;
+            lEvent.mNewPositionAndRadius.z      = lrPosition.z;
+            lEvent.mNewPositionAndRadius.w      = lfRadius;
+            lpSceneUpdate->mUpdateCachedPositionQueue.AddEvent(lEvent);
+        }
+
+        mPhysicalTrafficManager.UpdateTriangleCache(lpSceneInputBuffer_Update);
     }
 
     // ------------------------------------------------------------------------------------

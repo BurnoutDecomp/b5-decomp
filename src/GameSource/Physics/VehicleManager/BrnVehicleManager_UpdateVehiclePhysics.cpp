@@ -394,11 +394,15 @@ namespace Vehicle
 
         // ---- STAGE: traction line tests (dword_82F2A154) -------------------------------
         CgsDev::PerfMonCpu::StartMonitor(gs_iTractionLTsPM);
-        // ⭐ RE-POINTED 2026-08-10 (ground wave): ONE argument. The old second argument was a
-        // fabricated parameter -- the callee's 68 instructions never touch r5 (proof at the
-        // declaration in BrnVehicleManager.h); r4 alone is forwarded to
-        // DoVehicleTractionLineDecallocations, whose assert names it lpInputBufferStack.
-        EndVehicleTractionLineTests(lpInputBufferStack);                     // r4=stack (only)
+        // ⛔ RE-POINTED AGAIN 2026-08-11 (lifetime wave): TWO arguments, restoring what the
+        // 2026-08-10 note removed. That note reasoned from the callee ("the 68 instructions never
+        // touch r5") and concluded the parameter was fabricated -- but an unread argument is not
+        // an absent one, and THIS call site is the proof: the console emits `mr r5, r29` at
+        // 0x8264565C, loading r29 fresh from an incoming argument slot at 0x82645638. The PS3
+        // DWARF types the pair (IOBufferStack*, const VehicleInputInterface*). Nothing
+        // behavioural changes -- the callee still ignores it -- but the declaration stops
+        // claiming something the image contradicts.
+        EndVehicleTractionLineTests(lpInputBufferStack, lpInputInterface);   // r4=stack, r5=input
         CgsDev::PerfMonCpu::StopMonitor(gs_iTractionLTsPM);
 
         // ---- STAGE: fatal crashes (dword_82F2A178) -------------------------------------

@@ -327,19 +327,26 @@ namespace Vehicle
         void UpdateCrashes(f32 lfTimeStep);
 
         // DWARF h:893; X360 @0x82633CD8 (68 insns).
-        // ⛔⛔ ARITY CORRECTED 2026-08-10 (ground wave) -- THE SECOND PARAMETER WAS FABRICATED.
-        // The committed declaration took (IOBufferStack*, const VehicleInputInterface*) and the
-        // one call site passed both. The emitted body reads exactly TWO incoming registers:
-        //     0x82633CE8  mr r31, r3   <- this
-        //     0x82633CF0  mr r26, r4   <- the one parameter
-        // and r5 is never touched in any of the 68 instructions. r26 is consumed once, at the tail:
-        //     0x82633DCC  mr r4, r26 ; 0x82633DD4  bl DoVehicleTractionLineDecallocations
-        // whose own r4 assert is "lpInputBufferStack != NULL" (BrnVehicleManager.cpp:2296) -- the
-        // SAME argument StartVehicleTractionLineTests hands DoVehicleTractionLineAllocations in r4.
-        // So the single parameter is the IOBufferStack, and the interface argument never existed.
-        // (Also RETRACTED here: the old "export-set hole" claim -- the body is exported, with
-        // pseudocode. That correction was already made in the link-stub banner on 2026-08-10.)
-        void EndVehicleTractionLineTests(CgsModule::IOBufferStack* lpInputBufferStack);
+        // ⛔⛔ THE 2026-08-10 "ARITY CORRECTED TO ONE PARAMETER" IS ITSELF RETRACTED, 2026-08-11
+        // (lifetime wave). That note reasoned entirely from the CALLEE ("r5 is never touched in
+        // any of the 68 instructions ... the interface argument never existed") and concluded the
+        // second parameter was fabricated. An unread argument is not an absent one, and the
+        // CALLER settles it:
+        //     0x8264565C  mr   r5, r29                 <- UpdateVehiclePhysics DOES set r5
+        //     0x82645660  lwz  r4, arg_1C(r1)
+        //     0x82645664  mr   r3, r24
+        //     0x82645668  bl   VehicleManager::EndVehicleTractionLineTests
+        // and r29 is loaded fresh from an incoming argument slot at 0x82645638. The PS3 DWARF
+        // types it:  ..VehicleManager27EndVehicleTractionLineTestsEPN9CgsModule13IOBufferStackE
+        //            PKNS0_21VehicleInputInterfaceE
+        // i.e. (IOBufferStack*, const VehicleInputInterface*) -- and UpdateVehiclePhysics has
+        // exactly one VehicleInputInterface parameter in scope. RESTORED to two.
+        // ⭐ This is the standing "prefer the DWARF arity when the console never reads an
+        // argument" rule; nothing behavioural changes, the declaration just stops claiming
+        // something the image contradicts.
+        // (Still RETRACTED, correctly: the old "export-set hole" claim -- the body IS exported.)
+        void EndVehicleTractionLineTests(CgsModule::IOBufferStack* lpInputBufferStack,
+                                         const VehicleInputInterface* lpInputInterface);
 
         // DWARF h:1287; X360 body is an export-set hole (image-only).
         void CrashFatalRaceCars(
@@ -716,7 +723,53 @@ namespace Vehicle
         void ReadRaceCarTractionLineTestResults(
             CgsMemory::SimpleDataStreamResultIterator* lpResultIterator);
 
+        // ⭐⭐ @0x825E9640 (313 insns) -- BODIED 2026-08-11 (lifetime wave). THE GENERATION HALF
+        // of the race-car leg: one 176-byte stream command per LIVE race car, carrying that car's
+        // window into the shared triangle cache and its four wheels' suspension probes.
+        // Signature from the PS3 DWARF (..VehicleManager27AddRaceCarTractionLineTestsE
+        // PN15CgsSceneManager12CgsCollision18CollisionGeneratorEPKNS2_14SceneManagerIO22Triangle
+        // CacheInterfaceE) and matched by the X360 asserts, which name both arguments.
+        // Returns the number of commands posted (the caller accumulates it).
+        s32 AddRaceCarTractionLineTests(
+            CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen,
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpCacheInterface);
+
+        // ⭐⭐ @0x82615C38 (240 insns) -- BODIED 2026-08-11 (lifetime wave). THE POSITION HALF:
+        // per live race car, post one InEventUpdateCachedPosition carrying {world position,
+        // bounding radius} for that car's triangle-cache slot, then chain to the traffic pool.
+        // Without it every claimed cache slot's sphere stays at the WORLD ORIGIN and the fill
+        // worker caches triangles from the wrong place entirely.
+        void UpdateTriangleCache(
+            CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update);
+
         // ---- ⚠ FLAG: gate-bodied (BrnPhysicsConductorGates.cpp) from here down ------------------
+
+        // ⭐ THE TWO SIDE LEGS OF THE TRACTION-LINE PRODUCER, GATED IN MATCHED Add<->Read PAIRS
+        // 2026-08-11 (lifetime wave). StartVehicleTractionLineTests and
+        // EndVehicleTractionLineTests are REAL as of this wave and run every frame; these six are
+        // the traffic and player-stuck legs, which a race car on the ground does not need
+        // (1,319 console instructions measured). ⛔ THEY MUST STAY PAIRED: each Add posts one
+        // command per live object and the matching Read consumes exactly that many records off a
+        // SHARED cursor. Landing an Add without its Read leaks records into the next harvest;
+        // landing a Read without its Add makes it consume the race-car leg's answers. Reconstruct
+        // a PAIR at a time and delete both gates together.
+        //   0x825E9B28 (171) AddPlayerStuckInCollisionLineTests   <-> 0x825C3898 (118) ReadPlayerStuck...
+        //   0x825E9DD8  (87) UpdatePlayerStuckInCollisionTest      (same leg; drives the spheres)
+        //   0x825C4AB8 (147) UpdatePlayerStuckInCollisionSpheres   (same leg)
+        // (the traffic pair lives on PhysicalTrafficManager -- see BrnPhysicalTrafficManager.h)
+        // ⚠ Returns the command count, like its two siblings -- StartVehicleTractionLineTests
+        // accumulates all three returns into miNumSPUTractionLineTests (`add r11, r3, r11 ;
+        // stw r11, 0(r30)` after each of the three `bl`s at 0x82629D8C/DB8/DD8).
+        s32 AddPlayerStuckInCollisionLineTests(
+            CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen,
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpCacheInterface,
+            BrnPhysics::Deformation::DeformationManager* lpDeformationManager);
+        void UpdatePlayerStuckInCollisionTest(
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpCacheInterface,
+            f32 lfTimeStep);
+        void UpdatePlayerStuckInCollisionSpheres(f32 lfTimeStep);
+        void ReadPlayerStuckTractionLineTestResults(
+            CgsMemory::SimpleDataStreamResultIterator* lpResultIterator);
 
         // @0x82629CE0 (DWARF :308; 78 insns).
         // ⛔ STILL GATED 2026-08-10 (ground wave) and here is the measurement, so nobody re-derives

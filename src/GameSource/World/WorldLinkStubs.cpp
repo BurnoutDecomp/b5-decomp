@@ -3476,21 +3476,16 @@ void BrnAI::AIModule::PostPhysicsUpdate(struct BrnAI::AIModuleIO::InputBuffer_Po
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the cached-position restage into the scene input (@0x8259C370).
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnPhysics::PhysicsModule::UpdateCachedPositions(struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PhysicsModule::UpdateCachedPositions: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⭐⭐ 2026-08-11 (lifetime wave): the PhysicsModule::UpdateCachedPositions @0x8259C370 boot gate
+// that stood here since 2026-07-27 is DELETED. The real 34-instruction body is in
+// BrnPhysicsModule.cpp, next to the module's other own-TU bodies.
+// This one mattered far beyond its size: it is the ONLY writer of a triangle-cache slot's sphere
+// CENTRE in the whole XEX, so while it was inert every claimed slot sat at the WORLD ORIGIN and
+// the fill worker cached geometry from there. It lands in the same commit as the traction-line
+// producer lifetime, because a car tested against triangles cached three kilometres away would be
+// valid, green and wrong -- this project's signature failure.
+// Arms 2 and 3 (PropManager:: / DeformationManager::UpdateTriangleCache) are named gates in
+// BrnPhysicsConductorGates.cpp; arm 1 (VehicleManager, plus the traffic pool behind it) is real.
 
 // ⭐⭐ 2026-08-10 (create-path wave): the PhysicsModule::PostSceneUpdate boot gate that stood here
 // since 2026-07-27 is DELETED -- the real 278-insn body @0x825ABC10 is landed in
