@@ -112,8 +112,26 @@ namespace Vehicle
         void GetAftertouchValues(f32& lrfOutX, f32& lrfOutY, f32& lrfOutZ, bool lbUseRequestedGas) const;
 
         // The remaining members are owned by future TUs (no X360 address in this ledger):
-        // ctor @ BrnVehicleDriverControls.h:63, Clear :67, ResetType :70, GetType :74.
+        // ctor @ BrnVehicleDriverControls.h:63, Clear :67, GetType :74.
         E_DRIVER_TYPE GetType() const { return meDriverType; }
+
+        // ⭐ ADDED 2026-08-11 (the VehiclePhysics::Prepare wave). DWARF-attested
+        // (BrnVehicleDriverControls.h:70, `void ResetType()`), header-inline because the console
+        // inlines it at every site -- no out-of-line body exists in either export set.
+        //
+        // WHY THIS AND NOT A DIRECT WRITE, which is what the asm literally shows. The X360's
+        // VehiclePhysics::Prepare @0x826380F0 emits a bare `stw r30, 0x10D4(r31)` -- a 4-byte zero
+        // into mPreviousControls + 0x44 -- and the PS3 build of the same statement emits the same
+        // bare store. But **meDriverType is `protected`** (the DecFIGS DWARF says so, not this
+        // tree's guess), and VehiclePhysics neither derives from nor befriends this class, so the
+        // source of that store cannot be a direct assignment. Of the four methods the DWARF
+        // attests, three are excluded: the ctor and GetType are wrong shapes, and Clear is
+        // independently pinned by BrnNetworkDriverControls::Clear @0x82581200, which walks
+        // +0x00..+0x42 and STOPS -- it never touches +0x44. ResetType is what is left, its name
+        // means exactly this, and 0 == E_DRIVER_TYPE_PLAYER is the class's own default type.
+        // ⚠️ INFERRED, and labelled so: the identification is by elimination plus the name. The
+        // STORE is verbatim on two ISAs; which method emits it is the inferred step.
+        void ResetType() { meDriverType = E_DRIVER_TYPE_PLAYER; }
 
         // ----- Project-local convenience accessors (NOT console functions). They existed as
         //       declare-only stubs while the interior of this struct was unrecovered; every one of

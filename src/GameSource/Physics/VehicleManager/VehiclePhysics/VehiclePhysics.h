@@ -625,11 +625,12 @@ namespace Vehicle
         // register for register: r4 = &transform, v1..v4 = the four vectors in declaration order,
         // r5 = the AABB, r6/r7/r8 = attribs / wheel positions / wheel radii.
         //
-        // ⚠️ DECLARE-ONLY still: the 306-insn body @0x82637C80 is NOT bodied yet (it forwards to
-        // SimpleVehiclePhysics::Prepare -- landed this wave -- then runs VehicleAttribs::operator=,
-        // SetupAttribsForAI, SetupSuspension, Engine::Prepare and ~40 own-block member seeds at
-        // +0x10D4/+0x1114..+0x1128/+0x1359..+0x1362/+0x13DC/+0xFD0 that still need naming).
-        // DELETE THIS NOTE WHEN @0x82637C80 lands.
+        // ⭐⭐ BODIED 2026-08-11 (its own wave) in VehiclePhysics.cpp -- the note that stood here
+        // ("DECLARE-ONLY still ... ~40 own-block member seeds that still need naming") is retired.
+        // Every one of those seeds landed on a member this header already named; the eighth callee
+        // resolved to VehiclePhysics::SetAttributes @0x8262E140 (the former sub_8262E140), which
+        // landed with it; and the whole body was cross-read against the PS3 build of the same
+        // source (export 0x735DEC) store for store, lane for lane. See the body's banner.
         //
         // ⚠️⚠️ ODR FORK FLAGGED, NOT FIXED (found by this correction). The PS3 mangle spells the
         // AABB parameter `RKN12CgsGeometric14AxisAlignedBoxE` == `const CgsGeometric::
@@ -880,6 +881,25 @@ namespace Vehicle
         // 2026-08-09 in VehiclePhysics.cpp. ⚠️ Returns bool (DWARF VehiclePhysics.h:1072) --
         // the committed `void` was a slice artifact; the console returns a literal true.
         bool SetAttributes();
+
+        // ⭐ @0x8262E140 (48) -- the THREE-ARG overload, and it used to be the unnamed
+        // `sub_8262E140`. IDENTIFIED AND BODIED 2026-08-11 (the VehiclePhysics::Prepare wave).
+        // Its identity is not inferred from shape: the PS3 build exports it named
+        // (0x735D20, `_ZN10BrnPhysics7Vehicle14VehiclePhysics13SetAttributesEPNS0_14Vehicle`
+        // `AttribsEPKN2rw4math3vpu7Vector3EPKf`) and the PS3 body of VehiclePhysics::Prepare
+        // @0x735DEC calls it by that name with `this+2704 == &mPlayerVehicleAttribs` -- exactly
+        // the `addi r4,r31,0xAA0` the X360 passes. Body, store for store off @0x8262E140:
+        //     SimpleVehiclePhysics::SetAttributes(lpAttribs, positions, radii)   [console-inlined]
+        //     CGS_ASSERT(lpAttribs != NULL)                     VehiclePhysics.cpp:410
+        //     mpAttribs = lpAttribs;                            `stw r30,0x720(r31)`
+        //     SimpleVehiclePhysics::SetAttributes(positions, radii)   -- AGAIN, out of line
+        //     mEngine.Prepare(&mpAttribs->mEngineAttribs)       `lwz 0x720` then `addi r4,r11,0x190`
+        //     SetupSuspension(); return true
+        // ⚠️ The 2-arg base overload really is called TWICE (0x8262E1A0 inside the inlined 3-arg,
+        // then 0x8262E1D8 after mpAttribs is re-seated) -- the same doubled-call shape
+        // SimpleVehiclePhysics::Prepare already carries for SetupAttribs. Not a transcription slip.
+        bool SetAttributes(VehicleAttribs* lpAttribs, const Vector3* lpaWheelPositions,
+                           const f32* lpafWheelRadii);
 
         // @0x825D0008 (139): the debug reset/fly-around handler (gated on mbReset). ⭐ BODIED
         // 2026-08-09 in VehiclePhysics.cpp.

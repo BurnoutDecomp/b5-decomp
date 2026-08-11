@@ -109,8 +109,19 @@ namespace Vehicle
     }
 
     // =============================================================================================
-    // ⛔⛔ NEW 2026-08-11 (create-drain wave 2) -- AND THIS ONE IS THE CAMPAIGN'S CURRENT BLOCKER,
-    // not a bystander. Read this before writing anything else in the create chain.
+    // ⭐⭐ THE TRAP THAT STOOD HERE IS GONE -- 2026-08-11 (the VehiclePhysics::Prepare wave).
+    // `VehiclePhysics::Prepare` @0x82637C80 is BODIED in VehiclePhysics.cpp, read off the X360 asm
+    // and cross-read against the PS3 build of the same source (0x735DEC) store for store; the
+    // 3-arg `VehiclePhysics::SetAttributes` @0x8262E140 that used to be `sub_8262E140` landed with
+    // it, and so did the declared-but-undefined `SimpleVehiclePhysics::SetAttributes(VehicleAttribs*,
+    // const Vector3*, const f32*)` it calls. The census below is preserved because it is the record
+    // of how the blocker was found -- the LNK2019 in it is what NAMED the function.
+    //
+    // ⚠️ STILL TRUE, and it is why this landing changes no runtime behaviour on its own: the only
+    // two callers are VehicleManager::ProcessCreateEvents @0x82616770 (a LOUD gate) and
+    // TrafficPhysics::PreparePhysical @0x82639380 (an UNMOUNTED TU). Nothing calls it at runtime yet.
+    //
+    // ---- the census as it stood, for the record -------------------------------------------------
     //
     // RaceCarPhysics::Prepare @0x82639CB8 LANDED this wave (RaceCarPhysics.cpp, recovered from the
     // PS3 export 0x73648C at the Δ=+16 member mapping this class's own table already establishes).
@@ -146,15 +157,13 @@ namespace Vehicle
     //     +0x10D4 = 0 · +0x13DC = <arg> · plus a dozen 16-byte VMX stores.
     // ⇒ SEVEN of its eight callees are already bodied and mounted. What is left is transcription
     // plus naming the VMX lanes -- big, but NOT blocked on anything. That is the next wave.
+    //
+    // ⭐ AND THAT IS WHAT HAPPENED: the eighth callee (`sub_8262E140`) turned out to be
+    // `VehiclePhysics::SetAttributes`, the "~40 own-block seeds" are all named members of this
+    // class, and every lane was confirmed twice (X360 `vrlimi128` masks 8/4/2/1 vs PS3
+    // `VectorPermuteConstant<4,1,2,3>/<0,5,2,3>/<0,1,6,3>/<0,1,2,7>`). The body is in
+    // VehiclePhysics.cpp; the trap is deleted.
     // =============================================================================================
-    bool VehiclePhysics::Prepare(Matrix44Affine, Vector3, Vector3, Vector3, Vector3,
-                                 const AxisAlignedBox&, VehicleAttribs*, const Vector3*, const f32*)
-    {
-        CGS_ASSERT(false, "VehiclePhysics::Prepare: link stub -- reconstruct from X360 @0x82637C80 "
-                          "(306 insns; seven of its eight callees are already bodied, and this is "
-                          "the ONLY writer of a race car's mTransform on the create path)");
-        return false;
-    }
 
     // ⭐ 2026-08-09 (powertrain wave): the Engine::Update @0x825CB288 trap is GONE -- BODIED in
     // Engine.cpp. The 3937-line X360 debug Opt-vs-Unopt assert harness turned out to be ONE
