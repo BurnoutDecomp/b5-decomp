@@ -12,6 +12,7 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"      // the zombie vector (family B)
 #include "SDKs/EATech/include/Apt/AptString/StringPool.h"         // StringPool::ClearTemporaryPool
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"                // AptValueGC_PoolManager
+#include "SDKs/EATech/include/Apt/AptDefine.h"                    // gpGCPoolManager (off_8324D834)
 #include "SDKs/EATech/include/Apt/AptCIH.h"                       // the zombie entries
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"    // mAnimationFilePtr (the reap's file-state swap)
 #include "SDKs/EATech/include/Apt/AptFile.h"                      // mnState / mnField12 (the saved-state slot)
@@ -19,13 +20,20 @@
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"           // queued-input counter clear
 
 // ---------------------------------------------------------------------------
-// The Apt GC globals: defined in AptGlobals.cpp (populated at Apt bring-up by
-// AptInit.cpp); declared here so this TU compiles + links against them.
-//   gValuesToRelease -- the deferred-release vector instance (X360 off_8324E51C).
-//   gAptValueGCPool  -- the live-AptValue pool manager  (X360 off_8324D834).
+// The Apt GC globals (populated at Apt bring-up by AptInit.cpp).
+//   gValuesToRelease -- the deferred-release vector pointer (X360 off_8324E51C);
+//                       defined in AptGlobals.cpp, declared here.
+//   gpGCPoolManager  -- the live-AptValue pool POINTER (X360 off_8324D834);
+//                       defined in AptDefine.cpp, declared by AptDefine.h above.
+//                       (UNIFIED 2026-08-11: this walk used to run over the
+//                       permanently-empty namespace-scope `gAptValueGCPool`
+//                       object -- one of three C++ homes for the one console
+//                       slot -- so it had never visited a live AptValue. The
+//                       console loads the slot as a pointer: @0x82AE4A58
+//                       `lis r29, off_8324D834@ha; lwz r3, off_8324D834@l(r29);
+//                       bl AptValueGC_PoolManager__GetFirstAptValue`.)
 // ---------------------------------------------------------------------------
 extern AptValueVector*         gpValuesToRelease;   // off_8324E51C (AptGlobals.cpp)
-extern AptValueGC_PoolManager  gAptValueGCPool;
 extern int                     gbAptSavedInputActive;
 
 // ---------------------------------------------------------------------------
@@ -46,6 +54,17 @@ void* AptGC::sReferenceRegistrationCb(const AptValue* /*pOwner*/, void* pSlot,
 // ---------------------------------------------------------------------------
 // CleanAll @0x82AE4A40 -- tear down every live Apt value at shutdown.
 // ---------------------------------------------------------------------------
+// The pool-pointer null test below is a PC pre-init guard, NOT console behaviour:
+// @0x82AE4A58 / @0x82AE4AC0 the console loads off_8324D834 straight into r3 with no
+// test, because on the console the slot is live from AptAllocatorInitialize
+// @0x82ADD118 until AptAllocatorShutdown @0x82AE9298 destroys the pool -- and this
+// teardown runs strictly between the two (AptUpdateShutdown @0x82B0C170 calls it).
+// The PC pool is likewise heap-built by AptAllocatorInitialize and never destroyed
+// (AptAllocatorShutdown is un-homed), so the pointer is non-null on every live path
+// and the guard changes nothing there; it only covers the window before the Apt
+// bring-up ran -- the same guard every GC-value operator new/delete in this tree
+// carries, and the one this function already applies to gpValuesToRelease. Each
+// walk re-reads the global per step, matching the asm's per-iteration slot reload.
 void AptGC::CleanAll()
 {
     // 1. Flush anything queued for deferred release.
@@ -56,11 +75,14 @@ void AptGC::CleanAll()
     //    deletion suspended, so the graph stays walkable while it is dismantled.
     const bool bWasSuspended = AptValue::sbSuspendRefcountDeletions;
     AptValue::sbSuspendRefcountDeletions = true;
-    for (AptValue* pValue = gAptValueGCPool.GetFirstAptValue(); pValue;
-         pValue = gAptValueGCPool.GetNextAptValue(pValue))
+    if (gpGCPoolManager != nullptr)
     {
-        pValue->PreDestroy();
-        pValue->DestroyGCPointers();
+        for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue;
+             pValue = gpGCPoolManager->GetNextAptValue(pValue))
+        {
+            pValue->PreDestroy();          // vtbl +0x24
+            pValue->DestroyGCPointers();   // vtbl +0x28
+        }
     }
     AptValue::sbSuspendRefcountDeletions = bWasSuspended;
 
@@ -68,11 +90,14 @@ void AptGC::CleanAll()
     //    (fetching the next link before deleting the current one).
     if (gpValuesToRelease != nullptr)
         gpValuesToRelease->ReleaseValues();
-    for (AptValue* pValue = gAptValueGCPool.GetFirstAptValue(); pValue; )
+    if (gpGCPoolManager != nullptr)
     {
-        AptValue* pNext = gAptValueGCPool.GetNextAptValue(pValue);
-        pValue->DeleteThis();
-        pValue = pNext;
+        for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue; )
+        {
+            AptValue* pNext = gpGCPoolManager->GetNextAptValue(pValue);
+            pValue->DeleteThis();   // vtbl +0x20
+            pValue = pNext;
+        }
     }
 
     // 4. Final flush, then clear the value free-lists / temporary string pool.

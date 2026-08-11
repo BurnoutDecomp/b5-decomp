@@ -211,13 +211,14 @@ extern AptActionInterpreter gAptActionInterpreter;
 #include "SDKs/EATech/include/Apt/Apt.h"
 extern AptUserFunctions gAptFuncs;
 
-// The Apt pool-pointer globals AptAllocatorInitialize wires (all alias off_8324D808;
-// the GC-view is off_8324D834). Defined in AptGlobals.cpp; wired here.
+// The Apt pool-pointer globals AptAllocatorInitialize wires (all alias off_8324D808).
+// Defined in AptGlobals.cpp; wired here. (off_8324D834 -- the GC value pool -- is
+// gpGCPoolManager, declared by the AptDefine.h include above; the extra `void*
+// gpAptValueGCPool` view of that same slot was RETIRED 2026-08-11, see AptGlobals.cpp.)
 extern DOGMA_PoolManager* gpAptOperandStackPool;   // off_8324D808 (operand-stack arrays)
 extern DOGMA_PoolManager* gpAptRenderManagerPool;  // off_8324D808
 extern DOGMA_PoolManager* gpAptSharedPtrPool;      // off_8324D808
 extern DOGMA_PoolManager* gpAptSingleListPool;     // off_8324D808
-extern void*              gpAptValueGCPool;        // off_8324D834 (type-erased GC-pool view)
 
 // ---------------------------------------------------------------------------
 // The Apt TEARDOWN leaves AptRenderShutdown reaches. The un-homed siblings are
@@ -284,11 +285,14 @@ namespace
 
         // The non-GC value pool (AptDefine.h gpNonGCPoolManager) also aliases the DOGMA
         // pool; the GC value pool pointer (gpGCPoolManager) points at the AptValueGC pool.
+        // gpGCPoolManager IS the console slot off_8324D834 -- the single store below is
+        // the console's `off_8324D834 = <the constructed pool>` (AptAllocatorInitialize
+        // @0x82ADD118). Every consumer (the Apt operator new/delete family, AptGC::CleanAll,
+        // ReplaceReferences, AptAnimationTarget::CleanRemList) reads this one pointer;
+        // the second `gpAptValueGCPool` store that used to sit here was retired 2026-08-11
+        // together with its (empty) namespace-scope twin -- see AptGlobals.cpp.
         gpNonGCPoolManager = s_pDogmaPool;
         gpGCPoolManager    = s_pGCPool;
-
-        // The type-erased GC-pool view the engine stamps (off_8324D834).
-        gpAptValueGCPool = s_pGCPool;
     }
 }
 

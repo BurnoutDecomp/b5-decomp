@@ -18,7 +18,8 @@
 #include "SDKs/EATech/include/Apt/AptSavedInputCheckpoints.h"// gpAptSavedInputCheckpoints, CanLinkPendingFiles, AllLinked
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"   // GetParentAnim (the ReplaceReferences owner tests)
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"           // gpAptClassRegistry->RegisterReferences
-#include "SDKs/EATech/Apt/AptValueGCPoolManager.h"           // gAptValueGCPool (the live-value walk)
+#include "SDKs/EATech/Apt/AptValueGCPoolManager.h"           // AptValueGC_PoolManager (the live-value walk)
+#include "SDKs/EATech/include/Apt/AptDefine.h"               // gpGCPoolManager (off_8324D834)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
 
 // =====================================================================
@@ -922,9 +923,18 @@ static int       nTemp2                 = 0;         // dword_8324E564 (table-wa
 // table purely to feed this path).
 static int snUseNewWay = 1;   // dword_82F7337C (dump-pinned: 0x00000001)
 
-// The GC live-value pool + the shared sentinels/registry (AptGlobals.cpp /
-// AptObject.cpp).
-extern AptValueGC_PoolManager gAptValueGCPool;    // off_8324D834
+// The GC live-value pool POINTER (off_8324D834) is gpGCPoolManager, declared by
+// AptDefine.h (included above) and wired by AptAllocatorInitialize @0x82ADD118.
+// UNIFIED 2026-08-11: this walk used to run over the namespace-scope
+// `AptValueGC_PoolManager gAptValueGCPool` object -- a second C++ home for the one
+// console slot that was permanently EMPTY (its (0,0) ctor takes the DogmaAllocator
+// static-init early-out), so the live-value arm below never visited a value. The
+// console loads the slot as a pointer and passes it as `this`: ReplaceReferences
+// @0x82AE4E24 `lwz r3, off_8324D834@l(r28); bl ...GetFirstAptValue` and @0x82AE4F3C
+// for GetNextAptValue -- with no null test (the slot is live between
+// AptAllocatorInitialize and AptAllocatorShutdown @0x82AE9298).
+//
+// The shared sentinels/registry (AptGlobals.cpp / AptObject.cpp).
 extern AptCIH*                gpAptEmptyCIH;      // dword_8324D700 (the pinned EmptyCIH)
 extern AptValue*              gpUndefinedValue;   // off_8324D814 (the shared undefined)
 extern AptNativeHash*         gpAptClassRegistry; // dword_8324E2D4 (AptObject.cpp)
@@ -1084,7 +1094,14 @@ int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nC
     gpRefernceValueReplace = pNew;                           // off_8324E558
     pnRefCount             = static_cast<int>(lnOldRefs);    // dword_8324E55C
 
-    AptValue* lpWalk = gAptValueGCPool.GetFirstAptValue();   // off_8324D834
+    // The console fetches the pool head HERE, unconditionally, before the mode branch
+    // (@0x82AE4E24 `lwz r3, off_8324D834`; @0x82AE4E30 `bl ...GetFirstAptValue`). The
+    // null test is the PC pre-init guard only (see the gpGCPoolManager note above); a
+    // null pool yields a null head, so the pool-mode loop below simply does not run and
+    // needs no further test.
+    AptValue* lpWalk = (gpGCPoolManager != nullptr)
+                           ? gpGCPoolManager->GetFirstAptValue()   // off_8324D834
+                           : nullptr;
 
     // Swap in the replace callback (dword_8324E4E8), saving the mark form.
     AptValue::ReferenceRegistrationCb const lpSavedCb = AptValue::sReferenceRegistrationCb;
@@ -1124,7 +1141,7 @@ int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nC
             while (lpWalk != nullptr && pnRefCount > 0)
             {
                 lpWalk->RegisterReferences();
-                lpWalk = gAptValueGCPool.GetNextAptValue(lpWalk);
+                lpWalk = gpGCPoolManager->GetNextAptValue(lpWalk);   // off_8324D834 (reloaded, as the asm does)
                 ++nTemp1;
                 if (pOld->getRefCount() == 1u)
                     break;

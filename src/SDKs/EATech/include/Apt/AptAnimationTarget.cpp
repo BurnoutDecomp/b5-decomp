@@ -23,6 +23,7 @@
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // mDisplayList head GC mark walk
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"    // GetCIH (the timer callback's bound clip)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"   // DOGMA_PoolManager::Allocate/Deallocate
+#include "SDKs/EATech/include/Apt/AptDefine.h" // gpGCPoolManager (off_8324D834, the GC value pool)
 
 #include "SDKs/EATech/include/Apt/Apt.h"   // AptUserFunctions (the gAptFuncs recorder-sink slot)
 
@@ -307,8 +308,13 @@ extern void* AptUpdateZombieVector(char bClear);                                
 // remove-list flush remaps references against; the table's element count lives at
 // +0x28 of the pool object. Declared opaque (the pool layout is its own TU).
 extern void** AptValueGC_PoolManager_GetAllAllocatedAptValues(void* pPool);        // ...::GetAllAllocatedAptValues
-extern void*  gpAptValueGCPool;                                                    // off_8324D834
 extern int    AptValueGCPool_GetAllocatedCount(void* pPool);                       // *(pool + 0x28)
+// The pool itself is gpGCPoolManager (off_8324D834), from the AptDefine.h include above.
+// UNIFIED 2026-08-11: the `void* gpAptValueGCPool` alias this file used to read was a
+// second C++ home for that one console slot (it was wired from the same s_pGCPool, so
+// the values matched -- but only gpGCPoolManager survives). CleanRemList @0x82AEAB08
+// loads the slot twice, once as `this` for GetAllAllocatedAptValues (@0x82AEAC50) and
+// once for the +0x28 live count (@0x82AEAC58/AC64), with no null test.
 extern void (*gpAptGCTableFree)(void* p, unsigned nBytes);                         // dword_8324E820 (frees the snapshot)
 
 // AptCIH::tick and AptCIH::queueClipEvents are called directly as members
@@ -736,8 +742,8 @@ void AptAnimationTarget::CleanRemList()
     {
         AptValue** lpAllValues =
             reinterpret_cast<AptValue**>(
-                AptValueGC_PoolManager_GetAllAllocatedAptValues(gpAptValueGCPool));
-        const int liAllCount = AptValueGCPool_GetAllocatedCount(gpAptValueGCPool);  // *(pool + 0x28)
+                AptValueGC_PoolManager_GetAllAllocatedAptValues(gpGCPoolManager));
+        const int liAllCount = AptValueGCPool_GetAllocatedCount(gpGCPoolManager);   // *(pool + 0x28)
 
         for (int liIndex = 0; liIndex < liSurvivors; ++liIndex)
         {

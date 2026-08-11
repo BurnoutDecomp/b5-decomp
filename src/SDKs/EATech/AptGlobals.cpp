@@ -41,7 +41,7 @@
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"       // AptActionInterpreter (VM singletons)
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"// AptGCReleaseVector (gValuesToRelease)
 #include "SDKs/EATech/include/Apt/AptRenderManagerQueue.h"      // AptRenderManagerQueue (gAptRenderManagerQueue)
-#include "SDKs/EATech/Apt/AptValueGCPoolManager.h"              // AptValueGC_PoolManager + byte_82144A18
+#include "SDKs/EATech/Apt/AptValueGCPoolManager.h"              // byte_82144A18[AptVFT_NumVFTs] (section 10)
 
 // --- pointer-only targets: forward declarations (exact struct/class tags) ---
 class  AptValue;
@@ -138,24 +138,32 @@ AptString*      gpStringPoolFreeList        = nullptr;   // off_8324E4FC (string
 AptValueVector* gpValuesToRelease           = nullptr;   // off_8324E51C
 
 // ===========================================================================
-// 4. The interpreter VM singletons (value objects) + the GC live-value pool.
-//    X360 &dword_8324E760 (the VM) and off_8324D834 (the GC pool).
+// 4. The interpreter VM singleton (a value object).  X360 &dword_8324E760.
 //    The VM has only an implicit default ctor + a dtor: namespace-scope storage
 //    is zero-initialized, faithful to the console .data object the engine inits.
+//    (The GC live-value pool used to live here too -- see the tombstone below.)
 // ===========================================================================
 AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 
-// FLAG: gAptValueGCPool (off_8324D834) is the live-AptValue pool manager. It has
-// NO default ctor (only the 2-arg DOGMA-forwarding ctor), so it is constructed
-// here with (0,0) -- an empty pool the engine RE-SIZES at AptInit via the real
-// per-VFT object-size table (StaticInitialize). The base DOGMA ctor reaches the
-// platform DOGMA heap (DOGMA_Malloc, an external TU); static-init order vs that
-// heap is the existing Apt-allocator-boot concern, not a code defect here.
-AptValueGC_PoolManager gAptValueGCPool(0u, 0u);   // off_8324D834
-
-// gpAptValueGCPool (off_8324D834) -- the type-erased void* view the engine stamps
-// to the same GC pool. Distinct C++ symbol; null until AptInit points it.
-void* gpAptValueGCPool = nullptr;   // off_8324D834
+// (the GC-pool pair {AptValueGC_PoolManager gAptValueGCPool(0,0), void*
+//  gpAptValueGCPool} RETIRED 2026-08-11 -- UNIFIED onto AptDefine.cpp's
+//  `AptValueGC_PoolManager* gpGCPoolManager`, the ONE console slot off_8324D834.
+//  off_8324D834 is a POINTER slot, not an object: every console reach LOADS it
+//  and passes the loaded value as `this` -- AptGC::CleanAll @0x82AE4A40
+//  (`lwz r3, off_8324D834@l(r29); bl GetFirstAptValue`), ReplaceReferences
+//  @0x82AE4DF0, AptAnimationTarget::CleanRemList @0x82AEAB08, AptAllocatorShutdown
+//  @0x82AE9298, and all 30-odd Apt `operator new`/`delete` bodies
+//  (e.g. AptArray::operator new @0x82AE6088 `DOGMA_PoolManager::Allocate(off_8324D834,
+//  size)`). The pointed-to pool is HEAP-constructed by AptAllocatorInitialize
+//  @0x82ADD118 and published by AptInit.cpp's WireAllocatorGlobals.
+//  Consequence of the old trio: the namespace-scope object here was permanently
+//  EMPTY -- its (0,0) ctor takes DogmaAllocator.cpp's static-init early-out and
+//  nothing ever re-sized it (the old FLAG comment claiming StaticInitialize
+//  re-sizes it was wrong: StaticInitialize only computes the item-size statics) --
+//  so AptGC::CleanAll's shutdown walk and AptLinker's ReplaceReferences live-value
+//  walk both iterated an empty pool and had never visited a live AptValue, while
+//  every real GC allocation went through gpGCPoolManager. Same class of defect,
+//  same remedy as the gpValuesToRelease unification above (2026-08-07).)
 
 // ===========================================================================
 // 5. The Apt allocator pool pointers (all alias the shared fixed-size DOGMA pool
