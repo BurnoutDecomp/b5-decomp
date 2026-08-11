@@ -10,6 +10,7 @@
 #include "GameSource/Gui/BrnGuiCache.h"                               // BrnGui::GuiCache (GetOptionsDataProfile)
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"                  // BrnGui::OptionsDataProfile (stored-segment validate/notify)
 #include "GameSource/Gui/SaveLoad/BrnGuiSaveLoadProfile.h"            // BrnGuiSaveLoad::Profile (stored-segment validate)
+#include "GameSource/GameState/Progression/BrnProfile.h"              // BrnProgression::Profile::Serialise/Deserialise + ProfileUpgradeTable
 #include "GameSource/Gui/BrnGuiOverlaysDirector.h"                    // BrnGui::GuiOverlayWaitFinishRequest (event 188)
 
 #include <cstring>   // std::memcpy / std::strncpy
@@ -201,32 +202,24 @@ namespace
 
     // ---- BrnProgression / BrnNetwork boundary (un-reconstructed profile codecs) -----
 
-    // BrnProgression::Profile::Serialise @0x8237C1F0 -- PROLOGUE ONLY (the live-field copy
-    // body is a Progression-TU boundary; see the park note below). The X360 body opens:
-    //     memset(a2, 0, 118064);   // clear the progression save image
-    //     memset(a4, 0,   9800);   // clear the DLC1 save image
-    //     *a2 = 28;                // stamp the progression save-image version word
-    //     ... 700+ lines of live-profile field copies + SplitArray fan-out ...
-    //     *a4 = 6;                 // stamp the DLC1 save-image version word
+    // BrnProgression::Profile::Serialise @0x8237C1F0 -- the REAL body now lives with its
+    // class (GameSource/GameState/Progression/BrnProfile_SaveImage.cpp, a per-function split
+    // of the console's own home file BrnProfile.cpp). These two shims only re-type the
+    // stored segment: the manager holds it as a FixedSizeOpaqueBuffer's byte array, and the
+    // codec takes the save-image class.
     //
-    // Those four stores are the only ones that do NOT read the live profile, so the two
-    // ConstructImage calls below reproduce every non-live-derived effect of the function.
+    // The prior leaf called BrnGuiSaveLoad::Profile::ConstructImage() + the DLC1 twin to
+    // reproduce Serialise's memset + version-word stores while the field-copy body was
+    // parked. Serialise does those four stores ITSELF (memset 0x1CD30 / memset 0x2648 /
+    // stw 28 @image+0 / stw 6 @dlc1+0), so those calls are retired here -- running both
+    // would clear the image a second time, after the field copies.
     //
-    // That prologue is the WHOLE of the console's first-boot default-profile story:
+    // That prologue is still the whole of the console's first-boot default-profile story:
     // ProfileManager::Bootup calls ReadProfileData (-> Serialise) BEFORE handing the image
-    // to the storage boot-up, so with no save on the memory unit ValidateProfiles still
-    // sees version 28 and an empty (count-0) event manifest. The prior no-op leaf skipped
-    // it, which is why a fresh PC boot logged "Progression Profile version mismatch,
-    // expected 28, got 0" and ValidateProfiles rejected the whole stored image.
-    //
-    // PARK: the field-copy body needs BrnProgression::Profile's full live layout and
-    // belongs in GameSource/GameState/Progression/BrnProfile.cpp (Serialise/Deserialise are
-    // still un-reconstructed there). Until it lands the copies are a no-op -- which is
-    // byte-identical to the prologue's own result for the current PC boot, because the live
-    // progression profile GuiModule installs is a freshly Construct'ed (all-zero) block, so
-    // every field Serialise would copy is already zero and every SplitArray count is 0.
-    void ProgressionProfile_Serialise(BrnProgression::Profile* /*lpProfile*/,
-                                      u8* lpSaveImage, const void* /*lpUpgradeData*/,
+    // to the storage boot-up, so with no save on the storage device ValidateProfiles still
+    // sees version 28 and a count-0 event manifest.
+    void ProgressionProfile_Serialise(BrnProgression::Profile* lpProfile,
+                                      u8* lpSaveImage, const void* lpUpgradeData,
                                       BrnGuiSaveLoad::ProfileDLC1* lpSaveImageDLC1)
     {
         // The stored segment and the save-image class must describe the same 118064 bytes
@@ -236,16 +229,24 @@ namespace
         static_assert(BrnGuiSaveLoad::ProfileDLC1::KI_IMAGE_SIZE_BYTES == 9800,
                       "the DLC1 save image Serialise clears is 9800 bytes");
 
-        reinterpret_cast<BrnGuiSaveLoad::Profile*>(lpSaveImage)->ConstructImage();
-        lpSaveImageDLC1->ConstructImage();
+        lpProfile->Serialise(reinterpret_cast<BrnGuiSaveLoad::Profile*>(lpSaveImage),
+                             static_cast<const BrnProgression::ProfileUpgradeTable*>(lpUpgradeData),
+                             lpSaveImageDLC1);
     }
 
-    // FLAG PC-platform leaf: BrnProgression::Profile::Deserialise (stored image -> live,
-    // same operands) is the same Progression-TU boundary; the live profile is unchanged.
-    void ProgressionProfile_Deserialise(BrnProgression::Profile* /*lpProfile*/,
-                                        const u8* /*lpSaveImage*/, const void* /*lpUpgradeData*/,
-                                        const BrnGuiSaveLoad::ProfileDLC1* /*lpSaveImageDLC1*/)
+    // BrnProgression::Profile::Deserialise @0x8237D308 -- the inverse, wired at the callsite
+    // the console uses: ProfileManager::ReportTaskCompleted's E_SAVELOADRESULT_PROFILE_LOADED
+    // arm, i.e. only after a real storage LOAD has validated. The boot path
+    // (Bootup -> ReadProfileData -> Serialise) never reaches it, so on the current PC boot
+    // -- which has no save on disk to load -- this shim is not exercised yet; it comes live
+    // with the storage load path.
+    void ProgressionProfile_Deserialise(BrnProgression::Profile* lpProfile,
+                                        const u8* lpSaveImage, const void* lpUpgradeData,
+                                        const BrnGuiSaveLoad::ProfileDLC1* lpSaveImageDLC1)
     {
+        lpProfile->Deserialise(reinterpret_cast<const BrnGuiSaveLoad::Profile*>(lpSaveImage),
+                               static_cast<const BrnProgression::ProfileUpgradeTable*>(lpUpgradeData),
+                               lpSaveImageDLC1);
     }
 
     // BrnNetwork::LiveRevengeProfile::ValidateProfile @0x824FCE98 IS committed
