@@ -41,16 +41,19 @@
 EA::Thread::Mutex MutexAptLoader;
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed engine hooks, owned by their own deferred TUs). The X360 loader
-// reaches the async stream subsystem + the linker through fn-ptr slots / the
-// AptLinker; routed here through named externs (not the literal console offsets)
-// so the x64 layout stays correct. Each lands when its owning TU is reconstructed.
+// The async-stream / linker boundaries the X360 loader reaches through fn-ptr
+// slots / the AptLinker; routed here through named externs (not the literal
+// console offsets) so the x64 layout stays correct. All three are resolved:
 //
 //   AptLoaderStartAsyncLoad  (dword_8324E838) -- kick off the async .apt stream
 //        for a freshly-requested file: takes the file name buffer + the AptFile
-//        handle. Called from Update on the state 1 -> 2 transition.
+//        handle. Called from Update on the state 1 -> 2 transition. HOMED in
+//        BrnGuiAptRuntime.cpp (the PC host stream hook; loads synchronously and
+//        drives AptCompleteAnimationAsyncLoad).
 //   AptLoaderCancelAsyncLoad (dword_8324E83C) -- abort an in-flight stream
 //        (state 2 with a pending data block). Called from CancelPreloadedAnimation.
+//        Marked PC-platform leaf in AptRenderLinkStubs.cpp (the synchronous host
+//        loads leave nothing in flight to cancel).
 //   AptLinker::isFileImported is the real member (AptLinker.cpp) -- true when the
 //        candidate AptFile is still imported by any movie the linker tracks;
 //        CONSUMES the candidate handle.
@@ -270,7 +273,7 @@ void AptLoader::Invalidate(AptFile* pFile)
 //   f[5] = a4->mnDataRootOffset;   // mpData = pRoot      (+0x14)
 //   f->mnState = 3; f->mnField12 = prevState;
 //   a4->mnDataRootOffset -= a3;                           // un-relocate the offset back
-//   dword_8324E840(a4);                                   // the load-complete hook (FLAG)
+//   dword_8324E840(a4);                                   // the host load-complete hook (leaf note at the call site below)
 //   dispose(*a2);
 //
 // pBlock (a5) is the AptDataHeader: it is what f->mpDataBlock is set to AND what flows to
@@ -289,7 +292,7 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
 
     // The data root (the movie root CHARACTER HEADER), and the movie's embedded
     // AptCharacterAnimation def base at root + the pointer-size header.
-    // FLAG (x64 fork): the console relocates a4->mnDataRootOffset in place in the 32-bit
+    // x64 fork (the committed port rule): the console relocates a4->mnDataRootOffset in place in the 32-bit
     // file slot (v15 += a3, stored back, then subtracted off again after Resolve); x64
     // computes the absolute address without the 32-bit write-back. The +pBase relocation is
     // GUARDED on a nonzero offset (asm @0x82AFFA44 beq): a zero offset leaves the root null.
@@ -352,7 +355,11 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
     f->mnField12        = f->mnState;   // record the previous state
     f->mnState          = 3;            // loaded / resolved
 
-    // FLAG: the console then notifies/frees through the load-complete hook (dword_8324E840(a4)).
+    // FLAG PC-platform leaf: the console then notifies/frees the const-file chunk
+    // through the HOST load-complete hook (dword_8324E840(a4) -- a host-installed
+    // slot beside the start/cancel hooks; its only engine xref is this call). The
+    // PC host's synchronous stream path (BrnGuiAptRuntime.cpp) owns the const-file
+    // lifetime, so the slot stays un-installed and the call is elided.
 
     // Release the by-value handle the callee owns (asm normal-exit @0x82AFFAC0:
     // *a2=0 + DecRef + AptSharedPtrDelete), mirroring AllImportsAvailable.
@@ -395,8 +402,8 @@ void AptCompleteAnimationAsyncLoad(AptFilePtr* pHandle, void* pBase, AptConstFil
 
 // AllImportsAvailable @0x82AEB270 -- true when every import referenced by `file`'s
 // movie has finished loading (AptLoader::IsLoaded accepts it). Consumes the passed
-// handle (the by-value AptFilePtr argument's teardown). FLAG: AptMovieData is the
-// homed-but-file-local view of the loaded .apt root (AptFile.cpp).
+// handle (the by-value AptFilePtr argument's teardown). AptMovieData is the homed
+// native-8 view of the loaded .apt movie root (AptFile.h).
 bool AptLoader::AllImportsAvailable(AptFilePtr file)
 {
     bool bAllAvailable = true;
@@ -429,14 +436,12 @@ bool AptLoader::AllImportsAvailable(AptFilePtr file)
 }
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed engine hook, owned by class:AptCharacterAnimation's link TU):
-// Link @... binds the loaded movie root into the scene -- it resolves every import
-// (pulling characters from the imported movies' export tables) and finalises the
-// character list. Routed through a named extern (root+16 is the embedded
-// AptCharacterAnimation; the console passes the raw mpData/mpDataBlock) so the x64
-// layout stays correct. Lands with the AptCharacterAnimation link follow-on.
+// Link binds the loaded movie root into the scene -- it resolves every import
+// (pulling characters from the imported movies' export tables) and finalises
+// the character list. HOMED as the real member AptCharacterAnimation::Link
+// (declared in AptCharacterAnimation.h); Update calls it on the embedded
+// native-8 def base (root + 0x20) directly.
 // ---------------------------------------------------------------------------
-// AptCharacterAnimation::Link is now a member (declared in AptCharacterAnimation.h); no free-function extern needed.
 
 // ---------------------------------------------------------------------------
 // notify @0x82B02030 -- publish a just-linked AptFile through the global Apt
@@ -446,10 +451,10 @@ bool AptLoader::AllImportsAvailable(AptFilePtr file)
 // notification function (which takes ownership of it -- note the asm never DecRefs
 // the local), then releases the passed-in *pFile (DecRef + delete-when-zero).
 // ---------------------------------------------------------------------------
-// FLAG (un-homed global): GlobalNotificationFunction @... is the Apt load-event
-// callback registered by the host (the loader's "file linked" notification). It
-// takes the AptFilePtr by address and consumes that reference. Modelled as an
-// extern hook (the registration TU is a follow-on).
+// GlobalNotificationFunction @0x82B00C78 -- the Apt load-event callback (the
+// loader's "file linked" notification into the current target's linker pending
+// list). HOMED in AptLinker.cpp; it takes the AptFilePtr by address and
+// consumes that reference. Declared extern here at the call site.
 extern void GlobalNotificationFunction(AptFilePtr* pFile);
 
 void AptLoader::notify(AptFilePtr* pFile)
@@ -504,7 +509,8 @@ void AptLoader::Update()
                     pFile->mnField12   = 1;              // [c:+0x0C] previous state
                     pFile->mnState     = 2;             // [c:+0x08] loading
                     AptSharedPtrIncRef(pFile);          // handle's reference
-                    // FLAG: dword_8324E838 -- the async-load-start hook (extern).
+                    // dword_8324E838 -- the async-load-start hook (HOMED in
+                    // BrnGuiAptRuntime.cpp: the PC host stream hook).
                     AptLoaderStartAsyncLoad(pFile->mFileName.c_str(), &handle);
                     node = mpHead;                       // restart from the (possibly mutated) head
                     // Drop the per-iteration ref (asm tail @0x82B02218: unconditional
@@ -540,7 +546,7 @@ void AptLoader::Update()
                     pFile->mnField12 = pFile->mnState;       // [c:+0x0C]
                     pFile->mnState   = 4;                    // [c:+0x08] linked
                     // The embedded AptCharacterAnimation def base is root + the pointer-size char
-                    // header. FLAG (x64 native-8): our GUIAPT bundles are native-8 (0x20 header), so
+                    // header. x64 native-8 (the committed .apt serialized regime): our GUIAPT bundles are native-8 (0x20 header), so
                     // the def base is pData + 0x20 (the console 4-byte formula was pData + 0x10; the
                     // struct static_asserts native-8 offsets, so it MUST be +0x20 here). This mirrors
                     // CompleteLoad's `pCharAnim = pRoot + luHdrSize` (0x20 native-8).
@@ -603,7 +609,7 @@ void AptLoader::CancelPreloadedAnimation(const EAStringC& fileName)
             {
                 // In-flight stream: abort it (only when a data block is pending).
                 if (pFile->mpDataBlock)              // [c:+0x18]
-                    AptLoaderCancelAsyncLoad(pFile->mpDataBlock);   // FLAG: dword_8324E83C
+                    AptLoaderCancelAsyncLoad(pFile->mpDataBlock);   // dword_8324E83C (PC-platform leaf: synchronous host loads leave nothing in flight)
             }
             else if (nState == 3 || nState == 4 || nState == 5)
             {

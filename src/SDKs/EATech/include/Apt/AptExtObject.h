@@ -111,10 +111,9 @@ protected:
     static bool      SetVariable(AptValue* pContext, const AptNativeString* const pName,
                                  AptValue* const pValue);
 
-    // FLAG: the apt native-method argument fetch -- a native sMethod_* reads its i-th
-    // ActionScript call argument off the apt interpreter operand stack via this helper
-    // (X360 AptExtObject::GetParam). Declared here (body its own TU) so the native
-    // methods of derived extensions (e.g. CgsGui::AptCommunicator) compile.
+    // The apt native-method argument fetch -- a native sMethod_* reads its i-th
+    // ActionScript call argument off the apt interpreter operand stack via this
+    // helper (X360 AptExtObject::GetParam @0x82ADC270, HOMED in AptExtObject.cpp).
     static AptValue* GetParam(int iIndex);
 
 private:

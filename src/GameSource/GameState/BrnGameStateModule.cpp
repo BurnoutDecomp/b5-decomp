@@ -89,6 +89,74 @@ void GameStateModule::Construct()
     // not-yet-constructed subobject is well-defined and the stored value is already final.
     // DELETE-WHEN those two Constructs land: they must then run BEFORE this line.
     mCarSelectManager.Construct(&mTriggerQueryManager, this, &mProgressionManager);
+
+    // ⚠️⚠️ THE TWO PREPARE2 SUB-OBJECTS ARE NOT Construct()ed HERE (2026-08-11), and the reason in
+    // BOTH cases is a MEASURED LINK COST -- not a missing body. The X360 Construct @0x82380388 runs
+    //
+    //   BrnGameState::AchievementManagerBase::Construct(a1 + 181680,   // &mAchievementManager
+    //                                                   a1 + 47920,    // &mProgressionManager
+    //                                                   a1 + 284520,   // &mStreetManager
+    //                                                   a1 + 7632,     // mModeManager.GetScoringSystem()
+    //                                                   a1);           // this
+    //   BrnGameState::StreetManager::Construct(a1 + 284520,            // &mStreetManager
+    //                                          a1,                     // this
+    //                                          a1 + 47920,             // &mProgressionManager
+    //                                          a1 + 183592);           // &mRoadRulesManager
+    //
+    // (`a1 + 7632` is the ScoringSystem EMBEDDED IN mModeManager, not a module member of its own:
+    // mModeManager sits at a1 + 4128 and BrnModeManager.h:303 puts mScoringSystem at ModeManager
+    // +0xDB0 == 3504; 4128 + 3504 == 7632 exactly. So the argument is mModeManager.GetScoringSystem().)
+    //
+    // What blocks each call, MEASURED with `cl /c` + dumpbin /SYMBOLS over the candidate mount set:
+    //   * AchievementManagerBase::Construct lives in BrnGameStateAchievementManagerBase.cpp, and
+    //     mounting that TU costs EIGHT unresolved externals with NO definition anywhere in the
+    //     tree -- ScoringSystem::GetPlayerScore / GetPlayerModeCrashes / GetPlayerModeTakedowns /
+    //     GetNewlyWreckedCarCount / GetNumberOfTakedownsAgainst and ProgressionManager::
+    //     GetCarChallengeWinCount / GetCollectedStuntElementCount / GetProfileTotalTakedowns
+    //     (pulled in by the base's gameplay-event hooks). ⚠️ VERIFIED, because the tree's folklore
+    //     says otherwise: /Gy + /OPT:REF does NOT excuse those. A minimal repro (one COMDAT calling
+    //     an undefined symbol, never referenced, linked with /OPT:REF) still fails LNK2019 -- the
+    //     linker resolves symbols before it discards. So "nothing calls it" is NOT a link defence.
+    //   * StreetManager::Construct's FIRST statement is mStreetManagerDebugComponent.Construct(this),
+    //     which emits StreetManagerDebugComponent's vtable; that vtable hard-references the
+    //     component's virtual Update/OnActivate/RenderHUD, and those pull in ~15 still-unhomed
+    //     StreetManager / ScoringSystem / ProgressionManager / OutputBuffer symbols.
+    //
+    // What stands in, so neither subobject is INDETERMINATE (the thing that would actually bite):
+    // the exact values each Construct writes are carried as in-class initialisers on the members
+    // that the wired path reads -- the achievement manager's four back-pointers
+    // (BrnGameStateAchievementManagerBase.h) and the street manager's three stage words
+    // (BrnGameStateStreetManager.h). Both are FLAGGED at their declarations.
+    //
+    // ⛔⛔ AND THE SENTENCE THAT USED TO END THAT PARAGRAPH -- "Nothing on the wired path reads
+    // any other member of either subobject" -- WAS TRUE WHEN WRITTEN AND WAS FALSIFIED BY THE
+    // VERY NEXT WAVE. Un-parking Prepare2's SetupParRivals leg (2026-08-11) put
+    // StreetManager::mpProgressionManager on the wired path, and StreetManager::Construct is its
+    // ONLY writer. First boot after the un-park: EXCEPTION_ACCESS_VIOLATION reading 0x1D9E8 in
+    // ProgressionManager::GetProgressionData <- StreetManager::SetupParRivals. 0x1D9E8 == 121320
+    // is exactly the host offsetof(ProgressionManager, mpProgressionData) -- measured with a
+    // compile-time probe against this build's headers -- i.e. a member read off a NULL base.
+    // ⚠️ THE LESSON, for whoever un-parks the next call into a not-Construct()ed subobject:
+    // "the stage words are seeded" is NOT the same claim as "every member this path reads has a
+    // writer". Enumerate the `this->mp*` reads of the code you are un-parking and check each one.
+    //
+    // WIRED BELOW at the console's own call position (X360 0x82380768, immediately after
+    // AchievementManagerBase::Construct), with the console's own two available values, through a
+    // NAMED subset helper -- not a partial `Construct`. Its full contract, its console
+    // attestation and its deliberate omission (the third owner pointer, whose RoadRulesManager
+    // member does not exist on PC yet) are documented at its declaration in
+    // BrnGameStateStreetManager.h. This is the same shape as mCarSelectManager.Construct above:
+    // pointer stores only, into a subobject that is not otherwise constructed yet, which is
+    // well-defined because nothing dereferences the stored values until Prepare2.
+    mStreetManager.WireOwnerPointers(this, &mProgressionManager);
+
+    // DELETE-WHEN those two closures land (StreetManager::Construct additionally needs a
+    // RoadRulesManager member, DWARF :229 / X360 this+183592, for its third argument) -- and
+    // then the WireOwnerPointers call above, the helper itself, and the `= 0` initialisers
+    // backing it all go with them:
+    //     mAchievementManager.Construct(&mProgressionManager, &mStreetManager,
+    //                                   mModeManager.GetScoringSystem(), this);
+    //     mStreetManager.Construct(this, &mProgressionManager, &mRoadRulesManager);
 }
 
 void GameStateModule::Destruct()
@@ -126,8 +194,15 @@ void GameStateModule::Destruct()
 // (LoadingScriptedState::LoadGameState2 @0x823EF4D8 is the same bracket for the SECOND pass,
 // GameStateModule::Prepare2 @0x8239ED10 -- Progression + Street. Not this wave.)
 //
-// ⚠️⚠️ RECONSTRUCTED SLICE -- say it plainly. ONE stage is real:
+// ⚠️⚠️ RECONSTRUCTED SLICE -- say it plainly. The REAL stages are:
 //   stage 3  E_PREPARESTAGE_LOAD_TRIGGER_DATA -> TriggerQueryManager::Prepare @0x82398218.
+//   stage 4  E_PREPARESTAGE_STUNT_MANAGER     -> the LoadBundle("Districts.dat") half of
+//            StuntManager::Prepare's LoadDistrictMap (the tally half is still deferred; see
+//            the stage body and mbDistrictsBundleRequested).
+//   stages 7/8 and 9/10 -> the vehicle / wheel list GETs.
+//   stage 23 E_PREPARESTAGE_STREET_MANAGER    -> StreetManager::Prepare @0x82350900
+//            (LoadAIData + LoadDistrictMap -> mDistrictMapResourceHandle), added 2026-08-11.
+//   stage 26 -> the car-select / progression list publish.
 // Every other stage logs once and advances, naming its X360 call. In console order they are:
 //   0  START                    ClearData @(not exported by name) + DebugComponent::Register x2
 //                               (this+208544 / this+208376)
@@ -177,6 +252,13 @@ void GameStateModule::Destruct()
 // DeferredGameDataRequest, so a stage waiting on it would never advance.
 static const s32 KI_REPLY_VEHICLE_LIST = 52;
 static const s32 KI_REPLY_WHEEL_LIST   = 59;
+
+// Stage 4's district-map bundle. The console's own literals, off StuntManager::LoadDistrictMap
+// @0x82399458 (`aDistrictsDat`, event id 1, pool 5 == the GameData pool) -- the same spelling
+// BrnWorldModule::LoadDistrictMap @0x827D11D8 uses for the same file.
+static const char* const KPC_DISTRICTS_FILE_NAME = "Districts.dat";
+static const s32         KI_DISTRICTS_EVENT_ID   = 1;
+static const s32         KI_GAMEDATA_POOL_ID     = 5;
 
 namespace
 {
@@ -311,7 +393,42 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // fall through
 
     case E_PREPARESTAGE_STUNT_MANAGER:
-        LogPrepareStageOnce(4, "StuntManager::Prepare [deferred]");
+        // X360: `if (!StuntManager::Prepare(this + 183952, out)) break;` -- and
+        // StuntManager::Prepare @0x82380F30 opens with `if (!LoadDistrictMap(out)) return false;`
+        // (@0x82399458), i.e. LoadBundle("Districts.dat", pool 5) -> wait -> acquire("Districts")
+        // -> bind. THE TALLY HALF (the county/stunt-element census the rest of that Prepare does)
+        // IS STILL DEFERRED -- this module has no StuntManager sub-object and BrnStuntManager.cpp's
+        // loader is an inert stub.
+        //
+        // ⭐ WHAT IS REAL HERE, and why it has to be: stage 23's
+        // StreetManager::LoadDistrictMap @0x8234FB98 only ACQUIRES "Districts" -- it never loads
+        // the bundle, because on the console THIS stage loaded it 19 stages earlier. Without the
+        // bundle resident, PoolModule::DoAcquireResourceRequest still replies (it always does)
+        // but with a NULL handle, and SetupParRivals would then null-deref. So the console's own
+        // LoadBundle is issued here, with the console's own arguments, latched by
+        // meDistrictsBundleStage (which stands in for StuntManager::meDistrictMapLoadStage --
+        // see its declaration). Same request idiom as stage 3's Triggers.dat leg.
+        mePrepareStage = E_PREPARESTAGE_STUNT_MANAGER;
+        if (meDistrictsBundleStage == E_DISTRICTS_BUNDLE_NOT_REQUESTED)
+        {
+            // Console order, off 0x82399458 case 0: Clear FIRST, then LoadBundle (the mirror
+            // image of LoadStreetData's request-then-clear). `Clear` only drops stale replies.
+            mReceiverQueue.Clear();
+            lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
+                &mReceiverQueue, KI_DISTRICTS_EVENT_ID, KI_GAMEDATA_POOL_ID,
+                KPC_DISTRICTS_FILE_NAME, /*lbUseHDCache*/ false);
+            meDistrictsBundleStage = E_DISTRICTS_BUNDLE_REQUESTED;
+            break;   // the console returns here too (its case 0 ends `result = 0`)
+        }
+        if (meDistrictsBundleStage == E_DISTRICTS_BUNDLE_REQUESTED)
+        {
+            // The console's case 1 (E_DISTRICT_MAP_LOAD_RESPONSE): wait for the load reply.
+            if (mReceiverQueue.GetCount() <= 0)
+                break;
+            mReceiverQueue.Clear();
+            meDistrictsBundleStage = E_DISTRICTS_BUNDLE_LOADED;
+            LogPrepareStageOnce(4, "Districts.dat bundle loaded; StuntManager tally half [deferred]");
+        }
         // fall through
     case E_PREPARESTAGE_REQUEST_CHALLENGE_LIST:
     case E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST:
@@ -367,10 +484,27 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     case E_PREPARESTAGE_PROGRESSION:
     case E_PREPARESTAGE_RICH_PRESENCE:
     case E_PREPARESTAGE_ACHIEVEMENT_MANAGER:
+        LogPrepareStageOnce(13, "the 10 manager prepares (Mode..Achievement) [deferred]");
+        // fall through
+
     case E_PREPARESTAGE_STREET_MANAGER:
+        // ⭐ REAL. X360 LABEL_51: `*(this+552) = 23;
+        //     if (!StreetManager::Prepare(this + 284520, out, this + 232384)) break;`
+        // i.e. mStreetManager.Prepare(out, &mReceiverQueue). StreetManager::Prepare @0x82350900 is
+        //     LoadAIData(out, rq) && LoadDistrictMap(out, rq)
+        //         -> debug component Construct + Register; return true
+        // LoadDistrictMap @0x8234FB98 is the ONLY writer of mDistrictMapResourceHandle, which
+        // SetupParRivals dereferences unconditionally -- so this stage is the precondition for
+        // Prepare2 case 2's SetupParRivals leg. It acquires "Districts" out of pool 5; stage 4
+        // above is what makes that bundle resident.
+        mePrepareStage = E_PREPARESTAGE_STREET_MANAGER;
+        if (!mStreetManager.Prepare(lpOutputBuffer, &mReceiverQueue))
+            break;
+        // fall through
+
     case E_PREPARESTAGE_IMAGE_MANAGER:
     case E_PREPARESTAGE_RUMBLE_MANAGER:
-        LogPrepareStageOnce(13, "the 13 manager prepares (Mode..Rumble) [deferred]");
+        LogPrepareStageOnce(24, "GameStateImageManagerBase / RumbleManager::Prepare [deferred]");
         // fall through
     case E_PREPARESTAGE_DONE:
         // [diagnostic, one-shot] print BOTH ENDS of the two list stages -- a non-null pointer
@@ -467,8 +601,9 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
 
         LogPrepareStageOnce(26, "car-select list publish REAL; DriveThruManager::Prepare [deferred] -- prepare DONE");
         // X360 tail: `*(this + 552) = 1; *(this + 560) = 0;` -- the machine re-arms at MANAGER
-        // for a later re-prepare and clears the second-pass stage word (which this slice does
-        // not model yet). Reproduced for the stage word it does have.
+        // for a later re-prepare and clears the +560 flag. (CORRECTION 2026-08-11: +560 is NOT
+        // Prepare2's stage word, as an earlier note here claimed -- Prepare2 @0x8239ED10 switches
+        // on this+556 (`lwz r11, 0x22C(r31)`). +560 is a separate flag this slice does not model.)
         mePrepareStage = E_PREPARESTAGE_MANAGER;
         lbDone = true;
         break;
@@ -480,6 +615,169 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
 
     lpOutputBuffer->UnlockForWrite();
     mbIsUpdating = false;
+    return lbDone;
+}
+
+// ----------------------------------------------------------------------------
+// ⭐ X360 0x8239ED10 -- GameStateModule::Prepare2, the SECOND-pass prepare.
+//
+// THE SHAPE (console, instruction for instruction off 0x8239ED10):
+//     LockForWrite(lpOutputBuffer);
+//     switch (mePrepare2Stage /* this+0x22C */) {
+//       case 0: case 1:
+//           mePrepare2Stage = 1;
+//           if (!mProgressionManager.Prepare2(lpOutputBuffer,          // r4
+//                                             &mModeManager,           // r5 == this + 0x1020
+//                                             &mReceiverQueue,         // r6 == this + 0x38BC0
+//                                             mTriggerQueryManager.GetTriggerData(),  // r7
+//                                             achievementManager))     // r8 == this + 181680
+//               break;
+//           // fall through
+//       case 2:
+//           mePrepare2Stage = 2;
+//           if (!mStreetManager.Prepare2(lpOutputBuffer, &mReceiverQueue, &mTriggerQueryManager))
+//               break;
+//           // fall through
+//       case 3: lbDone = true; break;
+//     }
+//     UnlockForWrite(lpOutputBuffer);
+//
+// ⭐ THE PROGRESSION LEG IS REAL. This is what the whole junkyard -> car-select handover was
+// missing: ProgressionManager::LoadProgressionData @0x82399ED0 is the ONLY writer of
+// mpProgressionData in the entire image, and nothing on PC had ever driven it, so
+// GetProgressionData() answered NULL and OnPlayerCarChange fired the console's own
+// "lpProgressionData != NULL" assert at BrnGameStateModule.cpp:4636.
+//
+// ⭐ BOTH LEGS ARE WIRED NOW (2026-08-11) -- the two "honest deviations" this banner used to
+// list are paid off:
+//   * the ACHIEVEMENT MANAGER (X360 this+181680) is a REAL embedded AchievementManagerX360
+//     subobject (BrnGameStateModule.h, DWARF :226), constructed by this module's Construct with
+//     the console's own four arguments. `&mAchievementManager` is passed as r8, so
+//     ProgressionManager::Prepare2's `lpAchievementManager` assert
+//     (BrnProgressionManager.cpp:265) no longer fires every boot.
+//   * the STREET MANAGER (X360 this+284520) is a REAL embedded StreetManager subobject
+//     (DWARF :425), and case 2 now drives the console's own STREETDATA.DAT load.
+//
+// ⭐ THE STREET PARK IS GONE (2026-08-11, SetupParRivals wave). Case 2 below is now the single
+// console call `mStreetManager.Prepare2(out, &mReceiverQueue, &mTriggerQueryManager)`
+// (X360 0x823509D8 == `if (LoadStreetData(out, rq)) { SetupParRivals(tqm); return 1; }`) --
+// both halves, no stand-in. See the case body for what closed it.
+// ----------------------------------------------------------------------------
+bool GameStateModule::Prepare2(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
+{
+    if (lpOutputBuffer == 0)
+    {
+        CGS_ASSERT(false, "lpOutputBuffer");
+        return false;
+    }
+
+    lpOutputBuffer->LockForWrite();
+
+    bool lbDone = false;
+
+    switch (mePrepare2Stage)
+    {
+    case E_PREPARE2STAGE_START:
+    case E_PREPARE2STAGE_PROGRESSION:
+    {
+        mePrepare2Stage = E_PREPARE2STAGE_PROGRESSION;
+
+        // X360 `BrnTrigger::TriggerData_::GetMemor(this + 43888)` -- the trigger RESOURCE MEMORY
+        // pointer, which is exactly what GetTriggerData() hands back. The manager stores it as an
+        // opaque back-pointer (its own member is typed void*), hence the const strip.
+        void* lpTriggerData =
+            const_cast<void*>(static_cast<const void*>(mTriggerQueryManager.GetTriggerData()));
+
+        // X360 r8 == `a1 + 181680` -- the embedded achievement manager, by address.
+        if (!mProgressionManager.Prepare2(lpOutputBuffer,
+                                          &mModeManager,
+                                          &mReceiverQueue,
+                                          lpTriggerData,
+                                          &mAchievementManager))
+        {
+            break;
+        }
+    }
+        // fall through
+
+    case E_PREPARE2STAGE_STREET_MANAGER:
+    {
+        mePrepare2Stage = E_PREPARE2STAGE_STREET_MANAGER;
+
+        // X360: `if (!StreetManager::Prepare2(this + 284520, out, this + 232384, this + 42320))
+        //           break;` -- i.e. mStreetManager.Prepare2(out, &mReceiverQueue,
+        // &mTriggerQueryManager). StreetManager::Prepare2 @0x823509D8 is exactly two things:
+        //     if (LoadStreetData(this, out, rq)) { SetupParRivals(this, tqm); return 1; }
+        //     return 0;
+        //
+        // ⭐ THE LOAD HALF IS REAL. LoadStreetData @0x8234F630 is the only writer of mpStreetData
+        // in the whole image (LoadBundle "STREETDATA.DAT" -> acquire "StreetData" -> bind), so
+        // this is what makes StreetManager::GetStreetData() answer non-null at all.
+        //
+        // ⭐ THE DATA GAP IS CLOSED (2026-08-11, district-map wave). What this park used to say
+        // -- "the district map is NULL for two independent reasons" -- is no longer true:
+        //   (a) Prepare stage 23 (E_PREPARESTAGE_STREET_MANAGER) now pumps
+        //       StreetManager::Prepare @0x82350900, so LoadDistrictMap @0x8234FB98 runs, and
+        //       stage 4 makes the DISTRICTS.DAT bundle resident first (its acquire needs that --
+        //       the machine only ACQUIRES "Districts", it never loads the bundle); and
+        //   (b) LoadDistrictMap's handle bind is REAL now -- it reads the acquire response's
+        //       {mpResourceMemory, mpSourceEntry} pair BY MEMBER (X360 payload+0x18).
+        // DISTRICTS.DAT ships in build/game and is a correct platform-4 bundle: bnd2 v2,
+        // platform 4, ONE resource, id 0x68E318DC == HashString("Districts"), type 0x30 ==
+        // WorldPainter2D (registered in CgsResourceTypeRegistration.cpp; its FixUp is
+        // BinaryFileResourceType::FixUp, a genuine no-op -- a binary blob has nothing to
+        // relocate), payload {mu32DataSize = 0x10010, mu32DataOffset = 0x10} over a 256x256
+        // district grid.
+        //
+        // ⭐ THE BODY GAP IS CLOSED (2026-08-11, SetupParRivals wave). What this park used to
+        // list -- four symbols SetupParRivals could not link against -- is now all homed, so the
+        // console's own single call is made below:
+        //   * BrnStreetData::Road::GetRoadLimitId0()          -> header inline, BrnStreetData.h
+        //     (asm: the `ld r10, 0x18(r23)` inside SetupParRivals itself, 0x8233F758).
+        //   * BrnProgression::ProgressionData::GetRival(s32)  -> BrnProgressionData.cpp
+        //     (asm: `lwz 0x28 / add stride 0x38` + the BrnProgressionData.h:460 bounds assert,
+        //     attested identically at 0x823363F8 and 0x8233F828).
+        //   * CgsNumeric::Random::RandomInt(s32, s32)         -> CgsRandom.cpp
+        //     (asm: the CgsRandom.h:320/:323 assert pair + `divwu` reduction of the PRE-step
+        //     seed's high word, read in full out of Shuffle<u16> @0x8271B420, which is the one
+        //     expansion with a runtime liMin).
+        //   * StreetManager::FindRivalsByDistrict             -> its own split TU
+        //     (BrnGameStateStreetManager_FindRivalsByDistrict.cpp; the _wC_04 partfile that used
+        //     to be its only home costs four other symbols, so the one function was split out
+        //     per the _Prepare.cpp precedent -- as were SetupParRivals and Prepare2 themselves).
+        // Net measured cost of the three split TUs + the three accessor bodies: ZERO new
+        // unresolved externals (cl /c with the build's flags + dumpbin /SYMBOLS against the
+        // defined-symbol set of build\game\obj).
+        //
+        // ⚠️ AND THE DISTRICT MAP IS ACTUALLY BOUND NOW. The previous boot printed
+        // `[StreetManager] district map: handle=0` with DISTRICTS.DAT demonstrably resident;
+        // the cause was in StreetManager::LoadDistrictMap, not in this stage machine -- its
+        // acquire tagged the resource id with the pool id (a Hex-Rays store-fusion artifact) and
+        // posted the request at the console's 32-bit size. Both are fixed in
+        // BrnGameStateStreetManager_wB_01.cpp, which carries the full evidence. SetupParRivals
+        // additionally carries a documented PC-only guard so a future acquire failure names
+        // itself instead of null-dereferencing here.
+        if (!mStreetManager.Prepare2(lpOutputBuffer, &mReceiverQueue, &mTriggerQueryManager))
+        {
+            break;
+        }
+    }
+        // fall through
+
+    case E_PREPARE2STAGE_DONE:
+        // The console does NOT write 3 into the stage word here (case 3 is only `li r28, 1`), so
+        // a later re-entry re-runs the street leg -- which is idempotent once loaded. Reproduced:
+        // no store.
+        lbDone = true;
+        break;
+
+    default:
+        // The console's jump table sends anything > 3 straight to the unlock tail with lbDone
+        // still false -- there is no assert on this switch.
+        break;
+    }
+
+    lpOutputBuffer->UnlockForWrite();
     return lbDone;
 }
 
@@ -570,6 +868,17 @@ bool GameStateModule::IsOnlineGameMode()
 GameStateModuleIO::EGameModeType GameStateModule::GetCurrentGameModeType() const
 {
     return mModeManager.GetCurrentGameModeType();
+}
+
+// ⭐ REAL (2026-08-11). The embedded achievement manager (X360 this+181680). Every console reader
+// spells it as an inline `this + 181680` pointer adjust rather than a call -- BurnoutSkillzManager::
+// Construct @0x82332688 (`*(a1 + 124) = *(a2 + 27992) + 181680`), Prepare2 @0x8239ED10 (r8),
+// ProcessGameEvents @0x823A0A18, ProcessTakedownEvents @0x8238FC50, PostWorldUpdate @0x8238F358,
+// UpdateShowtimeMode @0x82380EF8 and CheckForAllEventsBeingFound @0x82382460 -- so there is no
+// out-of-line X360 symbol to cite for the accessor itself; it is the de-inlined form of that adjust.
+AchievementManagerBase* GameStateModule::GetAchievementManager()
+{
+    return &mAchievementManager;
 }
 
 // X360 @ 0x82311620. Returns the player's GLOBAL race-car index (its slot in the full world race-car

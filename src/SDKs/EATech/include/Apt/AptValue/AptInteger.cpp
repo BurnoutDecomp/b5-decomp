@@ -4,42 +4,65 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"
-#include <new>   // placement new
+#include <intrin.h>   // _InterlockedExchange (the free-list spin lock)
+#include <new>        // placement new
 
 AptInteger* AptInteger::spFirstFree = 0;
 
+// The free-list spin lock -- the X360 brackets every spFirstFree mutation with the
+// lwarx/stwcx. interrupt-masked test-and-set idiom.
+// FLAG PC-platform leaf: spin lock modelled as a host-portable interlocked TAS
+// (threading primitive, not an engine method; uncontended on the single-thread
+// bring-up path -- the AptString.cpp / AptStringPool.cpp treatment).
+namespace
+{
+    volatile long gAptIntegerFreeListLock = 0;
+    // FLAG PC-platform leaf: threading primitive (host interlocked TAS).
+    inline void AptIntegerFreeListLock_Acquire()
+    {
+        while (_InterlockedExchange(&gAptIntegerFreeListLock, 1) != 0) {}
+    }
+    // FLAG PC-platform leaf: threading primitive (host interlocked TAS).
+    inline void AptIntegerFreeListLock_Release()
+    {
+        _InterlockedExchange(&gAptIntegerFreeListLock, 0);
+    }
+}
+
 // @ 0x82AE7D48 -- recycle a freed AptInteger from the free-list, else pool-allocate one,
-// then (re)construct in place with nValue.
-//
-// FLAG (faithful note): the X360 guards spFirstFree with an lwarx/stwcx atomic spinlock
-// (multithreaded) and, when reusing a freed value, re-marks it release-at-end and re-registers
-// it in the per-frame deferred-release vector (the Apt value frame garbage collector). The PC
-// boot path is single-threaded and that frame-GC vector is part of the not-yet-reconstructed
-// Apt runtime startup (AptInit), so this reconstructs the core, observable Create semantics --
-// pop the free-list, else allocate from the non-GC pool, then placement-construct.
+// then (re)construct in place with nValue. The release-at-end re-mark + deferred-vector
+// re-registration the X360 shows inline on the reuse path is the AptValue base ctor's
+// GC-thread arm (sub_82AE3000, inlined) -- reproduced by the placement-new ctor, whose
+// defer queue is gated on the off_8324E51C vector (see AptValue.cpp).
 AptInteger* AptInteger::Create(const int nValue)
 {
+    AptIntegerFreeListLock_Acquire();
     AptInteger* lpValue = spFirstFree;
     if (lpValue != 0)
     {
         spFirstFree = lpValue->mpNextFree;     // pop the recycled value
+        AptIntegerFreeListLock_Release();
         return ::new (lpValue) AptInteger(nValue);
     }
+    AptIntegerFreeListLock_Release();
 
-    // Free-list empty -> allocate from the non-GC pool (X360: DOGMA_PoolManager::Allocate of
-    // sizeof(AptInteger); 12 on PPC). Guarded for null until AptInit wires the pool.
+    // Free-list empty -> allocate from the non-GC pool (X360: DOGMA_PoolManager::Allocate
+    // of sizeof(AptInteger); 12 on PPC). gpNonGCPoolManager is wired by
+    // AptAllocatorInitialize (AptInit.cpp); the null guard keeps a pre-boot call inert.
     void* lpMem = (gpNonGCPoolManager != 0) ? gpNonGCPoolManager->Allocate(sizeof(AptInteger)) : 0;
     if (lpMem == 0)
         return 0;
     return ::new (lpMem) AptInteger(nValue);
 }
 
-// @ 0x82AD77C0 -- recycle: push onto the free-list (not freed; ClearPool does the real release).
-// FLAG: the X360 lwarx/stwcx atomic spinlock around spFirstFree is omitted (single-threaded boot).
+// @ 0x82AD77C0 -- recycle: push onto the free-list (not freed; ClearPool does the real
+// release), under the free-list lock.
 void AptInteger::Destroy()
 {
+    AptIntegerFreeListLock_Acquire();
     mpNextFree  = spFirstFree;
     spFirstFree = this;
+    AptIntegerFreeListLock_Release();
 }
 
 // Release every recycled value back to the pool (called at Apt shutdown / pool clear).

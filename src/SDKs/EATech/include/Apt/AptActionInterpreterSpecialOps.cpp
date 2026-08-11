@@ -16,11 +16,13 @@
 // SWF opcodes match exactly (GetTime 0x34, Return 0x3E, StoreRegister 0x87); the
 // 0x56/0x58/0x70/0x71 are EA's extended set.
 //
-// FLAG -- string-pool constants + the host clock (wired at AptInit):
+// String-pool constants + the frame clock:
 //   gAptKeyThis (unk_8324E6C0 "this"), gAptKeyGlobal (unk_8324E59C "_global") are
-//   pooled EAStringC keys; gAptTimerMs (dword_8324D820) is the host millisecond
-//   clock the runtime advances each frame. The AptString::Create seed (unk_820046A7)
-//   is the console's seed-prefix const -- irrelevant here (the str is overwritten).
+//   defined with their literal contents in AptGlobals.cpp. GetTimer reads
+//   dword_8324D820 -- the SAME counter AptUpdate advances per banked frame
+//   (`++dword_8324D820` @0x82B0DB68), whose one canonical PC symbol is
+//   gAptInputRecorderTag. The AptString::Create seed (unk_820046A7) is the
+//   empty-string const -- irrelevant here (the string is overwritten).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -29,7 +31,8 @@
 #include "SDKs/EATech/include/Apt/AptTarget.h"            // gpAptTarget (the drag-state view)
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"   // the director drag block
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
-#include "SDKs/EATech/include/Apt/AptValue/AptString.h"     // AptString::Create / GetInternalString
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"       // AptString::Create / GetInternalString
+#include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h" // the tag-33 boxed-string form (StartDragMovie name)
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"    // AptInteger::Create
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"     // EAStringC::operator=
 #include "SDKs/EATech/include/Apt/AptObject.h"              // AptValueWithHash (gpAptGlobalFallback upcast)
@@ -37,19 +40,22 @@
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"  // AptScriptFunctionBase::SetRegisterValue
 #include "SDKs/EATech/include/Apt/AptCIH.h"                 // AptCIH : AptValueGC (mpCIH -> AptValue* upcast)
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"            // GetCharacterInst / GetTypeTag
+#include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"             // AptMatrix::tx/ty (the drag grab offset)
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // mnClipActionFlags / mDisplayList
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"              // removeClonedObject
 
 #include <cstdint>
 
-// FLAG (string-pool constants -- wired at AptInit; gAptKeyThis already used by
-// AptScriptFunction2): the pooled "this"/"_global" keys.
+// The pooled "this"/"_global" keys -- defined with their literal contents in
+// AptGlobals.cpp.
 extern const EAStringC gAptKeyThis;     // unk_8324E6C0
 extern const EAStringC gAptKeyGlobal;   // unk_8324E59C
 
-// FLAG (host clock -- advanced by the runtime each frame; wired at AptInit): the
-// elapsed-milliseconds counter GetTimer reads (console dword_8324D820).
-extern int32_t gAptTimerMs;
+// The counter GetTimer reads (console dword_8324D820) IS the per-banked-frame tick
+// AptUpdate advances -- one dword, one PC symbol: gAptInputRecorderTag
+// (AptGlobals.cpp). The old gAptTimerMs duplicate never advanced, so GetTimer
+// pushed a frozen 0.
+extern uint32_t gAptInputRecorderTag;   // dword_8324D820
 
 // ---------------------------------------------------------------------------
 // PushThis @0x82AF4018 (0x56) -- push the string "this".
@@ -57,7 +63,7 @@ extern int32_t gAptTimerMs;
 void AptActionInterpreter::_FunctionAptActionPushThis(AptActionInterpreter* pInterp,
                                                       LocalContextT* /*pContext*/)
 {
-    AptString* pStr = AptString::Create("");          // FLAG: seed const, overwritten below
+    AptString* pStr = AptString::Create("");          // console seed @0x820046A7 ("" -- overwritten below)
     *pStr->GetInternalString() = gAptKeyThis;
     pInterp->mpStack[pInterp->mnStackTop++] = pStr;    // inlined stackPush
     pStr->AddRef();
@@ -69,7 +75,7 @@ void AptActionInterpreter::_FunctionAptActionPushThis(AptActionInterpreter* pInt
 void AptActionInterpreter::_FunctionAptActionPushGlobal(AptActionInterpreter* pInterp,
                                                         LocalContextT* /*pContext*/)
 {
-    AptString* pStr = AptString::Create("");          // FLAG: seed const, overwritten below
+    AptString* pStr = AptString::Create("");          // console seed @0x820046A7 ("" -- overwritten below)
     *pStr->GetInternalString() = gAptKeyGlobal;
     pInterp->mpStack[pInterp->mnStackTop++] = pStr;
     pStr->AddRef();
@@ -103,7 +109,7 @@ void AptActionInterpreter::_FunctionAptActionPushGlobalVariable(AptActionInterpr
 void AptActionInterpreter::_FunctionAptActionGetTimer(AptActionInterpreter* pInterp,
                                                       LocalContextT* /*pContext*/)
 {
-    AptInteger* pVal = AptInteger::Create(gAptTimerMs);
+    AptInteger* pVal = AptInteger::Create(static_cast<int32_t>(gAptInputRecorderTag));   // dword_8324D820
     pInterp->mpStack[pInterp->mnStackTop++] = pVal;
     pVal->AddRef();
 }
@@ -154,9 +160,9 @@ void AptActionInterpreter::_FunctionAptActionReturn(AptActionInterpreter* /*pInt
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-// The clip's play-head "playing" bit (mnClipActionFlags bit 6 / 0x40): set by Play,
+// The clip's play-head "playing" bit (bIsPlaying, x64 mnClipActionFlags bit 25): set by Play,
 // cleared by Stop / NextFrame / GotoFrame. (Console *(spriteBase + 0x14) & 0x40.)
-static const uint32_t KU_CLIP_PLAYING = 0x40u;
+static const uint32_t KU_CLIP_PLAYING = 0x2000000u;   // bIsPlaying, x64 bit 25 (X360 reversed bit 6)
 
 // The level-instance character type tag (mTypeFlags >> 26 == 15): the timeline ops
 // are no-ops on it. (Console: (mTypeFlags & 0xFC000000) == 0x3C000000.)
@@ -175,40 +181,32 @@ static inline bool IsClipHandleOrCIHNone(const AptValue* pValue)
         || eType == AptVFT_CIHNone;
 }
 
-// FLAG (un-homed AptCIH play-head seek -- declared as an extern shim, matching the
-// sibling AptCIHNativeFunctionHelper.cpp): seek the node's timeline to nFrame.
-//   AptCIH::jumpToFrame @0x82B0C... (X360) -- now the real member, called directly.
+// AptCIH::jumpToFrame (the play-head seek) and AptActionInterpreter::valueToObject
+// @0x82B07FB8 are homed members (AptCIHNativeFunctionHelper.cpp /
+// AptActionInterpreterInterpHelpers.cpp), called directly below.
 
-// FLAG (un-homed AptActionInterpreter::valueToObject -- declared as an extern shim,
-// matching the sibling AptCIHNativeFunctionHelper.cpp): coerce pValue to the object
-// it designates under (pScope, pTarget), writing the result through *ppOut.
-//   AptActionInterpreter::valueToObject @0x82B0... (X360).
-// AptActionInterpreter::valueToObject is now a member (declared in AptActionInterpreter.h).
-
-// FLAG (AptGC layer -- AptValueVector::ReleaseValues over off_8324E51C): drain the
-// deferred-release value vector once the operand stack empties. Shared with the
-// Var/Member/Control opcodes (declared there too); the host-side vector type/global
-// are not reconstructed yet, so the flush is encapsulated.
+// Drain the deferred-release value vector (off_8324E51C) once the operand stack
+// empties -- homed in AptGC.cpp over the real gValuesToRelease vector. Shared with
+// the Var/Member/Control opcodes (declared there too).
 extern void AptFlushDeferredReleases();
 
-// FLAG (homed by the AS-globals layer): the shared "undefined" value (off_8324D814).
+// The shared "undefined" value (off_8324D814) -- defined in AptGlobals.cpp, built
+// at AptInit.
 extern AptValue* gpUndefinedValue;
 
-// FLAG (host path-context resolver -- console sub_82B02F80, the same one CallFunction
-// uses): parse pName into (*ppOutContext, *pOutLeaf) under (pScope, pTarget). Shared
-// with the StackOps call opcodes (declared there too).
+// The path-context resolver (console sub_82B02F80, the same one CallFunction uses):
+// parse pName into (*ppOutContext, *pOutLeaf) under (pScope, pTarget). Homed in
+// AptActionInterpreterInterpHelpers.cpp; shared with the StackOps call opcodes.
 extern void AptResolveTargetContext(AptValue* pScope, AptValue* pTarget,
                                            const EAStringC* pName,
                                            AptValue** ppOutContext, EAStringC* pOutLeaf);
 
 // ---------------------------------------------------------------------------
-// FLAG (the drag-state singleton + mouse globals -- host/AptApt layer, wired at
-// AptInit; reached through the apt-context global off_8324E574 in the console).
-// StartDragMovie writes the active drag target + its constrain rect + grab offset
-// into the engine's single drag-state record. The host owns the record (it lives
-// behind the apt-context global's +0x18 slot in the console); it is modelled here
-// as a small named struct so the float-field stores stay faithful (the console
-// reaches them at +0x3C/+0x40.. off the record) without raw offset arithmetic.
+// The drag-state record: StartDragMovie writes the active drag target + its
+// constrain rect + grab offset into the director's mpDragMC..mGrabOffset member
+// run (console gpAptTarget (off_8324E574) -> mpAnimationTarget -> +0x3C..0x54).
+// Modelled as a small named struct view over those real members so the float-field
+// stores stay faithful without raw offset arithmetic.
 // ---------------------------------------------------------------------------
 // The drag block lives ON the director (X360 StartDragMovie @0x82B03B00..:
 // target @+0x3C, constrain L/T/R/B @+0x40..+0x4C, grab X/Y @+0x50/+0x54 --
@@ -229,10 +227,10 @@ struct AptDragState
 
 // AptApt_GetDragState inlined at its call site(s).
 
-// FLAG (host mouse position -- the engine's current cursor coords, console
-// dword_8324E534 / dword_8324E538, advanced by the input layer each frame; the
-// console loads them as 64-bit then converts int->float). The grab-offset path
-// reads them once.
+// The engine's current cursor coords (console dword_8324E534 / dword_8324E538 --
+// the dwords AptAnimationTarget::GetXMousePos/GetYMousePos read; written by the
+// host input layer each frame). Storage defined in AptGlobals.cpp; the console
+// loads them as 64-bit then converts int->float.
 extern int32_t gAptMouseX;   // dword_8324E534
 extern int32_t gAptMouseY;   // dword_8324E538
 
@@ -271,7 +269,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame(AptActionInterpreter* pIn
     // Flush the AptGC deferred-release vector once the operand stack has drained
     // (console: off_8324E51C->count != 0 && mnStackTop == 0).
     if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // off_8324E51C drain (homed, AptGC.cpp)
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +388,7 @@ void AptActionInterpreter::_FunctionAptActionRemoveSprite(AptActionInterpreter* 
     {
         AptValue* pResolved = nullptr;
         pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
-                                           pTop, &pResolved);   // FLAG: un-homed valueToObject
+                                           pTop, &pResolved);   // homed member (InterpHelpers.cpp)
         if (pResolved && IsClipHandleOrCIHNone(pResolved))
         {
             // The cloned node lives in its display-list parent's child display list
@@ -405,13 +403,10 @@ void AptActionInterpreter::_FunctionAptActionRemoveSprite(AptActionInterpreter* 
     pInterp->stackPop();
 }
 
-// FLAG (the drag target's clip matrix translation -- the console reaches it through
-// the resolved value's boxed object (+0x20) -> character instance (+4) -> position
-// matrix (+8), reading the translate components at the matrix's +0x10/+0x14, with a
-// null-matrix fallback to the engine's identity translate (flt_8324E2B0). AptMatrix
-// is not yet a reconstructed named type, so the deref chain is encapsulated here):
-// write the drag target's clip translate (x,y) through the out params.
-extern void AptApt_GetDragTargetTranslate(AptValue* pDragTarget, float* pOutX, float* pOutY);
+// (The AptApt_GetDragTargetTranslate shim is retired: the console's translate chain
+// CIH+0x20 (char inst) -> +4 (render item) -> +8 (position matrix), with the
+// null-matrix fallback to the identity translate (flt_8324E2B0 == gAptIdentityMatrix),
+// IS the homed AptCIH::GetPositionMatrixConst @0x82ADC2F0 -- called directly below.)
 
 // ---------------------------------------------------------------------------
 // StartDragMovie @0x82B03A20 -- AS startDrag opcode: begin dragging a movie clip.
@@ -435,14 +430,14 @@ void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter
         EAStringC leafName;                                          // console v23 scratch
         AptValue* pResolvedContext = nullptr;                        // console HIDWORD(v24)
 
-        // Boxed strings (type != 1) expose their AptString behind +0x20.
+        // Boxed strings (type != 1) expose their AptString behind AptStringObject::mpValue.
         const EAStringC* pName = (pTarget->getVtblIndex() == AptVFT_StringValue)
             ? reinterpret_cast<AptString*>(pTarget)->GetInternalString()
-            : (*reinterpret_cast<AptString**>(reinterpret_cast<char*>(pTarget) + 0x20))
-                  ->GetInternalString();   // FLAG: type-33 box (console *(Variable+32) then +8)
+            : static_cast<AptString*>(static_cast<AptStringObject*>(pTarget)->GetBoxedString())
+                  ->GetInternalString();   // tag-33 box (console *(Variable+32) then +8)
 
         AptResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
-                                       pName, &pResolvedContext, &leafName);   // FLAG: sub_82B02F80
+                                       pName, &pResolvedContext, &leafName);   // sub_82B02F80 (homed, InterpHelpers.cpp)
         pTarget = pInterp->getVariable(pResolvedContext, pContext->mpPendingReleaseValue,
                                        &leafName, 1, 1, 0);
     }
@@ -463,12 +458,14 @@ void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter
     // -- the cursor->clip offset is (mouse - clip-translate).
     if (!pInterp->mpStack[pInterp->mnStackTop - 2]->isInteger())
     {
-        float fTransX = 0.0f;
-        float fTransY = 0.0f;
-        AptApt_GetDragTargetTranslate(pTarget, &fTransX, &fTransY);   // FLAG: clip matrix translate
+        // The drag target's clip translate (console @0x82B03A20: value+0x20 char
+        // inst -> +4 render item -> +8 position matrix, null -> &flt_8324E2B0
+        // identity) == the homed AptCIH::GetPositionMatrixConst chain (the identity
+        // fallback lives inside AptRenderItem::GetPositionMatrixConst).
+        const AptMatrix* pMatrix = static_cast<AptCIH*>(pTarget)->GetPositionMatrixConst();
 
-        pDrag->mGrabOffsetX = static_cast<float>(gAptMouseX) - fTransX;   // console dword_8324E534
-        pDrag->mGrabOffsetY = static_cast<float>(gAptMouseY) - fTransY;   // console dword_8324E538
+        pDrag->mGrabOffsetX = static_cast<float>(gAptMouseX) - pMatrix->tx;   // console dword_8324E534 - matrix[+0x10]
+        pDrag->mGrabOffsetY = static_cast<float>(gAptMouseY) - pMatrix->ty;   // console dword_8324E538 - matrix[+0x14]
     }
 
     // "constrain" (top-3): an integer enables the constrain rect, read from the four
@@ -596,7 +593,7 @@ void AptActionInterpreter::_FunctionAptActionTargetPath(AptActionInterpreter* pI
 
     AptValue* pResolved = nullptr;
     pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
-                                       pTop, &pResolved);   // FLAG: un-homed valueToObject
+                                       pTop, &pResolved);   // homed member (InterpHelpers.cpp)
 
     if (pResolved)
     {
@@ -610,7 +607,7 @@ void AptActionInterpreter::_FunctionAptActionTargetPath(AptActionInterpreter* pI
             scratch = EAStringC("/");   // console InitFromBuffer(&unk_82143A2F == "/") -> scratch
         }
 
-        AptString* pStr = AptString::Create("");    // FLAG: seed const @0x820046A7 (""), overwritten
+        AptString* pStr = AptString::Create("");    // console seed @0x820046A7 ("" -- overwritten below)
         *pStr->GetInternalString() = scratch;
         pInterp->stackPop();
         pInterp->mpStack[pInterp->mnStackTop++] = pStr;   // inlined stackPush

@@ -55,7 +55,8 @@ struct AptPseudoData_t
     // the native-8 record carries a POINTER instead, which this 4-byte slot cannot
     // hold -- and the slot is UNREAD by the mergeState props-overlay pun (it lands
     // on AptFramePlacementProps::mnReserved0C), so it stays 0 on the native-8
-    // path. FLAG: revisit if a consumer of the console value surfaces.
+    // path -- verified unread (the overlay pun lands it on a reserved slot);
+    // nothing consumes the console value.
     s32   miClipActionValue;
     f32   mfRatio;            // [0x10] source ratio         if 0x10 set, else 0.0
     u32   muxFlags;           // [0x14] copy of source flag bits

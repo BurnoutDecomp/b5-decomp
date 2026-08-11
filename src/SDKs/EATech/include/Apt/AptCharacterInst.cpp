@@ -21,6 +21,7 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"   // the sprite/movie-clip subtype (type 5)
 #include "SDKs/EATech/include/Apt/AptCharacterTextInst.h"          // the dynamic-text subtype (type 2)
+#include "SDKs/EATech/include/Apt/AptCharacterMorphInst.h"          // the morph subtype (type 8)
 #include "SDKs/EATech/include/Apt/AptPseudoCIH.h"                 // gpAptPseudoDataPool (off_8324D808, the ctor's pool)
 
 #include <new>   // placement new (factory)
@@ -33,7 +34,7 @@
 //   if ( off_8324E574 )                                // if (gpAptTarget)  -- the create-item guard
 //       Item = AptRenderItem::Manager_CreateItem(pCharacter, dword_8324E520);
 //   mpRenderItem = Item;                               // a1[1] (this+0x4)
-//   mTypeFlags = ((pCharacter ? pCharacter->mnType : 15) << 26) | (mTypeFlags & 0x3FFFFFF);
+//   mTypeFlags = (mTypeFlags & ~0x3F) | (pCharacter ? pCharacter->mnType : 15);   // x64: tag in the LOW 6 bits
 //   if ( Item ) Item->AddReference();                  // atomic ++Item[9] (render item ref count)
 //
 // FAITHFUL create-item dispatch (was an invented AptRTM_CreateItem null-manager fallback): the
@@ -52,9 +53,10 @@ AptCharacterInst::AptCharacterInst(AptCharacter* pCharacter)
         pItem = AptRenderItem::Manager_CreateItem(pCharacter, gnCurrUpdateTick);
     mpRenderItem = pItem;
 
-    // High 6 bits of mTypeFlags = the character's type tag (15 when none).
+    // LOW 6 bits of mTypeFlags = the character's type tag (15 when none).
+    // x64 ctor 0x140825A00: `and dword ptr [rbx+10h],0FFFFFFC0h / or [rbx+10h],ecx`.
     const uint32_t uType = pCharacter ? static_cast<uint32_t>(pCharacter->mnType) : 15u;
-    mTypeFlags = (mTypeFlags & 0x03FFFFFFu) | (uType << 26);
+    mTypeFlags = (mTypeFlags & ~0x3Fu) | (uType & 0x3Fu);
 
     if (pItem)
         pItem->AddReference();
@@ -83,16 +85,19 @@ AptCharacterInst::~AptCharacterInst()
 //                               mnClipActionFlags / mpClipEventHandlers / mDisplayList / etc.)
 //   type 2 (dynamic text): Allocate(32) + base AptCharacterInst
 //   type 4 (button): return null (built elsewhere)
-//   type 1/10/other/null: Allocate(16) + base AptCharacterInst
+//   type 8 (morph): Allocate(20 console / 0x28 x64) + base ctor in the morph-sized block
+//   type 1/10/null: Allocate(16 console / 0x20 x64) + base AptCharacterInst
+//   any other type: return null (BOTH binaries; no base fallback)
 // This MUST allocate the sprite subtype for type 5: the placement path (instantiateCharacter /
 // placeObject / _addToSetCaches / AptCIH::tick) reads/writes the sprite-base members at +0x10..
 // +0x20 (mnGotoFrame / mDisplayList / ...) -- if a type-5 char got only the 16-byte base, those
 // accesses fell OUTSIDE the allocation and CORRUPTED the heap (non-deterministic AVs during the
 // first frame-0 place). Allocates from the DOGMA pool (off_8324D808 == gpAptPseudoDataPool), the
-// console's pool. FLAG: the per-type console VTABLE (off_82145FE0 etc.) is the family's manual
-// mpVTable_unused slot the reconstruction does not model (dispatch is via mTypeFlags), so it is
-// not written -- the type tag (mTypeFlags high 6 bits) still identifies the type. Text/button
-// subtype BEHAVIOUR beyond the base remains a follow-on; the render item stays type-correct.
+// console's pool. NOTE (permanent modelling decision): the per-type console VTABLE
+// (off_82145FE0 etc.) is the family's manual mpVTable_unused slot the reconstruction
+// does not model (dispatch is via the type tag, x64 mTypeFlags LOW 6 bits), so it is
+// not written. Text/button subtype BEHAVIOUR beyond the base remains a follow-on; the
+// render item stays type-correct.
 AptCharacterInst* AptCharacterInst::CreateCharacterInst(AptCharacter* pCharacter)
 {
     const int32_t nType = pCharacter ? pCharacter->mnType : -1;
@@ -122,8 +127,10 @@ AptCharacterInst* AptCharacterInst::CreateCharacterInst(AptCharacter* pCharacter
             return nullptr;
         AptCharacterTextInst* const pTextInst =
             static_cast<AptCharacterTextInst*>(::new (pMem) AptCharacterInst(pCharacter));
-        // Seed the cached layout scalars (the console text-inst ctor's seeds; the render
-        // item's own ctor seeds its scroll to 1 the same way).
+        // Seed the cached layout scalars. HOST ADDITION (deterministic bring-up):
+        // NEITHER binary initialises these -- X360 @0x82AFFF70 case 2 runs the plain
+        // base ctor and x64 0x140825BE0 writes only the vtable, leaving them as pool
+        // garbage until the first layout pass writes them.
         pTextInst->mMaxScroll  = 1;
         pTextInst->mTextWidth  = 0.0f;
         pTextInst->mTextHeight = 0.0f;
@@ -131,11 +138,30 @@ AptCharacterInst* AptCharacterInst::CreateCharacterInst(AptCharacter* pCharacter
         return pTextInst;
     }
 
-    // Every other type (1 / 10 / null / etc.) is the plain base.
-    void* const pMem = gpAptPseudoDataPool->Allocate(sizeof(AptCharacterInst));
-    if (pMem == nullptr)
-        return nullptr;
-    return ::new (pMem) AptCharacterInst(pCharacter);
+    if (nType == 8)
+    {
+        // Morph: base + the one extra morph dword (X360 @0x82AFFF70 case 8 Allocate(20);
+        // x64 factory 0x140835410 `case 8: Allocate(0x28)` + ctor 0x140825900, which runs
+        // only the base-ctor body). The block MUST be morph-sized: a plain-base 0x20
+        // alloc leaves the +0x20 morph member outside the allocation (pool corruption).
+        void* const pMem = gpAptPseudoDataPool->Allocate(sizeof(AptCharacterMorphInst));
+        if (pMem == nullptr)
+            return nullptr;
+        return static_cast<AptCharacterMorphInst*>(::new (pMem) AptCharacterInst(pCharacter));
+    }
+
+    if (nType == 1 || nType == 10 || pCharacter == nullptr)
+    {
+        // Shape / static text / null character: the plain base (console 16; x64 0x20).
+        void* const pMem = gpAptPseudoDataPool->Allocate(sizeof(AptCharacterInst));
+        if (pMem == nullptr)
+            return nullptr;
+        return ::new (pMem) AptCharacterInst(pCharacter);
+    }
+
+    // Any OTHER type: BOTH binaries return null (X360 @0x82AFFF70 switch default;
+    // x64 0x140835410 falls through to `return 0`) -- no base-inst fallback exists.
+    return nullptr;
 }
 
 // ---- render item ----------------------------------------------------------
@@ -177,10 +203,11 @@ AptCharacter* AptCharacterInst::SetCharacter(AptCharacter* pCharacter)
 }
 
 // ---- const reads (through the render item) --------------------------------
-// NULL-SAFE (x64 bring-up): mpRenderItem is null when the render-tree manager is the FLAG'd null stub
-// (no render item was created). The console always has a render item; on our partial bring-up these
-// return safe defaults instead of dereferencing null. FLAG: remove the guards once the render-tree
-// manager lands (every AptCharacterInst will then own a render item).
+// NULL-SAFE (host): the console always has a render item; on x64 mpRenderItem is
+// legitimately null when the inst was built before an Apt target was active (the
+// ctor's gpAptTarget guard, faithful to the X360 ctor), when the pool is exhausted,
+// or for a character type Manager_CreateItem does not build (e.g. button). These
+// return safe defaults instead of dereferencing null.
 const AptCharacter* AptCharacterInst::GetCharacterConst() const { return mpRenderItem ? mpRenderItem->GetCharacterConst() : nullptr; }
 int16_t AptCharacterInst::GetDepth() const     { return mpRenderItem ? mpRenderItem->GetDepth() : static_cast<int16_t>(0); }
 int16_t AptCharacterInst::GetClipDepth() const { return mpRenderItem ? mpRenderItem->GetClipDepth() : static_cast<int16_t>(0); }
@@ -205,13 +232,12 @@ void AptCharacterInst::SetClipDepth(int nClipDepth)
 }
 void AptCharacterInst::SetIsVisible(bool bVisible)
 {
-    // FLAG: AptRenderItem::SetIsVisible (visibility propagation @0x7ED720) is a
-    // follow-on; the writable item + the flag bit are set here.
-    AptRenderItem* pItem = GetRenderItemWritable();
-    if (pItem == nullptr)
-        return;
-    if (bVisible) pItem->mFlags |= 0x80000000u;
-    else          pItem->mFlags &= ~0x80000000u;
+    // Route through the homed AptRenderItem::SetIsVisible (@0x82AE0708 / PS3
+    // @0x7ED720 -- sets the x64 is-visible bit 0 and recomputes the subtree's
+    // mask-driven visibility). The old direct 0x80000000 poke wrote the CONSOLE
+    // bit position, which the x64 GetIsVisible (mFlags & 1) never read.
+    if (AptRenderItem* pItem = GetRenderItemWritable())
+        pItem->SetIsVisible(bVisible);
 }
 
 // ===========================================================================
@@ -223,8 +249,8 @@ void AptCharacterInst::SetIsVisible(bool bVisible)
 // AptRenderTreeManager.cpp (AptRTM_*). Declared extern here (this TU calls them);
 // the earlier no-op stubs were removed to resolve the LNK2005 double-definition.
 // ---------------------------------------------------------------------------
-extern AptCIH* AptCloneManagedItem(AptRenderTreeManager* pMgr, AptCIH* pNode,
-                                int nSourceArg, int nTick);
+extern AptCIH* AptCloneManagedItem(AptRenderTreeManager* pMgr, AptCIH* pSourceNode,
+                                AptCIH* pDestNode, int nTick);
 extern AptCIH* AptManagedItemMoved(AptRenderTreeManager* pMgr, AptCIH* pNode, int nTick);
 
 // The X360 render-tree helpers read the live manager through gpCurrentTargetSim's
@@ -237,12 +263,16 @@ extern AptCIH* AptManagedItemMoved(AptRenderTreeManager* pMgr, AptCIH* pNode, in
 //   return AptRenderTreeManager::Update_CloneItem(gpCurrentTargetSim[11], a1, a2,
 //                                                 dword_8324E520);
 // Tail-call into the manager's clone entry point; passes the scene node, the
-// source argument (r4->r5), and the current update tick. FLAG: the live
-// double-buffer clone is deferred -- AptCloneManagedItem is the manager facade.
+// source argument (r4->r5), and the current update tick. AptCloneManagedItem routes
+// to the real AptRenderTreeManager::Update_CloneItem @0x82AE0B38 (AptRenderTreeManager.cpp).
 // ---------------------------------------------------------------------------
-AptCIH* AptCharacterInst::CloneItem(AptCIH* pNode, int nArg)
+void AptCharacterInst::CloneItem(const AptCIH* pSrc, AptCIH* pDst)
 {
-    return AptCloneManagedItem(AptCurrentRenderTreeManager(), pNode, nArg, gnCurrUpdateTick);
+    // x64 SAX(PEBV,PEAV): void return, (const src, dest) CIH pair -- carried
+    // pointer-width through the whole chain (the old int second arg truncated
+    // the dest pointer on x64).
+    AptCloneManagedItem(AptCurrentRenderTreeManager(), const_cast<AptCIH*>(pSrc),
+                        pDst, gnCurrUpdateTick);
 }
 
 // ---------------------------------------------------------------------------
@@ -363,9 +393,10 @@ AptCIH* AptCharacterInst::ItemMoved(AptCIH* pNode)
 // ---------------------------------------------------------------------------
 void AptCharacterInst::MoveRenderDataFrom(AptCharacterInst* pSource)
 {
-    // NULL-SAFE (x64 bring-up): render items are null when the render-tree manager is the null stub.
-    // The console always has both items; here we move the render data only when both exist, else just
-    // transfer the property-hash ownership below. FLAG: render-data move resumes once the RTM lands.
+    // NULL-SAFE (host): the console always has both items; on x64 either render item is
+    // legitimately null when its inst was built with no active Apt target (the ctor's
+    // gpAptTarget guard). Move the render data only when both exist; the property-hash
+    // ownership below transfers either way.
     AptRenderItem* pDst = GetRenderItemWritable();
     if (pDst != nullptr && pSource->mpRenderItem != nullptr)
     {

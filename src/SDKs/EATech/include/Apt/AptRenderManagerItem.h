@@ -43,13 +43,13 @@
 #include "SDKs/EATech/include/Apt/AptRenderTreeManager.h"   // _AptRenderItemRootList(::Shutdown)
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed global, owned by the Apt allocator boot TU): the shared fixed-
-// size Apt DOGMA pool the queue nodes (and the root-list nodes + anchor cells)
-// come from. The X360 loads it from off_8324D808 in both owned bodies. Declared
-// here as an extern so this TU compiles + links; the single underlying pool
-// object is shared with the other Apt families (the sibling Apt headers declare
-// the same off_8324D808 slot under their own names -- gpAptSharedPtrPool /
-// gpAptSingleListPool / gpAptPseudoDataPool / ...).
+// The shared fixed-size Apt DOGMA pool the queue nodes (and the root-list nodes
+// + anchor cells) come from. The X360 loads it from off_8324D808 in both owned
+// bodies. DEFINED in AptGlobals.cpp and installed by AptCommonInitialize
+// (AptInit.cpp:261); the single underlying pool object is shared with the other
+// Apt families (the sibling Apt headers declare the same off_8324D808 slot under
+// their own names -- gpAptSharedPtrPool / gpAptSingleListPool /
+// gpAptPseudoDataPool / ...).
 // ---------------------------------------------------------------------------
 extern DOGMA_PoolManager* gpAptRenderManagerPool;   // off_8324D808
 

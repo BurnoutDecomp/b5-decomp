@@ -59,12 +59,11 @@ bool AptExtern::objectMemberSet(AptValue* const /*pThis*/,
 // (Apt.h:405, table +0x3C). Homed here -- the one TU that owns the call -- routed
 // through the named table member rather than the raw .data offset.
 //
-// FLAG: the console call is unconditional (the host installs the table at AptInit);
-// guarded for null here so a write before the host wires the table is a safe no-op
-// during PC bring-up (the slot is null until CgsAptAux installs gAptFuncs).
+// The console call is unconditional, transcribed verbatim: the host installs the
+// slot before any AS runs (CgsAptAux.cpp AptAux::ConstructApt stamps
+// pfnSetExternVariable at the InitializeApt bring-up, ahead of every movie load).
 // ---------------------------------------------------------------------------
 void AptHostSetExternVariable(const char* szVar, const char* szValue)
 {
-    if (gAptFuncs.pfnSetExternVariable != nullptr)   // dword_8324E854
-        gAptFuncs.pfnSetExternVariable(szVar, szValue);
+    gAptFuncs.pfnSetExternVariable(szVar, szValue);   // dword_8324E854
 }

@@ -90,17 +90,58 @@ static bool RegisterDeviceNotif(HDEVNOTIFY* notify)
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// FLAG PC-platform leaf: bounded teardown. HOST POLICY -- there is no console counterpart
+// (the X360 title is torn down by the kernel the moment main() returns).
+//
+// Once the user has asked for the window to close, this process MUST die. The engine's own
+// release path is only partly landed (EngineRelease's gm->Release() loop and GameRelease's
+// gm->Destruct() are still gated -- see BrnMain.cpp), and the pieces that DO run can block:
+// an XAudio2 engine Release, a file device parked mid-transfer, a decoder waiting on a
+// buffer, or the CRT's static teardown. So the whole shutdown gets a fixed budget measured
+// from the moment the close was requested; if the normal path has not already exited the
+// process by then, the watchdog terminates it outright.
+//
+// Armed once and never disarmed: when the normal path wins the race the process is already
+// gone and this thread dies with it.
+// ---------------------------------------------------------------------------
+static const DWORD KU_SHUTDOWN_BUDGET_MS = 5000;
+
+static DWORD WINAPI ShutdownWatchdogProc(LPVOID)
+{
+    Sleep(KU_SHUTDOWN_BUDGET_MS);
+    TerminateProcess(GetCurrentProcess(), 0);
+    return 0;
+}
+
+void CgsSystem::HardwareInit::RequestShutdown()
+{
+    if (mbHardwareRequestsShutdown)
+        return;                                   // already requested; the watchdog is armed
+
+    mbHardwareRequestsShutdown = true;
+
+    HANDLE hWatchdog = CreateThread(nullptr, 0, ShutdownWatchdogProc, nullptr, 0, nullptr);
+    if (hWatchdog)
+        CloseHandle(hWatchdog);
+}
+
 static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {
     case WM_CLOSE:
-        // User closed the window: tear it down (-> WM_DESTROY).
+        // User closed the window: raise the shutdown request FIRST, then tear the window down
+        // (-> WM_DESTROY). The flag is what actually ends the run -- WM_QUIT alone is not
+        // enough, because whichever message pump happens to be running when the close arrives
+        // consumes it, and the assert screen's modal pump used to consume it and discard it.
+        CgsSystem::HardwareInit::RequestShutdown();
         DestroyWindow(hwnd);
         return 0;
     case WM_DESTROY:
-        // Post WM_QUIT so EngineUpdate's message loop exits and WinMain returns (otherwise the
-        // loop spins forever on the destroyed window and the process lingers).
+        // Also covers a destroy that did not come through WM_CLOSE. Post WM_QUIT as well so a
+        // plain `while (message != WM_QUIT)` pump still ends the moment it sees it.
+        CgsSystem::HardwareInit::RequestShutdown();
         PostQuitMessage(0);
         return 0;
     default:

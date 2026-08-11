@@ -28,7 +28,7 @@
 // swap helper are compiler-emitted template bodies). It is therefore reconstructed
 // here as the equivalent typed vector AptFileSavedInputStateVector, accessed by
 // NAMED members (semantic parity, not the console's literal 4-byte offsets / SBO)
-// -- the pervasive x64 PC-port FLAG.
+// -- the pervasive x64 PC-port rule (Phase-0 regime).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -98,8 +98,8 @@ namespace AptSavedInputCheckpoints
 }
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by the saved-input system boot, not yet reconstructed): the single
-// global checkpoint list (ARTIST dword_8324D810). AptLinker::Update and the replay
-// tick operate on this instance. Null until the saved-input system is initialised.
+// The single global checkpoint list (ARTIST dword_8324D810), defined in
+// AptSavedInputCheckpoints.cpp and constructed empty by the Apt update bring-up
+// (AptInit.cpp). AptLinker::Update and the replay tick operate on this instance.
 // ---------------------------------------------------------------------------
 extern AptFileSavedInputStateVector* gpAptSavedInputCheckpoints;   // dword_8324D810

@@ -37,6 +37,7 @@
 #include "SDKs/EATech/include/Apt/AptScriptFunctionByteCodeBlock.h" // the onLoad/onUnload block wrapper
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"            // findChild / getIsDefined
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"      // the operand-stack pop (the unload-call tail)
+#include "SDKs/EATech/include/Apt/Apt.h"                          // AptUserFunctions (gAptFuncs.pfnOnUnload -- the PreDestroy notify slot)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"    // mAnimationFilePtr (the zombie file-state swap)
 #include "SDKs/EATech/include/Apt/AptFile.h"                      // mnState / mnField12 / mFileName
 
@@ -155,16 +156,14 @@ void AptCIH::ForceCleanNativeHash()
 // 8-byte {eventMask, nameIndex} pairs, EXTRACTED from the decrypted XEX below). For
 // each descriptor whose event bit is not already set in this node's native-hash event
 // mask AND that names a real handler (mask & 0x201C7), it resolves the named child
-// against the runtime AS-name table (AptValue::findChild(&gAptEventNameTable[index]));
+// against the interned AS-name pool (AptValue::findChild(&StringPool::saConstant[index]));
 // when the child exists the event bit is OR'd into the hash mask. The return is 1 iff
 // any of the "needs a per-frame update tick" events (mask 0x200C0) was newly bound.
 // ---------------------------------------------------------------------------
 
-// FLAG (homed elsewhere -- the AS-name registration boot TU; console dword_8324E580):
-// the runtime table of registered ActionScript handler-name strings (EAStringC). The
-// descriptors index into it by name id. x64-native: an array of EAStringC (8 bytes
-// each), indexed by element -- NOT the console 4-byte stride.
-extern EAStringC* gAptEventNameTable;
+// (The handler-name strings live in the interned AS-name pool StringPool::saConstant
+// -- console dword_8324E580; the earlier zeroed gAptEventNameTable alias is retired
+// from this reader, see the note inside FindAndSetEvents.)
 
 namespace
 {
@@ -274,9 +273,9 @@ void AptCIH::SetCharacterInst(AptCharacterInst* pCharacterInst, bool bMoveRender
         gpNonGCPoolManager->Deallocate(pOld, sizeof(AptCharacterInst));
     }
 
-    // Notify the render tree the node's render item moved (FLAG: the X360 reads the
-    // manager + tick from gpAptTarget; the established convention resolves the same
-    // manager through AptCurrentRenderTreeManager() + gnCurrUpdateTick).
+    // Notify the render tree the node's render item moved (the X360 reads the
+    // manager + tick from gpAptTarget; the established project convention resolves
+    // the same manager through AptCurrentRenderTreeManager() + gnCurrUpdateTick).
     if (AptRenderTreeManager* pManager = AptCurrentRenderTreeManager())
         pManager->Update_ItemMoved(this, gnCurrUpdateTick);
 }
@@ -311,7 +310,7 @@ float AptCIH::GetCosAngle(const AptMatrix* pMatrix)
 void AptCIH::Remove(bool bClearGCRoots)
 {
     // Cancel any in-flight asset load + drop the queued ActionScript actions
-    // (through the Apt context singleton -- see the FLAG'd accessors above).
+    // (through the Apt context singleton gpAptTarget, as the X360 inlines them).
     gpAptTarget->mpLinker->CancelLoad(this);   // X360 @0x82AFC0C8 (inlined accessor)
     gpAptTarget->mpAnimationTarget->mpActionQueue->RemoveActionFor(this);   // X360 @0x82AFC0D8 (inlined accessor; AptValue* return discarded)
 
@@ -421,25 +420,27 @@ AptCXForm* AptCIH::GetColorMatrixWritable()
 // render item (a halfword store of the 16-bit depth); returns that render item.
 AptRenderItem* AptCIH::SetDepth(int16_t nDepth)
 {
-    return GetCharacterInst()->GetRenderItemWritable()->SetDepth(nDepth);
+    AptRenderItem* pItem = GetCharacterInst()->GetRenderItemWritable();
+    pItem->SetDepth(nDepth);   // x64 QEAAXH@Z: void -- the item pointer is this fn's return
+    return pItem;
 }
 
-// GetIsPlaying @0x82AD5C00 -- the movie-clip play-head state (bit 6 of the sprite-
-// base inst's mnClipActionFlags low byte). Only valid on a sprite-base node; the
-// X360 reads mpCharacterInst unconditionally (no null/type guard).
+// GetIsPlaying @0x82AD5C00 -- the movie-clip play-head state (bIsPlaying, x64 bit 25
+// of the sprite-base inst's mnClipActionFlags; X360 reversed bit 6). Only valid on a
+// sprite-base node; the X360 reads mpCharacterInst unconditionally (no null/type guard).
 bool AptCIH::GetIsPlaying() const
 {
     const AptCharacterSpriteInstBase* pSpriteInst =
         static_cast<const AptCharacterSpriteInstBase*>(mpCharacterInst);
-    return ((pSpriteInst->mnClipActionFlags >> 6) & 1u) != 0;
+    return (pSpriteInst->mnClipActionFlags & 0x2000000u) != 0;
 }
 
 // SetIsPlaying (PS3 @0x7EE474 -- the X360 build INLINES this member into each of its
 // callers, so it has no ARTIST address of its own; the PS3 external ships it as the
 // real out-of-line `AptCIH::SetIsPlaying(bool)` the source declares). Write the
-// movie-clip play-head bit (bit 6 of the sprite-base inst's mnClipActionFlags) and,
+// movie-clip play-head bit (bIsPlaying, x64 bit 25; X360 reversed bit 6) and,
 // ONLY when starting playback, re-dirty the node so the next tick picks it up:
-//     flags = ROL(ROR(flags,7) & 0x7FFFFFFF, 7) | ((b << 6) & 0x40)   <- clear bit 6, OR b
+//     (the X360 rotate idiom cleared/OR'd its reversed bit 6; x64 uses mask 0x2000000)
 //     if (b == 1) SetDirtyState(1, 1)
 // The asymmetry is deliberate and load-bearing: a STOP must not dirty the node.
 // Callers on the console: sMethod_play / sMethod_stop / _gotoAndX / GotoFrame /
@@ -449,7 +450,7 @@ void AptCIH::SetIsPlaying(bool bPlaying)
     AptCharacterSpriteInstBase* const pSpriteInst =
         static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);
     pSpriteInst->mnClipActionFlags =
-        (pSpriteInst->mnClipActionFlags & ~0x40u) | (bPlaying ? 0x40u : 0u);
+        (pSpriteInst->mnClipActionFlags & ~0x2000000u) | (bPlaying ? 0x2000000u : 0u);
     if (bPlaying)
         SetDirtyState(true, true);
 }
@@ -625,14 +626,12 @@ void AptCIH::SetMask(AptCIH* pMaskSlave)
 // Behavioural batch 4 -- procedural-property reader + visibility.
 // ===========================================================================
 
-// FLAG (deferred): the X360 static-local bounding-rect helper (sub_82AE2C58) seeds
-// the rect, expands it via AptCIH::GetBoundingRect (@0x82AE2B30 -- not yet homed; it
-// needs the AptCharacterShape glyph/geometry bounds layout), then zeroes the rect if
-// nothing expanded. Until GetBoundingRect lands this returns an empty rect, so the
-// _width/_height procedural properties read 0; every other property is fully faithful.
-// FLAG: the bounding-rect mode threaded through GetBoundingRect (X360 dword_8324E2AC);
-// it is plumbed through the recursion but not read for the bounds math. Defined by
-// the Apt runtime; declared here so the clamp helper passes it faithfully.
+// The X360 static-local bounding-rect helper (sub_82AE2C58): seed the rect, expand
+// it via AptCIH::GetBoundingRect (@0x82AE2B30, HOMED below in this TU), then zero
+// the rect if nothing expanded.
+// The bounding-rect mode threaded through GetBoundingRect (X360 dword_8324E2AC) is
+// plumbed through the recursion but never read by the bounds math; storage HOMED in
+// AptGlobals.cpp, declared here so the clamp helper passes it faithfully.
 extern int gAptBoundingRectMode;
 
 // GetBoundingRectClamped -- sub_82AE2C58: seed the rect to the empty (+/-FLT_MAX)
@@ -657,15 +656,21 @@ void GetBoundingRectClamped(const AptCIH* pThis, float* afRect)   // float* (not
 }
 
 // GetProceduralProperty @0x82AE2D10 -- the AS getProperty reader. The X360 indexes a
-// 12-entry remap table (byte_82145248, unexported) to select one of twelve arms; the
-// case-label integers below are inferred to match SetProceduralProperty's arm order
-// (only index 11 == _visible is confirmed, by IsVisible). Each arm's behaviour IS
-// proven from the asm.
+// 12-entry remap table (byte_82145248) to select one of twelve arms; the table bytes
+// are ATTESTED from the 0x82145240 rodata dump (@+0x08: 4F 51 2B 40 00 09 0E 53 57
+// 59 5B 5D, arm = loc_82AE2D80 + 4*byte), pinning every case label below -- 0 _x /
+// 1 _y / 2 _xscale / 3 _yscale / 4 _width / 5 _height / 6 _rotation / 7 _alpha /
+// 8-10 colour-translate R/G/B / 11 _visible, the same order SetProceduralProperty's
+// word_82145258 jump table encodes. Each arm's behaviour is proven from the asm.
 float AptCIH::GetProceduralProperty(uint32_t nPropertyIndex) const
 {
     const AptMatrix* pPos = GetPositionMatrixConst();
     const AptCXForm* pCx  = GetColorMatrixConst();
-    const float kSkewEpsilon = 1.1754944e-38f;   // FLT_MIN; FLAG: exact bits unread
+    // flt_82002540 == 9.99999975e-05f -- the shared near-zero scale floor (the SAME
+    // rodata constant SetProceduralProperty reads as KF_AptProcScaleFloor below); the
+    // 0x82AE2D10 asm compares |b|/|c| against flt_82002540 at 0x82AE2DD8 / 0x82AE2E38
+    // / 0x82AE2E8C. (The FLT_MIN stand-in "exact bits unread" park is retired.)
+    const float kSkewEpsilon = 9.99999975e-05f;
 
     switch (nPropertyIndex)
     {
@@ -705,9 +710,11 @@ float AptCIH::GetProceduralProperty(uint32_t nPropertyIndex) const
     case 1:   // _y -- translation Y
         return pPos->ty;
     case 7:   // _alpha -- colour scale alpha (stored 0..255) as percent
-        // flt_82145600 = 0.3921569 == 100/255 (the scale-alpha field is 0..255, not 0..1;
-        // cross-checked vs SetProceduralProperty's inverse percent->0..255 store).
-        return pCx->scale.GetValuef(AptColorHelper::Alpha) * 0.3921569f;
+        // flt_82145600 == 0x3EC8C8C9 == 0.392156869f (100/255), ATTESTED from the
+        // 0x82145240 rodata dump @+0x3C0. (The old 0.3921569f literal rounds to
+        // 0x3EC8C8CA -- one ulp ABOVE the console constant.) The scale-alpha field is
+        // 0..255, not 0..1; cross-checked vs SetProceduralProperty's inverse store.
+        return pCx->scale.GetValuef(AptColorHelper::Alpha) * 0.392156869f;
     case 8:   // colour translate Red (additive)
         return pCx->translate.GetValuef(AptColorHelper::Red);
     case 9:   // colour translate Green
@@ -736,11 +743,12 @@ bool AptCIH::IsVisible() const
 
 // ---------------------------------------------------------------------------
 // SetGeneralizedProcessDirtyState @0x82ADCA50 -- mark/clear this node's
-// generalized-process-dirty state (mFlagsA bit24 = self, bit23 = subtree).
+// generalized-process-dirty state (mFlagsA bit 7 = self, bit 8 = subtree; x64
+// positions -- the old bit24/bit23 were the X360 big-endian reversal).
 //
-// SET (bDirty): set bit24 on this node, then walk up mpDisplayListParent setting
-//   each ancestor's bit23 until one already has it. CLEAR: clear bit24; if the
-//   subtree bit (bit23) is not set, scan this node's children for one still flagged
+// SET (bDirty): set bit 7 on this node, then walk up mpDisplayListParent setting
+//   each ancestor's bit 8 until one already has it. CLEAR: clear bit 7; if the
+//   subtree bit (bit 8) is not set, scan this node's children for one still flagged
 //   dirty and return it (the X360's outer parent-walk re-scans the same child list,
 //   so it is a single scan gated on having a parent). The return is `this` on every
 //   path except a found dirty child; the sole callers (SetMask/InsertChild) discard
@@ -752,26 +760,26 @@ AptCIH* AptCIH::SetGeneralizedProcessDirtyState(bool bDirty)
 {
     if (bDirty)
     {
-        mFlagsA |= 0x01000000u;   // self generalized-process-dirty (bit24)
+        mFlagsA |= 0x80u;   // self generalized-process-dirty (bit 7)
         for (AptCIH* pAncestor = mpDisplayListParent; pAncestor; )
         {
-            if (pAncestor->mFlagsA & 0x00800000u)   // subtree bit already set -> stop
+            if (pAncestor->mFlagsA & 0x100u)   // subtree bit already set -> stop
                 break;
             AptCIH* pNext = pAncestor->mpDisplayListParent;
-            pAncestor->mFlagsA |= 0x00800000u;       // propagate subtree dirty (bit23)
+            pAncestor->mFlagsA |= 0x100u;       // propagate subtree dirty (bit 8)
             pAncestor = pNext;
         }
         return this;
     }
 
-    mFlagsA &= 0xFEFFFFFFu;   // clear the self bit (bit24)
-    if (!(mFlagsA & 0x00800000u))
+    mFlagsA &= ~0x80u;   // clear the self bit (bit 7)
+    if (!(mFlagsA & 0x100u))
     {
         for (AptCIH* pAncestor = mpDisplayListParent; pAncestor; pAncestor = pAncestor->mpDisplayListParent)
         {
             for (AptCIH* pChild = GetFirstChild(); pChild; pChild = pChild->mpDisplayListNext)
             {
-                if (pChild->mFlagsA & 0x01800000u)   // child still dirty (bit23 | bit24)
+                if (pChild->mFlagsA & 0x180u)   // child still dirty (bit 8 | bit 7)
                     return pChild;
             }
         }
@@ -838,15 +846,15 @@ AptRect* AptCIH::GetBoundingRect(int nMode, const AptMatrix* pParentTransform, A
 // ---------------------------------------------------------------------------
 // HasMouseEvent @0x82AE2268 -- does this node respond to any mouse event? OR of two
 // sources: (1) the sprite/movie-clip's packed clip-event flags carry a mouse-event
-// bit (mnClipActionFlags & the shifted mouse-event mask), and (2) an ActionScript
+// bit (mnClipActionFlags & the mouse-event mask), and (2) an ActionScript
 // mouse handler is registered in this value's __proto__ chain (HasEventMember with
-// the same mouse-event set un-shifted). mnClipActionFlags stores the clip-event mask
-// in its high 24 bits, so the two literals are the one mouse-event set in its two
-// storage positions.
+// the same mouse-event set). x64: mnClipActionFlags stores the clip-event mask in
+// its LOW 24 bits, so the one mouse-event set serves both tests directly (the X360
+// kept the clip copy <<8 in its big-endian allocation).
 // ---------------------------------------------------------------------------
 namespace
 {
-    const uint32_t KU_AptMouseEventClipMask    = 0x09FC3800u;  // mouse bits, shifted clip-event position
+    const uint32_t KU_AptMouseEventClipMask    = 0x0009FC38u;  // mouse bits, low-24 clip-event position (x64)
     const uint32_t KU_AptMouseEventHandlerMask = 0x0009FC38u;  // same bits, native-hash handler position
 }
 
@@ -867,9 +875,11 @@ bool AptCIH::HasMouseEvent()
 // FLAG (Apt runtime scratch -- console dword_8324E53C; a process-wide fixed buffer
 // the runtime uses to stage this node's display-list ancestor pointers while it
 // folds their transforms). x64-native: a buffer of AptCIH* (8-byte pointers), NOT
-// the console 4. Owned + sized by the Apt runtime boot TU; declared here so the
-// mask-matrix fold can stage into it faithfully (one mask is processed at a time,
-// so the buffer is never re-entered).
+// the console 4. Storage is homed NULL in AptGlobals.cpp but the boot-TU ALLOCATION
+// that sizes it is still un-homed -- a mask with ancestors would dereference null
+// until it lands (only reachable through the AptUpdate slot install). Declared here
+// so the mask-matrix fold stages into it faithfully (one mask is processed at a
+// time, so the buffer is never re-entered).
 extern AptCIH** gAptMaskAncestorScratch;
 
 // The minimum colour-scale alpha a mask render item is allowed to carry (console
@@ -954,7 +964,7 @@ bool AptCIH::ProcessMaskMatricies()
 // 12-entry jump table (word_82145258); the selectors decoded from that table are:
 //   0 _x   1 _y   2 _xscale   3 _yscale   4 _width   5 _height   6 _rotation
 //   7 _alpha   8 colour-translate Red   9 Green   10 Blue   11 _visible
-// Every arm first stamps the AS-changed flag (mFlagsA bit31) from bASChanged, then
+// Every arm first stamps the AS-changed flag (mFlagsA bit 0; x64 position) from bASChanged, then
 // writes through the char inst's WRITABLE position/colour matrix (or SetIsVisible).
 //
 // The console float constants (read from the decrypted XEX rodata):
@@ -991,10 +1001,10 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     if (nSelector > 11u)
         return;
 
-    // Stamp the AS-changed flag (mFlagsA bit31) from bASChanged on every arm.
+    // Stamp the AS-changed flag (mFlagsA bit 0; x64 position) from bASChanged on every arm.
     auto markASChanged = [this, bASChanged]()
     {
-        mFlagsA = (mFlagsA & 0x7FFFFFFFu) | (bASChanged ? 0x80000000u : 0u);
+        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
     };
 
     float f31 = fValue;
@@ -1146,7 +1156,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
         // Cache the authored angle in the lazily-allocated mpAssetString slot (the
         // X360 reuses it as a single-float store; allocated from the DOGMA pool).
         if (mpAssetString == nullptr)
-            mpAssetString = gpNonGCPoolManager->Allocate(4);   // FLAG: console off_8324D808 (DOGMA pool)
+            mpAssetString = gpNonGCPoolManager->Allocate(4);   // console off_8324D808 == gpNonGCPoolManager (AptInit wires both DOGMA-pool aliases to the same pool)
         *reinterpret_cast<float*>(mpAssetString) = f31;
 
         // Rebuild the first two columns from the cached scales + the new angle.
@@ -1168,8 +1178,9 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
         AptCXForm* pCx = GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
         if (f31 < KF_AptProcZero)
         {
-            // FLAG: the X360 folds the negative-alpha path into a shared store epilogue
-            // (loc_82AE7808); reconstructed as the plain clamp-and-store of the raw value.
+            // The X360 folds the negative-alpha path into a shared store epilogue
+            // (loc_82AE7808); the plain clamp-and-store of the raw value is that
+            // epilogue's exact effect on this arm.
             float fClamped = f31;
             if (!(fClamped >= KF_AptProcColorMin)) fClamped = KF_AptProcColorMin;
             if (fClamped > KF_AptProcColorMax)     fClamped = KF_AptProcColorMax;
@@ -1231,12 +1242,12 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
 // ActionScript native-function singletons. Each non-null slot has its value Released
 // (AptValue vtable slot 1, the deleting destructor path) and is nulled. The X360
 // unrolls the 27 slots in a fixed (non-address) order; reproduced verbatim so the
-// teardown sequence matches. The slots are owned by the AS-builtin registration boot
-// TU, so they are FLAG'd extern here.
+// teardown sequence matches. Slot storage is HOMED in AptGlobals.cpp.
 // ---------------------------------------------------------------------------
-// FLAG (homed elsewhere -- the AS-builtin registration boot TU; console
-// off_8324E42C..0x8324E494): the per-built-in native-function singletons. Each is an
-// AptValueGC (AptNativeFunction) torn down through the AptValue Release virtual.
+// The per-built-in native-function singletons (console off_8324E42C..0x8324E494;
+// storage in AptGlobals.cpp, created lazily by AptCIHMembers.cpp's
+// LookupMethodSingleton). Each is an AptValueGC (AptNativeFunction) torn down
+// through the AptValue Release virtual.
 extern AptValue* gpAptNativeFn_8324E440;
 extern AptValue* gpAptNativeFn_8324E43C;
 extern AptValue* gpAptNativeFn_8324E48C;
@@ -1295,9 +1306,9 @@ void AptCIH::CleanNativeFunctions()
 // Behavioural batch 7 -- per-frame dynamic-text refresh.
 // ===========================================================================
 
-// FLAG (homed with the dynamic-text render-item TU; console &unk_82F72DB0): the
-// "unresolved/empty text render-data handle" sentinel. mZID equal to it (or 0) means
-// the field has no resolved render data yet. Mirrors AptRenderItemDynamicText.cpp.
+// The "unresolved/empty text render-data handle" sentinel (console &unk_82F72DB0;
+// storage HOMED in AptGlobals.cpp). mZID equal to it (or 0) means the field has no
+// resolved render data yet. Mirrors AptRenderItemDynamicText.cpp.
 extern intptr_t gAptEmptyTextRenderDataZID;
 
 // ---------------------------------------------------------------------------
@@ -1368,21 +1379,23 @@ void AptRunGeneralisedTextProcess(AptCIH* pRoot)
 // TUs (AptDisplayList / AptLinker / AptAnimationTarget / AptCIHNativeFunctionHelper)
 // reference by name. DECOMPILED from the PS3 EXTERNAL ELF (DWARF-named) + the X360
 // ARTIST.XEX, cross-checked. EnsureStringAllocated (the deep dynamic-text/glyph layout
-// engine) stays a FLAG stub -- its body belongs with the Apt text/font subsystem TU.
+// engine) is HOMED in AptCIHText.cpp.
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // (cluster shim types)
 
-// ---- FLAG (un-homed runtime singletons referenced by the deep cluster bodies; each
-// declared verbatim by its console-name equivalent, bodies/storage owned by the
-// AS-interpreter, GC, and Apt-runtime boot TUs) ------------------------------------
-// AddToRemList (console AptAnimationTarget::AddToRemList @0x82B...): queue a node that
-// is still externally referenced onto the animation director's removal list.
+// ---- runtime callees / hook slots referenced by the deep cluster bodies ----------
+// AddToRemList (console AptAnimationTarget::AddToRemList @0x82AEE3F8; HOMED in
+// AptAnimationTarget.cpp): queue a node that is still externally referenced onto the
+// animation director's removal list.
 void AptAnimationTargetAddToRemList(AptAnimationTarget* pAnim, AptCIH* pItem);
 
-// PreDestroy hook (console dword_8324E8A0): the optional process-wide pre-destroy notify
-// callback; null until a host installs it. Owned by the Apt-runtime boot TU.
-extern void (*gpAptCIHPreDestroyHook)(AptCIH* pCIH);   // dword_8324E8A0
+// PreDestroy hook: console dword_8324E8A0 is NOT a standalone global -- it is
+// gAptFuncs+0x88 == gAptFuncs.pfnOnUnload (base dword_8324E818; the neighbour
+// dword_8324E8A4 == pfnPointHitTest pins the alignment). The host installs
+// CgsGui::AptCallbackFile::OnUnload there (AptAux::ConstructApt), which drops the
+// dying clip's AptCommunicator component registration.
+extern AptUserFunctions gAptFuncs;   // dword_8324E818 (CgsAptAux.cpp)
 
 // ---------------------------------------------------------------------------
 // GetMask @0x82AE7B48 -- the current mask SLAVE of this MASTER node. The X360 first
@@ -1408,15 +1421,17 @@ AptCIH* AptCIH::GetMask() const
 }
 
 // ---------------------------------------------------------------------------
-// HasClipEvent @0x82B027C0 -- the sprite-base clip-event flag set (the high 24 bits of
-// mnClipActionFlags, read here `>> 8`) intersected with nEventMask. The X360 reads the
-// char inst's +0x14 word unconditionally (only valid on a sprite-base node).
+// HasClipEvent @0x82B027C0 -- the sprite-base clip-event flag set (x64: the LOW 24
+// bits of mnClipActionFlags, sign-extended `(v<<8)>>8`) intersected with nEventMask.
+// The X360 reads the char inst's flags word unconditionally (only valid on a
+// sprite-base node).
 // ---------------------------------------------------------------------------
 bool AptCIH::HasClipEvent(int nEventMask)
 {
     const AptCharacterSpriteInstBase* pSpriteInst =
         static_cast<const AptCharacterSpriteInstBase*>(mpCharacterInst);
-    return ((pSpriteInst->mnClipActionFlags >> 8) & static_cast<uint32_t>(nEventMask)) != 0;
+    return (((static_cast<int32_t>(pSpriteInst->mnClipActionFlags << 8)) >> 8)
+            & nEventMask) != 0;
 }
 
 // HasEvent @0x82B02838 -- a packed clip-event flag OR an AS __proto__ handler matches.
@@ -1437,8 +1452,8 @@ bool AptCIH::HasEvent(int nEventMask)
 // enterFrame mask 2 / the keyframe-id-gated 0x20000 path, back otherwise), stamped with
 // nFrameId. The byte-code-block construction + AS-interpreter execution of a matched
 // record entry (masks 512 / 4 -> a fresh AptScriptFunctionByteCodeBlock run through
-// gAptActionInterpreter) and the bDeferred __proto__-member dispatch are the deferred
-// AS-execution sub-paths -- FLAG'd to the cluster callee below until that engine is homed.
+// gAptActionInterpreter) and the bDeferred __proto__-member dispatch are BOTH live in
+// the cluster callee below (un-staged 2026-07-01).
 // ---------------------------------------------------------------------------
 
 // The clip-event record scan + enqueue (HOMED 2026-07-01 from the PS3 body @0x815BD0;
@@ -1449,7 +1464,7 @@ bool AptCIH::HasEvent(int nEventMask)
 //   mask 2 (enterFrame)          -> AddActionFront(..., gAptNullInputId)
 //   mask 0x20000 (keyframe)      -> AddActionFront(..., nFrameId) when the record's
 //                                   keyframe id == nFrameId >> 17
-//   masks 512 / 4 / 0x40000      -> the immediate BYTE-CODE-BLOCK run (FLAG below)
+//   masks 512 / 4 / 0x40000      -> the immediate BYTE-CODE-BLOCK run (live below)
 //   anything else (incl. 1 load) -> AddActionBack(..., nFrameId)
 //
 // UN-STAGED (2026-07-01, with the recovered StringPool table + the extracted
@@ -1648,7 +1663,7 @@ AptValue* AptCIH::queueClipEvents(int nEventMask, unsigned int nFrameId, int bDe
         return reinterpret_cast<AptValue*>(0);
 
     // The faithful record-table scan + the AS byte-code execution / __proto__ dispatch
-    // live in the deferred AS-execution sub-path (FLAG). The integer result the X360
+    // live in AptQueueClipEventsRunMatched above. The integer result the X360
     // returns (0 / 1) is what every caller treats truthily; carried back as the shared
     // value pointer's int role.
     const int nRan = AptQueueClipEventsRunMatched(this, nEventMask, nFrameId, bDeferred);
@@ -1660,16 +1675,17 @@ AptValue* AptCIH::queueClipEvents(int nEventMask, unsigned int nFrameId, int bDe
 //
 // When the early-return gate is armed (AptCIH::sbGeneralisedProcessEarlyReturn) the node
 // is skipped unless it is a defined, non-dead (CIHState != 3), subtree-or-self-dirty
-// (mFlagsA bits 23/24) node whose render item is flagged dirty (mFlags bit31 set, or the
-// 0x40000000 process bit). The registered process callbacks (sCIHProcessCb[0..2]) run and
-// their results are OR'd; a sprite(5)/animation(9) recurses its child display list. The
-// fold is written back into the subtree-dirty bit (mFlagsA bit23) and returned (0/1).
+// (mFlagsA bits 8/7; x64 positions) node whose render item is flagged dirty (mFlags bit31
+// set, or the 0x40000000 process bit). The registered process callbacks (sCIHProcessCb[0..2])
+// run and their results are OR'd; a sprite(5)/animation(9) recurses its child display list.
+// The fold is written back into the subtree-dirty bit (mFlagsA bit 8) and returned (0/1).
 // ---------------------------------------------------------------------------
 
-// FLAG (un-homed Apt-runtime generalised-process state; console AptCIH::bEarlyReturn /
+// The Apt-runtime generalised-process state (console AptCIH::bEarlyReturn /
 // AptCIH::sCIHProcessCb[0..2] / AptCIH::nTreeDepth): the process gate flag, the up-to-three
-// registered per-node process callbacks, and the recursion-depth counter. Owned + installed
-// by the Apt generalised-process boot TU; declared here so the homed pass names them.
+// registered per-node process callbacks, and the recursion-depth counter. Storage in
+// AptRenderLinkStubs.cpp; installed/swapped live per frame by the AptUpdate driver
+// (AptUpdate.cpp).
 extern bool AptCIH_sbGeneralisedProcessEarlyReturn;                                   // bEarlyReturn
 extern unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*);                 // sCIHProcessCb
 extern unsigned int (*AptCIH_sCIHProcessCb1)(AptCIH*, AptCIH*, void*);                // sCIHProcessCb1
@@ -1682,13 +1698,13 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
     {
         if (!getIsDefined())
             return 0;
-        if (((mFlagsA >> 29) & 3u) == 3u)         // CIHState 3 == dead
+        if (((mFlagsA >> 1) & 3u) == 3u)          // CIHState 3 == dead (x64 bits 1-2)
             return 0;
-        if ((mFlagsA & 0x01800000u) == 0u)         // neither subtree (bit23) nor self (bit24) dirty
+        if ((mFlagsA & 0x180u) == 0u)             // neither subtree (bit 8) nor self (bit 7) dirty
             return 0;
         const uint32_t nItemFlags = mpCharacterInst->GetRenderItem()->mFlags;
         // X360: v5 >= 0 && (v5 & 0x40000000) == 0  ->  skip  (a non-dirty render item).
-        if ((nItemFlags & 0x80000000u) == 0u && (nItemFlags & 0x40000000u) == 0u)
+        if ((nItemFlags & 0x1u) == 0u && (nItemFlags & 0x2u) == 0u)   // neither visible nor a mask (x64 bits 0/1)
             return 0;
     }
 
@@ -1717,17 +1733,17 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
         --AptCIH_snGeneralisedProcessTreeDepth;
     }
 
-    // Fold the OR'd result into the subtree-dirty bit (mFlagsA bit23), leaving every
+    // Fold the OR'd result into the subtree-dirty bit (mFlagsA bit 8), leaving every
     // other bit untouched (the X360 rotate-mask idiom).
-    mFlagsA = (mFlagsA & 0xFF7FFFFFu) | ((nResult << 23) & 0x00800000u);
-    return (mFlagsA >> 23) & 1u;
+    mFlagsA = (mFlagsA & ~0x100u) | ((nResult << 8) & 0x100u);
+    return (mFlagsA >> 8) & 1u;
 }
 
 // ===========================================================================
 // ClearCIH @0x82AF6020 -- tear down this node's placed character state.
 //
 // FAITHFUL (from the X360 ARTIST.XEX + PS3 DWARF): early-out on a transitioning
-// (CIHState == 1) or never-constructed (mFlagsA bit27 clear) node. Clear the dirty
+// (CIHState == 1) or never-constructed (mFlagsA bit 4 / IsInCtor clear) node. Clear the dirty
 // bit, drop the node from the animation director's pending action/new-instance tables
 // and the input-target's drag/focus slots, drop its per-frame timer functions when it
 // is an animation (type tag 9), then -- when it is a mask master or slave -- unwire the
@@ -1736,16 +1752,16 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
 // a fresh "none" character instance (bClearGCRoots) or null the slot, GC-tear-down + free
 // the old instance, and run the value teardown.
 //
-// FLAG: the deferred AS-execution tail (the type-5/16 unload-event dispatch +
-// callFunction, the zombie-vector push + partial GC, and the host render hook
-// dword_8324E8C8) is the deep AS-interpreter / GC sub-path -- routed through the cluster
-// callee below until that engine is homed. The observable state teardown (the mask
-// unwiring + the char-inst swap/free) is reconstructed faithfully here.
+// The unload-event tail (the type-5/16 unload dispatch + callFunction), the zombie
+// decision (vector push / CIHState staging / notify hook dword_8324E8C8 / deferred-
+// release flush / zombies-dirty raise), and the observable state teardown (the mask
+// unwiring + the char-inst swap/free) are ALL implemented inline below in the shipped
+// order; the director-table drain is the cluster callee AptClearCIHDrainQueuesAndZombie.
+// (The zombies-dirty consumer AptGC::CleanUnreachable is tracked in AptRenderLinkStubs.cpp.)
 // ===========================================================================
 
-// FLAG (un-homed action-queue / new-inst / input-target / GC sub-paths of ClearCIH;
-// console sub_82ADBD50 + __::remove + the off_8324E528 zombie vector + dword_8324E8C8
-// render hook + AptPartialGarbageCollection). Drops this node from every deferred queue
+// ClearCIH's director-table drain (console sub_82ADBD50 + __::remove + the shared
+// new-insts table scrub; HOMED below). Drops this node from every deferred queue
 // the director / input target hold it in. The unload-event tail + the zombie
 // decision live in ClearCIH itself (shipped order); the helper's int return is
 // vestigial (always 0) and ignored.
@@ -1760,7 +1776,7 @@ extern bool            gbAptZombiesDirty;
 extern void          (*gpAptZombieNotifyHook)(int bImmediate, int nReserved,
                                               const char* pInstanceName,
                                               const char* pFileName);
-extern AptValueVector* gpAptDeferredReleaseVector;   // off_8324E51C
+extern AptValueVector* gpValuesToRelease;   // off_8324E51C
 extern AptCIH*         AptGetAnimationAtLevel(int nLevel);
 
 // AptClearCIHDrainQueuesAndZombie -- ClearCIH's director-table DRAIN
@@ -1773,8 +1789,8 @@ extern AptCIH*         AptGetAnimationAtLevel(int nLevel);
 // slot). The UNLOAD-EVENT tail + the zombie decision live in ClearCIH itself,
 // in the shipped order (both consoles run the unload tail AFTER the mask
 // master/slave teardown -- X360 bl chain @0x82AF6374, XB1 sub_1408333D0).
-// Returns nonzero when the node became a zombie -- the zombie arm is still a
-// staged FLAG (see the note at the ClearCIH call site), so 0 for now.
+// Returns 0 always -- the zombie decision runs inline in ClearCIH (below), so
+// the helper's int return is vestigial.
 int AptClearCIHDrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
 {
     // ---- the director-set / event-slot / new-inst DRAIN --------------------
@@ -1826,24 +1842,24 @@ int AptClearCIHDrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
         }
     }
 
-    // ---- the zombie decision: FLAG (staged) -- see the ClearCIH call site ---
+    // ---- the zombie decision runs inline in ClearCIH (below) ---------------
     return 0;
 }
 
 void AptCIH::ClearCIH(bool bClearGCRoots)
 {
     // Transitioning (CIHState == 1) or not defined -> no-op. NB the second test reads the
-    // AptValue base bitfield at +4 (mnValueData bit27 == mbIsDefined), NOT mFlagsA at +0xC.
+    // AptValue base bitfield at +8 (x64: mbIsDefined = bit 4), NOT mFlagsA.
     // console @0x82AF6020: `lwz r11,0xC` CIHState==1, then `lwz r11,4; extrwi. r11,r11,1,4`.
-    if (((mFlagsA & 0x60000000u) == 0x20000000u) || !getIsDefined())
+    if (((mFlagsA & 0x6u) == 0x2u) || !getIsDefined())
         return;
 
     SetDirtyState(false, false);
 
-    // Drop the node from the director's deferred-action / new-instance tables, the input
-    // target's drag/focus slots, the new-insts table, and (when it became externally
-    // referenced) the zombie vector + partial GC; run the unload-event tail. Returns
-    // nonzero when the node was queued as a zombie (the instance is NOT freed below).
+    // Drop the node from the director's input/listener sets, the press/roll-over
+    // event slots, and the shared new-instances table (the drain helper above).
+    // The unload-event tail + the zombie decision follow inline below, in the
+    // shipped order.
     AptClearCIHDrainQueuesAndZombie(this, bClearGCRoots);
 
     // Animation node (type tag 9) -> remove its per-frame timer functions.
@@ -1911,7 +1927,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
         {
             AptCharacterSpriteInstBase* const pSprite =
                 static_cast<AptCharacterSpriteInstBase*>(pInstU);
-            if ((pSprite->mnClipActionFlags & 0x400u) != 0u ||
+            if ((pSprite->mnClipActionFlags & 0x4u) != 0u ||   // unload clip event; x64 low-24 mask
                 HasEventMember(4) != 0)
             {
                 queueClipEvents(4, 0, 0);
@@ -1942,14 +1958,13 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
     // removal as an AS-visible ZOMBIE instead of being torn down: the AS side
     // still holds live references (IncZombieCount) against the loaded movie.
     // NOT-zombie preconditions (any -> the immediate clear below): in shutdown;
-    // zombie count <= 0 (the X360 tests the SIGNED int16 `(flagsA<<9)&0xFFFF0000
-    // <= 0` -- sign bit == our count field's top bit); not an animation node
-    // (charInst mTypeFlags tag 9, mask 0xFC000000 == 0x24000000); or the root
-    // level-0 animation itself.
+    // zombie count <= 0 (the X360 tests the SIGNED int16 sign bit of the count
+    // field); not an animation node (charInst tag 9, x64 low-6-bit tag); or the
+    // root level-0 animation itself.
     bool bBecameZombie = false;
     if (!gbAptInShutdown
         && GetZombieCount() > 0
-        && (mpCharacterInst->mTypeFlags & 0xFC000000u) == 0x24000000u
+        && (mpCharacterInst->mTypeFlags & 0x3Fu) == 9u
         && this != AptGetAnimationAtLevel(0))
     {
         if (gpAptZombieVector == nullptr ||
@@ -1981,13 +1996,13 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
                 ->mDisplayList.clear(true);                     // charInst+28, arg 1
             if (AptNativeHash* pHash = GetNativeHashVirtual())  // vtbl[2]
                 pHash->ClearData();
-            if (gpAptDeferredReleaseVector != nullptr &&
-                gpAptDeferredReleaseVector->mnCapacity != 0)    // family-(B) live count
-                gpAptDeferredReleaseVector->ReleaseValues();
+            if (gpValuesToRelease != nullptr &&
+                gpValuesToRelease->mnCapacity != 0)    // family-(B) live count
+                gpValuesToRelease->ReleaseValues();
 
             if (GetZombieCount() > 0)   // re-check: the scrub may have drained it
             {
-                mFlagsA &= ~0x80000000u;   // AS-changed clear (the X360 rlwinm 1,31)
+                mFlagsA &= ~0x1u;   // AS-changed clear (x64 bit 0; the X360 rlwinm 1,31)
                 SetHasClass(0);            // vtable slot 5
                 SetReleaseAtEnd();
                 // Push onto the zombie vector (family-(B): count == mnCapacity,
@@ -1997,7 +2012,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
                         static_cast<AptValue*>(this);
                 else
                     ClearReleaseAtEnd();
-                SetCIHState(1);            // X360 `flagsA & 0x9FFFFFFF | 0x20000000`
+                SetCIHState(1);            // x64: `flagsA & ~6 | 2` (X360 reversed form 0x20000000)
 
                 AptFile* pFile =
                     static_cast<AptCharacterAnimationInst*>(mpCharacterInst)
@@ -2023,13 +2038,13 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
     AptCharacterInst* pOld = mpCharacterInst;
     if (pOld == nullptr)
     {
-        // X360/XB1 tail: clear the AS-changed flag inline (mFlagsA bit 31, the
+        // X360/XB1 tail: clear the AS-changed flag inline (x64 mFlagsA bit 0, the
         // X360 `rlwinm 1,31`), then tail-call vtable slot 5 == SetHasClass(0)
-        // (X360 0x82AD7418 `insrwi ..,1,3` = our bit 28; XB1 sub_140841530, the
-        // same slot on its LE flag layout). The previous transcription mislabeled
+        // (X360 0x82AD7418 `insrwi ..,1,3`; XB1 sub_140841530 mask 0x8, the
+        // same slot on the LE flag layout). The previous transcription mislabeled
         // the slot-5 call as Release(), which fabricated an extra reference drop
         // on every cleared node.
-        mFlagsA &= ~0x80000000u;
+        mFlagsA &= ~0x1u;
         SetHasClass(0);
         return;
     }
@@ -2067,9 +2082,9 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
         pOld->~AptCharacterInst();
         gpNonGCPoolManager->Deallocate(pOld, sizeof(AptCharacterInst));
 
-        // AS-changed clear + vtable slot 5 == SetHasClass(0) (see the null-inst
-        // arm note above).
-        mFlagsA &= ~0x80000000u;
+        // AS-changed clear (x64 bit 0) + vtable slot 5 == SetHasClass(0) (see the
+        // null-inst arm note above).
+        mFlagsA &= ~0x1u;
         SetHasClass(0);
     }
 }
@@ -2133,12 +2148,17 @@ AptCIH* AptCIH::InsertChild(AptCIH* pSource, AptCharacter* pCharacter,
 // AptDisplayList_mergeState RETIRED: now called directly as the AptDisplayList::mergeState
 // member (defined in AptDisplayList.cpp @ 0x82B0B438); the free-function forwarder is removed.
 
-// AptCIH_PreDestroyHook -- AptCIH::PreDestroy's optional notify hook (console dword_8324E8A0).
-// FLAG PC-platform leaf: the host-installed pre-destroy callback boundary (dispatch when installed, else no-op).
+// AptCIH_PreDestroyHook -- AptCIH::PreDestroy's notify dispatch. X360 @0x82AD7490:
+//   lwz r10, (gAptFuncs+0x88); beqlr-if-0; mtctr; bctr   (r3 == this passed through)
+// i.e. `if (gAptFuncs.pfnOnUnload) gAptFuncs.pfnOnUnload(this)`. The console slot is
+// the pfnOnUnload member of the host callback table, installed by AptAux::ConstructApt
+// (-> CgsGui::AptCallbackFile::OnUnload -> AptCommunicator::RemoveExpiredAptComponent).
+// A previous recon aliased it to a separate never-installed global, so no component
+// registration was ever released and the 256-entry table overflowed at the menus.
 void AptCIH_PreDestroyHook(AptCIH* pCIH)
 {
-    if (gpAptCIHPreDestroyHook)
-        gpAptCIHPreDestroyHook(pCIH);
+    if (gAptFuncs.pfnOnUnload)
+        gAptFuncs.pfnOnUnload(pCIH);
 }
 
 // ===========================================================================
@@ -2160,7 +2180,7 @@ void AptCIH_PreDestroyHook(AptCIH* pCIH)
 // EnsureStringAllocated @0x82B06F08 is now HOMED in AptCIHText.cpp (the deep dynamic-text
 // build/layout path -- AptCharacterTextInst::UpdateText + the AptAllocateStringParameters
 // build + the host pfnAllocateString call + the SetZID/box-align/measure fold). The prior
-// FLAG no-op stub here is retired.
+// no-op stub here is retired.
 
 AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
 {

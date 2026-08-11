@@ -20,7 +20,7 @@
 //   AptInterp_SetInScopeChain       <- the scope-chain store, the nSearchScopeChain
 //       branch of setVariable @0x82B03048
 //   AptInterp_SetVariableFallback   <- setVariable's CIH (type 12/37) + frame-context
-//       hash fallback tail (the deepest frame-context branch FLAG-encapsulated)
+//       hash fallback tail (the node frame-context hash via GetNodeFrameContextHash)
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -39,8 +39,6 @@
 #include "SDKs/EATech/include/Apt/AptNativeFunction.h"
 #include "SDKs/EATech/include/Apt/AptConstFile.h"
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"   // AptGetAnimationAtLevel (script-fn root-anim resolve)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h" // FLAG bring-up probe log sink
-#include <cstdio>                                          // snprintf (FLAG bring-up probe)
 
 // ---------------------------------------------------------------------------
 // AptInterp_GetNodeFrameContextHash (HOMED 2026-07-02, retiring the null
@@ -119,7 +117,7 @@ done_scan:
 
 // ---------------------------------------------------------------------------
 // AptInterp_GetDictEntry -- fetch a string-dictionary slot with a null guard.
-// FLAG hardening: a resolved dictionary slot can be NULL on x64 when its const
+// Deliberate x64 hardening: a resolved dictionary slot can be NULL on x64 when its const
 // record resolved to nothing at parse (e.g. an AptLookup pool miss -- the
 // console pre-seeds its pools, so its slots are never null). The dict-byte
 // opcodes AddRef the slot unconditionally; a null here AV'd MAIN's first init
@@ -164,8 +162,8 @@ bool AptActionInterpreter::HasMember(AptValue* pValue, EAStringC** pNameSlot)
     }
 
     // console LABEL_17: probe the (resolved) value's own hash for the name.
-    // (Null-slot guard: the console never passes a null/empty name slot here; a
-    // not-yet-complete x64 caller path can -- same hardening as NameEquals. FLAG.)
+    // (Null-slot guard: the console never passes a null/empty name slot here; an x64
+    // caller path can -- the same deliberate hardening as NameEquals, cdb-proven.)
     if (pValue && pNameSlot && *reinterpret_cast<void* const*>(pNameSlot))
     {
         AptNativeHash* const pHash = pValue->GetNativeHashVirtual();   // (*(*a1+8))(a1)
@@ -278,12 +276,11 @@ bool AptActionInterpreter::SetInScopeChain(const EAStringC* pName, AptValue* pVa
     return pFrame->SetWhereExistsInScopeChain(*pName, pValue);
 }
 
-// FLAG (the deepest setVariable fallback branch -- the CIH/CIHNone node's frame-
-// context native hash: console *(*(pContext+0x1C) + 0x20) -> +0xC). The character-
-// instance frame-context layout the console reaches by these raw offsets is not yet
-// a reconstructed named-member path, so resolving the destination hash for a node
-// context is encapsulated here, matching the sibling call/special-op TUs. Returns the
-// node's frame-context property hash, or null when it has none.
+// The deepest setVariable fallback branch -- the CIH/CIHNone node's frame-context
+// native hash (console *(*(pContext+0x1C) + 0x20) -> +0xC) -- is resolved through the
+// NAMED chain GetDisplayListParent()->GetCharacterInst()->mpProperties, homed above
+// as GetNodeFrameContextHash. Returns the node's frame-context property hash, or
+// null when it has none.
 
 // ---------------------------------------------------------------------------
 // AptInterp_SetVariableFallback -- the tail of setVariable @0x82B03048 reached when
@@ -313,8 +310,9 @@ bool AptActionInterpreter::SetVariableFallback(AptValue* pContext, const EAStrin
         // console: a non-node context here is unhandled (return 1, store nothing).
         if (!bIsNode)
             return true;
-        // FLAG: resolve the node's frame-context hash (the +0x1C boxed object ->
-        // +0x20 char-inst -> +0xC hash chain); only a movie-clip-class node has one.
+        // Resolve the node's frame-context hash (the +0x1C display parent ->
+        // +0x20 char-inst -> +0xC hash chain, walked by name in
+        // GetNodeFrameContextHash); only a movie-clip-class node has one.
         pDest = GetNodeFrameContextHash(pContext);
         if (!pDest)
             return true;   // console goto LABEL_16 (handled, nothing to store)
@@ -413,12 +411,12 @@ void AptActionInterpreter::valueToObject(AptValue* pScope, AptValue* pTarget,
 // SCOPE value -- the forwarder passed the interpreter pointer as the scope, which
 // mis-resolved every valueToObject path whose scope was not the interpreter.)
 
-// FLAG (host URL-variable fetch -- console indirect through dword_8324E84C (named-URL
+// Host URL-variable fetch -- console indirect through dword_8324E84C (named-URL
 // fetch) / dword_8324E850 (default no-arg fetch); each returns the AptValue whose
-// string form is the downloaded "key=value&..." body). The host installs the fetch at
+// string form is the downloaded "key=value&..." body. The host installs the fetch at
 // AptInit; modelled as a single named host boundary (a null pUrl selects the default
-// fetch), matching the AptApt_* FLAG link-stub family so the parse below stays faithful
-// without introducing a new unresolved symbol.
+// fetch). Body is the host-boundary link-stub in AptRenderLinkStubs.cpp; the parse
+// below is faithful either way.
 extern AptValue* AptApt_LoadVariablesFetch(const char* pUrl);   // dword_8324E84C / dword_8324E850
 
 // ---------------------------------------------------------------------------
@@ -433,7 +431,7 @@ void AptActionInterpreter::loadVariables(AptValue* pScope, AptValue* pTarget, EA
 {
     AptActionInterpreter* const pInterp = this;
     // console: v7 = a4 ? dword_8324E84C(a4->m_strText) : dword_8324E850().
-    AptValue* const pLoaded = AptApt_LoadVariablesFetch(pURL ? pURL->GetBuffer() : nullptr);   // FLAG: host fetch
+    AptValue* const pLoaded = AptApt_LoadVariablesFetch(pURL ? pURL->GetBuffer() : nullptr);   // host fetch boundary
 
     EAStringC strBody;                                  // console v13 = &unk_82F72FF8 (empty)
     if (pLoaded)
@@ -481,12 +479,10 @@ void AptActionInterpreter::EnumerateMembers(AptValue* pScope, AptValue* pTarget)
         ((eTop == AptVFT_StringValue) || (eTop == AptVFT_StringObject)) && pVariable->getIsDefined();
     if (bIsName)
     {
-        // console: v9 = (tag != 1) ? Variable[8] : the top; name = v9 + 8.
-        AptValue* const pNameHost = (eTop != AptVFT_StringValue)
-            ? *reinterpret_cast<AptValue**>(reinterpret_cast<char*>(pVariable) + 0x20)   // FLAG: boxed-string object slot
-            : pVariable;
-        const EAStringC* const pName =
-            reinterpret_cast<AptString*>(pNameHost)->GetInternalString();
+        // console: v9 = (tag != 1) ? Variable[8] : the top; name = v9 + 8 -- exactly
+        // the boxed-string indirection c_string() @0x7E4E18 performs BY NAME
+        // (AptStringObject::mpValue for tag 33, the value itself for tag 1).
+        const EAStringC* const pName = pVariable->c_string()->GetInternalString();
         pVariable = pInterp->getVariable(pScope, pTarget, pName, 1, 1, 0);
     }
 
@@ -582,17 +578,15 @@ int AptBuildPathName(AptActionInterpreter* /*pInterp*/,
     return 0;
 }
 
-// FLAG (un-homed AptCIH child-insertion -- console AptCIH::InsertChild; the same
-// extern the sibling AptCIHNativeFunctionHelper.cpp clone/attach methods drive): place
-// a clone of pSource (or a fresh instance of pCharacter) under pNode at nDepth named
-// pName, returning the inserted node. The display-tree insertion is not yet a
-// reconstructed body; declared here to keep the clone call shape faithful.
-// AptCIH::InsertChild is now a member (declared in AptCIH.h, included above).
+// AptCIH::InsertChild @0x82B09CA0 -- the display-tree child insertion the clone below
+// and the sibling AptCIHNativeFunctionHelper.cpp attach methods drive: place a clone
+// of pSource (or a fresh instance of pCharacter) under the node at nDepth named
+// pName, returning the inserted node. Member declared in AptCIH.h; body homed in
+// AptCIHBehaviour.cpp.
 
-// FLAG (the process-wide AS VM -- homed by AptActionInterpreter, console
-// dword_8324E760 == &gAptActionInterpreter.mnStackTop): the init-object member copy
-// stores variables through it (the console hard-codes &dword_8324E760 as the setVariable
-// receiver). Committed extern in the sibling AptCIHNativeFunctionHelper.cpp.
+// The process-wide AS VM (console dword_8324E760 == &gAptActionInterpreter.mnStackTop;
+// defined in AptGlobals.cpp): the init-object member copy stores variables through it
+// (the console hard-codes &dword_8324E760 as the setVariable receiver).
 extern AptActionInterpreter gAptActionInterpreter;
 
 // ---------------------------------------------------------------------------
@@ -666,21 +660,17 @@ AptValue* AptActionInterpreter::_doCloneSprite(AptCIH* pScope, AptValue* pTarget
     return pInserted;
 }
 
-// FLAG (the script-function execution branch of callFunction -- tags 34/35/36; console
-// the deep block from `*(a1+60)=a3` through `AptValue_::pop(a1+36)`). It drives the
+// The script-function execution branch of callFunction -- tags 34/35/36; console
+// the deep block from `*(a1+60)=a3` through `AptValue_::pop(a1+36)`. It drives the
 // AptScriptFunctionBase per-call machinery: install the function as mpCurrentFunction,
 // SetupBeforeExecution (snapshot + preload the register window), bind up to
 // GetNumArguments stack operands as the call arguments (SetArgument), collapse the
 // args, run the function body (runStream over GetByteCodeBase/Size against the
 // resolved animation context), CleanupAfterExecution, and leave the result on the
-// call-context stack -- restoring the saved mpCurrentFunction / mnConstantPoolCount / mpConstantPool.
-//
-// It reads the AptScriptFunctionBase vtable slots the console reaches by raw offset
-// (+0x50/+0x54 setup, +0x44 GetNumArguments, +0x58 SetArgument, +0x48/+0x4C bytecode,
-// +0x5C cleanup) and the interpreter's still-half-mapped per-call window members
-// (mnConstantPoolCount / mpConstantPool / the call-context stack #5 at +0x90) which are NOT yet
-// reconstructed as named members -- so this innermost branch is encapsulated here,
-// matching the deferral the AptActionInterpreter.cpp callFunction FLAG documents.
+// call-context stack -- restoring the saved mpCurrentFunction / mnConstantPoolCount /
+// mpConstantPool. The console's raw vtable offsets (+0x44..+0x5C) are called BY NAME
+// through the AptScriptFunctionBase interface, and the per-call window members are
+// the named mnConstantPoolCount / mpConstantPool / mpCIHStack members.
 // Returns the call result value (already on the appropriate stack), or `undefined`.
 // AptActionInterpreter::ExecuteScriptFunction is a member (declared in the header);
 // definition below.
@@ -732,9 +722,9 @@ AptValue* AptActionInterpreter::CallFunctionDispatch(AptValue* pScope, AptValue*
     }
     else if (pFunction && pFunction->isScriptFunction())   // tags 34/35/36, defined
     {
-        // FLAG: the AptScriptFunctionBase frame-execution branch (un-named vtable slots
-        // + per-call register window) -- encapsulated; see the extern above.
-                pResult = pInterp->ExecuteScriptFunction(pScope, pFunction, nArgs,
+        // The AptScriptFunctionBase frame-execution branch -- homed + LIVE below
+        // (ExecuteScriptFunction).
+        pResult = pInterp->ExecuteScriptFunction(pScope, pFunction, nArgs,
                                                  pNewTarget, pConstructTarget);
     }
     else
@@ -820,7 +810,7 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
             if (eCIHType == AptVFT_CharacterInstHandle || eCIHType == AptVFT_CIHNone)
             {
                 AptCIH* const  pCIHNode = static_cast<AptCIH*>(pBoundCIH);
-                const uint32_t nState   = pCIHNode->GetCIHState();                       // (mFlagsA>>29)&3
+                const uint32_t nState   = pCIHNode->GetCIHState();                       // x64 (mFlagsA>>1)&3
                 if (nState == 3)
                     bReduced = true;
                 else if (pCIHNode->GetCharacterInst()->GetTypeTag() == 0xFu &&
@@ -921,11 +911,9 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
     return gpUndefinedValue;
 }
 
-// FLAG (the AptGC deferred-release flush -- console AptValueVector::ReleaseValues over
-// off_8324E51C / gpValuesToRelease; the same boundary the sibling SpecialOps TUs reach
-// through AptFlushDeferredReleases): _parseStream drains it once per processed
-// opcode (resolve direction) and once up front (unresolve direction). Declared here so
-// the transcode walk stays faithful; the host vector type/global are not reconstructed.
+// The AptGC deferred-release flush (console AptValueVector::ReleaseValues over
+// off_8324E51C == gValuesToRelease; homed in AptGC.cpp): _parseStream drains it once
+// per processed opcode (resolve direction) and once up front (unresolve direction).
 extern void AptFlushDeferredReleases();
 
 // FLAG (the per-opcode inline-operand POINTER REBASE -- the only part of _parseStream

@@ -10,16 +10,19 @@
 //   AptCIH (scene node) -> AptCharacterInst -> AptRenderItem (renderable).
 //
 // SHAPE + BODIES from the PS3 EXTERNAL ELF (6AptCIH, ~80 methods). LAYOUT
-// (named, x64-width; console dwords): AptValueGC base, then
-//   [2] mInstanceName          EAStringC
-//   [3] mFlagsA                CIHState@29-30 / genProcDirty@24 / inCtor@27 /
-//                              zombieCount@7-22 / dirty bits ...
-//   [4] mFlagsB                createdOnFrame@18-31 / ...
-//   [5] mpDisplayListPrevious  AptCIH*
-//   [6] mpDisplayListNext      AptCIH*
-//   [7] mpDisplayListParent    AptCIH*   (the parent node; ref-counted)
-//   [8] mpCharacterInst        AptCharacterInst*
-//   [9] mpAssetString          lazily-allocated asset-name string (freed by dtor)
+// pinned against the x64 XB1 build (the Apt rung-1 authority; accessors read the
+// offsets directly): AptValueGC base {vptr@0x00, value bitfield@0x08}, then
+//   +0x10 mInstanceName          EAStringC
+//   +0x18 mFlagsA                asChanged@0 / CIHState@1-2 / hasClass@3 / inCtor@4 /
+//                                inRemList@5 / dirty@6 / genProcDirty self@7 subtree@8 /
+//                                zombieCount@9-24 (signed 16)
+//   +0x1C mFlagsB                createdOnFrame@0-13 (signed 14; ctor inits -1)
+//   +0x20 mpDisplayListPrevious  AptCIH*
+//   +0x28 mpDisplayListNext      AptCIH*
+//   +0x30 mpDisplayListParent    AptCIH*   (the parent node; ref-counted)
+//   +0x38 mpCharacterInst        AptCharacterInst*
+//   +0x40 mpAssetString          lazily-allocated asset-name string (freed by dtor)
+// sizeof == 0x48 (x64: GC-pool alloc of 72 before the ctor, sub_140834A90).
 //
 // SCOPE: the node core -- ctor/dtor, the GC virtuals, and the state/flag/link/
 // name accessors. The ~60 behavioural methods (tick / Process* / render /
@@ -29,6 +32,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include <cstddef>   // offsetof (_AssertLayout)
 #include <cstdint>
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"     // AptValueGC base
@@ -43,7 +47,7 @@ struct AptCXForm;
 struct AptRect;
 struct AptNativeHash;
 
-// FLAG (x64 fork): the offset of the AptMovie/AptCharacterAnimation body embedded by value inside a
+// FLAG PC-platform leaf (.apt native-8 blob offset): the offset of the AptMovie/AptCharacterAnimation body embedded by value inside a
 // sprite/animation AptCharacter. The console reaches it at char+0x10 (== the console sizeof(AptCharacter)
 // header); on the x64 gate the serialised AptCharacter header widens under the 8-byte pointer rule
 // (GUIAPT64 "1:7:8" layout) so the embedded body lands at char+0x20 (VERIFIED vs TITLE_SCREEN02.bundle:
@@ -54,14 +58,29 @@ static const unsigned int KU_AptEmbeddedMovieOff = 0x20u;
 
 struct AptCIH : public AptValueGC
 {
-    EAStringC         mInstanceName;          // [2]
-    uint32_t          mFlagsA;                // [3]
-    uint32_t          mFlagsB;                // [4]
-    AptCIH*           mpDisplayListPrevious;  // [5]
-    AptCIH*           mpDisplayListNext;      // [6]
-    AptCIH*           mpDisplayListParent;    // [7]
-    AptCharacterInst* mpCharacterInst;        // [8]
-    void*             mpAssetString;          // [9]
+    EAStringC         mInstanceName;          // +0x10
+    uint32_t          mFlagsA;                // +0x18
+    uint32_t          mFlagsB;                // +0x1C
+    AptCIH*           mpDisplayListPrevious;  // +0x20
+    AptCIH*           mpDisplayListNext;      // +0x28
+    AptCIH*           mpDisplayListParent;    // +0x30
+    AptCharacterInst* mpCharacterInst;        // +0x38
+    void*             mpAssetString;          // +0x40
+
+    // Layout pinned against the x64 XB1 accessors (never called; member body gives
+    // complete-class offsetof context).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptCIH, mInstanceName)         == 0x10, "x64 GetInstanceName @0x140839100: lea rax,[rcx+10h]");
+        static_assert(offsetof(AptCIH, mFlagsA)               == 0x18, "x64 GetASChanged @0x140838000: mov eax,[rcx+18h]");
+        static_assert(offsetof(AptCIH, mFlagsB)               == 0x1C, "x64 GetCreatedOnFrame @0x1408387E0: mov eax,[rcx+1Ch]");
+        static_assert(offsetof(AptCIH, mpDisplayListPrevious) == 0x20, "x64 GetDisplayListPrevious @0x1408388A0");
+        static_assert(offsetof(AptCIH, mpDisplayListNext)     == 0x28, "x64 GetDisplayListNext @0x140838890");
+        static_assert(offsetof(AptCIH, mpDisplayListParent)   == 0x30, "x64 GetDisplayListParent @0x1400C95D0");
+        static_assert(offsetof(AptCIH, mpCharacterInst)       == 0x38, "x64 GetCharacterInst @0x1408385B0");
+        static_assert(offsetof(AptCIH, mpAssetString)         == 0x40, "x64 ctor sub_140825520: mov [rbx+40h],rbp");
+        static_assert(sizeof(AptCIH) == 0x48, "x64: GC-pool alloc 72 at sub_140834A90/sub_14084F0A0");
+    }
 
     AptCIH(AptCharacter* pCharacter, AptCIH* pParent);   // @0x824C7C
     virtual ~AptCIH();                                    // @0x804E68
@@ -213,7 +232,7 @@ struct AptCIH : public AptValueGC
 
     // ---- movie-clip play-head (the per-frame timeline driver) -------------
     // tick @0x82B0BED8 -- advance a sprite(5)/animation(9) movie-clip node one frame
-    // when its dirty bit (mFlagsA bit25) is set: optionally step the play-head
+    // when its dirty bit (mFlagsA bit 6) is set: optionally step the play-head
     // (auto-play, unless stopped or the recorder gate is shut), run the new frame's
     // place/remove commands (doFrameControls) and queue its frame actions
     // (queueFrameActions), fire the enterFrame / construct clip events, recurse the
@@ -240,23 +259,25 @@ struct AptCIH : public AptValueGC
     bool     IsInCtor() const;          void SetInCtor(uint32_t b);           // @0x7DF0E8/0x7DF0F4
     int      GetCreatedOnFrame() const; void SetCreatedOnFrame(int nFrame);   // @0x7DF1D4/0x7DF1E4
 
-    // ActionScript-changed flag (bit 31). @0x82AD50E8/0x82AD50C8
-    bool GetASChanged() const  { return (mFlagsA >> 31) != 0; }
-    void SetASChanged(bool b)  { mFlagsA = (mFlagsA & 0x7FFFFFFFu) | (b ? 0x80000000u : 0u); }
-    // Dirty-state flag (bit 25). @0x82AD5C10 / @0x82AD76B8
-    bool GetDirtyState() const { return ((mFlagsA >> 25) & 1u) != 0; }
+    // ActionScript-changed flag (bit 0; x64 GetASChanged @0x140838000 `and eax,1`).
+    // The old bit-31 form was the X360 big-endian bitfield reversal. @0x82AD50E8/0x82AD50C8
+    bool GetASChanged() const  { return (mFlagsA & 1u) != 0; }
+    void SetASChanged(bool b)  { mFlagsA = (mFlagsA & ~1u) | (b ? 1u : 0u); }
+    // Dirty-state flag (bit 6; x64 GetDirtyState @0x140838870 mask 0x40). @0x82AD5C10 / @0x82AD76B8
+    bool GetDirtyState() const { return (mFlagsA & 0x40u) != 0; }
     // SetDirtyState @0x82AD76B8 -- set/clear the dirty bit; container/leaf types
     // (shape/dyn-text/static-text) and the empty placeholder never carry it. When
     // dirtying with bPropagate, mark up the parent chain to the first dirty ancestor.
     void SetDirtyState(bool bDirty, bool bPropagate);
-    // "In remove list" flag (bit 26). @0x82AD5188/0x82AD5170
-    bool GetInRemList() const  { return ((mFlagsA >> 26) & 1u) != 0; }
-    void SetInRemList(bool b)  { mFlagsA = (mFlagsA & 0xFBFFFFFFu) | (b ? 0x04000000u : 0u); }
+    // "In remove list" flag (bit 5; x64 GetInRemList @0x140838F70 mask 0x20). @0x82AD5188/0x82AD5170
+    bool GetInRemList() const  { return (mFlagsA & 0x20u) != 0; }
+    void SetInRemList(bool b)  { mFlagsA = (mFlagsA & ~0x20u) | (b ? 0x20u : 0u); }
 
-    // ---- AptValue object-model overrides (mFlagsA bit 28) -----------------
+    // ---- AptValue object-model overrides (mFlagsA bit 3) ------------------
     // @0x82AD7438/0x82AD7418 -- whether this CIH has an attached AS class.
-    virtual bool GetHasClass() const override { return ((mFlagsA >> 28) & 1u) != 0; }
-    virtual void SetHasClass(int b) override  { mFlagsA = (mFlagsA & 0xEFFFFFFFu) | (b ? 0x10000000u : 0u); }
+    // (x64 sub_140838D50/sub_140841530: mask 0x8.)
+    virtual bool GetHasClass() const override { return (mFlagsA & 0x8u) != 0; }
+    virtual void SetHasClass(int b) override  { mFlagsA = (mFlagsA & ~0x8u) | (b ? 0x8u : 0u); }
 
     // ---- behavioural batch 2: delegated transform / flag / native-hash ops -
     // All forward through the char inst's (writable) render item or its property
@@ -297,8 +318,8 @@ struct AptCIH : public AptValueGC
     AptCIH* GetMask() const;                                    // @0x82AE7B48
 
     // HasClipEvent @0x82B027C0 -- does this node's sprite-base clip-event flag set
-    // (mnClipActionFlags high bits) carry any handler in nEventMask? Body in
-    // AptCIHBehaviour.cpp.
+    // (x64: the LOW 24 bits of mnClipActionFlags; the high-24 form was the X360
+    // layout) carry any handler in nEventMask? Body in AptCIHBehaviour.cpp.
     bool HasClipEvent(int nEventMask);                          // @0x82B027C0
     // HasEvent @0x82B02838 -- HasClipEvent(nEventMask) OR HasEventMember(nEventMask):
     // the node responds to nEventMask via either a packed clip-event flag or an AS
@@ -310,19 +331,20 @@ struct AptCIH : public AptValueGC
     // enqueued on the deferred-action queue stamped with nFrameId; when bDeferred and an
     // AS __proto__ event member matches, the named child handler is enqueued instead.
     // Returns the shared 0/`undefined`-as-int the callers ignore. Body in
-    // AptCIHBehaviour.cpp (FLAG: the AS bytecode-execution sub-path is deferred).
+    // AptCIHBehaviour.cpp (the immediate byte-code run + __proto__ dispatch are live;
+    // only the cross-CIH handler-rebind sub-branch remains deferred there).
     AptValue* queueClipEvents(int nEventMask, unsigned int nFrameId, int bDeferred);   // @0x82B0...
 
     // GeneralisedProcess @0x82AE01B0(per-node) -- the per-node generalised-process pass
     // (the deferred dirty-state / mask-matrix / AS-process callback flush). Runs the
     // registered process callbacks, recurses sprite/animation child lists, and folds the
-    // results into this node's subtree-dirty bit (mFlagsA bit23). Returns that bit (0/1).
+    // results into this node's subtree-dirty bit (mFlagsA bit 8). Returns that bit (0/1).
     // Body in AptCIHBehaviour.cpp.
     unsigned int GeneralisedProcess(AptCIH* pRoot, void* pContext);   // @0x82B...
 
     // SetGeneralizedProcessDirtyState @0x82ADCA50 -- mark this node's generalized-
-    // process-dirty state. When dirtying: set the self bit (mFlagsA bit24) and
-    // propagate the subtree bit (bit23) up the parent chain to the first marked
+    // process-dirty state. When dirtying: set the self bit (mFlagsA bit 7) and
+    // propagate the subtree bit (bit 8) up the parent chain to the first marked
     // ancestor. When clearing: clear the self bit, then (if the subtree bit is clear)
     // scan for a still-dirty child. Returns the offending child, else `this`.
     AptCIH* SetGeneralizedProcessDirtyState(bool bDirty);      // @0x82ADCA50
@@ -331,7 +353,7 @@ struct AptCIH : public AptValueGC
     // (the AS setProperty writer, mirror of GetProceduralProperty) by selector. The
     // selector order is the X360 jump table (word_82145258): 0 _x / 1 _y / 2 _xscale /
     // 3 _yscale / 4 _width / 5 _height / 6 _rotation / 7 _alpha / 8 colour-translate R /
-    // 9 G / 10 B / 11 _visible. bASChanged stamps the AS-changed flag (mFlagsA bit31).
+    // 9 G / 10 B / 11 _visible. bASChanged stamps the AS-changed flag (mFlagsA bit 0).
     // Writes through the char inst's writable position/colour matrix (or SetIsVisible),
     // then re-marks the generalized-process dirty state for _visible.
     void SetProceduralProperty(uint32_t nSelector, float fValue, bool bASChanged);   // @0x82AE73C0
@@ -339,9 +361,12 @@ struct AptCIH : public AptValueGC
     // GetProceduralProperty @0x82AE2D10 -- read a built-in AS "procedural" property
     // (scale/rotation/x/y/alpha/colour/visible/width/height) by selector and return
     // it as a float; out-of-range -> -1. Derives from the node's position + colour
-    // transforms (the AS getProperty reader). FLAG: the case-label integers are
-    // inferred from an unexported remap table (only index 11 == _visible is
-    // confirmed, via IsVisible); _width/_height defer to the un-homed GetBoundingRect.
+    // transforms (the AS getProperty reader). Case labels ATTESTED (2026-08-07) from
+    // the dumped byte_82145248 remap table (0x82145240 rodata block @+0x08: 4F 51 2B
+    // 40 00 09 0E 53 57 59 5B 5D; arm = loc_82AE2D80 + 4*byte): the selector order
+    // matches the SetProceduralProperty jump table above exactly (0 _x .. 11
+    // _visible); _width/_height go through GetBoundingRect (HOMED in
+    // AptCIHBehaviour.cpp).
     float GetProceduralProperty(uint32_t nPropertyIndex) const;   // @0x82AE2D10
 
     // IsVisible @0x82AE2F30 -- true iff this node AND every display-list ancestor is
@@ -386,10 +411,9 @@ struct AptCIH : public AptValueGC
     // so inherited TextFormat resolves). Returns true if the node is dynamic text.
     bool ProcessTextInst();   // @0x82B076F0
 
-    // EnsureStringAllocated @0x82B06F08 -- FLAG (declared-only): the deep dynamic-text
-    // build/layout path (AptCharacterTextInst::UpdateText + the glyph/TextFormat layout
-    // engine that bakes the field's render data). Its body belongs with the Apt text/font
-    // engine TU; declared here so ProcessTextInst / the AS createTextField path can name
-    // it. pParent is the display-list parent (inherited TextFormat source).
+    // EnsureStringAllocated @0x82B06F08 -- the deep dynamic-text build/layout path
+    // (AptCharacterTextInst::UpdateText + the host string-layout call that bakes the
+    // field's render data). Body HOMED in AptCIHText.cpp; pParent is the display-list
+    // parent (inherited TextFormat source).
     void EnsureStringAllocated(AptCIH* pParent);   // @0x82B06F08
 };

@@ -21,8 +21,10 @@
 // @ 0x827ADF88 / 0x827A8C58. On the consoles these are WorldModule methods; per
 // the committed bridge precedent they are modelled as namespace functions whose
 // leading lpWorldModule arg is the X360 r3 (the WorldModule `this`) -- this
-// bridge DOES read through it (the director camera member + the hard-stop flag,
-// X360 offsets cited in the .cpp).
+// bridge DOES read through it (the director camera member + its embedded
+// hard-stop state flag), BY NAME through the typed seat + the class's public
+// GetLastCameraInput door (2026-08-11; the raw X360 byte offsets it used before
+// are the RaceCar-bridge bug class and do not land on the x64 layout).
 namespace WorldModule
 {
     // @ 0x827A8C58 (this TU, WorldBridgeInputToEntityModules.cpp:183) -- scan the

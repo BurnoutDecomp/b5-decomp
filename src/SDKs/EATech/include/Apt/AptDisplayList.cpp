@@ -61,30 +61,24 @@
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"    // gAptActionInterpreter.setVariable (AptCloneClassMembers / AssociateInstToClass)
 
 #include <new>      // placement new (AptCIH::operator new + ctor for AptCreateInstAtDepth)
-#include <cstdio>   // snprintf (FLAG bring-up probe in AssociateInstToClass)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // FLAG bring-up probe log sink
 
 // ---------------------------------------------------------------------------
-// FLAG (module-static, owned by the Apt GC layer, not yet homed): the X360 drains
-// the deferred-release value vector (off_8324E51C / AptValueVector::ReleaseValues,
-// guarded by the dword_8324E760 latch) every time a node is released during a
-// clear. Encapsulated -- exactly as the AptActionInterpreter siblings do -- in
-// AptFlushDeferredReleases(); declared extern by name so this TU compiles
-// against the same GC drain. (FLAG: off_8324E51C / dword_8324E760.)
+// The X360 drains the deferred-release value vector (off_8324E51C /
+// AptValueVector::ReleaseValues, guarded by the dword_8324E760 latch) every time
+// a node is released during a clear. Encapsulated -- exactly as the
+// AptActionInterpreter siblings do -- in AptFlushDeferredReleases(), HOMED in
+// AptGC.cpp; declared extern here.
 // ---------------------------------------------------------------------------
 extern void AptFlushDeferredReleases();
 
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed AptCIH behavioural surface): the per-node tick / generalised-
-// process hooks the display-list walks (AptCIH::tick @0x82B0BED8 / AptCIH::
-// GeneralisedProcess @0x82AE0228). Declared as the same free-function shims the
-// AptLinker TU uses (AptCIH_tick), so this TU compiles against the AptCIH
-// behavioural cluster by name without redeclaring AptCIH's interface here. Each
-// returns the OR-accumulated "did work" flag the X360 bodies return in r3.
+// The per-node tick / generalised-process hooks the display-list walks
+// (AptCIH::tick @0x82B0BED8 / AptCIH::GeneralisedProcess @0x82AE0228) are
+// called directly as members (AptCIH.h is included below); the old free-
+// function shims are retired. Each returns the OR-accumulated "did work" flag
+// the X360 bodies return in r3.
 // ---------------------------------------------------------------------------
-// AptCIH::tick is now called directly as a member (AptCIH.h is included below).
-// AptCIH::GeneralisedProcess is now called directly as a member (AptCIH.h is included below).
 
 // ---------------------------------------------------------------------------
 // ctor @0x82AE4850
@@ -188,7 +182,7 @@ AptDisplayListState* AptDisplayList::AsState() const
 
 // ---------------------------------------------------------------------------
 // removeObject @0x82AFD0B0
-//   if (pItem && ((pItem->mFlagsBitfield >> 27) & 1)) {   // a real placed node
+//   if (pItem && pItem->getIsDefined()) {   // a real placed node (x64: value bitfield bit 4)
 //     parent = pItem->mpDisplayListParent;                // pItem[7]
 //     if (parent) {
 //       hash = parent->GetNativeHashVirtual();            // (*(*parent+8))(parent) vtbl[2]
@@ -277,7 +271,7 @@ AptRect* AptDisplayList::GetBoundingRect(int nMode, const AptMatrix* pTransform,
 // (the per-frame movie-clip update walk). For each listed AptCIH:
 //   * gate: when bUseDepthLayerMask, only nodes whose render-item depth layer is
 //     set in nDepthLayerMask ((1 << GetDepth()) & nDepthLayerMask); otherwise
-//     skip nodes whose CIHState == 3 (mFlagsA bits 29-30 both set: a fully
+//     skip nodes whose CIHState == 3 (mFlagsA bits 1-2 both set, x64: a fully
 //     removed / dead node);
 //   * type gate: only sprite (5) / animation (9) / button (4) character instances
 //     actually tick (those are the only AS-driven container/interactive types);
@@ -299,8 +293,8 @@ int AptDisplayList::tick(int nDepthLayerMask, uint8_t bUseDepthLayerMask)
             if (((1 << pNode->GetCharacterInst()->GetRenderItem()->GetDepth()) & nDepthLayerMask) == 0)
                 continue;
         }
-        // (mFlagsA bits 29-30) == CIHState 3 == a dead/removed node -> skip.
-        else if ((pNode->mFlagsA & 0x60000000u) == 0x60000000u)
+        // (mFlagsA bits 1-2, x64) == CIHState 3 == a dead/removed node -> skip.
+        else if ((pNode->mFlagsA & 0x6u) == 0x6u)
         {
             continue;
         }
@@ -308,8 +302,8 @@ int AptDisplayList::tick(int nDepthLayerMask, uint8_t bUseDepthLayerMask)
         AptCharacterInst* pCharInst = pNode->GetCharacterInst();
         const uint32_t nTypeTag = pCharInst->GetTypeTag();
         bool bTick = (nTypeTag == 5 || nTypeTag == 9);
-        // (charInst->mTypeFlags & 0xFC000000) == 0x10000000  <=>  GetTypeTag() == 4 (button).
-        if (bTick || (pCharInst->mTypeFlags & 0xFC000000u) == 0x10000000u)
+        // GetTypeTag() == 4 (button); x64 low-6-bit tag (X360 form 0xFC000000/0x10000000).
+        if (bTick || (pCharInst->mTypeFlags & 0x3Fu) == 4u)
             nResult |= pNode->tick();   // AptCIH::tick
     }
 
@@ -342,13 +336,12 @@ int AptDisplayList::GeneralisedProcess(int nFlags, int nDepthLayerMask, uint8_t 
 }
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed callees, bodies their own TUs):
-//   AptFramePlacementDispatch (sub_82B0B080) -- the frame-placement dispatcher:
+// AptFramePlacementDispatch (sub_82B0B080) -- the frame-placement dispatcher:
 //     creates/re-uses the AptCIH for the placement and returns it. A REAL standalone
-//     X360 function (AddToDisplayList @0x82B0B150 does `bl sub_82B0B080`) that has no
-//     per-address dossier in the export set yet -- export + decompile it to convert
-//     the role-reconstruction below into attestation. Declared as the callee whose
-//     result AddToDisplayList consumes.
+//     X360 function (AddToDisplayList @0x82B0B150 does `bl sub_82B0B080`), HOMED at
+//     the bottom of this TU (ATTESTED 2026-08-07 against its per-address dossier;
+//     the earlier role reconstruction is retired). Forward-declared here for
+//     AddToDisplayList, which consumes its result.
 // The freshly-placed node's just-instantiated hook -- the X360 calls its vtable[0] with
 // (node, &node->mInstanceName) right after pushing it to the new-instance table -- is
 // AptValue::AddRef (vtbl[0], arg2 discarded), invoked directly at the AddToDisplayList call site.
@@ -363,11 +356,13 @@ extern AptCIH* AptFramePlacementDispatch(AptDisplayList* pThis, void** ppPlaceme
 // name in the parent's property hash, and add it to the target's "new instances to
 // tick this frame" table (running each node's just-instantiated hook).
 //
-// ppPlacement is the .apt frame-placement command: ppPlacement[0] is the placement
-// record (its +0xC dword is the placed character id), ppPlacement[1] is the
-// AptCharacter being placed. The record + the movie import table are serialised .apt
-// data (relocated in place), walked here by their fixed layout; the runtime objects
-// (the owner character / movie / placed node) are reached by named members.
+// ppPlacement is the .apt frame-placement command (an AptMergeSourceNode /
+// AptPseudoCIH_t chain node): ppPlacement[0] is the placement record (its +0xC
+// dword is the placed character id), ppPlacement[1] the AptPseudoData_t snapshot
+// whose mpData is the AptCharacter being placed. The record + the movie import
+// table are serialised .apt data (relocated in place), walked here by their fixed
+// layout; the runtime objects (the owner character / movie / placed node) are
+// reached by named members.
 // ---------------------------------------------------------------------------
 AptCIH* AptDisplayList::AddToDisplayList(AptNativeHash* pParentHash, void** ppPlacement, AptCIH* pParentNode)
 {
@@ -402,7 +397,7 @@ AptCIH* AptDisplayList::AddToDisplayList(AptNativeHash* pParentHash, void** ppPl
             (luTablePtr >= 0x10000u) && ((luTablePtr >> 47) == 0u);
     }
 
-    // FLAG (import not loaded -- the deferred boundary, mirrored from the live place
+    // FLAG PC-platform leaf (.apt converter-data guard, mirrored from the live place
     // path): a fresh ADD whose placement names NO character (an unresolved-import slot,
     // or a MOVE node whose target depth never composed because ITS import place was
     // skipped) cannot be instantiated -- the dispatch would create a CIH over a null
@@ -499,7 +494,7 @@ AptCIH* AptDisplayList::ReplaceDisplyListItem(AptNativeHash* pParentHash, AptCIH
     }
 
     // No new character: keep the existing node, merge its visual state. An AS write
-    // (mFlagsA bit31, ASChanged) owns the transform -- never clobber it from a frame.
+    // (mFlagsA bit 0, ASChanged; x64 position) owns the transform -- never clobber it from a frame.
     if (pExisting->GetASChanged())
         return nullptr;
 
@@ -520,9 +515,9 @@ AptCIH* AptDisplayList::ReplaceDisplyListItem(AptNativeHash* pParentHash, AptCIH
 }
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed): the per-frame clip-event queue + the action-frame id.
-//   AptCIH_queueClipEvents -- queue the given clip events on a node for a frame.
-//   gnAptActionFrameId (dword_8324E514) -- the current AS action frame, homed in AptMovie.cpp.
+// The per-frame clip-event queue + the action-frame id:
+//   AptCIH::queueClipEvents -- called directly as a member (AptCIH.h above).
+//   gnAptActionFrameId (dword_8324E514) -- the current AS action frame, defined in AptGlobals.cpp.
 // ---------------------------------------------------------------------------
 // Canonical sig: the X360/PS3 AptCIH::queueClipEvents(int, unsigned int, int) -- the
 // frame-id (a3) is UNSIGNED. Reconciled across the three call-site TUs (was int here).
@@ -552,7 +547,7 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
     if (!pHandlers)
         return;
 
-    // FLAG (converter data boundary -- the same 4-byte-straddle class as the malformed
+    // FLAG PC-platform leaf (.apt converter-data guard -- the same 4-byte-straddle class as the malformed
     // frame tables / char[1]): a few clipActions blocks in the apt_convert-produced
     // bundle put the record-array pointer at the XB1-aligned +0x08 instead of +0x04,
     // so the +0x04 read straddles {pad, offset} (observed 0x0000A838_00000000). Such a
@@ -566,15 +561,16 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
     }
 
 
-    // Fold each registered handler's event mask into mnClipActionFlags' high 24 bits,
-    // and note whether any handler registers a load/unload event.
+    // Fold each registered handler's event mask into mnClipActionFlags' LOW 24 bits
+    // (x64 position; X360 kept the clip copy <<8), and note whether any handler
+    // registers a load/unload event.
     bool bHasLoadUnload = false;
     for (int32_t i = 0; i < pHandlers->mnCount; ++i)
     {
         const uint32_t nEventFlags = pHandlers->mpHandlers[i].mnEventFlags;
         if (nEventFlags & 0x201C7u)
         {
-            pSprite->mnClipActionFlags |= (nEventFlags << 8);
+            pSprite->mnClipActionFlags |= (nEventFlags & 0xFFFFFFu);
             if (nEventFlags & 0x200C0u)
                 bHasLoadUnload = true;
         }
@@ -627,15 +623,15 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
     // On the placing frame, queue this node's load + init clip events.
     if (bRunLoad)
     {
-        pSprite->mnClipActionFlags |= 0x4020000u;
-                pNode->queueClipEvents(512,     gnAptActionFrameId, 1);
+        pSprite->mnClipActionFlags |= 0x40200u;   // events 0x200|0x40000; x64 low-24 mask (X360 <<8 form 0x4020000)
+        pNode->queueClipEvents(512,     gnAptActionFrameId, 1);
         pNode->queueClipEvents(0x40000, gnAptActionFrameId, 1);
-        pSprite->mnClipActionFlags &= 0xFBFDFFFFu;
+        pSprite->mnClipActionFlags &= ~0x40200u;
     }
 }
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed leaf-first callees / globals; bodies in their own TUs):
+// Leaf-first callees, all HOMED at the bottom of this TU (forward-declared here):
 //   AptCreateInstAtDepth (sub_82B008B0) -- create a fresh AptCIH(char,parent),
 //     find its insert-after slot at nDepth, stamp the render-item depth, insert; returns it.
 //   AptReinsertInstAtDepth (sub_82AEE788) -- re-insert an existing node at nDepth.
@@ -852,7 +848,7 @@ AptCIH* AptDisplayList::placeObject(AptCIH* pExistingNode, int nDepth, AptCharac
             static_cast<AptClipEventHandlerList*>(const_cast<void*>(pPlacementClipActions));   // console stw 0x18(charInst)
 
     // A morph instance (type tag 8) takes the AS frame value as its blend amount.
-    if ((pInst->mTypeFlags & 0xFC000000u) == 0x20000000u)
+    if ((pInst->mTypeFlags & 0x3Fu) == 8u)   // morph; x64 low-6-bit tag (X360 form 0x20000000)
         *reinterpret_cast<float*>(&static_cast<AptCharacterMorphInst*>(pInst)->mMorphState_unknown) =
             static_cast<float>(fFrameValue);
 
@@ -955,7 +951,7 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
             const bool bSpriteOrAnim = (nTag == 5 || nTag == 9);
 
             // An AS-owned sprite/animation node (render-item bit27) is left as-is.
-            if (bSpriteOrAnim && ((pRenderItem->mFlags >> 27) & 1u) != 0u)
+            if (bSpriteOrAnim && (pRenderItem->mFlags & 0x10u) != 0u)
             {
                 pNode = pNode->GetDisplayListNext();
                 pSrc  = pSrc->mpNext;
@@ -984,7 +980,7 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
 
             // Placement-identity gate (evaluated BEFORE any in-place merge).
             const bool bGate1 = (pProps->mi16CharacterId == pNode->GetCreatedOnFrame());
-            const bool bGate2 = ((pInst->mTypeFlags & 0xFC000000u) == 0x24000000u);
+            const bool bGate2 = ((pInst->mTypeFlags & 0x3Fu) == 9u);   // animation; x64 low-6-bit tag
             if (!bGate1 && !bGate2)
             {
                 pResult = ReplaceDisplyListItem(pParentHash, pNode,
@@ -1101,10 +1097,10 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
 // DecFIGS DWARF where the X360 body is folded), homed here next to their callers.
 // ===========================================================================
 
-// FLAG (the process-wide AS VM -- homed by AptActionInterpreter, console
-// dword_8324E760 == &gAptActionInterpreter.mnStackTop): the class-member clone
-// stores variables through it (the console hard-codes &dword_8324E760 as the
-// setVariable receiver). Committed extern in the sibling AptCIHNativeFunctionHelper.cpp.
+// The process-wide AS VM (console dword_8324E760 == &gAptActionInterpreter.mnStackTop),
+// defined in AptGlobals.cpp: the class-member clone stores variables through it
+// (the console hard-codes &dword_8324E760 as the setVariable receiver).
+// Committed extern in the sibling AptCIHNativeFunctionHelper.cpp.
 extern AptActionInterpreter gAptActionInterpreter;
 
 // ---------------------------------------------------------------------------
@@ -1154,36 +1150,41 @@ AptCIH* AptReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, AptCIH* 
 }
 
 // ---------------------------------------------------------------------------
-// AptFramePlacementDispatch -- sub_82B0B080. A real standalone X360 function
-// (`bl sub_82B0B080` in AddToDisplayList @0x82B0B150) with no per-address dossier in
-// the export set yet, so this body is a ROLE reconstruction: field-for-field it
-// mirrors the fully attested sibling AptDispatchPlaceCommand (sub_82B0AE08), which
-// parses the same native-8 PlaceObject record; the caller's post-dispatch instance-
-// name check proves the dispatcher binds the record's name. Export + decompile
-// sub_82B0B080 to upgrade this to attestation. The dispatcher
-// creates/re-uses the placed node for a serialised .apt frame-placement command and
-// returns it. ppPlacement[1] is the AptFramePlacementProps/pseudo-data overlay; the
-// authored name / clip-depth / clip-actions live in ppPlacement[0]'s raw PlaceObject
-// record, the same native-8 body layout AptDispatchPlaceCommand parses.
-//
-// FLAG: sub_82B0B080's own body is folded (no per-address dossier in the X360 export
-// and absent as a named function in the PS3 DWARF). The faithful observable behaviour
-// -- materialise the placed node at the command's depth and return it -- is
-// reconstructed through the homed placeObject, reading the placement command's named
-// fields (the same AptFramePlacementProps the sibling ReplaceDisplyListItem reads).
+// AptFramePlacementDispatch -- sub_82B0B080 (ATTESTED 2026-08-07: the per-address
+// X360 dossier landed; the earlier role reconstruction is retired). The frame-
+// placement dispatcher AddToDisplayList invokes: build the instance name from the
+// serialised .apt PlaceObject record (flags bit5 + the resolve64-relocated name
+// pointer), placeObjectNCXForm the pseudo-snapshot's captured state at the merge
+// chain node's depth, then stamp the placed node's createdOnFrame from the
+// snapshot's character id (the rlwimi tail @0x82B0B130 writes the 14-bit field the
+// placement-identity gate1 in mergeState re-checks against AptPseudoData_t::
+// mi16CharacterId on the next merge pass).
+//   X360 arg map (@0x82B0B0DC..0x82B0B11C, stack slots pinned against the attested
+//   sibling call @0x82B0AEC0..0x82B0AEE8): r4 existing=0, r5 depth=ppPlacement[2]
+//   (the AptMergeSourceNode depth word), r6 char=props+0x00, r7 name, r8 parent,
+//   r9 forceRemove=1, r10 clipDepth=extsh(props+0x18 low half == mi16Depth@+0x1A),
+//   f1 frame=(f32)props+0x10; stack: colour=props+0x08 / matrix=props+0x04 /
+//   clipActions=props+0x0C -- all three passed UNGATED (the AptPseudoData_t ctor
+//   already nulled the flag-absent ones).
+// ppPlacement[1] is read through AptPseudoData_t, the console snapshot layout the
+// AptFramePlacementProps pun overlays (mi16Depth is the captured CLIP depth -- the
+// console snapshot ctor copies the record's s16 clip depth, see AptPseudoData.h).
 // ---------------------------------------------------------------------------
 AptCIH* AptFramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, AptCIH* pParentNode)
 {
-    AptFramePlacementProps* const pProps = static_cast<AptFramePlacementProps*>(ppPlacement[1]);
+    const AptMergeSourceNode* const pSrcNode =
+        reinterpret_cast<const AptMergeSourceNode*>(ppPlacement);
     const AptPlaceObjectInfo_t* const pInfo =
-        static_cast<const AptPlaceObjectInfo_t*>(ppPlacement[0]);
+        static_cast<const AptPlaceObjectInfo_t*>(pSrcNode->mpRecord);   // serialised .apt record
+    const AptPseudoData_t* const pProps =
+        reinterpret_cast<const AptPseudoData_t*>(pSrcNode->mpProps);
 
-    const uint32_t nFlags = pInfo->muxFlags;
-    const int32_t  nDepth = pInfo->mi32Depth;
-
+    // The instance name (record flags bit5 HasName; the serialised .apt record's
+    // name pointer was relocated by resolve64 -- null-guarded like the sibling
+    // AptDispatchPlaceCommand; the console InitFromBuffers record+0x34 unguarded).
     EAStringC nameStr;
     const EAStringC* pName = nullptr;
-    if ((nFlags & 0x20u) != 0u)
+    if ((pInfo->muxFlags & 0x20u) != 0u)
     {
         const char* const pNamePtr = pInfo->mpName;
         if (pNamePtr != nullptr)
@@ -1193,20 +1194,24 @@ AptCIH* AptFramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, Apt
         }
     }
 
-    const float* const pPosition =
-        ((pProps->mnFlags & 0x4) != 0) ? pProps->mpPositionMatrix : nullptr;
-    const AptUint32CXForm* const pPackedColor =
-        ((pProps->mnFlags & 0x8) != 0) ? pProps->mpColorTransform : nullptr;
-    const double fFrameValue = static_cast<double>(pInfo->mfRatio);
-    const int16_t nClipDepth = static_cast<int16_t>(pInfo->miClipDepth);
+    // The snapshot's clip-actions slot carries the console's captured 4-byte VALUE;
+    // on the native-8 path the AptPseudoData_t ctor leaves it 0 (the 8-byte pointer
+    // cannot be captured -- see AptPseudoData.h), so placeObject's placement-field
+    // store stays a no-op exactly as shipped.
+    const void* const pClipActions =
+        reinterpret_cast<const void*>(static_cast<intptr_t>(pProps->miClipActionValue));
 
-    const void* pClipActions = nullptr;
-    if ((nFlags & 0x80u) != 0u)
-        pClipActions = pInfo->mpClipActions;
+    AptCIH* const pPlaced = pThis->placeObjectNCXForm(
+        /*pExistingNode*/ nullptr, pSrcNode->mnDepth,
+        static_cast<AptCharacter*>(pProps->mpData), pName, pParentNode,
+        /*bForceRemove*/ 1, pProps->mi16Depth, static_cast<double>(pProps->mfRatio),
+        static_cast<const float*>(pProps->mpMatrix), pClipActions,
+        static_cast<const AptUint32CXForm*>(pProps->mpColorTransform));
 
-    return pThis->placeObjectNCXForm(
-        /*pExistingNode*/ nullptr, nDepth, pProps->mpCharacter, pName, pParentNode,
-        /*bForceRemove*/ 0, nClipDepth, fFrameValue, pPosition, pClipActions, pPackedColor);
+    // The rlwimi tail @0x82B0B130: createdOnFrame(14-bit) <- the snapshot's character
+    // id (the console writes the field blindly; SetCreatedOnFrame masks the same 0x3FFF).
+    pPlaced->SetCreatedOnFrame(pProps->mi16CharacterId);
+    return pPlaced;
 }
 
 // (AptCharInst_Get/SetPlacementField18 RETIRED 2026-07-07: the console inlines a single
@@ -1255,26 +1260,19 @@ void AptCloneClassMembers(AptCIH* pNode, AptValue* pClassObject)
 // resolve the named class value off the registered class-name hash, run the AS
 // constructor) is the deep AS-execution tail, routed through the cluster callee below.
 //
-// FLAG (deferred AS-execution tail, modelled inline as a marked no-op -- NO new
-// unresolved symbol introduced): once gated, the X360 builds a fresh AptPrototype for
-// the instance's property hash + wires its __proto__ to the registered base Object
-// prototype (off_8324E380+8 hash, key dword_8324E640), locates the character in the
-// owning movie's character table, resolves the class value the entry names (off the
+// The AS-execution tail (UN-DEFERRED 2026-07-05; implemented in full in the body
+// below): once gated, the X360 builds a fresh AptPrototype for the instance's
+// property hash + wires its __proto__ to the registered base Object prototype
+// (off_8324E380+8 hash, key dword_8324E640), locates the character in the owning
+// movie's character table, resolves the class value the entry names (off the
 // registered class-name hash dword_8324E2D4), chains __proto__ to that class's
-// prototype, ticks the node, pushes it across the interpreter's instance/this stacks
-// (off_8324E774/E798), runs the class constructor (AptActionInterpreter::callFunction
-// over the register window off_8324E3D0 / the dword_8324E760 VM), pops the stacks, and
-// -- when the node carries built-in events (FindAndSetEvents) -- registers it on the
-// director's event-target set (off_8324E574). Every one of those steps reads/writes the
-// process-wide AS-VM scratch globals (the registered class-name hash + the registered
-// Object prototype + the interpreter register window/instance/this stacks) that are
-// owned by the AS-name-registration + interpreter boot TUs and are NOT yet homed; the
-// X360 short-circuits the entire tail when none of those classes is registered (the
-// `*(v4+12) <= 0` / `dword_8324E2D4 == 0` / `class value not found` early-outs), which
-// is exactly the boot state until that engine is homed. So the faithful observable
-// result during bring-up is the gated early-out: bind nothing, return 0. This is the
-// same deferred AS-execution sub-path queueClipEvents / ClearCIH route through a cluster
-// callee -- modelled here as a no-op tail so the homed gate links with no new extern.
+// prototype, runs the class constructor (AptActionInterpreter::callFunction over
+// the register window off_8324E3D0 / the dword_8324E760 VM) under the interpreter
+// instance/this stack pushes (off_8324E774/E798), and wires the clip-event member
+// mask (FindAndSetEvents). All of those AS-VM globals are homed (AptGlobals.cpp /
+// AptInit.cpp -- Object.registerClass populates gpAptClassRegistry); the X360's
+// own early-outs (`*(v4+12) <= 0` / `dword_8324E2D4 == 0` / class value not
+// found) are reproduced in the body.
 int AptCIH::AssociateInstToClass()
 {
     AptCIH* const pNode = this;   // console r3 (`result`) is the node `this`
@@ -1286,11 +1284,11 @@ int AptCIH::AssociateInstToClass()
     // (mTypeFlags 0xFC000000 == 0x24000000), that is NOT created-dynamic
     // (item->mFlags bit27 == AptRenderItem::mbCreatedDynamic -- a runtime
     // createEmptyMovieClip/createTextField child has no library export name to bind).
-    const uint32_t nTag = pInst->mTypeFlags >> 26;            // v2[2] >> 26
+    const uint32_t nTag = pInst->mTypeFlags & 0x3Fu;          // x64 low-6-bit tag (X360 v2[2] >> 26)
     const bool bSpriteLike = (nTag == 5u || nTag == 16u);
-    if (!bSpriteLike && (pInst->mTypeFlags & 0xFC000000u) != 0x24000000u)
+    if (!bSpriteLike && (pInst->mTypeFlags & 0x3Fu) != 9u)   // x64 low-6-bit tag
         return 0;
-    if (((pInst->GetRenderItem()->mFlags >> 27) & 1u) != 0u)   // already class-bound
+    if ((pInst->GetRenderItem()->mFlags & 0x10u) != 0u)   // already class-bound (x64 bit 4; X360 bit27)
         return 0;
 
     // ---- the class-binding tail (UN-DEFERRED 2026-07-05: the AS framework is live,
@@ -1384,9 +1382,9 @@ int AptCIH::AssociateInstToClass()
     pNode->AddRef();
     gAptActionInterpreter.mpCallStackE[gAptActionInterpreter.mnCallStackE_Count++] = pNode;
     pNode->AddRef();
-    pNode->mFlagsA |= 0x8000000u;
+    pNode->mFlagsA |= 0x10u;    // IsInCtor (x64 bit 4; X360 reversed form 0x8000000)
     gAptActionInterpreter.callFunction(static_cast<AptValue*>(pNode), pClass, 0, nullptr, nullptr);
-    pNode->mFlagsA &= ~0x8000000u;
+    pNode->mFlagsA &= ~0x10u;
 
     if (gAptActionInterpreter.mnCallStackE_Count > 0)
     {

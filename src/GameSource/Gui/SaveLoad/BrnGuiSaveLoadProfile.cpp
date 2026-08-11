@@ -2,7 +2,8 @@
 // BrnGuiSaveLoad::Profile  -- implementation
 //   class:BrnGuiSaveLoad::Profile
 //
-//   ValidateProfile @0x824EFE30
+//   Construct        (outlined from BrnProgression::Profile::Serialise @0x8237C1F0)
+//   ValidateProfile  @0x824EFE30
 //
 // Reconstructed branch-for-branch from the X360 pseudocode/asm. Member access is by name.
 // ===================================================================================
@@ -11,8 +12,27 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStreamBase
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // CgsDev::Log::gpDebugPrint, Message::gxMessageFilterFlags
 
+#include <cstring>   // std::memset (the Serialise-prologue image clear)
+
 namespace BrnGuiSaveLoad
 {
+    // Compile-time pin: the object spans the whole serialised image, so the clear below
+    // is a plain object-sized memset rather than an over-length write through a view.
+    static_assert(sizeof(Profile) == Profile::KI_IMAGE_SIZE_BYTES,
+                  "BrnGuiSaveLoad::Profile must span the 118064-byte serialised image");
+
+    // Outlined from BrnProgression::Profile::Serialise @0x8237C1F0, whose prologue reads:
+    //     _savegprlr_14();
+    //     memset(a2, 0, 118064);   <- the progression save image
+    //     memset(a4, 0,   9800);   <- the DLC1 save image (see ProfileDLC1::ConstructImage)
+    //     *a2 = 28;                <- the version word
+    // The live-field copy that follows in the X360 body belongs to the Progression TU.
+    void Profile::ConstructImage()
+    {
+        std::memset(this, 0, KI_IMAGE_SIZE_BYTES);
+        miVersion = KI_VERSION_CURRENT;
+    }
+
     // @0x824EFE30
     bool Profile::ValidateProfile(const ExpectedManifest& lrExpected)
     {

@@ -1,4 +1,4 @@
-#include "SDKs/EATech/Apt/AptMath.h"
+﻿#include "SDKs/EATech/Apt/AptMath.h"
 
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"   // gpAptSharedPtrPool (off_8324D808)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"          // DOGMA_PoolManager::Allocate
@@ -19,9 +19,10 @@
 namespace
 {
     // X360 .data: the single global clip stack.
-    // FLAG (x64): the console stores the entry-array pointers as 32-bit ints; on x64
-    // the heap base is 64-bit, so the base/raw pointer slots are widened to intptr_t
-    // (a 32-bit int would truncate the base -> the makeUnit write corrupts memory).
+    // (x64 widening, Phase-0 regime): the console stores the entry-array pointers as
+    // 32-bit ints; on x64 the heap base is 64-bit, so the base/raw pointer slots are
+    // widened to intptr_t (a 32-bit int would truncate the base -> the makeUnit write
+    // corrupts memory).
     u16      gsnClipStackIndex = 0;   // word_8324E390
     intptr_t giClipStackBase   = 0;   // dword_8324E384  (16-aligned entry array)
     intptr_t giClipStackRaw    = 0;   // dword_8324E388  (raw allocation pointer)
@@ -31,24 +32,24 @@ namespace
 namespace AptMath
 {
 
-// @0x82AD5D08 -- base + 0x70 * top index.
+// @0x82AD5D08 -- base + stride * top index (x64 stride 0x80: XB1 `shl rax,7` @0x140834240).
 intptr_t ClipStackGetTop()
 {
-    return 0x70 * gsnClipStackIndex + giClipStackBase;
+    return sizeof(AptClipMatrixEntry) * gsnClipStackIndex + giClipStackBase;
 }
 
 // @0x82AD5CB0 -- pre-increment index, return new top pointer.
 intptr_t ClipStackPush()
 {
     gsnClipStackIndex = static_cast<u16>(gsnClipStackIndex + 1);
-    return 0x70 * gsnClipStackIndex + giClipStackBase;
+    return sizeof(AptClipMatrixEntry) * gsnClipStackIndex + giClipStackBase;
 }
 
 // @0x82AD5CD8 -- pre-decrement index, return new top pointer.
 intptr_t ClipStackPop()
 {
     gsnClipStackIndex = static_cast<u16>(gsnClipStackIndex - 1);
-    return 0x70 * gsnClipStackIndex + giClipStackBase;
+    return sizeof(AptClipMatrixEntry) * gsnClipStackIndex + giClipStackBase;
 }
 
 // @0x82ADC548 -- write the unit transform + opaque-white colour to the top entry.
@@ -61,7 +62,7 @@ intptr_t ClipStackPop()
 void ClipStackMakeUnit()
 {
     AptClipMatrixEntry* lpEntry =
-        reinterpret_cast<AptClipMatrixEntry*>(0x70 * gsnClipStackIndex + giClipStackBase);
+        reinterpret_cast<AptClipMatrixEntry*>(sizeof(AptClipMatrixEntry) * gsnClipStackIndex + giClipStackBase);
 
     const f32 lfOne  = 1.0f;   // flt_82001C98
     const f32 lfZero = 0.0f;   // flt_82001CC0
@@ -100,11 +101,11 @@ intptr_t ClipStackInit(int nDepth)
 {
     const u16 lsnDepth = static_cast<u16>(nDepth);
 
-    // pool->Allocate(112*nDepth + 16); the raw pointer is kept then 16-aligned up.
-    // FLAG (x64): the raw pointer is captured as intptr_t (not int) so the 64-bit heap
-    // base is not truncated; the 16-align math is identical.
+    // pool->Allocate(stride*nDepth + 16); x64 stride 0x80 (XB1 shl 7; console was 112). the raw pointer is kept then 16-aligned up.
+    // (x64 widening, Phase-0 regime): the raw pointer is captured as intptr_t (not
+    // int) so the 64-bit heap base is not truncated; the 16-align math is identical.
     intptr_t liRaw = reinterpret_cast<intptr_t>(
-        gpAptSharedPtrPool->Allocate(static_cast<size_t>(0x70 * nDepth + 0x10)));
+        gpAptSharedPtrPool->Allocate(static_cast<size_t>(sizeof(AptClipMatrixEntry) * nDepth + 0x10)));
 
     giClipStackRaw = liRaw;
 
@@ -120,6 +121,28 @@ intptr_t ClipStackInit(int nDepth)
 
     ClipStackMakeUnit();
     return ClipStackGetTop();            // the unit-entry pointer (base + 0)
+}
+
+// @0x82AE24E8 -- free the clip stack (the ClipStackInit inverse; AptRenderShutdown
+// @0x82B0C2F0 calls it first). Live stack (non-null base): return the RAW allocation
+// to the shared Apt pool with the init-matching size -- x64 stride
+// sizeof(AptClipMatrixEntry) (the console mulli's 0x70 * depth + 0x10; the raw
+// console stride on the x64 host would return the wrong size-class to the pool).
+// Then the base is zeroed UNCONDITIONALLY (stw 0 -> dword_8324E384); the raw
+// pointer / depth / index words stay stale, exactly as the console leaves them.
+intptr_t ClipStackShutdown()
+{
+    intptr_t liResult = 0;
+    if (giClipStackBase)                 // lwz dword_8324E384; beq -> skip the free
+    {
+        liResult = gpAptSharedPtrPool->Deallocate(
+                       reinterpret_cast<void*>(giClipStackRaw),
+                       sizeof(AptClipMatrixEntry) * gsnClipStackDepth + 0x10)
+                       ? 1
+                       : 0;              // the console r3 = the Deallocate result
+    }
+    giClipStackBase = 0;                 // only the base clears (raw/depth/index stay)
+    return liResult;
 }
 
 // @0x82AD5D40 -- 2D affine matrix multiply of two 4x4 (16-float) clip matrices.

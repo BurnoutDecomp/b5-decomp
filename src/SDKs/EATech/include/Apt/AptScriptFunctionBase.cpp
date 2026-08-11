@@ -15,8 +15,8 @@
 // (X360 .data globals off_8324E3DC / off_8324E3D0 / dword_8324E3D4), modelled as the
 // class statics. The scope methods delegate to the (landed) AptFrameStack chain.
 //
-// FLAG -- the CIH / GC leaf couplings (the value-object lifecycle, not the frame
-// machinery the interpreter needs):
+// The CIH / GC leaf couplings (the value-object lifecycle, not the frame
+// machinery the interpreter needs) -- all homed:
 //   * The ctor's pCallContext vtbl+0x60 dispatch is CreateFrameStack (the slot
 //     after CleanupAfterExecution): lazily build the caller's activation frame
 //     before capturing it as the closure scope. Called directly as the member.
@@ -45,7 +45,8 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                  // DOGMA_PoolManager
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h" // gpAptOperandStackPool
 
-// FLAG (GC leaf couplings -- see header above; wired at AptInit).
+// GC leaf couplings (see header above) -- defined in AptGlobals.cpp, wired by
+// AptValueInitialize (AptInit.cpp).
 extern AptValue* gpAptFunctionPrototypeRoot;                                      // dword_8324E4EC
 extern AptValue* gpUndefinedValue;                                               // register-array fill (AptInit)
 
@@ -107,7 +108,7 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     {
         AptPrototype* pProto = new AptPrototype();
         GetNativeHashVirtual()->SetPrototype(pProto);
-        pProto->GetNativeHashVirtual()->Set__Proto__(gpAptFunctionPrototypeRoot);   // FLAG: Function.prototype root
+        pProto->GetNativeHashVirtual()->Set__Proto__(gpAptFunctionPrototypeRoot);   // dword_8324E4EC -- the builtin prototype root, seeded by AptValueInitialize (AptInit.cpp)
     }
 }
 
@@ -180,7 +181,7 @@ AptScriptFunctionBase::~AptScriptFunctionBase()
 // aborting. They return a type-appropriate default after the abort so the (never
 // taken) fallthrough type-checks.
 //
-// FLAG (reconstruction): _purecall (@0x82C08F60) is a CRT abort handler
+// FLAG PC-platform leaf: _purecall (@0x82C08F60) is a CRT abort handler
 // (_NMSG_WRITE(0x19) -> _set_abort_behavior -> abort, after an optional installed
 // gpPureCallHandler at dword_832BADDC). Modelled here with the PC CRT abort() (the
 // faithful "pure virtual call" terminator); the dword_832BADDC user-handler hook is
@@ -280,7 +281,8 @@ void AptScriptFunctionBase::SetRegisterValue(int32_t nRegister, AptValue* pValue
     pValue->AddRef();
     // Null-guarded: the console pre-fills the whole register block with the
     // undefined singleton at init, so pOld is never raw null there; the x64
-    // block's first-touch slots are zero -- skip the release. FLAG hardening.
+    // block's first-touch slots are zero -- skip the release (x64 hardening,
+    // Phase-0 regime).
     if (pOld)
         pOld->Release();
 }

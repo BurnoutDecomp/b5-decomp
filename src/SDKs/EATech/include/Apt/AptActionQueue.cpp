@@ -1,4 +1,4 @@
-#include "SDKs/EATech/include/Apt/AptActionQueue.h"
+﻿#include "SDKs/EATech/include/Apt/AptActionQueue.h"
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AptValue::AddRef/Release + sReferenceRegistrationCb
 #include "SDKs/EATech/include/Apt/AptCIH.h"               // AptCIH (the queued action target)
@@ -60,9 +60,9 @@ AptActionQueueC::AptActionQueueC(u32 nCapacity)
 {
     mnCapacity = nCapacity;
 
-    // FLAG (x64 native stride -- same fix as SetupStaticData's tables): the console
+    // x64 native stride (the committed port rule; same fix as SetupStaticData's tables): the console
     // allocates 20-byte slots (KU_X360_SLOT_STRIDE); the x64 AptAnimationPoolData is
-    // pointer-widened (sizeof == 40), and every walker (enqueue/drain/WrapForward)
+    // pointer-widened (sizeof == 32/0x20 -- the x64 deque accessors' `shl reg,5`), and every walker (enqueue/drain/WrapForward)
     // indexes by element -- allocating the console byte size would let the ring roam
     // past its block once the cursors pass slot (20*cap)/sizeof.
     s32 liByteSize = static_cast<s32>(sizeof(AptAnimationPoolData) * nCapacity);
@@ -170,7 +170,7 @@ AptValue* AptActionQueueC::AddActionBack(const void* pEventStreamSlot, AptCIH* p
     lpBack->action.mpEventStreamSlot = pEventStreamSlot;
     lpBack->action.mpCIH     = pCIH;
     pCIH->AddRef();
-    lpBack->action.miContext = iContext;
+    lpBack->mnInput = iContext;
 
     mpBack = lpNextBack;
     return pCIH;
@@ -200,7 +200,7 @@ AptValue* AptActionQueueC::AddActionFront(const void* pEventStreamSlot, AptCIH* 
     lpNewFront->action.mpEventStreamSlot = pEventStreamSlot;
     lpNewFront->action.mpCIH     = pCIH;
     pCIH->AddRef();
-    lpNewFront->action.miContext = iContext;
+    lpNewFront->mnInput = iContext;
 
     return pCIH;
 }
@@ -223,7 +223,7 @@ AptValue* AptActionQueueC::AddFunctionBack(AptValue* pContext, AptValue* pFuncDe
     }
 
     lpBack->mnType             = AptAnimationPoolData::E_ACTION_TYPE_FUNCTION;
-    lpBack->function.miArgCount = iArgCount;
+    lpBack->mnInput = iArgCount;
     lpBack->function.mpContext  = pContext;
     pContext->AddRef();
     lpBack->function.mpFuncDef  = pFuncDef;
@@ -253,7 +253,7 @@ AptValue* AptActionQueueC::AddFunctionFront(AptValue* pContext, AptValue* pFuncD
 
     mpFront = lpNewFront;
     lpNewFront->mnType             = AptAnimationPoolData::E_ACTION_TYPE_FUNCTION;
-    lpNewFront->function.miArgCount = iArgCount;
+    lpNewFront->mnInput = iArgCount;
     lpNewFront->function.mpContext  = pContext;
     pContext->AddRef();
     lpNewFront->function.mpFuncDef  = pFuncDef;
@@ -455,9 +455,9 @@ bool AptActionQueueC::IsLastItemOrBeyond(AptAnimationPoolData* pSlot) const
 }
 
 // ---- SetCurItem @ 0x82AD5E60 ---------------------------------------------
-// Set the "current item" cursor. Returns *this (X360 fastcall return value).
-AptActionQueueC* AptActionQueueC::SetCurItem(AptAnimationPoolData* pSlot)
+// Set the "current item" cursor. VOID per the x64 mangling (?SetCurItem@
+// AptActionQueueC@@QEAAXPEAUAptActionPool@1@@Z @0x140841240: `mov [rcx+18h],rdx / retn`).
+void AptActionQueueC::SetCurItem(AptAnimationPoolData* pSlot)
 {
     mpCurItem = pSlot;
-    return this;
 }

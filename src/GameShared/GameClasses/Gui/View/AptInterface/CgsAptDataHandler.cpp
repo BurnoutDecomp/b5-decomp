@@ -110,7 +110,8 @@ namespace CgsGui
     // is an UN-RELOCATED file offset (the no-op FixUp; see CgsAptDataHeader.cpp), so the
     // console form resolves it as header base + offset (the converted 6-field header's name
     // offset is the 8-byte slot at +0x00); the two-arg form takes an already-resolved name
-    // (// FLAG x64: the import fallback's spelling of the same registration).
+    // (FLAG PC-platform leaf: host .apt blob offset access -- the import fallback's
+    // spelling of the same registration).
     // =========================================================================
     AptDataHeader* AptDataHandler::AddAptData(AptDataHeader* lpHeader)
     {

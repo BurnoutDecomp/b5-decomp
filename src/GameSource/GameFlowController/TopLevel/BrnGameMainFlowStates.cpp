@@ -224,6 +224,60 @@ bool LoadingScriptedState::LoadWorldCollision(BrnResource::GameDataIO::InputBuff
     return lbPrepared;
 }
 
+// ⭐ X360 0x823EF4D8 -- LoadingScriptedState::LoadGameState2, scripted stage 3.
+//
+// The console body:
+//     CreateIOBuffer<GameStateModuleIO::OutputBuffer>(updateOutStack, &out, "GameState");
+//     if (GameStateModule::Prepare2(&gGameModule.mGameStateModule, out)) {
+//         DestroyIOBuffer(out); return 1;
+//     }
+//     LockForRead(out);
+//     gameDataIn->AppendRequestInterface<3072>(*out->GetResourceRequestInterface());
+//     UnlockForRead(out);
+//     DestroyIOBuffer(out); return 0;
+//
+// ⚠️ FLAG (PC deviation -- ONE persistent buffer instead of a per-pass scratch): identical to the
+// one BrnGameModule::GamePrepare stage 4 already carries for the FIRST-pass Prepare. The console
+// carves a fresh GameStateModuleIO::OutputBuffer off the update-output IOBufferStack every pass
+// (so its request queue starts empty each time and the append moves exactly that pass's
+// requests); the PC module owns ONE persistent buffer, so the queue is CLEARED after the append,
+// which is the state the console's next pass starts in. Using the module's own buffer here also
+// keeps BOTH prepare passes staging onto the SAME queue -- the acquire LoadProgressionData
+// issues has to reach the GameData pump through the identical hop the trigger acquire does.
+// DELETE-WHEN the module's real CreateOutputDataStructure path lands.
+bool LoadingScriptedState::LoadGameState2(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer)
+{
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    if (lpGameModule == 0)
+        return true;
+
+    BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
+        lpGameModule->GetGameStateModule().GetOutputBuffer();
+    if (lpGameStateOutput == 0)
+        return true;
+
+    const bool lbPrepared = lpGameModule->GetGameStateModule().Prepare2(lpGameStateOutput);
+
+    if (!lbPrepared && lpGameDataInputBuffer != 0)
+    {
+        // The CONST overload is the one the console calls under the read lock (its non-const twin
+        // @0x8231D560 asserts the WRITE lock) -- same const-alias idiom as GamePrepare stage 4.
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutputRead =
+            lpGameStateOutput;
+        lpGameStateOutput->LockForRead();
+        lpGameDataInputBuffer->AppendRequestInterface<3072>(
+            *lpGameStateOutputRead->GetResourceRequestInterface());
+        lpGameStateOutput->UnlockForRead();
+
+        // [PC deviation, see the FLAG above] the console's per-pass buffer dies here.
+        lpGameStateOutput->LockForWrite();
+        lpGameStateOutput->GetResourceRequestInterface()->mRequestQueue.Clear();
+        lpGameStateOutput->UnlockForWrite();
+    }
+
+    return lbPrepared;
+}
+
 // The per-frame world UPDATE leg of the scripted-load spine (X360 0x823F22D8, the
 // `dword_82FAE4B0 > 5` block). Split out of Update() for readability; the X360 inlines it.
 //
@@ -325,6 +379,27 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
         reinterpret_cast<const BrnWorldIO::TimerStatusInterface*>(
             lpGameModule->GetTimerStatusInterface()));
     lpWorldInput->UnlockForWrite();
+
+    // ⭐⭐ THE CONTROLLER -> WORLD BRIDGE (X360 BridgeControllerToWorld @0x823CD890), first of
+    // DoUpdate_World's five source bridges and the ONLY producer of the world input's
+    // PlayerVehicleControls -- the block BridgeInputToEntityModules hands the race car as
+    // the player's steering/throttle. Until this line (driving-input wave 2026-08-11) the
+    // block stayed Construct-cleared every frame and the player car was deaf to input.
+    // FLAG PC placement: staged here for exactly the reason the game-state block below
+    // gives -- DoUpdate_World is reconstructed but reached from nowhere; this function is
+    // the live world drive, and both sites carry the same call and move together. The pad
+    // fill (InputPadsPC::UpdatePlayer0) ran earlier this sub-step under GameMain's GUI
+    // staging, so the buffer carries this frame's controls; the console's DoUpdate locks
+    // all five sources in one LockBuffersForIO, reproduced here as the per-source bracket
+    // this file already uses for the game-state leg.
+    {
+        CgsInput::InputIO::OutputBuffer* lpInputOutput = lpGameModule->GetPcInputOutputBuffer();
+        lpInputOutput->LockForRead();
+        lpWorldInput->LockForWrite();
+        lpGameModule->BridgeControllerToWorld(lpWorldInput, lpInputOutput);
+        lpWorldInput->UnlockForWrite();
+        lpInputOutput->UnlockForRead();
+    }
 
     // ⭐ THE OUTPUT BUFFER IS THE GAME MODULE'S, not this function's (2026-08-01, camera wave).
     // The console's DoUpdate @0x823F0AF8 creates ONE BrnWorldIO::UpdateOutputBuffer per
@@ -572,8 +647,12 @@ void LoadingScriptedState::Update()
                 // fall through
             case 3:
                 gBrnScriptedLoadStage = 3;
-                // X360: LoadGameState2. [deferred: game-state module placeholder]
-                LogScriptedStageOnce(3, "LoadGameState2 [deferred]");
+                // ⭐ REAL since 2026-08-11 (was `[deferred]`, which is why PROGRESSION.DAT never
+                // loaded and OnPlayerCarChange fired "lpProgressionData != NULL"). X360:
+                // `if (!LoadGameState2(this, gameDataIn)) break;`
+                LogScriptedStageOnce(3, "LoadGameState2 -- real");
+                if (!LoadGameState2(&s_GameDataInput))
+                    break;
                 // fall through
             case 4:
                 gBrnScriptedLoadStage = 4;

@@ -70,10 +70,9 @@ struct AptScriptColour : public AptObject
     // them with the Color value as the receiver and the script arg count). Each
     // returns an AptValue* result (the AS "undefined" value when it has nothing to
     // hand back). Their addresses back the cached AptNativeFunction singletons.
-    //   setRGB       -- write the target's additive RGB from an int arg. FLAG: its
-    //                   disassembly was not in this TU's dossier (only its symbol,
-    //                   referenced by objectMemberLookup); declared so the lookup can
-    //                   wire it, body deferred (see the .cpp).
+    //   setRGB       -- write the target's additive RGB from an int arg (body HOMED
+    //                   in the .cpp, decompiled from the PS3 DecFIGS EXTERNAL twin
+    //                   @0xF349AC).
     //   getRGB       @0x82AECF48 -- pack the target's additive RGB into an int.
     //   getTransform @0x82AF5918 -- build an Object of the 8 transform channels.
     //   setTransform @0x82AE6BA8 -- write the 8 transform channels from an Object.

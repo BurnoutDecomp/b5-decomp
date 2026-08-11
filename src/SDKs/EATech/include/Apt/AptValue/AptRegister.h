@@ -52,11 +52,10 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"              // DOGMA_PoolManager::Allocate/Deallocate
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed global): the configured AS register count (X360 dword_82F733E8,
-// loaded by Initialize from the Apt runtime config block at unk_82F733B8). The
-// value is published by the not-yet-reconstructed Apt runtime startup; declared
-// here as an extern so this TU links. 0 until then -> Initialize brings up an
-// empty register file.
+// The configured AS register count (X360 dword_82F733E8 == word 12 of the
+// unk_82F733B8 config block). Published by AptUpdateInitialize (AptInit.cpp
+// @0x82B02D08: `gnAptRegisterCount = params[12]`, default 128) before
+// AptValueInitialize runs AptRegister::Initialize. Defined in AptRegister.cpp.
 // ---------------------------------------------------------------------------
 extern s32 gnAptRegisterCount;   // X360 dword_82F733E8
 

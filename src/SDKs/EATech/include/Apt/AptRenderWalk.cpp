@@ -118,9 +118,9 @@ static void AptCleanupInvisibleMovieClipInternal(AptRenderItem* pItem, int nTick
 
         // console order: the MASK recursion first, then the child (bit26 == the
         // went-invisible-this-frame flag, `extrwi r11,1,5` on mFlags).
-        if (lpMask && ((lpMask->mFlags >> 26) & 1u) != 0)
+        if (lpMask && (lpMask->mFlags & 0x20u) != 0)
             AptCleanupInvisibleMovieClipInternal(lpMask, nTick);
-        if (lpChild && ((lpChild->mFlags >> 26) & 1u) != 0)
+        if (lpChild && (lpChild->mFlags & 0x20u) != 0)
             AptCleanupInvisibleMovieClipInternal(lpChild, nTick);
 
         pItem = lpMgr->Render_GetSiblingInvisible(pItem, nTick);
@@ -201,9 +201,9 @@ static void AptDecoupleTreeCleanUpInvisibleRI(AptRenderItem* pItem, int nTick)
     AptRenderItem* lpChild = lpMgr->Render_GetChildInvisible(pItem, nTick);
     AptRenderItem* lpMask  = lpMgr->Render_GetMaskInvisible(pItem, nTick);
 
-    if (lpChild && ((lpChild->mFlags >> 26) & 1u) != 0)
+    if (lpChild && (lpChild->mFlags & 0x20u) != 0)
         AptCleanupInvisibleMovieClipInternal(lpChild, nTick);
-    if (lpMask && ((lpMask->mFlags >> 26) & 1u) != 0)
+    if (lpMask && (lpMask->mFlags & 0x20u) != 0)
         AptCleanupInvisibleMovieClipInternal(lpMask, nTick);
 }
 
@@ -227,7 +227,7 @@ static void AptDecoupleTreeTraversalClipper(AptRenderItem* pItem, int nTick, Apt
 
         // bracket == leaf when: no first child, OR the node is not a "recurse-as-parent"
         // mask-owner ((mFlags & 0xFC0000) != 0x400000).
-        const bool lbMaskOwner = (lpChild != nullptr) && ((lpNode->mFlags & 0x00FC0000u) == 0x00400000u);
+        const bool lbMaskOwner = (lpChild != nullptr) && ((lpNode->mFlags & 0x3F00u) == 0x1000u);
         if (lpChild == nullptr || lbMaskOwner)
         {
             AptRenderLeaf(lpNode, lbMaskOwner, pCtx, eOp, nDepth);
@@ -270,7 +270,7 @@ static AptRenderItem* AptDecoupleClippedTreeTraversal(AptRenderItem* pItem, int 
         lpNode->Manager_UpdateFirstChild(lpChildRev);
         AptRenderItem* lpChild = lpNode->mpManagerFirstChild;   // *(v12+48)
 
-        const bool lbMaskOwner = (lpChild != nullptr) && ((lpNode->mFlags & 0x00FC0000u) == 0x00400000u);
+        const bool lbMaskOwner = (lpChild != nullptr) && ((lpNode->mFlags & 0x3F00u) == 0x1000u);
         if (lpChild == nullptr || lbMaskOwner)
         {
             AptRenderLeaf(lpNode, lbMaskOwner, pCtx, eOp, nDepth);
@@ -316,7 +316,7 @@ static void AptDecoupleMaskedTreeTraversal(AptRenderItem* pItem, int nTick, AptR
 
         // NB: the mask-owner test here is on the ROOT pItem's flags (v6 == the entry item),
         // matching the asm (`(*(v6 + 24) & 0xFC0000) != 0x400000`).
-        const bool lbMaskOwner = (lpChild != nullptr) && ((pItem->mFlags & 0x00FC0000u) == 0x00400000u);
+        const bool lbMaskOwner = (lpChild != nullptr) && ((pItem->mFlags & 0x3F00u) == 0x1000u);
         if (lpChild == nullptr || lbMaskOwner)
         {
             AptRenderLeaf(lpNode, lbMaskOwner, pCtx, eOp, nDepth);
@@ -412,7 +412,7 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
             // ---- shared node render (LABEL_11) --------------------------------------------
             {
                 const u32 luFlags = lpNode->mFlags;   // *(v15+24)
-                if (static_cast<int>(luFlags) >= 0)
+                if ((luFlags & 0x1u) == 0)   // isVisible (x64 bit 0, ?GetIsVisible @0x1408391B0) clear
                 {
                     // isVisible bit (bit31) clear -> node invisible: run the invisible-RI cleanup.
                     AptDecoupleTreeCleanUpInvisibleRI(lpNode, nTick);
@@ -421,7 +421,7 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
                 {
                     // ---- mask (if hasMask bit29 set AND the mask link is non-null) ----
                     AptRenderItem* lpMaskItem = nullptr;
-                    if (((luFlags >> 29) & 1u) != 0 && lpNode->mpMask != nullptr)   // *(v15+28)
+                    if ((luFlags & 0x4u) != 0 && lpNode->mpMask != nullptr)   // hasMask (x64 bit 2) + *(v15+28)
                     {
                         AptRenderItem* lpMaskRev = lpNode->mpMask->Manager_GetRenderRevision(nTick);
                         lpNode->Manager_UpdateMask(lpMaskRev);
@@ -444,7 +444,7 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
                     }
 
                     // ---- the node's own children, unless the skip-children bit (bit1) is set ----
-                    if (((luFlags >> 30) & 1u) == 0)   // *(v15+24) bit30 clear
+                    if ((luFlags & 0x2u) == 0)   // isMask (x64 bit 1, ?GetIsMask @0x140839180) clear
                     {
                         AptRenderItem* lpChildRev = lpNode->mpManagerFirstChild
                             ? lpNode->mpManagerFirstChild->Manager_GetRenderRevision(nTick) : nullptr;
@@ -452,7 +452,7 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
                         AptRenderItem* lpChild = lpNode->mpManagerFirstChild;   // *(v15+48)
 
                         const bool lbMaskOwner = (lpChild != nullptr)
-                            && ((lpNode->mFlags & 0x00FC0000u) == 0x00400000u);
+                            && ((lpNode->mFlags & 0x3F00u) == 0x1000u);
                         if (lpChild == nullptr || lbMaskOwner)
                         {
                             AptRenderLeaf(lpNode, lbMaskOwner, pCtx, eOp, nDepth);

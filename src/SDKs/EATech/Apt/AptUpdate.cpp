@@ -32,6 +32,7 @@
 #include "SDKs/EATech/include/Apt/AptCIH.h"                       // ProcessTextInst / ProcessCustomControls / ProcessMaskMatricies
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"  // gValuesToRelease (deferred-release flush)
 #include "SDKs/EATech/include/Apt/AptGC.h"                        // AptGC::CleanUnreachable (the partial sweep)
+#include "SDKs/EATech/include/Apt/Apt.h"                          // AptUserFunctions (the gAptFuncs recorder-sink slots)
 
 // ---- collaborator globals (all defined elsewhere; console addresses noted) ----------
 extern bool gbAptZombiesDirty;                  // byte_8324E38F (AptGC.cpp; raised by AptPartialGarbageCollection)
@@ -40,8 +41,10 @@ extern int  gbAptSavedInputActive;              // dword_8324D7F0 (AptGlobals.cp
 extern uint32_t gAptInputRecorderTag;           // dword_8324D820 (AptGlobals.cpp; advanced per banked frame)
 extern int  gnCurrUpdateTick;                   // dword_8324E520 (AptGlobals.cpp; the update-side tick bank)
 extern int  gnCurrRenderTickConsumed;           // dword_8324E524 (AptGlobals.cpp; the render-side consumed tick)
-extern int  (*gpAptInputRecorderSink)(void*, int);          // dword_8324E830 (AptGlobals.cpp)
-extern void (*gpAptInputRecorderTagSink)(const char*);      // dword_8324E834 (AptGlobals.cpp)
+// The two recorder sinks are NOT standalone globals: dword_8324E830/834 are
+// gAptFuncs+0x18/+0x1C -- the pfnDebugAddSavedInput / pfnDebugSetScreenGrabPending
+// members of the host user-function table (installed by AptAux::ConstructApt).
+extern AptUserFunctions gAptFuncs;                          // dword_8324E818 (CgsAptAux.cpp)
 
 // The three per-node generalised-process callback slots the update pass installs
 // around AptDisplayList::GeneralisedProcess (dword_8324E41C/420/424; defined in
@@ -98,14 +101,14 @@ static void AptUpdateRecordFrame()
     {
         char lacTag[24];
         std::snprintf(lacTag, sizeof(lacTag), "%06d", gAptInputRecorderTag);
-        if (gpAptInputRecorderTagSink)
-            gpAptInputRecorderTagSink(lacTag);
+        if (gAptFuncs.pfnDebugSetScreenGrabPending)   // dword_8324E834 == gAptFuncs+0x1C
+            gAptFuncs.pfnDebugSetScreenGrabPending(lacTag);
 
         int laRecord[2];
         laRecord[0] = static_cast<int>(gAptInputRecorderTag);
         laRecord[1] = 0x03000000;
-        if (gpAptInputRecorderSink)
-            gpAptInputRecorderSink(laRecord, 8);
+        if (gAptFuncs.pfnDebugAddSavedInput)          // dword_8324E830 == gAptFuncs+0x18
+            gAptFuncs.pfnDebugAddSavedInput(reinterpret_cast<AptSavedInputRecord*>(laRecord), 8);
     }
 }
 
@@ -124,7 +127,7 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
     AptAnimationTarget* pAnim = gpAptTarget->mpAnimationTarget;
 
     AptCharacterInst* pRootInst = pAnim->mDisplayList.mpHead->mpFirst->GetCharacterInst();
-    if ((pRootInst->mTypeFlags & 0xFC000000u) != 0x24000000u)
+    if ((pRootInst->mTypeFlags & 0x3Fu) != 9u)   // x64: tag in LOW 6 bits (X360 form 0xFC000000/0x24000000)
         return 0;
 
     AptCharacterAnimationInst* pRootAnimInst =
@@ -137,7 +140,7 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
     // banked-credit divide) -- a 0-period movie cannot be paced (both this loop
     // and the console's would never bank down). The MAIN framework bundle carries
     // an authored 0 in this field -- a known bundle-data defect (see the GUIAPT
-    // bundle-defect notes). FLAG (PC guard, host-driver precedent): pace an
+    // bundle-defect notes). FLAG PC-platform leaf (data-defect guard, host-driver precedent): pace an
     // invalid period at the 30fps stand-in the retired host driver used. (A
     // CGS_ASSERT here PAUSES the game loop on the dev-assert screen every boot, so
     // the guard is silent by design.)
@@ -163,7 +166,7 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
             // the generalised-process pass (the X360 break path).
             AptCharacterInst* pCurrentRoot =
                 gpAptTarget->mpAnimationTarget->mDisplayList.mpHead->mpFirst->GetCharacterInst();
-            if ((pCurrentRoot->mTypeFlags & 0xFC000000u) != 0x24000000u)
+            if ((pCurrentRoot->mTypeFlags & 0x3Fu) != 9u)   // x64 low-6-bit tag
                 return 1;
 
             // Single-step when the input recorder is armed; otherwise keep catching
@@ -177,7 +180,7 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
     {
         AptCharacterInst* pStoreRoot =
             gpAptTarget->mpAnimationTarget->mDisplayList.mpHead->mpFirst->GetCharacterInst();
-        if ((pStoreRoot->mTypeFlags & 0xFC000000u) == 0x24000000u)
+        if ((pStoreRoot->mTypeFlags & 0x3Fu) == 9u)   // x64 low-6-bit tag
             static_cast<AptCharacterAnimationInst*>(pStoreRoot)->mnAccumulatedUpdateMs = nBankedMs;
     }
 
@@ -202,7 +205,7 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
         // single-threaded, so a plain add reproduces the observable state.
         // (The X360 also traps on nMsPerFrame == 0 -- twllei -- before the divide.)
         if (nMsPerFrame != 0
-            && (gnCurrUpdateTick - gnCurrRenderTickConsumed) / static_cast<int>(nMsPerFrame)
+            && static_cast<int>(static_cast<unsigned int>(gnCurrUpdateTick - gnCurrRenderTickConsumed) / nMsPerFrame)
                    < nMaxBankedFrames)
         {
             gnCurrUpdateTick += nMsPerFrame;
@@ -231,7 +234,7 @@ void AptUpdate(int nElapsedMs, int nDepthLayerMask, int nMaxBankedFrames)
         AptAnimationTarget* pAnim = gpAptTarget->mpAnimationTarget;
         AptCIH* pRootNode = pAnim->mDisplayList.mpHead->mpFirst;
         if (pRootNode != nullptr
-            && (pRootNode->GetCharacterInst()->mTypeFlags & 0xFC000000u) == 0x24000000u)
+            && (pRootNode->GetCharacterInst()->mTypeFlags & 0x3Fu) == 9u)   // x64 low-6-bit tag
         {
             if (AptUpdateRunTargetFrames(nElapsedMs, nDepthLayerMask, nMaxBankedFrames))
                 AptUpdateRecordFrame();
@@ -246,7 +249,8 @@ void AptUpdate(int nElapsedMs, int nDepthLayerMask, int nMaxBankedFrames)
         }
     }
 
-    gValuesToRelease.ReleaseValues();
+    if (gpValuesToRelease != nullptr)
+        gpValuesToRelease->ReleaseValues();
     if (gbAptZombiesDirty)
     {
         AptGC::CleanUnreachable();

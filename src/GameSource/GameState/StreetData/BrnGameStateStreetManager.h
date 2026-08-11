@@ -282,6 +282,53 @@ namespace BrnGameState
                        CgsModule::EventReceiverQueue<3072,16>* lpReceiverQueue,
                        const TriggerQueryManager* lpTriggerQueryManager );
 
+        // ====================================================================================
+        // ⚠️ [FLAG PC bring-up] WireOwnerPointers -- A DELIBERATE, NAMED SUBSET OF Construct.
+        //
+        // NOT a console function. It exists because GameStateModule::Construct cannot yet call
+        // StreetManager::Construct @0x82335978 (that function's FIRST statement is
+        // mStreetManagerDebugComponent.Construct(this), which emits the debug component's vtable
+        // and hard-references ~15 still-unhomed symbols -- see the DELETE-WHEN in
+        // BrnGameStateModule.cpp), while Prepare2's SetupParRivals leg DOES dereference the
+        // owner pointers that Construct is the only writer of.
+        //
+        // ⛔ IT IS NAMED FOR WHAT IT IS SO IT CANNOT BE MISTAKEN FOR THE REAL THING. The house
+        // rule (BrnVehicleManager.h) is "do not ship a PARTIAL Construct" -- a body that runs
+        // part of Construct under Construct's own name and looks complete. This is the opposite:
+        // a differently-named two-store helper whose whole contract is in its name, callable
+        // exactly once, from the console's own call position, with the console's own values.
+        //
+        // WHAT IT REPRODUCES, store for store (X360 Construct @0x82335978, whose caller is
+        // GameStateModule::Construct @0x82380388 at 0x82380768 --
+        // `StreetManager::Construct(a1 + 284520, a1, a1 + 47920, a1 + 183592)`):
+        //     if (!lpProgression)      assert("lpProgression",      ...:151);
+        //     *(this + 7440) = a3;   // +0x1D10 mpProgressionManager
+        //     if (!lpGameStateModule)  assert("lpGameStateModule",  ...:153);
+        //     *(this + 7444) = a2;   // +0x1D14 mpGameStateModule
+        // -- the console's own two asserts and two stores, in the console's order.
+        //
+        // WHAT IT DOES *NOT* DO, said plainly:
+        //   * the THIRD owner pointer. The console's a4 is `a1 + 183592` == GameStateModule's
+        //     RoadRulesManager member, and THAT MEMBER DOES NOT EXIST ON PC YET (DWARF
+        //     BrnGameStateModule.h:229 declares it; the recon header does not). There is nothing
+        //     to take the address of, so mpRoadRulesManager stays at its `= 0` initialiser below
+        //     rather than being handed a fabricated value, and the console's third assert
+        //     (...:155) is deliberately NOT reproduced here -- firing it every boot for a member
+        //     that does not exist would be noise, not a finding. AUDITED: no TU on the wired PC
+        //     path reads mpRoadRulesManager (the four readers -- _wB_06, _wB_07 and the two
+        //     debug components -- are all unmounted), and every one of them already carries its
+        //     own `CGS_ASSERT(mpRoadRulesManager, ...)` from the console, so whichever mounts
+        //     first gets a named failure rather than an AV.
+        //   * the ~120 other stores Construct makes (the score-table memsets, the walk state,
+        //     the five perf monitors, the debug component). Those are covered by the in-class
+        //     initialisers below and are NOT silently zeroed by this helper.
+        //
+        // DELETE-WHEN GameStateModule::Construct calls the real StreetManager::Construct: delete
+        // this method, delete its call site, and delete the `= 0` initialisers it backs up.
+        // ====================================================================================
+        void WireOwnerPointers( GameStateModule* lpGameStateModule,
+                                BrnProgression::ProgressionManager* lpProgression );
+
         // DWARF :226 (not in this wave's ledger; body elsewhere).
         bool Release();
 
@@ -351,7 +398,10 @@ namespace BrnGameState
                                   const GameStateModuleIO::BuddyRemovedEvent* lpBuddyRemovedEvent );
 
         // ---- streamed loads ----------------------------------------------------
-        // DWARF :310 (committed body pending; declared for Prepare2).
+        // DWARF :310 / @ 0x8234F630 (committed body, BrnGameStateStreetManager_wB_01.cpp).
+        // meLoadStage machine: LoadBundle("STREETDATA.DAT", pool 5) -> AcquireResource
+        // ("StreetData", pool 5) -> bind mpStreetData from the acquire response handle.
+        // True once E_LOAD_COMPLETE.
         bool LoadStreetData( GameStateModuleIO::OutputBuffer* lpOutput,
                              CgsModule::EventReceiverQueue<3072,16>* lpReceiverQueue );
 
@@ -610,9 +660,27 @@ namespace BrnGameState
         CgsResource::ResourcePtr<BrnAI::AISectionsData>     mpAISectionData;                   // +0x1CE8
         CgsResource::ResourceHandle              mDistrictMapResourceHandle;                   // +0x1D08
 
-        BrnProgression::ProgressionManager*      mpProgressionManager;                         // +0x1D10
-        GameStateModule*                         mpGameStateModule;                            // +0x1D14
-        RoadRulesManager*                        mpRoadRulesManager;                           // +0x1D18
+        // ⚠️ [FLAG PC bring-up] the three owner back-pointers carry `= 0` in-class initialisers.
+        // StreetManager::Construct @0x82335978 is their only writer and GameStateModule::Construct
+        // cannot call it yet (see WireOwnerPointers above and the DELETE-WHEN in
+        // BrnGameStateModule.cpp), so without these they are INDETERMINATE -- and on 2026-08-11
+        // that was not theoretical: the first boot after the SetupParRivals un-park took an
+        // EXCEPTION_ACCESS_VIOLATION reading 0x1D9E8 inside ProgressionManager::GetProgressionData
+        // called from StreetManager::SetupParRivals. 0x1D9E8 == 121320 is EXACTLY the host
+        // offsetof(ProgressionManager, mpProgressionData) (measured with a compile-time probe
+        // against this build's headers), i.e. a member read off a NULL base -- mpProgressionManager.
+        // These initialisers do not change the layout (the _AssertLayout pins below still hold) and
+        // they are not invented values -- zero is what Destruct @0x82335D40 writes back into all
+        // three. Same doctrine as BrnGameStateModule.h's `mpOutputBuffer = 0` and the achievement
+        // manager's four back-pointers (BrnGameStateAchievementManagerBase.h:232-235).
+        // ⚠️ THEY ARE A BACKSTOP, NOT THE WIRING: mpProgressionManager and mpGameStateModule are
+        // given their real console values by WireOwnerPointers, called from GameStateModule::
+        // Construct at the console's own call position. Zero here only guarantees that a member
+        // nothing wired is DETERMINATE, so the guards that test it can actually fire.
+        // DELETE-WHEN GameStateModule::Construct calls StreetManager::Construct for real.
+        BrnProgression::ProgressionManager*      mpProgressionManager = 0;                     // +0x1D10
+        GameStateModule*                         mpGameStateModule    = 0;                     // +0x1D14
+        RoadRulesManager*                        mpRoadRulesManager   = 0;                     // +0x1D18
 
         BrnStreetData::RoadIndex                 miCurrentPlayerRoadIndex;                     // +0x1D1C (-1 init)
         BrnStreetData::RoadIndex                 miLastPlayerRoadIndex;                        // +0x1D20 (-1)
@@ -652,9 +720,22 @@ namespace BrnGameState
         bool                                     mbLockLeftSign;                               // +0x1DCE
         bool                                     mbPlayerIsInAShortcut;                        // +0x1DCF
 
-        LoadStage                                meLoadStage;                                  // +0x1DD0
-        AILoadStage                              meAILoadStage;                                // +0x1DD4
-        DistrictMapLoadStage                     meDistrictMapLoadStage;                       // +0x1DD8
+        // ⚠️ [FLAG PC bring-up] the three stage words carry in-class initialisers holding the
+        // EXACT values StreetManager::Construct @0x82335978 writes into them. Reason, stated
+        // rather than hidden: GameStateModule now embeds this manager BY VALUE (DWARF :425) but
+        // does NOT yet call StreetManager::Construct -- that Construct's first statement is
+        // mStreetManagerDebugComponent.Construct(this), which emits the debug component's vtable
+        // and therefore hard-references its virtual Update/OnActivate/RenderHUD and the ~15
+        // still-unhomed StreetManager/ScoringSystem/ProgressionManager accessors those call
+        // (MEASURED with dumpbin /SYMBOLS over the mount candidate set). Without the stage words
+        // seeded, LoadStreetData would switch on an INDETERMINATE value on the very first tick.
+        // These initialisers do not change the layout (the _AssertLayout offsets below still
+        // hold) and they are not invented values -- they are Construct's own three stores.
+        // Same doctrine as BrnGameStateModule.h's `mpOutputBuffer = 0`.
+        // DELETE-WHEN GameStateModule::Construct calls StreetManager::Construct for real.
+        LoadStage                                meLoadStage            = E_LOAD_NOT_STARTED;            // +0x1DD0
+        AILoadStage                              meAILoadStage          = E_AI_DATA_LOAD_NOT_STARTED;    // +0x1DD4
+        DistrictMapLoadStage                     meDistrictMapLoadStage = E_DISTRICT_MAP_LOAD_REQUEST;   // +0x1DD8
 
         s32                                      miUpcomingRoadsPM;                            // +0x1DDC ("UpcomingRoads")
         s32                                      miUpcomingRoadsSentMessagePM;                 // +0x1DE0 ("UpcomingRoadsSendMessage")

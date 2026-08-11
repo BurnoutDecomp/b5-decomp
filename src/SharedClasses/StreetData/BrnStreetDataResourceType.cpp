@@ -19,13 +19,18 @@ namespace BrnStreetData
         return KU_STREET_DATA_RESOURCE_TYPE_ID;
     }
 
+    // x64: StreetData's serialised offset slots relocate to full 64-bit pointers, so the
+    // delta must be the full-width load base (GetLoadBase64). The console passes the u32
+    // form only because its pointers are 32-bit; truncating the x64 heap base here would
+    // point every table at a wild address. Same treatment as
+    // CgsLanguage::LanguageResourceType::FixUp/FixDown.
     void StreetDataResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
-        static_cast<StreetData*>(lpResource)->FixDown(static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+        static_cast<StreetData*>(lpResource)->FixDown(CgsResource::GetLoadBase64(lrResource));
     }
 
     void StreetDataResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        static_cast<StreetData*>(lpResource)->FixUp(static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+        static_cast<StreetData*>(lpResource)->FixUp(CgsResource::GetLoadBase64(lrResource));
     }
 }

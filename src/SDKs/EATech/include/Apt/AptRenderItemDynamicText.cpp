@@ -6,6 +6,7 @@
 //                                               sub_82AEF678 = the clone copy-ctor)
 //   Render                        0x82AEFAD0   / SetZID 0x82ADB578
 //   SetTextFormat                 0x82AEC1D0
+//   ~AptRenderItemDynamicText     0x82AEF850   (the real dtor; targeted export)
 //   `vector deleting destructor'  0x82AF4E78   (compiler thunk; the base sized
 //                                               operator delete frees the pool block)
 //
@@ -48,8 +49,8 @@
 // mouse-wheel flag stamped into a fresh field.
 // gAptEmptyTextRenderDataZID (&unk_82F72DB0) is the "unresolved/empty handle"
 // sentinel -- a field whose handle equals it has nothing to draw / release.
-// FLAG: on x64 the render-data handle is a 32-bit host id (the console stored a
-// 32-bit pointer in this slot); kept as the header's int32_t mZID.
+// The render-data handle is POINTER-WIDTH on x64 (the console stored a 32-bit
+// pointer; XB1 ?GetZID does an 8-byte load) -- the header's intptr_t mZID.
 // ---------------------------------------------------------------------------
 extern void (*gpfnAptDrawTextRenderData)(intptr_t nZId, AptMaskRenderOperation eOp, int nTick);  // dword_8324E868
 extern void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp);                        // dword_8324E864
@@ -68,7 +69,7 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(AptCharacter* pCharacter, int
     const AptCharacterDynamicText* pText = static_cast<const AptCharacterDynamicText*>(pCharacter);
 
     // Dynamic-text render-type flag: bit 19 (console __ROR4__(1,13) & 0x00FC0000).
-    mFlags = (mFlags & 0xFF03FFFFu) | 0x00080000u;
+    mFlags = (mFlags & ~0x3F00u) | 0x200u;   // dynamic-text=2; x64 type field bits 8-13
 
     mZID         = 0;          // no render-data handle yet
     mScroll      = 1;          // console seeds the scroll offset to 1
@@ -81,14 +82,14 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(AptCharacter* pCharacter, int
     mFontID    = pText->mnDefaultGlyphIndex;                          // char +0x20
 
     // Packed back-colour dword: background colour forced white (bits 8-31), the
-    // alignment field (bits 3-6) from the character's authored align dword. The
-    // console preserved the (uninitialised) low/draws-background bits here; they
-    // are initialised deterministically to 0 (the portable de-opt).
-    mFlagsAndBackColor = 0xFFFFFF00u;                                 // backColor = 0xFFFFFF
-    SetAlignment(pText->mnAuthoredReserved0);                         // char +0x24, bits 3-6
+    // alignment field (x64 bits 25-28) from the character's authored align dword.
+    // The console preserved the (uninitialised) draws-background bit here; it is
+    // initialised deterministically to 0 (the portable de-opt).
+    mFlagsAndBackColor = 0x00FFFFFFu;                                 // backColor = 0xFFFFFF (x64 low-24)
+    SetAlignment(pText->mnAuthoredReserved0);                         // char +0x24
 
     // Packed border-colour dword: border colour + draws-border 0, box alignment 3
-    // (bits 2-5), mouse-wheel flag (bit 6) from the global authored default.
+    // (x64 bits 26-29), mouse-wheel flag (x64 bit 25) from the global authored default.
     mFlagsAndBorderColor = 0u;
     SetBoxAlignment(3);
     SetMouseWheelEnabled(gAptDefaultTextMouseWheelEnabled);
@@ -105,19 +106,16 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(AptCharacter* pCharacter, int
 // render-type flag. The strings / colours / bounds / font copy from the source.
 // VERIFIED vs the asm (sub_82AEF678 @0x82AEF678 IS present in .ida-exports/ARTIST):
 // mStateFlags is hard-coded to 4 (li r7,4 -> stw 0x6C), NOT copied; mZID resets to 0.
-// FLAG (deferred, NOT guessed): the console DEEP-COPIES mpTextFormat -- 0x82AEF80C: if
-// source->mpTextFormat (0x68) != null it Allocates a 0x20 block from gpNonGCPoolManager
-// and copy-constructs a fresh TextFormat from the source's, else leaves null. Kept null
-// here because the TextFormat value type is still opaque (an AptValue* that SetTextFormat
-// tears down as an EAStringC 0x20 block); a wrong deep-copy would double-free. Re-home
-// with the TextFormat layer. Effect today: cloning a text field with active formatting
-// loses its format until the next resolve -- safe (no UB), just not yet faithful.
+// The mpTextFormat DEEP COPY (asm tail @0x82AEF80C) is now faithful: the TextFormat
+// record type is homed (AptTextFormat.cpp), so the clone pool-allocates a fresh
+// record and copy-constructs it through TextFormat::TextFormat(const TextFormat*)
+// @0x82AEC320 -- the copy the earlier pass deferred while the type was opaque.
 // ---------------------------------------------------------------------------
 AptRenderItemDynamicText::AptRenderItemDynamicText(const AptRenderItemDynamicText* pSource,
                                                    int nCreatedOnTick, bool bCopyExtended)
     : AptRenderItem(pSource, nCreatedOnTick, bCopyExtended)
 {
-    mFlags = (mFlags & 0xFF03FFFFu) | 0x00080000u;
+    mFlags = (mFlags & ~0x3F00u) | 0x200u;   // dynamic-text=2; x64 type field bits 8-13
 
     mTextValue           = pSource->mTextValue;
     mVarValue            = pSource->mVarValue;
@@ -130,26 +128,60 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(const AptRenderItemDynamicTex
     mFontID              = pSource->mFontID;
     mStateFlags          = 4;          // console (sub_82AEF678 @0x82AEF7F8) hard-codes 4, NOT a source copy
 
-    mZID         = 0;          // asm stores 0 to 0x3C (the render-data handle re-resolves)
-    mpTextFormat = nullptr;    // FLAG (see header note above): asm deep-copies; deferred with the TextFormat layer
+    mZID = 0;                  // asm stores 0 to 0x3C (the render-data handle re-resolves)
+
+    // Deep-copy the source's TextFormat record (asm tail @0x82AEF80C): non-null
+    // source -> pool-Allocate a fresh record (console 0x20 == its sizeof) and
+    // copy-construct via TextFormat::TextFormat(const TextFormat*) @0x82AEC320;
+    // pool exhaustion (or a null source) leaves null.
+    if (pSource->mpTextFormat)
+    {
+        void* pMem = gpNonGCPoolManager->Allocate(sizeof(TextFormat));
+        mpTextFormat = pMem
+            ? reinterpret_cast<AptValue*>(
+                  new (pMem) TextFormat(reinterpret_cast<const TextFormat*>(pSource->mpTextFormat)))
+            : nullptr;
+    }
+    else
+        mpTextFormat = nullptr;
 }
 
 // ---------------------------------------------------------------------------
-// dtor -- the two EAStringC members destruct automatically (the compiler emits the
-// refcount drop) and the base ~AptRenderItem runs.
-// FLAG: the real ~AptRenderItemDynamicText is OUT OF SCOPE for this TU -- the
-// dossier marks it [external/unknown] (only the vector-deleting-destructor
-// @0x82AF4E78 is in scope, and it just calls this dtor then the sized base delete).
-// Its body is NOT in the asm, so the owned-resource teardown (the mpTextFormat
-// 0x20-byte pool block + the render-data handle release) is DEFERRED rather than
-// guessed -- a fabricated free here could double-free or release out of order vs
-// the real console dtor. Bodied as an empty stub so the class is destroyable and
-// the vector-deleting-destructor synthesizes; the resource teardown is the
-// out-of-scope follow-on (see SetTextFormat/SetZID for the per-resource teardown
-// the real dtor is expected to mirror).
+// dtor @0x82AEF850 (targeted export 2026-08-07; called by the vector-deleting
+// destructor @0x82AF4E78). The formerly-deferred owned-resource teardown,
+// store-for-store -- and it mirrors the SetTextFormat/SetZID release idioms
+// exactly, as predicted:
+//   * mpTextFormat (console +0x68): drop the record's embedded string ref
+//     (EAStringC::DecreaseInternalRefCount on its word 0) + return the record to
+//     the off_8324D808 pool (console Deallocate size 0x20 == its sizeof), null it.
+//   * mZID (console +0x3C): release through the host hook dword_8324E864(zid, 2)
+//     unless null/the empty sentinel (&unk_82F72DB0), then null it (the hook stays
+//     null-guarded on PC, matching Render/SetZID above).
+//   * mVarValue (+0x38) then mTextValue (+0x34): the console's two trailing
+//     DecreaseInternalRefCount calls ARE the compiler-emitted EAStringC member
+//     dtors in reverse declaration order -- implicit here.
+//   * then the base ~AptRenderItem @0x82AEBCE0 -- implicit.
 // ---------------------------------------------------------------------------
 AptRenderItemDynamicText::~AptRenderItemDynamicText()
 {
+    if (mpTextFormat)                                        // lwz 0x68; beq
+    {
+        // The TextFormat record embeds an EAStringC at offset 0; its dtor drops that
+        // shared string's internal refcount, then the record block returns to the
+        // pool (x64 sizeof(TextFormat) == the console 0x20 size-class).
+        reinterpret_cast<EAStringC*>(mpTextFormat)->~EAStringC();
+        gpNonGCPoolManager->Deallocate(mpTextFormat, sizeof(TextFormat));
+        mpTextFormat = nullptr;                              // stw 0 -> +0x68
+    }
+
+    if (mZID && mZID != gAptEmptyTextRenderDataZID)          // lwz 0x3C; the sentinel compare
+    {
+        if (gpfnAptReleaseTextRenderData)
+            gpfnAptReleaseTextRenderData(mZID, 2);           // dword_8324E864(zid, 2)
+        mZID = 0;                                            // stw 0 -> +0x3C
+    }
+    // mVarValue / mTextValue drop their string refs via their implicit dtors, then
+    // the base ~AptRenderItem runs.
 }
 
 // ---------------------------------------------------------------------------

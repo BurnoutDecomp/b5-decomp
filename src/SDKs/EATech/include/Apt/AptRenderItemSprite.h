@@ -43,6 +43,9 @@ struct AptRenderItemSprite : public AptRenderItem
     // ---- render-properties string (the instance-name render-data key) --------
     // The sprite's "render properties string" IS mInstanceName; Set assigns through
     // EAStringC::operator= (refcount-shared copy).
-    EAStringC* GetRenderPropertiesString();                                        // @0x82AD5030
-    EAStringC& SetRenderPropertiesString(const EAStringC& rString);                // @0x82AE5A80
+    // x64 ?GetRenderPropertiesStr@...@@QEBAAEBVEAStringC@@XZ @0x140839A30 (const,
+    // const-ref return) / ?SetRenderPropertiesStr@...@@QEAAXAEBVEAStringC@@@Z
+    // @0x140842F80 (void) -- the retail names end ...Str.
+    const EAStringC& GetRenderPropertiesStr() const;                               // @0x82AD5030
+    void SetRenderPropertiesStr(const EAStringC& rString);                         // @0x82AE5A80
 };

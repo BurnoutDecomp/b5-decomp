@@ -215,6 +215,21 @@ protected:
     // +0x2C -- non-zero while a nested DefineFunction is mid-construction.
     uint16_t  mnCreatingNestedFunction;
 
+public:
+    // Layout pinned against the x64 XB1 export (never called; member body gives
+    // complete-class + protected-member offsetof context). Pins the AptObject
+    // base-size dependency: any drift in AptObject silently shifts all three
+    // scope pointers.
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptScriptFunctionBase, mpCIH)         == 0x40, "first field after the 0x40 AptObject base");
+        static_assert(offsetof(AptScriptFunctionBase, mpParentAnim)  == 0x48, "getVariable reads the fn's ParentAnim here");
+        static_assert(offsetof(AptScriptFunctionBase, mpParentScope) == 0x50, "x64: ExistsInLocalScope @0x140837300 reads [this+50h]");
+        static_assert(sizeof(AptScriptFunctionBase) == 0x60, "console 0x30 widened; +0x58 u16 + pad");
+    }
+
+protected:
+
     // ---- process-wide AS execution state (X360 .data globals) ------------------
     // The current local-variable frame stack (off_8324E3DC); CreateFrameStack
     // installs it and SetArgument inserts into its locals.

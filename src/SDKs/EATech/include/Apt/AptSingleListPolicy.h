@@ -36,11 +36,11 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"   // DOGMA_PoolManager
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed, owned by the Apt allocator boot TU): the shared DOGMA pool the
-// node allocations come from. The X360 loads it from off_8324D808 in all three
-// methods. Declared as an extern so this TU compiles + links; the single
-// underlying pool object is shared with the other Apt families (the sibling Apt
-// headers declare the same off_8324D808 slot under their own names).
+// The shared DOGMA pool the node allocations come from. The X360 loads it from
+// off_8324D808 in all three methods. Defined in AptGlobals.cpp and wired by
+// AptInit's AptAllocatorInitialize @0x82ADD118; the single underlying pool
+// object is shared with the other Apt families (the sibling Apt headers declare
+// the same off_8324D808 slot under their own names).
 // ---------------------------------------------------------------------------
 extern DOGMA_PoolManager* gpAptSingleListPool;   // off_8324D808
 

@@ -12,54 +12,82 @@
 // subtype.
 //
 // SHAPE + BODIES from the PS3 EXTERNAL ELF (cross-checked vs X360 ARTIST). LAYOUT
-// (console 52 bytes / 13 dwords; reconstructed with NAMED members):
-//   [0]  vtable
-//   [1]  mpCharacter            the AptCharacter this renders (ref-counted)
-//   [2]  mpPositionMatrix       AptMatrix* (lazily allocated; null -> identity)
-//   [3]  mpColorMatrix          AptCXForm* (lazily allocated; null -> identity)
-//   [4]  mpMaskPositionMatrix   AptMatrix*
-//   [5]  mDepth:i16 + mClipDepth:i16   (packed; both -1 at ctor)
-//   [6]  mFlags                 bit31 isVisible, bit30 isMask, bit29 hasMask
-//   [7]  mpMask                 AptRenderItem* (the mask item; ref-counted)
-//   [8]  mCreatedOnTick         int
-//   [9]  mRefCount              int (Add/ReleaseReference mutate it atomically)
-//   [10] mpManagerNextRevision  AptRenderItem*  (the render-tree-manager links --
-//   [11] mpManagerNextSibling   AptRenderItem*   the double-buffered revision tree;
-//   [12] mpManagerFirstChild    AptRenderItem*   populated by AptRenderTreeManager)
+// pinned against the x64 XB1 export (sizeof 0x58; ctor sub_1408267A0):
+//   +0x00 vptr                  (the compiler vptr -- this class IS polymorphic)
+//   +0x08 mpCharacter           the AptCharacter this renders (ref-counted)
+//   +0x10 mpPositionMatrix      AptMatrix* (lazily allocated; null -> identity)
+//   +0x18 mpColorMatrix         AptCXForm* (lazily allocated; null -> identity)
+//   +0x20 mpMaskPositionMatrix  AptMatrix*
+//   +0x28 mDepth:i16 +0x2A mClipDepth:i16   (both -1 at ctor)
+//   +0x2C mFlags                x64 bits: 0 isVisible / 1 isMask / 2 hasMask /
+//                               3 deletionMark / 4 clone-copied / 5 tree-vis state /
+//                               6 writable-revision / 7 tree-vis companion /
+//                               8-13 render-type (shape=1 sprite=5 morph=8 anim=9
+//                               statictext=0xA level=0xF custom=0x10)
+//   +0x30 mpMask                AptRenderItem* (the mask item; ref-counted)
+//   +0x38 mCreatedOnTick        int
+//   +0x3C mRefCount             int (Add/ReleaseReference mutate it atomically)
+//   +0x40 mpManagerNextRevision AptRenderItem*  (the render-tree-manager links --
+//   +0x48 mpManagerNextSibling  AptRenderItem*   the double-buffered revision tree;
+//   +0x50 mpManagerFirstChild   AptRenderItem*   populated by AptRenderTreeManager)
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include <cstddef>   // offsetof (_AssertLayout)
 #include <cstdint>
 
 struct AptCharacter;
 struct AptMatrix;
 struct AptCXForm;
 class AptRenderingContext;
-enum AptMaskRenderOperation : int;   // values reconstructed with the render path (FLAG)
+enum AptMaskRenderOperation : int;   // values in CgsAptCallbackRender.h (Subtract=-1 / Normal=0 / Add=1)
 
-// FLAG (homed elsewhere): the shared identity transforms returned when an item
-// has no own matrix, and the global render-item teardown latch + alloc counter.
+// The shared identity transforms returned when an item has no own matrix (DEFINED
+// in AptGlobals.cpp) and the global render-item teardown latch (DEFINED in
+// AptRenderItem.cpp, X360 byte_8324E56C).
 extern AptMatrix gIdentityMatrix;
 extern AptCXForm gIdentityCXForm;
 extern bool      gbRenderItemShuttingDown;
 
 struct AptRenderItem
 {
-    void*          mpVTable_unused;   // [0] (the real vtable; named for layout clarity)
-    AptCharacter*  mpCharacter;       // [1]
-    AptMatrix*     mpPositionMatrix;  // [2]
-    AptCXForm*     mpColorMatrix;     // [3]
-    AptMatrix*     mpMaskPositionMatrix; // [4]
-    int16_t        mDepth;            // [5] low half
-    int16_t        mClipDepth;        // [5] high half
-    uint32_t       mFlags;            // [6]
-    AptRenderItem* mpMask;            // [7]
-    int32_t        mCreatedOnTick;    // [8]
-    volatile int32_t mRefCount;       // [9] (byte 36)
-    AptRenderItem* mpManagerNextRevision; // [10]
-    AptRenderItem* mpManagerNextSibling;  // [11]
-    AptRenderItem* mpManagerFirstChild;   // [12]
+    // NB: NO explicit vtable member -- this class declares real virtuals, so the
+    // compiler vptr occupies +0x00. (The old `mpVTable_unused` member alongside the
+    // virtuals produced a DOUBLE vptr, shifting every member +8 vs the binary.)
+    AptCharacter*  mpCharacter;       // +0x08
+    AptMatrix*     mpPositionMatrix;  // +0x10
+    AptCXForm*     mpColorMatrix;     // +0x18
+    AptMatrix*     mpMaskPositionMatrix; // +0x20
+    int16_t        mDepth;            // +0x28
+    int16_t        mClipDepth;        // +0x2A
+    uint32_t       mFlags;            // +0x2C (x64 bit layout -- see header comment)
+    AptRenderItem* mpMask;            // +0x30
+    int32_t        mCreatedOnTick;    // +0x38
+    volatile int32_t mRefCount;       // +0x3C
+    AptRenderItem* mpManagerNextRevision; // +0x40
+    AptRenderItem* mpManagerNextSibling;  // +0x48
+    AptRenderItem* mpManagerFirstChild;   // +0x50
+
+    // Layout pinned against the x64 XB1 accessors (never called; member body gives
+    // complete-class offsetof context).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptRenderItem, mpCharacter)           == 0x08, "x64 ?GetCharacterConst: mov rax,[rcx+8]");
+        static_assert(offsetof(AptRenderItem, mpPositionMatrix)      == 0x10, "x64 ctor 0x1408267A0 zeroes [rcx+10h]");
+        static_assert(offsetof(AptRenderItem, mpColorMatrix)         == 0x18, "x64 ctor zeroes [rcx+18h]");
+        static_assert(offsetof(AptRenderItem, mpMaskPositionMatrix)  == 0x20, "x64 ?GetMaskPositionMatrixConst: [rcx+20h]");
+        static_assert(offsetof(AptRenderItem, mDepth)                == 0x28, "x64 ?GetDepth: movsx eax, word [rcx+28h]");
+        static_assert(offsetof(AptRenderItem, mClipDepth)            == 0x2A, "x64 ?GetClipDepth: [rcx+2Ah]");
+        static_assert(offsetof(AptRenderItem, mFlags)                == 0x2C, "x64 ?GetIsVisible: dword [rcx+2Ch]");
+        static_assert(offsetof(AptRenderItem, mpMask)                == 0x30, "x64 ?GetMask: [rcx+30h]");
+        static_assert(offsetof(AptRenderItem, mCreatedOnTick)        == 0x38, "x64 ?GetCreatedOnTick: [rcx+38h]");
+        static_assert(offsetof(AptRenderItem, mRefCount)             == 0x3C, "x64 ?GetRefCount: [rcx+3Ch]");
+        static_assert(offsetof(AptRenderItem, mpManagerNextRevision) == 0x40, "x64 ?Manager_GetNextRevision: [rcx+40h]");
+        static_assert(offsetof(AptRenderItem, mpManagerNextSibling)  == 0x48, "x64 ?Manager_GetNextSibling: [rcx+48h]");
+        static_assert(offsetof(AptRenderItem, mpManagerFirstChild)   == 0x50, "x64 ?Manager_GetFirstChild: [rcx+50h]");
+        static_assert(sizeof(AptRenderItem) == 0x58, "x64 factory 0x14083C0D0 pool-allocs 88 for base-only subtypes");
+    }
 
     static int sItemsAllocated;
 
@@ -108,10 +136,10 @@ struct AptRenderItem
     // (Used by AptCIH::ReplaceZombieChild to carry a swapped node's look over.)
     void CopyRenderDataFrom(const AptRenderItem* pSource);
 
-    int16_t GetDepth() const;       AptRenderItem* SetDepth(int nDepth);          // @0x7DEE14/0x7DEEA0
-    int16_t GetClipDepth() const;   AptRenderItem* SetClipDepth(int nClipDepth);  // @0x7DEDF8/0x7DEEA8
+    int16_t GetDepth() const;       void SetDepth(int nDepth);          // @0x7DEE14/0x7DEEA0 (x64 ?SetDepth@...@@QEAAXH@Z: void)
+    int16_t GetClipDepth() const;   void SetClipDepth(int nClipDepth);  // @0x7DEDF8/0x7DEEA8 (x64 ?SetClipDepth@...@@QEAAXH@Z: void)
 
-    // SetIsVisible @0x82AE0708 -- set the is-visible flag (bit31) + recompute the
+    // SetIsVisible @0x82AE0708 -- set the is-visible flag (x64 bit 0) + recompute the
     // subtree's mask-driven visibility (PropagateTreeIsVisible) when the bit changes.
     AptRenderItem* SetIsVisible(bool bVisible);
 
@@ -120,11 +148,11 @@ struct AptRenderItem
     bool GetHasMask() const;        // @0x7DEE34
     AptRenderItem* GetMask() const; // @0x7DEE2C
 
-    // SetHasMask @0x82ADB388 -- set the has-mask flag (bit29) + (un)bind the mask
+    // SetHasMask @0x82ADB388 -- set the has-mask flag (x64 bit 2) + (un)bind the mask
     // render item (ref-counted; propagates visibility). Returns the previous mask
     // (X360 r3 = this on the no-op path / the released old mask otherwise).
     AptRenderItem* SetHasMask(bool bHasMask, AptRenderItem* pMask);
-    // SetIsMask @0x82AEBF28 -- set the is-mask flag (bit30) + the mask matrix.
+    // SetIsMask @0x82AEBF28 -- set the is-mask flag (x64 bit 1) + the mask matrix.
     // Returns this (X360 r3).
     AptRenderItem* SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix);
 
@@ -149,11 +177,12 @@ struct AptRenderItem
     // (defined in AptRenderTreeManager.cpp, where the subtype headers are visible).
     static AptRenderItem* Manager_CreateItem(AptCharacter* pCharacter, int nTick);
 
-    // FLAG (bodies are [todo] in their own render-item revision TU; declared here
-    // decl-only so the AptRenderTreeManager Render_*/Update_* facade compiles
-    // against them by name). These are the per-item revision/link mutators the
-    // render-tree manager drives -- the writable-revision chase + the
-    // first-child / next-sibling / mask link writes for the double-buffered tree.
+    // The per-item revision/link mutators the render-tree manager drives -- the
+    // writable-revision chase + the first-child / next-sibling / mask link writes
+    // for the double-buffered tree. ALL BODIES HOMED in AptRenderItem.cpp
+    // (@0x82ADAAE8 / @0x82ADABA0 / @0x82ADAC58 / @0x82ADACA8 / @0x82ADB1B8 /
+    // @0x82ADAF58 / @0x82ADAD90, plus the symmetry-reconstructed
+    // Manager_UpdateFirstChild).
     //   Manager_GetRenderRevision  @ (called from Render_GetChildInvisible/...) --
     //     resolve THIS item's render revision for nTick (chases the revision chain).
     AptRenderItem* Manager_GetRenderRevision(int nTick);
@@ -173,16 +202,17 @@ struct AptRenderItem
     AptRenderItem* Manager_SetNextSibling(AptRenderItem* pSibling);
 
     // PropagateTreeIsVisible @0x82ADA8B8 -- recompute the mask-driven "tree visible"
-    // state (mFlags bits 24..26) down this item's first-child + next-sibling subtree.
-    // nVisibleMode: 1 = becoming hidden by a mask, 0 = becoming shown. Recursive.
+    // state (x64 mFlags bits 5/7) down this item's first-child + next-sibling subtree.
+    // nVisibleMode: 0 = becoming hidden, 1 = becoming shown (x64 sub_140841B00: SetIsVisible(true)
+    // propagates 1 clearing the 0x60 bits; SetIsVisible(false) propagates 0 setting 0x20). Recursive.
     AptRenderItem* PropagateTreeIsVisible(int nVisibleMode);
 
     // True when this item is already the writable revision for nTick (its
     // creation tick matches, or it is flagged the current/highest revision). @0x7DEF54
     bool IsWritableForThisTick(int nTick) const;
-    bool Manager_IsDeletionMark() const;            // @0x7DEEBC (mFlags bit 28)
+    bool Manager_IsDeletionMark() const;            // @0x7DEEBC (x64 mFlags bit 3)
     void Manager_SetNextRevision(AptRenderItem* pNext);   // @0x7DEF00
-    void Manager_SetDeletionMark(bool bMark);             // @0x7E48DC (simplified)
+    void Manager_SetDeletionMark(bool bMark);             // @0x82ADB138 (full link-release form)
 
     // Manager_GetMask @0x82AD4F48 -- the mask render item (manager-side accessor).
     AptRenderItem* Manager_GetMask() const { return mpMask; }
@@ -190,7 +220,7 @@ struct AptRenderItem
     // manager's double-buffered chain (no newer revision linked).
     bool IsHighestRevisionItem() const { return mpManagerNextRevision == nullptr; }
     // IsRenderableForThisTick @0x82AD4FC8 -- drawable on nTick: aged in (created on or
-    // before nTick) AND the committed (non-writable) revision (mFlags bit 25 clear).
+    // before nTick) AND the committed (non-writable) revision (x64 mFlags bit 6 clear).
     bool IsRenderableForThisTick(int nTick) const;
 };
 

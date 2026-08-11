@@ -49,7 +49,7 @@
 // The shared Apt action interpreter instance (X360 &dword_8324E760). It is the
 // `this` the X360 GetVariable/SetVariable pass to getVariable/setVariable, and the
 // object whose mnStackTop (dword_8324E760, +0) / mpStack (off_8324E768, +8) GetParam
-// reads. FLAG: global owned by the Apt boot TU; declared extern here.
+// reads. Defined in AptGlobals.cpp (&dword_8324E760); declared extern here.
 // ---------------------------------------------------------------------------
 extern AptActionInterpreter gAptActionInterpreter;          // &dword_8324E760
 

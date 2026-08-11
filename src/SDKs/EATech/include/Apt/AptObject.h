@@ -10,7 +10,7 @@
 // SHAPE + BODIES from the PS3 EXTERNAL ELF (9AptObject): GetHasClass @0x7DF374 /
 // SetHasClass @0x7DF34C / objectMemberLookup @0x7FC7E8 / Set/Get__Proto__/
 // Prototype thunks (delegate to the hash). LAYOUT: AptValueWithHash (28 bytes) +
-// mClassFlags (dword [7], the hasClass bit @ bit23).
+// mClassFlags (x64 +0x38; hasClass @ bit 8, count in bits 0-7).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -20,18 +20,29 @@
 
 #include "SDKs/EATech/include/Apt/AptValueWithHash.h"
 
-// FLAG (homed by the AS-globals TU): the native "registerClass" method value
-// returned by objectMemberLookup. Null until the AS globals are built.
+// The native "registerClass" method value returned by objectMemberLookup (X360
+// off_8324D748). Defined in AptGlobals.cpp; built + GC-rooted by
+// AptValueInitialize (AptInit.cpp) -- null only before that bring-up runs.
 extern AptValue* gpObjRegistrationFunc;
 
 struct AptObject : public AptValueWithHash
 {
 protected:
-    uint32_t mClassFlags;   // [7] -- hasClass @ bit 23 (+ implemented-objects bits)
+    uint32_t mClassFlags;   // x64 +0x38 -- implemented-objects count bits 0-7 /
+                            // hasClass bit 8 (B4 mbHasClass) / isInMainInst bit 9
+                            // (the old bit-23 reading was the X360 BE reversal)
 
     AptObject(AptVirtualFunctionTable_Indices eType, int nHashCapacity)
         : AptValueWithHash(eType, nHashCapacity), mClassFlags(0)
     {
+    }
+
+    // Layout pinned against the x64 XB1 export (never called; member body gives
+    // complete-class offsetof context).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptObject, mClassFlags) == 0x38, "x64: object ctors write [this+38h] (@0x1408264E0)");
+        static_assert(sizeof(AptObject) == 0x40, "x64: CreateNewAptObject allocates 64 from the GC pool (@0x1408357D0)");
     }
 
 public:

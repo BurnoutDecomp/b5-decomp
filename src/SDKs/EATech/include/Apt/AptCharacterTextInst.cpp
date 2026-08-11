@@ -70,7 +70,7 @@ intptr_t AptCharacterTextInst::GetZID() const { return GetTextItemConst()->GetZI
 // runtime marker) read straight through the const item.
 bool AptCharacterTextInst::GetCreatedDynamic() const
 {
-    return ((mpRenderItem->mFlags >> 27) & 1u) != 0;
+    return (mpRenderItem->mFlags & 0x10u) != 0;   // x64 bit 4 (X360 bit27)
 }
 
 const EAStringC* AptCharacterTextInst::GetTextValueConst() const { return GetTextItemConst()->GetTextValueConst(); }  // @0x82AD5810
@@ -169,9 +169,10 @@ void AptCharacterTextInst::SetText(AptCIH* pScope)
     {
         while (true)
         {
-            const int nType =
-                static_cast<int32_t>(pNode->mpCharacterInst->mTypeFlags) >> 26;
-            const bool bScope = (nType == 5 || nType == 9);
+            // x64 type tag = mTypeFlags & 0x3F (the console read was >>26, the
+            // X360 big-endian position -- it reads garbage on the x64 layout).
+            const uint32_t nType = pNode->mpCharacterInst->GetTypeTag();
+            const bool bScope = (nType == 5u || nType == 9u);
             if (bScope || !pNode->mpDisplayListParent)
                 break;
             pNode = pNode->mpDisplayListParent;
@@ -189,7 +190,7 @@ void AptCharacterTextInst::SetText(AptCIH* pScope)
     {
         // Undefined -> seed from the asset's default text, store it, and write the
         // variable back so the binding has a value.
-        AptString* pSeed = AptString::Create("");   // FLAG [unrecoverable literal @0x820046A7]
+        AptString* pSeed = AptString::Create("");   // "" ATTESTED: 0x820046A7 is a NUL byte in the rodata literal pool (dump 0x82004690..0x820046CF -- between "%s%s%s%s%s" @0x8200469C and "::" @0x820046A8), i.e. the shared empty-string terminator
 
         const char* pDefaultText =
             static_cast<AptCharacterDynamicText*>(mpRenderItem->mpCharacter)->mpDefaultText;
@@ -227,9 +228,9 @@ void AptCharacterTextInst::UpdateText(AptCIH* pScope)
     {
         while (true)
         {
-            const int nType =
-                static_cast<int32_t>(pNode->mpCharacterInst->mTypeFlags) >> 26;
-            const bool bScope = (nType == 5 || nType == 9);
+            // x64 type tag = mTypeFlags & 0x3F (the console read was >>26 -- see SetText).
+            const uint32_t nType = pNode->mpCharacterInst->GetTypeTag();
+            const bool bScope = (nType == 5u || nType == 9u);
             if (bScope || !pNode->mpDisplayListParent)
                 break;
             pNode = pNode->mpDisplayListParent;

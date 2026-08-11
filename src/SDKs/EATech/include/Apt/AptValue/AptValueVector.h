@@ -31,21 +31,21 @@
 // kept verbatim; the reconstructed members follow the mpX/mnX prefixes.
 // ===========================================================================
 
+#include <cstddef>   // offsetof (_AssertLayout)
 #include <cstdint>
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/Apt/DogmaAllocator.h"   // DOGMA_PoolManager
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed, owned by another TU): the global DOGMA pool that backs the
-// operand-stack array. The X360 binary loads it from off_8324D808 in Shutdown.
-// Declared here as an extern so Shutdown compiles + links; its definition (and
-// initialization) lives in the Apt allocator boot TU.
+// The global DOGMA pool that backs the operand-stack array. The X360 binary
+// loads it from off_8324D808 in Shutdown. Defined in AptGlobals.cpp; wired to
+// the shared DOGMA pool by AptAllocatorInitialize (AptInit.cpp @0x82ADD118).
 // ---------------------------------------------------------------------------
 extern DOGMA_PoolManager* gpAptOperandStackPool;   // off_8324D808
 
 // ---------------------------------------------------------------------------
-// FLAG: PopAndPush takes a "value producer" -- in the X360 asm `a3` is an
+// NOTE: PopAndPush takes a "value producer" -- in the X360 asm `a3` is an
 // object whose first virtual (vtbl[0]) is invoked with itself as the receiver
 // and yields the AptValue* to push. The producer is constructed by the caller
 // (an AptActionInterpreter helper); modelled here as a minimal polymorphic
@@ -93,6 +93,12 @@ public:
     // (unconditional; no bounds check). Returns the Release result.
     AptValue* pop();
 
+    // PopValue -- the x64 export's pop-WITHOUT-Release twin of pop() (phase-0
+    // signature-parity item): pre-decrement the live top and hand the popped
+    // value to the caller, who now owns the reference. No bounds check,
+    // matching pop(). Body in AptValueVector.cpp.
+    AptValue* PopValue();
+
     // Shutdown @ 0x82AE14F0 -- free the backing array and clear the vector.
     void Shutdown();
 
@@ -101,7 +107,7 @@ public:
     void shutdown();
 
     // -----------------------------------------------------------------------
-    // FLAG (layout collision -- two X360 classes share this one home + storage)
+    // NOTE (layout collision -- two X360 classes share this one home + storage)
     //
     // IDA exports TWO distinct symbol families against this 12-byte
     // {int@0, int@4, AptValue**@8} shape:
@@ -137,7 +143,9 @@ public:
     static AptValueVector ConstructAptValueVector(int32_t nCapacity);
 
     // GetAt @0x82ADBFD0 -- mppItems[nIndex] (no bounds check; raw indexed load).
-    AptValue* GetAt(int32_t nIndex) const;
+    // x64 signature parity: non-const (the x64 export's GetAt @0x140838220 takes a
+    // mutable this).
+    AptValue* GetAt(int32_t nIndex);
 
     // SetAt @0x82ADBFE0 -- mppItems[nIndex] = pValue (no bounds check).
     void      SetAt(int32_t nIndex, AptValue* pValue);
@@ -146,8 +154,9 @@ public:
     int32_t GetNumValues() const { return mnCapacity; }
 
     // IsVectorFull @0x82ADC130 -- full when live-count(+4) >= capacity(+0); i.e.
-    // mnCapacity (the +4 top) >= mnTop (the +0 capacity).
-    bool    IsVectorFull() const { return mnCapacity >= mnTop; }
+    // mnCapacity (the +4 top) >= mnTop (the +0 capacity). x64 signature parity:
+    // returns int (the export's i32 result), not bool.
+    int     IsVectorFull() const { return (mnCapacity >= mnTop) ? 1 : 0; }
 
     // ReleaseValues @0x82ADCF60 -- pop every live value off the top, Release-ing
     // (or ForceDelete-ing) each; leaves the vector empty. Returns the last
@@ -162,5 +171,15 @@ public:
 
     int32_t     mnTop;        // +0x00
     int32_t     mnCapacity;   // +0x04
+
+    // Layout pinned against the x64 XB1 accessors (never called; member body gives
+    // complete-class offsetof context). Family-(B) semantics: capacity@+0, count@+4.
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptValueVector, mnTop)      == 0x0, "x64: capacity dword at +0 (IsVectorFull @0x14083B3E0)");
+        static_assert(offsetof(AptValueVector, mnCapacity) == 0x4, "x64: live count dword at +4 (GetNumValues @0x140839680)");
+        static_assert(offsetof(AptValueVector, mppItems)   == 0x8, "x64: slot array at +8, 8-byte stride (GetAt @0x140838220)");
+        static_assert(sizeof(AptValueVector) == 0x10, "natural x64 layout of {i32,i32,ptr}");
+    }
     AptValue**  mppItems;     // +0x08
 };

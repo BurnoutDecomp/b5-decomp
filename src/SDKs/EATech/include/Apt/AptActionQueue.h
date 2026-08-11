@@ -41,7 +41,9 @@
 //     +0x0C mpCurItem   "current item" cursor (SetCurItem)     (a1[3])
 //     +0x10 mnCapacity  slot capacity (== a2 of the ctor)      (a1[4])
 //
-// The ring is allocated with capacity+1 slots (front == back means empty), from
+// The ring is allocated with exactly `capacity` slots (X360 ctor @0x82AE6780:
+// Allocate(20 * capacity + 4)); front == back means empty and the full-check
+// sacrifices one slot, so the usable depth is capacity-1. Allocated from
 // the shared Apt fixed-size DOGMA pool (gpAptPseudoDataPool == X360 off_8324D808,
 // the same pool the other Apt display-list nodes use); the allocation stores its
 // own slot-count in the dword preceding mpBegin and is freed by the pool.
@@ -49,6 +51,8 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API
 // exception): AptActionQueueC, AddActionBack, ClearActions, ...
 // ===========================================================================
+
+#include <cstddef>   // offsetof (_AssertLayout)
 
 #include "types.hpp"
 
@@ -73,33 +77,45 @@ struct AptAnimationPoolData
         E_ACTION_TYPE_FUNCTION = 2,   // an ActionScript function call
     };
 
-    s32 mnType;   // +0x00  E_AptActionType tag
+    // x64 slot shape (the ring stride is PROVEN 0x20 -- every deque accessor does
+    // `shl reg,5` @0x140835BC0/0x140839630/0x14083A650; B4Extern's AptActionPool
+    // corroborates field-for-field): the +0x04 int sits OUTSIDE the union (B4
+    // 'input'), the union starts 8-aligned at +0x08 with {int,ptr,ptr} action /
+    // {ptr,ptr,int} function views. (The earlier shape nested the +0x04 int inside
+    // the union, compiling to a 40-byte slot -- a live ring-stride corruption.)
+    s32 mnType;    // +0x00  E_AptActionType tag
+    s32 mnInput;   // +0x04  B4 'input' -- the action's interpreter-context handle (a4)
+                   //        / the function's forwarded arg-count handle (a5)
 
     union
     {
         // ---- action view (mnType == E_ACTION_TYPE_ACTION) -----------------
         struct
         {
-            s32       miContext;   // +0x04  interpreter context handle (a4)
-            s32       miDepth;     // +0x08  instance depth snapshot at queue time
+            s32       miDepth;     // +0x08  instance depth snapshot at queue time (B4 nFrame)
             // The queued "event id" is really the ADDRESS of the command record's
             // action-stream pointer slot (console: queueFrameActions passes cmd+4;
-            // RunActions dereferences it TWICE -- `**(v3+12)`). A 4-byte console
-            // slot; pointer-width on x64 (the same forced widening as the union's
-            // function view, whose AptValue* members are already 8 bytes).
-            const void* mpEventStreamSlot;   // +0x10 x64 (console +0x0C, s32)
-            AptValue* mpCIH;       // +0x18 x64 (console +0x10)  the CIH (GC ref)
+            // RunActions dereferences it TWICE -- `**(v3+12)`).
+            const void* mpEventStreamSlot;   // +0x10 (B4 pBlock)
+            AptValue* mpCIH;       // +0x18  the CIH (GC ref; B4 pCIH)
         } action;
 
         // ---- function view (mnType == E_ACTION_TYPE_FUNCTION) -------------
         struct
         {
-            s32       miArgCount;  // +0x04  forwarded arg count / handle (a5)
             AptValue* mpContext;   // +0x08  call "this"/context value (GC ref)
-            AptValue* mpFuncDef;   // +0x0C  the function-definition value (GC ref)
-            s32       miReturnReg; // +0x10  result register / handle (a4)
+            AptValue* mpFuncDef;   // +0x10  the function-definition value (GC ref)
+            s32       miReturnReg; // +0x18  result register / handle (B4 nParams)
         } function;
     };
+
+    // Layout pinned against the x64 XB1 export (never called; member body gives
+    // complete-class offsetof context).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptAnimationPoolData, mnInput) == 0x04, "B4: 'input' lives OUTSIDE the union");
+        static_assert(sizeof(AptAnimationPoolData) == 0x20, "x64 ring stride: `shl reg,5` in every deque accessor");
+    }
 };
 
 // ---------------------------------------------------------------------------
@@ -171,7 +187,7 @@ public:
 
     // @ 0x82AD5E60 -- set the "current item" cursor (mpCurItem). Returns *this
     // (X360 fastcall return value).
-    AptActionQueueC* SetCurItem(AptAnimationPoolData* pSlot);
+    void SetCurItem(AptAnimationPoolData* pSlot);   // x64 QEAAX...: void
 
     AptAnimationPoolData* mpBegin;     // +0x00
     AptAnimationPoolData* mpFront;     // +0x04

@@ -171,7 +171,8 @@ namespace
                 lpEntry->mResourceDescriptor.m_baseResourceDescriptors[CgsResource::E_MEMTYPE_MAINMEMORY].m_size;
 
             // Register the header with the data handler so the faithful FindAptData(name)
-            // resolves it (the resolved-name form -- FLAG x64; see the fallback note above).
+            // resolves it (the resolved-name form -- the AddAptData leaf overload; see the
+            // fallback note above).
             lpAptAux->mAptDataHandler.AddAptData(
                 reinterpret_cast<CgsGui::AptDataHeader*>(lpRes), lpSlot->macName);
 

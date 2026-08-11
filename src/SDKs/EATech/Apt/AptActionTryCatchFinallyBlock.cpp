@@ -3,59 +3,48 @@
 // ===========================================================================
 //  AptAction_TryCatchFinallyBlock accessors.
 //
-//  Store-for-store reconstruction from BURNOUT_X360_ARTIST.XEX. X360 asm is
-//  authoritative. The block-size words at +0x00 / +0x04 are added to the record
-//  base as RAW BYTE offsets (X360 `add r11, <size>, r3`), so all arithmetic is
-//  done in bytes. See AptActionTryCatchFinallyBlock.h for the header layout.
+//  Reconstructed from BURNOUT_X360_ARTIST.XEX and re-pinned against the x64 XB1
+//  export (rung 1 for Apt): the accessors are const MEMBER functions
+//  (?getTryBlockBase@AptAction_TryCatchFinallyBlock@@QEBAPEAEXZ etc.) and the
+//  body starts at +0x18 (`lea rax,[rcx+18h]`) -- the console's +0x14 plus the
+//  widened caught-var-name pointer. The block-size words at +0x00 / +0x04 are
+//  added to the record base as RAW BYTE offsets.
 // ===========================================================================
 
-namespace AptAction_TryCatchFinallyBlock
+// x64 twin of @0x82AD5268: lea rax,[rcx+18h]
+const u8* AptAction_TryCatchFinallyBlock::getTryBlockBase() const
 {
-
-// @0x82AD5268:  addi r3, r3, 0x14
-int getTryBlockBase(int iRecord)
-{
-    return iRecord + KU_BODY_OFFSET;
+    return reinterpret_cast<const u8*>(this) + sizeof(AptAction_TryCatchFinallyBlock);
 }
 
-// @0x82AD5270:  lwz r11, 0(r3); add r11, r11, r3; addi r3, r11, 0x14
-int getCatchBlockBase(const void* pRecord)
+// x64 twin of @0x82AD5270: base + trySize + 0x18
+const u8* AptAction_TryCatchFinallyBlock::getCatchBlockBase() const
 {
-    const u8* lpBase = static_cast<const u8*>(pRecord);
-    const u32 luTrySize = *reinterpret_cast<const u32*>(lpBase + 0x00);   // serialized .apt Try record: trySize @+0
-    return static_cast<int>(reinterpret_cast<int>(lpBase) + luTrySize + KU_BODY_OFFSET);
+    return reinterpret_cast<const u8*>(this) + muTryCodeSize
+         + sizeof(AptAction_TryCatchFinallyBlock);
 }
 
-// @0x82AD5280:  lwz r11, 4(r3); lwz r10, 0(r3); add r11,r11,r10;
-//               add r11,r11,r3; addi r3, r11, 0x14
-int getFinallyBlockBase(const void* pRecord)
+// x64 twin of @0x82AD5280: base + trySize + catchSize + 0x18
+const u8* AptAction_TryCatchFinallyBlock::getFinallyBlockBase() const
 {
-    const u8* lpBase = static_cast<const u8*>(pRecord);
-    const u32 luTrySize   = *reinterpret_cast<const u32*>(lpBase + 0x00);   // serialized .apt Try record: trySize @+0
-    const u32 luCatchSize = *reinterpret_cast<const u32*>(lpBase + 0x04);   // serialized .apt Try record: catchSize @+4
-    return static_cast<int>(
-        reinterpret_cast<int>(lpBase) + luCatchSize + luTrySize + KU_BODY_OFFSET);
+    return reinterpret_cast<const u8*>(this) + muTryCodeSize + muCatchCodeSize
+         + sizeof(AptAction_TryCatchFinallyBlock);
 }
 
-// @0x82AD5C20:  lbz r11, 0xC(r3); clrlwi r3, r11, 31    -> bit0
-int hasCatchBlock(const void* pRecord)
+// @0x82AD5C20: bit0 of the flags byte at +0x0C
+int AptAction_TryCatchFinallyBlock::hasCatchBlock() const
 {
-    const u8 luFlags = *(static_cast<const u8*>(pRecord) + 0xC);
-    return luFlags & 1;
+    return muFlags & 1;
 }
 
-// @0x82AD5248:  lbz r11, 0xC(r3); extrwi r3, r11, 1,30  -> bit1
-int hasFinallyBlock(const void* pRecord)
+// @0x82AD5248: bit1
+int AptAction_TryCatchFinallyBlock::hasFinallyBlock() const
 {
-    const u8 luFlags = *(static_cast<const u8*>(pRecord) + 0xC);
-    return (luFlags >> 1) & 1;
+    return (muFlags >> 1) & 1;
 }
 
-// @0x82AD5258:  lbz r11, 0xC(r3); extrwi r3, r11, 1,29  -> bit2
-int putCaughtObjectInRegister(const void* pRecord)
+// @0x82AD5258: bit2
+int AptAction_TryCatchFinallyBlock::putCaughtObjectInRegister() const
 {
-    const u8 luFlags = *(static_cast<const u8*>(pRecord) + 0xC);
-    return (luFlags >> 2) & 1;
+    return (muFlags >> 2) & 1;
 }
-
-} // namespace AptAction_TryCatchFinallyBlock

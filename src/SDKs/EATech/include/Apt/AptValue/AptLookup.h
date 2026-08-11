@@ -51,21 +51,23 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"              // DOGMA_PoolManager (the shared Apt pool)
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed global): off_8324D808 is the shared Apt fixed-size DOGMA pool
-// that backs the AptLookup pool array (the X360 Initialize allocates the array
-// from it and the deleting destructor frees back to it). Declared as the same
-// extern the sibling Apt pool users use (AptExtern.h / AptSharedPtr.h /
-// AptLinkerThingy.h); the pool instance is constructed by the Apt runtime startup
-// TU. Guarded for null until then.
+// off_8324D808 -- the shared Apt fixed-size DOGMA pool that backs the AptLookup
+// pool array (the X360 Initialize allocates the array from it and the deleting
+// destructor frees back to it). The same extern the sibling Apt pool users use
+// (AptExtern.h / AptSharedPtr.h / AptLinkerThingy.h); defined in AptGlobals.cpp
+// and wired by AptAllocatorInitialize (AptInit.cpp @0x82ADD118). The null guards
+// below keep a pre-boot call inert.
 // ---------------------------------------------------------------------------
 extern DOGMA_PoolManager* gpAptSharedPtrPool;   // off_8324D808
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed Apt config global): the number of AptLookup pool entries to
-// pre-allocate. The X360 reads it as dword_82F733EC (a read-only config slot in
-// the 0x82F7xxxx data segment, written by the Apt startup config -- the sibling
-// AptRegister pool reads the adjacent dword_82F733E8 the same way). Declared
-// extern so Initialize compiles; its definition belongs to the Apt config TU.
+// The number of AptLookup pool entries to pre-allocate. The X360 reads it as
+// dword_82F733EC (config word 13 of the unk_82F733B8 block; the sibling
+// AptRegister pool reads the adjacent dword_82F733E8 / word 12 the same way).
+// Defined in AptGlobals.cpp. FLAG (parked): AptUpdateInitialize (AptInit.cpp)
+// publishes the register count (word 12) but not yet this slot (default 128) --
+// that one-line publish belongs to the out-of-cluster AptInit TU; 0 meanwhile
+// brings up an empty (inert) lookup pool.
 // ---------------------------------------------------------------------------
 extern int gAptLookupPoolSize;   // dword_82F733EC
 

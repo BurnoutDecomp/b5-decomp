@@ -17,7 +17,7 @@ namespace
         AptAnimationTarget* pAnim2  = pCtx->mpAnimationTarget;      // same, by member
         AptLoader*          pLoader = pCtx->mpLoader;               // +0x1C (AptLinker::Update uses this)
         AptLinker*          pLinker = pCtx->mpLinker;               // +0x20
-        void*               pF24    = pCtx->mpField24;              // +0x24
+        void*               pF24    = pCtx->mpNext;              // +0x24
         u32                 nCfg    = pCtx->mnConfigE;              // +0x10
 
         (void)pAnim; (void)pAnim2; (void)pLoader; (void)pLinker; (void)pF24; (void)nCfg;

@@ -29,6 +29,7 @@
 // than fabricated.
 // ===========================================================================
 
+#include <cstddef>   // offsetof (_AssertLayout)
 #include <cstdint>
 
 class EAStringC;                  // SDKs/EATech/include/Apt/AptString/EAString.h
@@ -254,11 +255,12 @@ public:
         return getVtblIndex() == AptVFT_Extern && getIsDefined();
     }
 
+    // x64 ?isCIH@AptValue@@QEBA_N_N@Z @0x1400C1540: ONLY type 12 (CharacterInstHandle)
+    // gated on (bUndefOK || defined). The earlier CIHNone(37) second clause does not
+    // exist in the x64 body -- callers that accept CIHNone test it themselves.
     bool isCIH(bool bUndefOK = false) const
     {
-        AptVirtualFunctionTable_Indices eType = getVtblIndex();
-        return (eType == AptVFT_CharacterInstHandle && (bUndefOK || getIsDefined()))
-            || eType == AptVFT_CIHNone;
+        return getVtblIndex() == AptVFT_CharacterInstHandle && (bUndefOK || getIsDefined());
     }
 
     bool isSound() const
@@ -396,20 +398,19 @@ public:
     float toFloat() const;
     bool  toBool() const;
 
-    // Render this value into pScratch as an ActionScript string. FLAG: the body
-    // (the meValueType-dispatched StringPool / Append renderer) is the value-layer
-    // follow-on; declared so the conversion + opcode layers can call it.
+    // Render this value into pScratch as an ActionScript string (the meValueType-
+    // dispatched renderer). Body in AptValue/AptValueConvert.cpp (@0x82AF8FA0).
     void toString(EAStringC* pScratch) const;
 
     // urlEncodeCustomRender @0x82AF9410 -- render this value to its URL-encoded
     // string form (returned by value; the X360 sret form `urlEncodeCustomRender(
-    // this, &out)`). Used by AptError::sMethod_toString. FLAG: body is the same
-    // value-layer renderer follow-on as toString (declared so callers compile).
+    // this, &out)`). Used by AptError::sMethod_toString. Body in
+    // AptValue/AptValueConvert.cpp.
     EAStringC urlEncodeCustomRender() const;
 
     // Append this value's string form to pOut (the toString sibling the ToString
-    // opcode uses to render into a fresh AptString). FLAG: body is the same
-    // value-layer renderer follow-on as toString.
+    // opcode uses to render into a fresh AptString). Body in
+    // AptValue/AptValueConvert.cpp (@0x82AF9668).
     void Append_ToString(EAStringC* pOut) const;
 
     // Get_ToString @0x82AD8558 -- coerce a value to an EAStringC name: a
@@ -429,17 +430,18 @@ public:
     AptBoolean* c_boolean() const { return reinterpret_cast<AptBoolean*>(const_cast<AptValue*>(this)); }
     AptString*  c_string()  const;
 
-    // findChild @0x8183B0 -- resolve a child/property/special-name (_root/_parent/
-    // _global/_level<N>/this/...) of this value by name. FLAG: the 190-instruction
-    // special-name + display-tree resolver is its own follow-on TU; declared so
-    // getVariable can call it.
+    // findChild @0x82B01298 -- resolve a child/property/special-name (_root/
+    // _parent/_global/_level<N>/this/...) of this value by name. Body (with the
+    // AptResolveSpecialName special-name dispatch) in AptValue/AptValueFindChild.cpp.
     AptValue* findChild(const EAStringC* pName, AptValue* pTarget);
 
     // ---- GC mark callback ------------------------------------------------
     // The Apt garbage collector installs a reference-registration callback the GC
     // value types invoke from RegisterReferences (once per held AptValue ref:
-    // cb(owner, &slot, debugName, 0)). FLAG: wired by the Apt GC startup (AptInit);
-    // null until then, so the mark walk is inert until the collector is up.
+    // cb(owner, &slot, debugName, 0)). The callback body is AptGC::
+    // sReferenceRegistrationCb (AptGC.cpp @0x82AD9C80). FLAG (parked): its
+    // installer -- the partial-GC mark/sweep tier (XB1 sub_140832E70) -- is
+    // un-homed, so the slot stays null and the mark walk is inert until it lands.
     typedef void* (*ReferenceRegistrationCb)(const AptValue* pOwner, void* pSlot,
                                              const char* pDebugName, int);
     static ReferenceRegistrationCb sReferenceRegistrationCb;
@@ -469,6 +471,16 @@ public:
 
         uint32_t mnValueData;
     };
+
+    // Layout pinned against the x64 XB1 accessors (never called; member body gives
+    // complete-class offsetof context). The LSB-first bitfield order above matches
+    // the x64 truth bit-for-bit (getVtblIndex @0x1400C1510 `sar eax,19h`,
+    // getIsDefined @0x1400C1520 `shr 4`, getRefCount @0x14084E5C0 `shr 6, and 0xFFF`).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(AptValue, mnValueData) == 0x08, "x64: flags dword at [this+8] (getVtblIndex @0x1400C1510)");
+        static_assert(sizeof(AptValue) == 0x10, "x64: memberless AptExtern allocates 0x10 (AptValueInitialize @0x140830BA0); all leaf payloads at +0x10");
+    }
 
 protected:
 

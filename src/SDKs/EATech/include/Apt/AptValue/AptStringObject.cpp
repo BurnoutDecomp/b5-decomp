@@ -24,8 +24,9 @@
 //   new    : p = pool->Allocate(size);            then MemItem(p).SetIsAllocated(1)
 //   delete : ok = pool->Deallocate(p, size);      then on success MemItem(p).SetIsAllocated(0)
 // The free path is exactly AptValueGC_PoolManager::DeallocateAptValueGC, so it
-// is restored as that call (de-inlined). Both are guarded for a null pool until
-// the Apt runtime startup (AptInit) wires gpGCPoolManager (FLAG: null until then).
+// is restored as that call (de-inlined). gpGCPoolManager is wired by
+// AptAllocatorInitialize (AptInit.cpp @0x82ADD118) at bring-up; the null guards
+// keep a pre-boot allocation inert.
 // ---------------------------------------------------------------------------
 void* AptStringObject::operator new(size_t size)
 {

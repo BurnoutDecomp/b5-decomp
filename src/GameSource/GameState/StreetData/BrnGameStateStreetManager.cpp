@@ -15,24 +15,14 @@
 namespace BrnGameState
 {
 
-// @ 0x823509D8 (the DWARF :222 3-param `Prepare`; kept under its X360 symbol name).
-// Param types firmed up from the former void* placeholders with the wave-B header
-// freeze -- same forwarding body.
-bool StreetManager::Prepare2( GameStateModuleIO::OutputBuffer* lpOutput,
-                              CgsModule::EventReceiverQueue<3072,16>* lpReceiverQueue,
-                              const TriggerQueryManager* lpTriggerQueryManager )
-{
-    CGS_ASSERT( lpOutput != NULL, "lpOutput" );
-    CGS_ASSERT( lpReceiverQueue != NULL, "lpReceiverQueue" );
-
-    if ( !LoadStreetData( lpOutput, lpReceiverQueue ) )
-    {
-        return false;
-    }
-
-    SetupParRivals( lpTriggerQueryManager );
-    return true;
-}
+// @ 0x823509D8. Prepare2 WAS DEFINED HERE; it was SPLIT OUT 2026-08-11 into the sibling
+// BrnGameStateStreetManager_Prepare2.cpp so that GameStateModule::Prepare2 case 2 could make the
+// console's single call without dragging this TU's two score-entry factories. MEASURED
+// (cl /c + dumpbin /SYMBOLS vs the defined-symbol set of build\game\obj): mounting this whole TU
+// costs SIX unresolved externals (BrnStreetData::operator++, ChallengeHighScoreEntry::Construct,
+// ChallengePlayerScoreEntry::Construct, ChallengeData::SetScore, ScoreList::KAI_MIN_SCORES /
+// KAI_MAX_SCORES) and every one belongs to the two factories below. Fold the split file back in
+// when the ChallengeData score family lands. Do NOT re-add the body: two definitions is LNK2005.
 
 // @ 0x82324A28
 BrnStreetData::ChallengeHighScoreEntry*

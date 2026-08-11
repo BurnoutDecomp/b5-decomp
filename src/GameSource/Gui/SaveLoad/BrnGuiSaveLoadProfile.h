@@ -21,6 +21,11 @@
 // the manifest's true capacity is the save's resource count (unknown from this TU's single
 // reference), so it is declared as a one-element head governed by muManifestCount at run
 // time rather than fabricating a capacity. All access is by name.
+//
+// The image is 118064 bytes end to end: BrnProgression::Profile::Serialise (@0x8237C1F0)
+// opens with `memset(a2, 0, 118064)` over it, and ProfileManager::Construct's debug print
+// names the size against this class ("Size of BrnGuiSaveLoad::Profile 118064"). The tail
+// reservation below carries the object out to that width so the whole image is one object.
 // ===================================================================================
 
 #include "types.hpp"
@@ -32,6 +37,10 @@ namespace BrnGuiSaveLoad
     public:
         // The progression save-image version this build understands (X360 cmpwi 0x1C == 28).
         static const s32 KI_VERSION_CURRENT = 28;
+
+        // The full serialised image width (X360 `memset(a2, 0, 118064)` at the head of
+        // BrnProgression::Profile::Serialise @0x8237C1F0).
+        static const s32 KI_IMAGE_SIZE_BYTES = 118064;
 
         // One per-resource version manifest entry (8-byte stride; the X360 loop reads the id
         // word at +0 and advances 8 bytes). Only the id is read on the profile side.
@@ -58,6 +67,17 @@ namespace BrnGuiSaveLoad
             s32          miCount;            // +0x1C (entry count)
         };
 
+        // OUTLINED from BrnProgression::Profile::Serialise @0x8237C1F0 -- the two stores it
+        // makes to this image that do NOT come from the live profile:
+        //     memset(a2, 0, 118064);   // (prologue) clear the whole progression save image
+        //     *a2 = 28;                // (prologue) stamp the save-image version word
+        // Serialise is the ONLY writer of the version word -- ProfileManager::Bootup runs
+        // ReadProfileData (-> Serialise) before the storage boot-up, which is how a console
+        // FIRST boot with no save on the memory unit still presents a version-current image
+        // to ValidateProfiles. Reconstructing it as a method keeps that store off a raw
+        // offset poke into the byte image.
+        void ConstructImage();
+
         // @0x824EFE30 - validate the save image against lrExpected: require the version word
         // to be current and the stored manifest to match the expected manifest entry-for-entry
         // (same count; every stored id present in the expected set with its valid flag set).
@@ -74,5 +94,10 @@ namespace BrnGuiSaveLoad
         // capacity is the save's resource count; the live length is muManifestCount. The
         // dedicated save-image TU must replace this with the real fixed-capacity array.
         ManifestEntry maVersionManifest[1]; // +0x7070
+
+        // +0x7078 .. +0x1CD2F -- the rest of the serialised image (the split car / livery /
+        // rival tables, the freeburn-challenge and mugshot galleries, ...). Un-modelled here;
+        // reserved so the object spans the whole 118064-byte image Serialise clears.
+        u8 maReservedC[KI_IMAGE_SIZE_BYTES - 0x7078];
     };
 }

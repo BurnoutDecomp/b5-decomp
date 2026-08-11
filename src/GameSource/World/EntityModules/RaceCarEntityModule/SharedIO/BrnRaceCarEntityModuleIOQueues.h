@@ -46,6 +46,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<32768,16> (SceneResultQueue base)   // u8 (reserved-byte blob)
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact (PotentialContactQueue element)
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"  // BrnResource::GameDataIO::RequestInterface<8192>
+#include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h" // BrnGameState::TakedownEvent (TakedownEventQueue element)
 
 namespace BrnWorld
 {
@@ -71,10 +72,27 @@ namespace RaceCarEntityModuleIO
     };
 
     // ---- Takedown event queue (InputBuffer_PrePhysics :444) -------------------------------
-    // EventQueue<BrnGameState::TakedownEvent, 8> -> alignas(16). Grown by its own TU.
+    // EventQueue<BrnGameState::TakedownEvent, 8> -> alignas(16).
+    // ⛔ GROWN 2026-08-11 (WorldBridgeInputToEntityModules mount) -- THE FIFTH
+    // 256-BYTE-BLOB-VS-REAL-QUEUE FINDING in this file, and it was about to become live.
+    //   InputBuffer_PrePhysics::SetTakedownEventQueue @0x827A98F8 does
+    //     *(_DWORD *)(this + 208984) = 0;                        // == member+8 == miLength (Clear)
+    //     BrnGameState::TakedownEvent_::Append(this + 208976, src);
+    //   i.e. Clear() + the committed BaseEventQueue<TakedownEvent>::Append merge on the MEMBER
+    //   itself -- so the member must BE the real fixed-capacity instantiation, not an opaque
+    //   blob. The console span pins it exactly: mTakedownEventQueue @+208976 and
+    //   mScoringInterface @+209312 (== +212048 - 2736, from SetOnlineScoringInterface's
+    //   memcpy target and SetScoringInterface's 2736-byte block), i.e. 336 bytes
+    //   == 16 header + 8 * 40 == EventQueue<TakedownEvent,8> -- NOT 256. Appending through
+    //   the old blob would have run off the end of the member and over mScoringInterface.
+    //   The same EventQueue<BrnGameState::TakedownEvent,8> is already the committed shape of
+    //   the producing side (BrnWorldIO::UpdateInputBuffer::TakedownEventQueue), which is the
+    //   second independent attestation of the width.
+    // Derives (rather than typedefs) so existing `struct TakedownEventQueue` forward
+    // references stay valid -- the SceneResultQueue / PotentialContactQueue precedent above.
     struct alignas(16) TakedownEventQueue
+        : public CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>
     {
-        unsigned char maReserved[256];   // NOMINAL -- not byte-verified, grown by own TU
     };
 
     // ---- Game event queue (OutputBuffer_PrePhysics :491 / OutputBuffer_PostPhysics :602) --

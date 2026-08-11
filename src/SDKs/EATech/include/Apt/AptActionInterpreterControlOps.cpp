@@ -12,12 +12,11 @@
 // an already-string value untouched. Throw records the thrown value where runStream
 // observes it (the abort slot, mpAbortValue) and unwinds the run.
 //
-// FLAG -- deferred dependencies:
-//   * AptHook_Trace -- the host debug-output sink (console dword_8324E82C, a
-//     printf-style hook installed by the host); the trace TEXT is faithful, the
-//     sink is the host boundary.
-//   * AptValue::Append_ToString -- the value->string renderer (the StringPool /
-//     Append path, a toString sibling); declared, body is the value-layer follow-on.
+// Host boundary: AptHook_Trace -- the host debug-output sink (console
+// dword_8324E82C, a printf-style hook installed by the host); the trace TEXT is
+// faithful, the sink body is the host-side link-stub (AptRenderLinkStubs.cpp).
+// AptValue::Append_ToString (the value->string renderer) is homed in
+// AptValue/AptValueConvert.cpp (@0x82AF9668).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -36,8 +35,9 @@
 // AptActionInterpreter::GetDictEntry (the null-guarded dictionary-slot fetch) is
 // declared in AptActionInterpreter.h.
 
-// FLAG (host debug sink -- installed by the host; console dword_8324E82C): the
-// trace output function. printf-style; the one call site passes (fmt, message).
+// The host debug sink (installed by the host; console dword_8324E82C): the trace
+// output function. printf-style; the one call site passes (fmt, message). Body is
+// the host-boundary link-stub in AptRenderLinkStubs.cpp.
 extern void AptHook_Trace(const char* szFormat, const char* szMessage);
 
 // ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ void AptActionInterpreter::_FunctionAptActionTrace(AptActionInterpreter* pInterp
     AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
     EAStringC scratch;
     const EAStringC* pStr = AptValue::Get_ToString(pTop, &scratch);
-    AptHook_Trace("AptTrace: %s\n", pStr->GetBuffer());   // FLAG: host debug sink
+    AptHook_Trace("AptTrace: %s\n", pStr->GetBuffer());   // host debug sink (dword_8324E82C)
     pInterp->stackPop();
 }
 
@@ -80,8 +80,8 @@ void AptActionInterpreter::_FunctionAptActionToString(AptActionInterpreter* pInt
         && pTop->getIsDefined())
         return;   // already a string -> nothing to do
 
-    AptString* pStr = AptString::Create("");                 // FLAG: seed const, filled below
-    pTop->Append_ToString(pStr->GetInternalString());        // FLAG: value->string renderer (deferred)
+    AptString* pStr = AptString::Create("");                 // the empty seed, filled below
+    pTop->Append_ToString(pStr->GetInternalString());        // Append_ToString @0x82AF9668 (AptValueConvert.cpp)
     pInterp->stackPop();
     pInterp->mpStack[pInterp->mnStackTop++] = pStr;           // inlined stackPush
     pStr->AddRef();
@@ -109,16 +109,16 @@ void AptActionInterpreter::_FunctionAptActionToString(AptActionInterpreter* pInt
 // folded into AptFlushDeferredReleases, exactly as the sibling Var/Member
 // opcodes do).
 //
-// FLAG -- the AptGC deferred-release vector flush (console off_8324E51C /
+// The AptGC deferred-release vector flush (console off_8324E51C /
 // AptValueVector::ReleaseValues; the AptGC layer). Encapsulated as
 // AptFlushDeferredReleases (the same hook the Var/Member opcodes use); the
 // stack-empty guard that triggers it is faithful + engine-side.
 // ===========================================================================
 
-// FLAG (AptGC layer -- AptValueVector::ReleaseValues over off_8324E51C): drain
-// the deferred-release value vector once the operand stack empties. Shared with
-// the Var/Member opcodes (declared there too); the host-side vector type/global
-// are not reconstructed yet, so the flush is encapsulated.
+// The AptGC deferred-release drain (AptValueVector::ReleaseValues over
+// off_8324E51C == gValuesToRelease): drain the vector once the operand stack
+// empties. Shared with the Var/Member opcodes (declared there too); homed in
+// AptGC.cpp.
 extern void AptFlushDeferredReleases();
 
 namespace
@@ -134,7 +134,7 @@ namespace
     {
         const uint8_t nDictByte = *pContext->mpProgramCounter;
         ++pContext->mpProgramCounter;                       // advance past the byte
-        AptValue* pValue = pInterp->GetDictEntry(nDictByte);   // null-guarded (FLAG hardening)
+        AptValue* pValue = pInterp->GetDictEntry(nDictByte);   // null-guarded (x64 hardening; see GetDictEntry)
         pInterp->mpStack[pInterp->mnStackTop++] = pValue;   // inlined stackPush
         pValue->AddRef();
     }
@@ -149,7 +149,7 @@ void AptActionInterpreter::_FunctionAptActionCallFuncSetVar(AptActionInterpreter
     _FunctionAptActionCallFunction(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
     if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +161,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethodPop(AptActionInterpreter*
     _FunctionAptActionCallMethod(pInterp, pContext);
     pInterp->stackPop();                  // console AptValue>::Pop -- drop the call result
     if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +189,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallFuncPop(AptActionInterprete
     const unsigned int nIndex = *pContext->mpProgramCounter;   // inline byte dict index
     pContext->mpProgramCounter += 1;
 
-    AptValue* pEntry = pInterp->GetDictEntry(nIndex);   // null-guarded (FLAG hardening)           // console: *(4*idx + a1[17])
+    AptValue* pEntry = pInterp->GetDictEntry(nIndex);   // null-guarded (x64 hardening)            // console: *(4*idx + a1[17])
     pInterp->mpStack[pInterp->mnStackTop++] = pEntry;          // inlined stackPush
     pEntry->AddRef();
 
@@ -225,9 +225,9 @@ void AptActionInterpreter::_FunctionAptActionWith(AptActionInterpreter* pInterp,
     {
         pContext->mpProgramCounter = pAligned + 8;   // consume the qword operand (GUIAPT64)
 
-        AptValue* pObject = nullptr;   // FLAG: the console leaves the out slot uninitialised
-                                       // on a no-object value and AddRefs it regardless; the
-                                       // null init + guard below keep that hazard out.
+        AptValue* pObject = nullptr;   // x64 hardening: the console leaves the out slot
+                                       // uninitialised on a no-object value and AddRefs it
+                                       // regardless; the null init + guard keep that hazard out.
         pInterp->valueToObject(pContext->mpCIH, nullptr, pTarget, &pObject);
         if (pObject)
         {
@@ -254,7 +254,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethodSetVar(AptActionInterpret
     _FunctionAptActionCallMethod(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
     if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
 }
 
 // ---------------------------------------------------------------------------
@@ -268,7 +268,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallFuncSetVar(AptActionInterpr
     _FunctionAptActionCallFunction(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
     if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
 }
 
 // ---------------------------------------------------------------------------
@@ -282,7 +282,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodPop(AptActionInterpre
     _FunctionAptActionCallMethod(pInterp, pContext);
     pInterp->stackPop();                  // console AptValue>::Pop -- drop the call result
     if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +296,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodSetVar(AptActionInter
     _FunctionAptActionCallMethod(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
     if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
 }
 
 // ===========================================================================
@@ -307,13 +307,13 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodSetVar(AptActionInter
 // laid out inline after a 20-byte try record at the (4-byte-aligned) PC.
 // ===========================================================================
 
-// FLAG (console Burnout_X360_Artist_01e3_0 -- the inlined stack-collapse primitive):
-// pop nCount operands off the operand stack, Releasing each. Shared with the StackOps
-// call opcodes (declared there too); used here to unwind any operands the sub-streams
-// left above the entry top.
-// AptApt_PopValues -> AptActionInterpreter::stackPop(int) member (@0x7FDB68; the {} shim was a no-op).
-
-// FLAG (the active AS local-variable frame stack -- console off_8324E3DC /
+// The inlined stack-collapse primitive (console Burnout_X360_Artist_01e3_0): pop
+// nCount operands off the operand stack, Releasing each -- the real
+// AptActionInterpreter::stackPop(int) member (@0x7FDB68; the AptApt_PopValues no-op
+// shim is retired), used here to unwind any operands the sub-streams left above the
+// entry top.
+//
+// The active AS local-variable frame stack (console off_8324E3DC /
 // AptScriptFunctionBase::spFrameStack, a protected static). The catch-variable bind
 // reads it (and lazily creates it via CreateFrameStack) to store the caught value in
 // the current activation's locals; read through the public static accessor
