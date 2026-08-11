@@ -15,7 +15,9 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"            // BrnResource::GameDataIO::RequestInterface<3072>::GetAILanes
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"                  // BrnResource::GameDataIO::GameDataEvent (response GetEventId read)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"      // CgsResource::Events::AcquireResourceRequest
-#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"           // CgsResource::ID::HashString
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"           // CgsResource::ID::HashString + operator<<
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"        // CgsResource::ResourceHandle
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                   // CgsDev::Log::gpDebugPrint (the console's road dump)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                           // CGS_ASSERT
 
 // ============================================================================
@@ -24,6 +26,7 @@
 // Streamed-load state machines the GameStateModule pumps from Prepare:
 //   LoadAIData       @ 0x8234FA70  (meAILoadStage over the <3072,16> receiver queue)
 //   LoadDistrictMap  @ 0x8234FB98  (meDistrictMapLoadStage over the <3072,16> queue)
+//   LoadStreetData   @ 0x8234F630  (meLoadStage; pumped from Prepare2, added 2026-08-11)
 //
 // OnProfileLoaded (0x82349E20) is in this group's ledger but is NOT bodied here:
 // its body memcpys two 64-entry road-rules tables + reads the road-rules id/timestamp
@@ -33,8 +36,191 @@
 // do -- reported blocked instead.
 // ============================================================================
 
+namespace
+{
+    // The console's bundle / resource names, read off the X360 rodata LoadStreetData's
+    // switch loads (0x8234F630: `lis/addi` of the "STREETDATA.DAT" and "StreetData"
+    // literals). Both legs use event id 1 (`li r?, 1`); pool 5 == the GameData pool.
+    const char* const KPC_STREET_DATA_FILE_NAME     = "STREETDATA.DAT";
+    const char* const KPC_STREET_DATA_RESOURCE_NAME = "StreetData";
+    const s32         KI_STREET_DATA_EVENT_ID       = 1;
+    const s32         KI_STREET_DATA_POOL_ID        = 5;
+
+    // The X360 baked assert path/line for the meLoadStage default case.
+    const char* const KPC_STREET_MANAGER_FILE =
+        "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp";
+}
+
 namespace BrnGameState
 {
+
+// ----------------------------------------------------------------------------
+// StreetManager::LoadStreetData  @ 0x8234F630   ⭐ THE STREETDATA.DAT LOADER
+//
+// The resumable five-stage machine Prepare2 gates on -- structurally the twin of
+// ProgressionManager::LoadProgressionData @0x82399ED0 and TriggerQueryManager::Prepare
+// @0x82398218 (LoadBundle -> acquire -> bind). It is the ONLY writer of mpStreetData
+// (X360 `a1 + 7368` == +0x1CC8), so nothing else can make GetStreetData() answer
+// non-null; the stage word is `*(a1 + 7632)` == meLoadStage (+0x1DD0).
+//
+//   0 E_LOAD_NOT_STARTED    : GetResourceRequestInterface(out)->LoadBundle(&rq, 1, pool 5,
+//                             "STREETDATA.DAT", useHDCache 0); rq.Clear(); stage = 1;
+//                             FALL THROUGH into case 1 (the console `goto LABEL_3`).
+//     ⚠️ ORDER: the console issues the LoadBundle FIRST and clears the receiver queue
+//     AFTER (0x8234F630's case 0 is `LoadBundle(...)` then `BaseEventReceiverQueue::
+//     Clear(v4)`), the mirror image of LoadProgressionData's clear-then-request. The
+//     request record is already queued on the OUTPUT request interface by then, so the
+//     clear only drops stale replies; reproduced in the console's order.
+//   1 E_LOAD_REQUESTED      : reply not in yet (`if (!v4[2])`) -> return false. Otherwise
+//                             rq.Clear(); stage = 2; fall through (`goto LABEL_7`).
+//   2 E_ACQUIRE_NOT_STARTED : AcquireResource(&rq, 1, pool 5, "StreetData"); stage = 3;
+//                             FALL THROUGH into case 3 (the console `goto LABEL_8`) --
+//                             which then finds the queue empty this tick and returns false.
+//   3 E_ACQUIRE_REQUESTED   : reply not in yet -> return false. Otherwise walk EVERY queued
+//                             event, CreateFromHandle(&mpStreetData, response handle), and
+//                             (dev builds only) print the loaded road table; stage = 4;
+//                             return true.
+//   4 E_LOAD_COMPLETE       : return true.
+//   default                 : assert "StreetManager::meLoadStage in a weird state"
+//                             (BrnGameStateStreetManager.cpp:3394) then return TRUE -- the
+//                             console falls into LABEL_36 (`result = 1`), not into a false.
+//
+// ⚠️ The Hex-Rays `HashString("StreetData") | 0x500000000LL` is the same store-fusion
+// artifact LoadProgressionData / LoadDistrictMap document: pool id 5 and the
+// zero-extended 32-bit resource id are two INDEPENDENT stores into the 24-byte acquire
+// record (AddEvent type 4). RequestInterface<3072>::AcquireResource builds it -- the
+// de-inlined form of the console's stack record.
+//
+// MEASURED against the shipped build/game/STREETDATA.DAT: bnd2 v2, platform 4, ONE
+// resource, id 0xBC9CC502 == HashString("StreetData"), type 0x10018 (65560) ==
+// BrnStreetData::StreetDataResourceType::GetTypeID.
+// ----------------------------------------------------------------------------
+bool StreetManager::LoadStreetData( GameStateModuleIO::OutputBuffer* lpOutput,
+                                    CgsModule::EventReceiverQueue<3072,16>* lpReceiverQueue )
+{
+    switch ( meLoadStage )
+    {
+        case E_LOAD_NOT_STARTED:
+        {
+            lpOutput->GetResourceRequestInterface()->LoadBundle(
+                lpReceiverQueue, KI_STREET_DATA_EVENT_ID, KI_STREET_DATA_POOL_ID,
+                KPC_STREET_DATA_FILE_NAME, /*lbUseHDCache*/ false );
+
+            lpReceiverQueue->Clear();
+            meLoadStage = E_LOAD_REQUESTED;
+        }
+            // fall through -- the X360 `goto LABEL_3` polls on the same tick.
+
+        case E_LOAD_REQUESTED:
+            if ( lpReceiverQueue->GetCount() == 0 )
+            {
+                return false;   // still waiting for the bundle-load reply
+            }
+            lpReceiverQueue->Clear();
+            meLoadStage = E_ACQUIRE_NOT_STARTED;
+            // fall through (`goto LABEL_7`).
+
+        case E_ACQUIRE_NOT_STARTED:
+            lpOutput->GetResourceRequestInterface()->AcquireResource(
+                lpReceiverQueue, KI_STREET_DATA_EVENT_ID, KI_STREET_DATA_POOL_ID,
+                KPC_STREET_DATA_RESOURCE_NAME );
+            meLoadStage = E_ACQUIRE_REQUESTED;
+            // fall through -- the console does NOT return here (`goto LABEL_8`); the queue
+            // it just cleared is empty, so the poll below returns false on this tick.
+
+        case E_ACQUIRE_REQUESTED:
+        {
+            // ⚠️ TWO tests, exactly as the console: `if (v9)` gates the whole stage (zero == the
+            // response has not arrived, return false), and a SEPARATE `if (v9 > 0)` gates the walk.
+            // A negative count therefore still completes the stage without binding anything --
+            // reproduced rather than collapsed into a single `<= 0`.
+            const s32 liQueuedCount = lpReceiverQueue->GetCount();
+            if ( liQueuedCount == 0 )
+            {
+                return false;   // still waiting for the acquire response
+            }
+
+            const CgsModule::Event* lpEvent = NULL;
+            s32                     liSize  = 0;
+            if ( liQueuedCount > 0 )
+            {
+                lpReceiverQueue->GetFirstEvent( &lpEvent, &liSize );
+            }
+
+            while ( lpEvent != NULL )
+            {
+                // reinterpret_cast, not static_cast: CgsResource::Events::Event and
+                // CgsModule::Event are unrelated roots and the receiver queue hands out the
+                // module one (the idiom LoadProgressionData / TriggerQueryManager::Prepare use).
+                const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                    reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>( lpEvent );
+
+                // X360 `CreateFromHandle(a1 + 7368, v11 + 24)` -- payload +0x18 is the
+                // response's {mpResourceMemory, mpSourceEntry} pair, i.e. a ResourceHandle.
+                // Read BY MEMBER: the host handle is 16 bytes where the console's is 8, so
+                // every literal offset shifts.
+                CgsResource::ResourceHandle lHandle;
+                lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+                lHandle.mpSourceEntry    = lpResponse->mpSourceEntry;
+                mpStreetData = lHandle;   // ResourcePtr::operator=(handle) -> CreateFromHandle
+
+                // The console advances the iterator BEFORE it prints (GetNextEvent at
+                // 0x8234F6F4 sits between the CreateFromHandle and the "LOADING ROADS" banner);
+                // the two do not interact, but the order is kept.
+                const CgsModule::Event* lpNext = NULL;
+                lpReceiverQueue->GetNextEvent( lpEvent, &lpNext, &liSize );
+
+                // The console's own road-table dump, gated on the dev message filter. It is
+                // NOT a bring-up diagnostic: the whole block sits inside the X360's
+                // `if ((gxMessageFilterFlags & 1) != 0)` guards at 0x8234F7xx, and the three
+                // literals below are that function's rodata.
+                if ( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0
+                  && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    *CgsDev::Log::gpDebugPrint << "\n\n\n***LOADING ROADS*****************\n";
+
+                    for ( BrnStreetData::RoadIndex liRoadIndex = 0;
+                          liRoadIndex < mpStreetData->GetRoadCount();
+                          ++liRoadIndex )
+                    {
+                        // GetRoad carries the console's own inlined
+                        // "liIndex < miRoadCount && liIndex >= 0" bounds assert (BrnStreetData.h:621).
+                        const BrnStreetData::Road* lpRoad = mpStreetData->GetRoad( liRoadIndex );
+
+                        CgsResource::ID lRoadId;
+                        lRoadId.SetHash( lpRoad->GetId() );
+
+                        *CgsDev::Log::gpDebugPrint << "Road " << liRoadIndex << " has ID ";
+                        *CgsDev::Log::gpDebugPrint << lRoadId;
+                        *CgsDev::Log::gpDebugPrint << " & is named ";
+                        *CgsDev::Log::gpDebugPrint << lpRoad->GetDebugName();
+                        *CgsDev::Log::gpDebugPrint << "\n";
+                    }
+
+                    *CgsDev::Log::gpDebugPrint
+                        << "\n***DONE LOADING ROADS*****************\n\n\n";
+                }
+
+                lpEvent = lpNext;
+            }
+
+            meLoadStage = E_LOAD_COMPLETE;
+            return true;
+        }
+
+        case E_LOAD_COMPLETE:
+            return true;
+
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert( "StreetManager::meLoadStage in a weird state",
+                                        KPC_STREET_MANAGER_FILE, 3394 );
+            CgsDev::Assert::EndAssert();
+            // The console falls into LABEL_36 -- `result = 1` -- so a corrupt stage word
+            // reports DONE rather than wedging the caller.
+            return true;
+    }
+}
 
 // ----------------------------------------------------------------------------
 // StreetManager::LoadAIData  @ 0x8234FA70

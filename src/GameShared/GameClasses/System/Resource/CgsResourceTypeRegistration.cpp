@@ -38,6 +38,7 @@
 #include "SharedClasses/World/BrnWheelGraphicsSpecResourceType.h"              // BrnWheel::GraphicsSpecResourceType (0x1000A)
 #include "SharedClasses/Graphics/PlayerCarColoursResourceType.h"               // CgsResource::PlayerCarColoursResourceType (0x1001E)
 #include "SharedClasses/Progression/BrnProgressionResourceType.h"              // BrnProgression::ProgressionResourceType (0x1000E)
+#include "SharedClasses/StreetData/BrnStreetDataResourceType.h"                // BrnStreetData::StreetDataResourceType (0x10018)
 #include "GameShared/GameClasses/Containers/CgsDictionaryResourceType.h"       // CgsContainers::DictionaryResourceType<ICE::ICETakeData> (0x41)
 #include "SDKs/Packages/ICE/ICEData.hpp"                                       // ICE::ICETakeData (the dictionary's element type)
 
@@ -240,6 +241,21 @@ namespace CgsResource
         // record whose nine array bases are still file offsets.
         static BrnProgression::ProgressionResourceType sProgressionData;   // 0x1000E (65550)
         TypeRegistry::Register(&sProgressionData);
+
+        // ---- the road / street table (street-data load wave, 2026-08-11) ---------------------
+        // STREETDATA.DAT carries exactly one resource: id 0xBC9CC502 == HashString("StreetData"),
+        // type 0x10018 (65560) -- the name+id StreetManager::LoadStreetData @0x8234F630 loads the
+        // bundle for and then acquires from pool 5. MEASURED on the shipped
+        // build/game/STREETDATA.DAT (bnd2 v2, platform 4, 1 resource, type 65560, id 0xBC9CC502),
+        // and 65560 is exactly what BrnStreetData::StreetDataResourceType::GetTypeID @0x82676798
+        // returns.
+        // LOAD-BEARING for the same reason ProgressionData was: mpaStreets / mpaJunctions /
+        // mpaRoads / mpaChallengeParScores are serialised 32-bit offsets that only
+        // StreetData::FixUp rebases, so with no registered handler the pool stores a NULL
+        // mpResourceType, BundleLoader skips the fix-up passes, and the acquire hands the
+        // StreetManager a live-looking record whose table bases are still file offsets.
+        static BrnStreetData::StreetDataResourceType  sStreetData;         // 0x10018 (65560)
+        TypeRegistry::Register(&sStreetData);
 
         // ---- the world-render resource types (2026-07-27) -------------------------------------
         // The streamed TRK_UNIT bundles carry these; without a registered handler the

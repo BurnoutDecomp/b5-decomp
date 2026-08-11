@@ -351,7 +351,10 @@ namespace BrnGameState
                                   const GameStateModuleIO::BuddyRemovedEvent* lpBuddyRemovedEvent );
 
         // ---- streamed loads ----------------------------------------------------
-        // DWARF :310 (committed body pending; declared for Prepare2).
+        // DWARF :310 / @ 0x8234F630 (committed body, BrnGameStateStreetManager_wB_01.cpp).
+        // meLoadStage machine: LoadBundle("STREETDATA.DAT", pool 5) -> AcquireResource
+        // ("StreetData", pool 5) -> bind mpStreetData from the acquire response handle.
+        // True once E_LOAD_COMPLETE.
         bool LoadStreetData( GameStateModuleIO::OutputBuffer* lpOutput,
                              CgsModule::EventReceiverQueue<3072,16>* lpReceiverQueue );
 
@@ -652,9 +655,22 @@ namespace BrnGameState
         bool                                     mbLockLeftSign;                               // +0x1DCE
         bool                                     mbPlayerIsInAShortcut;                        // +0x1DCF
 
-        LoadStage                                meLoadStage;                                  // +0x1DD0
-        AILoadStage                              meAILoadStage;                                // +0x1DD4
-        DistrictMapLoadStage                     meDistrictMapLoadStage;                       // +0x1DD8
+        // ⚠️ [FLAG PC bring-up] the three stage words carry in-class initialisers holding the
+        // EXACT values StreetManager::Construct @0x82335978 writes into them. Reason, stated
+        // rather than hidden: GameStateModule now embeds this manager BY VALUE (DWARF :425) but
+        // does NOT yet call StreetManager::Construct -- that Construct's first statement is
+        // mStreetManagerDebugComponent.Construct(this), which emits the debug component's vtable
+        // and therefore hard-references its virtual Update/OnActivate/RenderHUD and the ~15
+        // still-unhomed StreetManager/ScoringSystem/ProgressionManager accessors those call
+        // (MEASURED with dumpbin /SYMBOLS over the mount candidate set). Without the stage words
+        // seeded, LoadStreetData would switch on an INDETERMINATE value on the very first tick.
+        // These initialisers do not change the layout (the _AssertLayout offsets below still
+        // hold) and they are not invented values -- they are Construct's own three stores.
+        // Same doctrine as BrnGameStateModule.h's `mpOutputBuffer = 0`.
+        // DELETE-WHEN GameStateModule::Construct calls StreetManager::Construct for real.
+        LoadStage                                meLoadStage            = E_LOAD_NOT_STARTED;            // +0x1DD0
+        AILoadStage                              meAILoadStage          = E_AI_DATA_LOAD_NOT_STARTED;    // +0x1DD4
+        DistrictMapLoadStage                     meDistrictMapLoadStage = E_DISTRICT_MAP_LOAD_REQUEST;   // +0x1DD8
 
         s32                                      miUpcomingRoadsPM;                            // +0x1DDC ("UpcomingRoads")
         s32                                      miUpcomingRoadsSentMessagePM;                 // +0x1DE0 ("UpcomingRoadsSendMessage")

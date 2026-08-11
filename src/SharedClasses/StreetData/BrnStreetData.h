@@ -243,6 +243,19 @@ namespace BrnStreetData
         CGS_ASSERT( liIndex < miRoadCount && liIndex >= 0, "liIndex < miRoadCount && liIndex >= 0" );
         return &mpaChallengeParScores[ liIndex ];
     }
+
+    // ---- ADDITIVE (street-data load wave, 2026-08-11) -------------------
+    // Three plain field reads that were DECLARED here and defined NOWHERE in the tree
+    // (grep: no out-of-line definition in any .cpp), so every caller was a latent
+    // unresolved external -- invisible under the per-TU `cl /c` gate, and exactly the
+    // "gate-green != linkable" trap. The X360 inlines all three at every call site (no
+    // standalone symbol in the ledger for any of them), so a header inline IS the
+    // faithful shape; same treatment as GetRoad/GetStreet/GetChallengeParScore above.
+    // Offsets are the ones the class already pins: Road::mId +16, Road::macDebugName +40,
+    // StreetData::miRoadCount +32.
+    inline CgsID       Road::GetId() const          { return mId; }
+    inline const char* Road::GetDebugName() const   { return macDebugName; }
+    inline int32_t     StreetData::GetRoadCount() const { return miRoadCount; }
 }
 
 #endif // BRN_STREET_DATA_H
