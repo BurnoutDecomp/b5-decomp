@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
 #include <cmath>                                        // std::sqrt (AddTractionPoint's line distance)
 #include "rw/math/vpu/vector3_operation.h"             // rw::math::vpu::{IsValid, operator+/-, Mult, Dot}
+#include "rw/math/vpu/matrix44affine_operation.h"      // rw::math::vpu::IsValid(Matrix44Affine) (Prepare's :98 assert)
 
 // BrnPhysics::Vehicle::SimpleVehiclePhysics -- the 3 functions owned by the BrnPhysics-bodies
 // group. The X360 build is VMX128 inline asm; these are the DE-SIMD'd named-member equivalents
@@ -25,6 +26,13 @@ namespace BrnPhysics
 namespace Vehicle
 {
     namespace vpu = rw::math::vpu;
+
+    // m/s -> MPH. The console constant is flt_830180B0, whose static initialiser is a DIVISION
+    // (0x82C6D0C0: f0 = flt_82001C98 == 1.0f, f13 = flt_82F31928 == 0.447039992f, `fdivs`), i.e.
+    // 1 / 0.44704 == 2.2369363f. VehiclePhysics.cpp homes the same value under KF_MPS_TO_MPH with
+    // that derivation written out; it is TU-static there, so the same literal is re-stated here
+    // rather than reached across a translation unit. Prepare @0x8262FC10 loads it by symbol.
+    static const f32 KF_SVP_MPS_TO_MPH = 2.2369363f;   // flt_830180B0 == 1/flt_82F31928
 
     // Rotate the (model-space) COM offset into world space by the matrix's 3x3 basis.
     static Vector3 RotateCOMOffsetToWorld(const Matrix44Affine& lrTransform, const Vector3& lrCOMOffset)
@@ -880,6 +888,120 @@ namespace Vehicle
         }
 
         return true;   // li r3, 1
+    }
+
+    // ===============================================================================================
+    // SimpleVehiclePhysics::Prepare  @0x8262F620 (554 insns)
+    //
+    // OUT OF THE "BLOCKED (fidelity:blocked)" LIST, 2026-08-11 (the create-drain wave). The header
+    // blocked-list banner said this was "deep VMX128 ... cannot be faithfully reproduced BY NAME".
+    // That was assessed against the 20-byte SimpleVehicleAttribs slice and before the member map was
+    // pinned. RE-READ FROM THE ASM: the great majority of the 554 instructions are the inlined
+    // RwMathVPU::IsValid NaN cascades of the nine debug asserts (each lane is a vspltw + vcmpeqfp. +
+    // branch triple), and every one of the remaining stores lands on a member this header ALREADY
+    // NAMES. Nothing here is de-SIMD'd by guess.
+    //
+    // THE SIGNATURE IS DWARF/PS3-ATTESTED, not inferred. PS3 export 0x734D58:
+    //   _ZN10BrnPhysics7Vehicle20SimpleVehiclePhysics7PrepareE
+    //     N2rw4math3vpu14Matrix44AffineE NS4_7Vector3E S6_ S6_ S6_
+    //     RKN12CgsGeometric14AxisAlignedBoxE PNS0_14VehicleAttribsE PKS6_ PKf
+    // which is exactly the declaration this header already carried, parameter for parameter. The
+    // X360 register map confirms it: r4 = lTransform, v1..v4 = the four vectors in declaration
+    // order, r5 = lAABB, r6/r7/r8 = attribs / wheel positions / wheel radii.
+    //
+    // Asserts in the console order (lines from the baked __FILE__/__LINE__ pairs): :98
+    // IsValid(lTransform) - :99 IsValid(lLinearVelocity) - :100 IsValid(lAngularVelocity) - :101
+    // IsValid(lHandlingBodyOffset) - :102 IsValid(lHalfExtent) - :103 lpAttribs != NULL - :104
+    // lpaWheelPositions != NULL - :105 lpafWheelRadii != NULL - :110 IsValid(lpaWheelPositions[w])
+    // per wheel - :299 the second, bare lpAttribs one - :134 IsValid(mLocalInverseInertia).
+    //
+    // Store map, every offset read off the asm and reached BY NAME below:
+    //   0x8262FB94  bl ExternalPhysicsBody::Prepare      r3 = this + 0x10 (the base sub-object)
+    //   0x8262FBA0  bl SimpleVehiclePhysics::Reset       the caller's `vmr128 v1,v127` is a DEAD
+    //               move -- Reset @0x825D9A58 overwrites v127 with `vspltisw128 v127,0` before its
+    //               first use, so the committed 0-arg Reset() is right (checked, not assumed).
+    //   0x8262FBB0  bl SimpleVehicleAttribs::SetupAttribs  r3 = this + 0x5A0 == &mSimpleAttribs
+    //   0x8262FBC8  stvx128 v127, this+0x50    mLinearVelocity     = lLinearVelocity
+    //   0x8262FBD0  stvx128 v125, this+0x690   mHandlingBodyOffset = lHandlingBodyOffset
+    //   0x8262FBD8  stvx128 v126, this+0x60    mAngularVelocity    = lAngularVelocity
+    //   0x8262FBE8/F8/FC04/FC0C   the four rows of lTransform -> mTransform (+0x10/0x20/0x30/0x40)
+    //   0x8262FC38  stvx128 v124, this+0x6A0   mHalfExtent         = lHalfExtent
+    //   0x8262FC28/FC44/FC48  mfSpeedMPH = vmsum3fp(mTransform.zAxis, mLinearVelocity) *
+    //               KF_MPS_TO_MPH -- the forward-axis component of the velocity, in mph. The
+    //               constant is the same flt_830180B0 == 2.2369363f VehiclePhysics.cpp already homes
+    //               (1 / 0.44704); the asm splats it out of a 16-byte stack temp whose other three
+    //               lanes are zeroed (`stw r30` x3), which is why the multiply is a lane-0 splat.
+    //   0x8262FC4C..0x8262FC88  mDeformableAABB = *lAABB and mOriginalAABB = *lAABB -- four ld/std
+    //               pairs each, from the SAME source. Both AABBs start life as the streamed box;
+    //               VehicleManager::SetRaceCarCrashing's inlined ResetDeformableAABB copies +0x6F0
+    //               back over +0x6D0, which is only meaningful if the two start equal.
+    //   0x8262FCB4  bl SimpleVehicleAttribs::SetupAttribs   AGAIN, after the bare :299 assert. NOT a
+    //               transcription slip -- the console has two distinct `bl` sites (0x8262FBB0 and
+    //               0x8262FCB4), the second guarded by its own assert. Reproduced as-is.
+    //   0x8262FCC4  bl SimpleVehiclePhysics::SetAttributes(lpaWheelPositions, lpafWheelRadii)
+    //   0x8262FE88..0x8262FEB4  mbCrashing = false - mbStartedDeforming = false - and the
+    //               mAboveGroundTestResult block at +0x570: position/normal zeroed, distance
+    //               flt_82001CC0 (READ FROM THE IMAGE with x360rd: 0x00000000 == 0.0f), the two
+    //               CollisionTag halfwords 0xFFFF/0x8000, valid byte cleared. That is
+    //               AboveGroundTestResult::Reset() store for store -- the body already in this TU,
+    //               recovered independently from a DIFFERENT console function's inlined copy, so it
+    //               is called by name rather than re-spelled.
+    //   0x8262FE94  li r3, 1   -> returns true.
+    // ===============================================================================================
+    bool SimpleVehiclePhysics::Prepare(Matrix44Affine lTransform, Vector3 lLinearVelocity,
+                                       Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset,
+                                       Vector3 lHalfExtent, const AxisAlignedBox& lrAABB,
+                                       VehicleAttribs* lpAttribs, const Vector3* lpWheelPositions,
+                                       const f32* lpafWheelRadii)
+    {
+        CGS_ASSERT(vpu::IsValid(lTransform),          "RwMathVPU::IsValid( lTransform )");          // :98
+        CGS_ASSERT(vpu::IsValid(lLinearVelocity),     "RwMathVPU::IsValid( lLinearVelocity )");     // :99
+        CGS_ASSERT(vpu::IsValid(lAngularVelocity),    "RwMathVPU::IsValid( lAngularVelocity )");    // :100
+        CGS_ASSERT(vpu::IsValid(lHandlingBodyOffset), "RwMathVPU::IsValid( lHandlingBodyOffset )"); // :101
+        CGS_ASSERT(vpu::IsValid(lHalfExtent),         "RwMathVPU::IsValid( lHalfExtent )");         // :102
+        CGS_ASSERT(lpAttribs != 0,                    "lpAttribs != NULL");                         // :103
+        CGS_ASSERT(lpWheelPositions != 0,             "lpaWheelPositions != NULL");                 // :104
+        CGS_ASSERT(lpafWheelRadii != 0,               "lpafWheelRadii != NULL");                    // :105
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            CGS_ASSERT(vpu::IsValid(lpWheelPositions[liWheel]),
+                       "RwMathVPU::IsValid( lpaWheelPositions[lu8Wheel] )");                        // :110
+        }
+
+        ExternalPhysicsBody::Prepare();          // bl @0x8262FB94, r3 = this + 0x10
+        Reset();                                 // bl @0x8262FBA0 (incoming v1 is dead -- see banner)
+        mSimpleAttribs.SetupAttribs(lpAttribs);  // bl @0x8262FBB0
+
+        mLinearVelocity     = lLinearVelocity;     // +0x50
+        mHandlingBodyOffset = lHandlingBodyOffset; // +0x690
+        mAngularVelocity    = lAngularVelocity;    // +0x60
+        mTransform          = lTransform;          // +0x10..+0x40, four stvx128
+        mHalfExtent         = lHalfExtent;         // +0x6A0
+
+        // +0x6C0: forward speed in mph -- vmsum3fp128(mTransform.zAxis, mLinearVelocity) broadcast,
+        // times the lane-0 splat of KF_MPS_TO_MPH.
+        const f32 lfForwardSpeedMPH =
+            vpu::Dot(mTransform.zAxis, mLinearVelocity) * KF_SVP_MPS_TO_MPH;
+        mfSpeedMPH = VecFloat{ lfForwardSpeedMPH, lfForwardSpeedMPH,
+                               lfForwardSpeedMPH, lfForwardSpeedMPH };
+
+        mDeformableAABB = lrAABB;                // +0x6D0, four ld/std out of lAABB
+        mOriginalAABB   = lrAABB;                // +0x6F0, the SAME source
+
+        CGS_ASSERT(lpAttribs != 0, "lpAttribs");                                                    // :299
+        mSimpleAttribs.SetupAttribs(lpAttribs);            // bl @0x8262FCB4 -- the second call
+        SetAttributes(lpWheelPositions, lpafWheelRadii);   // bl @0x8262FCC4
+
+        CGS_ASSERT(vpu::IsValid(mLocalInverseInertia.xAxis) &&
+                   vpu::IsValid(mLocalInverseInertia.yAxis) &&
+                   vpu::IsValid(mLocalInverseInertia.zAxis),
+                   "RwMathVPU::IsValid( mLocalInverseInertia )");                                   // :134
+
+        mbCrashing         = false;              // stb 0, +0x710
+        mbStartedDeforming = false;              // stb 0, +0x712
+        mAboveGroundTestResult.Reset();          // the +0x570 block, store for store
+
+        return true;                             // li r3, 1
     }
 }
 }

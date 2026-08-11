@@ -46,19 +46,30 @@ namespace Vehicle
         // mean = (1/4) * sum  (the asm forms vrefp(4.0) + one Newton step, then `v3 = recip * sum`).
         const Vector3 lvWheelPosMean = vpu::Mult(lvWheelPosSum, 0.25f);
 
-        // FLAG: the X360 then does `*(lpAttribs+32) = COM + lvWheelPosMean` -- folding the wheel-mean
-        // into the attribs' COM-offset lane (mCOMOffset region @ +0x20 of the full VehicleAttribs).
-        // The included VehiclePhysics.h VehicleAttribs slice does NOT expose mCOMOffset BY NAME (it is
-        // owned by the VehicleAttribs TU), so this in-place COM update is recorded but ELIDED here
-        // rather than written through a raw-offset cast. The computed lvWheelPosMean is the faithful
-        // value the console adds. (void)-tagged so the computation is not dropped.
-        (void)lvWheelPosMean;
-        (void)lrAABB;
-
-        // Build the local transform from the spawn event (the asm copies event+0x10 rows into a
-        // local v35 transform) and forward into the full-physics Prepare.
-        VehiclePhysics::Prepare(&lpEvent->mInitialTransform, lpDeformSpec, lpAttribs,
-                                lpWheelPositions, lpafWheelRadii);
+        // ⭐⭐ CORRECTED 2026-08-11 (create-drain wave). The old note here said the wheel-mean was
+        // folded into the attribs' COM lane and then `(void)`-discarded it, and the AABB was
+        // discarded too -- both because the VehiclePhysics::Prepare declaration this file called was
+        // a FIVE-parameter fork (see that declaration's banner). With the DWARF/PS3 nine-parameter
+        // signature in place, the console's own use of both values is plain, read off the asm:
+        //   0x826394CC  vmulfp128 v3, v0, v12    <- v3 = 0.25f * sum(wheelPositions), and v3 is NOT
+        //                                           written again before the call, i.e. the wheel
+        //                                           mean IS the lHandlingBodyOffset argument.
+        //   0x826394E8  mr  r5, r25              <- r25 is PreparePhysical's own lrAABB parameter.
+        //   0x82639550  lvx128 v4, r24, 0x40     <- r24 == lpDeformSpec; +0x40 == +64 ==
+        //                                           StreamedDeformationSpec::mHandlingBodyDimensions
+        //                                           (static_asserted in that header) == lHalfExtent.
+        //   0x8263950C  lvx128 v1, r0, r29       <- r29 == lpEvent + 0x50 == mInitialVelocity.
+        //   0x8263951C  lvx128 v2, r30, 0x60     <- lpEvent + 0x60 == mAngularVelocity.
+        //   0x826394E0  addi  r4, r1, var_90     <- the local transform built from the spawn event.
+        VehiclePhysics::Prepare(lpEvent->mInitialTransform,
+                                lpEvent->mInitialVelocity,
+                                lpEvent->mAngularVelocity,
+                                lvWheelPosMean,
+                                lpDeformSpec->mHandlingBodyDimensions,
+                                lrAABB,
+                                lpAttribs,
+                                lpWheelPositions,
+                                lpafWheelRadii);
         // asm: `lvx128 v1, r0, r29` where r29 = lpEvent+0x50 = &lpEvent->mInitialVelocity -- the
         // post-Prepare SetWheelVelocities call passes the spawn event's initial velocity vector,
         // NOT a zero vector (Hex-Rays dropped this VMX128 register argument from the pseudocode).
