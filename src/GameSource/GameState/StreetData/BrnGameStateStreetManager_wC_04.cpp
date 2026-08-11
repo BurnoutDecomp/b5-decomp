@@ -91,34 +91,14 @@ void StreetManager::FillInRoadRulesQuery( GameStateModuleIO::RoadRulesBatchQuery
         static_cast<s32>( mpProgressionManager->GetNumberOfCompleteRoadRulesRuledByPlayer() ) >= KI_MAX_CHALLENGES;
 }
 
-// @ 0x82336360. Collect up to liMaxRivals rival ids whose district matches leDistrict
-// from the progression data's rival table, returning how many were written.
-// The found-count cut-out is tested at the TOP of each iteration, before the rival is
-// fetched, so the last iteration never reaches GetRival's bounds assert.
-s32 StreetManager::FindRivalsByDistrict( s32 leDistrict, ::CgsID* lpaRivalIds, s32 liMaxRivals )
-{
-    const BrnProgression::ProgressionData* lpProgressionData = mpProgressionManager->GetProgressionData();
-
-    s32 liNumberOfRivalsFound = 0;
-
-    for ( s32 liRivalIndex = 0; liRivalIndex < lpProgressionData->GetRivalCount(); ++liRivalIndex )
-    {
-        if ( liNumberOfRivalsFound >= liMaxRivals )
-        {
-            break;
-        }
-
-        const BrnProgression::Rival* lpRival = lpProgressionData->GetRival( liRivalIndex );
-
-        if ( static_cast<s32>( lpRival->GetDistrict() ) == leDistrict )
-        {
-            lpaRivalIds[liNumberOfRivalsFound] = lpRival->GetId();
-            ++liNumberOfRivalsFound;
-        }
-    }
-
-    return liNumberOfRivalsFound;
-}
+// @ 0x82336360. FindRivalsByDistrict WAS DEFINED HERE; it was SPLIT OUT 2026-08-11 into the
+// sibling BrnGameStateStreetManager_FindRivalsByDistrict.cpp so that SetupParRivals' one
+// unhomed callee could be mounted without this partfile's two other functions. MEASURED
+// (cl /c + dumpbin /SYMBOLS vs the defined-symbol set of build\game\obj): mounting this whole
+// partfile costs FOUR unresolved externals -- StreetManager::GetStreetData,
+// ::HasPlayerBeatenParScore, ::HasPlayerBeatenFriendScore and Rival::GetDistrict -- and all but
+// the last are pulled in ONLY by the two functions that remain here. Fold the split file back
+// in when those three score accessors land. Do NOT re-add the body: two definitions is LNK2005.
 
 // @ 0x8233F350. Tally the roads whose par score the local player has beaten for BOTH
 // score types (a "complete" road rule), then mirror the tally into the ProgressionManager

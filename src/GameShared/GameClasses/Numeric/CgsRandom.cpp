@@ -28,6 +28,8 @@
 
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (RandomInt's two baked bounds asserts)
+
 #include "rw/math/vpu/types.h"   // Vector3 -- RandomVector's DEFINITION needs the complete
                                  //   type (the header itself deliberately only forward-declares
                                  //   it, to stay standalone)
@@ -62,6 +64,53 @@ namespace CgsNumeric
         if (luSpan == 0u)
             return luMin;
         return luMin + (RandomUInt() % luSpan);
+    }
+
+    // ========================================================================
+    // THE BOUNDED SIGNED-INT DRAW -- BODIED 2026-08-11 (SetupParRivals wave).
+    //
+    // ⚠️ NO STANDALONE X360 SYMBOL: the console inlines it at all 16 of its call sites (every
+    // one of them carries the same pair of baked assert literals, which is how they were
+    // enumerated -- grep the export set for `aLimaxLimin`). Two of those expansions were read
+    // in full, and they agree instruction for instruction:
+    //
+    //   * CgsAlgorithms::Shuffle<u16, Stack<u16,1>> @0x8271B420 -- THE GENERAL FORM, because
+    //     its liMin is a runtime value (r25) rather than a constant:
+    //         0x8271B49C  cmpw  cr6, r28, r25 ; bge      -> assert(liMax >= liMin)   [.h:320]
+    //         0x8271B474  subf  r11, r25, r28 ; addi r27, r11, 1
+    //                                                     -> luMod = liMax - liMin + 1
+    //         0x8271B4BC  cmplwi cr6, r27, 0  ; bne      -> assert(luMod > 0)        [.h:323]
+    //         0x8271B4E0  ld    r11, 0x20(random)         -> the OLD seed
+    //         0x8271B4F8  srdi  r9, r11, 32 ; clrlwi r11, r9, 0
+    //                                                     -> draw == (u32)(OLD seed >> 32)
+    //         0x8271B4FC  mulld/addi 1 / std 0x20         -> muSeed = old * K + 1
+    //         0x8271B50C  divwu/mullw/subf                -> draw % luMod  (UNSIGNED)
+    //         0x8271B518  add   r31, r11, r25             -> + liMin
+    //   * StreetManager::SetupParRivals @0x8233F560 (0x8233F854..0x8233F8CC) -- the same
+    //     sequence with liMin folded to the constant 0, so the trailing `add` disappears and
+    //     the `subf` collapses into `addi r29, r28, 1`.
+    //
+    // ⚠️ THE DRAW IS THE SEED *BEFORE* THE STEP (`srdi` of the old value precedes the `std` of
+    // the new one in both expansions) and the reduction is UNSIGNED (`divwu`), even though the
+    // bounds are signed. Both are observable and are reproduced exactly. The `twllei r27, 0`
+    // that guards the divide is the compiler's own trap for the assert above it; it has no
+    // C++ counterpart.
+    //
+    // ⚠️ IT DOES NOT TOUCH THE RING BUFFER -- same as RandomBool. Neither expansion reads or
+    // writes mafFloatBuffer/muOldestBufferIndex; only muSeed moves.
+    //
+    // FLAG (inlining reversal): the four instructions that draw-and-step are byte-identical to
+    // RandomUInt()'s own attested expansion (@0x827537D0..E4), so they are written as that call
+    // rather than re-inlined here. Semantics are unchanged; only the source structure is a
+    // reconstruction choice.
+    s32 Random::RandomInt(s32 liMin, s32 liMax)
+    {
+        CGS_ASSERT(liMax >= liMin, "liMax >= liMin");
+
+        const u32 luMod = static_cast<u32>(liMax - liMin) + 1u;
+        CGS_ASSERT(luMod > 0u, "luMod > 0");
+
+        return liMin + static_cast<s32>(RandomUInt() % luMod);
     }
 
     // ========================================================================

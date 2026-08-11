@@ -3,28 +3,19 @@
 //   (wave C partfile -- group 2)
 //
 // Faithful de-optimisation of the X360 BURNOUT_X360_ARTIST.XEX:
-//   BrnGameState::StreetManager::SetupParRivals            @ 0x8233F560
 //   BrnGameState::StreetManager::ProcessScoreRequestEvent  @ 0x8234A240
+//   (BrnGameState::StreetManager::SetupParRivals @0x8233F560 was split out 2026-08-11 into
+//    the sibling BrnGameStateStreetManager_SetupParRivals.cpp -- see the note at its former
+//    place below. Its two vector immediates and its LCG seed went with it.)
 //
 // Every store / branch / early-out / assert has an asm counterpart; members are
-// the frozen-header named fields (never raw-offset casts). The two vector
-// immediates SetupParRivals hands WorldMap2D::Construct are the TU's own
-// static-initialiser globals unk_82FADAA0 / unk_82FADD60, recovered below.
+// the frozen-header named fields (never raw-offset casts).
 // ===========================================================================
 
 #include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"
 
 #include "GameSource/GameState/BrnGameEvents.h"                        // GameStateModuleIO::RoadRulesScoreRequestEvent
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                 // OutputBuffer (GetGameActionQueue / GetGuiOutputQueue)
-#include "GameSource/GameState/Progression/BrnProgressionManager.h"    // ProgressionManager::GetProgressionData
-#include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // TriggerQueryManager::GetTriggerData
-#include "SharedClasses/Progression/BrnProgressionData.h"              // ProgressionData::GetRival / GetRivalCount
-#include "SharedClasses/Progression/BrnRival.h"                        // BrnProgression::Rival::GetId
-#include "SharedClasses/Trigger/BrnTriggerData.h"                      // BrnTrigger::TriggerData::GetGenericRegion(Count)
-#include "SharedClasses/Trigger/BrnGenericRegion.h"                    // BrnTrigger::GenericRegion (+ TriggerRegion / BoxRegion)
-#include "GameShared/GameClasses/World/CgsWorldMap2D.h"                // CgsWorld::WorldMap2D / KU_INVALID_WORLD_MAP_VALUE
-#include "GameShared/GameClasses/Numeric/CgsRandom.h"                  // CgsNumeric::Random
-#include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h" // CgsResource::BinaryFileResource::GetData
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // CgsModule::Event / VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"           // CgsDev::StrStream (streamed dev assert)
@@ -40,26 +31,6 @@
 
 namespace
 {
-    // -------------------------------------------------------------------
-    // SetupParRivals' two lvx128 sources (@0x8233F5C8 / 0x8233F5D4) are the
-    // TU's own zero-initialised .data vectors unk_82FADD60 / unk_82FADAA0,
-    // filled by its static initialisers @0x82C4C2E0 / 0x82C4C320 from the
-    // rodata floats flt_8200D4EC/E8 (-4208, -3846) and flt_8200D4F4/F0
-    // (8270, 6101). SetupParRivals is their only consumer: they are the
-    // district-map's world rectangle handed to WorldMap2D::Construct.
-    // FLAG: the identifiers are ours (no DWARF name survives); the VALUES are
-    // byte-exact from the image.
-    // -------------------------------------------------------------------
-    const Vector2 KV2_DISTRICT_MAP_WORLD_ORIGIN = { -4208.0f, -3846.0f, 0.0f, 0.0f };   // unk_82FADAA0
-    const Vector2 KV2_DISTRICT_MAP_WORLD_SIZE   = {  8270.0f,  6101.0f, 0.0f, 0.0f };   // unk_82FADD60
-
-    // The LCG state SetupParRivals draws its rival picks from, materialised as a
-    // 64-bit immediate at 0x8233F5D8..0x8233F5E8 (lis/ori 0x2EC654DA + insrdi of
-    // 0xB5E330D0 into the high half). It is NOT the state CgsNumeric::Random::
-    // Construct() leaves behind (that spine is DEAD here -- the ring buffer is
-    // never read, only muSeed is), so the seed is installed explicitly.
-    const u64 KU_PAR_RIVAL_SELECTION_SEED = 0xB5E330D02EC654DAull;
-
     // -------------------------------------------------------------------
     // The 48-byte road-score response ProcessScoreRequestEvent builds on the
     // stack (sp+0x70..0xA0) and hands to VariableEventQueue<13312,16>::
@@ -84,109 +55,15 @@ namespace BrnGameState
 {
 
 // ---------------------------------------------------------------------------
-// @ 0x8233F560. Places the two par rivals for every road: the road's
-// RoadLimitId0 selects the matching generic trigger region, that region's box
-// position is sampled against the "Districts" WorldMap2D, and two rivals are
-// drawn at random out of the district's rival set (falling back to rival 0 when
-// the position is off-map or the district has no rivals).
+// @ 0x8233F560. SetupParRivals WAS DEFINED HERE; it was SPLIT OUT 2026-08-11 into the sibling
+// BrnGameStateStreetManager_SetupParRivals.cpp so that GameStateModule::Prepare2 case 2 could
+// stop parking on it. MEASURED (cl /c + dumpbin /SYMBOLS vs the defined-symbol set of
+// build\game\obj): mounting this whole partfile costs THIRTEEN unresolved externals, and every
+// one of them belongs to ProcessScoreRequestEvent below (the score-entry family, PlayerName,
+// SPrintf and the StrStream dev-assert chain). SetupParRivals touches none of them, so the split
+// costs ZERO. Fold the split file back in when the score-entry family lands. Do NOT re-add the
+// body: two definitions is LNK2005.
 // ---------------------------------------------------------------------------
-void StreetManager::SetupParRivals( const TriggerQueryManager* lpTriggerQueryManager )
-{
-    const BrnTrigger::TriggerData* lpTriggerData = lpTriggerQueryManager->GetTriggerData();
-
-    // The committed accessor IS the asm's null-checked ResourcePtr read
-    // (mpProgressionManager + 133348).
-    const BrnProgression::ProgressionData* lpProgressionData = mpProgressionManager->GetProgressionData();
-
-    CgsNumeric::Random lRandom;
-    lRandom.Construct();
-    lRandom.SetSeed( KU_PAR_RIVAL_SELECTION_SEED );
-
-    // The district-map handle slot holds a pointer to the resource-memory
-    // pointer; the X360 folds BinaryFileResource::GetData() into its caller as
-    // `base + *(u32*)(base + 4)` (0x8233F5EC..0x8233F5F4).
-    const CgsResource::BinaryFileResource* lpBinaryFileResource =
-        *reinterpret_cast<const CgsResource::BinaryFileResource* const*>( mDistrictMapResourceHandle.mpResourceMemory );
-
-    CgsWorld::WorldMap2D lWorldMap;
-    lWorldMap.Construct( lpBinaryFileResource->GetData(),
-                         KV2_DISTRICT_MAP_WORLD_ORIGIN,
-                         KV2_DISTRICT_MAP_WORLD_SIZE );
-
-    CGS_ASSERT( mpStreetData->GetRoadCount() <= KI_MAX_CHALLENGES,
-                "mpStreetData->GetRoadCount() <= KI_MAX_CHALLENGES" );
-
-    for ( BrnStreetData::RoadIndex liRoadIndex = 0;
-          liRoadIndex < mpStreetData->GetRoadCount();
-          ++liRoadIndex )
-    {
-        // GetRoad carries its own "liIndex < miRoadCount && liIndex >= 0" bounds assert.
-        const BrnStreetData::Road* lpRoad = mpStreetData->GetRoad( liRoadIndex );
-
-        for ( s32 liGenericRegionIndex = 0;
-              liGenericRegionIndex < lpTriggerData->GetGenericRegionCount();
-              ++liGenericRegionIndex )
-        {
-            // GetGenericRegion carries its own "liGenericRegionIndex < miGenericRegionCount" assert.
-            const BrnTrigger::GenericRegion* lpGenericRegion =
-                lpTriggerData->GetGenericRegion( liGenericRegionIndex );
-
-            if ( lpGenericRegion->GetId() == lpRoad->GetRoadLimitId0() )
-            {
-                // ⚠️ THE SWIZZLE IS THE CALL SITE'S, AND IT IS NOT (x, y).
-                // The console loads the region's three position floats into consecutive stack
-                // slots (0x8233F770/84/88 -> var_100/var_FC/var_F8), lvx128's them into v0, and
-                // then does `vperm v1, v0, v0, v7` (0x8233F7A8) BEFORE the bl to
-                // WorldMap2D::GetValue -- i.e. GetValue(Vector3)'s ground-plane swizzle, inlined
-                // here. GetValue itself reads only lanes 0 and 1 (`vspltw v10,v1,0` /
-                // `vspltw v9,v1,1` @0x82907FF8), so if the wanted lanes were already 0 and 1 the
-                // compiler would have passed v0 straight through and emitted no vperm at all.
-                // The permute therefore PROVES the sampled pair is not (x, y); a 2D world map
-                // over a Y-up world samples (x, z), which is also what the map's own rectangle
-                // says (origin (-4208, -3846), size (8270, 6101) -- Paradise City's x/z extents,
-                // not its height range).
-                // FLAG: the control vector itself (unk_82CDA450) is data the exports do not
-                // carry, so the ORDER (x, z) rather than (z, x) is inferred from that rectangle,
-                // not read out of the image. Built explicitly here rather than through
-                // CgsWorldMap2D.cpp's Vector3 overload, which flattens to (.x, .y).
-                Vector2 lSamplePosition;
-                const Vector3 lRegionPosition = lpGenericRegion->GetBoxRegion()->GetPosition();
-                lSamplePosition.x = lRegionPosition.x;
-                lSamplePosition.y = lRegionPosition.z;
-                lSamplePosition.z = 0.0f;
-                lSamplePosition.w = 0.0f;
-
-                const u8 luDistrict = lWorldMap.GetValue( lSamplePosition );
-
-                ::CgsID laRivalIds[2];
-                s32     liRivalsFound = 0;
-
-                if ( luDistrict != CgsWorld::KU_INVALID_WORLD_MAP_VALUE
-                  && ( liRivalsFound = FindRivalsByDistrict( luDistrict, laRivalIds, 2 ) ) != 0 )
-                {
-                    for ( s32 liParRival = 0; liParRival < BrnStreetData::E_SCORE_TYPE_COUNT; ++liParRival )
-                    {
-                        // RandomInt owns the baked "liMax >= liMin" / "luMod > 0" asserts.
-                        maaParRivalIds[liRoadIndex][liParRival] =
-                            laRivalIds[ lRandom.RandomInt( 0, liRivalsFound - 1 ) ];
-                    }
-                }
-                else
-                {
-                    CGS_ASSERT( lpProgressionData->GetRivalCount() > 0,
-                                "lpProgressionData->GetRivalCount() > 0" );
-
-                    for ( s32 liParRival = 0; liParRival < BrnStreetData::E_SCORE_TYPE_COUNT; ++liParRival )
-                    {
-                        // GetRival(0) is re-evaluated per pick -- its "liIndex < miRivalCount"
-                        // bounds assert fires once per stored id in the asm.
-                        maaParRivalIds[liRoadIndex][liParRival] = lpProgressionData->GetRival( 0 )->GetId();
-                    }
-                }
-            }
-        }
-    }
-}
 
 // ---------------------------------------------------------------------------
 // @ 0x8234A240. Answers a GUI road-score request: formats the road's user and
