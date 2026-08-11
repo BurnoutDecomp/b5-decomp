@@ -365,6 +365,45 @@ namespace Vehicle
     //     previous slot first, and this body's own assert list contains "Race Car Index Already
     //     Used" -- the console expects the slot to be free. ⇒ **ProcessRemoveEvents is part of the
     //     drain wave, not a later one.** That is a seventh function and it is not in the 2,295.
+    //
+    // (E) ⭐⭐ 2026-08-11 (VehiclePhysics::Prepare wave) -- THE CLOSURE IS DOWN TO **ONE** ABSENT
+    //     CALLEE, AND IT IS THE ONE THAT MAY NOT LAND YET. Re-costed by address at this seed:
+    //     4,370 insns / 47 nodes, and the ONLY genuinely-absent body left in the whole walk is
+    //         AddRaceCarDeformationModel  @0x825E9118  (153)   [called from @0x82617400]
+    //     -- the function held back because the handling-body handle is EIGHT bytes and routing
+    //     the id through the tree's 4-byte ::RigidBodyId stand-in delivers a silent ZERO (a race
+    //     car's LOW dword is identically zero). That widening is a decided question owed its own
+    //     wave in the mounted DeformationManager; it must NOT be smuggled in here.
+    //     Everything else the walk reports as absent is a false negative of the name matcher: the
+    //     eight `Attrib::Gen::physicsvehicle*attribs` ctors, the checked copy @0x825BDB88 and the
+    //     `Attrib::Class::TablePolicy` helpers are all exercised TODAY by the committed
+    //     VehiclePhysics::SetAttributes(), which links and runs. ⇒ the drain's real remaining cost
+    //     is **1,067 insns of this body plus a loud sub-gate on one call**, not a closure problem.
+    //     The whole Prepare chain is now BODIED AND MOUNTED (VehiclePhysics::Prepare @0x82637C80
+    //     landed this wave together with VehiclePhysics::SetAttributes @0x8262E140, the former
+    //     sub_8262E140).
+    //
+    // (F) ⛔⛔ AND A RISK THE BRIEFS HAVE HAD BACKWARDS -- MEASURED, NOT ASSUMED. Every recent
+    //     brief warns that draining here "arms the compensating pair": that seating
+    //     VehiclePhysics::mTransform risks a 0.740575 m VISIBLE jump against the two golden frames.
+    //     **It cannot, on this build, and the reason is a missing function rather than an argument.**
+    //     The rendered pose comes from ActiveRaceCar::mRenderParams.mBodyTransform, whose ONLY
+    //     console producer is ActiveRaceCar::UpdatePhysicsState @0x822D4418, whose ONLY caller is
+    //     RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics @0x822E87B8 -- **which is
+    //     absent from this build**. Today that pose is published solely by the bring-up stand-in
+    //     PublishRenderPoseWithoutPhysicsBringUp, off ActiveRaceCar::mPhysicsState.mTransform,
+    //     which only SeedPhysicsStateFromCreateEventBringUp ever writes (BrnPhysicsModuleUpdate-
+    //     Functions.cpp:1033-1038 states exactly this, and the 663-dialog mEntityId==0 guard there
+    //     is the shipped consequence of it).
+    //     ⇒ VehiclePhysics::mTransform and the render pose live in DIFFERENT OBJECTS with the
+    //     bridge between them missing. Draining here cannot move the car on screen.
+    //     ⚠️⚠️ THE CONVERSE IS THE TRAP, and it is the one to carry forward: **observable "the
+    //     car's height is unchanged after 275 s" CANNOT BE READ OFF THE SCREEN.** A body falling
+    //     forever in maRaceCarPhysics[] would be completely invisible in both goldens. Whoever
+    //     lands the drain must measure the fall with a probe on the VehicleManager side and must
+    //     NOT read a stable-looking frame as evidence that the car is resting.
+    //     DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics lands -- at THAT point, and only
+    //     then, the compensating pair becomes real and the warning above becomes true.
     // =============================================================================================
     void VehicleManager::ProcessCreateEvents(const VehicleInputInterface* lpInputInterface,
                                              VehicleOutputRequestInterface*,
