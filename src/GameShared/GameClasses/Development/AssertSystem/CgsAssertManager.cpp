@@ -9,6 +9,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // mpRender Begin/End/HasRenderBuffer
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"               // DebugManager::RenderAssertOverlay (the ARTIST overlay)
 #include "GameShared/GameClasses/Development/MapFile/Reader/CgsMapFileReaderMinimalMemory.h"  // the call-stack symbol resolver
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"  // IsHardwareWantingToShutdown (the window-close request)
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device (FrameBegin/ShowPixelBuffer) + <Windows.h>
 #undef DrawText                            // <Windows.h> (via device.h) #defines DrawText -> DrawTextA; keep our method name
 
@@ -224,6 +225,12 @@ namespace Assert
 
             for (;;)
             {
+                // The host has been asked to shut down (the user closed the window): abandon
+                // the halt so this frame unwinds and EngineUpdate can reach the release path.
+                // Checked BEFORE the draw, so the same assert re-firing on the way out returns
+                // immediately instead of re-entering the halt every frame.
+                if (CgsSystem::HardwareInit::IsHardwareWantingToShutdown())
+                    break;
                 DisplayAssertScreen();
                 if (GetAsyncKeyState(VK_END) & 0x8000)
                     break;
@@ -232,7 +239,8 @@ namespace Assert
                 Sleep(1);
             }
             // Wait for END to be released so the keypress doesn't carry into the resumed game.
-            while (GetAsyncKeyState(VK_END) & 0x8000)
+            while ((GetAsyncKeyState(VK_END) & 0x8000) &&
+                   !CgsSystem::HardwareInit::IsHardwareWantingToShutdown())
                 Sleep(1);
             ClearCurrentAssert();
         }
@@ -250,6 +258,17 @@ namespace Assert
         MSG lMsg;
         while (PeekMessage(&lMsg, nullptr, 0, 0, PM_REMOVE))
         {
+            // Do NOT swallow WM_QUIT. While the assert screen is up this is the ONLY pump
+            // running, so a close request is dispatched from here (WM_CLOSE -> DestroyWindow ->
+            // WM_DESTROY -> PostQuitMessage) and its WM_QUIT lands in THIS queue on the very
+            // next drain. Discarding it left EngineUpdate's `while (message != WM_QUIT)` with
+            // nothing to see -- the window died while the loop, and the XAudio2 voice with it,
+            // ran on headless forever. Put it back for the outer loop and stop draining.
+            if (lMsg.message == WM_QUIT)
+            {
+                PostQuitMessage(static_cast<int>(lMsg.wParam));
+                break;
+            }
             TranslateMessage(&lMsg);
             DispatchMessage(&lMsg);
         }

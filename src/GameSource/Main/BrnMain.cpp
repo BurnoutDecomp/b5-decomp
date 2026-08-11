@@ -11,6 +11,8 @@
 #include "pc/gcm/renderengine/device.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/System/PC/CgsAudioOutputPC.h"
+#include "GameShared/GameClasses/System/PC/CgsCrashHandlerPC.h"
 
 // ============================================================================================
 // The PC boot shell. Two references govern this TU:
@@ -178,9 +180,17 @@ void EngineUpdate()
     // through CgsSystem::ThreadLayout with vsync sync; the terminated flag at +10094112 ends
     // it. Until the threading core + that vtable entry land, the same IThreadClass hooks run
     // inline single-threaded here.
+    //
+    // The loop ends on EITHER the WM_QUIT this pump retrieves itself OR the hardware's
+    // shutdown request. Both are needed: the request flag (raised by the window procedure on
+    // WM_CLOSE/WM_DESTROY -- CgsSystem::HardwareInit::RequestShutdown) is the AUTHORITATIVE
+    // end-of-run signal, because a modal host loop that owns its own message pump for a while
+    // (the assert screen, CgsDev::Assert::Manager::DisplayAssertScreen) receives the close and
+    // therefore the WM_QUIT, which never reaches this pump at all. That is exactly how a closed
+    // window used to leave the process running headless with the menu-music voice still sounding.
     MSG lMsg;
     ZeroMemory(&lMsg, sizeof(lMsg));
-    while (lMsg.message != WM_QUIT)
+    while (lMsg.message != WM_QUIT && !CgsSystem::HardwareInit::IsHardwareWantingToShutdown())
     {
         if (PeekMessageA(&lMsg, nullptr, 0, 0, PM_REMOVE))
         {
@@ -210,6 +220,13 @@ void EngineUpdate()
 
 void EngineRelease()
 {
+    // Silence the output device FIRST -- before anything slower in the teardown gets a chance
+    // to run. AudioOutputPC::Close stops and destroys the source voice (so the XAudio2 audio
+    // thread stops pulling the movie / menu-music / speech fills), destroys the mastering
+    // voice, releases the engine and unloads xaudio2_9.dll. Without it the voice kept sounding
+    // for as long as the process lived.
+    CgsSystem::AudioOutputPC::Close();
+
     SaveConfig();
 
     // [gated] X360 main 0x827E60D8 ends with `while (!gm->Release());` (vtable+8 --
@@ -235,6 +252,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 {
     // TUB WinMain 0x79D580 shape: single-instance guard, device enumeration, config.ini,
     // hardware/window init, then the engine spine.
+    // Host-only: last-chance crash reporter (BrnGame.log block + BrnCrash.png) -- first,
+    // so even an init-path fault is captured.
+    CgsSystem::CrashHandler::Install();
     if (!CgsSystem::HardwareInit::IsAlreadyRunning())
     {
         renderengine::Device::Initialize();
