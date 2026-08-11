@@ -579,19 +579,44 @@ namespace RaceCarEntityModuleIO
         typedef BrnPhysics::ContactSpy::ContactSpyInterface        ContactSpyInterface;           // :90
         typedef BrnAI::AIModuleIO::AIRaceCarInterface              AIRaceCarInterface;            // :82
         void Construct();                                                                  // :510
-        const VehicleOutputInterface* GetVehicleOutputInterface() const;                   // :513
+        // ⛔ CORRECTION (3) -- 2026-08-11 (physics-readback wave). EVERY const-getter address
+        // below was attributed ONE-TO-TWO SLOTS TOO EARLY. The six out-of-line const getters
+        // in the ARTIST image are, by the offset each one returns:
+        //     0x822B5F48 -> this+16      == &mVehicleOutputInterface
+        //     0x822B5FF0 -> this+27680   == &mVehicleManagerOutputInterface
+        //     0x822B6098 -> this+848624  == &mDeformationOutputInterfaceForEntityModules
+        //     0x822B6140 -> this+868400  == &mDeformationOutputInterface
+        //     0x822B61E8 -> this+879392  == &mContactSpyInterface
+        //     0x822B6290 -> this+879408  == &mAIRaceCarInterface
+        // 0x822B6098 and 0x822B61E8 were MISSING from the previous attribution entirely,
+        // which is what shifted the other four. Three independent proofs:
+        //   (a) +16 is the FIRST member after the 16-byte IOBuffer base, and
+        //       ReadUpdatedActiveRaceCarDataFromPhysics @0x822E87B8 feeds 0x822B5F48's
+        //       return value straight into VehicleOutputInterface::GetRaceCar;
+        //   (b) 0x822B6098's return has muNumEntries@+0, maWheelStates@+0xF0 (stride 400),
+        //       miNumSkinnedModels@+0x2CB0, miNumLocatorOutputs@+0x2D94 and
+        //       mDetachedPartRenderQueue@+0x2E80 -- the DeformationOutputInterfaceFor-
+        //       EntityModules layout exactly; 0x822B6140's has mpDeformationState@+0x70 and
+        //       mGlassSmashOrCrackQueue@+0x1AF0 -- DeformationOutputInterface exactly;
+        //   (c) the "Not locked for reading" asserts these getters fire carry THIS header's
+        //       X360 __LINE__: 522 / 525 / 531 / 534 / 537 / 540 -- a perfectly regular
+        //       3-line ladder with the missing rung at 528 (the const GetSceneInputInterface,
+        //       which the X360 has no out-of-line body for; only its non-const twin
+        //       @0x8279E310 survives). The DWARF declaration lines below are the PS3 header's
+        //       and run a few lines earlier; the X360 assert lines are what pin the bodies.
+        const VehicleOutputInterface* GetVehicleOutputInterface() const;                   // :513 R (0x822B5F48, +16)
         void                          SetVehicleOutputInterface(const VehicleOutputInterface*); // :514
-        const VehicleManagerOutputInterface* GetVehicleManagerOutputInterface() const;     // :516
+        const VehicleManagerOutputInterface* GetVehicleManagerOutputInterface() const;     // :516 R (0x822B5FF0, +27680)
         void                                 SetVehicleManagerOutputInterface(const VehicleManagerOutputInterface*); // :517
-        const OutputBuffer_PreScene::SceneInputInterface* GetSceneInputInterface() const;  // :519
+        const OutputBuffer_PreScene::SceneInputInterface* GetSceneInputInterface() const;  // :519 (no out-of-line body; X360 :528 rung is empty)
         OutputBuffer_PreScene::SceneInputInterface*       GetSceneInputInterface();        // :520 W (0x8279E310) [CORRECTION (1)]
-        const DeformationOutputInterfaceForEntityModules* GetDeformationOutputInterfaceForEntityModules() const; // :522 R (0x822B5F48)
+        const DeformationOutputInterfaceForEntityModules* GetDeformationOutputInterfaceForEntityModules() const; // :522 R (0x822B6098, +848624)
         void SetDeformationOutputInterfaceForEntityModules(const DeformationOutputInterfaceForEntityModules*); // :523
-        const DeformationOutputInterface* GetDeformationOutputInterface() const;           // :525 R (0x822B5FF0)
+        const DeformationOutputInterface* GetDeformationOutputInterface() const;           // :525 R (0x822B6140, +868400)
         void                              SetDeformationOutputInterface(const DeformationOutputInterface*); // :526
-        const ContactSpyInterface* GetContactSpyInterface() const;                         // :528 R (0x822B6140)
+        const ContactSpyInterface* GetContactSpyInterface() const;                         // :528 R (0x822B61E8, +879392)
         void                       SetContactSpyInterface(const ContactSpyInterface*);     // :529 [CORRECTION (2): no non-const getter]
-        const AIRaceCarInterface*  GetAIRaceCarInterface() const;                          // :531 R (0x822B6290)
+        const AIRaceCarInterface*  GetAIRaceCarInterface() const;                          // :531 R (0x822B6290, +879408)
         void                       SetAIRaceCarInterface(const AIRaceCarInterface*);       // :532
     private:
         VehicleOutputInterface                     mVehicleOutputInterface;               // :536

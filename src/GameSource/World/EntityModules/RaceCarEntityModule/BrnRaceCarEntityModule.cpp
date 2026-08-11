@@ -30,6 +30,9 @@
 // fabricated rodata):
 //   RaceCarEntityModule::AddTrainingRequest   X360 0x822A47A8
 //   RaceCarEntityModule::UpdateTailgateTimer  X360 0x822CE508
+//   ⭐ RaceCarEntityModule::ProcessPlayerVehicleInput  X360 0x822FFE30  (player-input wave
+//      2026-08-11) -- the pad-to-physics hop; COMPLETE, and wired at the console's own slot
+//      inside PrePhysicsUpdate. See its banner for the PPC float-arg signature and the FLAGs.
 //
 // (The self-contained player-scoring map + GetGameModeFlag slice was bodied in a
 // prior work item in BrnRaceCarEntityModule_ScoringMapping.cpp.)
@@ -59,6 +62,9 @@
 #include "rw/math/vpu/matrix44affine_operation.h"                                        // rw::math::vpu::IsValid(Matrix44Affine) / Mult
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h" // StreamedDeformationSpec::WheelSpec (the authored wheel placements)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"                 // VehiclePhysics::SeatTransformFromCreateLegBringUp (the analytic rest seat, seat wave 2026-08-05)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"             // BrnPhysics::Vehicle::BrnPlayerDriverControls (the 72-byte player record)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"       // VehicleDriverInputInterface::AddTargetAssist / GetUpdateDriverQueue
+#include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostStrategy.h"       // BrnWorld::BoostStrategy::IsBoosting (vtable slot 19)
 
 #include <cstring>   // memset
 
@@ -2293,6 +2299,223 @@ void RaceCarEntityModule::PreSceneUpdate(
     lpInput->UnlockForRead();
 }
 
+// ============================================================================
+// ⭐⭐ ReadUpdatedActiveRaceCarDataFromPhysics @ 0x822E87B8 -- THE PHYSICS RETURN PATH
+// (physics-return-path wave 2026-08-11).
+//
+// This is the console's ONE producer of every active car's pose. Everything the render
+// side, the output interfaces and the director read about where a car IS comes out of
+// here. Its only caller is PostPhysicsUpdate @0x82307538 (`bl` at 0x8230761C, BEFORE
+// UpdateActiveRaceCarColours / UpdateOutputInterfaces -- the order this file's
+// PostPhysicsUpdate banner already records from the asm).
+//
+// SIGNATURE from the asm prologue (0x822E87D8 `mr r26, r3` / 0x822E87DC `mr r16, r4`):
+// two arguments, this + the post-physics input buffer. Hex-Rays renders twelve; the extra
+// ten are stack-frame artifacts of the assert-message builder.
+//
+// THE CONSOLE BODY, leg by leg (addresses from the ARTIST listing):
+//   L1  0x822E87E8..0x822E8880  the EIGHT-SLOT CAR LOOP.
+//       per slot: if IsActive()
+//                    UpdatePhysicsState(GetVehicleOutputInterface()->GetRaceCar(i),
+//                                       &mWorldMap2D)
+//                    UpdateRaceCarCollisionTagging(i, GetRaceCar(i))
+//                    UpdateDeformationState(GetDeformationOutputInterface()
+//                                               ->mpDeformationState)
+//                 then UNCONDITIONALLY `stw r14, 0x1598(r30)` -- see L1b.
+//   L1b 0x822E8874                ActiveRaceCar+0x1598 == mRenderParams(+0x7E0) + 0xDB8
+//                                 == maDetachedParts.miLength, i.e. the per-frame
+//                                 GetDetachedPartQueue().Clear() that L6 then refills.
+//   L2  0x822E888C..0x822E8D68  the GLASS SMASH/CRACK drain over
+//                               GetDeformationOutputInterface()->mGlassSmashOrCrackQueue.
+//   L3  0x822E8D6C..~0x822E8E30 the WHEEL-STATE publish: for each live entry of
+//                               GetDeformationOutputInterfaceForEntityModules()
+//                               (muNumEntries / maBaseIDs / maWheelStates) call
+//                               ActiveRaceCar::UpdateWheelPhysicsState.
+//   L4  the SKINNED-MODEL verlet copy (maSkinData -> ActiveRaceCar+0x2280, 128 x 16B).
+//   L5  the LOCATOR-OUTPUT copy (maLocatorData -> the car's light-locator block).
+//   L6  the DETACHED-PART render events -> maDetachedParts.AddEventSafe.
+//
+// ⭐ LANDED HERE: L1 (the transform/velocity/gear/wheel return path -- the mission) and
+// L1b -- i.e. the whole vehicle-physics half of the readback is BODIED here.
+//
+// ⚠️ "BODIED" IS NOT "RUNNING", AND THIS PARAGRAPH USED TO BLUR THAT (softened 2026-08-11).
+// L1's per-car call sits behind the mUsedRaceCars gate described further down. That gate is
+// the console's OWN liveness test -- VehicleOutputInterface::GetUsedCarsBitArray, the bitset
+// the physics side sets when it takes a race-car slot -- not a bring-up invention, but on
+// every build up to this wave the bit was never set by anything, so L1 was gated OFF and the
+// landed code did no work. The only writer of that bitset in the XEX is
+// VehicleManager::ProcessCreateEvents, and THAT LANDED AND MOUNTED THIS WAVE
+// (BrnVehicleManager_ProcessCreateEvents.cpp + its build_game_exe.bat line), so the path goes
+// live with the create drain rather than with this file. Read the claim below as what the
+// leg DOES once the bit is up.
+//
+// UpdatePhysicsState
+// @0x822D4418 memcpy's the published 1120-byte RaceCarState into mPhysicsState, drives
+// RaceCar::UpdatePositioningData + UpdateVelocity, publishes mRenderParams.mBodyTransform
+// from the console's own CalcBodyTransform, copies the four wheel transforms + existence
+// flags, and runs the brake/reverse/engine-off tail. It is what retires BOTH bring-up
+// stand-ins (SeedPhysicsStateFromCreateEventBringUp and
+// PublishRenderPoseWithoutPhysicsBringUp) -- retirement is the conductor's consolidation
+// once the rest of this wave lands, NOT this file's job today.
+//
+// ⛔ PARKED, LOUDLY, WITH A LOG-ONCE GATE EACH (never a silent no-op):
+//   * UpdateRaceCarCollisionTagging @0x822D2280 (159 insns) -- absent from the tree; over
+//     the wave's land-it size bar and it reaches the un-homed collision-group interior.
+//   * UpdateDeformationState @0x822D4A58 (107 insns) -- absent; small enough by size, but
+//     its body stores through EIGHT ActiveRaceCar offsets (+0x157C, +0x6E0, +0x1320,
+//     +0x1326) that have NO named member in BrnActiveRaceCar.h, and it needs
+//     DeformationState::GetCarStateF. Landing it would mean minting eight members from
+//     offsets alone -- the exact live-corruption bug class this project keeps paying for.
+//   * L2 / L3 / L4 / L5 / L6 -- the whole DEFORMATION-OUTPUT half. All five read
+//     DeformationOutputInterface / DeformationOutputInterfaceForEntityModules, whose
+//     producer (the deformation manager's per-frame publish) is not on this build, and
+//     four of them need private members of a header outside this tree's ownership.
+//     UpdatePhysicsState already publishes the four wheel transforms from the RaceCarState,
+//     so L3's absence does NOT hold the wheels back.
+//
+// ⚠️ THE BRING-UP GATE, AND WHY IT IS THE CONSOLE'S OWN SIGNAL, NOT AN INVENTION.
+// The console loops on IsActive() alone, because its own flow guarantees that an ACTIVE
+// entity-module slot has a matching live physics slot (VehicleManager::ProcessCreateEvents
+// makes both, together). On THIS build that guarantee does not hold: nothing populates
+// VehicleOutputInterface::maRaceCarStates yet -- which is precisely the fact
+// BrnPhysicsModuleUpdateFunctions.cpp's PC-BUILD GUARD #2 measured (663 assert dialogs
+// from an identically-ZERO mEntityId sailing through the console's own sentinel test).
+// Running the readback against that zero would memcpy an all-zero RaceCarState over a car
+// that HAS a good placement pose and teleport it to the world origin -- strictly worse
+// than today. So the per-slot call is gated on mUsedRaceCars, the vehicle output's OWN
+// "physics owns this race-car slot" bitset (VehicleOutputInterface::GetUsedCarsBitArray,
+// DWARF :382, zeroed by its Construct and set by the physics side when it takes a slot).
+// It invents nothing: it is the console's own liveness bit, tested where the console's own
+// flow would have made it redundant, and the moment the sibling producer sets it the real
+// path runs with no further edit here.
+// ⭐ AS OF 2026-08-11 THAT PRODUCER IS MOUNTED: VehicleManager::ProcessCreateEvents
+// @0x82616770 -- the XEX's only setter of mUsedRaceCars -- is bodied and in
+// build_game_exe.bat, so the gate now passes for every slot the create drain has taken and
+// L1 does real work on those cars. The gate itself STAYS (it is the console's own bit, and
+// it is what keeps a still-unclaimed slot from memcpy'ing a zero RaceCarState over a good
+// placement pose); what is retired is the assumption that it never passes.
+// DELETE-WHEN the maRaceCarStates publish is proven for every active slot on a booted run.
+//
+// ⚠️ DIVERGENCE, stated plainly: the console has NO `lpInput != NULL` early-out and no
+// bring-up gate. Both are additions, and both are marked.
+// ============================================================================
+void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
+        RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput )
+{
+    CGS_ASSERT( lpInput != 0, "lpInput != NULL" );
+    if( lpInput == 0 )
+    {
+        return;
+    }
+
+    // The console's two buffer reads, in its own order: the deformation output first
+    // (0x822E87E8, only to lift mpDeformationState out of it at +0x70), then the vehicle
+    // output (0x822E87F8).
+    const BrnPhysics::Deformation::DeformationOutputInterface* lpDeformationOutput =
+        lpInput->GetDeformationOutputInterface();
+    const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutput =
+        lpInput->GetVehicleOutputInterface();
+
+    // `lwz r27, 0x70(r11)` -- the DeformationState the parked UpdateDeformationState leg
+    // takes as its second argument. Read here, at the console's own point, so the parked
+    // leg's input is visible in the reconstruction rather than implied.
+    const BrnPhysics::Deformation::DeformationState* lpDeformationState =
+        lpDeformationOutput->mpDeformationState;
+
+    const CgsContainers::BitArray<8u>& lrUsedRaceCars = lpVehicleOutput->GetUsedCarsBitArray();
+
+    bool lbSawActiveCarWithoutPhysicsSlot = false;
+
+    // ---- L1 : the eight-slot car loop ---------------------------------------
+    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
+    {
+        ActiveRaceCar* lpActiveRaceCar =
+            GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
+
+        if( lpActiveRaceCar->IsActive() )
+        {
+            // [FLAG PC bring-up] the mUsedRaceCars gate -- see the banner.
+            if( lrUsedRaceCars.IsBitSet( static_cast<u32>( liCar ) ) )
+            {
+                // ⭐ THE RETURN PATH. `bl ActiveRaceCar::UpdatePhysicsState` @0x822E8844,
+                // r4 = GetRaceCar(i), r5 = this + 0x18300 == &mWorldMap2D.
+                lpActiveRaceCar->UpdatePhysicsState(
+                    lpVehicleOutput->GetRaceCar( static_cast<u32>( liCar ) ),
+                    &mWorldMap2D );
+
+                // ⛔ PARKED: UpdateRaceCarCollisionTagging(liCar, GetRaceCar(liCar))
+                //            @0x822D2280 and UpdateDeformationState(lpDeformationState)
+                //            @0x822D4A58 run here on the console. Both are absent from the
+                //            tree; see the banner for why each is parked rather than
+                //            guessed. Reported once per boot, never per frame.
+                static bool sbReportedParkedPerCarLegs = false;
+                if( !sbReportedParkedPerCarLegs )
+                {
+                    sbReportedParkedPerCarLegs = true;
+                    if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0
+                        && CgsDev::Log::gpDebugPrint != 0 )
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[physics-readback] PARKED per-car legs: "
+                               "RaceCarEntityModule::UpdateRaceCarCollisionTagging "
+                               "(X360 0x822D2280) and ActiveRaceCar::UpdateDeformationState "
+                               "(X360 0x822D4A58) are NOT reconstructed -- collision tagging "
+                               "and deformation state will not update. DeformationState ptr "
+                            << ( lpDeformationState != 0 ? "present" : "NULL" ) << "\n";
+                    }
+                }
+            }
+            else
+            {
+                lbSawActiveCarWithoutPhysicsSlot = true;
+            }
+        }
+
+        // L1b -- `stw r14, 0x1598(r30)`: UNCONDITIONAL for all eight slots (it sits after
+        // the IsActive branch rejoins), and it is the queue L6 refills.
+        lpActiveRaceCar->GetRenderParams()->GetDetachedPartQueue().Clear();
+    }
+
+    if( lbSawActiveCarWithoutPhysicsSlot )
+    {
+        // [FLAG PC bring-up] the honest consequence of the deferral -- see the banner.
+        static bool sbReportedNoPhysicsSlot = false;
+        if( !sbReportedNoPhysicsSlot )
+        {
+            sbReportedNoPhysicsSlot = true;
+            if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0
+                && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[physics-readback] an ACTIVE race car has NO physics slot "
+                       "(VehicleOutputInterface::mUsedRaceCars bit clear) -- the readback is "
+                       "held back for it so the placement pose is not overwritten with zeros. "
+                       "DELETE WHEN VehicleManager::ProcessCreateEvents populates "
+                       "maRaceCarStates.\n";
+            }
+        }
+    }
+
+    // ---- L2 / L3 / L4 / L5 / L6 : the deformation-output half ----------------
+    // ⛔ PARKED as a block -- see the banner. Loud once, never a silent no-op.
+    static bool sbReportedParkedDeformationLegs = false;
+    if( !sbReportedParkedDeformationLegs )
+    {
+        sbReportedParkedDeformationLegs = true;
+        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0
+            && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[physics-readback] PARKED deformation legs of "
+                   "ReadUpdatedActiveRaceCarDataFromPhysics (X360 0x822E87B8): glass "
+                   "smash/crack drain, wheel-state publish (UpdateWheelPhysicsState), "
+                   "skinned-model verlet copy, locator-output copy and detached-part render "
+                   "events. Their producer (the deformation manager publish) is absent on "
+                   "this build; the wheel POSE is still published by UpdatePhysicsState.\n";
+        }
+    }
+}
+
 // X360 0x82307538 -- PARTIAL SLICE. The console body runs the post-physics half of the
 // module (ProcessCreateVehicleEvents, the crash/takedown queues, the director vehicle
 // input, the replay request interface, ...). Three of its 20-odd legs are reproduced, in the
@@ -2315,7 +2538,6 @@ void RaceCarEntityModule::PostPhysicsUpdate(
         RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput,
         BrnUpdateSet lUpdateSet )
 {
-    (void)lpInput;
     (void)lUpdateSet;
 
     if( lpOutput == 0 )
@@ -2330,18 +2552,55 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     // @0x8230761C). See PublishNewVehicleToDirectorWithoutPhysicsBringUp's banner.
     PublishNewVehicleToDirectorWithoutPhysicsBringUp( lpOutput );
 
-    // [FLAG PC bring-up] the console's ReadUpdatedActiveRaceCarDataFromPhysics runs HERE
-    // and is what publishes every active car's render pose. It does not exist on this
-    // build (no physics module), so the pose publish stands in for it -- see
-    // PublishRenderPoseWithoutPhysicsBringUp's banner. It must run BEFORE
-    // UpdateOutputInterfaces, exactly as the console's readback does.
-    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
+    // ⭐⭐ THE PHYSICS READBACK, at the console's own position (`bl` at 0x8230761C, before
+    // UpdateActiveRaceCarColours @0x823076C4 and UpdateOutputInterfaces @0x8230771C).
+    // Landed 2026-08-11 (physics-return-path wave). It is the real producer of every active
+    // car's pose; the bring-up pose publish below now only covers the slots the readback
+    // holds back (see ReadUpdatedActiveRaceCarDataFromPhysics' mUsedRaceCars banner).
+    if( lpInput != 0 )
     {
-        ActiveRaceCar* lpActiveRaceCar =
-            GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
-        if( lpActiveRaceCar->IsActive() )
+        // The console locks the post-physics input buffer around this whole half; the
+        // getters' own "Not locked for reading" asserts are what require it.
+        lpInput->LockForRead();
+
+        ReadUpdatedActiveRaceCarDataFromPhysics( lpInput );
+
+        // [FLAG PC bring-up] the pose STAND-IN. Until the vehicle manager populates
+        // VehicleOutputInterface::maRaceCarStates / mUsedRaceCars the readback holds back
+        // every active car, and nothing else publishes a render pose at all -- so the
+        // stand-in still runs, for exactly those slots. See
+        // PublishRenderPoseWithoutPhysicsBringUp's banner.
+        // ⚠️ It is deliberately SKIPPED for any slot the readback has just posed, so the
+        // stand-in's rest-pose approximation can never overwrite a real physics pose. The
+        // two are conductor-retired together once the producer lands.
+        const CgsContainers::BitArray<8u>& lrUsedRaceCars =
+            lpInput->GetVehicleOutputInterface()->GetUsedCarsBitArray();
+
+        for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
         {
-            PublishRenderPoseWithoutPhysicsBringUp( lpActiveRaceCar, liCar );
+            ActiveRaceCar* lpActiveRaceCar =
+                GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
+            if( lpActiveRaceCar->IsActive()
+                && !lrUsedRaceCars.IsBitSet( static_cast<u32>( liCar ) ) )
+            {
+                PublishRenderPoseWithoutPhysicsBringUp( lpActiveRaceCar, liCar );
+            }
+        }
+
+        lpInput->UnlockForRead();
+    }
+    else
+    {
+        // [FLAG PC bring-up] no input buffer at all -> no readback is possible, so the
+        // stand-in owns every active slot exactly as it did before this wave.
+        for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
+        {
+            ActiveRaceCar* lpActiveRaceCar =
+                GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
+            if( lpActiveRaceCar->IsActive() )
+            {
+                PublishRenderPoseWithoutPhysicsBringUp( lpActiveRaceCar, liCar );
+            }
         }
     }
 
@@ -2401,8 +2660,6 @@ void RaceCarEntityModule::PrePhysicsUpdate(
         RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput,
         BrnUpdateSet lUpdateSet )
 {
-    (void)lUpdateSet;
-
     CGS_ASSERT( lpInput != 0, "lpInput != NULL" );        // X360 :1724
     CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );      // X360 :1725
 
@@ -2430,12 +2687,450 @@ void RaceCarEntityModule::PrePhysicsUpdate(
     lpInput->LockForRead();
     lpOutput->LockForWrite();
 
-    // [FLAG PC bring-up] the paused / not-paused split and its nine calls -- see the banner.
+    // [FLAG PC bring-up] the paused / not-paused split and its EIGHT remaining calls -- see the
+    // banner. ⭐ ProcessPlayerVehicleInput is no longer one of them (player-input wave
+    // 2026-08-11): it sits at the console's own slot in the not-paused arm, between UpdateBoost
+    // and ProcessTakedownEvents (X360 call site 0x8230732C, immediately after the
+    // UpdateBoost @0x82307318 call and immediately before ProcessTakedownEvents @0x82307340).
+    // The console passes the SIM time step in f1 here (`lfs f1, 0(r31)` at 0x82307324, r31 ==
+    // &mfTimeStep); mfTimeStep is the member PreSceneUpdate latches, so it is what we forward.
+    // ⚠️ AND THE ARM IS PAUSE-GATED (verifier catch, 2026-08-11): the console runs the whole
+    // not-paused arm only when bit 0 of lUpdateSet is CLEAR (`clrlwi r30, r31, 31` at insn 14,
+    // tested at 0x82307230) -- an unconditional call would publish a driver-controls event on
+    // PAUSED frames. The gate below is the console's own test, not a PC addition.
+
+    if( ( lUpdateSet & 1 ) == 0 )
+    {
+        ProcessPlayerVehicleInput( mfTimeStep, lpInput, lpOutput );
+    }
 
     mPlaceOnTrackManager.PrePhysicsUpdate( lpInput, lpOutput );
 
     lpOutput->UnlockForWrite();
     lpInput->UnlockForRead();
+}
+
+// ============================================================================
+// ProcessPlayerVehicleInput  @ 0x822FFE30   (572 instructions)   -- COMPLETE
+//   (player-input wave 2026-08-11)
+//
+// ⭐⭐ THE MISSING LINK OF THE CONTROLS CHAIN. Everything upstream of it was already landed
+// (pad -> CgsInputPads -> GameBridgeControllerToX -> BrnWorldIO::UpdateInputBuffer ->
+// WorldBridgeInputToEntityModules -> InputBuffer_PreScene::SetPlayerVehicleControls ->
+// PreSceneUpdate's `memcpy(module + 99240, controls, 60)`) and everything downstream was already
+// landed (WorldBridgeEntityModulesToPhysics -> PhysicsModule input -> VehicleManager::
+// UpdateDrivers -> VehiclePhysics::UpdateDriving). This is the ONE hop between them: it turns
+// the latched BrnWorld::PlayerVehicleControls into the 72-byte
+// BrnPhysics::Vehicle::BrnPlayerDriverControls event and AddEvents it into the output buffer's
+// VehicleDriverInputInterface queue. Nothing else in the XEX produces that record for the
+// player.
+//
+// ---- SIGNATURE (PPC FLOAT-ARG TRAP, re-derived from the asm) -------------------------------
+// Hex-Rays prints eight ints and a trailing double. The caller says otherwise:
+//     0x82307324  lfs  f1, 0(r31)        r31 == &mfTimeStep     -> f1  = lfTimeStep
+//     0x82307320  mr   r5, r24           r24 == lpInput         -> r5  = lpInput
+//     0x8230731C  mr   r6, r26           r26 == lpOutput        -> r6  = lpOutput
+//     0x82307328  mr   r3, r29           r29 == the module      -> r3  = this
+// and the callee's prologue agrees: `mr r23, r5` (lpInput), `mr r19, r6` (lpOutput), `mr r28, r3`
+// (this). r4 is NEVER READ in the callee -- the float takes f1 and SKIPS its GPR slot, which is
+// exactly the PPC float-arg rule. The body never references f1 either, so lfTimeStep is an
+// unused parameter here; it is kept because it is what the call site passes.
+//
+// ---- THE RECORD ----------------------------------------------------------------------------
+// Every one of the 26 fields is filled, and BrnPlayerDriverControls::_AssertLayout() pins all 26
+// offsets (the record crosses the module boundary by memcpy, so a slip is live corruption).
+// meDriverType (+0x44) is set by the default constructor -- see that ctor's banner for why the
+// `stw r26, var_BC` at instruction #14 is a ctor and not a body store.
+//
+// ---- SHAPE ---------------------------------------------------------------------------------
+//   asserts (lpInput, mePlayerActiveRaceCarIndex >= 0, IsAttached, muType in range)
+//   if (the player's paired global car is an AI car) return;              // muType == 1
+//   record.miVehicleID = mePlayerActiveRaceCarIndex
+//   the taken-down latch (clear it in Showtime, else let the crash state gate the controller)
+//   if (controller active && engine RUNNING)   -> the LIVE fill
+//   else                                       -> the ZERO fill (steering survives if the
+//                                                  controller is active)
+//   record.mfBoostMaxSpeedScale = 1.0f
+//   the "online mode just finished" park (gas 0, handbrake 1, steering hard to +/-1)
+//   record.miVehicleIDToMerge = -1
+//   if (online) { the per-mode tweak (race catch-up / burning-home-run blue-team cap) then the
+//                 payback "dirty trick" switch }
+//   AddEvent into lpOutput->GetVehicleDriverInterface()'s driver queue
+//
+// ---- CONSTANTS (all asm-literal) ------------------------------------------------------------
+//   flt_82001CC0 0.0    flt_82001C98 1.0    flt_82014A8C 1.5     flt_82013F90 0.001
+//   flt_820148D0 4.5    flt_820148D4 0.55   flt_82014930 0.8     flt_820037C8 -1.0
+//   flt_8201F7F8 0.1    flt_82005450 0.9
+//
+// ---- DIVERGENCES / FLAGS --------------------------------------------------------------------
+//  1. [FLAG PC bring-up] mBoostManager.GetBoostStrategy() is NULL on this build (BoostManager::
+//     Prepare is a documented keystone stub, and it is the console's only writer of that
+//     pointer). The console dispatches IsBoosting() through it unconditionally; here it is
+//     null-guarded so the boot survives, and the guard is the ONLY added behaviour in this body.
+//     DELETE-WHEN BoostManager::Prepare lands.
+//  2. The default arm of the payback switch streams the offending value into the assert message
+//     on the console (`"Unknown dirty trick type " << meActivePaybackType`); CGS_ASSERT takes a
+//     fixed string, so the value is dropped from the TEXT only -- the assert itself fires at the
+//     same place, on the same condition.
+//  3. The tilt-steering remap is emitted as a VMX sign/deadzone sequence with no console symbol;
+//     it is outlined below as a file-static helper (NOT a console function -- see its banner).
+//  4. [FLAG PC bring-up] a LOUD log-once early-out when there is no attached player car. The
+//     console has no such test -- see the gate's own comment for why the console body would
+//     otherwise index maActiveRaceCars[-1] on this build's first pre-physics frames.
+// ============================================================================
+
+// [FLAG] NOT an X360 symbol. The tilt("sixaxis")-steering remap ProcessPlayerVehicleInput emits
+// inline at 0x823001BC..0x8230025C, outlined here for legibility per the project's
+// undo-inlining rule. Transcribed instruction for instruction:
+//     f0  = mfXSensor * 4.5f                              (fmuls, flt_820148D0)
+//     v0  = (mfXSensor >= 0) ? ((mfXSensor > 0) ? 1.0f : 0.0f) : -1.0f
+//                                                         (vcmpgefp/vcmpgtfp + two vsel)
+//     f13 = |f0| - 0.55f                                  (fabs/fsubs, flt_820148D4)
+//     f13 = (-(f13) >= 0) ? 0.0f : f13                    (fsel f13, -f13, 0.0f, f13)
+//                                                         i.e. clamp the excess at zero
+//     result = v0 * f13 + f0                              (vmulfp128 then fadds)
+// -- i.e. a signed, deadzone-widened AMPLIFICATION of the scaled tilt, not a subtraction. The
+// VMX splats are the compiler broadcasting a scalar through a vector register; only lane 0 is
+// ever read back (`lfs f30, var_120`), so the scalar form below is exact.
+static f32 RemapTiltSteering( f32 lfTiltSensor )
+{
+    const f32 lfScaled = lfTiltSensor * 4.5f;
+
+    f32 lfSign = -1.0f;
+    if( lfTiltSensor >= 0.0f )
+    {
+        lfSign = ( lfTiltSensor > 0.0f ) ? 1.0f : 0.0f;
+    }
+
+    f32 lfExcess = ( lfScaled < 0.0f ? -lfScaled : lfScaled ) - 0.55f;
+    if( lfExcess <= 0.0f )
+    {
+        lfExcess = 0.0f;
+    }
+
+    return lfSign * lfExcess + lfScaled;
+}
+
+void RaceCarEntityModule::ProcessPlayerVehicleInput(
+        f32 lfTimeStep,
+        const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
+        RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput )
+{
+    // f1 is passed by the call site and never read by the console body (no f1 reference in the
+    // whole 572-instruction listing). Kept in the signature to match the call.
+    (void)lfTimeStep;
+
+    // The ctor's `meDriverType = E_DRIVER_TYPE_PLAYER` is the X360's instruction-#14
+    // `stw r26, 0x170+var_BC(r1)`.
+    BrnPhysics::Vehicle::BrnPlayerDriverControls lControls;
+
+    CGS_ASSERT( lpInput != 0, "lpInput" );                                          // X360 :6037
+
+    bool lbControllerActive = lpInput->GetControllerActive();
+
+    // ⛔ [FLAG PC bring-up] LOUD GATE, NOT A SILENT NO-OP -- and it is LOAD-BEARING, not
+    // defensive padding. The console's own flow guarantees a valid, attached player slot by the
+    // time PrePhysicsUpdate runs; this build does not (see PrePhysicsUpdate's :1726 banner --
+    // mePlayerActiveRaceCarIndex stays E_ACTIVE_RACE_CAR_INDEX_INVALID == -1 until the junkyard
+    // reset action lands, and the world ticks pre-physics frames before that). Without this gate
+    // the very next line indexes maActiveRaceCars[-1] and the line after dereferences a NULL
+    // mpRaceCar, i.e. the console body would take the process down on frame one. The console has
+    // NO such test; the two CGS_ASSERTs above and below are its whole guarantee.
+    // DELETE-WHEN a player car is attached before the world's first pre-physics frame.
+    if( static_cast<u32>( mePlayerActiveRaceCarIndex ) >= E_ACTIVE_RACE_CAR_INDEX_COUNT
+        || !GetActiveRaceCar( mePlayerActiveRaceCarIndex )->IsAttached() )
+    {
+        static bool sbReportedNoAttachedPlayerCar = false;
+        if( !sbReportedNoAttachedPlayerCar )
+        {
+            sbReportedNoAttachedPlayerCar = true;
+            if( CgsDev::Log::gpDebugPrint != 0 )
+                *CgsDev::Log::gpDebugPrint
+                    << "[FLAG PC bring-up] RaceCarEntityModule::ProcessPlayerVehicleInput: no "
+                       "attached player active race car -- the frame's BrnPlayerDriverControls "
+                       "record is NOT published (X360 has no such gate; its asserts at :6041 / "
+                       "BrnActiveRaceCar.h:1089 are the console's only guarantee). "
+                       "Reported once, not per frame\n";
+        }
+        return;
+    }
+
+    // ⚠️ CONSOLE-ORDER DEVIATION (conductor, 2026-08-11, measured): the X360 fires this assert
+    // BEFORE any test (:6041, its first act after GetControllerActive). On this build the world
+    // spine ticks pre-physics frames from the MARKETING SCREENS on, so the console order halted
+    // the game once per frame -- 243 assert dialogs in 78 s, boot never reached the flyby. The
+    // assert is now scoped BEHIND the bring-up gate above: on every frame the console's
+    // precondition can hold (an attached player car exists) it is checked exactly as the console
+    // wrote it; on the pre-car frames the gate's log-once carries the signal instead.
+    // DELETE-WHEN the gate above goes (then restore the console position).
+    CGS_ASSERT( mePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                "mePlayerActiveRaceCarIndex >= 0" );                                // X360 :6041
+
+    ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
+
+    CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );          // BrnActiveRaceCar.h:1089
+
+    const RaceCar* lpGlobalRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
+
+    CGS_ASSERT( lpGlobalRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
+                "muType < E_RACE_CAR_TYPE_COUNT" );                            // BrnRaceCar.h:603
+
+    // The player's paired global slot being an AI car means there is no player input to publish
+    // this frame; the console branches straight to the epilogue (0x822FFF44 -> 0x82300714),
+    // i.e. it does NOT AddEvent.
+    if( lpGlobalRaceCar->GetType() == E_RACE_CAR_TYPE_AI )
+    {
+        return;
+    }
+
+    lControls.miVehicleID = mePlayerActiveRaceCarIndex;
+
+    // The taken-down latch. In Showtime a takedown is consumed outright; otherwise the car keeps
+    // its controller only while the physics snapshot says it is not crashing.
+    if( lpActiveRaceCar->IsTakenDown() )
+    {
+        if( lpActiveRaceCar->IsInShowtime() )
+        {
+            lpActiveRaceCar->SetTakenDown( false );
+        }
+        else
+        {
+            lbControllerActive = !lpActiveRaceCar->GetPhysicsState()->mbCrashing;
+        }
+    }
+
+    // lfGas / lfSteering shadow the console's f27 / f30, which survive past the two fill arms
+    // because the online tweaks below re-derive the record's gas and steering from them.
+    f32 lfGas      = 0.0f;
+    f32 lfSteering = 0.0f;
+
+    if( lbControllerActive
+        && lpActiveRaceCar->GetEngineState()
+               == RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING )
+    {
+        // ---- the LIVE fill ----------------------------------------------------------------
+        // [FLAG PC bring-up] the null guard -- see divergence 1 in the banner.
+        const BoostStrategy* lpBoostStrategy = mBoostManager.GetBoostStrategy();
+        lControls.mbBoost = ( lpBoostStrategy != 0 ) && lpBoostStrategy->IsBoosting();
+
+        lControls.mbReset  = mPlayerVehicleControls.mbReset;
+        lControls.mbToggle = mPlayerVehicleControls.mbToggle;
+
+        const f32 lfInvulnerabilityTime = lpActiveRaceCar->GetInvulnerabilityTime();
+        lControls.mbIsInvulnerableToVehicles = lfInvulnerabilityTime > 0.0f;
+        lControls.mbIsInvulnerableToWorld    = lfInvulnerabilityTime > 0.0f;
+
+        if( lpActiveRaceCar->IsCrashing() && lpActiveRaceCar->IsWrecked() )
+        {
+            lfGas                  = 0.0f;
+            lControls.mfGas        = 0.0f;
+            lControls.mfBrake      = 0.0f;
+            lControls.mfHandBrake  = 0.0f;
+
+            // A wrecked Showtime car is pinned: full brake AND full handbrake.
+            if( lpActiveRaceCar->IsInShowtime() )
+            {
+                lControls.mfBrake     = 1.0f;
+                lControls.mfHandBrake = 1.0f;
+            }
+        }
+        else
+        {
+            lfGas                 = mPlayerVehicleControls.mfAcceleration;
+            lControls.mfGas       = mPlayerVehicleControls.mfAcceleration;
+            lControls.mfBrake     = mPlayerVehicleControls.mfBraking;
+            lControls.mfHandBrake = mPlayerVehicleControls.mfHandBrake;
+        }
+
+        lControls.mfForwardSteering = mPlayerVehicleControls.mfYAxis0;
+        lControls.mfSpin            = mPlayerVehicleControls.mfSpin;
+        lControls.mfRequestedGas    = mPlayerVehicleControls.mfAcceleration;
+        lControls.mfAftertouchLevel = mCrashPlayManager.GetAftertouchLevel();
+
+        // Hand this frame's stomped/leaped cars to the physics side's target-assist list.
+        for( s32 liStompee = 0; liStompee < miStoredStompeeCount; ++liStompee )
+        {
+            lpOutput->GetVehicleDriverInterface()->AddTargetAssist(
+                    mStoredStompees[liStompee].mPosition,
+                    mStoredStompees[liStompee].mEntityId );
+        }
+
+        // Tilt steering is only armed when it is switched on, we are not in Showtime, and the
+        // player is not already on a wheel.
+        if( ( !mbSixaxisSteeringEnabled && !mbPaybackSixaxisSteering )
+            || mCrashPlayManager.IsInShowtime()
+            || mPlayerVehicleControls.mbIsWheel )
+        {
+            lControls.mbIsSteeringWheel = mPlayerVehicleControls.mbIsWheel;
+            lfSteering                  = mPlayerVehicleControls.mfSteering;
+        }
+        else
+        {
+            lControls.mbIsSteeringWheel = true;
+            lfSteering                  = RemapTiltSteering( mPlayerVehicleControls.mfXSensor );
+        }
+
+        lControls.mfSteering    = lfSteering;
+        lControls.mfXSensor     = mPlayerVehicleControls.mfXSensor;
+        lControls.mfYSensor     = mPlayerVehicleControls.mfYSensor;
+        lControls.mfZSensor     = mPlayerVehicleControls.mfZSensor;
+        lControls.mfGSensor     = mPlayerVehicleControls.mfGSensor;
+        lControls.mbForceDrift  = false;
+        lControls.mbBoostBounce = mCrashPlayManager.IsBounceBoosting();
+        lControls.mbHorn        = mPlayerVehicleControls.mbHorn;
+        lControls.mbIsOnStartLine =
+                lpActiveRaceCar->IsOnRaceStartState( ActiveRaceCar::E_RACE_START_STATE_ON_START_LINE );
+    }
+    else
+    {
+        // ---- the ZERO fill ----------------------------------------------------------------
+        // Everything off. The one survivor is the raw steering, and only while the controller is
+        // active (an engine that is off/starting/stopping still lets the wheels be turned).
+        lControls.mbBoost                    = false;
+        lControls.mbReset                    = false;
+        lControls.mbToggle                   = false;
+        lControls.mbForceDrift               = false;
+        lControls.mbBoostBounce              = false;
+        lControls.mbIsInvulnerableToVehicles = false;
+        lControls.mbIsInvulnerableToWorld    = false;
+
+        lfGas                       = 0.0f;
+        lControls.mfGas             = 0.0f;
+        lControls.mfBrake           = 0.0f;
+        lControls.mfHandBrake       = 0.0f;
+        lControls.mfForwardSteering = 0.0f;
+        lControls.mfAftertouchLevel = 0.0f;
+        lControls.mfSpin            = 0.0f;
+        lControls.mfRequestedGas    = 0.0f;
+
+        lfSteering = lbControllerActive ? mPlayerVehicleControls.mfSteering : 0.0f;
+
+        lControls.mfSteering        = lfSteering;
+        lControls.mfXSensor         = 0.0f;
+        lControls.mfYSensor         = 0.0f;
+        lControls.mfZSensor         = 0.0f;
+        lControls.mfGSensor         = 0.0f;
+        lControls.mbIsOnStartLine   = false;
+        lControls.mbIsSteeringWheel = false;
+        lControls.mbHorn            = false;
+    }
+
+    lControls.mfBoostMaxSpeedScale = 1.0f;
+
+    // The end-of-online-mode park: coast to a stop with the handbrake on and the wheels at full
+    // lock, keeping the sign the player last had.
+    if( mbOnlineModeJustFinished )
+    {
+        lfSteering            = ( lfSteering >= 0.0f ) ? 1.0f : -1.0f;
+        lControls.mfBrake     = 0.0f;
+        lControls.mfHandBrake = 1.0f;
+        lfGas                 = 0.0f;
+        lControls.mfGas       = 0.0f;
+        lControls.mfSteering  = lfSteering;
+    }
+
+    lControls.miVehicleIDToMerge = -1;
+
+    if( mbIsInOnlineGameMode )
+    {
+        if( meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_RACE )
+        {
+            CGS_ASSERT( lpInput != 0, "lpInput" );                                  // X360 :6191
+            CGS_ASSERT( lpInput->GetScoringInterface() != 0,
+                        "lpInput->GetScoringInterface()" );                         // X360 :6192
+
+            const RaceCarEntityModuleIO::InputBuffer_PrePhysics::ScoringInterface* lpScoring =
+                    lpInput->GetScoringInterface();
+
+            if( lpScoring->miNumPlayersInGame > 1 )
+            {
+                const EActiveRaceCarIndex leActiveRaceCarIndex =
+                        lpActiveRaceCar->GetActiveRaceCarIndex();
+
+                CGS_ASSERT( leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0" );  // X360 :6205
+                CGS_ASSERT( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" ); // X360 :6206
+
+                // Online-race catch-up: the leader keeps 90% throttle, last place keeps 100%,
+                // linearly between. The console does both int->float converts with fcfid/frsp,
+                // i.e. a plain (f32) cast of the s32.
+                const f32 lfPositionFromFront =
+                        static_cast<f32>( lpScoring->maCarScoreData[leActiveRaceCarIndex]
+                                                  .GetRacePosition() - 1 );
+                const f32 lfPositionRange =
+                        static_cast<f32>( lpScoring->miNumPlayersInGame - 1 );
+
+                lControls.mfGas =
+                        ( ( lfPositionFromFront / lfPositionRange ) * 0.1f + 0.9f ) * lfGas;
+            }
+        }
+        else if( meGameModeType
+                 == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN )
+        {
+            const EActiveRaceCarIndex leActiveRaceCarIndex =
+                    lpActiveRaceCar->GetActiveRaceCarIndex();
+
+            CGS_ASSERT( leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0" );      // X360 :6225
+            CGS_ASSERT( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" );   // X360 :6226
+
+            // The blue (chasing) team is boost-speed capped in Burning Home Run.
+            if( lpInput->GetOnlineScoringInterface()->maePlayerTeam[leActiveRaceCarIndex]
+                    == BrnGameState::GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM )
+            {
+                lControls.mfBoostMaxSpeedScale = 0.8f;
+            }
+        }
+
+        // The payback "dirty tricks" the aggressor gets to play on this car.
+        switch( meActivePaybackType )
+        {
+        case BrnNetwork::E_PAYBACK_TYPE_REVERSE_STEERING:
+            lControls.mfBrake     = 0.0f;
+            lControls.mfSteering  = -lfSteering;
+            lControls.mfHandBrake = 0.0f;
+            break;
+
+        case BrnNetwork::E_PAYBACK_TYPE_BOOST_LOCK:
+            lControls.mfBrake     = 0.0f;
+            lControls.mbBoost     = true;
+            lControls.mfHandBrake = 0.0f;
+            break;
+
+        case BrnNetwork::E_PAYBACK_TYPE_AGGRESSORS_CONTROLS_AFFECTS_VICTIM:
+            CGS_ASSERT( meActivePaybackAggressor >= E_ACTIVE_RACE_CAR_INDEX_0,
+                        "meActivePaybackAggressor >= E_ACTIVE_RACE_CAR_INDEX_0" );  // X360 :6266
+            CGS_ASSERT( meActivePaybackAggressor < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                        "meActivePaybackAggressor < E_ACTIVE_RACE_CAR_INDEX_COUNT" ); // X360 :6267
+
+            // The console narrows the index to a byte here (`stb r11, var_C8`); the record's
+            // slot is an s8.
+            lControls.miVehicleIDToMerge = static_cast<s8>( meActivePaybackAggressor );
+            break;
+
+        case BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING:
+            // Disarm the trick and give the car its boost economy back.
+            mbPaybackSixaxisSteering = false;
+            mfRandomBoostTime        = -1.0f;
+            mbRandomBoostOn          = false;
+            mBoostManager.SetBoostEarningEnabled( true );
+            break;
+
+        default:
+            // The console streams the offending value into the message; see divergence 2.
+            CGS_ASSERT( false, "Unknown dirty trick type" );                        // X360 :6297
+            break;
+        }
+    }
+
+    // ⭐ THE PUBLISH. r3 == GetVehicleDriverInterface(lpOutput) (0x822B5CA8 returns
+    // buffer + 142192, which is mVehicleDriverInterface -- NOT mGameEventQueue, see that
+    // accessor's own note), r4 == &record, r5 == 0 (the event type). The queue is the
+    // interface's first member, which is why the console passes the interface pointer straight
+    // to VariableEventQueue<5040,16>::AddEvent<BrnPlayerDriverControls>.
+    lpOutput->GetVehicleDriverInterface()->GetUpdateDriverQueue()->AddEvent( &lControls, 0 );
 }
 
 // ============================================================================
@@ -2456,7 +3151,13 @@ void RaceCarEntityModule::PrePhysicsUpdate(
 //   ResetActiveRaceCar, AttachActiveRaceCar, OnRaceCarResourcesLoaded, AddRivalCar,
 //   AddRaceCarToStartingGridOrFreeburnLobby, SetUpAIForMode, SetUpPlayerCarForMode,
 //   SetupOpponents, HandlePrepareForModeAction, HandleResetPlayerCarAction,
-//   HandleStopModeAction, HandleGameActions, ProcessPlayerVehicleInput,
+//   HandleStopModeAction, HandleGameActions,
+//   (ProcessPlayerVehicleInput RETIRED from this list 2026-08-11 -- it is COMPLETE above.
+//    It was never a [VMX] function either: the only vector work is the tilt-steering
+//    sign/deadzone sequence, which is scalar maths the compiler happened to vectorise, plus a
+//    plain Vector3 load in the stompee loop. Landing it needed the CrashPlayManager scalar
+//    tail, the BoostManager's BoostStrategy pointer and mPlayerVehicleControls modelled --
+//    all three are now named members in the header.)
 //   ProcessCreateVehicleEvents, ProcessRaceCarCrashCompleteEvents, ProcessResetOnTrackResultQueue,
 //   UpdateBoost, UpdateNearMisses, UpdateInAndOutOfRangeCars, UpdateSerialiser,
 //   UpdateReplayStreaming, CheckForResetOnTrackConditions, DebugRenderPosition (38 total).

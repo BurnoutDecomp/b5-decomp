@@ -239,6 +239,19 @@ InputBuffer_PrePhysics::GetTrafficToRaceCarInterface_PostScene() const
     return &mTrafficToRaceCarInterface_PostScene;
 }
 
+// ⭐ X360 0x822B5950 (R, DWARF :424 / X360 baked line 433) -- const scoring accessor
+// (X360 tail `addis r3, r28, 3 ; addi r3, r3, 0x31A0` == this + 209312 == &mScoringInterface).
+// LANDED 2026-08-11 (player-input wave): it was declaration-only, and
+// RaceCarEntityModule::ProcessPlayerVehicleInput @0x82300494 is its first caller (the
+// online-race catch-up arm asserts on it by name -- "lpInput->GetScoringInterface()").
+// The +9 PS3-DWARF-line vs X360-baked-line skew this file documents above is what identifies
+// it: baked 433 - 9 == DWARF :424, the const GetScoringInterface. (The comment on the
+// TrafficToRaceCarInterface_PostScene member in the header still cites 0x822B5950; that
+// citation is the pre-correction one and this body is the offset-proven owner of the address.)
+// (BODY NOT HERE: the byte-identical definition already lives in the mounted
+// BrnRaceCarEntityModuleIO_PreSceneAccessors.cpp:94 with the same +9-skew correction --
+// a second copy landed here 2026-08-11 and was deleted by the conductor on the LNK2005.)
+
 // ---- OutputBuffer_PrePhysics ------------------------------------------------
 
 // X360 0x822B5C00 (W, :471) -- mutable vehicle-input accessor.
@@ -312,7 +325,28 @@ OutputBuffer_PrePhysics::GetGameEventQueue() const
     return &mGameEventQueue;
 }
 
-// X360 0x822B5CA8 (W, :483) -- mutable game-event queue accessor.
+// ⭐ X360 0x822B5CA8 (W, DWARF :474 / X360 baked line 483) -- mutable vehicle-driver accessor
+// (X360 tail `addis r3, r28, 2 ; addi r3, r3, 0x2B70` == this + 142192 ==
+// &mVehicleDriverInterface). LANDED 2026-08-11 (player-input wave); it was declaration-only and
+// RaceCarEntityModule::ProcessPlayerVehicleInput @0x82300148/0x82300704 is its caller -- both
+// the per-stompee AddTargetAssist loop and the final
+// AddEvent<BrnPlayerDriverControls> go through it.
+//
+// ⛔ ANNOTATION DEBT PAID: the "X360 0x822B5CA8 (W, :483)" line used to sit on the NON-CONST
+// GetGameEventQueue() below. Same +9 skew the READ-lock block above documents in full: baked
+// 483 - 9 == DWARF :474, which is this function, not :483. The returned offset settles it --
+// 142192 is mVehicleDriverInterface (the offset this class's own Construct comment names),
+// while mGameEventQueue is at +149312.
+OutputBuffer_PrePhysics::VehicleDriverInputInterface*
+OutputBuffer_PrePhysics::GetVehicleDriverInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mVehicleDriverInterface;
+}
+
+// X360 address NOT ATTRIBUTED (W). The write-lock accessor that returns +149312. It is NOT
+// 0x822B5CA8 -- that address returns +142192 and belongs to GetVehicleDriverInterface above.
+// The body is unchanged and was always right (by-name &member); only the citation moved.
 OutputBuffer_PrePhysics::GameEventQueue*
 OutputBuffer_PrePhysics::GetGameEventQueue()
 {
@@ -332,7 +366,38 @@ InputBuffer_PostPhysics::GetSceneInputInterface()
     return &mSceneInputInterface;
 }
 
-// X360 0x822B5F48 (R, :522) -- const per-entity-module deformation-output accessor.
+// ⛔ CORRECTION (3) -- 2026-08-11 (physics-readback wave). The five const getters below were
+// each attributed to the WRONG X360 body: 0x822B6098 (+848624) and 0x822B61E8 (+879392) were
+// missing from the attribution entirely, so every address slid one-to-two rungs early. The
+// six out-of-line const getters are, by returned offset, 0x822B5F48/+16,
+// 0x822B5FF0/+27680, 0x822B6098/+848624, 0x822B6140/+868400, 0x822B61E8/+879392 and
+// 0x822B6290/+879408 -- i.e. exactly the member order below. Full proof (offsets, layouts and
+// the 522/525/531/534/537/540 assert-line ladder) is in the header's CORRECTION (3) banner.
+// This also RETIRES two link holes: GetVehicleOutputInterface and
+// GetVehicleManagerOutputInterface were declared but had no body anywhere in the tree, and
+// the physics readback (RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics) is the
+// first reconstructed caller of the first one.
+
+// X360 0x822B5F48 (R, :513 / X360 h:522, +16) -- const vehicle-output accessor. This is the
+// interface ReadUpdatedActiveRaceCarDataFromPhysics reads every race car's published
+// RaceCarState out of.
+const InputBuffer_PostPhysics::VehicleOutputInterface*
+InputBuffer_PostPhysics::GetVehicleOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mVehicleOutputInterface;
+}
+
+// X360 0x822B5FF0 (R, :516 / X360 h:525, +27680) -- const vehicle-manager-output accessor.
+const InputBuffer_PostPhysics::VehicleManagerOutputInterface*
+InputBuffer_PostPhysics::GetVehicleManagerOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mVehicleManagerOutputInterface;
+}
+
+// X360 0x822B6098 (R, :522 / X360 h:531, +848624) -- const per-entity-module
+// deformation-output accessor.
 const InputBuffer_PostPhysics::DeformationOutputInterfaceForEntityModules*
 InputBuffer_PostPhysics::GetDeformationOutputInterfaceForEntityModules() const
 {
@@ -340,8 +405,7 @@ InputBuffer_PostPhysics::GetDeformationOutputInterfaceForEntityModules() const
     return &mDeformationOutputInterfaceForEntityModules;
 }
 
-// X360 0x822B5FF0 (R, :525) -- const deformation-output accessor (distinct from the
-// AI-racecar accessor at 0x822B6290).
+// X360 0x822B6140 (R, :525 / X360 h:534, +868400) -- const deformation-output accessor.
 const InputBuffer_PostPhysics::DeformationOutputInterface*
 InputBuffer_PostPhysics::GetDeformationOutputInterface() const
 {
@@ -349,7 +413,7 @@ InputBuffer_PostPhysics::GetDeformationOutputInterface() const
     return &mDeformationOutputInterface;
 }
 
-// X360 0x822B6140 (R, :528) -- const contact-spy accessor.
+// X360 0x822B61E8 (R, :528 / X360 h:537, +879392) -- const contact-spy accessor.
 // CORRECTION (2): this is the ONLY GetContactSpyInterface getter (no non-const overload).
 const InputBuffer_PostPhysics::ContactSpyInterface*
 InputBuffer_PostPhysics::GetContactSpyInterface() const
@@ -358,7 +422,7 @@ InputBuffer_PostPhysics::GetContactSpyInterface() const
     return &mContactSpyInterface;
 }
 
-// X360 0x822B6290 (R, :531) -- const AI race-car interface accessor (last member).
+// X360 0x822B6290 (R, :531 / X360 h:540, +879408) -- const AI race-car accessor (last member).
 const InputBuffer_PostPhysics::AIRaceCarInterface*
 InputBuffer_PostPhysics::GetAIRaceCarInterface() const
 {
