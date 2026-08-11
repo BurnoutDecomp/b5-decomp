@@ -160,10 +160,15 @@ namespace Deformation
                                                    CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
                                                    RigidBodyId lHandlingBodyId)
     {
-        // The handling vehicle's owner entity type -- the high byte of the packed id, the only
-        // field gate-1 compares against (the asm builds v13 = (a3<<32)|1 and tests against
-        // HIBYTE(HIDWORD(v13)) == (lHandlingBodyId>>24)&0xFF).
-        const u32 luHandlingOwner = (lHandlingBodyId.muValue >> 24) & 0xFFu;
+        // The handling vehicle's owner entity type -- the owner byte of the entity word packed in
+        // the id, the only field gate-1 compares against.
+        // ⭐ 2026-08-11 (handle-widening wave): the asm's own shape is the proof this is a 64-bit
+        // handle and the byte lives at bits 56..63. It builds `v13 = (a3<<32)|1` -- the entity word
+        // promoted into the HIGH dword, exactly like ProcessCollisionEvents' `extldi r,r,64,32` --
+        // and then tests `HIBYTE(HIDWORD(v13))`, i.e. the top byte OF THE HIGH DWORD. That is
+        // precisely GetEntityIDOwner() (`srdi 32` then `srwi 24`), so it is spelled as that instead
+        // of a hand-rolled shift on a 4-byte stand-in. Same bits, one place.
+        const u32 luHandlingOwner = lHandlingBodyId.GetEntityIDOwner();
 
         for (s32 liSlot = mUsedWheels.GetFirstNonZeroBit();
              liSlot != CgsContainers::BitArray<KI_MAX_DETACHED_WHEELS>::KI_INVALID_BITINDEX;

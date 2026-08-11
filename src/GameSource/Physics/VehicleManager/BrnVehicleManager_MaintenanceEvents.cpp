@@ -56,20 +56,26 @@
 // ⭐ CONSOLE-VALUE HAZARD DECLARED ONCE, HERE, BECAUSE THREE BODIES BELOW HIT IT.
 //
 // The vehicle manager's race-car identity is a 64-bit CgsPhysics::RigidBodyId whose HIGH dword is
-// the 32-bit entity word (`ld ; srdi r,r,32` at every read site). The Deformation event structs
-// this file posts into (BrnDeformationEvents.h) type their `mHandlingBodyID` with the GLOBAL
-// 4-byte `::RigidBodyId { u32 muValue }` stand-in, NOT CgsPhysics::RigidBodyId -- a fork
-// BrnDeformationManager.h documents at length and deliberately leaves open.
+// the 32-bit entity word (`ld ; srdi r,r,32` at every read site).
 //
-// On the console those two are the same bytes: a 32-bit big-endian load of the first word of the
-// 64-bit handle yields the entity word. On x64 they are NOT. So every post below assigns the
-// ENTITY WORD into `.muValue`, spelled through CgsPhysics::RigidBodyId::GetEntityId(), never a
-// truncating cast of the whole handle. That is what the committed consumers already expect
-// (BrnDeformationManager.cpp does `mHandlingBodyID.muValue >> 24` for the owner and
-// `(mHandlingBodyID.muValue >> 10) & 0x3FFF` for the index -- entity-word arithmetic).
-// ⚠ It is also lossless on this build: ProcessCreateEvents is the only writer of
-// maRaceCarHandlingBodyIDs and it stores `((u64)entityWord) << 32`, i.e. the low dword is always
-// zero. If that ever stops being true, these three posts lose information silently.
+// ⭐⭐⭐ THE FORK THIS SECTION EXISTED TO MANAGE IS GONE (2026-08-11, handle-widening wave).
+// It used to read: "the Deformation event structs this file posts into type their mHandlingBodyID
+// with the GLOBAL 4-byte ::RigidBodyId { u32 muValue } stand-in ... so every post below assigns
+// the ENTITY WORD into .muValue ... never a truncating cast of the whole handle."
+// `::RigidBodyId` is now a typedef of the real 8-byte CgsPhysics::RigidBodyId (BrnCommonTypes.h,
+// which carries the eight-witness evidence banner), so every post below passes the WHOLE HANDLE,
+// which is what the console does: `std`/`ld` at every one of those seats.
+//
+// ⛔⛔ AND ONE OF THOSE HAND-CARRIED POSTS WAS A LIVE SILENT DROP, IN THIS MOUNTED FILE.
+// ProcessCollisionEvents' two arms wrote `lPost.mHandlingBodyID.muValue = lrEvent.mBodyId.muValue`
+// -- the entity word into the LOW dword. The console writes `extldi r11,r11,64,32`, i.e. into the
+// HIGH dword, and every consumer starts with `ld` + `srdi 32`. The word was being delivered to the
+// half everybody discards, with nothing asserting. Both arms are corrected in place, spelled as
+// the shift the asm performs. The deactivate / remove / add posts were lossless by luck (they went
+// through GetEntityId(), which reads the half that carries the value) and now pass the handle whole.
+// ⚠ The luck was real and is worth recording: ProcessCreateEvents is the only writer of
+// maRaceCarHandlingBodyIDs and it stores `((u64)entityWord) << 32`, so the low dword is always zero
+// TODAY. The widening is what stops that from being load-bearing.
 //
 // -------------------------------------------------------------------------------------------------
 // ⭐⭐ THE HAZARD ABOVE WAS INDEPENDENTLY MEASURED BY THE SIBLING WAVE (2026-08-11), which recovered
@@ -100,17 +106,18 @@
 //   ⚠️ THE SIBLING WAVE DREW THE OPPOSITE CONCLUSION -- that these two bodies must not land at all,
 //   because passing the u64 through the 4-byte stand-in "delivers ZERO with nothing asserting".
 //   That failure mode is REAL for a truncating cast (`static_cast<u32>(theWholeHandle)` takes the
-//   low dword, which for a race car is identically zero). It is NOT what these bodies do: every
-//   post goes through GetEntityId(), which takes the HIGH dword -- the half that carries the value.
-//   The bodies stay. What the sibling wave is right about is the DEBT: while `::RigidBodyId` is
-//   4 bytes, this file is carrying a fork by hand at every seat.
+//   low dword, which for a race car is identically zero). It was NOT what the deactivate/remove/add
+//   posts did (they went through GetEntityId(), the half that carries the value) -- but it WAS
+//   exactly what the two ProcessCollisionEvents arms did, in the opposite direction. Both waves
+//   were half right, and the debt they both named is what closed it.
 //
-//   ⛔ FOLLOW-UP FLAG, and it is NOT this file's change to make: `::RigidBodyId` in
-//   BrnCommonTypes.h:28 should be widened to match CgsPhysics::RigidBodyId, per the fork
-//   BrnDeformationManager.h documents. That moves five `mHandlingBodyID` fields, the
-//   BrnDeformationManager.cpp bodies that shift them, and those event records' field offsets --
-//   all in a MOUNTED subsystem. Its own wave, with its own boot test. When it lands, every
-//   `GetEntityId()` seat in this file should be revisited to pass the whole handle instead.
+//   ⭐⭐ THE FOLLOW-UP FLAG THAT STOOD HERE IS DISCHARGED (2026-08-11). It read: "`::RigidBodyId`
+//   in BrnCommonTypes.h:28 should be widened to match CgsPhysics::RigidBodyId ... That moves five
+//   `mHandlingBodyID` fields, the BrnDeformationManager.cpp bodies that shift them, and those event
+//   records' field offsets -- all in a MOUNTED subsystem. Its own wave, with its own boot test.
+//   When it lands, every `GetEntityId()` seat in this file should be revisited to pass the whole
+//   handle instead." That wave is this one; all five fields, both consumers and every seat in this
+//   file are done, and the boot test is in the log. The evidence lives in BrnCommonTypes.h.
 // =================================================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
@@ -371,9 +378,12 @@ namespace Vehicle
                 // written here now. (-1 is not a named DeformationResetType enumerator; it is the
                 // literal the image stores, so it is spelled as a cast of that literal and not
                 // rounded to the nearest named value.)
+                // ⭐ 2026-08-11 (handle-widening wave): the WHOLE 8-byte handle, verbatim, which is
+                // literally what `0x82616448 std r11, var_D0(r1)` does -- one doubleword straight
+                // out of maRaceCarHandlingBodyIDs into the event's first field. It used to be
+                // narrowed to the entity word through the 4-byte `::RigidBodyId` stand-in.
                 Deformation::DeactivateDeformationModelEvent lDeactivate;
-                lDeactivate.mHandlingBodyID.muValue =
-                    static_cast<u32>(lHandlingBodyId.GetEntityId());
+                lDeactivate.mHandlingBodyID        = lHandlingBodyId;
                 lDeactivate.mfInitialDamageAmount  = 0.0f;                                  // flt_82001CC0
                 lDeactivate.meDeformationResetType =
                     static_cast<Deformation::DeformationResetType>(-1);                     // li r11, -1
@@ -386,8 +396,10 @@ namespace Vehicle
             CGS_ASSERT(static_cast<s32>(luRaceCar) >= 0 && static_cast<s32>(luRaceCar) < 8,
                        "(liVehicleIndex >= 0) && (liVehicleIndex < ku8MaxNumRaceCars)");           // :1640
             {
+                // `0x826164B4 std r11, var_E8(r1)` -- the whole 8-byte handle (see the deactivate
+                // post above; both were narrowed through the stand-in until 2026-08-11).
                 Deformation::RemoveDeformationModelEvent lRemove;
-                lRemove.mHandlingBodyID.muValue = static_cast<u32>(lHandlingBodyId.GetEntityId());
+                lRemove.mHandlingBodyID = lHandlingBodyId;
                 lpDeformationInterface->GetRemoveDeformationModelQueue().AddEvent(lRemove);
             }
 
@@ -525,8 +537,16 @@ namespace Vehicle
         {
             const SetRaceCarCollisionEvent& lrEvent = lpCollisionQueue->GetEvent(liEvent);
 
+            // ⛔⛔ THIS LINE WAS AN ACTIVE SILENT DROP UNTIL 2026-08-11, in a MOUNTED TU.
+            // The console is `lwz r11,<scratch> ; extldi r11,r11,64,32` == `(u64)entityWord << 32`
+            // -- the entity word promoted into the HIGH dword of an 8-byte handle. Through the
+            // 4-byte `::RigidBodyId` stand-in the word landed in the LOW dword instead, i.e. in the
+            // half every consumer discards (they all do `ld` then `srdi 32` first -- see
+            // ProcessAddDeformationModelEvents @0x82644940). The value was being posted to the
+            // wrong half with nothing asserting. Now spelled as the shift the asm performs.
             Deformation::SetModelCollisionEvent lPost;
-            lPost.mHandlingBodyID.muValue = lrEvent.mBodyId.muValue;   // the entity word (see banner)
+            lPost.mHandlingBodyID = CgsPhysics::RigidBodyId(
+                static_cast<u64>(lrEvent.mBodyId.muValue) << 32);       // extldi r11,r11,64,32
             lPost.mbCollide               = lrEvent.mbCollide;
             lpDeformationInterface->GetSetModelCollisionEvents().AddEvent(lPost);
         }
@@ -538,8 +558,11 @@ namespace Vehicle
         {
             const SetRaceCarCullingGroupEvent& lrEvent = lpCullingQueue->GetEvent(liEvent);
 
+            // Same `extldi r11,r11,64,32` promotion as the collision arm above -- see that comment
+            // for why the old `.muValue = ...` was a silent drop into the discarded half.
             Deformation::SetModelCullingGroupEvent lPost;
-            lPost.mHandlingBodyID.muValue = lrEvent.mBodyId.muValue;   // the entity word (see banner)
+            lPost.mHandlingBodyID = CgsPhysics::RigidBodyId(
+                static_cast<u64>(lrEvent.mBodyId.muValue) << 32);       // extldi r11,r11,64,32
             lPost.mCullGroup              = lrEvent.mCullingGroup;
             lpDeformationInterface->GetSetModelCullingGroupEvents().AddEvent(lPost);
         }
@@ -594,44 +617,19 @@ namespace Vehicle
         Vector3 lvZero;
         lvZero.x = 0.0f; lvZero.y = 0.0f; lvZero.z = 0.0f; lvZero.w = 0.0f;
 
-        // ⛔⛔ THE MODEL-HANDLE ARGUMENT IS A LOUD PARK, AND IT IS A TYPE FORK, NOT A GAP IN THE
-        // DECODE. The console passes the WHOLE 8-byte resource handle here
-        // (`ldx r4, r20, r29` -- one doubleword straight out of maRaceCarModelHandles[index]), and
-        // on the host that value is a 16-byte `CgsResource::ResourceHandle {void*, Entry*}`.
-        // `DeformationInputInterface::AddDeformationModel`'s first parameter is spelled
-        // `BrnPhysics::Deformation::ResourceHandle`, which BrnDeformationEvents.h:22 defines as a
-        // FOUR-BYTE stand-in `{ u32 muValue }`. There is no honest projection of a pair of 64-bit
-        // pointers onto one u32, and reinterpret_cast'ing across would hand the deformation add
-        // the low half of a pointer -- exactly the console-value-on-the-host defect this wave
-        // exists to avoid.
-        //
-        // ⚠️ It is INERT TODAY on both ends: this function's only caller is ProcessCreateEvents
-        // (its own TU, unmounted), and the only consumer of the posted event's mModelHandle is
-        // `DeformationManager::ResolveDeformationSpec`, which BrnDeformationManager.cpp:90 marks
-        // DECLARE-ONLY. So nothing reads it -- but a zero handle is still a wrong value, so it is
-        // announced once rather than passed silently.
-        //
-        // DELETE-WHEN the Deformation group de-forks its `ResourceHandle`. That is their change,
-        // not this wave's: retyping it onto CgsResource::ResourceHandle grows
-        // AddDeformationModelEvent past the X360-attested `sizeof == 160` its own mounted
-        // BaseEventQueue TU static_asserts, so it needs the queue stride re-derived with it.
-        {
-            static bool s_bModelHandleForkLogged = false;
-            if (!s_bModelHandleForkLogged)
-            {
-                s_bModelHandleForkLogged = true;
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "conductor park: AddRaceCarDeformationModel @0x825E9118 passes a NULL "
-                           "model handle -- BrnPhysics::Deformation::ResourceHandle is a 4-byte "
-                           "stand-in for the 16-byte CgsResource::ResourceHandle the console hands "
-                           "it [FLAG PC boot gate]\n";
-                }
-            }
-        }
-        Deformation::ResourceHandle lParkedModelHandle;
-        lParkedModelHandle.muValue = 0u;
+        // ⭐⭐⭐ THE MODEL-HANDLE PARK IS RETIRED (2026-08-11, handle-widening wave).
+        // It used to read: "THE MODEL-HANDLE ARGUMENT IS A LOUD PARK ... there is no honest
+        // projection of a pair of 64-bit pointers onto one u32 ... DELETE-WHEN the Deformation
+        // group de-forks its ResourceHandle ... retyping it grows AddDeformationModelEvent past the
+        // X360-attested sizeof == 160 its own mounted BaseEventQueue TU static_asserts, so it needs
+        // the queue stride re-derived with it."
+        // BOTH HALVES OF THAT DELETE-WHEN ARE NOW DONE: BrnDeformationEvents.h types mModelHandle
+        // as the real CgsResource::ResourceHandle, and the stride WAS re-derived (console 160 ->
+        // host 176, member by member, in BaseEventQueue_AddDeformationModelEvent_AddEvent.cpp --
+        // ⛔ re-derived, never bumped). So the console's own value goes through, verbatim:
+        //     0x825E932C  ldx r4, r20, r29    -- one doubleword out of maRaceCarModelHandles[index]
+        // and the same array element the :1611 assert two lines above already dereferences.
+        Deformation::ResourceHandle lModelHandle = maRaceCarModelHandles[liVehicleIndex];
 
         // ⚠️ [FLAG PC bring-up] NULL-mpAttribs TRIPWIRE (verifier catch, 2026-08-11): the console
         // reads mpAttribs unconditionally here, but VehiclePhysics::Construct seeds it NULL and
@@ -647,13 +645,14 @@ namespace Vehicle
             return;
         }
 
-        // The 4-byte `::RigidBodyId` stand-in carries the ENTITY WORD (see this file's banner).
-        RigidBodyId lHandlingBodyIDField;
-        lHandlingBodyIDField.muValue = static_cast<u32>(lHandlingBodyId.GetEntityId());
-
+        // ⭐ THE WHOLE 8-BYTE HANDLE (2026-08-11): `0x825E9324 ldx r8, r23, r29` ; `std r8, var_C8`
+        // ; `0x825E9358 ld r5, 0(r22)` -- the console loads it, spills it and reloads it as one
+        // doubleword into AddDeformationModel's r5. It used to be narrowed to the entity word here
+        // because the event field was a 4-byte stand-in; it is not any more.
+        // (lGlobalEntityId, arg 3, STAYS 32-bit -- `stw r28` / `0x825E9354 lwz r6`.)
         lpDeformationInterface->AddDeformationModel(
-            lParkedModelHandle,
-            lHandlingBodyIDField,
+            lModelHandle,
+            lHandlingBodyId,
             lGlobalEntityId,
             &maRaceCarVehicles[liVehicleIndex],
             maRaceCarVehicles[liVehicleIndex].mpAttribs->mBaseAttribs.mCOMOffset,

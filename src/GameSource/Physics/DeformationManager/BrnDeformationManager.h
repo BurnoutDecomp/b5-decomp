@@ -42,23 +42,35 @@
 #include "types.hpp"           // s32, s8, u8, u16, u32, f32
 #include "BrnCommonTypes.h"    // Vector3, Matrix44Affine, VecFloat, EntityId
 // ⛔⛔ THE RIGID-BODY HANDLE HERE IS EIGHT BYTES, AND UNTIL 2026-08-04 THIS HEADER MADE IT FOUR
-// (task #141). BrnCommonTypes.h:28 declares a GLOBAL-namespace stand-in `struct RigidBodyId
+// (task #141). BrnCommonTypes.h declared a GLOBAL-namespace stand-in `struct RigidBodyId
 // { u32 muValue; }`, and the three uses below were UNQUALIFIED, so inside
 // `namespace BrnPhysics::Deformation` they all bound to that 4-byte stand-in instead of the real
 // 8-byte `CgsPhysics::RigidBodyId`.
-// ⛔⛔ ONLY THESE THREE ARE FIXED. THE NAME IS STILL USED FOR A DIFFERENT, 32-BIT HANDLE
-// ELSEWHERE IN THIS SUBSYSTEM, AND THAT IS *NOT* SAFE TO "FINISH" WITHOUT ASM WORK.
-// BrnDeformationEvents.h types five separate `mHandlingBodyID` fields as the same unqualified
-// `RigidBodyId`, and the committed bodies in BrnDeformationManager.cpp do genuinely 32-BIT
-// arithmetic on them -- `mHandlingBodyID.muValue >> 24` for the owner type,
-// `(... >> 10) & 0x3FFF` for the race-car/traffic index, and at :347/:413 they convert the whole
-// thing to a 32-bit `EntityId`. `.muValue` exists ONLY on the stand-in, and that bit layout
-// CONTRADICTS CgsRigidBody.h's documented packing (high dword = EntityId, low dword = index).
-// So the handling-body handle may legitimately be a different 32-bit id, or those bodies may be
-// wrong -- the DWARF spells both `RigidBodyId` and cannot separate them. ⚠️ Deciding it needs
-// the X360 asm for AddDeformationModel @0x825A95E0's caller and the Process*Events drains.
-// mWorldRigidBodyId is fixed here because its width is settled INDEPENDENTLY by console
-// adjacency (below) and because nothing reads or writes it yet, so the change is inert.
+//
+// ⭐⭐⭐ THE REST OF THE FORK IS CLOSED TOO, AS OF 2026-08-11 (handle-widening wave), AND THE
+// QUESTION THIS BANNER POSED IS ANSWERED. It used to say: "ONLY THESE THREE ARE FIXED. THE NAME IS
+// STILL USED FOR A DIFFERENT, 32-BIT HANDLE ELSEWHERE IN THIS SUBSYSTEM ... the committed bodies in
+// BrnDeformationManager.cpp do genuinely 32-BIT arithmetic on them -- `.muValue >> 24` for the
+// owner type, `(... >> 10) & 0x3FFF` for the index ... that bit layout CONTRADICTS CgsRigidBody.h's
+// documented packing. So the handling-body handle may legitimately be a different 32-bit id, or
+// those bodies may be wrong ... ⚠️ Deciding it needs the X360 asm for AddDeformationModel
+// @0x825A95E0's caller and the Process*Events drains."
+//
+// THOSE EXACT FUNCTIONS WERE READ, AND THE ANSWER IS: **the handle is 64-bit and the bodies were
+// right.** There is no second 32-bit handle. The apparent contradiction was that all three
+// extractions run on the HIGH DWORD, taken FIRST -- `srdi r11,r11,32` at 0x825E9218 in the
+// producer (AddRaceCarDeformationModel) and at 0x82644940 in the consumer
+// (ProcessAddDeformationModelEvents), and only then `srwi 24` / `extrwi 14,8`. The arithmetic was
+// never wrong; only the width was short, and a 4-byte seat kept the index and silently discarded
+// the owning entity. All five `mHandlingBodyID` fields in BrnDeformationEvents.h are now the real
+// type, and this file's ten consumer sites are re-spelled through GetEntityIDOwner() /
+// GetEntityId().GetEntityIndex() -- **the same bits**, in one place each, instead of `.muValue`.
+// ⭐ The full eight-witness evidence table (array strides, argument loads, both stack event
+// records, the AddEvent element-copy head, the consumer's `ld`/`ld`/`lwz` triple, DeformableObject
+// ::Prepare's `std`+`stw` pair, and ProcessCollisionEvents' `extldi`) lives in **BrnCommonTypes.h**,
+// beside the typedef. Read it there rather than re-deriving.
+// mWorldRigidBodyId was fixed on 2026-08-04 because its width was settled INDEPENDENTLY by console
+// adjacency (below) and because nothing read or wrote it yet, so that change was inert.
 // ⭐ THE CONSOLE ADJACENCY IS DECISIVE -- and it closes with ZERO padding only on 8 bytes:
 //     mModelsAdded      @ +75904  (BrnDeformationDebugComponent.cpp:736)  BitArray<28> = 8B
 //     maGlobalEntityIDs @ +75912  = 75904 + 8                             28 * 4 = 112B

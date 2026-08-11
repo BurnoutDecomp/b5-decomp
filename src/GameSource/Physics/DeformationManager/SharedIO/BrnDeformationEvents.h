@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BrnCommonTypes.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"   // CgsResource::ResourceHandle
 
 namespace BrnPhysics
 {
@@ -19,9 +20,29 @@ namespace BrnPhysics
             E_DEFORMATION_RESET_NONE = 0
         };
 
-        struct ResourceHandle { u32 muValue; };
+        // ⭐⭐ THE MODEL HANDLE IS THE REAL RESOURCE HANDLE, NOT A u32 (2026-08-11).
+        // Until this date this was a 4-byte stand-in `struct ResourceHandle { u32 muValue; }`, so
+        // VehicleManager::AddRaceCarDeformationModel had no honest way to pass the handle the
+        // console hands it and parked a NULL instead. The console passes the WHOLE 8-byte handle
+        // (`ldx r4, r20, r29` @0x825E932C, out of a `slwi ,3` stride-8 array), the AddEvent element
+        // copy emits it as the TWO 32-bit pointer stores `stw +0 / stw +4`, and the consumer
+        // @0x82644930 reads it back with one `ld 0(evt)`. It is CgsResource::ResourceHandle
+        // {void*, Entry*} -- 8 bytes on the console, 16 on the host, exactly like the sibling
+        // BrnVehicleEvents.h which has spelled it `using CgsResource::ResourceHandle;` all along
+        // (and whose ValidateRaceCarEvent embed check already re-derives the widened stride).
+        // ⭐ The producer side is already this type: VehicleManager::maRaceCarModelHandles is a
+        // CgsResource::ResourceHandle[8], fed from CreateRaceCarEvent::mModelHandle.
+        using CgsResource::ResourceHandle;
 
         // Input event: spawn a deformable model for a body.
+        // CONSOLE LAYOUT (from the AddEvent copy and the ProcessAddDeformationModelEvents read,
+        // which agree instruction for instruction): mModelHandle +0x00 (8) · mHandlingBodyID +0x08
+        // (8, one `std`/`ld`) · mGlobalEntityId +0x10 (4, one `stw`/`lwz`) · pad · mCOMOffset +0x20
+        // · mInitialWorldSpaceTransform +0x30 · velocity +0x70 · angular +0x80 · mpVehiclePhysics
+        // +0x90 · damage +0x94 · type +0x98 · bool +0x9C == 0xA0 == 160.
+        // ⭐ On the host the two pointer-pairs widen (handle 8->16, mpVehiclePhysics 4->8) and the
+        // record becomes 176 -- and every SIMD member lands back on its EXACT console offset
+        // (+0x20/+0x30/+0x70/+0x80), which the pre-widening 160-byte host layout did NOT.
         struct alignas(16) AddDeformationModelEvent
         {
             ResourceHandle             mModelHandle;

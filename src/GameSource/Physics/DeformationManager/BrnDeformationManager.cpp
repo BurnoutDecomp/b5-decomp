@@ -281,7 +281,7 @@ namespace Deformation
             maGlobalEntityIDs[liModelIndex] = lrEvent.mGlobalEntityId;
 
             // The handling body must be a race car or a traffic vehicle.
-            const u32 luHandlingOwner = lrEvent.mHandlingBodyID.muValue >> 24;
+            const u32 luHandlingOwner = lrEvent.mHandlingBodyID.GetEntityIDOwner();
             CGS_ASSERT(luHandlingOwner == KU_ENTITYTYPE_RACECAR || luHandlingOwner == KU_ENTITYTYPE_TRAFFIC_VEHICLE,
                        "lHandlingBodyEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_RACECAR || "
                        "lHandlingBodyEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
@@ -294,7 +294,7 @@ namespace Deformation
             // index (handling id) and the global-traffic index (global id).
             if (luHandlingOwner == KU_ENTITYTYPE_RACECAR)
             {
-                const u32 lu16RaceCarIndex = (lrEvent.mHandlingBodyID.muValue >> 10) & 0x3FFFu;
+                const u32 lu16RaceCarIndex = lrEvent.mHandlingBodyID.GetEntityId().GetEntityIndex();
                 CGS_ASSERT(lu16RaceCarIndex < static_cast<u32>(KI_MAX_NUM_RACE_CARS),
                            "lu16RaceCarIndex < Vehicle::ku8MaxNumRaceCars");
                 ma8RaceCarToModelIndex[lu16RaceCarIndex] = static_cast<s8>(liModelIndex);
@@ -305,7 +305,7 @@ namespace Deformation
                 CGS_ASSERT(luGlobalOwner == KU_ENTITYTYPE_TRAFFIC_VEHICLE,
                            "lEvent.mGlobalEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
 
-                const u32 lu16TrafficPhysicsIndex = (lrEvent.mHandlingBodyID.muValue >> 10) & 0x3FFFu;
+                const u32 lu16TrafficPhysicsIndex = lrEvent.mHandlingBodyID.GetEntityId().GetEntityIndex();
                 const u32 lu16TrafficGlobalIndex  = (lrEvent.mGlobalEntityId.muValue >> 10) & 0x3FFFu;
                 CGS_ASSERT(lu16TrafficPhysicsIndex < static_cast<u32>(KI_MAX_NUM_PHYSICAL_TRAFFIC),
                            "lu16TrafficPhysicsIndex < Vehicle::ku8TotalMaxNumPhysicalTraffic");
@@ -344,7 +344,7 @@ namespace Deformation
             const RemoveDeformationModelEvent& lrEvent = lrQueue.GetEvent(liI);
 
             // The handling-body id identifies the model to remove.
-            const EntityId lHandlingId = { lrEvent.mHandlingBodyID.muValue };
+            const EntityId lHandlingId = { static_cast<u32>(lrEvent.mHandlingBodyID.GetEntityId()) };
             const s32 liModelIndex = FindModelIndexByEntityID(lHandlingId);
             if (liModelIndex == -1)
                 continue;
@@ -369,17 +369,17 @@ namespace Deformation
 
             // Clear the per-class index-table entry. Race cars: the race-car table by the handling
             // id index. Traffic: both the physics-index table and the global-traffic table.
-            const u32 luHandlingOwner = lrEvent.mHandlingBodyID.muValue >> 24;
+            const u32 luHandlingOwner = lrEvent.mHandlingBodyID.GetEntityIDOwner();
             if (luHandlingOwner == KU_ENTITYTYPE_RACECAR)
             {
-                const u32 lu16RaceCarIndex = (lrEvent.mHandlingBodyID.muValue >> 10) & 0x3FFFu;
+                const u32 lu16RaceCarIndex = lrEvent.mHandlingBodyID.GetEntityId().GetEntityIndex();
                 CGS_ASSERT(lu16RaceCarIndex < static_cast<u32>(KI_MAX_NUM_RACE_CARS),
                            "lu16RaceCarIndex < Vehicle::ku8MaxNumRaceCars");
                 ma8RaceCarToModelIndex[lu16RaceCarIndex] = -1;
             }
             else
             {
-                const u32 lu16TrafficPhysicsIndex = (lrEvent.mHandlingBodyID.muValue >> 10) & 0x3FFFu;
+                const u32 lu16TrafficPhysicsIndex = lrEvent.mHandlingBodyID.GetEntityId().GetEntityIndex();
                 CGS_ASSERT(lu16TrafficPhysicsIndex < static_cast<u32>(KI_MAX_NUM_PHYSICAL_TRAFFIC),
                            "lu16TrafficPhysicsIndex < Vehicle::ku8TotalMaxNumPhysicalTraffic");
                 CGS_ASSERT(luPriorGlobalIndex < static_cast<u32>(KI_MAX_TOTAL_TRAFFIC),
@@ -410,15 +410,15 @@ namespace Deformation
         {
             const DeactivateDeformationModelEvent& lrEvent = lrQueue.GetEvent(liI);
 
-            const EntityId lHandlingId = { lrEvent.mHandlingBodyID.muValue };
+            const EntityId lHandlingId = { static_cast<u32>(lrEvent.mHandlingBodyID.GetEntityId()) };
             const s32 liModelIndex = FindModelIndexByEntityID(lHandlingId);
             if (liModelIndex == -1)
                 continue;
 
             // The reset flag is set only for the player race car: owner byte == RACECAR (1) and the
             // packed index == 0 (the player slot). Any other case clears it.
-            const u32 luOwner = lrEvent.mHandlingBodyID.muValue >> 24;
-            const u32 luIndex = (lrEvent.mHandlingBodyID.muValue >> 10) & 0x3FFFu;
+            const u32 luOwner = lrEvent.mHandlingBodyID.GetEntityIDOwner();
+            const u32 luIndex = lrEvent.mHandlingBodyID.GetEntityId().GetEntityIndex();
             const bool lbIsPlayerRaceCar = (luOwner == KU_ENTITYTYPE_RACECAR) && (luIndex == 0u);
 
             // Reset the model's deformation in place (keep the slot live). The damage/time + reset
