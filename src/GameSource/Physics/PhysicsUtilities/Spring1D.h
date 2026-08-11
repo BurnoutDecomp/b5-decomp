@@ -143,7 +143,12 @@ namespace BrnPhysics
 
         // @0x825BF9C0: base+16, vrlimi mask 4 -> lane 1 (.y).
         void SetAcceleration(f32 lfAcceleration);
-        void SetDampingForce(f32 lfDampingForce);   // declared-only (no body in this TU)
+        // @0x825BFAB8: base+16, vrlimi mask 2 -> lane 2 (.z). ⭐ BODIED 2026-08-11 (the
+        // suspension-springs wave) -- it stopped being "declared-only" the moment
+        // UpdateSuspensionSprings, its ONLY caller in the image, got a body. 0x825BFAB8 is missing
+        // from the IDA export set, so the lane was read out of the image bytes and calibrated
+        // against the three siblings in this register; see the SuspensionSpring.cpp banner.
+        void SetDampingForce(f32 lfDampingForce);
         // @0x825BFBB0: base+16, vrlimi mask 1 -> lane 3 (.w).
         void SetSpringForce(f32 lfSpringForce);
         // @0x825BFCA8: base+32, vrlimi mask 8 -> lane 0 (.x) of the external-force vec.

@@ -59,6 +59,29 @@ namespace BrnPhysics
         mvVelocity_Acceleration_DampingForce_SpringForce.y = lfAcceleration;
     }
 
+    // @0x825BFAB8 -- base+16, mask 2 -> .z
+    //
+    // ⭐ THE NINTH SETTER, ADDED 2026-08-11 (suspension-springs wave). It was declared-only, and
+    // UpdateSuspensionSprings @0x825F7AF0 calls it -- so it was an LNK2019 waiting for the first
+    // caller. 0x825BFAB8 is a genuine hole in the IDA export set (its four siblings all have a
+    // .json; it does not) -- [[ida-export-set-has-holes]] again.
+    //
+    // ⛔ THE LANE IS NOT INFERRED FROM THE MEMBER NAME. It is read out of the X360 image and
+    // calibrated against the three siblings whose masks are already committed. All four bodies are
+    // 62 words and differ in exactly 10 of them; word 56 (+0xE0) is the vrlimi128:
+    //     SetVelocity     @0x825BF8C8  1808ff13  mask 8 -> .x
+    //     SetAcceleration @0x825BF9C0  1804ff13  mask 4 -> .y
+    //     SetDampingForce @0x825BFAB8  1802ff13  mask 2 -> .z   <- this one
+    //     SetSpringForce  @0x825BFBB0  1801ff13  mask 1 -> .w
+    // The store base word is byte-identical across all four (base+0x10). Corroborated by word 49,
+    // `li r5,<__LINE__>`: 123 / 169 / 177 / 185 -- strictly ascending, so the console header
+    // declares them in exactly this order, which is the order Spring1D.h already carries.
+    void SuspensionSpring::SetDampingForce(f32 lfDampingForce)
+    {
+        CGS_ASSERT(lfDampingForce == lfDampingForce, "SuspensionSpring: setting invalid (NaN) damping force");
+        mvVelocity_Acceleration_DampingForce_SpringForce.z = lfDampingForce;
+    }
+
     // @0x825BFBB0 -- base+16, mask 1 -> .w
     void SuspensionSpring::SetSpringForce(f32 lfSpringForce)
     {

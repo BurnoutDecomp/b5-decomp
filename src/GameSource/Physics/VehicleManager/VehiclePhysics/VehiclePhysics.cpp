@@ -2921,8 +2921,11 @@ namespace Vehicle
         // 1) push the static chassis weight down each wheel's contact normal.
         ApplyWheelWeight();
 
-        // 2) set each spring's stiffness/mass/damping/velocity/position from the current ride state.
-        UpdateSuspensionSprings();
+        // 2) set each spring's stiffness/mass/damping/velocity/position from the current ride state
+        //    and integrate it one step. ⭐ dt IS AN ARGUMENT: the X360 parks the incoming vector
+        //    (0x8261F6B4 `vmr128 v127,v1`) and re-issues `vmr128 v1,v127` before every phase call,
+        //    including this one at 0x8261F6D8.
+        UpdateSuspensionSprings(VecFloat{ lfDeltaTime, lfDeltaTime, lfDeltaTime, lfDeltaTime });
 
         // 3) snapshot mLinearVelocity (+0x50 == base+0x40) into mPreviousWorldSpaceVelocity (+0x1330),
         //    so CalculateWeightTransfer can difference it against this frame's velocity.
@@ -2936,44 +2939,82 @@ namespace Vehicle
         ApplySuspensionForces();
     }
 
-// [partial] ApplyWheelWeight  @0x825F7898 FLAGS: partial: per-wheel suspension-length projection writes an un-pinned wheel lane via dense VMX (vmsum3fp128/vmaxfp/vxor cascade through this+0x180/this+0x1A0 lanes); not store-faithful, emitted as the recoverable loop+gate skeleton; elided: the per-wheel CgsDev::Assert 'Invalid wheel position' (Wheel.h:412) debug guard
-    // @0x825F7898  BrnPhysics::Vehicle::VehiclePhysics::ApplyWheelWeight
-    // ---------------------------------------------------------------------------------------------
-    // FIDELITY: PARTIAL. Per the findings doc (Section 5): "push static chassis weight down each wheel's
-    // contact normal" -- the first suspension phase, run before UpdateSuspensionSprings. The X360 walks
-    // the four wheel records (stride 0xE0) and, for each wheel whose attached flag is set
-    // (*(wheel-0x58) != 0), projects the chassis weight onto the wheel's contact geometry and writes the
-    // result into the wheel's suspension-length lane (vrlimi128 lane1 ; stvx128 back to the wheel record).
-    // The projection itself is a dense VMX128 cascade: it loads three packed lanes of the wheel record
-    // (vspltw lanes 0/1/2), FMA-combines them against the body weight register (this+0x20 ; this+0x10),
-    // dot3s the result (vmsum3fp128), subtracts a stored offset (vsubfp v0,v0,v8 where v8 = wheel lane3
-    // @ -0x40), negates (vxor against the all-ones sign mask), adds a prior lane and clamps to a minimum
-    // (vmaxfp v0,v0,v7). The destination is a wheel-internal suspension-length lane NOT pinned in this
-    // minimal slice, and the source lanes (wheel +0x180/+0x1A0-region offsets, well past the committed
-    // Wheel layout) are likewise un-pinned. The loop + the attached-flag gate ARE faithful; the
-    // projection arithmetic is left as a structural comment (no fabricated lane routing).
-    // ---------------------------------------------------------------------------------------------
+// [clean] ApplyWheelWeight  @0x825F7898
+    // @0x825F7898  BrnPhysics::Vehicle::VehiclePhysics::ApplyWheelWeight   (149 insns)
+    // =============================================================================================
+    // ⭐⭐⭐ BODIED 2026-08-11 (suspension-springs wave). ⛔ THE "PARTIAL" VERDICT THAT STOOD HERE
+    // IS RETRACTED, AND IT WAS WRONG IN A WAY THAT MATTERED: it claimed the sources were "wheel
+    // +0x180/+0x1A0-region offsets, well past the committed Wheel layout" and the destination "a
+    // wheel-internal suspension-length lane NOT pinned in this minimal slice". EVERY offset this
+    // function touches is a committed member, and the un-pinned addresses were a mis-attribution --
+    // the walker's base register is `this + 0x1B0`, which is maWheels[0].mPosition (maWheels @0x130
+    // + 0x80), not a raw this-relative address in some unmapped region. The same trap as
+    // [[junkyard-state-writer-found]]: an offset read against the wrong base.
+    //
+    // ⭐ WHY IT MATTERS EXACTLY: **this writes maWheels[i].mPosition.y, which is the one and only
+    // input the grounded arm of UpdateSuspensionSprings reads** (0x825F874C `lvx128 v12,[wheel+0x80]`
+    // ; `vspltw v12,v12,1`). With this inert the spring's position never changes, Hooke's law
+    // returns a constant, and the car cannot settle no matter how correct the spring solver is.
+    // It is not "push static chassis weight down the contact normal" (that is
+    // ApplySuspensionForces, the LAST phase); it is the suspension-compression solve, and the
+    // asserts in the sibling call its output "suspension length".
+    //
+    // READ STORE-FOR-STORE (r31 = &maWheels[i].mPosition, stepping 0xE0; r11 = this + 0x10):
+    //   gate   `lbz r11, -0x58(r31)`  == maWheels[i].mRoadContact.mbIsOnGround  (0x1B0-0x58 = 0x158)
+    //   0x825F7A80/AA4/AA8   world = xAxis*p.x + yAxis*p.y + zAxis*p.z + Pos()
+    //                        (three vmaddfp off [this+0x10]/[+0x20]/[+0x30], seeded with [this+0x40]
+    //                         -- the translation IS included here, because this is a POINT; the
+    //                         sibling's lever-arm transform deliberately omits it)
+    //   0x825F7AAC           world -= mRoadContact.mPosition        (the 48-byte contact copy)
+    //   0x825F7AB0           gap = dot3([this+0x20] == mTransform.Up(), that)
+    //   0x825F7AB4/AB8       -(gap - mSlipVariables.w)              (the WHEEL RADIUS -- Wheel::
+    //                        Prepare's committed lane map, `f1 -> mSlipVariables.w = THE WHEEL RADIUS`)
+    //   0x825F7ABC           += mPosition.y
+    //   0x825F7AC0           vmaxfp against mSuspensionAndInertiaVariables.x  (= streamedY - travelDown,
+    //                        again Wheel::Prepare's committed lane map: the travel-DOWN bound)
+    //   0x825F7AC4/AC8       vrlimi128 mask 4 (lane 1) ; stvx128 -> mPosition.y
+    // ⇒ raise the wheel, in body space, by exactly how far it is penetrating the road, and stop at
+    // the down-travel bump stop. Nothing here is fabricated; the two "magic" lanes are both named
+    // by the lane map this tree already proved from Wheel::Prepare's own asm.
+    // ⚠️ The per-wheel CgsDev::Assert "Invalid wheel position" (Wheel.h:412) guards are elided as
+    // debug-build plumbing, per the project convention.
+    // =============================================================================================
     void VehiclePhysics::ApplyWheelWeight()
     {
+        const Vector3& lvRight = mTransform.Right();   // [this+0x10]
+        const Vector3& lvUp    = mTransform.Up();      // [this+0x20] -- also the projection axis
+        const Vector3& lvAt    = mTransform.At();      // [this+0x30]
+        const Vector3& lvPos   = mTransform.Pos();     // [this+0x40]
+
         for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
         {
             Wheel& lrWheel = maWheels[liWheel];
 
-            // Gate: only wheels that are attached/in-contact get a weight push (the X360 tests the
-            // wheel-attached flag *(wheel-0x58) before doing any work; an un-attached wheel is skipped).
+            // Gate: only wheels actually touching the road (X360 `lbz r11,-0x58(r31)`).
             if (!lrWheel.GetRoadContact().mbIsOnGround)
                 continue;
 
-            // (debug-only "Invalid wheel position" assert on the wheel's contact position -- elided.)
+            // (debug-only "Invalid wheel position" assert on the wheel's position -- elided.)
 
-            // FIDELITY: BLOCKED projection -- the X360 computes the new suspension length as
-            //   length' = max( prevLength + (-(dot3(weightReg, wheelContactBasis) - storedOffset)),
-            //                   minLength )
-            // and stores it into the wheel's suspension-length lane (vrlimi128 lane1 ; stvx128 wheel).
-            // The basis lanes (wheel +0x180/+0x1A0-region) and the destination lane are un-pinned in this
-            // slice; the weight register is this+0x20/this+0x10. The push DIRECTION is the wheel's contact
-            // normal (findings: "down each wheel's contact normal"). No fabricated lane routing is emitted.
-            (void)lrWheel;
+            // The wheel's body-space position taken out to world space (point, so + translation).
+            const Vector3& lvLocal = lrWheel.mPosition;
+            const f32 lfWorldX = lvRight.x * lvLocal.x + lvUp.x * lvLocal.y + lvAt.x * lvLocal.z + lvPos.x;
+            const f32 lfWorldY = lvRight.y * lvLocal.x + lvUp.y * lvLocal.y + lvAt.y * lvLocal.z + lvPos.y;
+            const f32 lfWorldZ = lvRight.z * lvLocal.x + lvUp.z * lvLocal.y + lvAt.z * lvLocal.z + lvPos.z;
+
+            // Signed distance from the contact point to the wheel centre, measured along the body
+            // up axis (X360: vsubfp then vmsum3fp128 against [this+0x20]).
+            const Vector3& lvContact = lrWheel.GetRoadContact().mPosition;
+            const f32 lfGap = lvUp.x * (lfWorldX - lvContact.x)
+                            + lvUp.y * (lfWorldY - lvContact.y)
+                            + lvUp.z * (lfWorldZ - lvContact.z);
+
+            // Raise the wheel by its penetration (radius - gap), clamped at the down-travel stop.
+            const f32 lfWheelRadius   = lrWheel.mSlipVariables.w;                  // wheel+0x40 .w
+            const f32 lfTravelDownEnd = lrWheel.mSuspensionAndInertiaVariables.x;  // wheel+0x60 .x
+            const f32 lfNewY = lrWheel.mPosition.y + (lfWheelRadius - lfGap);
+
+            lrWheel.mPosition.y = (lfNewY > lfTravelDownEnd) ? lfNewY : lfTravelDownEnd;
         }
     }
 
@@ -3026,36 +3067,72 @@ namespace Vehicle
         }
     }
 
-// [partial] ApplySuspensionForces  @0x825D1EE8 FLAGS: partial: the per-wheel gate (attached flag *(wheel+86) != 0 && state *(wheel+87) != 2 && magnitude > 0) + the spring-lane product (reg0.z * reg1.y) + the AddLocalForce apply + the trailing CalculateNewVelocity are faithful; the contact-normal source lane (wheel +0x1B0 region, un-pinned) and the per-wheel 'wheel position valid' SIMD assert are flagged/elided; elided: the two CgsDev::Assert 'Invalid wheel position' (Wheel.h:412) debug guards
+// [clean] ApplySuspensionForces  @0x825D1EE8
     // @0x825D1EE8  BrnPhysics::Vehicle::VehiclePhysics::ApplySuspensionForces
-    // ---------------------------------------------------------------------------------------------
-    // FIDELITY: PARTIAL. Per the findings doc (Section 5): per wheel, the push MAGNITUDE is the product of
-    // two packed lanes of the spring register block ( maSprings[i].reg0 lane2 * maSprings[i].reg1 lane1 ),
-    // gated > 0; the DIRECTION is the normalized contact normal (read from the wheel record @ +0x1B0).
-    // The force is applied at the contact via ExternalPhysicsBody::AddLocalForce, and a single
-    // CalculateNewVelocity (the base integrator checkpoint) is run at the end. A wheel is SKIPPED when its
-    // attached flag (wheel+86) is 0, its state (wheel+87) == 2, or the magnitude is <= 0.
-    //   The gate + the spring-lane product + the per-wheel apply + the trailing integrate are FAITHFUL.
-    //   The contact-normal SOURCE lane (wheel +0x1B0 region, past the committed Wheel layout) is un-pinned
-    //   in this slice, so the applied direction is carried as the wheel's committed contact normal
-    //   (mRoadContact.mNormal) -- the same physical quantity the findings doc names; FLAG if the +0x1B0
-    //   lane proves distinct when the full Wheel TU lands. The 'wheel position valid' SIMD asserts are
-    //   elided (debug-build guards). AddLocalForce / CalculateNewVelocity are the committed base entries.
-    // ---------------------------------------------------------------------------------------------
+    // =============================================================================================
+    // ⛔⛔⛔ CORRECTED 2026-08-11 (suspension-springs wave). THREE THINGS WERE WRONG HERE, AND THE
+    // WORST OF THEM LAUNCHED THE CAR AT 91 m/s THE MOMENT THE MAGNITUDE STOPPED BEING ZERO.
+    // Every one was invisible while `mag` was identically 0 -- [[silent-drop-stubs]]: "not on the
+    // live path" expires silently, and it expired this wave.
+    //
+    // ⭐⭐ 1. THE LEVER ARM. The X360 passes **maWheels[i].mPosition** -- the BODY-SPACE wheel
+    //    position, which is why r5 == 1 (BODY_SPACE) -- straight out of the register the whole
+    //    function walks (`r27 = this + 0x1B0`, i.e. &maWheels[0].mPosition, stepping 0xE0):
+    //        0x825D20F8  vmr128 v1, v127          ; the force
+    //        0x825D20FC  li     r5, 1             ; position space = BODY
+    //        0x825D2100  li     r4, 0             ; force space    = WORLD
+    //        0x825D2104  lvx128 v2, r0, r27       ; <- maWheels[i].mPosition
+    //        0x825D2108  addi   r3, r20, 0x10
+    //        0x825D210C  bl     ExternalPhysicsBody::AddLocalForce
+    //    The committed body passed `mRoadContact.mPosition`, which is a WORLD position -- in the
+    //    junkyard, (2986, -3.5, -2012). Declared BODY_SPACE, that is a **~3,600 m lever arm**, so
+    //    a perfectly correct 4,933 N suspension push became ~1.8e7 N.m of torque, the body spun
+    //    up in a single step, and the suspension-point velocity (omega x r) reached ~860 m/s.
+    //    MEASURED, not reasoned: with this wrong the car left the ground at +91.7 m/s on step 21.
+    //
+    // ⭐ 2. THE DIRECTION is the NORMALIZED BODY UP AXIS, not the contact normal:
+    //        0x825D1FB4  lvx128 v13, r20, 0x20        ; mTransform.Up()
+    //        0x825D1FD4  vmsum3fp128 v0, v13, v13     ; |up|^2
+    //        0x825D1FFC..0x825D201C  vrsqrtefp + two Newton refinements
+    //        0x825D2020  vmulfp128 v0, v13, v0        ; up * (1/|up|)
+    //        0x825D2024  vmulfp128 v127, v0, v9       ; * magnitude
+    //    The old note guessed "the normalized contact normal ... FLAG if the +0x1B0 lane proves
+    //    distinct". It is distinct, and the +0x1B0 "un-pinned region" was never un-pinned -- it is
+    //    maWheels[0].mPosition (maWheels @0x130 + 0x80). Same mis-based-offset trap as the one in
+    //    ApplyWheelWeight's old banner.
+    //
+    // ⭐ 3. THE GATE is **mbHasTraction**, not mbIsOnGround: `lbz r11,0x56(r27)` reads wheel+0xD6
+    //    (0x1B0+0x56 = 0x206 = wheel base 0x130 + 0xD6), and `lbz r11,0x57(r27)` is mu8State.
+    //    On flat ground the two agree (SetRoadContact derives traction from normal.y > 0.5), which
+    //    is exactly why it never showed -- it would only have shown on a steep wall.
+    //
+    // UNCHANGED and already correct: the magnitude is maSprings[i].reg0.z * reg1.y (mass x
+    // acceleration -- so it IS the net spring force), gated > 0 by `fcmpu cr6,f0,f31 ; ble`.
+    // The trailing ExternalPhysicsBody::CalculateNewVelocity(this+0x10) checkpoint stays a
+    // faithful comment (base-owned, not declared on this slice), as before.
+    // ⚠️ The two per-wheel "Invalid wheel position" (Wheel.h:412) asserts are elided -- debug.
+    // =============================================================================================
     void VehiclePhysics::ApplySuspensionForces()
     {
+        // The push direction: the body up axis, normalized (0x825D1FB4..0x825D2020). Hoisted --
+        // the console re-derives it per wheel, but it cannot change inside the loop.
+        const Vector3& lvUp = mTransform.Up();
+        const f32 lfUpMagSq = lvUp.x * lvUp.x + lvUp.y * lvUp.y + lvUp.z * lvUp.z;
+        const f32 lfRecipUpMag = 1.0f / std::sqrt(lfUpMagSq);
+        const Vector3 lvUpUnit{ lvUp.x * lfRecipUpMag, lvUp.y * lfRecipUpMag, lvUp.z * lfRecipUpMag, 0.0f };
+
         for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
         {
             Wheel& lrWheel = maWheels[liWheel];
 
-            // Gate: skip un-attached wheels (wheel+86) and wheels in the detached state (wheel+87 == 2).
-            if (!lrWheel.GetRoadContact().mbIsOnGround)
+            // 0x825D1F68 / 0x825D1F74: wheel+0xD6 (mbHasTraction) and wheel+0xD7 (mu8State).
+            if (!lrWheel.mbHasTraction)
                 continue;
             if (lrWheel.mu8State == 2)
                 continue;
 
-            // Push magnitude = maSprings[i].reg0.z (mass lane) * maSprings[i].reg1.y (acceleration lane).
-            // (The X360 splats reg0 lane2 + reg1 lane1, multiplies, stores the scalar to v95 and tests > 0.)
+            // Push magnitude = maSprings[i].reg0.z (mass lane) * maSprings[i].reg1.y (acceleration
+            // lane) -- i.e. the net spring force. (0x825D1F80..0x825D1F94, then `ble` on > 0.)
             const f32 lfMagnitude =
                 maSprings[liWheel].mvStiffness_Damping_Mass_Position.z *
                 maSprings[liWheel].mvVelocity_Acceleration_DampingForce_SpringForce.y;
@@ -3063,23 +3140,16 @@ namespace Vehicle
             if (lfMagnitude <= 0.0f)
                 continue;   // no push this wheel
 
-            // Direction = the normalized contact normal (findings: "the normalized contact normal read from
-            // the wheel @ +0x432"). FLAG: the +0x1B0-region contact normal is un-pinned here; the committed
-            // mRoadContact.mNormal is the faithful stand-in for the same quantity.
-            const Vector3& lvNormal = lrWheel.GetRoadContact().mNormal;
+            // (debug-only 'Invalid wheel position' assert on mPosition -- elided.)
 
-            // (debug-only 'Invalid wheel position' assert on the contact basis -- elided.)
-
-            // Force = normal * magnitude, applied at the wheel's local contact point. The X360 calls
-            // ExternalPhysicsBody::AddLocalForce on the body subobject (addi r3,this,0x10) with the force +
-            // the contact position; modelled here as the committed (force, localPos) pair.
-            const Vector3 lvForce{ lvNormal.x * lfMagnitude,
-                                   lvNormal.y * lfMagnitude,
-                                   lvNormal.z * lfMagnitude,
+            const Vector3 lvForce{ lvUpUnit.x * lfMagnitude,
+                                   lvUpUnit.y * lfMagnitude,
+                                   lvUpUnit.z * lfMagnitude,
                                    0.0f };
-            // asm @0x825D2100/0x825D20FC: r4 = 0 (WORLD force), r5 = 1 (BODY position).
+            // asm @0x825D2100/0x825D20FC: r4 = 0 (WORLD force), r5 = 1 (BODY position), and
+            // 0x825D2104 loads the position from r27 == &maWheels[i].mPosition.
             AddLocalForce(lvForce, rw::physics::WORLD_SPACE,
-                          lrWheel.GetRoadContact().mPosition, rw::physics::BODY_SPACE);
+                          lrWheel.mPosition, rw::physics::BODY_SPACE);
         }
 
         // One base integrator checkpoint after all four pushes (asm tail:
@@ -3297,94 +3367,284 @@ namespace Vehicle
         }
     }
 
-// [blocked] UpdateSuspensionSprings  @0x825F7AF0 FLAGS: blocked: Hex-Rays 'local variable allocation has failed, the output may be wrong' -- a degenerate VMX128 giant with ~800 lines of CgsDev::Assert finite-value plumbing wrapping ~25 un-pinned SuspensionSpring setters (SetStiffness/SetMass/SetDamping/SetVelocity/SetPosition/SetDampingForce/SetSpringForce/SetAcceleration/SetExternalForce); the per-spring lane math is not recoverable store-faithfully
-    // @0x825F7AF0  BrnPhysics::Vehicle::VehiclePhysics::UpdateSuspensionSprings
-    // ---------------------------------------------------------------------------------------------
-    // FIDELITY: BLOCKED -- structural skeleton only. The X360 export is flagged by Hex-Rays as
-    // "local variable allocation has failed, the output may be wrong". Per the findings doc (Section 5):
-    // set each spring's stiffness/mass/damping/velocity/position from the current ride state -- but the
-    // bulk of the body is CgsDev::Assert finite-value plumbing ("Invalid spring mass scalar / mass / rest
-    // displacement / recip. rest displ. / in air damping / spring damping / ...  please tell Graham D.").
-    // STRUCTURE (assert-stripped): build per-spring scalars (mass scale, recip rest displacement, in-air
-    // damping) from packed wheel registers, then per spring (4 springs, this+900-DWORD region, the X360
-    // walks &this[12*spring+900]) call SuspensionSpring::{SetStiffness, SetMass, SetDamping, SetVelocity,
-    // SetPosition, SetDampingForce, SetSpringForce, SetAcceleration, SetExternalForce} with the
-    // wheel-derived values, gated on the wheel's attached/contact bytes (*(wheel+519) != 2, *(wheel+344)).
-    // WHY BLOCKED: the degenerate allocation makes the per-lane stack temporaries unreliable; the ~25
-    // setter inputs are dense VMX through un-pinned wheel lanes + un-homed rodata, and several setters
-    // (SetDampingForce/SetSpringForce/SetAcceleration) are not even in the committed SuspensionSpring slice.
-    // A faithful body would fabricate the per-spring lane math -> forbidden. No fabricated math emitted.
-    //
+// [clean] UpdateSuspensionSprings  @0x825F7AF0
+    // @0x825F7AF0  BrnPhysics::Vehicle::VehiclePhysics::UpdateSuspensionSprings   (2,231 insns)
     // =============================================================================================
-    // ⭐⭐⭐ 2026-08-11 (ground-contact wave) -- THIS IS THE CAMPAIGN BLOCKER, AND HALF OF IT IS
-    // NOW DECODED. STILL NOT WRITTEN -- ON PURPOSE -- BUT THE NEXT WAVE STARTS FROM HERE, NOT FROM
-    // THE ASM. Two of the "several setters ... not even in the committed SuspensionSpring slice" ARE
-    // in it now (SuspensionSpring.cpp has all eight plus Prepare and Reset, every one @-cited), so
-    // that clause of the verdict is already stale.
+    // ⭐⭐⭐ BODIED 2026-08-11 (suspension-springs wave). ⛔ THE "BLOCKED" VERDICT IS RETRACTED,
+    // and every one of its four reasons is now answered rather than argued around:
+    //   1. "Hex-Rays: local variable allocation has failed"  -> nothing here is read from the
+    //      pseudocode. The whole body is decoded from the ASM.
+    //   2. "the ~25 setter inputs are dense VMX through un-pinned wheel lanes + un-homed rodata"
+    //      -> every input is named twice over, see the register table below.
+    //   3. "several setters (SetDampingForce/SetSpringForce/SetAcceleration) are not even in the
+    //      committed SuspensionSpring slice" -> all nine are now bodied in SuspensionSpring.cpp
+    //      (SetDampingForce landed with this wave; its export is an IDA hole and the lane came out
+    //      of the image bytes).
+    //   4. "~800 lines of CgsDev::Assert plumbing" -> true, and it is the KEY, not the noise:
+    //      **the assert message strings name every hoisted register.**
     //
-    // ⭐ WHY IT MATTERS EXACTLY, MEASURED THIS WAVE, NOT REASONED: the traction chain is CLOSED.
-    // An instrumented boot logged, on frame 2 of the player car's life:
-    //     PROBE gc/read #4239 car 0 hits 1111 onGround 1111
-    //           w0hit (2986.091797,-3.525000,-2012.752808) nrm (0.000000,1.000000,0.000000)
-    // -- all four wheels on the junkyard floor, through the real console chain, on real triangles.
-    // The car still falls because ApplySuspensionForces (:3096) needs
-    //   maSprings[w].mvStiffness_Damping_Mass_Position.z (MASS -- now seeded by SetupSuspension)
-    // x maSprings[w].mvVelocity_Acceleration_DampingForce_SpringForce.y (ACCELERATION)
-    // and THIS FUNCTION is the acceleration lane's only writer in the image. Both lanes measured
-    // identically 0 on all four wheels across 90 samples. **This body is the last dry hop.**
+    // ⭐⭐ HOW THE ~20 HOISTED PROLOGUE REGISTERS WERE CLOSED WITHOUT TOUCHING THE IDA VMX+32 SKEW.
+    // [[ida-vmx-plus32-and-rdata-unlock]] says IDA prints VMX128 SOURCE registers 32 too high per
+    // operand field, which is why the previous wave refused to trust v110..v127. It never needed
+    // to. Each hoisted value is `stvx128`d to a stack slot which a prologue assert re-loads with
+    // `lfs` and prints -- so the GAME NAMES IT. Every one then matches a committed DWARF member:
     //
-    // ⭐⭐ THREE FORMULAS RECOVERED EXACTLY, AND THEY ARE IMMUNE TO THE VMX+32 HAZARD.
-    // [[ida-vmx-plus32-and-rdata-unlock]] warns that IDA prints VMX128 SOURCE registers 32 too high,
-    // which is why the hoisted v111..v127 prologue registers below are NOT trusted here. These three
-    // are safe because every operand is a lane of the SPRING itself, addressed through a GPR
-    // (r26 == &maSprings[i], r27 == r26+0x20 == &mvExternalForce) and selected with the NON-128
-    // `vspltw` form, which the +32 skew does not touch:
+    //   reg         built from                     the game's own assert string    committed member
+    //   v112     lvx128 unk_82FB9160          (feeds stiffness)                 KF_GRAVITY 9.81
+    //   v114     [mpAttribs+0x70].x           "Invalid mass: "                  mBaseAttribs.mvMass_....x
+    //   v117     [mpAttribs+0x230].x          "Invalid rest displacement: "     mSuspensionAttribs.mvRestDisplacement_....x
+    //   v111     vrefp+2NR(v117)              "Invalid recip. rest displ.: "    (1/restDisplacement)
+    //   v113     [mpAttribs+0x230].y          "Invalid spring damping: "        ...mvRestDisplacement_**Dampening**_....y
+    //   v110     [mpAttribs+0x240].z          "Invalid in air damping: "        ...mv..._**InAirDamping**_....z
+    //   v116     [this+0xED0]                 "Invalid spring mass scalar: "    mvSpringMassScalers
+    //   v118     the incoming v1              --                                THE TIMESTEP ARGUMENT
     //
-    //   0x825F8F98..0x825F8FC4   SetDampingForce( -stack[0] * reg0.y * reg0.z )
-    //                            == -velocity * damping * mass      (`vxor` with the 0x80000000
-    //                            splat from `vslw v127,v127` is the negate)
-    //   0x825F8FC8..0x825F8FE4   SetSpringForce ( -reg0.x * reg0.w )
-    //                            == -stiffness * position           -- HOOKE'S LAW, exactly.
-    //   0x825F8FE8..0x825F9044   SetAcceleration( (stack[2] + stack[3] + externalForce.x) * (1/reg0.z) )
-    //                            == (dampingForce + springForce + externalForce) / mass -- NEWTON.
-    //                            (`vrefp` + two Newton refinements is the reciprocal; the two stack
-    //                            lanes are the two values the previous two setters just wrote.)
-    //   0x825F9048..0x825F905C   SetVelocity( stack[0] + stack[1]*dt )   -- semi-implicit Euler
-    //   0x825F9060..0x825F9078   SetPosition( reg0.w + stack[0]*dt )
-    //   0x825F907C..0x825F9084   SetExternalForce( <hoisted reg> )
-    // where `stack` is the 16-byte scratch at r28 that the body re-loads from the spring's
-    // mvVelocity_Acceleration_DampingForce_SpringForce after each setter.
-    // ⇒ **mag in ApplySuspensionForces reduces to `springForce + dampingForce + externalForce`.**
+    // The "duplicate splats" that made the prologue look ambiguous (v117/v126, v114/v124,
+    // v113/v121, v110/v122) are simply those assert copies, `stvx128`d to var_3D0/3E0/3F0/400/410.
+    // ⭐ v112 == unk_82FB9160 reads ALL ZEROS in the image; it is the static-init splat of
+    // flt_8208F83C == 9.81000042, exactly as BrnVehicleConstants.h:35-42 already records -- and
+    // that header ALREADY said "UpdateSuspensionSprings computes k = massOnSpring * g /
+    // restDisplacement", which is precisely what 0x825F81CC..0x825F81EC does. No new constant.
     //
-    // ⭐ THE LOOP SHAPE, ALSO PINNED:
-    //   0x825F81AC  r30 = &maWheels[i]      (`mulli r11, r10, 0xE0` off the committed 0x130 seat)
-    //   0x825F81B4  if (maWheels[i].mu8State (+0xD7 -> abs 0x207) == 2) skip the wheel entirely
-    //   0x825F81DC  r26 = &maSprings[i]     (`(idx + 0x4B) * 0x30` == +0xE10 + i*0x30 -- the SAME
-    //               committed seat SetupSuspension above walks; the two agree, which is itself a
-    //               cross-check on the maSprings offset)
-    //   0x825F81F0  **`lbz r11, 0x158(r30)` == maWheels[i].mRoadContact.mbIsOnGround** (the identical
-    //               seat RaceCarPhysics::AddTractionPoint writes with `stb 1, 0x158(r8)`), and the
-    //               body FORKS on it: the grounded arm seeds mass/damping at 0x825F8208/0x825F8214,
-    //               the airborne arm at 0x825F89FC/0x825F8A08.
-    //   0x825F9BE8  `blt cr6, loc_825F81AC` -- four iterations.
+    // ⚠️⚠️ ARITY: `vmr128 v118,v1` at 0x825F7B04 reads an INCOMING register, and the caller
+    // UpdateSuspension @0x8261F698 parks dt (`vmr128 v127,v1`) then re-issues `vmr128 v1,v127`
+    // before each phase call including 0x825F6D8. So the parameter is real and the committed
+    // no-argument declaration was a slice artifact -- [[the-work-is-in-a-prepare-stage]]: recover
+    // the signature from the asm, not from the PC declaration.
     //
-    // ⛔ WHAT IS STILL GENUINELY OPEN, so the next wave does not think it is done: the ~20 hoisted
-    // prologue registers (v111..v127 as IDA prints them) that feed stiffness, mass, damping,
-    // position and the external force, and the 24 CgsDev::Assert blocks interleaved between the
-    // setters (24 x BeginAssert/AppendFormat/FireAssert/EndAssert -- ~840 of the 2,231 instructions
-    // are assert plumbing, so the real body is ~1,390). Resolve the +32 skew on each `*128` source
-    // BEFORE trusting any of them. Cost measured this wave with cost4.py: **2,231 instructions, and
-    // everything it calls is already MOUNTED and real** (all eight SuspensionSpring setters +
-    // Prepare); the only not-in-tree weight in its whole closure is 85 instructions across three
-    // unnamed `sub_`.
-    // =============================================================================================
     // ---------------------------------------------------------------------------------------------
-    void VehiclePhysics::UpdateSuspensionSprings()
+    // PASS 1 (0x825F7FF4..0x825F803C) -- WHERE DOES THE AIRBORNE WHEELS' WEIGHT GO?
+    //   for each wheel, taking mvSpringMassScalers lane-by-lane (v116 rotated one lane per step):
+    //     state==2 OR onGround -> groundedScalerSum += scaler        (vaddfp128 v125)
+    //     otherwise            -> airborneMassSum   += mass*scaler   (vmaddfp128 v115)
+    //   then recip = 1/groundedScalerSum (0x825F8044 vrefp + two Newton refinements).
+    // ⭐ SELF-CHECK DONE BEFORE WRITING, AND IT IS EXACT: the grounded arm below assigns
+    //   m_i = scaler_i * (M + airborneMassSum/groundedScalerSum), so summing over the grounded
+    //   wheels gives M*S_g + M*(sum of airborne scalers) = M * (sum of ALL scalers) = M * 1.0.
+    //   **Total mass is conserved to the last term** -- which is exactly what a suspension must do
+    //   when a wheel leaves the road: the wheels still down carry the whole car.
+    //
+    // PASS 2 (0x825F81AC..0x825F9BE8) -- four wheels, `mulli r11,r10,0xE0` off the committed 0x130
+    // seat, spring at `(0x4B+i)*0x30` == the committed +0xE10.
+    //   0x825F81B4  maWheels[i].mu8State == 2 -> skip the wheel ENTIRELY (and, note, WITHOUT
+    //               rotating the scaler register -- the rotate at 0x825F9BC8 is jumped over; that
+    //               is reproduced literally below rather than tidied away).
+    //   0x825F81EC  SetStiffness( mass * scaler * GRAVITY / restDisplacement )
+    //   0x825F81F0  **`lbz r11,0x158(r30)` == mRoadContact.mbIsOnGround** -- the fork:
+    //     GROUNDED (0x825F8200..0x825F89EC):
+    //        SetMass    ( scaler*(M + airborneMassSum/groundedScalerSum) )
+    //        SetDamping ( spring damping )
+    //        SetVelocity( dot3( mLinearVelocity + omega x (R * mPosition), mRoadContact.mNormal ) )
+    //                     -- the classic two-vpermwi 0x63 cross product at 0x825F83D0..0x825F83E0;
+    //                        the transform here deliberately OMITS the translation (a lever arm,
+    //                        not a point), which is how it differs from ApplyWheelWeight's.
+    //        SetPosition( -((mPosition.y - mStreamedPositionPlusTwistAmount.y) + restDisplacement) )
+    //     AIRBORNE (0x825F89F0..0x825F8A08):
+    //        SetMass    ( maWheels[i].mIntegrationVariables.w )   -- the unsprung wheel mass
+    //        SetDamping ( in-air damping )
+    //        and NOTHING else: velocity and position carry over, owned by pass 3.
+    //   COMMON INTEGRATE (0x825F8F98..0x825F9084), re-loading the spring after every setter:
+    //        SetDampingForce ( -velocity * damping * mass )
+    //        SetSpringForce  ( -stiffness * position )                        <- HOOKE
+    //        SetAcceleration ( (dampingForce+springForce+externalForce)/mass) <- NEWTON
+    //        SetVelocity     ( velocity + acceleration*dt )                   <- semi-implicit Euler
+    //        SetPosition     ( position + velocity*dt )
+    //        SetExternalForce( 0 )      -- the weight-transfer force is CONSUMED, then cleared.
+    //
+    // PASS 3 (0x825F9C0C..0x825F9DB4) -- AIRBORNE WHEELS ONLY. Drive the visible wheel from the
+    // spring and clamp it to the travel stops, then round-trip the clamp back into the spring:
+    //        y = clamp( streamedY - restDisplacement + springPosition,
+    //                   mSuspensionAndInertiaVariables.x, mSuspensionAndInertiaVariables.y )
+    //        mPosition.y = y ;  SetPosition( y + restDisplacement - streamedY )
+    // ⭐ The two clamp bounds are Wheel::Prepare's already-committed lane map (`f4 -> .x =
+    // streamedY - travelDown`, `f3 -> .y = streamedY + travelUp`) -- an independent confirmation
+    // that arrived from a different function in a different wave.
+    //
+    // ⭐⭐ ON THE TWO OPPOSITE POSITION SIGNS, because they look like a bug and are not.
+    // Grounded stores -(compression), pass 3 stores +(compression). BOTH have their zero at the
+    // SAME physical place (wheel fully extended, y == streamedY - restDisplacement), and each sign
+    // makes `springForce = -k*position` push the right way for its own arm: a grounded spring
+    // pushes the BODY up, an airborne spring pushes the WHEEL down toward full extension. Pass 3
+    // is also exactly the algebraic inverse of its own forward map, so with no clamping it is a
+    // no-op -- which is what proves the reading rather than merely permitting it.
+    //
+    // ⛔ ELIDED, and named so nobody thinks the body is short: the six prologue asserts and the 24
+    // in-loop CgsDev::Assert blocks (BeginAssert/AppendFormat x N/FireAssert/EndAssert) -- ~840 of
+    // the 2,231 instructions. They are debug-build finite-value guards ("..., please tell Graham
+    // D."), the project convention elides them, and they write nothing the game reads.
+    // =============================================================================================
+    void VehiclePhysics::UpdateSuspensionSprings(VecFloat lvfTimeStep)
     {
-        // FIDELITY: BLOCKED -- see the block comment above. Hex-Rays "local variable allocation has failed";
-        // the per-spring SuspensionSpring setter cascade is not store-faithfully recoverable. No fabricated
-        // math. ⭐ The three CORE formulas (Hooke / damping / Newton) and the loop shape ARE recovered
-        // and banked in the banner; what is missing is the ~20 hoisted VMX inputs, not the algebra.
+        // ---- the hoisted per-vehicle constants (prologue 0x825F7B08..0x825F7BF8) ----
+        const VehicleAttribs::SuspensionAttribs& lrSus = mpAttribs->mSuspensionAttribs;
+
+        const f32 lfBodyMass =
+            mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;          // v114
+        const f32 lfRestDisplacement =
+            lrSus.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.x;               // v117
+        const f32 lfSpringDamping =
+            lrSus.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.y;               // v113
+        const f32 lfInAirDamping =
+            lrSus.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.z; // v110
+        const f32 lfRecipRestDisplacement = 1.0f / lfRestDisplacement;                          // v111
+        const f32 lfTimeStep = lvfTimeStep.x;                                                   // v118
+
+        // (the six prologue "Invalid <thing>, please tell Graham D" asserts are elided -- debug.)
+
+        // v116: mvSpringMassScalers, rotated one lane left per SERVICED wheel. Kept as an explicit
+        // rotating register because the console's rotate is INSIDE the not-skipped path (see below).
+        Vector4 lvRotatingScalers = mvSpringMassScalers;
+
+        // ---- PASS 1: redistribute the airborne wheels' share of the body mass ----
+        f32 lfGroundedScalerSum = 0.0f;   // v125
+        f32 lfAirborneMassSum   = 0.0f;   // v115
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            const Wheel& lrWheel = maWheels[liWheel];
+            const f32 lfScaler = lvRotatingScalers.x;
+
+            if (lrWheel.mu8State == 2 || lrWheel.GetRoadContact().mbIsOnGround)
+                lfGroundedScalerSum += lfScaler;
+            else
+                lfAirborneMassSum += lfBodyMass * lfScaler;
+
+            // 0x825F8024/0x825F8034: unconditional one-lane rotate in this pass.
+            lvRotatingScalers = Vector4{ lvRotatingScalers.y, lvRotatingScalers.z,
+                                         lvRotatingScalers.w, lvRotatingScalers.x };
+        }
+        const f32 lfRecipGroundedScalerSum = 1.0f / lfGroundedScalerSum;   // v123 (0x825F8044)
+
+        // ---- PASS 2: per wheel -- seed the spring, then integrate it one step ----
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            Wheel& lrWheel = maWheels[liWheel];
+
+            // 0x825F81B4: a detached wheel is skipped whole, and the console jumps PAST the scaler
+            // rotate to do it (loc_825F9BDC is after 0x825F9BD8). Reproduced, not tidied.
+            if (lrWheel.mu8State == 2)
+                continue;
+
+            SuspensionSpring& lrSpring = maSprings[liWheel];
+            const f32 lfScaler     = lvRotatingScalers.x;            // v127
+            const f32 lfSprungMass = lfBodyMass * lfScaler;          // v126
+
+            // 0x825F81E4/E8: k = m*g/restDisplacement -- the same law SetupSuspension seeds with.
+            lrSpring.SetStiffness((lfSprungMass * KF_GRAVITY) * lfRecipRestDisplacement);
+
+            if (lrWheel.GetRoadContact().mbIsOnGround)
+            {
+                // -- GROUNDED --------------------------------------------------------------------
+                // 0x825F8200/0x825F8204: carry this wheel's own share PLUS its slice of whatever
+                // the airborne wheels are no longer carrying.
+                lrSpring.SetMass(lfRecipGroundedScalerSum * (lfAirborneMassSum * lfScaler) + lfSprungMass);
+                lrSpring.SetDamping(lfSpringDamping);
+
+                // (debug-only "Invalid wheel position" assert on mPosition -- elided.)
+
+                // 0x825F8340..0x825F83E4: the velocity of the suspension point, resolved along the
+                // road normal. The lever arm is R * mPosition with NO translation.
+                const Vector3& lvLocal = lrWheel.mPosition;
+                const Vector3& lvRight = mTransform.Right();
+                const Vector3& lvUp    = mTransform.Up();
+                const Vector3& lvAt    = mTransform.At();
+                const f32 lfArmX = lvRight.x * lvLocal.x + lvUp.x * lvLocal.y + lvAt.x * lvLocal.z;
+                const f32 lfArmY = lvRight.y * lvLocal.x + lvUp.y * lvLocal.y + lvAt.y * lvLocal.z;
+                const f32 lfArmZ = lvRight.z * lvLocal.x + lvUp.z * lvLocal.y + lvAt.z * lvLocal.z;
+
+                const Vector3& lvOmega = mAngularVelocity;
+                const f32 lfVx = mLinearVelocity.x + (lvOmega.y * lfArmZ - lvOmega.z * lfArmY);
+                const f32 lfVy = mLinearVelocity.y + (lvOmega.z * lfArmX - lvOmega.x * lfArmZ);
+                const f32 lfVz = mLinearVelocity.z + (lvOmega.x * lfArmY - lvOmega.y * lfArmX);
+
+                const Vector3& lvNormal = lrWheel.GetRoadContact().mNormal;
+                lrSpring.SetVelocity(lfVx * lvNormal.x + lfVy * lvNormal.y + lfVz * lvNormal.z);
+
+                // (debug-only "Invalid suspension velocity" assert -- elided.)
+
+                // 0x825F8730..0x825F875C: the suspension length, negated. Zero when the wheel sits
+                // at full extension (streamedY - restDisplacement); negative once compressed, so
+                // -k*position pushes the body UP.
+                const f32 lfStreamedY = lrWheel.mStreamedPositionPlusTwistAmount.y;
+                lrSpring.SetPosition(-((lrWheel.mPosition.y - lfStreamedY) + lfRestDisplacement));
+
+                // (debug-only "Invalid suspension length" assert -- elided.)
+            }
+            else
+            {
+                // -- AIRBORNE (0x825F89F0) -- the unsprung wheel falls on its own mass ------------
+                lrSpring.SetMass(lrWheel.mIntegrationVariables.w);
+                lrSpring.SetDamping(lfInAirDamping);
+                // velocity + position are NOT touched here; pass 3 owns the airborne position.
+            }
+
+            // -- COMMON INTEGRATE (0x825F8F98..0x825F9084) ---------------------------------------
+            // The console re-loads the spring registers after each setter; these reads do the same.
+            // (the "Invalid {velocity,mass,position} before integrate" asserts are elided.)
+            {
+                const f32 lfVelocity  = lrSpring.mvVelocity_Acceleration_DampingForce_SpringForce.x;
+                const f32 lfDamping   = lrSpring.mvStiffness_Damping_Mass_Position.y;
+                const f32 lfMass      = lrSpring.mvStiffness_Damping_Mass_Position.z;
+                lrSpring.SetDampingForce(-lfVelocity * lfDamping * lfMass);            // 0x825F8FC4
+            }
+            {
+                const f32 lfStiffness = lrSpring.mvStiffness_Damping_Mass_Position.x;
+                const f32 lfPosition  = lrSpring.mvStiffness_Damping_Mass_Position.w;
+                lrSpring.SetSpringForce(-lfStiffness * lfPosition);                    // 0x825F8FE4
+            }
+            {
+                const f32 lfDampingForce = lrSpring.mvVelocity_Acceleration_DampingForce_SpringForce.z;
+                const f32 lfSpringForce  = lrSpring.mvVelocity_Acceleration_DampingForce_SpringForce.w;
+                const f32 lfExternal     = lrSpring.mvExternalForce.x;
+                const f32 lfMass         = lrSpring.mvStiffness_Damping_Mass_Position.z;
+                lrSpring.SetAcceleration((lfDampingForce + lfSpringForce + lfExternal) / lfMass);  // 0x825F9044
+            }
+            {
+                const f32 lfVelocity     = lrSpring.mvVelocity_Acceleration_DampingForce_SpringForce.x;
+                const f32 lfAcceleration = lrSpring.mvVelocity_Acceleration_DampingForce_SpringForce.y;
+                lrSpring.SetVelocity(lfAcceleration * lfTimeStep + lfVelocity);        // 0x825F905C
+            }
+            {
+                const f32 lfVelocity = lrSpring.mvVelocity_Acceleration_DampingForce_SpringForce.x;
+                const f32 lfPosition = lrSpring.mvStiffness_Damping_Mass_Position.w;
+                lrSpring.SetPosition(lfVelocity * lfTimeStep + lfPosition);            // 0x825F9078
+            }
+            lrSpring.SetExternalForce(0.0f);                                           // 0x825F9084
+            // (the "Invalid {velocity,mass,position} after integrate" + acceleration/force asserts
+            //  are elided -- eight more blocks, all debug.)
+
+            // 0x825F9BC8..0x825F9BD8: advance the scaler register -- reached ONLY by a serviced wheel.
+            lvRotatingScalers = Vector4{ lvRotatingScalers.y, lvRotatingScalers.z,
+                                         lvRotatingScalers.w, lvRotatingScalers.x };
+        }
+
+        // ---- PASS 3 (0x825F9C0C): airborne wheels -- extend the visible wheel, clamp, round-trip ----
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            Wheel& lrWheel = maWheels[liWheel];
+            if (lrWheel.mu8State == 2)                          // 0x825F9C18
+                continue;
+            if (lrWheel.GetRoadContact().mbIsOnGround)          // 0x825F9C24
+                continue;
+
+            SuspensionSpring& lrSpring = maSprings[liWheel];
+
+            const f32 lfStreamedY   = lrWheel.mStreamedPositionPlusTwistAmount.y;
+            const f32 lfTravelDown  = lrWheel.mSuspensionAndInertiaVariables.x;   // streamedY - travelDown
+            const f32 lfTravelUp    = lrWheel.mSuspensionAndInertiaVariables.y;   // streamedY + travelUp
+            const f32 lfSpringPos   = lrSpring.mvStiffness_Damping_Mass_Position.w;
+
+            f32 lfWheelY = (lfStreamedY - lfRestDisplacement) + lfSpringPos;      // 0x825F9C54/58
+            lfWheelY = (lfWheelY > lfTravelDown) ? lfWheelY : lfTravelDown;       // 0x825F9C5C vmaxfp
+            lfWheelY = (lfWheelY < lfTravelUp)   ? lfWheelY : lfTravelUp;         // 0x825F9C60 vminfp
+
+            lrWheel.mPosition.y = lfWheelY;                                       // 0x825F9C6C/74
+
+            // (debug-only "RwMathVPU::VecFloat( lvfClampedWheelPos... )" assert -- elided.)
+
+            // 0x825F9D94/9D9C: the exact inverse of the map above, so an unclamped wheel round-trips
+            // to the identical value and only a wheel that hit a stop has its spring corrected.
+            lrSpring.SetPosition((lfWheelY + lfRestDisplacement) - lfStreamedY);
+        }
     }
 
 // [blocked] UpdateSuspensionPostSimulation  @0x825F6BB0 FLAGS: blocked: Hex-Rays 'local variable allocation has failed, the output may be wrong' -- a ~6600-line degenerate VMX128 giant (re-derive per-wheel suspension velocities post-solve, find the most-loaded wheel, inject penetration-recovery impulses via CalculateCollisionImpulseWithInanimateOb/AddLocalImpulse, conditionally clear the hard-landing latch, call StabiliseAfterHardLanding); the per-lane routing + un-homed rodata are not recoverable
