@@ -1888,14 +1888,20 @@ namespace Vehicle
         // @0x825CF718 (190) -- ⭐ BODIED 2026-08-11 (ground-contact wave); the 2026-08-03 BLOCKED
         // verdict is RETRACTED in the .cpp with the four rodata values read out of the image.
         // Seeds maSprings[i].{stiffness, damping, mass} from mvSpringMassScalers x the body mass.
-        // ⛔ It does NOT make the car hold its height: ApplySuspensionForces multiplies MASS by the
-        // ACCELERATION lane, whose only writer is UpdateSuspensionSprings @0x825F7AF0 (still empty).
         void SetupSuspension();                             // @0x825CF718
-        void ApplyWheelWeight();                            // @0x825F7898 PARTIAL
+        // ⭐ BODIED 2026-08-11 (suspension-springs wave). Its "PARTIAL / un-pinned lane" verdict is
+        // RETRACTED in the .cpp: it writes maWheels[i].mPosition.y -- the exact input the grounded
+        // arm of UpdateSuspensionSprings reads -- and every offset it touches is a committed member.
+        void ApplyWheelWeight();                            // @0x825F7898
         void CalculateWeightTransfer();                     // @0x825F9DD0 PARTIAL (units 0.10193679)
-        void ApplySuspensionForces();                       // @0x825D1EE8 PARTIAL
+        void ApplySuspensionForces();                       // @0x825D1EE8 (lever arm + direction + gate corrected 2026-08-11)
         void UpdateSuspension(f64 lfTimeStep);              // @0x8261F698 CLEAN (the virtual spine)
-        void UpdateSuspensionSprings();                     // @0x825F7AF0 BLOCKED (degenerate VMX)
+        // ⭐ BODIED 2026-08-11 (suspension-springs wave); the BLOCKED verdict is RETRACTED in the
+        // .cpp. ⚠️ ARITY CONFORMED at the same time: UpdateSuspension @0x8261F698 parks the
+        // incoming dt (`vmr128 v127,v1`) and re-issues `vmr128 v1,v127` before EACH of its four
+        // phase calls, and the callee integrates with it (0x825F9058/0x825F9074). The committed
+        // no-parameter form was a slice artifact -- the same shape as SetupSuspension's, inverted.
+        void UpdateSuspensionSprings(VecFloat lvfTimeStep); // @0x825F7AF0
         void UpdateSuspensionPostSimulation();              // @0x825F6BB0 BLOCKED (degenerate VMX giant)
         void StabiliseAfterHardLanding();                   // @0x825D1890 PARTIAL (powf settle blocked)
 

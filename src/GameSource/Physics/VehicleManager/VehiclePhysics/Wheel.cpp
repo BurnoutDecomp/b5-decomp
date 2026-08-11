@@ -157,49 +157,85 @@ namespace Vehicle
     // ===========================================================================================
     //  Wheel::Reset   @0x825D7190
     // ===========================================================================================
-    // Reset the wheel to a road-contact position. The asm zeroes the suspension/integration lanes
-    // (like Clear), then normalizes the supplied vector via vrsqrtefp + two Newton refinement steps
-    // (zero-guarded by vcmpeqfp-against-zero), scales it by an un-homed rodata factor (unk_82FB8AB0)
-    // and a second vrefp+Newton reciprocal, stores the result into the integration register, and
-    // finishes with SetPosition() reading the suspension register (+0x90 lane region).
+    // ⛔⛔ REBODIED 2026-08-11 (suspension-springs wave). THE PREVIOUS BODY DESTROYED TWO LIVE
+    // VALUES AND IT WAS FOUND BY A NaN, NOT BY A REVIEW -- the textbook [[silent-drop-stubs]]
+    // shape: three `SetZero()` calls where the console writes SINGLE LANES.
     //
-    // FLAG (rodata): the scale factor unk_82FB8AB0 is an un-homed runtime/.rdata scratch global
-    // absent from the function export -> carried as an honest flagged-0 placeholder. The normalize
-    // (mag/Newton) and the member stores it touches are EXACT; the scaled integration lane stays 0
-    // until the factor is recovered. NEVER fabricated.
+    // The console never clears these registers wholesale. It read-modify-writes them with
+    // `vrlimi128` masks 8/4/2 -- lanes x, y, z -- and **mask 1 (lane .w) is never used**:
+    //     0x825D71BC  lvx128 v8,[r3+0x30] ; vrlimi 8,0 ; vrlimi 4,3 ; vrlimi 2,2 ; stvx128
+    //     0x825D71E0  lvx128 v8,[r3+0x40] ; vrlimi 8,0 ; vrlimi 4,3 ; vrlimi 2,2 ; stvx128
+    //     0x825D7204  lvx128 v8,[r3+0x70] ; vrlimi 2,2 ONLY            ; stvx128
+    // So `mIntegrationVariables.w` (the UNSPRUNG WHEEL MASS, 30 kg, seeded by Wheel::Prepare) and
+    // `mSlipVariables.w` (THE WHEEL RADIUS) both SURVIVE a Reset on console. The old body wiped
+    // both, and wiped all four lanes of the +0x70 register instead of just .z.
+    //
+    // ⭐ WHAT THAT COST, MEASURED: with the unsprung mass gone, the airborne arm of
+    // UpdateSuspensionSprings @0x825F7AF0 divides the spring force by a zero mass -- 730 NaN
+    // asserts in one boot, and the flow never left BOOT. With the radius gone,
+    // ApplyWheelWeight's `radius - gap` silently loses the radius and seats every wheel at the
+    // wrong height. One defect, two consumers, and it only became visible when the first real
+    // consumer landed. ⚠️ Nothing about the old body was detectable by a compile gate.
+    //
+    // ⭐ AND THE ARGUMENT IS A VELOCITY, NOT A POSITION. The asm takes |v1| (vmsum3fp128 +
+    // vrsqrtefp with two Newton steps), multiplies by unk_82FB8AB0 and DIVIDES BY THE WHEEL
+    // RADIUS, then writes **lane 0 only** (`vrlimi128 v11,v0,8,0`):
+    //     0x825D7254  v13 = |v|^2 * (1/|v|)            == |v|
+    //     0x825D725C  vsel against vcmpeqfp(0,|v|^2)   -- zero input stays zero
+    //     0x825D7260  v13 = |v| * KF_RESET_SCALE
+    //     0x825D7264  v0  = vrefp(mSlipVariables.w) + 2 Newton     == 1 / wheel radius
+    //     0x825D7278  v0  = v0 * v13
+    //     0x825D727C  mIntegrationVariables.x = v0     (mask 8, lane 0 -- .y/.z/.w untouched)
+    // `speed / radius` is rad/s: this seeds the WHEEL SPIN so a placed car's wheels are already
+    // turning at road speed. That is the identical `mIntegrationVariables.x = target /
+    // mSlipVariables.w` idiom this tree already documents at VehiclePhysics.cpp:575 -- which is
+    // what names the lane, and it is why the old body's "normalize into a direction and store a
+    // whole vector" could never have been right: a direction divided by nothing is not rad/s.
+    // The parameter keeps its committed spelling so no caller changes; the comment names it.
+    //
+    // The tail is `lvx128 v1,[r3+0x90] ; b Wheel::SetPosition` -- a TAIL CALL, unchanged.
     void Wheel::Reset(Vector3 lvPosition)
     {
-        // ⭐ IDENTIFIED, not just filled. unk_82FB8AB0 <- flt_8200D4DC, static-init splat @0x82C5AF90,
-        // and the value 0.447039992 is BIT-IDENTICAL to flt_82F31928 -- the MPH->m/s conversion this
-        // image uses everywhere. So this is not an "un-homed rodata scale factor" of unknown meaning:
-        // Reset seeds the integration register from a direction expressed in MPH.
+        // ⭐ IDENTIFIED, not just filled (kept verbatim from the previous body -- this part was
+        // right). unk_82FB8AB0 <- flt_8200D4DC, static-init splat @0x82C5AF90, and the value
+        // 0.447039992 is BIT-IDENTICAL to flt_82F31928 -- the MPH->m/s conversion this image uses
+        // everywhere. So Reset seeds the wheel spin from a speed expressed in MPH.
         static const f32 KF_RESET_SCALE = 0.447039992f;   // unk_82FB8AB0 == flt_82F31928 (MPH -> m/s)
 
-        // Zero the integration / slip-region lanes the asm clears (vrlimi cascades at +0x30/+0x40),
-        // and the suspension-inertia register touched at +0x70 region.
-        mIntegrationVariables.SetZero();
-        mSlipVariables.SetZero();
-        mSpeedAndMassOnWheelVariables.SetZero();
+        // 0x825D71B8: mBodyPointVelocity (+0xA0) IS cleared whole (`stvx128 v0, r3, 0xA0`).
+        mBodyPointVelocity.SetZero();
 
-        // Normalize the supplied position vector (vmsum3fp128 |v|^2 + vrsqrtefp/Newton, zero-guarded).
+        // +0x30 / +0x40: lanes x, y, z only. ⛔ .w is the unsprung mass / the wheel radius --
+        // the console preserves both and so must this.
+        mIntegrationVariables.x = 0.0f;
+        mIntegrationVariables.y = 0.0f;
+        mIntegrationVariables.z = 0.0f;
+        mSlipVariables.x = 0.0f;
+        mSlipVariables.y = 0.0f;
+        mSlipVariables.z = 0.0f;
+
+        // +0x70: lane z ONLY (a single `vrlimi128 v8, v0, 2, 2`).
+        mSpeedAndMassOnWheelVariables.z = 0.0f;
+
+        // 0x825D7214/18/20: the three trailing flag bytes.
+        mi8NumContacts          = 0;
+        mbHasTraction           = false;
+        mbBrokenAdhesiveLimit   = false;
+
+        // |lvPosition| -- the magnitude, zero-guarded exactly as the vsel does.
         const f32 lfMagSq = lvPosition.x * lvPosition.x
                           + lvPosition.y * lvPosition.y
                           + lvPosition.z * lvPosition.z;
-        Vector3 lvUnit{ 0.0f, 0.0f, 0.0f, 0.0f };
-        if (lfMagSq > 0.0f)
-        {
-            const f32 lfInvMag = 1.0f / std::sqrt(lfMagSq);
-            lvUnit = Vector3{ lvPosition.x * lfInvMag,
-                              lvPosition.y * lfInvMag,
-                              lvPosition.z * lfInvMag, 0.0f };
-        }
+        const f32 lfMagnitude = (lfMagSq > 0.0f) ? std::sqrt(lfMagSq) : 0.0f;
 
-        // Scaled unit direction -> integration register (flagged-inert until KF_RESET_SCALE lands).
-        mIntegrationVariables = Vector4{ lvUnit.x * KF_RESET_SCALE,
-                                         lvUnit.y * KF_RESET_SCALE,
-                                         lvUnit.z * KF_RESET_SCALE, 0.0f };
+        // spin (rad/s) = speed / wheel radius. The radius is the lane the clear above preserved;
+        // if a caller ever Resets a wheel that was never Prepared it is 0, and the console's
+        // vrefp(0) would go to infinity here just the same -- not guarded, because the console
+        // does not guard it.
+        const f32 lfWheelRadius = mSlipVariables.w;
+        mIntegrationVariables.x = (lfMagnitude * KF_RESET_SCALE) / lfWheelRadius;
 
-        // The asm tail loads the suspension register (+0x90) into v1 and calls SetPosition with it.
+        // 0x825D7284/88: tail call with the +0x90 register.
         SetPosition(mStreamedPositionPlusTwistAmount.GetVector3());
     }
 
