@@ -111,6 +111,24 @@ public:
                  CgsModule::IOBufferStack*        lpUpdateOutputBufferStack,
                  const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
 
+    // ------------------------------------------------------------------------
+    // ⭐ X360 0x8239ED10 -- the module's SECOND-pass prepare. Its ONE caller is
+    // LoadingScriptedState::LoadGameState2 @0x823EF4D8, i.e. scripted-load stage 3, which pumps
+    // it until it returns true and forwards the requests it stages into the frame's GameData
+    // input (AppendRequestInterface<3072>), exactly like GamePrepare stage 4 does for Prepare.
+    //
+    // ⭐ THIS is where PROGRESSION.DAT is loaded: case 0/1 calls
+    // ProgressionManager::Prepare2 @0x8239DC98, whose LoadProgressionData @0x82399ED0 does
+    // LoadBundle("Progression.dat", pool 5) -> acquire("ProgressionData") -> bind
+    // mpProgressionData. Nothing on PC ran it before 2026-08-11, which is why
+    // ProgressionManager::GetProgressionData() answered NULL and OnPlayerCarChange fired the
+    // console's own "lpProgressionData != NULL" assert (BrnGameStateModule.cpp:4636) the moment
+    // the junkyard handed a car over.
+    //
+    // ⚠️ SLICE: the progression leg is REAL; the StreetManager leg (case 2) logs once and
+    // advances -- see the body.
+    bool Prepare2(GameStateModuleIO::OutputBuffer* lpOutputBuffer);
+
     // The track's TriggerData / traffic-lane owner, and the spawn-location source the junkyard
     // car-select flow walks. DWARF BrnGameStateModule.h:201 (X360 this+42320).
     TriggerQueryManager*       GetTriggerQueryManager()       { return &mTriggerQueryManager; }
@@ -608,6 +626,18 @@ private:
     // classes do (they are different words at different offsets, +8 on the base vs +552 here).
     // The base's copy is private, so there is no ambiguity; nothing reads it through this class.
     EPrepareStage mePrepareStage = E_PREPARESTAGE_START;
+
+    // X360 this+556 (0x22C) -- Prepare2's OWN stage word, four bytes past mePrepareStage. Proven
+    // straight off 0x8239ED10 (`lwz r11, 0x22C(r31)` / three `stw ..., 0x22C(r31)`). It is NOT
+    // the word Prepare's tail clears: that one is this+560 (0x230), a different flag.
+    enum EPrepare2Stage
+    {
+        E_PREPARE2STAGE_START          = 0,   // cases 0 and 1 share the progression leg
+        E_PREPARE2STAGE_PROGRESSION    = 1,
+        E_PREPARE2STAGE_STREET_MANAGER = 2,
+        E_PREPARE2STAGE_DONE           = 3,
+    };
+    EPrepare2Stage mePrepare2Stage = E_PREPARE2STAGE_START;
 
     // DWARF BrnGameStateModule.h:201 (X360 this+42320). The track-trigger dispatcher that owns
     // the loaded TriggerData / traffic-lane resources. Held BY VALUE as the console holds it.

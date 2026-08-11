@@ -12,6 +12,10 @@
 
 namespace BrnAI { struct AISectionsData; }   // ResourcePtr<T> tag only (never dereferenced here)
 namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue; }   // SendGameCompletionResults param (pointer-only)
+namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class EventReceiverQueue; }   // Prepare2 / LoadProgressionData reply queue (pointer-only)
+// The GameState module's output buffer -- LoadProgressionData reaches its RequestInterface<3072>
+// through it. Pointer-only here; the .cpp includes the owning BrnGameStateModuleIO.h.
+namespace BrnGameState { namespace GameStateModuleIO { struct OutputBuffer; } }
 
 // Foreign types the additive DriveThruManager-facing accessors route by pointer (declare-only).
 // Tags match the committed homes (CarData/ProgressionData = struct, AchievementManagerBase = class)
@@ -218,8 +222,21 @@ public:
     // component and sets up the roaming sections. Returns true on a successful load.
     // FLAG: a3 (mpGameStateModule back-pointer, stored at +0x2093C) and the SetupRoamingSections
     // argument list are modelled as the void* the X360 forwards; reconcile when those TUs land.
-    bool Prepare2(void* lpOutput, void* lpGameStateModule, BrnGameState::GameStateModuleIO::GameActionQueue* lpReceiverQueue,
+    //
+    // ⚠️ SIGNATURE CORRECTION (2026-08-11): the fourth argument is the GameState module's
+    // EventReceiverQueue<3072,16> (X360 `a1 + 232384`, the same queue GameStateModule::Prepare
+    // hands TriggerQueryManager::Prepare), NOT the VariableEventQueue<13312,16> game-action queue
+    // the earlier declaration named. LoadProgressionData below drains replies out of it, so the
+    // wrong type was not merely cosmetic.
+    bool Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer* lpOutput, void* lpGameStateModule,
+                  CgsModule::EventReceiverQueue<3072, 16>* lpReceiverQueue,
                   void* lpTriggerData, BrnGameState::AchievementManagerBase* lpAchievementManager);
+
+    // X360 0x82399ED0. The console's PROGRESSION.DAT loader -- the resumable five-stage machine
+    // Prepare2 gates on. Returns true once the "ProgressionData" resource has been acquired and
+    // bound into mpProgressionData; false while a reply is still outstanding.
+    bool LoadProgressionData(BrnGameState::GameStateModuleIO::OutputBuffer* lpOutput,
+                             CgsModule::EventReceiverQueue<3072, 16>* lpReceiverQueue);
 
     // X360 0x82311520. True when road rules are available: the player has reached medal-progress >= 4
     // OR either road-rules-availability flag is set. (Read off the embedded Profile + two tail flags.)
@@ -353,6 +370,20 @@ private:
     // first: it reads +133348's mpResourceMemory and calls
     // ResourcePtr<ProgressionData>::operator-> on it. No committed code used the
     // old names except the ctor's Reset() calls (now the members' own default ctors).
+    // X360 +133340 (0x2085C) -- the word LoadProgressionData @0x82399ED0 switches on (`v6 = a1 +
+    // 133340`), i.e. the DWARF's ProgressionManager::LoadStage. It sits immediately before the
+    // resource pointer below, exactly as the console lays it out. The five states are the
+    // console's own switch cases 0..4.
+    enum ELoadStage
+    {
+        E_LOADSTAGE_NOT_STARTED      = 0,   // nothing requested yet
+        E_LOADSTAGE_BUNDLE_REQUESTED = 1,   // LoadBundle("Progression.dat") issued
+        E_LOADSTAGE_BUNDLE_LOADED    = 2,   // reply in; about to acquire
+        E_LOADSTAGE_ACQUIRE_REQUESTED= 3,   // AcquireResource("ProgressionData") issued
+        E_LOADSTAGE_DONE             = 4    // mpProgressionData bound
+    };
+    ELoadStage meLoadStage = E_LOADSTAGE_NOT_STARTED;                             // X360 +133340
+
     CgsResource::ResourcePtr<BrnProgression::ProgressionData> mpProgressionData;  // X360 +133348 (0x20 stride)
     CgsResource::ResourcePtr<BrnAI::AISectionsData>           mpAISectionData;    // X360 +133380
 

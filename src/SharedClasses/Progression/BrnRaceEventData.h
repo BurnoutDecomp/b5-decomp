@@ -4,6 +4,8 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // CgsID (EventJunction / RaceEventData id accessors)
 
+#include <cstdint>            // uintptr_t (the serialised 32-bit pointer slots below)
+
 // =============================================================================
 // BrnRaceEventData.h  (OWNING HEADER for the BrnProgression race-event leaf types)
 //
@@ -27,14 +29,43 @@ namespace BrnProgression
 // the junction only stores it by pointer).
 struct RaceEventData;
 
+// ============================================================================================
+// SERIALISED 32-BIT POINTER SLOTS (2026-08-11) -- WHY THE TWO EVENT MEMBERS BELOW ARE u32.
+//
+// EventJunction and RaceEventData are *serialised resource records*: they are read straight out
+// of PROGRESSION.DAT's single 0x1000E resource, and their "pointers" are FILE-RELATIVE OFFSETS
+// that ProgressionData::FixUp rebases by adding the resource's 32-bit load base
+// (CgsResource::GetLoadBase). The slots are therefore FOUR bytes wide on the x64 host, exactly as
+// they are on the console -- the same rule already proven for VehicleListResource::muEntriesOffset
+// and the AttribSys vault entries.
+//
+// THIS WAS A LIVE LAYOUT CORRUPTION, not a style point. The earlier declaration spelled them as
+// host `const RaceEventData*`, which on x64 makes EventJunction 24 bytes (aligned to 32) against
+// the 16-byte record the data actually is, and pushes RaceEventData::miCheckpointCount from +0x1C
+// to +0x20 and the record from 248 to 256 bytes. The X360 proves the console widths directly --
+// ProgressionData::FixDown @0x8267F220 strides the junction array by 16 (`v3 += 16`) touching
+// `+4` and `+8`, and strides the event array by 248 (`v8 += 248`) touching `+24` -- and
+// tools/assets/bundles/progression_transcode.py keeps every one of those widths when it ports the
+// retail X360 bundle to platform 4 (its --verify contest is byte-for-byte against EA's own
+// little-endian port).
+// ============================================================================================
+
 // Per-junction record that links an offline event to an online event. DWARF BrnRaceEventData.h:
 // EventJunction. 16 bytes. ProgressionData's relocation walks the junction array and rebases the
-// two event pointers, so they are named here.
+// two event slots, so they are named here.
 struct EventJunction
 {
     u32 GetID() const { return muID; }
-    const RaceEventData* GetOfflineEvent() const { return mpOfflineEvent; }
-    const RaceEventData* GetOnlineEvent() const { return mpOnlineEvent; }
+    const RaceEventData* GetOfflineEvent() const
+    {
+        // Serialised slot -> host address (post-FixUp the slot holds the absolute address; the
+        // GameData heap is carved below 4 GB, the same guarantee VehicleListResource relies on).
+        return reinterpret_cast<const RaceEventData*>(static_cast<uintptr_t>(muOfflineEventOffset));
+    }
+    const RaceEventData* GetOnlineEvent() const
+    {
+        return reinterpret_cast<const RaceEventData*>(static_cast<uintptr_t>(muOnlineEventOffset));
+    }
     s32 GetShotGroup() const { return miShotGroup; }
 
     // ---- Remaining attested API (bodies in their own TUs; declaration-only) ----
@@ -48,11 +79,15 @@ struct EventJunction
     CgsID GetEventId() const;
     CgsID GetId() const;
 
-    u32                  muID;            // 0x00 (DWARF :80)
-    const RaceEventData* mpOfflineEvent;  // 0x04 (DWARF :82)
-    const RaceEventData* mpOnlineEvent;   // 0x08 (DWARF :83)
-    s32                  miShotGroup;     // 0x0C (DWARF :85)
+    u32 muID;                    // 0x00 (DWARF :80)
+    u32 muOfflineEventOffset;    // 0x04 (DWARF :82)  serialised 32-bit slot (FixUp-rebased)
+    u32 muOnlineEventOffset;     // 0x08 (DWARF :83)  serialised 32-bit slot (FixUp-rebased)
+    s32 miShotGroup;             // 0x0C (DWARF :85)
 };
+
+// The 16-byte stride ProgressionData::FixDown @0x8267F220 walks the junction array with
+// (`v3 += 16`), and the stride progression_transcode.py ports the retail table at.
+static_assert(sizeof(EventJunction) == 16, "BrnProgression::EventJunction is a 16-byte record");
 
 // Per-racer AI tuning record carried by the start-grid setup. DWARF BrnRaceEventData.h:99.
 // Four f32 fields: an aggression range, a skill scalar and a speed scalar.
@@ -226,14 +261,25 @@ struct RaceEventData
     u64   GetEventInstanceId() const;
 
 private:
-    u8                    maPad_00[0x18];                 // 0x00..0x17 (id / car id / leading scalars -- not in this slice)
-    const CheckpointData* mpaCheckpoints;                 // 0x18  checkpoint table base (X360 GetCheckpointData base)
-    s32                   miCheckpointCount;              // 0x1C  live checkpoint count
-    u8                    maPad_20[0x08];                 // 0x20..0x27 (not in this slice)
-    s32                   maiRankScores[KU_NUM_RANKS];    // 0x28  rank target scores (6 * 4 == 0x18 -> 0x40)
-    f32                   mafRankTimes[KU_NUM_RANKS];     // 0x40  rank target times  (6 * 4 == 0x18 -> 0x58)
-    u8                    maPad_58[0xA0];                 // 0x58..0xF7 (remaining record -- not in this slice; sizeof == 0xF8)
+    // The checkpoint-table base is a SERIALISED 32-BIT SLOT -- see the banner above EventJunction.
+    // ProgressionData::FixUp/FixDown rebase it in place (`*(event + 24) -= delta` @0x8267F220), and
+    // the whole record is 248 bytes with miCheckpointCount at +0x1C; a host pointer here would move
+    // the count to +0x20 and grow the record to 256, desynchronising it from the shipped data.
+    u8  maPad_00[0x18];                 // 0x00..0x17 (id / car id / leading scalars -- not in this slice)
+    u32 muaCheckpointsOffset;           // 0x18  checkpoint table base (FixUp-rebased 32-bit slot)
+    s32 miCheckpointCount;              // 0x1C  live checkpoint count
+    u8  maPad_20[0x08];                 // 0x20..0x27 (not in this slice)
+    s32 maiRankScores[KU_NUM_RANKS];    // 0x28  rank target scores (6 * 4 == 0x18 -> 0x40)
+    f32 mafRankTimes[KU_NUM_RANKS];     // 0x40  rank target times  (6 * 4 == 0x18 -> 0x58)
+    u8  maPad_58[0xA0];                 // 0x58..0xF7 (remaining record -- not in this slice; sizeof == 0xF8)
+
+    // ProgressionData's relocation walks the event table and rebases muaCheckpointsOffset.
+    friend struct ProgressionData;
 };
+
+// The 248-byte (0xF8) stride ProgressionData::FixDown @0x8267F220 walks the event table with
+// (`v8 += 248`), and the stride progression_transcode.py ports the retail table at.
+static_assert(sizeof(RaceEventData) == 248, "BrnProgression::RaceEventData is a 248-byte (0xF8) record");
 
 }
 
