@@ -48,10 +48,16 @@
 #include "SDKs/EATech/eajobs/job_types.h"                   // EA::Jobs::Param / JOB_ENVIRONMENT_LOCAL
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsFillTriangleCacheStreamJobDesc.h" // the descriptor RunFillTriangleCacheStream prepares
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithTriangleListStreamJobDesc.h" // the descriptor RunLineWithTriangleListStream prepares
 
 // The polygon-soup tester job entry every fill batch is wired to
 // (GameShared/Jobs/PolygonSoupTester/PolygonSoupTester.cpp; X360 rodata PolygonSoupTesterEntry).
 void PolygonSoupTesterEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param);
+
+// The contact-generator job entry every COLLISION batch is wired to -- the traction-line worker
+// lives behind it (GameShared/Jobs/ContactGenerator/ContactGenerator.cpp; X360 0x82920F10, an
+// export-set hole named from ContactGeneratorJob::Execute's xrefs_to).
+void ContactGeneratorEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param);
 
 namespace CgsSceneManager
 {
@@ -115,26 +121,132 @@ namespace CgsCollision
         return lpProducer;
     }
 
-    // X360 0x82810E80 -- export-set hole, body NOT reconstructed (see the file banner).
-    // ⛔ NEVER make this silent. Returning null is the console's own "nothing to dispatch" answer
-    // (its exported twin returns null when the producer holds zero commands), and
-    // EndVehicleTractionLineTests' `if (job) WaitOn(job)` handles null exactly as shipped -- but a
-    // null returned because the DISPATCHER IS MISSING is not the same fact, so it says so once.
+    // =============================================================================================
+    // ⭐⭐⭐ BaseCollisionGenerator::RunLineWithTriangleListStream @0x82810E80 (89) -- LANDED
+    // 2026-08-11 (traction-line wave). THE GATE THAT WAS HERE IS DELETED.
+    //
+    // ⚠️ EXPORT-SET HOLE. There is no 0x82810E80.json among the 30,084 (the directory jumps
+    // RunFillTriangleCacheStream @0x82810D38, last insn 0x82810E7C -> 0x82810FE8). The address
+    // was proved by decoding the `bl` word at the call site (0x825B5248 == 0x4825BC39 ->
+    // 0x82810E80) and the NAME independently by reading a neighbour's xref table (`STUB`
+    // @0x82AD5078's xrefs_to spells "...BaseCollisionGenerator::RunLineWithTriangleListStr[eam]").
+    // The 89-instruction BODY was then lifted from the image with ppcdis.py -- a decoder proved
+    // 82/82 against the exported twin @0x82810D38 first -- and every `bl` target resolved against
+    // the 30,084-entry name index. Its PS3 twin @0xB0AA0C carries the DWARF signature
+    //   _ZN15CgsSceneManager12CgsCollision22BaseCollisionGenerator29RunLineWithTriangleListStreamE
+    //     PN9CgsMemory24SimpleDataStreamProducerE
+    // and fires the SAME assert at the SAME source line (633 on both), which is the independent
+    // confirmation that the lift is right.
+    //
+    // The console body, instruction for instruction:
+    //   0x82810E98  cmplwi producer, 0        -> assert "lpStream != NULL"  (:633)
+    //   0x82810EC0  lwz  r28, 0x104(producer) -> miNumAddedCommands; 0 => return null
+    //   0x82810EDC  cmpi r28, 3 ; ble ; li r28, 3      -> clamp numBatches = min(count, 3)
+    //   0x82810EEC  AllocateJob()                      -> the parent job
+    //   per batch:
+    //   0x82810F24  CreateNewBatch()                   -> u16 index into maCollisionBatches
+    //   0x82810F54  stw  r20, 0x3D0(batch)             -> desc.mpStreamProducer
+    //   0x82810F4C  stw  r25, 0x4C0 / 0x82810F44 stfs f31, 0x4C4 (flt_82001CC0 == 0.0f)
+    //   0x82810F50  stw  r25, 0x4C8 / 0x82810F48 stb  r21, 0x4CF -> the CollisionJobDescription
+    //                                                               bookkeeping, type = 16
+    //   0x82810F58  Job::Clear(batch + 0x80)
+    //   0x82810F68  EntryPoint::SetName(job.mEntryPoint, "CollisionBatch")
+    //   0x82810F80  EntryPoint::SetCode(job.mEntryPoint, 0, ContactGeneratorEntry, 0)
+    //                                                     (0x82810F74 addi r5, r11, 3856 -> 0x82920F10)
+    //   0x82810F90  Job::SetData(job, batch + 0x3D0, 256)
+    //   0x82810F9C  <STUB>(job.mEntryPoint, 1)          -> SetCodeRecycle(CODE_RECYCLE_ON)
+    //   0x82810FAC  Job::DependsOn(parent, job, 1)
+    //   0x82810FBC  stbx r22, r11, r26                  -> mabUsedBatches[index] = true
+    //   0x82810FD0  JobScheduler::AddTree(&unk_830EA650, parent)
+    //   0x82810FD4  return parent
+    //
+    // ⚠️ TWO DIVERGENCES FROM THE EXPORTED TWIN THAT A COPY-PASTE WOULD GET WRONG, both read out
+    // of the image rather than assumed:
+    //   * the twin takes THREE register arguments and stores both r22 -> +0x3D0 and r23 -> +0x3D4;
+    //     this one reads only r3/r4 (r5 is never touched in the 89 instructions) and writes only
+    //     +0x3D0. Do not give it a spatial map.
+    //   * this one DOES write the per-batch flag array (`mabUsedBatches[index] = true`); the twin
+    //     does not touch it at all.
+    // ⚠️ AND ONE X360-vs-PS3 DIVERGENCE: X360 clamps the batch count to 3, PS3 to 4
+    // (`cmpwi cr7, liNumJobs, 4` @0xB0AA5C). X360 wins here; the two must not be averaged.
+    //
+    // ⚠️⚠️ FLAG PC-platform leaf: THE DISPATCH, AND ONLY THE DISPATCH -- identical in mechanism,
+    // reason and wording to the sibling RunFillTriangleCacheStream below, so read that banner too.
+    // `unk_830EA650` is the global EA::Jobs::JobScheduler singleton and on this build it does not
+    // exist (CgsHardwareInitPC.cpp:40 has it commented out). The AddTree call -- and only that
+    // call -- is replaced by running the batch's entry point inline, the precedent
+    // CgsLooseOctree.cpp:997 set and this file's sibling already uses.
+    //
+    // ⭐ AND THE RETURNED JOB IS STILL SAFE TO WaitOn -- CHECKED, NOT ASSUMED, because
+    // VehicleManager::EndVehicleTractionLineTests does exactly that with it. EA::Jobs::Job::WaitOn
+    // @0x82BCB238 opens with the console's own liveness guard (`mJobInstanceHandle.
+    // mSchedulerBackend != 0`), and a job that was never submitted has a null backend, so it
+    // returns immediately. No spin, no hang.
+    //
+    // ⚠️ ONE CONSEQUENCE, STATED PLAINLY: running inline means the traction-line batches execute
+    // SEQUENTIALLY inside StartVehicleTractionLineTests instead of concurrently before
+    // EndVehicleTractionLineTests. The results are identical (every batch drains the same command
+    // stream through the same atomic cursor and posts into the same result buffer), but the COST
+    // lands earlier in the frame.
+    // =============================================================================================
     EA::Jobs::Job*
-    BaseCollisionGenerator::RunLineWithTriangleListStream(CgsMemory::SimpleDataStreamProducer*)
+    BaseCollisionGenerator::RunLineWithTriangleListStream(
+        CgsMemory::SimpleDataStreamProducer* lpProducer)
     {
-        static bool s_bLogged = false;
-        if (!s_bLogged)
+        CGS_ASSERT(lpProducer != nullptr, "lpStream != NULL");   // CgsCollisionGenerator.cpp:633
+
+        // 0x82810EC0: an empty stream dispatches nothing. This is the console's own null, and
+        // EndVehicleTractionLineTests' `if (job) WaitOn(job)` is written for it.
+        if (lpProducer->GetNumCommands() == 0)
         {
-            s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "conductor gate: BaseCollisionGenerator::RunLineWithTriangleListStream "
-                       "@0x82810E80 (90; export hole, address PROVED by bl decode 2026-08-10) "
-                       "inert -- the job entry + ContactGeneratorJob::ExecuteLineWithTriangleList"
-                       "Stream @0x82921968 (589) are not in the tree [FLAG PC boot gate]\n";
+            return 0;
         }
-        return 0;
+
+        // 0x82810EDC..0x82810EE4. ⚠️ THREE on X360, FOUR on PS3.
+        const s32 KI_MAX_LINE_BATCHES = 3;
+
+        s32 liNumBatches = lpProducer->GetNumCommands();
+        if (liNumBatches > KI_MAX_LINE_BATCHES)
+        {
+            liNumBatches = KI_MAX_LINE_BATCHES;
+        }
+
+        EA::Jobs::Job* lpParentJob = AllocateJob();
+
+        for (s32 liBatch = 0; liBatch < liNumBatches; ++liBatch)
+        {
+            const u16 lu16BatchIndex = CreateNewBatch();
+            CollisionBatch& lrBatch = maCollisionBatches[lu16BatchIndex];
+
+            LineWithTriangleListStreamJobDesc* lpDesc =
+                reinterpret_cast<LineWithTriangleListStreamJobDesc*>(
+                    lrBatch.GetJobDescription().GetBuffer());
+            lpDesc->Prepare(lpProducer);
+
+            EA::Jobs::Job* lpJob = lrBatch.GetJob();
+            lpJob->Clear();
+            lpJob->SetName("CollisionBatch");
+            lpJob->SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+                           reinterpret_cast<const void*>(&ContactGeneratorEntry), 0);
+            lpJob->SetData(lpDesc,
+                           static_cast<int>(CollisionJobDescriptionStorage::KU_CONSOLE_BYTES));
+            lpJob->SetCodeRecycle(EA::Jobs::EntryPoint::CODE_RECYCLE_ON);
+            lpParentJob->DependsOn(*lpJob, EA::Jobs::Event::EVENT_WHEN_JOB_END);  // 0x82810FA0 `li r5, 1`
+
+            // 0x82810FBC `stbx r22, r11, r26` with r26 == 0x123C0 -- the flag the Fill sibling
+            // never writes. ⚠️ PS3 puts the same array at +0x93C0; X360's +0x123C0 is the seat
+            // mabUsedBatches already occupies in this tree, so it is reached by NAME.
+            mabUsedBatches[lu16BatchIndex] = true;
+
+            // ---- FLAG PC-platform leaf: run the job body here ----
+            // X360: JobScheduler::AddTree(&unk_830EA650, lpParentJob) after the loop.
+            ContactGeneratorEntry(EA::Jobs::Param(static_cast<void*>(lpDesc)),
+                                  EA::Jobs::Param(static_cast<void*>(lpDesc)),
+                                  EA::Jobs::Param(),
+                                  EA::Jobs::Param());
+        }
+
+        return lpParentJob;
     }
 
     // =============================================================================================

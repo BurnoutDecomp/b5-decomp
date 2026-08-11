@@ -50,6 +50,16 @@ namespace CgsCollision
         E_COLLISIONJOB_SPHERE_LIST_WITH_SPHERE_LIST       = 7,   // @0x82810198
         E_COLLISIONJOB_PRIMITIVE_PAIR_LIST                = 10,  // @0x82810478
         E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST  = 11,  // @0x82810278
+
+        // ⭐ 2026-08-11 (traction-line wave). 16 is written by the dispatcher
+        // (BaseCollisionGenerator::RunLineWithTriangleListStream @0x82810F0C `li r21, 16` ->
+        // `stb r21, 0x4CF(batch)`) and read straight back by ContactGeneratorJob::Execute
+        // @0x82926818 (`lbz r11, 0xFF(r4)`; `addi r11, r11, -5`; 12-way `bctr`, index 11).
+        // ⚠️ NAME MISMATCH CARRIED FROM THE CONSOLE: the PS3 DWARF enum member is spelled
+        // `E_COLLISION_TYPE_LINE_TRIANGLE_LIST` -- it DROPS "STREAM" -- while the descriptor
+        // class and the worker both keep it. The class name wins here; the console's own
+        // spelling is recorded in this comment so a future name-join can find either.
+        E_COLLISIONJOB_LINE_WITH_TRIANGLE_LIST_STREAM     = 16,  // @0x82810E80 -> the traction line
     };
 
     struct CollisionJobDescription

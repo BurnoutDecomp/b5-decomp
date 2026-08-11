@@ -132,9 +132,13 @@ namespace CgsCollision
         //     image are the exact call sequence of its exported twin RunFillTriangleCacheStream:
         //     AllocateJob / CreateNewBatch / Job::Clear / EntryPoint::SetName / EntryPoint::SetCode
         //     / Job::SetData / Job::DependsOn / JobScheduler::AddTree.
-        // The Run BODY is NOT reconstructed (its job entry point and the
-        // ContactGeneratorJob::ExecuteLineWithTriangleListStream @0x82921968 worker behind it are
-        // not in the tree) -- it is a named boot gate in CgsCollisionGenerator_LineStream.cpp.
+        // ⭐⭐⭐ UPDATED 2026-08-11 (traction-line wave): THE Run BODY IS REAL NOW and its boot
+        // gate is DELETED. The paragraph that used to sit here said the body was not reconstructed
+        // "because its job entry point and the ContactGeneratorJob::ExecuteLineWithTriangleList-
+        // Stream @0x82921968 worker are not in the tree" -- both are, as of this wave, in
+        // GameShared/Jobs/ContactGenerator/ (ContactGenerator.cpp + ContactGeneratorJob.cpp).
+        // The dispatcher's ONE PC divergence is the JobScheduler::AddTree call, replaced by
+        // running the batch entry inline; see the body's banner.
         // ⚠️ Run takes NO DebugRenderStreamReader (unlike the three collide-stream Run*): the call
         // site loads r3=generator, r4=producer and nothing else.
         // ==========================================================================================
