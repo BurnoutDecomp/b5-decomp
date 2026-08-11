@@ -180,40 +180,55 @@ static void ScaleIrradiance( Matrix44& lrIrradiance, f32 lfScale )
 
             case E_DISTRICT_MAP_ACQUIRE_REQUEST:
             {
-                // Clear the queue and push a GetGameDataEvent (type 24) acquiring the loaded
-                // "Districts" data from pool 5. The X360 builds the event payload on the stack
-                // as { &mReceiverQueue, 1, 5 (pool), HashString("Districts") } and pushes
-                // it via VariableEventQueue<4096,16>::AddEvent(payload, type=4, size=24).
+                // Clear the queue and push an AcquireResourceRequest (event type 4) acquiring the
+                // loaded "Districts" resource from pool 5. The X360 builds the record on the
+                // stack as { &mReceiverQueue, 1, 5 (pool), HashString("Districts") } and pushes
+                // it via VariableEventQueue<4096,16>::AddEvent(record, type=4, size=24).
                 mReceiverQueue.Clear();
                 BrnResource::GameDataIO::RequestInterface<4096>* lpRequest =
                     lpOutput->GetResourceRequestResourceInterface();
 
-                // CONSOLE payload order (asm 0x827D11D8): v9[0]=&queue, v9[1]=1, v9[2]=5 (pool),
-                // then the u64 = the RAW HashString("Districts") return at sp+0x60 (the
-                // `| 0x500000000` in the pseudocode is a fusion artifact of the `li r10,5 /
-                // stw @+8` miPoolId store -- HashString zero-extends, high dword is 0).
-                // PoolId lands at +8 and the u64 resourceId at +16 (NOT the reverse).
-                struct AcquireEvent
-                {
-                    CgsModule::BaseEventReceiverQueue* mpReceiverQueue; // CONSOLE +0
-                    s32                                miEventId;       // CONSOLE +4  (=1)
-                    s32                                miPoolId;        // CONSOLE +8  (=5)
-                    s32                                mi_pad;          // CONSOLE +12
-                    u64                                muResourceId;    // CONSOLE +16 (untagged hash)
-                } lEvent;
-                lEvent.mpReceiverQueue = &mReceiverQueue;
-                lEvent.miEventId       = 1;
-                lEvent.miPoolId        = 5;
-                lEvent.mi_pad          = 0;
-                lEvent.muResourceId    =
+                // ⭐ BY-MEMBER REQUEST BIND (2026-08-11, district-map wave). This block used to
+                // build a LOCAL struct laid out at the CONSOLE's 32-bit offsets
+                // ({queue@+0, id@+4, pool@+8, pad@+12, u64 resourceId@+16}) and post it with the
+                // console's literal 24-byte size. On the x64 host that record is a DIFFERENT
+                // shape (the leading pointer is 8 bytes, so miEventId slides to +8, miPoolId to
+                // +12 and the u64 to +24) while the pool that consumes it --
+                // PoolModule::DoAcquireResourceRequest -- reads a real
+                // CgsResource::Events::AcquireResourceRequest BY NAME (mResourceId at +16 on
+                // x64). Net effect on PC: the pool read the padding word as the resource id and
+                // the 24-byte post truncated the id away entirely, so FindResource could never
+                // match "Districts" and the acquire always resolved to a NULL handle.
+                //
+                // CONSOLE attestation (asm 0x827D12DC..0x827D1334, the case-2 block):
+                //   stw r30, var_40 (+0)   = &mReceiverQueue
+                //   stw r10(1), var_3C (+4)  = miEventId
+                //   stw r10(5), var_38 (+8)  = miPoolId
+                //   std r11,  var_30 (+16)   = the RAW HashString("Districts") return
+                //   li r5,4 / li r6,0x18 -> AddEvent(type 4, size 24 == the 32-bit sizeof)
+                // The id is UNTAGGED: HashString @0x828D84A8 ends `clrldi r3,32`, so the high
+                // dword is zero -- the `| 0x500000000` Hex-Rays shows is a fusion artifact of the
+                // separate `li r10,5 / stw @+8` miPoolId store (same artifact as the
+                // `| 0x700000000` already corrected in LoadAttribSysVault below).
+                CgsResource::Events::AcquireResourceRequest lRequest;
+                lRequest.mpUser    = &mReceiverQueue;
+                lRequest.miEventId = 1;
+                lRequest.miPoolId  = 5;
+                lRequest.mResourceId.SetHash(
                     static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
-                        reinterpret_cast<const u8*>("Districts"))));   // untagged (high dword 0)
+                        reinterpret_cast<const u8*>("Districts")))));   // untagged (high dword 0)
+                lRequest.mbCheckRefCount = false;
 
                 // The request interface's queue IS a VariableEventQueue<4096,16> (RequestQueue
                 // <4096> -> ResourceRequestQueue<4096> -> VariableEventQueue<4096,16>); the X360
-                // pushes the acquire event straight onto it via the 3-arg AddEvent.
+                // pushes the acquire event straight onto it via the 3-arg AddEvent. The X360
+                // literal size 24 is its 32-bit sizeof(AcquireResourceRequest); the host record
+                // is wider and the consumer reads it back by NAME, so post sizeof() (same
+                // convention as RaceCarEntityModule::LoadGlobalResources and every committed
+                // GameDataModule request).
                 lpRequest->mRequestQueue.AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lEvent), /*liType*/ 4, /*liSize*/ 24);
+                    reinterpret_cast<const CgsModule::Event*>(&lRequest), /*liType*/ 4,
+                    static_cast<s32>(sizeof(lRequest)));
 
                 meDistrictMapLoadStage = E_DISTRICT_MAP_ACQUIRE_RESPONSE;
                 lpOutput->UnlockForWrite();
@@ -223,8 +238,7 @@ static void ScaleIrradiance( Matrix44& lrIrradiance, f32 lfScale )
             case E_DISTRICT_MAP_ACQUIRE_RESPONSE:
             {
                 // Wait for the acquire response, then capture the resolved resource handle from
-                // the first response event's payload (X360 reads two dwords at payload + 24 into
-                // mDistrictMapResourceHandle).
+                // the first response event.
                 if (mReceiverQueue.GetCount() <= 0)
                 {
                     lpOutput->UnlockForWrite();
@@ -232,22 +246,39 @@ static void ScaleIrradiance( Matrix44& lrIrradiance, f32 lfScale )
                 }
                 meDistrictMapLoadStage = E_DISTRICT_MAP_DONE;
 
-                const CgsModule::Event* lpEventData = nullptr;
+                // ⭐ BY-MEMBER HANDLE BIND (2026-08-11, district-map wave). This used to read
+                // TWO u32s at a raw payload +24 and widen them into pointers -- the CONSOLE's
+                // 32-bit record layout applied to the x64 host, which produces a truncated /
+                // garbage handle (the host's response is wider and its handle members are 8-byte
+                // pointers, so nothing lives at +24/+28 any more).
+                //
+                // CONSOLE attestation (pseudocode/asm 0x827D11D8, case 3):
+                //   v7 = (count>0) ? mpBuffer + miStartOffset + 8 : 0   // == GetFirstEvent's payload
+                //   v8 = v7 + 24;  a1[1541858] = *v8;  a1[1541859] = v8[1];
+                // 1541858*4 / 1541859*4 are mDistrictMapResourceHandle.mpResourceMemory /
+                // .mpSourceEntry. The record at payload +0x18 IS the AcquireResourceResponse's
+                // {mpResourceMemory, mpSourceEntry} pair: PoolModule::DoAcquireResourceRequest
+                // @0x828FCD48 builds a 32-byte reply {mpUser@0, miEventId@4, miPoolId@8,
+                // mResourceId@16, handle pair@24} and posts it with AddEvent(tag 6, 32). So it is
+                // read BY MEMBER off the real response type -- never at the console's literal
+                // +0x18/+0x1C, because the host handle pair starts past a wider PoolEvent base.
+                // Same idiom as LoadAttribSysVault below, StreetManager::LoadDistrictMap and
+                // RaceCarEntityModule::LoadGlobalResources.
+                const CgsModule::Event* lpEventData = 0;
                 s32 liSize = 0;
-                // X360: v7 = (count>0) ? mpBuffer + miStartOffset + 8 : 0  (== the first event's
-                // payload pointer) -- exactly what GetFirstEvent returns. The handle is at +24.
                 mReceiverQueue.GetFirstEvent(&lpEventData, &liSize);
 
-                const u32* lpPayload =
-                    lpEventData ? reinterpret_cast<const u32*>(lpEventData) : nullptr;
-                // FLAG: the +24 handle dwords live in the opaque LoadGameDataResponse payload
-                // (external, forward-declared) -- read by attested offset (allowed per AGENTS.md).
-                const u32* lpHandleWords =
-                    reinterpret_cast<const u32*>(reinterpret_cast<const u8*>(lpPayload) + 24);
-                mDistrictMapResourceHandle.mpResourceMemory =
-                    reinterpret_cast<void*>(static_cast<uintptr_t>(lpHandleWords[0]));
-                mDistrictMapResourceHandle.mpSourceEntry =
-                    reinterpret_cast<CgsResource::Entry*>(static_cast<uintptr_t>(lpHandleWords[1]));
+                if (lpEventData != 0)
+                {
+                    // reinterpret_cast, not static_cast: CgsResource::Events::Event and
+                    // CgsModule::Event are unrelated roots and the receiver queue hands out the
+                    // module one.
+                    const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                        reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEventData);
+
+                    mDistrictMapResourceHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+                    mDistrictMapResourceHandle.mpSourceEntry    = lpResponse->mpSourceEntry;
+                }
 
                 lpOutput->UnlockForWrite();
                 return false;
