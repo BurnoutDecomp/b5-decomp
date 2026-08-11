@@ -478,11 +478,11 @@ namespace Vehicle
                           "(.ida-exports HOLE; PS3 0x789760) not reconstructed (big-five #2 closure stub)\n");
     }
 
-    bool VehicleManager::IsRaceCarHidden(s32 /*liRaceCarIndex*/)
-    {
-        CGS_ASSERT(false, "TRAP: VehicleManager::IsRaceCarHidden @0x825C2EA0 "
-                          "(.ida-exports HOLE) not reconstructed (big-five #2 closure stub)\n");
-        return false;
-    }
+    // ⭐⭐ TRAP STUB DELETED 2026-08-11 (physics->output publish wave). VehicleManager::
+    // IsRaceCarHidden @0x825C2EA0 is REAL, in BrnVehicleManager_WriteOutVehicleStats.cpp beside
+    // its per-frame caller. It was NOT an ".ida-exports HOLE" -- the banner at the top of this
+    // file said so because the address has no JSON, but the function is in the IDB and a targeted
+    // headless IDA 9.3 pull produced all 104 instructions. MISSING JSON != MISSING FUNCTION.
+    // If a definition for it reappears here the link will say so (LNK2005).
 }
 }

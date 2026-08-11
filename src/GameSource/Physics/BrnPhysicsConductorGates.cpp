@@ -382,9 +382,21 @@ namespace Vehicle
         BRN_CONDUCTOR_GATE("VehicleManager::ProcessCrashingNetworkCars @0x8263C7C0 (export hole)");
     }
 
-    void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface*)
+    // ⭐⭐ GATE DELETED 2026-08-11 (physics->output publish wave): VehicleManager::WriteOutVehicleStats
+    // @0x8263F460 is REAL, in BrnVehicleManager_WriteOutVehicleStats.cpp, together with the
+    // VehicleManager::IsRaceCarHidden @0x825C2EA0 it calls (which was a trap stub, not a hole) and
+    // the VehicleOutputInterface::UpdateRaceCarState @0x825EC808 that does the actual publishing
+    // (which was ABSENT FROM THE TREE ALTOGETHER -- not on any gate list). That trio is the whole
+    // physics->output publish; with it landed, VehicleOutputInterface::mUsedRaceCars and
+    // maRaceCarStates[] are written every frame and the world-side readback stops being gated off.
+    // If a gate for it ever reappears here the link will say so (LNK2005).
+    //
+    // ⛔ ...but the TRAFFIC half of the same publish is NOT landed, so it keeps a gate of its own.
+    // The console's own call sequence is preserved: WriteOutVehicleStats tail-calls this.
+    void PhysicalTrafficManager::WriteOutVehicleStats(VehicleOutputInterface*)
     {
-        BRN_CONDUCTOR_GATE("VehicleManager::WriteOutVehicleStats @0x8263F460 (380)");
+        BRN_CONDUCTOR_GATE("PhysicalTrafficManager::WriteOutVehicleStats @0x825F0308 (481) -- "
+                           "the TRAFFIC half of the per-frame publish; race-car half is LANDED");
     }
 
     void VehicleManager::ProcessResetEvents(const VehicleInputInterface*,

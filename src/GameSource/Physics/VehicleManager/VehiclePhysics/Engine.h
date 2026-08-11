@@ -137,6 +137,14 @@ namespace Vehicle
         // Exposed as one named getter so those hosts read the named member, not an offset cast.
         u32 GetCurrentGear() const { return mu8CurrentGear; }
 
+        // ⭐ ADDED 2026-08-11 (physics->output publish wave). The live crank speed, X360-attested by
+        // VehicleOutputInterface::UpdateRaceCarState @0x825ECB14 (`addi r11,r30,0xFB0 ; lvx128 v0 ;
+        // vspltw v0,v0,1` -- VehiclePhysics base +0xF00 == mEngine, +0xB0 == the clutch/RPM register,
+        // lane .y == RPM), which publishes it as RaceCarState::mfRPM. It is the same value the DWARF
+        // spells `float32_t VehiclePhysics::GetRPM() const` (VehiclePhysics.h:1099) -- that owner-side
+        // getter is this one's forwarder. Named getter so the host reads the named lane, not an offset.
+        f32 GetRPM() const { return mvClutchFactor_RPM_CurrentGearChangeTime.y; }
+
         // --- Remaining Engine API: owned by separate future TUs -- declared only (no body). ---
 
     private:

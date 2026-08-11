@@ -453,6 +453,27 @@ namespace Vehicle
         // has to live in a separate TU. Static so it can see the private block through offsetof.
         static void _AssertOwnBlockLayout();
 
+        // ⭐ ADDED 2026-08-11 (physics->output publish wave). DWARF RaceCarPhysics.h:351, and
+        // X360-ATTESTED by VehicleOutputInterface::UpdateRaceCarState @0x825ECC40
+        // (`lbz r11,0x1436(r30) ; cntlzw ; extrwi r11,r11,1,26 ; stb r11,0x44C(r31)` -- the byte,
+        // negated, seeds RaceCarState::mbIsDriveable before the per-wheel AND-fold). The member it
+        // returns is declared in the private block below with this accessor already named in its
+        // comment; only the declaration was missing.
+        bool GetDeformedBeyondDriveTimeLimitsInCrash() const
+        {
+            return mbDeformedBeyondDriveTimeLimitsInCrash;
+        }
+
+        // ⭐ ADDED 2026-08-11 (physics->output publish wave). DWARF RaceCarPhysics.h:363 -- the
+        // "stuck on its belly for too long" query the member comment at mfBeachedTime already names.
+        // X360-ATTESTED by VehicleManager::WriteOutVehicleStats @0x8263F6B0:
+        //     lfs f0, 0x1408(r30) ; fcmpu cr6, f0, f31 ; bgt -> r11 = 1
+        // with f31 == flt_82004270 == 3.0f (Hex-Rays renders the same compare as `> 3.0`). The
+        // console emits it INLINE at that one site, which is why no out-of-line symbol exists.
+        // (3.0f == flt_82004270 -- the seconds of continuous beaching after which the car is
+        // force-reset; spelled at the one site the console compares it at.)
+        bool IsBeached() const { return mfBeachedTime > 3.0f; }
+
     private:
         // =========================================================================================
         // ⭐⭐ THE RaceCarPhysics OWN-MEMBER BLOCK -- RECOVERED IN FULL 2026-08-03.

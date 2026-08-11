@@ -577,6 +577,14 @@ public:
         const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody, 200>* lpUpdatedBodies,
         VecFloat lvfTimeStep);
 
+    // ⭐ ADDED 2026-08-11 (physics->output publish wave). X360 0x825F0308 (481 insns) -- the TRAFFIC
+    // half of the per-frame publish, and the tail call of VehicleManager::WriteOutVehicleStats
+    // @0x8263FA28 (`addis r3,r18,1 ; addi r3,r3,-0x5120` == this + 44768 == &mPhysicalTrafficManager,
+    // r4 = the same VehicleOutputInterface). Its own body walks mUsedTrafficVehicles into the
+    // interface's PhysicalTrafficStateQueue. ⚠ FLAG: DECLARED so the race-car half can reproduce the
+    // console's call sequence; the body is a LOUD one-shot gate (BrnPhysicsConductorGates.cpp).
+    void WriteOutVehicleStats(Vehicle::VehicleOutputInterface* lpOutputInterface);
+
     // ⭐ ADDED 2026-08-10 (create-path wave). X360 0x82649768 (246 insns) -- the traffic twin of
     // VehicleManager::ProcessVehicleMaintenanceEvents and its sixth and last call, taking that
     // function's whole argument list verbatim (r3 = &mPhysicalTrafficManager, i.e. the vehicle

@@ -376,6 +376,26 @@ namespace Vehicle
         // (`lbz 0x713(car)`) against the car GetRaceCarPhysics resolved. Placed after the
         // member run so the access-specifier does not split the layout block.
         bool HasCrashedThisFrame() const { return mbCrashedThisFrame; }
+
+        // ⭐ ADDED 2026-08-11 (physics->output publish wave). FIVE DWARF-declared read accessors
+        // over the protected member run above, every one of them X360-ATTESTED by the same
+        // function: BrnPhysics::Vehicle::VehicleOutputInterface::UpdateRaceCarState @0x825EC808,
+        // the console's ONLY writer of RaceCarState, which inlines all five against the
+        // RaceCarPhysics it is handed (asm offsets in the comments). They are declared HERE,
+        // after the member run, so the access specifier cannot split the layout block.
+        //   DWARF BrnSimpleVehiclePhysics.h -- GetSpeedMPH / IsFatallyCrashing /
+        //   HasStartedDeforming / GetAboveGroundTestResult / GetLocalTractionPoint.
+        VecFloat GetSpeedMPH() const { return mfSpeedMPH; }                          // @0x6C0 (`lvx128 v0,r30,0x6C0`)
+        bool     IsFatallyCrashing() const { return mbStartedFatallyCrashing; }      // @0x711 (`lbz r11,0x711(r30)`)
+        bool     HasStartedDeforming() const { return mbStartedDeforming; }          // @0x712 (`lbz r11,0x712(r30)`)
+        const AboveGroundTestResult* GetAboveGroundTestResult() const                // @0x570 (`addi r11,r31,0x570`)
+        {
+            return &mAboveGroundTestResult;
+        }
+        Vector3 GetLocalTractionPoint(u8 lu8Wheel) const                             // @0x530 stride 16
+        {                                                                            // (`r29 = (wheel+0x53)<<4 ; lvx128 v0,r29,r30`)
+            return maLocalTractionPoints[lu8Wheel];
+        }
     };
 
     // ⭐ The console sizes this block closes on, exported so the layout gate and the VehiclePhysics
