@@ -2922,21 +2922,16 @@ void WorldModule::BridgeWorldModuleToPropModule_PreScene(void *,class BrnWorld::
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AE9D0 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgePhysicsModuleToRaceCarModule_PostPhysics(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostPhysics *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsModuleToRaceCarModule_PostPhysics: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⭐⭐ GATE DELETED 2026-08-11 (physics->output publish wave):
+// WorldModule::BridgePhysicsModuleToRaceCarModule_PostPhysics @0x827AE9D0 is REAL, in
+// GameSource/World/Bridges/WorldBridgePhysicsToEntityModules.cpp (its declared home). It is the
+// ONLY thing in the XEX that copies the physics module's output buffer into the race-car module's
+// post-physics input buffer, so while it was inert the landed readback
+// (RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics) was gated off no matter what the
+// physics side published. Its two live legs carry the VehicleOutputInterface and the
+// VehicleManagerOutputInterface; the four deformation/scene/contact-spy legs are parked LOUDLY in
+// that file (their blockers are named there). If a gate for it reappears here the link will say
+// so (LNK2005).
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
@@ -3601,11 +3596,14 @@ void BrnWorld::PropEntityIO::InputBuffer_PrePhysics::Construct()
     CgsModule::IOBuffer::Construct();
 }
 
-// BOOT GATE: base bring-up only (see the block note above).
-void BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostPhysics::Construct()
-{
-    CgsModule::IOBuffer::Construct();
-}
+// (BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostPhysics::Construct gate RETIRED
+//  2026-08-11, physics->output publish wave: the real partial slice now lives in
+//  BrnRaceCarEntityModuleIO.cpp from X360 0x822EA838. The base-only gate left
+//  mVehicleOutputInterface and mVehicleManagerOutputInterface un-Constructed, and the moment
+//  BridgePhysicsModuleToRaceCarModule_PostPhysics went live their operator= Appended into
+//  never-Constructed queues -- a "Base event queue overflow" assert followed by an AV writing
+//  through a null mpEvents inside memcpy, on the first boot run. Same family as the
+//  PhysicsModuleIO::OutputBuffer::Construct root cause. Leaving both = LNK2005.)
 
 // BOOT GATE: base bring-up only (see the block note above).
 void BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostScene::Construct()

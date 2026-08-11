@@ -30,6 +30,15 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    // Forward declarations, pointer-only (documented exception (b) in AGENTS.md): the publish
+    // surface added below takes `const RaceCarPhysics*` / `const VehicleDriver*` and never
+    // dereferences them in this header. Including RaceCarPhysics.h / BrnVehicleDriver.h here
+    // would pull the whole vehicle-physics cascade into every IO buffer that embeds this
+    // interface (PhysicsModuleIO, RaceCarEntityModuleIO, CrashModuleIO, ...). The real headers
+    // are included by BrnVehicleOutputInterface_UpdateRaceCarState.cpp, which owns the bodies.
+    class  RaceCarPhysics;   // RaceCarPhysics.h  (class)
+    struct VehicleDriver;    // BrnVehicleDriver.h (struct)
+
     // The per-frame aggressive-driving summary published to the GUI/scoring (5 bools).
     // DWARF BrnVehicleOutputInterface.h:283.
     struct AggressiveDrivingFlags
@@ -83,6 +92,42 @@ namespace Vehicle
         const RaceCarState* GetRaceCar(u32 luRaceCarIndex) const;
 
         const CgsContainers::BitArray<8u>& GetUsedCarsBitArray() const { return mUsedRaceCars; } // DWARF :370
+
+        // ⭐⭐ ADDED 2026-08-11 (physics->output publish wave) -- THE PUBLISH SURFACE.
+        // Four DWARF-declared methods (BrnVehicleOutputInterface.h :323 / :328 / :333 / :339),
+        // all four X360-ATTESTED by VehicleManager::WriteOutVehicleStats @0x8263F460, which is
+        // the console's only caller of the first and inlines the other three:
+        //     UpdateRaceCarState  -> out-of-line @0x825EC808 (535 insns), `bl` at 0x8263F724
+        //     SetEntityID         -> inlined,  `stw r11, 0x3D8(state)` == maRaceCarStates[i].mEntityId
+        //     SetRaceCarHidden    -> inlined,  `stb r11, 0x462(state)` == ....mbIsHidden
+        //     SetWheelTransform   -> inlined,  the 4x4 `lvx128/stvx128` run at 0x8263F7F4..0x8263F844
+        // Bodied in BrnVehicleOutputInterface_UpdateRaceCarState.cpp.
+        //
+        // ⚠️ THE INDEX ARGUMENT IS THE ENTITY INDEX, NOT THE RACE-CAR SLOT, on UpdateRaceCarState
+        // ALONE -- and that is the console's own arithmetic, reproduced rather than "corrected":
+        // WriteOutVehicleStats passes `maRaceCarEntityIDs[liRaceCar].GetEntityIndex()`
+        // (`lwzx r11,r31,r18 ; extrwi r4,r11,14,8` == (id >> 10) & 0x3FFF) while every OTHER
+        // store in the same iteration is indexed by liRaceCar. The two coincide on the console
+        // because the vehicle manager mints each race car's EntityId with entityIndex == its own
+        // slot; if they ever diverge on this build the divergence is the create path's, not this
+        // function's. FLAGGED for the verifier.
+        void UpdateRaceCarState(s32 liRaceCarIndex,
+                                const RaceCarPhysics* lpRaceCarPhysics,
+                                const VehicleDriver*  lpDriver,
+                                bool                  lbForceReset);
+        void SetEntityID(s32 liRaceCarIndex, EntityId lEntityID);
+        void SetRaceCarHidden(s32 liRaceCarIndex, bool lbHidden);
+        void SetWheelTransform(u8 lu8RaceCarIndex, u8 lu8Wheel, Matrix44Affine lTransform);
+
+        // ⚠️ ADDITIVE GROW, flagged. The DWARF names only the CONST bitset accessor (:370); this is
+        // its non-const sibling, and it exists because WriteOutVehicleStats' very first act is a
+        // whole-word write of the vehicle manager's live-car bitset over this member --
+        //     addis r9,r18,1 ; addi r9,r9,-0x5340   ; == &VehicleManager::mUsedRaceCars (this+44224)
+        //     ld    r10,0(r9)  ;  std r10,0(r19)    ; == lpOutputInterface->mUsedRaceCars = ...
+        // -- which the console emits inline (member access from a friend/same-TU context that this
+        // reconstruction cannot reproduce). Exposing the member's own accessor pair is the smallest
+        // honest seam; no field is reordered or retyped.
+        CgsContainers::BitArray<8u>& GetUsedCarsBitArray() { return mUsedRaceCars; }
 
         // @0x823C89C8: hand-written copy assignment (ADDITIVE GROW: a real ledger func not in the
         // DWARF member set; no field reordered/retyped).

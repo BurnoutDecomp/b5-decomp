@@ -879,6 +879,51 @@ InputBuffer_PostPhysics::SetVehicleOutputInterface(const VehicleOutputInterface*
     mVehicleOutputInterface = *lpVehicleOutputInterface;
 }
 
+// =================================================================================================
+// ⭐⭐ X360 0x822EA838 (47 insns, DWARF :510) -- InputBuffer_PostPhysics::Construct, PARTIAL SLICE.
+// Its base-only boot gate in WorldLinkStubs.cpp is RETIRED by the same commit (same treatment, and
+// for the same reason, as the InputBuffer_PrePhysics slice retired 2026-07-27).
+//
+// ⛔ WHY THIS HAD TO LAND WITH THE PUBLISH LEG, MEASURED NOT GUESSED. The gate ran only
+// `CgsModule::IOBuffer::Construct()`, so every event queue embedded in this buffer stayed
+// un-Constructed (mpEvents null, miMaxLength 0). That was invisible while
+// BridgePhysicsModuleToRaceCarModule_PostPhysics was inert. The moment that bridge went live the
+// FIRST boot run died here:
+//     [ASSERT] Base event queue overflow (CgsBaseEventQueue.h:122)
+//         BrnPhysics::Vehicle::VehicleManagerOutputInterface::operator=
+//         WorldModule::BridgePhysicsModuleToRaceCarModule_PostPhysics
+//     [EXCEPTION] EXCEPTION_ACCESS_VIOLATION writing 0x0 in memcpy <- the same operator=
+// -- because that operator= Clear()s and Append()s each destination queue, and Append into a
+// never-Constructed queue memcpy's through a null mpEvents. Same family as the
+// PhysicsModuleIO::OutputBuffer::Construct root cause (2026-08-10).
+//
+// The console body, decoded (r29 == this, r30 == this + 0x10 == &mVehicleOutputInterface):
+//   0x822EA854  stb 1, 0(this)                       -- IOBuffer::Construct
+//   0x822EA850..0x822EA88C  VehicleOutputInterface::Construct INLINED over +0x10: the traffic-state
+//               queue (+0x2620), the impact queue (+0x2310), the game-event VariableEventQueue
+//               <1536,16> (+0x65F0), then `std 0` over the used-cars bitset (+0) and five `stb 0`
+//               over the aggressive-driving flags (+0x6C00..+0x6C04). That IS the committed
+//               VehicleOutputInterface::Construct, so it is called by name.
+//   0x822EA88C  VehicleManagerOutputInterface::Construct(this + 0x6C20)
+//   0x822EA894  InSceneUpdateInterface::Construct(this + 0x74A0)                     [PARKED]
+//   0x822EA8A4..0x822EA8E8  the deformation-for-entity-modules queues + counters, the deformation
+//               output interface, the contact-spy interface and a trailing 16-byte zero  [PARKED]
+//
+// ⛔ PARKED, and the park is EXACTLY the bridge's park -- these are the same four legs
+// BridgePhysicsModuleToRaceCarModule_PostPhysics cannot carry (opaque physics-output seats /
+// const-accessor gap), so nothing writes into them and leaving them un-Constructed changes no
+// observable. Constructing them here and NOT feeding them would be the misleading half.
+// DELETE-WHEN those bridge legs land: this Construct must grow with them or the same overflow
+// returns, one interface further along.
+// =================================================================================================
+void
+InputBuffer_PostPhysics::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+    mVehicleOutputInterface.Construct();
+    mVehicleManagerOutputInterface.Construct();
+}
+
 // ---- InputBuffer_GenerateDispatchLists --------------------------------------
 
 // X360 0x822B6A70 (R, :633) -- const dispatch-frame accessor (returns the pointer VALUE

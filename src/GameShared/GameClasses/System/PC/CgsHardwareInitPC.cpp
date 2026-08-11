@@ -144,6 +144,20 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
         CgsSystem::HardwareInit::RequestShutdown();
         PostQuitMessage(0);
         return 0;
+    case WM_ERASEBKGND:
+        // FLAG PC-platform leaf (no console counterpart -- the X360/PS3 own the display
+        // outright and have no window manager). The client area belongs to the D3D9 swap
+        // chain: every pixel of it is written by BrnRendererModule::Render (FrameBegin's
+        // clear -> the 2D/GUI tail -> ShowPixelBuffer's Present). Letting DefWindowProc
+        // erase it runs BeginPaint's fill with the class background brush straight over the
+        // last PRESENTED frame -- and because this is a WINDOWED D3DSWAPEFFECT_COPY chain
+        // (device.cpp), Present blits into the same DWM redirection surface GDI paints
+        // into, so the fill wipes the whole client: scene, Apt GUI, loading screen AND the
+        // debug HUD together, until the next present. That is the "whole screen flashes
+        // black" flicker (the HUD vanishing with everything else is what identifies it --
+        // no render-path failure can blank the HUD, which draws last and unconditionally).
+        // Claim the erase and draw nothing.
+        return 1;
     default:
         return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
@@ -212,7 +226,10 @@ static HWND CreateGameWindow(const s32 width, const s32 height, bool fullscreen)
     wndClass.hInstance = module;
     wndClass.hIcon = ExtractIcon(module, filename, 0);
     wndClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wndClass.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    // No background brush: the client area is the D3D9 swap chain's (see the WM_ERASEBKGND
+    // case in windowProc). A BLACK_BRUSH here is what DefWindowProc would paint over the
+    // presented frame on any erase that slips past that handler.
+    wndClass.hbrBackground = nullptr;
     wndClass.lpszMenuName = nullptr;
     wndClass.lpszClassName = windowClassName;
     if (!RegisterClass(&wndClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
