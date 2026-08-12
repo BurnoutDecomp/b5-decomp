@@ -34,7 +34,13 @@ namespace rw
     struct Resource;   // rw::Resource : BaseResources<4> (rw/rwcore_structs.h)
 }
 
-class Model;           // foreign RenderWare model resource (pointer-only here)
+namespace CgsGraphics { class Model; }
+// The RenderWare model resource these records import IS CgsGraphics::Model (the type
+// CgsModel.h defines and the whole renderer takes). The old global `class Model;` was a
+// DISTINCT, never-defined type, so every consumer that handed mpPropModel to the renderer
+// had to reinterpret_cast across two unrelated types -- the prop draw path cannot. Aliased
+// rather than renamed so BrnPropGraphicsList.cpp / ...ResourceType.cpp keep their spelling.
+using Model = CgsGraphics::Model;
 
 namespace BrnPhysics
 {
