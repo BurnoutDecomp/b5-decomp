@@ -25,6 +25,7 @@
 #include "GameShared/GameClasses/RenderWare/cross/CgsMaterialTechniqueResourceType.h"     // 0xD
 #include "GameShared/GameClasses/Graphics/Resources/CgsShaderTechniqueResourceType.h"     // 0x32
 #include "GameShared/GameClasses/RenderWare/x360/materialstates/CgsRwShaderProgramBufferResourceTypeX360.h" // 0x12
+#include "SharedClasses/Physics/Props/BrnPropPhysicsListResourceType.h"        // Props::PropPhysicsResourceType (0x1000F)
 #include "SharedClasses/Physics/Props/BrnPropGraphicsListResourceType.h"       // Props::PropGraphicsListResourceType (0x10010)
 #include "SharedClasses/Physics/Props/BrnPropInstanceDataResourceType.h"       // Props::PropInstanceDataResourceType (0x10011)
 #include "SharedClasses/Sound/World/BrnStaticSoundMapResourceType.h"           // World::StaticSoundMapResourceType (0x10016)
@@ -137,9 +138,20 @@ namespace CgsResource
         // it could not be instantiated here. Both are bodied now.
         static IdListResourceType          sIdList;            // 0x25 (37) IdList (zone-collision lists)
         TypeRegistry::Register(&sIdList);
-        // The three world-prop/sound types (X360 GameDataModule::RegisterResourceTypes
-        // @0x82667EA8 registers all three; exact [game #] positions pending that
-        // function's order decode -- id-keyed lookup is order-independent).
+        // The four world-prop/sound types (X360 GameDataModule::RegisterResourceTypes
+        // @0x82667EA8 registers all four, PropPhysics immediately before PropGraphicsList;
+        // id-keyed lookup is order-independent).
+        //
+        // PropPhysics is the prop TYPE table -- the game's single 0x1000F resource,
+        // PROPS/PROPPHYSICS.BUNDLE. Without a registered handler
+        // CgsResource::Pool::CreateEntryInSlot stores a NULL mpResourceType for that entry
+        // and AllocateMemoryForResource null-derefs it (GetCachedCanDefrag) -- the same
+        // failure mode ZoneList and PlayerCarColours were added for. Even surviving that,
+        // nothing would call PropPhysicsDataHeader::FixUp, so every mapPropTypes[] slot
+        // would stay a raw file offset and PropPhysicsDataHeader::GetType would hand every
+        // prop spawn a garbage PropTypeData*. No props exist in the world without this.
+        static BrnPhysics::Props::PropPhysicsResourceType      sPropPhysics;      // 0x1000F (65551)
+        TypeRegistry::Register(&sPropPhysics);
         static BrnPhysics::Props::PropGraphicsListResourceType sPropGraphicsList; // 0x10010 (65552)
         TypeRegistry::Register(&sPropGraphicsList);
         static BrnPhysics::Props::PropInstanceDataResourceType sPropInstanceData; // 0x10011 (65553)

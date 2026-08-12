@@ -136,7 +136,27 @@ namespace BrnWorld
         static const u32 KU_ENTITY_ID_BASE        = 32;
         static const u64 KU_VOLUME_INDEX_MASK     = 0x00000000000000FFull; // bits [0..7]
 
-        PropVolumeInstanceID() {}
+        // ⭐ SEEDS THE OWNER BYTE 2026-08-12 (prop-BOOT wave, agent B8) -- the direct twin of
+        // PropVolumeID's seed above, and the fix for 980 of the boot's asserts. The embedded
+        // PropEntityID lives in the HIGH dword (KU_ENTITY_ID_BASE == 32) and its owner byte is
+        // at bits [24..31] of that word, i.e. bit 56 of the packed 64-bit id.
+        // X360 WITNESSES (the compiler's fold of this constructor, emitted at the point each
+        // local is declared, immediately before the first SetEntityIndex):
+        //     PropZoneManager::UnloadZone     @0x82303790 -> 0x82303974  li r10,3
+        //                                                    0x8230397C  sldi r10, r10, 56
+        //                                                    0x8230398C  std  r10, var_B8(r1)
+        //     PropZoneManager::UpdateInstance @0x822F0920 -> 0x822F1428/0x822F17CC, same pair
+        // PropZoneManager::LoadProp already open-coded the same seed by hand (see its comment,
+        // which calls it "the compiler's fold of the default-constructed prop handle") --
+        // every OTHER declaration site was missing it, so UnloadZone / RemovePropFromScene /
+        // RemovePropFromSim / the PropCellManager sites all tripped
+        // "mVolumeInstanceId.GetEntityIDOwner() == E_ENTITYTYPE_PROP" and the nested
+        // "mEntityId.GetOwner() == E_ENTITYTYPE_PROP" once per prop per unload.
+        PropVolumeInstanceID()
+        {
+            mVolumeInstanceId.muId = static_cast<u64>( E_ENTITYTYPE_PROP )
+                                     << ( KU_ENTITY_ID_BASE + PropEntityID::KU_OWNER_BASE );
+        }
 
         // 0x822B7CE0 — Set(propEntityId, volumeNumber).
         void Set(PropEntityID lPropEntityId, u8 luVolumeNumber);
@@ -204,7 +224,22 @@ namespace BrnWorld
         static const u32 KU_VOLUME_NUMBER_MASK     = 0x0000003Fu; // 63   :154 bits [0..5]
         static const u32 KU_TYPE_ID_MASK           = 0x0000FFC0u; // 65472 :155 bits [6..15]
 
-        PropVolumeID() {}                       // BrnPropEntityID.h:141 (trivial)
+        // ⭐ SEEDS THE OWNER BYTE 2026-08-12 (prop-BOOT wave, agent B8). This was `{}`,
+        // i.e. an uninitialised 64-bit word, and PropVolumeID::Set / AssertIsProp test the
+        // owner byte that is ALREADY THERE (Set's tripwire runs before the new word is
+        // stored) -- so the first Set on any default-constructed handle fired
+        // "mVolumeId.GetOwner() == E_ENTITYTYPE_PROP" on every boot.
+        // X360 WITNESS: PropEntityModule::InitializePropPhysicsData @0x822DA840 emits, at
+        // the point the local is declared (0x822DA8F4 / 0x822DA908),
+        //     lis r11, 3                  ; r11 = 3 << 16 == E_ENTITYTYPE_PROP at bits[16..23]
+        //     std r11, 0x1A0+var_138(r1)  ; var_138 IS that local
+        // -- which is the compiler's fold of exactly this constructor. A PropVolumeID can
+        // only ever have owner E_ENTITYTYPE_PROP (that is what the type MEANS, and what its
+        // three AssertIsProp tripwires enforce), so the seed belongs here rather than being
+        // re-open-coded at every declaration site.
+        PropVolumeID()                          // BrnPropEntityID.h:141
+            : mVolumeId( static_cast<u64>( E_ENTITYTYPE_PROP )
+                         << CgsSceneManager::VolumeId::KU_OWNER_BASE ) {}
         explicit PropVolumeID(CgsSceneManager::VolumeId lVolumeId) // :142
             : mVolumeId(lVolumeId) {}
 
