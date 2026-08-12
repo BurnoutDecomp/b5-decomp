@@ -223,11 +223,61 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // 22 / 23: the deformation verlet block. `v107 = mbDamaged; if (kbAllowDeformationDebug)
     // v107 = 1;` then `if (v107 || <module debug bool>)` uploads the 128-entry offset array
     // as constant 22 and its companion scale as 23.
-    // NOT reconstructed: ShaderConstantTable::SetShaderConstantArrayData has no body in this
-    // tree for ANY of its five overloads (all declaration-only in CgsShaderConstants.h), so
-    // the array upload cannot be expressed yet. It runs only for a DAMAGED car and nothing
-    // on this build deforms one. mbDamaged is still read -- it selects the technique below.
+    //
+    // ⭐ LANDED 2026-08-12 (exploding-panels wave). The old banner here said this "cannot be
+    // expressed yet" because SetShaderConstantArrayData was declaration-only for all five
+    // overloads. THAT IS NO LONGER TRUE -- the Vector4* overload is bodied
+    // (CgsShaderConstantTable.cpp:80) and carries this array verbatim: maVerletOffsets is
+    // Vector3Plus[128] and Vector3Plus is a 16-byte lane register, the same quad-word the
+    // overload's FastNonOverlappedVectorMemcpy copies, GetNumEntries() == the declared 128.
+    //
+    // WHY LEAVING IT UNSENT WAS NOT NEUTRAL -- this is the panel-stretch defect, and the
+    // mechanism is MEASURED, not inferred. Sixteen vertex programs in SHADERS_PC.BNDL declare
+    // `g_verletOffsets` at register c0 with count 128, and an external constant whose source
+    // pointer is null is SKIPPED, not zeroed (shadowingdevice.cpp:847). So the car body
+    // program read c0..c127 as they were left by the preceding world draws:
+    //     c0..c11   ShadowMap_WorldToLight (three light matrices)
+    //     c12..c15  ViewProjectionModified
+    //     c16..c19  IrradianceQuadricA
+    //     c20..c23  the LAST WORLD OBJECT'S WORLD MATRIX -- translations in the thousands of metres
+    //     c24..c31  irradiance/shadow/scattering leftovers
+    //     c32..c127 never written by any program in the bundle -> zero
+    // mbDamaged is TRUE for every player car (RaceCar::ToBeRenderedDamaged, console
+    // behaviour), so the DAMAGED technique ran and offset each vertex by
+    // g_verletOffsets[boneIndex]: a vertex whose bone index was 32..127 stayed exactly put
+    // while its neighbour indexing 0..31 was catapulted by a matrix row. One or two vertices
+    // of a triangle flung metres away, the rest anchored -- a long thin sail, anchored at the
+    // car because `world` (c148) IS published and the rigid transform was always correct.
+    // The wheels (forced onto the flat fallback pair) and the non-deforming parts were
+    // untouched, which is exactly the frame the user saw.
+    //
+    // The array itself is zero-seeded in RenderParams::Reset until BrnDeformationManager
+    // lands; see the flagged block there.
     const bool lbDamaged = lpRenderParams->IsDamaged();
+
+    // ⚠ DELIBERATE DEVIATION from the console's `if (mbDamaged || <debug>)` gate: the upload
+    // is UNCONDITIONAL. Measured reason -- of the 16 vertex programs in SHADERS_PC.BNDL that
+    // declare g_verletOffsets, fifteen are the `*_Damaged_*` variants but the sixteenth is
+    // `ZOnlyVehicleSkinnedOpaqueSingleSided_VertexShader`, i.e. the SHADOW / Z-only skinned
+    // path, which binds irrespective of mbDamaged. Under the console's gate an UNDAMAGED car
+    // would leave slot 22 unpublished for that program and have its shadow-map geometry torn
+    // by the same stale registers this fix exists to stop. An unpublished constant is not
+    // zero, it is the previous draw's value, so "only when damaged" is not a safe economy on
+    // PC. Cost is one 2 KB copy per car per pass.
+    // RESTORE the console gate if the Z-only skinned program is ever shown to ignore the array.
+    {
+        CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData(
+            22, reinterpret_cast< const Vector4* >( lpRenderParams->GetVerletOffsets() ) );
+
+        // 23 is the companion scale, and -- MEASURED against SHADERS_PC.BNDL's variable
+        // tables -- it is a PIXEL-shader constant (PS c5, declared by 5 programs), so it
+        // cannot move a vertex: it is shading only. It is uploaded as zero rather than left
+        // unset purely so the register carries a deterministic value instead of whatever the
+        // previous draw's PS c5 held.
+        // DELETE-WHEN the deformation debug component's scale has a real source.
+        const Vector4 lv4DamageConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
+        CgsGraphics::mShaderConstantTable.SetShaderConstantData( 23, lv4DamageConstants );
+    }
 
     // ---- the body-part loop -------------------------------------------------
     // `if (*(this + 99147))` -- the module's own render switch (see the header's

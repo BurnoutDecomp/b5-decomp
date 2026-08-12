@@ -268,6 +268,31 @@ void ActiveRaceCar::RenderParams::Reset()
     // [0,0,1,0][0,0,0,0]; SetIdentity is the semantic-parity reset used throughout).
     mBodyTransform.SetIdentity();
 
+    // ⭐ [FLAG PC bring-up, 2026-08-12 exploding-panels wave] ZERO THE VERLET SCRATCH.
+    //
+    // NOT a console store: the X360 Reset does not touch maVerletOffsets, because on the
+    // console this array always has a writer -- the deformation system owns it, and an
+    // undeformed car simply holds zeros in it. On PC BrnDeformationManager is not mounted,
+    // so NOTHING has ever written these 128 vectors: they were whatever the ActiveRaceCar
+    // allocation happened to contain.
+    //
+    // ⚠ BE PRECISE ABOUT WHAT THIS DOES AND DOES NOT FIX. Zeroing the CPU array is only HALF
+    // the repair, and on its own it is INERT. The garbage the vertex shader actually read was
+    // never this array -- it was the stale D3D9 REGISTER FILE, because slot 22 had no writer
+    // at all and an unset external constant is SKIPPED rather than zeroed, leaving c0..c127
+    // holding the preceding world draw's ShadowMap_WorldToLight / world matrices. The other
+    // half is the upload in RenderRaceCar, which now publishes this array to constant 22;
+    // that is what makes the zeros here reach the GPU. Neither change alone is sufficient.
+    //
+    // Zero is the honest stand-in AND the console's own value for a car that has taken no
+    // damage: zero displacement, zero scratch in the w lane. Once BrnDeformationManager lands
+    // it becomes the correct seed for a freshly spawned car rather than a stand-in.
+    // DELETE-WHEN the deformation system writes this array.
+    for (u32 luVerlet = 0; luVerlet < KU_MAX_RACE_CAR_VERLET_POINTS; ++luVerlet)
+    {
+        maVerletOffsets[luVerlet].SetZero();
+    }
+
     // Identity wheel transforms + scale matrices (console unrolls this 6-iteration
     // loop; re-rolled here).
     for (u32 luWheel = 0; luWheel < 6; ++luWheel)
