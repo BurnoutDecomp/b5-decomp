@@ -1176,6 +1176,14 @@ namespace BrnWorld
                 mpcStage  = 0;
                 miCascade = -1;
                 for (s32 liI = 0; liI < 4; ++liI) { mafDetail[liI] = 0.0f; }
+                mbHavePlaneReport   = false;
+                miNonFiniteVertMask = 0;
+                mfSubCamNear = mfSubCamFar = mfSlabNear = mfSlabFar = 0.0f;
+                for (s32 liI = 0; liI < 6; ++liI)
+                {
+                    maiOppositeSlot[liI] = -1;
+                    mafOppositeDot[liI]  = 0.0f;
+                }
             }
 
             void Note(const char* lpcStage, s32 liCascade,
@@ -1187,8 +1195,18 @@ namespace BrnWorld
                 mafDetail[0] = lfA; mafDetail[1] = lfB;
                 mafDetail[2] = lfC; mafDetail[3] = lfD;
             }
+
+            // ---- rung 1's forensic payload (see NotePlaneForensics) ----------
+            bool mbHavePlaneReport;
+            s32  miNonFiniteVertMask;    // bit v set == lFrustumPoints[v] non-finite
+            f32  mfSubCamNear;           // lTsmBBInfo.mCamera.maProjectionScalars[7]
+            f32  mfSubCamFar;            //                                      [8]
+            f32  mfSlabNear;             // lTsmBBInfo.mfNearClip
+            f32  mfSlabFar;              // lTsmBBInfo.mfFarClip
+            s32  maiOppositeSlot[6];     // per stored slot: the slot its normal most opposes
+            f32  mafOppositeDot[6];      // ...and that dot3 (an opposite pair is ~ -1)
         };
-        ShadowCamProbe gShadowCamProbe = { 0, -1, { 0.0f, 0.0f, 0.0f, 0.0f } };
+        ShadowCamProbe gShadowCamProbe;
 
         // The probe's canary: a value no real sub-frustum corner can hold.
         const f32 KF_SHADOW_CAM_PROBE_CANARY = -1.2345678e9f;
@@ -1203,6 +1221,31 @@ namespace BrnWorld
         {
             return ProbeFinite4(lrM.xAxis) && ProbeFinite4(lrM.yAxis)
                 && ProbeFinite4(lrM.zAxis) && ProbeFinite4(lrM.wAxis);
+        }
+
+        // --------------------------------------------------------------------
+        // [FLAG PC bring-up probe] rung 1's forensics.
+        //
+        // Recovers stored slot `luSlot` out of a Frustum's swizzled SoA batch,
+        // AoS and un-negated -- the same de-swizzle CalcVertices' stage 1 does
+        // (batch = slot >= 4 ? 4 : 0, float lane = slot & 3, whole-vector
+        // negate, per VectorToPlane @0x82840DB0). READ-ONLY, and it goes through
+        // the public maSwizzledPlanes member the WorldModule tripwire already
+        // reads, so it borrows no private access and asserts nothing.
+        // --------------------------------------------------------------------
+        inline Vector4 ProbeGetStoredPlane(const CgsGeometric::Frustum& lrFrustum, u32 luSlot)
+        {
+            const Vector4* lpaLanes = &lrFrustum.maSwizzledPlanes[(luSlot >= 4u) ? 4u : 0u];
+            const u32      luLane   = luSlot & 3u;
+
+            Vector4 lvPlane;
+            f32*    lpfOut = &lvPlane.x;
+            for (u32 luComp = 0; luComp < 4; ++luComp)
+            {
+                const f32* lpfLane = &lpaLanes[luComp].x;
+                lpfOut[luComp] = -lpfLane[luLane];
+            }
+            return lvPlane;
         }
     }
 
@@ -1489,8 +1532,38 @@ namespace BrnWorld
                     << ") types=" << static_cast<s32>(maShadowMapTypes[0])
                     << "/" << static_cast<s32>(maShadowMapTypes[1])
                     << "/" << static_cast<s32>(maShadowMapTypes[2])
-                    << " far=" << mfShadowMapFarPlane
+                    << " shadowCamFar=" << mfShadowMapFarPlane
                     << "\n";
+
+                // The rung-1 forensics: the fingerprint that names WHICH stored
+                // plane slot holds which plane, plus the sub-frustum clip pair
+                // (so "did the cascade slab reach the camera?" is answered by
+                // the log rather than by argument). subCam near/far is what
+                // GetFrustumPerspective actually used; slab is the configured
+                // KAF_SHADOWMAP_SUBSET_FRUSTUM_NEAR/FAR_CLIP pair it clamps to.
+                if (gShadowCamProbe.mbHavePlaneReport)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[shadow-cam] verts nonFiniteMask=0x";
+                    const s32 liMask = gShadowCamProbe.miNonFiniteVertMask;
+                    for (s32 liBit = 7; liBit >= 0; --liBit)
+                    {
+                        *CgsDev::Log::gpDebugPrint << (((liMask >> liBit) & 1) ? 1 : 0);
+                    }
+                    *CgsDev::Log::gpDebugPrint
+                        << " subCamNear=" << gShadowCamProbe.mfSubCamNear
+                        << " subCamFar="  << gShadowCamProbe.mfSubCamFar
+                        << " slab=[" << gShadowCamProbe.mfSlabNear
+                        << "," << gShadowCamProbe.mfSlabFar << "]"
+                        << " opposedSlot:";
+                    for (s32 liSlot = 0; liSlot < 6; ++liSlot)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << " " << liSlot << "->" << gShadowCamProbe.maiOppositeSlot[liSlot]
+                            << "(" << gShadowCamProbe.mafOppositeDot[liSlot] << ")";
+                    }
+                    *CgsDev::Log::gpDebugPrint << "\n";
+                }
             }
         }
     }
@@ -1953,14 +2026,66 @@ namespace BrnWorld
             }
         }
 
-        for (u32 luI = 0; luI < 8; ++luI)
+        // [FLAG PC bring-up probe] rung 1 + its forensics. detail[0] is the
+        // vertex INDEX (not x); detail[1..3] are that vertex's x/y/z.
         {
-            if (!ProbeFinite4(lFrustumPoints[luI]))
+            s32 liNonFiniteMask = 0;
+            s32 liFirstBad      = -1;
+            for (u32 luI = 0; luI < 8; ++luI)
+            {
+                if (!ProbeFinite4(lFrustumPoints[luI]))
+                {
+                    liNonFiniteMask |= (1 << luI);
+                    if (liFirstBad < 0) { liFirstBad = static_cast<s32>(luI); }
+                }
+            }
+
+            if (liFirstBad >= 0)
             {
                 gShadowCamProbe.Note("subfrustum-verts", static_cast<s32>(luMapIndex),
-                                     static_cast<f32>(luI), lFrustumPoints[luI].x,
-                                     lFrustumPoints[luI].y, lFrustumPoints[luI].z);
-                break;
+                                     static_cast<f32>(liFirstBad),
+                                     lFrustumPoints[liFirstBad].x,
+                                     lFrustumPoints[liFirstBad].y,
+                                     lFrustumPoints[liFirstBad].z);
+
+                // The decisive payload, gathered once per frame. WHICH vertices
+                // fail is a fingerprint: CalcVertices pairs stored slots
+                // (0,2) horizontally, (1,3) vertically and (4,5) in depth, so a
+                // vertex is only unsolvable when its triple contains two
+                // PARALLEL planes -- i.e. when the slot the storage writer used
+                // for a plane disagrees with the slot CalcVertices reads it
+                // from. The per-slot "most opposed" table below reads that
+                // straight off the live data: a real opposite pair dots to
+                // about -1, so it names the true slot->plane mapping with no
+                // inference at all.
+                if (!gShadowCamProbe.mbHavePlaneReport)
+                {
+                    gShadowCamProbe.mbHavePlaneReport   = true;
+                    gShadowCamProbe.miNonFiniteVertMask = liNonFiniteMask;
+                    gShadowCamProbe.mfSubCamNear = lTsmBBInfo.mCamera.maProjectionScalars[7];
+                    gShadowCamProbe.mfSubCamFar  = lTsmBBInfo.mCamera.maProjectionScalars[8];
+                    gShadowCamProbe.mfSlabNear   = lTsmBBInfo.mfNearClip;
+                    gShadowCamProbe.mfSlabFar    = lTsmBBInfo.mfFarClip;
+
+                    Vector4 laStored[6];
+                    for (u32 luSlot = 0; luSlot < 6; ++luSlot)
+                    {
+                        laStored[luSlot] = ProbeGetStoredPlane(lTsmBBInfo.mSubFrustum, luSlot);
+                    }
+                    for (u32 luI = 0; luI < 6; ++luI)
+                    {
+                        s32 liBest    = -1;
+                        f32 lfBestDot = 1.0e30f;
+                        for (u32 luJ = 0; luJ < 6; ++luJ)
+                        {
+                            if (luJ == luI) { continue; }
+                            const f32 lfDot = Dot3(laStored[luI], laStored[luJ]);
+                            if (lfDot < lfBestDot) { lfBestDot = lfDot; liBest = static_cast<s32>(luJ); }
+                        }
+                        gShadowCamProbe.maiOppositeSlot[luI] = liBest;
+                        gShadowCamProbe.mafOppositeDot[luI]  = lfBestDot;
+                    }
+                }
             }
         }
         if (!ProbeFinite44(lWorldToLight))
