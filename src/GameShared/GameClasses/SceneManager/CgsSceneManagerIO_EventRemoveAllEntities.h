@@ -1,5 +1,7 @@
 #pragma once
 
+#include "types.hpp"   // u8 (the mu8Owner payload below)
+
 // Minimal owning home for the SceneManager "remove all entities" event element
 //   CgsSceneManager::SceneManagerIO::InEventRemoveAllEntities
 // -- the per-event payload stored in the EventQueue<InEventRemoveAllEntities, N>
@@ -20,10 +22,22 @@
 //   => sizeof(InEventRemoveAllEntities) == 1 (a payload-less marker event); the "remove
 //      all entities" request carries no data, only its presence in the queue.
 //
-// LAYOUT: a payload-less marker (an empty event whose presence triggers the bulk remove).
-// C++ gives an empty struct sizeof 1, exactly the asm-attested 1-byte stride. Construct
-// does not read the element and Append block-copies it whole, so only the size/alignment
-// is load-bearing.
+// LAYOUT: a single-byte payload. ⚠️ CORRECTED 2026-08-12 (prop-spawn link-closure pass) --
+// this was previously modelled as a payload-less marker, which is why the one producer
+// (PropZoneManager::RemoveAllPropsAndParts) had to carry a FLAG saying its payload byte
+// "has nowhere to go". It does have somewhere to go:
+//   * DecFIGS DWARF (CgsSceneManagerIO_SceneUpdate.h:63/65) declares
+//         struct InEventRemoveAllEntities : public Event { uint8_t mu8Owner; };
+//     and the matching producer as `void RemoveAllEntities(uint8_t)`.
+//   * The X360 confirms both: RemoveAllPropsAndParts @0x822DEF50 inlines the producer at
+//     0x822DF020-38 as
+//         GetSceneInputInterface() -> +0xC7E3C -> BaseEventQueue<T>::AddEvent() -> stb 3
+//     and 3 is E_ENTITYTYPE_PROP -- i.e. "remove every entity OWNED BY PROPS", which is
+//     exactly what that function is for. A payload-less marker could not express that.
+// LAYOUT-NEUTRAL: an empty struct and a struct holding one u8 are both sizeof 1 / align 1
+// (the empty base is elided), so the asm-attested 1-byte Append stride and the +0xC
+// maEvents offset are unchanged, and both explicit-instantiation TUs are unaffected. The
+// static_assert below is the tripwire for that.
 
 namespace CgsSceneManager
 {
@@ -34,8 +48,16 @@ namespace SceneManagerIO
     // with the SceneManagerIO::Event defined by the other per-element queue homes.
     struct EventBaseRemoveAllEntities {};
 
-    // EventQueue<InEventRemoveAllEntities, N> element. A payload-less marker event:
-    // sizeof 1 (empty struct), 1-byte stride -- exactly the asm-attested Append stride.
-    struct InEventRemoveAllEntities : public EventBaseRemoveAllEntities {};
+    // EventQueue<InEventRemoveAllEntities, N> element (DWARF CgsSceneManagerIO_SceneUpdate.h:63).
+    // sizeof 1, 1-byte stride -- exactly the asm-attested Append stride.
+    struct InEventRemoveAllEntities : public EventBaseRemoveAllEntities
+    {
+        // DWARF :65. The entity-type owner whose entities are to be dropped; the sole
+        // observed value is E_ENTITYTYPE_PROP (3), stored by the `stb r10, 0(r11)` at
+        // 0x822DF038.
+        u8 mu8Owner;
+    };
+    static_assert(sizeof(InEventRemoveAllEntities) == 1,
+                  "InEventRemoveAllEntities stride 1 (asm: Append strides by count UNSCALED)");
 }
 }

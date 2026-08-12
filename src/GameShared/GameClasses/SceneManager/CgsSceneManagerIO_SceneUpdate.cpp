@@ -194,6 +194,30 @@ namespace SceneManagerIO
         mSetVolumeInstanceTransformQueue.AddEvent(lEvent);
     }
 
+    // ----- Drop every entity belonging to one entity-type owner -----
+    // BODIED 2026-08-12 (prop-spawn link-closure pass).
+    //
+    // The X360 never emits this out of line -- it is a two-line header inline, and the one
+    // producer in the build shows it whole. PropZoneManager::RemoveAllPropsAndParts
+    // @0x822DEF50 inlines it at 0x822DF018-38 as:
+    //     bl  sub_822B9738                 ; OutputBuffer_PreScene::GetSceneInputInterface
+    //     addis r3,r3,0xC / addi r3,r3,0x7E3C   ; + 0xC7E3C == mRemoveAllEntitiesQueue
+    //     bl  0x822C6AE8                   ; BaseEventQueue<T>::AddEvent()  -- the NO-ARG
+    //                                      ; "reserve the tail slot" overload: asserts
+    //                                      ; mpEvents != NULL and GetLength() < GetMaxLength(),
+    //                                      ; returns mpEvents + miLength (UNSHIFTED, i.e.
+    //                                      ; element stride 1), post-increments miLength
+    //     li  r10, 3 / stb r10, 0(r11)     ; slot.mu8Owner = 3 == E_ENTITYTYPE_PROP
+    //
+    // So the whole body is "reserve a slot and write the owner byte" -- note there is NO
+    // separate "queue too small" tripwire here as in the siblings above, because AddEvent()
+    // itself carries the two asserts (the sibling producers use the by-value AddEvent(const
+    // T&) overload, which does not).
+    void InSceneUpdateInterface::RemoveAllEntities(u8 lu8Owner)
+    {
+        mRemoveAllEntitiesQueue.AddEvent().mu8Owner = lu8Owner;
+    }
+
     // ----- Set a volume instance's culling group (X360 0x822B1A98) -----
     // Stages { mVolumeInstanceId = a2 (std, 8B), miCullingGroupId = a3 (stw, 4B) } and appends
     // to mSetVolumeInstanceCullingGroupQueue.

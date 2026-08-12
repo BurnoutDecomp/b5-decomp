@@ -1015,9 +1015,14 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
             lpOutputBufferStack->CreateIOBuffer( &lpPropOutput, "Prop" );
             // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
             // T::Construct after the alloc; the generic PC template placement-news only).
+            // ⭐ 2026-08-12 (prop-BOOT wave, agent B8): this line NOW REACHES THE REAL
+            // OutputBuffer_Prepare::Construct @0x822EFC58. Until that body existed it silently
+            // resolved to the inherited CgsModule::IOBuffer::Construct, which is why a second
+            // explicit `lpPropOutput->CgsModule::IOBuffer::Construct()` used to stand here --
+            // it was doing the only thing the first line actually did. The real Construct sets
+            // the base status byte itself (`stb 1, 0(this)` is its first instruction), so the
+            // duplicate is removed rather than left to re-clear a freshly built buffer.
             lpPropOutput->Construct();
-            // PC Construct restoration (see the RaceCar stage above).
-            lpPropOutput->CgsModule::IOBuffer::Construct();
 
             CgsModule::LockBuffersForIO( lpPropOutput );
             const bool lbPropPrepared =
@@ -3978,7 +3983,9 @@ WorldModule::GenerateDispatchLists(
         mPropEntityModule.GenerateDispatchLists(
             lpPropDispatchInput, lpFilteredEntityData->maPropEntityIds,
             gDispatchCamera.GetViewProjectionMatrix(), gDispatchCamera.GetPosition(),
-            lfLodZoomFactor, &mShaderLodInfo, 11, 11, 15 );
+            // The trailing pair is (lbRenderingEnvironmentMap, lbRenderCoronas). X360
+            // @0x827D294C..58 writes @0x6F = 0 / @0x77 = 1 for the main view.
+            lfLodZoomFactor, &mShaderLodInfo, 11, 11, 15, false, true );
         PerfMonCpu::StopMonitor( miPropGenerateDispListClearPM );
     }
 
@@ -4053,7 +4060,9 @@ WorldModule::GenerateDispatchLists(
             mPropEntityModule.GenerateDispatchLists(
                 lpPropDispatchInput, lpFilteredEntityData->maPropEntityIds,
                 lFaceCamera.GetViewProjectionMatrix(), gDispatchCamera.GetPosition(),
-                1.0f, &mShaderLodInfo, 5 + liFace, 5 + liFace, 5 + liFace );
+                // Env-map face: X360 @0x827D2C58..70 writes @0x6F = 1 / @0x77 = 0 --
+                // rendering the environment map, and no coronas on it.
+                1.0f, &mShaderLodInfo, 5 + liFace, 5 + liFace, 5 + liFace, true, false );
             PerfMonCpu::StopMonitor( miPropGenerateDispListClearPM );
 
             // Refresh the face camera's projection for the renderer (far 10000)
@@ -4289,7 +4298,11 @@ WorldModule::GenerateShadowMapDispatchLists(
             mPropEntityModule.GenerateDispatchLists(
                 lpPropDispatchInput, lpFilteredEntityData->maPropEntityIds,
                 lpCascadeCamera->GetViewProjectionMatrix(), lpCameraInput->GetPosition(),
-                lfLodZoomFactor, &mShaderLodInfo, liCascadeList, liCascadeList, liCascadeList );
+                // Shadow cascade: a depth-only pass, so neither the env-map flag nor
+                // coronas apply (GenerateShadowMapDispatchLists @0x827C96D8 runs the same
+                // prop leg per cascade).
+                lfLodZoomFactor, &mShaderLodInfo, liCascadeList, liCascadeList, liCascadeList,
+                false, false );
         }
         PerfMonCpu::StopMonitor( miPropGenerateDispListClearPM );
 
@@ -4449,6 +4462,25 @@ WorldModule::SetBringUpCameraOverride( const rw::math::vpu::Matrix44Affine& lrTr
     mBringUpCameraOverride       = lrTransform;
     mfBringUpCameraOverrideFOV   = lfFOVDegrees;
     mbBringUpCameraOverrideValid = true;
+}
+
+// [FLAG PC bring-up] Finiteness tripwire for the shadow-producer arm below. See the
+// HONEST GATE banner there: while ShadowMap::Construct's per-slot ortho scale is
+// un-recovered rodata carried as zero, UpdateOrthogonalProjectionMatrix divides 1.0f
+// by it and every cascade view-projection comes out +inf. Handing inf/NaN to
+// LooseOctree::AddJobFrustumTest is not a faithful query, so the arm parks instead.
+// DELETE with GenerateDispatchListsBringUp.
+static bool IsFiniteMatrix44BringUp( const Matrix44& lrMatrix )
+{
+    const f32* lpfLanes = &lrMatrix.xAxis.x;
+    for ( s32 liLane = 0; liLane < 16; liLane++ )
+    {
+        if ( !std::isfinite( lpfLanes[ liLane ] ) )
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 void
@@ -4876,11 +4908,13 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     // the shader contract above for the establishing camera; DELETE with the rest of
     // GenerateDispatchListsBringUp when the real camera + Camera::GetViewProjectionMatrixModified
     // land.
+    // (Hoisted out of the block below so the shadow arm can re-publish it -- see the
+    // main-view constant restore at the bottom of SHADOW PRODUCER, PART 2.)
+    Matrix44 lViewProjectionModified;
     {
         const f32 lfZScale = lfFar / ( lfFar - lfNear );
         const f32 lfZBias  = -lfNear * lfFar / ( lfFar - lfNear );
 
-        Matrix44 lViewProjectionModified;
         lViewProjectionModified.xAxis = Vector4{ lViewProjection.xAxis.x, lViewProjection.yAxis.x,
                                                  lViewProjection.zAxis.x, lViewProjection.wAxis.x };
         lViewProjectionModified.yAxis = Vector4{ lViewProjection.xAxis.y, lViewProjection.yAxis.y,
@@ -4891,7 +4925,242 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         CgsGraphics::mShaderConstantTable.SetShaderConstantData( 34, lViewProjectionModified );
     }
 
+    // =========================================================================
+    // ⭐ [FLAG PC bring-up] SHADOW PRODUCER, PART 1 -- the three cascade cameras.
+    //
+    // MIRRORS the console leg in WorldModule::GenerateFrustumQueries @0x827DADF8
+    // (this file, :3541-3548). That function is bodied, compiled AND linked -- and has
+    // ZERO callers on this build: BrnGameModule::DoDispatch runs this bring-up producer
+    // instead, and until now it had no shadow arm at all, which is why the renderer's
+    // "MESH lists:" probe has never once shown the shadow-caster lists 0/1/2/3/4.
+    //
+    // ---- THE RENDER CAMERA -------------------------------------------------------
+    // The console hands ShadowMap::CalculateShadowMapCameras the DIRECTOR camera
+    // (BrnDirector::Camera::Camera*, asm-proven -- see the RECONCILE note on the decl).
+    // DoDispatch's director camera object is NOT reachable from inside this producer:
+    // all this function ever receives of it is the transform + FOV that
+    // SetBringUpCameraOverride stages, and the module's own mLastCameraInput is NOT a
+    // stand-in for it -- that member is deliberately the PVS QUERY LATCH (its Pos row is
+    // lPvsPosition, which for the frozen establishing shot is the point being framed,
+    // not the eye, and repurposing it would move the streamer's query point).
+    //
+    // So the leg builds its own director camera from EXACTLY the basis the stand-in
+    // graphics camera above was framed with -- read straight out of sBringUpCamera.mView,
+    // whose basis COLUMNS the engine's own CgsGraphics::Camera::LookAt @0x827F9510 filled
+    // (column0 = right, column1 = up, column2 = dir), so the two cannot drift. When the
+    // director IS driving, that basis is the director's own framing.
+    //
+    // ---- THE KEY LIGHT -----------------------------------------------------------
+    // mEnvironmentManager.CalcKeyLightDirection() @0x827B0638 -- the REAL console
+    // producer. Verified live-safe: it is a complete reconstruction, and every input it
+    // reads (mfTimeOfDay, the three sun-rig tuning angles, the 09:00..16:00 elevation
+    // clamp) is seeded by EnvironmentManager::Construct, which WorldModule::Construct
+    // calls at :451. At the Construct default time of day (46800 s == 13:00) it evaluates
+    // to (-0.4246, -0.6698, +0.6092) -- a real, normalised, downward direction.
+    //
+    // ⚠ IT IS NOT THE DIRECTION THE WORLD IS CURRENTLY LIT BY. Both bring-up publishes
+    // (PublishWorldShadingConstantsBringUp below, shader slot 10, and
+    // BrnRendererModule::PublishSkyConstantsBringUp) push the hard-coded bring-up value
+    // (0.406, -0.812, 0.419). The two are in the SAME HEMISPHERE (dot == +0.63; both
+    // travel downward) but about 51 degrees apart in azimuth/elevation. The real function
+    // is used here deliberately: it is the console call, it is what the world WILL be lit
+    // by the moment the two bring-up publishes are retired, and nothing renders out of
+    // these cascades yet. Unify all three in the change that retires the publishes.
+    // =========================================================================
+    bool lbShadowArmLive = false;
+    if ( mShadowMap.IsEnabled() )
+    {
+        // The director camera this leg owns. Construct() once for the FOV / aspect /
+        // camera-state defaults; only the transform + FOV move per frame.
+        static BrnDirector::Camera::Camera sShadowRenderCamera;
+        static bool                        sbShadowRenderCameraConstructed = false;
+        if ( !sbShadowRenderCameraConstructed )
+        {
+            sbShadowRenderCameraConstructed = true;
+            sShadowRenderCamera.Construct();
+        }
+
+        // mView's basis COLUMNS -> the camera transform's basis ROWS.
+        const Matrix44& lrView = sBringUpCamera.mView;
+        sShadowRenderCamera.mTransform.xAxis =
+            Vector3{ lrView.xAxis.x, lrView.yAxis.x, lrView.zAxis.x, 0.0f };   // right
+        sShadowRenderCamera.mTransform.yAxis =
+            Vector3{ lrView.xAxis.y, lrView.yAxis.y, lrView.zAxis.y, 0.0f };   // up
+        sShadowRenderCamera.mTransform.zAxis =
+            Vector3{ lrView.xAxis.z, lrView.yAxis.z, lrView.zAxis.z, 0.0f };   // at
+        sShadowRenderCamera.mTransform.wAxis =
+            Vector3{ lEye.x, lEye.y, lEye.z, 0.0f };                           // pos
+        sShadowRenderCamera.mfFOV         = lfHorizontalFov / KF_DEGS_TO_RADS; // mfFOV is DEGREES
+        sShadowRenderCamera.mfAspectRatio = lfAspect;
+
+        const Vector3 lKeyLightDirection = mEnvironmentManager.CalcKeyLightDirection();
+
+        // ⚠ SUSPECT, NOT MINE TO FIX (flagged 2026-08-12, shadow-producer wave).
+        // CalculateShadowMapCameras step 3 makes a CGS copy of THIS camera
+        // (CopyToCgsCamera) and steps 4/5 hand it to ComputeBoundingBoxMatrix -- which is
+        // now a LIVE path, because the dumped KA_SHADOWMAPTYPE rodata says all three
+        // cascades ship as E_SHADOWMAP_TYPE_BOUNDINGBOX, not ortho. CopyToCgsCamera sets
+        // that copy's far clip from BrnDirector::Camera::Camera::KF_DEFAULT_FAR_CLIP_DISTANCE,
+        // which is still a FLAGGED 0.0f PLACEHOLDER (Camera.cpp:64 -- "no pinned address").
+        // A zero far clip behind a 0.15 near clip is a degenerate view volume, so the
+        // per-cascade best-fit matrix it feeds can come out degenerate or non-finite. That
+        // shows up in the [shadow-prod] line below as the view-projection WARN; it cannot
+        // reach the screen (see the tripwire note) and it cannot be fixed from this file.
+        mShadowMap.CalculateShadowMapCameras( lKeyLightDirection, &sShadowRenderCamera );
+
+        // ---- FINITENESS TRIPWIRE -------------------------------------------------
+        // This should never fire now: the 0x820CA81C rodata block was dumped on
+        // 2026-08-12, so ShadowMap::Construct seeds real ortho scales { 7, 30, 120 } and
+        // at-offsets { 7.5, 30, 120 } instead of the zeros it used to carry (a zero ortho
+        // scale made CgsGraphics::Camera::UpdateOrthogonalProjectionMatrix compute 1.0f/0
+        // and every cascade view-projection came out +inf). The tripwire stays because
+        // that rodata is exactly the kind of value a later wave re-derives, and the two
+        // failure modes are NOT equivalent:
+        //
+        //   * a non-finite cascade FRUSTUM would poison the query, so it PARKS the arm --
+        //     the octree's frustum test culls against nothing but those planes
+        //     (LooseOctree::FrustumTestVpRecursive -> FrustumTestEntities).
+        //   * a non-finite cascade VIEW-PROJECTION cannot: AddJobFrustumTest copies it
+        //     but no test path reads it, and inside the cascade legs it only reaches
+        //     shader constants 3/34, which only the shadow-list records snapshot (AddToBin
+        //     bakes the dirty block per record) and the renderer dispatches no shadow
+        //     list yet. So it is WARNED about, latched, and the leg proceeds.
+        lbShadowArmLive = true;
+        bool lbCascadeVpFinite = true;
+        for ( s32 liCascade = 0; liCascade < 3; liCascade++ )
+        {
+            const CgsGraphics::Camera* lpCascadeCamera = mShadowMap.GetCascadeCamera( liCascade );
+
+            const CgsGeometric::Frustum& lrCascadeFrustum = lpCascadeCamera->GetFrustumPerspective();
+            for ( s32 liPlane = 0; liPlane < 8; liPlane++ )
+            {
+                const Vector4& lrPlane = lrCascadeFrustum.maSwizzledPlanes[ liPlane ];
+                if ( !std::isfinite( lrPlane.x ) || !std::isfinite( lrPlane.y )
+                     || !std::isfinite( lrPlane.z ) || !std::isfinite( lrPlane.w ) )
+                {
+                    lbShadowArmLive = false;
+                }
+            }
+
+            if ( !IsFiniteMatrix44BringUp( lpCascadeCamera->GetViewProjectionMatrix() ) )
+            {
+                lbCascadeVpFinite = false;
+            }
+        }
+
+        // ---- the value-latched liveness probe ------------------------------------
+        // ⚠️ LATCHED ON THE VALUE, never on a `static bool` one-shot. Project lesson,
+        // learned three times: a one-shot probe here fires on the loading screen before
+        // the world exists and then never again, which is indistinguishable in the log
+        // from "this code was never reached". This reprints whenever cascade 0's camera
+        // origin moves more than a metre -- i.e. whenever the producer is genuinely
+        // running over a moving camera. A NON-FINITE origin also prints (once per
+        // transition, and the latch is reset to the sentinel so the recovery prints too):
+        // a NaN would make every `moved > 1` test false and silently reproduce exactly
+        // the "looks like it was never reached" failure this probe exists to avoid.
+        {
+            static Vector3 sLastCascadeOrigin  = { 1.0e30f, 1.0e30f, 1.0e30f, 0.0f };
+            static bool    sbLastOriginFinite  = true;
+
+            const Vector3 lCascadeOrigin = mShadowMap.GetCascadeCamera( 0 )->GetPosition();
+            const bool    lbOriginFinite = std::isfinite( lCascadeOrigin.x )
+                                        && std::isfinite( lCascadeOrigin.y )
+                                        && std::isfinite( lCascadeOrigin.z );
+            const f32     lfDeltaX = lCascadeOrigin.x - sLastCascadeOrigin.x;
+            const f32     lfDeltaY = lCascadeOrigin.y - sLastCascadeOrigin.y;
+            const f32     lfDeltaZ = lCascadeOrigin.z - sLastCascadeOrigin.z;
+            const f32     lfMovedSq =
+                lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
+
+            // Rate limit ON TOP of the value latch, never instead of it: when the
+            // director is driving, the camera covers more than a metre in a single
+            // dispatch frame, and an unlimited value latch would then print on every
+            // one of the ~7000 frames of a boot-drive session. The latch still decides
+            // WHETHER there is anything to say; this only decides how often it is said.
+            static s32 siFramesSincePrint = 1000;
+            ++siFramesSincePrint;
+
+            const bool lbPrint = ( siFramesSincePrint >= 60 )
+                              && ( lbOriginFinite ? ( lfMovedSq > 1.0f ) : sbLastOriginFinite );
+
+            if ( lbPrint && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                siFramesSincePrint = 0;
+                sbLastOriginFinite = lbOriginFinite;
+                sLastCascadeOrigin = lbOriginFinite
+                    ? lCascadeOrigin
+                    : Vector3{ 1.0e30f, 1.0e30f, 1.0e30f, 0.0f };
+                *CgsDev::Log::gpDebugPrint
+                    << "[shadow-prod] cascade0 origin=(" << lCascadeOrigin.x << ","
+                    << lCascadeOrigin.y << "," << lCascadeOrigin.z
+                    << ") renderEye=(" << lEye.x << "," << lEye.y << "," << lEye.z
+                    << ") keyLight=(" << lKeyLightDirection.x << ","
+                    << lKeyLightDirection.y << "," << lKeyLightDirection.z
+                    << ") cascades=" << ( mShadowMap.GetRenderMultipleShadowMaps() ? 3 : 1 )
+                    << " armed=" << ( lbShadowArmLive ? 1 : 0 )
+                    << ( lbCascadeVpFinite
+                             ? ""
+                             : "  [WARN: a cascade view-projection is not finite -- check"
+                               " ShadowMap KAF_ORTHO_SCALE; the frustum planes are"
+                               " unaffected so the query still runs]" )
+                    << ( lbShadowArmLive
+                             ? ""
+                             : "  [PARKED: a cascade frustum plane is not finite]" )
+                    << "\n";
+            }
+        }
+    }
+
+    // ⚠️ THE SINGLE MOST DANGEROUS BIT OF THE SHADOW ARM, MADE HARMLESS BY CONSTRUCTION.
+    // WorldEntityModule::GenerateDispatchLists (BrnWorldEntityModule.cpp:1774) and
+    // RenderRaceCar (BrnRaceCarEntityModule_Render.cpp:164) both select their Z-only
+    // shadow path from ShadowMap::IsRenderingShadowMap(), so a latch left raised would
+    // silently corrupt the MAIN pass. The console only ever raises it inside
+    // GenerateShadowMapDispatchLists and lowers it at the bottom of the same loop body;
+    // this producer additionally FORCES it down here, before any main-view leg runs, so
+    // the main pass is provably unaffected even if a future edit leaks the latch.
+    mShadowMap.SetRenderingShadowMap( false );
+
+    // TODO(shadow-wave): this publish unconditionally installs the "shadows off"
+    // configuration (identity ShadowMap_WorldToLight, zeroed c15/c16 -> ApplyFade gives a
+    // shadow factor of exactly 1.0), and it runs AFTER CalculateShadowMapCameras above --
+    // deliberately, so ShadowMap::SetConstants' c14/c15/c16/c17 are overwritten and the
+    // pixel shaders keep reading the shadows-off block. DO NOT remove it here: sampler 15
+    // has no texture bound yet, so an unbound-sampler read returns 0 and the world would
+    // render with the KEY LIGHT REMOVED -- visibly worse than today. It comes out in the
+    // same change that binds the shadow-map texture and enables the renderer's cascade
+    // passes (BrnRendererModule::RenderWorldPasses gates lists 0,2,1,3,4 off).
     PublishWorldShadingConstantsBringUp();
+
+    // ======================================================================
+    // ⭐ [FLAG PC bring-up] THE PROP-GRAPHICS REGISTRATION TABLE (prop-render wave,
+    // 2026-08-12).
+    //
+    // MIRRORS the console call in WorldModule::GenerateDispatchLists (this file, :3806
+    // -- X360 @0x827D1CE8), which is the ONLY caller of PropEntityModule::
+    // CachePropGraphicsLists @0x822DBF28 anywhere in the image (its xrefs_to list has
+    // exactly one entry). That console producer has NO callers in this build --
+    // BrnGameModule::DoDispatch drives GenerateDispatchListsBringUp instead -- so the
+    // 500-slot "prop type id -> PropGraphics" table was never rebuilt after boot and
+    // PropGraphicsManager::GetPropGraphics() returned 0 for every type.
+    //
+    // MEASURED, this build, before this line existed: the frustum handed the prop module
+    // 193 visible ids, ALL of them owner 3 (whole props) with sane type ids (0/6/21/22/
+    // 53/108/115/123/124), and all 193 were dropped at the
+    // `mPropGraphicsManager.GetPropGraphics( luPropTypeId ) == 0` continue in
+    // PropEntityModule::GenerateDispatchLists, with the registration census reporting
+    // registered=0 of 500 slots. Nothing else on the path was wrong.
+    //
+    // Console ORDER is preserved: the cache is rebuilt HERE, before the frustum query and
+    // the module dispatch legs below, exactly as :3806 sits ahead of the LOD-zoom factor
+    // and the dispatch calls in the real producer. It is safely after the bind, too --
+    // mapGraphicsLists[zone] is written a whole phase earlier, in the prop module's
+    // PreScene leg (BrnPropEntityModule_PreScene.cpp:659).
+    //
+    // DELETE this call (not the cache) when the real WorldModule::GenerateDispatchLists
+    // becomes the live producer -- it already carries the console call at :3806.
+    // ======================================================================
+    mPropEntityModule.CachePropGraphicsLists();
 
     // ======================================================================
     // THE REAL DISPATCH FEED. Everything below here is the console path:
@@ -4940,6 +5209,10 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         static CgsSceneManager::SceneManagerIO::OutputBuffer       sQueryOutput;
         static WorldEntityIO::InputBuffer_GenerateDispatchLists    sWorldDispatchInput;
         static RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists sRaceCarDispatchInput;
+        // [FLAG PC bring-up] the prop leg's stand-in IO buffer -- same stand-in pattern as
+        // the two above, for the same reason (BridgeWorldModuleToEntityModules_Render is
+        // still gated). Retire all three together.
+        static PropEntityIO::InputBuffer_Dispatch                  sPropDispatchInput;
         static FilteredEntityData                                  sFilteredEntityData;
         static bool sbBuffersConstructed = false;
         if ( !sbBuffersConstructed )
@@ -4947,6 +5220,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             sbBuffersConstructed = true;
             sWorldDispatchInput.Construct();
             sRaceCarDispatchInput.Construct();
+            sPropDispatchInput.Construct();
             sFilteredEntityData.Construct();
         }
         sQueryInput.Construct();
@@ -4964,6 +5238,49 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             sQueryInput.GetInCoarseQueryQueue()->FrustumTestVp(
                 KA_FRUSTUM_QUERY_IDS[ 0 ], luEntityTypeFlags,
                 lFrustum.maSwizzledPlanes, lViewProjection, 0u );
+        }
+
+        // ---- stage the three shadow cascades (the same three events
+        //      WorldModule::GenerateFrustumQueries @0x827DADF8 emits for
+        //      FrustumQuery_Shadowmap0..2 -- this file, :3615-3636) ----
+        // [FLAG PC bring-up] The console additionally gates this on the dispatch input
+        // buffer's RenderSwitches.mbRenderShadowMap; there is no dispatch input buffer
+        // in this producer (see the FLAG above), so the ShadowMap's own enable is the
+        // only gate, plus the finiteness park from part 1.
+        //
+        // ⚠ SUSPECT INHERITED FROM THE CONSOLE LEG, reproduced deliberately rather than
+        // "improved" here. GenerateFrustumQueries :3624 culls each cascade against
+        // Camera::GetFrustumPerspective() of the cascade camera -- and that reads only
+        // mView plus the cached fov/near/far SCALARS, which CalculateShadowMapCameras
+        // leaves IDENTICAL on all three cascades (fov 70, aspect 1, near -450, far 650).
+        // So the three cascade queries are near-identical ~650 m cones, not the tight
+        // 0..10.5 / 10.5..34 / 34..120 m slabs the cascade split implies; the per-cascade
+        // narrowing lives in mProjection (the bounding-box best fit) and in the ShadowMap's
+        // own maFrustum[i] culling frustum, and GetFrustumPerspective sees neither. Expect
+        // lists 0/1/4 to come back with similar, generous counts. Worth an asm re-read of
+        // @0x827DADF8 (ShadowMap::GetFrustum(i) is the obvious alternative source) -- but
+        // that is a fix to the CONSOLE function, so it belongs there, not in this mirror.
+        if ( lbShadowArmLive )
+        {
+            for ( s32 liCascade = 0; liCascade < 3; liCascade++ )
+            {
+                const CgsGraphics::Camera* lpCascadeCamera =
+                    mShadowMap.GetCascadeCamera( liCascade );
+
+                CgsSceneManager::SceneManagerIO::InEventFrustumTestVp lEvent;
+                const CgsGeometric::Frustum& lrCascadeFrustum =
+                    lpCascadeCamera->GetFrustumPerspective();
+                lEvent.mViewProjection = lpCascadeCamera->GetViewProjectionMatrix();
+                for ( s32 liPlane = 0; liPlane < 8; liPlane++ )
+                {
+                    lEvent.maFrustumPlanes[ liPlane ] = lrCascadeFrustum.maSwizzledPlanes[ liPlane ];
+                }
+                lEvent.mQueryId            = KA_FRUSTUM_QUERY_IDS[ 8 + liCascade ];
+                lEvent.mx32EntityTypeFlags = 128u;      // asm: the shadow entity mask
+                lEvent.mxQueryFlags        = 0u;
+
+                sQueryInput.GetInCoarseQueryQueue()->AddEvent( &lEvent, 4, sizeof( lEvent ) );
+            }
         }
         sQueryInput.UnlockForWrite();
 
@@ -5059,6 +5376,249 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 Vector4{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f },
                 lEye );
         }
+
+        // ==================================================================
+        // ⭐ [FLAG PC bring-up] THE PROPS (prop-spawn wave, 2026-08-12).
+        //
+        // MIRRORS the console leg in WorldModule::GenerateDispatchLists (this file,
+        // X360 @0x827D1CE8 -> the mPropEntityModule.GenerateDispatchLists call) and sits
+        // at the console-equivalent position: after the race-car dispatch leg.
+        //
+        // WHY IT IS HERE AT ALL: FilterFrustumTestResults above has ALWAYS been filling
+        // sFilteredEntityData.maPropEntityIds (its `case 3:` / `case 0x22:` arm -- owner 3
+        // is a whole prop, 0x22 a part of a smashed one), and this bring-up producer then
+        // dropped the array on the floor every single frame. That is the last link in the
+        // "no props anywhere" chain: even once the module spawns them and the culler sees
+        // them, nothing asked the prop module to draw them.
+        //
+        // The console stages this buffer through BridgeWorldModuleToEntityModules_Render;
+        // that bridge is still an inert gate, so -- exactly as the world and race-car legs
+        // above already do -- the frame and shadow map are seeded directly here. DELETE
+        // this seeding (not the call) when that bridge lands.
+        // No render-switch guard and no perf monitor here, matching the race-car leg above:
+        // this bring-up producer has no dispatch input buffer to read GetRenderSwitches()
+        // from (the real GenerateDispatchLists gets one), and PerfMonCpu is not in scope at
+        // this point in the file. Both come back with the real producer.
+        {
+            sPropDispatchInput.LockForWrite();
+            sPropDispatchInput.SetDispatchFrame( lpDispatchFrame );
+            sPropDispatchInput.SetShadowMap( &mShadowMap );
+            sPropDispatchInput.UnlockForWrite();
+
+            mPropEntityModule.GenerateDispatchLists(
+                &sPropDispatchInput, sFilteredEntityData.maPropEntityIds,
+                lViewProjection, lEye, lfLodZoomFactor, &mShaderLodInfo,
+                // object list 11 / opaque 11 / transparent 15 -- the console's own triple.
+                // Trailing pair: not the environment map, and coronas on (main view).
+                11, 11, 15, false, true );
+        }
+
+        // The MAIN-VIEW visible-world count, snapshotted here because the shadow arm
+        // below re-uses sFilteredEntityData for each cascade -- without this the two
+        // culling diagnostics at the bottom of this function would silently start
+        // reporting the LAST CASCADE's count under the name `visibleWorld`.
+        const s32 liMainViewVisibleWorld =
+            static_cast< s32 >( sFilteredEntityData.maWorldEntityIds.GetLength() );
+
+        // ==================================================================
+        // ⭐ [FLAG PC bring-up] SHADOW PRODUCER, PART 2 -- the cascade dispatch legs.
+        //
+        // MIRRORS WorldModule::GenerateShadowMapDispatchLists @0x827C96D8 (this file,
+        // :4151-4297), the console's real 3-cascade producer, which is bodied and linked
+        // and unreachable (its only caller, ::GenerateDispatchLists, has no callers).
+        //
+        // Console order is preserved: the main-view legs above run FIRST, then the
+        // cascades, exactly as @0x827D1CE8 does. That matters for the shader-constant
+        // table, which is a DELTA channel -- DrawRenderable::AddToBin drains the dirty
+        // list into each command as it is emitted (CgsDispatcherCommands.cpp:516), so the
+        // main-view records already carry the main-view camera constants before this leg
+        // touches slots 8/3/34. (Belt and braces: the main-view values are re-published
+        // at the bottom of this block anyway, so the table's end-of-frame state is byte
+        // for byte what it was before this arm existed.)
+        //
+        // SCOPE, honestly: TRAFFIC and PROPS are gated OFF. The console seeds their
+        // dispatch inputs here too, but this producer owns no BrnTrafficIO /
+        // PropEntityIO buffers (the console gets them from DoDispatch's IO stacks, which
+        // do not exist), and inventing them would be fabrication. World + race cars --
+        // the two feeds this producer already drives for the main view -- are the ones
+        // that matter, and they are wired for real.
+        //
+        // CASCADE -> LIST MAP, read off :4251 (`liCascadeList = (c >= 2) ? c + 2 : c`;
+        // the traffic feed uses c + 2 throughout, which is why the far cascade skips the
+        // env-map ids): cascade 0 -> list 0, cascade 1 -> list 1, cascade 2 -> list 4.
+        // Those are GDL OBJECT lists AND the destination mesh lists; the renderer sorts
+        // {0,2,1,3,4} and its cascade passes are still gated off
+        // (BrnRendererModule::RenderWorldPasses), so nothing is drawn from them yet --
+        // they are what the "MESH lists:" probe will finally show as non-empty.
+        // ==================================================================
+        if ( lbShadowArmLive && liResultType >= 0 && lpFrustumTestResult != 0 )
+        {
+            const u32 luNumCascades = mShadowMap.GetRenderMultipleShadowMaps() ? 3u : 1u;
+
+            // Walk on from the main-view result the legs above consumed.
+            const CgsModule::Event* lpCascadeResult = 0;
+            s32 liCascadeSize = 0;
+            s32 liCascadeType =
+                lpResultsQueue->GetNextEvent( lpFrustumTestResult, &lpCascadeResult, &liCascadeSize );
+
+            for ( u32 luCascade = 0; luCascade < luNumCascades; luCascade++ )
+            {
+                if ( liCascadeType < 0 || lpCascadeResult == 0 )
+                {
+                    break;
+                }
+
+                // The console asserts this (:4176). A hard assert here would storm the
+                // log on a bring-up mis-order, so it is a soft, value-latched park.
+                const u32 luResultId =
+                    reinterpret_cast< const CgsSceneManager::SceneQueryId* >( lpCascadeResult )->mId;
+                if ( luResultId != KA_FRUSTUM_QUERY_IDS[ 8 + luCascade ].mId )
+                {
+                    static u32 suLastMismatchId = 0xFFFFFFFFu;
+                    if ( luResultId != suLastMismatchId && CgsDev::Log::gpDebugPrint != 0 )
+                    {
+                        suLastMismatchId = luResultId;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[shadow-prod] PARKED: result " << static_cast< s32 >( luCascade )
+                            << " carries query id " << static_cast< s32 >( luResultId )
+                            << ", expected " << static_cast< s32 >( KA_FRUSTUM_QUERY_IDS[ 8 + luCascade ].mId )
+                            << " -- the cascade queries did not come back in submission order\n";
+                    }
+                    break;
+                }
+
+                mShadowMap.SetCurrentCascadeIndex( luCascade );
+                sFilteredEntityData.Clear();
+
+                const CgsGraphics::Camera* lpCascadeCamera =
+                    mShadowMap.GetCascadeCamera( static_cast< s32 >( luCascade ) );
+
+                // The per-module near-only gates (:4163-4173) minus the RenderSwitches
+                // half, which needs the dispatch input buffer this producer has not got.
+                const bool lbRaceCars = mShadowMap.GetRenderRaceCarsIntoShadowMap()
+                                     && ( luCascade == 0 || !mShadowMap.GetRenderRaceCarsNearOnly() );
+                const bool lbWorld    = mShadowMap.GetRenderWorldIntoShadowMap();
+
+                FilterFrustumTestResults( lpCascadeResult,
+                                          &sFilteredEntityData.maWorldEntityIds,
+                                          &sFilteredEntityData.maRaceCarEntityIds,
+                                          &sFilteredEntityData.maTrafficEntityIds,
+                                          &sFilteredEntityData.maPropEntityIds );
+
+                // Seed the enabled modules' dispatch inputs with this cascade's result.
+                sWorldDispatchInput.LockForWrite();
+                sWorldDispatchInput.GetSceneResultQueue()->Clear();
+                if ( lbWorld )
+                {
+                    sWorldDispatchInput.GetSceneResultQueue()->AddEvent(
+                        lpCascadeResult, liCascadeType, liCascadeSize );
+                }
+                sWorldDispatchInput.SetDispatchFrame( lpDispatchFrame );
+                sWorldDispatchInput.SetShadowMap( &mShadowMap );
+                sWorldDispatchInput.UnlockForWrite();
+
+                sRaceCarDispatchInput.LockForWrite();
+                sRaceCarDispatchInput.GetSceneResultQueue()->Clear();
+                if ( lbRaceCars )
+                {
+                    sRaceCarDispatchInput.GetSceneResultQueue()->AddEvent(
+                        lpCascadeResult, liCascadeType, liCascadeSize );
+                }
+                sRaceCarDispatchInput.SetDispatchFrame( lpDispatchFrame );
+                sRaceCarDispatchInput.SetShadowMap( &mShadowMap );
+                sRaceCarDispatchInput.UnlockForWrite();
+
+                // Advance to the next cascade's result BEFORE the dispatch legs run --
+                // the console does exactly this at :4225 (the event pointer the legs
+                // consumed is already copied into the module queues above).
+                liCascadeType =
+                    lpResultsQueue->GetNextEvent( lpCascadeResult, &lpCascadeResult, &liCascadeSize );
+
+                // ---- THE LATCH. Raised and lowered inside this ONE loop body, with no
+                // `continue`, no `break` and no early return between the two, exactly as
+                // the console does at :4242 / :4296. Everything that reads it
+                // (WorldEntityModule::GenerateDispatchLists, RenderRaceCar) is called
+                // between them and nowhere else in this frame; the whole arm runs AFTER
+                // the main-view legs; and the producer force-clears it at the top of
+                // every frame. There is no path on which the main pass sees it raised.
+                mShadowMap.SetRenderingShadowMap( true );
+
+                CgsGraphics::mShaderConstantTable.SetShaderConstantData( 8, lEye );
+                CgsGraphics::mShaderConstantTable.SetShaderConstantData(
+                    3, lpCascadeCamera->GetViewProjectionMatrix() );
+
+                // ---- [DIAG prop-render wave 2026-08-12] THE ISSIMILAR-STORM WITNESS ----
+                // ⛔ DELETE-WHEN the cascade projection satisfies the console tripwire.
+                // THIS call site is the source of every
+                // `RwMath::IsSimilar( m_projectionMatrix.GetElem(..), 0.0f )` assert in the
+                // log (CgsCamera.cpp:548-551, four per call). It is NOT the rw::math::vpu::
+                // Inverse stub: those asserts carried this exact callstack BEFORE Inverse was
+                // bodied, and they still fire now that Inverse is real and the log contains
+                // ZERO `nan(ind)`. Every writer of Camera::mProjection in CgsCamera.cpp
+                // stores literal 0.0f into the three asserted slots, so the non-zero can only
+                // come from ShadowMap::CalculateShadowMapCameras' TSM post-multiply
+                // (BrnShadowMap.cpp:1241/1249, `mProjection = mProjection * mBestFitMatrix`).
+                // This prints the actual magnitudes ONCE so the next wave knows whether it is
+                // float noise under the console's (un-dumped) IsSimilar epsilon or a real
+                // best-fit-matrix defect.
+                if ( CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    static bool sbLoggedCascadeProj = false;
+                    if ( !sbLoggedCascadeProj )
+                    {
+                        sbLoggedCascadeProj = true;
+                        const Matrix44& lrProj = lpCascadeCamera->mProjection;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[shadow-proj] cascade " << static_cast< s32 >( luCascade )
+                            << " projection off-axis terms: [0][2]=" << lrProj.xAxis.z
+                            << " [1][2]=" << lrProj.yAxis.z
+                            << " [0][3]=" << lrProj.xAxis.w
+                            << " | diag [0][0]=" << lrProj.xAxis.x
+                            << " [1][1]=" << lrProj.yAxis.y
+                            << " [2][2]=" << lrProj.zAxis.z
+                            << " [3][3]=" << lrProj.wAxis.w << "\n";
+                    }
+                }
+
+                CgsGraphics::mShaderConstantTable.SetShaderConstantData(
+                    34, lpCascadeCamera->GetViewProjectionMatrixModified() );
+
+                const s32 liCascadeList = ( luCascade >= 2 ) ? static_cast< s32 >( luCascade ) + 2
+                                                             : static_cast< s32 >( luCascade );
+
+                if ( lbRaceCars )
+                {
+                    mRaceCarEntityModule.GenerateDispatchLists(
+                        &sRaceCarDispatchInput, sFilteredEntityData.maRaceCarEntityIds,
+                        liCascadeList, liCascadeList, liCascadeList, false,
+                        Vector4{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f },
+                        lEye );
+                }
+
+                if ( lbWorld )
+                {
+                    mWorldEntityModule.GenerateDispatchLists(
+                        &sWorldDispatchInput, sFilteredEntityData.maWorldEntityIds,
+                        lpCascadeCamera->GetViewProjectionMatrix(), lEye, lForward,
+                        lfLodZoomFactor, &mShaderLodInfo,
+                        liCascadeList, liCascadeList, liCascadeList, liCascadeList, true );
+                }
+
+                mShadowMap.SetRenderingShadowMap( false );
+            }
+
+            // Unconditional lower, whatever the loop did above (see the latch note).
+            mShadowMap.SetRenderingShadowMap( false );
+
+            // Re-publish the MAIN-VIEW camera constants so the table's end-of-frame state
+            // is exactly what it was before this arm existed. Not console behaviour (the
+            // console leaves the last cascade's constants staged, because its renderer
+            // re-publishes per pass); it is a bring-up guard that makes this change
+            // provably invisible to every consumer downstream of the producer.
+            CgsGraphics::mShaderConstantTable.SetShaderConstantData( 8, lEye );
+            CgsGraphics::mShaderConstantTable.SetShaderConstantData( 3, lViewProjection );
+            CgsGraphics::mShaderConstantTable.SetShaderConstantData( 34, lViewProjectionModified );
+        }
         sQueryOutput.UnlockForRead();
 
         {
@@ -5075,10 +5635,12 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                     << " t=" << lfElapsed
                     << " producerFps=" << ( lfElapsed > 0.01f ? ( siDiagFrame / lfElapsed ) : 0.0f )
                     << " eye=(" << lEye.x << "," << lEye.y << "," << lEye.z
-                    << ") visibleWorld="
-                    << static_cast< s32 >( sFilteredEntityData.maWorldEntityIds.GetLength() )
+                    << ") visibleWorld=" << liMainViewVisibleWorld
                     << " list11=" << static_cast< s32 >(
                            lpDispatchFrame->GetList( KI_WORLD_OPAQUE_LIST )->GetCount() )
+                    << " shadowLists=" << static_cast< s32 >( lpDispatchFrame->GetList( 0 )->GetCount() )
+                    << "/" << static_cast< s32 >( lpDispatchFrame->GetList( 1 )->GetCount() )
+                    << "/" << static_cast< s32 >( lpDispatchFrame->GetList( 4 )->GetCount() )
                     << "\n";
             }
 
@@ -5090,7 +5652,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                     << "[culling] real frustum producer live: centre ("
                     << lCentre.x << ", " << lCentre.y << ", " << lCentre.z
                     << ") radius " << lfRadius << " -- visible world entities "
-                    << static_cast< s32 >( sFilteredEntityData.maWorldEntityIds.GetLength() )
+                    << liMainViewVisibleWorld
                     << ", object list " << static_cast< s32 >( KI_WORLD_OPAQUE_LIST )
                     << " count "
                     << static_cast< s32 >( lpDispatchFrame->GetList( KI_WORLD_OPAQUE_LIST )->GetCount() )

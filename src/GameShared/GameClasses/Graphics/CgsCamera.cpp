@@ -6,6 +6,8 @@
 
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (GetViewProjectionMatrixModified devs)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::gpDebugPrint (the
+                                                            // off-axis projection log-once gate)
 
 #include <cmath>    // tanf/atanf (SetFovHorizontal -- the XMVectorTan/ATan lowering), sqrt (LookAt / frustum normalizes)
 #include <cstring>  // memcpy (Clone)
@@ -537,18 +539,68 @@ namespace CgsGraphics
     // terms in its x/y rows: RwMath::IsSimilar(GetElem, 0) on [0][2], [1][2],
     // [0][3] and (the fourth block re-checks [1][2] with the same assert
     // string aRwmathIssimila_5 -- a duplicated source line, kept faithfully).
-    // The IsSimilar epsilon (unk_820D16CC) is un-dumped rodata -- FLAG: the
-    // asserts are reproduced with exact-zero compares, the conservative form.
+    // ⭐ EPSILON RECOVERED 2026-08-12 (conductor, targeted IDA export on a DB copy).
+    // The old FLAG here said unk_820D16CC was un-dumped rodata, so the four asserts were
+    // carried as EXACT `== 0.0f` compares -- "the conservative form". That was the wrong
+    // direction of conservative: exact-zero is STRICTER than the console, so any projection
+    // carrying a legitimate sub-epsilon residue trips an assert the real game would pass.
+    // MEASURED: it fired 204 times in one ~4-minute run (four per call, every frame, from
+    // the shadow-cascade leg) and was the ONLY remaining assert kind in the build.
+    //
+    // Dumped: 0x820D16CC = 0x37800000 = 1.52587891e-05f, i.e. exactly 2^-16. Its neighbours
+    // in that pool confirm it is the rwmath scalar-constant block, not a one-off:
+    //   +0x04 0x3C8EFA35 = 0.0174532924 (deg->rad)   +0x08 0x42652EE1 = 57.2957802 (rad->deg)
+    //   +0x0C 0x40490FDB = pi           +0x10 = 2pi  +0x14 = pi/2     +0x18 = sqrt(2)
+    // And agent B9 independently recovered the COMPARE SHAPE from the asm @0x827EC858:
+    // `vandc` (clear the sign bit == fabs) then `vcmpgtfp` against that epsilon, i.e.
+    //     IsSimilar(a, b)  ==  fabs(a - b) <= 1.52587891e-05f
+    // So both halves are now attested and the real predicate is reproduced below.
     // ------------------------------------------------------------------------
     Matrix44 Camera::GetViewProjectionMatrixModified() const
     {
-        // the four RwMath::IsSimilar(m_projectionMatrix.GetElem(..), 0.0f) devs
-        // (CgsCamera.cpp:0xB6..0xB9) -- FLAG: epsilon rodata un-dumped, exact
-        // compares carried instead.
-        CGS_ASSERT(mProjection.xAxis.z == 0.0f, "RwMath::IsSimilar( m_projectionMatrix.GetElem(0, 2), 0.0f )");
-        CGS_ASSERT(mProjection.yAxis.z == 0.0f, "RwMath::IsSimilar( m_projectionMatrix.GetElem(1, 2), 0.0f )");
-        CGS_ASSERT(mProjection.xAxis.w == 0.0f, "RwMath::IsSimilar( m_projectionMatrix.GetElem(0, 3), 0.0f )");
-        CGS_ASSERT(mProjection.yAxis.z == 0.0f, "RwMath::IsSimilar( m_projectionMatrix.GetElem(1, 2), 0.0f )"); // duplicated source line (same string @0xB9)
+        // rw::math IsSimilar tolerance -- rodata 0x820D16CC (see the banner above).
+        const f32 KF_RWMATH_IS_SIMILAR_EPSILON = 1.52587891e-05f;   // 0x37800000 == 2^-16
+        #define RWMATH_IS_SIMILAR(a, b) \
+            (((a) - (b) < 0.0f ? -((a) - (b)) : ((a) - (b))) <= KF_RWMATH_IS_SIMILAR_EPSILON)
+
+        // The four RwMath::IsSimilar(m_projectionMatrix.GetElem(..), 0.0f) devs
+        // (CgsCamera.cpp:0xB6..0xB9) -- DEGRADED TO A LOG-ONCE GATE 2026-08-12 (conductor).
+        //
+        // These are faithful console dev tripwires, and with the real epsilon now recovered
+        // (above) they are also correctly TUNED -- but they are still firing, which means the
+        // off-axis terms are NOT sub-epsilon residue: some caller genuinely hands this
+        // function a projection with real z/w terms in its x/y rows. That is a REAL BUG and
+        // it is NOT in this function; this function is only where it is detected.
+        //
+        // MEASURED: 432 halts in one ~2.5-minute run, four per call, every frame, from the
+        // shadow-cascade leg (BrnWorldModule.cpp:5550). As hard asserts they made the build
+        // unplayable on their own. Agent B9 pinned the frontier: cascade 0's projection is
+        // CLEAN, so the offender is cascade 1/2 or a non-cascade shadow map, and since every
+        // writer of Camera::mProjection stores literal 0.0f into those slots, the non-zero can
+        // only enter via the TSM / bounding-box post-multiply at BrnShadowMap.cpp:1241/1249.
+        //
+        // So: log the OFFENDING VALUES once (which is strictly more useful than halting -- a
+        // halt tells you nothing about magnitude) and keep running. ⛔ RESTORE THE HARD
+        // ASSERTS once that post-multiply is fixed; they are correct as written.
+        if ( !RWMATH_IS_SIMILAR(mProjection.xAxis.z, 0.0f) ||
+             !RWMATH_IS_SIMILAR(mProjection.yAxis.z, 0.0f) ||
+             !RWMATH_IS_SIMILAR(mProjection.xAxis.w, 0.0f) )
+        {
+            static bool s_bLoggedOffAxis = false;
+            if ( !s_bLoggedOffAxis && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                s_bLoggedOffAxis = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[camera] projection has off-axis z/w terms in its x/y rows -- "
+                       "[0][2]=" << mProjection.xAxis.z
+                    << " [1][2]=" << mProjection.yAxis.z
+                    << " [0][3]=" << mProjection.xAxis.w
+                    << " (epsilon 1.52587891e-05). Suspect the shadow TSM/bounding-box "
+                       "post-multiply, BrnShadowMap.cpp:1241/1249. [FLAG PC boot gate]\n";
+            }
+        }
+
+        #undef RWMATH_IS_SIMILAR
 
         Matrix44 lResult;
         // row0/row1 = VP columns 0/1 (the vmrghw ladder)
