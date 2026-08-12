@@ -153,7 +153,15 @@ namespace SceneManagerIO
         // pointer-/value-used by committed consumers, signatures unchanged.
         void SetEntityPosition(u32 luEntityId, const Matrix44Affine& lTransform);
         void SetVolumeInstanceTransform(VolumeInstanceId lVolumeInstanceId, const Matrix44Affine& lTransform);
-        void RemoveAllEntities();
+
+        // ⚠️ SIGNATURE CORRECTED 2026-08-12 (prop-spawn link-closure pass): this was
+        // committed as a no-arg call. Both higher rungs say otherwise -- the DecFIGS DWARF
+        // declares `void RemoveAllEntities(uint8_t)` (CgsSceneManagerIO_SceneUpdate.h:452)
+        // and the X360 stores a payload byte of 3 (== E_ENTITYTYPE_PROP) into the queued
+        // event at its only call site, PropZoneManager::RemoveAllPropsAndParts @0x822DEF50
+        // (0x822DF038). The parameter is the entity-type OWNER whose entities to drop; the
+        // matching payload member is InEventRemoveAllEntities::mu8Owner.
+        void RemoveAllEntities(u8 lu8Owner);
 
         // ADDITIVE GROW: the two remaining volume-instance producers (bodied by this TU). Args
         // are asm-attested (r4 8-byte VolumeInstanceId + a 32-bit second word each).

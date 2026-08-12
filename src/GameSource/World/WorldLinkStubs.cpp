@@ -87,6 +87,8 @@
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModule.h"
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModuleIO.h"
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModule.h"
+
+#include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityDebugComponent.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
 #include "GameSource/World/Trigger/BrnTriggerEntityModule.h"
@@ -128,6 +130,9 @@
 #include "GameSource/Replays/BrnReplayModuleIO.h"
 #include "vendor/renderware/collision/BitTable.hpp"
 #include "vendor/renderware/collision/VolumeQuery.hpp"
+// Prop-spawn wave (2026-08-12) link-closure gates -- see the block at the FOOT of this file.
+#include "GameSource/World/EntityModules/PropEntityModule/BrnPropCellManager.h"        // PropCellManager contact-gen gates
+#include "GameSource/Replays/Serialisers/BrnReplayPropSerialiserFrame.h"                // PropSerialiserFrame delta-serialisation gates
 
 // ---------------------------------------------------------------------------
 // rw::collision::Volume -- same documented platform/SDK forward-declaration
@@ -162,18 +167,20 @@ namespace CgsGraphics
 //  left mu8NumUsedConstants at 0, so no shader constant could ever be set.)
 
 // ---------------------------------------------------------------------------
-// rw::math::vpu::Inverse @ X360 0x825B2628 -- 4x4 inverse + determinant out.
-// Declared TU-locally by its callers (BrnShadowMap.cpp); no shared header, so
-// the definition is namespace-wrapped to self-declare with the same mangling.
+// ⭐⭐ STUB RETIRED 2026-08-12 (prop-render wave): rw::math::vpu::Inverse
+// @ X360 0x825B2628 IS BODIED, in its canonical RenderWare vendor home
+//   vendor/renderware/src/rw/math/vpu/Matrix44Operation.cpp
+//   (declared in vendor/renderware/include/rw/math/vpu/matrix44_operation.h --
+//    the hand-maintained sibling of types.h / matrix44affine_operation.h; the
+//    header generator only writes rwcore_*.h, so rw/math/vpu/ is not generated).
+// It is the GENERAL 4x4 cofactor inverse (no affine fast path) plus the
+// broadcast determinant out-param, exactly as the X360 VMX body computes it.
+//
+// The stub here returned a value-initialised (all-zero) Matrix44, so every
+// caller got a zero matrix: ShadowMap::ComputeBoundingBoxMatrix then produced a
+// NaN view-projection, which is what drove the 57 Inverse-stub asserts plus the
+// 228 RwMath::IsSimilar(m_projectionMatrix ...) asserts per boot.
 // ---------------------------------------------------------------------------
-namespace rw { namespace math { namespace vpu {
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-Matrix44 Inverse(const Matrix44&, Vector4&)
-{
-    CGS_ASSERT(false, "rw::math::vpu::Inverse: link stub (world fleet mount) -- reconstruct from X360");
-    return Matrix44();
-}
-} } }
 
 
 
@@ -1200,48 +1207,37 @@ void BrnWorld::PVSDebugComponent::OnActivate()
     }
 }
 
-// -------------------------------------------------------------------------
-// BrnWorld::PropEntityModule
-// -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::PropEntityModule::CachePropGraphicsLists()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::PropEntityModule::CachePropGraphicsLists: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-12 (prop-spawn wave): BrnWorld::PropEntityModule::CachePropGraphicsLists @0x822DBF28 is now REAL.
 
-// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot by the wired
-// WorldModule::Construct @0x827CF540 fleet cascade; quiet no-op (see
-// AIModule::Construct above). Reconstruct from X360 before wiring Prepare.
-// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
-void BrnWorld::PropEntityModule::Construct()
-{
-}
+// The body lives in this module's own TU under PropEntityModule/ (see the
 
-// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot -- WorldModule::
-// Construct registers the prop module's nested perf monitors mid-way through
-// its own AddMonitor block. Quiet no-op: the handles stay 0/unregistered,
-// consumed only by the un-wired Update path. Reconstruct from X360.
-// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
-void BrnWorld::PropEntityModule::ConstructPostPhysicsPerfMonitors()
-{
-}
+// 'PROP SPAWN WAVE' block in tools/build/build_game_exe.bat). Leaving this inert
 
-// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot (see
-// ConstructPostPhysicsPerfMonitors above). Quiet no-op.
-// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
-void BrnWorld::PropEntityModule::ConstructPreScenePerfMonitors()
-{
-}
+// definition here would be a duplicate symbol at link.
+
+// GATE RETIRED 2026-08-12 (prop-spawn wave): BrnWorld::PropEntityModule::Construct @0x822FA068 is now REAL.
+
+// The body lives in this module's own TU under PropEntityModule/ (see the
+
+// 'PROP SPAWN WAVE' block in tools/build/build_game_exe.bat). Leaving this inert
+
+// definition here would be a duplicate symbol at link.
+
+// GATE RETIRED 2026-08-12 (prop-spawn wave): BrnWorld::PropEntityModule::ConstructPostPhysicsPerfMonitors @0x822A9218 is now REAL.
+
+// The body lives in this module's own TU under PropEntityModule/ (see the
+
+// 'PROP SPAWN WAVE' block in tools/build/build_game_exe.bat). Leaving this inert
+
+// definition here would be a duplicate symbol at link.
+
+// GATE RETIRED 2026-08-12 (prop-spawn wave): BrnWorld::PropEntityModule::ConstructPreScenePerfMonitors @0x822A90A0 is now REAL.
+
+// The body lives in this module's own TU under PropEntityModule/ (see the
+
+// 'PROP SPAWN WAVE' block in tools/build/build_game_exe.bat). Leaving this inert
+
+// definition here would be a duplicate symbol at link.
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
@@ -1259,21 +1255,13 @@ void BrnWorld::PropEntityModule::Destruct()
     }
 }
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::PropEntityModule::GenerateDispatchLists(class BrnWorld::PropEntityIO::InputBuffer_Dispatch *,class Array<class CgsSceneManager::EntityId,5400> const &,struct rw::math::vpu::Matrix44 const &,struct rw::math::vpu::Vector3 const &,float,struct BrnWorld::ShaderLodInfo const *,int,int,int)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::PropEntityModule::GenerateDispatchLists: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-12 (prop-spawn wave): BrnWorld::PropEntityModule::GenerateDispatchLists @0x822FB4F0 is now REAL.
+
+// The body lives in this module's own TU under PropEntityModule/ (see the
+
+// 'PROP SPAWN WAVE' block in tools/build/build_game_exe.bat). Leaving this inert
+
+// definition here would be a duplicate symbol at link.
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
@@ -1307,39 +1295,21 @@ void BrnWorld::PropEntityModule::PrePhysicsUpdate(struct CgsModule::IOBufferStac
     }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::PropEntityModule::Prepare(class BrnWorld::PropEntityIO::OutputBuffer_Prepare *,struct rw::IResourceAllocator *)
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
-    // chain. One-shot log + report success so the scripted load advances toward
-    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
-    // deeper consumers keep their traps. Reconstruct from X360.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropEntityModule::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// GATE RETIRED 2026-08-12 (prop-spawn wave): BrnWorld::PropEntityModule::Prepare @0x82306DB8 is now REAL.
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-bool BrnWorld::PropEntityModule::Release()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::PropEntityModule::Release: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return false;
-}
+// The body lives in this module's own TU under PropEntityModule/ (see the
+
+// 'PROP SPAWN WAVE' block in tools/build/build_game_exe.bat). Leaving this inert
+
+// definition here would be a duplicate symbol at link.
+
+// GATE RETIRED 2026-08-12 (prop-spawn wave): BrnWorld::PropEntityModule::Release @0x822A92F8 is now REAL.
+
+// The body lives in this module's own TU under PropEntityModule/ (see the
+
+// 'PROP SPAWN WAVE' block in tools/build/build_game_exe.bat). Leaving this inert
+
+// definition here would be a duplicate symbol at link.
 
 // -------------------------------------------------------------------------
 // BrnWorld::RaceCarEntityModule
@@ -2881,37 +2851,16 @@ void WorldModule::BridgeRaceCarModuleToTrafficModule_PreScene(void *,class BrnTr
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827A5510 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeRaceCarModuleToPropModule_PreScene(void *,class BrnWorld::PropEntityIO::InputBuffer_PreScene *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToPropModule_PreScene: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-12 (prop-spawn wave): WorldModule::BridgeRaceCarModuleToPropModule_PreScene @0x827A5510
+// is now REAL -- body in GameSource/World/Bridges/ (see the 'PROP SPAWN WAVE'
+// block in tools/build/build_game_exe.bat). It publishes the player position/index/crashing/wrecked flags and the 8-slot race-car
+// velocity array (w lane = speed in MPH) into the prop module's pre-scene input.
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AACF8 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeWorldModuleToPropModule_PreScene(void *,class BrnWorld::PropEntityIO::InputBuffer_PreScene *,struct BrnWorld::WorldEntityIO::OutputBuffer_PreScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeWorldModuleToPropModule_PreScene: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-12 (prop-spawn wave): WorldModule::BridgeWorldModuleToPropModule_PreScene @0x827AACF8
+// is now REAL -- body in GameSource/World/Bridges/ (see the 'PROP SPAWN WAVE'
+// block in tools/build/build_game_exe.bat). It carries the PropInstancesNeededForZone / PropGraphicsLoaded / PropGraphicsUnloaded
+// queues and the player zone number. While it was inert every queue read length 0, so the
+// streaming machine had nothing to ask for and NO ZONE COULD EVER LOAD.
 
 // ⭐⭐ GATE DELETED 2026-08-11 (physics->output publish wave):
 // WorldModule::BridgePhysicsModuleToRaceCarModule_PostPhysics @0x827AE9D0 is REAL, in
@@ -3034,21 +2983,9 @@ void WorldModule::BridgeInputToCrashModule(void *,struct BrnWorld::CrashIO::Inpu
 // queue, so this gate discarded every game action the race-car module was ever sent --
 // including action 0, ResetPlayerCarAction.
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AF258 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgePropToOutput_PreScene(void *,struct BrnWorldIO::UpdateOutputBuffer *,class BrnWorld::PropEntityIO::OutputBuffer_PreScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePropToOutput_PreScene: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-12 (prop-spawn wave): WorldModule::BridgePropToOutput_PreScene @0x827AF258
+// is now REAL -- body in GameSource/World/Bridges/ (see the 'PROP SPAWN WAVE'
+// block in tools/build/build_game_exe.bat). It carries the prop pre-scene resource-request ring out to the world output buffer.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
@@ -3330,21 +3267,13 @@ void BrnTraffic::TrafficEntityModule::PostPhysicsUpdate(struct CgsModule::IOBuff
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the prop pre-scene tick (X360 vtbl+68).
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnWorld::PropEntityModule::PreSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnWorld::PropEntityIO::InputBuffer_PreScene *,class BrnWorld::PropEntityIO::OutputBuffer_PreScene *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropEntityModule::PreSceneUpdate: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-12 (prop-spawn wave): BrnWorld::PropEntityModule::PreSceneUpdate @0x82309A40 is now REAL.
+
+// The body lives in this module's own TU under PropEntityModule/ (see the
+
+// 'PROP SPAWN WAVE' block in tools/build/build_game_exe.bat). Leaving this inert
+
+// definition here would be a duplicate symbol at link.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. the prop post-physics tick (X360 vtbl+80).
@@ -3845,5 +3774,248 @@ void BrnWorld::EnvironmentSettings::CloudsData::Construct()
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
             *CgsDev::Log::gpDebugPrint << "EnvironmentSettings::CloudsData::Construct: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// ============================================================================
+// PropEntityDebugComponent -- the FOUR out-of-line virtuals + Construct.
+// (prop-spawn wave, 2026-08-12)
+//
+// PropEntityDebugComponent is embedded BY VALUE in PropEntityModule (console +0xCD900),
+// so PropEntityModule::Construct emits the component's vtable and the linker demands
+// every out-of-line virtual -- whether or not the debug menu is ever opened.
+//
+// Its real TU EXISTS and is fully reconstructed, but mounting it MEASURABLY made things
+// worse: RenderWorld/RenderHUD pull in the whole un-reconstructed CgsDev debug-render
+// stack (Debug3DImmediateRender::DrawBox / DrawSphere / DrawHollowSphere / DrawSolidBox /
+// DrawText, Debug2DImmediateRender::DrawCircle, rw::RGBA's ctor, Volume::GetRelativeTransform,
+// plus the component's own ToCellGridScreenCoords). Mounting it took the unresolved count
+// UP, not down.
+//
+// So the vtable is served here instead, exactly as the 2026-08-11 baseline wave did for the
+// same class of embedded debug component: GetName is REAL (it is a one-line string return
+// and the debug menu keys on it), the rest are inert. This is a DEV-MENU-ONLY surface and
+// cannot affect whether props spawn or render.
+//
+// RETIRE ALL FIVE and mount BrnPropEntityDebugComponent.cpp once the debug-render stack
+// lands -- the bodies are already written and waiting.
+// ============================================================================
+const char* BrnWorld::PropEntityDebugComponent::GetName() const
+{
+    // REAL -- @0x822A9740 returns this literal.
+    return "Prop Entity Module";
+}
+
+void BrnWorld::PropEntityDebugComponent::Construct(class BrnWorld::PropEntityModule*)
+{
+    // @0x822A96A8. Inert: the component's own state is only read by the render passes
+    // below, which are themselves inert here. PropEntityModule::Construct calls this at
+    // the console's call position, so the call itself is faithful.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropEntityDebugComponent::Construct: inert [FLAG PC boot gate]\n";
+    }
+}
+
+void BrnWorld::PropEntityDebugComponent::OnActivate()
+{
+    // @0x822C52C8 -- registers the render toggles / cell-grid zoom / override tuning and
+    // the "Reset props" action with the debug menu. Inert: CgsDebugManager exposes no
+    // RegisterVariable/SetLimits on this build.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropEntityDebugComponent::OnActivate: inert [FLAG PC boot gate]\n";
+    }
+}
+
+void BrnWorld::PropEntityDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender*)
+{
+    // @0x822EFEB8 -- 3D debug pass (volumes, prop stats, inertia boxes). Inert.
+}
+
+void BrnWorld::PropEntityDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender*)
+{
+    // @0x822FC108 -- 2D debug pass (module stats + cell grid). Inert.
+}
+
+// ============================================================================
+// PROP-SPAWN WAVE, LINK-CLOSURE GATES (2026-08-12, agent B7)
+// ----------------------------------------------------------------------------
+// Everything else in this wave's unresolved set was BODIED in its real home. These nine
+// are the deliberate exceptions: two families that are out of scope for "make props spawn
+// and render", each parked for a REAL reason rather than papered over.
+//
+// Neither family can affect whether a prop appears in the world:
+//   * contact generation is what makes a prop SMASHABLE, and it is reached only from
+//     PropCellManager::ActivateCell / the state-change path -- a prop is added to the
+//     SCENE (which is what renders it) by AddPropToScene / AddPropPartsToScene, both of
+//     which are real bodies and neither of which calls these.
+//   * the PropSerialiserFrame delta half is replay record/playback only; the load path
+//     asks the serialiser IsPlaying() and takes the not-playing branch in normal play.
+//
+// ⚠️ NONE of these is silently wrong: each logs once through the boot gate, states what
+// the real body would do, carries its X360 address, and names exactly what unparks it.
+// ============================================================================
+
+// ---- (a) PROP CONTACT GENERATION x4 -----------------------------------------
+// Parked by agent A2 on a REAL, still-unresolved TYPE MISMATCH -- not on missing effort.
+// All four splice a volume index into the LOW BYTE of the 64-bit PropVolumeInstanceID
+// (`clrrdi r,id,8; or index`) and then hand the WHOLE 64-BIT WORD to the scene:
+//     AddPropToContactGeneration            @0x822DF6C8 -> AddForCollision / AddVolumeInstance
+//     AddPropPartsToContactGeneration       @0x822DF9D8 -> same, once per part volume
+//     RemovePropFromContactGeneration       @0x822C6318 -> RemoveForCollision / RemoveVolumeInstance
+//     RemovePropPartsFromContactGeneration  @0x822C6430 -> same, once per part volume
+// The committed InSceneUpdateInterface collision entry points take a 32-bit
+// CgsSceneManager::EntityId. Writing these against the 32-bit signature would DISCARD the
+// volume index -- i.e. every volume of a prop would key to the same scene id -- so it is
+// papering over the divergence, which is precisely what a decomp must not do.
+//
+// UNPARKED BY: (1) PropVolumeInstanceID gaining the asm-attested volume-index
+// setter/getter (BrnPropEntityID.h models only Set(entityId, volumeNumber) today), and
+// (2) InSceneUpdateInterface's Add/RemoveForCollision + Add/RemoveVolumeInstance taking
+// VolumeInstanceId (64-bit) as the X360 does. Both live in other owners' headers.
+// The four bodies are then a short pass; they are NOT hard.
+void BrnWorld::PropCellManager::AddPropToContactGeneration(
+        BrnWorld::PropEntityInstance*, const BrnPhysics::Props::PropTypeData*,
+        BrnWorld::PropVolumeInstanceID, CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*)
+{
+    // @0x822DF6C8. WOULD: set KU_ADDED_TO_CONTACT_GEN_BIT on the prop, then for each of the
+    // type's collision volumes splice the volume index into the id's low byte and call
+    // lpScene->AddForCollision + AddVolumeInstance, bumping mu16NumberOfPropVolumesInScene.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropCellManager::AddPropToContactGeneration: inert -- "
+                                          "64-bit PropVolumeInstanceID vs 32-bit EntityId collision API "
+                                          "[FLAG PC boot gate]\n";
+    }
+}
+
+void BrnWorld::PropCellManager::AddPropPartsToContactGeneration(
+        BrnWorld::PropEntityInstance*, BrnWorld::PropPartEntityInstance*,
+        const BrnPhysics::Props::PropTypeData*, BrnWorld::PropVolumeInstanceID,
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*)
+{
+    // @0x822DF9D8. WOULD: the smashed-prop twin of the above -- one contact-gen volume per
+    // part volume group, keyed by (part index, volume index) inside the 64-bit id.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropCellManager::AddPropPartsToContactGeneration: inert -- "
+                                          "same 64-bit volume-id blocker [FLAG PC boot gate]\n";
+    }
+}
+
+void BrnWorld::PropCellManager::RemovePropFromContactGeneration(
+        BrnWorld::PropEntityInstance*, const BrnPhysics::Props::PropTypeData*,
+        BrnWorld::PropVolumeInstanceID, CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*)
+{
+    // @0x822C6318. WOULD: clear KU_ADDED_TO_CONTACT_GEN_BIT and undo the above volume by
+    // volume (RemoveForCollision + RemoveVolumeInstance), decrementing the volume count.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropCellManager::RemovePropFromContactGeneration: inert -- "
+                                          "same 64-bit volume-id blocker [FLAG PC boot gate]\n";
+    }
+}
+
+void BrnWorld::PropCellManager::RemovePropPartsFromContactGeneration(
+        BrnWorld::PropEntityInstance*, const BrnPhysics::Props::PropTypeData*,
+        BrnWorld::PropVolumeInstanceID, CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*)
+{
+    // @0x822C6430. WOULD: the smashed-prop twin of the remove above.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropCellManager::RemovePropPartsFromContactGeneration: inert -- "
+                                          "same 64-bit volume-id blocker [FLAG PC boot gate]\n";
+    }
+}
+
+// ---- (b) PROP REPLAY DELTA SERIALISATION x4 ---------------------------------
+// The record/playback half of BrnReplays::PropSerialiserFrame. Referenced by
+// PropEntitySerialiser::Read/Write, which the prop load path reaches only through
+// GetStaticLayout() -- and every gameplay caller takes the IsPlaying()==false branch, so
+// none of these runs while props are simply spawning and rendering.
+//
+// These are parked as OUT OF SCOPE, not blocked: the frame interior is a ~15 KB record
+// whose per-cell / per-prop / per-part arrays are still modelled as padding runs
+// (BrnReplayPropSerialiserFrame.h is one long maPadNNNN[] ladder with a handful of named
+// flags). Writing a delta codec against padding would be fabrication; the bodies are
+// substantial (Read 135 insns @0x82653120, Write 156 @0x82657FE0, KeyFrameRead 295
+// @0x826586B0, KeyFrameWrite unnamed in IDA) and each walks members that do not exist by
+// name yet.
+//
+// UNPARKED BY: reconstructing the PropSerialiserFrame interior (the padding ladder ->
+// named per-cell/per-prop/per-part arrays). Then all four decode straightforwardly, since
+// the sibling WriteProp @0x822BB528 / WritePart @0x822BB718 already show the idiom.
+void BrnReplays::PropSerialiserFrame::Read(BrnReplays::BaseSerialiser*)
+{
+    // @0x82653120 (135 insns). WOULD: delta-read one prop frame out of the replay stream.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropSerialiserFrame::Read: inert -- frame interior still "
+                                          "padding-modelled; replay only [FLAG PC boot gate]\n";
+    }
+}
+
+void BrnReplays::PropSerialiserFrame::KeyFrameRead(BrnReplays::BaseSerialiser*)
+{
+    // @0x826586B0 (295 insns). WOULD: read a full (non-delta) prop key frame.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropSerialiserFrame::KeyFrameRead: inert -- frame interior still "
+                                          "padding-modelled; replay only [FLAG PC boot gate]\n";
+    }
+}
+
+void BrnReplays::PropSerialiserFrame::Write(BrnReplays::BaseSerialiser*,
+                                            BrnReplays::PropSerialiserFrame*)
+{
+    // @0x82657FE0 (156 insns). WOULD: delta-write this frame against the static layout.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropSerialiserFrame::Write: inert -- frame interior still "
+                                          "padding-modelled; replay only [FLAG PC boot gate]\n";
+    }
+}
+
+void BrnReplays::PropSerialiserFrame::KeyFrameWrite(BrnReplays::BaseSerialiser*,
+                                                    BrnReplays::PropSerialiserFrame*)
+{
+    // X360 body exists but is UNNAMED in the IDA export (its siblings Read/Write/KeyFrameRead
+    // are named; this one is only reachable as the fourth call out of
+    // PropEntitySerialiser::Write). WOULD: write a full prop key frame.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropSerialiserFrame::KeyFrameWrite: inert -- frame interior still "
+                                          "padding-modelled; replay only [FLAG PC boot gate]\n";
     }
 }

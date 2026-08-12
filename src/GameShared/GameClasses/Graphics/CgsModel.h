@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Graphics/Dispatch/Renderable.h"
 #include "GameShared/GameClasses/Graphics/CgsSerialisedPtr.h"   // Ptr32<T> (the 32-bit slot)
+#include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"  // CgsGraphics::DispatchFrame (ModelInstanceCollector)
 
 #include <cstddef>
 
@@ -164,4 +165,103 @@ namespace CgsGraphics
 
     // The console header size ModelResourceType::GetSerialisedResourceDescriptor adds (20).
     static_assert(sizeof(Model) == 20, "CgsGraphics::Model must be the console's 20-byte on-disc header");
+
+    // =========================================================================
+    // CgsGraphics::ModelInstanceCollector   (CgsModel.h:279 -- a NAMESPACE, not
+    // a class; DecFIGS dwarfdump GameShared/GameClasses/Graphics/CgsModel.cpp
+    // declares every member at namespace scope and the X360 asm confirms it:
+    // every entry point is a plain function with NO implicit `this`, and all of
+    // the state lives in file-scope statics in CgsModel.cpp.)
+    //
+    // The instanced-batch collector for the prop draw path. A pass brackets its
+    // model submissions between BeginInstanceCollection / EndInstanceCollection
+    // and drops one ModelInstanceInfo per visible prop with AddInstance; the
+    // flush sorts the buffer by (model, LOD state), walks it in runs of at most
+    // Model::KU_MAX_INSTANCES_PER_GROUP compatible entries, publishes each run's
+    // world matrices into the instancing shader constants and stamps ONE
+    // DrawRenderable command for the whole run.
+    //
+    // X360 entry points (all four in this namespace):
+    //   BeginInstanceCollection @ 0x827E6E58   (36 instructions)
+    //   AddInstance             @ 0x82801FD0   (37)
+    //   EndInstanceCollection   @ 0x82802068   (24)
+    //   FlushInstanceCollection @ 0x82801B48   (290)
+    // and the two inlined predicates, attested by the DWARF and recovered from
+    // the std::sort instantiation / the flush's run scan:
+    //   operator<               (CgsModel.cpp:609, inlined into std::_Sort)
+    //   AreCompatibleInstances  (CgsModel.cpp:621, inlined into the flush)
+    //
+    // There is NO collector object to allocate or own: the X360 has exactly one
+    // set of statics, so a caller just calls the free functions.
+    // =========================================================================
+    namespace ModelInstanceCollector
+    {
+        // CgsModel.cpp:603 -- one buffered prop submission.
+        //
+        // *** HOST-vs-CONSOLE SIZING ***  The X360 record is 12 bytes (three
+        // 32-bit slots) and AddInstance/the flush index it with a literal `12 *
+        // i` stride. This is pure runtime scratch -- it is never serialised and
+        // never shared with the GPU -- so the host record legitimately grows to
+        // 24 bytes (8-byte Model*/Matrix44Affine*). NOTHING may reintroduce the
+        // console's 12; every access here is by array subscript + member name.
+        struct ModelInstanceInfo
+        {
+            // CgsModel.cpp:604 -- X360 +0x00 (`stw r30, 0(r11)` in AddInstance)
+            Model* mpModel;
+            // CgsModel.cpp:605 -- X360 +0x04 (`stw r28, 4(r11)`, the 3rd argument)
+            Model::State meLodState;
+            // CgsModel.cpp:606 -- X360 +0x08 (`stw r29, 8(r11)`, the 2nd argument)
+            const rw::math::vpu::Matrix44Affine* mpMatrix;
+
+            // Never called; pins the member ORDER (the only layout fact that is
+            // platform-independent). Deliberately expressed against sizeof(void*)
+            // rather than the console's 0/4/8 so it stays true on the x64 host.
+            static void _AssertLayout()
+            {
+                static_assert(offsetof(ModelInstanceInfo, mpModel) == 0,
+                              "ModelInstanceInfo::mpModel is the first member");
+                static_assert(offsetof(ModelInstanceInfo, meLodState) == sizeof(Model*),
+                              "ModelInstanceInfo::meLodState follows mpModel");
+                static_assert(offsetof(ModelInstanceInfo, mpMatrix) == 2 * sizeof(void*),
+                              "ModelInstanceInfo::mpMatrix is the third member");
+            }
+        };
+
+        // CgsModel.cpp:600 -- the buffered-submission ceiling; AddInstance
+        // auto-flushes when the buffer fills.
+        const s32 KI_MAX_INSTANCES_PER_COLLECTION_PASS = 100;
+
+        // CgsModel.cpp:609 -- the std::sort ordering: by model pointer, then by
+        // LOD state. (Recovered from the _Med3/_Unguarded_partition
+        // instantiations, which compare +0x00 unsigned then +0x04 signed.)
+        bool operator<(const ModelInstanceInfo& lrLeft, const ModelInstanceInfo& lrRight);
+
+        // CgsModel.cpp:621 -- may these two share one instanced draw?
+        bool AreCompatibleInstances(const ModelInstanceInfo& lrLeft,
+                                    const ModelInstanceInfo& lrRight);
+
+        // CgsModel.cpp:664 -- open a collection pass. Argument order/types from
+        // the DWARF, confirmed store-for-store against the X360 prologue
+        // (r3..r9) and against the sole caller,
+        // BrnWorld::PropEntityModule::GenerateDispatchLists @0x822FB4F0, which
+        // passes lu8PreZList = 255 ("no pre-Z list").
+        void BeginInstanceCollection(DispatchFrame* lpDispatchFrame,
+                                     const rw::math::vpu::Matrix44* lpCameraViewProjection,
+                                     s32 liModelOnlyDisplayList,
+                                     s32 liOpaqueList,
+                                     s32 liTransparentList,
+                                     u8 lu8PreZList,
+                                     bool lbEnableZOnlyRenderPath);
+
+        // CgsModel.cpp:687 -- buffer one prop submission.
+        void AddInstance(Model* lpModel,
+                         const rw::math::vpu::Matrix44Affine* lpMatrix,
+                         Model::State leLodState);
+
+        // CgsModel.cpp:706 -- flush the tail and close the pass.
+        void EndInstanceCollection();
+
+        // CgsModel.cpp:714 -- sort + group + draw everything buffered so far.
+        void FlushInstanceCollection();
+    }
 }
