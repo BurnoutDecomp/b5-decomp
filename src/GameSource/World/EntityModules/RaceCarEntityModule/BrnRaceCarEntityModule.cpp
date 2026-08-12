@@ -67,6 +67,8 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostStrategy.h"       // BrnWorld::BoostStrategy::IsBoosting (vtable slot 19)
 
 #include <cstring>   // memset
+#include <cstdlib>   // getenv  ([motion] bring-up probe only)
+#include <cmath>     // sqrtf   ([motion] bring-up probe only)
 
 namespace BrnWorld
 {
@@ -2282,6 +2284,48 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
             }
         }
 
+        // ---- [motion] PC bring-up instrument -- DELETE WHEN the car drives ----------------
+        // OPT-IN (BRN_MOTION_PROBE=1) so a default run and every golden gate are byte-identical
+        // to a build without it. Prints the player slot's pose, heading and velocity every 30
+        // presents, which is the cadence a distance/acceleration trace needs; [uoi] above is
+        // every 3000 (~50 s) and cannot measure an acceleration.
+        {
+            static s32 siMotionProbe = -1;
+            if( siMotionProbe < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_MOTION_PROBE" );
+                siMotionProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+            }
+            if( siMotionProbe == 1 && leSlot == mePlayerActiveRaceCarIndex )
+            {
+                static u32 suMotionCount = 0;
+                ++suMotionCount;
+                if( ( suMotionCount % 30u ) == 0u && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    const BrnPhysics::Vehicle::RaceCarState* lpS =
+                        lpActiveRaceCar->GetPhysicsState();
+                    const Vector3& lP = lpS->mTransform.Pos();
+                    const Vector3& lA = lpS->mTransform.At();
+                    const Vector3& lV = lpS->mLinearVelocity;
+                    const f32 lfSpeed = sqrtf( lV.x * lV.x + lV.y * lV.y + lV.z * lV.z );
+                    *CgsDev::Log::gpDebugPrint
+                        << "[motion] n " << static_cast<s32>( suMotionCount )
+                        << " pos " << lP.x << " " << lP.y << " " << lP.z
+                        << " at "  << lA.x << " " << lA.y << " " << lA.z
+                        << " vel " << lV.x << " " << lV.y << " " << lV.z
+                        << " |v| " << lfSpeed
+                        << " mph " << lpS->mfSpeedMPH
+                        << " gear " << static_cast<s32>( lpS->mi8Gear )
+                        << " rpm " << lpS->mfRPM
+                        << " gas " << lpS->mfGas
+                        << " steer " << lpS->mfSteering
+                        << " engine " << static_cast<s32>( lpActiveRaceCar->GetEngineState() )
+                        << "\n";
+                }
+            }
+        }
+        // ---- end [motion] ----------------------------------------------------------------
+
         lpActiveCarInterface->SetRaceCarState(
             leSlot,
             lpRaceCar->GetGlobalRaceCarIndex(),
@@ -2854,6 +2898,20 @@ void RaceCarEntityModule::PrePhysicsUpdate(
 
     if( ( lUpdateSet & 1 ) == 0 )
     {
+        // ⭐⭐ THE IGNITION SLOT (engine wave 2026-08-12). The console runs UpdateActiveCars
+        // at 0x823072F0, BEFORE ProcessPlayerVehicleInput at 0x8230732C, in the same
+        // not-paused arm -- so the engine reaches RUNNING on the same frame the driver record
+        // that reads it is built. That ORDER is load-bearing: swap the two and the gas lags
+        // the ignition by a frame.
+        //
+        // All three floats are loaded by the console right here, from the module, at
+        // 0x82307294..0x823072C4 (`lfs f31, 0(r31)` with r31 == &mfTimeStep, then
+        // `lfsx f29, r29, 0x183C8` and `lfsx f30, r29, 0x183CC`), and 0x183C8 / 0x183CC are
+        // mPlayerVehicleControls + 32 / + 36 == mfAcceleration / mfBraking.
+        UpdateActiveCars( mfTimeStep,
+                          mPlayerVehicleControls.mfAcceleration,
+                          mPlayerVehicleControls.mfBraking );
+
         ProcessPlayerVehicleInput( mfTimeStep, lpInput, lpOutput );
     }
 
@@ -2861,6 +2919,52 @@ void RaceCarEntityModule::PrePhysicsUpdate(
 
     lpOutput->UnlockForWrite();
     lpInput->UnlockForRead();
+}
+
+// ============================================================================
+// UpdateActiveCars  @ 0x822FF250   (73 instructions)   -- PARTIAL SLICE
+//   (engine wave 2026-08-12)
+//
+// The eight-slot active-car tick. Structurally the whole console body is here: the loop base
+// `addi r24, r31, 0x1A60` (== &maActiveRaceCars[0]), the count `li r20, 8`, the stride
+// `addi r24, r24, 0x1CD0` (7376 == sizeof(ActiveRaceCar) on the console), the IsActive gate
+// at 0x822FF2EC and the Update call at 0x822FF344.
+//
+// ---- THE CONSOLE'S ARGUMENTS -------------------------------------------------------------
+// PrePhysicsUpdate @0x823072CC..0x823072F0 passes thirteen things; this slice forwards the
+// three the ignition needs and drops the rest, each named:
+//   f1  mfTimeStep (+0x18398)                      ✔ forwarded
+//   f4  mPlayerVehicleControls.mfAcceleration      ✔ forwarded
+//   f5  mPlayerVehicleControls.mfBraking           ✔ forwarded
+//   f2  module +0x183A0        f3  module +0x183A4 (-> ActiveRaceCar::CalculateWheelAngular-
+//                                                   Velocities, which does not exist yet)
+//   r4  sub_822B5EA0(lpOutput)         r10 InputBuffer_PrePhysics::GetInHardStopCamera()
+//   stack: lpVehicleOutput, module +0x18490 (the RNG), module +0x18368 (meGameModeType)
+//   v1/v2  two Vector3s from module +0x18720 / +0x18730 (the route vectors)
+// Every one of those feeds a part of ActiveRaceCar::Update this build has not landed -- see
+// that function's banner for the drop list.
+//
+// ---- [FLAG PC bring-up] DROPPED HERE ------------------------------------------------------
+//  * the `lpVehicleOutput != NULL` assert (X360 :4335) -- the pointer is not plumbed.
+//  * the tail call SendAddedForCollisionStateToPhysics(lpVehicleOutput) @0x822FF360: it walks
+//    each car's mAddRemoveNetworkCarForCollisionQueue, and the producer for that queue
+//    (ActiveRaceCar::SendAddedRemovedNetworkCarForCollisionEvents @0x822BF840) is itself
+//    dropped by Update's slice, so running it here would drain a queue nothing fills.
+// ============================================================================
+void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfAcceleration, f32 lfBraking )
+{
+    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
+    {
+        ActiveRaceCar& lrCar = maActiveRaceCars[liCar];
+
+        if( lrCar.IsActive() )                                   // 0x822FF2EC
+        {
+            // mbIsInOnlineGameMode / mbInCarSelectScreen are the console's own
+            // `lbzx r10, r31, 0x18345` / `lbzx r8, r31, 0x186C9` -- both read from `this`.
+            lrCar.Update( lfTimeStep, lfAcceleration, lfBraking,
+                          mbIsInOnlineGameMode, mbInCarSelectScreen );
+        }
+    }
 }
 
 // ============================================================================

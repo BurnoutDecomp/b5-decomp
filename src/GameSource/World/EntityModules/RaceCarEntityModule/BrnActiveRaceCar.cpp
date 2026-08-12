@@ -41,6 +41,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h" // VehicleInputInterface::CreateRaceCar
 #include "GameSource/World/BrnEntityTypes.h"              // BrnWorld::E_ENTITYTYPE_RACECAR (the Attach seed)
 #include "SharedClasses/World/BrnCollisionTag.h"          // BrnWorld::KU_COLLISION_FLAG_FATAL (IsWrecked)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint / gxMessageFilterFlags ([engine-diag])
 
 #include <cstring>   // memset (the console's own inlined clears)
 
@@ -956,6 +957,293 @@ void ActiveRaceCar::UpdateWheelPhysicsState(const void* lpPhysicsWheelData)
 
         mRenderParams.GetWheelTransform(luWheel) = mPhysicsState.maWheelTransforms[luWheel];
         mRenderParams.SetWheelExists(luWheel, lpSnapshot->mau8OnGround[luWheel] != 0);
+    }
+}
+
+// ============================================================================
+// ⭐⭐ UpdateEngineState @ 0x822A4F50   (163 instructions)   -- COMPLETE
+//   (engine wave 2026-08-12)
+//
+// THE IGNITION. Pressing the gas (or the brake) starts the engine:
+//   OFF --(demand)--> STARTING --(1.2 s)--> RUNNING --(15 s idle)--> STOPPING --(0.5 s)--> OFF
+// and RUNNING is the state ProcessPlayerVehicleInput @0x822FFE30 requires before it fills the
+// driver-controls record with anything but zeros. Nothing else in the XEX writes meEngineState
+// away from OFF, and ActiveRaceCar::Attach parks the junkyard player car at OFF by design.
+//
+// ---- SIGNATURE (see the header banner; every argument traced to a named module member) -----
+// Hex-Rays' a5/a6/a7 are the phantom GPR shadows the PPC ABI reserves for f1/f2/f3; the body
+// never touches r4/r5/r6.
+//
+// ---- CONSTANTS (rodata, read out of the asm) -----------------------------------------------
+//   flt_8201497C = 0.05f   the throttle/brake dead-band       (0x822A4F78/7C/84)
+//   flt_82014980 = 1.2f    STARTING -> RUNNING crank time     (0x822A50B8)
+//   flt_82014984 = 2.0f    |mfSpeedMPH| that keeps it RUNNING (0x822A510C)
+//   flt_82014988 = 15.0f   RUNNING -> STOPPING idle timeout   (0x822A5120)
+//   flt_820147FC = 0.5f    STOPPING -> OFF                    (0x822A5164)
+//   flt_82001CC0 = 0.0f    this file's own zero
+//
+// ---- THE TWO NON-OBVIOUS BRANCHES ----------------------------------------------------------
+// * 0x822A51BC (the `mbEnableEngineSwitchOff == false` / "not my car" arm) is
+//     cntlzw r11, state ; extrwi r11,r11,1,26 ; xori r11,r11,1 ; addi r11,r11,1
+//   cntlzw is 32 only when state == 0, and bit 26 (big-endian numbering) is the 0x20 bit of
+//   that count, so the whole sequence is exactly
+//     meEngineState = (meEngineState == OFF) ? STARTING : RUNNING;
+//   i.e. a car that may not switch its engine off is dragged toward RUNNING every frame.
+// * case STOPPING's `bne cr6, loc_822A50C8` (0x822A5158) jumps into case STARTING's tail --
+//   the shared "time = 0; state = RUNNING" epilogue (Hex-Rays' LABEL_21).
+//
+// ⚠️ NOT A DIVERGENCE: the console's `if (v13 && !a9)` in case OFF is the reason the car does
+// not crank on the car-select screen. It is reproduced verbatim.
+// ----------------------------------------------------------------------------
+void ActiveRaceCar::UpdateEngineState(f32 lfTimeStep,
+                                      f32 lfAcceleration,
+                                      f32 lfBraking,
+                                      bool lbIsInOnlineGameMode,
+                                      bool lbInCarSelectScreen)
+{
+    const f32 KF_CONTROL_DEAD_BAND  = 0.05f;         // flt_8201497C
+    const f32 KF_CRANK_TIME         = 1.2f;          // flt_82014980
+    const f32 KF_ROLLING_SPEED_MPH  = 2.0f;          // flt_82014984
+    const f32 KF_IDLE_SHUTDOWN_TIME = 15.0f;         // flt_82014988
+    const f32 KF_STOPPING_TIME      = 0.5f;          // flt_820147FC
+
+    // 0x822A4F78..0x822A4F9C. An online car is always treated as "the driver is asking for
+    // throttle" -- a remote car's engine must not idle itself off on our machine.
+    const bool lbEngineDemanded = ( lfAcceleration > KF_CONTROL_DEAD_BAND )
+                               || ( lfBraking      > KF_CONTROL_DEAD_BAND )
+                               || lbIsInOnlineGameMode;
+
+    if( !IsActive() )
+    {
+        mfEngineStateTime = 0.0f;                                        // 0x822A4FC0
+        return;
+    }
+
+    // 0x822A4FD0..0x822A4FF0. mbEnableEngineSwitchOff (+0x770) / mbIsInGameMode (+0x777) are the
+    // same pair ActiveRaceCar::Attach uses to decide the seed state.
+    if( !mbEnableEngineSwitchOff || ( mbIsInGameMode && !lbInCarSelectScreen ) )
+    {
+        // 0x822A51BC -- see the banner.
+        mfEngineStateTime = 0.0f;
+        meEngineState =
+            ( meEngineState == RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_OFF )
+                ? RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_STARTING
+                : RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING;
+        return;
+    }
+
+    // 0x822A4FF4..0x822A5038. A crashing car's engine is forced RUNNING out of STARTING or
+    // STOPPING (so the wreck keeps its engine note) and its timer is cleared either way.
+    if( IsCrashing() )
+    {
+        mfEngineStateTime = 0.0f;
+        if( meEngineState == RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_STARTING
+         || meEngineState == RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_STOPPING )
+        {
+            meEngineState = RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING;
+        }
+        return;
+    }
+
+    switch( meEngineState )                                              // 0x822A503C jump table
+    {
+    case RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_OFF:      // 0x822A506C
+        // ⭐ THE GAS PEDAL. `&& !lbInCarSelectScreen` is the console's own: the car on the
+        // car-select podium never cranks, however hard the pad is pushed.
+        if( lbEngineDemanded && !lbInCarSelectScreen )
+        {
+            mfEngineStateTime = 0.0f;
+            meEngineState = RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_STARTING;
+        }
+        break;
+
+    case RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_STARTING: // 0x822A50A4
+        if( lbEngineDemanded )
+        {
+            mfEngineStateTime = mfEngineStateTime + lfTimeStep;
+            if( mfEngineStateTime > KF_CRANK_TIME )
+            {
+                mfEngineStateTime = 0.0f;
+                meEngineState = RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING;
+            }
+        }
+        else
+        {
+            // Let go mid-crank and it drops straight back to OFF -- note the console does NOT
+            // clear the timer here (0x822A50E8 stores only the state).
+            meEngineState = RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_OFF;
+        }
+        break;
+
+    case RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING:  // 0x822A50F8
+        // Demand, or still rolling faster than 2 mph, keeps it running -- and the console
+        // reaches the shared `mfEngineStateTime = 0` epilogue at 0x822A4FB8 to do it.
+        if( lbEngineDemanded
+         || ( ( mPhysicsState.mfSpeedMPH < 0.0f ? -mPhysicsState.mfSpeedMPH
+                                                :  mPhysicsState.mfSpeedMPH )
+              > KF_ROLLING_SPEED_MPH ) )
+        {
+            mfEngineStateTime = 0.0f;
+        }
+        else
+        {
+            mfEngineStateTime = mfEngineStateTime + lfTimeStep;
+            if( mfEngineStateTime > KF_IDLE_SHUTDOWN_TIME )
+            {
+                mfEngineStateTime = 0.0f;
+                meEngineState = RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_STOPPING;
+            }
+        }
+        break;
+
+    case RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_STOPPING: // 0x822A5150
+        if( lbEngineDemanded )
+        {
+            mfEngineStateTime = 0.0f;
+            meEngineState = RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING;
+        }
+        else
+        {
+            mfEngineStateTime = mfEngineStateTime + lfTimeStep;
+            if( mfEngineStateTime > KF_STOPPING_TIME )
+            {
+                meEngineState = RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_OFF;
+                mfEngineStateTime = 0.0f;
+            }
+        }
+        break;
+
+    default:                                                            // 0x822A5190
+        CGS_ASSERT( false, "How did it get here?" );                     // X360 :1743
+        break;
+    }
+}
+
+// ============================================================================
+// Update @ 0x822F78B0   (400 instructions)   -- PARTIAL SLICE   (engine wave 2026-08-12)
+//
+// The per-frame tick of one active race car. Its ONLY caller is
+// RaceCarEntityModule::UpdateActiveCars @0x822FF250, and it is the ONLY caller of
+// UpdateEngineState -- which is why it has to exist at all for the gas pedal to work.
+//
+// ---- THE CONSOLE'S FULL ARGUMENT LIST (derived slot by slot from the two asms) -------------
+// Param save area starts at r1+0x10 (calibrated: UpdateActiveCars' `stb r8, 0x57(r1)` is read
+// back by Update as `lbz r8, arg_57(r1)`, so caller displacement == callee arg name).
+//   r3   this
+//   r4   an int  (Update: `mr r27, r4`)                    <- UpdateActiveCars' own r4,
+//                                                             = sub_822B5EA0(lpOutput)
+//   r10  bool    (Update: `mr r24, r10`)                   -> lbIsInOnlineGameMode  ✔ USED
+//   0x50 bool    (`lbz r8, arg_57`)                        -> lbInCarSelectScreen   ✔ USED
+//   0x58 bool                                              <- InputBuffer_PrePhysics::
+//                                                             GetInHardStopCamera()
+//   0x60 ptr                                               <- module + 0x18490
+//   0x68 ptr     (`lwz r23, arg_6C`, asserted non-NULL)    <- lpVehicleOutput
+//   0x70 int                                               <- module + 0x18368 (meGameModeType)
+//   f1   f32     -> lfTimeStep      ✔ USED   <- module mfTimeStep      (+0x18398)
+//   f2   f32                                 <- module +0x183A0
+//   f3   f32                                 <- module +0x183A4  (-> CalculateWheelAngular…)
+//   f4   f32     -> lfAcceleration  ✔ USED   <- mPlayerVehicleControls.mfAcceleration (+0x183C8)
+//   f5   f32     -> lfBraking       ✔ USED   <- mPlayerVehicleControls.mfBraking      (+0x183CC)
+//   v1/v2 two Vector3s                       <- module +0x18720 / +0x18730
+//
+// ---- WHAT THIS SLICE REPRODUCES ------------------------------------------------------------
+//   the IsAttached assert; the per-frame dt work on members this tree has NAMED
+//   (mfInvulnerablityTime, mfTimeSinceCreation, the two mbIsTouching* clears,
+//   mbDriveAwayCheckRequired/mbCanDriveAwayFromCrash); the muType == E_RACE_CAR_TYPE_PLAYER
+//   gate at 0x822F7E24 and the UpdateEngineState call behind it; the mbAIToBeActivated clear;
+//   and the mbCrashedIntoWater timer.
+//
+// ---- [FLAG PC bring-up] WHAT THIS SLICE DROPS -- named, not paraphrased --------------------
+//  1. `lpVehicleOutput != NULL` (X360 :260) -- the argument itself is not plumbed here.
+//  2. mbIsTouchingWorld's value (0x822F7A0C): `mbCrashing ? false : (*(this+0x4E4) <= 0.0f)`.
+//     +0x4E4 is RaceCarState+0x404 and this tree has not named that field, so the flag is
+//     LEFT ALONE rather than written from a guess. Nothing in the PC build reads it today.
+//  3. the whole route/direction block (X360 0x822F7A5C..0x822F7C5C): GetDirection, BrnMath::
+//     Flatten, the RwMathVPU::IsValid assert (:315), the mfTimeDriveableInCrash accumulator
+//     and the `> 1.5s` VariableEventQueue<1536,16>::AddEvent(type 38). It is gated on
+//     +0x536 (RaceCarState+0x456, also unnamed here) and on the two VMX route vectors, which
+//     this slice does not receive.
+//  4. the IsOnRaceStartState(0) start-line rev RNG (0x822F7C64..0x822F7CE4) -- it needs the
+//     module's RNG at +0x18490.
+//  5. RaceCar::GetTransform / GetPreviousPosition / GetPosition (0x822F7D44..0x822F7DC8):
+//     the console calls them and DISCARDS all three results (v102/v103/v104 are dead in the
+//     decompilation) -- almost certainly an inlined body Hex-Rays lost. Dropped deliberately.
+//  6. CalculateWheelAngularVelocities @0x822BFCF8, UpdateInAirRotations @0x822BFFA8,
+//     SendAddedRemovedNetworkCarForCollisionEvents @0x822BF840, UpdateIndicators @0x822A5340 --
+//     NONE of the four exists anywhere in this tree yet.
+//     ⚠️ #6 is why the wheels still do not spin: CalculateWheelAngularVelocities is the
+//     producer for them, and GetWheelsWorldTransfrom @0x825D8878 is bodyless besides.
+//  7. the mbIsWaitingForDeferredReset -> RequestPlaceOnTrack countdown (0x822F7E80..0x822F7EB8).
+//     RequestPlaceOnTrack exists, but the latch is only ever armed by code this build has not
+//     landed, so running the countdown would be dead work with a live teleport at the end.
+// ----------------------------------------------------------------------------
+void ActiveRaceCar::Update(f32 lfTimeStep,
+                           f32 lfAcceleration,
+                           f32 lfBraking,
+                           bool lbIsInOnlineGameMode,
+                           bool lbInCarSelectScreen)
+{
+    CGS_ASSERT( IsAttached(), "IsAttached()" );          // BrnActiveRaceCar.h:1418
+
+    // 0x822F7964..0x822F797C. Not crashing => the "can I drive away?" check is re-armed and the
+    // answer is cleared. mPhysicsState.mbCrashing is the console's `lbz r10, 0x52A(r31)`.
+    const bool lbCrashing = mPhysicsState.mbCrashing;
+    if( !lbCrashing )
+    {
+        mbDriveAwayCheckRequired = true;                 // +0x730
+        mbCanDriveAwayFromCrash  = false;                // +0x779
+    }
+
+    // 0x822F7984..0x822F79B8.
+    if( mfInvulnerablityTime > 0.0f )                    // +0x724 (Attach seeds -1.0f)
+    {
+        mfInvulnerablityTime = mfInvulnerablityTime - lfTimeStep;
+    }
+    mfTimeSinceCreation = mfTimeSinceCreation + lfTimeStep;   // +0x728
+
+    mbIsTouchingAnotherRaceCar = false;                  // +0x772
+    mbIsTouchingPlayer         = false;                  // +0x773
+    // [FLAG PC bring-up] mbIsTouchingWorld (+0x774) -- drop #2 in the banner.
+
+    // 0x822F7DF4..0x822F7E48. ⭐ THE GATE AND THE CALL. Only a PLAYER-typed global slot gets an
+    // engine state; AI / traffic / remote slots skip it entirely.
+    CGS_ASSERT( mpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
+                "muType < E_RACE_CAR_TYPE_COUNT" );      // BrnRaceCar.h:577
+    if( mpRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER )
+    {
+        // ---- [engine-diag] PC bring-up instrument -- DELETE WHEN the car drives -----------
+        // Placed in the CALLER so the reconstructed UpdateEngineState body stays byte-for-byte
+        // the console's shape (it has six early returns; wrapping it would have restructured
+        // it). Logs only TRANSITIONS, so the whole ignition chain is four lines in BrnGame.log.
+        const RaceCarEntityModuleIO::EActiveRaceCarEngineState leEntryState = meEngineState;
+
+        UpdateEngineState( lfTimeStep, lfAcceleration, lfBraking,
+                           lbIsInOnlineGameMode, lbInCarSelectScreen );
+
+        if( meEngineState != leEntryState
+            && ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0
+            && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[engine-diag] meEngineState " << static_cast<s32>( leEntryState )
+                << " -> " << static_cast<s32>( meEngineState )
+                << "  (0=OFF 1=STARTING 2=RUNNING 3=STOPPING)"
+                << "  accel " << lfAcceleration
+                << " brake " << lfBraking
+                << " mph "   << mPhysicsState.mfSpeedMPH
+                << " carsel " << ( lbInCarSelectScreen ? 1 : 0 )
+                << " swoff "  << ( mbEnableEngineSwitchOff ? 1 : 0 )
+                << " ingame " << ( mbIsInGameMode ? 1 : 0 ) << "\n";
+        }
+        // ---- end [engine-diag] ------------------------------------------------------------
+    }
+
+    mbAIToBeActivated = false;                           // +0x781 (0x822F7E54)
+
+    // 0x822F7EBC..0x822F7ED0.
+    if( mbCrashedIntoWater )                             // +0x783
+    {
+        mfTimeInWater = mfTimeInWater + lfTimeStep;      // +0x784
     }
 }
 
