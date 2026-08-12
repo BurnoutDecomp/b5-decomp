@@ -5177,8 +5177,20 @@ namespace Vehicle
     // scaled by the counter-steer factor. It is zeroed above the max speed -- the cap is the boost
     // MaxBoostSpeed (mBoostAttribs +0x290 .y) while a boost is running (TimeBoosting == +0x1040 .y
     // > 0), else the attribs MaxSpeed (mvMass_..._MaxSpeed_... +0x70 .z), each times the
-    // boost-max-speed scale. Then the drive lands on the wheels' angular-velocity integration
-    // accumulators (maWheels[i].mIntegrationVariables .z):
+    // boost-max-speed scale. Then the drive lands on the wheels' TORQUE ACCUMULATOR
+    // (maWheels[i].mIntegrationVariables **.y**):
+    //
+    // ⚠️⚠️ CORRECTED 2026-08-13 (drivetrain wave). This body used to add the drive into `.z`, and
+    // `.z` is the wheel's VISUAL ROTATION ANGLE -- `UpdateWheels` publishes it as
+    // `WheelLite::mfRotation` and advances it as `wrap(.z + .x * dt)` (0x8261F494). The drive was
+    // therefore thrown away every frame: nothing wrote `.y`, so the torque-integrate stage
+    // (0x8261EA58, `.x += .y * dt * invInertia ; .y = 0`) added zero and every wheel stayed a pure
+    // ROLLING SLAVE of the body -- measured in-game as omega*radius == |v| to four figures at every
+    // sample, with a 5x change in engine drive moving the car's trajectory by nothing at all.
+    // Every store in the X360 body is `vrlimi128 ..., 4, 0` over the four wheel bases
+    // r3+0x160/0x240/0x320/0x400, and mask 4 is lane **.y** (the 8/4/2/1 == x/y/z/w convention is
+    // re-proved in SetWheelVelocities' banner above). `UpdateEngine` @0x82638320 runs before
+    // `UpdateWheels` @0x8263840C, so accumulate -> integrate -> clear lands in one tick.
     //   * no handbrake, OR handbrake below 5 mph (unk_8208FB14 == KF_SPEED_TO_ALLOW_LOCKING_WHEELS):
     //     all four wheels, split PowerToRear(+0xB0 .z) for the rear pair / PowerToFront(+0xB0 .y)
     //     for the front pair;
@@ -5208,16 +5220,16 @@ namespace Vehicle
         if (lbHandBrake && !(5.0f > lfForwardSpeed))                  // unk_8208FB14 == 5.0
         {
             // wheel lock: raw drive into the rear pair only.
-            maWheels[eRearLeftWheel ].mIntegrationVariables.z += lfDrive;
-            maWheels[eRearRightWheel].mIntegrationVariables.z += lfDrive;
+            maWheels[eRearLeftWheel ].mIntegrationVariables.y += lfDrive;
+            maWheels[eRearRightWheel].mIntegrationVariables.y += lfDrive;
             return;
         }
 
         // normal distribution: rear pair scaled by PowerToRear, front pair by PowerToFront.
-        maWheels[eRearLeftWheel  ].mIntegrationVariables.z += lfDrive * lfPowerToRear;
-        maWheels[eRearRightWheel ].mIntegrationVariables.z += lfDrive * lfPowerToRear;
-        maWheels[eFrontLeftWheel ].mIntegrationVariables.z += lfDrive * lfPowerToFront;
-        maWheels[eFrontRightWheel].mIntegrationVariables.z += lfDrive * lfPowerToFront;
+        maWheels[eRearLeftWheel  ].mIntegrationVariables.y += lfDrive * lfPowerToRear;
+        maWheels[eRearRightWheel ].mIntegrationVariables.y += lfDrive * lfPowerToRear;
+        maWheels[eFrontLeftWheel ].mIntegrationVariables.y += lfDrive * lfPowerToFront;
+        maWheels[eFrontRightWheel].mIntegrationVariables.y += lfDrive * lfPowerToFront;
     }
 
 // [clean] UpdateDownForce  @0x825F6338

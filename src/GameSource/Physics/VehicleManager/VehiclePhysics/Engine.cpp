@@ -1,9 +1,11 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Engine.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([powertrain] probe)
 
 #include <algorithm> // std::min, std::max
 #include <cmath>     // std::fabs
 #include <cstddef>   // offsetof
+#include <cstdlib>   // getenv ([powertrain] probe)
 #include <cstring>   // std::memcpy
 
 // BrnPhysics::Vehicle::Engine -- the two ledger functions owned by the Vehicle-physics group.
@@ -525,6 +527,57 @@ namespace
         mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.z = lfFlyWheel;
         mvClutchFactor_RPM_CurrentGearChangeTime.x = lfClutch;
         mvClutchFactor_RPM_CurrentGearChangeTime.z = lfTimer;
+
+        // ---- [powertrain] PC bring-up instrument -- DELETE WHEN the drivetrain is right -------
+        // OPT-IN (BRN_ENGINE_PROBE=1) so a default run and every golden gate are byte-identical
+        // to a build without it. One line every 30 calls: the whole torque chain plus the three
+        // per-gear attribs lanes it read, so a wrong lane shows up as a wrong NUMBER, not a guess.
+        {
+            static s32 siPowertrainProbe = -1;
+            if (siPowertrainProbe < 0)
+            {
+                const char* lpcEnv = getenv("BRN_ENGINE_PROBE");
+                siPowertrainProbe = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
+            }
+            // ⚠️ Sample on a counter that only advances for THROTTLED calls. A single global
+            // counter aliases: several vehicles call Update in a fixed order every tick, so
+            // `count % 30` lands on the same slot forever and the player is never sampled.
+            static u32 suPowertrainCount = 0;
+            const bool lbUnderPower = (lfGas > 0.0f);
+            if (lbUnderPower)
+                ++suPowertrainCount;
+            if (siPowertrainProbe == 1 && lbUnderPower && (suPowertrainCount % 30u) == 0u
+                && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[powertrain] n " << static_cast<s32>(suPowertrainCount)
+                    << " gear " << liGear
+                    << " rpm " << lfRPM
+                    << " fly " << lfFlyWheel
+                    << " clutch " << lfClutch
+                    << " torque " << lfTorque
+                    << " curveT " << lfCurveT
+                    << " drive " << lfEngineDrive
+                    << " gas " << lfGas
+                    << " wOmega " << lvfWheelAngularVelocity.x
+                    << " wRPM " << lfWheelRPM
+                    << " fwd " << lfForwardSpeed
+                    << " timer " << lfTimer
+                    << " | ratio " << mAttribs.GetGearRatio(liGear)
+                    << " upRPM " << mAttribs.GetGearUpRPM(liGear)
+                    << " tScale " << mAttribs.GetTorqueScale(liGear)
+                    << " diff " << mAttribs.GetDifferential()
+                    << " maxRPM " << mAttribs.GetMaxRPM()
+                    << " fallOff " << mAttribs.GetTorqueFallOffRPM()
+                    << " inertia " << mAttribs.GetFlyWheelInertia()
+                    << " friction " << mAttribs.GetFlyWheelFriction()
+                    << " gct " << mAttribs.GetGearChangeTime()
+                    << " transEff " << mAttribs.GetTransmissionEfficiency()
+                    << " burn " << lfBurnClutch
+                    << "\n";
+            }
+        }
+        // ---- end [powertrain] -----------------------------------------------------------------
     }
 }
 }
