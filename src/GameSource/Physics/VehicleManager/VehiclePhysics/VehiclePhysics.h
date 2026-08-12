@@ -1904,7 +1904,12 @@ namespace Vehicle
         // RETRACTED in the .cpp: it writes maWheels[i].mPosition.y -- the exact input the grounded
         // arm of UpdateSuspensionSprings reads -- and every offset it touches is a committed member.
         void ApplyWheelWeight();                            // @0x825F7898
-        void CalculateWeightTransfer();                     // @0x825F9DD0 PARTIAL (units 0.10193679)
+        // @0x825F9DD0 -- ⭐⭐ THE MassOnWheel WRITER (the per-frame load pass). dt IS AN ARGUMENT:
+        // UpdateSuspension parks the incoming vector (`vmr128 v127,v1`) and re-issues `vmr128 v1,v127`
+        // before this call at 0x8261F6EC, and the callee's first instruction is `vrefp v13,v1` -- the
+        // 1/dt that turns the velocity delta into an acceleration. The old no-arg spelling was a slice
+        // artifact of the [partial] body that never used dt.
+        void CalculateWeightTransfer(VecFloat lvfTimeStep);
         void ApplySuspensionForces();                       // @0x825D1EE8 (lever arm + direction + gate corrected 2026-08-11)
         void UpdateSuspension(f64 lfTimeStep);              // @0x8261F698 CLEAN (the virtual spine)
         // ⭐ BODIED 2026-08-11 (suspension-springs wave); the BLOCKED verdict is RETRACTED in the
