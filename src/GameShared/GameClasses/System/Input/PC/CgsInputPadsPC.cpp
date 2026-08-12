@@ -328,12 +328,26 @@ namespace
         return lfValue;
     }
 
-    // FLAG PC-platform leaf: the unattended boot harness signals one auto-reset event
-    // per host action. Unlike synthetic desktop keystrokes these survive a locked or
-    // disconnected desktop and are consumed by exactly one input update. The channel is
+    // FLAG PC-platform leaf: the unattended boot harness signals one named event per host
+    // action. Unlike synthetic desktop keystrokes these survive a locked or disconnected
+    // desktop, and -- because they are named kernel objects rather than global key state --
+    // they cannot leak into whatever other window happens to own the desktop. The channel is
     // enabled only with the harness's BRN_INPUT_ALLOW_BACKGROUND environment marker.
-    // Only the four menu actions have a harness channel (they are the first four rows of
-    // KA_BINDINGS); every other action id returns false immediately.
+    //
+    // ⭐ THE RESET MODE LIVES ENTIRELY ON THE HARNESS SIDE; this code is one zero-timeout wait
+    // either way, and each channel is sampled exactly ONCE per input update (see UpdatePlayer0):
+    //   * the four MENU channels are created AUTO-RESET, so one Set() is observed by exactly one
+    //     input update -- a tap, which is what a menu press is;
+    //   * the DRIVING channels are created MANUAL-RESET, so they read as active on every input
+    //     update between the harness's Set() and its Reset() -- a HOLD, which is what a throttle
+    //     is. A pedal you can only tap for one frame cannot drive a car.
+    // Nothing here distinguishes the two: WaitForSingleObject(h, 0) == WAIT_OBJECT_0 is "this
+    // control is down right now" in both cases.
+    //
+    // The driving rows deliberately mirror a PAD player, not a keyboard one: ACCELERATE/BRAKE
+    // land in their maActionInfo slots (where the triggers put them) and steering lands on
+    // mfStickLX (where the left stick puts it) -- see HarnessSteerActive below. So the game
+    // sees an ordinary controller, through the ordinary bridge.
     bool ConsumeHarnessAction(s32 liActionId)
     {
         static const bool s_bHarnessEnabled =
@@ -344,16 +358,25 @@ namespace
         const char* lpcEventName = 0;
         switch (liActionId)
         {
-        case 45: lpcEventName = "Local\\BurnoutPC_Input_Accept"; break;
-        case 49: lpcEventName = "Local\\BurnoutPC_Input_Stop";   break;
-        case 41: lpcEventName = "Local\\BurnoutPC_Input_Next";   break;
-        case 42: lpcEventName = "Local\\BurnoutPC_Input_Prev";   break;
+        case 45: lpcEventName = "Local\\BurnoutPC_Input_Accept";     break;
+        case 49: lpcEventName = "Local\\BurnoutPC_Input_Stop";       break;
+        case 41: lpcEventName = "Local\\BurnoutPC_Input_Next";       break;
+        case 42: lpcEventName = "Local\\BurnoutPC_Input_Prev";       break;
+        // -- driving. These three ids are the rows BridgeControllerToWorld reads straight out
+        //    of maActionInfo[] into PlayerVehicleControls (asm-attested: [0].mfValue ->
+        //    mfAcceleration, [1] -> mfBraking, [2] -> mfHandBrake), i.e. exactly the slots the
+        //    right trigger / left trigger / X button fill.
+        case  0: lpcEventName = "Local\\BurnoutPC_Input_Accelerate"; break;
+        case  1: lpcEventName = "Local\\BurnoutPC_Input_Brake";      break;
+        case  2: lpcEventName = "Local\\BurnoutPC_Input_HandBrake";  break;
         default: return false;
         }
 
-        // SYNCHRONIZE == 0x00100000; WAIT_OBJECT_0 == 0. The harness creates
-        // auto-reset events before launching the game, so a successful zero-time wait
-        // both observes and consumes one requested action.
+        // SYNCHRONIZE == 0x00100000; WAIT_OBJECT_0 == 0. The harness creates every event
+        // before launching the game, so a successful zero-time wait says the control is down
+        // this update (and, for the auto-reset menu channels, consumes the one request).
+        // The handle cache is indexed by KA_BINDINGS row, so every id in the switch above must
+        // also be a bound row -- 45/49/41/42 are rows 0..3 and 0/1/2 are rows 4..6.
         static void* sapHarnessEvents[KU_NUM_BINDINGS] = {};
         u32 luBinding = 0;
         while (luBinding < KU_NUM_BINDINGS
@@ -365,6 +388,31 @@ namespace
             sapHarnessEvents[luBinding] = OpenEventA(0x00100000u, 0, lpcEventName);
         return sapHarnessEvents[luBinding] != 0
             && WaitForSingleObject(sapHarnessEvents[luBinding], 0) == 0;
+    }
+
+    // The harness's two STEERING channels. Steering is not an action -- on a pad it is the left
+    // stick, and BridgeControllerToWorld takes mfStickLX (not any maActionInfo slot) through the
+    // response curve into mfSteering. So these are summed onto mfStickLX in exactly the place,
+    // and by exactly the +/-1.0 full deflection, that the keyboard's A/D rows use; a second
+    // device on the same port, which is what InputPads::FillRawData @0x828E7350 does with one.
+    // They carry no action id and therefore no KA_BINDINGS row, hence their own handle pair.
+    bool HarnessSteerActive(bool lbRight)
+    {
+        static const bool s_bHarnessEnabled =
+            (std::getenv("BRN_INPUT_ALLOW_BACKGROUND") != nullptr);
+        if (!s_bHarnessEnabled)
+            return false;
+
+        static void* sapSteerEvents[2] = {};
+        const u32 luIndex = lbRight ? 1u : 0u;
+        if (sapSteerEvents[luIndex] == 0)
+        {
+            sapSteerEvents[luIndex] = OpenEventA(0x00100000u, 0,
+                    lbRight ? "Local\\BurnoutPC_Input_SteerRight"
+                            : "Local\\BurnoutPC_Input_SteerLeft");
+        }
+        return sapSteerEvents[luIndex] != 0
+            && WaitForSingleObject(sapSteerEvents[luIndex], 0) == 0;
     }
 }
 
@@ -410,6 +458,12 @@ namespace CgsInput
             if (AnyKeyDown(KAI_KEYS_ACCELERATE))    lfStickLY += 1.0f;
             if (AnyKeyDown(KAI_KEYS_BRAKE))         lfStickLY -= 1.0f;
         }
+        // The harness steering channels sum onto the same stick as a further device. Sampled
+        // once each, here, because mfStickLX is the ONLY place steering reaches the bridge.
+        // They do NOT touch mfStickLY: a pad player's throttle is the trigger (action 0), not
+        // the stick, and mfStickLY is the bridge's mfForwardSteering (in-air pitch), not gas.
+        if (HarnessSteerActive(false)) lfStickLX -= 1.0f;
+        if (HarnessSteerActive(true))  lfStickLX += 1.0f;
 
         lrPad.mfStickLX = ClampAxis(lfStickLX);                                        // E_PADAXIS_0_X
         lrPad.mfStickLY = ClampAxis(lfStickLY);                                        // E_PADAXIS_0_Y

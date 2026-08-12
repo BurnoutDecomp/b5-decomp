@@ -611,6 +611,23 @@ InputBuffer_PreScene::GetActivePaybackAggressor() const
     return meActivePaybackAggressor;
 }
 
+// X360 0x822B4B88 (R, :160) -- const player vehicle-controls accessor. The console body is
+// exactly this shape: the read-lock assert (`(*a1 >> 4) & 1`, message "Not locked for reading",
+// citing BrnRaceCarEntityModuleIO.h:160 -- which is the line the header annotates this getter
+// with) and then `return a1 + 496`, i.e. &mPlayerVehicleControls at this+0x1F0. 496 == 0x1F0
+// confirms the member independently of the declaration order.
+//
+// ⛔ IT WAS DECLARE-ONLY, and the setter right below it was not. That asymmetry is why the
+// player's pad state could be written into this buffer and never read back out of it: the one
+// console caller of this getter is PreSceneUpdate @0x8230D928's `memcpy(a1 + 99240, v56, 60)`,
+// the store that fills RaceCarEntityModule::mPlayerVehicleControls. Only a LINK found it.
+const BrnWorld::PlayerVehicleControls*
+InputBuffer_PreScene::GetPlayerVehicleControls() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mPlayerVehicleControls;
+}
+
 // X360 0x8279CFA8 (W, :161) -- copy player vehicle-controls into the buffer
 // (memcpy 60 bytes; this+0x1F0). PlayerVehicleControls is a 60-byte POD.
 void

@@ -278,6 +278,54 @@ public:
     // X360 @ 0x82356978. Is the simulation currently paused (see the mask notes at the body)?
     bool IsSimPaused(bool lbCheckGameMode, bool lbStrictMask) const;
 
+    // DWARF BrnGameStateModule.h:106 (references/DecFIGS/.../BrnGameStateModule.h:106-111),
+    // names and values verbatim. Every value is attested by a console WRITER of the member:
+    //   0 NOT_IN_GAME                ModeManager::SendModeStopMessages @0x8234BEC0, ClearData
+    //                                @0x8236B3A8, Destruct @0x82375420 -- "no game mode is
+    //                                running", i.e. free roam
+    //   1 CAR_SELECT                 ProcessGameEvents @0x823A0A18 case 16
+    //   2 INACTIVE_GAME_MODE_STATE   ModeManager::PlayerFinishedMode @0x823280D8, and the
+    //                                case-106 `else` arm
+    //   3 ACTIVE_GAME_MODE_STATE     ModeManager::UpdateCurrentMode @0x82350EC8 (mode start),
+    //                                and the case-106 `if` arm
+    // Declared here, ahead of the member block, because a nested type must precede the member
+    // that names it.
+    enum EControllerState
+    {
+        E_CONTROLLERSTATE_NOT_IN_GAME              = 0,
+        E_CONTROLLERSTATE_CAR_SELECT               = 1,
+        E_CONTROLLERSTATE_INACTIVE_GAME_MODE_STATE = 2,
+        E_CONTROLLERSTATE_ACTIVE_GAME_MODE_STATE   = 3
+    };
+
+    // ⭐⭐ DWARF BrnGameStateModule.h:1173 `bool IsControllerActive() const`. The console
+    // INLINES it into PreWorldUpdate @0x823A5328, where it reads verbatim:
+    //     v61 = *(a1 + 232292);                        // meControllerState
+    //     if ( v61 == 3 || (v63 = v61 != 0, v62 = 0, !v63) ) v62 = 1;
+    //     GameStateModuleIO::OutputBuffer::SetControllerActive(a5, v62);
+    // i.e. TRUE for exactly E_CONTROLLERSTATE_NOT_IN_GAME (free roam -- no game mode is
+    // running, the player drives Paradise City) and E_CONTROLLERSTATE_ACTIVE_GAME_MODE_STATE
+    // (an event is actually under way). FALSE while the car-select screen owns the pad and
+    // while a mode is in its inactive phase (countdown / results).
+    bool IsControllerActive() const;
+
+    // ⭐⭐ THE EXTRACTED CONTROLLER-ACTIVE PUBLISH of PreWorldUpdate @0x823A5328 (the store
+    // immediately after the IsOnlineGameMode / +536 / +537 / +532 block).
+    //
+    // ⛔ WITHOUT IT NOTHING CAN DRIVE THE CAR -- pad, keyboard OR harness. The flag reaches the
+    // physics as BrnGameModule.cpp:1022 `lpWorldInput->SetControllerActive(...)` ->
+    // WorldBridgeInputToEntityModules.cpp:250 -> RaceCarEntityModule::ProcessPlayerVehicleInput,
+    // whose `lbControllerActive` false arm ZERO-FILLS BrnPlayerDriverControls (gas, brake,
+    // handbrake AND steering). GameStateModuleIO::OutputBuffer's ctor leaves mbControllerActive
+    // false and 0x82363040 has exactly ONE caller in the whole image -- PreWorldUpdate -- which
+    // is not reconstructed, so on this build the flag was false for the entire run. MEASURED
+    // 2026-08-12: `ctrlactive 0` on every frame, `gas 0.000` with the throttle held.
+    //
+    // [FLAG PC bring-up] the EXTRACTION is the deviation, as with the two PreWorldUpdate legs
+    // above: the condition, the store and its position relative to the rest of the body are the
+    // console's. DELETE-WHEN PreWorldUpdate lands whole.
+    void PreWorldUpdatePublishControllerActiveBringUp();
+
     // ADDITIVE GROW (declare-only) for the BrnChallengeManager wave-C TUs (NetworkPlayerRemoved
     // @0x8234E420 / SetRemotePlayersChallengeCompleted @0x82323DF8 call it through mpGameStateModule
     // @+0xE48). DWARF BrnGameStateModule.h:618 declares
@@ -531,6 +579,16 @@ private:
     // X360 this+232288 (0x38B60) -- bitfield of active pause reasons (0 == running). Read by
     // IsSimPaused @0x82356978 and IsTrainingPauseSuppressed; cleared by RequestUnpause @0x82382138.
     s32                 miSimPauseFlags;
+    // ⭐ X360 this+232292 (0x38B64), the word immediately after the pause flags -- and DWARF
+    // BrnGameStateModule.h:806 puts `EControllerState meControllerState` immediately after
+    // `EPauseFlags mePauseFlags` (:805), so the name and the neighbour agree independently.
+    // Read by IsControllerActive(); written by ClearData @0x8236B3A8 and Destruct @0x82375420
+    // (both to 0) and by the four ModeManager / ProcessGameEvents sites listed on the enum.
+    // ⓘ Nothing on this build writes it yet -- ModeManager's mode machine and ProcessGameEvents'
+    // case 16/106 arms are not reconstructed -- so it holds its zero-init
+    // E_CONTROLLERSTATE_NOT_IN_GAME, which is the CORRECT state for the free-roam the junkyard
+    // handover leaves the player in, and which IsControllerActive() reports as active.
+    EControllerState    meControllerState = E_CONTROLLERSTATE_NOT_IN_GAME;
 
     // ---- the CarSelect / player-car block (X360 this+0x456D8 .. +0x456E8, contiguous there) ----
     // X360 +0x456D8 (284376). The active player car's CgsID. WRITTEN by OnSpecialEventPlayerCarChange

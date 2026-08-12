@@ -1549,6 +1549,37 @@ void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp(bool lbMayCompleteJunk
 }
 
 // ============================================================================
+// IsControllerActive -- DWARF BrnGameStateModule.h:1173, inlined by the console into
+// PreWorldUpdate @0x823A5328. The two-value test is transcribed from that inline:
+//     if ( v61 == 3 || (v63 = v61 != 0, v62 = 0, !v63) ) v62 = 1;
+// which is `state == 3 || state == 0` written the way the compiler folded it.
+// ============================================================================
+bool GameStateModule::IsControllerActive() const
+{
+    return meControllerState == E_CONTROLLERSTATE_ACTIVE_GAME_MODE_STATE
+        || meControllerState == E_CONTROLLERSTATE_NOT_IN_GAME;
+}
+
+// ============================================================================
+// PreWorldUpdatePublishControllerActiveBringUp -- the extracted CONTROLLER-ACTIVE publish
+// of PreWorldUpdate @0x823A5328. See the header for the FLAG and the measurement.
+// ============================================================================
+void GameStateModule::PreWorldUpdatePublishControllerActiveBringUp()
+{
+    if (mpOutputBuffer == 0)
+    {
+        return;
+    }
+
+    // The console holds the output buffer's write lock across this whole tail of PreWorldUpdate
+    // (LockForWrite is taken near the top, at the same place the car-select leg takes it in its
+    // own extraction), so the store is made under the same lock here.
+    mpOutputBuffer->LockForWrite();
+    mpOutputBuffer->SetControllerActive(IsControllerActive());
+    mpOutputBuffer->UnlockForWrite();
+}
+
+// ============================================================================
 // PreWorldUpdateCarSelectBringUp -- the extracted CAR-SELECT leg of PreWorldUpdate
 // @0x823A5328 (0x823A5904..0x823A5958). See the header for the FLAG and the asm.
 // ============================================================================
