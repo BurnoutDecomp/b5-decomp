@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // Construct's debug-variable registration
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"           // CgsDev::DebugUI::StringList (type options)
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"    // ShaderConstantTable (SetConstantsForEnvmap)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"         // [FLAG PC bring-up probe] the "[shadow-cam]" stage report only
 
 #include <algorithm> // std::sort (ComputeOptimalViewVolume's candidate-plane ordering)
 #include <cmath>     // std::sqrt/sin/cos (the vrsqrtefp + 2x NR chains, de-optimised exact)
@@ -21,11 +22,20 @@
 //   CalcLodDistanceModifier   @ 0x827B43A8  (trivial branch + splat)
 //   ComputeTSMMatrix          @ 0x827BFF58  (wave-2 dedicated VMX pass -- the
 //                                            trapezoidal-shadow-map best-fit solve)
+//   Construct                 @ 0x827B43E8
+//   CalculateShadowMapCameras @ 0x827DA820
+//   ComputeBoundingBoxMatrix  @ 0x827D91B0
+//   ComputeOptimalViewVolume  @ 0x827D8980
 //
-// DECLARATION-ONLY (see BrnShadowMap.h for the per-function FLAG comments): Construct,
-// CalculateShadowMapCameras, ComputeBoundingBoxMatrix, ComputeOptimalViewVolume,
-// DebugRender. Each is a heavily VMX-laden pipeline that stays declared in the header
-// until its own dependency TUs land.
+// STILL PARKED: DebugRender @0x827C1BB8 -- a ~1650-line debug-only immediate-mode
+// pipeline; the body is an assert trap (see the bottom of this file).
+//
+// CONSTANTS PASS 2026-08-12: this file previously carried a set of "not
+// recovered" placeholder ZEROS through a done review. Every one of them has now
+// been recovered by byte-dumping BURNOUT_X360_ARTIST.XEX.i64 (big-endian, via
+// ida_bytes.get_bytes) and, for the .bss objects, by disassembling their C++
+// dynamic-initialiser thunks in the unnamed .text run at
+// 0x82C6AF00..0x82C6B460. Each constant now carries its source address inline.
 // ============================================================================
 
 namespace rw { namespace math { namespace vpu {
@@ -103,9 +113,10 @@ namespace BrnWorld
     // Construct-time configuration constants (DWARF globals block, BrnShadowMap.cpp
     // :7..:61 -- names are the DWARF ground truth). The SCALAR values are recovered
     // from the X360 Construct asm (the pseudocode resolves the float immediates);
-    // the per-slot ARRAYS live in un-dumped rodata (IDA exports carry no data --
-    // see [[ida-exports-no-data]]), carried as honest zeros per the project
-    // convention (same as KA_SHADOWMAP_LOD_MODIFIER above).
+    // the per-slot ARRAYS are BYTE-DUMPED from the ARTIST .rdata image
+    // (0x820CA81C..0x820CA8A4, big-endian, via ida_bytes.get_bytes on
+    // BURNOUT_X360_ARTIST.XEX.i64 -- 2026-08-12). They were previously carried as
+    // "not recovered" zeros, which silently degenerated every shadow camera.
     // ========================================================================
     const f32 KF_SHADOWMAP_NEAR_PLANE_OFFSET = -450.0f;  // flt_820CA850 (@0x827B4468 -> +0x14D0)
     const f32 KF_SHADOWMAP_FAR_PLANE_OFFSET  = 650.0f;   // flt_820CA854 (@0x827B4488 -> +0x14D4)
@@ -116,21 +127,31 @@ namespace BrnWorld
     const f32 KF_VARIABLE_BIAS_MIN           = 0.51f;    // 0x3F028F5C  -> +0x1520
     const f32 KF_BIAS_FRUSTUM_LENGTH         = 500.0f;   // @0x827B46C0 -> +0x1524
 
-    // FLAG: rodata not recovered (values live in the un-dumped 0x820CA81C..0x820CA8A4
-    // block the Construct loops index; the names/extents are DWARF-attested).
-    const BrnWorld::ShadowMapType KA_SHADOWMAPTYPE[KU_NUM_SHADOW_MAPS] =
-        { E_SHADOWMAP_TYPE_ORTHO, E_SHADOWMAP_TYPE_ORTHO, E_SHADOWMAP_TYPE_ORTHO };  // dword_820CA81C -- FLAG: rodata not recovered
-    const f32 KAF_ORTHO_SCALE[KU_NUM_SHADOW_MAPS]                      = { 0.0f, 0.0f, 0.0f }; // flt_820CA870 -- FLAG: rodata not recovered
-    const f32 KAF_CENTRE_AT_OFFSET[KU_NUM_SHADOW_MAPS]                 = { 0.0f, 0.0f, 0.0f }; // flt_820CA87C -- FLAG: rodata not recovered
-    const f32 KAF_SHADOWMAP_SUBSET_FRUSTUM_NEAR_CLIP[KU_NUM_SHADOW_MAPS] = { 0.0f, 0.0f, 0.0f }; // flt_820CA88C -- FLAG: rodata not recovered
-    const f32 KAF_SHADOWMAP_SUBSET_FRUSTUM_FAR_CLIP[KU_NUM_SHADOW_MAPS]  = { 0.0f, 0.0f, 0.0f }; // flt_820CA898 -- FLAG: rodata not recovered
+    // .rdata DUMP 2026-08-12 (0x820CA81C..0x820CA8A4, big-endian). All three
+    // cascades ship as BOUNDINGBOX (2), NOT ortho -- i.e. it is
+    // ComputeBoundingBoxMatrix / ComputeOptimalViewVolume that run in retail, and
+    // the ortho branch of CalculateShadowMapCameras is dead. The three-cascade
+    // split is 0..10.5 / 10.5..34 / 34..120 metres.
+    const BrnWorld::ShadowMapType KA_SHADOWMAPTYPE[KU_NUM_SHADOW_MAPS] =         // dword_820CA81C: 2, 2, 2
+        { E_SHADOWMAP_TYPE_BOUNDINGBOX, E_SHADOWMAP_TYPE_BOUNDINGBOX, E_SHADOWMAP_TYPE_BOUNDINGBOX };
+    const f32 KAF_ORTHO_SCALE[KU_NUM_SHADOW_MAPS]                        = {  7.0f, 30.0f, 120.0f }; // flt_820CA870 (dumped)
+    const f32 KAF_CENTRE_AT_OFFSET[KU_NUM_SHADOW_MAPS]                   = {  7.5f, 30.0f, 120.0f }; // flt_820CA87C (dumped)
+    const f32 KAF_SHADOWMAP_SUBSET_FRUSTUM_NEAR_CLIP[KU_NUM_SHADOW_MAPS] = {  0.0f, 10.5f,  34.0f }; // flt_820CA88C (dumped)
+    const f32 KAF_SHADOWMAP_SUBSET_FRUSTUM_FAR_CLIP[KU_NUM_SHADOW_MAPS]  = { 10.5f, 34.0f, 120.0f }; // flt_820CA898 (dumped)
 
     // DWARF BrnShadowMap.cpp:10 -- `const StringList[5] KA_SHADOWMAP_TYPE_OPTIONS`
     // (unk_820CA828), the option table Construct binds to each per-CSM "Type"
-    // variable. FLAG: rodata (the four names + terminator) not recovered.
+    // variable. DUMPED 2026-08-12: the five 8-byte {s32 miValue, const char*
+    // mpcName} records at 0x820CA828, with the name literals read out of
+    // 0x820CA0B0..0x820CA0CD. The value column is exactly the ShadowMapType enum,
+    // which independently corroborates E_SHADOWMAP_TYPE_BOUNDINGBOX == 2 above.
     const CgsDev::DebugUI::StringList KA_SHADOWMAP_TYPE_OPTIONS[5] =
     {
-        { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 },  // FLAG: rodata not recovered
+        { 0, "Ortho"       },   // 0x820CA828 -> 0x820CA0C8
+        { 1, "TSM"         },   // 0x820CA830 -> 0x820CA0C4
+        { 2, "BoundingBox" },   // 0x820CA838 -> 0x820CA0B8
+        { 3, "Cached"      },   // 0x820CA840 -> 0x820CA0B0
+        { 0, 0             },   // 0x820CA848 -- the terminator record
     };
 
     // ========================================================================
@@ -300,6 +321,25 @@ namespace BrnWorld
         return &maCgsShadowMapCamera[liCascade];
     }
 
+    // @0x827DADF8: the per-cascade CULL VOLUME the three shadow frustum queries submit.
+    //
+    // Declared at BrnShadowMap.h:156 by the 2026-07-26 ADDITIVE wave alongside
+    // GetCascadeCamera above, but never bodied -- nothing called it, so the link stayed
+    // green for months. The 2026-08-12 asm re-read of GenerateFrustumQueries makes it
+    // REQUIRED: the shadow leg (@0x827DB250..0x827DB300) does NOT call
+    // Camera::GetFrustumPerspective the way the main-view and env-map legs do; it flat-
+    // copies 128 bytes from `mShadowMap + 0x1340 + i*0x80` -- i.e. maFrustum[i], the
+    // light-space volume ComputeBoundingBoxMatrix/ComputeOptimalViewVolume fitted around
+    // cascade i's near/far slab. Reproducing that copy as a member accessor is what lets
+    // the producer submit each cascade's own volume instead of one shared wide frustum.
+    // (maFrustum @ this+0x1340, stride 0x80 == sizeof(Frustum), attested twice: from the
+    // GenerateFrustumQueries asm and independently from ComputeTSMMatrix in this TU.)
+    const CgsGeometric::Frustum& ShadowMap::GetFrustum( u32 luIndex ) const
+    {
+        CGS_ASSERT( luIndex < KU_NUM_SHADOW_MAPS, "luIndex < KU_NUM_SHADOW_MAPS" );
+        return maFrustum[ luIndex ];
+    }
+
     // @0x827C96D8: `*(ShadowMap+0x14F4) = luCascade` at the top of each cascade pass.
     void ShadowMap::SetCurrentCascadeIndex( u32 luCascade ) { muCurrentShadowMap = luCascade; }
 
@@ -404,17 +444,17 @@ namespace BrnWorld
     // identity-matrix rows (committed precedent: rendered as SetIdentity()).
     // ========================================================================
 
-    // byte_8300FB34 @0x827C05C0: when set, the silhouette sides found by the
-    // scan are swapped (A<->B, ray dirs too). FLAG: holder TU / default value
-    // not recovered (debug-variable style toggle); carried as `false`, the
-    // inert default.
-    static bool sbTsmSwapSilhouetteSides = false; // FLAG: default not recovered
+    // byte_8300FB34 (read @0x827C05C4): when set, the silhouette sides found by
+    // the scan are swapped (A<->B, ray dirs too). DUMPED 2026-08-12: the image
+    // byte at 0x8300FB34 is 0x00 and no dynamic initializer writes it (its only
+    // xref is the 0x827C05C4 load), so `false` is the shipping value, not a guess.
+    static bool sbTsmSwapSilhouetteSides = false; // 0x8300FB34 == 0x00 (dumped)
 
-    // dword_82F30E24 @0x827C12F8: selects which composition-stage matrix the
-    // debug fill maps the trapezoid corners through (index into the 11-entry
-    // stage list below). FLAG: holder TU / default not recovered; 0 (identity
-    // stage) is inert.
-    static s32 siTsmDebugMatrixStage = 0;         // FLAG: default not recovered
+    // dword_82F30E24 (read @0x827C12F8): selects which composition-stage matrix
+    // the debug fill maps the trapezoid corners through (index into the 11-entry
+    // stage list below). DUMPED 2026-08-12: 0x82F30E24 == 5 -> stage lM5 (+S1).
+    // Debug-render only -- it never feeds mBestFitMatrix.
+    static s32 siTsmDebugMatrixStage = 5;         // 0x82F30E24 == 5 (dumped)
 
     // unk_8300E220 -- the per-slot TSM debug-render blob (640 bytes each),
     // consumed by the declaration-only ShadowMap::DebugRender
@@ -922,18 +962,79 @@ namespace BrnWorld
     //   unk_8300F9A0  -- the per-map second-stage matrix triple (64B stride).
     //   unk_8300E9F0  -- the matrix substituted for DISABLED maps.
     //   unk_8300FB00  -- the row-3 (translation) add applied to every result.
-    // FLAG (writers not recovered): no function in the .ida-exports set writes
-    // these blobs -- the writers are expected inside the not-yet-reconstructed
-    // ComputeBoundingBoxMatrix/ComputeOptimalViewVolume pair (whose sibling
-    // stores hit the adjacent unk_8300F460/unk_8300F5C0/unk_8300F980 slots) or
-    // in un-exported setup code. Carried as zero-initialised statics exactly
-    // like the console BSS boot state; role names are semantic, not symbol
-    // ground truth.
+    // WRITERS RECOVERED 2026-08-12 (this corrects the previous "writer not
+    // recovered" claim, which was FALSE and left all four blobs at zero -- with
+    // gShadowPostProjectionMatrix zeroed every shadow lookup samples UV (0,0),
+    // i.e. no shadows at all). They are not written by any *named* function: they
+    // are C++ file-scope objects with dynamic initialisers, emitted as a run of
+    // unnamed `blr`-terminated init thunks in .text at 0x82C6AF00..0x82C6B460 and
+    // called from the CRT init-array. Each thunk was disassembled instruction by
+    // instruction and its stack scratch replayed store-by-store (every one of the
+    // 48 gaShadowConstantMatrix slots is written exactly once, and each
+    // `lvx128 v0, r0, r10` reads only slots already stored):
+    //
+    //   0x82C6AF60 -> unk_8300FB00  gShadowConstantRowOffset
+    //   0x82C6AFF0 -> unk_8300F470  gShadowPostProjectionMatrix
+    //   0x82C6B098 -> unk_8300E9F0  gShadowDisabledConstantMatrix
+    //   0x82C6B130 -> unk_8300F9A0  gaShadowConstantMatrix[3]
+    //
+    // Contributing rodata (all byte-dumped big-endian): flt_82001C98 == 1.0,
+    // flt_82001CC0 == 0.0, flt_82001DA0 == 0.5, flt_82004C78 == -0.5,
+    // flt_820065E0 == 1/3, flt_8200AECC == 2/3, flt_820CD728 == 0.000390625,
+    // flt_820CD724 == 0.00025510203.
     // ------------------------------------------------------------------------
-    static Matrix44 gShadowPostProjectionMatrix;                       // unk_8300F470 -- FLAG: writer not recovered
-    static Matrix44 gaShadowConstantMatrix[KU_NUM_SHADOW_MAPS];        // unk_8300F9A0 -- FLAG: writer not recovered
-    static Matrix44 gShadowDisabledConstantMatrix;                     // unk_8300E9F0 -- FLAG: writer not recovered
-    static Vector4  gShadowConstantRowOffset;                          // unk_8300FB00 -- FLAG: writer not recovered
+
+    // Clip -> shadow-UV bias: x' = 0.5x + 0.5, y' = -0.5y + 0.5 (the Y flip is the
+    // D3D clip-to-texture convention). Init thunk @0x82C6AFF0.
+    static Matrix44 gShadowPostProjectionMatrix =   // unk_8300F470
+    {
+        {  0.5f,  0.0f, 0.0f, 0.0f },
+        {  0.0f, -0.5f, 0.0f, 0.0f },               // -0.5 == flt_82004C78
+        {  0.0f,  0.0f, 1.0f, 0.0f },
+        {  0.5f,  0.5f, 0.0f, 1.0f },
+    };
+
+    // The per-cascade atlas map: identity in X/Z, Y scaled to 1/3 of the target
+    // and translated to the cascade's own third (0, 1/3, 2/3) -- a 1x3 vertical
+    // strip atlas. Init thunk @0x82C6B130 (stores base+0x00..0xB0 in the order
+    // 0x30,0x20,0x10,0x00,0x70,0x60,0x50,0x40,0xB0,0xA0,0x90,0x80).
+    // 0.333333343f / 0.666666687f are the exact dumped bit patterns of
+    // flt_820065E0 (0x3EAAAAAB) and flt_8200AECC (0x3F2AAAAB).
+    static Matrix44 gaShadowConstantMatrix[KU_NUM_SHADOW_MAPS] =   // unk_8300F9A0
+    {
+        { { 1.0f, 0.0f,         0.0f, 0.0f },
+          { 0.0f, 0.333333343f, 0.0f, 0.0f },
+          { 0.0f, 0.0f,         1.0f, 0.0f },
+          { 0.0f, 0.0f,         0.0f, 1.0f } },
+        { { 1.0f, 0.0f,         0.0f, 0.0f },
+          { 0.0f, 0.333333343f, 0.0f, 0.0f },
+          { 0.0f, 0.0f,         1.0f, 0.0f },
+          { 0.0f, 0.333333343f, 0.0f, 1.0f } },
+        { { 1.0f, 0.0f,         0.0f, 0.0f },
+          { 0.0f, 0.333333343f, 0.0f, 0.0f },
+          { 0.0f, 0.0f,         1.0f, 0.0f },
+          { 0.0f, 0.666666687f, 0.0f, 1.0f } },
+    };
+
+    // Substituted for a DISABLED map: identity apart from wAxis.y == 1, which
+    // pushes the sampled V to 1.0 (off the top of every cascade strip) so the
+    // lookup can never report "in shadow". Init thunk @0x82C6B098.
+    static Matrix44 gShadowDisabledConstantMatrix =   // unk_8300E9F0
+    {
+        { 1.0f, 0.0f, 0.0f, 0.0f },
+        { 0.0f, 1.0f, 0.0f, 0.0f },
+        { 0.0f, 0.0f, 1.0f, 0.0f },
+        { 0.0f, 1.0f, 0.0f, 1.0f },
+    };
+
+    // The half-texel row-3 add applied to every result. Init thunk @0x82C6AF60
+    // (lanes 2/3 written from flt_82001CC0 == 0.0).
+    static Vector4 gShadowConstantRowOffset =   // unk_8300FB00
+    {
+        0.000390625f,      // flt_820CD728 (0x39CCCCCD)
+        0.00025510203f,    // flt_820CD724 (0x3985BF37)
+        0.0f, 0.0f,
+    };
 
     namespace
     {
@@ -957,11 +1058,11 @@ namespace BrnWorld
         //   assert !IsZero(Y)  ("!IsZero(lYaxis)":797)
         //   rows out: X, Y, Z, lrFocus
         //
-        // FLAG: the IsZero epsilon (flt_82001770) is un-dumped rodata; carried
-        // as the flagged constant below (component-abs threshold, matching the
-        // vandc/vcmpgtfp shape).
+        // The IsZero epsilon is flt_82001770, DUMPED 2026-08-12 as 0x34000000 ==
+        // 1.1920929e-07 (FLT_EPSILON, 2^-23) -- the rw::math IsZero default, not
+        // the 1e-6 that was previously carried as a flagged placeholder.
         // --------------------------------------------------------------------
-        const f32 KF_ISZERO_EPSILON = 1e-6f;   // flt_82001770 -- FLAG: value not recovered
+        const f32 KF_ISZERO_EPSILON = 1.1920929e-07f;   // flt_82001770 == 0x34000000 (dumped)
 
         inline bool IsZero3(f32 lfX, f32 lfY, f32 lfZ)
         {
@@ -1032,6 +1133,80 @@ namespace BrnWorld
     }
 
     // ========================================================================
+    // [FLAG PC bring-up probe] "[shadow-cam]" -- WHICH cascade stage first goes
+    // non-finite. DELETE together with BrnWorldModule's IsFiniteMatrix44BringUp
+    // tripwire; it is pure instrumentation and changes no console-attested value.
+    //
+    // WHY IT EXISTS (2026-08-12, shadow-camera NaN wave): the whole
+    // BOUNDINGBOX path below executed for the first time in this project's
+    // history today, and 39 of 41 [shadow-prod] samples reported a non-finite
+    // cascade view-projection. The ladder below names the FIRST intermediate
+    // that stops being finite, so the next boot log says which stage to look at
+    // instead of "somewhere in the solve".
+    //
+    // The canary rung is the load-bearing one: ComputeBoundingBoxMatrix's
+    // lFrustumPoints[8] is an uninitialised stack array that
+    // CgsGeometric::Frustum::CalcVertices is supposed to fill, and that callee
+    // is currently the INERT boot gate in GameSource/World/WorldLinkStubs.cpp
+    // (real body: X360 @0x82840DF8, not reconstructed). The probe therefore
+    // calls it a SECOND time on its own canary-filled scratch array -- a pure
+    // out-parameter writer, so the extra call has no side effect and the real
+    // array is left exactly as the shipping path leaves it. If the canary
+    // survives, the callee wrote nothing and every number downstream is stack
+    // garbage.
+    //
+    // LATCHING: value-latched, never a `static bool` one-shot (project lesson,
+    // learned three times: a one-shot here fires on the loading screen before
+    // the world exists and is then indistinguishable from "never reached").
+    // It reprints whenever the first-failing (stage, cascade) pair CHANGES --
+    // including the transition back to "all finite" -- and, on top of that,
+    // whenever the shadow focus point has moved more than a metre, so it keeps
+    // talking while the car is driving.
+    // ========================================================================
+    namespace
+    {
+        struct ShadowCamProbe
+        {
+            const char* mpcStage;        // 0 == every stage was finite this frame
+            s32         miCascade;
+            f32         mafDetail[4];
+
+            void BeginFrame()
+            {
+                mpcStage  = 0;
+                miCascade = -1;
+                for (s32 liI = 0; liI < 4; ++liI) { mafDetail[liI] = 0.0f; }
+            }
+
+            void Note(const char* lpcStage, s32 liCascade,
+                      f32 lfA, f32 lfB, f32 lfC, f32 lfD)
+            {
+                if (mpcStage != 0) { return; }      // the FIRST failing stage wins
+                mpcStage     = lpcStage;
+                miCascade    = liCascade;
+                mafDetail[0] = lfA; mafDetail[1] = lfB;
+                mafDetail[2] = lfC; mafDetail[3] = lfD;
+            }
+        };
+        ShadowCamProbe gShadowCamProbe = { 0, -1, { 0.0f, 0.0f, 0.0f, 0.0f } };
+
+        // The probe's canary: a value no real sub-frustum corner can hold.
+        const f32 KF_SHADOW_CAM_PROBE_CANARY = -1.2345678e9f;
+
+        inline bool ProbeFinite4(const Vector4& lrV)
+        {
+            return std::isfinite(lrV.x) && std::isfinite(lrV.y)
+                && std::isfinite(lrV.z) && std::isfinite(lrV.w);
+        }
+
+        inline bool ProbeFinite44(const Matrix44& lrM)
+        {
+            return ProbeFinite4(lrM.xAxis) && ProbeFinite4(lrM.yAxis)
+                && ProbeFinite4(lrM.zAxis) && ProbeFinite4(lrM.wAxis);
+        }
+    }
+
+    // ========================================================================
     // BrnWorld::ShadowMap::CalculateShadowMapCameras @0x827DA820
     //
     // Per-frame shadow camera build. r3 = this, v1 = the key-light direction,
@@ -1081,6 +1256,8 @@ namespace BrnWorld
     void ShadowMap::CalculateShadowMapCameras(Vector3 lv3LightDirection,
                                               const BrnDirector::Camera::Camera* lpRenderCamera)
     {
+        gShadowCamProbe.BeginFrame();   // [FLAG PC bring-up probe] -- see the banner above
+
         // ---- 1. the light-direction eye offset (vmulfp128 v127, v1, splat) --
         Vector4 lvLightOffset;
         lvLightOffset.x = lv3LightDirection.x * mfEyeOffset;
@@ -1173,6 +1350,17 @@ namespace BrnWorld
             default:   // E_SHADOWMAP_TYPE_CACHED -- nothing (@0x827DAA20 bge)
                 break;
             }
+
+            // [FLAG PC bring-up probe] the last rung of the ladder: the matrix
+            // BrnWorldModule's tripwire actually tests.
+            if (!ProbeFinite44(lrCgsCamera.mViewProjection))
+            {
+                gShadowCamProbe.Note("cascade-VP", static_cast<s32>(luMap),
+                                     lrCgsCamera.mViewProjection.xAxis.x,
+                                     lrCgsCamera.mViewProjection.yAxis.y,
+                                     lrCgsCamera.mViewProjection.zAxis.z,
+                                     lrCgsCamera.mViewProjection.wAxis.w);
+            }
         }
 
         // ---- 5. dynamic far-clip refit (@0x827DAC00..0x827DADA0) ------------
@@ -1241,6 +1429,68 @@ namespace BrnWorld
             if (maTsmBBInfo[luMap].mbDebugRender)                // lbz tsm+0x314
             {
                 DebugRender(luMap);
+            }
+        }
+
+        // ---- [FLAG PC bring-up probe] the value-latched "[shadow-cam]" report --
+        // See the banner above ShadowCamProbe. The latch is the (stage, cascade)
+        // PAIR, not a one-shot bool; the movement re-arm keeps it talking while
+        // the car drives; the 5/60-frame floors only decide how OFTEN it speaks,
+        // never WHETHER there is something to say.
+        {
+            static const char* spcLastStage  = "\x01";   // sentinel: matches no real stage literal
+            static s32         siLastCascade = -2;
+            static Vector3     sLastFocus    = { 1.0e30f, 1.0e30f, 1.0e30f, 0.0f };
+            static s32         siFramesSincePrint = 1000;
+            ++siFramesSincePrint;
+
+            const bool lbFocusFinite = std::isfinite(mShadowMapFocusPoint.x)
+                                    && std::isfinite(mShadowMapFocusPoint.y)
+                                    && std::isfinite(mShadowMapFocusPoint.z);
+            const f32  lfDx = mShadowMapFocusPoint.x - sLastFocus.x;
+            const f32  lfDy = mShadowMapFocusPoint.y - sLastFocus.y;
+            const f32  lfDz = mShadowMapFocusPoint.z - sLastFocus.z;
+            const f32  lfMovedSq = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
+
+            const bool lbStateChanged = (gShadowCamProbe.mpcStage != spcLastStage)
+                                     || (gShadowCamProbe.miCascade != siLastCascade);
+            const bool lbMoved = lbFocusFinite ? (lfMovedSq > 1.0f) : true;
+
+            const bool lbPrint = (siFramesSincePrint >= 5)
+                              && (lbStateChanged || (lbMoved && siFramesSincePrint >= 60));
+
+            if (lbPrint && CgsDev::Log::gpDebugPrint != 0)
+            {
+                siFramesSincePrint = 0;
+                spcLastStage  = gShadowCamProbe.mpcStage;
+                siLastCascade = gShadowCamProbe.miCascade;
+                sLastFocus    = lbFocusFinite
+                    ? mShadowMapFocusPoint
+                    : Vector3{ 1.0e30f, 1.0e30f, 1.0e30f, 0.0f };
+
+                *CgsDev::Log::gpDebugPrint << "[shadow-cam] ";
+                if (gShadowCamProbe.mpcStage == 0)
+                {
+                    *CgsDev::Log::gpDebugPrint << "all cascade stages finite";
+                }
+                else
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "FIRST non-finite stage=" << gShadowCamProbe.mpcStage
+                        << " cascade=" << gShadowCamProbe.miCascade
+                        << " detail=(" << gShadowCamProbe.mafDetail[0] << ","
+                        << gShadowCamProbe.mafDetail[1] << ","
+                        << gShadowCamProbe.mafDetail[2] << ","
+                        << gShadowCamProbe.mafDetail[3] << ")";
+                }
+                *CgsDev::Log::gpDebugPrint
+                    << " focus=(" << mShadowMapFocusPoint.x << ","
+                    << mShadowMapFocusPoint.y << "," << mShadowMapFocusPoint.z
+                    << ") types=" << static_cast<s32>(maShadowMapTypes[0])
+                    << "/" << static_cast<s32>(maShadowMapTypes[1])
+                    << "/" << static_cast<s32>(maShadowMapTypes[2])
+                    << " far=" << mfShadowMapFarPlane
+                    << "\n";
             }
         }
     }
@@ -1403,43 +1653,51 @@ namespace BrnWorld
     // BrnShadowMap.cpp:1203 (DWARF) -- unk_8300EA70.
     BoundingBoxDebugRenderInfo gBoundingBoxDebugRenderInfo[KU_NUM_SHADOW_MAPS];
 
-    // BrnShadowMap.cpp:1219 (DWARF) -- unk_8300F630. DERIVED 0.25: the only use
-    // is scaling the two four-vertex face sums into the near/far face centres
-    // (the same quarter-average ComputeTSMMatrix spells with flt_82004EF4).
-    // (The value is in fact unobservable -- it cancels in the Normalize that
-    // immediately follows -- so 0.25 is the semantic, not a fitted, choice.)
-    const VecFloat K_1_OVER_4 = { 0.25f, 0.25f, 0.25f, 0.25f };
+    // BrnShadowMap.cpp:1219 (DWARF) -- unk_8300F630. The value was previously
+    // only DERIVED; now CONFIRMED 2026-08-12 from the init thunk @0x82C6B328,
+    // which splats flt_82003F40 == 0x3E800000 == 0.25 into unk_8300F630.
+    const VecFloat K_1_OVER_4 = { 0.25f, 0.25f, 0.25f, 0.25f };   // unk_8300F630 (dumped)
 
     // BrnShadowMap.cpp:78/79 (DWARF) -- unk_8300F980 / unk_8300F5C0, the two
-    // terms of the ideal-aspect-ratio area penalty. DERIVED from the names and
-    // the clamp arithmetic the X360 emits, `t = clamp01((err - 1 - A) * B)`:
-    // A == 0.25 and B == 1/0.75 make the penalty ramp exactly from t == 0 at an
-    // aspect error of 1.25 to t == 1 at an aspect error of 2.0 -- i.e. B is
-    // literally "one over (2.0 - 1.25)", which is what the DWARF name spells.
-    const VecFloat K_VECFLOAT_ZEROPOINTTWOFIVE            = { 0.25f, 0.25f, 0.25f, 0.25f };
-    const VecFloat K_VECFLOAT_ONE_OVER_ZEROPOINTSEVENFIVE = { 1.0f / 0.75f, 1.0f / 0.75f,
-                                                              1.0f / 0.75f, 1.0f / 0.75f };
+    // terms of the ideal-aspect-ratio area penalty `t = clamp01((err - 1 - A) * B)`.
+    // Both were previously only DERIVED; now CONFIRMED 2026-08-12 from their init
+    // thunks: @0x82C6AFA0 splats flt_82003F40 == 0.25 into unk_8300F980, and
+    // @0x82C6AFC8 splats flt_82058310 == 0x3FAAAAAB == 1.3333334 (== 1/0.75) into
+    // unk_8300F5C0. The derivation was exactly right.
+    const VecFloat K_VECFLOAT_ZEROPOINTTWOFIVE            = { 0.25f, 0.25f, 0.25f, 0.25f };   // unk_8300F980 (dumped)
+    const VecFloat K_VECFLOAT_ONE_OVER_ZEROPOINTSEVENFIVE = { 1.3333334f, 1.3333334f,
+                                                              1.3333334f, 1.3333334f };       // unk_8300F5C0 (dumped)
 
     // BrnShadowMap.cpp:1589-1592 (DWARF) -- unk_8300F990 / unk_8300E9A0 /
     // unk_8300E9D0 / unk_8300F460.
     //
-    // FLAG (values not in this dossier -- IDA exports carry no data): K_VERY_SMALL
-    //   must be STRICTLY POSITIVE. Both endpoints of every candidate edge plane
-    //   evaluate to exactly zero distance in exact arithmetic, so with a zero
-    //   tolerance float rounding puts them on both sides and the accept test
-    //   rejects all twelve candidates (verified: 0/12 accepted at eps == 0 in the
-    //   numeric emulation). Carried as a millimetre in world units.
-    // FLAG (K_LOW_PRIORITY / K_HIGH_PRIORITY): values un-dumped. The X360 scores
-    //   the first four (near-face) edge planes from one of them and the remaining
-    //   eight from the other; which symbol binds to which branch is NOT pinned by
-    //   the dossier. Both are carried at the same (zero) value, which makes the
-    //   binding inert and keeps every edge plane ahead of the opposing frustum
-    //   planes (whose score is 2 - NdotL, i.e. > 2) in the ascending sort -- the
-    //   ordering the algorithm plainly intends.
-    const VecFloat K_VERY_SMALL       = {  0.001f,  0.001f,  0.001f,  0.001f }; // FLAG: value not recovered
-    const VecFloat K_MINUS_VERY_SMALL = { -0.001f, -0.001f, -0.001f, -0.001f }; // == -K_VERY_SMALL
-    const VecFloat K_LOW_PRIORITY     = { 0.0f, 0.0f, 0.0f, 0.0f };             // FLAG: value not recovered
-    const VecFloat K_HIGH_PRIORITY    = { 0.0f, 0.0f, 0.0f, 0.0f };             // FLAG: value not recovered
+    // ALL FOUR RECOVERED 2026-08-12 from their dynamic-initialiser thunks in the
+    // 0x82C6AF00..0x82C6B460 run (each is `lfs f0, <rodata> ; stfs ; lvlx ;
+    // vspltw v0,v0,0 ; stvx128` -- a splat of one rodata float into the 16-byte
+    // slot), with the rodata floats byte-dumped:
+    //   0x82C6B378 : unk_8300F990 <- flt_82002138 == 0x3C23D70A ==  0.01
+    //   0x82C6B3A0 : unk_8300E9A0 <- flt_8201FDB8 == 0xBC23D70A == -0.01
+    //   0x82C6B3C8 : unk_8300E9D0 <- flt_82004A20 == 0x41200000 == 10.0
+    //   0x82C6B3F0 : unk_8300F460 <- flt_82001C98 == 0x3F800000 ==  1.0
+    //
+    // NAME<->ADDRESS BINDING (was an unpinned DWARF-ordering inference; SETTLED
+    // here from the asm + the sort semantics). ComputeOptimalViewVolume picks the
+    // edge-plane score at 0x827D8C84 / 0x827D8C6C:
+    //     r4 = &unk_8300E9D0 (10.0)   used when the edge index <  4
+    //     r5 = &unk_8300F460 ( 1.0)   used when the edge index >= 4
+    // CandidateViewVolumePlane::operator< is a plain ascending score compare and
+    // std::sort keeps only the first Min(count, 8), so a LOWER score means the
+    // plane is kept -- i.e. lower score == higher priority. The near-clip plane
+    // scores 0 (always first) and the opposing frustum planes score 2 - NdotL
+    // (> 2). So 1.0 is the HIGH-priority score and 10.0 the LOW-priority one,
+    // which sorts the four near-face edge planes dead last -- exactly right, the
+    // camera's near face is the least useful supporting plane. The existing
+    // `(luI < 4) ? K_LOW_PRIORITY : K_HIGH_PRIORITY` binding is therefore CORRECT
+    // and is left as it stands.
+    const VecFloat K_VERY_SMALL       = {  0.01f,  0.01f,  0.01f,  0.01f }; // unk_8300F990 (dumped)
+    const VecFloat K_MINUS_VERY_SMALL = { -0.01f, -0.01f, -0.01f, -0.01f }; // unk_8300E9A0 (dumped)
+    const VecFloat K_LOW_PRIORITY     = { 10.0f, 10.0f, 10.0f, 10.0f };     // unk_8300E9D0 (dumped)
+    const VecFloat K_HIGH_PRIORITY    = {  1.0f,  1.0f,  1.0f,  1.0f };     // unk_8300F460 (dumped)
 
     // BrnShadowMap.cpp:256 (DWARF `const CgsGeometric::Frustum::Vertices[24]`).
     // The twelve (start, end) vertex-index pairs of the sub-frustum's edge list.
@@ -1636,12 +1894,81 @@ namespace BrnWorld
         }
 
         // ---- 2. sub-frustum -> 8 world corners (0x827D9294..0x827D92BC) -----
+        // ⚠ ROOT CAUSE OF THE [shadow-prod] "cascade view-projection is not
+        // finite" WARN (39 of 41 samples, 2026-08-12) -- NOT MINE TO FIX.
+        // lFrustumPoints below is an uninitialised stack array that
+        // CgsGeometric::Frustum::CalcVertices is supposed to fill with the eight
+        // sub-frustum corners. That function is NOT reconstructed: the linked
+        // definition is the inert boot gate in GameSource/World/WorldLinkStubs.cpp
+        // (an empty body + a one-shot log), so it writes nothing and the whole
+        // best-fit solve below runs on stack garbage. Garbage that happens to be
+        // finite and non-degenerate gives a finite view-projection (the two clean
+        // samples); anything else collapses the fitted box and the UNGUARDED
+        // reciprocals -- which the X360 has too, verified below -- produce inf/NaN.
+        // The fix is the real X360 body @0x82840DF8 in its own TU
+        // (GameShared/GameClasses/Geometric/Primitives/CgsFrustum.cpp); nothing in
+        // THIS file can honestly stand in for it. The [shadow-cam] probe's rung 0
+        // proves it at runtime.
         const Matrix44& lWorldToLight = lTsmBBInfo.mWorldToLight;    // BrnShadowMap.cpp:1246
         CgsGraphics::CameraRwFrustum lRwFrustum;                     // BrnShadowMap.cpp:1248
         Vector4 lFrustumPoints[8];                                   // BrnShadowMap.cpp:1259
         lTsmBBInfo.mCamera.GetFrustumPerspective(lRwFrustum, false);
         lTsmBBInfo.mSubFrustum.SetFromRwFrustum(lRwFrustum);
         lTsmBBInfo.mSubFrustum.CalcVertices(lFrustumPoints);
+
+        // [FLAG PC bring-up probe] rung 0 -- see the ShadowCamProbe banner. A
+        // SECOND call on a canary-filled scratch array: CalcVertices is a pure
+        // out-parameter writer, so this cannot perturb lFrustumPoints or any
+        // console-attested state. If the canary survives, the callee wrote
+        // nothing and every number below this line is uninitialised stack.
+        {
+            Vector4 laProbeScratch[8];
+            for (u32 luI = 0; luI < 8; ++luI)
+            {
+                laProbeScratch[luI] = Vector4{ KF_SHADOW_CAM_PROBE_CANARY,
+                                               KF_SHADOW_CAM_PROBE_CANARY,
+                                               KF_SHADOW_CAM_PROBE_CANARY,
+                                               KF_SHADOW_CAM_PROBE_CANARY };
+            }
+            lTsmBBInfo.mSubFrustum.CalcVertices(laProbeScratch);
+
+            bool lbCanaryIntact = true;
+            for (u32 luI = 0; luI < 8; ++luI)
+            {
+                if (laProbeScratch[luI].x != KF_SHADOW_CAM_PROBE_CANARY
+                 || laProbeScratch[luI].y != KF_SHADOW_CAM_PROBE_CANARY
+                 || laProbeScratch[luI].z != KF_SHADOW_CAM_PROBE_CANARY)
+                {
+                    lbCanaryIntact = false;
+                    break;
+                }
+            }
+            if (lbCanaryIntact)
+            {
+                gShadowCamProbe.Note("subfrustum-verts-UNWRITTEN(CalcVertices-inert)",
+                                     static_cast<s32>(luMapIndex),
+                                     lTsmBBInfo.mCamera.maProjectionScalars[7],
+                                     lTsmBBInfo.mCamera.maProjectionScalars[8],
+                                     lTsmBBInfo.mfNearClip, lTsmBBInfo.mfFarClip);
+            }
+        }
+
+        for (u32 luI = 0; luI < 8; ++luI)
+        {
+            if (!ProbeFinite4(lFrustumPoints[luI]))
+            {
+                gShadowCamProbe.Note("subfrustum-verts", static_cast<s32>(luMapIndex),
+                                     static_cast<f32>(luI), lFrustumPoints[luI].x,
+                                     lFrustumPoints[luI].y, lFrustumPoints[luI].z);
+                break;
+            }
+        }
+        if (!ProbeFinite44(lWorldToLight))
+        {
+            gShadowCamProbe.Note("worldToLight", static_cast<s32>(luMapIndex),
+                                 lWorldToLight.xAxis.x, lWorldToLight.yAxis.y,
+                                 lWorldToLight.zAxis.z, lWorldToLight.wAxis.w);
+        }
 
         // ---- 3. into the 2D light plane (0x827D92C0..0x827D940C) ------------
         // The flattened point keeps only (x, y): the perm+vrlimi pair the X360
@@ -1683,16 +2010,41 @@ namespace BrnWorld
             lCentreLineEnd.z - lCentreLineStart.z, lCentreLineEnd.w - lCentreLineStart.w });
         const Vector4 lOriginalBaseLineVec{ lCentreLineVec.y, -lCentreLineVec.x, 0.0f, 0.0f }; // :1305
 
+        // [FLAG PC bring-up probe] rungs 2/3 -- the flattened point cloud and the
+        // seed direction Normalize3 produces from it. Normalize3 is UNGUARDED here
+        // on purpose: the X360 @0x827D94E0 is a bare vmsum3fp + vrsqrtefp + 2x NR
+        // with no vcmpeqfp/vsel, so a zero-length centre line gives NaN on console
+        // too -- if this rung fires, the INPUT is wrong, not the reconstruction.
+        for (u32 luI = 0; luI < 8; ++luI)
+        {
+            if (!ProbeFinite4(lFrustumPointsLightSpace[luI]))
+            {
+                gShadowCamProbe.Note("lightspace-points", static_cast<s32>(luMapIndex),
+                                     static_cast<f32>(luI),
+                                     lFrustumPointsLightSpace[luI].x,
+                                     lFrustumPointsLightSpace[luI].y, 0.0f);
+                break;
+            }
+        }
+        if (!ProbeFinite4(lCentreLineVec))
+        {
+            gShadowCamProbe.Note("centreline-dir", static_cast<s32>(luMapIndex),
+                                 lCentreLineStart.x, lCentreLineStart.y,
+                                 lCentreLineEnd.x, lCentreLineEnd.y);
+        }
+
         // ---- 5. the rotation search (0x827D95C4..0x827DA004) ----------------
-        // FLAG (dword_82F30E64 / flt_82004F64 -- values not in this dossier):
-        //   KU_NUM_BOUNDING_BOX_ITERATIONS must be >= 1, otherwise the corner
-        //   solve below runs on the zero-initialised support points and divides
-        //   by zero. Carried at 1 (evaluate the un-rotated fit only), the
-        //   minimal value that reproduces the algorithm; the sweep in degrees is
-        //   then unobservable (only rotation 0 is visited) and is carried as the
-        //   quarter turn that covers every distinct box orientation.
-        static u32 KU_NUM_BOUNDING_BOX_ITERATIONS = 1;                        // :1307 FLAG
-        static const f32 KF_BOUNDING_BOX_SWEEP_DEGREES = 90.0f;               // FLAG
+        // BOTH DUMPED 2026-08-12 (the previous "values not in this dossier" FLAG
+        // is retired):
+        //   dword_82F30E64 == 0x00000010 == 16 -- the rotation search really does
+        //     evaluate SIXTEEN orientations, not the 1 that was carried here. With
+        //     1 the solve only ever tested the un-rotated fit, so the "best-fit"
+        //     box was not fitted at all.
+        //   flt_82004F64   == 0x42B40000 == 90.0 -- the sweep, loaded at
+        //     0x827D9468 alongside flt_820CA158 == 0x3C8EFA35 == 0.017453292
+        //     (deg->rad) at 0x827D9444; step = 90deg * deg2rad / 16.
+        static u32 KU_NUM_BOUNDING_BOX_ITERATIONS = 16;                       // dword_82F30E64 (dumped)
+        static const f32 KF_BOUNDING_BOX_SWEEP_DEGREES = 90.0f;               // flt_82004F64 (dumped)
 
         Vector4 laBestBoxPoints[4];                                            // :1296
         Vector4 lBestBoxBaseLineStart;      lBestBoxBaseLineStart.SetZero();   // :1297
@@ -1815,6 +2167,18 @@ namespace BrnWorld
             laBestBoxPoints[0].x - laBestBoxPoints[3].x, laBestBoxPoints[0].y - laBestBoxPoints[3].y,
             laBestBoxPoints[0].z - laBestBoxPoints[3].z, laBestBoxPoints[0].w - laBestBoxPoints[3].w });
 
+        // [FLAG PC bring-up probe] rung 4 -- the four intersected box corners.
+        for (u32 luI = 0; luI < 4; ++luI)
+        {
+            if (!ProbeFinite4(laBestBoxPoints[luI]))
+            {
+                gShadowCamProbe.Note("box-corners", static_cast<s32>(luMapIndex),
+                                     static_cast<f32>(luI), laBestBoxPoints[luI].x,
+                                     laBestBoxPoints[luI].y, lBaseLineVec.x);
+                break;
+            }
+        }
+
         if (mbPreferShortAndFatProjection && lWidth > lHeight)                 // lbz 0x1503(this)
         {
             const Vector4 lvFirst = laBestBoxPoints[0];        // cycle the quad by one
@@ -1825,12 +2189,12 @@ namespace BrnWorld
         }
 
         // ---- 7. the best-fit transform (0x827D9CB4..0x827DA10C) -------------
-        // FLAG (byte_82F30E60 -- value not in this dossier): with sbCentreBox the
-        //   box is centred on its own centroid (the quad maps onto [-1,1]^2);
-        //   without it the base edge's midpoint becomes the origin (the quad maps
-        //   onto x in [-1,1], y in [0,1]). Carried false -- the base-edge origin
-        //   is the trapezoidal-shadow convention this projection feeds.
-        static const bool sbCentreBox = false;                                  // :1463 FLAG
+        // DUMPED 2026-08-12: the image byte at 0x82F30E60 is 0x01 (read by the
+        //   lbz @0x827D9CBC), so sbCentreBox ships TRUE, not the false that was
+        //   carried here. The box is therefore centred on its own centroid and the
+        //   quad maps onto [-1,1]^2 -- with false it mapped onto y in [0,1], i.e.
+        //   half the cascade's vertical resolution was wasted.
+        static const bool sbCentreBox = true;                                   // byte_82F30E60 == 0x01 (dumped)
         Vector4 lvCentre;
         if (sbCentreBox)
         {
@@ -1858,18 +2222,23 @@ namespace BrnWorld
         lTransformT1.zAxis = Vector4{ 0.0f, 0.0f, 1.0f, 0.0f };
         lTransformT1.wAxis = Vector4{ -lvCentre.x, -lvCentre.y, 0.0f, 1.0f };
 
-        // FLAG (flt_82F30E50 / flt_82F30E40 -- the two static coefficient rows
-        //   are un-dumped .data). DERIVED, not guessed: the composed transform
-        //   must map the fitted quad onto the axis-aligned unit box, and only
-        //   XMult == {1,0,0,1} / YMult == {0,-1,1,0} does so -- i.e. lTransformR
-        //   is the rotation that carries lVecU onto +X. Checked against the
-        //   numeric emulation of the X360 stream over randomised quads: the two
-        //   alternative sign/transpose fillings put the mapped corners at
-        //   arbitrary positions (up to 65 units off the unit box) while this one
-        //   lands them exactly on (+-1, 1) / (+-1, 0) -- and on (+-1, +-1) with
-        //   sbCentreBox.
-        static const f32 XMult[4] = { 1.0f, 0.0f, 0.0f, 1.0f };                // :1482 FLAG
-        static const f32 YMult[4] = { 0.0f, -1.0f, 1.0f, 0.0f };               // :1483 FLAG
+        // DUMPED 2026-08-12 (.data, big-endian) -- both rows are the exact SIGN
+        //   INVERSE of the values previously DERIVED here:
+        //     flt_82F30E50 XMult = { -1,  0,  0, -1 }   (was {  1, 0, 0, 1 })
+        //     flt_82F30E40 YMult = {  0,  1, -1,  0 }   (was { 0, -1, 1, 0 })
+        //   The lane structure below is unchanged and is corroborated by the
+        //   dumped values: with them lTransformR's 2x2 block is { {-u.x, u.y},
+        //   {-u.y, -u.x} }, which is still orthonormal with det +1 and carries
+        //   lVecU onto an axis -- onto -X rather than +X. (The alternative lane
+        //   pairings do not produce a rotation at all under the true data, which
+        //   is what pins the structure.) Note the sign pair then CANCELS in
+        //   mBestFitMatrix, because lTransformS2's 1/lvCorner.x and 1/lvCorner.y
+        //   are negated by the very same rotation -- so the old derived values
+        //   were behaviourally equivalent for the shipped matrix and differ only
+        //   in the debug stage matrices (lpMatrices[2]/[4]/[5]). Corrected anyway:
+        //   this is the shipping data.
+        static const f32 XMult[4] = { -1.0f,  0.0f,  0.0f, -1.0f };            // flt_82F30E50 (dumped)
+        static const f32 YMult[4] = {  0.0f,  1.0f, -1.0f,  0.0f };            // flt_82F30E40 (dumped)
 
         Matrix44 lTransformR;                                                  // :1485
         lTransformR.xAxis = Vector4{ lVecU.x * XMult[0] + lVecU.y * YMult[0],
@@ -1889,6 +2258,31 @@ namespace BrnWorld
         lTransformS2.wAxis = Vector4{ 0.0f, 0.0f, 0.0f, 1.0f };
 
         lTsmBBInfo.mBestFitMatrix = MultMatrix(lTransformT1xR, lTransformS2);
+
+        // [FLAG PC bring-up probe] rungs 5/6/7 -- the box basis, the reciprocal
+        // pair that scales the quad onto the unit square, and the composed
+        // best-fit. The two reciprocals are the X360's UNGUARDED vrefp pair
+        // @0x827DA02C/0x827DA034 (no vcmpeqfp/vsel), so a zero-area box is
+        // +inf on console too; a hit here means the box collapsed upstream.
+        if (!ProbeFinite4(lVecU))
+        {
+            gShadowCamProbe.Note("vecU", static_cast<s32>(luMapIndex),
+                                 laBestBoxPoints[2].x, laBestBoxPoints[2].y,
+                                 laBestBoxPoints[3].x, laBestBoxPoints[3].y);
+        }
+        if (!ProbeFinite4(lvCorner) || lvCorner.x == 0.0f || lvCorner.y == 0.0f)
+        {
+            gShadowCamProbe.Note("bestfit-S2-corner", static_cast<s32>(luMapIndex),
+                                 lvCorner.x, lvCorner.y, lHeight, lWidth);
+        }
+        if (!ProbeFinite44(lTsmBBInfo.mBestFitMatrix))
+        {
+            gShadowCamProbe.Note("bestfit-matrix", static_cast<s32>(luMapIndex),
+                                 lTsmBBInfo.mBestFitMatrix.xAxis.x,
+                                 lTsmBBInfo.mBestFitMatrix.yAxis.y,
+                                 lTsmBBInfo.mBestFitMatrix.wAxis.x,
+                                 lTsmBBInfo.mBestFitMatrix.wAxis.y);
+        }
 
         if (lTsmBBInfo.mbInvertCullMode)                                       // lbz 0x240(tsm)
         {
@@ -1947,11 +2341,11 @@ namespace BrnWorld
 
         if (mbUpdateDebugRender)                                               // lbz 0x1501(this)
         {
-            // FLAG (dword_82F30E3C -- value not in this dossier): selects which
-            //   composition stage the debug quad is mapped through. 0 (identity)
-            //   is the inert default, same treatment as ComputeTSMMatrix's
-            //   siTsmDebugMatrixStage.
-            static s32 siBoxMatrixIndex = 0;                                   // :1534 FLAG
+            // DUMPED 2026-08-12: dword_82F30E3C == 5 (read by the lwzx chain at
+            //   0x827DA4E4) -> lpMatrices[5] == lTestMatrixRxT1. Selects which
+            //   composition stage the debug quad is mapped through; debug-render
+            //   only, it never feeds mBestFitMatrix. In range for the 6-entry list.
+            static s32 siBoxMatrixIndex = 5;                                   // dword_82F30E3C == 5 (dumped)
 
             Vector4 lvDeterminant;
             const Matrix44 lLightToWorld =                                     // :1538
@@ -2051,16 +2445,16 @@ namespace BrnWorld
                                              const Vector4* laFrustumPoints,
                                              const Vector4* laFrustumPointsLightSpace)
     {
-        // FLAG (byte_82F30E39/38/37/36/35 -- values not in this dossier). All
-        //   five are carried TRUE: they are the algorithm's own stage switches,
-        //   and with them false the function emits no candidate at all and then
-        //   writes one plane straight out of the uninitialised candidate array,
-        //   so the shipping defaults cannot be false.
-        static const bool sbAddLinePlanes     = true;                 // :1610 FLAG
-        static const bool sbAddOpposingPlanes = true;                 // :1708 FLAG
-        static const bool sbAddNearClipPlane  = true;                 // :1729 FLAG
-        static const bool sbSortPlanes        = true;                 // :1745 FLAG
-        static const bool sbClearPlanes       = true;                 // :1754 FLAG
+        // DUMPED 2026-08-12: the .data bytes 0x82F30E35..0x82F30E39 read
+        //   01 01 01 01 01, so all five stage switches ship TRUE. That is what
+        //   was already carried here (previously as a reasoned FLAG); the FLAG is
+        //   retired, the values are now byte-attested.
+        //   Which byte gates which stage is pinned by the lbz sites, in body order:
+        static const bool sbAddLinePlanes     = true;   // byte_82F30E39 == 0x01, lbz @0x827D89B8
+        static const bool sbAddOpposingPlanes = true;   // byte_82F30E38 == 0x01, lbz @0x827D8E20
+        static const bool sbAddNearClipPlane  = true;   // byte_82F30E37 == 0x01, lbz @0x827D8EC4
+        static const bool sbSortPlanes        = true;   // byte_82F30E36 == 0x01, lbz @0x827D8F1C
+        static const bool sbClearPlanes       = true;   // byte_82F30E35 == 0x01, lbz @0x827D90D4
 
         CandidateViewVolumePlane laCandidatePlanes[32];               // :1604
         u32 luNumCandidatePlanes = 0;                                 // :1605
