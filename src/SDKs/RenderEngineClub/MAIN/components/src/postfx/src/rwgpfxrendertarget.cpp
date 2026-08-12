@@ -112,17 +112,17 @@ namespace postfx
         const Parameters& lrParams = *lpParameters;
 
         // The format byte is stored on the Target up front (stb 0x14).
-        mu8Format = lrParams.mu8Format;
+        mu8Format = lrParams.mu8NumSections;
 
         // --- the sampleable texture the surface resolves to (AllocateAndInitializeTexture) -----------
         renderengine::Texture::Parameters lTextureParams;
         std::memset(&lTextureParams, 0, sizeof(lTextureParams));
-        lTextureParams.miFormat    = static_cast<s32>(lrParams.muMipBase);  // var_100 = a2[6] (+0x18)
+        lTextureParams.miFormat    = static_cast<s32>(lrParams.mTextureType);  // var_100 = a2[6] (+0x18)
         lTextureParams.muSysMem    = 0;
-        lTextureParams.muWidth     = lrParams.muWidth;
-        lTextureParams.muHeight    = lrParams.muHeight;
+        lTextureParams.muWidth     = lrParams.mu32Width;
+        lTextureParams.muHeight    = lrParams.mu32Height;
         lTextureParams.muNumLevels = 1;                                     // var_F0 = 1
-        lTextureParams.muReserved0 = lrParams.muReserved14;                // var_E8 = a2[5] (+0x14)
+        lTextureParams.muReserved0 = lrParams.mTextureFormat;                // var_E8 = a2[5] (+0x14)
 
         renderengine::Texture* lpTexture = AllocateAndInitializeTexture(lrParams, lTextureParams);
         mpTexture = lpTexture;
@@ -135,8 +135,8 @@ namespace postfx
             lStateParams.muAddressU      = 2;                // var_150
             lStateParams.muAddressV      = 2;                // var_14C
             lStateParams.muMipFilter     = 2;                // var_13C
-            lStateParams.muMagFilter     = lrParams.muFilterWord;  // var_144 = a2[8]
-            lStateParams.muMinFilter     = lrParams.muFilterWord;  // var_140 = a2[8]
+            lStateParams.muMagFilter     = lrParams.mFilterMode;  // var_144 = a2[8]
+            lStateParams.muMinFilter     = lrParams.mFilterMode;  // var_140 = a2[8]
             lStateParams.muMaxAnisotropy = 13;               // var_130
             lStateParams.muField10       = 1;                // var_128
             lStateParams.mfMipLodBias    = 0.0f;             // var_124
@@ -148,8 +148,7 @@ namespace postfx
             rw::BaseResourceDescriptors<5> lStateDescriptor;
             renderengine::TextureState::GetResourceDescriptor(reinterpret_cast<u32*>(&lStateDescriptor));
 
-            rw::IResourceAllocator* lpAllocator =
-                *reinterpret_cast<rw::IResourceAllocator**>(const_cast<Parameters*>(lpParameters));
+            rw::IResourceAllocator* lpAllocator = lrParams.mpAllocator;
             rw::Resource lStateResource = lpAllocator->DoAllocate(
                 reinterpret_cast<const rw::ResourceDescriptor&>(lStateDescriptor), nullptr);
             mpTextureState =
@@ -161,20 +160,19 @@ namespace postfx
         std::memset(&lBufferParams, 0, sizeof(lBufferParams));
         lBufferParams.muKind         = 0;                    // v18[0]
         lBufferParams.muFlags        = 1;                    // v18[1]
-        lBufferParams.muWidth        = lrParams.muWidth;     // v18[2] = a2[1]
-        lBufferParams.muHeight       = lrParams.muHeight;    // v18[3] = a2[2]
-        lBufferParams.muFormat       = lrParams.muFormat;    // v18[4] = a2[4]
-        lBufferParams.muMultiSample  = lrParams.muReserved1C;// v18[5] = a2[7]
+        lBufferParams.muWidth        = lrParams.mu32Width;     // v18[2] = a2[1]
+        lBufferParams.muHeight       = lrParams.mu32Height;    // v18[3] = a2[2]
+        lBufferParams.muFormat       = lrParams.mBufferFormat;    // v18[4] = a2[4]
+        lBufferParams.muMultiSample  = lrParams.mu32MultiSampleFormat;// v18[5] = a2[7]
         lBufferParams.muMipBase      = 0;                    // v18[6]
 
-        rw::IResourceAllocator* lpAllocator =
-            *reinterpret_cast<rw::IResourceAllocator**>(const_cast<Parameters*>(lpParameters));
+        rw::IResourceAllocator* lpAllocator = lrParams.mpAllocator;
         rw::Resource lBufferResource = lpAllocator->DoAllocate(
             reinterpret_cast<const rw::ResourceDescriptor&>(lBufferParams), nullptr);
         mpPixelBuffer = renderengine::PixelBuffer::Initialize(
             reinterpret_cast<renderengine::PixelBuffer::Wrapper*>(&lBufferResource), &lBufferParams);
 
-        renderengine::PixelBuffer::Xbox2SetBaseEDRAM(mpPixelBuffer, static_cast<s16>(lrParams.muEDRAMBase));
+        renderengine::PixelBuffer::Xbox2SetBaseEDRAM(mpPixelBuffer, static_cast<s16>(lrParams.mn32BaseEDRAM));
     }
 
     // ============================================================================================
@@ -189,18 +187,18 @@ namespace postfx
         std::memset(&lTextureParams, 0, sizeof(lTextureParams));
         lTextureParams.miFormat    = 1;                                  // v15 = 1
         lTextureParams.muSysMem    = 0;                                  // v16 = 0
-        lTextureParams.muWidth     = lrParams.muWidth;                   // v17 = a2[1]
-        lTextureParams.muHeight    = lrParams.mu8Format * lrParams.muHeight; // v18 = (*(a2+68)) * a2[2]
+        lTextureParams.muWidth     = lrParams.mu32Width;                   // v17 = a2[1]
+        lTextureParams.muHeight    = lrParams.mu8NumSections * lrParams.mu32Height; // v18 = (*(a2+68)) * a2[2]
         lTextureParams.muDepth     = 1;                                  // v19 = 1
         lTextureParams.muNumLevels = 1;                                  // v20 = 1
-        lTextureParams.muReserved0 = lrParams.muReserved14;             // v21 = a2[5]
+        lTextureParams.muReserved0 = lrParams.mTextureFormat;             // v21 = a2[5]
 
         mpTexture    = AllocateAndInitializeTexture(lrParams, lTextureParams);
         mpHiZTexture = nullptr;
 
         // When the parameters request a hierarchical-Z surface (*(a2+36) != 0), build a second texture
         // and rebase its EDRAM tile word onto the depth surface's high 20 bits.
-        if (lrParams.muEDRAMWord != 0)
+        if (lrParams.mbUseStencil != 0)
         {
             lTextureParams.muSysMem    = 1;          // v16 = 1
             lTextureParams.muReserved0 = 405275014;  // v21 = 0x18280186 hierarchical-Z format word
@@ -218,29 +216,28 @@ namespace postfx
         }
 
         // The format byte is stored after the hi-Z block (lbz 0x44 -> stb 0x14).
-        mu8Format = lrParams.mu8Format;
+        mu8Format = lrParams.mu8NumSections;
 
         // --- the GPU depth PixelBuffer surface -------------------------------------------------------
         renderengine::PixelBuffer::Parameters lBufferParams;
         std::memset(&lBufferParams, 0, sizeof(lBufferParams));
         lBufferParams.muKind         = 1;                    // v22[0] = 1 (depth-stencil surface)
         lBufferParams.muFlags        = 1;                    // v22[1] = 1
-        lBufferParams.muWidth        = lrParams.muWidth;     // v22[2] = a2[1]
-        lBufferParams.muHeight       = lrParams.muHeight;    // v22[3] = a2[2]
-        lBufferParams.muFormat       = lrParams.muFormat;    // v22[4] = a2[4]
+        lBufferParams.muWidth        = lrParams.mu32Width;     // v22[2] = a2[1]
+        lBufferParams.muHeight       = lrParams.mu32Height;    // v22[3] = a2[2]
+        lBufferParams.muFormat       = lrParams.mBufferFormat;    // v22[4] = a2[4]
         lBufferParams.muMultiSample  = 52;                   // v22[5] = 52
         lBufferParams.muMipBase      = 0;                    // v22[6] = 0
 
-        rw::IResourceAllocator* lpAllocator =
-            *reinterpret_cast<rw::IResourceAllocator**>(const_cast<Parameters*>(lpParameters));
+        rw::IResourceAllocator* lpAllocator = lrParams.mpAllocator;
         rw::Resource lBufferResource = lpAllocator->DoAllocate(
             reinterpret_cast<const rw::ResourceDescriptor&>(lBufferParams), nullptr);
         mpPixelBuffer = renderengine::PixelBuffer::Initialize(
             reinterpret_cast<renderengine::PixelBuffer::Wrapper*>(&lBufferResource), &lBufferParams);
 
-        // asm @0x824037CC: r4 = *(a2+0x2C) = lrParams.maReserved2C[0] (the hi-Z base), not 0.
-        renderengine::PixelBuffer::Xbox2SetBaseHierarchicalZ(mpPixelBuffer, lrParams.maReserved2C[0]);
-        renderengine::PixelBuffer::Xbox2SetBaseEDRAM(mpPixelBuffer, static_cast<s16>(lrParams.muEDRAMBase));
+        // asm @0x824037CC: r4 = *(a2+0x2C) = lrParams.mn32HierarchicalZAddress (the hi-Z base), not 0.
+        renderengine::PixelBuffer::Xbox2SetBaseHierarchicalZ(mpPixelBuffer, lrParams.mn32HierarchicalZAddress);
+        renderengine::PixelBuffer::Xbox2SetBaseEDRAM(mpPixelBuffer, static_cast<s16>(lrParams.mn32BaseEDRAM));
     }
 
     // ============================================================================================
@@ -338,7 +335,7 @@ namespace postfx
         const Target::Parameters& lrParams = *lpParameters;
 
         // The colour byte from the parameters (+0x19) drives the texture-state's blend flag below.
-        const u8 lu8HasColour = lrParams.mu8Format;
+        const u8 lu8HasColour = lrParams.mu8NumSections;
         mu8HasColour = lu8HasColour;
 
         rw::IResourceAllocator* lpAllocator = mpAllocator;
@@ -458,11 +455,11 @@ namespace postfx
         const Target::Parameters& lrParams = *lpParameters;
 
         mpAllocator        = nullptr;                       // *a1 = 0 (filled below)
-        muWidth            = lrParams.muWidth;              // a1[1] = a2[1]
-        muHeight           = lrParams.muHeight;            // a1[2] = a2[2]
-        muColourMode       = lrParams.muFormat;            // a1[4] = a2[4]
-        muDepthStencilMode = lrParams.muReserved14;        // a1[5] = a2[5]
-        mu8HasColour       = static_cast<u8>(lrParams.muMipBase); // *(a1+24) byte = *(a2+24) byte
+        muWidth            = lrParams.mu32Width;              // a1[1] = a2[1]
+        muHeight           = lrParams.mu32Height;            // a1[2] = a2[2]
+        muColourMode       = lrParams.mBufferFormat;            // a1[4] = a2[4]
+        muDepthStencilMode = lrParams.mTextureFormat;        // a1[5] = a2[5]
+        mu8HasColour       = static_cast<u8>(lrParams.mTextureType); // *(a1+24) byte = *(a2+24) byte
 
         // Zero each colour Target's surface pointers.
         for (u32 luTarget = 0; luTarget < 3; ++luTarget)
@@ -489,17 +486,17 @@ namespace postfx
         muProvidedTextureId   = 0;         // a1[33]
 
         // The allocator: the parameters' own, or the registry default.
-        if (lrParams.mpAllocator != 0)
-            mpAllocator = reinterpret_cast<rw::IResourceAllocator*>(static_cast<uintptr_t>(lrParams.mpAllocator));
+        if (lrParams.mpAllocator != nullptr)
+            mpAllocator = lrParams.mpAllocator;
         else
             mpAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator();
 
         // The colour surface (mode 1 builds it; mode 2 binds the engine device-write block).
         Target::Parameters lSurfaceParams;
         std::memcpy(&lSurfaceParams, reinterpret_cast<const u8*>(lpParameters) + 0x1C, 0x48);
-        lSurfaceParams.mpAllocator = static_cast<u32>(reinterpret_cast<uintptr_t>(mpAllocator));
-        lSurfaceParams.muWidth     = lrParams.muWidth;
-        lSurfaceParams.muHeight    = lrParams.muHeight;
+        lSurfaceParams.mpAllocator = mpAllocator;
+        lSurfaceParams.mu32Width     = lrParams.mu32Width;
+        lSurfaceParams.mu32Height    = lrParams.mu32Height;
 
         if (muColourMode == 1)
         {
@@ -515,9 +512,9 @@ namespace postfx
         if (muDepthStencilMode == 1)
         {
             std::memcpy(&lSurfaceParams, reinterpret_cast<const u8*>(lpParameters) + 0x13C, 0x48);
-            lSurfaceParams.mpAllocator = static_cast<u32>(reinterpret_cast<uintptr_t>(mpAllocator));
-            lSurfaceParams.muWidth     = lrParams.muWidth;
-            lSurfaceParams.muHeight    = lrParams.muHeight;
+            lSurfaceParams.mpAllocator = mpAllocator;
+            lSurfaceParams.mu32Width     = lrParams.mu32Width;
+            lSurfaceParams.mu32Height    = lrParams.mu32Height;
             mDepthTarget.CreateDepth(&lSurfaceParams);
         }
         else if (muDepthStencilMode == 4)
@@ -545,8 +542,8 @@ namespace postfx
 
         // The allocator: the parameters' own when set, else the registry default.
         rw::IResourceAllocator* lpAllocator;
-        if (lpParameters->mpAllocator != 0)
-            lpAllocator = reinterpret_cast<rw::IResourceAllocator*>(static_cast<uintptr_t>(lpParameters->mpAllocator));
+        if (lpParameters->mpAllocator != nullptr)
+            lpAllocator = lpParameters->mpAllocator;
         else
             lpAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator();
 

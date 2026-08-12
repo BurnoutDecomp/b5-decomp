@@ -42,25 +42,66 @@ namespace postfx
     // by pointer (a provided / shared surface), so the full definition lives here.
     struct Target
     {
-        // The serialised per-surface parameters the build copies (X360 memcpy 0x48 bytes out of the
-        // RenderTarget Parameters at +0x1C colour / +0x13C depth). Only the words the create path
-        // reads are named; the rest ride along verbatim so the layout matches.
+        // rwgpfxrendertarget.h:38 (DWARF) - the serialised description of ONE surface (a colour
+        // section or the depth/stencil section) that Target::CreateColor / CreateDepth consume. The
+        // member set, names and types are the DecFIGS DWARF; the offsets in the comments are the X360
+        // image (4-byte pointers, sizeof == 0x48) and are confirmed store-for-store against
+        // CgsRenderTarget::Construct @0x827ECC28, which fills one of these per section.
+        //
+        // 2026-08-12: RETYPED from the pre-DWARF placeholder spelling (muReserved14 / muMipBase /
+        // maReserved2C[6] / a 4-byte `u32 mpAllocator`). The old block could not hold an x64 layout at
+        // all - mpBufferAddress (+0x38) widens 4->8 and would have collided with mn8TileIndex (+0x3C),
+        // and the u32 allocator slot TRUNCATED a 64-bit pointer. Offsets no longer transfer on the
+        // host; every member is reached BY NAME.
         struct Parameters
         {
-            u32 mpAllocator;     // +0x00  the rw allocator pointer (caller fills it from the RT)
-            u32 muWidth;         // +0x04
-            u32 muHeight;        // +0x08
-            u32 muReserved0C;    // +0x0C
-            u32 muFormat;        // +0x10
-            u32 muReserved14;    // +0x14
-            u32 muMipBase;       // +0x18
-            u32 muReserved1C;    // +0x1C
-            u32 muFilterWord;    // +0x20  (a2[8] -- the colour mag/min-filter source)
-            u32 muEDRAMWord;     // +0x24  (a2[9] -- read by *(a2+36): the hierarchical-Z request)
-            u32 muEDRAMBase;     // +0x28  (a2[10] -- the EDRAM base handed to Xbox2SetBaseEDRAM)
-            u32 maReserved2C[6]; // +0x2C..+0x43
-            u8  mu8Format;       // +0x44  (the surface format/sysmem byte stored into Target::mu8Format)
-            u8  mau8Pad45[3];    // +0x45
+            rw::IResourceAllocator* mpAllocator;             // +0x00
+            u32   mu32Width;                                  // +0x04
+            u32   mu32Height;                                 // +0x08
+            u32   mu32Pitch;                                  // +0x0C
+            u32   mBufferFormat;                              // +0x10  renderengine::PixelFormat
+            u32   mTextureFormat;                             // +0x14  renderengine::PixelFormat
+            u32   mTextureType;                               // +0x18  renderengine::Texture::Type
+            u32   mu32MultiSampleFormat;                      // +0x1C
+            u32   mFilterMode;                                // +0x20  SamplerState::FilterMode
+            bool  mbUseStencil;                               // +0x24  (gates the hierarchical-Z companion)
+            s32   mn32BaseEDRAM;                              // +0x28
+            s32   mn32HierarchicalZAddress;                   // +0x2C
+            s32   mn32CompressionBase;                        // +0x30  (PS3)
+            bool  mbSystemMemory;                             // +0x34
+            void* mpBufferAddress;                            // +0x38  shared-memory base, when shared
+            s8    mn8TileIndex;                               // +0x3C
+            s8    mn8ZCullIndex;                              // +0x3D
+            s32   mn32ZCullAddress;                           // +0x40  (PS3)
+            u8    mu8NumSections;                             // +0x44
+
+            // The DWARF setter family (rwgpfxrendertarget.h:114-248). The X360 inlines these into its
+            // callers (CgsRenderTarget::Construct appears as a flat run of stores); un-inlined here so
+            // callers reach the named fields. Only the ones an X360-attested caller uses are added.
+            void SetAllocator(rw::IResourceAllocator* lpAllocator) { mpAllocator = lpAllocator; }
+            void SetWidth(u32 lu32Width)                           { mu32Width = lu32Width; }
+            void SetHeight(u32 lu32Height)                         { mu32Height = lu32Height; }
+            void SetBufferFormat(u32 lFormat)                      { mBufferFormat = lFormat; }
+            void SetTextureFormat(u32 lFormat)                     { mTextureFormat = lFormat; }
+            void SetTextureType(u32 lType)                         { mTextureType = lType; }
+            void SetMultisampleFormat(u32 lu32Format)              { mu32MultiSampleFormat = lu32Format; }
+            void SetFilterMode(u32 lMode)                          { mFilterMode = lMode; }
+            void SetBaseEDRAM(s32 ln32Base)                        { mn32BaseEDRAM = ln32Base; }
+            void SetUseSystemMemory(bool lbUse)                    { mbSystemMemory = lbUse; }
+            void SetTileIndex(s8 ln8Index)                         { mn8TileIndex = ln8Index; }
+            void SetZCullIndex(s8 ln8Index)                        { mn8ZCullIndex = ln8Index; }
+            void SetZCullAddress(s32 ln32Address)                  { mn32ZCullAddress = ln32Address; }
+            void SetNumSections(u32 lu32NumSections)               { mu8NumSections = static_cast<u8>(lu32NumSections); }
+
+            // rwgpfxrendertarget.h:114 (DWARF) - point this surface at another target's memory. The
+            // X360 branch stores the shared base address and marks the surface as un-tiled (-1); it
+            // does NOT store the shared Target* itself (the pointer is only tested), so neither does
+            // this - the parameter is kept because the DWARF signature carries it.
+            void ShareMemoryWithTarget(const Target* /*lpTarget*/, void* lpAddress)
+            {
+                mpBufferAddress = lpAddress;
+                mn8TileIndex    = -1;
+            }
         };
 
         u32                                       mpReserved0;     // +0x00
@@ -94,6 +135,54 @@ namespace postfx
             eRenderTarget_USE_PROVIDED         = 4,
         };
 
+        // rwgpfxrendertarget.h:516 (DWARF) - the whole render target's serialised description: the
+        // shared dimensions/allocator, the per-target creation modes, and one Target::Parameters
+        // record per colour section plus one for the depth/stencil section. This is the block
+        // CgsRenderTarget::Construct @0x827ECC28 builds on its stack and hands to Initialize.
+        //
+        // ARRAY SIZES ARE THE X360 SET, NOT THE PS3 DWARF's. The DWARF (Internal PS3) declares
+        // m_aColorTargetParams[5] / m_apProvidedColorTarget[5]; the X360 ARTIST build carries FOUR of
+        // each. Proven from the Construct asm, which is self-consistent only at four:
+        //   colour loop  = 4 iterations (0x827ECD10..0x827ECDA0, dst stride 0x48 from +0x1C)
+        //   depth block  @ +0x13C == 0x1C + 4*0x48   (var_C4 .. var_80)
+        //   provided DS  @ +0x194 == 0x13C + 0x48 + 4*4   (var_6C)
+        // The same 5->4 merge-window delta shows in CgsRenderTarget (4 colour surfaces + 1 depth,
+        // sizeof 0x110), which is the class that fills this block.
+        struct Parameters
+        {
+            rw::IResourceAllocator* mpAllocator;               // +0x000
+            u32                mu32Width;                      // +0x004
+            u32                mu32Height;                     // +0x008
+            u32                mu32NumMipMaps;                 // +0x00C
+            u32                mColourMode;                    // +0x010  RenderTargetMode
+            u32                mDepthStencilMode;              // +0x014  RenderTargetMode
+            bool               mbUseDepthStencilAsTexture;     // +0x018
+            u8                 mu8NumSections;                 // +0x019
+            Target::Parameters maColourTargetParams[4];        // +0x01C  (stride 0x48)
+            Target::Parameters mDepthStencilParams;            // +0x13C
+            Target*            mapProvidedColourTarget[4];     // +0x184
+            Target*            mpProvidedDepthStencilTarget;   // +0x194
+
+            // rwgpfxrendertarget.h:535 (DWARF). Seeds the block to its "nothing requested" defaults.
+            // NOT reconstructed yet - the body lives in the postfx TU (the X360 calls it out of line,
+            // rw__graphics__postfx__RenderTarget__Parameters__Parameters, from Construct @0x827ECCCC).
+            Parameters();
+
+            void SetAllocator(rw::IResourceAllocator* lpAllocator) { mpAllocator = lpAllocator; }
+            void SetWidth(u32 lu32Width)                           { mu32Width = lu32Width; }
+            void SetHeight(u32 lu32Height)                         { mu32Height = lu32Height; }
+            void SetNumMipMaps(u32 lu32NumMipMaps)                 { mu32NumMipMaps = lu32NumMipMaps; }
+            void SetColorMode(RenderTargetMode lMode)              { mColourMode = static_cast<u32>(lMode); }
+            void SetDepthStencilMode(RenderTargetMode lMode)       { mDepthStencilMode = static_cast<u32>(lMode); }
+            void SetUseDepthStencilAsTexture(bool lbUse)           { mbUseDepthStencilAsTexture = lbUse; }
+            void SetNumSections(u32 lu32NumSections)               { mu8NumSections = static_cast<u8>(lu32NumSections); }
+
+            Target::Parameters& GetColorTargetParameters(u32 luIndex) { return maColourTargetParams[luIndex]; }
+            Target::Parameters& GetDepthStencilParameters()           { return mDepthStencilParams; }
+
+            void SetProvidedDepthStencilTarget(Target* lpTarget) { mpProvidedDepthStencilTarget = lpTarget; }
+        };
+
         // Bind this render-target for a draw pass writing into the given slice/face, then resolve
         // (luDestSliceOrFace selects the cube face / array slice; the 2D path passes 0).
         void Begin(u32 luDestSliceOrFace);
@@ -120,6 +209,19 @@ namespace postfx
         // --- the build-side surface (X360 ARTIST asm; reconstructed in rwgpfxrendertarget.cpp) -------
         // X360 0x82409B60 -- allocate the render-target object through the parameters' allocator (or the
         // registry default) and construct it; returns null when the allocation fails.
+        //
+        // rwgpfxrendertarget.h:744 (DWARF) is the REAL signature: it takes the whole
+        // RenderTarget::Parameters block, and that is what CgsRenderTarget::Construct @0x827ECC28
+        // passes. It has no body yet.
+        static RenderTarget* Initialize(const Parameters& lrParameters);
+
+        // SUSPECT (pre-DWARF model, kept because rwgpfxrendertarget.cpp still defines this form):
+        // the same X360 function declared with `const Target::Parameters*`. That TU's body reaches the
+        // colour/depth/provided sub-blocks by memcpy at the raw X360 offsets +0x1C / +0x13C / +0x194
+        // out of the pointer, i.e. it is already treating the argument as a RenderTarget::Parameters -
+        // and those byte offsets do not survive the x64 pointer widening. Reconciling that TU onto the
+        // overload above (and splitting RenderTarget's own conflated +0x18/+0x19 member) is follow-on
+        // work owned by the postfx TU; nothing calls this form.
         static RenderTarget* Initialize(const Target::Parameters* lpParameters);
 
         // X360 0x824088B0 -- construct the render-target into `this` from the parameters (the X360
@@ -151,6 +253,19 @@ namespace postfx
         renderengine::RenderTargetState* mpProvidedColourState;// +0x90
         u8                               mu8UsesProvidedState; // +0x95
         u8                               mau8Pad96[2];         // +0x96
+
+        // FLAG PC-platform leaf: the per-section render-target-state ARRAY, given a real name.
+        // The X360 reaches section n's state as `(&mpSection0State)[n]` -- a pointer-array PUN that
+        // walks off mpSection0State (+0x1C) into maColourTargets/mDepthTarget on the 4-byte-pointer
+        // image, where those members happen to line up on a 4-byte grid. That pun CANNOT survive the
+        // x64 widening (the Target records are no longer a whole number of pointers wide), and
+        // CreateBackBuffer legitimately reads/writes section 4, so replicating it would corrupt the
+        // object. The five slots therefore get their own array here; mpSection0State above stays as
+        // the console's documented +0x1C member and mirrors slot 0.
+        // Five slots because the X360 caller set uses 0 (the bind) and 4 (CreateBackBuffer's shared
+        // depth-stencil state).
+        static const u32 KU_NUM_SECTION_STATES = 5;
+        renderengine::RenderTargetState* mapSectionState[KU_NUM_SECTION_STATES];
     };
 
     // The engine's default render-target state (X360 dword_83271614, installed by
