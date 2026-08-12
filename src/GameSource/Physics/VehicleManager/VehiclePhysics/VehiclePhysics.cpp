@@ -3307,8 +3307,11 @@ namespace Vehicle
         //    asm @0x8261F6E4-0x8261F6F8: `lvx128 v0,this,0x50 ; stvx128 v0,this,0x1330`.
         mPreviousWorldSpaceVelocity = Vector3{ mLinearVelocity.x, mLinearVelocity.y, mLinearVelocity.z, 0.0f };
 
-        // 4) build the dynamic load-transfer external force per spring.
-        CalculateWeightTransfer();
+        // 4) build the dynamic load-transfer external force per spring -- and, the finding that
+        //    unblocked the whole tyre model, WRITE EACH WHEEL'S MassOnWheel LANE. dt is re-issued
+        //    into v1 for this call exactly as for the others (0x8261F6EC `vmr128 v1,v127`).
+        //    ⚠️ Note the ordering above: step 3 makes the delta this function differences ZERO.
+        CalculateWeightTransfer(VecFloat{ lfDeltaTime, lfDeltaTime, lfDeltaTime, lfDeltaTime });
 
         // 5) emit the spring push forces + recompute velocity.
         ApplySuspensionForces();
@@ -3393,53 +3396,212 @@ namespace Vehicle
         }
     }
 
-// [partial] CalculateWeightTransfer  @0x825F9DD0 FLAGS: rodata: the units scalar 0.10193679 is an INLINE literal (asm v71[0] = 0.10193679), reproduced exactly; the per-axis orientation projection uses the un-homed permute table unk_82CDA350 (flagged-inert); partial: the clamped per-axis weight-transfer build + the body-orientation projection are dense VMX128 (vmrghw/vmrglw transpose, vmaxfp/vminfp clamps, unk_82CDA350 vperm); the per-spring SetExternalForce distribution loop + the visible units scalar are faithful, the projection is flagged
-    // @0x825F9DD0  BrnPhysics::Vehicle::VehiclePhysics::CalculateWeightTransfer
-    // ---------------------------------------------------------------------------------------------
-    // FIDELITY: PARTIAL. Per the findings doc (Section 5): accel/brake/turn load transfer implemented as
-    // an ADDITIVE external force per spring (NOT a centre-of-mass move). The X360:
-    //   1. Reads a per-vehicle weight-transfer response from mpAttribs (+0x720)+608 (.x/.y lanes) and
-    //      reciprocal-Newton normalises a scale (vrefp v13,v1 ; the vnmsubfp/vmaddfp refine cascade).
-    //   2. Builds a clamped 3-component weight-shift from the body's acceleration/turn state, transposed
-    //      through the body orientation 3x3 (vmrghw/vmrglw lane-merge transpose of this+0x10..+0x30) and
-    //      stored to mWeightTransfer (this+3808) -- clamped per axis (vmaxfp/vminfp against the prior
-    //      value).
-    //   3. Distributes it to the four springs: for each spring whose wheel is attached (*(wheel-72) != 0),
-    //      SuspensionSpring::SetExternalForce( the projected per-spring force ), where the force is the
-    //      weight-shift scaled by the units constant 0.10193679 (near 1/9.80665, physical meaning
-    //      unconfirmed -- findings) and permuted into the spring's external-force lane (unk_82CDA350).
-    //   The scalar 0.10193679 + the per-spring distribution loop + the attached-flag gate are FAITHFUL.
-    //   The clamped weight-shift build + the orientation projection are dense VMX128 through the un-homed
-    //   permute unk_82CDA350; that arithmetic is left structural (no fabricated lane routing).
-    // ---------------------------------------------------------------------------------------------
-    void VehiclePhysics::CalculateWeightTransfer()
+// [clean] CalculateWeightTransfer  @0x825F9DD0
+    // @0x825F9DD0  BrnPhysics::Vehicle::VehiclePhysics::CalculateWeightTransfer   (296 insns)
+    // =============================================================================================
+    // ⭐⭐⭐ THIS IS THE MassOnWheel WRITER. Fifty-plus waves built a complete, correct tyre model
+    // that multiplied `maWheels[i].mSpeedAndMassOnWheelVariables.z` -- the DWARF MassOnWheel lane --
+    // and NOTHING IN THE TREE WROTE IT, so every tyre force was identically zero on every frame
+    // whatever the slip. The writer is here, and it is the `vrlimi128 mask 2` store the last wave
+    // predicted -- just not in a suspension setup routine. It is in the PER-FRAME weight-transfer
+    // pass, 0x825FA1FC..0x825FA21C:
+    //     lvx128    v13, r0, r10        ; r10 = this+0xED0  == mvSpringMassScalers
+    //     vperm     v13, v13, v13, v7   ; v7 = vspltw(lvsl(0, i*4), 0)  -> splat lane i
+    //     vmulfp128 v10, v10, v0        ; v10 = 0.10193679 * delta[i]
+    //     vmaddfp   v13, v11, v10, v13  ; v13 = mass*scaler[i] + 0.10193679*delta[i]
+    //     vrlimi128 v12, v13, 2, 2      ; v12.z <- v13.x           <<< MASK 2 == THE Z LANE
+    //     stvx128   v12, r0, r30        ; r30 = this+0x1A0 + i*0xE0
+    //                                   ;     = &maWheels[i].mSpeedAndMassOnWheelVariables
+    // ⭐ HOW IT WAS FOUND, and why five earlier waves missed it: `SetMassOnWheel` is in NO X360
+    // export name (a trivial inlined setter), so a NAME search can never reach it. Scanning all
+    // 30,084 exports' ASSEMBLY for the offset `0xED0` -- SetupSuspension's OUTPUT, i.e. the thing
+    // whoever fills the lane must read -- returns four physics functions, and one of them is
+    // named WeightTransfer. [[unnamed-sub-bodies-and-env-faults]]: search for the DATA, not the name.
+    //
+    // ⭐⭐ THE OPERAND ORDER IS READ FROM THE IMAGE, NOT FROM IDA'S PRINTING. Every semantic here
+    // turns on how `vmaddfp`/`vnmsubfp` group their operands, and IDA prints VA-form in ENCODING
+    // order (vD, vA, vB, vC) while the ISA multiplies vA*vC and adds vB. Raw words (x360rd, self
+    // test 10/10):
+    //     0x825FA214 = 11AB536E -> opcd 4, xo 46, vD=13 vA=11 vB=10 vC=13  => v13 = v11*v13 + v10
+    //     0x825F9F08 = 112849EE -> vD=9  vA=8  vB=9  vC=7                  => the 3x3 product
+    //     0x825F9E34 = 116D006F -> xo 47 (vnmsubfp), vD=11 vA=13 vB=0 vC=1 => 1 - e*d  (Newton)
+    // Read the other way the reciprocal cascade does not converge and the 3x3 is not a matrix
+    // product, so this reading is FORCED, not chosen. The store's lane is decoded the same way:
+    //     0x825FA218 = 19826F90 -> VMX128_4: vD=12, vB=13, mask(b12..15)=2 (the z lane),
+    //                              rotate(b24..25)=2  => dest.z = src.x.
+    //
+    // ⭐⭐ THE ATTRIBUTE LANES ARE NAMED BY THE DWARF AND THEY MATCH THE DECODE LANE FOR LANE.
+    // mpAttribs+0x260 is already in this tree as BodyRollAttribs::
+    // mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ, and the asm uses
+    // .x/.y as the two per-frame DECAYS, .z/.w as the two per-axis GAINS *and* the two clamp
+    // limits. Three independent witnesses (asm dataflow, physical units, DWARF names) agree.
+    // The units scalar 0.10193679 (flt_82097C60, image-read) is 1/9.8100004 == 1/g exactly: it
+    // converts the transfer FORCE into a MASS, which is what closes the units on the lane.
+    // The permute unk_82CDA350 is READ, not guessed: `00 01 02 03 | 14 15 16 17 | 00 01 02 03 |
+    // 00 01 02 03` == {lateral, 0.0, lateral, lateral}, whose z lane is then overwritten by the
+    // longitudinal term (vrlimi128 mask 2) -- so only .x and .z carry meaning.
+    //
+    // ⛔⛔ AND THE THING THIS FUNCTION'S NAME PROMISES DOES NOT HAPPEN. The transfer is driven by
+    // `(mLinearVelocity - mPreviousWorldSpaceVelocity) / dt`, and the SOLE caller, UpdateSuspension
+    // @0x8261F698, copies the one into the other IMMEDIATELY BEFORE the call:
+    //     0x8261F6F4  lvx128  v0, r31, 0x50      ; mLinearVelocity
+    //     0x8261F6F8  stvx128 v0, r31, 0x1330    ; mPreviousWorldSpaceVelocity
+    //     0x8261F6FC  bl      CalculateWeightTransfer
+    // so the delta is structurally ZERO, the body acceleration is zero, both increments are zero,
+    // and mWeightTransfer decays from zero to zero forever. ⇒ **the shipped X360 game has no
+    // load transfer under braking or cornering**, and massOnWheel[i] is exactly the STATIC per
+    // corner mass, recomputed every frame. All the machinery (decay, gains, geometry, clamps) is
+    // real and reached; its one input is killed by the caller. That is emitted faithfully here --
+    // this is a transcription, not a repair. The lvx128 destination and the vsubfp128 source are
+    // the same VMX128 register (low5 == 30 in both raw words), so the delta is not a mis-read.
+    // ⭐ VERIFIED AT RUNTIME (this wave): the probe printed dV = (0,0,0) and W = (0,0,0) on every
+    // sampled frame, and massOnWheel came out as mass*scaler to the last bit.
+    //
+    // The geometry is all read out of the wheels' STREAMED rest positions (this+0x1C0/0x380/0x460
+    // == maWheels[0/2/3].mStreamedPositionPlusTwistAmount, and this+0x170/0x330 ==
+    // maWheels[0/2].mSlipVariables.w == the wheel radii, per Wheel::Prepare's proven lane map):
+    // the CoM ride height is the front/rear |radius - restY| pair lerped at the CoM's longitudinal
+    // station, over the front-to-rear wheelbase and the rear track.
+    // ⚠️ The four `vandc <v>, <0x80000000 splat>` are fabsf, as in SetupSuspension.
+    // ⚠️ The reciprocals are vrefp + two Newton refinements == a plain divide; the console does not
+    // guard any of them, and neither does this (no fabricated clamp).
+    // =============================================================================================
+    void VehiclePhysics::CalculateWeightTransfer(VecFloat lvfTimeStep)
     {
-        // The units scalar the per-spring force is multiplied by (asm: v71[0] = 0.10193679, an INLINE
-        // literal -- near 1/9.80665 but not exactly; physical meaning unconfirmed per the findings doc).
-        static const f32 KF_WEIGHT_TRANSFER_UNITS = 0.10193679f;   // inline literal (asm)
+        // flt_82001CC0 / flt_82097C60, both read out of the X360 image this wave.
+        static const f32 KF_ZERO           = 0.0f;
+        static const f32 KF_RECIP_GRAVITY  = 0.10193679f;   // == 1/9.8100004, the force -> mass unit
 
-        // FIDELITY: BLOCKED build -- the clamped per-axis mWeightTransfer (this+3808) is assembled from the
-        // body acceleration/turn state projected through the orientation 3x3 (vmrghw/vmrglw transpose of
-        // mTransform rows) and clamped (vmaxfp/vminfp). The mpAttribs+608 response lanes scale it. The
-        // exact per-axis source lanes are dense VMX not store-faithfully recoverable here; mWeightTransfer
-        // holds whatever the (un-emitted) build produced. No fabricated math.
+        const VehicleAttribs::BodyRollAttribs& lrRoll = mpAttribs->mBodyRollAttribs;
+        const f32 lfDecayX =
+            lrRoll.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.x;
+        const f32 lfDecayZ =
+            lrRoll.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.y;
+        const f32 lfFactorOfWeightX =
+            lrRoll.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.z;
+        const f32 lfFactorOfWeightZ =
+            lrRoll.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.w;
 
-        // Distribute the weight-transfer as a per-spring external force (the faithful loop + gate).
+        // attribs+0x70 .x -- the SAME body mass SetupSuspension multiplies the scalers by before it
+        // hands them to SuspensionSpring::Prepare, which is what makes mass*scaler a mass in kg.
+        const f32 lfMass =
+            mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+
+        // ---- 1) decay the running transfer, and hard-zero the y lane (0x825F9E3C..0x825FA0A0).
+        mWeightTransfer.x *= lfDecayX;
+        mWeightTransfer.y  = KF_ZERO;
+        mWeightTransfer.z *= lfDecayZ;
+
+        // ---- 2) the body-space acceleration (0x825F9DF4 + 0x825F9EA4..0x825F9F0C).
+        //         The console's vmrghw/vmrglw pair transposes the orientation 3x3 and multiplies it
+        //         by the world acceleration, which is exactly the three row dots below.
+        const f32 lfRecipTimeStep = 1.0f / lvfTimeStep.x;   // vrefp + 2 Newton refinements
+
+        const f32 lfWorldAccelX =
+            (mLinearVelocity.x - mPreviousWorldSpaceVelocity.x) * lfRecipTimeStep;
+        const f32 lfWorldAccelY =
+            (mLinearVelocity.y - mPreviousWorldSpaceVelocity.y) * lfRecipTimeStep;
+        const f32 lfWorldAccelZ =
+            (mLinearVelocity.z - mPreviousWorldSpaceVelocity.z) * lfRecipTimeStep;
+
+        const f32 lfBodyAccelX = mTransform.xAxis.x * lfWorldAccelX
+                               + mTransform.xAxis.y * lfWorldAccelY
+                               + mTransform.xAxis.z * lfWorldAccelZ;
+        const f32 lfBodyAccelZ = mTransform.zAxis.x * lfWorldAccelX
+                               + mTransform.zAxis.y * lfWorldAccelY
+                               + mTransform.zAxis.z * lfWorldAccelZ;
+
+        // The two per-axis gains (0x825F9F28 / 0x825F9F5C).
+        const f32 lfScaledAccelLat  = lfBodyAccelX * lfFactorOfWeightX;
+        const f32 lfScaledAccelLong = lfBodyAccelZ * lfFactorOfWeightZ;
+
+        // ---- 3) the chassis geometry, from the STREAMED rest positions + the wheel radii
+        //         (0x825F9F4C..0x825FA030). Wheel 0 is front-left, 2 rear-left, 3 rear-right.
+        const f32 lfHeightFront = std::fabs(maWheels[0].mSlipVariables.w
+                                          - maWheels[0].mStreamedPositionPlusTwistAmount.y);
+        const f32 lfHeightRear  = std::fabs(maWheels[2].mSlipVariables.w
+                                          - maWheels[2].mStreamedPositionPlusTwistAmount.y);
+        const f32 lfWheelbase   = std::fabs(maWheels[2].mStreamedPositionPlusTwistAmount.z
+                                          - maWheels[0].mStreamedPositionPlusTwistAmount.z);
+        const f32 lfTrack       = std::fabs(maWheels[2].mStreamedPositionPlusTwistAmount.x
+                                          - maWheels[3].mStreamedPositionPlusTwistAmount.x);
+
+        const f32 lfRecipWheelbase = 1.0f / lfWheelbase;
+        const f32 lfRecipTrack     = 1.0f / lfTrack;
+
+        // The CoM ride height: the front/rear heights lerped at the front axle's longitudinal
+        // station (0x825FA02C/0x825FA030 -- `vmaddfp v8, v7, v8, v10` == v7*v10 + v8).
+        const f32 lfCoMHeight =
+            (lfHeightRear - lfHeightFront)
+                * (maWheels[0].mStreamedPositionPlusTwistAmount.z * lfRecipWheelbase)
+            + lfHeightFront;
+
+        // ---- 4) the increment: m * a * h / L, per axis. The multiply association mirrors the asm
+        //         (0x825FA05C..0x825FA068 and 0x825FA090..0x825FA098).
+        const f32 lfLongitudinal = ((lfRecipWheelbase * lfCoMHeight) * lfMass) * lfScaledAccelLong;
+        const f32 lfLateral      = ((lfRecipTrack     * lfCoMHeight) * lfMass) * lfScaledAccelLat;
+
+        // The unk_82CDA350 vperm + the mask-2 vrlimi128 + the vaddfp at 0x825FA09C..0x825FA0A8.
+        // The .w lane is DEAD -- nothing reads it -- but the console writes it, so it is written.
+        mWeightTransfer.x += lfLateral;
+        mWeightTransfer.y += KF_ZERO;
+        mWeightTransfer.z += lfLongitudinal;
+        mWeightTransfer.w += lfLateral;
+
+        // ---- 5) the per-axis saturation (0x825FA0E4..0x825FA12C). vmaxfp then vminfp against
+        //         +-(gain * mass) -- the same two attribute lanes that gained the accelerations.
+        const f32 lfLimitX = lfFactorOfWeightX * lfMass;
+        const f32 lfLimitZ = lfFactorOfWeightZ * lfMass;
+
+        mWeightTransfer.x = (mWeightTransfer.x < -lfLimitX) ? -lfLimitX : mWeightTransfer.x;
+        mWeightTransfer.x = (lfLimitX < mWeightTransfer.x) ?  lfLimitX : mWeightTransfer.x;
+        mWeightTransfer.z = (mWeightTransfer.z < -lfLimitZ) ? -lfLimitZ : mWeightTransfer.z;
+        mWeightTransfer.z = (lfLimitZ < mWeightTransfer.z) ?  lfLimitZ : mWeightTransfer.z;
+
+        // ---- 6) the per-corner split (0x825FA134..0x825FA1A0). The lateral term flips sign
+        //         left/right, the longitudinal term flips front/rear -- which is what identifies
+        //         .x as the roll (lateral) transfer and .z as the pitch (longitudinal) one.
+        const f32 lafCornerTransfer[eNumDrivenWheels] =
+        {
+             mWeightTransfer.x - mWeightTransfer.z,   // 0 front-left
+            -mWeightTransfer.x - mWeightTransfer.z,   // 1 front-right
+             mWeightTransfer.x + mWeightTransfer.z,   // 2 rear-left
+            -mWeightTransfer.x + mWeightTransfer.z,   // 3 rear-right
+        };
+
+        // ---- 7) THE STORE. Gate: `lbz r11, -0x48(r30)` == wheel+0x28 == mRoadContact.mbIsOnGround.
         for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
         {
-            // Gate: only springs whose wheel is attached receive an external force (X360: *(wheel-72)).
             if (!maWheels[liWheel].GetRoadContact().mbIsOnGround)
                 continue;
 
-            // The per-spring force = the projected weight-shift * the units scalar, permuted into the
-            // spring's external-force lane (unk_82CDA350 permute, flagged-inert). With the projection
-            // un-emitted, the magnitude term below carries the faithful units scalar against the pinned
-            // mWeightTransfer; the per-axis routing is the blocked part.
-            const f32 lfExternal =
-                (mWeightTransfer.x + mWeightTransfer.y + mWeightTransfer.z) * KF_WEIGHT_TRANSFER_UNITS;
+            const f32 lfScaler = (liWheel == 0) ? mvSpringMassScalers.x
+                               : (liWheel == 1) ? mvSpringMassScalers.y
+                               : (liWheel == 2) ? mvSpringMassScalers.z
+                                                : mvSpringMassScalers.w;
 
-            maSprings[liWheel].SetExternalForce(lfExternal);
+            // ⭐ THE LANE. `vmaddfp v13, v11, v10, v13` == v11*v13 + v10 == mass*scaler[i] plus the
+            // transfer force converted to a mass by 1/g, then `vrlimi128 v12, v13, 2, 2` puts it in
+            // the z lane of the wheel's +0x70 register.
+            maWheels[liWheel].mSpeedAndMassOnWheelVariables.z =
+                lfMass * lfScaler + KF_RECIP_GRAVITY * lafCornerTransfer[liWheel];
+
+            // The spring's external force: the console reads the CURRENT lane and SUBTRACTS the
+            // corner transfer (`lvx128 v13,[spring+0x20] ; vspltw ; vaddfp v1, v13, -delta`).
+            // UpdateSuspensionSprings consumes and clears this lane earlier in the same frame
+            // (SetExternalForce(0) @0x825F9084), so the read is 0 in practice -- but the read is
+            // what the console does, so it is what is emitted.
+            maSprings[liWheel].SetExternalForce(
+                maSprings[liWheel].mvExternalForce.x - lafCornerTransfer[liWheel]);
         }
+
+
+        // ---- 8) the tail store (0x825FA248): snapshot the velocity for the next frame. Redundant
+        //         with the caller's own pre-call copy -- the console issues both.
+        mPreviousWorldSpaceVelocity.x = mLinearVelocity.x;
+        mPreviousWorldSpaceVelocity.y = mLinearVelocity.y;
+        mPreviousWorldSpaceVelocity.z = mLinearVelocity.z;
+        mPreviousWorldSpaceVelocity.w = mLinearVelocity.w;
     }
 
 // [clean] ApplySuspensionForces  @0x825D1EE8
@@ -4916,6 +5078,7 @@ namespace Vehicle
                                       VecFloat lvfTimeStep)
     {
         static const f32 KF_DEBUG_GAS_ADD = 0.0f;   // flt_82FB7E24 ships 0.0; dev-menu only
+
 
         f32 lfGas = lpControls->mfGas + KF_DEBUG_GAS_ADD;
         if (lfGas < 0.0f) lfGas = 0.0f;             // vmaxfp v0(0)
@@ -7125,6 +7288,7 @@ namespace Vehicle
         // == v1 and reloads its .x lane for the crash leg's f1.
         const f32 lfDT = lrPassThroughV1.x;
         const VecFloat lvfTimeStep{ lfDT, lfDT, lfDT, lfDT };   // the v127 splat
+
 
         CgsDev::PerfMonCpu::StartMonitor(gs_iVPhysUpdatePM);
 
