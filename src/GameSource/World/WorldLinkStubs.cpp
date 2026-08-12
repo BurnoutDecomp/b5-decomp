@@ -235,7 +235,7 @@ void BrnAI::AIModule::Destruct()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "AIModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnAI::AIModule::Destruct: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -268,7 +268,7 @@ bool BrnAI::AIModule::Release()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "AIModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnAI::AIModule::Release: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return false;
 }
@@ -288,7 +288,7 @@ struct BrnAI::AIModuleIO::AICarOutputInterface const * BrnAI::AIModuleIO::Output
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "GetAICarOutputInterfaceConst: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnAI::AIModuleIO::OutputBuffer::GetAICarOutputInterfaceConst: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return 0;
 }
@@ -305,7 +305,7 @@ struct BrnResource::GameDataIO::RequestInterface<4096> const * BrnAI::AIModuleIO
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "GetAIResourceRequestInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnAI::AIModuleIO::OutputBuffer::GetAIResourceRequestInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return 0;
 }
@@ -322,7 +322,7 @@ class CgsModule::VariableEventQueue<1536,16> const * BrnAI::AIModuleIO::OutputBu
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "GetGameEventQueueConst: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnAI::AIModuleIO::OutputBuffer::GetGameEventQueueConst: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return 0;
 }
@@ -339,7 +339,7 @@ class CgsModule::EventQueue<struct BrnAI::RouteMapModuleIO::RouteResponse,16> co
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "GetRouteResponseQueue: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnAI::AIModuleIO::OutputBuffer::GetRouteResponseQueue: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return 0;
 }
@@ -388,7 +388,7 @@ void BrnGame::DispatchThreadInputBuffer::SetCameraViewProjection(struct rw::math
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "DispatchThreadInputBuffer: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnGame::DispatchThreadInputBuffer::SetCameraViewProjection: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -404,7 +404,7 @@ void BrnGame::DispatchThreadInputBuffer::SetEnvMapFaceRendered(int,bool)
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "DispatchThreadInputBuffer: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnGame::DispatchThreadInputBuffer::SetEnvMapFaceRendered: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -453,7 +453,7 @@ int BrnMassive::BrnMassive::Destruct()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnMassive: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnMassive::BrnMassive::Destruct: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return 0;
 }
@@ -490,7 +490,7 @@ void MassiveAdClient3::CMassiveAdObjectSubscriber::operator delete(void *)
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "CMassiveAdObjectSubscriber: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "MassiveAdClient3::CMassiveAdObjectSubscriber::operator delete: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -656,7 +656,7 @@ void BrnReplays::ReplayIO::RequestInterface::Append(struct BrnReplays::ReplayIO:
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "RequestInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnReplays::ReplayIO::RequestInterface::Append: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -675,7 +675,7 @@ void BrnSound::Module::Io::SoundWorldLoadEvent::Construct(enum BrnSound::Module:
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "SoundWorldLoadEvent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnSound::Module::Io::SoundWorldLoadEvent::Construct: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -694,7 +694,7 @@ class CgsModule::VariableEventQueue<32768,16> * BrnTraffic::BrnTrafficIO::InputB
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "InputBuffer_Dispatch: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch::GetSceneResultQueue: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return 0;
 }
@@ -714,7 +714,7 @@ void BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::Construct()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "InputBuffer_PreDispatch: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::Construct: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -730,7 +730,7 @@ void BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::SetCameraPosition(struct
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "InputBuffer_PreDispatch: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::SetCameraPosition: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -746,7 +746,7 @@ void BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::SetVisibleEntities(class
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "InputBuffer_PreDispatch: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::SetVisibleEntities: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -765,7 +765,7 @@ void BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch::Construct()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "OutputBuffer_PreDispatch: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch::Construct: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -810,7 +810,7 @@ void BrnTraffic::TrafficEntityModule::Destruct()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnTraffic::TrafficEntityModule::Destruct: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -826,7 +826,7 @@ void BrnTraffic::TrafficEntityModule::EnterTearingDownState()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnTraffic::TrafficEntityModule::EnterTearingDownState: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -842,7 +842,7 @@ void BrnTraffic::TrafficEntityModule::GenerateDispatchLists(class BrnTraffic::Br
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnTraffic::TrafficEntityModule::GenerateDispatchLists: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -858,7 +858,7 @@ void BrnTraffic::TrafficEntityModule::PostSceneUpdate(struct CgsModule::IOBuffer
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnTraffic::TrafficEntityModule::PostSceneUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -874,7 +874,7 @@ void BrnTraffic::TrafficEntityModule::PreDispatchUpdate(class BrnTraffic::BrnTra
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnTraffic::TrafficEntityModule::PreDispatchUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -890,7 +890,7 @@ void BrnTraffic::TrafficEntityModule::PrePhysicsUpdate(struct CgsModule::IOBuffe
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnTraffic::TrafficEntityModule::PrePhysicsUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -923,7 +923,7 @@ bool BrnTraffic::TrafficEntityModule::Release()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnTraffic::TrafficEntityModule::Release: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return false;
 }
@@ -943,7 +943,7 @@ bool BrnWorld::EnvironmentSettings::ParseEnvironmentFile(float &,char (&)[4][256
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "EnvironmentSettings: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::ParseEnvironmentFile: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return false;
 }
@@ -963,7 +963,7 @@ void BrnWorld::EnvironmentSettings::CloudsData::SetToBlend(class BrnWorld::Envir
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "CloudsData: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::CloudsData::SetToBlend: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1003,7 +1003,7 @@ void BrnWorld::EnvironmentSettings::DebugComponent::Update()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "DebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::DebugComponent::Update: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1019,7 +1019,7 @@ void BrnWorld::EnvironmentSettings::DebugComponent::RenderHUD(struct CgsDev::Deb
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "DebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::DebugComponent::RenderHUD: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1047,7 +1047,7 @@ void BrnWorld::EnvironmentSettings::DebugComponent::OnActivate()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "DebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::DebugComponent::OnActivate: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1063,7 +1063,7 @@ void BrnWorld::EnvironmentSettings::EnvironmentManager::GenerateEffects(class Br
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "EnvironmentManager: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::EnvironmentManager::GenerateEffects: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1099,7 +1099,7 @@ void BrnWorld::EnvironmentSettings::Keyframe::Construct()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "Keyframe: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::Keyframe::Construct: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1118,7 +1118,7 @@ void BrnWorld::EnvironmentSettings::LightingData::SetToBlend(class BrnWorld::Env
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "LightingData: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::LightingData::SetToBlend: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1137,7 +1137,7 @@ void BrnWorld::EnvironmentSettings::ScatteringData::SetToBlend(class BrnWorld::E
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "ScatteringData: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::ScatteringData::SetToBlend: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1180,7 +1180,7 @@ void BrnWorld::PVSDebugComponent::RenderHUD(struct CgsDev::Debug2DImmediateRende
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PVSDebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::PVSDebugComponent::RenderHUD: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1196,7 +1196,7 @@ void BrnWorld::PVSDebugComponent::OnActivate()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PVSDebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::PVSDebugComponent::OnActivate: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1215,7 +1215,7 @@ void BrnWorld::PropEntityModule::CachePropGraphicsLists()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::PropEntityModule::CachePropGraphicsLists: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1255,7 +1255,7 @@ void BrnWorld::PropEntityModule::Destruct()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::PropEntityModule::Destruct: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1271,7 +1271,7 @@ void BrnWorld::PropEntityModule::GenerateDispatchLists(class BrnWorld::PropEntit
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::PropEntityModule::GenerateDispatchLists: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1287,7 +1287,7 @@ void BrnWorld::PropEntityModule::PostSceneUpdate(struct CgsModule::IOBufferStack
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::PropEntityModule::PostSceneUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1303,7 +1303,7 @@ void BrnWorld::PropEntityModule::PrePhysicsUpdate(struct CgsModule::IOBufferStac
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::PropEntityModule::PrePhysicsUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1336,7 +1336,7 @@ bool BrnWorld::PropEntityModule::Release()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::PropEntityModule::Release: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return false;
 }
@@ -1364,7 +1364,7 @@ void BrnWorld::RaceCarEntityModule::Destruct()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::RaceCarEntityModule::Destruct: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1384,7 +1384,7 @@ bool BrnWorld::RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(enum EAct
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return false;
 }
@@ -1401,7 +1401,7 @@ void BrnWorld::RaceCarEntityModule::PostSceneUpdate(struct BrnWorld::RaceCarEnti
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::RaceCarEntityModule::PostSceneUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1436,7 +1436,7 @@ bool BrnWorld::RaceCarEntityModule::Release()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::RaceCarEntityModule::Release: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return false;
 }
@@ -1500,7 +1500,7 @@ void BrnWorld::TriggerEntityModule::PostSceneUpdate(struct CgsModule::IOBufferSt
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TriggerEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::TriggerEntityModule::PostSceneUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1516,7 +1516,7 @@ void BrnWorld::TriggerEntityModule::PrePhysicsUpdate(struct CgsModule::IOBufferS
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TriggerEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::TriggerEntityModule::PrePhysicsUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1550,7 +1550,7 @@ void BrnWorld::TriggerEntityModuleDebugComponent::RenderWorld(struct CgsDev::Deb
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TriggerEntityModuleDebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::TriggerEntityModuleDebugComponent::RenderWorld: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1566,7 +1566,7 @@ void BrnWorld::TriggerEntityModuleDebugComponent::RenderHUD(struct CgsDev::Debug
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TriggerEntityModuleDebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::TriggerEntityModuleDebugComponent::RenderHUD: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1588,7 +1588,7 @@ void BrnWorld::TriggerEntityModuleDebugComponent::OnActivate()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TriggerEntityModuleDebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::TriggerEntityModuleDebugComponent::OnActivate: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1694,25 +1694,16 @@ void BrnWorld::WorldModule::BridgeWorldModuleToEntityModules_Render(class BrnTra
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::WorldModule::BridgeWorldModuleToEntityModules_Render: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::WorldModule::CalculateVehicleLODs(struct rw::math::vpu::Vector3)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// (WorldModule::CalculateVehicleLODs stub RETIRED 2026-08-12, vehicle-LOD wave:
+//  the real body @0x827C3778 now lives in BrnWorldModule.cpp. It was the ONLY
+//  per-frame writer of ActiveRaceCar::RenderParams::mLOD, so while it was inert
+//  every race car rendered at the E_STATE_LOD_4 that RenderParams::Reset seeds and
+//  2-/3-state body parts failed DoesStateExist(4) and did not render at all. The
+//  stub also carried the wrong signature -- one argument instead of four.)
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
@@ -1736,7 +1727,7 @@ void BrnWorld::WorldModule::SetupShaderConstantsBeforeRendering(struct BrnShader
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnWorld::WorldModule::SetupShaderConstantsBeforeRendering: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1834,7 +1825,7 @@ void CgsDev::DebugRender::DrawCircle(struct rw::math::vpu::Vector3,struct rw::ma
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "DebugRender: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsDev::DebugRender::DrawCircle: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1905,7 +1896,7 @@ void CgsGeometric::Frustum::CalcVertices(struct rw::math::vpu::Vector4 *) const
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "Frustum: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsGeometric::Frustum::CalcVertices: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1950,7 +1941,7 @@ void CgsGraphics::DispatchBin::HandleMemoryOverflow(unsigned int)
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "DispatchBin: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsGraphics::DispatchBin::HandleMemoryOverflow: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2004,7 +1995,7 @@ int CgsSceneManager::EntityManager::GetVolumeInstanceIndexByID(struct CgsSceneMa
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "GetVolumeInstanceIndexByID: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::EntityManager::GetVolumeInstanceIndexByID: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return 0;
 }
@@ -2021,7 +2012,7 @@ struct CgsSceneManager::VolumeInstance * CgsSceneManager::EntityManager::GetVolu
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "EntityManager: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::EntityManager::GetVolumeInstance: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return 0;
 }
@@ -2070,7 +2061,7 @@ void CgsSceneManager::OverlapGenerationModule::GenerateOverlaps(void *,void cons
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "OverlapGenerationModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::OverlapGenerationModule::GenerateOverlaps: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2122,7 +2113,7 @@ bool CgsSceneManager::OverlapGenerationModule::Release()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "OverlapGenerationModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::OverlapGenerationModule::Release: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return true;
 }
@@ -2139,7 +2130,7 @@ void CgsSceneManager::OverlapGenerationModule::Destruct()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "OverlapGenerationModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::OverlapGenerationModule::Destruct: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2155,7 +2146,7 @@ void CgsSceneManager::OverlapGenerationModule::Update()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "OverlapGenerationModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::OverlapGenerationModule::Update: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2185,7 +2176,7 @@ void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::AddVolumeInstance(
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "InSceneUpdateInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::AddVolumeInstance: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2218,7 +2209,7 @@ void CgsSceneManager::SceneManagerIO::InputBuffer_Query::Destruct()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "InputBuffer_Query: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::SceneManagerIO::InputBuffer_Query::Destruct: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2266,7 +2257,7 @@ void CgsSceneManager::SceneManagerModule::BridgeOverlapCullerToOutputBuffer(stru
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "SceneManagerModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::SceneManagerModule::BridgeOverlapCullerToOutputBuffer: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2282,7 +2273,7 @@ void CgsSceneManager::SceneManagerModule::BridgeOverlapGenerationToOutputBuffer(
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "SceneManagerModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::SceneManagerModule::BridgeOverlapGenerationToOutputBuffer: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2298,7 +2289,7 @@ void CgsSceneManager::SceneManagerModule::BridgeOverlapGenerationToOverlapCullin
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "SceneManagerModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::SceneManagerModule::BridgeOverlapGenerationToOverlapCulling: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2314,7 +2305,7 @@ void CgsSceneManager::SceneManagerModule::ExternalSceneQueriesUpdate()
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "SceneManagerModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::SceneManagerModule::ExternalSceneQueriesUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2460,7 +2451,7 @@ void WorldModule::BridgeCrashModuleToPropModule_PostScene(void *,struct BrnWorld
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeCrashModuleToPropModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2476,7 +2467,7 @@ void WorldModule::BridgeCrashModuleToRaceCarModule_PostScene(void *,struct BrnWo
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeCrashModuleToRaceCarModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2492,7 +2483,7 @@ void WorldModule::BridgeCrashModuleToTrafficModule_PostScene(void *,class BrnTra
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeCrashModuleToTrafficModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2508,7 +2499,7 @@ void WorldModule::BridgePropModuleToTrafficModule_PrePhysics(void *,class BrnTra
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePropModuleToTrafficModule_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2524,7 +2515,7 @@ void WorldModule::BridgeRaceCarEntityInfoToOutput_PrePhysics(void *,struct BrnWo
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarEntityInfoToOutput_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2540,7 +2531,7 @@ void WorldModule::BridgeRaceCarModuleToSceneModule_PostScene(void *,struct CgsSc
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToSceneModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2556,7 +2547,7 @@ void WorldModule::BridgeRaceCarModuleToTrafficModule_PostScene(void *,class BrnT
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToTrafficModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2572,7 +2563,7 @@ void WorldModule::BridgeRaceCarModuleToTrafficModule_PrePhysics(void *,class Brn
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToTrafficModule_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2588,7 +2579,7 @@ void WorldModule::BridgeSceneContactsToPropModule_PrePhysics(void *,class BrnWor
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeSceneContactsToPropModule_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2604,7 +2595,7 @@ void WorldModule::BridgeSceneContactsToRaceCarModule_PrePhysics(void *,struct Br
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeSceneContactsToRaceCarModule_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2620,7 +2611,7 @@ void WorldModule::BridgeSceneContactsToTrafficModule_PrePhysics(void *,class Brn
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeSceneContactsToTrafficModule_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2636,7 +2627,7 @@ void WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics(void *,class
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2652,7 +2643,7 @@ void WorldModule::BridgeSceneQueryResultsToTriggerModule_PrePhysics(void *,class
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeSceneQueryResultsToTriggerModule_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2668,7 +2659,7 @@ void WorldModule::BridgeTrafficCarEntityInfoToOutput_PrePhysics(void *,struct Br
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTrafficCarEntityInfoToOutput_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2684,7 +2675,7 @@ void WorldModule::BridgeTrafficModuleToSceneModule_PostScene(void *,struct CgsSc
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTrafficModuleToSceneModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2704,7 +2695,7 @@ void WorldModule::BridgeTriggerModuleToSceneModule_PostScene(void *,struct CgsSc
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTriggerModuleToSceneModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -2777,7 +2768,7 @@ struct BrnPhysics::Deformation::WheelPhysicalStates & BrnPhysics::Deformation::W
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WheelPhysicalStates: inert (body not reconstructed) [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "BrnPhysics::Deformation::WheelPhysicalStates::operator=: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return *this;
 }

@@ -70,7 +70,10 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"       // BrnResource::GameDataIO::RequestInterface<4096>
 
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"     // DispatchFrame / DispatchList
-#include <cmath>   // sqrtf / tanf ([FLAG PC bring-up] the dispatch producer's camera)
+#include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::operator- / Magnitude (CalculateVehicleLODs)
+#include "GameSource/Director/Camera/Utils/CameraUtils.h" // Utils::GetZoomFromFOVDegs (the bring-up LOD zoom)
+#include <cmath>    // sqrtf / tanf ([FLAG PC bring-up] the dispatch producer's camera) + std::sqrt (vehicle LODs)
+#include <cstddef>  // offsetof (the VehicleRenderInfo layout pins)
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable;
 // same extern as the world-entity TU -- the defining home lands with the shader TU).
@@ -3181,6 +3184,286 @@ WorldModule::FilterFrustumTestResults(
 }
 
 // ============================================================================
+// The vehicle LOD policy tables + debug toggles  (X360 .data / .bss)
+//
+// Registered as debug-tunables by BrnWorld::RaceCarEntityModuleDebugComponent::
+// OnActivate @0x822C2538 under "Graphics/Vehicles.../LODs..." -- the five quality
+// bands as "Quality LOD 0".."Quality LOD 4" and the five aggressive bands as
+// "Aggressive LOD 0".."Aggressive LOD 4", all with SetRange(0, 300) + SetStep(1);
+// the three bools through the bool-registration helper and the fixed-LOD index
+// through the int one with range [0, 4]. Tunable => NOT const, exactly as the
+// console keeps them in writable data.
+//
+// NOTE: the shipped Quality and Aggressive tables are BYTE-IDENTICAL, so the blend
+// below is a no-op in the retail build. They are kept as two tables because the
+// binary keeps two, they sit at two distinct addresses, and both are separately
+// tunable at runtime.
+//
+// (A previous RE note claiming 20/30/40/50/60 for these bands was never verified
+// against the image and is WRONG -- the values below are the recovered bytes.)
+// ============================================================================
+static const u32 KU_NUM_VEHICLE_LODS = 5;
+
+f32 KA_VEHICLE_QUALITY_LOD_DISTANCE[ KU_NUM_VEHICLE_LODS ] =     // X360 0x82F307B4
+    { 10.0f, 22.0f, 35.0f, 50.0f, 70.0f };
+f32 KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[ KU_NUM_VEHICLE_LODS ] =  // X360 0x82F307C8
+    { 10.0f, 22.0f, 35.0f, 50.0f, 70.0f };
+
+bool sbUseDynamicLods    = true;   // X360 byte_82F307DC  (initialised data, shipped 0x01)
+bool sbUseFixedLods      = false;  // X360 byte_8300E114  (zero-init segment)
+bool sbUseAggressiveLods = false;  // X360 byte_8300E115  (zero-init segment)
+s32  siFixedVehicleLod   = 0;      // X360 dword_8300E118 (zero-init segment, range [0,4])
+
+// The crowding-metric blend constants (X360 flt_82004744 / flt_820CC1CC, loaded by
+// the `fsubs f13,f31,f0` + `fmuls f0,f13,f0` pair @0x827C3930..0x827C3938).
+// 0.76923078f == 1/1.3.
+static const f32 KF_LOD_BLEND_BIAS  = 0.2f;
+static const f32 KF_LOD_BLEND_SCALE = 0.76923078f;
+
+// The one console byte offset this body depends on that is not already pinned in its
+// owning TU (ActiveRaceCar::mRenderParams @+2016 and RenderParams::mLOD @+5120 --
+// together the `stw r9, 0x1BE0(r3)` == +7136 store -- are pinned by the
+// static_asserts in BrnActiveRaceCarRenderParams.cpp). VehicleRenderInfo is a public
+// standard-layout record, so its two touched fields can be pinned right here:
+// `lfs f0, 4(r3)` reads mfDistanceSq and `stw r9, 8(r3)` writes mLOD.
+static_assert( offsetof( BrnTraffic::VehicleRenderInfo, mfDistanceSq ) == 4,
+               "VehicleRenderInfo::mfDistanceSq @ +0x04 (X360 lfs f0, 4(r3) @0x827C3BF8)" );
+static_assert( offsetof( BrnTraffic::VehicleRenderInfo, mLOD ) == 8,
+               "VehicleRenderInfo::mLOD @ +0x08 (X360 stw r9, 8(r3) @0x827C3C34)" );
+
+// ============================================================================
+// [FLAG PC bring-up] GetTrafficRenderInfosBringUp -- NOT an X360 function.
+//
+// The console hands CalculateVehicleLODs the Array<VehicleRenderInfo,64> that lives
+// INSIDE the traffic pre-dispatch output buffer: WorldModule::GenerateDispatchLists
+// @0x827D1CE8 computes it as `addi r22, r19, 4` (r19 = the OutputBuffer_PreDispatch,
+// so the array starts at buffer + 4) and passes r22 in r6 @0x827D24BC.
+//
+// On this build BrnTrafficIO::OutputBuffer_PreDispatch is still a 16-byte opaque
+// slice (BrnTrafficEntityModuleIO.h:501, `u8 maDeferredPayload[16]`) with no
+// accessor for that array, and its only producer -- TrafficEntityModule::
+// PreDispatchUpdate -- is itself an inert stub in WorldLinkStubs.cpp, so there are
+// no traffic render infos to classify yet. This returns an empty (Clear()-ed, i.e.
+// miCount = 0) array so the RACE CAR leg -- the actual defect -- runs, without
+// inventing traffic data that the build does not produce.
+//
+// ⚠ The function-local static is SHARED by both call sites (the console producer and
+// the bring-up producer). That is safe ONLY because the array is permanently length
+// 0, so neither site can observe the other's state -- it is deliberately not
+// re-entrancy-safe, and must not outlive the stand-in.
+//
+// DELETE and replace with `lpTrafficRenderInfos->GetVehicleRenderInfos()` the moment
+// OutputBuffer_PreDispatch's interior is homed.
+// ============================================================================
+static Array< BrnTraffic::VehicleRenderInfo, 64u >&
+GetTrafficRenderInfosBringUp( BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch* /*lpBuffer*/ )
+{
+    static Array< BrnTraffic::VehicleRenderInfo, 64u > sEmptyTrafficRenderInfos;
+    sEmptyTrafficRenderInfos.Clear();
+    return sEmptyTrafficRenderInfos;
+}
+
+// Pick the first band the distance falls short of; LOD 4 (the coarsest) when it is
+// past every band. The X360 compiler emits this loop TWICE inside
+// CalculateVehicleLODs -- once for race cars @0x827C3B78..0x827C3BAC and once for
+// traffic @0x827C3BF8..0x827C3C34 -- instruction for instruction identical:
+//   li r11,0 / mr r9,r26(==4) ; loop: lfs f13,0(r10) ; fcmpu f0,f13 ;
+//   blt -> (mr r9,r11 ; done) ; addi r11,1 ; addi r10,4 ; cmplwi r11,5 ; blt loop
+// i.e. a STRICT `<` against each band in ascending order, with the 4 preloaded as
+// the fall-through. Outlined here so the two sites cannot drift apart.
+static CgsGraphics::Model::State
+ClassifyVehicleLOD( f32 lfDistance, const f32* lpafLODDistances )
+{
+    for ( u32 luIndex = 0; luIndex < KU_NUM_VEHICLE_LODS; luIndex++ )
+    {
+        if ( lfDistance < lpafLODDistances[ luIndex ] )
+        {
+            return static_cast< CgsGraphics::Model::State >( luIndex );
+        }
+    }
+    return CgsGraphics::Model::E_STATE_LOD_4;
+}
+
+// ============================================================================
+// CalculateVehicleLODs  @ 0x827C3778
+//
+// ⭐ THIS FUNCTION IS THE ONLY PER-FRAME WRITER OF ActiveRaceCar::RenderParams::mLOD.
+// While it was an inert stub in WorldLinkStubs.cpp every race car rendered at the
+// LOD that RenderParams::Reset seeds -- E_STATE_LOD_4, the coarsest of the five --
+// permanently, and every body part whose model carries only 2 or 3 states failed
+// DoesStateExist(4) and did not render at all. Reset's `4` is console-faithful (X360
+// Reset @0x822E6818 stores 4 into +5120): it is the deliberate "past every threshold"
+// fallback that THIS function is expected to lift off every frame.
+//
+// Shape (X360, read instruction for instruction):
+//   * both input arrays are length-checked through Array<>::GetLength (the two
+//     "Array used before Construct/Clear was called" assert sites @0x827C37C4 /
+//     @0x827C37EC over the count words at +0x80 and +0x300);
+//   * per visible race car: decode the entity id's 14-bit entity index
+//     (`extrwi r4, r11, 14, 8` == (id >> 10) & 0x3FFF == EntityId::GetEntityIndex),
+//     fetch the ActiveRaceCar, and take the distance from the camera to its body
+//     transform's translation row (`lvx128 v0, r0, r11` with r11 = car + 0x810 ==
+//     2016 (mRenderParams) + 48 (mBodyTransform.wAxis)). The console computes it as
+//     vsubfp + vmsum3fp128 + vrsqrtefp with two Newton refinements and a
+//     vcmpeqfp/vsel guard that returns 0 for a zero-length delta -- exactly what
+//     rw::math::vpu::Magnitude reduces to here;
+//   * lfRenderingCostEstimate = SUM of 1/distance over the visible race cars AND
+//     the traffic render infos (traffic distance = sqrt(mfDistanceSq)). It is a
+//     CROWDING metric: the closer/more numerous the vehicles, the larger it gets;
+//   * the blend factor: 0 normally, (cost - 0.2) * (1/1.3) when Use Dynamic LODs is
+//     on, 1 when Use Aggressive LODs is on. NOT clamped to [0,1] on console;
+//   * lafLODDistances[i] = Lerp(quality[i], aggressive[i], alpha) * lfZoomFactor.
+//     The zoom multiply is a per-band `fmuls f0, f0, f28` (five of them,
+//     @0x827C3A18/3A34/3A4C/3AB4/3AC4) -- a zoomed-in camera (zoom > 1) pushes every
+//     band further out so distant cars keep their detail;
+//   * classify: liLod = 4; for (i = 0; i < 5; ++i) if (dist < band[i]) { liLod = i;
+//     break; }. The console spells it as the `fcmpu / blt` + `cmplwi r11, 5` loop
+//     @0x827C3B84..0x827C3BA8 -- STRICT `<`, and the 4 fallback is the register
+//     preload `mr r9, r26` with r26 == 4;
+//   * store: race car -> mRenderParams.mLOD (`stw r9, 0x1BE0(r3)` == +7136 ==
+//     2016 + 5120), traffic -> VehicleRenderInfo::mLOD (`stw r9, 8(r3)`);
+//   * the PLAYER's own car is then forced to LOD 0 unconditionally (`lwzx r4` from
+//     raceCarModule + 0x182F8, `blt` skip when negative, then `li r11,0` +
+//     `stw r11, 0x1BE0(r3)` -- an INTEGER zero store, not a float one). This leg
+//     runs only in the dynamic branch; the fixed-LOD branch overrides it.
+// With the shipped tables and zoom 1 the resulting bands are
+//   LOD0 < 10 m | LOD1 10-22 | LOD2 22-35 | LOD3 35-50 | LOD4 >= 50.
+//
+// De-optimisations applied (per AGENTS.md): the two Newton rsqrt refinements reduce
+// to Magnitude/std::sqrt, the five unrolled VMX band lanes are re-rolled into one
+// loop, and the `goto LABEL_27/LABEL_36` classifier tails become a `break`.
+// ============================================================================
+void
+WorldModule::CalculateVehicleLODs(
+    Vector3 lCameraPos,
+    f32 lfZoomFactor,
+    Array<CgsSceneManager::EntityId, 32u>& laRaceCarEntityIDs,
+    Array<BrnTraffic::VehicleRenderInfo, 64u>& laTrafficRenderInfos )
+{
+    const s32 liRaceCarCount = static_cast< s32 >( laRaceCarEntityIDs.GetLength() );
+    const s32 liTrafficCount = static_cast< s32 >( laTrafficRenderInfos.GetLength() );
+
+    f32 lafRaceCarDistances[ 32 ];
+    f32 lfRenderingCostEstimate = 0.0f;
+
+    // ---- pass 1: per-race-car distance + the crowding metric ----------------
+    for ( s32 liRaceCarIndex = 0; liRaceCarIndex < liRaceCarCount; liRaceCarIndex++ )
+    {
+        const CgsSceneManager::EntityId lEntityID =
+            laRaceCarEntityIDs[ static_cast< u32 >( liRaceCarIndex ) ];
+        ActiveRaceCar* lpRaceCar = mRaceCarEntityModule.GetActiveRaceCar(
+            static_cast< EActiveRaceCarIndex >( lEntityID.GetEntityIndex() ) );
+
+        const Vector3& lVehiclePosition =
+            lpRaceCar->GetRenderParams()->GetBodyTransform().Pos();
+
+        const f32 lfDistance =
+            rw::math::vpu::Magnitude( lCameraPos - lVehiclePosition );
+
+        lafRaceCarDistances[ liRaceCarIndex ] = lfDistance;
+        lfRenderingCostEstimate += 1.0f / lfDistance;
+    }
+
+    // ---- pass 2: the traffic half of the crowding metric --------------------
+    // (the DWARF spells the root rw::math::fpu::Sqrt<float>; the console emits a
+    //  bare `fsqrts f0, f0` over the record's cached squared distance.)
+    for ( s32 liTrafficIndex = 0; liTrafficIndex < liTrafficCount; liTrafficIndex++ )
+    {
+        lfRenderingCostEstimate +=
+            1.0f / std::sqrt( laTrafficRenderInfos[ static_cast< u32 >( liTrafficIndex ) ].mfDistanceSq );
+    }
+
+    // ---- this frame's band set ----------------------------------------------
+    f32 lfAlpha = 0.0f;
+    if ( sbUseDynamicLods )
+    {
+        lfAlpha = ( lfRenderingCostEstimate - KF_LOD_BLEND_BIAS ) * KF_LOD_BLEND_SCALE;
+    }
+    else if ( sbUseAggressiveLods )
+    {
+        lfAlpha = 1.0f;
+    }
+
+    f32 lafLODDistances[ KU_NUM_VEHICLE_LODS ];
+    for ( u32 luIndex = 0; luIndex < KU_NUM_VEHICLE_LODS; luIndex++ )
+    {
+        const f32 lfQuality    = KA_VEHICLE_QUALITY_LOD_DISTANCE[ luIndex ];
+        const f32 lfAggressive = KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[ luIndex ];
+        lafLODDistances[ luIndex ] =
+            ( lfQuality + ( lfAggressive - lfQuality ) * lfAlpha ) * lfZoomFactor;
+    }
+
+    // ---- publish ------------------------------------------------------------
+    if ( sbUseFixedLods )
+    {
+        const CgsGraphics::Model::State leFixedLod =
+            static_cast< CgsGraphics::Model::State >( siFixedVehicleLod );
+
+        for ( s32 liRaceCarIndex = 0; liRaceCarIndex < liRaceCarCount; liRaceCarIndex++ )
+        {
+            const CgsSceneManager::EntityId lEntityID =
+                laRaceCarEntityIDs[ static_cast< u32 >( liRaceCarIndex ) ];
+            ActiveRaceCar* lpRaceCar = mRaceCarEntityModule.GetActiveRaceCar(
+                static_cast< EActiveRaceCarIndex >( lEntityID.GetEntityIndex() ) );
+            lpRaceCar->GetRenderParams()->SetLOD( leFixedLod );
+        }
+
+        for ( s32 liTrafficIndex = 0; liTrafficIndex < liTrafficCount; liTrafficIndex++ )
+        {
+            laTrafficRenderInfos[ static_cast< u32 >( liTrafficIndex ) ].mLOD = leFixedLod;
+        }
+    }
+    else
+    {
+        for ( s32 liRaceCarIndex = 0; liRaceCarIndex < liRaceCarCount; liRaceCarIndex++ )
+        {
+            const CgsSceneManager::EntityId lEntityID =
+                laRaceCarEntityIDs[ static_cast< u32 >( liRaceCarIndex ) ];
+            ActiveRaceCar* lpRaceCar = mRaceCarEntityModule.GetActiveRaceCar(
+                static_cast< EActiveRaceCarIndex >( lEntityID.GetEntityIndex() ) );
+
+            lpRaceCar->GetRenderParams()->SetLOD(
+                ClassifyVehicleLOD( lafRaceCarDistances[ liRaceCarIndex ], lafLODDistances ) );
+        }
+
+        // The player's own car always renders at the finest LOD.
+        //
+        // ⚠ FLAG (holder substitution, 2026-08-12): the console reads the RACE CAR
+        // MODULE's own mePlayerActiveRaceCarIndex -- `lwzx r4, r3, r11` with
+        // r3 == this + 0x280 (mRaceCarEntityModule) and r11 == 0x182F8, i.e.
+        // BrnRaceCarEntityModule.h:483. That member is PRIVATE and the class exposes
+        // no accessor for it, so this body reads the WorldModule's own mirror
+        // instead. It is the same value: BridgeRaceCarModuleToWorldModule_PreScene
+        // @0x827A52B0 publishes GetPlayerActiveRaceCarIndex() into it every PreScene,
+        // set to E_ACTIVE_RACE_CAR_INDEX_INVALID otherwise -- which is the same `< 0`
+        // early-out the console branches on (polarity verified: INVALID == -1,
+        // E_ACTIVE_RACE_CAR_INDEX_0 == 0, matching `blt cr6` @0x827C3BD0).
+        //
+        // ⚠ NOT FULLY EQUIVALENT (verifier, 2026-08-12): the publish chain
+        // (UpdateOutputInterfaces -> SetPlayerActiveRaceCarData -> bridge) is gated on
+        // lpPlayerSlot->IsAttached() at BrnRaceCarEntityModule.cpp:2171, not merely on
+        // IsPlayerCarActive(), and there is a PreScene->Dispatch phase gap. So a
+        // VALID-BUT-UNATTACHED player slot leaves this mirror INVALID where the
+        // console would still force LOD 0. Low impact today; the swap below removes it.
+        // SWAP THIS to mRaceCarEntityModule.GetPlayerActiveRaceCarIndex() the moment
+        // BrnRaceCarEntityModule.h grows that accessor.
+        if ( meLocalPlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 )
+        {
+            mRaceCarEntityModule.GetActiveRaceCar( meLocalPlayerActiveRaceCarIndex )
+                ->GetRenderParams()->SetLOD( CgsGraphics::Model::E_STATE_LOD_0 );
+        }
+
+        for ( s32 liTrafficIndex = 0; liTrafficIndex < liTrafficCount; liTrafficIndex++ )
+        {
+            BrnTraffic::VehicleRenderInfo& lrRenderInfo =
+                laTrafficRenderInfos[ static_cast< u32 >( liTrafficIndex ) ];
+            lrRenderInfo.mLOD =
+                ClassifyVehicleLOD( std::sqrt( lrRenderInfo.mfDistanceSq ), lafLODDistances );
+        }
+    }
+}
+
+// ============================================================================
 // GenerateFrustumQueries  @ 0x827DADF8
 //
 // Runs only when the update set selects frustum testing (bit 7). Stages this
@@ -3595,7 +3878,9 @@ WorldModule::GenerateDispatchLists(
     lpTrafficPreDispatchInput->LockForRead();
     lpTrafficRenderInfos->LockForWrite();
     mTrafficEntityModule.PreDispatchUpdate( lpTrafficPreDispatchInput, lpTrafficRenderInfos );
-    CalculateVehicleLODs( lpCameraInput->GetPosition() );
+    CalculateVehicleLODs( lpCameraInput->GetPosition(), lfLodZoomFactor,
+                          lpFilteredEntityData->maRaceCarEntityIds,
+                          GetTrafficRenderInfosBringUp( lpTrafficRenderInfos ) );
     lpTrafficRenderInfos->UnlockForWrite();
     lpTrafficPreDispatchInput->UnlockForRead();
 
@@ -4455,6 +4740,54 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     }
     const f32 lfCotHalfFov = 1.0f / tanf( 0.5f * lfVerticalFov );
 
+    // The HORIZONTAL field of view this stand-in camera is actually built with
+    // (SetFovHorizontal below consumes it in radians). Hoisted out of that call so
+    // the LOD zoom factor below is derived from the same number.
+    const f32 lfHorizontalFov = 2.0f * atanf( lfAspect / lfCotHalfFov );
+
+    // ⭐ THE LOD ZOOM FACTOR (2026-08-12, vehicle-LOD wave) -- this used to be a
+    // hard-coded 1.0f at the world dispatch call below.
+    //
+    // The console computes it in GenerateDispatchLists @0x827D1CE8 as
+    //     f32 lfLodZoomFactor = lpCameraInput->GetLodZoomFactor();
+    //     if ( lfLodZoomFactor < 1.0f ) lfLodZoomFactor = 1.0f;     // X360 fsel
+    // where BrnDirector::Camera::Camera::GetLodZoomFactor @0x827BAC40 forwards the
+    // camera's FOV (DEGREES) into Utils::GetZoomFromFOVDegs == 1/tan(fov/2). It is
+    // consumed by WorldEntityModule::GenerateDispatchLists @0x822D5AB0, which
+    // divides dist^2 by zoom^2 (so a zoomed-IN camera lengthens every world LOD band
+    // and the cull radius), and by CalculateVehicleLODs, which multiplies every
+    // vehicle band by it.
+    //
+    // [FLAG PC bring-up] the director publishes no camera here, so the FOV comes from
+    // the stand-in camera framed above -- the same value SetFovHorizontal is given,
+    // in the degrees domain GetZoomFromFOVDegs works in. DELETE with the rest of this
+    // producer; the console line above is the replacement.
+    //
+    // ⚠ MEASURED ON THE LIVE PATH (2026-08-12, verifier re-measure -- an earlier note
+    // here claimed the clamp binds and the change was inert; THAT WAS WRONG, it was
+    // measured against the tour fallback rather than what the director publishes).
+    // Whenever the director is driving, BrnGameModule.cpp:1362 stages
+    // lpCamera->GetFOV() and this producer round-trips it back out, and the boot log
+    // shows that FOV blending 61.13 deg -> 42.94 deg (BrnBehaviourInterpolate cuts at
+    // t == 1, so 42.94 deg is the steady state). GetZoomFromFOVDegs of those is
+    // 1.693 .. 2.543 -- the clamp does NOT bind. Even the no-director tour fallback
+    // only lands under 1 at exactly 16:9 (0.974); at 16:10 it is 1.083, at 4:3 1.299.
+    //
+    // SO THIS IS A BEHAVIOURAL CHANGE, in two places, both console-faithful given the
+    // FOV but both real:
+    //   * the vehicle bands stretch from 10/22/35/50/70 m to ~25/56/89/127/178 m;
+    //   * the world pass at the GenerateDispatchLists call below now divides every
+    //     dist^2 by zoom^2 (BrnWorldEntityModule.cpp:1776), which makes world LOD
+    //     selection finer AND grows the max-draw-distance cull radius ~2.5x.
+    // The second one is a per-frame draw-call cost increase -- MEASURE IT before
+    // treating this producer's framing as settled.
+    f32 lfLodZoomFactor = BrnDirector::Camera::Utils::GetZoomFromFOVDegs(
+        lfHorizontalFov / KF_DEGS_TO_RADS );
+    if ( lfLodZoomFactor < 1.0f )
+    {
+        lfLodZoomFactor = 1.0f;
+    }
+
     // ---- the view basis: built by the ENGINE'S OWN LookAt -------------------
     // CgsGraphics::Camera::LookAt @0x827F9510 is the AUTHORITY on this engine's camera
     // handedness, and it is not the textbook D3DXMatrixLookAtLH recipe. Transcribed from
@@ -4479,7 +4812,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     static CgsGraphics::Camera sBringUpCamera;
     sBringUpCamera.Release();                                   // the @0x827F94E8 defaults reset
     sBringUpCamera.maProjectionScalars[ 6 ] = lfAspect;         // m_aspectRatio
-    sBringUpCamera.SetFovHorizontal( 2.0f * atanf( lfAspect / lfCotHalfFov ) );
+    sBringUpCamera.SetFovHorizontal( lfHorizontalFov );
     sBringUpCamera.maProjectionScalars[ 7 ] = lfNear;           // m_nearClipPlane
     sBringUpCamera.maProjectionScalars[ 8 ] = lfFar;            // m_farClipPlane
     {
@@ -4668,7 +5001,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
 
             mWorldEntityModule.GenerateDispatchLists(
                 &sWorldDispatchInput, sFilteredEntityData.maWorldEntityIds,
-                lViewProjection, lEye, lForward, 1.0f, &mShaderLodInfo,
+                lViewProjection, lEye, lForward, lfLodZoomFactor, &mShaderLodInfo,
                 KI_WORLD_OPAQUE_LIST, KI_WORLD_SORT_LAYER, KI_WORLD_SORT_KEY,
                 KI_WORLD_PREZ_LIST, false );
         }
@@ -4690,6 +5023,29 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         //   * fog. The environment settings are not converted on this build, so the
         //     scattering vector is zero -- which makes RenderRaceCar's fog blend exactly
         //     zero, the same state the world pass is already in.
+        // ⭐ [FLAG PC bring-up] THE PER-VEHICLE LOD POLICY (2026-08-12).
+        //
+        // This MIRRORS the console call in WorldModule::GenerateDispatchLists at the
+        // `CalculateVehicleLODs(...)` line above (X360 @0x827D24C8) and sits at the
+        // console-equivalent position: after the traffic pre-dispatch leg, before the
+        // race-car dispatch leg. It exists here only because the frame is driven by
+        // this bring-up stand-in rather than by the console producer -- FOLD IT BACK
+        // (delete this block) the moment GenerateDispatchListsBringUp is retired.
+        //
+        // Without it nothing lifts ActiveRaceCar::RenderParams::mLOD off the
+        // E_STATE_LOD_4 that RenderParams::Reset seeds, so every car renders at the
+        // coarsest LOD forever and 2-/3-state body parts vanish entirely.
+        //
+        // HONEST SCOPE on this build: maRaceCarEntityIds is whatever the frustum
+        // filter produced, so the per-car distance banding only reaches cars the
+        // scene manager actually registered as race-car entities (owner 1 / 0x21).
+        // The PLAYER-car force-to-LOD-0 leg inside the function does NOT depend on
+        // that array -- it keys off meLocalPlayerActiveRaceCarIndex -- so the player
+        // car comes off LOD 4 regardless.
+        CalculateVehicleLODs( lEye, lfLodZoomFactor,
+                              sFilteredEntityData.maRaceCarEntityIds,
+                              GetTrafficRenderInfosBringUp( 0 ) );
+
         {
             sRaceCarDispatchInput.LockForWrite();
             sRaceCarDispatchInput.SetDispatchFrame( lpDispatchFrame );

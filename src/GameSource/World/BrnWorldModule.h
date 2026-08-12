@@ -519,9 +519,37 @@ namespace BrnWorld
             Array<CgsSceneManager::EntityId, 5400u>* lpPropIds );
 
         // @0x827C3778 -- derive this frame's per-vehicle LOD set from the render
-        // budget (the KF_*_VEHICLE_LOD_DISTANCES policy tables). The X360 hands
-        // it the camera position in v1.
-        void CalculateVehicleLODs( Vector3 lvCameraPosition );
+        // budget (the KA_VEHICLE_*_LOD_DISTANCE policy tables). BODIED in
+        // BrnWorldModule.cpp; see the banner there for the asm attestation.
+        //
+        // ⭐ SIGNATURE CORRECTED 2026-08-12 (vehicle-LOD wave). This used to read
+        // `void CalculateVehicleLODs( Vector3 )` -- THREE arguments short, and the
+        // body it gated could therefore never be written. The X360 prologue
+        // @0x827C3778 settles it: `mr r25,r3` (this), `vmr128 v124,v1` (the camera
+        // position -- a VMX register argument), `fmr f28,f1` (the LOD zoom factor),
+        // `mr r28,r5` / `mr r24,r6` (the two arrays). r4 is UNTOUCHED: on PPC the
+        // float argument RESERVES its GPR slot without using it, which is exactly
+        // why the arrays land in r5/r6 and why a register-counting read of this
+        // prologue loses lfZoomFactor. The DecFIGS DWARF names all four
+        // (BrnWorldModule.h:428 / _compile/BrnWorldUnity.cpp:7973).
+        //
+        // CONSTNESS: BOTH arrays are non-const references. The DWARF _compile
+        // rendering spells them `const&`, but that rendering is lossy -- the DWARF
+        // HEADER dump (BrnWorldModule.h:428) spells both non-const, and the asm
+        // agrees on both counts:
+        //   * the body WRITES the traffic array (`stw r9, 8(r3)` into each
+        //     VehicleRenderInfo::mLOD, @0x827C3C34 / @0x827C3B38);
+        //   * it reaches the race-car id array through the NON-CONST Array<>::GetItem
+        //     overload -- the three `bl` sites @0x827C3848 / @0x827C3AE8 / @0x827C3B5C
+        //     all target 0x827BA878, whose assert line is CgsArray.h:556 (non-const).
+        //     The const overload is a separate symbol (0x822AFAB8, CgsArray.h:538)
+        //     whose only caller is RaceCarEntityModule::GenerateDispatchLists. The
+        //     split is already documented in Array_EntityId_32.cpp:11-13.
+        void CalculateVehicleLODs(
+            Vector3 lCameraPos,
+            f32 lfZoomFactor,
+            Array<CgsSceneManager::EntityId, 32u>& laRaceCarEntityIDs,
+            Array<BrnTraffic::VehicleRenderInfo, 64u>& laTrafficRenderInfos );
 
         // @0x827D1410 -- stage the frame's global shader constants before any
         // dispatch-list generation.
