@@ -62,11 +62,13 @@
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"
 #include "pc/gcm/renderengine/device.h"                  // renderengine::gDevice / gD3D9 / Device::SetState
 #include "pc/gcm/renderengine/texture.h"                 // renderengine::Texture (mpD3DTexture)
+#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"        // renderengine::ShadowDepthFormat* (homed below)
 #include "rw/rwcore_structs.h"                           // rw::IResourceAllocator / Resource / ResourceDescriptor
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::WriteToLog ([shadow-rt] diagnostic)
 
 #include <cstring>
 #include <cstdio>
+#include <cstddef>
 
 // =============================================================================
 // renderengine::RenderTargetState -- the bound-surface object.
@@ -99,11 +101,6 @@ namespace
     {
         return renderengine::gDevice;
     }
-
-    // The last render-target state installed on the device (X360 dword_83010A30): the bind
-    // skips a redundant Device::SetState when the same state is rebound back-to-back. This is
-    // the console's own optimisation, kept.
-    const renderengine::RenderTargetState* gpLastRenderTargetState = nullptr;
 
     // ---- the throwaway colour render target -------------------------------------------------
     // FLAG PC bring-up: Direct3D 9 has no "no colour attachment" mode -- SetRenderTarget(0, NULL)
@@ -161,59 +158,118 @@ namespace
     // FLAG PC bring-up: the X360 samples a depth surface after Xbox2ResolveTo has copied it out
     // of EDRAM into a linear texture of the packed format 0x2D200196. On PC the standard (and
     // only) way to sample depth under Direct3D 9 is a depth-stencil TEXTURE, created with a
-    // vendor FOURCC and bound both as the depth-stencil surface and as a sampler resource -- so
+    // vendor format and bound both as the depth-stencil surface and as a sampler resource -- so
     // the console's 0x2D200196 is not translated, it is REPLACED by the D3D9 equivalent.
     //
-    // The ladder, best first:
-    //   INTZ  - depth as texture, works on every current NVIDIA/AMD/Intel D3D9 part; returns the
-    //           raw depth in .r when sampled. This is what the shadow receiver wants.
-    //   DF24  - the older ATI depth-texture format (24-bit).
-    //   DF16  - the older ATI depth-texture format (16-bit); last resort that is still sampleable.
-    // If none of the three can be created, the target falls back to a plain non-sampleable
+    // ⚠ CORRECTED 2026-08-12 (the shadow-fetch wave). The ladder used to be
+    // INTZ -> DF24 -> DF16 -> D24S8, chosen for "is it sampleable at all". That is the WRONG
+    // axis: the receiver does not want a depth VALUE, it wants a depth COMPARISON. Every one of
+    // the 92 s15 pixel shaders in build/game/SHADERS.BNDL reads
+    //     texldp rN, rN, s15 ; ... mul r0.w, r0.w, rN.x
+    // i.e. it takes .x straight as a 0..1 lit factor, with rN.z/rN.w as the reference -- the
+    // Xenos hardware depth-compare fetch. None of the 92 does a manual compare (verified by
+    // disassembling all 110 shipped pixel shaders with fxc -dumpbin). INTZ/DF24/DF16 return the
+    // RAW stored depth and compare nothing, so on those formats `lit *= rawDepth` is not a
+    // shadow test at all -- on a cleared (1.0) map it is identically "fully lit".
+    //
+    // The ladder is therefore ordered by SEMANTICS first, availability second:
+    //   D24X8 - a real depth-stencil format created as a TEXTURE. Where the driver allows it
+    //           (NVIDIA and Intel do; it is the classic "hardware shadow map"), the fetch
+    //           COMPARES ref against the stored depth and, with a LINEAR filter, 2x2-PCFs the
+    //           result -- exactly the Xenos semantic the shaders were written against.
+    //   D16   - the same thing at 16 bits.
+    //   INTZ / DF24 / DF16 - readable depth, NO comparison. Kept as a last resort so an AMD part
+    //           still gets a bound, populated sampler rather than an unbound one, but the fetch
+    //           semantics DIVERGE from the shaders and ShadowDepthFormatIsHardwareCompare()
+    //           reports false so the [shadow-rt] line says `compare=RAW`. Fixing that case is a
+    //           SHADER-PIPELINE job (the technique needs a manual-compare variant); it cannot be
+    //           done from the engine without rewriting shipped shader semantics.
+    // If nothing above can be created, the target falls back to a plain non-sampleable
     // D3DFMT_D24S8 depth-stencil surface: the pass still renders (and is still correct), but
-    // GetDepthStencilTexture() returns null and the [shadow-rt] line below says so, so a machine
-    // without depth-texture support reports the fact instead of silently drawing black.
+    // GetDepthStencilTexture() returns null and the [shadow-rt] line below says so.
+    //
+    // Each candidate is gated on CheckDeviceFormat rather than a blind CreateTexture: a driver
+    // that merely tolerates a depth-stencil texture is not the same as one that advertises it,
+    // and the old ladder's first blind CreateTexture(INTZ) succeeding is precisely how the
+    // semantically wrong format won.
     struct DepthSurfaceResult
     {
         IDirect3DTexture9* mpTexture;
         IDirect3DSurface9* mpSurface;
-        u32                muFourCC;   // 0 => the non-sampleable D24S8 fallback
+        u32                muFormat;           // 0 => the non-sampleable D24S8 fallback
+        bool               mbHardwareCompare;  // true => the fetch compares (Xenos semantic)
     };
 
     DepthSurfaceResult CreateDepthSurface(u32 luWidth, u32 luHeight)
     {
-        DepthSurfaceResult lResult = { nullptr, nullptr, 0u };
+        DepthSurfaceResult lResult = { nullptr, nullptr, 0u, false };
 
         IDirect3DDevice9* const lpDevice = Dev();
         if (lpDevice == nullptr)
             return lResult;
 
-        const u32 lauCandidates[3] =
+        // The adapter/device identity the format query needs. D3DADAPTER_DEFAULT +
+        // D3DDEVTYPE_HAL is what the device was created with (see device.cpp); the creation
+        // parameters are read back rather than assumed.
+        D3DDEVICE_CREATION_PARAMETERS lCreation;
+        std::memset(&lCreation, 0, sizeof(lCreation));
+        lCreation.AdapterOrdinal = D3DADAPTER_DEFAULT;
+        lCreation.DeviceType     = D3DDEVTYPE_HAL;
+        lpDevice->GetCreationParameters(&lCreation);
+
+        IDirect3D9* lpD3D = nullptr;
+        D3DFORMAT   leAdapterFormat = D3DFMT_X8R8G8B8;
+        if (SUCCEEDED(lpDevice->GetDirect3D(&lpD3D)) && lpD3D != nullptr)
         {
-            static_cast<u32>(MAKEFOURCC('I', 'N', 'T', 'Z')),
-            static_cast<u32>(MAKEFOURCC('D', 'F', '2', '4')),
-            static_cast<u32>(MAKEFOURCC('D', 'F', '1', '6'))
+            D3DDISPLAYMODE lMode;
+            if (SUCCEEDED(lpD3D->GetAdapterDisplayMode(lCreation.AdapterOrdinal, &lMode)))
+                leAdapterFormat = lMode.Format;
+        }
+
+        struct Candidate { u32 muFormat; bool mbHardwareCompare; };
+        const Candidate laCandidates[5] =
+        {
+            { static_cast<u32>(D3DFMT_D24X8),                 true  },
+            { static_cast<u32>(D3DFMT_D16),                   true  },
+            { static_cast<u32>(MAKEFOURCC('I', 'N', 'T', 'Z')), false },
+            { static_cast<u32>(MAKEFOURCC('D', 'F', '2', '4')), false },
+            { static_cast<u32>(MAKEFOURCC('D', 'F', '1', '6')), false }
         };
 
-        for (u32 luCandidate = 0; luCandidate < 3u; ++luCandidate)
+        for (u32 luCandidate = 0; luCandidate < 5u; ++luCandidate)
         {
+            const D3DFORMAT leFormat = static_cast<D3DFORMAT>(laCandidates[luCandidate].muFormat);
+
+            if (lpD3D != nullptr
+                && FAILED(lpD3D->CheckDeviceFormat(lCreation.AdapterOrdinal, lCreation.DeviceType,
+                                                   leAdapterFormat, D3DUSAGE_DEPTHSTENCIL,
+                                                   D3DRTYPE_TEXTURE, leFormat)))
+            {
+                continue;
+            }
+
             IDirect3DTexture9* lpTexture = nullptr;
             if (SUCCEEDED(lpDevice->CreateTexture(luWidth, luHeight, 1, D3DUSAGE_DEPTHSTENCIL,
-                                                  static_cast<D3DFORMAT>(lauCandidates[luCandidate]),
-                                                  D3DPOOL_DEFAULT, &lpTexture, nullptr))
+                                                  leFormat, D3DPOOL_DEFAULT, &lpTexture, nullptr))
                 && lpTexture != nullptr)
             {
                 IDirect3DSurface9* lpSurface = nullptr;
                 if (SUCCEEDED(lpTexture->GetSurfaceLevel(0, &lpSurface)) && lpSurface != nullptr)
                 {
-                    lResult.mpTexture = lpTexture;
-                    lResult.mpSurface = lpSurface;
-                    lResult.muFourCC  = lauCandidates[luCandidate];
+                    lResult.mpTexture         = lpTexture;
+                    lResult.mpSurface         = lpSurface;
+                    lResult.muFormat          = laCandidates[luCandidate].muFormat;
+                    lResult.mbHardwareCompare = laCandidates[luCandidate].mbHardwareCompare;
+                    if (lpD3D != nullptr)
+                        lpD3D->Release();
                     return lResult;
                 }
                 lpTexture->Release();
             }
         }
+
+        if (lpD3D != nullptr)
+            lpD3D->Release();
 
         // Non-sampleable fallback: the pass renders, the receiver gets nothing.
         IDirect3DSurface9* lpPlainDepth = nullptr;
@@ -286,14 +342,37 @@ namespace
     u32 guLastHeight     = 0xFFFFFFFFu;
     u32 guLastSections   = 0xFFFFFFFFu;
     u32 guLastDepthValid = 0xFFFFFFFFu;
-    u32 guLastFourCC     = 0xFFFFFFFFu;
+    u32 guLastFormat     = 0xFFFFFFFFu;
+
+    // Spell a depth format for the log: a FOURCC prints as its four characters, a real
+    // D3DFORMAT enumerant as its name.
+    void FormatName(u32 luFormat, char* lpcOut, size_t luSize)
+    {
+        switch (luFormat)
+        {
+        case 0u:                             std::snprintf(lpcOut, luSize, "D24S8-surface"); return;
+        case static_cast<u32>(D3DFMT_D24X8): std::snprintf(lpcOut, luSize, "D24X8");         return;
+        case static_cast<u32>(D3DFMT_D16):   std::snprintf(lpcOut, luSize, "D16");           return;
+        default: break;
+        }
+        // Anything else on the ladder is a FOURCC (INTZ / DF24 / DF16).
+        const char lacChars[5] =
+        {
+            static_cast<char>(luFormat & 0xFFu),
+            static_cast<char>((luFormat >> 8) & 0xFFu),
+            static_cast<char>((luFormat >> 16) & 0xFFu),
+            static_cast<char>((luFormat >> 24) & 0xFFu),
+            '\0'
+        };
+        std::snprintf(lpcOut, luSize, "%s", lacChars);
+    }
 
     void ReportShadowRenderTarget(u32 luWidth, u32 luHeight, u32 luSections,
-                                  bool lbDepthTextureValid, u32 luFourCC)
+                                  bool lbDepthTextureValid, u32 luFormat, bool lbHardwareCompare)
     {
         const u32 luDepthValid = lbDepthTextureValid ? 1u : 0u;
         if (luWidth == guLastWidth && luHeight == guLastHeight && luSections == guLastSections
-            && luDepthValid == guLastDepthValid && luFourCC == guLastFourCC)
+            && luDepthValid == guLastDepthValid && luFormat == guLastFormat)
         {
             return;
         }
@@ -301,36 +380,37 @@ namespace
         guLastHeight     = luHeight;
         guLastSections   = luSections;
         guLastDepthValid = luDepthValid;
-        guLastFourCC     = luFourCC;
+        guLastFormat     = luFormat;
 
-        char lacFourCC[8];
-        if (luFourCC != 0u)
-        {
-            lacFourCC[0] = static_cast<char>(luFourCC & 0xFFu);
-            lacFourCC[1] = static_cast<char>((luFourCC >> 8) & 0xFFu);
-            lacFourCC[2] = static_cast<char>((luFourCC >> 16) & 0xFFu);
-            lacFourCC[3] = static_cast<char>((luFourCC >> 24) & 0xFFu);
-            lacFourCC[4] = '\0';
-        }
-        else
-        {
-            std::snprintf(lacFourCC, sizeof(lacFourCC), "D24S8");
-        }
+        char lacFormat[16];
+        FormatName(luFormat, lacFormat, sizeof(lacFormat));
 
-        char lacMessage[192];
+        char lacMessage[224];
         std::snprintf(lacMessage, sizeof(lacMessage),
-                      "[shadow-rt] target %ux%u sections=%u depthFormat=%s depthTexture=%s\n",
+                      "[shadow-rt] target %ux%u sections=%u depthFormat=%s depthTexture=%s"
+                      " compare=%s\n",
                       static_cast<unsigned>(luWidth), static_cast<unsigned>(luHeight),
-                      static_cast<unsigned>(luSections), lacFourCC,
-                      lbDepthTextureValid ? "OK" : "NULL");
+                      static_cast<unsigned>(luSections), lacFormat,
+                      lbDepthTextureValid ? "OK" : "NULL",
+                      lbHardwareCompare ? "HW" : "RAW");
         CgsDev::Log::WriteToLog(lacMessage);
     }
 
-    // The FOURCC + section count the live target was created with, kept so
+    // The format + section count the live target was created with, kept so
     // GetDepthStencilTexture can re-report the same tuple without re-deriving it (neither is a
     // console member of RenderTarget and neither is worth inventing one for).
-    u32 guCreatedFourCC   = 0u;
-    u32 guCreatedSections = 1u;
+    u32  guCreatedFormat          = 0u;
+    bool gbCreatedHardwareCompare = false;
+    u32  guCreatedSections        = 1u;
+}
+
+// The two accessors ShadowPassPCLeaf.h declares (see the SAMPLE SEMANTICS SEAM banner there):
+// which depth format the shadow target actually got, and whether that format's fetch COMPARES.
+// They read the same two file statics Initialize wrote, so no state is duplicated.
+namespace renderengine
+{
+    u32  ShadowDepthFormat()                  { return guCreatedFormat; }
+    bool ShadowDepthFormatIsHardwareCompare() { return gbCreatedHardwareCompare; }
 }
 
 // =============================================================================
@@ -345,6 +425,10 @@ namespace
 // =============================================================================
 namespace renderengine
 {
+    // X360 dword_83010A30 -- THE single "last state installed" shadow (see the banner in
+    // ShadowPassPCLeaf.h for why it lives here and why it MUST be shared).
+    const RenderTargetState* gpLastRenderTargetState = nullptr;
+
     void Device::SetState(const RenderTargetState* lpState)
     {
         IDirect3DDevice9* const lpDevice = Dev();
@@ -454,9 +538,10 @@ namespace postfx
         const u32 luSurfaceWidth  = lrParameters.mu32Width;
         const u32 luSurfaceHeight = lrParameters.mu32Height * luNumSections;
 
-        IDirect3DSurface9* lpColourSurface = nullptr;
-        IDirect3DSurface9* lpDepthSurface  = nullptr;
-        u32                luDepthFourCC   = 0u;
+        IDirect3DSurface9* lpColourSurface  = nullptr;
+        IDirect3DSurface9* lpDepthSurface   = nullptr;
+        u32                luDepthFormat    = 0u;
+        bool               lbDepthHwCompare = false;
 
         // --- the colour surface -------------------------------------------------------------
         // eRenderTarget_CREATE is the only mode that owns a surface here; USE_DEVICE_FOR_WRITE
@@ -484,15 +569,16 @@ namespace postfx
         if (lrParameters.mDepthStencilMode == static_cast<u32>(eRenderTarget_CREATE))
         {
             const DepthSurfaceResult lDepth = CreateDepthSurface(luSurfaceWidth, luSurfaceHeight);
-            lpDepthSurface = lDepth.mpSurface;
-            luDepthFourCC  = lDepth.muFourCC;
+            lpDepthSurface   = lDepth.mpSurface;
+            luDepthFormat    = lDepth.muFormat;
+            lbDepthHwCompare = lDepth.mbHardwareCompare;
 
             // The sampleable wrapper is built only when the target asked to be sampled AND a
             // depth-texture format was actually available.
             if (lrParameters.mbUseDepthStencilAsTexture)
             {
                 lpRenderTarget->mDepthTarget.mpTexture =
-                    WrapTexture(lpAllocator, lDepth.mpTexture, lDepth.muFourCC,
+                    WrapTexture(lpAllocator, lDepth.mpTexture, lDepth.muFormat,
                                 luSurfaceWidth, luSurfaceHeight);
             }
         }
@@ -519,10 +605,12 @@ namespace postfx
         }
         lpRenderTarget->mpSection0State = lpRenderTarget->mapSectionState[0];
 
-        guCreatedFourCC   = luDepthFourCC;
-        guCreatedSections = luNumSections;
+        guCreatedFormat          = luDepthFormat;
+        gbCreatedHardwareCompare = lbDepthHwCompare && (lpRenderTarget->mDepthTarget.mpTexture != nullptr);
+        guCreatedSections        = luNumSections;
         ReportShadowRenderTarget(luSurfaceWidth, luSurfaceHeight, luNumSections,
-                                 lpRenderTarget->mDepthTarget.mpTexture != nullptr, luDepthFourCC);
+                                 lpRenderTarget->mDepthTarget.mpTexture != nullptr,
+                                 luDepthFormat, gbCreatedHardwareCompare);
 
         return lpRenderTarget;
     }
@@ -568,10 +656,11 @@ namespace postfx
         else
             lpState = GetRenderTargetState(luDestSliceOrFace);
 
-        if (gpLastRenderTargetState != lpState)
+        // The SHARED shadow (X360 dword_83010A30), not a private copy -- see ShadowPassPCLeaf.h.
+        if (renderengine::gpLastRenderTargetState != lpState)
         {
             renderengine::Device::SetState(lpState);
-            gpLastRenderTargetState = lpState;
+            renderengine::gpLastRenderTargetState = lpState;
         }
 
         IDirect3DDevice9* const lpDevice = Dev();
@@ -641,7 +730,8 @@ namespace postfx
         // Re-report on the way out: this runs once a frame from the s15 bind, so the
         // value-latched line re-fires if the depth texture is ever lost.
         ReportShadowRenderTarget(muWidth, muHeight * guCreatedSections, guCreatedSections,
-                                 mDepthTarget.mpTexture != nullptr, guCreatedFourCC);
+                                 mDepthTarget.mpTexture != nullptr, guCreatedFormat,
+                                 gbCreatedHardwareCompare);
         return mDepthTarget.mpTexture;
     }
 }

@@ -32,6 +32,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT (BeginAssert/FireAssert/EndAssert)
 #include "pc/gcm/renderengine/device.h"                     // renderengine::Device::SetState + gpD3DDevice
+#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"          // renderengine::gpLastRenderTargetState (the shared X360 dword_83010A30)
 
 // X360 (Xenon) D3D9 viewport / scissor entry points. These are platform externals (XDK intrinsics);
 // declared with their X360 ABI so the body compiles store-for-store against the same calls the image
@@ -68,9 +69,17 @@ namespace
         s32 miBottom;  // +0x0C
     };
 
-    // The last render-target state installed on the device (X360 dword_83010A30): the wrapper skips a
-    // redundant Device::SetState when the same state is rebound back-to-back.
-    const renderengine::RenderTargetState* gpLastRenderTargetState = nullptr;
+    // ⚠ REMOVED 2026-08-12 (shadow-fetch wave). The "last render-target state installed on the
+    // device" shadow (X360 dword_83010A30) used to be a FILE-LOCAL copy here -- a second,
+    // independent copy of the same console global that rw::graphics::postfx::RenderTarget::Begin
+    // also keeps. On the console that duplication would merely be redundant; on this build it was
+    // a live bug, because the PC-only PCSurfaceBracket_Restore puts the scene surfaces back with
+    // raw D3D9 calls instead of through Device::SetState. The copy here therefore stayed stuck at
+    // "the shadow-map state is installed" and SetRenderTargetState below skipped its bind on every
+    // frame after the first, sending the shadow cascades into the BACK BUFFER.
+    // There is now ONE definition, renderengine::gpLastRenderTargetState (declared in
+    // pc/gcm/renderengine/ShadowPassPCLeaf.h, defined in PostFxRenderTargetPCLeaf.cpp beside the
+    // only Device::SetState that writes it), and PCSurfaceBracket_Restore invalidates it.
 
     // NOTE (2026-08-12): the default render-target state (X360 dword_83271614) used to be defined
     // HERE as a file-local `const renderengine::RenderTargetState*` -- a duplicate of the one in
@@ -289,11 +298,12 @@ void CgsRenderTarget::SetRenderTargetState(u32 luSection)
         lpState = rw::graphics::postfx::gpDefaultRenderTargetState;
     }
 
-    // Skip the device call when the same surface state is already bound.
-    if (gpLastRenderTargetState != lpState)
+    // Skip the device call when the same surface state is already bound (the shared X360
+    // dword_83010A30 shadow -- see the note where the old file-local copy used to live).
+    if (renderengine::gpLastRenderTargetState != lpState)
     {
         renderengine::Device::SetState(lpState);
-        gpLastRenderTargetState = lpState;
+        renderengine::gpLastRenderTargetState = lpState;
     }
 
     // Viewport: the target's full extent, depth range [0, 1]. Width/height come from the stored
@@ -333,11 +343,12 @@ void CgsRenderTarget::SetRenderTargetStateInvertDepth(u32 luSection)
         lpState = rw::graphics::postfx::gpDefaultRenderTargetState;
     }
 
-    // Skip the device call when the same surface state is already bound.
-    if (gpLastRenderTargetState != lpState)
+    // Skip the device call when the same surface state is already bound (the shared X360
+    // dword_83010A30 shadow -- see the note where the old file-local copy used to live).
+    if (renderengine::gpLastRenderTargetState != lpState)
     {
         renderengine::Device::SetState(lpState);
-        gpLastRenderTargetState = lpState;
+        renderengine::gpLastRenderTargetState = lpState;
     }
 
     // Viewport: the target's full extent, inverted depth range [1, 0]. Width/height come from the

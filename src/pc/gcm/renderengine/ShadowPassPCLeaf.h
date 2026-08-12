@@ -26,6 +26,30 @@
 namespace renderengine
 {
     class DepthStencilState;   // renderstates.h (the real 0x60-byte state object)
+    class RenderTargetState;   // PostFxRenderTargetPCLeaf.cpp (the bound-surface descriptor)
+
+    // =========================================================================
+    // X360 dword_83010A30 -- THE "last render-target state installed on the device" shadow.
+    //
+    // The console has exactly ONE of these, and both readers (CgsRenderTarget::
+    // SetRenderTargetState* @0x827E7588/0x827E7668 and rw::graphics::postfx::RenderTarget::
+    // Begin @0x823F9250) skip a redundant Device::SetState against it. This build had grown
+    // TWO private copies -- one file-local in each of those TUs -- which is not just
+    // duplication, it is a LIVE BUG on PC:
+    //
+    //   The shadow pass is bracketed by PCSurfaceBracket_Save/Restore, a PC-only stand-in for
+    //   the console's BeginRenderAntiAliased. The console's rebind goes THROUGH Device::SetState
+    //   and therefore keeps this shadow in step; the PC bracket restores the saved surfaces with
+    //   raw IDirect3DDevice9::SetRenderTarget / SetDepthStencilSurface calls, BEHIND the shadow's
+    //   back. So after the first shadow frame the shadow still reads "the shadow-map state is
+    //   installed" while the device actually holds the back buffer -- and every LATER frame's
+    //   SetRenderTargetState skips its bind and renders the cascades into the BACK BUFFER's
+    //   colour and depth instead of into the shadow map.
+    //
+    // One definition (PostFxRenderTargetPCLeaf.cpp, beside the only Device::SetState that
+    // writes it) and one invalidation point (PCSurfaceBracket_Restore) close that.
+    // =========================================================================
+    extern const RenderTargetState* gpLastRenderTargetState;
 
     // The clear descriptor the X360 renderengine device clear (sub_82B61D78) consumes.
     // BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap builds one on its stack as
@@ -41,6 +65,65 @@ namespace renderengine
         f32 mfDepth;       // +0x04  the Z value to clear to
         u32 mu32Stencil;   // +0x08  the stencil value to clear to
     };
+
+    // =========================================================================
+    // THE SHADOW-MAP SAMPLE SEMANTICS SEAM (PC bring-up, 2026-08-12).
+    //
+    // The Xenos samples the shadow map through a hardware DEPTH-COMPARISON fetch: the
+    // shipped pixel shaders do `texldp rN, rN, s15` and consume ONLY `.x`, as a 0..1
+    // "lit" factor (`mul r0.w, r0.w, rN.x`), with rN.z/rN.w as the comparison
+    // reference. All 92 s15 shaders in build/game/SHADERS.BNDL are written that way
+    // and NONE of them does a manual compare, so the comparison MUST come from the
+    // sampler, exactly as it does on the console.
+    //
+    // Direct3D 9 has no generic comparison-sampler state. What it has is two
+    // vendor conventions, and they are NOT interchangeable:
+    //   * a real depth-stencil format (D24X8 / D16) created as a TEXTURE -- the
+    //     NVIDIA/Intel "hardware shadow map": the fetch compares and (with a LINEAR
+    //     filter) 2x2-PCFs, returning 0..1. THIS is the Xenos semantic.
+    //   * INTZ / DF24 / DF16 -- readable depth: the fetch returns the RAW stored
+    //     depth. `lit *= rawDepth` is not a shadow test; on a cleared (1.0) map it is
+    //     identically "fully lit", which is exactly the no-shadows symptom.
+    // So the depth-target format is not a free choice: it decides whether the shipped
+    // shaders mean anything. PostFxRenderTargetPCLeaf.cpp picks it and reports which
+    // semantic it got through these two accessors; the sampler-state applier below
+    // configures unit 15 to match.
+    //
+    // ShadowDepthFormat()                  the D3DFORMAT / FOURCC the shadow depth
+    //                                      texture was created with (0 = none yet).
+    // ShadowDepthFormatIsHardwareCompare() true when that format's fetch COMPARES.
+    // Both defined in PostFxRenderTargetPCLeaf.cpp.
+    u32  ShadowDepthFormat();
+    bool ShadowDepthFormatIsHardwareCompare();
+
+    // Install the sampler state unit luUnit needs for the format above. The console
+    // does this through a renderengine::TextureState built in
+    // BrnRendererModule::Construct @0x8240A778; this build has no TextureState objects
+    // (they need the render-target pool), so shadow::Device::SetResource binds the
+    // TEXTURE only and the unit keeps whatever the last user left -- for unit 15 that
+    // is the D3D9 defaults (POINT/WRAP), which defeats the PCF the hardware compare
+    // exists to give. DELETE when Construct's TextureState pair lands.
+    // Defined in XenonD3D9Shims.cpp.
+    void ShadowSampler_ApplyState(u32 luUnit);
+
+    // The number of world DrawIndexedPrimitiveUP submissions issued so far. Read by the
+    // shadow pass's [shadow-fetch] probe to separate "no draws reached the shadow target"
+    // from "draws reached it and rasterised nothing".
+    // Defined in XenonD3D9Shims.cpp.
+    u64 WorldDrawCallCount();
+
+    // [FLAG PC bring-up probe] the shadow-pass occlusion probe -- the ONLY way to establish
+    // whether the shadow map is being written on this backend (a D3DPOOL_DEFAULT depth
+    // texture cannot be locked or copied out, so the depth bytes are unreadable from the
+    // CPU; the fragment count that survived the depth test is readable and answers the same
+    // question). Bracket a cascade's draws with Begin/End; LastPixels returns the PREVIOUS
+    // frame's count without stalling. ShadowProbe_TextureBound asks the runtime -- not the
+    // engine's own shadow cache -- whether a texture is really bound at a sampler unit.
+    // All four defined in XenonD3D9Shims.cpp. DELETE with the shadow bring-up.
+    void ShadowProbe_Begin(u32 luCascade);
+    void ShadowProbe_End(u32 luCascade);
+    bool ShadowProbe_LastPixels(u32 luCascade, u32* lpuPixels);
+    bool ShadowProbe_TextureBound(u32 luUnit);
 
     // FLAG PC-platform leaf: the console's scene render target is (re)bound by
     // BrnRendererModule::BeginRenderAntiAliased @ Render:725, which runs AFTER the shadow and
