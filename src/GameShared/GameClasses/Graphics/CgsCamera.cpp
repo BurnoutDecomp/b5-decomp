@@ -13,18 +13,45 @@
 #include <cstring>  // memcpy (Clone)
 
 // ----------------------------------------------------------------------------
-// Camera defaults (DWARF ::-scope globals, CgsCamera.h:32-35). The near/far
-// magnitudes are RECOVERED from the X360 Construct()/Release() body @0x827F94E8
-// (lfs immediates 0.1 / 1000.0). The fov/aspect pair lives in the un-dumped
-// .data block (flt_82F30FD4 / flt_82F30FD8; IDA exports carry no data) -- FLAG:
-// carried as honest zeros per the project convention. NOTE: with a zero default
-// fov, SetFovHorizontal's 1/tan(0) is inf -- the FLAG values must be recovered
-// before the camera path is driven with defaults.
+// Camera defaults (DWARF ::-scope globals, CgsCamera.h:32-35).
+//
+// RECOVERED 2026-08-12 (shadow wave). The old note claimed the fov/aspect pair
+// "lives in the un-dumped .data block (IDA exports carry no data)" and carried both
+// as honest zeros. The EXPORTS carry no data; the DATABASE does -- dumped from
+// BURNOUT_X360_ARTIST.XEX.i64 (this is the fifth "unrecoverable data" claim to fall
+// this way, so treat any such note as untested):
+//
+//   flt_82F30FD4 = 3F C9 0F DB = 1.5707964f  (pi/2, i.e. 90 degrees horizontal)
+//   flt_82F30FD8 = 3F E3 8E 39 = 1.7777778f  (16/9)
+//
+// Slot binding is PROVEN, not inferred, from the reset thunk @0x827F94E8, which
+// tail-calls Camera::Construct with the PPC float-arg registers loaded explicitly:
+//   lis r11,0x82F3 ; lfs f1,0xFD4(r11)   -> arg1 = fovHorizontal
+//                    lfs f2,0xFD8(r11)   -> arg2 = aspectRatio
+//   lis r11,0x820D ; addi r11,r11,0x1704 ; lfs f3,0(r11) ; lfs f4,4(r11)
+//                                        -> arg3/arg4 = near 0.1 / far 1000.0
+// (0x82F30FD0 holds a second 16/9 -- a display-aspect block, not a stray. The
+// near/far are rodata lfs loads, not the "immediates" the old comment called them;
+// their values happened to be right.)
+//
+// THE ZERO ASPECT WAS LOAD-BEARING, and it cost this campaign a full wave.
+// BrnDirector::Camera::Camera::CopyToCgsCamera (Camera.cpp:505) opens with
+// Release() -> Construct(KF_DEFAULT_FOVHORIZONTAL, KF_DEFAULT_ASPECTRATIO, ...),
+// and nothing else ever writes m_aspectRatio on that camera. SetFovHorizontal then
+// computes 2*atanf((1.0f/0.0f) * tanHalfH) = 2*atanf(inf) = pi EXACTLY, so
+// tanHalfV = tanf(float(pi)*0.5f) = -2.2877e7 and every frame camera became a
+// 180-degree-tall fan. The shadow cascade fit was then perfectly correct code
+// fitting a minimum-area box around a genuinely astronomical point cloud --
+// fitHalfW came out 1e8..1e9 metres, every caster triangle was sub-pixel, and
+// ~2200 shadow draws per frame rasterised ZERO fragments. Nothing was ever
+// non-finite, which is precisely why it survived so long.
+// Diagnostic signature, if this ever regresses: fitHalfW / slabFar is a CONSTANT
+// across all cascades, and that constant is tanf(float(pi/2)) = 2.2877e7.
 // ----------------------------------------------------------------------------
-const f32 KF_DEFAULT_FOVHORIZONTAL = 0.0f;   // flt_82F30FD4 -- FLAG: value not recovered
-const f32 KF_DEFAULT_ASPECTRATIO   = 0.0f;   // flt_82F30FD8 -- FLAG: value not recovered
-const f32 KF_DEFAULT_NEARCLIPPLANE = 0.1f;   // @0x827F94E8 immediate
-const f32 KF_DEFAULT_FARCLIPPLANE  = 1000.0f; // @0x827F94E8 immediate
+const f32 KF_DEFAULT_FOVHORIZONTAL = 1.5707964f;  // flt_82F30FD4 (.i64-recovered, pi/2)
+const f32 KF_DEFAULT_ASPECTRATIO   = 1.7777778f;  // flt_82F30FD8 (.i64-recovered, 16/9)
+const f32 KF_DEFAULT_NEARCLIPPLANE = 0.1f;        // flt_820D1704 (.i64-recovered)
+const f32 KF_DEFAULT_FARCLIPPLANE  = 1000.0f;     // flt_820D1708 (.i64-recovered)
 
 namespace CgsGraphics
 {
