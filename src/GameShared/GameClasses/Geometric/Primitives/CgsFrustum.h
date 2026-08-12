@@ -34,12 +34,12 @@ namespace CgsGeometric
             PlaneNear   = 5,
         };
 
-        // --- PENDING DECLARATIONS (cross-TU; bodies live in their own not-
-        //     yet-landed TUs; call shapes attested at the BrnWorld::ShadowMap::
-        //     ComputeTSMMatrix @ 0x827BFF58 call sites) ----------------------
-
-        // @call 0x827C0058: build the 6-plane frustum from the RW-side
-        // snapshot Camera::GetFrustum(CameraRwFrustum&) wrote.
+        // SetFromRwFrustum @ 0x82839FA8 -- build the 6-plane frustum from the
+        // RW-side snapshot Camera::GetFrustum(CameraRwFrustum&) wrote.
+        // ⚠ IT PERMUTES: RW (near, far, left, right, top, bottom) lands in stored
+        // slots (5, 4, 0, 2, 1, 3) -- i.e. the stored slot IS the PlaneId below --
+        // and slots 6/7 duplicate far/near. Proven from the @0x82839FA8 vperm
+        // masks; do NOT "simplify" it back to identity. Body in CgsFrustum.cpp.
         void SetFromRwFrustum(const CgsGraphics::CameraRwFrustum& lrRw);
 
         // CalcVertices @ 0x82840DF8 -- solve the eight frustum corners as

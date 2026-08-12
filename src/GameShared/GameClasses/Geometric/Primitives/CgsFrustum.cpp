@@ -41,21 +41,24 @@
 //
 // Sibling ledger functions in their own passes (their bodies need collaborators
 // this file cannot ground faithfully):
-//   CgsGeometric::Frustum::SetFromRwFrustum       @ 0x82839FA8  (BLOCKED)
 //   CgsGeometric::Frustum::DebugRender            @ 0x82845EC0  (BLOCKED)
 //   CgsGeometric::Frustum::DebugRenderCustomPlanes@ 0x82845BB8  (BLOCKED)
 //
-// The BLOCKED trio depend on collaborators that cannot be grounded here:
-//   - SetFromRwFrustum transposes the 6 (negated) input planes into the 8
-//     swizzled SoA lanes with eight `vperm` control vectors loaded from rodata
-//     (unk_82CDA3F0, unk_82CDADB0/C0/D0/E0/F0, unk_82CDB430/450). Those permute
-//     masks are NOT in the dossier, and the exact AoS->SoA lane mapping (which
-//     the culling tests read back) cannot be reproduced without them.
-//   - DebugRender / DebugRenderCustomPlanes draw the frustum through the 3D
-//     debug renderer (CgsDev::DebugRender::DrawQuad / DrawArrow / DrawLine),
-//     whose declarations/arg shapes are not homed, and they call the still-todo
-//     sibling method IntersectionOf3Planes and the un-pinned rw::collision::Plane
-//     accessors (GetNormal / GetDistance).
+// Both draw the frustum through the 3D debug renderer (CgsDev::DebugRender::
+// DrawQuad / DrawArrow / DrawLine), whose declarations/arg shapes are not homed,
+// and they call the still-unwritten sibling IntersectionOf3Planes @0x828415E8 and
+// the un-pinned rw::collision::Plane accessors (GetNormal / GetDistance).
+//
+// ⚠ RETRACTED 2026-08-12 -- the banner here used to list SetFromRwFrustum
+// @0x82839FA8 as BLOCKED on "its rodata vperm masks are NOT in the dossier ...
+// the exact AoS->SoA lane mapping cannot be reproduced without them", and the
+// body below was written to an ASSUMED identity mapping on that basis. Both
+// halves of that claim were false. ALL EIGHT masks read straight out of the
+// `.i64` (see SetFromRwFrustum's own banner), and they encode a real
+// PERMUTATION, not identity -- which silently corrupted every frustum in the
+// game until CalcVertices became the first permutation-sensitive reader and
+// turned it into visible NaNs. Lesson for the next agent: "the export has no
+// data section" is a statement about the EXPORT, never about the database.
 // ============================================================================
 
 namespace CgsGeometric
@@ -281,53 +284,78 @@ namespace CgsGeometric
     //
     // Transpose the SIX world-space camera planes (CameraRwFrustum, each stored
     // [Nx, Ny, Nz, D] with `dot3(N, p) == D` and N pointing INTO the view volume)
-    // into the EIGHT swizzled SoA lanes this class stores.
+    // into the EIGHT swizzled SoA lanes this class stores, negated (S = -plane,
+    // the form VectorToPlane @0x82840DB0 un-negates).
     //
-    // The X360 does the AoS->SoA transpose with eight `vperm` control vectors
-    // loaded from rodata (unk_82CDA3F0, unk_82CDADB0/C0/D0/E0/F0, unk_82CDB430/450);
-    // the exports carry no data section, so those masks cannot be read back.
-    // They are NOT needed: the lane MEANING is pinned exactly, from both readers of
-    // the stored form --
-    //   * GetPlaneByIndex / SetPlaneByIndex @0x8274EFE8 / @0x827BAA48 read/write
-    //     component c of plane p at maSwizzledPlanes[(p >= 4 ? 4 : 0) + c] lane (p & 3);
-    //   * IsSphereInFrustum @0x828AF020 and LooseOctree::FrustumTestEntities
-    //     @0x828B1CA0 both evaluate
-    //         d = S0*cx + S1*cy + S2*cz - S3   (lanes = planes 0..3)
-    //         d = S4*cx + S5*cy + S6*cz - S7   (lanes = planes 4..7)
-    //     and reject when any lane's d exceeds the sphere radius,
-    // and from VectorToPlane @0x82840DB0, which recovers a plane by NEGATING the
-    // stored lane. So the stored lane is -(plane): S = -N, and the reject test
-    // `-dot3(N,c) + D > r` is exactly `dot3(N,c) - D < -r`, i.e. "the sphere is
-    // entirely on the outside half-space" for an inward-pointing N -- which is what
-    // the camera writers produce. Whichever intra-batch lane a plane lands in is
-    // unobservable (every lane must pass), so the natural identity mapping is used.
+    // ⭐⭐ IT PERMUTES. The RW slot order is NOT the stored slot order, and this
+    // body asserted identity from 2026-07-28 until 2026-08-12. Nothing caught it
+    // because every reader that existed then (IsSphereInFrustum,
+    // LooseOctree::FrustumTestEntities, FrustumTestVp) evaluates ALL eight lanes
+    // and ORs the rejects -- permutation-invariant by construction. CalcVertices
+    // @0x82840DF8 is the first permutation-SENSITIVE reader, and under identity
+    // storage it paired near-with-left and far-with-top: two of its eight plane
+    // triples became singular (NaN at vertex 2 and 6) and the other six solved
+    // finite but geometrically WRONG. The silent six mattered as much as the NaN.
     //
-    // The two spare lanes (the frustum has 6 planes, the SoA batch holds 8) are
-    // zeroed: a zero plane gives d == 0, and 0 > r is false for any r >= 0, so a
-    // pad lane can never reject. That is the only value that keeps the 8-lane batch
-    // equivalent to the 6-plane frustum, so it is forced rather than guessed.
+    // THE MAPPING, READ OFF THE ASM (RW source index -> stored slot):
+    //     slot 0 <- RW2   slot 1 <- RW4   slot 2 <- RW3   slot 3 <- RW5
+    //     slot 4 <- RW1   slot 5 <- RW0   slot 6 <- RW1   slot 7 <- RW0
+    //
+    // HOW. The eight `stvx128`s at 0x8283A05C..0x8283A114 each combine two
+    // `vperm`s with `vsldoi(A, B, 8)` = (A.w2, A.w3, B.w0, B.w1). Every mask came
+    // out of the .i64 (the JSON export has no data section -- the same recovery
+    // the CalcVertices banner describes):
+    //     unk_82CDA3F0 = (A.w0, B.w0, A.w0, A.w0)   unk_82CDADB0 = (A.w0, A.w0, A.w0, B.w0)
+    //     unk_82CDADC0 = (A.w1, B.w1, A.w0, A.w0)   unk_82CDADD0 = (A.w0, A.w0, A.w1, B.w1)
+    //     unk_82CDADE0 = (A.w2, B.w2, A.w0, A.w0)   unk_82CDADF0 = (A.w0, A.w0, A.w2, B.w2)
+    //     unk_82CDB430 = (A.w0, A.w0, A.w3, B.w3)   unk_82CDB450 = (A.w3, B.w3, A.w0, A.w0)
+    // and all eight `vsldoi` immediates decode to SHB=8 from the raw words (IDA
+    // renders the immediate as a register here too -- 0x8283A048 = 0x10E63A2C,
+    // bits 22..25 = 1000). The batch split alone already disproves identity: the
+    // loads are v13=RW0, v0=RW1, v12=RW2, v10=RW3, v11=RW4, v9=RW5, and BATCH 0
+    // (this+0x00..0x30) is built only from {v12,v11,v10,v9} = RW{2,4,3,5} while
+    // BATCH 1 (this+0x40..0x70) is built only from {v0,v13} = RW{1,0}. Resolving
+    // the masks then gives each lane 0 exactly:
+    //     lane0 = vsldoi(vperm(v12,v11,ADB0), vperm(v10,v9,A3F0), 8)
+    //           = (-RW2.x, -RW4.x, -RW3.x, -RW5.x)
+    // and the other three components repeat it with the .w1/.w2/.w3 mask pairs.
+    //
+    // ⭐ THREE INDEPENDENT ARTIFACTS AGREE. With the RW order both camera writers
+    // emit (CgsCamera.h:52 -- near, far, left, right, top, bottom) this asm
+    // permutation reads out as
+    //     slot0=left  slot1=top  slot2=right  slot3=bottom  slot4=far  slot5=near
+    // which is the DecFIGS `PlaneId` enum (CgsFrustum.h:50) VALUE FOR VALUE. The
+    // asm was decoded without reference to the enum, so the enum, the camera
+    // writers' plane order, and this permutation each corroborate the other two.
+    //
+    // ⚠ THE PAD LANES ARE NOT ZERO -- they DUPLICATE far and near. Slots 6/7 get
+    // RW1/RW0 again, from the same `(A.w0,A.w0,A.w1,B.w1)`-style mask pairs that
+    // fill 4/5 (batch 1's two vperm sources are both {v0,v13}, so its four lanes
+    // can only ever be far/near/far/near). The previous body zeroed them on the
+    // argument that "a zero plane can never reject, so it is forced rather than
+    // guessed" -- the reasoning was sound but the premise was not, and the console
+    // simply re-applies far/near, which rejects exactly when slots 4/5 already do.
+    // Both are equivalent for every all-lane culling reader, but they are NOT
+    // equivalent for GetPlaneByIndex(6)/(7), which on console returns a real
+    // plane. Reproduce the binary.
     // ------------------------------------------------------------------------
     void Frustum::SetFromRwFrustum(const CgsGraphics::CameraRwFrustum& lrRw)
     {
-        for (u32 luLane = 0; luLane < 4; ++luLane)
-        {
-            // Batch 0 -- planes 0..3 (near / far / left / right).
-            const Vector4& lrPlaneA = lrRw.maPlanes[luLane];
-            LaneSet(maSwizzledPlanes[0], luLane, -lrPlaneA.x);
-            LaneSet(maSwizzledPlanes[1], luLane, -lrPlaneA.y);
-            LaneSet(maSwizzledPlanes[2], luLane, -lrPlaneA.z);
-            LaneSet(maSwizzledPlanes[3], luLane, -lrPlaneA.w);
+        // Stored slot -> CameraRwFrustum::maPlanes index. See the banner: this is
+        // the whole content of the eight vperm/vsldoi stores.
+        static const u32 KAU_RW_SOURCE_FOR_SLOT[8] = { 2u, 4u, 3u, 5u, 1u, 0u, 1u, 0u };
 
-            // Batch 1 -- planes 4..5 (top / bottom); lanes 2 and 3 are the pad.
-            const bool lbReal = (luLane < 2);
-            const f32  lfNx = lbReal ? -lrRw.maPlanes[4 + luLane].x : 0.0f;
-            const f32  lfNy = lbReal ? -lrRw.maPlanes[4 + luLane].y : 0.0f;
-            const f32  lfNz = lbReal ? -lrRw.maPlanes[4 + luLane].z : 0.0f;
-            const f32  lfD  = lbReal ? -lrRw.maPlanes[4 + luLane].w : 0.0f;
-            LaneSet(maSwizzledPlanes[4], luLane, lfNx);
-            LaneSet(maSwizzledPlanes[5], luLane, lfNy);
-            LaneSet(maSwizzledPlanes[6], luLane, lfNz);
-            LaneSet(maSwizzledPlanes[7], luLane, lfD);
+        for (u32 luSlot = 0; luSlot < 8; ++luSlot)
+        {
+            const Vector4& lrRwPlane = lrRw.maPlanes[KAU_RW_SOURCE_FOR_SLOT[luSlot]];
+
+            const u32 luBatch = (luSlot >= 4) ? 4u : 0u;   // 4 SoA lanes per batch
+            const u32 luLane  = luSlot & 3u;
+
+            LaneSet(maSwizzledPlanes[luBatch + 0], luLane, -lrRwPlane.x);
+            LaneSet(maSwizzledPlanes[luBatch + 1], luLane, -lrRwPlane.y);
+            LaneSet(maSwizzledPlanes[luBatch + 2], luLane, -lrRwPlane.z);
+            LaneSet(maSwizzledPlanes[luBatch + 3], luLane, -lrRwPlane.w);
         }
     }
 
