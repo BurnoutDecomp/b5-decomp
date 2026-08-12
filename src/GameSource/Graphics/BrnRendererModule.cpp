@@ -51,6 +51,11 @@ EA::Jobs::Job::Job(s32 /*liPriority*/) {}
 // [diag] present counter (device.cpp) - stamps the trace lines with their frame.
 namespace renderengine { extern u32 guPresentCount; }
 
+// [DIAG carverts] defined in pc/gcm/renderengine/XenonD3D9Shims.cpp -- tags the car mesh walks
+// so that TU's exploding-geometry probe can separate a car draw from the world meshes around it.
+// DELETE together with the probe.
+namespace renderengine { void WorldDraw_SetPassTag(u32 luTag); }
+
 // High-res frame timer (CgsTimeUtils.cpp), forward-declared - drives the thread-monitor health.
 namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
 
@@ -546,10 +551,20 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
     // started and nothing else ever rebinds it. See ShadowPassPCLeaf.h.
     renderengine::PCSurfaceBracket_Save();
 
+    // [FLAG PC bring-up probe] draw-call snapshot for the [shadow-fetch] line below.
+    const u64 luDrawCallsBeforePass = renderengine::WorldDrawCallCount();
+    u32       lauCascadeDrawCalls[3] = { 0u, 0u, 0u };
+
     for (s32 liCascade = 0; liCascade < 3; ++liCascade)
     {
         mShadowMapRenderManager.BeginRenderShadowMap(liCascade, /*lbClear*/ true,
                                                      &mAllocatedRenderTargets);
+
+        // [FLAG PC bring-up probe] bracket this cascade's draws in an occlusion query. See
+        // ShadowPassPCLeaf.h -- this is the ground truth for "is the map being written".
+        // Issued AFTER the clear so the clear's own fill is not counted.
+        const u64 luDrawCallsBeforeCascade = renderengine::WorldDrawCallCount();
+        renderengine::ShadowProbe_Begin(static_cast<u32>(liCascade));
 
         for (s32 liSlot = 0; liSlot < 2; ++liSlot)
         {
@@ -588,10 +603,93 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
             // bytes are recovered.
         }
 
+        renderengine::ShadowProbe_End(static_cast<u32>(liCascade));
+        lauCascadeDrawCalls[liCascade] =
+            static_cast<u32>(renderengine::WorldDrawCallCount() - luDrawCallsBeforeCascade);
+
         mShadowMapRenderManager.EndRenderShadowMap(liCascade, &mAllocatedRenderTargets);
     }
 
     renderengine::PCSurfaceBracket_Restore();
+
+    // =========================================================================
+    // [FLAG PC bring-up probe] "[shadow-fetch]" -- the shadow-map GROUND TRUTH line.
+    //
+    // Three independent facts, on one line, because the failure modes are only
+    // distinguishable together:
+    //
+    //   fmt=/compare=   which depth format the target actually got, and whether its
+    //                   fetch COMPARES (the Xenos semantic all 92 s15 shaders assume)
+    //                   or returns RAW depth (then `lit *= rawDepth`, and a cleared
+    //                   map reads as "fully lit" -- indistinguishable in the frame
+    //                   from having no shadow map at all).
+    //   s15=            whether the D3D9 runtime really holds a texture at unit 15
+    //                   (asked of the device, not of the engine's own bind cache).
+    //   cN draws/px     per cascade: how many draws were submitted into its band, and
+    //                   how many FRAGMENTS survived the depth test there. px>0 proves
+    //                   the map is written. draws>0 with px==0 means the geometry is
+    //                   being submitted but lands outside the band (viewport, cull
+    //                   mode, or a cascade matrix) -- a completely different bug from
+    //                   draws==0, and the two look identical on screen.
+    //
+    // ⚠ LATCHED ON A SIGNATURE, never on a `static bool` one-shot (that fires on the
+    // loading screen, before the world exists, and then never again -- this project's
+    // most repeated diagnostic bug). The latch is the zero/non-zero pattern plus a
+    // power-of-two bucket of each pixel count, so it reprints when something
+    // meaningful changes and stays quiet while the camera merely moves.
+    // =========================================================================
+    {
+        u32 lauPixels[3] = { 0u, 0u, 0u };
+        u32 lauHave[3]   = { 0u, 0u, 0u };
+        for (u32 luCascade = 0; luCascade < 3u; ++luCascade)
+        {
+            lauHave[luCascade] =
+                renderengine::ShadowProbe_LastPixels(luCascade, &lauPixels[luCascade]) ? 1u : 0u;
+        }
+
+        const bool lbSampler15  = renderengine::ShadowProbe_TextureBound(15u);
+        const u32  luFormat     = renderengine::ShadowDepthFormat();
+        const bool lbHwCompare  = renderengine::ShadowDepthFormatIsHardwareCompare();
+
+        // Power-of-two bucket: 0 stays 0, everything else collapses to its magnitude, so a
+        // camera pan does not reprint the line but "this cascade stopped drawing" does.
+        u32 luSignature = (lbSampler15 ? 1u : 0u) | (lbHwCompare ? 2u : 0u);
+        for (u32 luCascade = 0; luCascade < 3u; ++luCascade)
+        {
+            u32 luBucket = 0u;
+            for (u32 luValue = lauPixels[luCascade]; luValue != 0u; luValue >>= 1)
+                ++luBucket;
+            u32 luDrawBucket = 0u;
+            for (u32 luValue = lauCascadeDrawCalls[luCascade]; luValue != 0u; luValue >>= 1)
+                ++luDrawBucket;
+            luSignature = (luSignature * 131u) + (luBucket * 37u) + luDrawBucket + lauHave[luCascade];
+        }
+
+        static u32 suLastSignature = 0xFFFFFFFFu;
+        if (luSignature != suLastSignature && CgsDev::Log::gpDebugPrint != 0)
+        {
+            suLastSignature = luSignature;
+            *CgsDev::Log::gpDebugPrint
+                << "[shadow-fetch] fmt=0x" << static_cast<s32>(luFormat)
+                << " compare=" << (lbHwCompare ? "HW" : "RAW")
+                << " s15=" << (lbSampler15 ? 1 : 0)
+                << " passDraws=" << static_cast<s32>(renderengine::WorldDrawCallCount()
+                                                     - luDrawCallsBeforePass);
+            for (u32 luCascade = 0; luCascade < 3u; ++luCascade)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << " c" << static_cast<s32>(luCascade)
+                    << "(draws=" << static_cast<s32>(lauCascadeDrawCalls[luCascade])
+                    << " px=";
+                if (lauHave[luCascade] != 0u)
+                    *CgsDev::Log::gpDebugPrint << static_cast<s32>(lauPixels[luCascade]);
+                else
+                    *CgsDev::Log::gpDebugPrint << "pending";
+                *CgsDev::Log::gpDebugPrint << ")";
+            }
+            *CgsDev::Log::gpDebugPrint << "\n";
+        }
+    }
 #endif  // BRN_SHADOW_MAP_TARGET_AVAILABLE
 }
 
@@ -699,7 +797,11 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
 
         if (mbRenderCarsOpaque)
         {
+            // [DIAG carverts] tag the walk so the D3D9 leaf's probe can tell a CAR draw from
+            // the world meshes around it. DELETE with the probe in XenonD3D9Shims.cpp.
+            renderengine::WorldDraw_SetPassTag(19u);
             mSingleBufferedDispatchFrame.GetList(19)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+            renderengine::WorldDraw_SetPassTag(0u);
         }
         if (mbRenderWorldOpaque)
         {
@@ -737,7 +839,10 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
         }
         if (mbRenderCarsTransparent)
         {
+            // [DIAG carverts] see the list-19 tag above. DELETE with the probe.
+            renderengine::WorldDraw_SetPassTag(20u);
             mSingleBufferedDispatchFrame.GetList(20)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+            renderengine::WorldDraw_SetPassTag(0u);
         }
     }
 
@@ -985,6 +1090,15 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         if (lpShadowBuffer != 0 && lpShadowBuffer->GetRenderTarget() != 0)
         {
             shadow::Device::SetResource(lpShadowBuffer->GetDepthTexture(), 15u);
+
+            // FLAG PC-platform leaf: the SAMPLER half of the console's bind. sub_8227D158
+            // installs a renderengine::TextureState (filter + address + comparison) alongside
+            // the resource; shadow::Device::SetResource is the resource-only entry point, and
+            // it CACHES -- once the texture pointer stops changing it makes no D3D call at all,
+            // so a sampler state set inside it would be applied once and then never refreshed.
+            // Applying it here, unconditionally, every frame is the honest stand-in until
+            // Construct's TextureState pair lands. See ShadowPassPCLeaf.h.
+            renderengine::ShadowSampler_ApplyState(15u);
         }
 #endif
 

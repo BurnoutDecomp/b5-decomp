@@ -137,6 +137,14 @@ namespace
     u32                          suVertexDec3nCount = 0;
     u16                          sau16VertexDec3nOffsets[16] = {};
     bool                         sbWorldDeclarationValid = false;
+    // [DIAG carverts] which of the two publishers bound the current stream: the DISPATCH path
+    // (WorldVd32_GetDeclaration + WorldDraw_SetVertexSource) or the Xenon FAST-SET path
+    // (D3DDevice_SetStreamSource -> WorldDraw_SetVertexSourceRaw). DELETE with the probe.
+    bool                         sbVertexSourceFastSet = false;
+    // [DIAG carverts] the pass the renderer is currently walking: 19 == CARS OPAQUE,
+    // 20 == CARS TRANSPARENT, 0 == anything else. Set by BrnRendererModule::RenderWorldPasses
+    // so a probe can separate a CAR draw from the world meshes around it. DELETE with the probe.
+    u32                          suPassTag = 0;
 
     // Some D3D9 drivers (notably current NVIDIA drivers) do not expose
     // D3DDTCAPS_DEC3N. DrawIndexedPrimitiveUP already copies the submitted vertex
@@ -522,6 +530,66 @@ namespace
     // has to drop back to the fallback can restore it after a real-constant upload.
     f32         safLastWvp[16] = { 0 };
     bool        sbHaveLastWvp = false;
+
+    // [FLAG PC bring-up probe] submitted world draw count -- see the increment site in
+    // WorldDraw_IndexedUP and renderengine::WorldDrawCallCount below.
+    u64         guWorldDrawCalls = 0;
+
+    // True between ShadowPass_BeginScope/EndScope: the caster draws of the shadow-map pass.
+    // Read only by the env-gated cull/depth-bias experiment in WorldDraw_IndexedUP.
+    bool        sbShadowPassActive = false;
+
+    // =========================================================================
+    // [FLAG PC bring-up probe] the CLIP-SPACE TALLY for the shadow pass.
+    //
+    // The occlusion probe answered "the casters rasterise nothing"; this answers WHY,
+    // by classifying where the geometry actually lands. Every caster draw's first few
+    // referenced vertices are pushed through the record's own baked WVP (the same rows
+    // SetObjectTransformPC just handed the fallback shader) and bucketed:
+    //
+    //   behindW      w <= 0            -- the vertex is behind the light's eye plane
+    //   outZNear     z < 0             -- in front of the shadow near plane
+    //   outZFar      z > w             -- past the shadow far plane
+    //   outXY        |x| > w or |y|>w  -- outside the cascade's X/Y extent
+    //   inside       none of the above
+    //
+    // Those five are mutually exclusive in that order, so the tally reads as a single
+    // cause rather than a fog of overlapping conditions. A pass where every vertex is
+    // outZFar is a near/far problem; all-outXY is an extent/matrix problem; all-behindW
+    // is a light-direction problem; all-inside with px==0 means the geometry IS in the
+    // volume and the loss is downstream (cull, depth test, or -- since the REAL vertex
+    // shader does not use this WVP but `world` x `ViewProjectionModified` -- the constant
+    // block the real programs were given is not the cascade's).
+    //
+    // The device state at the cascade's FIRST caster draw is captured alongside, because
+    // "which viewport/scissor/cull/depth state was actually in force" is otherwise pure
+    // inference: the material walk rebinds all of them per technique
+    // (Xbox2SetRasterizerStateLowLevelShadowed / ...DepthStencil...), so whatever
+    // BeginRenderShadowMap set is NOT necessarily what the draws ran under.
+    //
+    // DELETE with the rest of the shadow bring-up probes.
+    // =========================================================================
+    struct ShadowClipTally
+    {
+        u32  muSampled;
+        u32  muInside;
+        u32  muOutXY;
+        u32  muOutZNear;
+        u32  muOutZFar;
+        u32  muBehindW;
+        u32  muNoWvp;
+
+        bool mbStateCaptured;
+        u32  muVpX, muVpY, muVpW, muVpH;
+        f32  mfVpMinZ, mfVpMaxZ;
+        s32  miScissorL, miScissorT, miScissorR, miScissorB;
+        u32  muScissorEnable;
+        u32  muZEnable, muZWrite, muZFunc, muCull, muColourWrite;
+    };
+
+    const u32      KU_SHADOW_TALLY_SLOTS = 4u;   // 3 cascades + the world-pass control
+    ShadowClipTally saShadowClip[KU_SHADOW_TALLY_SLOTS] = {};
+    u32             suShadowClipSlot = 0xFFFFFFFFu;
 }
 
 namespace renderengine
@@ -762,6 +830,18 @@ namespace renderengine
             std::memcpy(&luStateSlot, lpSampler + 0x10, 4);
             if (lu16Scope != 0 || luStateSlot == 0 || lu16Unit >= 16u)
                 continue;
+
+            // [DIAG] unit 15 is the SHADOW MAP's, bound once a frame by
+            // BrnRendererModule::Render (X360 Render:536-542) outside any material. A
+            // material-scope sampler landing there would silently replace the shadow map for
+            // the rest of the frame -- the exact failure that looks like "shadows stopped
+            // working half way down the pass list". Report it if it ever happens; do NOT
+            // suppress the bind (that would be inventing a rule the console does not have).
+            if (lu16Unit == 15u)
+            {
+                LogOnce("mats15", "[WorldSamplers] a MATERIAL-scope sampler claims unit 15 -"
+                                  " it overwrites the shadow map bind\n");
+            }
 
             const u8* const lpState = reinterpret_cast<const u8*>(static_cast<uintptr_t>(luStateSlot));
             u32 luRasterSlot;
@@ -1200,9 +1280,13 @@ namespace renderengine
         spIndexSource = static_cast<const IndexBufferHeader32*>(lpIndexBufferHeader);
     }
 
+    // The DISPATCH path's publisher: `luStride` is the EXPANDED stride WorldVd32_GetDeclaration
+    // just returned, and the three DEC3N fields it left in the suLastDecl* trio describe the very
+    // same declaration. The two halves must be published together -- see the raw variant below.
     void WorldDraw_SetVertexSource(const void* lpVertexBufferHeader, u32 luStride)
     {
         spVertexSource = static_cast<const VertexBufferHeader32*>(lpVertexBufferHeader);
+        sbVertexSourceFastSet = false;                 // [DIAG carverts] which publisher ran
         suVertexStride = luStride;
         suVertexSourceStride = suLastDeclSourceStride;
         suVertexDec3nCount   = suLastDeclDec3nCount;
@@ -1210,7 +1294,55 @@ namespace renderengine
                     sizeof(sau16VertexDec3nOffsets));
     }
 
+    // ⭐ FIXED 2026-08-12 (exploding-geometry wave). The FAST-SET path's publisher.
+    //
+    // THE BUG: D3DDevice_SetStreamSource -- the Xenon fast-set binder the sky dome, MeshHelper,
+    // the Lion particle renderer, XCam and shadow::Device's own stream-array walk all go through
+    // -- used to call WorldDraw_SetVertexSource above. That takes the stride from its CALLER but
+    // reads the source stride and the whole DEC3N expansion plan out of the suLastDecl* trio,
+    // which ONLY WorldVd32_GetDeclaration ever writes. Nothing on the fast-set path goes through
+    // that function (its declarations are built by D3DDevice_CreateVertexDeclaration, a different
+    // function that maps DEC3N straight through and expands nothing), so every fast-set draw
+    // silently inherited the expansion plan of whatever DISPATCH mesh was bound last.
+    //
+    // MEASURED, on the frame the car is on screen ([carverts] probe): stride 20 published by the
+    // caller against a stale sourceStride of 24 and a stale dec3nCount of 1 -- a triple that
+    // cannot come from one declaration (the expanded stride is always sourceStride + 8 per DEC3N,
+    // i.e. 32, never 20). Two things then went wrong at once:
+    //   * the vertex COUNT is muSize / sourceStride, so a 990-vertex buffer was reported as 825
+    //     and 388 of the run's indices fell "outside" it; and
+    //   * dec3nCount != 0 sent the buffer through the DEC3N expansion loop, which re-packs each
+    //     vertex reading at a 24-byte source stride and writing ~32 bytes into 20-byte
+    //     destination records -- every vertex stomping the next, and the scratch overrun at the
+    //     end. That is the stretched-ribbon geometry.
+    //
+    // The fast-set path needs a plan that describes ITS OWN buffer: the stride the caller gave,
+    // no expansion. A stride of 0 (the console's "clear the previous binding" call) stays 0 and
+    // the draw path's own early-out catches it.
+    //
+    // ⚠ KNOWN RESIDUAL, deliberately not papered over: because this path performs no expansion,
+    // a fast-set declaration that really does carry a DEC3N element cannot be created on a driver
+    // without D3DDTCAPS_DEC3N -- CreateVertexDeclaration fails, sbWorldDeclarationValid goes
+    // false and the draw is SKIPPED. Skipping is honest; drawing it through another mesh's plan
+    // was not. Give this path its own descriptor-driven expansion when one of those meshes needs
+    // it on such a driver.
+    void WorldDraw_SetVertexSourceRaw(const void* lpVertexBufferHeader, u32 luStride)
+    {
+        spVertexSource        = static_cast<const VertexBufferHeader32*>(lpVertexBufferHeader);
+        sbVertexSourceFastSet = true;                  // [DIAG carverts] which publisher ran
+        suVertexStride        = luStride;
+        suVertexSourceStride  = luStride;
+        suVertexDec3nCount   = 0;
+        std::memset(sau16VertexDec3nOffsets, 0, sizeof(sau16VertexDec3nOffsets));
+    }
+
     // The technique's primitive-reset render state, republished on every technique change.
+    // [DIAG carverts] see suPassTag. DELETE with the probe.
+    void WorldDraw_SetPassTag(u32 luTag)
+    {
+        suPassTag = luTag;
+    }
+
     void WorldDraw_SetPrimitiveReset(bool lbEnabled, u32 luResetIndex)
     {
         spResetEnabled = lbEnabled;
@@ -1252,6 +1384,77 @@ namespace renderengine
         const UINT luNumVertices = spVertexSource->muSize / suVertexSourceStride;
         if (luBaseVertexIndex >= luNumVertices)
             return;
+
+        // ---- [DIAG carverts 2026-08-12] THE EXPLODING-GEOMETRY PROBE --------------------
+        // ⛔ DELETE-WHEN the car body panels are confirmed clean on a booted run.
+        //
+        // The car draws long stretched silver ribbons out of its panels. Only two things in
+        // this leaf can do that to geometry whose object-space vertices and whose WVP are both
+        // already known-good (the [carrender] witness proves the part matrices, and the wheels
+        // -- same fallback pair, same WVP channel -- land correctly):
+        //   (a) an index value OUTSIDE the vertex buffer, which D3D9 UP fetches as whatever
+        //       follows the buffer -> one vertex of the triangle flies off; and
+        //   (b) a triangle STRIP whose runs were never cut, i.e. the run carries the primitive
+        //       reset value but the bound rasteriser state left the reset DISABLED, so the
+        //       expansion below is skipped and the end of one run is stitched to the start of
+        //       the next -> exactly a long thin ribbon.
+        // Both are self-selecting, so this probe reports the CONDITION rather than a sample:
+        // it stays silent on a clean draw and names the offender on a broken one.
+        //
+        // LATCHED ON THE SIGNATURE, never a "printed once" bool (project lesson): a one-shot
+        // here fires on the boot loading screen, ~200 log lines before a car exists.
+        if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            u32 luOutOfRange = 0, luResetValues = 0, luMaxIndex = 0;
+            for (u32 luI = 0; luI < luIndexCount; ++luI)
+            {
+                const u32 luV = lb32Bit ? reinterpret_cast<const u32*>(lpIndices)[luI]
+                                        : reinterpret_cast<const u16*>(lpIndices)[luI];
+                if (luV == suResetIndex) { ++luResetValues; continue; }
+                if (luV > luMaxIndex) luMaxIndex = luV;
+                if (luV >= luNumVertices) ++luOutOfRange;
+            }
+
+            const bool lbUncutStrip = (lePrim == D3DPT_TRIANGLESTRIP)
+                                   && (luResetValues != 0) && !spResetEnabled;
+            if (luOutOfRange != 0 || lbUncutStrip)
+            {
+                // One line per distinct (cause, primitive, stride) signature, budgeted.
+                static u32 suSignatures[16] = {};
+                static u32 suSignatureCount = 0;
+                const u32  luSignature = (lbUncutStrip ? 0x80000000u : 0u)
+                                       | ((luOutOfRange != 0) ? 0x40000000u : 0u)
+                                       | (sbVertexSourceFastSet ? 0x20000000u : 0u)
+                                       | (static_cast<u32>(lePrim) << 16)
+                                       | (suVertexStride & 0xFFFFu);
+                bool lbSeen = false;
+                for (u32 luS = 0; luS < suSignatureCount; ++luS)
+                    if (suSignatures[luS] == luSignature) { lbSeen = true; break; }
+                if (!lbSeen && suSignatureCount < 16u)
+                {
+                    suSignatures[suSignatureCount++] = luSignature;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[carverts] " << (lbUncutStrip ? "UNCUT STRIP" : "in-range")
+                        << (luOutOfRange != 0 ? " + OUT-OF-RANGE INDICES" : "")
+                        << " via " << (sbVertexSourceFastSet ? "FAST-SET" : "dispatch")
+                        << " clipOrigin (" << safLastWvp[12] << ", " << safLastWvp[13]
+                        << ", " << safLastWvp[14] << ", " << safLastWvp[15] << ")"
+                        << ": prim " << static_cast<s32>(lePrim)
+                        << " indices " << static_cast<s32>(luIndexCount)
+                        << " resetEnabled " << (spResetEnabled ? 1 : 0)
+                        << " resetIndex 0x" << static_cast<s32>(suResetIndex)
+                        << " resetValuesInRun " << static_cast<s32>(luResetValues)
+                        << " maxIndex " << static_cast<s32>(luMaxIndex)
+                        << " bufferVerts " << static_cast<s32>(luNumVertices)
+                        << " outOfRange " << static_cast<s32>(luOutOfRange)
+                        << " stride " << static_cast<s32>(suVertexStride)
+                        << "/" << static_cast<s32>(suVertexSourceStride)
+                        << " dec3n " << static_cast<s32>(suVertexDec3nCount)
+                        << " baseVertex " << static_cast<s32>(luBaseVertexIndex)
+                        << " startIndex " << static_cast<s32>(luStartIndex) << "\n";
+                }
+            }
+        }
 
         const u8* lpVertices = nullptr;
         if (suVertexDec3nCount != 0)
@@ -1305,6 +1508,79 @@ namespace renderengine
         {
             lpVertices = static_cast<const u8*>(lpVertexData)
                        + static_cast<size_t>(luBaseVertexIndex) * suVertexSourceStride;
+        }
+
+        // ---- [DIAG carverts B] THE CAR-PASS OBJECT-SPACE EXTENT WITNESS -----------------
+        // ⛔ DELETE-WHEN the car body panels are confirmed clean on a booted run.
+        //
+        // Probe A (above) cleared the sky dome, but stretched sheets survive around the car,
+        // and A is silent on them -- so their indices are IN RANGE and their strips ARE cut.
+        // That leaves one question, and this answers it directly: are the VERTEX BYTES being
+        // read correctly? It decodes POSITION for every vertex this draw references and reports
+        // the object-space bounding box. A body panel is at most a couple of metres across, so
+        // a car-pass draw whose own vertices span tens of metres is being read through the wrong
+        // stride or the wrong element offset -- and one whose box is sane exonerates the vertex
+        // path entirely and moves the hunt to the transform or the shader.
+        //
+        // Runs ONLY inside the tagged car passes (lists 19/20), so it costs the world nothing.
+        // POSITION is assumed to be element 0 at byte 0 -- the same assumption the wheel NDC
+        // diag above already relies on; the printed stride lets that be checked.
+        if (suPassTag != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            f32 lafMin[3] = {  3.0e38f,  3.0e38f,  3.0e38f };
+            f32 lafMax[3] = { -3.0e38f, -3.0e38f, -3.0e38f };
+            u32 luSampled = 0;
+            for (u32 luI = 0; luI < luIndexCount; ++luI)
+            {
+                const u32 luV = lb32Bit ? reinterpret_cast<const u32*>(lpIndices)[luI]
+                                        : reinterpret_cast<const u16*>(lpIndices)[luI];
+                if (luV == suResetIndex || luV >= luNumVertices)
+                    continue;
+                f32 lafP[3];
+                std::memcpy(lafP, lpVertices + static_cast<size_t>(luV) * suVertexStride,
+                            sizeof(lafP));
+                for (u32 luC = 0; luC < 3u; ++luC)
+                {
+                    if (lafP[luC] < lafMin[luC]) lafMin[luC] = lafP[luC];
+                    if (lafP[luC] > lafMax[luC]) lafMax[luC] = lafP[luC];
+                }
+                ++luSampled;
+            }
+
+            if (luSampled != 0)
+            {
+                f32 lfExtent = lafMax[0] - lafMin[0];
+                if (lafMax[1] - lafMin[1] > lfExtent) lfExtent = lafMax[1] - lafMin[1];
+                if (lafMax[2] - lafMin[2] > lfExtent) lfExtent = lafMax[2] - lafMin[2];
+
+                // Latched on the EXTENT BAND, not on a counter: a run where every part is
+                // sane and a run where one panel spans 40 m print different lines, and the
+                // bands keep the log to a handful of lines however many draws there are.
+                const u32 luBand = (lfExtent < 3.0f)  ? 0u
+                                 : (lfExtent < 10.0f) ? 1u
+                                 : (lfExtent < 50.0f) ? 2u
+                                 : (lfExtent < 500.0f)? 3u : 4u;
+                static bool sabBandSeen[2][5] = {};
+                const u32 luPassSlot = (suPassTag == 20u) ? 1u : 0u;
+                if (!sabBandSeen[luPassSlot][luBand])
+                {
+                    sabBandSeen[luPassSlot][luBand] = true;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[carverts-B] list " << static_cast<s32>(suPassTag)
+                        << " extentBand " << static_cast<s32>(luBand)
+                        << " extent " << lfExtent
+                        << " objBox (" << lafMin[0] << ".." << lafMax[0]
+                        << ", " << lafMin[1] << ".." << lafMax[1]
+                        << ", " << lafMin[2] << ".." << lafMax[2] << ")"
+                        << " verts " << static_cast<s32>(luSampled)
+                        << "/" << static_cast<s32>(luNumVertices)
+                        << " stride " << static_cast<s32>(suVertexStride)
+                        << "/" << static_cast<s32>(suVertexSourceStride)
+                        << " dec3n " << static_cast<s32>(suVertexDec3nCount)
+                        << " prim " << static_cast<s32>(lePrim)
+                        << " realShader " << (sbRealProgramsBound ? 1 : 0) << "\n";
+                }
+            }
         }
 
         // [DIAG wheels] scan the run this draw will actually submit, BEFORE the strip
@@ -1378,11 +1654,197 @@ namespace renderengine
             }
         }
 
+        // ---- [DIAG, env-gated] the shadow-caster cull / depth-bias experiment -------------
+        // OFF unless one of the three variables is set; with none set this block does nothing
+        // and the draw is byte-for-byte what it was.
+        //
+        // WHY IT EXISTS. Once sampler 15 really compares (see ShadowSampler_ApplyState), the
+        // next thing between "no shadows" and "correct shadows" is SHADOW ACNE, and this build
+        // has nothing to prevent it: the shipped vertex shaders apply NO depth bias to the
+        // shadow coordinate (verified across the world VS set -- o3.xyz is the raw
+        // worldPos * ShadowMap_WorldToLight[0] with nothing added), so on the console the bias
+        // must come from the pass's own rasteriser state. That is exactly the bracket
+        // BrnRendererModule::RenderShadowMapPasses parks: sub_82276B38(dword_83010A3C) /
+        // (dword_83010A38), whose two RasterizerState globals are DATA and are not in any IDA
+        // export -- so their cull mode and depth bias are unattested and cannot be written
+        // down honestly. What IS attested is the intent: ShadowMap::Construct sets
+        // maTsmBBInfo[i].mbInvertCullMode = true for all three cascades
+        // (BrnShadowMap.cpp:223, stb r11, 0x23C(r10)) -- the console renders casters with the
+        // cull mode inverted, the classic depth-acne remedy.
+        // These knobs let that be MEASURED without fabricating the constants:
+        //   BRN_SHADOW_CULL=none|cw|ccw    force a cull mode for caster draws
+        //   BRN_SHADOW_BIAS=<float>        D3DRS_DEPTHBIAS for caster draws
+        //   BRN_SHADOW_SLOPEBIAS=<float>   D3DRS_SLOPESCALEDEPTHBIAS for caster draws
+        // Whatever value turns out to be right is still a PARK until the two globals' bytes
+        // are recovered -- a knob that produces a good picture is evidence, not attestation.
+        // ---- [PROBE] the clip-space tally + the cascade's first-draw device state ---------
+        if (sbShadowPassActive && suShadowClipSlot < KU_SHADOW_TALLY_SLOTS)
+        {
+            ShadowClipTally& lrTally = saShadowClip[suShadowClipSlot];
+
+            if (!lrTally.mbStateCaptured)
+            {
+                lrTally.mbStateCaptured = true;
+
+                D3DVIEWPORT9 lViewport;
+                std::memset(&lViewport, 0, sizeof(lViewport));
+                lpDevice->GetViewport(&lViewport);
+                lrTally.muVpX    = lViewport.X;
+                lrTally.muVpY    = lViewport.Y;
+                lrTally.muVpW    = lViewport.Width;
+                lrTally.muVpH    = lViewport.Height;
+                lrTally.mfVpMinZ = lViewport.MinZ;
+                lrTally.mfVpMaxZ = lViewport.MaxZ;
+
+                RECT lScissor;
+                std::memset(&lScissor, 0, sizeof(lScissor));
+                lpDevice->GetScissorRect(&lScissor);
+                lrTally.miScissorL = static_cast<s32>(lScissor.left);
+                lrTally.miScissorT = static_cast<s32>(lScissor.top);
+                lrTally.miScissorR = static_cast<s32>(lScissor.right);
+                lrTally.miScissorB = static_cast<s32>(lScissor.bottom);
+
+                DWORD luState = 0;
+                lpDevice->GetRenderState(D3DRS_SCISSORTESTENABLE, &luState); lrTally.muScissorEnable = luState;
+                lpDevice->GetRenderState(D3DRS_ZENABLE,           &luState); lrTally.muZEnable       = luState;
+                lpDevice->GetRenderState(D3DRS_ZWRITEENABLE,      &luState); lrTally.muZWrite        = luState;
+                lpDevice->GetRenderState(D3DRS_ZFUNC,             &luState); lrTally.muZFunc         = luState;
+                lpDevice->GetRenderState(D3DRS_CULLMODE,          &luState); lrTally.muCull          = luState;
+                lpDevice->GetRenderState(D3DRS_COLORWRITEENABLE,  &luState); lrTally.muColourWrite   = luState;
+            }
+
+            if (!sbHaveLastWvp)
+            {
+                ++lrTally.muNoWvp;
+            }
+            else
+            {
+                for (u32 luK = 0; luK < 3u && luK < luIndexCount; ++luK)
+                {
+                    const u32 luIdx = lb32Bit ? reinterpret_cast<const u32*>(lpIndices)[luK]
+                                              : reinterpret_cast<const u16*>(lpIndices)[luK];
+                    if (luIdx >= luNumVertices)
+                        continue;
+
+                    f32 lafPosition[3];
+                    std::memcpy(lafPosition, lpVertices + luIdx * suVertexStride, sizeof(lafPosition));
+
+                    f32 lafClip[4];
+                    for (u32 luLane = 0; luLane < 4u; ++luLane)
+                    {
+                        lafClip[luLane] = lafPosition[0] * safLastWvp[0 + luLane]
+                                        + lafPosition[1] * safLastWvp[4 + luLane]
+                                        + lafPosition[2] * safLastWvp[8 + luLane]
+                                        +                  safLastWvp[12 + luLane];
+                    }
+
+                    ++lrTally.muSampled;
+                    const f32 lfW = lafClip[3];
+                    if (!(lfW > 0.0f))                              ++lrTally.muBehindW;
+                    else if (lafClip[2] < 0.0f)                     ++lrTally.muOutZNear;
+                    else if (lafClip[2] > lfW)                      ++lrTally.muOutZFar;
+                    else if (lafClip[0] < -lfW || lafClip[0] > lfW
+                          || lafClip[1] < -lfW || lafClip[1] > lfW) ++lrTally.muOutXY;
+                    else                                            ++lrTally.muInside;
+                }
+            }
+        }
+
+        // ---- [DIAG, env-gated] force the FALLBACK program pair for caster draws ----------
+        // The real per-technique vertex shader does NOT consume the WVP the tally above uses:
+        // it computes o0 from `world` x `ViewProjectionModified` (two separate constant
+        // blocks). The FALLBACK pair does use it, at c240. So binding the fallback here is a
+        // clean A/B: if the fallback rasterises pixels where the real programs rasterise none,
+        // the record's baked WVP is right and the constants the real programs were handed are
+        // not the cascade's. Diagnostic only; the next technique bind restores the real pair.
+        if (sbShadowPassActive)
+        {
+            static const char* const spcFallbackVs = std::getenv("BRN_SHADOW_FALLBACKVS");
+            if (spcFallbackVs != nullptr && spcFallbackVs[0] != '0')
+                renderengine::WorldFallbackShader_Bind();
+        }
+
+        DWORD luSavedCull = 0, luSavedBias = 0, luSavedSlopeBias = 0;
+        DWORD luSavedZFunc = 0, luSavedZEnable = 0, luSavedZWrite = 0;
+        bool  lbShadowStateOverridden = false;
+        bool  lbShadowZDefeated       = false;
+        if (sbShadowPassActive)
+        {
+            // BRN_SHADOW_ZALWAYS=1 -- defeat the depth test (and force the test/write on) for
+            // caster draws. This is the single knob that splits the remaining search in two:
+            // if the pixel counts jump, the geometry WAS reaching the band and the depth test
+            // (or an uncleared / wrongly cleared depth buffer) was rejecting it; if they stay
+            // at zero, nothing is rasterising and the cause is upstream of the depth test.
+            static const char* const spcZAlways = std::getenv("BRN_SHADOW_ZALWAYS");
+            if (spcZAlways != nullptr && spcZAlways[0] != '0')
+            {
+                lbShadowZDefeated = true;
+                lpDevice->GetRenderState(D3DRS_ZFUNC,        &luSavedZFunc);
+                lpDevice->GetRenderState(D3DRS_ZENABLE,      &luSavedZEnable);
+                lpDevice->GetRenderState(D3DRS_ZWRITEENABLE, &luSavedZWrite);
+                lpDevice->SetRenderState(D3DRS_ZFUNC,        D3DCMP_ALWAYS);
+                lpDevice->SetRenderState(D3DRS_ZENABLE,      D3DZB_TRUE);
+                lpDevice->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+            }
+
+            static const char* const spcCull  = std::getenv("BRN_SHADOW_CULL");
+            static const char* const spcBias  = std::getenv("BRN_SHADOW_BIAS");
+            static const char* const spcSlope = std::getenv("BRN_SHADOW_SLOPEBIAS");
+            if (spcCull != nullptr || spcBias != nullptr || spcSlope != nullptr)
+            {
+                lbShadowStateOverridden = true;
+                lpDevice->GetRenderState(D3DRS_CULLMODE, &luSavedCull);
+                lpDevice->GetRenderState(D3DRS_DEPTHBIAS, &luSavedBias);
+                lpDevice->GetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, &luSavedSlopeBias);
+
+                if (spcCull != nullptr)
+                {
+                    DWORD luCullMode = D3DCULL_NONE;
+                    if (spcCull[0] == 'c' && spcCull[1] == 'w')       luCullMode = D3DCULL_CW;
+                    else if (spcCull[0] == 'c' && spcCull[1] == 'c')  luCullMode = D3DCULL_CCW;
+                    lpDevice->SetRenderState(D3DRS_CULLMODE, luCullMode);
+                }
+                if (spcBias != nullptr)
+                {
+                    const f32 lfBias = static_cast<f32>(std::atof(spcBias));
+                    DWORD luBiasBits = 0;
+                    std::memcpy(&luBiasBits, &lfBias, sizeof(luBiasBits));
+                    lpDevice->SetRenderState(D3DRS_DEPTHBIAS, luBiasBits);
+                }
+                if (spcSlope != nullptr)
+                {
+                    const f32 lfSlope = static_cast<f32>(std::atof(spcSlope));
+                    DWORD luSlopeBits = 0;
+                    std::memcpy(&luSlopeBits, &lfSlope, sizeof(luSlopeBits));
+                    lpDevice->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, luSlopeBits);
+                }
+            }
+        }
+
         const HRESULT lhrDraw =
             lpDevice->DrawIndexedPrimitiveUP(lePrim, 0, luNumVertices, luPrimCount,
                                              lpIndices,
                                              lb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
                                              lpVertices, suVertexStride);
+
+        if (lbShadowStateOverridden)
+        {
+            lpDevice->SetRenderState(D3DRS_CULLMODE, luSavedCull);
+            lpDevice->SetRenderState(D3DRS_DEPTHBIAS, luSavedBias);
+            lpDevice->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, luSavedSlopeBias);
+        }
+        if (lbShadowZDefeated)
+        {
+            lpDevice->SetRenderState(D3DRS_ZFUNC,        luSavedZFunc);
+            lpDevice->SetRenderState(D3DRS_ZENABLE,      luSavedZEnable);
+            lpDevice->SetRenderState(D3DRS_ZWRITEENABLE, luSavedZWrite);
+        }
+        // [FLAG PC bring-up probe] every submitted world draw, counted. Read by the shadow
+        // pass's [shadow-fetch] line to tell "no draws reached the shadow target" apart from
+        // "draws reached it and rasterised nothing" -- the two have identical symptoms in the
+        // frame and completely different causes. DELETE with the shadow bring-up probes.
+        if (SUCCEEDED(lhrDraw))
+            ++guWorldDrawCalls;
 
         if (lbZDefeated)
             lpDevice->SetRenderState(D3DRS_ZFUNC, luSavedZFunc);
@@ -1631,7 +2093,7 @@ void D3DDevice_SetStreamSource(IDirect3DDevice9* /*lpDeviceArg*/, u32 luStreamNu
                                u32 luStride, u32 /*luFlags*/)
 {
     if (luStreamNumber == 0)
-        renderengine::WorldDraw_SetVertexSource(lpStreamData, luStride);
+        renderengine::WorldDraw_SetVertexSourceRaw(lpStreamData, luStride);
 }
 
 unsigned int D3DDevice_SetTexture(IDirect3DDevice9* /*lpDeviceArg*/, u32 luSampler,
@@ -2166,6 +2628,12 @@ namespace
     RECT               sSavedScissor        = {};
     BOOL               sbSavedScissorEnable = FALSE;
     bool               sbSurfacesSaved      = false;
+
+    // The shadow map's own texture, unbound from sampler 15 for the duration of the pass.
+    // See the READ-WHILE-WRITTEN note in PCSurfaceBracket_Save.
+    IDirect3DBaseTexture9* spSavedShadowSampler = nullptr;
+
+    const u32 KU_SHADOW_SAMPLER_UNIT = 15u;
 }
 
 void PCSurfaceBracket_Save()
@@ -2186,6 +2654,29 @@ void PCSurfaceBracket_Save()
         lpDevice->GetRenderState(D3DRS_SCISSORTESTENABLE, &luScissorEnable);
         sbSavedScissorEnable = static_cast<BOOL>(luScissorEnable);
     }
+
+    // FLAG PC-platform leaf: READ-WHILE-WRITTEN. BrnRendererModule::Render binds the shadow
+    // map's depth texture to sampler 15 (X360 Render:536-542) BEFORE this pass runs, and this
+    // pass then binds the very same surface as the depth-stencil target. On the console those
+    // are two different objects -- the pass writes tiled EDRAM and the sampler reads the
+    // RESOLVED copy -- so the console can leave the bind in place. On PC there is no resolve:
+    // the texture IS the surface, and Direct3D 9 leaves a surface that is simultaneously a
+    // sampler source and the depth-stencil target UNDEFINED (drivers variously ignore the
+    // writes, ignore the reads, or decompress). So unit 15 is parked for the length of the
+    // pass and put back on the way out; the pointer restored is the same one shadow::Device's
+    // resource cache still believes is bound, so the cache stays truthful.
+    // DELETE with the bracket.
+    spSavedShadowSampler = nullptr;
+    if (SUCCEEDED(lpDevice->GetTexture(KU_SHADOW_SAMPLER_UNIT, &spSavedShadowSampler))
+        && spSavedShadowSampler != nullptr)
+    {
+        lpDevice->SetTexture(KU_SHADOW_SAMPLER_UNIT, nullptr);
+    }
+
+    // The bracket already delimits exactly the shadow-map pass, so it is also what marks the
+    // caster draws for the env-gated cull/depth-bias experiment in WorldDraw_IndexedUP.
+    sbShadowPassActive = true;
+
     sbSurfacesSaved = true;
 }
 
@@ -2194,7 +2685,8 @@ void PCSurfaceBracket_Restore()
     IDirect3DDevice9* const lpDevice = Dev();
     if (!sbSurfacesSaved)
         return;
-    sbSurfacesSaved = false;
+    sbSurfacesSaved    = false;
+    sbShadowPassActive = false;
 
     if (lpDevice != nullptr)
     {
@@ -2204,10 +2696,201 @@ void PCSurfaceBracket_Restore()
         lpDevice->SetViewport(&sSavedViewport);
         lpDevice->SetScissorRect(&sSavedScissor);
         lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, sbSavedScissorEnable);
+
+        // Put the shadow map back on sampler 15 (see the READ-WHILE-WRITTEN note in Save) and
+        // re-apply its sampler state, since the unit was cleared underneath it.
+        if (spSavedShadowSampler != nullptr)
+        {
+            lpDevice->SetTexture(KU_SHADOW_SAMPLER_UNIT, spSavedShadowSampler);
+            ShadowSampler_ApplyState(KU_SHADOW_SAMPLER_UNIT);
+        }
     }
+
+    if (spSavedShadowSampler != nullptr)
+    {
+        spSavedShadowSampler->Release();
+        spSavedShadowSampler = nullptr;
+    }
+
+    // ⚠ THE INVALIDATION THAT MAKES THE BRACKET SAFE (added 2026-08-12, shadow-fetch wave).
+    // The two surface binds above go STRAIGHT to D3D9 -- they are a raw restore, not a
+    // Device::SetState -- so the engine's "last state installed" shadow (X360 dword_83010A30)
+    // does not see them and would keep claiming the shadow-map state is still on the device.
+    // The next CgsRenderTarget::SetRenderTargetState / RenderTarget::Begin would then compare
+    // equal, SKIP its bind, and draw into whatever this function just restored. Measured
+    // consequence before the fix: only the FIRST shadow frame reached the shadow map; every
+    // later frame rendered its three cascades into the back buffer's colour and depth.
+    // The console needs no such invalidation because its counterpart of this restore is
+    // BeginRenderAntiAliased, which rebinds THROUGH Device::SetState and keeps the shadow in
+    // step. DELETE this line together with the bracket, when BeginRenderAntiAliased lands.
+    gpLastRenderTargetState = nullptr;
 
     if (spSavedColourSurface != nullptr) { spSavedColourSurface->Release(); spSavedColourSurface = nullptr; }
     if (spSavedDepthSurface  != nullptr) { spSavedDepthSurface->Release();  spSavedDepthSurface  = nullptr; }
+}
+
+// =============================================================================
+// FLAG PC-platform leaf: the SHADOW-MAP sampler state (see the SAMPLE SEMANTICS SEAM
+// banner in ShadowPassPCLeaf.h).
+//
+// The console binds sampler 15 through sub_8227D158 -- the shadow cache's TEXTURE STATE
+// path -- which installs a renderengine::TextureState carrying the filter, the address
+// modes and the comparison, all built once in BrnRendererModule::Construct @0x8240A778.
+// This build has no TextureState objects (they need the render-target pool), so
+// BrnRendererModule binds the texture through shadow::Device::SetResource, which sets the
+// RESOURCE only. Unit 15 therefore keeps whatever it last held -- and nothing else in this
+// build ever touches unit 15, so that is the raw D3D9 default: POINT filter, WRAP address.
+// On a hardware-comparison depth texture POINT defeats the 2x2 PCF the compare exists to
+// give, and WRAP makes a cascade's edge sample bleed round to the opposite edge of the
+// 1x3 atlas. So the state is installed explicitly here, matched to the format that was
+// actually created:
+//
+//   HW-compare (D24X8 / D16)  LINEAR min+mag -- on these formats the LINEAR filter IS the
+//                             PCF: the hardware compares four texels and returns the
+//                             filtered 0..1 fraction, which is what the shipped shaders'
+//                             `mul r0.w, r0.w, rN.x` wants.
+//   RAW (INTZ / DF24 / DF16)  POINT -- filtering raw depth VALUES averages depths, which is
+//                             meaningless; a raw-depth path has to point-sample.
+//
+// CLAMP on both axes in either case (the atlas is a 1x3 vertical strip; a wrapped V would
+// read a different cascade). No mip chain, no sRGB.
+// DELETE when Construct's TextureState pair lands and the console's own bind path is live.
+// =============================================================================
+void ShadowSampler_ApplyState(u32 luUnit)
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr || luUnit >= 16u)
+        return;
+
+    const DWORD leFilter = ShadowDepthFormatIsHardwareCompare() ? D3DTEXF_LINEAR : D3DTEXF_POINT;
+
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER,   leFilter);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER,   leFilter);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER,   D3DTEXF_NONE);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU,    D3DTADDRESS_CLAMP);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV,    D3DTADDRESS_CLAMP);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW,    D3DTADDRESS_CLAMP);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXMIPLEVEL, 0u);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE, FALSE);
+}
+
+// [FLAG PC bring-up probe] see the increment site in WorldDraw_IndexedUP.
+u64 WorldDrawCallCount()
+{
+    return guWorldDrawCalls;
+}
+
+// =============================================================================
+// [FLAG PC bring-up probe] the SHADOW-PASS OCCLUSION PROBE -- ground truth for
+// "is the shadow map actually being WRITTEN?".
+//
+// Nothing else can answer that question on this backend: a D3DPOOL_DEFAULT
+// depth-stencil texture cannot be locked and cannot be StretchRect'd out, so the
+// depth bytes are simply not readable from the CPU. What IS readable is how many
+// fragments the cascade's draws got through the depth test, and that is exactly the
+// question -- a cascade that writes N > 0 pixels has real geometry in its band; a
+// cascade that writes 0 while the world pass draws thousands does not, and then the
+// bug is in the pass (viewport band, cull mode, the matrices the casters are
+// transformed by), not in the sampling.
+//
+// The queries are read ONE FRAME LATE and NON-BLOCKING. A GetData with
+// D3DGETDATA_FLUSH straight after Issue(END) stalls the CPU on the GPU every frame,
+// which would distort the very frame it is measuring; deferring the read costs
+// nothing and the numbers are still per-frame.
+//
+// DELETE with the rest of the shadow bring-up probes.
+// =============================================================================
+namespace
+{
+    const u32 KU_SHADOW_PROBE_CASCADES = KU_SHADOW_TALLY_SLOTS;   // 3 cascades + the control
+
+    IDirect3DQuery9* sapShadowQuery[KU_SHADOW_PROBE_CASCADES]           = {};
+    bool             sabShadowQueryActive[KU_SHADOW_PROBE_CASCADES]     = {};
+    bool             sabShadowQueryPending[KU_SHADOW_PROBE_CASCADES]    = {};
+    u32              sauShadowQueryPixels[KU_SHADOW_PROBE_CASCADES]     = {};
+    bool             sabShadowQueryHaveResult[KU_SHADOW_PROBE_CASCADES] = {};
+}
+
+void ShadowProbe_Begin(u32 luCascade)
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr || luCascade >= KU_SHADOW_PROBE_CASCADES)
+        return;
+
+    // Open this slot's clip-space tally (see the ShadowClipTally banner) and make the draw
+    // path attribute its samples to it. The scope is closed by ShadowProbe_End, so a draw
+    // outside any Begin/End pair is never counted against a cascade.
+    std::memset(&saShadowClip[luCascade], 0, sizeof(saShadowClip[luCascade]));
+    suShadowClipSlot = luCascade;
+
+    // Drain the previous issue first -- a query that is still in flight cannot be re-issued.
+    if (sabShadowQueryPending[luCascade] && sapShadowQuery[luCascade] != nullptr)
+    {
+        DWORD luPixels = 0;
+        if (sapShadowQuery[luCascade]->GetData(&luPixels, sizeof(luPixels), 0) == S_OK)
+        {
+            sauShadowQueryPixels[luCascade]     = static_cast<u32>(luPixels);
+            sabShadowQueryHaveResult[luCascade] = true;
+            sabShadowQueryPending[luCascade]    = false;
+        }
+        else
+        {
+            return;   // still in flight; skip this frame's measurement rather than stall
+        }
+    }
+
+    if (sapShadowQuery[luCascade] == nullptr)
+    {
+        if (FAILED(lpDevice->CreateQuery(D3DQUERYTYPE_OCCLUSION, &sapShadowQuery[luCascade])))
+        {
+            sapShadowQuery[luCascade] = nullptr;
+            LogOnce("shprobe", "[shadow-fetch] occlusion queries unsupported - pixel counts unavailable\n");
+            return;
+        }
+    }
+
+    if (SUCCEEDED(sapShadowQuery[luCascade]->Issue(D3DISSUE_BEGIN)))
+        sabShadowQueryActive[luCascade] = true;
+}
+
+void ShadowProbe_End(u32 luCascade)
+{
+    if (luCascade >= KU_SHADOW_PROBE_CASCADES || !sabShadowQueryActive[luCascade]
+        || sapShadowQuery[luCascade] == nullptr)
+    {
+        return;
+    }
+    sabShadowQueryActive[luCascade] = false;
+    if (SUCCEEDED(sapShadowQuery[luCascade]->Issue(D3DISSUE_END)))
+        sabShadowQueryPending[luCascade] = true;
+}
+
+bool ShadowProbe_LastPixels(u32 luCascade, u32* lpuPixels)
+{
+    if (luCascade >= KU_SHADOW_PROBE_CASCADES || lpuPixels == nullptr
+        || !sabShadowQueryHaveResult[luCascade])
+    {
+        return false;
+    }
+    *lpuPixels = sauShadowQueryPixels[luCascade];
+    return true;
+}
+
+// Is anything actually bound at sampler unit luUnit on the device right now? The bind goes
+// through shadow::Device's cache, so "we called SetResource" is not the same as "the runtime
+// holds a texture there" -- this asks the runtime.
+bool ShadowProbe_TextureBound(u32 luUnit)
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr || luUnit >= 16u)
+        return false;
+
+    IDirect3DBaseTexture9* lpTexture = nullptr;
+    if (FAILED(lpDevice->GetTexture(luUnit, &lpTexture)) || lpTexture == nullptr)
+        return false;
+    lpTexture->Release();
+    return true;
 }
 }
 
