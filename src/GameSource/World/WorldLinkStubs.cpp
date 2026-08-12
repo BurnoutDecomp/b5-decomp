@@ -1869,12 +1869,16 @@ int CgsDev::PerfMonCpu::AddMonitor(char const * lpcName, int liColour, int liMin
 //  which stays.)
 
 // (CgsGeometric::Frustum::SetFromRwFrustum stub RETIRED 2026-07-28, culling wave:
-//  the real body @0x82839FA8 now lives in its X360 home
-//  GameShared/GameClasses/Geometric/Primitives/CgsFrustum.cpp. The rodata vperm
-//  masks the X360 transposes with are unrecoverable from the exports, but the lane
-//  MEANING is pinned exactly by the two readers of the stored form
-//  (IsSphereInFrustum @0x828AF020 / LooseOctree::FrustumTestEntities @0x828B1CA0)
-//  plus VectorToPlane's whole-vector negate -- see the body's banner.)
+//  the real body @0x82839FA8 lives in its X360 home
+//  GameShared/GameClasses/Geometric/Primitives/CgsFrustum.cpp.
+//  ⚠ The note that stood here -- "the rodata vperm masks the X360 transposes with
+//  are unrecoverable from the exports, but the lane MEANING is pinned by the two
+//  readers of the stored form" -- was WRONG on both counts and is RETRACTED
+//  (2026-08-12). All eight masks were read out of the .i64; they encode a
+//  PERMUTATION (RW near/far/left/right/top/bottom -> stored slots 5/4/0/2/1/3)
+//  that the body had flattened to identity, and the pad lanes duplicate far/near
+//  rather than being zero. The permutation-invariant readers cited as the pin
+//  were exactly why the bug stayed invisible. See the body's banner.)
 
 // -------------------------------------------------------------------------
 // CgsGraphics::Camera -- DESTUBBED (2026-07-26 wave): Construct (both overloads,
