@@ -1,6 +1,8 @@
 #ifndef BRN_BLOBBY_SHADOW_MANAGER_H
 #define BRN_BLOBBY_SHADOW_MANAGER_H
 
+#include <cstddef>            // offsetof (layout pins in _AssertLayout below)
+
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3 / Vector3Plus / Vector4 / VecFloat (rw::math::vpu)
 
@@ -32,10 +34,20 @@
 // ---------------------------------------------------------------------------
 
 // Soft-shadow alpha and the per-frame shadow count cap, from the DWARF header.
-static const f32 KF_BLOBBY_SHADOW_ALPHA = 0.0f;  // PLACEHOLDER value: const is named in the DWARF
-                                                 // (BrnBlobbyShadowManager.h:25) but the X360 data
-                                                 // blob holding it is not exported; only Render
-                                                 // (out of scope) consumes it.
+//
+// KF_BLOBBY_SHADOW_ALPHA -- RECOVERED 2026-08-12, value 0.7f, by two INDEPENDENT reads that agree:
+//   1. X360 asm. BrnRendererModule::Construct seeds mfBlobbyShadowAlpha from it:
+//      @0x8240BC8C `lfs f13, -0x2D04(r26)` / `stfs f13, 0x37F4(r31)` with r26 = 0x8203E414
+//      (loaded @0x8240B480, spilled/reloaded via var_1F0), so the source is flt_8203B710 =
+//      0x3F333333 = 0.7f. That the member at +0x37F4 IS the blobby-shadow alpha is confirmed by
+//      BrnGraphics::DebugComponent::OnActivate @0x823F7DF0, which registers `this->0x37F4` as the
+//      debug variable "Blobby Shadow Alpha" with SetRange(0.0f, 1.0f).
+//   2. DecFIGS DWARF. The constant-value record spells it out directly:
+//      `KF_BLOBBY_SHADOW_ALPHA = [63, 51, 51, 51]` == 0x3F333333 == 0.7f.
+// NOTE for the BrnRendererModule owner: BrnRendererModule.h:602 still seeds
+// `mfBlobbyShadowAlpha = 0.0f`; the X360 seeds it from this constant. Not fixed here (that file
+// belongs to another agent this wave).
+static const f32 KF_BLOBBY_SHADOW_ALPHA = 0.7f;  // DWARF :25 (name+value); X360 flt_8203B710
 static const s32 KI_MAX_SHADOWS = 64;            // DWARF :49; AddShadow asm bound (cmpwi 0x40)
 
 class BrnBlobbyShadowManager
@@ -71,6 +83,21 @@ public:
 
         s32         miNumShadows;            // +0x00 : count read/written by AddShadow (lwz/stw 0(this))
         ShadowStruct maShadowPos[KI_MAX_SHADOWS];
+
+        // Never called; pins the pointer-invariant facts AddShadow's addressing depends on.
+        // The asm derives a record address as `this + 0x10 + 64*index` -- i.e. the count word
+        // owns the whole first 16 bytes and the array starts at 0x10 (the stores are spelled
+        // `stvx128 v, this + (count<<6), {0x10,0x20,0x30}` and `stvx128 v1, this, (count+1)<<6`).
+        // Nothing here holds a pointer, so both facts transfer verbatim from the X360 to x64.
+        static void _AssertLayout()
+        {
+            static_assert(offsetof(BrnBlobbyShadowBuffer, maShadowPos) == 0x10,
+                          "maShadowPos @0x10 -- AddShadow addresses record i as this+0x10+64*i");
+            static_assert(sizeof(BrnBlobbyShadowBuffer) == 0x1010,
+                          "buffer stride 0x1010 == 0x10 header + 64 * 0x40 records");
+            static_assert(sizeof(ShadowStruct) == 0x40,
+                          "ShadowStruct == 64 bytes (slwi count, 6)");
+        }
     };
 
     // ---- Remaining DWARF-declared surface (NOT in this TU's ledger; left unbodied) ----
