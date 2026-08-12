@@ -10,6 +10,7 @@
 //   CgsGeometric::Frustum::GetPlaneByIndex        @ 0x8274EFE8
 //   CgsGeometric::Frustum::SetPlaneByIndex        @ 0x827BAA48
 //   CgsGeometric::Frustum::IsSphereInFrustum      @ 0x828AF020
+//   CgsGeometric::Frustum::CalcVertices           @ 0x82840DF8  (2026-08-12)
 //
 // The stored planes live in a struct-of-arrays layout across the 8 x 16-byte
 // maSwizzledPlanes lanes: two batches of four planes, each batch four lanes
@@ -21,6 +22,22 @@
 // so they lower to the per-lane component moves below (the same VMX-de-swizzling
 // precedent as CgsLineTests.cpp / CgsTriangleBox.cpp). Get/Set share one lane
 // mapping, so the round-trip is exact regardless of the intra-batch labelling.
+//
+// ⭐ THE LANE MAPPING IS NOW PROVEN, NOT INFERRED (2026-08-12). CalcVertices
+// @0x82840DF8 de-swizzles the batch back to AoS in the open, and its rodata
+// permute masks WERE recovered -- from the .i64, not the JSON export, which
+// carries no data section (`ida_bytes.get_bytes`, big-endian):
+//     unk_82CDA3C0 = 00010203 00010203 00010203 14151617  -> (A.w0,A.w0,A.w0,B.w1)
+//     unk_82CDA400 = 08090A0B 1C1D1E1F 00010203 00010203  -> (A.w2,B.w3,A.w0,A.w0)
+//     unk_82CDB450 = 0C0D0E0F 1C1D1E1F 00010203 00010203  -> (A.w3,B.w3,A.w0,A.w0)
+// Combined with the vsldoi shift -- SHB=8, decoded from the RAW instruction word
+// (0x82840EA4 = 0x11AA6A2C, bits 22..25 = 1000); IDA misrenders the immediate as
+// "v8", and taking that at face value silently yields a wrong transpose -- each
+// de-swizzle round emits exactly
+//     (lane[b+0].w<k>, lane[b+1].w<k>, lane[b+2].w<k>, lane[b+3].w<k>)
+// i.e. AoS plane k of batch b = (Nx, Ny, Nz, D), then a whole-vector vxor
+// against the 0x80000000 splat. That is byte-for-byte the SoA layout above plus
+// VectorToPlane's negate, independently confirming Get/SetPlaneByIndex.
 //
 // Sibling ledger functions in their own passes (their bodies need collaborators
 // this file cannot ground faithfully):
@@ -70,6 +87,93 @@ namespace CgsGeometric
             case 2:  lrLane.z = lfValue; break;
             default: lrLane.w = lfValue; break;
             }
+        }
+
+        // --------------------------------------------------------------------
+        // The 3x3 solve CalcVertices @0x82840DF8 has INLINED eight times.
+        //
+        // ⚠ THIS IS *NOT* THE SIBLING MEMBER Frustum::IntersectionOf3Planes
+        // @0x828415E8, and must not be re-expressed as a call to it. That one
+        // guards the solve with `|det| <= eps -> return false` (vandc against the
+        // sign splat, vcmpgtfp. against *unk_830393B0, an early `return 0` before
+        // the store). CalcVertices has NO branch of any kind -- straight-line from
+        // 0x82840DF8 to the final `stvx128 v0, r4, 112` -- so routing it through
+        // IntersectionOf3Planes would ADD a degeneracy early-out the binary does
+        // not have. IDA's line info attributes CalcVertices to
+        // SDKs/EATech/include/rw/math/vpu/detail/matrix33_operation_platform_inline.h
+        // (vs vector3_operation_inline.h for IntersectionOf3Planes): the original
+        // source solved it as an rwmath Matrix33 inverse-times-vector, which is
+        // why the console form runs in TRANSPOSED (per-component) registers.
+        //
+        // Given three planes with INWARD normals and `dot3(N, p) == D` (the form
+        // VectorToPlane returns and SetFromRwFrustum stores negated), Cramer:
+        //     p = ( D_a*(N_b x N_c) + D_b*(N_c x N_a) + D_c*(N_a x N_b) ) / det
+        //     det = dot3(N_a, N_b x N_c)
+        //
+        // Evaluation shape kept as the asm has it, because it decides the
+        // rounding:
+        //   * det is the COLUMN-0 cofactor expansion
+        //         a.x*(bxc).x + b.x*(cxa).x + c.x*(axb).x
+        //     (vmsum3fp128 v27, X, cross(Y,Z) over the transposed columns X/Y/Z),
+        //     not the row form dot3(a, bxc). Equal in exact arithmetic, and the
+        //     horizontal vmsum3fp's own summation order is not observable anyway.
+        //   * each cofactor is scaled by 1/det FIRST, then by its D and summed
+        //     (vmulfp128 . vmulfp128 . vmaddfp . vmaddfp).
+        //
+        // 1/det: the console does `vrefp` + TWO Newton-Raphson refinements
+        //     e = 1 - d*x ; x = x*e + x     (x2)
+        // which converges the ~12-bit VMX estimate to full float precision, so the
+        // refinement is emulating exact division rather than being relied on as an
+        // approximation -- project convention is then to use exact host math.
+        // ⚠ NO GUARD, deliberately: the X360 divides bare here (unlike
+        // IntersectionOf3Planes), so a degenerate triple yields inf/NaN on console
+        // too. Do not add a clamp. (Only pathological det == 0 differs at all:
+        // host 1/0 = +inf, console vrefp(0)+Newton = NaN. Neither is a defined
+        // result and no caller reaches it with a real frustum.)
+        // --------------------------------------------------------------------
+        inline Vector4 SolvePlaneTriple(const Vector4& lrA, const Vector4& lrB, const Vector4& lrC)
+        {
+            // Cofactor rows of the normal matrix (rows N_a, N_b, N_c).
+            const f32 lfBCx = lrB.y * lrC.z - lrB.z * lrC.y;
+            const f32 lfBCy = lrB.z * lrC.x - lrB.x * lrC.z;
+            const f32 lfBCz = lrB.x * lrC.y - lrB.y * lrC.x;
+
+            const f32 lfCAx = lrC.y * lrA.z - lrC.z * lrA.y;
+            const f32 lfCAy = lrC.z * lrA.x - lrC.x * lrA.z;
+            const f32 lfCAz = lrC.x * lrA.y - lrC.y * lrA.x;
+
+            const f32 lfABx = lrA.y * lrB.z - lrA.z * lrB.y;
+            const f32 lfABy = lrA.z * lrB.x - lrA.x * lrB.z;
+            const f32 lfABz = lrA.x * lrB.y - lrA.y * lrB.x;
+
+            // Cofactor expansion along column 0 -- vmsum3fp128 of the X column
+            // against cross(Ycolumn, Zcolumn).
+            const f32 lfDet    = lrA.x * lfBCx + lrB.x * lfCAx + lrC.x * lfABx;
+            const f32 lfInvDet = 1.0f / lfDet;
+
+            // Accumulation order is the asm's: BC*D_a, then += CA*D_b, then
+            // += AB*D_c (vmulfp128 -> vmaddfp -> vmaddfp).
+            Vector4 lvPoint;
+            lvPoint.x = ((lfBCx * lfInvDet) * lrA.w
+                       + (lfCAx * lfInvDet) * lrB.w)
+                       + (lfABx * lfInvDet) * lrC.w;
+            lvPoint.y = ((lfBCy * lfInvDet) * lrA.w
+                       + (lfCAy * lfInvDet) * lrB.w)
+                       + (lfABy * lfInvDet) * lrC.w;
+            lvPoint.z = ((lfBCz * lfInvDet) * lrA.w
+                       + (lfCAz * lfInvDet) * lrB.w)
+                       + (lfABz * lfInvDet) * lrC.w;
+
+            // The console works four lanes wide and lane 3 of each assembled
+            // cofactor vector is the SoA duplicate of its Y component
+            // (v26/v30/v29 = (CX[k], CY[k], CZ[k], CY[k]) -- vmrghw/vmrglw of a
+            // 3-wide result into a 4-wide register), so the stored W comes out
+            // EQUAL TO Y, not 0 or 1. `stvx128` writes all sixteen bytes, so
+            // reproduce it. (Every reconstructed caller overwrites W with 1.0f
+            // before transforming, so this is inert downstream -- but it is what
+            // the binary leaves there.)
+            lvPoint.w = lvPoint.y;
+            return lvPoint;
         }
     }
 
@@ -264,5 +368,105 @@ namespace CgsGeometric
                 return false;
         }
         return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // CalcVertices @ 0x82840DF8      (r3 = this, r4 = lapVerts; void, no branches)
+    //
+    // Write the eight frustum corners, each the intersection of a plane triple.
+    // Called by BrnWorld::ShadowMap::ComputeTSMMatrix @0x827BFF58,
+    // ComputeBoundingBoxMatrix @0x827D91B0 and CalculateShadowMapCameras
+    // @0x827DA820 -- the shadow-cascade fitter's only source of frustum corners.
+    //
+    // STAGE 1 -- de-swizzle. The X360 transposes the SoA batches back into six
+    // AoS planes and negates each (VectorToPlane's whole-vector vxor). Which
+    // register ends up holding which plane is pinned by the splat word each
+    // transpose round selects (lvsl(0/4/8/12) -> vspltw word 0 -> a "select word
+    // k" vperm control), and word k of a batch is plane k:
+    //     v13 = -lane[0..3].w0 = plane 0 = PlaneLeft
+    //     v10 = -lane[0..3].w1 = plane 1 = PlaneTop
+    //     v12 = -lane[0..3].w2 = plane 2 = PlaneRight
+    //     v11 = -lane[0..3].w3 = plane 3 = PlaneBottom
+    //     v7  = -lane[4..7].w0 = plane 4 = PlaneFar
+    //     v9  = -lane[4..7].w1 = plane 5 = PlaneNear
+    // (planes 6/7, the pad lanes SetFromRwFrustum zeroes, are never read here --
+    // a zero plane has no intersection, which is why the corner solve only ever
+    // touches the six real ones.)
+    //
+    // STAGE 2 -- eight solves. Each block's triple is read off UNAMBIGUOUSLY from
+    // its distance gather, `vperm vD, <A>, <B>, unk_82CDB450` (= (A.w, B.w, ..))
+    // followed by `vrlimi128 vD, <C>, 2, 1` (rotate C left one word, insert into
+    // element 2 -> C.w), giving (D_a, D_b, D_c) for exactly the triple whose
+    // normals feed that block's column transpose:
+    //     r4+0x00 (v13,v11,v9) L,B,N     r4+0x40 (v13,v11,v7) L,B,F
+    //     r4+0x10 (v12,v11,v9) R,B,N     r4+0x50 (v12,v11,v7) R,B,F
+    //     r4+0x20 (v13,v10,v9) L,T,N     r4+0x60 (v13,v10,v7) L,T,F
+    //     r4+0x30 (v12,v10,v9) R,T,N     r4+0x70 (v12,v10,v7) R,T,F
+    // -- a clean 2x2x2 product {Left,Right} x {Bottom,Top} x {Near,Far}, i.e. the
+    // near quad (BL, BR, TL, TR) then the far quad in the same order. The eight
+    // unrolled blocks are re-rolled into the loop below over exactly that table;
+    // the emitted store offsets (0x00,0x10,...,0x70) fix the output order.
+    // ------------------------------------------------------------------------
+    void Frustum::CalcVertices(Vector4* lapVerts) const
+    {
+        // Stage 1: the six real planes, AoS, un-negated -- (Nx, Ny, Nz, D) with
+        // N pointing into the view volume and dot3(N, p) == D.
+        Vector4 laPlanes[6];
+        for (u32 luPlane = 0; luPlane < 6; ++luPlane)
+        {
+            const u32 luBatch = (luPlane >= 4) ? 4u : 0u;   // 4 SoA lanes per batch
+            const u32 luLane  = luPlane & 3u;
+
+            laPlanes[luPlane].x = -LaneGet(maSwizzledPlanes[luBatch + 0], luLane);
+            laPlanes[luPlane].y = -LaneGet(maSwizzledPlanes[luBatch + 1], luLane);
+            laPlanes[luPlane].z = -LaneGet(maSwizzledPlanes[luBatch + 2], luLane);
+            laPlanes[luPlane].w = -LaneGet(maSwizzledPlanes[luBatch + 3], luLane);
+        }
+
+        // Stage 2: bit 0 picks the horizontal plane, bit 1 the vertical, bit 2
+        // the depth -- exactly the store order the eight inlined blocks emit.
+        for (u32 luVert = 0; luVert < 8; ++luVert)
+        {
+            const PlaneId lHorizontal = ((luVert & 1u) != 0) ? PlaneRight : PlaneLeft;
+            const PlaneId lVertical   = ((luVert & 2u) != 0) ? PlaneTop   : PlaneBottom;
+            const PlaneId lDepth      = ((luVert & 4u) != 0) ? PlaneFar   : PlaneNear;
+
+            lapVerts[luVert] = SolvePlaneTriple(laPlanes[lHorizontal],
+                                                laPlanes[lVertical],
+                                                laPlanes[lDepth]);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Never called -- layout pins for the swizzled batch every function above
+    // indexes by hand. A member function so the body is a complete-class context
+    // with private access.
+    // ------------------------------------------------------------------------
+    void Frustum::_AssertLayout()
+    {
+        // One 16-byte SIMD lane per plane slot.
+        static_assert(sizeof(Vector4) == 16, "Vector4 must be one 16-byte SIMD lane");
+        static_assert(alignof(Vector4) == 16, "Vector4 must be 16-byte aligned");
+
+        // 8 lanes = 0x80. This is the size FrustumJobQueryInfo::operator=
+        // block-copies per maFrustum[] element, and the +0x40 batch split every
+        // accessor here relies on.
+        static_assert(sizeof(Frustum::maSwizzledPlanes) == 128, "Frustum plane batch must be 128 bytes");
+        static_assert(sizeof(Frustum::maSwizzledPlanes) / sizeof(Vector4) == 8, "Frustum must store exactly 8 swizzled lanes");
+        static_assert(sizeof(Frustum) == 128, "sizeof(CgsGeometric::Frustum) must be 128 (0x80)");
+        static_assert(alignof(Frustum) == 16, "Frustum must be 16-byte aligned (lvx128/stvx128)");
+
+        // POINTER INVARIANT: maSwizzledPlanes is the SOLE data member and is
+        // exactly as large as the whole object, so it is necessarily at offset 0.
+        // That is what lets CalcVertices/IsSphereInFrustum address the lanes as
+        // `this + 0x00 .. this + 0x70` the way the X360 asm does.
+        static_assert(sizeof(Frustum) == sizeof(Frustum::maSwizzledPlanes), "maSwizzledPlanes must be the whole object (offset 0)");
+
+        // The PlaneId numbering is load-bearing: CalcVertices' de-swizzle reads
+        // plane k from float lane (k & 3) of batch (k >= 4), so these values ARE
+        // the lane indices, not labels. Pinned by the splat-word order in the
+        // @0x82840DF8 transpose.
+        static_assert(PlaneLeft == 0 && PlaneTop == 1 && PlaneRight == 2, "batch 0 lane order");
+        static_assert(PlaneBottom == 3 && PlaneFar == 4 && PlaneNear == 5, "batch 0/1 lane order");
     }
 }

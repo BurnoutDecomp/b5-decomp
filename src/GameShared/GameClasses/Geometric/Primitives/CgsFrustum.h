@@ -41,7 +41,10 @@ namespace CgsGeometric
         // @call 0x827C0058: build the 6-plane frustum from the RW-side
         // snapshot Camera::GetFrustum(CameraRwFrustum&) wrote.
         void SetFromRwFrustum(const CgsGraphics::CameraRwFrustum& lrRw);
-        // @call 0x827C0064: write the 8 corner vertices.
+
+        // CalcVertices @ 0x82840DF8 -- solve the eight frustum corners as
+        // plane-triple intersections and write them to lapVerts[0..7].
+        // Body in CgsFrustum.cpp (reconstructed 2026-08-12, shadow-cascade wave).
         void CalcVertices(Vector4* lapVerts) const;
 
         // GetPlaneByIndex @ 0x8274EFE8 (CgsFrustum.h:242 assert) -- gather the
@@ -60,6 +63,11 @@ namespace CgsGeometric
 
         // CgsFrustum.h:159 (DWARF). 8 swizzled plane lanes = 128 bytes.
         Vector4 maSwizzledPlanes[8];
+
+        // Never called. A MEMBER function so the body is a complete-class context
+        // with private access (a bare static_assert in the class body is not).
+        // Body + evidence in CgsFrustum.cpp.
+        static void _AssertLayout();
 
     private:
         // CgsFrustum.h:145 (DWARF) -- pack a stored swizzled lane back into a

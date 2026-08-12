@@ -55,13 +55,20 @@ namespace Camera
 // changes no observable behaviour yet -- but check it against the near plane the world
 // actually renders with the day that path lights up.
 //
-// FLAG (still un-recovered): the FAR-clip constant has no pinned address at all -- the third
-// DWARF member is not referenced by GetNearClipDistance, so there is nothing to read. It
-// stays a flagged 0.0f placeholder. (The world's live far plane comes from elsewhere; the sky
-// wave measured it at 5665.)
+// RECOVERED 2026-08-12 (shadow wave): the FAR-clip constant IS pinned -- it lives at
+// flt_82CDA564, immediately after the near clip in the same scalar table, and the reason
+// GetNearClipDistance does not reference it is simply that it is not a near clip. Its two
+// readers are CopyToCgsCamera @0x8220AD2C (the stamp below) and the debug-var registration
+// in BrnDirector::DebugComponent::OnActivate @0x82276640 -- dumped from the ARTIST .i64:
+//   0x82CDA564 = 46 1C 40 00 = 10000.0f
+// The prior "no pinned address / stays a flagged 0.0f placeholder" note was wrong, and the
+// zero was load-bearing: CopyToCgsCamera stamps this onto the frame-camera copy that
+// ShadowMap::CalculateShadowMapCameras hands to ComputeBoundingBoxMatrix, so a 0.0 far clip
+// behind the 0.15 near clip produced a degenerate cascade view volume.
+// (The sky wave's 5665 is the world's live far plane, published elsewhere -- not this default.)
 const f32 Camera::KF_SMALL_NEAR_CLIP_DISTANCE   = 0.1f;   // flt_82CDA55C (.id1-recovered)
 const f32 Camera::KF_DEFAULT_NEAR_CLIP_DISTANCE = 0.15f;  // flt_82CDA560 (.id1-recovered)
-const f32 Camera::KF_DEFAULT_FAR_CLIP_DISTANCE  = 0.0f;   // FLAG placeholder (no pinned address)
+const f32 Camera::KF_DEFAULT_FAR_CLIP_DISTANCE  = 10000.0f;  // flt_82CDA564 (.i64-recovered)
 
 // Pointer-size-independent facts the X360 asm pins (these hold on the x64 gate too).
 // CameraEffects has no pointer members, so its 0xBC stride -- the gap the Construct asm
