@@ -3,68 +3,88 @@
 // BrnBlobbyShadowManager::BrnBlobbyShadowBuffer::AddShadow @ 0x823F7638
 //
 // Appends one projected ground-shadow quad to this frame's shadow buffer. Returns false only
-// when the buffer is already full; otherwise returns true (and, on the VMX reject path below,
-// returns true WITHOUT adding -- the X360 result register is set to 1 before that branch).
+// when the buffer is already full; otherwise returns true -- including on the fade-distance
+// reject path, where the X360 sets r3 = 1 BEFORE the early `bnelr` and adds nothing.
 //
 // X360 control flow (asm @ 0x823F7638, authoritative; the body below is the de-SIMD'd
 // equivalent -- the lvx128/stvx128/vaddfp/vmulfp128/vrlimi128/vcmpgtfp ops have no PC
-// intrinsic and, per project policy, the VMX math lives in the SDK operation headers):
+// intrinsic and, per project policy, the VMX math lives in the SDK operation headers).
 //
-//   r11 = this
-//   r9  = *this                         ; miNumShadows
-//   if (r9 >= 0x40)  return 0;          ; cmpwi count, 0x40 ; bge -> li r3,0 ; blr   (buffer full)
+// ARGUMENT -> REGISTER MAPPING (confirmed at BOTH call sites, 2026-08-12):
+//   r3 = this
+//   r4 = const Matrix44Affine&   -- the caller builds it in four consecutive 16-byte stack
+//                                   slots and passes the base; +0x00 xAxis, +0x10 yAxis,
+//                                   +0x20 zAxis, +0x30 wAxis.
+//                                   BrnTraffic::TrafficEntityModule::RenderTrafficCar fills
+//                                   var_4D0/4C0/4B0/4A0 (x/y/z/w) and loads r4 = &var_4D0
+//                                   @0x827294D4; BrnWorld::RaceCarEntityModule::
+//                                   GenerateDispatchLists fills var_1E0/1D0/1C0/1B0 and loads
+//                                   r4 = &var_1E0 @0x822E8024.
+//   v1 = const Vector4  lvFwdLength_RearLength_BackAxle_FrontAxle  (`vmr128 v1, vNNN` at both
+//                                   call sites: 0x8272954C and 0x822E8020)
+//   v2 = VecFloat       lfWidth              (`vspltw v2, v0, 0` @0x82729550)
+//   v3 = VecFloat       lfHeightOffGround    (`vspltw v3, v12, 3` @0x827294E8; the same value
+//                                   the caller already used to drop the matrix translation
+//                                   onto the ground -- wAxis = pos - up * height)
 //
-//   v0 = load(unk_82FAF0E0)             ; a packed float threshold vector (DATA NOT EXPORTED)
-//   vcmpgtfp. v0, v3, v0                ; compare incoming vector v3 (lane-wise) > threshold
-//   r3  = 1                             ; result preset to true
-//   if (compare bit set)  return 1;     ; extrwi/cmplwi/bnelr  -- reject this shadow, keep true
+//   r11 = this ; r9 = *this                  ; miNumShadows
+//   if (r9 >= 0x40)  return 0;               ; cmpwi 0x40 ; bge -> li r3,0 ; blr  (buffer full)
 //
-//   ; --- accepted: write the record at slot[count], then count++ ---
-//   v13 = load(src + 0x30)              ; lvx128 v13, r4, 0x30
-//   v0  = load(unk_82FAEFB0)            ; a packed float bias/offset vector (DATA NOT EXPORTED)
-//   vaddfp v0, v13, v0                  ; src.front_rear_axle + bias
-//   store v0 -> slot + 0x10            ; stvx128 ..., 0x10  (mvAt region; see NOTE)
-//   v0  = load(src + 0x20)              ; lvx128 v0, r4, 0x20
-//   store v0 -> slot + 0x20            ; stvx128 ..., 0x20  (mvScaledRight_HeightOffGround)
-//   v0  = load(src + 0x00)             ; lvx128 v0, r4
-//   vmulfp128 v0, v0, v2               ; src.pos * v2 (a per-component scale vector)
-//   vrlimi128 v0, <slot+0x30>, 1, 0    ; insert the w lane from slot+0x30 into v0
-//   store v0 -> slot + 0x30            ; stvx128 ..., (slot + 0x30)
-//   vrlimi128 v0, v3, 1, 0             ; insert w lane from v3 into slot+0x30 value
-//   store v0 -> slot + 0x30
-//   store v1 -> this + 0x40*(count+1)  ; stvx128 v1, (count+1)<<6, this
-//   *this = count + 1                  ; ++miNumShadows
-//   return 1
+//   v0 = load(kfAmbientShadowFadeDistance)   ; splat(1.25f)
+//   vcmpgtfp. v0, v3, v0                     ; lane-wise heightOffGround > 1.25
+//   li r3, 1                                 ; result preset to TRUE
+//   mfocrf/extrwi/cmplwi/bnelr               ; CR6[0] == ALL FOUR LANES TRUE -> return 1 without
+//                                            ;   adding.  v3 is a broadcast, so this is simply
+//                                            ;   "the car is more than 1.25 m off the ground".
 //
-// FLAGGED / UNPROVEN (honest placeholders -- see structured report):
-//   * The two VMX constants unk_82FAF0E0 (compare threshold) and unk_82FAEFB0 (additive bias)
-//     are NAMED by the PS3 DecFIGS DWARF (AddShadow @ PS3 0x3522BC): the threshold is
-//     kfAmbientShadowFadeDistance, the bias is kvShadowOffset (added to the transform's
-//     translation row at +0x48). Their float CONTENTS are still un-exported data blobs (no
-//     per-address value), so they remain clearly-flagged placeholder vectors below; only their
-//     names/roles are now recovered.
-//   * The exact destination-field mapping is partially ambiguous: the asm writes vectors at
-//     slot offsets +0x10/+0x20/+0x30 (relative to `this + 0x40*count`) plus one store at
-//     `this + 0x40*(count+1)`, while the incoming VMX vector registers v1/v2/v3 are set up by
-//     the (very large, multi-arg) callers and are not recoverable from this function alone.
-//     The body therefore reproduces the PROVEN behaviour -- full-check, reject-compare,
-//     per-field copy of the four ShadowStruct vectors from the source, count increment -- in
-//     terms of the named DWARF members, rather than fabricating the precise lane math.
+//   ; --- accepted: the record base is `this + 0x10 + 64*count` (the count word occupies the
+//   ; --- first 16 bytes of the buffer), so the four stores land at record +0x00/+0x10/+0x20/+0x30.
+//   record.mvPos                            = matrix.wAxis + kvShadowOffset
+//        lvx128 v13, r4, 0x30 / vaddfp v0, v13, kvShadowOffset / stvx128 v0, this+64*count, 0x10
+//   record.mvAt                             = matrix.zAxis
+//        lvx128 v0, r4, 0x20 / stvx128 v0, this+64*count, 0x20
+//   record.mvScaledRight_HeightOffGround    = matrix.xAxis * lfWidth, w lane = lfHeightOffGround
+//        lvx128 v0, r0, r4 / vmulfp128 v0, v0, v2 / vrlimi128 v0, v3, 1, 0
+//        -> stvx128 at this + 64*count + 0x30
+//        (the double read-modify-write at 0x823F76CC-0x823F76F0 is a compiler artifact of
+//         SetVector3() followed by SetPlus(); the FIRST vrlimi128 re-inserts the stale w lane
+//         that the second immediately overwrites, so it is dead and is collapsed here.)
+//   record.mvFront_Rear_BackAxle_FrontAxle  = lvFwdLength_... stored VERBATIM, no arithmetic
+//        stvx128 v1, this, (count+1)<<6   ==  this + 64*count + 0x40  ==  record + 0x30
+//   ++*this ; return 1
+//
+// CONSTANTS -- RECOVERED 2026-08-12 (previously flagged as un-exported placeholder zeros).
+// The three vector blobs read as 16 zero bytes in the loaded image because they are C++
+// DYNAMIC initialisers; the values live in the initialiser code, not the .data blob:
+//   * kfAmbientShadowFadeDistance (unk_82FAF0E0), init @0x82C4ED88:
+//       lfs f0, flt_820092CC (0x3FA00000 = 1.25f) ; vspltw v0, v0, 0 ; stvx128 -> 82FAF0E0
+//   * kvShadowOffset (unk_82FAEFB0), init @0x82C4ED48:
+//       x = flt_82001CC0 (0x00000000 = 0.0f), y = flt_82009B8C (0x3CF5C28F = 0.03f),
+//       z = flt_82001CC0 (0.0f), w = the integer 0 stored by `stw r9`
+//   * kfAmbientShadowScaleFactor (unk_82FAFBF0), init @0x82C4EDB0:
+//       lfs f0, flt_8200473C (0x3ECCCCCD = 0.4f) ; vspltw v0, v0, 0 ; stvx128 -> 82FAFBF0
+// Names come from the PS3 DecFIGS DWARF for this TU (AddShadow @ PS3 0x3522BC); the values
+// were dumped from BURNOUT_X360_ARTIST.XEX.i64.
 //
 // The DWARF source-level signature (const Matrix44Affine&, const Vector4, VecFloat, VecFloat)
-// is what game code calls; the X360 ABI packs those into the VMX argument registers / a
-// caller stack block that the asm reads through `r4`. We honour the DWARF signature.
+// is what game code calls, and the register mapping above confirms it exactly.
 
+// Names and types are the DecFIGS DWARF's for this exact source file, in its declared order
+// (BrnBlobbyShadowManager.cpp:25/:26/:27); the values are dumped from the X360 initialisers.
 namespace
 {
-    // PLACEHOLDER: the AddShadow compare threshold (X360 unk_82FAF0E0 == PS3 DWARF
-    // kfAmbientShadowFadeDistance). Contents not exported; zero-initialised so the reject test is
-    // structurally present but does not silently drop shadows. Replace once the data blob is recovered.
-    const Vector4 KV_BLOBBY_SHADOW_REJECT_THRESHOLD = { 0.0f, 0.0f, 0.0f, 0.0f };
+    // DWARF :25 -- X360 unk_82FAEFB0 (init @0x82C4ED48). A 3 cm lift on the Y axis, added to
+    // the shadow transform's translation row so the quad does not z-fight with the road.
+    const Vector3 kvShadowOffset = { 0.0f, 0.03f, 0.0f, 0.0f };
 
-    // PLACEHOLDER: the additive bias (X360 unk_82FAEFB0 == PS3 DWARF kvShadowOffset), added to the
-    // transform translation row at +0x48 in the asm.
-    const Vector4 KV_BLOBBY_SHADOW_EXTENT_BIAS = { 0.0f, 0.0f, 0.0f, 0.0f };
+    // DWARF :26 -- X360 unk_82FAF0E0 (init @0x82C4ED88), broadcast 1.25f.
+    // A car more than 1.25 m off the ground casts no blobby shadow.
+    const VecFloat kfAmbientShadowFadeDistance = { 1.25f, 1.25f, 1.25f, 1.25f };
+
+    // DWARF :27 -- X360 unk_82FAFBF0 (init @0x82C4EDB0), broadcast 0.4f. A file-scope constant
+    // of THIS TU; its only consumer is the manager's Render path, which is not in this TU's
+    // ledger, so nothing here reads it yet. Recorded so the value is not lost again.
+    const VecFloat kfAmbientShadowScaleFactor = { 0.4f, 0.4f, 0.4f, 0.4f };
 }
 
 bool BrnBlobbyShadowManager::BrnBlobbyShadowBuffer::AddShadow(
@@ -79,35 +99,41 @@ bool BrnBlobbyShadowManager::BrnBlobbyShadowBuffer::AddShadow(
         return false;
     }
 
-    // VMX reject compare (vcmpgtfp. v3 > threshold): if the incoming shadow fails the
-    // visibility/magnitude test the X360 returns true WITHOUT appending. The compared vector
-    // (v3) and the threshold blob are not recoverable here; using the height-off-ground lane
-    // against the (placeholder) threshold keeps the branch structurally faithful.
-    if (lfHeightOffGround.x > KV_BLOBBY_SHADOW_REJECT_THRESHOLD.x)
+    // Fade-distance reject (vcmpgtfp. v3 > kfAmbientShadowFadeDistance, then CR6[0] ==
+    // "all four lanes greater"). lfHeightOffGround is a broadcast VecFloat so this reduces to
+    // the scalar test height > 1.25 m, but the conjunction is spelled out to match the asm.
+    // The X360 returns TRUE here -- the shadow is skipped, not an error.
+    if (lfHeightOffGround.x > kfAmbientShadowFadeDistance.x &&
+        lfHeightOffGround.y > kfAmbientShadowFadeDistance.y &&
+        lfHeightOffGround.z > kfAmbientShadowFadeDistance.z &&
+        lfHeightOffGround.w > kfAmbientShadowFadeDistance.w)
     {
         return true;
     }
 
     // Accepted: fill slot[count] from the incoming transform/extents, then bump the count.
-    // Field copy order follows the X360 store order (mvAt/extent, mvScaledRight, mvFront, mvPos).
+    // Field order below follows the X360 store order.
     ShadowStruct& lSlot = maShadowPos[miNumShadows];
 
-    // mvFront_Rear_BackAxle_FrontAxle = incoming packed extents + bias vector (vaddfp).
-    lSlot.mvFront_Rear_BackAxle_FrontAxle.x = lvFwdLength_RearLength_BackAxle_FrontAxle.x + KV_BLOBBY_SHADOW_EXTENT_BIAS.x;
-    lSlot.mvFront_Rear_BackAxle_FrontAxle.y = lvFwdLength_RearLength_BackAxle_FrontAxle.y + KV_BLOBBY_SHADOW_EXTENT_BIAS.y;
-    lSlot.mvFront_Rear_BackAxle_FrontAxle.z = lvFwdLength_RearLength_BackAxle_FrontAxle.z + KV_BLOBBY_SHADOW_EXTENT_BIAS.z;
-    lSlot.mvFront_Rear_BackAxle_FrontAxle.w = lvFwdLength_RearLength_BackAxle_FrontAxle.w + KV_BLOBBY_SHADOW_EXTENT_BIAS.w;
+    // mvPos = the transform's translation row lifted by kvShadowOffset (vaddfp, all four lanes).
+    lSlot.mvPos.x = lShadowTransform.wAxis.x + kvShadowOffset.x;
+    lSlot.mvPos.y = lShadowTransform.wAxis.y + kvShadowOffset.y;
+    lSlot.mvPos.z = lShadowTransform.wAxis.z + kvShadowOffset.z;
+    lSlot.mvPos.w = lShadowTransform.wAxis.w + kvShadowOffset.w;
 
-    // mvAt = the transform's projection ("at") axis; mvPos = the transform's translation row;
-    // mvScaledRight_HeightOffGround packs the scaled right axis with the height-off-ground
-    // scalar in the w lane (DWARF SetVector3 + SetPlus). lfWidth scales the right axis.
-    lSlot.mvAt  = lShadowTransform.zAxis;
-    lSlot.mvPos = lShadowTransform.wAxis;
+    // mvAt = the transform's projection ("at") axis, copied whole.
+    lSlot.mvAt = lShadowTransform.zAxis;
 
+    // mvScaledRight_HeightOffGround = right axis scaled by lfWidth (a broadcast, so the lanewise
+    // vmulfp128 is a uniform scale), with the height off ground packed into the w lane
+    // (DWARF SetVector3 + SetPlus == the two vrlimi128 inserts, the first of which is dead).
     lSlot.mvScaledRight_HeightOffGround.x = lShadowTransform.xAxis.x * lfWidth.x;
-    lSlot.mvScaledRight_HeightOffGround.y = lShadowTransform.xAxis.y * lfWidth.x;
-    lSlot.mvScaledRight_HeightOffGround.z = lShadowTransform.xAxis.z * lfWidth.x;
-    lSlot.mvScaledRight_HeightOffGround.w = lfHeightOffGround.x;   // vrlimi128 w-lane insert
+    lSlot.mvScaledRight_HeightOffGround.y = lShadowTransform.xAxis.y * lfWidth.y;
+    lSlot.mvScaledRight_HeightOffGround.z = lShadowTransform.xAxis.z * lfWidth.z;
+    lSlot.mvScaledRight_HeightOffGround.w = lfHeightOffGround.w;
+
+    // mvFront_Rear_BackAxle_FrontAxle = the packed extents, stored VERBATIM (stvx128 v1).
+    lSlot.mvFront_Rear_BackAxle_FrontAxle = lvFwdLength_RearLength_BackAxle_FrontAxle;
 
     ++miNumShadows;   // *this = count + 1
     return true;
