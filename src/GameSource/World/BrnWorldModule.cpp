@@ -29,6 +29,7 @@
 //              blocked, to be bodied once their sub-module/IO deps are homed.
 // ============================================================================
 #include <ctime>   // [DIAG culling wave] clock() for the producer-fps readout
+#include <chrono>  // [DIAG shadow-perf wave] steady_clock for the per-phase producer timers
 #include <cstdlib>                                                // getenv/atof (the BRN_WORLD_CAMDIST bring-up diagnostic)
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"   // CgsGraphics::ShaderConstantTable
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // BrnShaderConstantsFrame
@@ -4448,19 +4449,31 @@ WorldModule::PublishWorldShadingConstantsBringUp()
     lrTable.SetShaderConstantData( 33, Vector4{ 1.015278f, 0.882773f, 0.807155f, 0.500000f } );   // SkyReflectionColour
     lrTable.SetShaderConstantData( 29, Vector4{ 1.000000f, 1.000000f, 0.000000f, 0.000000f } );   // HDRConstants
 
-    // --- shadow cascades: fade = 0 -> shadow factor exactly 1 (see the banner) ---------
-    Matrix44 laWorldToLight[3];
-    for ( int liCascade = 0; liCascade < 3; ++liCascade )
-    {
-        laWorldToLight[liCascade].xAxis = Vector4{ 1.0f, 0.0f, 0.0f, 0.0f };
-        laWorldToLight[liCascade].yAxis = Vector4{ 0.0f, 1.0f, 0.0f, 0.0f };
-        laWorldToLight[liCascade].zAxis = Vector4{ 0.0f, 0.0f, 1.0f, 0.0f };
-        laWorldToLight[liCascade].wAxis = Vector4{ 0.0f, 0.0f, 0.0f, 1.0f };
-    }
-    lrTable.SetShaderConstantArrayData( 14, laWorldToLight );
-    lrTable.SetShaderConstantData( 15, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f } );      // ShadowMap_Constants
-    lrTable.SetShaderConstantData( 16, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f } );      // ShadowMap_Constants2
-    lrTable.SetShaderConstantData( 17, Vector4{ 0.0f, 1.0f, 0.0f, 0.0f } );      // ShadowMap_ObjectCsmSelect
+    // --- shadow cascades: RETIRED 2026-08-12, the real producer is live -----------------
+    //
+    // This block used to force the "shadows off" configuration -- identity
+    // ShadowMap_WorldToLight for all three cascades and zeroed c15/c16, which makes
+    // ApplyFade(factor, fade) = factor*fade + 1 - fade collapse to exactly 1.0, i.e. fully
+    // lit regardless of what sampler 15 returns. That was correct while it stood: the real
+    // producer was unreachable, so without it the world's pixel shaders (92 of the 110 in
+    // SHADERS.BNDL do `texldp ..., s15`) would have read an unbound sampler.
+    //
+    // c14/c15/c16/c17 are now published by the REAL console producer,
+    // BrnShadowMap::SetConstants, reached every frame via
+    // ShadowMap::CalculateShadowMapCameras from the shadow arm of
+    // GenerateDispatchListsBringUp -- which runs BEFORE this function, so anything written
+    // here would overwrite it. Hence: nothing written here.
+    //
+    // Retired only once all three preconditions were boot-verified, in this order:
+    //   1. a real shadow-map depth surface exists and is bound to s15
+    //      ([shadow-rt] target 1280x1920 sections=1 depthFormat=INTZ depthTexture=OK);
+    //   2. the cascade matrices are FINITE ([shadow-cam] all cascade stages finite, and
+    //      [shadow-prod] non-finite WARNs 40/40 -> 0) -- they were NaN until the frustum
+    //      plane-slot permutation and the inert CalcVertices were fixed;
+    //   3. the cascades carry DISTINCT caster sets (c0/c1/c2 = 1224/498/498, previously
+    //      identical), so the three matrices are actually describing different volumes.
+    // If any of those regress, the symptom is NOT "no shadows" but a world rendered with
+    // the key light removed -- restore this block first while diagnosing.
 
     // --- misc ---------------------------------------------------------------------------
     lrTable.SetShaderConstantData( 13, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f } );      // Time
@@ -4501,6 +4514,185 @@ WorldModule::SetBringUpCameraOverride( const rw::math::vpu::Matrix44Affine& lrTr
     mbBringUpCameraOverrideValid = true;
 }
 
+// =============================================================================
+// ⭐ [DIAG shadow-perf wave 2026-08-12] THE PRODUCER PHASE TIMERS.
+//
+// WHY IT WAS BUILT: adding the shadow-producer arm took the dispatch loop from ~47-49
+// producerFps to ~16.6, and the record counts did not explain it (713 main-view records
+// + 277/104/75 cascade == 1.6x the records for 3x the frame). These timers split the
+// producer into its phases so the cost could be attributed instead of guessed at.
+//
+// ⭐ THE ANSWER, MEASURED 2026-08-12 -- READ THIS BEFORE RE-INVESTIGATING.
+// THE PRODUCER IS NOT THE BOTTLENECK. One boot at 120-frame averages:
+//
+//   frame=60360.6  total=522.8            <-- the whole producer is 0.9% of the frame
+//   cam=21.3  stage=1.2  query=136.8
+//   mainFilter=6.6 mainWorld=164.2 mainCar=17.6 mainProp=61.6 propCache=13.0
+//   casc=62.8 (cascFilter=2.4 cascCar=27.5 cascWorld=31.6)
+//   mainEnt=978 mainRec=713 cascEnt=206/30/0 cascWorldRec=202/29/0
+//   cascCarRec=75/75/75 cascPadPlanes=0/2/1 | jobPool=2000/8192 batches=4
+//
+// The ENTIRE cascade arm is 63 us. `frame - total` ~= 59.8 ms is DOWNSTREAM of this
+// function -- the renderer, whose shadow pass carries the extra draw calls the cascade
+// lists produce. Do not look for the regression in this file; it is not here.
+//
+// Three hypotheses this run KILLED, recorded so they are not re-run:
+//   * "a cascade volume is all clear-plane sentinels and culls nothing" -- NO.
+//     cascPadPlanes=0/2/1, never 8. The fits are real.
+//   * "the cascades all share one volume" -- NO, not on this build.
+//     cascEnt=206/30/0 genuinely narrows per slab. (It WAS true earlier the same day,
+//     when CalcVertices was still an inert stub writing nothing into
+//     ComputeBoundingBoxMatrix's uninitialised corner array; the CalcVertices +
+//     SetFromRwFrustum-permutation + far-clip fixes changed this path materially.)
+//   * "the shared job-result pool is overflowing and truncating cascades" -- NO.
+//     jobPool=2000/8192 across all four batches. Comfortable headroom.
+//
+// WHAT THE FIELDS ARE FOR NOW: the cascade volume fit is actively being worked in
+// BrnShadowMap.cpp and has already changed twice, so cascPadPlanes / cascEnt / jobPool
+// are kept as REGRESSION TRIPWIRES -- they are the cheapest way to notice a fit that
+// silently starts culling nothing (padPlanes -> 8), a volume that balloons (cascEnt >>
+// mainEnt), or a pool that starts truncating. `frame` vs `total` stays the
+// producer-versus-downstream discriminator. cascCarRec is constant by construction
+// (ShadowMap::Construct leaves mbRenderRaceCarsNearOnly false, so the car is
+// re-dispatched into every cascade) and must never be read as caster work.
+//
+// ⚠️ LATCHED ON A VALUE (the accumulated frame count), never on a `static bool`
+// one-shot: this function runs on the loading screen before the world exists, and a
+// one-shot probe there fires once into an empty world and then never again --
+// indistinguishable in the log from "this code was never reached" (the project has
+// learned this three times). The accumulator is only advanced on frames that get
+// past GetLoadedWorldBounds, i.e. real producer frames, and it reprints forever.
+//
+// Every number is MICROSECONDS PER FRAME, averaged over the reporting window.
+// DELETE with GenerateDispatchListsBringUp.
+// =============================================================================
+namespace
+{
+    typedef std::chrono::steady_clock ShadowPerfClock;
+
+    inline ShadowPerfClock::time_point ShadowPerfNow()
+    {
+        return ShadowPerfClock::now();
+    }
+
+    inline f64 ShadowPerfUsSince( const ShadowPerfClock::time_point& lrFrom )
+    {
+        return std::chrono::duration< f64, std::micro >( ShadowPerfClock::now() - lrFrom ).count();
+    }
+
+    struct ShadowPerfAccumulator
+    {
+        // ---- accumulated microseconds over the window ----
+        f64 mfTotalUs;          // the whole producer body
+        f64 mfCamerasUs;        // PART 1: CalculateShadowMapCameras + the finiteness tripwire
+        f64 mfStageUs;          // frustum build + IO Construct + the four query events
+        f64 mfQueryUs;          // ProcessFrustumTestJobRequests + ...Results (the octree walks)
+        f64 mfMainFilterUs;     // main view: FilterFrustumTestResults + buffer seeding
+        f64 mfMainWorldUs;      // main view: WorldEntityModule::GenerateDispatchLists
+        f64 mfMainCarUs;        // main view: CalculateVehicleLODs + the race-car leg
+        f64 mfMainPropUs;       // main view: the prop leg
+        f64 mfPropCacheUs;      // PropEntityModule::CachePropGraphicsLists (same-day sibling
+                                // change -- timed so the arm is not blamed for its cost)
+        f64 mfCascadeUs;        // PART 2 in total (loop overhead included)
+        f64 mfCascadeFilterUs;  // ...of which: the three per-cascade filters + seeding
+        f64 mfCascadeCarUs;     // ...of which: the three per-cascade race-car legs
+        f64 mfCascadeWorldUs;   // ...of which: the three per-cascade world legs
+
+        f64 mfFramePeriodUs;    // producer entry -> next producer entry (the WHOLE frame), so
+                                // the producer's share of it is readable off one line
+
+        // ---- last-frame counts (not averaged -- a snapshot of the reporting frame) ----
+        s32 miMainWorldEnts;
+        s32 miMainWorldRecords;
+        s32 maiCascadeWorldEnts[ 3 ];
+        s32 maiCascadeCarRecords[ 3 ];    // split out: the race car is a FIXED per-cascade cost
+        s32 maiCascadeWorldRecords[ 3 ];  // ...so it must not be confused with caster work
+        s32 maiCascadePadPlanes[ 3 ];     // ComputeOptimalViewVolume clear-plane sentinels
+        s32 miPoolResults;      // sum of every result batch's miNumResults this frame
+        s32 miPoolBatches;
+        s32 miArmed;
+
+        s32 miFrames;
+
+        void ResetWindow()
+        {
+            mfTotalUs = 0.0; mfCamerasUs = 0.0; mfStageUs = 0.0; mfQueryUs = 0.0;
+            mfMainFilterUs = 0.0; mfMainWorldUs = 0.0; mfMainCarUs = 0.0; mfMainPropUs = 0.0;
+            mfPropCacheUs = 0.0;
+            mfCascadeUs = 0.0; mfCascadeFilterUs = 0.0; mfCascadeCarUs = 0.0;
+            mfCascadeWorldUs = 0.0; mfFramePeriodUs = 0.0;
+            miFrames = 0;
+        }
+    };
+
+    ShadowPerfAccumulator gShadowPerf = {};
+
+    // The job-result pool the four queries SHARE. LooseOctree::KU_JOB_RESULT_BUFFER_SIZE is
+    // 8192 u16 entries and muCurrentWriteOffset is per-JOB cumulative, and every query lands
+    // in job 0 on this build (SceneManagerModule's jobIndex map is q*4/16 == q/4), so the
+    // headroom question is "does main + the three cascades fit in 8192 together". Reported
+    // as the summed batch result counts, which is exactly what was written into the pool
+    // (PushCoarseResult drops SILENTLY past the cap, so a sum pinned at 8192 == truncation).
+    const s32 KI_SHADOW_PERF_POOL_CAPACITY = 8192;
+
+    // ---- the CLEAR-PLANE SENTINEL CENSUS ------------------------------------------
+    // ComputeOptimalViewVolume pads any candidate-plane slot it could not fill with its
+    // own saClearPlanes defaults {N, D = -1000000}, and CgsGeometric::Frustum::
+    // SetPlaneByIndex stores the NEGATION of the plane handed to it (VectorToPlane's
+    // whole-vector vxor against the 0x80000000 splat -- re-confirmed 2026-08-12 by the
+    // recovered CalcVertices de-swizzle, which reproduces the same negate independently).
+    // So a padded slot reads back with an offset lane of +1e6, and LooseOctree's
+    // `Nx*cx + Ny*cy + Nz*cz - D > R` evaluates to `-N.C - 1e6`, which is INSIDE for
+    // every finite point: a padded slot cannot reject anything. Counting them is a DIRECT
+    // read of "the fit ran out of real planes", instead of inferring it from entity counts.
+    //
+    // ⚠ NOT to be confused with SetFromRwFrustum's pad lanes. That writer -- the
+    // PERSPECTIVE path, used by the main view -- fills slots 6/7 by DUPLICATING far and
+    // near (CgsFrustum.cpp:331), which reject exactly when slots 4/5 already do. That is a
+    // different, benign padding scheme on a different frustum; this census only ever looks
+    // at the cascade volumes ShadowMap::GetFrustum(i) hands back.
+    const f32 KF_SHADOW_PERF_CLEAR_PLANE_THRESHOLD = 500000.0f;
+
+    inline f32 ShadowPerfLaneGet( const Vector4& lrLane, u32 luLane )
+    {
+        switch ( luLane )
+        {
+            case 0:  return lrLane.x;
+            case 1:  return lrLane.y;
+            case 2:  return lrLane.z;
+            default: return lrLane.w;
+        }
+    }
+
+    // How many of the eight stored planes are clear-plane sentinels. The lanes are
+    // struct-of-arrays -- two batches of four planes, each batch {Nx, Ny, Nz, offset} --
+    // so plane p's offset is float lane (p & 3) of maSwizzledPlanes[(p >= 4 ? 4 : 0) + 3].
+    s32 ShadowPerfCountClearPlanes( const CgsGeometric::Frustum& lrFrustum )
+    {
+        s32 liCount = 0;
+        for ( u32 luPlane = 0; luPlane < 8; luPlane++ )
+        {
+            const u32 luBatch  = ( luPlane >= 4 ) ? 4u : 0u;
+            const f32 lfOffset =
+                ShadowPerfLaneGet( lrFrustum.maSwizzledPlanes[ luBatch + 3 ], luPlane & 3u );
+            if ( lfOffset > KF_SHADOW_PERF_CLEAR_PLANE_THRESHOLD
+                 || lfOffset < -KF_SHADOW_PERF_CLEAR_PLANE_THRESHOLD )
+            {
+                ++liCount;
+            }
+        }
+        return liCount;
+    }
+
+    // (A BRN_SHADOW_ARM=0..3 A/B ladder lived here during the investigation, gating the
+    // cascade cameras / queries / dispatch legs so the arm's cost could be attributed by
+    // subtraction across boots. REMOVED once `total` answered the question directly:
+    // at 523 us of a 60,361 us frame there is nothing left to attribute, and it was the
+    // only diagnostic in this file that sat in LIVE CONTROL FLOW -- a stray environment
+    // variable could silently disable the shadow arm and turn "why are there no cascades"
+    // into a debugging trap. Every probe that remains is pure observation.)
+}
+
 // [FLAG PC bring-up] Finiteness tripwire for the shadow-producer arm below. See the
 // HONEST GATE banner there: while ShadowMap::Construct's per-slot ortho scale is
 // un-recovered rodata carried as zero, UpdateOrthogonalProjectionMatrix divides 1.0f
@@ -4526,6 +4718,28 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     if ( lpDispatchFrame == 0 )
     {
         return;
+    }
+
+    // [DIAG shadow-perf] the whole-producer stopwatch. Started here and BANKED only at the
+    // bottom, so the early-out frames (no world delivered yet) never enter the average.
+    const ShadowPerfClock::time_point lProducerStart = ShadowPerfNow();
+
+    // [DIAG shadow-perf] the WHOLE-FRAME period, measured producer-entry to
+    // producer-entry. Without it `total` cannot be read on its own: the arm's cost may
+    // sit DOWNSTREAM of this function (the renderer expands GDL object lists 0/1/4 into
+    // mesh lists and sorts them, both no-ops on the empty lists of the pre-arm build), and
+    // `frame - total` is exactly that remainder. The very first frame has no predecessor,
+    // so it contributes nothing rather than a bogus epoch-sized delta.
+    {
+        static ShadowPerfClock::time_point sPrevProducerEntry;
+        static bool                        sbHavePrevProducerEntry = false;
+        if ( sbHavePrevProducerEntry )
+        {
+            gShadowPerf.mfFramePeriodUs +=
+                std::chrono::duration< f64, std::micro >( lProducerStart - sPrevProducerEntry ).count();
+        }
+        sPrevProducerEntry      = lProducerStart;
+        sbHavePrevProducerEntry = true;
     }
 
     // [DIAG] BRN_WORLD_CAMFREE=1 makes this stand-in IGNORE the director override, so a
@@ -5005,6 +5219,9 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     // these cascades yet. Unify all three in the change that retires the publishes.
     // =========================================================================
     bool lbShadowArmLive = false;
+    // [DIAG shadow-perf] PART 1's stopwatch (`cam`). Measured 21.3 us/frame -- the
+    // three-cascade camera solve is not a cost worth thinking about.
+    const ShadowPerfClock::time_point lCamerasStart = ShadowPerfNow();
     if ( mShadowMap.IsEnabled() )
     {
         // The director camera this leg owns. Construct() once for the FOV / aspect /
@@ -5098,6 +5315,12 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             // says is non-finite in 39 of 41 samples.
             const CgsGeometric::Frustum& lrCascadeFrustum =
                 mShadowMap.GetFrustum( static_cast< u32 >( liCascade ) );
+
+            // [DIAG shadow-perf] how many of this cascade's eight planes are
+            // ComputeOptimalViewVolume clear-plane sentinels (see the census banner).
+            gShadowPerf.maiCascadePadPlanes[ liCascade ] =
+                ShadowPerfCountClearPlanes( lrCascadeFrustum );
+
             for ( s32 liPlane = 0; liPlane < 8; liPlane++ )
             {
                 const Vector4& lrPlane = lrCascadeFrustum.maSwizzledPlanes[ liPlane ];
@@ -5176,6 +5399,8 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             }
         }
     }
+    gShadowPerf.mfCamerasUs += ShadowPerfUsSince( lCamerasStart );
+    gShadowPerf.miArmed      = lbShadowArmLive ? 1 : 0;
 
     // ⚠️ THE SINGLE MOST DANGEROUS BIT OF THE SHADOW ARM, MADE HARMLESS BY CONSTRUCTION.
     // WorldEntityModule::GenerateDispatchLists (BrnWorldEntityModule.cpp:1774) and
@@ -5187,15 +5412,11 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     // the main pass is provably unaffected even if a future edit leaks the latch.
     mShadowMap.SetRenderingShadowMap( false );
 
-    // TODO(shadow-wave): this publish unconditionally installs the "shadows off"
-    // configuration (identity ShadowMap_WorldToLight, zeroed c15/c16 -> ApplyFade gives a
-    // shadow factor of exactly 1.0), and it runs AFTER CalculateShadowMapCameras above --
-    // deliberately, so ShadowMap::SetConstants' c14/c15/c16/c17 are overwritten and the
-    // pixel shaders keep reading the shadows-off block. DO NOT remove it here: sampler 15
-    // has no texture bound yet, so an unbound-sampler read returns 0 and the world would
-    // render with the KEY LIGHT REMOVED -- visibly worse than today. It comes out in the
-    // same change that binds the shadow-map texture and enables the renderer's cascade
-    // passes (BrnRendererModule::RenderWorldPasses gates lists 0,2,1,3,4 off).
+    // Publishes the bring-up lighting/atmosphere constants. It still runs AFTER
+    // CalculateShadowMapCameras above, but its shadow block is RETIRED (2026-08-12) now
+    // that the real producer is live, so ShadowMap::SetConstants' c14/c15/c16/c17 survive
+    // to the pixel stage instead of being overwritten with the shadows-off configuration.
+    // See the retirement note in its body for the three boot-verified preconditions.
     PublishWorldShadingConstantsBringUp();
 
     // ======================================================================
@@ -5226,7 +5447,13 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     // DELETE this call (not the cache) when the real WorldModule::GenerateDispatchLists
     // becomes the live producer -- it already carries the console call at :3806.
     // ======================================================================
-    mPropEntityModule.CachePropGraphicsLists();
+    {
+        // [DIAG shadow-perf] timed separately: this call landed the SAME DAY as the shadow
+        // arm, so the fps attribution has to be able to tell the two apart.
+        const ShadowPerfClock::time_point lPropCacheStart = ShadowPerfNow();
+        mPropEntityModule.CachePropGraphicsLists();
+        gShadowPerf.mfPropCacheUs += ShadowPerfUsSince( lPropCacheStart );
+    }
 
     // ======================================================================
     // THE REAL DISPATCH FEED. Everything below here is the console path:
@@ -5264,6 +5491,10 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         // basis reverses the left/right/top/bottom cross products. With the basis now
         // coming from the engine, the console writer's planes are inward by construction
         // and both the copy and the fix-up are gone.
+        // [DIAG shadow-perf] the staging phase stopwatch (frustum build + the IO buffer
+        // recycle + the four query events).
+        const ShadowPerfClock::time_point lStageStart = ShadowPerfNow();
+
         CgsGraphics::CameraRwFrustum lRwFrustum;
         sBringUpCamera.GetFrustumPerspective( lRwFrustum, false );
 
@@ -5349,14 +5580,59 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             }
         }
         sQueryInput.UnlockForWrite();
+        gShadowPerf.mfStageUs += ShadowPerfUsSince( lStageStart );
 
+        // ---- THE KNOWN STRUCTURAL DIVERGENCE. DO NOT RE-INVESTIGATE. ----------------
+        // This is the query round trip -- the four octree walks (main view + three
+        // cascades). It is the ONE place in this producer where the PC build is
+        // architecturally slower than the console, and the gap is understood:
+        //
+        //   * the console runs these as FOUR PARALLEL JOBS. LooseOctree::
+        //     StartFrustumTestJobs @0x828B23E0 hands each job to JobScheduler::AddJobs,
+        //     and SceneManagerModule's KA_FRUSTUM_QUERY_JOB_INDEX map spreads the staged
+        //     queries across them. The PC leaf has no job scheduler, so it runs every
+        //     query INLINE on this thread (see the FLAG in StartFrustumTestJobs).
+        //   * the console also overlaps this whole producer with the render thread; the
+        //     bring-up spine runs producer and render serially on one thread.
+        //
+        // MEASURED 2026-08-12: query=136.8 us/frame of a 60,361 us frame. Even taken as
+        // 100% avoidable it is 0.2% of the frame, so closing this gap is worth nothing
+        // today -- it is recorded here only so a future reader does not re-derive it.
+        // It becomes relevant when (and only when) the job scheduler lands.
+        const ShadowPerfClock::time_point lQueryStart = ShadowPerfNow();
         mSceneModule.ProcessFrustumTestJobRequests( 0, 0, &sQueryInput, &sQueryOutput );
         mSceneModule.ProcessFrustumTestJobResults( 0, 0, &sQueryInput, &sQueryOutput );
+        gShadowPerf.mfQueryUs += ShadowPerfUsSince( lQueryStart );
 
         // ---- filter the result into the per-owner id lists ----
         sQueryOutput.LockForRead();
         const CgsSceneManager::SceneManagerIO::OutputBuffer::SceneQueryResultsQueue* lpResultsQueue =
             sQueryOutput.GetSceneQueryResultsQueue();
+
+        // [DIAG shadow-perf] THE JOB-RESULT-POOL HEADROOM WALK. All four queries share job
+        // 0's single 8192-entry u16 run pool (muCurrentWriteOffset is per-job cumulative and
+        // is reset only in StartFrustumTestJobs), and LooseOctree::PushCoarseResult drops
+        // SILENTLY once it is full -- so a cascade can lose its whole caster set with no
+        // symptom other than an empty list. Summing the batches' miNumResults is exactly the
+        // number of u16 entries the pool took this frame. Read-only, at most a handful of
+        // events, and deliberately outside every stopwatch above.
+        {
+            const CgsModule::Event* lpPoolProbe = 0;
+            s32 liPoolProbeSize = 0;
+            s32 liPoolProbeType = lpResultsQueue->GetFirstEvent( &lpPoolProbe, &liPoolProbeSize );
+            s32 liPoolTotal   = 0;
+            s32 liPoolBatches = 0;
+            while ( liPoolProbeType >= 0 && lpPoolProbe != 0 && liPoolBatches < 16 )
+            {
+                liPoolTotal += static_cast< const CgsSceneManager::SceneManagerIO::OutCoarseQueryResult* >(
+                                   lpPoolProbe )->miNumResults;
+                ++liPoolBatches;
+                liPoolProbeType =
+                    lpResultsQueue->GetNextEvent( lpPoolProbe, &lpPoolProbe, &liPoolProbeSize );
+            }
+            gShadowPerf.miPoolResults = liPoolTotal;
+            gShadowPerf.miPoolBatches = liPoolBatches;
+        }
 
         const CgsModule::Event* lpFrustumTestResult = 0;
         s32 liResultSize = 0;
@@ -5364,6 +5640,8 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
 
         if ( liResultType >= 0 && lpFrustumTestResult != 0 )
         {
+            // [DIAG shadow-perf] the main-view filter + buffer seeding.
+            const ShadowPerfClock::time_point lMainFilterStart = ShadowPerfNow();
             FilterFrustumTestResults( lpFrustumTestResult,
                                       &sFilteredEntityData.maWorldEntityIds,
                                       &sFilteredEntityData.maRaceCarEntityIds,
@@ -5381,12 +5659,17 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             // BridgeWorldModuleToEntityModules_Render.
             sWorldDispatchInput.SetShadowMap( &mShadowMap );
             sWorldDispatchInput.UnlockForWrite();
+            gShadowPerf.mfMainFilterUs += ShadowPerfUsSince( lMainFilterStart );
 
+            // [DIAG shadow-perf] the main-view world leg -- the per-record BASELINE the
+            // three cascade world legs below are compared against.
+            const ShadowPerfClock::time_point lMainWorldStart = ShadowPerfNow();
             mWorldEntityModule.GenerateDispatchLists(
                 &sWorldDispatchInput, sFilteredEntityData.maWorldEntityIds,
                 lViewProjection, lEye, lForward, lfLodZoomFactor, &mShaderLodInfo,
                 KI_WORLD_OPAQUE_LIST, KI_WORLD_SORT_LAYER, KI_WORLD_SORT_KEY,
                 KI_WORLD_PREZ_LIST, false );
+            gShadowPerf.mfMainWorldUs += ShadowPerfUsSince( lMainWorldStart );
         }
 
         // THE RACE CAR (pose wave 2026-07-31). This is now the REAL console leg:
@@ -5425,6 +5708,12 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         // The PLAYER-car force-to-LOD-0 leg inside the function does NOT depend on
         // that array -- it keys off meLocalPlayerActiveRaceCarIndex -- so the player
         // car comes off LOD 4 regardless.
+        // [DIAG shadow-perf] the main-view race-car leg (LOD policy + dispatch). The SAME
+        // race-car dispatch runs again in every cascade below with no near-only gate
+        // (ShadowMap::Construct leaves mbRenderRaceCarsNearOnly false), so this number is
+        // the per-cascade FIXED cost of the car -- the one that does not move with the
+        // world caster count.
+        const ShadowPerfClock::time_point lMainCarStart = ShadowPerfNow();
         CalculateVehicleLODs( lEye, lfLodZoomFactor,
                               sFilteredEntityData.maRaceCarEntityIds,
                               GetTrafficRenderInfosBringUp( 0 ) );
@@ -5442,6 +5731,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 Vector4{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f },
                 lEye );
         }
+        gShadowPerf.mfMainCarUs += ShadowPerfUsSince( lMainCarStart );
 
         // ==================================================================
         // ⭐ [FLAG PC bring-up] THE PROPS (prop-spawn wave, 2026-08-12).
@@ -5466,6 +5756,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         // from (the real GenerateDispatchLists gets one), and PerfMonCpu is not in scope at
         // this point in the file. Both come back with the real producer.
         {
+            const ShadowPerfClock::time_point lMainPropStart = ShadowPerfNow();
             sPropDispatchInput.LockForWrite();
             sPropDispatchInput.SetDispatchFrame( lpDispatchFrame );
             sPropDispatchInput.SetShadowMap( &mShadowMap );
@@ -5477,6 +5768,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 // object list 11 / opaque 11 / transparent 15 -- the console's own triple.
                 // Trailing pair: not the environment map, and coronas on (main view).
                 11, 11, 15, false, true );
+            gShadowPerf.mfMainPropUs += ShadowPerfUsSince( lMainPropStart );
         }
 
         // The MAIN-VIEW visible-world count, snapshotted here because the shadow arm
@@ -5485,6 +5777,15 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         // reporting the LAST CASCADE's count under the name `visibleWorld`.
         const s32 liMainViewVisibleWorld =
             static_cast< s32 >( sFilteredEntityData.maWorldEntityIds.GetLength() );
+        gShadowPerf.miMainWorldEnts    = liMainViewVisibleWorld;
+        gShadowPerf.miMainWorldRecords = static_cast< s32 >(
+            lpDispatchFrame->GetList( KI_WORLD_OPAQUE_LIST )->GetCount() );
+        for ( s32 liSlot = 0; liSlot < 3; liSlot++ )
+        {
+            gShadowPerf.maiCascadeWorldEnts[ liSlot ]    = 0;
+            gShadowPerf.maiCascadeCarRecords[ liSlot ]   = 0;
+            gShadowPerf.maiCascadeWorldRecords[ liSlot ] = 0;
+        }
 
         // ==================================================================
         // ⭐ [FLAG PC bring-up] SHADOW PRODUCER, PART 2 -- the cascade dispatch legs.
@@ -5517,6 +5818,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         // (BrnRendererModule::RenderWorldPasses), so nothing is drawn from them yet --
         // they are what the "MESH lists:" probe will finally show as non-empty.
         // ==================================================================
+        const ShadowPerfClock::time_point lCascadeStart = ShadowPerfNow();
         if ( lbShadowArmLive && liResultType >= 0 && lpFrustumTestResult != 0 )
         {
             const u32 luNumCascades = mShadowMap.GetRenderMultipleShadowMaps() ? 3u : 1u;
@@ -5565,6 +5867,8 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                                      && ( luCascade == 0 || !mShadowMap.GetRenderRaceCarsNearOnly() );
                 const bool lbWorld    = mShadowMap.GetRenderWorldIntoShadowMap();
 
+                // [DIAG shadow-perf] this cascade's filter + seeding.
+                const ShadowPerfClock::time_point lCascFilterStart = ShadowPerfNow();
                 FilterFrustumTestResults( lpCascadeResult,
                                           &sFilteredEntityData.maWorldEntityIds,
                                           &sFilteredEntityData.maRaceCarEntityIds,
@@ -5593,6 +5897,12 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 sRaceCarDispatchInput.SetDispatchFrame( lpDispatchFrame );
                 sRaceCarDispatchInput.SetShadowMap( &mShadowMap );
                 sRaceCarDispatchInput.UnlockForWrite();
+                gShadowPerf.mfCascadeFilterUs += ShadowPerfUsSince( lCascFilterStart );
+                if ( luCascade < 3u )
+                {
+                    gShadowPerf.maiCascadeWorldEnts[ luCascade ] =
+                        static_cast< s32 >( sFilteredEntityData.maWorldEntityIds.GetLength() );
+                }
 
                 // Advance to the next cascade's result BEFORE the dispatch legs run --
                 // the console does exactly this at :4225 (the event pointer the legs
@@ -5652,6 +5962,17 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 const s32 liCascadeList = ( luCascade >= 2 ) ? static_cast< s32 >( luCascade ) + 2
                                                              : static_cast< s32 >( luCascade );
 
+                // [DIAG shadow-perf] the car and world legs share one destination list, so
+                // the split is taken as two deltas around them. This is the measurement
+                // that tells a car-only cascade (the fixed cost) apart from a cascade that
+                // is actually carrying world casters.
+                const s32 liRecordsBefore = static_cast< s32 >(
+                    lpDispatchFrame->GetList( liCascadeList )->GetCount() );
+
+                // [DIAG shadow-perf] this cascade's race-car leg. FIXED cost: the module
+                // sweeps its own eight active-car slots, so it does not shrink when the
+                // cascade's caster set does.
+                const ShadowPerfClock::time_point lCascCarStart = ShadowPerfNow();
                 if ( lbRaceCars )
                 {
                     mRaceCarEntityModule.GenerateDispatchLists(
@@ -5660,7 +5981,13 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                         Vector4{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f },
                         lEye );
                 }
+                gShadowPerf.mfCascadeCarUs += ShadowPerfUsSince( lCascCarStart );
 
+                const s32 liRecordsAfterCar = static_cast< s32 >(
+                    lpDispatchFrame->GetList( liCascadeList )->GetCount() );
+
+                // [DIAG shadow-perf] this cascade's world leg.
+                const ShadowPerfClock::time_point lCascWorldStart = ShadowPerfNow();
                 if ( lbWorld )
                 {
                     mWorldEntityModule.GenerateDispatchLists(
@@ -5668,6 +5995,16 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                         lpCascadeCamera->GetViewProjectionMatrix(), lEye, lForward,
                         lfLodZoomFactor, &mShaderLodInfo,
                         liCascadeList, liCascadeList, liCascadeList, liCascadeList, true );
+                }
+                gShadowPerf.mfCascadeWorldUs += ShadowPerfUsSince( lCascWorldStart );
+
+                if ( luCascade < 3u )
+                {
+                    gShadowPerf.maiCascadeCarRecords[ luCascade ] =
+                        liRecordsAfterCar - liRecordsBefore;
+                    gShadowPerf.maiCascadeWorldRecords[ luCascade ] =
+                        static_cast< s32 >( lpDispatchFrame->GetList( liCascadeList )->GetCount() )
+                        - liRecordsAfterCar;
                 }
 
                 mShadowMap.SetRenderingShadowMap( false );
@@ -5685,6 +6022,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             CgsGraphics::mShaderConstantTable.SetShaderConstantData( 3, lViewProjection );
             CgsGraphics::mShaderConstantTable.SetShaderConstantData( 34, lViewProjectionModified );
         }
+        gShadowPerf.mfCascadeUs += ShadowPerfUsSince( lCascadeStart );
         sQueryOutput.UnlockForRead();
 
         {
@@ -5708,6 +6046,123 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                     << "/" << static_cast< s32 >( lpDispatchFrame->GetList( 1 )->GetCount() )
                     << "/" << static_cast< s32 >( lpDispatchFrame->GetList( 4 )->GetCount() )
                     << "\n";
+            }
+
+            // ==============================================================
+            // ⭐ [DIAG shadow-perf wave 2026-08-12] THE PHASE REPORT.
+            //
+            // Bank this frame's total and, once the window is full, print the
+            // per-frame average of every phase. Value-latched on the accumulated
+            // FRAME COUNT (never a `static bool`): the counter only advances on
+            // frames the producer actually completed, and the line reprints for
+            // the whole session, so it can never read as "never reached".
+            //
+            // HOW TO READ IT. `frame - total` is everything downstream of this
+            // producer; `total` is everything inside it. The 2026-08-12 run put
+            // total at 0.9% of the frame, so a frame-time regression that does not
+            // move `total` is NOT a producer regression -- check the renderer.
+            //
+            // The count fields are correctness tripwires, not perf fields:
+            //   * cascPadPlanes -> 8 on any cascade: ComputeOptimalViewVolume found no
+            //     real supporting plane, so that cascade culls NOTHING and its query
+            //     degenerates into a full-octree trivial-accept walk. Measured 0/2/1
+            //     (healthy). A partly-padded volume is normal; a fully padded one is a
+            //     defect in the fit.
+            //   * cascEnt >> mainEnt: the fitted volume ballooned. Measured 206/30/0
+            //     against mainEnt 978 -- the three slabs genuinely narrow.
+            //   * cascEnt identical across all three: the cascades are sharing one
+            //     volume. Note this CANNOT be diagnosed from record counts alone --
+            //     both shadow-LOD toggles ship FALSE (BrnShadowMap.cpp:65/66,
+            //     sbOptimiseShadowLods / sbOptimiseShadowLodDistances), so
+            //     CalcLodDistanceModifier returns 0 for every cascade and the
+            //     {50,50,75} table is never read. Identical sets therefore FORCE
+            //     identical counts, and identical counts prove identical sets. That
+            //     state was real earlier the same day, when CalcVertices was an inert
+            //     stub and ComputeBoundingBoxMatrix solved all three fits from the same
+            //     uninitialised stack corners; it is gone on this build.
+            //   * jobPool at 8192: silent truncation (see the pool banner).
+            // Every one of those is owned by BrnShadowMap.cpp, not by this file.
+            // ==============================================================
+            {
+                gShadowPerf.mfTotalUs += ShadowPerfUsSince( lProducerStart );
+                ++gShadowPerf.miFrames;
+
+                if ( gShadowPerf.miFrames >= 120 && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    const f64 lfInvFrames = 1.0 / static_cast< f64 >( gShadowPerf.miFrames );
+                    *CgsDev::Log::gpDebugPrint
+                        << "[shadow-perf] armed=" << gShadowPerf.miArmed
+                        << " frames=" << gShadowPerf.miFrames
+                        << " us/frame: frame=" << static_cast< f32 >( gShadowPerf.mfFramePeriodUs * lfInvFrames )
+                        << " total=" << static_cast< f32 >( gShadowPerf.mfTotalUs * lfInvFrames )
+                        << " cam=" << static_cast< f32 >( gShadowPerf.mfCamerasUs * lfInvFrames )
+                        << " stage=" << static_cast< f32 >( gShadowPerf.mfStageUs * lfInvFrames )
+                        << " query=" << static_cast< f32 >( gShadowPerf.mfQueryUs * lfInvFrames )
+                        << " mainFilter=" << static_cast< f32 >( gShadowPerf.mfMainFilterUs * lfInvFrames )
+                        << " mainWorld=" << static_cast< f32 >( gShadowPerf.mfMainWorldUs * lfInvFrames )
+                        << " mainCar=" << static_cast< f32 >( gShadowPerf.mfMainCarUs * lfInvFrames )
+                        << " mainProp=" << static_cast< f32 >( gShadowPerf.mfMainPropUs * lfInvFrames )
+                        << " propCache=" << static_cast< f32 >( gShadowPerf.mfPropCacheUs * lfInvFrames )
+                        << " casc=" << static_cast< f32 >( gShadowPerf.mfCascadeUs * lfInvFrames )
+                        << " cascFilter=" << static_cast< f32 >( gShadowPerf.mfCascadeFilterUs * lfInvFrames )
+                        << " cascCar=" << static_cast< f32 >( gShadowPerf.mfCascadeCarUs * lfInvFrames )
+                        << " cascWorld=" << static_cast< f32 >( gShadowPerf.mfCascadeWorldUs * lfInvFrames )
+                        << " | mainEnt=" << gShadowPerf.miMainWorldEnts
+                        << " mainRec=" << gShadowPerf.miMainWorldRecords
+                        << " cascEnt=" << gShadowPerf.maiCascadeWorldEnts[ 0 ]
+                        << "/" << gShadowPerf.maiCascadeWorldEnts[ 1 ]
+                        << "/" << gShadowPerf.maiCascadeWorldEnts[ 2 ]
+                        << " cascWorldRec=" << gShadowPerf.maiCascadeWorldRecords[ 0 ]
+                        << "/" << gShadowPerf.maiCascadeWorldRecords[ 1 ]
+                        << "/" << gShadowPerf.maiCascadeWorldRecords[ 2 ]
+                        << " cascCarRec=" << gShadowPerf.maiCascadeCarRecords[ 0 ]
+                        << "/" << gShadowPerf.maiCascadeCarRecords[ 1 ]
+                        << "/" << gShadowPerf.maiCascadeCarRecords[ 2 ]
+                        << " cascPadPlanes=" << gShadowPerf.maiCascadePadPlanes[ 0 ]
+                        << "/" << gShadowPerf.maiCascadePadPlanes[ 1 ]
+                        << "/" << gShadowPerf.maiCascadePadPlanes[ 2 ]
+                        << " | jobPool=" << gShadowPerf.miPoolResults
+                        << "/" << KI_SHADOW_PERF_POOL_CAPACITY
+                        << " batches=" << gShadowPerf.miPoolBatches
+                        << ( gShadowPerf.miPoolResults >= KI_SHADOW_PERF_POOL_CAPACITY
+                                 ? "  [WARN: the shared job-result pool is FULL --"
+                                   " LooseOctree::PushCoarseResult is dropping results silently,"
+                                   " so a cascade's caster set is truncated]"
+                                 : "" )
+                        // ⚠ THE NEVER-CULLING CASCADE. ComputeOptimalViewVolume pads any
+                        // unused plane slot with its sbClearPlanes defaults {N, D=-1e6},
+                        // and CgsGeometric::Frustum::SetPlaneByIndex stores the NEGATION of
+                        // the plane it is given -- so a padded lane reads back as
+                        // (-N, +1e6) and LooseOctree's test `N.C - D > R` evaluates to
+                        // -N.C - 1e6, which is inside for every finite point. A cascade
+                        // whose fit yields no surviving candidate planes therefore CULLS
+                        // NOTHING: its query degenerates into a full-octree
+                        // TrivialAcceptRecursive walk that pushes the entire mask-128
+                        // population into the shared pool (starving the later cascades) and
+                        // its world dispatch leg then iterates that whole population. The
+                        // main view is the reference for "how much of the world is even
+                        // near the camera", so a cascade seeing far more than it does is
+                        // the signature. The fix for it lives in BrnShadowMap.cpp
+                        // (ComputeBoundingBoxMatrix / ComputeOptimalViewVolume), not here.
+                        << ( ( gShadowPerf.maiCascadePadPlanes[ 0 ] >= 8
+                            || gShadowPerf.maiCascadePadPlanes[ 1 ] >= 8
+                            || gShadowPerf.maiCascadePadPlanes[ 2 ] >= 8 )
+                                 ? "  [WARN: a cascade volume is ALL clear-plane sentinels --"
+                                   " ComputeOptimalViewVolume found no real supporting plane,"
+                                   " so that cascade culls NOTHING and its query degenerates"
+                                   " into a full-octree trivial-accept walk]"
+                                 : "" )
+                        << ( ( gShadowPerf.maiCascadeWorldEnts[ 0 ] > 2 * gShadowPerf.miMainWorldEnts
+                            || gShadowPerf.maiCascadeWorldEnts[ 1 ] > 2 * gShadowPerf.miMainWorldEnts
+                            || gShadowPerf.maiCascadeWorldEnts[ 2 ] > 2 * gShadowPerf.miMainWorldEnts )
+                                 ? "  [WARN: a cascade returned far more world entities than the"
+                                   " main view -- its fitted volume is far too large even if it"
+                                   " is not fully padded]"
+                                 : "" )
+                        << "\n";
+
+                    gShadowPerf.ResetWindow();
+                }
             }
 
             static bool sbLogged = false;
