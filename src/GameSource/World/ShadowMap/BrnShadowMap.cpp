@@ -1176,14 +1176,12 @@ namespace BrnWorld
                 mpcStage  = 0;
                 miCascade = -1;
                 for (s32 liI = 0; liI < 4; ++liI) { mafDetail[liI] = 0.0f; }
-                mbHavePlaneReport   = false;
+                mbHaveForensics     = false;
+                miCascadeForensics  = -1;
                 miNonFiniteVertMask = 0;
                 mfSubCamNear = mfSubCamFar = mfSlabNear = mfSlabFar = 0.0f;
-                for (s32 liI = 0; liI < 6; ++liI)
-                {
-                    maiOppositeSlot[liI] = -1;
-                    mafOppositeDot[liI]  = 0.0f;
-                }
+                mfSubCamFovH = mfSubCamAspect = mfSubCamTanH = mfSubCamTanV = 0.0f;
+                mfFitHalfW = mfFitHalfH = 0.0f;
             }
 
             void Note(const char* lpcStage, s32 liCascade,
@@ -1196,15 +1194,35 @@ namespace BrnWorld
                 mafDetail[2] = lfC; mafDetail[3] = lfD;
             }
 
-            // ---- rung 1's forensic payload (see NotePlaneForensics) ----------
-            bool mbHavePlaneReport;
+            // ---- the sub-frustum forensic payload (see CaptureForensics) -----
+            bool mbHaveForensics;
             s32  miNonFiniteVertMask;    // bit v set == lFrustumPoints[v] non-finite
             f32  mfSubCamNear;           // lTsmBBInfo.mCamera.maProjectionScalars[7]
             f32  mfSubCamFar;            //                                      [8]
             f32  mfSlabNear;             // lTsmBBInfo.mfNearClip
             f32  mfSlabFar;              // lTsmBBInfo.mfFarClip
-            s32  maiOppositeSlot[6];     // per stored slot: the slot its normal most opposes
-            f32  mafOppositeDot[6];      // ...and that dot3 (an opposite pair is ~ -1)
+            f32  mfSubCamFovH;           // maProjectionScalars[0] m_fovHorizontal (radians)
+            f32  mfSubCamAspect;         //                    [6] m_aspectRatio
+            f32  mfSubCamTanH;           //                    [2] m_tanHalfFovHorizontal
+            f32  mfSubCamTanV;           //                    [5] m_tanHalfFovVertical
+            f32  mfFitHalfW;             // the fitted box half-extents, in METRES
+            f32  mfFitHalfH;
+
+            void CaptureForensics(s32 liCascade, f32 lfSubNear, f32 lfSubFar,
+                                  f32 lfSlabNear, f32 lfSlabFar,
+                                  f32 lfFovH, f32 lfAspect, f32 lfTanH, f32 lfTanV,
+                                  s32 liVertMask)
+            {
+                if (mbHaveForensics) { return; }
+                mbHaveForensics     = true;
+                miCascadeForensics  = liCascade;
+                miNonFiniteVertMask = liVertMask;
+                mfSubCamNear = lfSubNear;  mfSubCamFar = lfSubFar;
+                mfSlabNear   = lfSlabNear; mfSlabFar   = lfSlabFar;
+                mfSubCamFovH = lfFovH;     mfSubCamAspect = lfAspect;
+                mfSubCamTanH = lfTanH;     mfSubCamTanV   = lfTanV;
+            }
+            s32 miCascadeForensics;
         };
         ShadowCamProbe gShadowCamProbe;
 
@@ -1223,30 +1241,11 @@ namespace BrnWorld
                 && ProbeFinite4(lrM.zAxis) && ProbeFinite4(lrM.wAxis);
         }
 
-        // --------------------------------------------------------------------
-        // [FLAG PC bring-up probe] rung 1's forensics.
-        //
-        // Recovers stored slot `luSlot` out of a Frustum's swizzled SoA batch,
-        // AoS and un-negated -- the same de-swizzle CalcVertices' stage 1 does
-        // (batch = slot >= 4 ? 4 : 0, float lane = slot & 3, whole-vector
-        // negate, per VectorToPlane @0x82840DB0). READ-ONLY, and it goes through
-        // the public maSwizzledPlanes member the WorldModule tripwire already
-        // reads, so it borrows no private access and asserts nothing.
-        // --------------------------------------------------------------------
-        inline Vector4 ProbeGetStoredPlane(const CgsGeometric::Frustum& lrFrustum, u32 luSlot)
-        {
-            const Vector4* lpaLanes = &lrFrustum.maSwizzledPlanes[(luSlot >= 4u) ? 4u : 0u];
-            const u32      luLane   = luSlot & 3u;
-
-            Vector4 lvPlane;
-            f32*    lpfOut = &lvPlane.x;
-            for (u32 luComp = 0; luComp < 4; ++luComp)
-            {
-                const f32* lpfLane = &lpaLanes[luComp].x;
-                lpfOut[luComp] = -lpfLane[luLane];
-            }
-            return lvPlane;
-        }
+        // (The stored-plane de-swizzle helper that pinned the SetFromRwFrustum
+        // slot permutation was retired 2026-08-12: that fault is fixed and
+        // verified, and the ladder's live question is now MAGNITUDE, not which
+        // slot holds which plane. The nonFiniteMask below still reports it --
+        // it should read 0b00000000 forever now.)
     }
 
     // ========================================================================
@@ -1360,6 +1359,38 @@ namespace BrnWorld
         }
 
         // ---- 3. the frame camera in CGS form (stack v73) --------------------
+        // ⚠ ROOT CAUSE OF THE 10^8-METRE CASCADE FIT ([shadow-extent], 2026-08-12)
+        // -- NOT MINE TO FIX. This copy is where the whole bounding-box solve
+        // gets its sub-frustum shape from, and it arrives DEGENERATE:
+        //
+        //   CopyToCgsCamera (Camera.cpp:505) begins with lpOutCamera->Release(),
+        //   which resets the camera through Camera::Construct(KF_DEFAULT_FOVHORIZONTAL,
+        //   KF_DEFAULT_ASPECTRATIO, ...). KF_DEFAULT_ASPECTRATIO is still a FLAGGED
+        //   0.0f PLACEHOLDER (CgsCamera.cpp:25, flt_82F30FD8 "value not recovered"),
+        //   and nothing else ever writes m_aspectRatio on this camera. So
+        //   SetFovHorizontal computes fovVertical = 2*atan((1/0) * tanHalfH)
+        //   = 2*atan(+inf) = pi EXACTLY, hence
+        //       m_tanHalfFovVertical = tanf(float(pi/2)) = 2.2877e7.
+        //   The frame camera is therefore 180 DEGREES TALL. Clone + the per-slot
+        //   near/far clamps below preserve that, GetFrustumPerspective builds its
+        //   top/bottom planes from it, and CalcVertices duly returns corners
+        //   +/- far*2.29e7 off-axis. ComputeBoundingBoxMatrix then fits a
+        //   perfectly correct minimum-area box around a genuinely astronomical
+        //   point cloud -- which is why nothing reports non-finite and every
+        //   caster triangle lands sub-pixel.
+        //
+        // RECOVERED 2026-08-12 (this wave, ida_bytes.get_bytes on a scratch copy
+        // of the .i64, big-endian; slot binding proven by the lfs f1/f2 pair in
+        // the @0x827F94E8 reset thunk, PPC float-arg order):
+        //     flt_82F30FD4 = 0x3FC90FDB = 1.5707964f  -> KF_DEFAULT_FOVHORIZONTAL (pi/2, 90 deg)
+        //     flt_82F30FD8 = 0x3FE38E39 = 1.7777778f  -> KF_DEFAULT_ASPECTRATIO   (16/9)
+        // The fix is those two constants in CgsCamera.cpp; nothing in THIS file
+        // may compensate for them. The console does NOT stamp an aspect ratio on
+        // the frame camera -- step 2 above writes 1.0 to the CASCADE cameras only
+        // (stfs f31, 0x158(r31) @0x827DA98C, f31 = flt_82001C98 = 1.0), and there
+        // is no matching store for this copy @0x827DA9F0. Adding one here would
+        // be a fabrication that also hid the real defect from every other caller
+        // of Camera::Release().
         CgsGraphics::Camera lFrameCamera;
         lpRenderCamera->CopyToCgsCamera(&lFrameCamera);
 
@@ -1541,28 +1572,27 @@ namespace BrnWorld
                 // the log rather than by argument). subCam near/far is what
                 // GetFrustumPerspective actually used; slab is the configured
                 // KAF_SHADOWMAP_SUBSET_FRUSTUM_NEAR/FAR_CLIP pair it clamps to.
-                if (gShadowCamProbe.mbHavePlaneReport)
+                if (gShadowCamProbe.mbHaveForensics)
                 {
                     *CgsDev::Log::gpDebugPrint
-                        << "[shadow-cam] verts nonFiniteMask=0x";
+                        << "[shadow-cam] subFrustum c" << gShadowCamProbe.miCascadeForensics
+                        << " nonFiniteMask=0b";
                     const s32 liMask = gShadowCamProbe.miNonFiniteVertMask;
                     for (s32 liBit = 7; liBit >= 0; --liBit)
                     {
                         *CgsDev::Log::gpDebugPrint << (((liMask >> liBit) & 1) ? 1 : 0);
                     }
                     *CgsDev::Log::gpDebugPrint
-                        << " subCamNear=" << gShadowCamProbe.mfSubCamNear
-                        << " subCamFar="  << gShadowCamProbe.mfSubCamFar
+                        << " camClip=[" << gShadowCamProbe.mfSubCamNear
+                        << "," << gShadowCamProbe.mfSubCamFar << "]"
                         << " slab=[" << gShadowCamProbe.mfSlabNear
                         << "," << gShadowCamProbe.mfSlabFar << "]"
-                        << " opposedSlot:";
-                    for (s32 liSlot = 0; liSlot < 6; ++liSlot)
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << " " << liSlot << "->" << gShadowCamProbe.maiOppositeSlot[liSlot]
-                            << "(" << gShadowCamProbe.mafOppositeDot[liSlot] << ")";
-                    }
-                    *CgsDev::Log::gpDebugPrint << "\n";
+                        << " fovH=" << gShadowCamProbe.mfSubCamFovH
+                        << " aspect=" << gShadowCamProbe.mfSubCamAspect
+                        << " tanH=" << gShadowCamProbe.mfSubCamTanH
+                        << " tanV=" << gShadowCamProbe.mfSubCamTanV
+                        << " fitHalfW=" << gShadowCamProbe.mfFitHalfW
+                        << "m fitHalfH=" << gShadowCamProbe.mfFitHalfH << "m\n";
                 }
             }
         }
@@ -2048,45 +2078,28 @@ namespace BrnWorld
                                      lFrustumPoints[liFirstBad].y,
                                      lFrustumPoints[liFirstBad].z);
 
-                // The decisive payload, gathered once per frame. WHICH vertices
-                // fail is a fingerprint: CalcVertices pairs stored slots
-                // (0,2) horizontally, (1,3) vertically and (4,5) in depth, so a
-                // vertex is only unsolvable when its triple contains two
-                // PARALLEL planes -- i.e. when the slot the storage writer used
-                // for a plane disagrees with the slot CalcVertices reads it
-                // from. The per-slot "most opposed" table below reads that
-                // straight off the live data: a real opposite pair dots to
-                // about -1, so it names the true slot->plane mapping with no
-                // inference at all.
-                if (!gShadowCamProbe.mbHavePlaneReport)
-                {
-                    gShadowCamProbe.mbHavePlaneReport   = true;
-                    gShadowCamProbe.miNonFiniteVertMask = liNonFiniteMask;
-                    gShadowCamProbe.mfSubCamNear = lTsmBBInfo.mCamera.maProjectionScalars[7];
-                    gShadowCamProbe.mfSubCamFar  = lTsmBBInfo.mCamera.maProjectionScalars[8];
-                    gShadowCamProbe.mfSlabNear   = lTsmBBInfo.mfNearClip;
-                    gShadowCamProbe.mfSlabFar    = lTsmBBInfo.mfFarClip;
-
-                    Vector4 laStored[6];
-                    for (u32 luSlot = 0; luSlot < 6; ++luSlot)
-                    {
-                        laStored[luSlot] = ProbeGetStoredPlane(lTsmBBInfo.mSubFrustum, luSlot);
-                    }
-                    for (u32 luI = 0; luI < 6; ++luI)
-                    {
-                        s32 liBest    = -1;
-                        f32 lfBestDot = 1.0e30f;
-                        for (u32 luJ = 0; luJ < 6; ++luJ)
-                        {
-                            if (luJ == luI) { continue; }
-                            const f32 lfDot = Dot3(laStored[luI], laStored[luJ]);
-                            if (lfDot < lfBestDot) { lfBestDot = lfDot; liBest = static_cast<s32>(luJ); }
-                        }
-                        gShadowCamProbe.maiOppositeSlot[luI] = liBest;
-                        gShadowCamProbe.mafOppositeDot[luI]  = lfBestDot;
-                    }
-                }
             }
+
+            // The sub-frustum forensics, captured on cascade 0 whether or not a
+            // vertex failed -- because the fault mode this ladder now hunts is
+            // MAGNITUDE, not finiteness. maProjectionScalars[6] (m_aspectRatio)
+            // is the load-bearing one: SetFovHorizontal derives the vertical fov
+            // as 2*atan(tanHalfH / aspect), so a zero aspect makes that atan
+            // argument +inf, fovVertical exactly pi, and tanHalfV = tanf(pi/2)
+            // ~ 2.29e7 -- a sub-frustum 180 degrees tall, whose corners are
+            // then astronomically far off-axis. Everything downstream of that
+            // is arithmetic on a real (if absurd) frustum, so nothing reports
+            // as non-finite; only the fitted extent gives it away.
+            gShadowCamProbe.CaptureForensics(
+                static_cast<s32>(luMapIndex),
+                lTsmBBInfo.mCamera.maProjectionScalars[7],
+                lTsmBBInfo.mCamera.maProjectionScalars[8],
+                lTsmBBInfo.mfNearClip, lTsmBBInfo.mfFarClip,
+                lTsmBBInfo.mCamera.maProjectionScalars[0],
+                lTsmBBInfo.mCamera.maProjectionScalars[6],
+                lTsmBBInfo.mCamera.maProjectionScalars[2],
+                lTsmBBInfo.mCamera.maProjectionScalars[5],
+                liNonFiniteMask);
         }
         if (!ProbeFinite44(lWorldToLight))
         {
@@ -2399,6 +2412,35 @@ namespace BrnWorld
         {
             gShadowCamProbe.Note("bestfit-S2-corner", static_cast<s32>(luMapIndex),
                                  lvCorner.x, lvCorner.y, lHeight, lWidth);
+        }
+
+        // [FLAG PC bring-up probe] the MAGNITUDE rung. lvCorner is the fitted
+        // box half-extent in the cascade's post-projective light plane, so
+        // multiplying by the ortho half-extent recovers METRES -- exactly the
+        // quantity the renderer's [shadow-extent] instrument reads back off the
+        // baked WVP as 1/|(m00,m10,m20)|. A healthy cascade fits its own slab,
+        // so the half-width lands within a small multiple of mfFarClip; 10^8 m
+        // means the sub-frustum handed to the solve was degenerate long before
+        // the box fit saw it. The 4x threshold is a bring-up tripwire, NOT a
+        // clamp -- nothing here alters a single console-attested value, and the
+        // X360 has no such test.
+        {
+            const f32 lfOrthoHalfExtent = mafShadowMapOrthoScale[
+                (maShadowMapTypes[luMapIndex] != E_SHADOWMAP_TYPE_ORTHO) ? 0u : luMapIndex];
+            const f32 lfFitHalfW = std::fabs(lvCorner.x) * lfOrthoHalfExtent;
+            const f32 lfFitHalfH = std::fabs(lvCorner.y) * lfOrthoHalfExtent;
+
+            if (gShadowCamProbe.miCascadeForensics == static_cast<s32>(luMapIndex))
+            {
+                gShadowCamProbe.mfFitHalfW = lfFitHalfW;
+                gShadowCamProbe.mfFitHalfH = lfFitHalfH;
+            }
+            if (!(lfFitHalfW <= 4.0f * lTsmBBInfo.mfFarClip))   // NaN-safe: NaN fails the <=
+            {
+                gShadowCamProbe.Note("bestfit-EXTENT-absurd", static_cast<s32>(luMapIndex),
+                                     lfFitHalfW, lfFitHalfH, lTsmBBInfo.mfFarClip,
+                                     lTsmBBInfo.mCamera.maProjectionScalars[5]);
+            }
         }
         if (!ProbeFinite44(lTsmBBInfo.mBestFitMatrix))
         {

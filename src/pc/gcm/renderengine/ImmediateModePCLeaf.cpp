@@ -471,25 +471,39 @@ void DeviceClearDepthStencil(const renderengine::ClearDepthStencilParameters* lp
 
     HRESULT lhr = lpDevice->Clear(0, nullptr, luFlags, D3DCOLOR_ARGB(0, 0, 0, 0),
                                   lpParameters->mfDepth, lpParameters->mu32Stencil);
+    bool lbDroppedStencil = false;
     if (FAILED(lhr) && (luFlags & D3DCLEAR_STENCIL) != 0)
     {
         luFlags &= ~static_cast<DWORD>(D3DCLEAR_STENCIL);
+        lbDroppedStencil = true;
         lhr = lpDevice->Clear(0, nullptr, luFlags, D3DCOLOR_ARGB(0, 0, 0, 0),
                               lpParameters->mfDepth, lpParameters->mu32Stencil);
-        static bool sbLoggedNoStencil = false;   // log-spam guard, not a diagnostic latch
-        if (!sbLoggedNoStencil)
-        {
-            sbLoggedNoStencil = true;
-            LogLine("[ImLeaf] depth/stencil clear: no stencil channel - cleared Z only\n");
-        }
     }
-    if (FAILED(lhr))
+
+    // ⚠ VALUE-LATCHED, not a `static bool` one-shot. The old one-shots here could only ever
+    // say "this happened at least once, some time"; with the shadow pass calling this three
+    // times a frame that is not enough to answer the question that matters -- DID THE Z CLEAR
+    // ACTUALLY HAPPEN, every frame? "Cleared to 1.0" and "not cleared at all" are the
+    // difference between LESSEQUAL passing everything and LESSEQUAL rejecting everything, and
+    // the depth surface cannot be read back to check. The latch is
+    // (flags, hr, stencil-dropped, the depth value), so a clear that starts failing -- or
+    // starts clearing to a different Z -- reprints instead of hiding behind the first line.
     {
-        static bool sbLoggedClearFail = false;   // log-spam guard, not a diagnostic latch
-        if (!sbLoggedClearFail)
+        struct ClearLatch { DWORD muFlags; HRESULT mhr; u32 muDropped; f32 mfDepth; };
+        static ClearLatch sLast = { 0xFFFFFFFFu, 0x7FFFFFFF, 0xFFFFFFFFu, -1.0e30f };
+        const ClearLatch  lNow  = { luFlags, lhr, lbDroppedStencil ? 1u : 0u, lpParameters->mfDepth };
+        if (lNow.muFlags != sLast.muFlags || lNow.mhr != sLast.mhr
+            || lNow.muDropped != sLast.muDropped || lNow.mfDepth != sLast.mfDepth)
         {
-            sbLoggedClearFail = true;
-            LogLine("[ImLeaf] depth/stencil clear FAILED\n");
+            sLast = lNow;
+            char lacMessage[192];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                          "[shadow-fetch] depth clear: xenonFlags=0x%X d3dFlags=0x%X z=%.3f"
+                          " stencilDropped=%d hr=0x%08X %s\n",
+                          (unsigned)luXenonFlags, (unsigned)luFlags,
+                          (double)lpParameters->mfDepth, lbDroppedStencil ? 1 : 0,
+                          (unsigned)lhr, SUCCEEDED(lhr) ? "OK" : "FAILED");
+            LogLine(lacMessage);
         }
     }
 }
