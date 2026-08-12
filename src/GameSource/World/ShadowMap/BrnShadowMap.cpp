@@ -45,21 +45,15 @@ namespace CgsGraphics { extern ::ShaderConstantTable mShaderConstantTable; }
 namespace BrnWorld
 {
     // BrnShadowMap.cpp:373-374 (DWARF). Per-shadow-map-slot LOD tuning tables, indexed by
-    // muCurrentShadowMap (0..KU_NUM_SHADOW_MAPS-1). NOT marked `const` by the DWARF (game
-    // code can presumably tune them at runtime via debug variables), but their rodata
-    // contents are not in this dossier's exports -- carried as honest zeros, matching the
-    // project convention for un-dumped rodata (never fabricated; see e.g.
-    // BrnPhysicalBodyPart.cpp's KF_PART_* constants).
-    s32 KA_SHADOWMAP_LOD_MODIFIER[KU_NUM_SHADOW_MAPS]          = { 0, 0, 0 };  // FLAG: rodata not recovered
-    f32 KA_SHADOWMAP_LOD_DISTANCE_MODIFIER[KU_NUM_SHADOW_MAPS] = { 0.0f, 0.0f, 0.0f }; // FLAG: rodata not recovered
+    // muCurrentShadowMap (0..KU_NUM_SHADOW_MAPS-1). Non-const: debug-tunable at runtime.
+    // Recovered from the X360 ARTIST .data image.
+    s32 KA_SHADOWMAP_LOD_MODIFIER[KU_NUM_SHADOW_MAPS]          = { 1, 1, 2 };             // X360 dword_82F30D14 @0x82F30D14
+    f32 KA_SHADOWMAP_LOD_DISTANCE_MODIFIER[KU_NUM_SHADOW_MAPS] = { 50.0f, 50.0f, 75.0f }; // X360 unk_82F30D20 @0x82F30D20
 
-    // BrnShadowMap.cpp:378-379 (DWARF). Debug-toggleable optimisation gates the two
-    // functions below branch on (byte_8300E120 / byte_8300E121 in the X360 asm). Default
-    // value not attested in this dossier (no Construct/ctor initialiser recovered for these
-    // in the boot trace); carried as `false` (optimisations off), the conservative/inert
-    // default that keeps CalcOptimisedLod/CalcLodDistanceModifier on their early-out paths.
-    bool sbOptimiseShadowLods         = false; // FLAG: default value not recovered
-    bool sbOptimiseShadowLodDistances = false; // FLAG: default value not recovered
+    // BrnShadowMap.cpp:378-379 (DWARF). Debug-toggleable optimisation gates; both shipped
+    // disabled, so the two functions below take their early-out paths in retail.
+    bool sbOptimiseShadowLods         = false; // X360 byte_8300E120 @0x8300E120 (shipped 0x00)
+    bool sbOptimiseShadowLodDistances = false; // X360 byte_8300E121 @0x8300E121 (shipped 0x00)
 
     // BrnShadowMap.cpp / BrnShadowMap.h:170, X360 0x827B42E8.
     //
