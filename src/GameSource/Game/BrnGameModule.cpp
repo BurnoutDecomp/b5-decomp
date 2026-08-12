@@ -2147,6 +2147,21 @@ namespace BrnGame
 
                     mGameStateModule.PreWorldUpdateCarSelectBringUp(
                         mGameTimer.GetRate() * mGameTimer.GetScaleCurrent());
+
+                    // ⭐⭐ THE CONTROLLER-ACTIVE PUBLISH (X360 PreWorldUpdate @0x823A5328, the
+                    // store just before the case-193 AddEvent). It MUST run before
+                    // lpState->Update() below, because that is the leg that drives the world and
+                    // therefore BridgeGameStateToWorld, which reads the flag back out at :1022 --
+                    // the same reason the two legs above run here.
+                    // ⚠️ WITHOUT IT NOTHING CAN DRIVE: ProcessPlayerVehicleInput zero-fills the
+                    // whole BrnPlayerDriverControls record while the flag is false. See the
+                    // header banner for the measurement.
+                    // ⓘ NARROWER THAN THE CONSOLE, DELIBERATELY: the console publishes from
+                    // PreWorldUpdate on every frame; this runs only inside E_MGS_IN_GAME, which
+                    // is a strict subset (the flag's only consumer is the race-car module, which
+                    // needs an attached player car anyway). It inherits the ordering gate the
+                    // two legs above already stand behind rather than adding a second one.
+                    mGameStateModule.PreWorldUpdatePublishControllerActiveBringUp();
                 }
 
                 if (leState != BrnGameMainFlowController::E_MGS_INVALID)

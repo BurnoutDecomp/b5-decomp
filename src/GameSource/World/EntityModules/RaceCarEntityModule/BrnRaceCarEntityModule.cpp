@@ -2362,6 +2362,42 @@ void RaceCarEntityModule::PreSceneUpdate(
     // ---- step 11: pump the five component streamers -------------------------
     UpdateStreaming( lpInput, lpOutput );
 
+    // ---- step 12: LATCH THIS FRAME'S PAD STATE ------------------------------
+    // ⛔⛔ THIS WAS A SILENT DROP, AND IT IS THE ONE THAT KEPT THE CAR PARKED.
+    // ProcessPlayerVehicleInput reads mPlayerVehicleControls by name at fifteen sites; NOTHING
+    // in this tree ever wrote it, so it served its zero-initialised value for ever and every
+    // control the player (or the harness) pressed was thrown away one hop before it was used.
+    // ⚠️ The label lied: ProcessPlayerVehicleInput's own banner at :2837 lists
+    // "PreSceneUpdate's `memcpy(module + 99240, controls, 60)`" among the things that "was
+    // already landed". It was not in the body. MEASURED 2026-08-12: `[controls-diag] FIRST
+    // NON-ZERO control reached the race-car pre-scene buffer -- accel 1.000000` in the SAME run
+    // where the physics probe read `gas 0.000` on every frame.
+    //
+    // The console's three consecutive stores, verbatim from PreSceneUpdate @0x8230D928:
+    //     *(a1 + 99300) = InputBuffer_PreScene::GetActivePaybackType(v5);
+    //     *(a1 + 99304) = InputBuffer_PreScene::GetActivePaybackAggressor(v5);
+    //     v56 = sub_822B4B88(v5);            // == GetPlayerVehicleControls: its "Not locked
+    //                                        //    for reading" assert cites
+    //                                        //    BrnRaceCarEntityModuleIO.h:160, which is the
+    //                                        //    line this tree annotates that getter with
+    //     memcpy(a1 + 99240, v56, 60);       // -> mPlayerVehicleControls
+    // reached by NAME here; +99240/+99300/+99304 are quoted only as the console's own proof of
+    // which member each store lands in (see the member banners in the header).
+    meActivePaybackType       = lpInput->GetActivePaybackType();
+    meActivePaybackAggressor  = lpInput->GetActivePaybackAggressor();
+    {
+        const BrnWorld::PlayerVehicleControls* lpPlayerControls =
+            lpInput->GetPlayerVehicleControls();
+        if( lpPlayerControls != 0 )
+        {
+            // [FLAG PC bring-up] the null test is the deviation: the console's getter cannot
+            // return null (it is `this + 496`, an embedded sub-object), but this build's
+            // producer chain is still being assembled and a null here would be a fault, not a
+            // dropped frame. The copy itself is the console's 60-byte memcpy.
+            mPlayerVehicleControls = *lpPlayerControls;
+        }
+    }
+
     // ---- step 13: the PRE-SCENE output publish ------------------------------
     // ⭐⭐ ADDED 2026-08-01 (car-select hand-off wave). The console runs UpdateOutputInterfaces
     // TWICE per frame -- once here and once in PostPhysicsUpdate -- and only the PostPhysics
@@ -2945,6 +2981,7 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 
     bool lbControllerActive = lpInput->GetControllerActive();
 
+
     // ⛔ [FLAG PC bring-up] LOUD GATE, NOT A SILENT NO-OP -- and it is LOAD-BEARING, not
     // defensive padding. The console's own flow guarantees a valid, attached player slot by the
     // time PrePhysicsUpdate runs; this build does not (see PrePhysicsUpdate's :1726 banner --
@@ -3247,6 +3284,7 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
     // accessor's own note), r4 == &record, r5 == 0 (the event type). The queue is the
     // interface's first member, which is why the console passes the interface pointer straight
     // to VariableEventQueue<5040,16>::AddEvent<BrnPlayerDriverControls>.
+
     lpOutput->GetVehicleDriverInterface()->GetUpdateDriverQueue()->AddEvent( &lControls, 0 );
 }
 
