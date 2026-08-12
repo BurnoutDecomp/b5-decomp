@@ -92,9 +92,23 @@ class Texture;
 class TextureState;
 }
 
-struct BrnRendererMemory
-{
-};
+// BrnRendererMemory is the real type now (GameSource/Graphics/BrnRendererMemory.h): it owns the
+// renderer's render-target pool, and mAllocatedRenderTargets below is embedded BY VALUE, so the
+// shadow pass -- which asks it for GetShadowMapBuffer(0) -- needs the complete layout, not the
+// empty placeholder that used to stand here.
+//
+// ODR TRAP (the same one the BrnBlobbyShadowManager note below records): the real class is also a
+// GLOBAL-namespace `struct BrnRendererMemory`, so the placeholder was not a distinct type that
+// could coexist with it -- any TU that co-included both headers got a redefinition error. It is
+// gone WITH the include added in the same edit, per the project rule.
+//
+// LAYOUT: this grows BrnRendererModule by sizeof(BrnRendererMemory) - 1 (and the sibling
+// ShadowMapRenderManager change below by another 11), which in turn grows BrnGameModule (it embeds
+// the renderer by value at BrnGameModule.hpp:614). Nothing pins either size -- there is no
+// _AssertLayout / static_assert on sizeof for either class, and no member of either is reached by
+// raw byte offset -- so the growth is inert. It is also the CORRECTION: the console object carries
+// both sub-objects at full size, and the placeholders were understating it.
+#include "GameSource/Graphics/BrnRendererMemory.h"
 
 // BrnShaderConstantsFrame is the real type (BrnShaderConstantsFrame.h).
 
@@ -151,9 +165,15 @@ struct ResourceHandle
 {
 };
 
-struct ShadowMapRenderManager
-{
-};
+// BrnGraphics::ShadowMapRenderManager is the real type now
+// (GameSource/Graphics/BrnShadowMapRenderManager.h) -- mShadowMapRenderManager below is embedded
+// by value and Render calls its Begin/EndRenderShadowMap bracket, so the complete type is
+// required. Unlike BrnRendererMemory the placeholder here was a DIFFERENT type (global-namespace
+// `ShadowMapRenderManager` vs. the real `BrnGraphics::ShadowMapRenderManager`), so it did not
+// ODR-clash -- it silently shadowed the real class instead, which is worse: the member compiled
+// and occupied one byte while the real manager's three fields (the two shadow-cache buffer
+// indices and mbForceFrontFaceCull) did not exist at all.
+#include "GameSource/Graphics/BrnShadowMapRenderManager.h"
 
 struct DebugComponent
 {
@@ -378,7 +398,23 @@ public:
                       renderengine::Texture* lpGlassFracture);
 
 private:
-    void RenderWorldPasses(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
+    // @ 0x8240BFA8 (Render:389-396) - reset the render frame, point the interpreter at it, build
+    // the per-frame DispatchObjectContext the X360 keeps on Render's stack, expand the GDL object
+    // lists into mesh lists and sort every pass list. Returns false when the GDL ring never came
+    // up (Construct's allocator gate did not open), in which case no pass may run.
+    //
+    // This is hoisted OUT of RenderWorldPasses and up into Render because the console's frame order
+    // is convert/sort -> SHADOW MAPS -> env map -> BeginRenderAntiAliased -> the world passes: the
+    // shadow cascades consume mesh lists 0..4, so the lists have to exist before them.
+    bool BuildDispatchLists(CgsGraphics::DispatchObjectContext* lpContext);
+
+    // @ 0x8240BFA8 (Render:545-640) - the three shadow-map cascades, gated on
+    // mRenderSwitches.mbRenderShadows. Each cascade brackets its mesh-list walks with
+    // ShadowMapRenderManager::Begin/EndRenderShadowMap; the lists are {0,2} / {1,3} / {4}.
+    void RenderShadowMapPasses(CgsGraphics::DispatchObjectContext* lpContext);
+
+    void RenderWorldPasses(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer,
+                           CgsGraphics::DispatchObjectContext* lpContext);
 
     // [FLAG PC bring-up] Sky-dome bring-up (NOT X360 functions -- see the bodies).
     // EnsureSkyDomeBringUp does the Construct/Prepare pair the console runs from
@@ -522,7 +558,7 @@ private:
     BrnGpuMonitors                      mGpuMonitors;
     BrnGpuHwCounters                    mGpuHwMonitors;
     s32                                 miCpuPerfMonDispatchThread;
-    ShadowMapRenderManager              mShadowMapRenderManager;
+    BrnGraphics::ShadowMapRenderManager mShadowMapRenderManager;
     bool                                mbDiskErrorLastFrame;
     s32                                 miFramesSinceDiskErrorReported;
     DebugComponent                      mDebugComponent;
@@ -599,7 +635,9 @@ inline BrnRendererModule::BrnRendererModule()
     mpShadowMapTextureState[0] = 0;
     mpShadowMapTextureState[1] = 0;
     mpBlobbyShadowTexture = 0;
-    mfBlobbyShadowAlpha = 0.0f;
+    // X360 Construct @0x8240BC8C stores flt_8203B710 = 0.7f into this slot; the PS3 DWARF
+    // carries the same value independently. It was 0.0f here, i.e. fully transparent blobs.
+    mfBlobbyShadowAlpha = 0.7f;
     mpGraphicsAllocator = 0;
     for (u32 luIndex = 0; luIndex < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++luIndex)
         mapaObjectToMeshJobOutputDispatchLists[luIndex] = 0;

@@ -5,38 +5,39 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h" // RenderTarget::mDepthTarget.Resolve()
 #include "pc/gcm/renderengine/Xbox2SurfaceShims.h"                  // renderengine::gpD3DDevice
+#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                   // gpShadowDepthStencilState,
+                                                                    // ImDeviceSetDepthStencilState,
+                                                                    // DeviceClearDepthStencil
 
 // BrnGraphics::ShadowMapRenderManager -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //   BeginRenderShadowMap @ 0x823F7858
 //   EndRenderShadowMap   @ 0x823FD708
 
-namespace renderengine { class DepthStencilState; }
-
 // ---- BrnShadowMapRenderManager.cpp file-local reconstruction preamble ----
 // X360 D3D9 viewport/scissor intrinsics (platform externals; off_83271608 device == renderengine::gpD3DDevice).
+// Same declarations as CgsRenderTarget.cpp / rwgpfxrendertarget.cpp; defined in XenonD3D9Shims.cpp.
 extern "C" void D3DDevice_SetViewportF(void* lpDevice, const void* lpViewport);
 extern "C" void D3DDevice_SetScissorRect(void* lpDevice, const void* lpRect);
 
 namespace
 {
     // The X360 float viewport descriptor D3DDevice_SetViewportF consumes (mirrors CgsRenderTarget.cpp).
+    // Both of these stay TU-local: they cross the boundary as `const void*`, so their linkage never
+    // reaches a mangled name. (The clear descriptor that used to sit here did NOT -- it was the
+    // parameter type of an external-linkage function, which made that function's decorated name
+    // unique to this object file and therefore unsatisfiable by any other TU. It now lives at
+    // namespace scope in ShadowPassPCLeaf.h as renderengine::ClearDepthStencilParameters.)
     struct ViewportF   { f32 mfX, mfY, mfWidth, mfHeight, mfMinZ, mfMaxZ; u32 mu32Pad; };
     // The integer scissor rectangle D3DDevice_SetScissorRect consumes.
     struct ScissorRect { s32 miLeft, miTop, miRight, miBottom; };
-    // The clear descriptor sub_82B61D78 consumes ({0x30, 1.0f, 0}).
-    struct ClearDepthStencilParameters { u32 mu32Flags; f32 mfDepth; u32 mu32Stencil; };
 }
 
-// X360 dword_8301090C == CgsDepthStencilStateFactory::saDepthStencilStates[0] (Z-on / Z<= / Zwrite-on),
-// owned by CgsDepthStencilStateFactory.cpp; declared-not-defined here (external linkage; link-time resolve).
-extern renderengine::DepthStencilState* gpShadowDepthStencilState;
-// X360 sub_82276AD0 == CgsGraphics::ImRendererBase::SetState(const DepthStencilState*): install the
-// depth/stencil state on the device (the immediate-mode state cache is module-static). Declared-only.
-void ImDeviceSetDepthStencilState(renderengine::DepthStencilState* lpState);
-// X360 sub_82B61D78: clear the bound depth/stencil. Declared-only.
-void DeviceClearDepthStencil(const ClearDepthStencilParameters* lpParameters);
-
-namespace BrnGraphics { bool gbCombinedShadowMapViewport; }
+// X360 byte_82F2423F. Read out of the ARTIST image by the shadow-map wave's data dump as 0x01,
+// alongside the shadow target's geometry (1280x1920, three 640-row sections) -- so the
+// multi-section COMBINED branch below is the live one, and the definition is seeded to match
+// rather than left zero-initialised (which would have selected the never-taken separate-target
+// branch and asked BrnRendererMemory for three shadow buffers instead of one).
+namespace BrnGraphics { bool gbCombinedShadowMapViewport = true; }
 
 // BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap  @ 0x823F7858
 // Bind the shadow-map render target for one shadow face's draw pass, install the shared shadow-pass
@@ -132,8 +133,9 @@ void BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap(s32 liIndex, bool
 
     if (lbClear)
     {
-        // Clear the shadow depth/stencil (flags 0x30, Z = 1.0, stencil = 0).
-        ClearDepthStencilParameters lClearZbuffer;
+        // Clear the shadow depth/stencil (Xenon D3DCLEAR flags 0x30 = ZBUFFER|STENCIL,
+        // Z = 1.0, stencil = 0).
+        renderengine::ClearDepthStencilParameters lClearZbuffer;
         lClearZbuffer.mu32Flags   = 0x30;
         lClearZbuffer.mfDepth     = 1.0f;
         lClearZbuffer.mu32Stencil = 0;

@@ -71,6 +71,8 @@
 #include "pc/gcm/renderengine/IndexBuffer.h"
 #include "pc/gcm/renderengine/Xbox2VertexBufferShims.h"
 #include "pc/gcm/renderengine/texture.h"
+#include "pc/gcm/renderengine/renderstates.h"                                  // renderengine::DepthStencilState
+#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                              // the shadow-pass leaf surface
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"       // CgsGraphics::ImRendererBase
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"          // shadow::Device
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -285,6 +287,49 @@ namespace
     // The env-map faces are rendered into a freshly cleared face with nothing else in
     // it, so that pass takes the depth test out of the way entirely.
     ImDepthStencilState sSkyDomeEnvMapDepthStencilState = { FALSE, FALSE, D3DCMP_ALWAYS };
+
+    // -------------------------------------------------------------------------
+    // The SHADOW-MAP pass depth/stencil state (X360 dword_8301090C).
+    // -------------------------------------------------------------------------
+    // Unlike the four sky states above this one is a REAL renderengine::DepthStencilState:
+    // the console's dword_8301090C is CgsDepthStencilStateFactory::saDepthStencilStates[0],
+    // an object built by CgsDepthStencilStateFactory::Construct @0x827EBBA0 out of a
+    // DepthStencilState::Parameters block. That factory does not run on this build yet
+    // (BrnRendererModule::mDepthStencilStateFactory is still a placeholder), so the object is
+    // laid down here statically -- but its SHAPE is the factory's, not an invention:
+    // renderstates.h records every word of the attested Parameters block, and the values below
+    // are exactly what DepthStencilState::Initialize would have written from it.
+    //
+    //   maState[4]/[8]  = E_FUNCTION_ALWAYS (the two stencil comparison functions)
+    //   maState[11]/[12]/[14]/[15] = -1     (the stencil read/write masks, both faces)
+    //   everything else zero.
+    //
+    // The one value that is a CHOICE is maState[0], the depth comparison function: the shadow
+    // pass wants LESSEQUAL. These words carry the XENOS zero-based D3DCMPFUNC encoding
+    // (NEVER=0 .. ALWAYS=7), NOT PC Direct3D 9's one-based one -- D3DDevice_SetRenderState_ZFunc
+    // in XenonD3D9Shims.cpp adds the 1 -- so LESSEQUAL is 3, which the shim turns into
+    // D3DCMP_LESSEQUAL (4). Writing 4 here would silently ask for GREATER.
+    renderengine::DepthStencilState MakeShadowDepthStencilState()
+    {
+        renderengine::DepthStencilState lState = {};
+
+        lState.muZFunc               = 3u;   // Xenos LESSEQUAL -> D3DCMP_LESSEQUAL
+        lState.muStencilFunc         = renderengine::DepthStencilState::E_FUNCTION_ALWAYS;
+        lState.muCcwStencilFunc      = renderengine::DepthStencilState::E_FUNCTION_ALWAYS;
+        lState.muStencilMask         = 0xFFFFFFFFu;
+        lState.muStencilWriteMask    = 0xFFFFFFFFu;
+        lState.muCcwStencilMask      = 0xFFFFFFFFu;
+        lState.muCcwStencilWriteMask = 0xFFFFFFFFu;
+
+        lState.muZEnable             = 1u;   // Parameters::mbDepthTestEnable
+        lState.muZWriteEnable        = 1u;   // Parameters::mbDepthWriteEnable
+        lState.muStencilEnable       = 0u;
+
+        lState.muInitialised         = 1u;   // Initialize's trailing store
+        return lState;
+    }
+
+    renderengine::DepthStencilState sShadowDepthStencilState = MakeShadowDepthStencilState();
 }
 
 // =============================================================================
@@ -297,19 +342,36 @@ void* gpSkyDomeRasterizerState         = &sSkyDomeRasterizerState;
 void* gpSkyDomeDepthStencilState       = &sSkyDomeDepthStencilState;
 void* gpSkyDomeEnvMapDepthStencilState = &sSkyDomeEnvMapDepthStencilState;
 
+// X360 dword_8301090C -- the shadow pass's shared depth/stencil state (see the object above).
+renderengine::DepthStencilState* gpShadowDepthStencilState = &sShadowDepthStencilState;
+
 // =============================================================================
 // CgsGraphics::ImRendererBase::SetState's three state overloads
 // (X360 sub_82276A68 blend / sub_82276B38 rasteriser / sub_82276AD0 depth-stencil,
 // each a shadow-cached compare-then-apply into the Xenos register shadow). On PC the
 // apply is the matching IDirect3DDevice9::SetRenderState set.
 //
-// NOTE the signature: BrnSkyDomeManager.cpp declares these `void(void*)` and
-// BrnShadowMapRenderManager.cpp declares an INCOMPATIBLE
-// `void ImDeviceSetDepthStencilState(renderengine::DepthStencilState*)`. They mangle
-// differently, so one body cannot serve both. The `void*` form is taken here because
-// it is the one the sky (the only mounted caller) uses; when the shadow-map wave lands
-// its TU, the two declarations must be reconciled to the typed form and this leaf
-// updated with it.
+// ---- THE TWO DEPTH/STENCIL OVERLOADS (reconciled, shadow-map wave) ----------
+// The console has ONE SetState(const DepthStencilState*). This leaf carries TWO
+// overloads because the two mounted callers hold two genuinely different kinds of
+// object, and collapsing them would mean faking one of the two:
+//
+//   * BrnSkyDomeManager.cpp passes gpSkyDome{,EnvMap}DepthStencilState. The console's
+//     dword_83010F4C / F50 are real state objects whose INITIALISER VALUES were never
+//     recovered (they are data, and the IDA exports carry no data section), so the sky
+//     mount stood them up as the file-local ImDepthStencilState triples above. They are
+//     PC placeholders, not renderengine::DepthStencilState objects -- reinterpreting one
+//     as a 0x60-byte engine state would read 0x54 bytes past its end.
+//   * BrnShadowMapRenderManager.cpp passes gpShadowDepthStencilState, which IS a real
+//     renderengine::DepthStencilState (dword_8301090C == saDepthStencilStates[0], whose
+//     shape renderstates.h has fully attested).
+//
+// So the typed overload below is the FAITHFUL one -- it forwards to the real X360
+// depth/stencil applier (shadow::Device::Xbox2SetDepthStencilStateLowLevelShadowed
+// @0x827E8150, the same body every material bind goes through) -- and the void* overload
+// stays as the sky's placeholder path. When the sky's two state objects are recovered as
+// real DepthStencilStates, the void* overload and its callers go away and one typed
+// applier is left, matching the console exactly.
 // =============================================================================
 void ImDeviceSetBlendState(void* lpState)
 {
@@ -357,6 +419,79 @@ void ImDeviceSetDepthStencilState(void* lpState)
     lpDevice->SetRenderState(D3DRS_ZWRITEENABLE, lpDepth->mbDepthWriteEnable);
     lpDevice->SetRenderState(D3DRS_ZFUNC, lpDepth->meDepthFunction);
     lpDevice->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+}
+
+// X360 sub_82276AD0 == CgsGraphics::ImRendererBase::SetState(const DepthStencilState*).
+// The console body is a shadow-cached compare against the immediate-mode renderer's last
+// depth/stencil object followed by the low-level apply; the apply is
+// shadow::Device::Xbox2SetDepthStencilStateLowLevelShadowed (@0x827E8150), which is
+// reconstructed and pushes all 23 words through the D3DDevice_SetRenderState_* fast-set
+// surface -- so this forwards straight to it.
+//
+// The compare half is deliberately NOT reproduced: the shadow device's `mpLastDepthStencilState`
+// belongs to the MESH-DISPATCH cache (SetMaterialRenderStatesPC) and is private to it, so
+// there is nothing here to compare against without inventing a second cache that could
+// disagree with the first. Passing lbWasUnset = true takes the applier's force-set path,
+// which is what the console does on a state change anyway.
+void ImDeviceSetDepthStencilState(renderengine::DepthStencilState* lpState)
+{
+    if (lpState == nullptr)
+        return;
+    shadow::Device::Xbox2SetDepthStencilStateLowLevelShadowed(lpState, true);
+}
+
+// =============================================================================
+// X360 sub_82B61D78 -- clear the bound depth/stencil surface.
+//
+// The console body is `D3DDevice_Clear(device, 0, 0, p->flags, 0, p->depth, ..., p->stencil, 0)`
+// (with a BeginTiling fast path when the engine is mid-predicated-tiling, which has no PC
+// counterpart). The one thing that does NOT forward verbatim is the flags word: the Xenon
+// D3DCLEAR_* mask reserves bits 0..3 for its four colour targets and puts ZBUFFER at 0x10 /
+// STENCIL at 0x20, whereas PC Direct3D 9 uses TARGET 0x1 / ZBUFFER 0x2 / STENCIL 0x4. The
+// shadow pass's 0x30 is therefore Z | STENCIL, not "targets 4 and 5".
+//
+// FLAG PC-platform leaf: D3D9 rejects the whole Clear with D3DERR_INVALIDCALL when
+// D3DCLEAR_STENCIL is asked for on a depth surface that has no stencil channel (a D16 shadow
+// map is the normal case). The console's EDRAM surface always has one. Rather than lose the
+// depth clear with it, the stencil bit is dropped and the clear retried.
+// =============================================================================
+void DeviceClearDepthStencil(const renderengine::ClearDepthStencilParameters* lpParameters)
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr || lpParameters == nullptr)
+        return;
+
+    const u32 luXenonFlags = lpParameters->mu32Flags;
+    DWORD luFlags = 0;
+    if ((luXenonFlags & 0x0Fu) != 0u) luFlags |= D3DCLEAR_TARGET;    // Xenon TARGET0..3
+    if ((luXenonFlags & 0x10u) != 0u) luFlags |= D3DCLEAR_ZBUFFER;
+    if ((luXenonFlags & 0x20u) != 0u) luFlags |= D3DCLEAR_STENCIL;
+    if (luFlags == 0)
+        return;
+
+    HRESULT lhr = lpDevice->Clear(0, nullptr, luFlags, D3DCOLOR_ARGB(0, 0, 0, 0),
+                                  lpParameters->mfDepth, lpParameters->mu32Stencil);
+    if (FAILED(lhr) && (luFlags & D3DCLEAR_STENCIL) != 0)
+    {
+        luFlags &= ~static_cast<DWORD>(D3DCLEAR_STENCIL);
+        lhr = lpDevice->Clear(0, nullptr, luFlags, D3DCOLOR_ARGB(0, 0, 0, 0),
+                              lpParameters->mfDepth, lpParameters->mu32Stencil);
+        static bool sbLoggedNoStencil = false;   // log-spam guard, not a diagnostic latch
+        if (!sbLoggedNoStencil)
+        {
+            sbLoggedNoStencil = true;
+            LogLine("[ImLeaf] depth/stencil clear: no stencil channel - cleared Z only\n");
+        }
+    }
+    if (FAILED(lhr))
+    {
+        static bool sbLoggedClearFail = false;   // log-spam guard, not a diagnostic latch
+        if (!sbLoggedClearFail)
+        {
+            sbLoggedClearFail = true;
+            LogLine("[ImLeaf] depth/stencil clear FAILED\n");
+        }
+    }
 }
 
 // =============================================================================

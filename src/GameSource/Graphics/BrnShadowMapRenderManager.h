@@ -14,7 +14,7 @@
 // .cpp; the remaining DWARF-listed methods are declared (ledger-gated) so the class shape matches, with
 // bodies belonging to their own TUs. The class is embedded by value in BrnRendererModule.
 
-class BrnRendererMemory;
+struct BrnRendererMemory;   // BrnRendererMemory.h declares it `struct` (C4099 if mismatched)
 class CgsRenderTarget;
 
 namespace CgsGraphics

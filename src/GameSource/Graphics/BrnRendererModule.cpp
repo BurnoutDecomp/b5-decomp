@@ -1,7 +1,37 @@
 #include "GameSource/Graphics/BrnRendererModule.h"
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
+#include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"           // CgsRenderTarget::GetDepthTexture (the s15 bind)
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device::SetResource (the global texture binds)
+#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                      // renderengine::PCSurfaceBracket_* (the scene-target bracket)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // CgsDev::DebugManager (debug HUD overlay)
 #include "GameSource/Gui/BrnGuiModule.h"         // BrnGui::gpActiveGuiModule (the GUI render drive)
+
+// ---------------------------------------------------------------------------------------------
+// BRN_SHADOW_MAP_TARGET_AVAILABLE -- the shadow-map RENDER TARGET gate (PC bring-up, 2026-08-12).
+//
+// OPENED 2026-08-12 (the render-target wave). The shadow-map pass and the s15 bind below call
+// into BrnShadowMapRenderManager.cpp (Begin/EndRenderShadowMap), BrnRendererMemory.cpp
+// (GetShadowMapBuffer) and CgsRenderTarget.cpp (GetDepthTexture). Until this wave none of those
+// three could be mounted, because the layer BENEATH them did not exist: the postfx RenderTarget /
+// RenderTargetState surface (postfx::gpDefaultRenderTargetState,
+// RenderTarget::{Get,Set}SectionRenderTargetState, RenderTarget::Parameters::Parameters(),
+// RenderTarget::Initialize, renderengine::Device::SetState(const RenderTargetState*)) was
+// declared everywhere and defined nowhere. The console's own version of that layer is EDRAM-based
+// and has no PC counterpart, so it is now realised as a Direct3D 9 bring-up leaf:
+//     pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp
+// which creates a real depth-sampleable INTZ texture (1280x1920, the 1x3 cascade atlas) and binds
+// it as the depth-stencil surface. All four TUs are in tools/build/build_game_exe.bat and the
+// closure was proved with dumpbin over the linked object set, NOT with the compile gate --
+// `cl /c` cannot see unresolved externals and /OPT:REF does NOT excuse them (measured, twice).
+//
+// ⚠ STILL OUTSTANDING, deliberately and by the conductor's sequencing:
+// WorldModule::PublishWorldShadingConstantsBringUp still force-writes a shadows-off c14/c15/c16
+// block every frame, so the shadow factor stays pinned at 1.0 and this pass renders into a target
+// nothing reads YET. That safety is retired in a separate, separately-verified step: if the s15
+// bind silently failed, removing it early would make 92 pixel shaders sample an unbound sampler
+// (returns 0 => the key light is REMOVED), which looks far worse than the current flatness.
+// Expect no visible shadows on the first boot after this change -- that is the intended two-step.
+#define BRN_SHADOW_MAP_TARGET_AVAILABLE 1
 
 // Minimal constructor for the off-path job placeholder embedded in BrnRendererModule
 // (Option B). The job system is reconstructed with the threading core; on the
@@ -184,6 +214,28 @@ namespace
         sbWorldDispatchAllocatorReady = true;
         return true;
     }
+
+    // [PC bring-up] The shadow-map render target, created on the first frame that HAS a device.
+    //
+    // Value-latched on the created target, not on a `static bool tried` -- a one-shot flag set
+    // during the loading screen (before renderengine::gDevice exists) would burn the single
+    // attempt and the target would never be built. The pointer below only becomes non-null once
+    // a real CgsRenderTarget is in pool slot 1.
+    CgsRenderTarget* gpShadowMapTarget = nullptr;
+
+    bool EnsureShadowMapTarget(BrnRendererMemory& lrRendererMemory)
+    {
+        if (gpShadowMapTarget != nullptr)
+            return true;
+        if (renderengine::gDevice == 0)
+            return false;              // no device yet -- retry next frame
+        if (!EnsureWorldDispatchAllocator())
+            return false;
+
+        lrRendererMemory.PCBringUpCreateShadowMapBufferOnly(&sWorldDispatchAllocator);
+        gpShadowMapTarget = lrRendererMemory.GetShadowMapBuffer(0);
+        return gpShadowMapTarget != nullptr;
+    }
 }
 
 void BrnRendererModule::Construct()
@@ -362,24 +414,18 @@ void BrnRendererModule::SortDispatchLists(CgsGraphics::DispatchFrame* lpMeshFram
     }
 }
 
-// The world/car/sky pass block of Render (@0x8240BFA8 mid-section). Pass order
-// and list ids are the X360's (see the renderer wave log for the full map):
-//   shadow cascades (lists 0,2,1,3,4)  -> gated OFF on PC (Z-only interpreter
-//     + shadow-map render manager still under reconstruction)
-//   env-map faces (lists 5..10)        -> gated OFF on PC (env-map targets)
-//   pre-Z (list 21)         -> DispatchAllMeshesZOnly (mbRenderPreZ)
-//   CARS OPAQUE  (list 19)  -> DispatchAllMeshes
-//   WORLD OPAQUE (list 11)  -> DispatchAllMeshes
-//   sky                     -> gated OFF on PC (SkyDomeManager not constructed)
-//   WORLD TRANSPARENT (15)  -> DispatchAllMeshes
-//   CARS TRANSPARENT  (20)  -> DispatchAllMeshes (blobby shadows gated off)
-// Occlusion-query interleaving is the mbOcclusionCull* path (default false).
-void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuffer* /*lpDispatchThreadInputBuffer*/)
+// @0x8240BFA8 (Render:389-396) - the render frame reset, the per-frame object context, the
+// object->mesh expansion and the pass sorts. This block used to open RenderWorldPasses; it is
+// hoisted into its own method (and called from Render) because the console runs it BEFORE the
+// shadow-map pass, which consumes mesh lists 0..4.
+bool BrnRendererModule::BuildDispatchLists(CgsGraphics::DispatchObjectContext* lpContext)
 {
     using namespace CgsGraphics;
 
+    std::memset(lpContext, 0, sizeof(*lpContext));
+
     if (mpInterpreter == 0)
-        return;
+        return false;
 
     // Start-of-frame: reset the render frame + point the interpreter at it
     // (X360: DispatchFrame::Reset(this+768); interp+12 = frame; interp+8 = 0).
@@ -389,20 +435,189 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
 
     // The 240-byte object context (X360 builds it on the Render stack):
     // constant shadow cleared, list base 0, the pre-Z config from the module.
-    DispatchObjectContext lContext;
-    std::memset(&lContext, 0, sizeof(lContext));
-    lContext.ResetShadowing();
-    lContext.miListIdBase       = 0;
-    lContext.mbPreZEnabled      = mbRenderPreZ;
-    lContext.mbPreZAlphaEnabled = mbRenderPreZAlpha;
+    lpContext->ResetShadowing();
+    lpContext->miListIdBase       = 0;
+    lpContext->mbPreZEnabled      = mbRenderPreZ;
+    lpContext->mbPreZAlphaEnabled = mbRenderPreZAlpha;
     const f32 lfPreZDistance = mbPreZNearOnly ? mfPreZDistanceThreshold : 100000.0f;
     for (u32 luLane = 0; luLane < 4; ++luLane)
-        lContext.mvPreZDistanceThreshold[luLane] = lfPreZDistance * lfPreZDistance;
+        lpContext->mvPreZDistanceThreshold[luLane] = lfPreZDistance * lfPreZDistance;
 
     // Object -> mesh expansion + the pass sorts.
     ConvertObjectsToMeshes(&mDoubleBufferedDispatchFrame, &mSingleBufferedDispatchFrame,
-                           mpInterpreter, &lContext);
+                           mpInterpreter, lpContext);
     SortDispatchLists(&mSingleBufferedDispatchFrame);
+    return true;
+}
+
+// =============================================================================
+// @0x8240BFA8 (Render:545-640) - BrnRendererModule's SHADOW-MAP PASS.
+//
+// Three cascades, each one Begin/EndRenderShadowMap around a Z-only walk of its mesh
+// lists. The list-to-cascade map is the X360's, read straight off the unrolled body:
+//   cascade 0 -> GetList(0) then GetList(2)
+//   cascade 1 -> GetList(1) then GetList(3)
+//   cascade 2 -> GetList(4)
+// The console clears on every BeginRenderShadowMap (the literal 1 in each call) and hands
+// the manager &mAllocatedRenderTargets. The cascade count is not a variable on the console
+// either -- the body is written out three times.
+//
+// TWO PIECES OF THE CONSOLE BODY ARE DELIBERATELY ABSENT; both are marked below:
+//   (a) the six EA::Jobs::Job::WaitOn(maShadowMapSortJob[n]) calls, and
+//   (b) the front/back-face cull bracket around one list per cascade.
+// =============================================================================
+void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext* lpContext)
+{
+    using namespace CgsGraphics;
+
+    // The gate the console reads at Render:545 (*(this+50188)). Until this wave the switch was
+    // WRITTEN by ConstructRenderSwitches and never READ anywhere -- this is its first reader.
+    if (!mRenderSwitches.mbRenderShadows)
+        return;
+
+    // The cascade -> mesh-list map, as three explicit rows (the X360 body is unrolled the same
+    // way). -1 = the cascade has no second list.
+    static const s32 KAI_CASCADE_LISTS[3][2] = { { 0, 2 }, { 1, 3 }, { 4, -1 } };
+
+    // Nothing to draw: with no shadow-caster records the whole pass is a target bind, a clear and
+    // a resolve of an empty depth buffer. The console pays that every frame; this build skips it
+    // so that a boot with no world data leaves the device exactly as it found it (the same
+    // data-gating the world passes below use).
+    u32 lauCascadeCounts[3] = { 0u, 0u, 0u };
+    u32 luTotalShadowRecords = 0u;
+    for (s32 liCascade = 0; liCascade < 3; ++liCascade)
+    {
+        for (s32 liSlot = 0; liSlot < 2; ++liSlot)
+        {
+            const s32 liList = KAI_CASCADE_LISTS[liCascade][liSlot];
+            if (liList < 0)
+                continue;
+            lauCascadeCounts[liCascade] +=
+                mSingleBufferedDispatchFrame.GetList(static_cast<u32>(liList))->GetCount();
+        }
+        luTotalShadowRecords += lauCascadeCounts[liCascade];
+    }
+
+    // [shadow-pass diagnostic] the per-cascade record counts actually dispatched.
+    //
+    // LATCHED ON THE VALUE, never on a "printed once" bool: a one-shot here fires on the boot
+    // loading screen -- where every list is empty and the pass has not even run -- and then
+    // never again, so it would permanently report zeroes (the wheel-render wave's bug, and the
+    // reason the mesh-list probe below is written the same way). Reprints whenever the triple
+    // changes, which is exactly when casters enter or leave a cascade.
+    {
+        static u32 sauLastCounts[3] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
+        if ((lauCascadeCounts[0] != sauLastCounts[0]
+          || lauCascadeCounts[1] != sauLastCounts[1]
+          || lauCascadeCounts[2] != sauLastCounts[2])
+            && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sauLastCounts[0] = lauCascadeCounts[0];
+            sauLastCounts[1] = lauCascadeCounts[1];
+            sauLastCounts[2] = lauCascadeCounts[2];
+            *CgsDev::Log::gpDebugPrint
+                << "[shadow-pass] cascade records: c0(lists 0,2)=" << static_cast<s32>(lauCascadeCounts[0])
+                << " c1(lists 1,3)="                               << static_cast<s32>(lauCascadeCounts[1])
+                << " c2(list 4)="                                  << static_cast<s32>(lauCascadeCounts[2])
+                << "\n";
+        }
+    }
+
+    if (luTotalShadowRecords == 0u)
+        return;
+
+#if !BRN_SHADOW_MAP_TARGET_AVAILABLE
+    // No shadow-map render target exists on this build (see the gate banner at the top of this
+    // file). Returning HERE -- after the diagnostic, before the target bind -- is deliberate:
+    // dispatching the cascades with no shadow target bound would draw every caster straight into
+    // the back buffer, which is far worse than rendering no shadows at all.
+    return;
+#else
+
+    // Pass stats, the same way the world block below accumulates its four (the raw totals feed
+    // the debug HUD; mu32NumShadowObjects is the 60-frame average the console derives from them,
+    // and is left to the averaging pass that owns the other four).
+    mu32NumShadowObjectTotals += luTotalShadowRecords;
+
+    // FLAG PC-platform leaf: save the scene surfaces before the manager binds the shadow target,
+    // and put them back after the last cascade. The console does not need this -- its
+    // BeginRenderAntiAliased (Render:725) rebinds the scene target after this pass and the env-map
+    // pass -- but on PC renderengine::Device::FrameBegin bound the back buffer before Render
+    // started and nothing else ever rebinds it. See ShadowPassPCLeaf.h.
+    renderengine::PCSurfaceBracket_Save();
+
+    for (s32 liCascade = 0; liCascade < 3; ++liCascade)
+    {
+        mShadowMapRenderManager.BeginRenderShadowMap(liCascade, /*lbClear*/ true,
+                                                     &mAllocatedRenderTargets);
+
+        for (s32 liSlot = 0; liSlot < 2; ++liSlot)
+        {
+            const s32 liList = KAI_CASCADE_LISTS[liCascade][liSlot];
+            if (liList < 0)
+                continue;
+
+            // [X360 ONLY] EA::Jobs::Job::WaitOn(&maShadowMapSortJob[liList], 0, 0, -1) sits here
+            // on the console -- one wait per list, immediately before its GetList. It is a
+            // rendezvous with the RadixSort job SortDispatchLists kicked off for that list, and
+            // it has NO PC counterpart to write: SortDispatchLists runs the sorts SYNCHRONOUSLY
+            // on this very thread (see its body), so by the time control reaches here every list
+            // is already sorted and a wait would be a wait on nothing. The maShadowMapSortJob
+            // array is still carried in the layout, unused, for when the job scheduler lands --
+            // at which point these five waits come back with it.
+
+            mSingleBufferedDispatchFrame.GetList(static_cast<u32>(liList))
+                ->DispatchAllMeshesZOnly(mpInterpreter, lpContext);
+
+            // [PARKED - unattested data] The console wraps ONE list per cascade (the first when
+            // mbForceFrontFaceCull is clear, the second when it is set) in the cull-state bracket
+            //   sub_82276B38(dword_83010A3C); shadow::Device::LockRasteriserState();
+            //   ... UnlockRasteriserState(); sub_82276B38(dword_83010A38);
+            // which the DWARF names ShadowMapRenderManager::Begin/EndFrontFaceCullRender and
+            // Begin/EndBackFaceCullRender (both inlined by the X360 compiler, so neither has an
+            // exported body). sub_82276B38 is ImRendererBase::SetState(const RasterizerState*),
+            // and the two arguments are DATA globals: the IDA exports carry no data section, so
+            // the contents of dword_83010A3C / dword_83010A38 -- the whole point of the bracket,
+            // its cull mode and depth bias -- are unattested. Standing up a plausible
+            // "cull front faces" RasterizerState here would be a fabricated constant, and locking
+            // the rasteriser WITHOUT first setting one is strictly worse than not locking (the
+            // pass would inherit whatever state the previous frame left and refuse every
+            // per-material rasteriser bind for the rest of the walk). So the bracket is omitted:
+            // casters render with their own material rasteriser state, which is what the console
+            // does for the OTHER list of every cascade anyway. Restore this when the two globals'
+            // bytes are recovered.
+        }
+
+        mShadowMapRenderManager.EndRenderShadowMap(liCascade, &mAllocatedRenderTargets);
+    }
+
+    renderengine::PCSurfaceBracket_Restore();
+#endif  // BRN_SHADOW_MAP_TARGET_AVAILABLE
+}
+
+// The world/car/sky pass block of Render (@0x8240BFA8 :725+). Pass order and list ids are the
+// X360's (see the renderer wave log for the full map):
+//   shadow cascades (lists 0,2,1,3,4)  -> LIVE, and no longer here: they run in
+//     RenderShadowMapPasses above, called from Render BEFORE this block, which is the
+//     console's own order (Render:545-640 vs. the world passes at :725+)
+//   env-map faces (lists 5..10)        -> gated OFF on PC (env-map targets)
+//   pre-Z (list 21)         -> DispatchAllMeshesZOnly (mbRenderPreZ)
+//   CARS OPAQUE  (list 19)  -> DispatchAllMeshes
+//   WORLD OPAQUE (list 11)  -> DispatchAllMeshes
+//   sky                     -> BrnSkyDomeManager::Render (bring-up gated)
+//   WORLD TRANSPARENT (15)  -> DispatchAllMeshes
+//   CARS TRANSPARENT  (20)  -> DispatchAllMeshes (blobby shadows gated off)
+// Occlusion-query interleaving is the mbOcclusionCull* path (default false).
+// The context is the one Render built through BuildDispatchLists, on Render's stack.
+void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuffer* /*lpDispatchThreadInputBuffer*/,
+                                          CgsGraphics::DispatchObjectContext* lpContext)
+{
+    using namespace CgsGraphics;
+
+    if (mpInterpreter == 0)
+        return;
+
+    DispatchObjectContext& lContext = *lpContext;
 
     // Pass stats (X360 60-frame averages; the raw totals feed the debug HUD).
     const u32 luPreZ             = mSingleBufferedDispatchFrame.GetList(21)->GetCount();
@@ -718,10 +933,92 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         mLoadingScreenRenderer.AddCommand(
             lpDispatchThreadInputBuffer->GetLoadingScreenCommand());
 
-    // The gameplay render walk (object->mesh conversion, pass sorts, the world/
-    // car passes). On the X360 this whole block precedes the 2D overlay tail;
-    // with no world GDL data the lists are empty and every pass no-ops.
-    RenderWorldPasses(lpDispatchThreadInputBuffer);
+    // ---- X360 Render:389-396 -- the object->mesh expansion and the pass sorts. ------------
+    // Hoisted up here (it used to live at the top of RenderWorldPasses) because the SHADOW
+    // pass below consumes mesh lists 0..4 and, on the console, runs before the world passes.
+    // The context object is on Render's stack exactly as the X360 keeps it.
+    CgsGraphics::DispatchObjectContext lDispatchContext;
+    const bool lbDispatchReady = BuildDispatchLists(&lDispatchContext);
+
+    // [PC bring-up] Realise the shadow-map render target. The console builds the whole
+    // render-target pool in BrnRendererMemory::Construct during BrnRendererModule::Construct;
+    // that pool is not linkable on this build (see the BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE
+    // banner in BrnRendererMemory.cpp), and module Construct runs before the D3D9 device exists
+    // anyway. So the shadow slice is created lazily, here, on the first frame that has a device
+    // -- the same shape as the sky dome's PrepareSkyDome gate. DELETE with the pool.
+    EnsureShadowMapTarget(mAllocatedRenderTargets);
+
+    // ---- X360 Render:536-542 -- the three GLOBAL texture binds. --------------------------
+    //
+    // THIS IS THE SHADOW RECEIVER'S MISSING HALF. 92 of the 110 pixel shaders in the shipped
+    // SHADERS.BNDL declare `dcl_2d s15` and do `texldp r1, r1, s15`; the three
+    // ShadowMap_* constants they read alongside it are registered, name-bound and uploaded --
+    // but nothing in this build had ever bound a TEXTURE to sampler 15, so every one of those
+    // shaders was sampling an unbound sampler.
+    //
+    // The console runs these unconditionally, after shadow::Device::ResetShadowing() and before
+    // the shadow-map pass, through sub_8227D158 -- the shadow cache's TEXTURE STATE bind, which
+    // installs a renderengine::TextureState (sampler parameters + raster) built once in
+    // Construct @0x8240A778. This build has no TextureState objects for them (Construct's two
+    // TextureState::Initialize calls need the render-target pool and the resource allocator), so
+    // the binds go through the cache's other entry point, shadow::Device::SetResource @0x82276C70
+    // -> D3DDevice_SetTexture: the same D3D call at the end of the same shadow cache, minus the
+    // sampler-state half. FLAG: the sampler state (filter/address/comparison) therefore comes
+    // from whatever the unit last held; wire the TextureState pair when Construct's pool lands.
+    //
+    //   s15 <- GetDepthTexture(mapRenderTarget[SHADOW_MAP_0])   (this+5924 on the console)
+    //   s14 <- the blobby-shadow texture                        (this+5804, PrepareAgain's arg)
+    //   s13 <- GetTexture(mapRenderTarget[ENV_MAP], 0)          (this+5700)  [PARKED, see below]
+    {
+        // s15 -- the shadow map's resolved depth texture. Both guards are the console's own
+        // asserts in BeginRenderShadowMap; here they are a gate, because the pool is built
+        // lazily on this build and GetDepthTexture would assert on a target with no
+        // post-fx RenderTarget behind it yet.
+        //
+        // LIVE since the render-target wave (2026-08-12): GetShadowMapBuffer and GetDepthTexture
+        // now have a target behind them (EnsureShadowMapTarget above builds it on the first
+        // frame with a device, and PostFxRenderTargetPCLeaf.cpp creates the D3D9 depth texture).
+        // GetRenderTarget() being non-null is still the gate -- a device-less or
+        // depth-texture-less machine leaves sampler 15 unbound rather than binding garbage.
+#if BRN_SHADOW_MAP_TARGET_AVAILABLE
+        CgsRenderTarget* const lpShadowBuffer = mAllocatedRenderTargets.GetShadowMapBuffer(0);
+        if (lpShadowBuffer != 0 && lpShadowBuffer->GetRenderTarget() != 0)
+        {
+            shadow::Device::SetResource(lpShadowBuffer->GetDepthTexture(), 15u);
+        }
+#endif
+
+        // s14 -- the blobby-shadow texture. The console guards this one too (`if (v79)` at
+        // Render:540); it is null until GamePrepare stage 3 hands it to PrepareAgain.
+        if (mpBlobbyShadowTexture != 0)
+        {
+            shadow::Device::SetResource(mpBlobbyShadowTexture, 14u);
+        }
+
+        // s13 -- PARKED, no source. The console binds the ENV-MAP target's colour texture
+        // (CgsRenderTarget::GetTexture(mapRenderTarget[E_RENDER_TARGET_ENV_MAP], 0)), but
+        // BrnRendererMemory exposes only GetShadowMapBuffer -- mapRenderTarget is private and
+        // the env-map slot has no accessor, because no X360-attested caller needed one before
+        // now. Binding some other texture here would be an invention, and leaving the unit
+        // unbound is what the build already does. Unpark it with the env-map accessor (that
+        // header is another agent's this wave) once the env-map pass exists to fill the target.
+    }
+
+    // ---- X360 Render:545-640 -- THE SHADOW-MAP PASS. -------------------------------------
+    // Before RenderWorldPasses and before anything binds the scene target, exactly as the
+    // console orders it. Gated on mRenderSwitches.mbRenderShadows.
+    if (lbDispatchReady)
+    {
+        RenderShadowMapPasses(&lDispatchContext);
+    }
+
+    // The gameplay render walk (the world/car/sky passes). On the X360 this whole
+    // block precedes the 2D overlay tail; with no world GDL data the lists are empty
+    // and every pass no-ops.
+    if (lbDispatchReady)
+    {
+        RenderWorldPasses(lpDispatchThreadInputBuffer, &lDispatchContext);
+    }
 
     // [FLAG PC diagnostic] BRN_WORLD_ONLY=1 suppresses the whole 2D overlay tail
     // (loading-screen background/foreground, GUI, movie) for ONE purpose: seeing the
