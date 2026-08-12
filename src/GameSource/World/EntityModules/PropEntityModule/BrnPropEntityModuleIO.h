@@ -40,8 +40,33 @@
 // included.
 #include "GameSource/Replays/BrnReplayStatusInterface.h"   // BrnReplays::ReplayIO::StatusInterface
 
+// ---- ADDITIVE GROW 2026-08-12 (prop-spawn wave, agent B5) --------------------------------
+// InputBuffer_PreScene's real interior: the three streaming notification queues, the player
+// position / race-car velocity block and the game-action-derived scalars.
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray<300000>
+#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (GetHitPropsBitArray tripwire)
+#include "SharedIO/BrnPropGraphicsAndZoneEvents.h"           // PropGraphicsLoaded/Unloaded/InstancesNeededForZoneEvent
+#include "BrnCommonTypes.h"                                  // Vector3
+
+// ---- ADDITIVE GROW 2026-08-12 (prop-BOOT wave, agent B8) ---------------------------------
+// The three nested interfaces the prepare/pre-scene/pre-physics OUTPUT buffers hold BY VALUE.
+// They used to be opaque byte spans here, which is exactly why nothing could Construct them
+// (see the banner on OutputBuffer_Prepare). Their real homes:
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"              // BrnResource::GameDataIO::RequestInterface<1024>
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // CgsSceneManager::SceneManagerIO::InSceneUpdateInterface
+#include "SharedIO/BrnPropToTrafficInterface.h"                                // PropToTrafficInterface + the two TrafficLight*Event structs
+                                                                               // (RE-HOMED there 2026-08-12; this include replaces their old
+                                                                               //  definitions below and breaks the former A<->B cycle)
+
+// Pointer-only uses in InputBuffer_Dispatch (AGENTS.md forward-declaration exception (b)):
+// including CgsDispatcher.h / BrnShadowMap.h here would pull the whole renderer + shadow
+// cascade tail into every includer of this IO header.
+namespace CgsGraphics { class DispatchFrame; }
+
 namespace BrnWorld
 {
+    struct ShadowMap;
+
 namespace PropEntityIO
 {
     // BrnPropEntityModuleIO.h:66 -- the PropVFXLocator output queue capacity.
@@ -95,49 +120,10 @@ namespace PropEntityIO
         u8 muPropIndex;   // +0x00  broken prop index (single-byte payload)
     };
 
-    // ========================================================================
-    // BrnWorld::PropEntityIO::TrafficLightKnockDownEvent -- a "this traffic light has been
-    // knocked down" notification queued by the prop entity module's pre-physics input/output
-    // buffers (the producers OutputBuffer_PrePhysics::Construct / BrnTrafficIO::
-    // InputBuffer_PrePhysics::Construct build EventQueue<TrafficLightKnockDownEvent,32>).
-    //
-    // SIZE (X360, authoritative): sizeof == 4. Pinned by
-    // BaseEventQueue<TrafficLightKnockDownEvent>::AddEvent @ 0x822C8D78, which copies the event
-    // with `slwi r11,miLength,2; stwx r10,r11,mpEvents` -- a single 4-byte store at stride 4
-    // (no two-half split, no index scaling beyond *4). EventQueue<...,32>::Construct
-    // @ 0x822E4CE0 places the inline maEvents[32] at +0xC (base mpEvents@0, miMaxLength@4,
-    // miLength@8, maEvents@12 -- no alignment pad, confirming 4-byte element alignment) with
-    // miMaxLength = 32 (0x20).
-    //
-    // FLAG (opaque interior): the 4-byte payload's internal field layout is not recovered by
-    // this slice -- every observed body (the queue Construct/AddEvent/Append) treats the
-    // element only as a 4-byte blob (single stwx / 4*count XMemCpy). Modelled as exactly one
-    // 4-byte word so the asm-attested stride and the +0xC inline-buffer offset are exact; the
-    // interior (likely a traffic-light/junction id or packed index) is honestly opaque.
-    struct TrafficLightKnockDownEvent
-    {
-        u32 muPayload;   // +0x00  4-byte payload (interior opaque -- see FLAG)
-    };
-
-    // ========================================================================
-    // BrnWorld::PropEntityIO::TrafficLightRestoreEvent -- the paired "restore this knocked-down
-    // traffic light" notification, queued alongside TrafficLightKnockDownEvent by the same
-    // producers (EventQueue<TrafficLightRestoreEvent,80>).
-    //
-    // SIZE (X360, authoritative): sizeof == 4. Pinned by
-    // BaseEventQueue<TrafficLightRestoreEvent>::AddEvent (@ 0x822C8F.., `slwi r11,miLength,2;
-    // stwx r10,r11,mpEvents`) and ::Append (XMemCpy with `slwi count,miLength,2` == 4*count) --
-    // a single 4-byte element at stride 4. EventQueue<...,80>::Construct @ 0x822E4D50 places
-    // the inline maEvents[80] at +0xC (base mpEvents@0, miMaxLength@4, miLength@8, maEvents@12 --
-    // no alignment pad, confirming 4-byte element alignment) with miMaxLength = 80 (0x50).
-    //
-    // FLAG (opaque interior): as TrafficLightKnockDownEvent above -- the 4-byte payload's
-    // internal field layout is not recovered by this slice; modelled as one 4-byte word so the
-    // asm-attested stride and +0xC inline-buffer offset are exact.
-    struct TrafficLightRestoreEvent
-    {
-        u32 muPayload;   // +0x00  4-byte payload (interior opaque -- see FLAG)
-    };
+    // (TrafficLightKnockDownEvent / TrafficLightRestoreEvent were RE-HOMED 2026-08-12 to
+    //  SharedIO/BrnPropToTrafficInterface.h -- their DWARF home, and the same file as the
+    //  interface whose queues hold them. Included at the top of this header; nothing else
+    //  changed about them.)
 
     // ========================================================================
     // BrnWorld::PropEntityIO::OutputBuffer_PreScene (DWARF BrnPropEntityModuleIO.h:676).
@@ -164,13 +150,32 @@ namespace PropEntityIO
     class OutputBuffer_PreScene : public CgsModule::IOBuffer
     {
     public:
-        // Opaque foreign-type storages (see FLAG above). Sized so each X360-pinned return offset
-        // is exact: mResourceRequestInterface@+4, mSceneInputInterface@+1056,
-        // mPropInputInterface@+819824, mVisibleOverheadSignArray@+831104 (LAST member).
-        struct ResourceRequestInterfaceStorage { unsigned char maBytes[1056 - 4]; };        // +4..+1055
-        struct SceneInputInterfaceStorage      { unsigned char maBytes[819824 - 1056]; };    // +1056..+819823
-        struct PropInputInterfaceStorage       { unsigned char maBytes[831104 - 819824]; };  // +819824..+831103
-        struct VisibleOverheadSignArrayStorage { unsigned char maBytes[1]; };                // trailing +831104
+        // ⭐⭐ RETYPED 2026-08-12 (prop-BOOT wave, agent B8) -- see the identical note on
+        // OutputBuffer_Prepare below for the full argument. Short form: the three interfaces
+        // were CONSOLE-SIZED OPAQUE SPANS that every consumer reinterpret_cast to the real
+        // host type, and nothing could Construct them because a span has no Construct. Both
+        // halves of that are fixed by naming the DWARF types (:647/:648/:649).
+        typedef BrnResource::GameDataIO::RequestInterface<1024>         ResourceRequestInterfaceStorage; // :647 (DWARF typedef :74)
+        typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface SceneInputInterfaceStorage;      // :648 (DWARF typedef :75)
+        typedef BrnPhysics::Props::PropInputInterface                   PropInputInterfaceStorage;       // :649 (DWARF typedef :76)
+
+        // :650 -- DWARF type GuiOverheadSignInfoEvent::VisibleOverheadSignArray
+        // (== Array<BrnGui::OverheadSignScore,32>), which has NO committed home.
+        // ⭐ GROWN 2026-08-12 from `maBytes[1]` to the console extent, because Construct
+        // @0x822EFB98 zeroes exactly one word at buffer+832128 == &mVisibleOverheadSignArray
+        // + 1024 -- twice, once in the Construct pass and once in the Clear pass -- and a
+        // 1-byte member had nothing to zero. 1024 == 32 * 0x20; the trailing word IS the
+        // array's count (BridgePropToOutput_PreScene's console body materialises the same
+        // aggregate on the stack and zeroes the word at sp+0x400 == +1024 before
+        // AppendArray). FLAG: only the count is named -- the 32 elements stay opaque until
+        // BrnGui::OverheadSignScore gets a home.
+        struct VisibleOverheadSignArrayStorage
+        {
+            unsigned char maSigns[32 * 0x20];   // +0    FLAG opaque element interior
+            s32           miCount;              // +1024 the count Construct/Clear zero
+
+            void Clear() { miCount = 0; }
+        };
 
         // X360 0x827A1A18 (:640, THIS batch): read-lock handle, returns this + 4 (mResourceRequestInterface).
         const ResourceRequestInterfaceStorage* GetResourceRequestInterface() const;
@@ -180,10 +185,30 @@ namespace PropEntityIO
         const PropInputInterfaceStorage* GetPropInputInterface() const;
         // X360 0x822B97E0: write-lock handle, returns this + 819824 (mPropInputInterface).
         PropInputInterfaceStorage* GetPropInputInterface();
+        // ADDITIVE GROW (prop-spawn wave, 2026-08-12). X360 0x822B9738 (IDA `sub_822B9738`,
+        // unnamed): write-lock handle, returns this + 1056 (mSceneInputInterface); its
+        // "Not locked for writing" tripwire bakes BrnPropEntityModuleIO.h:645. It is the
+        // scene interface PropCellManager::DeactivateCell / PropEntityModule::
+        // ReplayUpdate*InScene / PropZoneManager::RemoveAllPropsAndParts push through.
+        SceneInputInterfaceStorage* GetSceneInputInterface();
+        // ADDITIVE GROW (prop-BOOT wave, 2026-08-12, agent B8). X360 0x827A18C8 (IDA
+        // `sub_827A18C8`, unnamed): read-lock handle (bit 4, `extrwi r11,r11,1,27`),
+        // returns this + 1056 (`addi r3, r28, 0x420`) -- the CONST twin of the getter
+        // above, DWARF :634. It is the one the per-frame scene merge uses:
+        // WorldModule::BridgeEntityModulesToSceneModule_PreScene @0x827AB490 calls it as
+        // its FOURTH leg (`mr r3,r27 ; bl sub_827A18C8` at 0x827AB5C4) and Appends the
+        // result into the scene manager's update input. Without it that leg had no const
+        // source to read and was dropped, so no prop ever reached the broad phase.
+        const SceneInputInterfaceStorage* GetSceneInputInterface() const;
         // X360 0x827A1AC0 (:643, THIS batch): read-lock handle, returns this + 831104 (mVisibleOverheadSignArray).
         const VisibleOverheadSignArrayStorage* GetVisibleOverheadSignArray() const;
         // X360 0x822B9930 (:644, THIS batch): write-lock handle, returns this + 831104 (mVisibleOverheadSignArray).
         VisibleOverheadSignArrayStorage* GetVisibleOverheadSignArray();
+
+        // DWARF :628 / :632. X360 Construct @0x822EFB98 (bodied in this buffer's own TU);
+        // Destruct @0x822DC3D0 is a separate ledger function, declaration-only here.
+        void Construct();
+        void Destruct();
 
         static void _AssertLayout();
 
@@ -218,11 +243,40 @@ namespace PropEntityIO
     class OutputBuffer_Prepare : public CgsModule::IOBuffer
     {
     public:
-        // Opaque foreign-type storages (see FLAG above). Sized so each X360-pinned return offset
-        // is exact: mResourceRequestInterface@+4, mSceneInputInterface@+1056, mPropInputInterface@+819824.
-        struct ResourceRequestInterfaceStorage { unsigned char maBytes[1056 - 4]; };     // +4..+1055
-        struct SceneInputInterfaceStorage      { unsigned char maBytes[819824 - 1056]; }; // +1056..+819823
-        struct PropInputInterfaceStorage       { unsigned char maBytes[1]; };             // trailing +819824
+        // ⭐⭐⭐ RETYPED 2026-08-12 (prop-BOOT wave, agent B8) -- THE FIX FOR THE 21-ASSERT
+        // BOOT STORM + the access violation in InSceneUpdateInterface::SetCullingGroupPair.
+        //
+        // These three were `unsigned char maBytes[...]` spans sized to the CONSOLE offsets,
+        // and mPropInputInterface was a 1-byte trailing placeholder. Two independent things
+        // were wrong with that, and both bit at once on the first boot that reached
+        // WorldModule::Prepare -> PropEntityModule::Prepare:
+        //
+        //   (1) NOTHING COULD CONSTRUCT THEM. A byte span has no Construct, so the X360's
+        //       OutputBuffer_Prepare::Construct @0x822EFC58 -- which is nothing BUT the three
+        //       nested Construct/Clear calls -- had no C++ to be written as, and the buffer's
+        //       `Construct()` silently resolved to the 2-line CgsModule::IOBuffer base. The
+        //       embedded VariableEventQueue<1024,16> therefore kept mbIsConstructed == false
+        //       and every request fired "Not Constructed" (CgsVariableEventQueue.h:688/454/
+        //       728/983/1000/348). This is the FOURTH instance of the project's recurring
+        //       "promised-but-never-written Construct" disease (cf. PhysicsSimulationIO's
+        //       InputBuffer/OutputBuffer/InputBuffer_PostPhysics).
+        //   (2) THE SPANS WERE THE WRONG SIZE ON THE HOST -- the recurring console-offset bug.
+        //       Every consumer already reinterpret_cast them to the real type
+        //       (BrnPropEntityModule.cpp's GetSceneInterface/GetGameDataRequestInterface/
+        //       GetPropInputInterface helpers), and the real host types are WIDER than their
+        //       console spans (8-byte mpEvents per embedded queue, two-pointer ResourceHandle).
+        //       Writing an 11 KB host PropInputInterface through a 1-byte trailing member ran
+        //       off the end of the IOBufferStack allocation.
+        //
+        // Naming the DWARF types (:609/:610/:611, typedefs :74/:75/:76) fixes both at once:
+        // the members can Construct themselves, the casts become identities, and the host
+        // compiler -- not a console constant -- decides where each member sits. This is the
+        // same move OutputBuffer_PrePhysics::PropInputInterfaceStorage already made on
+        // 2026-08-10 (the "seventh use of the storage-typedef pattern"); the *Storage names
+        // are kept so no call site has to change.
+        typedef BrnResource::GameDataIO::RequestInterface<1024>         ResourceRequestInterfaceStorage; // :609 (DWARF typedef :74)
+        typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface SceneInputInterfaceStorage;      // :610 (DWARF typedef :75)
+        typedef BrnPhysics::Props::PropInputInterface                   PropInputInterfaceStorage;       // :611 (DWARF typedef :76)
 
         // X360 0x827A1820 (:605, THIS batch): read-lock handle, returns this + 4 (mResourceRequestInterface).
         const ResourceRequestInterfaceStorage* GetResourceRequestInterface() const;
@@ -236,6 +290,11 @@ namespace PropEntityIO
         const PropInputInterfaceStorage* GetPropInputInterface() const;
         // X360 0x822B95E8: write-lock handle, returns this + 819824 (mPropInputInterface).
         PropInputInterfaceStorage* GetPropInputInterface();
+
+        // DWARF :593 / :597. X360 Construct @0x822EFC58 (bodied in this buffer's own TU);
+        // Destruct has no out-of-line X360 symbol, so it stays declaration-only.
+        void Construct();
+        void Destruct();
 
         static void _AssertLayout();
 
@@ -352,7 +411,14 @@ namespace PropEntityIO
         // cast, no overrun, and mPropToTrafficInterface simply moves down by the host growth
         // (the layout gate below computes that drift from sizeof, so it keeps its teeth).
         typedef BrnPhysics::Props::PropInputInterface PropInputInterfaceStorage;
-        struct PropToTrafficInterfaceStorage { unsigned char maBytes[1]; };         // trailing +11296
+        // ⭐ RETYPED 2026-08-12 (prop-BOOT wave, agent B8) -- EIGHTH use of the pattern, and
+        // the same two faults the Prepare buffer had: a 1-byte trailing span that (a) nothing
+        // could Construct, so its two embedded EventQueues kept mpEvents == NULL, and (b) is
+        // ~2.2 KB smaller than the host type BrnPropZoneManager.cpp:676 already
+        // reinterpret_casts it to (SendTrafficLightRestoreEvents) -- an off-the-end write.
+        // PropToTrafficInterface's DWARF home now also homes the two TrafficLight*Event
+        // structs, so including it here costs no cycle. DWARF :703.
+        typedef PropToTrafficInterface PropToTrafficInterfaceStorage;               // trailing +11296
 
         // X360 0x827A1B68 (own TU): read-lock handle, returns this + 4 (mPropInputInterface).
         const PropInputInterfaceStorage* GetPropInputInterface() const;
@@ -362,6 +428,11 @@ namespace PropEntityIO
         const PropToTrafficInterfaceStorage* GetPropToTrafficInterface() const;
         // X360 0x822B9A80 (:699, THIS batch): write-lock handle, returns this + 11296 (mPropToTrafficInterface).
         PropToTrafficInterfaceStorage* GetPropToTrafficInterface();
+
+        // DWARF :688 / :692. X360 Construct @0x822EFCF0 (bodied in this buffer's own TU);
+        // Destruct is declaration-only (no out-of-line X360 symbol).
+        void Construct();
+        void Destruct();
 
         static void _AssertLayout();
 
@@ -386,35 +457,182 @@ namespace PropEntityIO
     //     SetCurrentTimestep / ResetProps -- real PS3 symbols); the X360 bridge INLINES them
     //     (direct stb/stw/stfs), which pins the member offsets below. Modelled as X360-style
     //     header-inlines over offset-pinned members.
-    // FLAG: muHitPropsBitArray is a 32-bit console word (likely a BitArray handle/pointer on
-    // the 32-bit targets); kept as the raw copied word -- resolve when the prop TU lands.
-    // The interior between the IOBuffer status byte and +0x780 (the replay-status payload
-    // etc.) is opaque pad owned by the buffer's own TUs.
+    // ⭐ SUPERSEDED 2026-08-12 (prop-spawn wave, agent B5): the old FLAG here said
+    // "muHitPropsBitArray is a 32-bit console word ... resolve when the prop TU lands",
+    // and the interior up to +0x780 was one opaque pad. The prop TU has now landed
+    // (PropEntityModule::PreSceneUpdate @0x82309A40, the buffer's only consumer), so the
+    // word is resolved to the pointer it is, the three streaming queues and the
+    // position/velocity block are named, and the three "bool" flags are resolved to the
+    // tri-state latches they are. See the big banner inside the class.
     class InputBuffer_PreScene : public CgsModule::IOBuffer
     {
     public:
+        // ====================================================================
+        // ADDITIVE GROW 2026-08-12 (prop-spawn wave, agent B5) -- the FULL DWARF member
+        // set (BrnPropEntityModuleIO.h:474-:490) plus the DWARF accessor surface
+        // (:344-:463). Nothing below claims a HOST byte offset: every member is named and
+        // the host compiler lays the class out. The console offsets in the comments are
+        // PROVENANCE, recovered from the two ends that pin them --
+        //   * InputBuffer_PreScene::Construct   @0x822EFAA0  (the initial values), and
+        //   * PropEntityModule::PreSceneUpdate  @0x82309A40  (the reads),
+        //   * WorldModule::BridgeInputToEntityModules @0x827ADF88 (the inlined setters).
+        //
+        // THE THREE QUEUES. The X360 emits the const getters out of line; their `this+N`
+        // returns pin the member order exactly:
+        //     0x822B91F8 -> this + 0x004   GetPropInstancesNeededForZoneQueue() const  (:458)
+        //     0x822B90A8 -> this + 0x04C   GetPropGraphicsLoadedQueue() const          (:452)
+        //     0x822B9150 -> this + 0x08C   GetPropGraphicsUnloadedQueue() const        (:455)
+        // (the baked assert lines are the X360 file's; the DecFIGS dump is 3 lines older).
+        // 0x04C-0x004 == 72 == 12 + 30*2 and 0x08C-0x04C == 64 == round4(12 + 25*2), which
+        // is exactly EventQueue<...,30> / EventQueue<...,25> over the 2-byte events
+        // BrnPropGraphicsAndZoneEvents.h homes -- and matches Construct's three calls
+        // (PropGraphicsLoadedEvent_25 on this+0x4C, PropInstancesNeededForZoneEvent_30 on
+        // this+4, PropGraphicsUnloadedEvent_25 on this+0x8C).
+        //
+        // ⚠ meOnlineStatus / meEasySmashPropsStatus / mePropProgressionStatus ARE NOT
+        // BOOLS. Construct stores **2** in all three (`li r11,2 ; stb r11,0x78D/E/F`)
+        // while the bridge only ever stores 0 or 1 -- a THREE-state latch whose third
+        // state means "no change this frame". That is what the DWARF's six
+        // HasJustChangedTo* / HasPropProgressionBeen* predicates read, and it is why
+        // PreSceneUpdate is a PAIR of tests per flag (`if (==1) m = true; if (==0) m =
+        // false;`) instead of a plain copy: state 2 leaves the module's flag alone. The
+        // previous `bool mbIsOnline` model silently collapsed that third state.
+        //
+        // ⚠ mpabHitPropBitArray IS A POINTER, not the u32 the previous slice modelled.
+        // PreSceneUpdate does `memcpy(&mZoneManager.maPreviouslyHitProps,
+        // *(lpInput+0x780), 37504)` -- it DEREFERENCES the word -- and guards it with the
+        // buffer's own baked tripwire "mpabHitPropBitArray != NULL"
+        // (BrnPropEntityModuleIO.h:848). The bridge's PropSmashReport case reads the game
+        // action's first word (`lwz r11,0(r31)`) and stores it straight here, i.e. the
+        // action carries `const Profile::HitPropsBitArray*` (BrnGameActions.h:5156).
+        //
+        // ⚠ mbSendingPropProgression / mbReloadingProfile ARE SWAPPED vs the DecFIGS DIE
+        // order (:486 mbReloadingProfile then :487 mbSendingPropProgression). The X360 asm
+        // is unambiguous: the bridge's SEND_PROP_PROGRESSION case writes +0x790 and its
+        // PROP_SMASH_REPORT case writes +0x791 next to the +0x780 pointer store; and
+        // PreSceneUpdate reads +0x790 -> meStreamingMode = E_RESET_UNLOADING_FOR_PROFILE
+        // ("we are about to hand the profile our progression, drop everything") and +0x791
+        // -> install the profile's hit-props and resume E_STREAM ("the profile came
+        // back"). Declaration order here follows the ASM.
+        // ====================================================================
+
+        // BrnPropEntityModuleIO.h:81 / :83 / :85 -- the buffer's own queue typedefs.
+        typedef CgsModule::EventQueue<PropInstancesNeededForZoneEvent, 30> PropInstancesNeededForZoneQueue;
+        typedef CgsModule::EventQueue<PropGraphicsLoadedEvent, 25>         PropGraphicsLoadedQueue;
+        typedef CgsModule::EventQueue<PropGraphicsUnloadedEvent, 25>       PropGraphicsUnloadedQueue;
+        // DWARF `Profile::HitPropsBitArray` (BrnProfile.h:555). Same instantiation the
+        // committed PropZoneManager::HitPropsBitArray names -- a typedef, not a new type,
+        // so the two spell one type and no header cycle is introduced.
+        typedef CgsContainers::BitArray<300000u> HitPropsBitArray;
+
+        // :344 / :348 -- X360 Construct @0x822EFAA0 (bodied in this buffer's own TU);
+        // Destruct is declaration-only (no out-of-line symbol in ARTIST).
+        void Construct();
+        void Destruct();
+
         void SetReplayStatusInterface(const BrnReplays::ReplayIO::StatusInterface* lpReplayStatusInterface);
 
-        // X360 header-inlines (inlined into BridgeInputToEntityModules @0x827ADF88).
-        void SetHitPropsBitArray(u32 luHitPropsBitArray)          { muHitPropsBitArray = luHitPropsBitArray; mbHitPropsBitArrayValid = true; }
-        void SetCurrentTimestep(f32 lfTimeStep)                   { mfCurrentTimestep = lfTimeStep; }
-        void SetIsOnline(bool lbIsOnline)                         { mbIsOnline = lbIsOnline; }
-        void SetEasySmashProps(bool lbEasySmashProps)             { mbEasySmashProps = lbEasySmashProps; }
-        void SetPropProgressionEnabled(bool lbEnabled)            { mbPropProgressionEnabled = lbEnabled; }
-        void SendingPropProgression()                             { mbSendingPropProgression = true; }
-        void ResetProps()                                         { mbResetProps = true; }
+        // ---- the three streaming queues (X360 out-of-line; bodied in this buffer's TU) ----
+        const PropGraphicsLoadedQueue*         GetPropGraphicsLoadedQueue() const;          // :449 / X360 0x822B90A8
+        PropGraphicsLoadedQueue*               GetPropGraphicsLoadedQueue();                // :450
+        const PropGraphicsUnloadedQueue*       GetPropGraphicsUnloadedQueue() const;        // :452 / X360 0x822B9150
+        PropGraphicsUnloadedQueue*             GetPropGraphicsUnloadedQueue();              // :453
+        const PropInstancesNeededForZoneQueue* GetPropInstancesNeededForZoneQueue() const;  // :455 / X360 0x822B91F8
+        PropInstancesNeededForZoneQueue*       GetPropInstancesNeededForZoneQueue();        // :456
+
+        // ---- X360 header-inlines (the consumer/producer both open-code these) ----------
+        // Producer side (inlined into BridgeInputToEntityModules @0x827ADF88).
+        void SetHitPropsBitArray(const HitPropsBitArray& lrHitProps)
+        {
+            mbReloadingProfile   = true;                 // stb 1, 0x791  (store order: asm)
+            mpabHitPropBitArray  = &lrHitProps;          // stw   , 0x780
+        }
+        void SetCurrentTimestep(f32 lfTimeStep)                   { mfCurrentTimeStep = lfTimeStep; }        // :426
+        void SetIsOnline(bool lbIsOnline)                         { meOnlineStatus = lbIsOnline ? E_CHANGESTATUS_ON : E_CHANGESTATUS_OFF; }            // :414
+        void SetEasySmashProps(bool lbEasySmashProps)             { meEasySmashPropsStatus = lbEasySmashProps ? E_CHANGESTATUS_ON : E_CHANGESTATUS_OFF; } // :418
+        void SetPropProgressionEnabled(bool lbEnabled)            { mePropProgressionStatus = lbEnabled ? E_CHANGESTATUS_ON : E_CHANGESTATUS_OFF; }      // :422
+        void SendingPropProgression()                             { mbSendingPropProgression = true; }       // :367
+        void ReloadingProfile()                                   { mbReloadingProfile = true; }             // :361
+        void ResetProps()                                         { mbResetProps = true; }                   // :407
+        void SetPlayerCarIndex(u8 lu8Index)                       { mu8PlayerCarIndex = lu8Index; }          // :352
+        void SetPlayerPosition(Vector3 lPosition)                 { mPlayerPos = lPosition; }                // :374
+        void SetPlayerCarCrashing(bool lbCrashing)                { mbPlayerCrashing = lbCrashing; }         // :378
+        void SetPlayerWrecked(bool lbWrecked)                     { mbPlayerWrecked = lbWrecked; }           // :382
+        void SetPlayerZoneNumber(s32 liZoneNumber)                { miPlayerZoneNumber = liZoneNumber; }     // :386
+        void SetRaceCarVelocity(s32 liIndex, Vector3 lVelocity)   { maRaceCarVelocity[liIndex] = lVelocity; }// :400
+
+        // Consumer side (inlined into PreSceneUpdate @0x82309A40 as bare lbz/lwz/lvx).
+        Vector3 GetPlayerPosition() const                   { return mPlayerPos; }             // :355
+        u8      GetPlayerCarIndex() const                   { return mu8PlayerCarIndex; }      // :358
+        Vector3 GetRaceCarVelocity(s32 liIndex) const       { return maRaceCarVelocity[liIndex]; } // :404
+        s32     GetPlayerZoneNumber() const                 { return miPlayerZoneNumber; }     // :389
+        f32     GetCurrentTimestep() const                  { return mfCurrentTimeStep; }      // :429
+        bool    IsPlayerWrecked() const                     { return mbPlayerWrecked; }        // :392
+        bool    IsPlayerCrashing() const                    { return mbPlayerCrashing; }       // :395
+        bool    ShouldResetProps() const                    { return mbResetProps; }           // :410
+        bool    IsReloadingProfile() const                  { return mbReloadingProfile; }     // :364
+        bool    IsSendingPropProgression() const            { return mbSendingPropProgression; } // :370
+        const HitPropsBitArray& GetHitPropsBitArray() const                                    // :459
+        {
+            // The buffer's own baked tripwire, BrnPropEntityModuleIO.h:848, which
+            // PreSceneUpdate fires before the copy.
+            CGS_ASSERT(mpabHitPropBitArray != 0, "mpabHitPropBitArray != NULL");
+            return *mpabHitPropBitArray;
+        }
+
+        // The six tri-state predicates (:432-:447). "Just changed" == the status byte is
+        // no longer the E_CHANGESTATUS_NO_CHANGE Construct seeded.
+        bool HasJustChangedToEasySmashOn() const   { return meEasySmashPropsStatus  == E_CHANGESTATUS_ON;  }  // :432
+        bool HasJustChangedToEasySmashOff() const  { return meEasySmashPropsStatus  == E_CHANGESTATUS_OFF; }  // :435
+        bool HasJustChangedToOnline() const        { return meOnlineStatus          == E_CHANGESTATUS_ON;  }  // :438
+        bool HasJustChangedToOffline() const       { return meOnlineStatus          == E_CHANGESTATUS_OFF; }  // :441
+        bool HasPropProgressionBeenEnabled() const { return mePropProgressionStatus == E_CHANGESTATUS_ON;  }  // :444
+        bool HasPropProgressionBeenDisabled() const{ return mePropProgressionStatus == E_CHANGESTATUS_OFF; }  // :447
+
+        // The tri-state the three `uint8_t me*Status` members carry. The DWARF types them
+        // uint8_t (no enum DIE survives), so the enumerator NAMES are descriptive; the
+        // VALUES are X360 facts: Construct seeds 2, the bridge writes 0 / 1.
+        enum EChangeStatus
+        {
+            E_CHANGESTATUS_OFF       = 0,
+            E_CHANGESTATUS_ON        = 1,
+            E_CHANGESTATUS_NO_CHANGE = 2
+        };
+
+        static void _AssertLayout();
 
     private:
-        u8   maPad[0x77F];                     // +0x001..+0x77F (payload owned by own TUs)
-        u32  muHitPropsBitArray;               // +0x780  (SetHitPropsBitArray; see FLAG)
-        f32  mfCurrentTimestep;                // +0x784  (SetCurrentTimestep: sim timestep * multiplier)
-        u8   maPad788[5];                      // +0x788..+0x78C
-        bool mbIsOnline;                       // +0x78D  (SetIsOnline: game mode is an online mode)
-        bool mbEasySmashProps;                 // +0x78E  (SetEasySmashProps)
-        bool mbPropProgressionEnabled;         // +0x78F  (SetPropProgressionEnabled)
-        bool mbSendingPropProgression;         // +0x790  (SendingPropProgression latch)
-        bool mbHitPropsBitArrayValid;          // +0x791  (set alongside muHitPropsBitArray)
-        bool mbResetProps;                     // +0x792  (ResetProps latch)
+        PropInstancesNeededForZoneQueue mPropInstancesNeededForZoneQueue;  // :474  console +0x004
+        PropGraphicsLoadedQueue         mPropGraphicsLoadedQueue;          // :475  console +0x04C
+        PropGraphicsUnloadedQueue       mPropGraphicsUnloadedQueue;        // :476  console +0x08C
+
+        // FLAG (unrecovered members): the console span +0x0CC..+0x6EF holds members this
+        // slice does not recover. Construct touches three of them -- a word at +0x0CC, six
+        // byte flags at +0x1D0 + i*0x101, and a {-1, -1, float} triple at +0x6D8/+0x6DC/
+        // +0x6E0 -- but nothing in the prop module reads them, so they are left as one
+        // opaque span rather than guessed at. THE SIZE IS THE CONSOLE SPAN, NOT A HOST
+        // OFFSET CLAIM: it only reserves "at least this much unknown payload"; every
+        // member around it is reached by name and the host lays them out wherever it
+        // likes. GROW it into named members when their producer lands.
+        u8 maUnrecoveredPayload[0x6F0 - 0x0CC];
+
+        Vector3 mPlayerPos;                          // :477  console +0x6F0
+        // :478. Console +0x700..+0x77F; Construct zeroes all eight with `stvx128` at
+        // 0x700/0x710/.../0x770, which is what pins the 16-byte stride and the count.
+        Vector3 maRaceCarVelocity[8];
+
+        const HitPropsBitArray* mpabHitPropBitArray; // :479  console +0x780 (see banner)
+        f32  mfCurrentTimeStep;                      // :480  console +0x784
+        s32  miPlayerZoneNumber;                     // :481  console +0x788 (-1 == none)
+        u8   mu8PlayerCarIndex;                      // :482  console +0x78C
+        u8   meOnlineStatus;                         // :483  console +0x78D (EChangeStatus)
+        u8   meEasySmashPropsStatus;                 // :484  console +0x78E (EChangeStatus)
+        u8   mePropProgressionStatus;                // :485  console +0x78F (EChangeStatus)
+        bool mbSendingPropProgression;               // :487  console +0x790 (asm order)
+        bool mbReloadingProfile;                     // :486  console +0x791 (asm order)
+        bool mbResetProps;                           // :488  console +0x792
+        bool mbPlayerCrashing;                       // :489  console +0x793
+        bool mbPlayerWrecked;                        // :490  console +0x794
 
         // ---- ADDITIVE GROW 2026-08-11 (WorldBridgeInputToEntityModules mount) ----------
         // The frame's replay status, latched by SetReplayStatusInterface @0x827A1578.
@@ -477,14 +695,27 @@ namespace PropEntityIO
         // GenerateDispatchLists @0x827D1CE8 drives Clear/AddEvent through it.
         typedef CgsModule::VariableEventQueue<32768, 16> SceneResultQueueStorage;
 
-        // X360 0x822B8EA8: read-lock; return the dispatch-frame index (this+4).
-        u32  GetDispatchFrame() const;
-        // X360 0x827A1180: write-lock; set the dispatch-frame index (this+4).
-        void SetDispatchFrame(u32 luDispatchFrame);
-        // X360 0x822B8F50: read-lock; return the shadow-map handle (this+8).
-        u32  GetShadowMap() const;
-        // X360 0x827A1228: write-lock; set the shadow-map handle (this+8).
-        void SetShadowMap(u32 luShadowMap);
+        // ⚠️ POINTER WIDTH CORRECTED 2026-08-12 (prop-spawn wave, phase 2 -- render slice).
+        // The first two slots were modelled as `u32` handles because the X360 accessors are a
+        // bare `lwz r3,4(this)` / `lwz r3,8(this)`. They are not handles: the console words ARE
+        // the 32-bit pointers (WorldModule seeds the sibling world/race-car dispatch inputs with
+        // `SetDispatchFrame(lpDispatchFrame)` / `SetShadowMap(&mShadowMap)`, and
+        // WorldEntityIO::InputBuffer_GenerateDispatchLists already carries them as real pointers).
+        // Keeping them u32 on x64 truncates a host pointer -- the recurring project bug. The
+        // console offsets below are PROVENANCE ONLY; every access goes through the named member.
+        // The corona-submission slot stays u32 for now: its only consumer (the parked corona
+        // loop in BrnPropEntityModule_Render.cpp) needs no dereference, and widening it would
+        // drag BrnCoronaManager's whole header into this one for a nested class that cannot be
+        // forward-declared.
+        //
+        // X360 0x822B8EA8: read-lock; return the dispatch frame (console word @this+4).
+        CgsGraphics::DispatchFrame* GetDispatchFrame() const;
+        // X360 0x827A1180: write-lock; set the dispatch frame (console word @this+4).
+        void SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame);
+        // X360 0x822B8F50: read-lock; return the shadow map (console word @this+8).
+        ShadowMap* GetShadowMap() const;
+        // X360 0x827A1228: write-lock; set the shadow map (console word @this+8).
+        void SetShadowMap(ShadowMap* lpShadowMap);
         // :295 (own TU): read-lock; return the scene-query-results queue (this+0xC).
         const SceneResultQueueStorage* GetSceneResultQueue() const;
         // X360 0x827BB1E0 (:296, THIS batch): write-lock; return the scene-query-results queue (this+0xC).
@@ -494,18 +725,28 @@ namespace PropEntityIO
         // X360 0x827A12D0: write-lock; set the corona-submission interface handle (this+0x801C).
         void SetCoronaSubmissionInterface(u32 luCoronaSubmissionInterface);
 
+        // X360 Construct @0x822DC300 / Destruct @0x822DC358 (both real ledger symbols).
+        // ADDED 2026-08-12 (prop-BOOT wave, agent B8): Construct was never written, so
+        // `Construct()` on this buffer resolved to the CgsModule::IOBuffer base and the
+        // embedded VariableEventQueue<32768,16> stayed un-Constructed. Bodied in this
+        // buffer's own TU; Destruct stays declaration-only.
+        void Construct();
+        void Destruct();
+
         static void _AssertLayout();
 
     private:
-        // The IOBuffer base is a single status byte; the X360 places muDispatchFrame at this+4,
-        // so pad bytes +1..+3 explicitly.
-        u8                     maStatusPad[3];                    // +1..+3 (force +4)
-        u32                    muDispatchFrame;                   // +4
-        u32                    muShadowMap;                       // +8
-        // Scene-query-results queue (:307) at +0xC (opaque; see FLAG). Spans up to the +0x801C
-        // start of muCoronaSubmissionInterface.
-        SceneResultQueueStorage mSceneResultQueue;                // +0xC   :307
-        u32                    muCoronaSubmissionInterface;       // +0x801C
+        // The IOBuffer base is a single status byte; the X360 places the dispatch-frame word at
+        // this+4, so pad bytes +1..+3 explicitly. On the host the two widened pointers push the
+        // queue and the corona word past their console offsets -- deliberately: this buffer is a
+        // pure runtime object (nothing serialises it), so host width is correct and the console
+        // offsets are provenance.
+        u8                          maStatusPad[3];                    // +1..+3 (console: force +4)
+        CgsGraphics::DispatchFrame* mpDispatchFrame;                   // console +4
+        ShadowMap*                  mpShadowMap;                       // console +8
+        // Scene-query-results queue (:307) at console +0xC (opaque; see FLAG).
+        SceneResultQueueStorage     mSceneResultQueue;                 // console +0xC   :307
+        u32                         muCoronaSubmissionInterface;       // console +0x801C
     };
 
     // ========================================================================

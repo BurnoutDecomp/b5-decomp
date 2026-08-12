@@ -73,6 +73,14 @@ namespace Props
         // @0x822CCE20: enqueue a remove-physical-part request.
         void RemovePartInstance(BrnWorld::PropEntityID lEntityId, s32 liPhysicalIndex);
 
+        // ADDITIVE GROW (prop-spawn wave, 2026-08-12). @0x822CCD88: enqueue a
+        // remove-physical-PROP request -- the whole-prop twin of RemovePartInstance.
+        // Called by BrnWorld::PropCellManager::RemovePropFromSim @0x822DFF48
+        // (`RemovePropInstance(lVolumeInstanceID.GetPropEntityID(), lu8PhysicsIndex)`);
+        // args are the r4/r5 pair in that call site's asm. Declaration only -- the body
+        // belongs to this interface's own TU. No layout change.
+        void RemovePropInstance(BrnWorld::PropEntityID lEntityId, s32 liPhysicalIndex);
+
         // DWARF :42. The console emits this INLINE inside
         // PhysicsModuleIO::InputBuffer::Construct @0x825ABA18 (r30 = buffer + 327216 == this):
         // the four queue Constructs in the order below, then mbRemoveAllPropsAndParts = false,
@@ -97,6 +105,34 @@ namespace Props
         // (WorldModule::BridgePropModuleToPhysicsModule_Prepare @0x827AB410,
         //  BridgeEntityModulesToPhysicsModule_PreScene @0x827AADB8 and _PrePhysics @0x827AAEC0).
         void Append(const PropInputInterface* lpOther);
+
+        // ADDITIVE GROW (prop-spawn wave, 2026-08-12) -- DWARF BrnPropInputInterface.h:72
+        // `void RemoveAllPropsAndParts()` and :75 `bool ShouldRemoveAllPropsAndParts() const`.
+        // Both are header inlines the X360 folds at every call site: the request setter is
+        // the `stb 1, 0x2C00(interface)` tail of BrnWorld::PropZoneManager::
+        // RemoveAllPropsAndParts @0x822DEF50 (console +0x2C00 == mbRemoveAllPropsAndParts),
+        // and the query is the matching read on the physics side. Defined inline here (the
+        // console emits no out-of-line body) so callers set the flag BY NAME. Pure addition:
+        // no member/layout change.
+        void RemoveAllPropsAndParts()            { mbRemoveAllPropsAndParts = true; }
+        bool ShouldRemoveAllPropsAndParts() const { return mbRemoveAllPropsAndParts; }
+
+        // ADDITIVE GROW (prop-spawn wave, 2026-08-12, conductor) -- the named form of the
+        // tail of BrnWorld::PropEntityModule::InitializePropPhysicsData @0x822DA840
+        // (0x822DB00C..0x822DB024): `ldx r31, module, 0xCDD9C` loads mpPropPhysicsDataHeader
+        // + 0x14 -- the ResourcePtr's {mpThis, muThreadId} pair, which IS a ResourceHandle --
+        // and `std r31, 0x2BF8(interface)` stores it into mpPhysicsData.
+        //
+        // This is how the PHYSICS side receives the prop TYPE TABLE (the 219 PropTypeData
+        // records out of PROPPHYSICS.BUNDLE). Without it the field stays whatever Construct
+        // left it -- and Construct deliberately does not even clear it, faithfully to the
+        // console -- so every physics-side prop type lookup reads a stale handle.
+        //
+        // Defined inline here rather than poked at +0x2BF8 from the caller: the member is
+        // private, and a raw-offset write is exactly the console-offset-on-x64 pattern that
+        // AGENTS.md bans (the ResourceHandle widens on the host, so +0x2BF8 is wrong here
+        // anyway). Pure addition -- no member added, no layout change.
+        void SetPhysicsData(const CgsResource::ResourceHandle& lrHandle) { mpPhysicsData = lrHandle; }
 
     private:
         AddPhysicalPropEventQueue mAddPropQueue;             // +0x0000   (:125)

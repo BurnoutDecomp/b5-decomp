@@ -42,9 +42,52 @@ namespace PropEntityIO
         static_assert(sizeof(PropInputInterfaceStorage) >= 11296 - 4 - 12,
                       "prop-input span smaller than the console span -- retype regressed");
         static_assert(offsetof(OutputBuffer_PrePhysics, mPropToTrafficInterface)
-                          == offsetof(OutputBuffer_PrePhysics, mPropInputInterface)
+                          >= offsetof(OutputBuffer_PrePhysics, mPropInputInterface)
                              + sizeof(PropInputInterfaceStorage),
-                      "mPropToTrafficInterface must immediately follow mPropInputInterface (console +11296)");
+                      "mPropToTrafficInterface must follow mPropInputInterface (console +11296)");
+        // ⭐ ADDED 2026-08-12 (prop-BOOT wave, agent B8): mPropToTrafficInterface is the real
+        // PropToTrafficInterface now, not a 1-byte span. Console extent 140 + 332 == the two
+        // embedded queues (EventQueue<TrafficLightKnockDownEvent,32> at +0, 12 + 32*4 == 140,
+        // and EventQueue<TrafficLightRestoreEvent,80> at +140, 12 + 80*4 == 332) -- pinned by
+        // Construct @0x822EFCF0's two calls at buffer+11296 and buffer+11436.
+        static_assert(sizeof(PropToTrafficInterfaceStorage) >= 140 + 332,
+                      "prop-to-traffic interface smaller than the console span -- retype regressed");
+    }
+
+    // ========================================================================
+    // OutputBuffer_PrePhysics::Construct   @ 0x822EFCF0   (DWARF :688)
+    // ------------------------------------------------------------------------
+    // ⭐ NEW 2026-08-12 (prop-BOOT wave, agent B8) -- the same never-written hole as the
+    // Prepare / PreScene twins: `Construct()` resolved to the inherited
+    // CgsModule::IOBuffer::Construct, so the prop-input interface's four event queues and the
+    // prop-to-traffic interface's two kept mpEvents == NULL.
+    //
+    // Store-for-store from the asm, r31 == this + 16 == &mPropInputInterface:
+    //   stb 1, 0(this)                                       -> IOBuffer::Construct()
+    //   bl  AddPhysicalPropEvent_50_::Construct(+16)           \
+    //   bl  RemovePhysicalPropEvent_300_::Construct(+16+8032)   |  mPropInputInterface.Construct()
+    //   bl  RemovePhysicalPartEvent_100_::Construct(+16+10444)  |  (inlined, four queues in member
+    //   bl  AddPhysicalPartEvent_50_::Construct(+16+4016)       |   order, then the flag)
+    //   stb 0, [+16+11264]                                     /
+    //   bl  TrafficLightKnockDownEvent_32_::Construct(+11296)  \ mPropToTrafficInterface.Construct()
+    //   bl  TrafficLightRestoreEvent_80_::Construct(+11436)    /
+    //   stw 0, [+16+8/+4024/+8040/+10452]; stb 0, [+16+11264]  -> mPropInputInterface.Clear()
+    //
+    // ⚠️ NOTE ON THE HEADER'S "+4": mPropInputInterface is at console +16, NOT +4. Both
+    // GetPropInputInterface overloads end in `addi r3, r28, 0x10` (0x827A1B68 / 0x822B99D8) and
+    // Construct's r31 is `this + 16`; the "+4" in the older comments was a transcription slip.
+    // It changes nothing here -- the member is reached by name, and on the host it lands at 16
+    // anyway because PropInputInterface is 16-aligned (its queues hold alignas(16) elements).
+    // The prop-to-traffic interface needs no Clear pass: EventQueue::Construct zeroes miLength.
+    // ========================================================================
+    void OutputBuffer_PrePhysics::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+
+        mPropInputInterface.Construct();
+        mPropToTrafficInterface.Construct();
+
+        mPropInputInterface.Clear();
     }
 
     // X360 0x827A1B68 (own TU): read-lock; return this + 4.

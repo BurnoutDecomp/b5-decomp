@@ -31,7 +31,11 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h" // PropPhysicsDataHeader::GetType, PropTypeData
-#include "SharedClasses/Physics/Props/BrnPhysicsPropZoneData.h"   // PropZoneData
+#include "SharedClasses/Physics/Props/BrnPhysicsPropZoneData.h"   // PropZoneData, PropCellData, PropCellId
+#include "SharedClasses/Physics/Props/BrnPhysicsPropInstanceData.h" // PropInstanceData (the 80B serialised record LoadProp reads)
+#include "SharedClasses/Physics/Props/BrnPropGraphicsList.h"        // PropGraphics / PropPartGraphics (PropGraphicsManager table)
+#include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h" // PropInputInterface::RemoveAllPropsAndParts
+#include "GameSource/Replays/Serialisers/BrnReplayPropEntitySerialiser.h"  // PropEntitySerialiser::GetStaticLayout / PropSerialiserFrame
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h" // OutputBuffer_PreScene / _PostPhysics / _PrePhysics
 #include "GameSource/World/EntityModules/PropEntityModule/SharedIO/BrnPropToTrafficInterface.h" // PropToTrafficInterface (SendTrafficLightRestoreEvents)
 
@@ -40,6 +44,50 @@ namespace BrnWorld
     using BrnPhysics::Props::PropPhysicsDataHeader;
     using BrnPhysics::Props::PropTypeData;
     using BrnPhysics::Props::PropZoneData;
+    using BrnPhysics::Props::PropCellData;
+    using BrnPhysics::Props::PropCellId;
+    using BrnPhysics::Props::PropInstanceData;
+
+    // ========================================================================
+    // Host layout tripwires (never called).
+    // ------------------------------------------------------------------------
+    // Deliberately NOT asserting the console byte offsets in the header banner: pointer
+    // widening moves every one of them on x64 (see the banner's CONSOLE-vs-HOST warning).
+    // What IS load-bearing is that the per-zone tables have the shapes the bodies index by
+    // name, and that PropGraphicsManager's slot stride is the HOST stride (16 on x64), not
+    // the console's 8 -- the old header banner claimed 8, which is why this pin exists.
+    void PropZoneManager::_AssertLayout()
+    {
+        static_assert(sizeof(((PropZoneManager*)0)->mauStartIndexOfZone)    == 2 * KU_MAX_ZONES, "mauStartIndexOfZone[500] u16");
+        static_assert(sizeof(((PropZoneManager*)0)->mauNumberOfPropsInZone) == 2 * KU_MAX_ZONES, "mauNumberOfPropsInZone[500] u16");
+        static_assert(sizeof(((PropZoneManager*)0)->mauStartIndexOfParts)   == 2 * KU_MAX_ZONES, "mauStartIndexOfParts[500] u16");
+        static_assert(sizeof(((PropZoneManager*)0)->mauNumberOfPartsInZone) == 2 * KU_MAX_ZONES, "mauNumberOfPartsInZone[500] u16");
+        // The pools the X360 addresses as `base + 80*index`: the stride must come from the
+        // element type, and it does (both records are pinned at 80 by their own home).
+        static_assert(sizeof(PropEntityInstance)     == 80, "prop pool stride 80");
+        static_assert(sizeof(PropPartEntityInstance) == 80, "part pool stride 80");
+        static_assert(sizeof(PropInstanceData)       == 80, "serialised prop record stride 80");
+        // maRotationParams: the X360 strides it by 6 and writes +0/+2/+3/+4. Those four
+        // field offsets are pointer-free, so they DO hold on the host.
+        static_assert(offsetof(PropEntityRotationParams, miPropIndex) == 0, "rot params +0");
+        static_assert(offsetof(PropEntityRotationParams, mnRotSpeed)  == 2, "rot params +2");
+        static_assert(offsetof(PropEntityRotationParams, muMinAngle)  == 3, "rot params +3");
+        static_assert(offsetof(PropEntityRotationParams, muMaxAngle)  == 4, "rot params +4");
+    }
+
+    void PropGraphicsManager::_AssertLayout()
+    {
+        // HOST-sized, not console-sized: the reference slot is { pointer, u8 } padded to
+        // the pointer's alignment, i.e. 2 * sizeof(void*) (16 on x64, 8 on the X360). All
+        // indexing goes through maPropGraphicsReferences[type], so this stride is whatever
+        // the host compiler picks -- these pins just make that explicit and stop anyone
+        // reintroducing the "8-byte slot" console constant.
+        static_assert(offsetof(PropGraphicsReference, mpPropGraphics) == 0,               "graphics ref slot +0");
+        static_assert(offsetof(PropGraphicsReference, mu8RefCount)    == sizeof(void*),   "refcount right after the pointer");
+        static_assert(sizeof(PropGraphicsReference)                   == 2 * sizeof(void*), "host slot stride");
+        static_assert(sizeof(((PropGraphicsManager*)0)->maPropGraphicsReferences)
+                      == KU_MAX_PROP_TYPES * sizeof(PropGraphicsReference), "500 slots");
+    }
 
     // ---- UpdateInstance displacement / world-floor thresholds (X360 rodata) -------------
     // unk_82FAD840 (@0x822F0B80): a Y-position floor. UpdateInstance computes
@@ -85,8 +133,10 @@ namespace BrnWorld
     {
         CGS_ASSERT(lpPropGraphics != nullptr, "lpPropGraphics");
 
-        // The PropGraphics record begins with its prop type id (X360 `*lpPropGraphics`).
-        const u32 luType = *reinterpret_cast<const u32*>(lpPropGraphics);
+        // X360 `lwz r30,0(r29)` -- the record's FIRST word is its prop type id. Read BY
+        // NAME now that BrnPropGraphicsList.h homes the layout (muTypeId @ +0), replacing
+        // the previous `*reinterpret_cast<const u32*>(lpPropGraphics)` offset-read.
+        const u32 luType = lpPropGraphics->muTypeId;
         CGS_ASSERT(luType < KU_MAX_PROP_TYPES, "luType < BrnPhysics::Props::KU_MAX_PROP_TYPES");
 
         PropGraphicsReference& lrReference = maPropGraphicsReferences[luType];
@@ -96,10 +146,65 @@ namespace BrnWorld
         }
         else
         {
-            lrReference.mpPropGraphics = lpPropGraphics;
-            lrReference.mu8RefCount    = 1;
+            // The X360 inlines AddPropGraphics here; de-inlined to the named helper.
+            AddPropGraphics(lpPropGraphics);
         }
         return true;
+    }
+
+    // ========================================================================
+    // PropGraphicsManager::AddPropGraphics (DWARF BrnPropZoneManager.h:473)
+    // ------------------------------------------------------------------------
+    // The install half Register @0x822A9DE8 folds inline: seat the record in its own type
+    // slot with a fresh reference count of one (asm `stw r29,0(r11); li r10,1; stb r10,4(r11)`).
+    void PropGraphicsManager::AddPropGraphics(const PropGraphics* lpPropGraphics)
+    {
+        CGS_ASSERT(lpPropGraphics != nullptr, "lpPropGraphics");
+
+        const u32 luType = lpPropGraphics->muTypeId;
+        CGS_ASSERT(luType < KU_MAX_PROP_TYPES, "luType < BrnPhysics::Props::KU_MAX_PROP_TYPES");
+
+        PropGraphicsReference& lrReference = maPropGraphicsReferences[luType];
+        lrReference.mpPropGraphics = lpPropGraphics;
+        lrReference.mu8RefCount    = 1;
+    }
+
+    // ========================================================================
+    // PropGraphicsManager::GetPropGraphics (DWARF BrnPropZoneManager.h:455)
+    // ------------------------------------------------------------------------
+    // The registered graphics record for a prop type, or null when nothing has registered
+    // that type yet (an unpopulated slot holds a null pointer -- Register/AddPropGraphics
+    // are the only writers, and Construct-time zeroing is the initial state).
+    //
+    // FLAG (shape-only attestation): the X360 emits no out-of-line body -- this accessor is
+    // a header inline folded at its call sites -- so the DWARF gives the signature and the
+    // member set gives the body. There is no invented policy here: the table maps type id
+    // to slot, which is exactly what Register @0x822A9DE8 builds.
+    const PropGraphicsManager::PropGraphics* PropGraphicsManager::GetPropGraphics(u32 luType) const
+    {
+        CGS_ASSERT(luType < KU_MAX_PROP_TYPES, "luType < BrnPhysics::Props::KU_MAX_PROP_TYPES");
+        return maPropGraphicsReferences[luType].mpPropGraphics;
+    }
+
+    // ========================================================================
+    // PropGraphicsManager::GetPropPartGraphics (DWARF BrnPropZoneManager.h:460)
+    // ------------------------------------------------------------------------
+    // The graphics record for one destructible part of a prop type. PropGraphics::mpParts
+    // points at this prop's FIRST PropPartGraphics inside the list's part table (the parts
+    // of a prop are stored contiguously, grouped by owning type -- BrnPropGraphicsList.h,
+    // and PropGraphicsList::FixUp @0x8267DB38 rebases exactly that per-prop pointer), so
+    // part n of the prop is mpParts[n].
+    //
+    // FLAG (shape-only attestation, as GetPropGraphics above): no out-of-line X360 body.
+    const PropGraphicsManager::PropPartGraphics*
+    PropGraphicsManager::GetPropPartGraphics(u32 luPropType, u32 luPropPartType) const
+    {
+        const PropGraphics* lpPropGraphics = GetPropGraphics(luPropType);
+        if (lpPropGraphics == nullptr)
+        {
+            return nullptr;
+        }
+        return &lpPropGraphics->mpParts[luPropPartType];
     }
 
     // ========================================================================
@@ -197,6 +302,240 @@ namespace BrnWorld
     {
         CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES, "luZoneIndex < BrnPhysics::Props::KU_MAX_ZONES");
         return mauStartIndexOfZone[lu16ZoneId] != KU_UNLOADED_ZONE;
+    }
+
+    // ========================================================================
+    // PropZoneManager::GetNumberOfPropsInZone / GetNumberOfPartsInZone
+    // ------------------------------------------------------------------------
+    // DWARF BrnPropZoneManager.h:101/:105. Header inlines (the X360 folds the two `lhzx`
+    // loads at every call site -- e.g. GetProp @0x822A41A8's own bounds assert loads
+    // mauNumberOfPropsInZone the same way), so only the per-zone table read is attested.
+    u32 PropZoneManager::GetNumberOfPropsInZone(u16 lu16ZoneId) const
+    {
+        CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES, "luZoneId < BrnPhysics::Props::KU_MAX_ZONES");
+        return mauNumberOfPropsInZone[lu16ZoneId];
+    }
+
+    u32 PropZoneManager::GetNumberOfPartsInZone(u16 lu16ZoneId) const
+    {
+        CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES, "luZoneId < BrnPhysics::Props::KU_MAX_ZONES");
+        return mauNumberOfPartsInZone[lu16ZoneId];
+    }
+
+    // ========================================================================
+    // PropZoneManager::GetProp @ 0x822A41A8
+    // ------------------------------------------------------------------------
+    // Resolve (zone id, index-within-zone) to its prop-pool slot. Four tripwires, then the
+    // slot address -- there is NO null return path in the shipped body.
+    PropEntityInstance* PropZoneManager::GetProp(u16 lu16ZoneId, u32 luPropIndex)
+    {
+        CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES, "luZoneId < 500");
+
+        const u16 lu16StartIndex = mauStartIndexOfZone[lu16ZoneId];
+        CGS_ASSERT(lu16StartIndex != KU_UNLOADED_ZONE, "luStartIndex != KU_UNLOADED_ZONE");
+        CGS_ASSERT(luPropIndex < mauNumberOfPropsInZone[lu16ZoneId],
+                   "luInstanceId < mauNumberOfPropsInZone[luZoneId]");
+
+        const u32 luPoolIndex = lu16StartIndex + luPropIndex;
+        CGS_ASSERT(luPoolIndex < KU_MAX_LOADED_PROP_INSTANCES,
+                   "luStartIndex + luInstanceId < BrnPhysics::Props::KU_MAX_LOADED_PROP_INSTANCES");
+
+        return &maProps[luPoolIndex];
+    }
+
+    // ========================================================================
+    // PropZoneManager::GetPart @ 0x822A4298
+    // ------------------------------------------------------------------------
+    // Resolve (zone id, prop-index-within-zone, part-index-within-prop) to its part-pool
+    // slot. The X360 resolves the owning prop first (same start-index math as GetProp),
+    // reads its first-part slot (`lhz r11, 0x9C8(r11)` == maProps[i].mu16PartsIndex) and
+    // adds the part index -- so the part pool is indexed by the PROP's mu16PartsIndex, not
+    // by the zone's part start index.
+    PropPartEntityInstance* PropZoneManager::GetPart(u16 lu16ZoneId, u16 lu16PropIndex, u16 lu16PartIndex)
+    {
+        CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES, "luZoneId < BrnPhysics::Props::KU_MAX_ZONES");
+
+        const u16 lu16StartIndex = mauStartIndexOfZone[lu16ZoneId];
+        CGS_ASSERT(lu16StartIndex != KU_UNLOADED_ZONE, "luStartIndex != KU_UNLOADED_ZONE");
+        CGS_ASSERT(lu16PropIndex < mauNumberOfPropsInZone[lu16ZoneId],
+                   "luPropIndex < mauNumberOfPropsInZone[luZoneId]");
+
+        const PropEntityInstance& lrProp = maProps[lu16StartIndex + lu16PropIndex];
+        return &maParts[lrProp.mu16PartsIndex + lu16PartIndex];
+    }
+
+    // ========================================================================
+    // PropZoneManager::GetZone @ 0x822C5FF0 (24 insns)
+    // ------------------------------------------------------------------------
+    // The entity-id keyed zone lookup: owner tripwire, then the owning prop slot's zone
+    // index. The X360 addresses it as `maProps_base(0x980) + 80*idx + 70`; here that is
+    // the named member of the named slot, and the stride is sizeof(PropEntityInstance).
+    //
+    // Returned SIGNED: every caller sign-extends (`extsh`) and compares against -1, which
+    // is how "this entity has no loaded zone" is spelled. (KU_UNLOADED_ZONE is 65535 ==
+    // (s16)-1, so the sentinel survives the narrowing intact -- that is the whole trick.)
+    s16 PropZoneManager::GetZone(PropEntityID lEntityId) const
+    {
+        lEntityId.AssertIsProp();
+        return static_cast<s16>(maProps[lEntityId.GetEntityIndex()].mu16ZoneIndex);
+    }
+
+    // ========================================================================
+    // PropZoneManager::GetProp @ 0x822CDA28 (90 insns; unnamed in IDA)
+    // ------------------------------------------------------------------------
+    // The PropEntityID-keyed overload of GetProp. Unlike the (zone, index-within-zone)
+    // pair above, the packed id already carries a GLOBAL prop-pool index, so the body is
+    // five tripwires and one array subscript.
+    //
+    // Identified by its baked assert texts ("!lEntityId.IsPart()" @BrnPropZoneManager.h:534
+    // == 0x216, "lEntityId.GetEntityIndex() < ...KU_MAX_LOADED_PROP_INSTANCES" @:537,
+    // "GetZone( lEntityId ) != -1" @:540, "IsZoneLoaded( GetZone( lEntityId ) )" @:541).
+    // The owner tripwire fires TWICE in the asm (0x822CDA88 and 0x822CDAD8) because the
+    // source calls two different id accessors that each assert; reproduced as the two
+    // AssertIsProp()-carrying calls that produce it.
+    //
+    // ⚠️ CONSOLE-CONSTANT TRAP: the asm computes the slot as `idx*5 << 4` (== idx*80) added
+    // to `this + 0x980`. Neither number appears here -- 80 is sizeof(PropEntityInstance) on
+    // the HOST and 0x980 is where maProps happens to land on the CONSOLE. The subscript
+    // below is the faithful form; the pins in _AssertLayout() keep the element stride honest.
+    PropEntityInstance* PropZoneManager::GetProp(PropEntityID lEntityId)
+    {
+        // "!lEntityId.IsPart()" -- a whole-prop id must carry a zero part index
+        // (asm 0x822CDA3C: `clrlwi r11, r31, 22` == muValue & KU_PART_INDEX_MASK).
+        CGS_ASSERT(lEntityId.GetPartIndex() == 0, "!lEntityId.IsPart()");
+        lEntityId.AssertIsProp();
+
+        const u32 luEntityIndex = lEntityId.GetEntityIndex();
+        CGS_ASSERT(luEntityIndex < KU_MAX_LOADED_PROP_INSTANCES,
+                   "lEntityId.GetEntityIndex() < BrnPhysics::Props::KU_MAX_LOADED_PROP_INSTANCES");
+
+        const s16 li16Zone = GetZone(lEntityId);
+        CGS_ASSERT(li16Zone != -1, "GetZone( lEntityId ) != -1");
+        CGS_ASSERT(IsZoneLoaded(static_cast<u16>(li16Zone)), "IsZoneLoaded( GetZone( lEntityId ) )");
+
+        return &maProps[luEntityIndex];
+    }
+
+    // ========================================================================
+    // PropZoneManager::GetPart @ 0x822CDB90 (81 insns; unnamed in IDA)
+    // ------------------------------------------------------------------------
+    // The PropEntityID-keyed overload of GetPart. The part-pool slot is the OWNING PROP's
+    // first-part slot plus the id's 1-based part index, minus one:
+    //
+    //     asm 0x822CDC74  lhz   r30, 0x9C8(r30)   ; maProps[idx].mu16PartsIndex (0x980+72)
+    //     asm 0x822CDC98  clrlwi r10, r30, 16     ; (u16) that
+    //     asm 0x822CDC9C  clrlwi r11, r31, 22     ; lEntityId.GetPartIndex()
+    //     asm 0x822CDCA0  add    r11, r11, r10
+    //     asm 0x822CDCA4  addis  r11, r11, 1      ; + 0x10000  )  the two together are
+    //     asm 0x822CDCA8  addi   r11, r11, -1     ; - 1        )  "(x - 1) mod 65536",
+    //     asm 0x822CDCAC  clrlwi r11, r11, 16     ;               i.e. u16 wraparound
+    //
+    // The +0x10000/-1/mask triple is the compiler spelling `(u16)(partsIndex + partIndex - 1)`
+    // without letting the intermediate go negative -- so the subtraction is done in u16, and
+    // that wraparound is REPRODUCED here rather than "cleaned up" into a signed subtract.
+    // Part indices are 1-based (0 means "the whole prop"), which is why the -1 is there at all.
+    //
+    // ⚠️ Same console-constant trap as GetProp: the console's `+435968` part-pool base and
+    // its 80-byte stride are absent by design; this indexes maParts by name.
+    PropPartEntityInstance* PropZoneManager::GetPart(PropEntityID lEntityId)
+    {
+        lEntityId.AssertIsProp();
+
+        const u32 luEntityIndex = lEntityId.GetEntityIndex();
+        CGS_ASSERT(luEntityIndex < KU_MAX_LOADED_PROP_INSTANCES,
+                   "lEntityId.GetEntityIndex() < BrnPhysics::Props::KU_MAX_LOADED_PROP_INSTANCES");
+
+        CGS_ASSERT(GetZone(lEntityId) != -1, "GetZone( lEntityId ) != -1");
+
+        const u16 lu16FirstPart = maProps[luEntityIndex].mu16PartsIndex;
+        const u16 lu16PartSlot  = static_cast<u16>(lu16FirstPart + lEntityId.GetPartIndex() - 1u);
+
+        return &maParts[lu16PartSlot];
+    }
+
+    // ========================================================================
+    // PropZoneManager::RecordHitProp @ 0x822BCC00
+    // ------------------------------------------------------------------------
+    // Flag one prop as hit in the persistent progression bit set. The flat bit index is the
+    // same 600*zone + index addressing HasPropBeenHit reads back. The X360 body is mostly
+    // the "Recording hit prop. Zone index: ... Prop index: ... array index: ..." debug
+    // stream plus the three tripwires; the state change is the single SetBit.
+    void PropZoneManager::RecordHitProp(s32 liZoneIndex, s32 liPropIndex)
+    {
+        CGS_ASSERT(static_cast<u32>(liPropIndex) < KU_MAX_PROP_INSTANCES_PER_ZONE,
+                   "Zone / Prop index");
+        CGS_ASSERT(static_cast<u32>(liZoneIndex) < KU_MAX_ZONES,
+                   "liZoneIndex < static_cast<int32_t>(BrnPhysics::Props::KU_MAX_ZONES)");
+
+        const u32 luBitIndex =
+            KU_MAX_PROP_INSTANCES_PER_ZONE * static_cast<u32>(liZoneIndex) + static_cast<u32>(liPropIndex);
+        CGS_ASSERT(luBitIndex < 300000u, "invalid index");
+        maPreviouslyHitProps.SetBit(luBitIndex);
+    }
+
+    // ========================================================================
+    // PropZoneManager::RemoveAllPropsAndParts @ 0x822DEF50
+    // ------------------------------------------------------------------------
+    // The streaming teardown (PropEntityModule::UpdateInstanceStreaming @0x82308330): drop
+    // every loaded prop and part in one shot, without walking them. The X360 body is a flat
+    // run of stores because it INLINES the container clears and PropCellManager::Clear; the
+    // DecFIGS hint for this function names them all
+    // (BitArray<9>::UnSetAll x2, BitArray<5400>::UnSetAll x2, BitArray<100>::UnSetAll,
+    //  PropCellManager::Clear, BitArray<15>::UnSetAll, then GetSceneInputInterface ->
+    //  RemoveAllEntities and GetPropInputInterface -> RemoveAllPropsAndParts), so they are
+    // restored as the named calls / named-member stores here.
+    //
+    // ⚠️ PropCellManager::Clear is NOT declared by the cell-manager home yet, so its inlined
+    // body is reproduced here as the named-member resets the asm performs (offsets 0x708,
+    // 0x76C, 0x778, 0x780, 0x904, 0x908, 0x90C, 0x90E == miNumLoadedCells,
+    // miNumActiveCells, mPhysicalProps, mPhysicalParts, miNumPropsInSim, miNumPartsInSim,
+    // mu16NumberOfPropVolumesInScene, mu16NumberOfPropEntitiesInScene). Collapse this back
+    // into mCellManager.Clear() when that TU lands it.
+    void PropZoneManager::RemoveAllPropsAndParts(PropEntityIO::OutputBuffer_PreScene* lpOutput)
+    {
+        CGS_ASSERT(lpOutput != nullptr, "lpOutput");
+
+        maUsedProps.UnSetAll();
+        maUsedParts.UnSetAll();
+        maDontRespawnProps.UnSetAll();
+        maRespawnDifferentProps.UnSetAll();
+        mUsedRotationParams.UnSetAll();
+
+        // --- inlined PropCellManager::Clear ---
+        mCellManager.miNumLoadedCells = 0;
+        mCellManager.miNumActiveCells = 0;
+        mCellManager.mPhysicalProps.UnSetAll();
+        mCellManager.mPhysicalParts.UnSetAll();
+        mCellManager.miNumPropsInSim = 0;
+        mCellManager.miNumPartsInSim = 0;
+        mCellManager.mu16NumberOfPropVolumesInScene  = 0;
+        mCellManager.mu16NumberOfPropEntitiesInScene = 0;
+
+        // Mark every zone unloaded. The X360 re-stores the (loop-invariant) zero into
+        // mu16NumberOfLoadedProps on every iteration; hoisted out here.
+        mu16NumberOfLoadedProps = 0;
+        for (u32 luZoneId = 0; luZoneId < KU_MAX_ZONES; ++luZoneId)
+        {
+            mauStartIndexOfZone[luZoneId]    = KU_UNLOADED_ZONE;
+            mauNumberOfPropsInZone[luZoneId] = 0;
+            mauStartIndexOfParts[luZoneId]   = KU_UNLOADED_ZONE;
+            mauNumberOfPartsInZone[luZoneId] = 0;
+        }
+
+        // Ask the scene to drop every entity, and the physics side to drop every body.
+        InSceneUpdateInterface* lpScene =
+            reinterpret_cast<InSceneUpdateInterface*>(lpOutput->GetSceneInputInterface());
+        // FLAG RETIRED 2026-08-12 (link-closure pass): the payload byte now has somewhere
+        // to go. The X360 stages the queued InEventRemoveAllEntities with `stb 3` at
+        // 0x822DF038, and 3 is E_ENTITYTYPE_PROP -- this asks the scene to drop every
+        // entity owned by PROPS, not literally every entity in the world. The event's
+        // mu8Owner member and RemoveAllEntities' uint8_t parameter are both DWARF-attested
+        // (CgsSceneManagerIO_SceneUpdate.h:65 / :452); see that header's banner.
+        lpScene->RemoveAllEntities(static_cast<u8>(E_ENTITYTYPE_PROP));
+
+        BrnPhysics::Props::PropInputInterface* lpPropInput =
+            reinterpret_cast<BrnPhysics::Props::PropInputInterface*>(lpOutput->GetPropInputInterface());
+        lpPropInput->RemoveAllPropsAndParts();
     }
 
     // ========================================================================
@@ -356,7 +695,8 @@ namespace BrnWorld
     // entity index minus the zone's prop start index), assert it is non-negative, and
     // forward along with the zone id.
     void PropZoneManager::AddPropPartsToScene(PropEntityInstance* lpProp, const PropTypeData* lpType,
-                                              PropVolumeInstanceID lVolumeInstanceID, InSceneUpdateInterface* lpScene)
+                                              PropVolumeInstanceID lVolumeInstanceID, InSceneUpdateInterface* lpScene,
+                                              BrnReplays::PropEntitySerialiser* lpSerialiser)
     {
         const u16 lu16ZoneId         = lpProp->mu16ZoneIndex;
         const s32 liPropIndexInZone  =
@@ -364,14 +704,15 @@ namespace BrnWorld
         CGS_ASSERT(liPropIndexInZone >= 0, "liPropIndexInZone >= 0");
 
         mCellManager.AddPropPartsToScene(lpProp, lpType, lVolumeInstanceID, lpScene,
-                                         lu16ZoneId, liPropIndexInZone);
+                                         lpSerialiser, lu16ZoneId, liPropIndexInZone);
     }
 
     // ========================================================================
     // PropZoneManager::RemovePropFromScene @ 0x822F0740
     // ------------------------------------------------------------------------
     void PropZoneManager::RemovePropFromScene(PropEntityInstance* lpProp, const PropTypeData* lpType,
-                                              PropVolumeInstanceID lVolumeInstanceID, InSceneUpdateInterface* lpScene)
+                                              PropVolumeInstanceID lVolumeInstanceID, InSceneUpdateInterface* lpScene,
+                                              BrnReplays::PropEntitySerialiser* lpSerialiser)
     {
         const u16 lu16ZoneId         = lpProp->mu16ZoneIndex;
         const s32 liPropIndexInZone  =
@@ -379,14 +720,15 @@ namespace BrnWorld
         CGS_ASSERT(liPropIndexInZone >= 0, "liPropIndexInZone >= 0");
 
         mCellManager.RemovePropFromScene(lpProp, lpType, lVolumeInstanceID, lpScene,
-                                         lu16ZoneId, liPropIndexInZone);
+                                         lpSerialiser, lu16ZoneId, liPropIndexInZone);
     }
 
     // ========================================================================
     // PropZoneManager::RemovePropPartsFromScene @ 0x822F0880
     // ------------------------------------------------------------------------
     void PropZoneManager::RemovePropPartsFromScene(PropEntityInstance* lpProp, const PropTypeData* lpType,
-                                                   PropVolumeInstanceID lVolumeInstanceID, InSceneUpdateInterface* lpScene)
+                                                   PropVolumeInstanceID lVolumeInstanceID, InSceneUpdateInterface* lpScene,
+                                                   BrnReplays::PropEntitySerialiser* lpSerialiser)
     {
         const u16 lu16ZoneId         = lpProp->mu16ZoneIndex;
         const s32 liPropIndexInZone  =
@@ -394,7 +736,7 @@ namespace BrnWorld
         CGS_ASSERT(liPropIndexInZone >= 0, "liPropIndexInZone >= 0");
 
         mCellManager.RemovePropPartsFromScene(lpProp, lpType, lVolumeInstanceID, lpScene,
-                                              lu16ZoneId, liPropIndexInZone);
+                                              lpSerialiser, lu16ZoneId, liPropIndexInZone);
     }
 
     // ========================================================================
@@ -423,16 +765,37 @@ namespace BrnWorld
     //
     // The X360 build 4x-unrolls the prop loop and inlines the bit/stream math; re-rolled
     // and de-inlined here.
-    s32 PropZoneManager::LoadZone(const PropZoneData* lpZoneData, const PropPhysicsDataHeader* lpTypes,
-                                  Vector3 lPlayerPosition, PropEntityIO::OutputBuffer_PreScene* lpOutput)
+    //
+    // ⚠️ SIGNATURE + INTERFACE CORRECTED 2026-08-12 (prop-spawn wave). Two defects:
+    //   1. The declaration modelled only the DWARF's four PS3 parameters, so the replay
+    //      flag (r7) and the replay serialiser (r8) the X360 threads down into LoadProp
+    //      were both missing -- LoadProp cannot pick between HasPropBeenHit and
+    //      PropSerialiserFrame::WasPropPreviouslyHit without them. Both are restored (see
+    //      the header for the register evidence), and the return type drops to void
+    //      (DWARF :131; the X360 epilogue sets no result register).
+    //   2. The scene interface was obtained as
+    //         reinterpret_cast<InSceneUpdateInterface*>(lpOutput->GetPropInputInterface())
+    //      -- a cast between two UNRELATED interfaces AND the wrong member. The X360 calls
+    //      `sub_822B9738(lpOutput)`, whose body is `addi r3, r28, 0x420` == this + 1056 ==
+    //      &mSceneInputInterface (the DecFIGS hint for RemoveAllPropsAndParts names that
+    //      accessor OutputBuffer_PreScene::GetSceneInputInterface). +819824 -- what
+    //      GetPropInputInterface returns -- is a different member entirely. Now fetched
+    //      from the correct accessor; the residual cast is only the project's standard
+    //      "opaque foreign-type storage -> its real type" idiom that every consumer of
+    //      these IO buffers uses, and disappears once BrnPropEntityModuleIO.h names the
+    //      member with its real type.
+    void PropZoneManager::LoadZone(const PropZoneData* lpZoneData, const PropPhysicsDataHeader* lpTypes,
+                                   Vector3 lPlayerPosition, PropEntityIO::OutputBuffer_PreScene* lpOutput,
+                                   bool lbReplayActive, BrnReplays::PropEntitySerialiser* lpSerialiser)
     {
         const u16 lu16ZoneId       = lpZoneData->GetZoneId();
         const u32 luNumberOfProps  = lpZoneData->GetNumberOfProps();
         const u32 luNumberOfParts  = lpZoneData->GetNumberOfInstances() - luNumberOfProps;
 
-        // The scene-input interface that LoadProp adds the loaded props' entities to.
+        // The scene-input interface that LoadProp adds the loaded props' entities to
+        // (X360 sub_822B9738 == OutputBuffer_PreScene::GetSceneInputInterface, this+1056).
         InSceneUpdateInterface* lpScene =
-            reinterpret_cast<InSceneUpdateInterface*>(lpOutput->GetPropInputInterface());
+            reinterpret_cast<InSceneUpdateInterface*>(lpOutput->GetSceneInputInterface());
 
         CGS_ASSERT(!IsZoneLoaded(lu16ZoneId), "!IsZoneLoaded( liZoneId )");
 
@@ -463,7 +826,8 @@ namespace BrnWorld
         for (s32 liZoneDataPropIndex = 0; liZoneDataPropIndex < liNumberOfPropsInZone; ++liZoneDataPropIndex)
         {
             LoadProp(&liPropPoolIndex, &liPartPoolIndex, liZoneDataPropIndex,
-                     lpZoneData, lpTypes, lPlayerPosition, lpScene);
+                     lpZoneData, lpTypes, lPlayerPosition, lpScene,
+                     lbReplayActive, lpSerialiser);
         }
 
         // Post-conditions the X360 asserts: every prop and every part landed in the slot.
@@ -471,8 +835,286 @@ namespace BrnWorld
                    "Current instance / start index / number of props in zone");
         CGS_ASSERT((liPartPoolIndex - liPartStartIndex) == static_cast<s32>(luNumberOfParts),
                    "(liPartPoolIndex - liPartsStartIndex) == liNumPartsInZone");
+    }
 
-        return liPropStartIndex;
+    // ========================================================================
+    // PropZoneManager::LoadProp @ 0x822F2EF0  (947 instructions -- the core spawner)
+    // ------------------------------------------------------------------------
+    // Turn ONE serialised PropInstanceData record into a live prop entity, plus its part
+    // instances, and hand it to the scene. Called once per prop by LoadZone (4x-unrolled
+    // there). Both pool cursors are in/out by pointer: the prop cursor advances by exactly
+    // one, the part cursor by the type's part count.
+    //
+    // The shipped body is large because the compiler inlines: the cell-range validation
+    // stream, BitArray<100>::GetFirstClearBit/SetBit, three BitArray<5400> set/clear pairs,
+    // PropVolumeInstanceID::SetEntityIndex's packing, the identity-matrix stores for every
+    // part, the VMX distance test, and every CgsDev::StrStream assert/log message. All of
+    // those are restored to their logical named form here; the debug streams collapse to
+    // CGS_ASSERT (the X360 log lines have no run-time effect outside dev builds and are
+    // dropped per project convention).
+    //
+    // ASM-LEVEL DECODES worth recording:
+    //   * The prop's serialised record is `lpZoneData->GetInstances()[liZoneDataPropIndex]`
+    //     (`lwz r10,8(zone)` + `*80`); its world position is the transform's wAxis
+    //     (`addi r24, rec, 0x30` feeding GetCellId's f1/f2 = x and z lanes).
+    //   * Rotation-slot gate: `lbz r11,0x4A(rec); clrrwi r11,r11,6` then equality against
+    //     0 / 0x40 / 0x80 -- i.e. the two-bit axis selector is X, Y or Z. 0xC0
+    //     (knNoAngularRotation) is the ONLY encoding that skips the slot. That is exactly
+    //     PropInstanceData::IsAnimated().
+    //   * The rotation slot's three payload bytes are written to +2/+4/+3 of the 6-byte
+    //     PropEntityRotationParams from record bytes 0x4A/0x4B/0x4C -- note the CROSSOVER:
+    //     record mn8MaxAngle (0x4B) lands in muMaxAngle (+4) and mn8MinAngle (0x4C) lands
+    //     in muMinAngle (+3), so the two are NOT written in address order. Transcribing the
+    //     asm's store order without the names would swap them.
+    //   * The entity handle is built as `(index << 10) | 0x03000000` (`slwi r11,r26,10;
+    //     oris r6,r11,0x300`) -- owner byte E_ENTITYTYPE_PROP, 14-bit entity index, part 0.
+    //   * The respawn switch is on GetRespawnTypeForProp's return: 0 == E_RESPAWN clears
+    //     BOTH respawn bits; 1 == E_DONT_RESPAWN clears "respawn different" and SETS "don't
+    //     respawn"; 2 == E_RESPAWN_CHANGED does the reverse and swaps in the record's
+    //     alternative prop type; >=3 asserts "Shouldn't get here".
+    //   * The "already hit?" question is answered from the REPLAY frame
+    //     (PropSerialiserFrame::WasPropPreviouslyHit, via GetStaticLayout() + 0x3A20 ==
+    //     &mLiveFrame) when the replay stage is active, otherwise from the live
+    //     progression bit set (HasPropBeenHit). This is the whole reason LoadZone/LoadProp
+    //     needed the two extra parameters.
+    //   * Every part is stamped with an IDENTITY transform (the four `lvx128` lanes are
+    //     built from flt_82001C98 == 1.0f / flt_82001CC0 == 0.0f, with a ZERO w row) and
+    //     with the PROP's type id (`lhz r9,0x44(prop)` -> part +0x40), its index within the
+    //     prop, and the zone id.
+    //   * The proximity gate is `vmsum3fp128` (squared distance player->prop) compared
+    //     against `(KVF_MIN_DIST_FROM_PLAYER + type->GetBoundingRadius())^2` with
+    //     `vcmpgtfp.`; the CR6 "all lanes true" bit is what the branch reads. Traffic
+    //     lights (type +0x60 == 1) and the three overhead-sign graphics ids are exempt.
+    void PropZoneManager::LoadProp(s32* lpiPropPoolIndex, s32* lpiPartPoolIndex, s32 liZoneDataPropIndex,
+                                   const PropZoneData* lpZoneData, const PropPhysicsDataHeader* lpTypes,
+                                   Vector3 lPlayerPosition, InSceneUpdateInterface* lpScene,
+                                   bool lbReplayActive, BrnReplays::PropEntitySerialiser* lpSerialiser)
+    {
+        const s32 liPropPoolIndex  = *lpiPropPoolIndex;
+        const s32 liFirstPartIndex = *lpiPartPoolIndex;
+        const u16 lu16ZoneId       = lpZoneData->GetZoneId();
+
+        const PropInstanceData& lrInstanceData = lpZoneData->GetInstances()[liZoneDataPropIndex];
+        const PropTypeData* lpTypeData = lpTypes->GetType(lrInstanceData.GetTypeID());
+
+        // The volume-instance handle this prop's entity owns. The X360 seeds the packed
+        // 64-bit word with the prop owner byte (`li r11,3; sldi r11,r11,56; std`) -- the
+        // compiler's fold of the default-constructed prop handle -- then splices in the
+        // entity index.
+        PropVolumeInstanceID lVolumeInstanceID;
+        lVolumeInstanceID.mVolumeInstanceId.muId =
+            static_cast<u64>(E_ENTITYTYPE_PROP)
+            << (PropVolumeInstanceID::KU_ENTITY_ID_BASE + PropEntityID::KU_OWNER_BASE);
+        lVolumeInstanceID.SetEntityIndex(static_cast<u16>(liPropPoolIndex));
+
+        CGS_ASSERT(liZoneDataPropIndex < static_cast<s32>(KU_MAX_PROP_INSTANCES_PER_ZONE),
+                   "liZoneDataIndex < static_cast< int32_t > ( BrnPhysics::Props::KU_MAX_PROP_INSTANCES_PER_ZONE )");
+
+        // ---- debug-only cell validation ------------------------------------------------
+        // Map the prop's world XZ to its grid cell and prove the zone's cell table agrees
+        // that this instance index belongs to that cell. Pure tripwires: no state changes.
+        {
+            const Vector3& lPropPosition = lrInstanceData.GetWorldTransform().Pos();
+            const PropCellId lCellId = lpZoneData->GetCellId(lPropPosition.x, lPropPosition.z);
+            CGS_ASSERT(lCellId.IsValid(), "lCellId.IsValid()");
+
+            bool lbFoundCell = false;
+            const s32 liNumCells = lpZoneData->GetNumCells();
+            for (s32 liCellIndex = 0; liCellIndex < liNumCells; ++liCellIndex)
+            {
+                const PropCellData& lrCell = *lpZoneData->GetCellData(liCellIndex);
+                if (lrCell.GetId() == lCellId)
+                {
+                    lbFoundCell = true;
+                    const s32 liCellStart = lrCell.GetStartIndex();
+                    const s32 liCellEnd   = liCellStart + lrCell.GetCount();
+                    CGS_ASSERT(liZoneDataPropIndex >= liCellStart && liZoneDataPropIndex < liCellEnd,
+                               "Cellid / Prop pos");
+                }
+            }
+            CGS_ASSERT(lbFoundCell, "lbFoundCell");
+        }
+
+        // ---- claim the prop pool slot --------------------------------------------------
+        PropEntityInstance* lpProp = &maProps[liPropPoolIndex];
+        lpProp->Construct();
+
+        // ---- claim an animated-rotation parameter slot, if this prop rotates -----------
+        s32 liRotationParamsIndex = -1;
+        if (lrInstanceData.IsAnimated())
+        {
+            liRotationParamsIndex = mUsedRotationParams.GetFirstClearBit();
+            if (liRotationParamsIndex != -1 &&
+                static_cast<u32>(liRotationParamsIndex) < KU_MAX_ROTATION_PARAMS)
+            {
+                CGS_ASSERT(static_cast<u32>(liRotationParamsIndex) < KU_MAX_ROTATION_PARAMS,
+                           "Index / Number of bits");
+                mUsedRotationParams.SetBit(static_cast<u32>(liRotationParamsIndex));
+
+                PropEntityRotationParams& lrRotationParams = maRotationParams[liRotationParamsIndex];
+                lrRotationParams.miPropIndex = static_cast<s16>(liPropPoolIndex);
+                lrRotationParams.mnRotSpeed  = lrInstanceData.GetRotVelocity();
+                lrRotationParams.muMaxAngle  = lrInstanceData.GetMaxAngle();
+                lrRotationParams.muMinAngle  = lrInstanceData.GetMinAngle();
+            }
+            else
+            {
+                // The pool is full (GetFirstClearBit == -1, or the bit index ran past the
+                // 100-slot capacity): the prop loads without animation.
+                liRotationParamsIndex = -1;
+            }
+        }
+
+        // ---- initialise the instance ---------------------------------------------------
+        CGS_ASSERT(static_cast<u32>(liPropPoolIndex) < (1u << PropEntityID::KU_NUM_BITS_FOR_ENTITY_NUM),
+                   "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");
+
+        PropEntityID lPropEntityId;
+        lPropEntityId.mEntityId.muValue =
+            (static_cast<u32>(E_ENTITYTYPE_PROP) << PropEntityID::KU_OWNER_BASE)
+            | (static_cast<u32>(liPropPoolIndex) << PropEntityID::KU_ENTITY_INDEX_BASE);
+
+        lpProp->InitialiseFromData(&lrInstanceData, lpTypeData, lPropEntityId,
+                                   lu16ZoneId, liRotationParamsIndex);
+
+        // ---- respawn classification ----------------------------------------------------
+        bool lbLoadProp = true;
+        const BrnPhysics::Props::eRespawnType leRespawnType =
+            lpZoneData->GetRespawnTypeForProp(liZoneDataPropIndex);
+
+        if (leRespawnType == BrnPhysics::Props::E_RESPAWN)
+        {
+            // Ordinary prop: it respawns intact, so neither respawn bit is set.
+            CGS_ASSERT(static_cast<u32>(liPropPoolIndex) < KU_MAX_LOADED_PROP_INSTANCES, "luIndex < NUMBITS");
+            maDontRespawnProps.UnSetBit(static_cast<u32>(liPropPoolIndex));
+            maRespawnDifferentProps.UnSetBit(static_cast<u32>(liPropPoolIndex));
+        }
+        else if (leRespawnType == BrnPhysics::Props::E_DONT_RESPAWN)
+        {
+            CGS_ASSERT(liZoneDataPropIndex < static_cast<s32>(KU_MAX_NON_PERSISTENT_PROPS_PER_ZONE)
+                       || !HasPropBeenHit(lu16ZoneId, static_cast<u32>(liZoneDataPropIndex)),
+                       "liZoneDataIndex < static_cast< int32_t > ( BrnPhysics::Props::"
+                       "KU_MAX_NON_PERSISTENT_PROPS_PER_ZONE ) || !HasPropBeenHit( liZoneId, liZoneDataIndex )");
+
+            CGS_ASSERT(static_cast<u32>(liPropPoolIndex) < KU_MAX_LOADED_PROP_INSTANCES, "luIndex < NUMBITS");
+            maRespawnDifferentProps.UnSetBit(static_cast<u32>(liPropPoolIndex));
+            maDontRespawnProps.SetBit(static_cast<u32>(liPropPoolIndex));
+
+            // A prop that has already been hit and must not respawn is simply not loaded.
+            const bool lbPreviouslyHit = lbReplayActive
+                ? lpSerialiser->GetStaticLayout()->mLiveFrame.WasPropPreviouslyHit(
+                      lu16ZoneId, static_cast<u32>(liZoneDataPropIndex))
+                : HasPropBeenHit(lu16ZoneId, static_cast<u32>(liZoneDataPropIndex));
+            if (lbPreviouslyHit)
+            {
+                // X360 log: "Prop: <n> in zone: <z> has been previously hit. Not respawning."
+                lbLoadProp = false;
+            }
+        }
+        else if (leRespawnType == BrnPhysics::Props::E_RESPAWN_CHANGED)
+        {
+            CGS_ASSERT(static_cast<u32>(liPropPoolIndex) < KU_MAX_LOADED_PROP_INSTANCES, "luIndex < NUMBITS");
+            maRespawnDifferentProps.SetBit(static_cast<u32>(liPropPoolIndex));
+            maDontRespawnProps.UnSetBit(static_cast<u32>(liPropPoolIndex));
+
+            const PropTypeData* lpAlternativeTypeData = lpTypes->GetType(lrInstanceData.GetAlternativeType());
+            CGS_ASSERT(lpAlternativeTypeData != nullptr, "lpAlternativeTypeData != NULL");
+            CGS_ASSERT(lpTypeData != lpAlternativeTypeData, "lpTypeData != lpAlternativeTypeData");
+
+            const bool lbPreviouslyHit = lbReplayActive
+                ? lpSerialiser->GetStaticLayout()->mLiveFrame.WasPropPreviouslyHit(
+                      lu16ZoneId, static_cast<u32>(liZoneDataPropIndex))
+                : HasPropBeenHit(lu16ZoneId, static_cast<u32>(liZoneDataPropIndex));
+            if (lbPreviouslyHit)
+            {
+                // Respawn as the wreck/alternative variant instead. The X360 stores the
+                // record's alternative type as a HALFWORD into the instance's type id
+                // (`lhz r11,0x48(rec); sth r11,0x44(prop)`) -- a 32-bit store would clobber
+                // mu16ZoneIndex, which InitialiseFromData has already written.
+                lpTypeData = lpAlternativeTypeData;
+                lpProp->muTypeId = static_cast<u16>(lrInstanceData.GetAlternativeType());
+                // X360 log: "... has been previously hit. Respawning changed."
+            }
+        }
+        else
+        {
+            CGS_ASSERT(false, "Shouldn't get here");
+        }
+
+        // ---- build this prop's part instances ------------------------------------------
+        const s32 liLastPartIndex = liFirstPartIndex + static_cast<s32>(lpTypeData->GetNumberOfParts());
+        lpProp->mu16PartsIndex = static_cast<u16>(liFirstPartIndex);
+        CGS_ASSERT(liFirstPartIndex != -1, "liFirstPartIndex != -1");
+
+        s32 liPartPoolIndex = liFirstPartIndex;
+        while (liPartPoolIndex < liLastPartIndex)
+        {
+            PropPartEntityInstance& lrPart = maParts[liPartPoolIndex];
+
+            lrPart.mWorldTransform.SetIdentity();
+            lrPart.muPartId        = static_cast<u16>(liPartPoolIndex - liFirstPartIndex);
+            lrPart.mu16ZoneIndex   = lu16ZoneId;
+            lrPart.muTypeId        = lpProp->muTypeId;
+            lrPart.mbPhysical      = false;
+
+            ++liPartPoolIndex;
+        }
+
+        // ---- "too close to the player" gate --------------------------------------------
+        // Squared distance from the player to the prop, against the squared exclusion
+        // radius (KVF_MIN_DIST_FROM_PLAYER grown by the prop type's bounding sphere).
+        // Restored from the VMX form: `vsubfp128` then `vmsum3fp128` is the 3-lane dot
+        // product of the delta with itself, and `vaddfp`/`vmulfp128` square the broadcast
+        // (minDist + radius).
+        {
+            const Vector3& lPropPosition = lpProp->mWorldTransform.Pos();
+            const f32 lfDeltaX = lPlayerPosition.x - lPropPosition.x;
+            const f32 lfDeltaY = lPlayerPosition.y - lPropPosition.y;
+            const f32 lfDeltaZ = lPlayerPosition.z - lPropPosition.z;
+            const f32 lfDistanceSquared =
+                lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
+
+            const f32 lfExclusionRadius = KF_MIN_DIST_FROM_PLAYER + lpTypeData->GetBoundingRadius();
+
+            if ((lfExclusionRadius * lfExclusionRadius) > lfDistanceSquared)
+            {
+                // Traffic lights and the three overhead-sign prop types must always load,
+                // however close the player is (the same three graphics ids UpdateInstance
+                // special-cases: 500950 / 500930 / 506050).
+                const u32 luGraphicsId = lpTypeData->GetGraphicsId();
+                const bool lbOverheadSign =
+                    (luGraphicsId == 500950u || luGraphicsId == 500930u || luGraphicsId == 506050u);
+
+                if (!lpTypeData->IsTrafficLight() && !lbOverheadSign)
+                {
+                    // X360 log: "Not loading prop because its too close to player <id>".
+                    lbLoadProp = false;
+                }
+            }
+        }
+
+        // ---- publish to the scene ------------------------------------------------------
+        if (lbLoadProp)
+        {
+            const u16 lu16PropZoneId = lpProp->mu16ZoneIndex;
+            const s32 liPropIndexInZone =
+                static_cast<s32>(lVolumeInstanceID.GetEntityIndex()) - mauStartIndexOfZone[lu16PropZoneId];
+            CGS_ASSERT(liPropIndexInZone >= 0, "liPropIndexInZone >= 0");
+
+            mCellManager.AddPropToScene(lpProp, lpTypeData, lVolumeInstanceID, lpScene,
+                                        lpSerialiser, lu16PropZoneId, liPropIndexInZone);
+        }
+
+        // A traffic light that loads while its knocked-down state is pending needs a
+        // restore request; SendTrafficLightRestoreEvents drains this list next frame.
+        if (lpTypeData->IsTrafficLight())
+        {
+            mauTrafficLightsToRestore.Append(lpProp->muInstanceID);
+        }
+
+        // ---- advance the caller's pool cursors -----------------------------------------
+        *lpiPropPoolIndex = liPropPoolIndex + 1;
+        *lpiPartPoolIndex = liPartPoolIndex;
     }
 
     // ========================================================================
@@ -482,7 +1124,9 @@ namespace BrnWorld
     // animated-rotation slots they held, deallocate the zone's prop/part pool slots, mark
     // the zone unloaded, and unlink the zone's traffic-light restore list node.
     void PropZoneManager::UnloadZone(u16 lu16ZoneId, const PropPhysicsDataHeader* lpTypes,
-                                     void* lpRecentlyBrokenProps, PropEntityIO::OutputBuffer_PreScene* lpOutput)
+                                     PropCellManager::RecentlyBrokenPropsArray* lpRecentlyBrokenProps,
+                                     PropEntityIO::OutputBuffer_PreScene* lpOutput,
+                                     BrnReplays::PropEntitySerialiser* lpSerialiser)
     {
         CGS_ASSERT(IsZoneLoaded(lu16ZoneId), "IsZoneLoaded(luZoneId)");
 
@@ -491,8 +1135,11 @@ namespace BrnWorld
         const s32 liEndIndex     = liStartIndex + liNumProps;
 
         // Tear down the zone's cells first (this also publishes recently-broken props).
-        mCellManager.RemoveCells(static_cast<s16>(lu16ZoneId), liStartIndex, liNumProps,
-                                 lpTypes, lpRecentlyBrokenProps, lpOutput);
+        // The X360 resolves the PropPhysicsResourcePtr to its header before the call
+        // (`bl sub_822CA148` == ResourcePtr::Get) -- this recon already takes the resolved
+        // PropPhysicsDataHeader*, so that hop is not modelled.
+        mCellManager.RemoveCells(static_cast<s16>(lu16ZoneId), lpTypes, lpRecentlyBrokenProps,
+                                 lpOutput, lpSerialiser, static_cast<u16>(liStartIndex));
 
         mu16NumberOfLoadedProps = static_cast<u16>(mu16NumberOfLoadedProps - mauNumberOfPropsInZone[lu16ZoneId]);
 
@@ -515,7 +1162,7 @@ namespace BrnWorld
             {
                 CGS_ASSERT(lpProp->mu8State < E_STATE_COUNT, "mu8State < E_STATE_COUNT");
                 InSceneUpdateInterface* lpScene =
-                    reinterpret_cast<InSceneUpdateInterface*>(lpOutput->GetPropInputInterface());
+                    reinterpret_cast<InSceneUpdateInterface*>(lpOutput->GetSceneInputInterface());
                 // X360 branch on (mu8State >= E_SMASHED): a smashed prop has live parts.
                 if (lpProp->mu8State >= E_SMASHED)
                 {
@@ -532,15 +1179,15 @@ namespace BrnWorld
             {
                 CGS_ASSERT(lpProp->mu8State < E_STATE_COUNT, "mu8State < E_STATE_COUNT");
                 InSceneUpdateInterface* lpScene =
-                    reinterpret_cast<InSceneUpdateInterface*>(lpOutput->GetPropInputInterface());
+                    reinterpret_cast<InSceneUpdateInterface*>(lpOutput->GetSceneInputInterface());
                 if (lpProp->mu8State >= E_SMASHED)
                 {
-                    RemovePropPartsFromScene(lpProp, lpType, lVolumeInstanceID, lpScene);
+                    RemovePropPartsFromScene(lpProp, lpType, lVolumeInstanceID, lpScene, lpSerialiser);
                     mCellManager.RemovePropPartsFromSimIfPhysical(lpProp, lpType, lVolumeInstanceID, lpOutput);
                 }
                 else
                 {
-                    RemovePropFromScene(lpProp, lpType, lVolumeInstanceID, lpScene);
+                    RemovePropFromScene(lpProp, lpType, lVolumeInstanceID, lpScene, lpSerialiser);
                     CGS_ASSERT(lpProp->mu8State < E_STATE_COUNT, "mu8State < E_STATE_COUNT");
                     if (lpProp->mu8State == E_PHYSICAL)
                     {
@@ -602,7 +1249,8 @@ namespace BrnWorld
     void PropZoneManager::UpdateInstance(PropEntityID lEntityId, Matrix44Affine lTransform,
                                          Vector3 lLinearVelocity, Vector3 lAngularVelocity, bool lbFrozen,
                                          const PropPhysicsDataHeader* lpTypeData, f32 lfTimeStep,
-                                         PropEntityIO::OutputBuffer_PostPhysics* lpOutput)
+                                         PropEntityIO::OutputBuffer_PostPhysics* lpOutput,
+                                         BrnReplays::PropEntitySerialiser* lpSerialiser)
     {
         (void)lLinearVelocity;
         (void)lAngularVelocity;
@@ -736,7 +1384,7 @@ namespace BrnWorld
                     }
                     if ((lpProp->mu8Flags & KU_ADDED_TO_SCENE_BIT) != 0)
                     {
-                        RemovePropFromScene(lpProp, lpType, lVolumeInstanceID, lpScene);
+                        RemovePropFromScene(lpProp, lpType, lVolumeInstanceID, lpScene, lpSerialiser);
                     }
                 }
             }

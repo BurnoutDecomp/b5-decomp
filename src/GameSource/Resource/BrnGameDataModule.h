@@ -245,6 +245,12 @@ namespace BrnResource
         void ProcessLoadPropInstancesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                              const GameDataIO::GameDataAssetEvent* lpEvent,
                                              s32 liEventId, s32 liSlotIndex);          // 0x8266F178
+        // The prop-physics LOAD leg (dispatch id 34). DWARF BrnGameDataModule.h:608; it has no
+        // X360 address of its own -- the console INLINED it into ProcessLoadGameDataEvent
+        // @0x82671EA0 (see the .cpp banner and the file-name constant's provenance note).
+        void ProcessLoadPropPhysicsRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                           const GameDataIO::GameDataAssetEvent* lpEvent,
+                                           s32 liEventId, s32 liSlotIndex);            // inlined on X360
         // The two lane-data LOAD legs (the director's WorldMap::LoadData feeds off these).
         // Both are line-for-line ProcessLoadPVSRequest with a different baked file name.
         void ProcessLoadTrafficLanesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
@@ -266,6 +272,17 @@ namespace BrnResource
         void ProcessGetPropInstancesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                             const GameDataIO::GameDataAssetEvent* lpEvent,
                                             s32 liEventId, s32 liSlotIndex);           // 0x8266FB68
+        // The other two prop GET legs. GraphicsList is the instruction-for-instruction twin
+        // of PropInstances (hash the request's own id string); PropPhysics hashes the fixed
+        // "PRP_PHYSICS_" literal instead and is reached BOTH from the GET dispatcher (id 61)
+        // and from ProcessInternalLoadBundleResponse's case 34 (hop 2 of the prop-physics
+        // load). DWARF-attested shapes: BrnGameDataModule.h:644 / :650.
+        void ProcessGetPropGraphicsListRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                               const GameDataIO::GameDataAssetEvent* lpEvent,
+                                               s32 liEventId, s32 liSlotIndex);        // 0x8266FC80
+        void ProcessGetPropPhysicsRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                          const GameDataIO::GameDataAssetEvent* lpEvent,
+                                          s32 liEventId, s32 liSlotIndex);             // 0x8266FAD8
         // The two lane-data GET legs -- hop 2 of the lane fetch, dispatched from
         // ProcessInternalLoadBundleResponse's cases 29/30 once the bundle is in the pool.
         void ProcessGetTrafficLanesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,

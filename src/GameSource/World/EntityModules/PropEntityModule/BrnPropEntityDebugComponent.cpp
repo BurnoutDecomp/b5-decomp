@@ -304,7 +304,7 @@ namespace BrnWorld
                             lpType->GetPartVolumeGroups()[luPartIndex];
 
                         PropPartEntityInstance* lpPart =
-                            lrZoneManager.GetPart(lu16ZoneId, lpProp->GetFirstPartIndex() + luPartIndex);
+                            lrZoneManager.GetPart(lu16ZoneId, static_cast<u16>(luPropIndex), static_cast<u16>(luPartIndex));
                         CGS_ASSERT(IsValid(lpPart->mWorldTransform),
                                    "RwMath::IsValid(lpPartInstance->mWorldTransform)");
                         const Matrix44Affine& lrPartTransform = lpPart->mWorldTransform;
@@ -412,7 +412,7 @@ namespace BrnWorld
                     for (u32 luPartIndex = 0; luPartIndex < luNumberOfParts; ++luPartIndex)
                     {
                         PropPartEntityInstance* lpPart =
-                            lrZoneManager.GetPart(lu16ZoneId, lpProp->GetFirstPartIndex() + luPartIndex);
+                            lrZoneManager.GetPart(lu16ZoneId, static_cast<u16>(luPropIndex), static_cast<u16>(luPartIndex));
 
                         CGS_ASSERT(luGlobalPropIndex < (1u << PropEntityID::KU_NUM_BITS_FOR_ENTITY_NUM),
                                    "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");
@@ -503,7 +503,7 @@ namespace BrnWorld
                     for (u32 luPartIndex = 0; luPartIndex < luNumberOfParts; ++luPartIndex)
                     {
                         PropPartEntityInstance* lpPart =
-                            mpPropEntityModule->mZoneManager.GetPart(lu16ZoneId, lpProp->GetFirstPartIndex() + luPartIndex);
+                            mpPropEntityModule->mZoneManager.GetPart(lu16ZoneId, static_cast<u16>(luPropIndex), static_cast<u16>(luPartIndex));
                         CGS_ASSERT(IsValid(lpPart->mWorldTransform),
                                    "RwMath::IsValid(lpPartInstance->mWorldTransform)");
 

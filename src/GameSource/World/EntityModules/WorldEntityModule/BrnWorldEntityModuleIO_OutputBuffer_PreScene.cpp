@@ -102,7 +102,7 @@ namespace WorldEntityIO
         return &mSoundWorldLoadInterface;
     }
 
-    // Queue trio member :146 (X360 +16). Called by BrnWorld::WorldEntityModule::UpdateStream.
+    // Queue trio member :146 (X360 +4). Called by BrnWorld::WorldEntityModule::UpdateStream.
     OutputBuffer_PreScene::PropInstancesNeededForZoneQueue*
     OutputBuffer_PreScene::GetPropInstancesNeededForZoneQueue()
     {
@@ -110,7 +110,40 @@ namespace WorldEntityIO
         return &mPropInstancesNeededForZoneQueue;
     }
 
-    // miPlayerZoneNumber :152 (the X360 UpdateStream 32-bit store @ this + 821764).
+    // ---- ADDITIVE 2026-08-12 (prop-spawn wave, agent B6) -----------------------------
+    // The READ-LOCK const twins of the queue trio -- the three the world module's
+    // BridgeWorldModuleToPropModule_PreScene @0x827AACF8 calls to hand the streamer's prop
+    // notifications to the prop entity module. Each X360 body is the sibling shape of the
+    // write twin above with the read-lock bit (`lbz r11,0(this) ; extrwi r11,r11,1,27` ==
+    // IsBufferLockedForReading) and the "Not locked for reading\n" tripwire; the streamed
+    // "\n" is dropped from the stringized condition as everywhere else in this TU.
+
+    // X360 0x827A2B30 (BrnWorldEntityModuleIO.h:129 baked): read-lock; `addi r3, this, 4`.
+    const OutputBuffer_PreScene::PropInstancesNeededForZoneQueue*
+    OutputBuffer_PreScene::GetPropInstancesNeededForZoneQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mPropInstancesNeededForZoneQueue;
+    }
+
+    // X360 0x827A2A88 (BrnWorldEntityModuleIO.h:126 baked): read-lock; `addi r3, this, 0x4C`.
+    const OutputBuffer_PreScene::PropGraphicsLoadedQueue*
+    OutputBuffer_PreScene::GetPropGraphicsLoadedQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mPropGraphicsLoadedQueue;
+    }
+
+    // X360 0x827A2BD8 (BrnWorldEntityModuleIO.h:132 baked): read-lock; `addi r3, this, 0x8C`.
+    const OutputBuffer_PreScene::PropGraphicsUnloadedQueue*
+    OutputBuffer_PreScene::GetPropGraphicsUnloadedQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mPropGraphicsUnloadedQueue;
+    }
+
+    // miPlayerZoneNumber :152 (the X360 UpdateStream 32-bit store @ this + 820740 == 0xC8604;
+    // the "+821764" this comment used to carry was a transcription slip -- see the header).
     void OutputBuffer_PreScene::SetPlayerZoneNumber( s32 liPlayerZoneNumber )
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");

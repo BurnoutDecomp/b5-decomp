@@ -65,6 +65,22 @@ namespace GameDataIO
     {
         RequestQueue<N> mRequestQueue;   // @0x00 (only member)
 
+        // ---- ADDITIVE GROW 2026-08-12 (prop-BOOT wave, agent B8) -----------------------
+        // The X360 emits no out-of-line RequestInterface<N>::Construct/Clear -- both are
+        // header inlines the compiler folds into the owning IO buffer's Construct. Their
+        // attested expansion is BrnWorld::PropEntityIO::OutputBuffer_Prepare::Construct
+        // @0x822EFC58, which for this member emits exactly
+        //     bl CgsModule::VariableEventQueue<1024,16>::Construct(this+4)
+        //     bl CgsModule::VariableEventQueue<1024,16>::Clear(this+4)
+        // in the Construct pass and a second bare ::Clear(this+4) in the Clear pass -- i.e.
+        // Construct == queue.Construct(); queue.Clear();  and  Clear == queue.Clear().
+        // (VariableEventQueue::Construct already ends in its own Clear; the extra call is the
+        // console's, not an invention.) The sibling owners (OutputBuffer_PreScene::Construct
+        // @0x822EFB98, GameStateModuleIO's <3072> interface) emit the same pair.
+        // Defined here so every N gets them; pure addition, no member/layout change.
+        void Construct() { mRequestQueue.Construct(); mRequestQueue.Clear(); }
+        void Clear()     { mRequestQueue.Clear(); }
+
         // ---- request-builder methods owned/bodied by the RequestInterface<4096> TU ----
         // (declared on the generic so any N inherits them; only <4096> is instantiated
         //  by this TU's .cpp).

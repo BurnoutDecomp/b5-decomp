@@ -519,5 +519,66 @@ RCEntityActiveRaceCarOutputInterface::GetRaceCarState(EActiveRaceCarIndex leActi
     return &maRaceCarStates[leActiveRaceCarIndex];
 }
 
+// ============================================================================
+// ---- ADDITIVE 2026-08-12 (prop-spawn wave, agent B6) -----------------------
+// The last two declaration-only members of this interface that a MOUNTED caller needs.
+// Both were declared at BrnRaceCarEntityModuleOutputInterface.h:396 / :431 with no body
+// anywhere in the tree, so every TU that called them (this wave's
+// BridgeRaceCarModuleToPropModule_PreScene, plus the already-written
+// BrnTriggerQueryManager / BrnDriveThruManager / BrnStuntModeScoring_StuntTypes /
+// BrnGameStateStreetManager_wB_09/_10 / BrnScoringSystem_UpdateB bodies) carried an
+// unresolved external.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// X360 0x823102F0 (41 insns; IDA leaves it `sub_823102F0`, so it is absent from the
+// ledger -- identified by its two baked assert strings and its single caller set).
+// GetPlayerPosition, DWARF BrnRaceCarEntityModuleOutputInterface.h:396. Returned by
+// value through an sret pointer in r3 (`stvx128 v0, r0, r29`), which is why Hex-Rays
+// renders it as the two-argument sub_823102F0(out, this).
+// Statement for statement:
+//     lwz   r11, 0x2858(this)                     ; mePlayerActiveRaceCarIndex
+//     cmpwi r11, 8 ; blt -> skip
+//       FireAssert("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+//                  <this header>, 0x3C7 == 967)
+//     lwz   r11, 0x2858(this) ; cmpwi -1 ; r11 = (idx == -1) ? 0 : lbz 0x2860(this)
+//     cmplwi r11, 0 ; bne -> skip
+//       FireAssert("IsPlayerCarActive()", <this header>, 0x4F9 == 1273)
+//     lwz   r11, 0x2858(this) ; mulli r11,r11,0x460 ; add r11,r11,this
+//     lvx128 v0, r11, 0x550                       ; +1360
+//     stvx128 v0, r0, sret
+// The second guard is the INLINED IsPlayerCarActive() (identical shape to the
+// out-of-line 0x82277B90 bodied above: the -1 sentinel short-circuits mbIsPlayerCarActive
+// @+0x2860), so it is written as the call. 1360 == maRaceCarStates(816) + idx*1120 + 544,
+// and 544 == RaceCarState::mTransform(496) + 48 == Matrix44Affine::wAxis -- the
+// translation row, i.e. mTransform.Pos(). Both asserts are NON-gating tripwires: the
+// console reads the element regardless.
+// ----------------------------------------------------------------------------
+Vector3 RCEntityActiveRaceCarOutputInterface::GetPlayerPosition() const
+{
+    CGS_ASSERT(mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");   // this header :967
+    CGS_ASSERT(IsPlayerCarActive(), "IsPlayerCarActive()");                     // this header :1273
+    return maRaceCarStates[mePlayerActiveRaceCarIndex].mTransform.Pos();
+}
+
+// ----------------------------------------------------------------------------
+// IsPlayerWrecked, DWARF BrnRaceCarEntityModuleOutputInterface.h:431. HEADER-INLINED by
+// the X360 compiler at every site, so there is no out-of-line symbol to point at -- the
+// same disposition as its committed setter twin SetPlayerWrecked (also inlined, also a
+// bare store). Its shape is pinned by the two ends that DO appear in the asm:
+//   * the producer, RaceCarEntityModule::UpdateOutputInterfaces @0x822F5CF8 --
+//     `stb r11, 0x28E0(iface)`;
+//   * the consumer, WorldModule::BridgeRaceCarModuleToPropModule_PreScene @0x827A5510 --
+//     `lbz r11, 0x28E0(r29) ; stb r11, 0x794(dest)`.
+// +0x28E0 is mbPlayerWrecked. No assert: the console load is unguarded.
+// (Bodied out-of-line here rather than turned into a header inline so the frozen
+// declaration set in BrnRaceCarEntityModuleOutputInterface.h is left untouched.)
+// ----------------------------------------------------------------------------
+bool RCEntityActiveRaceCarOutputInterface::IsPlayerWrecked() const
+{
+    return mbPlayerWrecked;
+}
+
 }
 }

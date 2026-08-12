@@ -25,37 +25,12 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"
 #include "GameSource/Replays/Serialisers/BrnReplayPropSerialiserFrame.h"
+// The class declaration moved to its DWARF home so other TUs (PropCellManager) can
+// call it; this TU keeps the bodies. See the header banner.
+#include "GameSource/Replays/Serialisers/BrnReplayPropEntitySerialiser.h"
 
 namespace BrnReplays
 {
-    // DWARF home: GameSource/Replays/Serialisers/BrnReplayPropEntitySerialiser.h.
-    class PropEntitySerialiser : public BaseSerialiser
-    {
-    public:
-        // @0x8264C6C0
-        s32 Construct();
-        // @0x822A4090 -- returns the static-layout buffer, asserting it is big enough.
-        PropSerialiserStaticLayout* GetStaticLayout();
-        // @0x8265A8E8 / @0x8265AA40 -- playback / record one frame.
-        s32 Read(PropSerialiserStaticLayout* lpStaticLayout);
-        s32 Write(PropSerialiserStaticLayout* lpStaticLayout);
-        // @0x822CD650 -- lazily clear the previous frame on the first frame after a
-        // (re)start, then mark it initialised.
-        bool CheckPreviousFrameCleared();
-        // @0x822E7738 / @0x822CD5B8 / @0x822CD790 -- zone bookkeeping (record-side only).
-        PropLoadedZoneRecord* AddLoadedZone(s32 liZoneId);
-        void RemoveLoadedZone(s32 liZoneId);
-        void RemoveAllLoadedZones();
-        // @0x822CD700 -- forward a prop's scene-membership change to the live frame.
-        void SetPropAddedToScene(s32 liArg2, u32 luArg3, s32 liArg4);
-
-    private:
-        // True once the previous-frame slot has been cleared for this recording/playback
-        // session. X360: byte at this+0x5C, cleared by Construct, set by
-        // CheckPreviousFrameCleared. (BaseSerialiser occupies this+0x00..0x5A.)
-        bool mbPreviousFrameInitialized; // @0x5C
-    };
-
     // -------------------------------------------------------------------------
 
     s32 PropEntitySerialiser::Construct()
@@ -71,6 +46,46 @@ namespace BrnReplays
         // member access is what matters on the 64-bit host.
         CGS_ASSERT(GetStaticBufferSize() >= 0x7480, "Static buffer size is too small");
         return reinterpret_cast<PropSerialiserStaticLayout*>(mpStaticBuffer);
+    }
+
+    // ------------------------------------------------------------------------
+    // [FLAG PC boot gate] THE STATIC BUFFER IS NEVER HANDED OVER ON THIS BUILD.
+    // ------------------------------------------------------------------------
+    // BaseSerialiser::Construct sets mpStaticBuffer = 0 (faithfully -- the X360 does the
+    // same at 0x8264C280); the pointer is filled in later by the replay manager's
+    // serialiser registration/buffer hand-off, and NOTHING in this tree writes
+    // BaseSerialiser::mpStaticBuffer -- grep it: the only assignment is the `= 0` in
+    // Construct. So GetStaticLayout() returns NULL for every serialiser on this build.
+    //
+    // That was invisible until 2026-08-12, when the prop streamer first got far enough to
+    // actually load a zone: PropEntityModule::LoadZone calls AddLoadedZone unconditionally
+    // (correctly -- the console does too), which dereferenced the null layout and took an
+    // access violation READING 0x4008 (== &mLiveFrame(0x3A20) + maLoadedZones.muLength(0x5E8)
+    // off a null base), right after the "mbPreviousFrameInitialized" tripwire that
+    // CheckPreviousFrameCleared had already declined to set for the same reason.
+    //
+    // The four record-side entry points below therefore no-op when the layout is absent.
+    // This costs nothing observable on this build: the replay RECORD path is already inert
+    // end-to-end (PropSerialiserFrame::Read / KeyFrameRead are parked in WorldLinkStubs, the
+    // frame interior is still a padding ladder), and every caller discards the result.
+    // RETIRE THIS GATE WHEN: the replay manager's serialiser buffer allocation lands and
+    // mpStaticBuffer is real -- then these guards simply never fire.
+    bool PropEntitySerialiser::HasStaticLayout()
+    {
+        if (GetStaticBuffer() != 0)
+        {
+            return true;
+        }
+
+        static bool sbLoggedOnce = false;
+        if (!sbLoggedOnce && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLoggedOnce = true;
+            *CgsDev::Log::gpDebugPrint
+                << "PropEntitySerialiser: no static buffer -- replay record inert "
+                   "[FLAG PC boot gate]\n";
+        }
+        return false;
     }
 
     s32 PropEntitySerialiser::Read(PropSerialiserStaticLayout* lpStaticLayout)
@@ -146,7 +161,9 @@ namespace BrnReplays
             // Reset the live frame's per-sub-array "added to scene" flags, then snapshot
             // the cleared live frame into the previous-frame slot.
             PropSerialiserFrame& lrLive = lpStaticLayout->mLiveFrame;
-            lrLive.mbZonesLoaded   = false; // static 0x4008
+            // static 0x4008 == frame 0x5E8 == the loaded-zone array's live count (see
+            // BrnReplayPropSerialiserFrame.h): "no zones loaded" is count 0.
+            lrLive.maLoadedZones.muLength = 0;
             lrLive.mbAddedFlag15F0 = false; // static 0x5010
             lrLive.mbAddedFlag25E0 = false; // static 0x6000
             lrLive.mbAddedFlag27EC = false; // static 0x620C
@@ -169,16 +186,21 @@ namespace BrnReplays
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
                    "!IsPlaying()");
+        // [FLAG PC boot gate] AHEAD of the console's own mbPreviousFrameInitialized tripwire:
+        // with no static layout that flag can never be set (CheckPreviousFrameCleared bails on
+        // the same condition), so leaving the assert in front would storm it once per loaded
+        // zone for a state this build cannot reach. See HasStaticLayout above.
+        if (!HasStaticLayout()) { return 0; }
+
         CGS_ASSERT(mbPreviousFrameInitialized, "mbPreviousFrameInitialized");
 
         PropSerialiserFrame* lpFrame = &GetStaticLayout()->mLiveFrame;
         PropLoadedZoneRecord* lpRecord = lpFrame->AllocateLoadedZoneRecord();
-        // asm: store the zone id then zero the 160-byte trailing payload.
+        // asm: store the zone id, then zero the 160-byte trailing payload as TWO 0x50-byte
+        // runs of `std 0` -- which is exactly "clear both 600-bit arrays", 10 u64 fields each.
         lpRecord->miZoneId = liZoneId;
-        for (u32 luByte = 0; luByte < sizeof(lpRecord->maZeroed); ++luByte)
-        {
-            lpRecord->maZeroed[luByte] = 0;
-        }
+        lpRecord->maPropsAddedToScene.UnSetAll();
+        lpRecord->maPropsPreviouslyHit.UnSetAll();
         return lpRecord;
     }
 
@@ -188,6 +210,8 @@ namespace BrnReplays
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
                    "!IsPlaying()");
+
+        if (!HasStaticLayout()) { return; }   // [FLAG PC boot gate] see HasStaticLayout
 
         GetStaticLayout()->mLiveFrame.RemoveLoadedZone(liZoneId);
     }
@@ -199,8 +223,11 @@ namespace BrnReplays
                    meMode != E_MODE_PLAYING_STALLED,
                    "!IsPlaying()");
 
-        // asm: `stb 0,0x4008(staticBase)` -- the live frame's zones-loaded flag.
-        GetStaticLayout()->mLiveFrame.mbZonesLoaded = false;
+        if (!HasStaticLayout()) { return; }   // [FLAG PC boot gate] see HasStaticLayout
+
+        // asm: `stb 0,0x4008(staticBase)` -- the live frame's loaded-zone COUNT (frame +0x5E8).
+        // One byte drops all nine records because the array is count-terminated.
+        GetStaticLayout()->mLiveFrame.maLoadedZones.muLength = 0;
     }
 
     void PropEntitySerialiser::SetPropAddedToScene(s32 liArg2, u32 luArg3, s32 liArg4)
@@ -209,6 +236,8 @@ namespace BrnReplays
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
                    "!IsPlaying()");
+
+        if (!HasStaticLayout()) { return; }   // [FLAG PC boot gate] see HasStaticLayout
 
         GetStaticLayout()->mLiveFrame.SetPropAddedToScene(liArg2, luArg3, liArg4);
     }

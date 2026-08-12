@@ -1347,6 +1347,30 @@ namespace BrnResource
         const char* const KPC_PVS_FILE_NAME          = "pvs.bndl";                  // off_82F2A70C
         const char* const KPC_PROP_INSTANCES_PATH    = "Props/Instances/TRK_UNIT";  // off_82F2A748
 
+        // The prop-physics bundle file name (DWARF: KPC_PROP_PHYSICS_BUNDLE_FILENAME,
+        // BrnGameDataModule.cpp:82 -- declared immediately before KPC_PROP_PHYSICS_RESOURCENAME
+        // on :83, i.e. the file/resource pair this TU's prop-physics LOAD+GET legs use).
+        //
+        // ⚠️ PROVENANCE, read before trusting: unlike every other literal in this block the
+        // VALUE here is NOT read out of the ARTIST data segment. ProcessLoadPropPhysicsRequest
+        // has no function of its own in the X360 image -- it is inlined into
+        // ProcessLoadGameDataEvent @0x82671EA0, which is one of the function-gapped addresses
+        // this export set does not carry (its xrefs_from list every OTHER Load handler and no
+        // prop-physics one), and the .i64 is packed so its string pool is not readable here
+        // either. The value below is therefore DERIVED, from three converging facts:
+        //   1. the shipped disc file is PROPS/PROPPHYSICS.BUNDLE, and it holds exactly one
+        //      resource -- 0xD75C5932 / type 0x1000F / name "PRP_PHYSICS_" -- which is the
+        //      resource ProcessGetPropPhysicsRequest then acquires on hop 2;
+        //   2. the sibling constants in this same TU spell mixed-case, forward-slash paths
+        //      with the real extension ("Props/Instances/TRK_UNIT...PropInstances.bundle",
+        //      "Wheels/%s_%s.bndl");
+        //   3. name resolution is case-insensitive here -- the already-committed
+        //      "surfacelist.bin"/"pvs.bndl"/"worldcol.bin" all resolve to upper-case files.
+        // Only the glyph case/separator is uncertain and neither is behaviourally
+        // load-bearing. Replace with the literal from the data segment if 0x82671EA0 is ever
+        // exported.
+        const char* const KPC_PROP_PHYSICS_BUNDLE_FILE_NAME = "Props/PropPhysics.bundle";
+
         // off_82F2A72C -- the PVS zone-list RESOURCE name ProcessGetPVSRequest hashes.
         // Attested TWICE: read from the ARTIST .i64 data segment (headless IDA dump), and
         // CRC32-lowercase("newgrid") == 0x5A4A4CDB == the id of the one ZoneList resource
@@ -1373,6 +1397,21 @@ namespace BrnResource
         // Response's swap-in reload + the LoadWorldCollision handler family). Read from
         // the ARTIST .i64 data segment (headless IDA dump; the exports are function-only).
         const char* const KPC_WORLD_COLLISION_FILE_NAME = "worldcol.bin";
+
+        // off_82F2A744 -- the PROP-PHYSICS resource name ProcessGetPropPhysicsRequest
+        // @0x8266FAD8 hashes. Unlike every other prop GET, this one does NOT hash the
+        // request's own id string: the asm loads the literal pointer
+        // (`lis r11, off_82F2A744@ha; lwz r3, off_82F2A744@l(r11)  # "PRP_PHYSICS_"`) and
+        // hands THAT to CgsResource::ID::HashString, so the id string it just converted into
+        // the stack buffer is discarded. Attested TWICE, exactly like KPC_PVS_RESOURCE_NAME:
+        // the IDA data-segment comment on that literal, and the shipped data --
+        // PROPS/PROPPHYSICS.BUNDLE holds exactly one resource entry, id 0xD75C5932, type
+        // 0x1000F (PropPhysics), and its debug ResourceStringTable names it "PRP_PHYSICS_";
+        // CRC32-lowercase("PRP_PHYSICS_") == 0xD75C5932.
+        // (DecFIGS DWARF spells the original identifier KPC_PROP_PHYSICS_RESOURCENAME
+        // -- BrnGameDataModule.cpp:83; the `_RESOURCE_NAME` form here matches the spelling
+        // the rest of this recon block already uses.)
+        const char* const KPC_PROP_PHYSICS_RESOURCE_NAME = "PRP_PHYSICS_";
 
         // ProcessLoadPropInstancesRequest baked constants (the assert texts @0x8266F178
         // name both: "strncmp(lacResourceName, \"PRP_INST_\", KU_STRING_INDEX_OF_ZONE_NUMBER)
@@ -1701,7 +1740,7 @@ namespace BrnResource
         else if (memcmp(lacName, "PRP_", 4) == 0)
         {
             if (memcmp(lacName + 4, "PHYS", 4) == 0)
-                DeferredGameDataRequest("LoadPropPhysics (id 34)", lpSlot);
+                ProcessLoadPropPhysicsRequest(lpResourceInput, lpEvent, 34, liIndex);
             else if (memcmp(lacName + 4, "INST", 4) == 0)
                 ProcessLoadPropInstancesRequest(lpResourceInput, lpEvent, 35, liIndex);
             else
@@ -1786,11 +1825,11 @@ namespace BrnResource
         else if (memcmp(lacName, "PRP_", 4) == 0)
         {
             if (memcmp(lacName + 4, "PHYS", 4) == 0)
-                DeferredGameDataRequest("GetPropPhysics (id 61)", lpSlot);
+                ProcessGetPropPhysicsRequest(lpResourceInput, lpEvent, 61, liIndex);
             else if (memcmp(lacName + 4, "GL__", 4) == 0)
-                DeferredGameDataRequest("GetPropGraphicsList (id 63)", lpSlot);
+                ProcessGetPropGraphicsListRequest(lpResourceInput, lpEvent, 63, liIndex);
             else if (memcmp(lacName + 4, "INST", 4) == 0)
-                DeferredGameDataRequest("GetPropInstances (id 62)", lpSlot);
+                ProcessGetPropInstancesRequest(lpResourceInput, lpEvent, 62, liIndex);
             else
                 CGS_ASSERT(false, "Invalid id\n");   // X360 line 3114
         }
@@ -2519,6 +2558,52 @@ namespace BrnResource
             2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
     }
 
+    // ProcessLoadPropPhysicsRequest -- service a LOAD prop-physics request: stream the game's
+    // single prop-physics bundle into the request's pool. Response id staged at the slot (34);
+    // ProcessInternalLoadBundleResponse's case 34 then fires the paired GET (id 61) that
+    // acquires "PRP_PHYSICS_" out of it. Producer: PropEntityModule::Prepare @0x82306DB8 ->
+    // RequestInterface<1024>::LoadPropPhysics @0x82303DA0.
+    //
+    // ⚠️ NO OWN X360 ADDRESS. Every other Load handler in this file is a standalone function
+    // that ProcessLoadGameDataEvent @0x82671EA0 calls; this one is inlined into that
+    // dispatcher, which the export set does not carry (see the file-name constant's
+    // provenance note above for how that was established). What IS attested:
+    //   * the method exists with exactly this shape -- DecFIGS DWARF BrnGameDataModule.h:608,
+    //     `ProcessLoadPropPhysicsRequest(InputBuffer*, const LoadGameDataEvent*, int32_t,
+    //     int32_t)`;
+    //   * response id 34 -- ProcessInternalLoadBundleResponse @0x82672630 case 0x22 is the
+    //     slot state this handler must stage, and it dispatches ProcessGetPropPhysicsRequest
+    //     with id 61;
+    //   * the body shape -- the canonical 148-byte type-2 LoadBundleRequest build shared
+    //     store-for-store by ProcessLoadPVSRequest @0x8266F9C0 / ProcessLoadTrafficLanes-
+    //     Request @0x8266F398 / ProcessLoadAILanesRequest @0x8266F4B0 / ProcessLoadSurface-
+    //     ListRequest @0x8266F718, all in this TU.
+    // What is NOT attested and is therefore ABSENT rather than guessed: the asset-type assert
+    // its siblings all open with (the X360 request carries meType == E_ASSETSET_PHYSICS, but
+    // the assert text and its presence cannot be read), and any non-default mbUseHDCache
+    // (left at the memset default, i.e. false -- the value four of the five siblings use;
+    // only worldcol.bin sets it).
+    void GameDataModule::ProcessLoadPropPhysicsRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                       const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                       s32 liEventId, s32 liSlotIndex)
+    {
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        CgsResource::Events::LoadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.SetFileName(KPC_PROP_PHYSICS_BUNDLE_FILE_NAME);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId            = lpEvent->miPoolId;
+        lRequest.mbAllowFailiure     = lpEvent->mbFailFlag;
+        lRequest.mbUseHDCache        = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
     // @ 0x8266F178 -- service a LOAD prop-instances request: parse the zone number out of
     // the "PRP_INST_<n>" id, build the zone's prop-instance bundle path
     // ("Props/Instances/TRK_UNIT<n>_PropInstances.bundle") through the StrStream chain,
@@ -2708,6 +2793,85 @@ namespace BrnResource
         lRequest.miPoolId  = lpEvent->miPoolId;
         lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
             CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacResourceName)))));
+        lRequest.mbCheckRefCount = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            4 /*AcquireResource*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x8266FC80 -- service a GET prop-graphics-list request: acquire the resource named
+    // by the request's own id string ("PRP_GL__<zone>"). Response id staged at the slot (63).
+    //
+    // Instruction-for-instruction ProcessGetPropInstancesRequest @0x8266FB68 above -- the two
+    // asm listings differ only in their entry addresses. Producer side: the "PRP_GL__%d"
+    // GetGameDataEvent is built inline by PropEntityModule::PreSceneUpdate @0x82309A40
+    // (`CgsCore::SPrintf(..., "PRP_GL__%d", zone)` -> VariableEventQueue<1024,16>::
+    // AddEvent<GetGameDataEvent>(..., 49)).
+    //
+    // [resident-resource note] This GET needs no paired LOAD: the type-0x10010
+    // (PropGraphicsList) resource is already inside the zone's world bundle. Verified on the
+    // shipped data -- TRK_UNIT100_GR.BNDL carries entry id 0xDF80E759 / type 0x10010 whose
+    // ResourceStringTable name is "PRP_GL__100", and CRC32-lowercase("PRP_GL__100") ==
+    // 0xDF80E759. Same for every zone.
+    void GameDataModule::ProcessGetPropGraphicsListRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                           const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                           s32 liEventId, s32 liSlotIndex)
+    {
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        char lacResourceName[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacResourceName);
+
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.miPoolId  = lpEvent->miPoolId;
+        lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+            CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacResourceName)))));
+        lRequest.mbCheckRefCount = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            4 /*AcquireResource*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x8266FAD8 -- service a GET prop-physics request: acquire the game's ONE PropPhysics
+    // resource (type 0x1000F). Response id staged at the slot (61).
+    //
+    // ⚠️ The one prop GET that does NOT hash its own id. The asm converts the request id into
+    // the stack buffer (`ld r3,0x10(event); addi r4,r1,var_B0; bl CgsIDConvertToString`) and
+    // then IGNORES the result: HashString is handed the fixed literal instead
+    // (`lwz r3, off_82F2A744@l(r11)  # "PRP_PHYSICS_"` at 0x8266FB20). That dead conversion is
+    // reproduced here because it is what the binary does -- the prop-physics table is global,
+    // not per-zone, so the request's "PRP_PHYS..." id never varies and the copy-pasted
+    // conversion was left in the original source. Everything else is store-for-store the
+    // prop-instances twin.
+    //
+    // Hop 2 of a two-hop fetch: ProcessInternalLoadBundleResponse's case 34 dispatches here
+    // once PROPS/PROPPHYSICS.BUNDLE is resident (that bundle -- unlike the prop-instance
+    // resources -- is a real standalone file on disc, and the LOAD leg is what streams it).
+    void GameDataModule::ProcessGetPropPhysicsRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                      const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                      s32 liEventId, s32 liSlotIndex)
+    {
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        // Dead in the X360 too (see the banner) -- kept so the reconstruction has no side
+        // effect the binary lacks and none the binary has.
+        char lacResourceName[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacResourceName);
+        (void)lacResourceName;
+
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.miPoolId  = lpEvent->miPoolId;
+        lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+            CgsResource::ID::HashString(
+                reinterpret_cast<const u8*>(KPC_PROP_PHYSICS_RESOURCE_NAME)))));
         lRequest.mbCheckRefCount = false;
 
         lpResourceInput->GetResourceQueue()->AddEvent(
@@ -2972,9 +3136,10 @@ namespace BrnResource
             ProcessGetPVSRequest(lpResourceInput, &lpSlot->mEvent, 58, liSlotIndex);
             break;
 
-        case 34:   // prop physics
+        case 34:   // prop physics -- hop 2: PROPS/PROPPHYSICS.BUNDLE is resident, acquire
+                   // "PRP_PHYSICS_" (X360 case 0x22 -> ProcessGetPropPhysicsRequest(...,61,...))
             CGS_ASSERT(!lbFailed, "Failed to load\n");   // X360 line 3302
-            DeferredGameDataRequest("GetPropPhysics after load (id 61)", lpSlot);
+            ProcessGetPropPhysicsRequest(lpResourceInput, &lpSlot->mEvent, 61, liSlotIndex);
             break;
 
         case 35:   // prop instances

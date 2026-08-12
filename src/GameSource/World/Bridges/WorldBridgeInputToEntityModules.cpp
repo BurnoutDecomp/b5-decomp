@@ -327,8 +327,24 @@ void BridgeInputToEntityModules(
             break;
         case KI_GAME_ACTION_PROP_SMASH_REPORT:    // :125 lpPropHitReport
         {
-            const u32* lpPropHitReport = reinterpret_cast<const u32*>(lpGameAction);
-            lpPropEntityInputBuffer_PreScene->SetHitPropsBitArray(*lpPropHitReport);
+            // ⭐ RETYPED 2026-08-12 (prop-spawn wave, agent B5) -- CONSEQUENTIAL EDIT.
+            // This used to read the action's leading word as a `u32` and hand it to a
+            // `SetHitPropsBitArray(u32)`. The word is a POINTER: BrnGameActions.h:5156
+            // types the PropSmashReport action's first member
+            // `const Profile::HitPropsBitArray* mpabHitPropBitArray`, the X360 bridge
+            // stores it verbatim (`lwz r11,0(r31) ; stw r11,0x780(r30)`), and
+            // PropEntityModule::PreSceneUpdate @0x82309A40 DEREFERENCES it
+            // (`memcpy(&mZoneManager.maPreviouslyHitProps, *(lpInput+0x780), 37504)`)
+            // behind the buffer's own "mpabHitPropBitArray != NULL" tripwire. On x64 a
+            // u32 seat truncates the pointer, so the setter is now the DWARF's
+            // `SetHitPropsBitArray(const HitPropsBitArray&)` and the word is read at
+            // pointer width. Same raw-offset action-record access as the neighbouring
+            // cases (the action records' own homes are still unreconstructed -- see the
+            // FLAG above the switch).
+            typedef BrnWorld::PropEntityIO::InputBuffer_PreScene::HitPropsBitArray HitPropsBitArray;
+            const HitPropsBitArray* const* lppPropHitReport =
+                reinterpret_cast<const HitPropsBitArray* const*>(lpGameAction);
+            lpPropEntityInputBuffer_PreScene->SetHitPropsBitArray(**lppPropHitReport);
             break;
         }
         default:
