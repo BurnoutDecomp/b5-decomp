@@ -38,12 +38,20 @@ namespace Vehicle
     // FLAG: the asm's two reciprocal slopes (1/g0 and 1/(g1-g0)) are formed via vrefp + one Newton
     // step; here written as exact divides (algebraically identical; the Newton refinement only
     // restores full precision to the hardware estimate). The region blend matches the vcmpgefp/vsel
-    // selection chain. FIDELITY: PARTIAL on region 2. The rise (region 1 = g2*|S|/g0), the plateau
-    // (region 3 = g3) and the sign(S) re-apply ARE store-exact; but the EXACT region-2 fall is NOT
-    // pinned -- the asm's final vsubfp/vmulfp/vmaddfp triple (@0x825B838C..) multiplies (g3-g2) by a
-    // grip lane and adds the t term with an operand grouping that differs from the clean
-    // coeff = g2 + (g3-g2)*t lerp written below. The lerp is a faithful APPROXIMATION of the fall's
-    // endpoints (g2 at g0, g3 at g1) but the interior curvature is not store-verified. FLAG.
+    // selection chain.
+    //
+    // ⭐⭐ 2026-08-12 (tyre-force wave): the old "FIDELITY: PARTIAL on region 2 -- the interior
+    // curvature is not store-verified" FLAG is RETIRED, and the lerp below is CONFIRMED EXACT.
+    // HandleWheelPairFriction @0x825FB458 evaluates this same curve INLINE, four lanes at a time,
+    // and its copy is unambiguous (0x825FBAAC..0x825FBAF8):
+    //     vsubfp    v11, v31(g3), v27(g2)            ; g3 - g2
+    //     vmulfp128 v26, v61(|S|-g0), v6(1/(g1-g0))  ; t
+    //     vmaddfp   v27, v11, v27, v26              ; vA*vC + vB = (g3-g2)*t + g2
+    //     vsel      v27, v16(g3), v27, v17(g1>|S|)  ; the plateau select
+    //     vsel      v30, v27,     v30(g2*|S|/g0), v11(g0>|S|)
+    // i.e. exactly `g2 + (g3 - g2) * t` inside [g0, g1], `g2*|S|/g0` below g0, `g3` above g1.
+    // The BPR twin's `_mm_add_ps(_mm_mul_ps(v11, v26), v27)` is the third witness. No change to
+    // the code below was needed -- it was right; only the doubt was wrong.
     VecFloat Wheel::TireGripCurve::GetCoefficient(VecFloat lvfSlip) const
     {
         const f32 lfS  = lvfSlip.x;                 // the slip is splatted across all lanes on console
@@ -427,6 +435,60 @@ namespace Vehicle
                                 || std::fabs(lfCandidate) < KF_SLOW_SPIN_THRESHOLD;
         mSuspensionAndInertiaVariables.z = lbKeepInertia ? lfInertia    : 0.0f;   // vrlimi 2 (z)
         mSuspensionAndInertiaVariables.w = lbKeepInertia ? lfInvInertia : 0.0f;   // vrlimi 1 (w)
+    }
+
+    // ===========================================================================================
+    //  Wheel::ApplyFrictionReaction   @0x825D6F68
+    // ===========================================================================================
+    // The wheel-spin half of the tyre torque couple. Recovered store-for-store from the copy the
+    // X360 compiler INLINED into VehiclePhysics::HandleWheelPairFriction for the pair's FIRST
+    // wheel (0x825FBE6C..0x825FBF00); the pair's second wheel gets the real
+    // `bl BrnPhysics__Vehicle__Wheel__ApplyFrictionReaction` at 0x825FC020 with v1 = the torque,
+    // v2 = the road long speed, v3 = dt, r3 = the wheel. The BPR twin (sub_B90DB0, called as
+    // `sub_B90DB0(&torque, &longSpeed, dt)`) confirms the same three arguments.
+    //
+    // asm, in order:
+    //   lvx128 v0,[wheel+0x40]; vspltw 3      -> radius        (mSlipVariables.w)
+    //   lvx128 v9,[wheel+0x60]; vspltw 3      -> invInertia    (mSuspensionAndInertiaVariables.w)
+    //   lbz    r9,[wheel+0xD7]                -> mu8State
+    //   lvx128 v13,[wheel+0x30]; vspltw 0     -> omega         (mIntegrationVariables.x)
+    //   vrefp+Newton(radius)                  -> 1/radius
+    //   vmaddfp128 v6, v9, v119(dt), v6       -> omegaNew = omega + (torque*invInertia)*dt
+    //   v0 = roadLongSpeed * (1/radius)       -> the FREE-ROLLING angular velocity
+    //   vcmpgefp(omega-v0, 0) XOR vcmpgefp(omegaNew-v0, 0) -> "the step crossed the rolling speed"
+    //   vsel  -> crossed ? rollingSpeed : omegaNew
+    //   vsel against unk_8327F240[(mu8State==1) ? 0x10 : 0]  -> a LOCKED wheel is forced to 0
+    //   vrlimi128 mask 8 + stvx128            -> mIntegrationVariables.x
+    // (unk_8327F240 is the shared {FALSE, TRUE} vsel mask pair already homed above, so the select
+    // needs no constant -- it is a plain `mu8State == eWheelInertiaTypeLocked` test.)
+    void Wheel::ApplyFrictionReaction(VecFloat lvfWheelTorque, VecFloat lvfRoadLongSpeed,
+                                      VecFloat lvfTimeStep)
+    {
+        const f32 lfRadius     = mSlipVariables.w;                     // +0x40 .w
+        const f32 lfInvInertia = mSuspensionAndInertiaVariables.w;     // +0x60 .w
+        const f32 lfOmega      = mIntegrationVariables.x;              // +0x30 .x
+
+        // The angular velocity at which the tyre would roll without slipping. The console forms
+        // 1/radius with vrefp + one Newton step; written as the exact divide (see the same note on
+        // TireGripCurve::GetCoefficient). A zero radius cannot happen after Wheel::Prepare, but a
+        // vrefp of zero would be +inf, so the guard keeps a mis-seeded wheel from poisoning the
+        // integrator with a NaN rather than inventing a value.
+        const f32 lfRollingSpeed = (lfRadius != 0.0f) ? (lvfRoadLongSpeed.x / lfRadius) : 0.0f;
+
+        f32 lfNewOmega = lfOmega + lvfWheelTorque.x * lfInvInertia * lvfTimeStep.x;
+
+        // The overshoot guard: if this step carried the wheel ACROSS the free-rolling speed, the
+        // friction can only have brought it TO that speed, so land exactly on it.
+        const bool lbBeforeAbove = (lfOmega    - lfRollingSpeed) >= 0.0f;
+        const bool lbAfterAbove  = (lfNewOmega - lfRollingSpeed) >= 0.0f;
+        if (lbBeforeAbove != lbAfterAbove)
+            lfNewOmega = lfRollingSpeed;
+
+        // A locked wheel does not spin (the same eWheelInertiaTypeLocked test UpdateVelocity makes).
+        if (mu8State == eWheelInertiaTypeLocked)
+            lfNewOmega = 0.0f;
+
+        mIntegrationVariables.x = lfNewOmega;   // vrlimi128 mask 8 (x)
     }
 
     // ===========================================================================================

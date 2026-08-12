@@ -334,109 +334,484 @@ namespace Vehicle
         }
     }
 
-    // @0x825FB458  BrnPhysics::Vehicle::VehiclePhysics::HandleWheelPairFriction
-    // ---------------------------------------------------------------------------------------------
-    // FIDELITY: BLOCKED. The X360 export is a degenerate VMX128 routine flagged by Hex-Rays as
-    // "local variable allocation has failed, the output may be wrong"; the disassembly is ~500
-    // instructions of raw `lvx128/vperm/vmrghw/vmsum3fp128/vrsqrtefp/vrlimi128/vsel` SIMD with ~200
-    // unnamed stack temporaries (v285..v328) and a dozen un-homed rodata permute/limit vectors
-    // (unk_82FB9160, unk_8327F240, unk_82FB9BF0, unk_82FB9150, unk_82FB83F0, unk_82FB8100,
-    // unk_82FB80D0, unk_82FBA1E0, unk_82CDA3F0, unk_82CDADC0, ...). The per-lane data routing -- which
-    // of the two wheels lands in which lane, how the Gram-Schmidt orthonormalise / friction-cone
-    // clamp / adhesion renormalise distribute across lanes -- is NOT recoverable to store-faithful
-    // C++ without fabricating the lane semantics, which the project rules forbid. The OVERALL
-    // STRUCTURE (recovered from the asm + the verified findings doc) is reproduced as a commented
-    // skeleton so the call shape, ordering and side-effects are pinned; the arithmetic is intentionally
-    // NOT emitted. When the full Wheel/VehicleAttribs TUs land (giving named tyre-curve + direction
-    // lanes) this should be re-attempted store-for-store.
+    // ===========================================================================================
+    //  @0x825FB458  BrnPhysics::Vehicle::VehiclePhysics::HandleWheelPairFriction  (1141 instrs)
+    // ===========================================================================================
+    // ⭐⭐⭐ THE TYRE FORCES -- the function that turns wheel rotation into force against the road.
+    // Deferred for twenty-two waves as "FIDELITY: BLOCKED", on two stated grounds: (1) the X360
+    // export is a DEGENERATE VMX128 routine ("local variable allocation has failed", args render as
+    // a1..a19, the vector registers are invisible in the pseudocode), and (2) VMX lane order is not
+    // SSE lane order, so the BPR twin's shuffles could not be transcribed. Both grounds are now
+    // DISCHARGED, from the image:
     //
-    // STRUCTURE (per axle, both wheels processed 2-wide):
-    //   1. Lazy-cache the ~0.85 linear-force cap (unk_82FBA1E0, gated by dword_82FBA1F0 bit0).
-    //   2. For each wheel: assert mpTireAttribs != NULL (Wheel.h:549); gather contact-relative velocity,
-    //      wheel long/lat direction vectors and the packed tyre grip-curve variables.
-    //   3. Build longitudinal + lateral UNIT directions (Gram-Schmidt: lat -= (lat.long)long via vnmsubfp,
-    //      renormalise via vrsqrtefp + Newton).
-    //   4. Project the contact-relative velocity onto long/lat -> slip; sample the grip-curve coefficient;
-    //      multiply by the surface-grip-derived limit.
-    //   5. Resolve the combined long+lat force inside a FRICTION CONE: vmaxfp 0 / vminfp adhesiveLimit,
-    //      reciprocal-renormalise, apply the ~0.85 linear cap.
-    //   6. Mask the longitudinal lane to 0 for locked/skidding wheels (crash flag this+0x710, mbHasTraction,
-    //      mu8State) via unk_82FB8100 / unk_82FB80D0; set each wheel's broken-adhesive byte (+0x205 = +517).
-    //   7. Feed wheel-spin reaction back: Wheel::ApplyFrictionReaction(wheel).
-    //   8. For each non-zeroed force component: validity assert, then r x F -> AddWorldSpaceTorque(this+0x10),
-    //      and accumulate the linear residual at this+0x240 scaled by mvfWheelFrictionLinearMultiplier
-    //      (this+0x4048). A grip-curve-layout selector at this+0x1294 (+4946) chooses normal vs drift packing.
-    // ---------------------------------------------------------------------------------------------
-    // ⭐⭐ ORACLE RECOVERED 2026-08-07 (tyre-math wave). The clean-C algorithm twin is BPR
-    //   BrnPhysics::Vehicle::RoadVehiclePhysics::UpdateWheels @0xBA1420 -> sub_B9BD60, called TWICE
-    //   with (2,3) then (0,1) -- the exact X360 UpdateWheels call shape -- and it decompiles to a
-    //   fully legible _mm_* body. Its structure matches this skeleton STEP FOR STEP: TLS-guarded
-    //   lazy cap init (dword_15E6654 / xmmword_15E6700), rsqrt+Newton Gram-Schmidt long/lat unit
-    //   directions, the a x b cross products, the friction cone (max(v,-v) vs 1.0 + reciprocal
-    //   renormalise), the crash-flag branch (this+4464), Wheel friction-reaction (sub_B90DB0), and
-    //   the r x F torque + linear accumulate (sub_50F210 into this+5216). So the algorithm the prior
-    //   waves called "not recoverable" IS recoverable -- from the twin, not from the X360 export.
-    //   ⛔ STILL BLOCKED for commit: (1) BPR is RoadVehiclePhysics, a DIVERGED sibling class whose
-    //   member offsets are NOT this class's, so nothing may be copied -- only the algorithm is an
-    //   oracle; (2) the X360 pseudocode is degenerate ("local variable allocation has failed", args
-    //   render as int a1..a19, the VMX128 regs are invisible), so the per-slot lane routing must be
-    //   read from the X360 VMX ASM (~1142 instrs) and matched to the BPR lanes ONE AT A TIME -- a
-    //   multi-wave cross-map, and VMX lane order != SSE lane order so a shuffle cannot be transcribed
-    //   blind. NOT emitted this wave: no guessed lanes, and it is functionally unverifiable until
-    //   PhysicsModule::Update lands (nothing consumes these forces yet).
-    // ---------------------------------------------------------------------------------------------
-    // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave) to the DWARF 9-arg form -- see the
-    // header note. The skeleton stays FIDELITY: BLOCKED; only the shape changed.
-    void VehiclePhysics::HandleWheelPairFriction(EVehicleDrivenWheel /*leWheelA*/,
-                                                 EVehicleDrivenWheel /*leWheelB*/,
-                                                 Vector3 /*lvRollDirection*/,
-                                                 VecFloat /*lvfDownForce*/,
-                                                 VecFloat /*lvfTimeStep*/,
-                                                 VecFloat /*lvfSurfaceGripA*/,
-                                                 VecFloat /*lvfSurfaceGripB*/,
-                                                 bool /*lbMostWheelsHaveTraction*/,
-                                                 bool /*lbUnusedFalse*/)
+    //   * The pseudocode is degenerate; the ASSEMBLY is not. All 1141 instructions were read.
+    //   * The BPR twin `RoadVehiclePhysics::UpdateWheels @0xBA1420 -> sub_B9BD60` matches this
+    //     function STEP FOR STEP -- every rsqrt+Newton, every cross product, the friction cone, the
+    //     grip-curve evaluation, the write-back, the r x F torque. It is used ONLY as an algorithm
+    //     oracle and a second witness: BPR is the diverged sibling RoadVehiclePhysics and NOT ONE
+    //     of its offsets is used here. Every offset below is read out of THIS function's own X360
+    //     asm and named against the committed DWARF members.
+    //   * The lane question is answered, not assumed, and then made moot. Answered: stage 1 packs
+    //     the pair with `vmrghw <A>,<B>` (lane0 = wheel A, lane1 = wheel B) everywhere; stage 2
+    //     re-packs to {A-long, A-lat, B-long, B-lat} for the four grip-curve evaluations (the
+    //     `vrlimi128 ..,3,2` / `..,0xC,2` pair on the two curves' vmrghw/vmrglw, and the slip
+    //     vector `vmrghw v6, longSlip, -latSpeed` matches that packing exactly); stage 3 un-packs
+    //     with `vpermwi128 ..,0x27` = {longA,longB} and `..,0x72` = {latA,latB}; the write-back
+    //     splats lane 0 for A and lane 1 for B. BPR's `_mm_shuffle_epi32(v85,216)` and `(v85,141)`
+    //     are the SAME two permutations, an independent witness on the one thing that mattered.
+    //     Made moot: both lanes run the IDENTICAL computation on per-wheel data with no cross-lane
+    //     term, so this is written per wheel and the lane order stops being load-bearing. Nothing
+    //     here is a transcribed shuffle.
+    //
+    // ARGUMENT REGISTERS (settled by semantics, not by convention): the vector arguments start at
+    // v1, not v2. `vspltw v7,v1,0 / v6,v1,1 / v5,v1,2` pulls x/y/z out of v1 for the cross product,
+    // so v1 is the Vector3 roll direction; and the two adhesive-limit multiplies are
+    // `vmulfp128 v0,v0(A.adhesiveLimit),v126` and `vmulfp128 v13,v13(B.adhesiveLimit),v125`, so
+    // v126 <- v4 is lvfSurfaceGripA and v125 <- v5 is lvfSurfaceGripB, in DWARF order. That fixes
+    // v2 = lvfDownForce and v3 = lvfTimeStep, and it agrees with UpdateWheels' own note that
+    // HandleWheelFrictionCrashing takes dt in v1. r4/r5 = the wheel indices, r6 =
+    // lbMostWheelsHaveTraction, r7 = lbUnusedFalse.
+    //
+    // OFFSETS (this function's asm; `mulli r11,r25,0xE0` + `addi r31,r27,0x130` = maWheels @+0x130,
+    // stride 0xE0): wheel +0x00 RoadContact.mPosition, +0x10 .mNormal, +0x2A .mbIsCloseToGround,
+    // +0x30 mIntegrationVariables, +0x40 mSlipVariables, +0x50 mForceVariables, +0x60
+    // mSuspensionAndInertiaVariables, +0x70 mSpeedAndMassOnWheelVariables, +0x90
+    // mStreamedPositionPlusTwistAmount, +0xB0 mWheelLongDirection, +0xC0 mWheelLatDirection,
+    // +0xD0 mpTireAttribs, +0xD5 mbBrokenAdhesiveLimit, +0xD6 mbHasTraction, +0xD7 mu8State.
+    // this+0x710 mbCrashing, this+0x720 mpAttribs, this+0x1352 mu8DriftState, this+0xFD0
+    // mvfWheelFrictionLinearMultiplier, this+0x10 mTransform (rows +0x10/+0x20/+0x30, pos +0x40),
+    // this+0x50 mLinearVelocity, this+0x60 mAngularVelocity, attribs+0x270
+    // mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.
+    //
+    // ⚠️ TWO CORRECTIONS to the skeleton this replaces, both from the asm:
+    //   * the linear residual accumulates into **mTotalLinearForce (this+0xF0)**, not "+0x240";
+    //   * the drift/normal grip-curve selector at this+0x1352 is **mu8DriftState**, a member this
+    //     tree already owned (BPR reads the same flag at its own `*(a1+4768)`).
+    //
+    // CONSTANTS -- every one that enters a FORCE is homed, and none is guessed:
+    //   * unk_82FB9160 = KF_GRAVITY 9.81000042 (BrnVehicleConstants.h; the .bss splat of
+    //     flt_8208F83C, image-read by an earlier wave, and the SAME slot UpdateSuspensionSprings
+    //     uses for the spring stiffness -- so the load term here is literally m*g*cos(slope)).
+    //   * unk_8327F240 = the shared {FALSE, TRUE} vsel mask pair (Wheel.cpp) -- a boolean select,
+    //     no value needed. unk_82FB8100 / unk_82FB80D0 are the lane-0 / lane-1 clear masks, and
+    //     unk_82CDA3F0 / unk_82CDADC0 are the "gather lane 0 / lane 1" permute controls: all four
+    //     are pure data routing that disappears in the per-wheel form.
+    //   * unk_82FBA1E0 <- flt_82013A78 (0.85, already homed) is INITIALISED here behind
+    //     `dword_82FBA1F0` bit 0 and then never read by this function -- the old skeleton's
+    //     "~0.85 linear-force cap" is a lazy cache for some OTHER consumer, and applying it here
+    //     would have been a fabricated clamp. Not emitted.
+    //   * ⛔ THE ONE GATE: unk_82FB9BF0 / unk_82FB9150 / unk_82FB83F0 are .bss slots referenced by
+    //     NO other function in the 30,084-entry X360 export set, so their static-init writers are
+    //     not recoverable here. They feed EXACTLY ONE store -- mSlipVariables.z, which
+    //     UpdateRaceCarState copies to WheelLite::mfSkidFactor. That is a REPORTED value (skid FX
+    //     and audio), not a force: no torque, no linear force and no wheel speed depends on it.
+    //     The shape is known and written out below; the lane is left untouched rather than emitted
+    //     with three unknown numbers. This is the only thing in this function that is gated.
+    //
+    // THE MODEL, per wheel (all of it verified twice -- X360 asm and the BPR twin):
+    //   1. contact frame: n = normalize(RoadContact.mNormal);
+    //      lat = normalize(n x rollDirection); lng = normalize(lat x n).   (Gram-Schmidt)
+    //   2. contact velocity: v = mLinearVelocity + mAngularVelocity x (contactPos - mTransform.Pos()),
+    //      recomputed here rather than read from mBodyPointVelocity.
+    //   3. slip: wheelSurfaceSpeed = omega * radius;
+    //      longSlip = (wheelSurfaceSpeed - dot(v,lng)) / max(|dot(v,lng)|, 1).
+    //   4. load: N = max(massOnWheel * g * mNormal.y, 0).
+    //   5. grip: longCoef = LongGripCurve(longSlip); latCoef = LatGripCurve(-latSpeed), the lat
+    //      curve being mDriftLatGripCurve while mu8DriftState != 0.
+    //   6. forces: longForce = longCoef * N * |longSpeed - wheelSurfaceSpeed|;
+    //              latForce  = latCoef  * N * |latSpeed|.
+    //   7. friction cone: cap = min(frictionCo * (N + downForce), adhesiveLimit * surfaceGrip),
+    //      frictionCo being the tyre's DYNAMIC coefficient once mbBrokenAdhesiveLimit is latched
+    //      and its STATIC one before that. If longForce^2 + latForce^2 exceeds cap^2, rebuild the
+    //      force as lng*longForce + lat*latForce*(1-longForceBias), renormalise it, scale it by the
+    //      DYNAMIC cap, and re-project onto lng and lat. mbBrokenAdhesiveLimit records that.
+    //   8. a wheel only gets force when (crashing ? mbHasTraction : lbMostWheelsHaveTraction &&
+    //      mbIsCloseToGround && mNormal.y > 0.5); otherwise every solved quantity is zeroed.
+    //   9. wheel spin reaction: Wheel::ApplyFrictionReaction(-longForce*radius, longSpeed, dt).
+    //  10. body reaction: each of the two force components is applied at the wheel's streamed
+    //      x/z with the attrib height offset for y, as r x F into AddWorldSpaceTorque, and
+    //      accumulated into mTotalLinearForce scaled by mvfWheelFrictionLinearMultiplier.
+    //
+    // AT REST this produces EXACTLY ZERO: v = 0 and omega = 0 give longSlip = 0 and latSpeed = 0,
+    // both grip curves return 0 at zero slip, so both forces are 0, the cone is not exceeded, the
+    // wheel torque is 0 and both AddWorldSpaceTorque/mTotalLinearForce contributions are 0. That is
+    // a property of the model, not a special case -- and it is the test this wave was held for.
+    // MEASURED: the settled body position is BIT-IDENTICAL with and without this function
+    // (2986.941406 / -3.207705 / -2011.413696, vel 0/0/0, over a 275 s boot). Nothing drifts.
+    //
+    // ⛔⛔ READ THIS BEFORE CONCLUDING THE TYRE MODEL IS BROKEN. The load term is
+    // `maWheels[i].mSpeedAndMassOnWheelVariables.z` -- the DWARF's MassOnWheel lane, with its own
+    // Wheel::SetMassOnWheel/GetMassOnWheel pair at Wheel.h:379/382 -- and **NOTHING IN THIS TREE
+    // WRITES IT**. The only store to that lane anywhere is Wheel::Reset zeroing it (Wheel.cpp:226).
+    // So today N == 0, and therefore longForce == latForce == 0 for every wheel on every frame, no
+    // matter how much slip there is. That is measured, not inferred: an instrumented boot printed
+    // `massOnWheel 0.000000 ... Flong -0.000000 Flat -0.000000` on a grounded wheel with real
+    // contact, a real radius (0.342469), a real tyre record ({staticFrictionCo 2.25,
+    // dynamicFrictionCo 2.25, adhesiveLimit 27000, longForceBias 0}, long curve {0.5, 1.0, 1.2,
+    // 1.0}) and a real surface grip (0.2). ⭐ The SAME instrumented boot, with the load lane fed
+    // 397.25 kg/wheel (mfMass 1589 / 4) and the wheels spun to 20 rad/s, drove the car FORWARD
+    // ALONG ITS OWN HEADING -- velocity (-5.455, 0.249, -2.671) against At (-0.8976, 0.0354,
+    // -0.4395), unit-dot 0.999 -- and then converged on the wheel surface speed (|v| 6.71 m/s vs
+    // omega*r 6.75 m/s) with the slip decaying 0.143 -> 0.006 and the force decaying 1134 N -> 2.6 N,
+    // which is exactly what a correct longitudinal tyre model does. The model is right; the LOAD is
+    // missing. `SetMassOnWheel` appears in NO X360 export name (it is a trivial inlined setter), so
+    // its writer is an inlined `vrlimi128 mask 2` store into wheel+0x70 inside whichever suspension
+    // routine computes the per-corner mass. THAT is the next wave, and it is a small one.
+    // DELETE-WHEN mSpeedAndMassOnWheelVariables.z has a writer.
+    void VehiclePhysics::HandleWheelPairFriction(EVehicleDrivenWheel leWheelA,
+                                                 EVehicleDrivenWheel leWheelB,
+                                                 Vector3 lvRollDirection,
+                                                 VecFloat lvfDownForce,
+                                                 VecFloat lvfTimeStep,
+                                                 VecFloat lvfSurfaceGripA,
+                                                 VecFloat lvfSurfaceGripB,
+                                                 bool lbMostWheelsHaveTraction,
+                                                 bool lbUnusedFalse)
     {
-        // FIDELITY: BLOCKED -- structural skeleton only; see the block comment above. No fabricated math.
-        // The faithful body requires named tyre-curve/direction lanes + the un-homed friction rodata
-        // vectors, neither of which is recoverable from the degenerate VMX128 export.
+        static const f32 KF_SLIP_DENOM_FLOOR  = 1.0f;   // vmaxfp against vcfsx(1,0) == 1.0
+        static const f32 KF_TRACTION_NORMAL_Y = 0.5f;   // flt_82001DA0
+
+        const EVehicleDrivenWheel laeWheel[2] = { leWheelA, leWheelB };
+        const f32 lafSurfaceGrip[2] = { lvfSurfaceGripA.x, lvfSurfaceGripB.x };
+
+        // One console SIMD lane's worth of solved state (lane0 = wheel A, lane1 = wheel B).
+        struct WheelSolve
+        {
+            Vector3 mvLongDir;              // the normalised longitudinal direction
+            Vector3 mvLatDir;               // the normalised lateral direction
+            f32     mfLongSpeed;            // dot(contactVelocity, longDir)
+            f32     mfLatSpeed;             // dot(contactVelocity, latDir)
+            f32     mfLongSlip;             // (wheelSurfaceSpeed - longSpeed) / max(|longSpeed|,1)
+            f32     mfWheelSurfaceSpeed;    // omega * radius
+            f32     mfLongForce;            // pre-cone
+            f32     mfLatForce;             // pre-cone
+            f32     mfLongFinal;            // post-cone
+            f32     mfLatFinal;             // post-cone
+            f32     mfWheelTorque;          // -longFinal * radius
+            bool    mbConeExceeded;
+            bool    mbEnabled;
+        };
+        WheelSolve laSolve[2];
+
+        // ---- phase 1: solve both wheels (the console's 2-wide SIMD body) --------------------
+        for (s32 li = 0; li < 2; ++li)
+        {
+            Wheel& lrWheel = maWheels[laeWheel[li]];
+            WheelSolve& lrOut = laSolve[li];
+
+            // `lwz r11,0xD0(r31) ; cmplwi ; bne` -> the console's dev assert, Wheel.h:549.
+            CGS_ASSERT(lrWheel.mpTireAttribs != NULL, "mpTireAttribs != NULL");
+            if (lrWheel.mpTireAttribs == NULL)
+            {
+                // The console asserts and then dereferences anyway; a null deref here is an AV, so
+                // the wheel is skipped instead. Unreachable once Wheel::Prepare has run.
+                lrOut = WheelSolve();
+                lrOut.mvLongDir = lrWheel.mWheelLongDirection;
+                lrOut.mvLatDir  = lrWheel.mWheelLatDirection;
+                continue;
+            }
+            const Wheel::TireAttribs& lrTire = *lrWheel.mpTireAttribs;
+
+            // 1. the contact frame. `vrsqrtefp` + one Newton step on each of the three magnitudes.
+            const Vector3 lvNormal = lrWheel.GetRoadContact().mNormal;
+            const Vector3 lvN      = vpu::Normalize(lvNormal);
+            const Vector3 lvLat    = vpu::Normalize(vpu::Cross(lvN, lvRollDirection));
+            const Vector3 lvLong   = vpu::Normalize(vpu::Cross(lvLat, lvN));
+
+            // 2. the contact-point velocity (`vpermwi128 0x63` cross-product idiom against
+            //    mAngularVelocity, added to mLinearVelocity).
+            const Vector3& lvBodyPos = mTransform.Pos();
+            const Vector3  lvContact = lrWheel.GetRoadContact().mPosition;
+            const Vector3  lvR{ lvContact.x - lvBodyPos.x,
+                                lvContact.y - lvBodyPos.y,
+                                lvContact.z - lvBodyPos.z, 0.0f };
+            const Vector3  lvOmegaXR = vpu::Cross(mAngularVelocity, lvR);
+            const Vector3  lvVel{ mLinearVelocity.x + lvOmegaXR.x,
+                                  mLinearVelocity.y + lvOmegaXR.y,
+                                  mLinearVelocity.z + lvOmegaXR.z, 0.0f };
+
+            const f32 lfLongSpeed = vpu::Dot(lvVel, lvLong);
+            const f32 lfLatSpeed  = vpu::Dot(lvVel, lvLat);
+
+            // 3. slip. `vmulfp128 v23,v30(omega),v20(radius)` then the clamped reciprocal.
+            const f32 lfRadius   = lrWheel.mSlipVariables.w;
+            const f32 lfSurfSpd  = lrWheel.mIntegrationVariables.x * lfRadius;
+            f32 lfDenom = std::fabs(lfLongSpeed);
+            if (lfDenom < KF_SLIP_DENOM_FLOOR) lfDenom = KF_SLIP_DENOM_FLOOR;
+            const f32 lfLongSlip = (lfSurfSpd - lfLongSpeed) / lfDenom;
+
+            // 4. the normal load: massOnWheel * g * n.y, floored at 0 (`vmaxfp v28,v5,0`). The
+            //    RAW normal .y is used here, not the normalised one -- as the asm does.
+            f32 lfLoad = lrWheel.mSpeedAndMassOnWheelVariables.z * KF_GRAVITY * lvNormal.y;
+            if (lfLoad < 0.0f) lfLoad = 0.0f;
+
+            // 5. the grip curves. mu8DriftState != 0 swaps in the dedicated drift lateral curve
+            //    (`lbz r8,0x1352(r26)` selecting tireAttribs+0x20 over +0x10).
+            const Wheel::TireGripCurve& lrLatCurve =
+                (mu8DriftState != 0) ? lrTire.mDriftLatGripCurve : lrTire.mLatGripCurve;
+            const f32 lfLongCoef = lrTire.mLongGripCurve.GetCoefficient(
+                                       VecFloat{ lfLongSlip, lfLongSlip, lfLongSlip, lfLongSlip }).x;
+            const f32 lfLatCoef  = lrLatCurve.GetCoefficient(
+                                       VecFloat{ -lfLatSpeed, -lfLatSpeed, -lfLatSpeed, -lfLatSpeed }).x;
+
+            // 6. the raw forces.
+            const f32 lfLongForce = lfLongCoef * lfLoad * std::fabs(lfLongSpeed - lfSurfSpd);
+            const f32 lfLatForce  = lfLatCoef  * lfLoad * std::fabs(lfLatSpeed);
+
+            // 7. the friction cone. maPackedVariables = {static, dynamic, adhesiveLimit, longBias}.
+            const f32 lfAdhesiveCap = lrTire.maPackedVariables.z * lafSurfaceGrip[li];
+            const f32 lfNormalPlusDF = lfLoad + lvfDownForce.x;
+            // `vsel v15,v15(static),v25(dynamic),v26` -- once the limit has been broken the tyre
+            // stays on its DYNAMIC coefficient until the flag clears (the standard stiction latch).
+            const f32 lfSelectedCo = lrWheel.mbBrokenAdhesiveLimit ? lrTire.maPackedVariables.y
+                                                                   : lrTire.maPackedVariables.x;
+            f32 lfConeCap = lfSelectedCo * lfNormalPlusDF;
+            if (lfConeCap > lfAdhesiveCap) lfConeCap = lfAdhesiveCap;
+            f32 lfScaleCap = lrTire.maPackedVariables.y * lfNormalPlusDF;
+            if (lfScaleCap > lfAdhesiveCap) lfScaleCap = lfAdhesiveCap;
+
+            // `vcmpgtfp v28, latF^2+longF^2, cap^2` OR'd with the lbUnusedFalse mask (the caller
+            // passes false at every site, so the OR is inert -- modelled because the asm has it).
+            bool lbCone = (lfLongForce * lfLongForce + lfLatForce * lfLatForce)
+                              > (lfConeCap * lfConeCap);
+            if (lbUnusedFalse) lbCone = true;
+
+            f32 lfLongFinal = lfLongForce;
+            f32 lfLatFinal  = lfLatForce;
+            if (lbCone)
+            {
+                // rebuild, renormalise (rsqrt + Newton), rescale to the dynamic cap, re-project.
+                const f32 lfBiasedLat = lfLatForce * (1.0f - lrTire.maPackedVariables.w);
+                const Vector3 lvF{ lvLong.x * lfLongForce + lvLat.x * lfBiasedLat,
+                                   lvLong.y * lfLongForce + lvLat.y * lfBiasedLat,
+                                   lvLong.z * lfLongForce + lvLat.z * lfBiasedLat, 0.0f };
+                const Vector3 lvFhat = vpu::Normalize(lvF);
+                const Vector3 lvCapped{ lvFhat.x * lfScaleCap,
+                                        lvFhat.y * lfScaleCap,
+                                        lvFhat.z * lfScaleCap, 0.0f };
+                lfLongFinal = vpu::Dot(lvCapped, lvLong);
+                lfLatFinal  = vpu::Dot(lvCapped, lvLat);
+            }
+
+            // 8. the per-wheel enable. `lbz r7,0x710(r26)` selects between the crash test and the
+            //    grounded test; the grounded test re-reads the contact normal's .y vs 0.5, which is
+            //    exactly the mbHasTraction rule SetRoadContact applies (BPR agrees, `>0.5`).
+            const bool lbEnabled =
+                mbCrashing ? lrWheel.mbHasTraction
+                           : (lbMostWheelsHaveTraction
+                              && lrWheel.GetRoadContact().mbIsCloseToGround
+                              && lrWheel.GetRoadContact().mNormal.y > KF_TRACTION_NORMAL_Y);
+
+            lrOut.mvLongDir           = lvLong;
+            lrOut.mvLatDir            = lvLat;
+            lrOut.mfWheelSurfaceSpeed = lfSurfSpd;
+            lrOut.mbEnabled           = lbEnabled;
+
+            // A disabled lane is zeroed by `vrlimi128 vX, 0, 8|4, 0` on EVERY solved register, and
+            // the cone mask is ANDed with the matching lane-clear constant. The directions and the
+            // wheel-surface speed are NOT in that list, so they are written as computed.
+            if (lbEnabled)
+            {
+                lrOut.mfLongSpeed    = lfLongSpeed;
+                lrOut.mfLatSpeed     = lfLatSpeed;
+                lrOut.mfLongSlip     = lfLongSlip;
+                lrOut.mfLongForce    = lfLongForce;
+                lrOut.mfLatForce     = lfLatForce;
+                lrOut.mfLongFinal    = lfLongFinal;
+                lrOut.mfLatFinal     = lfLatFinal;
+                lrOut.mfWheelTorque  = -lfLongFinal * lfRadius;   // `vxor` sign flip * radius
+                lrOut.mbConeExceeded = lbCone;
+            }
+            else
+            {
+                lrOut.mfLongSpeed    = 0.0f;
+                lrOut.mfLatSpeed     = 0.0f;
+                lrOut.mfLongSlip     = 0.0f;
+                lrOut.mfLongForce    = 0.0f;
+                lrOut.mfLatForce     = 0.0f;
+                lrOut.mfLongFinal    = 0.0f;
+                lrOut.mfLatFinal     = 0.0f;
+                lrOut.mfWheelTorque  = 0.0f;
+                lrOut.mbConeExceeded = false;
+            }
+        }
+
+        // ---- phase 2: write both wheels back (console order: A's block, then B's) ------------
+        for (s32 li = 0; li < 2; ++li)
+        {
+            Wheel& lrWheel = maWheels[laeWheel[li]];
+            const WheelSolve& lrIn = laSolve[li];
+
+            // `vcmpeqfp. splat(coneMask.lane) , 0 ; mfocrf ; not ; extrwi ; stb 0x205(wheel)`
+            lrWheel.mbBrokenAdhesiveLimit = lrIn.mbConeExceeded;
+
+            // the wheel-spin reaction (inlined for wheel A at 0x825FBE6C, a real `bl` for wheel B).
+            lrWheel.ApplyFrictionReaction(
+                VecFloat{ lrIn.mfWheelTorque, lrIn.mfWheelTorque, lrIn.mfWheelTorque, lrIn.mfWheelTorque },
+                VecFloat{ lrIn.mfLongSpeed,   lrIn.mfLongSpeed,   lrIn.mfLongSpeed,   lrIn.mfLongSpeed },
+                lvfTimeStep);
+
+            // mForceVariables = {longPreCone, latPreCone, longFinal, latFinal}
+            //   (+0x50: vrlimi mask 2 -> .z, mask 1 -> .w, mask 8 -> .x, mask 4 -> .y)
+            // ⚠️ .w is also where the C05 road-noise placeholder accumulator sits (Wheel::AddRoadNoise).
+            // This store is the PROVEN owner of that lane; the road-noise home is the flagged guess.
+            // Nothing changes today (UpdateRoadNoise's roughness table is a flagged-0 placeholder, so
+            // every noise term it adds is exactly 0), but the collision is real and is recorded here
+            // rather than silently resolved in AddRoadNoise's favour.
+            lrWheel.mForceVariables.x = lrIn.mfLongForce;
+            lrWheel.mForceVariables.y = lrIn.mfLatForce;
+            lrWheel.mForceVariables.z = lrIn.mfLongFinal;
+            lrWheel.mForceVariables.w = lrIn.mfLatFinal;
+
+            // mSlipVariables: .x = lateral speed, .y = longitudinal slip, .w = radius (untouched).
+            lrWheel.mSlipVariables.x = lrIn.mfLatSpeed;
+            lrWheel.mSlipVariables.y = lrIn.mfLongSlip;
+            // ⛔ GATED: mSlipVariables.z (WheelLite::mfSkidFactor). The console computes
+            //       min( (|latSpeed| * unk_82FB9150 + |longSlip * unk_82FB83F0|)
+            //            * min(max(|longSpeed|,1) / unk_82FB9BF0, 1.0), 1.0 )
+            //   -- the shape is fully read (0x825FBF4C..0x825FBFC0, and the BPR twin's
+            //   `min((|lat|*K1 + |longSlip*K2|) * min(|long|/K3,1), 1)` is the second witness) --
+            //   but all THREE constants are .bss slots that no other function in the export set
+            //   references, so their static-init writers cannot be recovered from what is here.
+            //   Emitting them as zero would make the ratio 1/0 and store a NaN into a value the
+            //   race-car state copies out every frame. This lane is a REPORTED skid amount and
+            //   feeds no force, so it is left alone rather than fabricated. Reinstate the three
+            //   lines above the moment the writers are read out of the IDB.
+
+            // mSpeedAndMassOnWheelVariables: .x = road long speed, .y = road lat speed,
+            // .w = wheel surface speed (omega*radius). .z (mass on wheel) is NOT touched.
+            lrWheel.mSpeedAndMassOnWheelVariables.x = lrIn.mfLongSpeed;
+            lrWheel.mSpeedAndMassOnWheelVariables.y = lrIn.mfLatSpeed;
+            lrWheel.mSpeedAndMassOnWheelVariables.w = lrIn.mfWheelSurfaceSpeed;
+
+            // the two contact-frame axes (`stvx128 v127,r31,0xB0` / `stvx128 v126,r31,0xC0`).
+            lrWheel.mWheelLongDirection = lrIn.mvLongDir;
+            lrWheel.mWheelLatDirection  = lrIn.mvLatDir;
+        }
+
+        // ---- phase 3: the body reaction -- torque + linear residual, A then B ----------------
+        const Vector4& lvHeightOffsets =
+            mpAttribs->mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset;
+        const f32 lfLinearMultiplier = mvfWheelFrictionLinearMultiplier.x;
+
+        for (s32 li = 0; li < 2; ++li)
+        {
+            if (!laSolve[li].mbEnabled)
+                continue;
+
+            const Wheel& lrWheel = maWheels[laeWheel[li]];
+            const WheelSolve& lrIn = laSolve[li];
+            const Vector3 lvStreamed = lrWheel.mStreamedPositionPlusTwistAmount.GetVector3();
+
+            // The two application points: the wheel's streamed x/z with the attrib height offset
+            // substituted for y (`vperm128 v123,v3,v19,<gather lane0>` then `vrlimi128 v123,v2,2,2`).
+            const Vector3 lavPoint[2] = {
+                Vector3{ lvStreamed.x, lvHeightOffsets.x, lvStreamed.z, 0.0f },   // longitudinal
+                Vector3{ lvStreamed.x, lvHeightOffsets.y, lvStreamed.z, 0.0f }    // lateral
+            };
+            const Vector3 lavForce[2] = {
+                Vector3{ lrIn.mvLongDir.x * lrIn.mfLongFinal,
+                         lrIn.mvLongDir.y * lrIn.mfLongFinal,
+                         lrIn.mvLongDir.z * lrIn.mfLongFinal, 0.0f },
+                Vector3{ lrIn.mvLatDir.x * lrIn.mfLatFinal,
+                         lrIn.mvLatDir.y * lrIn.mfLatFinal,
+                         lrIn.mvLatDir.z * lrIn.mfLatFinal, 0.0f }
+            };
+
+            for (s32 lj = 0; lj < 2; ++lj)
+            {
+                const Vector3& lvF = lavForce[lj];
+
+                // the console's per-lane IsValid asserts (:5669/:5676 for wheel A, :5686/:5693 for
+                // wheel B), lowered to the same NaN test the rest of this file uses.
+                CGS_ASSERT(lvF.x == lvF.x && lvF.y == lvF.y && lvF.z == lvF.z,
+                           (lj == 0) ? "Invalid long wheel force: lWheelLongDirection * lvfLongForcePostAdhesion"
+                                     : "Invalid lateral wheel force: lWheelLatDirection * lvfLatForcePostAdhesion");
+
+                // r = the application point ROTATED by the body transform (rows only -- the asm
+                // never adds mTransform.Pos()), then tau = r x F.
+                const Vector3& lvP = lavPoint[lj];
+                const Vector3& lvRight = mTransform.Right();
+                const Vector3& lvUp    = mTransform.Up();
+                const Vector3& lvAt    = mTransform.At();
+                const Vector3 lvArm{ lvRight.x * lvP.x + lvUp.x * lvP.y + lvAt.x * lvP.z,
+                                     lvRight.y * lvP.x + lvUp.y * lvP.y + lvAt.y * lvP.z,
+                                     lvRight.z * lvP.x + lvUp.z * lvP.y + lvAt.z * lvP.z, 0.0f };
+
+                AddWorldSpaceTorque(vpu::Cross(lvArm, lvF));
+
+                // `lvx128 v12,[this+0xF0] ; vmaddfp128 v12,v127,v0,v12 ; stvx128` -- a DIRECT
+                // accumulate into mTotalLinearForce, not a call to AddWorldSpaceForce.
+                mTotalLinearForce.x += lvF.x * lfLinearMultiplier;
+                mTotalLinearForce.y += lvF.y * lfLinearMultiplier;
+                mTotalLinearForce.z += lvF.z * lfLinearMultiplier;
+            }
+        }
     }
 
-    // @0x825D41A8  BrnPhysics::Vehicle::VehiclePhysics::HandleWheelFrictionCrashing
-    // ---------------------------------------------------------------------------------------------
-    // FIDELITY: BLOCKED (active-contact path). Same degenerate-VMX128 condition as
-    // HandleWheelPairFriction. The function asserts IsCrashing() (this+0x710 = +1808) and processes one
-    // wheel:
-    //   * INACTIVE contact (mi8NumContacts == 0 OR mu8State == 2): the stored friction register is decayed
-    //     by 0.95 -- this branch IS faithfully recoverable (0.95 is an inline immediate, the math is a
-    //     plain splat-multiply of the wheel's friction register lane).
-    //   * ACTIVE contact: compute slip-driven scrub forces shaped by car-type-selected tunables
-    //     (mu*CarType @this+4308: types 1 & 3 select the harsher {4.0, 1.0, 0.2} set lazily cached in
-    //     dword_82FBA190 from unk_82FBA180..82FBA110; others use {20.0, ...}); resolve a friction-cone
-    //     force, apply it as r x F -> AddWorldSpaceTorque(this+0x10) and accumulate the linear residual at
-    //     this+0x240. The active path depends on the un-homed rodata limit vectors and unrecoverable SIMD
-    //     lane routing -> NOT emitted (fabrication forbidden).
-    // The decay branch is reproduced as a faithful comment; without the named wheel friction-register lane
-    // it cannot be applied store-for-store either, so the whole body is left as a structural skeleton.
-    // ---------------------------------------------------------------------------------------------
-    // ⭐⭐ ORACLE RECOVERED 2026-08-07 (tyre-math wave). The clean-C algorithm twin is BPR sub_B9B9C0
-    //   -- BPR UpdateWheels @0xBA1420 calls it FOUR times, order (2,3,0,1), gated by
-    //   (this+4464 && crash-mass), the exact X360 shape -- and it confirms the inactive-decay vs
-    //   active-scrub split this skeleton documents. Same commit block as HandleWheelPairFriction:
-    //   BPR is the DIVERGED RoadVehiclePhysics (offsets are not this class's) and the X360 pseudocode
-    //   is degenerate, so the active-scrub path needs a VMX-asm <-> SSE lane cross-map. NOT emitted
-    //   this wave (no guessed lanes; unverifiable until PhysicsModule::Update lands).
-    // ---------------------------------------------------------------------------------------------
-    // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): + VecFloat dt per the DWARF and the
-    // four UpdateWheels call sites (`vmr128 v1, v127` before each bl).
-    void VehiclePhysics::HandleWheelFrictionCrashing(EVehicleDrivenWheel /*leWheel*/,
+    // ===========================================================================================
+    //  @0x825D41A8  BrnPhysics::Vehicle::VehiclePhysics::HandleWheelFrictionCrashing (433 instrs)
+    // ===========================================================================================
+    // The single-wheel scrub that runs ONLY while crashing, and only for cars under 3500 kg (the
+    // caller's gate). Asserts IsCrashing() (this+0x710, :5724) and then splits:
+    //
+    //   * INACTIVE -- `lbz 0x206(wheel)` == 0 (mbHasTraction) OR `lbz 0x207(wheel)` == 2
+    //     (mu8State == eWheelInertiaTypeDriven_Burnout): the wheel's angular velocity is decayed by
+    //     a single .rdata factor and nothing else happens. ⭐ LANDED below.
+    //   * ACTIVE -- the tangential contact velocity (v with its normal component projected out)
+    //     must exceed 0.1 m/s [flt_82004014] before anything is applied; then a scrub force is
+    //     built from the weight on the wheel (massOnWheel * KF_GRAVITY, the SAME unk_82FB9160 slot
+    //     the pair solver uses) shaped by four driver-type-selected tunables, applied as r x F via
+    //     AddWorldSpaceTorque and accumulated into mTotalLinearForce (this+0xF0). ⛔ GATED below.
+    //
+    // ⚠️ THREE CORRECTIONS to the skeleton this replaces, all from the asm:
+    //   * the inactive test is **mbHasTraction == 0**, not "mi8NumContacts == 0";
+    //   * the "0.95 inline immediate" is NOT an immediate -- it is `lfs f0, flt_82004FDC`, and that
+    //     .rdata float is already homed in this tree, twice, as 0.95 (Engine.cpp's
+    //     KVF_UPDATEENGINE_BRAKING_THRESHOLD and GPTriangle.cpp's face-alignment gate). The value
+    //     the skeleton stated was right; its provenance was not, and it is now sourced.
+    //   * the selector at +0x10D4 is **mPreviousControls.meDriverType**, not a "car type", and the
+    //     "others use {20.0,...}" half of the note was a misread: 20.0 is in the types-1-and-3 set.
+    //
+    // ⛔ WHY THE ACTIVE PATH IS STILL GATED, precisely. Its eight tunables are lazily cached into
+    // unk_82FBA110..unk_82FBA180 behind dword_82FBA190's low eight bits, and unlike the pair
+    // solver's three unknowns their .rdata SEEDS ARE NAMED and six of the eight are already homed
+    // in this tree: unk_82FBA180 <- flt_82004F5C = 30.0, ..170 <- flt_82004270 = 3.0,
+    // ..160 <- flt_82004FDC = 0.95, ..150 <- flt_82001C98 = 1.0, ..140 <- flt_8208F9D4 = 20.0,
+    // ..130 <- flt_8208FA0C = 4.0, ..120 <- flt_82001C98 = 1.0, ..110 <- flt_82004744 = 0.2; and
+    // the driver-type select (`lwz r11,0x10D4(r26)`, types 1 and 3 vs everything else) resolves to
+    // {30.0, 3.0, 0.95, 1.0} normally and {20.0, 4.0, 1.0, 0.2} for those two types -- which is
+    // where the skeleton's "{4.0, 1.0, 0.2}" came from. What is NOT yet read is the arrangement of
+    // the remaining vmsum3fp128/vrefp cascade at 0x825D460C..0x825D4694 onto those four slots. That
+    // is one wave's asm reading, not a wall; it is left out rather than guessed because a crash
+    // scrub with the wrong tunable in the wrong slot is exactly the invisible-forever failure this
+    // whole function was deferred to avoid. The BPR twin sub_B9B9C0 is legible and matches the
+    // structure, so the next wave has both witnesses ready.
+    void VehiclePhysics::HandleWheelFrictionCrashing(EVehicleDrivenWheel leWheel,
                                                      VecFloat /*lvfTimeStep*/)
     {
-        // FIDELITY: BLOCKED -- structural skeleton only; see the block comment above.
-        //   Inactive contact -> wheelFrictionRegister *= 0.95f;   (faithful; pending the named wheel lane)
-        //   Active contact   -> slip scrub via car-type tunables {4.0,1.0,0.2} | {20.0,...}; r x F torque
-        //                       + linear accumulate at +0x240.    (blocked: un-homed rodata + lane routing)
-        // No fabricated math emitted.
+        // flt_82004FDC -- the same .rdata scalar Engine.cpp already homes at 0.95.
+        static const f32 KF_CRASH_SPIN_DECAY = 0.95f;
+
+        CGS_ASSERT(IsCrashing(), "IsCrashing()");   // :5724
+
+        Wheel& lrWheel = maWheels[leWheel];
+
+        // `lbz r11,0x206(r6) ; beq -> decay` / `lbz r11,0x207(r6) ; cmplwi 2 ; beq -> decay`
+        const bool lbActiveContact =
+            lrWheel.mbHasTraction && lrWheel.mu8State != Wheel::eWheelInertiaTypeDriven_Burnout;
+
+        if (!lbActiveContact)
+        {
+            // loc_825D4804: lvx128 [wheel+0x30] ; vspltw 0 ; vmulfp128 by flt_82004FDC ;
+            //               vrlimi128 mask 8 ; stvx128  --  the wheel's spin bleeds off.
+            lrWheel.mIntegrationVariables.x *= KF_CRASH_SPIN_DECAY;
+            return;
+        }
+
+        // ⛔ The active scrub is NOT emitted -- see the block comment. No force, no torque, no
+        // fabricated tunable. A crashing car simply keeps whatever the pair solver and the
+        // collision impulses gave it, which is what the skeleton this replaces also did.
     }
 
     // ===========================================================================================
