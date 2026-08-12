@@ -72,6 +72,22 @@ struct BrnRendererMemory
     // target to share the down-sample buffer's depth surface and use the default render-target state.
     void CreateBackBuffer(rw::IResourceAllocator* lpAllocator, u32 luWidth, u32 luHeight);
 
+    // FLAG PC bring-up scope (2026-08-12): NOT an X360 function. Construct() above is the console's
+    // only entry point into the render-target pool, and it is UNLINKABLE on PC today - eight of the
+    // nine Create*Buffer helpers have no body in the tree, BrnResource::Allocators::
+    // GetGlobalGraphicsAllocator() is declaration-only, and the four gacIm2d*BlitProgram microcode
+    // blobs are external generated data with no definition. Rather than fabricate those nine bodies
+    // to satisfy a linker, this entry point does the slice the shadow wave actually needs: clear the
+    // pool and build ONLY the shadow-map target, where Construct's third call would. Delete it (and
+    // call Construct) the moment the rest of the pool exists.
+    //
+    // ONE store differs from CreateShadowmapBuffer's, and is flagged at the definition: the target is
+    // described as ONE section at the COMBINED 1280x1920 rather than three sections of 1280x640,
+    // because PC D3D9 has no EDRAM-surface + resolve pair -- the depth TEXTURE is the render surface,
+    // so the surface is the whole atlas and the per-cascade band is a viewport. Everything else is
+    // CreateShadowmapBuffer's, value for value.
+    void PCBringUpCreateShadowMapBufferOnly(rw::IResourceAllocator* lpAllocator);
+
     // 0x823F4910 -- return one of the shadow-map render targets by index. The X360 asserts the index
     // is in [0,4) and returns mapRenderTarget[liIndex + 1] (slot 0 is the anti-alias buffer; the
     // shadow-map slots begin at slot 1). Called by ShadowMapRenderManager::Begin/EndRenderShadowMap.

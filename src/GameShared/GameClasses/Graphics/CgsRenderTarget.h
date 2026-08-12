@@ -11,15 +11,31 @@
 // SetRenderTargetState binds the target's surfaces + viewport/scissor on the device.
 //
 // Shape from the DecFIGS DWARF (GameShared/GameClasses/Graphics/CgsRenderTarget.h). The X360 ARTIST
-// ledger attests only the draw-side surface (Begin/End/GetTexture/GetDepthTexture/SetRenderTargetState
-// + the build-side Construct/Destruct/Prepare virtuals); the many serialise-time setters the DWARF
-// lists are PS3-only and left out per the X360-attestation gate. The data layout is kept in full so
-// the object sizes correctly and members are reached by name.
+// ledger attests the draw-side surface (Begin/End/GetTexture/GetDepthTexture/SetRenderTargetState)
+// and all three build-side virtuals; the many serialise-time setters the DWARF lists are PS3-only and
+// left out per the X360-attestation gate (the ones an attested caller inlines are added back as
+// inline members). The data layout is kept in full so the object sizes correctly and members are
+// reached by name.
 //
 // LAYOUT NOTE (offset authority = X360 asm): on the X360 image mpRenderTarget sits at +0x108 and the
 // width/height scalars at +0x04/+0x08 (read directly by the attested bodies). This recon preserves
 // the *semantics* with named members, not the byte offsets (x64 widens the pointers); the member
 // ORDER follows the DWARF.
+//
+// COLOUR-SECTION COUNT (corrected 2026-08-12): the DWARF (Internal PS3) declares maRenderTargets[5]
+// PLUS mDepthTarget, i.e. six 0x30-byte surface records. The X360 ARTIST build carries FOUR colour
+// records plus the depth record - five in total - and the earlier six-record recon over-sized the
+// object by 0x30 and put every member past the surface array (mpRenderTarget included) in the wrong
+// place. Proof, all from the X360 asm:
+//   sizeof(CgsRenderTarget) == 0x110      (operator new(0x110) in CreateShadowmapBuffer @0x823F6D98
+//                                          and CreateBackBuffer @0x823F6F78)
+//   mpRenderTarget          == +0x108     (lwz r3, 0x108(r3) in Begin @0x827E7748)
+//   surfaces start          == +0x18, stride 0x30  (the ctor @0x823F47A0 seeds exactly five:
+//                                          0x18 / 0x48 / 0x78 / 0xA8 / 0xD8)
+//   the +0xD8 record is the DEPTH one     (CreateShadowmapBuffer writes the depth format 0x2D200196
+//                                          to 0xE0/0xE4 and the in-use flag to 0xDC)
+//   the "clear every colour section" loops in both Create*Buffer helpers run FOUR times.
+// 0x18 + 5*0x30 == 0x108 == mpRenderTarget, and 0x108 + 2 pointers == 0x110. Six records cannot fit.
 
 namespace renderengine
 {
@@ -33,12 +49,16 @@ namespace rw { struct IResourceAllocator; }
 class CgsRenderTarget
 {
 public:
-    // CgsRenderTarget.h:34 (DWARF) - one colour or depth surface's serialised description. Pure data
-    // here: the X360-attested CgsRenderTarget bodies never touch these fields (they go through the
-    // built rw::graphics::postfx::RenderTarget), so only the layout is reconstructed. The setters/
-    // getters the DWARF lists are PS3-serialise-side and absent from the X360 ledger.
+    // CgsRenderTarget.h:34 (DWARF) - one colour or depth surface's serialised description. Construct()
+    // reads every field out of these records into the post-fx RenderTarget::Parameters block; the
+    // serialise-side setters the DWARF lists are PS3-only and absent from the X360 ledger (the ones an
+    // attested caller inlines live on CgsRenderTarget itself).
     struct CgsRenderTargetSurface
     {
+        // CgsRenderTarget.h:57 (DWARF). The X360 ctor @0x823F47A0 inlines this five times (once per
+        // surface record) - un-inlined back to the real per-surface constructor here.
+        CgsRenderTargetSurface();
+
         u32                                 mu32FilterMode;     // renderengine::SamplerState::FilterMode
         bool                                mbInUse;
         bool                                mbUseSystemMemory;
@@ -110,6 +130,15 @@ public:
     }
     void SetColourTargetBufferFormat(u32 luSection, u32 luFormat)  { maRenderTargets[luSection].mu32BufferFormat = luFormat; }
     void SetColourTargetTextureFormat(u32 luSection, u32 luFormat) { maRenderTargets[luSection].mu32TextureFormat = luFormat; }
+    void SetColourTargetBaseEDRAM(u32 luSection, u32 luBase)       { maRenderTargets[luSection].mu32BaseEDRAM = luBase; }
+
+    // The depth/stencil section's own description (DWARF SetDepthTarget* family). Seeded by
+    // BrnRendererMemory::CreateShadowmapBuffer, which builds a depth-ONLY target.
+    void SetDepthTargetInUse(bool lbInUse)          { mDepthTarget.mbInUse = lbInUse; }
+    void SetDepthTargetBufferFormat(u32 luFormat)   { mDepthTarget.mu32BufferFormat = luFormat; }
+    void SetDepthTargetTextureFormat(u32 luFormat)  { mDepthTarget.mu32TextureFormat = luFormat; }
+    void SetDepthTargetBaseEDRAM(u32 luBase)        { mDepthTarget.mu32BaseEDRAM = luBase; }
+    void SetDepthTargetTileIndex(s8 ls8Index)       { mDepthTarget.ms8TileIndex = ls8Index; }
 
     // The built post-fx render target (null until Construct()/Prepare()). CreateBackBuffer reaches in
     // to share the down-sample buffer's depth-stencil section state.
@@ -121,18 +150,27 @@ public:
     u32 GetHeight() const { return mu32MaxHeight; }
     u32 GetNumSections() const { return mu8NumSections; }
 
+public:
+    // The number of COLOUR surface records the X360 build carries (the depth/stencil record is
+    // separate). See the COLOUR-SECTION COUNT note at the top of this file - the PS3 DWARF says 5,
+    // ARTIST says 4, and every X360 body agrees with 4.
+    static const u32 KU_NUM_COLOUR_SECTIONS = 4;
+
 private:
-    u32  mu32MaxWidth;
-    u32  mu32MaxHeight;
-    u32  mu32MaxNumMipMaps;
-    s32  mn32MultiSampleFormat;
-    u8   mu8NumSections;
-    bool mbUseDepthStencilAsTexture;
+    u32  mu32MaxWidth;                            // +0x04
+    u32  mu32MaxHeight;                           // +0x08
+    u32  mu32MaxNumMipMaps;                       // +0x0C
+    s32  mn32MultiSampleFormat;                   // +0x10
+    u8   mu8NumSections;                          // +0x14
+    bool mbUseDepthStencilAsTexture;              // +0x15
 
-    CgsRenderTargetSurface maRenderTargets[5];   // up to 5 colour sections
-    CgsRenderTargetSurface mDepthTarget;          // the depth/stencil section
+    CgsRenderTargetSurface maRenderTargets[KU_NUM_COLOUR_SECTIONS];  // +0x18 (stride 0x30)
+    CgsRenderTargetSurface mDepthTarget;                              // +0xD8
 
-    // The built post-fx render target (DWARF type RenderTarget*; X360 +0x108). Null until Prepare().
-    rw::graphics::postfx::RenderTarget* mpRenderTarget;
-    rw::IResourceAllocator*             mpAllocator;
+    // The built post-fx render target (DWARF type RenderTarget*; X360 +0x108). Null until Construct().
+    rw::graphics::postfx::RenderTarget* mpRenderTarget;   // +0x108
+    rw::IResourceAllocator*             mpAllocator;      // +0x10C
+
+    // Pointer-invariant layout facts (never called; a MEMBER so it can reach the private members).
+    static void _AssertLayout();
 };

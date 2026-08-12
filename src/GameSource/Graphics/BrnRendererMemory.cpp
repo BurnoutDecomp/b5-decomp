@@ -7,8 +7,10 @@
 #include "GameSource/Resource/BrnResourceAllocator.h"          // BrnResource::Allocators::GetGlobalGraphicsAllocator
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   BrnRendererMemory::Construct        @ 0x823FCA38  (EXECUTED in the boot trace)
-//   BrnRendererMemory::CreateBackBuffer @ 0x823F6F78  (EXECUTED in the boot trace)
+//   BrnRendererMemory::Construct             @ 0x823FCA38  (EXECUTED in the boot trace)
+//   BrnRendererMemory::CreateShadowmapBuffer @ 0x823F6D98
+//   BrnRendererMemory::CreateBackBuffer      @ 0x823F6F78  (EXECUTED in the boot trace)
+//   BrnRendererMemory::GetShadowMapBuffer    @ 0x823F4910
 //
 // BrnRendererMemory owns the renderer's render-target pool and the blit shader programs. Construct
 // builds every render target through the Create* helpers, then compiles the four blit shader programs
@@ -17,6 +19,32 @@
 // same idiom the post-fx effects use. CreateBackBuffer builds the back-buffer render target and patches
 // its post-fx render target to share the down-sample buffer's depth-stencil section.
 
+// ---------------------------------------------------------------------------------------------
+// BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE -- the FULL render-target pool gate (PC bring-up,
+// 2026-08-12).
+//
+// BrnRendererMemory::Construct @0x823FCA38 is reconstructed and correct, and it is the console's
+// ONLY entry point into the pool. It is also UNLINKABLE on this build, and will stay so until a
+// lot more of the renderer exists. Its unresolved set, measured with dumpbin, is fourteen
+// symbols, none of which has a body anywhere in the tree:
+//   * the eight sibling pool helpers -- CreateAntiAliasBuffer, CreateDownSampleBuffer,
+//     CreateEnvmapBuffer, CreateBloomBuffer, CreateDepthOfFieldBuffer, CreateWorkBuffer,
+//     CreateParticleBuffer, CreateSunCoronaBuffer (CreateShadowmapBuffer and CreateBackBuffer,
+//     the two that ARE bodied, live in this file),
+//   * BrnResource::Allocators::GetGlobalGraphicsAllocator() -- declaration-only, defined nowhere,
+//   * the four gacIm2d*BlitProgram shader-microcode blobs -- external generated data,
+//   * renderengine::TextureState::GetResourceDescriptor.
+// Writing any of those to satisfy a linker would be fabrication, so Construct is COMPILED OUT and
+// the shadow wave's slice goes through PCBringUpCreateShadowMapBufferOnly below. The body stays
+// here, unchanged and reviewable, for the wave that lands the rest of the pool: flip this to 1
+// then, delete the bring-up entry point, and call Construct.
+//
+// Everything else in this TU -- CreateShadowmapBuffer, CreateBackBuffer, GetShadowMapBuffer -- is
+// LIVE and in the link.
+#define BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE 0
+// ---------------------------------------------------------------------------------------------
+
+#if BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE
 // --- renderengine::TextureState (canonical home: states/texturestate.cpp) -------------------------
 // Re-declared here as the minimal call surface Construct uses (its GetResourceDescriptor static + the
 // sampler param block). The canonical class lives in its own committed TU with no shared header; the
@@ -65,15 +93,37 @@ namespace renderengine
         static rw::BaseResourceDescriptors<5>* GetResourceDescriptor(rw::BaseResourceDescriptors<5>* lpDescriptor);
     };
 }
+#endif  // BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE
 
 namespace
 {
-    // The clamp LOD-bias the blit sampler is seeded with (X360 flt_82001CC0).
-    const f32 KF_BLIT_SAMPLER_LOD_BIAS = 0.0f;
-
     // The packed Xenos surface formats CreateBackBuffer seeds the colour section with (X360 immediates).
     const u32 KU_BACK_BUFFER_BUFFER_FORMAT  = 0x18280186u;
     const u32 KU_BACK_BUFFER_TEXTURE_FORMAT = 0x18280106u;
+
+    // --- shadow-map render-target sizing -------------------------------------------------------------
+    // The combined shadow-map buffer's dimensions, read straight out of the image's data segment by
+    // CreateShadowmapBuffer @0x823F6D98 (lwz from dword_82F24240 / dword_82F24244). Re-dumped from
+    // BURNOUT_X360_ARTIST.XEX.i64 for this reconstruction: 0x82F24240 = 0x00000500 = 1280 and
+    // 0x82F24244 = 0x00000780 = 1920. NO function in the image writes either dword - the only xrefs
+    // are the two reads in that one helper - so they are initialised data, not runtime configuration.
+    //
+    // The height dword is the COMBINED height of all three cascades; the helper divides it by three to
+    // get the per-section height (1920 / 3 = 640). That is the same 3 the section count is set to, and
+    // it matches gbCombinedShadowMapViewport (byte_82F2423F, which dumps as 0x01) - one 1280x1920
+    // surface carrying three stacked 1280x640 cascade viewports.
+    const u32 KU_SHADOW_MAP_WIDTH            = 1280u;
+    const u32 KU_SHADOW_MAP_COMBINED_HEIGHT  = 1920u;
+    const u32 KU_SHADOW_MAP_NUM_CASCADES     = 3u;
+
+    // The packed Xenos depth-surface format the shadow map is built with; the X360 loads the same
+    // immediate (lis 0x2D20 / ori 0x196) into BOTH the depth buffer format and the depth texture
+    // format, which is what makes the target sampleable as a shadow map.
+    const u32 KU_SHADOW_MAP_DEPTH_FORMAT = 0x2D200196u;
+
+#if BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE
+    // The clamp LOD-bias the blit sampler is seeded with (X360 flt_82001CC0).
+    const f32 KF_BLIT_SAMPLER_LOD_BIAS = 0.0f;
 
     // The four blit shader microcode blobs the X360 image embeds (Im2dDepthBlit / Im2dCompositeBlit
     // vertex+pixel). The compiled bytes are external generated shader data resolved at link; here we
@@ -106,8 +156,10 @@ namespace
         return renderengine::ProgramBuffer::Initialize(
             reinterpret_cast<renderengine::ProgramResourceLayout*>(&lResource), &lParameters);
     }
+#endif  // BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE
 }
 
+#if BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE
 // 0x823FCA38 -- build every render target, then compile the blit shader programs + blit texture state.
 void BrnRendererMemory::Construct(renderengine::DeviceParameters lParameters,
                                   rw::IResourceAllocator* lpAllocator,
@@ -178,6 +230,106 @@ void BrnRendererMemory::Construct(renderengine::DeviceParameters lParameters,
     // The blit texture state object pointer is resolved lazily; null until first bound.
     mpBlitTextureState = nullptr;
 }
+#endif  // BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE
+
+// FLAG PC bring-up scope (2026-08-12): NOT an X360 function -- see the
+// BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE banner above for why Construct() cannot be linked yet.
+// This builds the shadow-map slice of the pool and nothing else: the same pool clear Construct
+// does, then the shadow-map target. No other pool slot is touched (they stay null, which is what
+// the pool's own null-checks expect).
+//
+// IT IS NOT A CALL TO CreateShadowmapBuffer, and the difference is deliberate. The console
+// describes the shadow target as THREE sections of 1280x640, because on the Xenos each cascade is
+// rendered into one 1280x640 tiled EDRAM surface and RESOLVED into its own band of a 1280x1920
+// texture. PC Direct3D 9 has neither the EDRAM surface nor the resolve: the depth TEXTURE is the
+// surface that gets rendered into, so the surface is the full combined 1280x1920 and the per-
+// cascade band is selected by the VIEWPORT.
+//
+// Describing that truthfully -- ONE section at the combined 1280x1920 -- has a second payoff: it
+// makes BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap take its own SINGLE-section
+// branch, which is console code that already packs the faces into vertical thirds
+// (offsetY = index * height/3). So cascade n lands on rows [n*640, (n+1)*640) of one texture,
+// which is exactly the 1x3 vertical-strip atlas the recovered ShadowMap_WorldToLight /
+// ShadowMap_Constants matrices encode (Y scaled 1/3, offsets 0 / 1/3 / 2/3). Nothing in the
+// console path is bent to fit; the PC surface is simply described as what it is.
+//
+// Every other store below is CreateShadowmapBuffer's, value for value.
+void BrnRendererMemory::PCBringUpCreateShadowMapBufferOnly(rw::IResourceAllocator* lpAllocator)
+{
+    for (u32 luSlot = 0; luSlot < E_RENDER_TARGET_COUNT; ++luSlot)
+    {
+        mapRenderTarget[luSlot] = nullptr;
+    }
+
+    CgsRenderTarget* lpShadowMap = new CgsRenderTarget();
+    mapRenderTarget[E_RENDER_TARGET_SHADOW_MAP_0] = lpShadowMap;
+
+    // Depth-only: no colour section is in use, so the post-fx colour mode comes out NONE.
+    for (u32 luSection = 0; luSection < CgsRenderTarget::KU_NUM_COLOUR_SECTIONS; ++luSection)
+    {
+        lpShadowMap->ClearColourTargetInUse(luSection);
+    }
+
+    // FLAG PC bring-up: the COMBINED extent + one section (see above). The console's
+    // CreateShadowmapBuffer @0x823F6D98 sets (1280, 1920/3) and three sections.
+    lpShadowMap->SetDimensions(KU_SHADOW_MAP_WIDTH, KU_SHADOW_MAP_COMBINED_HEIGHT);
+    lpShadowMap->SetNumSections(1);
+
+    lpShadowMap->SetNumMipMaps(1);
+    lpShadowMap->SetMultisampleFormat(0);
+    lpShadowMap->SetUseDepthStencilAsTexture(true);
+
+    lpShadowMap->SetDepthTargetInUse(true);
+    lpShadowMap->SetDepthTargetBufferFormat(KU_SHADOW_MAP_DEPTH_FORMAT);
+    lpShadowMap->SetDepthTargetTextureFormat(KU_SHADOW_MAP_DEPTH_FORMAT);
+    lpShadowMap->SetDepthTargetBaseEDRAM(0);
+    lpShadowMap->SetDepthTargetTileIndex(0);
+
+    // Realise the post-fx render target (CgsRenderTarget::Construct, the first virtual). On PC that
+    // reaches rw::graphics::postfx::RenderTarget::Initialize in
+    // pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp, which creates the D3D9 depth texture.
+    lpShadowMap->Construct(lpAllocator);
+}
+
+// 0x823F6D98 -- build the shadow-map render target: ONE combined depth-only surface carrying all
+// three cascades, stored in pool slot 1 (E_RENDER_TARGET_SHADOW_MAP_0, the slot GetShadowMapBuffer(0)
+// hands back). Every colour section is switched off and only the depth/stencil record is described,
+// with the same packed depth format used for both the buffer and the sampled texture, so the finished
+// target is a pure sampleable shadow depth buffer.
+//
+// The pool slot is written BEFORE the target is described (the X360 stores the new pointer to +0x04
+// immediately after the constructor returns) - unlike CreateBackBuffer, which stores its slot last.
+void BrnRendererMemory::CreateShadowmapBuffer(rw::IResourceAllocator* lpAllocator)
+{
+    const u32 luWidth  = KU_SHADOW_MAP_WIDTH;
+    const u32 luHeight = KU_SHADOW_MAP_COMBINED_HEIGHT / KU_SHADOW_MAP_NUM_CASCADES;
+
+    CgsRenderTarget* lpShadowMap = new CgsRenderTarget();
+    mapRenderTarget[E_RENDER_TARGET_SHADOW_MAP_0] = lpShadowMap;
+
+    // Depth-only: no colour section is in use, so the post-fx colour mode comes out NONE.
+    for (u32 luSection = 0; luSection < CgsRenderTarget::KU_NUM_COLOUR_SECTIONS; ++luSection)
+    {
+        lpShadowMap->ClearColourTargetInUse(luSection);
+    }
+
+    lpShadowMap->SetDimensions(luWidth, luHeight);
+    lpShadowMap->SetNumMipMaps(1);
+    lpShadowMap->SetMultisampleFormat(0);
+    // One section per cascade -- the combined-viewport layout ShadowMapRenderManager renders into.
+    lpShadowMap->SetNumSections(static_cast<u8>(KU_SHADOW_MAP_NUM_CASCADES));
+    lpShadowMap->SetUseDepthStencilAsTexture(true);
+
+    lpShadowMap->SetDepthTargetInUse(true);
+    lpShadowMap->SetDepthTargetBufferFormat(KU_SHADOW_MAP_DEPTH_FORMAT);
+    lpShadowMap->SetDepthTargetTextureFormat(KU_SHADOW_MAP_DEPTH_FORMAT);
+    lpShadowMap->SetDepthTargetBaseEDRAM(0);
+    // Tile slot 0 (the constructor's -1 "unassigned" sentinel is overwritten here).
+    lpShadowMap->SetDepthTargetTileIndex(0);
+
+    // Realise the post-fx render target (CgsRenderTarget::Construct, the first virtual).
+    lpShadowMap->Construct(lpAllocator);
+}
 
 // 0x823F6F78 -- build the back-buffer render target. A 1-section colour+depth target at the front-buffer
 // resolution; once built, its post-fx render target shares the down-sample buffer's resolved depth
@@ -187,7 +339,7 @@ void BrnRendererMemory::CreateBackBuffer(rw::IResourceAllocator* lpAllocator, u3
     CgsRenderTarget* lpBackBuffer = new CgsRenderTarget();
 
     // Clear every colour section's in-use flag, then describe section 0 as the active colour surface.
-    for (u32 luSection = 0; luSection < 5; ++luSection)
+    for (u32 luSection = 0; luSection < CgsRenderTarget::KU_NUM_COLOUR_SECTIONS; ++luSection)
     {
         lpBackBuffer->ClearColourTargetInUse(luSection);
     }
@@ -203,6 +355,11 @@ void BrnRendererMemory::CreateBackBuffer(rw::IResourceAllocator* lpAllocator, u3
     lpBackBuffer->SetColourTargetInUse(0);
     lpBackBuffer->SetColourTargetBufferFormat(0, KU_BACK_BUFFER_BUFFER_FORMAT);
     lpBackBuffer->SetColourTargetTextureFormat(0, KU_BACK_BUFFER_TEXTURE_FORMAT);
+    lpBackBuffer->SetColourTargetBaseEDRAM(0, 0);          // stw r30, 0x28(r31)
+
+    // The back buffer describes no depth surface of its own -- it borrows the down-sample buffer's
+    // below, so the depth record is explicitly switched off (stb r30, 0xDC(r31)).
+    lpBackBuffer->SetDepthTargetInUse(false);
 
     // Realise the post-fx render target (CgsRenderTarget::Construct, the first virtual).
     lpBackBuffer->Construct(lpAllocator);
