@@ -90,6 +90,10 @@ namespace BrnWorld
 static CgsSceneManager::SceneQueryId KA_FRUSTUM_QUERY_IDS[11];
 static CgsGraphics::Camera gFrustumQueryCamera;
 
+// ShadowMap::GetFrustum -- the per-cascade cull volume this file's shadow queries submit --
+// now lives in its canonical home next to GetCascadeCamera (BrnShadowMap.cpp), relocated
+// there by the conductor once the concurrent ShadowMap wave released that file.
+
 // The dispatch-pass camera (X360 file static at 0x8300FB40).
 static CgsGraphics::Camera gDispatchCamera;
 
@@ -3617,6 +3621,39 @@ WorldModule::GenerateFrustumQueries(
     }
 
     // ---- the three shadow cascades ----------------------------------------
+    //
+    // ✅ ASM RE-READ 2026-08-12 (@0x827DB250..0x827DB300). This leg calls NEITHER
+    // Camera::GetFrustumPerspective NOR Frustum::SetFromRwFrustum -- unlike the main-view
+    // and env-map legs above, which both do. It copies two ALREADY-COMPUTED per-cascade
+    // blocks straight out of the ShadowMap that CalculateShadowMapCameras filled a few
+    // hundred instructions earlier (@0x827DAFC4):
+    //
+    //   r31 = this + 0x5E2BB0            (== mShadowMap + 0x4D0), += 0x170 per cascade
+    //   r28 = this + 0x5E3A20            (== mShadowMap + 0x1340), += 0x80  per cascade
+    //
+    //   the VIEW-PROJECTION: four lvx128 at r31-0x20 / r31-0x10 / r31+0 / r31+0x10 ->
+    //     event rows 0..3. Base = mShadowMap + 0x4B0, stride 0x170 == sizeof(
+    //     CgsGraphics::Camera). maCgsShadowMapCamera lives at mShadowMap+0x430 and a
+    //     Camera's mViewProjection is at +0x80 (pinned independently by the env-map leg
+    //     above, which reads its CLONE at clone+0x80) -- 0x430 + 0x80 == 0x4B0. So this
+    //     is maCgsShadowMapCamera[i].mViewProjection == GetCascadeCamera(i)->
+    //     GetViewProjectionMatrix(). UNCHANGED; the mirror already had this right.
+    //
+    //   the FRUSTUM: `mtctr 16; ld/std` -- a flat 128-byte copy from r28, i.e. from
+    //     mShadowMap + 0x1340 + i*0x80. BrnShadowMap.cpp:407 attests maFrustum at
+    //     this+0x1340 with stride 0x80 == sizeof(CgsGeometric::Frustum), and
+    //     CgsGeometric::Frustum is exactly Vector4 maSwizzledPlanes[8] (128 bytes), so
+    //     the copy IS `maFrustum[i]` verbatim -> ShadowMap::GetFrustum(i).
+    //
+    // That is the per-cascade narrowing. maFrustum[i] is the light-space optimal view
+    // volume ComputeBoundingBoxMatrix -> ComputeOptimalViewVolume fits around cascade i's
+    // sub-frustum slab (KAF_SHADOWMAP_SUBSET_FRUSTUM_NEAR/FAR_CLIP = 0/10.5, 10.5/34,
+    // 34/120 m), so the three cascades cull against three DIFFERENT volumes.
+    // GetFrustumPerspective() -- what this mirror used to call -- reads only mView plus
+    // the cached fov/near/far scalars, which CalculateShadowMapCameras leaves identical on
+    // all three cascades, and would have handed all three the same ~650 m cone. The
+    // console never asks for it here. (SUSPECT flagged at the bring-up mirror below on
+    // 2026-08-12: CONFIRMED REAL, and it was OUR mis-read, not the console's.)
     if ( mShadowMap.IsEnabled() &&
          lpDispatchInputBuffer->GetRenderSwitches()->mbRenderShadowMap )
     {
@@ -3626,7 +3663,7 @@ WorldModule::GenerateFrustumQueries(
 
             CgsSceneManager::SceneManagerIO::InEventFrustumTestVp lEvent;
             const CgsGeometric::Frustum& lrCascadeFrustum =
-                lpCascadeCamera->GetFrustumPerspective();
+                mShadowMap.GetFrustum( static_cast< u32 >( liCascade ) );
             lEvent.mViewProjection = lpCascadeCamera->GetViewProjectionMatrix();
             for ( s32 liPlane = 0; liPlane < 8; liPlane++ )
             {
@@ -5020,18 +5057,47 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         //   * a non-finite cascade FRUSTUM would poison the query, so it PARKS the arm --
         //     the octree's frustum test culls against nothing but those planes
         //     (LooseOctree::FrustumTestVpRecursive -> FrustumTestEntities).
-        //   * a non-finite cascade VIEW-PROJECTION cannot: AddJobFrustumTest copies it
-        //     but no test path reads it, and inside the cascade legs it only reaches
-        //     shader constants 3/34, which only the shadow-list records snapshot (AddToBin
-        //     bakes the dirty block per record) and the renderer dispatches no shadow
-        //     list yet. So it is WARNED about, latched, and the leg proceeds.
+        //   * a non-finite cascade VIEW-PROJECTION does not poison the query DIRECTLY:
+        //     AddJobFrustumTest copies it but no test path reads it, and inside the
+        //     cascade legs it only reaches shader constants 3/34, which only the
+        //     shadow-list records snapshot (AddToBin bakes the dirty block per record)
+        //     and the renderer dispatches no shadow list yet. So it is WARNED about,
+        //     latched, and the leg proceeds.
+        //
+        // ⚠️ CORRECTED 2026-08-12 (cull-volume wave): those two are NOT independent, and
+        // the note above used to imply they were. Now that the cull volume is maFrustum[i]
+        // (the asm-correct source -- see ::GenerateFrustumQueries), the FRUSTUM is
+        // DOWNSTREAM OF THE VIEW-PROJECTION: ComputeBoundingBoxMatrix takes
+        // lWorldToLight = maCgsShadowMapCamera[i].mViewProjection and transforms the
+        // sub-frustum corners through it before ComputeOptimalViewVolume fits the planes
+        // (BrnShadowMap.cpp:1697/1740). So while the VP is NaN, maFrustum[i] is garbage in
+        // one of two ways, neither of which can produce a correct per-cascade split:
+        //   (a) NaN planes            -> this tripwire fires and the arm parks (correct);
+        //   (b) zero surviving        -> ComputeOptimalViewVolume's sbClearPlanes padding
+        //       candidate planes         installs the eight never-culling +/-1e6 defaults,
+        //                                which are FINITE, so the arm stays live and every
+        //                                cascade accepts everything -- i.e. the counts stay
+        //                                identical, for a completely different reason.
+        // Either way THE CASCADE COUNTS CANNOT DIVERGE UNTIL THE NaN VIEW-PROJECTION IS
+        // FIXED (owned separately, in BrnShadowMap.cpp). This wave fixes WHICH volume is
+        // submitted; that wave fixes WHAT IS IN IT. Do not read a still-identical
+        // [shadow-pass] line as evidence that the cull-volume source is wrong again --
+        // check [shadow-prod]'s view-projection WARN first.
         lbShadowArmLive = true;
         bool lbCascadeVpFinite = true;
         for ( s32 liCascade = 0; liCascade < 3; liCascade++ )
         {
             const CgsGraphics::Camera* lpCascadeCamera = mShadowMap.GetCascadeCamera( liCascade );
 
-            const CgsGeometric::Frustum& lrCascadeFrustum = lpCascadeCamera->GetFrustumPerspective();
+            // ASM RE-READ 2026-08-12: the volume the console actually submits is
+            // maFrustum[i], NOT the cascade camera's perspective frustum (see the long
+            // note at ::GenerateFrustumQueries above). The tripwire has to test THE PLANES
+            // THAT GET SUBMITTED, so it reads the same source the arm below does -- and
+            // that source is the one genuinely at risk here, because maFrustum[i] is
+            // produced by ComputeBoundingBoxMatrix from the cascade CAMERA, which the log
+            // says is non-finite in 39 of 41 samples.
+            const CgsGeometric::Frustum& lrCascadeFrustum =
+                mShadowMap.GetFrustum( static_cast< u32 >( liCascade ) );
             for ( s32 liPlane = 0; liPlane < 8; liPlane++ )
             {
                 const Vector4& lrPlane = lrCascadeFrustum.maSwizzledPlanes[ liPlane ];
@@ -5248,18 +5314,18 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         // in this producer (see the FLAG above), so the ShadowMap's own enable is the
         // only gate, plus the finiteness park from part 1.
         //
-        // ⚠ SUSPECT INHERITED FROM THE CONSOLE LEG, reproduced deliberately rather than
-        // "improved" here. GenerateFrustumQueries :3624 culls each cascade against
-        // Camera::GetFrustumPerspective() of the cascade camera -- and that reads only
-        // mView plus the cached fov/near/far SCALARS, which CalculateShadowMapCameras
-        // leaves IDENTICAL on all three cascades (fov 70, aspect 1, near -450, far 650).
-        // So the three cascade queries are near-identical ~650 m cones, not the tight
-        // 0..10.5 / 10.5..34 / 34..120 m slabs the cascade split implies; the per-cascade
-        // narrowing lives in mProjection (the bounding-box best fit) and in the ShadowMap's
-        // own maFrustum[i] culling frustum, and GetFrustumPerspective sees neither. Expect
-        // lists 0/1/4 to come back with similar, generous counts. Worth an asm re-read of
-        // @0x827DADF8 (ShadowMap::GetFrustum(i) is the obvious alternative source) -- but
-        // that is a fix to the CONSOLE function, so it belongs there, not in this mirror.
+        // ✅ THE SUSPECT FLAGGED HERE ON 2026-08-12 WAS REAL, AND IT WAS OURS. Re-read of
+        // @0x827DADF8's shadow leg (@0x827DB250..0x827DB300) settles it: the console does
+        // NOT call Camera::GetFrustumPerspective for the cascades. It flat-copies 128 bytes
+        // from mShadowMap + 0x1340 + i*0x80 == maFrustum[i] == ShadowMap::GetFrustum(i),
+        // which ComputeOptimalViewVolume fits to cascade i's 0..10.5 / 10.5..34 / 34..120 m
+        // sub-frustum slab. The identical-caster-sets symptom (c0 == c1 == c2 in every
+        // [shadow-pass] line) was this mirror handing all three the same ~650 m cone, not a
+        // console defect. The full asm derivation lives at ::GenerateFrustumQueries above,
+        // which is fixed in the same change; this stays a faithful mirror OF THAT.
+        //
+        // The VIEW-PROJECTION was already right (maCgsShadowMapCamera[i].mViewProjection),
+        // so it is unchanged.
         if ( lbShadowArmLive )
         {
             for ( s32 liCascade = 0; liCascade < 3; liCascade++ )
@@ -5269,7 +5335,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
 
                 CgsSceneManager::SceneManagerIO::InEventFrustumTestVp lEvent;
                 const CgsGeometric::Frustum& lrCascadeFrustum =
-                    lpCascadeCamera->GetFrustumPerspective();
+                    mShadowMap.GetFrustum( static_cast< u32 >( liCascade ) );
                 lEvent.mViewProjection = lpCascadeCamera->GetViewProjectionMatrix();
                 for ( s32 liPlane = 0; liPlane < 8; liPlane++ )
                 {
