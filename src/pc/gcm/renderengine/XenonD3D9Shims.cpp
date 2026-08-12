@@ -32,6 +32,7 @@
 #include "pc/gcm/renderengine/IndexBuffer.h"      // renderengine::IndexBuffer  (Xbox2CheckPhysicalMemoryFlags leaf)
 #include "pc/gcm/renderengine/VertexBuffer.h"     // renderengine::VertexBuffer (Xbox2CheckPhysicalMemoryFlags leaf)
 #include "pc/gcm/renderengine/texture.h"          // renderengine::Texture::mpD3DTexture (world sampler bind)
+#include "pc/gcm/renderengine/ShadowPassPCLeaf.h" // renderengine::PCSurfaceBracket_* (homed at the bottom of this TU)
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsXboxConditionalRenderShims.h" // the predicated-draw externs homed at the bottom of this TU
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -49,11 +50,25 @@
 // than static init).
 IDirect3DDevice9* gpD3DDevice = nullptr;
 
+// The SAME device global under its NAMESPACED spelling, `renderengine::gpD3DDevice`
+// (Xbox2SurfaceShims.h:45 -- "the device pointer the X360 image reads from off_83271608").
+// Three reconstructed TUs name it in that form -- CgsRenderTarget.cpp,
+// rw::graphics::postfx::RenderTarget's bind, and
+// BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap, all of them passing it straight
+// into D3DDevice_SetViewportF / D3DDevice_SetScissorRect -- and NOTHING defined it: the
+// declaration's comment claims the "renderengine VertexBuffer/device TUs" own it, but neither
+// does, and neither TU is on the exe source list. It is defined here, beside the unqualified
+// alias, because this is where the device the Xenon fast-set surface uses actually lives.
+// Refreshed by Dev() on every shim entry, exactly like its sibling.
+// (Only ONE TU may define this -- if a render-target mount adds its own, drop this one.)
+namespace renderengine { void* gpD3DDevice = nullptr; }
+
 namespace
 {
     inline IDirect3DDevice9* Dev()
     {
         gpD3DDevice = renderengine::gDevice;
+        renderengine::gpD3DDevice = gpD3DDevice;
         return gpD3DDevice;
     }
 
@@ -2070,7 +2085,131 @@ void D3DDevice_SetRenderState_PrimitiveResetIndex(IDirect3DDevice9*, u32) {}
 void D3DDevice_SetShaderGPRAllocation(void*, u32, u32, u32) {}
 void D3DDevice_SetRenderState_PresentInterval(void*, u32) {}
 
+// ---- the viewport / scissor fast-set ---------------------------------------
+// Three reconstructed TUs call these with the same X360 ABI --
+// CgsRenderTarget::SetRenderTargetState{,InvertDepth},
+// rw::graphics::postfx::RenderTarget's bind, and
+// BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap -- and each declares them
+// `extern "C" void (void* lpDevice, const void* lpDescriptor)`, so they are defined with
+// exactly that signature here. The descriptor pointers are the X360 blocks those bodies
+// build on their stacks:
+//
+//   ViewportF   { f32 X, Y, Width, Height, MinZ, MaxZ; u32 pad }   (0x1C bytes)
+//   ScissorRect { s32 Left, Top, Right, Bottom }                   (0x10 bytes)
+//
+// The Xenos takes the viewport rectangle in FLOATS (it feeds the vertex pipe's viewport
+// transform directly); PC Direct3D 9's D3DVIEWPORT9 takes DWORDs for X/Y/Width/Height and
+// floats only for the depth range. That conversion is the whole of the leaf. Rounding is
+// truncation-with-clamp: every caller passes exact integral pixel values, and a negative
+// origin (which D3D9 rejects outright) can only come from a malformed target.
+void D3DDevice_SetViewportF(void* /*lpDeviceArg*/, const void* lpViewport)
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr || lpViewport == nullptr)
+        return;
+
+    const f32* const lpfViewport = static_cast<const f32*>(lpViewport);
+    const f32 lfX      = lpfViewport[0];
+    const f32 lfY      = lpfViewport[1];
+    const f32 lfWidth  = lpfViewport[2];
+    const f32 lfHeight = lpfViewport[3];
+
+    D3DVIEWPORT9 lViewport;
+    lViewport.X      = static_cast<DWORD>(lfX      > 0.0f ? lfX      : 0.0f);
+    lViewport.Y      = static_cast<DWORD>(lfY      > 0.0f ? lfY      : 0.0f);
+    lViewport.Width  = static_cast<DWORD>(lfWidth  > 0.0f ? lfWidth  : 0.0f);
+    lViewport.Height = static_cast<DWORD>(lfHeight > 0.0f ? lfHeight : 0.0f);
+    lViewport.MinZ   = lpfViewport[4];
+    lViewport.MaxZ   = lpfViewport[5];
+    lpDevice->SetViewport(&lViewport);
+}
+
+void D3DDevice_SetScissorRect(void* /*lpDeviceArg*/, const void* lpRect)
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr || lpRect == nullptr)
+        return;
+
+    const s32* const lpiRect = static_cast<const s32*>(lpRect);
+    RECT lScissor;
+    lScissor.left   = static_cast<LONG>(lpiRect[0]);
+    lScissor.top    = static_cast<LONG>(lpiRect[1]);
+    lScissor.right  = static_cast<LONG>(lpiRect[2]);
+    lScissor.bottom = static_cast<LONG>(lpiRect[3]);
+    lpDevice->SetScissorRect(&lScissor);
+}
+
 } // extern "C"
+
+// =============================================================================
+// FLAG PC-platform leaf: the scene render-target bracket the shadow pass needs.
+//
+// On the console the frame's scene target is (re)bound by
+// BrnRendererModule::BeginRenderAntiAliased @ Render:725 -- AFTER the shadow-map and
+// env-map passes have each bound their own off-screen targets. This build has no
+// BeginRenderAntiAliased: renderengine::Device::FrameBegin has already bound the D3D9
+// IMPLICIT back buffer before Render's first instruction, and nothing rebinds it later.
+// So a pass that binds another surface underneath it has to put it back, or every
+// subsequent pass (world, sky, GUI, the 2D tail, the present) draws into that surface.
+//
+// This is that bracket, and nothing more: it saves and restores the bound colour surface,
+// depth-stencil surface, viewport and scissor. DELETE it when BeginRenderAntiAliased is
+// reconstructed -- it is a stand-in for that call, not a piece of console behaviour.
+// =============================================================================
+namespace renderengine
+{
+namespace
+{
+    IDirect3DSurface9* spSavedColourSurface = nullptr;
+    IDirect3DSurface9* spSavedDepthSurface  = nullptr;
+    D3DVIEWPORT9       sSavedViewport       = {};
+    RECT               sSavedScissor        = {};
+    BOOL               sbSavedScissorEnable = FALSE;
+    bool               sbSurfacesSaved      = false;
+}
+
+void PCSurfaceBracket_Save()
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr || sbSurfacesSaved)
+        return;
+
+    // GetRenderTarget / GetDepthStencilSurface both AddRef; the restore releases.
+    if (FAILED(lpDevice->GetRenderTarget(0, &spSavedColourSurface)))
+        spSavedColourSurface = nullptr;
+    if (FAILED(lpDevice->GetDepthStencilSurface(&spSavedDepthSurface)))
+        spSavedDepthSurface = nullptr;   // a device with no depth buffer bound is legal
+    lpDevice->GetViewport(&sSavedViewport);
+    lpDevice->GetScissorRect(&sSavedScissor);
+    {
+        DWORD luScissorEnable = FALSE;
+        lpDevice->GetRenderState(D3DRS_SCISSORTESTENABLE, &luScissorEnable);
+        sbSavedScissorEnable = static_cast<BOOL>(luScissorEnable);
+    }
+    sbSurfacesSaved = true;
+}
+
+void PCSurfaceBracket_Restore()
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (!sbSurfacesSaved)
+        return;
+    sbSurfacesSaved = false;
+
+    if (lpDevice != nullptr)
+    {
+        if (spSavedColourSurface != nullptr)
+            lpDevice->SetRenderTarget(0, spSavedColourSurface);
+        lpDevice->SetDepthStencilSurface(spSavedDepthSurface);   // null is a valid unbind
+        lpDevice->SetViewport(&sSavedViewport);
+        lpDevice->SetScissorRect(&sSavedScissor);
+        lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, sbSavedScissorEnable);
+    }
+
+    if (spSavedColourSurface != nullptr) { spSavedColourSurface->Release(); spSavedColourSurface = nullptr; }
+    if (spSavedDepthSurface  != nullptr) { spSavedDepthSurface->Release();  spSavedDepthSurface  = nullptr; }
+}
+}
 
 // =============================================================================
 // The Xenon predicated-draw (conditional rendering) extension the occlusion-cull
