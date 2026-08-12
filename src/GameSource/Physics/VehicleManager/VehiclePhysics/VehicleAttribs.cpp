@@ -11,8 +11,10 @@
 #include "GameSource/AttribSys/Generated/classes/physicsvehicleengineattribs.h"        // the engine sub-record wrapper (SetupAttribs(handling))
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([engine-attribs] probe)
 
 #include <cstddef>
+#include <cstdlib>   // getenv ([engine-attribs] probe)
 #include <cstring>   // std::memcpy (SetupAttribsForAI's engine-block re-copy)
 
 // This TU used to carry a private, self-contained copy of five types the tree already owns
@@ -337,32 +339,91 @@ void VehicleAttribs::EngineAttribs::Construct()
 // insert is one scalar copy. The source-wrapper byte offsets are EXACT (asm-confirmed); the
 // wrapper's own type is un-homed, so it is read here as a byte-addressed float source.
 //
-// Source -> destination map (asm-confirmed):
-//   per-gear ratio  (gear[g].x): src+0x50 lanes -> gears 0,1,2 ; src+0x40 lanes -> gears 3,4,5
-//   per-gear up-RPM (gear[g].z): src+0x30 lanes -> gears 0,1,2 ; src+0x20 lanes -> gears 3,4,5
-//   per-gear torque (gear[g].y): src+0x10 lanes -> gears 0,1,2 ; src+0x00 lanes -> gears 3,4,5
-//   scalars:  src+0x8C -> Differential(@+0x10.x)             (lvlx r9=0x8C -> lane0/.x)
-//             src+0x60 -> TransmissionEfficiency(@+0x10.y)    (lvlx r8=0x60 -> lane1/.y)
-//             src+0x80 -> EngineResistance(@+0x10.z)          (lvlx r7=0x80 -> lane2/.z)
-//             src+0x68 -> GearDownRPM(@+0x10.w)               (lvlx r6=0x68 -> lane0 store, mask8)
-//             src+0x64 -> MaxTorque(@+0x20.x)                 (lvlx r5=0x64 -> lane1)
-//             src+0x84 -> MaxRPM(@+0x20.z)  [drives torque-curve domain = MaxRPM*0.5]
-//             src+0x6C -> (@+0x20.z scatter, lane2)           src+0x70 -> (@+0x20.w, lane3? mask1)
-//             src+0x78 -> FlyWheelInertia(@+0x30.x)           src+0x7C -> FlyWheelFriction(@+0x30.y)
-//             src+0x74 -> GearChangeTime(@+0x30.z)
-//   then mTorqueCurve.Prepare(domainMin, domainMax) with the data-driven domain derived from
-//   src+0x84 (MaxRPM) scaled by 0.5 (flt_82001DA0) and 2.0 (flt_82001D9C) -- the InterpedParam3
-//   input domain. (flt_82001D9C=2.0 / flt_82001DA0=0.5 are resolved .rdata literals.)
+// ⚠️⚠️ CORRECTED 2026-08-13 (drivetrain wave). The previous body had the two per-gear DESTINATION
+// lanes TRANSPOSED -- it sent the gear-up-RPM source block into `.y` (TorqueScale) and the
+// torque-scale source block into `.z` (GearUpRPM). Consequence, measured in-game: gearUpRPM[1]
+// came out as 1.0, so at the 1000 rpm idle the gearbox up-shifted on EVERY tick and the car sat
+// in FIFTH GEAR FROM A STANDSTILL with the revs pinned. Two more streaming faults came with it
+// (MaxTorque/TorqueFallOffRPM, and the torque-curve control points) -- see below.
 //
-// FLAG: the lvsl/vperm element-within-block selection picks one of the four floats inside each
-// 16-byte source block; the per-gear scalar->lane assignment is reproduced exactly as the asm
-// indexes it. The findings doc flags the gear lane semantics as "unresolved"; this body matches
-// the asm reads literally and does not reinterpret them.
+// THE RE-READ. Every one of the function's 28 `vrlimi128` inserts is accounted for
+// (6 + 3 + 2 + 6 + 6 + 2 + 3 == 28); the mask IS the destination lane:
+//     mask 8 -> .x     mask 4 -> .y     mask 2 -> .z     mask 1 -> .w
+//
+// Source -> destination map (asm-confirmed, mask by mask):
+//   per-gear ratio  (gear[g].x, mask 8): src+0x50 lanes -> gears 0,1,2 ; src+0x40 -> gears 3,4,5
+//                     0x825CF300..0x825CF3A8, dest regs r27..r22 == this+0x40..this+0x90
+//   per-gear up-RPM (gear[g].z, mask 2): src+0x30 lanes -> gears 0,1,2 ; src+0x20 -> gears 3,4,5
+//                     0x825CF4D0..0x825CF5B4
+//   per-gear torque (gear[g].y, mask 4): src+0x10 lanes -> gears 0,1,2 ; src+0x00 -> gears 3,4,5
+//                     0x825CF5B8..0x825CF6A0
+//   scalars:  src+0x8C -> Differential          (@+0x10.x, mask 8, lvlx r9=0x8C)
+//             src+0x60 -> TransmissionEfficiency(@+0x10.y, mask 4, lvlx r8=0x60)
+//             src+0x80 -> EngineResistance      (@+0x10.z, mask 2, lvlx r7=0x80)
+//             src+0x68 -> MaxTorque             (@+0x20.x, mask 8, lvlx r6=0x68)
+//             src+0x64 -> TorqueFallOffRPM      (@+0x20.y, mask 4, lvlx r5=0x64)
+//             src+0x6C -> MaxRPM                (@+0x20.z, mask 2, lvlx r9=0x6C)
+//             src+0x70 -> LSDMSpeedToAllowGearChanges (@+0x20.w, mask 1, lvlx r10=0x70)
+//             src+0x78 -> FlyWheelInertia       (@+0x30.x, mask 8, lvlx r8=0x78)
+//             src+0x7C -> FlyWheelFriction      (@+0x30.y, mask 4, lvlx r7=0x7C)
+//             src+0x74 -> GearChangeTime        (@+0x30.z, mask 2, lvlx r6=0x74)
+//   ⭐ GearDownRPM (@+0x10.w) is NOT streamed: there is no mask-1 store to this+0x10 anywhere in
+//     the function. Engine::Update recomputes it from the gearing every frame. The previous body
+//     wrote src+0x68 there, which was both the wrong lane and the wrong field.
+//
+//   then the torque curve (0x825CF44C..0x825CF4CC, register-traced):
+//       v13 = splat([+0x20].x) == MaxTorque
+//       f1  = MaxTorque * src+0x84                              (vmulfp128 v13,v13,v11)
+//       f2  = MaxTorque * 2.0 - src+0x84 * 0.5                  (vmulfp128 then vsubfp)
+//       f3  = flt_82001CC0 == 0.0
+//       bl InterpedParam3::Prepare(f1, f2, f3)
+//     (flt_82001D9C == 2.0, flt_82001DA0 == 0.5, flt_82001CC0 == 0.0 -- resolved .rdata literals.)
+//     src+0x84 is the record's EngineLowEndTorqueFactor: InterpedParam3 is a quadratic Bezier
+//     through A (t=0) and C (t=1) with B as the control point, and Engine::Update samples it at
+//     t = RPM / (2 * TorqueFallOffRPM). So A == the low-end torque, C == 0 at twice the fall-off
+//     RPM, and B ~ 2*MaxTorque puts the peak at ~MaxTorque near t=0.5. The DEFAULTS corroborate
+//     the roles exactly: Construct prepares (37, 740, 0) with MaxTorque 370 == 370*0.1 and 370*2.
+//     The previous body prepared (0, src+0x84 * 0.5, 0) -- a curve of three near-zero control
+//     points, i.e. essentially no engine torque at all.
+//
+// FLAG: the record's own field ORDER is not in the DWARF (which names the 6 RwVector3 +
+// 12 Float members but not their layout offsets), so the field NAMES above are the roles the asm's
+// destination lanes assign, cross-checked against the shipped record's magnitudes -- gear-up RPMs
+// in the thousands, torque scales near 1, one negative gear ratio for reverse.
 void VehicleAttribs::EngineAttribs::InitializeFromAttribs(const void* lpSourceWrapper)
 {
     const f32* lpSrc = static_cast<const f32*>(lpSourceWrapper);
     // byte-offset helper (offset is in BYTES; the source floats are 4-byte).
     #define BP_SRC_F(byteOff) (lpSrc[(byteOff) >> 2])
+
+    // ---- [engine-attribs] PC bring-up instrument -- DELETE WHEN the drivetrain is right ------
+    // OPT-IN (BRN_ENGINE_PROBE=1) so a default run and every golden gate are byte-identical to a
+    // build without it. Dumps the 36 floats of the source record raw, so the shipped data itself
+    // can be read instead of reasoned about. The DWARF says this record is exactly 6 RwVector3
+    // (GearRatios1/2, GearUpRPMs1/2, TorqueScales1/2) + 12 Floats == 0x90 bytes.
+    {
+        static s32 siAttribProbe = -1;
+        if( siAttribProbe < 0 )
+        {
+            const char* lpcEnv = getenv( "BRN_ENGINE_PROBE" );
+            siAttribProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+        }
+        static s32 siAttribDumps = 0;
+        if( siAttribProbe == 1 && lpSrc != 0 && siAttribDumps < 3
+            && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            ++siAttribDumps;
+            for( s32 liRow = 0; liRow < 9; ++liRow )
+            {
+                *CgsDev::Log::gpDebugPrint << "[engine-attribs] +0x";
+                *CgsDev::Log::gpDebugPrint << ( liRow * 16 );
+                for( s32 liCol = 0; liCol < 4; ++liCol )
+                    *CgsDev::Log::gpDebugPrint << "  " << lpSrc[ liRow * 4 + liCol ];
+                *CgsDev::Log::gpDebugPrint << "\n";
+            }
+        }
+    }
+    // ---- end [engine-attribs] -----------------------------------------------------------------
 
     // --- per-gear gear ratios (gear[g].x) : src+0x50 -> 0,1,2 ; src+0x40 -> 3,4,5 ---
     SetGearRatio(0, KVF(BP_SRC_F(0x50)));
@@ -373,35 +434,40 @@ void VehicleAttribs::EngineAttribs::InitializeFromAttribs(const void* lpSourceWr
     SetGearRatio(5, KVF(BP_SRC_F(0x48)));
 
     // --- inline scalar lanes streamed before the torque-curve prepare ---
-    SetDifferential(KVF(BP_SRC_F(0x8C)));            // @+0x10.x
-    SetTransmissionEfficiency(KVF(BP_SRC_F(0x60)));  // @+0x10.y
-    SetEngineResistance(KVF(BP_SRC_F(0x80)));        // @+0x10.z
-    SetGearDownRPM(KVF(BP_SRC_F(0x68)));             // @+0x10.w
-    SetMaxTorque(KVF(BP_SRC_F(0x64)));               // @+0x20.x
+    SetDifferential(KVF(BP_SRC_F(0x8C)));            // @+0x10.x (mask 8)
+    SetTransmissionEfficiency(KVF(BP_SRC_F(0x60)));  // @+0x10.y (mask 4)
+    SetEngineResistance(KVF(BP_SRC_F(0x80)));        // @+0x10.z (mask 2)
+    // (@+0x10.w GearDownRPM: the console stores NOTHING here -- no mask-1 insert to this+0x10.)
+    SetMaxTorque(KVF(BP_SRC_F(0x68)));               // @+0x20.x (mask 8, lvlx r6=0x68)
+    SetTorqueFallOffRPM(KVF(BP_SRC_F(0x64)));        // @+0x20.y (mask 4, lvlx r5=0x64)
 
-    // --- torque-curve domain (InterpedParam3::Prepare). Domain derived from src+0x84 (MaxRPM):
-    //     the asm forms  domainHi = MaxRPM * 0.5  and feeds (domainLo, domainHi) to Prepare. ---
-    static const f32 KF_TORQUE_DOMAIN_SCALE = 0.5f;       // flt_82001DA0 (resolved)
-    const f32 lfMaxRPM       = BP_SRC_F(0x84);
-    const f32 lfDomainHigh   = lfMaxRPM * KF_TORQUE_DOMAIN_SCALE;
-    const f32 lfDomainLow    = 0.0f;                      // zeroed scratch (stw r28=0 cascade)
-    mTorqueCurve.Prepare(lfDomainLow, lfDomainHigh, 0.0f);
+    // --- the torque curve (InterpedParam3::Prepare @0x825CF4CC). The three Bezier control points
+    //     are built from the JUST-STREAMED MaxTorque and the record's EngineLowEndTorqueFactor
+    //     (src+0x84): A = MaxTorque * lowEnd, B = MaxTorque * 2 - lowEnd * 0.5, C = 0. ---
+    static const f32 KF_TORQUE_CURVE_PEAK_SCALE = 2.0f;   // flt_82001D9C (resolved)
+    static const f32 KF_TORQUE_CURVE_LOW_SCALE  = 0.5f;   // flt_82001DA0 (resolved)
+    const f32 lfMaxTorque   = BP_SRC_F(0x68);
+    const f32 lfLowEndScale = BP_SRC_F(0x84);
+    mTorqueCurve.Prepare(lfMaxTorque * lfLowEndScale,
+                         lfMaxTorque * KF_TORQUE_CURVE_PEAK_SCALE
+                             - lfLowEndScale * KF_TORQUE_CURVE_LOW_SCALE,
+                         0.0f);                           // flt_82001CC0
 
-    // --- per-gear torque scales (gear[g].y) : src+0x30 -> 0,1,2 ; src+0x20 -> 3,4,5 ---
-    SetTorqueScale(0, KVF(BP_SRC_F(0x30)));
-    SetTorqueScale(1, KVF(BP_SRC_F(0x34)));
-    SetTorqueScale(2, KVF(BP_SRC_F(0x38)));
-    SetTorqueScale(3, KVF(BP_SRC_F(0x20)));
-    SetTorqueScale(4, KVF(BP_SRC_F(0x24)));
-    SetTorqueScale(5, KVF(BP_SRC_F(0x28)));
+    // --- per-gear up-RPMs (gear[g].z, mask 2) : src+0x30 -> 0,1,2 ; src+0x20 -> 3,4,5 ---
+    SetGearUpRPM(0, KVF(BP_SRC_F(0x30)));
+    SetGearUpRPM(1, KVF(BP_SRC_F(0x34)));
+    SetGearUpRPM(2, KVF(BP_SRC_F(0x38)));
+    SetGearUpRPM(3, KVF(BP_SRC_F(0x20)));
+    SetGearUpRPM(4, KVF(BP_SRC_F(0x24)));
+    SetGearUpRPM(5, KVF(BP_SRC_F(0x28)));
 
-    // --- per-gear up-RPMs (gear[g].z) : src+0x10 -> 0,1,2 ; src+0x00 -> 3,4,5 ---
-    SetGearUpRPM(0, KVF(BP_SRC_F(0x10)));
-    SetGearUpRPM(1, KVF(BP_SRC_F(0x14)));
-    SetGearUpRPM(2, KVF(BP_SRC_F(0x18)));
-    SetGearUpRPM(3, KVF(BP_SRC_F(0x00)));
-    SetGearUpRPM(4, KVF(BP_SRC_F(0x04)));
-    SetGearUpRPM(5, KVF(BP_SRC_F(0x08)));
+    // --- per-gear torque scales (gear[g].y, mask 4) : src+0x10 -> 0,1,2 ; src+0x00 -> 3,4,5 ---
+    SetTorqueScale(0, KVF(BP_SRC_F(0x10)));
+    SetTorqueScale(1, KVF(BP_SRC_F(0x14)));
+    SetTorqueScale(2, KVF(BP_SRC_F(0x18)));
+    SetTorqueScale(3, KVF(BP_SRC_F(0x00)));
+    SetTorqueScale(4, KVF(BP_SRC_F(0x04)));
+    SetTorqueScale(5, KVF(BP_SRC_F(0x08)));
 
     // --- trailing scalar lanes (@+0x20.z/.w and @+0x30.x/.y/.z) ---
     SetMaxRPM(KVF(BP_SRC_F(0x6C)));                  // @+0x20.z (lvlx r9=0x6C, mask2)
@@ -1023,6 +1089,34 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
     }
 
     #undef BP_VA_SRC_F
+
+    // ---- [engine-attribs] PC bring-up instrument -- DELETE WHEN the drivetrain is right --------
+    // OPT-IN (BRN_ENGINE_PROBE=1). The car's mass, so the measured acceleration can be scored
+    // against the drive force the powertrain reports without guessing the denominator.
+    {
+        static s32 siMassProbe = -1;
+        if( siMassProbe < 0 )
+        {
+            const char* lpcEnv = getenv( "BRN_ENGINE_PROBE" );
+            siMassProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+        }
+        static s32 siMassDumps = 0;
+        if( siMassProbe == 1 && siMassDumps < 3 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            ++siMassDumps;
+            *CgsDev::Log::gpDebugPrint
+                << "[engine-attribs] mass "
+                << mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x
+                << " maxSpeed "
+                << mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z
+                << " powerToFront "
+                << mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.y
+                << " powerToRear "
+                << mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z
+                << "\n";
+        }
+    }
+    // ---- end [engine-attribs] ------------------------------------------------------------------
 
     mbIsValid = true;                                                 // li 1; stb -> +0x360
 }
