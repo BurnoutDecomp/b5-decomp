@@ -1019,14 +1019,23 @@ namespace Vehicle
         // in 2-wide SIMD (left lane0 / right lane1). Builds longitudinal & lateral unit directions
         // (Gram-Schmidt), projects contact-relative velocity to slip, multiplies by the tyre grip-curve
         // coefficient and the surface-grip limit, resolves the combined long+lat force inside a friction
-        // cone (max 0 / min adhesiveLimit + reciprocal renormalise) with a ~0.85 linear-force cap, then
-        // applies each force component as r x F TORQUE via AddWorldSpaceTorque and accumulates the linear
-        // residual at +0x240 (scaled by mvfWheelFrictionLinearMultiplier @+0x4048). Wheel-spin reaction
-        // feeds back via Wheel::ApplyFrictionReaction; locked/skidding wheels get their long lane masked.
-        // FLAG (blocked): the X360 body is a degenerate VMX128 routine ("local variable allocation has
-        // failed") with ~200 unnamed stack temps and a dozen un-homed rodata permute/limit vectors whose
-        // per-lane semantics are not recoverable store-faithfully; bodied as a structural skeleton, not
-        // fabricated math.
+        // cone (min adhesiveLimit + reciprocal renormalise), then applies each force component as
+        // r x F TORQUE via AddWorldSpaceTorque and accumulates the linear residual into
+        // mTotalLinearForce (+0xF0) scaled by mvfWheelFrictionLinearMultiplier (+0xFD0). Wheel-spin
+        // reaction feeds back via Wheel::ApplyFrictionReaction; wheels without traction are masked out.
+        // ⭐⭐⭐ BODIED 2026-08-12 (tyre-force wave). The old "FLAG (blocked): degenerate VMX128, the
+        // per-lane semantics are not recoverable" is RETIRED: the pseudocode is degenerate but the
+        // 1141-instruction disassembly is not, and it was read end to end and cross-mapped against the
+        // BPR twin sub_B9BD60 (algorithm oracle ONLY -- no BPR offset is used). The lane question was
+        // settled from the image (`vmrghw <A>,<B>` -> lane0 = A; the four grip-curve lanes pack as
+        // {A-long, A-lat, B-long, B-lat}; `vpermwi128 0x27/0x72` un-packs) and then made moot by
+        // writing the solver per wheel. See the VehiclePhysics.cpp banner for the full derivation.
+        // ⛔ ONE thing is still gated, and only one: mSlipVariables.z (the reported skid factor) needs
+        // three .bss constants no other exported function references. It feeds no force.
+        // ⚠️ CORRECTIONS from the asm: the linear residual lands in mTotalLinearForce (+0xF0), NOT the
+        // "+0x240" this note used to claim; the drift/normal grip-curve selector at +0x1352 is
+        // mu8DriftState; and the +0x85 "linear-force cap" (unk_82FBA1E0 <- flt_82013A78) is only
+        // INITIALISED here -- this function never reads it, so no such cap is applied.
         // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): the old 2-arg form was a slice
         // artifact. DWARF VehiclePhysics.h (decl :5377 block) spells the 9-arg form, and UpdateWheels'
         // register map @0x8261F2CC-0x8261F2F4 names every slot: r4/r5 = the two wheel indices,
@@ -1040,14 +1049,16 @@ namespace Vehicle
                                      bool lbUnusedFalse);
 
         // @0x825D41A8: single-wheel scrub path used ONLY while crashing (asserts IsCrashing() @+0x710).
-        // Inactive contacts decay the stored friction by 0.95; active contacts compute slip-driven scrub
-        // forces shaped by car-type-selected tunables (mu*CarType @+4308: types 1 & 3 use the harsher
-        // {4.0,1.0,0.2} set, others {20.0,...}), applied as r x F torque via AddWorldSpaceTorque +
-        // accumulated at +0x240.
-        // FLAG (blocked): same degenerate-VMX128 condition as HandleWheelPairFriction -- the active-contact
-        // scrub math depends on un-homed rodata limit vectors (unk_82FBA180..82FBA110) and unrecoverable
-        // SIMD lane routing; bodied as a structural skeleton. The 0.95 inactive-decay branch IS faithfully
-        // recovered (constants are inline immediates).
+        // A wheel with no traction, or in the burnout inertia state, has its spin decayed by 0.95 and
+        // nothing else; otherwise a slip-driven scrub force is applied as r x F torque via
+        // AddWorldSpaceTorque and accumulated into mTotalLinearForce (+0xF0).
+        // ⭐ 2026-08-12 (tyre-force wave): the INACTIVE decay branch is now BODIED (and its 0.95 is
+        // sourced -- `lfs flt_82004FDC`, the same .rdata scalar Engine.cpp homes, not the "inline
+        // immediate" the old note claimed). ⛔ The ACTIVE scrub stays GATED, but the reason narrowed:
+        // its eight tunables' .rdata seeds are NAMED and six of eight are already homed in this tree
+        // (30.0 / 3.0 / 0.95 / 1.0 / 20.0 / 4.0 / 1.0 / 0.2, selected by
+        // mPreviousControls.meDriverType @+0x10D4 -- types 1 and 3 vs the rest). What is missing is
+        // only which slot each occupies in the 0x825D460C.. cascade. Not guessed.
         // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): DWARF VehiclePhysics.h spells
         // (EVehicleDrivenWheel, VecFloat) -- UpdateWheels passes v1 = dt at all four call sites.
         void HandleWheelFrictionCrashing(EVehicleDrivenWheel leWheel, VecFloat lvfTimeStep);

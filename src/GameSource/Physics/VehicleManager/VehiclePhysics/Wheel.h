@@ -215,6 +215,26 @@ namespace Vehicle
                             VecFloat lvfBrakeFactor, VecFloat lvfBrakeCapacityScale,
                             VecFloat lvfBrakeDecelScale, bool lbGasReleased, bool lbInReverse);
 
+        // @0x825D6F68: the wheel-SPIN reaction to the tyre's longitudinal contact force -- the
+        // second half of the tyre model's torque couple. VehiclePhysics::HandleWheelPairFriction
+        // calls it once per wheel with
+        //     lvfWheelTorque   = -longitudinalForce * radius   (the reaction on the wheel)
+        //     lvfRoadLongSpeed =  the road-relative longitudinal contact speed
+        //     lvfTimeStep      =  dt
+        // and it integrates the torque into mIntegrationVariables.x (the wheel's angular velocity),
+        // never overshooting the free-rolling speed (roadLongSpeed / radius), then zeroes a locked
+        // wheel. Bodied in Wheel.cpp.
+        //
+        // ⭐ 2026-08-12 (tyre-force wave). Its own .ida-exports JSON is a HOLE -- the address and
+        // the name came out of HandleWheelPairFriction's `xrefs_from`, exactly the documented
+        // hole-recovery route -- and the BODY did not need the hole closed at all: the X360
+        // compiler INLINED this call for the pair's first wheel (0x825FBE6C..0x825FBF00) and only
+        // emitted the real `bl` for the second, so a store-for-store copy of the callee sits inside
+        // the caller this wave was already reading. Recovered from that inlined copy; the shape is
+        // cross-witnessed by the BPR twin sub_B90DB0's call site (torque, longSpeed, dt).
+        void ApplyFrictionReaction(VecFloat lvfWheelTorque, VecFloat lvfRoadLongSpeed,
+                                   VecFloat lvfTimeStep);
+
         // PRE-EXISTING accessor -- UNTOUCHED. Returns by const-ref (the committed RoadContact-only
         // consumers depend on this signature; the DWARF spells it by-value but that is not changed
         // here to avoid breaking the committed callers).
