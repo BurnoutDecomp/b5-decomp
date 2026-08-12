@@ -5,6 +5,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"      // CgsModule::VariableEventQueue<N,16>
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"            // gpDebugPrint (PROPS-BOOT one-shot)
 
 // WorldModule entity-modules -> update-output bridges, reconstructed store-for-store from
 // BURNOUT_X360_ARTIST.XEX.
@@ -78,6 +79,93 @@ void BridgeEntityModulesToOutput_PrePhysics(
     BridgeTrafficCarEntityInfoToOutput_PrePhysics(lpWorldModule, lpOutputBuffer, lpTrafficOutput_PrePhysics);
 
     lpOutputBuffer->SetTriggerEntityOutputInterface(lpTriggerOutput_PrePhysics->GetOutputInterface());
+}
+
+// ----------------------------------------------------------------------------
+// BridgePropToOutput_PreScene  @ 0x827AF258   (47 instructions)
+//   ADDED 2026-08-12 (prop-spawn wave, agent B6) -- was an inert WorldLinkStubs gate.
+//
+// ⭐ WHY IT MATTERS: this is the PRE-SCENE half of the prop module's resource pipe. Its
+// Prepare-phase twin (BridgePropResourceRequestsToOutput_Prepare @0x827AF1D0, above) was
+// already real, but PropEntityModule::PreSceneUpdate -> UpdateStreaming is where the prop
+// streamer actually raises its GetPropInstances / prop-graphics requests, and it raises them
+// into the PRE-SCENE output buffer. With this bridge gated those requests were written every
+// frame and then thrown away when the buffer was recycled -- they never reached
+// UpdateOutputBuffer, so LoadingScriptedState::UpdateWorldModule / BridgeWorldToResource
+// never handed them to the GameData module and no prop bundle was ever loaded.
+//
+// The console body, statement for statement (asserts at the X360's own
+// ../World/Bridges/WorldBridgeEntityModulesToOutput.cpp:268/269, local at :273):
+//     assert lpWorldOutput != NULL                                              (:268)
+//     assert lpPropOutputBuffer_PreScene != NULL                                (:269)
+//     v5 = PropEntityIO::OutputBuffer_PreScene::GetResourceRequestInterface() const
+//                                                     (0x827A1A18, read-lock, src+4)
+//     VariableEventQueue<4096,16>::Append<1024,16>(
+//         UpdateOutputBuffer::GetResourceRequestResourceInterface(out), v5 )
+//     GuiOverheadSignInfoEvent lGuiInfo;                                        (:273)
+//     lGuiInfo.<array>.Construct()                    ; `li r11,0 ; stw r11, sp+0x450`
+//     Array<BrnGui::OverheadSignScore,32>::AppendArray<32>(
+//         &lGuiInfo, PropEntityIO::OutputBuffer_PreScene::GetVisibleOverheadSignArray() const )
+//     VariableEventQueue<32768,16>::AddEvent(
+//         UpdateOutputBuffer::GetGuiEventQueue(out), &lGuiInfo, 210, 1040 )
+// (1040 == sizeof(Array<OverheadSignScore,32>) rounded to the type's 16-byte alignment:
+//  32 * 0x20 elements + the trailing count word; the `stw 0` at sp+0x400 IS that count word,
+//  which is what identifies the event's payload as the bare array.)
+//
+// The tail forwards AddEvent's result in r3 as a register artifact; the logical return type
+// is void (DWARF unity :9723).
+//
+// [FLAG PARKED -- the overhead-sign GUI leg] Only the resource-request transfer is
+// reproduced. The second leg needs two types that have NO committed home:
+//   * BrnGui::GuiOverheadSignInfoEvent (the 1040-byte event and its
+//     VisibleOverheadSignArray typedef) -- absent from the tree; and
+//   * PropEntityIO::OutputBuffer_PreScene::mVisibleOverheadSignArray, which that buffer's
+//     home models as a 1-byte opaque VisibleOverheadSignArrayStorage, so there is nothing to
+//     AppendArray FROM.
+// Its producer is parked for the same reason: the overhead-sign refresh tail of
+// PropEntityModule::GenerateDispatchLists (@0x822FBE20, see BrnPropEntityModule_Render.cpp's
+// park list #3) is not reconstructed either, so the source array is empty on this build and
+// dropping the leg is the consistent observable. It is a HUD score-marker feature -- no prop
+// spawns or renders because of it. LAND IT WHEN: GuiOverheadSignInfoEvent gets a home and
+// OutputBuffer_PreScene::VisibleOverheadSignArrayStorage is retyped to the real array.
+// ----------------------------------------------------------------------------
+void BridgePropToOutput_PreScene(
+    void* lpWorldModule,
+    BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+    const BrnWorld::PropEntityIO::OutputBuffer_PreScene* lpPropOutput_PreScene)
+{
+    (void)lpWorldModule;
+
+    CGS_ASSERT(lpOutputBuffer != 0, "lpWorldOutput != NULL");                            // :268
+    CGS_ASSERT(lpPropOutput_PreScene != 0, "lpPropOutputBuffer_PreScene != NULL");       // :269
+
+    // The prop streamer's staged GameData requests. Same cross-home reference-cast as the
+    // Prepare twin above: PropEntityIO's resource-request interface is still an opaque,
+    // correctly-sized span whose embedded VariableEventQueue<1024,16> sits at offset 0
+    // (the interface IS its queue), which is exactly what the console passes.
+    const auto* lpSourceInterface = lpPropOutput_PreScene->GetResourceRequestInterface();
+
+    lpOutputBuffer->GetResourceRequestResourceInterface()->mRequestQueue.Append<1024, 16>(
+        reinterpret_cast<const CgsModule::VariableEventQueue<1024, 16>&>(*lpSourceInterface));
+
+    // DIAGNOSTIC (prop-spawn wave 2026-08-12) -- NOT in the X360 binary, and NOT gated on
+    // gxMessageFilterFlags, so a boot log always answers "did a prop resource request ever
+    // leave the prop module?". Boot-log grep: "PROPS-BOOT prop->output requests".
+    {
+        static bool sbLoggedFirstRequests = false;
+        if ( !sbLoggedFirstRequests && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            const s32 liQueued = reinterpret_cast<const CgsModule::VariableEventQueue<1024, 16>&>(
+                                     *lpSourceInterface ).GetLength();
+            if ( liQueued != 0 )
+            {
+                sbLoggedFirstRequests = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "PROPS-BOOT prop->output requests first transfer: events "
+                    << liQueued << "\n";
+            }
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------

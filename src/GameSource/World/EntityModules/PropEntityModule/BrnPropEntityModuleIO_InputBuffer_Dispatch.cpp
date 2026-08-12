@@ -20,42 +20,77 @@ namespace PropEntityIO
 {
     void InputBuffer_Dispatch::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer_Dispatch, muDispatchFrame) == 4,
-                      "muDispatchFrame @4");
-        static_assert(offsetof(InputBuffer_Dispatch, muShadowMap) == 8,
-                      "muShadowMap @8");
-        static_assert(offsetof(InputBuffer_Dispatch, mSceneResultQueue) == 0xC,
-                      "mSceneResultQueue @0xC");
-        static_assert(offsetof(InputBuffer_Dispatch, muCoronaSubmissionInterface) == 0x801C,
-                      "muCoronaSubmissionInterface @0x801C");
+        // HOST layout, not the console's: mpDispatchFrame / mpShadowMap are real 8-byte host
+        // pointers now (see the header's POINTER WIDTH note), so the queue and the corona word
+        // sit past their console offsets. These tripwires state the HOST fact -- transcribing
+        // the console's 4 / 8 / 0xC / 0x801C would be exactly the bug the widening fixes.
+        static_assert(offsetof(InputBuffer_Dispatch, mpDispatchFrame) == 8,
+                      "mpDispatchFrame @8 (host: 1 status byte + 3 pad + 4 align)");
+        static_assert(offsetof(InputBuffer_Dispatch, mpShadowMap)
+                          == offsetof(InputBuffer_Dispatch, mpDispatchFrame) + sizeof(void*),
+                      "mpShadowMap immediately follows mpDispatchFrame");
+        static_assert(offsetof(InputBuffer_Dispatch, mSceneResultQueue)
+                          == offsetof(InputBuffer_Dispatch, mpShadowMap) + sizeof(void*),
+                      "mSceneResultQueue immediately follows mpShadowMap");
+        static_assert(offsetof(InputBuffer_Dispatch, muCoronaSubmissionInterface)
+                          > offsetof(InputBuffer_Dispatch, mSceneResultQueue),
+                      "muCoronaSubmissionInterface follows the scene-result queue");
     }
 
-    // X360 0x822B8EA8 (R, :295) -- read-lock; return the dispatch-frame index (this+4).
-    u32 InputBuffer_Dispatch::GetDispatchFrame() const
+    // ========================================================================
+    // InputBuffer_Dispatch::Construct   @ 0x822DC300
+    // ------------------------------------------------------------------------
+    // ⭐ NEW 2026-08-12 (prop-BOOT wave, agent B8). Another never-written Construct: both
+    // creation sites (WorldModule::GenerateDispatchLists' stack buffer and the static
+    // sPropDispatchInput) call `Construct()`, which resolved to the inherited
+    // CgsModule::IOBuffer::Construct, so mSceneResultQueue kept mbIsConstructed == false and
+    // every GenerateDispatchLists AddEvent would fire "Not Constructed".
+    //
+    // The asm is four statements:
+    //   stb 1, 0(this)                                    -> IOBuffer::Construct()
+    //   bl  VariableEventQueue<32768,16>::Construct(+12)   \ mSceneResultQueue
+    //   bl  VariableEventQueue<32768,16>::Clear(+12)       /
+    //   stw 0, 4(this) ; stw 0, 8(this)                   -> mpDispatchFrame / mpShadowMap = 0
+    // (the two console words at +4/+8 are the host pointers -- see the header's POINTER WIDTH
+    //  note -- so they are nulled by name, not by offset).
+    // ========================================================================
+    void InputBuffer_Dispatch::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+
+        mSceneResultQueue.Construct();
+        mSceneResultQueue.Clear();
+
+        mpDispatchFrame = 0;
+        mpShadowMap     = 0;
+    }
+
+    // X360 0x822B8EA8 (R, :295) -- read-lock; return the dispatch frame (console word @this+4).
+    CgsGraphics::DispatchFrame* InputBuffer_Dispatch::GetDispatchFrame() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return muDispatchFrame;
+        return mpDispatchFrame;
     }
 
-    // X360 0x827A1180 (W, :296) -- write-lock; set the dispatch-frame index (this+4).
-    void InputBuffer_Dispatch::SetDispatchFrame(u32 luDispatchFrame)
+    // X360 0x827A1180 (W, :296) -- write-lock; set the dispatch frame (console word @this+4).
+    void InputBuffer_Dispatch::SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        muDispatchFrame = luDispatchFrame;
+        mpDispatchFrame = lpDispatchFrame;
     }
 
-    // X360 0x822B8F50 (R, :301) -- read-lock; return the shadow-map handle (this+8).
-    u32 InputBuffer_Dispatch::GetShadowMap() const
+    // X360 0x822B8F50 (R, :301) -- read-lock; return the shadow map (console word @this+8).
+    ShadowMap* InputBuffer_Dispatch::GetShadowMap() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return muShadowMap;
+        return mpShadowMap;
     }
 
-    // X360 0x827A1228 (W, :302) -- write-lock; set the shadow-map handle (this+8).
-    void InputBuffer_Dispatch::SetShadowMap(u32 luShadowMap)
+    // X360 0x827A1228 (W, :302) -- write-lock; set the shadow map (console word @this+8).
+    void InputBuffer_Dispatch::SetShadowMap(ShadowMap* lpShadowMap)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        muShadowMap = luShadowMap;
+        mpShadowMap = lpShadowMap;
     }
 
     // X360 0x827BB1E0 (W, :296) -- write-lock; return the scene-query-results queue (this+0xC).

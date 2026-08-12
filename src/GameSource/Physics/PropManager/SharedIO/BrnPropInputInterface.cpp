@@ -94,6 +94,34 @@ namespace Props
         mRemovePartQueue.AddEvent(lEvent);
     }
 
+    // @0x822CCD88  PropInputInterface::RemovePropInstance
+    //   The whole-prop twin of RemovePartInstance directly above, and its exact mirror in
+    //   the asm -- same two tripwires with the part-index test INVERTED, same 8-byte event,
+    //   different queue. Asserts the entity is a prop and is NOT a part, then appends a
+    //   RemovePhysicalPropEvent { EntityId, physical index } to mRemovePropQueue (the
+    //   console's `addi r3, r30, 0x1F60` seat; reached by name here).
+    //
+    //   The "!lEntityId.IsPart()" assert bakes this interface's OWN header path
+    //   (gamesource/physics/PropManager/SharedIO/BrnPropInputInterface.h:311 == 0x137),
+    //   not BrnPropEntityID.h -- which is how the two same-texted tripwires in the prop
+    //   code are told apart.
+    //
+    //   Called by BrnWorld::PropCellManager::RemovePropFromSim @0x822DFF48.
+    //   DWARF sig (BrnPropInputInterface.h:87): RemovePropInstance(PropEntityID, int32_t).
+    void PropInputInterface::RemovePropInstance(BrnWorld::PropEntityID lEntityId,
+                                                s32 liPhysicalIndex)
+    {
+        lEntityId.AssertIsProp();
+        CGS_ASSERT((lEntityId.mEntityId.muValue & BrnWorld::PropEntityID::KU_PART_INDEX_MASK) == 0,
+                   "!lEntityId.IsPart()");
+
+        RemovePhysicalPropEvent lEvent;
+        lEvent.mEntityId       = lEntityId;
+        lEvent.miPhysicalIndex = liPhysicalIndex;
+
+        mRemovePropQueue.AddEvent(lEvent);
+    }
+
     // ---------------------------------------------------------------------------------------
     // PropInputInterface::Construct (DWARF :42)                 NEW 2026-08-10 (root-cause wave)
     //

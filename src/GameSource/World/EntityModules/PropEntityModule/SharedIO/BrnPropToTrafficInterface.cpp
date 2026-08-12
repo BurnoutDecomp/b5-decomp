@@ -22,6 +22,25 @@ namespace BrnWorld
 {
 namespace PropEntityIO
 {
+    // ------------------------------------------------------------------------
+    // PropToTrafficInterface::Construct (DWARF :111)      NEW 2026-08-12 (prop-boot wave, B8)
+    // ------------------------------------------------------------------------
+    // The X360 emits NO out-of-line body for this: it is a header inline the compiler folds
+    // into every owning IO buffer's Construct. Its one attested expansion is
+    // BrnWorld::PropEntityIO::OutputBuffer_PrePhysics::Construct @0x822EFCF0, whose tail is
+    //     bl BrnWorld::PropEntityIO::TrafficLightKnockDownEvent_32_::Construct  (buffer+11296)
+    //     bl BrnWorld::PropEntityIO::TrafficLightRestoreEvent_80_::Construct    (buffer+11436)
+    // -- i.e. the two embedded queues, in member order, and nothing else (11436-11296 == 140
+    // == 12 + 32*4, the exact size of EventQueue<TrafficLightKnockDownEvent,32>, which is what
+    // identifies the two calls as this interface's two members rather than buffer members).
+    // EventQueue<T,N>::Construct already points mpEvents at the inline maEvents and zeroes
+    // miLength, so there is no separate Clear pass here and none is invented.
+    void PropToTrafficInterface::Construct()
+    {
+        mTrafficLightKnockDownQueue.Construct();
+        mTrafficLightRestoreQueue.Construct();
+    }
+
     // X360 0x822CD378 (:117) -- queue a knock-down request for the given traffic-light instance.
     void PropToTrafficInterface::RequestTrafficLightKnockDown(u32 luInstanceID)
     {

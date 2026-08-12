@@ -120,23 +120,35 @@ void BridgeEntityModulesToSceneModule_PreScene(
     typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface InSceneUpdateInterface;
     InSceneUpdateInterface* lpScene = lpSceneInputBuffer->GetInSceneUpdateInterface();
 
-    // FLAG (deferred, NOT a divergence for the broad phase): only the WORLD-ENTITY leg
-    // is merged today. The trigger / race-car / traffic / prop pre-scene output buffers
-    // either do not model a scene-input interface in their own IO homes, or model it as
-    // a declaration-only accessor whose body belongs to that buffer's own TU -- none of
-    // which is reconstructed. All four of those modules are inert on this build (no
-    // trigger volume, race car, traffic vehicle or prop is registered with the scene
-    // manager), so the queues they would contribute are empty and their merges are
-    // no-ops either way. The world entity module IS live -- it stages one AddEntity per
-    // streamed instance -- and that is the leg the frustum query runs on. Restore the
-    // other four with those buffers' own waves.
+    // FLAG (partially deferred): the WORLD-ENTITY and PROP legs are merged; trigger,
+    // race-car and traffic are not. Those three buffers either do not model a scene-input
+    // interface in their own IO homes, or model it as a declaration-only accessor whose
+    // body belongs to that buffer's own TU -- none of which is reconstructed -- and all
+    // three modules are inert on this build, so the queues they would contribute are empty
+    // and their merges are no-ops either way. Restore them with those buffers' own waves.
     lpScene->Append(reinterpret_cast<const InSceneUpdateInterface&>(
         *lpWorldEntityOutputBuffer_PreScene->GetSceneInputInterface()));
+
+    // ⭐ PROP LEG RESTORED 2026-08-12 (prop-BOOT wave, agent B8). The FLAG that stood here
+    // said the prop buffer had no reconstructed scene-input accessor and that "no prop is
+    // registered with the scene manager" -- both were true when it was written and both are
+    // now stale. PropZoneManager::LoadProp -> PropCellManager::AddPropToScene stages a real
+    // AddEntity/AddDynamicVolume per spawned prop into this very interface (the boot log's
+    // "PROPS-BOOT prop instances arrived: zone 52 -> LoadZone done" proves it runs), the
+    // interface is the real InSceneUpdateInterface now and is Constructed by
+    // OutputBuffer_PreScene::Construct, and its const read-lock getter is bodied.
+    // Dropping this leg is exactly why "[props-gdl] visible=0" -- nothing the prop module
+    // staged ever reached the broad phase, so the frustum query could never return a prop
+    // entity for the render list.
+    // X360: this is the FOURTH Append, `mr r3,r27 ; bl sub_827A18C8` at 0x827AB5C4 followed
+    // by the InputBuffer_Update::GetInSceneUpdateInterface + Append pair -- i.e. after the
+    // world-entity leg and before the trigger leg, which is where it sits here.
+    lpScene->Append(reinterpret_cast<const InSceneUpdateInterface&>(
+        *lpPropOutputBuffer_PreScene->GetSceneInputInterface()));
 
     (void)lpTriggerOutputBuffer_PreScene;
     (void)lpTrafficOutputBuffer_PreScene;
     (void)lpRaceCarOutputBuffer_PreScene;
-    (void)lpPropOutputBuffer_PreScene;
 }
 
 // @ 0x827AB608 -- the post-physics restage (traffic -> race car -> prop -> world

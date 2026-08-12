@@ -32,6 +32,36 @@ namespace PropEntityIO
                       "mPotentialContactQueue @ +0x10");
     }
 
+    // ========================================================================
+    // InputBuffer_PrePhysics::Construct   @ 0x822EFD68   (DWARF :534)
+    // ------------------------------------------------------------------------
+    // ⭐ NEW 2026-08-12 (prop-BOOT wave, agent B8). Declared in the header since this buffer
+    // landed, never bodied -- so WorldModule's `lpPropInput_PrePhysics->Construct()` resolved
+    // to the inherited CgsModule::IOBuffer::Construct and both embedded queues kept
+    // mpEvents == NULL (the "mpEvents != NULL" tripwire, then a null write, on the first
+    // potential contact of the frame).
+    //
+    // The asm is five statements:
+    //   stb 1, 0(this)                                         -> IOBuffer::Construct()
+    //   bl  PotentialContact_2048_::Construct(this+16)          \ mPotentialContactQueue
+    //   stw 0, 24(this)          == that queue's miLength       /  .Construct(); .Clear();
+    //   bl  ResetOnTrackResult_128_::Construct(this+163872)     \ mResetOnTrackResultQueue
+    //   stw 0, 163880(this)      == that queue's miLength       /  .Construct(); .Clear();
+    // (+24 == +16+8 and +163880 == +163872+8 are each the BaseEventQueue miLength field, i.e.
+    //  the inlined Clear; EventQueue::Construct already zeroes it, and the console clears
+    //  again -- reproduced, not deduplicated.)
+    // ========================================================================
+    void InputBuffer_PrePhysics::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+
+        mPotentialContactQueue.Construct();
+        mPotentialContactQueue.Clear();
+
+        mResetOnTrackResultQueue.Construct();
+        mResetOnTrackResultQueue.Clear();
+    }
+
     // X360 0x827AA170 (:541) -- write-lock; append the source potential-contact queue onto the
     // embedded mPotentialContactQueue (this+0x10).
     void InputBuffer_PrePhysics::AppendPotentialContactQueue(const OutPotentialContactQueue* lpQueue)

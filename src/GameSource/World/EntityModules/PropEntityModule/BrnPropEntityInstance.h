@@ -31,8 +31,15 @@
 // compile gate needs only the declarations.
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Matrix44Affine
+// PropInstanceData now has a real home (the DWARF one, alongside BrnPhysicsPropZoneData.h);
+// include it rather than forward-declaring, so every consumer of this header reads the
+// serialised record through its named members instead of raw offsets.
+#include "SharedClasses/Physics/Props/BrnPhysicsPropInstanceData.h"
 
-namespace BrnPhysics { namespace Props { class PropInstanceData; class PropTypeData; } }
+// PropTypeData stays a pointer-only forward declaration here: it is reached only through
+// a `const PropTypeData*` parameter, and its own header carries a much larger dependency
+// tail (rw::collision::Volume et al.).
+namespace BrnPhysics { namespace Props { class PropTypeData; } }
 
 namespace BrnWorld
 {

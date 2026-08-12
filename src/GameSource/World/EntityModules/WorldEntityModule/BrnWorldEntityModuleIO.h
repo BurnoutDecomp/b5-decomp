@@ -270,29 +270,65 @@ namespace WorldEntityIO
         // X360 0x827A29E0: read-lock (WorldModule::BridgeWorldEntityInfoToOutput
         // @0x827ADD78 drains the queue through it).
         const GameEventQueue* GetGameEventQueue() const;
-        // Queue trio (:146/:147/:148; X360 +16/+76/+140).
+        // Queue trio (:146/:147/:148; X360 +4/+76/+140).
         PropInstancesNeededForZoneQueue* GetPropInstancesNeededForZoneQueue();
         // X360 0x822BA4C8: write-lock; X360 this+76.
         PropGraphicsLoadedQueue* GetPropGraphicsLoadedQueue();
         // X360 0x822BA618: write-lock; X360 this+140.
         PropGraphicsUnloadedQueue* GetPropGraphicsUnloadedQueue();
+
+        // ---- ADDITIVE GROW 2026-08-12 (prop-spawn wave, agent B6) ----------------------
+        // The READ-LOCK const twins of the queue trio. These are the CONSUMER side of the
+        // world streamer's prop notifications: WorldModule::BridgeWorldModuleToPropModule_-
+        // PreScene @0x827AACF8 reads all three through them and Appends each onto the prop
+        // entity module's pre-scene input queues. Without them the trio had a producer
+        // (WorldEntityModule::UpdateStream / OnWorldGraphicsLoadComplete) and no reader.
+        // Each X360 body is the same shape as its write twin but tests the READ-lock bit
+        // (`extrwi r11,r11,1,27` == bit 4, "Not locked for reading") and returns the member:
+        //   0x827A2A88  -> this + 0x04C (mPropGraphicsLoadedQueue)         DWARF :126
+        //   0x827A2B30  -> this + 0x004 (mPropInstancesNeededForZoneQueue) DWARF :129
+        //   0x827A2BD8  -> this + 0x08C (mPropGraphicsUnloadedQueue)       DWARF :132
+        // (+4/+76/+140 is self-consistent: EventQueue<...,30> over the 2-byte event is
+        // 12 + 60 = 72 bytes, so 4 + 72 == 76, and round4(12 + 50) == 64, so 76 + 64 == 140.)
+        const PropInstancesNeededForZoneQueue* GetPropInstancesNeededForZoneQueue() const;
+        const PropGraphicsLoadedQueue*         GetPropGraphicsLoadedQueue() const;
+        const PropGraphicsUnloadedQueue*       GetPropGraphicsUnloadedQueue() const;
+
+        // DWARF WorldEntityIO::OutputBuffer_PreScene::GetPlayerZoneNumber (BrnWorldBridgesUnity
+        // dump). A HEADER INLINE, not an own-TU export: its only consumer, the prop bridge
+        // @0x827AACF8, open-codes the load as a bare `lwzx r11, buffer, 0xC8604` with NO
+        // read-lock tripwire, so the inline carries no assert either.
+        s32 GetPlayerZoneNumber() const { return miPlayerZoneNumber; }
         // X360 0x822BA6C0: write-lock; X360 this+820528.
         SoundWorldLoadInterface* GetSoundWorldLoadInterface();
         // X360 0x827A2C80: read-lock (BridgeWorldEntityInfoToOutput @0x827ADD78).
         const SoundWorldLoadInterface* GetSoundWorldLoadInterface() const;
-        // miPlayerZoneNumber :152 (the X360 UpdateStream store @ this+821764).
+        // miPlayerZoneNumber :152 (the X360 UpdateStream store @ this+820740).
         void SetPlayerZoneNumber( s32 liPlayerZoneNumber );
 
         static void _AssertLayout();
 
     private:
-        PropInstancesNeededForZoneQueue mPropInstancesNeededForZoneQueue; // :146 (X360 +16)
+        // ⚠️ CORRECTED 2026-08-12 (prop-spawn wave, agent B6): this comment read "(X360 +16)".
+        // The console offset is +4 -- pinned by the read-lock getter 0x827A2B30, whose tail is
+        // `addi r3, this, 4`, and self-consistent with the +76 / +140 of the two queues that
+        // follow (see the const-getter block above). Comment-only: the member is reached by
+        // name, so nothing miscompiled -- but the wrong number is exactly the seed the
+        // recurring console-offset bug grows from.
+        PropInstancesNeededForZoneQueue mPropInstancesNeededForZoneQueue; // :146 (X360 +4)
         PropGraphicsLoadedQueue         mPropGraphicsLoadedQueue;         // :147 (X360 +76)
         PropGraphicsUnloadedQueue       mPropGraphicsUnloadedQueue;       // :148 (X360 +140)
         SceneInputInterface             mSceneInputInterface;             // :149 (X360 +208)
         GameEventQueue                  mGameEventQueue;                  // :150 (X360 +818976)
         SoundWorldLoadInterface         mSoundWorldLoadInterface;         // :151 (X360 +820528)
-        s32                             miPlayerZoneNumber;               // :152 (X360 +821764)
+        // ⚠️ CORRECTED 2026-08-12 (prop-spawn wave, agent B6): this comment read "(X360
+        // +821764)" (0xC8A04). The console offset is +820740 == 0xC8604 -- the SAME word both
+        // ends of the pipe touch: UpdateStream @0x822F9740 writes it with
+        // `lis r10,0xC ; ori r10,r10,0x8604 ; stwx r11,r21,r10` and the prop bridge
+        // @0x827AACF8 reads it with the identical `lis/ori/lwzx` pair. Comment-only (the
+        // member is reached by name), but the two numbers disagreeing by 1024 is precisely
+        // the kind of provenance rot that hides a real mismatch.
+        s32                             miPlayerZoneNumber;               // :152 (X360 +820740)
     };
 }
 }

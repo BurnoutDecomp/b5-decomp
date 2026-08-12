@@ -61,6 +61,29 @@ OutputBuffer_PreScene::GetActiveRaceCarOutputInterface() const
     return &mActiveRaceCarOutputInterface;
 }
 
+// X360 0x8279D650 (R, :294) -- const REPLAY active-race-car output-interface accessor of
+// OutputBuffer_PreScene. Same shape as the :288 accessor above, one member along.
+// BODIED 2026-08-12 (prop-spawn link-closure pass): it became the last unresolved external
+// in the build the moment agent B6's WorldBridgeRaceCarToPropModule.cpp was mounted -- that
+// bridge is its only caller (`bl 0x8279D650`), which is why nothing needed it before.
+//
+// Everything about it is pinned by its own asm:
+//   * read-lock tripwire -- `lbz r11,0(r28); extrwi r11,r11,1,27` is bit 4 of the status
+//     byte (eStatusLockedForRead) => IsBufferLockedForReading(), i.e. CONST, not the
+//     write-lock its non-const twin (sub_822B5170) uses.
+//   * the baked assert cites BrnRaceCarEntityModuleIO.h line 0x126 == 294, which is exactly
+//     the DWARF line of this declaration -- that is what distinguishes it from the three
+//     neighbouring interface accessors, whose bodies are otherwise identical.
+//   * epilogue `addis r3,r28,0xF; addi r3,r3,-0x23E0` == this + 0xEDC20 (973856), the same
+//     displacement the mutable twin returns; reproduced by-name as
+//     &mReplayActiveRaceCarOutputInterface, NOT as an offset.
+const RCEntityActiveRaceCarOutputInterface*
+OutputBuffer_PreScene::GetReplayActiveRaceCarOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mReplayActiveRaceCarOutputInterface;
+}
+
 // X360 0x8279D3B0 (R, :282) -- const vehicle-input-interface accessor of
 // OutputBuffer_PreScene. Read-lock ((status>>4)&1, eStatusLockedForRead) =>
 // IsBufferLockedForReading(). X360 epilogue == `addi r3, r28, 0x10` (this+16);
