@@ -581,6 +581,16 @@ private:
     void PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar,
                                                  s32 liActiveRaceCar );
 
+    // [FLAG PC bring-up] NOT an X360 function. The WHEEL half of the pose stand-in, split out
+    // of the above on 2026-08-12 because the two halves stand in for two DIFFERENT console
+    // producers and only one of them has landed: the body's producer
+    // (ActiveRaceCar::UpdatePhysicsState) mounted 2026-08-11, the wheel's
+    // (SimpleVehiclePhysics::GetWheelsWorldTransfrom @0x825D8878, still bodyless) has not.
+    // Sharing one gate retired both at once and left the car with EMPTY ARCHES.
+    // DELETE-WHEN GetWheelsWorldTransfrom is bodied and mabWheelExists has a writer.
+    void PublishWheelPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar,
+                                                s32 liActiveRaceCar );
+
     // ========================================================================
     // MODELLED members (pose wave 2026-07-31): the three module flags
     // AttachActiveRaceCar reads. All three are named + placed by the SAME DWARF bool run
