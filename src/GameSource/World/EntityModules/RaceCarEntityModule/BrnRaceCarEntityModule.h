@@ -736,6 +736,19 @@ private:
                                     const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
                                     RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput );
 
+    // ⭐ X360 0x822FF250 (73 insns) -- PARTIAL SLICE (engine wave 2026-08-12). The eight-slot
+    // active-car tick: `for (i = 0; i < 8; ++i) if (maActiveRaceCars[i].IsActive())
+    // maActiveRaceCars[i].Update(...)`, then SendAddedForCollisionStateToPhysics.
+    // It is the ONLY caller of ActiveRaceCar::Update, which is the ONLY caller of
+    // ActiveRaceCar::UpdateEngineState -- i.e. this is the frame slot the ignition hangs off.
+    // The two bools Update forwards to UpdateEngineState are loaded HERE, from `this`:
+    //     0x822FF318  lbzx r10, r31, 0x18345  ->  mbIsInOnlineGameMode
+    //     0x822FF304  lbzx r8,  r31, 0x186C9  ->  mbInCarSelectScreen
+    // so they are read from the members directly rather than threaded through the signature.
+    // Only the three floats this slice forwards are declared; see the .cpp banner for the
+    // console's other five arguments and for SendAddedForCollisionStateToPhysics.
+    void UpdateActiveCars( f32 lfTimeStep, f32 lfAcceleration, f32 lfBraking );
+
     // X360 +0x17890 (96400). DWARF :347. The receiver of
     // `BoostManager::SetBoostEarningEnabled(module + 96400, 1)` in this TU's dirty-trick arm; it
     // also owns the BoostStrategy* at +0x450 (module+97504) that the same body virtual-dispatches

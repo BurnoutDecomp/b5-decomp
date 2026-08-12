@@ -239,6 +239,43 @@ public:
     // X360 0x822A20D8: meRaceStartState is one of the two race-start phases.
     bool IsInAnyRaceStartState() const;
 
+    // ⭐⭐ X360 0x822A4F50 (163 insns) -- THE IGNITION. The ONLY function in the XEX that
+    // ever moves meEngineState away from E_ACTIVE_RACE_CAR_ENGINE_STATE_OFF, and
+    // ProcessPlayerVehicleInput @0x822FFE30 publishes a ZERO-FILLED driver record until it
+    // reads RUNNING. So: this function is what makes the gas pedal do anything.
+    //
+    // ---- SIGNATURE FROM THE ASM (PPC float-arg trap) --------------------------------------
+    // Hex-Rays prints nine args; the ABI says five. Each float arg burns its GPR slot, so
+    // r4/r5/r6 are phantom shadows of f1/f2/f3 and are never read in the body. The call site
+    // (ActiveRaceCar::Update @0x822F7E30..0x822F7E48) sets exactly r3, f1, f2, f3, r7, r8:
+    //     fmr f1, f31   f31 <- Update's f1   -> lfTimeStep
+    //     fmr f2, f29   f29 <- Update's f4   -> lfAcceleration
+    //     fmr f3, f28   f28 <- Update's f5   -> lfBraking
+    //     mr  r7, r24   r24 <- Update's r10  -> lbIsInOnlineGameMode
+    //     lbz r8, arg_57(r1)                 -> lbInCarSelectScreen
+    // and the two bools trace one hop further, to RaceCarEntityModule::UpdateActiveCars
+    // @0x822FF304/0x822FF318, which loads them from ITS OWN `this`:
+    //     lbzx r10, r31, 0x18345 == module + 99141  == mbIsInOnlineGameMode
+    //     lbzx r8,  r31, 0x186C9 == module + 100041 == mbInCarSelectScreen
+    // Both member names were already pinned in BrnRaceCarEntityModule.h (:760 / :607).
+    // ⚠️ NOTHING HERE IS INVENTED: every argument is a load from a named module member.
+    void UpdateEngineState(f32 lfTimeStep,
+                           f32 lfAcceleration,
+                           f32 lfBraking,
+                           bool lbIsInOnlineGameMode,
+                           bool lbInCarSelectScreen);
+
+    // X360 0x822F78B0 (400 insns) -- PARTIAL SLICE, see the .cpp banner for the full console
+    // argument list (13 GPR/stack slots + 5 floats + 2 VMX vectors) and for every dropped call.
+    // Only the parameters this slice consumes are declared; each dropped one is named in the
+    // banner rather than accepted and ignored (an accepted-and-ignored argument is how a
+    // silent-drop stub is born).
+    void Update(f32 lfTimeStep,
+                f32 lfAcceleration,
+                f32 lfBraking,
+                bool lbIsInOnlineGameMode,
+                bool lbInCarSelectScreen);
+
     // X360 0x822B8610: for an AI car ramp a braking hysteresis counter
     // (miBrakeChangeCounter, +1 toward +KI_MAX_BRAKE_COUNTER when braking / -2 toward
     // -KI_MAX_BRAKE_COUNTER when not) and publish mRenderParams.mbIsBraking = counter > 0;
