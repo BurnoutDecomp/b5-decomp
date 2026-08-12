@@ -1854,21 +1854,19 @@ int CgsDev::PerfMonCpu::AddMonitor(char const * lpcName, int liColour, int liMin
 // -------------------------------------------------------------------------
 // CgsGeometric::Frustum
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void CgsGeometric::Frustum::CalcVertices(struct rw::math::vpu::Vector4 *) const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "CgsGeometric::Frustum::CalcVertices: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// (CgsGeometric::Frustum::CalcVertices stub RETIRED 2026-08-12, shadow-cascade
+//  wave. The inert boot gate that stood here -- an empty body + a one-shot log,
+//  installed 2026-07-27 when the trap form stopped the sim on frame 1 -- was the
+//  SOLE definition in the tree, so BrnWorld::ShadowMap::ComputeBoundingBoxMatrix
+//  fitted its best-fit box to an UNINITIALISED stack array and 39 of 41 sampled
+//  frames reported a non-finite cascade view-projection. The real X360 body
+//  @0x82840DF8 now lives in its canonical home
+//  GameShared/GameClasses/Geometric/Primitives/CgsFrustum.cpp (already mounted in
+//  tools/build/build_game_exe.bat) -- eight plane-triple Cramer solves over the
+//  de-swizzled six planes. That file's banner carries the recovered rodata
+//  permute masks and the raw-word vsldoi decode that pin the transpose.
+//  The declaration this file needs comes from the CgsFrustum.h include at :114,
+//  which stays.)
 
 // (CgsGeometric::Frustum::SetFromRwFrustum stub RETIRED 2026-07-28, culling wave:
 //  the real body @0x82839FA8 now lives in its X360 home
