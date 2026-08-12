@@ -176,11 +176,14 @@ namespace CgsResource
             f32 Resolve()
             {
                 const f32 lfScaleX = lpFont->mScaleUV.mX;
-                // 0x828354D8: word-wrap OFF -> never wrap; the whole remainder is one line. (Asm folds
-                // this with the lpLastSpace==0 case, but with word-wrap off a line must run to the next
-                // newline / end regardless of spaces -- otherwise an exact-width box wraps the last word
-                // off the single-line box -> trailing text clipped. [non-wrapping text must not wrap])
-                if (!lbWordWrap)
+                // 0x828354D0/D8: the word-wrap-off exit is gated on there being NO wrap candidate --
+                // the asm only reaches the lbWordWrap test when lpLastSpace == 0 (a non-null
+                // lpLastSpace branches straight to the fits-check at 0x828354E4). The earlier port
+                // hoisted this test above the lpLastSpace check to stop single-line apt fields
+                // wrapping; that is now handled where the console handles it -- by never entering
+                // the line measurer for a non-multiline / non-word-wrapped object
+                // (TextRenderer::RenderStringInternal's single-line fast path).
+                if (lpLastSpace == 0 && !lbWordWrap)
                 {
                     *lppLineEnd = lpCursor;                                                   // 0x82835638
                     return (lpGlyph->mDimensionsUV.mX + lpGlyph->mStart.mX + lfWidth) * lfScaleX;

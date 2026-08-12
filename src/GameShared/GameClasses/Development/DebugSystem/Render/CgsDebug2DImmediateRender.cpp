@@ -269,16 +269,22 @@ namespace CgsDev
             lTextObject.meAlignment  = CgsGraphics::TextObject::E_ALIGNMENT_LEFT;
             lTextObject.mpUtf8String = lpUtf8;
 
-            // [PC reconstruction of the X360 VPU rect setup] the box's left/top is the draw position;
-            // its width is the measured string width, and its height spans the text's lines so
-            // RenderStringInternal's per-line loop (penY < mv2BottomRight.y) renders every line.
+            // [PC reconstruction of the X360 VPU rect setup] the box's left/top is the draw position
+            // and its height spans the text's lines so RenderStringInternal's per-line loop
+            // (penY < mv2BottomRight.y) renders every line. mbMultiLine selects that per-line loop
+            // (without it the single-line fast path would swallow the embedded newlines into one
+            // line); the box width is deliberately SLACK rather than the exact measured width,
+            // because the line walk word-wraps unconditionally and an exact-width box makes the
+            // last glyph compare equal to the limit -- wrapping the final word off debug text.
             const f32 lfWidth = mpFont->GetStringWidth(lpUtf8) * lfScale;
             s32 liLines = 1;
             for (const char* lpc = lpcText; *lpc; ++lpc)
                 if (*lpc == '\n')
                     ++liLines;
+            lTextObject.mbMultiLine    = 1;
             lTextObject.mv2TopLeft     = { lfX, lfY };
-            lTextObject.mv2BottomRight = { lfX + lfWidth, lfY + lfScale * static_cast<f32>(liLines) };
+            lTextObject.mv2BottomRight = { lfX + lfWidth * 2.0f + lfScale,
+                                           lfY + lfScale * static_cast<f32>(liLines) };
             lTextObject.mfStringWidth  = lfWidth;
 
             if (lTextObject.mbAutosize)

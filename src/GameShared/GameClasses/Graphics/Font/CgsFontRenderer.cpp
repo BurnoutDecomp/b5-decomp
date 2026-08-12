@@ -239,13 +239,41 @@ namespace CgsGraphics
         s32 liColourIndex = -1;
         const CgsUtf8* lpCursor = lrTextObject.mpUtf8String;
 
+        // X360 0x827FF9C0 / 0x827FF9CC: the per-line MEASURE is only reached when the object is
+        // multiline or word-wrapped. A plain single-line field takes the fast path below instead --
+        // whole string, no measure, no wrap. That gate is what stops an over-long single line from
+        // breaking at a space: the apt dynamic-text fields routinely author a box NARROWER than the
+        // string (e.g. BrnIntro's $DMV_INTRO_1 "DEPARTMENT OF MOTOR VEHICLES", bMultiLine=0 /
+        // bWordWrap=0 in a 286.8-wide box), and they are meant to overflow it, not wrap.
+        const bool lbLineWalk = (lrTextObject.mbMultiLine != 0 || lrTextObject.mbWordWrap != 0);
+
         while (*lpCursor != 0 && lfPenY < lrTextObject.mv2BottomRight.mY)
         {
-            // Measure the next line (word-wrapping); GetStringStartAndEnd gives [start,end) + its width.
             const CgsUtf8* lpLineStart = lpCursor;
             const CgsUtf8* lpLineEnd   = lpCursor;
-            const f32 lfLineWidth = lpFont->GetStringStartAndEnd(lpCursor, lfWidthInEm, &lpLineStart, &lpLineEnd,
-                                                                 lrTextObject.mbWordWrap != 0);
+            f32 lfLineWidth;
+            if (lbLineWalk)
+            {
+                // Measure the next line; GetStringStartAndEnd gives [start,end) + its width. The
+                // console passes word-wrap TRUE unconditionally here (`li r8, 1` @0x827FFB18) --
+                // this call is only reached for a multiline / word-wrapped object, so the flag is
+                // already known set.
+                lfLineWidth = lpFont->GetStringStartAndEnd(lpCursor, lfWidthInEm, &lpLineStart, &lpLineEnd, true);
+            }
+            else
+            {
+                // Single-line fast path (X360 0x827FF9D8): the line IS the whole remaining string
+                // (CgsUnicode::ByteLength), and its width is the one Prepare already measured
+                // (mfStringWidth, +0x70) -- no line measurer, so no wrap is possible.
+                lpLineEnd   = lpCursor + CgsUnicode::ByteLength(lpCursor);
+                lfLineWidth = lrTextObject.mfStringWidth;
+            }
+
+            // Right-aligned text aligns against the SPACED width (X360 0x827FFB28 / 0x827FF9F8: the
+            // only alignment for which the console folds mfCharSpacingMultiplier into the measured
+            // line width -- the measurers themselves are spacing-unaware).
+            if (lrTextObject.meAlignment == TextObject::E_ALIGNMENT_RIGHT)
+                lfLineWidth *= lrTextObject.mfCharSpacingMultiplier;
 
             f32 lfPenX = lrTextObject.mv2TopLeft.mX + (lfAlignFactor * (lfWidthInEm - lfLineWidth)) * lfFontHeight;
 
@@ -410,12 +438,26 @@ namespace CgsGraphics
         s32 liColourIndex = -1;
         const CgsUtf8* lpCursor = lrTextObject.mpUtf8String;
 
+        // Same single-line gate as RenderStringInternal (X360 0x827FF9C0/0x827FF9CC).
+        const bool lbLineWalk = (lrTextObject.mbMultiLine != 0 || lrTextObject.mbWordWrap != 0);
+
         while (*lpCursor != 0 && lfPenY < lrTextObject.mv2BottomRight.mY)
         {
             const CgsUtf8* lpLineStart = lpCursor;
             const CgsUtf8* lpLineEnd   = lpCursor;
-            const f32 lfLineWidth = lpFont->GetStringStartAndEnd(lpCursor, lfWidthInEm, &lpLineStart, &lpLineEnd,
-                                                                 lrTextObject.mbWordWrap != 0);
+            f32 lfLineWidth;
+            if (lbLineWalk)
+            {
+                lfLineWidth = lpFont->GetStringStartAndEnd(lpCursor, lfWidthInEm, &lpLineStart, &lpLineEnd, true);
+            }
+            else
+            {
+                lpLineEnd   = lpCursor + CgsUnicode::ByteLength(lpCursor);
+                lfLineWidth = lrTextObject.mfStringWidth;
+            }
+
+            if (lrTextObject.meAlignment == TextObject::E_ALIGNMENT_RIGHT)
+                lfLineWidth *= lrTextObject.mfCharSpacingMultiplier;
 
             f32 lfPenX = lrTextObject.mv2TopLeft.mX + (lfAlignFactor * (lfWidthInEm - lfLineWidth)) * lfFontHeight;
 
