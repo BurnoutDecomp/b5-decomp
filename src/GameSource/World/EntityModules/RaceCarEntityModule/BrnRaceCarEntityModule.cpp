@@ -984,7 +984,70 @@ void RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar*
         lpRenderParams->SetBodyTransform( lBodyTransform );
     }
 
-    // ---- THE WHEEL POSE (wheel-render wave 2026-08-03) ----------------------
+    // ---- THE WHEEL POSE -----------------------------------------------------
+    // ⭐ SPLIT OUT 2026-08-12 (carrender wave). It used to be inline here, which meant the
+    // BODY half and the WHEEL half shared one gate -- and that is exactly how the wheels
+    // vanished. See PublishWheelPoseWithoutPhysicsBringUp's banner.
+    PublishWheelPoseWithoutPhysicsBringUp( lpActiveRaceCar, liActiveRaceCar );
+}
+
+// ============================================================================
+// [FLAG PC bring-up] PublishWheelPoseWithoutPhysicsBringUp -- NOT an X360 function.
+//
+// ⭐⭐ WHY THIS IS ITS OWN FUNCTION NOW (carrender wave 2026-08-12) -- A GATE-SCOPE BUG.
+// This code is unchanged; only WHO CALLS IT and WHEN has changed, and that was the whole
+// defect. It used to be the tail of PublishRenderPoseWithoutPhysicsBringUp, so it shared
+// that function's gate: `IsActive() && !mUsedRaceCars.IsBitSet(i)`.
+//
+// PublishRenderPoseWithoutPhysicsBringUp stands in for TWO different console producers:
+//   * the BODY pose  <- ActiveRaceCar::UpdatePhysicsState @0x822D4418   -- LANDED 2026-08-11
+//   * the WHEEL pose <- the SetWheelTransform publish in the physics half -- STILL PARKED
+// mUsedRaceCars answers "does physics own this race-car slot", which is the right question
+// for the first and the WRONG question for the second. When VehicleManager::ProcessCreateEvents
+// mounted on 2026-08-11 and started setting that bit, the gate correctly retired the body
+// stand-in -- and silently retired the wheel stand-in with it, whose producer had not landed.
+//
+// MEASURED, on the run that motivated this split (BrnGame.log, carrender probe):
+//   [carrender]  wheel 0 exists 0 T (0.000000, 0.000000, 0.000000) scaleDiag (1.000000, 1.000000, 1.000000)
+//   ... identically for wheels 1..3, and
+//   [racecar-wheels] RenderRaceCar wheel block outcome 3 (... 3 no wheel exists ...)
+// i.e. the render leg drew NO WHEELS AT ALL, on a car that had drawn them correctly on
+// 2026-08-05. Two services were lost on that one switch: SetWheelExists AND SetWheelScale
+// (the scale matrix fell back to RenderParams::Reset()'s identity -- see the `scaleDiag`).
+//
+// ⛔ THE REAL PRODUCER, NAMED, NOT HIDDEN. The console fills RaceCarState::maWheelTransforms
+// in VehicleManager::WriteOutVehicleStats via SimpleVehiclePhysics::GetWheelsWorldTransfrom
+// @0x825D8878 -- 868 VMX128 instructions, declared in BrnSimpleVehiclePhysics.h with NO BODY
+// anywhere in this tree (see park (3) in BrnVehicleManager_WriteOutVehicleStats.cpp), and the
+// console's writer of RaceCarState::mabWheelExists (+0x446) is not identified in EITHER half
+// of the publish. Until BOTH land, nothing on this build can produce a wheel pose, and this
+// stand-in is the only thing between the player and an empty pair of arches.
+// DELETE-WHEN GetWheelsWorldTransfrom @0x825D8878 is bodied and mabWheelExists has a writer.
+//
+// ⚠️ THE GATE IT CARRIES NOW is the console's OWN field, not a bring-up invention: it runs
+// only for a car for which the physics readback published NO wheel at all
+// (mabWheelExists false for all four). The instant the real producer sets even one of those
+// bytes, this stops running for that car with no further edit here -- exactly the property
+// the mUsedRaceCars gate has for the body half.
+// ============================================================================
+void RaceCarEntityModule::PublishWheelPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar,
+                                                                 s32 liActiveRaceCar )
+{
+    ActiveRaceCar::RenderParams* lpRenderParams = lpActiveRaceCar->GetRenderParams();
+
+    Matrix44Affine lBodyTransform;
+    lpActiveRaceCar->CalcBodyTransform( lBodyTransform );
+
+    const RaceCarStreamer::PhysicsResourcePtr& lrPhysicsResource =
+        mRaceCarStreamer.GetPhysicsResourceBringUp( liActiveRaceCar );
+
+    // ⭐ THE FRAME IS UNCHANGED BY THE SPLIT, AND THAT MATTERS. The wheels compose against
+    // CalcBodyTransform()'s MODEL-frame output -- which is bit-for-bit the matrix the inline
+    // version used (its `lBodyTransform` local) AND bit-for-bit what UpdatePhysicsState now
+    // publishes as the body transform (BrnActiveRaceCar.cpp:449-450 stores CalcBodyTransform
+    // directly). So a wheel drawn through the readback path lands in exactly the frame it
+    // landed in on 2026-08-05, when these wheels were last seen seated in their arches.
+
     // The same stand-in, for the same missing producer. UpdatePhysicsState /
     // UpdateWheelPhysicsState are the console's ONLY writers of mWheelTransforms[] and
     // mabWheelExists[], and both read the physics snapshot -- so with no physics module
@@ -1033,8 +1096,33 @@ void RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar*
             lWheelLocal.wAxis.y = lpWheelSpec->mPosition.y;
             lWheelLocal.wAxis.z = lpWheelSpec->mPosition.z;
 
+            // ⭐⭐ THE WHEEL COMPOSES AGAINST THE HANDLING-BODY FRAME, NOT THE MODEL FRAME
+            // (corrected 2026-08-12, carrender wave -- MEASURED, and it is a one-matrix
+            // change, not a tuned offset).
+            //
+            // This used to be Mult(lWheelLocal, lBodyTransform), i.e. against
+            // CalcBodyTransform()'s output == Mult(mCentreOfMassTransform, physicsTransform).
+            // That put every wheel EXACTLY ONE model->handling step below its own arch:
+            //   [carrender-y] bodyDraw y -3.534189 wheel0 y -3.966501 archPartWorldY -3.227483
+            //   arch - wheel = 0.739018, against M1552's own translation 0.740575 -- 1.6 mm.
+            // The car draws its arches at ground + 0.297517 against the seat wave's measured
+            // target of ground + 0.290 (a 7 mm fit), so the BODY is right and the WHEEL was
+            // the thing carrying the spurious step.
+            //
+            // WHY THE HANDLING-BODY FRAME IS THE RIGHT ONE, and not just the one that fits:
+            // a WheelSpec is read out of the StreamedDeformationSpec -- the SAME table the
+            // suspension solver is fed from -- and the suspension works in the handling-body
+            // frame. mPhysicsState.mTransform IS that frame; CalcBodyTransform is that frame
+            // pushed down into the graphics model frame by mCentreOfMassTransform. Using the
+            // undisplaced one removes the step rather than cancelling it with a constant.
+            // CROSS-CHECK, independent of the arch: predicted wheel centre
+            //   -3.534189 + 0.740575 - 0.409029 = -3.202643
+            // against ground + tyre radius = -3.525000 + 0.331333 = -3.193667 -- a 9 mm fit,
+            // the same order as the arch's 7 mm, and the radius itself is confirmed by the
+            // authored scale this loop publishes (0.662665 / 2 == 0.331333).
             lpRenderParams->GetWheelTransform( static_cast<u32>( liWheel ) ) =
-                rw::math::vpu::Mult( lWheelLocal, lBodyTransform );
+                rw::math::vpu::Mult( lWheelLocal,
+                                     lpActiveRaceCar->GetPhysicsState()->mTransform );
             lpRenderParams->SetWheelScale( static_cast<u32>( liWheel ), lpWheelSpec->mScale );
             lpRenderParams->SetWheelExists( static_cast<u32>( liWheel ), true );
         }
@@ -2584,6 +2672,35 @@ void RaceCarEntityModule::PostPhysicsUpdate(
                 && !lrUsedRaceCars.IsBitSet( static_cast<u32>( liCar ) ) )
             {
                 PublishRenderPoseWithoutPhysicsBringUp( lpActiveRaceCar, liCar );
+            }
+            // ⭐⭐ THE WHEEL HALF, ON ITS OWN GATE (carrender wave 2026-08-12).
+            // A car the readback HAS posed still has no wheel pose, because the physics
+            // side's wheel publish is parked (SimpleVehiclePhysics::GetWheelsWorldTransfrom
+            // @0x825D8878 is bodyless -- park (3) of WriteOutVehicleStats). The gate is the
+            // console's OWN field: run only when the readback published no wheel at all.
+            // MEASURED before this line existed: all four `exists 0`, all four transforms
+            // (0,0,0), wheel block outcome 3 -- the arches drew empty.
+            else if( lpActiveRaceCar->IsActive()
+                     && !lpActiveRaceCar->GetRenderParams()->GetWheelExists( 0u )
+                     && !lpActiveRaceCar->GetRenderParams()->GetWheelExists( 1u )
+                     && !lpActiveRaceCar->GetRenderParams()->GetWheelExists( 2u )
+                     && !lpActiveRaceCar->GetRenderParams()->GetWheelExists( 3u ) )
+            {
+                PublishWheelPoseWithoutPhysicsBringUp( lpActiveRaceCar, liCar );
+
+                static bool sbReportedWheelStandIn = false;
+                if( !sbReportedWheelStandIn && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    sbReportedWheelStandIn = true;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[FLAG PC bring-up] the WHEEL pose stand-in is running for a car the "
+                           "physics readback HAS posed: RaceCarState::mabWheelExists is false for "
+                           "all four wheels because SimpleVehiclePhysics::GetWheelsWorldTransfrom "
+                           "@0x825D8878 (868 insns) has no body and mabWheelExists (+0x446) has no "
+                           "identified writer. Wheels are drawn at their AUTHORED REST positions "
+                           "with the body's orientation -- NO suspension travel, NO steer, NO "
+                           "spin. DELETE-WHEN both land.\n";
+                }
             }
         }
 

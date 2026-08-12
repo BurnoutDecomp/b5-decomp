@@ -341,6 +341,114 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
         }
     }
 
+    // ---- [DIAG carrender wave 2026-08-12] THE PER-PART WITNESS -----------------
+    // ⛔ DELETE-WHEN the wheels + panels are confirmed on a booted run.
+    // Answers, in ONE line per part, the two questions the frame poses: "where does a body
+    // part's world matrix come from?" and "is anything flung?". It re-walks the spec
+    // read-only -- it cannot perturb the loop above.
+    // Latched on the number of parts sitting further than 3 m from the body origin (plus the
+    // detached-queue length), NOT on a "printed once" bool: a run where nothing is flung and
+    // a run where six panels are flung print different lines, and a change mid-run reprints.
+    if ( mbRenderCarsDuringCrash && CgsDev::Log::gpDebugPrint != 0 )
+    {
+        const ActiveRaceCar::RenderParams::DetachedPartRenderQueue& lrDiagQueue =
+            lpRenderParams->GetDetachedPartQueue();
+
+        s32 liFarParts = 0;
+        f32 lfMaxDist  = 0.0f;
+        for ( u32 luDiag = 0; luDiag < lpCarGraphicsSpec->muPartsCount; ++luDiag )
+        {
+            const Matrix44Affine lDiagWorld =
+                rw::math::vpu::Mult( lpCarGraphicsSpec->GetPartLocators()[ luDiag ], lBodyTransform );
+            const f32 lfDX = lDiagWorld.wAxis.x - lBodyTransform.wAxis.x;
+            const f32 lfDY = lDiagWorld.wAxis.y - lBodyTransform.wAxis.y;
+            const f32 lfDZ = lDiagWorld.wAxis.z - lBodyTransform.wAxis.z;
+            const f32 lfD  = sqrtf( lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ );
+            if ( lfD > lfMaxDist ) { lfMaxDist = lfD; }
+            if ( lfD > 3.0f )      { ++liFarParts; }
+        }
+
+        // The Y-OVER-TIME probe (observable (d)): one compact line per CENTIMETRE of body
+        // travel, budgeted so a settling car prints its whole descent and a settled one goes
+        // quiet. This is what proves a render change did not disturb the physics.
+        {
+            static s32 siLastBodyYcm = 0x7FFFFFFF;
+            static s32 siYBudget     = 60;
+            const s32  liBodyYcm     = static_cast< s32 >( lBodyTransform.wAxis.y * 100.0f );
+            if ( liBodyYcm != siLastBodyYcm && siYBudget > 0 )
+            {
+                siLastBodyYcm = liBodyYcm;
+                --siYBudget;
+                *CgsDev::Log::gpDebugPrint
+                    << "[carrender-y] bodyDraw y " << lBodyTransform.wAxis.y
+                    << " wheel0 exists " << ( lpRenderParams->GetWheelExists( 0u ) ? 1 : 0 )
+                    << " wheel0 y " << lpRenderParams->GetWheelTransform( 0u ).wAxis.y
+                    << " archPartWorldY " << rw::math::vpu::Mult(
+                           lpCarGraphicsSpec->GetPartLocators()[ 3 ], lBodyTransform ).wAxis.y
+                    << "\n";
+            }
+        }
+
+        static s32 siLastFarParts   = -1;
+        static s32 siLastQueueLen   = -1;
+        if ( liFarParts != siLastFarParts || lrDiagQueue.GetLength() != siLastQueueLen )
+        {
+            siLastFarParts = liFarParts;
+            siLastQueueLen = lrDiagQueue.GetLength();
+
+            *CgsDev::Log::gpDebugPrint
+                << "[carrender] parts " << lpCarGraphicsSpec->muPartsCount
+                << " sizeof(locator) " << static_cast< s32 >( sizeof( Matrix44Affine ) )
+                << " detachedQueueLen " << lrDiagQueue.GetLength()
+                << " farParts(>3m) " << liFarParts
+                << " maxPartDist " << lfMaxDist
+                << " body (" << lBodyTransform.wAxis.x << ", " << lBodyTransform.wAxis.y
+                << ", " << lBodyTransform.wAxis.z << ")\n";
+
+            for ( u32 luDiag = 0; luDiag < lpCarGraphicsSpec->muPartsCount; ++luDiag )
+            {
+                const Matrix44Affine& lrLoc = lpCarGraphicsSpec->GetPartLocators()[ luDiag ];
+                const Matrix44Affine  lDiagWorld = rw::math::vpu::Mult( lrLoc, lBodyTransform );
+                const CgsGraphics::Model* lpDiagModel = lpCarGraphicsSpec->GetPartModel( luDiag );
+
+                // did the queue override this part?
+                s32 liQueueHit = -1;
+                for ( s32 liEv = 0; liEv < lrDiagQueue.GetLength(); ++liEv )
+                {
+                    if ( lrDiagQueue.GetEvent( liEv ).miPartIndex == static_cast< s32 >( luDiag ) )
+                    {
+                        liQueueHit = liEv;
+                        break;
+                    }
+                }
+
+                *CgsDev::Log::gpDebugPrint
+                    << "[carrender]  part " << static_cast< s32 >( luDiag )
+                    << " vis " << ( lpRenderParams->IsPartVisible( static_cast< u8 >( luDiag ) ) ? 1 : 0 )
+                    << " model " << ( lpDiagModel != 0 ? 1 : 0 )
+                    << " locT (" << lrLoc.wAxis.x << ", " << lrLoc.wAxis.y << ", " << lrLoc.wAxis.z
+                    << ") locScaleRow0 (" << lrLoc.xAxis.x << ", " << lrLoc.xAxis.y << ", "
+                    << lrLoc.xAxis.z << ")"
+                    << " world (" << lDiagWorld.wAxis.x << ", " << lDiagWorld.wAxis.y << ", "
+                    << lDiagWorld.wAxis.z << ") queueHit " << liQueueHit << "\n";
+            }
+
+            // The wheel half of the same witness: what the wheel block will read.
+            for ( u32 luDiagW = 0; luDiagW < 4u; ++luDiagW )
+            {
+                const Matrix44Affine& lrWT = lpRenderParams->GetWheelTransform( luDiagW );
+                const Matrix44Affine& lrWS = lpRenderParams->GetWheelScaleMatrix( luDiagW );
+                *CgsDev::Log::gpDebugPrint
+                    << "[carrender]  wheel " << static_cast< s32 >( luDiagW )
+                    << " exists " << ( lpRenderParams->GetWheelExists( luDiagW ) ? 1 : 0 )
+                    << " T (" << lrWT.wAxis.x << ", " << lrWT.wAxis.y << ", " << lrWT.wAxis.z
+                    << ") scaleDiag (" << lrWS.xAxis.x << ", " << lrWS.yAxis.y << ", "
+                    << lrWS.zAxis.z << ")\n";
+            }
+        }
+    }
+    // ---- end [DIAG carrender wave] --------------------------------------------
+
     // NOT reconstructed (see the banner), in console order after the body-part loop:
     //   * `if (lbRenderAttachedGeometry)`  -- the cracked-glass loop, which walks the
     //     spec's shattered-glass part table and calls BrnWorld::SetGlassFractureConstants
