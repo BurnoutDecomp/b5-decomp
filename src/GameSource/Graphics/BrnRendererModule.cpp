@@ -666,9 +666,10 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
         }
 
         static u32 suLastSignature = 0xFFFFFFFFu;
-        if (luSignature != suLastSignature && CgsDev::Log::gpDebugPrint != 0)
+        const bool lbEmit = (luSignature != suLastSignature) && (CgsDev::Log::gpDebugPrint != 0);
+        suLastSignature = luSignature;
+        if (lbEmit)
         {
-            suLastSignature = luSignature;
             *CgsDev::Log::gpDebugPrint
                 << "[shadow-fetch] fmt=0x" << static_cast<s32>(luFormat)
                 << " compare=" << (lbHwCompare ? "HW" : "RAW")
@@ -688,6 +689,98 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
                 *CgsDev::Log::gpDebugPrint << ")";
             }
             *CgsDev::Log::gpDebugPrint << "\n";
+        }
+
+        // ---------------------------------------------------------------------
+        // [FLAG PC bring-up probe] "[shadow-clip]" -- WHY the fragments are lost.
+        //
+        // The occlusion line above answered "thousands of draws, no fragments"; this
+        // answers where the geometry actually went, per cascade, plus the device state
+        // the cascade's first draw really ran under. Slot 3 is the WORLD-OPAQUE
+        // CONTROL, bracketed in RenderWorldPasses: it is there to prove the instrument.
+        // If the control shows a large px and a sane viewport while the cascades show
+        // nothing, the probe is sound and the cascades are genuinely empty; if the
+        // control ALSO shows px=0, the probe itself is lying and nothing else on this
+        // line may be trusted.
+        //
+        // Latched on the SAME signature as the line above (the shared lbEmit), so the
+        // two always describe the same frame.
+        // ---------------------------------------------------------------------
+        if (lbEmit)
+        {
+            for (u32 luSlot = 0; luSlot < 4u; ++luSlot)
+            {
+                renderengine::ShadowClipReport lReport;
+                if (!renderengine::ShadowProbe_ClipTally(luSlot, &lReport))
+                    continue;
+
+                u32 luControlPixels = 0;
+                const bool lbControlHave =
+                    renderengine::ShadowProbe_LastPixels(luSlot, &luControlPixels);
+
+                *CgsDev::Log::gpDebugPrint
+                    << "[shadow-clip] " << (luSlot < 3u ? "c" : "CONTROL-worldOpaque c")
+                    << static_cast<s32>(luSlot)
+                    << " sampled=" << static_cast<s32>(lReport.muSampled)
+                    << " inside="  << static_cast<s32>(lReport.muInside)
+                    << " outXY="   << static_cast<s32>(lReport.muOutXY)
+                    << " outZnear=" << static_cast<s32>(lReport.muOutZNear)
+                    << " outZfar=" << static_cast<s32>(lReport.muOutZFar)
+                    << " behindW=" << static_cast<s32>(lReport.muBehindW)
+                    << " noWvp="   << static_cast<s32>(lReport.muNoWvp)
+                    << " firstObj(" << lReport.mafFirstObject[0]
+                    << "," << lReport.mafFirstObject[1]
+                    << "," << lReport.mafFirstObject[2] << ")"
+                    << " firstClip(" << lReport.mafFirstClip[0]
+                    << "," << lReport.mafFirstClip[1]
+                    << "," << lReport.mafFirstClip[2]
+                    << ",w" << lReport.mafFirstClip[3] << ")"
+                    << " px=";
+                if (lbControlHave)
+                    *CgsDev::Log::gpDebugPrint << static_cast<s32>(luControlPixels);
+                else
+                    *CgsDev::Log::gpDebugPrint << "pending";
+                *CgsDev::Log::gpDebugPrint
+                    << " | vp(" << static_cast<s32>(lReport.muVpX)
+                    << ","      << static_cast<s32>(lReport.muVpY)
+                    << ","      << static_cast<s32>(lReport.muVpW)
+                    << "x"      << static_cast<s32>(lReport.muVpH)
+                    << " z"     << lReport.mfVpMinZ << ".." << lReport.mfVpMaxZ << ")"
+                    << " sc("   << static_cast<s32>(lReport.miScissorL)
+                    << ","      << static_cast<s32>(lReport.miScissorT)
+                    << ","      << static_cast<s32>(lReport.miScissorR)
+                    << ","      << static_cast<s32>(lReport.miScissorB)
+                    << " en="   << static_cast<s32>(lReport.muScissorEnable) << ")"
+                    << " zen="  << static_cast<s32>(lReport.muZEnable)
+                    << " zwr="  << static_cast<s32>(lReport.muZWrite)
+                    << " zfunc=" << static_cast<s32>(lReport.muZFunc)
+                    << "/eff"    << static_cast<s32>(lReport.muZFuncEffective)
+                    << " cull=" << static_cast<s32>(lReport.muCull)
+                    << "/eff"   << static_cast<s32>(lReport.muCullEffective)
+                    << " cwe="  << static_cast<s32>(lReport.muColourWrite)
+                    << "\n";
+
+                // THE EXTENT LINE -- the number this wave exists to read. `fit` is the
+                // cascade's own half-width/height in METRES, taken off the matrix columns
+                // rather than inferred; compare it against the slab the cascade is supposed
+                // to cover (0..10.5, 10.5..34, 34..120 m). `clipAABB` is the scale-free
+                // cross-check: a correct fit puts the casters the cascade SELECTED across
+                // most of [-1,1]. `subPixTris` is the verdict on whether the geometry is
+                // simply too small to raster.
+                *CgsDev::Log::gpDebugPrint
+                    << "[shadow-extent] " << (luSlot < 3u ? "c" : "CONTROL c")
+                    << static_cast<s32>(luSlot)
+                    << " fitHalfW=" << lReport.mfHalfWidthMetres << "m"
+                    << " fitHalfH=" << lReport.mfHalfHeightMetres << "m"
+                    << " depthSpan=" << lReport.mfDepthSpanMetres << "m"
+                    << " clipAABB x[" << lReport.mafClipMin[0] << "," << lReport.mafClipMax[0]
+                    << "] y["         << lReport.mafClipMin[1] << "," << lReport.mafClipMax[1]
+                    << "] z["         << lReport.mafClipMin[2] << "," << lReport.mafClipMax[2]
+                    << "] subPixTris=" << static_cast<s32>(lReport.muTrisSubPixel)
+                    << "/"             << static_cast<s32>(lReport.muTrisSampled)
+                    << " maxTriPx="    << lReport.mfMaxTriPixelArea
+                    << "\n";
+            }
         }
     }
 #endif  // BRN_SHADOW_MAP_TARGET_AVAILABLE
@@ -805,7 +898,15 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
         }
         if (mbRenderWorldOpaque)
         {
+            // [FLAG PC bring-up probe] THE CONTROL for the shadow pass's occlusion probe
+            // (slot 3). The shadow cascades report thousands of draws and no fragments; the
+            // only way to know that is a fact about the cascades and not about the probe is to
+            // run the same instrument over a pass that DEMONSTRABLY puts pixels on screen.
+            // The world-opaque walk is that pass. Read one frame late like the others, so it
+            // costs a query issue and nothing else. DELETE with the shadow bring-up probes.
+            renderengine::ShadowProbe_Begin(3u);
             mSingleBufferedDispatchFrame.GetList(11)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+            renderengine::ShadowProbe_End(3u);
         }
     }
 

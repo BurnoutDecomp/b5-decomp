@@ -41,6 +41,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <unordered_map>
 #include <vector>
 
@@ -579,7 +580,56 @@ namespace
         u32  muBehindW;
         u32  muNoWvp;
 
+        // The FIRST sample, in full. The tally above only means something if the vertex was
+        // decoded correctly, and this classifier assumes POSITION is three floats at vertex
+        // byte 0 -- the same assumption the wheel probe makes, and one that a compressed
+        // (DEC3N / int16) position stream would silently break. Printing the raw object
+        // position next to its clip result makes a mis-decode obvious at a glance: Paradise
+        // world coordinates are metres in the hundreds-to-thousands, so a first sample of
+        // (1e-41, 3e+27, ...) is a decode bug and the buckets are meaningless.
+        f32  mafFirstObject[3];
+        f32  mafFirstClip[4];
+
+        // ---- THE FITTED EXTENT, IN METRES -----------------------------------------------
+        // The one number that decides whether the cascade projection is right, read straight
+        // off the matrix instead of inferred from a sample.
+        //
+        // The record's WVP is world x view x projection, and the world transform of a world
+        // chunk or a car is rigid (rotation + translation, unit scale). So the gradient of
+        // clip-x with respect to object position -- the length of the matrix's first COLUMN,
+        // |(m00, m10, m20)| -- is d(clip.x)/d(metre). An orthographic projection maps its
+        // half-extent onto clip 1, so
+        //
+        //     half-width in metres = 1 / |(m00, m10, m20)|
+        //
+        // and likewise for height and for the depth span. Those are directly comparable with
+        // what the cascade is SUPPOSED to cover: the subset-frustum slabs
+        // KAF_SHADOWMAP_SUBSET_FRUSTUM_{NEAR,FAR}_CLIP = 0..10.5, 10.5..34, 34..120 m
+        // (BrnShadowMap.cpp:139-140), i.e. tens of metres, not thousands.
+        //
+        // Caveat, stated rather than hidden: a non-rigid world matrix (a scaled prop) makes
+        // this reading that object's scale as well. The clip AABB below is the scale-free
+        // cross-check -- a correct fit puts the casters the cascade SELECTED across most of
+        // [-1,1], because that is what fitting means.
+        f32  mfHalfWidthMetres;
+        f32  mfHalfHeightMetres;
+        f32  mfDepthSpanMetres;
+
+        // The clip-space AABB of every sampled vertex (after the perspective divide), and the
+        // sub-pixel triangle census: for each sampled draw the first triangle's area is
+        // computed in the cascade's own viewport pixels. "100% inside the volume and still no
+        // fragments" has exactly one remaining explanation, and this is the number that
+        // either proves or kills it.
+        f32  mafClipMin[3];
+        f32  mafClipMax[3];
+        u32  muTrisSampled;
+        u32  muTrisSubPixel;
+        f32  mfMaxTriPixelArea;
+
         bool mbStateCaptured;
+        bool mbEffectiveCaptured;
+        u32  muZFuncEffective;    // read immediately BEFORE the draw, i.e. after any override
+        u32  muCullEffective;
         u32  muVpX, muVpY, muVpW, muVpH;
         f32  mfVpMinZ, mfVpMaxZ;
         s32  miScissorL, miScissorT, miScissorR, miScissorB;
@@ -1677,8 +1727,12 @@ namespace renderengine
         //   BRN_SHADOW_SLOPEBIAS=<float>   D3DRS_SLOPESCALEDEPTHBIAS for caster draws
         // Whatever value turns out to be right is still a PARK until the two globals' bytes
         // are recovered -- a knob that produces a good picture is evidence, not attestation.
-        // ---- [PROBE] the clip-space tally + the cascade's first-draw device state ---------
-        if (sbShadowPassActive && suShadowClipSlot < KU_SHADOW_TALLY_SLOTS)
+        // ---- [PROBE] the clip-space tally + the slot's first-draw device state -----------
+        // Scoped by suShadowClipSlot alone, NOT by sbShadowPassActive: the world-opaque
+        // CONTROL (slot 3) is measured by the same classifier on purpose, and a control that
+        // only exercised half the instrument would not be a control. suShadowClipSlot is set
+        // by ShadowProbe_Begin and cleared by ShadowProbe_End, so the scoping is exact.
+        if (suShadowClipSlot < KU_SHADOW_TALLY_SLOTS)
         {
             ShadowClipTally& lrTally = saShadowClip[suShadowClipSlot];
 
@@ -1719,6 +1773,27 @@ namespace renderengine
             }
             else
             {
+                // The fitted extent, from the first record's matrix columns (see the banner).
+                if (lrTally.muSampled == 0u)
+                {
+                    const f32 lfGradX = std::sqrt(safLastWvp[0] * safLastWvp[0]
+                                                + safLastWvp[4] * safLastWvp[4]
+                                                + safLastWvp[8] * safLastWvp[8]);
+                    const f32 lfGradY = std::sqrt(safLastWvp[1] * safLastWvp[1]
+                                                + safLastWvp[5] * safLastWvp[5]
+                                                + safLastWvp[9] * safLastWvp[9]);
+                    const f32 lfGradZ = std::sqrt(safLastWvp[2] * safLastWvp[2]
+                                                + safLastWvp[6] * safLastWvp[6]
+                                                + safLastWvp[10] * safLastWvp[10]);
+                    lrTally.mfHalfWidthMetres  = (lfGradX > 0.0f) ? (1.0f / lfGradX) : -1.0f;
+                    lrTally.mfHalfHeightMetres = (lfGradY > 0.0f) ? (1.0f / lfGradY) : -1.0f;
+                    lrTally.mfDepthSpanMetres  = (lfGradZ > 0.0f) ? (1.0f / lfGradZ) : -1.0f;
+                }
+
+                f32  lafTriX[3] = { 0.0f, 0.0f, 0.0f };
+                f32  lafTriY[3] = { 0.0f, 0.0f, 0.0f };
+                u32  luTriVerts = 0;
+
                 for (u32 luK = 0; luK < 3u && luK < luIndexCount; ++luK)
                 {
                     const u32 luIdx = lb32Bit ? reinterpret_cast<const u32*>(lpIndices)[luK]
@@ -1738,6 +1813,12 @@ namespace renderengine
                                         +                  safLastWvp[12 + luLane];
                     }
 
+                    if (lrTally.muSampled == 0u)
+                    {
+                        std::memcpy(lrTally.mafFirstObject, lafPosition, sizeof(lafPosition));
+                        std::memcpy(lrTally.mafFirstClip, lafClip, sizeof(lafClip));
+                    }
+
                     ++lrTally.muSampled;
                     const f32 lfW = lafClip[3];
                     if (!(lfW > 0.0f))                              ++lrTally.muBehindW;
@@ -1746,6 +1827,37 @@ namespace renderengine
                     else if (lafClip[0] < -lfW || lafClip[0] > lfW
                           || lafClip[1] < -lfW || lafClip[1] > lfW) ++lrTally.muOutXY;
                     else                                            ++lrTally.muInside;
+
+                    // The clip AABB + the triangle's screen footprint, both after the divide.
+                    if (lfW != 0.0f)
+                    {
+                        const f32 lafNdc[3] = { lafClip[0] / lfW, lafClip[1] / lfW, lafClip[2] / lfW };
+                        for (u32 luAxis = 0; luAxis < 3u; ++luAxis)
+                        {
+                            if (lrTally.muSampled == 1u || lafNdc[luAxis] < lrTally.mafClipMin[luAxis])
+                                lrTally.mafClipMin[luAxis] = lafNdc[luAxis];
+                            if (lrTally.muSampled == 1u || lafNdc[luAxis] > lrTally.mafClipMax[luAxis])
+                                lrTally.mafClipMax[luAxis] = lafNdc[luAxis];
+                        }
+                        lafTriX[luTriVerts] = lafNdc[0] * 0.5f * static_cast<f32>(lrTally.muVpW);
+                        lafTriY[luTriVerts] = lafNdc[1] * 0.5f * static_cast<f32>(lrTally.muVpH);
+                        ++luTriVerts;
+                    }
+                }
+
+                // Sub-pixel census. A triangle whose screen area is under one pixel can pass
+                // every clip and depth test and still light no fragment -- which is precisely
+                // the "100% inside, px=0" shape.
+                if (luTriVerts == 3u)
+                {
+                    const f32 lfArea = 0.5f * std::fabs(
+                          (lafTriX[1] - lafTriX[0]) * (lafTriY[2] - lafTriY[0])
+                        - (lafTriX[2] - lafTriX[0]) * (lafTriY[1] - lafTriY[0]));
+                    ++lrTally.muTrisSampled;
+                    if (lfArea < 1.0f)
+                        ++lrTally.muTrisSubPixel;
+                    if (lfArea > lrTally.mfMaxTriPixelArea)
+                        lrTally.mfMaxTriPixelArea = lfArea;
                 }
             }
         }
@@ -1765,7 +1877,7 @@ namespace renderengine
         }
 
         DWORD luSavedCull = 0, luSavedBias = 0, luSavedSlopeBias = 0;
-        DWORD luSavedZFunc = 0, luSavedZEnable = 0, luSavedZWrite = 0;
+        DWORD luShadowSavedZFunc = 0, luShadowSavedZEnable = 0, luShadowSavedZWrite = 0;
         bool  lbShadowStateOverridden = false;
         bool  lbShadowZDefeated       = false;
         if (sbShadowPassActive)
@@ -1779,9 +1891,9 @@ namespace renderengine
             if (spcZAlways != nullptr && spcZAlways[0] != '0')
             {
                 lbShadowZDefeated = true;
-                lpDevice->GetRenderState(D3DRS_ZFUNC,        &luSavedZFunc);
-                lpDevice->GetRenderState(D3DRS_ZENABLE,      &luSavedZEnable);
-                lpDevice->GetRenderState(D3DRS_ZWRITEENABLE, &luSavedZWrite);
+                lpDevice->GetRenderState(D3DRS_ZFUNC,        &luShadowSavedZFunc);
+                lpDevice->GetRenderState(D3DRS_ZENABLE,      &luShadowSavedZEnable);
+                lpDevice->GetRenderState(D3DRS_ZWRITEENABLE, &luShadowSavedZWrite);
                 lpDevice->SetRenderState(D3DRS_ZFUNC,        D3DCMP_ALWAYS);
                 lpDevice->SetRenderState(D3DRS_ZENABLE,      D3DZB_TRUE);
                 lpDevice->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
@@ -1821,6 +1933,40 @@ namespace renderengine
             }
         }
 
+        // ---- [DIAG, env-gated] force colour writes on for caster draws -------------------
+        // BRN_SHADOW_FORCECWE=1. The Z-only walk forces COLORWRITEENABLE to 0 (the leaf in
+        // SetMaterialRenderStatesPC), which is correct for a depth-only pass but leaves one
+        // exclusion open: whether this driver still counts occlusion samples with every
+        // colour channel masked off. Turning the mask back on for one boot closes it.
+        DWORD luSavedColourWrite = 0;
+        bool  lbColourWriteForced = false;
+        if (sbShadowPassActive)
+        {
+            static const char* const spcForceCwe = std::getenv("BRN_SHADOW_FORCECWE");
+            if (spcForceCwe != nullptr && spcForceCwe[0] != '0')
+            {
+                lbColourWriteForced = true;
+                lpDevice->GetRenderState(D3DRS_COLORWRITEENABLE, &luSavedColourWrite);
+                lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE,
+                                         D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN
+                                         | D3DCOLORWRITEENABLE_BLUE | D3DCOLORWRITEENABLE_ALPHA);
+            }
+        }
+
+        // ---- [PROBE] the EFFECTIVE depth/cull state, read AFTER every override -----------
+        // The state block captured at the top of the tally is read BEFORE the env knobs are
+        // applied, so it reports what the material walk left -- which is what you want as the
+        // baseline, but it is NOT what the draw runs under when a knob is set. Reading it
+        // again here removes the ambiguity: `zfuncEff` is the value the GPU actually used.
+        if (suShadowClipSlot < KU_SHADOW_TALLY_SLOTS && !saShadowClip[suShadowClipSlot].mbEffectiveCaptured)
+        {
+            ShadowClipTally& lrTally = saShadowClip[suShadowClipSlot];
+            lrTally.mbEffectiveCaptured = true;
+            DWORD luState = 0;
+            lpDevice->GetRenderState(D3DRS_ZFUNC,    &luState); lrTally.muZFuncEffective = luState;
+            lpDevice->GetRenderState(D3DRS_CULLMODE, &luState); lrTally.muCullEffective  = luState;
+        }
+
         const HRESULT lhrDraw =
             lpDevice->DrawIndexedPrimitiveUP(lePrim, 0, luNumVertices, luPrimCount,
                                              lpIndices,
@@ -1835,9 +1981,13 @@ namespace renderengine
         }
         if (lbShadowZDefeated)
         {
-            lpDevice->SetRenderState(D3DRS_ZFUNC,        luSavedZFunc);
-            lpDevice->SetRenderState(D3DRS_ZENABLE,      luSavedZEnable);
-            lpDevice->SetRenderState(D3DRS_ZWRITEENABLE, luSavedZWrite);
+            lpDevice->SetRenderState(D3DRS_ZFUNC,        luShadowSavedZFunc);
+            lpDevice->SetRenderState(D3DRS_ZENABLE,      luShadowSavedZEnable);
+            lpDevice->SetRenderState(D3DRS_ZWRITEENABLE, luShadowSavedZWrite);
+        }
+        if (lbColourWriteForced)
+        {
+            lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE, luSavedColourWrite);
         }
         // [FLAG PC bring-up probe] every submitted world draw, counted. Read by the shadow
         // pass's [shadow-fetch] line to tell "no draws reached the shadow target" apart from
@@ -2856,6 +3006,11 @@ void ShadowProbe_Begin(u32 luCascade)
 
 void ShadowProbe_End(u32 luCascade)
 {
+    // Close the clip-space attribution window first, unconditionally: a draw issued outside a
+    // Begin/End pair must never land in a cascade's tally, even when the query half below
+    // bails out.
+    suShadowClipSlot = 0xFFFFFFFFu;
+
     if (luCascade >= KU_SHADOW_PROBE_CASCADES || !sabShadowQueryActive[luCascade]
         || sapShadowQuery[luCascade] == nullptr)
     {
@@ -2874,6 +3029,60 @@ bool ShadowProbe_LastPixels(u32 luCascade, u32* lpuPixels)
         return false;
     }
     *lpuPixels = sauShadowQueryPixels[luCascade];
+    return true;
+}
+
+// The clip-space tally + the first-draw device state for one probe slot. Returns false when
+// the slot never saw a draw, so the caller can say "not measured" rather than print zeroes.
+bool ShadowProbe_ClipTally(u32 luSlot, ShadowClipReport* lpReport)
+{
+    if (luSlot >= KU_SHADOW_TALLY_SLOTS || lpReport == nullptr)
+        return false;
+
+    const ShadowClipTally& lrTally = saShadowClip[luSlot];
+    if (!lrTally.mbStateCaptured)
+        return false;
+
+    lpReport->muSampled       = lrTally.muSampled;
+    lpReport->muInside        = lrTally.muInside;
+    lpReport->muOutXY         = lrTally.muOutXY;
+    lpReport->muOutZNear      = lrTally.muOutZNear;
+    lpReport->muOutZFar       = lrTally.muOutZFar;
+    lpReport->muBehindW       = lrTally.muBehindW;
+    lpReport->muNoWvp         = lrTally.muNoWvp;
+    for (u32 luLane = 0; luLane < 3u; ++luLane)
+        lpReport->mafFirstObject[luLane] = lrTally.mafFirstObject[luLane];
+    for (u32 luLane = 0; luLane < 4u; ++luLane)
+        lpReport->mafFirstClip[luLane] = lrTally.mafFirstClip[luLane];
+    lpReport->muVpX           = lrTally.muVpX;
+    lpReport->muVpY           = lrTally.muVpY;
+    lpReport->muVpW           = lrTally.muVpW;
+    lpReport->muVpH           = lrTally.muVpH;
+    lpReport->mfVpMinZ        = lrTally.mfVpMinZ;
+    lpReport->mfVpMaxZ        = lrTally.mfVpMaxZ;
+    lpReport->miScissorL      = lrTally.miScissorL;
+    lpReport->miScissorT      = lrTally.miScissorT;
+    lpReport->miScissorR      = lrTally.miScissorR;
+    lpReport->miScissorB      = lrTally.miScissorB;
+    lpReport->muScissorEnable = lrTally.muScissorEnable;
+    lpReport->muZEnable       = lrTally.muZEnable;
+    lpReport->muZWrite        = lrTally.muZWrite;
+    lpReport->muZFunc         = lrTally.muZFunc;
+    lpReport->muCull          = lrTally.muCull;
+    lpReport->muColourWrite   = lrTally.muColourWrite;
+    lpReport->muZFuncEffective = lrTally.muZFuncEffective;
+    lpReport->muCullEffective  = lrTally.muCullEffective;
+    lpReport->mfHalfWidthMetres  = lrTally.mfHalfWidthMetres;
+    lpReport->mfHalfHeightMetres = lrTally.mfHalfHeightMetres;
+    lpReport->mfDepthSpanMetres  = lrTally.mfDepthSpanMetres;
+    lpReport->muTrisSampled      = lrTally.muTrisSampled;
+    lpReport->muTrisSubPixel     = lrTally.muTrisSubPixel;
+    lpReport->mfMaxTriPixelArea  = lrTally.mfMaxTriPixelArea;
+    for (u32 luAxis = 0; luAxis < 3u; ++luAxis)
+    {
+        lpReport->mafClipMin[luAxis] = lrTally.mafClipMin[luAxis];
+        lpReport->mafClipMax[luAxis] = lrTally.mafClipMax[luAxis];
+    }
     return true;
 }
 

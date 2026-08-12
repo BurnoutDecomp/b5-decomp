@@ -125,6 +125,32 @@ namespace renderengine
     bool ShadowProbe_LastPixels(u32 luCascade, u32* lpuPixels);
     bool ShadowProbe_TextureBound(u32 luUnit);
 
+    // [FLAG PC bring-up probe] the CLIP-SPACE TALLY, the follow-up to the occlusion probe.
+    // The occlusion counts said "thousands of draws, no fragments"; this says WHERE the
+    // geometry went. Every caster draw's first three referenced vertices are pushed through
+    // the record's own baked WVP and bucketed into five mutually exclusive causes, and the
+    // device state in force at the cascade's FIRST draw is captured alongside -- necessary
+    // because the material walk rebinds viewport-affecting, cull and depth state per
+    // technique, so what BeginRenderShadowMap set is not necessarily what the draws ran
+    // under. Slot 3 is the WORLD-OPAQUE CONTROL: a probe that reports plausible numbers
+    // there is a probe that works. DELETE with the shadow bring-up.
+    struct ShadowClipReport
+    {
+        u32 muSampled, muInside, muOutXY, muOutZNear, muOutZFar, muBehindW, muNoWvp;
+        f32 mafFirstObject[3];   // the first sampled vertex, object space -- the decode check
+        f32 mafFirstClip[4];     // ...and what the record's WVP made of it
+        u32 muVpX, muVpY, muVpW, muVpH;
+        f32 mfVpMinZ, mfVpMaxZ;
+        s32 miScissorL, miScissorT, miScissorR, miScissorB;
+        u32 muScissorEnable, muZEnable, muZWrite, muZFunc, muCull, muColourWrite;
+        u32 muZFuncEffective, muCullEffective;   // re-read after any env override, at the draw
+        f32 mfHalfWidthMetres, mfHalfHeightMetres, mfDepthSpanMetres;  // the FITTED extent
+        f32 mafClipMin[3], mafClipMax[3];        // the caster set's clip-space AABB
+        u32 muTrisSampled, muTrisSubPixel;       // the sub-pixel census
+        f32 mfMaxTriPixelArea;
+    };
+    bool ShadowProbe_ClipTally(u32 luSlot, ShadowClipReport* lpReport);
+
     // FLAG PC-platform leaf: the console's scene render target is (re)bound by
     // BrnRendererModule::BeginRenderAntiAliased @ Render:725, which runs AFTER the shadow and
     // env-map passes. This PC build has no BeginRenderAntiAliased -- renderengine::Device::
