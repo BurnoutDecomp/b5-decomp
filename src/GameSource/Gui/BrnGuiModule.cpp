@@ -1496,6 +1496,63 @@ namespace BrnGui
             lAudioEvent.GetEventType(), static_cast<s32>(sizeof(lAudioEvent)));
     }
 
+    namespace
+    {
+        // The four player-name string ids UpdatePlayerName reads/writes. The read side
+        // ("DEFAULTPLAYERNAME"/"DEFAULTPLAYERNAMEQUOTED", X360 off_82F278B4/off_82F278B8)
+        // are language-DATABASE keys whose entries ship in the LANGUAGE bundles ("You" /
+        // '"You"'); the write side (off_82F278AC/off_82F278B0) are the LIVE ids every
+        // GUI consumer resolves (GuiCache::GetPlayerName returns the first verbatim).
+        const char* const KAPC_UPN_PLAYER_NAME_ID        = "PLAYER_NAME_STRING_ID";      // @0x8206E7DC
+        const char* const KAPC_UPN_PLAYER_NAME_QUOTED_ID = "PLAYER_NAME_STRING_ID_Q";    // @0x8206E7C4
+        const char* const KAPC_UPN_DEFAULT_NAME_ID       = "DEFAULTPLAYERNAME";          // off_82F278B4
+        const char* const KAPC_UPN_DEFAULT_QUOTED_ID     = "DEFAULTPLAYERNAMEQUOTED";    // off_82F278B8
+    }
+
+    // @ 0x824F0D30 -- publish the live player name into the language database (see the
+    // header note). Runs when GuiModule::Update sees event 507 -- the command record
+    // BootProfile::OnLeave posts as the profile boot completes -- so every subsequent
+    // "PLAYER_NAME_STRING_ID" lookup (the licence card's playerName field, the HUD
+    // message analyzer's name substitution) resolves to a real name instead of the id.
+    //
+    // [PC] XUserGetName has no host equivalent and no user is ever signed in, so this
+    // always takes the console's XUserGetName-FAILED branch: copy the database's own
+    // DEFAULT entries ("You" / '"You"') under the live ids -- byte-identical to an X360
+    // with no profile signed in. The signed-in branch (gamertag + the "''%s''" quoted
+    // form) needs the platform user account and stays X360-only.
+    void GuiModule::UpdatePlayerName()
+    {
+        CgsLanguage::LanguageManager* lpLanguageManager = mViewModule.GetLanguageManager();
+        if (lpLanguageManager == 0)
+            return;   // [PC] Prepare not finished yet; the console cannot reach 507 this early.
+
+        const u8* lpcDefaultName = lpLanguageManager->FindString(KAPC_UPN_DEFAULT_NAME_ID);
+        CGS_ASSERT(lpcDefaultName != 0,
+                   "Couldn't find default player name in string database.");             // cpp:1216
+        if (lpcDefaultName == 0)
+            return;   // [PC] the console strncpy's from NULL here; entries ship in every LANGUAGE bundle
+        CGS_ASSERT(std::strlen(reinterpret_cast<const char*>(lpcDefaultName)) < 0x1B,
+                   "String too long: ");                                                  // CgsStringUtils.h:55
+        char lacName[32];
+        std::strncpy(lacName, reinterpret_cast<const char*>(lpcDefaultName), 27);
+        lacName[27] = 0;
+        lpLanguageManager->AddString(KAPC_UPN_PLAYER_NAME_ID,
+                                     reinterpret_cast<const u8*>(lacName));
+
+        const u8* lpcDefaultQuoted = lpLanguageManager->FindString(KAPC_UPN_DEFAULT_QUOTED_ID);
+        CGS_ASSERT(lpcDefaultQuoted != 0,
+                   "Couldn't find default player name quoted in string database.");      // cpp:1222
+        if (lpcDefaultQuoted == 0)
+            return;   // [PC] see above
+        CGS_ASSERT(std::strlen(reinterpret_cast<const char*>(lpcDefaultQuoted)) < 0x1F,
+                   "String too long: ");                                                  // CgsStringUtils.h:55
+        char lacQuoted[32];
+        std::strncpy(lacQuoted, reinterpret_cast<const char*>(lpcDefaultQuoted), 31);
+        lacQuoted[31] = 0;   // the console's explicit v35 = 0 store
+        lpLanguageManager->AddString(KAPC_UPN_PLAYER_NAME_QUOTED_ID,
+                                     reinterpret_cast<const u8*>(lacQuoted));
+    }
+
     // The real GuiModule::Update event dispatch (X360 0x82527A58's switch): consume the
     // module-level events, forward the load notifications, and fan the rest to the flow.
     void GuiModule::DispatchInboundGuiEvents()
@@ -1871,8 +1928,26 @@ namespace BrnGui
                     break;
 
                 case 40:   // channel 40: GuiEventOut command records -> the game bridge
+                {
+                    // Command 507 = "refresh the player name" (the {1, 507, 12} record
+                    // BootProfile::OnLeave posts as the profile boot completes). On the
+                    // console it round-trips through the game/network side and comes back
+                    // as GUI in-event 507, whose Update arm (0x82527A58 case 507) calls
+                    // UpdatePlayerName. [FLAG PC-platform seam] the network module that
+                    // reflects it does not exist on PC, so the record is answered at the
+                    // drain -- the same call at the same point in the frame, one hop
+                    // earlier. DELETE-WHEN the network sign-in manager lands and posts
+                    // in-event 507; then this becomes a plain forward and case 507 moves
+                    // to DispatchInboundGuiEvents.
+                    if (liSize >= 8 &&
+                        reinterpret_cast<const u32*>(lpEvent)[1] == 507u)
+                    {
+                        UpdatePlayerName();
+                        break;   // consumed, exactly as the console's Update arm consumes it
+                    }
                     mGuiOutQueue.AddEvent(lpEvent, liId, liSize);
                     break;
+                }
 
                 case 41:   // channel 41: GuiOutViewState records -> the view input queue
                 {

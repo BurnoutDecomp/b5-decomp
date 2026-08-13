@@ -158,6 +158,16 @@ namespace BrnGui
         // (155/201, the PC sound leaves).
         void DrainFlowOutputQueue(s32 liFlow);
 
+        // @0x824F0D30 -- refresh the two live player-name entries in the language
+        // database ("PLAYER_NAME_STRING_ID" / "PLAYER_NAME_STRING_ID_Q"). The X360 asks
+        // XUserGetName for the signed-in gamertag; when that FAILS it falls back to the
+        // database's own "DEFAULTPLAYERNAME" / "DEFAULTPLAYERNAMEQUOTED" entries ("You" /
+        // '"You"'). Triggered by GUI event 507 in GuiModule::Update's dispatch (the
+        // record BrnGui::BootProfile::OnLeave posts when the profile boot completes).
+        // (The console passes the view-state queue as a second argument; the body never
+        // reads it, so it is dropped here.)
+        void UpdatePlayerName();
+
         // The GUI resource-loading dispatch: hand the flow controller's FSM-bundle load
         // requests (GuiEventLoadRequest, queue type 39, out of mModelInputBuffer) to the
         // REAL CgsGui::GuiResourceModule, run it (its acquire machine + the [PC] platform
