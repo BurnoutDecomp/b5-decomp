@@ -241,6 +241,45 @@ namespace
         gpShadowMapTarget = lrRendererMemory.GetShadowMapBuffer(0);
         return gpShadowMapTarget != nullptr;
     }
+
+    // [PC bring-up] The POST-FX SCENE TARGETS, created the same lazy way and for the same reason.
+    //
+    // WHY THIS IS NOT JUST `Construct()`. BrnRendererMemory::Construct @0x823FCA38 is the console's one
+    // entry point into the pool and it is now much closer to linkable -- the post-fx spine wave bodied
+    // the eight sibling Create*Buffer helpers, which were the bulk of the fourteen unresolved externals
+    // in its BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE banner. Two blockers remain, and neither is
+    // honestly closeable yet:
+    //   * BrnResource::Allocators::GetGlobalGraphicsAllocator() is still declaration-only,
+    //   * the four gacIm2d{Depth,Composite}Blit{Vertex,Pixel}Program blobs are XENOS MICROCODE. Their
+    //     bytes ARE recoverable (they are at unk_8203DAA8 / DC00 / DCF0 / DE80 and this wave dumped
+    //     them), but linking Xenos microcode into a D3D9 build would satisfy the linker with data the
+    //     GPU cannot execute -- a green build that draws garbage. They wait for a PC program leaf.
+    // So the gate stays at 0 and the spine goes through this bring-up entry point, exactly as the
+    // shadow slice does. DELETE BOTH once those two land and Construct() can be called.
+    //
+    // ⚠️ ORDER IS LOAD-BEARING: PCBringUpCreateShadowMapBufferOnly NULLS EVERY POOL SLOT before it
+    // fills the shadow one, so it must run FIRST. EnsureShadowMapTarget is called before this on every
+    // path below, and this function additionally refuses to run until that target exists.
+    CgsRenderTarget* gpAntiAliasTarget = nullptr;
+
+    bool EnsurePostFxSceneTargets(BrnRendererMemory& lrRendererMemory)
+    {
+        if (gpAntiAliasTarget != nullptr)
+            return true;
+        if (renderengine::gDevice == 0)
+            return false;              // no device yet -- retry next frame
+        if (gpShadowMapTarget == nullptr)
+            return false;              // the slot-nulling pass has not run yet (see above)
+        if (!EnsureWorldDispatchAllocator())
+            return false;
+
+        // The eight Create*Buffer helpers are private to BrnRendererMemory (only Construct calls them
+        // on the console), so the bring-up goes through the one public entry point that owns the order.
+        lrRendererMemory.PCBringUpCreatePostFxSceneTargets(&sWorldDispatchAllocator);
+
+        gpAntiAliasTarget = lrRendererMemory.GetAntiAliasBuffer();
+        return gpAntiAliasTarget != nullptr;
+    }
 }
 
 void BrnRendererModule::Construct()
@@ -1153,6 +1192,19 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // anyway. So the shadow slice is created lazily, here, on the first frame that has a device
     // -- the same shape as the sky dome's PrepareSkyDome gate. DELETE with the pool.
     EnsureShadowMapTarget(mAllocatedRenderTargets);
+
+    // [PC bring-up, post-fx spine wave 2026-08-13] Realise the off-screen SCENE target (and the
+    // down-sample buffer beside it) the same lazy way, on the first frame that has a device.
+    //
+    // NOTHING RENDERS INTO IT YET, and that is deliberate. This wave lands the pool half of the spine
+    // only: the console's frame bracket (BeginRenderAntiAliased @0x823FFA18 / ResolveMSAA @0x823FFBE0 /
+    // EndRenderAntiAliased @0x82408B00) is what actually redirects the world passes off-screen, and all
+    // three are still absent from the tree -- their ledger "reviewed" status is false, like the eight
+    // pool creators' was. Until they land, the world keeps drawing straight to the back buffer and this
+    // target is created, logged ("[postfx-rt] ...") and left idle. The point of landing it separately is
+    // that a wrong scene target and a wrong bracket look identical on screen; this half is provable on
+    // its own, from the log line and an unchanged frame.
+    EnsurePostFxSceneTargets(mAllocatedRenderTargets);
 
     // ---- X360 Render:536-542 -- the three GLOBAL texture binds. --------------------------
     //

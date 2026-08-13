@@ -115,19 +115,47 @@ public:
     void SetNumSections(u8 lu8NumSections)                  { mu8NumSections = lu8NumSections; }
     void SetUseDepthStencilAsTexture(bool lbUse)            { mbUseDepthStencilAsTexture = lbUse; }
 
-    // Mark colour section luSection in use (the X360 sets its filter mode to 1 and flags it in-use +
-    // device-written), or clear it.
-    void SetColourTargetInUse(u32 luSection)
+    // --- the colour-section description bits, one setter each (DWARF-attested names) ---------------
+    //
+    // ⚠️ THESE REPLACE AN EARLIER FUSED PAIR, and the split is not a style choice. The old
+    // SetColourTargetInUse(u32) set filter mode + in-use + use-device together and
+    // ClearColourTargetInUse(u32) cleared ONE section, which served the only two callers that existed
+    // (CreateShadowmapBuffer, CreateBackBuffer) but cannot serve the rest of the pool: the eight other
+    // Create*Buffer helpers set DIFFERENT SUBSETS of those bits, and the differences are load-bearing.
+    // The DecFIGS DWARF names all four separately, and it also settles the shape of the clear:
+    //     CgsRenderTarget.h:242  void ClearColourTargetInUse();                  <-- NO parameter
+    //     CgsRenderTarget.h:245  void SetColourTargetInUse(uint32_t, bool);
+    //     CgsRenderTarget.h:248  void SetColourTargetUseDevice(uint32_t, bool);
+    //     CgsRenderTarget.h:272  void SetColourFilterMode(uint32_t, renderengine::SamplerState::FilterMode);
+    // ClearColourTargetInUse taking no argument is why every pool helper shows a FOUR-ITERATION loop in
+    // the X360 asm: the loop is inside this one method, inlined at each call site. Open-coding that
+    // loop in each helper (as a first reconstruction pass did) is a failed inlining reversal.
+    //
+    // mbUseDevice is therefore NOT part of "in use". CreateBackBuffer is the only helper in the whole
+    // pool that sets it, i.e. it means "this section IS the device's own surface", and leaving it clear
+    // is exactly what makes Construct() derive colour mode CREATE (an off-screen surface) rather than
+    // USE_DEVICE_FOR_WRITE. That is the bit the post-fx scene target depends on.
+    void ClearColourTargetInUse()
     {
-        maRenderTargets[luSection].mu32FilterMode = 1;
-        maRenderTargets[luSection].mbInUse        = true;
-        maRenderTargets[luSection].mbUseDevice    = true;
+        for (u32 luSection = 0; luSection < KU_NUM_COLOUR_SECTIONS; ++luSection)
+        {
+            maRenderTargets[luSection].mbInUse     = false;
+            maRenderTargets[luSection].mbUseDevice = false;
+        }
     }
-    void ClearColourTargetInUse(u32 luSection)
-    {
-        maRenderTargets[luSection].mbInUse     = false;
-        maRenderTargets[luSection].mbUseDevice = false;
-    }
+    void SetColourTargetInUse(u32 luSection, bool lbInUse)      { maRenderTargets[luSection].mbInUse = lbInUse; }
+    void SetColourTargetUseDevice(u32 luSection, bool lbUse)    { maRenderTargets[luSection].mbUseDevice = lbUse; }
+
+    // The value is a renderengine::SamplerState::FilterMode in the DWARF; that enum has no committed
+    // home yet, so it is carried as its underlying u32 (the only value any attested caller passes is 1).
+    void SetColourFilterMode(u32 luSection, u32 luFilterMode)   { maRenderTargets[luSection].mu32FilterMode = luFilterMode; }
+
+    // DWARF CgsRenderTarget.h:305 -- SetTextureType(uint32_t, renderengine::Texture::Type). The type is
+    // carried as its underlying u32 (renderengine::Texture::Type lives in pc/gcm/renderengine/texture.h;
+    // including that here would drag the D3D9 texture layer into every consumer of this header).
+    // BrnRendererMemory::CreateEnvmapBuffer @0x823F6C88 is the only attested caller: it passes 3
+    // (E_TYPE_CUBE) to make the environment map's colour surface a cube map.
+    void SetTextureType(u32 luSection, u32 luType)              { maRenderTargets[luSection].mu32TextureType = luType; }
     void SetColourTargetBufferFormat(u32 luSection, u32 luFormat)  { maRenderTargets[luSection].mu32BufferFormat = luFormat; }
     void SetColourTargetTextureFormat(u32 luSection, u32 luFormat) { maRenderTargets[luSection].mu32TextureFormat = luFormat; }
     void SetColourTargetBaseEDRAM(u32 luSection, u32 luBase)       { maRenderTargets[luSection].mu32BaseEDRAM = luBase; }
