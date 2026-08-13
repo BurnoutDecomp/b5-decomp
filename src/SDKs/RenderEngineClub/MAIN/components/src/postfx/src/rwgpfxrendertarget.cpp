@@ -248,7 +248,12 @@ namespace postfx
         // *(result + 8) != 0 -> resolve the surface's PixelBuffer (+0x04) out to its texture.
         if (mpTexture != nullptr)
         {
-            renderengine::PixelBuffer::Xbox2ResolveTo(mpPixelBuffer, nullptr, 0, 0, 0, 0, 0, 0, 1.0f);
+            // Trailing arguments updated 2026-08-13 for Xbox2ResolveTo's corrected signature: the
+            // 8th is the clear-colour POINTER (null here) and the 10th is ClearStencil, which the
+            // X360 passes in the first outgoing overflow slot -- `li r5, 0` @0x823F9130 then
+            // `stw r5, 0x70+var_14(r1)` = r1+0x5C @0x823F914C. Zero, from this caller's own asm.
+            renderengine::PixelBuffer::Xbox2ResolveTo(mpPixelBuffer, nullptr, 0, 0, 0, 0, 0,
+                                                      nullptr, 1.0f, 0u);
         }
     }
 
@@ -315,8 +320,12 @@ namespace postfx
         // (+0x28 != 0). (The X360 reads the colour Target at this + 0x24/0x28: maColourTargets[0].)
         if (lbResolveColour && maColourTargets[0].mpTexture != nullptr)
         {
+            // Trailing arguments updated 2026-08-13 for Xbox2ResolveTo's corrected signature: the
+            // 8th is the clear-colour POINTER (null here) and the 10th is ClearStencil, passed in
+            // the first outgoing overflow slot -- `li r5, 0` @0x823F936C then
+            // `stw r5, 0x80+var_24(r1)` = r1+0x5C @0x823F9388. Zero, from this caller's own asm.
             renderengine::PixelBuffer::Xbox2ResolveTo(
-                maColourTargets[0].mpPixelBuffer, nullptr, 0, 0, 0, 0, 0, 0, 1.0f);
+                maColourTargets[0].mpPixelBuffer, nullptr, 0, 0, 0, 0, 0, nullptr, 1.0f, 0u);
         }
 
         // Depth: when the target has a colour section (+0x18) and a depth resolve was asked, resolve the

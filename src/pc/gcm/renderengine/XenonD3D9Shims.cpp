@@ -2764,9 +2764,30 @@ void D3DDevice_SetScissorRect(void* /*lpDeviceArg*/, const void* lpRect)
 // So a pass that binds another surface underneath it has to put it back, or every
 // subsequent pass (world, sky, GUI, the 2D tail, the present) draws into that surface.
 //
-// This is that bracket, and nothing more: it saves and restores the bound colour surface,
-// depth-stencil surface, viewport and scissor. DELETE it when BeginRenderAntiAliased is
-// reconstructed -- it is a stand-in for that call, not a piece of console behaviour.
+// This is that bracket: it saves and restores the bound colour surface, depth-stencil surface,
+// viewport and scissor -- and, separately, parks the shadow map off sampler 15 (see the
+// READ-WHILE-WRITTEN note in Save). The SURFACE half is a stand-in for BeginRenderAntiAliased; the
+// SAMPLER half is not, and outlives it.
+//
+// BeginRenderAntiAliased exists as of 2026-08-13, but the deletion gate is NOT the function's
+// existence: its definition is compiled out behind BRN_ANTIALIAS_BRACKET_AVAILABLE (six symbols it
+// calls are undefined in the linked object set), the render-target pool must actually hold slots 0
+// and 4, and Render must gate the call on EnsurePostFxSceneTargets(). The full four-part condition
+// is on the declarations in ShadowPassPCLeaf.h. Deleting this today would swap a working bracket
+// for a null deref and re-open the measured bug recorded at the gpLastRenderTargetState line below.
+//
+// ONE THING TO CARRY ACROSS WHEN IT DOES GO, stated with its evidence separated:
+//   FACT -- BeginRenderAntiAliased sets no viewport and no scissor. It issues no
+//   D3DDevice_SetViewportF and no D3DDevice_SetScissorRect anywhere in 0x823FFA18-0x823FFBD8, and
+//   the bind it does perform (renderengine::Device::SetState, the PC body of which is
+//   PostFxRenderTargetPCLeaf.cpp:465-485) touches only SetRenderTarget / SetDepthStencilSurface.
+//   So a PC scene pass opened by that function alone inherits the previous pass's viewport --
+//   i.e. whatever this bracket currently restores.
+//   INTERPRETATION, from the documented Xenon tiling model and NOT recovered from this image
+//   (D3DDevice_BeginTiling @0x82947BC0 has no body in the export) -- that on the console the
+//   viewport and scissor came from the tile rectangles handed to D3DDevice_BeginTiling. Whoever
+//   writes the PC leaf must settle the viewport on PC evidence rather than implement this half as
+//   though it were recovered.
 // =============================================================================
 namespace renderengine
 {
@@ -2872,11 +2893,177 @@ void PCSurfaceBracket_Restore()
     // later frame rendered its three cascades into the back buffer's colour and depth.
     // The console needs no such invalidation because its counterpart of this restore is
     // BeginRenderAntiAliased, which rebinds THROUGH Device::SetState and keeps the shadow in
-    // step. DELETE this line together with the bracket, when BeginRenderAntiAliased lands.
+    // step. DELETE this line together with the bracket -- gated on the definitions, the pool and
+    // Render's call (the four-part condition on the declarations in ShadowPassPCLeaf.h), NOT on
+    // BeginRenderAntiAliased merely existing, which it does as of 2026-08-13. Its rebind is a
+    // compare-and-SKIP against this very shadow, so a stale "the shadow-map state is installed"
+    // value differs from the anti-alias state and the bind still happens -- which is what makes the
+    // invalidation redundant once the call is genuinely on the frame path, rather than load-bearing
+    // in the other direction.
     gpLastRenderTargetState = nullptr;
 
     if (spSavedColourSurface != nullptr) { spSavedColourSurface->Release(); spSavedColourSurface = nullptr; }
     if (spSavedDepthSurface  != nullptr) { spSavedDepthSurface->Release();  spSavedDepthSurface  = nullptr; }
+}
+
+// =============================================================================
+// FLAG PC bring-up: the SCENE-TARGET PRESENT BLIT's device state.
+//
+// See the banner on PCSceneBlit_Begin/_End in ShadowPassPCLeaf.h for WHAT this is and what
+// retires it (BrnPostFx::Render @0x8240A468 -- the real composite, a later wave). Short form:
+// once BrnRendererModule.cpp's BRN_ANTIALIAS_BRACKET_AVAILABLE is 1 the world renders
+// off-screen, and one full-screen textured quad through the existing Im2d path puts it back on
+// the back buffer before the 2D/GUI tail. These two set and unset the device state that quad
+// needs and the Im2d API cannot express.
+//
+// NOTHING HERE IS RECOVERED FROM THE X360 IMAGE. There is no console counterpart: the Xenos
+// resolves EDRAM into a texture and BrnPostFx samples it, so no equivalent state block exists to
+// decompile. Every value below is a D3D9 platform decision and is justified against the host code
+// it has to survive, never against an address.
+// =============================================================================
+namespace
+{
+    // What PCSceneBlit_Begin overwrote, so PCSceneBlit_End can put it back exactly. The RENDER
+    // TARGET is deliberately NOT in here: leaving the back buffer bound is the entire point.
+    DWORD suSavedAlphaBlendEnable = FALSE;
+    DWORD suSavedAlphaTestEnable  = FALSE;
+    DWORD suSavedZEnable          = 0;
+    DWORD suSavedZWriteEnable     = 0;
+    DWORD suSavedCullMode         = 0;
+    DWORD suSavedScissorEnable    = FALSE;
+    DWORD suSavedAddressU         = 0;
+    DWORD suSavedAddressV         = 0;
+    DWORD suSavedMinFilter        = 0;
+    DWORD suSavedMagFilter        = 0;
+    DWORD suSavedMipFilter        = 0;
+    DWORD suSavedSrgbTexture      = 0;
+    DWORD suSavedColourOp         = 0;
+    DWORD suSavedColourArg1       = 0;
+    DWORD suSavedAlphaOp          = 0;
+    DWORD suSavedAlphaArg1        = 0;
+    bool  sbSceneBlitStateSaved   = false;
+
+    const u32 KU_BLIT_SAMPLER_UNIT = 0u;   // the Im2d path's only texture stage (CgsIm2d.cpp)
+}
+
+void PCSceneBlit_Begin()
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr || sbSceneBlitStateSaved)
+        return;
+
+    // ---- (1) PUT THE BACK BUFFER BACK. --------------------------------------------------
+    // With the bracket live, BeginRenderAntiAliased has bound the anti-alias buffer's surfaces
+    // and NOTHING has unbound them -- that is EndRenderAntiAliased @0x82408B00, which is not
+    // reconstructed yet. So this does it, and hands the frame back to the 2D tail on the swap
+    // chain exactly as it found it before the bracket existed.
+    IDirect3DSurface9* lpBackBuffer = nullptr;
+    if (SUCCEEDED(lpDevice->GetBackBuffer(0u, 0u, D3DBACKBUFFER_TYPE_MONO, &lpBackBuffer))
+        && lpBackBuffer != nullptr)
+    {
+        lpDevice->SetRenderTarget(0, lpBackBuffer);   // also resets the viewport to the full surface
+        lpBackBuffer->Release();                      // GetBackBuffer AddRefs
+    }
+    // No depth surface: the blit is a screen-space quad with Z off, and the depth surface still
+    // bound is the SCENE's, not the swap chain's. Everything after this point in the frame -- the
+    // loading-screen layers, the GUI/Apt flush, the movie quad, the debug HUD, the thread monitors
+    // -- runs with D3DRS_ZENABLE FALSE (ImRenderer<V>::BeginRendering, CgsIm2d.cpp:140), so none
+    // of them reads or writes depth. The next frame's world pass binds its own depth through
+    // BeginRenderAntiAliased's renderengine::Device::SetState.
+    lpDevice->SetDepthStencilSurface(nullptr);
+
+    // The two binds above go STRAIGHT to D3D9, so the engine's "last render-target state
+    // installed" cache (X360 dword_83010A30) did not see them and would keep claiming the scene
+    // state is on the device -- and the next SetRenderTargetState / RenderTarget::Begin would
+    // compare equal and SKIP its bind. That exact miss is what put the shadow cascades in the back
+    // buffer (see the note in PCSurfaceBracket_Restore above). Invalidate, same as there.
+    gpLastRenderTargetState = nullptr;
+
+    // ---- (2) SAVE WHAT WE ARE ABOUT TO OVERWRITE. ---------------------------------------
+    lpDevice->GetRenderState(D3DRS_ALPHABLENDENABLE,  &suSavedAlphaBlendEnable);
+    lpDevice->GetRenderState(D3DRS_ALPHATESTENABLE,   &suSavedAlphaTestEnable);
+    lpDevice->GetRenderState(D3DRS_ZENABLE,           &suSavedZEnable);
+    lpDevice->GetRenderState(D3DRS_ZWRITEENABLE,      &suSavedZWriteEnable);
+    lpDevice->GetRenderState(D3DRS_CULLMODE,          &suSavedCullMode);
+    lpDevice->GetRenderState(D3DRS_SCISSORTESTENABLE, &suSavedScissorEnable);
+    lpDevice->GetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_ADDRESSU,    &suSavedAddressU);
+    lpDevice->GetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_ADDRESSV,    &suSavedAddressV);
+    lpDevice->GetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MINFILTER,   &suSavedMinFilter);
+    lpDevice->GetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MAGFILTER,   &suSavedMagFilter);
+    lpDevice->GetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MIPFILTER,   &suSavedMipFilter);
+    lpDevice->GetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_SRGBTEXTURE, &suSavedSrgbTexture);
+    lpDevice->GetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_COLOROP,   &suSavedColourOp);
+    lpDevice->GetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_COLORARG1, &suSavedColourArg1);
+    lpDevice->GetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_ALPHAOP,   &suSavedAlphaOp);
+    lpDevice->GetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_ALPHAARG1, &suSavedAlphaArg1);
+    sbSceneBlitStateSaved = true;
+
+    // ---- (3) THE SAMPLER. ----------------------------------------------------------------
+    // CLAMP is REQUIRED, not hygiene: the half-texel-corrected UVs run to 1.0 + 0.5/width, and
+    // D3D9's default is WRAP, which would fetch column 0 at the right edge and row 0 at the
+    // bottom. LINEAR matches what the console's post-fx chain samples with; at the 1:1 sizing this
+    // blit runs at (scene target == swap chain extent, both from renderengine::gDisplayWidth /
+    // gDisplayHeight -- see BrnRendererMemory::PCBringUpCreatePostFxSceneTargets) a CORRECT
+    // half-texel offset makes LINEAR land exactly on texel centres, i.e. it degenerates to a
+    // point fetch. THAT IS THE TRIPWIRE: if the whole screen looks slightly soft, the offset is
+    // wrong, not the filter. Point-sampling here would HIDE that error rather than fix it, which
+    // is why the filter stays LINEAR.
+    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_ADDRESSU,    D3DTADDRESS_CLAMP);
+    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_ADDRESSV,    D3DTADDRESS_CLAMP);
+    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MINFILTER,   D3DTEXF_LINEAR);
+    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MAGFILTER,   D3DTEXF_LINEAR);
+    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MIPFILTER,   D3DTEXF_NONE);
+    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_SRGBTEXTURE, FALSE);
+
+    // ---- (4) OPAQUE, TEXTURE ONLY. -------------------------------------------------------
+    // ⚠ THE ALPHA IS THE TRAP. ImRenderer<V>::BeginRendering turns blending ON with
+    // SRCALPHA/INVSRCALPHA (CgsIm2d.cpp:142-144) and ImRendererBase::SetTexture sets ALPHAOP to
+    // MODULATE (CgsIm2d.cpp:87-89), so the quad's coverage would be the SCENE TARGET's alpha
+    // channel -- which BeginRenderAntiAliased clears to KF_BACKGROUND_COLOUR_ALPHA == 0.0f
+    // (X360 flt_82001CC0, `lfs` @0x823FFA5C / @0x823FFA9C). A blit under that state draws
+    // nothing at all, and the symptom is a black screen indistinguishable from "the bracket did
+    // not work". SELECTARG1 on both ops takes the scene colour and ignores both the vertex
+    // colour and the scene alpha; blending off makes the copy a copy.
+    lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE,  FALSE);
+    lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE,   FALSE);
+    lpDevice->SetRenderState(D3DRS_ZENABLE,           D3DZB_FALSE);
+    lpDevice->SetRenderState(D3DRS_ZWRITEENABLE,      FALSE);
+    lpDevice->SetRenderState(D3DRS_CULLMODE,          D3DCULL_NONE);
+    lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+    lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_COLOROP,   D3DTOP_SELECTARG1);
+    lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+    lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_ALPHAOP,   D3DTOP_SELECTARG1);
+    lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+}
+
+// Put back exactly what Begin overwrote -- and ONLY that. The render target is left on the back
+// buffer deliberately: handing the frame back on the swap chain is the whole purpose.
+void PCSceneBlit_End()
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr || !sbSceneBlitStateSaved)
+        return;
+    sbSceneBlitStateSaved = false;
+
+    lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE,  suSavedAlphaBlendEnable);
+    lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE,   suSavedAlphaTestEnable);
+    lpDevice->SetRenderState(D3DRS_ZENABLE,           suSavedZEnable);
+    lpDevice->SetRenderState(D3DRS_ZWRITEENABLE,      suSavedZWriteEnable);
+    lpDevice->SetRenderState(D3DRS_CULLMODE,          suSavedCullMode);
+    lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, suSavedScissorEnable);
+    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_ADDRESSU,    suSavedAddressU);
+    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_ADDRESSV,    suSavedAddressV);
+    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MINFILTER,   suSavedMinFilter);
+    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MAGFILTER,   suSavedMagFilter);
+    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MIPFILTER,   suSavedMipFilter);
+    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_SRGBTEXTURE, suSavedSrgbTexture);
+    lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_COLOROP,   suSavedColourOp);
+    lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_COLORARG1, suSavedColourArg1);
+    lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_ALPHAOP,   suSavedAlphaOp);
+    lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_ALPHAARG1, suSavedAlphaArg1);
+
+    // The texture stays bound at unit 0 only until the next Im2d SetTexture, which every
+    // subsequent 2D layer issues for itself.
 }
 
 // =============================================================================

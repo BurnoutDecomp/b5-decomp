@@ -158,10 +158,81 @@ namespace renderengine
     // so the shadow pass, which binds the shadow-map surfaces underneath it, must put the back
     // buffer back itself or every later pass would draw into the shadow map. These two are that
     // bracket: save the bound colour + depth surface, viewport and scissor, and restore them.
-    // DELETE when BeginRenderAntiAliased is reconstructed.
+    //
+    // ⚠ DO NOT DELETE ON "BeginRenderAntiAliased EXISTS". It exists as of 2026-08-13
+    // (BrnRendererModule.cpp @0x823FFA18) and that was always the wrong condition. FOUR things must
+    // hold first, and one part of this bracket must SURVIVE regardless:
+    //   (1) THE DEFINITIONS MUST EXIST. That body is compiled out behind
+    //       BRN_ANTIALIAS_BRACKET_AVAILABLE because six symbols it calls have no definition in the
+    //       linked object set (the four Xenos D3DDevice_* tiling/resolve entry points and
+    //       CgsDev::PerfMonGpu::Start/StopMonitor). The full list and what each owes is in that
+    //       banner in BrnRendererModule.cpp.
+    //   (2) THE POOL MUST ACTUALLY HOLD THE TARGETS. BeginRenderAntiAliased binds
+    //       mapRenderTarget[0] (GetAntiAliasBuffer) and ResolveMSAA reads mapRenderTarget[4]
+    //       (GetDownSampleBuffer), and NEITHER null-tests -- faithfully, the X360 asm
+    //       0x823FFB08-0x823FFB34 has no null test either. Those slots are filled LAZILY on PC by
+    //       BrnRendererMemory::PCBringUpCreatePostFxSceneTargets, reached through
+    //       EnsurePostFxSceneTargets (BrnRendererModule.cpp:265-282), which returns false until
+    //       renderengine::gDevice exists, until the shadow slot-nulling pass has run, and until
+    //       gDisplayWidth/Height are non-zero. Until Render gates the bracket call on that
+    //       returning true, wiring it up null-derefs on the loading screen.
+    //   (3) RENDER MUST CALL IT ON EVERY FRAME THAT RUNS THIS PASS. The console's rebind is
+    //       unconditional at Render:725; a PC call that is skipped on any frame leaves the shadow
+    //       surfaces bound for the rest of it.
+    //   (4) NOTHING BETWEEN THIS PASS AND THAT CALL MAY DRAW WITHOUT BINDING ITS OWN TARGET. On the
+    //       console the env-map pass sits in that gap and binds its own; on PC, verify it.
+    // WHY THE INVALIDATION IN PCSurfaceBracket_Restore BECOMES UNNECESSARY, once (1)-(4) hold:
+    // BeginRenderAntiAliased rebinds THROUGH renderengine::Device::SetState and writes
+    // gpLastRenderTargetState in the same breath (X360 0x823FFB2C-0x823FFB34), so the shadow stays
+    // in step -- which is exactly what this bracket's raw D3D9 restore cannot do, and is the whole
+    // reason the invalidation exists.
+    // ⚠ WHAT MUST SURVIVE THE DELETION: the SAMPLER-15 PARK in PCSurfaceBracket_Save is NOT a
+    // stand-in for BeginRenderAntiAliased and has no console counterpart at all -- the console can
+    // leave the shadow map bound on unit 15 while writing it, because it samples the RESOLVED copy
+    // and writes tiled EDRAM, whereas here the texture IS the surface and D3D9 leaves that
+    // undefined. Relocate it into the shadow manager's own bracket; deleting it with the surface
+    // save/restore would introduce a fresh undefined-behaviour bug that BeginRenderAntiAliased does
+    // nothing to prevent.
     // Defined in XenonD3D9Shims.cpp.
     void PCSurfaceBracket_Save();
     void PCSurfaceBracket_Restore();
+
+    // =========================================================================
+    // FLAG PC bring-up: THE SCENE-TARGET PRESENT BLIT's device state.
+    //
+    // ⚠ THIS IS NOT THE POST-FX COMPOSITE. The console's BrnPostFx::Render @0x8240A468 is what
+    // consumes the resolved scene -- tone map, bloom, depth of field, motion blur, the colour
+    // grade -- and it is a SEPARATE, LATER wave. These two exist for one reason: the moment
+    // BrnRendererModule.cpp's BRN_ANTIALIAS_BRACKET_AVAILABLE goes to 1, BeginRenderAntiAliased
+    // binds the anti-alias buffer's surfaces and the world passes stop drawing into the swap
+    // chain. Nothing then puts the result back, so without a blit the screen is the black that
+    // renderengine::Device::FrameBegin cleared the back buffer to -- and the wave would read as a
+    // regression rather than as the step it is.
+    //
+    // WHAT RETIRES THEM: BrnPostFx::Render drawing the composite itself. Delete these two, their
+    // definitions in XenonD3D9Shims.cpp, PCBringUpBlitSceneTargetToBackBuffer in
+    // BrnRendererModule.cpp and its call in Render, all together, on that day. They are a
+    // bring-up stand-in for a real console function, exactly like PCSurfaceBracket_* above --
+    // and, like it, the thing that retires them is a RECONSTRUCTION, not merely a decision.
+    //
+    // WHY THE Im2d PATH CANNOT DO THIS ALONE (each item is a live defeat, not a tidy-up):
+    //   * The BACK BUFFER IS NOT BOUND at that point in the frame -- the anti-alias buffer is.
+    //     Rebinding it is EndRenderAntiAliased's job (@0x82408B00, not yet reconstructed), so
+    //     Begin does it: GetBackBuffer(0) -> SetRenderTarget(0), and it nulls
+    //     gpLastRenderTargetState for the same reason PCSurfaceBracket_Restore does -- a raw
+    //     D3D9 rebind is invisible to the engine's "last state installed" cache, and a cache
+    //     that lies causes a SKIPPED bind, which is what put the shadow cascades in the back
+    //     buffer.
+    //   * ImRenderer<V>::BeginRendering enables ALPHA BLENDING (SRCALPHA/INVSRCALPHA) and
+    //     ImRendererBase::SetTexture sets D3DTSS_ALPHAOP to MODULATE. The scene target's alpha is
+    //     whatever the world left, and BeginRenderAntiAliased clears it to 0.0f -- so the blit
+    //     would be multiplied by zero alpha and draw NOTHING. Begin forces opaque,
+    //     texture-only (SELECTARG1) stage ops; End puts the 2D tail's blended MODULATE back.
+    //   * D3D9's default address mode is WRAP, and the half-texel-corrected UVs run to
+    //     1.0 + 0.5/width. Begin sets CLAMP.
+    // =========================================================================
+    void PCSceneBlit_Begin();
+    void PCSceneBlit_End();
 }
 
 // X360 dword_8301090C == CgsDepthStencilStateFactory::saDepthStencilStates[0]: the shared

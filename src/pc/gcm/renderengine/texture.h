@@ -245,12 +245,28 @@ namespace renderengine
         static SurfaceHeader* Initialize(Wrapper* lpWrapper, const Parameters* lpParams);
 
         // Resolve the tiled EDRAM surface (lpThis) out to a linear destination texture, clipping the
-        // resolve rect to the destination texture's width/height. liFlags is the D3D resolve-flags
-        // word; lfClearZ the clear-Z value; the trailing int args are the dest point / level / face
-        // and clear-colour the X360 resolve takes. Returns 1 (the X360 body's constant return).
+        // resolve rect to the destination texture's width/height. luFlags is the D3D resolve-flags
+        // word; lfClearZ the clear-Z value; liDestX/liDestY the dest point and liDestLevel/
+        // liDestSlice the destination mip / slice. Returns 1 (the X360 body's constant return).
+        //
+        // TWO PARAMETERS CORRECTED 2026-08-13 (post-fx frame-bracket wave), both from the X360 asm
+        // at 0x82B62300:
+        //   * lpClearColour is a POINTER, not an s32. The incoming 8th GPR argument (r10, saved by
+        //     `mr r25, r10` @0x82B6231C) is forwarded verbatim into the pClearColor position of both
+        //     outgoing calls -- `mr r7, r25 # pClearColor` @0x82B623A4 and `mr r10, r25 #
+        //     pClearColor` @0x82B62450 -- and is never treated as a value. Both current callers pass
+        //     null. A 32-bit console word is not a host address, so this must not be bridged through
+        //     an s32 on the LLP64 target.
+        //   * luClearStencil is the TENTH parameter and was missing. The body reads it from the
+        //     first incoming overflow slot (`lwz r9, 0xE0+arg_5C(r1)` @0x82B623A0 and
+        //     `lwz r10, 0xE0+arg_5C(r1)` @0x82B62428 -- r1+0x5C is the right-justified word of slot
+        //     0x58, i.e. argument 10, since ClearZ rides f1 and reserves no slot) and forwards it to
+        //     D3DDevice_EndTiling's ClearStencil and to D3DDevice_Resolve's own 0x5C. Both callers
+        //     supply 0 (`stw r5, 0x70+var_14` @0x823F914C and `stw r5, 0x80+var_24` @0x823F9388,
+        //     r5 = 0 in both).
         static int Xbox2ResolveTo(SurfaceHeader* lpThis, Texture* lpDestTexture, u32 luFlags,
                                   s32 liDestX, s32 liDestY, s32 liDestLevel, s32 liDestSlice,
-                                  s32 liClearColour, f32 lfClearZ);
+                                  const void* lpClearColour, f32 lfClearZ, u32 luClearStencil);
 
         // Patch the EDRAM tile base (low 12 bits of muEDRAMBase) -- only for colour/depth kinds
         // (muKind <= 1); higher kinds are left untouched.

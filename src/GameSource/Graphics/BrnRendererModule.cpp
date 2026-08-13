@@ -33,6 +33,79 @@
 // Expect no visible shadows on the first boot after this change -- that is the intended two-step.
 #define BRN_SHADOW_MAP_TARGET_AVAILABLE 1
 
+// ---------------------------------------------------------------------------------------------
+// BRN_ANTIALIAS_BRACKET_AVAILABLE -- the ANTI-ALIASED SCENE-PASS BRACKET gate (2026-08-13).
+//
+// BeginRenderAntiAliased @0x823FFA18 and ResolveMSAA @0x823FFBE0 are reconstructed further down this
+// file (after RenderShadowMapPasses), together with the PC bring-up blit that presents the scene
+// target. They are ALL COMPILED OUT, because six symbols they reference have no definition in any
+// object this exe links. `cl /c` cannot see that and /OPT:REF does not excuse it (measured on this
+// project, twice -- see the BRN_SHADOW_MAP_TARGET_AVAILABLE banner above).
+//
+// ⚠ WHAT THAT COSTS: with this macro at 0 the compiler reads none of that code. The per-TU compile
+// gate, the faithfulness lint and the reviewer packet all pass on text they never see, so a GREEN
+// GATE ON THIS TU IS NOT EVIDENCE ABOUT THE BRACKET. Whoever flips this to 1 should expect ordinary
+// compile errors alongside the link errors, and should not read the current green as a head start.
+//
+// WHAT MUST EXIST TO SET THIS TO 1:
+//
+//  (a) FOUR Xenos entry points, declared in pc/gcm/renderengine/Xbox2SurfaceShims.h with their
+//      decoded ABI and defined NOWHERE. Their PC home would be
+//      pc/gcm/renderengine/XenonD3D9Shims.cpp, beside the existing D3DDevice_* leaves, each marked
+//      `// FLAG PC-platform leaf: <reason>`. What each one owes, separated by strength of evidence:
+//        * D3DDevice_SetPredication -- MAY BE EMPTY. FACT: with one pass over the whole surface
+//          there is no per-tile replay of the command stream to select. The existing precedent for
+//          a legitimately empty D3DDevice_* shim is D3DDevice_Begin/EndConditionalRendering
+//          (XenonD3D9Shims.cpp:3123).
+//        * D3DDevice_EndTiling -- MAY BE EMPTY. FACT: both attested call sites pass null for every
+//          pointer argument (ResolveMSAA `li r4/r5/r6/r7/r10, 0` @0x823FFD3C-0x823FFD54), so
+//          nothing is resolved or cleared at that level.
+//        * D3DDevice_Resolve -- MUST NOT BE EMPTY, for the CLEAR. FACT: on PC the scene target
+//          already IS the texture the rest of the frame samples, so the copy is a no-op; but the
+//          0x300-mask variant is the only call in the whole bracket that carries a live clear
+//          colour on the untiled path, because BeginRenderAntiAliased's untiled branch
+//          (0x823FFB90-0x823FFBD8) loads no device pointer and clears nothing at all. Key off the
+//          mask VALUES (0x14 vs 0x300) and the null-vs-non-null clear colour.
+//        * D3DDevice_BeginTiling -- MUST NOT BE EMPTY, for the CLEAR. FACT: the colour, Z and
+//          stencil clear values are handed to this call and to no other in BeginRenderAntiAliased
+//          (`addi r7, r1, var_40 # pClearColor` @0x823FFB48, `lfs f1, flt_82001C98 # ClearZ`
+//          @0x823FFB54, `clrlwi r9, r27, 24` @0x823FFB44), so a PC shim that drops them drops the
+//          frame's clear.
+//          AND A SEPARATE, WEAKER POINT, LABELLED AS SUCH: the VIEWPORT/SCISSOR. FACT --
+//          BeginRenderAntiAliased issues no D3DDevice_SetViewportF and no D3DDevice_SetScissorRect
+//          anywhere in 0x823FFA18-0x823FFBD8, and the bind it does perform
+//          (renderengine::Device::SetState) does not set them either, so on PC this pass would
+//          inherit whatever viewport the shadow or env-map pass left behind. INTERPRETATION, from
+//          the documented Xenon tiling model and NOT recovered from this image (D3DDevice_BeginTiling
+//          @0x82947BC0 has no body in the export) -- that the console got them from the tile rects
+//          it hands BeginTiling. Whoever writes the leaf must decide the viewport question on PC
+//          evidence; do not implement the second half as though it were recovered.
+//
+//  (b) TWO GPU perf-monitor bodies. CgsDev::PerfMonGpu::StartMonitor / StopMonitor exist only in
+//      GameShared/GameClasses/Development/PerfMon/Gpu/PS3/CgsPerfMonGpuPS3.cpp, which is not on the
+//      exe source list. That file is host-portable (it already times with QueryPerformanceCounter),
+//      so mounting it is plausible -- but its StartMonitor asserts `mbProfilingRunning == true` and
+//      nothing in this tree calls PerfMonGpu::StartProfiling / Construct / Swap, so mounting it and
+//      flipping this gate in one step fires that assert twice a frame. Both steps, in order.
+//
+//  (c) THE POOL, before Render may call either body. Neither body null-tests -- faithfully; the
+//      X360 asm at 0x823FFB08-0x823FFB34 has no null test -- so
+//      GetAntiAliasBuffer()->GetRenderTarget() and GetDownSampleBuffer()->GetDepthTexture()
+//      null-deref if pool slots 0 and 4 are empty. On PC those slots are filled LAZILY by
+//      BrnRendererMemory::PCBringUpCreatePostFxSceneTargets, reached through
+//      EnsurePostFxSceneTargets (this file, :265-282), which returns false until
+//      renderengine::gDevice exists, until the shadow slot-nulling pass has run, and until
+//      gDisplayWidth/Height are non-zero. Render must gate the call on that returning true --
+//      NOT by adding a guard inside these bodies.
+//
+//  (d) SOMETHING MUST PUT THE SCENE BACK ON THE BACK BUFFER. The instant this gate goes to 1 the
+//      world passes stop drawing into the swap chain, and if nothing presents the off-screen target
+//      the screen is the black FrameBegin cleared it to. The PC bring-up blit further down this file
+//      (PCBringUpBlitSceneTargetToBackBuffer, called from Render under the same gate) is that
+//      something. It is NOT the post-fx composite -- BrnPostFx::Render @0x8240A468 is the next wave
+//      and retires it.
+#define BRN_ANTIALIAS_BRACKET_AVAILABLE 0
+
 // Minimal constructor for the off-path job placeholder embedded in BrnRendererModule
 // (Option B). The job system is reconstructed with the threading core; on the
 // single-threaded boot it carries no behaviour, so this definition keeps the link
@@ -825,6 +898,573 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
 #endif  // BRN_SHADOW_MAP_TARGET_AVAILABLE
 }
 
+#if BRN_ANTIALIAS_BRACKET_AVAILABLE
+
+#include "pc/gcm/renderengine/Xbox2SurfaceShims.h"   // renderengine::D3DDevice_BeginTiling / EndTiling / Resolve / SetPredication + gpD3DDevice
+#include "GameSource/Graphics/BrnAntiAliasTiling.h"  // BrnGraphics::KMSAA_TILING_PLAN / KNO_MSAA_TILING_PLAN (the recovered tile rects)
+#include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"  // CgsDev::PerfMonGpu::Start/StopMonitor
+
+// ================================================================================================
+// THE FRAME BRACKET -- BeginRenderAntiAliased @0x823FFA18 / ResolveMSAA @0x823FFBE0.
+//
+// THE SEAM, one line per function (this is the thing the PC leaf decision hangs on):
+//
+//   BeginRenderAntiAliased -- HALF AND HALF. Console EDRAM machinery with no D3D9 counterpart:
+//     D3DDevice_BeginTiling + D3DDevice_SetPredication. Platform-neutral frame logic the PC build
+//     MUST execute: the background-colour maths, the mvBackgroundColour publish, and the section-0
+//     RenderTargetState bind -- that bind IS what makes the world pass render off-screen.
+//
+//   ResolveMSAA -- NOTHING in it is platform-neutral; every call it makes is the EDRAM copy-out
+//     (SetPredication, both Resolves, EndTiling). But the PC leaf still OWES the CLEAR, because the
+//     0x300 colour resolve is the ONLY clear on the untiled path -- BeginRenderAntiAliased's untiled
+//     branch deliberately clears nothing at all.
+//
+// WHAT THAT MEANS FOR THE FOUR SHIMS, stated as answers rather than options:
+//   * D3DDevice_SetPredication and D3DDevice_EndTiling can be legitimately EMPTY on PC. With one
+//     pass over the whole surface there is no tile replay to select and no tiling pass to close
+//     (D3DDevice_Begin/EndConditionalRendering @XenonD3D9Shims.cpp:3123 are the existing precedent
+//     for a legitimately empty D3DDevice_* shim).
+//   * D3DDevice_BeginTiling CANNOT be empty. The console got TWO things out of it that nothing else
+//     in this function supplies: (1) the VIEWPORT + SCISSOR, which on the Xenos come from the tile
+//     rects -- BeginRenderAntiAliased issues no D3DDevice_SetViewportF / SetScissorRect anywhere
+//     (0x823FFA18-0x823FFBD8 contains neither call), so on PC the pass would inherit whatever
+//     viewport the shadow or env-map pass left; and (2) the colour/Z/stencil CLEAR.
+//     ⚠ (1) is INTERPRETATION from the documented Xenon tiling model, NOT recovered from this
+//     image; (2) is FACT, read off the three clear arguments at 0x823FFB44-0x823FFB54.
+//   * D3DDevice_Resolve CANNOT be empty either, for the clear in the paragraph above.
+//
+// (A) NO FORKED SYMBOLS. All four Xenos entry points are declared in their committed home,
+// pc/gcm/renderengine/Xbox2SurfaceShims.h, inside namespace renderengine -- D3DDevice_EndTiling and
+// D3DDevice_Resolve were already there (lines 34-42) and are CORRECTED in place to the ABI decoded
+// below; D3DDevice_BeginTiling and D3DDevice_SetPredication are genuinely new and are added beside
+// their siblings. Nothing is re-declared here. renderengine::gpD3DDevice comes from the same header
+// (line 45), so the local `namespace renderengine { extern void* gpD3DDevice; }` an earlier draft
+// carried is gone too.
+// ================================================================================================
+
+namespace
+{
+    // --- the bracket's recovered constants ------------------------------------------------------
+    // Every value below is matched to the DISPLACEMENT the assembly addresses. Each .rdata block in
+    // DATA_DUMP.md runs PAST its symbol into unrelated rodata (flt_82001CC0 +0x08 spells "Monitor ",
+    // flt_82004740 +0x08 spells "mpIceWra", flt_820473A4 +0x14 spells "kColourAndPo"), so a value
+    // taken from a block's first dword instead of its addressed displacement would be wrong.
+
+    // Grey-background channel: flt_82004740 +0x00 == 0x3E99999A == 0.300000012f, addressed by
+    // `lfs f0, flt_82004740@l(r11)` @0x823FFA44.
+    const f32 KF_BACKGROUND_COLOUR_GREY  = 0.3f;
+
+    // The normal background tint -- one displacement each into the flt_820473A4 block, matched to
+    // the store that consumes it:
+    //   flt_820473AC = block +0x08 = 0x3F3851EC = 0.720000029f -> RED   (lfs @0x823FFA70, stfs .x @0x823FFA7C)
+    //   flt_820473A8 = block +0x04 = 0x3F547AE1 = 0.829999983f -> GREEN (lfs @0x823FFA80, stfs .y @0x823FFA8C)
+    //   flt_820473A4 = block +0x00 = 0x3F63D70A = 0.889999986f -> BLUE  (lfs @0x823FFA90, stfs .z @0x823FFA98)
+    // R < G < B: it is a pale blue.
+    const f32 KF_BACKGROUND_COLOUR_RED   = 0.72f;
+    const f32 KF_BACKGROUND_COLOUR_GREEN = 0.83f;
+    const f32 KF_BACKGROUND_COLOUR_BLUE  = 0.89f;
+
+    // Alpha: flt_82001CC0 +0x00 == 0x00000000 == 0.0f (asm @0x823FFA5C / @0x823FFA9C). A DUMPED
+    // zero, read off a cited displacement -- not a placeholder standing in for an unknown.
+    const f32 KF_BACKGROUND_COLOUR_ALPHA = 0.0f;
+
+    // Every clear and resolve in the bracket clears Z to flt_82001C98 +0x00 == 0x3F800000 == 1.0f
+    // (`lfs f1, flt_82001C98@l(r10)` @0x823FFB54; `lfs f31, ...` @0x823FFC78 / @0x823FFDAC).
+    const f32 KF_CLEAR_Z = 1.0f;
+
+    // The HALF-PIXEL scale the console's own render targets compute their UV offset with.
+    // rw::graphics::postfx::RenderTarget::GetHalfPixelOffset @0x823FE668 builds
+    // (1.0f/width, 1.0f/height, 0, 0) -- `fdivs f12, f0, f12` / `fdivs f0, f0, f13` @0x823FE6D4/D8
+    // with f0 = flt_82001C98 = 1.0f -- and multiplies the whole vector by a splat of flt_82001DA0
+    // (`lvx128 v0` on the block whose word 0 is that constant, `vspltw v0, v0, 0` @0x823FE6AC/B4,
+    // then `vmulfp128 v0, v13, v0` @0x823FE6EC). BrnPostFx::Render @0x8240A468 inlines exactly the
+    // same sequence for the same purpose (@0x8240A574-0x8240A630).
+    //
+    // ⚠ flt_82001DA0 IS NOT IN scratch/postfx_wave1_dossiers/DATA_DUMP.md -- 0x82001DA0 needs to be
+    // added to the next dump. It is NOT a placeholder: the value is settled in-image, twice, by
+    // functions where a load from it is stored with no arithmetic in between and Hex-Rays renders
+    // the store as a literal --
+    //   BrnDirector::Camera::Utils::Looker::Parameters::Construct @0x821F8D80:
+    //     `lfs f0, flt_82001DA0@l(r10)` @0x821F8E28 -> `stfs f0, 0x40(r3)` @0x821F8E30 and
+    //     `stfs f0, 0x50(r3)` @0x821F8E34, pseudocode `*(result + 64) = 0.5;` / `*(result + 80) = 0.5;`
+    //   BrnDirector::Camera::BehaviourRig::Parameters::Construct @0x821F9680:
+    //     `lfs f10, flt_82001DA0@l(r11)` @0x821F96C8 -> `stfs f10, 0xEC(r3)` @0x821F96D0,
+    //     pseudocode `*(result + 236) = 0.5;`
+    // 0x40 == 64, 0x50 == 80, 0xEC == 236. Two unrelated functions, three stores, one value.
+    const f32 KF_HALF_PIXEL = 0.5f;
+
+    // The multisampled path always drives TWO EDRAM tiles. IMMEDIATE in both functions:
+    // `li r5, 2` @0x823FFB50 (BeginTiling's Count) and `cmplwi cr6, r31, 2` @0x823FFD2C (the resolve
+    // loop bound). Neither reads BrnGraphics::KMSAA_TILING_PLAN.mu32NumTiles, which happens to hold
+    // the same 2 -- the immediate is what the binary does and the immediate is what is reproduced.
+    const u32 KU_NUM_MSAA_TILES = 2u;
+
+    // Two predication bits per tile (`li r24, 3` @0x823FFC80, shifted by 2*tile via
+    // `slwi r11, r31, 1` + `slw r4, r24, r11` @0x823FFC84/8C).
+    const u32 KU_PREDICATION_BITS_PER_TILE = 3u;
+
+    // The two D3DRESOLVE_* masks, exactly as the X360 immediates (`li r4, 0x14` @0x823FFCDC /
+    // @0x823FFDCC and `li r4, 0x300` @0x823FFD18 / @0x823FFE08).
+    //
+    // WHAT THE BITS MEAN, separated by strength of evidence -- the PC leaf must key off the two mask
+    // VALUES, not off my decomposition:
+    //   0x04  = "the depth/stencil surface". PROVEN INSIDE THIS IMAGE:
+    //           renderengine::PixelBuffer::Xbox2ResolveTo @0x82B62300 does `ori r28, r28, 4`
+    //           (@0x82B62358) on exactly the branch where the surface kind is 1 == depth-stencil.
+    //   0x100 / 0x200 = the colour and depth/stencil CLEARS. SUPPORTED INSIDE THIS IMAGE: the 0x300
+    //           call is the one that passes a non-null clear colour (`addi r10, r1, var_70`
+    //           @0x823FFCF8) while the 0x14 call passes null (`li r10, 0` @0x823FFCC0). A resolve
+    //           that took no clear colour would have no use for one.
+    //   0x10  = FRAGMENT0 (take sample 0 rather than averaging, because depth samples cannot be
+    //           averaged). INTERPRETATION from the documented Xenon D3DRESOLVE_* set -- an external
+    //           platform API, NOT recovered from this image. Nothing below depends on it.
+    const u32 KU_RESOLVE_DEPTH_STENCIL_FRAGMENT0 = 0x14u;
+    const u32 KU_RESOLVE_COLOUR_AND_CLEAR        = 0x300u;
+
+    // The Xenon D3DPOINT (destination corner) D3DDevice_Resolve takes: two dwords, x then y, built
+    // on the stack (`stw r10, var_80` / `stw r11, var_7C` @0x823FFCAC/B0 and the zero pair
+    // @0x823FFD7C/D84). TU-local on purpose, exactly like the ViewportF / ScissorRect argument
+    // blocks that CgsRenderTarget.cpp, BrnShadowMapRenderManager.cpp and rwgpfxrendertarget.cpp each
+    // keep file-local: it is a call-argument block, not a shared type. If a second TU ever needs it,
+    // it moves to Xbox2SurfaceShims.h beside the shim that consumes it -- it does not get copied.
+    struct XenonPoint
+    {
+        s32 miX;   // +0x00
+        s32 miY;   // +0x04
+    };
+
+    // The render-target-state bind BeginRenderAntiAliased performs in BOTH of its branches: take
+    // section 0's RenderTargetState off the target's post-fx render target and install it, skipping
+    // the device call when it is already the installed one.
+    //
+    // WHAT THIS IS, per the DWARF: BrnGraphicsUnity.cpp:4597 lists shadow::Device::SetState TWICE
+    // inside BeginRenderAntiAliased -- exactly the two inlined instances the X360 shows at
+    // 0x823FFB20-0x823FFB34 and 0x823FFBB4-0x823FFBC8. So the original operation is
+    // shadow::Device::SetState(const renderengine::RenderTargetState*). It has NO home in this tree:
+    // shadowingdevice.h declares only SetState(void*, u32 luSamplerId) (line 58). This function is a
+    // disclosed TU-LOCAL stand-in for that missing overload -- named for the operation rather than
+    // claiming the DWARF name at the wrong scope -- and it is written once instead of twice because
+    // AGENTS.md requires inlining reversal. DELETE it and call shadow::Device::SetState the day that
+    // overload lands (the proposal, with its four other open-coded copies, is in this task's notes).
+    //
+    // IT IS DELIBERATELY NOT CgsRenderTarget::SetRenderTargetState @0x827E7588, and the difference is
+    // itself part of the seam: that function ALSO sets the viewport and scissor to the target's full
+    // extent and falls back to postfx::gpDefaultRenderTargetState when the section state is null.
+    // BeginRenderAntiAliased does neither -- 0x823FFB08-0x823FFB34 contains no D3DDevice_SetViewportF,
+    // no D3DDevice_SetScissorRect and no null test -- because on the Xenos the viewport comes from the
+    // tile rects BeginTiling is handed. (The DWARF's PS3 body DOES call
+    // CgsRenderTarget::SetRenderTargetState; the X360 asm does not, and rung 1 arbitrates.)
+    //
+    // THE CACHE WORD IS X360 dword_83010A30 and it is reached at its ONE canonical host home,
+    // renderengine::gpLastRenderTargetState (declared ShadowPassPCLeaf.h:52, defined
+    // PostFxRenderTargetPCLeaf.cpp:463) -- the same variable CgsRenderTarget::SetRenderTargetState*
+    // and rw::graphics::postfx::RenderTarget::Begin read. No second copy is minted here. (There IS a
+    // pre-existing second host home for that word, shadow::Device::muMisc30, which has a WRITE and no
+    // readers; it is recorded as an open defect in REPORT.md and is deliberately NOT touched by this
+    // wave, because shadowingdevice.cpp is mounted and ResetShadowing runs per frame.)
+    //
+    // THE STORE IS INSIDE THE BRANCH, and that is faithful, not tidied: the asm's `stw r29,
+    // dword_83010A30` @0x823FFB34 sits AFTER the `beq` at 0x823FFB28, i.e. on the not-equal path
+    // only. This is the compare-and-SKIP shape, NOT the unconditional-write-back shape of the
+    // blend/depth/rasterizer cached-state setters elsewhere in this wave -- do not "harmonise" them.
+    void ShadowedSetRenderTargetState(CgsRenderTarget* lpTarget)
+    {
+        const renderengine::RenderTargetState* const lpState =
+            lpTarget->GetRenderTarget()->GetSectionRenderTargetState(0);
+        if (renderengine::gpLastRenderTargetState != lpState)
+        {
+            renderengine::Device::SetState(lpState);
+            renderengine::gpLastRenderTargetState = lpState;
+        }
+    }
+
+    // ============================================================================================
+    // [FLAG PC bring-up] PRESENT THE SCENE TARGET -- one full-screen textured quad that puts the
+    // off-screen scene colour back on the back buffer before the 2D/GUI tail.
+    //
+    // ⚠ THIS IS NOT THE POST-FX COMPOSITE. BrnPostFx::Render @0x8240A468 is what really consumes the
+    // resolved scene (tone map, bloom, depth of field, motion blur, the colour grade) and it is the
+    // NEXT wave. This exists because of a hard sequencing fact: the moment
+    // BRN_ANTIALIAS_BRACKET_AVAILABLE goes to 1, BeginRenderAntiAliased binds the anti-alias buffer
+    // and the world stops drawing into the swap chain. If nothing hands the result back, the screen
+    // is the black renderengine::Device::FrameBegin cleared it to and the wave reads as a
+    // regression. RETIRED BY BrnPostFx::Render -- delete this function, its call in Render,
+    // renderengine::PCSceneBlit_Begin/_End and their definitions in XenonD3D9Shims.cpp together.
+    //
+    // WHICH TARGET IT READS, and why it is the ANTI-ALIAS buffer and not the down-sample buffer:
+    // BeginRenderAntiAliased binds mapRenderTarget[0] (GetAntiAliasBuffer) section 0, so that IS the
+    // surface the world renders into. ResolveMSAA copies it into mapRenderTarget[4]
+    // (GetDownSampleBuffer) -- but that copy is D3DDevice_Resolve's, and D3DDevice_Resolve has no PC
+    // definition yet (it is one of the six symbols this whole block is gated on). Reading the
+    // down-sample buffer would therefore read a texture nothing has written. When the real composite
+    // lands it reads the down-sample buffer, as the console does.
+    //
+    // THE HALF-TEXEL OFFSET IS THE ONE THING THAT IS EASY TO GET WRONG HERE, and getting it wrong
+    // does NOT produce an obvious failure -- it produces a picture that is uniformly, slightly soft,
+    // which reads as "the render target format is a bit lossy" rather than as a bug. Two separate
+    // claims, at two different strengths:
+    //   * FACT, from the image: the console's own offset for a render target is
+    //     (0.5/width, 0.5/height, 0, 0) -- rw::graphics::postfx::RenderTarget::GetHalfPixelOffset
+    //     @0x823FE668 reads width/height from the target (+0x04 / +0x08, `lwz r9, 4(r4)` /
+    //     `lwz r8, 8(r4)`), reciprocates them against 1.0f and scales by 0.5f. BrnPostFx::Render
+    //     @0x8240A468 inlines the identical sequence and feeds the result to the post-fx passes.
+    //     So the MAGNITUDE below is recovered, not chosen.
+    //   * INTERPRETATION, from the Direct3D 9 rasterisation rule and NOT from this image: that the
+    //     offset is ADDED to the UVs of a screen-space quad. D3D9 places a pixel's sample point at
+    //     integer screen coordinates while texel i's centre is at texel coordinate i + 0.5, so a
+    //     0..W quad with 0..1 UVs samples exactly on texel BOUNDARIES and a LINEAR fetch averages
+    //     two texels everywhere. Adding 0.5/W to u and 0.5/H to v moves every sample onto a texel
+    //     centre. (This is the same correction as shifting the vertices by -0.5 px, done in UV space
+    //     instead -- which is the right place here, because ImRenderer<V>::Render multiplies the
+    //     LOGICAL 1280x720 position by gDisplayWidth/1280 before it reaches the device, so a
+    //     position-space shift would be scaled by the display ratio and a UV-space one is not.)
+    // TRIPWIRE, so this is checkable rather than argued: at the sizing this runs at -- the scene
+    // target is created at renderengine::gDisplayWidth x gDisplayHeight
+    // (BrnRendererMemory::PCBringUpCreatePostFxSceneTargets) and the swap chain is the same extent
+    // (device.cpp:90-91), i.e. exactly 1:1 -- a CORRECT offset makes the LINEAR filter land on texel
+    // centres and return each texel unblended. So a correct blit is pixel-exact and a wrong one is
+    // softly blurred EVERYWHERE. If the frame looks soft, this sign or this denominator is wrong;
+    // do not reach for the filter state.
+    void PCBringUpBlitSceneTargetToBackBuffer(BrnRendererMemory& lrRendererMemory,
+                                              CgsGraphics::Im2d* lpIm2d)
+    {
+        CgsRenderTarget* const lpSceneTarget = lrRendererMemory.GetAntiAliasBuffer();
+        if (lpSceneTarget == 0 || lpIm2d == 0)
+        {
+            return;
+        }
+
+        renderengine::Texture* const lpSceneTexture = lpSceneTarget->GetTexture(0u);
+        const u32 luSceneWidth  = lpSceneTarget->GetWidth();
+        const u32 luSceneHeight = lpSceneTarget->GetHeight();
+        if (lpSceneTexture == 0 || luSceneWidth == 0u || luSceneHeight == 0u)
+        {
+            return;   // the lazy pool has not built the target yet -- nothing to present
+        }
+
+        // The console's own half-pixel offset for THIS target (see the banner above): the same
+        // 0.5/width, 0.5/height GetHalfPixelOffset @0x823FE668 computes, from the same two
+        // dimensions it reads off the render target.
+        const f32 lfHalfTexelU = KF_HALF_PIXEL / static_cast<f32>(luSceneWidth);
+        const f32 lfHalfTexelV = KF_HALF_PIXEL / static_cast<f32>(luSceneHeight);
+
+        // The Im2d path's logical screen space -- the PC leaf scales these to the real back buffer
+        // (CgsIm2d.cpp:50-51, :182-183). Host convention, not a console constant; the same pair the
+        // existing quads in this file use (RenderThreeThreadMonitors :98-99, the movie underlay
+        // :1384).
+        const f32 KF_LOGICAL_WIDTH  = 1280.0f;
+        const f32 KF_LOGICAL_HEIGHT = 720.0f;
+
+        // Opaque white. The stage ops PCSceneBlit_Begin installs are SELECTARG1(TEXTURE), so this
+        // colour is not read -- it is set so that a future regression to a MODULATE stage degrades
+        // to "modulated by white" (i.e. still correct) rather than to black.
+        const CgsGraphics::RGBA8 KC_OPAQUE_WHITE = { 255, 255, 255, 255 };
+
+        // TL, TR, BL, BR -- the same 4-vertex triangle-strip order as EmitColouredQuad in this file.
+        CgsGraphics::Basic2dColouredTexturedVertex laVerts[4];
+        const f32 lafPos[4][2] = { { 0.0f,              0.0f              },
+                                   { KF_LOGICAL_WIDTH,  0.0f              },
+                                   { 0.0f,              KF_LOGICAL_HEIGHT },
+                                   { KF_LOGICAL_WIDTH,  KF_LOGICAL_HEIGHT } };
+        const f32 lafUV[4][2]  = { { 0.0f + lfHalfTexelU, 0.0f + lfHalfTexelV },
+                                   { 1.0f + lfHalfTexelU, 0.0f + lfHalfTexelV },
+                                   { 0.0f + lfHalfTexelU, 1.0f + lfHalfTexelV },
+                                   { 1.0f + lfHalfTexelU, 1.0f + lfHalfTexelV } };
+        for (s32 liVertex = 0; liVertex < 4; ++liVertex)
+        {
+            laVerts[liVertex].mv2Pos    = { lafPos[liVertex][0], lafPos[liVertex][1] };
+            laVerts[liVertex].mv2Tex0UV = { lafUV[liVertex][0], lafUV[liVertex][1] };
+            laVerts[liVertex].mv4Colour = KC_OPAQUE_WHITE;
+        }
+
+        // ORDER IS LOAD-BEARING. BeginRendering re-enables alpha blending and SetTexture sets the
+        // stage ops to MODULATE, so PCSceneBlit_Begin has to run AFTER both or its opaque
+        // texture-only state is immediately overwritten and the quad draws with the scene's alpha
+        // (which BeginRenderAntiAliased clears to 0) -- i.e. invisible. See ShadowPassPCLeaf.h.
+        lpIm2d->BeginRendering();
+        lpIm2d->SetTexture(lpSceneTexture);
+        renderengine::PCSceneBlit_Begin();
+        lpIm2d->Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);   // triangle strip
+        renderengine::PCSceneBlit_End();
+        lpIm2d->EndRendering();
+    }
+}
+
+// 0x823FFA18 -- open the frame's ANTI-ALIASED scene pass.
+//
+// Member identification (offset authority = the X360 asm; every member is reached BY NAME):
+//   this+0xC400 -> mbMultisampledBackbuffer      this+0xC434 -> mbGreyBackgroundColour
+//   this+0xC4D0 -> mvBackgroundColour (.x/.y/.z/.w at 0xC4D0/D4/D8/DC)
+//   this+0xC9C4 -> mGpuMonitors.miScreenClear    this+0x238  -> mapRenderTarget[0] (GetAntiAliasBuffer())
+// The three flag/vector offsets are pinned by walking the committed header's member order from
+// 0xC400 (four flag bytes + s32 + f32 + the 6-byte RenderSwitches + 19 bools + 3 dwords lands
+// mbGreyBackgroundColour at exactly 0xC434; continuing through the counters, macScreenShotText[32]
+// and the four 16-byte light Vector3s lands mvBackgroundColour at exactly 0xC4D0), and PrepareAgain's
+// already-committed note (BrnRendererModule.h:392) corroborates from the other side by putting the
+// two cloud textures at 0xC4E0 / 0xC4E4, i.e. immediately after that Vector4.
+// The monitor is pinned arithmetically: `addis r31, r31, 1; addi r31, r31, -0x363C` @0x823FFB64/68
+// gives +0xC9C4, ResolveMSAA's gives +0xC9E4, and 0x20 == 8 dwords == BrnGpuMonitors index 0 ->
+// index 8, which the committed header spells miScreenClear (line 264) -> miDownsampleMSAAAndCompParticles
+// (line 272) with exactly eight members between them.
+void BrnRendererModule::BeginRenderAntiAliased(f32 lfWhiteLevel, bool lbClearStencil,
+                                               u8 luStencilClearValue)
+{
+    // lbClearStencil is NOT read by the X360 body: nothing in 0x823FFA18-0x823FFBD8 touches r5, and
+    // the only appearance of r5 in the whole listing is `li r5, 2` -- an OUTGOING argument. On this
+    // platform the clear rides inside the tiling pass, which clears colour + Z + stencil and takes
+    // the stencil value unconditionally. The flag gates a stencil clear on the PS3/GCM path only,
+    // which the DWARF body hint shows as ClearDepthStencilParameters::SetStencil inside a
+    // ClearColorParameters / ClearDepthStencilParameters block the X360 does not have. Reproduced as
+    // unused, never repurposed.
+    (void)lbClearStencil;
+
+    // This frame's background colour, scaled by the white level. Grey mode drives all three channels
+    // off one constant; otherwise it is the pale-blue tint. Alpha is always 0. (DWARF: the first of
+    // the two rw::math::vpu::Vector4::Set calls it lists.)
+    if (mbGreyBackgroundColour)
+    {
+        const f32 lfGrey = lfWhiteLevel * KF_BACKGROUND_COLOUR_GREY;
+        mvBackgroundColour.Set(lfGrey, lfGrey, lfGrey, KF_BACKGROUND_COLOUR_ALPHA);
+    }
+    else
+    {
+        mvBackgroundColour.Set(lfWhiteLevel * KF_BACKGROUND_COLOUR_RED,
+                               lfWhiteLevel * KF_BACKGROUND_COLOUR_GREEN,
+                               lfWhiteLevel * KF_BACKGROUND_COLOUR_BLUE,
+                               KF_BACKGROUND_COLOUR_ALPHA);
+    }
+
+    // ...then read straight back OUT of the member into the D3DVECTOR4 the clear consumes. This is
+    // the DWARF's SECOND rw::math::vpu::Vector4::Set, and the asm shows why the pair is not
+    // redundant: the branches above build four floats in the stack block var_40..var_34, publish
+    // them to mvBackgroundColour with one `stvx128 v0, r0, r11` @0x823FFAC4 (r11 = this+0xC4D0), and
+    // then reload the four floats back into the SAME stack block component by component
+    // (@0x823FFACC-0x823FFAFC, from 0xC4D0/D4/D8/DC), whose address is what BeginTiling is handed
+    // (`addi r7, r1, var_40` @0x823FFB48). Modelled as a real rw::math::vpu::Vector4 rather than a
+    // bare float[4]: Vector4 owns a single alignas(16) four-lane VectorIntrinsic, so &lvClearColour
+    // is the same four contiguous x/y/z/w floats the console passes, with no invented struct.
+    Vector4 lvClearColour;
+    lvClearColour.Set(static_cast<f32>(mvBackgroundColour.GetX()),
+                      static_cast<f32>(mvBackgroundColour.GetY()),
+                      static_cast<f32>(mvBackgroundColour.GetZ()),
+                      static_cast<f32>(mvBackgroundColour.GetW()));
+
+    if (mbMultisampledBackbuffer)
+    {
+        void* const lpDevice = renderengine::gpD3DDevice;
+
+        // Bind the anti-alias buffer's surfaces BEFORE opening the tiling pass (asm order:
+        // 0x823FFB08-0x823FFB34, then the BeginTiling call).
+        ShadowedSetRenderTargetState(mAllocatedRenderTargets.GetAntiAliasBuffer());
+
+        // ...then open the predicated-tiling pass over the two EDRAM tiles, clearing to the
+        // background colour / Z 1.0 / the caller's stencil value. The rect list is the MSAA tiling
+        // plan's rectangle array -- `addi r6, r11, (unk_8203E088 - 0x8203E080)` @0x823FFB4C, i.e.
+        // &KMSAA_TILING_PLAN.maTile[0], the +0x08 rectangle array of the 0x48-byte record. That
+        // record already has a home: GameSource/Graphics/BrnAntiAliasTiling.h, landed by the pool
+        // wave, which recovered both plans byte-exact AND names these two functions as its readers.
+        // The stencil byte is zero-extended into the DWORD parameter (`clrlwi r9, r27, 24`
+        // @0x823FFB44).
+        renderengine::D3DDevice_BeginTiling(lpDevice, 0u, KU_NUM_MSAA_TILES,
+                                            BrnGraphics::KMSAA_TILING_PLAN.maTile,
+                                            &lvClearColour, KF_CLEAR_Z, luStencilClearValue);
+
+        // The screen-clear GPU monitor brackets the predication RESET only -- the clear itself rode
+        // inside the tiling pass opened above. BeginTiling turns predication on for the tile it
+        // opens; clearing the mask submits every following draw to every tile, so the game does not
+        // predicate its GEOMETRY, only its resolves (see ResolveMSAA).
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miScreenClear);
+        renderengine::D3DDevice_SetPredication(lpDevice, 0u);
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miScreenClear);
+    }
+    else
+    {
+        // Untiled: there is NO clear here at all, and the device pointer is never even loaded (the
+        // untiled branch 0x823FFB90-0x823FFBD8 contains no reference to off_83271608). The previous
+        // frame's ResolveMSAA already left both EDRAM surfaces cleared -- its colour resolve carries
+        // the 0x300 mask -- so opening the pass is just the bind. Note the monitor order flips
+        // relative to the tiled branch: StartMonitor comes FIRST here (@0x823FFB9C, before the bind
+        // at 0x823FFBA0-0x823FFBC8), which is why the bind cannot be hoisted out of the if.
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miScreenClear);
+        ShadowedSetRenderTargetState(mAllocatedRenderTargets.GetAntiAliasBuffer());
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miScreenClear);
+    }
+}
+
+// 0x823FFBE0 -- resolve the anti-aliased scene out of EDRAM into the down-sample buffer.
+//
+// ================================================================================================
+// THE ABI DECODE, RESTATED. My previous submission got the argument MAPPING right and the
+// JUSTIFICATION wrong: it called the two stack-spilled Resolve arguments "slots 8 and 9 of an area
+// based at r1+0x18", which reads as ClearZ's own positional slot plus one. Here is the honest
+// derivation, which is stronger than what it replaced because every step is attested more than once.
+//
+// STEP 1 -- THE OUTGOING-PARAMETER AREA IS ANCHORED AT r1+0x18 WITH EIGHT 8-BYTE GPR HOMES, so the
+// first overflow slot is 0x58 and the second 0x60. Proven WITHOUT reference to any other function,
+// by frame-size invariance across four attested call sites with four different frames:
+//     rw::graphics::postfx::Target::Resolve       @0x823F9118  frame 0x70  `stw r5, 0x70+var_14` -> 0x5C
+//     rw::graphics::postfx::RenderTarget::Resolve @0x823F9338  frame 0x80  `stw r5, 0x80+var_24` -> 0x5C
+//     renderengine::PixelBuffer::Xbox2ResolveTo   @0x82B62300  frame 0xE0  -> 0x5C and 0x64
+//     BrnRendererModule::ResolveMSAA              @0x823FFBE0  frame 0xF0  -> 0x5C and 0x64
+// Four frame sizes, one pair of absolute offsets. Only a fixed base can do that. (It also matches
+// the independent homing evidence in BrnRendererMemory::Construct @0x823FCA44-0x823FCA6C, where
+// `std r4..r10` lands at 0x20/0x28/.../0x50 -- stride 8 from a base of 0x18.) The stores are at 0x5C
+// and 0x64 rather than 0x58 and 0x60 because a 32-bit `stw` into a big-endian 8-byte slot is
+// right-justified at slot+4 -- the same convention Construct reads back with `arg_8C` = 0x88+4 for a
+// word and `arg_97` = 0x90+7 for a byte.
+//
+// STEP 2 -- WITHIN r3-r10, A FLOAT ARGUMENT CONSUMES ITS POSITIONAL GPR AND LEAVES IT UNWRITTEN.
+// D3DDevice_EndTiling settles this and needs no interpretation: at both attested call sites r8 is
+// never written in the call block (here it still holds the stale 0xC4DC displacement from
+// @0x823FFC14; in Xbox2ResolveTo likewise), ClearZ rides f1, and the argument AFTER ClearZ lands in
+// r9. So EndTiling is (pDevice, ResolveFlags, pResolveRects, pDestTexture, pClearColor, ClearZ,
+// ClearStencil, pParameters) -- eight arguments, r10 = pParameters = 0 at both sites. IDA's own
+// "pParameters" comment on r9 @0x823FFD44 is therefore off by one, which is what my previous
+// submission said and remains true.
+//
+// STEP 3 -- PAST r10, AN FPR-PASSED ARGUMENT RESERVES NO STACK SLOT; the remaining arguments pack
+// from 0x58 upward. This is the correction, and the discriminating evidence is that both
+// postfx::Target::Resolve and postfx::RenderTarget::Resolve write their LAST argument at 0x5C, i.e.
+// into the FIRST overflow slot, while ClearZ (`lfs f1, flt_82001C98`) rides f1. Had ClearZ reserved
+// slot 0x58 the following argument would have gone to 0x60/0x64 instead. So for D3DDevice_Resolve:
+//     r3..r10 = args 1-8 (pDevice, Flags, pSourceRect, pDestTexture, pDestPoint, DestLevel,
+//               DestSliceOrFace, pClearColor)
+//     f1      = arg 9  ClearZ,        no stack slot
+//     0x58    = arg 10 ClearStencil   (written as a word at 0x5C)
+//     0x60    = arg 11 pParameters    (written as a word at 0x64, zero everywhere)
+// This is exactly the emitted argument order below; only the reasoning changed.
+//
+// STEP 4 -- THE VALUE CHAIN CONFIRMS THAT arg 10 AND EndTiling's r9 ARE THE SAME PARAMETER.
+// In Xbox2ResolveTo the ONE incoming value read from `arg_5C` is forwarded to EndTiling's r9
+// (@0x82B623A0) on one branch and stored to the Resolve call's 0x5C (@0x82B62444) on the other -- the
+// same value into both positions. In ResolveMSAA the stencil argument (r26) goes to exactly those two
+// places as well (`stw r26, 0x5C` @0x823FFCBC/@0x823FFCFC and `mr r9, r26` @0x823FFD44). Two
+// unrelated functions, the same pairing: EndTiling's r9 == Resolve's arg 10 == ClearStencil.
+// ================================================================================================
+//
+// PLATFORM-NEUTRAL half: none. Every call this function makes is EDRAM mechanics -- the resolve IS
+// the copy out of EDRAM, and on PC the scene target already is the texture the rest of the frame
+// samples. CONSOLE-ONLY half: all of it.
+// WHAT THE PC LEAF STILL OWES, because the console folded it in here: the CLEAR. The colour resolve
+// carries the 0x300 mask and a live clear colour, and on the untiled path it is the ONLY clear in the
+// whole bracket (BeginRenderAntiAliased's untiled branch clears nothing, deliberately). A PC shim
+// that no-ops Resolve outright must still clear colour to mvBackgroundColour and Z to 1.0, or nothing
+// ever clears the scene target.
+//
+// Member identification (offset authority = the X360 asm; reached BY NAME):
+//   this+0xC400 -> mbMultisampledBackbuffer   this+0xC4D0 -> mvBackgroundColour
+//   this+0xC9E4 -> mGpuMonitors.miDownsampleMSAAAndCompParticles (0x20 == 8 dwords past
+//                  miScreenClear, i.e. BrnGpuMonitors index 8, which the committed header spells
+//                  exactly eight members after index 0)
+//   this+0x248  -> mapRenderTarget[4] (GetDownSampleBuffer()). The base and the slot numbering are
+//                  corroborated from the other side by CreateBackBuffer, which reads
+//                  mapRenderTarget[4] and asserts "GetDownSampleBuffer() != NULL"; 0x248 - 0x238 =
+//                  0x10 = four slots past GetAntiAliasBuffer's slot 0.
+void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
+{
+    // lfWhiteLevel is NOT read by the X360 body. The white level was already baked into
+    // mvBackgroundColour by BeginRenderAntiAliased -- which is exactly what this function reads back
+    // -- and every ClearZ here is the constant 1.0f (flt_82001C98, loaded into f31 @0x823FFC78 /
+    // @0x823FFDAC and `fmr f1, f31`'d into place before each call, OVERWRITING the incoming f1).
+    // Reproduced as unused, never repurposed.
+    (void)lfWhiteLevel;
+
+    // The colour the resolve leaves the EDRAM colour surface at, ready for the next pass: this
+    // frame's background colour, read back component by component out of the member (the four `lfsx`
+    // from this+0xC4D0/D4/D8/DC @0x823FFC18-0x823FFC48 into the stack block var_70..var_64). Same
+    // rw::math::vpu::Vector4 modelling as BeginRenderAntiAliased, for the same reason: one
+    // alignas(16) four-lane VectorIntrinsic is the four contiguous x/y/z/w floats the console passes.
+    Vector4 lvClearColour;
+    lvClearColour.Set(static_cast<f32>(mvBackgroundColour.GetX()),
+                      static_cast<f32>(mvBackgroundColour.GetY()),
+                      static_cast<f32>(mvBackgroundColour.GetZ()),
+                      static_cast<f32>(mvBackgroundColour.GetW()));
+
+    void* const lpDevice = renderengine::gpD3DDevice;
+
+    if (mbMultisampledBackbuffer)
+    {
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles);
+
+        for (u32 luTile = 0; luTile < KU_NUM_MSAA_TILES; ++luTile)
+        {
+            // Predicate the pair of resolves below so each executes only during its own tile's
+            // replay of the command stream (two predication bits per tile).
+            renderengine::D3DDevice_SetPredication(lpDevice,
+                                                   KU_PREDICATION_BITS_PER_TILE << (2u * luTile));
+
+            // The tile's screen rectangle, out of the MSAA tiling plan's rectangle array. The asm
+            // walks it as base + 16*tile + 8 (`slwi r11, r31, 4` / `add r11, r11, r25` /
+            // `addi r27, r11, 8` @0x823FFC94-0x823FFCA0, r25 = &unk_8203E080) -- i.e. maTile[tile] of
+            // the 0x48-byte record whose committed home is GameSource/Graphics/BrnAntiAliasTiling.h.
+            const BrnGraphics::AntiAliasTilingPlan::TileRect& lrTile =
+                BrnGraphics::KMSAA_TILING_PLAN.maTile[luTile];
+
+            // Each tile lands back at its own screen position: the destination point is the tile
+            // rect's top-left corner. The asm reads the rect's FIRST TWO dwords -- `lwz r10, 8(r11)`
+            // and `lwz r11, 0xC(r11)` @0x823FFCA4/A8, i.e. maTile[tile].mu32Left / .mu32Top -- and
+            // stores them as the two-dword point @0x823FFCAC/B0.
+            const XenonPoint lDestPoint = { static_cast<s32>(lrTile.mu32Left),
+                                            static_cast<s32>(lrTile.mu32Top) };
+
+            // Depth/stencil first, fragment 0 only. pClearColor is NULL on this one (`li r10, 0`
+            // @0x823FFCC0) -- a depth resolve has no colour to clear to.
+            renderengine::D3DDevice_Resolve(lpDevice, KU_RESOLVE_DEPTH_STENCIL_FRAGMENT0, &lrTile,
+                                            mAllocatedRenderTargets.GetDownSampleBuffer()->GetDepthTexture(),
+                                            &lDestPoint, 0u, 0u, nullptr,
+                                            KF_CLEAR_Z, luStencilValue, nullptr);
+
+            // ...then colour target 0 with the samples averaged (that IS the downsample), clearing
+            // both EDRAM surfaces behind it to the background colour / Z 1.0 / the caller's stencil.
+            // The down-sample buffer is re-fetched for the second resolve exactly as the console does
+            // (`lwz r3, 0x248(r30)` appears once per resolve, @0x823FFC98 and @0x823FFCEC).
+            renderengine::D3DDevice_Resolve(lpDevice, KU_RESOLVE_COLOUR_AND_CLEAR, &lrTile,
+                                            mAllocatedRenderTargets.GetDownSampleBuffer()->GetTexture(0u),
+                                            &lDestPoint, 0u, 0u, &lvClearColour,
+                                            KF_CLEAR_Z, luStencilValue, nullptr);
+        }
+
+        // StopMonitor comes BEFORE EndTiling (@0x823FFD38 then @0x823FFD5C) -- the tiling close is
+        // outside the downsample monitor's bracket. Order preserved.
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles);
+
+        // Close the tiling pass. Nothing is left to resolve or clear at this level -- the per-tile
+        // resolves above did both -- so every pointer argument is null and only ClearZ and the
+        // stencil value ride along.
+        renderengine::D3DDevice_EndTiling(lpDevice, 0u, nullptr, nullptr, nullptr,
+                                          KF_CLEAR_Z, luStencilValue, nullptr);
+    }
+    else
+    {
+        // Untiled: one resolve pair over the whole screen, landing at the origin. No predication to
+        // set and no tiling pass to close, because none was opened. The destination point is an
+        // explicitly ZEROED stack pair (`li r29, 0` @0x823FFD74 then `stw r29, var_78` /
+        // `stw r29, var_74` @0x823FFD7C/D84), not the rect's corner.
+        const XenonPoint lDestPoint = { 0, 0 };
+
+        // The single full-screen rectangle: `addi r5, r26, (unk_8203E0D0 - 0x8203E0C8)` @0x823FFDC8
+        // with r26 = &unk_8203E0C8, i.e. &KNO_MSAA_TILING_PLAN.maTile[0].
+        const BrnGraphics::AntiAliasTilingPlan::TileRect& lrScreen =
+            BrnGraphics::KNO_MSAA_TILING_PLAN.maTile[0];
+
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles);
+
+        renderengine::D3DDevice_Resolve(lpDevice, KU_RESOLVE_DEPTH_STENCIL_FRAGMENT0, &lrScreen,
+                                        mAllocatedRenderTargets.GetDownSampleBuffer()->GetDepthTexture(),
+                                        &lDestPoint, 0u, 0u, nullptr,
+                                        KF_CLEAR_Z, luStencilValue, nullptr);
+
+        renderengine::D3DDevice_Resolve(lpDevice, KU_RESOLVE_COLOUR_AND_CLEAR, &lrScreen,
+                                        mAllocatedRenderTargets.GetDownSampleBuffer()->GetTexture(0u),
+                                        &lDestPoint, 0u, 0u, &lvClearColour,
+                                        KF_CLEAR_Z, luStencilValue, nullptr);
+
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles);
+    }
+}
+
+#endif  // BRN_ANTIALIAS_BRACKET_AVAILABLE
+
 // The world/car/sky pass block of Render (@0x8240BFA8 :725+). Pass order and list ids are the
 // X360's (see the renderer wave log for the full map):
 //   shadow cascades (lists 0,2,1,3,4)  -> LIVE, and no longer here: they run in
@@ -1286,6 +1926,19 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     {
         RenderWorldPasses(lpDispatchThreadInputBuffer, &lDispatchContext);
     }
+
+#if BRN_ANTIALIAS_BRACKET_AVAILABLE
+    // [FLAG PC bring-up] PRESENT THE SCENE TARGET. With the bracket live the world passes above have
+    // drawn into the off-screen anti-alias buffer, not into the swap chain, and nothing has handed
+    // the result back -- that is EndRenderAntiAliased @0x82408B00, which is not reconstructed. So one
+    // full-screen textured quad copies the scene onto the back buffer here, before the 2D/GUI tail
+    // draws over it. NOT the post-fx composite: BrnPostFx::Render @0x8240A468 is the next wave and is
+    // what retires this call, the helper it calls, and renderengine::PCSceneBlit_Begin/_End.
+    //
+    // Placed BEFORE the BRN_WORLD_ONLY early-out below on purpose: that diagnostic exists to show the
+    // world pass with the 2D tail suppressed, and with the world off-screen it would show black.
+    PCBringUpBlitSceneTargetToBackBuffer(mAllocatedRenderTargets, &mIm2dRenderer);
+#endif  // BRN_ANTIALIAS_BRACKET_AVAILABLE
 
     // [FLAG PC diagnostic] BRN_WORLD_ONLY=1 suppresses the whole 2D overlay tail
     // (loading-screen background/foreground, GUI, movie) for ONE purpose: seeing the

@@ -382,6 +382,44 @@ private:
     // PC: the synchronous DispatchList::SortForDispatch stand-in).
     void SortDispatchLists(CgsGraphics::DispatchFrame* lpMeshFrame);
 
+    // @ 0x823FFA18 - open the frame's ANTI-ALIASED scene pass: publish this frame's background
+    // colour into mvBackgroundColour, bind the anti-alias buffer's section-0 surface state, and
+    // (multisampled path only) open the Xenos predicated-tiling pass that clears the two EDRAM tiles
+    // to it. THIS is the call that makes the world pass render OFF-SCREEN instead of into the swap
+    // chain; everything Render submits between it and ResolveMSAA / EndRenderAntiAliased lands in the
+    // anti-alias buffer. Called from Render @0x8240BFA8 (Render:725), after the shadow-map and
+    // env-map passes.
+    //
+    // Signature and PARAMETER NAMES from the DecFIGS DWARF (BrnRendererModule.h:775 declares
+    // `void BeginRenderAntiAliased(float32_t, bool8_t, uint8_t)` in the PRIVATE section;
+    // _compile/BrnGraphicsUnity.cpp:4597 spells the names
+    // `const float32_t lfWhiteLevel, const bool8_t lbClearStencil, const uint8_t luStencilClearValue`).
+    // The X360 prologue attests all three positions: lfWhiteLevel in f1 (a float SKIPS its GPR slot,
+    // so r4 is dead), lbClearStencil in r5, luStencilClearValue in r6 (`mr r27, r6` @0x823FFA30) --
+    // the bool8 in the middle is what pushes the stencil byte out to r6, so the asm attests the
+    // middle parameter independently of the DWARF. Non-static: Render passes the module in r3 and the
+    // body uses it as `this` (`mr r31, r3` @0x823FFA28, then `lbzx r11, r31, r11` with r11 = 0xC434).
+    //
+    // DEFINITION IS GATED behind BRN_ANTIALIAS_BRACKET_AVAILABLE in BrnRendererModule.cpp; read that
+    // banner before calling this.
+    void BeginRenderAntiAliased(f32 lfWhiteLevel, bool lbClearStencil, u8 luStencilClearValue);
+
+    // @ 0x823FFBE0 - close the anti-aliased scene pass: RESOLVE the EDRAM depth and colour surfaces
+    // into the DOWN-SAMPLE buffer's sampleable textures (one resolve pair per EDRAM tile, each
+    // predicated to its own tile's replay of the command stream), then close the tiling pass. The
+    // colour resolve also CLEARS both EDRAM surfaces behind itself, which is what leaves the next
+    // frame's untiled path with nothing to clear. Called from Render @0x8240BFA8.
+    //
+    // Signature and PARAMETER NAMES from the DecFIGS DWARF (BrnRendererModule.h:781 declares
+    // `void ResolveMSAA(float32_t, uint8_t)` in the PRIVATE section; _compile/BrnGraphicsUnity.cpp:487
+    // spells the names `const float32_t lfWhiteLevel, const uint8_t luStencilValue`). The X360
+    // prologue agrees: the float rides f1 (skipping r4) and the stencil byte is r5
+    // (`mr r27, r5` @0x823FFC28, narrowed by `clrlwi r26, r27, 24` @0x823FFC70). Non-static: the body
+    // parks r3 as `this` and reads members off it (`lwz r3, 0x248(r30)` @0x823FFC98).
+    //
+    // DEFINITION IS GATED behind BRN_ANTIALIAS_BRACKET_AVAILABLE in BrnRendererModule.cpp.
+    void ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue);
+
     // The world/car/sky pass block of Render (@0x8240BFA8 mid-section), split out
     // for readability; runs between the frame begin and the 2D overlay tail.
 public:
