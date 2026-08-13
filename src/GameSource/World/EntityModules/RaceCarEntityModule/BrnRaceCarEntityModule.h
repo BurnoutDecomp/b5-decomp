@@ -581,13 +581,14 @@ private:
     void PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar,
                                                  s32 liActiveRaceCar );
 
-    // [FLAG PC bring-up] NOT an X360 function. The WHEEL half of the pose stand-in, split out
-    // of the above on 2026-08-12 because the two halves stand in for two DIFFERENT console
-    // producers and only one of them has landed: the body's producer
-    // (ActiveRaceCar::UpdatePhysicsState) mounted 2026-08-11, the wheel's
-    // (SimpleVehiclePhysics::GetWheelsWorldTransfrom @0x825D8878, still bodyless) has not.
-    // Sharing one gate retired both at once and left the car with EMPTY ARCHES.
-    // DELETE-WHEN GetWheelsWorldTransfrom is bodied and mabWheelExists has a writer.
+    // [FLAG PC bring-up] NOT an X360 function. The WHEEL half of the pose stand-in.
+    // ⭐ Since 2026-08-13 the REAL producer is landed (GetWheelsWorldTransfrom @0x825D8878
+    // bodied + WriteOutVehicleStats' SetWheelTransform loop unparked), so this runs ONLY for
+    // slots physics does not own (called from PublishRenderPoseWithoutPhysicsBringUp's tail).
+    // The old DELETE-WHEN's "mabWheelExists writer" clause resolved to: NO SUCH STORE exists
+    // in the XEX -- the console's exists source is the parked deformation leg
+    // (UpdateWheelPhysicsState @0x822B8738); see the .cpp banner.
+    // DELETE-WHEN the body-pose stand-in is deleted (they retire together).
     void PublishWheelPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar,
                                                 s32 liActiveRaceCar );
 

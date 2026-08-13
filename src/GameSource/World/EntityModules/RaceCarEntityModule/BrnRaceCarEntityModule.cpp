@@ -858,6 +858,24 @@ void RaceCarEntityModule::ResetActiveRaceCar(
             lpActiveRaceCar->SetCentreOfMassTransformBringUp(
                 lpSeatSpec->mCarModelSpaceToHandlingBodySpaceTransform );
 
+            // [FLAG PC bring-up] OnResourcesLoaded @0x822EB2FC leg 2, landed at this promote
+            // seam exactly like the +1552 matrix above (wheel-transform wave 2026-08-13): the
+            // console sets the four render wheel SCALES once at resource load, from the same
+            // streamed spec (spec + 96 + 48*i == maWheelSpecs[i].mScale). Needed here because
+            // the per-frame wheel stand-in (which also published scale) no longer runs for
+            // physics-owned cars now that the real transform producer is landed -- without
+            // this the wheels draw unit-scale. DELETE-WHEN OnResourcesLoaded's alias leg lands.
+            for( s32 liScaleWheel = 0; liScaleWheel < 4; ++liScaleWheel )
+            {
+                const BrnPhysics::Deformation::WheelSpec* lpScaleWheelSpec =
+                    lpSeatSpec->GetWheelSpec( liScaleWheel );
+                if( lpScaleWheelSpec != 0 )
+                {
+                    lpActiveRaceCar->GetRenderParams()->SetWheelScale(
+                        static_cast<u32>( liScaleWheel ), lpScaleWheelSpec->mScale );
+                }
+            }
+
             lpActiveRaceCar->SeedPhysicsStateFromCreateEventBringUp( lSeatedTransform );
 
             // ---- WITNESS PRINTS (both ends of the seat, every promote) -----------------
@@ -1003,7 +1021,7 @@ void RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar*
 //
 // PublishRenderPoseWithoutPhysicsBringUp stands in for TWO different console producers:
 //   * the BODY pose  <- ActiveRaceCar::UpdatePhysicsState @0x822D4418   -- LANDED 2026-08-11
-//   * the WHEEL pose <- the SetWheelTransform publish in the physics half -- STILL PARKED
+//   * the WHEEL pose <- the SetWheelTransform publish in the physics half -- LANDED 2026-08-13
 // mUsedRaceCars answers "does physics own this race-car slot", which is the right question
 // for the first and the WRONG question for the second. When VehicleManager::ProcessCreateEvents
 // mounted on 2026-08-11 and started setting that bit, the gate correctly retired the body
@@ -1017,20 +1035,22 @@ void RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar*
 // 2026-08-05. Two services were lost on that one switch: SetWheelExists AND SetWheelScale
 // (the scale matrix fell back to RenderParams::Reset()'s identity -- see the `scaleDiag`).
 //
-// ⛔ THE REAL PRODUCER, NAMED, NOT HIDDEN. The console fills RaceCarState::maWheelTransforms
-// in VehicleManager::WriteOutVehicleStats via SimpleVehiclePhysics::GetWheelsWorldTransfrom
-// @0x825D8878 -- 868 VMX128 instructions, declared in BrnSimpleVehiclePhysics.h with NO BODY
-// anywhere in this tree (see park (3) in BrnVehicleManager_WriteOutVehicleStats.cpp), and the
-// console's writer of RaceCarState::mabWheelExists (+0x446) is not identified in EITHER half
-// of the publish. Until BOTH land, nothing on this build can produce a wheel pose, and this
-// stand-in is the only thing between the player and an empty pair of arches.
-// DELETE-WHEN GetWheelsWorldTransfrom @0x825D8878 is bodied and mabWheelExists has a writer.
+// ⭐⭐ THE REAL PRODUCER LANDED 2026-08-13 (wheel-transform wave):
+// SimpleVehiclePhysics::GetWheelsWorldTransfrom @0x825D8878 is BODIED and
+// WriteOutVehicleStats' four SetWheelTransform calls are UNPARKED, so every car PHYSICS
+// OWNS gets real per-wheel world matrices (spin + steer + suspension) through
+// UpdatePhysicsState. The old DELETE-WHEN's second condition was resolved by a full-image
+// scan: RaceCarState::mabWheelExists (+0x446) has NO writer anywhere in the XEX (only the
+// copy ctor @0x8220A4C0 propagates it) -- on console the render-side exists comes from the
+// DEFORMATION half (L3 -> UpdateWheelPhysicsState @0x822B8738), still parked, so the
+// readback loop forces exists true for physics-owned cars ([FLAG] at that call site).
 //
-// ⚠️ THE GATE IT CARRIES NOW is the console's OWN field, not a bring-up invention: it runs
-// only for a car for which the physics readback published NO wheel at all
-// (mabWheelExists false for all four). The instant the real producer sets even one of those
-// bytes, this stops running for that car with no further edit here -- exactly the property
-// the mUsedRaceCars gate has for the body half.
+// ⚠️ WHY THIS STAND-IN STILL EXISTS: it now covers ONLY the slots physics does NOT own
+// (called solely from PublishRenderPoseWithoutPhysicsBringUp's tail, whose call sites gate
+// on !mUsedRaceCars / no input buffer) -- a car with no simulation still needs its wheels
+// drawn at the authored rest pose, e.g. before the create drain runs. For physics-owned
+// cars it no longer runs at all.
+// DELETE-WHEN the body-pose stand-in above it is deleted (they retire together).
 // ============================================================================
 void RaceCarEntityModule::PublishWheelPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar,
                                                                  s32 liActiveRaceCar )
@@ -2751,35 +2771,45 @@ void RaceCarEntityModule::PostPhysicsUpdate(
             if( lpActiveRaceCar->IsActive()
                 && !lrUsedRaceCars.IsBitSet( static_cast<u32>( liCar ) ) )
             {
+                // Physics does NOT own this slot: both halves of the pose are stand-ins.
+                // (PublishRenderPoseWithoutPhysicsBringUp calls the wheel half at its own
+                // tail -- the pre-split pairing; the 2026-08-12 wheel-only exists-gate that
+                // used to sit in the else-arm below is retired with the real producer.)
                 PublishRenderPoseWithoutPhysicsBringUp( lpActiveRaceCar, liCar );
             }
-            // ⭐⭐ THE WHEEL HALF, ON ITS OWN GATE (carrender wave 2026-08-12).
-            // A car the readback HAS posed still has no wheel pose, because the physics
-            // side's wheel publish is parked (SimpleVehiclePhysics::GetWheelsWorldTransfrom
-            // @0x825D8878 is bodyless -- park (3) of WriteOutVehicleStats). The gate is the
-            // console's OWN field: run only when the readback published no wheel at all.
-            // MEASURED before this line existed: all four `exists 0`, all four transforms
-            // (0,0,0), wheel block outcome 3 -- the arches drew empty.
-            else if( lpActiveRaceCar->IsActive()
-                     && !lpActiveRaceCar->GetRenderParams()->GetWheelExists( 0u )
-                     && !lpActiveRaceCar->GetRenderParams()->GetWheelExists( 1u )
-                     && !lpActiveRaceCar->GetRenderParams()->GetWheelExists( 2u )
-                     && !lpActiveRaceCar->GetRenderParams()->GetWheelExists( 3u ) )
+            // ⭐⭐ THE REAL WHEEL POSE (wheel-transform wave 2026-08-13). Physics owns this
+            // slot: SimpleVehiclePhysics::GetWheelsWorldTransfrom @0x825D8878 is BODIED and
+            // WriteOutVehicleStats' four SetWheelTransform calls are UNPARKED, so
+            // ActiveRaceCar::UpdatePhysicsState has just copied REAL per-wheel world
+            // matrices (spin + steer + suspension) into mRenderParams.
+            //
+            // [FLAG PC bring-up] THE EXISTS FLAG ALONE is still stood in for, and the
+            // divergence is named: the console's writer of the render-side wheel exists is
+            // the DEFORMATION half of this very readback (L3 -> ActiveRaceCar::
+            // UpdateWheelPhysicsState @0x822B8738, from the deformation output's per-wheel
+            // on-ground bytes) -- RaceCarState::mabWheelExists (+0x446) has NO writer
+            // anywhere in the XEX (full 30,084-export store scan, 2026-08-13; only the copy
+            // ctor @0x8220A4C0 propagates it), so UpdatePhysicsState's copy of it is false
+            // by construction on both platforms. Until the deformation publish lands, force
+            // the four road wheels visible exactly as L3 would for an intact car.
+            // DELETE-WHEN L3 (the deformation-output wheel-state publish) lands.
+            else if( lpActiveRaceCar->IsActive() )
             {
-                PublishWheelPoseWithoutPhysicsBringUp( lpActiveRaceCar, liCar );
-
-                static bool sbReportedWheelStandIn = false;
-                if( !sbReportedWheelStandIn && CgsDev::Log::gpDebugPrint != 0 )
+                for( u32 luWheel = 0; luWheel < 4u; ++luWheel )
                 {
-                    sbReportedWheelStandIn = true;
+                    lpActiveRaceCar->GetRenderParams()->SetWheelExists( luWheel, true );
+                }
+
+                static bool sbReportedWheelExistsSeam = false;
+                if( !sbReportedWheelExistsSeam && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    sbReportedWheelExistsSeam = true;
                     *CgsDev::Log::gpDebugPrint
-                        << "[FLAG PC bring-up] the WHEEL pose stand-in is running for a car the "
-                           "physics readback HAS posed: RaceCarState::mabWheelExists is false for "
-                           "all four wheels because SimpleVehiclePhysics::GetWheelsWorldTransfrom "
-                           "@0x825D8878 (868 insns) has no body and mabWheelExists (+0x446) has no "
-                           "identified writer. Wheels are drawn at their AUTHORED REST positions "
-                           "with the body's orientation -- NO suspension travel, NO steer, NO "
-                           "spin. DELETE-WHEN both land.\n";
+                        << "[FLAG PC bring-up] wheel EXISTS forced true for the four road "
+                           "wheels of physics-owned cars: the transforms are REAL "
+                           "(GetWheelsWorldTransfrom @0x825D8878 landed) but the exists "
+                           "byte's console producer is the parked deformation leg "
+                           "(UpdateWheelPhysicsState @0x822B8738). DELETE-WHEN L3 lands.\n";
                 }
             }
         }

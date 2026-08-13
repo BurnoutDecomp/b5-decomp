@@ -42,8 +42,11 @@
 //     0x8263F7A4  the vtable slot-0 GetSteeringAngle call, purely to assert
 //                 "RwMath::IsValid( maRaceCarVehicles[liRaceCar].GetSteeringAngle() )"  (:7294)
 //     0x8263F7F4  the four-wheel loop: SetWheelTransform(liRaceCar, wheel,
-//                     lpRaceCar->GetWheelsWorldTransfrom(wheel, /*lbApplySteer*/ false))
-//                 (`li r6, 0` is the third argument -- steer is NOT applied here)
+//                     lpRaceCar->GetWheelsWorldTransfrom(wheel, /*lbHackDontReverseRightWheels*/ false))
+//                 (`li r6, 0` is the third argument. ⚠️ GLOSS CORRECTED 2026-08-13: this bool
+//                  was mis-named lbApplySteer here and in the header; the PS3 DWARF names it
+//                  lbHackDontReverseRightWheels and the body agrees -- steer IS applied to the
+//                  front wheels regardless; false ENABLES the left-wheel pi-about-Y mirror.)
 //   0x8263FA28  mPhysicalTrafficManager.WriteOutVehicleStats(lpOutputInterface)
 //   0x8263FA38  mbPlayerCarStuckInCollision = false     (`stbx r23(0), r18, 0x2A240`)
 //
@@ -222,36 +225,29 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
         CGS_ASSERT(lfSteeringAngle == lfSteeringAngle,
                    "RwMath::IsValid( maRaceCarVehicles[liRaceCar].GetSteeringAngle() )");
 
-        // ⛔ PARKED -- park (3), added when the full-game link surfaced it. The four-wheel
-        // SetWheelTransform loop needs SimpleVehiclePhysics::GetWheelsWorldTransfrom @0x825D8878,
-        // which is DECLARED in BrnSimpleVehiclePhysics.h but has NO BODY anywhere in the tree
-        // (LNK2019 on the first build of this TU). It is 868 instructions with no callees at all:
-        // one dense VMX128 composition of the wheel's local position, its suspension displacement,
-        // the steer rotation (gated on the lbApplySteer argument this call passes as false) and the
-        // accumulated spin angle. That is a wave of its own, and guessing at it is exactly the
-        // silent-corruption class this project keeps paying for.
+        // ⭐⭐ UNPARKED 2026-08-13 (wheel-transform wave) -- park (3) retired, DELETE-WHEN
+        // honoured: SimpleVehiclePhysics::GetWheelsWorldTransfrom @0x825D8878 is BODIED
+        // (BrnSimpleVehiclePhysics.cpp, from the operand-level decode bank). The console's
+        // four-wheel publish loop @0x8263F7F4, verbatim: one call per wheel, bool false
+        // (`li r6, 0` -- the left-wheel mirror ACTIVE; see the corrected gloss in the banner).
         //
-        // WHAT IS ACTUALLY LOST, measured rather than assumed: RaceCarState::maWheelTransforms
-        // stays at whatever RaceCarState::Clear() left. It does NOT put wheels in the wrong place,
-        // because the consumer gates on a DIFFERENT field -- ActiveRaceCar::UpdatePhysicsState
-        // copies maWheelTransforms[i] but calls SetWheelExists(i, mabWheelExists[i]), and
-        // mabWheelExists (state +0x446) is written by NEITHER this function NOR UpdateRaceCarState
-        // (no store to +0x446..+0x449 exists in either asm body), so it stays false and
-        // RenderRaceCar's wheel block draws nothing. ⚠️ FLAG for the verifier: the console's writer
-        // of mabWheelExists is not identified -- it is in neither half of the publish, so it is a
-        // third site this wave did not find.
-        // DELETE-WHEN GetWheelsWorldTransfrom @0x825D8878 is bodied.
+        // ⚠️ The park's "third site" flag RESOLVED, and the answer is: THERE IS NO THIRD SITE.
+        // A full-image scan of all 30,084 X360 exports (this wave) finds NO store to
+        // RaceCarState+0x446..0x449 anywhere except the RaceCarState COPY ctor @0x8220A4C0
+        // (and no stbx/addi-computed store either); the PS3 set agrees (+1094 has only
+        // readers). The render-side wheel EXISTS on the console comes from the DEFORMATION
+        // half of the readback instead -- ActiveRaceCar::UpdateWheelPhysicsState @0x822B8738,
+        // fed by the deformation output's per-wheel data, a leg that is parked (L3 of
+        // ReadUpdatedActiveRaceCarDataFromPhysics). RaceCarState::mabWheelExists is left
+        // untouched here, exactly as the console leaves it; the render module carries the
+        // bring-up seam for the exists flag (see BrnRaceCarEntityModule.cpp).
+        for (u8 lu8Wheel = 0; lu8Wheel < 4; ++lu8Wheel)
         {
-            static bool sbLoggedWheelTransformPark = false;
-            if (!sbLoggedWheelTransformPark)
-            {
-                sbLoggedWheelTransformPark = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[FLAG PC bring-up] WriteOutVehicleStats: the four SetWheelTransform calls "
-                       "are NOT made -- SimpleVehiclePhysics::GetWheelsWorldTransfrom @0x825D8878 "
-                       "(868 insns) is declared but bodyless. maWheelTransforms stays cleared; "
-                       "mabWheelExists is false so no wheel is drawn at a wrong pose.\n";
-            }
+            lpOutputInterface->SetWheelTransform(
+                static_cast<u8>(liRaceCar), lu8Wheel,
+                lpRaceCar->GetWheelsWorldTransfrom(
+                    static_cast<EVehicleDrivenWheel>(lu8Wheel),
+                    /*lbHackDontReverseRightWheels*/ false));
         }
 
         // ---- [move-probe] DELETE-WHEN motion is confirmed on a booted run --------------------
