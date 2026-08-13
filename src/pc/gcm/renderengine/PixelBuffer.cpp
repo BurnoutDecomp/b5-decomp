@@ -120,9 +120,16 @@ namespace renderengine
     }
 
     // 0x82B62300 -- resolve the tiled EDRAM surface out to a linear destination texture.
+    //
+    // lpClearColour is the incoming 8th GPR argument (r10) and is a POINTER -- it is forwarded
+    // untouched into the pClearColor position of both outgoing calls (`mr r25, r10` @0x82B6231C,
+    // then `mr r7, r25` @0x82B623A4 and `mr r10, r25` @0x82B62450). luClearStencil is the 10th
+    // argument, read from the first incoming overflow slot (`lwz r9, 0xE0+arg_5C(r1)` @0x82B623A0
+    // and `lwz r10, 0xE0+arg_5C(r1)` @0x82B62428) and forwarded to both calls as well. Both were
+    // wrong/absent before 2026-08-13; see the note on the declaration in texture.h.
     int PixelBuffer::Xbox2ResolveTo(SurfaceHeader* lpThis, Texture* lpDestTexture, u32 luFlags,
                                     s32 liDestX, s32 liDestY, s32 liDestLevel, s32 liDestSlice,
-                                    s32 liClearColour, f32 lfClearZ)
+                                    const void* lpClearColour, f32 lfClearZ, u32 luClearStencil)
     {
         void* lpDevice = gpD3DDevice;            // v37 = off_83271608
 
@@ -143,13 +150,19 @@ namespace renderengine
 
         if (lpActiveTag == lpThis && gXbox2TilingEnabled)   // v42 == a1 && dword_8327161C
         {
-            // NOTE: cold (tiling-enabled, untraced) path; D3DDevice_EndTiling is an unhomed Xbox
-            // D3D9 shim. The asm @0x82B623A0 packs r3=device,r4=flags,r5=0(rects),r6=destTexture,
-            // r7=clearColor,r9=pParameters,r10=0,f1=clearZ; this call's middle args (level/slice/
-            // clearColour) are an APPROXIMATE mapping pending the real EndTiling signature (the r8
-            // slot is ambiguous in the asm). Declaration-only shim -> never linked on PC.
+            // Cold (tiling-enabled, untraced) path. D3DDevice_EndTiling is an unhomed Xbox D3D9
+            // shim -- declared in Xbox2SurfaceShims.h, defined nowhere in this tree.
+            //
+            // THE r8 SLOT IS NO LONGER AMBIGUOUS: it is ClearZ's SKIPPED GPR. A float argument
+            // consumes its positional GPR and leaves it unwritten, so the asm @0x82B6239C-0x82B623BC
+            // packs r3 = pDevice, r4 = ResolveFlags, r5 = 0 (pResolveRects), r6 = pDestTexture,
+            // r7 = pClearColor, f1 = ClearZ, r9 = ClearStencil (`lwz r9, 0xE0+arg_5C(r1)`
+            // @0x82B623A0 -- this function's own 10th parameter), r10 = 0 (pParameters), and NEVER
+            // writes r8. EndTiling therefore takes EIGHT arguments; the previous mapping invented
+            // liDestLevel / liDestSlice / liUnused parameters that do not exist. IDA's own
+            // "pParameters" comment on r9 is off by one for the same reason.
             D3DDevice_EndTiling(lpDevice, luFlags, nullptr, lpDestTexture,
-                                liDestLevel, liDestSlice, liClearColour, 0, lfClearZ);
+                                lpClearColour, lfClearZ, luClearStencil, nullptr);
         }
         else
         {
@@ -179,8 +192,15 @@ namespace renderengine
             }
             luSourceRect[3] = luClipH + static_cast<u32>(liDestY);      // v49[3] = v47 + a5
 
+            // Corrected 2026-08-13 to the decoded eleven-argument order (see Xbox2SurfaceShims.h).
+            // r10 is a POINTER, not an s32 -- the asm forwards this function's own 8th argument
+            // straight through (`mr r10, r25` @0x82B62450). The two overflow arguments are
+            // ClearStencil at r1+0x58 and pParameters at r1+0x60 (the asm's
+            // `stw r10, 0xE0+var_84` = 0x5C and `stw r5, 0xE0+var_7C` = 0x64, i.e. the forwarded
+            // stencil then a literal 0), right-justified words of the two 8-byte slots.
             D3DDevice_Resolve(lpDevice, luFlags, luSourceRect, lpDestTexture, nullptr,
-                              liDestLevel, liDestSlice, liClearColour, lfClearZ);
+                              static_cast<u32>(liDestLevel), static_cast<u32>(liDestSlice),
+                              lpClearColour, lfClearZ, luClearStencil, nullptr);
         }
         return 1;
     }
