@@ -141,5 +141,31 @@ namespace Vehicle
     // PolygonSoupListSpatialMap query -- so this is the radius of the world-triangle neighbourhood
     // kept live around every car.
     const f32 KF_TRIANGLE_CACHE_SPHERE_RADIUS = 5.0f;   // X360 flt_8200426C
+
+    // ⭐ ADDED 2026-08-13 (wheel-transform wave). The two crash-visual constants of
+    // SimpleVehiclePhysics::GetWheelsWorldTransfrom @0x825D8878. Both are BrnPhysics::Vehicle
+    // namespace-scope (the PS3 DecFIGS pseudocode names them through TOC symbols:
+    // `KVF_MAX_BUCKLE_ANGLE_CRASHING` / `KAVF_WHEEL_TWIST_DIRECTIONS`), and BOTH are the
+    // KF_GRAVITY trap again: their .data slots (0x82FB9070 / 0x82FB91E0) read ALL ZEROS in the
+    // X360 image and are filled by unexported static initialisers, read out of the image this
+    // wave (bank: wheeltransform_bank.md §5.2/§5.3):
+    //
+    //   @0x82C5D1E0: lfs f0, 0x4744(r11=0x82000000) ; vspltw ; stvx128 -> 0x82FB9070
+    //                *(f32*)0x82004744 == 0x3E4CCCCD == 0.2f
+    //   @0x82C5D230: vspltisw128 v0, 1 / v13, -1 ; vcsxwfp128 (int->float) ;
+    //                stvx128 v0 @+0x00, v13 @+0x10, v0 @+0x20, v13 @+0x30 -> 0x82FB91E0
+    //
+    // KVF_MAX_BUCKLE_ANGLE_CRASHING clamps the crash "buckle" rotation (about the local Z
+    // axis): angle = min((2*|posZ - streamedZ|)^2, this). ⚠️ The SQUARE is the angle -- both
+    // platforms agree instruction-for-instruction; it LOOKS like a porter-bait bug, do not
+    // "fix" it. 0.2 rad ~= 11.46 degrees.
+    // Console storage is a splatted VecFloat; the datum is the scalar.
+    const f32 KVF_MAX_BUCKLE_ANGLE_CRASHING = 0.2f;    // X360 flt_82004744 -> 0x82FB9070 (splat)
+
+    // Per-wheel sign of the crash "twist" rotation (about the local Y axis), indexed by
+    // EVehicleDrivenWheel: FL=+1, FR=-1, RL=+1, RR=-1 -- twist mirrors by side, as the name
+    // promises. GetWheelsWorldTransfrom loads element [16*leWheel] (each element is a splatted
+    // VecFloat on console; the datum per element is the scalar).
+    const f32 KAVF_WHEEL_TWIST_DIRECTIONS[4] = { 1.0f, -1.0f, 1.0f, -1.0f };  // 0x82FB91E0
 }
 }

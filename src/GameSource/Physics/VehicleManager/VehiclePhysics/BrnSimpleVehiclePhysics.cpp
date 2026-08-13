@@ -1,4 +1,6 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"  // GetWheelsWorldTransfrom's devirtualized GetSteeringAngle (named slot-0 divergence, see header)
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"            // KVF_MAX_BUCKLE_ANGLE_CRASHING / KAVF_WHEEL_TWIST_DIRECTIONS (crash arm)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"  // the full VehicleAttribs (SwitchAttribs reads its base/suspension lanes)
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"           // the car-asset wrapper (SetAttributes' key chase)
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"    // the handling wrapper + its checked copy ctor
@@ -535,6 +537,251 @@ namespace Vehicle
         lOutSusLineEnd.y = lvWorldWheelPos.y - mTransform.yAxis.y * lfProbeLength;
         lOutSusLineEnd.z = lvWorldWheelPos.z - mTransform.yAxis.z * lfProbeLength;
         lOutSusLineEnd.w = lvWorldWheelPos.w - mTransform.yAxis.w * lfProbeLength;
+    }
+
+    // ===========================================================================================
+    //  SimpleVehiclePhysics::GetWheelsWorldTransfrom   @0x825D8878  (868 insns)
+    // ===========================================================================================
+    // ⭐⭐ BODIED 2026-08-13 (wheel-transform wave) from the operand-level decode bank
+    // (scratchpad wheeltransform_bank.md -- X360 export 0x825D8878 + PS3 twin 0x6E78CC + image
+    // reads for every constant). This is the reader that turns wheel physics state into the four
+    // render transforms: WriteOutVehicleStats' SetWheelTransform loop consumes it once per wheel.
+    //
+    // Composition (row-vector convention, v' = v * M -- proven by the compose at 0x825D9490 and
+    // the body multiply at 0x825D94F0):
+    //   local = mbCrashing ? RotZ(buckle) * RotX(spin) * RotY(twist)          (steer NEVER runs)
+    //                      : RotX(spin) [ * RotY(GetSteeringAngle()) iff front wheel ]
+    //   out   = local * mTransform;   left wheels (0/2) mirrored pi-about-Y when the bool is
+    //   false (rows X and Z negated, 0x825D95AC);  out.wAxis = mTransform.wAxis +
+    //   RotateVector(wheel.mPosition, mTransform)  (0x825D95C4..0x825D95F4).
+    //
+    // The console does all five rotation builds through one shared VMX SinCos kernel
+    // (range-reduce + 12-term Taylor pair, coefficients at 0x82000BD0..0x82000C2F, read from the
+    // image); SvpSinCos below is that kernel de-SIMD'd with the SAME coefficients (the committed
+    // rw::math::vpu tree flags SinCos as not-committed, so the kernel lives here TU-static).
+    // ===========================================================================================
+
+    // The exact sin/cos Taylor coefficient rows the X360 kernel loads (bank §5.1; each value
+    // re-checked as the correctly-rounded 1/n! -- e.g. 0x3638EF1D == 2.7557319e-06f == 1/9!).
+    //   sin: 0x82000BD0/BE0/BF0     cos: 0x82000C00/C10/C20
+    static const f32 KAF_SVP_SIN_COEFFS[12] =
+    {
+        1.0f,            -1.66666672e-1f,  8.33333377e-3f,  -1.98412701e-4f,   // 1, -1/3!, 1/5!, -1/7!
+        2.75573188e-6f,  -2.50521080e-8f,  1.60590438e-10f, -7.64716373e-13f,  // 1/9! .. -1/15!
+        2.81145725e-15f, -8.22063525e-18f, 1.95729411e-20f, -3.86817017e-23f   // 1/17! .. -1/23!
+    };
+    static const f32 KAF_SVP_COS_COEFFS[12] =
+    {
+        1.0f,            -5.0e-1f,         4.16666679e-2f,  -1.38888892e-3f,   // 1, -1/2!, 1/4!, -1/6!
+        2.48015876e-5f,  -2.75573188e-7f,  2.08767570e-9f,  -1.14707456e-11f,  // 1/8! .. -1/14!
+        4.77947733e-14f, -1.56192070e-16f, 4.11031762e-19f, -8.89679139e-22f   // 1/16! .. -1/22!
+    };
+    static const f32 KF_SVP_TWO_PI     = 6.28318548f;   // 0x40C90FDB @0x82000C64
+    static const f32 KF_SVP_INV_TWO_PI = 0.159154937f;  // 0x3E22F983 @0x82000C6C
+
+    // The shared SinCos kernel: r = angle - 2pi*round(angle/2pi) (the console's vrfin
+    // round-to-nearest; floor(x+0.5) here -- differs only at exact .5 ties on an already-inexact
+    // angle), then the two 12-term series over r^2 (the console's splat-and-madd power lattice,
+    // evaluated Horner-wise here -- same terms, float-rounding-equivalent order).
+    static void SvpSinCos(f32 lfAngle, f32& lrfSin, f32& lrfCos)
+    {
+        const f32 lfR  = lfAngle
+                       - KF_SVP_TWO_PI * std::floor(lfAngle * KF_SVP_INV_TWO_PI + 0.5f);
+        const f32 lfR2 = lfR * lfR;
+
+        f32 lfSinPoly = KAF_SVP_SIN_COEFFS[11];
+        f32 lfCosPoly = KAF_SVP_COS_COEFFS[11];
+        for (s32 li = 10; li >= 0; --li)
+        {
+            lfSinPoly = lfSinPoly * lfR2 + KAF_SVP_SIN_COEFFS[li];
+            lfCosPoly = lfCosPoly * lfR2 + KAF_SVP_COS_COEFFS[li];
+        }
+        lrfSin = lfR * lfSinPoly;
+        lrfCos = lfCosPoly;
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // ⭐ THE ONE PLACE THE ROTATION HANDEDNESS IS DECIDED (bank §7.1). The asm proves, per
+    // build, WHICH row is the untouched axis row and that one polynomial output is sign-flipped
+    // into an off-diagonal -- but not which output is sine. All five rotation builds in
+    // GetWheelsWorldTransfrom route through these three builders so the sign convention is a
+    // single decision, checked VISUALLY (boot witness, 2026-08-13): under `-Drive` the wheels
+    // must roll FORWARD (top of wheel toward the nose = local +z), under `-Steer right` the
+    // front wheels must yaw RIGHT (nose of wheel toward local +x).
+    //
+    // Convention as written (row-vector, x=right / y=up / z=forward):
+    //   RotX(+a): (0,1,0) -> (0, c, +s): top of wheel moves FORWARD for +a.
+    //   RotY(+a): (0,0,1) -> (+s, 0, c): wheel nose moves RIGHT for +a.
+    //   RotZ(+a): (1,0,0) -> (c, +s, 0): right side of wheel moves UP for +a (crash buckle).
+    // ------------------------------------------------------------------------------------------
+    static Matrix44Affine SvpRotationAboutX(f32 lfAngle)
+    {
+        f32 lfSin, lfCos;
+        SvpSinCos(lfAngle, lfSin, lfCos);
+        Matrix44Affine lM;
+        lM.xAxis = { 1.0f,   0.0f,  0.0f, 0.0f };   // 0x825D92B4: X row untouched [V]
+        lM.yAxis = { 0.0f,  lfCos, lfSin, 0.0f };
+        lM.zAxis = { 0.0f, -lfSin, lfCos, 0.0f };
+        lM.wAxis = { 0.0f,   0.0f,  0.0f, 1.0f };
+        return lM;
+    }
+
+    static Matrix44Affine SvpRotationAboutY(f32 lfAngle)
+    {
+        f32 lfSin, lfCos;
+        SvpSinCos(lfAngle, lfSin, lfCos);
+        Matrix44Affine lM;
+        lM.xAxis = { lfCos, 0.0f, -lfSin, 0.0f };
+        lM.yAxis = {  0.0f, 1.0f,   0.0f, 0.0f };   // 0x825D9460: Y row untouched [V]
+        lM.zAxis = { lfSin, 0.0f,  lfCos, 0.0f };
+        lM.wAxis = {  0.0f, 0.0f,   0.0f, 1.0f };
+        return lM;
+    }
+
+    static Matrix44Affine SvpRotationAboutZ(f32 lfAngle)
+    {
+        f32 lfSin, lfCos;
+        SvpSinCos(lfAngle, lfSin, lfCos);
+        Matrix44Affine lM;
+        lM.xAxis = {  lfCos, lfSin, 0.0f, 0.0f };
+        lM.yAxis = { -lfSin, lfCos, 0.0f, 0.0f };
+        lM.zAxis = {   0.0f,  0.0f, 1.0f, 0.0f };   // 0x825D8CFC: Z row untouched [V]
+        lM.wAxis = {   0.0f,  0.0f, 0.0f, 1.0f };
+        return lM;
+    }
+
+    // Row-vector rotation compose, C = A * B (out row_i = A_i.x*B.x + A_i.y*B.y + A_i.z*B.z) --
+    // the console's splat-and-madd lattice at 0x825D9490 (operand-verified there; the two
+    // crash-path composes are the identical shape). Rotation-only: wAxis is not composed.
+    static Matrix44Affine SvpMulRotation(const Matrix44Affine& lrA, const Matrix44Affine& lrB)
+    {
+        Matrix44Affine lOut;
+        const Vector3* lpaARows[3] = { &lrA.xAxis, &lrA.yAxis, &lrA.zAxis };
+        Vector3*       lpaORows[3] = { &lOut.xAxis, &lOut.yAxis, &lOut.zAxis };
+        for (s32 li = 0; li < 3; ++li)
+        {
+            const Vector3& lrRow = *lpaARows[li];
+            lpaORows[li]->x = lrRow.x * lrB.xAxis.x + lrRow.y * lrB.yAxis.x + lrRow.z * lrB.zAxis.x;
+            lpaORows[li]->y = lrRow.x * lrB.xAxis.y + lrRow.y * lrB.yAxis.y + lrRow.z * lrB.zAxis.y;
+            lpaORows[li]->z = lrRow.x * lrB.xAxis.z + lrRow.y * lrB.yAxis.z + lrRow.z * lrB.zAxis.z;
+            lpaORows[li]->w = 0.0f;
+        }
+        lOut.wAxis = { 0.0f, 0.0f, 0.0f, 1.0f };
+        return lOut;
+    }
+
+    Matrix44Affine SimpleVehiclePhysics::GetWheelsWorldTransfrom(
+        EVehicleDrivenWheel leWheel, bool lbHackDontReverseRightWheels) const
+    {
+        const Wheel& lrWheel = maWheels[leWheel];
+
+        // 0x825D88B8..0x825D8924 -- Wheel::GetPosition() inlined: the three-lane NaN
+        // self-compare with the console-authored message (Wheel.h:412, `li r5, 0x19C`).
+        CGS_ASSERT(lrWheel.mPosition.x == lrWheel.mPosition.x &&
+                   lrWheel.mPosition.y == lrWheel.mPosition.y &&
+                   lrWheel.mPosition.z == lrWheel.mPosition.z,
+                   "Invalid wheel position: , please tell Graham D.");
+
+        // 0x825D89C8/0x825D89D8 -- the spin angle: mIntegrationVariables lane .z (the
+        // accumulated wheel rotation the drivetrain integrates at 0x8261F494).
+        const f32 lfSpinAngle = lrWheel.mIntegrationVariables.z;
+
+        Matrix44Affine lLocal;
+        if (mbCrashing)   // 0x825D89D4 `lbz r11, 0x710(r16)`
+        {
+            // 0x825D8A08..0x825D8A70 -- the console runs GetPosition() (and its NaN assert)
+            // a SECOND time on this path.
+            CGS_ASSERT(lrWheel.mPosition.x == lrWheel.mPosition.x &&
+                       lrWheel.mPosition.y == lrWheel.mPosition.y &&
+                       lrWheel.mPosition.z == lrWheel.mPosition.z,
+                       "Invalid wheel position: , please tell Graham D.");
+
+            // Buckle angle (0x825D8B10..0x825D8B9C): (2*|posZ - streamedZ|)^2, clamped.
+            // ⚠️ The SQUARE is the angle in radians -- faithful on both platforms (bank §7.3);
+            // it looks like a bug a porter would "fix". Do not.
+            const f32 lfDeltaZ =
+                lrWheel.mPosition.z - lrWheel.mStreamedPositionPlusTwistAmount.z;
+            f32 lfBuckleAngle = 2.0f * ((lfDeltaZ >= 0.0f) ? lfDeltaZ : -lfDeltaZ);
+            lfBuckleAngle = lfBuckleAngle * lfBuckleAngle;
+            if (lfBuckleAngle > KVF_MAX_BUCKLE_ANGLE_CRASHING)         // vminfp @0x825D8B98
+            {
+                lfBuckleAngle = KVF_MAX_BUCKLE_ANGLE_CRASHING;
+            }
+
+            // Twist angle (0x825D8B30/0x825D8EEC): the streamed twist amount (.w lane) signed
+            // by the per-wheel direction table (+1/-1/+1/-1).
+            const f32 lfTwistAngle =
+                lrWheel.mStreamedPositionPlusTwistAmount.w * KAVF_WHEEL_TWIST_DIRECTIONS[leWheel];
+
+            // 0x825D8CFC (RotZ) -> 0x825D8E98 (RotX) -> 0x825D9034 (RotY), composed
+            // buckle-first in row-vector order. Steering is NEVER applied while crashing
+            // (0x825D90EC branches straight to the common body multiply).
+            lLocal = SvpMulRotation(
+                SvpMulRotation(SvpRotationAboutZ(lfBuckleAngle), SvpRotationAboutX(lfSpinAngle)),
+                SvpRotationAboutY(lfTwistAngle));
+        }
+        else
+        {
+            // Normal path: spin about the axle (0x825D9298..0x825D92D0)...
+            lLocal = SvpRotationAboutX(lfSpinAngle);
+
+            // ...then, for the two FRONT wheels only (0x825D9254/0x825D92D8 -- REGARDLESS of
+            // the bool argument), steer about up: spin FIRST, then steer (the compose at
+            // 0x825D9490 splats the spin rows onto the steer rows).
+            if (leWheel == eFrontLeftWheel || leWheel == eFrontRightWheel)
+            {
+                // The console call is vtable slot 0 with a 16-byte sret (0x825D92E0) --
+                // `virtual VecFloat GetSteeringAngle() const`, which this tree declares
+                // non-virtual f32 on VehiclePhysics. DEVIRTUALIZED per the named divergence
+                // (header banner + the UpdateRaceCarState precedent); every live receiver is
+                // at least a VehiclePhysics.
+                const f32 lfSteerAngle =
+                    static_cast<const VehiclePhysics*>(this)->GetSteeringAngle();
+                lLocal = SvpMulRotation(lLocal, SvpRotationAboutY(lfSteerAngle));
+            }
+        }
+
+        // 0x825D94F0..0x825D9594 -- out = local * mTransform (rows only; local row3 is zero, so
+        // the translation row starts as mTransform.wAxis and is overwritten below anyway).
+        Matrix44Affine lWheelTransform = SvpMulRotation(lLocal, mTransform);
+
+        // 0x825D9560..0x825D95C0 -- the left-wheel mirror, gated by the bool: rows X and Z of
+        // the WORLD matrix negated = a pi rotation about Y (the wheel model faces the other
+        // side). Wheels 0/2 == FrontLeft/RearLeft per the DWARF enum (the parameter name says
+        // "Right" -- console misnomer, kept as the ABI name). WriteOutVehicleStats passes
+        // false, so the mirror is ACTIVE in the render publish.
+        if (!lbHackDontReverseRightWheels &&
+            (leWheel == eFrontLeftWheel || leWheel == eRearLeftWheel))
+        {
+            lWheelTransform.xAxis.x = -lWheelTransform.xAxis.x;
+            lWheelTransform.xAxis.y = -lWheelTransform.xAxis.y;
+            lWheelTransform.xAxis.z = -lWheelTransform.xAxis.z;
+            lWheelTransform.xAxis.w = -lWheelTransform.xAxis.w;
+            lWheelTransform.zAxis.x = -lWheelTransform.zAxis.x;
+            lWheelTransform.zAxis.y = -lWheelTransform.zAxis.y;
+            lWheelTransform.zAxis.z = -lWheelTransform.zAxis.z;
+            lWheelTransform.zAxis.w = -lWheelTransform.zAxis.w;
+        }
+
+        // 0x825D95C4..0x825D95F4 -- translation: the body position plus the BODY-ROTATED wheel
+        // position (mPosition is car-space with the suspension travel already integrated into
+        // its .y by ApplyWheelWeight -- rotation-only transform, then add the wAxis row).
+        lWheelTransform.wAxis.x = mTransform.wAxis.x
+            + mTransform.xAxis.x * lrWheel.mPosition.x
+            + mTransform.yAxis.x * lrWheel.mPosition.y
+            + mTransform.zAxis.x * lrWheel.mPosition.z;
+        lWheelTransform.wAxis.y = mTransform.wAxis.y
+            + mTransform.xAxis.y * lrWheel.mPosition.x
+            + mTransform.yAxis.y * lrWheel.mPosition.y
+            + mTransform.zAxis.y * lrWheel.mPosition.z;
+        lWheelTransform.wAxis.z = mTransform.wAxis.z
+            + mTransform.xAxis.z * lrWheel.mPosition.x
+            + mTransform.yAxis.z * lrWheel.mPosition.y
+            + mTransform.zAxis.z * lrWheel.mPosition.z;
+        lWheelTransform.wAxis.w = 1.0f;
+
+        // PS3 DWARF names the sret local `lWheelTransform` -- kept.
+        return lWheelTransform;
     }
 
     // ===========================================================================================

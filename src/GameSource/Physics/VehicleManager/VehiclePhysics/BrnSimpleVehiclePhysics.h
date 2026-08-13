@@ -272,7 +272,35 @@ namespace Vehicle
         // claim was unverified and false (every lane it touches was already a named member).
         void AddTractionPoint(EVehicleDrivenWheel leWheel, Vector3 lvPosition, Vector3 lvNormal,
                               u32 lu32CollisionTag);
-        Matrix44Affine GetWheelsWorldTransfrom(EVehicleDrivenWheel leWheel, bool lbApplySteer) const;
+
+        // ⭐⭐ @0x825D8878 (868 insns) -- BODIED 2026-08-13 (wheel-transform wave). THE WHEELS'
+        // WORLD TRANSFORM: one wheel's render matrix -- spin (mIntegrationVariables.z) about the
+        // axle, steer (GetSteeringAngle, front wheels only) about up, the crash arm's
+        // buckle/spin/twist triple instead while mbCrashing, composed onto mTransform, left
+        // wheels mirrored pi-about-Y unless the bool says not to; translation = body position +
+        // body-rotated mPosition (suspension travel lives in mPosition.y). Decode bank:
+        // scratchpad wheeltransform_bank.md; body in BrnSimpleVehiclePhysics.cpp.
+        //
+        // ⚠️ PARAMETER NAME CORRECTED from this tree's earlier `lbApplySteer` guess: the PS3
+        // DWARF prototype (export 0x6E78CC) names it lbHackDontReverseRightWheels, and the body
+        // agrees -- the bool NEVER gates steering (steer runs unconditionally for wheels 0/1);
+        // it only gates the left-wheel mirror. (The console name says "Right", the DWARF enum
+        // says the mirrored wheels 0/2 are the LEFT ones; the body and enum are the authority,
+        // the ABI name is kept.) Every committed caller passes false == mirror ACTIVE.
+        //
+        // ⛔ NAMED DIVERGENCE (vtable slot 0). The console class's FIRST virtual is
+        // `virtual VecFloat GetSteeringAngle() const` (DWARF BrnSimpleVehiclePhysics.h:250,
+        // base impl cpp:768) -- ahead of ClearCrashing -- and @0x825D8878 dispatches the steer
+        // read through vtable slot 0. This tree's virtual list starts at ClearCrashing (slot 0
+        // here), i.e. the committed vtable order is WRONG at slot 0, and it declares
+        // GetSteeringAngle non-virtual (f32) on VehiclePhysics instead. Retrofitting the base
+        // virtual would touch every vtable the closure work pinned, so the body follows the
+        // tree's existing precedent (BrnVehicleOutputInterface_UpdateRaceCarState.cpp:129) and
+        // DEVIRTUALIZES: every live receiver is at least a VehiclePhysics (RaceCarPhysics /
+        // TrafficPhysics both derive from it; neither overrides). Left for the verifier as the
+        // class-surface cure.
+        Matrix44Affine GetWheelsWorldTransfrom(EVehicleDrivenWheel leWheel,
+                                               bool lbHackDontReverseRightWheels) const;
         void GetSimpleVehicleBox(/* Box& */ void* lpOutBox) const;
 
         // ⭐ OUT of the BLOCKED list 2026-08-07 (wheel-cluster wave): BODIED in
