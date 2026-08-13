@@ -93,6 +93,18 @@ struct BrnRendererMemory
     // shadow-map slots begin at slot 1). Called by ShadowMapRenderManager::Begin/EndRenderShadowMap.
     CgsRenderTarget* GetShadowMapBuffer(s32 liIndex);
 
+    // The pool's by-slot accessors. DWARF-attested one per slot (DecFIGS BrnRendererMemory.h:129-162
+    // names the full family); only the ones an attested caller or the PC bring-up needs are added, and
+    // each is a plain slot read -- mapRenderTarget is private, which is why the shadow wave had to leave
+    // sampler 13 unbound for want of GetEnvMapBuffer.
+    CgsRenderTarget* GetAntiAliasBuffer()  { return mapRenderTarget[E_RENDER_TARGET_ANTI_ALIAS]; }
+    CgsRenderTarget* GetDownSampleBuffer() { return mapRenderTarget[E_RENDER_TARGET_DOWN_SAMPLE]; }
+
+    // The post-fx spine's two targets, created lazily on the first frame that has a D3D9 device.
+    // See the banner on EnsurePostFxSceneTargets in BrnRendererModule.cpp for why this is a bring-up
+    // entry point and not simply Construct(). DELETE with the bring-up.
+    void PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator* lpAllocator);
+
 private:
     // The Create* render-target helpers Construct delegates to. Bodies live in their own (already
     // attested) TUs; declared here so Construct can call them by name.
