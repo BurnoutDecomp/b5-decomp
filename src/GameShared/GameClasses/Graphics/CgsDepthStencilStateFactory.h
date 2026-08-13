@@ -16,10 +16,26 @@
 // Declaration shape (virtual-ness, return types, vtable order) is DWARF-attested
 // (references/DecFIGS/dwarfdump/GameShared/GameClasses/Graphics/
 // CgsDepthStencilStateFactory.h): a single-vptr polymorphic class, no base.
-// Destruct / Prepare / GetState are NOT in the X360 ledger for this TU (only
-// Construct is attested) -- declared here only to preserve the DWARF vtable
-// order; their bodies are a follow-on pass (same convention as
-// CgsBufferedDispatchFrame.h).
+// Destruct / Prepare / GetState are NOT in the X360 ledger for this TU -- only
+// Construct is attested (0x827EBBA0). They are declared here to preserve the DWARF
+// vtable order, and they are three different situations, which is worth spelling out:
+//
+//   * Destruct / Prepare have NO X360 body and never will from the binary: a scan of
+//     all 30,095 exports finds no symbol for either, on this class or on the blend and
+//     rasterizer twins, and no callee's xrefs_to names one. They are DEFINED -- as
+//     documented, never-called, link-closure stubs -- in
+//     GameShared/GameClasses/Graphics/CgsStateFactoryLinkStubs.cpp. That file is not
+//     decoration: this class is polymorphic, so its vtable is emitted in whatever TU
+//     constructs it and names every virtual, and the day BrnRendererModule stops using
+//     its empty placeholder and embeds the real class by value (it is reached from
+//     `static BrnGame::BrnGameModule gGameModule;`, BrnMain.cpp:45) an undefined virtual
+//     is an LNK2019 in the boot link. The per-TU gate is `cl /c`, which cannot see that.
+//   * GetState is a NON-VIRTUAL accessor, so it costs the link nothing until a caller
+//     exists. It is still declaration-only here, and bodying it means promoting the
+//     TU-local saDepthStencilStates array in the .cpp to the DWARF's private static
+//     member -- deliberately not done in this pass, because no caller can be written
+//     until the BrnRendererModule placeholder swap happens, and that swap is blocked on
+//     CgsRasterizerStateFactory still having no header at all.
 // =============================================================================
 
 class CgsDepthStencilStateFactory
