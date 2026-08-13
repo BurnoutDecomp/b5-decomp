@@ -396,9 +396,42 @@ namespace
         CgsDev::Log::WriteToLog(lacMessage);
     }
 
-    // The format + section count the live target was created with, kept so
+    // The sibling reporter for every NON-depth-sampled target -- the post-fx spine's scene colour
+    // buffer and the rest of the pool. Kept separate from ReportShadowRenderTarget because that one
+    // owns the shadow tuple and its once-only de-duplication state; a colour target flowing through
+    // it would both clobber that state and print a shadow line about something that is not a
+    // shadow. Unconditional (there are a handful of these per run, created once each).
+    void ReportRenderTarget(u32 luWidth, u32 luHeight, u32 luSections,
+                            u32 luColourMode, u32 luDepthStencilMode, bool lbColourTextureValid)
+    {
+        char lacMessage[224];
+        std::snprintf(lacMessage, sizeof(lacMessage),
+                      "[postfx-rt] target %ux%u sections=%u colourMode=%u depthMode=%u"
+                      " colourTexture=%s\n",
+                      static_cast<unsigned>(luWidth), static_cast<unsigned>(luHeight),
+                      static_cast<unsigned>(luSections), static_cast<unsigned>(luColourMode),
+                      static_cast<unsigned>(luDepthStencilMode),
+                      lbColourTextureValid ? "OK" : "NULL");
+        CgsDev::Log::WriteToLog(lacMessage);
+    }
+
+    // The format + section count THE SHADOW-MAP TARGET was created with, kept so
     // GetDepthStencilTexture can re-report the same tuple without re-deriving it (neither is a
     // console member of RenderTarget and neither is worth inventing one for).
+    //
+    // ⚠️ THESE DESCRIBE THE SHADOW TARGET SPECIFICALLY, NOT "the last target Initialize saw".
+    // Initialize used to latch them unconditionally, which was correct only while exactly ONE
+    // render target existed in the whole build. The post-fx spine (2026-08-13) creates a SECOND
+    // one -- the off-screen scene colour buffer, which has no depth texture at all -- and an
+    // unconditional latch would have set guCreatedFormat = 0 / gbCreatedHardwareCompare = false
+    // the moment it was built. renderengine::ShadowSampler_ApplyState (XenonD3D9Shims.cpp:2909)
+    // reads exactly that flag to choose sampler 15's filter, so shadow sampling would have
+    // silently dropped from LINEAR (the hardware PCF the depth-compare formats give us) to POINT,
+    // and guCreatedSections would have fallen 3 -> 1 and mis-reported the cascade atlas.
+    // Nothing would have crashed, nothing would have printed a warning, and the shadows would
+    // just have got worse -- the same shape of single-consumer-global bug as the shadow campaign's
+    // own defects. The latch below is therefore gated on the target being the one that asked to be
+    // SAMPLED AS DEPTH, which is the shadow map and only the shadow map.
     u32  guCreatedFormat          = 0u;
     bool gbCreatedHardwareCompare = false;
     u32  guCreatedSections        = 1u;
@@ -605,12 +638,36 @@ namespace postfx
         }
         lpRenderTarget->mpSection0State = lpRenderTarget->mapSectionState[0];
 
-        guCreatedFormat          = luDepthFormat;
-        gbCreatedHardwareCompare = lbDepthHwCompare && (lpRenderTarget->mDepthTarget.mpTexture != nullptr);
-        guCreatedSections        = luNumSections;
-        ReportShadowRenderTarget(luSurfaceWidth, luSurfaceHeight, luNumSections,
-                                 lpRenderTarget->mDepthTarget.mpTexture != nullptr,
-                                 luDepthFormat, gbCreatedHardwareCompare);
+        // Latch the shadow-sampler tuple ONLY for the shadow map (see the banner on guCreatedFormat).
+        //
+        // ⚠️ "HAS A DEPTH TEXTURE" IS NOT A TIGHT ENOUGH TEST, measured -- an earlier version of this
+        // gate used exactly that and the first boot of the post-fx pool wave printed the DOWN-SAMPLE
+        // buffer on the [shadow-rt] line: it is depth-CREATE + depth-as-texture too (post-fx samples its
+        // depth for depth of field), so it re-latched the tuple with its own 1280x720 values. That was
+        // harmless only by luck -- both targets happen to get D24X8 with hardware compare -- and it is
+        // the very clobber this gate exists to stop. The particle buffer is a third such target.
+        //
+        // The DISCRIMINATOR is that the shadow map is the only target in the pool with NO COLOUR AT ALL
+        // (CreateShadowmapBuffer clears every colour section, so Construct derives colour mode NONE)
+        // while still resolving its depth to a sampleable texture. Down-sample, particle and env map all
+        // carry a colour surface.
+        const bool lbIsShadowMapTarget =
+            (lpRenderTarget->mDepthTarget.mpTexture != nullptr)
+            && (lrParameters.mColourMode == static_cast<u32>(eRenderTarget_NONE));
+        if (lbIsShadowMapTarget)
+        {
+            guCreatedFormat          = luDepthFormat;
+            gbCreatedHardwareCompare = lbDepthHwCompare;
+            guCreatedSections        = luNumSections;
+            ReportShadowRenderTarget(luSurfaceWidth, luSurfaceHeight, luNumSections,
+                                     true, luDepthFormat, gbCreatedHardwareCompare);
+        }
+        else
+        {
+            ReportRenderTarget(luSurfaceWidth, luSurfaceHeight, luNumSections,
+                               lrParameters.mColourMode, lrParameters.mDepthStencilMode,
+                               lpRenderTarget->maColourTargets[0].mpTexture != nullptr);
+        }
 
         return lpRenderTarget;
     }
