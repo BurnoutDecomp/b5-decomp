@@ -45,22 +45,35 @@ namespace CgsCollision
     // hits into. Two accessors are recovered:
     //
     //   SetNumResults @ 0x8280FFE8:  sth r4, 0xC(r3) ; blr
-    //       → `this->munNumResults = (u16)liNumResults; return this;`. A halfword
+    //       → `this->mu16NumResults = (u16)liNumResults; return this;`. A halfword
     //         store → the count field is 16-bit at offset 0xC.
     //   GetResult     @ 0x828A9EF8:  lwz r10, 0(r31) ; mulli r11, r30, 0x70
     //                                add r3, r11, r10
     //       → `return &mpResults[index];`. Offset 0 is therefore the results-buffer
-    //         base pointer (mpResults); the 8 bytes between it and the count are the
-    //         list cursor/header the job populates elsewhere (reserved span so
-    //         munNumResults keeps the asm-observed console offset 0xC). Note: host
-    //         pointer width differs from the X360's 4-byte pointer, so the PC layout
-    //         widens mpResults — semantic parity by named member, not byte offsets.
+    //         base pointer (mpResults). Note: host pointer width differs from the
+    //         X360's 4-byte pointer, so the PC layout widens mpResults — semantic
+    //         parity by named member, not byte offsets.
+    //
+    // ⭐ 2026-08-14 (walls leg 1): the "8 reserved bytes between pointer and count" are
+    // RETIRED — the DecFIGS DWARF (CgsCollisionResultList.h:163-169) names every field, and
+    // BaseCollisionGenerator::PrepareNewPrimitiveTestResultsList @0x82810798 writes all six
+    // in one burst (stw/stw/sth/sth/sth/stb at +0/+4/+8/+A/+C/+E):
+    //     mpResults(mpaResults) / mu32UserTagA / mu16UserTagB / mu16MaxNumResults /
+    //     mu16NumResults / meResultType.
+    // The collide-stream drivers pass the BRIDGE'S custom-queue index through UserTagA
+    // (`li 5` race-world / `li 9` traffic-world / 7/8/13 car-car) and a constant 1 through
+    // UserTagB — tags, not semantics the list itself interprets.
+    // (mu16NumResults was spelled `munNumResults` here before the DWARF confirmed the
+    // canonical spelling; SetNumResults/GetResult updated with it.)
     // -------------------------------------------------------------------------
     struct CollisionResultList
     {
-        CollisionResult* mpResults;         // +0x00  results-buffer base (GetResult base)
-        u8               maCursorReserved[8]; // +0x04  list cursor/header (X360 offsets)
-        u16              munNumResults;      // +0x0C  live result count (sth target)
+        CollisionResult* mpResults;         // +0x00  results-buffer base (GetResult base; DWARF mpaResults)
+        u32              mu32UserTagA;       // +0x04  caller tag A (custom-queue index on the vehicle paths)
+        u16              mu16UserTagB;       // +0x08  caller tag B (the drivers pass 1)
+        u16              mu16MaxNumResults;  // +0x0A  capacity the results buffer was sized for
+        u16              mu16NumResults;     // +0x0C  live result count (sth target)
+        u8               meResultType;       // +0x0E  result-record type id (0 == primitive-test, 80-byte stride)
 
         // SetNumResults @ 0x8280FFE8
         CollisionResultList* SetNumResults(s32 liNumResults);

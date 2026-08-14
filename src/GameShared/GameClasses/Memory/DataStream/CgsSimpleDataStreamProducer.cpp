@@ -99,6 +99,18 @@ namespace CgsMemory
         return miNumAddedCommands;
     }
 
+    // ⭐ ADDED 2026-08-14 (walls leg 1). AddCommand -- declared since the class landed, never
+    // bodied; nothing called it until the two collide-stream posters did. Same inlined shape as
+    // AllocateCommand above, read off the poster sites (AddSphereListWithTriangleListToStream
+    // @0x828113A8..0x828113B4: `addi r3, producer, 0x80 ; bl DataStreamCommandPoster::AddCommand ;
+    // stw r3, 0x104(producer)`; the swept twin @0x82811700 is byte-identical). The producer-level
+    // return is modelled as the freshly stored count, mirroring AllocateCommand's own FLAG note.
+    s32 SimpleDataStreamProducer::AddCommand(void* lpCommand)
+    {
+        miNumAddedCommands = mCommandPoster.AddCommand(lpCommand);
+        return miNumAddedCommands;
+    }
+
     // End -- TriangleCacheManager::EndUpdateTriangleCaches @0x828BF1AC..0x828BF1B8:
     //     lwz r31, 0x30(this) ; addi r3, r31, 0x80 ; bl DataStreamCommandPoster::End
     //     li  r20, 0          ; stb r20, 0x100(r31)

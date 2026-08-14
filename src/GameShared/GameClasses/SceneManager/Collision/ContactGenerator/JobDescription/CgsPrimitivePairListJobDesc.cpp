@@ -20,11 +20,11 @@ namespace CgsCollision
         //   stw  r5,0xF0(r3)   ; mpResultsList = lpResultsList
         //   li   r10,0xA; stb r10,0xFF(r3)  ; muJobType = 10
         //   lfs  f0,flt_82001CC0(=0.0f); stfs f0,0xF4(r3)  ; mfRadius = 0.0f
-        //   li   r11,0; stw r11,0xF8(r3)    ; miStatus = 0
+        //   li   r11,0; stw r11,0xF8(r3)    ; mpDebugStream = 0 (DWARF mpDebugStream)
         mpResultsList = lpResultsList;
         muJobType     = E_COLLISIONJOB_PRIMITIVE_PAIR_LIST;
         mfRadius      = 0.0f;
-        miStatus      = 0;
+        mpDebugStream = 0;   // (was misnamed miStatus; DWARF h:119)
 
         // Copy the three dwords of the pair list into the leading payload (0,4,8):
         //   lwz r11,0(r4); stw r11,0(r3)

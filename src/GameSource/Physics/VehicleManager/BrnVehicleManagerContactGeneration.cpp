@@ -14,15 +14,17 @@
 // Caller: PhysicsModule::Update @0x825B0640 -- STILL A LINK STUB, so nothing reaches this
 // body at runtime yet; /OPT:REF strips it. Mounted for closure enforcement.
 //
-// ⚠⚠ Callee state (2026-08-14 deformation-mount wave): the model table is LIVE, so the two
-// race-car Do* callees are REACHED PER FRAME — both were DEGRADED from assert traps to log-once
-// gates that produce no contacts (see their bodies). Still not reconstructed:
+// ⭐⭐ Callee state (2026-08-14 walls leg 1): DoRaceCarWorldContactGeneration @0x825EB140 is
+// REAL (its log-once gate deleted) and the collide-stream family behind it is REAL
+// (CgsCollisionGenerator_CollideStreams.cpp) — one sphere/swept command per live car per frame
+// now flows into ContactGeneratorJob::Execute, where the type-6/14 workers are LOUD NAMED
+// GATES until the sphere-vs-Triangle4 contact kernels land. Still not reconstructed:
 //   DoCarCarContactGeneration @0x8261BB38 (250 asm / 15 callees; PS3 0x75C0C8) — log-once gate
-//   DoRaceCarWorldContactGeneration @0x825EB140 (131 asm / 14 callees; PS3 0x788190) — log-once gate
-//   DoTrafficCarWorldContactGeneration @0x8261BF28 (⚠ .ida-exports HOLE; PS3 0x789760)
-//   IsRaceCarHidden @0x825C2EA0 (⚠ .ida-exports HOLE; no PS3 twin surfaced either --
-//     signature from the two register-truth call sites)
-// RECONSTRUCT-NEXT.
+//   DoTrafficCarWorldContactGeneration @0x8261BF28 (⚠ .ida-exports HOLE; PS3 0x789760) — trap,
+//     dead at runtime (no live traffic on the junkyard path)
+//   EndVehicleContactGeneration (the harvest) — conductor gate elsewhere; nothing consumes the
+//     three job pointers yet.
+// (IsRaceCarHidden @0x825C2EA0 is REAL since 2026-08-11 — see the note at the foot of this TU.)
 // ============================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
@@ -33,6 +35,9 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventOutOverlapPair.h"    // OutOverlapPair (promoted ids)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_TriangleCache.h"          // TriangleCacheInterface
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h" // CollisionGenerator (+ the collide-stream family)
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsSphereList.h"       // SphereList (DoRaceCarWorld's sphere pass)
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsSweptSphereList.h"  // SweptSphereList (the swept pass)
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsTriangleList.h"     // TriangleList (CheckAlignment/ValidateTriangles)
 #include "GameSource/Physics/BrnContactGenerationList.h"                                  // ContactGenList
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"                  // DeformationManager (Add*Pair, FindModelIndexByEntityID, GetDeformableObject)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h" // DeformableObject (GetVehiclePhysics)
@@ -60,6 +65,13 @@ namespace Vehicle
         const u16 KU16_COLLIDE_MAX_RESULTS    = 200;
         const u32 KU_COLLIDE_FLAGS            = 11;    // == E_ENTITYTYPE_PROP_COLLISION_RACECAR's value; carried as the baked literal
         const u16 KU16_COLLIDE_TAG            = 0;
+
+        // ⭐ 2026-08-14 (walls leg 1): DoRaceCarWorldContactGeneration's two contact-padding
+        // floats, image-read this wave (x360rd): flt_82001D9C == 2.0f rides the in-place sphere
+        // pass, flt_82001DA0 == 0.5f the swept (continuous) pass. Both go to the poster's f1 and
+        // land in StreamCommand::mfPadding.
+        const f32 KF_SPHERE_TRIANGLE_CONTACT_PADDING       = 2.0f;   // flt_82001D9C
+        const f32 KF_SWEPT_SPHERE_TRIANGLE_CONTACT_PADDING = 0.5f;   // flt_82001DA0
     }
 
     // ==========================================================================================
@@ -402,31 +414,10 @@ namespace Vehicle
         }
 
         // ---- (5) begin the three producers, kick the three collide jobs -------------------------
-        // ⚠⚠ PC-BUILD GUARD (conductor wave 2026-08-09): the three CreateCollide*Stream
-        // factories are still one-shot gates (CgsCollisionGenerator_StreamStubs.cpp) that
-        // return NULL, so Begin() here would AV on the first conducted frame (measured:
-        // 0xC0000005 at SimpleDataStreamProducer::Begin, boot +8s). Until the stream family
-        // lands, a null producer means the collide-stream leg cannot run -- log once, skip
-        // the Begin/Run trio, leave the three job pointers null (EndVehicleContactGeneration
-        // is itself still a gate, so nothing consumes them yet). GUARD TESTS THE EXACT
-        // POINTERS THE STUBS LEAVE NULL. Delete with the stream family.
-        if (mpSphereTriangleStreamProducer == 0 || mpSweptSphereTriangleStreamProducer == 0 ||
-            mpSphereSphereStreamProducer == 0)
-        {
-            static bool s_bLogged = false;
-            if (!s_bLogged)
-            {
-                s_bLogged = true;
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint << "conductor gate: StartVehicleContactGeneration's "
-                                                  "collide-stream leg inert [FLAG PC boot gate -- "
-                                                  "CreateCollide*Stream stubs returned null]\n";
-            }
-            mpSphereTriangleStreamJob      = 0;
-            mpSweptSphereTriangleStreamJob = 0;
-            mpSphereSphereStreamJob        = 0;
-            return;
-        }
+        // ⭐ 2026-08-14 (walls leg 1): the PC-BUILD GUARD that sat here since the conductor wave
+        // (2026-08-09) is DELETED per its own instruction ("Delete with the stream family") --
+        // the three CreateCollide*Stream factories are REAL now
+        // (CgsCollisionGenerator_CollideStreams.cpp) and assert rather than return null.
         mpSphereTriangleStreamProducer->Begin();        // the three inlined Begin bodies
         mpSweptSphereTriangleStreamProducer->Begin();   // (see CgsSimpleDataStreamProducer_Begin.cpp)
         mpSphereSphereStreamProducer->Begin();
@@ -468,32 +459,130 @@ namespace Vehicle
         }
     }
 
+    // ==============================================================================================
+    // ⭐⭐ DoRaceCarWorldContactGeneration @0x825EB140 (131) — REAL as of walls leg 1 (2026-08-14).
+    // THE GATE THAT WAS HERE (log-once, "world contacts NOT generated") IS DELETED.
+    //
+    // One live unfrozen race car per call, per frame: take the car's window into the triangle
+    // cache, take its deformation spheres from the LIVE model table (the mount the previous wave
+    // landed), and post ONE sphere-list-vs-triangle-list command into this frame's collide
+    // stream — swept (continuous) spheres when the car is fast enough (IsUsingSweptSpheres),
+    // in-place spheres otherwise. Then mark the car in the contact-gen list so the harvest
+    // (EndVehicleContactGeneration, still a conductor gate) knows a world entry exists for it.
+    //
+    // The asm, top to bottom (every callee LANDED as of this wave — the queries were sliced to
+    // the mounted BrnDeformationManager_ContactQueries.cpp, GetSpheresForCar lifted from its
+    // export hole, the posters written in CgsCollisionGenerator_CollideStreams.cpp):
+    //   0x825EB168  index < 0x4000 tripwire            (the inlined EntityId build, CgsEntityId.h:116)
+    //   0x825EB190  interface GetCache (inlined: assert "mpTriangleCacheManager != NULL" + forward)
+    //   0x825EB1DC  GetNumCachedTriangleBatches
+    //   0x825EB1F0  assert lpCachedTriangles           (:943 — the cache MUST hold this car;
+    //                                                   PrepareTriangleCache registered it at create)
+    //   0x825EB218  IsUsingSweptSpheres(entityId)
+    //   0x825EB234  out-slot zero-initialised, THEN GetSpheresForCar / GetSweptSpheresForCar —
+    //               the plain getter returns -1 gracefully WITHOUT writing the slot, so the
+    //               assert "lpSpheres" (:952 / :979) is the caller's own null test on the slot.
+    //   0x825EB280  TriangleList::CheckAlignment + ValidateTriangles over the {cache, batches} pair
+    //   0x825EB2B0  AddSphereListWithTriangleListToStream(spheres, tris, 200, 2.0f, queueIdx, 1,
+    //               sphere stream)      — or the swept twin with 0.5f into the swept stream
+    //   0x825EB344  ContactGenList::AddEntry(EntityId{0}, EntityId{car}, 0, 1)  (@0x825B59B0 —
+    //               the WORLD marker entry: side A owner 0 == E_ENTITYTYPE_WORLD)
+    //
+    // ⭐ WHAT THIS CHANGES AT RUNTIME, STATED PLAINLY: commands now FLOW — one per live car per
+    // frame — and the Run* dispatcher drains them into ContactGeneratorJob::Execute, where case 6
+    // (ExecuteSphereListWithTriangleListStream @0x829235C8) is a LOUD NAMED GATE: the sphere-vs-
+    // Triangle4 contact kernel (IntersectTriangle4Sphere_HackyBurnoutVersion @0x829238E8-family)
+    // is the next leg. Contacts are NOT generated yet, and nothing pretends they are — the gate
+    // line in the log is the honest witness that the plumbing carried a real command.
+    // ==============================================================================================
     void VehicleManager::DoRaceCarWorldContactGeneration(
-        s32 /*liRaceCarIndex*/, BrnPhysics::Deformation::DeformationManager* /*lpDeformationManager*/,
-        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* /*lpTriangleCacheInterface*/,
-        BrnPhysics::ContactGenList* /*lpContactGenList*/,
-        CgsSceneManager::CgsCollision::CollisionGenerator* /*lpContactGenerator*/,
-        CgsMemory::SimpleDataStreamProducer* /*lpSphereTriangleStream*/,
-        CgsMemory::SimpleDataStreamProducer* /*lpSweptSphereTriangleStream*/,
-        u32 /*luQueueIndex*/)
+        s32 liRaceCarIndex, BrnPhysics::Deformation::DeformationManager* lpDeformationManager,
+        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
+        BrnPhysics::ContactGenList* lpContactGenList,
+        CgsSceneManager::CgsCollision::CollisionGenerator* lpContactGenerator,
+        CgsMemory::SimpleDataStreamProducer* lpSphereTriangleStream,
+        CgsMemory::SimpleDataStreamProducer* lpSweptSphereTriangleStream,
+        u32 luQueueIndex)
     {
-        // ⭐ DEGRADED TRAP → log-once gate (2026-08-14 deformation-mount wave). With the model
-        // table live this is reached EVERY FRAME for every unfrozen live race car; the previous
-        // CGS_ASSERT(false) trap would have halted the sim on the first post-mount frame. The
-        // honest state: race-car world contact generation (131 asm / 14 callees, ~10.5k insns of
-        // generation/harvest/kernels measured at the walls-wave census) is STILL NOT
-        // RECONSTRUCTED — this gate produces NO world contacts, loudly, once. That is the (c)
-        // walls wave, not this one.
-        static bool s_bLoggedRaceCarWorldGate = false;
-        if (!s_bLoggedRaceCarWorldGate)
+        typedef CgsSceneManager::CgsCollision::TriangleList    TriangleList;
+        typedef CgsSceneManager::CgsCollision::SphereList      SphereList;
+        typedef CgsSceneManager::CgsCollision::SweptSphereList SweptSphereList;
+
+        // The inlined EntityId build's own bound tripwire (0x825EB168).
+        CGS_ASSERT(static_cast<u32>(liRaceCarIndex) < (1u << 14),
+                   "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");           // CgsEntityId.h:116
+        const u32 luEntityWord = (static_cast<u32>(liRaceCarIndex) << 10) | 0x01000000u;
+
+        // The car's window into the shared triangle cache (GetCache inlines the
+        // "mpTriangleCacheManager != NULL" tripwire the asm carries at 0x825EB1A4).
+        const CgsGeometric::Triangle4* lpCachedTriangles =
+            lpTriangleCacheInterface->GetCache(liRaceCarIndex);
+        const s32 liNumTriangleBatches =
+            lpTriangleCacheInterface->GetNumCachedTriangleBatches(liRaceCarIndex);
+        CGS_ASSERT(lpCachedTriangles != nullptr, "lpCachedTriangles");              // :943
+
+        const bool lbUseSweptSpheres =
+            lpDeformationManager->IsUsingSweptSpheres(EntityId{ luEntityWord });
+
+        if (!lbUseSweptSpheres)
         {
-            s_bLoggedRaceCarWorldGate = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "conductor gate: DoRaceCarWorldContactGeneration @0x825EB140 reached (model "
-                       "table is LIVE) but not reconstructed -- world contacts NOT generated [FLAG "
-                       "PC boot gate]. Reported once, not per frame\n";
+            // ---- the in-place sphere pass (0x825EB23C..0x825EB2B0) --------------------------
+            const CgsGeometric::Sphere* lpSpheres = 0;    // 0x825EB234 stw 0 (the callee may not write it)
+            const s32 liNumSpheres =
+                lpDeformationManager->GetSpheresForCar(EntityId{ luEntityWord }, &lpSpheres);
+            CGS_ASSERT(lpSpheres != nullptr, "lpSpheres");                          // :952
+
+            SphereList lSphereList;
+            lSphereList.mpSpheres    = reinterpret_cast<u8*>(
+                const_cast<CgsGeometric::Sphere*>(lpSpheres));
+            lSphereList.miNumSpheres = liNumSpheres;
+
+            TriangleList lTriangleList;
+            lTriangleList.mpTriangles    = const_cast<CgsGeometric::Triangle4*>(lpCachedTriangles);
+            lTriangleList.miNumTriangles = liNumTriangleBatches;
+            lTriangleList.CheckAlignment();
+            lTriangleList.ValidateTriangles();
+
+            lpContactGenerator->AddSphereListWithTriangleListToStream(
+                &lSphereList, &lTriangleList,
+                KU16_COLLIDE_MAX_RESULTS,                    // li r6, 0xC8
+                KF_SPHERE_TRIANGLE_CONTACT_PADDING,          // lfs f1, flt_82001D9C (2.0f)
+                luQueueIndex,                                // lwz r8, arg_54 (the baked `li 5`)
+                1,                                           // li r9, 1
+                lpSphereTriangleStream);                     // mr r10, r24
         }
+        else
+        {
+            // ---- the swept (continuous) pass (0x825EB2B8..0x825EB32C) -----------------------
+            const CgsGeometric::SweptSphere* lpSweptSpheres = 0;
+            const s32 liNumSweptSpheres =
+                lpDeformationManager->GetSweptSpheresForCar(EntityId{ luEntityWord },
+                                                            &lpSweptSpheres);
+            CGS_ASSERT(lpSweptSpheres != nullptr, "lpSpheres");                     // :979
+
+            SweptSphereList lSweptSphereList;
+            lSweptSphereList.mpaSweptSpheres = reinterpret_cast<u8*>(
+                const_cast<CgsGeometric::SweptSphere*>(lpSweptSpheres));
+            lSweptSphereList.miNumSpheres    = liNumSweptSpheres;
+
+            TriangleList lTriangleList;
+            lTriangleList.mpTriangles    = const_cast<CgsGeometric::Triangle4*>(lpCachedTriangles);
+            lTriangleList.miNumTriangles = liNumTriangleBatches;
+            lTriangleList.CheckAlignment();
+            lTriangleList.ValidateTriangles();
+
+            lpContactGenerator->AddSweptSphereListWithTriangleListToStream(
+                &lSweptSphereList, &lTriangleList,
+                KU16_COLLIDE_MAX_RESULTS,
+                KF_SWEPT_SPHERE_TRIANGLE_CONTACT_PADDING,    // lfs f1, flt_82001DA0 (0.5f)
+                luQueueIndex,
+                1,
+                lpSweptSphereTriangleStream);                // mr r10, r23
+        }
+
+        // 0x825EB330..0x825EB344: the world marker entry — side A owner 0 (E_ENTITYTYPE_WORLD),
+        // side B this car, flags (0, 1).
+        lpContactGenList->AddEntry(EntityId{ 0u }, EntityId{ luEntityWord }, 0, 1);
     }
 
     void VehicleManager::DoTrafficCarWorldContactGeneration(

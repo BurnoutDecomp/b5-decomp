@@ -296,7 +296,16 @@ namespace Deformation
         const rw::math::vpu::Vector3Plus* GetOffset_ScratchArray();                             // :422
         const VehicleLocatorData* GetLocatorData();                                            // :426
         const IKBodyPart* GetIKPart(s32 liIndex);                                               // :430
-        s32 GetWorldSpaceSpheres(const CgsGeometric::Sphere** lppSpheresOut);                   // :434
+        // :434. ⭐ HEADER-INLINE (2026-08-14, walls leg 1): no export on X360 -- the console
+        // inlines it into DeformationManager::GetSpheresForCar @0x825C2260 (an export hole,
+        // lifted from the image: `*out = model base` == &maWorldSensorSpheres[0], the class's
+        // first member; count = spec+1618 (+4) == GetNumSensors()). GetNumSensors precedent.
+        // Unlike GetSweptSpheres there is NO mbDoSweptSphereTests tripwire on this one.
+        s32 GetWorldSpaceSpheres(const CgsGeometric::Sphere** lppSpheresOut)                    // :434
+        {
+            *lppSpheresOut = maWorldSensorSpheres;   // model + 0 (0x825C229C stw r11, 0(r30))
+            return GetNumSensors();                  // spec+1618 + 4 (0x825C22A0..0x825C22A8)
+        }
         s32 GetSweptSpheres(const CgsGeometric::SweptSphere** lppSpheresOut);                   // :443
         bool IsUsingSweptSpheres();                                                             // :452
         VecFloat GetWeightFactor();                                                             // :455

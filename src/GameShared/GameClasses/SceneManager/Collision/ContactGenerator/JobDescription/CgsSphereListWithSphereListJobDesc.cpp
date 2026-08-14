@@ -22,11 +22,11 @@ namespace CgsCollision
         //   stfs f1,0xF4(r31)  ; mfRadius   = lfPadding
         //   stw  r6,0xF0(r31)  ; mpResultsList = lpResultsList
         //   li   r11,7; stb r11,0xFF(r31) ; muJobType = 7
-        //   li   r10,0; stw r10,0xF8(r31) ; miStatus  = 0
+        //   li   r10,0; stw r10,0xF8(r31) ; mpDebugStream = 0 (DWARF mpDebugStream)
         mfRadius      = lfPadding;
         mpResultsList = lpResultsList;
         muJobType     = E_COLLISIONJOB_SPHERE_LIST_WITH_SPHERE_LIST;
-        miStatus      = 0;
+        mpDebugStream = 0;   // (was misnamed miStatus; DWARF h:119)
 
         // Copy sphere list A (2 dwords @0,4) and B (2 dwords @8,0xC):
         //   lwz r11,0(r4); stw r11,0(r31)   ; lwz r11,4(r4); stw r11,4(r31)

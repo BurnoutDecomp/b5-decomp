@@ -19,17 +19,19 @@
 // 0x828131C0 CollideLineAgainstPolySoupListNea, 0x82813978 TestLineAgainstPolySoupListDouble)
 // -- large hand-written VMX pipelines that need the un-homed
 // CgsGeometric::IntersectLinePolygonSoupNearestSingleSided, the PolygonSoupListSpatialMap query
-// path and permute-table constants (vpermwi128 0x4B/0x87, sub_82843E98). The async Run*/Collide*
-// dispatch family (RunCollide{Line,SphereListWithTr,SphereListWithSp,SweptSphereListW,
-// PrimitiveListWit}, CollidePrimitiveListAgainstTriang, CollideSweptSphereListWithTriangl) is
-// blocked on the un-homed global EA::Jobs::JobScheduler singleton (unk_830EA650), the un-exported
-// job entry-point rodata symbols (ContactGeneratorEntry / PolygonSoupTesterEntry) and the
-// job-data descriptor VARIANT the dispatchers poke by raw offset (an un-homed union member of
-// CollisionJobDescription). The Add* stream posters (0x828119F0/0x82811340/0x82811698) raw-poke
-// an un-homed external stream object (a9), and PrepareNewPrimitiveTestResultsLi (0x82810798) would
-// require naming un-attested CollisionResultList header fields (+0x04/+0x08/+0x0A, currently a
-// reserved span shared with the by-value GetResultList consumer). All left for when those
-// collaborators/globals are recovered.
+// path and permute-table constants (vpermwi128 0x4B/0x87, sub_82843E98).
+//
+// ⭐⭐ STALE-BLOCKED PARAGRAPH RETIRED 2026-08-14 (walls leg 1). This banner used to list the
+// Run*/Add*/PrepareNewPrimitiveTestResultsLi family as blocked on (a) the JobScheduler singleton,
+// (b) the un-exported job entry symbols, (c) an "un-homed descriptor variant" and (d)
+// "un-attested CollisionResultList header fields". Every one of those blockers had already
+// fallen by the time it was re-read: (a) the CgsLooseOctree.cpp:997 inline-dispatch precedent
+// (used by both dispatchers in CgsCollisionGenerator_LineStream.cpp since 2026-08-10/11),
+// (b) ContactGeneratorEntry is homed in GameShared/Jobs/ContactGenerator/, (c) the descriptor
+// "variant" is the per-family StreamCommand/Data the DWARF names verbatim, and (d) the DWARF
+// names every CollisionResultList field (CgsCollisionResultList.h:163-169). The family is REAL
+// in CgsCollisionGenerator_CollideStreams.cpp; only CollidePrimitivePairList keeps a gate
+// (CgsCollisionGenerator_StreamStubs.cpp).
 
 namespace CgsSceneManager
 {
@@ -53,8 +55,8 @@ void BaseCollisionGenerator::Construct()
     }
 }
 
-// X360 0x8284CB38. Empty (a single blr; ICF-folded with the generic 16-byte-object teardown
-// stub many other classes share). No teardown work.
+// X360 0x8284CB38. Empty (a single blr; ICF-folded with the generic empty-teardown body many
+// other classes share). The console body genuinely does nothing.
 void BaseCollisionGenerator::Destruct()
 {
 }
