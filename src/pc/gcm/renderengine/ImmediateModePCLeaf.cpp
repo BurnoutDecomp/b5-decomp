@@ -421,18 +421,38 @@ void ImDeviceSetDepthStencilState(void* lpState)
     lpDevice->SetRenderState(D3DRS_STENCILENABLE, FALSE);
 }
 
-// X360 sub_82276AD0 == CgsGraphics::ImRendererBase::SetState(const DepthStencilState*).
-// The console body is a shadow-cached compare against the immediate-mode renderer's last
-// depth/stencil object followed by the low-level apply; the apply is
-// shadow::Device::Xbox2SetDepthStencilStateLowLevelShadowed (@0x827E8150), which is
-// reconstructed and pushes all 23 words through the D3DDevice_SetRenderState_* fast-set
-// surface -- so this forwards straight to it.
+// X360 sub_82276AD0 == shadow::Device::SetState(const DepthStencilState*) -- NOT
+// CgsGraphics::ImRendererBase::SetState, which is sub_82276DA8 (the same block behind the
+// mgpActiveRenderer assert at CgsImRenderer.h:732). Corrected: 0x82276AD0 reads r3 as the state
+// pointer (`mr r31, r3` @0x82276AE8) and forms the file-scope shadow-block base itself
+// (`addi r30, r11, off_83010950@l` @0x82276AFC), so it has no `this` and no renderer.
 //
-// The compare half is deliberately NOT reproduced: the shadow device's `mpLastDepthStencilState`
-// belongs to the MESH-DISPATCH cache (SetMaterialRenderStatesPC) and is private to it, so
-// there is nothing here to compare against without inventing a second cache that could
-// disagree with the first. Passing lbWasUnset = true takes the applier's force-set path,
-// which is what the console does on a state change anyway.
+// The console body is: gate on mbDepthStencilStateLocked (@0x82276AEC) -> compare against
+// dword_83010A28 (@0x82276B00) -> apply -> cache (@0x82276B1C). The apply is
+// shadow::Device::Xbox2SetDepthStencilStateLowLevelShadowed (@0x827E8150), which is reconstructed and
+// pushes all 23 words through the D3DDevice_SetRenderState_* fast-set surface.
+//
+// THE COMPARE HALF IS NOW REPRODUCIBLE -- and is deliberately NOT switched on in this pass.
+// The old objection read: the shadow device's `mpLastDepthStencilState` belongs to the mesh-dispatch
+// cache, so there is nothing here to compare against without inventing a second cache. That was true
+// of a cache that should never have existed -- mpLastDepthStencilState was a SECOND host home for
+// dword_83010A28 (== StateBlockShadow::m_pDepthStencilState, DWARF shadowingdevice.h:669), deleted in
+// the same pass. There is now one slot (shadow::Device::mpDepthStencilState) and one setter over it,
+// so forwarding to shadow::Device::SetState would get the console's gate, compare, apply and cache
+// write-back, including lbWasUnset == (cached == nullptr), where this shim forces `true` and re-pushes
+// all 23 words on every call.
+//
+// ⚠️ WHY THE BODY STILL FORCE-APPLIES. Making that switch is the ONLY live per-frame behaviour change
+// this pass would make in the linked boot exe (ImmediateModePCLeaf.cpp is mounted,
+// build_game_exe.bat:214), and it lands on the shadow path -- gpShadowDepthStencilState is a
+// renderengine::DepthStencilState*, so BrnShadowMapRenderManager.cpp:70/102/131 bind through exactly
+// this typed overload. Today the apply is unconditional; forwarding makes it SKIP whenever the cached
+// pointer matches, which is only safe if no direct-D3D depth writer can run between two typed calls
+// carrying the same pointer -- the untyped void* overload the sky path uses is the candidate that
+// could. That argument has not been made, and this pass ships alongside the anti-alias bracket, so a
+// regression here would be indistinguishable from a bracket regression. The switch belongs to its own
+// boot-verified change, on its own, where it can be attributed. See the same reasoning that withdrew
+// the ResetShadowing redirect from the G3 pass.
 void ImDeviceSetDepthStencilState(renderengine::DepthStencilState* lpState)
 {
     if (lpState == nullptr)

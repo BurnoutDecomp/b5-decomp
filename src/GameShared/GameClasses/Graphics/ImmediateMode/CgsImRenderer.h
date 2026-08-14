@@ -108,10 +108,23 @@ namespace CgsGraphics
     public:
         // ---- module statics (X360 .data home of this TU) ----------------------------------------
         static ImRendererBase*        mgpActiveRenderer;          // dword_83010F9C
-        static const void*            mgpLastState;               // dword_83010964 (last state set)
-        static renderengine::Texture* mgpLastTexture;             // dword_830109E8 (last texture set)
-        static u32                    mgbTextureStateDirty;       // dword_83010968
-        static bool                   mgbStateShadowingDisabled;  // byte_83010907
+        // (mgpLastState / mgpLastTexture / mgbTextureStateDirty / mgbStateShadowingDisabled DELETED.)
+        //
+        // All four were SECOND host homes for words the shadow device already owns, and the X360
+        // reaches all four off the SAME file-scope block base off_83010950 that shadow::Device models:
+        //   mgpLastState             dword_83010964 -> shadow::Device::mpBlendState
+        //                                              (StateBlockShadow::m_pBlendState, DWARF
+        //                                              shadowingdevice.h:665)
+        //   mgpLastTexture           dword_830109E8 -> shadow::Device::mapSamplerTexture[0]
+        //                                              (m_apTextures[0], DWARF :668)
+        //   mgbTextureStateDirty     dword_83010968 -> shadow::Device::mauSamplerDirty[0]
+        //                                              (m_apTextureStates[0], DWARF :666)
+        //   mgbStateShadowingDisabled byte_83010907  -> shadow::Device::mbBlendStateLocked
+        //                                              (DWARF :776; DWARF's CgsImRenderer.h has no
+        //                                              such member at all)
+        // Two host words for one console word means a blit's bind is invisible to the frame bracket's
+        // compare and vice versa, so the bracket skips a bind the device actually needs. SetState /
+        // SetTexture below now delegate to shadow::Device, which leaves exactly one cache.
         static void*                  mgpDevice;                  // off_83271608 (the D3D device)
     };
 

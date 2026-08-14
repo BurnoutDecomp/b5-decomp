@@ -39,6 +39,11 @@ namespace renderengine
 
 class CgsRenderTarget;     // the render-target pool entries are held by pointer
 
+// The immediate-mode 2D renderer the two blits draw their full-screen quad through
+// (BrnRendererModule::mIm2dRenderer, this+0xB30). Reference-only here, so a forward declaration is
+// the documented cascade-avoidance exception. Key is `struct`, matching CgsIm2d.h:53.
+namespace CgsGraphics { struct Im2d; }
+
 struct BrnRendererMemory
 {
     // Render-target pool slot indices (the index each Create* helper stores its target into, read off
@@ -99,6 +104,31 @@ struct BrnRendererMemory
     // sampler 13 unbound for want of GetEnvMapBuffer.
     CgsRenderTarget* GetAntiAliasBuffer()  { return mapRenderTarget[E_RENDER_TARGET_ANTI_ALIAS]; }
     CgsRenderTarget* GetDownSampleBuffer() { return mapRenderTarget[E_RENDER_TARGET_DOWN_SAMPLE]; }
+    // DWARF source BrnRendererMemory.h:254 (dwarfdump file line 153). INLINED on the X360 (no
+    // standalone symbol), but its name survives verbatim in two assert strings
+    // BrnRendererModule::BeginQuarterResBuffer @0x82408C38 embeds --
+    // "mAllocatedRenderTargets.GetParticleBuffer() != NULL" and
+    // "mAllocatedRenderTargets.GetParticleBuffer()->GetRenderTarget() != NULL" -- and the slot it
+    // reads is fixed by the same function's `lwz r11, 0x25C(r28)` against mAllocatedRenderTargets at
+    // this+0x238: (0x25C-0x238)/4 == 9.
+    CgsRenderTarget* GetParticleBuffer()   { return mapRenderTarget[E_RENDER_TARGET_PARTICLE]; }
+
+    // 0x82406A68 (DWARF source BrnRendererMemory.h:221, dwarfdump file line 123) -- composite two
+    // sampled render targets into the bound one with one full-screen quad through the immediate-mode
+    // 2D renderer and the composite-blit shader pair (mpCompositeBlit{Vertex,Pixel}ProgramBuffer,
+    // +0x38/+0x3C). FIVE parameters: BrnRendererModule::EndRenderAntiAliased @0x82408B00 sets r4..r8
+    // (`addi r4, r29, 0xB30` / `mr r5, r28` / `lwz r6, 0x25C(r29)` / `li r7, 0` @0x82408C00 /
+    // `li r8, 0` @0x82408BF8), which is exactly this arity. Hex-Rays prints four and loses both bools.
+    // BODY NOT IN THE TREE -- declaration only.
+    void BlitComposite(CgsGraphics::Im2d& lIm2d, CgsRenderTarget* lpSource0,
+                       CgsRenderTarget* lpSource1, bool lbFlag0, bool lbFlag1);
+
+    // 0x82406EA8 (DWARF source BrnRendererMemory.h:226, dwarfdump file line 126) -- blit lpSource's
+    // depth into the bound render target with the depth-blit shader pair (+0x2C/+0x30). This is also
+    // the function that finally initialises mpBlitTextureState (+0x44) out of mBlitTextureStateResource
+    // (+0x48), which answers the "Initialize'd lazily on first use" note on Construct.
+    // BODY NOT IN THE TREE -- declaration only.
+    void BlitDepth(CgsGraphics::Im2d& lIm2d, CgsRenderTarget* lpSource);
 
     // The post-fx spine's two targets, created lazily on the first frame that has a D3D9 device.
     // See the banner on EnsurePostFxSceneTargets in BrnRendererModule.cpp for why this is a bring-up
