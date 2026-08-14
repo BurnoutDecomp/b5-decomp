@@ -233,6 +233,33 @@ namespace renderengine
     // =========================================================================
     void PCSceneBlit_Begin();
     void PCSceneBlit_End();
+
+    // =========================================================================
+    // FLAG PC bring-up INITIALISATION: clear a freshly created off-screen target ONCE, at
+    // creation, so that the first frame which renders into it does not render into undefined
+    // memory.
+    //
+    // THE CONSOLE DOES NOT NEED THIS, and the asymmetry is the whole justification. On the Xenos
+    // the scene target is EDRAM and the TILING PASS clears colour, depth and stencil at the TOP
+    // of every frame, the first one included -- that is what D3DDevice_BeginTiling's pClearColor
+    // / ClearZ / stencil arguments are. The PC bracket's only clear is at the BOTTOM of the
+    // frame: the 0x300 D3DDevice_Resolve clears the scene target behind its copy, which is what
+    // leaves it clean for the NEXT frame's world pass. That is faithful -- and it leaves the
+    // FIRST frame cleared by nothing at all, rendering the world into a D3DPOOL_DEFAULT texture
+    // whose contents D3D9 leaves UNDEFINED, over undefined depth, and that frame is copied and
+    // PRESENTED.
+    //
+    // Called ONCE per target from BrnRendererMemory::PCBringUpCreatePostFxSceneTargets, with the
+    // section-0 state of each of the two targets it creates. Defined in XenonD3D9Shims.cpp,
+    // beside the resolve whose clear it borrows (TilingClearBoundSurfaces), so the viewport /
+    // scissor bracket and the D3DCLEAR_STENCIL all-or-nothing retry exist exactly once. The
+    // values it writes, and the attestation for each of them, are on that definition.
+    //
+    // DELETE IT when a frame-TOP clear exists again -- the multisampled path's
+    // D3DDevice_BeginTiling clear, or BrnPostFx::Render @0x8240A468's own composite -- NOT
+    // merely when the bracket lands.
+    // =========================================================================
+    void PCBringUpClearRenderTargetState(const RenderTargetState* lpState);
 }
 
 // X360 dword_8301090C == CgsDepthStencilStateFactory::saDepthStencilStates[0]: the shared
