@@ -2165,6 +2165,66 @@ namespace renderengine
 }
 
 // =============================================================================
+// The Xenon immediate-vertex ring (D3DDevice_BeginVertices / _EndVertices):
+// the pending-run state the two ends share.
+//
+// FLAG PC-platform leaf: the pair is an Xbox 360 XDK D3D immediate-mode
+// extension. On the console BeginVertices reserves luVertexCount*luStride bytes
+// directly in the GPU command buffer and returns a write cursor into it; the
+// caller fills the cursor; EndVertices closes the packet and the run is drawn
+// against the CURRENTLY BOUND vertex declaration, shaders and render state.
+// PC Direct3D 9 has no writable command buffer, but DrawPrimitiveUP carries
+// exactly the same contract at the other end ("here is a block of vertices,
+// draw it with what is bound"), so the cursor becomes a host scratch block and
+// the submit becomes one DrawPrimitiveUP.
+//
+// WHY THIS IS NOT PUBLISHED INTO THE WORLD STASH. spVertexSource /
+// suVertexStride / the DEC3N plan above also describe "the vertices of the next
+// draw", and folding an immediate run into them would look like reuse. It is
+// the opposite: the stash describes a SERIALISED CONSOLE vertex-buffer header
+// for the indexed world path, and an immediate run overwriting it would leave
+// the next DispatchAllMeshes draw reading this quad's stride and expansion
+// plan. That is precisely the split-brain that produced the 2026-08-12
+// exploding geometry (see the WorldDraw_SetVertexSourceRaw note above). The two
+// paths keep separate state on purpose.
+// =============================================================================
+namespace
+{
+    // Scratch ring size. Both ImRenderer<V>::Render callers fence the GPU when a
+    // batch exceeds KU_FENCE_BYTE_THRESHOLD == 0x80000 bytes
+    // (CgsIm2dUntex.cpp:74, BrnSkidVertex.cpp:78), so by the console's own
+    // reckoning one run can reach half a megabyte; this is twice that. At the
+    // three known strides it holds 87,381 Im2d vertices (12 B),
+    // 52,428 post-fx vertices (20 B) or 37,449 skid vertices (28 B) -- against
+    // known in-tree batches of FOUR (every 2D quad and the post-fx composite).
+    // BSS, allocated once: the console path never heap-allocates per draw and
+    // neither does this one.
+    const u32 KU_IMVERTS_SCRATCH_BYTES = 1u << 20;
+
+    // 16-byte aligned: the callers write through u32*/f32* casts of the returned
+    // cursor, and a vertex block handed to D3D9 should be at least as aligned as
+    // the widest element it can carry.
+    alignas(16) u8 sauImVertsScratch[KU_IMVERTS_SCRATCH_BYTES];
+
+    bool             sbImVertsPending    = false;  // a BeginVertices is open
+    bool             sbImVertsDrawable   = false;  // ...and EndVertices may submit it
+    D3DPRIMITIVETYPE seImVertsPrimitive  = D3DPT_TRIANGLESTRIP;
+    UINT             suImVertsPrimCount  = 0;
+    u32              suImVertsStride     = 0;
+
+    // One flag per CAUSE, not per frame: the composite runs at 60 Hz, so a
+    // per-call log line would be 3,600 lines a minute. (LogOnce above keys on a
+    // string-literal ADDRESS, which is fine for its fixed messages but cannot
+    // carry the formatted numbers -- the requested byte count, the offending
+    // type -- that make these particular failures actionable.)
+    bool sbImVertsReportedOverflow = false;
+    bool sbImVertsReportedNesting  = false;
+    bool sbImVertsReportedOrphan   = false;
+    bool sbImVertsReportedPartial  = false;
+    bool sbImVertsReportedType     = false;
+}
+
+// =============================================================================
 // The extern "C" Xenon fast-set surface.
 // =============================================================================
 extern "C"
@@ -2289,6 +2349,192 @@ void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* /*lpDeviceArg*/,
     // Xenon signature: (PrimitiveType, BaseVertexIndex, StartIndex, IndexCount).
     renderengine::WorldDraw_IndexedUP(lePrimitiveType, luBaseVertexIndex,
                                       luMinVertexIndex, luNumVertices);
+}
+
+// ---------------------------------------------------------------------------------------------
+// D3DDevice_BeginVertices -- reserve a run of luVertexCount vertices of luVertexStreamZeroStride
+// bytes each and return the write cursor the caller fills.
+//
+// Declared (with no home until now) by CgsIm2dUntex.cpp:102, BrnSkidVertex.cpp:103 and the
+// post-fx composite; CgsIm3d.cpp:23-24 names the same pair as the reason its X360 Render body
+// was left unbodied.
+//
+// The device argument is IGNORED, exactly as in every sibling shim in this block: the callers
+// pass ImRendererBase::mgpDevice / renderengine::gpD3DDevice (the X360 off_83271608 global) and
+// the live PC device is whatever Dev() resolves at submit time. It is spelled void* here for the
+// same reason D3DDevice_SetViewportF is -- the callers' `D3DDevice` is an incomplete console-only
+// tag type this TU has no reason to name, and under extern "C" the symbol carries no parameter
+// types at all (the D3DDevice_SetStreamSource precedent: XCamVideoOutput.h declares it with
+// D3DDevice*, this TU defines it with IDirect3DDevice9*, and it links).
+//
+// THE PRIMITIVE TYPE ARRIVES AS A XENOS VALUE AND MUST BE TRANSLATED. Xenos numbers TRIANGLEFAN 5
+// and TRIANGLESTRIP 6; PC Direct3D 9 numbers them the other way round (D3DPT_TRIANGLESTRIP == 5,
+// D3DPT_TRIANGLEFAN == 6). Every immediate quad in this tree is a STRIP passed as 6 --
+// CgsFontRenderer.cpp:190-191 names 6 KU_PRIMITIVE_TRIANGLE_STRIP, the six
+// `Render(PrimitiveType(6), laVerts, 4)` 2D quads in BrnRendererModule / CgsGuiViewModule /
+// BrnLoadingScreenRenderer pass it, and so does the post-fx composite -- so forwarding 6 raw would
+// read all of them as FANS. A four-vertex strip and a four-vertex fan cover the same quad, but the
+// fan's second triangle has the OPPOSITE winding to its first, so with backface culling on a
+// diagonal half of every quad (and of the whole post-fx composite) silently is not drawn.
+// MapPrimitive() at the top of this TU is its single translation table and the indexed world path
+// already uses it; it is reused here rather than duplicated, so the two draw paths can never
+// disagree about what 6 means.
+//
+// Types MapPrimitive refuses -- Xenos RECTLIST (8) and QUADLIST (13) -- have no DrawPrimitiveUP
+// form and no caller in this tree today (nothing passes 8 or 13 anywhere in b5-decomp/src), so
+// they are refused honestly rather than expanded on speculation. If a real RECTLIST caller ever
+// lands, expand it there (a rect is two triangles) rather than guessing now.
+//
+// THE RETURN VALUE. Every in-tree caller null-checks the cursor before writing through it
+// (CgsIm2dUntex.cpp:436, BrnSkidVertex.cpp:379, the post-fx composite), so nullptr is a usable
+// refusal -- but it is returned for exactly ONE cause: a request larger than the scratch block,
+// where there is no memory to hand out and returning a short buffer would be a silent overrun of
+// KU_IMVERTS_SCRATCH_BYTES. Every other refusal (unsupported topology, empty run) still returns
+// the real scratch base, so even a future caller that dereferences unconditionally writes into
+// owned memory; only the submit is skipped.
+// ---------------------------------------------------------------------------------------------
+void* D3DDevice_BeginVertices(void* /*lpDeviceArg*/, u32 luPrimitiveType,
+                              u32 luVertexCount, u32 luVertexStreamZeroStride)
+{
+    if (sbImVertsPending && !sbImVertsReportedNesting)
+    {
+        sbImVertsReportedNesting = true;
+        CgsDev::Log::WriteToLog("[XenonD3D9] BeginVertices called with a run already open - "
+                                "the earlier run is dropped\n");
+    }
+    // Recover by abandoning the open run rather than asserting. The console ring is not re-entrant
+    // either, and faulting the sim over a mis-nested immediate draw would cost more than the draw.
+    sbImVertsPending   = true;
+    sbImVertsDrawable  = false;
+    suImVertsPrimCount = 0;
+    suImVertsStride    = luVertexStreamZeroStride;
+
+    // 64-bit product: luVertexCount * luVertexStreamZeroStride is two u32s and would WRAP in 32
+    // bits, which would turn a huge request into a small one and pass the bounds check.
+    const u64 lu64Bytes = static_cast<u64>(luVertexCount)
+                        * static_cast<u64>(luVertexStreamZeroStride);
+    if (lu64Bytes > static_cast<u64>(KU_IMVERTS_SCRATCH_BYTES))
+    {
+        if (!sbImVertsReportedOverflow)
+        {
+            sbImVertsReportedOverflow = true;
+            char lacMsg[224];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[XenonD3D9] BeginVertices: %u verts x %u bytes = %llu exceeds the %u-byte "
+                          "scratch ring - run REFUSED (raise KU_IMVERTS_SCRATCH_BYTES)\n",
+                          static_cast<unsigned>(luVertexCount),
+                          static_cast<unsigned>(luVertexStreamZeroStride),
+                          static_cast<unsigned long long>(lu64Bytes),
+                          static_cast<unsigned>(KU_IMVERTS_SCRATCH_BYTES));
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+        return nullptr;
+    }
+
+    if (luVertexCount == 0u || luVertexStreamZeroStride == 0u)
+    {
+        // Nothing to draw. Still a valid cursor, so a caller that writes anyway stays in bounds.
+        return sauImVertsScratch;
+    }
+
+    // Topology and primitive count are resolved HERE, not at submit time, so a type this backend
+    // cannot draw is refused before the caller has even filled the run -- the device never sees it.
+    D3DPRIMITIVETYPE lePrimitive = D3DPT_TRIANGLESTRIP;
+    UINT             luPrimCount = 0;
+    if (!MapPrimitive(luPrimitiveType, luVertexCount, &lePrimitive, &luPrimCount))
+    {
+        // MapPrimitive's own LogOnce covers the unsupported-TYPE case; this adds the numbers it
+        // cannot format, and also covers its other refusal (a supported type with too few
+        // vertices to make one primitive, e.g. a 2-vertex triangle strip).
+        if (!sbImVertsReportedType)
+        {
+            sbImVertsReportedType = true;
+            char lacMsg[208];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[XenonD3D9] BeginVertices: Xenos primitive type %u with %u vertices is not "
+                          "drawable as a DrawPrimitiveUP - submit SKIPPED\n",
+                          static_cast<unsigned>(luPrimitiveType),
+                          static_cast<unsigned>(luVertexCount));
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+        return sauImVertsScratch;
+    }
+
+    // MapPrimitive's counts already FLOOR (integer / 2 and / 3). A run whose vertex count does not
+    // divide evenly -- an odd LINELIST, a TRIANGLELIST that is not a multiple of three -- draws its
+    // complete primitives and drops the trailing partial one. That matches the hardware (a partial
+    // primitive is not a primitive) and is strictly better than dropping the whole batch over a
+    // caller's off-by-one, but it is a caller bug either way, so it is reported once.
+    bool lbPartial = false;
+    if (lePrimitive == D3DPT_LINELIST)          lbPartial = (luVertexCount % 2u) != 0u;
+    else if (lePrimitive == D3DPT_TRIANGLELIST) lbPartial = (luVertexCount % 3u) != 0u;
+    if (lbPartial && !sbImVertsReportedPartial)
+    {
+        sbImVertsReportedPartial = true;
+        char lacMsg[208];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[XenonD3D9] BeginVertices: %u vertices do not divide into D3D primitive type "
+                      "%u - drawing %u complete primitives, trailing partial dropped\n",
+                      static_cast<unsigned>(luVertexCount),
+                      static_cast<unsigned>(lePrimitive),
+                      static_cast<unsigned>(luPrimCount));
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+
+    seImVertsPrimitive = lePrimitive;
+    suImVertsPrimCount = luPrimCount;
+    sbImVertsDrawable  = true;
+    return sauImVertsScratch;
+}
+
+// ---------------------------------------------------------------------------------------------
+// D3DDevice_EndVertices -- close the open run and submit it.
+//
+// STREAM 0, THE DOCUMENTED SIDE EFFECT. DrawPrimitiveUP resets the stream-0 source binding (and
+// its stride) to the user-pointer data it just consumed. This was CHECKED rather than assumed:
+// no TU in b5-decomp/src calls IDirect3DDevice9::SetStreamSource at all. The Xenon
+// D3DDevice_SetStreamSource shim thirty lines above publishes into the WORLD STASH
+// (WorldDraw_SetVertexSourceRaw) and never touches a device stream, every other named
+// SetStreamSource in the tree (shadowingdevice.cpp, MeshHelper.cpp, BrnSkyDomeManager.cpp, the
+// Lion particle renderer, XCam) is a call TO that shim, and every draw on this backend is a
+// *PrimitiveUP. There is therefore no device-side stream-0 binding to lose and no cache to
+// invalidate -- and the world path's own DrawIndexedPrimitiveUP (WorldDraw_IndexedUP) has always
+// depended on the same fact. Deliberately NOT re-binding or clearing stream 0 here: that would
+// introduce a convention this backend's other draw path does not follow.
+//
+// The run is drawn against whatever vertex declaration, shaders and render state are currently
+// bound, which is the console contract exactly -- the caller's FlushVertexProgramState /
+// BeginRendering / SetProgram all ran before BeginVertices.
+// ---------------------------------------------------------------------------------------------
+void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
+{
+    if (!sbImVertsPending)
+    {
+        if (!sbImVertsReportedOrphan)
+        {
+            sbImVertsReportedOrphan = true;
+            CgsDev::Log::WriteToLog("[XenonD3D9] EndVertices with no open run - ignored\n");
+        }
+        return;
+    }
+    sbImVertsPending = false;
+
+    if (!sbImVertsDrawable)
+    {
+        // Refused at Begin (oversize / unsupported topology / empty run); the cause was already
+        // reported once there. Nothing reaches the device.
+        return;
+    }
+    sbImVertsDrawable = false;
+
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice == nullptr)
+    {
+        return;   // the same silent early-out every sibling shim in this block takes
+    }
+
+    lpDevice->DrawPrimitiveUP(seImVertsPrimitive, suImVertsPrimCount,
+                              sauImVertsScratch, suImVertsStride);
 }
 
 // The low-level sampler-state setter (X360 sub_827E8950). The Xenon sampler
