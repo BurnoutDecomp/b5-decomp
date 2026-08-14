@@ -22,8 +22,9 @@
 //   DoCarCarContactGeneration @0x8261BB38 (250 asm / 15 callees; PS3 0x75C0C8) — log-once gate
 //   DoTrafficCarWorldContactGeneration @0x8261BF28 (⚠ .ida-exports HOLE; PS3 0x789760) — trap,
 //     dead at runtime (no live traffic on the junkyard path)
-//   EndVehicleContactGeneration (the harvest) — conductor gate elsewhere; nothing consumes the
-//     three job pointers yet.
+// ⭐⭐ 2026-08-14 (walls leg 3): EndVehicleContactGeneration @0x8261AC38 + AddContactResultsToQueue
+// @0x825EB350 (THE HARVEST) + DoRaceCarWorldContactValidation @0x825EB6C8 are REAL in this TU;
+// ValidateRaceCarWorldContact @0x825C6088 is REAL in the _ValidateRaceCarWorldContact slice.
 // (IsRaceCarHidden @0x825C2EA0 is REAL since 2026-08-11 — see the note at the foot of this TU.)
 // ============================================================================
 
@@ -42,6 +43,11 @@
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"                  // DeformationManager (Add*Pair, FindModelIndexByEntityID, GetDeformableObject)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h" // DeformableObject (GetVehiclePhysics)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"              // VehiclePhysics (IsFrozen through the ExternallySimulatedBody base)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                                // gpDebugPrint / gxMessageFilterFlags
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                 // Start/StopMonitor (DoRaceCarWorldContactValidation's own monitor)
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h"  // CollisionResultList / PrimitiveTestResult (the harvest)
+#include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"              // PotentialContactInterface::AddEvent(u32, ...) + the queue accessors
+#include "SDKs/EATech/eajobs/job.h"                                                       // EA::Jobs::Job::WaitOn (EndVehicleContactGeneration)
 
 namespace BrnPhysics
 {
@@ -468,7 +474,7 @@ namespace Vehicle
     // landed), and post ONE sphere-list-vs-triangle-list command into this frame's collide
     // stream — swept (continuous) spheres when the car is fast enough (IsUsingSweptSpheres),
     // in-place spheres otherwise. Then mark the car in the contact-gen list so the harvest
-    // (EndVehicleContactGeneration, still a conductor gate) knows a world entry exists for it.
+    // (EndVehicleContactGeneration, REAL as of walls leg 3) knows a world entry exists for it.
     //
     // The asm, top to bottom (every callee LANDED as of this wave — the queries were sliced to
     // the mounted BrnDeformationManager_ContactQueries.cpp, GetSpheresForCar lifted from its
@@ -603,5 +609,339 @@ namespace Vehicle
     // file said so because the address has no JSON, but the function is in the IDB and a targeted
     // headless IDA 9.3 pull produced all 104 instructions. MISSING JSON != MISSING FUNCTION.
     // If a definition for it reappears here the link will say so (LNK2005).
+
+    // ==============================================================================================
+    // ⭐⭐ AddContactResultsToQueue @0x825EB350 (222) — THE HARVEST (walls leg 3, 2026-08-14).
+    // PS3 DecFIGS 0x70F454 (392; the mangle is the signature authority). DWARF h:1116.
+    //
+    // Walk the contact-gen entries [0, miFirstPartContactGenEntry) — the pre-part window the
+    // vehicle passes appended this frame. Result list i BELONGS to entry i: every
+    // Do*ContactGeneration appends exactly one ContactGenList entry and carves exactly one
+    // CollisionResultList (PrepareNewPrimitiveTestResultsList returns mu16NumUsedResultLists++),
+    // so the two indices advance in lockstep by construction. For each of the list's
+    // mu16NumResults 80-byte PrimitiveTestResults, build one 76-byte PotentialContact and post it
+    // to maCustomEventQueues[UserTagA] (== 5 on the race-car world path — Start's baked queue
+    // selector riding the list's tag):
+    //   mPointOnA <- record.mPrimitive0Contact (+0x20, the TRIANGLE contact point)
+    //   mPointOnB <- record.mPrimitive1Contact (+0x30, the SPHERE contact point)
+    //   mNormal   <- NEGATED (vxor 0x80000000 splat, all four lanes) record normal:
+    //               UserTagB != 0 selects mPrimitive0Normal (+0x00), else mPrimitive1Normal (+0x10)
+    //               (the world path passes UserTagB == 1 -> the triangle-side normal, flipped so
+    //                it points A->B == triangle->sphere == world->car)
+    //   muVolumeInstanceIdA/B <- the entry's entity word (high 32) | (the entry's per-side volume-
+    //               instance base offset + the record's primitive index) — both consoles load the
+    //               entry word as a 32-bit read of the BE muId's high half
+    //   muPolyTagA/B <- record.muPrimitive0Tag/muPrimitive1Tag (+0x40/+0x44)
+    //   mu16PrimitiveIndexA/B <- record.muPrimitive0Index/muPrimitive1Index RAW (+0x48/+0x4A)
+    // "Bad Part index" tripwire (:1317): on the part queue (UserTagA == 1) a triangle-side tag
+    // >= 50 is not a valid part index. The streamed value tail is lowered to the static prefix
+    // per the standing project rule.
+    // ==============================================================================================
+    void VehicleManager::AddContactResultsToQueue(
+        CgsSceneManager::CgsCollision::CollisionGenerator* lpContactGenerator,
+        BrnPhysics::ContactGenList* lpContactGenList,
+        BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface)
+    {
+        typedef CgsSceneManager::CgsCollision::CollisionResultList CollisionResultList;
+        typedef CgsSceneManager::CgsCollision::PrimitiveTestResult PrimitiveTestResult;
+        typedef CgsSceneManager::SceneManagerIO::PotentialContact  PotentialContact;
+
+        const s32 liNumEntries = miFirstPartContactGenEntry;                     // +172516
+        for (s32 liEntry = 0; liEntry < liNumEntries; ++liEntry)
+        {
+            // GetResultList carries the console's own bounds tripwire
+            // ("luIndex < mu16NumUsedResultLists", CgsCollisionGenerator.h:303) and returns the
+            // 16-byte list header BY VALUE, exactly as @0x825B2AE0 does.
+            const CollisionResultList lResultList =
+                lpContactGenerator->GetResultList(static_cast<u16>(liEntry));
+            const u16 lu16NumResults = lResultList.mu16NumResults;
+            if (lu16NumResults == 0)
+            {
+                continue;
+            }
+
+            // GetEntry carries "liEntry < miNumEntries" (BrnContactGenerationList.h:89 — the line
+            // both consoles assert at, per record; hoisted to the fetch here, identical failure
+            // surface for in-range counts).
+            const ContactGenList::ContactGenEntry& lrEntry = lpContactGenList->GetEntry(liEntry);
+            const u32 luEntityWordA = static_cast<u32>(lrEntry.mIdA.muId >> 32);
+            const u32 luEntityWordB = static_cast<u32>(lrEntry.mIdB.muId >> 32);
+
+            // meResultType == 0 lists carry 80-byte PrimitiveTestResults; the console walks the
+            // records at the raw 80 stride (R31 += 80), NOT through the 112-stride GetResult.
+            const PrimitiveTestResult* lpaResults =
+                reinterpret_cast<const PrimitiveTestResult*>(lResultList.mpResults);
+
+            for (u16 lu16Result = 0; lu16Result < lu16NumResults; ++lu16Result)
+            {
+                // The console's per-record cursor bound (CgsCollisionResultList.h:148).
+                CGS_ASSERT(lu16Result < lResultList.mu16NumResults, "lu16Index < mu16NumResults");
+                const PrimitiveTestResult& lrRecord = lpaResults[lu16Result];
+
+                PotentialContact lContact;
+                // Full 16-byte lane copies (lvx/stvx on the console) -- Vector3Plus source,
+                // Vector3 destination, w lane carried verbatim.
+                lContact.mPointOnA = Vector3{ lrRecord.mPrimitive0Contact.x,
+                                              lrRecord.mPrimitive0Contact.y,
+                                              lrRecord.mPrimitive0Contact.z,
+                                              lrRecord.mPrimitive0Contact.w };   // triangle point
+                lContact.mPointOnB = Vector3{ lrRecord.mPrimitive1Contact.x,
+                                              lrRecord.mPrimitive1Contact.y,
+                                              lrRecord.mPrimitive1Contact.z,
+                                              lrRecord.mPrimitive1Contact.w };   // sphere point
+
+                // vxor with the 0x80000000 splat == all-four-lane sign flip (the SwapEntityOrder
+                // precedent), of the tag-selected source normal.
+                const Vector3& lrNormalSrc = (lResultList.mu16UserTagB != 0)
+                    ? lrRecord.mPrimitive0Normal
+                    : lrRecord.mPrimitive1Normal;
+                lContact.mNormal.x = -lrNormalSrc.x;
+                lContact.mNormal.y = -lrNormalSrc.y;
+                lContact.mNormal.z = -lrNormalSrc.z;
+                lContact.mNormal.w = -lrNormalSrc.w;
+
+                CGS_ASSERT(!(lResultList.mu32UserTagA == 1u && lrRecord.muPrimitive0Tag >= 50u),
+                           "Bad Part index: ");                                  // :1317
+
+                lContact.muVolumeInstanceIdA.muId = (static_cast<u64>(luEntityWordA) << 32)
+                    | static_cast<u32>(lrEntry.mIdAVolInstOffset + lrRecord.muPrimitive0Index);
+                lContact.muVolumeInstanceIdB.muId = (static_cast<u64>(luEntityWordB) << 32)
+                    | static_cast<u32>(lrEntry.mIdBVolInstOffset + lrRecord.muPrimitive1Index);
+
+                lContact.muPolyTagA          = lrRecord.muPrimitive0Tag;
+                lContact.muPolyTagB          = lrRecord.muPrimitive1Tag;
+                lContact.mu16PrimitiveIndexA = lrRecord.muPrimitive0Index;
+                lContact.mu16PrimitiveIndexB = lrRecord.muPrimitive1Index;
+
+                // sub_825E73D0 == the out-of-line PotentialContactInterface::AddEvent(u32, ...)
+                // (assert + overflow warning + bounds-gated append).
+                lpPotentialContactsInterface->AddEvent(lResultList.mu32UserTagA, lContact);
+            }
+        }
+    }
+
+    // ==============================================================================================
+    // ⭐⭐ EndVehicleContactGeneration @0x8261AC38 (661) — REAL as of walls leg 3 (2026-08-14).
+    // THE CONDUCTOR GATE OF THIS NAME (BrnPhysicsConductorGates.cpp) IS DELETED.
+    //
+    // The async-generation join + harvest, mirroring Start step (5) in reverse:
+    //   1) WaitOn the three collide-stream jobs (+172536 sphere-tri, +172540 swept, +172532
+    //      sphere-sphere — null-guarded; on this single-threaded build the batches already ran
+    //      inline and WaitOn's null-backend guard returns immediately, the checked traction-leg
+    //      precedent);
+    //   2) End() the three stream producers (+172524/+172528/+172520 — the console inlines
+    //      DataStreamCommandPoster::End(producer+0x80) + the mbIsStreaming drop, which is
+    //      byte-for-byte SimpleDataStreamProducer::End());
+    //   3) AddContactResultsToQueue — the harvest (above);
+    //   4) the HIDE_ONLINE tail: unhide network race cars that stopped overlapping (BitArray walk
+    //      over mHiddenRaceCars; per car: OBB overlap re-test via Box::Set + BoxOverlappingTest
+    //      against every mOverlappingRaceCars partner, the mRaceCarsAddedForCollision /
+    //      mNetworkCarsAddedForCollisionThisFrame / mNetworkCarsRecievedFirstUpdate gates, the
+    //      mauNetworkCarHiddenFramesRemaining countdown, the mbPlayerCarInJunkYard hold, then
+    //      "HIDE_ONLINE: Making race car N, type T visible and collidable\n" + UnSetBit).
+    //      ⭐ GATED, NOT RECONSTRUCTED, and the gate is PROVABLY UNREACHABLE TODAY: the only
+    //      in-tree writer of mHiddenRaceCars is Construct's UnSetAll (grep witness, walls leg 3),
+    //      so no bit can be set on this offline build — the tail is network-only behaviour.
+    //      CgsGeometric::Box / Box::Set @0x825E6918 / BoxOverlappingTest (PS3 0x7A7B18) are also
+    //      absent from the tree; reconstruct them WITH this tail when the network path lands.
+    // ==============================================================================================
+    void VehicleManager::EndVehicleContactGeneration(
+        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* /*lpTriangleCacheInterface*/,
+        const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>* /*lpOverlapPairs*/,
+        f32 /*lfTimeStep*/,
+        BrnPhysics::Deformation::DeformationManager* /*lpDeformationManager*/,
+        CgsModule::IOBufferStack* /*lpIOBufferStack*/,
+        CgsMemory::LinearMalloc* /*lpLinearMalloc*/,
+        BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpPotentialContactInterface)
+    {
+        // ---- (1) join the three collide jobs (the console's order: sphere-tri, swept, ss) ------
+        if (mpSphereTriangleStreamJob)      { mpSphereTriangleStreamJob->WaitOn(); }      // +172536
+        if (mpSweptSphereTriangleStreamJob) { mpSweptSphereTriangleStreamJob->WaitOn(); } // +172540
+        if (mpSphereSphereStreamJob)        { mpSphereSphereStreamJob->WaitOn(); }        // +172532
+
+        // ---- (2) close the three producers (the console's order: sphere-tri, swept, ss) --------
+        mpSphereTriangleStreamProducer->End();        // +172524
+        mpSweptSphereTriangleStreamProducer->End();   // +172528
+        mpSphereSphereStreamProducer->End();          // +172520
+
+        // ---- (3) THE HARVEST -------------------------------------------------------------------
+        AddContactResultsToQueue(mpContactGenerator, mpContactGenList, lpPotentialContactInterface);
+
+        // ⭐ [FLAG PC boot witness] one-shot: the first frame the harvest posts anything, say so
+        // with the count — the leg-3 successor of leg-2's "24 PrimitiveTestResult(s)" witness.
+        {
+            static bool sbLoggedHarvest = false;
+            if (!sbLoggedHarvest)
+            {
+                const s32 liRawWorldContacts =
+                    lpPotentialContactInterface->GetRaceCarWithWorldQueue().GetLength();
+                if (liRawWorldContacts > 0)
+                {
+                    sbLoggedHarvest = true;
+                    if (CgsDev::Message::gxMessageFilterFlags & 1)
+                        *CgsDev::Log::gpDebugPrint
+                            << "⭐ world contacts HARVESTED: " << static_cast<u32>(liRawWorldContacts)
+                            << " PotentialContact(s) in the race-car-vs-world queue [5] [FLAG PC "
+                               "boot witness]. Reported once, not per frame\n";
+                }
+            }
+        }
+
+        // ---- (4) the HIDE_ONLINE tail — LOUD NAMED GATE (see the banner: provably dead) --------
+        if (mHiddenRaceCars.GetFirstNonZeroBit() != -1)
+        {
+            static bool sbLoggedHideOnlineGate = false;
+            if (!sbLoggedHideOnlineGate)
+            {
+                sbLoggedHideOnlineGate = true;
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint
+                        << "conductor gate: EndVehicleContactGeneration's HIDE_ONLINE unhide tail "
+                           "@0x8261AC38 reached (a hidden race car exists) but not reconstructed "
+                           "-- car NOT unhidden [FLAG PC boot gate]. Needs CgsGeometric::Box::Set "
+                           "@0x825E6918 + BoxOverlappingTest. Reported once, not per frame\n";
+            }
+        }
+    }
+
+    // ==============================================================================================
+    // ⭐ StartPartContactGeneration @0x8262C220 (114) — PARTIAL as of walls leg 3 (2026-08-14);
+    // the conductor gate of this name (BrnPhysicsConductorGates.cpp) is DELETED.
+    //
+    // REAL: the function's FIRST store — `miFirstPartContactGenEntry = mpContactGenList->
+    // GetNumEntries()` (X360 0x8262C238: `lwz r11, 0xC08(list) ; stw r11, 0x2A1D4(this)`).
+    // That boundary stamp is what AddContactResultsToQueue walks: the vehicle-pass entries
+    // occupy [0, stamp), the part-pass entries append after it. Without the stamp the harvest
+    // reads a permanent 0 and drains nothing — measured on the first leg-3 boot (both new
+    // witnesses silent, 24 kernel results parked), which is exactly how this line was found.
+    //
+    // GATED (log-once): everything after the stamp — the three pair-list Collide legs
+    // (part/wheel/hinged builders, queue tags 3/4/2, with their marker AddEntry calls), the
+    // part-vs-triangle collide stream create (@sub_82811DD0)/Begin/Run, and the two
+    // DeformationManager Do*WorldContactGeneration drivers. That is the PART contact family
+    // (EndPartContactGeneration @0x8261B690 is its harvest twin) — a later leg.
+    // ==============================================================================================
+    void VehicleManager::StartPartContactGeneration(
+        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* /*lpTriangleCacheInterface*/,
+        f32 /*lfTimeStep*/,
+        BrnPhysics::Deformation::DeformationManager* /*lpDeformationManager*/,
+        CgsModule::IOBufferStack* /*lpIOBufferStack*/,
+        BrnPhysics::PhysicsModuleIO::PotentialContactInterface* /*lpPotentialContactInterface*/,
+        CgsMemory::LinearMalloc* /*lpLinearMalloc*/)
+    {
+        // The boundary stamp (REAL): the vehicle-pass entry count, read by the harvest.
+        miFirstPartContactGenEntry = mpContactGenList->GetNumEntries();          // +172516
+
+        static bool s_bLoggedPartGate = false;
+        if (!s_bLoggedPartGate)
+        {
+            s_bLoggedPartGate = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint
+                    << "conductor gate: VehicleManager::StartPartContactGeneration @0x8262C220 "
+                       "(114) PARTIAL -- the miFirstPartContactGenEntry boundary stamp is real, "
+                       "the part-contact generation tail is not reconstructed [FLAG PC boot "
+                       "gate]. Reported once, not per frame\n";
+        }
+    }
+
+    // ==============================================================================================
+    // ⭐⭐ DoRaceCarWorldContactValidation @0x825EB6C8 (416) — REAL as of walls leg 3 (2026-08-14).
+    // PS3 DecFIGS 0x70FA74 (804). THE CONDUCTOR GATE OF THIS NAME IS DELETED.
+    //
+    // Drain the RAW race-car-vs-world queue [5] the harvest just filled; every surviving contact
+    // is appended to the VALIDATED queue [6] the bridge (BridgeContactsToSimulation ->
+    // ReadPotentialVehicleWorldContact) and crash prediction consume. Per contact:
+    //   * assert owners (A == WORLD :1400, B == RACECAR :1401 — the harvest posts (world, car));
+    //   * SwapEntityOrder (the committed inline: swap points/ids/tags/indices, negate the normal)
+    //     so the CAR is side A downstream;
+    //   * assert the car is live in mUsedRaceCars (:1409 "Recieved a potential contact for an
+    //     inactive race car");
+    //   * NaN-check the normal before (:1410) and after (:1415) validation;
+    //   * IsRaceCarCrashing bypasses validation entirely (crashing cars keep every contact);
+    //     otherwise ValidateRaceCarWorldContact (@0x825C6088, the slice TU) gates — and may
+    //     REWRITE the contact in place (wall-normal flatten / wheel-plane projection);
+    //   * append survivors to [6] via the same out-of-line AddEvent(6, ...) shape the console
+    //     inlines here (overflow warning with the literal 6 + bounds-gated AddEventSafe).
+    // Bracketed by the manager's OWN monitor miRaceCarWorldContactValidationPM (+172460) — the
+    // caller's miPhysicsUpdateValidateRaceCarWorldContactPM bracket in PhysicsModule::Update is a
+    // SECOND, outer monitor; both are the console's.
+    // The DeformationManager* parameter is UNUSED in both console bodies (checked, not assumed).
+    // ==============================================================================================
+    void VehicleManager::DoRaceCarWorldContactValidation(
+        BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpPotentialContactInterface,
+        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCache,
+        f32 lfTimeStep,
+        BrnPhysics::Deformation::DeformationManager* /*lpDeformationManager*/)
+    {
+        typedef CgsSceneManager::SceneManagerIO::PotentialContact PotentialContact;
+        typedef BrnPhysics::PhysicsModuleIO::PotentialContactInterface::CustomPotentialContactQueue Queue;
+
+        CgsDev::PerfMonCpu::StartMonitor(miRaceCarWorldContactValidationPM);     // +172460
+
+        CGS_ASSERT(lpPotentialContactInterface != nullptr, "lpPotentialContactInterface != NULL"); // :1382
+        CGS_ASSERT(lpTriCache != nullptr, "lpTriCache != NULL");                                   // :1383
+        CGS_ASSERT(lpPotentialContactInterface->GetRaceCarWithWorldQueueValidated().GetLength() == 0,
+                   "lpPotentialContactInterface->GetRaceCarWithWorldQueueValidated()->GetLength() == 0"); // :1384
+
+        const Queue& lrRawQueue = lpPotentialContactInterface->GetRaceCarWithWorldQueue();   // [5]
+        const s32 liNumContacts = lrRawQueue.GetLength();
+        s32 liValidatedContacts = 0;
+
+        for (s32 liContact = 0; liContact < liNumContacts; ++liContact)
+        {
+            PotentialContact lContact = lrRawQueue.GetEvent(liContact);          // 80-byte copy
+
+            CGS_ASSERT((lContact.muVolumeInstanceIdA.muId >> 56) == 0u,
+                       "lContact.muVolumeInstanceIdA.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_WORLD");   // :1400
+            CGS_ASSERT((lContact.muVolumeInstanceIdB.muId >> 56) == 1u,
+                       "lContact.muVolumeInstanceIdB.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_RACECAR"); // :1401
+
+            lContact.SwapEntityOrder();   // (world, car) -> (car, world); normal sign-flips
+
+            const u32 luRaceCarIndex =
+                static_cast<u32>(lContact.muVolumeInstanceIdA.muId >> 42) & 0x3FFFu;
+            CGS_ASSERT(mUsedRaceCars.IsBitSet(luRaceCarIndex),
+                       "Recieved a potential contact for an inactive race car");  // :1409 [sic]
+
+            CGS_ASSERT(lContact.mNormal.x == lContact.mNormal.x
+                           && lContact.mNormal.y == lContact.mNormal.y
+                           && lContact.mNormal.z == lContact.mNormal.z,
+                       "Normal is invalid before call to Validate\n");            // :1410
+
+            // The console's own line-8273 bound rides inside IsRaceCarCrashing (slice TU).
+            if (!IsRaceCarCrashing(static_cast<s32>(luRaceCarIndex))
+                && !ValidateRaceCarWorldContact(&lContact, lpTriCache, lfTimeStep))
+            {
+                continue;   // rejected — nothing appended
+            }
+
+            CGS_ASSERT(lContact.mNormal.x == lContact.mNormal.x
+                           && lContact.mNormal.y == lContact.mNormal.y
+                           && lContact.mNormal.z == lContact.mNormal.z,
+                       "Normal is invalid after call to Validate\n");             // :1415
+
+            // The console inlines exactly the AddEvent(6, ...) shape here (warning literal 6).
+            lpPotentialContactInterface->AddEvent(6u, lContact);
+            ++liValidatedContacts;
+        }
+
+        // ⭐ [FLAG PC boot witness] one-shot: first frame anything survives validation.
+        {
+            static bool sbLoggedValidated = false;
+            if (!sbLoggedValidated && liValidatedContacts > 0)
+            {
+                sbLoggedValidated = true;
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint
+                        << "⭐ world contacts VALIDATED: " << static_cast<u32>(liValidatedContacts)
+                        << " of " << static_cast<u32>(liNumContacts)
+                        << " raw contact(s) accepted into the Validated queue [6] [FLAG PC boot "
+                           "witness]. Reported once, not per frame\n";
+            }
+        }
+
+        CgsDev::PerfMonCpu::StopMonitor(miRaceCarWorldContactValidationPM);
+    }
 }
 }

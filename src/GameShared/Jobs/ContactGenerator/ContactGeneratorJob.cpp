@@ -521,8 +521,8 @@ void ContactGeneratorJob::ExecuteLineWithTriangleListStream()
 // ContactGeneratorEntry with desc type 6 -> Execute case 6 -> the stream arm below -> per
 // command the non-stream worker -> IntersectTriangle4Sphere_HackyBurnoutVersion per
 // (Triangle4 batch x sensor sphere) -> one 80-byte PrimitiveTestResult per hit lane into the
-// command's CollisionResultList. The list is what EndVehicleContactGeneration (still a gate)
-// will harvest.
+// command's CollisionResultList. The list is harvested by EndVehicleContactGeneration ->
+// AddContactResultsToQueue (REAL as of walls leg 3, 2026-08-14).
 // =============================================================================================
 
 // ---------------------------------------------------------------------------------------------
@@ -679,7 +679,7 @@ void ContactGeneratorJob::ExecuteSphereListWithTriangleList(
 
     // ⭐ THE WITNESS (PC boot gate mechanism, log-once): the first time this worker leaves a
     // non-empty result list, say so with the count. Not the console's; deleted when the
-    // harvest (EndVehicleContactGeneration) lands and makes contacts visible downstream.
+    // harvest (EndVehicleContactGeneration -- REAL as of walls leg 3) makes contacts visible downstream.
     if (lu16NumResults > 0)
     {
         static bool s_bLoggedFirstContacts = false;

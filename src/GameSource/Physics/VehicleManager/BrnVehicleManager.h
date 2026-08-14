@@ -370,6 +370,18 @@ namespace Vehicle
         // DWARF h:947; X360 @0x825B5690. BODIED in the slice TU.
         bool IsRaceCarCrashing(s32 liRaceCarIndex);
 
+        // ⭐ ADDED 2026-08-14 (walls leg 3). DWARF h:938; X360 @0x825C6088 (988 insns), PS3
+        // DecFIGS 0x70AB20 (the mangle is the signature authority). Validate ONE race-car-vs-
+        // world potential contact (may REWRITE the contact's normal/point in place -- the
+        // wall-normal flatten and the wheel/bottom-plane projection); returns whether the
+        // contact survives into the Validated queue. BODIED in
+        // BrnVehicleManager_ValidateRaceCarWorldContact.cpp (slice TU; home BrnVehicleManager.cpp
+        // is still unmounted -- RaceCarPhysics_Construct precedent).
+        bool ValidateRaceCarWorldContact(
+            CgsSceneManager::SceneManagerIO::PotentialContact* lpInOutContact,
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCacheInterface,
+            f32 lfTimeStep);
+
         // DWARF h:1239 -- the FIVE-argument overload; X360 @0x82635B78 (the unnamed sub the
         // export set skipped; identity proof in the slice TU banner). BODIED in the slice TU.
         // (The 6-arg + EntityId overload @0x82635B00, DWARF h:1242, is CrashFatalRaceCars'
@@ -937,6 +949,17 @@ namespace Vehicle
                                            const VehicleInputInterface* lpInputInterface,
                                            Deformation::DeformationManager* lpDeformationManager,
                                            f32 lfTimeStep);
+
+        // ⭐ ADDED 2026-08-14 (walls leg 3). DWARF h:1116; X360 @0x825EB350 (222 insns), PS3
+        // DecFIGS 0x70F454 (the mangle is the parameter-order authority). THE HARVEST: drain
+        // every pre-part contact-gen entry's CollisionResultList (result list i belongs to
+        // entry i -- the two are appended in lockstep by the Do*ContactGeneration family) into
+        // 76-byte PotentialContacts posted to maCustomEventQueues[UserTagA]. Called only by
+        // EndVehicleContactGeneration.
+        void AddContactResultsToQueue(
+            CgsSceneManager::CgsCollision::CollisionGenerator* lpContactGenerator,
+            BrnPhysics::ContactGenList* lpContactGenList,
+            BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface);
 
         // @0x8261AC38 (DWARF dump :1055; 661 insns -- the async-generation harvest half of
         // StartVehicleContactGeneration; same seven parameters).

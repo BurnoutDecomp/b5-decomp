@@ -75,4 +75,22 @@ namespace BrnPhysics
 
         ++miNumEntries;
     }
+
+    // =================================================================================================
+    // ⭐ ADDED 2026-08-14 (walls leg 3, harvest wave). The two read accessors -- declared since the
+    // class landed, never bodied (nothing read the list until AddContactResultsToQueue). The console
+    // inlines both everywhere; GetEntry's bounds tripwire is the header's own
+    // "liEntry < miNumEntries" (BrnContactGenerationList.h:89 -- the line the harvest asserts at on
+    // both consoles, per record).
+    // =================================================================================================
+    s32 ContactGenList::GetNumEntries() const
+    {
+        return miNumEntries;
+    }
+
+    const ContactGenList::ContactGenEntry& ContactGenList::GetEntry(s32 liIndex) const
+    {
+        CGS_ASSERT(liIndex < miNumEntries, "liEntry < miNumEntries");   // BrnContactGenerationList.h:89
+        return maEntries[liIndex];
+    }
 }

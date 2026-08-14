@@ -78,6 +78,14 @@ namespace Vehicle
         // ------------------------------------------------------------------------------------
         void Construct(VehicleManager* lpVehicleManager);
 
+        // ⭐ ADDED 2026-08-14 (walls leg 3): read access to the two contact-classification render
+        // gates ValidateRaceCarWorldContact checks (the console reads the component's bytes
+        // +597/+598 directly from inside the VehicleManager method; the host goes through these
+        // ADDITIVE inline getters instead of a friend grant). Both stay false on this build --
+        // nothing toggles the dev menu.
+        bool RenderWallContacts() const   { return mbRenderWallContacts; }    // +597 :194
+        bool RenderGroundContacts() const { return mbRenderGroundContacts; }  // +598 :195
+
     protected:
         // @0x825B5D80: the debug-menu display name.
         //   lis r11,aVehicleManager@ha ; addi r3,r11,aVehicleManager@l "Vehicle Manager" ; blr
