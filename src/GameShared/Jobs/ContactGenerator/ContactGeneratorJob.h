@@ -13,14 +13,17 @@
 //   d:\p4\b5_main\burnout\main\code\gameshared\jobs\contactgenerator\ContactGeneratorJob.h
 //   D:\P4\B5_MAIN\Burnout\MAIN\Code\GameShared\Jobs\ContactGenerator\ContactGenerator.cpp (entry)
 //
-// X360 homes reconstructed in this pass (traction-line wave, 2026-08-11):
+// X360 homes reconstructed (traction-line wave 2026-08-11; sphere arms walls leg 2 2026-08-14):
 //   ContactGeneratorJob::Execute                             @0x829267E0   (77)
 //   ContactGeneratorJob::ExecuteLineWithTriangleListStream    @0x82921968  (589)
+//   ContactGeneratorJob::ExecuteSphereListWithTriangleList    @0x829226A8  (967)  ⭐ contacts
+//   ContactGeneratorJob::ExecuteSphereListWithTriangleListStream @0x829235C8 (100)
+//   ContactGeneratorJob::LoadPrimitives                       @0x829210F0   (61)
+//   ContactGeneratorJob::LoadResultList                       @0x829211E8   (46)
 //   ContactGeneratorJob::AllocateMemory                       @0x829212A0   (54)
 //   ContactGeneratorJob::RestoreMemory                        @0x82921050   (39)
-// Declared-only (the other ten Execute arms; each a named boot gate in the .cpp -- see there for
-// why the switch keeps all twelve cases instead of only the one this wave needs):
-//   ExecuteSphereListWithTriangleList        @0x829226A8 · ...Stream          @0x829235C8
+// Declared-only (the other eight Execute arms; each a named boot gate in the .cpp -- see there for
+// why the switch keeps all twelve cases instead of only the ones landed so far):
 //   ExecuteSphereListWithSphereList          @0x829215B0 · ...Stream          @0x82923758
 //   ExecuteSweptSphereListWithTriangleList   @0x829238E8 · ...Stream          @0x82925238
 //   ExecuteBoxListWithTriangleList           @0x829218B8
@@ -71,7 +74,12 @@
 
 #include <cstddef>   // offsetof (the layout gates at the foot of this header)
 
-namespace CgsSceneManager { namespace CgsCollision { struct CollisionJobDescription; } }
+namespace CgsSceneManager { namespace CgsCollision {
+    struct CollisionJobDescription;
+    struct SphereListWithTriangleListJobDesc;
+    struct TriangleList;
+    struct CollisionResultList;
+} }
 
 struct alignas(16) ContactGeneratorJob
 {
@@ -96,11 +104,28 @@ struct alignas(16) ContactGeneratorJob
     // ---------------------------------------------------------------------------------------
     void ExecuteLineWithTriangleListStream();
 
-    // The other ten arms of the switch. Bodies NOT reconstructed this wave -- each is a named
+    // ---------------------------------------------------------------------------------------
+    // ⭐⭐ THE SPHERE CONTACT ARMS — REAL as of walls leg 2 (2026-08-14).
+    //
+    // ExecuteSphereListWithTriangleListStream @0x829235C8 (100): drain the descriptor's
+    // command stream; per 32-byte (host 48) command, build a LOCAL non-stream descriptor
+    // (SphereListWithTriangleListJobDesc::Prepare) and run the non-stream worker on it.
+    // No AddResult — results land in the command's own CollisionResultList.
+    //
+    // ExecuteSphereListWithTriangleList @0x829226A8 (967): the real worker. Takes the
+    // DESCRIPTOR as a parameter (the console's r4: Execute's case 5 passes lpvJobData
+    // straight through, and the stream arm passes its stack-local desc). Loops
+    // (Triangle4 batch x sensor sphere), runs the contact kernel
+    // CgsGeometric::IntersectTriangle4Sphere_HackyBurnoutVersion @0x8283D2E0, and queues
+    // one 80-byte PrimitiveTestResult per hit lane into the descriptor's result list.
+    // ---------------------------------------------------------------------------------------
+    void ExecuteSphereListWithTriangleList(
+        const CgsSceneManager::CgsCollision::SphereListWithTriangleListJobDesc* lpDesc); // @0x829226A8
+    void ExecuteSphereListWithTriangleListStream();    // @0x829235C8
+
+    // The other eight arms of the switch. Bodies NOT reconstructed -- each is a named
     // one-shot boot gate in the .cpp. Declared so the switch can name them and so the closure
     // is enforced at link time rather than discovered at runtime.
-    void ExecuteSphereListWithTriangleList();          // @0x829226A8
-    void ExecuteSphereListWithTriangleListStream();    // @0x829235C8
     void ExecuteSphereListWithSphereList();            // @0x829215B0
     void ExecuteSphereListWithSphereListStream();      // @0x82923758
     void ExecuteBoxListWithTriangleList();             // @0x829218B8
@@ -109,6 +134,15 @@ struct alignas(16) ContactGeneratorJob
     void ExecutePrimitiveListWithTriangleListStream(); // @0x82926650
     void ExecuteSweptSphereListWithTriangleList();     // @0x829238E8
     void ExecuteSweptSphereListWithTriangleListStream();// @0x82925238
+
+    // LoadPrimitives @0x829210F0 (61) / LoadResultList @0x829211E8 (46) -- the worker's
+    // "DMA down" pair (a plain copy on X360; the names are the SPU build's). LoadPrimitives
+    // copies a TriangleList {base, count}; LoadResultList copies a CollisionResultList
+    // header and asserts its results memory is non-null (:1552).
+    void LoadPrimitives(const CgsSceneManager::CgsCollision::TriangleList* lpSourceTriangleList,
+                        CgsSceneManager::CgsCollision::TriangleList* lpDestinationTriangleList);
+    void LoadResultList(const CgsSceneManager::CgsCollision::CollisionResultList* lpSourceResultList,
+                        CgsSceneManager::CgsCollision::CollisionResultList* lpDestinationResultList);
 
     // AllocateMemory @0x829212A0 -- align the cursor up, hand back the arena slice, advance the
     // cursor by the aligned size. No real allocation happens; the name is the console's.

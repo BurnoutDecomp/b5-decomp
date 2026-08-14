@@ -49,38 +49,56 @@ namespace CgsCollision
     }
 
     // -------------------------------------------------------------------------
-    // PrimitiveTestResult::IsValid @ 0x82921378  — VMX KEYSTONE (honest stub)
+    // PrimitiveTestResult::IsValid @ 0x82921378 (142) — REAL as of walls leg 2.
     //
-    // The X360 body is a multi-stage hand-vectorised VMX/AltiVec pipeline with NO
-    // scalar lowering that can be reproduced without fabricating a per-lane formula:
+    // The old "honest stub" here was gated on "the rodata constant at
+    // unk_821016C0 is NOT recoverable from the export". The .rdata unlock
+    // retired that floor: `x360rd.read(0x821016C0, 4)` == 0x34000000 ==
+    // 1.1920929e-07 == 2^-23 (FLT_EPSILON). With the value in hand the whole
+    // pipeline reads plainly:
     //
-    //   for lane-vector in {mLane0, mLane1, mLane2, mLane3}:
-    //       lvx128;  vspltw lane 0/1/2;  vcmpeqfp.   ; per-lane self-compare == finiteness
-    //                                                ; (x==x is false only for NaN)
-    //       extract CR6 bit; early-out to "invalid" on the first non-finite component
-    //   then for mLane0 and mLane1:
-    //       vspltisw v0,-1 ; vslw v0,v0,v0           ; build the 0x80000000 sign mask
-    //       lvlx v13,[unk_821016C0] ; vspltw          ; load a rodata magnitude threshold
-    //       vandc v* , mask                          ; clear sign bit  -> |component|
-    //       vrlimi128 ; vcmpgtfp.                     ; |component| > threshold ?
-    //       early-out to "invalid" on the first over-threshold component
-    //   return true only if all checks pass.
-    //
-    // The per-lane finiteness intent is clear, BUT the magnitude branch depends on the
-    // rodata constant at unk_821016C0 (an absolute-value threshold whose value is NOT
-    // recoverable from the export here) and on the exact vrlimi128 lane-rotation /
-    // vandc masking semantics. Per the VMX-keystone rule this must NOT be paraphrased
-    // into an invented scalar formula and the threshold must NOT be fabricated.
-    //
-    // Honest placeholder: the boot-trace never executes IsValid (it is called only
-    // from the ContactGeneratorJob narrow-phase, off the boot path). Returns true so
-    // dependents compile and link; FLAGGED in still_unbodied as a VMX keystone with a
-    // documented floor (unrecoverable rodata threshold @ unk_821016C0).
+    //   stage 1 (all four vectors): per-component x==x self-compare on the x/y/z
+    //     lanes (vspltw 0/1/2 + vcmpeqfp., w never tested) -> any NaN is invalid.
+    //   stage 2 (the two NORMAL vectors only): vandc clears the sign bits, the
+    //     vrlimi128(v, v, mask=1, rot=1) replaces the w lane with a copy of x
+    //     (so w is excluded), and vcmpgtfp. against the 2^-23 splat sets the
+    //     "all lanes false" CR6 bit. The branch keeps the record only when that
+    //     bit is CLEAR, i.e. when SOME |component| EXCEEDS 2^-23:
+    //     this is a non-degenerate-normal test (a zero/denormal normal is what
+    //     the caller's "Invalid normal generated" dump is about), not an upper
+    //     magnitude bound.
     // -------------------------------------------------------------------------
+    namespace
+    {
+        // unk_821016C0 word 0, read from the image: 0x34000000 == 2^-23.
+        const f32 KF_MIN_NORMAL_COMPONENT = 1.1920929e-07f;
+
+        template <class TLaneVector>
+        inline bool AllFiniteXYZ(const TLaneVector& lrV)
+        {
+            // x==x is false only for NaN (the console never tests the w lane).
+            return (lrV.x == lrV.x) && (lrV.y == lrV.y) && (lrV.z == lrV.z);
+        }
+
+        inline bool NormalNonDegenerate(const Vector3& lrV)
+        {
+            const f32 lfAx = lrV.x < 0.0f ? -lrV.x : lrV.x;   // vandc sign clear
+            const f32 lfAy = lrV.y < 0.0f ? -lrV.y : lrV.y;
+            const f32 lfAz = lrV.z < 0.0f ? -lrV.z : lrV.z;
+            return (lfAx > KF_MIN_NORMAL_COMPONENT)
+                || (lfAy > KF_MIN_NORMAL_COMPONENT)
+                || (lfAz > KF_MIN_NORMAL_COMPONENT);
+        }
+    }
+
     bool PrimitiveTestResult::IsValid() const
     {
-        // VMX keystone — body intentionally not reconstructed (see comment above).
-        return true;
+        return AllFiniteXYZ(mPrimitive0Normal)
+            && AllFiniteXYZ(mPrimitive1Normal)
+            && AllFiniteXYZ(mPrimitive0Contact)
+            && AllFiniteXYZ(mPrimitive1Contact)
+            && NormalNonDegenerate(mPrimitive0Normal)
+            && NormalNonDegenerate(mPrimitive1Normal);
     }
 }
 }
