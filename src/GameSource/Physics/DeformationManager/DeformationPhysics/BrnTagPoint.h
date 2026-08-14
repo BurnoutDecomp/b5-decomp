@@ -74,7 +74,10 @@ namespace Deformation
         void SetScratchAmount(f32 lfAmount) { mfScratchAmount = lfAmount; }
 
         // ---- remaining authored API (declared only; bodies elsewhere) -------------
-        f32                      GetDetachThresholdSquared() const;
+        // ⭐ HEADER-INLINE (2026-08-14, deformation-mount wave): no export on either console;
+        // the caller IKBodyPart::DetachablePart @0x825C13F8 inlines it as
+        // `*(*(tagPoint+16)+56)` == mpSpec->mfDetachThresholdSquared.
+        f32                      GetDetachThresholdSquared() const { return mpSpec->GetDetachThresholdSquared(); }
         f32                      GetJointDetachThresholdSquared() const;
         s32                      GetJointIndex() const;
         bool                     HasJoint() const;

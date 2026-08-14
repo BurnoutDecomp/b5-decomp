@@ -582,25 +582,13 @@ bool BrnPhysics::Vehicle::VehicleManager::PrepareData(struct rw::IResourceAlloca
     return true;
 }
 
-// LINK STUB (task #135, 2026-08-04): X360 @0x82630230. Called from
-// PhysicsModule::Prepare stage 4 (E_PREPARESTAGE_DEFORMATIONMANAGER).
-// ⚠️ UNLIKE THE OTHER TWO, THIS ONE HAS A REAL BODY ALREADY -- BrnDeformationManager.cpp:132,
-// in a TU that is not mounted. Delete this stub the moment that TU mounts, or the link will pick
-// a winner silently.
-// ⭐ 2026-08-14 (walls wave): the mount was TRIALLED and MEASURED -- 37 unresolved externals,
-// full census + landing plan in build_game_exe.bat's deformation block. The stale "25 unresolved"
-// figure this comment used to cite is retired there.
-bool BrnPhysics::Deformation::DeformationManager::Prepare(struct rw::IResourceAllocator *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "DeformationManager::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// ⭐⭐ LINK STUB DELETED 2026-08-14 (deformation-mount wave): DeformationManager::Prepare
+// @0x82630230's REAL body (BrnDeformationManager.cpp) is MOUNTED as of this wave -- the stub that
+// stood here ("DeformationManager::Prepare: inert [FLAG PC boot gate]") would have collided
+// (LNK2005) or, worse, been picked silently. PhysicsModule::Prepare stage 4
+// (E_PREPARESTAGE_DEFORMATIONMANAGER) now reaches the real pool carve + per-model ClearVariables,
+// and its fourteen deferred deformation-IO clears go live with it. If a stub for it reappears
+// here the link will say so (LNK2005).
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 void BrnPhysics::PhysicsModule::PropPrepareTypes(class BrnPhysics::PhysicsModuleIO::InputBuffer *)

@@ -183,7 +183,10 @@ namespace Deformation
         s32 GetMeshIndex() const;
 
         // BrnPhysicalBodyPart.h:170. Whether the part's volume instance is currently in the scene.
-        bool IsAddedToScene() const;
+        // ⭐ INLINE 2026-08-14 (deformation-mount wave): no out-of-line emission on either console
+        // (same evidence pattern as IsJoinedToVehicle below) -- PhysicalBodyPartPool::RemovePart
+        // @0x8260CA78 lbz's mbAddedToScene (console +485) directly.
+        bool IsAddedToScene() const { return mbAddedToScene; }
 
         // ----- scene membership ----------------------------------------------------------
 
@@ -305,8 +308,34 @@ namespace Deformation
         // BrnPhysicalBodyPart.h:288. Recompute the local bounding box (no scene publish).
         void UpdateBoundingBox();
 
-        // BrnPhysicalBodyPart.h:292. Set the packed joint angular velocity.
-        void SetJointVelocity(VecFloat lvfJointVelocity);
+        // BrnPhysicalBodyPart.h:292. Set the packed joint angular velocity -- the w ("Plus") lane
+        // of mLocalGraphicsPositionPlusJointVelocity, xyz untouched. ⭐ HEADER-INLINED 2026-08-14
+        // (deformation-mount wave): NO out-of-line export exists on EITHER console (it was inline
+        // there too); the write shape is attested by DeformableObject::ResetJointVelocities
+        // @0x825DF868 (`vrlimi128 v13, v0, 1, 0` == w lane <- 0, xyz kept; PS3 @0x6F8E64 vperm
+        // <0,1,2,7> against zeros, same thing).
+        void SetJointVelocity(VecFloat lvfJointVelocity)
+        {
+            mLocalGraphicsPositionPlusJointVelocity.SetPlus(lvfJointVelocity.x);
+        }
+
+        // ⭐ ADDED 2026-08-14 (deformation-mount wave). PhysicalBodyPartPool::RemovePart tears
+        // down the released slot's bindings with four direct stores on the console
+        // (0x8260CAF0..0x8260CAFC, a cross-object poke): mpIKPart = 0 (part+0x1DC),
+        // mpDeformableObject = 0 (part+0x1E0), mbAddedToScene = false (part+0x1E5), and
+        // mRigidBodyId re-seeded from qword_82F2A3A8 == CgsPhysics::K_INVALID_RIGID_BODY_ID
+        // (~0ull -- all three packed fields go all-ones). This named method is the by-name
+        // equivalent (the SetDeformationSpec / GetContactVolumeInstanceId precedent -- no
+        // friendship, no raw offsets).
+        void ClearPoolSlotBindings()
+        {
+            mpIKPart           = nullptr;        // stw 0 -> +0x1DC
+            mpDeformableObject = nullptr;        // stw 0 -> +0x1E0
+            mbAddedToScene     = false;          // stb 0 -> +0x1E5
+            mRigidBodyId.muEntityWord = 0xFFFFFFFFu;   // std K_INVALID_RIGID_BODY_ID (~0ull)
+            mRigidBodyId.muSubA       = 0xFFFFu;       //   spread over the packed id's
+            mRigidBodyId.muSubB       = 0xFFFFu;       //   three fields
+        }
 
         // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave): the packed 8-byte word
         // DeformationManager::FixupBodyPartVehicleContact re-keys a contact's A id from. The

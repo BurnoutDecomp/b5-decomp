@@ -188,23 +188,13 @@ namespace BrnPhysics
 
 namespace Deformation
 {
-    // @0x82644F40 (26 insns). The deformation manager's own post-scene tick -- drains its
-    // add/remove/deactivate/validate model queues and pushes new models into the scene.
-    // PostSceneUpdate brackets it between two VerifyPartIndices sweeps, both of which ARE real
-    // and DO run.
-    // ⭐ 2026-08-14 (walls wave): the REAL body now exists in the unmounted BrnDeformationManager
-    // .cpp (perfmon pair at this+76676/76680 bracketing ProcessEvents -- read off the 26-insn asm),
-    // and ProcessEvents' four drains are all bodied there too. This gate carries the seam until
-    // that TU mounts (trial-measured closure: see build_game_exe.bat's deformation block); the
-    // mount DELETES it (LNK2005 says so loudly).
-    void DeformationManager::PostSceneUpdate(
-        CgsPhysics::PhysicsSimulationIO::InputBuffer*,
-        DeformationInputInterface*,
-        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*)
-    {
-        BRN_CONDUCTOR_GATE("DeformationManager::PostSceneUpdate @0x82644F40 (26; real body in the "
-                           "unmounted BrnDeformationManager.cpp)");
-    }
+    // ⭐⭐ GATE DELETED 2026-08-14 (deformation-mount wave): DeformationManager::PostSceneUpdate
+    // @0x82644F40's REAL body (BrnDeformationManager.cpp -- the perfmon pair bracketing
+    // ProcessEvents, whose four model-event drains are all real) is MOUNTED as of this wave. The
+    // registration consumer now RUNS: the add-model events the producer has been queuing on every
+    // create are drained, the model table goes live (table != -1), and the
+    // StartVehicleContactGeneration skip line goes with it. If a gate for it reappears here the
+    // link will say so (LNK2005).
 }
 
 namespace Props
@@ -498,15 +488,13 @@ namespace Deformation
         BRN_CONDUCTOR_GATE("DeformationManager::UpdatePostPhysics @0x82630420 (236)");
     }
 
-    // OutputData @0x826225D8 (339) has a REAL body in the unmounted BrnDeformationManager.cpp;
-    // mounting that TU is its own closure job. This gate carries the seam until then -- the
-    // mount DELETES it (LNK2005 says so loudly).
-    // ⭐ 2026-08-14 (walls wave) MOUNT PLAN, trial-measured: mount the home TU's lifecycle+drain
-    // half FIRST and split OutputData into an unmounted _Output slice -- OutputData's own closure
-    // (OutputSensorState @0x82605618 X360-export-HOLE/PS3 0x6F3E10, UpdateAndOutputJointStates
-    // @0x82609AE8, OutputWheelData @0x82608E28, DetachedPartManager::OutputEvents -> pool
-    // OutputEvents @0x8260DBE8) is the deferrable half of the 37-symbol census in
-    // build_game_exe.bat's deformation block.
+    // OutputData @0x826225D8 (339). ⭐ 2026-08-14 (deformation-mount wave): the walls-wave mount
+    // plan EXECUTED -- the home TU's lifecycle+drain half is MOUNTED and OutputData's real body
+    // was split into the (still unmounted) BrnDeformationManager_Output.cpp. This gate carries
+    // the runtime seam until that slice's closure lands (OutputSensorState @0x82605618
+    // X360-export-HOLE/PS3 0x6F3E10, UpdateAndOutputJointStates @0x82609AE8, OutputWheelData
+    // @0x82608E28, DetachedPartManager::OutputEvents -> pool OutputEvents @0x8260DBE8); mounting
+    // the slice DELETES this gate (LNK2005 says so loudly).
     void DeformationManager::OutputData(DeformationOutputInterfaceForEntityModules*,
                                         DeformationOutputInterface*)
     {

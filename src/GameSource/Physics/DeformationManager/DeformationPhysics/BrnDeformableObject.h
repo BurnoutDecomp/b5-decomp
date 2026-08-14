@@ -285,7 +285,12 @@ namespace Deformation
         // DECLARE-ONLY (ApplyCarCarImpulse calls it BY NAME).
         DeformationSensor* GetDeformationSensor(s32 liSensorIndex);                             // :407
 
-        s32 GetNumSensors();                                                                    // :410
+        // :410. ⭐ HEADER-INLINE (2026-08-14, deformation-mount wave): no export on either
+        // console (console-inline). The count is the spec's sensor count PLUS the four appended
+        // wheel spheres -- _Update.cpp's own member map records the relation verbatim
+        // ("spec+1618 == mu8NumDeformationSensors; == GetNumSensors()-4"), and ResetSensors
+        // seeds exactly numSensors+4 world spheres.
+        s32 GetNumSensors() { return static_cast<s32>(mpDeformationSpec->mu8NumDeformationSensors) + 4; }   // :410
         DeformationSensor& GetDeformationSensorFromVolumeInstance(CgsSceneManager::VolumeInstanceId lId); // :415
         CgsGeometric::Sphere GetDeformationSphereFromVolumeInstance(CgsSceneManager::VolumeInstanceId lId); // :419
         const rw::math::vpu::Vector3Plus* GetOffset_ScratchArray();                             // :422

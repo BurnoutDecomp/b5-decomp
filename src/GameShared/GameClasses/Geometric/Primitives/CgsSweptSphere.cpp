@@ -1,0 +1,23 @@
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSweptSphere.h"
+
+// CgsGeometric::SweptSphere -- out-of-line bodies. ⭐ TU CREATED 2026-08-14 (deformation-mount
+// wave): the header has always said the bodies live in "the SweptSphere TU"; none existed. The
+// first in-tree caller (DeformableObject::ResetSensors @0x82623D60, phase 3) landed this wave.
+//
+// Set(Vector3Plus, Vector3Plus) has NO out-of-line X360 export: the console INLINES it at the
+// ResetSensors swept-seeding loops, where the two packed-lane stores are fully attested
+// (0x82624730/0x826247A8 for the sensor loop, 0x82624864/0x8262487C for the wheel loop):
+//   stvx128 <positionAndRadius>  -> maSweptSpheres[i] + 0x00
+//   stvx128 <directionAndLength> -> maSweptSpheres[i] + 0x10
+// i.e. the two members assigned whole, nothing else. The remaining declared methods stay
+// declare-only until a caller lands them with their own asm witness.
+
+namespace CgsGeometric
+{
+    // Inline-attested at ResetSensors' swept-sphere seeding (see the TU banner).
+    void SweptSphere::Set(Vector3Plus lPositionAndRadius, Vector3Plus lDirectionAndLength)
+    {
+        mPositionAndRadius   = lPositionAndRadius;
+        mDirectionAndLength  = lDirectionAndLength;
+    }
+}

@@ -1,6 +1,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformationSensor.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags (the ApplyLocalImpulse gate)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnAbsorptionTable.h"     // AbsorptionTable
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPenetrationSolver.h"   // PenetrationSolver
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnCollidableBody.h"      // ImpulseParams
@@ -146,17 +147,21 @@ namespace Deformation
 	// DeformationSensor() -- DWARF BrnDeformationSensor.h:97.
 	//
 	// The ctor zero-inits the sensor (the DWARF routes it through ClearVariables @ 0x82?? --
-	// declared-only). NO ctor asm is present in the exports, so the named members are zeroed to the
-	// canonical rest state the maintenance routines (Prepare / ClearNonWorldContacts) re-establish:
-	// no spec, no spheres, zero displacement / scratch, empty contact array. (Honest zero-init -- no
-	// fabricated values.)
+	// declared-only). NO ctor asm is present in the X360 exports, but the PS3 twin SHIPS the
+	// ClearVariables body (@0x6B5F28) and it is the authoritative store list: mfMaxPointDisplacement
+	// = 100.0 (NOT 0 -- `lfs f0, dword_100A62C(r2); stfs f0, 0x118(this)`), the two post-physics
+	// vectors + reset flag zeroed, count/spec/sphere-pointers/scratch zeroed. ⭐ CORRECTED
+	// 2026-08-14 (deformation-mount wave): the previous "honest zero" guess had 0.0 for the
+	// max-point-displacement seed; the PS3 body says 100.0 (the same rest seed Prepare re-writes).
+	// ClearVariables does NOT touch mPointDisplacement_BiggestImpulseThisFrame or the contact
+	// records; the zero here is the ctor's own baseline (kept).
 	// =============================================================================================
 	DeformationSensor::DeformationSensor()
 	{
 		mpSpec = nullptr;
 		mPointDisplacement_BiggestImpulseThisFrame.SetZero();
 
-		mfMaxPointDisplacement = 0.0f;
+		mfMaxPointDisplacement = 100.0f;   // PS3 ClearVariables @0x6B5F28: *(this+0x118) = 100.0
 		for ( s32 li = 0; li < 4; ++li )
 		{
 			maPostPhysicsVec0[li] = 0.0f;
@@ -373,6 +378,30 @@ namespace Deformation
 	// Modelled through the matching PenetrationSolver methods (AddWorldContact / AddVehicleContact);
 	// the partition + dedupe control flow is reproduced; the dense VMX point math is modelled per-lane.
 	// =============================================================================================
+	// =============================================================================================
+	// ApplyLocalImpulse -- ⭐ LOG-ONCE GATE 2026-08-14 (deformation-mount wave), the CollidableBody
+	// override the vtable needs. ⚠️ NOT RECONSTRUCTED: the X360 address is an export HOLE and the
+	// PS3 twin (@0x74D3A0, DecFIGS) is 569 instructions of dense per-direction compression math --
+	// a body of that size is its own slice, not a mount-night write. DEAD AT RUNTIME this wave:
+	// every path into it (ApplySensorImpulse / the car-car impulse route / the chain pass-on)
+	// requires generated contacts, and contact generation is the still-gated (c) walls wave. The
+	// gate is loud so the day it IS reached announces itself; the sensor absorbs nothing (no
+	// displacement fabricated).
+	// =============================================================================================
+	void DeformationSensor::ApplyLocalImpulse(ImpulseParams* /*lpImpulseParams*/)
+	{
+		static bool sbLoggedApplyLocalImpulseGate = false;
+		if (!sbLoggedApplyLocalImpulseGate)
+		{
+			sbLoggedApplyLocalImpulseGate = true;
+			if (CgsDev::Message::gxMessageFilterFlags & 1)
+				*CgsDev::Log::gpDebugPrint
+					<< "conductor gate: DeformationSensor::ApplyLocalImpulse reached (PS3 twin "
+					   "0x74D3A0, 569 insns; X360 export hole) but not reconstructed -- impulse "
+					   "NOT absorbed [FLAG PC boot gate]. Reported once, not per frame\n";
+		}
+	}
+
 	void DeformationSensor::AddContactsToPenetrationSolver(PenetrationSolver* lpSolver, DeformableObject* lpObject,
 	                                                       s32 liBodyIndex, s32 liWorldIndex, bool lbWorld) const
 	{

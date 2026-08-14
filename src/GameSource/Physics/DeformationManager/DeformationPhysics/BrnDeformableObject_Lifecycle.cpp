@@ -4,6 +4,11 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                    // CgsNumeric::Random
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu::AddMonitor
 #include "rw/math/vpu/vector3_operation.h"                               // rw::math::vpu::{...}
+// ⭐ 2026-08-14 (deformation-mount wave): ResetJointVelocities reaches the pooled parts through
+// the manager's header-inline GetPartFromIndex, so the real manager header is needed (it was only
+// forward-declared before; no cycle -- the pool/part headers reference DeformableObject by
+// forward-decl only).
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.h"     // DetachedPartManager (GetPartFromIndex)
 
 // =====================================================================================================
 // BrnPhysics::Deformation::DeformableObject -- LIFECYCLE / SETUP group.
@@ -92,6 +97,20 @@ namespace Deformation
     // scan that only recognises the splat idiom cannot resolve it, which is why it stayed flagged.
     static const Vector3 KVF_INITIAL_DAMAGE_BBOX_SCALE = { 5.0f, 5.0f, 5.0f, 5.0f }; // unk_82FB9B80 = 1/unk_82FB9770
     static const f32     KF_EXTREME_CRASH_SPEED_MARGIN = 5.0f;                        // unk_82FB9AB0 @82C5D8B8 <- flt_8200426C
+
+    // ⭐ RECOVERED 2026-08-14 (deformation-mount wave): the three compression/scratch ratio vectors
+    // GetInitialCompressionScalesAndLimits selects between (PS3 names them verbatim:
+    // KV3P_{EVENT,CAR_SELECT,DEFAULT}_COMPRESSION_SCRATCH_RATIO; X360 homes 0x82FB9540 / 0x82FB9DB0
+    // / 0x82FB9760). They are DYNAMIC-INIT (zero in the image); their initializers were read out of
+    // the static-init region and their scalar seeds out of .rodata via x360rd.py:
+    //   EVENT      @0x82C5D740: (flt_82001C98, x, x, flt_8208F9C8)      = (1.0, 1.0, 1.0, 0.8)
+    //   CAR_SELECT @0x82C5D700: (flt_8208F9C8, flt_82004C68, flt_8208F9C8, flt_82004018)
+    //                                                                    = (0.8, 0.7, 0.8, 0.75)
+    //   DEFAULT    @0x82C5D778: (flt_82001CC0 x4)                        = (0.0, 0.0, 0.0, 0.0)
+    // xyz = the per-axis compression scale ratio, w = the scratch ratio.
+    static const Vector3Plus KV3P_EVENT_COMPRESSION_SCRATCH_RATIO      = { 1.0f, 1.0f, 1.0f, 0.8f };
+    static const Vector3Plus KV3P_CAR_SELECT_COMPRESSION_SCRATCH_RATIO = { 0.8f, 0.7f, 0.8f, 0.75f };
+    static const Vector3Plus KV3P_DEFAULT_COMPRESSION_SCRATCH_RATIO    = { 0.0f, 0.0f, 0.0f, 0.0f };
 
     // Wheel-tag body-part selectors used by PrepareIKPart's switch on the part's GetPartType(). These
     // are the asm switch keys; the placeholder EBodyParts enum has no named enumerators, so the keys
@@ -558,21 +577,28 @@ namespace Deformation
         // when the manager header is in-tree.
         (void)lpWheelMgr;
 
-        // Spec bounding box + the initial damage compression scale/limits (asm: GetBoundingBox into a
-        // scratch AABB, then a coin-flip-signed +/-0.30000001 damage-point offset built from a Random
-        // draw, fed to GetInitialCompressionScalesAndLimits).
-        // FLAG: StreamedDeformationSpec::GetBoundingBox + GetInitialCompressionScalesAndLimits use spec
-        // internals not all exposed; the scratch values are pinned and the call kept by name.
+        // ⭐ UN-PINNED 2026-08-14 (deformation-mount wave). The old FLAG pinned the scratch values
+        // and modelled the damage point as a bare +/-0.3 -- the asm (0x82639EA8..0x82639F94) says
+        // it is BBOX-DERIVED: GetBoundingBox over the spec's sensor spheres into a scratch AABB,
+        // then the damage point is a TOP CORNER of that box inset by 0.30000001 (flt_82004740,
+        // image-read), x-side chosen by a Random parity draw (the inlined LCG on the Random seed;
+        // bit set -> the +x corner, clear -> the -x corner with x negated):
+        //   bit==1: (max.x - 0.3,  max.y - 0.0,  max.z - 0.3)         (flt_82001CC0 == 0.0 on y)
+        //   bit==0: (-max.x + 0.3, max.y - 0.0,  max.z - 0.3)         (flt_82020A80 == -0.3)
+        // GetBoundingBox is bodied + mounted (spec TU), so nothing is pinned any more.
+        CgsGeometric::AxisAlignedBox lSensorBBox;
+        mpDeformationSpec->GetBoundingBox(lSensorBBox);
+
         Vector3Plus lv3pCompressionScale_Scratch = { 0.0f, 0.0f, 0.0f, 0.0f };
         Vector3     lvPosLimits = { 0.0f, 0.0f, 0.0f, 0.0f };
         Vector3     lvNegLimits = { 0.0f, 0.0f, 0.0f, 0.0f };
 
-        // The asm's per-driven-point damage-point sign is a Random parity draw (v49 & 1) selecting
-        // +/-0.30000001 on the X lane (asm: 0.30000001 / -0.30000001 build). Faithful in structure.
         const bool lbDamageSignPositive = ((lrRandom.RandomUInt() & 1u) != 0u);
-        Vector3 lDamagePoint = lbDamageSignPositive
-                                 ? Vector3{  0.30000001f, 0.0f,  0.30000001f, 0.0f }
-                                 : Vector3{ -0.30000001f, 0.0f,  0.30000001f, 0.0f };
+        const Vector3 lDamagePoint = lbDamageSignPositive
+            ? Vector3{  lSensorBBox.mMax.x - 0.30000001f, lSensorBBox.mMax.y,
+                        lSensorBBox.mMax.z - 0.30000001f, 0.0f }
+            : Vector3{ -lSensorBBox.mMax.x + 0.30000001f, lSensorBBox.mMax.y,
+                        lSensorBBox.mMax.z - 0.30000001f, 0.0f };
 
         GetInitialCompressionScalesAndLimits(leResetType, lvfTime,
                                              lv3pCompressionScale_Scratch, lvPosLimits, lvNegLimits);
@@ -744,6 +770,354 @@ namespace Deformation
 
         // Final: rebuild the deformed bounding box (asm tail-call UpdateDeformedBBox).
         UpdateDeformedBBox();
+    }
+
+    // =================================================================================================
+    // ResetSensors @ 0x82623D60 (X360, 718 instr) -- ⭐ BODIED 2026-08-14 (deformation-mount wave).
+    // THE spec -> sensor/sphere seeding: without it a registered car is a hollow shell (no spheres
+    // -> no contact tests). The PS3 twin (@0x7446FC, DecFIGS) names the signature verbatim:
+    //   ResetSensors(const Vector3Plus lDamageScale, const Vector3 lPosLimits,
+    //                const Vector3 lNegLimits, const Vector3 lDamagePoint)
+    // (the frozen-header arg names lA..lD are kept; the roles are the PS3 names, in order).
+    //
+    // THREE PHASES, each verified on BOTH console listings:
+    //
+    //  (1) per-sensor seeding (X360 0x82623E44..0x82623F1C): for each of the spec's
+    //      mu8NumDeformationSensors sensors: DeformationSensor::Prepare(&maDeformationSensors[i],
+    //      spec sensor i (inlined checked accessor, :201 assert), &maLocalSensorSpheres[i],
+    //      &maWorldSensorSpheres[i], carTransform-by-value, then the four vector args forwarded
+    //      VERBATIM (vmr v1..v4 restores the original registers). Then the inlined
+    //      ImpulsePasser::SetCollidableBodyMap(spec->mu8SceneIndex (`lbz 0x32(spec)`), &sensor)
+    //      with its own BrnImpulsePasser.cpp:135 bounds assert, and the sensor's volume-instance
+    //      id = (mHandlingBodyID's HIGH dword == the entity word; `clrrdi r10,r10,32`) | sceneIndex
+    //      (`std sensor+0x190` == the promoted mVolInstId; PS3 spells it mVolInstId.muId).
+    //
+    //  (2) per-wheel mapping (0x82623FF4..0x8262468C, 4 wheels): read the wheel's LOCAL position
+    //      (vehicle wheel array; the Wheel.h:412 "Invalid wheel position ... please tell Graham D."
+    //      NaN sweep, fire-and-continue), transform to world by the car transform (vmaddfp
+    //      cascade), find the CLOSEST live sensor by |worldSphereCentre - wheelWorld| (read through
+    //      each sensor's mpWorldSpaceSphere pointer, `lwz sensor+0x1A0`; vmsum3fp128 +
+    //      vrsqrtefp/Newton + vsel zero-guard == guarded sqrt), assert one was found
+    //      (BrnDeformableObject.cpp:911 -- the console composes a multi-line diagnostic into the
+    //      assert buffer; the CONDITION is the tripwire, reproduced with the leading message), and
+    //      write mau8WheelToSensorMap[wheel]. Then append the wheel's own collision sphere at
+    //      maWorldSensorSpheres[numSensors + wheel]:
+    //        centre = wheelWorld + KV_UP * (mScale.x * 0.5) * 0.5   -- KV_UP == unk_82181510,
+    //                 image-read (0, 1, 0, 0); the two 0.5s are vcsxwfp(1,1) splats, kept literal
+    //        radius = mScale.x * 0.5
+    //      where mScale.x is the spec's WheelSpec lane (`spec + 96 + 48*wheel` lane 0, via the
+    //      inlined GetWheelSpec with its :257 "liWheel < eNumWheels" assert).
+    //
+    //  (3) swept-sphere seeding (0x82624690..0x82624880), gated on mbDoSweptSphereTests
+    //      (`lbz this+0x672A`): for each of the numSensors+4 world spheres, the point velocity
+    //      v = linVel + cross(angVel, centre - carPos) (the vpermwi-0x63 cross pair -- PS3 names
+    //      gCrossProductPermuteConstant), then maSweptSpheres[i] = { world sphere verbatim,
+    //      (normalize(v), |v| * KF_CONSOLE_TIMESTEP) } via the inlined SweptSphere::Set pair of
+    //      16-byte stores. KF_CONSOLE_TIMESTEP == flt_82095EE0, image-read 0.016666668 (the
+    //      console's baked 1/60 SIM step -- a source constant, NOT the render-rate coupling).
+    //      The (dir.x, dir.y, dir.z, len) packing is the vperm pair over unk_82CDA3C0/82CDA400
+    //      (image-read byte selectors) + vsldoi-8 merge == exactly that component assembly.
+    //      The console's rsqrt path leaves dir = NaN when v is exactly zero (only the length is
+    //      vsel-guarded); the committed vpu::Normalize guards dir to zero as well -- the guarded
+    //      form is kept (house Normalize family), divergence noted.
+    //
+    // ASSERTS are non-gating tripwires (fire-and-continue), exactly as the asm falls through.
+    // Constants image-verified this wave via x360rd.py: unk_82181510 = (0,1,0,0);
+    // flt_8208F5EC = FLT_MAX (3.4028235e38); flt_82095EE0 = 0.016666668.
+    // =================================================================================================
+    void DeformableObject::ResetSensors(Vector3Plus lA, Vector3 lB, Vector3 lC, Vector3 lD)
+    {
+        // :848 -- the spec must be resolved before sensors can be seeded (fire-and-continue).
+        CGS_ASSERT(mpDeformationSpec != nullptr, "mpDeformationSpec");
+
+        BrnPhysics::Vehicle::VehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
+
+        // The car transform: the asm copies the vehicle's four transform rows (+0x10..+0x40) to
+        // the stack ONCE and passes the copy by value to every sensor Prepare.
+        const Matrix44Affine lWorldTransform = lpVehicle->GetTransform();
+
+        // Sensor count captured once (asm r8/v157); the per-index accessor still asserts per pull.
+        const s32 liNumSensors = static_cast<s32>(mpDeformationSpec->mu8NumDeformationSensors);
+
+        // ---- phase 1: per-sensor Prepare + impulse-passer map + volume-instance id --------------
+        for (s32 liSensor = 0; liSensor < liNumSensors; ++liSensor)
+        {
+            // Inlined StreamedDeformationSpec::GetDeformationSensorSpec (its own :201 assert).
+            const SensorSpec* lpSensorSpec = mpDeformationSpec->GetDeformationSensorSpec(liSensor);
+
+            // The sensor's collidable-body slot (sensor spec +0x32 == mu8SceneIndex, `lbz 0x32`).
+            const u8 lu8SceneIndex = lpSensorSpec->GetSceneIndex();
+
+            DeformationSensor& lrSensor = maDeformationSensors[liSensor];
+            lrSensor.Prepare(lpSensorSpec, &maLocalSensorSpheres[liSensor],
+                             &maWorldSensorSpheres[liSensor], lWorldTransform,
+                             lA, lB, lC, lD);   // the four args forwarded verbatim (vmr v1..v4)
+
+            // Inlined ImpulsePasser::SetCollidableBodyMap (its own :135 bounds assert).
+            mImpulsePasser.SetCollidableBodyMap(static_cast<s32>(lu8SceneIndex), &lrSensor);
+
+            // The sensor's volume-instance id: the handling-body ENTITY word (high dword of the
+            // 8-byte id) keyed with this sensor's collidable-body index (`clrrdi` + `or` + `std`).
+            lrSensor.mVolInstId.muId =
+                (static_cast<u64>(mHandlingBodyID) & 0xFFFFFFFF00000000ull)
+                | static_cast<u64>(lu8SceneIndex);
+        }
+
+        // ---- phase 2: closest sensor per wheel + the four appended wheel spheres ----------------
+        for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+        {
+            const Vehicle::Wheel& lrWheel =
+                lpVehicle->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(liWheel));
+
+            // Wheel.h:412 NaN sweep over the wheel's local position (vspltw + vcmpeqfp. per lane).
+            CGS_ASSERT(lrWheel.mPosition.x == lrWheel.mPosition.x &&
+                       lrWheel.mPosition.y == lrWheel.mPosition.y &&
+                       lrWheel.mPosition.z == lrWheel.mPosition.z,
+                       "Invalid wheel position: , please tell Graham D.");   // Wheel.h:412
+
+            // Wheel world position: the rotation rows scaled by the local lanes, seeded with the
+            // translation row (the console's vmaddfp cascade over rows +0x10..+0x40).
+            const Vector3 lvWheelWorld{
+                lWorldTransform.xAxis.x * lrWheel.mPosition.x + lWorldTransform.yAxis.x * lrWheel.mPosition.y
+                    + lWorldTransform.zAxis.x * lrWheel.mPosition.z + lWorldTransform.wAxis.x,
+                lWorldTransform.xAxis.y * lrWheel.mPosition.x + lWorldTransform.yAxis.y * lrWheel.mPosition.y
+                    + lWorldTransform.zAxis.y * lrWheel.mPosition.z + lWorldTransform.wAxis.y,
+                lWorldTransform.xAxis.z * lrWheel.mPosition.x + lWorldTransform.yAxis.z * lrWheel.mPosition.y
+                    + lWorldTransform.zAxis.z * lrWheel.mPosition.z + lWorldTransform.wAxis.z,
+                0.0f };
+
+            // Nearest live sensor by WORLD sphere centre distance -- read through each sensor's
+            // own mpWorldSpaceSphere pointer exactly as the asm does (`lwz sensor+0x1A0`).
+            f32 lfMinDistance = 3.4028235e38f;   // flt_8208F5EC == FLT_MAX seed
+            u8  lu8MinIndex   = 0xFFu;           // li r15, 0xFF sentinel
+            for (s32 liSensor = 0; liSensor < liNumSensors; ++liSensor)
+            {
+                const Sphere* lpWorldSphere = maDeformationSensors[liSensor].GetWorldSpaceSphere();
+                const Vector4& lrCentre = lpWorldSphere->mPositionRadius;
+                const Vector3 lvDelta{ lrCentre.x - lvWheelWorld.x, lrCentre.y - lvWheelWorld.y,
+                                       lrCentre.z - lvWheelWorld.z, 0.0f };
+                // vmsum3fp128 + vrsqrtefp/2xNewton + vsel zero-guard == the guarded Magnitude.
+                const f32 lfDistance = vpu::Magnitude(lvDelta);
+                if (lfDistance < lfMinDistance)
+                {
+                    lfMinDistance = lfDistance;
+                    lu8MinIndex   = static_cast<u8>(liSensor);
+                }
+            }
+
+            // :911 -- the console composes "Failed to find closest sensor to wheel\n" + a full
+            // diagnostic dump (wheel local pos / index / car transform / NumSensors /
+            // lu8MinDistanceSensorIndex) into the assert buffer. The CONDITION is the tripwire;
+            // fire-and-continue.
+            CGS_ASSERT(static_cast<s32>(lu8MinIndex) < liNumSensors,
+                       "Failed to find closest sensor to wheel\n");   // BrnDeformableObject.cpp:911
+
+            mau8WheelToSensorMap[liWheel] = lu8MinIndex;   // stbx this+0x66E0+wheel
+
+            // Inlined GetWheelSpec (its own :257 "liWheel < eNumWheels" assert) -> mScale lane 0
+            // (`spec + 96 + 48*wheel`, the WheelSpec's mScale.x).
+            const f32 lfScale = mpDeformationSpec->GetWheelSpec(liWheel)->mScale.x;
+
+            // The appended wheel sphere: centre raised along KV_UP (unk_82181510 == (0,1,0,0),
+            // image-read) by (scale*0.5)*0.5; radius = scale*0.5 (the two vrlimi w-lane writes,
+            // second wins).
+            Vector4& lrWheelSphere = maWorldSensorSpheres[liNumSensors + liWheel].mPositionRadius;
+            lrWheelSphere.x = lvWheelWorld.x;
+            lrWheelSphere.y = lvWheelWorld.y + (lfScale * 0.5f) * 0.5f;
+            lrWheelSphere.z = lvWheelWorld.z;
+            lrWheelSphere.w = lfScale * 0.5f;
+        }
+
+        // ---- phase 3: swept-sphere seeding (gated on mbDoSweptSphereTests, `lbz +0x672A`) -------
+        if (mbDoSweptSphereTests)
+        {
+            // flt_82095EE0, image-read: the console's baked 1/60 sim step (a source constant).
+            const f32 KF_CONSOLE_TIMESTEP = 0.016666668f;
+
+            const Vector3& lvCarPos     = lpVehicle->GetPosition();          // rows base +0x40
+            const Vector3& lvLinearVel  = lpVehicle->GetLinearVelocity();    // +0x50
+            const Vector3& lvAngularVel = lpVehicle->GetAngularVelocity();   // +0x60
+
+            // Sensor spheres (loop A) then the four wheel spheres (loop B) -- identical math, one
+            // contiguous index range over maWorldSensorSpheres / maSweptSpheres.
+            for (s32 liSphere = 0; liSphere < liNumSensors + 4; ++liSphere)
+            {
+                const Vector4& lrSphere = maWorldSensorSpheres[liSphere].mPositionRadius;
+
+                // r = centre - carPos; v = linVel + cross(angVel, r) (the vpermwi-0x63 cross pair;
+                // PS3 names gCrossProductPermuteConstant).
+                const Vector3 lvR{ lrSphere.x - lvCarPos.x, lrSphere.y - lvCarPos.y,
+                                   lrSphere.z - lvCarPos.z, 0.0f };
+                const Vector3 lvPointVel = vpu::Add(lvLinearVel, vpu::Cross(lvAngularVel, lvR));
+
+                // vmsum3fp128 + vrsqrtefp/2xNewton: speed (vsel zero-guarded) + direction (the
+                // committed Normalize family's guard extends to the direction; see banner).
+                const f32     lfSpeed = vpu::Magnitude(lvPointVel);
+                const Vector3 lvDir   = vpu::Normalize(lvPointVel);
+
+                // The two packed 16-byte stores (inlined SweptSphere::Set): the world sphere
+                // verbatim, then (dir.xyz, speed * timestep) -- the vperm/vsldoi component
+                // assembly over unk_82CDA3C0/82CDA400, image-verified as exactly this packing.
+                maSweptSpheres[liSphere].Set(
+                    Vector3Plus{ lrSphere.x, lrSphere.y, lrSphere.z, lrSphere.w },
+                    Vector3Plus{ lvDir.x, lvDir.y, lvDir.z, lfSpeed * KF_CONSOLE_TIMESTEP });
+            }
+        }
+    }
+
+    // =================================================================================================
+    // RemovePhysicalPartsAndJoints @ 0x82625250 (155 instr) -- ⭐ BODIED 2026-08-14
+    // (deformation-mount wave). Two passes + the count zeroing, asm-complete:
+    //
+    //  (1) for each live physical part (mau8PhysicalBodyPartPoolIndex[0..mi16NumPhysicalParts)):
+    //      part = Pool::GetPart (via the manager -- pool at manager+0; host path is the inline
+    //      GetPartFromIndex); partIdx = (packed handle >> 32) & 0x3FF; assert
+    //      maPartStates[partIdx] is HINGED(3) or DETATCHED(4) (":2594", fire-and-continue);
+    //      maPartStates[partIdx] = ATTACHED_IK(2); Pool::RemovePart(input, scene, poolSlot);
+    //      and if the "deformation parts enabled" debug flag (byte_82F2A345) is CLEAR,
+    //      maPartStates[partIdx] = NON_DETACHABLE(1) instead (the flag is carried as the
+    //      file-static gbDeformationPartsEnabled above, default true == the console's set state,
+    //      so the re-write arm is compiled but never taken -- exactly the console default).
+    //  (2) consistency sweep over maPartStates[0..miNumIKBodyParts): any state still HINGED or
+    //      DETATCHED fires the composed "Part: %d State: %d" assert (":2609", tripwire only).
+    //  tail: mi16NumPhysicalParts = 0; mi16NumHingedParts = 0.
+    // =================================================================================================
+    void DeformableObject::RemovePhysicalPartsAndJoints(
+        CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpScene,
+        DetachedPartManager* lpPartMgr)
+    {
+        // ---- pass 1: release every live physical part back to the pool --------------------------
+        for (s16 li16Part = 0; li16Part < mi16NumPhysicalParts; ++li16Part)
+        {
+            const u8 lu8PoolSlot = mau8PhysicalBodyPartPoolIndex[li16Part];
+            PhysicalBodyPart* lpPart = lpPartMgr->GetPartFromIndex(lu8PoolSlot);
+
+            const u32 luPartIndex =
+                static_cast<u32>(lpPart->GetContactVolumeInstanceId().muId >> 32) & 0x3FFu;
+
+            // ":2594" tripwire -- the state must be HINGED or DETATCHED to be physical at all.
+            CGS_ASSERT(maPartStates[luPartIndex] == static_cast<u8>(E_PART_STATE_HINGED) ||
+                       maPartStates[luPartIndex] == static_cast<u8>(E_PART_STATE_DETATCHED),
+                       "maPartStates[ liPartIndex ] == E_PART_STATE_HINGED || "
+                       "maPartStates[ liPartIndex ] == E_PART_STATE_DETATCHED");
+
+            maPartStates[luPartIndex] = static_cast<u8>(E_PART_STATE_ATTACHED_IK);   // stbx 2
+
+            // Release the pool slot (posts the rigid-body remove + scene teardown; the manager
+            // pointer IS the pool on the console -- host path is the pool via the manager).
+            lpPartMgr->RemovePart(lpInput, lpScene, lu8PoolSlot);
+
+            if (!gbDeformationPartsEnabled)
+                maPartStates[luPartIndex] = static_cast<u8>(E_PART_STATE_NON_DETACHABLE);   // stbx 1
+        }
+
+        // ---- pass 2: consistency sweep (tripwire only; the console composes a diagnostic) -------
+        for (s32 liPart = 0; liPart < miNumIKBodyParts; ++liPart)
+        {
+            CGS_ASSERT(maPartStates[liPart] != static_cast<u8>(E_PART_STATE_HINGED) &&
+                       maPartStates[liPart] != static_cast<u8>(E_PART_STATE_DETATCHED),
+                       "Part: State: ");   // the ":2609" composed "Part: %d State: %d" dump
+        }
+
+        // ---- tail: no physical or hinged parts remain -------------------------------------------
+        mi16NumPhysicalParts = 0;   // sth 0 -> +0x66AE
+        mi16NumHingedParts   = 0;   // sth 0 -> +0x66B0
+    }
+
+    // =================================================================================================
+    // ResetJointVelocities @ 0x825DF810 (34 instr) -- ⭐ BODIED 2026-08-14 (deformation-mount wave).
+    // For each LIVE physical part (mau8PhysicalBodyPartPoolIndex[0..mi16NumPhysicalParts)): fetch
+    // the pooled part (Pool::GetPart via the manager -- the console passes the manager pointer
+    // straight as the pool `this`, mPartPool being the manager's one member at +0; the host path
+    // is the header-inline GetPartFromIndex forward), derive the part's own IK-part index from
+    // the packed handle (`ld part+0x1D0; srdi 32; & 0x3FF` == the entity word's low 10 bits), and
+    // if this object's maPartStates[index] == E_PART_STATE_HINGED(3), zero the part's JOINT
+    // VELOCITY -- the w lane of mLocalGraphicsPositionPlusJointVelocity, xyz KEPT (`vrlimi128
+    // v13, v0, 1, 0`; PS3 @0x6F8E64 vperm<0,1,2,7> vs zeros agrees). ⚠️ The walls-wave census
+    // phrased this as "zero the xyz keeping w" -- BOTH console listings say the opposite; the w
+    // lane IS the packed joint velocity, so the semantic is simply SetJointVelocity(0).
+    // The asm re-reads mi16NumPhysicalParts each iteration; kept.
+    // =================================================================================================
+    void DeformableObject::ResetJointVelocities(DetachedPartManager* lpPartMgr)
+    {
+        for (s16 li16Part = 0; li16Part < mi16NumPhysicalParts; ++li16Part)
+        {
+            PhysicalBodyPart* lpPart =
+                lpPartMgr->GetPartFromIndex(mau8PhysicalBodyPartPoolIndex[li16Part]);
+
+            // The part's IK-part index out of the packed handle (entity word low 10 bits). Read
+            // through the public packed-id accessor (the console `ld`s the same 8 bytes inline).
+            const u32 luPartIndex =
+                static_cast<u32>(lpPart->GetContactVolumeInstanceId().muId >> 32) & 0x3FFu;
+
+            if (maPartStates[luPartIndex] == static_cast<u8>(E_PART_STATE_HINGED))
+            {
+                lpPart->SetJointVelocity(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+            }
+        }
+    }
+
+    // =================================================================================================
+    // GetInitialCompressionScalesAndLimits @ 0x825DF6F8 -- ⭐ BODIED 2026-08-14 (deformation-mount
+    // wave). ⚠️ The X360 address is an .ida-exports HOLE (no JSON): recovered by decoding the `bl`
+    // at ResetDeformation+0x238 (0x82639F98) out of the image (x360rd), then disassembling
+    // 0x825DF6F8..0x825DF810 with ppcdis.py -- absent-from-JSON is not absent-from-image. The PS3
+    // twin @0x6C90C0 names everything: (leDeformationType, VecFloat lvfInitialDamage,
+    // Vector3Plus& lv3pCompressionScale_Scratch, Vector3& lvPosLimits, Vector3& lvNegLimits) --
+    // the frozen header's lvfTime/lrScales/lrLimitA/lrLimitB param names are KEPT; the roles are
+    // the PS3 names in order.
+    //
+    //   * ratio select by reset type (both consoles: 0 -> EVENT, 1 -> CAR_SELECT, else DEFAULT;
+    //     the three KV3P_* dynamic-init vectors recovered above);
+    //   * lrScales = ratio * initialDamage on ALL FOUR lanes (the two vperm<0,1,2,7> passes are
+    //     just the xyz/w lane assembly of that one product);
+    //   * assert the vehicle physics is attached (BrnDeformableObject.cpp:402, fire-and-continue);
+    //   * limits from the live attribs' drive-time deform band, A = mpAttribs->mBaseAttribs
+    //     .mDrivetimeDeformLimits (vehicle+0x720 -> attribs+0x40; the AttribSys names say exactly
+    //     what the lanes are: x = DriveTimeDeformLimitX, y = NegY, z = PosZ, w = NegZ):
+    //       lvPosLimits = ( A.x, 0,   A.z, A.x)     (vperm<0,5,0,0> + <0,1,6,3> over splats)
+    //       lvNegLimits = (-A.x, -A.y, -A.w, -A.x)  (the vxor sign-mask pass, same perms)
+    //     i.e. symmetric lateral band, no upward crush, PosZ forward / NegZ backward. The trailing
+    //     w lanes are exactly what the console perms leave there.
+    // =================================================================================================
+    void DeformableObject::GetInitialCompressionScalesAndLimits(DeformationResetType leResetType,
+                                                                VecFloat lvfTime, Vector3Plus& lrScales,
+                                                                Vector3& lrLimitA, Vector3& lrLimitB)
+    {
+        // Ratio select (0 -> EVENT, 1 -> CAR_SELECT, else DEFAULT).
+        const Vector3Plus& lrRatio =
+            (static_cast<s32>(leResetType) == 0) ? KV3P_EVENT_COMPRESSION_SCRATCH_RATIO
+          : (static_cast<s32>(leResetType) == 1) ? KV3P_CAR_SELECT_COMPRESSION_SCRATCH_RATIO
+                                                 : KV3P_DEFAULT_COMPRESSION_SCRATCH_RATIO;
+
+        // lrScales = ratio * initialDamage (vmaddfp ratio*damage + the two lane-assembly perms).
+        const f32 lfDamage = lvfTime.x;   // the VecFloat's broadcast lane (house idiom)
+        lrScales.x = lrRatio.x * lfDamage;
+        lrScales.y = lrRatio.y * lfDamage;
+        lrScales.z = lrRatio.z * lfDamage;
+        lrScales.w = lrRatio.w * lfDamage;
+
+        BrnPhysics::Vehicle::VehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
+        // :402 -- fire-and-continue tripwire (the asm re-reads the pointer and carries on).
+        CGS_ASSERT(lpVehicle != nullptr, "mVehicleBody.GetVehiclePhysics() != NULL");
+
+        // [marked deviation, 2026-08-14] mpAttribs NULL-guard -- same root cause as
+        // CalculateDriveTimeLimits' (per-car VehiclePhysics::Construct still gated behind
+        // PrepareData, so the CREATE-time reset can run before SetAttributes seats the pointer).
+        // Zero limits until seated; the console never sees a null here.
+        if (lpVehicle == nullptr || lpVehicle->mpAttribs == nullptr)
+        {
+            lrLimitA = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            lrLimitB = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            return;
+        }
+
+        // A = the live drive-time deform band (vehicle+0x720 -> attribs+0x40).
+        const Vector4& lrA = lpVehicle->mpAttribs->mBaseAttribs.mDrivetimeDeformLimits;
+
+        lrLimitA = Vector3{  lrA.x, 0.0f,   lrA.z,  lrA.x };   // pos limits
+        lrLimitB = Vector3{ -lrA.x, -lrA.y, -lrA.w, -lrA.x };  // neg limits
     }
 
     // =================================================================================================

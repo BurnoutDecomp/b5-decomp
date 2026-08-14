@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                              // Vector3, Vector3Plus, Matrix44Affine, VecFloat
+#include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"  // CgsSceneManager::VolumeInstanceId (mVolInstId, DWARF :269)
 #include "GameSource/Physics/ContactSpies/BrnContactId.h"  // BrnPhysics::ContactId
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnCollidableBody.h"          // CollidableBody (canonical base) + ImpulseParams
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnSharedDeformationEnums.h"  // ENextSensorDirection
@@ -172,8 +173,16 @@ namespace Deformation
 
 		u32 mu32PostPhysicsReset;       // console +0x180 (384) -- zeroed (overlay; DWARF mContactSpy/mVolInstId region)
 
-		// Opaque span between mu32PostPhysicsReset end (+0x184) and the count (+0x198).
-		u8 maReserved3[0x198 - 0x184];
+		// Opaque span between mu32PostPhysicsReset end (+0x184) and mVolInstId (+0x190).
+		u8 maReserved3[0x190 - 0x184];
+
+		// ⭐ PROMOTED out of the opaque span 2026-08-14 (deformation-mount wave): the DWARF
+		// mVolInstId (:269), console +0x190. DeformableObject::ResetSensors @0x82623D60 writes it
+		// per sensor: `ld r10,0x6710(this)` (the object's 8-byte mHandlingBodyID) -> keep the HIGH
+		// dword (`clrrdi r10,r10,32` == the entity word) -> `or` in the sensor's collidable-body
+		// index -> `std 0x1AE0(r7)` == sensor+0x190. The PS3 twin (@0x7446FC) names the member
+		// verbatim: v34->mVolInstId.muId = (entityWord) | sceneIndex.
+		CgsSceneManager::VolumeInstanceId mVolInstId;   // console +0x190 (DWARF :269)
 
 		// ---- DWARF trailing members (console +0x198 onward) ------------------------------------
 		// DWARF :270 miNumStoredContacts. KEPT under the committed name mi32NumStoredContacts (the

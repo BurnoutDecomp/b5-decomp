@@ -255,16 +255,9 @@ namespace Deformation
     // ReadPotentialVehicleWorldContact). Verbatim. Fold back when this TU mounts.
     // ==========================================================================================
     // ==========================================================================================
-    // GetPlayerCarModel @ 0x825B44F0  (DWARF spelling truncates to "GetPlaye")
-    //
-    // The player car's deformable model. Asserts the player's deformation model is active
-    // (miPlayerModelIndex >= 0), then returns &mpaModels[miPlayerModelIndex].
+    // GetPlayerCarModel @ 0x825B44F0 -- ⭐ MOVED 2026-08-14 (deformation-mount wave) to the now-
+    // MOUNTED home TU BrnDeformationManager.cpp (it was the one symbol the mount needed from this
+    // still-unmounted slice). Verbatim. Fold back when this TU mounts.
     // ==========================================================================================
-    DeformableObject* DeformationManager::GetPlayerCarModel()
-    {
-        CGS_ASSERT(miPlayerModelIndex >= 0,
-                   "Trying to access deformable object for player when it isn't active");
-        return &mpaModels[miPlayerModelIndex];
-    }
 }
 }

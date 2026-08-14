@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSweptSphere.h"                   // CgsGeometric::SweptSphere
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"                      // CgsSceneManager::VolumeInstanceId
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"              // VehiclePhysics (mfSpeedMPH/IsCrashing/GetTransform/mpAttribs)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                                // gpDebugPrint / gxMessageFilterFlags (the null-attribs gate)
 
 // ============================================================================================
 // GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject_BBox.cpp
@@ -476,6 +477,29 @@ namespace Deformation
 		// limits = mpAttribs->mBaseAttribs.mDrivetimeDeformLimits (`*(vehiclePhysics+0x720) + 0x40`).
 		const char* lpAttribs =
 			*reinterpret_cast<const char* const*>(reinterpret_cast<const char*>(lpPhysics) + KU_VEHICLE_ATTRIBS_PTR_OFFSET);
+		// [marked deviation, 2026-08-14 deformation-mount wave] mpAttribs NULL-guard. On the
+		// console mpAttribs is never null here (VehiclePhysics::Construct seeds it at the embedded
+		// attrib set before any car exists); on this build the per-car Construct chain is still
+		// gated behind VehicleManager::PrepareData, so the CREATE-time ResetDeformation reaches
+		// this read before SetAttributes has seated the pointer (boot-measured AV READING 0x40,
+		// 2026-08-14 04:56 run). Zero limits = no widening, loudly, once; real attribs apply on
+		// the next reset once seated.
+		if (lpAttribs == 0)
+		{
+			static bool sbLoggedNullAttribsGate = false;
+			if (!sbLoggedNullAttribsGate)
+			{
+				sbLoggedNullAttribsGate = true;
+				if (CgsDev::Message::gxMessageFilterFlags & 1)
+					*CgsDev::Log::gpDebugPrint
+						<< "conductor gate: CalculateDriveTimeLimits with NULL mpAttribs (per-car "
+						   "VehiclePhysics::Construct still gated in PrepareData) -- drive-time "
+						   "limits left unwidened [FLAG PC boot gate]. Reported once\n";
+			}
+			mDriveTimeBBoxLimitMin = lvMin;
+			mDriveTimeBBoxLimitMax = lvMax;
+			return;
+		}
 		const Vector4& lvLimits =
 			*reinterpret_cast<const Vector4*>(lpAttribs + KU_DRIVETIME_DEFORM_LIMITS_OFFSET);
 

@@ -226,6 +226,15 @@ namespace PhysicsSimulationIO
     const InputBuffer::InRemoveRigidBodyQueue* InputBuffer::GetRemoveRigidBodyQueue() const
     { CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n"); return &mRemoveRigidBodyQueue; }
 
+    // ⭐ ADDED 2026-08-14 (deformation-mount wave). The WRITE-side twin @0x825BCF58 (an unnamed
+    // sub in the exports; pulled + decoded this wave): write-lock guard firing "Not locked for
+    // writing\n" (CgsPhysicsSimulationModuleIO.h:1080, the address baked in its own assert),
+    // then `addi r3, this, 0x196A0` == &mRemoveRigidBodyQueue (+104096). Same shape as the
+    // GetAddContactQueue write-side twin above. Caller: PhysicalBodyPartPool::RemovePart
+    // @0x8260CA6C.
+    InputBuffer::InRemoveRigidBodyQueue* InputBuffer::GetRemoveRigidBodyQueue()
+    { CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n"); return &mRemoveRigidBodyQueue; }
+
     const InputBuffer::InRemoveAllRigidBodiesQueue* InputBuffer::GetRemoveAllRigidBodiesQueue() const
     { CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n"); return &mRemoveAllRigidBodiesQueue; }
 

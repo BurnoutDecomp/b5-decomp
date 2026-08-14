@@ -91,8 +91,12 @@ namespace Deformation
         void SetWeightA(f32);
         void SetWeightB(f32);
         void SetDetachThreshold(f32);
-        f32  GetDetachThresholdSquared() const;
         s32  GetIKPartJointIndex() const;
+
+        // ⭐ HEADER-INLINE (2026-08-14, deformation-mount wave): no X360/PS3 export symbol exists
+        // (console-inline); IKBodyPart::DetachablePart @0x825C13F8 reads it as `*(spec+56)` ==
+        // mfDetachThresholdSquared, via TagPoint::GetDetachThresholdSquared's forward.
+        f32  GetDetachThresholdSquared() const { return mfDetachThresholdSquared; }
     };
 }
 }

@@ -122,9 +122,17 @@ namespace Deformation
 
         // BrnDetachedPartManager.h:81. Release the part in slot lu8Index back to the pool,
         // tearing down its sim + scene presence.
+        // ⭐ INLINE-FORWARD 2026-08-14 (deformation-mount wave), the GetPartFromIndex evidence
+        // pattern above: the X360 has no out-of-line manager body -- DeformableObject::
+        // RemovePhysicalPartsAndJoints @0x82625300 calls the POOL's RemovePart @0x8260CA30
+        // with the MANAGER address as `this` (mPartPool is this manager's one member, at +0),
+        // i.e. the wrapper was a header-inline forward.
         void RemovePart(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
                         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
-                        u8 lu8Index);
+                        u8 lu8Index)
+        {
+            mPartPool.RemovePart(lpSimInput, lpSceneInterface, lu8Index);
+        }
 
         // ----- output --------------------------------------------------------------------
 

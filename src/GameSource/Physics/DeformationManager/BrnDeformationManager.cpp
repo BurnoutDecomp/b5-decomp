@@ -190,6 +190,12 @@ namespace Deformation
         }
 
         CGS_ASSERT(mpaModels != nullptr, "mpaModels != NULL");
+        // [marked deviation, 2026-08-14] the console has no null path here (its carve cannot
+        // fail); on the host a failed carve would fall through into the ClearVariables loop and
+        // AV (boot-measured before the rw-linear host headroom landed in BrnGameDataModule.cpp).
+        // Guard the host: report not-ready so the prepare FSM holds this stage.
+        if (mpaModels == nullptr)
+            return false;
 
         // Reset every model's per-object scratch to a quiescent state, then ClearVariables. The
         // X360 zeroes a small per-model header (the active flag / culling group / a few scratch
@@ -533,55 +539,28 @@ namespace Deformation
     }
 
     // -----------------------------------------------------------------------------------
-    // OutputData  @0x826225D8
-    //
-    // Output every live model's deformation/skinned/locator state into the two output interfaces,
-    // emit the detached-part events, output every live model's wheel + joint state, then the
-    // sensor state.
+    // OutputData @0x826225D8 -- ⭐ SPLIT OUT 2026-08-14 (deformation-mount wave) to the
+    // UNMOUNTED slice BrnDeformationManager_Output.cpp, exactly as the walls-wave census
+    // prescribed: this TU mounts this wave, and OutputData's own closure (OutputSensorState
+    // @0x82605618 -- an X360 EXPORT HOLE, PS3 0x6F3E10; UpdateAndOutputJointStates @0x82609AE8;
+    // OutputWheelData @0x82608E28; DetachedPartManager::OutputEvents -> pool OutputEvents
+    // @0x8260DBE8) is a later wave. Its conductor gate in BrnPhysicsConductorGates.cpp still
+    // carries the runtime seam; mounting the _Output slice DELETES that gate (LNK2005 says so).
     // -----------------------------------------------------------------------------------
-    void DeformationManager::OutputData(DeformationOutputInterfaceForEntityModules* lpOutputForEntityModules,
-                                        DeformationOutputInterface* lpOutput)
+
+    // ==========================================================================================
+    // GetPlayerCarModel @ 0x825B44F0  (DWARF spelling truncates to "GetPlaye")
+    // ⭐ MOVED HERE 2026-08-14 (deformation-mount wave) from the still-unmounted
+    // BrnDeformationManager_Contacts.cpp -- this TU mounts this wave and the mount needs it.
+    //
+    // The player car's deformable model. Asserts the player's deformation model is active
+    // (miPlayerModelIndex >= 0), then returns &mpaModels[miPlayerModelIndex].
+    // ==========================================================================================
+    DeformableObject* DeformationManager::GetPlayerCarModel()
     {
-        // First pass: for every live model slot, the X360 pushes its skinned-model base id +
-        // skin/locator outputs into the entity-module + output interfaces, asserting the
-        // destination count stays < 28 before each of three pushes.
-        //
-        // FLAG (GROW DEFERRAL -- NOT fabricated, NOT yet reproduced): the per-model skinned/locator
-        // records the X360 copies are interior DeformableObject fields, and the destination tables
-        // on the output interfaces are an opaque slice in the current reconstruction
-        // (DeformationOutputInterfaceForEntityModules is a reserved blob; DeformationOutputInterface
-        // does not yet model the skin/locator tables). Because those tables are not yet homed, the
-        // three count-bound asserts AND the table writes are deliberately NOT emitted here -- only
-        // the bit-walk is present. The three asserts to reinstate, in X360 order, are:
-        //   1. "miNumSkinnedModels < (int32_t)KU_MAX_DEFORMATION_MODELS"  (BrnDeformationOutputInterface.h:622)
-        //   2. "miNumLocatorOutputs < (int32_t)KU_MAX_DEFORMATION_MODELS" (BrnDeformationOutputInterface.h:634)
-        //   3. "miNumLocatorOutputs < (int32_t)KU_MAX_DEFORMATION_MODELS" (BrnDeformationOutputInterface.h:500)
-        // GROW: reinstate the asserts + the three table writes when the output-interface tables are homed.
-        for (s32 liModelIndex = mModelsAdded.GetFirstNonZeroBit();
-             liModelIndex != -1;
-             liModelIndex = mModelsAdded.GetNextNonZeroBit(liModelIndex))
-        {
-            (void)liModelIndex;
-        }
-
-        // Emit the detached-PART render + current-position events for every live part.
-        mDetachedPartManager.OutputEvents(lpOutputForEntityModules, lpOutput);
-
-        // Second pass: for every live model slot, output its wheel data + update/output its joint
-        // states. (The X360 inlines a per-model wheel-direction normalisation immediately before
-        // OutputWheelData; that precompute reads interior DeformableObject wheel-record fields and is
-        // folded into the homed OutputWheelData call.)
-        for (s32 liModelIndex = mModelsAdded.GetFirstNonZeroBit();
-             liModelIndex != -1;
-             liModelIndex = mModelsAdded.GetNextNonZeroBit(liModelIndex))
-        {
-            mpaModels[liModelIndex].OutputWheelData(liModelIndex, lpOutputForEntityModules,
-                                                    &mDetachedWheelManager);
-            mpaModels[liModelIndex].UpdateAndOutputJointStates(lpOutput, &mDetachedPartManager);
-        }
-
-        // Finally, output every live model's sensor state into the output interface.
-        OutputSensorState(lpOutput);
+        CGS_ASSERT(miPlayerModelIndex >= 0,
+                   "Trying to access deformable object for player when it isn't active");
+        return &mpaModels[miPlayerModelIndex];
     }
 
     // ⚠️ DeformationManager::_AssertLayout IS NOT HOMED HERE. This TU is UNMOUNTED (see
