@@ -630,6 +630,13 @@ namespace Vehicle
         // KVF_AI_CRASH_SLOWMO_FACTOR (the AI crash slow-motion). Read by IsInAICrashSlowMo (:292).
         bool mbAISlowMo;
 
+        // ⭐ 2026-08-14 (walls leg 4): named view of the +0x1434 byte for DeformableObject::Update's
+        // slow-mo timestep gate (the console reads the byte directly; accessor per the
+        // GetHandlingBodyIdHighByte precedent).
+    public:
+        bool IsAISlowMo() const { return mbAISlowMo; }
+    private:
+
         // @+0x1435 (DWARF :410). Latched by VehicleManager::GetUpdatedVehicleBodies once a slow-mo
         // frame's state has been written back into RenderWare, so it is written at most once per
         // slow-mo episode. Accessors SetWrittenIntoRWInSlowMo / GetWrittenIntoRWInSlowMo (:296/:300).

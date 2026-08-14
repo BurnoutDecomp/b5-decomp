@@ -122,7 +122,11 @@ namespace rw { class IResourceAllocator; }   // Prepare's allocator arg (DWARF r
 
 namespace CgsGeometric
 {
-    class Box;          // GetDeformedBBox out-param (DWARF CgsGeometric::Box*); no CgsBox.h in-tree -> forward-decl
+    struct Box;         // GetDeformedBBox out-param (DWARF CgsGeometric::Box*). ⭐ 2026-08-14 (walls
+                        // leg 4): `class` -> `struct` -- the provisional home (CgsPrimitivePairList
+                        // Builder.h) and BrnDeformableObject.h both say `struct`; the `class` here
+                        // made GetDeformedBBox mangle PEAV vs the PEAU definition (the shadowing-
+                        // redeclaration/mangle-fork shape; the _Contacts.cpp trial link found it).
     struct Sphere;      // GetSpheresForCar element (DWARF Sphere)
     struct SweptSphere; // GetSweptSpheresForCar element (DWARF SweptSphere)
 }

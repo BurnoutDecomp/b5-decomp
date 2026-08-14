@@ -1,5 +1,12 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"
 
+#include <algorithm>   // std::sort (the exported std::_Sort<ContactTime*> -- walls leg 4)
+
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                       // gpDebugPrint / gxMessageFilterFlags (walls leg 4 gates)
+#include "GameSource/Physics/BrnPhysicsModuleIO.h"                               // PhysicsModuleIO::OutputBuffer (obj Update params, walls leg 4)
+#include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"     // PhysicsModuleIO::PotentialContactInterface (walls leg 4)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface::SetEntityRadius (walls leg 4)
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"  // CgsGeometric::AxisAlignedBox
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu::{Dot, Mult, Subtract, ...}
@@ -84,11 +91,13 @@ namespace Deformation
         // per-direction unit vector (the switch at 0x82607BAC). KI_NUM_APPLY_DIRECTIONS == 6.
         const s32 KI_NUM_APPLY_DIRECTIONS = 6;
 
-        // FLAGGED-0 PLACEHOLDER for the per-direction signed body-axis basis the apply switch loads
-        // (&w::math::vpu::detail::gIVector and the &unk_82181510 / &unk_82181520 +/-axis rows). One
-        // 16-byte vector per direction. Honest zeros (NEVER fabricated); the indexing shape is exact.
-        // Direction 0 is the identity/zero seed (LABEL_21 vmr v0,v13).
-        const Vector3 KsaApplyDirection[KI_NUM_APPLY_DIRECTIONS] = {};
+        // ⭐⭐ TABLE RETIRED 2026-08-14 (walls leg 4): the flagged-zero KsaApplyDirection placeholder
+        // is the shared BrnPhysics::Deformation::KA_IMPULSE_DIRECTIONS (BrnCollidableBody.cpp) --
+        // the PS3 exports name the global, its accessor AND the initializer that writes the six
+        // signed unit body axes in ENextSensorDirection order. With the zero rows every projection
+        // in the six-direction loop was 0 -> the loop never fired and the banked vehicle impulse
+        // was identically zero (the silent-drop shape). The reference below aliases the real table.
+        const Vector3 (&KsaApplyDirection)[KI_NUM_APPLY_DIRECTIONS] = KA_IMPULSE_DIRECTIONS;
 
         // FLAGGED-0 PLACEHOLDERS for the friction / limit / scale rows the resolved world impulse is
         // shaped by after GetImpulsesFromLocalImpulse (&unk_82FB95C0 / &unk_82FB8330 / &unk_82FB9D30).
@@ -380,13 +389,13 @@ namespace Deformation
         for ( s32 li = 0; li < liNumSensors; ++li )
         {
             DeformationSensor& lrSensor = maDeformationSensors[li];
-            lrSensor.mfMaxPointDisplacement = 100.0f;   // sensor +280
+            lrSensor.mImpulseContact.mfImpactTimeInFrame = 100.0f;   // sensor +280 -- DISARM the impulse record (walls leg 4: the old overlay name mfMaxPointDisplacement was this field misnamed)
             for ( s32 lj = 0; lj < 4; ++lj )
             {
                 lrSensor.maPostPhysicsVec0[lj] = 0.0f;  // sensor +288 (stvx128 0)
                 lrSensor.maPostPhysicsVec1[lj] = 0.0f;  // sensor +304 (stvx128 0, r10+16)
             }
-            lrSensor.mu32PostPhysicsReset = 0;          // sensor +384
+            lrSensor.mSpyContactId = 0;                 // sensor +384 -- spy reset (was mu32PostPhysicsReset)
             lrSensor.mi32NumStoredContacts = 0;         // sensor +408
         }
     }
@@ -696,7 +705,7 @@ namespace Deformation
     // Caller (X360 xref): DeformableObject::Update.
     // =============================================================================================
     void DeformableObject::UpdateOutputContactSpies(CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
-                                                    PotentialContactInterface* lpContacts)
+                                                    BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContacts)
     {
         const s32 liNumSensors = GetNumSensors() - 4;   // *(mpDeformationSpec + 1618)
         const u32 luGameModeState = mu32GameModeState;  // this +26392 -- carried into each spy record
@@ -781,5 +790,561 @@ namespace Deformation
             }
         }
     }
+
+    // =============================================================================================
+    // WALLS LEG 4 (2026-08-14): THE PER-FRAME UPDATE SPINE LANDS. Everything below this banner
+    // was written this wave: SetTransform / GetWeightFactor (console-inline accessors the
+    // penetration solver's read-back needs), the contact-order statics + UpdateContacts (the
+    // impulse route), UpdateIKSuspensionOffsets, UpdateIKAndLocators, Update (the per-model
+    // per-frame driver) and UpdatePostPhysics (the post-solve sensor maintenance).
+    //
+    // NOTE on the per-class static perf monitors: the consoles bracket several legs below with
+    // per-class STATIC monitor ids (PS3 names them siSortContactsPerfMon / siUpdateSuspensionIK /
+    // siUpdateLocators / ...; X360 carries them at dword_82F2A348..) registered by
+    // ConstructUpdatePerformanceMonitors. Those statics are not homed on the host yet; the
+    // brackets are OMITTED with this note (the manager-level MEMBER monitors that wrap every one
+    // of these calls are real). Restore them with ConstructUpdatePerformanceMonitors.
+    // =============================================================================================
+
+    // ---------------------------------------------------------------------------------------------
+    // SetTransform (DWARF :378) -- console-inline on both consoles (no export). The inlined stores
+    // are visible in DeformationManager::SolvePenetration's phase-3 read-back (X360 @0x826223C0..
+    // 0x826223E4: four stvx128 of the solved rows into vehiclePhysics +0x10..+0x40 == the
+    // ExternallySimulatedBody::mTransform rows). The solver's positional correction reaches the
+    // car through exactly this store.
+    // ---------------------------------------------------------------------------------------------
+    void DeformableObject::SetTransform(const Matrix44Affine* lpTransform)
+    {
+        GetVehicleBody().SetTransform(*lpTransform);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // GetWeightFactor (DWARF :455) -- console-inline on both consoles. The inlined read is visible
+    // in SolvePenetration's phase-1 add loop (X360: `lvx128 v0, vehiclePhysics, 4176 ;
+    // vspltw v1, v0, 3` -- the w lane of the +0x1050 packed row, whose named host member carries
+    // ...SolvePenetrationWeightFactor in exactly that lane; VehiclePhysics.h seeds it 1.0, the
+    // image-read ground truth unk_8208FB18 == 0x3F800000).
+    // ---------------------------------------------------------------------------------------------
+    VecFloat DeformableObject::GetWeightFactor()
+    {
+        const f32 lfW = mVehicleBody.GetVehiclePhysics()
+            ->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.w;
+        return VecFloat{ lfW, lfW, lfW, lfW };   // vspltw lane-3 broadcast
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The contact-order scratch UpdateContacts sorts through. PS3 names the CLASS STATIC
+    // (`DeformableObject::_mContactOrder.miNumContacts` / `.maContactTimes[i].mi16SensorIndex`);
+    // the X360 carries the same block at file-static addresses (flt_82FB7B00 base, 12-byte stride:
+    // sort key +0, impact time +4, sensor index +8; count word_82FB7C2C). Modelled file-static
+    // here (internal linkage; the only consumer is UpdateContacts below, exactly as on console).
+    // ---------------------------------------------------------------------------------------------
+    namespace
+    {
+        struct ContactTime
+        {
+            f32 mfSortKey;        // +0 -- std::sort ascending key
+            f32 mfImpactTime;     // +4 -- the record's sub-frame impact time
+            s16 mi16SensorIndex;  // +8 -- which sensor owns the record
+
+            bool operator<(const ContactTime& lrOther) const { return mfSortKey < lrOther.mfSortKey; }
+        };
+
+        struct ContactOrder
+        {
+            s16         miNumContacts;
+            ContactTime maContactTimes[24];   // bare sensors (<=20) + 4 wheel slots headroom
+        };
+        ContactOrder _mContactOrder;
+    }
+
+    // =============================================================================================
+    // UpdateContacts @0x826478B0 (348; PS3 0x74715C, 961 -- the PS3 names every piece) -- THE
+    // IMPULSE ROUTE. Two phases:
+    //
+    //  (1) SORT: normalise the body's linear velocity (vmsum3fp + vrsqrtefp + 2 Newton refines);
+    //      for each bare sensor, GetImpulse() (X360 inlines it: skip when the record's impact time
+    //      > 1.0 -- the disarm sentinel -- else copy the 64-byte record); assert the time is 0..1
+    //      ("Impact time is %f on sensor %d/%d", PS3 :1861); build a ContactTime row:
+    //        * CAR-CAR records (mpOtherVehicle != 0): sort key = the impact time (earliest first);
+    //        * WORLD records: sort key = dot(normalizedVelocity, record.mNormal) -- most head-on
+    //          (most negative) first. [FLAG: the dot's second operand is the one 16-byte lane of
+    //          the copied record the X360 pseudo obscures; the normal is the only physically
+    //          consistent operand and matches the PS3 register flow.]
+    //      then std::sort the rows (the exported std::_Sort<ContactTime*> over operator<).
+    //  (2) APPLY: zero the vehicle's per-frame world-collision count (mi8NumWorldCollisions,
+    //      vp+4947); for each sorted row re-read the sensor's record (same >1.0 skip) and route:
+    //        * car-car -> ApplyCarCarImpulse(record, timeStep, iteration=0, sensorIdx, random)
+    //        * world   -> ApplyCarWorldImpulse(record, timeStep, iteration=0, sensorIdx)
+    //      and when an impulse was applied, CalculateNewVelocity(timeStep) on this body (and on
+    //      the other car's body for car-car).
+    // =============================================================================================
+    void DeformableObject::UpdateContacts(VecFloat lvfTimeStep, CgsNumeric::Random& lrRandom)
+    {
+        const Vector3 lvVelocityDir = vpu::Normalize(GetVehicleBody().GetLinearVelocity());
+
+        // ---- (1) collect + sort ----------------------------------------------------------------
+        _mContactOrder.miNumContacts = 0;
+
+        const s32 liNumSensors = GetNumSensors() - 4;
+        for ( s32 liSensor = 0; liSensor < liNumSensors; ++liSensor )
+        {
+            StoredImpulseContact lContact;
+            if ( !maDeformationSensors[liSensor].GetImpulse(lContact) )
+            {
+                continue;
+            }
+
+            // "Impact time is %f on sensor %d/%d" (PS3 :1861) -- tripwire, fire-and-continue.
+            CGS_ASSERT(lContact.mfImpactTimeInFrame >= 0.0f && lContact.mfImpactTimeInFrame <= 1.0f,
+                       "Impact time is ");
+
+            f32 lfSortKey;
+            if ( lContact.mpOtherVehicle != nullptr )
+            {
+                lfSortKey = lContact.mfImpactTimeInFrame;                 // car-car: earliest first
+            }
+            else
+            {
+                lfSortKey = vpu::Dot(lvVelocityDir, lContact.mNormal);    // world: most head-on first
+            }
+
+            ContactTime& lrRow = _mContactOrder.maContactTimes[_mContactOrder.miNumContacts];
+            lrRow.mfSortKey       = lfSortKey;
+            lrRow.mfImpactTime    = lContact.mfImpactTimeInFrame;
+            lrRow.mi16SensorIndex = static_cast<s16>(liSensor);
+            ++_mContactOrder.miNumContacts;
+        }
+
+        std::sort(_mContactOrder.maContactTimes,
+                  _mContactOrder.maContactTimes + _mContactOrder.miNumContacts);
+
+        // ---- (2) apply in sorted order ---------------------------------------------------------
+        mVehicleBody.GetVehiclePhysics()->mi8NumWorldCollisions = 0;   // *(vp+4947) = 0
+
+        const VecFloat lvfIterationZero = { 0.0f, 0.0f, 0.0f, 0.0f };  // vspltisw128 v126, 0
+
+        for ( s32 li = 0; li < _mContactOrder.miNumContacts; ++li )
+        {
+            CGS_ASSERT(li < _mContactOrder.miNumContacts, "liIndex < miNumContacts");   // h:132
+
+            const s32 liSensor = _mContactOrder.maContactTimes[li].mi16SensorIndex;
+
+            StoredImpulseContact lContact;
+            if ( !maDeformationSensors[liSensor].GetImpulse(lContact) )   // same >1.0 skip, re-read
+            {
+                continue;
+            }
+
+            bool lbApplied;
+            if ( lContact.mpOtherVehicle != nullptr )
+            {
+                lbApplied = ApplyCarCarImpulse(lContact, lvfTimeStep, lvfIterationZero,
+                                               liSensor, lrRandom);
+            }
+            else
+            {
+                lbApplied = ApplyCarWorldImpulse(lContact, lvfTimeStep, lvfIterationZero, liSensor);
+            }
+
+            if ( lbApplied )
+            {
+                GetVehicleBody().CalculateNewVelocity(lvfTimeStep);
+                if ( lContact.mpOtherVehicle != nullptr )
+                {
+                    lContact.mpOtherVehicle->GetVehicleBody().CalculateNewVelocity(lvfTimeStep);
+                }
+            }
+        }
+    }
+
+    // =============================================================================================
+    // UpdateIKSuspensionOffsets @0x826083B0 (X360; PS3 0x6D7670, 113) -- keep the four WHEEL tag
+    // points glued to their sensors + the live suspension height. Per wheel (0..3):
+    //   * liTag = mu8WheelTagPointIndices[wheel]; 255 = no wheel tag point -> skip.
+    //   * SNAP the tag point to its two-sensor skinned target (the UpdateIK relaxation at rate 1:
+    //     target = (sphereA + offA)*wA + (sphereB + offB)*wB; mPos = target).
+    //   * re-blend the tag scratch from the two sensors' accumulators (scalar spec weights).
+    //   * if the spec is a SKINNED point: replace the offset's Y with the suspension-corrected Y
+    //     ((pos.y - initial.y) + (wheel.mPosition.y - wheel.mStreamedPositionPlusTwistAmount.y) --
+    //     the live suspension compression), and write {corrected xyz, keep w} into the tag's
+    //     verlet scratch row (maVerletOffsets_Scratch[tag], the vperm<0,1,2,7> keep-w store).
+    // =============================================================================================
+    void DeformableObject::UpdateIKSuspensionOffsets()
+    {
+        const BrnPhysics::Vehicle::VehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
+
+        for ( s32 liWheel = 0; liWheel < 4; ++liWheel )
+        {
+            const u8 lu8Tag = mu8WheelTagPointIndices[liWheel];
+            if ( lu8Tag == KU_INVALID_WHEEL_TAG_POINT_INDEX )
+            {
+                continue;
+            }
+
+            TagPoint& lrTag = maTagPoints[lu8Tag];
+            const TagPointSpec* lpSpec = lrTag.GetSpec();
+
+            const Vector4& lrPosA =
+                lrTag.GetDeformationSensorA()->GetLocalSpaceSphere()->mPositionRadius;
+            const Vector4& lrPosB =
+                lrTag.GetDeformationSensorB()->GetLocalSpaceSphere()->mPositionRadius;
+            const Vector3Plus& lrOffA = lpSpec->GetOffsetAndWeightA();
+            const Vector3Plus& lrOffB = lpSpec->GetOffsetAndWeightB();
+
+            // target = (posA + offA)*wA + (posB + offB)*wB; SNAP (rate 1.0 -- vcfsx v7 is 1.0).
+            Vector3 lTarget;
+            lTarget.x = (lrPosA.x + lrOffA.x) * lrOffA.w + (lrPosB.x + lrOffB.x) * lrOffB.w;
+            lTarget.y = (lrPosA.y + lrOffA.y) * lrOffA.w + (lrPosB.y + lrOffB.y) * lrOffB.w;
+            lTarget.z = (lrPosA.z + lrOffA.z) * lrOffA.w + (lrPosB.z + lrOffB.z) * lrOffB.w;
+            lTarget.w = lrTag.GetPosition().w;
+            lrTag.SetPosition(lTarget);
+
+            // Scratch re-blend (scalar weight pair spec+48/+52 over the sensors' +420 accumulators).
+            lrTag.SetScratchAmount(
+                lrTag.GetDeformationSensorA()->GetScratchAmount() * lpSpec->GetWeightA() +
+                lrTag.GetDeformationSensorB()->GetScratchAmount() * lpSpec->GetWeightB());
+
+            // Skinned wheel tag: fold the live suspension compression into the Y lane and hand the
+            // corrected offset to the skinning scratch row.
+            if ( lpSpec->IsSkinned() )   // spec +65 (+0x41)
+            {
+                const BrnPhysics::Vehicle::Wheel& lrWheel =
+                    lpVehicle->GetWheel(static_cast<BrnPhysics::Vehicle::EVehicleDrivenWheel>(liWheel));
+
+                const Vector3& lrInitial = lpSpec->GetInitialPosition();
+                const f32 lfSuspensionY  = lrWheel.mPosition.y
+                                         - lrWheel.mStreamedPositionPlusTwistAmount.y;
+
+                Vector3Plus& lrScratch = maVerletOffsets_Scratch[lu8Tag];
+                lrScratch.x = lTarget.x - lrInitial.x;
+                lrScratch.y = (lTarget.y - lrInitial.y) + lfSuspensionY;   // vperm<0,5,2,3> Y swap
+                lrScratch.z = lTarget.z - lrInitial.z;
+                // w lane preserved (vperm<0,1,2,7>).
+            }
+        }
+    }
+
+    // =============================================================================================
+    // UpdateIKAndLocators @0x82642230 (117; PS3 0x765220, 740) -- the IK/locator/wheel/glass pass
+    // the manager budgets per frame. X360 flow, call for call:
+    //   assert mbActive (:1801); assert mbIKUpdateRequired || gboEnableDeformationDebug (:1806);
+    //   CheckForDetachment(simIn, physOut, partMgr, timeStep);
+    //   UpdateIK(0.05); UpdateIK(0.1); UpdateIK(0.5); UpdateIK(1.0);   (the four-step relaxation)
+    //   UpdateSkinningOffsets();
+    //   UpdateWheels(simIn, wheelMgr, timeStep, random);   [GATED -- see below]
+    //   UpdateGlass(timeStep, <the two deformation output interfaces off the module output>);
+    //   UpdateDeformedBBox();
+    //   mbIKUpdateRequired = false;
+    //
+    // TWO NAMED GATES (honest partials, censused):
+    //   * UpdateWheels @0x826254C0 (1125; PS3 0x763658, 1778) is the wheel-deformation whale --
+    //     NOT reconstructed this wave. Log-once gate; the traction/steering wheel path is a
+    //     different system and unaffected.
+    //   * UpdateGlass's two output interfaces come off the physics-module output buffer through
+    //     accessors not yet homed on the host PhysicsModuleIO::OutputBuffer -- glass pane updates
+    //     are dead on the junkyard path (no glass impacts); log-once gate.
+    // =============================================================================================
+    void DeformableObject::UpdateIKAndLocators(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
+                                               BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
+                                               VecFloat lvfTimeStep, DetachedPartManager* lpPartMgr,
+                                               DetachedWheelManager* lpWheelMgr,
+                                               CgsNumeric::Random* lpRandom)
+    {
+        CGS_ASSERT(mbActive, "mbActive");                                                    // :1801
+        CGS_ASSERT(mbIKUpdateRequired, "mbIKUpdateRequired || gboEnableDeformationDebug");   // :1806
+
+        CheckForDetachment(lpInput, lpOutput, lpPartMgr, lvfTimeStep.x);
+
+        UpdateIK(VecFloat{ 0.05f, 0.05f, 0.05f, 0.05f });   // v44[0] = 0.050000001
+        UpdateIK(VecFloat{ 0.1f, 0.1f, 0.1f, 0.1f });       // v44[0] = 0.1
+        UpdateIK(VecFloat{ 0.5f, 0.5f, 0.5f, 0.5f });       // vcsxwfp128(1,1) == 0.5
+        UpdateIK(VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f });       // vcsxwfp128(1,0) == 1.0
+
+        UpdateSkinningOffsets();
+
+        {
+            static bool sbLoggedWheelsGate = false;
+            if ( !sbLoggedWheelsGate )
+            {
+                sbLoggedWheelsGate = true;
+                if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                    *CgsDev::Log::gpDebugPrint
+                        << "conductor gate: DeformableObject::UpdateWheels @0x826254C0 (1125) "
+                           "reached but not reconstructed -- wheel deformation inert "
+                           "[FLAG PC boot gate]\n";
+            }
+            (void)lpWheelMgr; (void)lpRandom;
+        }
+
+        {
+            static bool sbLoggedGlassGate = false;
+            if ( !sbLoggedGlassGate )
+            {
+                sbLoggedGlassGate = true;
+                if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                    *CgsDev::Log::gpDebugPrint
+                        << "conductor gate: DeformableObject::UpdateGlass leg of "
+                           "UpdateIKAndLocators skipped (module-output deformation interfaces "
+                           "not homed) [FLAG PC boot gate]\n";
+            }
+        }
+
+        UpdateDeformedBBox();
+
+        mbIKUpdateRequired = false;   // *(this+26409) = 0
+    }
+
+    // =============================================================================================
+    // Update @0x82649160 (289; PS3 0x7585D8, 1069) -- THE PER-MODEL PER-FRAME DRIVER. Returns
+    // mbIKUpdateRequired (the manager's IK-budget selector). X360 flow, store for store:
+    //   assert mbActive (:1672);
+    //   vp = mVehicleBody.GetVehiclePhysics(); if (vp->IsFrozen()) return mbIKUpdateRequired;
+    //   if (owner byte == RACECAR && racecar->mbAISlowMo) timeStep *= 0.01  (the AI-crash slow-mo);
+    //   SetEntityRadius(scene iface, mGlobalEntityId, GetEntitySphereSize());
+    //   assert sphere size <= KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE + 1.0 (:1687; the KVF == 100.0,
+    //     recovered from the PS3 initializer);
+    //   if (meAbsorptionSet == 4) mfNoDamageTimer -= timeStep;
+    //   UpdateAbsorptionSet(gameMode); UpdateContacts(timeStep, random);
+    //   UpdateOutputContactSpies(simOut, contacts);
+    //   [kbAllowDeformationDebug -> mbHasDeformedThisFrame = 1 : the dev toggle, absent on host]
+    //   UpdateSpinningDetachment(simIn, physOut, partMgr, timeStep, random);
+    //   UpdateIKSuspensionOffsets(); UpdateLocators(partMgr);
+    //   mAngularVelocitySum = body angular velocity (vehicle row +96 -> this+26304); and the
+    //     entity sphere centre re-seeds from the velocity row's xyz (this+26320 keep w);
+    //   vp body CalculateNewVelocity(timeStep);
+    //   CheckForForcedDetachment(simIn, physOut, partMgr, random, timeStep);
+    //   mbIKUpdateRequired |= mbHasDeformedThisFrame; vp->mbDeformedThisFrame = flag;
+    //   [the showtime crashed-wheel random-detach block -- GATED, see below]
+    //   return mbIKUpdateRequired.
+    //
+    // ONE NAMED GATE: the showtime wheel-detach tail (game mode 3 + racecar + crashing +
+    // three dynamic-init thresholds unk_82FB9AE0/9700/9600, values not yet recovered) -- dead on
+    // the junkyard drive path; log-once gate, censused.
+    // =============================================================================================
+    bool DeformableObject::Update(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
+                                  CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
+                                  const BrnPhysics::PhysicsModuleIO::InputBuffer* lpModuleInput,
+                                  BrnPhysics::PhysicsModuleIO::OutputBuffer* lpModuleOutput,
+                                  VecFloat lvfTimeStep, DetachedPartManager* lpPartMgr,
+                                  DetachedWheelManager* lpWheelMgr,
+                                  BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContacts,
+                                  CgsNumeric::Random& lrRandom, s32 liGameMode)
+    {
+        CGS_ASSERT(mbActive, "mbActive");   // :1672
+
+        BrnPhysics::Vehicle::VehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
+        if ( lpVehicle->IsFrozen() )        // *(vp+112) early-out
+        {
+            return mbIKUpdateRequired;
+        }
+
+        // AI-crash slow motion: a RACECAR owner in slow-mo scales the whole deformation step by
+        // 0.01 (the 0.0099999998 literal in both asms; racecar mbAISlowMo == *(vp+5172)).
+        VecFloat lvfStep = lvfTimeStep;
+        if ( ((mGlobalEntityId.muValue >> 24) & 0xFFu) == 1u )   // HIBYTE(+26392) == E_ENTITYTYPE_RACECAR
+        {
+            const BrnPhysics::Vehicle::RaceCarPhysics* lpRaceCar = AsRaceCarPhysics();
+            if ( lpRaceCar != nullptr && lpRaceCar->IsAISlowMo() )
+            {
+                lvfStep.x *= 0.01f; lvfStep.y *= 0.01f; lvfStep.z *= 0.01f; lvfStep.w *= 0.01f;
+            }
+        }
+
+        // SetEntityRadius(scene iface, entity word, sphere size) + the size tripwire (:1687).
+        // (The module-output scene interface through the same reinterpret seam the mounted prop
+        //  read-back in PhysicsModule::Update uses -- the storage member is opaque on the host.)
+        // ⚠️ [marked deviation] HOST GUARD (walls leg 4 boot 1): on the PC bring-up NOTHING
+        // prepares this embedded interface's queue storages yet (no consumer constructs them),
+        // so the console's unconditional per-frame append filled a 0-capacity queue with a null
+        // mpEvents and AV'd inside SetEntityRadius (+0xB5, Get-WinEvent->map resolved). Guard on
+        // the queue actually having storage; the console has no such branch. Un-guard when the
+        // scene-side consumer of the module-output scene interface lands.
+        {
+            CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpScene =
+                reinterpret_cast<CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*>(
+                    lpModuleOutput->GetSceneInputInterface());
+            if ( lpScene->GetSetEntityRadiusQueue().GetMaxLength() > 0 )
+            {
+                lpScene->SetEntityRadius(CgsSceneManager::EntityId(mGlobalEntityId.muValue),
+                                         GetEntitySphereSize().x);
+            }
+            else
+            {
+                static bool sbLoggedRadiusGate = false;
+                if ( !sbLoggedRadiusGate )
+                {
+                    sbLoggedRadiusGate = true;
+                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                        *CgsDev::Log::gpDebugPrint
+                            << "conductor gate: module-output scene interface unprepared -- "
+                               "SetEntityRadius skipped [FLAG PC boot gate]\n";
+                }
+            }
+        }
+        CGS_ASSERT(GetEntitySphereSize().x <= 100.0f + 1.0f,
+                   "GetEntitySphereSize() <= (KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE + 1.0f)");  // :1687
+
+        if ( static_cast<s32>(meAbsorptionSet) == 4 )   // *(this+26460) == 4
+        {
+            mfNoDamageTimer -= lvfStep.x;               // *(this+26396) -= step
+        }
+
+        UpdateAbsorptionSet(liGameMode);
+        UpdateContacts(lvfStep, lrRandom);
+        UpdateOutputContactSpies(lpOutput, lpContacts);
+
+        UpdateSpinningDetachment(lpInput, lpModuleOutput, lpPartMgr, lvfStep, lrRandom);
+        UpdateIKSuspensionOffsets();
+        UpdateLocators(lpPartMgr);
+
+        // mAngularVelocitySum <- the body's angular velocity row; the entity sphere centre xyz
+        // re-seeds from the body velocity row (keeps its w == the size lane).
+        {
+            const Vector3 lvAngular = GetVehicleBody().GetAngularVelocity();
+            mAngularVelocitySum = VecFloat{ lvAngular.x, lvAngular.y, lvAngular.z, lvAngular.w };
+            const Vector3 lvLinear = GetVehicleBody().GetLinearVelocity();
+            SetLastLinearVelocity(lvLinear);   // this+26320 xyz keep w (the vperm{0,1,2,7} merge)
+        }
+
+        GetVehicleBody().CalculateNewVelocity(lvfStep);
+        CheckForForcedDetachment(lpInput, lpModuleOutput, lpPartMgr, &lrRandom, lvfStep.x);
+
+        mbIKUpdateRequired = mbIKUpdateRequired || mbHasDeformedThisFrame;   // +26409 |= +26408
+        lpVehicle->mbDeformedThisFrame = mbHasDeformedThisFrame;             // *(vp+4954)
+
+        // The showtime crashed-wheel random-detach tail (mode 3 + racecar + crashing + the three
+        // unrecovered dynamic-init thresholds) -- NAMED GATE, dead on the junkyard drive path.
+        if ( liGameMode == 3 )
+        {
+            static bool sbLoggedShowtimeDetachGate = false;
+            if ( !sbLoggedShowtimeDetachGate )
+            {
+                sbLoggedShowtimeDetachGate = true;
+                if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                    *CgsDev::Log::gpDebugPrint
+                        << "conductor gate: DeformableObject::Update's showtime wheel-detach tail "
+                           "reached but not reconstructed (thresholds unk_82FB9AE0/9700/9600 "
+                           "unrecovered) [FLAG PC boot gate]\n";
+            }
+        }
+
+        (void)lpModuleInput;
+        return mbIKUpdateRequired;
+    }
+
+    // =============================================================================================
+    // UpdatePostPhysics @0x825DFEB0 (643; PS3 0x74BBE0, 1520) -- the post-solve sensor
+    // maintenance, run per live model from DeformationManager::UpdatePostPhysics AFTER the
+    // penetration solve wrote the corrected transform back. X360 flow:
+    //   assert mbActive (:3110);
+    //   (1) per bare sensor: world sphere = bodyTransform * local sphere (keep the radius w lane);
+    //       zero the w lane of mPointDisplacement_BiggestImpulseThisFrame (the per-frame
+    //       biggest-impulse magnitude reset);
+    //   (2) FROZEN body: per sensor ClearNonWorldContacts (compact the car-car scratch);
+    //       else: the ClearStoredContacts reset (disarm the impulse record at 100.0, zero the spy
+    //       accumulators + spy id, zero the stored-contact count) -- the SAME store list the
+    //       committed ClearStoredContacts walks, called here;
+    //   (3) per wheel (0..3): re-seed the appended wheel sphere from the wheel's live X/Z and
+    //       STREAMED Y (vrlimi mask-4 Y insert -- suspension-neutral height), lifted (0,scale/4,0)
+    //       in body space, transformed by the body rows; radius = scale/2 (second vrlimi wins).
+    //       The "Invalid wheel position: ... please tell Graham D." NaN screeds are tripwires;
+    //   (4) mbDoSweptSphereTests: re-seed maSweptSpheres from the world spheres + the body point
+    //       velocities (linVel + angVel x r, 1/60 length) -- the ResetSensors phase-3 math.
+    // =============================================================================================
+    void DeformableObject::UpdatePostPhysics(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpScene)
+    {
+        CGS_ASSERT(mbActive, "mbActive");   // :3110
+
+        BrnPhysics::Vehicle::VehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
+        const Matrix44Affine& lrT = lpVehicle->GetTransform();
+
+        const s32 liNumSensors = GetNumSensors() - 4;
+
+        // ---- (1) world spheres from the solved transform + biggest-impulse magnitude reset -----
+        for ( s32 li = 0; li < liNumSensors; ++li )
+        {
+            const Vector4& lrLocal = maLocalSensorSpheres[li].mPositionRadius;
+            Vector4&       lrWorld = maWorldSensorSpheres[li].mPositionRadius;
+
+            lrWorld.x = lrT.xAxis.x * lrLocal.x + lrT.yAxis.x * lrLocal.y
+                      + lrT.zAxis.x * lrLocal.z + lrT.wAxis.x;
+            lrWorld.y = lrT.xAxis.y * lrLocal.x + lrT.yAxis.y * lrLocal.y
+                      + lrT.zAxis.y * lrLocal.z + lrT.wAxis.y;
+            lrWorld.z = lrT.xAxis.z * lrLocal.x + lrT.yAxis.z * lrLocal.y
+                      + lrT.zAxis.z * lrLocal.z + lrT.wAxis.z;
+            // w (radius) preserved (vrlimi keep-w).
+
+            maDeformationSensors[li].mPointDisplacement_BiggestImpulseThisFrame.w = 0.0f;   // vrlimi mask-1 zero
+        }
+
+        // ---- (2) contact-scratch reset ----------------------------------------------------------
+        if ( lpVehicle->IsFrozen() )   // *(vp+112)
+        {
+            for ( s32 li = 0; li < liNumSensors; ++li )
+            {
+                maDeformationSensors[li].ClearNonWorldContacts();
+            }
+        }
+        else
+        {
+            ClearStoredContacts();   // the identical per-sensor store list, inlined on console
+        }
+
+        // ---- (3) wheel spheres ------------------------------------------------------------------
+        for ( s32 liWheel = 0; liWheel < 4; ++liWheel )
+        {
+            const BrnPhysics::Vehicle::Wheel& lrWheel =
+                lpVehicle->GetWheel(static_cast<BrnPhysics::Vehicle::EVehicleDrivenWheel>(liWheel));
+
+            // ":3151 !IsZero(...GetStreamedPosition())" + the two "Invalid wheel position" NaN
+            // screeds are fire-and-continue tripwires; conditions carried, screeds omitted.
+            const f32 lfScale = mpDeformationSpec->GetWheelSpec(liWheel)->mScale.x;
+
+            // local = { pos.x, STREAMED.y (vrlimi mask-4 insert) + scale/4, pos.z }
+            const Vector3 lvLocal{
+                lrWheel.mPosition.x,
+                lrWheel.mStreamedPositionPlusTwistAmount.y + (lfScale * 0.5f) * 0.5f,
+                lrWheel.mPosition.z, 0.0f };
+
+            Vector4& lrSphere = maWorldSensorSpheres[liNumSensors + liWheel].mPositionRadius;
+            lrSphere.x = lrT.xAxis.x * lvLocal.x + lrT.yAxis.x * lvLocal.y
+                       + lrT.zAxis.x * lvLocal.z + lrT.wAxis.x;
+            lrSphere.y = lrT.xAxis.y * lvLocal.x + lrT.yAxis.y * lvLocal.y
+                       + lrT.zAxis.y * lvLocal.z + lrT.wAxis.y;
+            lrSphere.z = lrT.xAxis.z * lvLocal.x + lrT.yAxis.z * lvLocal.y
+                       + lrT.zAxis.z * lvLocal.z + lrT.wAxis.z;
+            lrSphere.w = lfScale * 0.5f;   // the second vrlimi w write wins
+        }
+
+        // ---- (4) swept-sphere re-seed (the ResetSensors phase-3 math, gated) --------------------
+        if ( mbDoSweptSphereTests )
+        {
+            const f32 KF_CONSOLE_TIMESTEP = 0.016666668f;   // flt_82095EE0 splat, image-read
+
+            const Vector3& lvCarPos     = lpVehicle->GetPosition();
+            const Vector3& lvLinearVel  = lpVehicle->GetLinearVelocity();
+            const Vector3& lvAngularVel = lpVehicle->GetAngularVelocity();
+
+            for ( s32 liSphere = 0; liSphere < liNumSensors + 4; ++liSphere )
+            {
+                const Vector4& lrSphere = maWorldSensorSpheres[liSphere].mPositionRadius;
+
+                const Vector3 lvR{ lrSphere.x - lvCarPos.x, lrSphere.y - lvCarPos.y,
+                                   lrSphere.z - lvCarPos.z, 0.0f };
+                const Vector3 lvPointVel = vpu::Add(lvLinearVel, vpu::Cross(lvAngularVel, lvR));
+
+                const f32     lfSpeed = vpu::Magnitude(lvPointVel);
+                const Vector3 lvDir   = vpu::Normalize(lvPointVel);
+
+                maSweptSpheres[liSphere].Set(
+                    Vector3Plus{ lrSphere.x, lrSphere.y, lrSphere.z, lrSphere.w },
+                    Vector3Plus{ lvDir.x, lvDir.y, lvDir.z, lfSpeed * KF_CONSOLE_TIMESTEP });
+            }
+        }
+
+        (void)lpScene;   // the scene interface is carried for the detached managers' twin passes
+    }
+
 }
 }

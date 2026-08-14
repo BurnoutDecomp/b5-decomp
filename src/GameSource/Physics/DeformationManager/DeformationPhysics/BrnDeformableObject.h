@@ -94,6 +94,18 @@ namespace Vehicle { class VehiclePhysics; }
 // physics contact-gen TU; referenced by pointer only. FLAG: forward-declared (home not in-tree).
 struct ContactGenList;
 
+// ⭐ 2026-08-14 (walls leg 4): the REAL physics-module IO types several method signatures take per
+// the PS3 mangles (Update params 3/4, UpdateIKAndLocators/UpdateSpinningDetachment/DetachPart/
+// CheckFor*Detachment param 2, UpdateOutputContactSpies' contact interface). Forward-declared here;
+// homes are BrnPhysicsModuleIO*.h. (The old `struct PotentialContactInterface;` forward-decl INSIDE
+// namespace Deformation was a silent fork of PhysicsModuleIO::PotentialContactInterface -- retired.)
+namespace PhysicsModuleIO
+{
+    class  InputBuffer;
+    class  OutputBuffer;
+    struct PotentialContactInterface;
+}
+
 namespace Deformation
 {
     // ---- DWARF BrnDeformableObject.h namespace-scope constants (:67-71, :998) -------------------
@@ -120,7 +132,6 @@ namespace Deformation
     class  DetachedWheelManager;
     class  PhysicalBodyPart;
     struct PenetrationSolver;
-    struct PotentialContactInterface;
     struct CarState;
     struct OutUpdateRigidBody;       // per-frame rigid-body update event (UpdateHandlingBody). FLAG: forward-declared.
     struct InTriangleCacheInterface; // tri-cache contact-gen input. FLAG: DWARF nests it as
@@ -182,15 +193,24 @@ namespace Deformation
         void ResetDeformationNextUpdate(bool lbReset);                                          // :212
         bool ShouldResetDeformationNextUpdate() const;                                          // :216
         void UpdateSensorDisplacements(VecFloat lvfTimeStep);                                   // :222
+        // ⭐ PARAMS 3/4 + lpContacts CORRECTED 2026-08-14 (walls leg 4): the PS3 DecFIGS mangle
+        // (0x7585D8) types params 3/4 as the PHYSICS-MODULE IO buffers (PKNS_15PhysicsModuleIO
+        // 11InputBufferE / PNS8_12OutputBufferE) and lpContacts as PhysicsModuleIO::
+        // PotentialContactInterface -- the old sim-buffer/local-fork spellings were
+        // declared-only (no body existed to migrate). Manager Update passes exactly these
+        // (its own corrected params 3/4) straight through.
         bool Update(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
                     CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
-                    const CgsPhysics::PhysicsSimulationIO::InputBuffer* lpPrevInput,
-                    CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpPrevOutput, VecFloat lvfTimeStep,
+                    const BrnPhysics::PhysicsModuleIO::InputBuffer* lpModuleInput,
+                    BrnPhysics::PhysicsModuleIO::OutputBuffer* lpModuleOutput, VecFloat lvfTimeStep,
                     DetachedPartManager* lpPartMgr, DetachedWheelManager* lpWheelMgr,
-                    PotentialContactInterface* lpContacts, CgsNumeric::Random& lrRandom,
+                    BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContacts,
+                    CgsNumeric::Random& lrRandom,
                     s32 liGameMode);  // :235 (FLAG: DWARF arg = BrnGameState::GameStateModuleIO::EGameModeType)
+        // ⭐ PARAM 2 CORRECTED 2026-08-14 (walls leg 4): PhysicsModuleIO::OutputBuffer per the
+        // PS3 mangle (0x765220); declared-only before this wave.
         void UpdateIKAndLocators(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
-                                 CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
+                                 BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
                                  VecFloat lvfTimeStep, DetachedPartManager* lpPartMgr,
                                  DetachedWheelManager* lpWheelMgr, CgsNumeric::Random* lpRandom); // :244
         bool ApplyCarWorldImpulse(const StoredImpulseContact& lContact, VecFloat lvfTimeStep,
@@ -207,12 +227,12 @@ namespace Deformation
 
         void UpdateIK(VecFloat lvfTimeStep);                                                    // :276
         void CheckForDetachment(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
-                                CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
-                                DetachedPartManager* lpPartMgr, f32 lfTimeStep);                 // :283
+                                BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
+                                DetachedPartManager* lpPartMgr, f32 lfTimeStep);                 // :283 (param 2: PS3 mangle 0x762570)
         void CheckForForcedDetachment(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
-                                      CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
+                                      BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
                                       DetachedPartManager* lpPartMgr, CgsNumeric::Random* lpRandom,
-                                      f32 lfTimeStep);                                           // :291
+                                      f32 lfTimeStep);                                           // :291 (param 2: PS3 mangle 0x757C08)
         void RemovePhysicalPartsAndJoints(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
                                           CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpScene,
                                           DetachedPartManager* lpPartMgr);                       // :310
@@ -264,7 +284,7 @@ namespace Deformation
         }
 
         // DWARF :347. This car's global scene-entity id. DECLARE-ONLY (its body reads mGlobalEntityId).
-        EntityId GetGlobalEntityId();                                                           // :347
+        EntityId GetGlobalEntityId() { return mGlobalEntityId; }                                // :347 (inlined walls leg 4 -- console-inline member read)
 
         bool IsActive();                                                                        // :351
         void InvalidateDeformationModel();                                                      // :354
@@ -283,7 +303,7 @@ namespace Deformation
 
         // DWARF :407. The deformation sensor at the given index (indexes maDeformationSensors).
         // DECLARE-ONLY (ApplyCarCarImpulse calls it BY NAME).
-        DeformationSensor* GetDeformationSensor(s32 liSensorIndex);                             // :407
+        DeformationSensor* GetDeformationSensor(s32 liSensorIndex) { return &maDeformationSensors[liSensorIndex]; }   // :407 (inlined walls leg 4)
 
         // :410. ⭐ HEADER-INLINE (2026-08-14, deformation-mount wave): no export on either
         // console (console-inline). The count is the spec's sensor count PLUS the four appended
@@ -319,8 +339,8 @@ namespace Deformation
         void UpdateAndOutputJointStates(DeformationOutputInterface* lpOut,
                                         DetachedPartManager* lpPartMgr);                         // :470
         void OutputState(CarState* lpCarState);                                                 // :473
-        s16 GetNumPhysicalParts() const;                                                        // :476
-        s16 GetNumHingedParts() const;                                                          // :480
+        s16 GetNumPhysicalParts() const { return mi16NumPhysicalParts; }                        // :476 (inlined walls leg 4)
+        s16 GetNumHingedParts() const { return mi16NumHingedParts; }                            // :480 (inlined walls leg 4)
         // :491/:501. World-space contact generation for the body parts / detached wheels. FLAG: the
         // DWARF spells arg1 as the nested VehicleInputInterface::InTriangleCacheInterface; here it is the
         // standalone forward-declared InTriangleCacheInterface (its enclosing VehicleInputInterface is
@@ -381,13 +401,20 @@ namespace Deformation
         // physics as the body via a reinterpret to keep the committed call sites (GetVehicleBody()
         // .GetLocalVelocity/.CalculateCollisionImpulseWithBody/.SetFrozen) compiling. Promote to a
         // typed GetExternalPhysicsBody() accessor on VehicleRigidBody when that slice grows.
+        // ⭐⭐ CAST FIXED 2026-08-14 (walls leg 4, PROBED at boot 3): the old reinterpret_cast did
+        // NOT adjust for the polymorphic derived's vptr -- SimpleVehiclePhysics introduces the
+        // vtable, so the (non-polymorphic) ExternalPhysicsBody base subobject sits 16 bytes into
+        // the derived object on the host. The reinterpret view therefore read every transform row
+        // one row LOW (the probe's "position" was a unit z-row) and CalculateNewVelocity through
+        // it STOMPED the vptr + transform -- the boot-2/3 car teleport. The implicit derived->base
+        // upcast is pointer-adjusting and exact.
         ExternalPhysicsBody& GetVehicleBody()
         {
-            return reinterpret_cast<ExternalPhysicsBody&>(*mVehicleBody.GetVehiclePhysics());
+            return *mVehicleBody.GetVehiclePhysics();
         }
         const ExternalPhysicsBody& GetVehicleBody() const
         {
-            return reinterpret_cast<const ExternalPhysicsBody&>(*mVehicleBody.GetVehiclePhysics());
+            return *mVehicleBody.GetVehiclePhysics();
         }
 
         // The attached vehicle physics, viewed as a RaceCarPhysics (the inlined downcast the bounce
@@ -474,6 +501,10 @@ namespace Deformation
         // Mark the rig "deformed / needs re-skin this update" (asm rig+26408 = 1, written when the debug
         // component nudges a sensor/driven point). Backed by the named mbHasDeformedThisFrame flag.
         void SetDeformedThisFrameDebug() { mbHasDeformedThisFrame = true; }
+
+        // ⭐ 2026-08-14 (walls leg 4): the per-frame latch clear DeformationManager::Update's
+        // opening loop stores (model+26408 = 0, X360 @0x82649BD4). Inline console store.
+        void ClearHasDeformedThisFrame() { mbHasDeformedThisFrame = false; }
 
         // Public debug wrappers around the (private) per-frame rebuild helpers the debug component drives
         // directly (the X360 calls UpdateDeformedBBox / CalculateDriveTimeLimits BY ADDRESS from the
@@ -612,7 +643,14 @@ namespace Deformation
         void SetLastLinearVelocity(Vector3 lVelocity);                                          // :696
         Vector3 GetLastLinearVelocity() const;                                                  // :699
         void SetEntitySphereSize(VecFloat lvfSize);                                             // :703
-        VecFloat GetEntitySphereSize() const;                                                   // :706
+        // :706. ⭐ INLINED 2026-08-14 (walls leg 4): console-inline on both consoles -- the w-lane
+        // splat of mLastLinearVelocityPlusEntityRadius (this+26320 lane 3; obj Update's
+        // `lvx128 v0, this, 26320 ; vspltw v0, v0, 3` size read + the :1687 tripwire operand).
+        VecFloat GetEntitySphereSize() const
+        {
+            const f32 lfSize = mLastLinearVelocityPlusEntityRadius.w;
+            return VecFloat{ lfSize, lfSize, lfSize, lfSize };
+        }
         void ResetSensors(Vector3Plus lA, Vector3 lB, Vector3 lC, Vector3 lD);                  // :713
         void PrepareIKPart(s32 liIndex);                                                        // :717
         void ClearVariables();                                                                  // :720
@@ -622,13 +660,13 @@ namespace Deformation
         s32 GetHingedPart(s32 liIndex);                                                         // :735
         void UpdateContacts(VecFloat lvfTimeStep, CgsNumeric::Random& lrRandom);                // :740
         void UpdateOutputContactSpies(CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
-                                      PotentialContactInterface* lpContacts);                    // :745
+                                      BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContacts); // :745 (PS3 mangle 0x74E9C0)
         void UpdateSpinningDetachment(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
-                                      CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
+                                      BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
                                       DetachedPartManager* lpPartMgr, VecFloat lvfTimeStep,
-                                      CgsNumeric::Random& lrRandom);                             // :753
+                                      CgsNumeric::Random& lrRandom);                             // :753 (param 2: PS3 mangle 0x757E80)
         void DetachPart(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
-                        CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
+                        BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
                         DetachedPartManager* lpPartMgr,
                         s32 liPartIndex, s32 liJointIndex, bool lbFlag);                         // :762
         void ApplyBreakingJointForces(PhysicalBodyPart* lpPart);                                // :766

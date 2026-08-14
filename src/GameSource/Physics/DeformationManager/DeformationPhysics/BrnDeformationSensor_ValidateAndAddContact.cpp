@@ -104,24 +104,45 @@ namespace Deformation
 		           "RwMathVPU::IsZero( RwMath::Magnitude( lNormal ) - RwMathVPU::GetVecFloat_One(), 0.01f )");
 
 		// --- (2) build the candidate contact ------------------------------------------------------
-		// pointA transformed into local space (vmaddfp chain by lWorldTransform); pointB + normal
-		// folded the same way. Modelled as the affine transform of the two points; normal carried.
+		// ⭐⭐ REWRITTEN 2026-08-14 (walls leg 4, at-rest probe): the old model transformed pointA
+		// with the ROTATION ONLY and skipped the sphere-centre rebase -- the record's local point
+		// missed both the translation and the sensor origin (the at-rest solver pop measured it).
+		// The PS3 words (@0x6CC104..0x6CC1A4) are:
+		//   localA = lInverseVehicleTransform * pointA   (FULL affine: rows * splats + ROW3)
+		//            - mpLocalSpaceSphere->centre        (vsubfp v10, v10, *(this+0x19C))
+		//   localB = pointB RAW                          (stvx v8 -- world point, untransformed)
+		//   normal = the (head-normalised) contact normal
+		//   projDist = lane-sum of (pointA + mPointDisplacement_BiggestImpulseThisFrame.xyz
+		//              - pointB)  (vaddfp/vsubfp then the vsldoi horizontal sum; v29 == ZERO, so
+		//              the surrounding vmaddfp are register moves -- NOT a dot product)
 		StoredContact lCandidate;
 		StoredContactView& lView = AsContactView(lCandidate);
 
 		const Vector3& lR  = lWorldTransform.Right();
 		const Vector3& lU  = lWorldTransform.Up();
 		const Vector3& lAt = lWorldTransform.At();
-		lView.mLocalPointOnA = Vector3{
-			lPointOnA.x * lR.x + lPointOnA.y * lU.x + lPointOnA.z * lAt.x,
-			lPointOnA.x * lR.y + lPointOnA.y * lU.y + lPointOnA.z * lAt.y,
-			lPointOnA.x * lR.z + lPointOnA.y * lU.z + lPointOnA.z * lAt.z, 0.0f };
+		const Vector3& lT  = lWorldTransform.Pos();
+
+		Vector3 lLocalA{
+			lPointOnA.x * lR.x + lPointOnA.y * lU.x + lPointOnA.z * lAt.x + lT.x,
+			lPointOnA.x * lR.y + lPointOnA.y * lU.y + lPointOnA.z * lAt.y + lT.y,
+			lPointOnA.x * lR.z + lPointOnA.y * lU.z + lPointOnA.z * lAt.z + lT.z, 0.0f };
+		if ( mpLocalSpaceSphere != nullptr )
+		{
+			const Vector4& lrCentre = SphereVec(mpLocalSpaceSphere);
+			lLocalA.x -= lrCentre.x;
+			lLocalA.y -= lrCentre.y;
+			lLocalA.z -= lrCentre.z;
+		}
+		lView.mLocalPointOnA = lLocalA;
 		lView.mLocalPointOnB = lPointOnB;
 		lView.mNormal        = lNormal;
 
-		// mfProjectedDist = dot( normal, pointB - pointA ) (vmsum3fp128 v12). Sort key for keep-deepest.
-		const f32 lfProjectedDist = Dot3(lNormal, Sub3(lPointOnB, lPointOnA));
-		lView.mfProjectedDist = lfProjectedDist;
+		// projDist: the lane-sum key (see the block note above).
+		const Vector3Plus& lrDisp = mPointDisplacement_BiggestImpulseThisFrame;   // this+0x10
+		lView.mfProjectedDist = (lPointOnA.x + lrDisp.x - lPointOnB.x)
+		                      + (lPointOnA.y + lrDisp.y - lPointOnB.y)
+		                      + (lPointOnA.z + lrDisp.z - lPointOnB.z);
 		lView.mpOtherVehicle  = lpOtherVehicle;
 		lView.mpOtherSensor   = lpOtherSensor;
 		lView.mu32Valid       = 1;                          // v100 = 1
@@ -158,13 +179,21 @@ namespace Deformation
 			++mi32NumStoredContacts;                       // ++*(this+408)
 		}
 
-		// --- (4) accept gates + biggest-impulse displacement latch --------------------------------
-		// Re-derive the projected separation speed and a guarded reciprocal-distance term:
-		//   v12 = dot3( (otherCentre - pointB), thisNormal )      (penetration depth)
-		//   v0  = dot3( thisNormal, ~thisNormal )  (+ other-sensor term when lpOtherSensor != 0)
-		//   refine 1/v0; v13 = v0 * refine^2 (clamped, max 0)
-		// The accept band: when the displacement (v13) is within (0, mfMaxPointDisplacement) AND
-		// below the per-frame cap, latch the biggest-impulse displacement record and continue.
+		// --- (4) the EARLIEST-IMPACT latch + contact-spy record -----------------------------------
+		// ⭐⭐ REWRITTEN 2026-08-14 (walls leg 4), byte-witnessed against the PS3 body
+		// (@0x6CC28C..0x6CC804; the X360 twin inlines the same stores). The old landed model
+		// ("biggest-impulse displacement latch") had the ARITHMETIC but landed the stores on
+		// overlay names at the wrong slots -- float writes over the record's POINTER fields.
+		// Latent while nothing read the record; UpdateContacts (landed this wave) reads it.
+		//
+		// Candidate impact time:
+		//   v12 = dot3( (otherCentre - pointB), thisNormal )       (penetration term)
+		//   v10 = dot3( thisNormal, thisNormal ) (+ the other-sensor term when lpOtherSensor != 0)
+		//   lfImpactTime = max( penetration / basis, 0 )           (vrefp + 2 Newton refines, vmaxfp 0)
+		// The latch (PS3 0x6CC744..0x6CC790): basis > 0 AND lfImpactTime <= 1.0 AND
+		// lfImpactTime >= 0 AND mImpulseContact.mfImpactTimeInFrame > lfImpactTime -- the record
+		// starts each frame DISARMED at 100.0, so the first valid contact arms it and later
+		// SMALLER times replace it: the EARLIEST impact of the frame wins.
 		Vector3 lOtherCentre = { 0.0f, 0.0f, 0.0f, 0.0f };
 		if ( lpOtherSensor && lpOtherSensor->mpLocalSpaceSphere )
 		{
@@ -173,35 +202,44 @@ namespace Deformation
 		}
 		const f32 lfPenetration = Dot3(Sub3(lOtherCentre, lPointOnB), lNormal);
 
-		f32 lfReciprocalBasis = Dot3(lNormal, lNormal);
+		f32 lfBasis = Dot3(lNormal, lNormal);
 		if ( lpOtherSensor )
 		{
-			lfReciprocalBasis += Dot3(lNormal, lNormal);   // + other-sensor contribution (vaddfp v0,v0,v13)
+			lfBasis += Dot3(lNormal, lNormal);   // + other-sensor contribution (vaddfp v10,v10,v0)
 		}
-		const f32 lfDisplacement = lfReciprocalBasis > 0.0f ? lfPenetration / lfReciprocalBasis : 0.0f;
+		const f32 lfRatio      = (lfBasis != 0.0f) ? (lfPenetration / lfBasis) : 0.0f;
+		const f32 lfImpactTime = (lfRatio > 0.0f) ? lfRatio : 0.0f;   // vmaxfp v13, v0, zero
+
+		if ( lfBasis > 0.0f                                        // vcmpgtfp v10 > 0 (dword_100A564 == 0.0)
+		     && lfImpactTime <= 1.0f                               // vcmpgefp 1.0 >= v13
+		     && lfImpactTime >= 0.0f                               // vcmpgefp v13 >= 0
+		     && mImpulseContact.mfImpactTimeInFrame > lfImpactTime ) // stored (+0x118) > candidate
+		{
+			// The impulse record (sensor +0xE0..+0x11F), field for field per the PS3 stores:
+			mImpulseContact.mPointOnA           = lPointOnA;       // stvx v9,  this,0xE0  (potential +0)
+			mImpulseContact.mPointOnB           = lPointOnB;       // stvx v0,  this,0xF0  (potential +0x10)
+			mImpulseContact.mNormal             = lNormal;         // stvx v30, this,0x100 (potential +0x20)
+			mImpulseContact.mpOtherVehicle      = lpOtherVehicle;  // stw  this,0x110
+			mImpulseContact.mpOtherSensor       = lpOtherSensor;   // stw  this,0x114
+			mImpulseContact.mfImpactTimeInFrame = lfImpactTime;    // stw  this,0x118
+			mImpulseContact.mContactId          = lContactId;      // stw  this,0x11C
+
+			// The contact-spy record (sensor +0x140..+0x183):
+			const u64* lpIds = reinterpret_cast<const u64*>(&lpPotential[3]);   // +0x30 idA, +0x38 idB
+			mSpyNormal            = lNormal;                                    // stvx v30, this,0x140
+			mSpyPointOnA          = lPointOnA;                                  // stvx (potential+0),  this,0x150
+			mSpyPointOnB          = lPointOnB;                                  // stvx (potential+0x10),this,0x160
+			mSpyVolumeInstanceIdA = lpIds[0] & 0xFFFFFFFF00000000ull;           // std (idA word)<<32, this,0x170
+			mSpyVolumeInstanceIdB = lpIds[1] & 0xFFFFFFFF00000000ull;           // std (idB word)<<32, this,0x178
+			mSpyContactId         = static_cast<u32>(lContactId);               // stw r16, this,0x180 (operator u32)
+		}
 
 		bool lbAccepted = false;
-
-		// Inner accept ladder: displacement > 0, <= mfMaxPointDisplacement, >= 0, and < the per-frame
-		// cap -> latch the biggest-impulse displacement record.
-		if ( lfDisplacement > 0.0f
-		     && mfMaxPointDisplacement >= lfDisplacement
-		     && lfDisplacement >= 0.0f
-		     && mfMaxPointDisplacement > lfDisplacement )
-		{
-			// Latch the biggest-impulse displacement record: the penetration normal * displacement,
-			// the contributing other-sensor, the contact id user-data, and the new max displacement.
-			// Maps onto the post-physics scratch / biggest-impulse region (named where it exists).
-			mPointDisplacement_BiggestImpulseThisFrame.SetVector3(
-				Vector3{ lNormal.x * lfDisplacement, lNormal.y * lfDisplacement, lNormal.z * lfDisplacement, 0.0f });
-			mfMaxPointDisplacement = lfDisplacement;       // *(this+280) = v69 (v101 = clamped value)
-			(void)lContactId;
-		}
 
 		// Final boolean: the two outer gates at LABEL_29. The contact is accepted (true) when the
 		// projected separation is positive AND the displacement is within tolerance, OR when the
 		// penetration term clears its own positive gate. Otherwise false.
-		if ( lfPenetration > 0.0f && lfReciprocalBasis >= 0.0f )
+		if ( lfPenetration > 0.0f && lfBasis >= 0.0f )
 		{
 			lbAccepted = true;                             // LABEL_29 LOBYTE(_R11)=1
 		}

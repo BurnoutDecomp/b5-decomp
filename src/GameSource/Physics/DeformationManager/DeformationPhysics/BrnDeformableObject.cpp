@@ -226,5 +226,111 @@ namespace Deformation
 
         return true;
     }
+
+    // =============================================================================================
+    // WALLS LEG 4 (2026-08-14): ApplyCarWorldImpulse -- the CAR-vs-WORLD impulse orchestrator.
+    // X360 @0x82624898 is an EXPORT HOLE; the PS3 body @0x746D68 (253 insns) is the authority,
+    // with the sibling ApplyCarCarImpulse (this TU, derived from both consoles) settling the
+    // shared idioms (the (iteration+1)*0.5 shaping literals are asm-visible vcfsx immediates in
+    // BOTH bodies). Showtime constants recovered this wave from the PS3 static initializer
+    // (__static_init_22 @0x6C2CCC): KF_SHOWTIME_BOUNCE_BOOST_SCALE = 2.0,
+    // KF_SHOWTIME_MIN_WORLD_BOUNCE_POWER = 8.0, KVF_Y_COMPONENT_BIG_BOUNCE_MIN = 0.5.
+    //
+    // Flow (PS3, register for register):
+    //   r        = lContact.mPointOnA - body position (row +0x40);
+    //   relMotion= linVel (+0x50) + angVel (+0x60) x r      (the gCrossProductPermuteConstant pair);
+    //   closing  = dot(relMotion, lContact.mNormal); if (closing >= 0) return false  (separating);
+    //   restitution = GetVehicleWorldRestitution(lContact);
+    //   mag = body.CalculateCollisionImpulseWithInanimateObject(r, relMotion, normal, restitution,
+    //                                                           &impulse, &invInertia);
+    //   if (vehicle->IsPlayerVehicleInShowtime()) {           (the vtable +0x10 virtual)
+    //       if (n.y*|n.y| >= n.x^2 + n.z^2 && n.y > 0) {      (upward-dominant landing normal)
+    //           RaceCarPhysics::SetJustBounced(contact-normal bounce, ...);
+    //           if (ShouldBounceBoostNextImpact())
+    //               mag = max(mag * KF_SHOWTIME_BOUNCE_BOOST_SCALE,
+    //                         KF_SHOWTIME_MIN_WORLD_BOUNCE_POWER);   [FLAG: the exact fsel fold of
+    //               the boost is modelled scale-then-floor -- showtime is dead on the junkyard
+    //               path; re-derive when showtime lands]
+    //       }
+    //   } else impulse *= (lvfIteration + 1) * 0.5;           (the sibling's asm-immediate shaping)
+    //   build the WORLD ImpulseParams and ApplySensorImpulse(...) -> return true.
+    // =============================================================================================
+    namespace
+    {
+        // PS3 __static_init_22 values (see the wave log): the showtime world-bounce family.
+        const f32 KF_SHOWTIME_BOUNCE_BOOST_SCALE     = 2.0f;
+        const f32 KF_SHOWTIME_MIN_WORLD_BOUNCE_POWER = 8.0f;
+    }
+
+    bool DeformableObject::ApplyCarWorldImpulse(const StoredImpulseContact& lContact,
+                                                VecFloat lvfTimeStep, VecFloat lvfIteration,
+                                                s32 liSensorIndex)
+    {
+        BrnPhysics::Vehicle::VehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
+
+        // Relative motion of the body point at the contact.
+        const Vector3 lvR = vpu::Subtract(lContact.mPointOnA, lpVehicle->GetPosition());
+        const Vector3 lRelativeMotion =
+            vpu::Add(lpVehicle->GetLinearVelocity(), vpu::Cross(lpVehicle->GetAngularVelocity(), lvR));
+
+        // Separating contact: no impulse.
+        if ( vpu::Dot(lRelativeMotion, lContact.mNormal) >= 0.0f )
+        {
+            return false;
+        }
+
+        const VecFloat lvfRestitution = GetVehicleWorldRestitution(lContact);
+
+        Vector3  lImpulse{ 0.0f, 0.0f, 0.0f, 0.0f };
+        VecFloat lvfInvInertia{ 0.0f, 0.0f, 0.0f, 0.0f };
+        VecFloat lvfImpulseMagnitude = GetVehicleBody().CalculateCollisionImpulseWithInanimateObject(
+            lvR, lRelativeMotion, lContact.mNormal, lvfRestitution, &lImpulse, &lvfInvInertia);
+
+        if ( lpVehicle->IsPlayerVehicleInShowtime() )   // the vtable +0x10 virtual
+        {
+            const Vector3& lrN = lContact.mNormal;
+            if ( lrN.y > 0.0f && (lrN.y * lrN.y) >= (lrN.x * lrN.x + lrN.z * lrN.z) )
+            {
+                BrnPhysics::Vehicle::RaceCarPhysics* lpRaceCar = AsRaceCarPhysics();
+                if ( lpRaceCar != nullptr )
+                {
+                    lpRaceCar->SetJustBounced(lContact.mNormal, false, false, EntityId{ 0u });
+                    if ( lpRaceCar->ShouldBounceBoostNextImpact() )
+                    {
+                        f32 lfMag = lvfImpulseMagnitude.x * KF_SHOWTIME_BOUNCE_BOOST_SCALE;
+                        if ( lfMag < KF_SHOWTIME_MIN_WORLD_BOUNCE_POWER )
+                        {
+                            lfMag = KF_SHOWTIME_MIN_WORLD_BOUNCE_POWER;   // the fsel floor
+                        }
+                        lvfImpulseMagnitude = VecFloat{ lfMag, lfMag, lfMag, lfMag };
+                    }
+                }
+            }
+        }
+        else
+        {
+            // The sibling ApplyCarCarImpulse's asm-immediate shaping (vcfsx 1.0 / 0.5), identical
+            // instruction pair in this body: impulse *= (iteration + 1) * 0.5.
+            const f32 lfShape = (lvfIteration.x + 1.0f) * 0.5f;
+            lImpulse = vpu::Mult(lImpulse, lfShape);
+        }
+
+        // The WORLD-contact params block; the remaining fields are filled by ApplySensorImpulse.
+        ImpulseParams lParams;
+        lParams.mvfImpulseMagnitude    = lvfImpulseMagnitude;
+        lParams.mWorldImpulseDirection = lContact.mNormal;
+        lParams.mvfInverseInertia      = lvfInvInertia;
+        lParams.mvfTimeStep            = lvfTimeStep;
+        lParams.mePositionSpace        = rw::physics::WORLD_SPACE;
+        lParams.mImpulsePosition       = lContact.mPointOnA;
+        lParams.mbWorldContact         = true;
+        lParams.meAbsorptionSet        = meAbsorptionSet;
+
+        ApplySensorImpulse(lvfTimeStep, lContact, lParams, lRelativeMotion, lImpulse,
+                           lvfImpulseMagnitude, GetDeformationSensor(liSensorIndex),
+                           /*lbAddToSpy*/ true, /*lbUseNormalScaledFriction*/ true);
+        return true;
+    }
+
 }
 }

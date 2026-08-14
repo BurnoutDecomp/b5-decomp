@@ -127,6 +127,25 @@ namespace Deformation
         return miNumWorldContacts;
     }
 
+    // (walls leg 4: the vehicle-count twin, same console-inline shape.)
+    s32 PenetrationSolver::GetNumVehicleContacts() const
+    {
+        return miNumVehicleContacts;
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // GetUpdatedTransform (DWARF :124) -- ⭐ 2026-08-14 (walls leg 4). Console-inline on BOTH
+    // consoles (no export on either); the inlined access is visible in SolvePenetration's
+    // phase-3 read-back (X360 @0x826221D0: `slwi r11, idx, 6` + base -> the 64-byte-stride
+    // maObjectTransforms element whose four rows are then NaN-tripwired and stored back into
+    // the model). The element-address return is the whole body.
+    // -----------------------------------------------------------------------------------------
+    const Matrix44Affine* PenetrationSolver::GetUpdatedTransform(s32 liIndex) const
+    {
+        CGS_ASSERT(liIndex < KI_MAX_PENETRATION_BODIES, "liIndex < KI_MAX_PENETRATION_BODIES");
+        return &maObjectTransforms[liIndex];
+    }
+
     // -----------------------------------------------------------------------------------------
     // Solve @ 0x825BAA58
     //   Resolve every accumulated penetration, writing the corrected per-body transforms back into

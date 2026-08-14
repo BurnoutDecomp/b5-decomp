@@ -65,7 +65,16 @@ namespace Deformation
         // CreatePart, whose asm is `Set(&id, a4, 0, a3)`) supply only THREE value args, leaving the
         // 4th (luSubB) register indeterminate at the call. The default below lets those 3-arg call
         // sites compile without fabricating a meaningful subB; it is NOT an asm-attested value.
-        void Set(u32 luOwningVehicleID, u16 luPartIndex, u16 luSubA, u16 luSubB = 0);
+        // INLINED 2026-08-14 (walls leg 4): pack the owning-vehicle entity word with this
+        // part index in the low part-index field, and seat the two sub-ids (dead at runtime
+        // today -- 0 detached parts; FLAG role-derived packing per the layout constants above).
+        void Set(u32 luOwningVehicleID, u16 luPartIndex, u16 luSubA, u16 luSubB = 0)
+        {
+            muEntityWord = (luOwningVehicleID & ~((1u << BurnoutBodyPartIDLayout::KU_ENTITY_INDEX_BASE) - 1u))
+                         | (static_cast<u32>(luPartIndex) & ((1u << BurnoutBodyPartIDLayout::KU_ENTITY_INDEX_BASE) - 1u));
+            muSubA = luSubA;
+            muSubB = luSubB;
+        }
 
         u32 muEntityWord;   // this+0 (high dword): owner | entityIndex | partIndex
         u16 muSubA;         // this+4

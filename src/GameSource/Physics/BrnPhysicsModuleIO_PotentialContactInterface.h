@@ -109,6 +109,19 @@ namespace PhysicsModuleIO
         // validated pairing is exactly the raw/Validated name split.
         const CustomPotentialContactQueue& GetRaceCarWithWorldQueue() const { return maCustomEventQueues[5]; }
 
+        // ⭐ ADDED 2026-08-14 (walls leg 4). DeformationManager::AddArticulatedJointContacts
+        // @0x825DB190 (PS3 0x739FAC names the drain verbatim) walks `maCustomEventQueues[12]` --
+        // the articulated-joint (traffic cab/trailer) contact queue; both entity ids are asserted
+        // TRAFFIC_VEHICLE owners at :1033/:1034. Same additive-inline pattern as [5]/[6] above.
+        const CustomPotentialContactQueue& GetArticulatedJointQueue() const { return maCustomEventQueues[12]; }
+
+        // ⭐ ADDED 2026-08-14 (walls leg 4). The two hinged-body-part queues the pool's
+        // UpdateJoinedParts drains -- index binding attested by the header's own offset notes
+        // (ifc+0x118080 == 16 + 7*stride -> [7] hinged-vs-CAR; ifc+0x140090 == 16 + 8*stride ->
+        // [8] hinged-vs-WORLD, owner asserts (RACECAR_DEFORMABLE_PART, ...)).
+        const CustomPotentialContactQueue& GetHingedBodyPartWithCarQueue()   const { return maCustomEventQueues[7]; }
+        const CustomPotentialContactQueue& GetHingedBodyPartWithWorldQueue() const { return maCustomEventQueues[8]; }
+
         // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave). Three more custom-queue accessors, same
         // ADDITIVE pattern as [6] above -- byte offsets (indices) are asm-proven from
         // PhysicsModule::FixUpVehicleContacts @0x825A6010, which walks:

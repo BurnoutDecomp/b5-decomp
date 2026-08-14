@@ -1,6 +1,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.h"
 
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"            // CgsModule::EventQueue / BaseEventQueue (GetLength / GetEvent)
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"   // the REAL sim OutputBuffer (walls leg 4: local model retired)
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h" // CgsPhysics::PhysicsSimulationIO::Event (OutUpdateRigidBody base)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"                         // rw::math::vpu::MagnitudeSquared (transform validation tripwires)
@@ -59,17 +60,11 @@ namespace PhysicsSimulationIO
     // re-spelled to the deformation-side BrnPhysics::Deformation::OutUpdateRigidBody the pool's
     // UpdatePart is declared over (the cast at the forward point bridges the two spellings).
 
-    class OutputBuffer
-    {
-    public:
-        // DWARF :704 -- the physics time-step actually consumed this frame.
-        f32 GetTimeStepUsed() const;
-
-        // DWARF :715 -- the queue of per-frame rigid-body update events. The queue is a
-        // CgsModule::EventQueue<OutUpdateRigidBody, 200> (DWARF :361); read here through the
-        // BaseEventQueue<OutUpdateRigidBody> length / element accessors.
-        const CgsModule::BaseEventQueue<OutUpdateRigidBody>* GetUpdateRigidBodyQueue() const;
-    };
+    // ⭐ walls leg 4: the LOCAL OutputBuffer model that stood here is RETIRED -- the REAL
+    // CgsPhysicsSimulationModuleIO.h OutputBuffer is homed and mounted (GetTimeStepUsed +
+    // GetUpdateRigidBodyQueue both bodied in its own TU); the local decl's BaseEventQueue-typed
+    // accessor mangled to a symbol no TU defines (the shadowing-redeclaration shape -- the
+    // walls-leg-4 trial link found it).
 }
 }
 
@@ -77,6 +72,12 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
+    // The shared swept-cache emission hook (declared FLAG-provisional in BrnDetachedWheelManager.h;
+    // the walls-leg-4 gate body lives in that TU).
+    void EmitUpdateTriangleCacheEvent(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdateInterface,
+                                      u64 lu64VolumeInstanceId, const Vector3& lvSweptPosition,
+                                      f32 lfSphereRadius);
+
     // X360 deformation owner tags (see BrnBurnoutBodyPartID.h). The post-physics pass forwards
     // a rigid-body update event to the part pool ONLY when the updated body's EntityId owner is
     // one of these two -- i.e. the body is a deformable car/traffic part, not some other rigid
@@ -216,7 +217,7 @@ namespace Deformation
         const VecFloat lvfTimeStep = { lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep };
 
         // ---- (2) forward each deformable-part rigid-body update event ----
-        const CgsModule::BaseEventQueue<CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody>*
+        const CgsPhysics::PhysicsSimulationIO::OutputBuffer::OutUpdateRigidBodyQueue*
             lpUpdatedBodyQueue = lpSimModuleOutputBuffer->GetUpdateRigidBodyQueue();
 
         const s32 liNumUpdatedBodyEvents = lpUpdatedBodyQueue->GetLength();
@@ -243,10 +244,84 @@ namespace Deformation
         }
 
         // ---- (3) resolve the still-joined parts' contacts ----
-        mPartPool.UpdateJoinedParts(lpPotentialContactsInterface, lpContactSpyData, lvfTimeStep);
+        mPartPool.UpdateJoinedParts(
+            // FLAG (fork seam, header note): the pool still models the interface locally.
+            reinterpret_cast<const PhysicsModuleIO::PotentialContactInterfaceModel*>(lpPotentialContactsInterface), lpContactSpyData, lvfTimeStep);
 
         // ---- (4) recompute + republish one part's bounding box this frame ----
         mPartPool.UpdateABoundingBox(lpSceneInterface);
     }
+
+    // =============================================================================================
+    // UpdateTriangleCache @0x8260E1F8 (113) -- ⭐ 2026-08-14 (walls leg 4). The part-pool twin of
+    // DetachedWheelManager::UpdateTriangleCache (same swept-sphere event emission, same 1/60 +
+    // 0.1-padding immediates): assert the scene interface (:161); for every used pool part that
+    // IS in the scene (+485) and NOT frozen (+484 clear on the X360 read), emit an
+    // update-cached-position event at the velocity-swept render position with the padded radius.
+    // Dead-at-runtime today (0 physical parts); the emission hook is the wheel TU's shared gate.
+    // =============================================================================================
+    void DetachedPartManager::UpdateTriangleCache(
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdateInterface)
+    {
+        CGS_ASSERT(lpSceneUpdateInterface != nullptr, "lpSceneUpdateInterface != NULL");   // :161
+
+        const f32 KF_FRAME_TIMESTEP        = 0.016666668f;   // asm immediate (1/60)
+        const f32 KF_TRIANGLE_CACHE_PADDING = 0.1f;          // asm immediate
+
+        for ( u8 lu8Part = 0; lu8Part < 50u; ++lu8Part )
+        {
+            if ( !mPartPool.IsPartIndexUsed(lu8Part) )
+            {
+                continue;
+            }
+            const PhysicalBodyPart* lpPart = mPartPool.GetPart(static_cast<s16>(lu8Part));
+            if ( !lpPart->IsAddedToScene() || lpPart->IsFrozen() )
+            {
+                continue;
+            }
+
+            const Vector3 lvVelocity = lpPart->GetLinearVelocity();
+            const f32 lfSpeed = std::sqrt(lvVelocity.x * lvVelocity.x
+                                        + lvVelocity.y * lvVelocity.y
+                                        + lvVelocity.z * lvVelocity.z);
+            const f32 lfSweptDistance = lfSpeed * KF_FRAME_TIMESTEP;
+
+            Vector3 lvSweptPosition = lpPart->GetRigidBodyTransform().wAxis;
+            if ( lfSpeed != 0.0f )
+            {
+                const f32 lfInvSpeed = 1.0f / lfSpeed;
+                lvSweptPosition.x += lvVelocity.x * lfInvSpeed * lfSweptDistance;
+                lvSweptPosition.y += lvVelocity.y * lfInvSpeed * lfSweptDistance;
+                lvSweptPosition.z += lvVelocity.z * lfInvSpeed * lfSweptDistance;
+            }
+
+            const f32 lfSphereRadius =
+                lpPart->GetSphereRadius() + KF_TRIANGLE_CACHE_PADDING + lfSweptDistance;
+
+            EmitUpdateTriangleCacheEvent(lpSceneUpdateInterface,
+                                         lpPart->GetContactVolumeInstanceId().muId,
+                                         lvSweptPosition, lfSphereRadius);
+        }
+    }
+
+
+    // =============================================================================================
+    // Update / AddPartsToScene -- ⭐ 2026-08-14 (walls leg 4): pool forwards. The X360 emits no
+    // manager bodies (DeformationManager::Update @0x82649B40 / UpdatePostPhysics @0x82630420 call
+    // the POOL's UpdateRWBodies / AddPartsToScene directly with the MANAGER address as `this`;
+    // the pool is this manager's one member, at +0). Bodied as the forwards those calls spell.
+    // =============================================================================================
+    void DetachedPartManager::Update(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
+                                     VecFloat lvfTimeStep)
+    {
+        mPartPool.UpdateRWBodies(lpSimInput, lvfTimeStep);
+    }
+
+    void DetachedPartManager::AddPartsToScene(
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface)
+    {
+        mPartPool.AddPartsToScene(lpSceneInterface);
+    }
+
 }
 }

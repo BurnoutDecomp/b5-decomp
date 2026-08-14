@@ -1,4 +1,5 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPart.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (walls leg 4 gates)
 
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"           // IKBodyPart, GetActiveJointSpec/Index, CheckSensorForcesForJointDetachment
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"      // DeformableObject (GetVehicleBody / transform delta path)
@@ -271,30 +272,11 @@ namespace Deformation
     }
 
     // =========================================================================================
-    // RemoveFromScene @ 0x825E7818
-    //
-    // Tear the part's volume instance / entity / collision / volume out of the scene, then drop its
-    // triangle-cache slot, and clear mbAddedToScene (+485). The asm splices the part's scene EntityId
-    // out of the packed mRigidBodyId (the HIDWORD(mRigidBodyId) word + the bit re-pack into v5) and
-    // feeds it to the four scene-remove producers in order, then the tri-cache remove.
+    // RemoveFromScene @ 0x825E7818 -- ⭐ MOVED (deformation-mount wave) to the mounted slice TU
+    // BrnPhysicalBodyPart_Remove.cpp (the authoritative body, with the four scene removals + the
+    // tri-cache eviction). The stale duplicate that stood HERE was deleted 2026-08-14 (walls
+    // leg 4) when this home TU first mounted -- the link's LNK2005 found it.
     // =========================================================================================
-    void PhysicalBodyPart::RemoveFromScene(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInput)
-    {
-        // The scene EntityId is the high dword of the packed id (mRigidBodyId.muEntityWord), with the
-        // owner/part bits re-spliced (the asm's WORD2/SBYTE shuffles re-pack the entity word the scene
-        // manager keys on). Modelled by handing the entity word through as the scene EntityId.
-        const CgsSceneManager::EntityId lEntityId(mRigidBodyId.muEntityWord);
-
-        lpSceneInput->RemoveEntity(lEntityId, 0);               // RemoveEntity(a2, v6, 0)
-        lpSceneInput->RemoveForCollision(lEntityId);            // RemoveForCollision(a2, v5)
-        lpSceneInput->RemoveVolumeInstance(lEntityId);          // RemoveVolumeInstance(a2, v5)
-        lpSceneInput->RemoveVolume(lEntityId);                  // RemoveVolume(__SPAIR64__(a2, ...))
-
-        // v9 = *(this+464)+73 (the part's triangle-cache slot, derived from the id) -> tri-cache remove.
-        RemoveTriangleCacheSlot(lpSceneInput, GetTriangleCacheSlot());
-
-        mbAddedToScene = false;   // *(this+485) = 0
-    }
 
     // =========================================================================================
     // SetRigidBodyTransform @ 0x825E7778
@@ -313,8 +295,11 @@ namespace Deformation
         // new volume-instance transform.
         if ( mbAddedToScene )   // *(this+485)
         {
-            const CgsSceneManager::EntityId lEntityId(mRigidBodyId.muEntityWord);
-            lpSceneInterface->SetVolumeInstanceTransform(lEntityId, mRwBody.GetTransform());
+            // ⭐ walls leg 4: the real bodied SetVolumeInstanceTransform keys on the packed
+            // VolumeInstanceId (the part handle IS the volume-instance id -- see the
+            // GetContactVolumeInstanceId banner); the old EntityId spelling never compiled.
+            lpSceneInterface->SetVolumeInstanceTransform(GetContactVolumeInstanceId(),
+                                                         mRwBody.GetTransform());
         }
     }
 
@@ -1119,5 +1104,89 @@ namespace Deformation
         // *(this+487) = 0 -- the part is no longer dirty for RW.
         mbNeedsWritingIntoRenderware = false;
     }
+
+    // =============================================================================================
+    // LOG-ONCE GATES 2026-08-14 (walls leg 4). Declared methods/hooks the newly-mounted family
+    // links against whose real bodies are NOT reconstructed yet. ALL are dead on the junkyard
+    // path (0 physical parts / 0 hinged joints). Reconstruct and DELETE each gate.
+    // =============================================================================================
+    void PhysicalBodyPart::AddContactSpy(ContactSpyData* /*lpContactSpyData*/)
+    {
+        static bool sbLoggedACS = false;
+        if ( !sbLoggedACS )
+        {
+            sbLoggedACS = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalBodyPart::AddContactSpy reached but not "
+                                              "reconstructed [FLAG PC boot gate]\n";
+        }
+        
+    }
+
+    void PhysicalBodyPart::AddToSim(CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/, Matrix44Affine /*lTransform*/, Vector3 /*lLinearVelocity*/, Vector3 /*lAngularVelocity*/)
+    {
+        static bool sbLoggedATS = false;
+        if ( !sbLoggedATS )
+        {
+            sbLoggedATS = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalBodyPart::AddToSim reached but not "
+                                              "reconstructed [FLAG PC boot gate]\n";
+        }
+        
+    }
+
+    void PhysicalBodyPart::PostVehicleUpdate()
+    {
+        static bool sbLoggedPVU = false;
+        if ( !sbLoggedPVU )
+        {
+            sbLoggedPVU = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalBodyPart::PostVehicleUpdate reached but not "
+                                              "reconstructed [FLAG PC boot gate]\n";
+        }
+        
+    }
+
+    void RemoveTriangleCacheSlot(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInput*/, u16 /*lu16TriangleCacheSlot*/)
+    {
+        static bool sbLoggedRTCS = false;
+        if ( !sbLoggedRTCS )
+        {
+            sbLoggedRTCS = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint << "conductor gate: RemoveTriangleCacheSlot hook reached but not "
+                                              "reconstructed [FLAG PC boot gate]\n";
+        }
+        
+    }
+
+    void EmitDetachedPartNotification(CgsPhysics::PhysicsSimulationIO::OutputBuffer* /*lpSimOutput*/, const void* /*lpEventBlob*/)
+    {
+        static bool sbLoggedEDPN = false;
+        if ( !sbLoggedEDPN )
+        {
+            sbLoggedEDPN = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint << "conductor gate: EmitDetachedPartNotification hook reached but not "
+                                              "reconstructed [FLAG PC boot gate]\n";
+        }
+        
+    }
+
+    void EmitUpdateExternalBodyEvent(CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/, const void* /*lpEventBlob*/)
+    {
+        static bool sbLoggedEUEB = false;
+        if ( !sbLoggedEUEB )
+        {
+            sbLoggedEUEB = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint << "conductor gate: EmitUpdateExternalBodyEvent hook reached but not "
+                                              "reconstructed [FLAG PC boot gate]\n";
+        }
+        
+    }
+
 }
 }

@@ -1,4 +1,5 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalWheel.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (walls leg 4 gates)
 
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface::SetVolumeInstanceTransform (pulls in CgsSceneManager::EntityId)
 
@@ -124,8 +125,11 @@ namespace Deformation
         // second Hex-Rays operand is the 64-bit-pair decoding artifact.
         if ( mbAddedToScene )
         {
+            // walls leg 4: the real bodied SetVolumeInstanceTransform keys on the packed
+            // VolumeInstanceId (the wheel handle IS the volume-instance id -- see
+            // GetContactVolumeInstanceId's banner); the EntityId overload never existed.
             lpSceneInterface->SetVolumeInstanceTransform(
-                CgsSceneManager::EntityId(mWheelBodyId.muEntityWord), mRenderTransform);
+                GetVolumeInstanceId(), mRenderTransform);
         }
     }
 
@@ -178,5 +182,34 @@ namespace Deformation
             }
         }
     }
+
+    void PhysicalWheel::RemoveFromScene(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInput*/)
+    {
+        static bool sbLoggedWRFS = false;
+        if ( !sbLoggedWRFS )
+        {
+            sbLoggedWRFS = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalWheel::RemoveFromScene reached but not "
+                                              "reconstructed [FLAG PC boot gate]\n";
+        }
+        
+    }
+
+
+    // LOG-ONCE GATE 2026-08-14 (walls leg 4): the wheel's scene ADD (the RemoveFromScene twin's
+    // inverse) is not reconstructed; dead today (0 detached wheels). Reconstruct and DELETE.
+    void PhysicalWheel::AddToScene(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInput*/)
+    {
+        static bool sbLoggedWATS = false;
+        if ( !sbLoggedWATS )
+        {
+            sbLoggedWATS = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalWheel::AddToScene reached "
+                                              "but not reconstructed [FLAG PC boot gate]\n";
+        }
+    }
+
 }
 }

@@ -162,18 +162,32 @@ namespace Deformation
 		// retained HERE (overlaying the DWARF mImpulseContact/mContactSpy/mVolInstId region) rather than
 		// promoting the DWARF members. The opaque spans bridge to each named scratch offset relative to
 		// the contacts-array base. PROMOTE to the DWARF members when ClearNonWorldContacts is re-derived.
-		u8 maReserved1[0x118 - (0x20 + KU_MAX_STORED_CONTACTS * sizeof(StoredContact))];
+		// ⭐⭐ OVERLAY PROMOTED 2026-08-14 (walls leg 4). The former named-scratch overlay
+		// (mfMaxPointDisplacement @+0x118 / mu32PostPhysicsReset @+0x180 / two reserved spans) is
+		// retired onto the REAL DWARF members, byte-witnessed by the PS3 ValidateAndAddContact
+		// latch (@0x6CC794..0x6CC804) + GetImpulse (@0x6B4ED4):
+		//   * +0xE0..+0x11F is mImpulseContact (StoredImpulseContact, DWARF :267) -- the EARLIEST-
+		//     IMPACT record of the frame. Its mfImpactTimeInFrame sits at console +0x118: the old
+		//     overlay name "mfMaxPointDisplacement" was THIS field misnamed -- "reset to 100.0"
+		//     is the DISARM sentinel (GetImpulse rejects times > 1.0), and the latch's
+		//     `*(+0x118) > candidate` compare keeps the EARLIEST impact, not a max displacement.
+		//   * +0x120..+0x18F is mContactSpy (OutContactSpy, DWARF :268), promoted FLAT here (the
+		//     homed CgsPhysics OutContactSpy layout is not byte-frozen in-tree): the two spy
+		//     accumulators (+0x120/+0x130, fed by ApplySensorImpulse), the latched contact normal
+		//     (+0x140), point-on-A (+0x150), point-on-B (+0x160), the two volume-instance id words
+		//     (+0x170/+0x178, latched as `u32 id << 32`), and the spy contact id (+0x180 -- the old
+		//     overlay name "mu32PostPhysicsReset"; zeroing it each post-physics IS the spy reset).
+		StoredImpulseContact mImpulseContact;   // console +0xE0 (DWARF :267); time +0x118 disarmed to 100.0
+		f32 maPostPhysicsVec0[4];       // console +0x120 (288) -- spy accumulated impulse (zeroed post-physics)
+		f32 maPostPhysicsVec1[4];       // console +0x130 (304) -- spy accumulated dir*motion (zeroed post-physics)
+		Vector3 mSpyNormal;             // console +0x140 -- latched contact normal
+		Vector3 mSpyPointOnA;           // console +0x150 -- latched potential-contact point on A
+		Vector3 mSpyPointOnB;           // console +0x160 -- latched potential-contact point on B
+		u64 mSpyVolumeInstanceIdA;      // console +0x170 -- latched (u64)muVolumeInstanceIdA.word << 32
+		u64 mSpyVolumeInstanceIdB;      // console +0x178 -- latched (u64)muVolumeInstanceIdB.word << 32
+		u32 mSpyContactId;              // console +0x180 -- latched contact id (zeroed post-physics)
 
-		f32 mfMaxPointDisplacement;     // console +0x118 (280) -- reset to 100.0  (overlay; DWARF mImpulseContact region)
-		f32 maPostPhysicsVec0[4];       // console +0x120 (288) -- zeroed (16 bytes)
-		f32 maPostPhysicsVec1[4];       // console +0x130 (304) -- zeroed (16 bytes)
-
-		// Opaque span between maPostPhysicsVec1 end (+0x140) and mu32PostPhysicsReset (+0x180).
-		u8 maReserved2[0x180 - 0x140];
-
-		u32 mu32PostPhysicsReset;       // console +0x180 (384) -- zeroed (overlay; DWARF mContactSpy/mVolInstId region)
-
-		// Opaque span between mu32PostPhysicsReset end (+0x184) and mVolInstId (+0x190).
+		// Opaque span between mSpyContactId end (+0x184) and mVolInstId (+0x190).
 		u8 maReserved3[0x190 - 0x184];
 
 		// ⭐ PROMOTED out of the opaque span 2026-08-14 (deformation-mount wave): the DWARF
@@ -238,6 +252,12 @@ namespace Deformation
 		                           ContactId lContactId,
 		                           DeformableObject* lpOtherVehicle,
 		                           DeformationSensor* lpOtherSensor);
+
+		// ⭐ 2026-08-14 (walls leg 4). Read this frame's earliest-impact record: false when disarmed
+		// (mImpulseContact.mfImpactTimeInFrame > 1.0, the 100.0 sentinel), else copy the record out
+		// and return true. PS3 @0x6B4ED4 (25 insns) is the whole body; X360 inlines it into
+		// UpdateContacts. Bodied in BrnDeformationSensor.cpp.
+		bool GetImpulse(StoredImpulseContact& lrOutContact);
 
 		// DWARF BrnDeformationSensor.cpp:718. Push this sensor's stored contacts into the shared
 		// penetration solver (as vehicle or world contacts per the body indices). const.

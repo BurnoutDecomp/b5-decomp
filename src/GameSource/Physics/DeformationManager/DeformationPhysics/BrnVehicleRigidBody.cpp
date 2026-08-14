@@ -51,28 +51,21 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
-    // X360 rodata &unk_82FB9680: one 16-byte vec4 row per ENextSensorDirection (the signed body-axis
-    // unit vector the deformation impulse direction selects). FLAGGED-0 PLACEHOLDER -- the real bytes
-    // live in X360 rodata at 0x82FB9680 and are not in the dossier; the SHAPE/STRIDE match the asm
-    // indexing (`16 * meImpulseDirection`, E_NSD_NUM rows). NEVER fabricate the concrete values.
-    static const Vector4 KA_IMPULSE_DIRECTION_VECTORS[E_NSD_NUM] =
-    {
-        { 0.0f, 0.0f, 0.0f, 0.0f },   // E_NSD_POS_XAXIS  (placeholder)
-        { 0.0f, 0.0f, 0.0f, 0.0f },   // E_NSD_NEG_XAXIS  (placeholder)
-        { 0.0f, 0.0f, 0.0f, 0.0f },   // E_NSD_POS_YAXIS  (placeholder)
-        { 0.0f, 0.0f, 0.0f, 0.0f },   // E_NSD_NEG_YAXIS  (placeholder)
-        { 0.0f, 0.0f, 0.0f, 0.0f },   // E_NSD_POS_ZAXIS  (placeholder)
-        { 0.0f, 0.0f, 0.0f, 0.0f },   // E_NSD_NEG_ZAXIS  (placeholder)
-    };
+    // ⭐ TABLE RETIRED 2026-08-14 (walls leg 4): the flagged-zero KA_IMPULSE_DIRECTION_VECTORS
+    // placeholder (X360 rodata &unk_82FB9680, dynamic-init so zero in the image) is now the REAL
+    // shared BrnPhysics::Deformation::KA_IMPULSE_DIRECTIONS in BrnCollidableBody.cpp -- the PS3
+    // exports name the global AND its rows' initializer (see that TU's banner). With the zero rows
+    // every impulse this TU applied multiplied to zero (the silent-drop shape); now real.
 
     // The shared apply kernel of both functions: build the impulse vector and route it into the
     // attached vehicle. Factored out only for the bodies below to share -- the X360 inlines it into
-    // both functions identically.
+    // both functions identically. (The PS3 keeps both out-of-line, @0x6E0A60/@0x6E0B8C, and both
+    // resolve the row through CollidableBody::GetDirectionVector -- the same table access.)
     static void ApplyImpulseToVehicle(BrnPhysics::Vehicle::VehiclePhysics* lpVehicle,
                                       const ImpulseParams* lpImpulseParams)
     {
         // liImpulse = direction-row * magnitude   (vmulfp128 v1, v13, v0)
-        const Vector4& lrDirection = KA_IMPULSE_DIRECTION_VECTORS[lpImpulseParams->meImpulseDirection];
+        const Vector3& lrDirection = KA_IMPULSE_DIRECTIONS[lpImpulseParams->meImpulseDirection];
         const f32 lfMagnitude = lpImpulseParams->mvfImpulseMagnitude.x;   // broadcast VecFloat lane
         const Vector3 liImpulse =
         {

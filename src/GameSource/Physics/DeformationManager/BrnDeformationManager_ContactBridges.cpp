@@ -155,8 +155,15 @@ namespace Deformation
         DeformationSensor& lrSensor =
             lrModel.GetDeformationSensorFromVolumeInstance(lrPotentialContact.muVolumeInstanceIdA);
 
+        // ⭐⭐ FIXED 2026-08-14 (walls leg 4, at-rest probe): the console hands ValidateAndAddContact
+        // the INVERSE (world -> model) transform -- the PS3 body's own argument is NAMED
+        // lInverseVehicleTransform, and the car-car route below already builds exactly this
+        // inverse. The old forward-transform pass made the stored local contact points garbage
+        // (latent while nothing consumed them; the solver's at-rest pop measured it).
+        Matrix44Affine lTransform;
+        lrModel.GetTransform(lTransform);
         Matrix44Affine lWorldTransform;
-        lrModel.GetTransform(lWorldTransform);
+        BuildWorldToModel(lWorldTransform, lTransform);
 
         // Normalised-normal tripwire (non-gating). ⭐ UPGRADED AT MOVE 2026-08-06: the old body
         // carried an honest always-pass placeholder ("no faithful Vector3 normalise helper is

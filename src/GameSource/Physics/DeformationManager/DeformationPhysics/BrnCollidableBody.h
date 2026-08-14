@@ -74,8 +74,14 @@ namespace Deformation
         virtual void RecievePassedOnImpulse(const ImpulseParams* lpImpulseParams, VecFloat lvfPassedMagnitude) = 0;
 
         // DWARF BrnCollidableBody.cpp:43 -- non-virtual helper returning the unit body-axis vector for a
-        // given signed-axis direction. DECLARED-ONLY: its body is owned by the BrnCollidableBody TU.
+        // given signed-axis direction. ⭐ BODIED 2026-08-14 (walls leg 4) in BrnCollidableBody.cpp
+        // (PS3 @0x6B4D7C -- an indexed load from KA_IMPULSE_DIRECTIONS below).
         Vector3 GetDirectionVector(ENextSensorDirection leDirection);
     };
+
+    // ⭐ 2026-08-14 (walls leg 4): the per-direction unit-axis table (PS3 names it; rows recovered
+    // from the PS3 static initializer -- see BrnCollidableBody.cpp's banner). Indexed by
+    // ENextSensorDirection; consumed by every impulse-apply body in the deformation system.
+    extern const Vector3 KA_IMPULSE_DIRECTIONS[6];
 }
 }
