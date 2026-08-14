@@ -148,26 +148,35 @@ namespace Vehicle
     }
 
     // ---------------------------------------------------------------------------------------
-    // GetHeightAboveRoad  @0x825B3998
-    //   For each of the four driven wheels, if its road-contact line test is valid and the wheel
-    //   is on the ground (contact normal points along the vehicle up axis: dot(normal, up) > 0.5),
-    //   compute the signed height of the wheel position above the contact plane
-    //   (= dot(position - contactPlanePoint, normal)) and keep the running MINIMUM. Wheels that
-    //   fail the on-ground test leave the running minimum unchanged (the asm's vsel keeps the prior
-    //   accumulator). The result is returned broadcast across the lanes.
+    // GetHeightAboveRoad  @0x825B3998   (PS3 DecFIGS 0x7A4BD8 -- the mangle is the signature
+    //   authority; DWARF prototype RaceCarPhysics.h dwarfdump :310)
     //
-    //   The seed accumulator is a large positive value (the X360 splats flt_8208F5EC); modelled
-    //   here as a large finite sentinel so any on-ground wheel wins the min. The per-wheel "plane
-    //   point" reference (the asm `v1` operand) is the contact position itself, so the projection
-    //   reduces to dot(position - contactPosition, normal); since both the position read and the
-    //   subtracted reference are the wheel's own contact data, the signed offset is taken from the
-    //   contact's recorded line distance to the road (the natural per-wheel height), preserving the
-    //   min-over-on-ground-wheels semantics. FLAGGED: see header.
+    //   ⭐⭐ REWRITTEN 2026-08-14 (walls leg 3): the old body here was built on the DROPPED-
+    //   ARGUMENT TRAP -- the X360 Hex-Rays rendered the function with no parameters, and the
+    //   reconstruction "resolved" the query vector (`v1`) into the wheel's own contact data,
+    //   substituting mfLineDistanceToRoad for the projection. The real function takes the QUERY
+    //   POINT as its Vector3 parameter (v1 across both consoles) and answers "how high is this
+    //   point above the road plane under each on-ground wheel":
+    //
+    //   For each of the four driven wheels (asm walks +0x130/+0x210/+0x2F0/+0x3D0, stride 0xE0,
+    //   copying the 48-byte RoadContact head to the stack each iteration):
+    //     * skip when mbLineTestIsValid (+43 of the copy) is clear;
+    //     * on-ground test: dot3(contact.mNormal, up axis @+0x20) > 0.5 (flt_82001DA0, image-read);
+    //     * height = dot3(lPoint - contact.mPosition, contact.mNormal)  (`vsubfp v12, v1, v12` --
+    //       v1 IS the parameter -- then vmsum3fp against the contact normal);
+    //     * keep the running MINIMUM (vcmpgefp/vnot/vand mask + vsel keeps the prior accumulator
+    //       for wheels that fail either gate).
+    //   Seed accumulator: splat(flt_8208F5EC) == 0x7F7FFFFF == FLT_MAX (image-read this wave --
+    //   the old "1.0e30 sentinel FLAG" retires to the measured value). Returns the min broadcast
+    //   across the lanes (the X360 stvx128 sret; DWARF types it VecFloat).
+    //
+    //   No caller existed until ValidateRaceCarWorldContact (walls leg 3) -- the wrong-arity body
+    //   was latent, never load-bearing (grep witness: zero in-tree callers before this wave).
     // ---------------------------------------------------------------------------------------
-    Vector3 RaceCarPhysics::GetHeightAboveRoad() const
+    VecFloat RaceCarPhysics::GetHeightAboveRoad(Vector3 lPoint) const
     {
-        static const f32 KF_SEED_MAX_HEIGHT = 1.0e30f;   // FLAG: seed "max" (flt_8208F5EC splat)
-        static const f32 KF_ON_GROUND_DOT_THRESHOLD = 0.5f;
+        static const f32 KF_SEED_MAX_HEIGHT         = 3.4028234663852886e+38f; // flt_8208F5EC == 0x7F7FFFFF == FLT_MAX (image-read)
+        static const f32 KF_ON_GROUND_DOT_THRESHOLD = 0.5f;                    // flt_82001DA0 (image-read)
 
         const Vector3 lUpAxis = GetUpAxis();
         f32 lfMinHeight = KF_SEED_MAX_HEIGHT;
@@ -186,14 +195,14 @@ namespace Vehicle
             if (!lbOnGround)
                 continue;
 
-            // Signed height of the wheel above its contact plane: the recorded line distance to the
-            // road (the contact's own per-wheel measurement). Keep the running minimum.
-            const f32 lfHeight = lrContact.mfLineDistanceToRoad;
+            // Signed height of the QUERY POINT above this wheel's contact plane.
+            const Vector3 lDelta = vpu::Subtract(lPoint, lrContact.mPosition);
+            const f32 lfHeight = vpu::Dot(lDelta, lrContact.mNormal);
             if (lfHeight < lfMinHeight)
                 lfMinHeight = lfHeight;
         }
 
-        return Vector3{ lfMinHeight, lfMinHeight, lfMinHeight, lfMinHeight };
+        return VecFloat{ lfMinHeight, lfMinHeight, lfMinHeight, lfMinHeight };
     }
 
     // =========================================================================================

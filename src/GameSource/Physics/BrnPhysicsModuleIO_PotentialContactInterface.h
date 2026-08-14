@@ -66,6 +66,16 @@ namespace PhysicsModuleIO
         void Construct();                                          // @0x825A96C8  :41 (:134)
         void SetConstQueue(const InPotentialContactQueue* lpQueue); // @0x825A03C8 :44 (:138) write-lock
         void AddEvent(const CgsSceneManager::SceneManagerIO::PotentialContact& lEvent); // @0x825E72F0 :47 (:142) write-lock
+
+        // ⭐ ADDED 2026-08-14 (walls leg 3, harvest wave). DWARF :51 (:147, body hint :601): the
+        // CUSTOM-QUEUE AddEvent overload -- inline in the console header (assert
+        // BrnPhysicsModuleIO.h:596), which is why the X360 also emits an out-of-line local copy
+        // (sub_825E73D0) that AddContactResultsToQueue / EndPartContactGeneration /
+        // AddArticulatedJointContacts call. Assert the queue id against E_NUM_CUSTOM_QUEUE_TYPES,
+        // warn on a full queue ("PHYSICS WARNING: Run out of space in contact queue N"), then the
+        // bounds-gated AddEventSafe into maCustomEventQueues[luQueueID]. NO lock tripwire -- the
+        // console body carries none (it runs under the caller's write lock).
+        void AddEvent(u32 luQueueID, const CgsSceneManager::SceneManagerIO::PotentialContact& lrEvent); // @0x825E73D0 :51 (:147)
         s32  GetLength() const;                                    // @0x825A0498  :59 (:150) read-lock
         const CgsSceneManager::SceneManagerIO::PotentialContact& GetEvent(s32 liIndex) const; // @0x825A0578 :62 (:154) read-lock
 
@@ -81,11 +91,23 @@ namespace PhysicsModuleIO
         // The X360 crash-prediction driver (VehicleManager::HandleCrashPredictionForRaceCarAndWorld
         // @0x82640C28) reaches this queue via an inlined `this + 983152`, which is
         // maCustomEventQueues[6] (983152 == 16-byte base + 6 * 0x28010 stride). ADDITIVE inline
-        // accessor -- byte offset (index 6) is asm-proven; the NAME is the best-fit DWARF accessor
-        // (:76 GetRaceCarWithWorldQueueValidated) FLAGGED as unproven (the accessor->index binding is
-        // not recoverable from this build). Host addressing uses the typed member index, so it stays
-        // layout-correct without the X360 32-bit byte offset.
+        // accessor -- byte offset (index 6) is asm-proven.
+        // ⭐ NAME PROVEN 2026-08-14 (walls leg 3): the old "FLAGGED as unproven" caveat retires --
+        // DoRaceCarWorldContactValidation @0x825EB6C8 asserts
+        // "lpPotentialContactInterface->GetRaceCarWithWorldQueueValidated()->GetLength() == 0"
+        // (BrnVehicleManagerContactGeneration.cpp:1384) against EXACTLY this+983152, binding the
+        // DWARF accessor name to index 6 by the console's own assert string.
         const CustomPotentialContactQueue& GetRaceCarWithWorldQueueValidated() const { return maCustomEventQueues[6]; }
+
+        // ⭐ ADDED 2026-08-14 (walls leg 3): the RAW (unvalidated) race-car-vs-world queue,
+        // maCustomEventQueues[5]. Index binding asm-proven twice over: the harvest posts race-car
+        // world contacts with UserTagA == 5 (DoRaceCarWorldContactGeneration's baked `li 5` queue
+        // selector -> AddContactResultsToQueue -> AddEvent(5, ...)), and
+        // DoRaceCarWorldContactValidation drains `this + 819296` == 16 + 5*0x28010 before
+        // appending survivors to [6] "Validated". NAME is the DWARF accessor
+        // (BrnPhysicsModuleIO.h dwarfdump :80 GetRaceCarWithWorldQueue) -- the [5]-raw / [6]-
+        // validated pairing is exactly the raw/Validated name split.
+        const CustomPotentialContactQueue& GetRaceCarWithWorldQueue() const { return maCustomEventQueues[5]; }
 
         // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave). Three more custom-queue accessors, same
         // ADDITIVE pattern as [6] above -- byte offsets (indices) are asm-proven from

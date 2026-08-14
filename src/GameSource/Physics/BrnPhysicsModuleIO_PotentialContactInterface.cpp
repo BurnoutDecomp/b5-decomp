@@ -1,6 +1,7 @@
 #include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"         // gpDebugPrint / gxMessageFilterFlags (AddEvent(u32) overflow warning)
 
 // BrnPhysics::PhysicsModuleIO::PotentialContactInterface member functions, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. This TU bodies the five X360-emitted methods:
@@ -47,6 +48,26 @@ namespace PhysicsModuleIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         CGS_ASSERT(mpQueue != nullptr, "mpQueue != NULL");
         maCustomEventQueues[0].AddEventSafe(lEvent);
+    }
+
+    // ⭐ ADDED 2026-08-14 (walls leg 3, harvest wave). X360 0x825E73D0 (the out-of-line copy of
+    // the console-inline DWARF :147 overload; assert BrnPhysicsModuleIO.h:596, warning gated on
+    // `miLength >= 0x800` + message filter bit 0). No lock tripwire -- the console body has none
+    // (its three callers all run under the physics update's write lock). The bool AddEventSafe
+    // result is dropped exactly as the console drops r3.
+    void PotentialContactInterface::AddEvent(u32 luQueueID,
+                                             const CgsSceneManager::SceneManagerIO::PotentialContact& lrEvent)
+    {
+        CGS_ASSERT(luQueueID < static_cast<u32>(KI_CUSTOM_QUEUE_COUNT),
+                   "luQueueID < (uint32_t)E_NUM_CUSTOM_QUEUE_TYPES");            // BrnPhysicsModuleIO.h:596
+
+        CustomPotentialContactQueue& lrQueue = maCustomEventQueues[luQueueID];
+        if (lrQueue.GetLength() >= 2048 && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "PHYSICS WARNING: Run out of space in contact queue "
+                                       << luQueueID << "\n";
+        }
+        lrQueue.AddEventSafe(lrEvent);
     }
 
     // X360 0x825A0498: read-lock tripwire, then a mpQueue != NULL tripwire, then returns the

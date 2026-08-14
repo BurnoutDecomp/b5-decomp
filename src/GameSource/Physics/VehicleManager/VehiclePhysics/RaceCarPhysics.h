@@ -221,12 +221,18 @@ namespace Vehicle
         // that fail the on-ground test do not lower the running minimum. The X360 returns the
         // result broadcast across a VMX register; here a flat Vector3 with the height in every lane.
         //
-        // FLAG (semantic): the asm's per-wheel reference vector (the `v1` operand of the
-        // `vsubfp v12,v1,v12` height step) is not separately homed -- it is the wheel's own contact
-        // position relative to the contact plane, reconstructed here as
-        // dot(position - contactPoint, normal). The on-ground threshold (0.5) and the seed "max"
-        // value are the values the X360 decompiler resolved for the inlined constants.
-        Vector3 GetHeightAboveRoad() const;
+        // ⭐⭐ SIGNATURE CORRECTED 2026-08-14 (walls leg 3): the old semantic FLAG here dressed up
+        // the DROPPED-ARGUMENT TRAP. The `v1` operand the old note called "not separately homed"
+        // is the function's Vector3 PARAMETER — the QUERY POINT — which the X360 Hex-Rays dropped
+        // (the known trap). Both oracles prove it: the PS3 DecFIGS mangle
+        // (._ZN10BrnPhysics7Vehicle14RaceCarPhysics18GetHeightAboveRoadEN2rw4math3vpu7Vector3E)
+        // and the DWARF prototype (RaceCarPhysics.h dwarfdump :310, `VecFloat
+        // GetHeightAboveRoad(Vector3)`). The function answers "how high is THIS POINT above the
+        // road the wheels are touching": min over on-ground wheels of
+        // dot(lPoint - wheelContact.mPosition, wheelContact.mNormal). Return type is the DWARF's
+        // VecFloat (the splat the X360 stvx128-returns). No caller existed until
+        // ValidateRaceCarWorldContact landed, so the wrong arity was latent, never load-bearing.
+        VecFloat GetHeightAboveRoad(Vector3 lPoint) const;
 
         // ----- ADDITIVE GROW (Deformation car-car-impulse group): two bounce-state methods the
         //       car-car shunt path calls. DECLARE-ONLY -- their bodies are owned by a separate

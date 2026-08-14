@@ -269,22 +269,13 @@ namespace Vehicle
                            "leaving it inert is CORRECT while the Add posts nothing");
     }
 
-    void VehicleManager::EndVehicleContactGeneration(
-        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface*,
-        const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>*,
-        f32, BrnPhysics::Deformation::DeformationManager*, CgsModule::IOBufferStack*,
-        CgsMemory::LinearMalloc*, BrnPhysics::PhysicsModuleIO::PotentialContactInterface*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::EndVehicleContactGeneration @0x8261AC38 (661)");
-    }
+    // ⭐⭐ GATE DELETED 2026-08-14 (walls leg 3): VehicleManager::EndVehicleContactGeneration
+    // @0x8261AC38 (661) is REAL in BrnVehicleManagerContactGeneration.cpp — the harvest runs.
 
-    void VehicleManager::StartPartContactGeneration(
-        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface*, f32,
-        BrnPhysics::Deformation::DeformationManager*, CgsModule::IOBufferStack*,
-        BrnPhysics::PhysicsModuleIO::PotentialContactInterface*, CgsMemory::LinearMalloc*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::StartPartContactGeneration @0x8262C220 (114)");
-    }
+    // ⭐ GATE MOVED 2026-08-14 (walls leg 3): VehicleManager::StartPartContactGeneration
+    // @0x8262C220 is a PARTIAL body in BrnVehicleManagerContactGeneration.cpp now — its FIRST
+    // store (the miFirstPartContactGenEntry boundary stamp the harvest reads) is real; the
+    // part-contact-generation tail stays a named log-once gate there.
 
     void VehicleManager::EndPartContactGeneration(f32, BrnPhysics::Deformation::DeformationManager*,
                                                   CgsModule::IOBufferStack*,
@@ -293,13 +284,10 @@ namespace Vehicle
         BRN_CONDUCTOR_GATE("VehicleManager::EndPartContactGeneration @0x8261B690 (276)");
     }
 
-    void VehicleManager::DoRaceCarWorldContactValidation(
-        BrnPhysics::PhysicsModuleIO::PotentialContactInterface*,
-        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface*, f32,
-        BrnPhysics::Deformation::DeformationManager*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::DoRaceCarWorldContactValidation @0x825EB6C8 (416)");
-    }
+    // ⭐⭐ GATE DELETED 2026-08-14 (walls leg 3): VehicleManager::DoRaceCarWorldContactValidation
+    // @0x825EB6C8 (416) is REAL in BrnVehicleManagerContactGeneration.cpp, and its callee
+    // ValidateRaceCarWorldContact @0x825C6088 (988) is REAL in
+    // BrnVehicleManager_ValidateRaceCarWorldContact.cpp.
 
     void VehicleManager::DoTrafficWorldContactOrdering(
         BrnPhysics::PhysicsModuleIO::PotentialContactInterface*)
