@@ -616,6 +616,16 @@ namespace BrnResource
         // ---- type-11 records: rw linear resource allocators (service @0x8286D130: bank carve
         //      per non-zero descriptor lane, then LinearResourceAllocator::Initialize(resource,
         //      capacity); the drain's case 11 stores the returned pointer) --------------------
+        // ⚠️ [marked deviation, 2026-08-14 deformation-mount wave] HOST HEADROOM x2 on the
+        // rw-linear lane sizes. The memory map's budgets are CONSOLE truth sized for 32-bit
+        // objects; the host's widened types must carve MORE from the same banks. The first
+        // measured overflow: bank 23 "PhysicsAlloc" (pool-0 budget 0x3ED800) already holds the
+        // sim module's widened carve, and DeformationManager::Prepare's 28-model pool (console
+        // 28 x 26496 = 0xB5200; host 28 x sizeof(DeformableObject), pointer-widened) tipped it --
+        // LinearResourceAllocator::DoAllocate returned a null lane and the boot died on the
+        // "mpaModels != NULL" tripwire + an AV in ClearVariables. The budgets scale, the map
+        // data itself stays untouched (the carve comes from the host debug allocator).
+        static const u32 KU_HOST_RWLINEAR_HEADROOM = 2u;
         for (s32 li = 0; li < KI_NUM_MEMORY_MAP_RWLINEAR_ALLOCATORS && li < 5; ++li)
         {
             const MemoryMapAllocatorDef& lrDef = KAC_MEMORY_MAP_RWLINEAR_ALLOCATORS[li];
@@ -626,13 +636,14 @@ namespace BrnResource
             bool lbAllocOk = true;
             for (u32 lu = 0; lu < 4; ++lu)
             {
-                lCapacity.m_baseResourceDescriptors[lu].m_size      = lrDef.mauSize[lu];
+                const u32 luHostSize = lrDef.mauSize[lu] * KU_HOST_RWLINEAR_HEADROOM;
+                lCapacity.m_baseResourceDescriptors[lu].m_size      = luHostSize;
                 lCapacity.m_baseResourceDescriptors[lu].m_alignment = lrDef.mauAlign[lu];
                 lRes.m_baseResources[lu] = 0;
                 if (lrDef.mauSize[lu] == 0)
                     continue;
                 lRes.m_baseResources[lu] =
-                    LaneAlloc::Carve(lpAllocator, lrDef.mauSize[lu], lrDef.mauAlign[lu],
+                    LaneAlloc::Carve(lpAllocator, luHostSize, lrDef.mauAlign[lu],
                                      lrDef.mpcName);
                 if (lRes.m_baseResources[lu] == 0)
                     lbAllocOk = false;

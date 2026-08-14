@@ -78,7 +78,9 @@ namespace Deformation
         // ---- driven-point / tag-point access (DWARF :77-92) ------------------------------
         IKDrivenPoint*       GetDrivenPoint(s32 liIndex);
         const IKDrivenPoint* GetDrivenPoint(s32 liIndex) const;
-        s32                  GetNumberOfDrivenPoints() const;   // forwards to mpSpec (console spec+464)
+        // ⭐ HEADER-INLINE (2026-08-14, deformation-mount wave): no export on either console
+        // (console-inline; the callers read spec+464 directly). Forwards to mpSpec.
+        s32                  GetNumberOfDrivenPoints() const { return mpSpec->GetNumberOfDrivenPoints(); }   // console spec+464
         TagPoint*            GetTagPoint(s32 liIndex);
         const TagPoint*      GetTagPoint(s32 liIndex) const;
         s32                  GetNumberOfTagPoints() const;      // forwards to mpSpec (console spec+472)

@@ -19,6 +19,10 @@ namespace BrnPhysics
 namespace Deformation
 {
 
+// stru_8208F620 lane 0 (image-read 2026-08-14: {FLT_EPSILON, 0.001, 1e-5, 1e-5}) -- the
+// tolerance the Construct rest-delta tripwire compares |magSq - 1| against.
+static const f32 KF_UNIT_DELTA_EPSILON = 1.1920928955078125e-07f;
+
 // Constraint solve shared by Construct (seed) and Update (re-solve). Given the live position
 // lPosition of the driven point and the current endpoint position lEndpoint, slide the point
 // back along the endpoint->point axis so it sits exactly lfDesiredDistance from the endpoint
@@ -60,14 +64,26 @@ void IKDrivenPoint::Construct(const IKDrivenPointSpec* lpSpec, const TagPoint* l
     mPositionPlusDistanceToA.z = lInitialPos.z;
     mPositionPlusDistanceToA.w = lpSpec->GetDesiredDistanceFromTagPointA();
 
-    // Constraint direction = unit A->B between the two endpoints' rest positions; the w "plus"
-    // lane carries the desired distance to endpoint B.
-    const Vector3 lDirectionToB = Normalize(Subtract(mpTagPointB->GetInitialPosition(),
-                                                      mpTagPointA->GetInitialPosition()));
+    // Constraint direction: raw A->B between the two endpoints' rest positions, then normalised;
+    // the w "plus" lane carries the desired distance to endpoint B.
+    const Vector3 lRawDeltaToB = Subtract(mpTagPointB->GetInitialPosition(),
+                                          mpTagPointA->GetInitialPosition());
 
-    // Non-gating tripwire: the A->B direction must be unit length (BrnIKDrivenPoint.h:130).
-    CGS_ASSERT(!IsZero(Vector3{ MagnitudeSquared(lDirectionToB) - 1.0f, 0.0f, 0.0f, 0.0f }),
+    // Non-gating tripwire, ⭐ CORRECTED 2026-08-14 (deformation-mount wave) against the asm
+    // (0x82615540..0x82615564): the console tests the RAW delta BEFORE normalising --
+    //   vsubfp; vmsum3fp128 magSq; vsubfp magSq-1; vandc |.|; vcmpgtfp vs stru_8208F620 lane 0
+    //   (image-read: FLT_EPSILON 1.1920929e-07); FireAssert when NOT greater
+    // i.e. it demands the streamed rest positions are NOT accidentally a pre-normalised unit
+    // pair (a data-sanity check on GetInitialPosition), and with authored positions it never
+    // fires. The previous transcription applied it to the NORMALISED direction -- unit by
+    // construction, so the "tripwire" fired for every well-formed driven point (93 per create,
+    // boot-measured 04:56 run). This TU had never executed before the deformation-manager mount;
+    // the gate was stale, not dead.
+    CGS_ASSERT(((MagnitudeSquared(lRawDeltaToB) - 1.0f) > KF_UNIT_DELTA_EPSILON) ||
+               ((MagnitudeSquared(lRawDeltaToB) - 1.0f) < -KF_UNIT_DELTA_EPSILON),
                "!IsZero( RwMathVPU::MagnitudeSquared( lvDirectionToB ) - RwMathVPU::GetVecFloat_One() )");
+
+    const Vector3 lDirectionToB = Normalize(lRawDeltaToB);
 
     mDirectionPlusDistanceToB.x = lDirectionToB.x;
     mDirectionPlusDistanceToB.y = lDirectionToB.y;

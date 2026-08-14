@@ -97,6 +97,37 @@ namespace Deformation
     }
 
     // -----------------------------------------------------------------------------------------
+    // AddWorldContact -- ⭐ ADDED 2026-08-14 (deformation-mount wave). NO out-of-line export on
+    // EITHER console (console-inline at its call sites -- DeformationSensor::
+    // AddContactsToPenetrationSolver's world arm); the exact sibling of AddVehicleContact above
+    // over maWorldContacts/miNumWorldContacts (the header declares both, DWARF :91).
+    // -----------------------------------------------------------------------------------------
+    void PenetrationSolver::AddWorldContact(Vector3 lPointOnA, Vector3 lPointOnB, Vector3 lNormal,
+                                            s32 liIndexA, s32 liIndexB)
+    {
+        CGS_ASSERT(miNumWorldContacts < KI_MAX_PENETRATION_CONTACTS,
+                   "miNumWorldContacts < KI_MAX_PENETRATION_CONTACTS");
+
+        PenetrationContact& lrContact = maWorldContacts[miNumWorldContacts];
+        lrContact.mPointOnA = lPointOnA;
+        lrContact.mPointOnB = lPointOnB;
+        lrContact.mNormal   = lNormal;
+        lrContact.miIndexA  = liIndexA;
+        lrContact.miIndexB  = liIndexB;
+
+        ++miNumWorldContacts;
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // GetNumWorldContacts -- ⭐ ADDED 2026-08-14 (deformation-mount wave). No export on either
+    // console (console-inline); the trivial live-count read (DWARF :106).
+    // -----------------------------------------------------------------------------------------
+    s32 PenetrationSolver::GetNumWorldContacts() const
+    {
+        return miNumWorldContacts;
+    }
+
+    // -----------------------------------------------------------------------------------------
     // Solve @ 0x825BAA58
     //   Resolve every accumulated penetration, writing the corrected per-body transforms back into
     //   maObjectTransforms. Two passes: the car-on-car pass (both bodies movable, weighted) then the

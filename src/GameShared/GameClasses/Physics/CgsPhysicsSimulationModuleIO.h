@@ -176,6 +176,12 @@ namespace PhysicsSimulationIO
         const InApplyForceQueue*             GetApplyForceQueue()             const;  // @0x8289E558
         const InSetRigidBodySpyQueue*        GetSetRigidBodySpyQueue()        const;  // @0x8289E600
         const InRemoveRigidBodyQueue*        GetRemoveRigidBodyQueue()        const;  // @0x8289E6A8  ⚠️ export HOLE
+        // ⭐ ADDED 2026-08-14 (deformation-mount wave): the WRITE-side twin @0x825BCF58 (an
+        // unnamed sub in the exports) -- write-lock guard ("Not locked for writing\n",
+        // CgsPhysicsSimulationModuleIO.h:1080 baked in its own assert) then
+        // &mRemoveRigidBodyQueue (`addi r3, this, 0x196A0` == +104096). Called (inlined on the
+        // console) by PhysicalBodyPartPool::RemovePart before its InRemoveRigidBody AddEvent.
+        InRemoveRigidBodyQueue*              GetRemoveRigidBodyQueue();               // @0x825BCF58
         const InRemoveAllRigidBodiesQueue*   GetRemoveAllRigidBodiesQueue()   const;  // @0x8289E750
         const InAddContactQueue*             GetAddContactQueue()             const;  // @0x8289E7F8
         // ⭐ ADDED 2026-08-06 (BridgeContactsToSimulation wave): the WRITE-side twin

@@ -39,6 +39,7 @@
 #include "SharedClasses/World/BrnWheelGraphicsSpecResourceType.h"              // BrnWheel::GraphicsSpecResourceType (0x1000A)
 #include "SharedClasses/Graphics/PlayerCarColoursResourceType.h"               // CgsResource::PlayerCarColoursResourceType (0x1001E)
 #include "SharedClasses/Progression/BrnProgressionResourceType.h"              // BrnProgression::ProgressionResourceType (0x1000E)
+#include "SharedClasses/Physics/Deformation/Resources/StreamedDeformationSpecResourceType.h" // BrnResource::StreamedDeformationSpecResourceType (0x1001C)
 #include "SharedClasses/StreetData/BrnStreetDataResourceType.h"                // BrnStreetData::StreetDataResourceType (0x10018)
 #include "GameShared/GameClasses/Containers/CgsDictionaryResourceType.h"       // CgsContainers::DictionaryResourceType<ICE::ICETakeData> (0x41)
 #include "SDKs/Packages/ICE/ICEData.hpp"                                       // ICE::ICETakeData (the dictionary's element type)
@@ -200,6 +201,20 @@ namespace CgsResource
         // load fine on the documented null-type path, so it is not a vehicle-specific gap.)
         static BrnVehicle::GraphicsSpecResourceType   sVehicleGraphicsSpec;  // 0x10006 (65542)
         TypeRegistry::Register(&sVehicleGraphicsSpec);
+        // ---- the streamed DEFORMATION spec (deformation-mount wave, 2026-08-14) --------------
+        // StreamedDeformationSpec (0x1001C / 65564), the deformation resource inside each
+        // Vehicles\VEH_*_AT.bin. The handler TU has existed since the spec landed; it was NEVER
+        // REGISTERED, which was invisible for as long as the deformation manager was unmounted --
+        // the loader logged "[bundle] UNREGISTERED resource type id 65564 in
+        // 'Vehicles\VEH_PUSMC01_AT.bin'" and SKIPPED FixUp on every boot. The moment the mount
+        // landed and ProcessAddDeformationModelEvents ran the resolved spec for real, the first
+        // table walk (TransformToNewCOMSpace) dereferenced an un-rebased serialised offset and
+        // AV'd READING 0x6D0 (boot-measured, 2026-08-14 04:27 run). Registering the handler
+        // routes the load through StreamedDeformationSpec::FixUp exactly as the IdList/ICE/
+        // PlayerCarColours precedents above. (The shipped _AT payload is platform 4 / ported --
+        // bnd2 +8 == 04, byte-checked.)
+        static BrnResource::StreamedDeformationSpecResourceType sStreamedDeformationSpec; // 0x1001C (65564)
+        TypeRegistry::Register(&sStreamedDeformationSpec);
         // The WHEEL graphics spec -- the exact twin of the gap above, and LOAD-BEARING for the
         // same reason the vehicle one was. BundleLoader::LoadBundle gates ALL THREE fix-up
         // passes on `mpResourceType != 0`, so an unregistered type does not merely skip FixUp:

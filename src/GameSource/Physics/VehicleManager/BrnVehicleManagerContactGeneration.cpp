@@ -14,9 +14,11 @@
 // Caller: PhysicsModule::Update @0x825B0640 -- STILL A LINK STUB, so nothing reaches this
 // body at runtime yet; /OPT:REF strips it. Mounted for closure enforcement.
 //
-// ⚠⚠ The four Do*/IsRaceCarHidden callees at the bottom are TRAP STUBS (named, not landed):
-//   DoCarCarContactGeneration @0x8261BB38 (250 asm / 15 callees; PS3 0x75C0C8)
-//   DoRaceCarWorldContactGeneration @0x825EB140 (131 asm / 14 callees; PS3 0x788190)
+// ⚠⚠ Callee state (2026-08-14 deformation-mount wave): the model table is LIVE, so the two
+// race-car Do* callees are REACHED PER FRAME — both were DEGRADED from assert traps to log-once
+// gates that produce no contacts (see their bodies). Still not reconstructed:
+//   DoCarCarContactGeneration @0x8261BB38 (250 asm / 15 callees; PS3 0x75C0C8) — log-once gate
+//   DoRaceCarWorldContactGeneration @0x825EB140 (131 asm / 14 callees; PS3 0x788190) — log-once gate
 //   DoTrafficCarWorldContactGeneration @0x8261BF28 (⚠ .ida-exports HOLE; PS3 0x789760)
 //   IsRaceCarHidden @0x825C2EA0 (⚠ .ida-exports HOLE; no PS3 twin surfaced either --
 //     signature from the two register-truth call sites)
@@ -449,8 +451,21 @@ namespace Vehicle
         CgsMemory::SimpleDataStreamProducer* /*lpSphereSphereStream*/,
         u16 /*lu16QueueIndex*/, f32 /*lfTimeStep*/)
     {
-        CGS_ASSERT(false, "TRAP: VehicleManager::DoCarCarContactGeneration @0x8261BB38 "
-                          "not reconstructed (big-five #2 closure stub)\n");
+        // ⭐ DEGRADED TRAP → log-once gate (2026-08-14 deformation-mount wave). The moment the
+        // deformation model table went live (table != -1) this body became REACHED PER FRAME for
+        // overlapping car pairs; an assert trap here would storm. The honest state: the car-car
+        // contact-generation leg (~250 asm / 15 callees) is STILL NOT RECONSTRUCTED — this gate
+        // produces NO contacts, loudly, once. Reconstruct with the collide-stream family wave.
+        static bool s_bLoggedCarCarGate = false;
+        if (!s_bLoggedCarCarGate)
+        {
+            s_bLoggedCarCarGate = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint
+                    << "conductor gate: DoCarCarContactGeneration @0x8261BB38 reached (model table "
+                       "is LIVE) but not reconstructed -- car-car contacts NOT generated [FLAG PC "
+                       "boot gate]. Reported once, not per frame\n";
+        }
     }
 
     void VehicleManager::DoRaceCarWorldContactGeneration(
@@ -462,8 +477,23 @@ namespace Vehicle
         CgsMemory::SimpleDataStreamProducer* /*lpSweptSphereTriangleStream*/,
         u32 /*luQueueIndex*/)
     {
-        CGS_ASSERT(false, "TRAP: VehicleManager::DoRaceCarWorldContactGeneration @0x825EB140 "
-                          "not reconstructed (big-five #2 closure stub)\n");
+        // ⭐ DEGRADED TRAP → log-once gate (2026-08-14 deformation-mount wave). With the model
+        // table live this is reached EVERY FRAME for every unfrozen live race car; the previous
+        // CGS_ASSERT(false) trap would have halted the sim on the first post-mount frame. The
+        // honest state: race-car world contact generation (131 asm / 14 callees, ~10.5k insns of
+        // generation/harvest/kernels measured at the walls-wave census) is STILL NOT
+        // RECONSTRUCTED — this gate produces NO world contacts, loudly, once. That is the (c)
+        // walls wave, not this one.
+        static bool s_bLoggedRaceCarWorldGate = false;
+        if (!s_bLoggedRaceCarWorldGate)
+        {
+            s_bLoggedRaceCarWorldGate = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint
+                    << "conductor gate: DoRaceCarWorldContactGeneration @0x825EB140 reached (model "
+                       "table is LIVE) but not reconstructed -- world contacts NOT generated [FLAG "
+                       "PC boot gate]. Reported once, not per frame\n";
+        }
     }
 
     void VehicleManager::DoTrafficCarWorldContactGeneration(

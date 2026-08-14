@@ -44,7 +44,14 @@ namespace Deformation
         void           Destruct();
         bool           Prepare();
         bool           Release();
-        const Vector3& GetPosition() const;
+        // ⭐ HEADER-INLINE (2026-08-14, deformation-mount wave): no export on either console
+        // (console-inline); the mount's trial link surfaced the reference (IKBodyPart::
+        // UpdateSkinningOffsetsWithinBox). The leading Vector3 view of the packed position lane
+        // (the GetMaxSensorImpulse reinterpret precedent).
+        const Vector3& GetPosition() const
+        {
+            return reinterpret_cast<const Vector3&>(mPositionPlusDistanceToA);
+        }
         const Vector3& GetDirection() const;
         const TagPoint* GetTagPointA() const;
         const TagPoint* GetTagPointB() const;
@@ -64,9 +71,20 @@ namespace Deformation
             // mPositionPlusDistanceToA.w (distance-to-A) deliberately left untouched.
         }
 
-        Vector3        GetOffsetFromInitialPosition() const;
-        f32            GetScratchAmount() const;
-        Vector3        GetOriginalPosition() const;
+        // ⭐ HEADER-INLINE x3 (2026-08-14, deformation-mount wave): no exports on either console
+        // (console-inline); references surfaced by the mount's trial link (IKBodyPart::
+        // UpdateSkinningOffsets/WithinBox). Same shapes as the TagPoint siblings: original/rest
+        // position from the spec (IKDrivenPointSpec::GetInitialPos), offset = current - rest per
+        // lane, scratch is the member.
+        Vector3 GetOffsetFromInitialPosition() const
+        {
+            const Vector3& lrInitial = mpSpec->GetInitialPos();
+            return Vector3{ mPositionPlusDistanceToA.x - lrInitial.x,
+                            mPositionPlusDistanceToA.y - lrInitial.y,
+                            mPositionPlusDistanceToA.z - lrInitial.z, 0.0f };
+        }
+        f32     GetScratchAmount() const  { return mfScratchAmount; }
+        Vector3 GetOriginalPosition() const { return mpSpec->GetInitialPos(); }
 
     private:
         Vector3                  ResolveConstraint(Vector3, Vector3, VecFloat);

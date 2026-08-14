@@ -212,6 +212,14 @@ namespace Deformation
         const TagPointSpec*      GetTagPointSpec(s32 liIndex) const;
         const IKDrivenPointSpec* GetDrivenPointSpec(s32 liIndex) const;
 
+        // ⭐ ADDED 2026-08-14 (deformation-mount wave) -- checked per-sensor spec accessor
+        // (BrnStreamedDeformationSpec.h:200, the DWARF's own home). DeformableObject::ResetSensors
+        // @0x82623D60 INLINES it per iteration: assert "liSensorIndex < mu8NumDeformationSensors"
+        // (:201, non-gating tripwire), then &maDeformationSensorSpecs[liSensorIndex] (asm:
+        // 64*liIndex + this + 272). Exact sibling of GetGlassPaneSpec/GetWheelSpec; bodied in the
+        // mounted spec TU.
+        const SensorSpec* GetDeformationSensorSpec(s32 liSensorIndex) const;
+
         // Live deformation-sensor count (mu8NumDeformationSensors; asm spec+1618). The debug component's
         // selected-sensor slider range-checks against this.
         s32 GetNumDeformationSensors() const { return static_cast<s32>(mu8NumDeformationSensors); }

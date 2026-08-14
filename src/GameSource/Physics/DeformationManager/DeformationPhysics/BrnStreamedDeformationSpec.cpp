@@ -48,7 +48,14 @@ namespace Deformation
         // IKBodyPartSpec internal offsets / stride (asm-authoritative; type not yet homed).
         static const u32 KU_IK_PART_STRIDE          = 480;   // sizeof(IKBodyPartSpec)
         static const u32 KU_IK_PART_BBOX_OFFSET     = 64;    // &IKBodyPartSpec::mBBoxSpec
-        static const u32 KU_IK_PART_JOINTS_PTR      = 448;   // IKBodyPartSpec::mpaJointSpecs (embedded ptr)
+        // ⭐⭐ 4-BYTE SERIALISED SLOT (corrected 2026-08-14, deformation-mount wave): the shipped
+        // record keeps the console layout -- a u32 slot at +448 with miNumJoints at +452. The
+        // three sites below used to read/write it as `char**` (8 bytes): the reads pulled
+        // {slot, count} as one pointer (boot-measured AV on 0x00000003_052160D0 -- high dword ==
+        // the count), and FixUp's 8-byte write-back survived only because the sum never carried
+        // into the high dword. All slot accesses are now u32 (the Ptr32 convention; the low-4GB
+        // pool makes the widened deref whole).
+        static const u32 KU_IK_PART_JOINTS_PTR      = 448;   // IKBodyPartSpec::mpaJointSpecs (u32 serialised slot)
         static const u32 KU_IK_PART_JOINTS_COUNT    = 452;   // IKBodyPartSpec::miNumberOfJoints
         static const u32 KU_JOINT_STRIDE            = 64;    // sizeof(DeformationJointSpec)
 
@@ -153,6 +160,18 @@ namespace Deformation
         CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
         const char* lpBase = reinterpret_cast<const char*>(maDrivenPointData.Get());
         return reinterpret_cast<const IKDrivenPointSpec*>(lpBase + KU_DRIVEN_POINT_STRIDE * liIndex);
+    }
+
+    // ⭐ ADDED 2026-08-14 (deformation-mount wave). Checked per-sensor spec accessor (DWARF
+    // BrnStreamedDeformationSpec.h:200). ResetSensors @0x82623D60 inlines it per iteration:
+    //   asm: lbz r11, 0x652(spec); cmplw liSensorIndex, r11; blt skip
+    //        assert "liSensorIndex < mu8NumDeformationSensors" (:C9=201, non-gating tripwire)
+    //        result = 64 * liSensorIndex + spec + 272   (&maDeformationSensorSpecs[liSensorIndex])
+    const SensorSpec* StreamedDeformationSpec::GetDeformationSensorSpec(s32 liSensorIndex) const
+    {
+        CGS_ASSERT(liSensorIndex < static_cast<s32>(mu8NumDeformationSensors),
+                   "liSensorIndex < mu8NumDeformationSensors");   // BrnStreamedDeformationSpec.h:201
+        return &maDeformationSensorSpecs[liSensorIndex];
     }
 
     // ---- LocatorPointSpecList batch accessors ---------------------------------------------------
@@ -342,7 +361,9 @@ namespace Deformation
                     const s32 liNumJoints = *reinterpret_cast<const s32*>(lpPart + KU_IK_PART_JOINTS_COUNT);
                     if ( liNumJoints > 0 )
                     {
-                        char* lpJointBase = *reinterpret_cast<char**>(lpPart + KU_IK_PART_JOINTS_PTR);
+                        // u32 serialised slot -> host pointer (low-4GB pool; see the slot note above).
+                        char* lpJointBase = reinterpret_cast<char*>(static_cast<uintptr_t>(
+                            *reinterpret_cast<const u32*>(lpPart + KU_IK_PART_JOINTS_PTR)));
                         s32 liJoint = 0;
                         do
                         {
@@ -382,12 +403,11 @@ namespace Deformation
             char* lpPartBase = reinterpret_cast<char*>(maIKPartData.Get());
             do
             {
-                char**    lppJoints = reinterpret_cast<char**>(
+                // u32 serialised slot ops (see the slot note above; count at +452 stays untouched).
+                u32* lpuJointSlot = reinterpret_cast<u32*>(
                     lpPartBase + KU_IK_PART_STRIDE * liIndex + KU_IK_PART_JOINTS_PTR);
-                ptrdiff_t liPtr = reinterpret_cast<ptrdiff_t>(*lppJoints);
-                *lppJoints = (liPtr != 0)
-                    ? reinterpret_cast<char*>(liPtr - liBase)
-                    : reinterpret_cast<char*>(0);
+                if (*lpuJointSlot != 0u)
+                    *lpuJointSlot = static_cast<u32>(*lpuJointSlot - static_cast<u32>(liBase));
                 ++liIndex;
             }
             while ( liIndex < miNumberOfIKParts );
@@ -489,12 +509,11 @@ namespace Deformation
             char* lpPartBase = reinterpret_cast<char*>(maIKPartData.Get());
             do
             {
-                char*  lpPart    = lpPartBase + KU_IK_PART_STRIDE * liIndex;
-                char** lppJoints = reinterpret_cast<char**>(lpPart + KU_IK_PART_JOINTS_PTR);
-                ptrdiff_t liPtr = reinterpret_cast<ptrdiff_t>(*lppJoints);
-                *lppJoints = (liPtr != 0)
-                    ? reinterpret_cast<char*>(liPtr + liBase)
-                    : reinterpret_cast<char*>(0);
+                char* lpPart       = lpPartBase + KU_IK_PART_STRIDE * liIndex;
+                // u32 serialised slot ops (see the slot note above; count at +452 stays untouched).
+                u32*  lpuJointSlot = reinterpret_cast<u32*>(lpPart + KU_IK_PART_JOINTS_PTR);
+                if (*lpuJointSlot != 0u)
+                    *lpuJointSlot = static_cast<u32>(*lpuJointSlot + static_cast<u32>(liBase));
 
                 reinterpret_cast<BodyPartBBoxSpec*>(lpPart + KU_IK_PART_BBOX_OFFSET)->HackCheckHandedness();
                 ++liIndex;
