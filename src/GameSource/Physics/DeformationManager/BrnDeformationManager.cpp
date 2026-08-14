@@ -26,6 +26,8 @@
 
 #include <new>   // placement new (Prepare constructs the 28 models in the allocated pool storage)
 
+#include "rw/rwcore_structs.h"   // rw::IResourceAllocator / Resource / BaseResourceDescriptors (the pool carve)
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"        // CgsDev::PerfMonCpu
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationInputInterface.h"  // DeformationInputInterface (event queues)
@@ -86,8 +88,40 @@ namespace Deformation
     void DeformationDebugComponent_Destruct(DeformationDebugComponent* lpComponent);  // X360: clear mpDeformationManager + BaseCollisionGenerator::Destruct(&static)
     bool DeformationDebugComponent_HasManager(const DeformationDebugComponent* lpComponent); // X360: the (mpDeformationManager != NULL) assert read
 
-    DeformableObject*        AllocateDeformableModelPool(rw::IResourceAllocator* lpAllocator, u32 luCount);
-    StreamedDeformationSpec* ResolveDeformationSpec(ResourceHandle lModelHandle);
+    // ⭐ BOTH BODIED 2026-08-14 (walls wave) -- they were declare-only "cross-TU surface" and no TU
+    // anywhere defined them (trial-link-measured). Their mechanisms are now byte-attested:
+    //
+    // AllocateDeformableModelPool -- Prepare @0x826302E0..0x8263033C builds the standard rw
+    // five-entry resource descriptor ({size,align} in entry[0], {0,1} in the rest), size 0xB5200
+    // (console 28 * 26496 -- the host uses its own 28 * sizeof) with ALIGN 16 (`li r11, 0x10`),
+    // names the allocation "DeformationModels", and calls the allocator's DoAllocate slot
+    // (vtable +0x10). Same CarveResource idiom as CgsPhysicsSimulationModule.cpp:1008 and
+    // TriangleCacheManager::Prepare. The pool base is m_baseResources[0].
+    DeformableObject* AllocateDeformableModelPool(rw::IResourceAllocator* lpAllocator, u32 luCount)
+    {
+        rw::BaseResourceDescriptors<5> lDescriptor;
+        for (u32 luEntry = 0u; luEntry < 5u; ++luEntry)
+        {
+            lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0u;
+            lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;
+        }
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = luCount * static_cast<u32>(sizeof(DeformableObject));
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16u;   // 0x8263031C `li r11, 0x10`
+
+        rw::Resource lResource = lpAllocator->DoAllocate(
+            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), "DeformationModels");
+        return static_cast<DeformableObject*>(lResource.m_baseResources[0]);
+    }
+
+    // ResolveDeformationSpec -- ONE dereference of the widened handle's leading pointer:
+    // DeformableObject::Prepare @0x826421C0 `lwz r27,0(evt) ; lwz r27,0(r27)` and the validate
+    // drain @0x825DB14C..164 both read *(mModelHandle.mpResourceMemory) as the fixed-up spec.
+    // The same *reinterpret_cast<T* const*>(mpResourceMemory) shape every CgsResourcePtr_* TU
+    // uses (e.g. CgsResourcePtr_BrnVehicle_GraphicsSpec.cpp).
+    StreamedDeformationSpec* ResolveDeformationSpec(ResourceHandle lModelHandle)
+    {
+        return *reinterpret_cast<StreamedDeformationSpec* const*>(lModelHandle.mpResourceMemory);
+    }
 
     // The X360 reaches three DeformableObject members the FROZEN BrnDeformableObject.h models in a
     // way this TU cannot call directly: ConstructUpdate/IK/PostPhysics PerformanceMonitors are
@@ -428,6 +462,73 @@ namespace Deformation
                 VecFloat{ lrEvent.mfInitialDamageAmount, lrEvent.mfInitialDamageAmount,
                           lrEvent.mfInitialDamageAmount, lrEvent.mfInitialDamageAmount },
                 lrEvent.meDeformationResetType, lbIsPlayerRaceCar, mRandom);
+        }
+    }
+
+    // -----------------------------------------------------------------------------------
+    // PostSceneUpdate  @0x82644F40  (26 insns -- ⭐ ADDED 2026-08-14, walls wave)
+    //
+    // The manager's per-scene-update tick: the two perfmon monitors (miTotalDeformationPerfMon
+    // @this+76676, miPostSceneUpdatePerfMon @this+76680 -- `addis r30,r31,1 ; addi r30,r30,0x2B84`
+    // / `...0x2B88`) bracket the ProcessEvents call, outer first, inner stopped first. That is the
+    // whole function. Its conductor gate in BrnPhysicsConductorGates.cpp carries the runtime seam
+    // until this TU mounts; the mount deletes that gate (LNK2005 says so loudly).
+    // -----------------------------------------------------------------------------------
+    void DeformationManager::PostSceneUpdate(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
+                                             DeformationInputInterface* lpInputInterface,
+                                             CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miTotalDeformationPerfMon);      // 0x82644F68
+        CgsDev::PerfMonCpu::StartMonitor(miPostSceneUpdatePerfMon);       // 0x82644F78
+
+        ProcessEvents(lpSimInput, lpInputInterface, lpSceneInterface);    // 0x82644F8C
+
+        CgsDev::PerfMonCpu::StopMonitor(miPostSceneUpdatePerfMon);        // 0x82644F94
+        CgsDev::PerfMonCpu::StopMonitor(miTotalDeformationPerfMon);       // 0x82644F9C
+    }
+
+    // -----------------------------------------------------------------------------------
+    // ProcessValidateDeformationModelEvents  @0x825DB0E0  (44 insns -- ⭐ ADDED 2026-08-14,
+    // walls wave; the last of ProcessEvents' four drains to be bodied)
+    //
+    // Drain the validate queue (EventQueue<Vehicle::ValidateRaceCarEvent, 8> @interface+3856 --
+    // `addi r27, r4, 0xF10`): for each event whose HIGH dword of mVolumeInstanceID maps to a live
+    // model (`ld r11,8(r31) ; srdi r11,r11,32` -> FindModelIndexByEntityID), REFRESH that model's
+    // cached spec pointer:
+    //   * mbValidate != 0 -> model.mpDeformationSpec = *(mModelHandle.mpResourceMemory)
+    //     (0x825DB14C `ld r10,0x10(r31)` the handle, then `lwz r9,0(r10)` ONE deref -- the same
+    //      handle->spec resolve DeformableObject::Prepare @0x826421C0 performs, and the same
+    //      *reinterpret_cast<T* const*>(mpResourceMemory) shape every CgsResourcePtr_* TU uses)
+    //   * mbValidate == 0 -> model.mpDeformationSpec = NULL   (0x825DB174)
+    // (the store target is model+0x18E0 == mpDeformationSpec, stride 0x6780 off mpaModels --
+    // exactly the seat ProcessAdd's Prepare fills; reached via the additive SetDeformationSpec.)
+    // -----------------------------------------------------------------------------------
+    void DeformationManager::ProcessValidateDeformationModelEvents(const DeformationInputInterface* lpInputInterface)
+    {
+        const CgsModule::EventQueue<BrnPhysics::Vehicle::ValidateRaceCarEvent, 8>& lrQueue =
+            lpInputInterface->GetValidateDeformationModelEvents();
+
+        const s32 liNumEvents = lrQueue.GetLength();
+        for (s32 liI = 0; liI < liNumEvents; ++liI)                       // 0x825DB110..0x825DB184
+        {
+            const BrnPhysics::Vehicle::ValidateRaceCarEvent& lrEvent = lrQueue.GetEvent(liI);
+
+            // The entity word is the HIGH dword of the volume-instance id (0x825DB128 srdi 32).
+            const s32 liModelIndex = FindModelIndexByEntityID(
+                EntityId{ static_cast<u32>(lrEvent.mVolumeInstanceID.muId >> 32) });
+            if (liModelIndex < 0)
+                continue;                                                  // 0x825DB138
+
+            if (lrEvent.mbValidate)                                        // 0x825DB140
+            {
+                // The one-deref handle->spec resolve (see the banner).
+                mpaModels[liModelIndex].SetDeformationSpec(
+                    *reinterpret_cast<StreamedDeformationSpec* const*>(lrEvent.mModelHandle.mpResourceMemory));
+            }
+            else
+            {
+                mpaModels[liModelIndex].SetDeformationSpec(nullptr);       // 0x825DB174
+            }
         }
     }
 

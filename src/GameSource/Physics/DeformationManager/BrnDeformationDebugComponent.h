@@ -70,6 +70,16 @@ namespace Deformation
         // steps, read-only state, change callbacks), then refresh the selected-rig + selected-sensor.
         virtual void OnActivate();
 
+        // ⭐ ADDITIVE named views (2026-08-14, walls wave), for DeformationManager::Destruct
+        // @0x82603F78's two direct pokes on the file-scope static component:
+        //   * the "mpDeformationManager != NULL" assert READ  -> HasManager()
+        //   * the back-pointer CLEAR before the base destruct -> DetachManager()
+        // Same shape as DeformableObject's *Debug wrappers -- a named member access, no friendship,
+        // no raw offset. Reached via the DeformationDebugComponent_* stand-ins in
+        // BrnDeformationConstructShims.cpp.
+        bool HasManager() const { return mpDeformationManager != 0; }
+        void DetachManager()    { mpDeformationManager = 0; }
+
     private:
         // ---- selected-rig / sensor / point sliders + the compression solver ----------------------
 

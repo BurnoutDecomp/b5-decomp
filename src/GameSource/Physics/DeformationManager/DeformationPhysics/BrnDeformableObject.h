@@ -110,9 +110,15 @@ namespace Deformation
     // ETagPointType, DeformationOutputInterface(ForEntityModules), StreamedDeformationSpec, IKBodyPart,
     // TagPoint, VehicleLocatorData, DeformationSensor, StoredImpulseContact, ImpulseParams, EAbsorptionSets,
     // EGlassState and the LocatorPointSpec are all already COMPLETE via the includes above.
-    struct DetachedPartManager;
-    struct DetachedWheelManager;
-    struct PhysicalBodyPart;
+    // ⚠️ KEYWORDS CORRECTED 2026-08-14 (walls wave, found by the LINK): the managers are `class`
+    // in their real homes (BrnDetachedPartManager.h:88 / BrnDetachedWheelManager.h:118), and
+    // PhysicalBodyPart is `class` (BrnPhysicalBodyPart.h:131). The old `struct` forward-decls
+    // made every TU that saw ONLY this header mangle PEAU while TUs with the real headers mangled
+    // PEAV -- Prepare/Release/ResetDeformation/OutputWheelData were defined-but-unmatchable, the
+    // exact [[shadowing-redeclarations]] fork shape (only a LINK finds it; this one did).
+    class  DetachedPartManager;
+    class  DetachedWheelManager;
+    class  PhysicalBodyPart;
     struct PenetrationSolver;
     struct PotentialContactInterface;
     struct CarState;
@@ -467,6 +473,22 @@ namespace Deformation
         {
             RenderSensors(lpRender, liFlags);
         }
+
+        // ⭐ ADDITIVE named seat write (2026-08-14, walls wave). DeformationManager::
+        // ProcessValidateDeformationModelEvents @0x825DB0E0 stores the re-resolved (or NULLed)
+        // spec pointer STRAIGHT into model+0x18E0 == mpDeformationSpec (0x825DB164 `stw r9` /
+        // 0x825DB174 `stw r26,0`) -- a direct cross-object poke on the console. This named setter
+        // is that store's by-name equivalent, same shape as the debug wrappers above (no
+        // friendship, no raw offset).
+        void SetDeformationSpec(const StreamedDeformationSpec* lpSpec) { mpDeformationSpec = lpSpec; }
+
+        // ⭐ 2026-08-14 (walls wave): the one friend grant the manager's Prepare needs --
+        // DeformationManager::Prepare @0x82630230 calls the PRIVATE ClearVariables on each pool
+        // model (0x826303CC `bl ...ClearVariables` inside manager code). The tree reaches it via
+        // the free trampoline the home TU declares; this friend line makes that trampoline (defined
+        // beside the private body in BrnDeformableObject_Lifecycle.cpp) legal without widening the
+        // member's access.
+        friend void DeformableObject_ClearVariables(DeformableObject* lpModel);
 
     private:
         // =========================================================================================

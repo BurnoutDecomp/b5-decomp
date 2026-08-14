@@ -76,12 +76,16 @@ namespace Deformation
             return mInitialPositionAndDetachThreshold;
         }
 
+        // ⭐ HEADER-INLINE (2026-08-14, walls wave): no X360/PS3 export symbol exists for it (the
+        // console kept it inline), and UpdateSkinningOffsets' reference was unresolved in the
+        // walls-wave trial link. It is the mbSkinnedPoint read.
+        bool IsSkinned() const { return mbSkinnedPoint; }
+
         // ---- remaining authored API (declared only; bodies elsewhere) -------------
         void Construct(s32, f32, Vector3, s32, f32, Vector3, Vector3, f32, bool);
         void SetInitialPosition(const Vector3&);
         void FixUp(void*);
         void FixDown(void*);
-        bool IsSkinned() const;
         void SetOffsetFromA(const Vector3&);
         void SetOffsetFromB(const Vector3&);
         void SetWeightA(f32);

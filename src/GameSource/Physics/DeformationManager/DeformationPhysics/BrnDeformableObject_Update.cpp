@@ -36,7 +36,9 @@
 //   this+25388 -> maIKParts[50]          (stride 16; mpSpec field at +8)
 //   this+26180 -> maPartStates[50]
 //   this+26232 -> miNumIKBodyParts
-//   this+26384 -> mGlobalEntityId        / this+26392 -> mu32GameModeState (reconstructed word)
+//   this+26384 -> mHandlingBodyID (8B)   / this+26392 -> mGlobalEntityId (the header's duplicate
+//                 mu32GameModeState models the same +26392 seat -- see its :572 flag; the walls
+//                 wave keeps the two equal in Prepare until the reconciliation lands)
 //
 // ============================ MODELLED-vs-ASM (read before editing) ==============================
 // The X360 build is dense VMX128 inline assembly. Per the established house idiom (cf. the committed
@@ -449,11 +451,28 @@ namespace Deformation
         // (2) showtime pre-apply: when the vehicle's vtable+0x10 predicate is set (image-settled as
         // IsPlayerVehicleInShowtime), pre-apply a showtime contact impulse (impulse-dir scaled by the
         // relative motion). Call order + gate preserved; the scaled vectors are modelled per-lane.
+        //
+        // ⚠️ CALL CORRECTED 2026-08-14 (walls wave -- this TU's FIRST COMPILE; the old 3-arg call
+        // predates the 2026-08-02 C09 signature correction and never built). The X360 site
+        // 0x82607978..0x8260799C is the INLINED VehicleRigidBody::ApplyShowtimeContactImpulse
+        // (PS3 keeps it out-of-line @0x6E1160: (ImpulseParams*, Vector3, bool)) expanding to the
+        // 5-arg VehiclePhysics handler, argument for argument:
+        //     v1 = vmulfp128 v116,v120          -> lImpulseDir * lRelativeMotion (unchanged)
+        //     r4 = li 0                          -> leImpulseSpace  = WORLD_SPACE
+        //     v2 = lvx var_270 == lParams+0x20   -> lParams.mImpulsePosition (NOT lContact.mPointOnA)
+        //     r5 = lwz var_240 == lParams+0x50   -> lParams.mePositionSpace (var_270-var_240 == 0x30
+        //                                           == the two fields' spacing in ImpulseParams)
+        //     r6 = lbz 0xB8(params)              -> mbWorldContact (+0xB8 == its console seat; the
+        //                                           PS3 wrapper's arg is even NAMED lbIsWorldImpulse)
         const bool lbIgnoringPassedOn = (lpVehicle != nullptr) && lpVehicle->IsPlayerVehicleInShowtime();
         if ( lbIgnoringPassedOn )
         {
             const Vector3 lShowtimeImpulse = vpu::Mult(lImpulseDir, lRelativeMotion);
-            lpVehicle->ApplyShowtimeContactImpulse(lShowtimeImpulse, lContact.mPointOnA, false);
+            lpVehicle->ApplyShowtimeContactImpulse(lShowtimeImpulse,
+                                                   rw::physics::WORLD_SPACE,
+                                                   lParams.mImpulsePosition,
+                                                   lParams.mePositionSpace,
+                                                   lParams.mbWorldContact);
         }
 
         // The vehicle's crashed byte (asm: `*(vehicle + 1808)`), read separately from the vtable+0x10
@@ -693,6 +712,74 @@ namespace Deformation
         (void)lpOutput;
         (void)lpContacts;
         (void)luGameModeState;
+    }
+
+    // =============================================================================================
+    // UpdateIK @0x82608858 (61 insns) -- ⭐ BODIED 2026-08-14 (walls wave; it was ABSENT from the
+    // tree altogether, trial-link-measured). PS3 out-of-line twin @0x6D374C confirms structure +
+    // the operand roles lane for lane.
+    //
+    // Two passes:
+    //  (1) TAG-POINT RELAXATION (0x8260887C..0x82608900): for each of the miNumTagPoints live tag
+    //      points (base this+15120, stride 32), pull the point toward its two-bone skinned target
+    //      at a rate of lvfTime per frame:
+    //          posA   = mpSensorA->mpLocalSpaceSphere->centre       (`lwz 0x19C(sensor)` -> lvx)
+    //          posB   = mpSensorB->mpLocalSpaceSphere->centre
+    //          target = (posA + offA)*wA + (posB + offB)*wB          (offsets/weights = spec +0/+16,
+    //                                                                 weights in the .w lanes)
+    //          mPos  += (target - mPos) * lvfTime                    (vmaddfp on the time broadcast)
+    //      then re-blend the point's scratch from the two sensors' accumulated scratch with the
+    //      SCALAR weight pair (spec +48/+52 -- a different pair from the .w lanes, exactly as the
+    //      asm reads both):
+    //          mfScratchAmount = sensorA.scratch*mfWeightA + sensorB.scratch*mfWeightB
+    //  (2) IK-PART UPDATE (0x8260891C..0x82608940): for each of the miNumIKBodyParts parts, skip
+    //      parts whose state == 4 (E_PART_STATE_DETATCHED, DWARF spelling -- detached parts are
+    //      simulated by the part pool, not IK), else IKBodyPart::Update().
+    // =============================================================================================
+    void DeformableObject::UpdateIK(VecFloat lvfTime)
+    {
+        // ---- (1) the tag-point relaxation ------------------------------------------------------
+        for (s32 liTag = 0; liTag < miNumTagPoints; ++liTag)
+        {
+            TagPoint& lrTag = maTagPoints[liTag];
+            const TagPointSpec* lpSpec = lrTag.GetSpec();
+
+            const Vector4& lrPosA =
+                lrTag.GetDeformationSensorA()->GetLocalSpaceSphere()->mPositionRadius;
+            const Vector4& lrPosB =
+                lrTag.GetDeformationSensorB()->GetLocalSpaceSphere()->mPositionRadius;
+            const Vector3Plus& lrOffA = lpSpec->GetOffsetAndWeightA();
+            const Vector3Plus& lrOffB = lpSpec->GetOffsetAndWeightB();
+
+            // target = (posA + offA)*wA + (posB + offB)*wB, per xyz lane (the .w weights splat).
+            Vector3 lTarget;
+            lTarget.x = (lrPosA.x + lrOffA.x) * lrOffA.w + (lrPosB.x + lrOffB.x) * lrOffB.w;
+            lTarget.y = (lrPosA.y + lrOffA.y) * lrOffA.w + (lrPosB.y + lrOffB.y) * lrOffB.w;
+            lTarget.z = (lrPosA.z + lrOffA.z) * lrOffA.w + (lrPosB.z + lrOffB.z) * lrOffB.w;
+
+            // mPos += (target - mPos) * time  (vsubfp then vmaddfp on the broadcast time lane).
+            const Vector3& lrPos = lrTag.GetPosition();
+            Vector3 lNewPos;
+            lNewPos.x = lrPos.x + (lTarget.x - lrPos.x) * lvfTime.x;
+            lNewPos.y = lrPos.y + (lTarget.y - lrPos.y) * lvfTime.x;
+            lNewPos.z = lrPos.z + (lTarget.z - lrPos.z) * lvfTime.x;
+            lNewPos.w = lrPos.w;
+            lrTag.SetPosition(lNewPos);
+
+            // Scratch re-blend, SCALAR weight pair (spec +48/+52; sensors' +420 accumulators).
+            lrTag.SetScratchAmount(
+                lrTag.GetDeformationSensorA()->GetScratchAmount() * lpSpec->GetWeightA() +
+                lrTag.GetDeformationSensorB()->GetScratchAmount() * lpSpec->GetWeightB());
+        }
+
+        // ---- (2) the IK-part update (skip detached/physical parts) -----------------------------
+        for (s32 liPart = 0; liPart < miNumIKBodyParts; ++liPart)
+        {
+            if (maPartStates[liPart] != static_cast<u8>(E_PART_STATE_DETATCHED))   // `cmplwi 4`
+            {
+                maIKParts[liPart].Update();
+            }
+        }
     }
 }
 }

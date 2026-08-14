@@ -42,18 +42,41 @@ namespace Deformation
         // bones this tag point is skinned to.
         void Construct(const TagPointSpec* lpType, const DeformationSensor* lpSensorArrayBase);
 
+        // ---- trivial accessors, HEADER-INLINE (⭐ 2026-08-14, walls wave) ----------
+        // None of these has an X360 or PS3 export symbol (checked in both name indexes), i.e. the
+        // console kept them inline in this header; the old "declared only; bodies elsewhere" note
+        // pointed at bodies that never existed anywhere (trial2_build.log named three of them as
+        // unresolved). Inlined here as the member reads they are.
+        const Vector3&           GetPosition() const             { return mPos; }
+        const DeformationSensor* GetDeformationSensorA() const   { return mpSensorA; }
+        const DeformationSensor* GetDeformationSensorB() const   { return mpSensorB; }
+        f32                      GetScratchAmount() const        { return mfScratchAmount; }
+        void                     SetPosition(Vector3 lPos)       { mPos = lPos; }
+        const TagPointSpec*      GetSpec()                       { return mpSpec; }
+
+        // Rest position comes from the spec (TagPointSpec::GetInitialPosition -- the xyz of
+        // mInitialPositionAndDetachThreshold); the offset is current minus rest, per lane.
+        Vector3 GetInitialPosition() const { return mpSpec->GetInitialPosition(); }
+        Vector3 GetOffsetFromInitialPosition() const
+        {
+            const Vector3& lrInitial = mpSpec->GetInitialPosition();
+            Vector3 lOffset;
+            lOffset.x = mPos.x - lrInitial.x;
+            lOffset.y = mPos.y - lrInitial.y;
+            lOffset.z = mPos.z - lrInitial.z;
+            lOffset.w = 0.0f;
+            return lOffset;
+        }
+
+        // ⭐ ADDITIVE named seat write (walls wave): DeformableObject::UpdateIK @0x826088F0 stores
+        // the re-blended scratch STRAIGHT into tag+0x1C from manager-object code (the console pokes
+        // the field directly). Same named-setter shape as SetPosition above.
+        void SetScratchAmount(f32 lfAmount) { mfScratchAmount = lfAmount; }
+
         // ---- remaining authored API (declared only; bodies elsewhere) -------------
-        const Vector3&           GetPosition() const;
-        Vector3                  GetInitialPosition() const;
-        const DeformationSensor* GetDeformationSensorA() const;
-        const DeformationSensor* GetDeformationSensorB() const;
-        Vector3                  GetOffsetFromInitialPosition() const;
-        f32                      GetScratchAmount() const;
-        void                     SetPosition(Vector3);
         f32                      GetDetachThresholdSquared() const;
         f32                      GetJointDetachThresholdSquared() const;
         s32                      GetJointIndex() const;
-        const TagPointSpec*      GetSpec();
         bool                     HasJoint() const;
     };
 }

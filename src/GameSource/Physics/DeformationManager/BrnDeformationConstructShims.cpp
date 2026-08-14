@@ -91,6 +91,33 @@ namespace Deformation
         lpComponent->Construct(lpManager);
     }
 
+    // ----------------------------------------------------------------------------------------------
+    // (2b) ⭐ ADDED 2026-08-14 (walls wave): the remaining three DeformationDebugComponent_* stand-ins
+    // BrnDeformationManager.cpp's Prepare/Destruct call by name. Trial-link-measured as genuinely
+    // undefined anywhere (trial2_build.log). Same forward shape as _Construct above:
+    //   * Register  -- Prepare @0x8263024C calls the BASE CgsDev::DebugComponent::Register on the
+    //                  static component (`addi r3, off_82F2A440 ; bl DebugComponent::Register`).
+    //   * HasManager - Destruct @0x82603F78's "mpDeformationManager != NULL" assert read.
+    //   * Destruct  -- Destruct's back-pointer clear; the "base destruct" half of the console pair
+    //                  is the TRIVIAL folded body (the image folds it onto BaseCollisionGenerator::
+    //                  Destruct's address -- ICF, see the component header's Construct note), so the
+    //                  clear IS the whole observable operation.
+    // ----------------------------------------------------------------------------------------------
+    void DeformationDebugComponent_Register(DeformationDebugComponent* lpComponent)
+    {
+        lpComponent->Register();
+    }
+
+    bool DeformationDebugComponent_HasManager(const DeformationDebugComponent* lpComponent)
+    {
+        return lpComponent->HasManager();
+    }
+
+    void DeformationDebugComponent_Destruct(DeformationDebugComponent* lpComponent)
+    {
+        lpComponent->DetachManager();
+    }
+
     // ==============================================================================================
     // (3) ConstructUpdatePerformanceMonitors @ 0x825B99A0  (87 instructions)
     //   Register the four per-frame Update-stage CPU perf monitors (Sort contacts, Solve contacts,

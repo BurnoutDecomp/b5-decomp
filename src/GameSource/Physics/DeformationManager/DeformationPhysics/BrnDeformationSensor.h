@@ -48,15 +48,28 @@ namespace CgsSceneManager
 	struct PotentialContact;
 }
 
+// Collision sphere; its leading 16 bytes are centre.xyz + radius.w. Its canonical home is
+// CgsGeometric (GameShared/GameClasses/Geometric/Primitives/CgsSphere.h); referenced only by
+// pointer here, so a forward declaration suffices.
+namespace CgsGeometric
+{
+	struct Sphere;
+}
+
 namespace BrnPhysics
 {
 namespace Deformation
 {
-	// Collision sphere; its leading 16 bytes are centre.xyz + radius.w. Its canonical home
-	// lives in the collision code — TagPoint::Construct only needs the centre, which it
-	// reads as the sphere's leading Vector4, so a forward declaration suffices here and we
-	// avoid forking the real type.
-	struct Sphere;
+	// ⚠️ FORK FIXED 2026-08-14 (walls wave): this used to be `struct Sphere;` declared INSIDE
+	// namespace Deformation -- which, despite its own "avoid forking the real type" comment,
+	// IS the fork: it minted the distinct type BrnPhysics::Deformation::Sphere, so every
+	// signature in this header (Prepare's two sphere args, mpLocal/WorldSpaceSphere) mangled
+	// against a type no other TU uses. The PS3 mangle for DeformationSensor::Prepare
+	// (@0x744...ResetSensors' callee: `...PN12CgsGeometric6SphereES7_...`) says CgsGeometric::
+	// Sphere, and the arrays these pointers point into (DeformableObject::maLocal/World-
+	// SensorSpheres) are declared CgsGeometric::Sphere. The alias below keeps every use in
+	// this header source-identical while restoring the one true type.
+	using CgsGeometric::Sphere;
 
 	// The full streamed sensor spec lives in SharedClasses/Physics/Deformation/BrnSensorSpec.h; the
 	// sensor holds it only by const pointer (mpSpec), so a forward declaration suffices and avoids an

@@ -205,6 +205,13 @@ namespace Deformation
         // misnomer GetIKPart belongs to DeformableObject and returns a different type.)
         const IKBodyPartSpec* GetDrivenPartSpec(s32 liIndex) const;
 
+        // ⭐ ADDED 2026-08-14 (walls wave): the per-index POINT-spec accessors, siblings of
+        // GetDrivenPartSpec (same checked shape; strides 80/32 are the TU's banner-attested table
+        // strides). They un-block ResetDeformation's tag/driven rebuild loops -- the _Lifecycle
+        // "spec accessors not exposed" FLAGs were stale against this header.
+        const TagPointSpec*      GetTagPointSpec(s32 liIndex) const;
+        const IKDrivenPointSpec* GetDrivenPointSpec(s32 liIndex) const;
+
         // Live deformation-sensor count (mu8NumDeformationSensors; asm spec+1618). The debug component's
         // selected-sensor slider range-checks against this.
         s32 GetNumDeformationSensors() const { return static_cast<s32>(mu8NumDeformationSensors); }
