@@ -112,11 +112,11 @@ namespace Deformation
                                        u16 lu16DeformableObjectIndex, DeformableObject* lpObject,
                                        EntityId lGlobalEntityId, RigidBodyId lHandlingBodyId,
                                        s32 liPartIndex, IKBodyPart* lpIKPart);                  // FLAG: provisional
-    void EmitDetachedPartNotification(CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
+    void EmitDetachedPartNotification(BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
                                       const void* lpEventBlob);                                  // FLAG: provisional
     bool TestJointForBreaking(DetachedPartManager* lpPartMgr, s32 liJointHandle,
                               CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
-                              CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput);          // FLAG: provisional
+                              BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput);          // FLAG: provisional
 
     // FLAG: the +1808 "is the body actively simulating" flag the asm reads off the attached body
     // (*(*(this+6476)+1808)). The attached-body slice does not expose that flag by name yet; modelled
@@ -217,7 +217,7 @@ namespace Deformation
     // (lpInput==a2, lpOutput==a3, lpPartMgr==a4; lfTimeStep is the X360-dropped trailing arg.)
     // =============================================================================================
     void DeformableObject::CheckForDetachment(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
-                                              CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
+                                              BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
                                               DetachedPartManager* lpPartMgr, f32 lfTimeStep)
     {
         // Outer gate. +26460 overall "already fully detached" state modelled as "every IK part is now
@@ -298,7 +298,7 @@ namespace Deformation
     // (lpInput==a2, lpOutput==a3, lpPartMgr==a4, lpRandom==a5; lfTimeStep is dropped.)
     // =============================================================================================
     void DeformableObject::CheckForForcedDetachment(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
-                                                    CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
+                                                    BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
                                                     DetachedPartManager* lpPartMgr,
                                                     CgsNumeric::Random* lpRandom, f32 lfTimeStep)
     {
@@ -360,7 +360,7 @@ namespace Deformation
     // (lpInput==a2, lpOutput==a3, lpPartMgr==a4, lrRandom==a5; this==_R29.)
     // =============================================================================================
     void DeformableObject::UpdateSpinningDetachment(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
-                                                    CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
+                                                    BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
                                                     DetachedPartManager* lpPartMgr, VecFloat lvfTimeStep,
                                                     CgsNumeric::Random& lrRandom)
     {
@@ -457,7 +457,7 @@ namespace Deformation
     // assert, branch and call is exact.
     // =============================================================================================
     void DeformableObject::DetachPart(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
-                                      CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
+                                      BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
                                       DetachedPartManager* lpPartMgr,
                                       s32 liPartIndex, s32 liJointIndex, bool lbHinge)
     {
@@ -640,5 +640,47 @@ namespace Deformation
             }
         }
     }
+
+    // =============================================================================================
+    // The two provisional free hooks (declared FLAG-provisional above) -- ⚠️ LOG-ONCE GATES
+    // 2026-08-14 (walls leg 4). Both are dead on the junkyard path (no detachments, no hinged
+    // parts): MakeDetachedPart's real body is DetachedPartManager::MakePartPhysical (mounted --
+    // wire the forward when the detach path goes live); TestJointForBreaking's real body is
+    // DetachedPartManager::TestJointForBreaking @0x825E??? (PS3 0x761F2C, 401).
+    // =============================================================================================
+    PhysicalBodyPart* MakeDetachedPart(DetachedPartManager* /*lpPartMgr*/,
+                                       CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpInput*/,
+                                       u16 /*lu16DeformableObjectIndex*/, DeformableObject* /*lpObject*/,
+                                       EntityId /*lGlobalEntityId*/, RigidBodyId /*lHandlingBodyId*/,
+                                       s32 /*liPartIndex*/, IKBodyPart* /*lpIKPart*/)
+    {
+        static bool sbLoggedMakePartGate = false;
+        if ( !sbLoggedMakePartGate )
+        {
+            sbLoggedMakePartGate = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint
+                    << "conductor gate: MakeDetachedPart hook reached but not wired to "
+                       "DetachedPartManager::MakePartPhysical -- part NOT detached [FLAG PC boot gate]\n";
+        }
+        return nullptr;
+    }
+
+    bool TestJointForBreaking(DetachedPartManager* /*lpPartMgr*/, s32 /*liJointHandle*/,
+                              CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpInput*/,
+                              BrnPhysics::PhysicsModuleIO::OutputBuffer* /*lpOutput*/)
+    {
+        static bool sbLoggedTestJointGate = false;
+        if ( !sbLoggedTestJointGate )
+        {
+            sbLoggedTestJointGate = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint
+                    << "conductor gate: TestJointForBreaking hook reached but not reconstructed "
+                       "(PS3 0x761F2C) [FLAG PC boot gate]\n";
+        }
+        return false;
+    }
+
 }
 }

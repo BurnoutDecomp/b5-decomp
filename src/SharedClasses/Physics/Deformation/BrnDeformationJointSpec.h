@@ -80,7 +80,7 @@ namespace Deformation
         // (mfJointDetachThreshold). FLAG: DWARF names this getter GetMaxStress() but
         // it returns the detach-threshold member -- the "limit stress" the body part's
         // joint test compares against. Name kept from DWARF.
-        f32 GetMaxStress() const;
+        f32 GetMaxStress() const { return mfJointDetachThreshold; }   // (inlined walls leg 4)
 
         // BrnIKBodyPartSpec.h:115 / :118. Stream fix-up/down (pointer relocation hooks).
         void FixUp(void* lpBase);

@@ -1,5 +1,8 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.h"
 
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"   // OutputBuffer + OutUpdateRigidBody queue (walls leg 4)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint / gxMessageFilterFlags (walls leg 4 gates)
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cmath>   // std::sqrt (the vrsqrtefp velocity-magnitude refinement converges to this)
@@ -262,5 +265,81 @@ namespace Deformation
                                          lfSphereRadius);
         }
     }
+
+    // =============================================================================================
+    // UpdatePostPhysics @0x82627150 (144) -- ⭐ 2026-08-14 (walls leg 4, FILTERED WALK + inner
+    // gate). Drain the sim output's updated-rigid-body queue; every event whose entity owner byte
+    // is a DETACHED wheel (9 == racecar wheel, 10 == traffic wheel; slot index asserted < 20)
+    // updates that wheel slot's transform/velocity from the event. The FILTER is real; the inner
+    // per-wheel update is a LOG-ONCE GATE (dead until a wheel detaches -- 0 detached wheels on
+    // the junkyard path).
+    // =============================================================================================
+    void DetachedWheelManager::UpdatePostPhysics(
+        const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput,
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface)
+    {
+        const CgsPhysics::PhysicsSimulationIO::OutputBuffer::OutUpdateRigidBodyQueue* lpQueue =
+            lpSimOutput->GetUpdateRigidBodyQueue();
+
+        const s32 liNumEvents = lpQueue->GetLength();
+        for ( s32 li = 0; li < liNumEvents; ++li )
+        {
+            const CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody& lrEvent =
+                lpQueue->GetEvent(li);
+
+            // owner byte = bits 56..63 of the event's 8-byte rigid-body handle (entity word high).
+            const u32 luOwner = static_cast<u32>(lrEvent.mID >> 56);
+            if ( luOwner != 9u && luOwner != 10u )   // detached racecar / traffic wheel only
+            {
+                continue;
+            }
+
+            static bool sbLoggedWheelPostPhysicsGate = false;
+            if ( !sbLoggedWheelPostPhysicsGate )
+            {
+                sbLoggedWheelPostPhysicsGate = true;
+                if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                    *CgsDev::Log::gpDebugPrint
+                        << "conductor gate: DetachedWheelManager::UpdatePostPhysics inner wheel "
+                           "update reached but not reconstructed [FLAG PC boot gate]\n";
+            }
+        }
+        (void)lpSceneInterface;
+    }
+
+    // =============================================================================================
+    // The two provisional emission hooks (declared FLAG-provisional in the header) -- ⚠️ LOG-ONCE
+    // GATES 2026-08-14 (walls leg 4). Both are dead until a wheel/part detaches AND is in scene;
+    // the real bodies are the InEventUpdateCachedPosition / RemoveRigidBody queue AddEvents.
+    // =============================================================================================
+    void EmitUpdateTriangleCacheEvent(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneUpdateInterface*/,
+                                      u64 /*lu64VolumeInstanceId*/, const Vector3& /*lvSweptPosition*/,
+                                      f32 /*lfSphereRadius*/)
+    {
+        static bool sbLoggedEmitCacheGate = false;
+        if ( !sbLoggedEmitCacheGate )
+        {
+            sbLoggedEmitCacheGate = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint
+                    << "conductor gate: EmitUpdateTriangleCacheEvent reached but not "
+                       "reconstructed [FLAG PC boot gate]\n";
+        }
+    }
+
+    void EmitRemoveRigidBodyEvent(CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/,
+                                  u32 /*luWheelEntityWord*/)
+    {
+        static bool sbLoggedEmitRemoveGate = false;
+        if ( !sbLoggedEmitRemoveGate )
+        {
+            sbLoggedEmitRemoveGate = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint
+                    << "conductor gate: EmitRemoveRigidBodyEvent reached but not reconstructed "
+                       "[FLAG PC boot gate]\n";
+        }
+    }
+
 }
 }

@@ -81,9 +81,9 @@ namespace Deformation
         // ⭐ HEADER-INLINE (2026-08-14, deformation-mount wave): no export on either console
         // (console-inline; the callers read spec+464 directly). Forwards to mpSpec.
         s32                  GetNumberOfDrivenPoints() const { return mpSpec->GetNumberOfDrivenPoints(); }   // console spec+464
-        TagPoint*            GetTagPoint(s32 liIndex);
-        const TagPoint*      GetTagPoint(s32 liIndex) const;
-        s32                  GetNumberOfTagPoints() const;      // forwards to mpSpec (console spec+472)
+        TagPoint*            GetTagPoint(s32 liIndex) { return &maTagPoints[liIndex]; }   // (inlined walls leg 4; @0x825C1170 is the same indexed read)
+        const TagPoint*      GetTagPoint(s32 liIndex) const { return &maTagPoints[liIndex]; }   // (inlined walls leg 4)
+        s32                  GetNumberOfTagPoints() const { return mpSpec->GetNumberOfTagPoints(); }   // (inlined walls leg 4; console spec+472)
 
         // ---- per-frame / skinning (DWARF :95-99) -----------------------------------------
 
@@ -120,7 +120,7 @@ namespace Deformation
         // detached-part creator @0x825DD7A8/0x825DD7AC chains part->mpIKPart (+8) -> spec
         // (+476) directly. Forwards to the spec's own committed inline.
         EBodyParts GetPartType() const { return mpSpec->GetPartType(); }   // console spec+476
-        s32        GetMeshId() const;     // forwards to mpSpec
+        s32        GetMeshId() const { return mpSpec->GetMeshId(); }   // (inlined walls leg 4)
         void       Reset();
 
         // X360 0x825C13F8. True if this panel is currently detachable: scans its tag points and
@@ -135,8 +135,8 @@ namespace Deformation
         bool IsToughenedPart() const;
 
         // ---- joint access (DWARF :123-127, :144-151) -------------------------------------
-        s32                          GetNumberOfJoints() const;          // forwards to mpSpec
-        const DeformationJointSpec*  GetJointSpec(s32 liIndex) const;    // forwards to mpSpec
+        s32                          GetNumberOfJoints() const { return mpSpec->GetNumberOfJoints(); }   // (inlined walls leg 4; console spec+452)
+        const DeformationJointSpec*  GetJointSpec(s32 liIndex) const { return mpSpec->GetJointSpec(liIndex); }   // (inlined walls leg 4)
 
         // Trivial raw-index accessor: mu8ActiveJointIndex as s32. NOT the 0x825B4110 body
         // (that is GetActiveJointSpec below). Used for the "active joint set?" tripwire.

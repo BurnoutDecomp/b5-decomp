@@ -76,7 +76,7 @@ namespace Deformation
 
         // BrnPhysicalWheel.h:140. The cached render-space transform (DWARF returns
         // const rw::math::vpu::Matrix44Affine*).
-        const Matrix44Affine* GetRenderTransform() const;
+        const Matrix44Affine* GetRenderTransform() const { return &mRenderTransform; }   // (inlined walls leg 4)
 
         // BrnPhysicalWheel.h:143. The rigid-body transform (DWARF returns
         // const rw::math::vpu::Matrix44Affine&).
@@ -100,7 +100,7 @@ namespace Deformation
         EntityId GetEntityId() const;
 
         // BrnPhysicalWheel.h:157. The packed wheel-body id.
-        BurnoutWheelBodyID GetWheelBodyId() const;
+        BurnoutWheelBodyID GetWheelBodyId() const { return mWheelBodyId; }   // (inlined walls leg 4)
 
         // ----- scene membership ----------------------------------------------------------
 
@@ -118,7 +118,7 @@ namespace Deformation
                       Vector3 lLinearVelocity, Vector3 lAngularVelocity);
 
         // BrnPhysicalWheel.h:172. The wheel's current linear velocity (mLinearVelocity).
-        Vector3 GetLinearVelocity() const;
+        Vector3 GetLinearVelocity() const { return mLinearVelocity; }   // (inlined walls leg 4: the cached member)
 
         // ----- scene ids / pool ----------------------------------------------------------
 
@@ -154,10 +154,10 @@ namespace Deformation
         void GetCylinder(CgsGeometric::Cylinder& lCylinderOut) const;
 
         // BrnPhysicalWheel.h:194. Whether the wheel's volume instance is currently in the scene.
-        bool IsAddedToScene() const;
+        bool IsAddedToScene() const { return mbAddedToScene; }   // (inlined walls leg 4)
 
         // BrnPhysicalWheel.h:198. The wheel radius (mfRadius).
-        f32 GetRadius() const;
+        f32 GetRadius() const { return mfRadius; }   // (inlined walls leg 4)
 
     private:
         // BrnPhysicalWheel.h:206. The packed scene volume id (shared collision volume).

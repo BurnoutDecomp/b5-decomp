@@ -442,5 +442,108 @@ namespace Deformation
         }
         return liRightMostIndex;
     }
+
+    // =============================================================================================
+    // CheckForDetachment @0x825C14B0 (209) -- ⭐ 2026-08-14 (walls leg 4). Scan this part's tag
+    // points; decide whether the accumulated sensor impulse should detach the part, and hand back
+    // the tag index whose joint should hinge. Store for store:
+    //   * per tag point i: fold the two sensors' biggest-impulse magnitudes (each sensor's
+    //     mPointDisplacement_BiggestImpulseThisFrame.w lane, vmaxfp chain) into lvfMaxImpulse;
+    //     lfDeform = |tagPos - spec initial pos|^2 - spec detach-threshold^2;
+    //     track the LARGEST lfDeform (fsel fold, FP31) and the tag with the SMALLEST lfDeform
+    //     among tags that HAVE a joint (spec joint index != 255) -> the hinge candidate;
+    //   * if the largest deformation excess <= 0: out = candidate, return false (nothing has
+    //     stretched past its detach threshold -- the at-rest early-out);
+    //   * asserts :409 (candidate has a joint) / :412 (joint index < spec joint count, streamed);
+    //   * band test (only when no candidate OR part type in {1,2,3}): detach iff
+    //     KVF_MIN_IMPULSE_FOR_DETACHMENT < maxImpulse <= (IsToughenedPart() ?
+    //     KVF_MAX_IMPULSE_FOR_DETACHMENT_TOUGH : KVF_MAX_IMPULSE_FOR_DETACHMENT).
+    // The three thresholds are DYNAMIC-INIT on both consoles; RECOVERED from the PS3 static
+    // initializer (__static_init_22): MIN = 500.0, MAX = 5000.0, MAX_TOUGH = 1200.0.
+    // =============================================================================================
+    // (The three detachment thresholds already live at this TU's top as the REAL namespace
+    // VecFloat globals -- 500/5000/1200, X360-initializer-recovered there and INDEPENDENTLY
+    // re-derived from the PS3 static initializer this wave: a value cross-witness.)
+
+    bool IKBodyPart::CheckForDetachment(f32 lfImpulse, s32& lriDetachJointIndexOut) const
+    {
+        s32 liCandidate       = -1;         // v7
+        f32 lfSmallestExcess  = 100000.0f;  // v8
+        f32 lfLargestExcess   = -100000.0f; // FP31
+        f32 lfMaxImpulse      = 0.0f;       // v127 (vspltisw 0 seed)
+
+        const s32 liNumTagPoints = GetNumberOfTagPoints();
+        for ( s32 li = 0; li < liNumTagPoints; ++li )
+        {
+            CGS_ASSERT(li >= 0, "liIndex >= 0");                          // h:264
+            CGS_ASSERT(li < liNumTagPoints, "liIndex < GetNumberOfTagPoints()");   // h:265
+
+            const TagPoint* lpTag  = GetTagPoint(li);
+            const TagPointSpec* lpSpec = const_cast<TagPoint*>(lpTag)->GetSpec();
+
+            const f32 lfImpA = lpTag->GetDeformationSensorA()
+                                   ->mPointDisplacement_BiggestImpulseThisFrame.w;
+            const f32 lfImpB = lpTag->GetDeformationSensorB()
+                                   ->mPointDisplacement_BiggestImpulseThisFrame.w;
+            f32 lfPair = (lfImpA > lfMaxImpulse) ? lfImpA : lfMaxImpulse;   // vmaxfp fold
+            lfMaxImpulse = (lfImpB > lfPair) ? lfImpB : lfPair;
+
+            const Vector3& lrPos     = lpTag->GetPosition();
+            const Vector3& lrInitial = lpSpec->GetInitialPosition();
+            const f32 lfDx = lrPos.x - lrInitial.x;
+            const f32 lfDy = lrPos.y - lrInitial.y;
+            const f32 lfDz = lrPos.z - lrInitial.z;
+            const f32 lfExcess = (lfDx * lfDx + lfDy * lfDy + lfDz * lfDz)
+                               - lpSpec->GetDetachThresholdSquared();      // spec +56
+
+            if ( lfExcess > lfLargestExcess )
+            {
+                lfLargestExcess = lfExcess;                                // the fsel fold
+            }
+            if ( lfExcess < lfSmallestExcess && lpSpec->GetJointIndex() != -1
+                 && static_cast<u8>(lpSpec->GetJointIndex()) != 255u )
+            {
+                lfSmallestExcess = lfExcess;
+                liCandidate = li;
+            }
+        }
+
+        if ( lfLargestExcess <= 0.0f )   // nothing stretched past its threshold (the at-rest exit)
+        {
+            lriDetachJointIndexOut = liCandidate;
+            return false;
+        }
+
+        if ( liCandidate != -1 )
+        {
+            const TagPointSpec* lpCandSpec =
+                const_cast<TagPoint*>(GetTagPoint(liCandidate))->GetSpec();
+            CGS_ASSERT(static_cast<u8>(lpCandSpec->GetJointIndex()) != 255u,
+                       "liLowestDeformedTagIndex == -1 || GetTagPoint( liLowestDeformedTagIndex )->HasJoint()");   // h:409
+            CGS_ASSERT(lpCandSpec->GetJointIndex() < GetNumberOfJoints(),
+                       "GetTagPoint( liLowestDeformedTagIndex )->GetJointIndex() < GetNumberOfJoints()");          // h:412
+        }
+        lriDetachJointIndexOut = liCandidate;
+
+        const f32 lfMaxBand = IsToughenedPart() ? KVF_MAX_IMPULSE_FOR_DETACHMENT_TOUGH.x
+                                                : KVF_MAX_IMPULSE_FOR_DETACHMENT.x;
+
+        const s32 liPartType = static_cast<s32>(GetPartType());   // spec +476
+        if ( liCandidate == -1 || liPartType == 1 || liPartType == 2 || liPartType == 3 )
+        {
+            if ( KVF_MIN_IMPULSE_FOR_DETACHMENT.x > lfMaxImpulse )
+            {
+                return false;
+            }
+            if ( lfMaxImpulse > lfMaxBand )
+            {
+                return false;
+            }
+        }
+
+        (void)lfImpulse;   // the X360-dropped trailing scalar (the caller's impulse; unused here)
+        return true;
+    }
+
 }
 }

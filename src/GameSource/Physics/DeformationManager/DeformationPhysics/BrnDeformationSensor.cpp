@@ -161,18 +161,36 @@ namespace Deformation
 		mpSpec = nullptr;
 		mPointDisplacement_BiggestImpulseThisFrame.SetZero();
 
-		mfMaxPointDisplacement = 100.0f;   // PS3 ClearVariables @0x6B5F28: *(this+0x118) = 100.0
+		mImpulseContact.mfImpactTimeInFrame = 100.0f;   // PS3 ClearVariables @0x6B5F28: *(this+0x118) = 100.0 (disarm; walls leg 4 rename)
 		for ( s32 li = 0; li < 4; ++li )
 		{
 			maPostPhysicsVec0[li] = 0.0f;
 			maPostPhysicsVec1[li] = 0.0f;
 		}
-		mu32PostPhysicsReset = 0;
+		mSpyContactId = 0;   // spy reset (walls leg 4 rename)
 
 		mi32NumStoredContacts = 0;
 		mpLocalSpaceSphere = nullptr;
 		mpWorldSpaceSphere = nullptr;
 		mfScratchAmount = 0.0f;
+	}
+
+	// =============================================================================================
+	// GetImpulse -- ⭐ 2026-08-14 (walls leg 4). PS3 @0x6B4ED4 (25 insns) is the whole body; the
+	// X360 build inlines it into UpdateContacts' per-sensor read. Byte-exact flow:
+	//   lfs f0, 0x118(this)               -- mImpulseContact.mfImpactTimeInFrame
+	//   fcmpu vs 1.0 (dword_100A560); if (time > 1.0) return false   -- the 100.0 DISARM sentinel
+	//   else copy the four 16-byte rows +0xE0/+0xF0/+0x100/+0x110 out -> the full 64-byte record
+	// (the host copy is the widened struct assignment; same fields, host pointer widths).
+	// =============================================================================================
+	bool DeformationSensor::GetImpulse(StoredImpulseContact& lrOutContact)
+	{
+		if ( mImpulseContact.mfImpactTimeInFrame > 1.0f )
+		{
+			return false;
+		}
+		lrOutContact = mImpulseContact;
+		return true;
 	}
 
 	// =============================================================================================
@@ -199,14 +217,14 @@ namespace Deformation
 	                                Vector3 lOffsetA, Vector3 lOffsetB, Vector3 lOffsetC)
 	{
 		// --- named-member stores (exact) ----------------------------------------------------------
-		mfMaxPointDisplacement = 100.0f;                 // *(this+280) = 100.0
+		mImpulseContact.mfImpactTimeInFrame = 100.0f;    // *(this+280) = 100.0 (disarm; walls leg 4 rename)
 
 		for ( s32 li = 0; li < 4; ++li )                 // stvx128 0 -> +288 / +304
 		{
 			maPostPhysicsVec0[li] = 0.0f;
 			maPostPhysicsVec1[li] = 0.0f;
 		}
-		mu32PostPhysicsReset = 0;                        // *(this+384) = 0
+		mSpyContactId = 0;                               // *(this+384) = 0 (spy reset; walls leg 4 rename)
 
 		mi32NumStoredContacts = 0;                       // *(this+408) = 0
 		mpSpec             = lpSpec;                      // *(this+4)   = lpSpec
@@ -478,7 +496,18 @@ namespace Deformation
 			CGS_ASSERT(liNumWorldContacts < KI_MAX_PENETRATION_CONTACTS,
 			           "liNumWorldContacts < KI_MAX_PENETRATION_CONTACTS");   // line 816
 
-			lpSolver->AddWorldContact(lView.mLocalPointOnA, lView.mLocalPointOnB, lView.mNormal,
+			// ⭐⭐ FIXED 2026-08-14 (walls leg 4, at-rest probe): the console RE-ADDS this sensor's
+			// LOCAL sphere centre to the stored point (PS3 @0x6C11A8 `vaddfp v31, v0, v29`, v29 ==
+			// *(mpLocalSpaceSphere)) -- the stored record is sphere-relative (ValidateAndAddContact
+			// subtracts the centre when it stores). The miss was a constant per-contact depth bias
+			// (22 x ~0.31m == the measured +6.8m at-rest pop).
+			Vector3 lPointA = lView.mLocalPointOnA;
+			if ( mpLocalSpaceSphere != nullptr )
+			{
+				const Vector4& lrC = *reinterpret_cast<const Vector4*>(mpLocalSpaceSphere);
+				lPointA.x += lrC.x; lPointA.y += lrC.y; lPointA.z += lrC.z;
+			}
+			lpSolver->AddWorldContact(lPointA, lView.mLocalPointOnB, lView.mNormal,
 			                          liWorldIndex, liBodyIndex);
 			++liNumWorldContacts;
 		}
@@ -501,7 +530,22 @@ namespace Deformation
 				(reinterpret_cast<const u8*>(lView.mpOtherVehicle) - reinterpret_cast<const u8*>(lpObject))
 				/ KI_DEFORMABLE_OBJECT_STRIDE);
 
-			lpSolver->AddVehicleContact(lView.mLocalPointOnA, lView.mLocalPointOnB, lView.mNormal,
+			// Same sphere-relative rebase as the world loop (PS3 @0x6C0D08/0x6C0D2C): pointA gets
+			// THIS sensor's local centre back; pointB gets the OTHER sensor's local centre back.
+			Vector3 lPointA = lView.mLocalPointOnA;
+			if ( mpLocalSpaceSphere != nullptr )
+			{
+				const Vector4& lrC = *reinterpret_cast<const Vector4*>(mpLocalSpaceSphere);
+				lPointA.x += lrC.x; lPointA.y += lrC.y; lPointA.z += lrC.z;
+			}
+			Vector3 lPointB = lView.mLocalPointOnB;
+			if ( lView.mpOtherSensor != nullptr && lView.mpOtherSensor->mpLocalSpaceSphere != nullptr )
+			{
+				const Vector4& lrC =
+					*reinterpret_cast<const Vector4*>(lView.mpOtherSensor->mpLocalSpaceSphere);
+				lPointB.x += lrC.x; lPointB.y += lrC.y; lPointB.z += lrC.z;
+			}
+			lpSolver->AddVehicleContact(lPointA, lPointB, lView.mNormal,
 			                            liWorldIndex, liOtherCarIndex);
 		}
 
@@ -542,13 +586,31 @@ namespace Deformation
 		}
 
 		// Post-physics scratch reset.
-		mfMaxPointDisplacement = 100.0f;
+		mImpulseContact.mfImpactTimeInFrame = 100.0f;   // disarm (walls leg 4 rename)
 		for ( int i = 0; i < 4; ++i )
 		{
 			maPostPhysicsVec0[i] = 0.0f;
 			maPostPhysicsVec1[i] = 0.0f;
 		}
-		mu32PostPhysicsReset = 0;
+		mSpyContactId = 0;   // spy reset (walls leg 4 rename)
 	}
+
+	// =============================================================================================
+	// StoredImpulseContact::GetInverse (DWARF :68) -- 2026-08-14 (walls leg 4). The role-swapped
+	// record for the equal-and-opposite car-car apply, per its own declaration gloss: point-on-A
+	// <-> point-on-B, normal negated; ownership/time/id fields carry over. Dead at runtime today
+	// (no car-car contacts on the junkyard path).
+	// =============================================================================================
+	void StoredImpulseContact::GetInverse(StoredImpulseContact& lrInverse) const
+	{
+		lrInverse.mPointOnA = mPointOnB;
+		lrInverse.mPointOnB = mPointOnA;
+		lrInverse.mNormal   = Vector3{ -mNormal.x, -mNormal.y, -mNormal.z, 0.0f };
+		lrInverse.mpOtherVehicle      = mpOtherVehicle;
+		lrInverse.mpOtherSensor       = mpOtherSensor;
+		lrInverse.mfImpactTimeInFrame = mfImpactTimeInFrame;
+		lrInverse.mContactId          = mContactId;
+	}
+
 }
 }

@@ -62,5 +62,26 @@ namespace Deformation
 
         mbAddedToScene = false;   // stb 0 -> part+0x1E5
     }
+
+    // =============================================================================================
+    // AddToScene -- ⚠️ LOG-ONCE GATE 2026-08-14 (walls leg 4). The INVERSE of RemoveFromScene
+    // above (the four scene adds + the cache add) is NOT reconstructed yet; the only caller is
+    // the pool's AddPartsToScene walk, which is empty until a part detaches (0 physical parts on
+    // the junkyard path). Reconstruct against the RemoveFromScene asm's add-side twins and DELETE
+    // this gate.
+    // =============================================================================================
+    void PhysicalBodyPart::AddToScene(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInput*/)
+    {
+        static bool sbLoggedAddToSceneGate = false;
+        if ( !sbLoggedAddToSceneGate )
+        {
+            sbLoggedAddToSceneGate = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint
+                    << "conductor gate: PhysicalBodyPart::AddToScene reached but not "
+                       "reconstructed -- detached part NOT added to scene [FLAG PC boot gate]\n";
+        }
+    }
+
 }
 }

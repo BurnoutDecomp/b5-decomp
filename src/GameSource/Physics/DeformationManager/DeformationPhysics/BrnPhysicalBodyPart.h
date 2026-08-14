@@ -27,6 +27,7 @@
 // ============================================================================
 
 #include "types.hpp"           // s32, u8, s8, u16, f32
+#include <cmath>               // std::sqrt (GetSphereRadius, walls leg 4)
 #include "BrnCommonTypes.h"    // Vector3, Vector3Plus, Matrix44Affine, VecFloat, EntityId, RigidBodyId
 
 #include "GameSource/Physics/PhysicsUtilities/ExternalPhysicsBody.h"                       // ExternalPhysicsBody (embedded BY VALUE)
@@ -37,7 +38,9 @@
 // ---- forward declarations (cross-TU types referenced only by pointer/reference) ----
 // Per project rule these are NOT included (their definitions are other agents' homes);
 // PhysicalBodyPart only stores/passes them by pointer or reference.
-namespace CgsGeometric { class Box; }   // GetBoundingBox out-param (DWARF CgsGeometric::Box*)
+namespace CgsGeometric { struct Box; }  // GetBoundingBox out-param (DWARF CgsGeometric::Box*).
+                                        // `class`->`struct` 2026-08-14 (walls leg 4): unified with the
+                                        // provisional home + BrnDeformableObject.h (MSVC mangle fork).
 
 namespace CgsSceneManager
 {
@@ -151,10 +154,21 @@ namespace Deformation
 
         // BrnPhysicalBodyPart.h:142. The render-space transform (rigid-body transform composed
         // with the local graphics offset).
-        Matrix44Affine GetRenderTransform() const;
+        // ⭐ INLINED walls leg 4 (console-inline): the rigid transform with the local graphics
+        // offset rotated into world and added to the translation (the banner's composition; the
+        // offset xyz is mLocalGraphicsPositionPlusJointVelocity's vector part).
+        Matrix44Affine GetRenderTransform() const
+        {
+            Matrix44Affine lT = mRwBody.GetTransform();
+            const Vector3Plus& lrOff = mLocalGraphicsPositionPlusJointVelocity;
+            lT.wAxis.x += lT.xAxis.x * lrOff.x + lT.yAxis.x * lrOff.y + lT.zAxis.x * lrOff.z;
+            lT.wAxis.y += lT.xAxis.y * lrOff.x + lT.yAxis.y * lrOff.y + lT.zAxis.y * lrOff.z;
+            lT.wAxis.z += lT.xAxis.z * lrOff.x + lT.yAxis.z * lrOff.y + lT.zAxis.z * lrOff.z;
+            return lT;
+        }
 
         // BrnPhysicalBodyPart.h:145. The raw rigid-body (physics) transform.
-        Matrix44Affine GetRigidBodyTransform() const;
+        Matrix44Affine GetRigidBodyTransform() const { return mRwBody.GetTransform(); }   // (inlined walls leg 4)
 
         // ----- per-frame update ----------------------------------------------------------
 
@@ -215,10 +229,10 @@ namespace Deformation
         // ----- pool / spec indices -------------------------------------------------------
 
         // BrnPhysicalBodyPart.h:196. This part's slot index inside its PhysicalBodyPartPool.
-        u8 GetPoolIndex() const;
+        u8 GetPoolIndex() const { return static_cast<u8>(mRigidBodyId.muSubB); }   // (inlined walls leg 4: the handle's low sub-id, the _Detach '+464 low byte' read)
 
         // BrnPhysicalBodyPart.h:200. The index of this part's IK spec within the deformable model.
-        s32 GetIKPartIndex() const;
+        s32 GetIKPartIndex() const { return static_cast<s32>(mRigidBodyId.muEntityWord & 0x3FFu); }   // (inlined walls leg 4: the entity word's part-index field)
 
         // ----- collision geometry --------------------------------------------------------
 
@@ -226,10 +240,16 @@ namespace Deformation
         void GetBoundingBox(CgsGeometric::Box* lpBoxOut) const;
 
         // BrnPhysicalBodyPart.h:208. The embedded externally-simulated physics body.
-        ExternalPhysicsBody* GetExternalBody();
+        ExternalPhysicsBody* GetExternalBody() { return &mRwBody; }   // (inlined walls leg 4)
 
         // BrnPhysicalBodyPart.h:212. A bounding sphere radius covering the box (broad-phase).
-        f32 GetSphereRadius() const;
+        // ⭐ INLINED walls leg 4 (console-inline; FLAG role-derived): the broad-phase radius
+        // covering the oriented box == |half extents| (the banner's own description).
+        f32 GetSphereRadius() const
+        {
+            const Vector3& lrH = mBoundingBoxHalfDimensions;
+            return std::sqrt(lrH.x * lrH.x + lrH.y * lrH.y + lrH.z * lrH.z);
+        }
 
         // BrnPhysicalBodyPart.h:215. The part's world position (rigid-body translation).
         Vector3 GetPosition() const;
@@ -257,7 +277,7 @@ namespace Deformation
         void UpdateBoundingBox(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface);
 
         // BrnPhysicalBodyPart.h:238. The triangle-cache slot this part's collision mesh occupies.
-        u16 GetTriangleCacheSlot() const;
+        u16 GetTriangleCacheSlot() const { return static_cast<u16>((mRigidBodyId.muSubB & 0xFFu) + 73u); }   // (inlined walls leg 4: the _Remove slice's attested (handle&0xFF)+73)
 
         // ----- joint model (attached-part deformation) -----------------------------------
 

@@ -33,6 +33,10 @@
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationInputInterface.h"  // DeformationInputInterface (event queues)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h" // DeformableObject (homed callee)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h" // StreamedDeformationSpec
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPenetrationSolver.h"        // PenetrationSolver (AddArticulatedJointContacts, walls leg 4)
+#include "GameSource/Physics/BrnPhysicsModuleIO.h"                                               // PhysicsModuleIO::OutputBuffer (walls leg 4)
+#include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"                     // PotentialContactInterface + queue [12] (walls leg 4)
+#include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"                    // PotentialContact (queue [12] events, walls leg 4)
 
 namespace BrnPhysics
 {
@@ -568,5 +572,244 @@ namespace Deformation
     // here would never be compiled -- it was, briefly, and a tamper test caught it passing with
     // the very defect it was written to catch. It lives in the MOUNTED
     // BrnDeformationManager_Construct.cpp instead. Do not re-home it here until this TU mounts.
+
+    // =============================================================================================
+    // WALLS LEG 4 (2026-08-14): the per-frame conductor pair + the articulated-joint feeder land.
+    // =============================================================================================
+
+    // The dev-menu deformation-debug master toggle (home: BrnDeformationConstructShims.cpp,
+    // default false == the X360 .bss byte). Update's player-IK arm reads it, as on console.
+    extern bool kbAllowDeformationDebug;
+
+    namespace
+    {
+        // BrnPhysics::KI_MAX_NUM_OF_IK_AND_LOCATOR_UPDATES -- the per-frame IK budget for
+        // non-player models. IMAGE-READ ground truth: X360 .data dword_82F2A238 == 2 (the manager
+        // Update's `lwz r11, dword_82F2A238` compare operand); PS3 names the global verbatim.
+        const s32 KI_MAX_NUM_OF_IK_AND_LOCATOR_UPDATES = 2;
+    }
+
+    // =============================================================================================
+    // Update @0x82649B40 (1021; PS3 0x765DB0, 925 -- the PS3 names every member) -- THE PER-STEP
+    // DEFORMATION CONDUCTOR. Flow (both consoles agree; monitors are the +76676.. member ids):
+    //   StartMonitor(miTotalDeformationPerfMon); StartMonitor(miUpdatePerfMon);
+    //   (1) per live model: clear mbHasDeformedThisFrame (model+26408 = 0);
+    //   (2) StartMonitor(miUpdateModelsPerfMon); per live model:
+    //         if (model.Update(simIn, simOut, physIn, physOut, timeStep, &partMgr, &wheelMgr,
+    //                          contacts, mRandom, gameMode))
+    //             lUpdatedModels.SetBit(i), ++liNumUpdated;
+    //       StopMonitor;
+    //   (3) StartMonitor(miUpdateIkAndDetachingPerfMon);
+    //       the PLAYER model IK's every updated frame (or under the debug toggle) and its bit is
+    //       cleared from the budget set;
+    //   (4) round-robin min(KI_MAX_NUM_OF_IK_AND_LOCATOR_UPDATES, liNumUpdated) other models
+    //       through miLastBodyToHaveIKUpdate (GetNextNonZeroBit, wrap via GetFirstNonZeroBit;
+    //       asserts :788 "miLastBodyToHaveIKUpdate != -1" and :789 "... != miPlayerModelIndex");
+    //       StopMonitor;
+    //   (5) StartMonitor(miUpdateDetachedPartsPerfMon); the detached-part pool RW step
+    //       (X360 inlines DetachedPartManager::Update == mPartPool.UpdateRWBodies); StopMonitor;
+    //   (6) the miNumUsedModels == live-bit-count tripwire (:817);
+    //   StopMonitor(miUpdatePerfMon); StopMonitor(miTotalDeformationPerfMon).
+    // =============================================================================================
+    void DeformationManager::Update(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
+                                    CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput,
+                                    const PhysicsModuleIO::InputBuffer* lpInputBuffer,
+                                    PhysicsModuleIO::OutputBuffer* lpOutputBuffer,
+                                    PhysicsModuleIO::PotentialContactInterface* lpContacts,
+                                    VecFloat lvfTimeStep, s32 leGameMode)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miTotalDeformationPerfMon);
+        CgsDev::PerfMonCpu::StartMonitor(miUpdatePerfMon);
+
+        // ---- (1) clear the per-frame deformed latch on every live model -------------------------
+        for ( s32 liModel = mModelsAdded.GetFirstNonZeroBit(); liModel != -1;
+              liModel = mModelsAdded.GetNextNonZeroBit(liModel) )
+        {
+            mpaModels[liModel].ClearHasDeformedThisFrame();   // model+26408 = 0
+        }
+
+        // ---- (2) per-model Update; collect who deformed -----------------------------------------
+        s32 liNumUpdated = 0;
+        CgsContainers::BitArray<28u> lUpdatedModels;
+        lUpdatedModels.UnSetAll();
+
+        CgsDev::PerfMonCpu::StartMonitor(miUpdateModelsPerfMon);
+        for ( s32 liModel = mModelsAdded.GetFirstNonZeroBit(); liModel != -1;
+              liModel = mModelsAdded.GetNextNonZeroBit(liModel) )
+        {
+            if ( mpaModels[liModel].Update(lpSimInput, lpSimOutput, lpInputBuffer, lpOutputBuffer,
+                                           lvfTimeStep, &mDetachedPartManager, &mDetachedWheelManager,
+                                           lpContacts, mRandom, leGameMode) )
+            {
+                lUpdatedModels.SetBit(static_cast<u32>(liModel));   // ("Index: %d, Number of bits: 28" bound assert inside)
+                ++liNumUpdated;
+            }
+        }
+        CgsDev::PerfMonCpu::StopMonitor(miUpdateModelsPerfMon);
+
+        // ---- (3) the player model IK's every updated frame --------------------------------------
+        CgsDev::PerfMonCpu::StartMonitor(miUpdateIkAndDetachingPerfMon);
+        if ( miPlayerModelIndex != -1 )
+        {
+            if ( lUpdatedModels.IsBitSet(static_cast<u32>(miPlayerModelIndex))
+                 || kbAllowDeformationDebug )
+            {
+                mpaModels[miPlayerModelIndex].UpdateIKAndLocators(
+                    lpSimInput, lpOutputBuffer, lvfTimeStep,
+                    &mDetachedPartManager, &mDetachedWheelManager, &mRandom);
+                lUpdatedModels.UnSetBit(static_cast<u32>(miPlayerModelIndex));
+                --liNumUpdated;
+            }
+        }
+
+        // ---- (4) round-robin the IK budget over the remaining updated models --------------------
+        s32 liNumToUpdate = liNumUpdated;
+        if ( liNumToUpdate > KI_MAX_NUM_OF_IK_AND_LOCATOR_UPDATES )
+        {
+            liNumToUpdate = KI_MAX_NUM_OF_IK_AND_LOCATOR_UPDATES;
+        }
+        for ( s32 li = 0; li < liNumToUpdate; ++li )
+        {
+            miLastBodyToHaveIKUpdate = lUpdatedModels.GetNextNonZeroBit(miLastBodyToHaveIKUpdate);
+            if ( miLastBodyToHaveIKUpdate == -1 )
+            {
+                miLastBodyToHaveIKUpdate = lUpdatedModels.GetFirstNonZeroBit();   // wrap
+            }
+            CGS_ASSERT(miLastBodyToHaveIKUpdate != -1,
+                       "miLastBodyToHaveIKUpdate != -1");                         // :788
+            CGS_ASSERT(miLastBodyToHaveIKUpdate != miPlayerModelIndex,
+                       "miLastBodyToHaveIKUpdate != miPlayerModelIndex");         // :789
+            if ( miLastBodyToHaveIKUpdate == -1 )
+            {
+                break;   // host guard behind the fire-and-continue tripwire (empty set)
+            }
+            mpaModels[miLastBodyToHaveIKUpdate].UpdateIKAndLocators(
+                lpSimInput, lpOutputBuffer, lvfTimeStep,
+                &mDetachedPartManager, &mDetachedWheelManager, &mRandom);
+        }
+        CgsDev::PerfMonCpu::StopMonitor(miUpdateIkAndDetachingPerfMon);
+
+        // ---- (5) the detached-part RW step (X360 inlines DetachedPartManager::Update) -----------
+        CgsDev::PerfMonCpu::StartMonitor(miUpdateDetachedPartsPerfMon);
+        mDetachedPartManager.Update(lpSimInput, lvfTimeStep);
+        CgsDev::PerfMonCpu::StopMonitor(miUpdateDetachedPartsPerfMon);
+
+        // ---- (6) the used-model count tripwire (:817) -------------------------------------------
+        s32 liNumModels = 0;
+        for ( u32 lu = 0; lu < 28u; ++lu )
+        {
+            if ( mModelsAdded.IsBitSet(lu) )
+            {
+                ++liNumModels;
+            }
+        }
+        CGS_ASSERT(miNumUsedModels == liNumModels, "miNumUsedModels == liNumModels");   // :817
+
+        CgsDev::PerfMonCpu::StopMonitor(miUpdatePerfMon);
+        CgsDev::PerfMonCpu::StopMonitor(miTotalDeformationPerfMon);
+    }
+
+    // =============================================================================================
+    // UpdatePostPhysics @0x82630420 (236; PS3 0x767800, 827) -- the post-physics conductor:
+    //   StartMonitor(miTotalDeformationPerfMon); StartMonitor(miUpdatePostPhysicsPerfMon);
+    //   sceneIface = physModOut->GetSceneInputInterface();
+    //   SolvePenetration(ioStack, contacts);          (the two-pass positional solve + read-back)
+    //   StartMonitor(miPostPhysicsUpdateModelsPerfMon);
+    //     per live model: model.UpdatePostPhysics(sceneIface);
+    //   StopMonitor;
+    //   StartMonitor(miPostPhysicsUpdateDetachedPartsManPerfMon);
+    //     mDetachedPartManager pool AddPartsToScene(sceneIface);
+    //     mDetachedPartManager.UpdatePostPhysics(simOut, sceneIface, spyData, contacts);
+    //     mDetachedWheelManager.UpdatePostPhysics(simOut, sceneIface);
+    //   StopMonitor; StopMonitor; StopMonitor.
+    // =============================================================================================
+    void DeformationManager::UpdatePostPhysics(const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput,
+                                               PhysicsModuleIO::OutputBuffer* lpOutputBuffer,
+                                               ContactSpy::ContactSpyData* lpContactSpyData,
+                                               IOBufferStack* lpIOBufferStack,
+                                               const PhysicsModuleIO::PotentialContactInterface* lpContacts)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miTotalDeformationPerfMon);
+        CgsDev::PerfMonCpu::StartMonitor(miUpdatePostPhysicsPerfMon);
+
+        // The module-output scene interface, through the same reinterpret seam the mounted
+        // PhysicsModule::Update read-backs use (the storage member is opaque on the host).
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface =
+            reinterpret_cast<CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*>(
+                lpOutputBuffer->GetSceneInputInterface());
+
+        SolvePenetration(lpIOBufferStack, lpContacts);
+
+        CgsDev::PerfMonCpu::StartMonitor(miPostPhysicsUpdateModelsPerfMon);
+        for ( s32 liModel = mModelsAdded.GetFirstNonZeroBit(); liModel != -1;
+              liModel = mModelsAdded.GetNextNonZeroBit(liModel) )
+        {
+            mpaModels[liModel].UpdatePostPhysics(lpSceneInterface);
+        }
+        CgsDev::PerfMonCpu::StopMonitor(miPostPhysicsUpdateModelsPerfMon);
+
+        CgsDev::PerfMonCpu::StartMonitor(miPostPhysicsUpdateDetachedPartsManPerfMon);
+        mDetachedPartManager.AddPartsToScene(lpSceneInterface);
+        // FLAG (fork to reconcile): DetachedPartManager::UpdatePostPhysics still takes the
+        // LOCAL Deformation::ContactSpyData model (its header note says the same); the real
+        // ContactSpy::ContactSpyData flows through the same bytes. Cast at the seam.
+        mDetachedPartManager.UpdatePostPhysics(lpSimOutput, lpSceneInterface,
+                                               reinterpret_cast<ContactSpyData*>(lpContactSpyData),
+                                               lpContacts);
+        mDetachedWheelManager.UpdatePostPhysics(lpSimOutput, lpSceneInterface);
+        CgsDev::PerfMonCpu::StopMonitor(miPostPhysicsUpdateDetachedPartsManPerfMon);
+
+        CgsDev::PerfMonCpu::StopMonitor(miUpdatePostPhysicsPerfMon);
+        CgsDev::PerfMonCpu::StopMonitor(miTotalDeformationPerfMon);
+    }
+
+    // =============================================================================================
+    // AddArticulatedJointContacts @0x825DB190 (162; PS3 0x739FAC, 566 -- names + asserts) -- drain
+    // the articulated-joint (traffic cab/trailer) contact queue [12] into the penetration solver.
+    // Per event: assert BOTH volume-instance owners are TRAFFIC_VEHICLE (:1033/:1034); map both
+    // entity words to model indices (the same table lookups FindModelIndexByEntityID inlines,
+    // with its own :701/:710 bounds asserts); stream "Failed to find deformation model for cab"
+    // on a -1 (:1039/:1040, fire-and-continue -- the console adds the contact regardless);
+    // AddVehicleContact(pointOnA, pointOnB, normal, cabModel, trailerModel).
+    // Queue [12] is EMPTY offline (no articulated traffic on the junkyard path) -- a live,
+    // empty walk.
+    // =============================================================================================
+    void DeformationManager::AddArticulatedJointContacts(PenetrationSolver* lpSolver,
+                                                         const PhysicsModuleIO::PotentialContactInterface* lpContacts)
+    {
+        const PhysicsModuleIO::PotentialContactInterface::CustomPotentialContactQueue& lrQueue =
+            lpContacts->GetArticulatedJointQueue();   // maCustomEventQueues[12]
+
+        const s32 liNumEvents = lrQueue.GetLength();
+        for ( s32 li = 0; li < liNumEvents; ++li )
+        {
+            const CgsSceneManager::SceneManagerIO::PotentialContact& lrEvent = lrQueue.GetEvent(li);
+
+            const u32 luCabWord     = static_cast<u32>(lrEvent.muVolumeInstanceIdA.muId >> 32);
+            const u32 luTrailerWord = static_cast<u32>(lrEvent.muVolumeInstanceIdB.muId >> 32);
+
+            CGS_ASSERT((luCabWord >> 24) == 2u,
+                       "lCabEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");      // :1033
+            CGS_ASSERT((luTrailerWord >> 24) == 2u,
+                       "lTrailerEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");  // :1034
+
+            const s32 liCabModel     = FindModelIndexByEntityID(EntityId{ luCabWord });
+            const s32 liTrailerModel = FindModelIndexByEntityID(EntityId{ luTrailerWord });
+
+            // :1039/:1040 -- the console STREAMS the failure and adds the contact anyway
+            // (fire-and-continue asserts). Reproduced: tripwire, then add.
+            CGS_ASSERT(liCabModel != -1,     "Failed to find deformation model for cab ");   // :1039
+            CGS_ASSERT(liTrailerModel != -1, "Failed to find deformation model for cab ");   // :1040
+
+            const Vector4* lpLanes = reinterpret_cast<const Vector4*>(&lrEvent);
+            const Vector3 lvPointOnA{ lpLanes[0].x, lpLanes[0].y, lpLanes[0].z, 0.0f };
+            const Vector3 lvPointOnB{ lpLanes[1].x, lpLanes[1].y, lpLanes[1].z, 0.0f };
+            const Vector3 lvNormal  { lpLanes[2].x, lpLanes[2].y, lpLanes[2].z, 0.0f };
+
+            lpSolver->AddVehicleContact(lvPointOnA, lvPointOnB, lvNormal,
+                                        liCabModel, liTrailerModel);
+        }
+    }
+
 }
 }

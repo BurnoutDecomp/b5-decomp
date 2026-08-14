@@ -787,4 +787,31 @@ namespace BrnPhysics
         if (AnyNaN4(mAngularVelocity))
             CheckStateFail(lpcContext, "Bad angular velocity");
     }
+
+    // ---------------------------------------------------------------------------------------
+    // GetLocalVelocity -- ⭐ 2026-08-14 (walls leg 4). Console-inline (no export on either
+    // console); the header's own gloss is the body: the velocity of a point on this body
+    // (= mLinearVelocity + mAngularVelocity x r). The InputSpace selects how the point maps to
+    // the moment arm r: WORLD_SPACE points subtract the body position (both mounted callers,
+    // ApplyCarCarImpulse's closing-velocity pair, pass world points); BODY_SPACE points rotate
+    // through the transform rows first (no translation).
+    // ---------------------------------------------------------------------------------------
+    Vector3 ExternalPhysicsBody::GetLocalVelocity(Vector3 lPoint, rw::physics::InputSpace leSpace) const
+    {
+        Vector3 lvR;
+        if ( leSpace == rw::physics::WORLD_SPACE )
+        {
+            lvR = vpu::Subtract(lPoint, mTransform.wAxis);
+        }
+        else
+        {
+            lvR = Vector3{
+                mTransform.xAxis.x * lPoint.x + mTransform.yAxis.x * lPoint.y + mTransform.zAxis.x * lPoint.z,
+                mTransform.xAxis.y * lPoint.x + mTransform.yAxis.y * lPoint.y + mTransform.zAxis.y * lPoint.z,
+                mTransform.xAxis.z * lPoint.x + mTransform.yAxis.z * lPoint.y + mTransform.zAxis.z * lPoint.z,
+                0.0f };
+        }
+        return vpu::Add(mLinearVelocity, vpu::Cross(mAngularVelocity, lvR));
+    }
+
 }

@@ -54,6 +54,10 @@ namespace Deformation
         void                     SetPosition(Vector3 lPos)       { mPos = lPos; }
         const TagPointSpec*      GetSpec()                       { return mpSpec; }
 
+        // ⭐ INLINED walls leg 4 (console-inline): the spec's joint index (spec +64, s8; 255/-1 ==
+        // no joint). CheckForForcedDetachment's tag scan + IKBodyPart::CheckForDetachment read it.
+        s32 GetJointIndex() const { return static_cast<s32>(mpSpec->GetJointIndex()); }
+
         // Rest position comes from the spec (TagPointSpec::GetInitialPosition -- the xyz of
         // mInitialPositionAndDetachThreshold); the offset is current minus rest, per lane.
         Vector3 GetInitialPosition() const { return mpSpec->GetInitialPosition(); }
@@ -79,7 +83,7 @@ namespace Deformation
         // `*(*(tagPoint+16)+56)` == mpSpec->mfDetachThresholdSquared.
         f32                      GetDetachThresholdSquared() const { return mpSpec->GetDetachThresholdSquared(); }
         f32                      GetJointDetachThresholdSquared() const;
-        s32                      GetJointIndex() const;
+        // (GetJointIndex: inlined above, walls leg 4)
         bool                     HasJoint() const;
     };
 }

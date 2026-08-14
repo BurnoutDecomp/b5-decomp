@@ -459,22 +459,9 @@ namespace Deformation
         BRN_CONDUCTOR_GATE("DeformationManager::UpdateSensorDisplacements @0x82604000 (189)");
     }
 
-    void DeformationManager::Update(CgsPhysics::PhysicsSimulationIO::InputBuffer*,
-                                    CgsPhysics::PhysicsSimulationIO::OutputBuffer*,
-                                    const PhysicsModuleIO::InputBuffer*,
-                                    PhysicsModuleIO::OutputBuffer*,
-                                    PhysicsModuleIO::PotentialContactInterface*, VecFloat, s32)
-    {
-        BRN_CONDUCTOR_GATE("DeformationManager::Update @0x82649B40 (1021)");
-    }
-
-    void DeformationManager::UpdatePostPhysics(const CgsPhysics::PhysicsSimulationIO::OutputBuffer*,
-                                               PhysicsModuleIO::OutputBuffer*, ContactSpy::ContactSpyData*,
-                                               IOBufferStack*,
-                                               const PhysicsModuleIO::PotentialContactInterface*)
-    {
-        BRN_CONDUCTOR_GATE("DeformationManager::UpdatePostPhysics @0x82630420 (236)");
-    }
+    // ⭐ 2026-08-14 (walls leg 4): the Update @0x82649B40 + UpdatePostPhysics @0x82630420 gates
+    // are DELETED -- both are REAL in BrnDeformationManager.cpp (the per-step conductor + the
+    // post-physics solve/read-back pass). LNK2005 if they ever come back.
 
     // OutputData @0x826225D8 (339). ⭐ 2026-08-14 (deformation-mount wave): the walls-wave mount
     // plan EXECUTED -- the home TU's lifecycle+drain half is MOUNTED and OutputData's real body
@@ -532,13 +519,8 @@ namespace Props
 
 namespace Deformation
 {
-    // 2026-08-11 (lifetime wave) -- arm 3 of PhysicsModule::UpdateCachedPositions.
-    void DeformationManager::UpdateTriangleCache(
-        CgsSceneManager::SceneManagerIO::InputBuffer_Update*)
-    {
-        BRN_CONDUCTOR_GATE("DeformationManager::UpdateTriangleCache @0x826230E8 (35; 585-insn "
-                           "closure onto DetachedPart/DetachedWheelManager) -- detached parts and "
-                           "wheels own ZERO triangle-cache slots today");
-    }
+    // ⭐ 2026-08-14 (walls leg 4): the UpdateTriangleCache @0x826230E8 gate is DELETED -- the
+    // real body mounts with BrnDeformationManager_Contacts.cpp (its detached-manager callees
+    // land with the part/wheel manager TUs this wave). LNK2005 if it ever comes back.
 }
 }

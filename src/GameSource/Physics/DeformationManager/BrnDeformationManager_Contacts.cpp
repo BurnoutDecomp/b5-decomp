@@ -24,7 +24,8 @@
 
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                                         // gpDebugPrint (the solve boot witness)
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"                                       // CgsModule::IOBufferStack::CreateIOBuffer<T>
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                          // CgsDev::PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"                     // CgsSceneManager::SceneManagerIO::PotentialContact (FLAG: newly homed)
@@ -150,7 +151,12 @@ namespace Deformation
         CgsDev::PerfMonCpu::StopMonitor(miPostPhysicsUpdateAddContactsToPenSolverPerfMon);
 
         // ---- PHASE 2: solve all accumulated penetrations. ----
+        // ⭐ 2026-08-14 (walls leg 4): Solve() is called TWICE, back-to-back -- two relaxation
+        // passes. Cross-witnessed on BOTH consoles (X360 0x82622110 + 0x82622114 are consecutive
+        // `bl Solve`; the PS3 twin @0x74A08C shows the same pair). The single-call body that sat
+        // here unmounted was the under-relaxed variant; fixed at mount time.
         CgsDev::PerfMonCpu::StartMonitor(miPostPhysicsUpdateSolvePenetrationPerfMon);
+        lpSolver->Solve();
         lpSolver->Solve();
         CgsDev::PerfMonCpu::StopMonitor(miPostPhysicsUpdateSolvePenetrationPerfMon);
 
@@ -168,6 +174,25 @@ namespace Deformation
             const Matrix44Affine* lpSolvedTransform = lpSolver->GetUpdatedTransform(liModelIndex);
             CGS_ASSERT(IsValidMatrix(*lpSolvedTransform), "RwMathVPU::IsValid( *lpTransform )");
 
+            // ⭐ BOOT WITNESS (log-once): the first frame the solver runs with live world
+            // contacts. At rest the correction must be ~ZERO -- the at-rest invariant this wave
+            // was gated on (probe-verified: nW=22 every frame, pre == post to print precision).
+            {
+                static bool sbLoggedSolveWitness = false;
+                if ( !sbLoggedSolveWitness && lpSolver->GetNumWorldContacts() > 0 )
+                {
+                    sbLoggedSolveWitness = true;
+                    Matrix44Affine lPre; mpaModels[liModelIndex].GetTransform(lPre);
+                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                        *CgsDev::Log::gpDebugPrint
+                            << "â­ penetration solver LIVE: "
+                            << lpSolver->GetNumWorldContacts() << " world contact(s); pos "
+                            << lPre.wAxis.x << " " << lPre.wAxis.y << " " << lPre.wAxis.z
+                            << " -> " << lpSolvedTransform->wAxis.x << " "
+                            << lpSolvedTransform->wAxis.y << " " << lpSolvedTransform->wAxis.z
+                            << " [FLAG PC boot witness]. Reported once, not per frame\n";
+                }
+            }
             mpaModels[liModelIndex].SetTransform(lpSolvedTransform);
         }
         CgsDev::PerfMonCpu::StopMonitor(miPostPhysicsUpdateReadTransformsFromPenSolverPerfMon);

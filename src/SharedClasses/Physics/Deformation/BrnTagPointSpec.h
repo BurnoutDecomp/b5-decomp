@@ -64,6 +64,7 @@ namespace Deformation
             return reinterpret_cast<const Vector3&>(mInitialPositionAndDetachThreshold);
         }
 
+        s8  GetJointIndex() const { return miJointIndex; }   // (walls leg 4: spec +64)
         f32 GetWeightA() const { return mfWeightA; }
         f32 GetWeightB() const { return mfWeightB; }
 

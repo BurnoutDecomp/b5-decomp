@@ -1,4 +1,6 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPartPool.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (walls leg 4 gates)
+#include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"   // the REAL interface (walls leg 4: model accessor views)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
@@ -294,6 +296,102 @@ namespace Deformation
                 maParts[liPart].AddContactSpy(lpContactSpyData);
             }
         }
+    }
+
+    // =============================================================================================
+    // AddPartsToScene @0x8260CF38 (178) -- ⭐ 2026-08-14 (walls leg 4). Walk mUsedParts; every
+    // live part that is neither frozen (+486) nor already in the scene (+485) gets
+    // PhysicalBodyPart::AddToScene(scene). Caller: DeformationManager::UpdatePostPhysics (via the
+    // manager forward). Dead-at-runtime today (0 physical parts on the junkyard path).
+    // =============================================================================================
+    void PhysicalBodyPartPool::AddPartsToScene(
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface)
+    {
+        for (s32 liPart = mUsedParts.GetFirstNonZeroBit();
+             liPart != CgsContainers::BitArray<KU_MAX_DETACHED_PARTS>::KI_INVALID_BITINDEX;
+             liPart = mUsedParts.GetNextNonZeroBit(liPart))
+        {
+            PhysicalBodyPart& lrPart = maParts[liPart];
+            if ( !lrPart.IsFrozen() && !lrPart.IsAddedToScene() )   // +486 == 0 && +485 == 0
+            {
+                lrPart.AddToScene(lpSceneInterface);
+            }
+        }
+    }
+
+
+
+
+    // =============================================================================================
+    // ⭐ 2026-08-14 (walls leg 4): the local PotentialContactInterfaceModel's two queue accessors,
+    // bodied as VIEWS over the REAL PhysicsModuleIO::PotentialContactInterface (the fork seam the
+    // model's own banner flags -- the model IS the real interface seen through a minimal local
+    // shape; the model's {ptr(8), pad(4), count(4)} row is layout-identical to the host
+    // EventQueue header, so the reinterpret is byte-exact). Queue indices [7] (vs car) / [8]
+    // (vs world) are the real interface's own attested accessors. Retire with the model when
+    // UpdateJoinedParts re-types onto the real interface. Dead at runtime today (0 hinged parts).
+    // =============================================================================================
+
+}
+}
+namespace BrnPhysics
+{
+namespace Deformation
+{
+
+    // =============================================================================================
+    // LOG-ONCE GATES 2026-08-14 (walls leg 4): the two remaining declared pool drivers --
+    // UpdateABoundingBox (per-frame round-robin bbox refresh) and UpdatePart (post-physics
+    // per-part read-back). Both dead today (0 detached parts). Reconstruct and DELETE.
+    // =============================================================================================
+    void PhysicalBodyPartPool::UpdateABoundingBox(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInterface*/)
+    {
+        static bool sbLoggedUBB = false;
+        if ( !sbLoggedUBB )
+        {
+            sbLoggedUBB = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalBodyPartPool::UpdateABoundingBox reached but not "
+                                              "reconstructed [FLAG PC boot gate]\n";
+        }
+        
+    }
+
+    void PhysicalBodyPartPool::UpdatePart(const OutUpdateRigidBody* /*lpEvent*/, CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInterface*/)
+    {
+        static bool sbLoggedUP = false;
+        if ( !sbLoggedUP )
+        {
+            sbLoggedUP = true;
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalBodyPartPool::UpdatePart reached but not "
+                                              "reconstructed [FLAG PC boot gate]\n";
+        }
+        
+    }
+}
+}
+
+namespace BrnPhysics
+{
+namespace PhysicsModuleIO
+{
+    const PotentialContactInterfaceModel::CustomPotentialContactQueue*
+    PotentialContactInterfaceModel::GetHingedBodyPartWithCarQueue() const
+    {
+        const PotentialContactInterface* lpReal =
+            reinterpret_cast<const PotentialContactInterface*>(this);
+        return reinterpret_cast<const CustomPotentialContactQueue*>(
+            &lpReal->GetHingedBodyPartWithCarQueue());
+    }
+
+    const PotentialContactInterfaceModel::CustomPotentialContactQueue*
+    PotentialContactInterfaceModel::GetHingedBodyPartWithWorldQueue() const
+    {
+        const PotentialContactInterface* lpReal =
+            reinterpret_cast<const PotentialContactInterface*>(this);
+        return reinterpret_cast<const CustomPotentialContactQueue*>(
+            &lpReal->GetHingedBodyPartWithWorldQueue());
     }
 }
 }
