@@ -2,95 +2,31 @@
 // GameShared/GameClasses/SceneManager/Collision/ContactGenerator/
 // CgsCollisionGenerator_StreamStubs.cpp
 //
-// ⚠⚠ TRAP-STUB TU (closure enforcement, 2026-08-06 big-five #2 wave). The seven
-// collide-stream methods VehicleManager::StartVehicleContactGeneration @0x8262AEE8 calls on
-// BaseCollisionGenerator, each declared in CgsCollisionGenerator.h with its X360 address --
-// NONE of the real bodies (39..97 asm lines each, dense job/stream plumbing) is
-// reconstructed yet. Every stub traps loudly; all are dead code today (the caller chain tops
-// out at PhysicsModule::Update @0x825B0640, still a link stub; /OPT:REF strips this TU).
-// RECONSTRUCT-NEXT, together as a family -- the three Create* share one shape (the
-// CreateStreamProducer factory + per-type command geometry) and the three Run* share another
-// (AllocateJob + per-batch dependency wiring).
+// ⭐⭐ SIX OF THE SEVEN STUBS RETIRED 2026-08-14 (walls leg 1). This TU was born
+// (2026-08-06, big-five #2 wave) holding trap stubs for the whole collide-stream family;
+// the three Create* factories, the three Run* dispatchers and the two Add* posters are REAL
+// now, in CgsCollisionGenerator_CollideStreams.cpp (bodies read from the image; the three
+// Create* proved byte-identical bar assert lines; the Run* wire ContactGeneratorEntry over
+// desc types 6/14/8 whose workers are loud named gates in ContactGeneratorJob.cpp).
+// If a definition for any of them reappears here the link will say so (LNK2005).
+//
+// WHAT REMAINS — one gate:
+//   CollidePrimitivePairList @0x82814138 (92) — the SYNCHRONOUS primitive-pair collide leg
+//   StartVehicleContactGeneration calls for the two simple-traffic pair lists. Nothing on the
+//   junkyard path posts a traffic pair (both GetNumTests() guards are 0), so this is dead at
+//   runtime today; when traffic lands, the gate names it. Its closure is its own: the type-10
+//   descriptor prepare + ExecutePrimitivePairList @0x82925798 (92) + the pair-list walk.
 // ============================================================================
 
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint (the boot gates, 2026-08-09)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint (the boot gate, 2026-08-09)
 
 namespace CgsSceneManager
 {
 namespace CgsCollision
 {
-    CgsMemory::SimpleDataStreamProducer*
-    BaseCollisionGenerator::CreateCollideSphereListWithTriangleListStream(s32 /*liMaxCommands*/)
-    {
-        do { static bool s_bLogged = false;
-        if (!s_bLogged) { s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate (was TRAP): BaseCollisionGenerator::CreateCollideSphereListWithTriangleListStream "
-                          "@0x828113C8 not reconstructed (big-five #2 closure stub)\n"; } } while (0);
-        return 0;
-    }
-
-    EA::Jobs::Job*
-    BaseCollisionGenerator::RunCollideSphereListWithTriangleListStream(
-        CgsMemory::SimpleDataStreamProducer* /*lpProducer*/, CgsDev::DebugRenderStreamReader* /*lpDebugReader*/)
-    {
-        do { static bool s_bLogged = false;
-        if (!s_bLogged) { s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate (was TRAP): BaseCollisionGenerator::RunCollideSphereListWithTriangleListStream "
-                          "@0x82811550 not reconstructed (big-five #2 closure stub)\n"; } } while (0);
-        return 0;
-    }
-
-    CgsMemory::SimpleDataStreamProducer*
-    BaseCollisionGenerator::CreateCollideSweptSphereListWithTriangleListStream(s32 /*liMaxCommands*/)
-    {
-        do { static bool s_bLogged = false;
-        if (!s_bLogged) { s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate (was TRAP): BaseCollisionGenerator::CreateCollideSweptSphereListWithTriangleListStream "
-                          "@0x82811720 not reconstructed (big-five #2 closure stub)\n"; } } while (0);
-        return 0;
-    }
-
-    EA::Jobs::Job*
-    BaseCollisionGenerator::RunCollideSweptSphereListWithTriangleListStream(
-        CgsMemory::SimpleDataStreamProducer* /*lpProducer*/, CgsDev::DebugRenderStreamReader* /*lpDebugReader*/)
-    {
-        do { static bool s_bLogged = false;
-        if (!s_bLogged) { s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate (was TRAP): BaseCollisionGenerator::RunCollideSweptSphereListWithTriangleListStream "
-                          "@0x828118A8 not reconstructed (big-five #2 closure stub)\n"; } } while (0);
-        return 0;
-    }
-
-    CgsMemory::SimpleDataStreamProducer*
-    BaseCollisionGenerator::CreateCollideSphereListWithSphereListStream(s32 /*liMaxCommands*/)
-    {
-        do { static bool s_bLogged = false;
-        if (!s_bLogged) { s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate (was TRAP): BaseCollisionGenerator::CreateCollideSphereListWithSphereListStream "
-                          "@0x82811A78 not reconstructed (big-five #2 closure stub)\n"; } } while (0);
-        return 0;
-    }
-
-    EA::Jobs::Job*
-    BaseCollisionGenerator::RunCollideSphereListWithSphereListStream(
-        CgsMemory::SimpleDataStreamProducer* /*lpProducer*/)
-    {
-        do { static bool s_bLogged = false;
-        if (!s_bLogged) { s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate (was TRAP): BaseCollisionGenerator::RunCollideSphereListWithSphereListStream "
-                          "@0x82811C00 not reconstructed (big-five #2 closure stub)\n"; } } while (0);
-        return 0;
-    }
-
     u16 BaseCollisionGenerator::CollidePrimitivePairList(const PrimitivePairList* /*lpPairList*/,
                                                          u16 /*lu16MaxResults*/, u32 /*luFlags*/, u16 /*lu16Tag*/)
     {

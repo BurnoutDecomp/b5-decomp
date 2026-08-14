@@ -60,6 +60,13 @@ namespace CgsCollision
     // class key struct). Pointer use only here.
     struct PrimitivePairList;
 
+    // ⭐ ADDED 2026-08-14 (walls leg 1): the two Add* posters' list arguments (homes:
+    // Primitives/CgsSphereList.h, Primitives/CgsSweptSphereList.h, Primitives/CgsTriangleList.h
+    // -- all class key struct). Pointer use only here.
+    struct SphereList;
+    struct SweptSphereList;
+    struct TriangleList;
+
     // DWARF CgsCollisionGenerator.h:63.
     struct BaseCollisionGenerator : public CgsModule::IOBuffer
     {
@@ -95,10 +102,18 @@ namespace CgsCollision
         // member names 1:1 (mpSphereSphereStreamProducer <- @0x82811A78, mpSphereTriangleStream-
         // Producer <- @0x828113C8, mpSweptSphereTriangleStreamProducer <- @0x82811720; the three
         // Run* results land in the matching *StreamJob members).
-        // ⚠ FLAG: all seven bodies are TRAP STUBS this wave (CgsCollisionGenerator_StreamStubs.cpp)
-        // -- named, not landed. The DebugRenderStreamReader parameter is spelled bare in the DWARF;
-        // bound to CgsDev::DebugRenderStreamReader (the one committed type of that name) -- FLAG if
-        // a second home ever appears.
+        // ⭐⭐ UPDATED 2026-08-14 (walls leg 1): SIX OF THE SEVEN ARE REAL NOW, in
+        // CgsCollisionGenerator_CollideStreams.cpp -- the three Create* factories (byte-identical
+        // to each other on the console bar assert line numbers; the landed CreateLineWithTriangle-
+        // ListStream shape with command size 32-console/sizeof-host and NO result buffer) and the
+        // three Run* dispatchers (the landed RunLineWithTriangleListStream shape wiring
+        // ContactGeneratorEntry over desc types 6/14/8 -- whose workers are the three loud named
+        // gates in ContactGeneratorJob.cpp until the intersection kernels land). Only
+        // CollidePrimitivePairList remains a gate (CgsCollisionGenerator_StreamStubs.cpp) -- its
+        // synchronous collide path (type-10 descriptor + ExecutePrimitivePairList worker) is a
+        // separate leg nothing live reaches (the junkyard runs no simple-traffic pairs).
+        // The DebugRenderStreamReader parameter is spelled bare in the DWARF; bound to
+        // CgsDev::DebugRenderStreamReader (the one committed type of that name).
         // ==========================================================================================
         CgsMemory::SimpleDataStreamProducer* CreateCollideSphereListWithTriangleListStream(s32 liMaxCommands);   // @0x828113C8 (:96)
         EA::Jobs::Job* RunCollideSphereListWithTriangleListStream(CgsMemory::SimpleDataStreamProducer* lpProducer,
@@ -110,6 +125,29 @@ namespace CgsCollision
         EA::Jobs::Job* RunCollideSphereListWithSphereListStream(CgsMemory::SimpleDataStreamProducer* lpProducer); // @0x82811C00 (:123)
         u16 CollidePrimitivePairList(const PrimitivePairList* lpPairList, u16 lu16MaxResults,
                                      u32 luFlags, u16 lu16Tag);                                                  // @0x82814138 (:144)
+
+        // ==========================================================================================
+        // ⭐ ADDED 2026-08-14 (walls leg 1): the two collide-stream COMMAND POSTERS
+        // DoRaceCarWorldContactGeneration @0x825EB140 calls per live race car per frame. Console
+        // bodies are byte-identical to each other (33 insns, diffed): allocate a fresh
+        // CollisionResultList via PrepareNewPrimitiveTestResultsList, build the family's
+        // StreamCommand {list pair, triangle pair, padding float, result list}, post it into the
+        // producer, and return the result-list index. Argument order is the console's own
+        // (f1 takes the float's GPR slot, so lu32UserTagA rides in r8): (lists, maxResults,
+        // padding, userTagA == the bridge's custom-queue index, userTagB == 1, producer).
+        // No DWARF twins (X360-only exports); signatures are register-truth from the two bodies
+        // plus their one caller.
+        // ==========================================================================================
+        s32 AddSphereListWithTriangleListToStream(const SphereList* lpSphereList,
+                                                  const TriangleList* lpTriangleList,
+                                                  u16 lu16MaxResults, f32 lfPadding,
+                                                  u32 lu32UserTagA, u16 lu16UserTagB,
+                                                  CgsMemory::SimpleDataStreamProducer* lpProducer);      // @0x82811340
+        s32 AddSweptSphereListWithTriangleListToStream(const SweptSphereList* lpSweptSphereList,
+                                                       const TriangleList* lpTriangleList,
+                                                       u16 lu16MaxResults, f32 lfPadding,
+                                                       u32 lu32UserTagA, u16 lu16UserTagB,
+                                                       CgsMemory::SimpleDataStreamProducer* lpProducer); // @0x82811698
 
         // ==========================================================================================
         // ⭐ ADDED 2026-08-10 (ground wave): the LINE-vs-triangle-list stream pair -- the floor of
@@ -199,6 +237,14 @@ namespace CgsCollision
     private:
         u16  CreateNewBatch();                   // h:350 / X360 0x82810960
         void FinishBatch(u16 lu16BatchIndex);    // h:353 / X360 0x82810718
+
+        // ⭐ ADDED 2026-08-14 (walls leg 1). X360 0x82810798 (the truncated export name
+        // "PrepareNewPrimitiveTestResultsLi"): claim the next mapCollisionResultLists slot
+        // (assert "Ran out of result lists" past 200, CgsCollisionGenerator.cpp:251), carve the
+        // 16-byte-console list header + an 80-byte-per-record results buffer out of the result
+        // allocator, seat {tags, capacity, count 0, type 0} through the DWARF-named fields, and
+        // return the slot index. Called by the two Add* posters above.
+        s32 PrepareNewPrimitiveTestResultsList(u16 lu16MaxResults, u32 lu32UserTagA, u16 lu16UserTagB);
 
         // Allocate + placement-construct one standalone (empty) EA::Jobs::Job out of the result
         // allocator (128-byte aligned, alignment saved/restored). Returns null if the bump

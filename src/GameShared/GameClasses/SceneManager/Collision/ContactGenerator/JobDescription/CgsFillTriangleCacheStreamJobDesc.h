@@ -29,7 +29,7 @@
 //     stw  r23, 0x3D4(batch)   -> +0x04  mpStreamProducer    (this type)
 //     stw  r27, 0x4C0(batch)   -> +0xF0  mpResultsList  = 0  (CollisionJobDescription)
 //     stfs f31, 0x4C4(batch)   -> +0xF4  mfRadius     = 0.0f (CollisionJobDescription)
-//     stw  r27, 0x4C8(batch)   -> +0xF8  miStatus     = 0    (CollisionJobDescription)
+//     stw  r27, 0x4C8(batch)   -> +0xF8  mpDebugStream = 0    (CollisionJobDescription)
 //     stb  r21, 0x4CF(batch)   -> +0xFF  muJobType    = 3    (CollisionJobDescription)
 // and PolygonSoupTesterJob::Execute then reads muJobType back off the SAME object through
 // CollisionJobDescription::GetType @0x82916E98 (`lbz r11, 0xFF(r11)`) to pick its arm. Those are
@@ -136,7 +136,7 @@ namespace CgsCollision
 
             mpResultsList = NULL;   // 0x82810DD4  stw  r27, 0x4C0
             mfRadius      = 0.0f;   // 0x82810DCC  stfs f31, 0x4C4  (flt_82001CC0)
-            miStatus      = 0;      // 0x82810DD8  stw  r27, 0x4C8
+            mpDebugStream = 0;   // (was misnamed miStatus; DWARF h:119)      // 0x82810DD8  stw  r27, 0x4C8
             muJobType     = static_cast<u8>(E_COLLISIONJOB_FILL_TRIANGLE_CACHE_STREAM); // 0x82810DD0
         }
     };

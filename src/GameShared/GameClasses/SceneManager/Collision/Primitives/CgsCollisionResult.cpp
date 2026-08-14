@@ -15,7 +15,7 @@ namespace CgsCollision
     // -------------------------------------------------------------------------
     // CollisionResultList::SetNumResults @ 0x8280FFE8
     //
-    //   0x8280FFE8  sth  r4, 0xC(r3)   ; this->munNumResults = (u16)liNumResults
+    //   0x8280FFE8  sth  r4, 0xC(r3)   ; this->mu16NumResults = (u16)liNumResults
     //   0x8280FFEC  blr                ; return this (r3 unchanged)
     //
     // A single 16-bit store of the count into offset 0xC, returning `this`. The arg
@@ -24,7 +24,7 @@ namespace CgsCollision
     // -------------------------------------------------------------------------
     CollisionResultList* CollisionResultList::SetNumResults(s32 liNumResults)
     {
-        munNumResults = static_cast<u16>(liNumResults);
+        mu16NumResults = static_cast<u16>(liNumResults);
         return this;
     }
 
@@ -32,8 +32,8 @@ namespace CgsCollision
     // CollisionResultList::GetResult @ 0x828A9EF8
     //
     //   clrlwi r30, r4, 16                 ; lu16Index (zero-extended)
-    //   lhz    r11, 0xC(r31)               ; munNumResults
-    //   cmplw  cr6, r30, r11 ; blt ...     ; if (lu16Index >= munNumResults) assert
+    //   lhz    r11, 0xC(r31)               ; mu16NumResults
+    //   cmplw  cr6, r30, r11 ; blt ...     ; if (lu16Index >= mu16NumResults) assert
     //   lwz    r10, 0(r31)                 ; mpResults
     //   mulli  r11, r30, 0x70              ; 112 * lu16Index
     //   add    r3,  r11, r10               ; &mpResults[lu16Index]
@@ -44,7 +44,7 @@ namespace CgsCollision
     // -------------------------------------------------------------------------
     CollisionResult* CollisionResultList::GetResult(u16 lu16Index)
     {
-        CGS_ASSERT(lu16Index < munNumResults, "lu16Index < mu16NumResults");
+        CGS_ASSERT(lu16Index < mu16NumResults, "lu16Index < mu16NumResults");
         return &mpResults[lu16Index];
     }
 

@@ -209,30 +209,13 @@ namespace Deformation
     // ==========================================================================================
 
     // ==========================================================================================
-    // GetSweptSpheresForCar @ 0x825C22D0
-    //
-    // The continuous (swept) collision spheres for the car with entity id lEntityId. Looks up the
-    // model slot, asserts it is live, and forwards to DeformableObject::GetSweptSpheres.
+    // GetSweptSpheresForCar @0x825C22D0 / IsUsingSweptSpheres @0x825C2338
+    // MOVED 2026-08-14 (walls leg 1) to the mounted slice TU
+    // BrnDeformationManager_ContactQueries.cpp -- DoRaceCarWorldContactGeneration @0x825EB140
+    // (now real) calls them per live race car per frame, alongside the newly-lifted
+    // GetSpheresForCar @0x825C2260 (an export hole; NOT the swept sibling's shape -- it returns
+    // -1 gracefully with no assert). Bodies are verbatim there; fold back when this TU mounts.
     // ==========================================================================================
-    s32 DeformationManager::GetSweptSpheresForCar(EntityId lEntityId,
-                                                  const CgsGeometric::SweptSphere** lppSpheresOut)
-    {
-        const s32 liIndex = FindModelIndexByEntityID(lEntityId);
-        CGS_ASSERT(liIndex != -1, "liIndex != -1");
-        return mpaModels[liIndex].GetSweptSpheres(lppSpheresOut);
-    }
-
-    // ==========================================================================================
-    // IsUsingSweptSpheres @ 0x825C2338
-    //
-    // Whether the car with entity id lEntityId currently runs continuous (swept-sphere) collision.
-    // ==========================================================================================
-    bool DeformationManager::IsUsingSweptSpheres(EntityId lEntityId)
-    {
-        const s32 liIndex = FindModelIndexByEntityID(lEntityId);
-        CGS_ASSERT(liIndex != -1, "liIndex != -1");
-        return mpaModels[liIndex].IsUsingSweptSpheres();
-    }
 
     // ==========================================================================================
     // GetDeformedBBox @ 0x825E87A0

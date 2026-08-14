@@ -25,11 +25,11 @@ namespace CgsCollision
         //   stw  r6,0xF0(r3)              ; mpResultsList = lpResultsList
         //   li   r10,0xB; stb r10,0xFF(r3); muJobType = 11
         //   lfs  f0,flt_82001CC0(=0.0f); stfs f0,0xF4(r3) ; mfRadius = 0.0f
-        //   li   r26,0; stw r26,0xF8(r3)  ; miStatus = 0
+        //   li   r26,0; stw r26,0xF8(r3)  ; mpDebugStream = 0 (DWARF mpDebugStream)
         mpResultsList = lpResultsList;
         muJobType     = E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST;
         mfRadius      = 0.0f;
-        miStatus      = 0;
+        mpDebugStream = 0;   // (was misnamed miStatus; DWARF h:119)
 
         // Copy the pair list (3 dwords @0,4,8) and the triangle list (2 dwords @0xC,0x10
         // via `addi r11,r3,0xC`), then the flag (stb r7,0x14):

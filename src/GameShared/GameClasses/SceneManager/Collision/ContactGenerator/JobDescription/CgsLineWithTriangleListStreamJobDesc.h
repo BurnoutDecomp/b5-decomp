@@ -22,7 +22,7 @@
 //   0x82810F54  stw  r20, 976(r11)   -> +0x00  mpStreamProducer
 //   0x82810F4C  stw  r25, 1216(r11)  -> +0xF0  mpResultsList = 0     (CollisionJobDescription)
 //   0x82810F44  stfs f31, 1220(r11)  -> +0xF4  mfRadius      = 0.0f  (flt_82001CC0)
-//   0x82810F50  stw  r25, 1224(r11)  -> +0xF8  miStatus      = 0
+//   0x82810F50  stw  r25, 1224(r11)  -> +0xF8  mpDebugStream = 0 (null reader)
 //   0x82810F48  stb  r21, 1231(r11)  -> +0xFF  muJobType     = 16
 // and ContactGeneratorJob::Execute reads the type back with `lbz r11, 0xFF(r4)` -- +0xFF is
 // exactly batch+0x4CF minus batch+0x3D0, so the two directions agree.
@@ -123,7 +123,7 @@ namespace CgsCollision
 
             mpResultsList = NULL;   // 0x82810F4C  stw  r25, 0x4C0
             mfRadius      = 0.0f;   // 0x82810F44  stfs f31, 0x4C4  (flt_82001CC0 == 0.0f)
-            miStatus      = 0;      // 0x82810F50  stw  r25, 0x4C8
+            mpDebugStream = 0;   // (was misnamed miStatus; DWARF h:119)      // 0x82810F50  stw  r25, 0x4C8
             muJobType     = static_cast<u8>(E_COLLISIONJOB_LINE_WITH_TRIANGLE_LIST_STREAM);
         }
     };
