@@ -7,6 +7,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"  // postfx::RenderTarget + gpDefaultRenderTargetState
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // renderengine::ProgramBuffer
 #include "GameSource/Resource/BrnResourceAllocator.h"          // BrnResource::Allocators::GetGlobalGraphicsAllocator
+#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"              // renderengine::PCBringUpClearRenderTargetState
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnRendererMemory::Construct             @ 0x823FCA38  (EXECUTED in the boot trace)
@@ -497,6 +498,39 @@ void BrnRendererMemory::PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator
     // (see BrnAntiAliasTiling.h). Off is one full-screen tile at multisample format 0, which the PC
     // leaf honours exactly.
     CreateAntiAliasBuffer(lpAllocator, false);
+
+    // ⚠️ FLAG PC bring-up INITIALISATION -- give both targets DEFINED contents before the first
+    // frame renders into one. NOT a console behaviour: the Xenos clears its EDRAM scene surface
+    // from the TILING PASS at the TOP of every frame (first frame included), whereas the PC
+    // bracket's only clear is the resolve's, at the BOTTOM. Both surfaces above are
+    // D3DPOOL_DEFAULT D3D9 objects, which D3D9 leaves UNDEFINED at creation, so without this the
+    // first bracket frame renders the world into undefined colour over undefined depth -- and
+    // that frame is copied and presented. Undefined depth can reject the whole world, which
+    // looks like the bracket failing rather than like one bad frame.
+    //
+    // The DOWN-SAMPLE buffer is cleared as well as the anti-alias buffer because it is what the
+    // present blit reads: its colour is rewritten every frame by the resolve's copy, but only
+    // over the rectangle that copy is handed, and its depth is never written at all.
+    //
+    // DELETE WITH THE BRING-UP, when a frame-top clear exists again -- see the banner on
+    // renderengine::PCBringUpClearRenderTargetState in pc/gcm/renderengine/ShadowPassPCLeaf.h,
+    // which also carries the attestation for every value the clear writes.
+    CgsRenderTarget* const lpDownSampleBuffer = GetDownSampleBuffer();
+    CgsRenderTarget* const lpAntiAliasBuffer  = GetAntiAliasBuffer();
+    rw::graphics::postfx::RenderTarget* const lpDownSampleTarget =
+        (lpDownSampleBuffer != nullptr) ? lpDownSampleBuffer->GetRenderTarget() : nullptr;
+    rw::graphics::postfx::RenderTarget* const lpAntiAliasTarget =
+        (lpAntiAliasBuffer != nullptr) ? lpAntiAliasBuffer->GetRenderTarget() : nullptr;
+    if (lpDownSampleTarget != nullptr)
+    {
+        renderengine::PCBringUpClearRenderTargetState(
+            lpDownSampleTarget->GetSectionRenderTargetState(0));
+    }
+    if (lpAntiAliasTarget != nullptr)
+    {
+        renderengine::PCBringUpClearRenderTargetState(
+            lpAntiAliasTarget->GetSectionRenderTargetState(0));
+    }
 }
 
 

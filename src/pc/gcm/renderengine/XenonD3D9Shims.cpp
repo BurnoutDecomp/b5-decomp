@@ -2943,6 +2943,15 @@ namespace
     DWORD suSavedAlphaArg1        = 0;
     bool  sbSceneBlitStateSaved   = false;
 
+    // THE SCENE'S DEPTH SURFACE, held across the blit so PCSceneBlit_End can put it back. The
+    // full reasoning is on the capture in PCSceneBlit_Begin; the short version is that leaving
+    // the device with NO depth-stencil surface past the end of the blit makes the NEXT frame's
+    // renderengine::Device::FrameBegin Clear fail as a whole and clear nothing, COLOUR INCLUDED.
+    // The flag is separate from sbSceneBlitStateSaved on purpose: it makes the rebind and the
+    // Release run on every path out of _End, including the ones that skip the state restore.
+    IDirect3DSurface9* spSavedSceneDepthSurface = nullptr;
+    bool               sbSceneDepthSaved        = false;
+
     const u32 KU_BLIT_SAMPLER_UNIT = 0u;   // the Im2d path's only texture stage (CgsIm2d.cpp)
 }
 
@@ -2970,6 +2979,37 @@ void PCSceneBlit_Begin()
     // -- runs with D3DRS_ZENABLE FALSE (ImRenderer<V>::BeginRendering, CgsIm2d.cpp:140), so none
     // of them reads or writes depth. The next frame's world pass binds its own depth through
     // BeginRenderAntiAliased's renderengine::Device::SetState.
+    //
+    // ⚠ BUT IT IS CAPTURED FIRST, AND PCSceneBlit_End PUTS IT BACK. Leaving the device with no
+    // depth-stencil surface past the end of the blit breaks the NEXT frame outright, and not
+    // only its depth: renderengine::Device::FrameBegin clears with D3DCLEAR_TARGET |
+    // D3DCLEAR_ZBUFFER (device.cpp:117) and IDirect3DDevice9::Clear is ALL-OR-NOTHING -- with no
+    // depth surface bound the whole call fails D3DERR_INVALIDCALL and the COLOUR is not cleared
+    // either. Because D3DSWAPEFFECT_COPY preserves the back buffer (device.cpp:89), any frame
+    // that then skips the world+blit composites its 2D tail over the LAST PRESENTED FRAME
+    // instead of over black. That regression arrives with this bracket, so the bracket carries
+    // the fix.
+    //
+    // WHAT GOES BACK is whatever was bound when the blit opened -- the SCENE target's own depth
+    // surface, which BeginRenderAntiAliased bound. That is legal for the back buffer now on
+    // colour slot 0: both are the swap chain's extent (BrnRendererMemory sizes the scene target
+    // from renderengine::gDisplayWidth/gDisplayHeight, the same pair device.cpp hands
+    // D3DPRESENT_PARAMETERS::BackBufferWidth/Height) and neither is multisampled, which is
+    // exactly what D3D9 requires of a depth surface. The only consequence is that FrameBegin's
+    // Clear now also clears the scene depth -- which the resolve clears every frame anyway, and
+    // which nothing in the 2D tail reads (it all runs with D3DRS_ZENABLE FALSE).
+    IDirect3DSurface9* lpSceneDepth = nullptr;
+    if (FAILED(lpDevice->GetDepthStencilSurface(&lpSceneDepth)))   // AddRefs on success
+        lpSceneDepth = nullptr;                                    // D3DERR_NOTFOUND == none bound
+    if (spSavedSceneDepthSurface != nullptr)
+    {
+        // Unreachable while Begin/End alternate (the sbSceneBlitStateSaved gate at the top of
+        // this function enforces that). Released rather than overwritten so that even a future
+        // caller that breaks the pairing cannot leak the reference.
+        spSavedSceneDepthSurface->Release();
+    }
+    spSavedSceneDepthSurface = lpSceneDepth;
+    sbSceneDepthSaved        = true;
     lpDevice->SetDepthStencilSurface(nullptr);
 
     // The two binds above go STRAIGHT to D3D9, so the engine's "last render-target state
@@ -3041,6 +3081,25 @@ void PCSceneBlit_Begin()
 void PCSceneBlit_End()
 {
     IDirect3DDevice9* const lpDevice = Dev();
+
+    // ---- (0) PUT THE DEPTH SURFACE BACK, AHEAD OF EVERY EARLY RETURN. ---------------------
+    // See the capture in PCSceneBlit_Begin for why this is not optional: without it the next
+    // frame's renderengine::Device::FrameBegin Clear fails as a whole and clears neither depth
+    // NOR colour. It sits before the state guard, and on its own flag, so that no path out of
+    // this function -- a null device, a state block that was never saved, a second call -- can
+    // either skip the rebind or leak the reference GetDepthStencilSurface took.
+    if (sbSceneDepthSaved)
+    {
+        sbSceneDepthSaved = false;
+        if (lpDevice != nullptr)
+            lpDevice->SetDepthStencilSurface(spSavedSceneDepthSurface);   // null is a valid unbind
+        if (spSavedSceneDepthSurface != nullptr)
+        {
+            spSavedSceneDepthSurface->Release();   // balances _Begin's GetDepthStencilSurface
+            spSavedSceneDepthSurface = nullptr;
+        }
+    }
+
     if (lpDevice == nullptr || !sbSceneBlitStateSaved)
         return;
     sbSceneBlitStateSaved = false;
@@ -3287,6 +3346,1024 @@ bool ShadowProbe_TextureBound(u32 luUnit)
         return false;
     lpTexture->Release();
     return true;
+}
+}
+
+// =============================================================================
+// FLAG PC-platform leaf: THE PREDICATED-TILING / EDRAM-RESOLVE FOUR.
+//
+// renderengine::D3DDevice_BeginTiling / _SetPredication / _Resolve / _EndTiling -- the four
+// Xenos entry points BrnRendererModule::BeginRenderAntiAliased @0x823FFA18 and
+// BrnRendererModule::ResolveMSAA @0x823FFBE0 call. They were declared in
+// pc/gcm/renderengine/Xbox2SurfaceShims.h (with the ABI decoded from the X360 asm) and defined
+// NOWHERE; they are four of the six symbols that keep BRN_ANTIALIAS_BRACKET_AVAILABLE at 0.
+// The signatures below are that header's, UNCHANGED -- nothing here re-derives them.
+//
+// -------------------------------------------------------------------------------------------
+// WHAT IS CONSOLE-FAITHFUL (recovered, with the address it is recovered from)
+// -------------------------------------------------------------------------------------------
+//  * THE CLEAR EXISTS AND ITS VALUES ARE THE CALLER'S. On the Xenos the tiling bracket is what
+//    clears the surface: the colour/Z/stencil arguments are handed to D3DDevice_BeginTiling
+//    (`addi r7, r1, var_40 # pClearColor` @0x823FFB48, `lfs f1, flt_82001C98 # ClearZ`
+//    @0x823FFB54, `clrlwi r9, r27, 24` @0x823FFB44) and to the 0x300 D3DDevice_Resolve
+//    (`addi r10, r1, var_70 # pClearColor` @0x823FFCF8 / @0x823FFDE8), and to no other call in
+//    either function. A leaf that drops them drops the frame's clear. That is why these two are
+//    NOT empty.
+//  * WHICH CALL CARRIES WHICH. Flags is an immediate at every site: 0x14 (`li r4, 0x14`
+//    @0x823FFCDC and @0x823FFDCC) with a NULL clear colour (`li r10, 0` @0x823FFCC0 /
+//    @0x823FFDA4), and 0x300 (`li r4, 0x300` @0x823FFD18 and @0x823FFE08) with a live one. The
+//    code below keys off those two VALUES, exactly as the BRN_ANTIALIAS_BRACKET_AVAILABLE banner
+//    in BrnRendererModule.cpp instructs.
+//  * THE ORDER INSIDE A RESOLVE IS COPY-THEN-CLEAR. The console clears the EDRAM surface *behind*
+//    the copy that is moving its contents out; clearing first would resolve a cleared surface.
+//  * THE RECTANGLES ARE THE CALLER'S. They are honoured as passed (clamped to the bound surface),
+//    never widened.
+//
+// -------------------------------------------------------------------------------------------
+// WHAT IS A PC BRING-UP CHOICE (nothing below is claimed to be recovered)
+// -------------------------------------------------------------------------------------------
+//  * THE COPY. On the Xenos, Resolve moves an EDRAM surface out to a sampleable texture -- EDRAM
+//    is not addressable by the texture units, so the copy is the only way to see the pixels. On
+//    PC there is no EDRAM: the scene render target already IS a texture. But the DESTINATION is
+//    still a DIFFERENT object here (the anti-alias buffer, pool slot 0, resolves into the
+//    down-sample buffer, pool slot 4 -- two independently created CgsRenderTargets), so the copy
+//    is not vacuous, it is just an ordinary surface-to-surface blit. It is implemented as
+//    IDirect3DDevice9::StretchRect. It is NOT a no-op and NOT dressed up as one.
+//    THE DEPTH HALF OF IT IS a no-op, honestly: D3D9 StretchRect refuses depth-stencil surfaces,
+//    and there is no other PC route from a bound depth surface into a texture. So the 0x14
+//    depth/stencil resolve does nothing here and says so (LogOnce). Nothing in the tree samples
+//    the down-sample buffer's depth today; BrnPostFx's depth of field is the wave that will need
+//    it, and it will need a shader-side answer, not a copy.
+//  * THE SCENE SUSPEND AROUND THE COPY. The whole of BrnRendererModule::Render runs inside ONE
+//    scene -- renderengine::Device::FrameBegin calls BeginScene (device.cpp:117) and
+//    ShowPixelBuffer calls EndScene (device.cpp:206) -- so the copy above is issued between them.
+//    The D3D9 reference carries the sentence "StretchRect cannot be called inside of a
+//    BeginScene/EndScene pair", and BE PRECISE ABOUT ITS SCOPE, because the correct decision here
+//    turns on it: in the current reference text that sentence is the last bullet of the sub-list
+//    headed "Additional Restrictions for Depth and Stencil Surfaces", NOT of the general
+//    "StretchRect Restrictions" list above it. So for a COLOUR render-target copy the restriction
+//    is not squarely documented, and claiming it is would be a fabricated citation.
+//    IT IS SUSPENDED ANYWAY, and here is the reasoning rather than an appeal to the doc:
+//      (a) the scoping is genuinely ambiguous -- the sentence is unqualified, several renderings
+//          of the same page present the restrictions as one flat list, and driver behaviour for
+//          StretchRect is explicitly documented to vary;
+//      (b) the failure it guards against is UNOBSERVABLE. StretchRect reports failure only in its
+//          HRESULT; the destination simply is not written, and the frame that is presented comes
+//          from the destination. That is a permanent black screen with no exception, no assert
+//          and nothing on screen to read -- the exact silent shape this campaign keeps paying for;
+//      (c) the cost of removing the question entirely is ONE EndScene/BeginScene pair per frame
+//          (the 0x14 depth resolve does no copy, so only the 0x300 colour resolve suspends).
+//    A GPU flush per frame is a real cost and it is a bring-up choice, not a recovered behaviour;
+//    when the real composite (BrnPostFx::Render @0x8240A468) lands and the copy moves, this goes
+//    with it. If it is ever removed, the thing to verify first is the D3D9 DEBUG runtime's output
+//    on a colour StretchRect inside a scene -- that, not the doc page, is the arbiter.
+//  * THE COPY AND THE CLEAR ARE COUPLED, which the console did not need to do. On the Xenos the
+//    resolve and the clear are one GPU operation: the clear cannot happen without the copy having
+//    happened. Two separate D3D9 calls can diverge, and the divergence is catastrophic in exactly
+//    one direction -- copy fails, clear succeeds: the source is wiped and the destination is never
+//    written, so the screen is cleanly black FOREVER and the anti-alias buffer looks pristine to
+//    anyone inspecting it. The clear is therefore withheld when a required copy did not land, so
+//    the failure degrades to the world accumulating in an uncleared scene target (a smear, with
+//    stale depth) instead of to a clean black frame. Restoring the console's coupling, not adding
+//    a behaviour it lacked.
+//  * THE COPY-FAILURE TRIPWIRE. Withholding the clear fixes what the SOURCE looks like, but the
+//    picture comes from the DESTINATION, and a destination that was never written still reads as
+//    black. So after KU_RESOLVE_TRIPWIRE_FRAMES consecutive failed copies the destination is
+//    ColorFill'd magenta. This is the one place in this leaf that can put a colour on screen that
+//    no console frame contains, and it is deliberate: it fires ONLY on a path whose alternative is
+//    an indistinguishable black screen, and it fires only after the failure has proven permanent.
+//  * THE CLEAR'S VIEWPORT / SCISSOR BRACKET. D3D9's Clear obeys the viewport and the scissor test,
+//    neither of which this leaf sets for rendering; TilingClearBoundSurfaces therefore saves them,
+//    forces the test off and the viewport to the bound surface's full extent for the length of the
+//    clear, and puts both back. The reasoning, with the two reference sentences it rests on, is at
+//    the call site. Platform mechanics: the console's clear rode inside the tiling pass and had no
+//    such state to trip over.
+//  * THE RENDERING VIEWPORT / SCISSOR, WHICH THIS LEAF STILL DOES NOT SET. The
+//    BRN_ANTIALIAS_BRACKET_AVAILABLE banner records, as INTERPRETATION, that on the console the
+//    viewport came from the tile rectangles handed to BeginTiling, and tells the leaf author to
+//    settle it on PC evidence. THE PC EVIDENCE SETTLES IT: IDirect3DDevice9::SetRenderTarget
+//    resets the viewport to the full extent of the new render target, and the bind
+//    BeginRenderAntiAliased performs -- renderengine::Device::SetState, PC body at
+//    PostFxRenderTargetPCLeaf.cpp:465-486 -- calls exactly that. So by the time BeginTiling would
+//    run, the viewport already IS the whole scene target; there is nothing for this leaf to owe
+//    the DRAWS that follow. (The clear's own bracket above is a different question: it is not
+//    setting a viewport for anything to render with, it is stopping leftover state from eating a
+//    clear.) The scissor is not set for rendering for the same reason it is saved/restored rather
+//    than set in PCSurfaceBracket_*: nothing in this bracket sets one on the console either.
+//  * THE D3DCLEAR_STENCIL DECISION, WHICH IS LOAD-BEARING AND EASY TO GET WRONG. D3D9's Clear is
+//    ALL-OR-NOTHING: ask for D3DCLEAR_STENCIL on a depth surface with no stencil bits and the
+//    call fails and clears NOTHING -- including the depth. The scene target's depth surface is
+//    picked by a format ladder whose FIRST and most likely candidate is D3DFMT_D24X8, which has
+//    NO STENCIL (PostFxRenderTargetPCLeaf.cpp:230-237). So the stencil bit is added only when the
+//    bound depth surface's format actually carries stencil, and a failed Clear is retried without
+//    it and then logged. Getting this wrong would leave depth uncleared every frame with no error
+//    anywhere -- the exact silent-failure shape this project keeps paying for.
+//  * THE ORDERING TRIPWIRE. The clear lands on whatever is BOUND, because that is what the
+//    console's clear lands on. If ResolveMSAA is ever called after the scene has been handed back
+//    to the swap chain (PCSceneBlit_Begin rebinds the back buffer and deliberately leaves it
+//    bound), the clear would wipe the finished frame. This leaf REFUSES to clear the swap chain
+//    and logs the fix instead. It cannot fire when the calls are in console order.
+//  * THE RETURN VALUES. D3DDevice_Resolve and D3DDevice_EndTiling keep the `int` the committed
+//    header declares; no attested caller reads it (ResolveMSAA tail-branches straight after its
+//    EndTiling call; PixelBuffer::Xbox2ResolveTo discards both and returns its own constant 1),
+//    so 0 is a bring-up choice for "no error", not a recovered value.
+//
+// -------------------------------------------------------------------------------------------
+// WHICH OF THE FOUR ACTUALLY RUNS ON THIS BUILD
+// -------------------------------------------------------------------------------------------
+// BrnRendererModule::mbMultisampledBackbuffer is written in exactly ONE place in the whole tree,
+// `mbMultisampledBackbuffer = false;` (BrnRendererModule.h:725, the Construct default), and the
+// PC pool creates the anti-alias buffer with MSAA explicitly off
+// (BrnRendererMemory.cpp:497-500, `CreateAntiAliasBuffer(lpAllocator, false)`). Both bracket
+// bodies therefore take their UNTILED branch, which calls NEITHER BeginTiling NOR EndTiling NOR
+// SetPredication -- only the two Resolves. So on the boot build:
+//     D3DDevice_Resolve         runs twice a frame and is the only clear in the whole bracket.
+//     D3DDevice_BeginTiling     is never called (correct, and dead).
+//     D3DDevice_EndTiling       is never called (correct, and dead).
+//     D3DDevice_SetPredication  is never called (correct, and dead).
+// They are all written anyway, because a body that is only reachable on a path this build does
+// not take is exactly the kind of code that becomes load-bearing later.
+// =============================================================================
+namespace renderengine
+{
+namespace
+{
+    // --- the two Xenon call-argument blocks ---------------------------------------------------
+    // The Xenon D3DRECT these entry points take: FOUR dwords, left / top / right / bottom. It is
+    // read as four dwords rather than as any one caller's C++ type because the attested callers
+    // already spell it with two different ones:
+    //   * BrnRendererModule::BeginRenderAntiAliased / ::ResolveMSAA pass
+    //     BrnGraphics::AntiAliasTilingPlan::TileRect (BrnAntiAliasTiling.h -- mu32Left, mu32Top,
+    //     mu32Right, mu32Bottom, stride 0x10);
+    //   * renderengine::PixelBuffer::Xbox2ResolveTo builds a bare `u32 luSourceRect[6]` and fills
+    //     [0] = left, [1] = top, [2] = right, [3] = bottom (PixelBuffer.cpp:169-193).
+    // Two independent callers, one layout. File-local for the same reason BrnRendererModule.cpp's
+    // XenonPoint is file-local: this is a platform-API call-argument block, not a shared Burnout
+    // type. If a third shape ever appears it moves to Xbox2SurfaceShims.h beside the declarations
+    // that consume it -- it does not get copied.
+    struct XenonResolveRect
+    {
+        u32 muLeft;     // +0x00
+        u32 muTop;      // +0x04
+        u32 muRight;    // +0x08
+        u32 muBottom;   // +0x0C
+    };
+
+    // The Xenon D3DPOINT D3DDevice_Resolve takes as its destination corner: two dwords, x then y
+    // (the same block BrnRendererModule.cpp builds as its file-local XenonPoint and fills from
+    // maTile[tile].mu32Left / .mu32Top @0x823FFCAC/B0, or zeroes @0x823FFD7C/D84).
+    struct XenonResolvePoint
+    {
+        s32 miX;    // +0x00
+        s32 miY;    // +0x04
+    };
+
+    // 0x04 -- "the surface being resolved is the DEPTH/STENCIL one". PROVEN IN-IMAGE:
+    // renderengine::PixelBuffer::Xbox2ResolveTo @0x82B62300 sets exactly this bit
+    // (`ori r28, r28, 4` @0x82B62358) on exactly the branch where the surface kind is
+    // 1 == depth-stencil (PixelBuffer.cpp:139-144).
+    const u32 KU_RESOLVE_DEPTH_STENCIL_BIT = 0x04u;
+
+    // 0x300 -- the CLEARS. The two bits always travel together: the only two Flags values in the
+    // whole image are 0x14 and 0x300, and the 0x300 call is the one that carries a non-null clear
+    // colour while the 0x14 call passes null. WHICH of 0x100 / 0x200 is the colour clear and which
+    // is the depth/stencil clear is NOT recovered, and nothing here needs it -- the pair is
+    // treated as one mask, which is the only form the image ever uses.
+    const u32 KU_RESOLVE_CLEAR_BITS = 0x300u;
+
+    // Bounded because the tile count is a caller-supplied argument and this is a leaf. The largest
+    // shipped plan has two tiles and the record has room for four (BrnAntiAliasTiling.h).
+    const u32 KU_MAX_TILE_RECTS = 8u;
+
+    // ---- DIAGNOSTICS -------------------------------------------------------------------------
+    // A LogOnce is the WRONG instrument for these. Every failure reported below is one that, once
+    // it starts, repeats every frame forever -- and LogOnce prints it in frame 1 and then never
+    // again, so the log reads like a one-off hiccup while the screen is permanently wrong. These
+    // report the first occurrence and then every KU_RESOLVE_LOG_INTERVAL-th, carrying the running
+    // count, so a permanent failure looks permanent.
+    const u32 KU_RESOLVE_LOG_INTERVAL = 300u;      // ~5 s at 60 Hz
+
+    // How many CONSECUTIVE failed colour copies before the destination is painted with the
+    // tripwire colour (see THE COPY-FAILURE TRIPWIRE in the banner). One second at 60 Hz: long
+    // enough that a transient failure shows as a frozen frame rather than a flash of colour, short
+    // enough that a permanent one is on screen immediately.
+    const u32 KU_RESOLVE_TRIPWIRE_FRAMES = 60u;
+
+    u32 suResolveCopyFailures      = 0u;
+    u32 suResolveCopyFailureStreak = 0u;
+    u32 suResolveClearWithheld     = 0u;
+    u32 suResolveSceneReopenFails  = 0u;
+    u32 suTilingClearFailures      = 0u;
+
+    void LogRepeating(u32& lruCount, const char* lpcMessage)
+    {
+        ++lruCount;
+        if (lruCount == 1u || (lruCount % KU_RESOLVE_LOG_INTERVAL) == 0u)
+        {
+            char lacMessage[320];
+            std::snprintf(lacMessage, sizeof(lacMessage), "%s [occurrence %u]\n",
+                          lpcMessage, static_cast<unsigned>(lruCount));
+            CgsDev::Log::WriteToLog(lacMessage);
+        }
+    }
+
+
+    // Does this depth format carry stencil bits? See the D3DCLEAR_STENCIL note in the banner: a
+    // stencil clear requested against a stencil-less surface makes Clear fail ENTIRELY, taking the
+    // depth clear down with it. The formats listed are the ones this build can actually end up
+    // with: the post-fx depth ladder tries D24X8, D16, INTZ, DF24, DF16 in that order and falls
+    // back to a plain D24S8 depth-stencil surface (PostFxRenderTargetPCLeaf.cpp:230-281), and the
+    // device's own auto depth-stencil is D24S8 (device.cpp:95).
+    bool TilingDepthFormatHasStencil(D3DFORMAT leFormat)
+    {
+        switch (static_cast<u32>(leFormat))
+        {
+        case static_cast<u32>(D3DFMT_D24S8):
+        case static_cast<u32>(D3DFMT_D24FS8):
+        case static_cast<u32>(D3DFMT_D24X4S4):
+        case static_cast<u32>(D3DFMT_D15S1):
+            return true;
+        default:
+            break;
+        }
+        // INTZ and RAWZ are the two FOURCC readable-depth formats that alias a D24S8 layout, so
+        // they do carry stencil; DF24 / DF16 (the ATI pair) do not.
+        return leFormat == static_cast<D3DFORMAT>(MAKEFOURCC('I', 'N', 'T', 'Z'))
+            || leFormat == static_cast<D3DFORMAT>(MAKEFOURCC('R', 'A', 'W', 'Z'));
+    }
+
+    // The D3DCLEAR_* set the surfaces CURRENTLY BOUND can actually accept (see the banner).
+    DWORD TilingClearFlagsForBoundSurfaces(IDirect3DDevice9* lpDevice, bool lbWantColourClear)
+    {
+        DWORD luFlags = lbWantColourClear ? static_cast<DWORD>(D3DCLEAR_TARGET) : 0u;
+
+        IDirect3DSurface9* lpDepth = nullptr;
+        if (SUCCEEDED(lpDevice->GetDepthStencilSurface(&lpDepth)) && lpDepth != nullptr)
+        {
+            luFlags |= static_cast<DWORD>(D3DCLEAR_ZBUFFER);
+
+            D3DSURFACE_DESC lDesc;
+            if (SUCCEEDED(lpDepth->GetDesc(&lDesc)) && TilingDepthFormatHasStencil(lDesc.Format))
+            {
+                luFlags |= static_cast<DWORD>(D3DCLEAR_STENCIL);
+            }
+            lpDepth->Release();   // GetDepthStencilSurface AddRefs
+        }
+        return luFlags;
+    }
+
+    // The clear colour the console passes is four floats in x/y/z/w = R/G/B/A order -- the same
+    // rw::math::vpu::Vector4 BrnRendererModule::BeginRenderAntiAliased publishes into
+    // mvBackgroundColour (0.72 -> .x -> RED, `stfs f0, var_40` @0x823FFA7C; 0.83 -> .y; 0.89 ->
+    // .z; alpha -> .w). D3D9's Clear takes a packed D3DCOLOR instead, so the floats are clamped
+    // and quantised here. That quantisation is a D3D9 fact, not a loss of console information.
+    D3DCOLOR TilingColourFromFloat4(const void* lpClearColour)
+    {
+        const f32* const lpafChannel = static_cast<const f32*>(lpClearColour);
+        u32 lauByte[4];
+        for (u32 luChannel = 0; luChannel < 4u; ++luChannel)
+        {
+            f32 lfValue = lpafChannel[luChannel];
+            if (!(lfValue > 0.0f))      // also catches NaN
+                lfValue = 0.0f;
+            if (lfValue > 1.0f)
+                lfValue = 1.0f;
+            lauByte[luChannel] = static_cast<u32>(lfValue * 255.0f + 0.5f);
+        }
+        return D3DCOLOR_ARGB(lauByte[3], lauByte[0], lauByte[1], lauByte[2]);
+    }
+
+    // Clamp one Xenon rect to a surface extent. Returns false when nothing is left of it.
+    bool TilingClampRect(const XenonResolveRect& lrSource, u32 luSurfaceWidth, u32 luSurfaceHeight,
+                         D3DRECT* lpOut)
+    {
+        u32 luLeft   = lrSource.muLeft;
+        u32 luTop    = lrSource.muTop;
+        u32 luRight  = lrSource.muRight;
+        u32 luBottom = lrSource.muBottom;
+
+        if (luRight  > luSurfaceWidth)  luRight  = luSurfaceWidth;
+        if (luBottom > luSurfaceHeight) luBottom = luSurfaceHeight;
+        if (luLeft >= luRight || luTop >= luBottom)
+            return false;
+
+        lpOut->x1 = static_cast<LONG>(luLeft);
+        lpOut->y1 = static_cast<LONG>(luTop);
+        lpOut->x2 = static_cast<LONG>(luRight);
+        lpOut->y2 = static_cast<LONG>(luBottom);
+        return true;
+    }
+
+    // The bound colour render target, AddRef'd (caller releases), with its extent.
+    IDirect3DSurface9* TilingAcquireBoundColour(IDirect3DDevice9* lpDevice,
+                                                u32* lpuWidth, u32* lpuHeight)
+    {
+        IDirect3DSurface9* lpSurface = nullptr;
+        if (FAILED(lpDevice->GetRenderTarget(0u, &lpSurface)) || lpSurface == nullptr)
+            return nullptr;
+
+        D3DSURFACE_DESC lDesc;
+        if (FAILED(lpSurface->GetDesc(&lDesc)))
+        {
+            lpSurface->Release();
+            return nullptr;
+        }
+        if (lpuWidth  != nullptr) *lpuWidth  = static_cast<u32>(lDesc.Width);
+        if (lpuHeight != nullptr) *lpuHeight = static_cast<u32>(lDesc.Height);
+        return lpSurface;
+    }
+
+    // Is that surface the SWAP CHAIN's back buffer? See the ordering tripwire in the banner.
+    bool TilingBoundColourIsBackBuffer(IDirect3DDevice9* lpDevice, IDirect3DSurface9* lpBound)
+    {
+        IDirect3DSurface9* lpBackBuffer = nullptr;
+        if (FAILED(lpDevice->GetBackBuffer(0u, 0u, D3DBACKBUFFER_TYPE_MONO, &lpBackBuffer))
+            || lpBackBuffer == nullptr)
+        {
+            return false;
+        }
+        const bool lbSame = (lpBackBuffer == lpBound);
+        lpBackBuffer->Release();   // GetBackBuffer AddRefs
+        return lbSame;
+    }
+
+    // THE CLEAR, shared by D3DDevice_BeginTiling and the 0x300 D3DDevice_Resolve because it is
+    // the same operation on the console: clear the surfaces the tiling pass owns, over the rects
+    // it was given, to the caller's colour / Z / stencil.
+    //
+    // lpRects may be null (or luCount 0), which means the whole surface -- that is what
+    // Clear(0, nullptr, ...) does and it is the only reading available when no rect is supplied.
+    void TilingClearBoundSurfaces(IDirect3DDevice9* lpDevice, IDirect3DSurface9* lpBoundColour,
+                                  u32 luSurfaceWidth, u32 luSurfaceHeight,
+                                  const XenonResolveRect* lpRects, u32 luCount,
+                                  const void* lpClearColour, f32 lfClearZ, u32 luClearStencil)
+    {
+        D3DRECT laRects[KU_MAX_TILE_RECTS];
+        u32     luRects       = 0u;
+        u32     luCoveredArea = 0u;
+
+        if (lpRects != nullptr)
+        {
+            const u32 luWanted = (luCount < KU_MAX_TILE_RECTS) ? luCount : KU_MAX_TILE_RECTS;
+            for (u32 luRect = 0; luRect < luWanted; ++luRect)
+            {
+                if (TilingClampRect(lpRects[luRect], luSurfaceWidth, luSurfaceHeight,
+                                    &laRects[luRects]))
+                {
+                    luCoveredArea +=
+                        static_cast<u32>(laRects[luRects].x2 - laRects[luRects].x1)
+                        * static_cast<u32>(laRects[luRects].y2 - laRects[luRects].y1);
+                    ++luRects;
+                }
+            }
+
+            // The shipped tiling plans partition a 1280x720 screen EXACTLY (BrnAntiAliasTiling.h:
+            // one 1280x720 rect with MSAA off, two 1280x384 / 1280x336 bands with it on) and their
+            // extents are HARD-CODED there, not derived from the target. So if the display is not
+            // 720p the rects cover only part of the surface and the rest is never cleared. That is
+            // a real, visible failure (uncleared bands) and it is reported rather than papered
+            // over: widening the caller's rectangles would be inventing a clear the console does
+            // not perform.
+            if (luRects != 0u && luCoveredArea != luSurfaceWidth * luSurfaceHeight)
+            {
+                LogOnce("tiling-rect-extent",
+                        "[tiling] clear rects do not cover the bound surface -- the tiling plan is"
+                        " hard-coded 1280x720 (BrnAntiAliasTiling.h) and the display is not."
+                        " The uncovered region is never cleared.\n");
+            }
+        }
+
+        const bool lbWantColourClear = (lpClearColour != nullptr) && (lpBoundColour != nullptr);
+        DWORD luFlags = TilingClearFlagsForBoundSurfaces(lpDevice, lbWantColourClear);
+        if (luFlags == 0u)
+            return;
+
+        const D3DCOLOR lColour = lbWantColourClear ? TilingColourFromFloat4(lpClearColour)
+                                                   : static_cast<D3DCOLOR>(0);
+        const D3DRECT* const lpaRects = (luRects != 0u) ? laRects : nullptr;
+
+        // ---- THE CLEAR'S OWN CLIP STATE ------------------------------------------------------
+        // D3D9's Clear is NOT a raw surface fill. It is clipped twice, by state this leaf does not
+        // set:
+        //   * by the SCISSOR RECTANGLE whenever the scissor test is on -- "The scissor test also
+        //     affects the device IDirect3DDevice9::Clear operation" (Direct3D 9 SDK, "Scissor
+        //     Test"), and
+        //   * by the VIEWPORT -- Clear's own reference says the coordinates in pRects "are clipped
+        //     to the bounds of the viewport rectangle", and a null rect list clears the viewport,
+        //     not the surface.
+        // On the untiled path this is the ONLY clear in the entire bracket, so whatever either one
+        // shrinks is a band that keeps the PREVIOUS frame's colour AND depth -- a smear with stale
+        // geometry standing up in it, and no error reported anywhere.
+        //
+        // Today the bind that precedes this (renderengine::Device::SetState ->
+        // IDirect3DDevice9::SetRenderTarget) resets the viewport and the scissor RECTANGLE to the
+        // full target -- but it does NOT reset D3DRS_SCISSORTESTENABLE, and PCSurfaceBracket_
+        // Restore puts back whatever enable was live before the shadow pass, i.e. whatever the
+        // PREVIOUS frame's 2D tail left (CgsIm2d.cpp:449 turns it on for a mask; PopMask at :464
+        // turns it off again, so it is balanced only as long as every push is popped). The clear's
+        // extent therefore rests on a chain of invariants this leaf neither owns nor can check.
+        // It is made explicit instead: force the test off and the viewport to the bound surface's
+        // full extent, clear, then put back exactly what was found.
+        //
+        // This is platform mechanics, not an invention -- the console's clear rode inside the
+        // tiling pass and had no viewport or scissor state to trip over. Only the XY extent of the
+        // viewport is forced; MinZ/MaxZ are carried across from the saved one, so nothing about the
+        // depth range changes.
+        D3DVIEWPORT9 lSavedViewport;
+        std::memset(&lSavedViewport, 0, sizeof(lSavedViewport));
+        const bool lbSavedViewport = SUCCEEDED(lpDevice->GetViewport(&lSavedViewport));
+
+        DWORD luSavedScissorEnable = FALSE;
+        if (FAILED(lpDevice->GetRenderState(D3DRS_SCISSORTESTENABLE, &luSavedScissorEnable)))
+            luSavedScissorEnable = FALSE;
+        lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+
+        // Not forced at all unless it can be put back afterwards, and not forced when the extent
+        // is unknown (no colour surface bound -- a depth-only clear keeps whatever viewport the
+        // caller had).
+        bool lbForcedViewport = false;
+        if (lbSavedViewport && luSurfaceWidth != 0u && luSurfaceHeight != 0u)
+        {
+            D3DVIEWPORT9 lFullViewport;
+            lFullViewport.X      = 0;
+            lFullViewport.Y      = 0;
+            lFullViewport.Width  = static_cast<DWORD>(luSurfaceWidth);
+            lFullViewport.Height = static_cast<DWORD>(luSurfaceHeight);
+            lFullViewport.MinZ   = lSavedViewport.MinZ;
+            lFullViewport.MaxZ   = lSavedViewport.MaxZ;
+            lbForcedViewport = SUCCEEDED(lpDevice->SetViewport(&lFullViewport));
+        }
+
+        HRESULT lHr = lpDevice->Clear(luRects, lpaRects, luFlags, lColour, lfClearZ,
+                                      static_cast<DWORD>(luClearStencil));
+
+        // Clear is ALL-OR-NOTHING (see the banner). The one failure mode worth surviving is a
+        // stencil clear against a stencil-less depth format, because losing it would silently take
+        // the DEPTH clear with it.
+        if (FAILED(lHr) && (luFlags & static_cast<DWORD>(D3DCLEAR_STENCIL)) != 0u)
+        {
+            luFlags &= ~static_cast<DWORD>(D3DCLEAR_STENCIL);
+            LogOnce("tiling-clear-nostencil",
+                    "[tiling] Clear rejected D3DCLEAR_STENCIL -- the bound depth surface has no"
+                    " stencil bits; retrying depth-only.\n");
+            lHr = lpDevice->Clear(luRects, lpaRects, luFlags, lColour, lfClearZ,
+                                  static_cast<DWORD>(luClearStencil));
+        }
+
+        if (FAILED(lHr))
+        {
+            char lacMessage[192];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                          "[tiling] Clear FAILED hr=0x%08X flags=0x%02X rects=%u -- the scene"
+                          " target is NOT being cleared, so the world composites over the previous"
+                          " frame and its depth",
+                          static_cast<unsigned>(lHr), static_cast<unsigned>(luFlags),
+                          static_cast<unsigned>(luRects));
+            LogRepeating(suTilingClearFailures, lacMessage);
+        }
+
+        // Put the clip state back exactly as it was found. The scissor RECTANGLE was never
+        // touched, only the enable, so there is nothing else to restore.
+        if (lbForcedViewport)
+            lpDevice->SetViewport(&lSavedViewport);
+        lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, luSavedScissorEnable);
+    }
+
+    // The destination surface of a resolve: mip level luLevel of the destination texture. Returns
+    // it AddRef'd (caller releases), or null when the destination cannot be expressed on PC.
+    IDirect3DSurface9* TilingAcquireDestSurface(Texture* lpDestTexture, u32 luLevel, u32 luSlice)
+    {
+        if (lpDestTexture == nullptr || lpDestTexture->mpD3DTexture == nullptr)
+            return nullptr;
+
+        // Every attested call site passes slice/face 0 (`li r9, 0` @0x823FFCC8 / @0x823FFD00 /
+        // @0x823FFDA8 / @0x823FFDF0). A cube face or array slice would need a different accessor
+        // than GetSurfaceLevel, so it is reported rather than silently resolved to face 0.
+        if (luSlice != 0u)
+        {
+            LogOnce("resolve-slice",
+                    "[postfx-resolve] non-zero DestSliceOrFace is not implemented on the PC leaf;"
+                    " the copy is skipped.\n");
+            return nullptr;
+        }
+
+        IDirect3DBaseTexture9* const lpBase = lpDestTexture->mpD3DTexture;
+        if (lpBase->GetType() != D3DRTYPE_TEXTURE)
+        {
+            LogOnce("resolve-desttype",
+                    "[postfx-resolve] the destination is not a 2D texture; the copy is skipped.\n");
+            return nullptr;
+        }
+
+        IDirect3DSurface9* lpSurface = nullptr;
+        if (FAILED(static_cast<IDirect3DTexture9*>(lpBase)->GetSurfaceLevel(luLevel, &lpSurface)))
+            return nullptr;
+        return lpSurface;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// D3DDevice_BeginTiling -- open a predicated-tiling pass, clearing each tile as it opens.
+//
+// ON PC: the tiling half has no counterpart and needs none (there is one surface and one pass, so
+// there is nothing to replay per tile and nothing to place in EDRAM); what the call really DOES,
+// and what nothing else in BeginRenderAntiAliased does, is THE CLEAR. That is what is implemented.
+// The viewport question the banner in BrnRendererModule.cpp leaves to this leaf is answered above:
+// SetRenderTarget has already set the viewport to the whole scene target, so this owes nothing.
+//
+// luFlags is 0 at the only attested call site (`li r4, 0# Flags` @0x823FFB58) and has no decoded
+// meaning; it is not acted on. lpDevice is the console's off_83271608 and is ignored for the same
+// reason every other shim in this file ignores it -- Dev() is the one live PC device.
+//
+// NOT REACHED ON THIS BUILD: BeginRenderAntiAliased only calls this on its multisampled branch,
+// and mbMultisampledBackbuffer is false everywhere (see the banner).
+// ---------------------------------------------------------------------------------------------
+void D3DDevice_BeginTiling(void* /*lpDevice*/, u32 /*luFlags*/, u32 luCount,
+                           const void* lpTileRects, const void* lpClearColour, f32 lfClearZ,
+                           u32 luClearStencil)
+{
+    IDirect3DDevice9* const lpD3DDevice = Dev();
+    if (lpD3DDevice == nullptr)
+        return;
+
+    u32 luSurfaceWidth  = 0u;
+    u32 luSurfaceHeight = 0u;
+    IDirect3DSurface9* const lpBoundColour =
+        TilingAcquireBoundColour(lpD3DDevice, &luSurfaceWidth, &luSurfaceHeight);
+
+    if (lpBoundColour != nullptr && TilingBoundColourIsBackBuffer(lpD3DDevice, lpBoundColour))
+    {
+        // See the ordering tripwire in the banner.
+        LogOnce("begintiling-backbuffer",
+                "[tiling] BeginTiling with the SWAP CHAIN bound -- refusing to clear the frame."
+                " BeginRenderAntiAliased must bind the scene target before this runs.\n");
+        lpBoundColour->Release();
+        return;
+    }
+
+    TilingClearBoundSurfaces(lpD3DDevice, lpBoundColour, luSurfaceWidth, luSurfaceHeight,
+                             static_cast<const XenonResolveRect*>(lpTileRects), luCount,
+                             lpClearColour, lfClearZ, luClearStencil);
+
+    if (lpBoundColour != nullptr)
+        lpBoundColour->Release();
+}
+
+// ---------------------------------------------------------------------------------------------
+// D3DDevice_SetPredication -- select which EDRAM tile's replay of the command stream the following
+// commands join.
+//
+// HONEST NO-OP, and here is why it is honest rather than convenient. Predication exists because a
+// tiled Xenos frame REPLAYS the whole command stream once per tile: every command is submitted
+// several times and the mask says which replays it belongs to. On PC each command is submitted
+// exactly once against one full-size surface, so there is no replay to select and no command to
+// exclude. The per-tile work the console predicated -- the resolves -- is instead scoped
+// explicitly by the rectangle each D3DDevice_Resolve is handed, so nothing is lost by dropping the
+// mask. The existing precedent for a legitimately empty D3DDevice_* shim in this file is
+// D3DDevice_Begin/EndConditionalRendering.
+//
+// NOT REACHED ON THIS BUILD (multisampled branches only).
+// ---------------------------------------------------------------------------------------------
+void D3DDevice_SetPredication(void* /*lpDevice*/, u32 /*luPredicationMask*/)
+{
+}
+
+// ---------------------------------------------------------------------------------------------
+// D3DDevice_EndTiling -- end predicated tiling, resolving the tiled surface.
+//
+// HONEST NO-OP AT ITS ATTESTED CALL SITE, which is the whole of the evidence: ResolveMSAA passes
+// null for every pointer argument (`li r4, 0` ResolveFlags, `li r5, 0` pResolveRects, `li r6, 0`
+// pDestTexture, `li r7, 0` pClearColor, `li r10, 0` pParameters -- @0x823FFD3C-0x823FFD54), so
+// there is nothing to resolve and nothing to clear; the per-tile resolves above it already did
+// both. With no tiling pass open on PC, closing one is a no-op too.
+//
+// THE ONE CALL SITE THAT PASSES A DESTINATION is PixelBuffer::Xbox2ResolveTo (PixelBuffer.cpp:164),
+// on the branch gated by `gXbox2TilingEnabled` -- a global that is DECLARED (Xbox2SurfaceShims.h)
+// and defined nowhere, in a TU that is not on tools/build/build_game_exe.bat. If that path is ever
+// mounted, this body owes the same copy D3DDevice_Resolve below performs. It is left unwritten
+// rather than guessed because no evidence in this image says what EndTiling's resolve rectangle
+// would be.
+//
+// NOT REACHED ON THIS BUILD (multisampled branch only).
+// ---------------------------------------------------------------------------------------------
+int D3DDevice_EndTiling(void* /*lpDevice*/, u32 /*luResolveFlags*/, const void* /*lpResolveRects*/,
+                        Texture* /*lpDestTexture*/, const void* /*lpClearColour*/,
+                        f32 /*lfClearZ*/, u32 /*luClearStencil*/, const void* /*lpParameters*/)
+{
+    return 0;   // unobservable: no attested caller reads it (see the banner)
+}
+
+// ---------------------------------------------------------------------------------------------
+// D3DDevice_Resolve -- copy (and MSAA-downsample) the bound EDRAM surface out into a linear
+// destination texture, optionally clearing the EDRAM behind it.
+//
+// THIS IS THE ONE OF THE FOUR THAT RUNS ON THIS BUILD, twice a frame, and it is the ONLY clear in
+// the whole bracket on the untiled path -- BeginRenderAntiAliased's untiled branch
+// (0x823FFB90-0x823FFBD8) never even loads the device pointer and clears nothing, deliberately,
+// because the PREVIOUS frame's colour resolve left the surface clean. So the frame's clean-slate
+// invariant is established here, at the END of frame N, for frame N+1.
+//
+// TWO HALVES, in the console's order:
+//   (1) THE COPY. Colour resolves (Flags without the 0x04 depth bit) become a StretchRect from the
+//       bound render target to the destination texture's surface. Depth resolves cannot be
+//       expressed at all on D3D9 and say so.
+//   (2) THE CLEAR. Flags carrying 0x300 clear the bound colour + depth/stencil, over the resolve
+//       rectangle, to the caller's colour / Z / stencil.
+// Copy BEFORE clear, because the console clears the surface it is copying OUT of.
+//
+// TWO PLATFORM DIFFERENCES SIT ON TOP OF THAT, both in the banner: the copy is issued with the
+// frame's scene SUSPENDED (EndScene / StretchRect / BeginScene), and the clear is WITHHELD when a
+// required copy did not land -- so that a copy failure degrades to a smear you can see rather than
+// to a black screen you cannot tell apart from a dozen other faults.
+//
+// ⚠ THE FRAME ORDER THIS DEPENDS ON. The clear lands on the surfaces that are BOUND, which is what
+// the console's clear lands on too. That makes the call order load-bearing on PC in a way it is
+// not on the console: BrnRendererModule::ResolveMSAA must run while the scene target is still
+// bound -- i.e. AFTER the world passes and BEFORE anything hands the frame back to the swap chain.
+// If it runs after the present blit, the blit has already rebound the back buffer (PCSceneBlit_
+// Begin, and it deliberately does not put the scene target back) and this would clear the finished
+// frame. It refuses to, and logs, rather than doing it.
+// ---------------------------------------------------------------------------------------------
+int D3DDevice_Resolve(void* /*lpDevice*/, u32 luFlags, const void* lpSourceRect,
+                      Texture* lpDestTexture, const void* lpDestPoint, u32 luDestLevel,
+                      u32 luDestSliceOrFace, const void* lpClearColour, f32 lfClearZ,
+                      u32 luClearStencil, const void* /*lpParameters*/)
+{
+    IDirect3DDevice9* const lpD3DDevice = Dev();
+    if (lpD3DDevice == nullptr)
+        return 0;
+
+    u32 luSurfaceWidth  = 0u;
+    u32 luSurfaceHeight = 0u;
+    IDirect3DSurface9* const lpBoundColour =
+        TilingAcquireBoundColour(lpD3DDevice, &luSurfaceWidth, &luSurfaceHeight);
+    if (lpBoundColour == nullptr)
+    {
+        LogOnce("resolve-nort",
+                "[postfx-resolve] no colour render target is bound; the resolve is skipped.\n");
+        return 0;
+    }
+
+    if (TilingBoundColourIsBackBuffer(lpD3DDevice, lpBoundColour))
+    {
+        // See the frame-order warning above. This is the misordering tripwire, and it is a REFUSAL
+        // (not a warning-and-proceed) because proceeding would erase the finished frame.
+        LogOnce("resolve-backbuffer",
+                "[postfx-resolve] ResolveMSAA ran with the SWAP CHAIN bound -- refusing, because"
+                " the clear would erase the finished frame. Call ResolveMSAA while the scene"
+                " target is still bound, i.e. before the present blit.\n");
+        lpBoundColour->Release();
+        return 0;
+    }
+
+    const XenonResolveRect* const lpRect =
+        static_cast<const XenonResolveRect*>(lpSourceRect);
+
+    // Did the copy this call owes actually land? The clear below is GATED on it -- see THE COPY
+    // AND THE CLEAR ARE COUPLED in the banner. `lbCopyDone` is set in exactly one place, on a
+    // succeeded StretchRect, so every other way of not copying (no destination texture, a
+    // non-2D destination, a non-zero slice, an empty rectangle, the destination being the bound
+    // surface) also counts as "did not copy" and also withholds the clear.
+    const bool lbCopyRequired = ((luFlags & KU_RESOLVE_DEPTH_STENCIL_BIT) == 0u);
+    bool       lbCopyDone     = false;
+
+    // ---- (1) THE COPY ------------------------------------------------------------------------
+    if ((luFlags & KU_RESOLVE_DEPTH_STENCIL_BIT) != 0u)
+    {
+        // The depth/stencil resolve. NO PC COUNTERPART: D3D9's StretchRect rejects depth-stencil
+        // surfaces outright and there is no other route from a bound depth surface into a
+        // sampleable texture, so this half of the console's resolve genuinely cannot be performed.
+        // It is a no-op, and it is labelled as one rather than dressed up: the down-sample
+        // buffer's depth texture is left holding whatever it held. Nothing samples it today; the
+        // consumer is BrnPostFx's depth of field, and that wave needs a shader-side answer (sample
+        // the scene depth texture directly), not a copy.
+        LogOnce("resolve-depth-noop",
+                "[postfx-resolve] the depth/stencil resolve is a no-op on D3D9 (StretchRect"
+                " refuses depth surfaces); the down-sample depth texture is not written.\n");
+    }
+    else
+    {
+        IDirect3DSurface9* const lpDestSurface =
+            TilingAcquireDestSurface(lpDestTexture, luDestLevel, luDestSliceOrFace);
+        if (lpDestSurface != nullptr && lpDestSurface != lpBoundColour)
+        {
+            D3DSURFACE_DESC lDestDesc;
+            if (SUCCEEDED(lpDestSurface->GetDesc(&lDestDesc)))
+            {
+                // The source rectangle, clamped to the bound surface. A null rectangle means the
+                // whole surface (no attested call site passes null, but PixelBuffer's EndTiling
+                // branch shows the argument can be null in this family).
+                D3DRECT lSourceRect = { 0, 0, static_cast<LONG>(luSurfaceWidth),
+                                        static_cast<LONG>(luSurfaceHeight) };
+                bool lbHaveSource = (luSurfaceWidth != 0u && luSurfaceHeight != 0u);
+                if (lpRect != nullptr)
+                {
+                    lbHaveSource =
+                        TilingClampRect(*lpRect, luSurfaceWidth, luSurfaceHeight, &lSourceRect);
+                }
+
+                // The destination corner: the caller's D3DPOINT, or the origin when it passes
+                // null. ResolveMSAA passes maTile[tile].mu32Left / .mu32Top on the tiled path and
+                // an explicitly zeroed pair on the untiled one.
+                s32 liDestX = 0;
+                s32 liDestY = 0;
+                if (lpDestPoint != nullptr)
+                {
+                    const XenonResolvePoint* const lpPoint =
+                        static_cast<const XenonResolvePoint*>(lpDestPoint);
+                    liDestX = lpPoint->miX;
+                    liDestY = lpPoint->miY;
+                }
+
+                if (lbHaveSource)
+                {
+                    RECT lSource;
+                    lSource.left   = lSourceRect.x1;
+                    lSource.top    = lSourceRect.y1;
+                    lSource.right  = lSourceRect.x2;
+                    lSource.bottom = lSourceRect.y2;
+
+                    RECT lDest;
+                    lDest.left   = liDestX;
+                    lDest.top    = liDestY;
+                    lDest.right  = liDestX + (lSourceRect.x2 - lSourceRect.x1);
+                    lDest.bottom = liDestY + (lSourceRect.y2 - lSourceRect.y1);
+                    if (lDest.right  > static_cast<LONG>(lDestDesc.Width))
+                        lDest.right  = static_cast<LONG>(lDestDesc.Width);
+                    if (lDest.bottom > static_cast<LONG>(lDestDesc.Height))
+                        lDest.bottom = static_cast<LONG>(lDestDesc.Height);
+
+                    if (lDest.right > lDest.left && lDest.bottom > lDest.top)
+                    {
+                        // D3DTEXF_NONE: same size, no filtering wanted. (If the scene target is
+                        // ever created multisampled, this same call IS the D3D9 MSAA resolve, and
+                        // D3DTEXF_NONE is the required filter for that too.)
+                        //
+                        // THE SCENE SUSPEND -- see the banner for WHY. The frame's scene is closed
+                        // for the length of the copy and reopened immediately after it, with the
+                        // failure handling (which touches the destination SURFACE) kept inside the
+                        // same window.
+                        //
+                        // D3DERR_INVALIDCALL from EndScene means exactly one thing -- no scene was
+                        // open -- so there is nothing to put back and opening one would leave it
+                        // unbalanced. ANY other result is reopened, including a driver error that
+                        // may have left the scene open, because every draw in the REST of the frame
+                        // (the loading layers, the GUI/Apt flush, the movie quad, the HUD) needs an
+                        // open scene; silently losing all of them would be worse than a redundant
+                        // BeginScene, which merely returns D3DERR_INVALIDCALL and changes nothing.
+                        //
+                        // Two plain calls rather than an RAII guard on purpose: a guard's
+                        // destructor makes MSVC emit unwind funclets and pulls __GSHandlerCheck_EH4
+                        // and __std_terminate into a TU that references neither today (measured
+                        // with dumpbin), and this region is straight-line code with no early exit
+                        // and nothing that throws, so the guard would buy nothing for the two new
+                        // link-time externals it costs.
+                        const bool lbSceneSuspended =
+                            (lpD3DDevice->EndScene() != D3DERR_INVALIDCALL);
+
+                        const HRESULT lHr = lpD3DDevice->StretchRect(lpBoundColour, &lSource,
+                                                                     lpDestSurface, &lDest,
+                                                                     D3DTEXF_NONE);
+
+                        if (FAILED(lHr))
+                        {
+                            ++suResolveCopyFailureStreak;
+
+                            // The one cap that governs this copy: both surfaces here are
+                            // render-target TEXTURE surfaces, and the D3D9 reference makes texture
+                            // sources/destinations conditional on
+                            // D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES. Reporting it beside the hr
+                            // turns "StretchRect failed" into an answerable question.
+                            D3DCAPS9 lCaps;
+                            std::memset(&lCaps, 0, sizeof(lCaps));
+                            const bool lbFromTextures =
+                                SUCCEEDED(lpD3DDevice->GetDeviceCaps(&lCaps))
+                                && (lCaps.DevCaps2
+                                    & static_cast<DWORD>(
+                                          D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES)) != 0u;
+
+                            char lacMessage[256];
+                            std::snprintf(lacMessage, sizeof(lacMessage),
+                                          "[postfx-resolve] StretchRect FAILED hr=0x%08X"
+                                          " (CAN_STRETCHRECT_FROM_TEXTURES=%u) -- the down-sample"
+                                          " buffer is NOT being written; the clear is withheld and"
+                                          " the destination gets the tripwire colour",
+                                          static_cast<unsigned>(lHr),
+                                          lbFromTextures ? 1u : 0u);
+                            LogRepeating(suResolveCopyFailures, lacMessage);
+
+                            // ⚠ THE COPY-FAILURE TRIPWIRE (banner). Withholding the clear fixes
+                            // what the SOURCE looks like, but what reaches the screen is the
+                            // DESTINATION -- and a destination nothing ever wrote is a
+                            // D3DPOOL_DEFAULT render-target texture holding undefined contents,
+                            // which in practice reads as black. A permanent copy failure would
+                            // therefore still present as a CLEAN BLACK FRAME, indistinguishable
+                            // from "the bracket did not work" and from a dozen other faults. So
+                            // once the copy has failed KU_RESOLVE_TRIPWIRE_FRAMES times in a row
+                            // the destination is filled with a colour nothing in this game
+                            // produces. ColorFill is legal on "a render target, a render-target
+                            // texture surface, or an off-screen plain surface with a pool type of
+                            // D3DPOOL_DEFAULT" (D3D9 reference) -- exactly what this is.
+                            if (suResolveCopyFailureStreak >= KU_RESOLVE_TRIPWIRE_FRAMES)
+                            {
+                                lpD3DDevice->ColorFill(lpDestSurface, nullptr,
+                                                       D3DCOLOR_ARGB(255, 255, 0, 255));
+                            }
+                        }
+                        else
+                        {
+                            suResolveCopyFailureStreak = 0u;
+                        }
+
+                        if (lbSceneSuspended)
+                        {
+                            const HRESULT lHrScene = lpD3DDevice->BeginScene();
+                            // D3DERR_INVALIDCALL here means a scene is ALREADY open (the EndScene
+                            // above did not close one after all) -- precisely the state wanted, so
+                            // it is not a failure.
+                            if (FAILED(lHrScene) && lHrScene != D3DERR_INVALIDCALL)
+                            {
+                                LogRepeating(suResolveSceneReopenFails,
+                                             "[postfx-resolve] BeginScene FAILED after the resolve"
+                                             " copy -- every draw in the REST of this frame (GUI,"
+                                             " movie, HUD) is being dropped");
+                            }
+                        }
+
+                        lbCopyDone = SUCCEEDED(lHr);
+                    }
+                }
+            }
+        }
+        if (lpDestSurface != nullptr)
+            lpDestSurface->Release();   // GetSurfaceLevel AddRefs
+    }
+
+    // ---- (2) THE CLEAR -----------------------------------------------------------------------
+    // Only the 0x300 variant carries it, and only that variant is handed a clear colour.
+    //
+    // ⚠ AND IT IS CONDITIONAL ON THE COPY -- see THE COPY AND THE CLEAR ARE COUPLED in the banner.
+    // Clearing whether or not the copy landed is what turns a failed copy from a VISIBLE fault
+    // into an invisible one: the source is wiped, the destination is never written, and the screen
+    // goes cleanly black forever. Withholding it leaves the world accumulating in the scene target
+    // instead, which is a fault you can see.
+    if ((luFlags & KU_RESOLVE_CLEAR_BITS) != 0u)
+    {
+        if (lbCopyRequired && !lbCopyDone)
+        {
+            LogRepeating(suResolveClearWithheld,
+                         "[postfx-resolve] the colour copy did not happen, so the 0x300 clear is"
+                         " WITHHELD -- the scene target keeps what it holds (a visible smear)"
+                         " rather than being wiped to the background colour (a silent black)");
+        }
+        else
+        {
+            TilingClearBoundSurfaces(lpD3DDevice, lpBoundColour, luSurfaceWidth, luSurfaceHeight,
+                                     lpRect, (lpRect != nullptr) ? 1u : 0u,
+                                     lpClearColour, lfClearZ, luClearStencil);
+        }
+    }
+
+    lpBoundColour->Release();   // GetRenderTarget AddRefs
+    return 0;                   // unobservable: no attested caller reads it (see the banner)
+}
+
+// =============================================================================
+// FLAG PC bring-up INITIALISATION: give a freshly created off-screen target DEFINED contents
+// before anything renders into it. THERE IS NO CONSOLE COUNTERPART, and there is no console
+// counterpart for a reason worth stating rather than hiding.
+//
+// WHY THE FIRST FRAME NEEDS IT. On the Xenos the scene target is EDRAM and the TILING PASS
+// clears it at the TOP of every frame, the first one included -- that is exactly what
+// D3DDevice_BeginTiling's pClearColor / ClearZ / stencil arguments above are for. The PC
+// bracket's only clear is the one at the BOTTOM of the frame: the 0x300 D3DDevice_Resolve
+// clears the scene target BEHIND the copy, which is what leaves it clean for the NEXT frame's
+// world pass. That is faithful -- and it is also why the FIRST frame after these targets are
+// created has been cleared by nothing at all.
+//
+// D3D9 leaves a freshly created D3DPOOL_DEFAULT render-target texture and depth texture
+// UNDEFINED, and nothing at creation writes them: in PostFxRenderTargetPCLeaf.cpp the colour
+// texture (:586-592) and the depth texture (:229-237) are created and handed straight out --
+// `grep -n "Clear(\|ColorFill" pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp` returns
+// NOTHING (run this round). So without this call the bracket's first frame renders the world
+// into undefined colour over undefined depth, and that frame is copied and PRESENTED. The
+// depth half is the worse one: undefined depth can reject every pixel of the world, which on
+// screen reads as "the bracket does not work" rather than as one bad frame.
+//
+// THE VALUES ARE ATTESTED, and not one of them is a placeholder zero:
+//   * RGB black and Z 1.0f are exactly what this build's own frame-start clear puts in the
+//     back buffer today -- renderengine::Device::FrameBegin issues
+//     `Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, D3DCOLOR_XRGB(0,0,0), 1.0f, 0)`
+//     (device.cpp:117). Starting the off-screen target from the SAME slate the back buffer
+//     starts from is what makes the flip's first frame look like the first frame before it --
+//     this step's entire success criterion.
+//   * 1.0f is independently the console's own ClearZ for this bracket: flt_82001C98 = 1.0f
+//     (DATA_DUMP.md, +0x0000), the constant BeginTiling is handed at 0x823FFB54.
+//   * alpha 0.0f is the console's KF_BACKGROUND_COLOUR_ALPHA (flt_82001CC0 = 0.0f, DATA_DUMP.md
+//     +0x0000) -- the alpha the per-frame scene clear writes. The blit ignores alpha
+//     (SELECTARG1 + blending off, see PCSceneBlit_Begin), so it is unobservable either way;
+//     this matches the recovered value instead of picking one.
+//   * stencil 0 -- device.cpp:117 again, and the console's own `li r8, 0`.
+//
+// IT IS DELIBERATELY NOT THE PER-FRAME BACKGROUND COLOUR (lfWhiteLevel * 0.72/0.83/0.89, X360
+// flt_820473A4/A8/AC). That value lives in BrnRendererModule's per-frame shader-constants block
+// and does not exist at pool-creation time; reaching for it here would be inventing a console
+// behaviour that has no counterpart at this point in the program. The consequence is bounded
+// and worth knowing: on the FIRST bracket frame only, a pixel that neither the world, the sky
+// dome nor the 2D tail covers is black rather than the pale background colour it will be from
+// frame 2 on. Black is what that pixel is TODAY, without the bracket.
+//
+// The clear goes through TilingClearBoundSurfaces -- the SAME clear the resolve uses -- so the
+// viewport/scissor bracket and the D3DCLEAR_STENCIL all-or-nothing retry exist exactly once.
+//
+// No back-buffer refusal here (unlike D3DDevice_Resolve, which runs every frame at a point
+// where the finished frame is on the swap chain): this runs ONCE, at pool creation, from
+// EnsurePostFxSceneTargets -- i.e. just after Device::FrameBegin cleared the back buffer to
+// that same black -- and its two callers hand it the two CREATE-mode scene targets, which own
+// their own surfaces and are never the swap chain. If the colour texture failed to create, the
+// [postfx-rt] line at PostFxRenderTargetPCLeaf.cpp already reports `colourTexture=NULL` at that
+// same moment; this function does not re-report it.
+//
+// DELETE IT when a frame-TOP clear exists again -- the multisampled path's D3DDevice_BeginTiling
+// clear, or BrnPostFx::Render @0x8240A468's own composite -- NOT merely when the bracket lands.
+// =============================================================================
+void PCBringUpClearRenderTargetState(const RenderTargetState* lpState)
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr || lpState == nullptr)
+        return;
+
+    // This BORROWS the device: it runs from the middle of a frame (EnsurePostFxSceneTargets,
+    // inside Render) and its caller has no idea it happened, so everything it touches is saved
+    // here and put back below.
+    IDirect3DSurface9* lpSavedColour = nullptr;
+    if (FAILED(lpDevice->GetRenderTarget(0u, &lpSavedColour)))
+        lpSavedColour = nullptr;                    // GetRenderTarget AddRefs on success
+    IDirect3DSurface9* lpSavedDepth = nullptr;
+    if (FAILED(lpDevice->GetDepthStencilSurface(&lpSavedDepth)))
+        lpSavedDepth = nullptr;                     // D3DERR_NOTFOUND == nothing bound
+
+    D3DVIEWPORT9 lSavedViewport;
+    std::memset(&lSavedViewport, 0, sizeof(lSavedViewport));
+    const bool lbSavedViewport = SUCCEEDED(lpDevice->GetViewport(&lSavedViewport));
+
+    RECT lSavedScissor;
+    std::memset(&lSavedScissor, 0, sizeof(lSavedScissor));
+    const bool lbSavedScissor = SUCCEEDED(lpDevice->GetScissorRect(&lSavedScissor));
+
+    // Bind the target's own surfaces through the engine's bind, not a raw one, so a depth-only
+    // state still gets a legal colour attachment (Device::SetState owns that rule).
+    renderengine::Device::SetState(lpState);
+
+    u32 luWidth  = 0u;
+    u32 luHeight = 0u;
+    IDirect3DSurface9* const lpBoundColour = TilingAcquireBoundColour(lpDevice, &luWidth, &luHeight);
+
+    // The four lanes are R, G, B, A in that order (TilingColourFromFloat4 above).
+    const f32 lafClearColourRGBA[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const f32 lfClearZ              = 1.0f;
+
+    TilingClearBoundSurfaces(lpDevice, lpBoundColour, luWidth, luHeight,
+                             nullptr, 0u, lafClearColourRGBA, lfClearZ, 0u);
+
+    if (lpBoundColour != nullptr)
+    {
+        lpBoundColour->Release();   // GetRenderTarget AddRefs
+    }
+    else
+    {
+        // Nothing on colour slot 0 after the bind means the clear just did depth only (or
+        // nothing at all). Silence here would be the exact undefined-first-frame this call
+        // exists to remove, so it is reported.
+        LogOnce("bringup-clear-no-colour",
+                "[postfx-bringup] the scene target's colour surface is not bound after"
+                " Device::SetState -- the one-shot creation clear cleared no colour, so the"
+                " first bracket frame renders into UNDEFINED colour\n");
+    }
+
+    // Hand the device back exactly as it was found. Depth is dropped first because D3D9 checks
+    // "the depth surface is at least as large as the render target" on SetRenderTarget -- the
+    // same ordering renderengine::Device::SetState itself uses -- and the viewport/scissor go
+    // back LAST because SetRenderTarget resets both.
+    lpDevice->SetDepthStencilSurface(nullptr);
+    if (lpSavedColour != nullptr)
+        lpDevice->SetRenderTarget(0u, lpSavedColour);
+    lpDevice->SetDepthStencilSurface(lpSavedDepth);   // null is a valid unbind
+    if (lbSavedViewport)
+        lpDevice->SetViewport(&lSavedViewport);
+    if (lbSavedScissor)
+        lpDevice->SetScissorRect(&lSavedScissor);
+
+    // Those binds went STRAIGHT to D3D9, so the engine's "last render-target state installed"
+    // shadow did not see them -- and a shadow that lies causes a SKIPPED bind, which is what
+    // put the shadow cascades in the back buffer. Invalidate, exactly as PCSurfaceBracket_
+    // Restore and PCSceneBlit_Begin do.
+    gpLastRenderTargetState = nullptr;
+
+    if (lpSavedColour != nullptr)
+        lpSavedColour->Release();
+    if (lpSavedDepth != nullptr)
+        lpSavedDepth->Release();
 }
 }
 
