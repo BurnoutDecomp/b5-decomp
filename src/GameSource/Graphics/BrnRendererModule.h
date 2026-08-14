@@ -92,6 +92,14 @@ class Texture;
 class TextureState;
 }
 
+// BrnRendererModule::EndRenderPostFx @0x823F65B0 takes one of these. Pointer-only use in this
+// header, so a forward declaration is the documented cascade-avoidance exception rather than an
+// include of the post-fx SDK header. Class KEY checked against the definition, not guessed:
+// `class RenderTarget` at
+// SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h:126, inside
+// `namespace rw` (:31) / `namespace graphics` (:33) / `namespace postfx` (:35).
+namespace rw { namespace graphics { namespace postfx { class RenderTarget; } } }
+
 // BrnRendererMemory is the real type now (GameSource/Graphics/BrnRendererMemory.h): it owns the
 // renderer's render-target pool, and mAllocatedRenderTargets below is embedded BY VALUE, so the
 // shadow pass -- which asks it for GetShadowMapBuffer(0) -- needs the complete layout, not the
@@ -269,6 +277,16 @@ public:
         s32 miWorldTransparent;
         s32 miCarOpaque;
         s32 miCarTransparent;
+        // X360-ONLY, and absent from the DecFIGS DWARF because the PS3 has no EDRAM: console index 8
+        // of the twenty monitors BrnRendererModule::Construct @0x8240A778 registers. Its own name is
+        // the console's -- `addi r3, r11, aResolvemsaafro@l # "ResolveMSAAFromEDRAM"` @0x8240B5DC,
+        // whose returned id is stored to this+0xC9E4 by `ori r9, r11, 0xC9E4` @0x8240B5F4 /
+        // `stwx r10, r31, r9` @0x8240B604. Its one reader is BrnRendererModule::ResolveMSAA
+        // @0x823FFBE0 (this+0xC9E4 at 0x823FFC58 and 0x823FFD78). Without it that function and
+        // EndRenderAntiAliased @0x82408B00 (this+0xC9E8, index 9) would share one host member.
+        // The DWARF's own source-line comments leave the gap this fills: miCarTransparent is
+        // BrnRendererModule.h:759 and miDownsampleMSAAAndCompParticles is :764.
+        s32 miResolveMSAAFromEDRAM;
         s32 miDownsampleMSAAAndCompParticles;
         s32 miSunCoronaVisibilityTest;
         s32 miFullResParticles;
@@ -352,6 +370,30 @@ private:
 
     // @ 0x823FC678 - the buffer-flip half of EndOfFrame (X360 calls it from there).
     void SwapBuffers();
+
+    // ---- the frame bracket's END (the off-screen scene target's exit path) -------------------
+    // DECLARATIONS ONLY: the reconstructed bodies for all three are delivered in this pass's
+    // bodies/ directory and are deliberately NOT mounted into BrnRendererModule.cpp yet -- they
+    // call the three state factories, which are still empty placeholder structs in this header
+    // (see the CgsBlendStateFactory / CgsRasterizerStateFactory / CgsDepthStencilStateFactory
+    // definitions above). The full, ordered precondition list for mounting them is in the pass
+    // REPORT (scratch/postfx_round3_out/G4_bracket_end/REPORT.md section 2.4). Nothing calls any
+    // of the three today, so declaring them adds no link requirement.
+    //
+    // @ 0x82408B00 - close the anti-aliased pass: retarget to the down-sample buffer, restore the
+    // pass-default state triple, composite the quarter-res particles, resolve the colour surface.
+    void EndRenderAntiAliased();
+
+    // @ 0x82408C38 - open the quarter-resolution soft-particle buffer: bind it, clear all colour
+    // targets, set the depth-write/no-colour-write triple, blit the scene depth down into it.
+    void BeginQuarterResBuffer();
+
+    // @ 0x823F65B0 - the pass-default state-triple restore that follows the post-fx chain. The
+    // RenderTarget parameter is UNUSED on this build and that is an asm fact, not an omission:
+    // the body reads only the four globals and never touches r3 or r4. Its type comes from the
+    // caller -- Render @0x8240BFA8 loads `lwz r4, 0x108(r29)`, a CgsRenderTarget::mpRenderTarget
+    // (CgsRenderTarget.h:199), i.e. rw::graphics::postfx::RenderTarget*.
+    void EndRenderPostFx(rw::graphics::postfx::RenderTarget* lpRenderTarget);
 
     void ClearDispatchCounters();
     void ClearScreenshotState();

@@ -216,29 +216,35 @@ namespace shadow
 
     const renderengine::ProgramBufferData* Device::mpVertexProgramShadow = nullptr;
     const renderengine::ProgramBufferData* Device::mpPixelProgramShadow = nullptr;
-    u32 Device::muUnused64 = 0;
+    const renderengine::BlendMaterialState* Device::mpBlendState = nullptr;   // dword_83010964
 
     u32 Device::mauSamplerDirty[KU_MAX_TEXTURE_STATES] = {};
     void* Device::mapSamplerState[KU_MAX_TEXTURE_STATES] = {};
     void* Device::mapSamplerTexture[KU_MAX_TEXTURE_STATES] = {};
 
-    u32 Device::muMisc28 = 0;
-    u32 Device::muMisc2C = 0;
+    const renderengine::DepthStencilState* Device::mpDepthStencilState = nullptr;  // dword_83010A28
+    const renderengine::RasterizerState*   Device::mpRasterizerState   = nullptr;  // dword_83010A2C
     u32 Device::muMisc30 = 0;
     bool Device::mbForceStencilWrite = false;
     u32 Device::muStencilValueToWrite = 0;
     bool Device::mbRasteriserStateLocked = false;
+    // byte_83010907 -- the blend third's lock gate. See the header for the elimination that names it.
+    bool Device::mbBlendStateLocked = false;
 
     u32 Device::mauLowLevelStateShadow[18] = {};
     // The X360 depth/stencil lock window (mbDepthStencilStateLocked, the sibling of
     // mbRasteriserStateLocked that DispatchAllMeshes tests before binding the depth state).
     // Nothing in the reconstructed set opens that window yet, so it reads false throughout.
     bool Device::mbDepthStencilStateLocked = false;
-    // The three state OBJECTS the dispatch last bound (X360 v64[5] / v64[54] / v64[55] in
-    // DispatchAllMeshes) -- the pointer compare that decides whether an applier runs at all.
-    void* Device::mpLastBlendState = nullptr;
-    void* Device::mpLastDepthStencilState = nullptr;
-    void* Device::mpLastRasterizerState = nullptr;
+    // mpLastBlendState / mpLastDepthStencilState / mpLastRasterizerState are GONE: they were a second
+    // host home for dword_83010964 / dword_83010A28 / dword_83010A2C, which mpBlendState /
+    // mpDepthStencilState / mpRasterizerState above already own. Their comment went with them; it
+    // said the slots "live on the per-dispatch context", and they do not -- DispatchAllMeshes
+    // @0x827F2718 reaches them as 0xD8 / 0x14 / 0xDC off r27, and r27 IS off_83010950
+    // (`addi r11, r11, off_83010950@l` @0x827F2754 -> `stw r11, var_140(r1)` @0x827F2760 ->
+    // `lwz r27, var_140(r1)` @0x827F2EE0), the file-scope shadow block.
+    // mbLastBlendZOnly STAYS: it is not a duplicate of any console word, it is the PC leaf's own
+    // companion to mpBlendState (its FLAG is in the header).
     bool  Device::mbLastBlendZOnly = false;
 
     bool Device::Initialize()
@@ -298,7 +304,7 @@ namespace shadow
         // dword_83010960 is reset to -1 (the "no pixel program bound" sentinel).
         mpPixelProgramShadow = reinterpret_cast<const renderengine::ProgramBufferData*>(
             static_cast<uintptr_t>(~0u));
-        muUnused64 = 0;
+        mpBlendState = nullptr;
 
         for (u32 luSampler = 0; luSampler < KU_MAX_TEXTURE_STATES; ++luSampler)
         {
@@ -307,8 +313,8 @@ namespace shadow
             mapSamplerTexture[luSampler] = nullptr;
         }
 
-        muMisc28 = 0;
-        muMisc2C = 0;
+        mpDepthStencilState = nullptr;
+        mpRasterizerState = nullptr;
         muMisc30 = 0;
         mbVertexProgramStateDirty = true;
     }
@@ -500,7 +506,7 @@ namespace shadow
         CGS_ASSERT(luStencilValueToWrite <= 255, "luStencilValueToWrite <= 255");
         muStencilValueToWrite = luStencilValueToWrite;
         mbForceStencilWrite = true;
-        muMisc28 = 0;
+        mpDepthStencilState = nullptr;   // dword_83010A28 = 0 @0x823F32D4
         return lpResult;
     }
 
@@ -509,7 +515,7 @@ namespace shadow
     {
         CGS_ASSERT(mbForceStencilWrite, "mbForceStencilWrite");
         mbForceStencilWrite = false;
-        muMisc28 = 0;
+        mpDepthStencilState = nullptr;   // dword_83010A28 = 0
         return nullptr;
     }
 
@@ -534,6 +540,23 @@ namespace shadow
     // bound only when its shadowed value differs.
     void* Device::Xbox2SetStateLowLevelShadowed(void* lpState, bool lbWasUnset)
     {
+        // FLAG PC-platform: the console body has NO null check here (its depth/stencil twin returns
+        // early at the top of Xbox2SetDepthStencilStateLowLevelShadowed and its rasteriser twin at
+        // shadowingdevice.cpp:728, but this one dereferences lpu[0] immediately), and it does not need
+        // one -- on the console CgsBlendStateFactory::Construct @0x827EB2D8 runs before any pass, so
+        // saBlendStates never reads null. On this build NOTHING CALLS THAT CONSTRUCT
+        // (BrnRendererModule::Construct does not reach mBlendStateFactory.Construct), so the nine-slot
+        // table reads null even though the Construct body is now reconstructed -- and a caller can
+        // legitimately ask to bind a null blend state while the immediate-mode path has left a real
+        // one in the cache, which passes the compare and reaches here. The guard goes HERE and not in
+        // SetState, because a guard in the setter would swallow the cache write-back the console
+        // performs unconditionally -- that store IS the invalidation.
+        // RETIRE THIS the day BrnRendererModule::Construct calls mBlendStateFactory.Construct. Not the
+        // day 0x827EB2D8 is dumped (it is: scratch/postfx_wave1_dossiers/BLENDFACTORY_DUMP.md) and not
+        // the day its body lands (it has, in this wave) -- only a CALLER fills the table.
+        if (lpState == nullptr)
+            return lpState;
+
         const u32* const lpu = static_cast<const u32*>(lpState);
         IDirect3DDevice9* const lpDevice = gpD3DDevice;
 
@@ -749,26 +772,181 @@ namespace shadow
         return lpState;
     }
 
+    // =================================================================================
+    // shadow::Device::SetState(const renderengine::DepthStencilState*)  @ 0x82276AD0
+    //
+    // Bind the depth/stencil third of the render-state triple through the shadow cache: gate on the
+    // depth/stencil lock window, compare against the shadow block's m_pDepthStencilState slot
+    // (X360 dword_83010A28), apply, then cache. DWARF names it at source shadowingdevice.h:499.
+    //
+    // NOT A STATIC MEMBER BY DWARF ASSERTION -- dwarfdump elides the implicit `this` from every member
+    // it prints, so it cannot tell static from non-static. It is proved from the callee's own register
+    // discipline: `mr r31, r3` @0x82276AE8 takes r3 as THE STATE POINTER (it is what the compare at
+    // 0x82276B04 tests and what the store at 0x82276B1C writes), and the object it compares against is
+    // reached independently from the file-scope block base (`lis r11, off_83010950@ha` @0x82276AF8 /
+    // `addi r30, r11, off_83010950@l` @0x82276AFC). There is no object pointer anywhere in the body,
+    // so there is no `this`.
+    //
+    // NO NULL GUARD, DELIBERATELY. On the console a null wanted state with a non-null cache passes the
+    // gate, fails the compare, calls the applier (which early-returns on null) and then STORES the null
+    // into the cache -- and that store IS the invalidation. An early return here would leave a stale
+    // cache that suppresses the next legitimate bind of the same pointer.
+    //
+    // lbWasUnset == (cached == nullptr) is the decode of `addi r11, r11, 0` @0x82276B0C /
+    // `cntlzw r11, r11` @0x82276B10 / `extrwi r4, r11, 1, 26` @0x82276B14: the addi of 0 is a copy,
+    // cntlzw yields 32 exactly when the cached pointer was zero, and bit 26 of a 32-bit word is the
+    // 0x20 bit -- so r4 is 1 iff the cache was null. Not arithmetic.
+    void Device::SetState(const renderengine::DepthStencilState* lpState)
+    {
+        if (!mbDepthStencilStateLocked && mpDepthStencilState != lpState)
+        {
+            const bool lbWasUnset = (mpDepthStencilState == nullptr);
+            Xbox2SetDepthStencilStateLowLevelShadowed(
+                const_cast<renderengine::DepthStencilState*>(lpState), lbWasUnset);
+            mpDepthStencilState = lpState;
+        }
+    }
+
+    // =================================================================================
+    // shadow::Device::SetState(const renderengine::RasterizerState*)  @ 0x82276B38
+    //
+    // The rasteriser third. Same shape as its two siblings: gate on the rasteriser lock window
+    // (mbRasteriserStateLocked -- `lbz r11, mbRasteriserStateLocked@l(r11)` @0x82276B54, the window
+    // LockRasteriserState @0x823F3190 / UnlockRasteriserState @0x823F31F0 open and close), compare
+    // against the shadow block's m_pRasterizerState slot (X360 dword_83010A2C, `lwz r11,
+    // (dword_83010A2C - 0x83010950)(r30)` @0x82276B68), apply (`bl sub_827E8690` @0x82276B80 ==
+    // Xbox2SetRasterizerStateLowLevelShadowed), cache (`stw r31, ...` @0x82276B84).
+    // DWARF names it at source shadowingdevice.h:503.
+    //
+    // Free function, not a member: `mr r31, r3` @0x82276B50 takes r3 as the state pointer and the
+    // block base is formed independently at 0x82276B60/0x82276B64. Same argument as the twin; not a
+    // DWARF claim.
+    //
+    // mbRasteriserStateLocked is an IDA-NAMED symbol in the XEX, which is how its identity is known
+    // without a data dump -- the name comes from LockRasteriserState's own assert string,
+    // "false == mbRasteriserStateLocked" (`addi r3, r11, aFalseMbrasteri@l` @0x823F31C4). Its
+    // depth/stencil sibling is named the same way. That asymmetry is what leaves the blend third's
+    // gate an unnamed byte; see the blend overload.
+    void Device::SetState(const renderengine::RasterizerState* lpState)
+    {
+        if (!mbRasteriserStateLocked && mpRasterizerState != lpState)
+        {
+            const bool lbWasUnset = (mpRasterizerState == nullptr);
+            Xbox2SetRasterizerStateLowLevelShadowed(
+                const_cast<renderengine::RasterizerState*>(lpState), lbWasUnset);
+            mpRasterizerState = lpState;
+        }
+    }
+
+    // =================================================================================
+    // shadow::Device::SetState(const renderengine::BlendMaterialState*)  @ 0x82276A68
+    //
+    // The blend third. Gate on mbBlendStateLocked (X360 byte_83010907, `lbz r11, byte_83010907@l(r11)`
+    // @0x82276A84), compare against the shadow block's m_pBlendState slot (X360 dword_83010964,
+    // `lwz r11, (dword_83010964 - 0x83010950)(r30)` @0x82276A98), apply through
+    // Xbox2SetStateLowLevelShadowed (`bl` @0x82276AB0), cache (`stw r31, ...` @0x82276AB4).
+    // DWARF names it at source shadowingdevice.h:496 and spells the parameter `const BlendState*`; in
+    // this tree renderengine::BlendState is a static helper class and the runtime object every applier
+    // consumes is renderengine::BlendMaterialState (blendstate.h:35) -- the same reconciliation the
+    // factory pass made for saBlendStates.
+    //
+    // Free function, not a member: `mr r31, r3` @0x82276A80 takes r3 as the state pointer and the
+    // shadow-block base is formed independently at 0x82276A90/0x82276A94. Not a DWARF claim -- dwarfdump
+    // cannot distinguish static from non-static.
+    //
+    // WHICH BYTE THE GATE IS, settled this round by closed-set elimination rather than left open:
+    //   (a) The three sibling setters gate on three different bytes -- this one on byte_83010907
+    //       (@0x82276A84), 0x82276AD0 on mbDepthStencilStateLocked (@0x82276AEC), 0x82276B38 on
+    //       mbRasteriserStateLocked (@0x82276B54). One gate each, one triple.
+    //   (b) DWARF gives shadow::Device EXACTLY three lock bools and no more: mbRasteriserStateLocked,
+    //       mbBlendStateLocked, mbDepthStencilStateLocked (source shadowingdevice.h:775/776/777).
+    //   (c) Two of the three gates ARE two of the three bools, so the third gate is the third bool.
+    //   (d) The reason IDA left it unnamed: the two it named got their names from assert strings
+    //       ("false == mbRasteriserStateLocked" @0x823F31C4), and mbBlendStateLocked has no
+    //       Lock/Unlock pair with asserts anywhere in the image. The asymmetry is explained, not
+    //       evidence against.
+    // Consequently CgsGraphics::ImRendererBase::mgbStateShadowingDisabled was a host spelling of this
+    // same byte -- DWARF's CgsImRenderer.h declares no such member -- and it MOVED here rather than
+    // being read from there. One console byte, one host home.
+    //
+    // NO NULL GUARD, for the same reason as the twins: the cache write-back the console performs
+    // unconditionally inside the compare IS the invalidation. This is the one applier of the three with
+    // no internal null check, so the guard belongs THERE -- see the FLAGGED early-out in
+    // Xbox2SetStateLowLevelShadowed.
+    //
+    // NOTHING IS ADDED TO THIS BODY -- and the reason is worth stating, because an earlier draft of
+    // this pass DID add a store here and it was wrong to.
+    // `mbLastBlendZOnly` is a host-only bool (FLAGGED in the header) recording whether the last blend
+    // APPLY was SetMaterialRenderStatesPC's derived colour-write-off object rather than the cached
+    // pointer itself; the console needs no such bool because its Z-only blend states are two
+    // engine-wide objects with their own pointers. This setter now writes the same cache word
+    // (mpBlendState) that SetMaterialRenderStatesPC writes, so the question is whether the pair can
+    // desynchronise. It cannot, and the chain is closed and grep-checked:
+    //   * mbLastBlendZOnly is READ in exactly one place, shadowingdevice.cpp:978, inside
+    //     SetMaterialRenderStatesPC;
+    //   * SetMaterialRenderStatesPC has exactly one caller, shadowingdevice.cpp:1045 in
+    //     SetMeshTechniquePC, i.e. inside a mesh-dispatch walk;
+    //   * every walk opens with shadow::Device::ResetProgramShadows (CgsDispatcherCommands.cpp:1118
+    //     for DispatchAllMeshes, :1234 for DispatchAllMeshesZOnly), which clears mpBlendState and
+    //     mbLastBlendZOnly TOGETHER.
+    // (`grep -rn "mbLastBlendZOnly\|SetMaterialRenderStatesPC" b5-decomp/src` returns those sites and
+    // no others outside comments.) So the flag is never read against a cache word this setter wrote,
+    // and adding a store the console does not perform would be invention, not safety. If a later pass
+    // ever removes ResetProgramShadows' invalidation, THIS pairing is what must be revisited first.
+    void Device::SetState(const renderengine::BlendMaterialState* lpState)
+    {
+        if (!mbBlendStateLocked && mpBlendState != lpState)
+        {
+            const bool lbWasUnset = (mpBlendState == nullptr);
+            Xbox2SetStateLowLevelShadowed(
+                const_cast<renderengine::BlendMaterialState*>(lpState), lbWasUnset);
+            mpBlendState = lpState;
+        }
+    }
+
     // ============================================================================
     // The mesh-dispatch flush seam (DispatchList::DispatchAllMeshes).
     // ============================================================================
 
-    // X360 walk prologue: dword_8301095C = 0 (vertex program shadow) and
-    // dword_83010960 = -1 (pixel program shadow). The three bound-state-object slots the
-    // walk compares against (DispatchAllMeshes v64[5] / v64[54] / v64[55]) live on the
-    // per-dispatch context, so they are per-walk too and are cleared alongside -- which is
-    // also what keeps the state triple correct on PC across a pass whose defaults
-    // (renderengine::Device::SetWorldPassDefaultStates) wrote the same render states from
-    // outside this seam.
+    // X360 walk prologue, and on the console it is EXACTLY two stores: dword_8301095C = 0 (vertex
+    // program shadow) @0x827F2758 and dword_83010960 = -1 (pixel program shadow) @0x827F2764, in
+    // DispatchAllMeshes @0x827F2718.
+    //
+    // The old note here said the three bound-state slots "live on the per-dispatch context". They do
+    // not, and that clause is deleted: DispatchAllMeshes reaches them as 0xD8 / 0x14 / 0xDC off r27,
+    // and r27 is off_83010950 (`addi r11, r11, off_83010950@l` @0x827F2754 -> `stw r11, var_140(r1)`
+    // @0x827F2760 -> `lwz r27, var_140(r1)` @0x827F2EE0) -- the file-scope shadow block. Across all
+    // 3307 instructions of that function the ONLY accesses to dword_83010964 / dword_83010A28 /
+    // dword_83010A2C are the technique bind's own compare/store pairs (`lwz r11, 0xD8(r27)`
+    // @0x827F2EF0 / `stw r31, 0xD8(r27)` @0x827F2F10, and the 0x14 / 0xDC twins at 0x827F2F24 /
+    // 0x827F2F44 and 0x827F2F58 / 0x827F2F78). The console caches the triple ACROSS walk boundaries.
+    //
+    // FLAG PC-platform leaf -- the four stores below the two console ones. They are a PC-ONLY
+    // RE-SYNCHRONISATION, and the writer they re-synchronise against is named:
+    // renderengine::Device::SetWorldPassDefaultStates (XenonD3D9Shims.cpp:652). Render calls it five
+    // times a frame, each time immediately before a walk (BrnRendererModule.cpp:922 / :928 / :968 /
+    // :974 / :993), and it pushes ZENABLE / ZWRITEENABLE / ALPHABLENDENABLE / SRCBLEND / DESTBLEND /
+    // LIGHTING / ALPHATESTENABLE / SCISSORTESTENABLE / COLORWRITEENABLE / STENCILENABLE / FILLMODE /
+    // BLENDOP / SEPARATEALPHABLENDENABLE straight through IDirect3DDevice9::SetRenderState, touching
+    // neither mauLowLevelStateShadow nor this triple. After it runs, the device no longer holds what
+    // the triple says it holds -- so a walk whose first technique reuses the previous walk's
+    // MaterialState would pass all three pointer compares in SetMaterialRenderStatesPC (:973 / :978 /
+    // :1017) and draw under the shim's pass defaults instead of the technique's states. Nulling the
+    // triple here is what forces that first bind. The console needs none of this because nothing
+    // there writes render states from outside the shadow.
+    // The cost is one redundant full-block push per walk (lbWasUnset == true on the first bind).
+    // RETIRE THESE FOUR STORES the day SetWorldPassDefaultStates is retired -- not before.
+    // mbLastBlendZOnly is reset with them because it is mpBlendState's companion (see its FLAG in the
+    // header); resetting one without the other is what would desynchronise the pair.
     void Device::ResetProgramShadows()
     {
         mpVertexProgramShadow = nullptr;
         mpPixelProgramShadow  = reinterpret_cast<const renderengine::ProgramBufferData*>(
             static_cast<uintptr_t>(~0u));
-        mpLastBlendState        = nullptr;
-        mpLastDepthStencilState = nullptr;
-        mpLastRasterizerState   = nullptr;
-        mbLastBlendZOnly        = false;
+        mpBlendState        = nullptr;
+        mpDepthStencilState = nullptr;
+        mpRasterizerState   = nullptr;
+        mbLastBlendZOnly    = false;
     }
 
     // =====================================================================================
@@ -970,20 +1148,22 @@ namespace shadow
             }
         }
 
-        if (!mbDepthStencilStateLocked && lpMaterialState->mpDepthStencilState != mpLastDepthStencilState)
+        if (!mbDepthStencilStateLocked && lpMaterialState->mpDepthStencilState != mpDepthStencilState)
         {
-            mpLastDepthStencilState = lpMaterialState->mpDepthStencilState;
-            Xbox2SetDepthStencilStateLowLevelShadowed(mpLastDepthStencilState, true);
+            mpDepthStencilState = lpMaterialState->mpDepthStencilState;
+            Xbox2SetDepthStencilStateLowLevelShadowed(
+                const_cast<renderengine::DepthStencilState*>(mpDepthStencilState), true);
         }
-        if (lpMaterialState->mpBlendState != mpLastBlendState || mbLastBlendZOnly != lbZOnly)
+        if (lpMaterialState->mpBlendState != mpBlendState || mbLastBlendZOnly != lbZOnly)
         {
-            mpLastBlendState = lpMaterialState->mpBlendState;
+            mpBlendState = lpMaterialState->mpBlendState;
             mbLastBlendZOnly = lbZOnly;
             if (!lbZOnly)
             {
-                Xbox2SetStateLowLevelShadowed(mpLastBlendState, true);
+                Xbox2SetStateLowLevelShadowed(
+                    const_cast<renderengine::BlendMaterialState*>(mpBlendState), true);
             }
-            else if (mpLastBlendState != 0)
+            else if (mpBlendState != nullptr)
             {
                 // FLAG PC-platform leaf. THE CONSOLE'S Z-ONLY BLEND STATE IS AN ENGINE
                 // GLOBAL, NOT THE MATERIAL'S: DrawRenderableMeshZOnly::Interpret
@@ -1005,8 +1185,7 @@ namespace shadow
                 // pass depth-only even for a mesh whose assembly has no separate pre-Z
                 // technique (the pre-Z technique index is clamped to numVertexDescriptors-1,
                 // so such a mesh re-uses its COLOUR technique here).
-                renderengine::BlendMaterialState lZOnlyBlend =
-                    *static_cast<const renderengine::BlendMaterialState*>(mpLastBlendState);
+                renderengine::BlendMaterialState lZOnlyBlend = *mpBlendState;
                 lZOnlyBlend.maState[renderengine::BlendMaterialState::E_WORD_COLOUR_WRITE_ENABLE]  = 0u;
                 lZOnlyBlend.maState[renderengine::BlendMaterialState::E_WORD_COLOUR_WRITE_ENABLE1] = 0u;
                 lZOnlyBlend.maState[renderengine::BlendMaterialState::E_WORD_COLOUR_WRITE_ENABLE2] = 0u;
@@ -1014,10 +1193,11 @@ namespace shadow
                 Xbox2SetStateLowLevelShadowed(&lZOnlyBlend, true);
             }
         }
-        if (!mbRasteriserStateLocked && lpMaterialState->mpRasterizerState != mpLastRasterizerState)
+        if (!mbRasteriserStateLocked && lpMaterialState->mpRasterizerState != mpRasterizerState)
         {
-            mpLastRasterizerState = lpMaterialState->mpRasterizerState;
-            Xbox2SetRasterizerStateLowLevelShadowed(mpLastRasterizerState, true);
+            mpRasterizerState = lpMaterialState->mpRasterizerState;
+            Xbox2SetRasterizerStateLowLevelShadowed(
+                const_cast<renderengine::RasterizerState*>(mpRasterizerState), true);
         }
     }
 

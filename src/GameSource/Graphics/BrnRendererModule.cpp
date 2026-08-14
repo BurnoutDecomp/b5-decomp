@@ -138,6 +138,16 @@ namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }
 
 namespace
 {
+    // The clear colour BrnRendererModule::BeginQuarterResBuffer @0x82408C38 clears every colour
+    // target to before the quarter-resolution particle pass. The console loads ONE float and stores
+    // it four times -- `lfs f0, flt_82001CC0@l(r11)` @0x82408CC4, then `stfs` @0x82408CCC /
+    // 0x82408CD0 / 0x82408CD4 / 0x82408CD8 -- so the four components are one value, which is why
+    // this is one constant.
+    // ATTESTED, not defaulted: scratch/postfx_wave1_dossiers/DATA_DUMP.md dumps flt_82001CC0 as
+    // +0x0000 = 0x00000000 = 0.0f, and only +0x0000 belongs to the symbol (that block runs on into
+    // the string "Monitor " at +0x0008, and the assembly addresses no other displacement).
+    const f32 KF_QUARTER_RES_CLEAR_COMPONENT = 0.0f;
+
     u32  gu32LastMonitorTick = 0;
     bool gbMonitorTickValid  = false;
 

@@ -267,51 +267,97 @@ const TextureState* ImRendererBase::ConstructDefaultTextureState(
 }
 
 // ---------------------------------------------------------------------------------------------------
-// CgsGraphics::ImRendererBase::SetStateLowLevel  (X360 SetState @ 0x82276D08)
-// Low-level render-state setter the typed SetState overloads drive: assert this is the active renderer,
-// then (unless shadowing is disabled) re-issue the state to the device only if it differs from the last
-// one set, caching it. Returns the renderer (X360 r3 passthrough).
+// CgsGraphics::ImRendererBase::SetStateLowLevel   (X360 ImRendererBase::SetState @ 0x82276D08)
+//
+// WHAT 0x82276D08 ACTUALLY IS: the mgpActiveRenderer assert (`lwz r11, dword_83010F9C@l(r11)`
+// @0x82276D24 / `cmplw cr6, r11, r3` @0x82276D28, assert string "mgpActiveRenderer == this" at
+// CgsImRenderer.h:711 == line 0x2C7 @0x82276D38) followed by an INLINE EXPANSION of
+// shadow::Device::SetState(const BlendState*) @0x82276A68. The expansion is exact -- gate on
+// byte_83010907 (@0x82276D54 vs @0x82276A84), compare dword_83010964 (@0x82276D68 vs @0x82276A98),
+// the same `addi r11, r11, 0` / `cntlzw` / `extrwi r4, r11, 1, 26` lbWasUnset decode (@0x82276D74..7C
+// vs @0x82276AA4..AC), the same `bl shadow__Device__Xbox2SetStateLowLevelShadowed` (@0x82276D84 vs
+// @0x82276AB0), the same write-back (@0x82276D88 vs @0x82276AB4).
+//
+// Its two siblings prove the shape rather than leaving it a single-case reading: 0x82276DA8 is the
+// same assert (CgsImRenderer.h:732) over SetState(const DepthStencilState*) @0x82276AD0, and
+// 0x82276E48 the same (CgsImRenderer.h:776) over SetState(const RasterizerState*) @0x82276B38.
+// So this body is the assert plus one call, and the gate/compare/apply/cache belongs to the shadow
+// device.
+//
+// THAT IS ALSO THE FIX FOR A SPLIT BRAIN: the block used to be duplicated here against
+// ImRendererBase::mgpLastState, which is the SAME console word (dword_83010964) as the shadow block's
+// m_pBlendState. Two host words for one console word means a blit's bind is invisible to the frame
+// bracket's compare, so the bracket skips a bind the device actually needs. Delegating leaves one
+// cache -- and one gate, since byte_83010907 moved to shadow::Device::mbBlendStateLocked with it.
+//
+// RETURN: the console leaves the applier's r3 in place, which Hex-Rays renders as a returned value.
+// DWARF types shadow::Device::SetState `void` (source shadowingdevice.h:496), so that register is
+// dead; this returns the renderer unconditionally, which is what every caller of the typed overloads
+// uses. Nothing in the tree calls SetStateLowLevel today, so the change is observationally inert as
+// well as correct.
 // ---------------------------------------------------------------------------------------------------
 void* ImRendererBase::SetStateLowLevel(const void* lpState)
 {
-    void* lpResult = this;
-
     CGS_ASSERT(mgpActiveRenderer == this, "mgpActiveRenderer == this");
 
-    if (!mgbStateShadowingDisabled && mgpLastState != lpState)
-    {
-        const bool lbLastStateWasNull = (mgpLastState == nullptr);
-        lpResult = shadow::Device::Xbox2SetStateLowLevelShadowed(
-            const_cast<void*>(lpState), lbLastStateWasNull);
-        mgpLastState = lpState;
-    }
+    shadow::Device::SetState(static_cast<const renderengine::BlendMaterialState*>(lpState));
 
-    return lpResult;
+    return this;
 }
 
 // ---------------------------------------------------------------------------------------------------
 // CgsGraphics::ImRendererBase::SetTexture  @ 0x82276EE8
-// Low-level texture setter: assert this is the active renderer, then bind the texture to sampler 0 and
-// cache it, only re-issuing the device call when it changes (and clearing the dependent dirty flag).
+//
+// The mgpActiveRenderer assert (`lwz r11, dword_83010F9C@l(r11)` @0x82276F04 / `cmplw cr6, r11, r3`
+// @0x82276F08; assert string "mgpActiveRenderer == this" with line 0x384 @0x82276F18) followed by a
+// SAMPLER-0 SPECIALISATION of shadow::Device::SetResource @0x82276C70. The console keeps both as
+// separate bodies -- this one does not `bl` the other -- but they are the same operation on the same
+// two words, and for sampler 0 they are behaviourally identical:
+//
+//   compare   0x82276EE8: `lwz r11, (dword_830109E8 - 0x83010950)(r31)`  @0x82276F38
+//             0x82276C70: `lwzx r11, r31, r28` with r28 == base + (0x9E8-0x950), r31 == id*4
+//                                                                        @0x82276CB8/BC
+//   bind      0x82276EE8: D3DDevice_SetTexture(off_83271608, Sampler=0, pTexture, 0x80000000)
+//                         -- `li r4, 0` @0x82276F54, `li r6, 0` + `oris r6, r6, 0x8000` @0x82276F48/50
+//             0x82276C70: D3DDevice_SetTexture(off_83271608, Sampler=id, pTexture,
+//                         (1ull<<63) >> (id+32))  -- `addi r11, r30, 0x20` @0x82276CC8,
+//                         `extldi r10, r10, 64,63` @0x82276CD4, `srd r6, r10, r9` @0x82276CE8.
+//                         For id == 0 that mask is exactly 0x80000000.
+//   cache     0x82276EE8: `stw r30, (dword_830109E8 - ...)` @0x82276F64 and
+//                         `stw r11(=0), (dword_83010968 - ...)` @0x82276F68
+//             0x82276C70: `stwx r27, r31, r28` @0x82276CF8 and `stwx r11(=0), r31, r10` @0x82276CFC
+//   device    both read off_83271608 (@0x82276F58 and @0x82276CE4) -- the same pointer.
+//
+// The only thing SetResource has that this does not is its own bounds assert
+// ("luSamplerId < MaxTextureStates", @0x82276CA0), which cannot fire for the constant 0.
+//
+// WHY DELEGATE RATHER THAN KEEP THE SPECIALISATION: dword_830109E8 and dword_83010968 are
+// StateBlockShadow::m_apTextures[0] and m_apTextureStates[0] (DWARF source shadowingdevice.h:668 /
+// :666; the arrays run 0x9E8..0xA24 and 0x968..0x9A4). shadow::Device already models both arrays.
+// Keeping ImRendererBase::mgpLastTexture / mgbTextureStateDirty gave those two console words a SECOND
+// host home, so an immediate-mode texture bind was invisible to shadow::Device::SetResource's compare
+// and vice versa: the shadow device would skip a rebind the device actually needed, and the
+// immediate-mode path would re-issue one it did not. Same defect shape, same block, two lines below
+// the mgpLastState the previous pass removed. One console word, one host home.
+//
+// This is the same un-inlining move the sibling SetStateLowLevel makes, in the opposite direction: the
+// console open-codes one body per call site; the host keeps one body and one cache.
 // ---------------------------------------------------------------------------------------------------
 void ImRendererBase::SetTexture(renderengine::Texture* lpTexture)
 {
     CGS_ASSERT(mgpActiveRenderer == this, "mgpActiveRenderer == this");
 
-    if (mgpLastTexture != lpTexture)
-    {
-        D3DDevice_SetTexture(mgpDevice, 0, lpTexture, 0x80000000u);  // bind to sampler 0
-        mgpLastTexture = lpTexture;
-        mgbTextureStateDirty = 0;
-    }
+    // Sampler 0 -- `li r4, 0` @0x82276F54. SetResource re-derives the same 0x80000000 bind mask and
+    // caches into the same two slots.
+    shadow::Device::SetResource(static_cast<void*>(lpTexture), 0);
 }
 
 // ---- module statics (X360 .data home of this TU) --------------------------------------------------
 ImRendererBase*       ImRendererBase::mgpActiveRenderer        = nullptr;  // dword_83010F9C
-const void*           ImRendererBase::mgpLastState             = nullptr;  // dword_83010964
-renderengine::Texture* ImRendererBase::mgpLastTexture          = nullptr;  // dword_830109E8
-u32                   ImRendererBase::mgbTextureStateDirty     = 0;        // dword_83010968
-bool                  ImRendererBase::mgbStateShadowingDisabled = false;   // byte_83010907
+// mgpLastState / mgpLastTexture / mgbTextureStateDirty / mgbStateShadowingDisabled were second host
+// homes for dword_83010964 / dword_830109E8 / dword_83010968 / byte_83010907, all of which
+// shadow::Device already owns -- see CgsImRenderer.h for the address evidence. Deleted with their
+// declarations.
 void*                 ImRendererBase::mgpDevice                 = nullptr;  // off_83271608
 
 }  // namespace CgsGraphics
