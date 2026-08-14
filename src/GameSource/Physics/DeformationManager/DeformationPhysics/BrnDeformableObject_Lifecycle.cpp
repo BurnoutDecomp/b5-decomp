@@ -170,6 +170,43 @@ namespace Deformation
         mAngularVelocitySum.SetZero();
         SetLastLinearVelocity(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
         SetEntitySphereSize(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+
+        // ⚠️ RECONCILE NOTE (2026-08-14, walls wave -- recorded, not yet applied): the PS3
+        // out-of-line ClearVariables @0x6BEEC4 shows this body ALSO runs
+        // ImpulsePasser::Construct(&mImpulsePasser) (the "+6372 25-dword zero" the Prepare banner
+        // misread as a scratch header -- it is the 25-slot chain map), VehicleRigidBody::
+        // Construct(&mVehicleBody), the 20-sensor Construct loop and the mLastAngularVelocity
+        // zero. Reconcile when the sensor/rigid-body Constructs land with the mount wave.
+    }
+
+    // =================================================================================================
+    // SetLastLinearVelocity / SetEntitySphereSize (DWARF :696 / :703) -- ⭐ BODIED 2026-08-14 (walls
+    // wave). Both are lane writes on the SAME packed member, proven by the PS3 ClearVariables
+    // @0x6BEEC4 tail: two vperm{0,1,2,7} merges on this+26320 == mLastLinearVelocityPlusEntityRadius
+    // -- the first replaces xyz and KEEPS w (SetLastLinearVelocity), the second replaces w and KEEPS
+    // xyz (SetEntitySphereSize; the header's own gloss "w = entity radius" says the same).
+    // =================================================================================================
+    void DeformableObject::SetLastLinearVelocity(Vector3 lVelocity)
+    {
+        mLastLinearVelocityPlusEntityRadius.x = lVelocity.x;
+        mLastLinearVelocityPlusEntityRadius.y = lVelocity.y;
+        mLastLinearVelocityPlusEntityRadius.z = lVelocity.z;
+        // w (the entity radius) is deliberately preserved -- the vperm mask {0,1,2,7}.
+    }
+
+    void DeformableObject::SetEntitySphereSize(VecFloat lvfSize)
+    {
+        // Only the w lane (the entity radius) -- the second vperm's {0,1,2,7} with the roles swapped.
+        mLastLinearVelocityPlusEntityRadius.w = lvfSize.w;
+    }
+
+    // ⭐ 2026-08-14 (walls wave): the free-function trampoline BrnDeformationManager.cpp's Prepare
+    // calls by name (the manager's per-model reset loop; ClearVariables is private on the frozen
+    // header and the header now grants exactly this function friendship). Defined HERE, next to the
+    // private body, so the two can never drift apart.
+    void DeformableObject_ClearVariables(DeformableObject* lpModel)
+    {
+        lpModel->ClearVariables();
     }
 
     // =================================================================================================
@@ -197,29 +234,53 @@ namespace Deformation
                                    DetachedPartManager* lpPartMgr, DetachedWheelManager* lpWheelMgr,
                                    CgsNumeric::Random& lrRandom)
     {
-        // Bind the scene/handling ids + the packed game-mode/state word from the event (asm: event[+1]
-        // -> +26384 handling body, event[+4] -> +26392 game-mode word). The asm does NOT touch +26388
-        // (mGlobalEntityId) in Prepare -- the entity id is only set/invalidated in Release -- so no
-        // entity-id store is emitted here (a prior fabricated store was removed).
-        mHandlingBodyID  = lrEvent.mHandlingBodyID;
-        mu32GameModeState = 0u;   // FLAG: asm copies event[+4] into the +26392 packed word; the event's
-                                  // game-mode word has no named field on AddDeformationModelEvent (the
-                                  // bounce gate reads it off the OTHER car), so it is reconstructed here.
+        // Bind the scene/handling ids from the event, RE-READ off the raw asm 2026-08-14 (walls
+        // wave -- the two notes this block used to carry were both wrong against the bytes):
+        //   0x826421A0  ld  r8,  8(evt)     0x826421B0  std r8,  0x6710(this)  -> mHandlingBodyID (8B)
+        //   0x826421B8  lwz r27, 0x10(evt)  0x826421BC  stw r27, 0x6718(this)  -> mGlobalEntityId (4B)
+        // The +0x10 word is the event's mGlobalEntityId (BrnDeformationEvents.h layout note:
+        // mGlobalEntityId +0x10), NOT a "game-mode word", and the old "the asm does NOT touch
+        // +26388/+26392 in Prepare" claim was a pre-widening misread -- at the widened seats the
+        // pair lands at +26384/+26392 and Prepare writes BOTH.
+        mHandlingBodyID = lrEvent.mHandlingBodyID;
+        mGlobalEntityId = lrEvent.mGlobalEntityId;
+        // ⚠️ The header still carries the RECONSTRUCTED duplicate mu32GameModeState for the SAME
+        // console seat (+26392; its own :572 flag says "ALMOST CERTAINLY mGlobalEntityId"). Until
+        // that reconciliation lands, keep the two host members equal so _Update/_Detach's readers
+        // of either name see the console's one value.
+        mu32GameModeState = lrEvent.mGlobalEntityId.muValue;
 
-        // Resolve + cache the streamed spec from the model handle (asm: v12 = **event -> the resolved,
-        // serialiser-fixed-up StreamedDeformationSpec pointer the resource handle points at).
-        // FLAG: mModelHandle is a u32 ResourceHandle, not a raw pointer; the asm's double-dereference is
-        // the resource-manager handle->spec resolve, which is not expressible from the frozen event
-        // layout. Cached into mpDeformationSpec by name; pinned null until the resolve is re-derived
-        // (NEVER fabricated). All spec-driven loops below correctly degenerate to empty under a null/zero
-        // count, matching the asm's "no parts" path.
-        mpDeformationSpec = nullptr;   // FLAG: = ResourceManager::Resolve(lrEvent.mModelHandle)
+        // Resolve + cache the streamed spec from the model handle. ⭐ UN-PINNED 2026-08-14 (walls
+        // wave): the old `mpDeformationSpec = nullptr` FLAG ("the resolve is not expressible from
+        // the frozen event layout") predates the handle widening -- the event's mModelHandle IS the
+        // real CgsResource::ResourceHandle now, and the console resolve is ONE dereference of its
+        // leading pointer:
+        //   0x826421C0  lwz r27, 0(evt)     -- the handle's mpResourceMemory
+        //   0x826421C4  lwz r27, 0(r27)     -- *(mpResourceMemory) == the fixed-up spec pointer
+        //   0x826421D4  stw r27, 0x18E0(this)
+        // -- the exact `*reinterpret_cast<T* const*>(mpResourceMemory)` shape every CgsResourcePtr_*
+        // TU in the tree uses, and the same resolve ProcessValidateDeformationModelEvents
+        // @0x825DB14C..164 performs on the same seat.
+        mpDeformationSpec =
+            *reinterpret_cast<const StreamedDeformationSpec* const*>(lrEvent.mModelHandle.mpResourceMemory);
 
-        // Pool index + the active/swept-sphere flags (asm: a3 -> +26290 index region; +26402 active=1;
-        // +26410 = event[+156] swept flag; +26460/+26417/+26415 latches cleared).
+        // ⭐ THE ATTACHED-VEHICLE BIND (walls wave; previously DROPPED entirely -- with it missing,
+        // every GetVehiclePhysics() consumer of a registered model would have dereferenced a NULL
+        // or stale body: StartVehicleContactGeneration's IsFrozen() read on frame one, the sensor
+        // impulse routing, the wall-impulse path):
+        //   0x826421F0  lwz r9, 0x90(evt)   -- AddDeformationModelEvent::mpVehiclePhysics
+        //   0x826421F4  stw r9, 0x194C(this)-- mVehicleBody's console +0x4 vehicle pointer
+        //                                      (6472 base + 4 == 6476 == 0x194C)
+        mVehicleBody.mpAttachedVehicle = lrEvent.mpVehiclePhysics;
+
+        // Pool index + the active/swept-sphere flags (asm: sth r5 -> +26290 index; stb 1 -> +26402
+        // active; lbz evt+0x9C -> stb +26410 swept flag; stw 0 -> +26460 / stb 0 -> +26417/+26415
+        // latches; sth 0 -> +26286/+26288 the two live-part counts).
         mu16DeformableObjectIndex = lu16Index;
         mbActive                  = true;
         mbDoSweptSphereTests      = lrEvent.mbDoSweptSphereTests;
+        mi16NumPhysicalParts      = 0;   // 0x826421C8 sth 0, +0x66AE
+        mi16NumHingedParts        = 0;   // 0x826421CC sth 0, +0x66B0
 
         // The +6372 25-dword scratch header the asm zeroes before the reset (the world-sphere/scratch
         // block). Cleared by name via the shared ClearVariables init the asm inlines here.
@@ -520,26 +581,34 @@ namespace Deformation
         // ResetSensors(this, scale, posLimits, negLimits, damagePoint)).
         ResetSensors(lv3pCompressionScale_Scratch, lvPosLimits, lvNegLimits, lDamagePoint);
 
-        // --- rebuild the tag-point pool from the spec (asm: miNumTagPoints = spec->count; per-index
-        //     bounds-assert; TagPoint::Construct(slot, spec->tagSpec[i], &mDrivenPoints[0])) -----------
-        // FLAG: spec tag count + per-tag spec pointer accessors not exposed on frozen spec -> 0 here.
-        const s32 liNumTagPoints = 0;   // FLAG: = mpDeformationSpec->miNumberOfTagPoints
+        // --- rebuild the tag-point pool from the spec ------------------------------------------------
+        // ⭐ UN-PINNED 2026-08-14 (walls wave): the "spec accessors not exposed" FLAG that zeroed
+        // this loop was STALE -- BrnStreamedDeformationSpec.h has modelled the tables (counts +
+        // Ptr32 bases, static_assert-pinned, shipped-spec-verified) since the spec TU landed; the
+        // two per-index reads it lacked (GetTagPointSpec / GetDrivenPointSpec) are added there this
+        // wave as exact siblings of GetDrivenPartSpec. ⚠️ The old commented-out call also had the
+        // WRONG second argument (&maDrivenPoints[0]) -- TagPoint::Construct's own declaration takes
+        // the SENSOR array base (BrnTagPoint.h:43), which is what is passed now.
+        const s32 liNumTagPoints = mpDeformationSpec->GetNumberOfTagPoints();
         miNumTagPoints = liNumTagPoints;
         for (s32 liTag = 0; liTag < liNumTagPoints; ++liTag)
         {
             CGS_ASSERT(liTag < liNumTagPoints, "liIndex < miNumberOfTagPoints");
             CGS_ASSERT(liTag >= 0, "liIndex >= 0");
-            // maTagPoints[liTag].Construct(spec->GetTagPointSpec(liTag), &maDrivenPoints[0]);  // FLAG
+            maTagPoints[liTag].Construct(mpDeformationSpec->GetTagPointSpec(liTag),
+                                         &maDeformationSensors[0]);
         }
 
-        // --- rebuild the driven-point pool from the spec (asm mirror of the tag-point loop) ----------
-        const s32 liNumDrivenPoints = 0;   // FLAG: = mpDeformationSpec->miNumberOfDrivenPoints
+        // --- rebuild the driven-point pool from the spec (mirror of the tag-point loop; the
+        //     endpoint base is the TAG-POINT array per IKDrivenPoint::Construct's declaration) -------
+        const s32 liNumDrivenPoints = mpDeformationSpec->GetNumberOfDrivenPoints();
         miNumDrivenPoints = liNumDrivenPoints;
         for (s32 liDriven = 0; liDriven < liNumDrivenPoints; ++liDriven)
         {
             CGS_ASSERT(liDriven < liNumDrivenPoints, "liIndex < miNumberOfDrivenPoints");
             CGS_ASSERT(liDriven >= 0, "liIndex >= 0");
-            // maDrivenPoints[liDriven].Construct(spec->GetDrivenPointSpec(liDriven), &maTagPoints[0]); // FLAG
+            maDrivenPoints[liDriven].Construct(mpDeformationSpec->GetDrivenPointSpec(liDriven),
+                                               &maTagPoints[0]);
         }
 
         // --- rebuild the IK parts (damage-state only) (asm: if (lbResetParts) { miNumIKBodyParts =
@@ -548,7 +617,9 @@ namespace Deformation
         //     pool-index -1 }) ----------------------------------------------------------------------
         if (lbResetParts)
         {
-            const s32 liNumIKParts = 0;   // FLAG: = mpDeformationSpec->miNumberOfIKParts
+            // ⭐ UN-PINNED 2026-08-14 (walls wave) -- same stale-FLAG retirement as the two loops
+            // above; the count + per-part spec come from the spec's own checked accessors.
+            const s32 liNumIKParts = mpDeformationSpec->GetNumberOfIKParts();
             miNumIKBodyParts = liNumIKParts;
             // Clear the four wheel tag-point indices (asm: +3920..3923 = -1).
             mu8WheelTagPointIndices[0] = KU_INVALID_WHEEL_TAG_POINT_INDEX;
@@ -560,8 +631,8 @@ namespace Deformation
             {
                 CGS_ASSERT(liPart < liNumIKParts, "liIndex < miNumberOfIKParts");
                 CGS_ASSERT(liPart >= 0, "liIndex >= 0");
-                // maIKParts[liPart].Construct(spec->GetDrivenPartSpec(liPart), &maDrivenPoints[0],
-                //                             &maTagPoints[0]);                                   // FLAG
+                maIKParts[liPart].Construct(mpDeformationSpec->GetDrivenPartSpec(liPart),
+                                            &maDrivenPoints[0], &maTagPoints[0]);
                 PrepareIKPart(liPart);
                 mau8PhysicalBodyPartPoolIndex[liPart] = KU_INVALID_WHEEL_TAG_POINT_INDEX;  // asm: -1
             }

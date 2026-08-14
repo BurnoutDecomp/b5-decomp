@@ -585,9 +585,11 @@ bool BrnPhysics::Vehicle::VehicleManager::PrepareData(struct rw::IResourceAlloca
 // LINK STUB (task #135, 2026-08-04): X360 @0x82630230. Called from
 // PhysicsModule::Prepare stage 4 (E_PREPARESTAGE_DEFORMATIONMANAGER).
 // ⚠️ UNLIKE THE OTHER TWO, THIS ONE HAS A REAL BODY ALREADY -- BrnDeformationManager.cpp:132,
-// in a TU that is not mounted (25 unresolved externals; see the build script's note at the
-// deformation block). Delete this stub the moment that TU mounts, or the link will pick a
-// winner silently.
+// in a TU that is not mounted. Delete this stub the moment that TU mounts, or the link will pick
+// a winner silently.
+// ⭐ 2026-08-14 (walls wave): the mount was TRIALLED and MEASURED -- 37 unresolved externals,
+// full census + landing plan in build_game_exe.bat's deformation block. The stale "25 unresolved"
+// figure this comment used to cite is retired there.
 bool BrnPhysics::Deformation::DeformationManager::Prepare(struct rw::IResourceAllocator *)
 {
     static bool s_bLogged = false;

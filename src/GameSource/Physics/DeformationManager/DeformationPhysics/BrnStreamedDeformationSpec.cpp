@@ -132,6 +132,29 @@ namespace Deformation
         return reinterpret_cast<const IKBodyPartSpec*>(lpBase + KU_IK_PART_STRIDE * liIndex);
     }
 
+    // ⭐ ADDED 2026-08-14 (walls wave): the two per-index POINT-spec accessors, the exact siblings
+    // of GetDrivenPartSpec above (same checked shape, same forward-declared-element stride idiom;
+    // strides 80 / 32 are this TU's own banner-attested table strides, the same numbers FixUp's
+    // rebase loops walk). They un-block ResetDeformation's tag/driven rebuild loops in
+    // BrnDeformableObject_Lifecycle.cpp, whose "spec accessors not exposed" FLAGs were stale --
+    // this header/TU has modelled the tables since the spec landed; only these two reads were
+    // missing.
+    const TagPointSpec* StreamedDeformationSpec::GetTagPointSpec(s32 liIndex) const
+    {
+        CGS_ASSERT(liIndex < miNumberOfTagPoints, "liIndex < miNumberOfTagPoints");
+        CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+        const char* lpBase = reinterpret_cast<const char*>(maTagPointData.Get());
+        return reinterpret_cast<const TagPointSpec*>(lpBase + KU_TAG_POINT_STRIDE * liIndex);
+    }
+
+    const IKDrivenPointSpec* StreamedDeformationSpec::GetDrivenPointSpec(s32 liIndex) const
+    {
+        CGS_ASSERT(liIndex < miNumberOfDrivenPoints, "liIndex < miNumberOfDrivenPoints");
+        CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+        const char* lpBase = reinterpret_cast<const char*>(maDrivenPointData.Get());
+        return reinterpret_cast<const IKDrivenPointSpec*>(lpBase + KU_DRIVEN_POINT_STRIDE * liIndex);
+    }
+
     // ---- LocatorPointSpecList batch accessors ---------------------------------------------------
 
     // X360 @ 0x825E32F0. Return-by-value copy of the locator at luTag (X360 hidden struct-return:

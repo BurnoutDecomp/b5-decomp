@@ -125,6 +125,15 @@ namespace BrnPhysics
             {
                 return mValidateDeformationModelEventQueue;
             }
+            // ⭐ ADDITIVE const overload (2026-08-14, walls wave): the consumer drain
+            // DeformationManager::ProcessValidateDeformationModelEvents @0x825DB0E0 reads the
+            // queue through a `const DeformationInputInterface*` (`addi r27, r4, 0xF10` -- the
+            // same +3856 seat), so it needs the const-qualified read exactly as the add/remove/
+            // deactivate queues already have one above.
+            const CgsModule::EventQueue<BrnPhysics::Vehicle::ValidateRaceCarEvent, 8>& GetValidateDeformationModelEvents() const
+            {
+                return mValidateDeformationModelEventQueue;
+            }
             CgsModule::EventQueue<SetModelCollisionEvent, 28>& GetSetModelCollisionEvents()
             {
                 return mSetModelCollisionEventQueue;
