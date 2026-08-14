@@ -20,9 +20,16 @@
 
 namespace CgsGeometric
 {
-    // K_TRIANGLE_NORMAL_TOLERANCE. The .rdata value is not present in the
-    // export; a small unit-length epsilon is used here and FLAGGED.
-    const VecFloat K_TRIANGLE_NORMAL_TOLERANCE = { 0.01f, 0.01f, 0.01f, 0.01f };
+    // K_TRIANGLE_NORMAL_TOLERANCE = 0.001f, MEASURED (walls leg 2, 2026-08-14):
+    // the PS3 DecFIGS static initializer (__static_initialization_and_destruction_0
+    // @0xB58360) builds `v65 = 0.001` and stvx's its splat into
+    // &CgsGeometric::K_TRIANGLE_NORMAL_TOLERANCE. The X360 twin (unk_82FB9EE0,
+    // zero in the image) has NO writer among the 30,084 exported functions --
+    // its dynamic initializer sits in an export hole -- so the PS3 initializer
+    // is the best evidence and replaces the 0.01 that was inferred here.
+    // (Same recovery that settled KF_MIN_PLANE_DIST = 0.001, whose X360 writer
+    // sub_82C6DCF0 IS exported and matches PS3 exactly.)
+    const VecFloat K_TRIANGLE_NORMAL_TOLERANCE = { 0.001f, 0.001f, 0.001f, 0.001f };
 
     namespace
     {

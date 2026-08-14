@@ -7,6 +7,10 @@
 //
 //   Execute                             @0x829267E0   (77)  :135
 //   ExecuteLineWithTriangleListStream   @0x82921968  (589)  :1151 :1152  + ContactGeneratorJob.h:167
+//   ExecuteSphereListWithTriangleList   @0x829226A8  (967)  :182 :233 :273 :313 :353   ⭐ walls leg 2
+//   ExecuteSphereListWithTriangleListStream @0x829235C8 (100)  :381 :382
+//   LoadPrimitives                      @0x829210F0   (61)  :1405 :1406
+//   LoadResultList                      @0x829211E8   (46)  :1552
 //   AllocateMemory                      @0x829212A0   (54)  :1720
 //   RestoreMemory                       @0x82921050   (39)  ContactGeneratorJob.h:167
 //
@@ -54,11 +58,15 @@
 #include "GameShared/Jobs/ContactGenerator/ContactGeneratorJob.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint (the ten gates)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint (the gates + witness)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"          // Sphere (16B centre+radius)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"       // Triangle4 (the SoA block)
+#include "GameShared/GameClasses/Geometric/Intersection/CgsTriangleSphere.h" // the sphere contact kernel
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamConsumer.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsCollisionJobDescription.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithTriangleListStreamJobDesc.h"
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSphereListWithTriangleListJobDesc.h"
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h"
 
 #include <cmath>     // std::sqrt (the vrsqrtefp lowering)
 #include <cstring>   // std::memcpy (reading a lane's raw bit pattern)
@@ -68,7 +76,12 @@
 ContactGeneratorJob gaContactGeneratorJobs[KI_NUM_CONTACT_GENERATOR_JOBS];
 
 using CgsSceneManager::CgsCollision::CollisionJobDescription;
+using CgsSceneManager::CgsCollision::CollisionResultList;
 using CgsSceneManager::CgsCollision::LineWithTriangleListStreamJobDesc;
+using CgsSceneManager::CgsCollision::PrimitiveTestResult;
+using CgsSceneManager::CgsCollision::SphereListWithTriangleListJobDesc;
+using CgsSceneManager::CgsCollision::SphereListWithTriangleListStreamJobDesc;
+using CgsSceneManager::CgsCollision::TriangleList;
 
 namespace
 {
@@ -196,7 +209,12 @@ void ContactGeneratorJob::Execute(void* lpvJobData)
 
     switch (mpJobDescription->GetType())
     {
-        case 5:  ExecuteSphereListWithTriangleList();           break;
+        // Case 5's `bl` leaves r4 = lpvJobData untouched: the non-stream worker takes the
+        // descriptor as its parameter (the stream arm passes a stack-local one instead).
+        case 5:
+            ExecuteSphereListWithTriangleList(
+                static_cast<const SphereListWithTriangleListJobDesc*>(mpJobDescription));
+            break;
         case 6:  ExecuteSphereListWithTriangleListStream();     break;
         case 7:  ExecuteSphereListWithSphereList();             break;
         case 8:  ExecuteSphereListWithSphereListStream();       break;
@@ -497,7 +515,237 @@ void ContactGeneratorJob::ExecuteLineWithTriangleListStream()
 }
 
 // =============================================================================================
-// The other ten Execute arms -- NAMED BOOT GATES, not silent returns and not a shared default.
+// ⭐⭐⭐ THE SPHERE CONTACT ARMS (walls leg 2, 2026-08-14) -- the first code in this tree that
+// PRODUCES world contacts. Chain: DoRaceCarWorldContactGeneration posts one 32-byte (host 48)
+// command per live car per frame -> RunCollideSphereListWithTriangleListStream wires a batch at
+// ContactGeneratorEntry with desc type 6 -> Execute case 6 -> the stream arm below -> per
+// command the non-stream worker -> IntersectTriangle4Sphere_HackyBurnoutVersion per
+// (Triangle4 batch x sensor sphere) -> one 80-byte PrimitiveTestResult per hit lane into the
+// command's CollisionResultList. The list is what EndVehicleContactGeneration (still a gate)
+// will harvest.
+// =============================================================================================
+
+// ---------------------------------------------------------------------------------------------
+// ContactGeneratorJob::LoadPrimitives @0x829210F0 (61)
+// The SPU build's "DMA the triangle list down" -- on X360 (and here) a plain header copy.
+// Both asserts kept verbatim (:1405/:1406).
+// ---------------------------------------------------------------------------------------------
+void ContactGeneratorJob::LoadPrimitives(const TriangleList* lpSourceTriangleList,
+                                         TriangleList*       lpDestinationTriangleList)
+{
+    CGS_ASSERT(lpSourceTriangleList != NULL, "lpSourceTriangleList != NULL");           // :1405
+    CGS_ASSERT(lpDestinationTriangleList != NULL, "lpDestinationTriangleList != NULL"); // :1406
+
+    *lpDestinationTriangleList = *lpSourceTriangleList;   // {base, count}, 2 dwords on console
+}
+
+// ---------------------------------------------------------------------------------------------
+// ContactGeneratorJob::LoadResultList @0x829211E8 (46)
+// Copy the 16-byte CollisionResultList header; assert the copied results pointer (:1552 --
+// the console checks the DESTINATION after the first word lands, hence the message).
+// ---------------------------------------------------------------------------------------------
+void ContactGeneratorJob::LoadResultList(const CollisionResultList* lpSourceResultList,
+                                         CollisionResultList*       lpDestinationResultList)
+{
+    *lpDestinationResultList = *lpSourceResultList;
+
+    CGS_ASSERT(lpDestinationResultList->mpResults != NULL,
+               "lpDestinationResultList->GetResultsMemory() != NULL");                  // :1552
+}
+
+// =============================================================================================
+// ContactGeneratorJob::ExecuteSphereListWithTriangleList @0x829226A8 (967) ⭐⭐⭐ THE CONTACT
+// WORKER -- runs the narrow-phase kernel and queues the results.
+//
+// SHAPE (all offsets read from the asm, not the pseudocode -- IDA typed the u16 header loads
+// as words; `lhz r25, numResults` / `lhz r11, maxNumResults` at 0x82922730/0x829227B8 settle
+// them):
+//   ld/std the descriptor's SphereList; LoadPrimitives(&desc->mTriangleList, local);
+//   LoadResultList(desc->mpResultsList, localHeader); splat desc->mfRadius (the padding);
+//   for each Triangle4 batch (stride 0xE0, triangle index base r15 = 2 so lane L is 4*batch+L):
+//     for each sphere (stride 0x10, index r22 resets per batch, base reloaded per batch):
+//       assert numResults < maxNumResults (:182, per iteration, BEFORE the kernel);
+//       mask = IntersectTriangle4Sphere_HackyBurnoutVersion(sphere, batch, padding, 4 groups);
+//       for each hit lane (vspltw + vcmpeqfp vs zero):
+//         tail-fill the lane's 80-byte record: muPrimitive0Tag = batch's surface tag lane
+//         (stw), muPrimitive1Tag = 0 (stw), muPrimitive0Index = 4*batch+lane (sth),
+//         muPrimitive1Index = sphere index (sth);
+//         copy the record to results[numResults] (10 ld/std = 80 bytes);
+//         numResults = min(numResults + 1, max - 1); localHeader.mu16NumResults = numResults;
+//         if (!record.IsValid()) -> the console builds a 0x2000-byte StrStream dump
+//         ("Invalid normal generated: \n" + sphere/normal/triangle points via GetAOSTriangle)
+//         and PrintStringed's it (:233/:273/:313/:353 per lane). Lowered to CGS_ASSERT with
+//         the console's own message; the dump scaffolding (StrStream + GetAOSTriangle) is
+//         dev-assert-path only and is NOT reconstructed here.
+//   write the 16-byte local header back to desc->mpResultsList (unconditional, 0x8292358C).
+//
+// ⚠️ mu16TestIndex/muPad are NOT written by the console (stack garbage travels into the queued
+// copy); zero-initialised here once per record instead -- deterministic, flagged.
+// ⚠️ The results array is the meResultType==0 / 80-byte-stride carve
+// (PrepareNewPrimitiveTestResultsList Mallocs 80*max), so the base pointer is reinterpreted as
+// PrimitiveTestResult[] -- CollisionResult's 112-byte stride belongs to the OTHER record type.
+// =============================================================================================
+void ContactGeneratorJob::ExecuteSphereListWithTriangleList(
+    const SphereListWithTriangleListJobDesc* lpDesc)
+{
+    using CgsGeometric::Sphere;
+    using CgsGeometric::Triangle4;
+
+    const CgsSceneManager::CgsCollision::SphereList lSpheres = lpDesc->mSphereList;
+
+    TriangleList lTriangles;
+    LoadPrimitives(&lpDesc->mTriangleList, &lTriangles);
+
+    CollisionResultList lHeader;
+    LoadResultList(lpDesc->mpResultsList, &lHeader);
+
+    // stfs f0 -> vspltw128 v124: the padding reach, broadcast.
+    VecFloat lPadding;
+    lPadding.x = lPadding.y = lPadding.z = lPadding.w = lpDesc->mfRadius;
+
+    PrimitiveTestResult* lpaResults =
+        reinterpret_cast<PrimitiveTestResult*>(lHeader.mpResults);
+
+    u16 lu16NumResults = lHeader.mu16NumResults;
+    const u16 lu16MaxResults = lHeader.mu16MaxNumResults;
+
+    for (s32 liBatch = 0; liBatch < lTriangles.miNumTriangles; ++liBatch)
+    {
+        const Triangle4& lrBlock = lTriangles.mpTriangles[liBatch];
+
+        const Sphere* lpSphere =
+            reinterpret_cast<const Sphere*>(lSpheres.mpSpheres);   // base reloaded per batch
+
+        for (s32 liSphere = 0; liSphere < lSpheres.miNumSpheres; ++liSphere, ++lpSphere)
+        {
+            CGS_ASSERT(lu16NumResults < lu16MaxResults,
+                       "lResultsList.GetNumResults() < lResultsList.GetMaxNumResults()"); // :182
+
+            // The four per-lane result records the kernel writes its groups into. The
+            // console carves these on its stack; the tail fields are filled only for
+            // lanes that hit.
+            PrimitiveTestResult laRecord[4] = {};
+
+            const Triangle4::Mask4 lHitMask =
+                CgsGeometric::IntersectTriangle4Sphere_HackyBurnoutVersion(
+                    *lpSphere, lrBlock, lPadding,
+                    // group per lane: ContactNormal(+0x10 mPrimitive1Normal),
+                    // TriangleNormal(+0x00 mPrimitive0Normal), SphereContactPoint
+                    // (+0x30 mPrimitive1Contact), TriangleContactPoint(+0x20
+                    // mPrimitive0Contact) -- offsets from the X360 call site.
+                    laRecord[0].mPrimitive1Normal, laRecord[0].mPrimitive0Normal,
+                    laRecord[0].mPrimitive1Contact, laRecord[0].mPrimitive0Contact,
+                    laRecord[1].mPrimitive1Normal, laRecord[1].mPrimitive0Normal,
+                    laRecord[1].mPrimitive1Contact, laRecord[1].mPrimitive0Contact,
+                    laRecord[2].mPrimitive1Normal, laRecord[2].mPrimitive0Normal,
+                    laRecord[2].mPrimitive1Contact, laRecord[2].mPrimitive0Contact,
+                    laRecord[3].mPrimitive1Normal, laRecord[3].mPrimitive0Normal,
+                    laRecord[3].mPrimitive1Contact, laRecord[3].mPrimitive0Contact);
+
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                // vspltw v0, mask, lane + vcmpeqfp vs zero: a zero lane is a miss.
+                if (LaneBits(lHitMask, liLane) == 0u)
+                {
+                    continue;
+                }
+
+                PrimitiveTestResult& lrRecord = laRecord[liLane];
+                lrRecord.muPrimitive0Tag   = LaneBits(lrBlock.mSurfaceTags, liLane);
+                lrRecord.muPrimitive1Tag   = 0;
+                lrRecord.muPrimitive0Index = static_cast<u16>((4 * liBatch) + liLane);
+                lrRecord.muPrimitive1Index = static_cast<u16>(liSphere);
+
+                lpaResults[lu16NumResults] = lrRecord;   // 80-byte copy at 80*index
+
+                // idx+1, clamped to max-1: an overflowing list overwrites its last slot
+                // (the assert above already fired once per overflowing iteration).
+                u16 lu16Next = static_cast<u16>(lu16NumResults + 1);
+                if (lu16Next >= lu16MaxResults)
+                {
+                    lu16Next = static_cast<u16>(lu16MaxResults - 1);
+                }
+                lu16NumResults = lu16Next;
+                lHeader.mu16NumResults = lu16NumResults;
+
+                CGS_ASSERT(lrRecord.IsValid(), "Invalid normal generated: \n"); // :233/:273/:313/:353
+            }
+        }
+    }
+
+    // The unconditional 16-byte header write-back (0x8292358C..0x829235B0) -- this is what
+    // publishes mu16NumResults to the harvest.
+    *lpDesc->mpResultsList = lHeader;
+
+    // ⭐ THE WITNESS (PC boot gate mechanism, log-once): the first time this worker leaves a
+    // non-empty result list, say so with the count. Not the console's; deleted when the
+    // harvest (EndVehicleContactGeneration) lands and makes contacts visible downstream.
+    if (lu16NumResults > 0)
+    {
+        static bool s_bLoggedFirstContacts = false;
+        if (!s_bLoggedFirstContacts)
+        {
+            s_bLoggedFirstContacts = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint
+                    << "⭐ sphere-vs-triangle CONTACTS LIVE: "
+                    << static_cast<s32>(lu16NumResults)
+                    << " PrimitiveTestResult(s) in the command's result list "
+                       "[FLAG PC boot witness]. Reported once, not per frame\n";
+        }
+    }
+}
+
+// =============================================================================================
+// ContactGeneratorJob::ExecuteSphereListWithTriangleListStream @0x829235C8 (100)
+// Drain the command stream; per command, run the non-stream worker on a stack-local
+// descriptor. NO AddResult: the results travel through the command's own CollisionResultList
+// (the poster carved it via PrepareNewPrimitiveTestResultsList).
+//
+//   0x829235E?  asserts :381 "No job description\n" / :382 "No stream producer\n"
+//   Construct(consumer, producer, 0, 0); AllocateMemory(128, 128)   -- the command scratch;
+//     128 is the producer's stride round (32+127)&~127 on the console AND (48+127)&~127
+//     here -- the whole stride is read per command, same doctrine as the line worker's 256.
+//   restore point opens AFTER the alloc; per ReadCom command:
+//     SphereListWithTriangleListJobDesc::Prepare(local, &cmd->mSphereList, &cmd->mTriList,
+//                                                cmd->mpResultList, cmd->mfPadding);
+//     ExecuteSphereListWithTriangleList(&local); RestoreMemory();
+//   Destruct.
+// =============================================================================================
+void ContactGeneratorJob::ExecuteSphereListWithTriangleListStream()
+{
+    typedef SphereListWithTriangleListStreamJobDesc Desc;
+
+    const Desc* lpDesc = static_cast<const Desc*>(mpJobDescription);
+
+    CGS_ASSERT(lpDesc != NULL, "No job description\n");                      // :381
+    CGS_ASSERT(lpDesc->GetStreamProducer() != NULL, "No stream producer\n"); // :382
+
+    CgsMemory::SimpleDataStreamConsumer lConsumer;
+    lConsumer.Construct(lpDesc->GetStreamProducer(), NULL, 0);
+
+    Desc::StreamCommand* lpCommand =
+        static_cast<Desc::StreamCommand*>(AllocateMemory(128, 128));
+
+    miMemoryRestorePoint = miAllocCursor;
+
+    u32 luCommandIndex = 0;
+    while (lConsumer.ReadCo(lpCommand, &luCommandIndex) == 0)
+    {
+        SphereListWithTriangleListJobDesc lLocalDesc;
+        lLocalDesc.Prepare(&lpCommand->mSphereList, &lpCommand->mTriList,
+                           lpCommand->mpResultList, lpCommand->mfPadding);
+
+        ExecuteSphereListWithTriangleList(&lLocalDesc);
+
+        RestoreMemory();
+    }
+
+    lConsumer.Destruct();
+}
+
+// =============================================================================================
+// The other eight Execute arms -- NAMED BOOT GATES, not silent returns and not a shared default.
 // Each names its own X360 home and insn count so that the day something posts that descriptor
 // type, the log says which worker is missing rather than "unsupported".
 // =============================================================================================
@@ -506,18 +754,6 @@ void ContactGeneratorJob::ExecuteLineWithTriangleListStream()
     if (!s_bLogged) { s_bLogged = true;                                                  \
         if (CgsDev::Message::gxMessageFilterFlags & 1)                                   \
             *CgsDev::Log::gpDebugPrint << TEXT; } } while (0)
-
-void ContactGeneratorJob::ExecuteSphereListWithTriangleList()
-{
-    BRN_CONTACT_JOB_GATE("conductor gate: ContactGeneratorJob::ExecuteSphereListWithTriangleList "
-                         "@0x829226A8 not reconstructed [FLAG PC boot gate]\n");
-}
-
-void ContactGeneratorJob::ExecuteSphereListWithTriangleListStream()
-{
-    BRN_CONTACT_JOB_GATE("conductor gate: ContactGeneratorJob::ExecuteSphereListWithTriangleList"
-                         "Stream @0x829235C8 (100) not reconstructed [FLAG PC boot gate]\n");
-}
 
 void ContactGeneratorJob::ExecuteSphereListWithSphereList()
 {

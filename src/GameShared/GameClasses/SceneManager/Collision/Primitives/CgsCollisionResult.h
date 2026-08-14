@@ -15,7 +15,7 @@
 // aggregate is preserved as reserved span so sizeof/offsets stay console-faithful.
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"   // Vector4 (rw::math::vpu, 16-byte / 16-aligned lane)
+#include "BrnCommonTypes.h"   // Vector3 / Vector3Plus / Vector4 (rw::math::vpu, 16-byte lanes)
 
 namespace CgsSceneManager
 {
@@ -85,24 +85,45 @@ namespace CgsCollision
     // -------------------------------------------------------------------------
     // PrimitiveTestResult
     //
-    // One narrow-phase primitive-vs-primitive test outcome. IsValid (the only
-    // recovered function) reads four consecutive 16-byte lanes (offsets 0, 0x10,
-    // 0x20, 0x30) and runs a hand-vectorised VMX validation pipeline over them
-    // (per-lane NaN test via vcmpeqfp self-compare, then |component| > threshold via
-    // a vandc/vrlimi128/vcmpgtfp mask against a rodata magnitude constant). The four
-    // lanes are modelled as named vec4 fields at the asm offsets; the VMX body itself
-    // is a keystone reconstructed (honest stub) in the .cpp — see CgsCollisionResult.cpp.
+    // One narrow-phase primitive-vs-primitive test outcome -- the 80-byte record
+    // the sphere-vs-triangle contact worker queues per hit, and the record type
+    // meResultType == 0 lists carry (PrepareNewPrimitiveTestResultsList Mallocs
+    // 80 * max; the worker copies 10 dwords at `80 * index + base`).
+    //
+    // ⭐ 2026-08-14 (walls leg 2): every field is now DWARF-NAMED verbatim
+    // (DecFIGS dwarfdump CgsCollisionResult.h:60-70), retiring the "four
+    // anonymous lanes" model. On the sphere-vs-triangle path Primitive0 is the
+    // TRIANGLE and Primitive1 is the SPHERE -- proven by the kernel call-site's
+    // record offsets (lTriangleNormal -> +0x00, lContactNormal -> +0x10,
+    // lTriangleContactPoint -> +0x20, lSphereContactPoint -> +0x30) and the
+    // worker's tail stores (surface tag -> +0x40, 0 -> +0x44, triangle index ->
+    // +0x48 sth, sphere index -> +0x4A sth).
+    // ⚠️ mu16TestIndex/muPad (+0x4C/+0x4E) are NOT written by the sphere worker
+    // -- on the console they carry stack garbage into the queued copy. The
+    // reconstruction zero-initialises them at the one build site instead
+    // (deterministic; garbage is not reproducible), flagged there.
     // -------------------------------------------------------------------------
     struct alignas(16) PrimitiveTestResult
     {
-        Vector4 mLane0;   // +0x00  (lvx128 v11, r0, r3)
-        Vector4 mLane1;   // +0x10  (lvx128 v12, r3, 0x10)
-        Vector4 mLane2;   // +0x20  (lvx128 v0,  r3, 0x20)
-        Vector4 mLane3;   // +0x30  (lvx128 v0,  r3, 0x30)
+        Vector3     mPrimitive0Normal;    // +0x00  DWARF :60 (triangle side's normal)
+        Vector3     mPrimitive1Normal;    // +0x10  DWARF :61 (sphere side's normal; the kernel
+                                          //         writes the SAME contact direction to both)
+        Vector3Plus mPrimitive0Contact;   // +0x20  DWARF :62 (triangle contact point)
+        Vector3Plus mPrimitive1Contact;   // +0x30  DWARF :63 (sphere contact point)
+        u32     muPrimitive0Tag;      // +0x40  DWARF :64 (triangle surface tag)
+        u32     muPrimitive1Tag;      // +0x44  DWARF :65 (sphere side: the worker stores 0)
+        u16     muPrimitive0Index;    // +0x48  DWARF :66 (triangle index: 4*batch + lane)
+        u16     muPrimitive1Index;    // +0x4A  DWARF :67 (sphere index)
+        u16     mu16TestIndex;        // +0x4C  DWARF :68 (unwritten by the sphere worker)
+        u16     muPad;                // +0x4E  DWARF :70
 
-        // IsValid @ 0x82921378 — returns true when every lane is finite and within
-        // the magnitude threshold. VMX keystone (see .cpp).
+        // IsValid @ 0x82921378 — all four vectors finite in xyz, and both normal
+        // vectors non-degenerate (some |component| > 2^-23). See the .cpp.
         bool IsValid() const;
     };
+
+    static_assert(sizeof(PrimitiveTestResult) == 80,
+                  "PrimitiveTestResult is the 80-byte result-list record "
+                  "(pointer-free; the list stride is a contract)");
 }
 }
