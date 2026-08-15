@@ -117,8 +117,10 @@ namespace CgsGraphics
         //                                              shadowingdevice.h:665)
         //   mgpLastTexture           dword_830109E8 -> shadow::Device::mapSamplerTexture[0]
         //                                              (m_apTextures[0], DWARF :668)
-        //   mgbTextureStateDirty     dword_83010968 -> shadow::Device::mauSamplerDirty[0]
-        //                                              (m_apTextureStates[0], DWARF :666)
+        //   mgbTextureStateDirty     dword_83010968 -> shadow::Device::mapTextureState[0]
+        //                                              (m_apTextureStates[0], DWARF :666 -- a
+        //                                              TextureState POINTER per unit, not a flag;
+        //                                              retyped 2026-08-14 with SetState @0x8227D158)
         //   mgbStateShadowingDisabled byte_83010907  -> shadow::Device::mbBlendStateLocked
         //                                              (DWARF :776; DWARF's CgsImRenderer.h has no
         //                                              such member at all)

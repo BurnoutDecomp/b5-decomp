@@ -218,7 +218,7 @@ namespace shadow
     const renderengine::ProgramBufferData* Device::mpPixelProgramShadow = nullptr;
     const renderengine::BlendMaterialState* Device::mpBlendState = nullptr;   // dword_83010964
 
-    u32 Device::mauSamplerDirty[KU_MAX_TEXTURE_STATES] = {};
+    const renderengine::TextureState* Device::mapTextureState[KU_MAX_TEXTURE_STATES] = {};   // dword_83010968
     void* Device::mapSamplerState[KU_MAX_TEXTURE_STATES] = {};
     void* Device::mapSamplerTexture[KU_MAX_TEXTURE_STATES] = {};
 
@@ -308,7 +308,7 @@ namespace shadow
 
         for (u32 luSampler = 0; luSampler < KU_MAX_TEXTURE_STATES; ++luSampler)
         {
-            mauSamplerDirty[luSampler] = 0;
+            mapTextureState[luSampler] = nullptr;
             mapSamplerState[luSampler] = nullptr;
             mapSamplerTexture[luSampler] = nullptr;
         }
@@ -376,7 +376,7 @@ namespace shadow
             // X360 passes (lpPrevious == 0) as the "no previous state" flag to the sub-setter.
             lpResult = SetSamplerStateLowLevel(lpState, luSamplerId, lpPrevious == nullptr);
             mapSamplerState[luSamplerId] = lpState;
-            mauSamplerDirty[luSamplerId] = 0;
+            mapTextureState[luSamplerId] = nullptr;   // a bare-sampler bind invalidates the whole-unit key
         }
         return lpResult;
     }
@@ -395,8 +395,48 @@ namespace shadow
                 static_cast<u32>((1ull << 63) >> (luSamplerId + 32));
             D3DDevice_SetTexture(gpD3DDevice, luSamplerId, lpTexture, luFlags);
             mapSamplerTexture[luSamplerId] = lpTexture;
-            mauSamplerDirty[luSamplerId] = 0;
+            mapTextureState[luSamplerId] = nullptr;   // a bare-texture bind invalidates the whole-unit key
             lpResult = lpTexture;
+        }
+        return lpResult;
+    }
+
+    // @0x8227D158: bind a whole TextureState (its 32-byte sampler block + the raster it samples)
+    // at one unit through the shadow. Keyed on the whole-unit shadow mapTextureState (dword_83010968):
+    //   * HIT  (`lwz r11, dword_83010968[a2]; cmplw r11, r3; bne`): the object is already the bound
+    //     one, so nothing is applied -- the console only re-asserts that the TEXTURE shadow still
+    //     holds this object's raster (shadowingdevice.h:918, string verbatim below). That assert is
+    //     what catches a SetResource() that slipped in behind a whole-unit bind.
+    //   * MISS: the raster is read FIRST (`lwz r27, 0x20(r3)` -- TextureState::mpRaster, i.e.
+    //     NativeGetTexture()), the sampler block is applied through the same low-level setter the
+    //     bare-sampler binder uses -- with the SAME "was unset" flag, (dword_83010968[a2] == 0), NOT
+    //     the sampler shadow's -- then the raster is set with the (1<<63)>>(unit+32) fast-set mask
+    //     (`li r10,1 / srd r6, r10, r9`, the mask SetResource computes), and all three per-unit
+    //     shadows are written: whole-unit key = this, sampler shadow = this (the TextureState IS a
+    //     sampler-state object -- its first 32 bytes are the sampler block, so the pointer is a valid
+    //     key for the bare-sampler binder's compare), texture shadow = the raster.
+    // No unit-range assert here (0x8227D158 has none; the two bare binders do) -- faithful.
+    // Return: r3 passthrough = lpState, as the siblings; the assert path's EndAssert value is never
+    // consumed by any caller.
+    void* Device::SetState(const renderengine::TextureState* lpState, u32 luSamplerId)
+    {
+        void* lpResult = const_cast<void*>(static_cast<const void*>(lpState));
+        const renderengine::TextureState* const lpPrevious = mapTextureState[luSamplerId];
+        if (lpPrevious == lpState)
+        {
+            CGS_ASSERT(mapSamplerTexture[luSamplerId] == static_cast<void*>(lpState->mpRaster),
+                       "m_Shadow.m_apTextures[id] == textureState->NativeGetTexture()");   // shadowingdevice.h:918
+        }
+        else
+        {
+            void* const lpTexture = static_cast<void*>(lpState->mpRaster);              // lwz r27, 0x20(r3)
+            SetSamplerStateLowLevel(lpResult, luSamplerId, lpPrevious == nullptr);      // bl sub_827E8950
+            const u32 luFlags =
+                static_cast<u32>((1ull << 63) >> (luSamplerId + 32));                   // li r10,1 / srd r6,r10,r9
+            D3DDevice_SetTexture(gpD3DDevice, luSamplerId, lpTexture, luFlags);         // bl D3DDevice_SetTexture
+            mapTextureState[luSamplerId]   = lpState;                                    // stw r31, dword_83010968[r30]
+            mapSamplerState[luSamplerId]   = lpResult;                                   // stw r31, dword_830109A8[r30]
+            mapSamplerTexture[luSamplerId] = lpTexture;                                  // stw r27, dword_830109E8[r30]
         }
         return lpResult;
     }

@@ -866,6 +866,35 @@ namespace renderengine
     }
 
     // =========================================================================
+    // renderengine::VertexDescriptor::Release(VertexDescriptorData*)
+    // X360 @0x82B63250 -- the other end of the Initialize above, and it lives HERE for the
+    // same reason Initialize does: this leaf is what created the D3D declaration, so
+    // this leaf is what releases it. The console reconstruction of the whole class
+    // (pc/gcm/renderengine/VertexDescriptor.cpp) carries a Release too, but that TU also
+    // carries the console Initialize -- mounting it beside this leaf is a duplicate symbol
+    // -- and its Release goes through two Xenon helpers (VertexDescriptor_PreRelease
+    // @0x82B61F90, then D3DResource_Release on the declaration) that resolve, on D3D9, to
+    // exactly one thing: the COM Release of the IDirect3DVertexDeclaration9. Same shape as
+    // the console body store for store: test the pointer, release, null it, return lpData.
+    //
+    // The VertexDescriptorData block itself is arena memory (see Initialize's ⚠ x64 note)
+    // and the arena has no free, so -- as for every other object this leaf carves -- the
+    // block is not reclaimed; only the device object is. Callers: BrnPostFxShader::Destruct
+    // and BrnPostFxBloom::Destruct (each once, at teardown).
+    // =========================================================================
+    VertexDescriptorData* VertexDescriptor::Release(VertexDescriptorData* lpData)
+    {
+        if (lpData != nullptr && lpData->mpDeclaration != nullptr)      // if (*result)
+        {
+            IDirect3DVertexDeclaration9* const lpDeclaration =
+                reinterpret_cast<IDirect3DVertexDeclaration9*>(lpData->mpDeclaration);
+            lpDeclaration->Release();                                     // PreRelease + D3DResource_Release
+            lpData->mpDeclaration = nullptr;                              // *v1 = 0
+        }
+        return lpData;
+    }
+
+    // =========================================================================
     // The Xenon vertex/index buffer surface.
     //
     // On the X360 these stamp a GPU resource header in place (XGSetVertexBufferHeader)
