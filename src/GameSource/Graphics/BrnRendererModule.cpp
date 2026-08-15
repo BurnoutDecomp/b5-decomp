@@ -219,11 +219,6 @@ EA::Jobs::Job::Job(s32 /*liPriority*/) {}
 // [diag] present counter (device.cpp) - stamps the trace lines with their frame.
 namespace renderengine { extern u32 guPresentCount; }
 
-// [DIAG carverts] defined in pc/gcm/renderengine/XenonD3D9Shims.cpp -- tags the car mesh walks
-// so that TU's exploding-geometry probe can separate a car draw from the world meshes around it.
-// DELETE together with the probe.
-namespace renderengine { void WorldDraw_SetPassTag(u32 luTag); }
-
 // High-res frame timer (CgsTimeUtils.cpp), forward-declared - drives the thread-monitor health.
 namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
 
@@ -1778,11 +1773,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
 
         if (mbRenderCarsOpaque)
         {
-            // [DIAG carverts] tag the walk so the D3D9 leaf's probe can tell a CAR draw from
-            // the world meshes around it. DELETE with the probe in XenonD3D9Shims.cpp.
-            renderengine::WorldDraw_SetPassTag(19u);
             mSingleBufferedDispatchFrame.GetList(19)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
-            renderengine::WorldDraw_SetPassTag(0u);
         }
         if (mbRenderWorldOpaque)
         {
@@ -1828,10 +1819,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
         }
         if (mbRenderCarsTransparent)
         {
-            // [DIAG carverts] see the list-19 tag above. DELETE with the probe.
-            renderengine::WorldDraw_SetPassTag(20u);
             mSingleBufferedDispatchFrame.GetList(20)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
-            renderengine::WorldDraw_SetPassTag(0u);
         }
     }
 

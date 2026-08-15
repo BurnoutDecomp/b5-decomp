@@ -33,6 +33,7 @@
 #include "pc/gcm/renderengine/VertexBuffer.h"     // renderengine::VertexBuffer (Xbox2CheckPhysicalMemoryFlags leaf)
 #include "pc/gcm/renderengine/texture.h"          // renderengine::Texture::mpD3DTexture (world sampler bind)
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h" // renderengine::PCSurfaceBracket_* (homed at the bottom of this TU)
+#include "pc/gcm/renderengine/WorldGeometryPCLeaf.h" // the RETAINED dispatch-path geometry mirrors
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsXboxConditionalRenderShims.h" // the predicated-draw externs homed at the bottom of this TU
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -138,19 +139,23 @@ namespace
     u32                          suVertexDec3nCount = 0;
     u16                          sau16VertexDec3nOffsets[16] = {};
     bool                         sbWorldDeclarationValid = false;
-    // [DIAG carverts] which of the two publishers bound the current stream: the DISPATCH path
-    // (WorldVd32_GetDeclaration + WorldDraw_SetVertexSource) or the Xenon FAST-SET path
-    // (D3DDevice_SetStreamSource -> WorldDraw_SetVertexSourceRaw). DELETE with the probe.
+    // WHICH PUBLISHER bound the current stream -- the ROUTING FLAG for the draw path:
+    //   false = the DISPATCH publisher (WorldVd32_GetDeclaration + WorldDraw_SetVertexSource,
+    //           i.e. shadow::Device::SetMeshBuffersPC). Its buffers are the bundle's own
+    //           STATIC serialised geometry, so the draw goes through the retained D3D9
+    //           mirrors in WorldGeometryPCLeaf.cpp.
+    //   true  = the Xenon FAST-SET publisher (D3DDevice_SetStreamSource ->
+    //           WorldDraw_SetVertexSourceRaw): sky dome, immediate mode, particles,
+    //           MeshHelper. That geometry is rewritten every frame, so it stays on the
+    //           DrawIndexedPrimitiveUP path, which is what UP is for.
     bool                         sbVertexSourceFastSet = false;
-    // [DIAG carverts] the pass the renderer is currently walking: 19 == CARS OPAQUE,
-    // 20 == CARS TRANSPARENT, 0 == anything else. Set by BrnRendererModule::RenderWorldPasses
-    // so a probe can separate a CAR draw from the world meshes around it. DELETE with the probe.
-    u32                          suPassTag = 0;
 
     // Some D3D9 drivers (notably current NVIDIA drivers) do not expose
     // D3DDTCAPS_DEC3N. DrawIndexedPrimitiveUP already copies the submitted vertex
     // data, so unsupported packed normals are expanded into FLOAT3 records here
     // without touching the converted world bundle or the native AMD/Intel path.
+    // (FAST-SET path only -- the dispatch path bakes the same expansion once per
+    // buffer at mirror-creation time instead; see WorldGeometryPCLeaf.cpp.)
     std::vector<u8> sVertexFormatScratch;
 
     // ---- Xenos primitive reset ----------------------------------------------
@@ -171,10 +176,15 @@ namespace
     // D3D10, so the strip runs are expanded here into an equivalent TRIANGLELIST:
     // identical triangles, identical winding, no marker ever reaching the device.
     //
-    // No cache: the expansion is one linear pass over an index run that
-    // DrawIndexedPrimitiveUP is about to copy wholesale anyway, and a cache keyed on
-    // the run address would go stale when a track unit is streamed out and another
-    // is loaded over it.
+    // This scratch now serves the FAST-SET path only, where the run really is rebuilt
+    // every frame and there is nothing to retain. The DISPATCH path bakes the identical
+    // expansion into a device index buffer ONCE per (buffer, run, primitive state) --
+    // see WorldGeometryPCLeaf.cpp. The old "no cache, a cache would go stale when a
+    // track unit is streamed out" note was the right worry and the wrong conclusion:
+    // going stale is exactly what the resource pool's free path tells the mirror cache
+    // about (CgsResource::Pool::FreeMemoryForResource ->
+    // renderengine::WorldGeometry_OnResourceMemoryFreed), so the mirrors die with the
+    // bundle memory they were built from, before anything can be loaded over it.
     std::vector<u8> sResetScratch;
 
     template <typename T>
@@ -1233,7 +1243,16 @@ namespace renderengine
         }
         if (lbRealUsable)
         {
-            LogOnce("realdraw", "[WorldShader] REAL technique shaders are drawing the world\n");
+            // A local latch, NOT LogOnce: this is the common case, so every world mesh of
+            // every pass used to hash a const char* through LogOnce's unordered_map on its
+            // way to a bind that already happened. (LogOnce itself is unchanged -- its other
+            // sites are all genuinely rare.)
+            static bool sbLoggedRealDraw = false;
+            if (!sbLoggedRealDraw)
+            {
+                sbLoggedRealDraw = true;
+                CgsDev::Log::WriteToLog("[WorldShader] REAL technique shaders are drawing the world\n");
+            }
             // Re-assert: an earlier mesh of this same technique may have swapped in the
             // fallback pair.
             lpDevice->SetVertexShader(spRealVs);
@@ -1336,7 +1355,7 @@ namespace renderengine
     void WorldDraw_SetVertexSource(const void* lpVertexBufferHeader, u32 luStride)
     {
         spVertexSource = static_cast<const VertexBufferHeader32*>(lpVertexBufferHeader);
-        sbVertexSourceFastSet = false;                 // [DIAG carverts] which publisher ran
+        sbVertexSourceFastSet = false;                 // -> the RETAINED draw path
         suVertexStride = luStride;
         suVertexSourceStride = suLastDeclSourceStride;
         suVertexDec3nCount   = suLastDeclDec3nCount;
@@ -1355,7 +1374,7 @@ namespace renderengine
     // function that maps DEC3N straight through and expands nothing), so every fast-set draw
     // silently inherited the expansion plan of whatever DISPATCH mesh was bound last.
     //
-    // MEASURED, on the frame the car is on screen ([carverts] probe): stride 20 published by the
+    // MEASURED, on the frame the car is on screen ([carverts] probe, since removed): stride 20 published by the
     // caller against a stale sourceStride of 24 and a stale dec3nCount of 1 -- a triple that
     // cannot come from one declaration (the expanded stride is always sourceStride + 8 per DEC3N,
     // i.e. 32, never 20). Two things then went wrong at once:
@@ -1379,7 +1398,7 @@ namespace renderengine
     void WorldDraw_SetVertexSourceRaw(const void* lpVertexBufferHeader, u32 luStride)
     {
         spVertexSource        = static_cast<const VertexBufferHeader32*>(lpVertexBufferHeader);
-        sbVertexSourceFastSet = true;                  // [DIAG carverts] which publisher ran
+        sbVertexSourceFastSet = true;                  // -> the DrawIndexedPrimitiveUP path
         suVertexStride        = luStride;
         suVertexSourceStride  = luStride;
         suVertexDec3nCount   = 0;
@@ -1387,12 +1406,6 @@ namespace renderengine
     }
 
     // The technique's primitive-reset render state, republished on every technique change.
-    // [DIAG carverts] see suPassTag. DELETE with the probe.
-    void WorldDraw_SetPassTag(u32 luTag)
-    {
-        suPassTag = luTag;
-    }
-
     void WorldDraw_SetPrimitiveReset(bool lbEnabled, u32 luResetIndex)
     {
         spResetEnabled = lbEnabled;
@@ -1435,79 +1448,75 @@ namespace renderengine
         if (luBaseVertexIndex >= luNumVertices)
             return;
 
-        // ---- [DIAG carverts 2026-08-12] THE EXPLODING-GEOMETRY PROBE --------------------
-        // ⛔ DELETE-WHEN the car body panels are confirmed clean on a booted run.
-        //
-        // The car draws long stretched silver ribbons out of its panels. Only two things in
-        // this leaf can do that to geometry whose object-space vertices and whose WVP are both
-        // already known-good (the [carrender] witness proves the part matrices, and the wheels
-        // -- same fallback pair, same WVP channel -- land correctly):
-        //   (a) an index value OUTSIDE the vertex buffer, which D3D9 UP fetches as whatever
-        //       follows the buffer -> one vertex of the triangle flies off; and
-        //   (b) a triangle STRIP whose runs were never cut, i.e. the run carries the primitive
-        //       reset value but the bound rasteriser state left the reset DISABLED, so the
-        //       expansion below is skipped and the end of one run is stitched to the start of
-        //       the next -> exactly a long thin ribbon.
-        // Both are self-selecting, so this probe reports the CONDITION rather than a sample:
-        // it stays silent on a clean draw and names the offender on a broken one.
-        //
-        // LATCHED ON THE SIGNATURE, never a "printed once" bool (project lesson): a one-shot
-        // here fires on the boot loading screen, ~200 log lines before a car exists.
-        if (CgsDev::Log::gpDebugPrint != 0)
+        // ---- THE SUBMISSION ROUTE -------------------------------------------------------
+        // FLAG PC-platform leaf: the DISPATCH publisher binds the bundle's own STATIC
+        // serialised buffers -- on the console they are GPU memory and the draw fetches
+        // straight out of them, so nothing is ever reworked per draw. D3D9 cannot bind host
+        // memory, so those buffers are mirrored once into device buffers (including the
+        // DEC3N expansion and the primitive-reset strip re-cut, neither of which D3D9 can do
+        // at fetch time) and drawn with SetStreamSource/SetIndices/DrawIndexedPrimitive.
+        // See WorldGeometryPCLeaf.cpp. The FAST-SET publisher's runs are rebuilt every frame
+        // and stay on DrawIndexedPrimitiveUP below, which is exactly what UP is for.
+        WorldGeometryDraw lRetained;
+        std::memset(&lRetained, 0, sizeof(lRetained));
+        bool lbRetained = false;
+        if (!sbVertexSourceFastSet)
         {
-            u32 luOutOfRange = 0, luResetValues = 0, luMaxIndex = 0;
-            for (u32 luI = 0; luI < luIndexCount; ++luI)
-            {
-                const u32 luV = lb32Bit ? reinterpret_cast<const u32*>(lpIndices)[luI]
-                                        : reinterpret_cast<const u16*>(lpIndices)[luI];
-                if (luV == suResetIndex) { ++luResetValues; continue; }
-                if (luV > luMaxIndex) luMaxIndex = luV;
-                if (luV >= luNumVertices) ++luOutOfRange;
-            }
+            WorldGeometryVertexPlan lVertexPlan;
+            std::memset(&lVertexPlan, 0, sizeof(lVertexPlan));
+            lVertexPlan.mpHeader         = spVertexSource;
+            lVertexPlan.mpData           = lpVertexData;
+            lVertexPlan.muNumVertices    = luNumVertices;
+            lVertexPlan.muSourceStride   = suVertexSourceStride;
+            lVertexPlan.muExpandedStride = suVertexStride;
+            // Clamped to the 16 offsets the plan (and sau16VertexDec3nOffsets) can carry, so
+            // the cache key and the baked bytes describe the same plan.
+            lVertexPlan.muDec3nCount     = suVertexDec3nCount < 16u ? suVertexDec3nCount : 16u;
+            std::memcpy(lVertexPlan.mau16Dec3nOffsets, sau16VertexDec3nOffsets,
+                        sizeof(lVertexPlan.mau16Dec3nOffsets));
 
-            const bool lbUncutStrip = (lePrim == D3DPT_TRIANGLESTRIP)
-                                   && (luResetValues != 0) && !spResetEnabled;
-            if (luOutOfRange != 0 || lbUncutStrip)
+            WorldGeometryIndexPlan lIndexPlan;
+            std::memset(&lIndexPlan, 0, sizeof(lIndexPlan));
+            lIndexPlan.mpHeader               = spIndexSource;
+            lIndexPlan.mpRun                  = lpIndices;
+            lIndexPlan.muStartIndex           = luStartIndex;
+            lIndexPlan.muIndexCount           = luIndexCount;
+            lIndexPlan.muResetIndex           = suResetIndex;
+            lIndexPlan.miMappedPrimitiveType  = static_cast<s32>(lePrim);
+            lIndexPlan.muMappedPrimitiveCount = luPrimCount;
+            lIndexPlan.mb32Bit                = lb32Bit;
+            lIndexPlan.mbResetEnabled         = spResetEnabled;
+
+            const EWorldGeometryPrepare lePrepare =
+                WorldGeometry_Prepare(lVertexPlan, lIndexPlan, &lRetained);
+            if (lePrepare == E_WORLDGEOMETRY_SKIP)
             {
-                // One line per distinct (cause, primitive, stride) signature, budgeted.
-                static u32 suSignatures[16] = {};
-                static u32 suSignatureCount = 0;
-                const u32  luSignature = (lbUncutStrip ? 0x80000000u : 0u)
-                                       | ((luOutOfRange != 0) ? 0x40000000u : 0u)
-                                       | (sbVertexSourceFastSet ? 0x20000000u : 0u)
-                                       | (static_cast<u32>(lePrim) << 16)
-                                       | (suVertexStride & 0xFFFFu);
-                bool lbSeen = false;
-                for (u32 luS = 0; luS < suSignatureCount; ++luS)
-                    if (suSignatures[luS] == luSignature) { lbSeen = true; break; }
-                if (!lbSeen && suSignatureCount < 16u)
+                // The strip run expanded to no triangles at all -- the same case the UP
+                // path's `luTriangles == 0` early-out covers. Consume the per-draw marks
+                // the skipped draw would have consumed.
+                LogOnce("retainskip", "[WorldDraw] retained strip expansion produced ZERO"
+                                      " triangles - draw skipped\n");
+                sbNextDrawIsInstanced     = false;
+                sbNextDrawIsImmediateMode = false;
+                return;
+            }
+            lbRetained = (lePrepare == E_WORLDGEOMETRY_READY);
+            if (!lbRetained)
+            {
+                // A plain latch, NOT LogOnce: this sits on the per-draw path and LogOnce is
+                // a hash-map probe.
+                static bool sbRetainOffLogged = false;
+                if (!sbRetainOffLogged)
                 {
-                    suSignatures[suSignatureCount++] = luSignature;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[carverts] " << (lbUncutStrip ? "UNCUT STRIP" : "in-range")
-                        << (luOutOfRange != 0 ? " + OUT-OF-RANGE INDICES" : "")
-                        << " via " << (sbVertexSourceFastSet ? "FAST-SET" : "dispatch")
-                        << " clipOrigin (" << safLastWvp[12] << ", " << safLastWvp[13]
-                        << ", " << safLastWvp[14] << ", " << safLastWvp[15] << ")"
-                        << ": prim " << static_cast<s32>(lePrim)
-                        << " indices " << static_cast<s32>(luIndexCount)
-                        << " resetEnabled " << (spResetEnabled ? 1 : 0)
-                        << " resetIndex 0x" << static_cast<s32>(suResetIndex)
-                        << " resetValuesInRun " << static_cast<s32>(luResetValues)
-                        << " maxIndex " << static_cast<s32>(luMaxIndex)
-                        << " bufferVerts " << static_cast<s32>(luNumVertices)
-                        << " outOfRange " << static_cast<s32>(luOutOfRange)
-                        << " stride " << static_cast<s32>(suVertexStride)
-                        << "/" << static_cast<s32>(suVertexSourceStride)
-                        << " dec3n " << static_cast<s32>(suVertexDec3nCount)
-                        << " baseVertex " << static_cast<s32>(luBaseVertexIndex)
-                        << " startIndex " << static_cast<s32>(luStartIndex) << "\n";
+                    sbRetainOffLogged = true;
+                    CgsDev::Log::WriteToLog("[WorldDraw] no retained mirror for a dispatch"
+                                            " mesh - DrawIndexedPrimitiveUP kept for it\n");
                 }
             }
         }
 
         const u8* lpVertices = nullptr;
-        if (suVertexDec3nCount != 0)
+        if (!lbRetained && suVertexDec3nCount != 0)
         {
             // D3DDECLTYPE_DEC3N is a signed-normalized 10:10:10 value. Expand
             // each component exactly as the fixed-function vertex fetch would:
@@ -1554,83 +1563,10 @@ namespace renderengine
             lpVertices = &sVertexFormatScratch[0]
                        + static_cast<size_t>(luBaseVertexIndex) * suVertexStride;
         }
-        else
+        else if (!lbRetained)
         {
             lpVertices = static_cast<const u8*>(lpVertexData)
                        + static_cast<size_t>(luBaseVertexIndex) * suVertexSourceStride;
-        }
-
-        // ---- [DIAG carverts B] THE CAR-PASS OBJECT-SPACE EXTENT WITNESS -----------------
-        // ⛔ DELETE-WHEN the car body panels are confirmed clean on a booted run.
-        //
-        // Probe A (above) cleared the sky dome, but stretched sheets survive around the car,
-        // and A is silent on them -- so their indices are IN RANGE and their strips ARE cut.
-        // That leaves one question, and this answers it directly: are the VERTEX BYTES being
-        // read correctly? It decodes POSITION for every vertex this draw references and reports
-        // the object-space bounding box. A body panel is at most a couple of metres across, so
-        // a car-pass draw whose own vertices span tens of metres is being read through the wrong
-        // stride or the wrong element offset -- and one whose box is sane exonerates the vertex
-        // path entirely and moves the hunt to the transform or the shader.
-        //
-        // Runs ONLY inside the tagged car passes (lists 19/20), so it costs the world nothing.
-        // POSITION is assumed to be element 0 at byte 0 -- the same assumption the wheel NDC
-        // diag above already relies on; the printed stride lets that be checked.
-        if (suPassTag != 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            f32 lafMin[3] = {  3.0e38f,  3.0e38f,  3.0e38f };
-            f32 lafMax[3] = { -3.0e38f, -3.0e38f, -3.0e38f };
-            u32 luSampled = 0;
-            for (u32 luI = 0; luI < luIndexCount; ++luI)
-            {
-                const u32 luV = lb32Bit ? reinterpret_cast<const u32*>(lpIndices)[luI]
-                                        : reinterpret_cast<const u16*>(lpIndices)[luI];
-                if (luV == suResetIndex || luV >= luNumVertices)
-                    continue;
-                f32 lafP[3];
-                std::memcpy(lafP, lpVertices + static_cast<size_t>(luV) * suVertexStride,
-                            sizeof(lafP));
-                for (u32 luC = 0; luC < 3u; ++luC)
-                {
-                    if (lafP[luC] < lafMin[luC]) lafMin[luC] = lafP[luC];
-                    if (lafP[luC] > lafMax[luC]) lafMax[luC] = lafP[luC];
-                }
-                ++luSampled;
-            }
-
-            if (luSampled != 0)
-            {
-                f32 lfExtent = lafMax[0] - lafMin[0];
-                if (lafMax[1] - lafMin[1] > lfExtent) lfExtent = lafMax[1] - lafMin[1];
-                if (lafMax[2] - lafMin[2] > lfExtent) lfExtent = lafMax[2] - lafMin[2];
-
-                // Latched on the EXTENT BAND, not on a counter: a run where every part is
-                // sane and a run where one panel spans 40 m print different lines, and the
-                // bands keep the log to a handful of lines however many draws there are.
-                const u32 luBand = (lfExtent < 3.0f)  ? 0u
-                                 : (lfExtent < 10.0f) ? 1u
-                                 : (lfExtent < 50.0f) ? 2u
-                                 : (lfExtent < 500.0f)? 3u : 4u;
-                static bool sabBandSeen[2][5] = {};
-                const u32 luPassSlot = (suPassTag == 20u) ? 1u : 0u;
-                if (!sabBandSeen[luPassSlot][luBand])
-                {
-                    sabBandSeen[luPassSlot][luBand] = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[carverts-B] list " << static_cast<s32>(suPassTag)
-                        << " extentBand " << static_cast<s32>(luBand)
-                        << " extent " << lfExtent
-                        << " objBox (" << lafMin[0] << ".." << lafMax[0]
-                        << ", " << lafMin[1] << ".." << lafMax[1]
-                        << ", " << lafMin[2] << ".." << lafMax[2] << ")"
-                        << " verts " << static_cast<s32>(luSampled)
-                        << "/" << static_cast<s32>(luNumVertices)
-                        << " stride " << static_cast<s32>(suVertexStride)
-                        << "/" << static_cast<s32>(suVertexSourceStride)
-                        << " dec3n " << static_cast<s32>(suVertexDec3nCount)
-                        << " prim " << static_cast<s32>(lePrim)
-                        << " realShader " << (sbRealProgramsBound ? 1 : 0) << "\n";
-                }
-            }
         }
 
         // [DIAG wheels] scan the run this draw will actually submit, BEFORE the strip
@@ -1652,7 +1588,7 @@ namespace renderengine
 
         // FLAG PC-platform leaf: honour the rasteriser state's primitive reset by
         // expanding the strip runs into a triangle list (see ExpandStripRunsToList).
-        if (spResetEnabled && lePrim == D3DPT_TRIANGLESTRIP)
+        if (!lbRetained && spResetEnabled && lePrim == D3DPT_TRIANGLESTRIP)
         {
             const UINT luTriangles =
                 lb32Bit
@@ -1685,6 +1621,40 @@ namespace renderengine
             lePrim      = D3DPT_TRIANGLELIST;
             luPrimCount = luTriangles;
             lpIndices   = &sResetScratch[0];
+        }
+
+        // ---- what the probes below sample ------------------------------------------------
+        // The clip-space tally and the wheel NDC witness both read POSITION for the first
+        // three indices of the SUBMITTED run. On the UP path those are the scratch bytes
+        // this function just built; on the retained path the run lives in a device buffer,
+        // so the mirror hands back its first three index values and POSITION is read out of
+        // the HOST source bytes at the SOURCE stride -- valid because POSITION is element 0
+        // at byte 0, which is the same assumption both probes already made.
+        const u8* lpProbeVertices;
+        u32       luProbeStride;
+        u32       lau32ProbeIndices[3] = { 0u, 0u, 0u };
+        u32       luProbeIndexCount;
+        if (lbRetained)
+        {
+            lePrim          = static_cast<D3DPRIMITIVETYPE>(lRetained.miPrimitiveType);
+            luPrimCount     = lRetained.muPrimitiveCount;
+            lpProbeVertices = static_cast<const u8*>(lpVertexData)
+                            + static_cast<size_t>(luBaseVertexIndex) * suVertexSourceStride;
+            luProbeStride   = suVertexSourceStride;
+            luProbeIndexCount = lRetained.muFirstIndexCount;
+            for (u32 luK = 0; luK < luProbeIndexCount && luK < 3u; ++luK)
+                lau32ProbeIndices[luK] = lRetained.mau32FirstIndices[luK];
+        }
+        else
+        {
+            lpProbeVertices   = lpVertices;
+            luProbeStride     = suVertexStride;
+            luProbeIndexCount = (luIndexCount < 3u) ? luIndexCount : 3u;
+            for (u32 luK = 0; luK < luProbeIndexCount; ++luK)
+            {
+                lau32ProbeIndices[luK] = lb32Bit ? reinterpret_cast<const u32*>(lpIndices)[luK]
+                                                 : reinterpret_cast<const u16*>(lpIndices)[luK];
+            }
         }
 
         // [DIAG wheels, env-gated] BRN_WHEEL_ZALWAYS=1 draws the console-instanced meshes with
@@ -1794,15 +1764,14 @@ namespace renderengine
                 f32  lafTriY[3] = { 0.0f, 0.0f, 0.0f };
                 u32  luTriVerts = 0;
 
-                for (u32 luK = 0; luK < 3u && luK < luIndexCount; ++luK)
+                for (u32 luK = 0; luK < luProbeIndexCount; ++luK)
                 {
-                    const u32 luIdx = lb32Bit ? reinterpret_cast<const u32*>(lpIndices)[luK]
-                                              : reinterpret_cast<const u16*>(lpIndices)[luK];
+                    const u32 luIdx = lau32ProbeIndices[luK];
                     if (luIdx >= luNumVertices)
                         continue;
 
                     f32 lafPosition[3];
-                    std::memcpy(lafPosition, lpVertices + luIdx * suVertexStride, sizeof(lafPosition));
+                    std::memcpy(lafPosition, lpProbeVertices + luIdx * luProbeStride, sizeof(lafPosition));
 
                     f32 lafClip[4];
                     for (u32 luLane = 0; luLane < 4u; ++luLane)
@@ -1967,11 +1936,17 @@ namespace renderengine
             lpDevice->GetRenderState(D3DRS_CULLMODE, &luState); lrTally.muCullEffective  = luState;
         }
 
+        // The retained submit is the exact equivalent of the UP call beside it: the UP form
+        // offsets the vertex POINTER by baseVertex * stride and passes base 0, the retained
+        // form passes BaseVertexIndex = baseVertex against the whole mirrored buffer, so the
+        // run's index values address the same vertices either way.
         const HRESULT lhrDraw =
-            lpDevice->DrawIndexedPrimitiveUP(lePrim, 0, luNumVertices, luPrimCount,
-                                             lpIndices,
-                                             lb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
-                                             lpVertices, suVertexStride);
+            lbRetained
+                ? static_cast<HRESULT>(WorldGeometry_Submit(lRetained, luBaseVertexIndex))
+                : lpDevice->DrawIndexedPrimitiveUP(lePrim, 0, luNumVertices, luPrimCount,
+                                                   lpIndices,
+                                                   lb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
+                                                   lpVertices, suVertexStride);
 
         if (lbShadowStateOverridden)
         {
@@ -1995,6 +1970,25 @@ namespace renderengine
         // frame and completely different causes. DELETE with the shadow bring-up probes.
         if (SUCCEEDED(lhrDraw))
             ++guWorldDrawCalls;
+        else if (lbRetained)
+        {
+            // A retained submit the runtime rejected (D3DERR_INVALIDCALL: a run whose index
+            // values reach past NumVertices - BaseVertexIndex would be the classic cause; the
+            // UP form silently drew such a run out of range). Witnessed once, latched.
+            static bool sbRetainedFailLogged = false;
+            if (!sbRetainedFailLogged)
+            {
+                sbRetainedFailLogged = true;
+                char lacMsg[160];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[WorldDraw] retained DrawIndexedPrimitive FAILED hr=0x%08X"
+                              " (prim %d count %u base %u verts %u)\n",
+                              static_cast<unsigned>(lhrDraw), lRetained.miPrimitiveType,
+                              lRetained.muPrimitiveCount, luBaseVertexIndex,
+                              lRetained.muNumVertices);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
 
         if (lbZDefeated)
             lpDevice->SetRenderState(D3DRS_ZFUNC, luSavedZFunc);
@@ -2017,14 +2011,13 @@ namespace renderengine
                 {
                     char* lpcAt = lacNdc;
                     int   liLeft = (int)sizeof(lacNdc);
-                    for (u32 luK = 0; luK < 3u && luK < luIndexCount; ++luK)
+                    for (u32 luK = 0; luK < luProbeIndexCount; ++luK)
                     {
-                        const u32 luIdx = lb32Bit ? reinterpret_cast<const u32*>(lpIndices)[luK]
-                                                  : reinterpret_cast<const u16*>(lpIndices)[luK];
+                        const u32 luIdx = lau32ProbeIndices[luK];
                         if (luIdx >= luNumVertices)
                             continue;
                         f32 lafP[3];
-                        std::memcpy(lafP, lpVertices + luIdx * suVertexStride, sizeof(lafP));
+                        std::memcpy(lafP, lpProbeVertices + luIdx * luProbeStride, sizeof(lafP));
                         f32 lafC[4];
                         for (int liC = 0; liC < 4; ++liC)
                         {
