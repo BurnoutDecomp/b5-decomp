@@ -66,6 +66,78 @@ namespace
         u8          mau8Pad[3];
     };
 
+    // The ONLY two places a key is built, so the byte-wise hash/equality below stays
+    // deterministic: memset first, then every named field, and nothing else.
+    //
+    // The front cache further down depends on that discipline: because every byte these
+    // two do not write is zero in EVERY key, comparing a plan against a stored key field
+    // by field (KeyMatchesPlan, below) gives the same answer as memcmp-ing this function's
+    // output against it -- exactness, without paying for the padding bytes.
+    VertexKey MakeVertexKey(const WorldGeometryVertexPlan& lrPlan)
+    {
+        VertexKey lKey;
+        std::memset(&lKey, 0, sizeof(lKey));
+        lKey.mpHeader         = lrPlan.mpHeader;
+        lKey.muSourceStride   = lrPlan.muSourceStride;
+        lKey.muExpandedStride = lrPlan.muExpandedStride;
+        lKey.muDec3nCount     = lrPlan.muDec3nCount;
+        lKey.muNumVertices    = lrPlan.muNumVertices;
+        for (u32 lu = 0; lu < lrPlan.muDec3nCount && lu < 16u; ++lu)
+            lKey.mau16Dec3nOffsets[lu] = lrPlan.mau16Dec3nOffsets[lu];
+        return lKey;
+    }
+
+    IndexKey MakeIndexKey(const WorldGeometryIndexPlan& lrPlan)
+    {
+        IndexKey lKey;
+        std::memset(&lKey, 0, sizeof(lKey));
+        lKey.mpHeader         = lrPlan.mpHeader;
+        lKey.muStartIndex     = lrPlan.muStartIndex;
+        lKey.muIndexCount     = lrPlan.muIndexCount;
+        lKey.muResetIndex     = lrPlan.muResetIndex;
+        lKey.miPrimitiveType  = lrPlan.miMappedPrimitiveType;
+        lKey.muPrimitiveCount = lrPlan.muMappedPrimitiveCount;
+        lKey.mu8Reset32Bit    = static_cast<u8>((lrPlan.mbResetEnabled ? 1u : 0u)
+                                              | (lrPlan.mb32Bit ? 2u : 0u));
+        return lKey;
+    }
+
+    // FULL-IDENTITY tests, field for field against MakeVertexKey / MakeIndexKey above --
+    // NOT a subset, and not a hash. The front cache's whole safety argument is that a hit
+    // means "MakeVertexKey(plan) == stored key", i.e. exactly what the map's RawEqual
+    // would have concluded, so the mirrors handed back cannot belong to another plan.
+    // The offset loop stops at muDec3nCount for the same reason MakeVertexKey's fill does:
+    // both keys already agree on that count, and offsets past it are zero in both.
+    inline bool VertexKeyMatchesPlan(const VertexKey& lrKey,
+                                     const WorldGeometryVertexPlan& lrPlan)
+    {
+        if (lrKey.mpHeader != lrPlan.mpHeader
+            || lrKey.muSourceStride != lrPlan.muSourceStride
+            || lrKey.muExpandedStride != lrPlan.muExpandedStride
+            || lrKey.muDec3nCount != lrPlan.muDec3nCount
+            || lrKey.muNumVertices != lrPlan.muNumVertices)
+            return false;
+        for (u32 lu = 0; lu < lrPlan.muDec3nCount && lu < 16u; ++lu)
+        {
+            if (lrKey.mau16Dec3nOffsets[lu] != lrPlan.mau16Dec3nOffsets[lu])
+                return false;
+        }
+        return true;
+    }
+
+    inline bool IndexKeyMatchesPlan(const IndexKey& lrKey,
+                                    const WorldGeometryIndexPlan& lrPlan)
+    {
+        return lrKey.mpHeader == lrPlan.mpHeader
+            && lrKey.muStartIndex == lrPlan.muStartIndex
+            && lrKey.muIndexCount == lrPlan.muIndexCount
+            && lrKey.muResetIndex == lrPlan.muResetIndex
+            && lrKey.miPrimitiveType == lrPlan.miMappedPrimitiveType
+            && lrKey.muPrimitiveCount == lrPlan.muMappedPrimitiveCount
+            && lrKey.mu8Reset32Bit == static_cast<u8>((lrPlan.mbResetEnabled ? 1u : 0u)
+                                                    | (lrPlan.mb32Bit ? 2u : 0u));
+    }
+
     // The hash is deliberately CHEAP and narrow: the header pointer already separates
     // almost every key (a header has one or two plans at most), so hashing the leading
     // pointer + first two words as three multiplies costs less than a byte-wise FNV over
@@ -149,6 +221,100 @@ namespace
     // writes into this before the index buffer is sized and filled.
     std::vector<u8> sBakeScratch;
 
+    // ---- the direct-mapped front cache --------------------------------------
+    // WHY: once the mirrors exist, the two unordered_map probes ARE the remaining cost of
+    // WorldGeometry_Prepare. Measured on a 17 ms in-world frame at ~3,500-4,000 dispatch
+    // draws: Prepare 10.7% inclusive, of which AcquireVertexBuffer self 3.0%,
+    // AcquireIndexBuffer self 2.7% and the key memcmp 4.2% -- about 1.7 ms a frame spent
+    // hashing, chasing bucket chains across a ~10k-entry vertex map and a ~5k-entry index
+    // map (both far past any cache), and memcmp-ing 56/32-byte keys. Almost none of that
+    // is new work: the same meshes are drawn again the next frame, so a repeat draw only
+    // has to find the mirrors it already found last frame.
+    //
+    // So a repeat draw goes through a plain fixed array instead: hash four words, load one
+    // slot, compare both keys. Direct-mapped on purpose -- no chain to walk, no rehash, no
+    // allocation, and a conflicting draw simply misses and takes the old path. The maps
+    // remain the sole OWNERS of a mirror; this only remembers where one was found.
+    //
+    // SIZE: MEASURED 2026-08-15 with 8192 slots: 5.6M hits / 5.9M misses over a driving run,
+    // i.e. ~49% -- worse than the ~67% a 3,800-key estimate predicts, because a mesh is
+    // looked up under up to THREE different plans a frame (its lit technique, the z-only
+    // pre-pass and the shadow cascades bind different declarations / runs), so the live key
+    // set is ~10k, a load factor of ~1.2 on 8192. 32768 slots puts it at ~0.3 (~75% hits).
+    // The static footprint is 3.6 MB, but a probe touches ONE line per slot and the slots
+    // are sparse, so the lines actually touched per frame (~10k) do not grow with the table
+    // -- what grows is only how often two live keys share a slot.
+    const u32 KU_FRONT_CACHE_ENTRIES = 32768u;
+    static_assert((KU_FRONT_CACHE_ENTRIES & (KU_FRONT_CACHE_ENTRIES - 1u)) == 0u,
+                  "the slot index is masked, not reduced -- entry count must be a power of two");
+
+    // Field order is deliberate: the generation and the vertex key's discriminating head
+    // share the first cache line, so the two ways a probe usually fails (retired cache,
+    // different mesh) both resolve off one load.
+    struct GeometryFrontCacheEntry
+    {
+        u64                   muGeneration;   // 0 = never filled; see suGeometryGeneration
+        VertexKey             mVertexKey;
+        IndexKey              mIndexKey;
+        RetainedVertexBuffer* mpVertex;       // -> the map node's value, NOT owned
+        RetainedIndexBuffer*  mpIndex;        // -> the map node's value, NOT owned
+    };
+
+    // POD in BSS: every slot starts at generation 0, which no live generation ever equals,
+    // so the cold cache is all misses with no explicit initialisation anywhere.
+    GeometryFrontCacheEntry saFrontCache[KU_FRONT_CACHE_ENTRIES];
+
+    // THE USE-AFTER-FREE GUARD. The slots above point straight into the maps' nodes. That
+    // is sound while they live -- unordered_map node addresses are stable across insert and
+    // rehash, so growth can never invalidate a slot -- but ERASE frees the node, and two
+    // places erase: the eviction sweep in WorldGeometry_OnResourceMemoryFreed and
+    // WorldGeometry_ReleaseAll. Both bump this counter AS they erase (see the call sites),
+    // and a hit is taken only when the slot was filled at its current value, so one erase
+    // anywhere retires every slot at once and no stale pointer can ever be dereferenced.
+    //
+    // Retiring the whole cache is the right trade because evictions are BURSTY: a track-unit
+    // swap frees thousands of mirrors in one notification storm and would have invalidated
+    // most of the cache anyway, while an ordinary frame erases nothing and pays nothing. The
+    // alternative -- a per-node back-index so an erase could clear just its slot -- would put
+    // bookkeeping on the create path to save a few hundred refills per track swap.
+    u64 suGeometryGeneration = 1;   // starts at 1: 0 is reserved for "slot never filled"
+
+    inline void RetireFrontCache()
+    {
+        ++suGeometryGeneration;
+        if (suGeometryGeneration == 0)      // 64-bit, so unreachable in practice; keeps the
+            suGeometryGeneration = 1;       // "0 means empty" invariant true unconditionally
+    }
+
+    // The words that actually discriminate one draw from another. This picks the SLOT only
+    // -- the full keys are still validated on a hit -- so a weak mix can cost a conflict
+    // miss and never a wrong mirror. The run's start/count are in here because the pointers
+    // alone do not separate draws (one index header serves several runs, slice 0 of an
+    // instanced draw among them) -- and so are the VERTEX PLAN's stride/DEC3N words, because
+    // one vertex header is bound under several technique plans a frame (lit, z-only,
+    // shadow) that share every other word.
+    // ⚠ MEASURED 2026-08-15: without the plan words in the slot hash the lit and z-only
+    // draws of every mesh mapped to ONE slot and evicted each other every frame -- a flat
+    // 50% miss rate that did not move when the table was quadrupled. That is thrash, not
+    // capacity, and it made Prepare MORE expensive than the maps alone (12.6% vs 10.7%).
+    inline u32 FrontCacheSlot(const WorldGeometryVertexPlan& lrVertexPlan,
+                              const WorldGeometryIndexPlan& lrIndexPlan)
+    {
+        u64 luHash = static_cast<u64>(reinterpret_cast<uintptr_t>(lrVertexPlan.mpHeader));
+        luHash ^= static_cast<u64>(reinterpret_cast<uintptr_t>(lrIndexPlan.mpHeader))
+                  * 0x9E3779B97F4A7C15ull;
+        luHash += static_cast<u64>(lrIndexPlan.muStartIndex) * 0xC2B2AE3D27D4EB4Full;
+        luHash ^= static_cast<u64>(lrIndexPlan.muIndexCount) * 0x165667B19E3779F9ull;
+        luHash += (static_cast<u64>(lrVertexPlan.muExpandedStride & 0xFFFFu)
+                   | (static_cast<u64>(lrVertexPlan.muDec3nCount & 0xFFFFu) << 16)
+                   | (static_cast<u64>(lrIndexPlan.muMappedPrimitiveCount) << 32))
+                  * 0x94D049BB133111EBull;
+        luHash *= 0xBF58476D1CE4E5B9ull;
+        // Take bits 32..46 (15 bits for 32768 slots): multiplication carries entropy
+        // upward, and the low bits of a heap pointer are alignment zeros shared by every key.
+        return static_cast<u32>(luHash >> 32) & (KU_FRONT_CACHE_ENTRIES - 1u);
+    }
+
     // ---- counters -----------------------------------------------------------
     u32 suVertexBuffersCreated  = 0;
     u32 suIndexBuffersCreated   = 0;
@@ -157,6 +323,11 @@ namespace
     u32 suVertexBuffersEvicted  = 0;
     u32 suIndexBuffersEvicted   = 0;
     u32 suCreateFailures        = 0;
+    // Front-cache hit/miss, so the log line can show whether the fast path is actually
+    // carrying the frame. Deliberately NOT part of ReportIfDue's "has anything changed"
+    // test -- they move every draw, and a report every draw is exactly what must not happen.
+    u64 suFrontCacheHits        = 0;
+    u64 suFrontCacheMisses      = 0;
     u32 suReportedVertexCreated = 0xFFFFFFFFu;   // forces the first report
     u32 suReportedIndexCreated  = 0;
     u32 suReportedEvictions     = 0;
@@ -187,8 +358,11 @@ namespace
         }
     }
 
-    // One log line, at most every ten seconds AND only when a counter moved. The
-    // draw path calls this; it must never allocate and must almost never do work.
+    // One log line, at most every ten seconds AND only when a counter moved. Called from
+    // the front cache's MISS path now (see WorldGeometry_Prepare), which reports the same
+    // events at the same times: every creation happens on that path by definition, and
+    // every eviction retires the whole front cache, so the frame after one is all misses.
+    // It must never allocate and must almost never do work.
     void ReportIfDue()
     {
         const bool lbChanged = (suVertexBuffersCreated != suReportedVertexCreated)
@@ -214,10 +388,11 @@ namespace
         suReportedIndexCreated  = suIndexBuffersCreated;
         suReportedEvictions     = suVertexBuffersEvicted + suIndexBuffersEvicted;
 
-        char lacMsg[256];
+        char lacMsg[320];
         std::snprintf(lacMsg, sizeof(lacMsg),
                       "[worldgeom] retained VB=%u (%.2f MB) IB=%u (%.2f MB)"
-                      " live=%u/%u evicted VB=%u IB=%u createFail=%u\n",
+                      " live=%u/%u evicted VB=%u IB=%u createFail=%u"
+                      " front=%llu hit/%llu miss\n",
                       suVertexBuffersCreated,
                       static_cast<double>(suVertexBytes) / (1024.0 * 1024.0),
                       suIndexBuffersCreated,
@@ -225,7 +400,9 @@ namespace
                       static_cast<unsigned>(sVertexBuffers.size()),
                       static_cast<unsigned>(sIndexBuffers.size()),
                       suVertexBuffersEvicted, suIndexBuffersEvicted,
-                      suCreateFailures);
+                      suCreateFailures,
+                      static_cast<unsigned long long>(suFrontCacheHits),
+                      static_cast<unsigned long long>(suFrontCacheMisses));
         CgsDev::Log::WriteToLog(lacMsg);
     }
 
@@ -291,19 +468,12 @@ namespace
         return true;
     }
 
-    RetainedVertexBuffer* AcquireVertexBuffer(const WorldGeometryVertexPlan& lrPlan)
+    // lrKey is MakeVertexKey(lrPlan), built by the caller so the front-cache miss path can
+    // reuse it for the slot it is about to fill.
+    RetainedVertexBuffer* AcquireVertexBuffer(const WorldGeometryVertexPlan& lrPlan,
+                                              const VertexKey& lrKey)
     {
-        VertexKey lKey;
-        std::memset(&lKey, 0, sizeof(lKey));
-        lKey.mpHeader         = lrPlan.mpHeader;
-        lKey.muSourceStride   = lrPlan.muSourceStride;
-        lKey.muExpandedStride = lrPlan.muExpandedStride;
-        lKey.muDec3nCount     = lrPlan.muDec3nCount;
-        lKey.muNumVertices    = lrPlan.muNumVertices;
-        for (u32 lu = 0; lu < lrPlan.muDec3nCount && lu < 16u; ++lu)
-            lKey.mau16Dec3nOffsets[lu] = lrPlan.mau16Dec3nOffsets[lu];
-
-        VertexMap::iterator lIt = sVertexBuffers.find(lKey);
+        VertexMap::iterator lIt = sVertexBuffers.find(lrKey);
         if (lIt != sVertexBuffers.end())
             return lIt->second.mpBuffer != nullptr ? &lIt->second : nullptr;
 
@@ -344,8 +514,8 @@ namespace
 
         // A failed creation is cached too (as a null mirror) so a mesh that cannot be
         // retained does not retry -- and re-fail -- on every single draw.
-        RetainedVertexBuffer& lrStored = sVertexBuffers[lKey] = lEntry;
-        RegisterPages(sVertexPages, lKey, lEntry.mpHeader,
+        RetainedVertexBuffer& lrStored = sVertexBuffers[lrKey] = lEntry;
+        RegisterPages(sVertexPages, lrKey, lEntry.mpHeader,
                       lEntry.mpSourceBegin, lEntry.mpSourceEnd);
         return lrStored.mpBuffer != nullptr ? &lrStored : nullptr;
     }
@@ -383,23 +553,14 @@ namespace
         return luTriangles;
     }
 
+    // lrKey is MakeIndexKey(lrPlan); same reason as AcquireVertexBuffer above.
     RetainedIndexBuffer* AcquireIndexBuffer(const WorldGeometryIndexPlan& lrPlan,
+                                            const IndexKey& lrKey,
                                             bool* lpbSkip)
     {
         *lpbSkip = false;
 
-        IndexKey lKey;
-        std::memset(&lKey, 0, sizeof(lKey));
-        lKey.mpHeader         = lrPlan.mpHeader;
-        lKey.muStartIndex     = lrPlan.muStartIndex;
-        lKey.muIndexCount     = lrPlan.muIndexCount;
-        lKey.muResetIndex     = lrPlan.muResetIndex;
-        lKey.miPrimitiveType  = lrPlan.miMappedPrimitiveType;
-        lKey.muPrimitiveCount = lrPlan.muMappedPrimitiveCount;
-        lKey.mu8Reset32Bit    = static_cast<u8>((lrPlan.mbResetEnabled ? 1u : 0u)
-                                              | (lrPlan.mb32Bit ? 2u : 0u));
-
-        IndexMap::iterator lIt = sIndexBuffers.find(lKey);
+        IndexMap::iterator lIt = sIndexBuffers.find(lrKey);
         if (lIt != sIndexBuffers.end())
         {
             if (lIt->second.mpBuffer == nullptr)
@@ -471,8 +632,8 @@ namespace
             {
                 lEntry.muPrimitiveCount = 0;
                 lEntry.muFirstIndexCount = 0xFFFFFFFFu;   // the SKIP marker (see above)
-                sIndexBuffers[lKey] = lEntry;
-                RegisterPages(sIndexPages, lKey, lEntry.mpHeader,
+                sIndexBuffers[lrKey] = lEntry;
+                RegisterPages(sIndexPages, lrKey, lEntry.mpHeader,
                               lEntry.mpSourceBegin, lEntry.mpSourceEnd);
                 *lpbSkip = true;
                 return nullptr;
@@ -529,10 +690,28 @@ namespace
             }
         }
 
-        RetainedIndexBuffer& lrStored = sIndexBuffers[lKey] = lEntry;
-        RegisterPages(sIndexPages, lKey, lEntry.mpHeader,
+        RetainedIndexBuffer& lrStored = sIndexBuffers[lrKey] = lEntry;
+        RegisterPages(sIndexPages, lrKey, lEntry.mpHeader,
                       lEntry.mpSourceBegin, lEntry.mpSourceEnd);
         return lrStored.mpBuffer != nullptr ? &lrStored : nullptr;
+    }
+
+    // The only place a WorldGeometryDraw is composed, so the front-cache hit path and the
+    // map path cannot drift apart in what they hand the caller.
+    inline void FillDraw(const RetainedVertexBuffer& lrVertex,
+                         const RetainedIndexBuffer& lrIndex,
+                         WorldGeometryDraw* lpOutDraw)
+    {
+        lpOutDraw->mpVertexBuffer   = lrVertex.mpBuffer;
+        lpOutDraw->mpIndexBuffer    = lrIndex.mpBuffer;
+        lpOutDraw->muExpandedStride = lrVertex.muStride;
+        lpOutDraw->muNumVertices    = lrVertex.muNumVertices;
+        lpOutDraw->miPrimitiveType  = lrIndex.miPrimitiveType;
+        lpOutDraw->muPrimitiveCount = lrIndex.muPrimitiveCount;
+        lpOutDraw->muFirstIndexCount = lrIndex.muFirstIndexCount;
+        lpOutDraw->mau32FirstIndices[0] = lrIndex.mau32FirstIndices[0];
+        lpOutDraw->mau32FirstIndices[1] = lrIndex.mau32FirstIndices[1];
+        lpOutDraw->mau32FirstIndices[2] = lrIndex.mau32FirstIndices[2];
     }
 
     inline bool RangeHit(const void* lpHeader, const u8* lpBegin, const u8* lpEnd,
@@ -554,9 +733,34 @@ EWorldGeometryPrepare WorldGeometry_Prepare(const WorldGeometryVertexPlan& lrVer
         || lrIndexPlan.muIndexCount == 0)
         return E_WORLDGEOMETRY_UNAVAILABLE;
 
+    // ---- fast path: the same mesh, drawn again ---------------------------------------
+    // Steady state is a repeat draw, so try the one slot these plans hash to before going
+    // near either map. The hit is taken ONLY when both conditions hold:
+    //   * the slot was filled at the CURRENT generation -- nothing has been erased since,
+    //     so its two node pointers still point at live map values (see suGeometryGeneration);
+    //   * BOTH stored keys match these plans in full -- the same identity RawEqual would
+    //     have tested, so the mirrors returned are exactly the ones the map lookups would
+    //     have found, under this plan's stride/primitive type and no other's.
+    // Anything else -- a retired slot, a different mesh landing on the slot, a first-ever
+    // draw -- is a miss and falls through to the maps unchanged.
+    const u32 luSlot = FrontCacheSlot(lrVertexPlan, lrIndexPlan);
+    GeometryFrontCacheEntry& lrSlot = saFrontCache[luSlot];
+    if (lrSlot.muGeneration == suGeometryGeneration
+        && VertexKeyMatchesPlan(lrSlot.mVertexKey, lrVertexPlan)
+        && IndexKeyMatchesPlan(lrSlot.mIndexKey, lrIndexPlan))
+    {
+        ++suFrontCacheHits;
+        FillDraw(*lrSlot.mpVertex, *lrSlot.mpIndex, lpOutDraw);
+        return E_WORLDGEOMETRY_READY;
+    }
+    ++suFrontCacheMisses;
+
+    // ---- slow path: the maps, exactly as before --------------------------------------
     // Sized once for the measured live set (~10k VB / ~5k IB mirrors while driving) so
-    // the per-draw find walks short bucket chains from the start instead of rehashing
-    // its way up through a dozen doublings.
+    // the find walks short bucket chains from the start instead of rehashing its way up
+    // through a dozen doublings. It sits here rather than above the fast path because a
+    // slot can only be filled by this path, so nothing can hit the cache before the first
+    // insert -- and the fast path is left with no statics to test.
     static bool sbReserved = false;
     if (!sbReserved)
     {
@@ -565,26 +769,33 @@ EWorldGeometryPrepare WorldGeometry_Prepare(const WorldGeometryVertexPlan& lrVer
         sIndexBuffers.reserve(8192u);
     }
 
-    const RetainedVertexBuffer* const lpVertex = AcquireVertexBuffer(lrVertexPlan);
+    const VertexKey lVertexKey = MakeVertexKey(lrVertexPlan);
+    RetainedVertexBuffer* const lpVertex = AcquireVertexBuffer(lrVertexPlan, lVertexKey);
     if (lpVertex == nullptr)
         return E_WORLDGEOMETRY_UNAVAILABLE;
 
+    const IndexKey lIndexKey = MakeIndexKey(lrIndexPlan);
     bool lbSkip = false;
-    const RetainedIndexBuffer* const lpIndex = AcquireIndexBuffer(lrIndexPlan, &lbSkip);
+    RetainedIndexBuffer* const lpIndex = AcquireIndexBuffer(lrIndexPlan, lIndexKey, &lbSkip);
     if (lpIndex == nullptr)
         return lbSkip ? E_WORLDGEOMETRY_SKIP : E_WORLDGEOMETRY_UNAVAILABLE;
 
-    lpOutDraw->mpVertexBuffer   = lpVertex->mpBuffer;
-    lpOutDraw->mpIndexBuffer    = lpIndex->mpBuffer;
-    lpOutDraw->muExpandedStride = lpVertex->muStride;
-    lpOutDraw->muNumVertices    = lpVertex->muNumVertices;
-    lpOutDraw->miPrimitiveType  = lpIndex->miPrimitiveType;
-    lpOutDraw->muPrimitiveCount = lpIndex->muPrimitiveCount;
-    lpOutDraw->muFirstIndexCount = lpIndex->muFirstIndexCount;
-    lpOutDraw->mau32FirstIndices[0] = lpIndex->mau32FirstIndices[0];
-    lpOutDraw->mau32FirstIndices[1] = lpIndex->mau32FirstIndices[1];
-    lpOutDraw->mau32FirstIndices[2] = lpIndex->mau32FirstIndices[2];
+    // Only a READY outcome takes a slot. The cached-failure and SKIP outcomes are rare,
+    // already answered by a single map probe, and leaving them out is what lets a filled
+    // slot mean one unambiguous thing -- "these two mirrors, submit them" -- with no
+    // outcome field for the hit path to test.
+    //
+    // The generation is read AFTER the acquires on purpose: it is the generation these two
+    // pointers are live under. Nothing on the acquire path can erase a node (creation only
+    // inserts, and D3D9's own managed-pool eviction does not run our free hook), so it
+    // cannot have moved between the lookup and this store.
+    lrSlot.mVertexKey   = lVertexKey;
+    lrSlot.mIndexKey    = lIndexKey;
+    lrSlot.mpVertex     = lpVertex;
+    lrSlot.mpIndex      = lpIndex;
+    lrSlot.muGeneration = suGeometryGeneration;
 
+    FillDraw(*lpVertex, *lpIndex, lpOutDraw);
     ReportIfDue();
     return E_WORLDGEOMETRY_READY;
 }
@@ -649,6 +860,13 @@ void WorldGeometry_OnResourceMemoryFreed(const void* lpBase, size_t luSize)
                     lrKeys[luKept++] = lrKeys[lu];  // still live; keep the reference
                     continue;
                 }
+                // BEFORE the Release AND the erase, never after: a front-cache slot may
+                // point at this node and hand out its mpBuffer, so the cache is retired
+                // first and no window exists in which a slot could still be believed. One
+                // increment, adjacent to the free, so the ordering cannot be lost in a later
+                // edit. (Bumping per eviction rather than per sweep costs nothing -- the
+                // effect is the same whole-cache retire.)
+                RetireFrontCache();
                 if (lIt->second.mpBuffer != nullptr)
                 {
                     lIt->second.mpBuffer->Release();
@@ -678,6 +896,7 @@ void WorldGeometry_OnResourceMemoryFreed(const void* lpBase, size_t luSize)
                     lrKeys[luKept++] = lrKeys[lu];
                     continue;
                 }
+                RetireFrontCache();     // before the Release and the erase; see the vertex sweep
                 if (lIt->second.mpBuffer != nullptr)
                 {
                     lIt->second.mpBuffer->Release();
@@ -695,6 +914,13 @@ void WorldGeometry_OnResourceMemoryFreed(const void* lpBase, size_t luSize)
 
 void WorldGeometry_ReleaseAll()
 {
+    // First, before a single node dies: every front-cache slot points into the maps about
+    // to be cleared, so retire them all up front (unconditionally here -- this erases
+    // everything by definition).
+    RetireFrontCache();
+    suFrontCacheHits   = 0;
+    suFrontCacheMisses = 0;
+
     for (VertexMap::iterator lIt = sVertexBuffers.begin(); lIt != sVertexBuffers.end(); ++lIt)
     {
         if (lIt->second.mpBuffer != nullptr)
