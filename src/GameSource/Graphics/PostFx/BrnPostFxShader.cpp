@@ -390,6 +390,69 @@ namespace renderengine
 #endif
 
 // ==================================================================================================
+// MotionBlurState::Construct
+//
+// DWARF HOME: references/DecFIGS/dwarfdump/GameSource/Graphics/PostFx/BrnPostFxShader.cpp:5, whose
+// own source-line comment reads "// BrnPostFxShader.cpp:117" -- i.e. THIS file, not a camera TU.
+// (The step-2 driver report guessed "the camera side"; the DWARF puts the definition here, next to
+// MotionBlurState::Update at BrnPostFxShader.cpp:130, and this file already owns the type's
+// declaration.)
+//
+// NO STANDALONE X360 SYMBOL. A name scan of all 30,095 exports in
+// .ida-exports/BURNOUT_X360_ARTIST.XEX finds MotionBlurState::Update @0x823F8490 and NO
+// MotionBlurState::Construct -- the console compiler INLINED it into its one caller,
+// BrnPostFx::Construct @0x82409F80. So the body is recovered from the CALLER's assembly, and
+// AGENTS.md's inlining-reversal rule is what puts it back as a call (BrnPostFx.cpp:386 already
+// makes that call; this is the definition it has been missing).
+//
+// THE ASM, instruction for instruction (asm 0x8240A3D0-0x8240A448; r29 = the BrnPostFx `this`,
+// r11 = r29 + 0x450 == this MotionBlurState sub-object, r10 = r11 + 0x40, and the three index
+// registers are constants set far earlier in the function: r24 = 0x10 @0x82409F90, r25 = 0x20
+// @0x8240A218, r23 = 0x30 @0x8240A0B0, r30 = 1):
+//
+//   0x8240A3F8  lvx128  v0, r0, r9    ; r9 = rw::math::vpu::detail::gIVector  @0x82181500 {1,0,0,0}
+//   0x8240A400  stvx128 v0, r0, r11   ;   -> mCurrentWVP.xAxis   (+0x00)
+//   0x8240A408  lvx128  v0, r0, r8    ; r8 = unk_82181510                     {0,1,0,0}
+//   0x8240A410  stvx128 v0, r11, r24  ;   -> mCurrentWVP.yAxis   (+0x10)
+//   0x8240A418  lvx128  v0, r0, r7    ; r7 = unk_82181520                     {0,0,1,0}
+//   0x8240A41C  stvx128 v0, r11, r25  ;   -> mCurrentWVP.zAxis   (+0x20)
+//   0x8240A420  lvx128  v0, r0, r6    ; r6 = unk_82181530                     {0,0,0,1}
+//   0x8240A424  stvx128 v0, r11, r23  ;   -> mCurrentWVP.wAxis   (+0x30)
+//   0x8240A428..0x8240A444             ; the SAME four vectors again, base r10 == r11 + 0x40
+//                                      ;   -> mPreviousWVP.{x,y,z,w}Axis      (+0x40..+0x70)
+//   0x8240A448  stw     r30, 0x80(r11) ;   -> meQuality = 1
+//
+// THE FOUR CONSTANTS ARE THE IDENTITY BASIS, DUMPED RATHER THAN ASSUMED.
+// scratch/postfx_wave1b_dossiers/DATA_DUMP.md:1678 gives 0x82181510 = {0, 1.0f, 0, 0} with the two
+// following 16-byte rows {0,0,1.0f,0} and {0,0,0,1.0f}; gIVector @0x82181500 = {1,0,0,0} is pinned
+// in this tree at CameraUtils.cpp:128 and used the same way by BrnSkyDomeManager.cpp:507 and
+// ExternalPhysicsBody.cpp:655. Two runs of those four rows over two 64-byte blocks IS
+// rw::math::vpu::Matrix44::SetIdentity() twice -- which is precisely what the DWARF hint listing
+// for this function shows, two SetIdentity calls and nothing else. The de-inlined call is therefore
+// the reconstruction, not a paraphrase of it.
+//
+// WHY meQuality BELONGS TO THIS FUNCTION AND NOT TO ITS CALLER. Inlining erases the call boundary
+// in the asm, so the asm cannot settle it -- but the DWARF can: mCurrentWVP, mPreviousWVP and
+// meQuality are all under a `private:` section of MotionBlurState (dwarfdump BrnPostFxShader.h:66 /
+// :67 / :68), so BrnPostFx, which is not a friend, could not have written +0x80 itself. The store
+// is inside Construct. (A plain store is not a call, so its absence from the DWARF's call-only hint
+// listing is not evidence either way.)
+//
+// E_QUALITY_EXPENSIVE, not "1": r30 is 1, and the DWARF enum list makes 1 == E_QUALITY_EXPENSIVE
+// (BrnPostFxShader.h:44). Named, per AGENTS.md's logical-type-restoration rule.
+//
+// WHAT IS *NOT* TOUCHED, reproduced as written: maViewCache[3] (+0x84). The caller's asm writes
+// nothing past +0x80, and Update is the only reader/writer of the cache. Zeroing it here would be
+// behaviour the binary does not have.
+// ==================================================================================================
+void MotionBlurState::Construct()
+{
+    mCurrentWVP.SetIdentity();
+    mPreviousWVP.SetIdentity();
+    meQuality = E_QUALITY_EXPENSIVE;
+}
+
+// ==================================================================================================
 // X360 0x82401538 -- BrnPostFxShader::BrnPostFxShader
 //
 // Zero the five {rw::Resource, state pointer} pairs and the two motion-blur sampler resource blocks.
@@ -1200,42 +1263,39 @@ void BrnPostFxShader::Render(f32 lfWhiteLevel,
 
     if (lbEnableVignette)
     {
-        // MEMBER-NAME SHIFT IN rwgpfxvignette.h -- READ THIS BEFORE "FIXING" THE LINES BELOW.
+        // THE MEMBER-NAME SHIFT THIS BLOCK USED TO DOCUMENT IS FIXED (2026-08-15, step-3 wave).
         // The composite reads its vignette state as four Vector4s: +0x00 a control vector whose .x is
         // the gradient sharpness and whose .y is the rotation angle, +0x10 the INNER colour, +0x20 the
-        // OUTER colour, +0x30 centre.xy / scale.xy. The committed
-        // rw::graphics::postfx::Vignette::State names those four mInnerColour / mOuterColour /
-        // mControlA / mControlB (plus a trailing mfSharpness at +0x40 this function never reads) --
-        // i.e. it is shifted one Vector4 late.
-        // THE PROOF is BrnPostFx's own constructor seeding (BrnPostFx.cpp:33-48): {0,0,0,0} /
-        // {1,1,1,1} / {1,1,1,1} / {0.5,0.5,1,1}. Under the composite's reading the last one is centre
-        // (0.5, 0.5) and scale (1, 1) -- the screen centre at unit scale, fed to a constant literally
-        // named VignetteCentreXyScaleXy. Under the committed reading it is an unexplained "controlB".
-        // Correcting rwgpfxvignette.h has to move rwgpfxvignette.cpp's SetState and BrnPostFx.cpp's
-        // ctor with it, so it is NOT done here; the lines below write the CORRECT BYTES through the
-        // CURRENT names and say what each one really is. (This branch cannot run on this build -- see
-        // the "why the index is 0" banner.)
-        const f32 lfSharpParam        = (lVignetteState.mInnerColour.x * KF_HALF) + KF_HALF;  // +0x00 .x = sharpness
+        // OUTER colour, +0x30 centre.xy / scale.xy. rw::graphics::postfx::Vignette::State used to name
+        // those mInnerColour / mOuterColour / mControlA / mControlB (plus a phantom trailing
+        // mfSharpness at +0x40) -- shifted one Vector4 late -- so the lines below wrote the correct
+        // bytes through the wrong names on purpose. rwgpfxvignette.h now carries the DecFIGS member
+        // set (m_gradientScalars / m_innerColour / m_outerColour / m_centerScale, and the State is
+        // exactly 0x40 bytes), pinned offset-by-offset against Vignette::SetState @0x823FE8B0 and the
+        // constructor @0x82403DB8; the reads below are simply renamed to match, with no change of
+        // meaning and no change of byte. (This branch still cannot run on this build -- see the
+        // "why the index is 0" banner.)
+        const f32 lfSharpParam        = (lVignetteState.m_gradientScalars.x * KF_HALF) + KF_HALF;  // +0x00 .x = sharpness
         const f32 lfGradientSharpness = powf(lfSharpParam, KF_VIGNETTE_GRADIENT_POWER);
         const f32 lfGradientMul       = (lfGradientSharpness * KF_VIGNETTE_GRADIENT_LIMIT) + KF_ONE;
         const f32 lfGradientAdd       = -(lfGradientSharpness * KF_VIGNETTE_GRADIENT_LIMIT);
 
         // VignetteAngle: lane x only, taken from the control vector's y. The console does it with one
         // vrlimi128 (rotate left one word, insert lane x); the DWARF names it SetX<VectorAxisY>.
-        laVertexShaderConstants[E_VS_VAR_VIGNETTE_ANGLE].x = lVignetteState.mInnerColour.y;
+        laVertexShaderConstants[E_VS_VAR_VIGNETTE_ANGLE].x = lVignetteState.m_gradientScalars.y;
 
         // VignetteCentreXyScaleXy: centre.xy passes through, scale.xy is multiplied by the gradient.
         const rw::math::vpu::Vector4 lVignetteScaleMult = { KF_ONE, KF_ONE, lfGradientMul, lfGradientMul };
         laVertexShaderConstants[E_VS_VAR_VIGNETTE_CENTRE_XY_SCALE_XY] =
-            MultiplyPerLane(lVignetteState.mControlB, lVignetteScaleMult);   // +0x30 = centre / scale
+            MultiplyPerLane(lVignetteState.m_centerScale, lVignetteScaleMult);   // +0x30 = centre / scale
 
         rw::math::vpu::Vector4 lInnerRgbPlusMul =
-            MultiplyPerLane(lVignetteState.mOuterColour, lContrastScale);    // +0x10 = INNER colour
+            MultiplyPerLane(lVignetteState.m_innerColour, lContrastScale);       // +0x10 = INNER colour
         lInnerRgbPlusMul.w = lfGradientMul;
         laPixelShaderConstants[E_PS_VAR_VIGNETTE_INNER_RGB_PLUS_MUL] = lInnerRgbPlusMul;
 
         rw::math::vpu::Vector4 lOuterRgbPlusAdd =
-            MultiplyPerLane(lVignetteState.mControlA, lContrastScale);       // +0x20 = OUTER colour
+            MultiplyPerLane(lVignetteState.m_outerColour, lContrastScale);       // +0x20 = OUTER colour
         lOuterRgbPlusAdd.w = lfGradientAdd;
         laPixelShaderConstants[E_PS_VAR_VIGNETTE_OUTER_RGB_PLUS_ADD] = lOuterRgbPlusAdd;
     }

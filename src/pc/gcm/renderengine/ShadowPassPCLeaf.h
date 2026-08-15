@@ -260,6 +260,29 @@ namespace renderengine
     // merely when the bracket lands.
     // =========================================================================
     void PCBringUpClearRenderTargetState(const RenderTargetState* lpState);
+
+    // =========================================================================
+    // [PC-platform leaf] PCInstallDefaultRenderTargetState -- give the engine its "device's own
+    // surface" state.
+    //
+    // The console installs rw::graphics::postfx::gpDefaultRenderTargetState (X360 dword_83271614)
+    // from renderengine::Device::Start: it is the front-buffer surface descriptor, and it is what
+    // every USE_DEVICE_FOR_WRITE render target binds through -- rw::graphics::postfx::RenderTarget::
+    // Begin @0x823F9250 picks it for that colour mode, and CgsRenderTarget::SetRenderTargetState
+    // @0x827E7588 falls back to it for a target with no section-0 state. The pool's BACK_BUFFER
+    // target (BrnRendererMemory::CreateBackBuffer @0x823F6F78) is USE_DEVICE_FOR_WRITE, so the
+    // post-fx composite (BrnPostFx::Render @0x8240A468: `lpDestinationRenderTarget->Begin(0)`)
+    // lands on the device back buffer ONLY if this state exists. Until now this build's default
+    // was null and Device::SetState(null) is a no-op -- which meant Begin(0) on the back buffer
+    // would leave the SCENE target bound and the composite would draw the scene onto itself.
+    //
+    // On PC the device's own surfaces are the swap chain's back buffer (colour) and the
+    // D3DPRESENT_PARAMETERS auto depth-stencil (D24S8, swap-chain sized -- device.cpp), which is
+    // what this captures, once, right after CreateDevice, at the console's own placement in
+    // Device::Start. Both surfaces are AddRef'd for the device's lifetime (no Reset path exists on
+    // this build). Defined in PostFxRenderTargetPCLeaf.cpp beside Device::SetState, the consumer.
+    // =========================================================================
+    void PCInstallDefaultRenderTargetState(u32 luWidth, u32 luHeight);
 }
 
 // X360 dword_8301090C == CgsDepthStencilStateFactory::saDepthStencilStates[0]: the shared

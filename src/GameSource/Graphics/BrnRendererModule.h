@@ -137,17 +137,19 @@ struct Resource
 // BrnCoronaManager is the real type (GameSource/Graphics/BrnCoronaManager.h, included above) --
 // mCoronaManager is embedded by value below, which needs the complete type, not a stub.
 
-struct CgsBlendStateFactory
-{
-};
-
-struct CgsRasterizerStateFactory
-{
-};
-
-struct CgsDepthStencilStateFactory
-{
-};
+// The three render-state factories are the REAL classes now (gate-flip wave, 2026-08-15) -- the
+// empty placeholder structs that stood here were an ODR fault against the real headers the post-fx
+// TUs include, and they left every state table null: the console's BrnRendererModule::Construct
+// @0x8240A778 constructs the three by-value members through vtbl[0] at 0x8240A950-0x8240A994
+// (`this+0x3940 / +0x3944 / +0x3948`, r4 = mpGraphicsAllocator), and the post-fx composite pushes
+// slots of those tables (saDepthStencilStates[1], saRasterizerStates[2]) -- with the tables null the
+// push was a compare-then-skip and the composite quad drew under the world's back-face cull, i.e. not
+// at all. Their Construct/Destruct/Prepare vtables link: Construct in each factory .cpp,
+// Destruct/Prepare in CgsStateFactoryLinkStubs.cpp. On PC the three Constructs run from the bring-up
+// (BrnRendererModule::Render, beside the post-fx pool) because the module's Construct has no allocator.
+#include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"
+#include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"
+#include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"
 
 struct SortInfo
 {
@@ -374,9 +376,8 @@ private:
     // ---- the frame bracket's END (the off-screen scene target's exit path) -------------------
     // DECLARATIONS ONLY: the reconstructed bodies for all three are delivered in this pass's
     // bodies/ directory and are deliberately NOT mounted into BrnRendererModule.cpp yet -- they
-    // call the three state factories, which are still empty placeholder structs in this header
-    // (see the CgsBlendStateFactory / CgsRasterizerStateFactory / CgsDepthStencilStateFactory
-    // definitions above). The full, ordered precondition list for mounting them is in the pass
+    // call the three state factories (which ARE the real classes in this header since the
+    // 2026-08-15 gate-flip wave; that precondition is met). The full, ordered precondition list for mounting them is in the pass
     // REPORT (scratch/postfx_round3_out/G4_bracket_end/REPORT.md section 2.4). Nothing calls any
     // of the three today, so declaring them adds no link requirement.
     //

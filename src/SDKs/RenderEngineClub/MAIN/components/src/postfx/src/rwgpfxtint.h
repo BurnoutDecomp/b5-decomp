@@ -45,13 +45,28 @@ namespace postfx
     // The X360 block is 0x80 bytes (m_blendLock follows at +0x80); the named destination fields
     // are laid out first and the caller-filled remainder is carried as opaque source storage
     // (PC-semantic parity, not byte-matched).
+    // ⚠ LAYOUT CORRECTION -- THE COMMITTED VERSION WAS MISSING `numSources` AND SHIFTED EVERY
+    // FIELD AFTER IT BY ONE WORD. The DWARF names all eight members
+    // (references/DecFIGS/dwarfdump/.../include/postfx/rwgpfxtintblender.h:14-22) and BOTH X360
+    // writers agree with it word for word:
+    //   Tint::BeginBlendJob @0x823F8310:  `stw r9, 0(r31)` size, `stw r11, 8(r31)` dstStride,
+    //                                     `stw r10, 0xC(r31)` dstSliceStride, `stw r8, 0x10(r31)` dst
+    //   BrnPostFx::BeginTintBlend @0x823F83D8: `stw r11, 4(r29)` numSources, then src[] from +0x14
+    //                                     and factor[] from +0x2C
+    // and the consumer proves it too: rw::graphics::postfx::TintBlend @0x82AD4860 dispatches on
+    // `lwz r10, 4(r3)` -- the source count -- as its jump-table index. With the committed layout
+    // BeginBlendJob wrote the row pitch into the slot the job reads as its VARIANT INDEX, i.e. an
+    // out-of-range indirect jump the moment the tint blend ever ran.
     struct TintBlendParameters
     {
-        u32   size;            // colour-lookup edge (== texture width)
-        u32   dstStride;       // destination row pitch (bytes)
-        u32   dstSliceStride;  // destination slice pitch (bytes)
-        u8*   dst;             // destination pixel data
-        u8    mauSourceOpaque[0x80 - (3 * sizeof(u32) + sizeof(void*))]; // numSources/src[]/factor[]
+        u32   size;            // +0x00  colour-lookup edge (== texture width)
+        u32   numSources;      // +0x04  cube count the blend job mixes (the TintBlend jump index)
+        u32   dstStride;       // +0x08  destination row pitch (bytes)
+        u32   dstSliceStride;  // +0x0C  destination slice pitch (bytes)
+        u8*   dst;             // +0x10  destination pixel data
+        u8*   src[6];          // +0x14  source cube pixel data (filled by BrnPostFx::BeginTintBlend)
+        f32   factor[6];       // +0x2C  per-source blend weight
+        u8    pad[60];         // +0x44  the block is 0x80 bytes on the guest (m_blendLock follows)
     };
 
     class Tint
@@ -79,11 +94,11 @@ namespace postfx
         // caller (BrnPostFx::BeginTintBlend) to fill the source list and schedule the blend.
         TintBlendParameters& BeginBlendJob();
 
-        // rwgpfxtint.h:98 (DWARF) -- close the blend: unlock the colour-lookup surface the job wrote.
+        // DWARF rwgpfxtint.h:39 -- close the blend: unlock the colour-lookup surface the job wrote.
         // INLINED on the X360 (BrnPostFx::Render 0x8240A4DC-0x8240A4F4); body belongs to this TU.
         void EndBlendJob();
 
-        // rwgpfxtint.h:77 (DWARF) -- release the colour-lookup texture and free the two rw resources
+        // DWARF rwgpfxtint.h:27 -- release the colour-lookup texture and free the two rw resources
         // it and its texture-state were carved into. INLINED on the X360 (BrnPostFx::Destruct
         // 0x82408150-0x82408188); body belongs to this TU.
         void Release();

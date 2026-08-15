@@ -55,6 +55,12 @@ namespace renderengine
         static void Lock(Texture* lpTexture, s32 liLevel, s32 liFace, s32 liFlags, LockInfo* lpLockInfoOut);
         static void Unlock(Texture* lpTexture, LockInfo* lpLockInfo);
 
+        // ADDITIVE OVERLOAD, the counterpart of the Locked* Lock below. The X360 has ONE Unlock and
+        // both lock descriptors reach it (rw::graphics::postfx::Tint::EndBlendJob passes its
+        // Texture::Locked at BrnPostFx::Render 0x8240A4EC); the PC body ignores the descriptor
+        // entirely and unlocks level 0 off the texture, so this forwards rather than duplicating.
+        static void Unlock(Texture* lpTexture, Locked* lpLocked);
+
         // X360 Lock @0x82B62B20 overload: fill the full Locked descriptor (texture +
         // surface bits + geometry), not just the lean {bits,pitch} LockInfo. The
         // CgsNetworkImageConverter unpack path and BrnNetworkPlayerImageRenderer::Prepare

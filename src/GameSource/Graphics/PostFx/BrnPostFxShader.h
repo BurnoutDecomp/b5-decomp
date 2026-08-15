@@ -88,10 +88,22 @@ struct MotionBlurState
         E_QUALITY_COUNT     = 2,
     };
 
-    // DWARF BrnPostFxShader.h:53 / :61. Bodies are NOT reconstructed by this wave (they belong to
-    // the camera side: Construct sets both matrices to identity, Update rebuilds the current/previous
-    // world-view-projection pair from the view + projection and the view cache). Declared here
-    // because the type is this file's, and because Render's parameter needs the complete layout.
+    // DWARF BrnPostFxShader.h:53 / :61.
+    //
+    // Construct IS NOW BODIED, in this file's .cpp, where the DWARF puts it
+    // (dwarfdump/GameSource/Graphics/PostFx/BrnPostFxShader.cpp:5, source line
+    // "BrnPostFxShader.cpp:117"). ⚠ CORRECTION: an earlier revision of this comment said both
+    // bodies "belong to the camera side". They do not -- both definitions are in THIS TU per the
+    // DWARF; only MotionBlurState::Update's *caller* is on the camera side. Construct has no
+    // standalone X360 symbol (the compiler inlined it into BrnPostFx::Construct @0x82409F80) and is
+    // recovered from that caller's asm; see the banner over its definition.
+    //
+    // Update (@0x823F8490 -- a real X360 symbol, unlike Construct) is STILL declaration-only: it
+    // rebuilds the current/previous world-view-projection pair from the view + projection and the
+    // three-entry view cache, through the rw::math::fpu double-precision matrix family that does not
+    // exist in this tree (the same blocker as BRN_POSTFX_MOTION_BLUR_REPROJECTION_AVAILABLE in the
+    // .cpp). It is declared here because the type is this file's, and because Render's parameter
+    // needs the complete layout.
     void Construct();
     void Update(const rw::math::vpu::Matrix44Affine& lView,
                 const rw::math::vpu::Matrix44& lProjection,

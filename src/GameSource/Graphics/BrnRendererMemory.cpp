@@ -499,6 +499,22 @@ void BrnRendererMemory::PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator
     // leaf honours exactly.
     CreateAntiAliasBuffer(lpAllocator, false);
 
+    // ---- the three targets the post-fx COMPOSITE reads or writes (gate-flip wave, 2026-08-15) ----
+    // BrnPostFx::Render @0x8240A468 dereferences the BLOOM and DEPTH-OF-FIELD slots unconditionally
+    // (`GetBloomBuffer()->GetRenderTarget()->GetTexture(0)` for SamplerBloom / SamplerDof -- the
+    // X360 asm at 0x8240A560-0x8240A5E8 has no null test, and that is FAITHFUL: the console pool
+    // cannot fail), and it composites INTO the BACK_BUFFER slot (`lpDestinationRenderTarget->
+    // Begin(0)`), whose colour mode is USE_DEVICE_FOR_WRITE -- the swap chain, through
+    // gpDefaultRenderTargetState (installed by Device::Start on this build too, see
+    // PCInstallDefaultRenderTargetState). Same three console creators, same relative order as
+    // Construct @0x823FCA38 (bloom, depth-of-field, ..., back buffer LAST -- CreateBackBuffer asserts
+    // the down-sample buffer exists because it borrows its section-4 depth state). The bloom target's
+    // texture MUST exist even while bloom is off: permutation 0's pixel program samples SamplerBloom
+    // unconditionally and is neutral through BloomColour == 0, not through an empty binding.
+    CreateBloomBuffer(lpAllocator);
+    CreateDepthOfFieldBuffer(lpAllocator);
+    CreateBackBuffer(lpAllocator, mu32ScreenWidth, mu32ScreenHeight);
+
     // ⚠️ FLAG PC bring-up INITIALISATION -- give both targets DEFINED contents before the first
     // frame renders into one. NOT a console behaviour: the Xenos clears its EDRAM scene surface
     // from the TILING PASS at the TOP of every frame (first frame included), whereas the PC
@@ -530,6 +546,25 @@ void BrnRendererMemory::PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator
     {
         renderengine::PCBringUpClearRenderTargetState(
             lpAntiAliasTarget->GetSectionRenderTargetState(0));
+    }
+
+    // The BLOOM and DEPTH-OF-FIELD targets are SAMPLED by the composite every frame, and nothing
+    // writes them while their effects are off -- so their D3DPOOL_DEFAULT contents would otherwise
+    // be undefined FOREVER, not just on the first frame. Bloom's neutral is `tap * BloomColour(0)`;
+    // an undefined tap that happens to hold NaN bits makes that NaN, and NaN survives the screen
+    // blend into the presented pixel. Cleared once, same helper. (The back buffer is the swap chain
+    // -- FrameBegin clears it every frame -- so it is not on this list.)
+    CgsRenderTarget* const lpBloomBuffer        = GetBloomBuffer();
+    CgsRenderTarget* const lpDepthOfFieldBuffer = GetDepthOfFieldBuffer();
+    if (lpBloomBuffer != nullptr && lpBloomBuffer->GetRenderTarget() != nullptr)
+    {
+        renderengine::PCBringUpClearRenderTargetState(
+            lpBloomBuffer->GetRenderTarget()->GetSectionRenderTargetState(0));
+    }
+    if (lpDepthOfFieldBuffer != nullptr && lpDepthOfFieldBuffer->GetRenderTarget() != nullptr)
+    {
+        renderengine::PCBringUpClearRenderTargetState(
+            lpDepthOfFieldBuffer->GetRenderTarget()->GetSectionRenderTargetState(0));
     }
 }
 

@@ -682,6 +682,19 @@ namespace BrnGame
         // brightness/contrast), OnEndOfUpdateFrame swaps it, and the dispatch/render side
         // reads it (BrnRendererModule::Render's per-frame AddCommand forward).
         BrnGame::DispatchThreadInputBufferManager mDispatchThreadInputBufferManager; // h:531
+        // The calibration settings the game module OWNS and BridgeGuiToGame @0x823CB758 publishes
+        // into the dispatch write buffer every update frame (its unconditional tail:
+        // LockForWrite / SetBrightness / SetContrast / SetCalibrationUnfriendlyEnablePostFx /
+        // SetCalibrationTextureHandle / UnlockForWrite). DWARF BrnGameModule.h:513/:514/:517
+        // (X360 module +10096740 / +10096744 / +10096748). Construct @0x823C9EA8 seeds them
+        // 50 / 50 / true -- the game's own default slider position (BrnGuiOptionsDataProfile's
+        // KI_DEFAULT_BRIGHTNESS/CONTRAST), which is exactly what makes the post-fx composite's
+        // brightness/contrast constants NEUTRAL (setting*0.01-0.5 == 0, setting*0.01+0.5 == 1).
+        // Landed 2026-08-15 when the composite went live and read 0/0 off the buffer: the picture
+        // came out at contrast 0.5 / brightness -0.5 -- black -- because nothing published these.
+        s32  miBrightness;                          // h:513  (X360 +10096740)
+        s32  miContrast;                            // h:514  (X360 +10096744)
+        bool mbEnableCalibrationUnfriendlyPostFx;   // h:517  (X360 +10096748)
         // The GamePrepare response queue (X360 gm+10094268; its miCount is the
         // gm+10094276 the stage machine tests and its miStartOffset the gm+10094280
         // the event walk adds to the base). The X360 capacity is not recoverable from

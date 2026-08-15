@@ -133,6 +133,13 @@ namespace BrnGame
         sDispatchStack.Prepare(saDispatchMem, sizeof(saDispatchMem), 128);
         mDispatchThreadInputBufferManager.Construct(&sDispatchStack);
 
+        // The calibration settings BridgeGuiToGame publishes every frame -- Construct @0x823C9EA8
+        // seeds them (`*(v9 + 10096740) = 50; *(v9 + 10096744) = 50; *(v9 + 10096748) = 1;`): the
+        // game's default slider position, i.e. the post-fx composite's NEUTRAL brightness/contrast.
+        miBrightness                        = 50;
+        miContrast                          = 50;
+        mbEnableCalibrationUnfriendlyPostFx = true;
+
         // X360 step 4: the debug manager (params block seeded from unk_820DC120 + overrides +
         // Allocators::mpInternalDebugAllocator as the RW allocator; the PC slice passes DEFAULT).
         // ConstructRenderer is the PC bring-up of the 2D debug renderer so the overlay draws over
@@ -363,12 +370,11 @@ namespace BrnGame
     // brightness/contrast forwards (545/546) are platform follow-ons.
     void BrnGameModule::BridgeGuiToGame(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue)
     {
-        if (lpGuiOutQueue == 0)
-            return;
-
+        // The event walk is skipped without a queue (a PC guard: the console always has the GUI
+        // output buffer's queue); the publish tail below runs regardless, as on the console.
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
-        s32 liId = lpGuiOutQueue->GetFirstEvent(&lpEvent, &liSize);
+        s32 liId = (lpGuiOutQueue != 0) ? lpGuiOutQueue->GetFirstEvent(&lpEvent, &liSize) : -1;
         while (liId >= 0 && lpEvent != 0)
         {
             if (liId == 40)   // channel 40: GuiEventOut command records (muEventType @+4)
@@ -508,6 +514,31 @@ namespace BrnGame
         // here either -- BridgeGuiToDirector @0x823CBF70 walks the SAME queue later in the same
         // frame, and clearing it in the first consumer would drop every director command on the
         // floor. DoUpdate now clears once, after both bridges have run.
+
+        // ---- the console's UNCONDITIONAL publish tail (@0x823CB758, after the event loop) -----
+        //     CgsModule::IOBuffer::LockForWrite(v4);                                  v4 = the WRITE buffer
+        //     DispatchThreadInputBuffer::SetBrightness(v4, *(a1 + 10096740));         miBrightness
+        //     DispatchThreadInputBuffer::SetContrast(v4, *(a1 + 10096744));           miContrast
+        //     DispatchThreadInputBuffer::SetCalibrationUnfriendlyEnablePostFx(v4, *(a1 + 10096748));
+        //     DispatchThreadInputBuffer::SetCalibrationTextureHandle(v4, v15);       v15 = qword_82FAE900
+        //     CgsModule::IOBuffer::UnlockForWrite(v4);                                (the null handle;
+        //                                                                              event 546 overrides)
+        // This is how the options-menu brightness / contrast reach the renderer: BrnRendererModule::
+        // Render reads them off the READ buffer for the post-fx composite (GetBrightness @0x8240DCC8 /
+        // GetContrast @0x8240DCFC). Landed 2026-08-15 with the composite: without it the buffer read
+        // 0 / 0 and the frame came out at contrast 0.5 / brightness -0.5 -- black. The texture handle
+        // is left as the buffer's own Clear()'d value (== the console's qword_82FAE900 null handle,
+        // the same word the SetDebugFont family compares against); GUI event 546 -- the calibration
+        // screen's BrightnessContrastPostFxControl -- is a follow-on and not handled yet, so the
+        // handle is never anything else here.
+        {
+            BrnGame::DispatchThreadInputBuffer* const lpWrite = mDispatchThreadInputBufferManager.GetWriteBuffer();
+            lpWrite->LockForWrite();
+            lpWrite->SetBrightness(miBrightness);
+            lpWrite->SetContrast(miContrast);
+            lpWrite->SetCalibrationUnfriendlyEnablePostFx(mbEnableCalibrationUnfriendlyPostFx);
+            lpWrite->UnlockForWrite();
+        }
     }
 
     // ------------------------------------------------------------------------------------
