@@ -652,6 +652,10 @@ namespace Deformation
 		// OPT-IN (BRN_IMPULSE_PROBE=1) so a default run and every golden gate stay byte-identical.
 		// Prints the FIRST few entries with every operand this body consumed, in ONE run -- the
 		// campaign rule is to read values a probe prints directly rather than infer them across runs.
+		// ⚠️ READ `mag` CAREFULLY: the probe sits AFTER the `mvfImpulseMagnitude -= lfAbsorbed`
+		// above, so `mag` is the REMAINING magnitude the chain forwards, not the incoming one. The
+		// incoming magnitude is `mag + absorbed`, and `absorbed / (mag + absorbed)` is `factor`.
+		// (Cost of not knowing this: an `absorbed/mag` ratio of 0.25 that should have been 0.2.)
 		{
 			static s32 siImpulseProbe = -1;
 			if ( siImpulseProbe < 0 )
@@ -659,9 +663,20 @@ namespace Deformation
 				const char* lpcEnv = getenv( "BRN_IMPULSE_PROBE" );
 				siImpulseProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
 			}
-			static u32 suCalls = 0;
+			// ⚠️ TWO WINDOWS (2026-08-16, walls leg 9): the +Y floor support runs this body ~20 times
+			// a frame while the car merely rests, so a flat cap is spent long before anything
+			// interesting happens. Window 1 proves the body runs at all; window 2 keeps only the
+			// applies along a HORIZONTAL body axis with a real magnitude -- what a wall face gives
+			// and what the ground does not.
+			static u32 suCalls      = 0;
+			static u32 suHorizontal = 0;
 			++suCalls;
-			if ( siImpulseProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && suCalls <= 12 )
+			const bool lbHorizontalDir = ( liDir != 2 && liDir != 3 );
+			const f32  lfProbeMag      = lpImpulseParams->mvfImpulseMagnitude.x;
+			const bool lbInteresting   = ( suCalls <= 30u )
+			                          || ( lbHorizontalDir && lfProbeMag > 1.0f
+			                               && ++suHorizontal <= 600u );
+			if ( siImpulseProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && lbInteresting )
 			{
 				*CgsDev::Log::gpDebugPrint
 					<< "[impulse] n " << static_cast<s32>(suCalls)
@@ -685,40 +700,38 @@ namespace Deformation
 		}
 		const f32 lfPassedOn = lfAbsorbed * 0.5f;
 
-		// ⛔⛔ CHAIN-FORWARD HELD 2026-08-15 (walls leg 8) -- the reason is a MEASURED crash in OTHER
-		// code, not a doubt about this body. Landing this function finally made PassOnImpulse run for
-		// real, and every run in which it actually ran died with an access violation (0xC0000005)
-		// inside ImpulsePasser::PassOnImpulse -- fault offset resolved through Burnout_PC.map, and
-		// reproduced on four consecutive runs. Two obvious suspects were MEASURED AND CLEARED:
-		//   * the chain map is FULLY BOUND -- ResetSensors binds all 20 sensors to slots 1..20 and
-		//     ResetDeformation binds slot 0 to &mVehicleBody (probed directly, one run);
-		//   * the spec's neighbour table is real -- e.g. sensor 0 `next[0..5] = 14,2,0,14,14,4`, and
-		//     ⭐ EVERY sensor's next[2] (E_NSD_POS_YAXIS) is 0, i.e. +Y routes straight to slot 0,
-		//     the vehicle body. The route to the momentum bank is exactly where leg 7 said it is.
-		// ⭐⭐ THE REAL BLOCKER IS OBJECT LIFETIME, and it is upstream of this whole subsystem:
-		// DeformationManager::Prepare takes its models from `AllocateDeformableModelPool`, which
-		// CARVES RAW MEMORY from the rw resource allocator (a 5-entry BaseResourceDescriptors +
-		// DoAllocate) and casts it to DeformableObject*. **No C++ constructor ever runs over that
-		// pool**, so every embedded DeformationSensor's vptr is uninitialised -- and PassOnImpulse's
-		// entire job is a VIRTUAL call (vtable slot 1) through exactly that pointer.
-		// ⚠️⚠️ AND NO ASSERT CAN SEE IT: PassOnImpulse's own `mapCollidableBodies[i] != NULL` check
-		// PASSES -- the slot really is non-null; it is the OBJECT behind it that is unconstructed.
-		// ⭐ THE FIX IS ALREADY WRITTEN DOWN, one wave early: BrnDeformableObject_Lifecycle.cpp's
-		// ClearVariables carries a RECONCILE NOTE that the PS3 DeformableObject::ClearVariables
-		// @0x6BEEC4 runs ImpulsePasser::Construct (landed THIS leg), VehicleRigidBody::Construct and
-		// **the 20-sensor Construct loop** -- the last two are still missing. Land those (or
-		// placement-new the pool) and this gate comes straight out; it is one line.
-		// ⛔ Deliberately NOT a null guard: a guard would turn a located defect back into a silent
-		// drop, which is the exact shape this subsystem keeps being bitten by.
-		const bool KB_CHAIN_FORWARD_ENABLED = false;
-		if ( KB_CHAIN_FORWARD_ENABLED && lpImpulseParams->mpImpulsePasser )
+		// ⭐⭐⭐ CHAIN-FORWARD RELEASED 2026-08-16 (walls leg 9) -- and the leg-8 gate banner that stood
+		// here was WRONG about why. It is worth recording the correction, because the wrong diagnosis
+		// would have cost the next leg a whole wave.
+		//
+		// LEG 8 WROTE: "no C++ constructor ever runs over the model pool, so every embedded
+		// DeformationSensor's vptr is uninitialised". ⛔ FALSE. DeformationManager::Prepare has
+		// placement-newed all 28 models since commit 583acffc ("Deformation Wave 5"):
+		//     for (li = KU_MAX_DEFORMATION_MODELS-1; li >= 0; --li) new (&mpaModels[li]) DeformableObject();
+		// which runs every member's constructor -- the 20 by-value maDeformationSensors and the
+		// by-value mVehicleBody included. Their vptrs were never in doubt.
+		//
+		// ⭐⭐ THE ACTUAL DEFECT was one line UPSTREAM, in the params builders: `ImpulseParams` is a
+		// 192-byte POD declared as a bare local, and `mpImpulsePasser` (+0xB0) had FOUR read sites in
+		// the tree and ZERO write sites. So the test below ran on UNINITIALISED STACK -- a non-null
+		// garbage pointer -- and PassOnImpulse then read `mapCollidableBodies[i]` off a garbage
+		// `this`. That is the 0xC0000005, and it needs no unconstructed object to explain it.
+		// ⚠️ It also explains leg 8's "zeroing the map turned a garbage-AV into a null-AV": the wild
+		// passer pointer aliased the model pool, which leg 8's ClearVariables change had just zeroed.
+		// The clue that looked like confirmation was an artefact of the fix being measured.
+		// ⇒ BrnDeformableObject.cpp now writes `lParams.mpImpulsePasser = &mImpulsePasser` in BOTH
+		//   builders (X360 @0x82625118/0x82625128 and @0x826251B0/0x826251B8; PS3 @0x746F6C/0x746F98),
+		//   along with the four other stores that block was dropping.
+		// ⭐ The `if (mpImpulsePasser)` guard is KEPT even though the console forwards
+		// unconditionally: it is now a real, meaningful test on a field that is really written, and
+		// on the host it is the difference between a located defect and a wild jump if a future
+		// builder ever forgets the store again.
+		if ( lpImpulseParams->mpImpulsePasser )
 		{
 			lpImpulseParams->mpImpulsePasser->PassOnImpulse(
 				lu8NextSlot, lpImpulseParams,
 				Vector4{ lfPassedOn, lfPassedOn, lfPassedOn, lfPassedOn });
 		}
-		(void)lu8NextSlot;
-		(void)lfPassedOn;
 	}
 
 	void DeformationSensor::AddContactsToPenetrationSolver(PenetrationSolver* lpSolver, DeformableObject* lpObject,

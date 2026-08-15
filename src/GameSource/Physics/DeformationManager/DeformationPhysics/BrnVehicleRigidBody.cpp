@@ -1,5 +1,8 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnVehicleRigidBody.h"
 
+#include <cstdlib>                                          // getenv -- the opt-in [chainarrive] probe only
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint -- the opt-in [chainarrive] probe only
+
 // Out-of-line bodies for BrnPhysics::Deformation::VehicleRigidBody::ApplyLocalImpulse (@0x8260E068)
 // and ::RecievePassedOnImpulse (@0x8260DFA0).
 //
@@ -74,6 +77,57 @@ namespace Deformation
             lrDirection.z * lfMagnitude,
             lrDirection.w * lfMagnitude,
         };
+
+        // ---- [chainarrive] PC bring-up instrument -- DELETE WHEN the wall test is banked ---------
+        // OPT-IN (BRN_IMPULSE_PROBE=1) so a default run and every golden gate stay byte-identical.
+        //
+        // ⭐⭐ WHY HERE AND NOWHERE ELSE. The brief's observable is "AddWorldSpaceImpulse is REACHED
+        // with a non-zero impulse", but a probe AT AddWorldSpaceImpulse cannot answer it: block (5)
+        // of DeformableObject::ApplySensorImpulse ALREADY banks there on every contact, chain or no
+        // chain, and so do the wheels. This function is the impulse-passing chain's ARRIVAL and is
+        // reached from nowhere else -- VehicleRigidBody's two virtuals are only ever dispatched
+        // through ImpulsePasser::mapCollidableBodies. A line here IS a chain delivery, by
+        // construction, and it prints the impulse BEFORE the handler so the number is the input the
+        // wall response is built from.
+        {
+            static s32 siArriveProbe = -1;
+            if ( siArriveProbe < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_IMPULSE_PROBE" );
+                siArriveProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+            }
+            // ⚠️ TWO WINDOWS, because one flat cap cannot see both things. The chain delivers ~60
+            // arrivals per frame while the car simply RESTS on the ground (+Y floor support), so a
+            // flat cap of 3000 was consumed 50 m before the wall. The first window proves the chain
+            // came alive at all; the second keeps only arrivals whose impulse is HORIZONTAL-dominant
+            // -- the same normal-direction discriminator the [wall] probe uses to tell a wall face
+            // from the junkyard floor.
+            static u32 suArrivals   = 0;
+            static u32 suHorizontal = 0;
+            ++suArrivals;
+            const f32 lfHorizontal = liImpulse.x * liImpulse.x + liImpulse.z * liImpulse.z;
+            const bool lbInteresting = ( suArrivals <= 30u )
+                                     || ( lfHorizontal > 1.0f && ++suHorizontal <= 600u );
+            if ( siArriveProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && lbInteresting )
+            {
+                const char* lpcRoute = lpVehicle->IsCrashing()          ? "CRASH"
+                                     : lpImpulseParams->mbWorldContact  ? "WALL"
+                                                                        : "CARCAR";
+                // ⭐ The vehicle POSITION is printed with every arrival so a line can be attributed
+                // to a place in the world without correlating two probes across a 275 s log -- the
+                // wall face this campaign drives at is a known z, so `route WALL` at that z with a
+                // horizontal impulse IS the wall taking momentum, in ONE line.
+                const Vector3 lPos = lpVehicle->GetPosition();
+                *CgsDev::Log::gpDebugPrint
+                    << "[chainarrive] n " << static_cast<s32>(suArrivals)
+                    << " route " << lpcRoute
+                    << " dir " << static_cast<s32>(lpImpulseParams->meImpulseDirection)
+                    << " mag " << lfMagnitude
+                    << " impulse " << liImpulse.x << " " << liImpulse.y << " " << liImpulse.z
+                    << " pos " << lPos.x << " " << lPos.y << " " << lPos.z
+                    << "\n";
+            }
+        }
 
         // Route by car state then contact kind.
         if ( lpVehicle->IsCrashing() )                       // *(*(this+4)+1808)

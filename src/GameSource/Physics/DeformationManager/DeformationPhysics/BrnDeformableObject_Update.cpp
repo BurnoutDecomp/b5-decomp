@@ -11,6 +11,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"  // CgsGeometric::AxisAlignedBox
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu::{Dot, Mult, Subtract, ...}
+#include "rw/math/vpu/matrix44affine_operation.h"           // rw::math::vpu::TransformVector (walls leg 9: the per-direction world axis)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"  // CgsGeometric::Sphere (walls leg 9: the sensor radius the limit rows pad by)
 
 // =================================================================================================
 // BrnPhysics::Deformation::DeformableObject -- the per-frame UPDATE core (group "update").
@@ -149,19 +151,14 @@ namespace Deformation
         // ⭐ The shipped X360 image has it SET (byte == 0x01), so the live console path is the row
         // above; the zero arm is the console's own deformation-disabled build option.
         //
-        // ⛔⛔ HELD FALSE 2026-08-15 (walls leg 8) -- A DELIBERATE, DOCUMENTED DIVERGENCE FROM THE
-        // SHIPPED IMAGE, and it is stated plainly rather than buried. Setting it true is CORRECT and
-        // was measured working end to end: DeformationSensor::ApplyLocalImpulse then reports
-        // `maxAllow 0.200000 base 0.200000 expo 1.000000 factor 0.200000 absorbed 146.7` and the
-        // sensor spheres start to dent (`move 0.0047`). It is held for ONE reason:
-        // ⛔ the chain forward out of ApplyLocalImpulse is currently gated (unconstructed pool objects
-        // -> a wild virtual call in ImpulsePasser::PassOnImpulse; see that gate's banner). With the
-        // forward gated, turning this on makes each contact ABSORB ~100-150 units of impulse and
-        // hand it to nobody -- momentum deleted, not transferred. That is the silent-drop shape this
-        // subsystem keeps being bitten by, and it is strictly worse than being inert.
-        // ⭐ FLIP THIS AND THE CHAIN GATE TOGETHER, in the same measured step, once the 20-sensor
-        // Construct loop lands. Neither is useful alone.
-        const bool KB_ALLOW_DRIVE_TIME_DEFORMATION = false;
+        // ⭐⭐⭐ RELEASED 2026-08-16 (walls leg 9) -- the divergence is RETIRED and the flag now carries
+        // the console's own shipped value. Leg 8 held it false for ONE stated reason: with the chain
+        // forward gated, absorbing would delete momentum instead of transferring it. Leg 9 found and
+        // fixed what the gate was really standing on (five dropped `ImpulseParams` stores, chiefly
+        // `mpImpulsePasser` -- see BrnDeformableObject.cpp and BrnDeformationSensor.cpp), so the two
+        // flags were flipped TOGETHER exactly as leg 8 prescribed. This is no longer a divergence:
+        // the shipped X360 image's byte at 0x82F2A346 is 0x01 and so is this.
+        const bool KB_ALLOW_DRIVE_TIME_DEFORMATION = true;
 
         // The two part-type ids whose driven points are skinned through the BOX-CLAMPED path
         // (UpdateSkinningOffsetsWithinBox) -- the bonnet / boot panel types in the asm's
@@ -497,12 +494,14 @@ namespace Deformation
     {
         BrnPhysics::Vehicle::VehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
 
-        // (1) seed the working ImpulseParams from the caller's block + the per-apply args. The asm copies
-        // the incoming params (memcpy v215) then overwrites the magnitude lane (max-folded with the
-        // relative-motion w lane) and the contact-id slot (v215[45] = *(this+26460)). Worked on a local
-        // copy so the caller's block is untouched. FLAG: the v215[45] contact-id store reads an un-named
-        // member at this+26460 with no homed accessor and the ImpulseParams slot-45 has no named field on
-        // the minimal slice -- the store is documented but not modelled (no fabricated member).
+        // (1) seed the working ImpulseParams from the caller's block + the per-apply args. The asm
+        // copies the incoming params WHOLE and then overwrites individual fields:
+        //     0x826078F0  addi r3, r1, var_290    ; Dst == &lParams
+        //     0x826078F8  li   r5, 0xC0           ; Size == sizeof(ImpulseParams) == 192
+        //     0x82607900  mr   r4, r31            ; Src == the caller's block (arg r5)
+        //     0x8260790C  bl   memcpy
+        // so `var_290` IS the local params base, and every `var_XXX` cited below is (0x290 - XXX)
+        // bytes into the block. Worked on a local copy so the caller's block is untouched.
         ImpulseParams lParams = lImpulseParams;
         lParams.mWorldImpulseDirection = lImpulseDir;
         lParams.mvfTimeStep            = lvfTimeStep;
@@ -511,6 +510,21 @@ namespace Deformation
             const f32 lfMag  = lvfImpulseMagnitude.x;
             lParams.mvfImpulseMagnitude.x = (lfMag > lfRelW) ? lfMag : lfRelW;   // vmaxfp
         }
+
+        // ⭐ 2026-08-16 (walls leg 9) -- THE +0xB4 STORE, AND THE FLAG THAT HID IT IS RETIRED.
+        //     0x8260793C  lwz r10, 0x675C(r17)          ; r17 == this, 0x675C == 26460
+        //     0x82607940  stw r10, var_1DC(r1)          ; var_290 - var_1DC == 0xB4
+        // This TU used to call that "the v215[45] contact-id store ... an un-named member at
+        // this+26460", and left it unmodelled. It is NOT un-named: BrnDeformableObject_Lifecycle.cpp's
+        // ResetDeformation already names +26460 `meAbsorptionSet` (it writes E_ABSORPTIONSET_NORMAL
+        // there, and E_ABSORPTIONSET_INVINCIBLE on a type-1 reset), and +0xB4 in ImpulseParams is
+        // `meAbsorptionSet` on the DWARF sequence. Same offset, same name, both already in-tree.
+        // ⛔ WHY IT MATTERS: ApplyCarCarImpulse never set this field, so on the car-car path the
+        // absorption SET index was uninitialised stack -- an out-of-bounds read of a 5-row table by
+        // GetAbsorption / GetSpeedForMaxAbsorbtion / GetProportionToSpeed and of the 5-row
+        // KsaAbsorptionScale in the sensor's RecievePassedOnImpulse. (The world path set it in the
+        // caller, so this is also the console's own single point of truth for both paths.)
+        lParams.meAbsorptionSet = meAbsorptionSet;
 
         // (2) showtime pre-apply: when the vehicle's vtable+0x10 predicate is set (image-settled as
         // IsPlayerVehicleInShowtime), pre-apply a showtime contact impulse (the impulse DIRECTION
@@ -601,18 +615,109 @@ namespace Deformation
             lParams.mvfMaximumAllowedAbsorption = VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f };
         }
 
+        // ⭐⭐ 2026-08-16 (walls leg 9) -- THE SIX PER-DIRECTION LIMIT ROWS (+0x40 mLimitVector).
+        // The console builds a SIX-ROW stack table immediately before the loop and stores row[dir]
+        // into the params block on every iteration. Without it mLimitVector was uninitialised stack
+        // for every apply, and it is read by DeformationSensor::ApplyLocalImpulse @0x825E13E0..
+        // 0x825E1410 (`dot3(mLimitVector - sphereCentre, hitDir)`) to bound how far a sensor may
+        // travel -- i.e. garbage went straight into the compression room, and through it into the
+        // per-contact sensor displacement.
+        //   0x82607A44  lbz  r10, 0x710(vehicle)   ; IsCrashing() selects the source pair
+        //   -- NOT crashing (0x82607A50..0x82607A74):
+        //        lwz r11, 0x19C(lpSensor) ; lvx v0 ; vspltw v13, v0, 3   ; the sensor sphere RADIUS
+        //        lvx v12, this+0x66F0                                    ; mDriveTimeBBoxLimitMin
+        //        lvx v0,  this+0x6700                                    ; mDriveTimeBBoxLimitMax
+        //        vsubfp v0, v0, v13   ->  Max - radius      (the ODD rows)
+        //        vaddfp v13, v12, v13 ->  Min + radius      (the EVEN rows)
+        //   -- crashing (0x82607A78..0x82607AA4): the same shape with the radius padded by 0.5
+        //        (vcfsx(vspltisw 1, 1) == 0.5) and the pair taken from vehicle+0x6D0 / vehicle+0x6E0.
+        //   0x82607AC4/AE4/AEC/AF4/AFC/B04  stvx v13,v0,v13,v0,v13,v0 -> var_1D0..var_180
+        //     i.e. rows {+X,-X,+Y,-Y,+Z,-Z} alternate POSITIVE-limit / NEGATIVE-limit, which is
+        //     exactly the ENextSensorDirection order KA_IMPULSE_DIRECTIONS uses.
+        // ⚠️ FLAG (marked, not buried): the CRASHING arm's pair lives at vehicle+0x6D0 / +0x6E0 and
+        // VehiclePhysics has no named member there yet, so that arm falls back to the drive-time
+        // rows WITH the console's +0.5 radius pad. The junkyard path never crashes; promote the two
+        // vehicle rows when VehiclePhysics' suspension-limit block is homed.
+        Vector3 laLimitRows[KI_NUM_APPLY_DIRECTIONS];
+        {
+            // `lwz r11, 0x19C(lpSensor) ; lvx v0, r11 ; vspltw v13, v0, 3` -- the sensor's LOCAL
+            // sphere, w lane == the radius.
+            const CgsGeometric::Sphere* lpLocalSphere =
+                ( lpSensor != nullptr ) ? lpSensor->GetLocalSpaceSphere() : nullptr;
+            const f32 lfSphereRadius = ( lpLocalSphere != nullptr )
+                                     ? lpLocalSphere->mPositionRadius.w : 0.0f;
+            const f32 lfPad    = lbCrashed ? 0.5f : 0.0f;          // vcfsx(vspltisw 1,1) == 0.5
+            const f32 lfRadius = lfSphereRadius + lfPad;
+            const Vector3& lrMin = GetDriveTimeLimitsMin();        // this + 0x66F0
+            const Vector3& lrMax = GetDriveTimeLimitsMax();        // this + 0x6700
+            const Vector3 lPositive = { lrMin.x + lfRadius, lrMin.y + lfRadius,
+                                        lrMin.z + lfRadius, lrMin.w + lfRadius };   // vaddfp v13
+            const Vector3 lNegative = { lrMax.x - lfRadius, lrMax.y - lfRadius,
+                                        lrMax.z - lfRadius, lrMax.w - lfRadius };   // vsubfp v0
+            for ( s32 liRow = 0; liRow < KI_NUM_APPLY_DIRECTIONS; ++liRow )
+            {
+                laLimitRows[liRow] = ( (liRow & 1) == 0 ) ? lPositive : lNegative;
+            }
+        }
+
+        // ⭐ The world-space body axes the projection below is taken against: the console loads the
+        // vehicle transform's three rotation rows ONCE, above the loop, and rotates the selected
+        // local axis by them inside it.
+        //   0x82607910  lwz r10, 0x194C(this)   ; the attached VehiclePhysics
+        //   0x8260791C  addi r10, r10, 0x10     ; -> mTransform
+        //   0x82607930  lvx128 v124, r0,  r10   ; row 0 (+0x10)
+        //   0x82607928  lvx128 v123, r10, 0x10  ; row 1 (+0x20)
+        //   0x82607938  lvx128 v122, r10, 0x20  ; row 2 (+0x30)
+        Matrix44Affine lBodyTransform;
+        if ( lpVehicle != nullptr ) { lBodyTransform = lpVehicle->GetTransform(); }
+        else                       { lBodyTransform.SetIdentity(); }
+
+        // ⭐ v126 == the IMPULSE VECTOR: `vmulfp128 v126, v116, v120` @0x82607AB4, where the prologue
+        // pinned v116 == lImpulseDir (arg 5) and v120 == lvfImpulseMagnitude (arg 6). Same product
+        // leg 7 recovered for the showtime pre-apply -- a direction times a magnitude.
+        const Vector3 lImpulseVector = vpu::Mult(lImpulseDir, lvfImpulseMagnitude.x);
+
         ++gChainProbe.muSensorImpulse;   // [chain] probe -- ApplySensorImpulse reached block (4)
 
         // (4) the six-direction apply loop. Accumulates the local impulse the body banks in (5).
         Vector3 lAccumulatedLocalImpulse = { 0.0f, 0.0f, 0.0f, 0.0f };
         for ( s32 liDir = 0; liDir < KI_NUM_APPLY_DIRECTIONS; ++liDir )
         {
-            // direction vector (the switch 0x82607BAC). Direction 0 is the zero/identity seed; the others
-            // select +/- a body axis. Carried through the FLAGGED-0 basis table.
+            // direction vector (the switch 0x82607BAC): the six signed unit BODY axes, verbatim the
+            // shared KA_IMPULSE_DIRECTIONS table (case 0/2/4 load a row, case 1/3/5 load it and xor
+            // the sign bit -- `vspltisw v0,-1 ; vslw v0,v0,v0 ; vxor`).
             const Vector3 lDirVec = KsaApplyDirection[liDir];
 
-            // project the impulse onto this direction (vmsum3fp128 of the impulse-dir vs the basis).
-            const f32 lfProjection = vpu::Dot(lImpulseDir, lDirVec);
+            // ⭐⭐⭐ 2026-08-16 (walls leg 9) -- THE PROJECTION IS MAGNITUDE-BEARING, AND IT IS WRITTEN
+            // BACK INTO THE PARAMS BLOCK. The console:
+            //   0x82607C30  vspltw v12, v0, 0 / v10 = splat(y) / v0 = splat(z)   ; the local axis lanes
+            //   0x82607C4C  vmaddfp128 v9,   v124, v12, v9      ; v9  = row0 * axis.x
+            //   0x82607C60  vmaddfp128 v9,   v123, v10, v9      ; v9 += row1 * axis.y
+            //   0x82607C68  vmaddfp128 v127, v122, v0,  v127    ; v127 = v9 + row2 * axis.z
+            //                                                   ; == the axis rotated into WORLD
+            //   0x82607C6C  vmsum3fp128 v0, v126, v127          ; dot3(impulseVector, worldAxis)
+            //   0x82607C70  stvx128 v0, r0, var_280             ; ** lParams.mvfImpulseMagnitude **
+            //   0x82607C74  vcmpgtfp128. v0, v0, v125           ; the >0 skip test uses the SAME value
+            // ⚠️⚠️ The tree used to compute `dot(lImpulseDir, localAxis)` -- a DIMENSIONLESS cosine in
+            // [0,1] -- and never stored it, so the sensor was handed the caller's whole scalar
+            // magnitude (leg 8's probe printed `mag 733.59` on every one of up to six directions
+            // instead of that direction's component). Since VehicleRigidBody::ApplyImpulseToVehicle
+            // banks `KA_IMPULSE_DIRECTIONS[dir] * mvfImpulseMagnitude`, this field IS the number the
+            // wall eventually receives.
+            // ⭐ INDEPENDENT CORROBORATION that the magnitude belongs here: block (5) shapes the
+            // accumulated impulse by KVF_APPLY_FRICTION_SCALE == 1.5e-4 and clamps it at
+            // KVF_APPLY_FRICTION_CLAMP == 1000. A clamp at 1000 can only ever bind on a quantity in
+            // the hundreds -- a real impulse -- and never on a unit cosine.
+            //   ⚠️ vmaddfp128 note: for the VMX128 three-register form the duplicated field is the
+            //   ADDEND (vB == vD), so IDA's `vmaddfp128 vD, vA, vC, vB(=vD)` is vD = vA*vC + vD -- a
+            //   destructive accumulate. That is NOT leg 8's plain-`vmaddfp` rule ("print position 2
+            //   is the addend"), which still holds for the four-distinct-operand form; read the two
+            //   separately. Here only the accumulate reading yields a matrix rotation at all.
+            const Vector3 lWorldAxis = vpu::TransformVector(lBodyTransform, lDirVec);
+            const f32 lfProjection = vpu::Dot(lImpulseVector, lWorldAxis);
+            lParams.mvfImpulseMagnitude =
+                VecFloat{ lfProjection, lfProjection, lfProjection, lfProjection };   // 0x82607C70
+
             ++gChainProbe.muDirsTried;   // [chain] probe
             if ( lfProjection <= 0.0f )   // vcmpgtfp against zero -- skip non-positive directions
             {
@@ -620,10 +725,13 @@ namespace Deformation
             }
             ++gChainProbe.muDirsPassed;   // [chain] probe
 
-            // per-direction params: the direction index. The friendly-fire / double-bounce displacement
-            // scaling (other car +26414 / vehicle crashed -> the FLAGGED double-bounce damp row) folds in
+            // per-direction params: the direction index (`stw r30, var_290` @0x82607C8C) and this
+            // direction's limit row (`lvx128 v11, dir*16(var_1D0) ; stvx128 v11, var_250`
+            // @0x82607C50/0x82607C58). The friendly-fire / double-bounce displacement scaling
+            // (other car +26414 / vehicle crashed -> the FLAGGED double-bounce damp row) folds in
             // here; all rows are FLAGGED-0, so the shaping is inert.
             lParams.meImpulseDirection = static_cast<ENextSensorDirection>(liDir);
+            lParams.mLimitVector       = laLimitRows[liDir];   // 0x82607C50 / 0x82607C58
 
             // magnitude validation tripwire (line 1430) -- non-gating. The asm self-compares the shaped
             // magnitude vector (vcmpeqfp.) to catch a NaN, then streams the real diagnostic whose leading

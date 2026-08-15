@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags (CheckState's failure print)
 
 #include <cmath>   // std::pow (models the VMX exp2/log2 pow-curve in the damp funcs)
+#include <cstdlib> // getenv -- the opt-in [bank] bring-up probe only
 
 // BrnPhysics::ExternalPhysicsBody -- the 7 functions owned by the BrnPhysics-bodies group.
 //
@@ -98,6 +99,45 @@ namespace BrnPhysics
     {
         CGS_ASSERT(vpu::IsValid(lvImpulse), "Bad impulse added ");
         mTotalLinearImpulse = vpu::Add(mTotalLinearImpulse, lvImpulse);
+
+        // ---- [bank] PC bring-up instrument -- DELETE WHEN the wall test is banked ---------------
+        // OPT-IN (BRN_BANK_PROBE=1, a probe of its own so it can be armed WITHOUT the deformation
+        // probes and vice versa). This is the momentum bank itself: every world-space linear impulse
+        // any subsystem hands the body, with the running total it accumulates into.
+        // ⚠️ Read it TOGETHER with [chainarrive] -- this function has several callers (the sensor
+        // apply's own block (5), the wheels, the wall handler), so a line here on its own attributes
+        // nothing. The pair does: a [chainarrive] route WALL immediately followed by a [bank] delta
+        // is the impulse-passing chain reaching the momentum bank, in one run, in order.
+        {
+            static s32 siBankProbe = -1;
+            if ( siBankProbe < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_BANK_PROBE" );
+                siBankProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+            }
+            // ⚠️ COUNT ONLY THE NON-ZERO BANKS. The first cut counted every call and capped at 4000:
+            // the wheels call this every frame with a zero impulse, so the cap was exhausted during
+            // the boot menus and the probe printed NOTHING for a whole 275 s run while the chain was
+            // demonstrably delivering. A cap has to be on the events you are counting.
+            static u32 suBanks      = 0;
+            static u32 suBigBanks   = 0;
+            const f32 lfMagSq = lvImpulse.x * lvImpulse.x + lvImpulse.y * lvImpulse.y
+                              + lvImpulse.z * lvImpulse.z;
+            const f32 lfHorizontalSq = lvImpulse.x * lvImpulse.x + lvImpulse.z * lvImpulse.z;
+            // Same two-window shape as [chainarrive]: a short opening window that proves the bank is
+            // being fed at all, then only HORIZONTAL-dominant banks, which is what a wall response
+            // looks like and what the ground's +Y support does not.
+            const bool lbInteresting = ( lfMagSq > 0.0f && ++suBanks <= 30u )
+                                     || ( lfHorizontalSq > 1.0f && ++suBigBanks <= 600u );
+            if ( siBankProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && lbInteresting )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[bank] n " << static_cast<s32>(suBanks)
+                    << " J " << lvImpulse.x << " " << lvImpulse.y << " " << lvImpulse.z
+                    << " total " << mTotalLinearImpulse.x << " " << mTotalLinearImpulse.y
+                    << " " << mTotalLinearImpulse.z << "\n";
+            }
+        }
     }
 
     void ExternalPhysicsBody::AddWorldSpaceAngularImpulse(Vector3 lvImpulse)
