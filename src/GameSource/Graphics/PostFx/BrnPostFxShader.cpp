@@ -36,13 +36,16 @@
 //
 //   BRN_POSTFX_SHADER_PROGRAMS_AVAILABLE   -- Construct / Destruct / Shader::Construct /
 //        Shader::Destruct. Needs (a) programs in a form the PC can bind -- the X360 embeds Xenos
-//        MICROCODE, the PC needs a transcoded D3D9 pair per permutation. ONE OF THE TWELVE PAIRS NOW
-//        EXISTS: the sibling shader step delivers permutation 0 as
-//        renderengine::gauPostFxComposite{Vertex,Pixel}ProgramPC (pc/gcm/renderengine/
-//        PostFxProgramsPC.cpp), already wrapped as platform-4 ShaderProgramBuffer images and adopted
-//        through renderengine::ProgramBufferPC_Adopt. The other ELEVEN slots are constructed EMPTY
-//        (null program pair, zero-count handles) and stay that way until their effects are wired --
-//        see Shader::Construct. Still missing for this gate: (b) renderengine::SamplerState,
+//        MICROCODE, the PC needs a transcoded D3D9 pair per permutation. ALL TWELVE PAIRS NOW EXIST
+//        (post-fx step 5): pc/gcm/renderengine/PostFxProgramsPC.cpp carries ONE shared vertex image
+//        -- the twelve X360 vertex packages are 596 bytes each and BYTE-IDENTICAL, md5
+//        a47e7e9943a3570c484e1724d6dff763 for all twelve, so there is one vertex program and not
+//        twelve -- plus TWELVE pixel images, each decoded from its own Xenos package and each
+//        reproducing that permutation's CTAB register/type/count surface name for name. All are
+//        wrapped as platform-4 ShaderProgramBuffer images and adopted through
+//        renderengine::ProgramBufferPC_Adopt. NO SLOT IS CONSTRUCTED EMPTY ANY MORE; the empty-slot
+//        arm in Shader::Construct survives only as the guard against a null argument.
+//        Still missing for this gate: (b) renderengine::SamplerState,
 //        renderengine::DepthStencilState and renderengine::VertexDescriptor::Release, whose homes
 //        (states/samplerstate.cpp, pc/gcm/renderengine/DepthStencilState.cpp,
 //        pc/gcm/renderengine/VertexDescriptor.cpp) are not on the exe build list; and (c)
@@ -60,6 +63,13 @@
 //        constant table resolves to a handle with register COUNT 0, and SetProgram skips those. So
 //        in permutation 0 those three constants are never uploaded and their value is unread. The
 //        gate leaves them at the zero the console's own zero-fill puts there.
+//        ⚠ WHAT CHANGED WHEN THE EIGHT BLUR PERMUTATIONS GOT PC PROGRAMS (step 5). Slots 4..11 DO
+//        intern BlurMatrixX/Y/W, so selecting one now uploads three ZERO float4s to a shader that
+//        reads them. The consequence is bounded and it is NOT a crash: the pixel program builds its
+//        screen velocity as `(row.xy - row.z * uv) * mask`, which with a zero matrix is exactly
+//        (0,0) -- so both gradients handed to tex2Dgrad are zero and the fetch degenerates to an
+//        ordinary top-mip tap. Motion blur would be SILENTLY ABSENT, not wrong. That is the whole
+//        reason this gate stays 0 and is reported once per boot instead of being quietly ignored.
 //
 //   BRN_POSTFX_COMPOSITE_DRAW_AVAILABLE    -- the whole DEVICE half of Render: the state / texture /
 //        sampler binds and the full-screen quad. Needs (a) BRN_POSTFX_SHADER_PROGRAMS_AVAILABLE to be
@@ -90,8 +100,11 @@
 //   assignment), BrnPostFx.h:41 (a comment) and BrnPostFx.h:114 (the declaration).
 //   So every bit is permanently clear and leShader is 0 every frame. WHAT WOULD CHANGE IT: bodying
 //   any of those five mutators and having something call it, or BrnRendererModule::Render passing
-//   lbMotionBlurEnabled = true. Either makes this function select a permutation with no PC program
-//   pair -- which is why the disclosure below is a hard early-out, not a fallback to slot 0.
+//   lbMotionBlurEnabled = true. SINCE STEP 5 THAT IS NO LONGER A WALL: every one of the twelve slots
+//   holds a real PC program pair, so any permutation this function selects can be drawn. What the
+//   early-out below still refuses is a slot whose ADOPT FAILED -- an empty slot binds no program at
+//   all, and rasterising a quad with whatever program the previous draw left installed is the one
+//   failure mode worth a hard return.
 // ==================================================================================================
 
 #define BRN_POSTFX_SHADER_PROGRAMS_AVAILABLE            1
@@ -106,23 +119,52 @@ namespace renderengine
     // TU is the existing precedent for this seam, which has no header yet.
     void WorldShaderConstants_Set(bool lbPixel, u32 luRegister, const void* lpData, u32 luNumRegisters);
 
-    // ---- PERMUTATION 0's PC PROGRAM PAIR ---------------------------------------------------------
-    // [FLAG PC-platform leaf: shader programs] The composite's permutation-0 vertex + pixel programs,
-    // wrapped as platform-4 ShaderProgramBuffer images by the sibling shader step
+    // ---- THE TWELVE PERMUTATIONS' PC PROGRAMS ----------------------------------------------------
+    // [FLAG PC-platform leaf: shader programs] The composite's vertex + pixel programs, wrapped as
+    // platform-4 ShaderProgramBuffer images by the shader step
     // (pc/gcm/renderengine/PostFxProgramsPC.cpp -- a GENERATED PC leaf). Declared here as the minimal
     // external surface, byte for byte the convention BrnIm3d.cpp:51-57 already uses for the sky-dome
     // pair; there is no header for these generated leaves.
     //
-    // ⚠ THE SIZES ARE THE *PC IMAGE* SIZES (608 / 976), NOT THE X360 MICROCODE SIZES (596 / 696).
-    // ProgramBufferPC_Adopt bounds-checks the blob against the size it is handed and copies exactly
-    // that many bytes, so passing a console size here would either refuse a valid image (596 < the
-    // 0x14 + 516 microcode extent -> "microcode size is out of range") or read past the array. That is
-    // why nothing below hard-codes a number: each size is read from the generated TU's own published
-    // constant, which its static_assert ties to sizeof() of the array.
+    // ONE VERTEX IMAGE FOR ALL TWELVE SLOTS, AND THAT IS MEASURED. The twelve X360 vertex packages
+    // (0x8203F0B8, 0x8203F630, 0x8203FB40, 0x82040180, 0x82040778, 0x82040E48, 0x820414D8,
+    // 0x82041C50, 0x82042380, 0x82042A50, 0x820430E0, 0x82043858) are 596 bytes each and
+    // BYTE-IDENTICAL -- md5 a47e7e9943a3570c484e1724d6dff763 for all twelve. The vignette coordinate
+    // the vertex program builds does not depend on any of the three permutation axes, so the console
+    // shipped the same program twelve times; this build declares it once.
+    //
+    // ⚠ THE SIZES ARE THE *PC IMAGE* SIZES, NOT THE X360 MICROCODE SIZES (596 vertex, 696..1308
+    // pixel). ProgramBufferPC_Adopt bounds-checks the blob against the size it is handed and copies
+    // exactly that many bytes, so passing a console size here would either refuse a valid image
+    // (596 < the 0x14 + 516 microcode extent -> "microcode size is out of range") or read past the
+    // array. That is why nothing below hard-codes a number: each size is read from the generated
+    // TU's own published constant, which its static_assert ties to sizeof() of the array.
     extern const u8  gauPostFxCompositeVertexProgramPC[];
     extern const u32 guPostFxCompositeVertexProgramPCSize;
-    extern const u8  gauPostFxCompositePixelProgramPC[];
+    extern const u8  gauPostFxCompositePixelProgramPC[];              // slot  0
     extern const u32 guPostFxCompositePixelProgramPCSize;
+    extern const u8  gauPostFxCompositeTint3dPixelProgramPC[];        // slot  1
+    extern const u32 guPostFxCompositeTint3dPixelProgramPCSize;
+    extern const u8  gauPostFxCompositeDofPixelProgramPC[];           // slot  2
+    extern const u32 guPostFxCompositeDofPixelProgramPCSize;
+    extern const u8  gauPostFxCompositeDofTint3dPixelProgramPC[];     // slot  3
+    extern const u32 guPostFxCompositeDofTint3dPixelProgramPCSize;
+    extern const u8  gauPostFxCompositeBlurPixelProgramPC[];          // slot  4
+    extern const u32 guPostFxCompositeBlurPixelProgramPCSize;
+    extern const u8  gauPostFxCompositeBlurTint3dPixelProgramPC[];    // slot  5
+    extern const u32 guPostFxCompositeBlurTint3dPixelProgramPCSize;
+    extern const u8  gauPostFxCompositeBlurDofPixelProgramPC[];       // slot  6
+    extern const u32 guPostFxCompositeBlurDofPixelProgramPCSize;
+    extern const u8  gauPostFxCompositeBlurDofTint3dPixelProgramPC[]; // slot  7
+    extern const u32 guPostFxCompositeBlurDofTint3dPixelProgramPCSize;
+    extern const u8  gauPostFxCompositeBlurHqPixelProgramPC[];        // slot  8
+    extern const u32 guPostFxCompositeBlurHqPixelProgramPCSize;
+    extern const u8  gauPostFxCompositeBlurHqTint3dPixelProgramPC[];  // slot  9
+    extern const u32 guPostFxCompositeBlurHqTint3dPixelProgramPCSize;
+    extern const u8  gauPostFxCompositeBlurHqDofPixelProgramPC[];     // slot 10
+    extern const u32 guPostFxCompositeBlurHqDofPixelProgramPCSize;
+    extern const u8  gauPostFxCompositeBlurHqDofTint3dPixelProgramPC[];       // slot 11
+    extern const u32 guPostFxCompositeBlurHqDofTint3dPixelProgramPCSize;
 }
 
 #if BRN_POSTFX_COMPOSITE_DRAW_AVAILABLE
@@ -293,12 +335,14 @@ namespace
     // pixel sizes are the `li r8` immediates.
     //
     // ⚠ THESE ARE COMMENTS ON PURPOSE. An earlier revision declared all twenty-four as
-    // `extern "C" const u8 gacBrnPostFx*_{VS,PS}[]` -- twenty-four symbols that NO TU in this tree or
-    // in this wave defines, i.e. twenty-four guaranteed LNK2019s the per-TU `cl /c` gate cannot see.
-    // A PC build cannot bind Xenos microcode anyway: each pair has to be transcoded to a D3D9
-    // vertex/pixel program, wrapped into a platform-4 ShaderProgramBuffer image and adopted through
-    // renderengine::ProgramBufferPC_Adopt. ONE of the twelve exists so far (permutation 0, declared
-    // at the top of this file); the other eleven are constructed EMPTY.
+    // `extern "C" const u8 gacBrnPostFx*_{VS,PS}[]` -- twenty-four symbols that NO TU in this tree
+    // defines, i.e. twenty-four guaranteed LNK2019s the per-TU `cl /c` gate cannot see. A PC build
+    // cannot bind Xenos microcode anyway: each pair has to be transcoded to a D3D9 vertex/pixel
+    // program, wrapped into a platform-4 ShaderProgramBuffer image and adopted through
+    // renderengine::ProgramBufferPC_Adopt. ALL TWELVE now exist -- one shared vertex image plus
+    // twelve pixel images, declared at the top of this file. The twelve VERTEX addresses below are
+    // twelve addresses of the same 596 bytes (byte-identical, md5
+    // a47e7e9943a3570c484e1724d6dff763), which is why the PC side has one vertex program.
     //
     //   slot  permutation (E_SHADER_*)                     X360 VS      X360 PS      PS bytes
     //    0    BLOOM_VIGNETTE_TINT2D                        0x8203F630   0x8203F888    696
@@ -619,23 +663,26 @@ void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
     else
     {
         // ---- [FLAG PC bring-up] AN HONESTLY EMPTY SLOT -----------------------------------------
-        // Eleven of the twelve permutations have no PC program pair yet (only permutation 0 was
-        // authored -- scratch/postfx_step2_out/shader/REPORT.md section 7). Their call sites pass a
-        // NULL pair rather than a fabricated blob or, worse, permutation 0's blob under another
-        // slot's name: an empty slot leaves both program pointers null and every handle at register
-        // count 0, so SetProgram binds nothing and uploads nothing, and Render's own early-out
-        // refuses to draw any permutation but 0. Nothing half-built, nothing invented.
+        // NO CALL SITE IN THIS FILE REACHES THIS ARM ANY MORE. Since post-fx step 5 all twelve
+        // Construct calls below pass a real PC pair, so this branch survives only as the guard
+        // against a null argument -- which is what it always was. Kept rather than deleted because
+        // an empty slot is still the only correct answer to a null pair: both program pointers stay
+        // null and every handle keeps register count 0, so SetProgram binds nothing and uploads
+        // nothing, and Render's own guard refuses to draw a slot with no program. Nothing
+        // half-built, nothing invented.
         //
         // DEVIATION FROM THE CONSOLE, DELIBERATE: the console asserts NULL != mpVertexProgram /
-        // mpPixelProgram (BrnPostFxShader.cpp:196/208) on every slot. Firing those eleven times per
-        // boot for a condition this file already discloses would be an assert storm, so the empty
-        // path reports once instead and names the gate.
+        // mpPixelProgram (BrnPostFxShader.cpp:196/208) on every slot. Reporting once instead of
+        // firing a per-slot assert storm for a condition this file discloses is the PC choice; with
+        // every slot backed it should now never be reached at all, and the log line saying it WAS
+        // reached is the signal that a program array went missing from the leaf.
         static bool sbReportedEmptySlot = false;
         ReportOnce(sbReportedEmptySlot,
-                   "[postfx-composite] one or more permutation slots constructed EMPTY -- only"
-                   " permutation 0 (BloomVignetteTint2d) has a PC program pair"
-                   " (renderengine::gauPostFxComposite{Vertex,Pixel}ProgramPC). Empty slots bind"
-                   " nothing and Render refuses to draw them."
+                   "[postfx-composite] a permutation slot was constructed EMPTY -- Shader::Construct"
+                   " was handed a null program pair. Since step 5 every slot has a PC pair"
+                   " (renderengine::gauPostFxComposite*ProgramPC), so this line means a program"
+                   " array is missing from pc/gcm/renderengine/PostFxProgramsPC.cpp. Empty slots"
+                   " bind nothing and Render refuses to draw them."
                    " [FLAG PC bring-up: BRN_POSTFX_SHADER_PROGRAMS_AVAILABLE]\n");
 
         for (u32 luVsConstant = 0; luVsConstant < E_VS_VAR_COUNT; ++luVsConstant)
@@ -873,19 +920,30 @@ void BrnPostFxShader::Construct(rw::IResourceAllocator* lpAllocator)
     // bind Xenos microcode at all, so those twenty-four addresses do not exist on this target and
     // there is no symbol to name (declaring twenty-four `gacBrnPostFx*` externs no TU defines, which
     // an earlier revision did, buys nothing but twenty-four LNK2019s a per-TU `cl /c` gate cannot
-    // see). Instead:
-    //   * SLOT 0 gets the transcoded PC pair the sibling shader step authored and published --
-    //     renderengine::gauPostFxComposite{Vertex,Pixel}ProgramPC with THEIR OWN PUBLISHED SIZES.
-    //     ⚠ NEVER pair a PC image with a console size: 608/976 are the wrapped-image sizes and
-    //     596/696 are the X360 microcode sizes, and ProgramBufferPC_Adopt bounds-checks the image
-    //     against the size it is given (a short size refuses a valid image, a long one reads off the
-    //     end of the array). The sizes below are read from the generated TU, never written out here.
-    //   * THE OTHER ELEVEN get a NULL pair, which Shader::Construct turns into an honestly empty
-    //     slot. They are not fabricated, and they are emphatically NOT given permutation 0's blob
-    //     under another slot's name -- that would silently draw the wrong shader for a permutation
-    //     the caller explicitly asked for. Render's early-out already refuses any index but 0.
+    // see). Instead every slot gets the transcoded PC pair the shader step authored and published in
+    // pc/gcm/renderengine/PostFxProgramsPC.cpp, WITH THAT ARRAY'S OWN PUBLISHED SIZE.
+    //   * THE VERTEX IMAGE IS THE SAME ONE TWELVE TIMES, because the console's twelve vertex
+    //     packages are byte-identical (md5 a47e7e9943a3570c484e1724d6dff763 for all twelve, 596
+    //     bytes each). Handing one image to twelve slots is not a stand-in: it IS what the console
+    //     ships, deduplicated. Each slot still adopts its own ProgramBufferData -- Adopt copies the
+    //     image into the arena per call -- so the twelve slots stay independently releasable.
+    //   * THE PIXEL IMAGE IS PER SLOT, decoded from that slot's own Xenos package, and each one
+    //     reproduces that permutation's CTAB register/type/count surface exactly (the twelve-way
+    //     comparison is in the wave report). No slot is given another slot's blob.
+    //   ⚠ NEVER pair a PC image with a console size: the wrapped-image sizes (608 vertex,
+    //     976..2016 pixel) and the X360 microcode sizes (596 vertex, 696..1308 pixel) are different
+    //     numbers, and ProgramBufferPC_Adopt bounds-checks the image against the size it is given (a
+    //     short size refuses a valid image, a long one reads off the end of the array). Every size
+    //     below is read from the generated TU, never written out here.
+    // The order is still the ASSEMBLY'S emission order; the trailing comment on each line carries
+    // that call site's console operands.
     maShaders[E_SHADER_BLOOM_TINT3D_VIGNETTE_TINT2D].Construct(
-        lpAllocator, 0, 0, 0, 0, 0);                 // X360 VS 0x8203F0B8 596 / PS 0x8203F310 796
+        lpAllocator,
+        renderengine::gauPostFxCompositeVertexProgramPC,
+        renderengine::guPostFxCompositeVertexProgramPCSize,
+        renderengine::gauPostFxCompositeTint3dPixelProgramPC,
+        renderengine::guPostFxCompositeTint3dPixelProgramPCSize,
+        0);                                          // X360 VS 0x8203F0B8 596 / PS 0x8203F310 796
     maShaders[E_SHADER_BLOOM_VIGNETTE_TINT2D].Construct(
         lpAllocator,
         renderengine::gauPostFxCompositeVertexProgramPC,
@@ -894,25 +952,75 @@ void BrnPostFxShader::Construct(rw::IResourceAllocator* lpAllocator)
         renderengine::guPostFxCompositePixelProgramPCSize,
         0);                                          // X360 VS 0x8203F630 596 / PS 0x8203F888 696
     maShaders[E_SHADER_DOF_BLOOM_TINT3D_VIGNETTE_TINT2D].Construct(
-        lpAllocator, 0, 0, 0, 0, 0);                 // X360 VS 0x8203FB40 596 / PS 0x8203FD98 996
+        lpAllocator,
+        renderengine::gauPostFxCompositeVertexProgramPC,
+        renderengine::guPostFxCompositeVertexProgramPCSize,
+        renderengine::gauPostFxCompositeDofTint3dPixelProgramPC,
+        renderengine::guPostFxCompositeDofTint3dPixelProgramPCSize,
+        0);                                          // X360 VS 0x8203FB40 596 / PS 0x8203FD98 996
     maShaders[E_SHADER_DOF_BLOOM_VIGNETTE_TINT2D].Construct(
-        lpAllocator, 0, 0, 0, 0, 0);                 // X360 VS 0x82040180 596 / PS 0x820403D8 928
+        lpAllocator,
+        renderengine::gauPostFxCompositeVertexProgramPC,
+        renderengine::guPostFxCompositeVertexProgramPCSize,
+        renderengine::gauPostFxCompositeDofPixelProgramPC,
+        renderengine::guPostFxCompositeDofPixelProgramPCSize,
+        0);                                          // X360 VS 0x82040180 596 / PS 0x820403D8 928
     maShaders[E_SHADER_BLUR_BLOOM_TINT3D_VIGNETTE_TINT2D].Construct(
-        lpAllocator, 0, 0, 0, 0, 0);                 // X360 VS 0x82040778 596 / PS 0x820409D0 1140
+        lpAllocator,
+        renderengine::gauPostFxCompositeVertexProgramPC,
+        renderengine::guPostFxCompositeVertexProgramPCSize,
+        renderengine::gauPostFxCompositeBlurTint3dPixelProgramPC,
+        renderengine::guPostFxCompositeBlurTint3dPixelProgramPCSize,
+        0);                                          // X360 VS 0x82040778 596 / PS 0x820409D0 1140
     maShaders[E_SHADER_BLUR_BLOOM_VIGNETTE_TINT2D].Construct(
-        lpAllocator, 0, 0, 0, 0, 0);                 // X360 VS 0x82040E48 596 / PS 0x820410A0 1076
+        lpAllocator,
+        renderengine::gauPostFxCompositeVertexProgramPC,
+        renderengine::guPostFxCompositeVertexProgramPCSize,
+        renderengine::gauPostFxCompositeBlurPixelProgramPC,
+        renderengine::guPostFxCompositeBlurPixelProgramPCSize,
+        0);                                          // X360 VS 0x82040E48 596 / PS 0x820410A0 1076
     maShaders[E_SHADER_BLUR_DOF_BLOOM_TINT3D_VIGNETTE_TINT2D].Construct(
-        lpAllocator, 0, 0, 0, 0, 0);                 // X360 VS 0x820414D8 596 / PS 0x82041730 1308
+        lpAllocator,
+        renderengine::gauPostFxCompositeVertexProgramPC,
+        renderengine::guPostFxCompositeVertexProgramPCSize,
+        renderengine::gauPostFxCompositeBlurDofTint3dPixelProgramPC,
+        renderengine::guPostFxCompositeBlurDofTint3dPixelProgramPCSize,
+        0);                                          // X360 VS 0x820414D8 596 / PS 0x82041730 1308
     maShaders[E_SHADER_BLUR_DOF_BLOOM_VIGNETTE_TINT2D].Construct(
-        lpAllocator, 0, 0, 0, 0, 0);                 // X360 VS 0x82041C50 596 / PS 0x82041EA8 1240
+        lpAllocator,
+        renderengine::gauPostFxCompositeVertexProgramPC,
+        renderengine::guPostFxCompositeVertexProgramPCSize,
+        renderengine::gauPostFxCompositeBlurDofPixelProgramPC,
+        renderengine::guPostFxCompositeBlurDofPixelProgramPCSize,
+        0);                                          // X360 VS 0x82041C50 596 / PS 0x82041EA8 1240
     maShaders[E_SHADER_BLURHQ_BLOOM_TINT3D_VIGNETTE_TINT2D].Construct(
-        lpAllocator, 0, 0, 0, 0, 0);                 // X360 VS 0x82042380 596 / PS 0x820425D8 1140
+        lpAllocator,
+        renderengine::gauPostFxCompositeVertexProgramPC,
+        renderengine::guPostFxCompositeVertexProgramPCSize,
+        renderengine::gauPostFxCompositeBlurHqTint3dPixelProgramPC,
+        renderengine::guPostFxCompositeBlurHqTint3dPixelProgramPCSize,
+        0);                                          // X360 VS 0x82042380 596 / PS 0x820425D8 1140
     maShaders[E_SHADER_BLURHQ_BLOOM_VIGNETTE_TINT2D].Construct(
-        lpAllocator, 0, 0, 0, 0, 0);                 // X360 VS 0x82042A50 596 / PS 0x82042CA8 1076
+        lpAllocator,
+        renderengine::gauPostFxCompositeVertexProgramPC,
+        renderengine::guPostFxCompositeVertexProgramPCSize,
+        renderengine::gauPostFxCompositeBlurHqPixelProgramPC,
+        renderengine::guPostFxCompositeBlurHqPixelProgramPCSize,
+        0);                                          // X360 VS 0x82042A50 596 / PS 0x82042CA8 1076
     maShaders[E_SHADER_BLURHQ_DOF_BLOOM_TINT3D_VIGNETTE_TINT2D].Construct(
-        lpAllocator, 0, 0, 0, 0, 0);                 // X360 VS 0x820430E0 596 / PS 0x82043338 1308
+        lpAllocator,
+        renderengine::gauPostFxCompositeVertexProgramPC,
+        renderengine::guPostFxCompositeVertexProgramPCSize,
+        renderengine::gauPostFxCompositeBlurHqDofTint3dPixelProgramPC,
+        renderengine::guPostFxCompositeBlurHqDofTint3dPixelProgramPCSize,
+        0);                                          // X360 VS 0x820430E0 596 / PS 0x82043338 1308
     maShaders[E_SHADER_BLURHQ_DOF_BLOOM_VIGNETTE_TINT2D].Construct(
-        lpAllocator, 0, 0, 0, 0, 0);                 // X360 VS 0x82043858 596 / PS 0x82043AB0 1240
+        lpAllocator,
+        renderengine::gauPostFxCompositeVertexProgramPC,
+        renderengine::guPostFxCompositeVertexProgramPCSize,
+        renderengine::gauPostFxCompositeBlurHqDofPixelProgramPC,
+        renderengine::guPostFxCompositeBlurHqDofPixelProgramPCSize,
+        0);                                          // X360 VS 0x82043858 596 / PS 0x82043AB0 1240
 
     // ---- the vertex descriptor ------------------------------------------------------------------
     // Two elements, both on stream 0: a FLOAT3 (element word 0x2A23B9, `lis 0x2A / ori 0x23B9`) and a
@@ -1101,11 +1209,10 @@ void BrnPostFxShader::Construct(rw::IResourceAllocator* lpAllocator)
     // null, and Render's draw gate refuses to issue a quad -- so this is inert, not partial.
     static bool sbReportedNoPrograms = false;
     ReportOnce(sbReportedNoPrograms,
-               "[postfx-composite] BrnPostFxShader::Construct SKIPPED -- permutation 0 now HAS a PC"
-               " program pair (renderengine::gauPostFxComposite{Vertex,Pixel}ProgramPC), but"
+               "[postfx-composite] BrnPostFxShader::Construct SKIPPED -- ALL TWELVE permutations now"
+               " have PC program images (renderengine::gauPostFxComposite*ProgramPC), but"
                " renderengine::SamplerState, renderengine::DepthStencilState and"
-               " renderengine::VertexDescriptor::Release still have no mounted home, and"
-               " pc/gcm/renderengine/PostFxProgramsPC.cpp is not on the exe build list. The composite"
+               " renderengine::VertexDescriptor::Release still have no mounted home. The composite"
                " cannot draw; the bring-up scene blit still presents the frame."
                " [FLAG PC bring-up: BRN_POSTFX_SHADER_PROGRAMS_AVAILABLE]\n");
 #endif  // BRN_POSTFX_SHADER_PROGRAMS_AVAILABLE
@@ -1383,17 +1490,32 @@ void BrnPostFxShader::Render(f32 lfWhiteLevel,
 
     CGS_ASSERT(leShader < static_cast<u32>(E_SHADER_COUNT), "leShader < E_Shader_Count");  // :804
 
-    // ---- the two disclosed bring-up conditions --------------------------------------------------
-    // NEITHER falls back to slot 0 and neither crashes: both report once and leave the device exactly
-    // as they found it, so the [FLAG PC bring-up] scene blit in BrnRendererModule still presents a
-    // correct (un-composited) frame. Half-binding this composite's states would corrupt that blit.
-    if (leShader != static_cast<u32>(E_SHADER_BLOOM_VIGNETTE_TINT2D))
+    // ---- the disclosed bring-up condition --------------------------------------------------------
+    // THE "ONLY PERMUTATION 0" REFUSAL IS RETIRED (post-fx step 5). All twelve slots are constructed
+    // from real PC program images, so every index this function can compute is drawable and there is
+    // nothing left to refuse on the grounds of a missing program.
+    //
+    // WHAT REPLACES IT IS NARROWER AND STILL HARD: a slot whose programs are NULL is not drawn. That
+    // is not a hypothetical -- Shader::Construct leaves a slot empty when it is handed a null pair,
+    // and renderengine::ProgramBufferPC_Adopt returns null for any image that fails its shape check
+    // (ImmediateModePCLeaf.cpp:671-690), so a truncated or mis-sized array in the generated leaf
+    // lands here rather than in the rasteriser. SetProgram on an empty slot binds NO program at all,
+    // which on D3D9 leaves whatever the previous draw installed -- the quad would then rasterise
+    // through a foreign shader and write a garbage frame with no error anywhere. Reporting once and
+    // returning leaves the device exactly as it was found, so the [FLAG PC bring-up] scene blit in
+    // BrnRendererModule still presents a correct (un-composited) frame.
+    //
+    // The test is on BOTH pointers because SetProgram binds both and Construct only ever sets them
+    // together. Naming the slot in the log line is the point: the number IS the permutation, and
+    // 4|8 vs 2 vs 1 says immediately which axis brought an unbacked slot in.
+    if (maShaders[leShader].mpVertexProgram == 0 || maShaders[leShader].mpPixelProgram == 0)
     {
         static bool sbReportedUnbackedPermutation = false;
         ReportOnce(sbReportedUnbackedPermutation,
-                   "[postfx-composite] a permutation other than 0 was selected, and only permutation 0"
-                   " (BloomVignetteTint2d) has a PC program pair. NOT DRAWING -- the frame is"
-                   " presented un-composited rather than through the wrong shader.\n");
+                   "[postfx-composite] the selected permutation has NO PC program pair (an empty slot,"
+                   " or ProgramBufferPC_Adopt refused its image). NOT DRAWING -- the frame is"
+                   " presented un-composited rather than through whatever program the previous draw"
+                   " left bound.\n");
         return;
     }
 

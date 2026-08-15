@@ -35,10 +35,12 @@
 //     @0x82409B60 does).
 //
 // WHAT IS A PC BRING-UP CHOICE (flagged, NOT dressed up as console behaviour)
-//   * the surfaces are D3D9 objects: an INTZ depth TEXTURE (see the format ladder
-//     below) whose level-0 surface is bound as the depth-stencil, and -- because
-//     D3D9 rejects SetRenderTarget(0, NULL) -- a throwaway colour render target
-//     for the depth-only case,
+//   * the surfaces are D3D9 objects: a depth TEXTURE whose level-0 surface is bound
+//     as the depth-stencil -- picked from ONE OF TWO FORMAT LADDERS, because the
+//     shadow map wants a hardware COMPARE fetch and every post-fx target wants the
+//     raw depth VALUE (see the two-ladder banner on CreateDepthSurface below) --
+//     and, because D3D9 rejects SetRenderTarget(0, NULL), a throwaway colour render
+//     target for the depth-only case,
 //   * Resolve() is a NO-OP, and legitimately so: on PC the depth texture IS the
 //     surface that was rendered into, so there is nothing to copy out. This is
 //     stated rather than faked; no EDRAM resolve is simulated,
@@ -65,6 +67,7 @@
 #include "pc/gcm/renderengine/renderstates.h"            // renderengine::TextureState (the colour sampler states)
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"        // renderengine::ShadowDepthFormat* (homed below)
 #include "rw/rwcore_structs.h"                           // rw::IResourceAllocator / Resource / ResourceDescriptor
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device::SetResource (the sampler-shadow-aware unbind)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::WriteToLog ([shadow-rt] diagnostic)
 
 #include <cstring>
@@ -193,17 +196,86 @@ namespace
     // that merely tolerates a depth-stencil texture is not the same as one that advertises it,
     // and the old ladder's first blind CreateTexture(INTZ) succeeding is precisely how the
     // semantically wrong format won.
+    //
+    // =====================================================================================
+    // CORRECTED AGAIN 2026-08-15 (the post-fx step-5 wave): THERE ARE **TWO** LADDERS,
+    // because there are two mutually exclusive sample semantics and ONE ladder cannot serve
+    // both. The paragraph above is right about the SHADOW MAP and wrong about everything else.
+    //
+    //   COMPARE (the shadow map, unchanged above): the receiver wants a 0/1 (PCF-filtered)
+    //     COMPARISON of a reference against the stored depth -- `texldp rN, rN, s15` then
+    //     `mul r0.w, r0.w, rN.x`. D24X8 / D16 created as a texture give exactly that.
+    //
+    //   RAW VALUE (every post-fx target that asks to be sampled): the receiver wants the depth
+    //     VALUE itself, to reconstruct a clip position or a focus distance. Its consumers are
+    //     named, and they read it with a PLAIN `texld` against SamplerDepth (unit 4, decoded in
+    //     BrnPostFxShader.cpp:174-195):
+    //       * BrnPostFxShader's DoF permutations (slots 2/3/6/7/10/11) -- DofParamsA/B vs depth,
+    //       * its motion-blur permutations (slots 4..11) -- depth + BlurMatrixX/Y/W rebuild the
+    //         previous frame's clip position and the tap direction,
+    //       * rw::graphics::postfx::DepthOfField (rwgpfxdof.cpp) and PfxHelper's down-sample.
+    //     On D24X8 those fetches return a COMPARISON against whatever happens to be in the
+    //     coordinate's z/w -- 0.0 or 1.0, never a depth -- so the effect is silently, uniformly
+    //     wrong rather than absent. INTZ / DF24 / DF16 are the formats that return the stored
+    //     value, i.e. exactly the three the compare ladder DEMOTED.
+    //
+    // The discriminator is the one the memory of this campaign already attests and which
+    // Initialize's shadow latch below already uses: the SHADOW MAP is the only pool target
+    // with colour mode NONE that still resolves its depth to a texture (CreateShadowmapBuffer
+    // clears every colour section); the down-sample buffer, the particle buffer and the env-map
+    // buffer all carry colour. So: colour mode NONE -> COMPARE ladder, anything else -> RAW.
+    //
+    // Targets that create depth but never sample it (the anti-alias buffer, the back buffer)
+    // keep the COMPARE ladder untouched -- their format is unobservable either way, and
+    // changing it would be an unforced change to a working path.
+    //
+    // D3DCLEAR_STENCIL stays consistent automatically: XenonD3D9Shims.cpp's
+    // TilingDepthFormatHasStencil answers from the format of the surface CURRENTLY BOUND
+    // (INTZ and RAWZ alias D24S8 and DO carry stencil; DF24 / DF16 do not), and every clear in
+    // this build goes through TilingClearBoundSurfaces, which asks it. Nothing here has to
+    // know which ladder produced the surface.
+    // =====================================================================================
     struct DepthSurfaceResult
     {
         IDirect3DTexture9* mpTexture;
         IDirect3DSurface9* mpSurface;
         u32                muFormat;           // 0 => the non-sampleable D24S8 fallback
-        bool               mbHardwareCompare;  // true => the fetch compares (Xenos semantic)
+        bool               mbHardwareCompare;  // true => the fetch compares (Xenos shadow semantic)
+        bool               mbRawDepthValue;    // true => the fetch returns the stored depth VALUE
     };
 
-    DepthSurfaceResult CreateDepthSurface(u32 luWidth, u32 luHeight)
+    struct DepthFormatCandidate
     {
-        DepthSurfaceResult lResult = { nullptr, nullptr, 0u, false };
+        u32  muFormat;
+        bool mbHardwareCompare;
+        bool mbRawDepthValue;
+    };
+
+    // The COMPARE ladder (the shadow map's; unchanged, order and members both).
+    const DepthFormatCandidate KA_DEPTH_LADDER_COMPARE[5] =
+    {
+        { static_cast<u32>(D3DFMT_D24X8),                  true,  false },
+        { static_cast<u32>(D3DFMT_D16),                    true,  false },
+        { static_cast<u32>(MAKEFOURCC('I', 'N', 'T', 'Z')), false, true  },
+        { static_cast<u32>(MAKEFOURCC('D', 'F', '2', '4')), false, true  },
+        { static_cast<u32>(MAKEFOURCC('D', 'F', '1', '6')), false, true  }
+    };
+
+    // The RAW-VALUE ladder (every sampled post-fx target's). D24X8 / D16 are deliberately NOT
+    // on it: a compare fetch is not a depth read, and falling back to one would produce the
+    // silent-wrong picture this split exists to prevent. If none of the three can be created
+    // the target takes the same non-sampleable D24S8 fallback the compare ladder takes, and
+    // reports depthTexture=NONE -- an honestly empty slot rather than a wrong one.
+    const DepthFormatCandidate KA_DEPTH_LADDER_RAW[3] =
+    {
+        { static_cast<u32>(MAKEFOURCC('I', 'N', 'T', 'Z')), false, true },
+        { static_cast<u32>(MAKEFOURCC('D', 'F', '2', '4')), false, true },
+        { static_cast<u32>(MAKEFOURCC('D', 'F', '1', '6')), false, true }
+    };
+
+    DepthSurfaceResult CreateDepthSurface(u32 luWidth, u32 luHeight, bool lbWantRawDepthValue)
+    {
+        DepthSurfaceResult lResult = { nullptr, nullptr, 0u, false, false };
 
         IDirect3DDevice9* const lpDevice = Dev();
         if (lpDevice == nullptr)
@@ -227,19 +299,13 @@ namespace
                 leAdapterFormat = lMode.Format;
         }
 
-        struct Candidate { u32 muFormat; bool mbHardwareCompare; };
-        const Candidate laCandidates[5] =
-        {
-            { static_cast<u32>(D3DFMT_D24X8),                 true  },
-            { static_cast<u32>(D3DFMT_D16),                   true  },
-            { static_cast<u32>(MAKEFOURCC('I', 'N', 'T', 'Z')), false },
-            { static_cast<u32>(MAKEFOURCC('D', 'F', '2', '4')), false },
-            { static_cast<u32>(MAKEFOURCC('D', 'F', '1', '6')), false }
-        };
+        const DepthFormatCandidate* const lpCandidates =
+            lbWantRawDepthValue ? KA_DEPTH_LADDER_RAW : KA_DEPTH_LADDER_COMPARE;
+        const u32 luCandidateCount = lbWantRawDepthValue ? 3u : 5u;
 
-        for (u32 luCandidate = 0; luCandidate < 5u; ++luCandidate)
+        for (u32 luCandidate = 0; luCandidate < luCandidateCount; ++luCandidate)
         {
-            const D3DFORMAT leFormat = static_cast<D3DFORMAT>(laCandidates[luCandidate].muFormat);
+            const D3DFORMAT leFormat = static_cast<D3DFORMAT>(lpCandidates[luCandidate].muFormat);
 
             if (lpD3D != nullptr
                 && FAILED(lpD3D->CheckDeviceFormat(lCreation.AdapterOrdinal, lCreation.DeviceType,
@@ -259,8 +325,9 @@ namespace
                 {
                     lResult.mpTexture         = lpTexture;
                     lResult.mpSurface         = lpSurface;
-                    lResult.muFormat          = laCandidates[luCandidate].muFormat;
-                    lResult.mbHardwareCompare = laCandidates[luCandidate].mbHardwareCompare;
+                    lResult.muFormat          = lpCandidates[luCandidate].muFormat;
+                    lResult.mbHardwareCompare = lpCandidates[luCandidate].mbHardwareCompare;
+                    lResult.mbRawDepthValue   = lpCandidates[luCandidate].mbRawDepthValue;
                     if (lpD3D != nullptr)
                         lpD3D->Release();
                     return lResult;
@@ -351,6 +418,63 @@ namespace
     };
     ShadowRtLatch gaShadowRtLatch[8] = {};
 
+    // =========================================================================================
+    // THE PER-TARGET DEPTH CREATION RECORD (added with the two-ladder split, 2026-08-15).
+    //
+    // WHY IT HAD TO EXIST. GetDepthStencilTexture re-reports its target's tuple every frame,
+    // and it used to read guCreatedFormat / gbCreatedHardwareCompare -- which are the SHADOW
+    // MAP's globals. With one ladder that lie was invisible (every target got D24X8, so the
+    // shadow's tuple happened to describe the down-sample buffer too). With two ladders it
+    // would print `depthFormat=D24X8 compare=HW` on a target that is actually INTZ/RAW -- a
+    // log that says the opposite of the truth, on the exact axis this wave exists to fix.
+    //
+    // It is a DIAGNOSTIC record keyed by target pointer, not new engine state: nothing in the
+    // render path reads it, and the shadow-sampler seam (guCreatedFormat below) is untouched.
+    // Eight slots for the same reason the latch has eight -- the pool creates a handful of
+    // depth targets once each and never again.
+    // =========================================================================================
+    struct DepthTargetRecord
+    {
+        const void* mpTarget;
+        u32         muWidth, muHeight, muSections, muFormat;
+        bool        mbHardwareCompare;
+        bool        mbRawDepthValue;
+        bool        mbShadowMap;
+    };
+    DepthTargetRecord gaDepthTargetRecords[8] = {};
+
+    void RegisterDepthTarget(const void* lpTarget, u32 luWidth, u32 luHeight, u32 luSections,
+                             u32 luFormat, bool lbHardwareCompare, bool lbRawDepthValue,
+                             bool lbShadowMap)
+    {
+        for (u32 lu = 0; lu < 8u; ++lu)
+        {
+            if (gaDepthTargetRecords[lu].mpTarget == lpTarget
+                || gaDepthTargetRecords[lu].mpTarget == nullptr)
+            {
+                gaDepthTargetRecords[lu].mpTarget          = lpTarget;
+                gaDepthTargetRecords[lu].muWidth           = luWidth;
+                gaDepthTargetRecords[lu].muHeight          = luHeight;
+                gaDepthTargetRecords[lu].muSections        = luSections;
+                gaDepthTargetRecords[lu].muFormat          = luFormat;
+                gaDepthTargetRecords[lu].mbHardwareCompare = lbHardwareCompare;
+                gaDepthTargetRecords[lu].mbRawDepthValue   = lbRawDepthValue;
+                gaDepthTargetRecords[lu].mbShadowMap       = lbShadowMap;
+                return;
+            }
+        }
+    }
+
+    const DepthTargetRecord* FindDepthTarget(const void* lpTarget)
+    {
+        for (u32 lu = 0; lu < 8u; ++lu)
+        {
+            if (gaDepthTargetRecords[lu].mpTarget == lpTarget)
+                return &gaDepthTargetRecords[lu];
+        }
+        return nullptr;
+    }
+
     // Spell a depth format for the log: a FOURCC prints as its four characters, a real
     // D3DFORMAT enumerant as its name.
     void FormatName(u32 luFormat, char* lpcOut, size_t luSize)
@@ -374,9 +498,20 @@ namespace
         std::snprintf(lpcOut, luSize, "%s", lacChars);
     }
 
-    void ReportShadowRenderTarget(const void* lpTarget,
-                                  u32 luWidth, u32 luHeight, u32 luSections,
-                                  bool lbDepthTextureValid, u32 luFormat, bool lbHardwareCompare)
+    // The DEPTH-target reporter. It used to print only `[shadow-rt]` because the shadow map was
+    // the only depth-sampled target that mattered; it now takes the LINE PREFIX so the post-fx
+    // depth targets report under `[postfx-rt]` (their colour line already does) with their OWN
+    // format and their OWN semantic. The shadow map's prefix is passed as the same
+    // "[shadow-rt] target" it always printed, so that line is byte-identical to today's except
+    // for the failure spelling below. Everything else -- the per-target latch, the
+    // value-latched re-report -- is unchanged.
+    //   compare=HW    the fetch COMPARES (D24X8 / D16): the shadow-map semantic.
+    //   compare=RAW   the fetch returns the stored depth VALUE (INTZ / DF24 / DF16).
+    //   compare=NONE  no sampleable depth texture at all (the plain D24S8 fallback).
+    void ReportDepthRenderTarget(const char* lpcTag, const void* lpTarget,
+                                 u32 luWidth, u32 luHeight, u32 luSections,
+                                 bool lbDepthTextureValid, u32 luFormat, bool lbHardwareCompare,
+                                 bool lbRawDepthValue)
     {
         const u32 luDepthValid = lbDepthTextureValid ? 1u : 0u;
         ShadowRtLatch* lpSlot = nullptr;
@@ -407,14 +542,21 @@ namespace
         char lacFormat[16];
         FormatName(luFormat, lacFormat, sizeof(lacFormat));
 
+        const char* lpcCompare = "NONE";
+        if (lbHardwareCompare)
+            lpcCompare = "HW";
+        else if (lbRawDepthValue)
+            lpcCompare = "RAW";
+
         char lacMessage[224];
         std::snprintf(lacMessage, sizeof(lacMessage),
-                      "[shadow-rt] target %ux%u sections=%u depthFormat=%s depthTexture=%s"
+                      "%s %ux%u sections=%u depthFormat=%s depthTexture=%s"
                       " compare=%s\n",
+                      lpcTag,
                       static_cast<unsigned>(luWidth), static_cast<unsigned>(luHeight),
                       static_cast<unsigned>(luSections), lacFormat,
-                      lbDepthTextureValid ? "OK" : "NULL",
-                      lbHardwareCompare ? "HW" : "RAW");
+                      lbDepthTextureValid ? "OK" : "NONE",
+                      lpcCompare);
         CgsDev::Log::WriteToLog(lacMessage);
     }
 
@@ -495,6 +637,36 @@ namespace renderengine
         IDirect3DSurface9* lpColour = lpState->mpColourSurface;
         if (lpColour == nullptr)
             lpColour = AcquireNullColourSurface(lpState->muWidth, lpState->muHeight);
+
+        // ⚠ A DEPTH TEXTURE CANNOT BE A SAMPLER SOURCE AND THE DEPTH-STENCIL TARGET AT THE SAME
+        // TIME (added with the raw-depth ladder, 2026-08-15). D3D9 -- unlike D3D10+ -- does NOT
+        // silently unbind the sampler for you: the write path keeps working while the SAMPLE
+        // becomes undefined, and on some drivers the depth WRITE is what degrades. The composite
+        // now leaves the down-sample buffer's INTZ depth texture bound at unit 4 (SamplerDepth)
+        // from one frame to the next, so the very next Begin() on that target would re-bind the
+        // same texture's surface as the depth-stencil underneath it.
+        //
+        // The unbind goes through shadow::Device::SetResource(nullptr, unit) rather than a raw
+        // SetTexture so the shadow CACHE is invalidated too. A raw unbind would leave
+        // mapTextureState[unit] still holding the composite's TextureState, and the next
+        // SetState(state, unit) would take its HIT path and skip the rebind -- the shader would
+        // then sample an unbound unit and nothing would report it. (This is the same class of
+        // bug as the gpLastRenderTargetState split-brain in ShadowPassPCLeaf.h's banner.)
+        //
+        // Costs nothing when no raw-depth texture is bound: the mask is zero and the loop does
+        // not run. Only units that received a raw-depth texture are ever in it.
+        if (lpState->mpDepthSurface != nullptr)
+        {
+            u32 luRawDepthUnits = renderengine::PostFxDepthSampler_BoundUnitMask();
+            for (u32 luUnit = 0; luRawDepthUnits != 0u && luUnit < 16u; ++luUnit)
+            {
+                if ((luRawDepthUnits & (1u << luUnit)) != 0u)
+                {
+                    luRawDepthUnits &= ~(1u << luUnit);
+                    shadow::Device::SetResource(nullptr, luUnit);
+                }
+            }
+        }
 
         // ORDER MATTERS on D3D9: the bound depth-stencil surface must be at least as large as the
         // render target, and that invariant is checked on SetRenderTarget. Going straight from the
@@ -645,6 +817,20 @@ namespace postfx
         IDirect3DSurface9* lpDepthSurface   = nullptr;
         u32                luDepthFormat    = 0u;
         bool               lbDepthHwCompare = false;
+        bool               lbDepthRawValue  = false;
+
+        // --- WHICH DEPTH SEMANTIC DOES THIS TARGET NEED? (see the two-ladder banner above) ----
+        // Decided from the PARAMETERS, before anything is created, because it selects the ladder.
+        // The discriminator is the attested one: the shadow map is the only pool target that asks
+        // for a sampleable depth while having NO COLOUR AT ALL. Everything else that asks to be
+        // sampled (down-sample, particle, env-map) is a post-fx target reading depth VALUES.
+        const bool lbWantsSampleableDepth =
+            (lrParameters.mDepthStencilMode == static_cast<u32>(eRenderTarget_CREATE))
+            && lrParameters.mbUseDepthStencilAsTexture;
+        const bool lbIsShadowMapTarget =
+            lbWantsSampleableDepth
+            && (lrParameters.mColourMode == static_cast<u32>(eRenderTarget_NONE));
+        const bool lbWantRawDepthValue = lbWantsSampleableDepth && !lbIsShadowMapTarget;
 
         // --- the colour surface -------------------------------------------------------------
         // eRenderTarget_CREATE is the only mode that owns a surface here; USE_DEVICE_FOR_WRITE
@@ -667,28 +853,24 @@ namespace postfx
                                 static_cast<u32>(D3DFMT_A8R8G8B8), luSurfaceWidth, luSurfaceHeight);
             }
 
-            // --- the colour target's SAMPLER TEXTURE-STATES (gate-flip wave, 2026-08-15) ---------
-            // The console builds TWO TextureStates over a colour target's resolved texture, and
-            // this leaf built neither, so both pointers were NULL on PC -- and the post-fx composite
-            // dereferences one of them: BrnPostFx::Render @0x8240A468 reads the DOWN-SAMPLE
-            // buffer's mpColourTextureState (+0x8C) and BrnPostFxShader::Render binds it whole
-            // (shadow::Device::SetState(const TextureState*, u32) @0x8227D158, which reads
-            // ->mpRaster with no test -- the console never has a null there). The bloom passes read
-            // the per-Target one (`lwz r3, 0x2C(source)` = maColourTargets[0].mpTextureState).
-            //
-            //  * per-Target (Target::CreateColor @0x82403C88, rwgpfxrendertarget.cpp:133-155):
+            // --- the colour target's SAMPLER TEXTURE-STATE (gate-flip wave, 2026-08-15) ---------
+            // Target::CreateColor @0x82403C88 (rwgpfxrendertarget.cpp:133-155) builds ONE
+            // TextureState over the colour target's resolved texture and stores it on the Target
+            // itself (+0x0C of the record, i.e. +0x2C on the RenderTarget for colour target 0 --
+            // `lwz r3, 0x2C(source)` is what the bloom passes read):
             //    address U/V = 2 (clamp), mip = 2, mag = min = the target's filter mode
             //    (Target::Parameters::mFilterMode, +0x20 -- CgsRenderTarget::SetColourFilterMode's
             //    word: 0 point / 1 linear), aniso 13, field10 = 1, the two trailing flag bytes 1,
             //    texture = the target's own.
-            //  * the RenderTarget-level one (+0x8C, RenderTarget::Initialize, rwgpfxrendertarget.cpp
-            //    :418-456): the same words except address = mag = 6 when (colour mode != NONE &&
-            //    depth mode == NONE) else 2, mip 2, texture = the provided colour state's, else the
-            //    colour target's own resolved texture (the console reads its own +0x8C at that
-            //    point, i.e. it binds the resolved colour of THIS target).
             // On this backend the sampler words are stored, not applied (SetSamplerStateLowLevel
-            // is a stub), so what matters is the raster: both states carry the wrapped colour
+            // is a stub), so what matters is the raster: the state carries the wrapped colour
             // texture. Same TextureState::Initialize the console uses (texturestate.cpp PC leaf).
+            //
+            // ⚠ THE SECOND STATE THIS BLOCK USED TO BUILD -- a COLOUR state written into
+            // mpColourTextureState (+0x8C) -- IS GONE, and its removal is a correction, not a
+            // trim. +0x8C is NOT a colour state on the console: see the RenderTarget::CreateStates
+            // banner in the depth section below. It is `mDepthTarget.mpTextureState`, the DEPTH
+            // texture state, and it is now built there from the depth texture.
             if (lpRenderTarget->maColourTargets[0].mpTexture != nullptr)
             {
                 const u32 luFilterMode = lrParameters.maColourTargetParams[0].mFilterMode;   // +0x20
@@ -707,34 +889,18 @@ namespace postfx
                 lTargetStateParams.mpTexture       = lpRenderTarget->maColourTargets[0].mpTexture;
                 lpRenderTarget->maColourTargets[0].mpTextureState =
                     renderengine::TextureState::Initialize(nullptr, &lTargetStateParams);
-
-                renderengine::TextureState::Parameters lColourStateParams;
-                std::memset(&lColourStateParams, 0, sizeof(lColourStateParams));
-                const bool lbBlendFlag =
-                    (lrParameters.mColourMode != static_cast<u32>(eRenderTarget_NONE)) &&
-                    (lrParameters.mDepthStencilMode == static_cast<u32>(eRenderTarget_NONE));
-                lColourStateParams.mu8Field40      = lbBlendFlag ? 1u : 0u;
-                lColourStateParams.muMagFilter     = lbBlendFlag ? 6u : 2u;
-                lColourStateParams.muAddressU      = lColourStateParams.muMagFilter;
-                lColourStateParams.muAddressV      = lColourStateParams.muMagFilter;
-                lColourStateParams.muMipFilter     = 2u;
-                lColourStateParams.muMaxAnisotropy = 13u;
-                lColourStateParams.muField10       = 1u;
-                lColourStateParams.mu8Field43      = 1u;
-                lColourStateParams.mu8Field44      = 1u;
-                lColourStateParams.mpTexture       = lpRenderTarget->maColourTargets[0].mpTexture;
-                lpRenderTarget->mpColourTextureState =
-                    renderengine::TextureState::Initialize(nullptr, &lColourStateParams);
             }
         }
 
         // --- the depth / stencil surface ----------------------------------------------------
         if (lrParameters.mDepthStencilMode == static_cast<u32>(eRenderTarget_CREATE))
         {
-            const DepthSurfaceResult lDepth = CreateDepthSurface(luSurfaceWidth, luSurfaceHeight);
+            const DepthSurfaceResult lDepth =
+                CreateDepthSurface(luSurfaceWidth, luSurfaceHeight, lbWantRawDepthValue);
             lpDepthSurface   = lDepth.mpSurface;
             luDepthFormat    = lDepth.muFormat;
             lbDepthHwCompare = lDepth.mbHardwareCompare;
+            lbDepthRawValue  = lDepth.mbRawDepthValue;
 
             // The sampleable wrapper is built only when the target asked to be sampled AND a
             // depth-texture format was actually available.
@@ -744,6 +910,105 @@ namespace postfx
                     WrapTexture(lpAllocator, lDepth.mpTexture, lDepth.muFormat,
                                 luSurfaceWidth, luSurfaceHeight);
             }
+        }
+
+        // =====================================================================================
+        // THE DEPTH TEXTURE-STATE  [RenderTarget::CreateStates @0x824037E8, its final block]
+        //
+        // WHAT THE CONSOLE ACTUALLY DOES, read off the asm at 0x82403A18-0x82403B44:
+        //     lbz  r11, 0x18(r27)      ; params.mbUseDepthStencilAsTexture   (r27 == the params)
+        //     cmplwi cr6, r11, 0 ; beq -> stw r31(=0), 0x8C(r29)             ; not sampled: null
+        //     lwz  r9,  0x14(r29)      ; this->muDepthStencilMode            (r29 == this)
+        //     cmpwi cr6, r9, 4 ; beq  -> stw r31(=0), 0x8C(r29)              ; USE_PROVIDED: null
+        //     ...build a TextureState::Parameters block...
+        //     lwz  r11, 0x90(r29)      ; mDepthTarget.mpHiZTexture
+        //     bne -> (skip) ; lwz r11, 0x88(r29)  ; ...else mDepthTarget.mpTexture
+        //     stw  r11, var_138        ; params.mpTexture = that
+        //     bl   TextureState::Initialize ; stw r3, 0x8C(r29)
+        //
+        // ⚠ SO +0x8C IS THE **DEPTH** TEXTURE STATE, NOT A COLOUR ONE. This tree names that word
+        // `mpColourTextureState` (rwgpfxrendertarget.h:252) and the parked console TU
+        // rwgpfxrendertarget.cpp:410-456 reads it as a colour state; both are wrong, and the
+        // mistake is a pure artefact of the X360's 4-byte-pointer layout, where the whole
+        // "provided state / provided texture id / colour texture state / provided colour state"
+        // quartet at +0x84/+0x88/+0x8C/+0x90 OVERLAPS `mDepthTarget` (+0x80, one 0x18-byte Target
+        // record: reserved +0x00, pixel buffer +0x04, texture +0x08, TEXTURE STATE +0x0C, hi-Z
+        // +0x10, format byte +0x14). PROVEN, not asserted: RenderTarget::Construct @0x824088B0
+        // does `addi r28, r31, 0x80` and hands r28 to Target::CreateDepth, so +0x88 and +0x90 are
+        // that record's mpTexture and mpHiZTexture -- the two textures the block above binds --
+        // and +0x8C is its mpTextureState, the slot CreateDepth itself leaves null.
+        //
+        // AND THE CONSUMER AGREES. BrnPostFx::Render @0x8240A5E4 does `lwz r25, 0x8C(r7)` on the
+        // DOWN-SAMPLE buffer's RenderTarget and passes r25 as BrnPostFxShader::Render's last
+        // TextureState argument, which BrnPostFxShader.cpp:1458 binds at sampler unit 4 --
+        // SamplerDepth. A colour state there would make every DoF / motion-blur permutation read
+        // the SCENE COLOUR as if it were depth: a silently, plausibly wrong picture, which is
+        // exactly the class of defect this wave exists to remove before those permutations light.
+        //
+        // The parameter words are the asm's, mapped through renderstates.h's
+        // TextureState::Parameters (base = var_180 in that frame):
+        //   +0x00/+0x04 addressU/V = 6 when (colourMode == NONE && depthMode != NONE) else 2
+        //               [`lwz r11,0x10(r29); bne ->else` then `cmpwi r9,0; beq ->else`, i.e. the
+        //                DEPTH-ONLY target takes 6 -- note this is the OPPOSITE of the condition
+        //                rwgpfxrendertarget.cpp:437 currently spells],
+        //   +0x0C/+0x10 mag/min filter = 0 (POINT) -- STORED, not inherited from a zero-fill:
+        //               `stw r31, var_174` @0x82403AD8 and `stw r31, var_170` @0x82403AD4 with
+        //               r31 == 0 (`li r31, 0` @0x824037F8). Every other word of the block is
+        //               written explicitly too, at 0x82403A38-0x82403A80,
+        //   +0x14 mip = 2, +0x20 aniso = 13, +0x28 field10 = 1, +0x2C/+0x30 lod bias = 0.0f,
+        //   +0x40 field40 = 1 only on the depth-only branch, +0x43/+0x44 = 1,
+        //   +0x48 texture = hi-Z if present else the depth texture.
+        // POINT is not a PC accommodation here -- it is what the console's own block sets, and it
+        // is also the only correct filter for a raw-depth fetch (averaging depth VALUES is
+        // meaningless). The PC sampler that actually enforces it is
+        // renderengine::PostFxDepthSampler_ApplyState, applied at bind time in
+        // XenonD3D9Shims.cpp's D3DDevice_SetTexture (SetSamplerStateLowLevel is a no-op on this
+        // backend, so a TextureState's sampler words are stored and never reach D3D).
+        //
+        // There is no hi-Z texture on PC (no hierarchical-Z region exists), so the `hi-Z else
+        // depth` choice always resolves to the depth texture -- stated rather than dropped.
+        // The state is built even when no depth TEXTURE could be created (the D24S8 fallback):
+        // the console's gate does not test the texture either, and a NULL state pointer here
+        // would crash shadow::Device::SetState(const TextureState*, u32), which dereferences
+        // ->mpRaster with no test (shadowingdevice.cpp:432). A state with a null raster binds
+        // nothing, which is the honest empty slot.
+        // =====================================================================================
+        if (lrParameters.mbUseDepthStencilAsTexture
+            && lrParameters.mDepthStencilMode != static_cast<u32>(eRenderTarget_USE_PROVIDED))
+        {
+            const u32 luDepthAddressMode =
+                ((lrParameters.mColourMode == static_cast<u32>(eRenderTarget_NONE))
+                 && (lrParameters.mDepthStencilMode != static_cast<u32>(eRenderTarget_NONE)))
+                ? 6u : 2u;
+
+            renderengine::TextureState::Parameters lDepthStateParams;
+            std::memset(&lDepthStateParams, 0, sizeof(lDepthStateParams));
+            lDepthStateParams.muAddressU      = luDepthAddressMode;
+            lDepthStateParams.muAddressV      = luDepthAddressMode;
+            lDepthStateParams.muMagFilter     = 0u;      // POINT -- see the banner
+            lDepthStateParams.muMinFilter     = 0u;
+            lDepthStateParams.muMipFilter     = 2u;
+            lDepthStateParams.muMaxAnisotropy = 13u;
+            lDepthStateParams.muField10       = 1u;
+            lDepthStateParams.mu8Field40      = (luDepthAddressMode == 6u) ? 1u : 0u;
+            lDepthStateParams.mu8Field43      = 1u;
+            lDepthStateParams.mu8Field44      = 1u;
+            lDepthStateParams.mpTexture       = (lpRenderTarget->mDepthTarget.mpHiZTexture != nullptr)
+                                              ? lpRenderTarget->mDepthTarget.mpHiZTexture
+                                              : lpRenderTarget->mDepthTarget.mpTexture;
+
+            renderengine::TextureState* const lpDepthTextureState =
+                renderengine::TextureState::Initialize(nullptr, &lDepthStateParams);
+
+            // ONE storage word, the console's own: the depth Target record's mpTextureState.
+            // mpColourTextureState is the SAME X360 word (+0x8C) under this tree's mis-derived
+            // name, and BrnPostFx.cpp:813 still reads it by that name, so both spellings are
+            // pointed at the one object rather than one of them being left stale -- a
+            // split-brain here is what "the composite samples colour as depth" looks like.
+            // FOLLOW-UP (cross-group request in REPORT.md): rename the member and move that
+            // caller onto GetDepthTextureState(), then this second assignment goes away.
+            lpRenderTarget->mDepthTarget.mpTextureState = lpDepthTextureState;
+            lpRenderTarget->mpColourTextureState        = lpDepthTextureState;
         }
 
         // --- the per-section states ---------------------------------------------------------
@@ -780,19 +1045,32 @@ namespace postfx
         // The DISCRIMINATOR is that the shadow map is the only target in the pool with NO COLOUR AT ALL
         // (CreateShadowmapBuffer clears every colour section, so Construct derives colour mode NONE)
         // while still resolving its depth to a sampleable texture. Down-sample, particle and env map all
-        // carry a colour surface.
-        const bool lbIsShadowMapTarget =
-            (lpRenderTarget->mDepthTarget.mpTexture != nullptr)
-            && (lrParameters.mColourMode == static_cast<u32>(eRenderTarget_NONE));
-        if (lbIsShadowMapTarget)
+        // carry a colour surface. That same test is what chose the ladder above (lbIsShadowMapTarget),
+        // computed there from the parameters; the depth TEXTURE having been created is checked here.
+        const bool lbShadowDepthTextureCreated =
+            lbIsShadowMapTarget && (lpRenderTarget->mDepthTarget.mpTexture != nullptr);
+        if (lbShadowDepthTextureCreated)
         {
             guCreatedFormat          = luDepthFormat;
             gbCreatedHardwareCompare = lbDepthHwCompare;
             guCreatedSections        = luNumSections;
-            ReportShadowRenderTarget(lpRenderTarget, luSurfaceWidth, luSurfaceHeight, luNumSections,
-                                     true, luDepthFormat, gbCreatedHardwareCompare);
         }
-        else
+
+        // Every target that asked for a sampleable depth gets a record and a depth line -- the
+        // shadow map under its own tag, everything else under [postfx-rt]. Without this the
+        // post-fx targets' depth was reported with the SHADOW's format (see the record banner).
+        if (lbWantsSampleableDepth)
+        {
+            RegisterDepthTarget(lpRenderTarget, luSurfaceWidth, luSurfaceHeight, luNumSections,
+                                luDepthFormat, lbDepthHwCompare, lbDepthRawValue,
+                                lbIsShadowMapTarget);
+            ReportDepthRenderTarget(lbIsShadowMapTarget ? "[shadow-rt] target" : "[postfx-rt] depth target",
+                                    lpRenderTarget, luSurfaceWidth, luSurfaceHeight, luNumSections,
+                                    lpRenderTarget->mDepthTarget.mpTexture != nullptr,
+                                    luDepthFormat, lbDepthHwCompare, lbDepthRawValue);
+        }
+
+        if (!lbIsShadowMapTarget)
         {
             ReportRenderTarget(luSurfaceWidth, luSurfaceHeight, luNumSections,
                                lrParameters.mColourMode, lrParameters.mDepthStencilMode,
@@ -916,10 +1194,41 @@ namespace postfx
     {
         // Re-report on the way out: this runs once a frame from the s15 bind, so the
         // value-latched line re-fires if the depth texture is ever lost.
-        ReportShadowRenderTarget(this, muWidth, muHeight * guCreatedSections, guCreatedSections,
-                                 mDepthTarget.mpTexture != nullptr, guCreatedFormat,
-                                 gbCreatedHardwareCompare);
+        //
+        // FROM THIS TARGET'S OWN RECORD, not from the shadow map's globals. It used to pass
+        // guCreatedFormat / gbCreatedHardwareCompare / guCreatedSections whoever `this` was --
+        // invisible while one ladder gave every target D24X8, a straight falsehood now that the
+        // post-fx targets are INTZ/DF24/DF16.
+        const DepthTargetRecord* const lpRecord = FindDepthTarget(this);
+        if (lpRecord != nullptr)
+        {
+            ReportDepthRenderTarget(lpRecord->mbShadowMap ? "[shadow-rt] target"
+                                                          : "[postfx-rt] depth target",
+                                    this, lpRecord->muWidth, lpRecord->muHeight,
+                                    lpRecord->muSections, mDepthTarget.mpTexture != nullptr,
+                                    lpRecord->muFormat, lpRecord->mbHardwareCompare,
+                                    lpRecord->mbRawDepthValue);
+        }
         return mDepthTarget.mpTexture;
+    }
+
+    // =========================================================================
+    // RenderTarget::GetDepthTextureState  -- THE SEAM the post-fx composite and rwgpfxdof
+    // bind SamplerDepth through.
+    //
+    // The console has no such accessor: BrnPostFx::Render reads the word directly
+    // (`lwz r25, 0x8C(r7)` @0x8240A5E4). It is added here because on the x64 host that word is
+    // TWO members (see the CreateStates banner in Initialize) and a caller that picks the wrong
+    // one binds scene colour to SamplerDepth. Callers -- BrnPostFxShader's DoF / motion-blur
+    // permutations via BrnPostFx.cpp, and rw::graphics::postfx::DepthOfField -- should reach the
+    // depth sampler state by NAME through here.
+    //
+    // Null for every target that did not ask for a sampleable depth, exactly as the console's
+    // +0x8C is (CreateStates stores 0 there on both of its early-out branches).
+    // =========================================================================
+    renderengine::TextureState* RenderTarget::GetDepthTextureState()
+    {
+        return mDepthTarget.mpTextureState;
     }
 }
 }

@@ -63,20 +63,65 @@ void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppSh
 // ReportOnce line naming the gate. The gate lives in PfxHelper::CreateProgram, the single funnel
 // every one of those sites goes through, so every CALL SITE stays console-faithful.
 //
-// ⚠ THE MICROCODE BYTES FOR EVERY SITE IN THIS TU AND IN rwgpfxb4blur.cpp / rwgpfxtint.cpp ARE
-// ABSENT from the function-only IDA export and from scratch/postfx_wave1b_dossiers/DATA_DUMP.md
-// (which carries only the first 32 bytes of one of them). They ARE recoverable the same way
-// rwgpfxrendertargetdebugger.cpp already recovered its own pair -- by dumping the .rdata range out
-// of the ARTIST .i64 -- and the exact addresses/sizes are listed at each site and in the wave
-// report. Nothing is invented in the meantime.
+// ⚠ THE GATE NOW GUARDS ONLY THE CONSOLE ROUTE -- THIS TU'S FOUR PROGRAMS ARE REAL AGAIN.
+// The four Xenos packages this file compiles (0x82044240 / 0x820444F8 / 0x820447A8 / 0x82044360)
+// were dumped byte-exact out of ARTIST_copy.i64 (scratch/postfx_step5_wave/PACKAGES_DUMP.md; every
+// dumped size matches the byte count each call site below already recorded), disassembled with
+// tools/assets/shaders/xenos.py, re-expressed as HLSL in tools/assets/shaders/brn_postfx_helper.fx
+// and published as PC ShaderProgramBuffer images in
+// pc/gcm/renderengine/PostFxHelperProgramsPC.cpp -- so every CreateProgram call site below now
+// hands a REAL PC image to the adopt path (a) and none of them reaches the gate. The gate stays 0
+// because the thing it guards is unchanged: renderengine::ProgramBuffer::Initialize (and
+// GetResourceDescriptor before it) still cannot run on this backend. rwgpfxb4blur.cpp's eight
+// packages and rwgpfxtint.cpp's are still not dumped and still take arm (b).
 #define RW_GPFX_PROGRAM_MICROCODE_AVAILABLE   0
 
 // ---- PC BRING-UP GATE: the full-screen-quad geometry -------------------------------------------
 // The constructor's vertex-descriptor / vertex-buffer / mesh block uploads the quad's vertices from
-// the guest data block at X360 unk_82FAFFF0. Those bytes are not in the export set (function-only)
-// and not in DATA_DUMP.md, and renderengine::MeshHelper::GetResourceDescriptor -- which the console
-// calls -- has no declaration anywhere in this tree. See the BLOCKED note at the site.
+// the guest data block at X360 unk_82FAFFF0. FOUR independent things are missing; only the SHAPE of
+// the upload has been recovered since the last wave (see the BLOCKED note at the site):
+//   1. THE VERTEX VALUES. The block is the DWARF's file-scope `rw::graphics::postfx::Vertex` --
+//      `Vector3 Vertex[4]`, rwgpfxhelper.cpp:74 -- i.e. 4 x 16 = the 0x40 bytes the note records.
+//      Its image copy is ALL ZERO, and it is zero because it is CONSTRUCTED AT RUNTIME by static
+//      initialisation, not because it was mis-dumped: a Vector3 has a constructor, so the array
+//      lives in .data. No function in the 30,095-function export set writes it (grep in the wave
+//      report) and the static initialiser itself is not in the export set, so the three corner
+//      positions are attested by nothing this tree can read.
+//   2. renderengine::MeshHelper::GetResourceDescriptor has no declaration in this tree, and
+//      MeshHelper::Initialize is declared non-static with one parameter while the console calls it
+//      with (resource, parameters).
+//   3. The draw needs renderengine::MeshHelper::Dispatch<renderengine::Device>, whose only home
+//      (pc/gcm/renderengine/MeshHelper.cpp) is NOT on tools/build/build_game_exe.bat, and
+//      D3DDevice_DrawVertices, which has no definition anywhere in the tree.
+//   4. The primitive is Xenos D3DPT_RECTLIST (8, `li r4, 8` @0x823FE634), which
+//      XenonD3D9Shims.cpp::MapPrimitive refuses by design (XenonD3D9Shims.cpp:2376-2378): D3D9 has
+//      no RECTLIST and expanding one is a rendering decision, not a translation.
 #define RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE 0
+
+// ---- THE FOUR PC PROGRAM IMAGES ----------------------------------------------------------------
+// [FLAG PC-platform leaf: shader programs] The D3D9 counterparts of the four Xenos packages this TU
+// compiles, wrapped as platform-4 ShaderProgramBuffer images by the generated leaf
+// pc/gcm/renderengine/PostFxHelperProgramsPC.cpp (sibling of PostFxProgramsPC.cpp and
+// PostFxBloomProgramsPC.cpp). Declared here as the minimal external surface -- the same convention
+// BrnPostFxBloom.cpp:121-149 and BrnPostFxShader.cpp already use for their own generated leaves;
+// there is no header for these.
+//
+// ⚠ THE SIZES ARE THE *PC IMAGE* SIZES, NOT THE X360 MICROCODE SIZES (288 / 688 / 948 / 408).
+// ProgramBufferPC_Adopt bounds-checks the blob against the size it is handed and copies exactly
+// that many bytes, so a console size here would either refuse a valid image ("microcode size is out
+// of range") or read past the array. Nothing below hard-codes a number: each size is read from the
+// generated TU's own published constant, whose static_assert ties it to sizeof() of the array.
+namespace renderengine
+{
+    extern const u8  gauPostFxHelperQuadVertexProgramPC[];
+    extern const u32 guPostFxHelperQuadVertexProgramPCSize;
+    extern const u8  gauPostFxHelperBlur9PixelProgramPC[];
+    extern const u32 guPostFxHelperBlur9PixelProgramPCSize;
+    extern const u8  gauPostFxHelperBlur16PixelProgramPC[];
+    extern const u32 guPostFxHelperBlur16PixelProgramPCSize;
+    extern const u8  gauPostFxHelperBlur4PixelProgramPC[];
+    extern const u32 guPostFxHelperBlur4PixelProgramPCSize;
+}
 
 namespace
 {
@@ -378,11 +423,24 @@ namespace
     }
     void ReleaseObject(renderengine::MeshHelper::MeshData*)
     {
-        // X360 `bl STUB` @0x82402F20 -- the mesh's own Release, which IDA could not name. This tree
-        // has no renderengine::MeshHelper::Release declaration to call.
-        // [FLAG BLOCKED: renderengine::MeshHelper::Release -- X360 callee at 0x82402F20 unnamed in
-        //  the export ("STUB"), no declaration in the tree. The resource is still handed back below,
-        //  so the only thing missing is the vendor object's own teardown.]
+        // X360 `bl STUB` @0x82402F20 -- the mesh's own Release. THE CALLEE IS NAMED NOW, from the
+        // DecFIGS DWARF: `void renderengine::MeshHelper::Release()` (meshhelper.h:86), sitting in
+        // PfxHelper::Release exactly where SafeRelease<renderengine::MeshHelper>
+        // (rwgpfxhelper.h:176) puts it -- between the VertexBuffer release at +0x0C (0x82402ED4) and
+        // the DepthStencilState release at +0x14 (0x82402F68), operating on this->m_quadMeshState
+        // (`lwz r3, 4(r30)` @0x82402F14).
+        // Its HOME in this tree is pc/gcm/renderengine/renderstates.h (the MeshHelper declaration)
+        // plus pc/gcm/renderengine/MeshHelper.cpp (the body) -- NOT this file; a rival definition
+        // under the RenderEngineClub tree would be a split brain against the class's real home.
+        // [FLAG BLOCKED: the renderengine::MeshHelper::Release BODY. IDA resolves the branch target
+        //  at 0x82402F20 to "STUB" and no MeshHelper::Release appears anywhere in the 30,095-function
+        //  export set (grep pasted in the wave report -- only Dispatch<Device> @0x8227B530 and
+        //  Initialize @0x82B63EB8 survive under that class name), so there is no body to reconstruct.
+        //  The resource is still handed back below, so the only thing missing is the vendor object's
+        //  own teardown -- and the two out-of-line SafeRelease instantiations that DO exist
+        //  (BlendState @0x823FF480, DepthStencilState @0x823FF4F8) emit no Release call at all, so a
+        //  no-op is a plausible but UNVERIFIED shape for this one; it is left empty and flagged
+        //  rather than asserted.]
     }
     void ReleaseObject(renderengine::DepthStencilState*)
     {
@@ -393,20 +451,9 @@ namespace
         // Empty on the console: SafeRelease<BlendState> @0x823FF480 emits no Release call.
     }
 
-    // ---- the four embedded microcode packages the constructor compiles --------------------------
-    // The pointers are null because the BYTES ARE ABSENT (see the gate). The X360 address and the
-    // byte size are the asm's own immediates and are carried so a later shader wave can fill them in
-    // without re-deriving anything. A null image makes CreateProgram return null, which is the
-    // honest-empty slot; it is NOT a one-byte placeholder standing in for a 288-byte blob (that is
-    // the shape that lets a console route read off the end of a stand-in).
-    const void* const KP_QUAD_VERTEX_PROGRAM  = nullptr;  // X360 &unk_82044240
-    const u32         KU_QUAD_VERTEX_PROGRAM_SIZE  = 288u;
-    const void* const KP_9TAP_PIXEL_PROGRAM   = nullptr;  // X360 &unk_820444F8
-    const u32         KU_9TAP_PIXEL_PROGRAM_SIZE   = 688u;
-    const void* const KP_16TAP_PIXEL_PROGRAM  = nullptr;  // X360 &unk_820447A8
-    const u32         KU_16TAP_PIXEL_PROGRAM_SIZE  = 948u;
-    const void* const KP_4TAP_PIXEL_PROGRAM   = nullptr;  // X360 &unk_82044360
-    const u32         KU_4TAP_PIXEL_PROGRAM_SIZE   = 408u;
+    // (The four KP_*/KU_* null microcode placeholders that stood here are gone. The real PC images
+    // are declared at file scope above and passed straight into CreateProgram at the call sites,
+    // where the X360 address and byte size they were decoded from stay in the comment.)
 
     // A handle whose register count is 0 is "not found" -- exactly what
     // renderengine::ProgramBuffer::GetVariableHandleByName writes when the name misses
@@ -544,21 +591,37 @@ namespace postfx
         //     MeshHelper params {…, [1] = m_quadVertexBuffer}
         //       -> MeshHelper::GetResourceDescriptor -> DoAllocate -> Initialize -> m_quadMeshState
         //
-        // [FLAG BLOCKED: TWO missing items, neither guessable.
-        //   (a) THE VERTEX DATA. The lvx128/vspltw/stvewx sequence at 0x824083E0-0x824084A0 sources
-        //       every position lane from the guest data block at X360 unk_82FAFFF0 (0x40 bytes,
-        //       .data). The IDA export is function-only and DATA_DUMP.md does not carry it, so the
-        //       quad's corner positions are unknown. They are NOT "obviously the unit quad": the
-        //       vertex count in the buffer parameters is 3, not 4, so this is a full-screen TRIANGLE
-        //       and its two out-of-range corners cannot be inferred from the four-vertex Vertex[4]
-        //       the DWARF names.
-        //   (b) renderengine::MeshHelper::GetResourceDescriptor has NO declaration in this tree, and
-        //       MeshHelper::Initialize is declared non-static with one parameter while the console
-        //       calls it with (resource, parameters). Both would have to be minted.
-        //  CONSEQUENCE: the helper has no quad, so PfxHelper::RenderQuad / Blur9 / Blur16 /
-        //  DownSample cannot draw. None of them is reachable on this build -- BrnPostFx runs
-        //  permutation 0 with every effect bit clear -- and the null members make a premature call
-        //  crash rather than draw garbage.]
+        // WHAT THE VERTEX UPLOAD WRITES, RECOVERED IN FULL from the lvx128/vspltw/stvewx sequence at
+        // 0x82408494-0x824085B0. VertexBufferHelper::Lock hands back a base pointer (var_3D0); the
+        // sequence keeps it in r11 biased by -4 and stores through `stvewx vX, r11, 4` / `, r11, 8`
+        // / `, 0, r8`, which lands three 20-byte vertices (FLOAT3 position + FLOAT2 uv == the
+        // declaration built at 0x82408370-A8) at base+0, base+20, base+40:
+        //     vertex 0  position = Vertex[0]   (lvx128 at unk_82FAFFF0 + 0x00, words 0/1/2)
+        //               uv       = (0.0, 1.0)  (staged in var_440 from flt_82001CC0 / flt_82001C98)
+        //     vertex 1  position = Vertex[1]   (lvx128 at unk_82FAFFF0 + 0x10)
+        //               uv       = (1.0, 1.0)
+        //     vertex 2  position = Vertex[2]   (lvx128 at unk_82FAFFF0 + 0x20)
+        //               uv       = (0.0, 0.0)
+        // The fourth Vector3 of the array is never read, and the vertex count in the buffer
+        // parameters is 3 (`li r26, 3` @0x82408404), because the draw is Xenos D3DPT_RECTLIST (8):
+        // three corners of a rectangle, the GPU infers the fourth. That corrects the previous note's
+        // reading of "a full-screen TRIANGLE with two out-of-range corners" -- and the three UVs are
+        // the SAME three the sibling BrnPostFxBloom::DrawFullScreenQuad writes for its first three
+        // strip vertices, which is a useful cross-check on the decode but is NOT evidence for the
+        // positions, so none is written here.
+        //
+        // [FLAG BLOCKED: FOUR missing items, none guessable -- enumerated at
+        //  RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE above. In short: (1) the three corner POSITIONS,
+        //  which live in the runtime-constructed `Vector3 Vertex[4]` at X360 unk_82FAFFF0 and are
+        //  zero in the shipped image with no writer anywhere in the export set; (2)
+        //  MeshHelper::GetResourceDescriptor has no declaration here; (3) MeshHelper.cpp is not
+        //  mounted and D3DDevice_DrawVertices has no definition in the tree; (4) RECTLIST is refused
+        //  by the PC primitive mapper on purpose.
+        //  CONSEQUENCE: the helper has no quad, so PfxHelper::RenderQuad -- and therefore Blur9 and
+        //  DownSample -- cannot draw. None of them is reachable on this build (BrnPostFx runs
+        //  permutation 0 with every effect bit clear), and the null members make a premature call
+        //  report-and-return rather than draw garbage. The four PROGRAMS are unaffected: they are
+        //  real, adopted, and their constants upload.]
         static bool sbReportedNoQuad = false;
         ReportOnce(sbReportedNoQuad,
                    "[PfxHelper] full-screen-quad geometry not built: the quad's vertex data"
@@ -607,49 +670,55 @@ namespace postfx
         }
 
         // ---- 5. the four shader programs and their named constants (asm 0x82408604-0x824086F0) ----
-        // The console builds, in order:
-        //   CreateProgram(0, &unk_82044240, 288) -> m_quadVertexProgram   , handle "uvOffset"
-        //   CreateProgram(1, &unk_820444F8, 688) -> m_9tapPixelProgram    , handles
+        // The console builds, in order (every immediate is the asm's own):
+        //   CreateProgram(0, &unk_82044240, 0x120=288) -> m_quadVertexProgram , handle "uvOffset"
+        //   CreateProgram(1, &unk_820444F8, 0x2B0=688) -> m_9tapPixelProgram  , handles
         //                                            "sampleOffsets4x4_1" / "_2" / "sampleOffsets4_1"
-        //   CreateProgram(1, &unk_820447A8, 948) -> m_16tapPixelProgram   , handles
+        //   CreateProgram(1, &unk_820447A8, 0x3B4=948) -> m_16tapPixelProgram , handles
         //                                            "sampleOffsets_1" .. "_4"
-        //   CreateProgram(1, &unk_82044360, 408) -> m_4tapPixelProgram    , handle "sampleOffsets"
-        // (The DWARF's 9tap/16tap member names and the shader-variable names disagree about which
-        // slot is which -- the +0x20 program binds the "4x4" names and the +0x30 program the plain
-        // ones. The MEMBER names are the DWARF's and the OFFSETS are the asm's; both are reproduced
-        // as found and neither is "corrected", because only the microcode could settle it.)
+        //   CreateProgram(1, &unk_82044360, 0x198=408) -> m_4tapPixelProgram  , handle "sampleOffsets"
         //
-        // Each site passes the microcode pointer as null with its X360 address and byte size
-        // recorded, because the bytes are absent (see the gate). CreateProgram returns null for a
-        // null image, so every slot above stays null and every handle stays zero-count.
+        // THE MEMBER NAMES AND THE SHADER-VARIABLE NAMES DO NOT DISAGREE -- this retires the note the
+        // previous revision left here. The packages are decoded now, and the tap counts settle it
+        // from two independent readings of each program (its tfetch count and its CTAB register
+        // count):
+        //   +0x20 (0x820444F8): 9 tfetch; CTAB sampleOffsets4x4_1 c0 x4, sampleOffsets4x4_2 c4 x4,
+        //                       sampleOffsets4_1 c8 x1 == 9 registers -> a NINE-tap program, which is
+        //                       exactly the 4 + 4 + 1 rows Blur9 pushes through its three handles.
+        //   +0x30 (0x820447A8): 16 tfetch; sampleOffsets_1..4, four registers each == 16 -> the
+        //                       SIXTEEN-tap program DownSample(METHOD_16TAP) fills.
+        //   +0x44 (0x82044360): 4 tfetch; sampleOffsets c0 x4 -> the FOUR-tap program
+        //                       METHOD_16TAP_WITH_BILINEAR uses (InitWeights_Blur16WithBilinear emits
+        //                       exactly four bilinear taps over the 4x4 box).
+        // So m_9tapPixelProgram / m_16tapPixelProgram / m_4tapPixelProgram are correct as the DWARF
+        // named them, and the "4x4" in the 9-tap's variable names is the author's name for the
+        // constant block, not a tap count.
         //
-        // [FLAG BLOCKED: four Xenos microcode packages, extractable from the ARTIST .i64 exactly the
-        //  way rwgpfxrendertargetdebugger.cpp already extracted its own pair:
-        //    0x82044240  288 bytes  vertex  ("uvOffset")
-        //    0x820444F8  688 bytes  pixel   ("sampleOffsets4x4_1", "sampleOffsets4x4_2",
-        //                                    "sampleOffsets4_1")
-        //    0x820447A8  948 bytes  pixel   ("sampleOffsets_1".."sampleOffsets_4")
-        //    0x82044360  408 bytes  pixel   ("sampleOffsets")
-        //  A PC replacement additionally needs an HLSL pair per program; none is authored in this
-        //  wave by design.]
-        m_quadVertexProgram = CreateProgram(0, KP_QUAD_VERTEX_PROGRAM, KU_QUAD_VERTEX_PROGRAM_SIZE,
+        // Each site now passes the PC image published by PostFxHelperProgramsPC.cpp; CreateProgram
+        // adopts it (arm (a)) and never reaches the gate. The X360 address and byte size stay in the
+        // comment above as the provenance of what each image was decoded from.
+        m_quadVertexProgram = CreateProgram(0, renderengine::gauPostFxHelperQuadVertexProgramPC,
+                                            renderengine::guPostFxHelperQuadVertexProgramPCSize,
                                             m_allocator);
         BindProgramVariable(m_quadVertexProgram, "uvOffset", m_uvOffsetHandle);
 
-        m_9tapPixelProgram = CreateProgram(1, KP_9TAP_PIXEL_PROGRAM, KU_9TAP_PIXEL_PROGRAM_SIZE,
+        m_9tapPixelProgram = CreateProgram(1, renderengine::gauPostFxHelperBlur9PixelProgramPC,
+                                           renderengine::guPostFxHelperBlur9PixelProgramPCSize,
                                            m_allocator);
         BindProgramVariable(m_9tapPixelProgram, "sampleOffsets4x4_1", m_blur9SamplesHandle[0]);
         BindProgramVariable(m_9tapPixelProgram, "sampleOffsets4x4_2", m_blur9SamplesHandle[1]);
         BindProgramVariable(m_9tapPixelProgram, "sampleOffsets4_1",   m_blur9SamplesHandle[2]);
 
-        m_16tapPixelProgram = CreateProgram(1, KP_16TAP_PIXEL_PROGRAM, KU_16TAP_PIXEL_PROGRAM_SIZE,
+        m_16tapPixelProgram = CreateProgram(1, renderengine::gauPostFxHelperBlur16PixelProgramPC,
+                                            renderengine::guPostFxHelperBlur16PixelProgramPCSize,
                                             m_allocator);
         BindProgramVariable(m_16tapPixelProgram, "sampleOffsets_1", m_blur16SamplesHandle[0]);
         BindProgramVariable(m_16tapPixelProgram, "sampleOffsets_2", m_blur16SamplesHandle[1]);
         BindProgramVariable(m_16tapPixelProgram, "sampleOffsets_3", m_blur16SamplesHandle[2]);
         BindProgramVariable(m_16tapPixelProgram, "sampleOffsets_4", m_blur16SamplesHandle[3]);
 
-        m_4tapPixelProgram = CreateProgram(1, KP_4TAP_PIXEL_PROGRAM, KU_4TAP_PIXEL_PROGRAM_SIZE,
+        m_4tapPixelProgram = CreateProgram(1, renderengine::gauPostFxHelperBlur4PixelProgramPC,
+                                           renderengine::guPostFxHelperBlur4PixelProgramPCSize,
                                            m_allocator);
         BindProgramVariable(m_4tapPixelProgram, "sampleOffsets", m_blur4SamplesHandle);
 
@@ -724,10 +793,11 @@ namespace postfx
     // stores, one bound-safe run per handle. Blur9's three runs (4 + 4 + 1) already go through three
     // separate handles on the console (`+0x24 / +0x28 / +0x2C`), so it is one-to-one.
     //
-    // On this build every helper program is honestly empty (RW_GPFX_PROGRAM_MICROCODE_AVAILABLE 0)
-    // -- zero-count handles route the rows to the leaf's discard row, SetPixelProgram binds null --
-    // and the quad has no geometry (RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE 0), so RenderQuad reports
-    // once and draws nothing. Neither pass is reachable while every effect bit is clear.
+    // On this build all four helper programs are REAL: the PC images published by
+    // PostFxHelperProgramsPC.cpp are adopted in the constructor, so the weight rows below upload
+    // through live handles and SetPixelProgram binds a live program. What is still missing is the
+    // QUAD (RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE 0), so RenderQuad reports once and draws nothing
+    // and neither pass produces pixels. Neither pass is reachable while every effect bit is clear.
     // ============================================================================================
     namespace
     {
@@ -835,19 +905,47 @@ namespace postfx
     }
 
     // X360 0x823FE530.
+    //
+    // THE CONSOLE BODY, RECOVERED IN FULL (it was only sketched before). Every shadow-cache
+    // compare-and-store in the asm is one of the shadow::Device binders inlined; AGENTS.md's
+    // inlining-reversal rule says restore the call, and restoring it is also what keeps this TU off
+    // four private statics of shadow::Device (dword_83010A28 / off_83010954 / dword_8301095C /
+    // off_83010958, all already homed there):
+    //     0x823FE53C-80  shadow::Device::SetState(m_quadDepthStencilState)              (+0x14)
+    //     0x823FE584-A8  renderengine::MeshHelper::Dispatch<renderengine::Device>(
+    //                        m_quadMeshState)                                           (+0x04)
+    //     0x823FE5AC-C4  shadow::Device::SetVertexProgram(m_quadVertexProgram)           (+0x18)
+    //     0x823FE5C8-E0  shadow::Device::SetVertexDescriptor(m_quadVertexDescriptor)     (+0x08)
+    //     0x823FE5E4-EC  renderengine::Device::BeginShaderStates(&m_uvOffsetHandle, &cursor)
+    //                        -- `addi r3, r29, 0x1C` IS m_uvOffsetHandle: one run, one constant
+    //     0x823FE5F0-620 cursor[0..3] = lpafUvOffset ? the caller's float4 (`lvx128`/`stvx128`)
+    //                        : four copies of flt_82001CC0 == 0.0f
+    //     0x823FE624     shadow::Device::FlushVertexProgramState()
+    //     0x823FE628-3C  D3DDevice_DrawVertices(gpD3DDevice, 8, 0, 3)
+    // PrimitiveType 8 is Xenos D3DPT_RECTLIST and VertexCount 3 is the rect's three corners -- the
+    // same three the constructor uploads.
+    //
+    // [FLAG BLOCKED: RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE] The sequence above is documented rather
+    // than written, for the four reasons enumerated at the gate -- and NOT merely because the corner
+    // values are missing. Even with the values: m_quadMeshState / m_quadVertexDescriptor are null on
+    // this build so Dispatch would dereference null on its first read; MeshHelper.cpp is not on
+    // tools/build/build_game_exe.bat; D3DDevice_DrawVertices has no definition in the tree; and
+    // RECTLIST is refused by XenonD3D9Shims.cpp::MapPrimitive. Writing the calls now would add two
+    // unresolvable externals to the link for a path that cannot execute, and drawing a fabricated
+    // triangle instead would read as a rendering choice. The four PROGRAMS this function would bind
+    // are real and adopted; only the geometry and the draw are missing.
     void PfxHelper::RenderQuad(const f32* lpafUvOffset)
     {
+#if RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE
+#error "RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE is on but the quad draw is not reconstructed -- see the BLOCKED note"
+#else
         (void)lpafUvOffset;
-        // [FLAG BLOCKED: RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE] The console pushes lpafUvOffset
-        // through m_uvOffsetHandle, binds m_quadVertexProgram / m_quadVertexDescriptor /
-        // m_quadDepthStencilState and issues the mesh draw. This build's helper owns no quad (the
-        // guest vertex block unk_82FAFFF0 is not dumped -- see the constructor), so there is nothing
-        // to draw and drawing a fabricated triangle would read as a rendering choice.
         static bool sbReported = false;
         ReportOnce(sbReported,
                    "[rwgpfx] PfxHelper::RenderQuad: NO quad geometry on this build -- the pass drew"
                    " nothing (destination left as it was). [FLAG BLOCKED:"
                    " RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE]\n");
+#endif
     }
 }
 }

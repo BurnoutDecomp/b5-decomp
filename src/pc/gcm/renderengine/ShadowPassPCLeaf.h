@@ -106,6 +106,28 @@ namespace renderengine
     // Defined in XenonD3D9Shims.cpp.
     void ShadowSampler_ApplyState(u32 luUnit);
 
+    // FLAG PC-platform leaf: the POST-FX RAW-DEPTH sampler seam -- the sibling of
+    // ShadowSampler_ApplyState above, for the other depth semantic.
+    //
+    // A post-fx target's depth is created in a RAW-VALUE format (INTZ / DF24 / DF16) so the
+    // composite's DoF / motion-blur permutations and rwgpfxdof can read depth VALUES; those
+    // fetches must be POINT (filtering depths averages two surfaces into one that exists at
+    // neither) and CLAMP. The console says the same in RenderTarget::CreateStates @0x82403A18,
+    // which builds that target's depth TextureState with mag = min = 0; this build cannot let
+    // a TextureState speak, because SetSamplerStateLowLevel is a no-op, so the words are applied
+    // at BIND time instead -- keyed on the bound resource's format, never on a unit number.
+    //
+    // ApplyRawDepthSamplerState is applied automatically by D3DDevice_SetTexture; this is the
+    // named entry for a caller that binds a depth texture some other way.
+    void PostFxDepthSampler_ApplyState(u32 luUnit);
+
+    // The units currently holding a raw-depth texture, one bit per sampler. Device::SetState
+    // unbinds them before it binds that same texture's surface as the depth-stencil: D3D9 (unlike
+    // D3D10+) does NOT auto-unbind, and a texture that is simultaneously a sampler source and the
+    // depth target has undefined sample results -- with no error and no log line.
+    // Defined in XenonD3D9Shims.cpp.
+    u32 PostFxDepthSampler_BoundUnitMask();
+
     // The number of world DrawIndexedPrimitiveUP submissions issued so far. Read by the
     // shadow pass's [shadow-fetch] probe to separate "no draws reached the shadow target"
     // from "draws reached it and rasterised nothing".
