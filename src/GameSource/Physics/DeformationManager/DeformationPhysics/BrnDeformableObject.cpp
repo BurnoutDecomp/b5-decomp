@@ -3,6 +3,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"       // CgsNumeric::Random
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu::{Dot, Cross, Subtract, ...}
+#include <cstdlib>                                          // getenv -- the opt-in [worldimp] probe only
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint -- the opt-in [worldimp] probe only
 
 // BrnPhysics::Deformation::DeformableObject::ApplyCarCarImpulse  @0x82624C08
 //
@@ -198,20 +200,67 @@ namespace Deformation
         }
 
         // -------- apply the equal-and-opposite impulse to both cars --------
-        // Build the impulse parameter block. The fields the orchestrator sets directly are the
-        // impulse magnitude, the world-space impulse direction and the per-body inverse inertia; the
-        // remaining ImpulseParams fields are filled by ApplySensorImpulse / the body apply.
+        // Build the impulse parameter block.
+        //
+        // ⭐⭐⭐ 2026-08-16 (walls leg 9) -- THE DROPPED STORES. `ImpulseParams` is a 0xC0 == 192-byte
+        // POD and `ImpulseParams lParams;` leaves every field this function does not assign as
+        // UNINITIALISED STACK. Five fields the console writes here were never written in-tree, and
+        // one of them (mpImpulsePasser) was the leg-8 access violation: the sensor's chain forward
+        // does `if (params->mpImpulsePasser) params->mpImpulsePasser->PassOnImpulse(...)`, which on
+        // stack garbage passes the test and then reads `mapCollidableBodies[i]` off a garbage `this`.
+        // ⚠️⚠️ A NON-NULL GARBAGE POINTER DEFEATS A NULL TEST -- the carried rule, one level up.
+        // Every store below is asm-attested at the address in its comment (X360 @0x82624C08).
         ImpulseParams lParams;
         lParams.mvfImpulseMagnitude    = lvfImpulseMagnitude;
         lParams.mWorldImpulseDirection = lContact.mNormal;
         lParams.mvfInverseInertia      = lvfInvInertiaA;
-        lParams.mvfTimeStep            = lvfTimeStep;
-        lParams.mePositionSpace        = rw::physics::WORLD_SPACE;
+        lParams.mvfTimeStep            = lvfTimeStep;                          // 0x82625120 -> +0x70
+        lParams.mePositionSpace        = rw::physics::WORLD_SPACE;             // 0x82625060 -> +0x50 (r29 == 0)
+        lParams.mImpulsePosition       = lContact.mPointOnA;                   // 0x82625078 -> +0x20 (lvx r31 == &lContact)
+        lParams.mbWorldContact         = false;                                // 0x82625124 -> +0xB8 (stb r29 == 0)
+        // +0x80 mvfVelocityAlongNormal <- v122 == vmsum3fp128(relativeMotion, normal) @0x82624D50,
+        // i.e. the CLOSING SPEED, stored at 0x8262510C. Positive by construction on this path (the
+        // function has already early-returned when it is <= 0), which is exactly why the head's
+        // `ASSERT(mvfVelocityAlongNormal >= 0)` (line 319) never fires on console.
+        lParams.mvfVelocityAlongNormal = VecFloat{ lfClosingSpeed, lfClosingSpeed,
+                                                   lfClosingSpeed, lfClosingSpeed };
+        // +0xB0 mpImpulsePasser <- `addi r11, r30, 0x18E4 ; stw r11, var_D0(r1)` @0x82625118/28.
+        // 0x18E4 is this object's mImpulsePasser map base (the same base ResetSensors' inlined
+        // SetCollidableBodyMap stores through). THIS is the chain's handle -- without it the sensor
+        // forwards into garbage.
+        lParams.mpImpulsePasser        = &mImpulsePasser;                      // 0x82625118/0x82625128
+        // (+0xB4 meAbsorptionSet is written by ApplySensorImpulse itself, `lwz r10,0x675C(this)`
+        //  @0x8260793C -> `stw r10, var_1DC` @0x82607940; see that TU.)
+
+        // ⭐⭐⭐ 2026-08-16 (walls leg 9) -- THE NORMALIZE THE TREE HAD DROPPED. ApplySensorImpulse's
+        // arg 5 is named `lImpulseDir` and arg 6 `lvfImpulseMagnitude`, and the console means both
+        // names literally: it runs ONE rsqrt pipeline over the shaped impulse and hands the callee
+        // the UNIT direction and the LENGTH separately. X360 @0x82625044..0x826250EC:
+        //     lvx128 v9, var_200            ; the shaped impulse
+        //     vmsum3fp128 v0, v9, v9        ; |imp|^2
+        //     vrsqrtefp + two Newton refines
+        //     vmulfp128 v0, v0, v11         ; |imp|^2 * rsqrt   == the LENGTH
+        //     vmulfp128 v3, v9, v13         ; imp     * rsqrt   == the UNIT DIRECTION
+        //     vsel128 v126, v0, v7, v126    ; zero-length guard on the length
+        //     0x826250FC stvx128 v3 -> var_200   (the local impulse is REPLACED by the unit form)
+        //     0x82625108 vmr128  v4, v126        ; arg 4 (v4) == the LENGTH
+        //                          v3            ; arg 3 (v3) == the UNIT DIRECTION
+        // (PS3 does the identical thing at 0x746FF8..0x74703C for the world twin; its ABI puts the
+        //  vector args in v2..v5, which is what makes `vmr v2, v27` == the timeStep argument.)
+        // ⛔ WHY IT MATTERS: `ApplySensorImpulse` forms the per-direction impulse as
+        // `lImpulseDir * lvfImpulseMagnitude` (`vmulfp128 v126, v116, v120` @0x82607AB4). Feeding it
+        // a magnitude-BEARING direction squares the impulse -- measured live before this landed:
+        // the +Y floor contact handed the vehicle body 2.15e5 instead of ~7e2. A dimensionally
+        // impossible number, which is exactly how it was caught.
+        Vector3   lImpulseUnit;
+        const f32 lfImpulseLength = vpu::NormalizeReturnMagnitude(lImpulse, lImpulseUnit);
+        const VecFloat lvfShapedMagnitude =
+            VecFloat{ lfImpulseLength, lfImpulseLength, lfImpulseLength, lfImpulseLength };
 
         // This car: apply the impulse as-is at the contact (sensor liSensorIndex), adding to the spy.
         DeformationSensor* lpSensor = GetDeformationSensor(liSensorIndex);
-        ApplySensorImpulse(lvfTimeStep, lContact, lParams, lRelativeMotion, lImpulse,
-                           lvfImpulseMagnitude, lpSensor, /*lbAddToSpy*/ true,
+        ApplySensorImpulse(lvfTimeStep, lContact, lParams, lRelativeMotion, lImpulseUnit,
+                           lvfShapedMagnitude, lpSensor, /*lbAddToSpy*/ true,
                            /*lbUseNormalScaledFriction*/ true);
 
         // The other car: apply the reversed contact (A<->B, normal negated) with the negated impulse
@@ -220,8 +269,15 @@ namespace Deformation
         lContact.GetInverse(lReverseContact);
         lParams.mvfInverseInertia      = lvfInvInertiaB;
         lParams.mWorldImpulseDirection = lReverseContact.mNormal;
+        // ⭐ The passer is RE-POINTED at the OTHER car for the reversed half -- the console repeats
+        // the store verbatim with the other object's base: `addi r11, r3, 0x18E4 ; stw r11, var_D0`
+        // @0x826251B0/B8. Each half of the shunt walks its OWN car's chain map.
+        lParams.mpImpulsePasser        = &lOtherCar.mImpulsePasser;            // 0x826251B0/0x826251B8
+        // The reversed half negates the (already unit) direction and keeps the same length -- the
+        // console negates the stored unit vector in place (`vslw128 v0 ; vxor v3, v12, v0` at
+        // 0x826251B4..0x826251C0, the sign-bit flip of the var_200 it just wrote the unit form to).
         lOtherCar.ApplySensorImpulse(lvfTimeStep, lReverseContact, lParams, vpu::Negate(lRelativeMotion),
-                                     vpu::Negate(lImpulse), lvfImpulseMagnitude, lContact.mpOtherSensor,
+                                     vpu::Negate(lImpulseUnit), lvfShapedMagnitude, lContact.mpOtherSensor,
                                      /*lbAddToSpy*/ false, /*lbUseNormalScaledFriction*/ true);
 
         return true;
@@ -316,18 +372,94 @@ namespace Deformation
         }
 
         // The WORLD-contact params block; the remaining fields are filled by ApplySensorImpulse.
+        //
+        // ⭐⭐⭐ 2026-08-16 (walls leg 9) -- TWO DROPPED STORES, from the PS3 twin @0x746D68 (the X360
+        // is an export hole). Params base there is var_190; the +0xB8/+0x50 stores below it pin the
+        // base exactly (`stb 1, var_D8` == mbWorldContact and `stw 0, var_140` == mePositionSpace,
+        // which are 8 and 0x40 off the two fields this block already set correctly).
         ImpulseParams lParams;
         lParams.mvfImpulseMagnitude    = lvfImpulseMagnitude;
         lParams.mWorldImpulseDirection = lContact.mNormal;
-        lParams.mvfInverseInertia      = lvfInvInertia;
-        lParams.mvfTimeStep            = lvfTimeStep;
-        lParams.mePositionSpace        = rw::physics::WORLD_SPACE;
-        lParams.mImpulsePosition       = lContact.mPointOnA;
-        lParams.mbWorldContact         = true;
+        lParams.mvfInverseInertia      = lvfInvInertia;                        // 0x746F78 -> +0x60
+        lParams.mvfTimeStep            = lvfTimeStep;                          // 0x746F90 -> +0x70
+        lParams.mePositionSpace        = rw::physics::WORLD_SPACE;             // 0x746F80 -> +0x50
+        lParams.mImpulsePosition       = lContact.mPointOnA;                   // 0x746F70 -> +0x20
+        lParams.mbWorldContact         = true;                                 // 0x746F88 -> +0xB8
         lParams.meAbsorptionSet        = meAbsorptionSet;
+        // +0x80 mvfVelocityAlongNormal @0x747010 (`li r0,0x150 ; stvx v1, r1, r0`). v1 is the
+        // vsldoi/vaddfp horizontal sum of relativeMotion*normal -- i.e. dot3(relMotion, normal) --
+        // passed through `vandc v1, v1, v9` @0x74700C where v9 == vslw(vspltisw -1) == 0x80000000,
+        // which CLEARS THE SIGN BIT. So the field is |closing speed|. The function has already
+        // returned false for a separating contact, so the dot is negative here and the abs is what
+        // makes the head's line-319 `>= 0` assert hold. Recomputed by name rather than re-derived.
+        {
+            const f32 lfClosing    = vpu::Dot(lRelativeMotion, lContact.mNormal);
+            const f32 lfAbsClosing = (lfClosing < 0.0f) ? -lfClosing : lfClosing;
+            lParams.mvfVelocityAlongNormal =
+                VecFloat{ lfAbsClosing, lfAbsClosing, lfAbsClosing, lfAbsClosing };
+        }
+        // +0xB0 mpImpulsePasser @0x746F6C/0x746F98 (`addi r11, this, 0x18E4 ; stw r11, var_E0`).
+        // ⭐⭐ THE CHAIN'S HANDLE, and the store the tree had never made: this is the ONLY route by
+        // which an ordinary world contact reaches the momentum bank (sensor absorbs -> PassOnImpulse
+        // -> slot 0 == &mVehicleBody -> VehicleRigidBody::RecievePassedOnImpulse ->
+        // VehiclePhysics::ApplyWallContactImpulse -> ExternalPhysicsBody::AddWorldSpaceImpulse).
+        lParams.mpImpulsePasser        = &mImpulsePasser;                      // 0x746F6C/0x746F98
 
-        ApplySensorImpulse(lvfTimeStep, lContact, lParams, lRelativeMotion, lImpulse,
-                           lvfImpulseMagnitude, GetDeformationSensor(liSensorIndex),
+        // ⭐⭐⭐ THE SAME DROPPED NORMALIZE as the car-car sibling (see its long note). PS3
+        // @0x746FF8..0x74703C: `vrsqrtefp` over the shaped impulse's |imp|^2, two Newton refines,
+        // then the double publish -- `vmaddfp v8,...` == imp * rsqrt (the UNIT DIRECTION, also
+        // written back through r28) and `vmaddfp v5,...` == |imp|^2 * rsqrt (the LENGTH), with
+        // `vsel v5, v5, v31, v7` guarding the zero-length case. `vmr v4, v8` seats the unit vector
+        // as ApplySensorImpulse's arg 3 (PS3 vector args start at v2) and v5 as its arg 4.
+        // vpu::NormalizeReturnMagnitude is the house model of exactly that one-pipeline double
+        // publish, zero guard included.
+        Vector3   lImpulseUnit;
+        const f32 lfImpulseLength = vpu::NormalizeReturnMagnitude(lImpulse, lImpulseUnit);
+        const VecFloat lvfShapedMagnitude =
+            VecFloat{ lfImpulseLength, lfImpulseLength, lfImpulseLength, lfImpulseLength };
+
+        // ---- [worldimp] PC bring-up instrument -- DELETE WHEN the wall test is banked -----------
+        // OPT-IN (BRN_IMPULSE_PROBE=1). The UPSTREAM question the downstream probes cannot answer:
+        // does the world-contact impulse orchestrator run AT ALL for a vertical wall face, or only
+        // for the ground? One line per world contact that reaches the solver, with the contact
+        // NORMAL (the floor's is ~+Y, a wall's is horizontal) and the solved magnitude.
+        // Two windows, same discipline as the others: an opening window plus horizontal normals.
+        // ⚠️ SCOPE OF THE EVIDENCE THIS GIVES: the probe sits AFTER the separating-contact early-out
+        // and after the solve, so "no WALLFACE line" proves no wall-normal contact reached HERE --
+        // it does not by itself prove none ENTERED the function. (For the campaign's wall run the
+        // distinction is moot: the car arrives at -30 m/s into a normal with |n.z| == 0.86, which
+        // cannot be classified separating. Stated anyway so the next leg does not over-read it.)
+        {
+            static s32 siWorldProbe = -1;
+            if ( siWorldProbe < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_IMPULSE_PROBE" );
+                siWorldProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+            }
+            static u32 suWorld      = 0;
+            static u32 suHorizontal = 0;
+            ++suWorld;
+            const f32  lfAbsNY  = ( lContact.mNormal.y < 0.0f ) ? -lContact.mNormal.y
+                                                                : lContact.mNormal.y;
+            const bool lbWallish = ( lfAbsNY < 0.6f );   // the [wall] probe's own discriminator
+            if ( siWorldProbe == 1 && CgsDev::Log::gpDebugPrint != 0
+                 && ( suWorld <= 30u || ( lbWallish && ++suHorizontal <= 600u ) ) )
+            {
+                const Vector3 lPos = lpVehicle->GetPosition();
+                *CgsDev::Log::gpDebugPrint
+                    << "[worldimp] n " << static_cast<s32>(suWorld)
+                    << ( lbWallish ? " WALLFACE" : " floor" )
+                    << " sensor " << liSensorIndex
+                    << " n " << lContact.mNormal.x << " " << lContact.mNormal.y
+                    << " " << lContact.mNormal.z
+                    << " mag " << lfImpulseLength
+                    << " pos " << lPos.x << " " << lPos.y << " " << lPos.z
+                    << "\n";
+            }
+        }
+
+        ApplySensorImpulse(lvfTimeStep, lContact, lParams, lRelativeMotion, lImpulseUnit,
+                           lvfShapedMagnitude, GetDeformationSensor(liSensorIndex),
                            /*lbAddToSpy*/ true, /*lbUseNormalScaledFriction*/ true);
         return true;
     }
