@@ -44,12 +44,29 @@ namespace postfx
         // X360 0x82403DB8 -- construct the vignette into `this`. lppParameters[0] is the rw resource
         // allocator the effect keeps and hands to every renderengine resource it builds;
         // lppParameters[1..] is the initial State SetState seeds from.
+        // rwgpfxvignette.h:87-92 (DWARF) -- the construction parameter block. Its LEADING member is
+        // the allocator, which is why the constructor above can take the block's address spelled as
+        // `rw::IResourceAllocator**`: &Parameters::m_allocator is exactly that pointer.
+        struct Parameters
+        {
+            rw::IResourceAllocator* m_allocator;   // rwgpfxvignette.h:89
+            State                   m_state;       // rwgpfxvignette.h:90
+
+            // rwgpfxvignette.h:92 -- X360 rw__graphics__postfx__Vignette__Parameters__Parameters
+            // @0x823F5420. Seeds the block; BrnPostFx::Construct then overwrites m_allocator only.
+            Parameters();
+        };
+
         explicit Vignette(rw::IResourceAllocator** lppParameters);
 
         // X360 0x823FE8B0 -- recompute the vignette shader-constant vectors from `lrState`: the inner
         // and outer colour vectors and the gradient sharpness gradient (mul = sharpness*500+1, add =
         // -sharpness*500) the pixel program applies.
         void SetState(const State& lrState);
+
+        // X360 0x823F93D0 -- release every renderengine resource the vignette owns.
+        // rwgpfxvignette.h:158 (DWARF). Called out-of-line by BrnPostFx::Destruct @0x824081FC.
+        void Release();
 
     private:
         // The vignette State constant block (the four Vector4 lanes + the sharpness scalar SetState

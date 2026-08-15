@@ -104,6 +104,12 @@ struct BrnRendererMemory
     // sampler 13 unbound for want of GetEnvMapBuffer.
     CgsRenderTarget* GetAntiAliasBuffer()  { return mapRenderTarget[E_RENDER_TARGET_ANTI_ALIAS]; }
     CgsRenderTarget* GetDownSampleBuffer() { return mapRenderTarget[E_RENDER_TARGET_DOWN_SAMPLE]; }
+    // The four post-fx slots BrnPostFx::PrepareDownSampleBuffers and BrnPostFx::Render index; the
+    // displacements they are read from are in the edit note for this hunk.
+    CgsRenderTarget* GetBackBuffer()       { return mapRenderTarget[E_RENDER_TARGET_BACK_BUFFER]; }
+    CgsRenderTarget* GetBloomBuffer()      { return mapRenderTarget[E_RENDER_TARGET_BLOOM]; }
+    CgsRenderTarget* GetDepthOfFieldBuffer() { return mapRenderTarget[E_RENDER_TARGET_DEPTH_OF_FIELD]; }
+    CgsRenderTarget* GetWorkBuffer()       { return mapRenderTarget[E_RENDER_TARGET_WORK]; }
     // DWARF source BrnRendererMemory.h:254 (dwarfdump file line 153). INLINED on the X360 (no
     // standalone symbol), but its name survives verbatim in two assert strings
     // BrnRendererModule::BeginQuarterResBuffer @0x82408C38 embeds --

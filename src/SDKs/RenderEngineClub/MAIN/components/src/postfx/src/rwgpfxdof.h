@@ -27,6 +27,11 @@ namespace graphics
 {
 namespace postfx
 {
+    // Forward-declared, not included: DownSampleAndGaussianBlur takes RenderTarget by pointer only,
+    // and rwgpfxrendertarget.h transitively pulls in the whole renderengine texture/pixel-buffer
+    // surface. This is the documented pointer-only cascade-avoidance exception in AGENTS.md.
+    class RenderTarget;
+
     class DepthOfField
     {
     public:
@@ -56,6 +61,21 @@ namespace postfx
         // dof / blur params carried through verbatim. (zProjScale = far/(far-near),
         // wProjOffset = -near*zProjScale -- the standard depth-linearisation constants.)
         void SetState(const State& lState);
+
+        // X360: called from BrnPostFx::PrepareDownSampleBuffers @0x82408EFC with r4 = the DoF pool
+        // slot's RenderTarget, r5 = the caller's result target, r6 = the WORK slot's RenderTarget --
+        // and NO float registers (see this edit's note; the `fmr f2, f1` at entry belongs to the
+        // bloom call). Down-sample the source into the DoF chain and gaussian-blur it; returns the
+        // target it produced. Declaration-only; the body lives in the DoF TU.
+        // DWARF rwgpfxdof.h:136 (dwarfdump line 116) -- three parameters.
+        RenderTarget* DownSampleAndGaussianBlur(RenderTarget* lpDestRenderTarget,
+                                                RenderTarget* lpSourceRenderTarget,
+                                                RenderTarget* lpWorkBufferTarget);
+
+        // Release the compiled DoF pixel program and free the resource it was carved into.
+        // INLINED on the X360 (BrnPostFx::Destruct 0x8240819C-0x824081F4); body belongs to the DoF TU.
+        // DWARF rwgpfxdof.h:125 (dwarfdump line 108).
+        void Release();
 
     private:
         renderengine::ProgramBufferData*    m_depthOfFieldProgram;    // +0x00 (DWARF: ProgramBuffer*)

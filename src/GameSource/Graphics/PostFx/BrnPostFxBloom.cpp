@@ -216,10 +216,21 @@ void BrnPostFxBloom::Construct(rw::IResourceAllocator* lpAllocator)
         &mBloomBlurOldPixelVariableHandleTapWeights_4);
 }
 
+// X360: INLINED into BrnPostFx::Destruct @0x82408214-0x82408260 (its assert cites this file,
+// line 265). Restored here as the call the original source made -- see this edit's note for the
+// instruction-by-instruction map.
+void BrnPostFxBloom::Destruct()
+{
+    CGS_ASSERT(mpAllocator != nullptr, "mpAllocator");
+
+    renderengine::VertexDescriptor::Release(mpBloomVertexDescriptor);
+    mpAllocator->DoFree(mBloomVertexDescriptorResource);
+}
+
 void BrnPostFxBloom::Render(
-    renderengine::RenderTarget* lpBloomRenderTarget,
-    renderengine::RenderTarget* lpIntermediateRenderTarget,
-    renderengine::RenderTarget* lpSourceRenderTarget,
+    rw::graphics::postfx::RenderTarget* lpBloomRenderTarget,
+    rw::graphics::postfx::RenderTarget* lpIntermediateRenderTarget,
+    rw::graphics::postfx::RenderTarget* lpSourceRenderTarget,
     f32 lfThreshold, f32 lfWhiteLevel)
 {
     mfThreshold = lfThreshold;

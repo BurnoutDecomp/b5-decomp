@@ -5,26 +5,34 @@
 #include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 
-namespace renderengine { class RenderTarget; }
+// The post-fx render target the bloom chain draws through. Pointer-only here (the documented
+// cascade-avoidance forward declaration); defined in
+// SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h.
+namespace rw { namespace graphics { namespace postfx { class RenderTarget; } } }
 
 class BrnPostFxBloom
 {
 public:
     void Construct(rw::IResourceAllocator* lpAllocator);
-    void Render(renderengine::RenderTarget* lpBloomRenderTarget,
-                renderengine::RenderTarget* lpIntermediateRenderTarget,
-                renderengine::RenderTarget* lpSourceRenderTarget,
+
+    // X360: INLINED into BrnPostFx::Destruct @0x82408214-0x82408260, whose assert names this file
+    // and line 265. Assert the allocator, release the bloom vertex descriptor, free its resource.
+    void Destruct();
+
+    void Render(rw::graphics::postfx::RenderTarget* lpBloomRenderTarget,
+                rw::graphics::postfx::RenderTarget* lpIntermediateRenderTarget,
+                rw::graphics::postfx::RenderTarget* lpSourceRenderTarget,
                 f32 lfThreshold, f32 lfWhiteLevel);
 
 private:
     renderengine::ProgramBufferData* CreateProgram(const void* lpMicrocode,
                                                    u32 luSize, bool lbPixelProgram);
-    void PrepareDownSampleBuffer(renderengine::RenderTarget* lpDestRenderTarget,
-                                 renderengine::RenderTarget* lpSourceRenderTarget);
-    void Generate1PassBlurredBloomBuffer(renderengine::RenderTarget* lpDestRenderTarget,
-                                         renderengine::RenderTarget* lpSourceRenderTarget);
-    void Generate2PassBlurredBloomBuffer(renderengine::RenderTarget* lpDestRenderTarget,
-                                         renderengine::RenderTarget* lpSourceRenderTarget);
+    void PrepareDownSampleBuffer(rw::graphics::postfx::RenderTarget* lpDestRenderTarget,
+                                 rw::graphics::postfx::RenderTarget* lpSourceRenderTarget);
+    void Generate1PassBlurredBloomBuffer(rw::graphics::postfx::RenderTarget* lpDestRenderTarget,
+                                         rw::graphics::postfx::RenderTarget* lpSourceRenderTarget);
+    void Generate2PassBlurredBloomBuffer(rw::graphics::postfx::RenderTarget* lpDestRenderTarget,
+                                         rw::graphics::postfx::RenderTarget* lpSourceRenderTarget);
 
     rw::IResourceAllocator* mpAllocator;
     rw::Resource mBloomVertexDescriptorResource;

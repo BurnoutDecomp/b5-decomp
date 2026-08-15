@@ -97,6 +97,73 @@
 #define BRN_ANTIALIAS_BRACKET_AVAILABLE 1
 
 // ---------------------------------------------------------------------------------------------
+// BRN_POSTFX_COMPOSITE_AVAILABLE -- THE REAL POST-FX COMPOSITE (2026-08-14).
+//
+// At 1, BrnPostFx::Render @0x8240A468 replaces the FLAG PC bring-up blit below at the console's own
+// position, and the options-menu brightness/contrast reach the picture (they are the GlobalParams
+// shader constant inside BrnPostFxShader::Render, and this function already reads both off the
+// dispatch buffer). At 0 -- today -- this file preprocesses to exactly the bring-up blit it did
+// before: the include, the constants and the call are all inside the `#if`.
+//
+// WHY IT IS 0: there is no PC vertex/pixel program pair for the 12-permutation composite, so
+// BrnPostFxShader::Shader::SetProgram binds nothing; and BrnPostFx.cpp's link is therefore not closed
+// and it is not on tools/build/build_game_exe.bat. Both, with the measured unresolved symbol list,
+// are in scratch/postfx_step2_out/driver/REPORT.md.
+//
+// GOING TO 1 IS DELIBERATELY NOT ONE CHARACTER: the `#error` below names what must be RECOVERED
+// first, so a careless flip fails the build loudly with the checklist instead of drawing a
+// full-screen quad with whatever program was last bound. It is itself guarded, so the gate-1 arm can
+// be COMPILED exactly as written -- add /DBRN_POSTFX_COMPOSITE_PRECONDITIONS_MET -- which is how it
+// was verified before shipping. Whoever really satisfies the list deletes the #error block.
+#define BRN_POSTFX_COMPOSITE_AVAILABLE 0
+
+#if BRN_POSTFX_COMPOSITE_AVAILABLE
+#  if !defined(BRN_POSTFX_COMPOSITE_PRECONDITIONS_MET)
+#    error "BRN_POSTFX_COMPOSITE_AVAILABLE: one thing must be RECOVERED, not chosen, before this \
+flips: a PC vertex/pixel program pair for the 12-permutation composite. Without one \
+BrnPostFxShader::Shader::SetProgram binds nothing and the full-screen quad draws with whatever \
+program was last set. Its consequence is the second precondition: until the RenderEngineClub post-fx \
+TUs can be mounted, BrnPostFx.cpp's unresolved set (scratch/postfx_step2_out/driver/REPORT.md \
+section 4) is not empty and the TU is not on tools/build/build_game_exe.bat. Delete this #error \
+block when both hold. To COMPILE this arm without satisfying them, define \
+BRN_POSTFX_COMPOSITE_PRECONDITIONS_MET on the command line -- that builds the code, it does not make \
+the frame correct."
+#  endif
+
+// The composite seam. NOT BrnPostFx.h: that header needs the real EA::Jobs::Job and this file's own
+// header still defines a placeholder one (BrnRendererModule.h:21-31) -- including both is C2011.
+// The seam header explains the whole constraint and names what retires it.
+#include "GameSource/Graphics/PostFx/BrnPostFxPCComposite.h"
+
+namespace
+{
+    // The options-menu calibration sliders reach the composite pre-scaled, and BOTH constants are
+    // RECOVERED off the X360 call site (asm 0x8240DCF8 `fmsubs f28, f0, f30, f29` and 0x8240DD40
+    // `fmadds f30, f0, f30, f29`, with f30 = flt_82002138 and f29 = flt_82001DA0):
+    //     brightness -> setting * 0.01f - 0.5f          contrast -> setting * 0.01f + 0.5f
+    //   * flt_82001DA0 == 0.5f is dumped (scratch/postfx_wave1b_dossiers/DATA_DUMP.md:1552).
+    //   * flt_82002138 == 0.01f is read off BrnDirector::Camera::Utils::Looker::Parameters::Construct
+    //     @0x821F8D80, where `lfs f11, flt_82002138@l(r10)` @0x821F8D8C feeds `stfs f11, 0x28(r3)`
+    //     @0x821F8D94 and Hex-Rays prints that store as `*(result + 40) = 0.0099999998;`.
+    const f32 KF_CALIBRATION_SLIDER_SCALE = 0.01f;   // flt_82002138
+    const f32 KF_CALIBRATION_SLIDER_BIAS  = 0.5f;    // flt_82001DA0
+
+    // ⚠ THE NO-DISPATCH-BUFFER FALLBACK IS A PC CHOICE, AND IT IS DERIVED RATHER THAN PICKED.
+    // The console has no such path: it reads GetBrightness/GetContrast off the buffer unconditionally
+    // inside the gate at 0x8240DC7C. On PC Render is entered with a null buffer on the frames before
+    // the dispatch ring comes up (see the `lpDispatchThreadInputBuffer != 0` test at the top of
+    // Render), so a value is needed. It is the game's OWN default slider position, run through the
+    // formula above by the compiler rather than by hand: BrnGui::KI_DEFAULT_BRIGHTNESS and
+    // KI_DEFAULT_CONTRAST are both 50 (BrnGuiOptionsDataProfile.h:29/:35, applied at
+    // BrnGuiOptionsDataProfile.cpp:57-58). That yields exactly 0.0f and 1.0f -- the neutral pair --
+    // but the derivation is the point: if the scale or the bias is ever corrected, the fallback moves
+    // with them instead of silently disagreeing. Spelled locally rather than by including
+    // BrnGuiOptionsDataProfile.h, which would drag the whole options/profile slice into the renderer.
+    const s32 KI_DEFAULT_CALIBRATION_SETTING = 50;
+}
+#endif  // BRN_POSTFX_COMPOSITE_AVAILABLE
+
+// ---------------------------------------------------------------------------------------------
 // BRN_GPU_PERFMON_AVAILABLE -- the GPU perf-monitor sub-gate (2026-08-14).
 //
 // CgsDev::PerfMonGpu::StartMonitor / StopMonitor are the last two of the six symbols the bracket
@@ -2176,7 +2243,78 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         // therefore calls PCBringUpHandBackTheBackBuffer() on both of its no-scene early returns;
         // see its banner. That is why this call is UNCONDITIONAL inside the bracket gate: the
         // condition that authorised the bind is the condition that guarantees the unbind.
+#if BRN_POSTFX_COMPOSITE_AVAILABLE
+        // ---- THE REAL COMPOSITE, at the console's own position (call @0x8240DE3C). -------------
+        //
+        // ARGUMENTS, all read off the X360 call site (asm 0x8240DE0C-0x8240DE3C) rather than chosen:
+        //   r4 = this + 0x238                  -> mAllocatedRenderTargets
+        //   r5 = *(mapRenderTarget[4] + 0x108) -> the DOWN-SAMPLE buffer's postfx RenderTarget (SRC)
+        //   r6 = *(mapRenderTarget[5] + 0x108) -> the BACK-BUFFER target's                     (DST)
+        //   v1 = the 2D tint colour Vector4, zeroed unless the layer-0 effects frame supplies one
+        //   r7 = the motion-blur-active byte off that same effects frame
+        //   f1 = GetBrightness() * 0.01f - 0.5f      f2 = GetContrast() * 0.01f + 0.5f
+        //   f3 = f26, the frame white level -- the SAME value BeginRenderAntiAliased / ResolveMSAA take
+        //   f4 = *(this + 0xC408)              -> mfAspectCorrection
+        //   stack = the calibration texture handle, or null
+        // The three that come off mEffectsArbitrator (tint vector, motion-blur flag, calibration
+        // texture) are the console's own NO-EVENT values, not invented ones, and the seam function
+        // documents each; mEffectsArbitrator is never Constructed on this build, so reading through
+        // mapaEffectsFrames[0] would crash rather than give a wrong answer.
+        //
+        // THE GATE IS THE CONSOLE'S. `lbz r11, 0(r26)` @0x8240DC6C / `beq cr6, loc_8240DE44` skips
+        // the entire block; r26 is this+0xC41C, which BrnGraphics::DebugComponent::OnActivate
+        // @0x823F7B98 registers as the "Render PostFX" toggle -- i.e. mbRenderPostFX
+        // (BrnRendererModule.h:593, defaulted true at :692).
+        //
+        // ⚠ BOTH ARMS END WITH THE SWAP CHAIN BOUND, and that is why the decision is here rather
+        // than inside the helper. BeginRenderAntiAliased redirected the world off-screen; if this
+        // point can be passed without rebinding, the whole 2D/GUI tail -- and the BRN_WORLD_ONLY
+        // early-out below -- draws where nobody will see it and the frame presents the black
+        // FrameBegin clear. The composite arm rebinds with PCBringUpHandBackTheBackBuffer(); the
+        // fallback arm calls the blit, which rebinds on all of its own paths.
+        //
+        // ⚠ AND THE FALLBACK IS NOT DEFENSIVE PADDING. PCBringUpRenderPostFxComposite returns false
+        // whenever the pool cannot supply BOTH surfaces, which is this build's state -- only
+        // DOWN_SAMPLE and ANTI_ALIAS are created. Handing the swap chain back without the composite
+        // COPIES NOTHING, so without this else-arm the frame would be black with the GUI on top.
+        // lbComposited is ALSO false when mbRenderPostFX is off, and the fallback covers that too:
+        // on the console, turning that debug toggle off leaves the frame with no presenter at all,
+        // which is a debug-menu behaviour, not one worth reproducing as a black screen on PC. That
+        // is the ONE deviation from the console's conditional and it is confined to the else-arm --
+        // the composite itself runs exactly when the console runs it.
+        //
+        // RETIRES THE BLIT: the day this gate is permanently 1 and EndRenderAntiAliased @0x82408B00
+        // lands, delete PCBringUpBlitSceneTargetToBackBuffer, PCBringUpHandBackTheBackBuffer,
+        // renderengine::PCSceneBlit_Begin/_End and their XenonD3D9Shims.cpp bodies together.
+        const s32 liBrightnessSetting = (lpDispatchThreadInputBuffer != 0)
+            ? lpDispatchThreadInputBuffer->GetBrightness()
+            : KI_DEFAULT_CALIBRATION_SETTING;
+        const s32 liContrastSetting = (lpDispatchThreadInputBuffer != 0)
+            ? lpDispatchThreadInputBuffer->GetContrast()
+            : KI_DEFAULT_CALIBRATION_SETTING;
+
+        const bool lbComposited =
+            mbRenderPostFX &&
+            PCBringUpRenderPostFxComposite(
+                mAllocatedRenderTargets,
+                static_cast<f32>(liBrightnessSetting) * KF_CALIBRATION_SLIDER_SCALE
+                    - KF_CALIBRATION_SLIDER_BIAS,
+                static_cast<f32>(liContrastSetting) * KF_CALIBRATION_SLIDER_SCALE
+                    + KF_CALIBRATION_SLIDER_BIAS,
+                lfFrameWhiteLevel,
+                mfAspectCorrection);
+
+        if (lbComposited)
+        {
+            PCBringUpHandBackTheBackBuffer();
+        }
+        else
+        {
+            PCBringUpBlitSceneTargetToBackBuffer(mAllocatedRenderTargets, &mIm2dRenderer);
+        }
+#else
         PCBringUpBlitSceneTargetToBackBuffer(mAllocatedRenderTargets, &mIm2dRenderer);
+#endif
     }
 #endif  // BRN_ANTIALIAS_BRACKET_AVAILABLE
 

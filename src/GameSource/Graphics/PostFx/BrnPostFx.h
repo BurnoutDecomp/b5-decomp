@@ -14,6 +14,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h" // RenderTarget
 #include "GameSource/Graphics/PostFx/BrnPostFxShader.h"                         // BrnPostFxShader
 #include "GameSource/Graphics/PostFx/BrnPostFxBloom.h"                          // BrnPostFxBloom
+#include "GameSource/Graphics/PostFx/BrnPostFxBloomData.h"                      // BrnPostFxBloomData
 
 // BrnPostFx -- the Burnout post-effects driver. It owns every render-engine post-fx effect
 // (depth-of-field, vignette, a pair of colour-tint effects, the Burnout-4 blur, and bloom), the
@@ -28,12 +29,15 @@
 // siblings, members are reached BY NAME (no raw-offset reads) and the layout is shape-faithful, not
 // X360-byte-exact (the 4-byte-pointer guest object widens on the LLP64 host).
 
-class BrnRendererMemory;
+// `struct`, not `class`: BrnRendererMemory.h:47 defines it as a struct, and the mismatch is a C4099
+// the moment both are visible in one TU -- which BrnPostFx.cpp now is, because PrepareDownSampleBuffers
+// and Render reach the pool through its accessors.
+struct BrnRendererMemory;
 
-// The DWARF names a MotionBlurState (BrnPostFx.h:220) and a BrnPostFxBloomData (BrnPostFx.h:249)
-// member; neither type is modelled by any TU yet, so both are reserved as named padding below and
-// the BrnPostFxBloomData accessor returns this opaque, forward-declared handle.
-class BrnPostFxBloomData;
+// Both of the types this header used to reserve as padding are now modelled: BrnPostFxBloomData in
+// its own header (included above) and MotionBlurState in BrnPostFxShader.h, where the DWARF puts it
+// (BrnPostFxShader.h:41). The opaque forward declaration that stood in for the first is gone -- it
+// declared a `class` where the real type is a `struct`, which is a C4099 the moment both are visible.
 
 class BrnPostFx
 {
@@ -59,7 +63,7 @@ public:
     void Destruct();
     void Clear();
 
-    void Render(const BrnRendererMemory& lAllocatedMemory,
+    void Render(BrnRendererMemory& lAllocatedMemory,
                 rw::graphics::postfx::RenderTarget* lpSourceRenderTarget,
                 rw::graphics::postfx::RenderTarget* lpDestinationRenderTarget,
                 rw::math::vpu::Vector4 lTintColour,
@@ -94,9 +98,10 @@ public:
     rw::graphics::postfx::Vignette::State*     GetVignetteState();
     rw::graphics::postfx::DepthOfField::State* GetDofState();
     rw::graphics::postfx::B4Blur::State*       GetB4BlurState();
+    MotionBlurState&                           GetMotionBlurState();   // BrnPostFx.h:200
 
 private:
-    void PrepareDownSampleBuffers(const BrnRendererMemory& lAllocatedMemory,
+    void PrepareDownSampleBuffers(BrnRendererMemory& lAllocatedMemory,
                                   rw::graphics::postfx::RenderTarget* lpResultRt,
                                   f32 lfWhiteLevel);
 
@@ -117,10 +122,13 @@ private:
     rw::graphics::postfx::DepthOfField::State m_dofState;      // BrnPostFx.h:217
     rw::graphics::postfx::B4Blur::State       m_b4blurState;   // BrnPostFx.h:218
 
-    // The DecFIGS DWARF carries a MotionBlurState member here; no TU models that type yet, so its
-    // storage is reserved as named padding (the driver never reaches it by name in the reconstructed
-    // methods). 0x20 bytes mirror the X360 gap between the B4Blur state and the render-target pointers.
-    u8 mau8MotionBlurStatePad[0x20];             // BrnPostFx.h:220  (MotionBlurState mMotionBlurState)
+    // The motion-blur reprojection state (DWARF BrnPostFx.h:220; the type is declared at
+    // BrnPostFxShader.h:41). BrnPostFx::Construct seeds it -- both matrices to the identity and
+    // meQuality to E_QUALITY_EXPENSIVE -- and BrnPostFx::Render hands it to BrnPostFxShader::Render
+    // by reference, which builds the camera-motion reprojection matrix out of the two WVPs and
+    // asserts on meQuality (BrnPostFxShader.cpp:798). Guest size 0x84, not the 0x20 the old
+    // placeholder reserved; reached by name, so the host size is the compiler's business.
+    MotionBlurState mMotionBlurState;            // BrnPostFx.h:220
 
     rw::graphics::postfx::RenderTarget* m_deviceRt;       // BrnPostFx.h:223
     rw::graphics::postfx::RenderTarget* m_mainRt;         // BrnPostFx.h:224
@@ -142,10 +150,11 @@ private:
 
     EA::Jobs::Job                       m_blendJob;       // BrnPostFx.h:244
 
-    // BrnPostFxBloomData mBloomData (BrnPostFx.h:249) -- unmodelled DWARF type, reserved as named
-    // padding. mBloom is then constructed at the X360 +604 (word) offset BrnPostFxBloom::Construct
-    // writes to; the bloom-data block precedes it.
-    u8                                  mau8BloomDataPad[0x30]; // BrnPostFx.h:249
+    // The bloom CONSTANT block (DWARF BrnPostFx.h:249). Written every frame by
+    // BrnRendererModule::Render, read by BrnPostFx::PrepareDownSampleBuffers (mfThreshold) and
+    // handed to BrnPostFxShader::Render by reference (mColour + mfLuminance become BloomColour).
+    // Three members, guest size 0x18 -- see BrnPostFxBloomData.h for the three-site attestation.
+    BrnPostFxBloomData                  mBloomData;             // BrnPostFx.h:249
     BrnPostFxBloom                      mBloom;                 // BrnPostFx.h:250
 };
 

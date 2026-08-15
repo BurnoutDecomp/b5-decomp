@@ -54,6 +54,10 @@ namespace postfx
         // Build the shared opaque blend state and store it at +0x4C. X360 0x82402D88.
         s32 CreateStates();
 
+        // The allocator the helper was constructed with (X360 PfxHelper +0x00, read by
+        // BrnPostFx::Destruct @0x824081C0 to free the depth-of-field program's resource).
+        rw::IResourceAllocator* GetAllocator();
+
         // --- Blur-weight table generators (pure float math; output buffers are caller-owned) ------
         // 16-tap 4x4 box blur with bilinear sampling: 4x4 grid of (offsetX, offsetY, 0.25, 1.0).
         // X360 0x823F8E78.
@@ -87,6 +91,20 @@ namespace postfx
         renderengine::ProgramVariableHandle mDirBlurHandle;     // +0x48
         void*                             mpOpaqueBlendState;   // +0x4C
     };
+}
+}
+}
+
+namespace rw
+{
+namespace graphics
+{
+namespace postfx
+{
+    // X360 off_82FAEE80 -- THE post-fx helper singleton. PfxHelper::PfxHelper @0x82408348 publishes
+    // itself here; every post-fx effect and BrnPostFx::Destruct read it. Declaration only: the
+    // definition belongs to the PfxHelper TU (rwgpfxhelper.cpp), which is not yet on the build list.
+    extern PfxHelper* gpPfxHelper;
 }
 }
 }
