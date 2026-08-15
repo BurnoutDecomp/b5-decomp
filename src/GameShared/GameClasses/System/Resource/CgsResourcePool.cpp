@@ -4,6 +4,20 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (the null-type boot gate)
 
 #include <cstdint>   // uintptr_t (the Heap allocation owner is the slot index)
+#include <cstddef>   // size_t (the PC-leaf free notification below)
+
+// FLAG PC-platform leaf (HOST-SIDE NOTIFICATION, console body otherwise unchanged).
+// Homed in pc/gcm/renderengine/WorldGeometryPCLeaf.cpp; declared here rather than
+// #included so a console TU does not pull a d3d9 header in (the same pattern
+// BrnRendererModule.cpp uses for the other renderengine leaf hooks).
+//
+// The console frees GPU-VISIBLE memory in FreeMemoryForResource: the bundle's
+// IndexBuffer/VertexBuffer bytes ARE what the Xenos fetches from, so handing the
+// block back is the whole of the teardown. PC Direct3D 9 cannot fetch from host
+// memory, so the world draw path keeps device-buffer MIRRORS of those same bytes --
+// and a mirror must die with the memory it was built from, or the next track unit
+// streamed over that block would be drawn with the previous one's geometry.
+namespace renderengine { void WorldGeometry_OnResourceMemoryFreed(const void* lpBase, size_t luSize); }
 
 // CgsResource::Pool method bodies, decompiled from the X360 ARTIST IDA (addresses noted
 // per method). This file is built up incrementally: the lookup + reference/accessor slice
@@ -394,6 +408,16 @@ namespace CgsResource
         {
             if (lpEntry->mResource.m_baseResources[lt] != 0)
             {
+                // [FLAG PC-platform leaf notification] see the banner at the top of this file.
+                // The block's byte count is the entry's OWN descriptor for this memory type --
+                // the very number AllocateMemoryForResource passed to Heap::Malloc
+                // (mResourceDescriptor.m_baseResourceDescriptors[luMemType].m_size), so it
+                // covers exactly the bytes the resource occupies. Nothing about the console
+                // control flow below changes.
+                renderengine::WorldGeometry_OnResourceMemoryFreed(
+                    lpEntry->mResource.m_baseResources[lt],
+                    lpEntry->mResourceDescriptor.m_baseResourceDescriptors[lt].m_size);
+
                 maHeaps[lt].Free(lpEntry->mauHeapIndices[lt]);
                 lpEntry->mResource.m_baseResources[lt] = 0;
                 lpEntry->mauHeapIndices[lt]            = 0;
@@ -547,7 +571,11 @@ namespace CgsResource
         miRefCountThreshold    = lpOptions->miRefCountThreshold;
         miBankId               = lpOptions->miBankId;
         mbAllowDefragmentation = lpOptions->mbAllowDefragmentation;
-        meDefragStage          = DEFRAGSTAGE_IDLE;   // (defrag-state init; the full machinery is deferred)
+        meDefragStage          = DEFRAGSTAGE_IDLE;   // (defrag-state init; the full machinery is deferred.
+                                                     //  ⚠ when it lands: a defrag MOVE relocates a resource
+                                                     //  without FreeMemoryForResource, so it must also notify
+                                                     //  renderengine::WorldGeometry_OnResourceMemoryFreed for
+                                                     //  the OLD range -- see WorldGeometryPCLeaf.h.)
 
         mResource   = lpOptions->mResource;
         mDescriptor = lpOptions->mDescriptor;
