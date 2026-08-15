@@ -4,6 +4,7 @@
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"  // KVF_HANDBRAKE_OFF_TIME_TO_ALLOW_DRIFT (CheckForEnteringDrift)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h" // CgsNumeric::Random (the shared LCG ring)
 #include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT (UpdateDownForce's attribsys guard)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint ([tyre] bring-up probe only)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu::Start/StopMonitor (Update's stage brackets)
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"        // the car-asset wrapper (SetAttributes' key chase)
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h" // the handling wrapper + its checked copy ctor
@@ -12,6 +13,7 @@
 #include "rw/math/vpu/matrix44affine_operation.h"     // rw::math::vpu::{InverseOfMatrixWithOrthonormal3x3, operator*}
 #include "rw/math/fpu/scalar_operation.h"            // rw::math::fpu::IsZero (SetWheelVelocities' per-axle power gates)
 
+#include <cstdlib>    // getenv ([tyre] bring-up probe only)
 #include <stdint.h>   // uint32_t / uint64_t for the road-noise LCG draw
 #include <algorithm>  // std::min / std::max (the driving spine's vmaxfp/vminfp lowerings)
 #include <cstring>    // std::memcpy (bit-reinterpret the road-noise float)
@@ -188,17 +190,69 @@ namespace Vehicle
     }
 
     // FLAG: the per-surface property tables are runtime-loaded scratch globals (un-homed); the
-    // looked-up value is carried as a flagged-0 placeholder until the table is recovered.
+    // looked-up value is carried as a flagged placeholder until the table is recovered.
+    //
+    // ⚠️ A PLACEHOLDER'S VALUE IS ITS EXPRESSION'S *IDENTITY ELEMENT*, AND THAT IS NOT ALWAYS ZERO.
+    // The roughness and drag lookups are consumed as `table * scale * blend`, so a zero table is
+    // genuinely inert: it contributes nothing and the attrib blend cannot act on its own.
+    // The GRIP lookup is not that shape -- see SurfaceGripPlaceholder below.
     static inline f32 SurfacePropertyPlaceholder(s32 /*liSurfaceId*/)
     {
         return 0.0f;
+    }
+
+    // ⭐⭐⭐ 2026-08-15 (oversteer wave) -- THE OVERSTEER. The grip table's placeholder was 0.0
+    // like its two siblings, and that single value is why the car spun.
+    //
+    // GetSurfaceGrip's console expression is `1 - (1 - gripTable[id]) * blend`: a LERP FROM 1.0
+    // TOWARD the surface's grip, by the car's per-axle surface-sensitivity factor. Its identity
+    // element is therefore **1.0**, not 0.0 -- at table == 1 the blend drops out entirely and the
+    // function returns 1.0 whatever the car's factors are. At table == 0 the expression collapses
+    // to `1 - blend`, i.e. the placeholder hands the car's raw sensitivity factor straight through
+    // as a permanent grip CUT -- and the factor is a DIFFERENT LANE FOR EACH AXLE (.x
+    // SurfaceFrontGripFactor for the front pair, .y SurfaceRearGripFactor for the rear), so the
+    // zero did not merely scale grip down, it scaled the two axles down by different amounts.
+    //
+    // ⭐ MEASURED, on the driven car (a [tyre] instrument added to HandleWheelPairFriction for
+    // this wave, BRN_TYRE_PROBE=1). This lookup's value IS the friction cone's adhesive cap,
+    // `tyre.adhesiveLimit * surfaceGrip`, and with the zero placeholder the probe printed, for
+    // the Hunter Cavalry on the junkyard floor:
+    //     front wheels   sGrip 0.736000   adhCap 19872.000000
+    //     rear  wheels   sGrip 0.200000   adhCap  5399.999512
+    // i.e. SurfaceFrontGripFactor 0.264 against SurfaceRearGripFactor 0.800 -- a **3.68x
+    // front/rear asymmetry in the friction cone**, out of a placeholder. Every capped rear sample
+    // landed on 5400.0 N exactly (sqrt(Flat^2 + Flng^2) of the post-cone pair), while the front
+    // never once reached its own ceiling. Under a held lock the rear cone was exceeded on 95% of
+    // frames and the front on 4%; rear |longitudinal slip| averaged 13.2 (a permanent burnout).
+    // A rear axle whose entire force budget is spent on the drive torque has nothing left to
+    // resist yaw: the car makes its own power-oversteer and never recovers.
+    // With the identity placeholder both axles read sGrip 1.0 / adhCap 27000 and NEITHER binds:
+    // the cone falls back to `dynamicFrictionCo * (N + downForce)`, ~8767..9120 N, front and rear
+    // alike -- which is what the shipped console computes on a full-grip surface.
+    //
+    // ⭐⭐ CONTROLLED, because "it drives better now" is not evidence: the identical drive script
+    // was run against a build with this value flipped back to 0.0. Same schedule, same car, one
+    // value apart -- peak sideslip (heading minus velocity direction) through the turn was
+    // **112.6 deg vs 8.9 deg**, the car covered 8 m while rotating 240 deg and scrubbed to a
+    // standstill instead of tracking a clean 11 m-radius arc, and 4 s of full throttle in a
+    // straight line reached 11.54 m/s instead of 19.83 m/s. The rear cone was throttling
+    // straight-line traction by 42% as well.
+    //
+    // ⛔ THIS IS NOT A TUNED COEFFICIENT AND NOT A DAMPER. It changes no maths and adds no term;
+    // it makes an un-recovered lookup INERT, which is what a placeholder is for. Nothing else in
+    // this file moves. When unk_82FB8890 is recovered this call becomes the real table read and
+    // the surface factors start acting again -- on real per-surface values, as shipped.
+    // DELETE-WHEN unk_82FB8890 is recovered.
+    static inline f32 SurfaceGripPlaceholder(s32 /*liSurfaceId*/)
+    {
+        return 1.0f;
     }
 
     // @0x825D51B8  GetSurfaceGrip: result = 1 - (1 - gripTable[id]) * blend  (a lerp toward 1.0).
     Vector3 VehiclePhysics::GetSurfaceGrip(EVehicleDrivenWheel leWheel) const
     {
         const s32 liSurfaceId = SurfaceIdFromTag(GetWheel(leWheel).GetRoadContact().mCollisionTag);
-        const f32 lfGrip = SurfacePropertyPlaceholder(liSurfaceId);   // unk_82FB8890[id]
+        const f32 lfGrip = SurfaceGripPlaceholder(liSurfaceId);   // unk_82FB8890[id]
 
         // FRONT wheels (index < eRearLeftWheel) use lane .x, REAR wheels lane .y (asm: if a3<2).
         const f32 lfBlend = (leWheel < eRearLeftWheel) ? mpAttribs->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.x
@@ -747,6 +801,157 @@ namespace Vehicle
                 mTotalLinearForce.z += lvF.z * lfLinearMultiplier;
             }
         }
+
+        // ---- [tyre] PC bring-up instrument -- DELETE WHEN the yaw settles -------------------
+        // OPT-IN (BRN_TYRE_PROBE=1) so a default run and every golden gate are byte-identical to
+        // a build without it -- the same discipline as [motion] and [wall].
+        //
+        // ⚠️⚠️ THE PROBE IS INSTRUMENTED FIRST. Walls leg 5 lost TWO confident conclusions to
+        // instrument bugs of exactly this shape, so every aliasing hazard here is closed BEFORE
+        // any number is believed:
+        //   * PER-INSTANCE, not global. This method runs for EVERY vehicle in the world. One
+        //     shared sample counter would alias against the live vehicle count and sample a
+        //     different car each time -- which is precisely the bug that produced "the driven car
+        //     has no deformation model this boot". The counter is keyed on `this`.
+        //   * PER-PAIR, not per call. UpdateWheels calls this twice per frame (rear, then front).
+        //     One counter would sample rear and front on DIFFERENT frames, so a front/rear torque
+        //     comparison -- the whole point -- would be comparing two different instants.
+        //   * IDENTITY IS PRINTED, not assumed: `this`, the driver type, and the body's linear
+        //     velocity, which is cross-checkable against [motion]'s vel to the digit. If the two
+        //     disagree, the probe is on the wrong car and every number below is void.
+        {
+            static s32 siTyreProbe = -1;
+            if (siTyreProbe < 0)
+            {
+                const char* lpcEnv = getenv("BRN_TYRE_PROBE");
+                siTyreProbe = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
+            }
+            if (siTyreProbe == 1 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                const s32 KI_PROBE_SLOTS = 8;
+                static const void* sapInstance[KI_PROBE_SLOTS] = { 0 };
+                static u32         sauCount[KI_PROBE_SLOTS][2] = { { 0 } };
+                s32 liSlot = -1;
+                for (s32 liS = 0; liS < KI_PROBE_SLOTS; ++liS)
+                {
+                    if (sapInstance[liS] == this) { liSlot = liS; break; }
+                    if (sapInstance[liS] == 0) { sapInstance[liS] = this; liSlot = liS; break; }
+                }
+                // The front pair is the one whose A wheel is eFrontLeftWheel (UpdateWheels' own
+                // two call sites); rear and front therefore land in separate counters and print
+                // on the SAME frames.
+                const s32 liPair = (leWheelA == eFrontLeftWheel) ? 1 : 0;
+                if (liSlot >= 0)
+                {
+                    u32& suCount = sauCount[liSlot][liPair];
+                    ++suCount;
+                    if ((suCount % 20u) == 0u)
+                    {
+                        const Vector3& lvUp2 = mTransform.Up();
+                        const Vector3& lvAt2 = mTransform.At();
+                        const f32 lfYawRate = vpu::Dot(mAngularVelocity, lvUp2);
+                        *CgsDev::Log::gpDebugPrint
+                            << "[tyre] n " << static_cast<s32>(suCount)
+                            << (liPair ? " FRONT" : " REAR ")
+                            << " car " << static_cast<u32>(reinterpret_cast<u64>(this))
+                            << " drv " << static_cast<s32>(mPreviousControls.GetType())
+                            << " at " << lvAt2.x << " " << lvAt2.z
+                            << " vel " << mLinearVelocity.x << " " << mLinearVelocity.y
+                            << " " << mLinearVelocity.z
+                            << " yawRate " << lfYawRate
+                            << " steerRad " << mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x
+                            << " steerIn " << mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y
+                            << " drift " << static_cast<s32>(mu8DriftState)
+                            << " mostTrac " << (lbMostWheelsHaveTraction ? 1 : 0)
+                            << " downF " << lvfDownForce.x
+                            << " rollDir " << lvRollDirection.x << " " << lvRollDirection.z
+                            // invYaw = Up . (W * Up): the scalar that turns a yaw torque into a
+                            // yaw acceleration. A too-small yaw INERTIA (too LARGE an invYaw)
+                            // spins a car exactly like the reported defect, so the number that
+                            // would prove or clear suspect 3 is printed beside the torques.
+                            << " invYaw " << (lvUp2.x * (mWorldInverseInertia.xAxis.x * lvUp2.x
+                                                       + mWorldInverseInertia.yAxis.x * lvUp2.y
+                                                       + mWorldInverseInertia.zAxis.x * lvUp2.z)
+                                            + lvUp2.y * (mWorldInverseInertia.xAxis.y * lvUp2.x
+                                                       + mWorldInverseInertia.yAxis.y * lvUp2.y
+                                                       + mWorldInverseInertia.zAxis.y * lvUp2.z)
+                                            + lvUp2.z * (mWorldInverseInertia.xAxis.z * lvUp2.x
+                                                       + mWorldInverseInertia.yAxis.z * lvUp2.y
+                                                       + mWorldInverseInertia.zAxis.z * lvUp2.z))
+                            << " mass " << mfMass.x
+                            << "\n";
+
+                        for (s32 lk = 0; lk < 2; ++lk)
+                        {
+                            const Wheel& lrW = maWheels[laeWheel[lk]];
+                            const WheelSolve& lrS = laSolve[lk];
+                            const Vector3 lvStr = lrW.mStreamedPositionPlusTwistAmount.GetVector3();
+                            const f32 lfN = lrW.mSpeedAndMassOnWheelVariables.z * KF_GRAVITY
+                                          * lrW.GetRoadContact().mNormal.y;
+
+                            // The lateral force's YAW moment about the body Up axis -- the number
+                            // this whole leg is about. Built exactly as phase 3 builds it.
+                            const Vector3 lvP2{ lvStr.x, lvHeightOffsets.y, lvStr.z, 0.0f };
+                            const Vector3& lvRt2 = mTransform.Right();
+                            const Vector3 lvArm2{ lvRt2.x * lvP2.x + lvUp2.x * lvP2.y + lvAt2.x * lvP2.z,
+                                                  lvRt2.y * lvP2.x + lvUp2.y * lvP2.y + lvAt2.y * lvP2.z,
+                                                  lvRt2.z * lvP2.x + lvUp2.z * lvP2.y + lvAt2.z * lvP2.z,
+                                                  0.0f };
+                            const Vector3 lvFl2{ lrS.mvLatDir.x * lrS.mfLatFinal,
+                                                 lrS.mvLatDir.y * lrS.mfLatFinal,
+                                                 lrS.mvLatDir.z * lrS.mfLatFinal, 0.0f };
+                            const f32 lfYawTorque = vpu::Dot(vpu::Cross(lvArm2, lvFl2), lvUp2);
+
+                            // ... and the LONGITUDINAL force's yaw moment, which a left/right
+                            // drive or brake imbalance also feeds. Reported separately so a
+                            // "the tyres are not resisting" reading cannot be confused with a
+                            // "the drive is pushing it round" one.
+                            const Vector3 lvPl2{ lvStr.x, lvHeightOffsets.x, lvStr.z, 0.0f };
+                            const Vector3 lvArmL{ lvRt2.x * lvPl2.x + lvUp2.x * lvPl2.y + lvAt2.x * lvPl2.z,
+                                                  lvRt2.y * lvPl2.x + lvUp2.y * lvPl2.y + lvAt2.y * lvPl2.z,
+                                                  lvRt2.z * lvPl2.x + lvUp2.z * lvPl2.y + lvAt2.z * lvPl2.z,
+                                                  0.0f };
+                            const Vector3 lvFg2{ lrS.mvLongDir.x * lrS.mfLongFinal,
+                                                 lrS.mvLongDir.y * lrS.mfLongFinal,
+                                                 lrS.mvLongDir.z * lrS.mfLongFinal, 0.0f };
+                            const f32 lfYawTorqueL = vpu::Dot(vpu::Cross(lvArmL, lvFg2), lvUp2);
+
+                            *CgsDev::Log::gpDebugPrint
+                                << "[tyre]   w" << static_cast<s32>(laeWheel[lk])
+                                << " en " << (lrS.mbEnabled ? 1 : 0)
+                                << " grnd " << (lrW.GetRoadContact().mbIsCloseToGround ? 1 : 0)
+                                << " nY " << lrW.GetRoadContact().mNormal.y
+                                << " mass " << lrW.mSpeedAndMassOnWheelVariables.z
+                                << " N " << lfN
+                                << " latSpd " << lrS.mfLatSpeed
+                                << " Flat " << lrS.mfLatForce << " -> " << lrS.mfLatFinal
+                                << " lngSlip " << lrS.mfLongSlip
+                                << " Flng " << lrS.mfLongForce << " -> " << lrS.mfLongFinal
+                                << " cone " << (lrS.mbConeExceeded ? 1 : 0)
+                                // ⭐ THE CONE, printed rather than inferred. `sGrip` is
+                                // GetSurfaceGrip's result for this wheel, `adhCap` the adhesive
+                                // ceiling it scales, `statCap` the load-based one; whichever is
+                                // SMALLER is the cap that binds. Front and rear reading different
+                                // sGrip is the whole defect, so the number is on the line.
+                                << " sGrip " << lafSurfaceGrip[lk]
+                                << " adhCap " << (lrW.mpTireAttribs != 0
+                                        ? lrW.mpTireAttribs->maPackedVariables.z * lafSurfaceGrip[lk]
+                                        : 0.0f)
+                                << " statCap " << (lrW.mpTireAttribs != 0
+                                        ? lrW.mpTireAttribs->maPackedVariables.y
+                                              * (lfN + lvfDownForce.x)
+                                        : 0.0f)
+                                << " arm " << lvStr.x << " " << lvStr.z
+                                << " latDir " << lrS.mvLatDir.x << " " << lrS.mvLatDir.z
+                                << " yawTqLat " << lfYawTorque
+                                << " yawTqLng " << lfYawTorqueL
+                                << "\n";
+                        }
+                    }
+                }
+            }
+        }
+        // ---- end [tyre] ---------------------------------------------------------------------
     }
 
     // ===========================================================================================
