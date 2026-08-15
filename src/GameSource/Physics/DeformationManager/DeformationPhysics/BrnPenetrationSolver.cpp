@@ -173,6 +173,24 @@ namespace Deformation
     }
 
     // -----------------------------------------------------------------------------------------
+    // GetWorldContacts / GetVehicleContacts -- ⭐ ADDED 2026-08-15 (walls leg 5). Declared since
+    // the header was written (DWARF :94/:98) but BODYLESS until now, which no link had noticed
+    // because no committed caller existed: the two array-base reads are console-inline on both
+    // consoles (Solve() walks maWorldContacts through its own base register, never through a
+    // call). The array-base return is the whole body -- the exact shape of GetUpdatedTransform
+    // above, minus the index.
+    // -----------------------------------------------------------------------------------------
+    PenetrationContact* PenetrationSolver::GetWorldContacts()
+    {
+        return maWorldContacts;
+    }
+
+    PenetrationContact* PenetrationSolver::GetVehicleContacts()
+    {
+        return maVehicleContacts;
+    }
+
+    // -----------------------------------------------------------------------------------------
     // GetUpdatedTransform (DWARF :124) -- ⭐ 2026-08-14 (walls leg 4). Console-inline on BOTH
     // consoles (no export on either); the inlined access is visible in SolvePenetration's
     // phase-3 read-back (X360 @0x826221D0: `slwi r11, idx, 6` + base -> the 64-byte-stride

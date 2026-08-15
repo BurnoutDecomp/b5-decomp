@@ -36,6 +36,8 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPart.h"         // PhysicalBodyPart
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalWheel.h"            // PhysicalWheel
 #include "rw/math/vpu/vector3_operation.h"                                                        // rw::math::vpu::IsValid(Vector3)
+#include <cstdlib>   // getenv  ([wall] bring-up probe only)
+#include <cmath>     // sqrtf   ([wall] bring-up probe only)
 
 namespace BrnPhysics
 {
@@ -193,6 +195,114 @@ namespace Deformation
                             << " [FLAG PC boot witness]. Reported once, not per frame\n";
                 }
             }
+
+            // ---- [wall] PC bring-up instrument -- DELETE WHEN the wall test is banked ---------
+            // OPT-IN (BRN_WALL_PROBE=1) so a default run and every golden gate are byte-identical
+            // to a build without it -- same discipline as [motion] in BrnRaceCarEntityModule.
+            //
+            // ⭐ WHY A SEPARATE PROBE AT ALL. The boot witness above fires ONCE and only proves the
+            // solver ran. "The car stopped against a wall" needs three things the witness cannot
+            // give: that the contacts under the car are WALL contacts and not just the 22 floor
+            // ones (a car parked on the floor also has contacts > 0), how deep the solver had to
+            // push, and WHEN the wall was first touched. A world contact is classified by its
+            // separating normal: the junkyard floor's normal is ~+Y, a wall's is ~horizontal, so
+            // |mNormal.y| < KF_WALL_NORMAL_Y splits them with a wide margin either side.
+            {
+                static s32 siWallProbe = -1;
+                if ( siWallProbe < 0 )
+                {
+                    const char* lpcEnv = getenv( "BRN_WALL_PROBE" );
+                    siWallProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+                }
+                if ( siWallProbe == 1 && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    // ⚠️ PER-MODEL COUNTERS. A single shared counter incremented once per model
+                    // per solve ALIASES against the live model count: with 3 models, only the
+                    // model whose turn lands on a multiple of 30 is ever sampled, and the others
+                    // look absent. That artifact had me reading "the driven car has no
+                    // deformation model this boot" off two different runs. The touch latch has to
+                    // be per-model for the same reason -- one shared latch makes one model's
+                    // EDGE-TOUCH cancel another's.
+                    const f32 KF_WALL_NORMAL_Y = 0.6f;
+                    const s32 KI_PROBE_SLOTS = 32;   // >= KI_MAX_PENETRATION_BODIES (29)
+                    static u32  sauWallCount[KI_PROBE_SLOTS]   = { 0 };
+                    static bool sabWasTouching[KI_PROBE_SLOTS] = { false };
+                    const s32 liSlot = ( liModelIndex >= 0 && liModelIndex < KI_PROBE_SLOTS )
+                                     ? liModelIndex : 0;
+                    u32&  suWallCount   = sauWallCount[liSlot];
+                    bool& sbWasTouching = sabWasTouching[liSlot];
+                    ++suWallCount;
+
+                    // ⚠️⚠️ PER-MODEL, NOT GLOBAL. GetWorldContacts() is the solver's ONE array for
+                    // every body in the solve, so counting all of it attributed the parked
+                    // staging car's 19 wall contacts to the car the player was driving -- both
+                    // models printed the identical nWall/wallN, which is how the aliasing was
+                    // caught. AddWorldContact is fed (indexA = liWorldIndex = the model index,
+                    // indexB = liBodyIndex = KI_MAX_DEFORMATION_MODELS, the world sentinel), so
+                    // miIndexA selects the contacts that belong to THIS model.
+                    // ⛔ No penetration DEPTH is printed: mPointOnA is model-local (plus the
+                    // sensor sphere centre) while mPointOnB comes in as mLocalPointOnB, and I
+                    // could not establish they share a space -- the first cut printed ~3000, i.e.
+                    // a world coordinate, so any "depth" here would be a fabricated number.
+                    const s32 liNumWorld = lpSolver->GetNumWorldContacts();
+                    const PenetrationContact* lpWC = lpSolver->GetWorldContacts();
+                    s32 liMine = 0;
+                    s32 liNumWall = 0;
+                    Vector3 lWallN; lWallN.x = 0.0f; lWallN.y = 0.0f; lWallN.z = 0.0f;
+                    for ( s32 liC = 0; liC < liNumWorld; ++liC )
+                    {
+                        if ( lpWC[liC].miIndexA != liModelIndex ) { continue; }
+                        ++liMine;
+                        const Vector3& lN = lpWC[liC].mNormal;
+                        const f32 lfAbsNY = ( lN.y < 0.0f ) ? -lN.y : lN.y;
+                        if ( lfAbsNY < KF_WALL_NORMAL_Y )
+                        {
+                            ++liNumWall;
+                            lWallN.x += lN.x; lWallN.y += lN.y; lWallN.z += lN.z;
+                        }
+                    }
+
+                    Matrix44Affine lNow; mpaModels[liModelIndex].GetTransform(lNow);
+                    const f32 lfDX = lpSolvedTransform->wAxis.x - lNow.wAxis.x;
+                    const f32 lfDY = lpSolvedTransform->wAxis.y - lNow.wAxis.y;
+                    const f32 lfDZ = lpSolvedTransform->wAxis.z - lNow.wAxis.z;
+                    const f32 lfCorr = sqrtf( lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ );
+
+                    // EDGE lines mark the exact solve the car first touched / last left a wall;
+                    // the periodic line is the position-vs-time trace between them.
+                    const bool lbTouching = ( liNumWall > 0 );
+                    const bool lbEdge     = ( lbTouching != sbWasTouching );
+                    sbWasTouching = lbTouching;
+
+                    // ⚠️ THE BINDING, printed with the pose. 2026-08-15: the pose above was
+                    // measured FROZEN at the spawn point for a whole 190 s drive while the car
+                    // reached x=3056 -- so the question "is this model even looking at the car
+                    // the player is driving?" has to be answerable from the same line. The
+                    // attached-vehicle POINTER discriminates a stale/other bind from a live one,
+                    // and its LINEAR VELOCITY discriminates "bound to a parked car" from "bound
+                    // to the right car but reading the transform through a bad view".
+                    Vector3 lVel; mpaModels[liModelIndex].GetLinearVelocity(lVel);
+                    const void* lpVeh = mpaModels[liModelIndex].GetVehiclePhysics();
+
+                    if ( lbEdge || ( suWallCount % 30u ) == 0u )
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[wall] n " << static_cast<s32>( suWallCount )
+                            << ( lbEdge ? ( lbTouching ? " EDGE-TOUCH" : " EDGE-CLEAR" ) : "" )
+                            << " model " << liModelIndex
+                            << " veh " << static_cast<u32>( reinterpret_cast<u64>( lpVeh ) )
+                            << " nWtot " << liNumWorld << " mine " << liMine
+                            << " wall " << liNumWall
+                            << " pos " << lNow.wAxis.x << " " << lNow.wAxis.y << " " << lNow.wAxis.z
+                            << " vel " << lVel.x << " " << lVel.y << " " << lVel.z
+                            << " corr " << lfCorr
+                            << " wallN " << lWallN.x << " " << lWallN.y << " " << lWallN.z
+                            << "\n";
+                    }
+                }
+            }
+            // ---- end [wall] -------------------------------------------------------------------
+
             mpaModels[liModelIndex].SetTransform(lpSolvedTransform);
         }
         CgsDev::PerfMonCpu::StopMonitor(miPostPhysicsUpdateReadTransformsFromPenSolverPerfMon);
