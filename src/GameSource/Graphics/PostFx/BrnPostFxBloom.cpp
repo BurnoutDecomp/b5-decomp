@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"                 // saDepthStencilStates[1] (Render)
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"                   // saRasterizerStates[2]   (Render)
+#include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"                        // saBlendStates[0]        (PrepareDownSampleBuffer)
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"  // rw::graphics::postfx::RenderTarget
 #include "pc/gcm/renderengine/Xbox2SurfaceShims.h"                                    // renderengine::gpD3DDevice
 
@@ -179,14 +180,11 @@ extern "C" void  D3DDevice_EndVertices(D3DDevice* lpDevice);
 // the console (there, too, these are two table slots, not globals). Render below reads the tables
 // through the two enumerators the shipped assert strings pin.
 //
-// STILL NOT NAMEABLE: gpPostFxBloomBlendState -- CgsBlendStateFactory::saBlendStates is a private
-// static behind a NON-static GetState with no reachable instance (the only instances are
-// BrnRendererModule members, and this file cannot include BrnRendererModule.h for the reason
-// BrnPostFxPCComposite.h states). Its one reader is inside the program gate below and is compiled out
-// with it, so it raises no external today; the same one-keyword treatment the other two factories got
-// closes it when the bloom programs exist.
+// The third is nameable too (verify fix-forward, 2026-08-15): CgsBlendStateFactory::GetState is
+// static like its two siblings, so PrepareDownSampleBuffer reads saBlendStates[0] through the
+// enumerator its FireAssert string pins -- no `gpPostFxBloomBlendState` global exists on the host,
+// exactly as no dword_83010F70-named global did on the console.
 namespace renderengine { class DepthStencilState; class RasterizerState; }
-extern renderengine::BlendMaterialState*  gpPostFxBloomBlendState;    // X360 dword_83010F70
 
 namespace
 {
@@ -293,6 +291,11 @@ namespace
     // their X360 package addresses, sizes and interned constant names, are listed in the banner on
     // Construct. `grep -n "extern const" b5-decomp/src/pc/gcm/renderengine/PostFxProgramsPC.cpp`
     // returns only gauPostFxComposite{Vertex,Pixel}ProgramPC today -- none of the six exists.
+    // NOTE (verify, 2026-08-15): flipping this gate alone is NOT enough. Construct's console block
+    // hands CreateProgram the six CONSOLE blobs, and ProgramBufferPC_Adopt refuses those on its first
+    // check (u32 at +0 is 0x01112A10/0x00112A10, never the shader-type tag). BrnPostFxShader gets its
+    // adopt because ITS caller selects the separate PC arrays; when the six PC images land, the six
+    // CreateProgram call sites in Construct must select the PC arrays the same way.
     //
     // It is a `const bool` tested at RUN TIME, not an `#if`, on purpose: everything below it still
     // COMPILES and is type-checked while it is off. This campaign has already shipped a batch of
@@ -450,7 +453,8 @@ renderengine::ProgramBufferData* BrnPostFxBloom::CreateProgram(
     // with none, leave the slot HONESTLY EMPTY -- a null program, so GetVariableHandleByName leaves
     // every handle at count 0 and the three passes' own gate keeps them from drawing -- rather than
     // a program built from bytes the GPU cannot execute. The console route stays on the page as the
-    // fallthrough it can never take here.
+    // fallthrough it can never take here. (The adopt below only succeeds when the CALLER passes a
+    // PC image -- see the note in Construct's gate banner; today every call site passes console bytes.)
     if (renderengine::ProgramBufferData* const lpAdopted =
             renderengine::ProgramBufferPC_Adopt(lpMicrocode, luSize, lbPixelProgram ? 1u : 0u))
     {
@@ -703,7 +707,7 @@ void BrnPostFxBloom::PrepareDownSampleBuffer(rw::graphics::postfx::RenderTarget*
     // lbWasUnset == (cached == 0), then cache). That sequence IS shadow::Device::SetState(const
     // BlendMaterialState*) @0x82276A68, so this is inlining reversal, not a paraphrase. The two blur
     // passes do NOT push it -- they inherit whatever this pass left.
-    shadow::Device::SetState(gpPostFxBloomBlendState);
+    shadow::Device::SetState(CgsBlendStateFactory::GetState(E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA));
 
     // asm 0x82401B64-0x82401B84: the program pair, the vertex one through the same compare/apply/
     // cache shape (dword_8301095C), i.e. shadow::Device::SetVertexProgram @0x82276BA0 inlined.

@@ -108,9 +108,12 @@ namespace
     // The vertex-format element codes the two vertex descriptors are built from. These are the
     // asm's own immediates (`li`/`lis`+`ori` into the Parameters element words); they are opaque
     // renderengine format codes, carried verbatim.
-    const s32 KI_VERTEX_FORMAT_POSITION = 0x002A24F9;   // 2761657
-    const s32 KI_VERTEX_FORMAT_UV       = 0x002C25E5;   // 2892709
-    const s32 KI_VERTEX_FORMAT_EXTRA    = 0x001A23A6;   // 1713062
+    // (Verify pass 2026-08-15: the first two HEX values were mis-typed against their own decimal
+    // comments -- 2761657 == 0x2A23B9 and 2892709 == 0x2C23A5, the same FLOAT3 / FLOAT2 codes every
+    // other post-fx quad uses; the boot log showed the blur/scatter descriptors dropping elements.)
+    const s32 KI_VERTEX_FORMAT_POSITION = 0x002A23B9;   // 2761657  FLOAT3
+    const s32 KI_VERTEX_FORMAT_UV       = 0x002C23A5;   // 2892709  FLOAT2
+    const s32 KI_VERTEX_FORMAT_EXTRA    = 0x001A23A6;   // 1713062  FLOAT4
 
     void ClearHandle(renderengine::ProgramVariableHandle& lrHandle)
     {

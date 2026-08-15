@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"                     // CgsRenderTarget::GetRenderTarget
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"        // saDepthStencilStates[1] (Render)
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"          // saRasterizerStates[2]   (Render)
+#include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"               // saBlendStates[1]        (Construct: B4Blur scatter)
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"           // shadow::Device::SetState
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // the seam's one-shot lines
@@ -359,20 +360,18 @@ void BrnPostFx::Construct(rw::IResourceAllocator* lpAllocator)
     // which DWARF rwgpfxb4blur.h:129 names Parameters::m_scatterBlendState, a
     // renderengine::BlendState*.
     //
-    // ⚠ m_scatterBlendState IS IDENTIFIED BUT NOT NAMEABLE FROM HERE YET -- it does NOT need a dump.
-    // dword_83010F70 is the base of CgsBlendStateFactory::saBlendStates, mapped slot by slot in the
-    // committed CgsBlendStateFactory.h:150-159, so dword_83010F74 is saBlendStates[1] ==
-    // E_FACTORY_BLEND_STATE_TRANSPARENT_MODULATE_NO_ALPHA_TEST_DEST_RGBA, filled at runtime by
-    // CgsBlendStateFactory::Construct @0x827EB2D8. (An earlier draft of this wave called it
-    // unattested data and asked for 0x83010F74 to be dumped; that was wrong.) It is still not
-    // written here because the table is a PRIVATE static whose only accessor, GetState, is a
-    // NON-static member -- there is no factory instance this TU can reach, and BrnPostFx cannot
-    // include BrnRendererModule.h (see BrnPostFxPCComposite.h). So the member keeps whatever
-    // B4Blur::Parameters::Parameters() seeds, the omission is recorded, and the permutation-0
-    // composite never reaches the blur. Plumbing, not reverse engineering.
+    // m_scatterBlendState: dword_83010F70 is the base of CgsBlendStateFactory::saBlendStates,
+    // mapped slot by slot in CgsBlendStateFactory.h:150-159, so dword_83010F74 (`lwz` @0x8240A368)
+    // is saBlendStates[1] == E_FACTORY_BLEND_STATE_TRANSPARENT_MODULATE_NO_ALPHA_TEST_DEST_RGBA,
+    // filled by CgsBlendStateFactory::Construct @0x827EB2D8 -- which the PC bring-up now runs (the
+    // factory is a real member of BrnRendererModule since the gate-flip wave). Nameable through the
+    // factory's static GetState (2026-08-15 verify pass: it had been left INDETERMINATE -- B4Blur::
+    // Parameters::Parameters() writes nothing, faithfully -- and copied into +0x108 as garbage).
     rw::graphics::postfx::B4Blur::Parameters lB4BlurParameters;
-    lB4BlurParameters.m_allocator = lpAllocator;
-    lB4BlurParameters.m_state     = rw::graphics::postfx::B4Blur::State();
+    lB4BlurParameters.m_allocator         = lpAllocator;
+    lB4BlurParameters.m_scatterBlendState =
+        CgsBlendStateFactory::GetState(E_FACTORY_BLEND_STATE_TRANSPARENT_MODULATE_NO_ALPHA_TEST_DEST_RGBA);
+    lB4BlurParameters.m_state             = rw::graphics::postfx::B4Blur::State();
     {
         // HOST sizeof, not the console's 0x130: B4Blur is placement-new'd into this block.
         // ⚠ THE "EMPTY CLASS" NOTE THAT USED TO STAND HERE IS RESOLVED. rwgpfxb4blur.h now models
@@ -435,9 +434,16 @@ void BrnPostFx::Destruct()
     // 0xC0 / 0xC8 / 0xDC are the committed rwgpfxtint.h members m_textureTintMap /
     // m_textureTintMapResource / m_textureStateTintMapResource, and 0xF0 is m_allocator.
     // Restoring the call also keeps this TU off three private members it has no business reaching.
+    // [FLAG PC bring-up] The five sub-object tests below are NOT the console's -- its carves cannot
+    // fail, so 0x8240814C-0x82408204 dereferences every one straight through -- but Construct above
+    // already tests each carve and leaves the pointer null on a pool shortfall (host sizeof carves
+    // from a bring-up allocator), and a null here would turn a missing effect into a teardown crash.
+    // Mirrors Construct's own conditionals; the console order and calls are unchanged. (Verify pass
+    // 2026-08-15.)
     for (u32 luTint = 0u; luTint < KU_POST_FX_NUM_TINT_BUFFERS; ++luTint)
     {
-        m_pfxTint[luTint]->Release();
+        if (m_pfxTint[luTint] != nullptr)
+            m_pfxTint[luTint]->Release();
     }
 
     // ---- the depth-of-field pixel program (asm 0x8240819C-0x824081F4) ---------------------------
@@ -446,12 +452,15 @@ void BrnPostFx::Destruct()
     // DoF's (`lwz r29, off_82FAEE80@l(r27)` then `lwz r3, 0(r29)`) -- and null the member. That is
     // rw::graphics::postfx::DepthOfField::Release() inlined (the DWARF lists Release among the
     // methods that live in the DoF TU; rwgpfxdof.h in this tree records the same).
-    m_pfxDof->Release();
+    if (m_pfxDof != nullptr)
+        m_pfxDof->Release();
 
     // ---- the vignette and the shared helper (asm 0x824081F8-0x82408204) --------------------------
     // Both already out-of-line on the console.
-    m_pfxVignette->Release();
-    rw::graphics::postfx::gpPfxHelper->Release();
+    if (m_pfxVignette != nullptr)
+        m_pfxVignette->Release();
+    if (rw::graphics::postfx::gpPfxHelper != nullptr)
+        rw::graphics::postfx::gpPfxHelper->Release();
 
     // ---- the shader array (asm 0x82408208-0x82408210) --------------------------------------------
     // `mr r3, r28` / `lwz r4, 0x378(r28)` -- the shader's `this` is the BrnPostFx object (first
@@ -506,11 +515,12 @@ void BrnPostFx::Destruct()
 // and the +0x108 that follows each is CgsRenderTarget::GetRenderTarget(), the postfx RenderTarget
 // the whole file already reaches by that name.
 //
-// ⚠ NEITHER BRANCH IS NULL-GUARDED, AND THAT IS FAITHFUL -- the asm has no test. On PC those three
-// pool slots are EMPTY (PCBringUpCreatePostFxSceneTargets builds only the down-sample and
-// anti-alias buffers), so both branches would dereference null. They are unreachable on this build
-// because m_enabledFx is 0 and nothing calls Set{Bloom,DepthOfField}; the gate that keeps them
-// unreachable is the caller's, not a guard smuggled into a console body. See REPORT.md.
+// ⚠ NEITHER BRANCH IS NULL-GUARDED, AND THAT IS FAITHFUL -- the asm has no test. Since the rung-3/4
+// bring-up (2026-08-15) PCBringUpCreatePostFxSceneTargets fills all three of those pool slots
+// (BrnRendererMemory.cpp: CreateBloomBuffer / CreateDepthOfFieldBuffer / CreateBackBuffer), so the
+// dereferences are live-safe; the branches are still not TAKEN on this build because m_enabledFx is
+// 0 and nothing calls Set{Bloom,DepthOfField} -- the gate that keeps them quiet is the caller's, not
+// a guard smuggled into a console body. See REPORT.md.
 // ================================================================================================
 
 void BrnPostFx::PrepareDownSampleBuffers(BrnRendererMemory& lrAllocatedMemory,
@@ -724,8 +734,11 @@ void BrnPostFx::Render(BrnRendererMemory& lrAllocatedMemory,
     // ---- 3. the two cached render states (asm 0x8240A504-0x8240A520) ------------------------------
     // Depth test off / no depth write, and the post-fx rasteriser state. Both go through the shadow
     // cache's compare-and-skip setters, so a repeat push costs nothing. The two slots are named
-    // rather than fetched from an invented global -- see the banner above for why, and for the
-    // still-open fact that nothing calls either factory's Construct on this build.
+    // rather than fetched from an invented global -- see the banner above for why. Both factories
+    // (and the blend one) are Constructed once in BrnRendererModule::Render's deferred PC bring-up,
+    // right after EnsurePostFxSceneTargets; the boot log line "[postfx-composite] the three
+    // render-state factories are Constructed" is the proof, and the composite diag's cull=1/scissor=1
+    // z=0/zw=0 shows the two slots applied.
     shadow::Device::SetState(
         CgsDepthStencilStateFactory::GetState(E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF));
     shadow::Device::SetState(

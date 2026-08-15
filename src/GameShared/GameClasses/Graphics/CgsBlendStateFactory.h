@@ -94,14 +94,12 @@
 // this tree's spelling of the same object.
 //
 // -----------------------------------------------------------------------------
-// ODR NOTE, disclosed rather than hidden. GameSource/Graphics/BrnRendererModule.h
-// lines 132-134 still carry the empty placeholder `struct CgsBlendStateFactory {};`
-// and line 473 still embeds it by value. That placeholder is a second declaration
-// of the same global-namespace name, so no TU may include both headers -- and none
-// does today (the only includer of this header is CgsBlendStateFactory.cpp). This
-// is the identical situation the two committed sibling factories are already in.
-// The swap that deletes the placeholder is DEFERRED, deliberately: see the LINK
-// section of CgsBlendStateFactory.cpp.
+// ODR NOTE -- RESOLVED (gate-flip wave, 2026-08-15). BrnRendererModule.h used to
+// carry an empty placeholder `struct CgsBlendStateFactory {};` (a second
+// declaration of this global-namespace name, so no TU could include both headers).
+// It now #includes this header instead, embeds the real class by value, and
+// BrnRendererModule::Render calls Construct once in its deferred PC bring-up;
+// BrnPostFx.cpp and BrnPostFxBloom.cpp read slots through the static GetState.
 // =============================================================================
 
 // Which slot of saBlendStates each of the nine built-in states occupies.
@@ -183,13 +181,17 @@ public:
     virtual bool Prepare();
 
     // CgsBlendStateFactory.h:82 (DWARF): a member accessor, defined inline in the
-    // header. STATICNESS UNDETERMINED -- see the banner above; this is the
-    // committed siblings' shape, not an attested convention.
+    // header. STATICNESS INFERRED (2026-08-15, matching the depth-stencil / rasterizer
+    // factories): dwarfdump elides `this`, no standalone symbol exists (header-inline),
+    // and of the table's readers only BrnRendererModule owns an instance -- BrnPostFx
+    // (B4Blur::Parameters::m_scatterBlendState == saBlendStates[1], X360 dword_83010F74)
+    // cannot even include BrnRendererModule.h. `static` is the strictly more permissive
+    // spelling: an instance call still compiles against it.
     //
     // NO BOUNDS ASSERT: every attested reader loads its slot with a constant index
     // and no check, and the export set carries no assert string for this accessor,
     // so a CGS_ASSERT here would be behaviour the binary does not have.
-    renderengine::BlendMaterialState* GetState(u32 luIndex) { return saBlendStates[luIndex]; }
+    static renderengine::BlendMaterialState* GetState(u32 luIndex) { return saBlendStates[luIndex]; }
 
 private:
     // Declared CgsBlendStateFactory.h:57, defined CgsBlendStateFactory.cpp:25 (DWARF).

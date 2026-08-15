@@ -113,7 +113,11 @@ struct MotionBlurState
     rw::math::vpu::Matrix44       mCurrentWVP;      // +0x00  DWARF :66  (Render reads 16 floats here)
     rw::math::vpu::Matrix44       mPreviousWVP;     // +0x40  DWARF :67  (Render reads 16 floats here)
     EQuality                      meQuality;        // +0x80  DWARF :68  (`lwz r11, 0x80(r30)`)
-    rw::math::vpu::Matrix44Affine maViewCache[3];   // +0x84  DWARF :72  (Update only)
+    rw::math::vpu::Matrix44Affine maViewCache[3];   // +0x84 on the CONSOLE (DWARF :72; Update only).
+                                                    // HOST: Matrix44Affine is alignas(16) here, so it
+                                                    // pads to +0x90 -- nothing in this build reads it
+                                                    // by offset, and Update (still a stub) is its only
+                                                    // user; do NOT carry 0x84 into any host reader.
 };
 
 // --------------------------------------------------------------------------------------------------

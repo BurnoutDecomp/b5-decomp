@@ -18,7 +18,7 @@
 // low 32 bits in result[1] (m_alignment), so m_size = 3*N^3 + 16 and m_alignment = 16. (Hex-Rays'
 // LODWORD/HIDWORD framing is little-endian; the big-endian image stores {size, align} = {3N^3+16, 16}.)
 //
-// rw::graphics::postfx is the committed post-fx namespace (see RwVignetteParameters.h). The ColourCube
+// rw::graphics::postfx is the committed post-fx namespace (rwgpfxvignette.h; the forked RwVignetteParameters.h that once stood beside it was deleted 2026-08-15). The ColourCube
 // class declaration carrying GetResourceDescriptor now lives in the shared header rwgpfxcolourcube.h
 // so the game-side resource-type handler (CgsRwColourCubeResourceType.cpp) can share it.
 
