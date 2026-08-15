@@ -94,9 +94,9 @@
 //   pair -- which is why the disclosure below is a hard early-out, not a fallback to slot 0.
 // ==================================================================================================
 
-#define BRN_POSTFX_SHADER_PROGRAMS_AVAILABLE            0
+#define BRN_POSTFX_SHADER_PROGRAMS_AVAILABLE            1
 #define BRN_POSTFX_MOTION_BLUR_REPROJECTION_AVAILABLE   0
-#define BRN_POSTFX_COMPOSITE_DRAW_AVAILABLE             0
+#define BRN_POSTFX_COMPOSITE_DRAW_AVAILABLE             1
 
 namespace renderengine
 {
@@ -135,17 +135,9 @@ struct D3DDevice;
 extern "C" void* D3DDevice_BeginVertices(D3DDevice* lpDevice, u32 luPrimitiveType,
                                           u32 luVertexCount, u32 luStride);
 extern "C" void  D3DDevice_EndVertices(D3DDevice* lpDevice);
-
-namespace shadow
-{
-    // X360 0x8227D158. The DecFIGS DWARF's recorded call list for BrnPostFxShader::Render names it
-    // shadow::Device::SetState -- the TextureState overload, i.e. "bind this whole texture+sampler
-    // state object at this unit". shadowingdevice.h declares the sampler-state overload
-    // (SetState(void*, u32), X360 0x822769E0) and the three render-state-triple overloads, but not
-    // this one. Declared here as a free function until the overload is added to shadow::Device and
-    // bodied in shadowingdevice.cpp; that edit belongs to the wave that flips this gate.
-    void* DeviceSetTextureState(const renderengine::TextureState* lpState, u32 luSamplerId);
-}
+// (The TextureState bind, X360 0x8227D158, is the real shadow::Device::SetState(const TextureState*,
+// u32) overload in shadowingdevice.h since the gate-flip wave -- the free-function seam that stood
+// in for it here is gone.)
 #endif  // BRN_POSTFX_COMPOSITE_DRAW_AVAILABLE
 
 namespace
@@ -1402,8 +1394,8 @@ void BrnPostFxShader::Render(f32 lfWhiteLevel,
 
     // Units 3 and 4: the colour-cube volume and the scene depth, each bound as a whole TextureState
     // (texture + its own sampler) rather than as a texture/sampler pair.
-    shadow::DeviceSetTextureState(lp3dTintTexture, KU_SAMPLER_TINT_3D);
-    shadow::DeviceSetTextureState(lpDepthTexture,  KU_SAMPLER_DEPTH);
+    shadow::Device::SetState(lp3dTintTexture, KU_SAMPLER_TINT_3D);
+    shadow::Device::SetState(lpDepthTexture,  KU_SAMPLER_DEPTH);
 
     shadow::Device::SetVertexDescriptor(mpVertexDescriptor);
     shadow::Device::FlushVertexProgramState();

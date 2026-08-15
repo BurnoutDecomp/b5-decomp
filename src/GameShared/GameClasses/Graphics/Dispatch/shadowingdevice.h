@@ -20,6 +20,7 @@ namespace renderengine
     class  DepthStencilState;
     class  RasterizerState;
     struct BlendMaterialState;
+    class  TextureState;      // pc/gcm/renderengine/renderstates.h -- the whole-unit bind (SetState overload)
 }
 
 namespace shadow
@@ -73,6 +74,15 @@ namespace shadow
 
         // Bind a texture (resource) through the shadow cache (X360 0x82276C70).
         static void* SetResource(void* lpTexture, u32 luSamplerId);
+
+        // Bind a WHOLE TextureState (sampler block + its raster) at one unit through the shadow
+        // cache (X360 0x8227D158; the DecFIGS DWARF names it SetState(const TextureState*, u32),
+        // shadowingdevice.h:918 is its one assert). Keyed on mapTextureState[unit]: a hit only
+        // re-asserts that the texture shadow still agrees; a miss applies the sampler block, sets
+        // the raster, and writes ALL THREE per-unit shadows. Callers: BrnPostFxShader::Render
+        // (the 3D tint volume + scene depth), BrnPostFxBloom, BrnSunCorona, Im3dBlend, the corona
+        // renderer. No unit-range assert in this one -- the console has none (faithful).
+        static void* SetState(const renderengine::TextureState* lpState, u32 luSamplerId);
 
         // Rebind the dirty vertex-program / stream sources to D3D (X360 0x827E7A10).
         static void FlushVertexProgramState();
@@ -209,7 +219,15 @@ namespace shadow
         static const renderengine::BlendMaterialState* mpBlendState;   // dword_83010964
 
         // --- Per-sampler caches (X360 16-entry arrays) --------------------------------------
-        static u32 mauSamplerDirty[KU_MAX_TEXTURE_STATES];   // dword_83010968
+        // RENAMED AND RETYPED from `u32 mauSamplerDirty` (2026-08-14). dword_83010968 is not a dirty
+        // flag: it is the WHOLE-TextureState shadow (DWARF StateBlockShadow::m_apTextureStates), a
+        // pointer per unit. SetState(const TextureState*, u32) @0x8227D158 compares the incoming
+        // object against it (`lwz r11, dword_83010968[a2]; cmplw r11, r3`) and stores it on a miss;
+        // the bare-sampler binder @0x822769E0 and the bare-texture binder @0x82276C70 both write it
+        // to ZERO -- binding half of a unit invalidates the whole-unit key, which is exactly why a
+        // flag reading "looked right": every writer this tree had was a writer of zero. On the host
+        // a u32 cannot hold the pointer the console stores, so the type follows the console.
+        static const renderengine::TextureState* mapTextureState[KU_MAX_TEXTURE_STATES]; // dword_83010968
         static void* mapSamplerState[KU_MAX_TEXTURE_STATES]; // dword_830109A8
         static void* mapSamplerTexture[KU_MAX_TEXTURE_STATES];// dword_830109E8
 
