@@ -1,12 +1,17 @@
 #include "GameSource/Graphics/PostFx/BrnPostFx.h"
 
 #include <new>                                                                  // placement new (the carved effects)
+#include <cstdio>                                                               // std::snprintf (the seam's sampled diag)
 #include "GameSource/Graphics/BrnRendererMemory.h"                              // the render-target pool
 #include "GameSource/Graphics/PostFx/BrnPostFxPCComposite.h"                    // the PC composite seam
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"                     // CgsRenderTarget::GetRenderTarget
+#include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"        // saDepthStencilStates[1] (Render)
+#include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"          // saRasterizerStates[2]   (Render)
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"           // shadow::Device::SetState
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // the seam's one-shot lines
 #include "SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxhelper.h"  // PfxHelper + gpPfxHelper
+#include "GameShared/Jobs/TintBlend/TintBlend.h"                                // TintBlendEntry
 
 // BrnPostFx -- the Burnout post-effects driver.
 //
@@ -24,12 +29,16 @@
 // THIS TU IS NOT ON tools/build/build_game_exe.bat AND MUST NOT BE ADDED UNTIL ITS UNRESOLVED SET IS
 // EMPTY. `cl /c` cannot see unresolved externals, so a clean compile gate on this file proves
 // nothing about the link. The measured set -- BrnPostFxShader::{Construct,Destruct,Render},
-// MotionBlurState::Construct, PfxHelper::{PfxHelper,Release}, DepthOfField::{DepthOfField,Release,
+// PfxHelper::{PfxHelper,Release}, DepthOfField::{DepthOfField,Release,
 // DownSampleAndGaussianBlur}, Vignette::{Vignette,Release}, Vignette::Parameters::Parameters,
 // Tint::{Initialize,InitializePixelProgram,Release,EndBlendJob}, B4Blur::{B4Blur,State::State},
-// B4Blur::Parameters::Parameters, BrnPostFxBloom::{Construct,Render,Destruct}, TintBlendEntry, and
-// the two cached-state globals gpPostFxDepthStencilState / gpPostFxRasterizerState -- is written out
-// in scratch/postfx_step2_out/driver/REPORT.md with the owning TU for each.
+// B4Blur::Parameters::Parameters, BrnPostFxBloom::{Construct,Render,Destruct} and TintBlendEntry --
+// is written out in scratch/postfx_step2_out/driver/REPORT.md with the owning TU for each.
+//
+// THREE ENTRIES OF THAT SET ARE CLOSED as of the states/motion-blur step: MotionBlurState::Construct
+// is now bodied in BrnPostFxShader.cpp (its DWARF home, and that TU IS on the build list), and the
+// two cached-state externs gpPostFxDepthStencilState / gpPostFxRasterizerState are DELETED rather
+// than defined -- they never existed on the console; see the banner below.
 
 BrnPostFx msPostFx;
 
@@ -44,25 +53,31 @@ BrnPostFx::BrnPostFx()
 
     m_enabledFx = 0;
 
-    // The vignette state constant block: inner colour {0,0,0,0}, outer colour {1,1,1,1},
-    // controlA {1,1,1,1}, controlB {0.5,0.5,1,1} (the v11..v14 stores into the vignette gap).
-    m_vignetteState.mInnerColour.x = 0.0f;
-    m_vignetteState.mInnerColour.y = 0.0f;
-    m_vignetteState.mInnerColour.z = 0.0f;
-    m_vignetteState.mInnerColour.w = 0.0f;
-    m_vignetteState.mOuterColour.x = 1.0f;
-    m_vignetteState.mOuterColour.y = 1.0f;
-    m_vignetteState.mOuterColour.z = 1.0f;
-    m_vignetteState.mOuterColour.w = 1.0f;
-    m_vignetteState.mControlA.x = 1.0f;
-    m_vignetteState.mControlA.y = 1.0f;
-    m_vignetteState.mControlA.z = 1.0f;
-    m_vignetteState.mControlA.w = 1.0f;
-    m_vignetteState.mControlB.x = 0.5f;
-    m_vignetteState.mControlB.y = 0.5f;
-    m_vignetteState.mControlB.z = 1.0f;
-    m_vignetteState.mControlB.w = 1.0f;
-    m_vignetteState.mfSharpness = 0.0f;
+    // The vignette state block (the v11..v14 stores into the vignette gap). RENAMED 2026-08-15 to the
+    // DecFIGS member set, which the step-3 wave pinned against the X360 asm: the four vectors are
+    // m_gradientScalars {0,0,0,0} / m_innerColour {1,1,1,1} / m_outerColour {1,1,1,1} /
+    // m_centerScale {0.5,0.5,1,1}, and there is NO trailing sharpness float -- Vignette::State is
+    // exactly 0x40 bytes, which is what Render's own `addi r6, r31, 0x390` / `addi r7, r31, 0x3D0`
+    // pair measures. These are the same sixteen values as before, under the names that say what they
+    // are: a centre of (0.5, 0.5) at unit scale, fed to a shader constant the composite's own interned
+    // name calls VignetteCentreXyScaleXy. Vignette::Parameters::Parameters @0x823F5420 writes the
+    // identical four vectors, which is the independent corroboration.
+    m_vignetteState.m_gradientScalars.x = 0.0f;
+    m_vignetteState.m_gradientScalars.y = 0.0f;
+    m_vignetteState.m_gradientScalars.z = 0.0f;
+    m_vignetteState.m_gradientScalars.w = 0.0f;
+    m_vignetteState.m_innerColour.x = 1.0f;
+    m_vignetteState.m_innerColour.y = 1.0f;
+    m_vignetteState.m_innerColour.z = 1.0f;
+    m_vignetteState.m_innerColour.w = 1.0f;
+    m_vignetteState.m_outerColour.x = 1.0f;
+    m_vignetteState.m_outerColour.y = 1.0f;
+    m_vignetteState.m_outerColour.z = 1.0f;
+    m_vignetteState.m_outerColour.w = 1.0f;
+    m_vignetteState.m_centerScale.x = 0.5f;
+    m_vignetteState.m_centerScale.y = 0.5f;
+    m_vignetteState.m_centerScale.z = 1.0f;
+    m_vignetteState.m_centerScale.w = 1.0f;
 
     // The depth-of-field state seeds (float3D0..float3EC immediates): the four focal planes, the
     // projection near/far planes, the dof amount and the blur radius.
@@ -95,37 +110,34 @@ BrnPostFx::BrnPostFx()
 }
 
 // ================================================================================================
-// THE TWO CACHED RENDER STATES BrnPostFx::Render PUSHES. BOTH ARE IDENTIFIED -- neither is
-// unrecoverable data and neither needs a dump session. They are declared here as the externs the
-// calls need, with no placeholder invented, because what is missing is a HOST PUBLISHER, not a value.
+// THE TWO CACHED RENDER STATES BrnPostFx::Render PUSHES -- CLOSED. This block used to declare two
+// externs, `gpPostFxDepthStencilState` and `gpPostFxRasterizerState`, that NOTHING DEFINED. They
+// are gone, and nothing replaces them, because THERE IS NO SUCH GLOBAL ON THE CONSOLE: the two
+// words the asm loads are two slots of the two state-factory tables, which this tree already owns.
 //
-//   gpPostFxDepthStencilState == X360 dword_83010910 == CgsDepthStencilStateFactory::saDepthStencilStates[1].
-//   The base the asm addresses is dword_8301090C, which this tree already pins as
-//   saDepthStencilStates[0] (CgsDepthStencilStateFactory.cpp:14-20, ImmediateModePCLeaf.cpp:292-295),
-//   and CgsDepthStencilStateFactory::Construct @0x827EBBA0 writes the +4 slot at 0x827EBBEC/0x827EBD4C.
-//   Slot [1] is E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF (CgsDepthStencilStateFactory.cpp:26-33)
-//   -- depth test off, compare ALWAYS, no depth write, exactly what a full-screen composite wants.
+//   X360 dword_83010910 == CgsDepthStencilStateFactory::saDepthStencilStates[1] -- the block base
+//   the asm addresses is dword_8301090C == slot 0, and Construct @0x827EBBA0 writes the +4 slot at
+//   0x827EBBEC / 0x827EBD4C. Slot 1 is E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF: depth
+//   test off, compare ALWAYS, no depth write -- exactly what a full-screen composite wants.
 //
-//   gpPostFxRasterizerState == X360 dword_83010A40 == CgsRasterizerStateFactory's
-//   gapRasterizerStates[2] == E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE
-//   (CgsRasterizerStateFactory.cpp:14-19) -- scissor on, no culling. ⚠ AN EARLIER DRAFT OF THIS WAVE
-//   CALLED IT UNATTESTED AND ASKED FOR 0x83010A38..0x83010A44 TO BE DUMPED; that was wrong.
-//   CgsRasterizerStateFactory::Construct writes it at 0x827EBFB0 and 0x827EC14C
-//   (`stw rN, (dword_83010A40 - 0x83010A38)(r29)`), and a `stw` scan of all 30,095 function exports
-//   finds those two stores and no others.
+//   X360 dword_83010A40 == CgsRasterizerStateFactory::saRasterizerStates[2] ==
+//   E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE -- scissor on, no culling, which is what a
+//   full-screen quad wants. Construct @0x827EBF30 stores it at 0x827EC14C (and clears it at
+//   0x827EBFB0); a `stw` scan of all 30,095 function exports finds those two and no others.
 //
-// WHAT IS MISSING FOR BOTH: saDepthStencilStates and gapRasterizerStates are TU-local / private-static
-// tables, CgsDepthStencilStateFactory::GetState is declaration-only and CgsRasterizerStateFactory has
-// no header at all, so nothing on the host can name either slot yet. That is plumbing in those two
-// TUs -- promote the tables to the DWARF's private statics and body the accessors -- not RE.
-namespace renderengine { class DepthStencilState; class RasterizerState; }
-extern renderengine::DepthStencilState* gpPostFxDepthStencilState;  // X360 dword_83010910
-extern renderengine::RasterizerState*   gpPostFxRasterizerState;    // X360 dword_83010A40
+// WHAT CHANGED SO THIS COULD BE WRITTEN (it was PLUMBING, never RE): both tables are now the
+// DWARF's PRIVATE STATIC members with a bodied `GetState`, and CgsRasterizerStateFactory -- which
+// had no header at all, only a TU-local, non-polymorphic, wrong-signature declaration inside its
+// own .cpp -- now has one at the DWARF shape. Minting a host global for state the tree already owns
+// would have been a split-brain; naming the slot is the fix. See CgsDepthStencilStateFactory.h and
+// CgsRasterizerStateFactory.h (both included above) for the full evidence, including why GetState
+// is spelled `static` and why that is an inference rather than an attestation.
+//
 
-// The EA::Jobs entry point BrnPostFx::Construct arms the tint-blend job with (X360 TintBlendEntry,
-// referenced at 0x8240A2C8/0x8240A2D4). Its body belongs to the BeginTintBlend/EndTintBlend slice
-// (dossier H4) and is not reconstructed in this TU.
-extern void TintBlendEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param);
+// The EA::Jobs entry point BrnPostFx::Construct arms the tint-blend job with (X360 TintBlendEntry
+// @0x82AD2CE8, referenced at 0x8240A2C8/0x8240A2D4). Its home is the DWARF's
+// GameShared/Jobs/TintBlend/, where it is now defined (TintBlend.cpp); the declaration is included
+// from that TU's header instead of being re-spelled here.
 
 // ================================================================================================
 // BrnPostFx::Construct @ 0x82409F80   (goes into b5-decomp/src/GameSource/Graphics/PostFx/BrnPostFx.cpp)
@@ -233,9 +245,13 @@ void BrnPostFx::Construct(rw::IResourceAllocator* lpAllocator)
     // ---- the shared post-fx helper (asm 0x82409FF4-0x8240A038) ---------------------------------
     // PfxHelper is a SINGLETON: its constructor publishes itself into the file-scope pointer the
     // whole post-fx layer reads (X360 off_82FAEE80), which is how Destruct and every effect reach it
-    // afterwards. Construct keeps no pointer to it. The parameter block is a one-element array of
-    // the allocator -- the shape PfxHelper::PfxHelper(rw::IResourceAllocator**) takes.
-    rw::IResourceAllocator* lapHelperParameters[1] = { lpAllocator };
+    // afterwards. Construct keeps no pointer to it. The console builds the one-member parameter block
+    // on the stack (`stw r28, 0x300+var_278(r1)` @0x82409FC4) and passes its ADDRESS
+    // (`addi r4, r1, 0x300+var_278` @0x8240A034) -- which is PfxHelper::Parameters, the shape the
+    // DWARF gives the constructor (rwgpfxhelper.h:110). It was previously spelled as a one-element
+    // `rw::IResourceAllocator*` array; same address, wrong type.
+    rw::graphics::postfx::PfxHelper::Parameters lHelperParameters;
+    lHelperParameters.allocator = lpAllocator;
     {
         // HOST sizeof, not the console's 0x50: PfxHelper is placement-new'd into this block.
         const rw::Resource lHelperResource = AllocatePostFxResource(
@@ -245,7 +261,7 @@ void BrnPostFx::Construct(rw::IResourceAllocator* lpAllocator)
         if (lHelperResource.m_baseResources[0] != nullptr)
         {
             new (lHelperResource.m_baseResources[0])
-                rw::graphics::postfx::PfxHelper(lapHelperParameters);
+                rw::graphics::postfx::PfxHelper(lHelperParameters);
         }
     }
 
@@ -278,9 +294,13 @@ void BrnPostFx::Construct(rw::IResourceAllocator* lpAllocator)
     // overwritten (`stw r28, 0x300+var_100(r1)` @0x8240A160 -- var_100 IS the block's first word,
     // and DWARF rwgpfxvignette.h:89 names that member m_allocator).
     //
-    // The console hands the constructor the ADDRESS of that leading pointer, which is why the
-    // committed declaration spells the argument `rw::IResourceAllocator**`; &m_allocator is exactly
-    // that, so no cast and no pun is needed on the host.
+    // CORRECTED 2026-08-15: the constructor takes `const Parameters&` (DWARF rwgpfxvignette.h:139),
+    // and the block is passed whole. The previous spelling handed it `&lVignetteParameters.m_allocator`
+    // against a `rw::IResourceAllocator**` declaration, and the constructor then recovered the initial
+    // State as `*(const State*)(lppParameters + 1)` -- which on x64 is base+8 while Parameters::m_state
+    // sits at base+16 (Vector4 is alignas(16)). That read eight bytes of padding plus three quarters of
+    // the real state into the vignette's shader constants. The console's own `addi r4, r22, 0x10`
+    // @0x824041A0 is the +0x10 this now respects.
     rw::graphics::postfx::Vignette::Parameters lVignetteParameters;
     lVignetteParameters.m_allocator = lpAllocator;
     {
@@ -291,7 +311,7 @@ void BrnPostFx::Construct(rw::IResourceAllocator* lpAllocator)
             0x10u);
         m_pfxVignette = (lVignetteResource.m_baseResources[0] != nullptr)
             ? new (lVignetteResource.m_baseResources[0])
-                  rw::graphics::postfx::Vignette(&lVignetteParameters.m_allocator)
+                  rw::graphics::postfx::Vignette(lVignetteParameters)
             : nullptr;
     }
 
@@ -355,17 +375,17 @@ void BrnPostFx::Construct(rw::IResourceAllocator* lpAllocator)
     lB4BlurParameters.m_state     = rw::graphics::postfx::B4Blur::State();
     {
         // HOST sizeof, not the console's 0x130: B4Blur is placement-new'd into this block.
-        // ⚠ B4Blur is still an EMPTY class in this tree, so this carve is currently SMALLER than the
-        // console's -- which is correct and self-consistent (an empty object writes one byte), and it
-        // grows automatically the day the B4Blur TU models its members. That is exactly why the host
-        // sizeof is the argument: it tracks the object, the console immediate does not.
+        // ⚠ THE "EMPTY CLASS" NOTE THAT USED TO STAND HERE IS RESOLVED. rwgpfxb4blur.h now models
+        // all 29 members (DWARF :254-308, every offset confirmed against the constructor's store map
+        // and summing to the console's own 0x130), so this carve is a real object again -- which is
+        // exactly the self-correction the host-sizeof idiom exists for.
         const rw::Resource lB4BlurResource = AllocatePostFxResource(
             lpAllocator,
             static_cast<u32>(sizeof(rw::graphics::postfx::B4Blur)),   // X360: 0x130
             0x10u);
         m_pfxB4Blur = (lB4BlurResource.m_baseResources[0] != nullptr)
             ? new (lB4BlurResource.m_baseResources[0])
-                  rw::graphics::postfx::B4Blur(&lB4BlurParameters.m_allocator)
+                  rw::graphics::postfx::B4Blur(lB4BlurParameters)
             : nullptr;
     }
 
@@ -639,37 +659,28 @@ namespace
     const f32 KF_POST_FX_ZERO = 0.0f;
 }
 
-// ⚠ TWO GLOBALS WITH NO HOST HOME YET -- the cached render states this function pushes before the
-// composite. BOTH ARE IDENTIFIED. Neither is unrecoverable data, and neither needs a dump session:
-// they are RUNTIME-BUILT objects, and the only thing missing is that their factories do not publish
-// their tables on the host. They are reproduced as the calls they are, against externs, and no
-// placeholder is invented for either.
+// THE TWO CACHED RENDER STATES THIS FUNCTION PUSHES -- CLOSED, and the two undefined
+// `gpPostFx*State` externs that used to be declared here are DELETED. Both words are slots of the
+// two state-factory tables, which this tree owns; there is no such global on the console. The full
+// identification is in the banner over BrnPostFx::Construct above, and the evidence for the tables
+// themselves is in CgsDepthStencilStateFactory.h / CgsRasterizerStateFactory.h.
 //
 //   dword_83010910 (asm 0x8240A504-0x8240A510, handed to shadow::Device::SetState(DepthStencilState*)
-//   @0x82276AD0) == CgsDepthStencilStateFactory::saDepthStencilStates[1]. The block base the asm
-//   addresses is dword_8301090C, which this tree already pins as saDepthStencilStates[0]
-//   (CgsDepthStencilStateFactory.cpp:14-20, ImmediateModePCLeaf.cpp:292-295), and
-//   CgsDepthStencilStateFactory::Construct @0x827EBBA0 writes the +4 slot at 0x827EBBEC / 0x827EBD4C.
-//   Slot [1] is E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF (CgsDepthStencilStateFactory.cpp:26-33)
-//   -- depth test off, compare ALWAYS, no depth write. Exactly right for a full-screen composite.
+//   @0x82276AD0) == CgsDepthStencilStateFactory::saDepthStencilStates[1] ==
+//   E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF.
 //
 //   dword_83010A40 (asm 0x8240A514-0x8240A520, handed to shadow::Device::SetState(RasterizerState*)
-//   @0x82276B38) == CgsRasterizerStateFactory's gapRasterizerStates[2], i.e.
-//   E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE (CgsRasterizerStateFactory.cpp:14-19) --
-//   scissor on, no culling, which is what a full-screen quad wants. ⚠ AN EARLIER DRAFT OF THIS WAVE
-//   CALLED IT UNATTESTED DATA AND ASKED FOR 0x83010A38..0x83010A44 TO BE DUMPED. That was wrong:
-//   CgsRasterizerStateFactory::Construct @0x827EBFB0 and @0x827EC14C store to
-//   `(dword_83010A40 - 0x83010A38)(r29)`, i.e. index 2 of the same three-entry table the committed
-//   CgsRasterizerStateFactory.cpp already reconstructs by name. A `stw` search over all 30,095
-//   function exports finds those two stores and no others.
+//   @0x82276B38) == CgsRasterizerStateFactory::saRasterizerStates[2] ==
+//   E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE.
 //
-// WHAT IS ACTUALLY MISSING, for both: a host publisher. saDepthStencilStates and gapRasterizerStates
-// are TU-local arrays, CgsDepthStencilStateFactory::GetState is declaration-only, and
-// CgsRasterizerStateFactory has no header at all. Closing this is plumbing in those two TUs (promote
-// the arrays to the DWARF's private statics and body GetState), not reverse engineering.
-namespace renderengine { class DepthStencilState; class RasterizerState; }
-extern renderengine::DepthStencilState* gpPostFxDepthStencilState;  // saDepthStencilStates[1]
-extern renderengine::RasterizerState*   gpPostFxRasterizerState;    // gapRasterizerStates[2]
+// ⚠ WHAT THIS DOES *NOT* FIX, stated so it is not mistaken for fixed: NOTHING ON THIS BUILD CALLS
+// EITHER FACTORY'S Construct (BrnRendererModule::Construct does not reach mDepthStencilStateFactory
+// / mRasterizerStateFactory, and neither factory TU is on tools/build/build_game_exe.bat), so both
+// tables read NULL at runtime today. Both SetState overloads are the shadow cache's
+// compare-then-apply, which stores and skips on a null exactly as it would on any other pointer --
+// i.e. the console's own "state unchanged" path, not a crash. Retiring this is the same one-line
+// change shadowingdevice.cpp:546-554 already names for saBlendStates: have
+// BrnRendererModule::Construct call the three factories' Construct.
 
 void BrnPostFx::Render(BrnRendererMemory& lrAllocatedMemory,
                        rw::graphics::postfx::RenderTarget* lpSourceRenderTarget,
@@ -712,9 +723,13 @@ void BrnPostFx::Render(BrnRendererMemory& lrAllocatedMemory,
 
     // ---- 3. the two cached render states (asm 0x8240A504-0x8240A520) ------------------------------
     // Depth test off / no depth write, and the post-fx rasteriser state. Both go through the shadow
-    // cache's compare-and-skip setters, so a repeat push costs nothing. See the BLOCKED note above.
-    shadow::Device::SetState(gpPostFxDepthStencilState);
-    shadow::Device::SetState(gpPostFxRasterizerState);
+    // cache's compare-and-skip setters, so a repeat push costs nothing. The two slots are named
+    // rather than fetched from an invented global -- see the banner above for why, and for the
+    // still-open fact that nothing calls either factory's Construct on this build.
+    shadow::Device::SetState(
+        CgsDepthStencilStateFactory::GetState(E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF));
+    shadow::Device::SetState(
+        CgsRasterizerStateFactory::GetState(E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE));
 
     // ---- 4. the down-sample chain (asm 0x8240A524-0x8240A534) -------------------------------------
     // ⚠ THE RESULT TARGET IS THE *SOURCE*, not the destination: `mr r5, r29` where r29 is this
@@ -872,6 +887,28 @@ void BrnPostFx::Render(BrnRendererMemory& lrAllocatedMemory,
 // visible at the call site. See the call site's banner in BrnRendererModule.cpp.
 // ================================================================================================
 
+namespace
+{
+    // Set by PCBringUpConstructPostFx. The seam's own record, not the object's: BrnPostFx keeps
+    // mnActiveLayerCount private and the guard belongs to the PC gate, not to the console class.
+    bool sbPostFxConstructed = false;
+}
+
+// [FLAG PC bring-up] The deferred BrnPostFx::Construct -- see BrnPostFxPCComposite.h. The console
+// runs it from BrnRendererModule::Construct (`bl BrnPostFx__Construct` @0x8240B78C, r3 = mPostFxVault,
+// r4 = this->mpGraphicsAllocator); on PC the module's Construct has no device and a null graphics
+// allocator, so it runs from the frame that builds the post-fx pool, on the bring-up allocator.
+void PCBringUpConstructPostFx(rw::IResourceAllocator* lpAllocator)
+{
+    if (sbPostFxConstructed || lpAllocator == 0)
+    {
+        return;
+    }
+    msPostFx.Construct(lpAllocator);
+    sbPostFxConstructed = true;
+    CgsDev::Log::WriteToLog("[postfx-composite] BrnPostFx::Construct ran (deferred PC bring-up)\n");
+}
+
 bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
                                     f32 lfBrightness,
                                     f32 lfContrast,
@@ -884,12 +921,51 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
     // E_RENDER_TARGET_BACK_BUFFER, and passes each slot's +0x108 (GetRenderTarget()).
     CgsRenderTarget* const lpSceneTarget = lrRendererMemory.GetDownSampleBuffer();
     CgsRenderTarget* const lpBackBuffer  = lrRendererMemory.GetBackBuffer();
+    // ...and the two the console body samples without a test (asm 0x8240A560-0x8240A5E8:
+    // GetBloomBuffer()->GetRenderTarget()->GetTexture(0) / GetDepthOfFieldBuffer()->...). Every
+    // slot BrnPostFx::Render dereferences is tested HERE, once, so the console body keeps its
+    // unguarded reads and cannot crash on a pool this build did not fill.
+    CgsRenderTarget* const lpBloomBuffer = lrRendererMemory.GetBloomBuffer();
+    CgsRenderTarget* const lpDofBuffer   = lrRendererMemory.GetDepthOfFieldBuffer();
 
     if (lpSceneTarget == 0 || lpSceneTarget->GetRenderTarget() == 0 ||
-        lpBackBuffer  == 0 || lpBackBuffer->GetRenderTarget()  == 0)
+        lpBackBuffer  == 0 || lpBackBuffer->GetRenderTarget()  == 0 ||
+        lpBloomBuffer == 0 || lpBloomBuffer->GetRenderTarget() == 0 ||
+        lpDofBuffer   == 0 || lpDofBuffer->GetRenderTarget()   == 0 ||
+        !sbPostFxConstructed)
     {
         // Nothing drawn, nothing bound, nothing resolved. The caller presents the frame the old way.
+        // The !sbPostFxConstructed arm matters as much as the pool: BrnPostFx::Render's first act is
+        // `if (mnActiveLayerCount == 0) return` and only Construct sets it, so an un-Constructed
+        // singleton would return here having drawn NOTHING while this function reported success --
+        // and the caller would present a black world with the GUI on top.
+        static bool sbReported = false;
+        if (!sbReported)
+        {
+            sbReported = true;
+            CgsDev::Log::WriteToLog(sbPostFxConstructed
+                ? "[postfx-composite] composite SKIPPED: the pool lacks a target it needs "
+                  "(down-sample / bloom / depth-of-field / back buffer) -- presenting via the blit\n"
+                : "[postfx-composite] composite SKIPPED: BrnPostFx::Construct has not run "
+                  "-- presenting via the blit\n");
+        }
         return false;
+    }
+
+    // [DIAG, sampled] what the composite is fed: the 1st / 100th / 1000th call's brightness,
+    // contrast, white level and aspect correction. The neutral picture needs 0 / 1 / 1 / 1.
+    {
+        static u32 suCalls = 0u;
+        ++suCalls;
+        if (suCalls == 1u || suCalls == 100u || suCalls == 1000u)
+        {
+            char lacMsg[200];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[postfx-composite] call %u: brightness=%g contrast=%g white=%g aspect=%g\n",
+                          static_cast<unsigned>(suCalls), (double)lfBrightness, (double)lfContrast,
+                          (double)lfFrameWhiteLevel, (double)lfAspectCorrection);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
     }
 
     // The neutral 2D tint. This is NOT a chosen value: BrnRendererModule::Render installs the ZERO

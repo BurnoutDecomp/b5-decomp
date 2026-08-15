@@ -18,9 +18,10 @@
 //   m_state                 +0x0C   (State: 8 floats == 0x20 bytes)
 //   m_bParametersDirty      +0x2C
 //
-// Only the Parameters-constructor and SetState are reconstructed in this TU; the remaining methods
-// (Initialize / Apply / Release / DownSampleAndGaussianBlur / GetResourceDescriptor) live in
-// sibling TUs and are not declared here.
+// Reconstructed in this TU: the Parameters constructor, SetState, DownSampleAndGaussianBlur and
+// Release (the last of which the console INLINED into BrnPostFx::Destruct). The remaining DWARF
+// methods (GetResourceDescriptor / Initialize / Apply / PostProcess) have no attested call site in
+// this build's post-fx path and are not declared here.
 namespace rw
 {
 namespace graphics

@@ -200,24 +200,48 @@ namespace
         }
     }
 
-    // The DecFIGS ELEMENTTYPE_* enum (ps3/gcm/renderengine/vertexdescriptor.h) ->
-    // D3DDECLUSAGE, used ONLY when a Parameters record leaves the usage lane at its
-    // 0xFF "take the default" sentinel. (The X360 reads a 256-byte defaults table at
-    // unk_8214AD50 for this; that table is .rodata with no PC home. Deriving the usage
-    // from the element TYPE is the same mapping the table encodes and is self-contained.
-    // The sky never takes this path -- both its elements name their usage explicitly.)
+    // THE X360 VERTEX-FORMAT DEFAULTS TABLE, gauVertexFormatDefaults @ unk_8214AD50 -- sixteen
+    // {usage, usageIndex} byte pairs indexed by the element TYPE, which the console's
+    // VertexDescriptor::Initialize @0x82B63060 reads for every Parameters record whose usage /
+    // usage-index lane is the 0xFF "take the default" sentinel (`lbz r11, 2(r7)` = the type,
+    // then `lbzx v10[type*2]` / `[type*2+1]`; see the console body in VertexDescriptor.cpp:229-243).
+    //
+    // DUMPED 2026-08-15 from the ARTIST .i64 (idat, DB copy; the known-control word dword_82F24240
+    // read 1280 in the same dump), replacing an INVENTED mapping that had assumed the DecFIGS PS3
+    // enum (XYZ = 0, TEX0 = 8). The X360 enum is not that one: 1 = XYZ, 3 = NORMAL, 4 / 5 =
+    // COLOR0 / COLOR1, 6..13 = TEXCOORD0..7, 14 = BLENDINDICES, 15 = BLENDWEIGHT, 0 = unused
+    // (usage 0xFF). Every immediate-mode caller in this tree writes 1 for its position element
+    // and 6 for its first UV, and under the invented table 1 meant BLENDWEIGHT -- which is how
+    // the post-fx composite's full-screen quad drew NOTHING with hr == S_OK: its POSITION was
+    // declared as a blend weight and the vertex shader's position input was never fed. (The Im3d
+    // family survived because it names its usages explicitly and never takes this path.)
+    const u8 kauVertexFormatDefaults[16 * 2] =
+    {
+        0xFF, 0x00,   //  0: (unused)
+        0x00, 0x00,   //  1: POSITION      0   <- ELEMENTTYPE_XYZ on the X360
+        0x00, 0x00,   //  2: POSITION      0
+        0x03, 0x00,   //  3: NORMAL        0
+        0x0A, 0x00,   //  4: COLOR         0
+        0x0A, 0x01,   //  5: COLOR         1   (specular)
+        0x05, 0x00,   //  6: TEXCOORD      0   <- ELEMENTTYPE_TEX0 on the X360
+        0x05, 0x01,   //  7: TEXCOORD      1
+        0x05, 0x02,   //  8: TEXCOORD      2
+        0x05, 0x03,   //  9: TEXCOORD      3
+        0x05, 0x04,   // 10: TEXCOORD      4
+        0x05, 0x05,   // 11: TEXCOORD      5
+        0x05, 0x06,   // 12: TEXCOORD      6
+        0x05, 0x07,   // 13: TEXCOORD      7
+        0x02, 0x00,   // 14: BLENDINDICES  0
+        0x01, 0x00,   // 15: BLENDWEIGHT   0
+    };
+
     u8 DefaultUsageForElementType(u8 lu8ElementType)
     {
-        switch (lu8ElementType)
-        {
-        case 0:  return D3DDECLUSAGE_POSITION;      // ELEMENTTYPE_XYZ
-        case 1:  return D3DDECLUSAGE_BLENDWEIGHT;   // ELEMENTTYPE_WEIGHTS
-        case 2:  return D3DDECLUSAGE_NORMAL;        // ELEMENTTYPE_NORMAL
-        case 3:  return D3DDECLUSAGE_COLOR;         // ELEMENTTYPE_VERTEXCOLOR
-        case 4:  return D3DDECLUSAGE_COLOR;         // ELEMENTTYPE_SPECULAR
-        case 7:  return D3DDECLUSAGE_BLENDINDICES;  // ELEMENTTYPE_INDICES
-        default: return D3DDECLUSAGE_TEXCOORD;      // ELEMENTTYPE_TEX0..7 (8..15)
-        }
+        return (lu8ElementType < 16u) ? kauVertexFormatDefaults[lu8ElementType * 2u] : 0xFFu;
+    }
+    u8 DefaultUsageIndexForElementType(u8 lu8ElementType)
+    {
+        return (lu8ElementType < 16u) ? kauVertexFormatDefaults[lu8ElementType * 2u + 1u] : 0u;
     }
 
     // -------------------------------------------------------------------------
@@ -778,9 +802,14 @@ namespace renderengine
             u8 lu8UsageIndex = lrIn.mu8Usage;                          // lane +0xA
             const u8 lu8ElementType = lrIn.mu8UsageIndex;              // lane +0xB
             if (lu8Usage == 0xFFu)
-                lu8Usage = DefaultUsageForElementType(lu8ElementType);
+                lu8Usage = DefaultUsageForElementType(lu8ElementType);        // table [type*2]
             if (lu8UsageIndex == 0xFFu)
-                lu8UsageIndex = 0u;
+                lu8UsageIndex = DefaultUsageIndexForElementType(lu8ElementType); // table [type*2+1]
+            if (lu8Usage == 0xFFu)
+            {
+                LogLine("[ImLeaf] VertexDescriptor: element type has no default usage - element dropped\n");
+                continue;
+            }
 
             // The offset lane doubles as an auto-pack request: >= 0x100 means "append
             // me to this stream" (the X360 takes the accumulator as the offset and then
@@ -936,6 +965,35 @@ namespace renderengine
         lpHeader->muSize           = lpParams->muLength;
         lpHeader->muFormat         = lpParams->muFormat;
         return lpHeader;
+    }
+
+    // =========================================================================
+    // renderengine::VertexBuffer::Release(VertexBufferHeader*)
+    // X360 @0x82B62FF8 -- the other end of the Initialize above, homed HERE for the same
+    // reason VertexDescriptor::Release is: this leaf built the object, this leaf releases
+    // it. The console reconstruction (pc/gcm/renderengine/VertexBuffer.cpp) carries a Release
+    // too, but that TU also defines Initialize -- mounting it beside this leaf is a duplicate
+    // symbol -- and it drags seven Xenon-only shims (XGSetVertexBufferHeader, XMemGetPageSize,
+    // XQueryMemoryProtect, D3DResource_IsSet/Release/BlockUntilNotBusy,
+    // D3DDevice_InvalidateGpuCache) that have no D3D9 counterpart; the gate-flip link probe
+    // measured exactly those seven as its whole residue.
+    //
+    // Console shape kept store for store: `if (muCommon) { Destruct; [D3D release when bit
+    // 0x100000]; keep the two low flag bits of the base address; zero muCommon; }` return the
+    // header. On this backend the header IS the object and the bytes live in the leaf's arena
+    // (no D3D object, no free), so Destruct and the D3D release are what Initialize's ⚠ notes
+    // already say they are here -- nothing to do -- and the header is simply cleared. Caller:
+    // PfxHelper::Release (SafeRelease<VertexBufferHeader>, at teardown only).
+    // =========================================================================
+    VertexBufferHeader* VertexBuffer::Release(VertexBufferHeader* lpBuffer)
+    {
+        if (lpBuffer != nullptr && lpBuffer->muCommon != 0u)               // if (*pThis)
+        {
+            const u32 luKeptFlags = lpBuffer->muBaseAddress & 3u;          // v2 = *(v1+6) & 3
+            lpBuffer->muCommon      = 0u;                                   // *v1 = 0
+            lpBuffer->muBaseAddress = luKeptFlags;                          // *(v1+6) = v2
+        }
+        return lpBuffer;
     }
 
     IndexBufferHeader* IndexBuffer::Initialize(IndexBufferWrapper* lpWrapper,

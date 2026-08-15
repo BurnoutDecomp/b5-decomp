@@ -32,11 +32,26 @@
 // Pointer/reference-only use: the documented cascade-avoidance forward declaration in AGENTS.md.
 // `struct`, matching BrnRendererMemory.h:47.
 struct BrnRendererMemory;
+namespace rw { struct IResourceAllocator; }
+
+// Run BrnPostFx::Construct @0x82409F80 over the file-scope singleton, once. On the console this is
+// BrnRendererModule::Construct @0x8240A778's own call (`addi r3, r11, mPostFxVault@l` @0x8240B774 /
+// `bl BrnPostFx__Construct` @0x8240B78C, r4 = this->mpGraphicsAllocator, guest +0x394C) -- the same
+// translation-unit boundary that keeps Render behind
+// this seam keeps Construct behind it too. It is DEFERRED on PC to the frame that builds the post-fx
+// pool (BrnRendererModule's EnsurePostFxSceneTargets), for the reason every other pool object is: the
+// device does not exist at Construct time on this build, and the module's mpGraphicsAllocator is null
+// (BrnResource::Allocators::GetGlobalGraphicsAllocator is declaration-only), so the bring-up
+// allocator every other console Construct already runs through (sWorldDispatchAllocator -- see
+// mIm3dRendererSkyDome.Construct) is what is passed. Idempotent: a second call does nothing.
+void PCBringUpConstructPostFx(rw::IResourceAllocator* lpAllocator);
 
 // Run BrnPostFx::Render @0x8240A468 over the render-target pool: down-sample buffer in, back-buffer
-// pool slot out. RETURNS FALSE, having drawn nothing, when the pool cannot supply both surfaces --
-// which is this build's state, because BrnRendererMemory::PCBringUpCreatePostFxSceneTargets creates
-// only DOWN_SAMPLE and ANTI_ALIAS. THE CALLER MUST PRESENT THE FRAME SOME OTHER WAY ON FALSE: the
+// pool slot out. RETURNS FALSE, having drawn nothing, when the pool cannot supply every surface the
+// console body dereferences without a test (down-sample, bloom, depth-of-field, back buffer), or
+// when PCBringUpConstructPostFx has not run -- BrnPostFx::Render's own first act is `if
+// (mnActiveLayerCount == 0) return`, which Construct is what sets, so an un-Constructed singleton
+// would "succeed" having drawn nothing. THE CALLER MUST PRESENT THE FRAME SOME OTHER WAY ON FALSE: the
 // world is already drawn off-screen by that point, so "did nothing" means a black frame with the GUI
 // on top. It does NOT hand the swap chain back either way; the caller owns that, so that the
 // rebind-on-every-path property is visible at the call site instead of buried in here.

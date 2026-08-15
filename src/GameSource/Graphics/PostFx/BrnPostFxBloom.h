@@ -27,12 +27,19 @@ public:
 private:
     renderengine::ProgramBufferData* CreateProgram(const void* lpMicrocode,
                                                    u32 luSize, bool lbPixelProgram);
-    void PrepareDownSampleBuffer(rw::graphics::postfx::RenderTarget* lpDestRenderTarget,
-                                 rw::graphics::postfx::RenderTarget* lpSourceRenderTarget);
-    void Generate1PassBlurredBloomBuffer(rw::graphics::postfx::RenderTarget* lpDestRenderTarget,
-                                         rw::graphics::postfx::RenderTarget* lpSourceRenderTarget);
-    void Generate2PassBlurredBloomBuffer(rw::graphics::postfx::RenderTarget* lpDestRenderTarget,
-                                         rw::graphics::postfx::RenderTarget* lpSourceRenderTarget);
+    // Parameter names are the DecFIGS DWARF's own (BrnPostFxBloom.cpp:285 / :310 / :446), and they
+    // are not cosmetic. In the two blur passes NEITHER argument is purely a destination: the two-pass
+    // blur PING-PONGS -- it samples lpBloomRt into lpWorkRt, resolves, then samples lpWorkRt back into
+    // lpBloomRt -- so the old "lpDestRenderTarget / lpSourceRenderTarget" spelling named the second
+    // pass exactly backwards. The console's own assert strings inside
+    // Generate2PassBlurredBloomBuffer @0x82402308 spell both names out.
+    //   X360 0x82401AE8 / 0x82401F50 / 0x82402308; DWARF BrnPostFxBloom.h:116 / :122 / :128.
+    void PrepareDownSampleBuffer(rw::graphics::postfx::RenderTarget* lpDestRt,
+                                 rw::graphics::postfx::RenderTarget* lpSourceRt);
+    void Generate1PassBlurredBloomBuffer(rw::graphics::postfx::RenderTarget* lpBloomRt,
+                                         rw::graphics::postfx::RenderTarget* lpWorkRt);
+    void Generate2PassBlurredBloomBuffer(rw::graphics::postfx::RenderTarget* lpBloomRt,
+                                         rw::graphics::postfx::RenderTarget* lpWorkRt);
 
     rw::IResourceAllocator* mpAllocator;
     rw::Resource mBloomVertexDescriptorResource;

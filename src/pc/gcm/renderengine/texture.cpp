@@ -93,6 +93,13 @@ namespace renderengine
         static_cast<IDirect3DTexture9*>(lpTexture->mpD3DTexture)->UnlockRect(0u);
     }
 
+    // The Locked* form of the same X360 entry point (see texture.h). The descriptor is unread on
+    // this backend, exactly as in the LockInfo overload above.
+    void Texture::Unlock(Texture* lpTexture, Locked* /*lpLocked*/)
+    {
+        Unlock(lpTexture, static_cast<LockInfo*>(nullptr));
+    }
+
     namespace
     {
         // Bytes per 4x4 block for the block-compressed (DXT/BCn) D3DFORMATs; 0 otherwise.

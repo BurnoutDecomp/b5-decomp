@@ -2533,8 +2533,135 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
         return;   // the same silent early-out every sibling shim in this block takes
     }
 
-    lpDevice->DrawPrimitiveUP(seImVertsPrimitive, suImVertsPrimCount,
-                              sauImVertsScratch, suImVertsStride);
+    const HRESULT lhrDraw = lpDevice->DrawPrimitiveUP(seImVertsPrimitive, suImVertsPrimCount,
+                                                      sauImVertsScratch, suImVertsStride);
+
+    // [DIAG one-shot x4] the first immediate runs, with the device state they drew against --
+    // the post-fx composite is this path's first live consumer (2026-08-15) and its first boot
+    // presented a black frame with no error anywhere, so the answers to "where did the quad go"
+    // are printed once instead of guessed: HRESULT, the bound colour target vs the swap chain's
+    // back buffer, whether shaders / a declaration are bound, and the render states a full-screen
+    // opaque quad depends on. Delete with the bring-up.
+    // [DIAG, sampled] every 500th run up to the 3000th (so it lands on WORLD frames, not only the
+    // loading screen): the centre pixel of the bound render target after the draw and of the
+    // stage-0 texture -- "is the SOURCE black, or is the OUTPUT black?" is the one question the
+    // state dump above cannot answer.
+    static u32 suRunTotal = 0u;
+    ++suRunTotal;
+    if ((suRunTotal % 500u) == 0u && suRunTotal <= 3000u && suImVertsStride == 20u)
+    {
+        IDirect3DSurface9* lpRt = nullptr;
+        IDirect3DBaseTexture9* lpTex0 = nullptr;
+        lpDevice->GetRenderTarget(0, &lpRt);
+        lpDevice->GetTexture(0, &lpTex0);
+        auto ReadCentre = [&](IDirect3DSurface9* lpSrc, const char* lpcTag, char* lpcOut, size_t luOut)
+        {
+            std::snprintf(lpcOut, luOut, "%s=n/a", lpcTag);
+            if (lpSrc == nullptr) return;
+            D3DSURFACE_DESC lDesc; if (FAILED(lpSrc->GetDesc(&lDesc))) return;
+            IDirect3DSurface9* lpSys = nullptr;
+            if (FAILED(lpDevice->CreateOffscreenPlainSurface(lDesc.Width, lDesc.Height, lDesc.Format,
+                                                             D3DPOOL_SYSTEMMEM, &lpSys, nullptr)))
+                return;
+            const HRESULT lhr = lpDevice->GetRenderTargetData(lpSrc, lpSys);
+            D3DLOCKED_RECT lLock;
+            if (SUCCEEDED(lhr) && SUCCEEDED(lpSys->LockRect(&lLock, nullptr, D3DLOCK_READONLY)))
+            {
+                const u32* lpRow = reinterpret_cast<const u32*>(
+                    static_cast<const u8*>(lLock.pBits) + (lDesc.Height / 2u) * lLock.Pitch);
+                const u32 luC = lpRow[lDesc.Width / 2u];
+                const u32 luQ = lpRow[lDesc.Width / 4u];
+                std::snprintf(lpcOut, luOut, "%s=%ux%u fmt=%u centre=%08X quarter=%08X",
+                              lpcTag, (unsigned)lDesc.Width, (unsigned)lDesc.Height, (unsigned)lDesc.Format, luC, luQ);
+                lpSys->UnlockRect();
+            }
+            else
+            {
+                std::snprintf(lpcOut, luOut, "%s=readback FAILED hr=0x%08X", lpcTag, (unsigned)lhr);
+            }
+            lpSys->Release();
+        };
+        char lacRt[160], lacTex[160];
+        ReadCentre(lpRt, "rt", lacRt, sizeof(lacRt));
+        IDirect3DSurface9* lpTexSurf = nullptr;
+        if (lpTex0 != nullptr && lpTex0->GetType() == D3DRTYPE_TEXTURE)
+            static_cast<IDirect3DTexture9*>(lpTex0)->GetSurfaceLevel(0, &lpTexSurf);
+        ReadCentre(lpTexSurf, "tex0", lacTex, sizeof(lacTex));
+        char lacMsg[400];
+        std::snprintf(lacMsg, sizeof(lacMsg), "[ImVerts pixels run %u] %s | %s\n",
+                      static_cast<unsigned>(suRunTotal), lacRt, lacTex);
+        CgsDev::Log::WriteToLog(lacMsg);
+        if (lpTexSurf) lpTexSurf->Release();
+        if (lpTex0)    lpTex0->Release();
+        if (lpRt)      lpRt->Release();
+    }
+
+    static u32 suDiagRuns = 0u;
+    if (suDiagRuns < 4u)
+    {
+        ++suDiagRuns;
+        IDirect3DSurface9* lpBoundRt = nullptr;  lpDevice->GetRenderTarget(0, &lpBoundRt);
+        IDirect3DSurface9* lpBackBuf = nullptr;  lpDevice->GetBackBuffer(0u, 0u, D3DBACKBUFFER_TYPE_MONO, &lpBackBuf);
+        IDirect3DSurface9* lpDepth   = nullptr;  lpDevice->GetDepthStencilSurface(&lpDepth);
+        IDirect3DVertexShader9*      lpVs   = nullptr; lpDevice->GetVertexShader(&lpVs);
+        IDirect3DPixelShader9*       lpPs   = nullptr; lpDevice->GetPixelShader(&lpPs);
+        IDirect3DVertexDeclaration9* lpDecl = nullptr; lpDevice->GetVertexDeclaration(&lpDecl);
+        IDirect3DBaseTexture9*       lpTex0 = nullptr; lpDevice->GetTexture(0, &lpTex0);
+        DWORD luBlend = 0, luZ = 0, luZW = 0, luCull = 0, luCw = 0, luScis = 0, luFill = 0, luATest = 0, luSrc = 0, luDst = 0;
+        lpDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &luBlend);
+        lpDevice->GetRenderState(D3DRS_ZENABLE, &luZ);
+        lpDevice->GetRenderState(D3DRS_ZWRITEENABLE, &luZW);
+        lpDevice->GetRenderState(D3DRS_CULLMODE, &luCull);
+        lpDevice->GetRenderState(D3DRS_COLORWRITEENABLE, &luCw);
+        lpDevice->GetRenderState(D3DRS_SCISSORTESTENABLE, &luScis);
+        lpDevice->GetRenderState(D3DRS_FILLMODE, &luFill);
+        lpDevice->GetRenderState(D3DRS_ALPHATESTENABLE, &luATest);
+        lpDevice->GetRenderState(D3DRS_SRCBLEND, &luSrc);
+        lpDevice->GetRenderState(D3DRS_DESTBLEND, &luDst);
+        D3DVIEWPORT9 lVp; std::memset(&lVp, 0, sizeof(lVp)); lpDevice->GetViewport(&lVp);
+        RECT lSc; std::memset(&lSc, 0, sizeof(lSc)); lpDevice->GetScissorRect(&lSc);
+        char lacMsg[512];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[ImVerts diag %u] prim=%d prims=%u stride=%u hr=0x%08X rt=%p backbuf=%p (%s) depth=%p"
+                      " vs=%p ps=%p decl=%p tex0=%p | blend=%lu src=%lu dst=%lu z=%lu zw=%lu cull=%lu cw=0x%lX"
+                      " scissor=%lu[%ld,%ld,%ld,%ld] fill=%lu atest=%lu vp=%lux%lu@%lu,%lu z%.2f-%.2f\n",
+                      static_cast<unsigned>(suDiagRuns), static_cast<int>(seImVertsPrimitive),
+                      static_cast<unsigned>(suImVertsPrimCount), static_cast<unsigned>(suImVertsStride),
+                      static_cast<unsigned>(lhrDraw), static_cast<void*>(lpBoundRt), static_cast<void*>(lpBackBuf),
+                      (lpBoundRt == lpBackBuf) ? "SWAP CHAIN" : "OFF-SCREEN", static_cast<void*>(lpDepth),
+                      static_cast<void*>(lpVs), static_cast<void*>(lpPs), static_cast<void*>(lpDecl), static_cast<void*>(lpTex0),
+                      luBlend, luSrc, luDst, luZ, luZW, luCull, luCw, luScis, lSc.left, lSc.top, lSc.right, lSc.bottom,
+                      luFill, luATest, lVp.Width, lVp.Height, lVp.X, lVp.Y, (double)lVp.MinZ, (double)lVp.MaxZ);
+        CgsDev::Log::WriteToLog(lacMsg);
+        // ...and the constant file the draw read: PS c0..c4 / VS c0..c1 (the composite's five + two).
+        float lafPs[5 * 4] = { 0 }; lpDevice->GetPixelShaderConstantF(0, lafPs, 5);
+        float lafVs[2 * 4] = { 0 }; lpDevice->GetVertexShaderConstantF(0, lafVs, 2);
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[ImVerts diag %u] ps c0={%g %g %g %g} c1={%g %g %g %g} c2={%g %g %g %g} c3={%g %g %g %g}"
+                      " c4={%g %g %g %g} | vs c0={%g %g %g %g} c1={%g %g %g %g}\n",
+                      static_cast<unsigned>(suDiagRuns),
+                      lafPs[0], lafPs[1], lafPs[2], lafPs[3], lafPs[4], lafPs[5], lafPs[6], lafPs[7],
+                      lafPs[8], lafPs[9], lafPs[10], lafPs[11], lafPs[12], lafPs[13], lafPs[14], lafPs[15],
+                      lafPs[16], lafPs[17], lafPs[18], lafPs[19],
+                      lafVs[0], lafVs[1], lafVs[2], lafVs[3], lafVs[4], lafVs[5], lafVs[6], lafVs[7]);
+        CgsDev::Log::WriteToLog(lacMsg);
+        // ...and the first vertex as written into the scratch (position xyz, uv).
+        const float* const lpfV0 = reinterpret_cast<const float*>(sauImVertsScratch);
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[ImVerts diag %u] v0={%g %g %g | %g %g} v1={%g %g %g | %g %g} v3={%g %g %g | %g %g}\n",
+                      static_cast<unsigned>(suDiagRuns),
+                      lpfV0[0], lpfV0[1], lpfV0[2], lpfV0[3], lpfV0[4],
+                      lpfV0[5], lpfV0[6], lpfV0[7], lpfV0[8], lpfV0[9],
+                      lpfV0[15], lpfV0[16], lpfV0[17], lpfV0[18], lpfV0[19]);
+        CgsDev::Log::WriteToLog(lacMsg);
+        if (lpBoundRt) lpBoundRt->Release();
+        if (lpBackBuf) lpBackBuf->Release();
+        if (lpDepth)   lpDepth->Release();
+        if (lpVs)      lpVs->Release();
+        if (lpPs)      lpPs->Release();
+        if (lpDecl)    lpDecl->Release();
+        if (lpTex0)    lpTex0->Release();
+    }
 }
 
 // The low-level sampler-state setter (X360 sub_827E8950). The Xenon sampler

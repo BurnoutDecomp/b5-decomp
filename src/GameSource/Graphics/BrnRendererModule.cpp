@@ -105,31 +105,30 @@
 // dispatch buffer). At 0 -- today -- this file preprocesses to exactly the bring-up blit it did
 // before: the include, the constants and the call are all inside the `#if`.
 //
-// WHY IT IS 0: there is no PC vertex/pixel program pair for the 12-permutation composite, so
-// BrnPostFxShader::Shader::SetProgram binds nothing; and BrnPostFx.cpp's link is therefore not closed
-// and it is not on tools/build/build_game_exe.bat. Both, with the measured unresolved symbol list,
-// are in scratch/postfx_step2_out/driver/REPORT.md.
+// WHY IT IS 1 (2026-08-15): the two preconditions the shipped `#error` named are both met.
+//   (1) A PC vertex/pixel program pair exists for permutation 0 -- pc/gcm/renderengine/
+//       PostFxProgramsPC.cpp, RECOVERED from the Xenos microcode (tools/assets/shaders/xenos.py,
+//       proven against the SHADERS.BNDL / SHADERS_PC.BNDL bundle-pair oracle) and adopted by
+//       BrnPostFxShader::Shader::Construct through ProgramBufferPC_Adopt. Only permutation 0 --
+//       the one this build's constant block ever selects (effects off, motion blur off).
+//   (2) BrnPostFx.cpp is link-closed and mounted: the RenderEngineClub post-fx effect TUs, the
+//       bloom passes and the two cached state pointers landed in the gate-flip wave (scratch/
+//       postfx_step3_effects/, verified per group).
+// What the flip needs on the PC side, all in this wave: gpDefaultRenderTargetState installed from
+// Device::Start (the back-buffer target is USE_DEVICE_FOR_WRITE and binds through it), the bloom /
+// depth-of-field / back-buffer pool slots created by PCBringUpCreatePostFxSceneTargets (the console
+// body samples the first two and composites into the third without a test), and BrnPostFx::Construct
+// run once from EnsurePostFxSceneTargets through the seam. THE PICTURE MUST NOT CHANGE at the
+// default sliders: permutation 0's neutrals were derived from the recovered math (GlobalParams
+// {1,0,0,0} so the white level must be 1; BloomColour 0 collapses the screen blend to the source;
+// inner == outer vignette; Tint2d 0), and brightness/contrast at the game's default 50/50 pre-scale to
+// exactly 0.0f / 1.0f. The FIRST VISIBLE CHANGE is the options-menu brightness slider taking effect.
 //
-// GOING TO 1 IS DELIBERATELY NOT ONE CHARACTER: the `#error` below names what must be RECOVERED
-// first, so a careless flip fails the build loudly with the checklist instead of drawing a
-// full-screen quad with whatever program was last bound. It is itself guarded, so the gate-1 arm can
-// be COMPILED exactly as written -- add /DBRN_POSTFX_COMPOSITE_PRECONDITIONS_MET -- which is how it
-// was verified before shipping. Whoever really satisfies the list deletes the #error block.
-#define BRN_POSTFX_COMPOSITE_AVAILABLE 0
+// REVERT: set the macro back to 0. One character; measured to preprocess back to the pre-composite
+// bring-up blit save the mfAspectCorrection initialiser (driver REPORT.md, step 5B).
+#define BRN_POSTFX_COMPOSITE_AVAILABLE 1
 
 #if BRN_POSTFX_COMPOSITE_AVAILABLE
-#  if !defined(BRN_POSTFX_COMPOSITE_PRECONDITIONS_MET)
-#    error "BRN_POSTFX_COMPOSITE_AVAILABLE: one thing must be RECOVERED, not chosen, before this \
-flips: a PC vertex/pixel program pair for the 12-permutation composite. Without one \
-BrnPostFxShader::Shader::SetProgram binds nothing and the full-screen quad draws with whatever \
-program was last set. Its consequence is the second precondition: until the RenderEngineClub post-fx \
-TUs can be mounted, BrnPostFx.cpp's unresolved set (scratch/postfx_step2_out/driver/REPORT.md \
-section 4) is not empty and the TU is not on tools/build/build_game_exe.bat. Delete this #error \
-block when both hold. To COMPILE this arm without satisfying them, define \
-BRN_POSTFX_COMPOSITE_PRECONDITIONS_MET on the command line -- that builds the code, it does not make \
-the frame correct."
-#  endif
-
 // The composite seam. NOT BrnPostFx.h: that header needs the real EA::Jobs::Job and this file's own
 // header still defines a placeholder one (BrnRendererModule.h:21-31) -- including both is C2011.
 // The seam header explains the whole constraint and names what retires it.
@@ -470,8 +469,23 @@ namespace
         // failure where every other PC bring-up guard in this file already lives: the bracket simply
         // never opens, the world keeps drawing straight to the back buffer, and the frame degrades
         // instead of crashing.
-        return gpAntiAliasTarget != nullptr
+        const bool lbTargetsReady = gpAntiAliasTarget != nullptr
             && gpAntiAliasTarget->GetRenderTarget() != nullptr;
+
+#if BRN_POSTFX_COMPOSITE_AVAILABLE
+        // The console's BrnPostFx::Construct runs from BrnRendererModule::Construct @0x8240A778
+        // (`bl BrnPostFx__Construct` @0x8240B78C, on this->mpGraphicsAllocator). On PC that Construct
+        // has no device and a null graphics allocator, so -- like every pool object above and like
+        // mIm3dRendererSkyDome.Construct further down -- it runs here, once, on the bring-up
+        // allocator, the frame the post-fx pool exists. Idempotent inside. Under the composite gate
+        // because BrnRendererModule.cpp reaches BrnPostFx only through the seam header (see the
+        // include under the gate above).
+        if (lbTargetsReady)
+        {
+            PCBringUpConstructPostFx(&sWorldDispatchAllocator);
+        }
+#endif
+        return lbTargetsReady;
     }
 }
 
@@ -2013,6 +2027,20 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         mLoadingScreenRenderer.AddCommand(
             lpDispatchThreadInputBuffer->GetLoadingScreenCommand());
 
+    // The console holds the dispatch input buffer's READ LOCK for the whole frame: `mr r3, r26 /
+    // bl CgsModule::IOBuffer::LockForRead` @0x8240C38C, before the first world pass, and the matching
+    // UnlockForRead @0x8240E304 at the tail of Render (r26 = lpDispatchThreadInputBuffer, the same
+    // register the `lwzx r4, r26, 0x9990` GetLoadingScreenCommand read above uses). Every read-locked
+    // getter this function calls sits inside that window -- GetBrightness @0x8240DCC8 / GetContrast
+    // @0x8240DCFC for the composite, and the effects-frame reads -- and each asserts
+    // "Not locked for reading" outside it. The lock was missing here until the composite lit its
+    // first locked getter (2026-08-15); GetLoadingScreenCommand is an inline read with no assert,
+    // which is why nothing had noticed. (There is also a shorter first window, LockForRead
+    // @0x8240C1C4 / UnlockForRead @0x8240C220, around the console's tint-vector reads at
+    // 0x8240C1C8-0x8240C21C, which this build does not perform yet.)
+    if (lpDispatchThreadInputBuffer != 0)
+        lpDispatchThreadInputBuffer->LockForRead();
+
     // ---- X360 Render:389-396 -- the object->mesh expansion and the pass sorts. ------------
     // Hoisted up here (it used to live at the top of RenderWorldPasses) because the SHADOW
     // pass below consumes mesh lists 0..4 and, on the console, runs before the world passes.
@@ -2040,6 +2068,31 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // that a wrong scene target and a wrong bracket look identical on screen; this half is provable on
     // its own, from the log line and an unchanged frame.
     EnsurePostFxSceneTargets(mAllocatedRenderTargets);
+
+    // [PC bring-up, gate-flip wave 2026-08-15] The three RENDER-STATE FACTORIES. The console
+    // constructs them in BrnRendererModule::Construct @0x8240A778 -- three vtbl[0] calls at
+    // 0x8240A950 / 0x8240A968 / 0x8240A980 on the by-value members at this+0x3940 / +0x3944 /
+    // +0x3948 (mBlendStateFactory / mRasterizerStateFactory / mDepthStencilStateFactory), each with
+    // r4 = this->mpGraphicsAllocator (`lwz r4, 0x394C(r31)`). On PC the module's Construct has no
+    // device and a null graphics allocator, so -- like the pool above and like BrnPostFx::Construct
+    // below -- they run here, once, on the bring-up allocator, the first frame that has a device.
+    // Every state the world / post-fx / corona code pushes by table slot (saBlendStates[n],
+    // saDepthStencilStates[n], saRasterizerStates[n]) is null until this runs; the composite's
+    // cull-mode-NONE push (saRasterizerStates[2]) was the first consumer to show it -- a compare-
+    // then-skip on null left the world's back-face cull in force and the full-screen quad was
+    // culled whole. Order = the console's (blend, rasterizer, depth-stencil).
+    {
+        static bool sbStateFactoriesConstructed = false;
+        if (!sbStateFactoriesConstructed && renderengine::gDevice != 0 && EnsureWorldDispatchAllocator())
+        {
+            sbStateFactoriesConstructed = true;
+            mBlendStateFactory.Construct(&sWorldDispatchAllocator);          // 0x8240A950
+            mRasterizerStateFactory.Construct(&sWorldDispatchAllocator);     // 0x8240A968
+            mDepthStencilStateFactory.Construct(&sWorldDispatchAllocator);   // 0x8240A980
+            CgsDev::Log::WriteToLog("[postfx-composite] the three render-state factories are Constructed"
+                                    " (deferred PC bring-up)\n");
+        }
+    }
 
     // ---- X360 Render:536-542 -- the three GLOBAL texture binds. --------------------------
     //
@@ -2332,6 +2385,8 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     }
     if (siWorldOnly == 1)
     {
+        if (lpDispatchThreadInputBuffer != 0)
+            lpDispatchThreadInputBuffer->UnlockForRead();   // the frame-long read lock, both exits
         renderengine::Device::ShowPixelBuffer();
         return;
     }
@@ -2453,6 +2508,10 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         if (lfFrameMs > lfBudgetMs * 2.00f) liBehind = 3;
         RenderThreeThreadMonitors(liBehind < 3, liBehind < 2, liBehind < 1);
     }
+
+    // UnlockForRead @0x8240E304 -- the end of the console's frame-long read window (taken above).
+    if (lpDispatchThreadInputBuffer != 0)
+        lpDispatchThreadInputBuffer->UnlockForRead();
 
     renderengine::Device::ShowPixelBuffer();
 }

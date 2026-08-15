@@ -9,29 +9,19 @@
 // between. Only Construct is X360-attested for this TU (Destruct / Prepare / GetState
 // are DWARF-only -- see the header).
 
+// The five depth/stencil-state slots (X360 file-scope statics dword_8301090C /
+// dword_83010910 / dword_83010914 / dword_83010918 / dword_8301091C, one per index of
+// saDepthStencilStates). DWARF (CgsDepthStencilStateFactory.h:53 / .cpp:25) declares
+// this as a PRIVATE STATIC MEMBER of CgsDepthStencilStateFactory named
+// saDepthStencilStates, and this wave promotes it to exactly that: it used to be a
+// TU-local array in the anonymous namespace below, which is why no reader outside this
+// file could name a slot -- and why BrnPostFx.cpp carried an invented
+// `gpPostFxDepthStencilState` extern for saDepthStencilStates[1]. The enum that indexes
+// it moved to the header for the same reason. Nothing about the values changes.
+renderengine::DepthStencilState* CgsDepthStencilStateFactory::saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_COUNT] = {};
+
 namespace
 {
-    // The five depth/stencil-state slots (X360 file-scope statics dword_8301090C /
-    // dword_83010910 / dword_83010914 / dword_83010918 / dword_8301091C, one per index
-    // of saDepthStencilStates). DWARF (CgsDepthStencilStateFactory.h:53/.cpp:25) declares
-    // this as a private static member of CgsDepthStencilStateFactory named
-    // saDepthStencilStates -- kept here as the TU-local backing storage so it is
-    // referenced by name, matching the pattern already used for the analogous default
-    // state table in renderengine::StateHelper.
-    renderengine::DepthStencilState* saDepthStencilStates[5] = {};
-
-    // Which slot of saDepthStencilStates each of the five built-in states occupies
-    // (assert-message strings the X360 binary embeds at each call site -- ground truth
-    // for the names; no attested enum exists elsewhere in the ledger for this set).
-    enum EFactoryDepthStencilState
-    {
-        E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEON,     // saDepthStencilStates[0]
-        E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF,   // saDepthStencilStates[1]
-        E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEOFF,    // saDepthStencilStates[2]
-        E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZALL_ZWRITEON,     // saDepthStencilStates[3]
-        E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON,    // saDepthStencilStates[4]
-        E_FACTORY_DEPTH_STENCIL_STATE_COUNT
-    };
 
     // Carve the backing store for one depth/stencil state through the supplied resource
     // allocator, then initialise it. X360: size via DepthStencilState::GetResourceDescriptor

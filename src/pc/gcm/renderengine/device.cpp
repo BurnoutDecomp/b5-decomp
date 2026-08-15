@@ -5,6 +5,8 @@
 #include <cstring>
 #include <cstdio>   // [diag] BRN_FRAME_DUMP back-buffer BMP writer
 
+#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"   // PCInstallDefaultRenderTargetState
+
 // PC / D3D9 renderengine device bring-up, reversed from TUB (Burnout Paradise: The
 // Ultimate Box):
 //   renderengine::Device::Initialize  @ TUB 0x7CC080  - display + settings init
@@ -101,6 +103,12 @@ void renderengine::Device::Start()
     {
         return;
     }
+
+    // The engine's "device's own surface" state (rw::graphics::postfx::gpDefaultRenderTargetState,
+    // X360 dword_83271614) is installed HERE on the console too -- Device::Start is what publishes
+    // the front-buffer descriptor. On PC it is the swap chain's back buffer + the auto
+    // depth-stencil created above; captured now, while they are exactly what is bound.
+    PCInstallDefaultRenderTargetState(static_cast<u32>(gDisplayWidth), static_cast<u32>(gDisplayHeight));
 
     ShowWindow(hWnd, SW_SHOWNORMAL);
 }

@@ -95,8 +95,21 @@ namespace shadow
         static void* LockRasteriserState();
         static void* UnlockRasteriserState();
 
-        static void FlushDepthStencilState();
-        static void FlushRasterizerState();
+        // (FlushDepthStencilState / FlushRasterizerState DELETED -- they were INVENTED.) Neither
+        // name exists in the X360 export set: scanning all 30,095 exported function names for a
+        // shadow::Device name containing "Flush" returns exactly ONE symbol,
+        // shadow::Device::FlushVertexProgramState @0x827E7A10. Neither appears anywhere in the
+        // DecFIGS DWARF either (`grep -rn "FlushDepthStencilState\|FlushRasterizerState"
+        // references/DecFIGS/dwarfdump/` -> no output; the class outline in
+        // dwarfdump/GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h has only
+        // FlushBeforeRendering and FlushVertexProgramState). Their ONE caller,
+        // BrnPostFxBloom::Render, stood for the two INLINED SetState calls the console makes at
+        // 0x82402B50-0x82402BAC and 0x82402BB0-0x82402BEC -- the depth/stencil and rasteriser
+        // thirds of the render-state triple, applied to dword_83010910 / dword_83010A40, i.e. the
+        // same two objects and the same two setters BrnPostFx::Render already uses by name
+        // (BrnPostFx.cpp:716-717). A second host spelling of a setter this class already owns is
+        // the split-brain the mpLast* note further down records the cost of, so the caller was
+        // moved onto SetState and these two were removed rather than bodied.
 
         // ---- The render-state TRIPLE setters, one per third -------------------------------------
         // Three STANDALONE X360 functions, not a pattern: 0x82276AD0, 0x82276B38, 0x82276A68. DWARF

@@ -62,6 +62,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"
 #include "pc/gcm/renderengine/device.h"                  // renderengine::gDevice / gD3D9 / Device::SetState
 #include "pc/gcm/renderengine/texture.h"                 // renderengine::Texture (mpD3DTexture)
+#include "pc/gcm/renderengine/renderstates.h"            // renderengine::TextureState (the colour sampler states)
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"        // renderengine::ShadowDepthFormat* (homed below)
 #include "rw/rwcore_structs.h"                           // rw::IResourceAllocator / Resource / ResourceDescriptor
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::WriteToLog ([shadow-rt] diagnostic)
@@ -161,7 +162,7 @@ namespace
     // vendor format and bound both as the depth-stencil surface and as a sampler resource -- so
     // the console's 0x2D200196 is not translated, it is REPLACED by the D3D9 equivalent.
     //
-    // ⚠ CORRECTED 2026-08-12 (the shadow-fetch wave). The ladder used to be
+    // âš  CORRECTED 2026-08-12 (the shadow-fetch wave). The ladder used to be
     // INTZ -> DF24 -> DF16 -> D24S8, chosen for "is it sampleable at all". That is the WRONG
     // axis: the receiver does not want a depth VALUE, it wants a depth COMPARISON. Every one of
     // the 92 s15 pixel shaders in build/game/SHADERS.BNDL reads
@@ -419,7 +420,7 @@ namespace
     // GetDepthStencilTexture can re-report the same tuple without re-deriving it (neither is a
     // console member of RenderTarget and neither is worth inventing one for).
     //
-    // ⚠️ THESE DESCRIBE THE SHADOW TARGET SPECIFICALLY, NOT "the last target Initialize saw".
+    // âš ï¸ THESE DESCRIBE THE SHADOW TARGET SPECIFICALLY, NOT "the last target Initialize saw".
     // Initialize used to latch them unconditionally, which was correct only while exactly ONE
     // render target existed in the whole build. The post-fx spine (2026-08-13) creates a SECOND
     // one -- the off-screen scene colour buffer, which has no depth texture at all -- and an
@@ -483,6 +484,54 @@ namespace renderengine
             lpDevice->SetRenderTarget(0, lpColour);
         lpDevice->SetDepthStencilSurface(lpState->mpDepthSurface);
     }
+
+    // =========================================================================
+    // [PC-platform leaf] PCInstallDefaultRenderTargetState -- see ShadowPassPCLeaf.h.
+    //
+    // Captured ONCE, immediately after CreateDevice, while the swap chain's back buffer and
+    // the auto depth-stencil are exactly what the device has bound: GetRenderTarget(0) /
+    // GetDepthStencilSurface here ARE those two surfaces (nothing has rebound yet). Both
+    // AddRef'd for the device's lifetime -- the console's default state lives as long as the
+    // device does, and this build has no Reset. Extent = the swap chain's, which is what
+    // Device::SetState's AcquireNullColourSurface / D3D9's depth>=target rule need.
+    // =========================================================================
+    void PCInstallDefaultRenderTargetState(u32 luWidth, u32 luHeight)
+    {
+        static RenderTargetState sDefaultState = { nullptr, nullptr, 0u, 0u };
+
+        IDirect3DDevice9* const lpDevice = Dev();
+        if (lpDevice == nullptr)
+            return;
+        if (rw::graphics::postfx::gpDefaultRenderTargetState != nullptr)
+            return;                                        // installed once per device
+
+        IDirect3DSurface9* lpColour = nullptr;
+        IDirect3DSurface9* lpDepth  = nullptr;
+        if (FAILED(lpDevice->GetRenderTarget(0, &lpColour)))       // AddRefs; kept for the device's life
+            lpColour = nullptr;
+        if (FAILED(lpDevice->GetDepthStencilSurface(&lpDepth)))     // AddRefs; kept for the device's life
+            lpDepth = nullptr;
+
+        if (lpColour == nullptr)
+        {
+            CgsDev::Log::WriteToLog("[postfx-rt] default render-target state NOT installed: no back buffer bound\n");
+            if (lpDepth != nullptr) lpDepth->Release();
+            return;
+        }
+
+        sDefaultState.mpColourSurface = lpColour;
+        sDefaultState.mpDepthSurface  = lpDepth;
+        sDefaultState.muWidth         = luWidth;
+        sDefaultState.muHeight        = luHeight;
+        rw::graphics::postfx::gpDefaultRenderTargetState = &sDefaultState;
+
+        char lacMsg[160];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[postfx-rt] default render-target state installed: %ux%u colour=%p depth=%p\n",
+                      static_cast<unsigned>(luWidth), static_cast<unsigned>(luHeight),
+                      static_cast<void*>(lpColour), static_cast<void*>(lpDepth));
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
 }
 
 namespace rw
@@ -501,11 +550,11 @@ namespace postfx
     // assign to them, so every "fall back to the default state" path fell back to null.
     // This is the single non-const definition the header declares.
     //
-    // It stays NULL on this build: the console installs it from renderengine::Device::Start
-    // (X360 dword_83271614), and this PC build's Device::Start has no surface-descriptor
-    // object to install. A null default is exactly what the callers' `if (state == nullptr)`
-    // guards already expect, and Device::SetState above ignores a null state, so the back
-    // buffer simply stays bound -- no invented state object.
+    // Null until renderengine::Device::Start installs it -- the console's own placement (X360
+    // dword_83271614) -- through PCInstallDefaultRenderTargetState below: the swap chain's back
+    // buffer + the auto depth-stencil, i.e. the device's own surfaces. Before that (and on a
+    // build without a device) the callers' `if (state == nullptr)` guards and Device::SetState's
+    // null-ignore keep whatever is bound, as they always did.
     // =========================================================================
     renderengine::RenderTargetState* gpDefaultRenderTargetState = nullptr;
 
@@ -596,6 +645,66 @@ namespace postfx
                     WrapTexture(lpAllocator, lpColourTexture,
                                 static_cast<u32>(D3DFMT_A8R8G8B8), luSurfaceWidth, luSurfaceHeight);
             }
+
+            // --- the colour target's SAMPLER TEXTURE-STATES (gate-flip wave, 2026-08-15) ---------
+            // The console builds TWO TextureStates over a colour target's resolved texture, and
+            // this leaf built neither, so both pointers were NULL on PC -- and the post-fx composite
+            // dereferences one of them: BrnPostFx::Render @0x8240A468 reads the DOWN-SAMPLE
+            // buffer's mpColourTextureState (+0x8C) and BrnPostFxShader::Render binds it whole
+            // (shadow::Device::SetState(const TextureState*, u32) @0x8227D158, which reads
+            // ->mpRaster with no test -- the console never has a null there). The bloom passes read
+            // the per-Target one (`lwz r3, 0x2C(source)` = maColourTargets[0].mpTextureState).
+            //
+            //  * per-Target (Target::CreateColor @0x82403C88, rwgpfxrendertarget.cpp:133-155):
+            //    address U/V = 2 (clamp), mip = 2, mag = min = the target's filter mode
+            //    (Target::Parameters::mFilterMode, +0x20 -- CgsRenderTarget::SetColourFilterMode's
+            //    word: 0 point / 1 linear), aniso 13, field10 = 1, the two trailing flag bytes 1,
+            //    texture = the target's own.
+            //  * the RenderTarget-level one (+0x8C, RenderTarget::Initialize, rwgpfxrendertarget.cpp
+            //    :418-456): the same words except address = mag = 6 when (colour mode != NONE &&
+            //    depth mode == NONE) else 2, mip 2, texture = the provided colour state's, else the
+            //    colour target's own resolved texture (the console reads its own +0x8C at that
+            //    point, i.e. it binds the resolved colour of THIS target).
+            // On this backend the sampler words are stored, not applied (SetSamplerStateLowLevel
+            // is a stub), so what matters is the raster: both states carry the wrapped colour
+            // texture. Same TextureState::Initialize the console uses (texturestate.cpp PC leaf).
+            if (lpRenderTarget->maColourTargets[0].mpTexture != nullptr)
+            {
+                const u32 luFilterMode = lrParameters.maColourTargetParams[0].mFilterMode;   // +0x20
+
+                renderengine::TextureState::Parameters lTargetStateParams;
+                std::memset(&lTargetStateParams, 0, sizeof(lTargetStateParams));
+                lTargetStateParams.muAddressU      = 2u;
+                lTargetStateParams.muAddressV      = 2u;
+                lTargetStateParams.muMipFilter     = 2u;
+                lTargetStateParams.muMagFilter     = luFilterMode;
+                lTargetStateParams.muMinFilter     = luFilterMode;
+                lTargetStateParams.muMaxAnisotropy = 13u;
+                lTargetStateParams.muField10       = 1u;
+                lTargetStateParams.mu8Field43      = 1u;
+                lTargetStateParams.mu8Field44      = 1u;
+                lTargetStateParams.mpTexture       = lpRenderTarget->maColourTargets[0].mpTexture;
+                lpRenderTarget->maColourTargets[0].mpTextureState =
+                    renderengine::TextureState::Initialize(nullptr, &lTargetStateParams);
+
+                renderengine::TextureState::Parameters lColourStateParams;
+                std::memset(&lColourStateParams, 0, sizeof(lColourStateParams));
+                const bool lbBlendFlag =
+                    (lrParameters.mColourMode != static_cast<u32>(eRenderTarget_NONE)) &&
+                    (lrParameters.mDepthStencilMode == static_cast<u32>(eRenderTarget_NONE));
+                lColourStateParams.mu8Field40      = lbBlendFlag ? 1u : 0u;
+                lColourStateParams.muMagFilter     = lbBlendFlag ? 6u : 2u;
+                lColourStateParams.muAddressU      = lColourStateParams.muMagFilter;
+                lColourStateParams.muAddressV      = lColourStateParams.muMagFilter;
+                lColourStateParams.muMipFilter     = 2u;
+                lColourStateParams.muMaxAnisotropy = 13u;
+                lColourStateParams.muField10       = 1u;
+                lColourStateParams.mu8Field43      = 1u;
+                lColourStateParams.mu8Field44      = 1u;
+                lColourStateParams.mpTexture       = lpRenderTarget->maColourTargets[0].mpTexture;
+                lpRenderTarget->mpColourTextureState =
+                    renderengine::TextureState::Initialize(nullptr, &lColourStateParams);
+            }
         }
 
         // --- the depth / stencil surface ----------------------------------------------------
@@ -640,7 +749,7 @@ namespace postfx
 
         // Latch the shadow-sampler tuple ONLY for the shadow map (see the banner on guCreatedFormat).
         //
-        // ⚠️ "HAS A DEPTH TEXTURE" IS NOT A TIGHT ENOUGH TEST, measured -- an earlier version of this
+        // âš ï¸ "HAS A DEPTH TEXTURE" IS NOT A TIGHT ENOUGH TEST, measured -- an earlier version of this
         // gate used exactly that and the first boot of the post-fx pool wave printed the DOWN-SAMPLE
         // buffer on the [shadow-rt] line: it is depth-CREATE + depth-as-texture too (post-fx samples its
         // depth for depth of field), so it re-latched the tuple with its own 1280x720 values. That was

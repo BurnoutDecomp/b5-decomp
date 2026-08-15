@@ -7,9 +7,9 @@
 // DELETE-WHEN note, and a real TU landing for any of them makes the removal enforced by
 // the build (a duplicate definition is a link error).
 //
-// WHY THESE FOUR EXIST AT ALL. CgsBlendStateFactory and CgsDepthStencilStateFactory are
-// polymorphic (DecFIGS DWARF: vptr, Construct/Destruct/Prepare virtual, in that vtable
-// order). A polymorphic class emits its vtable in whatever TU constructs it, and that
+// WHY THESE SIX EXIST AT ALL. CgsBlendStateFactory, CgsDepthStencilStateFactory and --
+// as of this wave -- CgsRasterizerStateFactory are polymorphic (DecFIGS DWARF: vptr,
+// Construct/Destruct/Prepare virtual, in that vtable order). A polymorphic class emits its vtable in whatever TU constructs it, and that
 // vtable names EVERY virtual -- so the day either class is embedded by value in something
 // the boot exe constructs (BrnRendererModule::mBlendStateFactory /
 // ::mDepthStencilStateFactory, reached from `static BrnGame::BrnGameModule gGameModule;`
@@ -40,19 +40,21 @@
 // headless dump the way 0x827EB2D8 did) -> write it in the owning .cpp and delete the
 // matching definition here.
 //
-// NOT COVERED HERE: CgsRasterizerStateFactory. That class is still declared TU-LOCALLY
-// and NON-POLYMORPHICALLY inside CgsRasterizerStateFactory.cpp:6-10
-//     class CgsRasterizerStateFactory
-//     { public: renderengine::RasterizerState* Construct(void* pResourceAllocator); };
-// -- no vptr, no virtuals, therefore no vtable and nothing unresolved. It is left exactly
-// as committed, on purpose: reconciling that declaration to the DWARF shape is what an
-// earlier review explicitly ruled out of this pass, and doing it is what would CREATE two
-// new undefined virtuals rather than close any. When that reconciliation happens it must
-// add CgsRasterizerStateFactory::Destruct / ::Prepare here in the same change.
+// CgsRasterizerStateFactory IS NOW COVERED. The note that used to stand here said this
+// class was "still declared TU-LOCALLY and NON-POLYMORPHICALLY inside
+// CgsRasterizerStateFactory.cpp:6-10 ... When that reconciliation happens it must add
+// CgsRasterizerStateFactory::Destruct / ::Prepare here in the same change." This IS that
+// change: the class now has a real header at the DWARF shape (vptr, virtual
+// Construct/Destruct/Prepare, private static saRasterizerStates[3]), so it has a vtable,
+// so it has the same two undefined virtuals its two siblings have -- and they are defined
+// below, in the same change, exactly as that note required. The reconciliation was forced
+// by BrnPostFx::Render, which pushes saRasterizerStates[2] and could not name it while the
+// class was TU-local.
 // ============================================================================
 
 #include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"
+#include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"
 
 // CgsBlendStateFactory.cpp:235 (DWARF). No X360 symbol, no X360 body, no caller.
 void CgsBlendStateFactory::Destruct()
@@ -74,6 +76,17 @@ void CgsDepthStencilStateFactory::Destruct()
 
 // CgsDepthStencilStateFactory.cpp:131 (DWARF). No X360 symbol, no X360 body, no caller.
 bool CgsDepthStencilStateFactory::Prepare()
+{
+    return true;
+}
+
+// CgsRasterizerStateFactory.cpp:90 (DWARF). No X360 symbol, no X360 body, no caller.
+void CgsRasterizerStateFactory::Destruct()
+{
+}
+
+// CgsRasterizerStateFactory.cpp:105 (DWARF). No X360 symbol, no X360 body, no caller.
+bool CgsRasterizerStateFactory::Prepare()
 {
     return true;
 }
