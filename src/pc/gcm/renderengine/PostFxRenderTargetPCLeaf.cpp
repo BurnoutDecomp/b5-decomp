@@ -339,11 +339,17 @@ namespace
     // diagnostics. This re-reports whenever the reported tuple CHANGES, so the first line is
     // emitted the moment a real target appears and any later change (a lost device, a null
     // depth texture) shows up too.
-    u32 guLastWidth      = 0xFFFFFFFFu;
-    u32 guLastHeight     = 0xFFFFFFFFu;
-    u32 guLastSections   = 0xFFFFFFFFu;
-    u32 guLastDepthValid = 0xFFFFFFFFu;
-    u32 guLastFormat     = 0xFFFFFFFFu;
+    // Latched PER TARGET (2026-08-15): GetDepthStencilTexture runs once a frame for EVERY
+    // depth-sampled target -- the shadow map AND the post-fx down-sample buffer -- and a single
+    // global tuple flipped between the two every frame, re-printing 3-4 lines a frame (14,485
+    // lines in one drive; each a fputs+fflush). One slot per target object; the first few
+    // targets created are the only ones that ever reach the s15 bind.
+    struct ShadowRtLatch
+    {
+        const void* mpTarget;
+        u32 muWidth, muHeight, muSections, muDepthValid, muFormat;
+    };
+    ShadowRtLatch gaShadowRtLatch[8] = {};
 
     // Spell a depth format for the log: a FOURCC prints as its four characters, a real
     // D3DFORMAT enumerant as its name.
@@ -368,20 +374,35 @@ namespace
         std::snprintf(lpcOut, luSize, "%s", lacChars);
     }
 
-    void ReportShadowRenderTarget(u32 luWidth, u32 luHeight, u32 luSections,
+    void ReportShadowRenderTarget(const void* lpTarget,
+                                  u32 luWidth, u32 luHeight, u32 luSections,
                                   bool lbDepthTextureValid, u32 luFormat, bool lbHardwareCompare)
     {
         const u32 luDepthValid = lbDepthTextureValid ? 1u : 0u;
-        if (luWidth == guLastWidth && luHeight == guLastHeight && luSections == guLastSections
-            && luDepthValid == guLastDepthValid && luFormat == guLastFormat)
+        ShadowRtLatch* lpSlot = nullptr;
+        for (u32 lu = 0; lu < 8u; ++lu)
+        {
+            if (gaShadowRtLatch[lu].mpTarget == lpTarget || gaShadowRtLatch[lu].mpTarget == nullptr)
+            {
+                lpSlot = &gaShadowRtLatch[lu];
+                break;
+            }
+        }
+        if (lpSlot == nullptr)
+            return;                       // more than 8 depth-sampled targets: stop reporting
+        if (lpSlot->mpTarget == lpTarget
+            && luWidth == lpSlot->muWidth && luHeight == lpSlot->muHeight
+            && luSections == lpSlot->muSections && luDepthValid == lpSlot->muDepthValid
+            && luFormat == lpSlot->muFormat)
         {
             return;
         }
-        guLastWidth      = luWidth;
-        guLastHeight     = luHeight;
-        guLastSections   = luSections;
-        guLastDepthValid = luDepthValid;
-        guLastFormat     = luFormat;
+        lpSlot->mpTarget     = lpTarget;
+        lpSlot->muWidth      = luWidth;
+        lpSlot->muHeight     = luHeight;
+        lpSlot->muSections   = luSections;
+        lpSlot->muDepthValid = luDepthValid;
+        lpSlot->muFormat     = luFormat;
 
         char lacFormat[16];
         FormatName(luFormat, lacFormat, sizeof(lacFormat));
@@ -768,7 +789,7 @@ namespace postfx
             guCreatedFormat          = luDepthFormat;
             gbCreatedHardwareCompare = lbDepthHwCompare;
             guCreatedSections        = luNumSections;
-            ReportShadowRenderTarget(luSurfaceWidth, luSurfaceHeight, luNumSections,
+            ReportShadowRenderTarget(lpRenderTarget, luSurfaceWidth, luSurfaceHeight, luNumSections,
                                      true, luDepthFormat, gbCreatedHardwareCompare);
         }
         else
@@ -895,7 +916,7 @@ namespace postfx
     {
         // Re-report on the way out: this runs once a frame from the s15 bind, so the
         // value-latched line re-fires if the depth texture is ever lost.
-        ReportShadowRenderTarget(muWidth, muHeight * guCreatedSections, guCreatedSections,
+        ReportShadowRenderTarget(this, muWidth, muHeight * guCreatedSections, guCreatedSections,
                                  mDepthTarget.mpTexture != nullptr, guCreatedFormat,
                                  gbCreatedHardwareCompare);
         return mDepthTarget.mpTexture;
