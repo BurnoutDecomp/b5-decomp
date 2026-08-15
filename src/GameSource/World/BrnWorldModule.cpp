@@ -64,6 +64,7 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h" // the frame collision generator Update carves
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/World/BrnWorldModule.h"
+#include "GameSource/World/EnvironmentSettings/BrnEnvironmentKeyframeBringUp.h"   // [PC bring-up] the embedded noon keyframe
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<4096,16>::AddEvent
@@ -5350,6 +5351,17 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     if ( mapBringUpEffectsFrames[ 0 ] != 0 && mapBringUpEffectsFrames[ 1 ] != 0
       && mapBringUpEffectsFrames[ 2 ] != 0 && mapBringUpEffectsFrames[ 3 ] != 0 )
     {
+        // [FLAG PC bring-up] THE TIME OF DAY: stage the shipped noon keyframe
+        // (ENV_KF_Paradise_ingame_junk_city_1200 -- the SAME one PublishWorldShadingConstantsBringUp
+        // above hard-codes the lighting from) into the manager's blend frame at weight 1, so the
+        // real GenerateEffects below takes its KEYFRAME arm for slot 0 and the world layer carries
+        // the game's own daytime bloom (lum 1.13 / thr 0.56) and vignette instead of the base layer's
+        // fallback asset. On the console Update @0x827D6060 -> SetupBlend/PerformBlend do this from
+        // the streamed timeline every frame; the streamer is an inert gate here.
+        // DELETE-WHEN EnvironmentManager::Prepare/Update stream the timeline (with the leaf).
+        mEnvironmentManager.PCBringUpStageKeyframe(
+            &BrnWorld::EnvironmentSettings::GetBringUpKeyframeCity1200(), 1.0f );
+
         // (explicitly qualified: unlike the real GenerateDispatchLists this function has no
         //  `using namespace CgsDev;` in scope)
         CgsDev::PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RenderFX );

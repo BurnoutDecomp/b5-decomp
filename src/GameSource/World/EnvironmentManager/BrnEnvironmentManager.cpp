@@ -518,5 +518,23 @@ void EnvironmentManager::GenerateEffects(BrnEffectsFrame* lpFrame0, BrnEffectsFr
     }
 }
 
+// [FLAG PC bring-up] see the declaration. Writes only the two members the console's timeline blend
+// writes for a single-keyframe frame (BlendFrame::mapKeyframes[0] / mafWeights[0]; SetupBlend and
+// PerformBlend @0x827B0EB8 own them on the console) and clears the other three slots the way
+// Construct's BlendFrame::Construct leaves them. mapKeyframes is a Keyframe* (the console's streamed
+// resources are mutable); the embedded keyframe is const data and no reader writes through the
+// pointer -- GenerateEffects copies OUT of it -- so the cast is a storage-qualifier bridge, disclosed.
+// DELETE-WHEN Prepare/Update stream the timeline.
+void EnvironmentManager::PCBringUpStageKeyframe(const Keyframe* lpKeyframe, f32 lfWeight)
+{
+    mBlendFrame.mapKeyframes[0] = const_cast<Keyframe*>(lpKeyframe);
+    mBlendFrame.mafWeights[0]   = lfWeight;
+    for (u32 luSlot = 1u; luSlot < 4u; ++luSlot)
+    {
+        mBlendFrame.mapKeyframes[luSlot] = 0;
+        mBlendFrame.mafWeights[luSlot]   = 0.0f;
+    }
+}
+
 }
 }
