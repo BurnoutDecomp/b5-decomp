@@ -1048,21 +1048,11 @@ void BrnWorld::EnvironmentSettings::DebugComponent::OnActivate()
     }
 }
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::EnvironmentSettings::EnvironmentManager::GenerateEffects(class BrnEffectsFrame *,class BrnEffectsFrame *,class BrnEffectsFrame *,class BrnEffectsFrame *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::EnvironmentManager::GenerateEffects: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// TOMBSTONE (bloom wave 2026-08-15): the EnvironmentManager::GenerateEffects boot gate that
+// stood here is DELETED. The real X360 body (@0x827BE698) is homed in
+// GameSource/World/EnvironmentManager/BrnEnvironmentManager.cpp, which is mounted at
+// tools/build/build_game_exe.bat:219 -- keeping this gate as well would be LNK2005.
+
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::EnvironmentSettings::EnvironmentManager::Prepare(struct BrnWorldIO::UpdateOutputBuffer *)

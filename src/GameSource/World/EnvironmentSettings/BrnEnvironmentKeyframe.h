@@ -26,7 +26,10 @@
 //     Clouds out-params (r-offsets 0x10 / 0x30 / 0x90 / 0x140 / 0x1D0).
 //   * EnvironmentManager::PerformBlend (@0x827B0EB8) reads each source keyframe's
 //     scattering(+0x90) / lighting(+0x140) / clouds(+0x1D0) sub-block.
-// The +0x00..+0x10 header, the +0x80..+0x90 gap (DoF/blur/tint, deferred) and the
+//   * EnvironmentManager::GenerateEffects (@0x827BE698) reads the tint COLOUR-CUBE id
+//     at +0x80 (`lwz r11, 0x80(kf)` -> `stw r11, 0x110(effectsFrame)`, i.e. straight
+//     into BrnEffectsFrame::mTintData::muColourCube). NAMED 2026-08-15 (bloom wave).
+// The +0x00..+0x10 header, the rest of the +0x80..+0x90 gap (DoF/blur, deferred) and the
 // small inter-block gaps are opaque padding rather than fabricated members.
 // ============================================================================
 
@@ -45,7 +48,11 @@ struct Keyframe
     u8                        mPad0[0x10];    // 0x000  version/header (deferred)
     BrnEffects::BloomData     mBloom;         // 0x010  (0x20)
     BrnEffects::VignetteData  mVignette;      // 0x030  (0x50)
-    u8                        mPad80[0x10];   // 0x080  DoF/blur/tint sub-blocks (deferred)
+    // 0x080  the keyframe's tint colour-cube resource id -- copied verbatim into the
+    // effects frame's BrnEffects::TintData by GenerateEffects @0x827BE698 (see the
+    // banner above). The remaining 0xC bytes are the still-deferred DoF/blur sub-blocks.
+    u32                       muColourCube;   // 0x080
+    u8                        mPad84[0xC];    // 0x084  DoF/blur sub-blocks (deferred)
     ScatteringData            mScattering;    // 0x090  (0xA8)
     u8                        mPad138[0x8];   // 0x138
     LightingData              mLighting;      // 0x140  (0x84)

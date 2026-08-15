@@ -926,7 +926,9 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
                                     f32 lfBrightness,
                                     f32 lfContrast,
                                     f32 lfFrameWhiteLevel,
-                                    f32 lfAspectCorrection)
+                                    f32 lfAspectCorrection,
+                                    const f32* lpafTint2dColourXYZW,
+                                    bool lbMotionBlurEnabled)
 {
     // The console's own source and destination: BrnRendererModule::Render @0x8240BFA8 loads
     // `lwz r27, 0x248(r31)` and `lwz r29, 0x24C(r31)` off mAllocatedRenderTargets at this+0x238,
@@ -940,11 +942,16 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
     // unguarded reads and cannot crash on a pool this build did not fill.
     CgsRenderTarget* const lpBloomBuffer = lrRendererMemory.GetBloomBuffer();
     CgsRenderTarget* const lpDofBuffer   = lrRendererMemory.GetDepthOfFieldBuffer();
+    // ...and the WORK buffer, which PrepareDownSampleBuffers hands the bloom / DoF passes as their
+    // ping-pong target the moment E_FX_BLOOM or E_FX_DEPTH_OF_FIELD is set (rung 5: the first
+    // bloom-lit boot crashed on exactly this null before the pool bring-up created it).
+    CgsRenderTarget* const lpWorkBuffer  = lrRendererMemory.GetWorkBuffer();
 
     if (lpSceneTarget == 0 || lpSceneTarget->GetRenderTarget() == 0 ||
         lpBackBuffer  == 0 || lpBackBuffer->GetRenderTarget()  == 0 ||
         lpBloomBuffer == 0 || lpBloomBuffer->GetRenderTarget() == 0 ||
         lpDofBuffer   == 0 || lpDofBuffer->GetRenderTarget()   == 0 ||
+        lpWorkBuffer  == 0 || lpWorkBuffer->GetRenderTarget()  == 0 ||
         !sbPostFxConstructed)
     {
         // Nothing drawn, nothing bound, nothing resolved. The caller presents the frame the old way.
@@ -981,19 +988,31 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
         }
     }
 
-    // The neutral 2D tint. This is NOT a chosen value: BrnRendererModule::Render installs the ZERO
-    // vector into its tint slot before the conditional effects-frame read
-    // (`vspltisw v0, 0` / `stvx128 v0, r0, r11` @0x8240DC80-0x8240DC8C), and only overwrites it when
-    // BrnGraphics::EffectsArbitrator posts a 2D tint. mEffectsArbitrator is never Constructed on this
-    // build, so the console's own no-event value is what the composite gets. With it,
-    // BrnPostFxShader::Render's Tint2dColour constant is the pass-through value.
+    // The 2D tint, now EVALUATED rather than assumed. BrnRendererModule::Render zeroes the vector
+    // (`vspltisw v0, 0` / `stvx128 v0, r0, r11` @0x8240DC80-0x8240DC8C) and overwrites it only when
+    // effects are allowed AND the layer-0 internal frame's mbUseTint2d is set, in which case
+    // EffectsArbitrator::EvalTint2d fills it; that is what arrives here as lpafTint2dColourXYZW. On
+    // this build the shipped tint2d asset ("374388", POSTFXVAULT.BIN) is (0,0,0,0), so the value is
+    // still the pass-through neutral -- but it is now the data's zero, not a hard-coded one.
     rw::math::vpu::Vector4 lTintColour;
-    lTintColour.SetZero();
+    if (lpafTint2dColourXYZW != 0)
+    {
+        lTintColour.x = lpafTint2dColourXYZW[0];
+        lTintColour.y = lpafTint2dColourXYZW[1];
+        lTintColour.z = lpafTint2dColourXYZW[2];
+        lTintColour.w = lpafTint2dColourXYZW[3];
+    }
+    else
+    {
+        lTintColour.SetZero();
+    }
 
-    // Motion blur false, likewise the console's no-event value: the flag the X360 passes in r7 comes
-    // off the layer-0 effects frame, and MotionBlurData::Construct @0x821F84E8 sets mbIsActive =
-    // false. It also keeps the permutation index at 0 (index = 4*(mb ? q+1 : 0) + 2*dof + tint), the
-    // only slot this build has any prospect of a program for.
+    // The motion-blur flag is now READ off the layer-0 effects frame, as the console reads it in r7
+    // (`lbz r7, 0xD40+var_CD0(r1)` @0x8240DE18 -- the byte Render sampled from mMotionBlurData
+    // .mbIsActive at 0x8240C2DC). It is still false on this build, because nothing posts a
+    // motion-blur event and MotionBlurData::Construct @0x821F84E8 seeds mbIsActive = false -- which
+    // is what keeps the permutation index at 0 (index = 4*(mb ? q+1 : 0) + 2*dof + tint), the only
+    // slot with a PC program pair.
     // Through the file-scope singleton, not BrnPostFx::GetInstance(): the console does the same --
     // BrnRendererModule::Render loads the global (`_R20 = mPostFxVault;`, pseudocode line 500) and
     // passes it as r3 at 0x8240DE0C. GetInstance() has no body in this tree, so calling it would
@@ -1002,7 +1021,7 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
                     lpSceneTarget->GetRenderTarget(),
                     lpBackBuffer->GetRenderTarget(),
                     lTintColour,
-                    false,
+                    lbMotionBlurEnabled,
                     lfBrightness,
                     lfContrast,
                     lfFrameWhiteLevel,
@@ -1010,3 +1029,61 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
                     0);   // no override source texture (the calibration path)
     return true;
 }
+
+// ==================================================================================================
+// The m_enabledFx MUTATORS and the effect/state ACCESSORS (DWARF BrnPostFx.h:73-101).
+//
+// NONE has a standalone X360 symbol: the console compiler inlined every one of them into their single
+// caller, BrnRendererModule::Render @0x8240BFA8's effects apply block, so each body below is
+// recovered from THAT caller's assembly and AGENTS.md's inlining-reversal rule is what puts them back
+// as calls. The five mutators are all the same compare-then-or/andc shape on m_enabledFx (this+0x384):
+//   SetBloom         `ori r9, r11, 2`     / `rlwinm r9, r11, 0,31,29`  @0x8240D760 / 0x8240D768
+//   SetVignette      `ori r11, r9, 0x10`  / `rlwinm r11, r9, 0,28,26`  @0x8240D80C / 0x8240D818
+//   SetDepthOfField  `ori r11, r11, 1`    / `clrrwi r11, r11, 1`       @0x8240D934 / 0x8240D93C
+//   SetB4Blur        `ori r11, r11, 0x40` / `rlwinm r11, r11, 0,26,24` @0x8240DA00 / 0x8240DA08
+//   SetTint          bit 0x20 (Hex-Rays `v78 = dword_82FAF474 | 0x20` / `& 0xFFFFFFDF`, lines 512-514)
+// and each accessor is the address the same asm forms: 0x950 mBloomData, 0x390 m_vignetteState,
+// 0x3D0 m_dofState, 0x3F0 m_b4blurState, 0x450 mMotionBlurState, 0x5B8 m_pfxDof, 0x5BC m_pfxVignette,
+// 0x5C8 m_pfxB4Blur (and 0x5C0/0x5C4 m_pfxTint[2], untouched by Render's apply block).
+//
+// The `const bool&` / `const int&` parameter spellings are the DWARF's, not a choice.
+// ==================================================================================================
+void BrnPostFx::SetDepthOfField(const bool& lrbEnabled)
+{
+    if (lrbEnabled) { m_enabledFx |=  static_cast<u32>(E_FX_DEPTH_OF_FIELD); }
+    else            { m_enabledFx &= ~static_cast<u32>(E_FX_DEPTH_OF_FIELD); }
+}
+
+void BrnPostFx::SetBloom(const bool& lrbEnabled)
+{
+    if (lrbEnabled) { m_enabledFx |=  static_cast<u32>(E_FX_BLOOM); }
+    else            { m_enabledFx &= ~static_cast<u32>(E_FX_BLOOM); }
+}
+
+void BrnPostFx::SetVignette(const bool& lrbEnabled)
+{
+    if (lrbEnabled) { m_enabledFx |=  static_cast<u32>(E_FX_VIGNETTE); }
+    else            { m_enabledFx &= ~static_cast<u32>(E_FX_VIGNETTE); }
+}
+
+void BrnPostFx::SetTint(const bool& lrbEnabled)
+{
+    if (lrbEnabled) { m_enabledFx |=  static_cast<u32>(E_FX_TINT); }
+    else            { m_enabledFx &= ~static_cast<u32>(E_FX_TINT); }
+}
+
+void BrnPostFx::SetB4Blur(const bool& lrbEnabled)
+{
+    if (lrbEnabled) { m_enabledFx |=  static_cast<u32>(E_FX_B4BLUR); }
+    else            { m_enabledFx &= ~static_cast<u32>(E_FX_B4BLUR); }
+}
+
+rw::graphics::postfx::Vignette*     BrnPostFx::GetVignette()     { return m_pfxVignette; }
+BrnPostFxBloomData*                 BrnPostFx::GetBloom()        { return &mBloomData; }
+rw::graphics::postfx::DepthOfField* BrnPostFx::GetDepthOfField() { return m_pfxDof; }
+rw::graphics::postfx::B4Blur*       BrnPostFx::GetB4Blur()       { return m_pfxB4Blur; }
+
+rw::graphics::postfx::Vignette::State*     BrnPostFx::GetVignetteState() { return &m_vignetteState; }
+rw::graphics::postfx::DepthOfField::State* BrnPostFx::GetDofState()      { return &m_dofState; }
+rw::graphics::postfx::B4Blur::State*       BrnPostFx::GetB4BlurState()   { return &m_b4blurState; }
+MotionBlurState&                           BrnPostFx::GetMotionBlurState() { return mMotionBlurState; }

@@ -245,6 +245,11 @@ namespace postfx
     // `rw::Resource` members are host-width (4 slots, rwcore.pdb x64) against the console's 5 --
     // the documented cross-build delta.
     // ============================================================================================
+    void B4Blur::SetState(const State& lrState)
+    {
+        m_state = lrState;
+    }
+
     B4Blur::B4Blur(const Parameters& lrParameters)
     {
         // asm 0x823FE9E0: `B4Blur::State::State(a1)` -- m_state is default-constructed FIRST and

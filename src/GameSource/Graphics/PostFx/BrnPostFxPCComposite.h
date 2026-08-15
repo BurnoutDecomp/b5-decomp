@@ -55,10 +55,19 @@ void PCBringUpConstructPostFx(rw::IResourceAllocator* lpAllocator);
 // world is already drawn off-screen by that point, so "did nothing" means a black frame with the GUI
 // on top. It does NOT hand the swap chain back either way; the caller owns that, so that the
 // rebind-on-every-path property is visible at the call site instead of buried in here.
+//
+// lpafTint2dColourXYZW / lbMotionBlurEnabled are the console's OWN two effects-frame arguments to
+// BrnPostFx::Render (v1 and r7 at the X360 call site 0x8240DE30 / 0x8240DE18): the 2D tint vector
+// BrnRendererModule::Render evaluates at 0x8240DC80-0x8240DCBC and the layer-0 internal frame's
+// mMotionBlurData.mbIsActive byte it reads at 0x8240C2DC. They were hard-coded here (zero / false)
+// while mEffectsArbitrator was never Constructed; the bloom wave Constructs it, so they are
+// parameters now. A null lpafTint2dColourXYZW keeps the previous zero-vector behaviour.
 bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
                                     f32 lfBrightness,
                                     f32 lfContrast,
                                     f32 lfFrameWhiteLevel,
-                                    f32 lfAspectCorrection);
+                                    f32 lfAspectCorrection,
+                                    const f32* lpafTint2dColourXYZW,
+                                    bool lbMotionBlurEnabled);
 
 #endif // BRN_POST_FX_PC_COMPOSITE_H

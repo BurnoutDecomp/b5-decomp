@@ -360,6 +360,22 @@ public:
     // as a named accessor so the renderer->world bridge has one seam to bind to.
     CgsGraphics::DispatchFrame* GetDispatchFrameForWrite();
 
+    // [FLAG PC bring-up] Hand a WORLD-layer effects frame to the world module.
+    //
+    // STANDS IN FOR RendererIO::OutputBuffer::GetWorldEffectsFrame(luSlot) @0x823B3C38, which
+    // BrnRendererModule::Update @0x82405E28 (pseudocode line 110) fills, per slot, with
+    // mEffectsArbitrator.GetExternalEffectsFrame(KU_EFFECTS_LAYER_WORLD, luSlot); the console then
+    // moves the pointer across in BridgeRendererToWorld (GameBridgeRendererToX.cpp:50) so
+    // WorldModule::GenerateDispatchLists @0x827D1CE8 can hand the four frames to
+    // EnvironmentManager::GenerateEffects @0x827BE698. Neither Update nor the RendererIO buffers
+    // exist on this build (BrnGameModule.cpp:1339-1360), so the world side calls this instead.
+    //
+    // Returns nullptr until the arbitrator has been Constructed (it is built lazily on PC -- see
+    // EnsureEffectsArbitratorBringUp in BrnRendererModule.cpp), and the world side must treat a null
+    // as "no effects frame this frame" rather than dereferencing it.
+    // DELETE-WHEN the RendererIO buffers are created on PC and Update publishes for real.
+    BrnEffectsFrame* GetWorldEffectsFrameBringUp(u8 luSlot);
+
 private:
     enum
     {
@@ -506,6 +522,11 @@ private:
     bool mbSkyDomeTried;
     bool EnsureSkyDomeBringUp();
     void PublishSkyConstantsBringUp(BrnShaderConstantsFrame* lpFrame);
+
+    // [FLAG PC bring-up] Write the LAYER-0 (base) effects frame the console's effects module writes.
+    // Stands in for BrnEffects::EffectsModule::GenerateRenderRequests @0x8227FF10 (lines 40-120);
+    // see the banner over the definition in BrnRendererModule.cpp for what it writes and why.
+    void PCBringUpProduceBaseEffectsFrame();
 
     ERendererPrepareStage mePrepareStage;
     ERendererReleaseStage meReleaseStage;

@@ -1,6 +1,7 @@
 #include "GameSource/World/EnvironmentManager/BrnEnvironmentManager.h"
 #include "GameSource/World/EnvironmentSettings/BrnEnvironmentSettings.h"  // ParseEnvironmentFile
 #include "SharedClasses/World/BrnEnvironmentUtil.h"                       // ComputeKeyLightDirection
+#include "SharedClasses/Graphics/BrnEffectsData.h"                        // BrnEffectsFrame + BrnEffects::{Bloom,Vignette,Tint}Data
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cmath>     // sqrtf
@@ -43,6 +44,13 @@ namespace
     // ---- stage-machine terminal values Construct writes -----------------------------------
     const s32 E_STREAMOUT_DONE          = 7;
     const s32 E_SETUPSEASONSBLEND_DONE  = 4;
+
+    // ---- GenerateEffects @0x827BE698: the weights its "no keyframe / defaults" arm writes ---
+    // A slot with no bracketing keyframe contributes NOTHING to the arbitrator's bloom /
+    // vignette blend (weight 0), but it still contributes its default colour cube at a
+    // quarter weight -- one full unit shared across the layer's four slots.
+    const f32 KF_DEF_EFFECTS_LAYER_WEIGHT      = 0.0f;   // flt_82001CC0 (bloom + vignette weight)
+    const f32 KF_DEF_EFFECTS_LAYER_TINT_WEIGHT = 0.25f;  // flt_82003F40 (tint weight)
 
     // K_DEFAULT_JUNKYARD_KEY_LIGHT_DIRECTION (X360 unk_8300F410). This is MUTABLE .data, not
     // rodata -- its bytes are zero in the image and its real initial value is written by a
@@ -412,6 +420,100 @@ void EnvironmentManager::DisableJunkyardLightingSetup()
     mfTimeOfDayUpperBound       = KF_DEF_TIME_OF_DAY_UPPER_BOUND;
     mbJunkyardLightingSetup     = false;
     mbOverrideKeyLightDirection = false;
+}
+
+// ============================================================================================
+// @ 0x827BE698. Fill the four WORLD-layer effects frames from the environment blend frame,
+// once per dispatch pass.
+//
+// CALLER: WorldModule::GenerateDispatchLists @0x827D1CE8 line 382 (this tree,
+// BrnWorldModule.cpp:3836) hands it the world dispatch input's GetEffectsFrame(0..3) --
+// four frames because kau8SlotsPerEffectsLayer[KU_EFFECTS_LAYER_WORLD] == 4
+// (byte_8203E110 = 01 04 02, DATA_NOTE.md section 1).
+//
+// SIGNATURE: five GPR arguments in the X360 prologue -- r3 = this, r4..r7 = the four frames.
+// Nothing is returned (both exits are a bare `b __restgprlr_19`; Hex-Rays' `__int64 result`
+// is r4's dead tail value). No float argument, so no PPC float-slot skew to resolve.
+//
+// PER SLOT the console runs one of two arms, selected by
+//     `if (mbUseDefaultEffects != 0 || mBlendFrame.mapKeyframes[i] == 0)`
+// (asm: `lbz r11,0x1170(r3)` / `bne` -> default arm; then `cmplwi r8,0` / `beq` -> default arm).
+// 0x1170 == mbUseDefaultEffects and 0x520/0x530 == mBlendFrame.mapKeyframes/mafWeights are the
+// committed layout in BrnEnvironmentManager.h (0x520 = 1312 and 0x530 = 1328 -- the "keyframe
+// pointers" and "weights" of the dossier are the BlendFrame, already named).
+//
+//   KEYFRAME arm  -- 32 B from kf+0x10 -> frame+0x20 (BloomData), weight -> frame+0x08;
+//                    80 B from kf+0x30 -> frame+0x40 (VignetteData), weight -> frame+0x0C;
+//                    u32 from kf+0x80  -> frame+0x110 (TintData::muColourCube), weight -> frame+0x18.
+//   DEFAULT  arm  -- the SAME three writes, but the Bloom/Vignette values are built fresh on the
+//                    stack from the shared post-fx defaults and the two weights are 0.0f
+//                    (flt_82001CC0) while the tint weight is 0.25f (flt_82003F40); the colour
+//                    cube comes from the manager's own muDefTintData (+0x1194).
+//
+// The default arm is BYTE-FOR-BYTE the inlined BrnEffects::BloomData::Construct() +
+// BrnEffects::VignetteData::Construct() -- proven by diffing it against
+// BrnEffectsFrame::Construct @0x822791E8, which stores the identical constant set in the
+// identical member order:
+//     BloomData    +0x00 flt_820A3A14 (kfDefLuminance 0.98f)   +0x04 flt_820A3A98 (kfDefThreshold 0.77f)
+//                  +0x10 unk_82FFAED0 (kv4DefScale)
+//     VignetteData +0x00 flt_820A3A9C (kfDefAngle 0.0f)        +0x04 flt_820A3AA0 (kfDefSharpness 0.33f)
+//                  +0x10 unk_82FFAE20 (kv2DefAmount)           +0x20 unk_82FFAEC0 (kv2DefCentre)
+//                  +0x30 unk_82FFB220 (kv4DefInnerColour)      +0x40 unk_82FFB1A0 (kv4DefOuterColour)
+// so it is written here as those two Construct() calls rather than as re-spelled literals.
+// (The 8 padding bytes at BloomData+0x08 and VignetteData+0x08 are NOT written by either arm --
+// the console copies them out of the uninitialised stack slot, which is exactly what a
+// default-constructed local struct copy does. No behaviour depends on them.)
+//
+// It does NOT write the six mbUse* bools, and it does not touch DoF / blur / 2d-tint --
+// those belong to the base (layer 0) and fx-events (layer 2) producers.
+//
+// PC NOTE (no deviation, stated for the reader): EnvironmentManager::Prepare and ::Update are
+// still inert gates in WorldLinkStubs.cpp and nothing else writes mBlendFrame, so on this build
+// every slot takes the "no keyframe" arm and the world layer contributes weight 0. That is the
+// console's own "environment settings not loaded" behaviour, not a stand-in.
+// FLAG: muDefTintData (+0x1194) is written ONLY by EnvironmentManager::Prepare @0x827D49A8
+// (`stw r3, 0x1194(r31)` at 0x827D4C10, the id of the default rw::graphics::postfx::ColourCube
+// it creates at +0x1174); Construct @0x827CA408 does not touch it. Prepare is an inert gate on
+// this build, so the value read here is the zero-initialised BSS of the file-scope static
+// gGameModule -- which is also what BrnEffects::TintData::Construct() writes, so the read is
+// deterministic and harmless. It becomes live for free when Prepare lands.
+// ============================================================================================
+void EnvironmentManager::GenerateEffects(BrnEffectsFrame* lpFrame0, BrnEffectsFrame* lpFrame1,
+                                         BrnEffectsFrame* lpFrame2, BrnEffectsFrame* lpFrame3)
+{
+    BrnEffectsFrame* const lapFrames[4] = { lpFrame0, lpFrame1, lpFrame2, lpFrame3 };
+
+    for (u32 luSlot = 0; luSlot < 4; ++luSlot)
+    {
+        BrnEffectsFrame* const lpFrame    = lapFrames[luSlot];
+        const Keyframe*  const lpKeyframe = mBlendFrame.mapKeyframes[luSlot];
+        const f32              lfWeight   = mBlendFrame.mafWeights[luSlot];
+
+        BrnEffects::TintData lTintData;
+
+        if (mbUseDefaultEffects || lpKeyframe == 0)
+        {
+            BrnEffects::BloomData lBloomData;
+            lBloomData.Construct();
+
+            BrnEffects::VignetteData lVignetteData;
+            lVignetteData.Construct();
+
+            lTintData.muColourCube = muDefTintData;
+
+            lpFrame->SetBloomData(lBloomData, KF_DEF_EFFECTS_LAYER_WEIGHT);
+            lpFrame->SetVignetteData(lVignetteData, KF_DEF_EFFECTS_LAYER_WEIGHT);
+            lpFrame->SetTintData(lTintData, KF_DEF_EFFECTS_LAYER_TINT_WEIGHT);
+        }
+        else
+        {
+            lTintData.muColourCube = lpKeyframe->muColourCube;
+
+            lpFrame->SetBloomData(lpKeyframe->mBloom, lfWeight);
+            lpFrame->SetVignetteData(lpKeyframe->mVignette, lfWeight);
+            lpFrame->SetTintData(lTintData, lfWeight);
+        }
+    }
 }
 
 }

@@ -149,11 +149,13 @@ BlurBlend* BlurBlend::Construct()
 }
 
 // ---- BlurBlend::Add @ 0x824F6B70 -----------------------------------------
-// Blend path delegates to BrnEffects::BlurData::SetToBlend(dst, dst, lfWeight,
-// src, 1-lfWeight) [arg order matches the X360 call: result, _R4=dst, a3=lfWeight,
-// a4=1-lfWeight via SetToBlend's (lpResult, lpA, lfWa, lfWb, lpB)]. The X360
-// passes f1=1-w, f2=w with r4=dst (lpA) and r6=src (lpB), so lpA weight is
-// (1-w) and lpB weight is w.
+// Blend path delegates to BrnEffects::BlurData::SetToBlend. The X360 call passes
+// r3=this(dst), r4=dst, f1=1-w, r6=src, f2=w -- which is the DWARF's non-static
+// `void SetToBlend(const BlurData& lA, f32 lfWa, const BlurData& lB, f32 lfWb)`
+// (BrnEffectsData.h:260), NOT the bunched-weight static this file assumed until
+// 2026-08-15. r6 (not r7) holding lpB is the tell: a float argument skips its GPR
+// slot, so an interleaved list lands the second source in r6. See the SetToBlend
+// banner in SharedClasses/Graphics/BrnEffectsData.h for the full evidence.
 BlurBlend* BlurBlend::Add(const BrnEffects::BlurData* lpSrc, f32 lfWeight)
 {
     if (lpSrc == nullptr)
@@ -174,8 +176,8 @@ BlurBlend* BlurBlend::Add(const BrnEffects::BlurData* lpSrc, f32 lfWeight)
     }
     else
     {
-        // SetToBlend(result=&mData, lpA=&mData, lfWa=1-w, lfWb=w, lpB=src)
-        BrnEffects::BlurData::SetToBlend(&mData, &mData, 1.0f - lfWeight, lfWeight, lpSrc);
+        // mData.SetToBlend(lA=mData, lfWa=1-w, lB=*src, lfWb=w)
+        mData.SetToBlend(mData, 1.0f - lfWeight, *lpSrc, lfWeight);
     }
 
     return this;
@@ -198,9 +200,10 @@ VignetteBlend* VignetteBlend::Construct()
 
 // ---- VignetteBlend::Add @ 0x824F69E8 -------------------------------------
 // Copy path (mfCount becomes 1.0f) is an 80-byte payload copy; the blend path
-// delegates to BrnEffects::VignetteData::SetToBlend(&mData, &mData, 1-w, w, src)
-// [X360 call: r3=lpResult=&mData, r4=lpA=&mData, f1=lfWa=1-w, f2=lfWb=w,
-// r6=lpB=src, matching SetToBlend's (lpResult, lpA, lfWa, lfWb, lpB)].
+// delegates to BrnEffects::VignetteData::SetToBlend [X360 call: r3=this=&mData,
+// r4=lA=&mData, f1=lfWa=1-w, r6=lB=src, f2=lfWb=w -- the DWARF's non-static
+// `void SetToBlend(const VignetteData&, f32, const VignetteData&, f32)`
+// (BrnEffectsData.h:161)].
 VignetteBlend* VignetteBlend::Add(const BrnEffects::VignetteData* lpSrc, f32 lfWeight)
 {
     if (lpSrc == nullptr)
@@ -221,8 +224,8 @@ VignetteBlend* VignetteBlend::Add(const BrnEffects::VignetteData* lpSrc, f32 lfW
     }
     else
     {
-        // SetToBlend(result=&mData, lpA=&mData, lfWa=1-w, lfWb=w, lpB=src)
-        BrnEffects::VignetteData::SetToBlend(&mData, &mData, 1.0f - lfWeight, lfWeight, lpSrc);
+        // mData.SetToBlend(lA=mData, lfWa=1-w, lB=*src, lfWb=w)
+        mData.SetToBlend(mData, 1.0f - lfWeight, *lpSrc, lfWeight);
     }
 
     return this;

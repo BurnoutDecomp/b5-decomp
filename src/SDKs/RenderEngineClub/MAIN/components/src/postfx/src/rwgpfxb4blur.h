@@ -84,6 +84,11 @@ namespace postfx
         // callee reads three different members out of it. `&params.m_allocator` spelt the same
         // address by accident; it could not name the other two.
         explicit B4Blur(const Parameters& lrParameters);
+        // The console publishes a freshly built State into the effect with a raw 0x60-byte copy over
+        // m_state (BrnRendererModule::Render @0x8240BFA8, `li r5, 0x60` / `addi r4, r20, 0x3F0` /
+        // `lwz r3, 0x5C8(r20)` / `bl memcpy` @0x8240DC30-0x8240DC50). m_state is member 0, so the
+        // memcpy IS an assignment; expressed as one so no caller pokes a private member.
+        void SetState(const State& lrState);
 
         // --- SHAPE (DWARF rwgpfxb4blur.h:254-308). Every offset in the comments is CONFIRMED by the
         // X360 constructor's store map, and the total (0x124 -> 0x130 at the class's 16-byte
