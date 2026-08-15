@@ -70,7 +70,10 @@
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"                       // BrnPhysics::ContactSpy::ContactSpyInterface
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleIOQueues.h" // local queue slices (GameActionQueue/GameEventQueue/PotentialContactQueue/SceneResultQueue/TakedownEventQueue/ResourceRequestInterface)
 
-namespace BrnNetwork { enum EPaybackType : s32; }
+// EPaybackType used to be an opaque `enum EPaybackType : s32;` forward declaration here, which
+// forced the "no dirty trick" sentinel in InputBuffer_PreScene::Construct to be spelled as a
+// static_cast of the literal 3. Include the real home instead so the enumerator can be named.
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::EPaybackType (:32)
 namespace CgsGraphics { class DispatchFrame; }   // class (matches CgsDispatcher.h:211; struct fwd-decl skewed MSVC mangling)
 // RECONCILED 2026-07-24 (ODR fix, see BrnRendererModuleIO.h): BrnBlobbyShadowBuffer
 // is a NESTED class of the real BrnBlobbyShadowManager CLASS -- include the home.
@@ -198,6 +201,60 @@ namespace RaceCarEntityModuleIO
             // pair the world input buffers fired one wave ago.
             mGameActionQueue.Construct();
             mAudioCarLoadedDataQueue.Construct();
+            // ⭐⭐ 2026-08-15 (IO-buffer zero-fill removal audit) -- THE MISSING STORES.
+            // Everything below is in the console Construct @0x822EA3C0 and was omitted here;
+            // it only ever worked because the old PC CreateIOBuffer<T> value-initialised
+            // (zero-filled) the whole buffer. With default-init these members arrive holding
+            // the previous IO-stack tenant's bytes, and the per-car "valid"/"this frame"
+            // latches below are pure read-if-set flags -- a stale 1 makes the pre-scene pass
+            // act on a colour/paint/select/contact event that never happened.
+            //   *(this+0x363C) = 3   -- the EPaybackType sentinel: literal 3 IS the named
+            //                           enumerator E_PAYBACK_TYPE_SIX_AXIS_STEERING
+            //                           (BrnNetworkSharedIO.h:32), the last real payback type and
+            //                           the value the world twin stores too (BrnWorldModuleIO.cpp).
+            //                           (It is EPaybackType, NOT EDirtyTrickStatus -- an earlier
+            //                           note here named the wrong enum.)
+            //   *(this+0x3640) = -1
+            //   the replay-status seed at +0x3644 (flag word, six reel head bytes,
+            //   the two current-reel indices = -1, the trailing debug alpha = 0.0)
+            //   the eight-iteration per-active-race-car clear over the nine leading arrays
+            //   (stores at +34/+42/+2/+50/+18/+58/+66/+74/+82, 0x822EA480..0x822EA4A4)
+            meActivePaybackType      = BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING;   // == 3
+            meActivePaybackAggressor = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+            mReplayStatusInterface.mxStatusFlags = 0;
+            for (s32 liReel = 0; liReel < 6; ++liReel)
+                mReplayStatusInterface.maReels[liReel].macName[0] = '\0';
+            mReplayStatusInterface.miCurrentRecordReel   = -1;
+            mReplayStatusInterface.miCurrentPlaybackReel = -1;
+            mReplayStatusInterface.mfDebugHudAlpha       = 0.0f;
+            // The range-guarded EActiveRaceCarIndex operator++ is what bakes the
+            // "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" assert (BurnoutConstants.h:39)
+            // the X360 body carries -- same shape as the world twin's trailing loop.
+            for (EActiveRaceCarIndex leIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+                 leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+                 leIndex++)
+            {
+                mabReceivedNetworkDriverControls[leIndex] = false;
+                mabRaceCarColourIndexValid[leIndex]       = false;
+                mau16RaceCarColourIndex[leIndex]          = 0;
+                mabRaceCarPaintFinishIndexValid[leIndex]  = false;
+                mau16RaceCarPaintFinishIndex[leIndex]     = 0;
+                mabLostContactThisFrame[leIndex]          = false;
+                mabRegainedContactThisFrame[leIndex]      = false;
+                mabCarSelectStatus[leIndex]               = false;
+                mabCarSelectStatusValid[leIndex]          = false;
+            }
+            // [FLAG] still NOT emitted (their own TUs own the bring-up): the console's
+            // Camera::Construct(+144) on mCameraInput, and the 60-byte mPlayerVehicleControls
+            // seed at +496 (BrnWorld::PlayerVehicleControls::Construct is declared but has NO
+            // body in this tree yet -- calling it would be an unresolved external).
+            // ⚠️ CORRECTED 2026-08-15: that seed is NOT a zero-fill. X360 0x822EA3C0 runs a
+            // 7-iteration loop storing the 64-bit literal 0x700000000 at +496 and then one
+            // trailing 32-bit 0 -- i.e. the 60 bytes come out as the dword pattern
+            // 7,0,7,0,7,0,7,0,7,0,7,0,7,0,0, seven `7`s interleaved with zeros. Whatever
+            // PlayerVehicleControls' first-of-each-pair field is, its idle value is 7, not 0,
+            // so a memset here would be actively wrong -- which is exactly why this stays a
+            // FLAG until PlayerVehicleControls::Construct is bodied.
         }
         const TimerStatusInterface*    GetTimerStatusInterface() const;                    // :154
         void                           SetTimerStatusInterface(const TimerStatusInterface*); // :155
@@ -331,23 +388,49 @@ namespace RaceCarEntityModuleIO
         // PARTIAL SLICE for the same reason as the InputBuffer twin above: the audio streamer
         // appends its per-frame (un)load requests into this queue every frame and the base-only
         // WorldLinkStubs gate left it un-Constructed. GROW as the other members' types land.
+        // ⭐⭐ REORDERED + COMPLETED 2026-08-15 (IO-buffer zero-fill removal audit). The body is
+        // now in the console's own call order, and THE FOUR RCEntity*OutputInterface::Clear CALLS
+        // THE BANNER ABOVE ALWAYS TRANSCRIBED ARE ACTUALLY MADE. They were listed and never
+        // emitted; that only ever worked because the old PC CreateIOBuffer<T> value-initialised
+        // the whole buffer. With default-init the four interfaces arrive holding the previous
+        // IO-stack tenant's bytes -- and these are the per-car "is active"/"is in current mode"/
+        // per-index state tables the pre-scene pass publishes, so a stale byte re-animates a car
+        // that is not in the race. RCEntityActiveRaceCarOutputInterface::Clear had ZERO callers
+        // in this tree before this change (BrnRCEntityActiveRaceCarOutputInterface.cpp:151).
         void Construct()
         {
-            CgsModule::IOBuffer::Construct();
+            CgsModule::IOBuffer::Construct();                 // X360 *a1 = 1
+            // The console's own list names VehicleInputInterface::Construct(+16) FIRST and
+            // the body never made it -- same omission as the OutputBuffer_PrePhysics twin
+            // below (drivable wave 2026-08-01). Unreached today (nothing posts into the
+            // PRE-SCENE copy of the interface) but it is the same fifteen un-Constructed
+            // queues, so it is made here rather than left as a latent trap.
+            mVehicleInputInterface.Construct();               // X360 +16
+            // [FLAG] the console's InSceneUpdateInterface::Construct(+142192) on
+            // mSceneInputInterface is still not emitted -- that interface's Construct belongs to
+            // the CgsSceneManager IO TU and has no body in this tree yet.
+            // ---- the four Clears, in the console's order (0x822EA4E0) ----
+            mActiveRaceCarOutputInterface.Clear();            // X360 +960960
+            mGlobalRaceCarOutputInterface.Clear();            // X360 +971440
+            mReplayActiveRaceCarOutputInterface.Clear();      // X360 +973856
+            mReplayGlobalRaceCarOutputInterface.Clear();      // X360 +984336
+            // The console's nine-slot zero fill at +987440..+987504 lands inside
+            // mRaceCarAIInterface, ahead of its management queue; those words belong to that
+            // interface's own bring-up [FLAG, unchanged from the previous body].
             // The console's VariableEventQueue<16384,16>::Construct(+987512). REAL as of the
             // reset-player-car wave: that offset is mRaceCarAIInterface.mManagementQueue (the
             // interface's own +0x2F8), and RaceCarEntityModule::SpawnRaceCar AddEvents an
             // AttachAIControlEvent into it for every car it spawns. The transcribed console
             // list above named this call and the body never made it -- the first spawn would
             // have fired the "Not Constructed" pair (CgsVariableEventQueue.h:454 / :728).
-            mRaceCarAIInterface.mManagementQueue.Construct();
-            mAudioCarLoadedDataQueue.Construct();
-            // The console's own list names VehicleInputInterface::Construct(+16) FIRST and
-            // the body never made it -- same omission as the OutputBuffer_PrePhysics twin
-            // below (drivable wave 2026-08-01). Unreached today (nothing posts into the
-            // PRE-SCENE copy of the interface) but it is the same fifteen un-Constructed
-            // queues, so it is made here rather than left as a latent trap.
-            mVehicleInputInterface.Construct();
+            mRaceCarAIInterface.mManagementQueue.Construct(); // X360 +987512
+            mAudioCarLoadedDataQueue.Construct();             // X360 +1004120
+            mbRequestingRivalUpdate = false;                  // X360 +1004112
+            // [FLAG] the console's trailing eight-slot per-car clear at +1004520 (with the
+            // EActiveRaceCarIndex range assert, BurnoutConstants.h:39) is past this buffer's
+            // modelled member list -- it lands inside mAudioCarLoadedDataQueue's span on the
+            // console offsets, which the host layout does not reproduce byte-for-byte. Left out
+            // rather than poked by offset.
         }
         const VehicleInputInterface* GetVehicleInputInterface() const;                      // :282
         VehicleInputInterface*       GetVehicleInputInterface();                            // :283 W  (0x822B4ED0)
@@ -646,18 +729,38 @@ namespace RaceCarEntityModuleIO
         // component streamers' queues into it every frame, and the base-only WorldLinkStubs gate
         // this replaces left it un-Constructed, which fired "Not Constructed" once per frame).
         // GROW as the other members' types land.
+        // ⭐⭐ COMPLETED 2026-08-15 (IO-buffer zero-fill removal audit) -- the four
+        // RCEntity*OutputInterface::Clear calls the banner above always transcribed are now
+        // actually made, in the console's order. Same defect and same reasoning as the
+        // OutputBuffer_PreScene twin: they were listed and never emitted, and the removed PC
+        // zero-fill was the only thing hiding it.
         void Construct()
         {
-            CgsModule::IOBuffer::Construct();
-            mResourceRequestInterface.mRequestQueue.Construct();
+            CgsModule::IOBuffer::Construct();                    // X360 *a1 = 1
+            mResourceRequestInterface.mRequestQueue.Construct();  // X360 +4
             mResourceRequestInterface.mRequestQueue.Clear();
+            // [FLAG] the console's InSceneUpdateInterface::Construct(+8224) on
+            // mSceneInputInterface is still not emitted (that interface's Construct lives in the
+            // CgsSceneManager IO TU and has no body here yet).
             // ⭐ ADDED 2026-08-02 (camera parameter-chain wave) -- the "NewVehicleEvent<50>::
             // Construct" leg named in the X360 note above. The producer that writes it lands
             // in this wave (RaceCarEntityModule's new-vehicle publish), and an unconstructed
             // queue has mpEvents == NULL, which is what killed the process the last time an
             // embedded queue in this family went un-Constructed (see the retired
             // OutputBuffer_PrePhysics gate in WorldLinkStubs.cpp).
-            mDirectorVehicleInputInterface.Construct();
+            mDirectorVehicleInputInterface.Construct();          // X360 +826992
+            // ---- the four Clears, in the console's order (0x822EA8F8) ----
+            mActiveRaceCarOutputInterface.Clear();               // X360 +827808
+            mGlobalRaceCarOutputInterface.Clear();               // X360 +838288
+            mReplayActiveRaceCarOutputInterface.Clear();         // X360 +840704
+            mReplayGlobalRaceCarOutputInterface.Clear();         // X360 +851184
+            mGameEventQueue.Construct();                         // X360 +853600 (VEQ<1536,16>)
+            // [FLAG] the console's 11-word zero fill at +855152 and
+            // VehicleInputInterface::Construct(+855200) are NOT emitted: on the console those two
+            // seats sit between mGameEventQueue and the buffer's end, but the member-offset
+            // attributions recorded on the declarations below disagree with the Construct's own
+            // offsets for the same two seats (see the report's SUSPECT note), so naming them here
+            // would be a guess. Restore both once that attribution is settled.
         }
         const ResourceRequestInterface* GetResourceRequestInterface() const;              // :563
         ResourceRequestInterface*       GetResourceRequestInterface();                     // :564

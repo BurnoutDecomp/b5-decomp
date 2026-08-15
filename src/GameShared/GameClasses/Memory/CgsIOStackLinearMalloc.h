@@ -29,11 +29,18 @@ namespace CgsMemory
     template <unsigned N>
     struct IOStackLinearMalloc : public CgsModule::IOBuffer
     {
-        // DWARF :61. The X360 stack template raises the status byte; the arena is
-        // adopted by Prepare, not here.
+        // DWARF :61. X360-attested by the CreateIOBuffer<IOStackLinearMalloc<1048576>>
+        // instantiation @0x825A36E0, which after `Alloc(this, 0x100020, name)` does exactly
+        //     addi r3, r3, 4 ; bl CgsMemory__LinearMalloc__Construct
+        // and NOTHING else -- no `stb 1,0(p)`. So this deliberately does NOT raise the
+        // IOBuffer status byte (nothing ever Lock*s an allocator buffer); it brings the
+        // embedded LinearMalloc to its pre-Create state (mbCreated=false, default alignment).
+        // This used to read `CgsModule::IOBuffer::Construct()` only -- the LinearMalloc was
+        // left uninitialised and got away with it purely because the old PC CreateIOBuffer
+        // value-initialised (zero-filled) the whole 1 MB block first.
         void Construct()
         {
-            CgsModule::IOBuffer::Construct();
+            mAlloc.Construct();
         }
 
         // DWARF :73 -- the two calls PhysicsModule::Update @0x825B0640 inlines

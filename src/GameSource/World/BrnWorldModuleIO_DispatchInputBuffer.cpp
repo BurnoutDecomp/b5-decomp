@@ -17,6 +17,46 @@
 namespace BrnWorldIO
 {
 
+// ---- construction -----------------------------------------------------------
+
+// ⭐ ADDED 2026-08-15 (IO-buffer zero-fill removal audit). X360 0x827C4988, store order
+// verbatim from the pseudocode/asm (offsets are the CONSOLE ones this header's banner pins;
+// every access here is BY NAME because the embedded camera widens the host layout):
+//     *(this+404) = 0            mpDispatchThreadInputBuffer = 0
+//     *this = 1                  IOBuffer::Construct()
+//     *(this+4)   = 0            mpDispatchFrame = 0
+//     Camera::Construct(this+16) mCameraInput.Construct()
+//     *(this+368) = 0            mpShaderConstantsFrame = 0
+//     loop i<4: *(this + 4*(i+93)) = 0    mapEffectsFrames[i] = 0   (+372..+384)
+//     *(this+388) = 0            mpBlobbyShadowBuffer = 0
+//     *(this+392) = 0            mpCoronaSubmissionInterface = 0
+//     *(this+408..413) = 1       mRenderSwitches -- ALL SIX SWITCHES TRUE
+// ⚠️ mfGameTime (+0x18C) and mfSimTime (+0x190) are DELIBERATELY NOT touched: the console
+// Construct has no store for either (the dispatch feed writes them every frame).
+void DispatchInputBuffer::Construct()
+{
+    mpDispatchThreadInputBuffer = 0;        // *(this+404) = 0 @0x827C4988 (first store)
+
+    CgsModule::IOBuffer::Construct();       // *(this+0) = 1 @0x827C4988
+
+    mpDispatchFrame = 0;                    // *(this+4) = 0 @0x827C4988
+    mCameraInput.Construct();               // Camera::Construct(this+16) @0x827C4988
+    mpShaderConstantsFrame = 0;             // *(this+368) = 0 @0x827C4988
+
+    for (u8 luSlot = 0; luSlot < 4; ++luSlot)
+        mapEffectsFrames[luSlot] = 0;       // *(this + 4*(slot+93)) = 0 @0x827C4988
+
+    mpBlobbyShadowBuffer        = 0;        // *(this+388) = 0 @0x827C4988
+    mpCoronaSubmissionInterface = 0;        // *(this+392) = 0 @0x827C4988
+
+    mRenderSwitches.mbRenderShadows  = true;  // *(this+408) = 1 @0x827C4988
+    mRenderSwitches.mbRenderEnvmap   = true;  // *(this+409) = 1 @0x827C4988
+    mRenderSwitches.mbRenderWorld    = true;  // *(this+410) = 1 @0x827C4988
+    mRenderSwitches.mbRenderProps    = true;  // *(this+411) = 1 @0x827C4988
+    mRenderSwitches.mbRenderRaceCars = true;  // *(this+412) = 1 @0x827C4988
+    mRenderSwitches.mbRenderTraffic  = true;  // *(this+413) = 1 @0x827C4988
+}
+
 // ---- dispatch frame ---------------------------------------------------------
 
 // X360 0x827A4EB0 (:383 R) -- read-lock handle to the graphics dispatch frame (this+0x04).

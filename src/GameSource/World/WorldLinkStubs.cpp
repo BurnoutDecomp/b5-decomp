@@ -1,5 +1,7 @@
 // ===========================================================================
 // WorldLinkStubs.cpp -- FLAG (world-fleet link-mount stubs, 2026-07-26).
+// (<cstring> is included below for the per-gate memsets that stand in for the
+//  unrecovered IO-buffer Construct bodies -- see the WORLD-DRIVE BOOT GATES note.)
 //
 // Minimal out-of-line definitions so the game exe LINKS with the world-module
 // fleet TUs mounted (BrnWorldModule + entity modules + scene manager + shadow/
@@ -40,6 +42,7 @@
 // MSVC manglings) identical to the references being satisfied.
 // ===========================================================================
 
+#include <cstring>                                                   // memset (unrecovered-Construct boot gates)
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"      // ShaderConstantTable (mShaderConstantTable definition below)
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"
 #include "GameShared/GameClasses/Module/CgsModuleUtils.h"
@@ -706,6 +709,13 @@ class CgsModule::VariableEventQueue<32768,16> * BrnTraffic::BrnTrafficIO::InputB
 // not this gate.
 void BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::Construct()
 {
+    // FLAG PC (2026-08-15): stands in for the unrecovered body. CreateIOBuffer<T>
+    // @0x827B7250 (Alloc 2640) no longer zero-fills (it default-inits + Constructs,
+    // as every X360 instantiation does), so this gate must zero its own buffer or the
+    // members it never brings up would hold the previous stack tenant's bytes.
+    // Delete with the gate when the real Construct lands.
+    memset(this, 0, sizeof(*this));
+
     static bool s_bLogged = false;
     if (!s_bLogged)
     {
@@ -757,6 +767,10 @@ void BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::SetVisibleEntities(class
 // not this gate.
 void BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch::Construct()
 {
+    // FLAG PC (2026-08-15): stands in for the unrecovered body -- same reason as
+    // InputBuffer_PreDispatch::Construct above. X360 CreateIOBuffer @0x827B7320 (Alloc 776).
+    memset(this, 0, sizeof(*this));
+
     static bool s_bLogged = false;
     if (!s_bLogged)
     {
@@ -1052,7 +1066,6 @@ void BrnWorld::EnvironmentSettings::DebugComponent::OnActivate()
 // stood here is DELETED. The real X360 body (@0x827BE698) is homed in
 // GameSource/World/EnvironmentManager/BrnEnvironmentManager.cpp, which is mounted at
 // tools/build/build_game_exe.bat:219 -- keeping this gate as well would be LNK2005.
-
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::EnvironmentSettings::EnvironmentManager::Prepare(struct BrnWorldIO::UpdateOutputBuffer *)
@@ -3464,37 +3477,52 @@ void BrnWorld::WorldDebugComponent::Update(struct BrnWorldIO::DebugController co
 
 // ---- module-IO buffer Construct() ------------------------------------------
 // WorldModule::Update creates ~30 module IO buffers per frame on the update
-// stacks. The X360 CreateIOBuffer<T> template instantiation runs T::Construct
-// after the stack alloc; the generic PC template placement-news only, so the
-// drive calls Construct explicitly. For the buffers below the owning IO TU has
-// no Construct body yet -- these gates run ONLY the IOBuffer base bring-up
-// (raising the status the Lock/Unlock tripwires assert on). The member queue /
-// interface bring-up each real Construct also performs is deferred with that
-// IO TU; every one of these buffers belongs to a module whose update is itself
-// boot-gated, so nothing writes into the un-constructed members.
+// stacks; CgsModule::IOBufferStack::CreateIOBuffer<T> runs T::Construct right
+// after the stack alloc, exactly as the console does. For the buffers below the
+// owning IO TU has no Construct body yet -- these gates run ONLY the IOBuffer
+// base bring-up (raising the status the Lock/Unlock tripwires assert on). The
+// member queue / interface bring-up each real Construct also performs is
+// deferred with that IO TU; every one of these buffers belongs to a module whose
+// update is itself boot-gated, so nothing writes into the un-constructed members.
 // Replace each with the real T::Construct in its own IO TU (and delete here).
+//
+// FLAG PC (2026-08-15, IO-buffer zero-fill removal): CreateIOBuffer<T> used to
+// VALUE-initialise (`new (p) T()`), i.e. zero-fill every buffer, which is what put
+// ~18-20 MB of memset per frame into WorldModule::Update / PhysicsModule::Update.
+// The template is now DEFAULT-init + Construct, matching every X360 instantiation.
+// For the gates below that is a behaviour change these partial buffers were leaning
+// on: their un-reconstructed members used to arrive zeroed and now arrive holding the
+// previous stack tenant's bytes. Since their real Construct bodies are NOT recovered
+// (the X360 instantiation only shows the out-of-line `T::Construct()` call, address
+// noted per gate), each gate zeroes ITS OWN buffer -- the per-T escape hatch, never
+// the template. Total ~296 KB/frame vs the ~18-20 MB the blanket zeroing cost.
+// DELETE the memset together with the gate when the real Construct lands.
+
+// (BrnAI::AIModuleIO::InputBuffer_PostPhysics::Construct used to be a memset gate here. Its REAL
+//  body -- and the Destruct the console DestroyIOBuffer<T> reaches -- were already reconstructed in
+//  BrnAIModuleIO_InputBuffer_PostPhysics.cpp; that TU is on the bat since 2026-08-15.)
 
 // BOOT GATE: base bring-up only (see the block note above).
-void BrnAI::AIModuleIO::InputBuffer_PostPhysics::Construct()
-{
-    CgsModule::IOBuffer::Construct();
-}
-
-// BOOT GATE: base bring-up only (see the block note above).
+// X360 CreateIOBuffer<OutputBuffer_PostScene> @0x827B69F0 (Alloc 63440).
 void BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene::Construct()
 {
+    memset(this, 0, sizeof(*this));   // FLAG PC: stands in for the unrecovered body
     CgsModule::IOBuffer::Construct();
 }
 
 // BOOT GATE: base bring-up only (see the block note above).
+// X360 CreateIOBuffer<InputBuffer_PostPhysics> @0x827B9DA0 (Alloc 22432).
 void BrnWorld::PropEntityIO::InputBuffer_PostPhysics::Construct()
 {
+    memset(this, 0, sizeof(*this));   // FLAG PC: stands in for the unrecovered body
     CgsModule::IOBuffer::Construct();
 }
 
 // BOOT GATE: base bring-up only (see the block note above).
+// X360 CreateIOBuffer<InputBuffer_PrePhysics> @0x827B6768 (Alloc 170032).
 void BrnWorld::PropEntityIO::InputBuffer_PrePhysics::Construct()
 {
+    memset(this, 0, sizeof(*this));   // FLAG PC: stands in for the unrecovered body
     CgsModule::IOBuffer::Construct();
 }
 
@@ -3508,8 +3536,10 @@ void BrnWorld::PropEntityIO::InputBuffer_PrePhysics::Construct()
 //  PhysicsModuleIO::OutputBuffer::Construct root cause. Leaving both = LNK2005.)
 
 // BOOT GATE: base bring-up only (see the block note above).
+// X360 CreateIOBuffer<InputBuffer_PostScene> @0x827B8C20 (Alloc 736).
 void BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostScene::Construct()
 {
+    memset(this, 0, sizeof(*this));   // FLAG PC: stands in for the unrecovered body
     CgsModule::IOBuffer::Construct();
 }
 
@@ -3537,8 +3567,10 @@ void BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostScene::Construct()
 //  frame, which fired a "Not Constructed" assert per frame.)
 
 // BOOT GATE: base bring-up only (see the block note above).
+// X360 CreateIOBuffer<OutputBuffer_PostScene> @0x827B6AC8 (Alloc 36592).
 void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene::Construct()
 {
+    memset(this, 0, sizeof(*this));   // FLAG PC: stands in for the unrecovered body
     CgsModule::IOBuffer::Construct();
 }
 

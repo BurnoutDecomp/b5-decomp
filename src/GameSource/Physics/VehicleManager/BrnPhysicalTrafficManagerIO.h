@@ -40,6 +40,26 @@ namespace Vehicle
         typedef CgsPhysics::PhysicsSimulationIO::InAddJoint    InAddJoint;    // :42
         typedef CgsPhysics::PhysicsSimulationIO::InRemoveJoint InRemoveJoint; // :43
 
+        // Construct -- X360-attested by the CreateIOBuffer<ArticulatedJointCreateBuffer>
+        // instantiation @0x82614AE8, which inlines it whole after `Alloc(this, 2032, name)`:
+        //     li r10,1 ; stb r10,0(r11)      -- IOBuffer::Construct
+        //     std r28,0x7E0(r11)             -- mCreatedJointBitArray = 0   (BitArray::Construct)
+        //     std r28,0x7E8(r11)             -- mRemovedJointBitArray = 0   (BitArray::Construct)
+        //     std r28,0x7E0(r11)             -- ...and again               (BitArray::Clear)
+        //     std r28,0x7E8(r11)             -- ...and again               (BitArray::Clear)
+        // (r28 == 0; the doubled stores are the console's own Construct-then-Clear pair, the
+        // same idiom RequestInterface<N>::Construct uses. Offsets 0x7E0/0x7E8 are exactly the
+        // two BitArray<10> members below.) Both request arrays are left uninitialised, as on
+        // the console -- only the two masks decide which slots are live.
+        // NOTE: nothing cleared these masks before, because the old PC CreateIOBuffer<T>
+        // value-initialised the whole 2 KB buffer; without this body they would be garbage.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mCreatedJointBitArray.UnSetAll();
+            mRemovedJointBitArray.UnSetAll();
+        }
+
         // @0x825C23B0: stash an add-joint request in slot liJointIndex and flag the slot for
         // creation (unconditional SetBit).
         void FlagJointToBeCreated(s32 liJointIndex, const InAddJoint& lrAddJointEvent);

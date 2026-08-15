@@ -124,10 +124,8 @@ bool LoadingScriptedState::LoadWorldModule(BrnResource::GameDataIO::InputBuffer*
 
     BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = 0;
     lpUpdateOutputStack->CreateIOBuffer(&lpWorldOutput, "World");
-    // The X360 CreateIOBuffer<UpdateOutputBuffer> instantiation runs the buffer's
-    // Construct after the stack alloc; the generic PC template placement-news only, so
-    // run the real Construct (0x827CA0F8) here (same pattern as the GUI input buffer).
-    lpWorldOutput->Construct();
+    // (CreateIOBuffer<T> runs UpdateOutputBuffer::Construct @0x827CA0F8 itself, as the X360
+    //  instantiation @0x823AD100 does.)
 
     // X360 passes the output buffer's allocator list (the module's mutable registry);
     // the PC read accessor is const-qualified, hence the cast back to the X360 shape.
@@ -189,8 +187,6 @@ bool LoadingScriptedState::LoadWorldCollision(BrnResource::GameDataIO::InputBuff
 
     BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = 0;
     lpUpdateOutputStack->CreateIOBuffer(&lpWorldOutput, "World");
-    // PC Construct restoration -- see LoadWorldModule.
-    lpWorldOutput->Construct();
 
     const bool lbPrepared = lpGameModule->GetWorldModule().PrepareWorldCollision(
         lpUpdateInputStack, lpUpdateOutputStack, lpWorldOutput);
@@ -343,9 +339,6 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
 
     BrnWorldIO::UpdateInputBuffer*  lpWorldInput  = 0;
     lpUpdateInputStack->CreateIOBuffer(&lpWorldInput, "World");
-    // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc; the
-    // generic PC template placement-news only (same restoration as LoadWorldModule).
-    lpWorldInput->Construct();
 
     // ⭐⭐ THE WORLD'S FRAME TIMER, STAGED -- 2026-08-10 (root-cause wave).
     // The console stages it here (X360 DoUpdate_World @0x823E8BD0:
@@ -415,7 +408,6 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
     if (lbOwnsOutputBuffer)
     {
         lpUpdateOutputStack->CreateIOBuffer(&lpWorldOutput, "World");
-        lpWorldOutput->Construct();
     }
 
     // ⭐⭐ THE GAME-STATE -> WORLD BRIDGE (X360 BridgeGameStateToWorld @0x823E1890), staged into
@@ -513,11 +505,9 @@ bool LoadingScriptedState::LoadDirectorModule(
 
     BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutput = 0;
     lpUpdateOutputStack->CreateIOBuffer(&lpDirectorOutput, "Director");
-    // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc; the
-    // generic PC template placement-news only (same restoration as LoadWorldModule).
-    // OutputBuffer::Construct also brings up the embedded RequestInterface<512> queue, which
-    // WorldMap::LoadData stages onto.
-    lpDirectorOutput->Construct();
+    // (CreateIOBuffer<T> runs DirectorIO::OutputBuffer::Construct itself -- X360 instantiation
+    //  @0x823ACBF8. That Construct also brings up the embedded RequestInterface<512> queue,
+    //  which WorldMap::LoadData stages onto.)
 
     // The X360 reads the allocator list out of the GameData OUTPUT buffer (read-locked by the
     // caller) and passes it as DirectorModule::Prepare's second argument, which

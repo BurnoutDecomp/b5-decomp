@@ -51,8 +51,9 @@ namespace PhysicsModuleIO
     }
 
     // ⛔⛔ 2026-08-10 (root-cause wave) -- THIS BUFFER HAD NO Construct AT ALL.
-    // The X360 CreateIOBuffer<T> stack template runs T::Construct after the alloc; the PC
-    // template placement-news only. So every embedded queue in the physics module's OUTPUT
+    // The X360 CreateIOBuffer<T> stack template runs T::Construct after the alloc, and so does
+    // the PC one: CreateIOBuffer<T> runs T::Construct (2026-08-15). While the PC template only
+    // placement-new'd, every embedded queue in the physics module's OUTPUT
     // buffer stayed un-Constructed, and the moment PhysicsModule::Update actually ran,
     // BridgeVehicleManagerToOutput's `GetVehicleOutputRequestInterface()->Append(...)` hit an
     // unconstructed VariableEventQueue<13440,16> (mRequestFineLineQueue) and fired

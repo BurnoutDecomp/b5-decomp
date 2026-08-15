@@ -111,7 +111,8 @@ namespace PhysicsModuleIO
 
         // ⛔ ADDED 2026-08-10 (root-cause wave). This buffer had NO Construct at all, while the
         // console emits one (X360 0x825ABB10, 64 instructions) that the CreateIOBuffer<T> stack
-        // template runs after the alloc. The PC template placement-news only, so every embedded
+        // template runs after the alloc. (Historic: the PC template used to placement-new only;
+        // CreateIOBuffer<T> runs T::Construct as of 2026-08-15.) Every embedded
         // queue in here was left un-Constructed -- and PhysicsModule::Update's
         // BridgeVehicleManagerToOutput drains the vehicle manager's requests INTO this buffer's
         // mVehicleOutputRequestInterface, whose VariableEventQueue<13440,16> then fired
@@ -323,8 +324,9 @@ namespace PhysicsModuleIO
         void SetTimerInterface(const TimerStatusInterfaceStorage* lpTimer);                 // 0x8279F128 :296
         void SetSolverMaxIterations(const u32* lpValue);                                    // 0x8279F240 :299
 
-        // The X360 CreateIOBuffer<T> stack template runs T::Construct after the alloc; the PC
-        // template placement-news only, so WorldModule::Update calls this explicitly. Until now
+        // CreateIOBuffer<T> runs T::Construct (2026-08-15) -- on both targets now; the PC
+        // template used to placement-new only, which is why WorldModule::Update used to call
+        // this explicitly. Until it was bodied
         // it resolved to the base IOBuffer::Construct, which raises the status byte and nothing
         // else -- so the embedded game-action queue was never Constructed and every
         // BridgeActionsToPhysicsModule AddEvent fired "Not Constructed"

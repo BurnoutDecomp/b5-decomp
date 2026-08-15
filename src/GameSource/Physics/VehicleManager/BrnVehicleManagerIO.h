@@ -55,7 +55,8 @@ namespace Vehicle
         // DWARF :52. The X360 CreateIOBuffer<VehicleManagerOutputBuffer>
         // @0x8259DAF0 runs this after the stack alloc (PS3 keeps it out of line:
         // VehicleManagerOutputBuffer::Construct): raise the buffer status, then
-        // construct the six request queues.
+        // construct the six request queues. The PC template does the same --
+        // CreateIOBuffer<T> runs T::Construct (2026-08-15).
         void Construct();
 
         // DWARF :56 (PS3 out-of-line sibling of Construct).

@@ -768,8 +768,6 @@ namespace BrnGame
         const bool lbCreated = lpUpdateInputBufferStack->CreateIOBuffer(&lpWorldInput, "World");
         CGS_ASSERT(lbCreated, "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");  // CgsModuleIOHelper.h:52
         (void)lbCreated;
-        // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc.
-        lpWorldInput->Construct();
 
         // Two of the six X360 input-staging bridges are committed now: the CONTROLLER leg and
         // (2026-08-01) the GAME-STATE leg.
@@ -1070,8 +1068,8 @@ namespace BrnGame
         mpUpdateInputBufferStack->CreateIOBuffer(&lpDirectorInput, "Director");
         if (lpDirectorInput == 0)
             return;
-        // [FLAG PC bring-up] Zero the staged region before Construct. The IO stack hands back
-        // RE-USED memory and the generic PC CreateIOBuffer<T> only placement-news, so every
+        // [FLAG PC bring-up] Zero the staged region. The IO stack hands back RE-USED memory
+        // and CreateIOBuffer<T> does not zero it (neither does the console), so every
         // published member (mePlayerCarIndex, mUsedRaceCars, the per-car VehicleInfo array, the
         // control block) would otherwise hold the PREVIOUS tenant's bytes. That is not a
         // cosmetic risk here: MainDirector::GetLivePlayerCarIndex reads mePlayerCarIndex and
@@ -1083,11 +1081,14 @@ namespace BrnGame
         // race-car entity module's global output interface + the world contact/timer publishes),
         // at which point every one of these fields is written before it is read.
         memset(lpDirectorInput, 0, sizeof(*lpDirectorInput));
-        // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc;
-        // the generic PC template placement-news only (same restoration as LoadWorldModule).
-        // ⚠️ This must be the buffer's OWN Construct @0x822393D0, not just the IOBuffer base:
-        // the console seeds mePlayerCarIndex and miCameraType to -1 there, and the zero-fill
-        // above would otherwise publish camera-type 0 as a live request every single frame.
+        // RE-Construct after the bring-up memset; the template already Constructed once.
+        // CreateIOBuffer<T> above runs T::Construct itself now (2026-08-15), so this is the
+        // SECOND Construct of this buffer -- and it is deliberate, because the memset in between
+        // wiped what the first one wrote. It re-seeds the -1 sentinels: the buffer's OWN
+        // Construct @0x822393D0 (not just the IOBuffer base) sets mePlayerCarIndex and
+        // miCameraType to -1, and without the re-run the zero-fill would publish camera-type 0
+        // as a live request every single frame. Delete this line together with the memset above,
+        // not before it.
         lpDirectorInput->Construct();
 
         // ⭐ THE FRAME TIMESTEP. The console's module scheduler runs BridgeTimers @0x823BD150
@@ -1254,8 +1255,6 @@ namespace BrnGame
             mpUpdateInputBufferStack->CreateIOBuffer(&lpSceneQueryInput, "DirectorSceneQuery");
             if (lpSceneQueryOutput != 0 && lpSceneQueryInput != 0)
             {
-                lpSceneQueryOutput->CgsModule::IOBuffer::Construct();
-                lpSceneQueryInput->CgsModule::IOBuffer::Construct();
 
                 // lbIsReplaying == false: the PC has no replay playback path (the module's own
                 // replay legs are documented gates).
@@ -2530,23 +2529,16 @@ namespace BrnGame
     // the update input/output buffer stacks.
     void BrnGameModule::CreateStaticIOBuffers()
     {
+        // CreateIOBuffer<T> runs each buffer's own Construct right after the stack alloc, the
+        // same as the X360 instantiations (e.g. CgsGuiModuleIO::InputBuffer @0x823AC898 ->
+        // InputBuffer::Construct @0x82857378, DirectorIO::OutputBuffer @0x823ACBF8). The hand
+        // Construct calls that used to follow each line here are gone -- they would now run
+        // twice, and DirectorIO::OutputBuffer::Construct re-clears a freshly built buffer.
         mpUpdateInputBufferStack->CreateIOBuffer<CgsGui::CgsGuiModuleIO::InputBuffer>(&mpGuiInputBuffer, "Gui");
-        // The X360 CreateIOBuffer<InputBuffer> instantiation (@0x823AC898) runs the buffer's
-        // Construct after the stack alloc; the generic PC template placement-news only, so
-        // run the real Construct (@0x82857378) here.
-        mpGuiInputBuffer->Construct();
         mpUpdateInputBufferStack->CreateIOBuffer<CgsGui::ViewIO::InputBuffer>(&mpGuiViewInputBuffer, "GuiView");
         mpUpdateOutputBufferStack->CreateIOBuffer<CgsGui::CgsGuiModuleIO::OutputBuffer>(&mpGuiOutputBuffer, "Gui");
         mpUpdateOutputBufferStack->CreateIOBuffer<CgsGui::ModelIO::OutputBuffer>(&mpGuiModelOutputBuffer, "GuiModel");
         mpUpdateOutputBufferStack->CreateIOBuffer<BrnDirector::DirectorIO::OutputBuffer>(&mpDirectorOutputBuffer, "Director");
-        // The X360 CreateIOBuffer<T> instantiation runs the buffer's Construct after the stack
-        // alloc; the generic PC template placement-news only. This was harmless while
-        // DirectorIO::OutputBuffer was an EMPTY ODR stub with no lock state; now that the real
-        // 1828-byte buffer is here, every DirectorModule pass locks it and the lock asserts
-        // eStatusConstructed (CgsIOBuffer.cpp:27/36). OutputBuffer::Construct raises the base
-        // status AND Constructs the embedded RequestInterface<512> queue.
-        if (mpDirectorOutputBuffer != 0)
-            mpDirectorOutputBuffer->Construct();
 
         // ⭐ THIS SUB-STEP'S WORLD UPDATE OUTPUT BUFFER (see the header note on
         // GetWorldUpdateOutputBuffer). The console's DoUpdate owns it for the whole sub-step
@@ -2555,10 +2547,6 @@ namespace BrnGame
         // INTO it and DoUpdate_Director's BridgeWorldToDirector reads it back out.
         mpUpdateOutputBufferStack->CreateIOBuffer<BrnWorldIO::UpdateOutputBuffer>(
             &mpWorldUpdateOutputBuffer, "World");
-        // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc;
-        // the generic PC template placement-news only.
-        if (mpWorldUpdateOutputBuffer != 0)
-            mpWorldUpdateOutputBuffer->Construct();
     }
 
     // @ BrnGameModule.cpp:2515 - free this sub-step's static GUI/director IO buffers (reverse

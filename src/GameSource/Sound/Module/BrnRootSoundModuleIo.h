@@ -6,6 +6,8 @@
 #include "GameSource/BurnoutConstants.h"                 // ::EActiveRaceCarIndex (mePlayerActiveRaceCarIndex)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer (base; lock state machine)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h" // CgsModule::EventQueue<T,N> (AudioCarLoadedDataQueue)
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::VariableEventQueue<N,16> (RootOutputBuffer::Construct)
+#include <cstring>                                      // memset (RootOutputBuffer::Construct trailing-state clear)
 #include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h" // AudioEffectsMessageQueue (adopted real type)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // AudioCarDataLoadedEvent (queue element)
 
@@ -390,8 +392,41 @@ namespace Io
         typedef AttribSysRequestInterface<2048> AttribSysRequestInterface;     // BrnSoundLogicSharedIO.h:47
         typedef RequestInterface<4096>          ReplayRequestInterface;        // BrnRootSoundModuleIo.h:56 (RequestInterface, default cap)
 
-        // BrnRootSoundModuleIo.h:284 (DWARF; own TU, declared-only here).
-        void Construct();
+        // BrnRootSoundModuleIo.h:284 (DWARF). X360 body @0x826AF448, reached from the
+        // CreateIOBuffer<RootOutputBuffer> instantiation @0x823AD458 (Alloc size 6224):
+        //     *a1 = 1;                                              -- IOBuffer::Construct
+        //     VariableEventQueue<4096,16>::Construct(a1 + 4);    Clear(a1 + 4);
+        //     VariableEventQueue<2048,16>::Construct(a1 + 4116); Clear(a1 + 4116);
+        //     for (11 words at a1 + 6180) *w++ = 0;
+        // 4 == mResourceRequestInterface, 4116 == 0x1014 == mAttribSysRequestInterface,
+        // 6180 == 0x1824 == mReplayRequestInterface. The two request interfaces derive from
+        // those queues, so the Construct+Clear pair is the queue's own -- reached through the
+        // members' named storage (same discipline as the accessors below, which the opaque
+        // request-interface storage forces).
+        // FLAG PC: homed inline here rather than in BrnRootSoundModuleIO.cpp (the console emits
+        // it out-of-line) because that TU is not on the exe build list yet and the template now
+        // REFERENCES this symbol from every CreateIOBuffer<RootOutputBuffer> site.
+        // FLAG(medium), pre-existing and unchanged by this edit: the console object is 6224
+        // bytes and the 11-word (44-byte) run at +0x1824 is all the trailing state it has, so
+        // mReplayRequestInterfaceStorage's provisional 0x1010 width over-states sizeof by 4068
+        // bytes. Only the attested 44 bytes are cleared here; the width is left alone (a layout
+        // change is out of this change's scope -- see the report).
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+
+            CgsModule::VariableEventQueue<4096, 16>* lpResourceQueue =
+                reinterpret_cast<CgsModule::VariableEventQueue<4096, 16>*>(mResourceRequestInterfaceStorage);
+            lpResourceQueue->Construct();
+            lpResourceQueue->Clear();
+
+            CgsModule::VariableEventQueue<2048, 16>* lpAttribSysQueue =
+                reinterpret_cast<CgsModule::VariableEventQueue<2048, 16>*>(mAttribSysRequestInterfaceStorage);
+            lpAttribSysQueue->Construct();
+            lpAttribSysQueue->Clear();
+
+            memset(mReplayRequestInterfaceStorage, 0, KI_ReplayStateWordsCleared * sizeof(u32));
+        }
 
         // X360 ::G 0x823B8A68 (read-lock, DWARF :289) / ::GetReso 0x826951D0 (write-lock, DWARF :292)
         // -> &mResourceRequestInterface (+0x04).
@@ -416,6 +451,11 @@ namespace Io
         static const int KI_ResourceInterfaceBytes  = 0x1010; // +0x0004 .. +0x1014 (RequestInterface<4096>)
         static const int KI_AttribSysInterfaceBytes = 0x0810; // +0x1014 .. +0x1824 (AttribSysRequestInterface<2048>)
         static const int KI_ReplayInterfaceBytes    = 0x1010; // +0x1824 ..        (width provisional; start attested)
+
+        // X360 @0x826AF448 zeroes exactly 11 words (44 bytes) from +0x1824 -- `v5 = 11; do
+        // *v4++ = 0; while (--v5);`. That run, not KI_ReplayInterfaceBytes, is the console's
+        // whole trailing-state clear (6224 - 0x1824 == 44).
+        static const int KI_ReplayStateWordsCleared = 11;
 
         // IOBuffer base is a single status byte; u8 storage is 1-byte aligned, so the first
         // member sits at +0x04 with an explicit 3-byte gap.

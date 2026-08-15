@@ -50,6 +50,19 @@ namespace CgsMemory
         mpResultBuffer           = lpResultBuffer;
         miMaxResults             = 0;
         mResultIterator.mpParent = this;
+        // ⭐ 2026-08-15: the console's `*(this+56) = 0` @0x8286A3B0 is THIS store -- +0x38 is
+        // mResultIterator.miResultIndex (its mpParent sits right behind it at +0x3C, which the
+        // same function sets to `this`). It was missing here, and it only ever worked because
+        // the producer is carved out of an IO-stack arena that the OLD PC CreateIOBuffer<T>
+        // value-initialised (zero-filled); once that PC-only zeroing went away the cursor
+        // started at whatever the arena last held, GetCurrent() clamped it past
+        // miNumAddedCommands and returned null, and the traction-line harvest read through it
+        // (AV in VehicleManager::ReadRaceCarTractionLineTestResults, first in-world frame).
+        // ⚠ FLAG for a layout pass: the console also stores its 2nd argument at +0x28 and
+        // nothing at +0x20, whereas this header puts miMaxCommands at +0x20 and miMaxResults
+        // at +0x28 (DWARF h:154/h:156 order). Every caller passes the same value for both
+        // counts, so nothing observable depends on it today; not changed here.
+        mResultIterator.miResultIndex = 0;
         mbIsStreaming            = false;
         miNumAddedCommands       = 0;
     }

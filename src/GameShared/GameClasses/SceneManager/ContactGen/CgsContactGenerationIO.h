@@ -6,8 +6,13 @@
 // ProcessFrustumTestJobResults).
 //
 // These buffers are pushed/popped on a CgsModule::IOBufferStack via the
-// CreateIOBuffer<T>/DestroyIOBuffer<T> member templates, which placement-construct
-// and sizeof() the payload -- so the template needs a COMPLETE type. Each payload's
+// CreateIOBuffer<T>/DestroyIOBuffer<T> member templates, which placement-construct and
+// sizeof() the payload -- and, as of 2026-08-15, CreateIOBuffer<T> runs T::Construct and
+// DestroyIOBuffer<T> runs T::Destruct, so the template needs a COMPLETE type. None of the
+// stand-ins below declares either, so both resolve to the CgsModule::IOBuffer base -- which
+// for QueryAccumulator matches the console's bare-Alloc instantiation @0x828AE7F0 except for
+// the base's status byte, a store the console never makes (see the base-only-Construct policy
+// in CgsIOBufferStack.h). Each payload's
 // full layout has a real home in its own module-IO TU (SpatialPartitionManagerIO /
 // OverlapCullingModuleIO / OverlapGenerationModuleIO / ContactGenerator); those TUs
 // are not reconstructed yet, and pulling their full event-queue trees in here would

@@ -64,6 +64,13 @@ namespace BrnWorldIO
     // DWARF BrnWorldModuleIO.h:422 -- struct DispatchInputBuffer : public IOBuffer.
     struct DispatchInputBuffer : public CgsModule::IOBuffer
     {
+        // ⭐ ADDED 2026-08-15 (IO-buffer zero-fill removal audit). X360 0x827C4988 -- this
+        // Construct was NEVER written, so `CreateIOBuffer<DispatchInputBuffer>` ran only the
+        // inherited CgsModule::IOBuffer::Construct and every pointer/switch below arrived as
+        // whatever the previous IO-stack tenant left there (it only ever "worked" because the
+        // old PC CreateIOBuffer<T> value-initialised the whole buffer). Body in the .cpp.
+        void Construct();   // X360 0x827C4988
+
         // --- accessors bodied in BrnWorldModuleIO_DispatchInputBuffer.cpp ---------------
         // Getters read-lock (status bit 4, "Not locked for reading\n"); setters write-lock
         // (status bit 3, "Not locked for writing\n") -- reproduced exactly as the X360 asm tests

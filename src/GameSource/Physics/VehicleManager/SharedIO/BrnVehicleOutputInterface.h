@@ -371,7 +371,8 @@ namespace Vehicle
         // by PhysicsModule::Update @0x825B0640, which inlines BOTH bodies:
         //   * Construct: CreateIOBuffer<VehicleManagerOutputBuffer> @0x8259DAF0 constructs
         //     the buffer's embedded interface (PS3 keeps VehicleManagerOutputBuffer::
-        //     Construct out of line, which lands here).
+        //     Construct out of line, which lands here). The PC stack template reaches this the
+        //     same way -- CreateIOBuffer<T> runs T::Construct (2026-08-15).
         //   * Append: Update's tail drains the vehicle-manager request buffer into the
         //     module output buffer's request interface with exactly five queue appends
         //     (0x825B2480..0x825B24C0): InAddRigidBody<50>::Append @0x825A3898 (+0),

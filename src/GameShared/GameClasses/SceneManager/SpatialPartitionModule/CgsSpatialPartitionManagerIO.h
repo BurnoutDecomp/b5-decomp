@@ -137,16 +137,34 @@ namespace SpatialPartitionIO
         // typedef is kept as an alias so existing spellings still resolve.
         typedef CgsSceneManager::CoarseQueryResultBuffer<16384> CoarseQueryResultBufferDefault;
 
-        // Lifecycle (DWARF-attested). The X360 CreateIOBuffer<T> stack template runs
-        // T::Construct after the alloc: raise the IOBuffer status base, bring up the
-        // query-result ring and clear the coarse-result buffer's counters.
+        // Lifecycle (DWARF-attested). CreateIOBuffer<T> runs T::Construct (2026-08-15) -- on the
+        // PC as well as the console -- so this body is what the stack template invokes: raise the
+        // IOBuffer status base, bring up the query-result ring and clear the coarse-result
+        // buffer's counters.
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
             mQueryResultQueue.Construct();
             mCoarseResultBuffer.Construct();
         }
-        void Destruct();
+        // BODIED 2026-08-15 (IO-buffer zero-fill removal audit): CgsIOBufferStack.h's
+        // DestroyIOBuffer<T> is the console's mirror now and calls T::Destruct, so this could no
+        // longer be declaration-only (CgsSceneManagerModule.cpp:1174 destroys this buffer).
+        // X360 0x828BB088, four acts in this order:
+        //   six zero stores at +53396/+53400/+53404/+53408/+53412/+53416 -- which are exactly
+        //     CoarseQueryResultBuffer<16384>::Clear()'s six member stores at the buffer's own
+        //     +32896..+32916 (mCoarseResultBuffer sits at +20500), i.e. an INLINED
+        //     mCoarseResultBuffer.Clear()
+        //   VariableEventQueue<20480,16>::Clear(this+4)     -> mQueryResultQueue
+        //   VariableEventQueue<20480,16>::Destruct(this+4)  -> mQueryResultQueue
+        //   CgsModule::IOBuffer::Destruct(this)
+        void Destruct()
+        {
+            mCoarseResultBuffer.Clear();
+            mQueryResultQueue.Clear();
+            mQueryResultQueue.Destruct();
+            CgsModule::IOBuffer::Destruct();
+        }
 
         // Accessors (DWARF :218/:219/:221/:222). GetCoarseResultBuffer() (non-const, X360
         // 0x828AFE40) asserts the buffer is write-locked and is bodied in this TU's .cpp; the

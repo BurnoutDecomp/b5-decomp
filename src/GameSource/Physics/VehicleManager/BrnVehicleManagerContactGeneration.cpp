@@ -131,7 +131,8 @@ namespace Vehicle
         // ---- (2) the two IO buffers + the generator arena + the cleared state -------------------
         lpIOBufferStack->CreateIOBuffer(&mpContactGenList, "Contact Gen List");
         CGS_ASSERT(mpContactGenList != nullptr, "mpContactGenList");                            // :79
-        mpContactGenList->Construct();          // the console CreateIOBuffer runs T::Construct
+        // (the CreateIOBuffer<T> template itself runs T::Construct, exactly as the console does
+        //  -- @0x82614CB0; the former hand call here would have run it twice.)
 
         miFirstPartContactGenEntry = 0;                                                         // +172516
 

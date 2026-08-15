@@ -83,6 +83,31 @@ void UpdateOutputBuffer::Construct()
     mbWorldWantsDebugControllerFocus = false;               // X360 +217668
 }
 
+// @ 0x827C4A08 -- tear the buffer down. BODIED 2026-08-15 (IO-buffer zero-fill removal
+// audit): CgsIOBufferStack.h's DestroyIOBuffer<T> is the console's mirror now and calls
+// T::Destruct, so this declaration-only ledger function had to become a real body or the
+// link would break at every DestroyIOBuffer<UpdateOutputBuffer> site (BrnGameModule.cpp
+// :2514/:2553, BrnGameMainFlowStates.cpp, the console instantiation @0x823AD1D8 which
+// frees 0x35250 bytes). The console body is four acts, in this order:
+//   VariableEventQueue<1536,16>::Destruct(this+216116)   == mGameEventQueue
+//   *(this+169104) = 0                                   -- inside mSoundWorldLoadInterface
+//   *(this+216112) = 0                                   == mTriangleCacheInterface's manager ptr
+//   CgsModule::IOBuffer::Destruct(this)                  -- asserts !IsBufferLocked(), status = 0
+void UpdateOutputBuffer::Destruct()
+{
+    mGameEventQueue.Destruct();
+
+    // [FLAG] the console's *(this+169104) = 0 is NOT emitted: +169104 is eight bytes into
+    // mSoundWorldLoadInterface (+169096), i.e. a word of that interface's own queue header,
+    // and on the host that offset moves with the widened mpEvents. It belongs to
+    // SoundWorldLoadInterface's own teardown; poking it by console offset here would be the
+    // raw-offset hack the project forbids. Restore it as `mSoundWorldLoadInterface.<member> = 0`
+    // when that interface's Destruct lands.
+    mTriangleCacheInterface.mpTriangleCacheManager = 0;
+
+    CgsModule::IOBuffer::Destruct();
+}
+
 // ---- player race-car indices -------------------------------------------------
 
 // X360 0x823B6E58 (:514 R) -- read-locked player global race-car index. The X360 body

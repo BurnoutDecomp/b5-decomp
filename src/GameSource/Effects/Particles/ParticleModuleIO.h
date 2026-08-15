@@ -30,9 +30,10 @@
 // right sizeof / placement-new.
 //
 // MINIMAL SLICE: only the data layout + the typedefs the IOHelper instantiation needs
-// are modelled. The Construct/Destruct/GetResourceRequestInterface members
-// (ParticleModuleIO.h:117/121/126/129) are their own ParticleModuleIO.cpp TU and are
-// left declared-only — they are not bodied by this BrnParticle facade TU. The sibling
+// are modelled. Construct (ParticleModuleIO.h:117) IS bodied here as of 2026-08-15 --
+// CreateIOBuffer<T> now calls it at every instantiation site, so it can no longer be left
+// declared-only (see the note on the member). Destruct/GetResourceRequestInterface
+// (:121/:126/:129) are still their own ParticleModuleIO.cpp TU, and the sibling
 // DispatchInputBuffer is likewise deferred. GROW this header additively when the
 // ParticleModuleIO TU lands; do NOT fork these types.
 // ============================================================================
@@ -46,9 +47,30 @@ namespace ParticleIO
         typedef BrnResource::GameDataIO::RequestInterface<4096> EffectsModuleResourceQueue;
         typedef EffectsModuleResourceQueue                      ResourceRequestInterface;
 
-        // ParticleModuleIO.h:117 / :121 — placement-new'd by CreateIOBuffer<>; own TU.
-        void Construct();
-        void Destruct();
+        // ParticleModuleIO.h:117. X360-attested by the CreateIOBuffer<PrepareOutputBuffer>
+        // instantiation @0x8228E4F0, which inlines it whole after `Alloc(this, 4116, name)`:
+        //     *v8 = 1;                                       -- IOBuffer::Construct
+        //     VariableEventQueue<4096,16>::Construct(v8 + 4);
+        //     VariableEventQueue<4096,16>::Clear(v8 + 4);
+        // +4 is mResourceRequestInterface, and Construct-then-Clear on its embedded queue IS
+        // RequestInterface<N>::Construct (BrnGameDataRequestQueue.h) -- so this is spelled by
+        // name rather than by offset.
+        // FLAG PC: homed inline here instead of the (still unwritten) ParticleModuleIO.cpp,
+        // because CreateIOBuffer<T> now REFERENCES T::Construct at every instantiation site.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mResourceRequestInterface.Construct();
+        }
+
+        // ParticleModuleIO.h:121. BODIED 2026-08-15 (IO-buffer zero-fill removal audit):
+        // CgsIOBufferStack.h's DestroyIOBuffer<T> is the console's mirror now and calls
+        // T::Destruct, so this could no longer be declaration-only. The console instantiation
+        // DestroyIOBuffer<PrepareOutputBuffer> @0x8228E5D8 (which frees 0x1014 bytes) shows the
+        // call resolving straight to `CgsModule::IOBuffer::Destruct` -- this buffer's Destruct
+        // ICF-folded into the base. Base-only, no member teardown (the console does NOT tear the
+        // embedded request ring down here).
+        void Destruct() { CgsModule::IOBuffer::Destruct(); }
 
         // ParticleModuleIO.h:126 / :129 — accessors; own TU.
         ResourceRequestInterface*       GetResourceRequestInterface();

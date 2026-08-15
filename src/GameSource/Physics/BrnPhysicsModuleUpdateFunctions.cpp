@@ -274,8 +274,8 @@ namespace BrnPhysics
         mVehicleManager.CheckState();
 
         // ---- the five per-frame IO buffers ---------------------------------------------------
-        // The X360 stack templates run each type's Construct after the alloc; the PC template
-        // placement-news only, so Construct is explicit here (the WorldModule::Update precedent).
+        // CreateIOBuffer<T> runs each type's Construct after the alloc, exactly as the X360
+        // instantiations do (addresses per line below) -- no hand Construct call here.
         CgsPhysics::PhysicsSimulationIO::InputBuffer*  lpSimInputBuffer  = 0;
         CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutputBuffer = 0;
         Vehicle::VehicleManagerOutputBuffer*           lpVehManagerBuffer = 0;
@@ -283,15 +283,10 @@ namespace BrnPhysics
         Props::PropRaceCarContactBuffer*               lpPropRaceCarContacts = 0;
 
         lpInputBufferStack->CreateIOBuffer(&lpSimInputBuffer, "Simulation");            // @0x8259D940
-        lpSimInputBuffer->Construct();
         lpOutputBufferStack->CreateIOBuffer(&lpSimOutputBuffer, "Simulation");          // @0x8259DCA0
-        lpSimOutputBuffer->Construct();
         lpOutputBufferStack->CreateIOBuffer(&lpVehManagerBuffer, "VehManager");         // @0x8259DAF0
-        lpVehManagerBuffer->Construct();
         lpOutputBufferStack->CreateIOBuffer(&lpPotentialContacts, "PotentialContacts"); // @0x825AC3C8
-        lpPotentialContacts->Construct();
         lpOutputBufferStack->CreateIOBuffer(&lpPropRaceCarContacts, "PropRaceCarContacts"); // @0x825AC4A0
-        lpPropRaceCarContacts->Construct();
 
         // ⭐ 2026-08-10 (root-cause wave): a const VIEW of the sim output buffer, nothing more.
         // The post-step read-back legs run with that buffer READ-locked, and the console reads
@@ -340,7 +335,6 @@ namespace BrnPhysics
             // "Vehicle prim alloc": a 1 MB linear arena on the input stack.
             CgsMemory::IOStackLinearMalloc<1048576>* lpVehiclePrimAlloc = 0;
             lpInputBufferStack->CreateIOBuffer(&lpVehiclePrimAlloc, "Vehicle prim alloc"); // @0x825A36E0
-            lpVehiclePrimAlloc->Construct();
             lpVehiclePrimAlloc->Prepare();                        // LinearMalloc::Create(+32, 1 MB)
             lpVehiclePrimAlloc->GetMalloc()->SetAlignment(16);
 
@@ -378,7 +372,6 @@ namespace BrnPhysics
                                                "Prop-world contact generator");          // @0x8259DD78
             CgsMemory::IOStackLinearMalloc<1048576>* lpPropLinearAlloc = 0;
             lpInputBufferStack->CreateIOBuffer(&lpPropLinearAlloc, "Prop linear alloc"); // @0x825A36E0
-            lpPropLinearAlloc->Construct();
             lpPropLinearAlloc->Prepare();
             lpPropLinearAlloc->GetMalloc()->SetAlignment(16);
 
@@ -641,7 +634,6 @@ namespace BrnPhysics
             // a bulk clear of every input queue for the post-step legs. Reproduced 1:1.
             lpInputBufferStack->DestroyIOBuffer(&lpSimInputBuffer);
             lpInputBufferStack->CreateIOBuffer(&lpSimInputBuffer, "Simulation");
-            lpSimInputBuffer->Construct();
 
             lpSimOutputBuffer->LockForRead();
             lpVehManagerBuffer->LockForWrite();
@@ -881,15 +873,12 @@ namespace BrnPhysics
         mVehicleManager.CheckState();
 
         // ---- the two per-frame IO buffers ----------------------------------------------------
-        // Same PC-vs-X360 note as Update above: the console stack template runs T::Construct after
-        // the alloc, the host template placement-news only, so Construct is explicit here.
+        // Same note as Update above: CreateIOBuffer<T> runs T::Construct after the alloc.
         CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInputBuffer   = 0;
         Vehicle::VehicleManagerOutputBuffer*          lpVehManagerBuffer = 0;
 
         lpInputBufferStack->CreateIOBuffer(&lpSimInputBuffer, "Simulation");             // @0x8259D940
-        lpSimInputBuffer->Construct();
         lpOutputBufferStack->CreateIOBuffer(&lpVehManagerBuffer, "VehManager");          // @0x8259DAF0
-        lpVehManagerBuffer->Construct();
 
         lpPhysicsModuleOutputBuffer->LockForWrite();
         lpPhysicsModuleInputBuffer->LockForRead();
@@ -966,16 +955,19 @@ namespace BrnPhysics
         // ---- publish the player's active-race-car slot + deformation model slot -----------------
         // The console re-fetches the interface three times through the read-locked accessor rather
         // than caching it; each fetch is a lock tripwire, so the repetition is reproduced.
+        // The console (0x825ABC10) reads mePlayerActiveRaceCarIndex RAW here -- `if (idx >= 8)
+        // assert(h:967); if (idx != -1) active = mbIsPlayerCarActive;` -- which is exactly the
+        // inlined IsPlayerCarActive() (its assert IS the h:967 one). It does NOT go through the
+        // "hasn't been set" getter (h:980) for this test: -1 is an expected value at this site.
+        // ⚠ Fixed 2026-08-15: this used to call GetPlayerActiveRaceCarIndex() twice for the raw
+        // reads, whose own assert fires on -1 -- silent while the (PC-only) IO-buffer zero-fill
+        // made the index read 0, an assert storm (440/boot) the moment the interface was cleared
+        // to -1 as the console does and the producer bridge is still a PC gate.
         bool lbPlayerCarActive = false;
         {
             const PhysicsModuleIO::InputBuffer::RCEntityOutputInterfaceStorage* const lpRCEntity =
                 lpPhysicsModuleInputBuffer->GetRCEntityOutputInterface();                // @0x8259FA98
-            CGS_ASSERT(lpRCEntity->GetPlayerActiveRaceCarIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");    // BrnRaceCarEntityModuleOutputInterface.h:967
-            if (lpRCEntity->GetPlayerActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID)
-            {
-                lbPlayerCarActive = lpRCEntity->IsPlayerCarActive();
-            }
+            lbPlayerCarActive = lpRCEntity->IsPlayerCarActive();                         // h:967 inline
         }
 
         // ⚠ TWO DIFFERENT EntityId TYPES LIVE IN THIS TREE and this leg touches both: the packed

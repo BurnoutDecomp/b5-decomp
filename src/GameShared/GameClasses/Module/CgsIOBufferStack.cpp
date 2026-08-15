@@ -1,11 +1,27 @@
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint (overflow diagnostic)
+#include <stdlib.h>                                          // getenv (BRN_IOBUF_ZERO, host only)
 
 // CgsModule::IOBufferStack - a LIFO bump allocator over a caller-supplied block. Modules push
 // their per-frame IO buffers with CreateIOBuffer<T> and pop them (reverse order) with
 // DestroyIOBuffer<T>. Recovered from the DecFIGS DWARF (Module/CgsIOBufferStack.cpp).
 namespace CgsModule
 {
+    // FLAG PC (host-only diagnostic, no console counterpart). BRN_IOBUF_ZERO=1 restores the old
+    // PC-only zero-fill inside CreateIOBuffer<T> so a suspected "buffer relied on being zeroed"
+    // regression can be A/B'd in a single boot. The environment is read exactly ONCE (first
+    // create); every later create just reads the cached bool -- the whole point of the change is
+    // that the per-create path does no work proportional to sizeof(T).
+    bool IOBufferHostZeroFillEnabled()
+    {
+        static const bool sbEnabled = []() -> bool
+        {
+            const char* lpcValue = getenv("BRN_IOBUF_ZERO");
+            return lpcValue != 0 && lpcValue[0] == '1';
+        }();
+        return sbEnabled;
+    }
+
     void IOBufferStack::Construct(const char*)
     {
         mpData = 0;
