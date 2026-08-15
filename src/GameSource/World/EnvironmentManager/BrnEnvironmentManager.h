@@ -98,6 +98,15 @@ public:
         float     mafWeights[4];     // 0x10  their blend weights (sum to 1)
     };
 
+    // [FLAG PC bring-up] Stage ONE keyframe into the live blend frame (slot 0, the other three
+    // empty) -- the stand-in for Update @0x827D6060 -> SetupBlend / PerformBlend, which fill
+    // mBlendFrame from the streamed timeline at the current time of day. GenerateEffects (real)
+    // then takes its keyframe arm for slot 0 with lfWeight and the no-keyframe arm (weight 0)
+    // for slots 1..3. Called by WorldModule::GenerateDispatchListsBringUp with the embedded
+    // shipped noon keyframe (BrnEnvironmentKeyframeBringUp.cpp). DELETE-WHEN Prepare/Update
+    // stream the timeline for real.
+    void PCBringUpStageKeyframe(const Keyframe* lpKeyframe, f32 lfWeight);
+
     // Blend / pause state-machine transition driven by the environment tool. Returns
     // whether the manager is (or has just been put) in a blocking operation.
     // @ 0x827B0DA8
