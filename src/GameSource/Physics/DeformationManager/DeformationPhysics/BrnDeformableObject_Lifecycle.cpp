@@ -731,6 +731,28 @@ namespace Deformation
         // Rebuild the locator table + seed the per-frame bbox/cooldown state (asm tail).
         PrepareLocators();
 
+        // ⭐⭐ 2026-08-15 (walls leg 7) -- THE MISSING TAIL OF THE IMPULSE-PASSING CHAIN.
+        // Immediately after the PrepareLocators call (asm `bl ...PrepareLocators` @0x8263A578) the
+        // console binds the vehicle's own rigid body into impulse-passer slot 0:
+        //     0x8263A584  addi r8, r31, 0x1948      ; r8 = this + 0x1948
+        //     0x8263A598  stw  r8, 0x18E4(r31)      ; mapCollidableBodies[0] = r8
+        // 0x18E4 is mImpulsePasser's map base (== the inlined SetCollidableBodyMap's
+        // `stwx ptr, 4*(liIndex + 0x639)(owner)` with liIndex == 0), and this+0x1948 is the
+        // mVehicleBody subobject -- cross-witnessed by this+0x194C being the attached VehiclePhysics
+        // that VehicleRigidBody dereferences as `*(this + 4)` (@0x8260DFBC / @0x8260E078).
+        //
+        // ⛔ WHY IT MATTERS: this is the ONLY route by which an ordinary (non-crash) world contact
+        // reaches the momentum bank. DeformationSensor::ApplyLocalImpulse absorbs part of the impulse
+        // and forwards the REMAINDER through ImpulsePasser::PassOnImpulse; the chain terminates here,
+        // at slot 0, in VehicleRigidBody::RecievePassedOnImpulse @0x8260DFA0, which (not crashing +
+        // params->mbWorldContact) calls VehiclePhysics::ApplyWallContactImpulse @0x825FEA18 ->
+        // ExternalPhysicsBody::AddWorldSpace{,Angular}Impulse. Without this bind the chain ends in a
+        // null slot and the wall takes no momentum.
+        // ⚠️ Still INERT today: the chain HEAD (DeformationSensor::ApplyLocalImpulse) is a log-once
+        // gate, so PassOnImpulse is never called. Landed now because it is exact, and because the
+        // sensor slice must not land on top of an unbound slot 0.
+        mImpulsePasser.SetCollidableBodyMap(0, &mVehicleBody);
+
         // No-damage cooldown: an extreme initial-damage reset arms the cooldown band (asm: if (v43 &&
         // v155) { spec-bbox *= unk_82FB9B80; +26417 = bbox.x + 1 } else +26417 = 0). FLAG: unk_82FB9B80
         // is the unrecovered per-axis scale (FLAGGED-0); the +26417 latch path is preserved by shape.

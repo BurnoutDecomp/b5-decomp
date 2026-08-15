@@ -458,8 +458,20 @@ namespace Deformation
         }
 
         // (2) showtime pre-apply: when the vehicle's vtable+0x10 predicate is set (image-settled as
-        // IsPlayerVehicleInShowtime), pre-apply a showtime contact impulse (impulse-dir scaled by the
-        // relative motion). Call order + gate preserved; the scaled vectors are modelled per-lane.
+        // IsPlayerVehicleInShowtime), pre-apply a showtime contact impulse (the impulse DIRECTION
+        // scaled by the impulse MAGNITUDE). Call order + gate preserved; the scaled vectors are
+        // modelled per-lane.
+        //
+        // ⚠️ OPERAND CORRECTED 2026-08-15 (walls leg 7; surfaced by leg 6, re-verified here against
+        // the asm rather than taken on trust). The vector handed to ApplyShowtimeContactImpulse is
+        //     0x8260798C  vmulfp128 v1, v116, v120
+        // and the prologue's four argument copies pin both registers:
+        //     0x826078E4 vmr128 v117,v1 -> arg1 lvfTimeStep       0x826078EC vmr128 v119,v2 -> arg2 lRelativeMotion
+        //     0x826078F4 vmr128 v116,v3 -> arg3 lImpulseDir       0x826078D4 vmr128 v120,v4 -> arg4 lvfImpulseMagnitude
+        // so v116*v120 is lImpulseDir * lvfImpulseMagnitude -- a direction times a magnitude, i.e. an
+        // impulse. The old body computed vpu::Mult(lImpulseDir, lRelativeMotion) (v116 * v119), which
+        // is the wrong operand and dimensionally not an impulse at all; its banner said so in words
+        // too. Dead on the junkyard path (showtime never fires there) but wrong wherever it does.
         //
         // ⚠️ CALL CORRECTED 2026-08-14 (walls wave -- this TU's FIRST COMPILE; the old 3-arg call
         // predates the 2026-08-02 C09 signature correction and never built). The X360 site
@@ -476,7 +488,8 @@ namespace Deformation
         const bool lbIgnoringPassedOn = (lpVehicle != nullptr) && lpVehicle->IsPlayerVehicleInShowtime();
         if ( lbIgnoringPassedOn )
         {
-            const Vector3 lShowtimeImpulse = vpu::Mult(lImpulseDir, lRelativeMotion);
+            // 0x8260798C  vmulfp128 v1, v116, v120  ==  lImpulseDir * lvfImpulseMagnitude
+            const Vector3 lShowtimeImpulse = vpu::Mult(lImpulseDir, lvfImpulseMagnitude.x);
             lpVehicle->ApplyShowtimeContactImpulse(lShowtimeImpulse,
                                                    rw::physics::WORLD_SPACE,
                                                    lParams.mImpulsePosition,
