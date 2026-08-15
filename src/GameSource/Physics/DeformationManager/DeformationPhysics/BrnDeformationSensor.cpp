@@ -398,10 +398,56 @@ namespace Deformation
 	// =============================================================================================
 	// =============================================================================================
 	// ApplyLocalImpulse -- ⭐ LOG-ONCE GATE 2026-08-14 (deformation-mount wave), the CollidableBody
-	// override the vtable needs. ⚠️ NOT RECONSTRUCTED: the X360 address is an export HOLE and the
-	// PS3 twin (@0x74D3A0, DecFIGS) is 569 instructions of dense per-direction compression math --
-	// a body of that size is its own slice, not a mount-night write. The gate is loud so the day it
-	// IS reached announces itself; the sensor absorbs nothing (no displacement fabricated).
+	// override the vtable needs. NOT RECONSTRUCTED: 569 instructions of dense per-direction
+	// compression math on the PS3 twin -- a body of that size is its own slice, not a mount-night
+	// write. The gate is loud so the day it IS reached announces itself; the sensor absorbs nothing
+	// (no displacement fabricated).
+	//
+	// ⭐⭐⭐ THIS FUNCTION IS THE ORDINARY WALL-CONTACT MOMENTUM PATH. Established 2026-08-15
+	// (walls leg 7) and stated here because two consecutive waves searched elsewhere for it:
+	//   ApplySensorImpulse's six-direction loop calls THIS (vtable slot 0, @0x82607F5C) -> the
+	//   sensor absorbs part of the impulse, writes the REMAINDER back into params.mvfImpulseMagnitude,
+	//   and forwards it via ImpulsePasser::PassOnImpulse -> the chain lands on impulse-passer SLOT 0,
+	//   which is the car's own &mVehicleBody (bound in DeformableObject::ResetDeformation @0x8263A598)
+	//   -> VehicleRigidBody::RecievePassedOnImpulse @0x8260DFA0 -> (not crashing + mbWorldContact)
+	//   -> VehiclePhysics::ApplyWallContactImpulse @0x825FEA18 -> ExternalPhysicsBody::
+	//   AddWorldSpaceImpulse / AddWorldSpaceAngularImpulse.
+	// ⛔ So while this body is a gate, an ordinary (non-crash) world contact banks NO momentum and
+	// the car drives through walls. Its `void` return is NOT evidence that it is inert: its products
+	// are the decremented magnitude in the caller's params and the chain call.
+	// ⚠️ ApplySensorImpulse's OTHER impulse arm (step 5, post-loop) is gated behind IsCrashing()
+	// (+0x710), so it is the CRASH response, not this one. Do not confuse the two.
+	//
+	// ⭐⭐ THE X360 BODY IS **sub_825E1320** (1128 bytes == 282 instructions). Earlier waves recorded
+	// "the X360 address is an export HOLE" and fell back on the PS3 twin; the address was recovered
+	// 2026-08-15 from the image's .pdata function census, which lists it unnamed between
+	// RecievePassedOnImpulse (0x825E11F8) and ValidateAndAddContact (0x825E1788). IDENTIFIED BY
+	// BEHAVIOUR, not position: it is the only function in the image calling all three AbsorptionTable
+	// accessors (bl GetAbsorption @0x825E1350, GetSpeedForMaxAbsorbtion @0x825E14D0,
+	// GetProportionToSpeed @0x825E14E0) -- exactly what this header says only ApplyLocalImpulse does.
+	// ⭐ 282 X360 instructions beat 569 PS3 ones whose Hex-Rays output opens "local variable
+	// allocation has failed": work the X360 body.
+	//
+	// ⭐ EVERY CONSTANT IT READS IS RESOLVED (from the dynamic-init initialisers, 2026-08-15):
+	//   flt_82002138 = 0.01
+	//   unk_82FB9560 = savfCompressionLimitFactor, FIVE rows indexed by absorption SET:
+	//                  { 1.0, 1.0, 1.5, 1.25, 1.0 }  (init 0x82C5DF40..0x82C5DFD4)
+	//   unk_82FB7F60 = 60.0, a single scalar VecFloat   (init 0x82C5DB58..0x82C5DB7C)
+	//   0x82014AC0/AD0/AE0/AF0 = minimax polynomial rows (1.4426896 == 1/ln2, -0.6931472 == -ln2)
+	//                  => an INLINED software powf/exp2/log2; the absorption curve is a POWER law.
+	//   and, through the out-of-line GetSpeedForMaxAbsorbtion, unk_82FB9C50 -- both AbsorptionTable
+	//   rodata tables are now REAL in BrnAbsorptionTable.cpp (they were flagged-0, and that zero was
+	//   not inert: it was the INVINCIBLE profile).
+	// Its last outward edge before the epilogue is `bl 0x825BA400` @0x825E1770 -- positionally the
+	// chain forward (PassOnImpulse), ⚠️ but 0x825BA400 is unnamed in identity.json: CONFIRM before use.
+	//
+	// ⭐ INDEX SEMANTICS, settled from the asm (⚠️ a previous wave banked the first bound as "a
+	// direction-enum bound of 0..4" -- it is the SET, not the direction):
+	//   params + 0xB4 == meImpulseDirection's SIBLING meAbsorptionSet, asserted <= 4
+	//                    (i.e. < E_ABSORPTIONSETS_NUM); it indexes savfCompressionLimitFactor.
+	//   mpSpec  + 0x33 == the absorption LEVEL, asserted <= 9 (< KU_NUM_ABSORPTION_VALUES).
+	//   params + 0x00 == meImpulseDirection, used as dir*4 / dir*16.
+	//   mpSpec + 0x2C + dir == the per-direction NEXT collidable-body index handed to PassOnImpulse.
 	//
 	// ⚠️⚠️ BRIEF CORRECTION (2026-08-15, walls leg 5). A wave brief called X360 @0x8260E068 "a
 	// 43-insn wrapper" around this body, i.e. the cross-console route into it. IT IS NOT. That
