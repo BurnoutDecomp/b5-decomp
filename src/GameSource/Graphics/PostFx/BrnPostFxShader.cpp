@@ -590,12 +590,35 @@ void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
 
         if (!mbAdoptedPC)
         {
+            // [FLAG PC bring-up] A REFUSED ADOPT LEAVES THE SLOT HONESTLY EMPTY. With all twelve slots
+            // now adopting (rung 6), an image the adopt refuses (a corrupt leaf array, a caller handing
+            // console bytes) used to fall through into the console route below, which this file's own
+            // banner says is memory-unsafe on this backend (truncated 64-bit muFunction, uninitialised
+            // ProgramMicrocodeParts) -- one exposure per slot, twelve now. The rung-6 verifier flagged it;
+            // this is the closure the report itself named: report once, keep both programs null (Render's
+            // null-program guard then skips the draw for this permutation and reports it), and never enter
+            // the console route on PC. If the VERTEX image adopted but the PIXEL one refused, the adopted
+            // vertex image is arena memory (see Destruct: adopted images are never freed) -- disclosed leak
+            // of one 608-byte image on a path that does not occur with the shipped leaf.
+            {
+                static bool sbReportedRefused = false;
+                ReportOnce(sbReportedRefused,
+                           "[postfx-shader] Shader::Construct: ProgramBufferPC_Adopt REFUSED a program image"
+                           " -- slot left EMPTY rather than entering the console microcode route."
+                           " [FLAG PC bring-up: BRN_POSTFX_SHADER_PROGRAMS_AVAILABLE]\n");
+            }
+            mpVertexProgram = 0;
+            mpPixelProgram  = 0;
+            return;
+        }
+
+        if (false)   // the console route below is unreachable on the PC backend -- see the banner above
+        {
             // ======== THE CONSOLE ROUTE (X360 0x823FD970), PRESERVED BYTE-FAITHFUL ==============
-            // Reached only for a NON-NULL binary that is not a PC ShaderProgramBuffer image. No call
-            // site in this file can reach it -- BrnPostFxShader::Construct passes either the two
-            // adopted PC images or (nullptr, 0) -- and on this backend it would crash for the reason
-            // above. It is kept, and kept compiled, so the console's structure stays on the page and
-            // so a future backend that CAN build a program buffer has the real body to use.
+            // Kept, and kept compiled, so the console's structure stays on the page and so a future
+            // backend that CAN build a program buffer has the real body to use; on this backend it
+            // would crash for the reason above, so it sits behind `if (false)` rather than behind
+            // "adopt refused" (which is what used to reach it).
 
             // ---- the vertex program (muShaderType 0) ---------------------------------------------
             // The X360 zeroes param words [1],[4],[6],[8],[9] and sets muFunction / muReserved8 -- the

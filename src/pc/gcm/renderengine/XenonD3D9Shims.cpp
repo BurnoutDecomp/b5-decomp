@@ -3713,6 +3713,29 @@ void PostFxDepthSampler_ApplyState(u32 luUnit)
 
 u32 PostFxDepthSampler_BoundUnitMask()
 {
+    // SELF-HEALING (rung-6 verifier): the claim bitmask is maintained by the D3DDevice_SetTexture hook,
+    // but two world paths bind through lpDevice->SetTexture DIRECTLY (WorldShader_BindTextureUnit and the
+    // material sampler loop), so a unit claimed for raw depth can silently become an ordinary texture
+    // and a later RenderTargetState bind would null what the world had bound there. So the mask is
+    // RE-VALIDATED against what the runtime actually holds before it is handed out: a claimed unit whose
+    // bound resource is no longer a raw-depth texture drops its claim here.
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice != nullptr && guRawDepthSamplerUnits != 0u)
+    {
+        for (u32 luUnit = 0u; luUnit < 16u; ++luUnit)
+        {
+            if ((guRawDepthSamplerUnits & (1u << luUnit)) == 0u)
+                continue;
+            IDirect3DBaseTexture9* lpBound = nullptr;
+            if (SUCCEEDED(lpDevice->GetTexture(luUnit, &lpBound)))
+            {
+                if (!BoundTextureIsRawDepth(lpBound, nullptr))
+                    guRawDepthSamplerUnits &= ~(1u << luUnit);
+                if (lpBound != nullptr)
+                    lpBound->Release();
+            }
+        }
+    }
     return guRawDepthSamplerUnits;
 }
 
