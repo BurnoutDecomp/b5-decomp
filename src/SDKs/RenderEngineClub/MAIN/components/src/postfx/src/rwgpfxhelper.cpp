@@ -82,12 +82,18 @@ void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppSh
 // the upload has been recovered since the last wave (see the BLOCKED note at the site):
 //   1. THE VERTEX VALUES. The block is the DWARF's file-scope `rw::graphics::postfx::Vertex` --
 //      `Vector3 Vertex[4]`, rwgpfxhelper.cpp:74 -- i.e. 4 x 16 = the 0x40 bytes the note records.
-//      Its image copy is ALL ZERO, and it is zero because it is CONSTRUCTED AT RUNTIME by static
-//      initialisation, not because it was mis-dumped: a Vector3 has a constructor, so the array
-//      lives in .data. No function in the 30,095-function export set writes it (grep in the wave
-//      report) and the static initialiser itself is not in the export set, so the three corner
-//      positions are attested by nothing this tree can read.
-//   2. renderengine::MeshHelper::GetResourceDescriptor has no declaration in this tree, and
+//      Its image copy is ALL ZERO because it is CONSTRUCTED AT RUNTIME by a CRT static initialiser
+//      (not in the export set; found with idat, 2026-08-15: 0x82C4F910-0x82C4F9C0 lfs/stfs four
+//      16-byte stack vectors from flt_820037C8 = -1.0 / flt_82001CC0 = 0.0 / flt_82001C98 = 1.0 and
+//      lvx128/stvx128 into unk_82FAFFF0 +0x00/+0x10/+0x20/+0x30). THE VALUES ARE KNOWN:
+//          Vertex[0] = (-1, -1, 0)   Vertex[1] = ( 1, -1, 0)   Vertex[2] = (-1,  1, 0)   Vertex[3] = ( 1,  1, 0)
+//      -- the clip-space unit quad; the console RECTLIST draws Vertex[0..2] with uv (0,1),(1,1),(0,0);
+//      a PC TRIANGLESTRIP needs Vertex[3] with uv (1,0). What is STILL missing is the PC DRAW itself:
+//      Xenos RECTLIST(8) is refused by XenonD3D9Shims::MapPrimitive and D3DDevice_DrawVertices has no
+//      PC definition, so RenderQuad must draw the 4-vertex strip through D3DDevice_BeginVertices/
+//      EndVertices like BrnPostFxBloom::DrawFullScreenQuad -- the follow-up that flips this gate.
+//   2. renderengine::MeshHelper::GetResourceDescriptor has no declaration in this tree (its X360 body
+//      exists @0x82B64070 -- just not in the .ida-exports set; rung-6 verifier), and
 //      MeshHelper::Initialize is declared non-static with one parameter while the console calls it
 //      with (resource, parameters).
 //   3. The draw needs renderengine::MeshHelper::Dispatch<renderengine::Device>, whose only home
@@ -220,6 +226,7 @@ namespace postfx
         rw::Resource lResource = AllocateResource(lpAllocator, lDescriptor);
         return renderengine::ProgramBuffer::Initialize(
             reinterpret_cast<renderengine::ProgramResourceLayout*>(&lResource), &lParams);
+#error "RW_GPFX_PROGRAM_MICROCODE_AVAILABLE is on but the console microcode route truncates a 64-bit pointer into muFunction and reaches a stub XGGetMicrocodeShaderParts on this backend -- it cannot be enabled on PC (rung-6 verifier)"
 #endif  // RW_GPFX_PROGRAM_MICROCODE_AVAILABLE
     }
 
@@ -624,10 +631,10 @@ namespace postfx
         //  real, adopted, and their constants upload.]
         static bool sbReportedNoQuad = false;
         ReportOnce(sbReportedNoQuad,
-                   "[PfxHelper] full-screen-quad geometry not built: the quad's vertex data"
-                   " (X360 unk_82FAFFF0, 0x40 bytes) is absent from the export set and"
-                   " MeshHelper::GetResourceDescriptor has no declaration."
-                   " [FLAG BLOCKED: RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE]\n");
+                   "[PfxHelper] full-screen-quad geometry not built: the corner positions are known"
+                   " (CRT static initialiser @0x82C4F910: the clip-space unit quad) but the PC draw of"
+                   " the RECTLIST (D3DDevice_DrawVertices) is not reconstructed yet -- RenderQuad/Blur9/"
+                   "DownSample report and return. [FLAG PC bring-up: RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE]\n");
 #endif
 
         // ---- 4. the quad depth/stencil state (asm 0x8240857C-0x82408600) --------------------------
