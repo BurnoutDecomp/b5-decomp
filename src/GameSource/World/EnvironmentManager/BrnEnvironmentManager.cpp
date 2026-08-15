@@ -438,9 +438,11 @@ void EnvironmentManager::DisableJunkyardLightingSetup()
 // PER SLOT the console runs one of two arms, selected by
 //     `if (mbUseDefaultEffects != 0 || mBlendFrame.mapKeyframes[i] == 0)`
 // (asm: `lbz r11,0x1170(r3)` / `bne` -> default arm; then `cmplwi r8,0` / `beq` -> default arm).
-// 0x1170 == mbUseDefaultEffects and 0x520/0x530 == mBlendFrame.mapKeyframes/mafWeights are the
-// committed layout in BrnEnvironmentManager.h (0x520 = 1312 and 0x530 = 1328 -- the "keyframe
-// pointers" and "weights" of the dossier are the BlendFrame, already named).
+// X360 0x1170 == mbUseDefaultEffects and X360 0x520/0x530 == mBlendFrame.mapKeyframes/mafWeights --
+// the members the committed BrnEnvironmentManager.h already names (the dossier's "keyframe pointers"
+// and "weights" ARE the BlendFrame). Those are GUEST offsets: on the x64 host Keyframe*[4] doubles,
+// so mBlendFrame sits at 0x528, mafWeights at +0x20 inside it and mbUseDefaultEffects at 0x1190 --
+// nothing here (or anywhere in the tree) reaches them by offset, only by name.
 //
 //   KEYFRAME arm  -- 32 B from kf+0x10 -> frame+0x20 (BloomData), weight -> frame+0x08;
 //                    80 B from kf+0x30 -> frame+0x40 (VignetteData), weight -> frame+0x0C;

@@ -689,8 +689,10 @@ void BrnRendererModule::StartOfFrame()
 // ... DispatchThread -> Render (reads the INTERNAL slot) ... OnEndOfUpdateFrame -> EndOfFrame ->
 // SwapBuffers -> EffectsArbitrator::EndOfFrame (the flip). So a write here reaches Render on the
 // NEXT frame -- which is exactly the console's own one-frame producer/consumer pipeline, not a
-// deviation. (Consequence to expect in the log: frame 0 evaluates against a freshly Constructed
-// frame, i.e. every bool false, and bloom lights from frame 1.)
+// deviation. (Measured, first bloom-lit boot: the very first `[postfx-fx] apply-call 0` line already
+// reads bloom=1 -- the composite's first apply-block call happens after at least one StartOfFrame/
+// EndOfFrame pair has run, so there is no visible "all-false" first line; the counter in that log
+// line counts apply-block CALLS, not game frames.)
 //
 // WHAT IT WRITES -- every value is the console's, on a frame with NO camera effects and the effects
 // module's debug component at its Construct @0x82278C98 defaults (scratch/postfx_step4_bloom/
@@ -2613,6 +2615,11 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         BrnGraphics::EffectsArbitrator* const lpEffectsArbitrator =
             sbEffectsArbitratorConstructed ? &mEffectsArbitrator : 0;
 
+        // [FLAG PC bring-up] GATING NOTE (rung-5 verifier): on the console this block runs
+        // unconditionally inside Render; here it sits inside `if (lbSceneBracketOpen)` and under
+        // BRN_ANTIALIAS_BRACKET_AVAILABLE / BRN_POSTFX_COMPOSITE_AVAILABLE, so those two PC gates
+        // carry the effects apply with them -- reverting either reverts bloom. It is not hoisted out
+        // because BrnPostFx's states are only meaningful once the composite that consumes them draws.
         if (mbRenderPostFX)
         {
             // D3DDevice_SetShaderGPRAllocation(off_83271608, 0, 0x40, 0x40) @0x8240D6FC opens the

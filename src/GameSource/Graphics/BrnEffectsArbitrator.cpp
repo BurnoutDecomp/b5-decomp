@@ -83,20 +83,17 @@ namespace
     // sub_823F9AA8 FireAssert call site) -- including the shipped typo "EffecsFrame".
     const char* const kacInvalidSlotCount = "Invalid number of slots per EffecsFrame source";
 
-    // ⚠ aInvalidEffects is TEXT-PARTIAL. The export truncates it to
-    //   "Invalid effects data weights summing up"... and the .rodata bytes are in no dossier,
-    // so the TAIL is the committed tree's existing wording, carried over, NOT a fresh read.
-    // What IS recovered from the asm is the ARGUMENT ORDER, and the committed EvalTint had it
-    // backwards: every call site is
-    //     fmr f1, f31 / stfd f1, var / ld r6, var   <- r6 = the WEIGHT (double bits)
-    //     mr  r7, <layer>                           <- r7 = the LAYER index
+    // aInvalidEffects is RECOVERED VERBATIM (idat get_strlit_contents @0x82046F20, 2026-08-15):
+    //     "Invalid effects data weights summing up to %f for source %i"
+    // and the ARGUMENT ORDER matches it: every call site is
+    //     fmr f1, f31 / stfd f1, var / ld r6, var   <- r6 = the WEIGHT (double bits) -> %f
+    //     mr  r7, <layer>                           <- r7 = the LAYER index          -> %i
     //     mr  r5, aInvalidEffects / li r4, 0x100 / addi r3, <buf> / bl CgsCore__SPrintf
     // (EvalTint @0x823FD658-0x823FD674; bloom @0x823F9D00-0x823F9D1C; vignette @0x823F9FE8;
     // dof @0x823FA2E4; blur @0x823FA5BC; tint2d @0x823FA8AC -- all identical). GPRs are 64-bit
     // on X360, so a double vararg takes ONE slot: vararg1 = weight (r6), vararg2 = layer (r7).
-    // The %f therefore precedes the %d. See CONDUCTOR DUMP REQUEST in the wave report.
     const char* const kacInvalidLayerWeights =
-        "Invalid effects data weights summing up to more than 1.0 (%f) on layer %d";
+        "Invalid effects data weights summing up to %f for source %i";
 
     // ---------------------------------------------------------------------------------
     // Per-effect frame accessors. DWARF BrnEffectsArbitrator.cpp declares one specialisation

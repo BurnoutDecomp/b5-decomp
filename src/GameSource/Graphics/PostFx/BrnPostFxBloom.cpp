@@ -510,6 +510,24 @@ renderengine::ProgramBufferData* BrnPostFxBloom::CreateProgram(
         return nullptr;
     }
 
+    // [FLAG PC bring-up] THE CONSOLE ROUTE IS UNREACHABLE ON THIS BACKEND, BY CONSTRUCTION. With the
+    // gate ON, an adopt that FAILS (a caller handing console bytes, a corrupt image) used to fall
+    // through into the block below, which XGGetMicrocodeShaderParts' PC stub turns into a crash
+    // (ImmediateModePCLeaf.cpp:626-646). The rung-5 verifier flagged that as silent-until-crash, so a
+    // failed adopt now leaves the slot HONESTLY EMPTY (null program -> the six CGS_ASSERTs in
+    // Construct name the slot; the passes' own gates keep them from drawing) and reports once. The
+    // console body stays on the page below as the fallthrough it can never take here.
+    {
+        static bool sbAdoptRefused = false;
+        ReportOnce(sbAdoptRefused,
+                   "[postfx-bloom] CreateProgram: ProgramBufferPC_Adopt REFUSED an image with the PC gate"
+                   " ON -- slot left EMPTY rather than entering the console microcode route."
+                   " [FLAG PC bring-up: BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE]\n");
+        return nullptr;
+    }
+
+    // clang-format off
+    // ---- the console route (X360 CreateProgram body), unreachable on the PC backend -- see above ---
     renderengine::ProgramBufferParameters lParameters = {};
     lParameters.muFunction =
         static_cast<u32>(reinterpret_cast<usize>(lpMicrocode));
@@ -523,6 +541,7 @@ renderengine::ProgramBufferData* BrnPostFxBloom::CreateProgram(
     return renderengine::ProgramBuffer::Initialize(
         reinterpret_cast<renderengine::ProgramResourceLayout*>(&lResource),
         &lParameters);
+    // clang-format on
 }
 
 void BrnPostFxBloom::Construct(rw::IResourceAllocator* lpAllocator)
