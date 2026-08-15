@@ -3,6 +3,7 @@
 #include <algorithm>   // std::sort (the exported std::_Sort<ContactTime*> -- walls leg 4)
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                       // gpDebugPrint / gxMessageFilterFlags (walls leg 4 gates)
+#include <cstdlib>                                                              // getenv -- the opt-in [chain] bring-up probe only
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"                               // PhysicsModuleIO::OutputBuffer (obj Update params, walls leg 4)
 #include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"     // PhysicsModuleIO::PotentialContactInterface (walls leg 4)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface::SetEntityRadius (walls leg 4)
@@ -91,6 +92,34 @@ namespace Deformation
         // per-direction unit vector (the switch at 0x82607BAC). KI_NUM_APPLY_DIRECTIONS == 6.
         const s32 KI_NUM_APPLY_DIRECTIONS = 6;
 
+        // ---- [chain] PC bring-up instrument -- DELETE WHEN the wall test is banked -------------
+        // OPT-IN (BRN_IMPULSE_PROBE=1). Counts every hop of the deformation impulse chain so ONE
+        // run says which hop is dead, instead of inferring it across runs.
+        struct ChainProbe
+        {
+            u32 muUpdateContacts;   // UpdateContacts entries
+            u32 muSensorsScanned;   // sensors offered to GetImpulse
+            u32 muGetImpulseHits;   // sensors that had a latched impulse contact
+            u32 muWorldApplies;     // (unused: ApplyCarWorldImpulse lives in another TU; its only
+                                    //  product is the ApplySensorImpulse call counted below)
+            u32 muSensorImpulse;    // ApplySensorImpulse entries
+            u32 muDirsTried;        // six-direction loop iterations reached
+            u32 muDirsPassed;       // iterations whose projection was > 0
+            u32 muDispatched;       // lpSensor->ApplyLocalImpulse dispatches
+            u32 muNullSensor;       // dispatches skipped because lpSensor was null
+        };
+        ChainProbe gChainProbe = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+        s32 giChainProbeOn = -1;
+        inline bool ChainProbeOn()
+        {
+            if ( giChainProbeOn < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_IMPULSE_PROBE" );
+                giChainProbeOn = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+            }
+            return giChainProbeOn == 1;
+        }
+
         // ⭐⭐ TABLE RETIRED 2026-08-14 (walls leg 4): the flagged-zero KsaApplyDirection placeholder
         // is the shared BrnPhysics::Deformation::KA_IMPULSE_DIRECTIONS (BrnCollidableBody.cpp) --
         // the PS3 exports name the global, its accessor AND the initializer that writes the six
@@ -107,6 +136,32 @@ namespace Deformation
         const Vector3 KVF_APPLY_FRICTION_SCALE = { 0.000150000007f, 0.000150000007f, 0.000150000007f, 0.000150000007f };  // unk_82FB8330 @82C5D688 <- flt_8209D738
         const Vector3 KVF_APPLY_FRICTION_CLAMP = { 1000.0f, 1000.0f, 1000.0f, 1000.0f };  // unk_82FB95C0 @82C5D868 <- flt_82009E10
         const Vector3 KVF_APPLY_SHOWTIME_SCALE = { 5.0f, 5.0f, 5.0f, 5.0f };  // unk_82FB9D30 @82C5D890 <- flt_8200426C
+
+        // ⭐⭐ RECOVERED 2026-08-15 (walls leg 8) -- the DRIVE-TIME DEFORMATION budget row,
+        // &unk_82FB9520. Dynamic-init (zero in the image); initialiser @0x82C5D818..0x82C5D83C loads
+        // flt_82004744 == 0.2, splats it (vspltw v0,v0,0) and stores the row. ApplySensorImpulse block
+        // (3) writes it into BOTH mvfAllowedCompressionFactor (+0x90) and mvfMaximumAllowedAbsorption
+        // (+0xA0) for an ordinary, non-crash contact. See the long note at the select below: carrying
+        // this as a zero was what made an ordinary world contact bank no momentum at all.
+        const VecFloat KVF_DRIVE_TIME_DEFORMATION = { 0.2f, 0.2f, 0.2f, 0.2f };
+
+        // The `kbAllowDriveTimeDeformation` byte the select tests (`lbz r10, 0x82F2A346` @0x826079E4).
+        // ⭐ The shipped X360 image has it SET (byte == 0x01), so the live console path is the row
+        // above; the zero arm is the console's own deformation-disabled build option.
+        //
+        // ⛔⛔ HELD FALSE 2026-08-15 (walls leg 8) -- A DELIBERATE, DOCUMENTED DIVERGENCE FROM THE
+        // SHIPPED IMAGE, and it is stated plainly rather than buried. Setting it true is CORRECT and
+        // was measured working end to end: DeformationSensor::ApplyLocalImpulse then reports
+        // `maxAllow 0.200000 base 0.200000 expo 1.000000 factor 0.200000 absorbed 146.7` and the
+        // sensor spheres start to dent (`move 0.0047`). It is held for ONE reason:
+        // ⛔ the chain forward out of ApplyLocalImpulse is currently gated (unconstructed pool objects
+        // -> a wild virtual call in ImpulsePasser::PassOnImpulse; see that gate's banner). With the
+        // forward gated, turning this on makes each contact ABSORB ~100-150 units of impulse and
+        // hand it to nobody -- momentum deleted, not transferred. That is the silent-drop shape this
+        // subsystem keeps being bitten by, and it is strictly worse than being inert.
+        // ⭐ FLIP THIS AND THE CHAIN GATE TOGETHER, in the same measured step, once the 20-sensor
+        // Construct loop lands. Neither is useful alone.
+        const bool KB_ALLOW_DRIVE_TIME_DEFORMATION = false;
 
         // The two part-type ids whose driven points are skinned through the BOX-CLAMPED path
         // (UpdateSkinningOffsetsWithinBox) -- the bonnet / boot panel types in the asm's
@@ -502,22 +557,51 @@ namespace Deformation
         // source. IsCrashing() is the homed +1808 accessor.
         const bool lbCrashed = (lpVehicle != nullptr) && lpVehicle->IsCrashing();
 
-        // (3) allowed-compression budget. Game-mode 2 OR crashed OR the vtable+0x10 predicate -> the unit
-        // budget; else the FLAGGED drive-time deformation row (zeroed when drive-time deformation is off,
-        // kbAllowDriveTimeDeformation). Modelled as the budget lanes on the params (asm line 1606). The
-        // game-mode selector reads HIBYTE(*(this+26384)) == the handling-body-id high byte (asm 1606),
-        // NOT the +26392 game-mode word -- use GetHandlingBodyIdHighByte() (see header note).
+        // (3) allowed-compression budget. The game-mode selector reads HIBYTE(*(this+26384)) == the
+        // handling-body-id high byte (asm 1606), NOT the +26392 game-mode word -- use
+        // GetHandlingBodyIdHighByte() (see header note).
+        //
+        // ⭐⭐⭐ CORRECTED 2026-08-15 (walls leg 8). This was a TWO-way select writing honest zeros in
+        // the else arm. The X360 (@0x826079E0..0x82607A34) is a **THREE-way** select, and the arm the
+        // shipped game actually takes was the missing one:
+        //     0x826079E4  lbz   r10, kbAllowDriveTimeDeformation (0x82F2A346)
+        //     0x826079F4  lvx128 v0, &unk_82FB9520          ; the drive-time deformation row
+        //     0x826079FC  stvx128 v0 -> params +0x90        ; mvfAllowedCompressionFactor
+        //     0x82607A04  stvx128 v0 -> params +0xA0        ; mvfMaximumAllowedAbsorption
+        //     0x82607A08  bne  -> keep the row              ; flag SET  -> the row
+        //     0x82607A0C  stvx128 v125 (== vspltisw128 0)   ; flag CLEAR -> zeros
+        // ⚠️⚠️ SO THE OLD "HONEST ZERO" WAS THE **OTHER ARM'S** VALUE. It looked defensible precisely
+        // because zero really is what the console writes when drive-time deformation is OFF -- but the
+        // shipped image has that byte SET (0x82F2A346 == 0x01), so the live path is the 0.2 row, and
+        // this build was running the deformation-disabled branch unconditionally.
+        // ⛔ AND ZERO IS NOT THIS TERM'S IDENTITY: mvfMaximumAllowedAbsorption is a min() clamp on the
+        // absorption fraction AND the base of DeformationSensor::ApplyLocalImpulse's powf, so a zero
+        // made the absorbed impulse identically zero -- i.e. an ordinary world contact banked NO
+        // momentum, which is exactly the "car drives through walls" symptom. mvfAllowedCompressionFactor
+        // multiplies the compression limit, so a zero also removed every sensor's room to dent.
+        // ⭐ RECOVERED FROM THE INITIALISER, not guessed: unk_82FB9520 is dynamic-init (it reads 0.0
+        // straight out of the image, like the AbsorptionTable rows); its initialiser @0x82C5D818..
+        // 0x82C5D83C loads flt_82004744 (== 0.2), splats it and stores it.
         if ( GetHandlingBodyIdHighByte() == KU_GAMEMODE_BOUNCE_ELIGIBLE || lbCrashed || lbIgnoringPassedOn )
         {
+            // vcfsx(vspltisw 1, 0) == 1.0 @0x82607A20 -- crash / showtime / bounce-eligible gets the
+            // whole budget.
             lParams.mvfAllowedCompressionFactor = VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f };
             lParams.mvfMaximumAllowedAbsorption = VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f };
         }
+        else if ( KB_ALLOW_DRIVE_TIME_DEFORMATION )
+        {
+            lParams.mvfAllowedCompressionFactor = KVF_DRIVE_TIME_DEFORMATION;
+            lParams.mvfMaximumAllowedAbsorption = KVF_DRIVE_TIME_DEFORMATION;
+        }
         else
         {
-            // FLAGGED-0 drive-time deformation row (&unk_82FB9520) -- honest zeros.
+            // v125 == vspltisw128 0 (@0x82607918) -- drive-time deformation disabled.
             lParams.mvfAllowedCompressionFactor = VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f };
             lParams.mvfMaximumAllowedAbsorption = VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f };
         }
+
+        ++gChainProbe.muSensorImpulse;   // [chain] probe -- ApplySensorImpulse reached block (4)
 
         // (4) the six-direction apply loop. Accumulates the local impulse the body banks in (5).
         Vector3 lAccumulatedLocalImpulse = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -529,10 +613,12 @@ namespace Deformation
 
             // project the impulse onto this direction (vmsum3fp128 of the impulse-dir vs the basis).
             const f32 lfProjection = vpu::Dot(lImpulseDir, lDirVec);
+            ++gChainProbe.muDirsTried;   // [chain] probe
             if ( lfProjection <= 0.0f )   // vcmpgtfp against zero -- skip non-positive directions
             {
                 continue;
             }
+            ++gChainProbe.muDirsPassed;   // [chain] probe
 
             // per-direction params: the direction index. The friendly-fire / double-bounce displacement
             // scaling (other car +26414 / vehicle crashed -> the FLAGGED double-bounce damp row) folds in
@@ -556,7 +642,12 @@ namespace Deformation
             // slot 0 (the `(**a37)(a37, v215)` indirect call).
             if ( lpSensor != nullptr )
             {
+                ++gChainProbe.muDispatched;   // [chain] probe
                 lpSensor->ApplyLocalImpulse(&lParams);
+            }
+            else
+            {
+                ++gChainProbe.muNullSensor;   // [chain] probe
             }
 
             // accumulate the applied local impulse (the body banks the sum in (5)).
@@ -894,6 +985,23 @@ namespace Deformation
     // =============================================================================================
     void DeformableObject::UpdateContacts(VecFloat lvfTimeStep, CgsNumeric::Random& lrRandom)
     {
+        // ---- [chain] PC bring-up instrument -- DELETE WHEN the wall test is banked -------------
+        ++gChainProbe.muUpdateContacts;
+        if ( ChainProbeOn() && CgsDev::Log::gpDebugPrint != 0
+             && (gChainProbe.muUpdateContacts % 600u) == 0u )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[chain] upd " << static_cast<s32>(gChainProbe.muUpdateContacts)
+                << " scan " << static_cast<s32>(gChainProbe.muSensorsScanned)
+                << " getImp " << static_cast<s32>(gChainProbe.muGetImpulseHits)
+                << " sensorImp " << static_cast<s32>(gChainProbe.muSensorImpulse)
+                << " dirsTried " << static_cast<s32>(gChainProbe.muDirsTried)
+                << " dirsPassed " << static_cast<s32>(gChainProbe.muDirsPassed)
+                << " dispatched " << static_cast<s32>(gChainProbe.muDispatched)
+                << " nullSensor " << static_cast<s32>(gChainProbe.muNullSensor)
+                << "\n";
+        }
+
         const Vector3 lvVelocityDir = vpu::Normalize(GetVehicleBody().GetLinearVelocity());
 
         // ---- (1) collect + sort ----------------------------------------------------------------
@@ -903,10 +1011,12 @@ namespace Deformation
         for ( s32 liSensor = 0; liSensor < liNumSensors; ++liSensor )
         {
             StoredImpulseContact lContact;
+            ++gChainProbe.muSensorsScanned;   // [chain] probe
             if ( !maDeformationSensors[liSensor].GetImpulse(lContact) )
             {
                 continue;
             }
+            ++gChainProbe.muGetImpulseHits;   // [chain] probe
 
             // "Impact time is %f on sensor %d/%d" (PS3 :1861) -- tripwire, fire-and-continue.
             CGS_ASSERT(lContact.mfImpactTimeInFrame >= 0.0f && lContact.mfImpactTimeInFrame <= 1.0f,

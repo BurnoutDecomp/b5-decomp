@@ -9,6 +9,10 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"    // DeformableObject
 #include "SharedClasses/Physics/Deformation/BrnSensorSpec.h"  // SensorSpec (mInitialOffset, maDirectionParams, GetAbsorptionLevel)
 
+#include <cmath>   // std::pow -- ApplyLocalImpulse's vlogefp/vexptefp + minimax refinement IS powf
+                   // (the image's coefficient rows are the log2 / 2^-x series; see its banner)
+#include <cstdlib> // getenv -- the opt-in [impulse] bring-up probe only
+
 // Out-of-line bodies for BrnPhysics::Deformation::DeformationSensor.
 //
 // This TU GROWS the existing file (which already owns ClearNonWorldContacts -- kept verbatim
@@ -97,17 +101,50 @@ namespace Deformation
 		// FLAGGED-0 PLACEHOLDER for the per-direction hit-direction table (&unk_82FB9680). Indexed
 		// 16*direction => one 16-byte vec4 per ENextSensorDirection (the DWARF KV_*_HIT_DIRECTION
 		// pair). Six signed body axes. Honest zeros (NEVER fabricated); the indexing shape is exact.
+		// ⚠️⚠️ 2026-08-15 (walls leg 8): THIS TABLE IS ALREADY REAL IN THE TREE UNDER ANOTHER NAME.
+		// &unk_82FB9680 is `KA_IMPULSE_DIRECTIONS` (BrnCollidableBody.cpp, recovered walls leg 4) --
+		// ApplyLocalImpulse below reads that table directly, exactly as the X360 does (its
+		// `lvx128 v122, [&unk_82FB9680 + 16*dir]` is CollidableBody::GetDirectionVector inlined).
+		// This duplicate is left zeroed ONLY because promoting it would silently change
+		// RecievePassedOnImpulse, whose other factor (KVF_VELOCITY_FACTOR) is still unrecovered --
+		// i.e. that function stays a silent zero and it is NOT this leg's to un-silence. ⭐ NEXT LEG:
+		// recover KVF_VELOCITY_FACTOR, then retire this placeholder onto KA_IMPULSE_DIRECTIONS and
+		// KsaAbsorptionScale in one measured step. Do not promote one factor without the other.
 		static const VecFloat KsaHitDirection[6] = {};
 
-		// FLAGGED-0 PLACEHOLDER for the absorption-scale row table (&unk_82FB9560). Indexed
-		// 16*absorptionSet => one 16-byte vec4 per EAbsorptionSets. Honest zeros (NEVER fabricated).
-		static const VecFloat KsaAbsorptionScale[E_ABSORPTIONSETS_NUM] = {};
+		// ⭐ REAL 2026-08-15 (walls leg 8). &unk_82FB9560, indexed 16*absorptionSet -- the PS3 exports
+		// name it `AbsorptionTable::savfCompressionLimitFactor` (that is what it scales: the
+		// per-direction compression limit, NOT the absorption). It reads zero in both images because
+		// it is a DYNAMIC-INIT global; its values live only in its initialiser, which is branch-free
+		// and was executed off the image: 0x82C5DF40..0x82C5DFD4 stores five splatted rows from
+		// flt_82001C98 / flt_82001C98 / flt_820945DC / flt_820092CC / flt_82001C98.
+		// ⚠️⚠️ THE OLD ZERO WAS NOT INERT -- this term is a MULTIPLIER, so its identity element is
+		// 1.0, not 0.0. With zeros the compression limit was identically zero and every sensor had
+		// zero room to deform, for every absorption set. (Third instance of this shape this week,
+		// after the AbsorptionTable rows and the oversteer grip lerp.)
+		// ⭐ The recovered values line up with the enum they index: the player's extreme crash is
+		// allowed the MOST compression (1.5) and shutdown next (1.25).
+		static const VecFloat KsaAbsorptionScale[E_ABSORPTIONSETS_NUM] =
+		{
+			{ 1.0f,  1.0f,  1.0f,  1.0f  },   // E_ABSORPTIONSET_NORMAL               flt_82001C98 = 1.0
+			{ 1.0f,  1.0f,  1.0f,  1.0f  },   // E_ABSORPTIONSET_AI_CRASHING          flt_82001C98 = 1.0
+			{ 1.5f,  1.5f,  1.5f,  1.5f  },   // E_ABSORPTIONSET_PLAYER_EXTREME_CRASH flt_820945DC = 1.5
+			{ 1.25f, 1.25f, 1.25f, 1.25f },   // E_ABSORPTIONSET_SHUTDOWN             flt_820092CC = 1.25
+			{ 1.0f,  1.0f,  1.0f,  1.0f  },   // E_ABSORPTIONSET_INVINCIBLE           flt_82001C98 = 1.0
+		};
 
-		// DWARF BrnDeformationSensor.cpp:198/264 -- the two file-static VecFloats. Their rodata is not
-		// in the exports; carried as FLAGGED placeholders (NEVER fabricated). KVF_60_HTZ is the 60 Hz
-		// reference rate the absorption scaling is expressed against; KVF_VELOCITY_FACTOR scales the
-		// closing speed. Honest zeros until recovered.
-		static const VecFloat KVF_60_HTZ        = { 0.0f, 0.0f, 0.0f, 0.0f };
+		// DWARF BrnDeformationSensor.cpp:198/264 -- the two file-static VecFloats.
+		// ⭐ KVF_60_HTZ REAL 2026-08-15 (walls leg 8): &unk_82FB7F60, likewise dynamic-init. Its
+		// initialiser @0x82C5DB58..0x82C5DB7C loads flt_82092BC4 (== 60.0), splats it (vspltw v0,v0,0)
+		// and stores it -- so the constant is exactly the 60 Hz console frame rate its name claims.
+		// ApplyLocalImpulse uses it as powf's EXPONENT scale (60 * mvfTimeStep), which is what makes
+		// the absorption frame-rate independent: at 60 Hz the exponent is 1 and the absorption factor
+		// is exactly the table value. ⭐ That matters here specifically because this build is
+		// deliberately DECOUPLED from the console's 60 fps lock.
+		static const VecFloat KVF_60_HTZ        = { 60.0f, 60.0f, 60.0f, 60.0f };
+		// ⚠️ STILL FLAGGED: KVF_VELOCITY_FACTOR's initialiser has not been located, so it stays an
+		// honest zero (NEVER fabricated). It is read ONLY by RecievePassedOnImpulse, whose
+		// displacement term is therefore still identically zero -- see the note on KsaHitDirection.
 		static const VecFloat KVF_VELOCITY_FACTOR = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 		// The 0.01f tolerance the normal-magnitude assert + the final accept gates compare against
@@ -397,100 +434,291 @@ namespace Deformation
 	// the partition + dedupe control flow is reproduced; the dense VMX point math is modelled per-lane.
 	// =============================================================================================
 	// =============================================================================================
-	// ApplyLocalImpulse -- ⭐ LOG-ONCE GATE 2026-08-14 (deformation-mount wave), the CollidableBody
-	// override the vtable needs. NOT RECONSTRUCTED: 569 instructions of dense per-direction
-	// compression math on the PS3 twin -- a body of that size is its own slice, not a mount-night
-	// write. The gate is loud so the day it IS reached announces itself; the sensor absorbs nothing
-	// (no displacement fabricated).
+	// ApplyLocalImpulse -- X360 **sub_825E1320** (0x825E1320..0x825E1787, 1128 bytes == 282
+	// instructions). ⭐⭐⭐ RECONSTRUCTED 2026-08-15 (walls leg 8). This is the CollidableBody
+	// override the sensor vtable needs (slot 0) and the HEAD of the ordinary wall-contact momentum
+	// path; it was a log-once gate from 2026-08-14 until this wave.
 	//
-	// ⭐⭐⭐ THIS FUNCTION IS THE ORDINARY WALL-CONTACT MOMENTUM PATH. Established 2026-08-15
-	// (walls leg 7) and stated here because two consecutive waves searched elsewhere for it:
-	//   ApplySensorImpulse's six-direction loop calls THIS (vtable slot 0, @0x82607F5C) -> the
-	//   sensor absorbs part of the impulse, writes the REMAINDER back into params.mvfImpulseMagnitude,
-	//   and forwards it via ImpulsePasser::PassOnImpulse -> the chain lands on impulse-passer SLOT 0,
-	//   which is the car's own &mVehicleBody (bound in DeformableObject::ResetDeformation @0x8263A598)
-	//   -> VehicleRigidBody::RecievePassedOnImpulse @0x8260DFA0 -> (not crashing + mbWorldContact)
-	//   -> VehiclePhysics::ApplyWallContactImpulse @0x825FEA18 -> ExternalPhysicsBody::
-	//   AddWorldSpaceImpulse / AddWorldSpaceAngularImpulse.
-	// ⛔ So while this body is a gate, an ordinary (non-crash) world contact banks NO momentum and
-	// the car drives through walls. Its `void` return is NOT evidence that it is inert: its products
-	// are the decremented magnitude in the caller's params and the chain call.
+	// ⭐ THE CHAIN THIS FUNCTION HEADS (verified by address, walls leg 7):
+	//   DeformableObject::ApplySensorImpulse's six-direction loop -> (vtable slot 0, @0x82607F5C)
+	//   -> THIS -> ImpulsePasser::PassOnImpulse -> impulse-passer slot 0 == the car's own
+	//   &mVehicleBody (bound in ResetDeformation @0x8263A598) -> VehicleRigidBody::
+	//   RecievePassedOnImpulse @0x8260DFA0 -> (not crashing + mbWorldContact) -> VehiclePhysics::
+	//   ApplyWallContactImpulse @0x825FEA18 -> ExternalPhysicsBody::AddWorldSpace{,Angular}Impulse.
 	// ⚠️ ApplySensorImpulse's OTHER impulse arm (step 5, post-loop) is gated behind IsCrashing()
-	// (+0x710), so it is the CRASH response, not this one. Do not confuse the two.
+	// (+0x710): that is the CRASH response, not this one. Do not confuse the two.
 	//
-	// ⭐⭐ THE X360 BODY IS **sub_825E1320** (1128 bytes == 282 instructions). Earlier waves recorded
-	// "the X360 address is an export HOLE" and fell back on the PS3 twin; the address was recovered
-	// 2026-08-15 from the image's .pdata function census, which lists it unnamed between
-	// RecievePassedOnImpulse (0x825E11F8) and ValidateAndAddContact (0x825E1788). IDENTIFIED BY
-	// BEHAVIOUR, not position: it is the only function in the image calling all three AbsorptionTable
-	// accessors (bl GetAbsorption @0x825E1350, GetSpeedForMaxAbsorbtion @0x825E14D0,
-	// GetProportionToSpeed @0x825E14E0) -- exactly what this header says only ApplyLocalImpulse does.
-	// ⭐ 282 X360 instructions beat 569 PS3 ones whose Hex-Rays output opens "local variable
-	// allocation has failed": work the X360 body.
+	// ================================ HOW THE BODY WAS SETTLED ===================================
+	// The X360 symbol is a genuine export hole (no 0x825E1320.json; the census neighbours
+	// 0x825E11F8 / 0x825E1788 both exist), so it was decoded FROM THE IMAGE, and cross-read against
+	// the PS3 twin @0x74D3A0, which IS exported with full mnemonics and NAMED globals.
+	// ⚠️ EARLIER WAVES DISMISSED THE PS3 TWIN FOR THE WRONG REASON: its Hex-Rays output opens
+	// "local variable allocation has failed", but that is the PSEUDOCODE only -- its ### ASSEMBLY ###
+	// is complete and names saaAbsorptionSets / savfCompressionLimitFactor / saDirectionSpeedModifier
+	// / KVF_60_HTZ and the assert strings. Both witnesses were used; they agree step for step.
+	// The 282-vs-569 instruction gap is fully explained: X360 calls the three AbsorptionTable
+	// accessors out-of-line and has hardware vlogefp / vexptefp / vmsum3fp128, where the PS3 inlines
+	// the accessors and spells the dot product as vsldoi/vaddfp/vspltw.
 	//
-	// ⭐ EVERY CONSTANT IT READS IS RESOLVED (from the dynamic-init initialisers, 2026-08-15):
-	//   flt_82002138 = 0.01
-	//   unk_82FB9560 = savfCompressionLimitFactor, FIVE rows indexed by absorption SET:
-	//                  { 1.0, 1.0, 1.5, 1.25, 1.0 }  (init 0x82C5DF40..0x82C5DFD4)
-	//   unk_82FB7F60 = 60.0, a single scalar VecFloat   (init 0x82C5DB58..0x82C5DB7C)
-	//   0x82014AC0/AD0/AE0/AF0 = minimax polynomial rows (1.4426896 == 1/ln2, -0.6931472 == -ln2)
-	//                  => an INLINED software powf/exp2/log2; the absorption curve is a POWER law.
-	//   and, through the out-of-line GetSpeedForMaxAbsorbtion, unk_82FB9C50 -- both AbsorptionTable
-	//   rodata tables are now REAL in BrnAbsorptionTable.cpp (they were flagged-0, and that zero was
-	//   not inert: it was the INVINCIBLE profile).
-	// Its last outward edge before the epilogue is `bl 0x825BA400` @0x825E1770 -- positionally the
-	// chain forward (PassOnImpulse), ⚠️ but 0x825BA400 is unnamed in identity.json: CONFIRM before use.
+	// ⭐ IDENTITY -- FOUR INDEPENDENT WITNESSES, not position:
+	//   1. the .pdata function census lists it unnamed between RecievePassedOnImpulse (0x825E11F8)
+	//      and ValidateAndAddContact (0x825E1788);
+	//   2. it is the only function in the image calling all three AbsorptionTable accessors
+	//      (GetAbsorption @0x825E1350, GetSpeedForMaxAbsorbtion @0x825E14D0,
+	//      GetProportionToSpeed @0x825E14E0);
+	//   3. ⭐ its own assert arms name the file: the string at 0x820928D8 is
+	//      ".../Physics/DeformationManager/DeformationPhysics/BrnDeformationSensor.cpp";
+	//   4. its two assert LINE numbers (319 @0x825E14B0 and 348 @0x825E16F8) match the PS3 twin's
+	//      (0x13F == 319, 0x15C == 348) exactly.
 	//
-	// ⭐ INDEX SEMANTICS, settled from the asm (⚠️ a previous wave banked the first bound as "a
-	// direction-enum bound of 0..4" -- it is the SET, not the direction):
-	//   params + 0xB4 == meImpulseDirection's SIBLING meAbsorptionSet, asserted <= 4
-	//                    (i.e. < E_ABSORPTIONSETS_NUM); it indexes savfCompressionLimitFactor.
-	//   mpSpec  + 0x33 == the absorption LEVEL, asserted <= 9 (< KU_NUM_ABSORPTION_VALUES).
-	//   params + 0x00 == meImpulseDirection, used as dir*4 / dir*16.
-	//   mpSpec + 0x2C + dir == the per-direction NEXT collidable-body index handed to PassOnImpulse.
+	// ⭐⭐ TWO IDA PRINTING TRAPS THAT INVERT THE MATHS -- settled before anything was believed:
+	//   * `vmaddfp vD, vX, vY, vZ` as IDA prints it means **vD = vX*vZ + vY** (position 2 is the
+	//     ADDEND -- encoding order, not the spec's vD,vA,vC,vB syntax). Altivec has NO vmulfp, so
+	//     the compiler spells a plain vector multiply as vmaddfp against a zero vector held in a
+	//     stack slot; on the PS3 twin the zero sits in print position 2 in 10 of 10 occurrences,
+	//     and the Newton-Raphson reciprocal (vrefp; vnmsubfp; vmaddfp) only reads correctly this
+	//     way. Under the other reading the whole function is multiply-by-zero. ⭐ The X360 has a
+	//     real `vmulfp128`, which independently confirms it.
+	//   * an `rA == 0` field prints as `r0` but means the ISA's LITERAL ZERO, not r0's contents
+	//     (which here hold set*16). Proven on the X360 raw word 0x825E1390 == 7DA03C0E.
 	//
-	// ⚠️⚠️ BRIEF CORRECTION (2026-08-15, walls leg 5). A wave brief called X360 @0x8260E068 "a
-	// 43-insn wrapper" around this body, i.e. the cross-console route into it. IT IS NOT. That
-	// address is `BrnPhysics::Deformation::VehicleRigidBody::ApplyLocalImpulse` -- a DIFFERENT
-	// CLASS's override, already bodied and mounted in BrnVehicleRigidBody.cpp. The SENSOR's X360
-	// symbol really is an export hole; verified by reading the export set at both addresses, not
-	// by name search. ⭐ Before treating it as nonexistent, discriminate a genuine hole from a name
-	// search failing: check the unnamed sub_XXXXXXXX neighbours and the callers' xrefs_from.
+	// ⭐ THE POWER LAW IS PROVEN NUMERICALLY, NOT ASSERTED. vlogefp @0x825E1598 / vexptefp
+	// @0x825E15FC are estimate instructions refined by minimax rows read off the image:
+	//   0x82014AD0 = { 1, -0.693147182, 0.240226462, -0.055503644 }  ==  the 2^-x series
+	//                { 1, -ln2, ln^2(2)/2, -ln^3(2)/6 } to six significant figures;
+	//   0x82014AC0 carries that same series' next four terms;
+	//   0x82014AF0 opens 1.44268966 == 1/ln2, the log2 series' leading coefficient.
+	// ⇒ the block is exp2(y*log2(x)) == powf(x, y), and is reconstructed as ONE std::pow call --
+	// which is what the source said before the compiler inlined it.
+	// ⭐⭐ THE EXPONENT IS `60.0f * mvfTimeStep`. At the console's 60 Hz it is exactly 1 and the
+	// absorption factor is exactly the table value: the pow is PURELY the frame-rate correction.
+	// That is why KVF_60_HTZ exists, and it is load-bearing for THIS build specifically, which is
+	// deliberately decoupled from the 60 fps lock.
 	//
-	// ⭐ STRUCTURAL RECON BANKED 2026-08-15 (walls leg 5) so the next leg does not re-do it. Read
-	// off the PS3 export, NOT guessed:
-	//   * 569 instructions, 121 of them vector, dominated by 40x vmaddfp (+10 vaddfp, 7 vsubfp,
-	//     7 vsel, 7 vspltw, 4 vminfp, 4 vcmpgtfp, 3 vmaxfp, 3 vnmsubfp, 2 vrefp) -- a clamped,
-	//     select-heavy per-direction accumulate, which is what "compression math" looks like.
-	//   * Only THREE non-assert calls in the whole body:
-	//       0x74D4AC  CollidableBody::GetDirectionVector(ENextSensorDirection)   <- ALREADY BODIED
-	//                 in BrnCollidableBody.cpp (the KA_IMPULSE_DIRECTIONS six-axis table).
-	//       0x74D9A8  ImpulsePasser::PassOnImpulse(u8, const ImpulseParams*, VecFloat)
-	//       + 2x StrStreamBase::AppendFormat, both inside assert arms.
-	//     ⇒ the body is self-contained arithmetic plus ONE outward edge (the chain pass-on).
-	//   * 8 asserts (BeginAssert/FireAssert/EndAssert x8); the first argument check is
-	//     `lpImpulseParams->[+180] > 4` -> assert, i.e. a direction-enum bound of 0..4.
-	//   ⚠️ Hex-Rays opens with "local variable allocation has failed, the output may be wrong!" --
-	//   so this MUST be worked from raw words with the +32-per-operand-FIELD VMX correction, and
-	//   the pseudocode used only as a map. Budget it as its own slice.
+	// ⭐ EVERY OFFSET THE ASM TOUCHES LANDS ON A NAME THIS TREE'S HEADERS ALREADY GAVE IT (and the
+	// names came from DWARF independently of this body) -- params +0x00/+0x10/+0x40/+0x60/+0x70/
+	// +0x80/+0x90/+0xA0/+0xB0/+0xB4, spec +0x00/+0x10+4*dir/+0x2C+dir/+0x33, this +0x19C.
+	// ⭐ And the physics comes out DIMENSIONALLY COHERENT without being made so: `absorbed *
+	// mvfInverseInertia` is a velocity and `* mvfTimeStep` is a displacement -- which is exactly
+	// what is then added to a position. A wrong operand order does not produce that.
 	//
-	// ⛔ DISPOSITION THIS LEG: GATED, DELIBERATELY. The leg's measured blocker turned out to be
-	// upstream of the impulse response (see the wall work), and 569 insns of register-allocation-
-	// failed dense VMX is not honestly closable in the remaining window. Landing a plausible-
-	// looking body here would be exactly the silent-drop shape this subsystem has been bitten by.
+	// ⭐ THE CHAIN FORWARD IS CONFIRMED BY BEHAVIOUR (it was flagged UNVERIFIED by walls leg 7,
+	// being merely positional). `bl 0x825BA400` @0x825E1770 is ImpulsePasser::PassOnImpulse: that
+	// callee (itself an export hole, so its body was decoded too) truncates arg1 to u8, asserts
+	// index < 25 (line 156), loads mapCollidableBodies[index], asserts it non-null (line 157), and
+	// calls VTABLE SLOT 1 on it -- exactly PassOnImpulse's shape, and the call site fills the same
+	// three slots the PS3 twin fills before its NAMED PassOnImpulse call.
+	//
+	// ⭐ ARGUMENT/RETURN REGISTER, MEASURED: GetAbsorption @0x825C0E70 ends `vspltw v1,v0,0; return`
+	// and PassOnImpulse reads its VecFloat argument out of v1 ⇒ on X360 v1 is both the vector
+	// return and the first vector argument. That is what makes `vmulfp128 v1, v0, v11` @0x825E173C
+	// the third argument -- and v11 there is `vcsxwfp128 v11, v126, 1` == 0.5f (the same instruction
+	// with immediate 0 earlier yields 1.0f; the PS3 spells the pair `vcfsx ..,1` / `vcfsx ..,0`).
+	// ⚠️⚠️ SO THE PASSED-ON MAGNITUDE IS **HALF THE ABSORBED IMPULSE**, not the remainder. Walls
+	// leg 7 recorded "the remainder is what passes on" from the params write-back alone; the actual
+	// argument is `absorbed * 0.5f`, and BOTH platforms agree on it.
+	//
+	// MODELLING (the established house idiom, cf. RecievePassedOnImpulse above): every scalar here
+	// is a splatted VecFloat, so the per-lane SIMD is modelled as explicit scalar lane math; only
+	// the hit direction and the sphere centre are genuine vectors. The null guards and the
+	// direction-range early-out are PC-side tripwires, not console behaviour -- the console
+	// dereferences unconditionally, and the direction cannot be out of range on the live path
+	// (ApplySensorImpulse's loop is `cmpwi r11,6`), so the guard is unreachable and documents the
+	// invariant. Asserts are non-gating tripwires: execution continues past a failure, as in the asm.
 	// =============================================================================================
-	void DeformationSensor::ApplyLocalImpulse(ImpulseParams* /*lpImpulseParams*/)
+	void DeformationSensor::ApplyLocalImpulse(ImpulseParams* lpImpulseParams)
 	{
-		static bool sbLoggedApplyLocalImpulseGate = false;
-		if (!sbLoggedApplyLocalImpulseGate)
+		// ---- (A) the three AbsorptionTable consults, in the asm's call order -------------------
+		const EAbsorptionSets leSet = lpImpulseParams->meAbsorptionSet;             // params +0xB4
+		const u8 lu8AbsorptionLevel = mpSpec ? mpSpec->GetAbsorptionLevel() : 0;    // spec   +0x33
+
+		// bl GetAbsorption @0x825E1350 -> v1, parked in v124 (vmr128 v124,v1 @0x825E13AC).
+		const VecFloat lvfAbsorption = AbsorptionTable::GetAbsorption(leSet, lu8AbsorptionLevel);
+
+		const ENextSensorDirection leDirection = lpImpulseParams->meImpulseDirection;   // params +0x00
+		const s32 liDir = static_cast<s32>(leDirection);
+		if ( liDir < 0 || liDir >= static_cast<s32>(E_NSD_NUM) )
+			return;   // PC-side tripwire only; ApplySensorImpulse's loop is 0..5.
+
+		// lvx128 v122, [&unk_82FB9680 + 16*dir] -- CollidableBody::GetDirectionVector INLINED by the
+		// X360 compiler (the PS3 twin calls it out of line @0x74D4AC). Same table either way.
+		const Vector3 lHitDir = KA_IMPULSE_DIRECTIONS[liDir];
+
+		// ---- (B) how much compression room is left along this axis -----------------------------
+		Vector3 lFromRest = { 0.0f, 0.0f, 0.0f, 0.0f };
+		Vector3 lToLimit  = { 0.0f, 0.0f, 0.0f, 0.0f };
+		if ( mpLocalSpaceSphere && mpSpec )
 		{
-			sbLoggedApplyLocalImpulseGate = true;
-			if (CgsDev::Message::gxMessageFilterFlags & 1)
-				*CgsDev::Log::gpDebugPrint
-					<< "conductor gate: DeformationSensor::ApplyLocalImpulse reached (PS3 twin "
-					   "0x74D3A0, 569 insns; X360 export hole) but not reconstructed -- impulse "
-					   "NOT absorbed [FLAG PC boot gate]. Reported once, not per frame\n";
+			const Vector4& lCentre = SphereVec(mpLocalSpaceSphere);
+			const Vector3 lCentre3 = { lCentre.x, lCentre.y, lCentre.z, 0.0f };
+			lFromRest = Sub3(lCentre3, mpSpec->mInitialOffset);                       // vsubfp v9,v0,v9
+			lToLimit  = Sub3(lpImpulseParams->mLimitVector, lCentre3);                // vsubfp v0,v11,v0
 		}
+
+		// max(spec per-direction compression limit, 0.01) * savfCompressionLimitFactor[set]
+		//                                               * mvfAllowedCompressionFactor
+		// (lvlx + vspltw @0x825E13E0/E4; vmaxfp @0x825E13F0; vmulfp128 @0x825E13F8 / @0x825E1400)
+		const f32 lfSpecLimit = mpSpec ? mpSpec->maDirectionParams[liDir].mCompressionLimits : 0.0f;
+		f32 lfCompressionLimit = lfSpecLimit > KF_NORMAL_TOLERANCE ? lfSpecLimit : KF_NORMAL_TOLERANCE;
+		lfCompressionLimit *= KsaAbsorptionScale[leSet].x;
+		lfCompressionLimit *= lpImpulseParams->mvfAllowedCompressionFactor.x;
+
+		// vmsum3fp128 v12 (@0x825E13FC) then vmaxfp128 v12,v12,v127 (@0x825E1404): how far the
+		// sphere has ALREADY travelled along this axis, floored at zero.
+		const f32 lfUsed = Dot3(lHitDir, lFromRest);
+		const f32 lfClampedUsed = lfUsed > 0.0f ? lfUsed : 0.0f;
+
+		// vmsum3fp128 v0 (@0x825E13F4): how far it may still travel before hitting mLimitVector.
+		const f32 lfToLimit = Dot3(lToLimit, lHitDir);
+
+		// vsubfp v13 (@0x825E1408); vminfp v0 (@0x825E140C); vmaxfp128 v121,v0,v127 (@0x825E1410).
+		const f32 lfHeadroom = lfCompressionLimit - lfClampedUsed;
+		f32 lfRoom = lfHeadroom < lfToLimit ? lfHeadroom : lfToLimit;
+		if ( lfRoom < 0.0f )
+			lfRoom = 0.0f;
+
+		// vcmpgefp128. v11,v7,v127 @0x825E13D8 -> the assert arm @0x825E142C, source line 319. The
+		// console builds the message with the offending float appended; the static text is verbatim.
+		CGS_ASSERT(lpImpulseParams->mvfVelocityAlongNormal.x >= 0.0f,
+		           "Applying impulse with -ve velocity: ");
+
+		// ---- (C) the absorption fraction, made frame-rate independent --------------------------
+		// bl GetSpeedForMaxAbsorbtion(set, level, dir) @0x825E14D0 -- the accessor ITSELF applies
+		// saDirectionSpeedModifier[dir] (vmulfp128 v1,v13,v0 @0x825C0FAC), so it is not applied again
+		// here. bl GetProportionToSpeed(set, level) @0x825E14E0.
+		const VecFloat lvfSpeedForMax = AbsorptionTable::GetSpeedForMaxAbsorbtion(leSet, lu8AbsorptionLevel, liDir);
+		const VecFloat lvfProportion  = AbsorptionTable::GetProportionToSpeed(leSet, lu8AbsorptionLevel);
+
+		// vrefp128 + two Newton-Raphson steps (@0x825E14EC..0x825E1544) converge to the reciprocal;
+		// vmulfp128 @0x825E1548 then vminfp @0x825E155C clamps the ratio at 1.
+		f32 lfSpeedRatio = lpImpulseParams->mvfVelocityAlongNormal.x / lvfSpeedForMax.x;
+		if ( lfSpeedRatio > 1.0f )
+			lfSpeedRatio = 1.0f;
+
+		// vmulfp128 v13,v13,v124 / v13,v13,v1 then vmaddfp128 v13,v124,v3,v13 (@0x825E1560..0x825E156C),
+		// where v3 == 1 - proportion (vsubfp v3,v11,v1 @0x825E1538):
+		//     absorption*(1 - proportion)  +  absorption*proportion*speedRatio
+		const f32 lfFraction = lvfAbsorption.x * (1.0f - lvfProportion.x)
+		                     + lvfAbsorption.x * lvfProportion.x * lfSpeedRatio;
+
+		// vminfp v9,v7,v13 @0x825E1570 -- v7 is params +0xA0.
+		const f32 lfMaxAllowed = lpImpulseParams->mvfMaximumAllowedAbsorption.x;
+		const f32 lfBase = lfMaxAllowed < lfFraction ? lfMaxAllowed : lfFraction;
+
+		// the inlined powf (@0x825E14E4..0x825E16C0): base == lfBase, exponent == 60 * timeStep.
+		const f32 lfExponent = KVF_60_HTZ.x * lpImpulseParams->mvfTimeStep.x;
+		const f32 lfAbsorbFactor = std::pow(lfBase, lfExponent);
+
+		// vcmpgtfp128. @0x825E16C4 and vcmpgefp128. @0x825E16DC -> the assert arm @0x825E16F0,
+		// source line 348. String verbatim from 0x82096020.
+		CGS_ASSERT(lfAbsorbFactor < 1.0f && lfAbsorbFactor >= 0.0f,
+		           "lvfAbsorption < RwMathVPU::GetVecFloat_One() && lvfAbsorption >= RwMathVPU::GetVecFloat_Zero()");
+
+		// ---- (D) absorb, deform, and hand the rest down the chain -------------------------------
+		// vmulfp128 v0,v0,v125 @0x825E1728 -- the part of the impulse this sensor takes.
+		const f32 lfAbsorbed = lpImpulseParams->mvfImpulseMagnitude.x * lfAbsorbFactor;
+
+		// vmulfp128 v12,v0,v12 (* mvfInverseInertia) then v13,v12,v13 (* mvfTimeStep)
+		// (@0x825E1738 / @0x825E1740): impulse -> velocity -> displacement this step.
+		// vminfp128 v13,v13,v121 @0x825E1744 clamps it to the room computed in (B).
+		f32 lfMove = lfAbsorbed * lpImpulseParams->mvfInverseInertia.x * lpImpulseParams->mvfTimeStep.x;
+		if ( lfMove > lfRoom )
+			lfMove = lfRoom;
+
+		// vmaddfp128 v10,v122,v13,v10 @0x825E1748 then vrlimi128 v10,v9,1,1 @0x825E174C: move the
+		// local sphere centre along the hit direction, KEEPING the w lane (the radius) untouched.
+		if ( mpLocalSpaceSphere )
+		{
+			Vector4& lCentre = SphereVec(mpLocalSpaceSphere);
+			lCentre.x += lHitDir.x * lfMove;
+			lCentre.y += lHitDir.y * lfMove;
+			lCentre.z += lHitDir.z * lfMove;
+			// w (radius) preserved -- vrlimi128 re-inserts it from the pre-update copy.
+		}
+
+		// vsubfp v0,v13,v0 then stvx128 @0x825E175C/0x825E1760 -- what this sensor took is removed
+		// from the magnitude the rest of the chain will see.
+		lpImpulseParams->mvfImpulseMagnitude.x -= lfAbsorbed;
+		lpImpulseParams->mvfImpulseMagnitude.y -= lfAbsorbed;
+		lpImpulseParams->mvfImpulseMagnitude.z -= lfAbsorbed;
+		lpImpulseParams->mvfImpulseMagnitude.w -= lfAbsorbed;
+
+		// bl 0x825BA400 @0x825E1770 == ImpulsePasser::PassOnImpulse(spec.maNextSensor[dir], params,
+		// absorbed * 0.5f). ⭐ Slot 0 of the passer's body map is the car's own VehicleRigidBody,
+		// which is how an ordinary world contact reaches the momentum bank.
+		const u8 lu8NextSlot = mpSpec ? mpSpec->maNextSensor[liDir] : 0;
+
+		// ---- [impulse] PC bring-up instrument -- DELETE WHEN the wall test is banked -----------
+		// OPT-IN (BRN_IMPULSE_PROBE=1) so a default run and every golden gate stay byte-identical.
+		// Prints the FIRST few entries with every operand this body consumed, in ONE run -- the
+		// campaign rule is to read values a probe prints directly rather than infer them across runs.
+		{
+			static s32 siImpulseProbe = -1;
+			if ( siImpulseProbe < 0 )
+			{
+				const char* lpcEnv = getenv( "BRN_IMPULSE_PROBE" );
+				siImpulseProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+			}
+			static u32 suCalls = 0;
+			++suCalls;
+			if ( siImpulseProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && suCalls <= 12 )
+			{
+				*CgsDev::Log::gpDebugPrint
+					<< "[impulse] n " << static_cast<s32>(suCalls)
+					<< " dir " << liDir << " set " << static_cast<s32>(leSet)
+					<< " lvl " << static_cast<s32>(lu8AbsorptionLevel)
+					<< " mag " << lpImpulseParams->mvfImpulseMagnitude.x
+					<< " vAlongN " << lpImpulseParams->mvfVelocityAlongNormal.x
+					<< " dt " << lpImpulseParams->mvfTimeStep.x
+					<< " absn " << lvfAbsorption.x << " prop " << lvfProportion.x
+					<< " spdMax " << lvfSpeedForMax.x << " ratio " << lfSpeedRatio
+					<< " maxAllow " << lfMaxAllowed << " base " << lfBase
+					<< " expo " << lfExponent << " factor " << lfAbsorbFactor
+					<< " absorbed " << lfAbsorbed
+					<< " invI " << lpImpulseParams->mvfInverseInertia.x
+					<< " room " << lfRoom << " move " << lfMove
+					<< " nextSlot " << static_cast<s32>(lu8NextSlot)
+					<< " passer " << ( lpImpulseParams->mpImpulsePasser != 0 ? 1 : 0 )
+					<< " world " << ( lpImpulseParams->mbWorldContact ? 1 : 0 )
+					<< "\n";
+			}
+		}
+		const f32 lfPassedOn = lfAbsorbed * 0.5f;
+
+		// ⛔⛔ CHAIN-FORWARD HELD 2026-08-15 (walls leg 8) -- the reason is a MEASURED crash in OTHER
+		// code, not a doubt about this body. Landing this function finally made PassOnImpulse run for
+		// real, and every run in which it actually ran died with an access violation (0xC0000005)
+		// inside ImpulsePasser::PassOnImpulse -- fault offset resolved through Burnout_PC.map, and
+		// reproduced on four consecutive runs. Two obvious suspects were MEASURED AND CLEARED:
+		//   * the chain map is FULLY BOUND -- ResetSensors binds all 20 sensors to slots 1..20 and
+		//     ResetDeformation binds slot 0 to &mVehicleBody (probed directly, one run);
+		//   * the spec's neighbour table is real -- e.g. sensor 0 `next[0..5] = 14,2,0,14,14,4`, and
+		//     ⭐ EVERY sensor's next[2] (E_NSD_POS_YAXIS) is 0, i.e. +Y routes straight to slot 0,
+		//     the vehicle body. The route to the momentum bank is exactly where leg 7 said it is.
+		// ⭐⭐ THE REAL BLOCKER IS OBJECT LIFETIME, and it is upstream of this whole subsystem:
+		// DeformationManager::Prepare takes its models from `AllocateDeformableModelPool`, which
+		// CARVES RAW MEMORY from the rw resource allocator (a 5-entry BaseResourceDescriptors +
+		// DoAllocate) and casts it to DeformableObject*. **No C++ constructor ever runs over that
+		// pool**, so every embedded DeformationSensor's vptr is uninitialised -- and PassOnImpulse's
+		// entire job is a VIRTUAL call (vtable slot 1) through exactly that pointer.
+		// ⚠️⚠️ AND NO ASSERT CAN SEE IT: PassOnImpulse's own `mapCollidableBodies[i] != NULL` check
+		// PASSES -- the slot really is non-null; it is the OBJECT behind it that is unconstructed.
+		// ⭐ THE FIX IS ALREADY WRITTEN DOWN, one wave early: BrnDeformableObject_Lifecycle.cpp's
+		// ClearVariables carries a RECONCILE NOTE that the PS3 DeformableObject::ClearVariables
+		// @0x6BEEC4 runs ImpulsePasser::Construct (landed THIS leg), VehicleRigidBody::Construct and
+		// **the 20-sensor Construct loop** -- the last two are still missing. Land those (or
+		// placement-new the pool) and this gate comes straight out; it is one line.
+		// ⛔ Deliberately NOT a null guard: a guard would turn a located defect back into a silent
+		// drop, which is the exact shape this subsystem keeps being bitten by.
+		const bool KB_CHAIN_FORWARD_ENABLED = false;
+		if ( KB_CHAIN_FORWARD_ENABLED && lpImpulseParams->mpImpulsePasser )
+		{
+			lpImpulseParams->mpImpulsePasser->PassOnImpulse(
+				lu8NextSlot, lpImpulseParams,
+				Vector4{ lfPassedOn, lfPassedOn, lfPassedOn, lfPassedOn });
+		}
+		(void)lu8NextSlot;
+		(void)lfPassedOn;
 	}
 
 	void DeformationSensor::AddContactsToPenetrationSolver(PenetrationSolver* lpSolver, DeformableObject* lpObject,

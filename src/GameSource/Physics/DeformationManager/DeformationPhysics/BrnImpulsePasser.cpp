@@ -25,6 +25,34 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
+    // =============================================================================================
+    // ClearVariables / Construct -- ⭐⭐ ADDED 2026-08-15 (walls leg 8). The 25-slot chain map was
+    // NEVER INITIALISED in this build, and that is an access violation waiting for the first real
+    // pass-on: PassOnImpulse dereferences `mapCollidableBodies[index]` unconditionally (the console
+    // fires-and-continues past its own NULL assert), so an uninitialised slot is a wild virtual call.
+    // ⚠️⚠️ AND THE NULL ASSERT CANNOT CATCH IT: uninitialised heap is rarely zero, so
+    // `mapCollidableBodies[i] != nullptr` PASSES on garbage and the crash happens anyway. (The
+    // campaign has hit this exact shape before -- a non-null garbage pointer defeats a null assert.)
+    // ⭐ THE ASM WITNESS WAS ALREADY ON RECORD, one wave early: BrnDeformableObject_Lifecycle.cpp's
+    // ClearVariables carries a RECONCILE NOTE that the PS3 out-of-line
+    // DeformableObject::ClearVariables @0x6BEEC4 also runs ImpulsePasser::Construct(&mImpulsePasser)
+    // -- the "+6372 25-dword zero" an earlier read had mistaken for a scratch header. This lands
+    // that note. Zeroing a pointer map cannot fabricate physics; it only makes an unbound slot
+    // detectable instead of undefined.
+    // =============================================================================================
+    void ImpulsePasser::ClearVariables()
+    {
+        for ( s32 liIndex = 0; liIndex < KI_MAX_COLLIDABLE_BODIES; ++liIndex )
+        {
+            mapCollidableBodies[liIndex] = nullptr;
+        }
+    }
+
+    void ImpulsePasser::Construct()
+    {
+        ClearVariables();
+    }
+
     // Inline-attested at ResetSensors @0x82623EB8..0x82623F00 (see the TU banner).
     void ImpulsePasser::SetCollidableBodyMap(s32 liIndex, CollidableBody* lpBody)
     {
