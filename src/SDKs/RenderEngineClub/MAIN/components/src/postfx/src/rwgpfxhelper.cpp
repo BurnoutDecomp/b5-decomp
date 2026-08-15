@@ -5,7 +5,8 @@
 #include <cstdint>  // intptr_t
 
 #include <new>      // placement new (the render-target debugger carve)
-#include <cstdio>   // std::fputs (the one-shot gate reports)
+#include <cstdio>   // std::snprintf
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog (the one-shot gate reports)
 
 #include "rw/rwcore_structs.h"  // rw::IResourceAllocator / rw::ResourceDescriptor / rw::Resource
 #include "SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxhelper.h"
@@ -85,7 +86,7 @@ namespace
         if (!lrbAlreadyReported)
         {
             lrbAlreadyReported = true;
-            std::fputs(lpcText, stderr);
+            CgsDev::Log::WriteToLog(lpcText);   // BrnGame.log, like every sibling post-fx report (verify pass 2026-08-15)
         }
     }
 
@@ -530,13 +531,13 @@ namespace postfx
 #else
         // ---- 3. THE FULL-SCREEN QUAD (asm 0x82408380-0x8240855C) -- BLOCKED -----------------------
         // What the console does, in full, so the shape is on the page:
-        //     renderengine::VertexDescriptor::Parameters  {element0: stream 0, format 0x002A24F9,
+        //     renderengine::VertexDescriptor::Parameters  {element0: stream 0, format 0x002A23B9,
         //                                                  usageIndex 1;
-        //                                                  element1: stream 0, format 0x002C25E5,
+        //                                                  element1: stream 0, format 0x002C23A5,
         //                                                  usageIndex 6}
         //       -> GetResourceDescriptor -> m_allocator->DoAllocate -> Initialize -> m_quadVertexDescriptor
-        //     renderengine::VertexBufferHelper::Parameters {vertexCount 3, formatCodes {0x002A24F9,
-        //                                                   0x002C25E5, -1...}}
+        //     renderengine::VertexBufferHelper::Parameters {vertexCount 3, formatCodes {0x002A23B9,
+        //                                                   0x002C23A5, -1...}}
         //       -> CalculateBufferSize -> VertexBuffer::GetResourceDescriptor -> DoAllocate
         //       -> CalculateBufferSize -> VertexBuffer::Initialize -> m_quadVertexBuffer
         //     VertexBufferHelper::Lock -> write the quad's vertices -> Unlock

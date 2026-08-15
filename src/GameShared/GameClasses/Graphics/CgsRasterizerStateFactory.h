@@ -51,7 +51,9 @@
 //     b5-decomp/src/GameSource/Graphics/BrnRendererModule.h:554:    CgsRasterizerStateFactory           mRasterizerStateFactory;
 //     b5-decomp/src/GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.cpp:6/82
 //     b5-decomp/src/GameShared/GameClasses/Graphics/CgsStateFactoryLinkStubs.cpp:45..53 (the comment)
-// (BrnRendererModule.h:144 is the empty PLACEHOLDER struct, not a caller.)
+// (BrnRendererModule.h:144 WAS the empty PLACEHOLDER struct at the time of that grep; the
+// gate-flip wave replaced the three placeholders with #includes of the real headers, and
+// BrnRendererModule::Render now calls all three Constructs in its deferred PC bring-up.)
 //
 // CONSTRUCT IS A NON-STATIC MEMBER, from the asm and not from the DWARF: the
 // prologue keeps the allocator in r4 (`mr r31, r4` @0x827EBF4C, then
@@ -110,14 +112,11 @@
 // CgsBlendStateFactory.h:189-191.)
 //
 // -----------------------------------------------------------------------------
-// ODR NOTE, disclosed rather than hidden. GameSource/Graphics/BrnRendererModule.h
-// lines 144-146 still carry the empty placeholder `struct CgsRasterizerStateFactory {};`
-// and line 554 still embeds it by value. That placeholder is a second declaration
-// of the same global-namespace name, so no TU may include both headers -- and none
-// does today. This is the identical situation both committed sibling factories are
-// already in; the swap that deletes the placeholders is deferred for all three
-// together (it is blocked on BrnRendererModule.h's EA::Jobs::Job placeholder, see
-// scratch/postfx_step2_out/driver/REPORT.md section 3C).
+// ODR NOTE -- RESOLVED (gate-flip wave, 2026-08-15). BrnRendererModule.h used to
+// carry an empty placeholder `struct CgsRasterizerStateFactory {};` (a second
+// declaration of this global-namespace name, so no TU could include both headers).
+// It now #includes this header instead, embeds the real class by value, and
+// BrnRendererModule::Render calls Construct once in its deferred PC bring-up.
 // =============================================================================
 
 // Which slot of saRasterizerStates each of the three built-in states occupies.

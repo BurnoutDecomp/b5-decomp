@@ -153,12 +153,11 @@ namespace postfx
     //    {0,0,0,0} / {1,1,1,1} / {1,1,1,1} / {0.5,0.5,1,1} -- and by the composite, which reads the
     //    last one as centre (0.5, 0.5) with scale (1, 1), the screen centre at unit scale.
     //
-    // NOTE ON THE DUPLICATE DEFINITION. GameShared/GameClasses/RenderWare/PostFX/RwVignetteParameters.cpp
-    // also defines rw::graphics::postfx::Vignette::Parameters::Parameters(), against a SECOND,
-    // forked declaration of rw::graphics::postfx::Vignette whose Parameters holds `u32 muFlags` plus
-    // EIGHT Vector4s -- i.e. it took all twelve Hex-Rays stack temporaries for members. Same mangled
-    // symbol, different class. That file is not on tools/build/build_game_exe.bat so it does not
-    // collide today; see this wave's report.
+    // NOTE ON THE DUPLICATE DEFINITION THAT USED TO EXIST. GameShared/GameClasses/RenderWare/PostFX/
+    // RwVignetteParameters.{h,cpp} defined this same mangled symbol against a SECOND, forked
+    // rw::graphics::postfx::Vignette whose Parameters held `u32 muFlags` plus EIGHT Vector4s -- all
+    // twelve Hex-Rays stack temporaries promoted to members. Both files were DELETED in the 2026-08-15
+    // gate-flip wave; this is the one definition.
     // ============================================================================================
     Vignette::Parameters::Parameters()
         : m_allocator(nullptr)                                        // stw r9(=0), 0(r3)
@@ -243,16 +242,27 @@ namespace postfx
             reinterpret_cast<renderengine::BlendMaterialState**>(&m_blendStateResource), &lBlendParams);
 
         // --- the Position+UV VertexDescriptor --------------------------------------------------------
+        // Parameters() @0x82276870 (`bl` @0x82403F28) seeds the block -- every record's format
+        // 0xFFFFFFFF (empty), offset 0xFFFF (auto-pack), usage / usage-index 0xFF (take the default)
+        // -- and the console then makes exactly SIX stores into it (asm 0x82403F2C-0x82403F50):
+        //   sth r31(0), +0x00      maElements[0].mu16Stream
+        //   stw 0x2A23B9, +0x04    maElements[0].miOffset      (the FLOAT3 format lane)
+        //   stb r24(1),  +0x0B     maElements[0].mu8UsageIndex (the element-TYPE lane: 1 = XYZ)
+        //   sth r31(0), +0x10      maElements[1].mu16Stream
+        //   stw 0x2C23A5, +0x14    maElements[1].miOffset      (FLOAT2)
+        //   stb r11(6),  +0x1B     maElements[1].mu8UsageIndex (6 = TEX0)
+        // (Verify pass 2026-08-15: an earlier revision memset the whole block -- an instruction the
+        // asm does not have, which destroyed the ctor's sixteen empty sentinels and made the leaf
+        // see sixteen live records with format 0 -- wrote the 6 into maElementFlags[0] instead of
+        // element 1's type lane, and dropped the `stb 1` for element 0's type. The boot log showed
+        // it: fourteen "unknown vertex format code" lines then `elements=2 stride0=6 decl=FAILED`.)
         renderengine::VertexDescriptor::Parameters lVertexParams;
-        // The two packed element words + the trailing element flags the X360 seeds (v60/v63/v64).
-        // [FLAG residual raw-cast, carried over unchanged from the previous revision: the two element
-        // words are written through a reinterpret_cast at the head of each Element instead of by
-        // field. Recovering renderengine::VertexDescriptor::Parameters::Element's bit layout is that
-        // TU's work, not this one's; flagged rather than silently re-blessed.]
-        std::memset(&lVertexParams, 0, sizeof(lVertexParams));
-        *reinterpret_cast<u32*>(&lVertexParams.maElements[0].miOffset) = KU_VIGNETTE_VTX_ELEMENT0;
-        *reinterpret_cast<u32*>(&lVertexParams.maElements[1].miOffset) = KU_VIGNETTE_VTX_ELEMENT1;
-        lVertexParams.maElementFlags[0] = 6;   // v64 = 6
+        lVertexParams.maElements[0].mu16Stream    = 0;
+        lVertexParams.maElements[0].miOffset      = static_cast<s32>(KU_VIGNETTE_VTX_ELEMENT0);
+        lVertexParams.maElements[0].mu8UsageIndex = 1;   // ELEMENTTYPE_XYZ  (stb r24, var_165)
+        lVertexParams.maElements[1].mu16Stream    = 0;
+        lVertexParams.maElements[1].miOffset      = static_cast<s32>(KU_VIGNETTE_VTX_ELEMENT1);
+        lVertexParams.maElements[1].mu8UsageIndex = 6;   // ELEMENTTYPE_TEX0 (stb r11, var_155)
 
         rw::BaseResourceDescriptors<5> lVertexDescriptor;
         renderengine::VertexDescriptor::GetResourceDescriptor(&lVertexDescriptor, &lVertexParams);
@@ -370,8 +380,16 @@ namespace postfx
     // ============================================================================================
     void Vignette::Release()
     {
-        renderengine::ProgramBuffer::Release(m_pixelProgram);
-        renderengine::ProgramBuffer::Release(m_vertexProgram);
+        // [FLAG PC bring-up] The console has no null test here (`lwz r3, 0xA8(r31); bl Release`
+        // straight through) because its programs are never null. On this build the program gate
+        // (BRN_POSTFX_VIGNETTE_PROGRAMS_AVAILABLE 0) makes them CERTAINLY null, and
+        // ProgramBuffer::Release writes through its argument (programbuffer.cpp:311) -- so the honest-
+        // empty gate is exactly what makes the console's assumption false. Same guard the sibling
+        // DepthOfField::Release carries. (Verify pass 2026-08-15.)
+        if (m_pixelProgram != nullptr)
+            renderengine::ProgramBuffer::Release(m_pixelProgram);
+        if (m_vertexProgram != nullptr)
+            renderengine::ProgramBuffer::Release(m_vertexProgram);
 
         m_allocator->DoFree(m_rasterizerStateResource);
         m_allocator->DoFree(m_depthStencilResource);
