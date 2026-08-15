@@ -79,6 +79,20 @@ namespace postfx
         // caller (BrnPostFx::BeginTintBlend) to fill the source list and schedule the blend.
         TintBlendParameters& BeginBlendJob();
 
+        // rwgpfxtint.h:98 (DWARF) -- close the blend: unlock the colour-lookup surface the job wrote.
+        // INLINED on the X360 (BrnPostFx::Render 0x8240A4DC-0x8240A4F4); body belongs to this TU.
+        void EndBlendJob();
+
+        // rwgpfxtint.h:77 (DWARF) -- release the colour-lookup texture and free the two rw resources
+        // it and its texture-state were carved into. INLINED on the X360 (BrnPostFx::Destruct
+        // 0x82408150-0x82408188); body belongs to this TU.
+        void Release();
+
+        // rwgpfxtint.h:110 (DWARF) -- the colour-lookup sampler state (X360 +0xC4), which the post-fx
+        // composite binds as its 3D-tint sampler. Defined inline: the X360 read is a single `lwz` and
+        // an out-of-line body would add a link dependency for a member read.
+        const renderengine::TextureState* GetTextureState() const { return m_textureStateTintMap; }
+
     private:
         rw::graphics::postfx::TintBlendParameters m_blendParameters;        // +0x00
         bool                                m_blendLock;                    // +0x80

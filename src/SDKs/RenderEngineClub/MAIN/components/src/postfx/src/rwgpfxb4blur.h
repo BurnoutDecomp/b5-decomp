@@ -2,6 +2,7 @@
 #define RW_GPFX_B4BLUR_H
 
 #include "types.hpp"
+#include "rw/rwcore_structs.h"   // rw::IResourceAllocator (Parameters::m_allocator)
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Vector2
 
 // rw::graphics::postfx::B4Blur::State -- the parameter block for the "B4" (Burnout-4) blur post-fx.
@@ -55,6 +56,26 @@ namespace postfx
             // additive/multiplicative gradient terms the blur shader applies.
             void SetBlendSharpness(f32 lfSharpness);
         };
+
+        // rwgpfxb4blur.h:126-132 (DWARF) -- the construction parameter block. Leading member is the
+        // allocator, so &Parameters::m_allocator is the `rw::IResourceAllocator**` the constructor
+        // below takes.
+        struct Parameters
+        {
+            rw::IResourceAllocator* m_allocator;          // rwgpfxb4blur.h:128
+            // rwgpfxb4blur.h:129. X360 dword_83010F74 == CgsBlendStateFactory::saBlendStates[1] ==
+            // E_FACTORY_BLEND_STATE_TRANSPARENT_MODULATE_NO_ALPHA_TEST_DEST_RGBA (CgsBlendStateFactory.h:151).
+            // IDENTIFIED, not unattested -- but the factory's table is a private static reached only
+            // through a non-static accessor, so BrnPostFx::Construct cannot name it yet and leaves
+            // this member at whatever Parameters::Parameters() seeds. See this edit's note.
+            void*                   m_scatterBlendState;
+            State                   m_state;              // rwgpfxb4blur.h:130
+
+            Parameters();                                 // rwgpfxb4blur.h:132
+        };
+
+        // X360 0x823FE9C8 -- construct the B4 blur into `this` from the parameter block's address.
+        explicit B4Blur(rw::IResourceAllocator** lppParameters);
     };
 }
 }

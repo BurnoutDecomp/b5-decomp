@@ -177,6 +177,14 @@ struct IResourceAllocator {  // sizeof = 8 (rwcore.pdb, x64) == one vptr
     // vestigial `IResourceAllocator field_0x0;` members in the concrete structs below stay
     // instantiable.
     virtual void Free(void* lpBlock, uint64_t luSizeOrFlags = 0);
+
+    // ADDITIVE (virtual member fn, no storage -> sizeof unchanged): the vtable's DoFree slot
+    // (IResourceAllocator_vtbl::DoFree, +56; LinearResourceAllocator overrides it as
+    // ?DoFree@LinearResourceAllocator@rw@@MEAAXAEBVResource@2@@Z == void DoFree(const Resource&)).
+    // The counterpart of DoAllocate: hand a carved Resource back. The X360 post-fx teardowns
+    // (BrnPostFxBloom::Destruct, postfx::Tint::Release, postfx::DepthOfField::Release) all reach it
+    // through the same slot. Default is a no-op, like Free above, so it costs the link nothing.
+    virtual void DoFree(const ::rw::Resource& /*lrResource*/) {}
 };
 RW_SIZE_ASSERT(rw::IResourceAllocator, 8);
 

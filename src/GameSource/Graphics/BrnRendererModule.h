@@ -727,7 +727,14 @@ inline BrnRendererModule::BrnRendererModule()
     mbShowShadowMap = false;
     mbSortDisplayListsWideNotLong = false;
     miShowShadowMapIndex = 0;
-    mfAspectCorrection = 0.0f;
+    // X360 BrnRendererModule::Construct @0x8240A828 stores flt_82001C98 == 1.0f into this slot
+    // (`addi r28, r28, -0x3BF8` = this+0xC408, `lfs f29, flt_82001C98@l(r11)`, `stfs f29, 0(r28)`;
+    // the constant is dumped at DATA_DUMP.md:1516 as 0x3F800000). It was 0.0f here -- a placeholder
+    // zero, and this member is a RATIO whose neutral is 1.0: Render's letterbox branch is
+    // `if (mfAspectCorrection < 1.0f) RenderLetterBoxBars(mfAspectCorrection, ...)`, so 0.0f means
+    // "letterbox every frame", and BrnPostFx::Render takes the same value as its f4 aspect
+    // correction, where 0.0f would stretch the composite by an invented number.
+    mfAspectCorrection = 1.0f;
     ConstructRenderSwitches();
 
     mbOcclusionCullCarOpaque = false;
