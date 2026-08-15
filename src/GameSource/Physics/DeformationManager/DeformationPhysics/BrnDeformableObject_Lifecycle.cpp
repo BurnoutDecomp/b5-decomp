@@ -1,5 +1,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                    // gpDebugPrint -- the opt-in [passer] bring-up probe only
+#include <cstdlib>                                                           // getenv -- the opt-in [passer] bring-up probe only
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                    // CgsNumeric::Random
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu::AddMonitor
@@ -190,12 +192,21 @@ namespace Deformation
         SetLastLinearVelocity(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
         SetEntitySphereSize(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
 
-        // ⚠️ RECONCILE NOTE (2026-08-14, walls wave -- recorded, not yet applied): the PS3
-        // out-of-line ClearVariables @0x6BEEC4 shows this body ALSO runs
-        // ImpulsePasser::Construct(&mImpulsePasser) (the "+6372 25-dword zero" the Prepare banner
-        // misread as a scratch header -- it is the 25-slot chain map), VehicleRigidBody::
-        // Construct(&mVehicleBody), the 20-sensor Construct loop and the mLastAngularVelocity
-        // zero. Reconcile when the sensor/rigid-body Constructs land with the mount wave.
+        // ⭐⭐ 2026-08-15 (walls leg 8) -- THE IMPULSE-PASSER MAP ZERO, APPLIED. The PS3 out-of-line
+        // ClearVariables @0x6BEEC4 runs ImpulsePasser::Construct(&mImpulsePasser): the
+        // "+6372 25-dword zero" an earlier read mistook for a scratch header IS the 25-slot chain
+        // map. It had been recorded here as "not yet applied" since 2026-08-14.
+        // ⛔ WHY IT COULD NOT WAIT ANY LONGER: with DeformationSensor::ApplyLocalImpulse landed this
+        // leg, PassOnImpulse finally runs for real -- and it dereferences mapCollidableBodies[index]
+        // unconditionally (fire-and-continue past its own NULL assert, as the console does). An
+        // uninitialised map is then a wild virtual call, which is exactly the access violation the
+        // first live wall-contact run produced (0xC0000005 in ImpulsePasser::PassOnImpulse +0x48,
+        // resolved through Burnout_PC.map).
+        mImpulsePasser.Construct();
+
+        // ⚠️ RECONCILE NOTE (2026-08-14, walls wave -- still recorded, not yet applied): the same PS3
+        // body ALSO runs VehicleRigidBody::Construct(&mVehicleBody), the 20-sensor Construct loop and
+        // the mLastAngularVelocity zero. Reconcile when the sensor/rigid-body Constructs land.
     }
 
     // =================================================================================================
@@ -883,6 +894,35 @@ namespace Deformation
             lrSensor.mVolInstId.muId =
                 (static_cast<u64>(mHandlingBodyID) & 0xFFFFFFFF00000000ull)
                 | static_cast<u64>(lu8SceneIndex);
+
+            // ---- [passer] PC bring-up instrument -- DELETE WHEN the wall test is banked --------
+            // OPT-IN (BRN_IMPULSE_PROBE=1). Which chain slots this spec actually binds, and which
+            // slots its own maNextSensor[] wants -- ONE run answers whether the map is complete.
+            {
+                static s32 siPasserProbe = -1;
+                if ( siPasserProbe < 0 )
+                {
+                    const char* lpcEnv = getenv( "BRN_IMPULSE_PROBE" );
+                    siPasserProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+                }
+                static u32 suLogged = 0;
+                if ( siPasserProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && suLogged < 24u )
+                {
+                    ++suLogged;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[passer] bind sensor " << liSensor << "/" << liNumSensors
+                        << " -> slot " << static_cast<s32>(lu8SceneIndex)
+                        << "  next[0..5] "
+                        << static_cast<s32>(lpSensorSpec->maNextSensor[0]) << ","
+                        << static_cast<s32>(lpSensorSpec->maNextSensor[1]) << ","
+                        << static_cast<s32>(lpSensorSpec->maNextSensor[2]) << ","
+                        << static_cast<s32>(lpSensorSpec->maNextSensor[3]) << ","
+                        << static_cast<s32>(lpSensorSpec->maNextSensor[4]) << ","
+                        << static_cast<s32>(lpSensorSpec->maNextSensor[5])
+                        << "  absLvl " << static_cast<s32>(lpSensorSpec->mu8AbsorbtionLevel)
+                        << "\n";
+                }
+            }
         }
 
         // ---- phase 2: closest sensor per wheel + the four appended wheel spheres ----------------
