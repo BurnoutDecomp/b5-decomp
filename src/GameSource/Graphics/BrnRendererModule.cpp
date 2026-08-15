@@ -5,6 +5,7 @@
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                      // renderengine::PCSurfaceBracket_* (the scene-target bracket)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // CgsDev::DebugManager (debug HUD overlay)
 #include "GameSource/Gui/BrnGuiModule.h"         // BrnGui::gpActiveGuiModule (the GUI render drive)
+#include "GameSource/Graphics/BrnRendererModulePostFx.h"  // Render's effects-frame -> BrnPostFx apply block
 
 // ---------------------------------------------------------------------------------------------
 // BRN_SHADOW_MAP_TARGET_AVAILABLE -- the shadow-map RENDER TARGET gate (PC bring-up, 2026-08-12).
@@ -238,6 +239,23 @@ namespace
     // the string "Monitor " at +0x0008, and the assembly addresses no other displacement).
     const f32 KF_QUARTER_RES_CLEAR_COMPONENT = 0.0f;
 
+    // --- [FLAG PC bring-up] the LAYER-0 base effects frame's shipped values -----------------------
+    // Every one of these is READ DATA, not a chosen number: the bloom five come from POSTFX vault
+    // asset "191270" (key C37BF4F3458A6DB5, class B632EC178CFDE613 "bloomasset", data at bin+0x1270
+    // in build/game/POSTFX/POSTFXVAULT.BIN, resource 0x627894D7) as BloomData::Construct @0x82678070
+    // reads it -- mfLuminance = data+20, mfThreshold = data+16, mv4Scale = data+0..16. Conductor
+    // extraction, scratch/postfx_step4_bloom/DATA_NOTE.md section 3. Consumed by
+    // PCBringUpProduceBaseEffectsFrame below.
+    const f32 KF_BASE_FRAME_BLOOM_LUMINANCE = 1.8f;
+    const f32 KF_BASE_FRAME_BLOOM_THRESHOLD = 0.655738f;
+    const f32 KF_BASE_FRAME_BLOOM_SCALE_R   = 0.954116f;
+    const f32 KF_BASE_FRAME_BLOOM_SCALE_G   = 0.947919f;
+    const f32 KF_BASE_FRAME_BLOOM_SCALE_B   = 0.886839f;
+    const f32 KF_BASE_FRAME_BLOOM_SCALE_A   = 1.0f;
+
+    // The weight the console's producer writes for an effect it enabled (`frame+8 = 1.0` etc.).
+    const f32 KF_BASE_FRAME_ENABLED_WEIGHT  = 1.0f;
+
     u32  gu32LastMonitorTick = 0;
     bool gbMonitorTickValid  = false;
 
@@ -390,6 +408,49 @@ namespace
         }
         sWorldDispatchAllocator.Initialize(lHeapResource, lHeapCapacity);
         sbWorldDispatchAllocatorReady = true;
+        return true;
+    }
+
+    // ============================================================================================
+    // [FLAG PC bring-up] CONSTRUCT THE EFFECTS ARBITRATOR.
+    //
+    // CONSOLE POSITION: BrnRendererModule::Construct @0x8240A778, pseudocode line 126 --
+    //     BrnGraphics::EffectsArbitrator::Construct(this + 1152, off_82F2C814)
+    // (this+1152 == this+0x480 == mEffectsArbitrator). off_82F2C814 is a GLOBAL OBJECT whose vtable
+    // is off_820A09F0, i.e. an rw::IResourceAllocator instance -- the process-wide GlobalGraphics
+    // BrnResource::LinearResourceAllocator (BrnResourceAllocator.h:86). That object is
+    // DECLARATION-ONLY in this tree: BrnResource::Allocators::GetGlobalGraphicsAllocator() has no
+    // body, which is the same blocker BrnRendererMemory::Construct's own gate banner names.
+    //
+    // WHY IT MOVED: BrnRendererModule::Construct runs before that allocator exists on PC, exactly as
+    // it runs before the D3D9 device exists. So the arbitrator is Constructed lazily, once, on the
+    // SAME bring-up allocator every other deferred console Construct in this file already runs
+    // through (sWorldDispatchAllocator -- the three state factories, mIm3dRendererSkyDome,
+    // BrnPostFx::Construct). It needs no device, so unlike those it can come up on the very first
+    // call, which is what lets the layer-0 producer write a frame before the first Render.
+    //
+    // ORDERING CONTRACT, and it is the whole reason this is a function rather than a line in
+    // Construct: the arbitrator must exist BEFORE (a) the first producer write
+    // (PCBringUpProduceBaseEffectsFrame, from StartOfFrame), (b) the first world hand-over
+    // (GetWorldEffectsFrameBringUp, from BrnGameModule::DoDispatch) and (c) the first read
+    // (Render's apply block). All three call this first, so whichever runs first builds it.
+    //
+    // DELETE-WHEN GetGlobalGraphicsAllocator() has a body and Construct can make the console's own
+    // one-line call.
+    // ============================================================================================
+    bool sbEffectsArbitratorConstructed = false;
+
+    bool EnsureEffectsArbitratorBringUp(BrnGraphics::EffectsArbitrator& lrArbitrator)
+    {
+        if (sbEffectsArbitratorConstructed)
+            return true;
+        if (!EnsureWorldDispatchAllocator())
+            return false;              // no heap yet -- retry next call
+
+        lrArbitrator.Construct(&sWorldDispatchAllocator);
+        sbEffectsArbitratorConstructed = true;
+        CgsDev::Log::WriteToLog("[postfx-fx] BrnGraphics::EffectsArbitrator Constructed"
+                                " (deferred PC bring-up, X360 Construct @0x8240A778 line 126)\n");
         return true;
     }
 
@@ -571,8 +632,36 @@ CgsGraphics::DispatchFrame* BrnRendererModule::GetDispatchFrameForWrite()
 // Reconstructed here: the two GDL halves (the parts whose subsystems exist).
 // FLAG [PC gate]: the im-buffer rewinds / texture-scope clear / corona rewind
 // land with CgsTextureScopeTable and the corona manager.
+//
+// THE EFFECTS ARBITRATOR IS NOT TOUCHED HERE, AND THAT IS THE BINARY, NOT AN OMISSION. The step-4
+// brief expected BrnGraphics::EffectsArbitrator::StartOfFrame to be inlined into this function. It
+// is not: the whole X360 body contains NO reference to a1 + 1152 (== this + 0x480 ==
+// mEffectsArbitrator). The only members it reaches are the GDL frame (+680), the seven im-render
+// buffers (+2828 / +4244 / +4756 / +5492 / +5532 / +5936 / +6040), the shader-constant table and the
+// corona pair (+14336 / +14640). Nor does such a function exist anywhere in the image:
+//     $ grep -rho "BrnGraphics::EffectsArbitrator::[A-Za-z0-9_]*" \
+//           .ida-exports/BURNOUT_X360_ARTIST.XEX/ | sort -u
+//     BrnGraphics::EffectsArbitrator::Construct
+//     BrnGraphics::EffectsArbitrator::Construct_DWORD
+//     BrnGraphics::EffectsArbitrator::EndOfFrame
+//     BrnGraphics::EffectsArbitrator::EndOfFrameint
+//     BrnGraphics::EffectsArbitrator::EvalTint
+//     BrnGraphics::EffectsArbitrator::EvalTintint
+// Three names, no StartOfFrame. The arbitrator's per-frame open IS its EndOfFrame (called from
+// SwapBuffers), which both flips the double buffer and re-Constructs the new write slot. So no
+// arbitrator call is added here.
 void BrnRendererModule::StartOfFrame()
 {
+    // [FLAG PC bring-up] The layer-0 (base) effects frame's producer, at the earliest point of the
+    // renderer's own frame bracket -- see PCBringUpProduceBaseEffectsFrame's banner for why this is
+    // where the console's dispatch-thread producer maps to. Deliberately BEFORE the mpInterpreter
+    // early-out below: the effects frames have nothing to do with the GDL ring, and on a build where
+    // the ring never came up the post-fx composite still runs.
+    if (EnsureEffectsArbitratorBringUp(mEffectsArbitrator))
+    {
+        PCBringUpProduceBaseEffectsFrame();
+    }
+
     if (mpInterpreter == 0)
         return;   // Construct's allocator gate did not open -- no GDL ring.
 
@@ -581,16 +670,179 @@ void BrnRendererModule::StartOfFrame()
         &mDoubleBufferedDispatchFrame.GetDispatchBinForWrite());
 }
 
+// ==================================================================================================
+// [FLAG PC bring-up] PCBringUpProduceBaseEffectsFrame -- NOT an X360 function.
+//
+// STANDS IN FOR BrnEffects::EffectsModule::GenerateRenderRequests @0x8227FF10 (lines 40-120), which
+// writes the LAYER-0 EXTERNAL BrnEffectsFrame every dispatch update; BrnRendererModule::Update
+// @0x82405E28 (line 105) then publishes that frame through
+// RendererIO::OutputBuffer::SetBaseEffectsFrame. NEITHER runs on this build:
+//     $ grep -rn "GenerateRenderRequests" b5-decomp/src
+//     (no hits)
+//     $ grep -n "EffectsModule" tools/build/build_game_exe.bat
+//     (no hits)
+// and the RendererIO buffers are not created either (BrnGameModule.cpp:1339-1360 says so at length).
+//
+// WHERE IT RUNS. The console's producer runs on the DISPATCH thread, between Update and SwapBuffers;
+// what matters is only that it writes the EXTERNAL slot before EffectsArbitrator::EndOfFrame flips
+// it. On PC the frame is BrnGameModule::OnStartOfUpdateFrame -> StartOfFrame (here) ... DoDispatch
+// ... DispatchThread -> Render (reads the INTERNAL slot) ... OnEndOfUpdateFrame -> EndOfFrame ->
+// SwapBuffers -> EffectsArbitrator::EndOfFrame (the flip). So a write here reaches Render on the
+// NEXT frame -- which is exactly the console's own one-frame producer/consumer pipeline, not a
+// deviation. (Consequence to expect in the log: frame 0 evaluates against a freshly Constructed
+// frame, i.e. every bool false, and bloom lights from frame 1.)
+//
+// WHAT IT WRITES -- every value is the console's, on a frame with NO camera effects and the effects
+// module's debug component at its Construct @0x82278C98 defaults (scratch/postfx_step4_bloom/
+// DATA_NOTE.md section 3, conductor-extracted):
+//   mbUseTint     = mbEnableTint     (module +181103)  -> true
+//   mbUseTint2d   = mbEnable2dTint                     -> true
+//   mbUseVignette = mbEnableVignette                   -> true
+//   mbUseBloom    = mbEnableBloom                      -> true
+//   mbUseBlur     = camera+180 flag | (module +181106 & +181105)   -> false with no camera effects
+//   mbUseDepthOfField = (camera+308 > 0) && mbEnableDOF            -> false with no camera effects
+// then, per ENABLED effect, the data block is built from an AttribSys asset and the weight set to
+// 1.0f. The three assets and their SHIPPED values (build/game/POSTFX/POSTFXVAULT.BIN, resource
+// 0x627894D7; the keys are Attrib::StringToKey of the decimal ids):
+//   bloom    "191270" -> BloomData::Construct @0x82678070 reads data+20 / data+16 / data+0..16, i.e.
+//                        mfLuminance 1.8f, mfThreshold 0.655738f, mv4Scale (0.954116, 0.947919,
+//                        0.886839, 1.0). The console then ADDS camera+252 to the luminance and
+//                        camera+248 to the threshold; both are 0 with no camera effects.
+//   tint2d   "374388" -> TintData2d::Construct @0x82678268 copies 16 bytes: (0,0,0,0) -- NEUTRAL.
+//   vignette "198102" -> NOT PRESENT in POSTFXVAULT.BIN nor in any other shipped bnd2 (the conductor
+//                        searched every bundle under build/game). See the vignette block below.
+//
+// mbUseTint IS WRITTEN AND IS INERT ON THIS BUILD, deliberately. The colour-cube tint is consumed by
+// Render's OTHER effects block (pseudocode lines 502-534: EffectsArbitrator::EvalTint ->
+// BrnPostFx::SetTint -> BrnPostFx::BeginTintBlend), which this wave does NOT reconstruct, for a
+// measured reason: E_FX_TINT (0x20) is the ONLY one of the five bits that moves the composite's
+// PERMUTATION INDEX (BrnPostFxShader.cpp:1377-1380, `leShader = 4*blur | 2*dof | tint3d`), and only
+// permutation 0 has a PC program pair -- BrnPostFxShader::Render hard-returns without drawing on any
+// other (BrnPostFxShader.cpp:1389-1397). Lighting tint before its programs exist would present the
+// frame un-composited. Bloom and vignette are IN permutation 0 (E_SHADER_BLOOM_VIGNETTE_TINT2D) and
+// move no index, which is why this wave can light them. Writing the bool faithfully costs nothing
+// while nothing reads it, and is what the tint step will need.
+//
+// DELETE-WHEN BrnEffects::EffectsModule::GenerateRenderRequests and the RendererIO buffers are live.
+// ==================================================================================================
+void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
+{
+    BrnEffectsFrame* const lpFrame = mEffectsArbitrator.GetExternalEffectsFrame(
+        static_cast<u8>(BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_BASE), 0u);
+    if (lpFrame == 0)
+        return;
+
+    lpFrame->SetUseBloom(true);
+    lpFrame->SetUseVignette(true);
+    lpFrame->SetUseDepthOfField(false);
+    lpFrame->SetUseBlur(false);
+    lpFrame->SetUseTint(true);
+    lpFrame->SetUseTint2d(true);
+
+    // ---- bloom: vault asset 191270 -------------------------------------------------------------
+    {
+        BrnEffects::BloomData lBloom;
+        lBloom.mfLuminance = KF_BASE_FRAME_BLOOM_LUMINANCE;
+        lBloom.mfThreshold = KF_BASE_FRAME_BLOOM_THRESHOLD;
+        lBloom.mv4Scale    = Vector4{ KF_BASE_FRAME_BLOOM_SCALE_R, KF_BASE_FRAME_BLOOM_SCALE_G,
+                                      KF_BASE_FRAME_BLOOM_SCALE_B, KF_BASE_FRAME_BLOOM_SCALE_A };
+        lpFrame->SetBloomData(lBloom, KF_BASE_FRAME_ENABLED_WEIGHT);   // data + weight in one call (DWARF BrnEffectsFrame.h:71)
+    }
+
+    // ---- 2D tint: vault asset 374388 (all four lanes zero -- neutral) --------------------------
+    {
+        BrnEffects::TintData2d lTint2d;
+        lTint2d.mv4Colour.SetZero();
+        lpFrame->SetTintData2d(lTint2d, KF_BASE_FRAME_ENABLED_WEIGHT);
+    }
+
+    // ---- vignette: the weight is written, the DATA BLOCK IS NOT ---------------------------------
+    // [FLAG BLOCKED: the base-layer vignette asset is absent from every shipped bundle]
+    //
+    // The console's producer does VignetteData::Construct(&frame+0x40, hash64("198102")) and then
+    // sets the weight to 1.0f. Asset "198102" is in NO shipped bundle -- not POSTFXVAULT.BIN, not
+    // any other bnd2 under build/game (the conductor searched all of them) -- so on the retail
+    // console VignetteData::Construct @0x826780D0 runs over an Attrib instance with NO collection
+    // behind it and the block it writes is the vignetteasset's DefaultDataArea (0x50 bytes), whose
+    // CONTENTS ARE NOT ATTESTED BY ANYTHING WE HAVE. So the data block is not written here: any
+    // value would be invented, and this is the one effect where an invented value is not cosmetic
+    // (see the measurement note below). What the frame carries instead is what
+    // BrnEffectsFrame::Construct seeded -- VignetteData::Construct's own kv4Def* / kv2Def* statics.
+    //
+    // THE WEIGHT IS WRITTEN AT THE CONSOLE'S 1.0f, and that is not a compromise -- it is very nearly
+    // a no-op, which the asm settles. EffectsArbitrator::EvalVignette (sub_823F9DE0) does NOT use
+    // the base layer's weight at all:
+    //   * it SEEDS the out block with the base layer's VignetteData verbatim -- a ten-iteration
+    //     `ld`/`std` loop over 80 bytes from `mapaEffectsFrames[0] + 496*internal + 0x40`
+    //     (asm 0x823F9E08-0x823F9E30), before it looks at any weight;
+    //   * then, per layer 1..2, it folds that layer in with
+    //     `VignetteData::SetToBlend(out, out, 1.0f - layerWeight, layerWeight, layerBlend)`
+    //     (asm 0x823FA020-0x823FA034: `fsubs f1, f29(1.0), f31` / `fmr f2, f31` / r3 = r4 = out).
+    // So the base layer IS the seed and its residual weight is (1 - the OTHER layers' sum).
+    // EvalBloom (sub_823F9AA8) has the same shape -- it copies 32 bytes from frame+0x20 into the out
+    // block first (asm 0x823F9AE0-0x823F9B00) -- which is ALSO why the bloom block written above is
+    // what reaches BrnPostFx unchanged while the world layer contributes weight 0 on this build.
+    //
+    // WHAT THE CONDUCTOR MUST MEASURE, because this is the one arm that can black the frame: with no
+    // world keyframes the vignette state IS the base frame's VignetteData, i.e. VignetteData's
+    // kv4DefInnerColour / kv4DefOuterColour. Those two statics are DECLARED in
+    // SharedClasses/Graphics/BrnEffectsData.h and DEFINED NOWHERE
+    // (`grep -rn "kv4DefInnerColour" --include=*.cpp b5-decomp/src` -> no hits), so their values are
+    // this wave's other open question. If they land as zeros, the composite's
+    // lerp(inner, outer, gradient) is black everywhere and the frame goes black.
+    //   * `[ImVerts pixels run N]` in BrnGame.log prints the render-target centre against the source
+    //     texture's centre. With bloom on the two MUST differ. An rt centre of 000000 while tex0 is
+    //     bright is the vignette going black.
+    //   * The `[postfx-fx]` line reports vig=1 either way; it says the arbitrator evaluated, not that
+    //     the result is sane.
+    // UNBLOCK by attesting asset 198102 (or the vignetteasset DefaultDataArea bytes) and writing the
+    // block here, next to the bloom one.
+    // The frame API sets data+weight together (DWARF BrnEffectsFrame.h:76); the DATA is left as
+    // BrnEffectsFrame::Construct seeded it (VignetteData::Construct() -> the kv*Def* statics dumped from
+    // the CRT initialisers, BrnEffectsData.cpp), so only the weight changes here.
+    lpFrame->SetVignetteData(lpFrame->GetVignetteData(), KF_BASE_FRAME_ENABLED_WEIGHT);
+}
+
+// [FLAG PC bring-up] see the declaration in BrnRendererModule.h. Hands the world module the
+// arbitrator's EXTERNAL world-layer frame for the slot, or nullptr while the arbitrator has not been
+// Constructed. The world layer has FOUR slots (kau8SlotsPerEffectsLayer[1] == 4).
+BrnEffectsFrame* BrnRendererModule::GetWorldEffectsFrameBringUp(u8 luSlot)
+{
+    if (!EnsureEffectsArbitratorBringUp(mEffectsArbitrator))
+        return 0;
+    return mEffectsArbitrator.GetExternalEffectsFrame(
+        static_cast<u8>(BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_WORLD), luSlot);
+}
+
 // @ 0x823FC678 - BrnRendererModule::SwapBuffers (called by EndOfFrame @0x823FFE28).
 // X360 order: the GDL ring Swap (vtable slot 4), two ShaderConstantTable
 // Destruct calls, EffectsArbitrator::EndOfFrame, the shader-constants frame
 // flip (+2768 <- +2769, +2769 <- 1 - old, BrnShaderConstantsFrame::Construct on
 // the new write slot and the two +1964 flags), the seven im-buffer Swaps and the
 // blobby-shadow / corona index flips.
-// Reconstructed here: the GDL Swap + the shader-constants frame flip.
+// Reconstructed here: the GDL Swap + the EFFECTS-ARBITRATOR FLIP + the shader-constants frame flip.
 // FLAG [PC gate]: the rest lands with those subsystems.
+//
+// THE ARBITRATOR FLIP IS AT THE CONSOLE'S POSITION IN THE ORDER, and the order is the point: the
+// X360 body @0x823FC678 runs
+//     (*(*(a1 + 680) + 16))(a1 + 680);                      <- the GDL ring Swap (vtable slot 4)
+//     ...Destruct(&mShaderConstantTable); ...Destruct(v2);   <- the two ShaderConstantTable Destructs
+//     BrnGraphics::EffectsArbitrator::EndOfFrame(a1 + 1152); <- HERE
+//     v3 = *(a1 + 2769); *(a1 + 2768) = v3; ...              <- the shader-constants frame flip
+// EndOfFrame promotes this frame's EXTERNAL slot to INTERNAL and re-Constructs the new external one,
+// so it must run AFTER every producer wrote (StartOfFrame / DoDispatch, both earlier in the update
+// frame) and BEFORE the next frame's Render reads. Moving it either side of the shader-constants
+// flip would be harmless today and wrong tomorrow; it is kept where the asm has it.
 void BrnRendererModule::SwapBuffers()
 {
+    // NOT behind the mpInterpreter early-out below. That gate is about the GDL ring; the effects
+    // frames are a separate double buffer, and skipping their flip would freeze the internal slot on
+    // whatever the first frame left -- so bloom would latch to frame 0's all-false frame forever.
+    if (sbEffectsArbitratorConstructed)
+    {
+        mEffectsArbitrator.EndOfFrame();
+    }
+
     if (mpInterpreter == 0)
         return;
 
@@ -2202,37 +2454,46 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         maShaderConstantsFrames[mu8ShaderConstantsFrameInternal].GetWhiteLevel();
 
     // lbClearStencil / luStencilClearValue -- the console reads BOTH off the LAYER-0 INTERNAL
-    // BrnEffectsFrame, at Render @0x8240C290-0x8240C300: `addi r21, r31, 0x480` (mEffectsArbitrator),
+    // BrnEffectsFrame, at Render @0x8240C290-0x8240C314: `addi r21, r31, 0x480` (mEffectsArbitrator),
     // `lwz r8, 0(r21)` (mapaEffectsFrames[0]), `lbz r11, 0xC(r21)` (mu8EffectsFrameInternal),
-    // `mulli r11, r11, 0x1F0` (== sizeof(BrnEffectsFrame); the header's member arithmetic lands the
-    // last member at +0x1E4 and alignas(16) rounds to 0x1F0), then
+    // `mulli r11, r11, 0x1F0` (== the GUEST sizeof(BrnEffectsFrame)), then
     //   `lbz r9, 0x1E0(r9)`  -> mMotionBlurData.mbIsActive        -> var_CD0 -> r5 @0x8240CDB0
     //   `lfs f13, 0x1DC(r8)` * flt_82010C20, fctiwz, low byte     -> var_CCE -> r6 @0x8240CDAC
     //                        -> that member is mMotionBlurData.mfWorldBlurAmount.
     // ResolveMSAA is handed the SAME var_CCE (`lbz r5, 0xD40+var_CCE(r1)` @0x8240D5B4), which is why
-    // one value serves both calls. The motion blur is masked into the STENCIL buffer: the stencil
-    // clear value IS the world blur amount quantised to a byte, and the clear is gated on motion
-    // blur being active.
+    // one value serves both calls, and BrnPostFx::Render is handed the SAME var_CD0 (`lbz r7,
+    // 0xD40+var_CD0(r1)` @0x8240DE18). The motion blur is masked into the STENCIL buffer: the stencil
+    // clear value IS the world blur amount quantised to a byte, and the clear is gated on motion blur
+    // being active. A third byte, var_CCF, is (u8)(mfCarsBlurAmount * 255.0f) and feeds the CAR
+    // passes' stencil reference (@0x8240CED0 / @0x8240D344), which this build does not reconstruct.
     //
-    // ⚠ BLOCKED, AND THIS IS THE HONEST FLOOR, NOT A CHOSEN ZERO. mEffectsArbitrator is NEVER
-    // Constructed on this build -- `grep -rn "mEffectsArbitrator" b5-decomp/src` returns exactly one
-    // hit, the member declaration at BrnRendererModule.h:518, and BrnEffectsArbitrator.cpp is not on
-    // build_game_exe.bat -- so mapaEffectsFrames[0] is an uninitialised pointer and reading through
-    // it would not give a wrong value, it would crash. The two values below are therefore the ones a
-    // CONSTRUCTED layer-0 frame yields, which is exactly what the console reads on any frame where
-    // no motion-blur event has been posted: BrnEffectsFrame::Construct calls
-    // mMotionBlurData.Construct(), and MotionBlurData::Construct @0x821F84E8 sets
-    // mfCarsBlurAmount = 0.0f, mfWorldBlurAmount = 0.0f, mbIsActive = false
-    // (BrnCameraEffects.cpp:31-33). 0.0f * flt_82010C20 is 0 for every finite scale, so the byte
-    // does not depend on that constant -- which is fortunate, because flt_82010C20 @ 0x82010C20 is
-    // NOT in scratch/postfx_wave1_dossiers/DATA_DUMP.md. IT MUST BE DUMPED before anything wires the
-    // effects frames; until then this is the only value the image attests.
-    // Neither is observable on this build in any case: lbClearStencil is not read by the X360 body
-    // (see BeginRenderAntiAliased's own note), and the PC scene target's depth surface is picked by
-    // a format ladder whose first candidate is D3DFMT_D24X8 -- no stencil bits -- so the PC
+    // LIVE SINCE THE BLOOM WAVE (2026-08-15). This used to be a documented all-zero floor whose note
+    // read "mEffectsArbitrator is NEVER Constructed on this build". It IS Constructed now
+    // (EnsureEffectsArbitratorBringUp, above), so the bytes are READ -- through the arbitrator's
+    // GetInternalEffectsFrame accessor and the frame's named members, never through 496*index.
+    // flt_82010C20 is attested at 255.0f as well (conductor idat dump; the old note asked for it).
+    // The values are still 0/0/false on this build, and that is not a floor either: the layer-0
+    // producer posts no motion-blur event, so what the frame carries is what
+    // MotionBlurData::Construct @0x821F84E8 seeds -- mfCarsBlurAmount = mfWorldBlurAmount = 0.0f,
+    // mbIsActive = false -- which is exactly what the console reads on any frame without one.
+    //
+    // POSITION: the console performs these reads much earlier (0x8240C290, right after
+    // SortDispatchLists) and carries them in stack slots to four consumers. They are read here
+    // instead, at the first consumer, because nothing writes the layer-0 INTERNAL frame between
+    // those two points -- the only writers are the producers (StartOfFrame / DoDispatch, both in the
+    // UPDATE frame) and EffectsArbitrator::EndOfFrame (SwapBuffers, after Render), all outside this
+    // function.
+    //
+    // Neither byte is observable on this build in any case: lbClearStencil is not read by the X360
+    // BeginRenderAntiAliased body (see its own note), and the PC scene target's depth surface is
+    // picked by a format ladder whose first candidate is D3DFMT_D24X8 -- no stencil bits -- so the PC
     // D3DDevice_Resolve strips D3DCLEAR_STENCIL from its clear.
-    const bool lbSceneClearStencil      = false;
-    const u8   luSceneStencilClearValue = 0u;
+    BrnRendererPostFxFrameBytes lPostFxFrameBytes;
+    BrnRendererReadPostFxFrameBytes(
+        sbEffectsArbitratorConstructed ? &mEffectsArbitrator : 0, &lPostFxFrameBytes);
+
+    const bool lbSceneClearStencil      = lPostFxFrameBytes.mbMotionBlurActive;
+    const u8   luSceneStencilClearValue = lPostFxFrameBytes.mu8WorldBlurStencil;
 
     if (lbSceneBracketOpen)
     {
@@ -2327,6 +2588,63 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         // RETIRES THE BLIT: the day this gate is permanently 1 and EndRenderAntiAliased @0x82408B00
         // lands, delete PCBringUpBlitSceneTargetToBackBuffer, PCBringUpHandBackTheBackBuffer,
         // renderengine::PCSceneBlit_Begin/_End and their XenonD3D9Shims.cpp bodies together.
+        // ---- X360 Render lines 964..1232 -- THE EFFECTS-FRAME APPLY BLOCK. --------------------
+        //
+        // This is the block that turns the layer-0 internal BrnEffectsFrame into BrnPostFx's
+        // m_enabledFx bits and its four effect state blocks. Its statements live in the sibling TU
+        // BrnRendererModulePostFx.cpp for one translation-unit reason (the EA::Jobs::Job placeholder
+        // in BrnRendererModule.h) that that file's banner sets out in full; it is called from here,
+        // at the console's position, with the console's gate.
+        //
+        // THE GATE IS `if (mbRenderPostFX)` (`if (*HIDWORD(v301[0]))` at pseudocode line 965, i.e.
+        // *(this + 50204) == this+0xC41C, which BrnGraphics::DebugComponent::OnActivate @0x823F7B98
+        // registers as the "Render PostFX" toggle) -- the SAME word that gates the composite below.
+        // The console tests it twice, once for each half; both tests are reproduced.
+        //
+        // v296 == lbEffectsAllowed == DispatchThreadInputBuffer::GetCalibrationUnfriendlyEnablePostFx
+        // (pseudocode lines 440-441 -- read ONCE near the top of Render and ANDed into every effect's
+        // active flag). The no-dispatch-buffer fallback is the buffer's OWN Construct default rather
+        // than a pick: DispatchThreadInputBuffer::Construct seeds
+        // mbCalibrationUnfriendlyEnablePostFx = true (BrnDispatchThreadInputBuffer.cpp:212).
+        const bool lbEffectsAllowed = (lpDispatchThreadInputBuffer != 0)
+            ? lpDispatchThreadInputBuffer->GetCalibrationUnfriendlyEnablePostFx()
+            : true;
+
+        BrnGraphics::EffectsArbitrator* const lpEffectsArbitrator =
+            sbEffectsArbitratorConstructed ? &mEffectsArbitrator : 0;
+
+        if (mbRenderPostFX)
+        {
+            // D3DDevice_SetShaderGPRAllocation(off_83271608, 0, 0x40, 0x40) @0x8240D6FC opens the
+            // console's block. It is a Xenos GPR-partition hint with no D3D9 counterpart, and this
+            // file already drops the other three occurrences in Render (0x8240C7F0, 0x8240CB38,
+            // 0x8240DE68), so it is dropped here too rather than routed through a shim that would be
+            // a no-op. Named so it stays greppable.
+            BrnRendererApplyEffectsFrameToPostFx(lpEffectsArbitrator, lbEffectsAllowed);
+        }
+
+        // ---- X360 Render lines 1237..1252 -- the second gate: tint colour + motion blur. -------
+        // The 2D tint vector is ALWAYS four floats (the console zeroes it before the conditional
+        // read), so a false mbRenderPostFX simply leaves the neutral zero the composite has been fed
+        // since it landed.
+        f32 lafTint2dColour[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        if (mbRenderPostFX)
+        {
+            BrnRendererEvalPostFxTint2dColour(lpEffectsArbitrator, lbEffectsAllowed,
+                                              lafTint2dColour);
+
+            // MotionBlurState::Update -- BLOCKED, and gated OFF inside the callee (its body does not
+            // exist in this tree, and its two matrix arguments live inside the still-opaque
+            // DispatchThreadInputBuffer::ParticleRenderData). The call is written at the console's
+            // position so it lights the day both land; see the callee's banner for the evidence.
+            (void)BrnRendererUpdatePostFxMotionBlur(lpEffectsArbitrator, 0);
+        }
+
+        // [FLAG PC bring-up diagnostic] the sampled [postfx-fx] line -- six lines, 500 frames apart,
+        // proving base frame -> Eval* -> BrnPostFx. Sits beside the [postfx-composite] diagnostics in
+        // BrnPostFx.cpp. DELETE with the bring-up.
+        BrnRendererLogPostFxEffectState();
+
         const s32 liBrightnessSetting = (lpDispatchThreadInputBuffer != 0)
             ? lpDispatchThreadInputBuffer->GetBrightness()
             : KI_DEFAULT_CALIBRATION_SETTING;
@@ -2334,6 +2652,18 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             ? lpDispatchThreadInputBuffer->GetContrast()
             : KI_DEFAULT_CALIBRATION_SETTING;
 
+        // The last two arguments are the console's own effects-frame pair, which the seam used to
+        // hard-code (zero tint / motion blur false) while mEffectsArbitrator was never Constructed:
+        // v1 == the tint vector evaluated just above, r7 == the layer-0 internal frame's
+        // mMotionBlurData.mbIsActive read at the top of the bracket (lPostFxFrameBytes).
+        //
+        // mbMotionBlurActive REACHING true SELECTS A PERMUTATION WITH NO PC PROGRAM:
+        // BrnPostFxShader::Render builds `leShader = 4*(quality+1 if motion blur) | 2*dof | tint3d`
+        // and hard-returns without drawing on anything but slot 0 (BrnPostFxShader.cpp:1389-1397), so
+        // the frame would present un-composited. It cannot happen on this build -- the layer-0
+        // producer posts no motion-blur event, so the byte is false -- and it is passed through
+        // rather than pinned to false because pinning it would hide the transition the day an event
+        // is posted.
         const bool lbComposited =
             mbRenderPostFX &&
             PCBringUpRenderPostFxComposite(
@@ -2343,7 +2673,9 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
                 static_cast<f32>(liContrastSetting) * KF_CALIBRATION_SLIDER_SCALE
                     + KF_CALIBRATION_SLIDER_BIAS,
                 lfFrameWhiteLevel,
-                mfAspectCorrection);
+                mfAspectCorrection,
+                lafTint2dColour,
+                lPostFxFrameBytes.mbMotionBlurActive);
 
         if (lbComposited)
         {

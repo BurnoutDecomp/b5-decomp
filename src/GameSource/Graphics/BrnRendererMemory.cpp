@@ -513,6 +513,14 @@ void BrnRendererMemory::PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator
     // unconditionally and is neutral through BloomColour == 0, not through an empty binding.
     CreateBloomBuffer(lpAllocator);
     CreateDepthOfFieldBuffer(lpAllocator);
+    // The WORK buffer (CreateWorkBuffer @0x823F7148, 320 wide): the console Construct's sixth creator. It
+    // is the ping-pong target of every bloom / depth-of-field pass -- BrnPostFx::PrepareDownSampleBuffers
+    // hands GetWorkBuffer()->GetRenderTarget() to BrnPostFxBloom::Render and DepthOfField::
+    // DownSampleAndGaussianBlur -- so it was harmless to omit only while every effect bit was clear.
+    // The first bloom-lit boot (rung 5, 2026-08-15) crashed at BrnPostFx::Render+0xE1 reading
+    // null->+0x160 (== CgsRenderTarget::GetRenderTarget on a null pool slot) the frame E_FX_BLOOM
+    // came on. Same allocator, same order as the console.
+    CreateWorkBuffer(lpAllocator);
     CreateBackBuffer(lpAllocator, mu32ScreenWidth, mu32ScreenHeight);
 
     // ⚠️ FLAG PC bring-up INITIALISATION -- give both targets DEFINED contents before the first

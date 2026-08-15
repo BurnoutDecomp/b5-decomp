@@ -358,6 +358,14 @@ WorldModule::Construct( const BrnGame::BrnCpuMonitors& lrCpuMonitors )
     mfBringUpCameraOverrideFOV   = 0.0f;
     mBringUpCameraOverride.SetIdentity();
 
+    // [FLAG PC bring-up] ...and so do the four staged world effects frames. Until
+    // BrnGameModule::DoDispatch stages them (which it cannot do before the renderer's
+    // arbitrator is Constructed) the producer below must not call GenerateEffects.
+    for ( s32 liSlot = 0; liSlot < 4; liSlot++ )
+    {
+        mapBringUpEffectsFrames[ liSlot ] = 0;
+    }
+
     {
         using namespace CgsDev;
 
@@ -4514,6 +4522,25 @@ WorldModule::SetBringUpCameraOverride( const rw::math::vpu::Matrix44Affine& lrTr
     mbBringUpCameraOverrideValid = true;
 }
 
+// [FLAG PC bring-up] see the header. STANDS IN FOR the four
+// BrnWorldIO::DispatchInputBuffer::SetEffectsFrame @0x823B6BD8 calls that
+// BrnGameModule::BridgeRendererToWorld @0x823CDD20 makes (GameBridgeRendererToX.cpp:50),
+// whose source is BrnRendererModule::Update @0x82405E28 line 110
+// (mEffectsArbitrator.GetExternalEffectsFrame(KU_EFFECTS_LAYER_WORLD, luSlot)).
+// Unlike the camera override this is NOT one-shot: the console's dispatch input buffer holds
+// the frames for the whole pass and DoDispatch re-stages them every frame, so they are simply
+// overwritten rather than consumed-and-cleared.
+// DELETE-WHEN the RendererIO/BrnWorldIO dispatch buffer set is created on PC.
+void
+WorldModule::SetBringUpEffectsFrames( BrnEffectsFrame* lpFrame0, BrnEffectsFrame* lpFrame1,
+                                      BrnEffectsFrame* lpFrame2, BrnEffectsFrame* lpFrame3 )
+{
+    mapBringUpEffectsFrames[ 0 ] = lpFrame0;
+    mapBringUpEffectsFrames[ 1 ] = lpFrame1;
+    mapBringUpEffectsFrames[ 2 ] = lpFrame2;
+    mapBringUpEffectsFrames[ 3 ] = lpFrame3;
+}
+
 // =============================================================================
 // ⭐ [DIAG shadow-perf wave 2026-08-12] THE PRODUCER PHASE TIMERS.
 //
@@ -5418,6 +5445,38 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     // to the pixel stage instead of being overwritten with the shadows-off configuration.
     // See the retirement note in its body for the three boot-verified preconditions.
     PublishWorldShadingConstantsBringUp();
+
+    // ======================================================================
+    // THE WORLD-LAYER EFFECTS PRODUCER (bloom wave 2026-08-15).
+    //
+    // This is the CONSOLE call, at the console's relative position. In the real producer
+    // WorldModule::GenerateDispatchLists (this file, :3836 -- X360 @0x827D1CE8 line 382)
+    // mEnvironmentManager.GenerateEffects sits immediately after the frame's shader-constant
+    // publish and immediately before PropEntityModule::CachePropGraphicsLists, bracketed by
+    // the UT_RenderFX CPU monitor. PublishWorldShadingConstantsBringUp() above is this
+    // producer's shader-constant publish and the prop cache is right below, so the ordering
+    // is preserved exactly -- including the monitor bracket.
+    //
+    // [FLAG PC bring-up] only the four FRAME POINTERS are the stand-in (staged by
+    // BrnGameModule::DoDispatch via SetBringUpEffectsFrames, because none of the dispatch IO
+    // buffers exists here); GenerateEffects itself is the real X360 body. They are null until
+    // BrnRendererModule's effects arbitrator is Constructed, and the console never calls
+    // GenerateEffects with a null frame -- the dispatch input buffer always holds four -- so
+    // skip the call entirely rather than passing nulls in.
+    // DELETE the guard (not the call) when the IO buffer set is real.
+    // ======================================================================
+    if ( mapBringUpEffectsFrames[ 0 ] != 0 && mapBringUpEffectsFrames[ 1 ] != 0
+      && mapBringUpEffectsFrames[ 2 ] != 0 && mapBringUpEffectsFrames[ 3 ] != 0 )
+    {
+        // (explicitly qualified: unlike the real GenerateDispatchLists this function has no
+        //  `using namespace CgsDev;` in scope)
+        CgsDev::PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RenderFX );
+        mEnvironmentManager.GenerateEffects( mapBringUpEffectsFrames[ 0 ],
+                                             mapBringUpEffectsFrames[ 1 ],
+                                             mapBringUpEffectsFrames[ 2 ],
+                                             mapBringUpEffectsFrames[ 3 ] );
+        CgsDev::PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_RenderFX );
+    }
 
     // ======================================================================
     // ⭐ [FLAG PC bring-up] THE PROP-GRAPHICS REGISTRATION TABLE (prop-render wave,

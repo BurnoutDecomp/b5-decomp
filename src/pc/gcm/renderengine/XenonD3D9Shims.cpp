@@ -2541,7 +2541,10 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
     // state dump above cannot answer.
     static u32 suRunTotal = 0u;
     ++suRunTotal;
-    if ((suRunTotal % 500u) == 0u && suRunTotal <= 3000u && suImVertsStride == 20u)
+    // Rung 5 (bloom lit): FOUR stride-20 quads run per frame now (bloom down-sample, two blur passes,
+    // the composite), so the cadence is 2000 runs (= 500 frames) up to run 12000 -- the old 500/3000
+    // landed every sample inside the title/menu period and read a black centre.
+    if ((suRunTotal % 2000u) == 0u && suRunTotal <= 12000u && suImVertsStride == 20u)
     {
         IDirect3DSurface9* lpRt = nullptr;
         IDirect3DBaseTexture9* lpTex0 = nullptr;
@@ -2574,16 +2577,38 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
             }
             lpSys->Release();
         };
-        char lacRt[160], lacTex[160];
+        char lacRt[160], lacTex[160], lacTex1[160];
         ReadCentre(lpRt, "rt", lacRt, sizeof(lacRt));
         IDirect3DSurface9* lpTexSurf = nullptr;
         if (lpTex0 != nullptr && lpTex0->GetType() == D3DRTYPE_TEXTURE)
             static_cast<IDirect3DTexture9*>(lpTex0)->GetSurfaceLevel(0, &lpTexSurf);
         ReadCentre(lpTexSurf, "tex0", lacTex, sizeof(lacTex));
-        char lacMsg[400];
-        std::snprintf(lacMsg, sizeof(lacMsg), "[ImVerts pixels run %u] %s | %s\n",
-                      static_cast<unsigned>(suRunTotal), lacRt, lacTex);
+        // [DIAG rung 5, bloom] the stage-1 texture (the composite's SamplerBloom == the bloom pool
+        // target after the three bloom passes) and the five pixel constants the composite reads
+        // (c0 GlobalParams, c1 BloomColour, c2 VignetteInnerRgbPlusMul, c3 VignetteOuterRgbPlusAdd,
+        // c4 Tint2dColour): the first bloom-lit boot presented BLACK with a bright source, and these
+        // are the only inputs that can turn a bright source black. Delete with the bring-up.
+        IDirect3DBaseTexture9* lpTex1 = nullptr;
+        lpDevice->GetTexture(1, &lpTex1);
+        IDirect3DSurface9* lpTex1Surf = nullptr;
+        if (lpTex1 != nullptr && lpTex1->GetType() == D3DRTYPE_TEXTURE)
+            static_cast<IDirect3DTexture9*>(lpTex1)->GetSurfaceLevel(0, &lpTex1Surf);
+        ReadCentre(lpTex1Surf, "tex1", lacTex1, sizeof(lacTex1));
+        float lafPs[5][4] = {};
+        lpDevice->GetPixelShaderConstantF(0, &lafPs[0][0], 5);
+        char lacMsg[900];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[ImVerts pixels run %u] %s | %s | %s | ps c0=(%g %g %g %g) c1=(%g %g %g %g) "
+                      "c2=(%g %g %g %g) c3=(%g %g %g %g) c4=(%g %g %g %g)\n",
+                      static_cast<unsigned>(suRunTotal), lacRt, lacTex, lacTex1,
+                      lafPs[0][0], lafPs[0][1], lafPs[0][2], lafPs[0][3],
+                      lafPs[1][0], lafPs[1][1], lafPs[1][2], lafPs[1][3],
+                      lafPs[2][0], lafPs[2][1], lafPs[2][2], lafPs[2][3],
+                      lafPs[3][0], lafPs[3][1], lafPs[3][2], lafPs[3][3],
+                      lafPs[4][0], lafPs[4][1], lafPs[4][2], lafPs[4][3]);
         CgsDev::Log::WriteToLog(lacMsg);
+        if (lpTex1Surf) lpTex1Surf->Release();
+        if (lpTex1)     lpTex1->Release();
         if (lpTexSurf) lpTexSurf->Release();
         if (lpTex0)    lpTex0->Release();
         if (lpRt)      lpRt->Release();

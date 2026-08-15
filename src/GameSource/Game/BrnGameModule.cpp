@@ -1406,6 +1406,24 @@ namespace BrnGame
             mpDirectorOutputBuffer->UnlockForRead();
         }
 
+        // ---- stage the RENDERER's four WORLD-layer effects frames for the world -----------
+        // The console does this through the same dispatch IO buffer set as the camera above:
+        // BrnRendererModule::Update @0x82405E28 line 110 publishes
+        // mEffectsArbitrator.GetExternalEffectsFrame(KU_EFFECTS_LAYER_WORLD, luSlot) into
+        // RendererIO::OutputBuffer, BridgeRendererToWorld @0x823CDD20 copies all four across
+        // with BrnWorldIO::DispatchInputBuffer::SetEffectsFrame @0x823B6BD8
+        // (GameBridgeRendererToX.cpp:50), and WorldModule::GenerateDispatchLists reads them
+        // back as GetEffectsFrame(0..3) for EnvironmentManager::GenerateEffects @0x827BE698.
+        // FOUR slots: kau8SlotsPerEffectsLayer[KU_EFFECTS_LAYER_WORLD] == 4 (byte_8203E110 =
+        // 01 04 02). The accessor returns null until the renderer's arbitrator is
+        // Constructed; the world producer checks all four before it calls GenerateEffects.
+        // DELETE-WHEN: DoDispatch's IO buffer set is real (this goes with the camera staging
+        // and GenerateDispatchListsBringUp).
+        mWorldModule.SetBringUpEffectsFrames(mRenderModule.GetWorldEffectsFrameBringUp(0),
+                                             mRenderModule.GetWorldEffectsFrameBringUp(1),
+                                             mRenderModule.GetWorldEffectsFrameBringUp(2),
+                                             mRenderModule.GetWorldEffectsFrameBringUp(3));
+
         CgsGraphics::DispatchFrame* lpDispatchFrame = mRenderModule.GetDispatchFrameForWrite();
         if (lpDispatchFrame != 0)
         {

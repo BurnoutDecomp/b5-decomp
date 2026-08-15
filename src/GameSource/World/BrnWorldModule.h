@@ -276,6 +276,23 @@ namespace BrnWorld
         void SetBringUpCameraOverride( const rw::math::vpu::Matrix44Affine& lrTransform,
                                        f32 lfFOVDegrees );
 
+        // [FLAG PC bring-up] Hand the bring-up producer the renderer's four WORLD-layer
+        // effects frames for this frame, so EnvironmentManager::GenerateEffects @0x827BE698
+        // has somewhere real to write.
+        // STANDS IN FOR: BrnWorldIO::DispatchInputBuffer::SetEffectsFrame @0x823B6BD8, called
+        // four times by BrnGameModule::BridgeRendererToWorld @0x823CDD20 (this tree,
+        // GameBridgeRendererToX.cpp:50 -- `lpWorldDispatchInput->SetEffectsFrame(luSlot,
+        // lpRendererOutput->GetWorldEffectsFrame(luSlot))`), whose values the real
+        // GenerateDispatchLists then reads back as GetEffectsFrame(0..3). None of the
+        // renderer/world dispatch IO buffers is created on this build, so the four pointers
+        // come straight across from BrnRendererModule instead.
+        // FOUR slots because kau8SlotsPerEffectsLayer[KU_EFFECTS_LAYER_WORLD] == 4
+        // (byte_8203E110 = 01 04 02). Any of them may be null (the renderer's accessor
+        // returns null until its arbitrator is Constructed) -- the producer checks.
+        // DELETE-WHEN the RendererIO/BrnWorldIO dispatch buffer set is real on PC.
+        void SetBringUpEffectsFrames( BrnEffectsFrame* lpFrame0, BrnEffectsFrame* lpFrame1,
+                                      BrnEffectsFrame* lpFrame2, BrnEffectsFrame* lpFrame3 );
+
         // NOT an X360 function either. Publishes the neutral lighting / atmosphere /
         // shadow-cascade engine constants the world's REAL vertex+pixel programs read,
         // because none of the console producers (environment manager, sky dome, shadow
@@ -668,6 +685,9 @@ namespace BrnWorld
         rw::math::vpu::Matrix44Affine mBringUpCameraOverride;
         f32                           mfBringUpCameraOverrideFOV;
         bool                          mbBringUpCameraOverrideValid;
+        // [FLAG PC bring-up] the four world-layer effects frames staged by
+        // SetBringUpEffectsFrames (see the header entry). DELETE with it.
+        BrnEffectsFrame*              mapBringUpEffectsFrames[ 4 ];
 
         BrnDirector::Camera::Camera mLastCameraInput;
 
