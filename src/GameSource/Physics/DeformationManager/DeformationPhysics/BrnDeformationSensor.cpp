@@ -400,11 +400,38 @@ namespace Deformation
 	// ApplyLocalImpulse -- ⭐ LOG-ONCE GATE 2026-08-14 (deformation-mount wave), the CollidableBody
 	// override the vtable needs. ⚠️ NOT RECONSTRUCTED: the X360 address is an export HOLE and the
 	// PS3 twin (@0x74D3A0, DecFIGS) is 569 instructions of dense per-direction compression math --
-	// a body of that size is its own slice, not a mount-night write. DEAD AT RUNTIME this wave:
-	// every path into it (ApplySensorImpulse / the car-car impulse route / the chain pass-on)
-	// requires generated contacts, and contact generation is the still-gated (c) walls wave. The
-	// gate is loud so the day it IS reached announces itself; the sensor absorbs nothing (no
-	// displacement fabricated).
+	// a body of that size is its own slice, not a mount-night write. The gate is loud so the day it
+	// IS reached announces itself; the sensor absorbs nothing (no displacement fabricated).
+	//
+	// ⚠️⚠️ BRIEF CORRECTION (2026-08-15, walls leg 5). A wave brief called X360 @0x8260E068 "a
+	// 43-insn wrapper" around this body, i.e. the cross-console route into it. IT IS NOT. That
+	// address is `BrnPhysics::Deformation::VehicleRigidBody::ApplyLocalImpulse` -- a DIFFERENT
+	// CLASS's override, already bodied and mounted in BrnVehicleRigidBody.cpp. The SENSOR's X360
+	// symbol really is an export hole; verified by reading the export set at both addresses, not
+	// by name search. ⭐ Before treating it as nonexistent, discriminate a genuine hole from a name
+	// search failing: check the unnamed sub_XXXXXXXX neighbours and the callers' xrefs_from.
+	//
+	// ⭐ STRUCTURAL RECON BANKED 2026-08-15 (walls leg 5) so the next leg does not re-do it. Read
+	// off the PS3 export, NOT guessed:
+	//   * 569 instructions, 121 of them vector, dominated by 40x vmaddfp (+10 vaddfp, 7 vsubfp,
+	//     7 vsel, 7 vspltw, 4 vminfp, 4 vcmpgtfp, 3 vmaxfp, 3 vnmsubfp, 2 vrefp) -- a clamped,
+	//     select-heavy per-direction accumulate, which is what "compression math" looks like.
+	//   * Only THREE non-assert calls in the whole body:
+	//       0x74D4AC  CollidableBody::GetDirectionVector(ENextSensorDirection)   <- ALREADY BODIED
+	//                 in BrnCollidableBody.cpp (the KA_IMPULSE_DIRECTIONS six-axis table).
+	//       0x74D9A8  ImpulsePasser::PassOnImpulse(u8, const ImpulseParams*, VecFloat)
+	//       + 2x StrStreamBase::AppendFormat, both inside assert arms.
+	//     ⇒ the body is self-contained arithmetic plus ONE outward edge (the chain pass-on).
+	//   * 8 asserts (BeginAssert/FireAssert/EndAssert x8); the first argument check is
+	//     `lpImpulseParams->[+180] > 4` -> assert, i.e. a direction-enum bound of 0..4.
+	//   ⚠️ Hex-Rays opens with "local variable allocation has failed, the output may be wrong!" --
+	//   so this MUST be worked from raw words with the +32-per-operand-FIELD VMX correction, and
+	//   the pseudocode used only as a map. Budget it as its own slice.
+	//
+	// ⛔ DISPOSITION THIS LEG: GATED, DELIBERATELY. The leg's measured blocker turned out to be
+	// upstream of the impulse response (see the wall work), and 569 insns of register-allocation-
+	// failed dense VMX is not honestly closable in the remaining window. Landing a plausible-
+	// looking body here would be exactly the silent-drop shape this subsystem has been bitten by.
 	// =============================================================================================
 	void DeformationSensor::ApplyLocalImpulse(ImpulseParams* /*lpImpulseParams*/)
 	{
