@@ -43,8 +43,15 @@ namespace TriggerEntityModuleIO
         // BrnTriggerEntityModuleIO.h:84 -- this TU. @ X360 0x822EED90.
         void Construct();
 
-        // BrnTriggerEntityModuleIO.h:87 / :90 / :91 -- declared-only (own TUs / sibling group).
-        void Destruct();
+        // BrnTriggerEntityModuleIO.h:87 / :90 / :91 -- the two accessors stay declared-only
+        // (own TUs / sibling group).
+        // Destruct BODIED 2026-08-15 (IO-buffer zero-fill removal audit): CgsIOBufferStack.h's
+        // DestroyIOBuffer<T> is the console's mirror now and calls T::Destruct. This buffer has
+        // no out-of-line Destruct in ARTIST because it ICF-folded with
+        // BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 -- the address
+        // DestroyIOBuffer<TriggerEntityModuleIO::OutputBuffer_PreScene> @0x827B7EE0 calls, and a
+        // bare `b CgsModule::IOBuffer::Destruct`. Base-only, no member teardown.
+        void Destruct() { CgsModule::IOBuffer::Destruct(); }
         const SceneInputInterface* GetSceneInputInterface() const;
         SceneInputInterface*       GetSceneInputInterface();
 

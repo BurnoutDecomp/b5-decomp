@@ -30,8 +30,16 @@ namespace AIModuleIO
 {
     void InputBuffer_PostPhysics::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer_PostPhysics, mContactInterface) == 0x04,
-                      "mContactInterface @ +0x04");
+        // The console offset is +0x04 (the 1-byte IOBuffer status, then the interface at the
+        // next 4-byte boundary). On the LLP64 host ContactSpyInterface carries pointers and is
+        // 8-aligned, so the same "first member after the status byte" lands at +0x08 -- pin the
+        // pointer-INVARIANT fact (nothing between the status byte and the interface but
+        // alignment padding), not the console literal. This pin is what kept the TU off the
+        // build list until 2026-08-15.
+        static_assert(offsetof(InputBuffer_PostPhysics, mContactInterface)
+                          == ((sizeof(CgsModule::IOBuffer) + alignof(ContactSpyInterface) - 1)
+                              & ~(alignof(ContactSpyInterface) - 1)),
+                      "mContactInterface is the first member after the IOBuffer status byte");
     }
 
     // X360 0x8277BCD0 -- mark the IOBuffer base constructed, then construct the embedded

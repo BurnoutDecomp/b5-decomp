@@ -39,6 +39,29 @@ namespace BrnWorldIO
     // DWARF BrnWorldModuleIO.h (struct DispatchOutputBuffer : public IOBuffer).
     struct DispatchOutputBuffer : public CgsModule::IOBuffer
     {
+        // ---- lifecycle ----------------------------------------------------------------
+        // ⭐ ADDED 2026-08-15 (IO-buffer zero-fill removal audit). This buffer had NO Construct
+        // at all on the PC side, which the audit flagged because WorldModule::GenerateDispatch-
+        // Lists reads six members straight out of it into the global shader-constant table
+        // (BrnWorldModule.cpp ~:3724-3729) and its console producer is not live here yet -- so
+        // with the old value-initialising CreateIOBuffer<T> gone, those reads take the previous
+        // IO-stack tenant's bytes.
+        //
+        // THE CONSOLE DOES NOT CLEAR THEM EITHER, and that is a load-bearing finding rather than
+        // an omission: CreateIOBuffer<BrnWorldIO::DispatchOutputBuffer> @0x823AEAC8 allocs 240
+        // bytes (== sizeof this type, the 0xF0 that DestroyIOBuffer @0x823AEB98 frees) and then
+        // calls the buffer's Construct, whose body -- reached through ICF as
+        // BrnWorld::WorldEntityIO::OutputBuffer_PrePhysics::Construct @0x822D8BA0 -- is exactly
+        // two instructions, `li r11,1 ; stb r11,0(r3)`. That IS CgsModule::IOBuffer::Construct
+        // and nothing else: the console leaves the whole 224-byte lighting/fog payload holding
+        // whatever the stack slot held before, and relies on SetupShaderConstantsBeforeRendering
+        // publishing every member under the write lock before anything read-locks it.
+        // So this Construct is the console's, verbatim; the real fix for the stale reads is
+        // landing the producer, NOT a memset here (per the base-only-Construct policy in
+        // CgsIOBufferStack.h). Modelled explicitly rather than left to inheritance so the next
+        // reader of this header does not have to re-derive that from the binary.
+        void Construct() { CgsModule::IOBuffer::Construct(); }
+
         // --- accessors bodied in BrnWorldModuleIO_DispatchOutputBuffer.cpp --------------
         // Getters read-lock (status bit 4); setters write-lock (status bit 3, "Not locked for
         // writing\n") -- reproduced exactly as the X360 asm tests them. NOTE: the getter rodata

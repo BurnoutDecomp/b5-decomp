@@ -111,8 +111,9 @@ namespace PhysicsModuleIO
     }
 
     // ⛔ 2026-08-01 (BridgeGameStateToWorld wave). The X360 CreateIOBuffer<T> stack template runs
-    // T::Construct after the alloc; the PC template placement-news only, so WorldModule::Update
-    // calls Construct explicitly -- and until now that resolved to the base
+    // T::Construct after the alloc -- and so does the PC one: CreateIOBuffer<T> runs T::Construct
+    // (2026-08-15). Historically the PC template placement-new'd only, so WorldModule::Update
+    // called Construct explicitly -- and until this body landed that resolved to the base
     // CgsModule::IOBuffer::Construct, which raises the status byte and nothing else. The embedded
     // game-action queue was therefore never Constructed, and the first
     // BridgeActionsToPhysicsModule AddEvent fired "Not Constructed"
@@ -145,12 +146,20 @@ namespace PhysicsModuleIO
     //   +0x4F1E0  SceneManagerIO::OutOverlapPair<128>::Construct     -> mOverlapPairsQueue
     //   +0x4FE20  mSolverMaxIterations = 0
     //
-    // ⚠️ FOUR of those calls CANNOT be emitted yet and are NOT faked: mCreateWorldEventQueue is
-    // still a 96-byte pad, and mVehicleEffectsInputInterface / mRCEntityOutputInterface /
-    // mCameraInput are still correctly-sized opaque *Storage spans with no members to
-    // construct. They are listed above by console seat so the next wave that retypes any of
-    // them knows exactly which call to restore -- and any consumer that reaches one of those
-    // spans will fire the same loud "Not Constructed" this one did, by design.
+    // ⚠️ TWO of those calls cannot be emitted yet and are NOT faked: mCreateWorldEventQueue is
+    // still a 96-byte pad, and mCameraInput is still a correctly-sized opaque *Storage span with
+    // no members to construct. They are listed above by console seat so the next wave that
+    // retypes either one knows exactly which call to restore -- and any consumer that reaches one
+    // of those spans will fire the same loud "Not Constructed" this one did, by design.
+    // ⭐ 2026-08-15 (IO-buffer zero-fill removal audit): mRCEntityOutputInterface is OFF that
+    // list and its console call is restored below. The FLAG text that used to stand here still
+    // called it "a correctly-sized opaque *Storage span with no members to construct", but it was
+    // retyped to the real BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface on
+    // 2026-08-10 (BrnPhysicsModuleIO.h:250/:358) -- so the console's +0x24880
+    // RCEntityActiveRaceCarOutputInterface::Clear has been a live omission ever since, and became
+    // a real defect the moment CreateIOBuffer<T> stopped zero-filling: this interface carries the
+    // per-active-car state tables PhysicsModule::Update reads, and stale IO-stack bytes there are
+    // per-car state for cars that are not in the race.
     // ⭐ 2026-08-10 (root-cause wave): the PROP leg is off that blocked list. The four console
     // calls at +0x4FE30 / +0x51D90 / +0x526FC / +0x50DE0 (and their five zero stores) are
     // exactly PropInputInterface::Construct, now that the member holds the real type -- see
@@ -168,6 +177,7 @@ namespace PhysicsModuleIO
         // race-car pre-physics buffer already suffered once.
         mVehicleEffectsInputInterface.Construct(); // +0x24180
         mPotentialContactQueue.Construct();      // +0x271D0
+        mRCEntityOutputInterface.Clear();        // +0x24880 (restored 2026-08-15; see note above)
         mTimerInterface.Clear();                 // +0x4FDF0
         mPropManagerInputInterface.Construct();  // +0x4FE30 (the four prop queues + the flag)
         mGameActionQueue.Construct();            // +0x52A40

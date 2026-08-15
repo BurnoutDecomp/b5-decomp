@@ -31,11 +31,10 @@ namespace SceneManagerIO
     // The scene-manager update-phase input buffer.
     struct InputBuffer_Update : public CgsModule::IOBuffer
     {
-        // PC restoration of the CreateIOBuffer<T> Construct step (the X360 stack template
-        // runs T::Construct after the alloc; the PC generic placement-news only): raise the
-        // IOBuffer status base, then bring up the embedded scene-update aggregate (the X360
-        // InputBuffer_Update::Construct constructs the aggregate's 25 queues -- see
-        // InSceneUpdateInterface::Construct @0x822E6550).
+        // The Construct CreateIOBuffer<T> runs after the alloc (X360 instantiation
+        // @0x827B59F0): raise the IOBuffer status base, then bring up the embedded
+        // scene-update aggregate (the X360 InputBuffer_Update::Construct constructs the
+        // aggregate's 25 queues -- see InSceneUpdateInterface::Construct @0x822E6550).
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
@@ -164,12 +163,31 @@ namespace SceneManagerIO
     {
         typedef CgsModule::VariableEventQueue<32768, 16> SceneQueryResultsQueue;
 
-        // PC restoration of the CreateIOBuffer<T> Construct step (see InputBuffer_Update):
-        // raise the IOBuffer status base + bring up the query-results ring.
+        // The Construct CreateIOBuffer<T> runs after the alloc (X360 instantiation
+        // @0x823AF668): raise the IOBuffer status base + bring up the query-results ring.
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
             mSceneQueryResultsQueue.Construct();
+            // ⭐ 2026-08-15 (IO-buffer zero-fill removal audit) -- MISSING STORE.
+            // *(this+217164) = 0 @0x828C7CA0 is this pointer. It was omitted, and it only
+            // ever survived because the old PC CreateIOBuffer<T> value-initialised the whole
+            // buffer; with default-init the slot holds the previous IO-stack tenant's bytes,
+            // which SURVIVES GetCache()'s "mpTriangleCacheManager != NULL" tripwire and is
+            // then dereferenced. Same defect class as SimpleDataStreamProducer's cursor.
+            mTriangleCacheInterface.mpTriangleCacheManager = 0;
+            // The console's tail `VariableEventQueue<32768,16>::Clear(this+4)` @0x828C7CA0.
+            mSceneQueryResultsQueue.Clear();
+            // [FLAG] the console Construct also runs PotentialContact<2048>/ErrorEvent<128>/
+            // OutOverlapPair<128> Constructs at +32800/+199744/+196656 -- those three queues
+            // are not members of this documented MINIMAL slice, so they cannot be reached by
+            // name yet.
+            // ⚠️ CORRECTED 2026-08-15: the assert on `mResultsQueue.Prepare()` that used to be
+            // listed alongside them as "not a member" IS a member -- mResultsQueue is this
+            // buffer's own mSceneQueryResultsQueue. It is not omitted, it is already covered:
+            // VariableEventQueue<...>::Prepare is nothing but the "Not Constructed" assert plus
+            // Clear() and `return true` (CgsVariableEventQueue.h), and both the Construct and
+            // the Clear above are made. Nothing to restore for that leg.
         }
 
         // @ 0x823B1ED0 -- read-lock tripwire, then the query-results ring. (Was a

@@ -56,6 +56,45 @@ namespace Deformation
     namespace vpu = rw::math::vpu;
 
     // -----------------------------------------------------------------------------------------
+    // Construct -- X360-attested by the CreateIOBuffer<PenetrationSolver> instantiation
+    // @0x825BC9E8, which inlines this whole body. After `Alloc(this, 260912, name)` the only
+    // work it does is two zero stores:
+    //     lis r10,3 ; ori r10,r10,0xFB20 ; stwx r28,r11,r10   -> +0x3FB20 (260896) = 0
+    //     lis  r9,3 ; ori  r9, r9,0xFB24 ; stwx r28,r11, r9   -> +0x3FB24 (260900) = 0
+    // which are miNumVehicleContacts and miNumWorldContacts (offsets confirmed against this
+    // header's layout: 16 base + 29*64 + 29*16 + 2*(2016*64) + 2*256 == 260896).
+    // NOTE, deliberately: there is NO `stb 1,0(p)` in the instantiation, so the console does
+    // NOT raise the IOBuffer status byte for this buffer and neither do we -- nothing
+    // Lock*s a PenetrationSolver (DeformationManager::SolvePenetration drives it directly).
+    // The contact arrays themselves are left uninitialised, as on the console: the two counts
+    // are the only liveness state and AddVehicleContact/AddWorldContact fully overwrite each
+    // slot they append.
+    // -----------------------------------------------------------------------------------------
+    void PenetrationSolver::Construct()
+    {
+        miNumVehicleContacts = 0;
+        miNumWorldContacts   = 0;
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Destruct (DWARF :69) -- BODIED 2026-08-15 (IO-buffer zero-fill removal audit).
+    // CgsIOBufferStack.h's DestroyIOBuffer<T> is the console's mirror now and calls T::Destruct,
+    // so this could no longer stay declaration-only (DeformationManager's post-physics pass tears
+    // the solver down at BrnDeformationManager_Contacts.cpp:201).
+    // The console has no out-of-line symbol for it -- DestroyIOBuffer<PenetrationSolver>
+    // @0x825BCAD8 INLINES it, and the whole body is two stores before the Free(…, 260912):
+    //     *(solver + 260896) = 0    == miNumVehicleContacts
+    //     *(solver + 260900) = 0    == miNumWorldContacts
+    // i.e. exactly Construct's pair, and NOTHING else -- note in particular that it does NOT
+    // chain to CgsModule::IOBuffer::Destruct, so the status byte is deliberately left standing.
+    // Reproduced as-is rather than "tidied" into a base call.
+    void PenetrationSolver::Destruct()
+    {
+        miNumVehicleContacts = 0;
+        miNumWorldContacts   = 0;
+    }
+
+    // -----------------------------------------------------------------------------------------
     // AddObject @ 0x825B3CB0
     //   Register body `liIndex`: store its world transform into maObjectTransforms[liIndex] (the
     //   four 16-byte rows the asm copies with lvx128/stvx128) and its solver weighting into

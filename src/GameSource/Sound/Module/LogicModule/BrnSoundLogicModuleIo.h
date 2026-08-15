@@ -5,6 +5,8 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer (base; lock state machine)
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h" // RootOutputBuffer::AttribSysRequestInterface / ::SoundResourceRequestInterface (member types)
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::VariableEventQueue<N,16> (LogicOutputBuffer::Construct)
+#include <cstring>                                       // memset (trailing-state clear)
 
 // =============================================================================
 // BrnSound::Module::Io::LogicOutputBuffer
@@ -67,8 +69,34 @@ namespace Io
     // sound logic module fills for the root module. DWARF shape (request interfaces).
     struct LogicOutputBuffer : public CgsModule::IOBuffer
     {
-        // BrnSoundLogicModuleIo.h:60 (DWARF; own TU, declared-only here).
-        void Construct();
+        // BrnSoundLogicModuleIo.h:60 (DWARF). X360 body @0x826C9A28, reached from the
+        // CreateIOBuffer<LogicOutputBuffer> instantiation @0x826DCD30 (Alloc size 6224):
+        //     *a1 = 1;                                              -- IOBuffer::Construct
+        //     VariableEventQueue<4096,16>::Construct(a1 + 2068); Clear(a1 + 2068);
+        //     VariableEventQueue<2048,16>::Construct(a1 + 4);    Clear(a1 + 4);
+        //     for (11 words at a1 + 6180) *w++ = 0;
+        // 2068 == 0x814 == mResourceRequestInterface, 4 == mAttribSysRequestInterface (note the
+        // reversed call order vs RootOutputBuffer -- reproduced), 6180 == 0x1824 == the trailing
+        // state run below. The two request interfaces derive from those queues, so the
+        // Construct+Clear pair is the queue's own, reached through the members' named storage.
+        // FLAG PC: homed inline here (the console emits it out-of-line) so the symbol exists for
+        // every CreateIOBuffer<LogicOutputBuffer> instantiation regardless of build-list state.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+
+            CgsModule::VariableEventQueue<4096, 16>* lpResourceQueue =
+                reinterpret_cast<CgsModule::VariableEventQueue<4096, 16>*>(mResourceRequestInterfaceStorage);
+            lpResourceQueue->Construct();
+            lpResourceQueue->Clear();
+
+            CgsModule::VariableEventQueue<2048, 16>* lpAttribSysQueue =
+                reinterpret_cast<CgsModule::VariableEventQueue<2048, 16>*>(mAttribSysRequestInterfaceStorage);
+            lpAttribSysQueue->Construct();
+            lpAttribSysQueue->Clear();
+
+            memset(mau8TrailingState, 0, sizeof(mau8TrailingState));
+        }
 
         // BrnSoundLogicModuleIo.h:65 / :73 (DWARF; own TU, declared-only here) --
         // &mResourceRequestInterface. Not bodied by this wave.
@@ -93,10 +121,22 @@ namespace Io
         u8 mAttribSysRequestInterfaceStorage[KI_AttribSysInterfaceBytes]; // @ +0x04 FIRST (DWARF :81)
         u8 mResourceRequestInterfaceStorage[KI_ResourceInterfaceBytes];  // @ +0x814     (DWARF :82; start not independently attested)
 
+        // X360-attested trailing state: Construct @0x826C9A28 ends with `v5 = 11; do *v4++ = 0;
+        // while (--v5);` over 11 words starting at +0x1824, and the CreateIOBuffer
+        // instantiation @0x826DCD30 allocates 6224 == 0x1824 + 44. The member set behind those
+        // 44 bytes is not recovered (the DWARF slice stops at the two request interfaces), so it
+        // is modelled as named opaque storage -- WITHOUT it sizeof(LogicOutputBuffer) would be
+        // 6180 and the buffer would be under-allocated by 44 bytes relative to the console.
+        u8 mau8TrailingState[44];                                        // @ +0x1824
+
         static void _AssertLayout()
         {
             static_assert(offsetof(LogicOutputBuffer, mAttribSysRequestInterfaceStorage) == 0x04,
                           "LogicOutputBuffer.mAttribSysRequestInterface @ +0x04");
+            static_assert(offsetof(LogicOutputBuffer, mau8TrailingState) == 0x1824,
+                          "LogicOutputBuffer trailing state @ +0x1824 (X360 Construct @0x826C9A28)");
+            static_assert(sizeof(LogicOutputBuffer) == 6224,
+                          "LogicOutputBuffer == 6224 (the X360 CreateIOBuffer Alloc literal @0x826DCD30)");
         }
     };
 

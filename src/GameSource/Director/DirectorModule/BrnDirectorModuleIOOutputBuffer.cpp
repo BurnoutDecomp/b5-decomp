@@ -43,8 +43,9 @@ namespace DirectorIO
     // stack alloc. That is the IOBuffer base status flag PLUS the embedded request queue's own
     // Construct -- a VariableEventQueue asserts "Not Constructed" on its first AddEvent, and the
     // IO stack hands back RE-USED memory, so an un-Constructed queue would also inherit the
-    // previous tenant's write position. The generic PC CreateIOBuffer<T> only placement-news,
-    // so every creation site calls this explicitly.
+    // previous tenant's write position. CreateIOBuffer<T> runs T::Construct (2026-08-15) on the
+    // PC too, so the creation sites' explicit calls are now redundant second Constructs (kept
+    // only where a bring-up memset sits between the create and the call).
     void OutputBuffer::Construct()
     {
         CgsModule::IOBuffer::Construct();

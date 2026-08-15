@@ -205,10 +205,17 @@ namespace PropEntityIO
         // X360 0x822B9930 (:644, THIS batch): write-lock handle, returns this + 831104 (mVisibleOverheadSignArray).
         VisibleOverheadSignArrayStorage* GetVisibleOverheadSignArray();
 
-        // DWARF :628 / :632. X360 Construct @0x822EFB98 (bodied in this buffer's own TU);
-        // Destruct @0x822DC3D0 is a separate ledger function, declaration-only here.
+        // DWARF :628 / :632. X360 Construct @0x822EFB98 (bodied in this buffer's own TU).
         void Construct();
-        void Destruct();
+        // BODIED 2026-08-15 (IO-buffer zero-fill removal audit): DestroyIOBuffer<T> is the
+        // console's mirror now and calls T::Destruct, so this could no longer stay
+        // declaration-only. X360 0x822DC3D0 IS this function and it is a single instruction --
+        // `b CgsModule::IOBuffer::Destruct` -- i.e. the whole body is the base call. (It is also
+        // the ICF representative every other base-only Destruct in this family folds into: the
+        // DestroyIOBuffer instantiations for OutputBuffer_Prepare @0x827B5E20, OutputBuffer_PreScene
+        // @0x827B6918, InputBuffer_PreScene @0x827B89A0, OutputBuffer_PrePhysics @0x827B9470 and
+        // InputBuffer_PostPhysics @0x827B9E70 all `bl` this address.)
+        void Destruct() { CgsModule::IOBuffer::Destruct(); }
 
         static void _AssertLayout();
 
@@ -291,10 +298,13 @@ namespace PropEntityIO
         // X360 0x822B95E8: write-lock handle, returns this + 819824 (mPropInputInterface).
         PropInputInterfaceStorage* GetPropInputInterface();
 
-        // DWARF :593 / :597. X360 Construct @0x822EFC58 (bodied in this buffer's own TU);
-        // Destruct has no out-of-line X360 symbol, so it stays declaration-only.
+        // DWARF :593 / :597. X360 Construct @0x822EFC58 (bodied in this buffer's own TU).
         void Construct();
-        void Destruct();
+        // BODIED 2026-08-15 (IO-buffer zero-fill removal audit). No out-of-line X360 symbol of
+        // its own because it ICF-folded with OutputBuffer_PreScene::Destruct @0x822DC3D0
+        // (`b CgsModule::IOBuffer::Destruct`) -- which is exactly what DestroyIOBuffer<
+        // OutputBuffer_Prepare> @0x827B5E20 calls. Base-only, no member teardown.
+        void Destruct() { CgsModule::IOBuffer::Destruct(); }
 
         static void _AssertLayout();
 
@@ -429,10 +439,12 @@ namespace PropEntityIO
         // X360 0x822B9A80 (:699, THIS batch): write-lock handle, returns this + 11296 (mPropToTrafficInterface).
         PropToTrafficInterfaceStorage* GetPropToTrafficInterface();
 
-        // DWARF :688 / :692. X360 Construct @0x822EFCF0 (bodied in this buffer's own TU);
-        // Destruct is declaration-only (no out-of-line X360 symbol).
+        // DWARF :688 / :692. X360 Construct @0x822EFCF0 (bodied in this buffer's own TU).
         void Construct();
-        void Destruct();
+        // BODIED 2026-08-15 (IO-buffer zero-fill removal audit). ICF-folded with
+        // OutputBuffer_PreScene::Destruct @0x822DC3D0 -- DestroyIOBuffer<OutputBuffer_PrePhysics>
+        // @0x827B9470 calls that address. Base-only, no member teardown.
+        void Destruct() { CgsModule::IOBuffer::Destruct(); }
 
         static void _AssertLayout();
 
@@ -525,10 +537,12 @@ namespace PropEntityIO
         // so the two spell one type and no header cycle is introduced.
         typedef CgsContainers::BitArray<300000u> HitPropsBitArray;
 
-        // :344 / :348 -- X360 Construct @0x822EFAA0 (bodied in this buffer's own TU);
-        // Destruct is declaration-only (no out-of-line symbol in ARTIST).
+        // :344 / :348 -- X360 Construct @0x822EFAA0 (bodied in this buffer's own TU).
         void Construct();
-        void Destruct();
+        // BODIED 2026-08-15 (IO-buffer zero-fill removal audit). No symbol of its own in ARTIST
+        // because it ICF-folded with OutputBuffer_PreScene::Destruct @0x822DC3D0 -- the address
+        // DestroyIOBuffer<InputBuffer_PreScene> @0x827B89A0 calls. Base-only.
+        void Destruct() { CgsModule::IOBuffer::Destruct(); }
 
         void SetReplayStatusInterface(const BrnReplays::ReplayIO::StatusInterface* lpReplayStatusInterface);
 
@@ -729,9 +743,23 @@ namespace PropEntityIO
         // ADDED 2026-08-12 (prop-BOOT wave, agent B8): Construct was never written, so
         // `Construct()` on this buffer resolved to the CgsModule::IOBuffer base and the
         // embedded VariableEventQueue<32768,16> stayed un-Constructed. Bodied in this
-        // buffer's own TU; Destruct stays declaration-only.
+        // buffer's own TU.
         void Construct();
-        void Destruct();
+        // BODIED 2026-08-15 (IO-buffer zero-fill removal audit) -- DestroyIOBuffer<T> is the
+        // console's mirror now and calls T::Destruct. Unlike its base-only siblings this one has
+        // a REAL body, X360 0x822DC358, and it is three statements in this order:
+        //   bl  CgsModule::IOBuffer::Destruct(this)
+        //   stw 0, 4(this)                                  -> mpDispatchFrame = 0
+        //   bl  VariableEventQueue<32768,16>::Clear(this+12) -> mSceneResultQueue.Clear()
+        // (the console does NOT null mpShadowMap here, only mpDispatchFrame -- Construct nulls
+        //  both; reproduced exactly. Both console words are host pointers, so they are touched by
+        //  name, per this header's POINTER WIDTH note.)
+        void Destruct()
+        {
+            CgsModule::IOBuffer::Destruct();
+            mpDispatchFrame = 0;
+            mSceneResultQueue.Clear();
+        }
 
         static void _AssertLayout();
 
@@ -772,7 +800,11 @@ namespace PropEntityIO
                 ResetOnTrackResultQueue;
 
         void Construct();                                                          // :534
-        void Destruct();                                                           // :538
+        // BODIED 2026-08-15 (IO-buffer zero-fill removal audit). No out-of-line symbol of its own
+        // in ARTIST: like every base-only Destruct in this family it ICF-folded with
+        // PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0, a bare
+        // `b CgsModule::IOBuffer::Destruct`. Base-only, no member teardown.        // :538
+        void Destruct() { CgsModule::IOBuffer::Destruct(); }
         const OutPotentialContactQueue* GetPotentialContactQueue() const;          // :540
         // X360 0x827AA170 (THIS batch): write-lock; Append onto mPotentialContactQueue (this+0x10).
         void AppendPotentialContactQueue(const OutPotentialContactQueue* lpQueue);  // :541
@@ -820,9 +852,12 @@ namespace PropEntityIO
         // constructed, then construct the update-prop queue and the contact-spy interface.
         void Construct();
 
-        // The remaining DWARF-attested members (:567-:573) live in their own (not-yet-
+        // The remaining DWARF-attested members (:569-:573) live in their own (not-yet-
         // reconstructed) TUs; declared here for declaration-shape fidelity, bodied elsewhere.
-        void Destruct();                                                    // :567
+        // BODIED 2026-08-15 (IO-buffer zero-fill removal audit): DestroyIOBuffer<
+        // InputBuffer_PostPhysics> @0x827B9E70 calls PropEntityIO::OutputBuffer_PreScene::Destruct
+        // @0x822DC3D0 -- the ICF representative, a bare `b CgsModule::IOBuffer::Destruct`.
+        void Destruct() { CgsModule::IOBuffer::Destruct(); }                // :567
         const ContactSpyInterface* GetContactSpyInterface() const;          // :569
         const UpdatePropEventQueue* GetUpdatedPropQueue() const;            // :570
         ContactSpyInterface* GetContactSpyInterface();                      // :572

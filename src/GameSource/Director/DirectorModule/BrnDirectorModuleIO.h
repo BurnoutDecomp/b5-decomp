@@ -145,7 +145,8 @@ namespace DirectorIO
     struct InputBuffer : public CgsModule::IOBuffer
     {
         // X360 @0x822393D0 -- the buffer's OWN Construct, which the console's
-        // CreateIOBuffer<InputBuffer> runs after the stack allocation. Raises the IOBuffer base
+        // CreateIOBuffer<InputBuffer> runs after the stack allocation -- and so does the PC
+        // template: CreateIOBuffer<T> runs T::Construct (2026-08-15). Raises the IOBuffer base
         // status and seeds the published scalars.
         // ⚠️ IT IS NOT A ZERO-FILL: it seeds mePlayerCarIndex @0x7AA8 AND miCameraType @0x7AB8
         // to -1 (`*(a1 + 31400) = -1; *(a1 + 31416) = -1;`). Both are "none" sentinels that

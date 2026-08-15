@@ -31,6 +31,35 @@ namespace BrnTrafficIO
         static_assert(offsetof(InputBuffer_Dispatch, muShadowMap)                 == 0x8020, "muShadowMap @0x8020");
     }
 
+    // ------------------------------------------------------------------------
+    // InputBuffer_Dispatch::Construct   @ 0x8275CF40
+    // ------------------------------------------------------------------------
+    // ⭐ ADDED 2026-08-15 (IO-buffer zero-fill removal audit). The console body is five
+    // statements:
+    //     stb 1, 0(this)                                   -> IOBuffer::Construct()
+    //     bl  VariableEventQueue<32768,16>::Construct(+4)   -> the scene-result queue
+    //     stw 0, 0x8014(this)                              -> muDispatchFrame = 0
+    //     stw 0, 0x8018(this)                              -> muBlobbyShadowBuffer = 0
+    //     stw 0, 0x801C(this)                              -> muCoronaSubmissionInterface = 0
+    //     stw 0, 0x8020(this)                              -> muShadowMap = 0
+    // The four handle words are the ones TrafficEntityModule::GenerateDispatchLists reads
+    // every frame; without this they hold the previous IO-stack tenant's bytes now that
+    // CreateIOBuffer<T> default-initialises instead of value-initialising.
+    // [FLAG] the `VariableEventQueue<32768,16>::Construct(this+4)` leg is NOT emitted: that
+    // queue lives inside the documented opaque maPayloadAndPad span (see the header FLAG) and
+    // has no named member to reach. Nothing in this tree reads it -- the only accessor,
+    // GetSceneResultQueue, is still the inert WorldLinkStubs gate that returns NULL. Restore
+    // this call together with the member when that slice lands.
+    void InputBuffer_Dispatch::Construct()
+    {
+        CgsModule::IOBuffer::Construct();      // stb 1, 0(this) @0x8275CF40
+
+        muDispatchFrame             = 0;       // *(this+0x8014) = 0 @0x8275CF40
+        muBlobbyShadowBuffer        = 0;       // *(this+0x8018) = 0 @0x8275CF40
+        muCoronaSubmissionInterface = 0;       // *(this+0x801C) = 0 @0x8275CF40
+        muShadowMap                 = 0;       // *(this+0x8020) = 0 @0x8275CF40
+    }
+
     // X360 0x827120D8 (asm-line :482) -- read-lock; return the dispatch-frame index (this+0x8014).
     u32 InputBuffer_Dispatch::GetDispatchFrame() const
     {

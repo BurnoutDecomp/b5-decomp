@@ -41,8 +41,10 @@ namespace BrnPhysics
     // ⭐ ADDED 2026-08-06 (big-five #2, contact-generation wave).
     //
     // ContactGenList::Construct -- the X360 CreateIOBuffer<ContactGenList> template runs
-    // T::Construct after the alloc; the PC template placement-news only, so
-    // StartVehicleContactGeneration calls this explicitly (the InputBuffer::Construct precedent).
+    // T::Construct after the alloc, and so does the PC one now: CreateIOBuffer<T> runs
+    // T::Construct (2026-08-15). StartVehicleContactGeneration still calls this explicitly after
+    // its CreateIOBuffer, which is now a redundant second Construct (harmless -- the body is a
+    // status raise plus miNumEntries = 0 -- but it should go when that TU is next touched).
     // The console inline (@0x8262AFC8..0x8262AFD4): `stw 0, 0xC08(list)` (miNumEntries = 0) +
     // the IOBuffer status raise (`li 1 ; stb 0(list)`).
     // =================================================================================================

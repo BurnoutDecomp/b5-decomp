@@ -85,6 +85,14 @@ namespace BrnTrafficIO
         // X360 0x827A10D0: write-lock; set the shadow-map handle (this+0x8020).
         void SetShadowMap(u32 luShadowMap);
 
+        // ⭐ ADDED 2026-08-15 (IO-buffer zero-fill removal audit). X360 0x8275CF40 -- this
+        // Construct was never written, so `CreateIOBuffer<InputBuffer_Dispatch>` ran only the
+        // inherited CgsModule::IOBuffer::Construct and the four handle words below arrived
+        // holding the previous IO-stack tenant's bytes (the old PC CreateIOBuffer<T>
+        // value-initialised the buffer, which is the only reason that was invisible).
+        // Body in BrnTrafficEntityModuleIO_InputBuffer_Dispatch.cpp.
+        void Construct();   // X360 0x8275CF40
+
         static void _AssertLayout();
 
     private:

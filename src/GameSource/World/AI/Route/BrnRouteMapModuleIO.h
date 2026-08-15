@@ -238,8 +238,31 @@ namespace BrnAI
         // =====================================================================
         struct InputBuffer : public CgsModule::IOBuffer
         {
-            void Construct();
-            void Destruct();
+            // ⭐ MOVED INLINE 2026-08-15 (IO-buffer zero-fill removal audit). This body used to
+            // live in BrnRouteMapModuleIO.cpp -- a TU that is NOT on tools/build/build_game_exe.bat,
+            // so it was never compiled into the exe and `Construct()` silently resolved to the
+            // inherited CgsModule::IOBuffer::Construct, leaving both request queues with
+            // mbIsConstructed == false. Inline here it is actually emitted.
+            //
+            // X360-attested by the CreateIOBuffer<InputBuffer> instantiation @0x82791878, which
+            // inlines it whole after `Alloc(this, 0x3B0, name)`:
+            //     li r11,1 ; stb r11,0(r31)                              -- IOBuffer::Construct
+            //     addi r3,r31,0x10 ; bl EventQueue<RaceRouteRequest,1>::Construct
+            //     addi r3,r31,0xA0 ; bl EventQueue<ExtrapolatedRouteRequest,12>::Construct
+            // +0x10 / +0xA0 are mRaceRouteRequestQueue / mExtrapolatedRouteRequestQueue (the
+            // queues are 16-aligned because their records embed rw vpu Vector3s, which is what
+            // puts the first one at +0x10 rather than +0x04).
+            void Construct()
+            {
+                CgsModule::IOBuffer::Construct();
+                mRaceRouteRequestQueue.Construct();
+                mExtrapolatedRouteRequestQueue.Construct();
+            }
+            // BODIED 2026-08-15 (same audit): CgsIOBufferStack.h's DestroyIOBuffer<T> is the
+            // console's mirror now and calls T::Destruct. DestroyIOBuffer<RouteMapModuleIO::
+            // InputBuffer> @0x8278A200 (Free 944) shows the call resolving straight to
+            // `CgsModule::IOBuffer::Destruct` -- base-only, no queue teardown.
+            void Destruct() { CgsModule::IOBuffer::Destruct(); }
 
             // The two NON-const producer getters are emitted out-of-line by the X360 build
             // (write-lock-guarded, X360 0x8276AE00 / 0x8276AF50); bodies live in
@@ -264,8 +287,23 @@ namespace BrnAI
         // =====================================================================
         struct OutputBuffer : public CgsModule::IOBuffer
         {
-            void Construct();
-            void Destruct();
+            // ⭐ MOVED INLINE 2026-08-15 (IO-buffer zero-fill removal audit) -- same reason as
+            // the InputBuffer twin above: the body's old home, BrnRouteMapModuleIO.cpp, is not on
+            // tools/build/build_game_exe.bat, so it never reached the exe.
+            //
+            // X360-attested by CreateIOBuffer<OutputBuffer> @0x82791960 (`Alloc(this, 82192,
+            // name)` then `*p = 1; EventQueue<RouteResponse,16>::Construct(p+4)`). +4 is
+            // mRouteResponseQueue (== KU_ROUTE_RESPONSE_QUEUE_OFFSET, pinned below).
+            void Construct()
+            {
+                CgsModule::IOBuffer::Construct();
+                mRouteResponseQueue.Construct();
+            }
+            // BODIED 2026-08-15 (same audit). DestroyIOBuffer<RouteMapModuleIO::OutputBuffer>
+            // @0x8278A2D8 (Free 82192) calls `CgsModule::IOBuffer::Destruct` directly -- this
+            // buffer's Destruct ICF-folded into the base. Reached every frame through
+            // IOHelper<OutputBuffer>::~IOHelper @0x82791820.
+            void Destruct() { CgsModule::IOBuffer::Destruct(); }
 
             // X360-attested member start offset into the buffer payload (the IOBuffer FlagSet<s8>
             // base pads to 4, so mRouteResponseQueue -- the first OutputBuffer member -- lands @+4).

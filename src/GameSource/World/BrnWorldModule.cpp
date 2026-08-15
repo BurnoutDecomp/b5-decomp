@@ -813,11 +813,8 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
             CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneOutput = 0;
             lpInputBufferStack->CreateIOBuffer( &lpSceneInput, "Scene" );
             lpOutputBufferStack->CreateIOBuffer( &lpSceneOutput, "Scene" );
-            // The X360 CreateIOBuffer<T> instantiations run the buffers' Construct after
-            // the stack alloc; the generic PC template placement-news only (same pattern
-            // as LoadWorldModule's world output buffer).
-            lpSceneInput->Construct();
-            lpSceneOutput->Construct();
+            // (CreateIOBuffer<T> runs each buffer's own Construct after the stack alloc,
+            //  exactly as the X360 instantiations do -- no hand Construct needed here.)
 
             lpSceneInput->LockForWrite();
             {
@@ -854,9 +851,6 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
             CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneOutput = 0;
             lpInputBufferStack->CreateIOBuffer( &lpSceneInput, "Scene" );
             lpOutputBufferStack->CreateIOBuffer( &lpSceneOutput, "Scene" );
-            // PC Construct restoration (see the SCENE stage above).
-            lpSceneInput->Construct();
-            lpSceneOutput->Construct();
 
             lpSceneInput->LockForWrite();
             const bool lbPhysicsPrepared = mPhysicsModule.Prepare(
@@ -899,12 +893,9 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
 
             RaceCarEntityModuleIO::OutputBuffer_Prepare* lpRaceCarOutput = 0;
             lpOutputBufferStack->CreateIOBuffer( &lpRaceCarOutput, "RaceCar" );
-            // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
-            // T::Construct after the alloc; the generic PC template placement-news only).
-            lpRaceCarOutput->Construct();
-            // PC Construct restoration (base IOBuffer status; the buffer interior is a
-            // minimal slice and its module Prepare is boot-gated).
-            lpRaceCarOutput->CgsModule::IOBuffer::Construct();
+            // (CreateIOBuffer<T> ran OutputBuffer_Prepare::Construct -- X360 instantiation
+            //  @0x827B5BA0. FLAG: the PC body is still a minimal slice, and its module
+            //  Prepare is boot-gated.)
 
             if ( !mRaceCarEntityModule.Prepare( lpRaceCarOutput, mDistrictMapResourceHandle ) )
             {
@@ -926,11 +917,6 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
 
             BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare* lpTrafficOutput = 0;
             lpOutputBufferStack->CreateIOBuffer( &lpTrafficOutput, "Traffic" );
-            // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
-            // T::Construct after the alloc; the generic PC template placement-news only).
-            lpTrafficOutput->Construct();
-            // PC Construct restoration (see the RaceCar stage above).
-            lpTrafficOutput->CgsModule::IOBuffer::Construct();
 
             if ( !mTrafficEntityModule.Prepare( lpTrafficOutput ) )
             {
@@ -938,9 +924,6 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
                 CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneOutput = 0;
                 lpInputBufferStack->CreateIOBuffer( &lpSceneInput, "Scene" );
                 lpOutputBufferStack->CreateIOBuffer( &lpSceneOutput, "Scene" );
-                // PC Construct restoration (see the SCENE stage above).
-                lpSceneInput->Construct();
-                lpSceneOutput->Construct();
 
                 CgsModule::LockBuffersForIO( lpSceneInput, lpTrafficOutput );
                 ::WorldModule::BridgeTrafficModuleToSceneModule_Prepare(
@@ -976,10 +959,6 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
             lpOutputBufferStack->CreateIOBuffer( &lpWorldEntityOutput, "WorldEntityPrepare" );
             lpInputBufferStack->CreateIOBuffer( &lpSceneInput, "Scene" );
             lpOutputBufferStack->CreateIOBuffer( &lpSceneOutput, "Scene" );
-            // PC Construct restoration (see the SCENE stage above).
-            lpWorldEntityOutput->Construct();
-            lpSceneInput->Construct();
-            lpSceneOutput->Construct();
 
             if ( !mWorldEntityModule.Prepare( lpWorldEntityOutput ) )
             {
@@ -1026,16 +1005,10 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
 
             PropEntityIO::OutputBuffer_Prepare* lpPropOutput = 0;
             lpOutputBufferStack->CreateIOBuffer( &lpPropOutput, "Prop" );
-            // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
-            // T::Construct after the alloc; the generic PC template placement-news only).
-            // ⭐ 2026-08-12 (prop-BOOT wave, agent B8): this line NOW REACHES THE REAL
-            // OutputBuffer_Prepare::Construct @0x822EFC58. Until that body existed it silently
-            // resolved to the inherited CgsModule::IOBuffer::Construct, which is why a second
-            // explicit `lpPropOutput->CgsModule::IOBuffer::Construct()` used to stand here --
-            // it was doing the only thing the first line actually did. The real Construct sets
-            // the base status byte itself (`stb 1, 0(this)` is its first instruction), so the
-            // duplicate is removed rather than left to re-clear a freshly built buffer.
-            lpPropOutput->Construct();
+            // (CreateIOBuffer<T> itself runs PropEntityIO::OutputBuffer_Prepare::Construct
+            //  @0x822EFC58 -- X360 instantiation @0x827B5D48. That Construct sets the base
+            //  status byte itself (`stb 1, 0(this)` is its first instruction), so no hand
+            //  IOBuffer::Construct belongs here either.)
 
             CgsModule::LockBuffersForIO( lpPropOutput );
             const bool lbPropPrepared =
@@ -1057,9 +1030,6 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
                 CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneOutput = 0;
                 lpInputBufferStack->CreateIOBuffer( &lpSceneInput, "Scene" );
                 lpOutputBufferStack->CreateIOBuffer( &lpSceneOutput, "Scene" );
-                // PC Construct restoration (see the SCENE stage above).
-                lpSceneInput->Construct();
-                lpSceneOutput->Construct();
 
                 CgsModule::LockBuffersForIO( lpSceneInput, lpPropOutput );
                 ::WorldModule::BridgePropModuleToSceneModule_Prepare(
@@ -1076,8 +1046,6 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
             {
                 BrnPhysics::PhysicsModuleIO::InputBuffer* lpPhysicsInput = 0;
                 lpInputBufferStack->CreateIOBuffer( &lpPhysicsInput, "Physics" );
-                // PC Construct restoration (base IOBuffer status; minimal-slice interior).
-                lpPhysicsInput->CgsModule::IOBuffer::Construct();
 
                 CgsModule::LockBuffersForIO( lpPhysicsInput, lpPropOutput );
                 ::WorldModule::BridgePropModuleToPhysicsModule_Prepare(
@@ -1110,8 +1078,6 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
 
             BrnAI::AIModuleIO::OutputBuffer* lpAIOutput = 0;
             lpOutputBufferStack->CreateIOBuffer( &lpAIOutput, "AI" );
-            // PC Construct restoration (see the RaceCar stage above).
-            lpAIOutput->CgsModule::IOBuffer::Construct();
             CGS_ASSERT( lpAIOutput, "lpAIOutputBuffer" );
 
             if ( !mAIModule.Prepare( lpAllocatorList, lpAIOutput ) )
@@ -1242,12 +1208,8 @@ WorldModule::PrepareWorldCollision( CgsModule::IOBufferStack* lpInputBufferStack
     CGS_ASSERT( lpOutputBufferStack->CreateIOBuffer( &lpSceneOutput, "Scene" ),
                 "mpStack->CreateIOBuffer( &mpBuffer, lpcName )" );
 
-    // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs T::Construct
-    // after the alloc; the generic PC template placement-news only) -- the same restoration
-    // Prepare's WORLDENTITY stage does for this exact buffer trio.
-    lpWorldEntityOutput->Construct();
-    lpSceneInput->Construct();
-    lpSceneOutput->Construct();
+    // (CreateIOBuffer<T> ran each buffer's own Construct; the hand restoration this trio
+    //  used to carry is gone -- see CgsIOBufferStack.h.)
 
     lpWorldEntityOutput->LockForWrite();
     // Both reached through the NON-CONST overloads: this buffer is WRITE-locked here.
@@ -1770,10 +1732,6 @@ WorldModule::EntityModulePostSceneUpdate(
         CgsSceneManager::SceneManagerIO::OutputBuffer* lpQueryOutput = 0;
         lpInputBufferStack->CreateIOBuffer( &lpQueryInput, "Scene" );
         lpOutputBufferStack->CreateIOBuffer( &lpQueryOutput, "Scene" );
-        // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
-        // T::Construct after the alloc; the generic PC template placement-news only).
-        lpQueryInput->Construct();
-        lpQueryOutput->Construct();
 
         PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RaceCar_Bridge );
         CgsModule::LockBuffersForIO( lpQueryInput, lpRaceCarOutputBuffer_PostScene );
@@ -1827,10 +1785,6 @@ WorldModule::EntityModulePostSceneUpdate(
         CgsSceneManager::SceneManagerIO::OutputBuffer* lpQueryOutput = 0;
         lpInputBufferStack->CreateIOBuffer( &lpQueryInput, "Scene" );
         lpOutputBufferStack->CreateIOBuffer( &lpQueryOutput, "Scene" );
-        // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
-        // T::Construct after the alloc; the generic PC template placement-news only).
-        lpQueryInput->Construct();
-        lpQueryOutput->Construct();
 
         PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_Traffic_Bridge );
         CgsModule::LockBuffersForIO( lpQueryInput, lpTrafficOutputBuffer_PostScene );
@@ -1886,9 +1840,6 @@ WorldModule::EntityModulePostSceneUpdate(
     {
         TriggerEntityModuleIO::OutputBuffer_PostScene* lpTriggerOutput = 0;
         lpOutputBufferStack->CreateIOBuffer( &lpTriggerOutput, "TriggerPostScene" );
-        // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
-        // T::Construct after the alloc; the generic PC template placement-news only).
-        lpTriggerOutput->Construct();
 
         mTriggerEntityModule.PostSceneUpdate( lpInputBufferStack, lpOutputBufferStack,
                                               lpTriggerInputBuffer_PostScene,
@@ -1900,10 +1851,6 @@ WorldModule::EntityModulePostSceneUpdate(
             CgsSceneManager::SceneManagerIO::OutputBuffer* lpQueryOutput = 0;
             lpInputBufferStack->CreateIOBuffer( &lpQueryInput, "Scene" );
             lpOutputBufferStack->CreateIOBuffer( &lpQueryOutput, "Scene" );
-            // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
-            // T::Construct after the alloc; the generic PC template placement-news only).
-            lpQueryInput->Construct();
-            lpQueryOutput->Construct();
 
             CgsModule::LockBuffersForIO( lpQueryInput, lpTriggerOutput );
             ::WorldModule::BridgeTriggerModuleToSceneModule_PostScene(
@@ -2207,10 +2154,6 @@ WorldModule::UpdateForBootUpVideo( BrnUpdateSet lUpdateSet,
     lpOutputBufferStack->CreateIOBuffer( &lpWorldEntityOutput_PostPhysics, "WorldEntityPostPhysics" );
     lpInputBufferStack->CreateIOBuffer( &lpTrafficInput_PostPhysics, "TrafficPostPhysics" );
     lpOutputBufferStack->CreateIOBuffer( &lpTrafficOutput_PostPhysics, "TrafficPostPhysics" );
-    // PC Construct restoration (see WorldModule::Prepare's SCENE stage).
-    lpWorldEntityOutput_PostPhysics->Construct();
-    lpTrafficInput_PostPhysics->Construct();
-    lpTrafficOutput_PostPhysics->Construct();
 
     // Drain the world in-event queue into the traffic post-physics action queue.
     // FLAG cross-home cast (the committed bridge precedent): the traffic input's
@@ -2343,29 +2286,16 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     lpOutputBufferStack->CreateIOBuffer( &lpCrashOutput_PreScene, "CrashPreScene" );
     lpInputBufferStack->CreateIOBuffer( &lpCrashInput_PostPhysics, "CrashPostPhysics" );
     lpOutputBufferStack->CreateIOBuffer( &lpCrashOutput_PostPhysics, "CrashPostPhysics" );
-    // PC Construct restoration (see WorldModule::Prepare's SCENE stage; the X360
-    // CreateIOBuffer<T> stack template runs T::Construct after the alloc).
-    lpPhysicsInput->Construct();
-    // ⛔ 2026-08-10 (root-cause wave): the OUTPUT half was never Constructed. Its console
-    // Construct is X360 0x825ABB10 and it is what leaves the vehicle-output REQUEST
-    // interface's queues live; without it PhysicsModule::Update's BridgeVehicleManagerToOutput
-    // appended into an unconstructed VariableEventQueue<13440,16> every frame.
-    lpPhysicsOutput->Construct();
-    lpPhysicsOutput->Construct();
-    lpSceneOutput->Construct();
-    lpTriggerInput_PreScene->Construct();
-    lpTriggerOutput_PreScene->Construct();
-    lpTriggerInput_PostScene->Construct();
-    lpTriggerOutput_PostScene->Construct();
-    lpTriggerInput_PrePhysics->Construct();
-    lpTriggerOutput_PrePhysics->Construct();
-    lpAIOutput->Construct();
-    lpTrafficInput_PostScene->Construct();
-    lpTrafficInput_PostPhysics->Construct();
-    lpCrashInput_PreScene->Construct();
-    lpCrashOutput_PreScene->Construct();
-    lpCrashInput_PostPhysics->Construct();
-    lpCrashOutput_PostPhysics->Construct();
+    // ⭐ 2026-08-15 (IO-buffer zero-fill removal audit): the sixteen hand-written
+    // `lp*->Construct();` calls that used to stand here are DELETED. They were the PC
+    // work-around for a CreateIOBuffer<T> that only placement-new'd; the template is now the
+    // console's own (CgsIOBufferStack.h -- `new (mem) T` then `T::Construct()`), so each buffer
+    // is already Constructed by the call above it and the hand calls were a second Construct on
+    // an already-constructed buffer. (One of them was even doubled --
+    // `lpPhysicsOutput->Construct();` appeared twice -- which is what a manual list of sixteen
+    // gets you. lpPhysicsInput never had one at all, and now does not need one.) Nothing between
+    // the creates and here depends on them: the buffers are only read/written further down,
+    // after their Lock*/bridge calls.
 
     // ---- the frame's triangle-cache collision generator --------------------
     // ONE carve from the per-frame world allocator: the generator object at the
@@ -2410,14 +2340,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     lpInputBufferStack->CreateIOBuffer( &lpTrafficInput_PrePhysics, "TrafficPrePhysics" );
     lpInputBufferStack->CreateIOBuffer( &lpPropInput_PrePhysics, "PropPrePhysics" );
     lpInputBufferStack->CreateIOBuffer( &lpSceneInput_Update, "SceneInput_Update" );
-    lpRaceCarOutput_PreScene->Construct();
-    lpTrafficOutput_PreScene->Construct();
-    lpPropOutput_PreScene->Construct();
-    lpWorldEntityOutput_PreScene->Construct();
-    lpRaceCarInput_PrePhysics->Construct();
-    lpTrafficInput_PrePhysics->Construct();
-    lpPropInput_PrePhysics->Construct();
-    lpSceneInput_Update->Construct();
 
     lpUpdateInputBuffer->LockForRead();
 
@@ -2476,10 +2398,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     lpInputBufferStack->CreateIOBuffer( &lpTrafficInput_PreScene, "TrafficPreScene" );
     lpInputBufferStack->CreateIOBuffer( &lpPropInput_PreScene, "PropPreScene" );
     lpInputBufferStack->CreateIOBuffer( &lpWorldEntityInput_PreScene, "WorldEntityPreScene" );
-    lpRaceCarInput_PreScene->Construct();
-    lpTrafficInput_PreScene->Construct();
-    lpPropInput_PreScene->Construct();
-    lpWorldEntityInput_PreScene->Construct();
 
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RaceCar_Bridge );
     CGS_ASSERT( lpRaceCarInput_PreScene != 0, "lpInputBuffer" );
@@ -2665,17 +2583,12 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     lpOutputBufferStack->CreateIOBuffer( &lpTrafficOutput_PostScene, "TrafficPostScene" );
     lpOutputBufferStack->CreateIOBuffer( &lpRaceCarOutput_PostScene, "RaceCarPostScene" );
     lpOutputBufferStack->CreateIOBuffer( &lpPropOutput_PostScene, "PropPostScene" );
-    lpTrafficOutput_PostScene->Construct();
-    lpRaceCarOutput_PostScene->Construct();
-    lpPropOutput_PostScene->Construct();
     PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
 
     RaceCarEntityModuleIO::InputBuffer_PostScene* lpRaceCarInput_PostScene = 0;
     PropEntityIO::InputBuffer_PostScene*          lpPropInput_PostScene    = 0;
     lpInputBufferStack->CreateIOBuffer( &lpRaceCarInput_PostScene, "RaceCarPostScene" );
     lpInputBufferStack->CreateIOBuffer( &lpPropInput_PostScene, "PropPostScene" );
-    lpRaceCarInput_PostScene->Construct();
-    lpPropInput_PostScene->Construct();
 
     // ---- POST-SCENE spine ----------------------------------------------------
     // (The world-entity post-scene pair is created/destroyed around the call per
@@ -2704,7 +2617,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
 
     BrnAI::AIModuleIO::InputBuffer* lpAIInput = 0;
     lpInputBufferStack->CreateIOBuffer( &lpAIInput, "AIInput" );
-    lpAIInput->Construct();
 
     CgsModule::LockBuffersForIO( lpAIInput, lpTrafficOutput_PostScene,
                                  lpRaceCarOutput_PostScene, lpSceneOutput,
@@ -2766,11 +2678,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     lpOutputBufferStack->CreateIOBuffer( &lpPropOutput_PrePhysics, "PropPrePhysics" );
     lpInputBufferStack->CreateIOBuffer( &lpWorldEntityInput_PrePhysics, "WorldEntityPrePhysics" );
     lpOutputBufferStack->CreateIOBuffer( &lpWorldEntityOutput_PrePhysics, "WorldEntityPrePhysics" );
-    lpRaceCarOutput_PrePhysics->Construct();
-    lpTrafficOutput_PrePhysics->Construct();
-    lpPropOutput_PrePhysics->Construct();
-    lpWorldEntityInput_PrePhysics->Construct();
-    lpWorldEntityOutput_PrePhysics->Construct();
 
     lpRaceCarInput_PrePhysics->LockForWrite();
     lpPropInput_PrePhysics->LockForWrite();
@@ -2845,7 +2752,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
 
     CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpSceneInput_PhysicsQueries = 0;
     lpInputBufferStack->CreateIOBuffer( &lpSceneInput_PhysicsQueries, "SceneInput_PhysicsQueries" );
-    lpSceneInput_PhysicsQueries->Construct();
 
     PerfMonCpu::StartMonitor( miPhysicsModuleGenerateSceneQueriesPM );
     mPhysicsModule.GenerateSceneQueries( lpPhysicsOutput, lUpdateSet );
@@ -2882,7 +2788,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
 
     PerfMonCpu::StartMonitor( miPhysicsBridgesPM );
     lpInputBufferStack->CreateIOBuffer( &lpSceneInput_Update, "SceneInput_Update" );
-    lpSceneInput_Update->Construct();
     CgsModule::LockBuffersForIO( lpSceneInput_Update, lpPhysicsOutput );
     ::WorldModule::BridgePhysicsSceneUpdateToScene( this, lpSceneInput_Update,
                                                     lpPhysicsOutput );
@@ -2917,7 +2822,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
 
     BrnAI::AIModuleIO::InputBuffer_PostPhysics* lpAIInput_PostPhysics = 0;
     lpInputBufferStack->CreateIOBuffer( &lpAIInput_PostPhysics, "AIInputPostPhysics" );
-    lpAIInput_PostPhysics->Construct();
 
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_AI_Bridge );
     CgsModule::LockBuffersForIO( lpAIInput_PostPhysics, lpPhysicsOutput );
@@ -2951,13 +2855,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     lpInputBufferStack->CreateIOBuffer( &lpRaceCarInput_PostPhysics, "RaceCarPostPhysics" );
     lpInputBufferStack->CreateIOBuffer( &lpPropInput_PostPhysics, "PropPostPhysics" );
     lpInputBufferStack->CreateIOBuffer( &lpWorldEntityInput_PostPhysics, "WorldEntityPostPhysics" );
-    lpRaceCarOutput_PostPhysics->Construct();
-    lpTrafficOutput_PostPhysics->Construct();
-    lpPropOutput_PostPhysics->Construct();
-    lpWorldEntityOutput_PostPhysics->Construct();
-    lpRaceCarInput_PostPhysics->Construct();
-    lpPropInput_PostPhysics->Construct();
-    lpWorldEntityInput_PostPhysics->Construct();
     PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
 
     // ---- AI -> entity modules post-physics ----------------------------------
@@ -3541,10 +3438,6 @@ WorldModule::GenerateFrustumQueries(
     CgsSceneManager::SceneManagerIO::OutputBuffer* lpQueryOutput = 0;
     lpInputBufferStack->CreateIOBuffer( &lpQueryInput, "Scene" );
     lpOutputBufferStack->CreateIOBuffer( &lpQueryOutput, "Scene" );
-    // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
-    // T::Construct after the alloc; the generic PC template placement-news only).
-    lpQueryInput->Construct();
-    lpQueryOutput->Construct();
 
     lpDispatchInputBuffer->LockForRead();
 
@@ -3796,19 +3689,8 @@ WorldModule::GenerateDispatchLists(
     lpInputBufferStack->CreateIOBuffer( &lpPropDispatchInput, "PropDispatch" );
     lpInputBufferStack->CreateIOBuffer( &lpQueryInput, "Scene" );
     lpOutputBufferStack->CreateIOBuffer( &lpQueryOutput, "Scene" );
-    // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
-    // T::Construct after the alloc; the generic PC template placement-news only).
-    lpQueryInput->Construct();
-    lpQueryOutput->Construct();
     lpInputBufferStack->CreateIOBuffer( &lpRaceCarDispatchInput, "RaceCar" );
     lpInputBufferStack->CreateIOBuffer( &lpFilteredEntityData, "Filtered Entity Data" );
-    // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
-    // T::Construct after the alloc; the generic PC template placement-news only).
-    lpWorldDispatchInput->Construct();
-    lpTrafficDispatchInput->Construct();
-    lpPropDispatchInput->Construct();
-    lpRaceCarDispatchInput->Construct();
-    lpFilteredEntityData->Construct();
     lpInputBufferStack->CreateIOBuffer( &lpTrafficPreDispatchInput, "TrafficVisibleEntities" );
     lpOutputBufferStack->CreateIOBuffer( &lpTrafficRenderInfos, "TrafficRenderInfos" );
 

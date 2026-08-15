@@ -36,10 +36,14 @@
 //                                                     + 200 * 2 (mau16ParentIsland),
 // which confirms KI_MAX_NUM_BODIES == 200 and both element widths exactly as the DWARF
 // declares them. The type is pointer-free, so the host size is the console size; pinned
-// below. ⚠️ The console template does NOT run a constructor over the block (raw Alloc; the
-// DWARF design initialises lazily through Prepare()); the committed PC CreateIOBuffer<T>
-// placement-news T(), which value-initialises the block to zero -- a benign superset on a
-// buffer nothing reads, noted for the record.
+// below. ⚠️ The console instantiation does NO construction work at all over the block: after
+// `Alloc(this, 0x4B2, name)` it is a bare `cntlzw/extrwi/xori` of the pointer into the bool
+// return -- so IslandGenerator's own Construct is empty and the DWARF design initialises
+// lazily through Prepare(). Since 2026-08-15 the PC CreateIOBuffer<T> DEFAULT-inits (no
+// zero-fill) and then calls T::Construct; this type declares none, so the call resolves to
+// the inherited CgsModule::IOBuffer::Construct -- one status-byte store the console does not
+// make. Benign (nothing Lock*s an island generator, and nothing reads the block before
+// Prepare), and recorded here rather than "corrected" with an invented empty override.
 // =====================================================================================
 
 #include "types.hpp"
@@ -51,6 +55,15 @@ namespace CgsPhysics
 {
     struct IslandGenerator : public CgsModule::IOBuffer
     {
+        // NO own Construct/Destruct, deliberately: CreateIOBuffer<IslandGenerator> @0x8289E0D0
+        // is a BARE Alloc -- the console makes no call at all after it, and DestroyIOBuffer
+        // @0x8289E190 likewise folds to nothing but the Free. (The binary cannot distinguish an
+        // empty Construct from no Construct call; either way nothing is written.) The PC reaches
+        // the inherited CgsModule::IOBuffer::Construct/Destruct through the stack template, so it
+        // emits ONE store the console never makes -- the status byte. Faithful as-is: this
+        // payload has no PC readers of uninitialised state (every slot is written by
+        // BuildIslands before it is read). See the base-only-Construct policy in
+        // CgsIOBufferStack.h.
         // DWARF CgsIslandGenerator.h:70. One per body slot: the slot's body index and its
         // union-find rank, u16 each (the invalid sentinels are 65535 -- DWARF :72/:73/:74).
         struct IslandData
