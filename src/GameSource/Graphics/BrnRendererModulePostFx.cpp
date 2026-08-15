@@ -325,7 +325,12 @@ void BrnRendererApplyEffectsFrameToPostFx(const BrnGraphics::EffectsArbitrator* 
             lpState->m_dofAmount      = lDepthOfField.mfDofAmount;
 
             // `lwz r3, 0x5B8(r20)` (m_pfxDof) / `addi r4, r20, 0x3D0` / `bl DepthOfField__SetState`.
-            msPostFx.GetDepthOfField()->SetState(*lpState);
+            // [FLAG PC bring-up] null test: m_pfxDof can be null on this build (the effect carves are
+            // PC bring-up); the console never tests it. Unreached today (mbUseDepthOfField is false).
+            if (msPostFx.GetDepthOfField() != 0)
+            {
+                msPostFx.GetDepthOfField()->SetState(*lpState);
+            }
         }
         gDiag.mbDepthOfField = lbDofActive;
     }
@@ -410,19 +415,17 @@ void BrnRendererApplyEffectsFrameToPostFx(const BrnGraphics::EffectsArbitrator* 
             lpState->m_blendNoise = lBlur.mfNoise;
             lpState->m_blendAngle = lBlur.mfAngle * KF_DEGREES_TO_RADIANS;
 
-            // [FLAG BLOCKED: rw::graphics::postfx::B4Blur has no way to receive a State]
             // The console finishes the arm with
             //     memcpy(*(this + 0x5C8), this + 0x3F0, 0x60)      (asm 0x8240DC30-0x8240DC50)
-            // i.e. it copies the 0x60-byte State it just built straight over B4Blur::m_state, which
-            // is that class's FIRST member (rwgpfxb4blur.h:254, `State m_state; // +0x00`). That
-            // member is PRIVATE and rwgpfxb4blur.h declares no B4Blur::SetState, so the publish
-            // cannot be written here without either a raw-offset poke into a live C++ object (an
-            // AGENTS.md audit failure) or an edit to a header this wave does not own.
-            // MISSING ITEM, exactly: `void B4Blur::SetState(const State& lrState);` in
-            // SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxb4blur.h, defined in the
-            // sibling .cpp as `m_state = lrState;`. The exact text is in this pass's REPORT under
-            // CROSS-GROUP REQUEST 4. Restore the line below when it lands:
-            //     msPostFx.GetB4Blur()->SetState(*lpState);
+            // i.e. it copies the 0x60-byte State it just built straight over B4Blur::m_state, that
+            // class's FIRST member (rwgpfxb4blur.h, `State m_state; // +0x00`) -- an assignment, spelled
+            // as one through B4Blur::SetState (rwgpfxb4blur.{h,cpp}, landed with this wave) so nothing
+            // pokes a private member. [FLAG PC bring-up] the null test: m_pfxB4Blur can be null on this
+            // build (BrnPostFx::Construct's effect carves are PC bring-up); the console never tests it.
+            if (msPostFx.GetB4Blur() != 0)
+            {
+                msPostFx.GetB4Blur()->SetState(*lpState);
+            }
             //
             // INERT ON THIS BUILD, and that is measured rather than hoped: the B4-blur arm only runs
             // when the layer-0 internal frame's mbUseBlur is set, and the PC bring-up producer of that
@@ -537,6 +540,10 @@ bool BrnRendererUpdatePostFxMotionBlur(const BrnGraphics::EffectsArbitrator* lpA
     // The three ParticleRenderData reads go here once that type has a layout:
     //     r4 -> the Matrix44Affine at +0x60, r5 -> the Matrix44 at +0xA0, f1 -> the f32 at +0x0C.
     // msPostFx.GetMotionBlurState().Update(lrView, lrProjection, lfTimeStep, leQuality);
+    // The flip must NOT pass silently while the call above is a comment (rung-5 verifier): a flipped
+    // build reporting "motion blur updated" without calling Update would be a lie the log cannot see.
+    #error "BRN_POSTFX_MOTION_BLUR_UPDATE_AVAILABLE is on but MotionBlurState::Update has no body and DispatchThreadInputBuffer::ParticleRenderData has no layout -- write the three reads + the call above, then delete this #error"
+    (void)leQuality;
     return true;
 #else
     (void)lpArbitrator;
@@ -573,7 +580,7 @@ void BrnRendererLogPostFxEffectState()
 
     char lacMsg[224];
     std::snprintf(lacMsg, sizeof(lacMsg),
-                  "[postfx-fx] frame %u: bloom=%d(lum %.3f thr %.3f col %.3f %.3f %.3f)"
+                  "[postfx-fx] apply-call %u: bloom=%d(lum %.3f thr %.3f col %.3f %.3f %.3f)"
                   " vig=%d dof=%d blur=%d tint2d=%d\n",
                   static_cast<unsigned>(luFrame),
                   gDiag.mbBloom ? 1 : 0,
