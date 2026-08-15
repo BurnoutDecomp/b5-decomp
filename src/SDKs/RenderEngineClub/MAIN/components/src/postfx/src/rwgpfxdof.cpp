@@ -24,40 +24,54 @@
 // instructions are the [0,1] clamp via floating-select; flt_82001CC0 == 0.0, flt_82001C98 == 1.0.)
 
 // --------------------------------------------------------------------------------------------------
-// [FLAG PC bring-up: BRN_POSTFX_DOF_PROGRAM_AVAILABLE]
+// THE DoF PIXEL PROGRAM -- NO LONGER BLOCKED, AND NO LONGER GATED.
 //
 // The X360 constructor compiles its pixel program from XENOS MICROCODE embedded in the executable
 // image: `addi r4, r11, unk_82043FB8@l` @0x82402D08 with `li r5, 0x284` (644) @0x82402CDC and
 // `li r3, 1` (pixel) @0x82402CE4, allocator `li r6, 0` @0x82402CD8 (the singleton's own).
 //
-// Those bytes are not in this tree. The previous revision declared
-//     extern const u8 gauDepthOfFieldProgramMicrocode[];
-// with NO definition anywhere -- an unresolved external that would have failed the link (it is one
-// of the symbols this wave was opened to close) -- and passed 644 as its size. Even had it been
-// defined as a placeholder, the console route it feeds cannot run on this backend:
-// renderengine::ProgramBuffer::GetResourceDescriptor / ::Initialize both call
-// XGGetMicrocodeShaderParts, whose PC stub returns 0 WITHOUT writing *lpParts
-// (ImmediateModePCLeaf.cpp:626-646), after which the size and the function pointer are read out of
-// uninitialised stack.
+// Those 644 bytes are dumped now (scratch/postfx_step5_wave/PACKAGES_DUMP.md, from ARTIST_copy.i64 --
+// the dump's size matches the `li r5, 0x284` immediate exactly). They were disassembled with
+// tools/assets/shaders/xenos.py, re-expressed as HLSL in tools/assets/shaders/brn_postfx_helper.fx
+// and published as a PC ShaderProgramBuffer image by the generated leaf
+// pc/gcm/renderengine/PostFxHelperProgramsPC.cpp. The console CTAB and the PC program's variable
+// table were compared entry by entry -- g_focalConstants1 c0 x1, g_focalConstants2 c1 x1,
+// screen_texture s0, low_texture s1, depth_texture s2 -- and are IDENTICAL, so the two
+// GetVariableHandleByName lookups below resolve to the same registers the console resolved.
 //
-// So the symbol is DELETED, not placeheld, and the gate follows the precedent
-// BrnPostFxShader::Shader::Construct set: adopt a PC image with renderengine::ProgramBufferPC_Adopt
-// when one exists, keep the console route as the fallthrough, and when none exists leave the program
-// slot HONESTLY EMPTY -- null pointer, register-count-0 handles, one report line naming the gate.
-// Nothing can be bound and nothing can be uploaded through a program that does not exist.
+// WHAT THE PROGRAM COMPUTES (recovered instruction by instruction; the full listing is in the .fx):
+//     near = saturate((g_focalConstants1.y - depth) * g_focalConstants2.y)
+//     far  = saturate((depth - g_focalConstants1.z) * g_focalConstants2.z)
+//     t    = max(near, far) * g_focalConstants2.x
+//     oC0.rgb = lerp(screen_texture, low_texture, t)
+// -- i.e. the two INNER focal planes drive the blend and the two outer ones are never read by this
+// program (a finding, not an omission). Alpha is the previous-scalar residual on the console
+// (`retain_prev export0.___w` with no scalar op defining PS), so the PC program writes 0.
 //
-// FOR THE LATER SHADER WAVE, the program's identity, in DATA_DUMP terms:
-//     rw::graphics::postfx::DepthOfField pixel program
-//       address 0x82043FB8   (IDA `unk_82043FB8`, segment .rdata)
-//       size    0x284 = 644 bytes
-//       type    1 (pixel)
-//       interns "g_focalConstants1", "g_focalConstants2"
-// It is NOT in scratch/postfx_wave1b_dossiers/DATA_DUMP.md: that dump ends at the twelfth composite
-// permutation's pixel package (0x82043AB0 + 1240 = 0x82043F88), and 0x82043FB8 is the next blob
-// after it. Extracting the bytes needs an IDA session against IDA Files/BURNOUT_X360_ARTIST.XEX.i64;
-// `idat.exe` is not installed on this machine, so the bytes are BLOCKED, not invented.
+// ONE PC DEVIATION, FLAGGED IN THE .fx: the console reconstructs a 24-bit depth from three 8-bit
+// channels of a depth surface read through a colour sampler; on PC the post-fx targets' depth is
+// bound as a RAW-DEPTH texture (INTZ / DF24 / DF16) whose .r IS the depth, so those three
+// instructions collapse to one fetch. Same quantity, different source encoding.
+//
+// The gate macro BRN_POSTFX_DOF_PROGRAM_AVAILABLE is GONE. It guarded a second, local copy of the
+// console microcode route -- and that route belongs to PfxHelper::CreateProgram, which is the single
+// funnel the console itself goes through (see the "THIS IS THE MICROCODE WALL, AND IT IS THE ONLY
+// PLACE IT NEEDS TO BE" banner in rwgpfxhelper.cpp). CreateProgram tries the PC image first, and its
+// own gate still owns the refusal when there is no image. This TU just makes the console's call.
 // --------------------------------------------------------------------------------------------------
-#define BRN_POSTFX_DOF_PROGRAM_AVAILABLE 0
+
+// [FLAG PC-platform leaf: shader programs] The PC image of the DoF pixel program, published by the
+// generated leaf pc/gcm/renderengine/PostFxHelperProgramsPC.cpp. Declared here as the minimal
+// external surface -- the convention BrnPostFxBloom.cpp and BrnPostFxShader.cpp already use for
+// their generated leaves; there is no header for these. The SIZE is the PC image's, not the X360
+// microcode's 644, and it is read from the leaf's own published constant (whose static_assert ties
+// it to sizeof() of the array) rather than hard-coded: ProgramBufferPC_Adopt bounds-checks the blob
+// against the size it is handed.
+namespace renderengine
+{
+    extern const u8  gauPostFxDepthOfFieldPixelProgramPC[];
+    extern const u32 guPostFxDepthOfFieldPixelProgramPCSize;
+}
 
 namespace
 {
@@ -65,10 +79,6 @@ namespace
     const f32 KF_ZERO      = 0.0f;        // flt_82001CC0
     const f32 KF_ONE       = 1.0f;        // flt_82001C98
     const f32 KF_HALF_PI   = 1.5707964f;  // flt_82047B38 -- the second (vertical) blur's angle
-
-#if BRN_POSTFX_DOF_PROGRAM_AVAILABLE
-    const u32 KU_DOF_PIXEL_PROGRAM_SIZE = 644;   // X360 li 0x284
-#endif
 }
 
 namespace rw
@@ -94,36 +104,46 @@ namespace postfx
         m_state.m_blurRadius     = 4.5f;
         m_bParametersDirty       = true;
 
-#if BRN_POSTFX_DOF_PROGRAM_AVAILABLE
-        // ======== THE CONSOLE ROUTE (X360 0x82402D00-0x82402D60), PRESERVED ======================
-        // NOTE: this arm DELIBERATELY does not compile as it stands -- gauDepthOfFieldProgramMicrocode
-        // has no declaration anywhere, because inventing one is what the previous revision did. Flipping
-        // the gate is a hard error until a real program image is supplied, which is the intent.
-        m_depthOfFieldProgram = PfxHelper::CreateProgram(1, gauDepthOfFieldProgramMicrocode,
-                                                         KU_DOF_PIXEL_PROGRAM_SIZE, nullptr);
-        renderengine::ProgramBuffer::GetVariableHandleByName(
-            m_depthOfFieldProgram, reinterpret_cast<const u8*>("g_focalConstants1"),
-            &m_focalConstants1Handle);
-        renderengine::ProgramBuffer::GetVariableHandleByName(
-            m_depthOfFieldProgram, reinterpret_cast<const u8*>("g_focalConstants2"),
-            &m_focalConstants2Handle);
-#else
-        // HONESTLY EMPTY. A default ProgramVariableHandle has register COUNT 0, which every uploader
-        // in this tree treats as "constant not present", so nothing binds and nothing uploads.
-        m_focalConstants1Handle = renderengine::ProgramVariableHandle();
-        m_focalConstants2Handle = renderengine::ProgramVariableHandle();
+        // ======== THE CONSOLE ROUTE (X360 0x82402D00-0x82402D60) ==================================
+        // `li r3, 1` (pixel) / `addi r4, r11, unk_82043FB8@l` / `li r5, 0x284` (644) / `li r6, 0`
+        // (no allocator override -> CreateProgram falls back to the singleton's own), then the two
+        // GetVariableHandleByName lookups. The pointer passed here is the PC image of that same
+        // program; CreateProgram adopts it and returns a live ProgramBufferData.
+        m_depthOfFieldProgram = PfxHelper::CreateProgram(
+            1, renderengine::gauPostFxDepthOfFieldPixelProgramPC,
+            renderengine::guPostFxDepthOfFieldPixelProgramPCSize, nullptr);
 
-        static bool sbReportedNoDofProgram = false;
-        if (!sbReportedNoDofProgram)
+        if (m_depthOfFieldProgram != nullptr)
         {
-            sbReportedNoDofProgram = true;
-            CgsDev::Log::WriteToLog(
-                "[postfx-dof] constructed with NO pixel program -- the X360 program is Xenos"
-                " microcode (&unk_82043FB8, 644 bytes, interning g_focalConstants1/2) and no PC image"
-                " exists. The program slot is null and both focal-constant handles have register"
-                " count 0. [FLAG PC bring-up: BRN_POSTFX_DOF_PROGRAM_AVAILABLE]\n");
+            renderengine::ProgramBuffer::GetVariableHandleByName(
+                m_depthOfFieldProgram, reinterpret_cast<const u8*>("g_focalConstants1"),
+                &m_focalConstants1Handle);
+            renderengine::ProgramBuffer::GetVariableHandleByName(
+                m_depthOfFieldProgram, reinterpret_cast<const u8*>("g_focalConstants2"),
+                &m_focalConstants2Handle);
         }
-#endif
+        else
+        {
+            // [FLAG PC bring-up] NOT IN THE CONSOLE: the X360 dereferences the returned program
+            // unconditionally because its CreateProgram cannot fail here. On PC the adopt can refuse
+            // (a malformed image, or a shader-type mismatch), and the committed lookup dereferences
+            // lpData unconditionally (programbuffer.cpp:263), so it would fault. A default
+            // ProgramVariableHandle has register COUNT 0, which every uploader in this tree treats
+            // as "constant not present", so nothing binds and nothing uploads.
+            m_focalConstants1Handle = renderengine::ProgramVariableHandle();
+            m_focalConstants2Handle = renderengine::ProgramVariableHandle();
+
+            static bool sbReportedNoDofProgram = false;
+            if (!sbReportedNoDofProgram)
+            {
+                sbReportedNoDofProgram = true;
+                CgsDev::Log::WriteToLog(
+                    "[postfx-dof] constructed with NO pixel program -- PfxHelper::CreateProgram"
+                    " REFUSED the PC image published by PostFxHelperProgramsPC.cpp"
+                    " (gauPostFxDepthOfFieldPixelProgramPC). The program slot is null and both"
+                    " focal-constant handles have register count 0. [FLAG PC bring-up]\n");
+            }
+        }
 
         SetState(lParameters.m_state);
     }

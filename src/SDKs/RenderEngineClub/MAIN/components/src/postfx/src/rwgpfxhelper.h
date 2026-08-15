@@ -143,9 +143,18 @@ namespace postfx
 
     private:
         // RenderQuad @0x823FE530 -- draw the shared full-screen quad with the given UV offset
-        // (Blur9 passes the destination's half texel; DownSample passes null). DWARF rwgpfxhelper.h:104.
-        // On this build the quad has no geometry (RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE 0 -- see the
-        // constructor's BLOCKED note), so the body reports once and draws nothing.
+        // (Blur9 passes the destination's half texel; DownSample passes null).
+        //
+        // DWARF rwgpfxhelper.h:71, `void RenderQuad(const rw::math::vpu::Vector4*)` -- the previous
+        // ":104" here was the DWARF line of CreateProgram, not of this method. The parameter is one
+        // Vector4, which is what `const f32*` reading four lanes spells; the asm agrees (`lvx128 v0,
+        // r0, r28` / `stvx128 v0, r0, r11` @0x823FE5FC-600 copies a whole 16-byte row).
+        //
+        // The quad is drawn as Xenos D3DPT_RECTLIST with THREE vertices
+        // (`D3DDevice_DrawVertices(dev, 8, 0, 3)` @0x823FE62C-3C) -- three corners of a rectangle,
+        // the GPU infers the fourth -- from the vertex buffer the constructor uploads. On this build
+        // the quad has no geometry (RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE 0 -- see the four BLOCKED
+        // items at the gate in rwgpfxhelper.cpp), so the body reports once and draws nothing.
         void RenderQuad(const f32* lpafUvOffset);
 
         // rwgpfxhelper.h:176 -- the teardown helper Release calls nine times. TWO instantiations

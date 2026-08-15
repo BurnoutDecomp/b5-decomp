@@ -2299,6 +2299,105 @@ void D3DDevice_SetStreamSource(IDirect3DDevice9* /*lpDeviceArg*/, u32 luStreamNu
         renderengine::WorldDraw_SetVertexSourceRaw(lpStreamData, luStride);
 }
 
+// =============================================================================
+// FLAG PC-platform leaf: THE RAW-DEPTH SAMPLER SEAM (2026-08-15, the post-fx step-5 wave).
+//
+// THE PROBLEM. A TextureState carries its own sampler words, and on this backend they are
+// NEVER APPLIED: shadow::Device::SetState(const TextureState*, u32) hands them to
+// SetSamplerStateLowLevel, which is the documented no-op a few hundred lines below (the Xenos
+// sampler descriptor has no D3D9 translation yet). So a unit keeps whatever sampler state the
+// last user left on it -- and D3D9's own default for an untouched unit is POINT/POINT/NONE with
+// ADDRESS = WRAP.
+//
+// THAT MATTERS THE MOMENT A DEPTH TEXTURE IS BOUND. PostFxRenderTargetPCLeaf.cpp now gives every
+// sampled post-fx target a RAW-depth format (INTZ / DF24 / DF16) so the composite's DoF and
+// motion-blur permutations, and rwgpfxdof, can read depth VALUES. Those fetches must be POINT
+// (averaging two depths yields a depth that is at neither surface -- haloes on every silhouette)
+// and CLAMP (a wrapped fetch at the screen edge reads the opposite edge's depth). The console
+// says the same thing in its own words: RenderTarget::CreateStates @0x82403A18 builds that
+// target's depth TextureState with mag = min = 0, i.e. POINT.
+//
+// WHY IT HOOKS THE **BIND** RATHER THAN A UNIT NUMBER. Keying on "unit 4 is SamplerDepth" would
+// be a guess that has to be re-guessed for rwgpfxdof and for PfxHelper; keying on the RESOURCE
+// cannot be wrong -- a raw-depth texture is a raw-depth texture at whatever unit it lands on.
+// The format is read from the D3D object itself (GetLevelDesc), not from renderengine::Texture::
+// miFormat, so no assumption about that field's encoding is made.
+//
+// IT DOES NOT TOUCH THE SHADOW PATH. The shadow map's D24X8 / D16 are hardware-COMPARE formats
+// and are not on the list below, so unit 15 keeps the LINEAR (= 2x2 PCF) filter
+// ShadowSampler_ApplyState installs. If a driver ever demotes the shadow map to INTZ, this
+// applies POINT there -- which is exactly what ShadowSampler_ApplyState itself does in that case
+// (see its `RAW (INTZ/DF24/DF16) POINT` note), so the two agree rather than fight.
+//
+// KNOWN, BOUNDED SIDE EFFECT: a unit that has held a raw-depth texture keeps POINT/CLAMP after a
+// later ordinary texture is bound to it (nothing here restores the previous words, because
+// nothing on this backend knows what they were). Today the only units that can receive one are
+// the composite's SamplerDepth (unit 4, bound by BrnPostFxShader::Render) and unit 15 on a
+// raw-depth shadow fallback; neither is used by anything else.
+// DELETE WHEN SetSamplerStateLowLevel really applies a TextureState's sampler block.
+//
+// extern "C++" BECAUSE THIS SITS INSIDE THE FILE'S extern "C" BLOCK (opened above
+// D3DDevice_SetViewportF, closed at the end of the fast-set surface). Without it the anonymous
+// namespace is powerless: C linkage flattens every name in it, so `guRawDepthSamplerUnits` and
+// the three helpers would be emitted as EXTERNAL, unmangled symbols -- three new globals in the
+// link's C namespace and a name collision waiting for any other TU to define `IsRawDepthFormat`.
+// Caught by dumpbin, not by the compiler.
+// =============================================================================
+extern "C++" {
+namespace
+{
+    const u32 KU_RAW_DEPTH_MAX_SAMPLER_UNITS = 16u;
+
+    // Which sampler units are currently holding a raw-depth texture. Read by
+    // renderengine::PostFxDepthSampler_BoundUnitMask so a target that is about to bind its depth
+    // texture as the DEPTH-STENCIL SURFACE can unbind it from the samplers first (D3D9 does not
+    // do that for you -- see renderengine::Device::SetState in PostFxRenderTargetPCLeaf.cpp).
+    u32 guRawDepthSamplerUnits = 0u;
+
+    bool IsRawDepthFormat(D3DFORMAT leFormat)
+    {
+        return leFormat == static_cast<D3DFORMAT>(MAKEFOURCC('I', 'N', 'T', 'Z'))
+            || leFormat == static_cast<D3DFORMAT>(MAKEFOURCC('D', 'F', '2', '4'))
+            || leFormat == static_cast<D3DFORMAT>(MAKEFOURCC('D', 'F', '1', '6'))
+            || leFormat == static_cast<D3DFORMAT>(MAKEFOURCC('R', 'A', 'W', 'Z'));
+    }
+
+    // Ask the runtime what was actually bound. Only 2D textures can be depth textures here, and
+    // the call happens ONLY on a real bind change (shadow::Device dedups every SetTexture), so
+    // this is a handful of CPU reads a frame, not a per-draw cost.
+    bool BoundTextureIsRawDepth(IDirect3DBaseTexture9* lpTexture, D3DFORMAT* lpeFormatOut)
+    {
+        if (lpTexture == nullptr || lpTexture->GetType() != D3DRTYPE_TEXTURE)
+            return false;
+
+        D3DSURFACE_DESC lDesc;
+        std::memset(&lDesc, 0, sizeof(lDesc));
+        if (FAILED(static_cast<IDirect3DTexture9*>(lpTexture)->GetLevelDesc(0u, &lDesc)))
+            return false;
+
+        if (lpeFormatOut != nullptr)
+            *lpeFormatOut = lDesc.Format;
+        return IsRawDepthFormat(lDesc.Format);
+    }
+
+    void ApplyRawDepthSamplerState(IDirect3DDevice9* lpDevice, u32 luUnit)
+    {
+        if (lpDevice == nullptr || luUnit >= KU_RAW_DEPTH_MAX_SAMPLER_UNITS)
+            return;
+
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER,     D3DTEXF_POINT);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER,     D3DTEXF_POINT);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_NONE);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_CLAMP);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_CLAMP);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_CLAMP);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
+    }
+}
+}  // extern "C++"
+
 unsigned int D3DDevice_SetTexture(IDirect3DDevice9* /*lpDeviceArg*/, u32 luSampler,
                                   void* lpTexture, unsigned int /*luFlags*/)
 {
@@ -2317,6 +2416,38 @@ unsigned int D3DDevice_SetTexture(IDirect3DDevice9* /*lpDeviceArg*/, u32 luSampl
     if (lpTexture != nullptr)
         lpD3DTexture = static_cast<const renderengine::Texture*>(lpTexture)->mpD3DTexture;
     const HRESULT lhr = lpDevice->SetTexture(luSampler, lpD3DTexture);
+
+    // A RAW-depth texture needs POINT/CLAMP on its unit, and this backend has nowhere else to
+    // say so (see the banner above this function). Keyed on what was bound, not on which unit.
+    if (luSampler < KU_RAW_DEPTH_MAX_SAMPLER_UNITS)
+    {
+        D3DFORMAT leBoundFormat = D3DFMT_UNKNOWN;
+        if (SUCCEEDED(lhr) && BoundTextureIsRawDepth(lpD3DTexture, &leBoundFormat))
+        {
+            ApplyRawDepthSamplerState(lpDevice, luSampler);
+            guRawDepthSamplerUnits |= (1u << luSampler);
+
+            static bool sabRawDepthReported[KU_RAW_DEPTH_MAX_SAMPLER_UNITS] = {};
+            if (!sabRawDepthReported[luSampler])
+            {
+                sabRawDepthReported[luSampler] = true;
+                const u32 luFourCC = static_cast<u32>(leBoundFormat);
+                char lacMsg[192];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[postfx-depth] unit %u bound a RAW depth texture (%c%c%c%c)"
+                              " -- sampler forced POINT/CLAMP\n",
+                              (unsigned)luSampler,
+                              (char)(luFourCC & 0xFFu), (char)((luFourCC >> 8) & 0xFFu),
+                              (char)((luFourCC >> 16) & 0xFFu), (char)((luFourCC >> 24) & 0xFFu));
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
+        else
+        {
+            // Anything else on this unit (including an unbind) retires its raw-depth claim.
+            guRawDepthSamplerUnits &= ~(1u << luSampler);
+        }
+    }
     {
         // [DIAG one-shot per unit] the first bind on each of the two cloud sampler units.
         static bool sabDiag[2] = { false, false };
@@ -3562,6 +3693,29 @@ void ShadowSampler_ApplyState(u32 luUnit)
     lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE, FALSE);
 }
 
+// =============================================================================
+// The RAW-DEPTH sampler seam's two public entry points (see the banner over
+// D3DDevice_SetTexture, which is where the work actually happens).
+//
+// PostFxDepthSampler_ApplyState  -- force one unit to the raw-depth sampler words. Nothing in
+//   this build needs to call it (the bind hook does it automatically); it exists so a future
+//   caller that binds a depth texture WITHOUT going through D3DDevice_SetTexture has a named
+//   way to say the same thing, instead of open-coding nine SetSamplerState calls.
+// PostFxDepthSampler_BoundUnitMask -- which units are holding a raw-depth texture right now.
+//   renderengine::Device::SetState reads it to unbind them before binding the same texture's
+//   surface as the depth-stencil (D3D9 will not do that for you, and the sample and the write
+//   cannot both be legal at once).
+// =============================================================================
+void PostFxDepthSampler_ApplyState(u32 luUnit)
+{
+    ApplyRawDepthSamplerState(Dev(), luUnit);
+}
+
+u32 PostFxDepthSampler_BoundUnitMask()
+{
+    return guRawDepthSamplerUnits;
+}
+
 // [FLAG PC bring-up probe] see the increment site in WorldDraw_IndexedUP.
 u64 WorldDrawCallCount()
 {
@@ -3962,9 +4116,13 @@ namespace
     // Does this depth format carry stencil bits? See the D3DCLEAR_STENCIL note in the banner: a
     // stencil clear requested against a stencil-less surface makes Clear fail ENTIRELY, taking the
     // depth clear down with it. The formats listed are the ones this build can actually end up
-    // with: the post-fx depth ladder tries D24X8, D16, INTZ, DF24, DF16 in that order and falls
-    // back to a plain D24S8 depth-stencil surface (PostFxRenderTargetPCLeaf.cpp:230-281), and the
-    // device's own auto depth-stencil is D24S8 (device.cpp:95).
+    // with, and since 2026-08-15 there are TWO ladders in PostFxRenderTargetPCLeaf.cpp: the
+    // COMPARE ladder (the shadow map) tries D24X8, D16, INTZ, DF24, DF16 and the RAW-VALUE ladder
+    // (every sampled post-fx target) tries INTZ, DF24, DF16; both fall back to a plain D24S8
+    // depth-stencil surface, and the device's own auto depth-stencil is D24S8 (device.cpp:95).
+    // NOTHING HERE HAD TO CHANGE FOR THAT SPLIT and that is by design: this answers from the
+    // format of the surface actually bound, so a target that moved from D24X8 (no stencil) to
+    // INTZ (stencil, it aliases D24S8) or to DF24 (no stencil) is handled without being named.
     bool TilingDepthFormatHasStencil(D3DFORMAT leFormat)
     {
         switch (static_cast<u32>(leFormat))

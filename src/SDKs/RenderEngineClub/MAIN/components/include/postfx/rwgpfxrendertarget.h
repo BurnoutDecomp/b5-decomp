@@ -194,6 +194,22 @@ namespace postfx
         // The resolved depth/stencil texture (the depth target sampled as a texture).
         renderengine::Texture* GetDepthStencilTexture();
 
+        // The DEPTH sampler state -- the whole TextureState (sampler words + raster) a shader
+        // binds to read this target's depth. Null unless the target asked for a sampleable depth
+        // (Parameters::mbUseDepthStencilAsTexture) with a depth mode other than USE_PROVIDED,
+        // which is exactly the gate RenderTarget::CreateStates @0x82403A18 applies.
+        //
+        // WHY IT EXISTS, given the console has no such accessor. The X360 reads the word directly
+        // -- BrnPostFx::Render @0x8240A5E4 `lwz r25, 0x8C(r7)` -> BrnPostFxShader::Render's last
+        // TextureState argument -> sampler unit 4, SamplerDepth. On the 4-byte-pointer image that
+        // +0x8C is BOTH `mDepthTarget.mpTextureState` (mDepthTarget sits at +0x80 and a Target
+        // record is 0x18 bytes) and the `mpColourTextureState` this header names below; the two
+        // cannot overlap once pointers widen, and CreateStates proves which one it is (it binds
+        // mDepthTarget's hi-Z-else-depth texture into the state it stores there). Reaching the
+        // depth state by NAME through this accessor is what stops a caller binding scene colour
+        // to SamplerDepth. Defined in pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp.
+        renderengine::TextureState* GetDepthTextureState();
+
         // The per-section D3D surface state to bind (Device::SetState). luSection selects the
         // section; the wrapper binds section 0.
         renderengine::RenderTargetState* GetRenderTargetState(u32 luSection);
@@ -249,7 +265,18 @@ namespace postfx
         Target                           mDepthTarget;         // +0x80
         renderengine::RenderTargetState* mpProvidedState;      // +0x84  provided state (USE_PROVIDED)
         u32                              muProvidedTextureId;  // +0x88
-        renderengine::TextureState*      mpColourTextureState; // +0x8C  colour-sampling state
+        // ⚠ MISNAMED, and the name is load-bearing enough to be worth this note (2026-08-15).
+        // The X360 word at +0x8C is `mDepthTarget.mpTextureState` -- the DEPTH sampler state --
+        // not a colour one: mDepthTarget starts at +0x80 and a Target record is 0x18 bytes, so
+        // the "provided state / provided texture id / colour texture state / provided colour
+        // state" quartet modelled at +0x84..+0x90 is the SAME storage as that record's
+        // pixel-buffer / texture / texture-state / hi-Z fields. RenderTarget::CreateStates
+        // @0x82403A18-0x82403B44 settles it: the state stored here binds mDepthTarget's hi-Z-else-
+        // depth texture, and it is built ONLY when Parameters::mbUseDepthStencilAsTexture is set.
+        // PostFxRenderTargetPCLeaf.cpp therefore points BOTH host members at the one state object
+        // and new callers should use GetDepthTextureState(). RENAME PENDING: this member and its
+        // one reader (BrnPostFx.cpp:813, the SamplerDepth argument) belong to the post-fx TU.
+        renderengine::TextureState*      mpColourTextureState; // +0x8C  == mDepthTarget.mpTextureState
         renderengine::RenderTargetState* mpProvidedColourState;// +0x90
         u8                               mu8UsesProvidedState; // +0x95
         u8                               mau8Pad96[2];         // +0x96
