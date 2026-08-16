@@ -319,6 +319,19 @@ namespace Deformation
                     << maDeformationSensorSpecs[0].mInitialOffset.z
                     << " wheel0 " << maWheelSpecs[0].mPosition.x << " "
                     << maWheelSpecs[0].mPosition.y << " " << maWheelSpecs[0].mPosition.z
+                    // ⭐ walls leg 12: the SERIALISED-vs-LOADED question. The probe above proves the
+                    // LOADED mCurrentCOMOffset; these prove the RECORD REGION is being read at the
+                    // right offset at all -- the raw dwords at +1632 next to mMeshOffset/mRigidBody
+                    // Offset/mCollisionOffset. A layout slip that faked a zero COM would have to
+                    // fake plausible floats in all three neighbours as well.
+                    << " | rawCOM " << reinterpret_cast<const u32*>(&mCurrentCOMOffset)[0] << " "
+                    << reinterpret_cast<const u32*>(&mCurrentCOMOffset)[1] << " "
+                    << reinterpret_cast<const u32*>(&mCurrentCOMOffset)[2]
+                    << " mesh " << mMeshOffset.x << " " << mMeshOffset.y << " " << mMeshOffset.z
+                    << " rigid " << mRigidBodyOffset.x << " " << mRigidBodyOffset.y << " "
+                    << mRigidBodyOffset.z
+                    << " coll " << mCollisionOffset.x << " " << mCollisionOffset.y << " "
+                    << mCollisionOffset.z
                     << "\n";
             }
         }
