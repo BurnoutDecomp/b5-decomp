@@ -276,6 +276,14 @@ namespace
         DWORD meSrcBlend;
         DWORD meDestBlend;
         BOOL mbAlphaTestEnable;
+        // The console's sky blend state (dword_83010F38, pushed through
+        // shadow::Device::SetState -> Xbox2SetStateLowLevelShadowed, shadowingdevice.cpp:619)
+        // carries an ALPHA-TO-MASK word like every other BlendState blob; the sky asks for
+        // none. FALSE on exactly the evidentiary footing of mbAlphaTestEnable above (an
+        // opaque dome tests nothing and masks nothing) -- and it is what lets
+        // ImDeviceSetBlendState feed the alpha-to-coverage reconciler the INPUT the console
+        // would have fed it (step-9 skya2c verify, finding 1).
+        BOOL mbAlphaToMaskEnable;
     };
     struct ImRasterizerState
     {
@@ -305,7 +313,7 @@ namespace
     // The depth FUNCTION is LESSEQUAL, not LESS: the dome is at the far end of the depth
     // range by construction, so a fragment that lands exactly on the cleared 1.0 (which a
     // 9500-unit dome under a 12000-unit far plane does to within a few ULPs) has to pass.
-    ImBlendState        sSkyDomeBlendState        = { FALSE, D3DBLEND_ONE, D3DBLEND_ZERO, FALSE };
+    ImBlendState        sSkyDomeBlendState        = { FALSE, D3DBLEND_ONE, D3DBLEND_ZERO, FALSE, FALSE };
     ImRasterizerState   sSkyDomeRasterizerState   = { D3DCULL_NONE, D3DFILL_SOLID };
     ImDepthStencilState sSkyDomeDepthStencilState = { TRUE, FALSE, D3DCMP_LESSEQUAL };
     // The env-map faces are rendered into a freshly cleared face with nothing else in
@@ -397,6 +405,11 @@ renderengine::DepthStencilState* gpShadowDepthStencilState = &sShadowDepthStenci
 // real DepthStencilStates, the void* overload and its callers go away and one typed
 // applier is left, matching the console exactly.
 // =============================================================================
+// The Xenon fast-set alpha-to-mask leaf (XenonD3D9Shims.cpp, extern "C" like the rest of that
+// surface; the shadow cache declares it the same way at shadowingdevice.cpp:47). Declared here
+// so the sky bind can publish its alpha-to-mask word through the ONE writer of the request.
+extern "C" void D3DDevice_SetRenderState_AlphaToMaskEnable(IDirect3DDevice9* lpDevice, u32 luValue);
+
 void ImDeviceSetBlendState(void* lpState)
 {
     IDirect3DDevice9* const lpDevice = Dev();
@@ -406,7 +419,37 @@ void ImDeviceSetBlendState(void* lpState)
     lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, lpBlend->mbBlendEnable);
     lpDevice->SetRenderState(D3DRS_SRCBLEND,  lpBlend->meSrcBlend);
     lpDevice->SetRenderState(D3DRS_DESTBLEND, lpBlend->meDestBlend);
+    // ⚠ THE ALPHA TEST AND THE ALPHA-TO-MASK REQUEST ARE ALPHA-TO-COVERAGE INPUTS SINCE RUNG 9,
+    // SO THIS BIND HAS TO FEED THE RECONCILER. Every other writer of D3DRS_ALPHATESTENABLE in the
+    // tree already reconciles (XenonD3D9Shims.cpp SetWorldPassDefaultStates, the fast-set leaf,
+    // the scene-blit bracket); this one was the last that did not, and the rung-9 report's own
+    // CROSS-GROUP note named it.
+    //
+    // WHAT WENT WRONG WITHOUT IT. Nothing reconciles between the world-opaque walk
+    // (BrnRendererModule.cpp, the world pass) and BrnSkyDomeManager::Render, so the LAST WORLD
+    // MATERIAL's alpha-to-coverage decision stood over the sky dome's own draws. On NVIDIA that is
+    // inert once the alpha test is off (the ATOC hook keys off it). On AMD the 'A2M1' hook is
+    // deliberately NOT alpha-test-gated (it matches the console, where alpha-to-mask and the alpha
+    // test are separate RB_COLORCONTROL bits), so an 'A2M1' left live by a fence or a tree turned
+    // the DOME's output alpha into a coverage mask and dithered holes into the sky.
+    //
+    // WHY THE ALPHA-TO-MASK LEAF, AND NOT A BARE PCAlphaCoverage_Reconcile(): the reconciler
+    // derives the vendor state from five inputs, and on the AMD path the alpha test is NOT one of
+    // them (AlphaCoveragePathNeedsAlphaTest is NVIDIA-only) -- so a bare re-derivation after the
+    // alpha-test write recomputes the SAME answer and returns without touching D3DRS_POINTSIZE.
+    // The input that has to move is the REQUEST word, sbA2cRequested, which is written in exactly
+    // one place: D3DDevice_SetRenderState_AlphaToMaskEnable. On the console the sky's real blend
+    // state object (dword_83010F38) goes through shadow::Device::SetState -> Xbox2SetStateLow-
+    // LevelShadowed, which issues its alpha-to-mask word (shadowingdevice.cpp:619/:686) -- i.e.
+    // the console DOES publish "alpha-to-mask OFF" at the sky bind. This is that publish. The leaf
+    // sets the request and reconciles in one step, so both vendors derive OFF for the dome.
+    // (Recovery after the dome is guaranteed: BrnSkyDomeManager::Render ends with
+    // shadow::Device::ResetShadowing(), which nulls mpBlendState, and every walk opens with
+    // ResetProgramShadows, so the next material bind takes the lbWasUnset path and force-re-issues
+    // all 18 words including word[10].) The leaf's material-only "asked for alpha-to-mask with the
+    // alpha test OFF" diagnostic cannot fire from here: the request published is FALSE.
     lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE, lpBlend->mbAlphaTestEnable);
+    D3DDevice_SetRenderState_AlphaToMaskEnable(lpDevice, lpBlend->mbAlphaToMaskEnable ? 1u : 0u);
     lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE,
                              D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN
                              | D3DCOLORWRITEENABLE_BLUE | D3DCOLORWRITEENABLE_ALPHA);
