@@ -83,7 +83,15 @@ namespace postfx
 
         // --- the colour-lookup texture (a muSize x muSize x muSize volume) ---------------------------
         renderengine::Texture::Parameters lTextureParams;
-        lTextureParams.miFormat    = 4;
+        // PC DIVERGENCE. The console stores the texture TYPE in Parameters word 0 (4 =
+        // Texture::E_TYPE_VOLUME -- this lookup is a muSize^3 cube) and the GPU format in
+        // muReserved0. This backend's word 0 is a real D3DFORMAT, so the console's 4 reached
+        // CreateTexture as D3DFORMAT(4) -> D3DERR_INVALIDCALL, twice per boot. Write the PC
+        // spelling of the format muReserved0 already names. Nothing is lost: GetType() returns
+        // E_TYPE_2D unconditionally here.
+        // [FLAG PC bring-up: still 2D -- a muSize^3 volume needs CreateVolumeTexture, so
+        //  muSliceStride stays 0 in Tint::BeginBlendJob. Inert today: no tint pixel program.]
+        lTextureParams.miFormat    = 21;                   // D3DFMT_A8R8G8B8 == muReserved0
         lTextureParams.muSysMem    = 0;
         lTextureParams.muWidth     = lrParameters.muSize;
         lTextureParams.muHeight    = lrParameters.muSize;
