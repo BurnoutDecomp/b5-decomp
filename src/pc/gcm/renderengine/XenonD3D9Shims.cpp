@@ -670,6 +670,252 @@ namespace
     const u32      KU_SHADOW_TALLY_SLOTS = 4u;   // 3 cascades + the world-pass control
     ShadowClipTally saShadowClip[KU_SHADOW_TALLY_SLOTS] = {};
     u32             suShadowClipSlot = 0xFFFFFFFFu;
+
+    // =========================================================================
+    // ALPHA-TO-COVERAGE -- the Xenos' ALPHA_TO_MASK realised over the D3D9 vendor hooks.
+    // The console semantics, the shipped data and the vendor citations are on the two
+    // LEAVES this serves (D3DDevice_SetRenderState_AlphaToMask{Enable,Offsets}); this is
+    // the state and the reconciler.
+    //
+    // WHY IT LIVES UP HERE and not beside those leaves: five places have to reconcile
+    // through it -- the two leaves, D3DDevice_SetRenderState_AlphaTestEnable,
+    // renderengine::Device::SetWorldPassDefaultStates (:682), PCSurfaceBracket_Save/_Restore
+    // (the shadow-map bracket) and PCSceneBlit_Begin/_End -- and all of them are defined
+    // between here and the leaves.
+    //
+    // THE ONLY THING SHADOWED IS THE CONSOLE'S OWN REQUEST. The alpha-test half of the
+    // decision is READ BACK from the device with GetRenderState rather than mirrored here:
+    // shadowingdevice.cpp's mauLowLevelStateShadow[16] and the D3D9 runtime already own
+    // that value, and a third copy is precisely the split-brain this project keeps paying
+    // for. Everything else in the decision (the vendor capability, the bound target's
+    // sample count, the shadow-pass flag, the config knob) is a live query.
+    //
+    // ⚠ THE ORDER THE BINDER USES MATTERS AND IS WHY THE RECONCILER IS SHARED.
+    // shadowingdevice.cpp's Xbox2SetStateLowLevelShadowed issues word[10] (alpha-to-mask)
+    // BEFORE word[16] (alpha-test enable) on BOTH paths -- unset path :619 then :625,
+    // incremental path :686 then :711. So at the moment the alpha-to-mask leaf runs, the
+    // alpha test still reads the PREVIOUS material's value. That transient is harmless (a
+    // state bind issues no draws) precisely BECAUSE the alpha-test leaf reconciles again
+    // straight after it, and the settled combination is the one that reaches the draw.
+    // =========================================================================
+    const u32 KU_A2M_OFFSETS_DITHERED = 0x87u;   // the only offsets word the shipped data carries
+
+    // The two vendor pseudo-format words. Both are ordinary FOURCCs smuggled through a
+    // render state; neither is a format anything is ever created in.
+    const DWORD KU_A2C_NVIDIA_ENABLE  = MAKEFOURCC('A', 'T', 'O', 'C');
+    const DWORD KU_A2C_NVIDIA_DISABLE = 0u;                             // D3DFMT_UNKNOWN
+    const DWORD KU_A2C_AMD_ENABLE     = MAKEFOURCC('A', '2', 'M', '1');
+    const DWORD KU_A2C_AMD_DISABLE    = MAKEFOURCC('A', '2', 'M', '0');
+
+    enum EAlphaCoveragePath
+    {
+        E_A2C_PATH_UNTESTED = -1,
+        E_A2C_PATH_NONE     = 0,
+        E_A2C_PATH_NVIDIA   = 1,   // D3DRS_ADAPTIVETESS_Y = 'ATOC' / D3DFMT_UNKNOWN
+        E_A2C_PATH_AMD      = 2    // D3DRS_POINTSIZE      = 'A2M1' / 'A2M0'
+    };
+
+    int  siA2cPath      = E_A2C_PATH_UNTESTED;
+    bool sbA2cRequested = false;                     // the console's blend word[10]
+    u32  suA2cOffsets   = KU_A2M_OFFSETS_DITHERED;   // the console's blend word[8]
+    bool sbA2cApplied   = false;                     // what this shim last put on the device
+
+    // Which hook this adapter exposes, asked ONCE: the probe is a driver round trip and the
+    // answer cannot change for the life of the device (the same reasoning, and the same
+    // shape, as TilingReszSupported at the bottom of this file).
+    //
+    // ⚠ THE TWO VENDORS ARE NOT DETECTED THE SAME WAY, AND THAT ASYMMETRY IS REAL.
+    //   * NVIDIA publishes a capability probe and it is used verbatim: CheckDeviceFormat with
+    //     USAGE 0 and D3DRTYPE_SURFACE against the 'ATOC' pseudo-format -- NVIDIA technical
+    //     report "Antialiasing with Transparency" (2004/2005), Sample Code. (Intel's D3D9
+    //     driver also answers this probe; nothing here needs to care which one did.)
+    //   * AMD publishes NO probe for alpha-to-coverage. "Advanced DX9 Capabilities for ATI
+    //     Radeon Cards" (rev. 2009-09-09) gives every OTHER hook it documents -- INTZ, NULL,
+    //     RESZ, DF16/DF24, Fetch-4, ATI1N/ATI2N -- an explicit CheckDeviceFormat snippet, and
+    //     for alpha-to-coverage states instead that every ATI card exposing the D3D9 feature
+    //     set supports it. A2M1/A2M0 are RENDER-STATE values behind the FourCC interface, not
+    //     surface formats, so CheckDeviceFormat(..., 'A2M1') has no documented meaning at all
+    //     and asking it would be an invented convention. The honest test is therefore the
+    //     ADAPTER VENDOR, read from the same D3D9 object.
+    const DWORD KU_PCI_VENDOR_AMD = 0x1002u;   // ATI/AMD's PCI vendor id
+
+    int AlphaCoveragePath()
+    {
+        if (siA2cPath != E_A2C_PATH_UNTESTED)
+            return siA2cPath;
+
+        IDirect3DDevice9* const lpDevice = Dev();
+        if (lpDevice == nullptr)
+            return E_A2C_PATH_NONE;      // not latched: ask again once the device exists
+        siA2cPath = E_A2C_PATH_NONE;
+
+        D3DDEVICE_CREATION_PARAMETERS lCreation;
+        std::memset(&lCreation, 0, sizeof(lCreation));
+        lCreation.AdapterOrdinal = D3DADAPTER_DEFAULT;
+        lCreation.DeviceType     = D3DDEVTYPE_HAL;
+        lpDevice->GetCreationParameters(&lCreation);
+
+        IDirect3D9* lpD3D = nullptr;
+        if (SUCCEEDED(lpDevice->GetDirect3D(&lpD3D)) && lpD3D != nullptr)
+        {
+            // The published snippet passes D3DFMT_X8R8G8B8 literally; the live display mode is
+            // used instead for the same reason TilingReszSupported does -- it is the format the
+            // device was actually created against.
+            D3DFORMAT      leAdapterFormat = D3DFMT_X8R8G8B8;
+            D3DDISPLAYMODE lMode;
+            std::memset(&lMode, 0, sizeof(lMode));
+            if (SUCCEEDED(lpD3D->GetAdapterDisplayMode(lCreation.AdapterOrdinal, &lMode)))
+                leAdapterFormat = lMode.Format;
+
+            if (SUCCEEDED(lpD3D->CheckDeviceFormat(
+                    lCreation.AdapterOrdinal, lCreation.DeviceType, leAdapterFormat,
+                    0u, D3DRTYPE_SURFACE, static_cast<D3DFORMAT>(KU_A2C_NVIDIA_ENABLE))))
+            {
+                siA2cPath = E_A2C_PATH_NVIDIA;
+            }
+            else
+            {
+                D3DADAPTER_IDENTIFIER9 lIdentifier;
+                std::memset(&lIdentifier, 0, sizeof(lIdentifier));
+                if (SUCCEEDED(lpD3D->GetAdapterIdentifier(lCreation.AdapterOrdinal, 0u,
+                                                          &lIdentifier))
+                    && lIdentifier.VendorId == KU_PCI_VENDOR_AMD)
+                {
+                    siA2cPath = E_A2C_PATH_AMD;
+                }
+            }
+            lpD3D->Release();            // GetDirect3D AddRefs
+        }
+
+        if (siA2cPath == E_A2C_PATH_NVIDIA)
+        {
+            LogOnce("a2c-path",
+                    "[a2c] alpha-to-mask -> NVIDIA ATOC (D3DRS_ADAPTIVETESS_Y): the shader's"
+                    " output alpha becomes an MSAA coverage mask on alpha-tested draws.\n");
+        }
+        else if (siA2cPath == E_A2C_PATH_AMD)
+        {
+            LogOnce("a2c-path",
+                    "[a2c] alpha-to-mask -> AMD A2M (D3DRS_POINTSIZE = 'A2M1'/'A2M0'): the"
+                    " shader's output alpha becomes an MSAA coverage mask.\n");
+        }
+        else
+        {
+            LogOnce("a2c-path",
+                    "[a2c] no D3D9 alpha-to-coverage on this adapter; alpha-tested cut-outs"
+                    " keep hard edges.\n");
+        }
+        return siA2cPath;
+    }
+
+    // Does this path need the alpha test switched on before the hook does anything?
+    //   * NVIDIA: YES -- but this is NOT in any NVIDIA document. The "Antialiasing with
+    //     Transparency" report never names D3DRS_ALPHATESTENABLE; the requirement is attested
+    //     by practitioners and, more usefully, by DXVK, whose D3D9 layer gates ATOC on
+    //     `renderStates[D3DRS_ADAPTIVETESS_Y] == ATOC && renderStates[D3DRS_ALPHATESTENABLE]`
+    //     (d3d9_device.cpp, UpdateAlphaToCoverageAndAlphaTest). Marked UNSOURCED-BY-VENDOR
+    //     rather than presented as documented.
+    //   * AMD: NO. The AMD document says nothing about the alpha test, and DXVK's AMD branch
+    //     checks only the POINTSIZE value. That matches the CONSOLE, where alpha-to-mask and
+    //     the alpha test are separate bits of RB_COLORCONTROL, so the AMD path is left
+    //     faithful and is NOT gated here. (Moot on the shipped data -- every alpha-to-mask
+    //     request carries the alpha test on -- but a gate that is not needed is a deviation
+    //     that is not taken.)
+    inline bool AlphaCoveragePathNeedsAlphaTest(int liPath)
+    {
+        return liPath == E_A2C_PATH_NVIDIA;
+    }
+
+    // Is the bound COLOUR target multisampled? THIS CHECK IS LOAD-BEARING, NOT HYGIENE.
+    // Neither vendor documents what its hook does on a single-sampled target: DXVK makes the
+    // NVIDIA one inert (it ANDs alpha-to-coverage with "RT0 sample count > 1"), but the AMD
+    // side is undetermined and the practitioner reading is that a single-sample configuration
+    // shows a visible DITHER -- an artefact, not a no-op. So the gate is applied on every
+    // path rather than argued away on one vendor's behalf.
+    //
+    // The D3D9 runtime is the only thing that knows what was actually created -- the same
+    // argument TilingSurfaceIsMultisampled makes further down; it is not reused because it
+    // lives in a different anonymous namespace 1,500 lines below. Asked only when everything
+    // cheaper has already said yes, i.e. a handful of times a frame: the probe boot counted
+    // 19,899 alpha-to-mask leaf calls over ~110 s (~3 a frame) and the blend-state shadow
+    // means only the ones that CHANGE ever get here.
+    bool AlphaCoverageTargetIsMultisampled(IDirect3DDevice9* lpDevice)
+    {
+        IDirect3DSurface9* lpTarget = nullptr;
+        if (FAILED(lpDevice->GetRenderTarget(0u, &lpTarget)) || lpTarget == nullptr)
+            return false;
+        D3DSURFACE_DESC lDesc;
+        std::memset(&lDesc, 0, sizeof(lDesc));
+        const bool lbMultisampled = SUCCEEDED(lpTarget->GetDesc(&lDesc))
+                                 && lDesc.MultiSampleType != D3DMULTISAMPLE_NONE;
+        lpTarget->Release();             // GetRenderTarget AddRefs
+        return lbMultisampled;
+    }
+
+    // Bring the vendor state in line with the five inputs. Idempotent and cheap: it issues a
+    // SetRenderState only when the answer actually changes.
+    void AlphaCoverage_Reconcile()
+    {
+        IDirect3DDevice9* const lpDevice = Dev();
+        if (lpDevice == nullptr)
+            return;
+
+        // Probed on the FIRST reconcile of the run (the first blend-state bind) so the log
+        // names the path taken early, whether or not anything asks for coverage.
+        const int liPath = AlphaCoveragePath();
+
+        bool lbWant = (liPath != E_A2C_PATH_NONE)
+                   && sbA2cRequested
+                   && (renderengine::gAlphaToCoverage != 0)
+                   // The shadow-map pass draws the SAME alpha-tested foliage into a
+                   // single-sampled depth atlas. No vendor DOCUMENT says what its hook does
+                   // there, so "A2C cannot touch the shadow map" is made true by construction
+                   // for one bool instead of by appeal to one vendor's behaviour.
+                   && !sbShadowPassActive;
+
+        if (lbWant && AlphaCoveragePathNeedsAlphaTest(liPath))
+        {
+            // ⚠ ON NVIDIA THE ALPHA TEST IS THE TRIGGER (see AlphaCoveragePathNeedsAlphaTest
+            // for exactly how well sourced that is). READ BACK rather than shadowed -- see the
+            // banner above; a third copy of a value shadowingdevice.cpp and the D3D9 runtime
+            // both already hold is the split-brain rule 3 forbids.
+            DWORD luAlphaTestEnable = FALSE;
+            lpDevice->GetRenderState(D3DRS_ALPHATESTENABLE, &luAlphaTestEnable);
+            lbWant = (luAlphaTestEnable != FALSE);
+        }
+        if (lbWant)
+            lbWant = AlphaCoverageTargetIsMultisampled(lpDevice);
+
+        if (lbWant == sbA2cApplied)
+            return;
+
+        if (liPath == E_A2C_PATH_NVIDIA)
+        {
+            lpDevice->SetRenderState(D3DRS_ADAPTIVETESS_Y,
+                                     lbWant ? KU_A2C_NVIDIA_ENABLE : KU_A2C_NVIDIA_DISABLE);
+        }
+        else if (liPath == E_A2C_PATH_AMD)
+        {
+            // ⚠ SHARES D3DRS_POINTSIZE WITH THE RESZ DEPTH RESOLVE. AMD overloads that one
+            // render state with at least three unrelated back doors -- 'A2M1'/'A2M0'
+            // (alpha-to-coverage), 0x7FA05000 (the RESZ depth resolve this file already uses)
+            // and 'INST' (SM2.0 instancing) -- so the two users in this tree have to agree.
+            // They do: TilingResolveDepthToTexture is the ONLY other writer of D3DRS_POINTSIZE
+            // in the whole tree (grep pasted in the report), and it GETs the state, writes the
+            // RESZ magic, then puts back exactly what it read -- so an 'A2M1' in flight
+            // survives the resolve and sbA2cApplied stays true across it. Its own trigger draw
+            // is a degenerate point with colour writes off, so coverage is irrelevant for the
+            // window in which the magic is in there. Nothing in this build sets a real point
+            // size, which is what makes the overload safe in the first direction too.
+            lpDevice->SetRenderState(D3DRS_POINTSIZE,
+                                     lbWant ? KU_A2C_AMD_ENABLE : KU_A2C_AMD_DISABLE);
+        }
+        else
+        {
+            return;                      // no hook: nothing was ever applied, nothing to undo
+        }
+        sbA2cApplied = lbWant;
+    }
 }
 
 namespace renderengine
@@ -692,6 +938,13 @@ namespace renderengine
         lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
         lpDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
         lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+        // The alpha test just went off, and alpha-to-coverage is derived from it, so the
+        // vendor hook has to follow. NOTE that sbA2cRequested is NOT cleared: the console's
+        // word[10] is still whatever the last material asked for, and the blend-state shadow
+        // (mauLowLevelStateShadow[10]) will NOT re-issue an unchanged word -- clearing the
+        // request here would strand alpha-to-coverage off for the rest of the pass. Deriving
+        // instead of clearing is what makes the pass boundary safe AND recoverable.
+        AlphaCoverage_Reconcile();
         lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
         // Colour writes ON. A world pass' own techniques override this from their
         // MaterialState -- and the Z pre-pass deliberately drives it to 0 -- so the
@@ -3115,14 +3368,126 @@ void D3DDevice_SetRenderState_BlendFactor(IDirect3DDevice9*, u32 luValue)
     if (lpDevice != nullptr)
         lpDevice->SetRenderState(D3DRS_BLENDFACTOR, luValue);
 }
-// Alpha-to-mask is the Xenos' own MSAA coverage feature (RB_COLORCONTROL
-// ALPHA_TO_MASK_ENABLE + a 4x2-bit dither offset word). D3D9's nearest relative
-// is the vendor-specific ATOC hack; the world pass runs unmultisampled, where
-// alpha-to-mask is a no-op on the console too.
-// FLAG PC-platform leaf: Xenos MSAA alpha-to-mask, no D3D9 counterpart.
-void D3DDevice_SetRenderState_AlphaToMaskEnable(IDirect3DDevice9*, u32) {}
-// FLAG PC-platform leaf: Xenos MSAA alpha-to-mask, no D3D9 counterpart.
-void D3DDevice_SetRenderState_AlphaToMaskOffsets(IDirect3DDevice9*, u32) {}
+// =============================================================================
+// ALPHA-TO-MASK -- the Xenos' MSAA coverage feature, and on PC the vendor
+// alpha-to-coverage hooks. REAL since rung 9; these were empty leaves before.
+//
+// WHAT THE XENOS DOES. D3DRS_ALPHATOMASKENABLE drives RB_COLORCONTROL's
+// ALPHA_TO_MASK_ENABLE bit and D3DRS_ALPHATOMASKOFFSETS drives that same register's four
+// 2-bit ALPHA_TO_MASK_OFFSET0..3 fields. With the bit set the hardware ANDs the sample
+// mask with a mask derived from the fragment's ALPHA, so partial alpha becomes partial
+// COVERAGE; the four offsets are the DITHER THRESHOLDS for the four pixels of a quad --
+// offset0 -> (0,0), offset1 -> (0,1), offset2 -> (1,0), offset3 -> (1,1) -- so that a
+// constant alpha does not resolve to the same all-or-nothing answer in every pixel. It is
+// a MULTISAMPLE feature: with one sample per pixel there is no mask to build.
+//
+// ⚠ IT IS INDEPENDENT OF THE ALPHA TEST ON THE CONSOLE, AND THAT IS SOURCED, NOT
+// ASSUMED. ALPHA_TEST_ENABLE and ALPHA_TO_MASK_ENABLE are SEPARATE BITS of
+// RB_COLORCONTROL (bits 3 and 4; the register layout is public in Xenia's
+// gpu/registers.h, and the same fields are documented on same-family AMD silicon in the
+// public "Radeon Evergreen 3D Register Reference Guide" rev 1.0, DB_ALPHA_TO_MASK, which
+// also gives the per-pixel-in-quad meaning of the four offsets and "set to 2 for
+// non-dithered, a unique 0-3 for dithered"). An Xbox 360 SDK sample (Graphics/
+// AdvancedXPS) uses alpha-to-mask for billboards with no alpha test at all, which
+// confirms the independence behaviourally. The PC hooks below do NOT share that
+// independence, which is the one place this leaf has to deviate -- see below.
+// [Provenance: the RB_COLORCONTROL vocabulary is also what this file's own fast-set
+// translation table already carries, read off the X360 thunks -- _AlphaFunc @0x82939328
+// pokes ALPHA_FUNC in the same register.]
+//
+// THE OFFSETS WORD IS ALWAYS 0x87, AND 0x87 DECODES. Four 2-bit fields at bits [1:0],
+// [3:2], [5:4], [7:6]: 0x87 = 0b10'00'01'11 -> 3, 1, 0, 2 -- four UNIQUE values, i.e.
+// the fully dithered pattern, which is exactly the constant the Xbox 360 headers name
+// D3DALPHATOMASK_DITHERED (0x87); its sibling D3DALPHATOMASK_SOLID (0xAA) decodes to
+// 2,2,2,2, the "non-dithered" setting the Evergreen guide describes. The two names
+// therefore cross-confirm the decode independently of the header they come from (which
+// is a mirrored SDK, not published documentation). Measured, not assumed, that the game
+// only ever asks for 0x87: a probe boot of these two leaves counted ~2,000 enable=1
+// requests in 19,899 calls with the offsets word 0x87 on every one of them, and the
+// tree's own constructed states agree (CgsBlendStateFactory.cpp:154/158, nine slots,
+// enable 0 offsets 0x87; BrnPostFxShader.cpp:1225 offsets 0x87).
+//
+// WHY THIS IS A RECONSTRUCTION AND NOT AN ENHANCEMENT. The requests come from the
+// SHIPPED MATERIAL DATA -- the 18-word BlendState blob serialised in the bundles, bound
+// through shadowingdevice.cpp's Xbox2SetStateLowLevelShadowed (word[10] enable,
+// word[8] offsets; blendstate.h:28/69-71). ~10% of blend-state binds ask for it. It is
+// the console's own answer for foliage, fences, railings and wires, and until rung 9 PC
+// dropped it on the floor.
+//
+// ⚠ THE BANNER THAT USED TO BE HERE WAS FALSE IN BOTH HALVES. It claimed "the world
+// pass runs unmultisampled, where alpha-to-mask is a no-op on the console too". The
+// console world pass is multisampled (that is what EDRAM tiling is FOR), and since
+// rung 8 the PC scene target is too (PostFxRenderTargetPCLeaf.cpp honours
+// mn32MultiSampleFormat; BrnRendererModule::mbMultisampledBackbuffer is the console's
+// constant TRUE). Nothing in the tree still says "unmultisampled" -- see the report.
+//
+// WHAT D3D9 DOES INSTEAD. There is no standard alpha-to-coverage in Direct3D 9; each
+// vendor smuggles one through an unrelated render state:
+//   * NVIDIA -- enable = SetRenderState(D3DRS_ADAPTIVETESS_Y, 'ATOC'), disable =
+//     D3DFMT_UNKNOWN; capability = CheckDeviceFormat(usage 0, D3DRTYPE_SURFACE, 'ATOC').
+//     All three verbatim from NVIDIA's "Antialiasing with Transparency" technical report
+//     (2004/2005). ('SSAA' on the same render state is SUPERSAMPLE transparency and is
+//     NOT wanted here; nothing in this tree writes D3DRS_ADAPTIVETESS_Y but this leaf.)
+//   * AMD -- enable = SetRenderState(D3DRS_POINTSIZE, 'A2M1'), disable = 'A2M0', and the
+//     toggle is GLOBAL. From "Advanced DX9 Capabilities for ATI Radeon Cards"
+//     (2009-09-09), the same document as the RESZ / INTZ / DF24 / Fetch4 hooks this file
+//     already uses. That document publishes NO capability probe for this one feature --
+//     see AlphaCoveragePath for how it is detected instead, and why probing 'A2M1' with
+//     CheckDeviceFormat would have been an invented convention.
+//   * Anything else: no hook. The leaf says so ONCE and leaves the cut-outs with the hard
+//     alpha-tested edge they have today.
+//
+// THE DEVIATIONS, STATED RATHER THAN HIDDEN. (1) NEITHER hook exposes the per-pixel
+// offsets, so the console's 0x87 dither becomes the vendor's own fixed pattern -- the
+// cut-out is dithered either way, but not with the console's exact quad pattern.
+// (2) THE NVIDIA HOOK NEEDS THE ALPHA TEST SWITCHED ON, where the console's
+// alpha-to-mask does not (see above). That precondition turns out to be met by the
+// console's OWN state and so costs no deviation at all: a probe boot recorded, for every
+// alpha-to-mask request, the AlphaTestEnable word the SAME blend-state bind issues next
+// -- on=11500, off=0, across title, intro, junkyard, car select and driving. So this leaf
+// does NOT force the alpha test on (which WOULD have been a real deviation: it changes
+// which pixels are discarded); it relies on the material's own alpha test, gates only the
+// NVIDIA path on it, and D3DDevice_SetRenderState_AlphaTestEnable below logs once if the
+// combination that probe never saw ever turns up.
+//
+// The state, the capability probe and the reconciler are at the top of this file (see
+// the ALPHA-TO-COVERAGE banner in the first anonymous namespace) because the world-pass
+// boundary, the shadow-map bracket and the scene blit all have to reconcile through
+// them too.
+// =============================================================================
+void D3DDevice_SetRenderState_AlphaToMaskEnable(IDirect3DDevice9*, u32 luValue)
+{
+    sbA2cRequested = (luValue != 0u);
+    AlphaCoverage_Reconcile();
+}
+
+// Neither vendor hook exposes the per-pixel-in-quad dither thresholds, so the console's
+// offsets word cannot be honoured -- the vendor's own fixed pattern is used instead. The
+// word is accepted and RECORDED, and a value other than the console's constant 0x87 says
+// so once, because it would mean a material this reconstruction has not accounted for.
+// The one other value with a name is 0xAA (D3DALPHATOMASK_SOLID = offsets 2,2,2,2, the
+// NON-dithered setting): it does not appear anywhere in the shipped data on the probed
+// flow, and if it ever does it is worth knowing that PC cannot express it -- the vendor
+// hooks always dither.
+void D3DDevice_SetRenderState_AlphaToMaskOffsets(IDirect3DDevice9*, u32 luValue)
+{
+    if (luValue == suA2cOffsets)
+        return;
+    suA2cOffsets = luValue;
+    if (luValue != KU_A2M_OFFSETS_DITHERED)
+    {
+        char lacMessage[320];
+        std::snprintf(lacMessage, sizeof(lacMessage),
+                      "[a2c] alpha-to-mask OFFSETS 0x%08X requested%s -- the console's constant"
+                      " is 0x%08X (D3DALPHATOMASK_DITHERED). D3D9's vendor alpha-to-coverage"
+                      " hooks expose no dither-threshold control, so the vendor's own fixed"
+                      " pattern is used and this word is recorded only.\n",
+                      static_cast<unsigned>(luValue),
+                      (luValue == 0xAAu) ? " (D3DALPHATOMASK_SOLID, i.e. NON-dithered)" : "",
+                      static_cast<unsigned>(KU_A2M_OFFSETS_DITHERED));
+        LogOnce("a2c-offsets", lacMessage);
+    }
+}
 // FLAG PC-platform leaf: high-precision blending selects the Xenos' 10.10.10.2 /
 // FP16 blend path per render target. The PC back buffer's format already fixes
 // the blend precision, so there is nothing to select.
@@ -3135,6 +3500,32 @@ void D3DDevice_SetRenderState_AlphaTestEnable(IDirect3DDevice9*, u32 luValue)
     IDirect3DDevice9* lpDevice = Dev();
     if (lpDevice != nullptr)
         lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE, luValue != 0);
+
+    // ⚠ ON THE NVIDIA PATH THIS LEAF IS HALF OF ALPHA-TO-COVERAGE, NOT JUST THE ALPHA TEST.
+    // The ATOC hook keys off D3DRS_ALPHATESTENABLE, and the blend-state binder issues
+    // word[10] (alpha-to-mask) BEFORE word[16] (this one) on BOTH of its paths
+    // (shadowingdevice.cpp: unset path :619 then :625, incremental :686 then :711) -- so THIS
+    // is the call at which a material's alpha-to-mask + alpha-test pair is finally settled.
+    // Reconciling here
+    // is what stops the vendor state being decided against the PREVIOUS material's alpha
+    // test. (Harmless on the AMD path, which is not gated on the alpha test at all.)
+    AlphaCoverage_Reconcile();
+
+    // The combination the console allows and the NVIDIA hook cannot express. Probed
+    // 2026-08-16 over title / intro / junkyard / car select / driving: 11500 alpha-to-mask
+    // requests, ALL with the alpha test on, 0 without -- so this line was not expected to
+    // appear. KNOWN GAP: it can only fire when the binder actually re-issues word[16], and
+    // the incremental path skips an UNCHANGED word, so a material whose word[16] was already
+    // 0 would take the silent hard-edge route without a line. That is the residual, and it is
+    // the same materials the probe measured as non-existent.
+    if (luValue == 0u && sbA2cRequested && siA2cPath == E_A2C_PATH_NVIDIA)
+    {
+        LogOnce("a2c-no-alpha-test",
+                "[a2c] a blend state asked for alpha-to-mask with the alpha test OFF. The"
+                " NVIDIA ATOC hook keys off the alpha test, so that material keeps its hard"
+                " cut-out edge; the console, where the two are independent register bits,"
+                " would have dithered it.\n");
+    }
 }
 void D3DDevice_SetRenderState_AlphaRef(IDirect3DDevice9*, u32 luValue)
 {
@@ -3476,6 +3867,15 @@ void PCSurfaceBracket_Save()
     // caster draws for the env-gated cull/depth-bias experiment in WorldDraw_IndexedUP.
     sbShadowPassActive = true;
 
+    // ...and it is what keeps alpha-to-coverage OUT OF THE SHADOW MAP. The cascades render
+    // the same alpha-tested foliage into a single-sampled depth atlas, and NO vendor document
+    // says what its hook does on a single-sampled target (DXVK makes NVIDIA's inert; the AMD
+    // side is undetermined and the practitioner reading is a visible dither, i.e. an artefact
+    // and not a no-op). Reconciling on both edges of the bracket makes it true by construction
+    // instead of by appeal. The console's request (sbA2cRequested) is untouched, so
+    // PCSurfaceBracket_Restore puts it straight back.
+    AlphaCoverage_Reconcile();
+
     sbSurfacesSaved = true;
 }
 
@@ -3529,6 +3929,11 @@ void PCSurfaceBracket_Restore()
     // invalidation redundant once the call is genuinely on the frame path, rather than load-bearing
     // in the other direction.
     gpLastRenderTargetState = nullptr;
+
+    // The scene target is bound again and sbShadowPassActive is back to false, so put
+    // alpha-to-coverage back where the last material's word[10] left it. AFTER the rebind,
+    // because the reconciler asks the bound colour target for its sample count.
+    AlphaCoverage_Reconcile();
 
     if (spSavedColourSurface != nullptr) { spSavedColourSurface->Release(); spSavedColourSurface = nullptr; }
     if (spSavedDepthSurface  != nullptr) { spSavedDepthSurface->Release();  spSavedDepthSurface  = nullptr; }
@@ -3702,6 +4107,11 @@ void PCSceneBlit_Begin()
     lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_COLORARG1, D3DTA_TEXTURE);
     lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_ALPHAOP,   D3DTOP_SELECTARG1);
     lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+
+    // The alpha test just went off and the back buffer (single-sampled) is bound, so
+    // alpha-to-coverage has to follow both. Derived, not cleared -- see the note in
+    // SetWorldPassDefaultStates for why clearing the console's request would strand it.
+    AlphaCoverage_Reconcile();
 }
 
 // Put back exactly what Begin overwrote -- and ONLY that. The render target is left on the back
@@ -3748,6 +4158,7 @@ void PCSceneBlit_End()
     lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_COLORARG1, suSavedColourArg1);
     lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_ALPHAOP,   suSavedAlphaOp);
     lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_ALPHAARG1, suSavedAlphaArg1);
+    AlphaCoverage_Reconcile();   // the alpha test was just put back; follow it
 
     // The texture stays bound at unit 0 only until the next Im2d SetTexture, which every
     // subsequent 2D layer issues for itself.

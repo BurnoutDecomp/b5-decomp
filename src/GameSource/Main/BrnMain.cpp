@@ -124,6 +124,12 @@ void LoadConfig()
     if (liAntiAliasing < 0)  liAntiAliasing = 0;
     if (liAntiAliasing > 16) liAntiAliasing = 16;
     renderengine::gAntiAliasing = liAntiAliasing;
+
+    // The alpha-to-coverage off switch (rung 9); 0/1, anything else clamped to 1 because
+    // the setting has no third state -- see the declaration in device.h.
+    const s32 liAlphaToCoverage =
+        GetPrivateProfileIntA("Settings", "AlphaToCoverage", renderengine::gAlphaToCoverage, lacPath);
+    renderengine::gAlphaToCoverage = (liAlphaToCoverage == 0) ? 0 : 1;
 #endif
 }
 
@@ -144,6 +150,8 @@ void SaveConfig()
     WritePrivateProfileStringA("Display", "AdapterIndex", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gAntiAliasing);
     WritePrivateProfileStringA("Settings", "AntiAliasing", lacValue, lacPath);
+    std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gAlphaToCoverage);
+    WritePrivateProfileStringA("Settings", "AlphaToCoverage", lacValue, lacPath);
 #endif
 }
 
