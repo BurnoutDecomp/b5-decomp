@@ -350,11 +350,10 @@ inline Matrix44Template<Type> operator-(const Matrix44Template<Type>& lLhs,
 // same shape the single-precision sibling rw::math::vpu::Inverse @0x825B2628 already carries in
 // vendor/renderware/include/rw/math/vpu/matrix44_operation.h.
 //
-// NO ZERO-DETERMINANT GUARD, deliberately: neither console entry point has one (the X360 bodies
-// divide unconditionally), and adding one here would be behaviour the binary does not have. The
-// CALLER is responsible for not handing in a singular matrix -- see the [FLAG PC bring-up] note on
-// BrnRendererUpdatePostFxMotionBlur, which is where a never-produced (all-zero) camera would
-// otherwise arrive.
+// ZERO-DETERMINANT GUARD: the X360 fpu::Inverse<double> @0x82405210 compares the determinant against
+// dbl_82001CA8 (0.0) and returns the ZERO matrix on a singular input (rung-7 verifier corrected the
+// earlier "divides unconditionally" reading here); reproduced below. The vpu single-precision Inverse
+// (MotionBlurState::Update's four inverses) has no such test on the console and keeps none.
 template <typename Type>
 inline Matrix44Template<Type> Inverse(const Matrix44Template<Type>& lrMatrix, Type& lrDeterminant)
 {
@@ -404,8 +403,22 @@ inline Matrix44Template<Type> Inverse(const Matrix44Template<Type>& lrMatrix, Ty
     const Type lfDeterminant = laE[0]*laAdj[0] + laE[1]*laAdj[4] + laE[2]*laAdj[8] + laE[3]*laAdj[12];
     lrDeterminant = lfDeterminant;
 
-    const Type lfInverseDeterminant = static_cast<Type>(1) / lfDeterminant;
+    // THE CONSOLE'S ZERO-DETERMINANT GUARD (rung-7 verifier): rw::math::fpu::Inverse<double> @0x82405210 does
+    // `fcmpu f1, dbl_82001CA8 (0.0)` / `bne 0x824052A0` and on a SINGULAR input returns the ZERO matrix
+    // (sixteen `stfd` of 0.0) instead of dividing -- the earlier note here that "the console has no guard"
+    // was wrong. Without it a singular WVP (a garbage or degenerate view) would put NaN into
+    // BlurMatrixX/Y/W and from there into a tex2Dgrad gradient.
     Matrix44Template<Type> lResult;
+    if (lfDeterminant == static_cast<Type>(0))
+    {
+        lResult.xAxis.Set(0, 0, 0, 0);
+        lResult.yAxis.Set(0, 0, 0, 0);
+        lResult.zAxis.Set(0, 0, 0, 0);
+        lResult.wAxis.Set(0, 0, 0, 0);
+        return lResult;
+    }
+
+    const Type lfInverseDeterminant = static_cast<Type>(1) / lfDeterminant;
     lResult.xAxis.Set(laAdj[0]  * lfInverseDeterminant, laAdj[1]  * lfInverseDeterminant,
                       laAdj[2]  * lfInverseDeterminant, laAdj[3]  * lfInverseDeterminant);
     lResult.yAxis.Set(laAdj[4]  * lfInverseDeterminant, laAdj[5]  * lfInverseDeterminant,

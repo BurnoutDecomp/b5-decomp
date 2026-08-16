@@ -301,8 +301,8 @@ namespace
     // (the +0x60 row is past everything Construct reads and is therefore not modelled).
     const f32 KF_BASE_FRAME_BLUR_OPACITY        = 0.666f;      // data +0x48
     const f32 KF_BASE_FRAME_BLUR_VELOCITY       = 2.622951f;   // data +0x40
-    const f32 KF_BASE_FRAME_BLUR_SHARPNESS      = 0.327869f;   // data +0x44
-    const f32 KF_BASE_FRAME_BLUR_NOISE          = 0.007049f;   // data +0x4C
+    const f32 KF_BASE_FRAME_BLUR_SHARPNESS      = 0.32786879f; // data +0x44 == 0x3EA7DE6B bit-exact (rung-7 verifier: 0.327869f was 7 ULP off)
+    const f32 KF_BASE_FRAME_BLUR_NOISE          = 0.00704918f; // data +0x4C == 0x3BE6FCCF bit-exact (rung-7 verifier: 0.007049f was 387 ULP off)
     const f32 KF_BASE_FRAME_BLUR_ANGLE          = 0.0f;        // data +0x50
     const f32 KF_BASE_FRAME_BLUR_BLEND_AMOUNT_X = 1.3f;        // data +0x30 lane 0
     const f32 KF_BASE_FRAME_BLUR_BLEND_AMOUNT_Y = 0.555f;      // data +0x30 lane 1
