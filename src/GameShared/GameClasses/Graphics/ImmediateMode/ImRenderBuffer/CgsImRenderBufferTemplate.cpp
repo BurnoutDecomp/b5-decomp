@@ -31,7 +31,7 @@
 // and stamps each line with the present counter that lives in device.cpp so a traced batch can
 // be correlated against the BRN_FRAME_DUMP image of the SAME frame.
 namespace CgsDev { namespace Log { void WriteToLog(const char*); } }
-namespace renderengine { extern u32 guPresentCount; }
+namespace renderengine { extern u32 guPresentCount; u32 FrameDumpEvery(); }
 
 namespace CgsGraphics
 {
@@ -1279,11 +1279,13 @@ namespace CgsGraphics
                 // [diag] BRN_CXFORM_TRACE=1: report each DISTINCT large batch (>= 15% of the
                 // logical stage) with its final folded vertex colour, so "what colour and alpha
                 // does the popup background actually get" is measured rather than inferred.
-                // Gate on the SAME frames BRN_FRAME_DUMP writes (every 30th present) so the
-                // logged bounds and the dumped pixels come from ONE frame -- correlating a
-                // trace from one boot against a dump from another produced a false lead.
+                // Gate on the SAME frames BRN_FRAME_DUMP writes so the logged bounds and the
+                // dumped pixels come from ONE frame -- correlating a trace from one boot
+                // against a dump from another produced a false lead.
+                // ⛔ ASK the writer for its period (BRN_FRAME_DUMP_EVERY can override the
+                // default 30); a second hardcoded 30 here would desync the two silently.
                 if (CxformTraceEnabled() && luCount >= 3u &&
-                    (renderengine::guPresentCount % 30u) == 0u)
+                    (renderengine::guPresentCount % renderengine::FrameDumpEvery()) == 0u)
                 {
                     f32 lfMinX = saBatch[0].x, lfMaxX = saBatch[0].x;
                     f32 lfMinY = saBatch[0].y, lfMaxY = saBatch[0].y;
