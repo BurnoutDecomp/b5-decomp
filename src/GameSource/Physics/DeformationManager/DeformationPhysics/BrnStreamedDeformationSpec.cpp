@@ -1,5 +1,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"
 #include "SharedClasses/Physics/Deformation/BrnBodyPartBBoxSpec.h"   // BodyPartBBoxSpec::HackCheckHandedness (FixUp)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"           // gpDebugPrint -- the opt-in [com] probe only
+#include <cstdlib>                                                   // getenv       -- the opt-in [com] probe only
 
 // BrnPhysics::Deformation::StreamedDeformationSpec.
 //
@@ -287,6 +289,39 @@ namespace Deformation
             lOldMinusNew.x * lOldMinusNew.x +
             lOldMinusNew.y * lOldMinusNew.y +
             lOldMinusNew.z * lOldMinusNew.z;
+
+        // ---- [com] PC bring-up instrument -- DELETE WHEN the wall test is banked -----------------
+        // OPT-IN (BRN_SPHERE_PROBE=1, the same switch as the sensor-sphere probe it is read with).
+        // ⭐ walls leg 11: the sensor offsets and the live wheel positions end up 2*COM apart in y
+        // (0.807 m on the starter car), which is exactly what parks a real-radius car on its belly.
+        // The two candidate causes -- "this ran with a zero old COM" vs "this was a no-op and the
+        // discrepancy is downstream" -- differ ONLY in the value of mCurrentCOMOffset ON ENTRY, so
+        // that is what this prints. One line, before the branch, so the skip is visible too.
+        {
+            static s32 siComProbe = -1;
+            if ( siComProbe < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_SPHERE_PROBE" );
+                siComProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+            }
+            static u32 suLogged = 0;
+            if ( siComProbe == 1 && suLogged < 6u && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                ++suLogged;
+                *CgsDev::Log::gpDebugPrint
+                    << "[com] TransformToNewCOMSpace old " << mCurrentCOMOffset.x << " "
+                    << mCurrentCOMOffset.y << " " << mCurrentCOMOffset.z
+                    << " -> new " << lCOMOffset.x << " " << lCOMOffset.y << " " << lCOMOffset.z
+                    << " magSq " << lfMagnitudeSquared
+                    << " applies " << (lfMagnitudeSquared > KF_COM_MOVE_DEADBAND_SQ_PLACEHOLDER ? 1 : 0)
+                    << " sensor0 " << maDeformationSensorSpecs[0].mInitialOffset.x << " "
+                    << maDeformationSensorSpecs[0].mInitialOffset.y << " "
+                    << maDeformationSensorSpecs[0].mInitialOffset.z
+                    << " wheel0 " << maWheelSpecs[0].mPosition.x << " "
+                    << maWheelSpecs[0].mPosition.y << " " << maWheelSpecs[0].mPosition.z
+                    << "\n";
+            }
+        }
 
         // back_chain[0] = (magSq > epsilon)  ->  the COM moved.
         if ( lfMagnitudeSquared > KF_COM_MOVE_DEADBAND_SQ_PLACEHOLDER )

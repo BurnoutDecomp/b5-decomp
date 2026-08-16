@@ -1025,6 +1025,90 @@ namespace Deformation
                     Vector3Plus{ lvDir.x, lvDir.y, lvDir.z, lfSpeed * KF_CONSOLE_TIMESTEP });
             }
         }
+
+        // ---- [sphere] PC bring-up instrument -- DELETE WHEN the wall test is banked --------------
+        // OPT-IN (BRN_SPHERE_PROBE=1) so a default run and every golden gate stay byte-identical.
+        //
+        // ⭐ WHY THIS PROBE EXISTS (walls leg 11). Leg 10 measured "ONE wall contact offered to ALL
+        // 20 SENSORS, byte-identical pen/basis/t" and called it an OWNERSHIP question. The console's
+        // ownership rule is not in doubt (ReadPotentialVehicleWorldContact @0x82604590 passes the
+        // whole 64-bit muVolumeInstanceIdA to GetDeformationSensorFromVolumeInstance @0x825B4338,
+        // which takes its LOW BYTE minus one as the sensor index -- one contact, one sensor). So if
+        // twenty sensors each received a contact, twenty DISTINCT contacts were generated, and the
+        // only way twenty distinct spheres produce byte-identical contact points is if the spheres
+        // are in the same place. That is a statement about THIS array, and one line per sphere
+        // settles it without inferring anything from downstream.
+        {
+            static s32 siSphereProbe = -1;
+            if ( siSphereProbe < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_SPHERE_PROBE" );
+                siSphereProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+            }
+            static bool sbLoggedSpheres = false;
+            if ( siSphereProbe == 1 && !sbLoggedSpheres && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                sbLoggedSpheres = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[sphere] ResetSensors numSensors " << liNumSensors << " (+4 wheels)\n";
+                // The FRAMES the spheres are expressed in -- printed together so the sensor
+                // offsets can be read against the body origin without inferring anything.
+                *CgsDev::Log::gpDebugPrint
+                    << "[sphere] bodyPos " << lWorldTransform.wAxis.x << " " << lWorldTransform.wAxis.y
+                    << " " << lWorldTransform.wAxis.z
+                    << " | specCOM " << mpDeformationSpec->mCurrentCOMOffset.x << " "
+                    << mpDeformationSpec->mCurrentCOMOffset.y << " "
+                    << mpDeformationSpec->mCurrentCOMOffset.z
+                    << " | attribCOM ";
+                if ( lpVehicle != 0 && lpVehicle->mpAttribs != 0 )
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << lpVehicle->mpAttribs->mBaseAttribs.mCOMOffset.x << " "
+                        << lpVehicle->mpAttribs->mBaseAttribs.mCOMOffset.y << " "
+                        << lpVehicle->mpAttribs->mBaseAttribs.mCOMOffset.z;
+                }
+                else
+                {
+                    *CgsDev::Log::gpDebugPrint << "(no attribs)";
+                }
+                *CgsDev::Log::gpDebugPrint
+                    << " | dims " << mpDeformationSpec->mHandlingBodyDimensions.x << " "
+                    << mpDeformationSpec->mHandlingBodyDimensions.y << " "
+                    << mpDeformationSpec->mHandlingBodyDimensions.z << "\n";
+                for ( s32 liW = 0; liW < 4; ++liW )
+                {
+                    const BrnPhysics::Vehicle::Wheel& lrW =
+                        lpVehicle->GetWheel(static_cast<BrnPhysics::Vehicle::EVehicleDrivenWheel>(liW));
+                    *CgsDev::Log::gpDebugPrint
+                        << "[sphere] wheel " << liW
+                        << " pos " << lrW.mPosition.x << " " << lrW.mPosition.y << " " << lrW.mPosition.z
+                        << " | specPos " << mpDeformationSpec->maWheelSpecs[liW].mPosition.x << " "
+                        << mpDeformationSpec->maWheelSpecs[liW].mPosition.y << " "
+                        << mpDeformationSpec->maWheelSpecs[liW].mPosition.z
+                        << " | scale " << mpDeformationSpec->maWheelSpecs[liW].mScale.x << " "
+                        << mpDeformationSpec->maWheelSpecs[liW].mScale.y << " "
+                        << mpDeformationSpec->maWheelSpecs[liW].mScale.z << "\n";
+                }
+                for ( s32 liSphere = 0; liSphere < liNumSensors + 4; ++liSphere )
+                {
+                    const Vector4& lrL = maLocalSensorSpheres[liSphere].mPositionRadius;
+                    const Vector4& lrW = maWorldSensorSpheres[liSphere].mPositionRadius;
+                    const Vector3  lSpecOff = ( liSphere < liNumSensors )
+                        ? mpDeformationSpec->GetDeformationSensorSpec(liSphere)->mInitialOffset
+                        : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+                    const f32 lfSpecRad = ( liSphere < liNumSensors )
+                        ? mpDeformationSpec->GetDeformationSensorSpec(liSphere)->mfRadius
+                        : 0.0f;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[sphere] " << liSphere
+                        << " local " << lrL.x << " " << lrL.y << " " << lrL.z << " r " << lrL.w
+                        << " | world " << lrW.x << " " << lrW.y << " " << lrW.z << " r " << lrW.w
+                        << " | SPEC off " << lSpecOff.x << " " << lSpecOff.y << " " << lSpecOff.z
+                        << " r " << lfSpecRad
+                        << "\n";
+                }
+            }
+        }
     }
 
     // =================================================================================================
