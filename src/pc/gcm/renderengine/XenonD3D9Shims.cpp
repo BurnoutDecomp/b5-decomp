@@ -690,6 +690,27 @@ namespace
     // for. Everything else in the decision (the vendor capability, the bound target's
     // sample count, the shadow-pass flag, the config knob) is a live query.
     //
+    // ...BUT A LIVE QUERY IS ONLY AS FRESH AS THE LAST RECONCILE, so every WRITER of an input
+    // must reconcile. The verify round (2026-08-16) found the one that did not: the BOUND COLOUR
+    // TARGET. Every engine render-target bind funnels through renderengine::Device::SetState
+    // (PostFxRenderTargetPCLeaf.cpp -- the single writer of the surfaces, reached from
+    // CgsRenderTarget::SetRenderTargetState{,InvertDepth} and rw::graphics::postfx::
+    // RenderTarget::Begin), and it did not reconcile; the sample-count gate was enforced only
+    // whenever one of the OTHER call sites happened to fire. Three accidents made that harmless
+    // on today's frame graph (the shadow bracket reconciles on both edges; shadowingdevice.cpp's
+    // ResetProgramShadows nulls mpBlendState before each of Render's five walks so every walk
+    // opens on the unset path re-issuing word[10] AND word[16]; BeginRenderEnvironmentMapFace --
+    // the one pass that binds a single-sampled colour target in the MIDDLE of world geometry --
+    // is not reconstructed yet). The residual was the window from the last world draw to
+    // PCSceneBlit_Begin (resolve + post-fx chain, single-sampled): inert on NVIDIA (the alpha
+    // test is the trigger, the post-fx quads do not use it) but the AMD path is deliberately not
+    // alpha-test-gated, so an 'A2M1' could stand across it -- exactly the single-sample dither
+    // AlphaCoverageTargetIsMultisampled exists to prevent. CLOSED: Device::SetState now calls
+    // PCAlphaCoverage_Reconcile() (exported below, declared in ShadowPassPCLeaf.h beside the
+    // bracket's own two) as its last statement, so the derivation is complete BY CONSTRUCTION.
+    // No recursion: the reconciler reads the target (GetRenderTarget) and never binds one, and
+    // the bracket / the blit rebind raw, not through SetState.
+    //
     // ⚠ THE ORDER THE BINDER USES MATTERS AND IS WHY THE RECONCILER IS SHARED.
     // shadowingdevice.cpp's Xbox2SetStateLowLevelShadowed issues word[10] (alpha-to-mask)
     // BEFORE word[16] (alpha-test enable) on BOTH paths -- unset path :619 then :625,
@@ -836,7 +857,10 @@ namespace
     // The D3D9 runtime is the only thing that knows what was actually created -- the same
     // argument TilingSurfaceIsMultisampled makes further down; it is not reused because it
     // lives in a different anonymous namespace 1,500 lines below. Asked only when everything
-    // cheaper has already said yes, i.e. a handful of times a frame: the probe boot counted
+    // cheaper has already said yes -- which is NOT "a handful of times a frame": with a request
+    // live it runs on every alpha-test change (hundreds a second) and now on every render-target
+    // bind. GetRenderTarget is a runtime AddRef and GetDesc a struct copy; the measured cost of
+    // the whole wave was 58.8 -> 57.5 fps. For scale, the probe boot counted
     // 19,899 alpha-to-mask leaf calls over ~110 s (~3 a frame) and the blend-state shadow
     // means only the ones that CHANGE ever get here.
     bool AlphaCoverageTargetIsMultisampled(IDirect3DDevice9* lpDevice)
@@ -920,6 +944,15 @@ namespace
 
 namespace renderengine
 {
+    // The exported face of AlphaCoverage_Reconcile for the ONE input writer that lives in
+    // another TU: renderengine::Device::SetState (PostFxRenderTargetPCLeaf.cpp), the single
+    // binder of colour slot 0. Declared in ShadowPassPCLeaf.h beside PCSurfaceBracket_Save/
+    // Restore. See the derivation banner above for why every input writer must reconcile.
+    void PCAlphaCoverage_Reconcile()
+    {
+        AlphaCoverage_Reconcile();
+    }
+
     // [PC bring-up] renderengine::Device::SetWorldPassDefaultStates -- the state a world
     // pass starts from (declared in device.h). Every state a MATERIAL owns is now bound per
     // technique from its own MaterialState triple (shadow::Device::SetMaterialRenderStatesPC),
@@ -3408,7 +3441,8 @@ void D3DDevice_SetRenderState_BlendFactor(IDirect3DDevice9*, u32 luValue)
 // enable 0 offsets 0x87; BrnPostFxShader.cpp:1225 offsets 0x87).
 //
 // WHY THIS IS A RECONSTRUCTION AND NOT AN ENHANCEMENT. The requests come from the
-// SHIPPED MATERIAL DATA -- the 18-word BlendState blob serialised in the bundles, bound
+// SHIPPED MATERIAL DATA -- the BlendState blob serialised in the bundles (19 words per
+// blendstate.h, of which the binder pushes the first 18), bound
 // through shadowingdevice.cpp's Xbox2SetStateLowLevelShadowed (word[10] enable,
 // word[8] offsets; blendstate.h:28/69-71). ~10% of blend-state binds ask for it. It is
 // the console's own answer for foliage, fences, railings and wires, and until rung 9 PC
@@ -3427,7 +3461,8 @@ void D3DDevice_SetRenderState_BlendFactor(IDirect3DDevice9*, u32 luValue)
 //     D3DFMT_UNKNOWN; capability = CheckDeviceFormat(usage 0, D3DRTYPE_SURFACE, 'ATOC').
 //     All three verbatim from NVIDIA's "Antialiasing with Transparency" technical report
 //     (2004/2005). ('SSAA' on the same render state is SUPERSAMPLE transparency and is
-//     NOT wanted here; nothing in this tree writes D3DRS_ADAPTIVETESS_Y but this leaf.)
+//     NOT wanted here; nothing in this tree writes D3DRS_ADAPTIVETESS_Y but this file's
+//     AlphaCoverage_Reconcile, which this leaf drives.)
 //   * AMD -- enable = SetRenderState(D3DRS_POINTSIZE, 'A2M1'), disable = 'A2M0', and the
 //     toggle is GLOBAL. From "Advanced DX9 Capabilities for ATI Radeon Cards"
 //     (2009-09-09), the same document as the RESZ / INTZ / DF24 / Fetch4 hooks this file
