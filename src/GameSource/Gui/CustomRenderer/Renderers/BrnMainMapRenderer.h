@@ -27,10 +27,26 @@ namespace BrnGui
         // 0x827DF3E8 -- zero the state groups and construct the four particle systems.
         MainMapRenderer();
 
+        // 0x82C290D8 -- `stb r4, 4(r3); blr` (returns this). DecFIGS attributes this leaf
+        // to CgsCustomRenderer.h, so its BODY lives in the sibling
+        // GameShared/.../CustomRenderer/CgsCustomRenderer.cpp; the DECLARATION belongs
+        // here, on the one real MainMapRenderer, so there is a single class and a single
+        // layout. (It was previously re-declared on two OTHER, differently-shaped
+        // `BrnGui::MainMapRenderer` definitions -- see the ODR note in that .cpp.)
+        MainMapRenderer* SetRenderEnabled(bool lbRenderEnabled);
+
     private:
         // Leading vtable slot (ctor writes &off_820CF868 to *this). FLAG: vtable pointer
-        // modelled as an opaque slot set to a named data-segment constant.
+        // modelled as an opaque slot set to a named data-segment constant. The real class
+        // derives from CgsGui::CustomRenderComponentInterface (DWARF); this slice is not
+        // reconstructed far enough to declare that base, so the vptr word stands in and
+        // mbRenderEnabled below is the +0x04 flag the base owns on console.
         void* mpVtable;
+
+        // [+0x04] the base CustomRenderComponentInterface::mbRenderEnabled flag
+        // SetRenderEnabled writes. Declared here (not inherited) for the same
+        // minimal-slice reason as mpVtable; the offset matches the console.
+        bool mbRenderEnabled;
 
         // Six zero-initialised state groups (guest +0x48..+0xD0). The ctor clears each as
         // five dwords with the compiler's duplicate-first-write unroll; the 6th dword of

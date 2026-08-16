@@ -37,6 +37,22 @@ namespace CgsGui
         mpGuiCache = lpGuiCache;
     }
 
+    // ---- the GUI camera selector -------------------------------------------------------
+    // X360 dword_8305A6C4. Zero in the shipped image (E_GUICAMERA_FULLSCREENMAP), which is
+    // also the C++ zero-init value, so no explicit seeding is needed.
+    EGuiCameraType gCurrentGuiCamera = E_GUICAMERA_FULLSCREENMAP;
+
+    // @0x82847658 (recovered from the image -- the export set has no entry for it; see the
+    // instruction listing in CgsGuiShared.h). Assert the type is in range, then store it.
+    // ⚠️ The store is UNCONDITIONAL on the console: the `blt` only skips the assert block,
+    // it does not skip the write, so an out-of-range value is asserted AND stored. Kept.
+    int SetGuiCamera(s32 liCameraType)
+    {
+        CGS_ASSERT(liCameraType < E_GUICAMERA_COUNT, "lCameraType<E_GUICAMERA_COUNT");
+        gCurrentGuiCamera = static_cast<EGuiCameraType>(liCameraType);
+        return liCameraType;
+    }
+
     // Null every shared-resource pointer; the owners install each one as its
     // subsystem comes up (mpAptAux from the Apt bring-up, the flapt/cache/queue
     // pointers from their modules).

@@ -66,4 +66,43 @@ namespace CgsGui
         InputBuffer::GuiEventQueue* GetGDMInput();
         GuiEventReceiverQueue*  GetGDMReceiverQueue();
     };
+
+    // ---------------------------------------------------------------------------------
+    // The GUI camera selector -- CgsGuiShared.cpp:182, X360 CgsGui::SetGuiCamera
+    // @0x82847658.
+    //
+    // ⚠️ That address is a HOLE in the IDA export set (no 0x82847658.json). It is not
+    // missing from the game: BrnGui::CustomRendererManager::RecvEvent @0x824443D0 lists it
+    // in xrefs_from, and its 22 instructions read cleanly out of the unpacked image. The
+    // body and both assert strings below were recovered from those bytes, not guessed.
+    //
+    //   82847658  mflr r12 / stw r12,-8(r1) / std r31,-16(r1) / stwu r1,-0x60(r1)
+    //   82847668  mr    r31, r3
+    //   8284766C  cmpwi cr6, r31, 2
+    //   82847670  blt   cr6, 0x82847694          ; skip the assert when < 2
+    //   82847674  bl    BeginAssert
+    //   8284767C  li    r5, 182                  ; line
+    //   82847680  addi  r4, r11, 0x0ED0          ; "d:\p45_main\...\gui\CgsGuiShared.cpp"
+    //   82847688  addi  r3, r11, 0x0EAC          ; "lCameraType<E_GUICAMERA_COUNT"
+    //   8284768C  bl    FireAssert  /  bl EndAssert
+    //   82847694  stw   r31, dword_8305A6C4      ; the store happens on BOTH paths
+    //   828476AC  blr
+    //
+    // The global it writes (0x8305A6C4) sits immediately before
+    // AptAuxPointer::mpAptAuxInst (0x8305A6C8).
+    enum EGuiCameraType
+    {
+        E_GUICAMERA_FULLSCREENMAP = 0,   // RecvEvent 213 passes 0 when the full map turns ON
+        E_GUICAMERA_NORMAL        = 1,   // ...and 1 when it turns off
+
+        E_GUICAMERA_COUNT         = 2    // from the assert string
+    };
+
+    // The selected camera (X360 dword_8305A6C4). Read by the GUI render path when it picks
+    // which camera to draw the custom-renderer layer through.
+    extern EGuiCameraType gCurrentGuiCamera;
+
+    // Returns the guest r3, which the body never rewrites -- i.e. the argument itself.
+    int SetGuiCamera(s32 liCameraType);
 }
+

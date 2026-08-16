@@ -8,6 +8,11 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // CgsCore::SPrintf (the "_level%d" target path)
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"                          // BrnFlapt::TextFieldRef (its GetLanguageManager is bridged here)
 #include "GameSource/Gui/BrnGuiPerfmons.h"                                      // BrnGui::GuiPerfmons (the AptAux perfmon tree handles, Initialise @0x824EF050)
+// ---- AptCallbackCustom::ControlRender @0x8285BFA0 dependencies ----------------------
+#include "GameSource/Gui/BrnCustomRendererManager.h"                             // CgsGui::CustomRendererManager (the vtable +0x1C dispatch)
+#include "GameShared/GameClasses/Core/CgsID.h"                                   // CgsIDCompress (szType -> component CgsID)
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiGeometryObjects.h"    // CgsResource::GuiGeometryFile / GuiGeometryMesh
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // the 20-byte UV vertex
 
 #include "SDKs/EATech/Apt/AptInit.h"                                            // Apt bring-up entry points (InitializeApt callees)
 #include "SDKs/EATech/include/Apt/AptTarget.h"                                  // AptCreateTargetInstance / AptChangeTargetInstance
@@ -17,7 +22,8 @@
 #include "SDKs/EATech/include/Apt/AptConstFile.h"                               // AptConstFile (the resolved const-file pointer type)
 #include "SDKs/EATech/include/Apt/AptGC.h"                                      // AptPartialGarbageCollection / AptFlushInputQueue
 
-#include <cstring>   // memset (zero-install the gAptFuncs slots)
+#include <cstring>   // memset (zero-install the gAptFuncs slots), strstr (ControlRender)
+#include <cstdlib>   // atoi (ControlRender's "_index=" parse)
 #include <cstdint>   // uintptr_t / uint64_t (x64 header-field resolution)
 #include <cstdarg>   // va_list (AptCallbackDebug::Print)
 #include <cstdio>    // vsnprintf (AptCallbackDebug::Print)
@@ -171,6 +177,13 @@ namespace CgsGui
         gAptFuncs.pfnPushRenderFlags     = &AptCallbackRenderFlags::Push;
         gAptFuncs.pfnPopRenderFlags      = &AptCallbackRenderFlags::Pop;
 
+        // ---- the CUSTOM-CONTROL render slot (2026-08-16) ------------------------------
+        // ⭐ Without this the GUI custom-renderer layer is unreachable no matter what else
+        // is mounted: the Apt engine calls gAptFuncs.pfnCustomControlRender and nothing
+        // else ever reads AptRenderHandler::mpCustomRendererManager. It was previously
+        // FLAG'd in the "not installed" list below.
+        gAptFuncs.pfnCustomControlRender = &AptCallbackCustom::ControlRender;
+
         // Dynamic text render-data slots live beside the host render table, but
         // AptRenderItemDynamicText reaches them directly rather than through gAptFuncs.
         gpfnAptDrawTextRenderData    = &DrawTextRenderData;
@@ -201,7 +214,8 @@ namespace CgsGui
         //   Debug       (pfnAssertFail -- its host body is not in the ARTIST export set)
         //   File        (pfnLoadAnimation / pfnFreeConstantTable)
         //   Variable    (pfnLoadVariables)
-        //   Custom      (pfnCustomControlRender / pfnCustomControlUpdate / the Zid family)
+        //   Custom      (pfnCustomControlUpdate / the Zid family -- pfnCustomControlRender
+        //                IS installed now, see above)
         //   Deprecated  (pfnUninitializedVarAccess / pfnCustomSavedInputHandler /
         //                pfnPlaySavedInputsDone / pfnHandleZombieState)
         // are NOT installed here: those hosts are not reconstructed yet (several depend on the
@@ -733,6 +747,175 @@ namespace CgsGui
         CgsLanguage::LanguageManager* lpLanguage = lpRenderHandler->GetLanguageManager();
         CGS_ASSERT(lpLanguage != 0, "Invalid language manager in CgsAptString::Prepare");
         return lpLanguage;
+    }
+
+    // =====================================================================================
+    // AptCallbackCustom::ControlRender -- X360 0x8285BFA0
+    //
+    // ⭐ THE ONE READER of AptRenderHandler::mpCustomRendererManager. Installed into
+    // gAptFuncs.pfnCustomControlRender by ConstructApt below; called by the Apt engine
+    // (AptRenderItemCustomControl::Render @0x82AEF8F8, `dword_8324E88C(...)`) whenever a
+    // movie draws a custom control.
+    //
+    // Faithful body (asserts are the console's own strings + line numbers):
+    //   v5  = off_8305A6C8;              ; AptAuxPointer::mpAptAuxInst
+    //   v12 = v5 + 1056;                 ; &AptAux->mRenderHandler (AptAux + 0x420)
+    //   assert(*(v12 + 45));             ; dword 45 == byte +0xB4 == mpCustomRendererManager
+    //   v17 = CgsIDCompress(a1);         ; a1 == szType, e.g. "PlayerImage"
+    //   v18 = strstr(a4, "_index");      ; a4 == the property string
+    //   if (v18) v9 = atoi(v18 + 7);     ; "_index=" is 7 chars
+    //   result = (*(**(v12+45) + 28))(*(v12+45), v17, v9, v34, *(v12 + 27147));
+    //                                    ; manager vtable +0x1C == GetComponentTexture,
+    //                                    ; v34 is the s32 shader-program OUT slot,
+    //                                    ; dword 27147 == byte +108588 == mpImRenderers
+    //   if (result) {
+    //       for each mesh: *(mesh + 12) = result;          ; bind the substituted texture
+    //       for each mesh: assert(vertexCount == 6); write the quad UVs
+    //       AptRenderHandler::Render(v12, a3, v34[0]);     ; draw with the chosen shader
+    //   }
+    //
+    // ⚠️ x64 LAYOUT NOTE: the console writes the texture at mesh+12 and the UVs at
+    // vertex+12/+16. On the native-8 .apt blob this build consumes, the SAME fields are
+    // GuiGeometryMesh::mpTexture (+0x10) and Basic2dColouredTexturedVertex::mv2Tex0UV
+    // (+0x0C/+0x10 within the 20-byte vertex). They are written BY NAME here; the console
+    // byte offsets are recorded only to show the correspondence.
+    //
+    // ⚠️ The vertex TABLE is read the way every other committed consumer of this data reads
+    // it (AptRenderHandler::Render, AptCallbackRender::DrawRenderingUnit): entry [0] of the
+    // 8-byte-strided mppVerticies table is the contiguous vertex run. The console walked
+    // six 4-byte table entries instead; that is the same six vertices under the console's
+    // 4-byte pointer table, and using the host reading here keeps this callback consistent
+    // with the path that actually draws the result.
+    // =====================================================================================
+    void AptCallbackCustom::ControlRender(char* lpcType, char* /*lpcTarget*/,
+                                          AptAssetRenderingUnit lpRenderingUnit,
+                                          const char* lpcProperties,
+                                          AptMaskRenderOperation /*leMaskOperation*/,
+                                          int /*liLevel*/)
+    {
+        AptAux* lpAptAux = AptAuxPointer::mpAptAuxInst;
+        CGS_ASSERT(lpAptAux != 0, "Invalid pointer to AptAux in AptCallbackCustom::ControlRender");
+        if (lpAptAux == 0)
+            return;
+
+        AptRenderHandler* lpRenderHandler = &lpAptAux->mRenderHandler;
+        CGS_ASSERT(lpRenderHandler != 0, "Invalid render handler in AptCallbackCustom::ControlRender");
+
+        CGS_ASSERT(lpRenderingUnit != 0, "Invalid geometry in AptCallbackCustom::ControlRender");
+        if (lpRenderingUnit == 0)
+            return;
+
+        CustomRendererManager* lpManager = lpRenderHandler->GetCustomRendererManager();
+        CGS_ASSERT(lpManager != 0,
+                   "Rendering a custom component when no custom render manager set up");
+        if (lpManager == 0)
+            return;
+
+        // The control's authored `_type` string IS the component's CgsID.
+        // (Control: CgsIDCompress("PlayerImage") == 0xA6864CCE2CE23B68, and
+        // BrnGui::NetworkPlayerImageRenderer::GetID @0x82445CA8 returns that same constant
+        // -- IDA prints its low half, 753023848.)
+        const CgsID lComponentID = CgsIDCompress(lpcType);
+
+        // `_index=<n>` inside the property string selects which of the component's textures
+        // to display. Absent => 0. ("_index" is 6 chars; the guest skips 7, i.e. past the '='.)
+        s32 liTextureIndex = 0;
+        if (lpcProperties != 0)
+        {
+            const char* lpcIndex = std::strstr(lpcProperties, "_index");
+            if (lpcIndex != 0)
+                liTextureIndex = static_cast<s32>(std::atoi(lpcIndex + 7));
+        }
+
+        // The component picks the shader program through this out-parameter; the guest
+        // leaves the slot UNINITIALISED and relies on the callee writing it (every
+        // GetRenderOutput override, including the base's refusal, stores through it), but a
+        // null return must not leave a garbage shader index reachable, so seed it.
+        s32 liShaderProgram = 0;
+
+        renderengine::Texture* lpTexture = lpManager->GetComponentTexture(
+            lComponentID, liTextureIndex, &liShaderProgram,
+            reinterpret_cast<CgsGui::ImRendererSet*>(lpRenderHandler->GetImRendererSetRaw()));
+
+        // [custrend] -- capped bring-up trace. This callback had NO reader and NO caller
+        // before 2026-08-16, so "it is wired now" is a claim that needs evidence in the log
+        // rather than an inference from a clean boot. Prints the type string, the resolved
+        // CgsID, the parsed index, and whether a texture came back.
+        {
+            static s32 siCustRendLogs = 0;
+            if (siCustRendLogs < 40)
+            {
+                ++siCustRendLogs;
+                char lacProbe[224];
+                std::snprintf(lacProbe, sizeof(lacProbe),
+                              "[custrend] ControlRender type='%s' id=%016llX index=%d "
+                              "props='%s' -> tex=%p shader=%d\n",
+                              lpcType ? lpcType : "(null)",
+                              static_cast<unsigned long long>(lComponentID),
+                              liTextureIndex,
+                              lpcProperties ? lpcProperties : "(null)",
+                              static_cast<void*>(lpTexture), liShaderProgram);
+                CgsDev::Log::WriteToLog(lacProbe);
+            }
+        }
+
+        // No component, or the component is not renderable -> draw nothing at all. This is
+        // the console behaviour AND the current state of the licence-card photo slot.
+        if (lpTexture == 0)
+            return;
+
+        CgsResource::GuiGeometryFile* lpFile =
+            reinterpret_cast<CgsResource::GuiGeometryFile*>(lpRenderingUnit);
+        const uintptr_t* lpMeshTable =
+            reinterpret_cast<const uintptr_t*>(lpFile->mppGeometryMeshes);
+
+        // Pass 1: bind the substituted texture into every mesh (guest `*(v23 + 12) = v20`).
+        for (u32 luMesh = 0; luMesh < lpFile->muNumberOfMeshes; ++luMesh)
+        {
+            CgsResource::GuiGeometryMesh* lpMesh =
+                reinterpret_cast<CgsResource::GuiGeometryMesh*>(lpMeshTable[luMesh]);
+            CGS_ASSERT(lpMesh != 0, "Invalid gui Mesh in AptCallbackCustom::ControlRender");
+            if (lpMesh == 0)
+                continue;
+            lpMesh->mpTexture = reinterpret_cast<uintptr_t>(lpTexture);
+        }
+
+        // Pass 2: stamp the standard full-quad UVs. The guest writes exactly these six
+        // (u,v) pairs, in this order, and asserts a 6-vertex mesh first.
+        static const f32 KAF_QUAD_UV[6][2] =
+        {
+            { 0.0f, 1.0f }, { 0.0f, 0.0f }, { 1.0f, 0.0f },
+            { 1.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f }
+        };
+
+        for (u32 luMesh = 0; luMesh < lpFile->muNumberOfMeshes; ++luMesh)
+        {
+            CgsResource::GuiGeometryMesh* lpMesh =
+                reinterpret_cast<CgsResource::GuiGeometryMesh*>(lpMeshTable[luMesh]);
+            if (lpMesh == 0)
+                continue;
+
+            CGS_ASSERT(lpMesh->muNumberOfVerticies == 6,
+                       "Flash custom component geometry without exactly 6 vertices");
+            if (lpMesh->muNumberOfVerticies != 6)
+                continue;
+
+            const uintptr_t* lppVertexTable =
+                reinterpret_cast<const uintptr_t*>(lpMesh->mppVerticies);
+            CgsGraphics::Basic2dColouredTexturedVertex* lpVertices =
+                reinterpret_cast<CgsGraphics::Basic2dColouredTexturedVertex*>(lppVertexTable[0]);
+            if (lpVertices == 0)
+                continue;
+
+            for (s32 liVert = 0; liVert < 6; ++liVert)
+            {
+                lpVertices[liVert].mv2Tex0UV.x = KAF_QUAD_UV[liVert][0];
+                lpVertices[liVert].mv2Tex0UV.y = KAF_QUAD_UV[liVert][1];
+            }
+        }
+
+        // Draw the control through the ordinary shape path with the component's shader.
+        lpRenderHandler->Render(lpFile, liShaderProgram);
     }
 }
 

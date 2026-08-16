@@ -328,9 +328,48 @@
     int  AptCIH_snGeneralisedProcessTreeDepth = 0;   // nTreeDepth (boot 0)
 
     // AptCIH::ProcessCustomControls -- the per-frame custom-control refresh pass the
-    // AptUpdate slot install (dword_8324E420) targets. Its X360 body has no
-    // per-address export in the dump set; returns false (nothing refreshed) until
-    // it is exported + reconstructed.
+    // AptUpdate slot install (dword_8324E420) targets.
+    //
+    // ⚠️⚠️ THE BANNER THAT USED TO BE HERE WAS WRONG. It said "its X360 body has no
+    // per-address export in the dump set". It has one: **AptCIH::ProcessCustomControls
+    // @0x82B07788**, with complete pseudocode, assembly and xrefs. (Checked 2026-08-16
+    // while chasing why the mounted GUI custom-renderer layer was never being called.)
+    //
+    // ⛔ IT IS STILL A STUB, AND THAT IS NOW THE ONE REMAINING BREAK IN THE CUSTOM-CONTROL
+    // CHAIN. Everything downstream of it is live as of 2026-08-16:
+    //     movie types the clip `_type='PlayerImage' _index=1`
+    //       -> [THIS FUNCTION classifies the clip + fills the render item's Type/Target/
+    //           Properties strings]                                  <-- returns false
+    //       -> AptRenderItemCustomControl::Render @0x82AEF8F8         (mounted, real)
+    //       -> gAptFuncs.pfnCustomControlRender                       (installed)
+    //       -> CgsGui::AptCallbackCustom::ControlRender @0x8285BFA0   (reconstructed)
+    //       -> AptRenderHandler::mpCustomRendererManager              (installed + read)
+    //       -> BrnGui::CustomRendererManager::GetComponentTexture     (mounted)
+    //       -> NetworkPlayerImageRenderer::GetRenderOutput            (mounted)
+    // MEASURED: with this returning false the boot log records ZERO
+    // `[custrend] ControlRender` lines. Nothing else in the chain is missing.
+    //
+    // What a reconstruction needs beyond the pseudocode (recorded so the next pass does
+    // not re-derive it):
+    //   * the AptCharacterInst +0x14 classification bitfield -- bits 4..5 hold
+    //     {0 = unclassified, 1 = string-style custom control, 2 = NOT a custom control,
+    //      3 = zid-style}; the pass caches its verdict there and only re-derives it when
+    //     the field is 0.
+    //   * the two native-hash keys it looks the clip's variables up by: unk_8324E5C8 (the
+    //     `_type` key -- the same variable the licence movie's PLACE tag sets) and the
+    //     literal "_CustomControlType".
+    //   * AptActionInterpreter::getVariable(&dword_8324E760, node, 0, &unk_8324E5C0, 1,1,0)
+    //     for the TARGET string.
+    //   * AptValue::urlEncodeCustomRender @0x82AF9410 for the PROPERTIES blob -- that is
+    //     what produces the "_index=1" text AptCallbackCustom::ControlRender parses.
+    //   * gAptFuncs.pfnCustomControlUpdate (dword_8324E890) gates the properties refresh;
+    //     a null slot means "always refresh", so it does NOT have to be installed first.
+    //   * the zid arm additionally needs gbAptCustomControlRenderEnabled (byte_82F733F6),
+    //     which this build leaves false -- so only the string arm matters.
+    // ⚠️ It runs on EVERY display-list node EVERY frame and can promote a live sprite
+    // render item to a custom control (AptRenderItemCustomControl::CopyFromSprite +
+    // AptCharacterInst::SetRenderItem), so a wrong classification breaks the whole GUI,
+    // not just custom controls. Reconstruct it with a control, not by eye.
     bool AptCIH::ProcessCustomControls() { return false; }
 
     // AptGC::CleanUnreachable -- the partial sweep AptUpdate runs on the

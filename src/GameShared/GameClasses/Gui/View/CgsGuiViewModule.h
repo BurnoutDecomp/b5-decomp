@@ -28,7 +28,7 @@
 //   SetClearScreenAlpha()     X360 0x82847500
 //   SetCustomRendererManager()X360 0x824EBBF8
 
-namespace CgsGui { class CustomRendererManager; }
+#include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h"  // CgsGui::CustomRendererManager (the real base; used by value through the wiring calls)
 
 // Pointer-only parameter types for the module lifecycle/IO virtuals below. These are
 // forward-declared (incomplete-type use is sufficient for the declarations, and pulling
@@ -156,7 +156,7 @@ namespace CgsGui
         // asm passes r6 (liArg4) to the third manager call and ignores r5. Kept for
         // call-signature fidelity (Hex-Rays four-arg form == the four guest argregs).
         void SetCustomRendererManager(CustomRendererManager* lpCustomRendererManager,
-                                      int liArg3, int liArg4);
+                                      int liArg3, void* lpReplaySerialiser);
 
         // X360 0x82858988 -- clear the frame to the configured clear-screen colour/alpha
         // before the derived view renders (non-virtual; called first by the BrnGui

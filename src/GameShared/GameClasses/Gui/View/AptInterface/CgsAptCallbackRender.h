@@ -135,4 +135,32 @@ namespace CgsGui
         static void Pop(const char* lpacRenderFlags);    // PS3 0x5BA8A8 (empty)
     };
 
+    // ---------------------------------------------------------------------------------
+    // The Apt CUSTOM-CONTROL callback family (gAptFuncs.pfnCustomControlRender & friends).
+    //
+    // An Apt custom control is a movieclip the movie itself types at author time. The
+    // engine (AptCIH::ProcessCustomControls @0x82B07788 -> AptRenderItemCustomControl::
+    // Render @0x82AEF8F8) hands the host the clip's `_type` / `_target` / property string
+    // and its geometry, and the host decides what to draw there. Burnout uses exactly one
+    // such control on the boot path: B5LicenseRank0's photo slot, authored
+    // `_type='PlayerImage', _index=1`.
+    //
+    // Body lives in CgsAptAux.cpp (the console's own assert strings name that file:
+    // "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptAux.cpp", lines
+    // 990/992/995/1002/1030/1039).
+    // ---------------------------------------------------------------------------------
+    class AptCallbackCustom
+    {
+    public:
+        // X360 0x8285BFA0. Resolve the control's `_type` to a CgsID, pull `_index=` out of
+        // the property string, ask the GUI's custom-renderer manager for that component's
+        // texture, and -- only if one comes back -- bind it into every mesh of the control's
+        // geometry, stamp the standard quad UVs, and draw through AptRenderHandler::Render
+        // with the shader program the component chose.
+        static void ControlRender(char* lpcType, char* lpcTarget,
+                                  AptAssetRenderingUnit lpRenderingUnit,
+                                  const char* lpcProperties,
+                                  AptMaskRenderOperation leMaskOperation, int liLevel);
+    };
+
 }

@@ -56,6 +56,14 @@ template <> void CgsGui::GuiEventQueueBase<4096, 16>::Clear()
 {
     this->CgsModule::VariableEventQueue<4096, 16>::Clear();
 }
+// Destruct: needed since the GUI custom-renderer manager landed --
+// CgsGui::CustomRendererManager::Destruct (@0x828577D8) is literally
+// `VariableEventQueue<4096,16>::Destruct(this + 12)` on its embedded event queue, which is
+// this <4096,16> instantiation. Same thin forwarder as the siblings above.
+template <> void CgsGui::GuiEventQueueBase<4096, 16>::Destruct()
+{
+    this->CgsModule::VariableEventQueue<4096, 16>::Destruct();
+}
 template <> s32 CgsGui::GuiEventQueueBase<4096, 16>::GetFirstEvent(
     const CgsModule::Event** lppEvent, s32* lpiSize) const
 {

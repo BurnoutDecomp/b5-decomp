@@ -25,13 +25,24 @@ namespace BrnGui
     namespace
     {
         // The resource the GuiCache must have loaded before the renderer reports ready
-        // (DWARF: maResourcesToLoad / muNumResourcesToLoad, file-static). The X360 build
-        // watches a single resource tuple; its exact id is the .rdata value the cache key
-        // resolves to (left as the recovered id). FLAG: the watched resource id/type are
-        // the recovered .rdata values (unk_82F2571C / dword_82F25724).
+        // (DWARF: maResourcesToLoad / muNumResourcesToLoad, file-static).
+        //
+        // ⚠️ CORRECTED 2026-08-16 -- both fields were WRONG. They were `{ 0u,
+        // E_GUI_RESOURCETYPE_FSM }`, FLAG'd "the recovered .rdata values", and that left the
+        // renderer WAITING ON resource 0 while FETCHING resource 236 two stages later, i.e.
+        // a tuple that could never make PrepareDefaultTexture correct. The real values were
+        // read out of the unpacked image at the exact addresses the asm loads
+        // (Prepare @0x82451560: `addi r4, r11, unk_82F2571C` / `lwz r5, dword_82F25724`):
+        //     0x82F2571C = 0x000000EC = 236     <- muId   (== KU_DEFAULT_TEXTURE_RESOURCE_ID)
+        //     0x82F25720 = 0x0000000B = 11      <- meType (E_GUI_RESOURCETYPE_TEXTURE)
+        //     0x82F25724 = 0x00000001 = 1       <- muNumResourcesToLoad
+        // Type 11 is the GUITEXTURES.BIN family ("%s" verbatim), which is exactly where the
+        // asset lives: gGuiResourceIdentifier[236] == "Headtif", and
+        // CgsResource::ID::HashString("headtif") == 0x2E0CA9B3 is resource [04] of the
+        // shipped, already-ported (bnd2 platform 4) GUITEXTURES.BIN.
         const CgsGui::sResourceTuple maResourcesToLoad[1] =
         {
-            { 0u, CgsGui::E_GUI_RESOURCETYPE_FSM },
+            { 236u, CgsGui::E_GUI_RESOURCETYPE_TEXTURE },
         };
         const u32 muNumResourcesToLoad = 1u;
 
