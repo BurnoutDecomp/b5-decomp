@@ -383,6 +383,26 @@ namespace
     // Set by WorldMaterialSamplers_Bind for the current technique, consumed by
     // WorldFallbackShader_SelectForMesh once the mesh declaration is known.
     bool                    sbMaterialTextureBound = false;
+    // ⭐ THE SAME QUESTION, ASKED ON THE PATH THAT ACTUALLY RUNS (2026-08-16, wheels leg 1).
+    //
+    // sbMaterialTextureBound above is written in exactly ONE function -- WorldMaterialSamplers_Bind
+    // -- and that function is called from exactly ONE place: the `if (!lbRealBound)` early-return
+    // arm of Device::SetMeshTechniquePC. On a build whose SHADERS.BNDL resolves, the real programs
+    // DO bind, so that arm never executes and the flag is never set. Every mesh that then has to
+    // drop back to the fallback pair (on this build: the console-instanced WHEEL renderable, and
+    // only it) was told "this material has no texture" and drew with the FLAT pair -- pale
+    // blue-grey, no tyre, no rim. MEASURED: the wtex one-shot never appears in a full boot log
+    // while `[WorldSamplers] technique sampler tally: bound=4096 ... of 4096` says every single
+    // technique sampler resolved to a live D3D texture. The texture was on the device; the
+    // consumer was told it was not.
+    //
+    // So the REAL sampler path (Device::BindTechniqueSamplers -> WorldShader_BindTextureUnit)
+    // records what it bound here, and the fallback selector reads it. Reset per technique change,
+    // in both of SetMeshTechniquePC's program-bind outcomes (WorldPrograms_Bind and
+    // WorldShader_ClearRealPrograms), so a technique that binds no sampler at all -- the z-only
+    // walk -- cannot inherit the previous technique's texture.
+    IDirect3DBaseTexture9*  spTechniqueUnit0Texture  = nullptr;  // what the technique put on s0
+    IDirect3DBaseTexture9*  spTechniqueFirstTexture  = nullptr;  // the first it bound anywhere
     // Set by WorldVd32_GetDeclaration for the mesh currently being bound.
     bool                    sbLastDeclHasTexcoord0 = false;
     u64                     suLastDeclUsageMask = 0;
@@ -735,6 +755,10 @@ namespace renderengine
     {
         IDirect3DDevice9* lpDevice = Dev();
         sbRealProgramsBound = false;
+        // Per-technique sampler record: see the two pointers' banner. Reset HERE, before
+        // SetMeshTechniquePC's own BindTechniqueSamplers tail fills it in.
+        spTechniqueUnit0Texture = nullptr;
+        spTechniqueFirstTexture = nullptr;
         if (lpDevice == nullptr || lpVertexPayload == nullptr || lpPixelPayload == nullptr)
             return false;
         if (!LooksLikeD3D9Bytecode(lpVertexPayload, false) || !LooksLikeD3D9Bytecode(lpPixelPayload, true))
@@ -771,6 +795,9 @@ namespace renderengine
         spRealVs            = nullptr;
         spRealPs            = nullptr;
         suRealVsInputMask   = 0;
+        // Per-technique sampler record: see the two pointers' banner.
+        spTechniqueUnit0Texture = nullptr;
+        spTechniqueFirstTexture = nullptr;
     }
 
     bool WorldShader_RealProgramsBound()
@@ -827,6 +854,12 @@ namespace renderengine
         lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
         lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
         lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+        // Record it for the fallback selector (see the two pointers' banner). Costs two
+        // predictable stores on a path that has just done five device calls.
+        if (luUnit == 0u)
+            spTechniqueUnit0Texture = lpD3DTexture;
+        if (spTechniqueFirstTexture == nullptr)
+            spTechniqueFirstTexture = lpD3DTexture;
         return true;
     }
 
@@ -1269,11 +1302,37 @@ namespace renderengine
         if (!CompileFallbackShaders(lpDevice))
             return;
 
-        const bool lbTextured = sbMaterialTextureBound && sbLastDeclHasTexcoord0
+        // ⭐ The diffuse for THIS mesh, from whichever of the two sampler paths actually ran.
+        // spTechniqueUnit0Texture / spTechniqueFirstTexture come from the REAL path
+        // (Device::BindTechniqueSamplers -> WorldShader_BindTextureUnit); sbMaterialTextureBound
+        // comes from the bring-up path, which already mirrors its first texture onto s0 itself.
+        // See the two pointers' banner for why asking only the second was the wheels defect.
+        IDirect3DBaseTexture9* const lpTechniqueTexture =
+            (spTechniqueUnit0Texture != nullptr) ? spTechniqueUnit0Texture
+                                                 : spTechniqueFirstTexture;
+        const bool lbHaveDiffuse = sbMaterialTextureBound || lpTechniqueTexture != nullptr;
+
+        const bool lbTextured = lbHaveDiffuse && sbLastDeclHasTexcoord0
                              && spFallbackTexVs != nullptr && spFallbackTexPs != nullptr;
         if (lbTextured)
         {
             LogOnce("wtex", "[WorldFallback] TEXTURED world draws live (material samplers bound)\n");
+            // The fallback pixel shader has a single sampler, s0. When the technique's own
+            // sampler list DID name unit 0 the right texture is already there and nothing is
+            // touched; when it did not, mirror the technique's first texture onto s0.
+            // ⭐ Why that mirror cannot break a real draw: BindTechniqueSamplers binds only the
+            // units the TECHNIQUE names, so "no unit 0 bound" means this technique's programs do
+            // not read s0 -- there is nothing there to clobber. A different technique re-binds
+            // its own samplers on the next technique change.
+            if (spTechniqueUnit0Texture == nullptr && lpTechniqueTexture != nullptr)
+            {
+                lpDevice->SetTexture(0, lpTechniqueTexture);
+                lpDevice->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+                lpDevice->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+                lpDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+                lpDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+                lpDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+            }
             lpDevice->SetVertexShader(spFallbackTexVs);
             static const bool sbUvDebug = (::GetEnvironmentVariableA("BRN_WORLD_UVDEBUG", nullptr, 0) != 0);
             lpDevice->SetPixelShader((sbUvDebug && spFallbackUvDebugPs != nullptr)
@@ -1283,6 +1342,34 @@ namespace renderengine
         {
             lpDevice->SetVertexShader(spFallbackVs);
             lpDevice->SetPixelShader(spFallbackPs);
+        }
+
+        // ---- [DIAG wheels leg 1] the FORCED (console-instanced) selection, one line per
+        // DISTINCT outcome. ⛔ DELETE-WHEN the wheels are confirmed textured on a booted run.
+        // Latched on the outcome BITS, never on a "printed once" bool: the wheel renderable has
+        // seven meshes with seven materials, and a run where one of them has no UVs and the rest
+        // do must not be reported as "the wheels are textured".
+        if (lbForceFallback)
+        {
+            const u32 luOutcome = (lbTextured ? 1u : 0u)
+                                | (sbLastDeclHasTexcoord0 ? 2u : 0u)
+                                | (lbHaveDiffuse ? 4u : 0u)
+                                | (spTechniqueUnit0Texture != nullptr ? 8u : 0u)
+                                | (sbMaterialTextureBound ? 16u : 0u);
+            static u32 suSeenForcedOutcomes = 0u;
+            if ((suSeenForcedOutcomes & (1u << luOutcome)) == 0u)
+            {
+                suSeenForcedOutcomes |= (1u << luOutcome);
+                char lacMsg[224];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[wheel-shade] forced-fallback mesh: textured=%d declUv0=%d haveDiffuse=%d"
+                    " techUnit0=%d techFirst=%d bringUpFlag=%d stride=%u declMask=0x%llX\n",
+                    (int)lbTextured, (int)sbLastDeclHasTexcoord0, (int)lbHaveDiffuse,
+                    spTechniqueUnit0Texture != nullptr, spTechniqueFirstTexture != nullptr,
+                    (int)sbMaterialTextureBound, (unsigned)suLastDeclSourceStride,
+                    (unsigned long long)suLastDeclUsageMask);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
         }
     }
 
