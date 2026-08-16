@@ -1364,7 +1364,11 @@ namespace BrnDirector
                                                       s32 liPlayerCarIndex)
     {
         Camera::BehaviourSharedInfo lSharedInfo = Camera::BehaviourSharedInfo();
-        ICE::CameraSpaceHandler     lCameraSpaces;
+        // ⭐ VALUE-INITIALISED, deliberately (2026-08-16, camcrash2). See the identical note
+        // on the PostScene twin below: BuildBehaviourSharedInfo publishes &lCameraSpaces
+        // UNCONDITIONALLY but only Constructs it behind a guard, so a default-initialised
+        // object hands every ICE consumer 528 bytes of the PREVIOUS frame's stack.
+        ICE::CameraSpaceHandler     lCameraSpaces = ICE::CameraSpaceHandler();
         BuildBehaviourSharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lCameraSpaces);
 
         // ⚠️ FLAG (see the BuildBehaviourSharedInfo banner): the two incomplete-type
@@ -1387,7 +1391,24 @@ namespace BrnDirector
                                                        s32 liPlayerCarIndex)
     {
         Camera::BehaviourSharedInfo lSharedInfo = Camera::BehaviourSharedInfo();
-        ICE::CameraSpaceHandler     lCameraSpaces;
+        // ⭐⭐ VALUE-INITIALISED, deliberately (2026-08-16, camcrash2 wave). MEASURED, not
+        // inferred: `ICE::CameraSpaceHandler` has `= default` special members, so a plain
+        // `ICE::CameraSpaceHandler lCameraSpaces;` is 528 bytes of RAW STACK -- and
+        // BuildBehaviourSharedInfo publishes its ADDRESS into mpCameraSpaceHandler
+        // UNCONDITIONALLY while calling Construct() only inside the
+        // `mAllVehicleData.GetRaceCars() != 0` guard. On any frame that guard is shut, every
+        // ICE consumer (BehaviourIceAnim copy-constructs one per frame; ICEAuthorSpaceOps and
+        // KeyAnimController read through it) sees the PREVIOUS frame's stack image of this
+        // same local -- a fully-formed-looking handler whose mpGamePlayCam back-pointer at
+        // +0x200 is stale. That is the "valid pointer, invalid object" class, and it is
+        // COMPILER-LAYOUT DEPENDENT (a stack object), which is exactly the signature of the
+        // public-build AV in GetTransformToWorld's eICE_GAMEPLAY_SPACE arm: a 4-byte-shifted
+        // read there lands on mHeading2ToWorld.wAxis.w at +0x1FC -- MEASURED as 0x78160E11,
+        // the don't-care w lane every TRIGGERS.DAT spawn position carries into the car's
+        // world transform -- and the chain then faults at +0x10.
+        // Zeroing costs one 528-byte stack clear per frame and makes the unconstructed case
+        // DETERMINISTIC (mpGamePlayCam == 0), where the arm's own assert can see it.
+        ICE::CameraSpaceHandler     lCameraSpaces = ICE::CameraSpaceHandler();
         BuildBehaviourSharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lCameraSpaces);
 
         static u8 saOpaqueControllerInfo[64] = { 0 };

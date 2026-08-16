@@ -186,6 +186,34 @@ const Matrix44Affine CameraSpaceHandler::GetTransformToWorld(eICESpace leSpace) 
         // on the returned pointer is Camera::GetTransform's own member offset, i.e. the
         // console spells this as two chained accessors, not one raw address.
         CGS_ASSERT(mpGamePlayCam != 0, "mpGamePlayCam != NULL");
+        // ⭐⭐ PC GUARD (2026-08-16, camcrash2) -- DELIBERATE DEVIATION, and the reason is
+        // measured, not theorised. This arm is the ONLY place in the camera path whose final
+        // read is at +0x10 (the console's own `addi r3, r3, 0x10` noted above), and the public
+        // build's EXCEPTION_ACCESS_VIOLATION is exactly `[rax+0x10]` with
+        // rax == 0x0000000078160E11. That constant is NOT an id and NOT uninitialised stack:
+        // it is the DON'T-CARE `w` lane of every Vector3 position in TRIGGERS.DAT (identical
+        // in the X360 retail data -- verified after zlib-decompressing it), which
+        // BrnMathUtils::BuildTransform stores VERBATIM (the console's own 16-byte stvx128)
+        // into the spawned car's mTransform.wAxis. From there it tiles the camera's whole
+        // working set: a BRN_CAMSCAN sweep counted 182 live copies at the first gameplay
+        // update, including this object's own +0x03C / +0x07C / +0x1FC -- and +0x1FC is the
+        // four bytes IMMEDIATELY BEFORE mpGamePlayCam at +0x200.
+        // ⚠️ The null assert above CANNOT catch that: a non-null garbage pointer defeats a
+        // null check. So test the pointer as a POINTER. A real handle is 8-byte aligned and
+        // lives in the host allocator's range; 0x78160E11 is ODD, so one alignment test is
+        // already decisive, and the range test covers the rest of the w-lane family.
+        // ⛔ Do NOT "fix" this by forcing wAxis.w to 1.0f at the source: 0x3F800000 is a
+        // 16-byte-aligned low address, i.e. that would turn a loud fault into a silent
+        // wild read. The value must stay junk; the READ is what must be guarded.
+        {
+            const uintptr_t luHandle = reinterpret_cast<uintptr_t>(mpGamePlayCam);
+            if (luHandle == 0 || (luHandle & 7u) != 0 || luHandle < 0x10000u)
+            {
+                CGS_ASSERT(false, "mpGamePlayCam is not a pointer");
+                lMatrix.SetIdentity();
+                break;
+            }
+        }
         lMatrix = mpGamePlayCam->GetProducedCamera().GetTransform();
         break;
 
