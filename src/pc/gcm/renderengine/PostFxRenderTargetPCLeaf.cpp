@@ -273,8 +273,254 @@ namespace
         { static_cast<u32>(MAKEFOURCC('D', 'F', '1', '6')), false, true }
     };
 
+    // =====================================================================================
+    // THE MULTISAMPLE (MSAA) SURFACE PATH  [rung 8, 2026-08-16]
+    //
+    // WHAT THE CONSOLE DOES. The anti-alias scene target is created at MULTISAMPLE FORMAT 1:
+    // BrnRendererMemory::CreateAntiAliasBuffer @0x823F6B40 selects one of two predicated-tiling
+    // records and takes the format straight out of it (BrnAntiAliasTiling.h --
+    // KMSAA_TILING_PLAN.mn32MultiSampleFormat == 1, KNO_MSAA_TILING_PLAN's == 0), and
+    // CgsRenderTarget::Construct forwards that one word into EVERY Target::Parameters block --
+    // the colour sections at CgsRenderTarget.cpp:174 and the depth block at :220, both from the
+    // single CgsRenderTarget::mn32MultiSampleFormat, so colour and depth cannot disagree.
+    // Until this wave the PC leaf ignored the word entirely and hard-wired D3DMULTISAMPLE_NONE.
+    //
+    // THE FORMAT -> SAMPLE-COUNT MAP IS RECOVERED, NOT ASSUMED. CreateAntiAliasBuffer's EDRAM
+    // arithmetic is the attestation: `format >= 1` doubles the surface's tile HEIGHT and
+    // `format == 2` doubles its WIDTH as well (cmpwi 1 / blt @0x823F6C20, cmpwi 2 / bne
+    // @0x823F6C2C; reproduced at BrnRendererMemory.cpp:667-676). One doubling of the footprint
+    // is 2 samples, two doublings is 4. So 0 -> 1 sample (none), 1 -> 2, 2 -> 4. No other value
+    // appears in the image (the pool writes 0 everywhere except the anti-alias buffer's plan and
+    // the env-map buffer's KI_ENV_MAP_MULTISAMPLE_FORMAT == 2).
+    //
+    // WHAT D3D9 NEEDS THAT THE CONSOLE DID NOT.
+    //   * A MULTISAMPLED COLOUR SECTION IS A SURFACE, NOT A TEXTURE. IDirect3DDevice9::
+    //     CreateTexture takes no multisample type at all; a multisampled render target must come
+    //     from CreateRenderTarget and can never be bound to a sampler. That costs this target
+    //     nothing, because its pixels reach the rest of the frame through the RESOLVE, whose
+    //     destination is the DOWN-SAMPLE buffer's texture -- BrnRendererModule::ResolveMSAA hands
+    //     `GetDownSampleBuffer()->GetTexture(0)` to D3DDevice_Resolve (BrnRendererModule.cpp:2238
+    //     tiled / :2278 untiled). So a multisampled target keeps NO colour texture, GetTexture(0)
+    //     returns null for it, the colour TextureState is not built (its gate already tests the
+    //     texture), and the [postfx-rt] line spells `colourTexture=MSAA` rather than `NULL` so the
+    //     log does not read as a creation failure.
+    //     NOTHING READS THE ANTI-ALIAS TARGET'S TEXTURE -- verified, not assumed:
+    //       $ grep -rn "GetAntiAliasBuffer" b5-decomp/src --include=*.cpp --include=*.h
+    //       GameSource/Graphics/BrnRendererMemory.cpp:543:    CgsRenderTarget* const lpAntiAliasBuffer  = GetAntiAliasBuffer();
+    //       GameSource/Graphics/BrnRendererMemory.h:105:    CgsRenderTarget* GetAntiAliasBuffer()  { return mapRenderTarget[E_RENDER_TARGET_ANTI_ALIAS]; }
+    //       GameSource/Graphics/BrnRendererModule.cpp:670:        gpAntiAliasTarget = lrRendererMemory.GetAntiAliasBuffer();
+    //       GameSource/Graphics/BrnRendererModule.cpp:2065:        ShadowedSetRenderTargetState(mAllocatedRenderTargets.GetAntiAliasBuffer());
+    //       GameSource/Graphics/BrnRendererModule.cpp:2102:        ShadowedSetRenderTargetState(mAllocatedRenderTargets.GetAntiAliasBuffer());
+    //     (plus three comment lines). The two live uses are surface BINDS; :543 is the pool's own
+    //     one-shot creation clear, which goes through the section state, not a texture; :670/:685
+    //     is a readiness test on GetRenderTarget() != null.
+    //   * THE DEPTH-STENCIL MUST MATCH THE COLOUR'S SAMPLE COUNT **AND QUALITY** or
+    //     SetDepthStencilSurface fails -- and a multisampled depth cannot be a texture either. So
+    //     it is a plain CreateDepthStencilSurface at the same type/quality. The anti-alias target
+    //     does not ask for a sampleable depth anyway (CreateAntiAliasBuffer:
+    //     `SetUseDepthStencilAsTexture(false)`); the target that does is the DOWN-SAMPLE buffer,
+    //     which the console leaves single-sampled and whose rung-6 INTZ ladder is untouched here.
+    //     The bridge between the two is the RESZ depth resolve in XenonD3D9Shims.cpp.
+    //   * EVERY COUNT IS CheckDeviceMultiSampleType-GATED, for the colour format AND for a depth
+    //     format, and a count the device refuses steps DOWN one at a time to 1, reporting
+    //     `msaa=<requested> unsupported -> <used>`. QUALITY LEVEL 0: the D3D9 contract is
+    //     `Quality < pQualityLevels`, 0 is the level every part that supports a type exposes, and
+    //     reaching for a vendor quality (CSAA / EQAA) would be a PC choice with no console
+    //     counterpart.
+    //
+    // THE PC KNOB, AND WHY IT IS NOT A NEW GLOBAL. `renderengine::gAntiAliasing` ALREADY EXISTS
+    // and is ALREADY the PC display setting for exactly this -- declared device.h:16, defined
+    // device.cpp:25, seeded 0 by Device::Initialize, read from config.ini by
+    // GameSource/Main/BrnMain.cpp:123 (`GetPrivateProfileIntA("Settings", "AntiAliasing", ...)`,
+    // clamped 0..16, TUB's own clamp) and written back by SaveConfig at :145. Minting a second
+    // `gMultisampleOverride` beside it would be the split-brain this project has paid for before
+    // (AGENTS.md "STATE OWNERSHIP"), so THE KNOB IS THAT WORD:
+    //     0        -> use the console's own multisample format (the default, and the shipped
+    //                 behaviour: the anti-alias target's plan says format 1 == 2 samples)
+    //     1        -> force MSAA off
+    //     2 / 4 / 8-> force that sample count
+    // It NEVER turns MSAA on for a target the console leaves single-sampled: an override applied
+    // to a console format of 0 is IGNORED, because that would be a silent change to a working
+    // path rather than a knob.
+    // =====================================================================================
+    const u32 KU_MULTISAMPLE_MAX_SAMPLES = 8u;
+
+    // Xenos multisample format -> sample count. See the banner for the attestation.
+    u32 MultisampleSampleCountForConsoleFormat(u32 luConsoleFormat)
+    {
+        switch (luConsoleFormat)
+        {
+        case 0u: return 1u;
+        case 1u: return 2u;
+        case 2u: return 4u;
+        default: break;
+        }
+        // There is no fourth value in the image, and CgsRenderTarget::mn32MultiSampleFormat is NOT
+        // seeded by its constructor (CgsRenderTarget.cpp:123 writes only mu8NumSections; every one
+        // of the eleven pool creators writes the format itself). So an unexpected value means an
+        // uninitialised target reached here, not a format this leaf should honour -- refuse it, and
+        // say so once rather than silently multisampling a target nobody asked to multisample.
+        static bool sbReportedBadFormat = false;
+        if (!sbReportedBadFormat)
+        {
+            sbReportedBadFormat = true;
+            char lacMessage[192];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                          "[postfx-rt] multisample format %u is not one of the console's 0/1/2 --"
+                          " the target is treated as single-sampled\n",
+                          static_cast<unsigned>(luConsoleFormat));
+            CgsDev::Log::WriteToLog(lacMessage);
+        }
+        return 1u;
+    }
+
+    // THE PC KNOB (see the banner). Returns 0 for "use the console's format".
+    u32 MultisampleOverrideSampleCount()
+    {
+        const s32 lnAntiAliasing = renderengine::gAntiAliasing;
+        if (lnAntiAliasing <= 0)
+            return 0u;
+        u32 luSamples = static_cast<u32>(lnAntiAliasing);
+        if (luSamples > KU_MULTISAMPLE_MAX_SAMPLES)
+            luSamples = KU_MULTISAMPLE_MAX_SAMPLES;
+        return luSamples;
+    }
+
+    struct MultisampleChoice
+    {
+        D3DMULTISAMPLE_TYPE meType;
+        DWORD               muQuality;
+        u32                 muSamples;        // 1 == D3DMULTISAMPLE_NONE
+        D3DFORMAT           meDepthFormat;    // the DS format that supports muSamples
+    };
+
+    // The MSAA depth-stencil ladder. D24S8 FIRST, because that is what the rest of this build
+    // already assumes it is looking at: the device's own auto depth-stencil is D24S8
+    // (device.cpp:97), the RESZ resolve's destination is an INTZ texture and INTZ *is* a D24S8
+    // layout, and XenonD3D9Shims.cpp's TilingDepthFormatHasStencil only lets the frame's clear ask
+    // for D3DCLEAR_STENCIL on a format that carries stencil (a stencil clear against a
+    // stencil-less surface makes D3D9's Clear fail ENTIRELY, taking the depth clear with it).
+    // D24X8 / D16 are honest fallbacks for a part that multisamples neither.
+    const D3DFORMAT KAE_MSAA_DEPTH_FORMATS[3] = { D3DFMT_D24S8, D3DFMT_D24X8, D3DFMT_D16 };
+
+    // Pick the highest supported sample count <= luRequestedSamples that BOTH the colour format
+    // and one of the depth formats accept. Steps down by one so a request the device refuses lands
+    // on the next lower count rather than on nothing.
+    MultisampleChoice ChooseMultisampleType(u32 luRequestedSamples, D3DFORMAT leColourFormat)
+    {
+        MultisampleChoice lChoice = { D3DMULTISAMPLE_NONE, 0u, 1u, D3DFMT_D24S8 };
+
+        IDirect3DDevice9* const lpDevice = Dev();
+        if (lpDevice == nullptr || luRequestedSamples <= 1u)
+            return lChoice;
+
+        D3DDEVICE_CREATION_PARAMETERS lCreation;
+        std::memset(&lCreation, 0, sizeof(lCreation));
+        lCreation.AdapterOrdinal = D3DADAPTER_DEFAULT;
+        lCreation.DeviceType     = D3DDEVTYPE_HAL;
+        lpDevice->GetCreationParameters(&lCreation);
+
+        // WINDOWED IS READ, NOT ASSUMED: CheckDeviceMultiSampleType answers differently for the two
+        // and this build forces windowed today (device.cpp:52 `gFullscreen = false`) without being
+        // required to. The swap chain knows what the device was actually created with.
+        BOOL lbWindowed = TRUE;
+        IDirect3DSwapChain9* lpSwapChain = nullptr;
+        if (SUCCEEDED(lpDevice->GetSwapChain(0u, &lpSwapChain)) && lpSwapChain != nullptr)
+        {
+            D3DPRESENT_PARAMETERS lPresent;
+            std::memset(&lPresent, 0, sizeof(lPresent));
+            if (SUCCEEDED(lpSwapChain->GetPresentParameters(&lPresent)))
+                lbWindowed = lPresent.Windowed;
+            lpSwapChain->Release();                 // GetSwapChain AddRefs
+        }
+
+        IDirect3D9* lpD3D = nullptr;
+        if (FAILED(lpDevice->GetDirect3D(&lpD3D)) || lpD3D == nullptr)
+            return lChoice;
+
+        for (u32 luSamples = luRequestedSamples; luSamples > 1u; --luSamples)
+        {
+            const D3DMULTISAMPLE_TYPE leType = static_cast<D3DMULTISAMPLE_TYPE>(luSamples);
+
+            DWORD luColourQuality = 0u;
+            if (FAILED(lpD3D->CheckDeviceMultiSampleType(lCreation.AdapterOrdinal,
+                                                         lCreation.DeviceType, leColourFormat,
+                                                         lbWindowed, leType, &luColourQuality)))
+            {
+                continue;
+            }
+
+            for (u32 luDepth = 0; luDepth < 3u; ++luDepth)
+            {
+                DWORD luDepthQuality = 0u;
+                if (SUCCEEDED(lpD3D->CheckDeviceMultiSampleType(lCreation.AdapterOrdinal,
+                                                                lCreation.DeviceType,
+                                                                KAE_MSAA_DEPTH_FORMATS[luDepth],
+                                                                lbWindowed, leType,
+                                                                &luDepthQuality)))
+                {
+                    lChoice.meType        = leType;
+                    lChoice.muQuality     = 0u;     // Quality < pQualityLevels; see the banner
+                    lChoice.muSamples     = luSamples;
+                    lChoice.meDepthFormat = KAE_MSAA_DEPTH_FORMATS[luDepth];
+                    lpD3D->Release();
+                    return lChoice;
+                }
+            }
+        }
+
+        lpD3D->Release();
+        return lChoice;
+    }
+
+    // The MULTISAMPLED colour render target. A SURFACE, and deliberately without a texture: the
+    // resolve writes the DOWN-SAMPLE buffer's texture, not this target's (see the banner).
+    // Lockable FALSE -- a lockable multisampled render target is not creatable, and nothing reads
+    // this surface from the CPU (the ImVerts read-back diag in XenonD3D9Shims.cpp now reports
+    // `rt=MSAA(no readback)` instead of pretending it can).
+    IDirect3DSurface9* CreateMultisampledColourSurface(u32 luWidth, u32 luHeight,
+                                                       D3DFORMAT leFormat,
+                                                       const MultisampleChoice& lrChoice)
+    {
+        IDirect3DDevice9* const lpDevice = Dev();
+        if (lpDevice == nullptr)
+            return nullptr;
+
+        IDirect3DSurface9* lpSurface = nullptr;
+        if (FAILED(lpDevice->CreateRenderTarget(luWidth, luHeight, leFormat, lrChoice.meType,
+                                                lrChoice.muQuality, FALSE, &lpSurface, nullptr)))
+        {
+            return nullptr;
+        }
+        return lpSurface;
+    }
+
+    // The MULTISAMPLED depth-stencil surface. Sample type AND quality must equal the colour
+    // target's or the bind fails. Discard FALSE, and that is load-bearing: the RESZ depth resolve
+    // (XenonD3D9Shims.cpp) reads this surface at the END of the frame, and a discardable
+    // depth-stencil's contents are undefined the moment it stops being the bound one.
+    IDirect3DSurface9* CreateMultisampledDepthSurface(u32 luWidth, u32 luHeight,
+                                                      const MultisampleChoice& lrChoice)
+    {
+        IDirect3DDevice9* const lpDevice = Dev();
+        if (lpDevice == nullptr)
+            return nullptr;
+
+        IDirect3DSurface9* lpSurface = nullptr;
+        if (FAILED(lpDevice->CreateDepthStencilSurface(luWidth, luHeight, lrChoice.meDepthFormat,
+                                                       lrChoice.meType, lrChoice.muQuality,
+                                                       FALSE, &lpSurface, nullptr)))
+        {
+            return nullptr;
+        }
+        return lpSurface;
+    }
+
     DepthSurfaceResult CreateDepthSurface(u32 luWidth, u32 luHeight, bool lbWantRawDepthValue)
     {
+        // SINGLE-SAMPLED ONLY (rung 8). A multisampled target takes CreateMultisampledDepthSurface
+        // above instead: every format on both ladders below is a TEXTURE format, and D3D9 has no
+        // multisampled texture of any kind -- CreateTexture does not even take a multisample type.
         DepthSurfaceResult lResult = { nullptr, nullptr, 0u, false, false };
 
         IDirect3DDevice9* const lpDevice = Dev();
@@ -565,17 +811,26 @@ namespace
     // owns the shadow tuple and its once-only de-duplication state; a colour target flowing through
     // it would both clobber that state and print a shadow line about something that is not a
     // shadow. Unconditional (there are a handful of these per run, created once each).
+    // `msaa=` ADDED (rung 8): the sample count the target was actually created at, so the boot log
+    // proves per target which one multisamples and which do not. It is printed for EVERY target
+    // (msaa=1 == D3DMULTISAMPLE_NONE) because "the line is absent" and "the line says 1" are the
+    // same picture and only one of them is checkable.
+    // `colourTexture=MSAA` is NOT a failure spelling: a multisampled colour section legitimately
+    // owns no texture on D3D9 (see the MSAA banner above); `NULL` still means a CreateTexture that
+    // was asked for and failed, which is the condition this field was added to catch.
     void ReportRenderTarget(u32 luWidth, u32 luHeight, u32 luSections,
-                            u32 luColourMode, u32 luDepthStencilMode, bool lbColourTextureValid)
+                            u32 luColourMode, u32 luDepthStencilMode, bool lbColourTextureValid,
+                            u32 luSamples)
     {
         char lacMessage[224];
         std::snprintf(lacMessage, sizeof(lacMessage),
                       "[postfx-rt] target %ux%u sections=%u colourMode=%u depthMode=%u"
-                      " colourTexture=%s\n",
+                      " colourTexture=%s msaa=%u\n",
                       static_cast<unsigned>(luWidth), static_cast<unsigned>(luHeight),
                       static_cast<unsigned>(luSections), static_cast<unsigned>(luColourMode),
                       static_cast<unsigned>(luDepthStencilMode),
-                      lbColourTextureValid ? "OK" : "NULL");
+                      (luSamples > 1u) ? "MSAA" : (lbColourTextureValid ? "OK" : "NULL"),
+                      static_cast<unsigned>(luSamples));
         CgsDev::Log::WriteToLog(lacMessage);
     }
 
@@ -832,6 +1087,48 @@ namespace postfx
             && (lrParameters.mColourMode == static_cast<u32>(eRenderTarget_NONE));
         const bool lbWantRawDepthValue = lbWantsSampleableDepth && !lbIsShadowMapTarget;
 
+        // --- DOES THIS TARGET MULTISAMPLE? (rung 8 -- see the MSAA banner above) --------------
+        // The word CgsRenderTarget::Construct forwarded into the Target::Parameters blocks. Colour
+        // and depth carry the SAME value (both are written from the one
+        // CgsRenderTarget::mn32MultiSampleFormat at CgsRenderTarget.cpp:174 / :220), so it is read
+        // from the colour section when the target has one and from the depth block otherwise --
+        // which keeps a colour-less target (the shadow map, format 0) answering from its own
+        // record rather than from an unwritten colour slot.
+        const u32 luConsoleMultisampleFormat =
+            (lrParameters.mColourMode != static_cast<u32>(eRenderTarget_NONE))
+            ? lrParameters.maColourTargetParams[0].mu32MultiSampleFormat
+            : lrParameters.mDepthStencilParams.mu32MultiSampleFormat;
+
+        const u32 luConsoleSamples =
+            MultisampleSampleCountForConsoleFormat(luConsoleMultisampleFormat);
+
+        // The knob only RE-SCALES a target the console already multisamples; it never turns MSAA
+        // on for one the console leaves single-sampled (see the banner).
+        u32 luRequestedSamples = luConsoleSamples;
+        if (luConsoleSamples > 1u)
+        {
+            const u32 luOverrideSamples = MultisampleOverrideSampleCount();
+            if (luOverrideSamples != 0u)
+                luRequestedSamples = luOverrideSamples;
+        }
+
+        // A8R8G8B8 is the colour format this leaf creates below; the gate has to ask about the
+        // format that will actually be created, not a nominal one.
+        const MultisampleChoice lMultisample =
+            ChooseMultisampleType(luRequestedSamples, D3DFMT_A8R8G8B8);
+
+        if (luRequestedSamples > 1u && lMultisample.muSamples != luRequestedSamples)
+        {
+            char lacMsaaMessage[192];
+            std::snprintf(lacMsaaMessage, sizeof(lacMsaaMessage),
+                          "[postfx-rt] target %ux%u msaa=%u unsupported -> %u\n",
+                          static_cast<unsigned>(luSurfaceWidth),
+                          static_cast<unsigned>(luSurfaceHeight),
+                          static_cast<unsigned>(luRequestedSamples),
+                          static_cast<unsigned>(lMultisample.muSamples));
+            CgsDev::Log::WriteToLog(lacMsaaMessage);
+        }
+
         // --- the colour surface -------------------------------------------------------------
         // eRenderTarget_CREATE is the only mode that owns a surface here; USE_DEVICE_FOR_WRITE
         // means "the device's own back buffer", which on PC is already bound, and USE_PROVIDED /
@@ -839,18 +1136,33 @@ namespace postfx
         // CreateShadowmapBuffer), so this branch is not on the shadow path.
         if (lrParameters.mColourMode == static_cast<u32>(eRenderTarget_CREATE))
         {
-            IDirect3DDevice9* const lpDevice = Dev();
-            IDirect3DTexture9*      lpColourTexture = nullptr;
-            if (lpDevice != nullptr
-                && SUCCEEDED(lpDevice->CreateTexture(luSurfaceWidth, luSurfaceHeight, 1,
-                                                     D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8,
-                                                     D3DPOOL_DEFAULT, &lpColourTexture, nullptr))
-                && lpColourTexture != nullptr)
+            if (lMultisample.muSamples > 1u)
             {
-                lpColourTexture->GetSurfaceLevel(0, &lpColourSurface);
-                lpRenderTarget->maColourTargets[0].mpTexture =
-                    WrapTexture(lpAllocator, lpColourTexture,
-                                static_cast<u32>(D3DFMT_A8R8G8B8), luSurfaceWidth, luSurfaceHeight);
+                // MULTISAMPLED: a render-target SURFACE and NO texture -- D3D9 has no multisampled
+                // texture, and this target does not need one (the resolve's destination is another
+                // target's texture). maColourTargets[0].mpTexture therefore stays null, GetTexture(0)
+                // returns null for this target, and the colour TextureState block below is skipped
+                // by its own existing `mpTexture != nullptr` gate. See the MSAA banner for the grep
+                // that shows nothing reads this target's texture.
+                lpColourSurface = CreateMultisampledColourSurface(luSurfaceWidth, luSurfaceHeight,
+                                                                  D3DFMT_A8R8G8B8, lMultisample);
+            }
+            else
+            {
+                IDirect3DDevice9* const lpDevice = Dev();
+                IDirect3DTexture9*      lpColourTexture = nullptr;
+                if (lpDevice != nullptr
+                    && SUCCEEDED(lpDevice->CreateTexture(luSurfaceWidth, luSurfaceHeight, 1,
+                                                         D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8,
+                                                         D3DPOOL_DEFAULT, &lpColourTexture, nullptr))
+                    && lpColourTexture != nullptr)
+                {
+                    lpColourTexture->GetSurfaceLevel(0, &lpColourSurface);
+                    lpRenderTarget->maColourTargets[0].mpTexture =
+                        WrapTexture(lpAllocator, lpColourTexture,
+                                    static_cast<u32>(D3DFMT_A8R8G8B8),
+                                    luSurfaceWidth, luSurfaceHeight);
+                }
             }
 
             // --- the colour target's SAMPLER TEXTURE-STATE (gate-flip wave, 2026-08-15) ---------
@@ -895,20 +1207,51 @@ namespace postfx
         // --- the depth / stencil surface ----------------------------------------------------
         if (lrParameters.mDepthStencilMode == static_cast<u32>(eRenderTarget_CREATE))
         {
-            const DepthSurfaceResult lDepth =
-                CreateDepthSurface(luSurfaceWidth, luSurfaceHeight, lbWantRawDepthValue);
-            lpDepthSurface   = lDepth.mpSurface;
-            luDepthFormat    = lDepth.muFormat;
-            lbDepthHwCompare = lDepth.mbHardwareCompare;
-            lbDepthRawValue  = lDepth.mbRawDepthValue;
-
-            // The sampleable wrapper is built only when the target asked to be sampled AND a
-            // depth-texture format was actually available.
-            if (lrParameters.mbUseDepthStencilAsTexture)
+            if (lMultisample.muSamples > 1u)
             {
-                lpRenderTarget->mDepthTarget.mpTexture =
-                    WrapTexture(lpAllocator, lDepth.mpTexture, lDepth.muFormat,
-                                luSurfaceWidth, luSurfaceHeight);
+                // MULTISAMPLED depth: a plain depth-stencil SURFACE at the colour target's exact
+                // sample type and quality (D3D9 rejects the bind otherwise). No depth TEXTURE --
+                // D3D9 has none at a multisample type -- and this target does not ask for one:
+                // CreateAntiAliasBuffer calls SetUseDepthStencilAsTexture(false), because on the
+                // console the scene depth is read back through the DOWN-SAMPLE buffer, which is
+                // exactly what the RESZ depth resolve in XenonD3D9Shims.cpp now writes.
+                lpDepthSurface = CreateMultisampledDepthSurface(luSurfaceWidth, luSurfaceHeight,
+                                                                lMultisample);
+                luDepthFormat  = static_cast<u32>(lMultisample.meDepthFormat);
+
+                if (lrParameters.mbUseDepthStencilAsTexture)
+                {
+                    // No target in the pool does this today (the anti-alias buffer is the only
+                    // multisampled one and it does not ask). If one ever does, its depth texture is
+                    // an honestly EMPTY slot rather than a wrong one, and it says so.
+                    static bool sbReportedMsaaDepthTexture = false;
+                    if (!sbReportedMsaaDepthTexture)
+                    {
+                        sbReportedMsaaDepthTexture = true;
+                        CgsDev::Log::WriteToLog(
+                            "[postfx-rt] a MULTISAMPLED target asked for a sampleable depth --"
+                            " D3D9 has no multisampled depth texture, so the slot is left empty;"
+                            " read the resolve destination's depth texture instead\n");
+                    }
+                }
+            }
+            else
+            {
+                const DepthSurfaceResult lDepth =
+                    CreateDepthSurface(luSurfaceWidth, luSurfaceHeight, lbWantRawDepthValue);
+                lpDepthSurface   = lDepth.mpSurface;
+                luDepthFormat    = lDepth.muFormat;
+                lbDepthHwCompare = lDepth.mbHardwareCompare;
+                lbDepthRawValue  = lDepth.mbRawDepthValue;
+
+                // The sampleable wrapper is built only when the target asked to be sampled AND a
+                // depth-texture format was actually available.
+                if (lrParameters.mbUseDepthStencilAsTexture)
+                {
+                    lpRenderTarget->mDepthTarget.mpTexture =
+                        WrapTexture(lpAllocator, lDepth.mpTexture, lDepth.muFormat,
+                                    luSurfaceWidth, luSurfaceHeight);
+                }
             }
         }
 
@@ -1074,7 +1417,8 @@ namespace postfx
         {
             ReportRenderTarget(luSurfaceWidth, luSurfaceHeight, luNumSections,
                                lrParameters.mColourMode, lrParameters.mDepthStencilMode,
-                               lpRenderTarget->maColourTargets[0].mpTexture != nullptr);
+                               lpRenderTarget->maColourTargets[0].mpTexture != nullptr,
+                               lMultisample.muSamples);
         }
 
         return lpRenderTarget;

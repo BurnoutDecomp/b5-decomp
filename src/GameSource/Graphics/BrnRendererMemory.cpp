@@ -465,7 +465,8 @@ CgsRenderTarget* BrnRendererMemory::GetShadowMapBuffer(s32 liIndex)
 // enforces that; this asserts it, because getting it backwards would silently drop the shadow target.
 //
 // DELETE WITH THE BRING-UP, together with PCBringUpCreateShadowMapBufferOnly.
-void BrnRendererMemory::PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator* lpAllocator)
+void BrnRendererMemory::PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator* lpAllocator,
+                                                          bool lbEnableMSAA)
 {
     CGS_ASSERT(mapRenderTarget[E_RENDER_TARGET_SHADOW_MAP_0] != nullptr,
                "GetShadowMapBuffer(0) != NULL -- slot-nulling bring-up must run first");
@@ -493,11 +494,30 @@ void BrnRendererMemory::PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator
     // Construct's own order: the down-sample buffer before the anti-alias buffer.
     CreateDownSampleBuffer(lpAllocator);
 
-    // FLAG PC bring-up: MSAA OFF. The console reads this from its display-mode setting, and the
-    // MSAA-on tiling plan splits the frame into two predicated tiles -- machinery D3D9 does not have
-    // (see BrnAntiAliasTiling.h). Off is one full-screen tile at multisample format 0, which the PC
-    // leaf honours exactly.
-    CreateAntiAliasBuffer(lpAllocator, false);
+    // THE ANTI-ALIAS (SCENE) BUFFER, at the console's own MSAA setting (anti-aliasing wave,
+    // 2026-08-16). This call used to be `CreateAntiAliasBuffer(lpAllocator, false)` under a banner
+    // reading "MSAA OFF. The console reads this from its display-mode setting". BOTH HALVES OF THAT
+    // WERE WRONG, and the correction is the whole point of this wave:
+    //
+    //   * THE CONSOLE DOES NOT READ A DISPLAY-MODE SETTING. BrnRendererModule::Construct @0x8240A778
+    //     stores a literal 1 into mbMultisampledBackbuffer (`li r28, 1` @0x8240A7B4 /
+    //     `stb r28, 0(r29)` @0x8240A7C4, r29 = this+0xC400) and forwards that same byte into this
+    //     pool's Construct as lbEnableMSAA (`lbz r11, 0(r29)` @0x8240A8BC -> sp+0x97 == `arg_97`).
+    //     There is no branch and no settings read anywhere on that path. The shipped X360 build is
+    //     MSAA ON, format 1 (Xenos 2x), always.
+    //   * D3D9 DOES HAVE THE MACHINERY THAT MATTERS. What it lacks is PREDICATED TILING, which is an
+    //     EDRAM budgeting device, not anti-aliasing: the two 1280x384/1280x336 rectangles of
+    //     KMSAA_TILING_PLAN exist because a 2-sample 1280x720 colour+depth pair does not fit in the
+    //     Xenos' 10 MB of EDRAM (BrnAntiAliasTiling.h). On PC the surface is whole, the two
+    //     rectangles partition it exactly, and every per-tile call degrades correctly: BeginTiling
+    //     clears both rects, SetPredication/EndTiling are honest no-ops, and each per-tile
+    //     D3DDevice_Resolve is a StretchRect over its own band -- which, from a MULTISAMPLED source,
+    //     IS D3D9's MSAA resolve.
+    //
+    // So the flag is threaded from the module rather than chosen here, and the PC sample COUNT (a
+    // knob, defaulting to the console's own format) is decided one layer down, in the leaf's
+    // RenderTarget::Initialize -- see renderengine::gAntiAliasing in Xbox2SurfaceShims.h.
+    CreateAntiAliasBuffer(lpAllocator, lbEnableMSAA);
 
     // ---- the three targets the post-fx COMPOSITE reads or writes (gate-flip wave, 2026-08-15) ----
     // BrnPostFx::Render @0x8240A468 dereferences the BLOOM and DEPTH-OF-FIELD slots unconditionally

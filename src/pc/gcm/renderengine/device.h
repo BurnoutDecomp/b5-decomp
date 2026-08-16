@@ -13,6 +13,13 @@ namespace renderengine
     extern s32 gDisplayHeight;
     extern s32 gAdapterIndex;
     extern s32 gAspectRatioIndex;
+    // The scene target's anti-aliasing knob. 0 = the console's own multisample format (default,
+    // Xenos format 1 == 2 samples); 1 = force off; 2/4/8 = force that sample count. Sourced from
+    // config.ini `[Settings] AntiAliasing` (BrnMain.cpp LoadConfig/SaveConfig) like the display
+    // extent above it; the full semantics, and why 0 is not "off", are on the DEFINITION in
+    // device.cpp. Consumed by the PC render-target leaf; also declared in
+    // pc/gcm/renderengine/Xbox2SurfaceShims.h so the leaf need not pull <Windows.h> in through
+    // this header (SAME OBJECT, one definition -- not a second global).
     extern s32 gAntiAliasing;
     extern HWND hWnd;
 

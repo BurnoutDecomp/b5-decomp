@@ -771,7 +771,35 @@ inline BrnRendererModule::BrnRendererModule()
     for (u32 luIndex = 0; luIndex < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++luIndex)
         mapaObjectToMeshJobOutputDispatchLists[luIndex] = 0;
 
-    mbMultisampledBackbuffer = false;
+    // ⚠ CORRECTED 2026-08-16 (anti-aliasing wave): this was `false`; THE X360 STORES 1, and it is
+    // the single byte the console's whole anti-aliasing configuration hangs off.
+    //
+    // (1) IT IS SET UNCONDITIONALLY, in Construct's opening block -- there is no display-mode read,
+    //     no video-settings query and no branch anywhere near it:
+    //         0x8240A7A8  addis r29, r31, 1
+    //         0x8240A7B0  addi  r29, r29, -0x3C00      ; r29 = this + 0xC400
+    //         0x8240A7B4  li    r28, 1
+    //         0x8240A7C4  stb   r28, 0(r29)            ; mbMultisampledBackbuffer = 1
+    //
+    // (2) IT IS ALSO THE POOL'S lbEnableMSAA -- the same byte, read straight back and handed to
+    //     BrnRendererMemory::Construct:
+    //         0x8240A8BC  lbz   r11, 0(r29)
+    //         0x8240A8C8  stb   r11, 0x2A0+var_209(r1) ; sp+0x97 == the callee's `arg_97`
+    //         0x8240A8FC  bl    BrnRendererMemory__Construct
+    //     and BrnRendererMemory::Construct @0x823FCA38 reads `arg_97` as lbEnableMSAA and forwards
+    //     it untouched to CreateAntiAliasBuffer @0x823F6B40, which is what selects
+    //     BrnGraphics::KMSAA_TILING_PLAN (multisample format 1 == 2 samples, two predicated tiles)
+    //     over KNO_MSAA_TILING_PLAN. See BrnAntiAliasTiling.h.
+    //
+    // So the target's multisample format and the frame bracket's tiled branch CANNOT be set
+    // independently without inventing a console configuration that does not exist. The PC bring-up
+    // creator takes this same flag as its argument for exactly that reason
+    // (BrnRendererMemory::PCBringUpCreatePostFxSceneTargets).
+    //
+    // WHAT THE PC SAMPLE COUNT IS is a separate question and is NOT decided here: the leaf maps the
+    // plan's multisample format to a D3DMULTISAMPLE_TYPE and applies the renderengine::gAntiAliasing
+    // override (Xbox2SurfaceShims.h). At the default (0) that is the console's own 2x.
+    mbMultisampledBackbuffer = true;
     mbShowEnvironmentMap = false;
     mbShowShadowMap = false;
     mbSortDisplayListsWideNotLong = false;

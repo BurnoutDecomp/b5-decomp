@@ -120,6 +120,32 @@ namespace renderengine
     // The device pointer the X360 image reads from off_83271608 (shared with the VB shims).
     extern void* gpD3DDevice;
 
+    // ---------------------------------------------------------------------------------------------
+    // THE PC ANTI-ALIASING KNOB (anti-aliasing wave, 2026-08-16). NOT a console entity -- there is no
+    // X360 counterpart, because the console's anti-aliasing is a hard-coded 1 in
+    // BrnRendererModule::Construct @0x8240A7B4 with no setting behind it.
+    //
+    // ⚠ THIS IS A RE-DECLARATION OF AN EXISTING GLOBAL, NOT A NEW ONE. The object is declared in
+    // pc/gcm/renderengine/device.h:16 and DEFINED in device.cpp beside gDisplayWidth/gDisplayHeight,
+    // where its full semantics live; it is already read from config.ini `[Settings] AntiAliasing` and
+    // written back (BrnMain.cpp LoadConfig / SaveConfig) and had no consumer until this wave. It is
+    // declared here as well only so the render-target leaf can reach it without including device.h,
+    // which includes <Windows.h>. One definition, one meaning, two declarations.
+    //
+    //     0          use the console's own multisample format -- the DEFAULT. The anti-alias buffer
+    //                takes BrnGraphics::KMSAA_TILING_PLAN's format 1, i.e. D3DMULTISAMPLE_2_SAMPLES.
+    //     1          force the scene target to no multisampling (the pre-2026-08-16 PC picture).
+    //     2 / 4 / 8  force that sample count on the scene target instead of the console's 2.
+    //
+    // WHO MAY READ IT: the render-target leaf's Initialize, for the ANTI-ALIAS target's colour and
+    // depth surfaces only. It must NOT reach any other pool target (shadow map, particle, bloom,
+    // work, depth-of-field, sun-corona, down-sample or back buffer are all single-sample on the
+    // console and must stay byte-for-byte unchanged), and it must NOT be used to pick the frame
+    // bracket's branch -- that is BrnRendererModule::mbMultisampledBackbuffer, a recovered constant.
+    // A request the adapter refuses (CheckDeviceMultiSampleType) falls back to the next lower count
+    // and is reported on the [postfx-rt] line rather than silently honoured.
+    extern s32 gAntiAliasing;
+
     // The X360 "tiling enabled" global the resolve path checks (dword_8327161C); when set and the
     // surface is the active render target the resolve goes through D3DDevice_EndTiling.
     extern int gXbox2TilingEnabled;
