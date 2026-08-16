@@ -403,6 +403,38 @@ public:
     // DELETE-WHEN the EffectsIO dispatch buffer set is real on PC (this goes with the producer).
     void PCBringUpSetCameraInput(const BrnDirector::Camera::Camera* lpCamera);
 
+    // [FLAG PC bring-up] PCBringUpSetRaceCarStateCache -- NOT an X360 function.
+    //
+    // STANDS IN FOR the player-car arm of BrnEffects::EffectsModule::Update @0x8229EC28, which
+    // is the ONLY writer of the effects module's TempRaceCarStateCache (DWARF EffectsModule.h:577,
+    // module +180864). Its four DYNAMIC fields are copied straight off the player's
+    // BrnPhysics::Vehicle::RaceCarState, reached through the world's
+    // RCEntityActiveRaceCarOutputInterface:
+    //     v101 = RCEntityActiveRaceCarOutputInterface::GetPlayerActiveRaceCarIndex(iface);
+    //     _R3  = RCEntityActiveRaceCarOutputInterface::GetActiveRaceCarState(iface, v101);
+    //     _R11 = 816;  _R10 = 180992;  lvx v0,r3,r11 / stvx v0,r31,r10   -> mvLinearVelocity
+    //     _R9  = 832;  _R8  = 181008;  lvx v0,r3,r9  / stvx v0,r31,r8    -> mvAngularVelocity
+    //     this->field_2C320 = *(_R3 + 972);                              -> mfSpeedMPH
+    //     this->field_2C324 = *(_R3 + 1044);                             -> mfSteering
+    // (RaceCarState's committed members sit at exactly those four offsets --
+    // BrnVehicleEvents.h mLinearVelocity @816 / mAngularVelocity @832 / mfSpeedMPH @972 /
+    // mfSteering @1044 -- so the caller reads them BY NAME, never by displacement.)
+    // BrnEffects::EffectsModule::GenerateRenderRequests @0x8227FF10 then copies the cache into
+    // the layer-0 BrnEffectsFrame (frame +0x1B0/+0x1C0/+0x1D0/+0x1D4), which is what
+    // PCBringUpProduceBaseEffectsFrame does with the values staged here.
+    // Neither the effects module nor its IO buffers exist on this build; the caller is
+    // BrnGameModule::DoDispatch, beside PCBringUpSetCameraInput, off the SAME world output
+    // interface the console's producer reads. Nothing is staged while the player car is not
+    // active (the console's whole block is inside `if (IsPlayerCarActive(...))`), so the last
+    // staged values stand -- exactly as the console's cache does.
+    // ⚠ The cache's two TRANSFORM fields are NOT staged and cannot be: nothing in the X360 image
+    // writes module +180864 / +180928 at all (see the BLOCKED banner in the producer).
+    // DELETE-WHEN BrnEffects::EffectsModule is on the build list and fills its own cache.
+    void PCBringUpSetRaceCarStateCache(Vector3::InParam lvLinearVelocity,
+                                       Vector3::InParam lvAngularVelocity,
+                                       f32 lfSpeedMPH,
+                                       f32 lfSteering);
+
 private:
     enum
     {
@@ -543,8 +575,18 @@ private:
     // [FLAG PC bring-up] Sky-dome bring-up (NOT X360 functions -- see the bodies).
     // EnsureSkyDomeBringUp does the Construct/Prepare pair the console runs from
     // BrnRendererModule::Construct/Prepare, deferred to the first world frame because
-    // both need a live D3D device; PublishSkyConstantsBringUp fills the per-frame
-    // constants the console's EnvironmentManager -> WorldModule producer chain would.
+    // both need a live D3D device.
+    //
+    // PublishSkyConstantsBringUp is NOT a producer: on the console this frame is filled by
+    // the WORLD (WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410 writes it in
+    // place, through the pointer BrnRendererModule::Update @0x82405E28 lends it via
+    // RendererIO::OutputBuffer::SetShaderConstantsFrame @0x823FB608 ->
+    // BridgeRendererToWorld @0x823CDD20 -> DispatchInputBuffer::GetShaderConstantsFrame
+    // @0x827BBEF0), and the renderer only reads it. So this function COPIES the live frame
+    // the real producer fills on PC -- gBrnWorldShaderConstantsFrameBringUp
+    // (BrnShaderConstantsFrame.h) -- into the renderer's own frame, and keeps only the
+    // camera half, which the dispatch IO buffer set would otherwise carry across.
+    // DELETE-WHEN that IO buffer set is real; see the banner over the definition.
     bool mbSkyDomeReady;
     bool mbSkyDomeTried;
     bool EnsureSkyDomeBringUp();

@@ -575,6 +575,38 @@ struct GuiNewBurnoutHudMessageEvent : public CgsGui::GuiEvent<542>
     EActiveRaceCarIndex                            mePreviousOwner;// BrnGuiEventTypeDefs.h:6365
 };
 
+// The options screen's DISPLAY-CALIBRATION hand-off -- the event that carries the
+// brightness / contrast slider positions from the GUI to the game module.
+//
+// DWARF (rung 2, BrnGuiEventTypeDefs.h:6425-6428) declares it
+//     struct BrnGui::GuiOptionsBrightnessContrast : public GuiEvent<530>
+//     { int32_t mBrightness; int32_t mContrast; };
+// The X360 build's id is 545 (0x221), not the PS3 530: the same merge-window +15 that
+// moved the PostFxControl sibling 531 -> 546. Both ids are read off the binary, not
+// assumed -- BrnGui::CrashNavColourCalibrate::ApplySettings @0x824CEBCC bakes
+// `li r11, 0x221` into the record it queues, and BrnGame::BrnGameModule::BridgeGuiToGame
+// @0x823CB9D8 dispatches `cmpwi cr6, r3, 0x221`.
+//
+// THE TWO PRODUCERS both post it as a channel-40 GuiEventOut record
+// { muHeader0 = 8 (payload bytes), muEventType = 545, muHeader2 = 12 (payload offset) }
+// followed by the two payload words, 20 bytes total:
+//   BrnGui::CrashNavColourCalibrate::ApplySettings              @0x824CEB50 (the slider)
+//   BrnGui::ScreenLoading::ApplyOptionsDataProfileSettings      @0x824D0DC0 (the save)
+// The consumer is BridgeGuiToGame's `case 0x221` @0x823CBA1C, two 32-bit loads at payload
+// +0 / +4 into the game module's miBrightness (+10096740) / miContrast (+10096744).
+//
+// Like its PostFxControl sibling below this is the PAYLOAD, not the record: the queued
+// record's 12-byte header is supplied by whichever wire posts it (CgsGui::GuiEvent<545>
+// for the channel-40 form, CgsGuiModuleIO::OutputBuffer::AddGuiOutEvent's own keying for
+// the type-keyed form), so the type id is carried by GetEventType() alone.
+struct GuiOptionsBrightnessContrast : public CgsModule::Event
+{
+    s32 mBrightness;   // +0x00 (X360 `lwz r11, 0(r29)`)
+    s32 mContrast;     // +0x04 (X360 `lwz r11, 4(r29)`)
+
+    s32 GetEventType() const { return 545; }
+};
+
 // The "drive the brightness/contrast-calibration post-fx" GUI out-event the colour-
 // calibration screen publishes (X360-attested by the AddGuiOutEvent instantiation
 // @0x82465D98: AddEvent(&event, /*id*/546, /*X360 record*/12) -- a ResourceHandle qword

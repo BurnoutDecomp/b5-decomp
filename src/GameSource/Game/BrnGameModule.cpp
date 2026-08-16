@@ -10,6 +10,9 @@
 #include <cstring>   // memset
 #include <string.h>  // _stricmp (RenderMetricsMessageHandler; MSVC canonical, not declared by <cstring>)
 #include <chrono>    // the ToGui repeat-clock feed (FLAG PC time source: wall clock)
+#include <cstdlib>   // getenv / strtol -- BridgeGuiToGame's BRN_POSTFX_CALIBRATION_TEST hook
+#include <cstdio>    // snprintf -- BridgeGuiToGame's [calib] change line
+#include <cstddef>   // offsetof -- the 545/546 payload layout pins in BridgeGuiToGame
 
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h" // CgsInput::InputPadsPC (the PC pad-fill leaf)
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h" // CgsGui::GuiModule::AddGuiEvent (the world-load report below)
@@ -21,6 +24,7 @@
 #include "GameSource/GameState/BrnGameStateModuleIO.h" // GameStateModuleIO::OutputBuffer (BridgeGameStateToDirector)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // DirectorIO::SceneQuery{Input,Output}Buffer
 #include "GameSource/Effects/Particles/ParticleModuleBringUp.h"               // BrnParticle::PCBringUpProduceParticleRenderData (DoDispatch's particle-render-data seam)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface + BrnPhysics::Vehicle::RaceCarState (DoDispatch's TempRaceCarStateCache seam)
 
 // The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- the world-load
 // stand-in below keys its loading-complete report on it.
@@ -371,6 +375,18 @@ namespace BrnGame
     // brightness/contrast forwards (545/546) are platform follow-ons.
     void BrnGameModule::BridgeGuiToGame(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue)
     {
+        // The calibration TEXTURE handle the console keeps as a FUNCTION LOCAL, re-seeded from
+        // the null-handle sentinel on every call: @0x823CB764-0x823CB774
+        //     lis r11, qword_82FAE900@ha ; ld r11, qword_82FAE900@l(r11) ; std r11, var_A0(r1)
+        // i.e. `ResourceHandle lTextureHandle = CgsResource::NULLResourceHandle;` (DWARF
+        // BrnGameModule.cpp:3105; qword_82FAE900 is the {NULL,NULL} handle the SetDebugFont
+        // family compares against -- BrnGameModule::Construct @0x823CA970, DebugManagerRender
+        // @0x823BCBD0, CgsDev::DebugManager::SetDebugFont @0x823B14FC all read the same word).
+        // GUI event 546 overwrites it for THIS frame only and the publish tail below stores
+        // whatever it then holds -- so the calibration texture goes away again the moment
+        // ColourCalibrationScreen stops posting. That per-frame reset is the console's, not ours.
+        CgsResource::ResourceHandle lhCalibrationTextureHandle = CgsResource::NULLResourceHandle;
+
         // The event walk is skipped without a queue (a PC guard: the console always has the GUI
         // output buffer's queue); the publish tail below runs regardless, as on the console.
         const CgsModule::Event* lpEvent = 0;
@@ -378,6 +394,117 @@ namespace BrnGame
         s32 liId = (lpGuiOutQueue != 0) ? lpGuiOutQueue->GetFirstEvent(&lpEvent, &liSize) : -1;
         while (liId >= 0 && lpEvent != 0)
         {
+            // ---- the DISPLAY-CALIBRATION events, 545 and 546 -------------------------------
+            // X360 BridgeGuiToGame @0x823CB758 handles these two ids in its one switch:
+            //   case 0x221 (545) BrnGui::GuiOptionsBrightnessContrast          @0x823CB9FC
+            //       assert "NULL != lpBrightnessContrast" (BrnGameModule.cpp:3194), then
+            //         lwz r11,0(r29) ; stwx r11,r31,r15   -> +10096740 == miBrightness
+            //         lwz r11,4(r29) ; stwx r11,r31,r16   -> +10096744 == miContrast
+            //   case 0x222 (546) BrnGui::GuiOptionsBrightnessContrastPostFxControl @0x823CBAAC
+            //       assert "lpBrightnessContrastPostFxControl" (BrnGameModule.cpp:3205), then
+            //         lbz r11,8(r29) ; stbx r11,r31,r17   -> +10096748 ==
+            //                                                mbEnableCalibrationUnfriendlyPostFx
+            //         ld  r11,0(r29) ; std r11,var_A0(r1) -> the local texture handle above
+            // The producers are BrnGui::ScreenLoading::ApplyOptionsDataProfileSettings and
+            // BrnGui::CrashNavColourCalibrate::ApplySettings (545, the saved profile / the
+            // options slider) and BrnGui::ColourCalibrationScreen::Update (546, the calibration
+            // ramp screen showing and hiding).
+            //
+            // FLAG PC-ABI adapter (the SAME one BridgeGuiToDirector below carries, and for the
+            // same reason): the console's GUI out queue is re-keyed by GuiEventWrapper type, so
+            // GetFirstEvent hands back 545 / 546 directly. On PC a record reaches this queue in
+            // EITHER form -- the flow states post through StateInterface::GetOutputEventQueue()
+            // on CHANNEL 40 with a { payloadBytes, eventType, payloadOffset } header (that is
+            // what ScreenLoading's 545 record is: { 8, 545, 12, brightness, contrast }, 20
+            // bytes), while CgsGuiModuleIO::OutputBuffer::AddGuiOutEvent<T> keys the record by
+            // T::GetEventType() exactly as the console does (that is ColourCalibrationScreen's
+            // 546). Both are resolved to (id, payload) here so the arms below are the console's.
+            //
+            // ⚠ THE PAYLOAD IS READ BY NAME, NOT AT THE CONSOLE'S BYTE OFFSETS. The 546 payload
+            // leads with a CgsResource::ResourceHandle -- two POINTERS, 8 bytes on the X360 and
+            // 16 bytes here -- so the console's `+8` for the bool is a guest offset and using it
+            // would read the middle of mpSourceEntry. The struct is the tree's own
+            // BrnGui::GuiOptionsBrightnessContrastPostFxControl and the members are reached by
+            // name; the size check below is against the HOST sizeof for the same reason.
+            {
+                s32       liCalibrationId    = liId;
+                const u8* lpuCalibPayload    = reinterpret_cast<const u8*>(lpEvent);
+                s32       liCalibPayloadSize = liSize;
+                if (liId == 40 && liSize >= 12)
+                {
+                    const u32* lpuRecord = reinterpret_cast<const u32*>(lpEvent);
+                    const u32  luOffset  = lpuRecord[2];
+                    liCalibrationId = static_cast<s32>(lpuRecord[1]);
+                    if (luOffset >= 12u && static_cast<s32>(luOffset) < liSize)
+                    {
+                        lpuCalibPayload    = reinterpret_cast<const u8*>(lpEvent) + luOffset;
+                        liCalibPayloadSize = liSize - static_cast<s32>(luOffset);
+                    }
+                    else
+                    {
+                        lpuCalibPayload    = 0;
+                        liCalibPayloadSize = 0;
+                    }
+                }
+
+                // Payload layout pins (event payloads are the classic byte-layout trap).
+                // 545: two words, brightness first -- swap them and the frame goes dark
+                // instead of bright, silently. 546: the handle LEADS and the flag follows
+                // it, which on the host means +16, not the console's +8.
+                static_assert(offsetof(BrnGui::GuiOptionsBrightnessContrast, mBrightness) == 0,
+                              "GUI 545 payload: mBrightness is the X360 payload +0 word");
+                static_assert(offsetof(BrnGui::GuiOptionsBrightnessContrast, mContrast) == 4,
+                              "GUI 545 payload: mContrast is the X360 payload +4 word");
+                static_assert(sizeof(BrnGui::GuiOptionsBrightnessContrast) == 8,
+                              "GUI 545 payload is two words (X360 record 20B = 12B header + 8)");
+                static_assert(offsetof(BrnGui::GuiOptionsBrightnessContrastPostFxControl,
+                                       mColourCalibrationTextureHandle) == 0,
+                              "GUI 546 payload: the calibration handle leads (X360 payload +0)");
+                static_assert(offsetof(BrnGui::GuiOptionsBrightnessContrastPostFxControl,
+                                       mbRestoreDefaults)
+                                  == sizeof(CgsResource::ResourceHandle),
+                              "GUI 546 payload: the post-fx flag follows the handle "
+                              "(X360 payload +8; host +16 -- the handle is two pointers)");
+
+                if (liCalibrationId == 545)
+                {
+                    CGS_ASSERT(lpuCalibPayload != 0, "NULL != lpBrightnessContrast");
+                    if (lpuCalibPayload != 0
+                        && liCalibPayloadSize >= static_cast<s32>(
+                               sizeof(BrnGui::GuiOptionsBrightnessContrast)))
+                    {
+                        const BrnGui::GuiOptionsBrightnessContrast* const lpSettings =
+                            reinterpret_cast<const BrnGui::GuiOptionsBrightnessContrast*>(
+                                lpuCalibPayload);
+                        miBrightness = lpSettings->mBrightness;
+                        miContrast   = lpSettings->mContrast;
+                    }
+                }
+                else if (liCalibrationId == 546)
+                {
+                    CGS_ASSERT(lpuCalibPayload != 0, "lpBrightnessContrastPostFxControl");
+                    if (lpuCalibPayload != 0
+                        && liCalibPayloadSize >= static_cast<s32>(
+                               sizeof(BrnGui::GuiOptionsBrightnessContrastPostFxControl)))
+                    {
+                        const BrnGui::GuiOptionsBrightnessContrastPostFxControl* const lpControl =
+                            reinterpret_cast<
+                                const BrnGui::GuiOptionsBrightnessContrastPostFxControl*>(
+                                    lpuCalibPayload);
+                        // mbRestoreDefaults is the console's byte at payload +8 -- false while
+                        // the calibration ramp is on screen, true when it hides. The game module
+                        // stores it verbatim; BrnRendererModule::Render ANDs
+                        // GetCalibrationUnfriendlyEnablePostFx() into every effect's active flag,
+                        // so the ramp is graded by nothing while you calibrate against it.
+                        // (DWARF BrnGuiEventTypeDefs.h:6441 names this member mbEnablePostFx --
+                        // see the calib report's cross-group note; polarity is identical.)
+                        mbEnableCalibrationUnfriendlyPostFx = lpControl->mbRestoreDefaults;
+                        lhCalibrationTextureHandle =
+                            lpControl->mColourCalibrationTextureHandle;
+                    }
+                }
+            }
+
             if (liId == 40)   // channel 40: GuiEventOut command records (muEventType @+4)
             {
                 const u32 luCommand = reinterpret_cast<const u32*>(lpEvent)[1];
@@ -528,16 +655,83 @@ namespace BrnGame
         // Render reads them off the READ buffer for the post-fx composite (GetBrightness @0x8240DCC8 /
         // GetContrast @0x8240DCFC). Landed 2026-08-15 with the composite: without it the buffer read
         // 0 / 0 and the frame came out at contrast 0.5 / brightness -0.5 -- black. The texture handle
-        // is left as the buffer's own Clear()'d value (== the console's qword_82FAE900 null handle,
-        // the same word the SetDebugFont family compares against); GUI event 546 -- the calibration
-        // screen's BrightnessContrastPostFxControl -- is a follow-on and not handled yet, so the
-        // handle is never anything else here.
+        // is the FUNCTION LOCAL seeded at the top of this walk (the console's qword_82FAE900
+        // null handle, the same word the SetDebugFont family compares against), overwritten for
+        // this frame only by GUI event 546.
+        //
+        // [FLAG PC bring-up TEST HOOK -- OFF BY DEFAULT, DELETE WHEN the colour-calibration
+        //  screen is reachable in the boot flow] BRN_POSTFX_CALIBRATION_TEST stands in for the
+        // options slider so the composite's response can be proven without the GUI: it pins
+        // (brightness, contrast) every frame, overriding whatever the profile published.
+        //   BRN_POSTFX_CALIBRATION_TEST=1        -> (80, 50)   the brief's default probe
+        //   BRN_POSTFX_CALIBRATION_TEST=80,20    -> (80, 20)   any pair, comma or semicolon
+        // The composite turns them into brightness*0.01-0.5 / contrast*0.01+0.5, so 80/50 is
+        // +0.3 brightness at neutral contrast -- a plainly brighter frame. This writes ONLY the
+        // two members the console's own 545 arm writes; it fabricates no new state.
+        {
+            static const char* const spcCalibrationTest = getenv("BRN_POSTFX_CALIBRATION_TEST");
+            if (spcCalibrationTest != 0)
+            {
+                s32         liTestBrightness = 80;
+                s32         liTestContrast   = 50;
+                const char* lpcSeparator     = spcCalibrationTest;
+                while (*lpcSeparator != 0 && *lpcSeparator != ',' && *lpcSeparator != ';')
+                    ++lpcSeparator;
+                if (*lpcSeparator != 0)
+                {
+                    liTestBrightness =
+                        static_cast<s32>(strtol(spcCalibrationTest, 0, 10));
+                    liTestContrast = static_cast<s32>(strtol(lpcSeparator + 1, 0, 10));
+                }
+                miBrightness = liTestBrightness;
+                miContrast   = liTestContrast;
+            }
+        }
+
+        // [FLAG PC bring-up diagnostic -- DELETE with the hook above] one line whenever the
+        // published calibration state CHANGES (so the boot log shows the Construct seed once and
+        // every slider / profile / calibration-screen move after it). The composite's own
+        // [postfx-composite] line only samples calls 1 / 100 / 1000, which cannot show a change.
+        {
+            static bool sbCalibrationLogged   = false;
+            static s32  siLastBrightness      = 0;
+            static s32  siLastContrast        = 0;
+            static bool sbLastEnablePostFx    = false;
+            static const void* spLastCalibTex = 0;
+            if (!sbCalibrationLogged
+                || siLastBrightness   != miBrightness
+                || siLastContrast     != miContrast
+                || sbLastEnablePostFx != mbEnableCalibrationUnfriendlyPostFx
+                || spLastCalibTex     != lhCalibrationTextureHandle.mpResourceMemory)
+            {
+                sbCalibrationLogged = true;
+                siLastBrightness    = miBrightness;
+                siLastContrast      = miContrast;
+                sbLastEnablePostFx  = mbEnableCalibrationUnfriendlyPostFx;
+                spLastCalibTex      = lhCalibrationTextureHandle.mpResourceMemory;
+
+                char lacMsg[192];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[calib] brightness=%d contrast=%d unfriendlyPostFx=%d "
+                              "calibTex=%p\n",
+                              static_cast<int>(miBrightness), static_cast<int>(miContrast),
+                              mbEnableCalibrationUnfriendlyPostFx ? 1 : 0,
+                              lhCalibrationTextureHandle.mpResourceMemory);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
+
         {
             BrnGame::DispatchThreadInputBuffer* const lpWrite = mDispatchThreadInputBufferManager.GetWriteBuffer();
             lpWrite->LockForWrite();
             lpWrite->SetBrightness(miBrightness);
             lpWrite->SetContrast(miContrast);
             lpWrite->SetCalibrationUnfriendlyEnablePostFx(mbEnableCalibrationUnfriendlyPostFx);
+            // @0x823CBB58 `ld r4, 0x100+var_A0(r1)` / bl SetCalibrationTextureHandle -- the
+            // console's fourth setter, restored now that event 546 can move the local. Until
+            // this arm existed the handle could only ever be the buffer's own Clear()'d null,
+            // so the call was omitted as a no-op.
+            lpWrite->SetCalibrationTextureHandle(lhCalibrationTextureHandle);
             lpWrite->UnlockForWrite();
         }
     }
@@ -1393,6 +1587,56 @@ namespace BrnGame
         {
             mpDirectorOutputBuffer->LockForRead();
             mRenderModule.PCBringUpSetCameraInput(mpDirectorOutputBuffer->GetCameraOutput());
+
+            // ---- stage the PLAYER's RACE-CAR STATE as the EFFECTS TempRaceCarStateCache -------
+            // The console: BrnEffects::EffectsModule::Update @0x8229EC28, the SECOND
+            // `if (RCEntityActiveRaceCarOutputInterface::IsPlayerCarActive(v87))` block, copies
+            // four fields of the PLAYER's BrnPhysics::Vehicle::RaceCarState into the module's
+            // TempRaceCarStateCache, and GenerateRenderRequests @0x8227FF10 then copies the cache
+            // into the layer-0 BrnEffectsFrame:
+            //     v101 = GetPlayerActiveRaceCarIndex(v87);
+            //     _R3  = GetActiveRaceCarState(v87, v101);
+            //     lvx v0,(_R3+816)  / stvx v0,(this+180992)   -> mvLinearVelocity
+            //     lvx v0,(_R3+832)  / stvx v0,(this+181008)   -> mvAngularVelocity
+            //     this->field_2C320 = *(_R3 +  972);          -> mfSpeedMPH
+            //     this->field_2C324 = *(_R3 + 1044);          -> mfSteering
+            // The effects module is not on this build's list, but the INTERFACE IT READS IS LIVE
+            // HERE: BridgeWorldToDirector already takes the same object off the same buffer every
+            // update frame (GameBridgeWorldToX.cpp, `lpWorldOutput->GetActiveRaceCarOutputInterface()`).
+            // So the four members are staged into the renderer's base-frame producer through
+            // BrnRendererModule::PCBringUpSetRaceCarStateCache, and they are read BY NAME --
+            // mLinearVelocity / mAngularVelocity / mfSpeedMPH / mfSteering are the committed
+            // RaceCarState members at exactly the console's 816 / 832 / 972 / 1044
+            // (BrnVehicleEvents.h), so no displacement is formed here.
+            // THE GATE IS THE CONSOLE'S: nothing is staged unless the player car is active, which
+            // leaves the last staged values standing exactly as the module's cache does.
+            // ⚠ THE WORLD BUFFER IS READ-LOCKED SEPARATELY from the director one -- it is a
+            // different IO buffer with its own lock, and DoUpdate_Director takes it the same way
+            // (LockForRead / read / UnlockForRead) one leg earlier in the frame.
+            // DELETE-WHEN BrnEffects::EffectsModule is on the build list (this goes with
+            // PCBringUpSetCameraInput and the renderer's base-frame producer).
+            if (mpWorldUpdateOutputBuffer != 0)
+            {
+                mpWorldUpdateOutputBuffer->LockForRead();
+                const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+                    lpActiveRaceCars =
+                        mpWorldUpdateOutputBuffer->GetActiveRaceCarOutputInterface();
+                if (lpActiveRaceCars != 0 && lpActiveRaceCars->IsPlayerCarActive())
+                {
+                    const BrnPhysics::Vehicle::RaceCarState* const lpPlayerState =
+                        lpActiveRaceCars->GetRaceCarState(
+                            lpActiveRaceCars->GetPlayerActiveRaceCarIndex());
+                    if (lpPlayerState != 0)
+                    {
+                        mRenderModule.PCBringUpSetRaceCarStateCache(
+                            lpPlayerState->mLinearVelocity,     // RaceCarState @816
+                            lpPlayerState->mAngularVelocity,    // RaceCarState @832
+                            lpPlayerState->mfSpeedMPH,          // RaceCarState @972
+                            lpPlayerState->mfSteering);         // RaceCarState @1044
+                    }
+                }
+                mpWorldUpdateOutputBuffer->UnlockForRead();
+            }
 
             // ---- stage the DIRECTOR's published camera as the PARTICLE RENDER DATA ------------
             // The console: BrnEffects::EffectsModule::Update @0x8229EC28 drives

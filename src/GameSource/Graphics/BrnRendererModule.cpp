@@ -27,13 +27,16 @@
 // closure was proved with dumpbin over the linked object set, NOT with the compile gate --
 // `cl /c` cannot see unresolved externals and /OPT:REF does NOT excuse them (measured, twice).
 //
-// ⚠ STILL OUTSTANDING, deliberately and by the conductor's sequencing:
-// WorldModule::PublishWorldShadingConstantsBringUp still force-writes a shadows-off c14/c15/c16
-// block every frame, so the shadow factor stays pinned at 1.0 and this pass renders into a target
-// nothing reads YET. That safety is retired in a separate, separately-verified step: if the s15
-// bind silently failed, removing it early would make 92 pixel shaders sample an unbound sampler
-// (returns 0 => the key light is REMOVED), which looks far worse than the current flatness.
-// Expect no visible shadows on the first boot after this change -- that is the intended two-step.
+// (The two-step this paragraph used to describe is CLOSED, twice over. The safety it named --
+// WorldModule::PublishWorldShadingConstantsBringUp force-writing a shadows-off c14/c15/c16
+// block every frame, which pinned the shadow factor at 1.0 -- was retired with the shadow
+// producer on 2026-08-12, and the whole bring-up publisher went with it in the env-manager
+// go-live wave on 2026-08-16: WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410 is
+// the producer now and it does not write c14..c17 at all (BrnWorldModule.cpp:4792-4794), so
+// the retirement holds BY CONSTRUCTION rather than by ordering. The real writers are
+// ShadowMap::SetConstants' slots 15/16 (BrnShadowMap.cpp:372/375) and the cascades reach the
+// screen.
+
 #define BRN_SHADOW_MAP_TARGET_AVAILABLE 1
 
 // ---------------------------------------------------------------------------------------------
@@ -375,6 +378,25 @@ namespace
         return gPCBringUpCameraInput;
     }
 
+    // --- [FLAG PC bring-up] the staged PLAYER RACE-CAR STATE ---------------------------------------
+    // The four DYNAMIC fields of the effects module's TempRaceCarStateCache (module +180992 /
+    // +181008 / +181024 / +181028), staged by BrnRendererModule::PCBringUpSetRaceCarStateCache off
+    // the world's RCEntityActiveRaceCarOutputInterface -- the same interface, and the same four
+    // RaceCarState members, that BrnEffects::EffectsModule::Update @0x8229EC28 reads to fill its
+    // own cache. See the declaration's banner in BrnRendererModule.h.
+    //
+    // ZERO-INITIALISED AND THAT IS THE CONSOLE'S OWN STARTING VALUE: the module's cache lives inside
+    // the statically zero-initialised game module and EffectsModule::Construct @0x8228FE98 does not
+    // touch it, so before the first player-car frame the console reads zeros here too.
+    // gbPCBringUpRaceCarStateStaged only drives the diagnostic line -- the producer writes the
+    // fields unconditionally, exactly as GenerateRenderRequests copies the cache unconditionally.
+    // DELETE-WHEN BrnEffects::EffectsModule fills its own cache.
+    Vector3 gvPCBringUpCacheLinearVelocity;
+    Vector3 gvPCBringUpCacheAngularVelocity;
+    f32     gfPCBringUpCacheSpeedMPH            = 0.0f;
+    f32     gfPCBringUpCacheSteering            = 0.0f;
+    bool    gbPCBringUpRaceCarStateStaged       = false;
+
     // --- [FLAG PC bring-up diagnostic] the line that proves the camera-side producers -------------
     // CHANGE-LATCHED, not purely periodic: these are event-driven producers (a director state has
     // to request a blur), so a fixed sample would almost certainly miss the transition. Emits when
@@ -397,7 +419,8 @@ namespace
             | (lrBlur.IsActive()                     ?  4u : 0u)
             | (lrBlur.IsExpensiveMotionBlur()        ?  8u : 0u)
             | (lrFrame.GetIsRacingGameplayCamera()   ? 16u : 0u)
-            | (gbPCBringUpCameraInputStaged          ? 32u : 0u);
+            | (gbPCBringUpCameraInputStaged          ? 32u : 0u)
+            | (gbPCBringUpRaceCarStateStaged         ? 64u : 0u);
         const bool lbChanged = (luSignature != suLastSignature);
         suLastSignature = luSignature;
 
@@ -418,6 +441,8 @@ namespace
             << " cars=" << lrBlur.GetCarsBlendAmount()
             << " world=" << lrBlur.GetWorldBlendAmount()
             << " speed=" << lrFrame.GetSpeedMPH()
+            << " steer=" << lrFrame.GetSteering()
+            << " carstate=" << (gbPCBringUpRaceCarStateStaged ? 1 : 0)
             << " gamecam=" << (lrFrame.GetIsRacingGameplayCamera() ? 1 : 0)
             << "\n";
     }
@@ -1121,24 +1146,44 @@ void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
     lpFrame->SetIsRacingGameplayCamera(
         lrCamera.GetState().IsFlagSet(KU_CAMERA_STATE_FLAG_IS_RACING_GAMEPLAY));
 
-    // ==============================================================================================
-    // [FLAG BLOCKED: no PC source for the effects module's TempRaceCarStateCache]
+    // ---- the four DYNAMIC TempRaceCarStateCache fields (GenerateRenderRequests lines 196-214) ----
+    // The console's producer copies them out of the effects module's own cache with four inline
+    // moves -- two 16-byte vector copies and two words:
+    //     lvx v0,(mod+180992) / stvx v0,(frame+432)     -> mLinearVelocity   (frame +0x1B0)
+    //     lvx v0,(mod+181008) / stvx v0,(frame+448)     -> mAngularVelocity  (frame +0x1C0)
+    //     *(frame + 464) = *(mod + 181024)              -> mfSpeedMPH        (frame +0x1D0)
+    //     *(frame + 468) = *(mod + 181028)              -> mfSteering        (frame +0x1D4)
+    // UNCONDITIONAL, like every other cache copy in that tail -- there is no "is the player car
+    // active" test HERE; the gate is on the CACHE FILL, one function away
+    // (EffectsModule::Update @0x8229EC28, inside `if (IsPlayerCarActive(...))`). Reproduced with the
+    // same split: the staging seam holds the gate, this write does not.
     //
-    // GenerateRenderRequests copies SIX more fields into the frame, and none of them comes from the
-    // camera record -- they all come from BrnEffects::EffectsModule::TempRaceCarStateCache
+    // ⭐ THE BLOCKER THAT USED TO STAND HERE IS CLOSED for these four (2026-08-16, drive-fx wave).
+    // It read "no PC source for the effects module's TempRaceCarStateCache". There is one, and it is
+    // the console's OWN source rather than a substitute: EffectsModule::Update reads the player's
+    // BrnPhysics::Vehicle::RaceCarState through
+    // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface, and that interface is
+    // LIVE on this build -- BrnGameModule::BridgeWorldToDirector already reads the same object every
+    // update frame (GameBridgeWorldToX.cpp:168, `lpWorldOutput->GetActiveRaceCarOutputInterface()`).
+    // So BrnGameModule::DoDispatch stages the same four members through
+    // PCBringUpSetRaceCarStateCache, beside the camera record it already stages, and they are
+    // written here. Same interface, same four members, same IsPlayerCarActive guard: this is a
+    // relocated producer, not an invented value.
+    lpFrame->SetLinearVelocity(gvPCBringUpCacheLinearVelocity);
+    lpFrame->SetAngularVelocity(gvPCBringUpCacheAngularVelocity);
+    lpFrame->SetSpeedMPH(gfPCBringUpCacheSpeedMPH);
+    lpFrame->SetSteering(gfPCBringUpCacheSteering);
+
+    // ==============================================================================================
+    // [FLAG BLOCKED: the effects module's TWO CACHE TRANSFORMS have no writer ANYWHERE]
+    //
+    // GenerateRenderRequests copies TWO more fields into the frame, and neither comes from the
+    // camera record -- both come from BrnEffects::EffectsModule::TempRaceCarStateCache
     // mCarStateCache (DWARF EffectsModule.h:577, module +180864):
     //     frame +0x130 mCarTransform     <- cache mCarTransform      (module +180864)
     //     frame +0x170 mCameraTransform  <- cache mCameraTransform   (module +180928)
-    //     frame +0x1B0 mLinearVelocity   <- cache mvLinearVelocity   (module +180992)
-    //     frame +0x1C0 mAngularVelocity  <- cache mvAngularVelocity  (module +181008)
-    //     frame +0x1D0 mfSpeedMPH        <- cache mfSpeedMPH         (module +181024)
-    //     frame +0x1D4 mfSteering        <- cache mfSteering         (module +181028)
-    // The four dynamic ones are filled by EffectsModule::Update @0x8229EC28 from the PLAYER's
-    // ActiveRaceCarState (state +816 linear velocity, +832 angular velocity, +972 speed mph,
-    // +1044 steering), reached through RCEntityActiveRaceCarOutputInterface off the effects INPUT
-    // buffer. Neither the effects module nor that IO buffer exists on this build, so there is no
-    // faithful value and none is invented.
-    // The two TRANSFORMS are a stronger statement -- NOTHING IN THE IMAGE EVER WRITES THEM:
+    // The TRANSFORMS are a stronger statement than a missing PC source -- NOTHING IN THE IMAGE EVER
+    // WRITES THEM:
     //     $ grep -rl "180928" .ida-exports/BURNOUT_X360_ARTIST.XEX/
     //     .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8227FF10.json     (this producer -- the READ)
     //     $ grep -rl "180864" .ida-exports/BURNOUT_X360_ARTIST.XEX/
@@ -1151,20 +1196,20 @@ void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
     // retail those two frame transforms carry whatever the module allocation held.
     //
     // WHAT THE FRAME CARRIES INSTEAD, and it is measured rather than chosen: ZERO.
-    // BrnEffectsFrame::Construct @0x822791E8 (and the tree's copy) writes NONE of the seven -- it
-    // stops after the tint2d block and the MotionBlurData::Construct tail -- so the frames keep
-    // their storage's initial bytes, and the storage is inside
+    // BrnEffectsFrame::Construct @0x822791E8 (and the tree's copy) writes neither -- it stops after
+    // the tint2d block and the MotionBlurData::Construct tail -- so the frames keep their storage's
+    // initial bytes, and the storage is inside
     //     $ grep -rn "static BrnGame::BrnGameModule" b5-decomp/src
     //     b5-decomp/src/GameSource/Main/BrnMain.cpp:45:static BrnGame::BrnGameModule gGameModule;
-    // i.e. a statically zero-initialised object.
-    // THE ONE CONSUMER THAT CARES, and what zero does to it: the B4-blur arm in
-    // BrnRendererModulePostFx.cpp reads GetSpeedMPH() and GetAngularVelocity().y whenever mbUseBlur
-    // is set. Speed 0 makes its lfSpeedFactor 0, hence m_blurVelocity = mfVelocity * 0 * 0 = 0, and
-    // yaw 0 leaves both blur centres unbiased at the authored (0.5, 0.5) / (0.5, 0). A B4 blur that
-    // turns on today is therefore a still, centred, zero-velocity blur rather than a speed-driven
-    // one -- wrong in DEGREE, not in kind, and it cannot read uninitialised memory.
-    // UNBLOCK by giving the renderer a live player-car speed/velocity/steering source (the world
-    // module's race-car state, or the real EffectsIO::InputBuffer) and writing the four here.
+    // i.e. a statically zero-initialised object. NO CONSUMER IN THIS TREE READS EITHER OF THE
+    // FRAME'S TRANSFORMS:
+    //     $ grep -rn "GetCarTransform\|GetCameraTransform" b5-decomp/src/GameSource/Graphics
+    //     src/GameSource/Graphics/BrnShaderConstantsFrame.h:54:  Matrix44Affine GetCameraTransform()
+    // -- one hit, and it belongs to BrnShaderConstantsFrame (the renderer's own shading frame), not
+    // to BrnEffectsFrame. So leaving the two at the console's own uninitialised-equivalent costs
+    // nothing today.
+    // UNBLOCK is not possible from the image: it needs an attestation of what the console INTENDED
+    // to put there, and there is none.
     // ==============================================================================================
 
     PCBringUpLogBaseEffectsFrameCameraState(*lpFrame, lrCamera);
@@ -1182,6 +1227,25 @@ void BrnRendererModule::PCBringUpSetCameraInput(const BrnDirector::Camera::Camer
         return;   // [FLAG PC bring-up] the console cannot be handed a null here; DoDispatch can.
     PCBringUpGetCameraInput() = *lpCamera;
     gbPCBringUpCameraInputStaged = true;
+}
+
+// [FLAG PC bring-up] see the declaration in BrnRendererModule.h. The PC stand-in for the
+// TempRaceCarStateCache fill inside BrnEffects::EffectsModule::Update @0x8229EC28: four stores,
+// the console's own four, off the same RCEntityActiveRaceCarOutputInterface the console reads.
+// The console's `if (IsPlayerCarActive(...))` gate lives at the CALL SITE (BrnGameModule::
+// DoDispatch), which is where the console's gate is too -- so a frame with no player car leaves
+// the last staged values standing, exactly as the module's cache does.
+// DELETE-WHEN BrnEffects::EffectsModule is on the build list and fills its own cache.
+void BrnRendererModule::PCBringUpSetRaceCarStateCache(Vector3::InParam lvLinearVelocity,
+                                                      Vector3::InParam lvAngularVelocity,
+                                                      f32 lfSpeedMPH,
+                                                      f32 lfSteering)
+{
+    gvPCBringUpCacheLinearVelocity  = lvLinearVelocity;    // cache +180992 <- RaceCarState +816
+    gvPCBringUpCacheAngularVelocity = lvAngularVelocity;   // cache +181008 <- RaceCarState +832
+    gfPCBringUpCacheSpeedMPH        = lfSpeedMPH;          // cache +181024 <- RaceCarState +972
+    gfPCBringUpCacheSteering        = lfSteering;          // cache +181028 <- RaceCarState +1044
+    gbPCBringUpRaceCarStateStaged   = true;
 }
 
 // [FLAG PC bring-up] see the declaration in BrnRendererModule.h. Hands the world module the
@@ -2418,13 +2482,70 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
         mSingleBufferedDispatchFrame.GetList(21)->DispatchAllMeshesZOnly(mpInterpreter, &lContext);
     }
 
+    // ==============================================================================================
+    // THE CARS-vs-WORLD MOTION-BLUR MASK -- the CAR half (X360 Render @0x8240CEC4-0x8240CF90 and
+    // @0x8240D338-0x8240D3FC).
+    //
+    // WHAT THE CONSOLE'S MASK IS, end to end, decoded off Render's own asm:
+    //   * the layer-0 internal BrnEffectsFrame's mMotionBlurData is quantised to three stack bytes
+    //     at @0x8240C2C0-0x8240C314 -- mbIsActive, (u8)(mfWorldBlurAmount*255) and
+    //     (u8)(mfCarsBlurAmount*255) (BrnRendererPostFxFrameBytes, already read in Render);
+    //   * the WORLD amount is the frame's STENCIL CLEAR value: BeginRenderAntiAliased passes it to
+    //     D3DDevice_BeginTiling's ClearStencil (`clrlwi r9, r27, 24` @0x823FFB44) and ResolveMSAA
+    //     passes the same byte to D3DDevice_EndTiling's ClearStencil (`mr r9, r26` @0x823FFD44).
+    //     Both are already reconstructed and already carry the byte;
+    //   * the CARS amount is stamped into the stencil BY THE CAR PASSES THEMSELVES, which is this
+    //     block: `shadow::Device::BeginForceStencilWrite(carsByte)` before the car mesh list and
+    //     EndForceStencilWrite after it. The force window makes
+    //     shadow::Device::Xbox2SetDepthStencilStateLowLevelShadowed (X360 sub_827E8150) override
+    //     every material's depth/stencil third with StencilEnable 1 / TwoSided 0 / Func ALWAYS(7) /
+    //     WriteMask -1 / Ref = the forced value / Pass REPLACE(2) / ZFail KEEP(0). That override is
+    //     ALREADY IMPLEMENTED on PC (shadowingdevice.cpp:747-754), and the car meshes reach it
+    //     through Device::SetMaterialState -- so the window works here exactly as it does there;
+    //   * the composite then reads the stencil out of the depth fetch's fourth lane and multiplies
+    //     the screen velocity by it, giving cars and world DIFFERENT blur amounts per pixel.
+    // ⚠ THE LAST STEP IS THE ONE THIS BUILD STILL CANNOT DO: D3D9 cannot SAMPLE a depth-stencil
+    // surface's stencil, so PostFxProgramsPC.cpp's composite uses 1.0 for the mask (its own
+    // "TWO DISCLOSED PC DEVIATIONS" banner says so). This block therefore makes the mask CORRECT IN
+    // THE BUFFER while the consumer is still flat -- see the drive-fx wave report for the two
+    // candidate PC consumers. It is written now because it is a literal reconstruction of two
+    // console windows, because it is free (the whole thing is gated OFF unless a camera actually
+    // requested motion blur), and because the alternative -- a consumer with nothing to consume --
+    // cannot be brought up in the other order.
+    //
+    // THE GATE IS mMotionBlurData.mbIsActive, NOT the render-cars flag: `lbz r25, var_CD0` /
+    // `beq` @0x8240CEC8 skips only the Begin, and the symmetric `cmplwi r25` / `beq` @0x8240CF84
+    // skips only the End -- so the pair is balanced on ONE bool, which is what
+    // BeginForceStencilWrite's `!mbForceStencilWrite` assert and EndForceStencilWrite's
+    // `mbForceStencilWrite` assert require.
+    //
+    // POSITION OF THE READ: Render reads the three bytes once, right after SortDispatchLists, and
+    // carries them in stack slots to four consumers. They are read again here, for the same reason
+    // Render's own copy documents -- nothing writes the layer-0 INTERNAL frame between those two
+    // points (its only writers are StartOfFrame / DoDispatch in the UPDATE frame and
+    // EffectsArbitrator::EndOfFrame in SwapBuffers, all outside Render).
+    // ==============================================================================================
+    BrnRendererPostFxFrameBytes lCarMaskBytes;
+    BrnRendererReadPostFxFrameBytes(
+        sbEffectsArbitratorConstructed ? &mEffectsArbitrator : 0, &lCarMaskBytes);
+    const bool lbForceCarStencil = lCarMaskBytes.mbMotionBlurActive;
+
     if (lbOpaqueWork)
     {
         renderengine::Device::SetWorldPassDefaultStates(false);
 
         if (mbRenderCarsOpaque)
         {
+            // X360 @0x8240CEC4-0x8240CED4 / @0x8240CF84-0x8240CF8C: the Begin/End pair sits INSIDE
+            // the render-cars-opaque gate (the `beq cr6, loc_8240CF94` at 0x8240CEC0 jumps past all
+            // three), and the dispatch of mesh list 0x13 sits between them.
+            if (lbForceCarStencil)
+                shadow::Device::BeginForceStencilWrite(lCarMaskBytes.mu8CarsBlurStencil);
+
             mSingleBufferedDispatchFrame.GetList(19)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+
+            if (lbForceCarStencil)
+                shadow::Device::EndForceStencilWrite();
         }
         if (mbRenderWorldOpaque)
         {
@@ -2445,8 +2566,18 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     // The dome is camera-centred and 9500 units across, so it is drawn AFTER the opaque
     // geometry and depth-tests against it (its depth/stencil state writes no depth) --
     // it fills only the pixels the city left empty.
+    //
+    // gbBrnWorldShaderConstantsFrameBringUpValid is the flag over the frame
+    // PublishSkyConstantsBringUp now COPIES, so the pass names it explicitly rather than
+    // depending on it transitively. It is already implied by gBrnSkyCameraBringUp.mbValid --
+    // WorldModule::GenerateDispatchListsBringUp raises the frame flag at
+    // BrnWorldModule.cpp:5541 and the camera flag at :5556, straight-line, in that order, and
+    // neither is ever cleared -- but naming it here means a future edit that separates the two
+    // producers cannot silently draw a sky with no constants behind it.
     if (mbRenderSky && (lbPreZWork || lbOpaqueWork || lbTransparentWork)
-        && gBrnSkyCameraBringUp.mbValid && EnsureSkyDomeBringUp())
+        && gBrnSkyCameraBringUp.mbValid && gbBrnWorldShaderConstantsFrameBringUpValid
+        && EnsureSkyDomeBringUp())
+
     {
         BrnShaderConstantsFrame& lrFrame =
             maShaderConstantsFrames[mu8ShaderConstantsFrameExternal];
@@ -2468,9 +2599,24 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
         {
             mSingleBufferedDispatchFrame.GetList(15)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
         }
+        // X360 @0x8240D338-0x8240D348 / @0x8240D3F4-0x8240D3FC: the car-TRANSPARENT window. The
+        // whole window sits INSIDE the mbRenderCarsTransparent gate: `lbzx r11, r31, 0xC417` /
+        // `cmplwi cr6, r11, 0` / `beq cr6, loc_8240D400` @0x8240D2F4-0x8240D304, and loc_8240D400 is
+        // PAST both the Begin (0x8240D338) and the End (0x8240D3FC). 0xC417 is
+        // mbRenderCarsTransparent (the five sibling flags 0xC413..0xC417 pin the committed member
+        // order in BrnRendererModule.h). What sits between Begin and End is the occlusion-query arm
+        // (0x8240D36C) or the plain arm (0x8240D3D0), both of which dispatch mesh list 0x14 -- the
+        // same shape as the opaque half above. (Step-10 verify finding: the first reading had the
+        // pair outside the gate.)
         if (mbRenderCarsTransparent)
         {
+            if (lbForceCarStencil)
+                shadow::Device::BeginForceStencilWrite(lCarMaskBytes.mu8CarsBlurStencil);
+
             mSingleBufferedDispatchFrame.GetList(20)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+
+            if (lbForceCarStencil)
+                shadow::Device::EndForceStencilWrite();
         }
     }
 
@@ -2556,85 +2702,200 @@ bool BrnRendererModule::EnsureSkyDomeBringUp()
     return true;
 }
 
-// The per-frame sky/cloud constants.
+// The per-frame sky/cloud constants -- SINCE THIS WAVE, A COPY OF THE LIVE WORLD FRAME.
 //
-// The values are the SHIPPED environment keyframe ENV_KF_Paradise_ingame_junk_city_1200
-// (build/game/ENVIRONMENTSETTINGS/PARADISE_INGAME_JUNK.BUNDLE -- the timeline pins city_1200
-// to exactly 12:00:00), decoded against the asm-attested BrnEnvironmentKeyframe layout and
-// pushed through the real producer maths read out of
-// EnvironmentManager::GenerateShaderConstants @0x827D0098. Three of those transforms are NOT
-// identities and are the difference between a sky and a bug:
-//   * g_layerCloudiness is 1 - LayerDensity   (`v159 = 1.0 - a50[0]` before the +0x280 store)
-//   * g_layerInvFeather is 1 / LayerFeathering(`v159 = 1.0 / a52[0]` before the +0x290 store)
-//   * the cloud texture scale is LayerScale * 0.00012500001 (flt_820CD130), not a world size
+// ---- WHY THIS IS A COPY AND NOT A PRODUCER (X360, proven from the asm) ----------------
+// On the console the BrnShaderConstantsFrame the sky pass reads is filled by the WORLD, not
+// by the renderer; the renderer only lends it the storage. The chain is a POINTER handed
+// across the dispatch IO buffers:
 //
-// WHITE LEVEL. The console multiplies every colour by EnvironmentManager::mfWhiteLevel
-// (+0x11C0), which Construct @0x827CA408 seeds to 0.5 and nothing else writes, and the post-FX
-// tonemapper divides it back out. This build has no tonemapper, and the world's own bring-up
-// publisher already publishes its colours at white level 1.0 (HDRConstants = (1,1,1,1)), so the
-// sky is published the same way -- the RAW keyframe colours. The clouds are the one place that
-// choice is visible: BrnSkyDomeManager multiplies both cloud colours by KF_CLOUD_COLOUR_SCALE
-// (2.0), which on the console exactly cancels the 0.5, so they are pre-divided by 2 here and
-// reach the shader at their authored values. (That round trip is also what pins mfWhiteLevel
-// to 0.5 independently of the asm.)
+//   BrnRendererModule::Update @0x82405E28, 0x824060C0-0x824060D4
+//       lbz   r11, 0xAD1(r31)          <- mu8ShaderConstantsFrameExternal
+//       mulli r11, r11, 0x320          <- sizeof(BrnShaderConstantsFrame)
+//       addi  r4,  r11, 0x490          <- &maShaderConstantsFrames[external]
+//       bl    RendererIO::OutputBuffer::SetShaderConstantsFrame   @0x823FB608
+//   -> BrnGame::BrnGameModule::BridgeRendererToWorld @0x823CDD20 -- the SINGLE xref of both
+//       RendererIO::OutputBuffer::GetShaderConstantsFrame        @0x823B3DE8 and
+//       BrnWorldIO::DispatchInputBuffer::SetShaderConstantsFrame @0x823B50B0
+//   -> WorldModule::GenerateDispatchLists @0x827D1CE8 -- the SINGLE xref of
+//       BrnWorldIO::DispatchInputBuffer::GetShaderConstantsFrame @0x827BBEF0 -- which hands
+//       it to WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410 (r8), and that
+//       function writes the frame IN PLACE.
+//
+// The renderer never writes a byte of it. The four frame setters the console emitted
+// out-of-line have exactly two callers between them, both in the world:
+//       SetViewProjectionMatrix       @0x827B0018 <- 0x827D1410
+//       SetCameraTransform            @0x827B0158 <- 0x827D1410
+//       SetEnvMapViewProjectionMatrix @0x827B00A8 <- 0x827D1CE8
+//       SetEnvMapViewPosition         @0x827B01E8 <- 0x827D1CE8
+// and Render's own sky call reads the OTHER slot of the double buffer -- the one SwapBuffers
+// promoted, i.e. the frame the world filled last dispatch:
+//       0x8240D0FC  lbz  r11, 0xAD0(r31)      <- mu8ShaderConstantsFrameInternal
+//       0x8240D110  addi r27, r11, 0x490
+//       0x8240D15C  bl   BrnSkyDomeManager::Render   (r7 = r27)
+//
+// So the console's sky is lit by the environment manager, through the world, one dispatch
+// late. The PC seam is therefore a COPY of gBrnWorldShaderConstantsFrameBringUp -- the frame
+// WorldModule::GenerateDispatchListsBringUp fills every dispatch through the REAL
+// WorldModule::SetupShaderConstantsBeforeRendering (BrnShaderConstantsFrame.h) -- and not a
+// second, hard-coded producer. Every environment value below is the live environment
+// manager's, at the live time of day.
+//
+// ---- WHAT WAS HERE BEFORE, AND WHY IT IS GONE ----------------------------------------
+// Until this wave this function hard-coded the noon keyframe ENV_KF_Paradise_ingame_junk_
+// city_1200 and the OLD bring-up key-light direction (0.406, -0.812, 0.419). Step 9 made the
+// world's own shading publish real, so the world moved to the environment manager's key light
+// while the sky kept the frozen one: the sun disc sat 51.2 degrees away from the direction the
+// city was lit and shadowed from at the timeline's own 13:00 start (61.7 degrees at 12:00,
+// 38.5 at 14:00 -- the gap moves because the frozen one cannot), and the sky never changed
+// colour as the day advanced. That incoherence is what this change closes. The hard-coded set
+// is DELETED, not kept as a fallback -- see the ordering proof below.
+//
+// ---- ORDERING / VALIDITY (measured, not assumed) --------------------------------------
+// Does the sky ever draw before the world's first dispatch? No, and it cannot:
+//   * the host frame is BrnMain.cpp EngineUpdate :210-224 --
+//         UpdateThread()  [ -> GameMain -> MainGameFlowStateInGame::Render ->
+//                            BrnGameModule::DoDispatch -> WorldModule::
+//                            GenerateDispatchListsBringUp (BrnGameModule.cpp:1502) ]
+//      -> OnEndOfUpdateFrame()  -> DispatchThread()  [ -> BrnRendererModule::Render ]
+//     so the world producer runs BEFORE this function in the same host frame;
+//   * gbBrnWorldShaderConstantsFrameBringUpValid is raised at BrnWorldModule.cpp:5541 and
+//     gBrnSkyCameraBringUp.mbValid at :5556 -- the same function, straight-line, frame first,
+//     no branch or return between them -- and neither is ever cleared (the only other
+//     mentions are the definitions at BrnWorldModule.cpp:127 and BrnRendererModule.cpp:2523).
+//     The sky pass is already gated on gBrnSkyCameraBringUp.mbValid, so "the camera is valid"
+//     already implies "the live frame is valid".
+// The gate at the call site now names the live frame explicitly anyway, so the dependency is
+// visible rather than transitive; the early-out below is belt-and-braces and reports itself.
+//
+// ---- THE TWO ARITHMETIC CONSEQUENCES, both intended ------------------------------------
+//  * WHITE LEVEL. The live producer publishes EnvironmentManager::mfWhiteLevel, which
+//    Construct @0x827CA408 seeds to 0.5f (KF_DEF_WHITE_LEVEL, BrnEnvironmentManager.cpp:40),
+//    and GenerateShaderConstants @0x827D0098 pre-multiplies every colour by it. The sky
+//    gradient therefore arrives at HALF the old hard-coded numbers -- which is exactly the
+//    level the WORLD has been lit at since step 9, so the two now agree. The old text
+//    published at white level 1.0 and hand-divided the two cloud colours by
+//    KF_CLOUD_COLOUR_SCALE (2.0) to cancel it; that hand-division is DELETED, because the
+//    console's own round trip does it: keyframe * 0.5 (manager) * 2.0 (BrnSkyDomeManager::
+//    Render's ScaleVector4) == the authored colour. The clouds therefore do NOT change value.
+//    ⚠ AND THE FRAME'S WHITE LEVEL ITSELF CHANGES -- deliberately (step-10 verify finding, taken
+//    as console-faithful): the slot this function publishes becomes the INTERNAL frame after
+//    SwapBuffers (BrnRendererModule.cpp SwapBuffers: Internal = External, the new External is
+//    re-Constructed), and Render reads maShaderConstantsFrames[Internal].GetWhiteLevel() into
+//    BeginRenderAntiAliased (the clear colour) and BrnPostFx::Render (GlobalParams.x =
+//    1/whiteLevel). Since step 9 the world constants were ALREADY at the console's 0.5 while
+//    the composite still divided by the Construct-seeded 1.0 -- the frame was half as bright as
+//    the console's; with 0.5 published here the tonemap doubles it back, which is the console's
+//    own round trip. Expect the boot frames to read BRIGHTER than step 9's, not darker.
+//  * KEY LIGHT. GetKeyLightDirection() is the manager's CLAMPED direction
+//    (BrnEnvironmentManager.cpp:538, ComputeKeyLightDirection on the 09:00..16:00-clamped time
+//    of day) -- bit-identical to EnvironmentManager::CalcKeyLightDirection() @0x827B0638,
+//    which is what the shadow producer already uses (BrnWorldModule.cpp:5663). So the sun in
+//    the sky, the world's key light and the shadow cascades all come off the same value, and
+//    the `[sky]` line below must read the same numbers as `[shadow-prod] keyLight`.
+//
+// ---- WHAT IS COPIED --------------------------------------------------------------------
+// The seventeen ENVIRONMENT members WorldModule::SetupShaderConstantsBeforeRendering writes,
+// plus mCameraTransform. NOT the view-projection / view position: those stay
+// gBrnSkyCameraBringUp's, because the sky pass's framing is the renderer's own on PC (the
+// dispatch IO buffer set that would carry the world's is not real). They are the same camera
+// today -- GenerateDispatchListsBringUp passes the same lViewProjection/lEye to the producer
+// at :5535 that it stages at :5554 -- so this is a redundancy, not a divergence.
+// Never written by either side, on the console or here: mCloudLayerRadii (+0x240, which the
+// console's producer does not write either) and the six env-map face matrices +
+// mEnvMapViewPosition (written by WorldModule::GenerateDispatchLists @0x827D1CE8 for
+// BrnSkyDomeManager::RenderToEnvironmentMap, a pass this build does not run).
+//
+// DELETE-WHEN the dispatch IO buffer set is real: then BrnRendererModule::Update publishes
+// maShaderConstantsFrames[external] through RendererIO::OutputBuffer::SetShaderConstantsFrame,
+// the world fills that very object, and both this function and gBrnSkyCameraBringUp go away.
 void BrnRendererModule::PublishSkyConstantsBringUp(BrnShaderConstantsFrame* lpFrame)
 {
     if (lpFrame == 0)
         return;
 
+    // Unreachable on this build (see the ordering proof in the banner); kept so the function
+    // is safe on its own and REPORTS rather than publishing a frame of zeros -- a frame of
+    // zeros is a black sky with a white level of 0, which looks like a render bug.
+    if (!gbBrnWorldShaderConstantsFrameBringUpValid)
+    {
+        static bool sbLoggedNoLiveFrame = false;
+        if (!sbLoggedNoLiveFrame && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLoggedNoLiveFrame = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[sky] no live world shading frame yet - the sky constants are not published\n";
+        }
+        return;
+    }
+
+    const BrnShaderConstantsFrame& lrLiveFrame = gBrnWorldShaderConstantsFrameBringUp;
+
+    // The live frame is read UNLOCKED (the world's seam closes its write lock at
+    // BrnWorldModule.cpp:5540), which is what every lock-checked getter asserts.
+    const Vector3 lKeyLightDirection = lrLiveFrame.GetKeyLightDirection();
+    const Vector4 lTopColourDrk      = lrLiveFrame.GetTopColourDrk();
+    const f32     lfWhiteLevel       = lrLiveFrame.GetWhiteLevel();
+
     lpFrame->LockForWriting();
 
-    // ---- camera (the console's WorldModule::SetupShaderConstantsBeforeRendering half) ----
+    // ---- the camera half: the renderer's own framing, unchanged ---------------------------
     lpFrame->SetViewProjectionMatrix(gBrnSkyCameraBringUp.mViewProjection);
     lpFrame->SetViewPosition(gBrnSkyCameraBringUp.mViewPosition);
+    // The transform is not a framing input for any pass this build runs; it is carried across
+    // so the frame is the world's frame in full rather than in part.
+    lpFrame->SetCameraTransform(lrLiveFrame.GetCameraTransform());
 
-    // ---- the key light -------------------------------------------------------------------
-    // MUST match the direction WorldModule::PublishWorldShadingConstantsBringUp publishes at
-    // shader-constant slot 10, or the sun in the sky sits somewhere other than where the world
-    // is lit from. It is the direction the light TRAVELS; Im3dSkyDome::SetConstants negates it
-    // and appends its XZ length for the shader's KeyLightDirAndXZLength.
-    //
-    // FLAG: this is the bring-up direction, NOT the console's. ComputeKeyLightDirection
-    // @0x82678AB0 derives the real one from the time of day and three manager tuning angles
-    // (SunRigRotation 45 deg, SunTiltAtHorizon 20 deg, SunTiltAtMidday 50 deg, all seeded by
-    // EnvironmentManager::Construct); at city_1200's 43200 s that gives
-    // (-0.60916963, -0.66981047, -0.42457779) -- a different azimuth and a 12-degree lower
-    // sun. Adopt it in the same change that adopts it for the world, not before.
-    lpFrame->SetKeyLightDirection(Vector3{ 0.406f, -0.812f, 0.419f, 0.0f });
-    lpFrame->SetKeyLightColour(Vector3{ 1.700000f, 1.700000f, 1.054000f, 0.0f });
-    lpFrame->SetWhiteLevel(1.0f);
+    // ---- the environment half: the live environment manager's, member for member -----------
+    lpFrame->SetKeyLightDirection(lKeyLightDirection);
+    lpFrame->SetKeyLightColour(lrLiveFrame.GetKeyLightColour());
+    lpFrame->SetUnbiasedKeyLightDirection(lrLiveFrame.GetUnbiasedKeyLightDirection());
+    lpFrame->SetWhiteLevel(lfWhiteLevel);
+    lpFrame->SetGameTime(lrLiveFrame.GetGameTime());
 
-    // ---- the sky gradient (ScatteringData @keyframe+0x090) --------------------------------
-    // rgb from Sky{Top,Hor,Sun}Colour; .w from SkyDrk / SkyHorPow / SkySunPow (the .w lanes
-    // are exponents and offsets, and the console's white-level vector is (wl,wl,wl,1) exactly
-    // so they are NOT scaled).
-    lpFrame->SetTopColourDrk  (Vector4{ 0.05321430f, 0.41437697f, 0.71731997f,  0.0f });
-    lpFrame->SetHorColourPow  (Vector4{ 1.01527800f, 0.88277322f, 0.80715537f,  0.5f });
-    lpFrame->SetSunColourPow  (Vector4{ 1.00100000f, 1.00100000f, 0.97702491f, 13.1f });
-    // SkyHorBleedScl / SkyHorBleedPow / SkySunBleedPow (keyframe +0x0CC/+0x0D0/+0x0D4).
-    lpFrame->SetHorBleedSclPow(Vector3{ 5.0f, 4.3f, 6.5f, 0.0f });
+    // the sky gradient (the manager's blended ScatteringData)
+    lpFrame->SetTopColourDrk(lTopColourDrk);
+    lpFrame->SetHorColourPow(lrLiveFrame.GetHorColourPow());
+    lpFrame->SetSunColourPow(lrLiveFrame.GetSunColourPow());
+    lpFrame->SetHorBleedSclPow(lrLiveFrame.GetHorBleedSclPow());
 
-    // ---- fog / scattering: {1/(far-near), near/(far-near), ScattPow, ScattCap} ------------
-    // ScattDist = (25, 1500), ScattPow = 1, ScattCap = 0.87. Same four numbers the world's
-    // ScattCoeffs (slot 27) carries, so the dome's horizon haze matches the city's.
-    lpFrame->SetFogScattering(Vector4{ 0.000677966102f, 0.0169491525f, 1.0f, 0.87f });
+    // fog / scattering (the same four numbers as shader-constant slot 27, so the dome's
+    // horizon haze matches the city's)
+    lpFrame->SetFogScattering(lrLiveFrame.GetFogScattering());
 
-    // ---- the clouds (CloudsData @keyframe+0x1D0) -----------------------------------------
-    // Pre-divided by KF_CLOUD_COLOUR_SCALE (see the white-level note above).
-    lpFrame->SetCloudDarkColour0(Vector4{ 0.50000000f, 0.49262166f, 0.46200001f, 0.5f });
-    lpFrame->SetCloudLiteColour0(Vector4{ 0.10284000f, 0.10284000f, 0.10284000f, 0.5f });
-    // (xy) the cloud drift offset -- EnvironmentManager::Update accumulates it from
-    // LayerSpeed/DirectionAngle; Construct's t=0 value is (0,0), so the clouds do not drift.
-    // (zw) LayerScale[0] (1.0) * 0.00012500001.
-    lpFrame->SetCloudTextureScaleAndOffsets0(Vector4{ 0.0f, 0.0f, 0.00012500001f, 0.00012500001f });
-    lpFrame->SetCloudLayerDensity   (Vector4{ 0.0f,          1.0f,  0.0f, 0.0f });  // 1 - (1.0, 0.0)
-    lpFrame->SetCloudLayerInvFeather(Vector4{ 0.909090889f, 10.0f,  0.0f, 0.0f });  // 1 / (1.1, 0.1)
-    lpFrame->SetCloudLayerOpacity   (Vector4{ 0.5f,          0.0f,  0.0f, 0.0f });
-    // g_domeRanges.z. EnvironmentManager::Construct seeds +0x6F0 to 1.0 and nothing else
-    // writes it; no keyframe field feeds it.
-    lpFrame->SetCloudDistanceCurve(1.0f);
+    // the clouds (the manager's blended CloudsData -- colours already at the white level,
+    // density already 1-negativeDensity, feather already 1/feathering)
+    lpFrame->SetCloudDarkColour0(lrLiveFrame.GetCloudDarkColour0());
+    lpFrame->SetCloudLiteColour0(lrLiveFrame.GetCloudLiteColour0());
+    lpFrame->SetCloudTextureScaleAndOffsets0(lrLiveFrame.GetCloudTextureScaleAndOffsets0());
+    lpFrame->SetCloudLayerOpacity(lrLiveFrame.GetCloudLayerOpacity());
+    lpFrame->SetCloudLayerDensity(lrLiveFrame.GetCloudLayerDensity());
+    lpFrame->SetCloudLayerInvFeather(lrLiveFrame.GetCloudLayerInvFeather());
+    lpFrame->SetCloudDistanceCurve(lrLiveFrame.GetCloudDistanceCurve());
 
     lpFrame->UnlockForWriting();
+
+    // [FLAG PC bring-up diagnostic] THE COHERENCE PROOF, and the only way to see the day move
+    // without a screenshot: the first published frame, then one line every 600 sky frames
+    // (~10 s at 60 fps, ~24 lines over a 240 s boot). The key light must read the same numbers
+    // as `[shadow-prod] keyLight` on the same frame -- that is the regression this closes --
+    // and the top-of-sky colour must drift as the timeline advances the hour.
+    // DELETE with the bring-up.
+    {
+        static u32 suSkyPublishCount = 0;
+        ++suSkyPublishCount;
+        if ((suSkyPublishCount == 1u || (suSkyPublishCount % 600u) == 0u)
+            && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[sky] key light from the live frame ("
+                << lKeyLightDirection.x << ", " << lKeyLightDirection.y << ", "
+                << lKeyLightDirection.z << ") [valid at renderer frame "
+                << static_cast<s32>(suSkyPublishCount) << "] top=("
+                << lTopColourDrk.x << ", " << lTopColourDrk.y << ", " << lTopColourDrk.z
+                << ") whiteLevel " << lfWhiteLevel << "\n";
+        }
+    }
 }
 
 // @ 0x8240BFA8 - BrnRendererModule::Render. Reconstructed from the X360 ARTIST build.
