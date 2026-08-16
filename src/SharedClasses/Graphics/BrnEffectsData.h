@@ -2,6 +2,13 @@
 
 #include "BrnCommonTypes.h"   // Vector2, Vector3, Vector4, Matrix44Affine (shared rw::math::vpu types)
 
+// rw::graphics::postfx::ColourCube -- BrnEffects::TintData holds one BY POINTER (DWARF
+// SharedClasses/Graphics/BrnEffectsData.h:275, and the DWARF's own forward declaration of it
+// sits at BrnEffectsData.h:40 in the same dump). Pointer-only here; the complete type lives in
+// SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxcolourcube.h, which declares it a
+// `class` -- matched here so no translation unit sees a struct/class mismatch (C4099).
+namespace rw { namespace graphics { namespace postfx { class ColourCube; } } }
+
 // Declaration shape for the six data structs and BrnEffectsFrame: the DecFIGS DWARF
 // (references/DecFIGS/dwarfdump/SharedClasses/Graphics/BrnEffectsData.h:84..321) and, for
 // BrnEffectsFrame's accessor surface, the Feb-2007 header
@@ -213,19 +220,34 @@ struct BlurData
 
 struct TintData
 {
-    // ⚠ SUSPECT (raised 2026-08-15, NOT changed this wave): DWARF BrnEffectsData.h:275 types
-    // this member `rw::graphics::postfx::ColourCube* mpColourCube` -- a real pointer, 4 bytes
-    // on the console and 8 on the host. The tree models it as the raw guest word, which forces
-    // EvalTint to do exactly the guest-int -> host-pointer cast PREAMBLE rule 1 forbids.
-    // Widening it is layout-neutral here (TintData sits at frame +0x110 with 12 bytes of pad
-    // before TintData2d at +0x120, so an 8-byte pointer + 8 pad still lands on +0x120), but it
-    // changes what the world group's GenerateEffects writes this wave, so it is left alone and
-    // listed as a follow-up.
-    u32 muColourCube;
+    // ⭐ THE SUSPECT RAISED 2026-08-15 IS PAID OFF (post-fx step 10, group tintdata).
+    // DWARF BrnEffectsData.h:275 types this member
+    //     rw::graphics::postfx::ColourCube * mpColourCube;
+    // -- a REAL POINTER, 4 bytes on the console and 8 on the host. Modelling it as the raw
+    // guest word forced BrnGraphics::EffectsArbitrator::EvalTint to cast a 32-bit guest int to
+    // a host ColourCube* and hand it to the blend kernels, which is PREAMBLE rule 1 exactly.
+    // It is now the pointer the DWARF declares, and that cast is gone.
+    //
+    // THE WIDENING IS LAYOUT-NEUTRAL AND THE static_asserts BELOW PROVE IT. TintData sits at
+    // BrnEffectsFrame +0x110 (EvalTint @0x823FD62C `lwz r9, 0x110(r10)`) and TintData2d at
+    // +0x120 (EvalEffectData<TintData2d> @0x823FA668 `addi r11, r11, 0x120`), i.e. the console
+    // leaves 12 bytes of tail padding after the 4-byte guest pointer. On the host the pointer
+    // takes 8 and the tail padding takes 8 -- same 16 bytes, same +0x120, same 496-byte frame.
+    //
+    // ⚠ THIS TYPE IS *NOT* WHAT THE SERIALISED KEYFRAME EMBEDS ON THE HOST. DWARF
+    // BrnEnvironmentKeyframe.h:62 types the keyframe's +0x80 slot `Keyframe::TintData mTintData`
+    // (the typedef at BrnEnvironmentData.h:42 is this struct), but the Keyframe is an IN-PLACE
+    // 0x240-byte serialised resource whose slot must stay FOUR bytes on disk -- see the note on
+    // BrnEnvironmentKeyframe.h's mpColourCube for why it keeps the console width behind a
+    // CgsGraphics::Ptr32 instead of embedding this struct.
+    rw::graphics::postfx::ColourCube* mpColourCube;
 
     void Construct()
     {
-        muColourCube = 0;
+        // `stw r0, 0x110(frame)` inside BrnEffectsFrame::Construct @0x822791E8 -- a null cube,
+        // which is also what BrnEnvironmentManager::GenerateEffects' default arm publishes on a
+        // build whose default colour cube has not been acquired.
+        mpColourCube = 0;
     }
 };
 
@@ -398,7 +420,11 @@ private:
     BrnEffects::DepthOfFieldData mDepthOfFieldData;
     BrnEffects::BlurData         mBlurData;
     BrnEffects::TintData         mTintData;
-    u8                           mPad114[12];
+    // TintData's tail padding up to TintData2d @ +0x120. The console's 4-byte cube pointer
+    // leaves 12; the host's 8-byte pointer leaves 8. Sized from the host struct rather than
+    // written as a literal so the two can never disagree (and the frame-stride static_assert
+    // below is the backstop).
+    u8                           mPad114[16 - sizeof(BrnEffects::TintData)];
     BrnEffects::TintData2d       mTintData2d;
     Matrix44Affine               mCarTransform;
     Matrix44Affine               mCameraTransform;
@@ -422,7 +448,10 @@ static_assert(sizeof(BrnEffects::BloomData) == 32, "BloomData layout drift");
 static_assert(sizeof(BrnEffects::VignetteData) == 80, "VignetteData layout drift");
 static_assert(sizeof(BrnEffects::DepthOfFieldData) == 32, "DepthOfFieldData layout drift");
 static_assert(sizeof(BrnEffects::BlurData) == 96, "BlurData layout drift");
-static_assert(sizeof(BrnEffects::TintData) == 4, "TintData layout drift");
+// ONE POINTER, whatever the target's pointer is (guest 4, host 8) -- DWARF BrnEffectsData.h:275.
+// The 496-byte frame stride below is what actually pins the layout; this pins the member set.
+static_assert(sizeof(BrnEffects::TintData) == sizeof(rw::graphics::postfx::ColourCube*),
+              "TintData layout drift");
 static_assert(sizeof(BrnEffects::TintData2d) == 16, "TintData2d layout drift");
 static_assert(sizeof(BrnDirector::Camera::MotionBlurData) == 12, "MotionBlurData layout drift");
 // The frame stride the whole subsystem is addressed with: every X360 frame address is

@@ -1,5 +1,7 @@
 #include "types.hpp"
 
+#include <cstdio>                                                              // std::snprintf (the one-shot diag)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // CgsDev::Log::WriteToLog
 #include "SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxtint.h"   // Tint
 #include "SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxhelper.h"  // PfxHelper::CreateProgram
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"     // ProgramBuffer
@@ -83,22 +85,32 @@ namespace postfx
 
         // --- the colour-lookup texture (a muSize x muSize x muSize volume) ---------------------------
         renderengine::Texture::Parameters lTextureParams;
-        // PC DIVERGENCE. The console stores the texture TYPE in Parameters word 0 (4 =
-        // Texture::E_TYPE_VOLUME -- this lookup is a muSize^3 cube) and the GPU format in
-        // muReserved0. This backend's word 0 is a real D3DFORMAT, so the console's 4 reached
-        // CreateTexture as D3DFORMAT(4) -> D3DERR_INVALIDCALL, twice per boot. Write the PC
-        // spelling of the format muReserved0 already names. Nothing is lost: GetType() returns
-        // E_TYPE_2D unconditionally here.
-        // [FLAG PC bring-up: still 2D -- a muSize^3 volume needs CreateVolumeTexture, so
-        //  muSliceStride stays 0 in Tint::BeginBlendJob. Inert today: no tint pixel program.]
-        lTextureParams.miFormat    = 21;                   // D3DFMT_A8R8G8B8 == muReserved0
+        // THE EIGHT WORDS ARE THE CONSOLE'S OWN, word for word (asm 0x82403B68-0x82403BD4):
+        //     word0 = 4            -> E_TYPE_VOLUME     `li r10, 4` / `stw r10, var_C0`
+        //     word1 = 0            -> muSysMem          `stw r31, var_BC`
+        //     word2/3/4 = muSize   -> width/height/depth `stw r11, var_B8 / var_B4 / var_B0`
+        //     word5 = 1            -> muNumLevels       `stw r30, var_AC`
+        //     word6 = 0x18280186   -> the FORMAT        `lis/ori r10` / `stw r10, var_A8`
+        // THE ONE PC DIVERGENCE is the format's SPELLING: word6 is the console's GPU format word
+        // (low bits 6 = GPUTEXTUREFORMAT_8_8_8_8) and D3D9 wants a D3DFORMAT, so the PC name for the
+        // same surface, D3DFMT_A8R8G8B8 (21), goes in. The console value stays below as the
+        // documentation of what was translated.
+        //
+        // ⭐ THIS IS THE ONLY PLACE IN THE TREE THAT ASKS FOR A VOLUME. The renderengine leaf keys
+        // its whole volume path (CreateVolumeTexture / LockBox / UnlockBox / GetType) off THIS word
+        // -- never off muDepth, which on a serialised X360 raster is a cube-map face count and would
+        // drag 234 shipped cube maps onto the volume path (texture.h's Type banner carries the
+        // census). Tint::BeginBlendJob below therefore gets a genuine muSliceStride out of its lock.
+        lTextureParams.meType      = renderengine::Texture::E_TYPE_VOLUME;   // word0 = 4
         lTextureParams.muSysMem    = 0;
         lTextureParams.muWidth     = lrParameters.muSize;
         lTextureParams.muHeight    = lrParameters.muSize;
         lTextureParams.muDepth     = lrParameters.muSize;
         lTextureParams.muNumLevels = 1;
-        lTextureParams.muReserved0 = KU_TINT_LOOKUP_TEXTURE_FORMAT;
+        lTextureParams.miFormat    = 21;   // D3DFMT_A8R8G8B8 -- the PC spelling of word6 below
         lTextureParams.muReserved1 = 0;
+        static_assert(KU_TINT_LOOKUP_TEXTURE_FORMAT == 0x18280186u,
+                      "word6, the console's GPU format for the tint lookup volume");
 
         rw::BaseResourceDescriptors<5> lTextureDescriptor;
         renderengine::Texture::GetResourceDescriptor(reinterpret_cast<u32*>(&lTextureDescriptor), &lTextureParams);
@@ -106,6 +118,26 @@ namespace postfx
             reinterpret_cast<const rw::ResourceDescriptor&>(lTextureDescriptor), nullptr);
         lpTint->m_textureTintMap =
             renderengine::Texture::Initialize(&lpTint->m_textureTintMapResource, &lTextureParams);
+
+        // [DIAG one-shot] the boot proof that the lookup volume exists at all. Two Tints are
+        // constructed (BrnPostFx::KU_POST_FX_NUM_TINT_BUFFERS), so this reports the first only.
+        {
+            static bool sbReportedTintVolume = false;
+            if (!sbReportedTintVolume)
+            {
+                sbReportedTintVolume = true;
+                char lacMsg[192];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[postfx-tint] tint volume texture edge=%u fmt=%d type=%d created (%s)\n",
+                    static_cast<unsigned>(lrParameters.muSize),
+                    lTextureParams.miFormat,
+                    static_cast<int>(renderengine::Texture::GetType(lpTint->m_textureTintMap)),
+                    (lpTint->m_textureTintMap != 0 &&
+                     lpTint->m_textureTintMap->mpD3DTexture != 0) ? "D3D object live"
+                                                                  : "NO D3D OBJECT");
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
 
         // --- the sampler texture-state for that lookup texture ---------------------------------------
         renderengine::TextureState::Parameters lStateParams = {};
@@ -166,7 +198,19 @@ namespace postfx
     // numSources / src[] / factor[] are filled by the caller; this only seeds the destination surface.
     TintBlendParameters& Tint::BeginBlendJob()
     {
-        renderengine::Texture::Lock(m_textureTintMap, 2, 0, 0, &m_textureLock);
+        // ⚠ THE CONSOLE'S `li r4, 2` IS THE FLAGS WORD, NOT THE LEVEL (corrected in the step-10 fix
+        // round -- it had been passed as liLevel, i.e. LockBox(2) on a ONE-level volume, which fails
+        // and leaves dst/dstStride/dstSliceStride all zero, so the LUT was never written at all).
+        // X360 Texture::Lock @0x82B62B20 is Lock(texture, FLAGS, LEVEL, FACE, out); BeginBlendJob
+        // @0x823F8310 passes flags 2, level 0, face 0. Flags bit 0x2 is the console's "writable"
+        // bit -- it is the bit that SKIPS `li r28, 0x10` (D3DLOCK_READONLY) at 0x82B62B4C -- so the
+        // D3D9 spelling of the same request is lock flags 0. This leaf's parameter order is
+        // (level, face, flags); see the declaration banner in pc/gcm/renderengine/texture.h.
+        renderengine::Texture::Lock(m_textureTintMap,
+                                    0,    // liLevel  -- the volume has exactly one level
+                                    0,    // liFace   -- X360 r6 = 0
+                                    0,    // liFlags  -- D3DLOCK_*; the console's writable == 0 here
+                                    &m_textureLock);
 
         // asm 0x823F835C `stw r9, 0(r31)`   -- size           <- Texture::GetWidth
         //     0x823F8358 `stw r11, 8(r31)`  -- dstStride      <- lock +0x08 (muStride)

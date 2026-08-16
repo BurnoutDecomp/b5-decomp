@@ -23,13 +23,19 @@
 // Destruct @0x82408138, PrepareDownSampleBuffers @0x82408E88 and Render @0x8240A468. Each carries
 // its own banner mapping it to the X360 instructions it came from.
 //
-// BeginTintBlend / EndTintBlend are STILL declaration-only. They are the colour-cube blend job
-// (dossier H4), a separable slice with its own dependency surface (Tint::BeginBlendJob, the
-// TintBlendParameters source list, EA::Jobs scheduling); they are not fabricated here.
+// BeginTintBlend / EndTintBlend ARE NOW BODIED (post-fx step 10). They are the colour-cube blend
+// job: BeginTintBlend @0x823F8380 flips the double-buffered tint map, locks it through
+// Tint::BeginBlendJob, fills the TintBlendParameters source list from m_colourCubes/m_tintFactors
+// and dispatches the blend; EndTintBlend (DWARF BrnPostFx.cpp:288, inlined by the X360 into
+// Render @0x8240A4DC) unlocks it. So are the three tint mutators SetColourCube /
+// SetTintBlendNumber / SetTintBlendFactor, recovered from their inlined call sites.
 //
-// THIS TU IS NOT ON tools/build/build_game_exe.bat AND MUST NOT BE ADDED UNTIL ITS UNRESOLVED SET IS
-// EMPTY. `cl /c` cannot see unresolved externals, so a clean compile gate on this file proves
-// nothing about the link. The measured set -- BrnPostFxShader::{Construct,Destruct,Render},
+// THE ORIGINAL "not on the build list" BANNER IS RETIRED: this TU IS on
+// tools/build/build_game_exe.bat (line 502) as of the rung-5 composite wave --
+//   $ grep -n "PostFx.BrnPostFx.cpp" tools/build/build_game_exe.bat
+//   502:  echo "%SRC%\GameSource\Graphics\PostFx\BrnPostFx.cpp"
+// -- and its unresolved set is link-closed. The historical set is kept below as the record of what
+// had to land first. The measured set -- BrnPostFxShader::{Construct,Destruct,Render},
 // PfxHelper::{PfxHelper,Release}, DepthOfField::{DepthOfField,Release,
 // DownSampleAndGaussianBlur}, Vignette::{Vignette,Release}, Vignette::Parameters::Parameters,
 // Tint::{Initialize,InitializePixelProgram,Release,EndBlendJob}, B4Blur::{B4Blur,State::State},
@@ -714,11 +720,16 @@ void BrnPostFx::Render(BrnRendererMemory& lrAllocatedMemory,
     // `m_pfxTint[m_currentTintBuffer]` expression the composite's texture gather uses below --
     // on the console both are the `(index + 0x170) * 4` word-index pun off `this`, which does not
     // survive to the host and is not carried here.
+    // INLINING REVERSAL (post-fx step 10): the flattened unlock IS BrnPostFx::EndTintBlend, which
+    // the DecFIGS DWARF places at BrnPostFx.cpp:288 with exactly one statement in it
+    // (references/DecFIGS/dwarfdump/GameSource/Graphics/PostFx/BrnPostFx.cpp:17,
+    //  `rw::graphics::postfx::Tint::EndBlendJob(...)`). AGENTS.md requires the call to be restored,
+    // so the two members it reaches are back behind their own method.
     if (m_processTint)
     {
         m_processTint = false;
         m_blendJob.WaitOn();
-        m_pfxTint[m_currentTintBuffer]->EndBlendJob();
+        EndTintBlend();
     }
 
     // ---- 2. the master gate (asm 0x8240A4F8-0x8240A500) ------------------------------------------
@@ -922,6 +933,34 @@ void PCBringUpConstructPostFx(rw::IResourceAllocator* lpAllocator)
     CgsDev::Log::WriteToLog("[postfx-composite] BrnPostFx::Construct ran (deferred PC bring-up)\n");
 }
 
+// [FLAG PC bring-up] WILL THE COMPOSITE ACTUALLY RUN THIS FRAME? -- the precondition, factored out
+// of PCBringUpRenderPostFxComposite below so that a SECOND caller can ask it without duplicating it.
+//
+// That second caller is BrnRendererModule::Render's colour-cube tint block. BrnPostFx::BeginTintBlend
+// LOCKS the tint volume texture and the only thing that unlocks it is BrnPostFx::Render's step-1
+// drain -- which lives on the far side of this precondition. On the console both sites sit under one
+// gate (the mbRenderPostFX byte, tested at 0x8240C6A8 and again at 0x8240DC6C), so a lock cannot
+// outlive its frame; on PC the composite has this pool/Construct test as well, and a tint blend
+// scheduled on a frame the composite skips would Lock and never Unlock. One function, one answer.
+//
+// It is a pure query: no logging, no side effect, cheap enough to call twice a frame (five pointer
+// loads and a bool).
+bool PCBringUpPostFxCompositeWillRun(BrnRendererMemory& lrRendererMemory)
+{
+    CgsRenderTarget* const lpSceneTarget = lrRendererMemory.GetDownSampleBuffer();
+    CgsRenderTarget* const lpBackBuffer  = lrRendererMemory.GetBackBuffer();
+    CgsRenderTarget* const lpBloomBuffer = lrRendererMemory.GetBloomBuffer();
+    CgsRenderTarget* const lpDofBuffer   = lrRendererMemory.GetDepthOfFieldBuffer();
+    CgsRenderTarget* const lpWorkBuffer  = lrRendererMemory.GetWorkBuffer();
+
+    return lpSceneTarget != 0 && lpSceneTarget->GetRenderTarget() != 0 &&
+           lpBackBuffer  != 0 && lpBackBuffer->GetRenderTarget()  != 0 &&
+           lpBloomBuffer != 0 && lpBloomBuffer->GetRenderTarget() != 0 &&
+           lpDofBuffer   != 0 && lpDofBuffer->GetRenderTarget()   != 0 &&
+           lpWorkBuffer  != 0 && lpWorkBuffer->GetRenderTarget()  != 0 &&
+           sbPostFxConstructed;
+}
+
 bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
                                     f32 lfBrightness,
                                     f32 lfContrast,
@@ -936,23 +975,15 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
     // E_RENDER_TARGET_BACK_BUFFER, and passes each slot's +0x108 (GetRenderTarget()).
     CgsRenderTarget* const lpSceneTarget = lrRendererMemory.GetDownSampleBuffer();
     CgsRenderTarget* const lpBackBuffer  = lrRendererMemory.GetBackBuffer();
-    // ...and the two the console body samples without a test (asm 0x8240A560-0x8240A5E8:
-    // GetBloomBuffer()->GetRenderTarget()->GetTexture(0) / GetDepthOfFieldBuffer()->...). Every
-    // slot BrnPostFx::Render dereferences is tested HERE, once, so the console body keeps its
-    // unguarded reads and cannot crash on a pool this build did not fill.
-    CgsRenderTarget* const lpBloomBuffer = lrRendererMemory.GetBloomBuffer();
-    CgsRenderTarget* const lpDofBuffer   = lrRendererMemory.GetDepthOfFieldBuffer();
-    // ...and the WORK buffer, which PrepareDownSampleBuffers hands the bloom / DoF passes as their
-    // ping-pong target the moment E_FX_BLOOM or E_FX_DEPTH_OF_FIELD is set (rung 5: the first
-    // bloom-lit boot crashed on exactly this null before the pool bring-up created it).
-    CgsRenderTarget* const lpWorkBuffer  = lrRendererMemory.GetWorkBuffer();
 
-    if (lpSceneTarget == 0 || lpSceneTarget->GetRenderTarget() == 0 ||
-        lpBackBuffer  == 0 || lpBackBuffer->GetRenderTarget()  == 0 ||
-        lpBloomBuffer == 0 || lpBloomBuffer->GetRenderTarget() == 0 ||
-        lpDofBuffer   == 0 || lpDofBuffer->GetRenderTarget()   == 0 ||
-        lpWorkBuffer  == 0 || lpWorkBuffer->GetRenderTarget()  == 0 ||
-        !sbPostFxConstructed)
+    // ...and the bloom / depth-of-field / work slots the console body samples without a test (asm
+    // 0x8240A560-0x8240A5E8: GetBloomBuffer()->GetRenderTarget()->GetTexture(0) /
+    // GetDepthOfFieldBuffer()->..., plus the WORK buffer PrepareDownSampleBuffers hands the bloom /
+    // DoF passes the moment E_FX_BLOOM or E_FX_DEPTH_OF_FIELD is set). Every slot BrnPostFx::Render
+    // dereferences is tested in PCBringUpPostFxCompositeWillRun above -- once, in one place, so the
+    // console body keeps its unguarded reads and the renderer's tint block can ask the same
+    // question before it schedules a blend only this function's drain can unlock.
+    if (!PCBringUpPostFxCompositeWillRun(lrRendererMemory))
     {
         // Nothing drawn, nothing bound, nothing resolved. The caller presents the frame the old way.
         // The !sbPostFxConstructed arm matters as much as the pool: BrnPostFx::Render's first act is
@@ -1028,6 +1059,198 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
                     lfAspectCorrection,
                     0);   // no override source texture (the calibration path)
     return true;
+}
+
+// ================================================================================================
+// BrnPostFx::BeginTintBlend @ 0x823F8380   (46 lines; the whole body is accounted for below)
+//
+// Ground truth: the X360 ARTIST ASSEMBLY at 0x823F8380-0x823F8488, cross-read against its ONE
+// caller, BrnRendererModule::Render @0x8240BFA8 (asm 0x8240C6C0-0x8240C794).
+//
+// WHAT IT DOES. Flip the double-buffered colour-lookup volume, lock the new one through
+// Tint::BeginBlendJob, publish this frame's colour cubes + weights into the returned
+// TintBlendParameters, and dispatch the blend that fills it. BrnPostFx::Render drains it.
+//
+// THE GATE IS TWO TESTS, IN THIS ORDER (asm 0x823F8390-0x823F83A8):
+//     lwz r11, 0x380(r31) / beq        -> mnActiveLayerCount, the same "is the driver built" latch
+//                                         BrnPostFx::Render gates on
+//     lwz r11, 0x384(r31) / rlwinm 0,26,26 / beq
+//                                      -> m_enabledFx & 0x20 == E_FX_TINT
+//
+// THE BUFFER FLIP (asm 0x823F83AC-0x823F83C4):
+//     lwz r11, 0x5FC / addi r11,r11,-1 / clrlwi r11,r11,31 / stw r11, 0x5FC
+// i.e. `m_currentTintBuffer = (m_currentTintBuffer - 1) & 1` -- a toggle written as a decrement,
+// because the field is unsigned and only bit 0 survives. The `addi r10, r11, 0x170 / slwi 2 / lwzx`
+// that follows is the console's word-index pun for `m_pfxTint[m_currentTintBuffer]` (0x170*4 ==
+// 0x5C0 == the array base); that arithmetic does not survive to the host and is not carried here.
+//
+// THE SOURCE LIST (asm 0x823F83D8-0x823F8418). `stw r11, 4(r29)` publishes m_numCubesToBlend into
+// TintBlendParameters::numSources -- the word rw::graphics::postfx::TintBlend @0x82AD4860 uses as
+// its variant jump-table index. The loop then walks two parallel arrays with ONE cursor
+// (`addi r11, r31, 0x5E0` stepping 4, reading `-0x14(r11)` for the cube and `0(r11)` for the
+// weight): m_colourCubes[i] at this+0x5CC and m_tintFactors[i] at this+0x5E0.
+//
+// ⚠ `lwz r8, 4(r8)` IS THE CUBE'S DATA POINTER, NOT THE CUBE. The console stores
+// `colourCube->m_pixels` -- the +0x04 word its resource fix-up relocated -- as src[i], never the
+// ColourCube itself. rwgpfxcolourcube.h::GetPixels() is that word's PC spelling (a 4-byte guest slot
+// cannot hold a host pointer; the address it names, resource base + 16, is recomputed). The DWARF
+// names both the member and the accessor -- see that header's banner.
+//
+// THE TWO STORES AFTER THE LOOP, in the console's order:
+//   * the assert (asm 0x823F8420-0x823F8444) -- `cmplwi r11, 5 / ble`, i.e. it fires when
+//     m_numCubesToBlend EXCEEDS 5, at BrnPostFx.cpp:266;
+//   * `stfs f0, 0x40(r29)` with f0 = flt_82001CC0 == 0.0f (asm 0x823F8448-0x823F8460) --
+//     TintBlendParameters::factor[5], the ONE weight slot the loop can never reach given that
+//     assert. Reproduced because it is a real store into a block the job reads.
+//
+// [FLAG PC bring-up] THE DISPATCH, AND ONLY THE DISPATCH. The console ends with
+//     EA::Jobs::Job::SetData(&m_blendJob, params, 128)
+//     EA::Jobs::JobScheduler::AddJobs(&unk_830EA650, &m_blendJob, 1)
+//     m_processTint = true
+// `unk_830EA650` is the process-wide EA::Jobs::JobScheduler singleton, and IT DOES NOT EXIST ON
+// THIS BUILD -- it is `gJobManager`, defined only in CgsHardwareInitPS3.cpp, and the PC variant has
+// it commented out:
+//   $ grep -n "JobManager" b5-decomp/src/GameShared/GameClasses/System/PC/CgsHardwareInitPC.cpp
+//   40://JobScheduler CgsSystem::HardwareInit::mJobManager; // TODO: Implement HardwareInit
+//   42:char CgsSystem::HardwareInit::macJobManagerBuffer[400 * 1024]; // 400 KB buffer for job manager
+//   44://CgsMemory::HeapMallocCoreAllocator CgsSystem::HardwareInit::mJobManagerAllocator; // TODO ...
+//   $ grep -n "CgsHardwareInitPS3" tools/build/build_game_exe.bat
+//   (no output -- the PS3/X360 variant that defines gJobManager is not on the build list)
+// So AddJobs -- and only AddJobs -- is replaced by running the job's OWN entry point inline, which
+// is the precedent this tree already set for the same missing singleton in
+// CgsCollisionGenerator_LineStream.cpp:175-180 and CgsLooseOctree.cpp:997. SetData still runs (it
+// is the job's own state), m_processTint is still set, and Render's `m_blendJob.WaitOn()` is still
+// correct: EA::Jobs::Job::WaitOn @0x82BCB238 opens with the console's own liveness guard on
+// mJobInstanceHandle.mSchedulerBackend, so a job that was never submitted returns immediately --
+// no spin, no hang (job.cpp:233-241). The one consequence, stated plainly: the blend costs its
+// ~131 K texels on the dispatch thread here instead of on a worker, before Render's drain.
+// DELETE WHEN a real job scheduler is brought up on PC.
+// ================================================================================================
+
+void BrnPostFx::BeginTintBlend()
+{
+    if (mnActiveLayerCount == 0u)
+    {
+        return;
+    }
+    if ((m_enabledFx & static_cast<u32>(E_FX_TINT)) == 0u)
+    {
+        return;
+    }
+
+    m_currentTintBuffer = (m_currentTintBuffer - 1u) & 1u;
+
+    rw::graphics::postfx::TintBlendParameters& lrBlendParameters =
+        m_pfxTint[m_currentTintBuffer]->BeginBlendJob();
+
+    lrBlendParameters.numSources = m_numCubesToBlend;
+    for (u32 luSource = 0u; luSource < m_numCubesToBlend; ++luSource)
+    {
+        // [FLAG PC bring-up] THE NULL TEST IS NOT THE CONSOLE'S, and it is one comparison.
+        // The console cannot see a null here: BrnEffects::EffectsModule::PrepareResources
+        // @0x8229DAAC seeds m_numCubesToBlend = 5 AND all five m_colourCubes with the default
+        // cube before anything can set the tint bit, so `lwz r8, 4(r8)` is always on a real
+        // object. On PC that producer is the tintdata half of this wave and may not be live yet,
+        // and GetPixels() on a null would yield the address 16 -- a garbage pointer that is NOT
+        // null, so the blend kernels' own null-source guard could not catch it. Carrying the null
+        // through into src[] is what lets that guard see it.
+        const rw::graphics::postfx::ColourCube* const lpColourCube = m_colourCubes[luSource];
+        lrBlendParameters.src[luSource]    = (lpColourCube != 0) ? lpColourCube->GetPixels() : 0;
+        lrBlendParameters.factor[luSource] = m_tintFactors[luSource];
+    }
+
+    CGS_ASSERT(m_numCubesToBlend <= 5u, "m_numCubesToBlend <= 5");           // BrnPostFx.cpp:266
+
+    lrBlendParameters.factor[5] = KF_POST_FX_ZERO;   // stfs flt_82001CC0, 0x40(r29)
+
+    // HOST sizeof, not the console's 0x80: every pointer in the block widens 4 -> 8 on this
+    // target, so the guest record size would under-describe it (AGENTS.md GUEST vs HOST).
+    m_blendJob.SetData(&lrBlendParameters,
+                       sizeof(rw::graphics::postfx::TintBlendParameters));   // X360: 128
+
+    {
+        // The scheduler's own call shape: the entry point receives four Params and reads only
+        // Param 1, which is where Job::SetData parks the data pointer (job.cpp:137). Running
+        // TintBlendEntry rather than TintBlend keeps the console's entry path real.
+        EA::Jobs::Param laJobParams[4];
+        laJobParams[1] = EA::Jobs::Param(static_cast<void*>(&lrBlendParameters));
+        TintBlendEntry(laJobParams[0], laJobParams[1], laJobParams[2], laJobParams[3]);
+    }
+
+    m_processTint = true;
+}
+
+// ================================================================================================
+// BrnPostFx::EndTintBlend -- DWARF BrnPostFx.cpp:288 (declaration BrnPostFx.h:123).
+//
+// INLINED by the X360 compiler into BrnPostFx::Render at 0x8240A4DC-0x8240A4F4, where the flattened
+// form is `lwz r11, 0x5FC(r31)` (the tint index) / `lwz r3, 0xC0(r11)` / `addi r4, r11, 0xA4` /
+// `bl renderengine__Texture__Unlock` -- i.e. Tint::EndBlendJob on the CURRENT tint buffer, and
+// nothing else. The DWARF body agrees exactly: one statement, `Tint::EndBlendJob(...)`.
+//
+// NOTE WHAT IT DOES *NOT* DO, reproduced by omission: it does not clear m_processTint (Render's own
+// drain does that, before the WaitOn) and it does not clear the Tint's m_blendLock.
+// ================================================================================================
+
+void BrnPostFx::EndTintBlend()
+{
+    m_pfxTint[m_currentTintBuffer]->EndBlendJob();
+}
+
+// ==================================================================================================
+// The THREE TINT MUTATORS (DWARF BrnPostFx.h:148/153 + the SetColourCube declaration at :84).
+//
+// None has a standalone X360 symbol -- like the five m_enabledFx mutators below, the console
+// compiler inlined each into its caller. Both callers are known and both are read here:
+//
+//   BrnRendererModule::Render @0x8240BFA8, asm 0x8240C718-0x8240C790 -- the per-frame apply block,
+//   five SetColourCube/SetTintBlendFactor pairs straight out of EffectsArbitrator::EvalTint's two
+//   output arrays. This is where the ONE non-obvious fact lives:
+//
+//     0x8240C718  lwz   r11, var_CA0(r1)          ; the cube EvalTint wrote
+//     0x8240C720  cmplwi cr6, r11, 0
+//     0x8240C724  beq   cr6, loc_8240C72C          ; <-- SKIP the store when it is null
+//     0x8240C728  stw   r11, dword_82FAF6BC(r20)   ; m_colourCubes[0]
+//     0x8240C72C  ...
+//     0x8240C730  stfs  f0, flt_82FAF6D0(r20)      ; m_tintFactors[0], NO test
+//
+//   ⚠ SetColourCube KEEPS THE PREVIOUS CUBE WHEN HANDED A NULL. All five cube stores are guarded
+//   and none of the five weight stores is. Writing it as a plain assignment would clear a live LUT
+//   to null on the first frame an effects layer went quiet -- and the blend would then either skip
+//   (this build) or read address 0 (the console). The guard is the console's, not a PC accommodation.
+//
+//   BrnEffects::EffectsModule::PrepareResources @0x8229D8A8, asm 0x8229DA8C-0x8229DAD0 -- the
+//   one-time seed: `li r9, 5` / `stw r9, dword_82FAF6E8` is SetTintBlendNumber(5), followed by five
+//   SetTintBlendFactor(i, flt_8200DD40) and five SetColourCube(i, <the default cube>). That is the
+//   only writer of m_numCubesToBlend in the whole image:
+//     $ grep -l "82FAF6E8" .ida-exports/BURNOUT_X360_ARTIST.XEX/*.json
+//     .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8229D8A8.json
+//   (recorded in this wave's report as a CROSS-GROUP item: with that seed absent, numSources stays
+//   0 and TintBlend's variant table has a null in slot 0.)
+//
+// The `const int&` parameter spelling is the DWARF's, not a choice.
+// ==================================================================================================
+void BrnPostFx::SetColourCube(int liIndex, rw::graphics::postfx::ColourCube* lpColourCube)
+{
+    // THE ONE NULL GUARD, and this is where the console spells it: BrnRendererModule::Render
+    // @0x8240BFA8 inlines this setter five times and every one of the five carries its own
+    // `cmplwi cr6, r11, 0` / `beq` over the `stw` into m_colourCubes (0x8240C720/C738/C750/C768/
+    // C780), while none of the five weight `stfs` has any test. The caller side therefore does NOT
+    // repeat it (BrnRendererModulePostFx.cpp's apply loop) -- one rule, one place.
+    if (lpColourCube != 0)
+    {
+        m_colourCubes[liIndex] = lpColourCube;
+    }
+}
+
+void BrnPostFx::SetTintBlendFactor(int liIndex, f32 lfFactor)
+{
+    m_tintFactors[liIndex] = lfFactor;
+}
+
+void BrnPostFx::SetTintBlendNumber(const int& lriNumber)
+{
+    m_numCubesToBlend = static_cast<u32>(lriNumber);
 }
 
 // ==================================================================================================

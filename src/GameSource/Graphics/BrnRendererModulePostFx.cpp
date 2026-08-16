@@ -5,6 +5,7 @@
 #include "GameSource/Graphics/PostFx/BrnPostFx.h"          // msPostFx + every setter/getter below
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"  // ParticleRenderData (the Update arguments)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::WriteToLog (the diag line)
+#include "SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxcolourcube.h"  // ColourCube::GetSize
 
 #include <cstdio>    // snprintf (the diag line)
 
@@ -143,11 +144,13 @@ namespace
         bool mbDepthOfField;
         bool mbBlur;
         bool mbTint2d;
+        bool mbTint3d;   // the COLOUR-CUBE tint (m_enabledFx bit 0x20), set by the tint block below
         f32  mfBloomLuminance;
         f32  mfBloomThreshold;
         f32  mafBloomColour[3];
     };
-    DiagState gDiag = { false, false, false, false, false, 0.0f, 0.0f, { 0.0f, 0.0f, 0.0f } };
+    DiagState gDiag = { false, false, false, false, false, false,
+                        0.0f, 0.0f, { 0.0f, 0.0f, 0.0f } };
 
     // The motion-blur half of the same sampled diagnostic. mfWvpDelta is the largest absolute
     // element difference between MotionBlurState's current and previous world-view-projection
@@ -227,6 +230,321 @@ void BrnRendererReadPostFxFrameBytes(const BrnGraphics::EffectsArbitrator* lpArb
         static_cast<s32>(lrMotionBlur.mfWorldBlurAmount * KF_MOTION_BLUR_STENCIL_SCALE));
     lpOut->mu8CarsBlurStencil = static_cast<u8>(
         static_cast<s32>(lrMotionBlur.mfCarsBlurAmount * KF_MOTION_BLUR_STENCIL_SCALE));
+}
+
+// ==================================================================================================
+// Render @0x8240C69C-0x8240C798 -- THE COLOUR-CUBE (3D LUT) TINT BLOCK.
+//
+// It is NOT part of the apply block below, and its position matters: the console runs it EARLY --
+// inside PerfMonCpu monitor `*(this + 51508)` (StartMonitor @0x8240C698 / StopMonitor @0x8240C79C),
+// immediately BEFORE shadow::Device::ResetShadowing() and the three global texture binds -- because
+// BeginTintBlend SCHEDULES AN EA::Jobs JOB that blends the source cubes into the tint volume
+// texture while the shadow map and the world passes draw. BrnPostFx::Render then drains it
+// (`if (m_processTint) { m_blendJob.WaitOn(); Tint::EndBlendJob(); }`, BrnPostFx.cpp step 1) before
+// the composite samples s3. Moving this to the apply block would serialise the job against nothing
+// and shorten the window to zero.
+//
+// THE SHAPE, off the asm (Hex-Rays pseudocode lines 505-533 renders the same block):
+//   0x8240C6A8  lbz    r11, 0(this + 0xC41C)         -> mbRenderPostFX, the block's whole gate
+//   0x8240C6C0  addi   r5, r1, var_C70               -> the FIVE-entry WEIGHT array
+//   0x8240C6C4  addi   r4, r1, var_CA0               -> the FIVE-entry CUBE array
+//   0x8240C6C8  mr     r3, r21 (this + 0x480)        -> &mEffectsArbitrator
+//   0x8240C6CC  bl     EffectsArbitrator::EvalTint
+//   0x8240C6D0..EC                                   -> active = EvalTint() && lbEffectsAllowed
+//   0x8240C6F4..0C  ori/rlwinm 0x20 on m_enabledFx   -> BrnPostFx::SetTint(active), INLINED
+//   0x8240C710  beq                                  -> if (!active) skip the publish
+//   0x8240C718..90  five times:                         if (cube[i]) m_colourCubes[i] = cube[i];
+//                                                       m_tintFactors[i] = weight[i];
+//   0x8240C794  bl     BrnPostFx::BeginTintBlend
+//
+// THE NULL GUARD ON THE CUBE STORE IS REAL AND LOAD-BEARING (`cmplwi cr6, r11, 0` / `beq` before
+// each of the five `stw`s, and there is no such test before the five weight `stfs`). It exists
+// because the slots are PRE-SEEDED with a default cube at prepare time -- see
+// PCBringUpSeedTintBlendSources below -- so a layer that contributes no cube this frame leaves the
+// default in place rather than nulling a pointer the blend kernels dereference.
+//
+// IT IS SPELLED ONCE, IN BrnPostFx::SetColourCube (2026-08-16 fix round). The console has exactly
+// one test per slot and the five it has are inlined around the five `stw`s INTO m_colourCubes --
+// i.e. inside the setter that got inlined, not around the call to it. The first cut wrote the same
+// test in both places: behaviour-identical, but it reads as two different rules and invites the next
+// reader to "fix" one of them. The guard therefore lives with the store it guards, and the loop
+// below calls the setter for every slot, unconditionally, exactly as the console's source did.
+//
+// THE TWO STACK ARRAYS ARE RAW, exactly as the bloom/vignette out-blocks are: `addi r4, r1,
+// var_CA0` with no prior store. EvalTint writes all five entries of both on its true path (4 WORLD
+// + 1 FXEVENTS colour cubes, byte_8203E114 = {0,4,1}) and the arrays are read only inside the
+// `if (active)` arm, which cannot be entered on its false path.
+//
+// ---- BRN_POSTFX_TINT3D_AVAILABLE -- THE ONE-LINE KILL SWITCH, AND WHY IT EXISTS ------------------
+// E_FX_TINT (0x20) is the ONLY one of the five effect bits that moves the composite's PERMUTATION
+// INDEX (BrnPostFxShader.cpp `leShader = 4*blur | 2*dof | tint3d`), so switching it on switches the
+// composite from an even permutation to an ODD one -- and every odd permutation SAMPLES the tint
+// volume at s3 (`tex3D(Sampler3dTint, composedColour)`). All twelve permutation program pairs are
+// adopted on this build (BrnPostFxShader.cpp's "ALL TWELVE PAIRS NOW EXIST" banner), so the draw
+// itself is safe; what is NOT this group's to guarantee is what s3 CONTAINS -- the tint volume
+// texture, its Lock/Unlock and the seven CPU blend kernels are group `tintrender`'s half
+// (rw::graphics::postfx::Tint::Initialize @0x82403B48 / BeginBlendJob @0x823F8310 / the
+// TintBlend variant table @0x82F7238C). This half and that half must land TOGETHER: with the bit on
+// and no real volume texture behind s3, the grade is whatever that sampler returns. Set this to 0 to
+// revert the tint layer to the step-9 behaviour (bit permanently clear, permutation index unmoved)
+// without touching anything else. DELETE the switch once tintrender's half is committed and booted.
+#define BRN_POSTFX_TINT3D_AVAILABLE 1
+// ==================================================================================================
+#if BRN_POSTFX_TINT3D_AVAILABLE
+namespace
+{
+    // ---- [FLAG PC bring-up] ------------------------------------------------------------------
+    // STANDS IN FOR: BrnEffects::EffectsModule::PrepareResources @0x8229D8A8, case 2 -- the ONE
+    // place in the image that seeds BrnPostFx's tint sources. Once the colour-cube dictionary
+    // ("PostFx/colourcubedictionary.bin", pool 10) is resident it writes, and writes nothing else
+    // into BrnPostFx (asm @0x8229DAAC and the stores around it; pseudocode lines 76-87):
+    //     m_numCubesToBlend = 5                              -> SetTintBlendNumber(5)
+    //     m_tintFactors[0..4] = 0.2f                         -> SetTintBlendFactor(i, 0.2f)
+    //     m_colourCubes[0..4] = <the dictionary's first cube> -> SetColourCube(i, cube)
+    //
+    // WHY IT HAS TO BE STOOD IN FOR. That TU is not on the build list:
+    //     $ grep -n "EffectsModule" tools/build/build_game_exe.bat
+    //     294:  rem   driver (EffectsModule::Update / ::GenerateDispatchLists) are BOTH still off this list. ...
+    //     300:  rem   DELETE this line when ParticleModule.cpp + EffectsModule.cpp land.
+    //     (two COMMENTS, no `echo` line -- the file is not compiled)
+    // so on this build nothing ever publishes the blend COUNT, and BrnPostFx::BeginTintBlend
+    // @0x823F8380 copies `m_numCubesToBlend` source pointers into the job parameters -- a count of
+    // zero makes rw::graphics::postfx::TintBlend @0x82AD4860 index dword_82F7238C[0], which is the
+    // table's NULL entry (DATA_DUMP.md "[ 0] ... 0x00000000 (NO FUNC)"). Nothing seeds the five cube
+    // slots either, so the FXEVENTS slot -- whose producer (BrnGui::EffectsArbitrator) is also not
+    // live -- would hand the kernels a null source pointer to read.
+    //
+    // WHAT IT WRITES, AND WHERE EACH VALUE COMES FROM. The count is the console's own 5, and it is
+    // the same 5 three independent ways (EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT from
+    // byte_8203E114, BrnPostFx::m_colourCubes[5], and BeginTintBlend's own
+    // `CGS_ASSERT(m_numCubesToBlend <= 5)` at BrnPostFx.cpp:266). The CUBE is NOT invented: it is
+    // the first non-null cube THIS FRAME'S EvalTint produced -- a real, loaded
+    // rw::graphics::postfx::ColourCube -- copied into the slots the console would have found
+    // holding the dictionary default. The weights are NOT seeded: the console's 0.2f x 5 is a
+    // prepare-time value the very next Render overwrites with EvalTint's, so it would be dead code.
+    //
+    // ⚠ A SUBSTITUTED SLOT IS UNOBSERVABLE **ONLY WHEN ITS WEIGHT IS ZERO** -- and since the
+    // 2026-08-16 fix round that is the rule the code enforces, not merely the argument for it.
+    // (The first cut claimed the substitution was never observable at all. It is not true.)
+    //
+    // The blend kernels splat each source's weight and multiply (DATA_DUMP.md Blend2Cubes:
+    // TintBlendParameters +0x2C / +0x30 -> v127 / v126 -> VMXBlend), so a ZERO-weight source
+    // contributes nothing to the output -- but its pixel POINTER is still dereferenced, which is the
+    // whole reason such a slot may not be left null. A slot with a NON-ZERO weight is a different
+    // animal, and this build can produce one: EnvironmentManager::GenerateEffects @0x827BE698's
+    // DEFAULT arm publishes (mpDefTintData, KF_DEF_EFFECTS_LAYER_TINT_WEIGHT = 0.25f) and
+    // mpDefTintData is null until Prepare's E_PREPARE_WF_ACQUIRE_DEPENDENCIES acquire lands, so the
+    // WORLD layer can arrive here NULL AND WEIGHTED. Substituting there would blend THIS FRAME'S
+    // first cube -- the graded 0x8b7e999a "ENV_CC_Paradise_ingame_junk / TINT_Art_Style.psd" every
+    // keyframe imports -- at 0.25 into a slot the console would have filled with its own
+    // prepare-time default, the NEUTRAL identity cube (Prepare @0x827D49A8 loads
+    // "PostFx/colourcubedictionary.bin" into pool 10 and acquires
+    // "gamedb://burnout5/Playground/PostFx/ColourCubeDictionary/rgb_colourcube.tga.ImageFile?ID=217407"
+    // out of it -- the same bundle PrepareResources reads its default from). That is a visibly
+    // over-graded frame. So: substitute into ZERO-WEIGHT slots only, and if any slot is null with a
+    // non-zero weight, log it once and return false -- the tint bit stays CLEAR for that frame,
+    // which is the one outcome that cannot be mistaken for art direction.
+    //
+    // Returns false when there is no cube at all this frame; the caller then leaves the tint bit
+    // CLEAR rather than scheduling a blend over null sources. That single extra term is the ONLY
+    // deviation from the console in this whole block.
+    //
+    // DELETE-WHEN GameSource/Effects/EffectsModule.cpp is on the build list -- at that point
+    // PrepareResources seeds the slots and the count, this function goes, and the caller's
+    // `&& lbSeeded` term goes with it.
+    bool PCBringUpSeedTintBlendSources(rw::graphics::postfx::ColourCube** lppColourCubes,
+                                       const f32* lpafWeights,
+                                       u32 luCount)
+    {
+        rw::graphics::postfx::ColourCube* lpDefault = 0;
+        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+        {
+            if (lppColourCubes[luIndex] != 0)
+            {
+                lpDefault = lppColourCubes[luIndex];
+                break;
+            }
+        }
+
+        if (lpDefault == 0)
+        {
+            static bool sbReported = false;
+            if (!sbReported)
+            {
+                sbReported = true;
+                CgsDev::Log::WriteToLog(
+                    "[postfx-tint] no colour cube this frame -- every EvalTint slot is null, so the"
+                    " tint bit stays CLEAR. The world layer's cube comes from the environment"
+                    " keyframe's +0x80 import (or the manager's default when Prepare has acquired"
+                    " one); the fx-events layer's producer (BrnGui::EffectsArbitrator) is not live."
+                    " [FLAG PC bring-up: BrnEffects::EffectsModule::PrepareResources @0x8229D8A8"
+                    " not on the build list]\n");
+            }
+            return false;
+        }
+
+        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+        {
+            if (lppColourCubes[luIndex] != 0)
+                continue;
+
+            // A null cube with a REAL weight is observable -- refuse the frame instead of grading
+            // it with a cube the console would not have used. See the banner above.
+            if (lpafWeights[luIndex] != 0.0f)
+            {
+                static bool sbWeightedNullReported = false;
+                if (!sbWeightedNullReported)
+                {
+                    sbWeightedNullReported = true;
+                    char lacMsg[288];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                        "[postfx-tint] slot %u has NO colour cube but weight %.3f -- the console"
+                        " would blend its prepare-time NEUTRAL default here, so the tint bit stays"
+                        " CLEAR this frame rather than substituting a graded cube."
+                        " [FLAG PC bring-up: BrnEffects::EffectsModule::PrepareResources"
+                        " @0x8229D8A8 not on the build list]\n",
+                        static_cast<unsigned>(luIndex),
+                        static_cast<double>(lpafWeights[luIndex]));
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+                return false;
+            }
+
+            lppColourCubes[luIndex] = lpDefault;
+        }
+
+        // SetTintBlendNumber takes `const int&` (DWARF BrnPostFx.h:82), so the value needs a name.
+        const int liSourceCount = static_cast<int>(luCount);
+        msPostFx.SetTintBlendNumber(liSourceCount);
+        return true;
+    }
+
+    // The one-shot proof line the step-10 boot check greps for. Printed the first time the tint
+    // layer actually schedules a blend.
+    //
+    // BUILT IN A LOOP OVER luCount (2026-08-16 fix round). The first cut took a count and then
+    // hard-indexed [0..4] in the format string and the argument list: correct only while
+    // EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT is 5, and that constant is BUILT from the console's
+    // byte_8203E114 {0,4,1} rather than written as a literal, so a hard five would over-read the
+    // caller's stack arrays the day it moves. The cube's EDGE is in the line now that the tree's
+    // ColourCube carries the DWARF's GetSize() -- it is the "edge=N" half of this wave's boot proof.
+    void LogTintBlendOnce(rw::graphics::postfx::ColourCube* const* lppColourCubes,
+                          const f32* lpfWeights, u32 luCount)
+    {
+        static bool sbReported = false;
+        if (sbReported)
+            return;
+        sbReported = true;
+
+        char lacMsg[384];
+        int liWritten = std::snprintf(lacMsg, sizeof(lacMsg),
+                                      "[postfx-tint] tint3d ON: %u sources",
+                                      static_cast<unsigned>(luCount));
+        size_t luUsed = (liWritten > 0) ? static_cast<size_t>(liWritten) : 0u;
+        if (luUsed > sizeof(lacMsg) - 1u)
+            luUsed = sizeof(lacMsg) - 1u;
+
+        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+        {
+            const rw::graphics::postfx::ColourCube* const lpCube = lppColourCubes[luIndex];
+            liWritten = std::snprintf(lacMsg + luUsed, sizeof(lacMsg) - luUsed,
+                                      " [%u]=%p edge=%u w=%.3f",
+                                      static_cast<unsigned>(luIndex),
+                                      static_cast<const void*>(lpCube),
+                                      (lpCube != 0) ? static_cast<unsigned>(lpCube->GetSize()) : 0u,
+                                      static_cast<double>(lpfWeights[luIndex]));
+            if (liWritten <= 0)
+                break;
+            luUsed += static_cast<size_t>(liWritten);
+            if (luUsed > sizeof(lacMsg) - 1u)
+            {
+                luUsed = sizeof(lacMsg) - 1u;   // snprintf truncated; stop appending
+                break;
+            }
+        }
+
+        // The newline goes on through snprintf as well, so this function performs NO index
+        // arithmetic of its own into lacMsg -- every write is bounded by the runtime, and the
+        // compiler needs no /GS range check (i.e. no fresh CRT external) to see it.
+        std::snprintf(lacMsg + luUsed, sizeof(lacMsg) - luUsed, "\n");
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+}
+#endif  // BRN_POSTFX_TINT3D_AVAILABLE
+
+void BrnRendererBeginPostFxTintBlend(const BrnGraphics::EffectsArbitrator* lpArbitrator,
+                                     bool lbEffectsAllowed)
+{
+#if !BRN_POSTFX_TINT3D_AVAILABLE
+    // Kill switch OFF: the step-9 behaviour, spelled out rather than left implicit. m_enabledFx's
+    // tint bit is never set, so the composite keeps selecting an EVEN permutation and nothing
+    // samples s3. Nothing else in the frame changes.
+    (void)lpArbitrator;
+    (void)lbEffectsAllowed;
+    static bool sbReported = false;
+    if (!sbReported)
+    {
+        sbReported = true;
+        CgsDev::Log::WriteToLog(
+            "[postfx-tint] tint3d compiled OUT."
+            " [FLAG PC bring-up: BRN_POSTFX_TINT3D_AVAILABLE]\n");
+    }
+#else
+    // [FLAG PC bring-up] the arbitrator is Constructed lazily on this build; the console's is a
+    // by-value member that always exists. Same seam gate as every other function in this file.
+    if (lpArbitrator == 0)
+        return;
+
+    // The two raw out-arrays, sized by the arbitrator's own contract (4 WORLD + 1 FXEVENTS).
+    rw::graphics::postfx::ColourCube*
+        lapColourCubes[BrnGraphics::EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT];
+    f32 lafWeights[BrnGraphics::EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT];
+
+    // 0x8240C6CC. The return value IS consumed here (unlike the five Eval* in the apply block):
+    // `clrlwi r11, r3, 24` / `cmplwi` / `beq` is the first half of the active flag.
+    const bool lbEvaluated = lpArbitrator->EvalTint(lapColourCubes, lafWeights);
+
+    bool lbTintActive = lbEvaluated && lbEffectsAllowed;
+
+    // [FLAG PC bring-up] the ONE extra term -- see PCBringUpSeedTintBlendSources' banner. It also
+    // publishes the blend COUNT the console publishes at effects-module prepare time.
+    if (lbTintActive
+        && !PCBringUpSeedTintBlendSources(lapColourCubes, lafWeights,
+                                          BrnGraphics::EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT))
+    {
+        lbTintActive = false;
+    }
+
+    // 0x8240C6F4-0x8240C70C: `ori r11, r11, 0x20` / `rlwinm r11, r11, 0,27,25` on m_enabledFx --
+    // BrnPostFx::SetTint(const bool&) inlined. AGENTS.md's inlining-reversal rule puts the call
+    // back; the bit is never poked directly. This is the bool that reaches
+    // BrnPostFxShader::Render as the composite's TINT3D permutation lane (BrnPostFx::Render
+    // step 10, `lbTint = lbEffectsAllowed && (m_enabledFx & E_FX_TINT)`).
+    msPostFx.SetTint(lbTintActive);
+    gDiag.mbTint3d = lbTintActive;
+
+    if (!lbTintActive)
+        return;
+
+    // 0x8240C718-0x8240C790, unrolled five times on the console (the count is a compile-time 5),
+    // re-rolled here. The console's cube store is null-GUARDED and its weight store is not -- and
+    // that guard lives inside BrnPostFx::SetColourCube, the setter the console inlined around that
+    // very `stw` (see the banner). Both calls are therefore unconditional here.
+    for (u32 luIndex = 0;
+         luIndex < BrnGraphics::EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT;
+         ++luIndex)
+    {
+        msPostFx.SetColourCube(static_cast<int>(luIndex), lapColourCubes[luIndex]);
+        msPostFx.SetTintBlendFactor(static_cast<int>(luIndex), lafWeights[luIndex]);
+    }
+
+    LogTintBlendOnce(lapColourCubes, lafWeights,
+                     BrnGraphics::EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT);
+
+    // 0x8240C794. Schedules the EA::Jobs blend of the (cube, weight) sources into the current
+    // tint volume texture and sets m_processTint; BrnPostFx::Render drains it.
+    msPostFx.BeginTintBlend();
+#endif  // BRN_POSTFX_TINT3D_AVAILABLE
 }
 
 // ==================================================================================================
@@ -715,7 +1033,7 @@ void BrnRendererLogPostFxEffectState()
     char lacMsg[224];
     std::snprintf(lacMsg, sizeof(lacMsg),
                   "[postfx-fx] apply-call %u: bloom=%d(lum %.3f thr %.3f col %.3f %.3f %.3f)"
-                  " vig=%d dof=%d blur=%d tint2d=%d\n",
+                  " vig=%d dof=%d blur=%d tint2d=%d tint3d=%d\n",
                   static_cast<unsigned>(luFrame),
                   gDiag.mbBloom ? 1 : 0,
                   static_cast<double>(gDiag.mfBloomLuminance),
@@ -726,7 +1044,8 @@ void BrnRendererLogPostFxEffectState()
                   gDiag.mbVignette ? 1 : 0,
                   gDiag.mbDepthOfField ? 1 : 0,
                   gDiag.mbBlur ? 1 : 0,
-                  gDiag.mbTint2d ? 1 : 0);
+                  gDiag.mbTint2d ? 1 : 0,
+                  gDiag.mbTint3d ? 1 : 0);
     CgsDev::Log::WriteToLog(lacMsg);
 
     // The motion-blur consumer line. `updated` is 1 only when the console's five-argument

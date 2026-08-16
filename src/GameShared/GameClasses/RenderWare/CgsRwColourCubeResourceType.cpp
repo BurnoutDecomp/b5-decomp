@@ -16,11 +16,24 @@
 
 namespace CgsResource
 {
+    // The registry id -- see the header for the three independent attestations (bundle entry word,
+    // debug string table, boot log). BrnResource::GameDataModule::RegisterResourceTypes @0x82667EA8
+    // registers this handler between ModelResourceType and WorldPainter2DResourceType
+    // ("RwColourCubeResourceType", vtable off_820A1490); RegisterAllResourceTypes now mirrors that
+    // slot.
+    static const uint32_t KU_COLOUR_CUBE_RESOURCE_TYPE_ID = 43u;   // 0x2B
+
+    uint32_t RwColourCubeResourceType::GetTypeID() const
+    {
+        return KU_COLOUR_CUBE_RESOURCE_TYPE_ID;
+    }
+
     ResourceDescriptor RwColourCubeResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
     {
         // X360 0x828A8678: v5[0] = *a3 (the edge length); ColourCube::GetResourceDescriptor(out, v5).
+        // The member is `size` because that is what the DWARF calls it (rwgpfxcolourcube.h:18).
         rw::graphics::postfx::ColourCube::Parameters lParameters;
-        lParameters.muEdgeLength = *reinterpret_cast<const u32*>(lpResource);
+        lParameters.size = *reinterpret_cast<const u32*>(lpResource);
 
         ResourceDescriptor lDescriptor;
         rw::graphics::postfx::ColourCube::GetResourceDescriptor(&lDescriptor, &lParameters);

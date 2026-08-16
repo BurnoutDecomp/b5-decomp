@@ -2994,6 +2994,65 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         }
     }
 
+    // ---- X360 Render:505-533 -- THE COLOUR-CUBE (3D LUT) TINT BLOCK. ---------------------
+    //
+    // POSITION IS THE POINT. The console runs this HERE -- inside the PerfMonCpu bracket
+    // `*(this + 51508)` (StartMonitor @0x8240C698, StopMonitor @0x8240C79C), after the dispatch
+    // sorts and BEFORE shadow::Device::ResetShadowing(), the three texture binds below and the
+    // shadow-map pass -- because BrnPostFx::BeginTintBlend SCHEDULES an EA::Jobs job that blends
+    // the source colour cubes into the tint volume texture while the shadow map and the world
+    // passes draw. BrnPostFx::Render drains it at the top of the composite (m_processTint ->
+    // Job::WaitOn -> Tint::EndBlendJob) before anything samples s3. Putting it down with the apply
+    // block would leave the job no window at all.
+    //
+    // THE GATE IS mbRenderPostFX (`lbz r11, 0(this + 0xC41C)` / `beq loc_8240C798` @0x8240C6A8-
+    // 0x8240C6BC) -- the same "Render PostFX" debug toggle that gates the apply block and the
+    // composite further down, tested a THIRD time here, exactly as the console tests it.
+    //
+    // The statements live in the sibling TU BrnRendererModulePostFx.cpp for the one translation-
+    // unit reason that file's banner sets out (this file cannot include BrnPostFx.h while
+    // BrnRendererModule.h carries the placeholder EA::Jobs::Job).
+    // ⚠ THE ONE PC PRECONDITION THIS BLOCK CARRIES ON TOP OF THE CONSOLE'S GATE, and it is not
+    // optional. BeginTintBlend LOCKS the tint volume texture (Tint::BeginBlendJob ->
+    // renderengine::Texture::Lock) and the ONLY thing that unlocks it is BrnPostFx::Render's step-1
+    // drain, `if (m_processTint) { m_blendJob.WaitOn(); EndTintBlend(); }`. On the console those two
+    // sites sit under ONE gate -- the same mbRenderPostFX byte, `lbz r11, 0(this + 0xC41C)` at
+    // 0x8240C6A8 here and at 0x8240DC6C for the composite -- so a lock can never outlive its frame.
+    // On PC the composite sits behind three further preconditions this block does not share:
+    // BRN_ANTIALIAS_BRACKET_AVAILABLE / BRN_POSTFX_COMPOSITE_AVAILABLE, the scene bracket
+    // (lbDispatchReady && EnsurePostFxSceneTargets, :3127), and the pool + Construct test inside
+    // PCBringUpRenderPostFxComposite. With any of them false the tint would Lock every frame and
+    // never Unlock -- re-locking the same alternating buffer while it is still held. So the block
+    // inherits the composite's whole precondition, evaluated here from the same inputs the bracket
+    // below uses: lbDispatchReady is fixed for the frame, EnsurePostFxSceneTargets is value-latched
+    // and has already run unconditionally above, and PCBringUpConstructPostFx runs from inside it --
+    // so asking here and asking at :3127 cannot disagree.
+#if BRN_ANTIALIAS_BRACKET_AVAILABLE && BRN_POSTFX_COMPOSITE_AVAILABLE
+    const bool lbTintBlendWillDrain =
+        lbDispatchReady
+        && EnsurePostFxSceneTargets(mAllocatedRenderTargets, mbMultisampledBackbuffer)
+        && PCBringUpPostFxCompositeWillRun(mAllocatedRenderTargets);
+#else
+    // No composite in this configuration => nothing would ever drain the blend, so it is not started.
+    const bool lbTintBlendWillDrain = false;
+#endif
+
+    if (mbRenderPostFX && lbTintBlendWillDrain)
+    {
+        // v296 -- DispatchThreadInputBuffer::GetCalibrationUnfriendlyEnablePostFx. The console
+        // reads it ONCE near the top of Render (pseudocode lines 440-441) and ANDs it into this
+        // block AND into all six effects in the apply block; this is the same read, inside the
+        // same frame-long read lock, so it is the same value. The no-buffer fallback is the
+        // buffer's OWN Construct default (BrnDispatchThreadInputBuffer.cpp:232 seeds it true),
+        // not a pick -- identical to the apply block's fallback below.
+        const bool lbTintEffectsAllowed = (lpDispatchThreadInputBuffer != 0)
+            ? lpDispatchThreadInputBuffer->GetCalibrationUnfriendlyEnablePostFx()
+            : true;
+
+        BrnRendererBeginPostFxTintBlend(
+            sbEffectsArbitratorConstructed ? &mEffectsArbitrator : 0, lbTintEffectsAllowed);
+    }
+
     // ---- X360 Render:536-542 -- the three GLOBAL texture binds. --------------------------
     //
     // THIS IS THE SHADOW RECEIVER'S MISSING HALF. 92 of the 110 pixel shaders in the shipped
@@ -3273,7 +3332,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         // (pseudocode lines 440-441 -- read ONCE near the top of Render and ANDed into every effect's
         // active flag). The no-dispatch-buffer fallback is the buffer's OWN Construct default rather
         // than a pick: DispatchThreadInputBuffer::Construct seeds
-        // mbCalibrationUnfriendlyEnablePostFx = true (BrnDispatchThreadInputBuffer.cpp:212).
+        // mbCalibrationUnfriendlyEnablePostFx = true (BrnDispatchThreadInputBuffer.cpp:232).
         const bool lbEffectsAllowed = (lpDispatchThreadInputBuffer != 0)
             ? lpDispatchThreadInputBuffer->GetCalibrationUnfriendlyEnablePostFx()
             : true;

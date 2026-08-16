@@ -96,7 +96,7 @@ namespace CgsResource
 
     // ---- GetSerialisedResourceDescriptor @ 0x828A9858 --------------------------------------
     //
-    //   renderengine::Texture::Parameters params;  // v5[8], v5[0] = miFormat = -1, rest zeroed
+    //   renderengine::Texture::Parameters params;  // v5[8], v5[0] = the DIMENSION word = -1, rest 0
     //   renderengine::Texture::GetParameters(resource, &params);
     //   renderengine::Texture::GetResourceDescriptor(out, &params);
     // Descriptor written into rw::ResourceDescriptor (BaseResourceDescriptors<4>).
@@ -104,13 +104,18 @@ namespace CgsResource
     {
         ResourceDescriptor lDescriptor;
         renderengine::Texture::Parameters lParameters;
-        lParameters.miFormat    = -1;   // v5[0] = -1 (D3DFORMAT none)
+        // ⚠ v5[0] IS THE DIMENSION WORD, NOT THE FORMAT (corrected 2026-08-16 with the Parameters
+        // layout): renderengine::Texture::GetParameters @0x82B60D80 writes -1 into word 0 for a
+        // resource type it does not recognise (`li r11, -1` @0x82B60DD8) and puts the format in
+        // word 6. The seed is otherwise unchanged -- the console zeroes every other word, and
+        // GetParameters overwrites all eight anyway.
+        lParameters.meType      = renderengine::Texture::E_TYPE_UNKNOWN;   // v5[0] = -1
         lParameters.muSysMem    = 0;
         lParameters.muWidth     = 0;
         lParameters.muHeight    = 0;
         lParameters.muDepth     = 0;
         lParameters.muNumLevels = 0;
-        lParameters.muReserved0 = 0;
+        lParameters.miFormat    = 0;    // v5[6]
         lParameters.muReserved1 = 0;
         renderengine::Texture::GetParameters(static_cast<const renderengine::Texture*>(lpResource), &lParameters);
         renderengine::Texture::GetResourceDescriptor(reinterpret_cast<u32*>(&lDescriptor), &lParameters);

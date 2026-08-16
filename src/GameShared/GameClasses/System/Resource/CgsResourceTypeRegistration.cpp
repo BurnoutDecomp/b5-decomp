@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/RenderWare/CgsRwRasterResourceType.h"
 #include "GameShared/GameClasses/RenderWare/CgsRwTextureStateResourceType.h"
 #include "GameShared/GameClasses/RenderWare/CgsMaterialStateResourceType.h"
+#include "GameShared/GameClasses/RenderWare/CgsRwColourCubeResourceType.h"   // CgsResource::RwColourCubeResourceType (0x2B)
 #include "GameShared/GameClasses/Fonts/Resources/CgsFontResourceType.h"
 #include "GameShared/GameClasses/Graphics/Resources/CgsVideoDataResource.h"
 #include "GameShared/GameClasses/RenderWare/cross/CgsModelResourceType.h"
@@ -123,6 +124,18 @@ namespace CgsResource
         TypeRegistry::Register(&sAttribSysVault);
         static ModelResourceType           sModel;             // [game #38] 0x2A  Model (serialised model)
         TypeRegistry::Register(&sModel);
+        // Post-fx colour-cube wave (2026-08-16). The X360 registers this handler in exactly this
+        // slot -- BrnResource::GameDataModule::RegisterResourceTypes @0x82667EA8 emits
+        // "RwColourCubeResourceType" immediately after "ModelResourceType" and before
+        // "WorldPainter2DResourceType" -- and without it the loader refuses every colour cube in
+        // the game:
+        //   [bundle] UNREGISTERED resource type id 43 in 'PostFx/colourcubedictionary.bin'
+        //     -- scratch/postfx_step9_final/boot1_BrnGame.log:387
+        // Same failure mode ZoneList / PlayerCarColours / IdList were added for: CreateEntryInSlot
+        // stores a NULL mpResourceType for the entry and nothing can acquire it, so the composite's
+        // 3D tint has no LUT to blend.
+        static RwColourCubeResourceType    sRwColourCube;      // [game #39] 0x2B  ColourCube (3D tint LUT)
+        TypeRegistry::Register(&sRwColourCube);
         static WorldPainter2DResourceType  sWorldPainter2D;    // [game #40] 0x30  WorldPainter2D (DISTRICTS.DAT map)
         TypeRegistry::Register(&sWorldPainter2D);
         static PolygonSoupListResourceType sPolygonSoupList;   // [game #71] 0x43  PolygonSoupList (collision)

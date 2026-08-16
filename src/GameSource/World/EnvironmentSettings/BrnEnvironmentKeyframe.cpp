@@ -82,10 +82,11 @@ void Keyframe::Construct()
 
     // BrnEffects::TintData::Construct -- inlined on X360 to the single
     // `stw 0, 0x80(this)`. The tree models the keyframe's tint sub-block as the
-    // bare colour-cube id word (BrnEnvironmentKeyframe.h) rather than an embedded
-    // BrnEffects::TintData, so the de-inlined call is spelled as that one store.
-    // (TintData is exactly that one u32 -- SharedClasses/Graphics/BrnEffectsData.h.)
-    muColourCube = 0;
+    // SERIALISED (4-byte) colour-cube import slot rather than an embedded host
+    // BrnEffects::TintData -- see the long note on BrnEnvironmentKeyframe.h's
+    // mpColourCube for why the on-disk width has to stay the console's -- so the
+    // de-inlined call is spelled as that one store, on the slot itself.
+    mpColourCube.muSlot = 0;
 
     mScattering.Construct();
     mLighting.Construct();

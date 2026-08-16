@@ -32,6 +32,20 @@ namespace postfx
 
     // X360 0x82AD4860 -- run the blend described by the parameter block.
     void TintBlend(TintBlendParameters& lrParameters);
+
+    // The per-source-count blend variants the dispatch table dword_82F7238C indexes with
+    // TintBlendParameters::numSources. Declared here (rather than left file-local) because they
+    // are named X360 functions in their own right, and because the table that holds their
+    // addresses is the ONLY thing that reaches them -- a reader who greps for a call site of
+    // Blend4Cubes and finds none must be able to see why.
+    //   [1] 0x82AD4078 SetColour     [2] 0x82AD4170 Blend2Cubes   [3] 0x82AD4280 Blend3Cubes
+    //   [4] 0x82AD43D0 Blend4Cubes   [5] 0x82AD4528 Blend5Cubes   [6] 0x82AD46B0 Blend6Cubes
+    void SetColour  (TintBlendParameters& lrParameters);
+    void Blend2Cubes(TintBlendParameters& lrParameters);
+    void Blend3Cubes(TintBlendParameters& lrParameters);
+    void Blend4Cubes(TintBlendParameters& lrParameters);
+    void Blend5Cubes(TintBlendParameters& lrParameters);
+    void Blend6Cubes(TintBlendParameters& lrParameters);
 }
 }
 }

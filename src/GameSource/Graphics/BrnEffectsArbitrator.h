@@ -99,6 +99,18 @@ namespace BrnGraphics
         bool EvalVignette(BrnEffects::VignetteData& lData) const;                 // DWARF :91
         bool EvalDepthOfField(BrnEffects::DepthOfFieldData& lData) const;         // DWARF :94
         bool EvalBlur(BrnEffects::BlurData& lData) const;                         // DWARF :97
+        // The length of the two arrays EvalTint fills, and therefore the length every caller
+        // must supply. It is the sum of the per-layer COLOUR-CUBE counts over the layers EvalTint
+        // walks (WORLD..FXEVENTS -- it starts at 1, `li r29, 1` @0x823FD5D4, and stops at 3,
+        // `cmplwi cr6, r29, 3` @0x823FD6CC), i.e. 4 + 1 == 5. Sourced from the same compile-time
+        // definitions as kau8ColourCubesPerEffectsLayer so the two cannot drift, and it is the
+        // same 5 BrnPostFx's m_colourCubes[5] / m_tintFactors[5] hold and the same 5
+        // BrnPostFx::BeginTintBlend @0x823F8380 asserts against ("m_numCubesToBlend <= 5",
+        // BrnPostFx.cpp:266).
+        static const u32 KU_TINT_COLOUR_CUBE_CNT =
+            EffectLayerDefinition<E_EFLAYER_WORLD>::KU_NUM_COLOURCUBES
+          + EffectLayerDefinition<E_EFLAYER_FXEVENTS>::KU_NUM_COLOURCUBES;
+
         bool EvalTint(rw::graphics::postfx::ColourCube** lppColourCubes,
                       f32* lpfWeights) const;                                     // DWARF :102
         bool EvalTint2d(BrnEffects::TintData2d& lData) const;                     // DWARF :105

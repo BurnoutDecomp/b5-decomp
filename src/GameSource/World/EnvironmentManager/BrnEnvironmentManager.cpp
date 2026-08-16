@@ -914,11 +914,12 @@ void EnvironmentManager::DisableJunkyardLightingSetup()
 //
 //   KEYFRAME arm  -- 32 B from kf+0x10 -> frame+0x20 (BloomData), weight -> frame+0x08;
 //                    80 B from kf+0x30 -> frame+0x40 (VignetteData), weight -> frame+0x0C;
-//                    u32 from kf+0x80  -> frame+0x110 (TintData::muColourCube), weight -> frame+0x18.
+//                    one word from kf+0x80 -> frame+0x110 (TintData::mpColourCube -- the resolved
+//                    ColourCube* the keyframe's bundle import wrote there), weight -> frame+0x18.
 //   DEFAULT  arm  -- the SAME three writes, but the Bloom/Vignette values are built fresh on the
 //                    stack from the shared post-fx defaults and the two weights are 0.0f
 //                    (flt_82001CC0) while the tint weight is 0.25f (flt_82003F40); the colour
-//                    cube comes from the manager's own muDefTintData (+0x1194).
+//                    cube comes from the manager's own mpDefTintData (+0x1194).
 //
 // The default arm is BYTE-FOR-BYTE the inlined BrnEffects::BloomData::Construct() +
 // BrnEffects::VignetteData::Construct() -- proven by diffing it against
@@ -941,12 +942,15 @@ void EnvironmentManager::DisableJunkyardLightingSetup()
 // still inert gates in WorldLinkStubs.cpp and nothing else writes mBlendFrame, so on this build
 // every slot takes the "no keyframe" arm and the world layer contributes weight 0. That is the
 // console's own "environment settings not loaded" behaviour, not a stand-in.
-// FLAG: muDefTintData (+0x1194) is written ONLY by EnvironmentManager::Prepare @0x827D49A8
-// (`stw r3, 0x1194(r31)` at 0x827D4C10, the id of the default rw::graphics::postfx::ColourCube
-// it creates at +0x1174); Construct @0x827CA408 does not touch it. Prepare is an inert gate on
-// this build, so the value read here is the zero-initialised BSS of the file-scope static
-// gGameModule -- which is also what BrnEffects::TintData::Construct() writes, so the read is
-// deterministic and harmless. It becomes live for free when Prepare lands.
+// mpDefTintData (+0x1194) is written ONLY by EnvironmentManager::Prepare @0x827D49A8
+// (`stw r3, 0x1194(r31)` at 0x827D4C10, the POINTER to the default rw::graphics::postfx::ColourCube
+// the ResourcePtr at +0x1174 instances); Construct @0x827CA408 does not touch it.
+// ⭐ LIVE 2026-08-16 (group tintdata): Prepare's E_PREPARE_WF_ACQUIRE_DEPENDENCIES arm no longer
+// HOLDS that publish -- BrnEffects::TintData::mpColourCube is the DWARF's real pointer now, so the
+// console's own line is restored and this arm hands the default cube out. Before Prepare runs (or
+// on a build where the acquire fails) it is the zero-initialised BSS of the file-scope static
+// gGameModule -- which is also what BrnEffects::TintData::Construct() writes -- so the read stays
+// deterministic and the null propagates to a null cube, never to a bogus address.
 // ============================================================================================
 void EnvironmentManager::GenerateEffects(BrnEffectsFrame* lpFrame0, BrnEffectsFrame* lpFrame1,
                                          BrnEffectsFrame* lpFrame2, BrnEffectsFrame* lpFrame3)
@@ -969,7 +973,7 @@ void EnvironmentManager::GenerateEffects(BrnEffectsFrame* lpFrame0, BrnEffectsFr
             BrnEffects::VignetteData lVignetteData;
             lVignetteData.Construct();
 
-            lTintData.muColourCube = muDefTintData;
+            lTintData.mpColourCube = mpDefTintData;
 
             lpFrame->SetBloomData(lBloomData, KF_DEF_EFFECTS_LAYER_WEIGHT);
             lpFrame->SetVignetteData(lVignetteData, KF_DEF_EFFECTS_LAYER_WEIGHT);
@@ -977,7 +981,10 @@ void EnvironmentManager::GenerateEffects(BrnEffectsFrame* lpFrame0, BrnEffectsFr
         }
         else
         {
-            lTintData.muColourCube = lpKeyframe->muColourCube;
+            // The keyframe's +0x80 import slot, widened to the host pointer on read (Ptr32::Get(),
+            // the project's low-4 GB convention -- see BrnEnvironmentKeyframe.h). One word in, one
+            // pointer out; the console's `lwz r11, 0x80(kf)` / `stw r11, 0x110(frame)` verbatim.
+            lTintData.mpColourCube = lpKeyframe->mpColourCube.Get();
 
             lpFrame->SetBloomData(lpKeyframe->mBloom, lfWeight);
             lpFrame->SetVignetteData(lpKeyframe->mVignette, lfWeight);
@@ -1939,24 +1946,27 @@ bool EnvironmentManager::Prepare( BrnWorldIO::UpdateOutputBuffer* lpOutput )
                 lHandle.mpSourceEntry    = lpResponse->mpSourceEntry;
                 mDefColourCubePtr = lHandle;
 
-                // [FLAG PC bring-up] the console's second line stores the ColourCube POINTER into
-                // mDefTintData (+0x1194), which GenerateEffects copies into
-                // BrnEffects::TintData::muColourCube. That member is still the 32-bit GUEST WORD
-                // (see the ⚠ SUSPECT banner in SharedClasses/Graphics/BrnEffectsData.h), so
-                // publishing a host pointer through it would TRUNCATE it and hand
-                // BrnEffectsArbitrator::EvalTint a bogus ColourCube* to dereference -- PREAMBLE
-                // rule 1 exactly. The publish is therefore HELD: mDefTintData keeps the 0 that
-                // BrnEffects::TintData::Construct() also writes, which is this build's current
-                // behaviour, so nothing regresses. DELETE-WHEN TintData::muColourCube is widened
-                // to `rw::graphics::postfx::ColourCube* mpColourCube`; the line then reads
-                //     mDefTintData = mDefColourCubePtr.GetMemoryResource();
-                static bool s_bLoggedTintHold = false;
-                if ( !s_bLoggedTintHold )
+                // The console's second line, RESTORED 2026-08-16 (group tintdata). It was HELD by
+                // step 9 for one reason only -- BrnEffects::TintData::muColourCube was a 32-bit
+                // guest word, so publishing a host pointer through it would have truncated it and
+                // handed EvalTint a bogus ColourCube* to dereference. That member is now the
+                // DWARF's real `rw::graphics::postfx::ColourCube* mpColourCube`
+                // (SharedClasses/Graphics/BrnEffectsData.h) and so is mpDefTintData, so the store
+                // is the console's own, at full width:
+                //     X360 0x827D4C0C `bl CgsResource::ResourcePtr<ColourCube>::GetMemoryResource`
+                //     X360 0x827D4C10 `stw r3, 0x1194(r31)`
+                mpDefTintData = mDefColourCubePtr.GetMemoryResource();
+
+                static bool s_bLoggedDefaultCube = false;
+                if ( !s_bLoggedDefaultCube )
                 {
-                    s_bLoggedTintHold = true;
-                    EnvLogLine( "[env] default colour cube acquired; TintData publish HELD -- "
-                                "BrnEffects::TintData::muColourCube is still a 32-bit guest word "
-                                "[FLAG PC bring-up]\n" );
+                    s_bLoggedDefaultCube = true;
+                    char lacLine[128];
+                    std::snprintf( lacLine, sizeof( lacLine ),
+                                   "[env] default colour cube acquired and PUBLISHED: %s -> %p\n",
+                                   KAC_DEFAULT_COLOUR_CUBE_RESOURCE,
+                                   static_cast<const void*>( mpDefTintData ) );
+                    EnvLogLine( lacLine );
                 }
             }
         }
