@@ -611,6 +611,47 @@ namespace Deformation
     //   (6) the miNumUsedModels == live-bit-count tripwire (:817);
     //   StopMonitor(miUpdatePerfMon); StopMonitor(miTotalDeformationPerfMon).
     // =============================================================================================
+    // =============================================================================================
+    // UpdateSensorDisplacements @0x82604000 (189) -- ⭐⭐⭐ BODIED 2026-08-16 (walls leg 10); it was
+    // an inert BRN_CONDUCTOR_GATE in BrnPhysicsConductorGates.cpp until now.
+    //
+    // The whole function is two perf-mon monitors around a walk of the live-model set, calling
+    // DeformableObject::UpdateSensorDisplacements on each with the SAME time step:
+    //   0x82604028  StartMonitor(*(this+76676))            ; miTotalDeformationPerfMon
+    //   0x8260403C  StartMonitor(*(this+76684))            ; miUpdateSensorDisplPerfMon
+    //   0x8260404C..0x826042CC  the inlined BitArray<28> GetFirstNonZeroBit / GetNextNonZeroBit
+    //                           walk over mModelsAdded (this+75904), with the CgsBitArray.h:203
+    //                           "invalid index : N < 28" tripwire inside the walk
+    //   0x826040F4  vmr128 v1, v127                        ; re-splat the saved VecFloat argument
+    //   0x826040FC  bl DeformableObject::UpdateSensorDisplacements(26496 * index + *(this+76032))
+    //                                                      ; 26496 == sizeof(DeformableObject),
+    //                                                      ; this+76032 == mpaModels
+    //   0x826042D8/E0  StopMonitor in the reverse order
+    //
+    // ⛔⛔ WHY THE STUB WAS EXPENSIVE. PhysicsModule::Update calls this EVERY FRAME
+    // (BrnPhysicsModuleUpdateFunctions.cpp:541), so the stub was a textbook silent drop: it
+    // compiled, linked, ran, copied nothing, and left every sensor's
+    // mPointDisplacement_BiggestImpulseThisFrame at the zero ClearVariables set it. That vector is
+    // the denominator of ValidateAndAddContact's impact-time latch, so with it zero the latch's
+    // `basis > 0` gate could never pass and NO contact -- wall or floor -- could ever become a
+    // deformation impulse. Witnessed live before the fix as `disp 0.000000 0.000000 0.000000` on
+    // every one of 24 wall-face contacts taken at 30.4 m/s.
+    // =============================================================================================
+    void DeformationManager::UpdateSensorDisplacements(VecFloat lvfTimeStep)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miTotalDeformationPerfMon);
+        CgsDev::PerfMonCpu::StartMonitor(miUpdateSensorDisplPerfMon);
+
+        for ( s32 liModel = mModelsAdded.GetFirstNonZeroBit(); liModel != -1;
+              liModel = mModelsAdded.GetNextNonZeroBit(liModel) )
+        {
+            mpaModels[liModel].UpdateSensorDisplacements(lvfTimeStep);
+        }
+
+        CgsDev::PerfMonCpu::StopMonitor(miUpdateSensorDisplPerfMon);
+        CgsDev::PerfMonCpu::StopMonitor(miTotalDeformationPerfMon);
+    }
+
     void DeformationManager::Update(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
                                     CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput,
                                     const PhysicsModuleIO::InputBuffer* lpInputBuffer,

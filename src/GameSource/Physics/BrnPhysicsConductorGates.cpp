@@ -454,10 +454,12 @@ namespace Deformation
         BRN_CONDUCTOR_GATE("DeformationManager::VerifyPartIndices @0x826042F8 (165)");
     }
 
-    void DeformationManager::UpdateSensorDisplacements(VecFloat)
-    {
-        BRN_CONDUCTOR_GATE("DeformationManager::UpdateSensorDisplacements @0x82604000 (189)");
-    }
+    // ⭐⭐⭐ 2026-08-16 (walls leg 10): the UpdateSensorDisplacements @0x82604000 gate is DELETED --
+    // the real body (a perf-mon-bracketed walk of mModelsAdded calling the per-model
+    // DeformableObject::UpdateSensorDisplacements) is in BrnDeformationManager.cpp. LNK2005 if it
+    // ever comes back. It was NOT a harmless seam: PhysicsModule::Update calls it every frame and
+    // the vector it writes is the denominator of ValidateAndAddContact's impact-time latch, so
+    // while it was inert no contact of any kind could become a deformation impulse.
 
     // ⭐ 2026-08-14 (walls leg 4): the Update @0x82649B40 + UpdatePostPhysics @0x82630420 gates
     // are DELETED -- both are REAL in BrnDeformationManager.cpp (the per-step conductor + the

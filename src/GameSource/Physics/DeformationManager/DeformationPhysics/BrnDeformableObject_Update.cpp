@@ -185,17 +185,23 @@ namespace Deformation
     // =============================================================================================
     // UpdateSensorDisplacements @0x825DF898
     //
-    // Advance every deformation sensor's stored point-displacement vector by one step. For each of the
-    // bare deformation sensors (GetNumSensors() - 4 == mpDeformationSpec->mu8NumDeformationSensors) the
-    // asm:
-    //   * loads the sensor's displacement source vector,
-    //   * transforms it through the vehicle body's world transform (mVehicleBody body +16, the four
-    //     16-byte rows), with the cross-product-style lane permute (vpermwi128 0x63) that re-derives the
-    //     orthogonal completion,
-    //   * scales the result by the supplied time-step lane (v127 == the VecFloat arg), and
-    //   * writes it back into the sensor's leading displacement vector (vrlimi128 keeps the w lane).
-    // The mbActive tripwire (line 1027) is non-gating. The dense VMX transform is modelled per-lane over
-    // the body transform rows.
+    // ⭐⭐ Advance every deformation sensor's point-displacement vector by ONE FRAME OF ITS OWN
+    // MOTION. For each bare deformation sensor (GetNumSensors() - 4 ==
+    // mpDeformationSpec->mu8NumDeformationSensors, the asm's `lbz r9, 0x652(spec)`):
+    //   * p = bodyRotation * mpLocalSpaceSphere->centre    -- the sensor's world-space offset,
+    //   * pointVelocity = mLinearVelocity + mAngularVelocity x p   (the standard rigid-body point
+    //     velocity; the asm builds the cross with the vpermwi128 0x63 yzx double-permute),
+    //   * displacement.xyz = pointVelocity * timeStep      (v127 == the VecFloat arg),
+    //   * vrlimi128 keeps the original w lane (the biggest-impulse magnitude).
+    // The mbActive tripwire (line 1027) is non-gating. The dense VMX is modelled per-lane.
+    //
+    // ⭐⭐⭐ WHY THIS FUNCTION IS LOAD-BEARING (2026-08-16, walls leg 10). The vector it writes is
+    // the DENOMINATOR of DeformationSensor::ValidateAndAddContact's impact-time latch -- the single
+    // gate that decides whether a contact ever becomes a deformation impulse. Two independent
+    // defects met here: this body dropped both velocity terms, AND the manager-level
+    // DeformationManager::UpdateSensorDisplacements that drives it was an inert conductor gate, so
+    // no sensor displacement was ever written at all. Measured live before the fix, at 30.4 m/s
+    // into a wall: `[latch] WALLFACE ... disp 0.000000 0.000000 0.000000`.
     // =============================================================================================
     void DeformableObject::UpdateSensorDisplacements(VecFloat lvfTimeStep)
     {
@@ -207,13 +213,29 @@ namespace Deformation
             return;
         }
 
-        // The body transform rows the sensor displacement is re-projected through (mVehicleBody body
+        // The body transform rows the sensor offset is rotated through (mVehicleBody body
         // sub-object +16 == the attached vehicle's world transform). Reached through GetTransform.
         Matrix44Affine lBodyTransform;
         GetTransform(lBodyTransform);
         const Vector3& lR  = lBodyTransform.Right();
         const Vector3& lU  = lBodyTransform.Up();
         const Vector3& lAt = lBodyTransform.At();
+
+        // ⭐⭐⭐ RESTORED 2026-08-16 (walls leg 10) -- THE TWO VELOCITY TERMS. The asm's `r11` is
+        // `*(this+0x194C) + 0x10`, i.e. the attached VehiclePhysics' TRANSFORM base, and it loads
+        // FIVE vectors off it, not three:
+        //   0x825DF934  lvx128 v9, r0,  r11        ; +0x00  transform Right
+        //   0x825DF930  lvx128 v0, r11, 0x10       ; +0x10  transform Up
+        //   0x825DF93C  lvx128 v8, r11, 0x20       ; +0x20  transform At
+        //   0x825DF944  lvx128 v7, r11, 0x40       ; +0x40  mLinearVelocity   <- WAS DROPPED
+        //   0x825DF940  lvx128 v0, r11, 0x50       ; +0x50  mAngularVelocity  <- WAS DROPPED
+        // Those last two offsets are already attested by name in the tree: ExternallySimulatedBody.h
+        // pins mTransform @+0x10, mLinearVelocity @+0x40 and mAngularVelocity @+0x50 RELATIVE TO
+        // THE TRANSFORM BASE (object +0x50 / +0x60), which is exactly what VehiclePhysics'
+        // GetLinearVelocity / GetAngularVelocity return.
+        const Vehicle::VehiclePhysics* const lpBody = GetVehiclePhysics();
+        const Vector3 lLinearVelocity  = lpBody->GetLinearVelocity();
+        const Vector3 lAngularVelocity = lpBody->GetAngularVelocity();
 
         const f32 lfStep = lvfTimeStep.x;   // v127 broadcast time-step lane
 
@@ -233,18 +255,37 @@ namespace Deformation
             const Vector4& lSphereCentre = *reinterpret_cast<const Vector4*>(lrSensor.GetLocalSpaceSphere());
             const Vector3 lSrc = { lSphereCentre.x, lSphereCentre.y, lSphereCentre.z, 0.0f };
 
-            // Re-project through the body rows, then the orthogonal-completion permute (vpermwi128 0x63
-            // == the yzx rotate the vnmsubfp cross step uses) and the time-step scale. Modelled per-lane;
-            // the permute term reduces to the body-frame projection of the source vector.
-            Vector3 lProjected;
-            lProjected.x = (lSrc.x * lR.x + lSrc.y * lU.x + lSrc.z * lAt.x) * lfStep;
-            lProjected.y = (lSrc.x * lR.y + lSrc.y * lU.y + lSrc.z * lAt.y) * lfStep;
-            lProjected.z = (lSrc.x * lR.z + lSrc.y * lU.z + lSrc.z * lAt.z) * lfStep;
+            // (a) Rotate the sensor's local sphere centre into world space: p = R * c
+            //     (0x825DF938/948/950, three vmaddfp against splat(c.x/y/z)).
+            const Vector3 lP = { lSrc.x * lR.x + lSrc.y * lU.x + lSrc.z * lAt.x,
+                                 lSrc.x * lR.y + lSrc.y * lU.y + lSrc.z * lAt.y,
+                                 lSrc.x * lR.z + lSrc.y * lU.z + lSrc.z * lAt.z, 0.0f };
+
+            // (b) ⭐⭐⭐ THE POINT VELOCITY: v + omega x p, then the time step.
+            // ⛔ WHAT WAS HERE, and why it mattered. This wrote `(R * c) * dt` -- the rotated
+            // sensor OFFSET scaled by the time step. That has no velocity in it at all: it is a
+            // position times a time, ~1e-3 for a 60 Hz step, and it does not change when the car
+            // moves. ValidateAndAddContact divides the contact's penetration depth by the
+            // projection of THIS vector on the contact normal to get an impact time in [0,1], so
+            // a displacement that is not a swept motion makes that quotient meaningless.
+            // The cross product is the two-permute idiom the asm spells out:
+            //   0x825DF94C  vpermwi128 v11, v0(omega), 0x63    ; 0x63 == the yzx word rotate
+            //   0x825DF958  vpermwi128 v13, v13(p),    0x63
+            //   0x825DF95C  vmulfp128  v0,  v0(omega), v13     ; omega * p_yzx
+            //   0x825DF960  vnmsubfp   v0,  v11, v0, v10       ; - omega_yzx * p
+            //   0x825DF964  vpermwi128 v0,  v0, 0x63           ; and rotate the result back
+            // which expands lane-by-lane to exactly the cross product written below. The same
+            // formula is already spelled in the tree for the wheels (VehiclePhysics.h:737,
+            // "v_contact = mLinearVelocity + mAngularVelocity x (r_contact - bodyPos)").
+            const Vector3 lPointVelocity = {
+                lLinearVelocity.x + (lAngularVelocity.y * lP.z - lAngularVelocity.z * lP.y),
+                lLinearVelocity.y + (lAngularVelocity.z * lP.x - lAngularVelocity.x * lP.z),
+                lLinearVelocity.z + (lAngularVelocity.x * lP.y - lAngularVelocity.y * lP.x), 0.0f };
 
             // vrlimi128 v0,v12,1,0 -- write xyz, keep the original w (the biggest-impulse lane).
-            lrDisplacement.x = lProjected.x;
-            lrDisplacement.y = lProjected.y;
-            lrDisplacement.z = lProjected.z;
+            lrDisplacement.x = lPointVelocity.x * lfStep;
+            lrDisplacement.y = lPointVelocity.y * lfStep;
+            lrDisplacement.z = lPointVelocity.z * lfStep;
         }
     }
 
