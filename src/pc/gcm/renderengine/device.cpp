@@ -4,6 +4,7 @@
 #include <d3d9.h>
 #include <cstring>
 #include <cstdio>   // [diag] BRN_FRAME_DUMP back-buffer BMP writer
+#include <cstdlib>  // [diag] atoi -- BRN_FRAME_DUMP_EVERY period override
 
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"   // PCInstallDefaultRenderTargetState
 
@@ -186,8 +187,43 @@ bool renderengine::Device::FrameBeginNoClear()
 // stamp traced draws with their frame). Plain u32; single render thread on the PC boot.
 namespace renderengine { u32 guPresentCount = 0; }
 
-// [diag] BRN_FRAME_DUMP=<dir>: save the back buffer as BMP into <dir> every 30th present
+// [diag] BRN_FRAME_DUMP=<dir>: save the back buffer as BMP into <dir> every Nth present
 // (PrintWindow returns black against this device, so the game dumps its own frames).
+//
+// N defaults to 30 and is overridden by BRN_FRAME_DUMP_EVERY=<n>.  ⭐ WHY THIS IS TUNABLE:
+// a 30-present period is ~0.4 s on an uncapped PC boot, which is COARSER THAN THE UI
+// TRANSITIONS IT IS USED TO JUDGE -- a GUI animation that plays over ~1 s lands in two or
+// three samples and is indistinguishable from a pop.  Judging "does this animate?" from a
+// 30-present dump is measuring the sampler, not the game.  Set BRN_FRAME_DUMP_EVERY=1 for
+// a per-present capture of a transition; leave it unset for the ordinary flow run (657
+// frames / 2.3 GB at 30 -- a period of 1 is ~30x that, so use it for short windows).
+// ⛔ THE PERIOD IS SHARED, NOT COPIED. Other diagnostics (the CXFORM batch trace in
+// CgsImRenderBufferTemplate.cpp) deliberately gate on the SAME presents this writer does, so
+// that a logged number and a dumped pixel come from ONE frame -- a trace correlated against a
+// dump of a DIFFERENT frame has already produced a false lead in this tree. A second hardcoded
+// 30 in those consumers would silently desync the moment the period is overridden, so they call
+// this accessor instead.
+namespace renderengine
+{
+    u32 FrameDumpEvery()
+    {
+        static u32 suEvery = 0u;
+        if (suEvery == 0u)
+        {
+            suEvery = 30u;
+            char lacEvery[32];
+            DWORD luEveryLen =
+                GetEnvironmentVariableA("BRN_FRAME_DUMP_EVERY", lacEvery, sizeof(lacEvery));
+            if (luEveryLen != 0 && luEveryLen < sizeof(lacEvery))
+            {
+                const int liEvery = atoi(lacEvery);
+                if (liEvery > 0) { suEvery = static_cast<u32>(liEvery); }
+            }
+        }
+        return suEvery;
+    }
+}
+
 static void DumpBackBufferIfRequested()
 {
     static char sacDir[512];
@@ -198,7 +234,7 @@ static void DumpBackBufferIfRequested()
         DWORD luLen = GetEnvironmentVariableA("BRN_FRAME_DUMP", sacDir, sizeof(sacDir));
         if (luLen == 0 || luLen >= sizeof(sacDir)) { sacDir[0] = 0; }
     }
-    if (sacDir[0] == 0 || (renderengine::guPresentCount % 30u) != 0u)
+    if (sacDir[0] == 0 || (renderengine::guPresentCount % renderengine::FrameDumpEvery()) != 0u)
     {
         return;
     }
