@@ -31,4 +31,18 @@ namespace BrnEffects
         // ---- FROZEN LAYOUT (DWARF :60) ----
         Vector2 mWindVelocity;   // :60
     };
+
+    // ---- SetWindVelocity, DEFINED (post-fx step 9, group envblend) ----------------
+    // The only producer in the image is EnvironmentSettings::EnvironmentManager::Update
+    // @0x827D6060, and the X360 compiler INLINED the setter there: right after
+    // `bl BrnWorldIO__UpdateOutputBuffer__GetEffectsEnvironmentIn` it does a bare
+    // `stvx128 v0, r0, r3` (0x827D6354 on the live arm, 0x827D6398 on the paused arm) --
+    // ONE 16-byte store at offset 0 of the returned interface, which is exactly
+    // `mWindVelocity = lWindVelocity`. Spelled out here rather than left as an unresolved
+    // external (`grep -rn "SetWindVelocity" b5-decomp/src` returned ONLY the declaration
+    // above, and this type has no .cpp) so the producer reaches the member BY NAME.
+    inline void EffectsEnvironmentInterface::SetWindVelocity(Vector2 lWindVelocity)
+    {
+        mWindVelocity = lWindVelocity;
+    }
 }

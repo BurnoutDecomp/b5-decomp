@@ -101,6 +101,21 @@ namespace GameDataIO
                         s32 liEventId, s32 liPoolId, const char* lpcFileName,
                         bool lbUseHDCache);
 
+        // Push an UnloadBundleRequest (type 3) to unload a named bundle -- the exact inverse of
+        // LoadBundle. DWARF BrnGameDataRequestQueue.h:51 `bool UnloadBundle(BaseEventReceiverQueue*,
+        // int, int, const char*)`; ADDITIVE GROW 2026-08-16 (envstream), forced by
+        // EnvironmentManager::StreamOut @0x827D2EB0, whose two unload arms call
+        //     BrnResource::GameDataIO::RequestInterface<4096>::UnloadBundle(iface, &mReceiverQueue,
+        //                                                                  eventId, 16, fileName)
+        // (asm 0x827D3000-0x827D3014 and 0x827D3118-0x827D312C -- five GPRs, r7 == the name, no
+        // HD-cache flag; that is the DWARF signature exactly). The X360 body for <4096> is an
+        // EXPORT HOLE (no .ida-exports JSON -- see the grep in the report), so the body below is
+        // the LoadBundle twin with the two request-only fields dropped, matching the committed
+        // CgsResource::Events::UnloadBundleRequest (a bare BundleLoaderEvent) and the console's
+        // own GuiResourceModule::UnloadBundle @0x8285E8C8 (queue type 3).
+        bool UnloadBundle(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+                          s32 liEventId, s32 liPoolId, const char* lpcFileName);
+
         // Push a LoadGameDataEvent (type 26) requesting the traffic-lane data.
         // X360 0x827468C0. meType == E_ASSETSET_DATA, mId == baked traffic-lane id.
         bool LoadTrafficLanes(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,

@@ -40,12 +40,19 @@ namespace EnvironmentSettings
 
 struct Keyframe
 {
-    // @ external (Keyframe::Construct, called by SetupUpdateFromToolBlend); its body
-    // is its own TU, not reconstructed in this batch. Sets every sub-block to its
-    // default template.
+    // Keyframe::Construct @0x82676298 -- body in BrnEnvironmentKeyframe.cpp beside
+    // this header (envfix round, 2026-08-16). Sets every sub-block to its default
+    // template. Called by EnvironmentManager::SetupUpdateFromToolBlend @0x827C5064,
+    // its only xref in the image.
     void Construct();
 
-    u8                        mPad0[0x10];    // 0x000  version/header (deferred)
+    // 0x000  the keyframe format version. NAMED from the DWARF
+    // (SharedClasses/World/BrnEnvironmentKeyframe.h:58 `uint32_t muVersion`); the
+    // guest's Construct stores the literal 8 here (`li r7,8` @0x826762B4 /
+    // `stw r7,0(r31)` @0x826762D0), and the shipped ENV_KF_..._1200 resource
+    // embedded in BrnEnvironmentKeyframeBringUp.cpp opens with 0x00000008.
+    u32                       muVersion;      // 0x000
+    u8                        mPad4[0xC];     // 0x004  rest of the header (deferred)
     BrnEffects::BloomData     mBloom;         // 0x010  (0x20)
     BrnEffects::VignetteData  mVignette;      // 0x030  (0x50)
     // 0x080  the keyframe's tint colour-cube resource id -- copied verbatim into the

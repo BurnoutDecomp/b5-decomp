@@ -252,13 +252,133 @@ bool ConsumeFieldValue( float& lrfValue, FILE* lpFile )
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// The rest of the ConsumeFieldValue family (envfix round, 2026-08-16).
+//
+// All five share ONE guard, byte-identical to the float& form above and to
+// ConsumeBlanks: `if (feof) return false; peek = (signed char)fgetc; ungetc(peek);
+// if (peek == '\n') return false;` -- then one fscanf and `return true`. The
+// per-arity difference is only the format string, which is why the guest emitted
+// five near-clones (0x82675C60 / CD0 / D48 / DC8 / E50 / EE8).
+//
+// DWARF (SharedClasses/World/BrnEnvironmentData.cpp) names the whole family and
+// its declaration shapes: :544 (float32_t&), :557 (float32_t&, float32_t&),
+// :570 (three float32_t&), :583 (Vector2&), :597 (Vector3&), :611 (char*).
+// ---------------------------------------------------------------------------
+
+// @ 0x82675CD0 -- two semicolon-separated floats, "%f;%f" (DWARF :557).
+bool ConsumeFieldValue( float& lrfValue0, float& lrfValue1, FILE* lpFile )
+{
+    if ( feof( lpFile ) )
+        return false;
+
+    const int liPeek = static_cast<signed char>( fgetc( lpFile ) );
+    ungetc( liPeek, lpFile );
+    if ( liPeek == '\n' )
+        return false;
+
+    fscanf( lpFile, "%f;%f", &lrfValue0, &lrfValue1 );
+    return true;
+}
+
+// @ 0x82675D48 -- three semicolon-separated floats, "%f;%f;%f" (DWARF :570).
+bool ConsumeFieldValue( float& lrfValue0, float& lrfValue1, float& lrfValue2, FILE* lpFile )
+{
+    if ( feof( lpFile ) )
+        return false;
+
+    const int liPeek = static_cast<signed char>( fgetc( lpFile ) );
+    ungetc( liPeek, lpFile );
+    if ( liPeek == '\n' )
+        return false;
+
+    fscanf( lpFile, "%f;%f;%f", &lrfValue0, &lrfValue1, &lrfValue2 );
+    return true;
+}
+
+// @ 0x82675DC8 -- Vector2 (DWARF :583). Reads the pair through the two-float
+// form, assembles it in a 16-byte stack slot whose upper half it first ZEROES
+// (`li r10,0` / `std r10, 0(sp+0x68)` @0x82675E18-0x82675E2C), then stores the
+// whole register over the target (lvx128 / stvx128 @0x82675E34-0x82675E38). So a
+// successful read writes FOUR lanes: { x, y, 0, 0 }. On failure the target is
+// untouched. Modelled with the tree's rw::math Vector2 (BrnCommonTypes.h), which
+// is exactly that 16-byte four-lane register.
+//
+// ⚠ CORRECTED (envfix round): this overload was declared `ConsumeFieldValue(u32*,
+// FILE*)` below, marked INFERRED. It is not a u32 reader -- the body reads two
+// FLOATS. No field of type 1 exists in ANY of the five recovered descriptor
+// tables, so the mis-typing was never reachable, but the fix removes the trap.
+bool ConsumeFieldValue( Vector2& lrv2Value, FILE* lpFile )
+{
+    float lfX;
+    float lfY;
+    if ( !ConsumeFieldValue( lfX, lfY, lpFile ) )
+        return false;
+
+    lrv2Value.x = lfX;
+    lrv2Value.y = lfY;
+    lrv2Value.z = 0.0f;
+    lrv2Value.w = 0.0f;
+    return true;
+}
+
+// @ 0x82675E50 -- Vector3 (DWARF :597), the COLOUR reader that field types 4 / 5
+// and 9 use. Same shape as the Vector2 form one arity up: three floats through
+// the "%f;%f;%f" reader, the fourth lane zeroed (`li r10,0` /
+// `stw r10, 0(sp+0x6C)` @0x82675EA4-0x82675EC0) and all four stored with
+// stvx128 @0x82675ECC. So a successful read writes { x, y, z, 0 } -- the w lane
+// IS cleared, which is why every colour that comes out of an environment text
+// file has w == 0, exactly like the CRT-initialised defaults.
+//
+// Modelled as f32* rather than Vector3& because the tree's ScatteringData /
+// LightingData / CloudsData spell their colour members as float[4] arrays (see
+// those headers); the callers below pass &member, so the four writes land on the
+// same four lanes the guest's stvx128 covers.
+bool ConsumeFieldValue( f32* lpv3Colour, FILE* lpFile )
+{
+    float lfX;
+    float lfY;
+    float lfZ;
+    if ( !ConsumeFieldValue( lfX, lfY, lfZ, lpFile ) )
+        return false;
+
+    lpv3Colour[0] = lfX;
+    lpv3Colour[1] = lfY;
+    lpv3Colour[2] = lfZ;
+    lpv3Colour[3] = 0.0f;
+    return true;
+}
+
+// @ 0x82675EE8 -- one whitespace-delimited string token, "%s" (DWARF :611).
+// Declared in BrnEnvironmentSettings.h; ParseEnvironmentFile calls it for the
+// time-of-day field, the keyframe name and the four colour-cube URIs.
+bool ConsumeFieldValue( char* lpBuffer, FILE* lpFile )
+{
+    if ( feof( lpFile ) )
+        return false;
+
+    const int liPeek = static_cast<signed char>( fgetc( lpFile ) );
+    ungetc( liPeek, lpFile );
+    if ( liPeek == '\n' )
+        return false;
+
+    fscanf( lpFile, "%s", lpBuffer );
+    return true;
+}
+
 // ===========================================================================
 // Templated keyframe field-value consumers  ConsumeFieldValue<T>
 //
 //   @ 0x82679160  ConsumeFieldValue<BrnEffects::BloomData>
 //   @ 0x82679528  ConsumeFieldValue<BrnEffects::VignetteData>
+//   @ 0x826798F0  ConsumeFieldValue<EnvironmentSettings::ScatteringData>
 //   @ 0x82679CB8  ConsumeFieldValue<EnvironmentSettings::LightingData>
 //   @ 0x8267A080  ConsumeFieldValue<EnvironmentSettings::CloudsData>
+//
+// The ScatteringData instantiation was previously believed absent: it has no JSON
+// of its own in .ida-exports (IDA folded 0x826798F0 into the 0x82679528 record),
+// but the symbol is real -- it is named in the xrefs_to of 0x82675C60 / 0x82675DC8
+// / 0x82675E50 and in the xrefs_from of ParseEnvironmentFile @0x8267CD70.
 //
 // ONE shared template body, reconstructed store-for-store from
 // BURNOUT_X360_ARTIST.XEX. Each instantiation walks a per-type static field
@@ -312,6 +432,45 @@ const FieldDescriptor kaVignetteFields[] =
     { "VignetteInnerColour", 9, 0x30 },
 };
 
+// --- @0x820A4690 : EnvironmentSettings::ScatteringData (22 records) ---
+// Recovered in the envfix round from the shipped image. The table ADDRESS comes
+// from the instantiation's own prologue (`addis r11,r0,0x820A` @0x826798FC /
+// `addi r25,r11,0x4690` @0x82679904 -- and that is the ONLY reference to
+// 0x820A4690 in the whole 0x82000000..0x82D00000 text range). The RECORD COUNT
+// comes from the same body's end-of-table pointer, `addi r11,r25,0x17B4`
+// @0x82679C18: 0x17B4 == 22*264 + 260, exactly the form the LightingData twin
+// uses (`addi r11,r25,0x0A4C` @0x82679FE0 == 9*264 + 260). It is corroborated
+// geometrically: 22 records starting at 0x820A4690 end at 0x820A5D40, which is
+// where the LightingData table below begins.
+const FieldDescriptor kaScatteringFields[] =
+{
+    { "SkyTopColour",           5, 0x00 },
+    { "SkyHorColour",           5, 0x10 },
+    { "SkySunColour",           5, 0x20 },
+    { "SkyHorShape",            0, 0x30 },
+    { "SkySunShape",            0, 0x34 },
+    { "SkyDarkness",            0, 0x38 },
+    { "SkyHorBleedHeight",      0, 0x3C },
+    { "SkyHorBleedWidth",       0, 0x40 },
+    { "SkySunHorBleedBal",      0, 0x44 },
+    { "ScattTopColour",         5, 0x50 },
+    { "ScattHorColour",         5, 0x60 },
+    { "ScattSunColour",         5, 0x70 },
+    { "ScattHorShape",          0, 0x80 },
+    { "ScattSunShape",          0, 0x84 },
+    { "ScattDarkness",          0, 0x88 },
+    { "ScattHorBleedHeight",    0, 0x8C },
+    { "ScattHorBleedWidth",     0, 0x90 },
+    { "ScattSunHorBleedBal",    0, 0x94 },
+    { "ScattDist0",             0, 0x98 },
+    { "ScattDist1",             0, 0x9C },
+    { "ScattPower",             0, 0xA0 },
+    { "ScattCap",               0, 0xA4 },
+};
+// Independent confirmation of the ScatteringData layout: these 22 offsets are
+// exactly the 22 named fields BrnEnvScatteringData.h declares, and NOTHING sits
+// at +0x48 -- the same hole ScatteringData::SetToBlend @0x827AF468 skips.
+
 // --- @0x820A5D40 : EnvironmentSettings::LightingData (9 records) ---
 const FieldDescriptor kaLightingFields[] =
 {
@@ -347,29 +506,25 @@ const FieldDescriptor kaCloudsFields[] =
 };
 
 // Per-type table selector (tag-dispatched on a null T* so the shared body stays
-// type-generic). Only the four recovered types have an overload; a fifth
-// consumer -- ConsumeFieldValue<ScatteringData> -- is a sibling wave kept
-// external via the extern-template declaration below.
+// type-generic). All FIVE instantiations the X360 emitted now have an overload.
 const FieldDescriptor* GetEnvFieldTable( const BrnEffects::BloomData*,    s32& lrCount )
 { lrCount = 3;  return kaBloomFields; }
 const FieldDescriptor* GetEnvFieldTable( const BrnEffects::VignetteData*, s32& lrCount )
 { lrCount = 8;  return kaVignetteFields; }
+const FieldDescriptor* GetEnvFieldTable( const ScatteringData*,           s32& lrCount )
+{ lrCount = 22; return kaScatteringFields; }
 const FieldDescriptor* GetEnvFieldTable( const LightingData*,             s32& lrCount )
 { lrCount = 9;  return kaLightingFields; }
 const FieldDescriptor* GetEnvFieldTable( const CloudsData*,               s32& lrCount )
 { lrCount = 15; return kaCloudsFields; }
 } // namespace
 
-// Sibling ConsumeFieldValue overloads whose bodies live in BrnEnvironmentData.cpp
-// (a separate wave -- declared here, like the char* string overload, so this
-// shared body links against them):
-//   @ 0x82675E50 -- read a colour (vec4 of floats) into lpColour. Used by type
-//                   codes 4 / 5 / 9.
-//   @ 0x82675DC8 -- read a type-1 field. FLAG: no field of type 1 appears in any
-//                   of the four recovered tables and this helper's asm was not in
-//                   scope, so its element type (u32*) is INFERRED, not attested.
-bool ConsumeFieldValue( f32* lpColour, FILE* lpFile );
-bool ConsumeFieldValue( u32* lpField,  FILE* lpFile );
+// The two sibling readers the store paths below use -- @0x82675E50 (Vector3, the
+// colour reader for type codes 4 / 5 / 9) and @0x82675DC8 (Vector2, type code 1)
+// -- are now DEFINED above in this TU, so the forward declarations that used to
+// stand here are gone with the "sibling wave" note that came with them.
+// The type-1 reader's element type is no longer INFERRED: its body reads two
+// floats, so it is Vector2 (DWARF BrnEnvironmentData.cpp:583), not u32.
 
 // ---------------------------------------------------------------------------
 // ConsumeFieldValue<T> -- the one shared body (see the block comment above).
@@ -400,7 +555,11 @@ bool ConsumeFieldValue( T& lrData, const char* lpFieldName, FILE* lpFile )
                     return ConsumeFieldValue( *reinterpret_cast<f32*>( lpTarget ), lpFile );
 
                 case 1:
-                    return ConsumeFieldValue( reinterpret_cast<u32*>( lpTarget ), lpFile );
+                    // Vector2 (@0x82675DC8): two floats, upper two lanes zeroed.
+                    // No record of type 1 exists in any of the five tables, so
+                    // this arm is unreachable in the shipped data -- it is kept
+                    // because the guest's switch has it.
+                    return ConsumeFieldValue( *reinterpret_cast<Vector2*>( lpTarget ), lpFile );
 
                 case 2:
                 {
@@ -455,10 +614,23 @@ bool ConsumeFieldValue( T& lrData, const char* lpFieldName, FILE* lpFile )
                     lpDst[0] = laColour[0];
                     lpDst[1] = laColour[1];
                     lpDst[2] = laColour[2];
-                    // lpDst[3] preserved: the guest merges the read colour over the
-                    // old target with vrlimi128 v0,v13,1,0. FLAG: mask=1 is read as
-                    // "keep word 3 (.w)" per the VMX128 field-mask convention; the
-                    // preserved lane was not byte-verified against a golden dump.
+                    // lpDst[3] preserved. FLAG RETIRED (envfix round, 2026-08-16).
+                    // The type-9 arm reads @0x8267938C-0x826793C0:
+                    //     bl sub_82675E50            ; Vector3 reader -> stack {x,y,z,0}
+                    //     lvx128 v13, r0, r31        ; v13 = the OLD TARGET
+                    //     lvx128 v0,  r0, r11        ; v0  = the freshly READ colour
+                    //     vrlimi128 v0, v13, 1, 0
+                    //     stvx128 v0, r0, r31
+                    // vD is the READ colour and vB is the OLD TARGET, so mask=1 ==
+                    // "insert word 3 of vB" gives { colour.xyz, target.w } -- exactly
+                    // the three-lane copy below. Two independent arguments agree:
+                    // (a) the VMX128 field mask numbers words 0..3 from bit 3 down, so
+                    //     1 selects word 3; (b) the Vector3 reader has ALREADY zeroed
+                    //     the stack slot's w lane, so if the vrlimi did not restore the
+                    //     target's w the instruction would be pure cost and a plain
+                    //     stvx128 of the read vector would do -- and the opposite
+                    //     reading (preserve word 0) would preserve RED, which is
+                    //     meaningless for a colour field.
                     return true;
                 }
                 default:
@@ -491,11 +663,10 @@ bool ConsumeFieldValue( T& lrData, const char* lpFieldName, FILE* lpFile )
     return false;
 }
 
-// ConsumeFieldValue<ScatteringData> is a sibling wave (its descriptor table was
-// not part of this recovery); keep it an external reference rather than
-// implicitly instantiating a table-less body in this TU.
-extern template bool ConsumeFieldValue< ScatteringData >(
-    ScatteringData& lrData, const char* lpFieldName, FILE* lpFile );
+// ConsumeFieldValue<ScatteringData> @0x826798F0 is now instantiated HERE, from the
+// descriptor table above. The `extern template` declaration that used to stand at
+// this spot made the symbol an unresolved external -- which is exactly what it was
+// at link time, because no other TU in the tree ever defined it.
 
 // ---------------------------------------------------------------------------
 // ParseTimeOfDay @ 0x82675B10

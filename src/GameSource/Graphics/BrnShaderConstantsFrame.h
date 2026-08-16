@@ -100,14 +100,31 @@ private:
     bool volatile  mbLockedForWriting;                     // @0x31C
 
 public:
-    // ADDITIVE (not X360 symbols). The console opens and closes the write lock around
-    // WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410, which is the frame's
-    // only producer; that function is not reconstructed yet, so the bring-up publisher in
-    // BrnRendererModule drives the lock by name rather than poking the flag. Delete with
-    // the bring-up publisher.
+    // ADDITIVE (not X360 symbols). The frame's only producer is
+    // WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410 -- RECONSTRUCTED as of
+    // the env-manager go-live wave (2026-08-16) -- and the console opens/closes the write
+    // lock AROUND it, in BrnRendererModule::Update, which is not reconstructed. So the two
+    // PC callers of that producer (WorldModule::GenerateDispatchListsBringUp) and the sky
+    // bring-up publisher drive the lock by name rather than poking the flag.
+    // Delete when BrnRendererModule::Update lands.
     void LockForWriting()   { mbLockedForWriting = true; }
     void UnlockForWriting() { mbLockedForWriting = false; }
 };
+
+// [FLAG PC bring-up] The shader-constants frame the WORLD producer filled this dispatch
+// frame. Defined in BrnWorldModule.cpp, written by WorldModule::GenerateDispatchListsBringUp
+// through the REAL WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410, which on
+// the console writes it via lpDispatchInputBuffer->GetShaderConstantsFrame(). The renderer's
+// own maShaderConstantsFrames[] is private to BrnRendererModule and the dispatch IO buffer
+// set does not exist on PC, so this is the seam -- the same one gBrnSkyCameraBringUp
+// already crosses for the camera.
+//
+// It carries the LIVE sky gradient / cloud / key-light / fog set from the environment
+// manager, i.e. exactly the members BrnRendererModule::PublishSkyConstantsBringUp still
+// hard-codes from the noon keyframe. DELETE-WHEN that publisher becomes a copy of this
+// frame and the dispatch IO buffer set is real.
+extern BrnShaderConstantsFrame gBrnWorldShaderConstantsFrameBringUp;
+extern bool                    gbBrnWorldShaderConstantsFrameBringUpValid;
 
 // [FLAG PC bring-up] The stand-in camera the world producer framed this frame.
 //
