@@ -127,11 +127,10 @@ private:
     // otherwise a fixed set of "intro / mode-explanation" tip types pause, the rest do not).
     bool DoesTrainingPauseGame(BrnProgression::ETrainingType leTrainingType);
 
-    // X360 0x82388... (BrnTrainingManager.cpp:784). Builds + queues the "show training ticker"
-    // GameAction for the currently-latched tip and marks it already-seen on the Profile. NOT one of
-    // this TU's 9 reconstructed bodies (it is a separate function with its own GameAction-payload /
-    // StrStream surface); declared here only so TriggerAnyFollowOnTrainingTips can call it. Body lands
-    // when SendTrainingTickerMessage is reconstructed.
+    // X360 0x82388940 (BrnTrainingManager.cpp:794). Queues the "show training ticker" GameAction
+    // (type 148, payload = the 4-byte ETrainingType) for the currently-latched tip and marks it
+    // already-seen on the Profile. ⭐ BODIED 2026-08-16 (tutorial-ticker leg) -- it was previously
+    // declared-only, so TriggerAnyFollowOnTrainingTips referenced a symbol no TU defined.
     void SendTrainingTickerMessage(GameStateModuleIO::GameActionQueue* lpGameActionQueue);
 
     // (IsTipAllowedInGameMode moved to the public additive-grow block above so the DriveThruManager

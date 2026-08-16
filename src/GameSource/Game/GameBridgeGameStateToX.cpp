@@ -11,8 +11,11 @@
 // their owning batches once those event layouts land.
 //
 //   BridgeGameStateToController     0x823C0AE8  [reconstructed]
-//   ConvertTrainingTypeToStringId   0x823AA3B8  [reconstructed]
-//   TranslateTakedownsToGuiEvents   0x823E1C38  [reconstructed]
+//   ConvertTrainingTypeToStringId   0x823AA3B8  [MOVED 2026-08-16 ->
+//                                    GameBridgeGameStateToX_TrainingStringIds.cpp; see the
+//                                    MOVED-OUT block below for the four compile errors that
+//                                    keep THIS file out of the build]
+//   TranslateTakedownsToGuiEvents   0x823E1C38  [reconstructed, DOES NOT COMPILE -- see below]
 //
 // FLAG (by-name, un-homed): the game-state input bind/unbind REQUEST-queue accessors
 // (BrnGameState::GetGameStateInput*RequestQueue; X360 sub_823B9CD8, +0x4C for the second
@@ -77,51 +80,34 @@ namespace BrnGame
     }
 
     // ------------------------------------------------------------------------
-    // Two file-scope string-ID lookup tables (X360 rodata off_82CDBF40 /
-    // dword_82FAE290). Both are const char*[] with a 4-byte element stride
-    // (asm: slwi rX, rX, 2 ; lwzx). Contents are UNRECOVERABLE from this TU's
-    // dossier -- only the first "specific" entry ("TRAINING_LEAVES_JUNKYARD")
-    // is attested -- so they are referenced by their DWARF names and defined
-    // elsewhere in the full translation unit rather than fabricated here.
-    //   KAC_SPECIFIC_TRAINING_TEXT : const char*[77]   (@0x82CDBF40)
-    //   KAC_GENERAL_TRAINING_TEXT  : const char*[128]  (@0x82FAE290)
-    extern const char* const KAC_SPECIFIC_TRAINING_TEXT[77];
-    extern const char* const KAC_GENERAL_TRAINING_TEXT[128];
-
-    // ------------------------------------------------------------------------
-    // ConvertTrainingTypeToStringId @0x823AA3B8
+    // MOVED OUT (2026-08-16, tutorial-ticker leg):
+    //   ConvertTrainingTypeToStringId @0x823AA3B8 + its two rodata string-ID tables now
+    //   live in the per-function sibling TU
+    //   GameSource/Game/GameBridgeGameStateToX_TrainingStringIds.cpp.
+    //   MOVED, not copied -- folding it back in later is a delete, not a duplicate-symbol hunt
+    //   (the same _Prepare.cpp / _SetupParRivals.cpp precedent the build script documents).
     //
-    // Maps a training-tip enum to its GUI string-ID. Indices 0..76 select from
-    // the "specific" (untimed) table; indices 128..255 select from the
-    // "general" (timed-tip) table at offset (index - 128). The gap 77..127 and
-    // the unused specific slots return the error sentinel.
+    // ⛔ WHY THE SPLIT: **THIS TU DOES NOT COMPILE**, and did not before this leg either --
+    // MEASURED with a control (HEAD's own copy of this file, compiled with the canonical
+    // build flags, produces the SAME four errors, so none of them is new work):
+    //   1. C2011 'BrnGui::GuiTakedownEvent': struct type redefinition. The placeholder in
+    //      GameBridgeGameStateToX.h collides with the real 40-byte record in
+    //      BrnGuiEventTypeDefs.h:1056. ⚠️ That header's own comment claims "the include
+    //      graphs do not meet" -- THEY DO. This TU includes BrnGameModule.hpp, which reaches
+    //      BrnGuiEventTypeDefs.h. The claim is stale and the compiler falsifies it.
+    //   2. The same fork exists for GuiSoftTakedownEvent (the bridge header's field-by-field
+    //      placeholder vs BrnGuiDemangledEventTypes.h:264's opaque GuiEvent<364>+u8[20]);
+    //      the compiler only reports #1 because it stops at the first definition clash.
+    //   3. C2065 'mpCgsGuiModule': undeclared identifier. BrnGameModule no longer has that
+    //      member -- it holds mGuiModule (a BrnGui::GuiModule BY VALUE, hpp:620). This TU is
+    //      stale against a rename.
+    //   4. The two C2027s are consequences of 1+3.
+    // All four are inside TranslateTakedownsToGuiEvents / its header block. Repairing them is
+    // a takedown-HUD job (two placeholder records to reconcile against two different canonical
+    // types, one of them itself opaque) with no way to verify from here -- so it is NAMED, not
+    // guessed at. ConvertTrainingTypeToStringId shares none of that surface, so it is split out
+    // and mounted on its own.
     // ------------------------------------------------------------------------
-    const char* ConvertTrainingTypeToStringId(BrnProgression::ETrainingType leTrainingType)
-    {
-        const int liType = static_cast<int>(leTrainingType);
-
-        CGS_ASSERT(liType >= 0 && liType < BrnProgression::E_TRAINING_TYPE_COUNT,
-                   "leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT");
-
-        if (liType < 128)
-        {
-            CGS_ASSERT(liType < 77, "leTrainingType < ciNumSpecificTrainingStringIDs");
-
-            if (liType > 76)
-            {
-                return "ERROR - UNKNOWN TRAINING TYPE";
-            }
-            return KAC_SPECIFIC_TRAINING_TEXT[liType];
-        }
-
-        const int liIndex = liType - 128;
-        if (liIndex >= 128)
-        {
-            CGS_ASSERT(liIndex < 128, "liIndex < ciNumGeneralTrainingStringIDs");
-            return "ERROR - UNKNOWN TRAINING TYPE";
-        }
-        return KAC_GENERAL_TRAINING_TEXT[liIndex];
-    }
 
     // =========================================================================
     // TranslateTakedownsToGuiEvents  (X360 0x823E1C38)
