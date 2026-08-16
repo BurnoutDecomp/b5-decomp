@@ -11,11 +11,16 @@
 // (count <= 0) input returns 0xFFFFFFFF unchanged (the `blelr` early-out).
 //
 // Table note: the original indexes a precomputed 256-word table in .rdata at
-// VA 0x82F310C0 (`dword_82F310C0`). That data section is not present in the
-// available IDA exports, so the table is regenerated here from the standard
-// reflected CRC-32 polynomial 0xEDB88320 — the only polynomial that produces
-// this canonical algorithm shape. If the binary's table is ever extracted it
-// should be diffed against this to confirm the polynomial.
+// VA 0x82F310C0 (`dword_82F310C0`). It is regenerated here from the standard
+// reflected CRC-32 polynomial 0xEDB88320.
+//
+// ⭐ NO LONGER AN ASSUMPTION (2026-08-16, tutorial-ticker leg). The old note said the
+// data section "is not present in the available IDA exports" and asked for the diff to be
+// done if the table were ever extracted. It has been: read straight out of the unpacked
+// X360 image and compared word-for-word against the poly-0xEDB88320 table generated below
+// -- 256 of 256 entries identical, 0 mismatches. The polynomial is confirmed, and with it
+// every language-string lookup that hashes through here (LanguageManager::FindString ->
+// CalculateHash -> FindStringByHash) is resolving on the console's own hash.
 //
 // Signedness note: the asm sign-extends each byte (`extsb`) before the xor, and
 // does NOT mask the index down to 8 bits, so a byte >= 0x80 would index outside

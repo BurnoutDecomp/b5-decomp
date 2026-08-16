@@ -11,6 +11,11 @@
 // GameStateModule::RequestPause) are expressed through the NAMED accessors additively
 // declared on those types' minimal-slice homes (each flagged there).
 //
+// (2026-08-16, tutorial-ticker leg) SendTrainingTickerMessage @0x82388940 is now BODIED here
+// -- it was previously declared-only, which is what stopped TriggerAnyFollowOnTrainingTips
+// from linking. See its banner below; it is the producer of the bottom-of-screen tutorial
+// text the game never shows today.
+//
 // TWO functions are intentionally NOT defined here (declared-only in the header) and are
 // reported in still_unbodied -- see the FLAG block at the bottom of this file:
 //   * RequestTraining        (0x82365B20)
@@ -44,6 +49,16 @@ namespace
     const s32 KI_GAME_ACTION_TRAINING_UNPAUSE = 151;  // ForceUnpause                       (0x97)
     const s32 KI_GAME_ACTION_SHOW_SATNAV      = 190;   // TriggerAnyFollowOnTrainingTips     (0xBE)
     const s32 KI_GAME_ACTION_TRAINING_PAUSE   = 150;   // TriggerAnyFollowOnTrainingTips     (0x96)
+
+    // ⭐ THE TICKER ACTION. SendTrainingTickerMessage's AddEvent immediates are `li r5,0x94;
+    // li r6,4` -- type 148, size 4 -- and unlike the three flag actions above its payload is
+    // NOT a stack flag byte: it is the 4-byte ETrainingType itself (the asm stores
+    // *(this+4) into the stack slot it hands to AddEvent). The consumer is
+    // BrnGameModule::TranslateGameActionsToGuiEvents @0x823E9CE0 case 148, which reads that
+    // s32, maps it through BrnGame::ConvertTrainingTypeToStringId, and -- when the id is
+    // non-NULL -- publishes GUI event 537 (BrnGui::GuiEventTickerCustomMessage) carrying the
+    // string id with param type 2.
+    const s32 KI_GAME_ACTION_TRAINING_TICKER  = 148;   // SendTrainingTickerMessage          (0x94)
 
     // The X360 reason bitflag passed to GameStateModule::RequestPause for a training-driven pause.
     const s32 KI_PAUSE_REASON_TRAINING = 64;           // (0x40)
@@ -194,6 +209,40 @@ void TrainingManager::TriggerAnyFollowOnTrainingTips(
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// SendTrainingTickerMessage -- X360 0x82388940 (BrnTrainingManager.cpp:794).
+//
+// ⭐ THIS IS THE FUNCTION THAT ASKS FOR THE BOTTOM-OF-SCREEN TUTORIAL TEXT. It was
+// declared-only in the header ("body lands when SendTrainingTickerMessage is
+// reconstructed"), so TriggerAnyFollowOnTrainingTips called a symbol no TU defined and this
+// whole TU could never be mounted. Bodied here store-for-store; it reaches nothing this TU
+// does not already own.
+//
+// The X360, in order:
+//   1. copies meCurrentTrainingType (*(this+4)) into a 4-byte stack slot and AddEvents it
+//      onto the GameAction queue as type 148 / size 4,
+//   2. forms the Profile as mpProgressionManager + 368 (GetProfile inlined, the same
+//      `+368` DEBUG_ClearTrainingFlags reaches through the named accessor) and asserts it
+//      is non-NULL (the `v3 == -368` test is the compiler's null check on the base),
+//   3. marks the tip already-seen: Profile::SetTrainingAlreadySeen(meCurrentTrainingType).
+//
+// ⚠️ THE MARK-AS-SEEN IS PART OF THE SEND, NOT OF THE FSM. It happens here, before the
+// message has been shown, so a tip that is queued once is never queued again even if the
+// ticker drops it. Keep them together.
+// ---------------------------------------------------------------------------
+void TrainingManager::SendTrainingTickerMessage(GameStateModuleIO::GameActionQueue* lpGameActionQueue)
+{
+    // The payload is the training type itself (4 bytes), not a flag record.
+    BrnProgression::ETrainingType leTrainingType = meCurrentTrainingType;
+    AsVeq(lpGameActionQueue)->AddEvent(
+        reinterpret_cast<const CgsModule::Event*>(&leTrainingType),
+        KI_GAME_ACTION_TRAINING_TICKER, (s32)sizeof(leTrainingType));
+
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
+    CGS_ASSERT(lpProfile, "lpProfile");   // BrnTrainingManager.cpp:794
+    lpProfile->SetTrainingAlreadySeen(meCurrentTrainingType);
 }
 
 // ---------------------------------------------------------------------------
