@@ -106,15 +106,25 @@ bool SpatialPartitionManager::Prepare(SpatialPartitionConstructParams* lpConstru
                         mpSpatialPartition = NULL;
                 }
 
+                // ⭐ THE ASSERT IS THE CONSOLE'S ONLY TEST (:142, `li r5, 142` @0x828D00D8).
+                // ⛔ AN INVENTED `if (mpSpatialPartition == NULL) return false;` USED TO SIT HERE
+                // and was deleted 2026-08-16. Read from the asm: 0x828D00C4 loads the member,
+                // 0x828D00CC is `bne cr6, 0x828D00EC` -- i.e. NOT-null SKIPS the assert block --
+                // and the null path FALLS THROUGH into 0x828D00EC, which loads the same member and
+                // dispatches Construct through its vtable. There is no early return on this arm.
+                // (A sibling invention in Release is on record as having caused a real bug; an
+                // invented guard turns a shipped crash into a silently un-built partition.)
                 CGS_ASSERT(mpSpatialPartition != NULL, "mpSpatialPartition != NULL");
-                if (mpSpatialPartition == NULL)
-                    return false;
                 mpSpatialPartition->Construct(lpConstructParams, lpSceneAllocator);
             }
             mePrepareStage++;   // -> SCENE_GRAPH
             // fall through
         case E_SCENE_GRAPH_PREPARE_SCENE_GRAPH:
-            if (mpSpatialPartition != NULL && mpSpatialPartition->Prepare())
+            // ⛔ `mpSpatialPartition != NULL &&` USED TO GUARD THIS CALL and was deleted
+            // 2026-08-16 for the same reason as the one above: the console's arm at 0x828D0108
+            // runs the stage helper, then `lwz r3, 16(r29)` / `lwz r11, 0(r3)` / `lwz r11, 8(r11)`
+            // / `bctrl` -- an unconditional virtual dispatch with no null test anywhere.
+            if (mpSpatialPartition->Prepare())
             {
                 mePrepareStage++;   // -> DONE
                 meReleaseStage = E_SCENE_GRAPH_RELEASE_START;

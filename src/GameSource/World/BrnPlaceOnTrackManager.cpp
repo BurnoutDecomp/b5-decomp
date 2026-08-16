@@ -683,14 +683,25 @@ namespace
                 if (liNumVerts <= 0)
                     continue;
 
-                // UnpackPolygonSoupVertices @0x8283B480: world = (pos_s32 + vert_s16) * scale.
-                const s16* lpaPacked =
-                    reinterpret_cast<const s16*>(lpcList + lpSoup->muVertices);
+                // UnpackPolygonSoupVertices @0x8283B480: world = (pos_s32 + vert_u16) * scale.
+                //
+                // ⭐⭐ THE PACKED VERTEX IS ZERO-EXTENDED, NOT SIGN-EXTENDED (fixed 2026-08-16).
+                // This read was `const s16*`. The console masks each lane with a vector constant
+                // of {0xFFFF, 0xFFFF, 0xFFFF, 0} -- built at 0x82C6DBD0 and applied by the `vand`
+                // inside UnpackPolygonSoupVertices -- so a lane of 0x8000 is +32768, never -32768.
+                // The committed consumer CgsPolygonSoupTests.cpp:349 already zero-extends; this
+                // was the one site that disagreed with it.
+                // ⭐ ORACLE, not reasoning: the per-soup AABB shipped inside WORLDCOL.BIN is
+                // console-authored, and decoding all 23,645 soups agrees with it on 23,645/23,645
+                // UNSIGNED and on only 23,629 signed. The 16 disagreeing soups decode up to ~1 km
+                // from where they belong.
+                const u16* lpaPacked =
+                    reinterpret_cast<const u16*>(lpcList + lpSoup->muVertices);
                 f32 lafVerts[256][3];
                 f32 lfMinX = 0.0f, lfMaxX = 0.0f, lfMinZ = 0.0f, lfMaxZ = 0.0f;
                 for (s32 liVert = 0; liVert < liNumVerts; ++liVert)
                 {
-                    const s16* lpPacked = lpaPacked + liVert * 3;
+                    const u16* lpPacked = lpaPacked + liVert * 3;
                     lafVerts[liVert][0] = (lpSoup->miPosX + lpPacked[0]) * lpSoup->mfScale;
                     lafVerts[liVert][1] = (lpSoup->miPosY + lpPacked[1]) * lpSoup->mfScale;
                     lafVerts[liVert][2] = (lpSoup->miPosZ + lpPacked[2]) * lpSoup->mfScale;

@@ -251,11 +251,22 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
         }
 
         // ---- [move-probe] DELETE-WHEN motion is confirmed on a booted run --------------------
-        // A per-boot, once-every-N-publishes readout of race car 0's PHYSICS-side position, so
+        // A per-boot, once-every-N-publishes readout of the PLAYER's PHYSICS-side position, so
         // that movement can be measured without reading it off a stable-looking screen. It prints
         // the source the publish leg actually reads (the RaceCarPhysics transform), not the
         // rendered pose.
-        if (liRaceCar == 0)
+        //
+        // ⚠️⚠️ THIS USED TO SAY `liRaceCar == 0`, AND THAT MADE IT A LYING DIAGNOSTIC.
+        // Race car 0 is NOT the local player in this build: three cars are created at boot
+        // (`HIDE_ONLINE: Created race car 0/1/2`) and the drive runs of 2026-08-16 all report
+        // `playerIdx 2`. Cars 0 and 1 sit at the junkyard spawn for the whole session, so the
+        // probe faithfully printed `pos 2986.97 -3.20 -2011.40 vel 0 0 0 gas 0.000000` for
+        // ~19,000 consecutive frames of a run in which the player's car was driving at 29.7 m/s
+        // 165 m away -- and that line was then quoted, in good faith, as evidence that the car
+        // does not move. It is the same failure mode as `staticGroups=5`: a number that is
+        // correct about the wrong subject. The label now carries the index so the line cannot be
+        // read as "the car" ever again.
+        if (lbIsLocalPlayer)
         {
             static u32 suProbeCounter = 0;
             if ((suProbeCounter % 300u) == 0u)
@@ -263,7 +274,8 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
                 const Matrix44Affine lProbeTransform = lpRaceCar->GetTransform();
                 const Vector3        lvProbeVelocity = lpRaceCar->GetLinearVelocity();
                 *CgsDev::Log::gpDebugPrint
-                    << "[move-probe] car0 physics pos " << lProbeTransform.wAxis.x << " "
+                    << "[move-probe] player car" << liRaceCar << " physics pos "
+                    << lProbeTransform.wAxis.x << " "
                     << lProbeTransform.wAxis.y << " " << lProbeTransform.wAxis.z
                     << " vel " << lvProbeVelocity.x << " " << lvProbeVelocity.y << " "
                     << lvProbeVelocity.z
