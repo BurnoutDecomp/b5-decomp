@@ -18,9 +18,9 @@
 // instead of a SphereList. Same widening contract as the sibling (console command size 32,
 // host sizeof(StreamCommand); runtime-carved ⇒ widen).
 //
-// ⚠️ The non-stream sibling (SweptSphereListWithTriangleListJobDesc, DWARF :51, job-type 13)
-// is NOT declared here yet — nothing in the tree posts it; grow additively when its
-// Collide/Test path is worked.
+// ⭐ 2026-08-16 (swept leg): the non-stream sibling (DWARF :51, job-type 13) IS declared now —
+// ContactGeneratorJob::ExecuteSweptSphereListWithTriangleListStream @0x82925238 builds one on
+// its stack per command and hands it to the worker, exactly as the sphere stream arm does.
 
 #include "types.hpp"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsCollisionJobDescription.h"
@@ -34,6 +34,30 @@ namespace CgsSceneManager
 {
 namespace CgsCollision
 {
+    // =============================================================================================
+    // The NON-stream descriptor (job-type 13) — DWARF :51, `Data { SweptSphereList
+    // mSweptSphereList; TriangleList mTriangleList; }` at :90/:91, `Prepare(const
+    // SweptSphereList*, const TriangleList*, CollisionResultList*, float32_t)` at :65.
+    //
+    // ⚠️ Prepare @0x828103E0 is MISSING FROM THE X360 EXPORT SET (a hole, not a nonexistent
+    // function). Its 37 instructions were read straight out of the image and are
+    // instruction-for-instruction the sphere sibling @0x82810100 with one word changed
+    // (`li r11, 13` for `li r11, 5`), right down to the same 16-byte alignment tripwire and
+    // the same "Spheres not aligned to 16 bytes" text — only the __FILE__ pointer differs,
+    // and it resolves to this class's own header. The members sit at the same +0x00/+0x08
+    // seats the copy loop uses (`stw ... 0(r3)`/`4(r3)` and `addi r9, r3, 8`).
+    // =============================================================================================
+    struct SweptSphereListWithTriangleListJobDesc : public CollisionJobDescription
+    {
+        SweptSphereList mSweptSphereList;   // +0x00  (console 8B {ptr,count}; host 16)
+        TriangleList    mTriangleList;      // +0x08
+
+        bool Prepare(const SweptSphereList* lpSweptSphereList,
+                     const TriangleList*    lpTriangleList,
+                     CollisionResultList*   lpResultsList,
+                     f32                    lfPadding);
+    };
+
     struct SweptSphereListWithTriangleListStreamJobDesc : public CollisionJobDescription
     {
         struct StreamCommand

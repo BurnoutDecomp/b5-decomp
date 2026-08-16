@@ -22,10 +22,11 @@
 //   ContactGeneratorJob::LoadResultList                       @0x829211E8   (46)
 //   ContactGeneratorJob::AllocateMemory                       @0x829212A0   (54)
 //   ContactGeneratorJob::RestoreMemory                        @0x82921050   (39)
-// Declared-only (the other eight Execute arms; each a named boot gate in the .cpp -- see there for
-// why the switch keeps all twelve cases instead of only the ones landed so far):
+//   ExecuteSweptSphereListWithTriangleList                    @0x829238E8  ⭐ swept leg
+//   ExecuteSweptSphereListWithTriangleListStream               @0x82925238  (100)
+// Declared-only (the other six Execute arms; each a named boot gate in the .cpp -- see there
+// for why the switch keeps all twelve cases instead of only the ones landed so far):
 //   ExecuteSphereListWithSphereList          @0x829215B0 · ...Stream          @0x82923758
-//   ExecuteSweptSphereListWithTriangleList   @0x829238E8 · ...Stream          @0x82925238
 //   ExecuteBoxListWithTriangleList           @0x829218B8
 //   ExecutePrimitiveListWithTriangleList     @0x82925908 · ...Stream          @0x82926650
 //   ExecutePrimitivePairList                 @0x82925798
@@ -77,6 +78,7 @@
 namespace CgsSceneManager { namespace CgsCollision {
     struct CollisionJobDescription;
     struct SphereListWithTriangleListJobDesc;
+    struct SweptSphereListWithTriangleListJobDesc;
     struct TriangleList;
     struct CollisionResultList;
 } }
@@ -123,6 +125,30 @@ struct alignas(16) ContactGeneratorJob
         const CgsSceneManager::CgsCollision::SphereListWithTriangleListJobDesc* lpDesc); // @0x829226A8
     void ExecuteSphereListWithTriangleListStream();    // @0x829235C8
 
+    // ---------------------------------------------------------------------------------------
+    // ⭐⭐⭐ THE SWEPT (CONTINUOUS) CONTACT ARMS — REAL as of the swept leg (2026-08-16).
+    //
+    // These are the arms `DoRaceCarWorldContactGeneration` selects ABOVE ~6 m/s
+    // (DeformableObject::IsUsingSweptSpheres). Until they landed they were named boot gates,
+    // which is why a car doing 30 mph had no body-shell collision anywhere in the map: the
+    // in-place arms above were the ONLY implemented generator and the console never routes a
+    // fast car through them.
+    //
+    // ExecuteSweptSphereListWithTriangleListStream @0x82925238 (100): the exact structural
+    // twin of the sphere stream arm — drain the command stream, build a local non-stream
+    // descriptor per command (SweptSphereListWithTriangleListJobDesc::Prepare), run the
+    // worker. AllocateMemory(128,128), asserts :642/:643.
+    //
+    // ExecuteSweptSphereListWithTriangleList @0x829238E8: the worker. Loops (Triangle4 batch
+    // x swept sphere — stride 0x20, `slwi r11, r22, 5`), runs
+    // CgsGeometric::IntersectTriangle4SweptSphere @0x8283EF50 and queues one 80-byte
+    // PrimitiveTestResult per hit lane. Asserts :497 (the count) and :513/:539/:565/:591
+    // (`lResult<k>.IsValid()`, one per unrolled lane).
+    // ---------------------------------------------------------------------------------------
+    void ExecuteSweptSphereListWithTriangleList(
+        const CgsSceneManager::CgsCollision::SweptSphereListWithTriangleListJobDesc* lpDesc); // @0x829238E8
+    void ExecuteSweptSphereListWithTriangleListStream();// @0x82925238
+
     // The other eight arms of the switch. Bodies NOT reconstructed -- each is a named
     // one-shot boot gate in the .cpp. Declared so the switch can name them and so the closure
     // is enforced at link time rather than discovered at runtime.
@@ -132,8 +158,6 @@ struct alignas(16) ContactGeneratorJob
     void ExecutePrimitivePairList();                   // @0x82925798
     void ExecutePrimitiveListWithTriangleList();       // @0x82925908
     void ExecutePrimitiveListWithTriangleListStream(); // @0x82926650
-    void ExecuteSweptSphereListWithTriangleList();     // @0x829238E8
-    void ExecuteSweptSphereListWithTriangleListStream();// @0x82925238
 
     // LoadPrimitives @0x829210F0 (61) / LoadResultList @0x829211E8 (46) -- the worker's
     // "DMA down" pair (a plain copy on X360; the names are the SPU build's). LoadPrimitives

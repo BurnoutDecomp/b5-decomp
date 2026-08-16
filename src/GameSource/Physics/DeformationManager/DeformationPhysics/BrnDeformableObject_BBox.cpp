@@ -7,6 +7,8 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"              // VehiclePhysics (mfSpeedMPH/IsCrashing/GetTransform/mpAttribs)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                                // gpDebugPrint / gxMessageFilterFlags (the null-attribs gate)
 
+#include <cstdlib>                                                                        // getenv (the [sweptsel] opt-in probe)
+
 // ============================================================================================
 // GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject_BBox.cpp
 //
@@ -191,6 +193,35 @@ namespace Deformation
 
 		// (mfSpeedMPH * KVF_SWEPT_SPHERE_SPEED_SCALE).x compared against the asm-visible 6.0 floor.
 		const f32 lfSpeedScaled = VehicleSpeedMPH(lpPhysics) * KVF_SWEPT_SPHERE_SPEED_SCALE.x;
+
+		// ---- [sweptsel] PC bring-up instrument -- DELETE WITH THE REST OF THE WALL PROBES ----
+		// OPT-IN (BRN_WALL_PROBE=1), pure read, no behaviour change. It exists to retire ONE
+		// standing inference: twelve legs of this campaign used a control that REVERSED into a
+		// wall at 31 m/s and collided, and the explanation offered was "mfSpeedMPH is forward-
+		// signed, so reverse never trips this test". That was reasoned, never read. This prints
+		// the raw field so the sign is witnessed instead.
+		{
+			static s32 siSweptSelProbe = -1;
+			if ( siSweptSelProbe < 0 )
+			{
+				const char* lpcEnv = getenv( "BRN_WALL_PROBE" );
+				siSweptSelProbe = ( lpcEnv != nullptr && lpcEnv[0] != '0' ) ? 1 : 0;
+			}
+			static u32 suSweptSelCalls = 0u;
+			++suSweptSelCalls;
+			if ( siSweptSelProbe == 1 && CgsDev::Log::gpDebugPrint != nullptr
+			     && ( suSweptSelCalls % 300u ) == 0u )
+			{
+				*CgsDev::Log::gpDebugPrint
+					<< "[sweptsel] mfSpeedMPH " << VehicleSpeedMPH( lpPhysics )
+					<< " -> m/s " << lfSpeedScaled
+					<< " floor " << KF_MIN_SWEPT_SPHERE_SPEED
+					<< ( ( lfSpeedScaled > KF_MIN_SWEPT_SPHERE_SPEED ) ? " SWEPT" : " INPLACE" )
+					<< "\n";
+			}
+		}
+		// ---- end [sweptsel] ------------------------------------------------------------------
+
 		if ( !(lfSpeedScaled > KF_MIN_SWEPT_SPHERE_SPEED) )
 		{
 			return false;

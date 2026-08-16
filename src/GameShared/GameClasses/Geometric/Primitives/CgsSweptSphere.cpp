@@ -20,4 +20,19 @@ namespace CgsGeometric
         mPositionAndRadius   = lPositionAndRadius;
         mDirectionAndLength  = lDirectionAndLength;
     }
+
+    // The two packed-lane getters (DWARF CgsSweptSphere.h:56/:59). The console INLINES both
+    // -- IntersectTriangle4SweptSphere @0x8283EF50 opens with `lvx128 v11, r0, r3` (+0x00) and
+    // `lvx128 v10, r0, r11` where r11 = r3 + 0x10, i.e. the two members read whole, in this
+    // order and with no other work. Landed by the swept kernel, which is their first in-tree
+    // caller.
+    Vector3Plus SweptSphere::GetPositionAndRadius() const
+    {
+        return mPositionAndRadius;
+    }
+
+    Vector3Plus SweptSphere::GetDirectionAndLength() const
+    {
+        return mDirectionAndLength;
+    }
 }

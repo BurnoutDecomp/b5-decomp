@@ -76,4 +76,43 @@ namespace CgsGeometric
         Vector3Plus& lSphereContactPoint2, Vector3Plus& lTriangleContactPoint2,
         Vector3& lContactNormal3, Vector3& lTriangleNormal3,
         Vector3Plus& lSphereContactPoint3, Vector3Plus& lTriangleContactPoint3);
+
+    // =========================================================================
+    // ⭐⭐⭐ IntersectTriangle4SweptSphere @0x8283EF50 (896) — THE CONTINUOUS
+    // (swept) contact kernel, reconstructed 2026-08-16 (swept leg).
+    //
+    // This is the kernel the console selects ABOVE ~6 m/s
+    // (DeformableObject::IsUsingSweptSpheres), precisely so a car doing 30 m/s
+    // cannot tunnel through a wall between two frames. It is NOT a variant of
+    // the in-place kernel above and must never be substituted by it.
+    //
+    // ⚠️ SIGNATURE: eighteen parameters, and there is NO padding VecFloat — the
+    // in-place kernel's third argument does not exist here. Both the DWARF
+    // (CgsTriangleSphere.cpp:2128, spelled verbatim) and the X360 call site in
+    // ExecuteSweptSphereListWithTriangleList @0x82923A70..0x82923AEC agree: six
+    // output refs in r5..r10 and ten on the stack, with the stack run starting
+    // two doublewords LOWER than the sphere kernel's — exactly the 16 bytes its
+    // by-value VecFloat occupies in the parameter save area.
+    //
+    // SHAPE (see the .cpp banner for the derivation and the fuzz numbers):
+    // build an orthonormal frame (U along P1-P0, N the face normal, V = U x N),
+    // clip the sweep against the plane slab of half-thickness r, run a 2D
+    // circle-vs-triangle test in that frame at the entry time, and independently
+    // sweep the circle against each vertex and each edge; take the earliest
+    // contact. The reported contact time rides in the w lane of BOTH contact
+    // points.
+    // =========================================================================
+    struct SweptSphere;
+
+    Triangle4::Mask4 IntersectTriangle4SweptSphere(
+        const SweptSphere& lSweptSphere,
+        const Triangle4&   lTriangles,
+        Vector3& lContactNormal0, Vector3& lTriangleNormal0,
+        Vector3Plus& lSphereContactPoint0, Vector3Plus& lTriangleContactPoint0,
+        Vector3& lContactNormal1, Vector3& lTriangleNormal1,
+        Vector3Plus& lSphereContactPoint1, Vector3Plus& lTriangleContactPoint1,
+        Vector3& lContactNormal2, Vector3& lTriangleNormal2,
+        Vector3Plus& lSphereContactPoint2, Vector3Plus& lTriangleContactPoint2,
+        Vector3& lContactNormal3, Vector3& lTriangleNormal3,
+        Vector3Plus& lSphereContactPoint3, Vector3Plus& lTriangleContactPoint3);
 }

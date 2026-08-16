@@ -72,6 +72,13 @@ namespace CgsCollision
         E_COLLISIONJOB_SPHERE_LIST_WITH_SPHERE_LIST_STREAM = 8,  // Run @0x82811C00
         E_COLLISIONJOB_PRIMITIVE_PAIR_LIST                = 10,  // @0x82810478
         E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST  = 11,  // @0x82810278
+
+        // ⭐ 2026-08-16 (swept leg): the NON-stream swept id, 13. Its own Prepare is missing
+        // from the X360 export set, so the id is read straight out of the image bytes:
+        // 0x828103EC `li r11, 13` -> 0x82810400 `stb r11, 0xFF(r3)`. That body is otherwise
+        // instruction-for-instruction the sphere sibling @0x82810100, and its alignment
+        // assert quotes CgsSweptSphereListWithTriangleListJobDesc.h:84.
+        E_COLLISIONJOB_SWEPT_SPHERE_LIST_WITH_TRIANGLE_LIST = 13, // @0x828103E0
         E_COLLISIONJOB_SWEPT_SPHERE_LIST_WITH_TRIANGLE_LIST_STREAM = 14, // Run @0x828118A8
 
         // ⭐ 2026-08-11 (traction-line wave). 16 is written by the dispatcher
