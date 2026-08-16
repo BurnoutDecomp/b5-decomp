@@ -49,6 +49,8 @@
 #include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"              // PotentialContactInterface::AddEvent(u32, ...) + the queue accessors
 #include "SDKs/EATech/eajobs/job.h"                                                       // EA::Jobs::Job::WaitOn (EndVehicleContactGeneration)
 
+#include <cstdlib>                                                                        // getenv -- the [cvalid] probe's opt-in latch
+
 namespace BrnPhysics
 {
 namespace Vehicle
@@ -531,6 +533,43 @@ namespace Vehicle
         const bool lbUseSweptSpheres =
             lpDeformationManager->IsUsingSweptSpheres(EntityId{ luEntityWord });
 
+        // ---- [cgen] PC bring-up instrument -- DELETE WHEN world collision is proven map-wide ----
+        // OPT-IN (BRN_WALL_PROBE=1), same latch as [cvalid] downstream.
+        //
+        // ⭐ WHY: [cvalid] proved raw world-contact candidates stop the moment the car leaves the
+        // junkyard, and the run log shows exactly ONE contact-generator gate firing --
+        // ExecuteSweptSphereListWithTriangleListStream @0x82925238, the kernel behind the SWEPT
+        // branch below. That makes "the car went fast, took the swept branch, and the swept kernel
+        // is a gate" the obvious story, but it is still an INFERENCE from two separate numbers,
+        // and walls leg 12's control reverses into a wall at 31 m/s and DOES collide, which the
+        // story does not obviously explain. This prints the branch actually taken, per car, so the
+        // selector is WITNESSED rather than reasoned about.
+        {
+            static s32 siCGenProbe = -1;
+            if (siCGenProbe < 0)
+            {
+                const char* lpcEnv = getenv("BRN_WALL_PROBE");
+                siCGenProbe = (lpcEnv != nullptr && lpcEnv[0] != '0') ? 1 : 0;
+            }
+            static u32 suCGenFrame = 0u;
+            static bool sabWasSwept[8] = { false, false, false, false, false, false, false, false };
+            ++suCGenFrame;
+            const s32 liSlot = (liRaceCarIndex >= 0 && liRaceCarIndex < 8) ? liRaceCarIndex : 0;
+            const bool lbEdge = (lbUseSweptSpheres != sabWasSwept[liSlot]);
+            sabWasSwept[liSlot] = lbUseSweptSpheres;
+            if (siCGenProbe == 1 && CgsDev::Log::gpDebugPrint != nullptr
+                && (lbEdge || (suCGenFrame % 300u) == 0u))
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[cgen] n " << static_cast<s32>(suCGenFrame)
+                    << " car " << liRaceCarIndex
+                    << (lbEdge ? " EDGE" : "")
+                    << (lbUseSweptSpheres ? " SWEPT(gated kernel)" : " INPLACE(real kernel)")
+                    << " batches " << liNumTriangleBatches << "\n";
+            }
+        }
+        // ---- end [cgen] --------------------------------------------------------------------------
+
         if (!lbUseSweptSpheres)
         {
             // ---- the in-place sphere pass (0x825EB23C..0x825EB2B0) --------------------------
@@ -926,6 +965,38 @@ namespace Vehicle
             lpPotentialContactInterface->AddEvent(6u, lContact);
             ++liValidatedContacts;
         }
+
+        // ---- [cvalid] PC bring-up instrument -- DELETE WHEN world collision is proven map-wide ---
+        // OPT-IN (BRN_WALL_PROBE=1, the switch that already arms the body-shell trace it pairs
+        // with), so a default run and every golden gate stay byte-identical to a build without it.
+        //
+        // ⭐ WHY HERE. [wall] proved the driven car contributes ZERO world contacts to the
+        // penetration solver from the moment it starts moving -- it drives through the wall of a
+        // solid structure at 30 m/s without one contact, and the EDGE latch rules out sampling.
+        // This line is the SPLIT that says which half is at fault, and it is the only place both
+        // numbers exist at once:
+        //     raw 0                -> the GENERATION half never produced a candidate;
+        //     raw > 0, valid 0     -> ValidateRaceCarWorldContact is eating them.
+        // Printed only on frames that actually have raw candidates, so it is near-silent while the
+        // car drives on open road (the body shell touches nothing) and dense exactly at an impact.
+        {
+            static s32 siCValidProbe = -1;
+            if (siCValidProbe < 0)
+            {
+                const char* lpcEnv = getenv("BRN_WALL_PROBE");
+                siCValidProbe = (lpcEnv != nullptr && lpcEnv[0] != '0') ? 1 : 0;
+            }
+            static u32 suCValidFrame = 0u;
+            ++suCValidFrame;
+            if (siCValidProbe == 1 && liNumContacts > 0 && CgsDev::Log::gpDebugPrint != nullptr)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[cvalid] n " << static_cast<s32>(suCValidFrame)
+                    << " raw " << liNumContacts
+                    << " valid " << liValidatedContacts << "\n";
+            }
+        }
+        // ---- end [cvalid] ------------------------------------------------------------------------
 
         // ⭐ [FLAG PC boot witness] one-shot: first frame anything survives validation.
         {
