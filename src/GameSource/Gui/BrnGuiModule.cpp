@@ -970,6 +970,15 @@ namespace BrnGui
             &GuiModule::FlaptSoundTriggerCallback, this);
         mMovieManager.Construct();
         mAlwaysAvailableComponentsManager.Construct();
+
+        // X360 GuiModule::GuiModule @0x827E5B28 constructs the custom-renderer manager as a
+        // by-value member; GuiModule::Construct @0x82518028 then drives its Construct.
+        // ⭐ This is the object the Apt custom-control render callback reaches through
+        // AptRenderHandler::mpCustomRendererManager -- until this leg NOTHING in the PC
+        // build instantiated it, so `_type='PlayerImage'` on the licence card (and every
+        // other custom control) had nowhere to resolve to.
+        mCustomRendererManager.Construct();
+
         mpGuiEventInputBuffer = 0;
         mpOutputBuffer = 0;
 
@@ -1069,6 +1078,44 @@ namespace BrnGui
         // PC runtime host above.  Construct already installed the language, Flapt, and
         // GuiCache owners exactly as the X360 GuiModule::Construct does.
         s_GuiAccessPointers.mpAptAux = CgsGui::AptAuxPointer::mpAptAuxInst;
+
+        // ---- X360 GuiModule::Prepare @0x82518D68, STAGE 7 -------------------------------
+        //   v27 = (*(*(v3+311952) + 4))(v3+311952, rwGeneralResource, rwLinearResource);
+        //   CgsGui::ViewModule::SetCustomRendererManager(v3+132224, v3+311952, 10, v3+1629284);
+        //   if (!v27) goto fail;
+        // Order matters and is reproduced: the manager is Prepared FIRST, installed SECOND,
+        // and the prepare result is only gated on afterwards -- so the view module gets the
+        // manager pointer even on a not-yet-finished staged prepare.
+        //
+        // ⚠️ It MUST be installed after PrepareAptRuntime() above, because
+        // ViewModule::SetCustomRendererManager mirrors the pointer into
+        // mAptAux.mRenderHandler and AptAux::Construct clears that same slot to 0.
+        //
+        // FLAG (allocators): the console passes the GUI module's rw general-resource and
+        // rw-linear-resource allocators (AllocatorList slots 31 / 42). This build has no
+        // AllocatorList; the same null the other GUI Prepare calls above already pass is
+        // used. The one component currently embedded (NetworkPlayerImageRenderer) uses them
+        // to create its triple-buffered avatar textures, so with nulls its Prepare cannot
+        // complete -- see the FLAG in BrnCustomRendererManager.h. It is wired, reachable and
+        // honest about not being fed; it is NOT faked into reporting success.
+        const bool lbCustomRenderersPrepared =
+            mCustomRendererManager.Prepare(/*lpHeapAllocator*/ 0, /*lpTextureAllocator*/ 0);
+        mViewModule.SetCustomRendererManager(&mCustomRendererManager, 10,
+                                             /*lpReplaySerialiser*/ 0);
+        (void)lbCustomRenderersPrepared;   // the console's `if (!v27) return 0;` -- see FLAG
+        {
+            char lacProbe[192];
+            std::snprintf(lacProbe, sizeof(lacProbe),
+                          "[custrend] manager installed: prepared=%d numComponents=%d "
+                          "slot0(PlayerImage) id=%016llX renderable=%d\n",
+                          lbCustomRenderersPrepared ? 1 : 0,
+                          mCustomRendererManager.GetNumComponents(),
+                          static_cast<unsigned long long>(
+                              mCustomRendererManager.GetComponentID(BrnGui::E_NETWORK_PLAYER_IMAGE)),
+                          mCustomRendererManager.GetComponentRenderable(
+                              BrnGui::E_NETWORK_PLAYER_IMAGE) ? 1 : 0);
+            CgsDev::Log::WriteToLog(lacProbe);
+        }
 
         // The REAL flow bring-up: base prepare (access pointers into the StateInterface)
         // + the 14-state pool carve, then the flow's single in-queue. FLAG (allocator):

@@ -182,6 +182,28 @@ namespace CgsGui
         void SetCustomRendererManager(CustomRendererManager* lpManager)
         { mpCustomRendererManager = lpManager; }
 
+        // ⭐ THE READER. Until 2026-08-16 this member had a setter and ZERO readers -- the
+        // exact dead shape of the mpImpulsePasser bug, inverted. Its one console reader is
+        // CgsGui::AptCallbackCustom::ControlRender @0x8285BFA0, the host body behind
+        // gAptFuncs.pfnCustomControlRender: it asserts the slot ("Rendering a custom
+        // component when no custom render manager set up", CgsAptAux.cpp:1002) and then
+        // dispatches the manager's GetComponentTexture at vtable +0x1C:
+        //   `(*(**(v12 + 45) + 28))(*(v12 + 45), CgsIDCompress(szType), index, &shader,
+        //                           *(v12 + 27147))`
+        // -- dword index 45 == byte +0xB4 == this member, dword 27147 == +108588 ==
+        // mpImRenderers. Exposed by name so that callback can reach the same state.
+        CustomRendererManager* GetCustomRendererManager() const
+        { return mpCustomRendererManager; }
+
+        // The renderer-set pointer ControlRender forwards to GetComponentTexture as its
+        // last argument (the guest passes the raw word at +108588 straight through).
+        // Returned untyped: the render handler models the set as its own AptImRendererSet
+        // slice, while the custom-renderer interface types it as CgsGui::ImRendererSet;
+        // both name the same console object, and only the component's own renderer
+        // dereferences it.
+        void* GetImRendererSetRaw() const
+        { return mpImRenderers; }
+
         // The active 2D command buffer (GetIm2dRendererType()->mCommandBuffer == base+4). The
         // mask-push/pop callbacks (DrawRenderingUnit) append raw mask commands through it.
         CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* GetCommandBuffer()

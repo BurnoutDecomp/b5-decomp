@@ -770,6 +770,35 @@ namespace BrnGui
             mStateLoadingHelper.UnloadResource(lpResources[luResource]);
     }
 
+    // @ 0x824ED6C0 -- StateLoadingHelper::GetLoadedResource. The id -> loaded-asset lookup:
+    //     if (luId >= 0xED) assert;                       ; 0xED == 237 == KU_MAX_RESOURCES_TO_WATCH
+    //     v4 = 12 * luId + this;                          ; ResourceInfo stride 12 {state,type,ptr}
+    //     if (!*(v4 + 8)) assert("maResources[luId].mpResource!=NULL");
+    //     return *(v4 + 8);
+    // Both asserts are the console's own (BrnGuiCache.cpp:345 / :346).
+    //
+    // ⭐ This is the whole of the "resource id -> asset" binding. The id is an index into
+    // maResources, and maResources[id].mpResource is filled by the resource module's LOADED
+    // notification -- so an id only resolves if something ASKED for it first
+    // (EnsureResourceIsLoaded on a matching sResourceTuple). It was declared and never
+    // defined, which is why BrnNetworkPlayerImageRenderer could not link.
+    const void* StateLoadingHelper::GetLoadedResource(u32 luId) const
+    {
+        CGS_ASSERT(luId < KU_MAX_RESOURCES_TO_WATCH,
+                   "(luId >= 0) && (luId < KU_MAX_RESOURCES_TO_WATCH)");
+        if (luId >= KU_MAX_RESOURCES_TO_WATCH)
+            return 0;
+
+        CGS_ASSERT(maResources[luId].mpResource != 0, "maResources[luId].mpResource!=NULL");
+        return maResources[luId].mpResource;
+    }
+
+    // @ 0x824EE520 -- the GuiCache face: `return StateLoadingHelper::GetLoadedResource(this + 8);`
+    const void* GuiCache::GetLoadedResource(u32 luId) const
+    {
+        return mStateLoadingHelper.GetLoadedResource(luId);
+    }
+
     void GuiCache::UnloadAllResources(CgsGui::ResourceRequestTypes leType)
     {
         mStateLoadingHelper.UnloadAllResources(leType);

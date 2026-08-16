@@ -15,26 +15,23 @@
 
 namespace CgsGui
 {
-    // The custom-renderer manager the module installs. On the X360,
-    // SetCustomRendererManager @0x824EBBF8 dispatches three subsystem-wiring calls
-    // through this object's vtable (guest slots +0x38, +0x3C, +0x40), passing the
-    // module's TextRenderer (+0x3E0), its LanguageManager (+0x7C0C) and the
-    // caller-supplied argument respectively. The committed CgsGui::CustomRendererManager
-    // is a minimal slice whose vtable order does not line up with the guest slots, so
-    // the three wiring calls are modelled as named virtual methods on a local
-    // declaration-only interface reflecting the observed argument flow. FLAG: the
-    // precise method names/return types of the three guest vtable slots are not
-    // independently DWARF-attested; they are reconstructed from the call-site argument
-    // flow (subsystem back-pointer wiring).
-    struct CustomRendererManagerWiring
-    {
-        // +0x38: receives the module's TextRenderer (guest this+0x3E0).
-        virtual void SetTextRenderer(void* lpTextRenderer) = 0;
-        // +0x3C: receives this module's LanguageManager (guest this+0x7C0C).
-        virtual void SetLanguageManager(void* lpLanguageManager) = 0;
-        // +0x40: receives the caller-supplied argument (guest r6).
-        virtual void SetExtraWiring(int liArg) = 0;
-    };
+    // ⛔ `struct CustomRendererManagerWiring` DELETED (2026-08-16).
+    //
+    // It was a locally-invented, declaration-only interface with three PURE VIRTUALS of
+    // guessed signatures -- SetTextRenderer(void*), SetLanguageManager(void*),
+    // SetExtraWiring(int) -- that SetCustomRendererManager reinterpret_cast the real
+    // manager to before dispatching. That is a fabricated vtable laid over a live object:
+    // the moment a real manager was installed it would have called slots 0/1/2 of an
+    // interface that does not exist on it (slot 0 of a polymorphic class is the virtual
+    // destructor), i.e. delete-then-two-wild-jumps. It only ever looked safe because
+    // mpCustomRendererManager was hard-wired to 0 and the code never ran.
+    //
+    // The real base -- CgsGui::CustomRendererManager -- now lives in its DWARF home
+    // (GameShared/.../CustomRenderer/CgsCustomRenderer.h), so the three wiring calls are
+    // ordinary virtual calls on the real type with the real signatures:
+    //   +0x38 SetTextRenderer(CgsGraphics::TextRenderer*)
+    //   +0x3C SetLanguageManager(CgsLanguage::LanguageManager*)
+    //   +0x40 SetReplaySerialiser(void*)
 
     // The two per-frame CPU monitors ViewModule::Update brackets its phases with
     // (X360 dword_82F3312C the view-event dispatch / dword_82F33128 the Apt update).
@@ -463,20 +460,24 @@ namespace CgsGui
     // the member slot before each call, matching the asm `lwz r3,0(r31)`), then mirror
     // the pointer into the render handler's slot (guest +58596 == mRenderHandler+0xB4).
     void ViewModule::SetCustomRendererManager(CustomRendererManager* lpCustomRendererManager,
-                                              int liArg3, int liArg4)
+                                              int liArg3, void* lpReplaySerialiser)
     {
-        (void)liArg3;   // guest r5: never read by the X360 body
+        (void)liArg3;   // guest r5: never read by the X360 body (GuiModule passes 10)
 
         CGS_ASSERT(lpCustomRendererManager != 0, "lpCustomRendererManager");
+        if (lpCustomRendererManager == 0)
+            return;
 
         mpCustomRendererManager = lpCustomRendererManager;
 
-        CustomRendererManagerWiring* lpWiring =
-            reinterpret_cast<CustomRendererManagerWiring*>(mpCustomRendererManager);
-        lpWiring->SetTextRenderer(&mTextRenderer);
-        lpWiring->SetLanguageManager(&mLanguageManager);
-        lpWiring->SetExtraWiring(liArg4);
+        // Guest re-reads the member slot before each call (`lwz r3, 0(r31)`), so the three
+        // dispatches all go through mpCustomRendererManager, not the argument.
+        mpCustomRendererManager->SetTextRenderer(&mTextRenderer);           // +0x38
+        mpCustomRendererManager->SetLanguageManager(&mLanguageManager);     // +0x3C
+        mpCustomRendererManager->SetReplaySerialiser(lpReplaySerialiser);   // +0x40
 
+        // Mirror into the render handler (guest +58596 == mRenderHandler+0xB4). ⭐ THIS is
+        // the store AptCallbackCustom::ControlRender reads on every custom-control draw.
         mAptAux.mRenderHandler.SetCustomRendererManager(mpCustomRendererManager);
     }
 

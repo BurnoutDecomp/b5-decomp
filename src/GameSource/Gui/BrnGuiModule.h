@@ -21,6 +21,7 @@
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (the flow states' cache)
 #include "GameSource/Gui/BrnGuiWorldDataController.h"                   // BrnGui::WorldDataController (module-owned; X360 +307836)
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"     // module-owned permanent FLApt components
+#include "GameSource/Gui/BrnCustomRendererManager.h"                    // BrnGui::CustomRendererManager (module-owned; X360 +311952)
 
 // BrnGui::GuiModule -- the GUI module (a dispatched CgsModule, like BrnRendererModule). The X360 module
 // (Construct 0x82518028 / Prepare 0x82518D68 / Update 0x82527A58 / Render 0x825146B8) builds the entire
@@ -196,6 +197,18 @@ namespace BrnGui
         CgsModule::VariableEventQueue<18432, 16>* mpOutputBuffer;
 
         ViewModule mViewModule;       // DecFIGS BrnGuiModule.h:441 (owns Apt/text/render state)
+
+        // X360 +311952 -- the GUI CUSTOM-RENDERER SET manager. GuiModule::GuiModule
+        // @0x827E5B28 constructs it by value and GuiModule::Prepare @0x82518D68 stage 7
+        // does, in this order:
+        //     v27 = (*(*(v3 + 311952) + 4))(v3 + 311952, rwGeneralRes, rwLinearRes);
+        //     CgsGui::ViewModule::SetCustomRendererManager(v3 + 132224, v3 + 311952, 10,
+        //                                                  v3 + 1629284);
+        //     if (!v27) return 0;
+        // -- i.e. Prepare the manager, install it into the view module (which mirrors it
+        // into AptRenderHandler::mpCustomRendererManager, the pointer the Apt custom-control
+        // callback reads), and only then gate on the prepare result.
+        CustomRendererManager mCustomRendererManager;   // X360 +311952
 
         // The view-module IO pair the per-frame bridge fills (the input buffer carries the
         // view-state events -- frame time step 26, the play-movie events 18, the load
