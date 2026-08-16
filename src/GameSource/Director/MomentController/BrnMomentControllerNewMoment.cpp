@@ -99,6 +99,18 @@ bool MomentController::NewMoment(Moment::EType leMomentType,
             lVoidHandle = mMomentPool.AllocateVoid<MomentStationaryCrash>();
             break;
         default:
+            // ⚠️ DO NOT "FIX" THE UNINITIALISED lVoidHandle ON THIS ARM -- the console has it too.
+            // MSVC reports C4701 here (measured 2026-08-16 under /w14701). It is a TRUE report of
+            // UB that is in the SHIPPED X360 BINARY, not a transcription defect:
+            //   0x82255B68 default: BeginAssert/FireAssert("Unhandled moment type")/EndAssert
+            //   0x82255B84 <- every case ALSO branches here
+            //   0x82255B88 ld r4, var_110(r1) ; 0x82255B90 ld r5, var_108(r1)   <- the handle slot
+            //   0x82255B98 bl MomentHandle::Prepare
+            // The default arm writes NOTHING to var_110/var_108 and falls straight into the one
+            // shared Prepare, i.e. the original source hoisted Prepare out of the switch exactly
+            // as it is written below. (Hex-Rays shows Prepare duplicated into all 13 arms; the ASM
+            // has a single call site. Rung 1 is the asm.) Seeding lVoidHandle would be behaviour
+            // the binary does not have.
             CGS_ASSERT(false, "Unhandled moment type");
             break;
     }
