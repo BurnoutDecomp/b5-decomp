@@ -126,7 +126,7 @@ namespace renderengine
     // BrnRendererModule::Construct @0x8240A7B4 with no setting behind it.
     //
     // ⚠ THIS IS A RE-DECLARATION OF AN EXISTING GLOBAL, NOT A NEW ONE. The object is declared in
-    // pc/gcm/renderengine/device.h:16 and DEFINED in device.cpp beside gDisplayWidth/gDisplayHeight,
+    // pc/gcm/renderengine/device.h:23 and DEFINED at device.cpp:55, beside gDisplayWidth/gHeight,
     // where its full semantics live; it is already read from config.ini `[Settings] AntiAliasing` and
     // written back (BrnMain.cpp LoadConfig / SaveConfig) and had no consumer until this wave. It is
     // declared here as well only so the render-target leaf can reach it without including device.h,

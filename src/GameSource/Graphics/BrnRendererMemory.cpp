@@ -491,7 +491,13 @@ void BrnRendererMemory::PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator
         return;
     }
 
-    // Construct's own order: the down-sample buffer before the anti-alias buffer.
+    // THE ORDER HERE IS THE BRING-UP'S, NOT Construct's, and the comment that used to claim
+    // otherwise was wrong (verify round, 2026-08-16). BrnRendererMemory::Construct @0x823FCA38 calls
+    // CreateAntiAliasBuffer FIRST (`bl BrnRendererMemory__CreateAntiAliasBuffer` @0x823FCAB4, with
+    // lbEnableMSAA already in r5 @0x823FCAAC) and CreateDownSampleBuffer SECOND (@0x823FCAC0) -- the
+    // order the gated Construct in this file reproduces at :257-258. The inversion is harmless
+    // (neither creator reads a slot the other writes; only CreateBackBuffer has an ordering
+    // requirement and it runs after both either way), but it is a DEVIATION and is recorded as one.
     CreateDownSampleBuffer(lpAllocator);
 
     // THE ANTI-ALIAS (SCENE) BUFFER, at the console's own MSAA setting (anti-aliasing wave,
