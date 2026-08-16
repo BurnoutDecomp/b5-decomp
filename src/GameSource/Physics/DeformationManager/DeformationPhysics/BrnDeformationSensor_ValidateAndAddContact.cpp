@@ -18,7 +18,11 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformationSensor.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint -- the opt-in [latch] probe only
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"    // DeformableObject
+
+#include <cstdlib>   // getenv    -- the opt-in [latch] bring-up probe only
+#include <cstdint>   // uintptr_t -- the opt-in [latch] bring-up probe only
 
 namespace BrnPhysics
 {
@@ -72,7 +76,7 @@ namespace Deformation
 
 	// =============================================================================================
 	// ValidateAndAddContact @ 0x825E1788 -- validate a candidate contact, keep the 3 deepest, latch
-	// the biggest-impulse displacement record. Returns true if the contact was kept.
+	// the EARLIEST-IMPACT record. Returns true if the contact was kept.
 	//
 	// Flow (this == v0/r31, lrPotential == r5/r28, lpOtherSensor == r13/r26):
 	//   1) Normalise lrPotential.mNormal; tripwire assert |mag(normal)-1| ~ 0 (line 473). Non-gating.
@@ -80,11 +84,20 @@ namespace Deformation
 	//      mNormal, mfProjectedDist, mpOtherVehicle, mpOtherSensor, mbValid=1.
 	//   3) Insert: if mi32NumStoredContacts < 3 append + increment; else (==3 full) replace the slot
 	//      with the smallest mfProjectedDist (keep the 3 deepest contacts).
-	//   4) Re-derive the projected metrics; if the displacement passes the accept gates, latch the
-	//      biggest-impulse displacement record (the +272/+276/+280/+284/+368.. scratch writes) and
-	//      return true; otherwise the gates at LABEL_29 decide the boolean result.
+	//   4) Form the swept impact time t = penetrationDepth / closingDisplacement, both measured
+	//      ALONG THE CONTACT NORMAL; if it is in [0,1] and earlier than the record's stored time,
+	//      latch mImpulseContact + the contact spy. Then return on the basis/t gates.
 	// The VMX projection/normalise math is modelled per-lane; the contact-array insertion + count
 	// updates + named scratch writes are exact.
+	//
+	// ⭐⭐⭐ 2026-08-16 (walls leg 10). Step (4) is THE gate on the whole deformation impulse path:
+	// mImpulseContact is the only thing DeformationSensor::GetImpulse reads, GetImpulse is the only
+	// feed into DeformableObject::UpdateContacts, and UpdateContacts is the only caller of
+	// ApplyCarWorldImpulse. Its arithmetic was wrong in three places (see the block notes below),
+	// which is why a wall was detected by the penetration solver for nine legs and never produced
+	// a single impulse. Measured before the fix, at 30.4 m/s into the junkyard wall:
+	//   [latch] WALLFACE nrm 0.512652 0 0.858597 | pen 208.821777 basis 1.000000 t 208.821747
+	//           latched 0        <- "t" was a WORLD COORDINATE, so the t <= 1.0 gate could not pass
 	// =============================================================================================
 	bool DeformationSensor::ValidateAndAddContact(Matrix44Affine lWorldTransform,
 	                                              const CgsSceneManager::PotentialContact& lrPotential,
@@ -112,9 +125,8 @@ namespace Deformation
 		//            - mpLocalSpaceSphere->centre        (vsubfp v10, v10, *(this+0x19C))
 		//   localB = pointB RAW                          (stvx v8 -- world point, untransformed)
 		//   normal = the (head-normalised) contact normal
-		//   projDist = lane-sum of (pointA + mPointDisplacement_BiggestImpulseThisFrame.xyz
-		//              - pointB)  (vaddfp/vsubfp then the vsldoi horizontal sum; v29 == ZERO, so
-		//              the surrounding vmaddfp are register moves -- NOT a dot product)
+		//   projDist = dot3( normal, pointA + mPointDisplacement_BiggestImpulseThisFrame.xyz
+		//              - pointB )  -- see the corrected note at the projDist store below
 		StoredContact lCandidate;
 		StoredContactView& lView = AsContactView(lCandidate);
 
@@ -138,11 +150,23 @@ namespace Deformation
 		lView.mLocalPointOnB = lPointOnB;
 		lView.mNormal        = lNormal;
 
-		// projDist: the lane-sum key (see the block note above).
+		// projDist: the swept penetration depth ALONG THE NORMAL.
+		// ⭐⭐ FIXED 2026-08-16 (walls leg 10). This was a plain LANE SUM, on the strength of a
+		// comment reading "v29 == ZERO, so the surrounding vmaddfp are register moves -- NOT a dot
+		// product". That reading put the addend in the wrong print position: PS3 @0x6CC164
+		// `vmaddfp v0, v5, v29, v0` is `v0 = v5*v0 + v29` with **v5 == v30 == the NORMAL**
+		// (`vmr v5, v30` @0x6CC0AC), and the vsldoi/vaddfp chain then horizontal-sums it.
+		// The X360 twin removes all doubt by using the explicit dot instruction:
+		//   0x825E18D4 vaddfp      v6,  v13(pointOnA), v6(this+0x10)
+		//   0x825E1910 vsubfp      v6,  v6,  v0(pointOnB)
+		//   0x825E1920 vmsum3fp128 v12, v12(NORMAL), v6      <- a dot product with the normal
+		// It is the key the "keep the 3 deepest" insertion sorts on, and a lane sum of world
+		// coordinates is not a depth: at the junkyard wall it was ~ -3000 for every contact.
 		const Vector3Plus& lrDisp = mPointDisplacement_BiggestImpulseThisFrame;   // this+0x10
-		lView.mfProjectedDist = (lPointOnA.x + lrDisp.x - lPointOnB.x)
-		                      + (lPointOnA.y + lrDisp.y - lPointOnB.y)
-		                      + (lPointOnA.z + lrDisp.z - lPointOnB.z);
+		const Vector3 lSweptDelta = { lPointOnA.x + lrDisp.x - lPointOnB.x,
+		                              lPointOnA.y + lrDisp.y - lPointOnB.y,
+		                              lPointOnA.z + lrDisp.z - lPointOnB.z, 0.0f };
+		lView.mfProjectedDist = Dot3(lNormal, lSweptDelta);
 		lView.mpOtherVehicle  = lpOtherVehicle;
 		lView.mpOtherSensor   = lpOtherSensor;
 		lView.mu32Valid       = 1;                          // v100 = 1
@@ -194,26 +218,105 @@ namespace Deformation
 		// lfImpactTime >= 0 AND mImpulseContact.mfImpactTimeInFrame > lfImpactTime -- the record
 		// starts each frame DISARMED at 100.0, so the first valid contact arms it and later
 		// SMALLER times replace it: the EARLIEST impact of the frame wins.
-		Vector3 lOtherCentre = { 0.0f, 0.0f, 0.0f, 0.0f };
-		if ( lpOtherSensor && lpOtherSensor->mpLocalSpaceSphere )
-		{
-			const Vector4& lc = SphereVec(lpOtherSensor->mpLocalSpaceSphere);
-			lOtherCentre = Vector3{ lc.x, lc.y, lc.z, 0.0f };
-		}
-		const f32 lfPenetration = Dot3(Sub3(lOtherCentre, lPointOnB), lNormal);
+		// ⭐⭐⭐ REWRITTEN 2026-08-16 (walls leg 10) -- BOTH TERMS WERE WRONG, and the pair is why a
+		// wall took no momentum for nine legs. Byte-witnessed on BOTH consoles; the X360 spells the
+		// dot products with `vmsum3fp128`, so there is no operand-order judgement left to make:
+		//   X360 0x825E1AD0  vsubfp      v12, v11(potential+0),    v0(potential+0x10)
+		//        0x825E1AE4  vmsum3fp128 v12, v12,                 v124(NORMAL)   <- NUMERATOR
+		//        0x825E1AD8  lvx128      v13, r0, r4   with r4 = r31+0x10 (0x825E18A8)
+		//        0x825E1ADC  vxor128     v0,  v124, <0x80000000>                  <- -NORMAL
+		//        0x825E1AE0  vmsum3fp128 v0,  v13(thisDisp),       v0(-NORMAL)    <- BASIS
+		//        0x825E1AF0  vmsum3fp128 v13, (otherSensor+0x10),  v124(+NORMAL)  <- BASIS +=
+		//   PS3  0x6CC28C..0x6CC2FC is the same body in plain Altivec (r18 = this+0x10 @0x6CC0F8).
+		//
+		// The numerator is the PENETRATION DEPTH along the normal and the basis is the CLOSING
+		// DISPLACEMENT along it, so the quotient is the fraction of this frame's sweep at which the
+		// surfaces meet -- an impact TIME in [0,1], which is exactly what the three gates below and
+		// GetImpulse's own > 1.0 sentinel expect.
+		//
+		// ⛔ WHAT WAS HERE. The numerator read `dot3(otherSensorCentre - pointOnB, normal)` and the
+		// basis was `dot3(normal, normal)` (== 1.0, doubled when a second sensor was present). Two
+		// separate faults in one expression:
+		//   * `otherSensorCentre` is an INVENTION -- this function never touches the other sensor's
+		//     SPHERE, only its DISPLACEMENT -- and it is identically zero for a world contact, so
+		//     the numerator degenerated to `-dot3(pointOnB, normal)`: A WORLD COORDINATE. Measured
+		//     live at the junkyard wall it was 208.82 where the console's is 1.905 m.
+		//   * a basis of 1.0 is not a length at all, so the quotient was never a time. With
+		//     `t == 208.82` the `t <= 1.0` gate below could not pass, the latch never armed,
+		//     mImpulseContact stayed at its 100.0 disarm sentinel, GetImpulse returned false and
+		//     ApplyCarWorldImpulse was never called for a wall. That was the whole blockage.
+		// ⚠️ The basis is signed and one-sided BY DESIGN: only a contact the sensor is closing on
+		// has basis > 0, which is how a separating contact is rejected. Do not "fix" it to fabs.
+		const f32 lfPenetration = Dot3(Sub3(lPointOnA, lPointOnB), lNormal);
 
-		f32 lfBasis = Dot3(lNormal, lNormal);
+		f32 lfBasis = -Dot3(lrDisp.GetVector3(), lNormal);   // vmsum3fp128 v0, thisDisp, -NORMAL
 		if ( lpOtherSensor )
 		{
-			lfBasis += Dot3(lNormal, lNormal);   // + other-sensor contribution (vaddfp v10,v10,v0)
+			// + the other sensor's own sweep along the SAME normal (vaddfp v10,v10,v0).
+			lfBasis += Dot3(
+				lpOtherSensor->mPointDisplacement_BiggestImpulseThisFrame.GetVector3(), lNormal);
 		}
+		// The console divides unconditionally (vrefp + 2 Newton refines) and lets the `basis > 0`
+		// gate discard the result; guarding the zero here is value-identical and avoids the inf.
 		const f32 lfRatio      = (lfBasis != 0.0f) ? (lfPenetration / lfBasis) : 0.0f;
 		const f32 lfImpactTime = (lfRatio > 0.0f) ? lfRatio : 0.0f;   // vmaxfp v13, v0, zero
 
-		if ( lfBasis > 0.0f                                        // vcmpgtfp v10 > 0 (dword_100A564 == 0.0)
-		     && lfImpactTime <= 1.0f                               // vcmpgefp 1.0 >= v13
-		     && lfImpactTime >= 0.0f                               // vcmpgefp v13 >= 0
-		     && mImpulseContact.mfImpactTimeInFrame > lfImpactTime ) // stored (+0x118) > candidate
+		const bool lbLatch = ( lfBasis > 0.0f                          // vcmpgtfp v10 > 0 (dword_100A564 == 0.0)
+		                       && lfImpactTime <= 1.0f                 // vcmpgefp 1.0 >= v13
+		                       && lfImpactTime >= 0.0f                 // vcmpgefp v13 >= 0
+		                       && mImpulseContact.mfImpactTimeInFrame > lfImpactTime ); // stored (+0x118) > cand
+
+		// ---- [latch] PC bring-up instrument -- DELETE WHEN the wall test is banked ---------------
+		// OPT-IN (BRN_LATCH_PROBE=1) so a default run and every golden gate stay byte-identical.
+		//
+		// ⭐ WHY THIS PROBE EXISTS. Nine legs measured this chain from DOWNSTREAM ("|vz| fell",
+		// "route WALL fired") and every one of those signals turned out to be produced by the
+		// GROUND. `mImpulseContact` is the ONLY feed into the deformation impulse path
+		// (GetImpulse -> UpdateContacts -> ApplyCarWorldImpulse), so the question "why does a wall
+		// take no momentum" reduces exactly to "does a wall-normal contact arm this latch". One
+		// line per candidate answers it, and prints BOTH the arithmetic the tree runs and the
+		// arithmetic the two consoles run, so the comparison is inside a single run rather than
+		// across two.
+		// Two windows (leg 9's rule -- cap the EVENTS you are counting, not the calls you filter):
+		// a short opening window that proves the probe can speak, plus a window reserved for
+		// horizontal normals, which is the rare event actually being hunted.
+		{
+			static s32 siLatchProbe = -1;
+			if ( siLatchProbe < 0 )
+			{
+				const char* lpcEnv = getenv( "BRN_LATCH_PROBE" );
+				siLatchProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+			}
+			static u32 suSeen = 0;
+			static u32 suWall = 0;
+			++suSeen;
+			const f32  lfAbsNY   = ( lNormal.y < 0.0f ) ? -lNormal.y : lNormal.y;
+			const bool lbWallish = ( lfAbsNY < 0.6f );   // the [wall] probe's own discriminator
+			if ( siLatchProbe == 1 && CgsDev::Log::gpDebugPrint != 0
+			     && ( suSeen <= 24u || ( lbWallish && ++suWall <= 400u ) ) )
+			{
+				// ⚠️ THE SENSOR IDENTITY IS PART OF THE EVIDENCE, not decoration: consecutive
+				// candidates carrying byte-identical contact points are either one contact offered
+				// to many sensors (each of which will raise its own full-strength impulse) or the
+				// same sensor re-offered the same contact. Those have different fixes, and without
+				// `sensor` in the line the two are indistinguishable in the log.
+				*CgsDev::Log::gpDebugPrint
+					<< "[latch] n " << static_cast<s32>(suSeen)
+					<< " sensor " << static_cast<s32>(reinterpret_cast<uintptr_t>(this) & 0xFFFFFu)
+					<< ( lbWallish ? " WALLFACE" : " floor" )
+					<< " nrm " << lNormal.x << " " << lNormal.y << " " << lNormal.z
+					<< " pA " << lPointOnA.x << " " << lPointOnA.y << " " << lPointOnA.z
+					<< " pB " << lPointOnB.x << " " << lPointOnB.y << " " << lPointOnB.z
+					<< " disp " << lrDisp.x << " " << lrDisp.y << " " << lrDisp.z
+					<< " | pen " << lfPenetration << " basis " << lfBasis
+					<< " t " << lfImpactTime
+					<< " stored " << mImpulseContact.mfImpactTimeInFrame
+					<< " latched " << static_cast<s32>(lbLatch ? 1 : 0)
+					<< "\n";
+			}
+		}
+
+		if ( lbLatch )
 		{
 			// The impulse record (sensor +0xE0..+0x11F), field for field per the PS3 stores:
 			mImpulseContact.mPointOnA           = lPointOnA;       // stvx v9,  this,0xE0  (potential +0)
@@ -236,16 +339,24 @@ namespace Deformation
 
 		bool lbAccepted = false;
 
-		// Final boolean: the two outer gates at LABEL_29. The contact is accepted (true) when the
-		// projected separation is positive AND the displacement is within tolerance, OR when the
-		// penetration term clears its own positive gate. Otherwise false.
-		if ( lfPenetration > 0.0f && lfBasis >= 0.0f )
+		// Final boolean -- ⭐ CORRECTED 2026-08-16 (walls leg 10). The first arm read
+		// `lfPenetration > 0 && lfBasis >= 0`; the console's is the SAME PAIR OF GATES THE LATCH
+		// USES, minus the freshness test. Cross-witnessed:
+		//   X360 0x825E1CA0  vcmpgtfp.    v0, v0(BASIS), <0.0>       -> beq to the second arm
+		//        0x825E1CB8  vcmpgefp128. v0, v126(1.0), v13(t)      -> bne to `li r11, 1`
+		//        0x825E1CF0  vcmpgtfp.    v0, <0.01>,    v12(NUMERATOR)
+		//   PS3  0x6CC380/0x6CC38C (basis > 0, then 1.0 >= t) and 0x6CC43C (0.01 > numerator).
+		// The second arm was already right, and its constant is not merely NUMERICALLY the same
+		// 0.01 -- it is the SAME LOAD: X360 keeps it in f31 from the prologue and spends it on the
+		// normal-magnitude assert at 0x825E1864 and here at 0x825E1CD0 (PS3: dword_100A5F8 both
+		// times). `.rdata` reads 0x82002138 == 0.0099999998 and 0x82001CC0 == 0.0.
+		if ( lfBasis > 0.0f && lfImpactTime <= 1.0f )
 		{
-			lbAccepted = true;                             // LABEL_29 LOBYTE(_R11)=1
+			lbAccepted = true;                             // 0x825E1D04 li r11, 1
 		}
 		else if ( KF_NORMAL_TOLERANCE > lfPenetration )
 		{
-			lbAccepted = true;                             // LABEL_29 (second path)
+			lbAccepted = true;                             // 0x825E1CF0 -> the same li r11, 1
 		}
 
 		return lbAccepted;
