@@ -7,6 +7,7 @@
 #include "GameSource/Gui/BrnGuiModule.h"         // BrnGui::gpActiveGuiModule (the GUI render drive)
 #include "GameSource/Graphics/BrnRendererModulePostFx.h"  // Render's effects-frame -> BrnPostFx apply block
 #include "GameSource/Director/Camera/Camera.h"            // BrnDirector::Camera::Camera -- the staged camera-input record
+#include "GameSource/Effects/Particles/ParticleModuleBringUp.h"  // BrnParticle::PCBringUpParticleRenderDataProduced (the motion-blur render-data latch)
 
 // ---------------------------------------------------------------------------------------------
 // BRN_SHADOW_MAP_TARGET_AVAILABLE -- the shadow-map RENDER TARGET gate (PC bring-up, 2026-08-12).
@@ -3044,11 +3045,41 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             BrnRendererEvalPostFxTint2dColour(lpEffectsArbitrator, lbEffectsAllowed,
                                               lafTint2dColour);
 
-            // MotionBlurState::Update -- BLOCKED, and gated OFF inside the callee (its body does not
-            // exist in this tree, and its two matrix arguments live inside the still-opaque
-            // DispatchThreadInputBuffer::ParticleRenderData). The call is written at the console's
-            // position so it lights the day both land; see the callee's banner for the evidence.
-            (void)BrnRendererUpdatePostFxMotionBlur(lpEffectsArbitrator, 0);
+            // MotionBlurState::Update @0x823F8490 -- LIVE (post-fx step 9). Its body, its two matrix
+            // arguments' layout and now its PRODUCER all exist:
+            //   * the body landed in BrnPostFxShader.cpp with the rung-7 producers wave;
+            //   * DispatchThreadInputBuffer::ParticleRenderData has its real DWARF layout
+            //     (ParticleModule.h:589-606), so the arguments are reached BY NAME;
+            //   * the record is now stamped every frame by the named PC bring-up producer
+            //     BrnParticle::PCBringUpProduceParticleRenderData, called from
+            //     BrnGameModule::DoDispatch on the buffer this Render read-locks after the swap.
+            // (The comment that stood here -- "BLOCKED ... its body does not exist" -- had been
+            // stale since rung 7.)
+            //
+            // THE READ LOCK IS ALREADY HELD FOR THE WHOLE FRAME: Render takes it at the top
+            // (`lpDispatchThreadInputBuffer->LockForRead()`, the console's own frame-long lock) and
+            // releases it at both exits, so the CONST GetParticleRenderData overload -- which
+            // asserts "Not locked for reading" -- is legal here. This is the same accessor the
+            // console's Render calls (`bl sub_8227F640` @0x8240C45C).
+            //
+            // THE LATCH IS NOT DEFENSIVE DRESSING. DispatchThreadInputBuffer::Construct
+            // deliberately does NOT clear mParticleRenderData (faithfully -- the console does not
+            // either) and CreateIOBuffer<T> has not zero-filled since the 2026-08-15 perf wave, so
+            // before the first producer run the payload is UNINITIALISED bytes. A garbage view
+            // matrix goes through four inverses in MotionBlurState::Update's zero-time-step arm and
+            // the resulting NaN would reach a tex2Dgrad gradient. So the pointer is handed over only
+            // once the producer has actually stamped a record -- THIS buffer instance's record: the
+            // buffer is double-buffered and the producer runs only on DoDispatch frames, so the
+            // latch is per instance (step-9 verify).
+            // DELETE the latch (not the call) when the real ParticleModule/EffectsModule producer
+            // runs -- from then on the record is written before any reader, as on the console.
+            const BrnParticle::ParticleModule::ParticleRenderData* lpParticleRenderData = 0;
+            if (lpDispatchThreadInputBuffer != 0
+                && BrnParticle::PCBringUpParticleRenderDataProducedFor(lpDispatchThreadInputBuffer))
+            {
+                lpParticleRenderData = lpDispatchThreadInputBuffer->GetParticleRenderData();
+            }
+            (void)BrnRendererUpdatePostFxMotionBlur(lpEffectsArbitrator, lpParticleRenderData);
         }
 
         // [FLAG PC bring-up diagnostic] the sampled [postfx-fx] line -- six lines, 500 frames apart,
