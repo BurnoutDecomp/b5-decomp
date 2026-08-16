@@ -2,47 +2,32 @@
 
 #include "types.hpp"
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
+#include "SharedClasses/World/BrnEnvironmentDictionary.h"   // BrnWorld::EnvironmentSettings::Dictionary (owning header)
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnWorld::EnvironmentSettings::DictionaryResourceType::GetTypeID @ 0x826763A0
+//   BrnWorld::EnvironmentSettings::DictionaryResourceType::GetSerialisedResourceDescriptor @ 0x8267D310
 //   BrnWorld::EnvironmentSettings::DictionaryResourceType::FixDown   @ 0x8267E250
 //   BrnWorld::EnvironmentSettings::DictionaryResourceType::FixUp     @ 0x8267E278
 //
-// FixUp/FixDown rebase the Dictionary's two load-relative pointer fields (+8 and
-// +16) by the rw::Resource's load base (the relocation delta). FixUp validates the
-// on-disk version first. Sibling of BrnVehicleGraphicsSpec / EnvironmentTimeLine.
+// FixUp/FixDown rebase the Dictionary's two array pointers by the rw::Resource's load
+// base (the relocation delta). FixUp validates the on-disk version first. Sibling of
+// BrnVehicleGraphicsSpec / EnvironmentTimeLine.
+//
+// 2026-08-16 (env wave, step 9): the former LOCAL `struct Dictionary` of u32 offset
+// slots is RETIRED in favour of the owning header
+// SharedClasses/World/BrnEnvironmentDictionary.h (DWARF-named members, HOST pointers).
+// On x64 muLocationCnt is at +0x10 and mpLocationDatii at +0x18, NOT the console's
+// +0x0C/+0x10 -- reading them at the console offsets is exactly the STREETDATA.DAT
+// defect. See that header's guest-vs-host table.
+
 
 namespace BrnWorld
 {
 namespace EnvironmentSettings
 {
-    // The environment-settings Dictionary relocation slice. Member SEMANTICS are
-    // recovered from the PS3 DecFIGS DWARF (same source as the X360): FixUp @
-    // PS3 0x81A008 rebases a2[2] via rw::RwPtrAddBasePtr<Dictionary::SeasonData>
-    // and a2[4] via rw::RwPtrAddBasePtr<Dictionary::LocationData>; and
-    // GetSerialisedResourceDescriptor @ PS3 0x813E00 reads *(+4)<<8 (SeasonData
-    // entry stride 256) and *(+12)<<6 (LocationData entry stride 64) for the
-    // payload size. So +8 = SeasonData pointer, +16 = LocationData pointer, +4 =
-    // season count, +12 = location count.
-    //
-    // The fields are kept as load-relative u32 offsets (not typed pointers): the
-    // X360 target (b5_main FixUp @ 0x8267E278 / FixDown @ 0x8267E250) rebases them
-    // with raw += / -= delta arithmetic — RwPtrAddBasePtr was inlined away on the
-    // X360 — and this TU faithfully follows the X360 (the rebase TARGET).
-    struct Dictionary
-    {
-        u32 muVersion;       // +0   on-disk version == 2
-        u32 muSeasonCount;   // +4   SeasonData entry count (size = count<<8)
-        u32 mpSeasonData;    // +8   rebased pointer (a2[2] += delta)
-        u32 muLocationCount; // +12  LocationData entry count (size = count<<6)
-        u32 mpLocationData;  // +16  rebased pointer (a2[4] = v8 + delta)
-    };
-
-    // FLAG: value 2 taken from the X360 `*a2 != 2` version check in FixUp.
-    static const u32 KU_ENVIRONMENT_DICTIONARY_VERSION = 2;
-
     // Resource registry type id for the environment-settings Dictionary resource
     // (65556 = 0x10014). Recovered verbatim from GetTypeID @ 0x826763A0.
     static const uint32_t KU_ENVIRONMENT_DICTIONARY_RESOURCE_TYPE_ID = 65556;
@@ -58,18 +43,27 @@ namespace EnvironmentSettings
     // The descriptor is returned by value (X360 sret in r3).
     //
     // Store-for-store from the X360:
-    //   seasonCount   = *(lpResource + 4)
-    //   locationCount = *(lpResource + 12)
-    //   size = ((((seasonCount << 8) + 47) & ~0xF) + (locationCount << 6) + 15) & ~0xF
+    //   size = ((((muSeasonCnt << 8) + 47) & ~0xF) + (muLocationCnt << 6) + 15) & ~0xF
     //   entry[0] = { size, 16 }            entry[1..4] = { 0, 1 }
-    // (47 == 0x2F; 15 == 0xF; <<8 == * 256; <<6 == * 64; & ~0xF == round up after +.)
+    // (<<8 == sizeof(SeasonData) == 256; <<6 == sizeof(LocationData) == 64; 47 == the
+    // 16-aligned start of the season array (0x20) + 0xF; 15/& ~0xF == round up.)
+    //
+    // ⚠️ THE FORMULA SURVIVES THE x64 RELAYOUT UNCHANGED, and that is not luck: the
+    // header grows 20 -> 32 bytes but align16(20) == align16(32) == 32, so the season
+    // array still starts at +0x20, and BOTH element records are pointer-free char
+    // arrays whose strides (256 / 64) do not move. The Dictionary payload is therefore
+    // byte-for-byte the SAME SIZE before and after the relayout (MEASURED: 352 bytes
+    // for the retail 1-season/1-location DICTIONARY.BUNDLE.x360). If a future header
+    // change pushes sizeof(Dictionary) past 32, this constant and
+    // env_transcode.py::_relayout_dictionary must move together --
+    // Dictionary::_AssertLayout() is the tripwire.
     CgsResource::ResourceDescriptor
     DictionaryResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
     {
         const Dictionary* lpDictionary = static_cast<const Dictionary*>(lpResource);
 
-        const u32 luSeasonCount   = lpDictionary->muSeasonCount;    // *(a3 + 4)
-        const u32 luLocationCount = lpDictionary->muLocationCount;  // *(a3 + 12)
+        const u32 luSeasonCount   = lpDictionary->muSeasonCnt;      // *(a3 + 4)
+        const u32 luLocationCount = lpDictionary->muLocationCnt;    // *(a3 + 12) console / +0x10 host
 
         const u32 luSize =
             ((((luSeasonCount << 8) + 0x2F) & ~0xFu) + (luLocationCount << 6) + 0xF) & ~0xFu;
@@ -85,36 +79,48 @@ namespace EnvironmentSettings
         return lDescriptor;
     }
 
-    // FixUp @ 0x8267E278. Validate version, then rebase the two load-relative
-    // pointers. The X360 `result` is the EndAssert() artifact (return value of the
-    // assert path); the function is void by contract.
+    // FixUp @ 0x8267E278. Validate version, then rebase the two array pointers. The
+    // X360 `result` is the EndAssert() artifact (return value of the assert path);
+    // the function is void by contract.
+    //
+    // x64 delta: GetLoadBase64 -- both slots are HOST pointers in the relaid-out image
+    // (env_transcode.py::_relayout_dictionary); the 32-bit form truncates the x64 heap
+    // base. Same treatment as BrnStreetDataResourceType / CgsLanguageResourceType.
     void DictionaryResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
         Dictionary* lpDictionary = static_cast<Dictionary*>(lpResource);
 
-        // X360: if (*a2 != 2) { Begin/Fire/EndAssert("...","...cpp",<line>); }
-        // The baked file/line is NOT reproduced (CGS_ASSERT injects __FILE__/__LINE__).
+        // X360: if (*a2 != 2) { Begin/Fire/EndAssert("...","...cpp",212); }
+        // The baked file/line 212 is NOT reproduced (CGS_ASSERT injects __FILE__/__LINE__).
         CGS_ASSERT(lpDictionary->muVersion == KU_ENVIRONMENT_DICTIONARY_VERSION,
                    "Incorrect version for Environment Settings Dictionary; get latest code/tools and rebuild data \n");
 
-        const u32 luDelta = CgsResource::GetLoadBase(lrResource);
+        const uintptr_t luDelta = CgsResource::GetLoadBase64(lrResource);
 
-        const u32 luLocationData = lpDictionary->mpLocationData;   // v8 = a2[4] (read before)
-        lpDictionary->mpSeasonData   += luDelta;                    // a2[2] += *a3
-        lpDictionary->mpLocationData  = luLocationData + luDelta;   // a2[4] = v8 + *a3
+        // v8 = a2[4] (read before) ; a2[2] += *a3 ; a2[4] = v8 + *a3
+        Dictionary::LocationData* lpLocationDatii = lpDictionary->mpLocationDatii;
+
+        lpDictionary->mpSeasonDatii = reinterpret_cast<Dictionary::SeasonData*>(
+            reinterpret_cast<uintptr_t>(lpDictionary->mpSeasonDatii) + luDelta);
+        lpDictionary->mpLocationDatii = reinterpret_cast<Dictionary::LocationData*>(
+            reinterpret_cast<uintptr_t>(lpLocationDatii) + luDelta);
     }
 
-    // FixDown @ 0x8267E250. The inverse rebase: un-rebase the two pointers (+16
-    // then +8, per the asm). void by contract.
+    // FixDown @ 0x8267E250. The inverse rebase: un-rebase the two pointers (+0x10 then
+    // +8 on the console, mpLocationDatii then mpSeasonDatii by name). void by contract.
     void DictionaryResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
         Dictionary* lpDictionary = static_cast<Dictionary*>(lpResource);
 
-        const u32 luDelta = CgsResource::GetLoadBase(lrResource);
+        const uintptr_t luDelta = CgsResource::GetLoadBase64(lrResource);
 
-        const u32 luSeasonData = lpDictionary->mpSeasonData;   // v2 = *(result + 8) (read before)
-        lpDictionary->mpLocationData -= luDelta;                // *(result + 16) -= *a2
-        lpDictionary->mpSeasonData    = luSeasonData - luDelta; // *(result + 8) = v2 - *a2
+        // v2 = *(result + 8) (read before) ; *(result+16) -= *a2 ; *(result+8) = v2 - *a2
+        Dictionary::SeasonData* lpSeasonDatii = lpDictionary->mpSeasonDatii;
+
+        lpDictionary->mpLocationDatii = reinterpret_cast<Dictionary::LocationData*>(
+            reinterpret_cast<uintptr_t>(lpDictionary->mpLocationDatii) - luDelta);
+        lpDictionary->mpSeasonDatii = reinterpret_cast<Dictionary::SeasonData*>(
+            reinterpret_cast<uintptr_t>(lpSeasonDatii) - luDelta);
     }
 }
 }

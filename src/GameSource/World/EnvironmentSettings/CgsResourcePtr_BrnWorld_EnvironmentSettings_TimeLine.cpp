@@ -19,11 +19,13 @@
 // DebugComponent::RenderHUD, all of which instance the season timeline resource pointer
 // (DWARF BrnEnvironmentManager.h:214 maSeasonPtrs -> ResourcePtr<TimeLine>[2]).
 //
-// TimeLine (the season-timeline resource) is forward-declared incomplete -- following the
-// CgsResourcePtr_BrnWheel_GraphicsSpec precedent, the generic body only needs
-// static_cast<Type*>(void*). Type + namespace + callers confirmed against the DecFIGS DWARF
+// TimeLine (the season-timeline resource) now has a real owning header -- INCLUDE it instead
+// of re-declaring the type locally (2026-08-16, env wave step 9). The generic body only needs
+// static_cast<Type*>(void*), so the old forward declaration compiled, but a local
+// re-declaration of a type that HAS a reconstructable home is the padding-fork trap the
+// project bans. Type + namespace + callers confirmed against the DecFIGS DWARF
 // (BrnEnvironmentManager.h/.cpp).
-namespace BrnWorld { namespace EnvironmentSettings { struct TimeLine; } }
+#include "SharedClasses/World/BrnEnvironmentTimeLine.h"
 
 template BrnWorld::EnvironmentSettings::TimeLine*
 CgsResource::ResourcePtr<BrnWorld::EnvironmentSettings::TimeLine>::GetMemoryResource();
