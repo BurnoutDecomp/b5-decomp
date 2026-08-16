@@ -66,9 +66,18 @@
 //      pc/gcm/renderengine/XenonD3D9Shims.cpp, which is on the exe source list
 //      (build_game_exe.bat:321). ⚠ THIS MACRO MUST NOT BE 1 WITHOUT THOSE DEFINITIONS: check with
 //      `grep -n "^void D3DDevice_BeginTiling\|^int D3DDevice_Resolve" XenonD3D9Shims.cpp` before
-//      trusting a build. On this build only _Resolve actually runs (mbMultisampledBackbuffer is
-//      false everywhere, so both bodies below take their UNTILED branch, which calls neither
-//      BeginTiling nor EndTiling nor SetPredication); the other three are correct and dead.
+//      trusting a build.
+//
+//      ⚠ UPDATED 2026-08-16 (anti-aliasing wave): ALL FOUR NOW RUN. This paragraph used to end
+//      "on this build only _Resolve actually runs (mbMultisampledBackbuffer is false everywhere ...
+//      the other three are correct and dead)". That was true only because the tree's inline
+//      BrnRendererModule::Construct initialised mbMultisampledBackbuffer to `false` -- a DEFECT: the
+//      X360 stores 1 (`li r28, 1` @0x8240A7B4 / `stb r28, 0(this+0xC400)` @0x8240A7C4) and hands the
+//      same byte to the pool as lbEnableMSAA. With that corrected (BrnRendererModule.h) both bodies
+//      below take their TILED branch, so BeginTiling opens the frame with the two-rect clear,
+//      SetPredication is called three times a frame, the two per-tile resolve pairs run, and
+//      EndTiling closes. On PC the two rectangles of BrnGraphics::KMSAA_TILING_PLAN partition a
+//      1280x720 surface EXACTLY, so "per tile" degrades to "over its own band" with no gap.
 //
 //  (b) THE TWO GPU perf-monitor bodies -- NOT SATISFIED, AND NOT PRETENDED OTHERWISE. Their eight
 //      call sites below, and the header that declares them, are behind BRN_GPU_PERFMON_AVAILABLE
@@ -652,7 +661,12 @@ namespace
     // path below, and this function additionally refuses to run until that target exists.
     CgsRenderTarget* gpAntiAliasTarget = nullptr;
 
-    bool EnsurePostFxSceneTargets(BrnRendererMemory& lrRendererMemory)
+    // lbEnableMSAA is BrnRendererModule::mbMultisampledBackbuffer, threaded from the caller instead
+    // of re-derived here: on the console that ONE byte both selects the anti-alias buffer's tiling
+    // plan (via BrnRendererMemory::Construct's arg_97 -> CreateAntiAliasBuffer @0x823F6B40) and
+    // picks the branch BeginRenderAntiAliased / ResolveMSAA take. Deriving it twice is how a
+    // multisampled target ends up driven by the untiled bracket, which nothing would report.
+    bool EnsurePostFxSceneTargets(BrnRendererMemory& lrRendererMemory, bool lbEnableMSAA)
     {
         if (gpAntiAliasTarget != nullptr)
             return true;
@@ -665,7 +679,7 @@ namespace
 
         // The eight Create*Buffer helpers are private to BrnRendererMemory (only Construct calls them
         // on the console), so the bring-up goes through the one public entry point that owns the order.
-        lrRendererMemory.PCBringUpCreatePostFxSceneTargets(&sWorldDispatchAllocator);
+        lrRendererMemory.PCBringUpCreatePostFxSceneTargets(&sWorldDispatchAllocator, lbEnableMSAA);
 
         gpAntiAliasTarget = lrRendererMemory.GetAntiAliasBuffer();
 
@@ -2225,6 +2239,24 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
 
             // Depth/stencil first, fragment 0 only. pClearColor is NULL on this one (`li r10, 0`
             // @0x823FFCC0) -- a depth resolve has no colour to clear to.
+            //
+            // ⚠ WHAT THIS PAIR-PER-TILE MEANS ON PC, stated here because the CALLER is what makes it
+            // load-bearing and the leaf is where it is handled (anti-aliasing wave, 2026-08-16).
+            // The console's per-tile depth resolve copies THAT TILE's EDRAM depth; the PC depth
+            // resolve is the D3D9 vendor "RESZ" mechanism, which resolves the WHOLE bound
+            // depth-stencil and CANNOT be rectangle-clamped. That is fine for tile 0 -- and only for
+            // tile 0. The 0x300 colour resolve immediately below carries D3DCLEAR_ZBUFFER over its
+            // own band, so by the time tile 1's depth resolve runs, rows 0..384 of the bound depth
+            // surface have ALREADY BEEN CLEARED TO Z=1, and repeating the whole-surface RESZ would
+            // overwrite the good copy with a half-cleared one. The down-sample buffer's INTZ would
+            // then hand the depth-of-field / motion-blur permutations a flat top band -- plausible
+            // enough on screen to be missed.
+            // THE RULE THE LEAF IMPLEMENTS (D3DDevice_Resolve, XenonD3D9Shims.cpp): perform the RESZ
+            // for the FIRST depth resolve of the bracket only -- discriminated with no state by the
+            // source rect's TOP being 0, which is true of KMSAA_TILING_PLAN.maTile[0] {0,0,1280,384}
+            // and of KNO_MSAA_TILING_PLAN.maTile[0] {0,0,1280,720} and false for maTile[1]. The
+            // console's calls are reproduced verbatim here; the collapse belongs to the platform
+            // that cannot express a partial depth resolve, not to this body.
             renderengine::D3DDevice_Resolve(lpDevice, KU_RESOLVE_DEPTH_STENCIL_FRAGMENT0, &lrTile,
                                             mAllocatedRenderTargets.GetDownSampleBuffer()->GetDepthTexture(),
                                             &lDestPoint, 0u, 0u, nullptr,
@@ -2673,7 +2705,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // target is created, logged ("[postfx-rt] ...") and left idle. The point of landing it separately is
     // that a wrong scene target and a wrong bracket look identical on screen; this half is provable on
     // its own, from the log line and an unchanged frame.
-    EnsurePostFxSceneTargets(mAllocatedRenderTargets);
+    EnsurePostFxSceneTargets(mAllocatedRenderTargets, mbMultisampledBackbuffer);
 
     // [PC bring-up, gate-flip wave 2026-08-15] The three RENDER-STATE FACTORIES. The console
     // constructs them in BrnRendererModule::Construct @0x8240A778 -- three vtbl[0] calls at
@@ -2797,7 +2829,8 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // function is value-latched on a file static and returns on a pointer compare when the targets
     // already exist.
     const bool lbSceneBracketOpen =
-        lbDispatchReady && EnsurePostFxSceneTargets(mAllocatedRenderTargets);
+        lbDispatchReady && EnsurePostFxSceneTargets(mAllocatedRenderTargets,
+                                                    mbMultisampledBackbuffer);
 
     // ---- the three arguments, all read rather than chosen -----------------------------------
     //

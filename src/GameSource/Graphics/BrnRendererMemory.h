@@ -139,7 +139,14 @@ struct BrnRendererMemory
     // The post-fx spine's two targets, created lazily on the first frame that has a D3D9 device.
     // See the banner on EnsurePostFxSceneTargets in BrnRendererModule.cpp for why this is a bring-up
     // entry point and not simply Construct(). DELETE with the bring-up.
-    void PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator* lpAllocator);
+    //
+    // lbEnableMSAA is the console's OWN argument, threaded rather than re-derived: on the X360 it is
+    // BrnRendererModule::mbMultisampledBackbuffer (this+0xC400, set to 1 @0x8240A7C4) copied into
+    // BrnRendererMemory::Construct's `arg_97` (@0x8240A8BC/0x8240A8C8) and forwarded from there to
+    // CreateAntiAliasBuffer @0x823F6B40. Keeping it a parameter is what stops the pool's multisample
+    // format and BeginRenderAntiAliased/ResolveMSAA's tiled branch from being set from two different
+    // places -- a split that would produce a wrong picture with nothing to log.
+    void PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator* lpAllocator, bool lbEnableMSAA);
 
 private:
     // The Create* render-target helpers Construct delegates to. Bodies live in their own (already

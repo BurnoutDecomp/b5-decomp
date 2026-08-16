@@ -22,6 +22,36 @@ s32  renderengine::gDisplayWidth = 640;
 s32  renderengine::gDisplayHeight = 480;
 s32  renderengine::gAdapterIndex = 0;
 s32  renderengine::gAspectRatioIndex = 0;
+// THE ANTI-ALIASING KNOB (given its meaning by the anti-aliasing wave, 2026-08-16).
+//
+// Sourced exactly like gDisplayWidth/gDisplayHeight: seeded here, overwritten from config.ini by
+// BrnMain.cpp's LoadConfig (`GetPrivateProfileIntA("Settings", "AntiAliasing", ...)`, clamped to
+// [0,16]) and written back by SaveConfig. LoadConfig runs AFTER Device::Initialize (BrnMain.cpp:260
+// then :261), so the file value is what survives.
+//
+// THE VALUES, as the PC render-target leaf reads them
+// (renderengine::RenderTarget::Initialize, pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp):
+//     0  -- USE THE CONSOLE'S OWN MULTISAMPLE FORMAT (the default, and what the shipped X360 build
+//           does): the anti-alias buffer's format comes from BrnGraphics::KMSAA_TILING_PLAN, i.e.
+//           format 1 == D3DMULTISAMPLE_2_SAMPLES. No other pool target is multisampled.
+//     1  -- force the scene target NOT multisampled (the pre-2026-08-16 PC picture, kept as an
+//           escape hatch; the frame bracket is unaffected -- see below).
+//     2 / 4 / 8 -- force that many samples on the scene target instead of the console's 2.
+// Anything the adapter refuses (CheckDeviceMultiSampleType) falls back to the next lower count and
+// SAYS SO on the [postfx-rt] line. This is a KNOB: a value other than 0 is the user asking for
+// something the console did not do, and it is never chosen silently.
+//
+// ⚠ IT DOES NOT SELECT THE FRAME BRACKET'S BRANCH, and must not be made to. That is
+// BrnRendererModule::mbMultisampledBackbuffer, which is a recovered console constant (1) and not a
+// setting -- BrnRendererModule.h. The tiled branch is correct at any sample count including none:
+// its two rectangles partition the surface exactly, so the clears and the per-band resolves cover
+// the same pixels either way.
+//
+// ⚠ IT IS ALSO NOT A "0 == OFF" SWITCH, which is the one reading to be careful of. Its Ultimate-Box
+// ancestor most likely meant a plain sample count with 0 == off; here 0 has to mean "whatever the
+// console did", because the console's answer is ON and this project's default is the console. That
+// re-reading is DELIBERATE and is the reason 1 (not 0) is the "off" value. If the TUB setting's own
+// semantics are ever recovered, this comment and the leaf's mapping are the two places to change.
 s32  renderengine::gAntiAliasing = 0;
 HWND renderengine::hWnd = nullptr;
 
@@ -47,6 +77,9 @@ bool renderengine::Device::Initialize()
         gDisplayHeight = static_cast<s32>(lDevMode.dmPelsHeight);
     }
 
+    // 0 == "use the console's own multisample format" (see the banner on the definition above), so
+    // this seeding is the console default, not an off switch and not a placeholder. LoadConfig runs
+    // after this (BrnMain.cpp:260/:261) and is what a config.ini value overrides it with.
     gAntiAliasing = 0;
     // TUB seeds fullscreen=true; forced windowed during the PC bring-up.
     gFullscreen = false;

@@ -2773,6 +2773,20 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
             std::snprintf(lpcOut, luOut, "%s=n/a", lpcTag);
             if (lpSrc == nullptr) return;
             D3DSURFACE_DESC lDesc; if (FAILED(lpSrc->GetDesc(&lDesc))) return;
+            // GetRenderTargetData CANNOT read a MULTISAMPLED surface -- D3D9 requires the source to
+            // be a non-multisampled render target. Since rung 8 the scene colour target IS one, so
+            // this probe would print "readback FAILED hr=0x8876086C" every time it landed on a
+            // world frame and read as a fault in the very wave that introduced the surface. Say
+            // what it actually is instead. (The composite's own rt is the swap chain and tex0 is
+            // the RESOLVED down-sample texture, so the sampled pixels this diag exists for are
+            // still readable.)
+            if (lDesc.MultiSampleType != D3DMULTISAMPLE_NONE)
+            {
+                std::snprintf(lpcOut, luOut, "%s=MSAA(no readback) %ux%u fmt=%u samples=%u",
+                              lpcTag, (unsigned)lDesc.Width, (unsigned)lDesc.Height,
+                              (unsigned)lDesc.Format, (unsigned)lDesc.MultiSampleType);
+                return;
+            }
             IDirect3DSurface9* lpSys = nullptr;
             if (FAILED(lpDevice->CreateOffscreenPlainSurface(lDesc.Width, lDesc.Height, lDesc.Format,
                                                              D3DPOOL_SYSTEMMEM, &lpSys, nullptr)))
@@ -4124,20 +4138,29 @@ bool ShadowProbe_TextureBound(u32 luUnit)
 //    so 0 is a bring-up choice for "no error", not a recovered value.
 //
 // -------------------------------------------------------------------------------------------
-// WHICH OF THE FOUR ACTUALLY RUNS ON THIS BUILD
+// WHICH OF THE FOUR ACTUALLY RUNS ON THIS BUILD  [RESTATED FOR RUNG 8 -- MSAA IS ON]
 // -------------------------------------------------------------------------------------------
-// BrnRendererModule::mbMultisampledBackbuffer is written in exactly ONE place in the whole tree,
-// `mbMultisampledBackbuffer = false;` (BrnRendererModule.h:725, the Construct default), and the
-// PC pool creates the anti-alias buffer with MSAA explicitly off
-// (BrnRendererMemory.cpp:497-500, `CreateAntiAliasBuffer(lpAllocator, false)`). Both bracket
-// bodies therefore take their UNTILED branch, which calls NEITHER BeginTiling NOR EndTiling NOR
-// SetPredication -- only the two Resolves. So on the boot build:
-//     D3DDevice_Resolve         runs twice a frame and is the only clear in the whole bracket.
-//     D3DDevice_BeginTiling     is never called (correct, and dead).
-//     D3DDevice_EndTiling       is never called (correct, and dead).
-//     D3DDevice_SetPredication  is never called (correct, and dead).
-// They are all written anyway, because a body that is only reachable on a path this build does
-// not take is exactly the kind of code that becomes load-bearing later.
+// UNTIL RUNG 8 the PC pool created the anti-alias buffer with MSAA explicitly off
+// (`CreateAntiAliasBuffer(lpAllocator, false)`), so both bracket bodies took their UNTILED branch
+// -- BeginTiling / EndTiling / SetPredication were never called and only the two Resolves ran.
+// THAT IS NO LONGER TRUE. The anti-alias wave flips the bring-up to the console's own choice
+// (MSAA on, KMSAA_TILING_PLAN, multisample format 1 == 2 samples), which puts
+// BrnRendererModule::mbMultisampledBackbuffer on the TILED branch. On this build now:
+//     D3DDevice_BeginTiling     runs once a frame -- it is the frame-TOP clear over the plan's
+//                               TWO tile rectangles, which partition 1280x720 exactly
+//                               ({0,0,1280,384} + {0,384,1280,720}, BrnAntiAliasTiling.h), so
+//                               there is no uncleared band at y=384. On PC there is ONE pass over
+//                               ONE surface, so the viewport must span BOTH rects; it does,
+//                               because RenderTarget::Begin sets the full extent immediately
+//                               before, and that is now CHECKED rather than assumed (below).
+//     D3DDevice_Resolve         runs FOUR times a frame (two tiles x {depth, colour}). The colour
+//                               half IS the MSAA resolve -- a same-size, unfiltered StretchRect
+//                               from a multisampled source is exactly D3D9's resolve primitive.
+//                               The depth half is no longer a no-op: it goes through RESZ.
+//     D3DDevice_EndTiling       runs once a frame with every pointer argument null -- still
+//                               nothing to do, and still honestly empty.
+//     D3DDevice_SetPredication  runs three times a frame and is still an honest no-op (there is
+//                               no per-tile command-stream replay on PC to select).
 // =============================================================================
 namespace renderengine
 {
@@ -4352,10 +4375,15 @@ namespace
     //
     // lpRects may be null (or luCount 0), which means the whole surface -- that is what
     // Clear(0, nullptr, ...) does and it is the only reading available when no rect is supplied.
+    // lbExpectFullCoverage: true only for the BeginTiling clear, whose rect list is the WHOLE
+    // tiling plan and must partition the surface; the per-tile 0x300 Resolve clear hands in ONE
+    // band of that plan and is partial by design (two bands, two calls) -- it must not trip the
+    // extent tripwire below.
     void TilingClearBoundSurfaces(IDirect3DDevice9* lpDevice, IDirect3DSurface9* lpBoundColour,
                                   u32 luSurfaceWidth, u32 luSurfaceHeight,
                                   const XenonResolveRect* lpRects, u32 luCount,
-                                  const void* lpClearColour, f32 lfClearZ, u32 luClearStencil)
+                                  const void* lpClearColour, f32 lfClearZ, u32 luClearStencil,
+                                  bool lbExpectFullCoverage)
     {
         D3DRECT laRects[KU_MAX_TILE_RECTS];
         u32     luRects       = 0u;
@@ -4383,7 +4411,8 @@ namespace
             // a real, visible failure (uncleared bands) and it is reported rather than papered
             // over: widening the caller's rectangles would be inventing a clear the console does
             // not perform.
-            if (luRects != 0u && luCoveredArea != luSurfaceWidth * luSurfaceHeight)
+            if (lbExpectFullCoverage && luRects != 0u
+                && luCoveredArea != luSurfaceWidth * luSurfaceHeight)
             {
                 LogOnce("tiling-rect-extent",
                         "[tiling] clear rects do not cover the bound surface -- the tiling plan is"
@@ -4519,6 +4548,417 @@ namespace
             return nullptr;
         return lpSurface;
     }
+
+    // Is this surface multisampled? Asked of the D3D object itself rather than of any engine-side
+    // record, for the same reason the raw-depth sampler hook asks GetLevelDesc: the runtime is the
+    // only thing that knows what was actually created.
+    bool TilingSurfaceIsMultisampled(IDirect3DSurface9* lpSurface)
+    {
+        if (lpSurface == nullptr)
+            return false;
+        D3DSURFACE_DESC lDesc;
+        std::memset(&lDesc, 0, sizeof(lDesc));
+        if (FAILED(lpSurface->GetDesc(&lDesc)))
+            return false;
+        return lDesc.MultiSampleType != D3DMULTISAMPLE_NONE;
+    }
+
+    // =========================================================================================
+    // THE DEPTH RESOLVE -- 'RESZ', THE D3D9 VENDOR MECHANISM, REPLACING A DOCUMENTED NO-OP.
+    //
+    // WHAT THE CONSOLE DOES. BrnRendererModule::ResolveMSAA issues TWO resolves per tile. The
+    // 0x14 one carries KU_RESOLVE_DEPTH_STENCIL_BIT and its destination is
+    // `GetDownSampleBuffer()->GetDepthTexture()` (BrnRendererModule.cpp:2228 tiled, :2272
+    // untiled): on the Xenos that copies -- and down-samples -- the EDRAM depth surface into a
+    // linear, sampleable texture.
+    //
+    // WHAT THIS LEAF USED TO DO: nothing, and it said so ("StretchRect refuses depth surfaces;
+    // the down-sample depth texture is not written"). That was TRUE and it was also A REAL HOLE
+    // INDEPENDENT OF MSAA. Rung 6 gave the down-sample buffer an INTZ RAW-depth texture precisely
+    // so the composite's DoF permutations (slots 2/3/6/7/10/11), its motion-blur permutations
+    // (4..11) and rw::graphics::postfx::DepthOfField could read scene depth -- and NOTHING HAS
+    // EVER WRITTEN IT. Every one of those fetches has been reading whatever D3D9 left in a fresh
+    // D3DPOOL_DEFAULT surface. MSAA does not create that hole; it makes it unavoidable. Closing
+    // it here closes it for the NON-multisampled path too.
+    //
+    // THE MECHANISM. D3D9 has no depth resolve and no depth copy: StretchRect rejects
+    // depth-stencil surfaces, GetRenderTargetData rejects them, and a depth surface cannot be a
+    // texture's level. The vendors expose one anyway, and NOT the same one:
+    //   * AMD (Radeon HD 2000 and later) and Intel: the pseudo-format command hook 'RESZ' below.
+    //   * NVIDIA: NO RESZ -- CheckDeviceFormat('RESZ') fails on every GeForce (verified on the
+    //     GTX 1660 Ti this tree boots on). Its D3D9 depth resolve is NvAPI_D3D9_StretchRectEx
+    //     (nvapi64.dll), which copies AND multisample-resolves between depth-stencil resources,
+    //     multisampled D24S8 -> INTZ included. It is loaded DYNAMICALLY (nvapi_QueryInterface by
+    //     the public interface ids from NVIDIA's nvapi_interface.h) so the build takes no NVAPI
+    //     link dependency and a machine without the DLL just falls through to the honest line.
+    // The RESZ recipe:
+    //   * AVAILABILITY = CheckDeviceFormat(adapter, devtype, adapterFormat,
+    //     D3DUSAGE_RENDERTARGET, D3DRTYPE_SURFACE, MAKEFOURCC('R','E','S','Z')) succeeding.
+    //   * THE TRIGGER = bind the DESTINATION depth texture to a sampler stage, issue a dummy draw
+    //     so the driver has consumed that binding, then SetRenderState(D3DRS_POINTSIZE,
+    //     0x7FA05000). The driver resolves the CURRENTLY BOUND depth-stencil -- multisampled or
+    //     not -- into that texture. The dummy draw is part of the published recipe, not
+    //     decoration: without it the sampler bind has not reached the driver when the magic
+    //     render state arrives.
+    //
+    // IT IS WHOLE-SURFACE ONLY. There is no rectangle in the hook, so the console's SOURCE RECT
+    // is IGNORED here and that is stated rather than hidden: on the two-tile plan this runs twice
+    // over the same full surface and the second pass writes identical pixels -- redundant, not
+    // wrong. (CROSS-GROUP: BrnRendererModule may hoist the depth resolve out of the tile loop on
+    // PC; this body is idempotent either way.)
+    //
+    // ONLY INTZ. RESZ writes a depth-stencil-layout texture; INTZ *is* a D24S8 layout, which is
+    // what the hook produces. DF24 / DF16 are ATI depth-SAMPLE formats with a different internal
+    // form and the hook does not write them -- so a machine that fell to those on rung 6's RAW
+    // ladder gets the honest "not written" line instead of a silently wrong texture.
+    //
+    // EVERY PIECE OF STATE THE RECIPE DISTURBS IS SAVED AND PUT BACK: both shaders, the vertex
+    // declaration (SetFVF replaces it) or the FVF when there was none, Z enable / Z write, the
+    // colour write mask, D3DRS_POINTSIZE itself, and the stage-0 texture. The stage-0 texture is
+    // restored to the EXACT object that was there, which is what keeps shadow::Device's sampler
+    // cache honest -- it dedups on the TextureState it last installed, so a bind that ends where
+    // it started leaves that belief TRUE, whereas an unbind would quietly make it a lie (the same
+    // split-brain renderengine::Device::SetState's unbind loop exists to avoid). For the same
+    // reason the bind is a RAW SetTexture and not D3DDevice_SetTexture: routing it through the
+    // shim would claim stage 0 in the raw-depth unit mask and force POINT/CLAMP on a unit the
+    // frame is about to reuse.
+    //
+    // NOTHING ELSE IS TOUCHED. DrawPrimitiveUP resets the stream-0 binding, which costs nothing
+    // here for the reason the D3DDevice_EndVertices banner establishes: no TU in b5-decomp/src
+    // calls IDirect3DDevice9::SetStreamSource at all and every draw on this backend is a
+    // *PrimitiveUP. The draw needs an OPEN SCENE, and it has one: this runs from ResolveMSAA in
+    // the middle of the frame, and the colour resolve's EndScene/BeginScene suspend is scoped to
+    // its own StretchRect, which happens after this.
+    //
+    // IF RESZ IS UNAVAILABLE the call says so ONCE and does nothing -- the honest fallback, not a
+    // silent one. It does NOT re-render the scene to reconstruct depth.
+    // =========================================================================================
+    const DWORD KU_RESZ_MAGIC = 0x7FA05000u;
+
+    u32 suDepthResolveFailures = 0u;
+
+    // -1 not yet asked, 0 no, 1 yes. CheckDeviceFormat is a driver round trip and the answer
+    // cannot change for the life of the device.
+    int siReszSupported = -1;
+
+    bool TilingReszSupported(IDirect3DDevice9* lpDevice)
+    {
+        if (siReszSupported >= 0)
+            return siReszSupported != 0;
+
+        siReszSupported = 0;
+
+        D3DDEVICE_CREATION_PARAMETERS lCreation;
+        std::memset(&lCreation, 0, sizeof(lCreation));
+        lCreation.AdapterOrdinal = D3DADAPTER_DEFAULT;
+        lCreation.DeviceType     = D3DDEVTYPE_HAL;
+        lpDevice->GetCreationParameters(&lCreation);
+
+        IDirect3D9* lpD3D = nullptr;
+        if (SUCCEEDED(lpDevice->GetDirect3D(&lpD3D)) && lpD3D != nullptr)
+        {
+            D3DFORMAT      leAdapterFormat = D3DFMT_X8R8G8B8;
+            D3DDISPLAYMODE lMode;
+            std::memset(&lMode, 0, sizeof(lMode));
+            if (SUCCEEDED(lpD3D->GetAdapterDisplayMode(lCreation.AdapterOrdinal, &lMode)))
+                leAdapterFormat = lMode.Format;
+
+            if (SUCCEEDED(lpD3D->CheckDeviceFormat(
+                    lCreation.AdapterOrdinal, lCreation.DeviceType, leAdapterFormat,
+                    D3DUSAGE_RENDERTARGET, D3DRTYPE_SURFACE,
+                    static_cast<D3DFORMAT>(MAKEFOURCC('R', 'E', 'S', 'Z')))))
+            {
+                siReszSupported = 1;
+            }
+            lpD3D->Release();       // GetDirect3D AddRefs
+        }
+        return siReszSupported != 0;
+    }
+
+    // ---- THE NVIDIA PATH: NvAPI_D3D9_StretchRectEx, loaded at run time -------------------------
+    // Interface ids are the published constants from nvapi_interface.h; a wrong or absent one
+    // simply comes back null from nvapi_QueryInterface and the path reports itself unavailable.
+    // NVAPI requires both resources to be registered (NvAPI_D3D9_RegisterResource) before
+    // StretchRectEx accepts them; registration is cached per resource pointer.
+    typedef void* (__cdecl* NvApiQueryInterfaceFn)(unsigned int);
+    typedef int   (__cdecl* NvApiInitializeFn)();
+    typedef int   (__cdecl* NvApiD3D9RegisterResourceFn)(IDirect3DResource9*);
+    typedef int   (__cdecl* NvApiD3D9StretchRectExFn)(IDirect3DDevice9*, IDirect3DResource9*,
+                                                     const RECT*, IDirect3DResource9*,
+                                                     const RECT*, D3DTEXTUREFILTERTYPE);
+    const unsigned int KU_NVAPI_ID_INITIALIZE             = 0x0150E828u;
+    const unsigned int KU_NVAPI_ID_D3D9_REGISTER_RESOURCE = 0xA064BDFCu;
+    const unsigned int KU_NVAPI_ID_D3D9_STRETCH_RECT_EX   = 0x22DE03AAu;
+    const u32          KU_NVAPI_MAX_REGISTERED            = 8u;
+
+    int                          siNvApiState       = -1;   // -1 untried, 0 unavailable, 1 ready
+    NvApiD3D9RegisterResourceFn  spNvApiRegister    = nullptr;
+    NvApiD3D9StretchRectExFn     spNvApiStretchRect = nullptr;
+    IDirect3DResource9*          sapNvApiRegistered[KU_NVAPI_MAX_REGISTERED] = {};
+    u32                          suNvApiRegistered  = 0u;
+
+    bool TilingNvApiReady()
+    {
+        if (siNvApiState >= 0)
+            return siNvApiState == 1;
+        siNvApiState = 0;
+
+        const HMODULE lhNvApi = LoadLibraryA("nvapi64.dll");
+        if (lhNvApi == nullptr)
+            return false;
+        const NvApiQueryInterfaceFn lpQuery = reinterpret_cast<NvApiQueryInterfaceFn>(
+            reinterpret_cast<void*>(GetProcAddress(lhNvApi, "nvapi_QueryInterface")));
+        if (lpQuery == nullptr)
+            return false;
+
+        const NvApiInitializeFn lpInitialize =
+            reinterpret_cast<NvApiInitializeFn>(lpQuery(KU_NVAPI_ID_INITIALIZE));
+        spNvApiRegister    = reinterpret_cast<NvApiD3D9RegisterResourceFn>(
+                                 lpQuery(KU_NVAPI_ID_D3D9_REGISTER_RESOURCE));
+        spNvApiStretchRect = reinterpret_cast<NvApiD3D9StretchRectExFn>(
+                                 lpQuery(KU_NVAPI_ID_D3D9_STRETCH_RECT_EX));
+        if (lpInitialize == nullptr || spNvApiRegister == nullptr || spNvApiStretchRect == nullptr)
+            return false;
+        if (lpInitialize() != 0)
+            return false;
+
+        siNvApiState = 1;
+        return true;
+    }
+
+    bool TilingNvApiRegister(IDirect3DResource9* lpResource)
+    {
+        for (u32 luSlot = 0u; luSlot < suNvApiRegistered; ++luSlot)
+        {
+            if (sapNvApiRegistered[luSlot] == lpResource)
+                return true;
+        }
+        if (spNvApiRegister(lpResource) != 0)
+            return false;
+        if (suNvApiRegistered < KU_NVAPI_MAX_REGISTERED)
+            sapNvApiRegistered[suNvApiRegistered++] = lpResource;
+        return true;
+    }
+
+    // Returns true when the NVAPI path RAN (success or its own logged failure), false when it is
+    // not available on this machine so the caller can say so.
+    bool TilingResolveDepthViaNvApi(IDirect3DDevice9* lpDevice, IDirect3DTexture9* lpDest)
+    {
+        if (!TilingNvApiReady())
+            return false;
+
+        IDirect3DSurface9* lpSource = nullptr;
+        if (FAILED(lpDevice->GetDepthStencilSurface(&lpSource)) || lpSource == nullptr)
+        {
+            LogOnce("resolve-depth-nvapi-nosrc",
+                    "[postfx-resolve] NVAPI depth resolve: no depth-stencil surface is bound;"
+                    " the down-sample depth stays unwritten.\n");
+            return true;
+        }
+        IDirect3DSurface9* lpDestSurface = nullptr;
+        if (FAILED(lpDest->GetSurfaceLevel(0u, &lpDestSurface)) || lpDestSurface == nullptr)
+        {
+            lpSource->Release();
+            return true;
+        }
+
+        // NVAPI wants TOP-LEVEL resources (the texture, not its level-0 surface; the stand-alone
+        // depth surface as itself). Which combination the driver accepts is not documented
+        // precisely enough to bet on, so the variants are tried in order and the one that works
+        // is remembered (siNvApiVariant) and named in the log:
+        //   0: destination = texture, source left bound as the depth-stencil
+        //   1: destination = texture, source UNBOUND for the copy (rebound after)
+        //   2: destination = level-0 surface, source unbound
+        static int siNvApiVariant = -1;      // -1 unknown yet
+        const bool lbRegisteredSource = TilingNvApiRegister(lpSource);
+        const bool lbRegisteredTex    = TilingNvApiRegister(lpDest);
+        const bool lbRegisteredSurf   = TilingNvApiRegister(lpDestSurface);
+        if (!lbRegisteredSource || (!lbRegisteredTex && !lbRegisteredSurf))
+        {
+            lpDestSurface->Release();
+            lpSource->Release();
+            LogOnce("resolve-depth-nvapi-register",
+                    "[postfx-resolve] NVAPI depth resolve: NvAPI_D3D9_RegisterResource refused"
+                    " the depth surface / INTZ texture -- the down-sample depth stays"
+                    " unwritten.\n");
+            return true;
+        }
+
+        int lStatus = -1;
+        int lVariantUsed = -1;
+        const int lFirst = (siNvApiVariant >= 0) ? siNvApiVariant : 0;
+        const int lLast  = (siNvApiVariant >= 0) ? siNvApiVariant : 2;
+        for (int lVariant = lFirst; lVariant <= lLast && lStatus != 0; ++lVariant)
+        {
+            IDirect3DResource9* const lpDestResource =
+                (lVariant == 2) ? static_cast<IDirect3DResource9*>(lpDestSurface)
+                                : static_cast<IDirect3DResource9*>(lpDest);
+            if ((lVariant == 2 && !lbRegisteredSurf) || (lVariant != 2 && !lbRegisteredTex))
+                continue;
+
+            const bool lbUnbind = (lVariant != 0);
+            if (lbUnbind)
+                lpDevice->SetDepthStencilSurface(nullptr);
+
+            lStatus = spNvApiStretchRect(lpDevice, lpSource, nullptr, lpDestResource, nullptr,
+                                         D3DTEXF_NONE);
+            if (lStatus != 0)
+            {
+                lStatus = spNvApiStretchRect(lpDevice, lpSource, nullptr, lpDestResource,
+                                             nullptr, D3DTEXF_POINT);
+            }
+
+            if (lbUnbind)
+                lpDevice->SetDepthStencilSurface(lpSource);
+            if (lStatus == 0)
+                lVariantUsed = lVariant;
+        }
+        lpDestSurface->Release();
+        lpSource->Release();
+
+        if (lStatus != 0)
+        {
+            char lacMessage[256];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                          "[postfx-resolve] the NVAPI StretchRectEx depth resolve was REJECTED"
+                          " (status %d, all variants) -- the down-sample depth texture is NOT"
+                          " being written, so DoF / motion blur read stale depth", lStatus);
+            LogRepeating(suDepthResolveFailures, lacMessage);
+            return true;
+        }
+
+        siNvApiVariant = lVariantUsed;
+        char lacOk[320];
+        std::snprintf(lacOk, sizeof(lacOk),
+                      "[postfx-resolve] depth resolve via NVAPI StretchRectEx -> INTZ (variant %d:"
+                      " %s; NVIDIA has no RESZ; this also fills the down-sample depth texture on"
+                      " the NON-multisampled path, which nothing wrote before).\n",
+                      lVariantUsed,
+                      (lVariantUsed == 0) ? "dest texture, source bound"
+                    : (lVariantUsed == 1) ? "dest texture, source unbound"
+                                          : "dest level-0 surface, source unbound");
+        LogOnce("resolve-depth-nvapi", lacOk);
+        return true;
+    }
+
+    void TilingResolveDepthToTexture(IDirect3DDevice9* lpDevice, Texture* lpDestTexture)
+    {
+        if (lpDestTexture == nullptr || lpDestTexture->mpD3DTexture == nullptr)
+        {
+            LogOnce("resolve-depth-nodest",
+                    "[postfx-resolve] the depth resolve has no destination texture; the"
+                    " down-sample depth stays unwritten.\n");
+            return;
+        }
+
+        IDirect3DBaseTexture9* const lpBase = lpDestTexture->mpD3DTexture;
+        if (lpBase->GetType() != D3DRTYPE_TEXTURE)
+        {
+            LogOnce("resolve-depth-desttype",
+                    "[postfx-resolve] the depth resolve destination is not a 2D texture; the"
+                    " down-sample depth stays unwritten.\n");
+            return;
+        }
+        IDirect3DTexture9* const lpDest = static_cast<IDirect3DTexture9*>(lpBase);
+
+        D3DSURFACE_DESC lDestDesc;
+        std::memset(&lDestDesc, 0, sizeof(lDestDesc));
+        if (FAILED(lpDest->GetLevelDesc(0u, &lDestDesc))
+            || lDestDesc.Format != static_cast<D3DFORMAT>(MAKEFOURCC('I', 'N', 'T', 'Z')))
+        {
+            LogOnce("resolve-depth-notintz",
+                    "[postfx-resolve] the depth resolve destination is not an INTZ texture -- the"
+                    " RESZ hook writes only INTZ, so the down-sample depth stays unwritten.\n");
+            return;
+        }
+
+        if (!TilingReszSupported(lpDevice))
+        {
+            if (TilingResolveDepthViaNvApi(lpDevice, lpDest))
+                return;
+            LogOnce("resolve-depth-noresz",
+                    "[postfx-resolve] depth resolve: RESZ unsupported and NVAPI StretchRectEx"
+                    " unavailable -> the down-sample depth stays unwritten (DoF / motion blur"
+                    " read an unwritten INTZ).\n");
+            return;
+        }
+
+        // ---- save everything the recipe disturbs ------------------------------------------
+        IDirect3DBaseTexture9*       lpSavedTexture0 = nullptr;
+        IDirect3DVertexShader9*      lpSavedVs       = nullptr;
+        IDirect3DPixelShader9*       lpSavedPs       = nullptr;
+        IDirect3DVertexDeclaration9* lpSavedDecl     = nullptr;
+        DWORD luSavedFvf          = 0u;
+        DWORD luSavedZEnable      = 0u;
+        DWORD luSavedZWrite       = 0u;
+        DWORD luSavedColourWrite  = 0u;
+        DWORD luSavedPointSize    = 0u;
+
+        lpDevice->GetTexture(0u, &lpSavedTexture0);         // AddRefs on success
+        lpDevice->GetVertexShader(&lpSavedVs);              // AddRefs on success
+        lpDevice->GetPixelShader(&lpSavedPs);               // AddRefs on success
+        lpDevice->GetVertexDeclaration(&lpSavedDecl);       // AddRefs on success
+        lpDevice->GetFVF(&luSavedFvf);
+        lpDevice->GetRenderState(D3DRS_ZENABLE,          &luSavedZEnable);
+        lpDevice->GetRenderState(D3DRS_ZWRITEENABLE,     &luSavedZWrite);
+        lpDevice->GetRenderState(D3DRS_COLORWRITEENABLE, &luSavedColourWrite);
+        lpDevice->GetRenderState(D3DRS_POINTSIZE,        &luSavedPointSize);
+
+        // ---- the published RESZ sequence ---------------------------------------------------
+        lpDevice->SetTexture(0u, lpDest);
+        lpDevice->SetVertexShader(nullptr);
+        lpDevice->SetPixelShader(nullptr);
+        lpDevice->SetFVF(D3DFVF_XYZ);
+        lpDevice->SetRenderState(D3DRS_ZENABLE,          FALSE);
+        lpDevice->SetRenderState(D3DRS_ZWRITEENABLE,     FALSE);
+        lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE, 0u);
+
+        // One degenerate point, colour writes off, depth test and write off: it rasterises
+        // nothing and can touch neither the scene colour nor the depth it is about to resolve.
+        const f32 lafDummyPoint[3] = { 0.0f, 0.0f, 0.0f };
+        const HRESULT lHrDraw =
+            lpDevice->DrawPrimitiveUP(D3DPT_POINTLIST, 1u, lafDummyPoint, sizeof(f32) * 3u);
+
+        lpDevice->SetRenderState(D3DRS_ZWRITEENABLE,     TRUE);
+        lpDevice->SetRenderState(D3DRS_ZENABLE,          TRUE);
+        lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE, 0x0000000Fu);
+
+        const HRESULT lHrResolve = lpDevice->SetRenderState(D3DRS_POINTSIZE, KU_RESZ_MAGIC);
+
+        // ---- put the device back exactly as it was found ------------------------------------
+        lpDevice->SetRenderState(D3DRS_POINTSIZE,        luSavedPointSize);
+        lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE, luSavedColourWrite);
+        lpDevice->SetRenderState(D3DRS_ZWRITEENABLE,     luSavedZWrite);
+        lpDevice->SetRenderState(D3DRS_ZENABLE,          luSavedZEnable);
+        if (lpSavedDecl != nullptr)
+            lpDevice->SetVertexDeclaration(lpSavedDecl);
+        else
+            lpDevice->SetFVF(luSavedFvf);       // nothing had a declaration: restore the FVF
+        lpDevice->SetPixelShader(lpSavedPs);
+        lpDevice->SetVertexShader(lpSavedVs);
+        lpDevice->SetTexture(0u, lpSavedTexture0);
+
+        if (lpSavedDecl     != nullptr) lpSavedDecl->Release();
+        if (lpSavedPs       != nullptr) lpSavedPs->Release();
+        if (lpSavedVs       != nullptr) lpSavedVs->Release();
+        if (lpSavedTexture0 != nullptr) lpSavedTexture0->Release();
+
+        if (FAILED(lHrDraw) || FAILED(lHrResolve))
+        {
+            char lacMessage[256];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                          "[postfx-resolve] the RESZ depth resolve was REJECTED"
+                          " (draw hr=0x%08X, trigger hr=0x%08X) -- the down-sample depth texture"
+                          " is NOT being written, so DoF / motion blur read stale depth",
+                          static_cast<unsigned>(lHrDraw), static_cast<unsigned>(lHrResolve));
+            LogRepeating(suDepthResolveFailures, lacMessage);
+            return;
+        }
+
+        LogOnce("resolve-depth-resz",
+                "[postfx-resolve] depth resolve via RESZ -> INTZ (this also fills the down-sample"
+                " depth texture on the NON-multisampled path, which nothing wrote before).\n");
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -4534,8 +4974,8 @@ namespace
 // meaning; it is not acted on. lpDevice is the console's off_83271608 and is ignored for the same
 // reason every other shim in this file ignores it -- Dev() is the one live PC device.
 //
-// NOT REACHED ON THIS BUILD: BeginRenderAntiAliased only calls this on its multisampled branch,
-// and mbMultisampledBackbuffer is false everywhere (see the banner).
+// REACHED EVERY FRAME SINCE RUNG 8: BeginRenderAntiAliased calls this on its multisampled branch
+// and mbMultisampledBackbuffer is the console's constant TRUE (BrnRendererModule.h).
 // ---------------------------------------------------------------------------------------------
 void D3DDevice_BeginTiling(void* /*lpDevice*/, u32 /*luFlags*/, u32 luCount,
                            const void* lpTileRects, const void* lpClearColour, f32 lfClearZ,
@@ -4562,7 +5002,45 @@ void D3DDevice_BeginTiling(void* /*lpDevice*/, u32 /*luFlags*/, u32 luCount,
 
     TilingClearBoundSurfaces(lpD3DDevice, lpBoundColour, luSurfaceWidth, luSurfaceHeight,
                              static_cast<const XenonResolveRect*>(lpTileRects), luCount,
-                             lpClearColour, lfClearZ, luClearStencil);
+                             lpClearColour, lfClearZ, luClearStencil,
+                             /*lbExpectFullCoverage*/ true);
+
+    // ---- THE ONE-PASS VIEWPORT (rung 8) ------------------------------------------------------
+    // With the console's MSAA plan this call now receives TWO tile rectangles, and on PC there is
+    // ONE pass over ONE surface -- so the viewport and the scissor must span BOTH tiles, not one.
+    // They do, and nothing here has to set them: BeginRenderAntiAliased binds the anti-alias
+    // buffer immediately before this call, that bind runs rw::graphics::postfx::RenderTarget::
+    // Begin, and Begin sets the viewport AND the scissor to the target's full muWidth x muHeight
+    // (PostFxRenderTargetPCLeaf.cpp). Setting one here would be inventing a console behaviour --
+    // the console's viewport came from the tiling pass itself, which does not exist on PC.
+    // The two shipped rects also partition the surface EXACTLY ({0,0,1280,384} + {0,384,1280,720};
+    // rect 1's top IS rect 0's bottom, BrnAntiAliasTiling.h), so the clear above leaves no band at
+    // y = 384 and TilingClearBoundSurfaces' own coverage check stays silent.
+    // CHECKED rather than assumed, because the failure is silent: a viewport that does not span
+    // the surface clips the whole world pass to one band with no error attached to it.
+    if (lpBoundColour != nullptr && luSurfaceWidth != 0u && luSurfaceHeight != 0u)
+    {
+        D3DVIEWPORT9 lViewport;
+        std::memset(&lViewport, 0, sizeof(lViewport));
+        if (SUCCEEDED(lpD3DDevice->GetViewport(&lViewport))
+            && (lViewport.X != 0u || lViewport.Y != 0u
+                || lViewport.Width  != static_cast<DWORD>(luSurfaceWidth)
+                || lViewport.Height != static_cast<DWORD>(luSurfaceHeight)))
+        {
+            char lacMessage[256];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                          "[tiling] the viewport at BeginTiling is %lux%lu@%lu,%lu but the bound"
+                          " surface is %ux%u -- the ONE-PASS world render is CLIPPED to the"
+                          " viewport, so the tiles outside it stay at the clear colour.\n",
+                          static_cast<unsigned long>(lViewport.Width),
+                          static_cast<unsigned long>(lViewport.Height),
+                          static_cast<unsigned long>(lViewport.X),
+                          static_cast<unsigned long>(lViewport.Y),
+                          static_cast<unsigned>(luSurfaceWidth),
+                          static_cast<unsigned>(luSurfaceHeight));
+            LogOnce("begintiling-viewport", lacMessage);
+        }
+    }
 
     if (lpBoundColour != nullptr)
         lpBoundColour->Release();
@@ -4689,16 +5167,28 @@ int D3DDevice_Resolve(void* /*lpDevice*/, u32 luFlags, const void* lpSourceRect,
     // ---- (1) THE COPY ------------------------------------------------------------------------
     if ((luFlags & KU_RESOLVE_DEPTH_STENCIL_BIT) != 0u)
     {
-        // The depth/stencil resolve. NO PC COUNTERPART: D3D9's StretchRect rejects depth-stencil
-        // surfaces outright and there is no other route from a bound depth surface into a
-        // sampleable texture, so this half of the console's resolve genuinely cannot be performed.
-        // It is a no-op, and it is labelled as one rather than dressed up: the down-sample
-        // buffer's depth texture is left holding whatever it held. Nothing samples it today; the
-        // consumer is BrnPostFx's depth of field, and that wave needs a shader-side answer (sample
-        // the scene depth texture directly), not a copy.
-        LogOnce("resolve-depth-noop",
-                "[postfx-resolve] the depth/stencil resolve is a no-op on D3D9 (StretchRect"
-                " refuses depth surfaces); the down-sample depth texture is not written.\n");
+        // THE DEPTH/STENCIL RESOLVE -- REAL SINCE RUNG 8, through the D3D9 vendor RESZ hook. The
+        // mechanism, the evidence and every piece of state it saves are on
+        // TilingResolveDepthToTexture above; the two things a reader needs HERE are:
+        //   * it resolves the CURRENTLY BOUND depth-stencil, which is what the console's resolve
+        //     copies too, so this call site needs no surface of its own -- and it must therefore
+        //     run while the scene target is still bound, exactly like the colour half below;
+        //   * the SOURCE RECT IS IGNORED by the hook (it has no rectangle) -- so on the two-tile
+        //     plan the resolve must run ONCE PER BRACKET, for the FIRST tile only. The console's
+        //     ResolveMSAA loop is depth(tile); colour+CLEAR(tile) per tile, and the tile-0 colour
+        //     resolve's 0x300 flags carry D3DCLEAR_ZBUFFER over rows 0..383 (TilingClearFlagsFor
+        //     BoundSurfaces): a second whole-surface RESZ after that would resolve an already-cleared
+        //     top band into the INTZ -- DoF/motion blur reading Z=1 for the upper half, no error
+        //     anywhere (the msaaframe group's finding, rung 8). The stateless discriminator is the
+        //     tile rect's top: 0 for maTile[0] of BOTH shipped plans (KMSAA {0,0,1280,384} and
+        //     KNO_MSAA {0,0,1280,720}), 384 for KMSAA's maTile[1]; a null rect (no plan) resolves.
+        // The old body was `LogOnce("resolve-depth-noop", ...)` and the fact it reported was true
+        // -- which is why the down-sample buffer's INTZ has never been written on ANY path, MSAA
+        // or not, and why closing it here fixes the single-sampled build as well.
+        if (lpRect == nullptr || lpRect->muTop == 0u)
+        {
+            TilingResolveDepthToTexture(lpD3DDevice, lpDestTexture);
+        }
     }
     else
     {
@@ -4780,9 +5270,39 @@ int D3DDevice_Resolve(void* /*lpDevice*/, u32 luFlags, const void* lpSourceRect,
                         const bool lbSceneSuspended =
                             (lpD3DDevice->EndScene() != D3DERR_INVALIDCALL);
 
-                        const HRESULT lHr = lpD3DDevice->StretchRect(lpBoundColour, &lSource,
-                                                                     lpDestSurface, &lDest,
-                                                                     D3DTEXF_NONE);
+                        // ⚠ WITH A MULTISAMPLED SOURCE, THIS CALL *IS* THE MSAA RESOLVE (rung 8).
+                        // D3D9 resolves a multisampled render target when StretchRect copies it to
+                        // a NON-multisampled surface of the SAME format at the SAME size with no
+                        // filtering -- which is exactly the call below: D3DTEXF_NONE, and a
+                        // destination rectangle built from the source rectangle's own width and
+                        // height a few lines up (`lDest.right = liDestX + (x2 - x1)`), so there is
+                        // no stretch. Both conditions are load-bearing on a multisampled source:
+                        // D3D9 refuses to stretch one and refuses to filter one. The formats match
+                        // too -- the anti-alias colour section and the down-sample colour section
+                        // are both A8R8G8B8 (PostFxRenderTargetPCLeaf.cpp creates both).
+                        const bool lbSourceIsMultisampled =
+                            TilingSurfaceIsMultisampled(lpBoundColour);
+
+                        HRESULT lHr = lpD3DDevice->StretchRect(lpBoundColour, &lSource,
+                                                               lpDestSurface, &lDest,
+                                                               D3DTEXF_NONE);
+
+                        // Some drivers accept an MSAA resolve only over the WHOLE surface and not
+                        // over a sub-rectangle -- and the console's MSAA plan hands this function
+                        // two half-screen tiles. Rather than assume either way, the console's own
+                        // sub-rectangle is tried FIRST and only a refusal on a multisampled source
+                        // falls back to the full-surface resolve, loudly and once. The fallback
+                        // writes the same pixels both tiles together would have written, so the
+                        // other tile's call then becomes redundant rather than wrong. (Nothing is
+                        // widened on the single-sampled path: the console's rectangle stands.)
+                        if (FAILED(lHr) && lbSourceIsMultisampled)
+                        {
+                            LogOnce("resolve-msaa-fullrect",
+                                    "[postfx-resolve] the driver refused a SUB-RECTANGLE MSAA"
+                                    " resolve; falling back to a full-surface resolve per tile.\n");
+                            lHr = lpD3DDevice->StretchRect(lpBoundColour, nullptr,
+                                                           lpDestSurface, nullptr, D3DTEXF_NONE);
+                        }
 
                         if (FAILED(lHr))
                         {
@@ -4879,7 +5399,8 @@ int D3DDevice_Resolve(void* /*lpDevice*/, u32 luFlags, const void* lpSourceRect,
         {
             TilingClearBoundSurfaces(lpD3DDevice, lpBoundColour, luSurfaceWidth, luSurfaceHeight,
                                      lpRect, (lpRect != nullptr) ? 1u : 0u,
-                                     lpClearColour, lfClearZ, luClearStencil);
+                                     lpClearColour, lfClearZ, luClearStencil,
+                                     /*lbExpectFullCoverage*/ false);   // one band of the plan
         }
     }
 
@@ -4983,7 +5504,8 @@ void PCBringUpClearRenderTargetState(const RenderTargetState* lpState)
     const f32 lfClearZ              = 1.0f;
 
     TilingClearBoundSurfaces(lpDevice, lpBoundColour, luWidth, luHeight,
-                             nullptr, 0u, lafClearColourRGBA, lfClearZ, 0u);
+                             nullptr, 0u, lafClearColourRGBA, lfClearZ, 0u,
+                             /*lbExpectFullCoverage*/ true);
 
     if (lpBoundColour != nullptr)
     {
