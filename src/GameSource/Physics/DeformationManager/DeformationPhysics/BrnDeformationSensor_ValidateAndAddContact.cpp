@@ -300,9 +300,18 @@ namespace Deformation
 				// to many sensors (each of which will raise its own full-strength impulse) or the
 				// same sensor re-offered the same contact. Those have different fixes, and without
 				// `sensor` in the line the two are indistinguishable in the log.
+				// ⭐ walls leg 11: the VOLUME-INSTANCE LOW BYTE is the console's ownership key
+				// (ReadPotentialVehicleWorldContact hands the whole id to
+				// GetDeformationSensorFromVolumeInstance @0x825B4338, whose first instruction is
+				// `clrlwi r11, r4, 24` -- the low byte, minus one, IS the sensor index). Printing it
+				// beside the sensor address turns "20 sensors saw one contact" from an inference
+				// into a reading: distinct low bytes mean twenty distinct CONTACTS were generated,
+				// not one contact fanned out by a broken lookup.
+				const u64* lpProbeIds = reinterpret_cast<const u64*>(&lpPotential[3]);
 				*CgsDev::Log::gpDebugPrint
 					<< "[latch] n " << static_cast<s32>(suSeen)
 					<< " sensor " << static_cast<s32>(reinterpret_cast<uintptr_t>(this) & 0xFFFFFu)
+					<< " volA " << static_cast<s32>(lpProbeIds[0] & 0xFFu)
 					<< ( lbWallish ? " WALLFACE" : " floor" )
 					<< " nrm " << lNormal.x << " " << lNormal.y << " " << lNormal.z
 					<< " pA " << lPointOnA.x << " " << lPointOnA.y << " " << lPointOnA.z

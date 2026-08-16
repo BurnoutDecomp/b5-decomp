@@ -8,6 +8,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnImpulsePasser.h"       // ImpulsePasser::PassOnImpulse
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"    // DeformableObject
 #include "SharedClasses/Physics/Deformation/BrnSensorSpec.h"  // SensorSpec (mInitialOffset, maDirectionParams, GetAbsorptionLevel)
+#include "rw/math/vpu/vector3_operation.h"                    // rw::math::vpu::Magnitude (Prepare's guarded |d|)
 
 #include <cmath>   // std::pow -- ApplyLocalImpulse's vlogefp/vexptefp + minimax refinement IS powf
                    // (the image's coefficient rows are the log2 / 2^-x series; see its banner)
@@ -111,6 +112,29 @@ namespace Deformation
 		// recover KVF_VELOCITY_FACTOR, then retire this placeholder onto KA_IMPULSE_DIRECTIONS and
 		// KsaAbsorptionScale in one measured step. Do not promote one factor without the other.
 		static const VecFloat KsaHitDirection[6] = {};
+
+		// FLAGGED-0 PLACEHOLDERS for the two rows DeformationSensor::Prepare selects between on the
+		// sign of lDamagePoint.x (X360 &unk_82FB82C0 / &unk_82FB9F20; the PS3 relocations NAME them
+		// KV_POS_X_HIT_DIRECTION / KV_NEG_X_HIT_DIRECTION). Same family as KsaHitDirection above and
+		// zero for the same reason: all three are DYNAMIC-INIT globals, so the image bytes are zero
+		// (x360rd.py reads 0.0 across +/-0x20 of both addresses) and only their initialisers carry
+		// the values. Prepare multiplies them into the DAMAGE displacement, whose other factor
+		// (lDamageScale) is itself the initial-damage scalar -- zero at a fresh spawn -- so a zero
+		// here is inert on the live path AND matches what the shipped console computes there. It is
+		// NOT inert after a crash reset with damage; retire it together with KsaHitDirection.
+		// ⚠️ 0 is safe here only because the term is a MULTIPLICAND inside a clamp that straddles
+		// zero (GetInitialCompressionScalesAndLimits emits lPosLimits >= 0 >= lNegLimits). The BASE
+		// this displacement is added to is spec->mInitialOffset and is NOT flagged -- dropping that
+		// was walls leg 11's bug.
+		static const VecFloat KV_POS_X_HIT_DIRECTION = {};   // &unk_82FB82C0
+		static const VecFloat KV_NEG_X_HIT_DIRECTION = {};   // &unk_82FB9F20
+
+		// ⛔ THE SENSOR-SPHERE PLACEMENT GATE (walls leg 11, 2026-08-16). See the measured block in
+		// DeformationSensor::Prepare: the placement arithmetic is reconstructed and correct, and it
+		// is held off by a COM-frame sign disagreement in ANOTHER subsystem. Same file-static shape
+		// as gbDeformationPartsEnabled in BrnDeformableObject_Lifecycle.cpp. Flip to true (or delete
+		// the two `if`s) the moment the sensor offsets and the wheel positions share a frame.
+		static bool gbPlaceSensorSpheres = false;
 
 		// ⭐ REAL 2026-08-15 (walls leg 8). &unk_82FB9560, indexed 16*absorptionSet -- the PS3 exports
 		// name it `AbsorptionTable::savfCompressionLimitFactor` (that is what it scales: the
@@ -241,13 +265,44 @@ namespace Deformation
 	//   *(this+4)=lpSpec    *(this+412)=lpLocalSphere  *(this+416)=lpWorldSphere
 	//   *(this+420)=<seed>  mfScratchAmount seeded from the trailing scalar arg (a27 reinterpreted)
 	//
-	// The VMX block then computes a clamped displacement of the local sphere centre and writes the
-	// placed sphere centres into the local + world spheres (the lvx128/stvx128 over *(this+412) and
-	// *(this+416) sphere vectors, transformed by the world matrix in r7). The clamp = the
-	// rsqrt/refine normalise of (sphereCentre - specOffset), scaled and bounded into [0, limit]; the
-	// per-direction limit row is loaded from one of the two FLAGGED rodata tables
-	// (&unk_82FB82C0 / &unk_82FB9F20) per the leading-lane sign test. Modelled as a documented block
-	// over the spheres' leading Vector4; the named-member stores above are exact.
+	// ⭐⭐⭐ 2026-08-16 (walls leg 11) -- THE SPHERE BLOCK WAS A NO-OP AND THE SPHERE IS THE SENSOR.
+	// The old model read the local sphere's EXISTING centre, subtracted the spec offset, discarded
+	// the result and wrote the centre back unchanged; it never wrote either RADIUS. Since
+	// ResetSensors is the only writer of DeformableObject::maLocalSensorSpheres[24], every one of
+	// the car's 20 body sensors kept the pool's zero: all 20 spheres sat at the car origin with
+	// radius 0. Measured live before the fix (BRN_SPHERE_PROBE=1, one boot):
+	//   [sphere] 0  local 0 0 0 r 0 | world 2987.006104 -3.256206 -2011.382202 r 0 | SPEC off 0.342648 -0.261114 0.015267 r 0.375660
+	//   [sphere] 19 local 0 0 0 r 0 | world 2987.006104 -3.256206 -2011.382202 r 0 | SPEC off 0.602071 -0.571243 -1.324382 r 0.437122
+	// -- twenty identical world spheres, twenty distinct specs sitting unread. That is why one wall
+	// contact reached all twenty sensors with byte-identical points (walls leg 10's open defect):
+	// twenty COINCIDENT spheres legitimately generate twenty identical contacts.
+	//
+	// THE CONSOLE BLOCK, byte-witnessed on both (the PS3 prototype NAMES every argument, so no
+	// operand-order judgement is left: Prepare(spec, lpLocalSphere, lpWorldSphere,
+	// lVehicleTransform, lDamageScale, lPosLimits, lNegLimits, lDamagePoint)):
+	//   X360 0x8260A35C lvx128 v9, r0, r4   | PS3 0x6C1A68 lvx v5, 0, spec    -- spec->mInitialOffset (+0)
+	//   X360 0x8260A360 vsubfp v13, v9, v4  | PS3 0x6C1A74 vsubfp v0, v5, v31 -- d = offset - lDamagePoint
+	//        (rsqrt + 2 Newton refines + the vsel zero-guard == |d|)
+	//   X360 0x8260A3A4..3B0                | PS3 0x6C1AE8..AF4               -- w = clamp(1 - |d|*0.5, 0, 1)
+	//   X360 0x8260A3C8/3F4 sign test on lDamagePoint.x picks &unk_82FB82C0 / &unk_82FB9F20; the PS3
+	//        relocations NAME them KV_POS_X_HIT_DIRECTION / KV_NEG_X_HIT_DIRECTION, and pick
+	//        maDirectionParams[1] (spec+0x14) / [0] (spec+0x10) with it; both then read [5] (+0x24).
+	//   X360 0x8260A420/438/44C vrlimi 8/4/2 | PS3 the three vperm passes -- limit = (xTerm, 0, zTerm)
+	//   X360 0x8260A458 vmulfp v12,v12,v1(lDamageScale) ; 0x45C * w
+	//   X360 0x8260A460 vmaxfp v13,v13,v3(lNegLimits) ; 0x464 vminfp v13,v13,v2(lPosLimits)
+	//   X360 0x8260A468 vaddfp v13, v9, v13 | PS3 0x6C1BA4 vaddfp v0, v5, v0  -- CENTRE = offset + disp
+	//   X360 0x8260A470 stvx128 -> lpLocalSphere (w kept, then overwritten below)
+	//   X360 0x8260A478/0x8260A498 lfs f0, 0x28(spec) -> BOTH spheres' w == spec->mfRadius
+	//   X360 0x8260A4B8..4F0 the row cascade -- world sphere centre = transform * local centre
+	//   X360 0x8260A4F8 vrlimi128 v13, v0(zero), 1, 0 | PS3 0x6C1C5C vperm<0,1,2,7> -- (this+0x10).w = 0
+	// `BrnSensorSpec.h` attests mInitialOffset @console+0 and mfRadius @console+40 (0x28), so both
+	// loads land on those two members by NAME, not by offset arithmetic.
+	// ⚠️ The two hit-direction rows stay FLAGGED-0 (see KsaHitDirection's banner -- same family,
+	// &unk_82FB9680's siblings; all three read zero in the image because they are dynamic-init).
+	// That keeps the DAMAGE displacement inert, which is honest and is also what the shipped console
+	// computes at a fresh spawn: GetInitialCompressionScalesAndLimits multiplies the ratio by the
+	// initial-damage scalar, and lPosLimits/lNegLimits straddle zero, so clamp(0, neg, pos) == 0.
+	// ⛔ The BASE is a different matter and was the bug: `existing + 0` is not `mInitialOffset + 0`.
 	// =============================================================================================
 	bool DeformationSensor::Prepare(const SensorSpec* lpSpec, Sphere* lpLocalSphere, Sphere* lpWorldSphere,
 	                                Matrix44Affine lWorldTransform, Vector3Plus lDisplacement,
@@ -268,35 +323,120 @@ namespace Deformation
 		mpLocalSpaceSphere = lpLocalSphere;              // *(this+412) = lpLocalSphere
 		mpWorldSpaceSphere = lpWorldSphere;              // *(this+416) = lpWorldSphere
 
-		// *(this+420) = v41. The asm PINS the store as *(a1+420) = a27 (one integer arg reinterpreted
-		// as a float scalar: `v41 = *&a27`), preceded by an initial *(a1+420) = 0.0. FLAG: the STORE
-		// is asm-exact; mapping arg a27 onto the clean signature is a best-effort guess -- a27 falls in
-		// the lDisplacement (Vector3Plus) arg region, so its packed plus/w lane is taken as the seed.
-		// The lane choice is not byte-proven; revisit if the call-site register mapping is recovered.
-		mfScratchAmount = lDisplacement.GetPlus();       // *(this+420) = a27  (best-effort lane; see FLAG)
+		// *(this+420) = the PLUS (w) lane of lDamageScale, preceded by an initial *(this+420) = 0.0.
+		// ⭐ FLAG RETIRED 2026-08-16 (walls leg 11): the old note called the lane "a best-effort
+		// guess". Both consoles spell it out -- each spills the Vector3Plus argument whole and then
+		// reloads its FOURTH float:
+		//   X360 0x8260A30C stvx128 v1, r0, arg_40   then 0x8260A354 lfs f0, arg_4C(r1)   (+0xC)
+		//   PS3  0x6C1A48   stvx    v2, 0, arg_60    then 0x6C1A70   lwz r0, arg_6C(r1)   (+0xC)
+		// and the PS3 prototype names that argument lDamageScale, whose w lane
+		// GetInitialCompressionScalesAndLimits fills with the SCRATCH ratio (KV3P_*_COMPRESSION_
+		// SCRATCH_RATIO, w = 0.8 / 0.75 / 0.0). The guess was right, and it is now witnessed.
+		mfScratchAmount = lDisplacement.GetPlus();       // *(this+420) = lDamageScale.w
 
-		// --- sphere world-placement (modelled VMX block) ------------------------------------------
-		// delta = lOffsetA - lDisplacement ; normalise; scale by the FLAGGED per-direction limit row;
-		// clamp into [0, mfMaxPointDisplacement-style bound]; add back to the sphere centre, then
-		// transform the result by lWorldTransform into the world sphere. The numeric scale rows are
-		// FLAGGED-0 (unrecovered rodata), so the placed centre reduces to the un-displaced centre --
-		// honest and inert, never fabricated.
-		if ( lpLocalSphere )
+		// --- sphere placement ---------------------------------------------------------------------
+		// Argument roles (PS3 prototype names, in the frozen header's argument order):
+		//   lDisplacement == lDamageScale   lOffsetA == lPosLimits
+		//   lOffsetB      == lNegLimits     lOffsetC == lDamagePoint
+		if ( lpLocalSphere && lpSpec )
 		{
 			Vector4& lLocalCentre = SphereVec(lpLocalSphere);
-			const Vector3 lSpecOffset = lpSpec ? lpSpec->mInitialOffset : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
-			const Vector3 lToCentre = Sub3(Vector3{ lLocalCentre.x, lLocalCentre.y, lLocalCentre.z, 0.0f },
-			                               lSpecOffset);
 
-			// vmsum3fp128 magSq -> vrsqrtefp + Newton refine == 1/|toCentre|; vsel guards the zero
-			// case. With the FLAGGED-0 scale rows the displacement term vanishes, leaving the centre.
-			const f32 lfMagSq = Dot3(lToCentre, lToCentre);
-			(void)lfMagSq;   // shape preserved; numeric scaling gated by FLAGGED-0 rodata
+			// d = spec->mInitialOffset - lDamagePoint, then the guarded |d| (vmsum3fp128 magSq ->
+			// vrsqrtefp + 2 Newton refines -> magSq * rsqrt == |d|, vsel'd to 0 when magSq == 0).
+			const Vector3& lSpecOffset = lpSpec->mInitialOffset;
+			const Vector3  lToPoint    = Sub3(lSpecOffset, lOffsetC);
+			const f32      lfMagSq     = Dot3(lToPoint, lToPoint);
+			const f32      lfDistance  = ( lfMagSq != 0.0f ) ? rw::math::vpu::Magnitude(lToPoint) : 0.0f;
 
-			// local sphere centre unchanged (displacement * 0 == 0); transform into the world sphere.
+			// The falloff weight around the damage point: clamp(1 - |d| * 0.5, 0, 1). The two
+			// constants are vcfsx(1,0) == 1.0 and vcfsx(1,1) == 0.5, not rodata.
+			f32 lfWeight = 1.0f - lfDistance * 0.5f;
+			lfWeight = ( lfWeight > 0.0f ) ? lfWeight : 0.0f;     // vmaxfp v13, v0, v13
+			lfWeight = ( lfWeight < 1.0f ) ? lfWeight : 1.0f;     // vminfp v13, v12, v13
+
+			// The per-direction limit row: the sign of lDamagePoint.x picks BOTH the hit-direction
+			// row and which of the two lateral compression limits it scales. y is left at zero by
+			// the console's own vrlimi/vperm assembly; z always uses maDirectionParams[5].
+			const bool lbPosX = ( lOffsetC.x > 0.0f );            // vspltw + vcmpgtfp. on lane 0
+			const VecFloat& lrHitDir = lbPosX ? KV_POS_X_HIT_DIRECTION : KV_NEG_X_HIT_DIRECTION;
+			const f32 lfDirX = lbPosX ? lpSpec->maDirectionParams[1].mCompressionLimits    // spec+0x14
+			                          : lpSpec->maDirectionParams[0].mCompressionLimits;   // spec+0x10
+			const f32 lfDirZ = lpSpec->maDirectionParams[5].mCompressionLimits;            // spec+0x24
+
+			const Vector3 lLimit{ lrHitDir.x * lfDirX, 0.0f, lrHitDir.z * lfDirZ, 0.0f };
+
+			// displacement = clamp(limit * lDamageScale * weight, lNegLimits, lPosLimits).
+			Vector3 lDisp{ lLimit.x * lDisplacement.x * lfWeight,
+			               lLimit.y * lDisplacement.y * lfWeight,
+			               lLimit.z * lDisplacement.z * lfWeight, 0.0f };
+			lDisp.x = ( lDisp.x > lOffsetB.x ) ? lDisp.x : lOffsetB.x;   // vmaxfp vs lNegLimits
+			lDisp.y = ( lDisp.y > lOffsetB.y ) ? lDisp.y : lOffsetB.y;
+			lDisp.z = ( lDisp.z > lOffsetB.z ) ? lDisp.z : lOffsetB.z;
+			lDisp.x = ( lDisp.x < lOffsetA.x ) ? lDisp.x : lOffsetA.x;   // vminfp vs lPosLimits
+			lDisp.y = ( lDisp.y < lOffsetA.y ) ? lDisp.y : lOffsetA.y;
+			lDisp.z = ( lDisp.z < lOffsetA.z ) ? lDisp.z : lOffsetA.z;
+
+			// ⛔⛔ NAMED GATE (walls leg 11, 2026-08-16) -- THE BODY ABOVE IS FAITHFUL AND THE
+			// STORES BELOW ARE HELD OFF BY A **SECOND, INDEPENDENT DEFECT** IN ANOTHER SUBSYSTEM.
+			// Turning the spheres on measured this, in one boot each (BRN_SPHERE_PROBE=1):
+			//   * the spheres become real and distinct (20 spec positions, spec radii) and the
+			//     leg-10 fan-out ENDS;
+			//   * but the car then rests on its BODY, not its wheels: the penetration solver lifts
+			//     it 0.372 m at spawn (it was a measured no-op before), it hovers with a per-frame
+			//     +0.0193 correction exactly cancelling gravity's -1.157 m/s, the wheels never
+			//     reach the ground, and the throttle moves it 1.3 m in 190 s instead of 90 m.
+			// ⭐ WHY, ARITHMETICALLY (all values printed by the probes in run w11D, not inferred):
+			//   authored spec, ONE self-consistent frame -- wheel bottoms level to 0.0002 m and the
+			//   lowest sensor sphere clearing them by 0.043 m, i.e. a car with 4.3 cm of clearance:
+			//     wheel0 authored (-0.829000, -0.409029, 1.342442), radius 0.5*mScale.y = 0.331333
+			//     sensor10 authored y = -0.197255, radius 0.500000
+			//   but the two halves are then rebased into COM space with OPPOSITE SIGNS:
+			//     sensors : StreamedDeformationSpec::TransformToNewCOMSpace  += (new - old COM)
+			//               [X360 0x825E31B0 vsubfp v0,v1,v13 ; 0x825E31E0 vaddfp v13,v13,v0]
+			//     wheels  : SimpleVehiclePhysics::Prepare                    -= mCOMOffset  [vsubfp]
+			//   with mCurrentCOMOffset measured 0 on entry and the COM measured EXACTLY the mean of
+			//   the four authored wheel positions (0.000023, -0.403568, -0.081302 -- all three lanes
+			//   match the mean to 6 digits). The two halves therefore end up 2*COM == 0.807 m apart
+			//   in y, and 0.807 - 0.043 == 0.764 is the hover measured above.
+			// ⚠️ BOTH SIGNS ARE ASM-ATTESTED AS WRITTEN, and AddRaceCarDeformationModel @0x825E9118
+			// hands the COM over UNNEGATED (0x825E935C `lvx128 v1, r21, 0x20` -- no vxor), so the
+			// contradiction is NOT resolvable from the three sites alone: something upstream
+			// (the shipped mCurrentCOMOffset, or the create path's wheel-position capture, which
+			// SimpleVehiclePhysics::SetAttributes captures as `streamed + COM` while
+			// ProcessCreateEvents passes it RAW) must supply the missing sign. ⛔ NOT GUESSED HERE.
+			// ⭐ RETIRE-WHEN: the sensor offsets and the live wheel positions land in the SAME frame.
+			// Then delete this gate (both `if` lines) and nothing else -- the arithmetic is already
+			// right, and the leg-10 fan-out ends the moment it runs.
+			static bool sbLoggedSphereGate = false;
+			if ( !sbLoggedSphereGate )
+			{
+				sbLoggedSphereGate = true;
+				if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+					*CgsDev::Log::gpDebugPrint
+						<< "conductor gate: DeformationSensor::Prepare @0x8260A2E8 -- the sensor "
+						   "sphere placement (centre = spec->mInitialOffset + displacement, radius = "
+						   "spec->mfRadius) is RECONSTRUCTED but HELD OFF: the deformation spec's "
+						   "sensor offsets and the vehicle's wheel positions are rebased into "
+						   "centre-of-mass space with opposite signs (0.807 m apart on the starter "
+						   "car), so real spheres park the car on its belly [FLAG PC boot gate]. "
+						   "Reported once, not per frame\n";
+			}
+			// The placed body-local sphere: centre = mInitialOffset + displacement, radius from the
+			// spec (the two `lfs f0, 0x28(spec)` w-lane inserts, one per sphere).
+			if ( gbPlaceSensorSpheres )
+			{
+				lLocalCentre.x = lSpecOffset.x + lDisp.x;
+				lLocalCentre.y = lSpecOffset.y + lDisp.y;
+				lLocalCentre.z = lSpecOffset.z + lDisp.z;
+				lLocalCentre.w = lpSpec->mfRadius;
+			}
+
 			if ( lpWorldSphere )
 			{
 				Vector4& lWorldCentre = SphereVec(lpWorldSphere);
+				lWorldCentre.w = gbPlaceSensorSpheres ? lpSpec->mfRadius : lLocalCentre.w;
+
 				const Vector3& lR = lWorldTransform.Right();
 				const Vector3& lU = lWorldTransform.Up();
 				const Vector3& lAt = lWorldTransform.At();
@@ -304,12 +444,15 @@ namespace Deformation
 				lWorldCentre.x = lLocalCentre.x * lR.x + lLocalCentre.y * lU.x + lLocalCentre.z * lAt.x + lP.x;
 				lWorldCentre.y = lLocalCentre.x * lR.y + lLocalCentre.y * lU.y + lLocalCentre.z * lAt.y + lP.y;
 				lWorldCentre.z = lLocalCentre.x * lR.z + lLocalCentre.y * lU.z + lLocalCentre.z * lAt.z + lP.z;
-				lWorldCentre.w = lLocalCentre.w;   // radius preserved (vrlimi128 w-lane keep)
+				// w untouched by the row cascade (vrlimi128 v13, v8, 1, 0 keeps the radius above).
 			}
 		}
 
-		(void)lOffsetB;
-		(void)lOffsetC;
+		// The tail store both consoles end on: the biggest-impulse displacement's w lane is zeroed
+		// (X360 0x8260A4F8 vrlimi128 v13, v0, 1, 0 -> stvx128 to this+0x10; PS3 0x6C1C5C
+		// vperm<0,1,2,7> against the zero register -> stvx to this+0x10).
+		mPointDisplacement_BiggestImpulseThisFrame.w = 0.0f;
+
 		return true;   // the asm returns 1 unconditionally.
 	}
 
