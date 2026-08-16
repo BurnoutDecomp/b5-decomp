@@ -64,7 +64,12 @@ namespace postfx
         u32   dstStride;       // +0x08  destination row pitch (bytes)
         u32   dstSliceStride;  // +0x0C  destination slice pitch (bytes)
         u8*   dst;             // +0x10  destination pixel data
-        u8*   src[6];          // +0x14  source cube pixel data (filled by BrnPostFx::BeginTintBlend)
+        // CONST-QUALIFIED 2026-08-16: the six sources are the RESIDENT COLOUR-CUBE RESOURCES
+        // (BrnPostFx::BeginTintBlend stores ColourCube::GetPixels(), a pointer into pool memory the
+        // blend only ever reads -- every kernel loads from them and stores only through `dst`).
+        // Without the const, BeginTintBlend would have to cast the constness off a resource it does
+        // not own, which is exactly the kind of quiet write permission this tree should not hand out.
+        const u8* src[6];      // +0x14  source cube pixel data (filled by BrnPostFx::BeginTintBlend)
         f32   factor[6];       // +0x2C  per-source blend weight
         u8    pad[60];         // +0x44  the block is 0x80 bytes on the guest (m_blendLock follows)
     };

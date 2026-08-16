@@ -484,10 +484,15 @@ private:
     // r31, 0x1174`), so it must be a real ResourcePtr, not an opaque 0x20 guest blob (which is
     // also the WRONG SIZE on x64 -- a host ResourcePtr is 48 bytes). DWARF :411.
     CgsResource::ResourcePtr<rw::graphics::postfx::ColourCube> mDefColourCubePtr;  // 0x1174 :411
-    u32            muDefTintData;               // 0x1194  :412  Keyframe::TintData (see the
-                                                //         SUSPECT note on BrnEffects::TintData::
-                                                //         muColourCube -- the console stores a
-                                                //         ColourCube* here, 4 bytes on the guest)
+    // ⭐ RETYPED 2026-08-16 (group tintdata). DWARF :412 types this member the same
+    // `Keyframe::TintData` (== BrnEffects::TintData) the keyframe carries, and Prepare
+    // @0x827D49A8 fills it with `ResourcePtr<ColourCube>::GetMemoryResource(&mDefColourCubePtr)`
+    // (`stw r3, 0x1194(r31)` @0x827D4C10) -- i.e. a real ColourCube POINTER, 4 bytes on the
+    // guest, 8 here. It used to be a u32 because BrnEffects::TintData::mpColourCube was; that
+    // member is now the pointer the DWARF declares, so this one is too and Prepare's publish is
+    // no longer HELD. Unlike the KEYFRAME's slot this is a plain runtime member of a
+    // heap-constructed manager -- nothing serialises it -- so it simply widens.
+    rw::graphics::postfx::ColourCube* mpDefTintData;   // 0x1194  :412  Keyframe::TintData
     bool           mbOverrideSeason;            // 0x1198  debug var "Override season"
     u8             mPad1199[3];                 // 0x1199
     s32            miOverrideCurrentSeason;     // 0x119C

@@ -15,6 +15,14 @@ namespace CgsResource
     class RwColourCubeResourceType : public Type
     {
     public:
+        // The registry id. 43 (0x2B) is measured off the shipped data, not guessed: every
+        // ColourCube entry in ENVIRONMENTSETTINGS/COLOURCUBES/PARADISE_INGAME_JUNK.BUNDLE and in
+        // POSTFX/COLOURCUBEDICTIONARY.BIN carries type id 43 in its bundle-entry word, their debug
+        // string table names those resources type="ColourCube", and the boot log names the same
+        // number when the handler is missing:
+        //   [bundle] UNREGISTERED resource type id 43 in 'PostFx/colourcubedictionary.bin'
+        //     -- scratch/postfx_step9_final/boot1_BrnGame.log:387
+        virtual uint32_t           GetTypeID() const;
         virtual ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const;
     };
 }

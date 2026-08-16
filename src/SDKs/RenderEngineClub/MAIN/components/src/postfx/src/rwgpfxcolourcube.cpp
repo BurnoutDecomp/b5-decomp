@@ -28,7 +28,7 @@ namespace rw::graphics::postfx
     rw::BaseResourceDescriptors<5>* ColourCube::GetResourceDescriptor(rw::BaseResourceDescriptors<5>* lpResult,
                                                                       const Parameters* lpParameters)
     {
-        const u32 luEdge = lpParameters->muEdgeLength;   // r9 = *a2
+        const u32 luEdge = lpParameters->size;   // r9 = *a2  (DWARF Parameters::size)
 
         // Seed all five entries to {size=0, align=1}.
         for (u32 luSlot = 0; luSlot < 5; ++luSlot)

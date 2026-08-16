@@ -62,6 +62,21 @@ struct BrnRendererPostFxFrameBytes
 void BrnRendererReadPostFxFrameBytes(const BrnGraphics::EffectsArbitrator* lpArbitrator,
                                      BrnRendererPostFxFrameBytes* lpOut);
 
+// Render @0x8240C69C-0x8240C798 (pseudocode 505..533) -- THE COLOUR-CUBE (3D LUT) TINT BLOCK.
+// Evaluates the arbitrator's five (colour cube, weight) tint sources, sets or clears BrnPostFx's
+// E_FX_TINT bit -- the bool that becomes the composite's TINT3D permutation lane -- publishes the
+// sources into m_colourCubes / m_tintFactors and schedules the EA::Jobs blend with
+// BrnPostFx::BeginTintBlend.
+//
+// ⚠ CALL IT AT THE CONSOLE'S POSITION, WHICH IS NOT THE APPLY BLOCK'S. The console runs this EARLY
+// in Render -- inside the PerfMonCpu bracket at 0x8240C698/0x8240C79C, immediately before
+// shadow::Device::ResetShadowing() and the three global texture binds -- so that the blend job runs
+// concurrently with the shadow map and the world passes. BrnPostFx::Render drains it (m_processTint
+// -> Job::WaitOn -> Tint::EndBlendJob) before the composite samples the tint volume at s3.
+//   lbEffectsAllowed == the same v296 the apply block takes.
+void BrnRendererBeginPostFxTintBlend(const BrnGraphics::EffectsArbitrator* lpArbitrator,
+                                     bool lbEffectsAllowed);
+
 // Render @0x8240D700-0x8240DC50 (pseudocode 964..1232) -- THE APPLY BLOCK. For each of bloom /
 // vignette / depth-of-field / B4-blur: test the layer-0 internal frame's bool, call the arbitrator's
 // evaluator, set or clear the effect's m_enabledFx bit through BrnPostFx's own mutator, and -- when

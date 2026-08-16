@@ -62,6 +62,18 @@ void PCBringUpConstructPostFx(rw::IResourceAllocator* lpAllocator);
 // mMotionBlurData.mbIsActive byte it reads at 0x8240C2DC. They were hard-coded here (zero / false)
 // while mEffectsArbitrator was never Constructed; the bloom wave Constructs it, so they are
 // parameters now. A null lpafTint2dColourXYZW keeps the previous zero-vector behaviour.
+// Would PCBringUpRenderPostFxComposite below actually reach BrnPostFx::Render this frame? True when
+// the pool holds every surface the console body dereferences without a test AND
+// PCBringUpConstructPostFx has run. A pure query -- no logging, no side effect.
+//
+// IT EXISTS FOR THE TINT BLEND'S Lock/Unlock PAIRING. BrnPostFx::BeginTintBlend locks the tint volume
+// texture; only BrnPostFx::Render's step-1 drain unlocks it. The console runs both under one gate
+// (mbRenderPostFX, tested at 0x8240C6A8 for the tint block and 0x8240DC6C for the composite) so a
+// lock cannot outlive its frame -- on PC the composite carries this extra precondition, so
+// BrnRendererModule::Render asks it BEFORE scheduling the blend. RETIRED WITH THE BRING-UP, together
+// with the rest of this header.
+bool PCBringUpPostFxCompositeWillRun(BrnRendererMemory& lrRendererMemory);
+
 bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
                                     f32 lfBrightness,
                                     f32 lfContrast,

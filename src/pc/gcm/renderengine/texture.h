@@ -15,17 +15,42 @@ namespace renderengine
     class Texture
     {
     public:
-        // X360 renderengine::Texture::GetType @0x82B60E68 dimension classes: the GPU texture-header
-        // type bits (header+0x30 bits 21-22) decode to LINE/2D/ARRAY/CUBE/VOLUME. On the PC backend
-        // every created texture is a 2D texture (D3DTexture), so GetType returns E_TYPE_2D; the enum
-        // is kept so the lock/unlock/accessor dispatch reads the same way as the X360 spine.
-        enum Type
+        // X360 renderengine::Texture::GetType @0x82B60E68 dimension classes. The X360 spine decodes
+        // them out of the GPU texture header; renderengine::Texture::GetParameters @0x82B60D80 maps
+        // XGGetTextureDesc's resource type onto the SAME five values and stores the result in
+        // Parameters WORD 0 -- asm 0x82B60DB0-0x82B60E1C, read instruction by instruction:
+        //     desc type 0x14 -> 0 (line)    0x13 -> 2 (array)   0x12 -> 3 (cube)
+        //     desc type 0x11 -> 4 (volume)  3    -> 1 (2D)      anything else -> -1
+        // and rw::graphics::postfx::Tint::Initialize @0x82403B48 writes 4 into that word by hand
+        // (`li r10, 4` @0x82403B68 -> `stw r10, 0x1A0+var_C0(r1)` @0x82403BB0).
+        //
+        // The PC backend CREATES two of them: E_TYPE_2D (IDirect3DTexture9) and, since the post-fx
+        // step-10 tint wave, E_TYPE_VOLUME (IDirect3DVolumeTexture9 -- the muSize^3 colour-lookup
+        // cube). LINE / ARRAY / CUBE have no create path here.
+        //
+        // ⚠ THE DIMENSION IS *CARRIED*, NEVER DERIVED (fix round, 2026-08-16). The first cut of the
+        // volume path used `Parameters::muDepth > 1` as the discriminant. On this data that is
+        // wrong: the serialised depth byte is the CUBE FACE COUNT of an X360 STACK texture --
+        // tools/assets/bundles/x360_tex.py:128-140 decodes GPUTEXTURESIZE with the dimension as its
+        // type ("STACK carries the cubemap face count in Depth", `if t == 3: d += (size_packed >>
+        // 26) & 0x3F`) and :378 writes it out verbatim (`out[0x24] = max(1, f['depth']) & 0xFF`).
+        // CENSUS over the shipped data: of 26,614 RwRaster resources under build/game, 234 have
+        // that byte > 1 -- every track unit's DXT1 64x64x6 cube map among them -- and 0 are volumes
+        // (scratch/postfx_step10_finish/tintfix/work/raster_dimension_census.py). So Create, Lock,
+        // Unlock and GetType all branch on the CREATE-TIME dimension (Parameters::meType, recorded
+        // in the raster header's mu8IsVolumeTexture byte); nothing branches on muDepth.
+        //
+        // The fixed signed underlying type is not decoration: GetParameters' unknown-type arm is
+        // `li r11, -1` and CgsRwRasterResourceTypePS3.cpp seeds that same -1, which for a plain
+        // enum with enumerators 0..4 would be an out-of-range (unspecified) value.
+        enum Type : s32
         {
-            E_TYPE_LINE   = 0,   // X360 case 0
-            E_TYPE_2D     = 1,   // X360 case 1 (array-flag clear)
-            E_TYPE_ARRAY  = 2,   // X360 case 1 (array-flag set) / case 2
-            E_TYPE_CUBE   = 3,   // X360 case 3
-            E_TYPE_VOLUME = 4    // X360 default
+            E_TYPE_UNKNOWN = -1,  // X360 default arm (`li r11, -1` @0x82B60DD8)
+            E_TYPE_LINE   = 0,    // X360 desc type 0x14
+            E_TYPE_2D     = 1,    // X360 desc type 3
+            E_TYPE_ARRAY  = 2,    // X360 desc type 0x13
+            E_TYPE_CUBE   = 3,    // X360 desc type 0x12
+            E_TYPE_VOLUME = 4     // X360 desc type 0x11
         };
 
         struct LockInfo
@@ -52,6 +77,18 @@ namespace renderengine
             u32      muLockFlags;
         };
 
+        // ⚠ THE PARAMETER ORDER HERE IS THE PC LEAF'S, *NOT* THE CONSOLE'S -- read this before
+        // adding a caller or porting one. X360 renderengine::Texture::Lock @0x82B62B20 is
+        //     Lock(texture, FLAGS, LEVEL, FACE, out)
+        // -- r4 is the FLAG word (`mr r25, r4` @0x82B62B34 then `rlwinm. r11, r25, 0,30,30`
+        // @0x82B62B4C: bit 0x2 CLEAR is what takes the read-only branch, `li r28, 0x10` =
+        // D3DLOCK_READONLY), r5 is the mip LEVEL (`mr r4, r29 # Level` into D3DVolumeTexture_LockBox
+        // @0x82B62BA0 and `mr r5, r29 # Level` into each D3D*Texture_LockRect), r6 is the face /
+        // array index, r7 is the out descriptor.
+        // THIS leaf takes (level, face, flags) and hands liFlags to D3D9 verbatim as the D3DLOCK_*
+        // word, so the console's flags word 2 ("writable", i.e. do NOT take the read-only branch) is
+        // spelled here as liFlags = 0. Reading the console's `li r4, 2` as a LEVEL is what made the
+        // tint LUT lock mip 2 of a one-level volume and write nothing at all (step-10 fix round).
         static void Lock(Texture* lpTexture, s32 liLevel, s32 liFace, s32 liFlags, LockInfo* lpLockInfoOut);
         static void Unlock(Texture* lpTexture, LockInfo* lpLockInfo);
 
@@ -78,15 +115,30 @@ namespace renderengine
         // renderengine::Texture Parameters (a _DWORD[8]); on X360 GetParameters reads them back
         // from the GPU texture descriptor (XGGetTextureDesc), on PC it reads the stored raster
         // header below (the PC D3D9 raster keeps format/size explicitly, having no GPU desc).
+        //
+        // ⚠ WORD 0 IS THE DIMENSION AND WORD 6 IS THE FORMAT -- CORRECTED 2026-08-16 off the X360
+        // asm, and that correction is what makes the volume path safe. GetParameters @0x82B60D80
+        // stores, in this order: word0 = the dimension class (or -1 for an unrecognised resource
+        // type), word1 = sysmem (always 0 out of GetParameters), word2/word3 = width/height
+        // (`stw r11, 8(r31)` / `stw r9, 0xC(r31)`), word4 = depth (`stw r9/r11, 0x10(r31)`),
+        // word5 = ((*(a1+44) >> 6) & 0xF) + 1 = levels (`stw r11, 0x14(r31)`), word6 = FORMAT
+        // (`stw r8, 0x18(r31)`, r8 = the texture desc's format field). Tint::Initialize @0x82403B48
+        // fills the same eight words by hand: word0 = 4 (E_TYPE_VOLUME), word2..4 = muSize,
+        // word5 = 1, word6 = 0x18280186 (the console's GPU spelling of 8_8_8_8, PC D3DFMT_A8R8G8B8).
+        // The tree used to call word0 "miFormat" and word6 "muReserved0", which is exactly why the
+        // console's 4 once arrived at CreateTexture as D3DFORMAT(4). Every member below is reached
+        // BY NAME at every call site, so putting miFormat on its real word changes no meaning.
         struct Parameters
         {
-            s32 miFormat;     // +0   D3DFORMAT (-1 = none)
+            Type meType = E_TYPE_2D;   // +0   the DIMENSION class. DEFAULTED so that a caller that
+                                       //      never heard of volumes cannot accidentally ask for one
             u32 muSysMem;     // +4   bit0 set => system-memory texture (no graphics-local pixels)
             u32 muWidth;      // +8
             u32 muHeight;     // +12
-            u32 muDepth;      // +16
+            u32 muDepth;      // +16  a VOLUME's depth -- and, for a serialised X360 STACK raster,
+                              //      the CUBE FACE COUNT, which is why it is not a dimension test
             u32 muNumLevels;  // +20
-            u32 muReserved0;  // +24
+            s32 miFormat;     // +24  D3DFORMAT on PC (-1 = none); the GPU format word on the X360
             u32 muReserved1;  // +28
         };
 
@@ -151,9 +203,32 @@ namespace renderengine
         s32      miFormat;                           // wiki +0x10  D3DFORMAT
         u16      muWidth;                            // wiki +0x14
         u16      muHeight;                           // wiki +0x16
-        u8       muDepth;                            // wiki +0x18
+        u8       muDepth;                            // wiki +0x18  (a STACK raster's FACE COUNT)
         u8       muNumMipLevels;                     // wiki +0x19
         u16      muFlags;                            // wiki +0x1A
+
+        // THE CREATE-TIME DIMENSION -- the one fact Lock / Unlock / GetType ask. Create writes it
+        // from Parameters::meType on BOTH of its arms and nothing else ever writes it, so 0 (the
+        // 2D answer) is also the right answer for a texture that never went through Create
+        // (Texture2D::Initialize makes its D3D texture directly).
+        //
+        // WHY ITS OWN FIELD RATHER THAN A BIT IN muFlags -- two measured reasons. (1) muFlags is
+        // not spare in the CODE: the console's depth/hi-Z path writes the EDRAM TILE word through
+        // that slot -- rw::graphics::postfx::Target::CreateDepth @0x82403688 does `lwz r11, 0x20(r3)`
+        // / `srwi 12` / `insrwi 20,0` / `stw r10, 0x20(r3)`, carried in rwgpfxrendertarget.cpp as
+        // `lpHiZ->muFlags = ((lpDepthTex->muFlags >> 12) << 12) | (lpHiZ->muFlags & 0xFFF)`.
+        // (2) muFlags is not spare in the DATA either: 51 shipped PARTICLES.BUNDLE rasters carry a
+        // non-zero muFlags (0x7fe0 / 0x3fe0 / 0xffe0 / 0x07e0 / 0x1fe0) -- their serialised object
+        // is 0x40 bytes, not the converter's 0x30.
+        //
+        // WHY +0x28 IS SAFE ON SERIALISED DATA: it is zero in EVERY shipped raster and inside every
+        // shipped payload. MEASURED over all 26,614 rasters under build/game -- object sizes are
+        // 0x30 (26,563) or 0x40 (51), so +0x28 is always in bounds, and the byte there is 0 in
+        // 26,614 of 26,614; 234 would have taken the volume arm under the retired depth test
+        // (scratch/postfx_step10_finish/tintfix/work/raster_dimension_census.py). So every bundle
+        // raster keeps the 2D path by construction, which is exactly the property the depth-derived
+        // discriminant did not have.
+        u8       mu8IsVolumeTexture;                 // +0x28  1 => created with CreateVolumeTexture
     };
 
     class Texture2D : public Texture

@@ -65,12 +65,65 @@ namespace renderengine
         return lpTexture;
     }
 
+    // ============================================================================================
+    // [FLAG PC-platform leaf] THE VOLUME (3D) TEXTURE CASE, added by the post-fx step-10 tint wave.
+    //
+    // WHY IT HAD TO EXIST. rw::graphics::postfx::Tint::Initialize @0x82403B48 asks for a
+    // muSize x muSize x muSize lookup volume -- the console writes E_TYPE_VOLUME (4) into
+    // Parameters word 0 (`li r10, 4` @0x82403B68) and the same muSize into width, height AND depth
+    // -- and the composite's tint permutations sample it with `tex3D(Sampler3dTint, colour)`
+    // (tools/assets/shaders/brn_postfx_composite.fx:334). Until now every path in this file made an
+    // IDirect3DTexture9, so the depth word was discarded without a word, Tint::BeginBlendJob got
+    // muSliceStride == 0, and the colour-cube blend had nowhere real to write.
+    //
+    // ⚠ THE DISCRIMINANT IS THE REQUESTED DIMENSION, NOT THE DEPTH (corrected in the step-10 fix
+    // round; the first cut asked `muDepth > 1`). The console carries the dimension explicitly in
+    // Parameters word 0 -- GetParameters @0x82B60D80 maps XGGetTextureDesc's resource type into it
+    // and Tint::Initialize @0x82403B48 writes 4 (E_TYPE_VOLUME) there by hand -- and on the
+    // SERIALISED side the depth byte means something else entirely: it is the CUBE FACE COUNT of an
+    // X360 STACK texture (tools/assets/bundles/x360_tex.py:128-140 / :378). A depth test therefore
+    // classifies 234 shipped rasters as volumes -- every track unit's DXT1 64x64x6 cube map, plus
+    // GLOBALBACKDROPS/GLOBALPROPS -- which would create them as (refused) compressed volumes and
+    // run an uncompressed row copy over DXT1 blocks. CENSUS, run before and after the fix:
+    //     RwRaster (type 0) resources scanned under build/game : 26614
+    //     (a) OLD discriminant  serialised depth byte  +0x24 > 1 : 234   (all DXT1, all 6-deep)
+    //     (b) NEW discriminant  dimension flag  muFlags bit0     : 0
+    // (scratch/postfx_step10_finish/tintfix/work/raster_dimension_census.py). Create stores the
+    // requested dimension in the raster header's own mu8IsVolumeTexture byte and everything that
+    // has to branch -- create, lock, unlock, GetType -- asks TextureIsVolume(), so there is exactly
+    // one decision and it is never inferred from data.
+    //
+    // The COM object is stored in the same mpD3DTexture slot: IDirect3DVolumeTexture9 derives from
+    // IDirect3DBaseTexture9, so SetTexture / Release / the shadow cache are unchanged.
+    // ============================================================================================
+    namespace
+    {
+        bool TextureIsVolume(const Texture* lpTexture)
+        {
+            return lpTexture != nullptr && lpTexture->mu8IsVolumeTexture != 0u;
+        }
+    }
+
     void Texture::Lock(Texture* lpTexture, s32 liLevel, s32 /*liFace*/, s32 liFlags, LockInfo* lpLockInfoOut)
     {
         lpLockInfoOut->mpBits = nullptr;
         lpLockInfoOut->muPitch = 0u;
         if (lpTexture == nullptr || lpTexture->mpD3DTexture == nullptr)
         {
+            return;
+        }
+
+        if (TextureIsVolume(lpTexture))
+        {
+            IDirect3DVolumeTexture9* lpD3DVolume =
+                static_cast<IDirect3DVolumeTexture9*>(lpTexture->mpD3DTexture);
+            D3DLOCKED_BOX lLockedBox;
+            if (SUCCEEDED(lpD3DVolume->LockBox(static_cast<UINT>(liLevel), &lLockedBox, nullptr,
+                                               static_cast<DWORD>(liFlags))))
+            {
+                lpLockInfoOut->mpBits = lLockedBox.pBits;
+                lpLockInfoOut->muPitch = static_cast<u32>(lLockedBox.RowPitch);
+            }
             return;
         }
 
@@ -88,6 +141,11 @@ namespace renderengine
     {
         if (lpTexture == nullptr || lpTexture->mpD3DTexture == nullptr)
         {
+            return;
+        }
+        if (TextureIsVolume(lpTexture))
+        {
+            static_cast<IDirect3DVolumeTexture9*>(lpTexture->mpD3DTexture)->UnlockBox(0u);
             return;
         }
         static_cast<IDirect3DTexture9*>(lpTexture->mpD3DTexture)->UnlockRect(0u);
@@ -174,23 +232,25 @@ namespace renderengine
     {
         if (lpTexture == nullptr)
         {
-            lpParamsOut->miFormat = -1;
+            // The X360's own unknown-resource-type arm writes -1 into word 0 (`li r11, -1`
+            // @0x82B60DD8); the PC null-texture arm says the same thing.
+            lpParamsOut->meType = E_TYPE_UNKNOWN;
             lpParamsOut->muSysMem = 0u;
             lpParamsOut->muWidth = 0u;
             lpParamsOut->muHeight = 0u;
             lpParamsOut->muDepth = 0u;
             lpParamsOut->muNumLevels = 0u;
-            lpParamsOut->muReserved0 = 0u;
+            lpParamsOut->miFormat = -1;
             lpParamsOut->muReserved1 = 0u;
             return;
         }
-        lpParamsOut->miFormat = lpTexture->miFormat;
+        lpParamsOut->meType = GetType(lpTexture);
         lpParamsOut->muSysMem = 0u;
         lpParamsOut->muWidth = lpTexture->muWidth;
         lpParamsOut->muHeight = lpTexture->muHeight;
         lpParamsOut->muDepth = lpTexture->muDepth;
         lpParamsOut->muNumLevels = lpTexture->muNumMipLevels;
-        lpParamsOut->muReserved0 = 0u;
+        lpParamsOut->miFormat = lpTexture->miFormat;
         lpParamsOut->muReserved1 = 0u;
     }
 
@@ -226,8 +286,79 @@ namespace renderengine
         lpTexture->muNumMipLevels = static_cast<u8>(lpParams->muNumLevels);
         lpTexture->mpD3DTexture = nullptr;
 
+        // Record the requested DIMENSION in the raster header -- the single fact every later branch
+        // reads (see the banner above Texture::Lock). Written on BOTH arms, so a reused object
+        // cannot keep a stale answer, and written NOWHERE else.
+        lpTexture->mu8IsVolumeTexture = (lpParams->meType == E_TYPE_VOLUME) ? 1u : 0u;
+
         if (gDevice == nullptr || lpParams->miFormat < 0)
         {
+            return;
+        }
+
+        // --- the VOLUME case (see the banner above Texture::Lock) ------------------------------
+        if (lpParams->meType == E_TYPE_VOLUME)
+        {
+            const UINT luVolumeLevels = (lpParams->muNumLevels != 0u) ? lpParams->muNumLevels : 1u;
+            IDirect3DVolumeTexture9* lpD3DVolume = nullptr;
+            const HRESULT lhrVolume = gDevice->CreateVolumeTexture(
+                lpParams->muWidth, lpParams->muHeight, lpParams->muDepth, luVolumeLevels, 0,
+                static_cast<D3DFORMAT>(lpParams->miFormat), D3DPOOL_MANAGED, &lpD3DVolume, nullptr);
+            if (FAILED(lhrVolume))
+            {
+                char lacVol[176];
+                std::snprintf(lacVol, sizeof(lacVol),
+                    "[Texture] CreateVolumeTexture(fmt=%d %ux%ux%u mips=%u MANAGED) failed hr=0x%08X\n",
+                    lpParams->miFormat, lpParams->muWidth, lpParams->muHeight, lpParams->muDepth,
+                    static_cast<unsigned>(luVolumeLevels), static_cast<unsigned>(lhrVolume));
+                CgsDev::Log::WriteToLog(lacVol);
+                return;
+            }
+            lpTexture->mpD3DTexture = lpD3DVolume;
+
+            if (lpPixelData == nullptr)
+            {
+                // CREATED EMPTY, and on this build that is the branch actually taken: the only
+                // volume producer is rw::graphics::postfx::Tint::Initialize, whose rw resource block
+                // holds nothing but freshly-allocated (uninitialised) bytes, so Texture::Initialize
+                // deliberately passes null rather than copying them in -- see its banner. The tint
+                // blend writes every texel of the LUT before the composite samples it (BeginTintBlend
+                // -> the kernels -> BrnPostFx::Render's drain, all inside one frame).
+                return;
+            }
+
+            // Upload the top level only, honouring the runtime's own RowPitch/SlicePitch. The
+            // serialised volume is TIGHTLY packed (one row per row of BLOCKS for a compressed
+            // format, pixel rows otherwise); a managed volume surface may pad either. The row unit
+            // is the same one the 2D path below uses -- a block row for DXT, a pixel row otherwise
+            // -- because using bits-per-pixel on a compressed format is what turned a 16 KB source
+            // into a 98 KB read (step-10 fix round).
+            const u32 luVolumeBytesPerBlock = lFormatBytesPerBlock(lpParams->miFormat);
+            const u32 luSrcRowBytes = (luVolumeBytesPerBlock != 0u)
+                ? ((lpParams->muWidth + 3u) / 4u) * luVolumeBytesPerBlock
+                : (lpParams->muWidth * lFormatBitsPerPixel(lpParams->miFormat) + 7u) / 8u;
+            const u32 luSrcNumRows = (luVolumeBytesPerBlock != 0u)
+                ? (lpParams->muHeight + 3u) / 4u
+                : lpParams->muHeight;
+            const u32 luSrcSliceBytes = luSrcRowBytes * luSrcNumRows;
+            D3DLOCKED_BOX lLockedBox;
+            if (SUCCEEDED(lpD3DVolume->LockBox(0u, &lLockedBox, nullptr, 0)))
+            {
+                const u8* lpSourceSlice = static_cast<const u8*>(lpPixelData);
+                u8* const lpDestBase = static_cast<u8*>(lLockedBox.pBits);
+                for (u32 luSlice = 0u; luSlice < lpParams->muDepth; ++luSlice)
+                {
+                    for (u32 luRow = 0u; luRow < luSrcNumRows; ++luRow)
+                    {
+                        memcpy(lpDestBase + luSlice * static_cast<u32>(lLockedBox.SlicePitch)
+                                          + luRow * static_cast<u32>(lLockedBox.RowPitch),
+                               lpSourceSlice + luRow * luSrcRowBytes,
+                               luSrcRowBytes);
+                    }
+                    lpSourceSlice += luSrcSliceBytes;
+                }
+                lpD3DVolume->UnlockBox(0u);
+            }
             return;
         }
 
@@ -317,11 +448,16 @@ namespace renderengine
     }
 
     // X360 GetType @0x82B60E68 decodes header+0x30 bits 21-22 (line/2D/array/cube/volume) and, for
-    // the 2D case, header+0x20 bit 21 (the array flag). The PC raster has no GPU header: every
-    // renderengine texture the create path produces is a managed D3D 2D texture, so the type is 2D.
-    Texture::Type Texture::GetType(const Texture* /*lpTexture*/)
+    // the 2D case, header+0x20 bit 21 (the array flag). The PC raster has no GPU header, so it
+    // reports the dimension Create was ASKED for and recorded in KU_RASTER_FLAG_VOLUME (see the
+    // banner above Texture::Lock -- notably NOT the stored depth, which on a serialised X360 STACK
+    // raster is the cube face count). The remaining three X360 classes (LINE / ARRAY / CUBE) have
+    // no create path on this backend and so cannot be produced -- they stay unreachable rather than
+    // being guessed at; a shipped cube map is created, and reported, as a 2D texture exactly as it
+    // was before the volume path existed.
+    Texture::Type Texture::GetType(const Texture* lpTexture)
     {
-        return E_TYPE_2D;
+        return TextureIsVolume(lpTexture) ? E_TYPE_VOLUME : E_TYPE_2D;
     }
 
     // X360 GetWidth @0x82B60EC8 / GetHeight @0x82B60F38: the X360 spine reads the packed GPU header
@@ -370,9 +506,10 @@ namespace renderengine
 
     // X360 Lock @0x82B62B20 (Locked* overload): lock the requested mip/face surface and fill the full
     // Locked descriptor -- the texture, the surface bits/strides, and the per-mip geometry. The X360
-    // spine dispatches on GetType to the matching D3D*Texture_LockRect; the PC raster is always a 2D
-    // texture, so it locks the 2D rect. Geometry is (dimension >> mip), floored to 1 (matching the
-    // X360's `if (!(Width >> level)) = 1`). muVolumeDepth / muSliceStride stay 0 (no volume on PC).
+    // spine dispatches on GetType to the matching D3D*Texture_LockRect; so does this now -- LockBox
+    // for a volume, LockRect otherwise. Geometry is (dimension >> mip), floored to 1 (matching the
+    // X360's `if (!(Width >> level)) = 1`). muSliceStride is filled only on the volume path (a 2D
+    // surface has no slice pitch), which is exactly the console's own split.
     void Texture::Lock(Texture* lpTexture, s32 liLevel, s32 liFace, s32 liFlags, Locked* lpLockedOut)
     {
         lpLockedOut->mpTexture     = lpTexture;
@@ -385,13 +522,34 @@ namespace renderengine
 
         if (lpTexture != nullptr && lpTexture->mpD3DTexture != nullptr)
         {
-            IDirect3DTexture9* lpD3DTexture = static_cast<IDirect3DTexture9*>(lpTexture->mpD3DTexture);
-            D3DLOCKED_RECT lLockedRect;
-            if (SUCCEEDED(lpD3DTexture->LockRect(static_cast<UINT>(liLevel), &lLockedRect, nullptr,
-                                                 static_cast<DWORD>(liFlags))))
+            if (TextureIsVolume(lpTexture))
             {
-                lpLockedOut->mpPixelData = lLockedRect.pBits;
-                lpLockedOut->muStride    = static_cast<u32>(lLockedRect.Pitch);
+                // The VOLUME lock, and the reason this overload had to learn one: it is the lock
+                // rw::graphics::postfx::Tint::BeginBlendJob @0x823F8310 takes, and the two words it
+                // publishes into the blend job are `lwz r11, 0xAC` (muStride) and `lwz r10, 0xB8`
+                // (muSliceStride). D3D9 hands both back in the D3DLOCKED_BOX; with the old 2D-only
+                // path muSliceStride stayed 0 and every slice of the blend wrote over slice 0.
+                IDirect3DVolumeTexture9* lpD3DVolume =
+                    static_cast<IDirect3DVolumeTexture9*>(lpTexture->mpD3DTexture);
+                D3DLOCKED_BOX lLockedBox;
+                if (SUCCEEDED(lpD3DVolume->LockBox(static_cast<UINT>(liLevel), &lLockedBox, nullptr,
+                                                   static_cast<DWORD>(liFlags))))
+                {
+                    lpLockedOut->mpPixelData   = lLockedBox.pBits;
+                    lpLockedOut->muStride      = static_cast<u32>(lLockedBox.RowPitch);
+                    lpLockedOut->muSliceStride = static_cast<u32>(lLockedBox.SlicePitch);
+                }
+            }
+            else
+            {
+                IDirect3DTexture9* lpD3DTexture = static_cast<IDirect3DTexture9*>(lpTexture->mpD3DTexture);
+                D3DLOCKED_RECT lLockedRect;
+                if (SUCCEEDED(lpD3DTexture->LockRect(static_cast<UINT>(liLevel), &lLockedRect, nullptr,
+                                                     static_cast<DWORD>(liFlags))))
+                {
+                    lpLockedOut->mpPixelData = lLockedRect.pBits;
+                    lpLockedOut->muStride    = static_cast<u32>(lLockedRect.Pitch);
+                }
             }
         }
 
@@ -448,6 +606,21 @@ namespace renderengine
         // (null when the texture is system-memory-only / created empty).
         void* lpObjectMemory = lpResourceMemory->m_baseResources[0];
         const void* lpPixelData = lpResourceMemory->m_baseResources[2];
+
+        // A VOLUME create takes NO pixel data, and that is a statement about the console as much as
+        // about this backend. The X360 Initialize @0x82B629D8 lays a GPU texture header OVER slot2
+        // (Xbox2SetTextureHeader) -- it never copies -- so "the pixels" and "the resource block" are
+        // the same memory there. On PC the D3D volume owns its own memory, and the one volume this
+        // build creates is Tint::Initialize's lookup cube, whose block the allocator has just handed
+        // out UNINITIALISED (GetResourceDescriptor sizes slot2 to 3*32^3 = 131,072 bytes of nothing
+        // in particular). Copying that in would put heap garbage in the LUT and let a comment claim
+        // it was "the texture's pixels"; the blend writes every texel of it before the composite
+        // samples it. DELETE-WHEN a genuine serialised 3D raster ships -- there is none today
+        // (census: 0 of 26,614 rasters, tintfix/work/raster_dimension_census.py).
+        if (lpParams->meType == E_TYPE_VOLUME)
+        {
+            lpPixelData = nullptr;
+        }
 
         Texture* lpTexture = (lpObjectMemory != nullptr)
                                  ? new (lpObjectMemory) Texture()

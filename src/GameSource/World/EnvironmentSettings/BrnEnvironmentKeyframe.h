@@ -4,6 +4,7 @@
 #include "types.hpp"
 
 #include "SharedClasses/Graphics/BrnEffectsData.h"                       // BrnEffects::BloomData / VignetteData
+#include "GameShared/GameClasses/Graphics/CgsSerialisedPtr.h"            // CgsGraphics::Ptr32 (the +0x80 import slot)
 #include "GameSource/World/EnvironmentSettings/BrnEnvScatteringData.h"
 #include "GameSource/World/EnvironmentSettings/BrnEnvLightingData.h"
 #include "GameSource/World/EnvironmentSettings/BrnEnvCloudsData.h"
@@ -26,9 +27,11 @@
 //     Clouds out-params (r-offsets 0x10 / 0x30 / 0x90 / 0x140 / 0x1D0).
 //   * EnvironmentManager::PerformBlend (@0x827B0EB8) reads each source keyframe's
 //     scattering(+0x90) / lighting(+0x140) / clouds(+0x1D0) sub-block.
-//   * EnvironmentManager::GenerateEffects (@0x827BE698) reads the tint COLOUR-CUBE id
-//     at +0x80 (`lwz r11, 0x80(kf)` -> `stw r11, 0x110(effectsFrame)`, i.e. straight
-//     into BrnEffectsFrame::mTintData::muColourCube). NAMED 2026-08-15 (bloom wave).
+//   * EnvironmentManager::GenerateEffects (@0x827BE698) reads the tint COLOUR-CUBE
+//     IMPORT SLOT at +0x80 (`lwz r11, 0x80(kf)` -> `stw r11, 0x110(effectsFrame)`, i.e.
+//     straight into BrnEffectsFrame::mTintData::mpColourCube). NAMED 2026-08-15 (bloom
+//     wave); corrected 2026-08-16 -- the word is a resolved POINTER, not a resource id,
+//     and the member below is mpColourCube. See its own banner for the import.
 // The +0x00..+0x10 header, the rest of the +0x80..+0x90 gap (DoF/blur, deferred) and the
 // small inter-block gaps are opaque padding rather than fabricated members.
 // ============================================================================
@@ -55,10 +58,36 @@ struct Keyframe
     u8                        mPad4[0xC];     // 0x004  rest of the header (deferred)
     BrnEffects::BloomData     mBloom;         // 0x010  (0x20)
     BrnEffects::VignetteData  mVignette;      // 0x030  (0x50)
-    // 0x080  the keyframe's tint colour-cube resource id -- copied verbatim into the
-    // effects frame's BrnEffects::TintData by GenerateEffects @0x827BE698 (see the
-    // banner above). The remaining 0xC bytes are the still-deferred DoF/blur sub-blocks.
-    u32                       muColourCube;   // 0x080
+    // 0x080  the keyframe's TINT COLOUR CUBE. DWARF BrnEnvironmentKeyframe.h:62 types this slot
+    // `Keyframe::TintData mTintData` -- the typedef at BrnEnvironmentData.h:42 is
+    // BrnEffects::TintData, i.e. the one-pointer struct the effects frame carries -- and
+    // GenerateEffects @0x827BE698 copies it straight across (`lwz r11, 0x80(kf)` ->
+    // `stw r11, 0x110(effectsFrame)`, a whole-struct copy of one word).
+    //
+    // ⭐ IT IS AN *IMPORT SLOT*, NOT AN ID (corrected 2026-08-16, group tintdata). The name
+    // `muColourCube` and the comment "resource id" that stood here were wrong: the keyframe's
+    // bundle carries a BundleV2 ImportEntry whose muOffset is this member, and
+    // CgsResource::Pool::ResolveImportForEntry writes the imported ColourCube's MAIN-MEMORY
+    // POINTER into it during load (KeyframeResourceType::FixUp @0x82678C40 clears the same
+    // +128 word first). Every shipped keyframe imports the same cube, 0x8b7e999a
+    // "ENV_CC_Paradise_ingame_junk ... TINT_Art_Style.psd" (envdata's dump, step 9).
+    //
+    // ⚠ WHY IT STAYS FOUR BYTES, i.e. why this is a Ptr32 and not `BrnEffects::TintData`.
+    // The Keyframe is an IN-PLACE serialised resource: KeyframeResourceType::
+    // GetSerialisedResourceDescriptor @0x8267D220 reports a FIXED 0x240-byte record and the
+    // loader relocates it where it lies, so every offset in it is fixed by the shipped data.
+    // Embedding the host BrnEffects::TintData (8-byte pointer) would push ScatteringData off
+    // +0x90, LightingData off +0x140 and CloudsData off +0x1D0 -- all three asm-attested (see
+    // the banner) -- and would need tools/assets/bundles/env_transcode.py to relay every
+    // Keyframe 0x10012 out to a host layout and every bundle regenerated. THE ALTERNATIVE COSTS
+    // NOTHING AND LOSES NOTHING: the slot holds a pointer that is guaranteed below 4 GB
+    // (CgsMemory::LowMemory reserves the whole root allocation there and asserts if it cannot --
+    // CgsLowMemoryPC.cpp:120 "Serialised resource pointer slots (PointerFromU32) WILL TRUNCATE"),
+    // ResolveImportForEntry already picks the narrow store for exactly this case
+    // (CgsResourcePool.cpp:648-664), and CgsGraphics::Ptr32<T> is the project's committed name
+    // for that slot (CgsSerialisedPtr.h; same convention as CgsModel/CgsInstance). So the
+    // on-disk record is untouched and the reader still gets a real, complete host pointer.
+    CgsGraphics::Ptr32<rw::graphics::postfx::ColourCube> mpColourCube;   // 0x080
     u8                        mPad84[0xC];    // 0x084  DoF/blur sub-blocks (deferred)
     ScatteringData            mScattering;    // 0x090  (0xA8)
     u8                        mPad138[0x8];   // 0x138

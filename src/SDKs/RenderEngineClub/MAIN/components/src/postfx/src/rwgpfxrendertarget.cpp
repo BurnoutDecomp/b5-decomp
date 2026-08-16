@@ -117,12 +117,18 @@ namespace postfx
         // --- the sampleable texture the surface resolves to (AllocateAndInitializeTexture) -----------
         renderengine::Texture::Parameters lTextureParams;
         std::memset(&lTextureParams, 0, sizeof(lTextureParams));
-        lTextureParams.miFormat    = static_cast<s32>(lrParams.mTextureType);  // var_100 = a2[6] (+0x18)
+        // WORD 0 IS THE DIMENSION AND WORD 6 IS THE FORMAT (Parameters relaid 2026-08-16 off
+        // renderengine::Texture::GetParameters @0x82B60D80 -- see pc/gcm/renderengine/texture.h).
+        // This call site is one of the three attestations: the value it puts in word 0 is the
+        // parameters' own mTextureType and the one it puts in word 6 is mTextureFormat, which is
+        // exactly what the names already said. Only the member names change here.
+        lTextureParams.meType      =
+            static_cast<renderengine::Texture::Type>(lrParams.mTextureType);   // var_100 = a2[6] (+0x18)
         lTextureParams.muSysMem    = 0;
         lTextureParams.muWidth     = lrParams.mu32Width;
         lTextureParams.muHeight    = lrParams.mu32Height;
         lTextureParams.muNumLevels = 1;                                     // var_F0 = 1
-        lTextureParams.muReserved0 = lrParams.mTextureFormat;                // var_E8 = a2[5] (+0x14)
+        lTextureParams.miFormat    = static_cast<s32>(lrParams.mTextureFormat);  // var_E8 = a2[5] (+0x14)
 
         renderengine::Texture* lpTexture = AllocateAndInitializeTexture(lrParams, lTextureParams);
         mpTexture = lpTexture;
@@ -185,13 +191,17 @@ namespace postfx
         // The depth surface's own texture-parameter block (var_15.. on the X360 stack).
         renderengine::Texture::Parameters lTextureParams;
         std::memset(&lTextureParams, 0, sizeof(lTextureParams));
-        lTextureParams.miFormat    = 1;                                  // v15 = 1
+        // v15 = 1 IS THE DIMENSION, NOT A FORMAT: `li r30, 1` @0x82403698 -> `stw r30, var_90`
+        // @0x824036C0 writes word 0, and E_TYPE_2D is 1. The format is word 6 (v21), which the
+        // hi-Z arm below overwrites with the console's own 0x18280186. (Parameters relaid
+        // 2026-08-16 -- see pc/gcm/renderengine/texture.h.)
+        lTextureParams.meType      = renderengine::Texture::E_TYPE_2D;    // v15 = 1
         lTextureParams.muSysMem    = 0;                                  // v16 = 0
         lTextureParams.muWidth     = lrParams.mu32Width;                   // v17 = a2[1]
         lTextureParams.muHeight    = lrParams.mu8NumSections * lrParams.mu32Height; // v18 = (*(a2+68)) * a2[2]
         lTextureParams.muDepth     = 1;                                  // v19 = 1
         lTextureParams.muNumLevels = 1;                                  // v20 = 1
-        lTextureParams.muReserved0 = lrParams.mTextureFormat;             // v21 = a2[5]
+        lTextureParams.miFormat    = static_cast<s32>(lrParams.mTextureFormat);  // v21 = a2[5]
 
         mpTexture    = AllocateAndInitializeTexture(lrParams, lTextureParams);
         mpHiZTexture = nullptr;
@@ -201,7 +211,9 @@ namespace postfx
         if (lrParams.mbUseStencil != 0)
         {
             lTextureParams.muSysMem    = 1;          // v16 = 1
-            lTextureParams.muReserved0 = 405275014;  // v21 = 0x18280186 hierarchical-Z format word
+            lTextureParams.miFormat    = 405275014;  // v21 = 0x18280186 hierarchical-Z format word
+                                                     //  (word 6 -- the same GPU format word
+                                                     //   Tint::Initialize writes for its lookup)
 
             renderengine::Texture* lpHiZ      = AllocateAndInitializeTexture(lrParams, lTextureParams);
             renderengine::Texture* lpDepthTex = mpTexture;

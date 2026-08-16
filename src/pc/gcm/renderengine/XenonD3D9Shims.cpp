@@ -2753,6 +2753,69 @@ namespace
         return IsRawDepthFormat(lDesc.Format);
     }
 
+    // =========================================================================================
+    // [FLAG PC-platform leaf] THE COLOUR-CUBE (VOLUME) SAMPLER SEAM -- post-fx step 10.
+    //
+    // Same disease as the raw-depth seam above, different patient, and it is fixed the same way
+    // for the same reason: a TextureState's sampler words are never applied on this backend
+    // (SetSamplerStateLowLevel is the documented no-op below), so the unit keeps whatever the
+    // last user left on it, and D3D9's own default for an untouched unit is POINT/POINT/NONE
+    // with ADDRESS = WRAP.
+    //
+    // THAT IS TWO VISIBLE BUGS ON A 32^3 COLOUR-GRADING LUT, not one:
+    //   * POINT on a 32-step lookup posterises the whole frame -- the grade snaps between 32
+    //     values per channel instead of interpolating, which reads as heavy banding in skies
+    //     and headlight falloff;
+    //   * WRAP is worse than wrong: the composite feeds the COMPOSED COLOUR in as the
+    //     coordinate (`tex3D(Sampler3dTint, lComposite)`), so a channel that reaches 1.0 wraps
+    //     to 0.0 and the brightest pixels in the frame come back BLACK.
+    //
+    // The console says LINEAR/CLAMP in its own words: rw::graphics::postfx::Tint::Initialize
+    // @0x82403B48 builds the lookup TextureState with addressU = addressV = addressW = 2 and
+    // magFilter = minFilter = 1, mipFilter = 0 (asm 0x82403CC8-0x82403CEC). This applies exactly
+    // that set.
+    //
+    // WHY IT HOOKS THE BIND RATHER THAN A UNIT NUMBER: identical argument to the raw-depth seam.
+    // "Unit 3 is Sampler3dTint" is a guess that has to be re-guessed for every future consumer;
+    // "a volume texture is a volume texture" cannot be wrong, and the type is read from the D3D
+    // object itself (GetType()), not from renderengine::Texture::miFormat.
+    //
+    // ONLY THE TINT LUT CAN REACH THIS PATH, and that is now measured rather than asserted. The
+    // test is on the D3D object's own GetType() == D3DRTYPE_VOLUMETEXTURE, so it fires exactly for
+    // the textures renderengine::Texture::Create made with CreateVolumeTexture -- and Create takes
+    // that branch only for Parameters::meType == E_TYPE_VOLUME, which nothing but
+    // rw::graphics::postfx::Tint::Initialize asks for (two buffers of one 32^3 cube). CENSUS of the
+    // shipped data behind that claim: of 26,614 RwRaster resources under build/game, 0 carry the
+    // create-time volume flag -- while 234 (every track unit's DXT1 64x64x6 CUBE MAP, plus
+    // GLOBALBACKDROPS / GLOBALPROPS) have a serialised depth byte above 1 and WOULD have landed
+    // here under the depth-derived test the first cut of this wave used
+    // (scratch/postfx_step10_finish/tintfix/work/raster_dimension_census.py). So there is no world
+    // or prop unit whose previous filter this can disturb, beyond the same bounded side effect the
+    // raw-depth seam already documents.
+    // DELETE WHEN SetSamplerStateLowLevel really applies a TextureState's sampler block.
+    // =========================================================================================
+    void ApplyVolumeSamplerState(IDirect3DDevice9* lpDevice, u32 luUnit)
+    {
+        if (lpDevice == nullptr || luUnit >= KU_RAW_DEPTH_MAX_SAMPLER_UNITS)
+            return;
+
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER,     D3DTEXF_LINEAR);  // X360 minFilter = 1
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER,     D3DTEXF_LINEAR);  // X360 magFilter = 1
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_NONE);    // X360 mipFilter = 0
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_CLAMP);  // X360 addressU = 2
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_CLAMP);  // X360 addressV = 2
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_CLAMP);  // X360 addressW = 2
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
+        // ⚠ 1, NOT the console's 13, AND THAT IS DELIBERATE. Tint::Initialize @0x82403B48 does put
+        // maxAnisotropy = 0xD in the lookup TextureState (`li r10, 0xD` @0x82403C54 -> `stw r10,
+        // 0x1A0+var_120(r1)` @0x82403C9C, which rwgpfxtint.cpp carries as muMaxAnisotropy = 13), but
+        // D3D9 consults MAXANISOTROPY only while MINFILTER or MAGFILTER is D3DTEXF_ANISOTROPIC --
+        // and both are LINEAR two lines above, exactly as the console sets them. Writing 13 here
+        // would change nothing and would read as an anisotropic filter that is not being asked for.
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
+    }
+
     void ApplyRawDepthSamplerState(IDirect3DDevice9* lpDevice, u32 luUnit)
     {
         if (lpDevice == nullptr || luUnit >= KU_RAW_DEPTH_MAX_SAMPLER_UNITS)
@@ -2789,6 +2852,28 @@ unsigned int D3DDevice_SetTexture(IDirect3DDevice9* /*lpDeviceArg*/, u32 luSampl
     if (lpTexture != nullptr)
         lpD3DTexture = static_cast<const renderengine::Texture*>(lpTexture)->mpD3DTexture;
     const HRESULT lhr = lpDevice->SetTexture(luSampler, lpD3DTexture);
+
+    // A VOLUME texture is the post-fx colour-cube LUT and needs LINEAR/CLAMP on its unit, for the
+    // same reason and by the same mechanism as the raw-depth case below (see both banners).
+    // Keyed on what was bound, not on which unit.
+    if (luSampler < KU_RAW_DEPTH_MAX_SAMPLER_UNITS &&
+        SUCCEEDED(lhr) && lpD3DTexture != nullptr &&
+        lpD3DTexture->GetType() == D3DRTYPE_VOLUMETEXTURE)
+    {
+        ApplyVolumeSamplerState(lpDevice, luSampler);
+
+        static bool sabVolumeReported[KU_RAW_DEPTH_MAX_SAMPLER_UNITS] = {};
+        if (!sabVolumeReported[luSampler])
+        {
+            sabVolumeReported[luSampler] = true;
+            char lacMsg[160];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[postfx-tint] unit %u bound a VOLUME texture"
+                          " -- sampler forced LINEAR/CLAMP (the colour-cube LUT)\n",
+                          (unsigned)luSampler);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
 
     // A RAW-depth texture needs POINT/CLAMP on its unit, and this backend has nowhere else to
     // say so (see the banner above this function). Keyed on what was bound, not on which unit.

@@ -475,6 +475,14 @@ bool EffectsArbitrator::EvalTint2d(BrnEffects::TintData2d& lData) const
 //
 // ⚠ OUTPUT SIZE. With the attested tables the caller must supply arrays of at least
 //   kau8ColourCubesPerEffectsLayer[WORLD] + [FXEVENTS] == 4 + 1 == 5 entries.
+//
+// THE CALLER EXISTS AS OF 2026-08-16 (group tintdata) and it is the console's own, at the
+// console's position: BrnRendererModule::Render @0x8240BFA8 calls it at 0x8240C6CC with
+// `addi r4, r1, var_CA0` / `addi r5, r1, var_C70` -- two FIVE-ENTRY stack arrays, r4 the cubes and
+// r5 the weights -- and feeds the result to BrnPostFx::SetColourCube / SetTintBlendFactor /
+// BeginTintBlend. Reconstructed in BrnRendererModulePostFx.cpp as
+// BrnRendererBeginPostFxTintBlend(); the array sizes there are this function's contract, not a
+// guess (EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT is the same sum, from the same tables).
 bool EffectsArbitrator::EvalTint(rw::graphics::postfx::ColourCube** lppColourCubes, f32* lpfWeights) const
 {
     // Gate on the layer-0 internal frame's tint flag (@0x823FD594-0x823FD5AC).
@@ -495,11 +503,11 @@ bool EffectsArbitrator::EvalTint(rw::graphics::postfx::ColourCube** lppColourCub
             const BrnEffectsFrame& lSlot =
                 mapaEffectsFrames[lu8Layer][luSlot][mu8EffectsFrameInternal];
 
-            // X360 stores the cube as a 32-bit pointer in the frame; the tree's TintData
-            // still models it as the raw word (see the SUSPECT note in BrnEffectsData.h).
-            lppColourCubes[luColourCube] =
-                reinterpret_cast<rw::graphics::postfx::ColourCube*>(
-                    static_cast<uintptr_t>(EffectData<BrnEffects::TintData>(lSlot).muColourCube));
+            // `lwz r9, 0x110(r10)` / `stwx r9, r8, r26` -- one word out of the frame's TintData,
+            // one word into the caller's array. It is a POINTER on both targets now
+            // (BrnEffects::TintData::mpColourCube, DWARF BrnEffectsData.h:275), so the
+            // guest-int -> host-pointer cast that used to stand here is gone.
+            lppColourCubes[luColourCube] = EffectData<BrnEffects::TintData>(lSlot).mpColourCube;
             lpfWeights[luColourCube] = EffectWeight<BrnEffects::TintData>(lSlot);
             lfLayerWeight += EffectWeight<BrnEffects::TintData>(lSlot);
             ++luColourCube;
