@@ -942,41 +942,14 @@ bool BrnTraffic::TrafficEntityModule::Release()
 // -------------------------------------------------------------------------
 // BrnWorld::EnvironmentSettings
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-bool BrnWorld::EnvironmentSettings::ParseEnvironmentFile(float &,char (&)[4][256],float (&)[4],struct BrnEffects::BloomData &,struct BrnEffects::VignetteData &,char *,class BrnWorld::EnvironmentSettings::ScatteringData &,class BrnWorld::EnvironmentSettings::LightingData &,class BrnWorld::EnvironmentSettings::CloudsData &,char const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::ParseEnvironmentFile: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return false;
-}
-
-// -------------------------------------------------------------------------
-// BrnWorld::EnvironmentSettings::CloudsData
-// -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::EnvironmentSettings::CloudsData::SetToBlend(class BrnWorld::EnvironmentSettings::CloudsData const &,float,class BrnWorld::EnvironmentSettings::CloudsData const &,float,class BrnWorld::EnvironmentSettings::CloudsData const &,float,class BrnWorld::EnvironmentSettings::CloudsData const &,float)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::CloudsData::SetToBlend: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// (ParseEnvironmentFile and CloudsData::SetToBlend RETIRED 2026-08-16, post-fx
+//  step 9 "environment live" / envfix round. Both are real bodies now and their
+//  TUs are on tools/build/build_game_exe.bat:
+//    ParseEnvironmentFile @0x8267CD70   -> GameSource/World/EnvironmentSettings/
+//                                          BrnEnvironmentSettings.cpp
+//    CloudsData::SetToBlend @0x82675FC0 -> GameSource/World/EnvironmentSettings/
+//                                          BrnEnvCloudsData.cpp
+//  Leaving either gate here alongside the mounted TU is LNK2005.)
 
 // -------------------------------------------------------------------------
 // BrnWorld::EnvironmentSettings::DebugComponent
@@ -1067,79 +1040,25 @@ void BrnWorld::EnvironmentSettings::DebugComponent::OnActivate()
 // GameSource/World/EnvironmentManager/BrnEnvironmentManager.cpp, which is mounted at
 // tools/build/build_game_exe.bat:219 -- keeping this gate as well would be LNK2005.
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::EnvironmentSettings::EnvironmentManager::Prepare(struct BrnWorldIO::UpdateOutputBuffer *)
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
-    // chain. One-shot log + report success so the scripted load advances toward
-    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
-    // deeper consumers keep their traps. Reconstruct from X360.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "EnvironmentManager::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// TOMBSTONE (envstream wave 2026-08-16): the EnvironmentManager::Prepare boot gate that stood
+// here is DELETED. The real X360 body (@0x827D49A8) is homed in
+// GameSource/World/EnvironmentManager/BrnEnvironmentManager.cpp, which is mounted at
+// tools/build/build_game_exe.bat:224 -- keeping this gate as well would be LNK2005.
 
 // -------------------------------------------------------------------------
 // BrnWorld::EnvironmentSettings::Keyframe
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::EnvironmentSettings::Keyframe::Construct()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::Keyframe::Construct: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// -------------------------------------------------------------------------
-// BrnWorld::EnvironmentSettings::LightingData
-// -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::EnvironmentSettings::LightingData::SetToBlend(class BrnWorld::EnvironmentSettings::LightingData const &,float,class BrnWorld::EnvironmentSettings::LightingData const &,float,class BrnWorld::EnvironmentSettings::LightingData const &,float,class BrnWorld::EnvironmentSettings::LightingData const &,float)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::LightingData::SetToBlend: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// -------------------------------------------------------------------------
-// BrnWorld::EnvironmentSettings::ScatteringData
-// -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::EnvironmentSettings::ScatteringData::SetToBlend(class BrnWorld::EnvironmentSettings::ScatteringData const &,float,class BrnWorld::EnvironmentSettings::ScatteringData const &,float,class BrnWorld::EnvironmentSettings::ScatteringData const &,float,class BrnWorld::EnvironmentSettings::ScatteringData const &,float)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::EnvironmentSettings::ScatteringData::SetToBlend: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// (Keyframe::Construct, LightingData::SetToBlend and ScatteringData::SetToBlend
+//  RETIRED 2026-08-16, post-fx step 9 "environment live" / envfix round. All three
+//  are real bodies now, in mounted TUs:
+//    Keyframe::Construct @0x82676298        -> GameSource/World/EnvironmentSettings/
+//                                              BrnEnvironmentKeyframe.cpp   (NEW TU)
+//    LightingData::SetToBlend @0x827AFAA8   -> .../BrnEnvLightingData.cpp
+//    ScatteringData::SetToBlend @0x827AF468 -> .../BrnEnvScatteringData.cpp
+//  These three were the reason PerformBlend was two thirds inert: with them gated,
+//  mScattering / mLighting / mClouds were NEVER written, so a live
+//  GenerateShaderConstants would have read an all-zero lighting block and the
+//  world would have gone dark. Leaving a gate beside a mounted TU is LNK2005.)
 
 // -------------------------------------------------------------------------
 // BrnWorld::InternalBaseStreamer
@@ -1678,21 +1597,11 @@ void BrnWorld::WorldModule::BridgeWorldModuleToEntityModules_Render(class BrnTra
 //  callers. It is the split of one coarse-query result record into the four
 //  per-owner id arrays every module's GenerateDispatchLists consumes.)
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::WorldModule::SetupShaderConstantsBeforeRendering(struct BrnShaderConstantsFrame *,float,float)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::WorldModule::SetupShaderConstantsBeforeRendering: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// (WorldModule::SetupShaderConstantsBeforeRendering boot gate RETIRED 2026-08-16,
+//  env-manager go-live wave: the real X360 body @0x827D1410 now lives in
+//  BrnWorldModule.cpp beside its caller, and the signature it was stubbing was wrong --
+//  three arguments short, with the two float parameters transposed. See the SIGNATURE
+//  CORRECTED note on the declaration in BrnWorldModule.h.)
 
 // -------------------------------------------------------------------------
 // BrnWorldIO::DispatchInputBuffer / DispatchOutputBuffer -- DESTUBBED
@@ -3424,21 +3333,14 @@ void BrnPhysics::PhysicsModule::UpdateNetworkCatchup(class BrnPhysics::PhysicsMo
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the environment tick (time of day / fog / key light) -- DWARF BrnEnvironmentManager.h:386.
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnWorld::EnvironmentSettings::EnvironmentManager::Update(float,struct BrnWorldIO::UpdateOutputBuffer *,struct rw::math::vpu::Vector3)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "EnvironmentSettings::EnvironmentManager::Update: inert [FLAG PC boot gate]\n";
-    }
-}
+// TOMBSTONE (post-fx step 9, 2026-08-16, group envblend): the EnvironmentManager::Update boot
+// gate that stood here since the world-drive wave is DELETED -- the real body @0x827D6060 is
+// landed in GameSource/World/EnvironmentManager/BrnEnvironmentManager.cpp (which is on
+// build_game_exe.bat), together with SetupBlend @0x827D4FE8, SetupTimeOfDayBlend @0x827D35C0
+// and SetupSeasonsBlend @0x827D37A0. Leaving both would be LNK2005.
+// ORDERING: this deletion is only correct once group `envstream` has landed StreamOut /
+// StreamIn / Prepare and group `envdata` the TimeLine/Dictionary relayout -- the real Update
+// dereferences maSeasonPtrs[miCurrSeason], which only Prepare/StreamIn populate.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. the world debug-menu pump (@0x827BF818).
@@ -3758,38 +3660,13 @@ uint32_t CgsResource::ShaderTechniqueResourceType::GetShaderConstantExternalSeri
 // them in rather than faulting the boot.
 // DELETE-WHEN: the environment-data TUs (Scattering/Lighting/Clouds) land.
 // ---------------------------------------------------------------------------
-void BrnWorld::EnvironmentSettings::ScatteringData::Construct()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "EnvironmentSettings::ScatteringData::Construct: inert [FLAG PC boot gate]\n";
-    }
-}
-
-void BrnWorld::EnvironmentSettings::LightingData::Construct()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "EnvironmentSettings::LightingData::Construct: inert [FLAG PC boot gate]\n";
-    }
-}
-
-void BrnWorld::EnvironmentSettings::CloudsData::Construct()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "EnvironmentSettings::CloudsData::Construct: inert [FLAG PC boot gate]\n";
-    }
-}
+// (ScatteringData / LightingData / CloudsData ::Construct RETIRED 2026-08-16,
+//  post-fx step 9 envfix round -- the DELETE-WHEN above is met: the three
+//  environment-data TUs are mounted on tools/build/build_game_exe.bat, with the
+//  static default template vectors they read (KAF_*) now defined in them.
+//    ScatteringData::Construct @0x82674FD0 -> .../BrnEnvScatteringData.cpp
+//    LightingData::Construct   @0x826750E0 -> .../BrnEnvLightingData.cpp
+//    CloudsData::Construct     @0x82675190 -> .../BrnEnvCloudsData.cpp)
 
 // ============================================================================
 // PropEntityDebugComponent -- the FOUR out-of-line virtuals + Construct.

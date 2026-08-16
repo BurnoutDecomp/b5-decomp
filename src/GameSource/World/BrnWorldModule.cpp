@@ -64,7 +64,8 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h" // the frame collision generator Update carves
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/World/BrnWorldModule.h"
-#include "GameSource/World/EnvironmentSettings/BrnEnvironmentKeyframeBringUp.h"   // [PC bring-up] the embedded noon keyframe
+
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"   // CgsSystem::TimerStatus{,Interface} -- WorldModule::Update stages the environment frame delta
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<4096,16>::AddEvent
@@ -98,6 +99,35 @@ static CgsGraphics::Camera gFrustumQueryCamera;
 
 // The dispatch-pass camera (X360 file static at 0x8300FB40).
 static CgsGraphics::Camera gDispatchCamera;
+
+// [FLAG PC bring-up] The per-frame shader-constants frame + dispatch output buffer that
+// WorldModule::GenerateDispatchListsBringUp hands to the REAL
+// WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410.
+//
+// STANDS IN FOR lpDispatchInputBuffer->GetShaderConstantsFrame() and the
+// BrnWorldIO::DispatchOutputBuffer the console's GenerateDispatchLists CreateIOBuffer's --
+// neither the renderer/world dispatch IO buffer set nor the renderer's own
+// maShaderConstantsFrames[] is reachable from this producer (the renderer owns that array
+// privately, and it is the same seam gBrnSkyCameraBringUp already crosses).
+//
+// The frame is EXPORTED (BrnShaderConstantsFrame.h) because it now carries the real sky /
+// cloud / key-light set that BrnRendererModule::PublishSkyConstantsBringUp currently
+// hard-codes from the noon keyframe: that publisher becomes a copy of this frame in the
+// follow-up change, and only then can it be retired. The output buffer stays private --
+// SetupShaderConstantsBeforeRendering publishes the same eight values into the global
+// shader-constant table itself, which is what the bring-up producer's passes read.
+//
+// DELETE both with GenerateDispatchListsBringUp.
+// ⚠ Defined at GLOBAL scope, closing BrnWorld for two lines: BrnShaderConstantsFrame.h declares
+// them `extern` outside any namespace (like gBrnSkyCameraBringUp, the precedent this seam copies),
+// and a definition inside BrnWorld would be a DIFFERENT entity -- the consumer's UNDEF would never
+// resolve (step-9 worldconst verify, finding 1).
+}   // namespace BrnWorld (reopened below)
+BrnShaderConstantsFrame gBrnWorldShaderConstantsFrameBringUp;
+bool                    gbBrnWorldShaderConstantsFrameBringUpValid = false;
+namespace BrnWorld
+{
+static BrnWorldIO::DispatchOutputBuffer gWorldDispatchOutputBringUp;
 
 // The world dispatch/sort list ids the X360 passes in registers to the world
 // module's dispatch feed (dropped by the decompiler at the call site).
@@ -2804,14 +2834,50 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     // virtual Update (the environment-settings tuning page).
     mSkyDebugComponent.Update();
 
-    // [FLAG PC boot gate] the environment time-of-day override + frame-delta
-    // staging (X360: when the director camera's override byte [camera+289] is
-    // set, mEnvironmentManager's time-of-day <- camera float [camera+256] * 3600;
-    // then env frame delta [env+4548] <- timer scale * timer delta from the
-    // world input's TimerStatusInterface). The committed Director camera slice
-    // has no named home for the two override fields and the committed
-    // EnvironmentManager slice none for the frame delta; the env Update below is
-    // gated inert, so the staging is unobservable. Restore with those TUs.
+    // [FLAG PC boot gate -- FRAME-DELTA HALF RESTORED, post-fx step 9, group envblend]
+    // X360 WorldModule::Update @0x827D63E8, 0x827D7CEC-0x827D7D78.
+    //
+    // RESTORED -- the environment frame delta. `stfsx f0, r31, 0x1E8124` is
+    // mEnvironmentManager + 0x11C4 == EnvironmentManager::mrTimeStep (DWARF
+    // BrnEnvironmentManager.h:425; the console inlines the setter DWARF :107 names
+    // SetCurrentTimeStep). Source: the world input's SIM timer status --
+    //     if (status[+0x24]) mrTimeStep = status[+0x20] * status[+0x1C]; else mrTimeStep = 0
+    // and +0x18 is where the 48-byte block's SECOND CgsSystem::TimerStatus starts, so
+    // +0x1C/+0x20/+0x24 are its mfBaseTimeStep / mfTimeStepMultiplier / mbRunning --
+    // i.e. `IsRunning() ? GetCurrentTimeStep() : 0`, reached BY NAME below.
+    //
+    // WHY IT IS LOAD-BEARING: mrTimeStep is the ONLY frame delta the environment manager
+    // has. EnvironmentManager::SetupTimeOfDayBlend @0x827D35C0 advances the time of day by
+    // `mfTimeOfDayDelta * mrTimeStep` and Update @0x827D6060 scrolls the cloud UVs by it.
+    // Left at its zero-initialised value the whole environment chain is arithmetically
+    // inert -- the sky would sit at Construct's 13:00 for ever, which reads on screen as
+    // "the time of day never moves" rather than as a crash.
+    //
+    // STILL GATED -- the director-camera time-of-day override (X360: when the camera's
+    // override byte [camera+289] is set, mfTimeOfDay <- camera float [camera+256] * 3600).
+    // The committed Director camera slice still has no named home for those two fields.
+    // Restore with that TU.
+    //
+    // FLAG cross-home cast: BrnWorldIO models the world buffer's timer block as its own
+    // 48-byte pointer-free POD while the canonical type is CgsSystem::TimerStatusInterface.
+    // Both model the SAME X360 member, the sizes are pinned equal here, and this is the
+    // identical cast the two committed bridges already make (Bridges/
+    // WorldBridgeInputToPhysicsModule.cpp and Bridges/WorldBridgeInputToEntityModules.cpp).
+    // Retire all three together when BrnWorldIO adopts the canonical type.
+    {
+        static_assert( sizeof( BrnWorldIO::TimerStatusInterface )
+                           == sizeof( CgsSystem::TimerStatusInterface ),
+                       "world timer-status block must be the canonical 48-byte X360 member" );
+
+        const CgsSystem::TimerStatusInterface* const lpTimerStatus =
+            reinterpret_cast< const CgsSystem::TimerStatusInterface* >(
+                lpUpdateInputBuffer->GetTimerStatusInterface() );
+        const CgsSystem::TimerStatus* const lpSimTimerStatus =
+            lpTimerStatus->GetSimTimerStatus();
+
+        mEnvironmentManager.SetCurrentTimeStep(
+            lpSimTimerStatus->IsRunning() ? lpSimTimerStatus->GetCurrentTimeStep() : 0.0f );
+    }
 
     mEnvironmentManager.Update( mfLocalPlayerActiveRaceCarSpeed, lpUpdateOutputBuffer,
                                 mLastCameraInput.GetPosition() );
@@ -3704,11 +3770,24 @@ WorldModule::GenerateDispatchLists(
         gDispatchCamera.GetViewProjectionMatrix() );
 
     // ---- global shader constants for the frame -----------------------------
+    // X360 @0x827D2074-0x827D20B8. The argument order is the asm's, not the pseudocode's:
+    // (viewProjection, cameraTransform, GAME time, SIM time, frame, output buffer). The
+    // camera transform argument is the director Camera* itself on the console -- its
+    // mTransform is the object's first member -- which is what GetTransform() returns here.
+    //
+    // Only the OUTPUT BUFFER is locked, exactly as the console does it: the frame's write
+    // lock belongs to BrnRendererModule::Update, which is not reconstructed, so on this
+    // build the real path (which has no callers -- GenerateDispatchListsBringUp is the live
+    // producer) would trip the frame setters' lock assert. That is the console's own
+    // discipline reproduced, not an omission; the bring-up seam brackets its own frame.
     lpDispatchOutputBuffer->LockForWrite();
     SetupShaderConstantsBeforeRendering(
-        lpDispatchInputBuffer->GetShaderConstantsFrame(),
+        gDispatchCamera.GetViewProjectionMatrix(),
+        lpCameraInput->GetTransform(),
+        lpDispatchInputBuffer->GetGameTime(),
         lpDispatchInputBuffer->GetSimTime(),
-        lpDispatchInputBuffer->GetGameTime() );
+        lpDispatchInputBuffer->GetShaderConstantsFrame(),
+        lpDispatchOutputBuffer );
     lpDispatchOutputBuffer->UnlockForWrite();
 
     lpDispatchOutputBuffer->LockForRead();
@@ -4240,135 +4319,491 @@ WorldModule::GenerateShadowMapDispatchLists(
 }
 
 
+// -----------------------------------------------------------------------------
+// Lane accessors for the two rw::math::vpu idioms this file's new bodies need and the PC
+// type vocabulary (plain named lanes, no SDK operations) does not carry:
+// Matrix44::SetRow / GetRow (`stvx v, rMatrix, rRow*16`) and Vector4::SetElem (the
+// store-vector / patch-one-lane / reload sequence at var_1C0 in sub_827B0790). Same shape
+// as the existing ShadowPerfLaneGet below.
+// -----------------------------------------------------------------------------
+static Vector4& Matrix44Row( Matrix44& lrMatrix, u32 luRow )
+{
+    switch ( luRow )
+    {
+        case 0:  return lrMatrix.xAxis;
+        case 1:  return lrMatrix.yAxis;
+        case 2:  return lrMatrix.zAxis;
+        default: return lrMatrix.wAxis;
+    }
+}
+
+static void Vector4SetElem( Vector4& lrVector, u32 luElement, f32 lfValue )
+{
+    switch ( luElement )
+    {
+        case 0:  lrVector.x = lfValue; break;
+        case 1:  lrVector.y = lfValue; break;
+        case 2:  lrVector.z = lfValue; break;
+        default: lrVector.w = lfValue; break;
+    }
+}
+
 // =============================================================================
-// [FLAG PC bring-up] PublishWorldShadingConstantsBringUp -- NOT an X360 function.
+// GenerateShaderConstantsForQuadricIrradiance  @ X360 sub_827B0790   [BODIED]
 //
-// The world's real vertex/pixel programs (SHADERS.BNDL) read a fixed set of engine
-// constants that the console publishes from the lighting / environment / shadow-map
-// modules: BrnEnvironmentManager feeds the key light + the two irradiance quadrics,
-// BrnSkyDomeManager the scattering + fog, BrnShadowMap the cascade matrices and their
-// two constant vectors. None of those producers is live on this build, so every one of
-// those constants would arrive NULL and the technique would draw with whatever was left
-// in the register file.
+// NAME: the export leaves it unnamed (sub_827B0790, no symbol), but the DecFIGS DWARF
+// names it and its whole local set --
+// references/DecFIGS/dwarfdump/GameSource/World/BrnWorldModule.cpp:36 (source line 2321):
+//     void GenerateShaderConstantsForQuadricIrradiance(
+//              const rw::math::vpu::Matrix44& lIrradianceMatrixR,
+//              const rw::math::vpu::Matrix44& lIrradianceMatrixG,
+//              const rw::math::vpu::Matrix44& lIrradianceMatrixB,
+//              Matrix44& lOutQuadricMatrix0, Matrix44& lOutQuadricMatrix1 )
+// (the _compile rendering spells the two out-params `const Matrix44&`; they are WRITTEN
+// -- 0x827B0B08..0x827B0B48 store eight rows through r6/r7 -- so the const is the known
+// lossy half of that rendering, exactly as it is for CalculateVehicleLODs' arrays.)
+// Its locals, in DWARF declaration order (cpp:2323..2401 / 2331..2349):
+//     Vector4 lIrradiance_1;  Matrix44 lIrradiance_x_y_z_xx;  Matrix44 lIrradiance_xy_yz_zx_yy;
+//     const Matrix44* laIrradianceMatrices[3];  Matrix44 lIrradianceQuadricForShaderA/B;
+//     uint32_t luChannel; const Matrix44& lIrradianceMatrix;
+//     float Cxx, Cyy, Czz, C1, Cx, Cy, Cz, Cxy, Cyz, Czx;
+// Its only caller is WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410
+// (`bl sub_827B0790` @0x827D1780, the single xref).
 //
-// The values below are NOT invented: they are the SHIPPED environment keyframe
-// ENV_KF_Paradise_ingame_junk_city_1200 (build/game/ENVIRONMENTSETTINGS/
-// PARADISE_INGAME_JUNK.BUNDLE, one of the nine city_HHMM keyframes; 0x240 bytes each,
-// decoded against BrnEnvironmentKeyframe.h's asm-attested layout) pushed through the real
-// X360 producer maths:
+// WHAT THE ASM DOES. Three inputs = the per-channel (R,G,B) order-2 SH IRRADIANCE
+// MATRICES GlobalIrradianceManager::ComputeIrradianceMatrix builds; two outputs = the
+// pair of Matrix44 "quadrics" shader constants 18/19 carry, in the form the pixel shaders
+// evaluate as
+//     E_c(n) = A[0][c]
+//            + dot( A[c+1], (n.x, n.y, n.z, n.x*n.x) )
+//            + dot( B[c]  , (n.x*n.y, n.y*n.z, n.z*n.x, n.y*n.y) )
 //
-//   WorldModule::SetupShaderConstantsBeforeRendering  @0x827D1410  (out-param -> slot)
-//   EnvironmentSettings::EnvironmentManager::
-//                            GenerateShaderConstants  @0x827D0098
-//   GlobalIrradianceManager::ComputeFrameCoeffs       @0x827C5188  (basis + 6 projections)
-//   GlobalIrradianceManager::UpdateCoefficients       @0x827BEF70  (order-2 SH projection)
-//   GlobalIrradianceManager::ComputeIrradianceMatrix  @0x827B1160  (irradiance matrix)
-//   sub_827B0790                                                   (matrices -> quadrics)
+// r3/r4/r5 are stashed as the three-entry pointer array laIrradianceMatrices
+// (@0x827B079C/0x827B07A4/0x827B07B4 -> var_1F8/var_1F4/var_1F0) and the body is a
+// three-iteration loop (`addi r8,r8,4` / `cmpwi r8,0xC` / `blt` @0x827B0A18..0x827B0AE0)
+// that indexes it with `lwzx r10, r8, r10` @0x827B0878.
 //
-// Two inputs of that chain cannot be attested until ENVIRONMENTSETTINGS is converted from
-// its stock X360 platform-2 form and actually streamed, so they stay bring-up choices and
-// everything else is made consistent with them:
-//   * KeyLightDirection. ComputeKeyLightDirection @0x82678AB0 derives it from the manager's
-//     time-of-day + three tuning angles (float504/510/514/518), none of which exist yet.
-//     The pre-existing bring-up direction is kept, and the irradiance rig below is solved
-//     for THAT direction, so the fill lights and the key light agree.
-//   * whiteLevel (EnvironmentManager::float11C0). Every colour the console publishes is
-//     scaled by it and the post-FX tonemap divides it back out; with post-FX off, 1.0 is
-//     the only non-blowing value -- which is what HDRConstants already assumed.
+// Per channel the loop reads exactly TEN elements of the matrix (rows are 16-byte lanes;
+// the reads are lvx + a vperm splat, or an lfs off the row copy):
+//     row0.x  @var_110[0]   (0x827B08C0)   -> Cxx base    == m00
+//     row1.y  @var_D0 +4    (0x827B09D4)   -> Cyy base    == m11
+//     row2.z  @var_170+8    (0x827B093C)   -> Czz         == m22
+//     row3.w  @var_C0 +0xC  (0x827B08DC)   -> C1  base    == m33
+//     row0.w  (vperm w-splat @0x827B089C)  -> Cx  = 2*m03
+//     row1.w  (vperm w-splat @0x827B08F4)  -> Cy  = 2*m13
+//     row2.w  (vperm w-splat @0x827B08D0)  -> Cz  = 2*m23
+//     row0.y  (vperm y-splat @0x827B0954)  -> Cxy = 2*m01
+//     row1.z  (vperm z-splat @0x827B0A0C)  -> Cyz = 2*m12
+//     row2.x  (vperm x-splat @0x827B0A28)  -> Czx = 2*m20
+// the six 2.0f multipliers are six separate (2,0,0,0) stack VecFloats built from
+// flt_82001D9C (== 2.0f, DATA_DUMP: `40000000 3F000000 ...`), one per product -- i.e. six
+// occurrences of a literal 2.0f in the source that the compiler did not CSE.
 //
-//   IrradianceQuadricA/B  ComputeIrradianceFast = saturate(A[0].xyz + linear(N) +
-//                         quadratic(N)). Solved offline by the four functions above from
-//                         the keyframe's six fill colours x AmbientIrradianceScale (0.4);
-//                         the repack was checked against n^T M n on 2000 random unit
-//                         normals (max error 1.1e-16). ComputeIrradianceRigFromSky
-//                         (@0x8267C948, gated on the manager's gap6F5) is treated as off,
-//                         i.e. the authored fill colours are used rather than sky-derived
-//                         ones.
-//   KeyLight*             the sun. Direction is the direction the light TRAVELS (the
-//                         shaders use -KeyLightDirection as the vector towards it).
-//                         Colour/Specular are the keyframe's; Specular additionally
-//                         carries gfSpecularScale, which is 1.0 in the shipped image
-//                         (@0x82F307E8). Clamped = min(max(colour,0), whiteLevel).
-//   ScattCoeffs           CalculateScattering = pow(saturate(d*x - y), z) * w with
-//                         x = 1/(far-near), y = near/(far-near), z = ScattPow, w = ScattCap
-//                         -- i.e. .w is the fog CAP, and publishing 0 (as this function
-//                         used to) made fog identically zero on every world mesh.
-//   ShadowMap_Constants/2 CalcShadowFactor*CSM ends in
-//                         ApplyFade(factor, fade) = factor*fade + 1 - fade with
-//                         fade = saturate(Constants.w - eyeZ * Constants2.w). Zeroing both
-//                         .w gives fade = 0 and therefore a shadow factor of EXACTLY 1.0
-//                         whatever the (unbound) shadow-map sampler returns -- the
-//                         data-driven "shadows off" configuration, not a shader edit.
-//   ShadowMap_WorldToLight the three cascade matrices; identity while there is no shadow
-//                         pass (their result is multiplied out by the fade above).
+// and folds Czz into the constant + the two square terms:
+//     Cxx -= Czz  (`fsubs f11, f11, f13` @0x827B0940)
+//     Cyy -= Czz  (`fsubs f13, f11, f13` @0x827B09EC)
+//     C1  += Czz  (`fadds f12, f12, f13` @0x827B094C)
+// which is the n.x^2 + n.y^2 + n.z^2 == 1 identity used to drop the z^2 term:
+//     m00 x^2 + m11 y^2 + m22 z^2 == (m00-m22) x^2 + (m11-m22) y^2 + m22
+// So the packed form is EXACTLY n^T M n for a unit normal (round-trip verified to 4.4e-15 (double)
+// over 20000 random unit normals x 3 channels -- work/quadric_roundtrip.py).
 //
-// DELETE together with GenerateDispatchListsBringUp when the environment / sky / shadow
-// modules publish these for real.
+// The three per-channel results land in
+//     lIrradiance_1[luChannel]              (the accumulate-into-a-stack-vector idiom at
+//                                            var_1C0: store the running vector, overwrite
+//                                            lane luChannel with `stfsx f12, r8, r28`
+//                                            @0x827B09D8, reload -- rw's Vector4::SetElem)
+//     lIrradiance_x_y_z_xx   row luChannel+1  (var_B0 + luChannel*16, @0x827B09BC)
+//     lIrradiance_xy_yz_zx_yy row luChannel   (var_70 + luChannel*16, @0x827B0A70)
+// and the tail (@0x827B0AE4..0x827B0B48) assembles the two outputs:
+//     A = lIrradiance_x_y_z_xx with row 0 replaced by lIrradiance_1
+//     B = lIrradiance_xy_yz_zx_yy with row 3 = (0,0,0,1)  (unk_82181530, the identity's
+//         fourth row -- DATA_DUMP pins it at 00000000 00000000 00000000 3F800000)
+// Rows 0 of x_y_z_xx and 3 of xy_yz_zx_yy are never written in the loop, so the compiler
+// dead-stored them; they are written here as SetZero for definedness (they are both
+// overwritten below and cannot reach the outputs).
+//
+// ⚠ DELTA vs THE BRING-UP: PublishWorldShadingConstantsBringUp's hard-coded lQuadricB
+// carries wAxis = (0,0,0,0); the console writes (0,0,0,1). Nothing consumes B row 3 (the
+// shader dots B rows 0..2 only), so this is a cosmetic difference, but it IS a difference
+// and the regression oracle must not flag it.
 // =============================================================================
 void
-WorldModule::PublishWorldShadingConstantsBringUp()
+GenerateShaderConstantsForQuadricIrradiance( const rw::math::vpu::Matrix44& lIrradianceMatrixR,
+                                             const rw::math::vpu::Matrix44& lIrradianceMatrixG,
+                                             const rw::math::vpu::Matrix44& lIrradianceMatrixB,
+                                             Matrix44& lOutQuadricMatrix0,
+                                             Matrix44& lOutQuadricMatrix1 )
 {
+    Vector4  lIrradiance_1;
+    lIrradiance_1.SetZero();                    // `vspltisw v10, 0` @0x827B07AC
+
+    Matrix44 lIrradiance_x_y_z_xx;
+    Matrix44 lIrradiance_xy_yz_zx_yy;
+    lIrradiance_x_y_z_xx.SetZero();
+    lIrradiance_xy_yz_zx_yy.SetZero();
+
+    const rw::math::vpu::Matrix44* laIrradianceMatrices[ 3 ] =
+        { &lIrradianceMatrixR, &lIrradianceMatrixG, &lIrradianceMatrixB };
+
+    for ( u32 luChannel = 0; luChannel < 3; luChannel++ )
+    {
+        const rw::math::vpu::Matrix44& lIrradianceMatrix = *laIrradianceMatrices[ luChannel ];
+
+        // The three squared-term coefficients + the constant, with z^2 folded away
+        // (x^2 + y^2 + z^2 == 1 for a unit normal).
+        const f32 Czz = lIrradianceMatrix.zAxis.z;          // m22
+        const f32 Cxx = lIrradianceMatrix.xAxis.x - Czz;    // m00 - m22
+        const f32 Cyy = lIrradianceMatrix.yAxis.y - Czz;    // m11 - m22
+        const f32 C1  = lIrradianceMatrix.wAxis.w + Czz;    // m33 + m22
+
+        // The linear terms (the matrix is symmetric, so 2*m0..3 is the whole contribution
+        // of both the row and the column entry).
+        const f32 Cx = 2.0f * lIrradianceMatrix.xAxis.w;    // 2 * m03
+        const f32 Cy = 2.0f * lIrradianceMatrix.yAxis.w;    // 2 * m13
+        const f32 Cz = 2.0f * lIrradianceMatrix.zAxis.w;    // 2 * m23
+
+        // The cross terms. Czx reads m20, not m02 -- the console reads row 2 lane 0
+        // (`vperm v12, v11, v11, v0` with v0 reloaded to the x-splat control @0x827B0A20);
+        // for the symmetric irradiance matrix the two are equal.
+        const f32 Cxy = 2.0f * lIrradianceMatrix.xAxis.y;   // 2 * m01
+        const f32 Cyz = 2.0f * lIrradianceMatrix.yAxis.z;   // 2 * m12
+        const f32 Czx = 2.0f * lIrradianceMatrix.zAxis.x;   // 2 * m20
+
+        Vector4SetElem( lIrradiance_1, luChannel, C1 );
+        Matrix44Row( lIrradiance_x_y_z_xx,    luChannel + 1 ) = Vector4{ Cx,  Cy,  Cz,  Cxx };
+        Matrix44Row( lIrradiance_xy_yz_zx_yy, luChannel     ) = Vector4{ Cxy, Cyz, Czx, Cyy };
+    }
+
+    Matrix44 lIrradianceQuadricForShaderA = lIrradiance_x_y_z_xx;
+    lIrradianceQuadricForShaderA.xAxis    = lIrradiance_1;
+
+    Matrix44 lIrradianceQuadricForShaderB = lIrradiance_xy_yz_zx_yy;
+    lIrradianceQuadricForShaderB.wAxis    = Vector4{ 0.0f, 0.0f, 0.0f, 1.0f };
+
+    lOutQuadricMatrix0 = lIrradianceQuadricForShaderA;
+    lOutQuadricMatrix1 = lIrradianceQuadricForShaderB;
+}
+
+// =============================================================================
+// WorldModule::SetupShaderConstantsBeforeRendering  @ X360 0x827D1410   [BODIED]
+//
+// The frame's GLOBAL shading publish: ask the environment manager for the blended
+// sky / scattering / key-light / cloud / irradiance set, then write it into (a) the
+// global runtime shader-constant register CgsGraphics::mShaderConstantTable, (b) the
+// renderer's per-frame BrnShaderConstantsFrame, and (c) the world module's dispatch
+// OUTPUT buffer (the copy the per-pass car/world legs of GenerateDispatchLists read
+// back). Its only console caller is WorldModule::GenerateDispatchLists @0x827D1CE8
+// (`bl` @0x827D20B0, the single xref).
+//
+// ---- SIGNATURE (asm prologue + DWARF, NOT the pseudocode) --------------------------
+// DecFIGS references/DecFIGS/dwarfdump/GameSource/World/BrnWorldModule.h:677 and
+// _compile/BrnWorldUnity.cpp:7634 (source BrnWorldModule.cpp:2436):
+//     void WorldModule::SetupShaderConstantsBeforeRendering(
+//              const rw::math::vpu::Matrix44&       lCameraViewProjection,
+//              const rw::math::vpu::Matrix44Affine& lCameraTransform,
+//              const float32_t                      lfGameTime,
+//              const float32_t                      lfSimTime,
+//              BrnShaderConstantsFrame*             lpOutputShaderConstants,
+//              DispatchOutputBuffer*                lpOutputBuffer )
+// The prologue agrees and pins the PPC slot assignment: r3=this, r4->r24, r5->r25,
+// f1 (slot 4, its GPR r6 SKIPPED), f2 (slot 5, r7 SKIPPED), r8->r26, r9->r22. The call
+// site closes it: @0x827D2098-0x827D20AC loads r4 = the local Matrix44 copied out of
+// gDispatchCamera+0x80..0xB0 (GetViewProjectionMatrix), r5 = the director Camera* (whose
+// mTransform is at +0x00, so the Camera* IS the Matrix44Affine&), f1 = GetGameTime(),
+// f2 = GetSimTime() (`fmr f2, f31`), r8 = GetShaderConstantsFrame(), r9 = the dispatch
+// OUTPUT buffer that is LockForWrite'd around the call. Hex-Rays renders the whole thing
+// as `int SetupShaderConstantsBeforeRendering()` -- ZERO parameters -- which is why the
+// pre-existing PC declaration (frame, simTime, gameTime) was three arguments short AND
+// had the two floats the wrong way round.
+//
+// ⚠ The two floats are (GAME, SIM) in that order. The old PC decl said (sim, game).
+//
+// ---- THE 26 OUT-PARAMS OF EnvironmentManager::GenerateShaderConstants @0x827D0098 ----
+// DWARF BrnEnvironmentManager.h:398 gives the 26 reference types; this caller's STORE
+// SITES give what each one is. The X360 parameter area is 8-BYTE slots (PPC64), base
+// r1+0x14, so the stack arguments are slot n at 0x14+(n-1)*8 -- 0x54, 0x5C, ... 0xE4,
+// exactly the 19 `stw` targets @0x827D1488..0x827D1544. Hex-Rays assumes 4-byte slots and
+// therefore invents 62 arguments (v122..v140 are its uninitialised phantom args 9..27).
+//
+//  #  reg/slot  local(sp)  DWARF type + name                where THIS function stores it
+//  -- --------- ---------- -------------------------------- ---------------------------------
+//   1 r4        var_2B0    Vector4& lSky_TopColourDrk       frame +0x2B0 mTopColourDrk
+//   2 r5        var_260    Vector4& lSky_HorColourPow       table 33 (SkyReflectionColour);
+//                                                           frame +0x2C0 mHorColourPow
+//   3 r6        var_250    Vector4& lSky_SunColourPow       frame +0x2D0 mSunColourPow
+//   4 r7        var_2F0    Vector3& lSky_HorBleedSclPow     frame +0x2E0 mHorBleedSclPow
+//   5 r8        var_1B0    Vector4& lScatt_HorColourPow     (NOT CONSUMED HERE)
+//   6 r9        var_3E0    Vector4& lScatt_TopColourDrk     .xyz -> lFogColourPlusWhiteLevel
+//                                                           (table 28 + output SetFogColour...)
+//   7 r10       var_1C0    Vector4& lScatt_SunColourPow     (NOT CONSUMED HERE)
+//   8 sp+0x54   var_1A0    Vector3& lScatt_HorBleedSclPow   (NOT CONSUMED HERE)
+//   9 sp+0x5C   var_2A0    Vector4& lScatt_Coeffs           table 27 (ScattCoeffs);
+//                                                           frame +0x2F0; output SetFogScattering
+//  10 sp+0x64   var_270    Vector3& lKeyLightDirection      table 10; frame +0x220;
+//                                                           output SetKeyLightDirection
+//  11 sp+0x6C   var_290    Vector3& lKeyLightColour         table 9; table 12 (clamped);
+//                                                           frame +0x230; output SetKeyLightColour
+//  12 sp+0x74   var_2D0    Vector3& lKeyLightSpecularColour table 11
+//  13 sp+0x7C   var_1E0    Vector3& laCloudLiteColours[0]   frame +0x260 mCloudLiteColour0 (w=1)
+//  14 sp+0x84   var_1D0    Vector3& laCloudLiteColours[1]   (NOT CONSUMED HERE)
+//  15 sp+0x8C   var_200    Vector3& laCloudDarkColours[0]   frame +0x250 mCloudDarkColour0 (w=1)
+//  16 sp+0x94   var_1F0    Vector3& laCloudDarkColours[1]   (NOT CONSUMED HERE)
+//  17 sp+0x9C   var_240    Vector4& laCloudScaleAndOffsets[0] frame +0x270
+//  18 sp+0xA4   var_360    Vector2& lCloudOpacity           frame +0x2A0 = (x, y, 0, 0)
+//  19 sp+0xAC   var_350    Vector2& lCloudNegativeDensity   frame +0x280 = (1-x, 1-y, 0, 0)
+//  20 sp+0xB4   var_340    Vector2& lCloudFeathering        frame +0x290 = (1/x, 1/y, 0, 0)
+//  21 sp+0xBC   var_3B0    float32_t& lfWhiteLevel          f31 everywhere; frame +0x318;
+//                                                           table 28.w / 29; output SetWhiteLevel
+//  22 sp+0xC4   var_110    Matrix44& lIrradianceMatrixR     -> the quadric packer (r3)
+//  23 sp+0xCC   var_150    Matrix44& lIrradianceMatrixG     -> the quadric packer (r4)
+//  24 sp+0xD4   var_190    Matrix44& lIrradianceMatrixB     -> the quadric packer (r5)
+//  25 sp+0xDC   var_2C0    Vector3& lAverageIrradianceColour output SetAverageIrradianceColour
+//  26 sp+0xE4   var_280    Vector3& lUnbiasedKeyLightDirection frame +0x300
+//
+// THREE INDEPENDENT NAME CONFIRMATIONS that the ordering above is right, not guessed:
+//   * #19 is named lCloudNegativeDensity and the store is 1 - it, into mCloudLayerDensity;
+//   * #20 is named lCloudFeathering and the store is 1 / it, into mCloudLayerInvFeather;
+//   * #15/#13 land in mCloudDarkColour0 / mCloudLiteColour0 respectively, which is what
+//     tells lite from dark (they are otherwise the same type in adjacent slots).
+//
+// ---- WHAT IS PUBLISHED --------------------------------------------------------------
+//  mShaderConstantTable slots (in the console's write order):
+//     8  ViewPosition            = lCameraTransform.Pos()  (`lvx128 v125, r25, 0x30`)
+//     9  KeyLightColour          = lKeyLightColour
+//    10  KeyLightDirection       = lKeyLightDirection
+//    11  KeyLightSpecularColour  = lKeyLightSpecularColour
+//    12  KeyLightClampedColour   = min(max(colour,0), whiteLevel) (`vmaxfp128`+`vminfp`,
+//                                  the clamp vector being (wl,wl,wl,0) so .w comes out 0)
+//    13  Time                    = (lSimTime, lGameTime, 0, 0)     <-- x is SIM, y is GAME
+//     0..4  the five ENGINE matrix slots, reset to the IDENTITY (five inlined
+//           GetMatrix44_Identity temporaries built from gIVector + unk_82181510/20/30,
+//           whose four rows DATA_DUMP pins as (1,0,0,0)/(0,1,0,0)/(0,0,1,0)/(0,0,0,1)).
+//           Slot 3 is ViewProjection: GenerateDispatchLists re-publishes 3/34 from the
+//           dispatch camera IMMEDIATELY after this call, which is why resetting it here
+//           is harmless -- and why this call must stay AHEAD of that publish.
+//    18/19 IrradianceQuadricA/B  = GenerateShaderConstantsForQuadricIrradiance(R,G,B)
+//    27  ScattCoeffs             = lScatt_Coeffs
+//    28  FogColourPlusWhiteLevel = (lScatt_TopColourDrk.xyz, whiteLevel)
+//    29  HDRConstants            = (whiteLevel, 1/whiteLevel, 0, 0)
+//    33  SkyReflectionColour     = lSky_HorColourPow
+//  the BrnShaderConstantsFrame, in the console's store order:
+//    +0x000 ViewProjection, +0x050 CameraTransform, +0x040 ViewPosition,
+//    +0x220 KeyLightDirection, +0x230 KeyLightColour, +0x2B0 TopColourDrk,
+//    +0x2C0 HorColourPow, +0x2D0 SunColourPow, +0x2E0 HorBleedSclPow,
+//    +0x250 CloudDarkColour0, +0x260 CloudLiteColour0, +0x270 CloudTexScaleAndOffsets0,
+//    +0x2A0 CloudLayerOpacity, +0x280 CloudLayerDensity, +0x290 CloudLayerInvFeather,
+//    +0x310 CloudDistanceCurve, +0x314 GameTime, +0x318 WhiteLevel,
+//    +0x2F0 FogScattering, +0x300 UnbiasedKeyLightDirection.
+//    mCloudLayerRadii (+0x240) is the ONE frame member this function does not write.
+//  the DispatchOutputBuffer: FogColourPlusWhiteLevel, FogScattering, KeyLightDirection,
+//    KeyLightColour, QuadricIrradianceA, QuadricIrradianceB, AverageIrradianceColour,
+//    WhiteLevel -- all eight members, in that order.
+//
+// LOCK DISCIPLINE. The console does NOT open either lock here: every frame setter it
+// emitted out-of-line carries `Assert(true == mbLockedForWriting)` (twelve surviving
+// checks of this+0x31C, the redundant ones CSE'd away), i.e. the CALLER must have the
+// frame write-locked, and GenerateDispatchLists brackets the call with the output
+// buffer's IOBuffer::LockForWrite / UnlockForWrite (@0x827D2074 / @0x827D20B8).
+//
+// PERF MONITORS: none. The asm contains no PerfMonCpu call; the UT_RenderMainScreen /
+// UT_RenderFX brackets around it live in the caller.
+//
+// +0x310 mfCloudDistanceCurve comes from `lfsx f30, r23, 0x1E7650` -- WorldModule +
+// 0x1E7650 == mEnvironmentManager (WorldModule+0x1E6F60) + 0x6F0, which the committed
+// BrnEnvironmentManager.h:211 already names mfCloudDistanceCurve (Construct seeds 1.0f).
+// The console reads the member directly; the PC reads it through the accessor added for
+// this wave (the member is private in the recon header).
+// =============================================================================
+void
+WorldModule::SetupShaderConstantsBeforeRendering( const rw::math::vpu::Matrix44& lCameraViewProjection,
+                                                  const rw::math::vpu::Matrix44Affine& lCameraTransform,
+                                                  const f32 lfGameTime,
+                                                  const f32 lfSimTime,
+                                                  BrnShaderConstantsFrame* lpOutputShaderConstants,
+                                                  BrnWorldIO::DispatchOutputBuffer* lpOutputBuffer )
+{
+    // lTime.x = the SIM time, lTime.y = the GAME time, zw zero (the two vrlimi128 inserts
+    // @0x827D14E8 mask 8 = lane x from f2, @0x827D1558 mask 4 = lane y from f1).
+    const VecFloat lSimTime  = VecFloat{ lfSimTime,  lfSimTime,  lfSimTime,  lfSimTime  };
+    const VecFloat lGameTime = VecFloat{ lfGameTime, lfGameTime, lfGameTime, lfGameTime };
+    Vector4 lTime;
+    lTime.SetZero();
+    lTime.x = lSimTime.x;
+    lTime.y = lGameTime.x;
+
+    // `lvx128 v125, r25, 0x30` -- the camera transform's translation row.
+    const Vector3 lCameraPosition = lCameraTransform.Pos();
+
+    // ---- the environment manager's blended set ---------------------------------------
+    Vector4  lSky_TopColourDrk;
+    Vector4  lSky_HorColourPow;
+    Vector4  lSky_SunColourPow;
+    Vector3  lSky_HorBleedSclPow;
+    Vector4  lScatt_HorColourPow;
+    Vector4  lScatt_TopColourDrk;
+    Vector4  lScatt_SunColourPow;
+    Vector3  lScatt_HorBleedSclPow;
+    Vector4  lScatt_Coeffs;
+    Vector3  lKeyLightDirection;
+    Vector3  lKeyLightColour;
+    Vector3  lKeyLightSpecularColour;
+    Vector3  laCloudLiteColours[ 2 ];
+    Vector3  laCloudDarkColours[ 2 ];
+    Vector4  laCloudScaleAndOffsets[ 2 ];
+    Vector2  lCloudOpacity;
+    Vector2  lCloudNegativeDensity;
+    Vector2  lCloudFeathering;
+    Matrix44 lIrradianceMatrixR;
+    Matrix44 lIrradianceMatrixG;
+    Matrix44 lIrradianceMatrixB;
+    Vector3  lAverageIrradianceColour;
+    Vector3  lUnbiasedKeyLightDirection;
+    f32      lfWhiteLevel = 0.0f;
+
+    // The 26 out-params, in the asm's argument order (see the table in the banner). The
+    // console leaves every one of them UNINITIALISED on entry -- GenerateShaderConstants
+    // writes all 26 unconditionally.
+    mEnvironmentManager.GenerateShaderConstants(
+        lSky_TopColourDrk, lSky_HorColourPow, lSky_SunColourPow, lSky_HorBleedSclPow,
+        lScatt_HorColourPow, lScatt_TopColourDrk, lScatt_SunColourPow, lScatt_HorBleedSclPow,
+        lScatt_Coeffs,
+        lKeyLightDirection, lKeyLightColour, lKeyLightSpecularColour,
+        laCloudLiteColours[ 0 ], laCloudLiteColours[ 1 ],
+        laCloudDarkColours[ 0 ], laCloudDarkColours[ 1 ],
+        laCloudScaleAndOffsets[ 0 ],
+        lCloudOpacity, lCloudNegativeDensity, lCloudFeathering,
+        lfWhiteLevel,
+        lIrradianceMatrixR, lIrradianceMatrixG, lIrradianceMatrixB,
+        lAverageIrradianceColour, lUnbiasedKeyLightDirection );
+
     ::ShaderConstantTable& lrTable = CgsGraphics::mShaderConstantTable;
 
-    // --- ambient irradiance: the real six-fill rig solved into the shader's quadric form
-    // (rows 1..3 of A are the per-channel (x, y, z, x*x) coefficients, rows 0..2 of B the
-    // per-channel (x*y, y*z, z*x, y*y) coefficients; A[0].xyz is the constant term).
-    Matrix44 lQuadricA;
-    lQuadricA.xAxis = Vector4{  0.365244f,  0.427732f,  0.430775f,  0.000000f };
-    lQuadricA.yAxis = Vector4{ -0.061486f,  0.087392f, -0.067495f,  0.000131f };
-    lQuadricA.zAxis = Vector4{ -0.058614f,  0.118284f, -0.064128f, -0.000443f };
-    lQuadricA.wAxis = Vector4{ -0.056434f,  0.132722f, -0.057723f, -0.000384f };
-    Matrix44 lQuadricB;
-    lQuadricB.xAxis = Vector4{  0.000000f,  0.000000f, -0.004146f, -0.057522f };
-    lQuadricB.yAxis = Vector4{  0.000000f,  0.000000f,  0.014042f, -0.073080f };
-    lQuadricB.zAxis = Vector4{  0.000000f,  0.000000f,  0.012188f, -0.066545f };
-    lQuadricB.wAxis = Vector4{  0.000000f,  0.000000f,  0.000000f,  0.000000f };
-    lrTable.SetShaderConstantData( 18, lQuadricA );
-    lrTable.SetShaderConstantData( 19, lQuadricB );
-
-    // --- the key light (direction of travel: high sun, slightly behind the camera) -----
-    const Vector4 lKeyLightDirection{ 0.406f, -0.812f, 0.419f, 0.0f };
+    // ---- the global shader-constant register -----------------------------------------
+    lrTable.SetShaderConstantData(  8, lCameraPosition );
+    lrTable.SetShaderConstantData(  9, lKeyLightColour );
     lrTable.SetShaderConstantData( 10, lKeyLightDirection );
-    lrTable.SetShaderConstantData(  9, Vector4{ 1.700000f, 1.700000f, 1.054000f, 1.0f } );   // KeyLightColour
-    lrTable.SetShaderConstantData( 11, Vector4{ 1.591840f, 1.286597f, 0.954163f, 1.0f } );   // KeyLightSpecularColour
-    lrTable.SetShaderConstantData( 12, Vector4{ 1.000000f, 1.000000f, 1.000000f, 1.0f } );   // KeyLightClampedColour
+    lrTable.SetShaderConstantData( 11, lKeyLightSpecularColour );
 
-    // --- atmosphere: ScattDist (25, 1500), ScattPow 1, ScattCap 0.87; the fog colour is
-    // the keyframe's ScattHorColour and the sky reflection its (SkyHorColour, SkyHorPow).
-    lrTable.SetShaderConstantData( 27, Vector4{ 0.000678f, 0.016949f, 1.000000f, 0.870000f } );   // ScattCoeffs
-    lrTable.SetShaderConstantData( 28, Vector4{ 0.383928f, 0.437485f, 0.527000f, 1.000000f } );   // FogColourPlusWhiteLevel
-    lrTable.SetShaderConstantData( 33, Vector4{ 1.015278f, 0.882773f, 0.807155f, 0.500000f } );   // SkyReflectionColour
-    lrTable.SetShaderConstantData( 29, Vector4{ 1.000000f, 1.000000f, 0.000000f, 0.000000f } );   // HDRConstants
+    // `vmaxfp128 v13, v126, v127` (v127 == 0) then `vminfp v1, v13, v0` with
+    // v0 = (whiteLevel, whiteLevel, whiteLevel, 0.0f) -- so the w lane comes out 0
+    // whatever the manager left in it.
+    Vector3 lKeyLightClampedColour = lKeyLightColour;
+    ClampColourToWhiteLevel( lKeyLightClampedColour, lfWhiteLevel );
+    lKeyLightClampedColour.w = 0.0f;
+    lrTable.SetShaderConstantData( 12, lKeyLightClampedColour );
 
-    // --- shadow cascades: RETIRED 2026-08-12, the real producer is live -----------------
-    //
-    // This block used to force the "shadows off" configuration -- identity
-    // ShadowMap_WorldToLight for all three cascades and zeroed c15/c16, which makes
-    // ApplyFade(factor, fade) = factor*fade + 1 - fade collapse to exactly 1.0, i.e. fully
-    // lit regardless of what sampler 15 returns. That was correct while it stood: the real
-    // producer was unreachable, so without it the world's pixel shaders (92 of the 110 in
-    // SHADERS.BNDL do `texldp ..., s15`) would have read an unbound sampler.
-    //
-    // c14/c15/c16/c17 are now published by the REAL console producer,
-    // BrnShadowMap::SetConstants, reached every frame via
-    // ShadowMap::CalculateShadowMapCameras from the shadow arm of
-    // GenerateDispatchListsBringUp -- which runs BEFORE this function, so anything written
-    // here would overwrite it. Hence: nothing written here.
-    //
-    // Retired only once all three preconditions were boot-verified, in this order:
-    //   1. a real shadow-map depth surface exists and is bound to s15
-    //      ([shadow-rt] target 1280x1920 sections=1 depthFormat=INTZ depthTexture=OK);
-    //   2. the cascade matrices are FINITE ([shadow-cam] all cascade stages finite, and
-    //      [shadow-prod] non-finite WARNs 40/40 -> 0) -- they were NaN until the frustum
-    //      plane-slot permutation and the inert CalcVertices were fixed;
-    //   3. the cascades carry DISTINCT caster sets (c0/c1/c2 = 1224/498/498, previously
-    //      identical), so the three matrices are actually describing different volumes.
-    // If any of those regress, the symptom is NOT "no shadows" but a world rendered with
-    // the key light removed -- restore this block first while diagnosing.
+    lrTable.SetShaderConstantData( 13, lTime );
 
-    // --- misc ---------------------------------------------------------------------------
-    lrTable.SetShaderConstantData( 13, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f } );      // Time
+    // The five ENGINE matrix slots, reset to the identity for the frame.
+    for ( u32 luMatrixConstant = 0; luMatrixConstant < 5; luMatrixConstant++ )
+    {
+        Matrix44 lIdentity;
+        lIdentity.SetIdentity();
+        lrTable.SetShaderConstantData( luMatrixConstant, lIdentity );
+    }
+
+    Matrix44 lQuadricIrradianceA;
+    Matrix44 lQuadricIrradianceB;
+    GenerateShaderConstantsForQuadricIrradiance( lIrradianceMatrixR, lIrradianceMatrixG,
+                                                 lIrradianceMatrixB,
+                                                 lQuadricIrradianceA, lQuadricIrradianceB );
+    lrTable.SetShaderConstantData( 18, lQuadricIrradianceA );
+    lrTable.SetShaderConstantData( 19, lQuadricIrradianceB );
+
+    lrTable.SetShaderConstantData( 27, lScatt_Coeffs );
+
+    Vector4 lFogColourPlusWhiteLevel;
+    lFogColourPlusWhiteLevel.x = lScatt_TopColourDrk.x;
+    lFogColourPlusWhiteLevel.y = lScatt_TopColourDrk.y;
+    lFogColourPlusWhiteLevel.z = lScatt_TopColourDrk.z;
+    lFogColourPlusWhiteLevel.w = lfWhiteLevel;
+    lrTable.SetShaderConstantData( 28, lFogColourPlusWhiteLevel );
+
+    // flt_82001C98 == 1.0f and flt_82001CC0 == 0.0f (DATA_DUMP).
+    Vector4 lHDRConstants;
+    lHDRConstants.x = lfWhiteLevel;
+    lHDRConstants.y = 1.0f / lfWhiteLevel;
+    lHDRConstants.z = 0.0f;
+    lHDRConstants.w = 0.0f;
+    lrTable.SetShaderConstantData( 29, lHDRConstants );
+
+    const Vector4 lSkyReflectionColour = lSky_HorColourPow;
+    lrTable.SetShaderConstantData( 33, lSkyReflectionColour );
+
+    // ---- the renderer's per-frame constants frame (caller holds the write lock) -------
+    lpOutputShaderConstants->SetViewProjectionMatrix( lCameraViewProjection );
+    lpOutputShaderConstants->SetCameraTransform( lCameraTransform );
+    lpOutputShaderConstants->SetViewPosition( lCameraPosition );
+    lpOutputShaderConstants->SetKeyLightDirection( lKeyLightDirection );
+    lpOutputShaderConstants->SetKeyLightColour( lKeyLightColour );
+    lpOutputShaderConstants->SetTopColourDrk( lSky_TopColourDrk );
+    lpOutputShaderConstants->SetHorColourPow( lSkyReflectionColour );
+    lpOutputShaderConstants->SetSunColourPow( lSky_SunColourPow );
+    lpOutputShaderConstants->SetHorBleedSclPow( lSky_HorBleedSclPow );
+
+    // The two cloud colours go in as Vector4 with w == 1.0f: the console stores a 16-byte
+    // vector built at var_3C0 by copying the Vector3 and then `stfs f29, var_3B4` with
+    // f29 == flt_82001C98 == 1.0f (@0x827D19C8/0x827D19CC and @0x827D1A10/0x827D1A14).
+    lpOutputShaderConstants->SetCloudDarkColour0( Vector4{ laCloudDarkColours[ 0 ].x,
+                                                          laCloudDarkColours[ 0 ].y,
+                                                          laCloudDarkColours[ 0 ].z, 1.0f } );
+    lpOutputShaderConstants->SetCloudLiteColour0( Vector4{ laCloudLiteColours[ 0 ].x,
+                                                          laCloudLiteColours[ 0 ].y,
+                                                          laCloudLiteColours[ 0 ].z, 1.0f } );
+    lpOutputShaderConstants->SetCloudTextureScaleAndOffsets0( laCloudScaleAndOffsets[ 0 ] );
+
+    lpOutputShaderConstants->SetCloudLayerOpacity( Vector4{ lCloudOpacity.x,
+                                                           lCloudOpacity.y, 0.0f, 0.0f } );
+    lpOutputShaderConstants->SetCloudLayerDensity( Vector4{ 1.0f - lCloudNegativeDensity.x,
+                                                           1.0f - lCloudNegativeDensity.y,
+                                                           0.0f, 0.0f } );
+    lpOutputShaderConstants->SetCloudLayerInvFeather( Vector4{ 1.0f / lCloudFeathering.x,
+                                                              1.0f / lCloudFeathering.y,
+                                                              0.0f, 0.0f } );
+    lpOutputShaderConstants->SetCloudDistanceCurve( mEnvironmentManager.GetCloudDistanceCurve() );
+
+    lpOutputShaderConstants->SetGameTime( lfGameTime );
+    lpOutputShaderConstants->SetWhiteLevel( lfWhiteLevel );
+    lpOutputShaderConstants->SetFogScattering( lScatt_Coeffs );
+    lpOutputShaderConstants->SetUnbiasedKeyLightDirection( lUnbiasedKeyLightDirection );
+
+    // ---- the dispatch output buffer (caller holds the IOBuffer write lock) -----------
+    lpOutputBuffer->SetFogColourPlusWhiteLevel( lFogColourPlusWhiteLevel );
+    lpOutputBuffer->SetFogScattering( lScatt_Coeffs );
+    lpOutputBuffer->SetKeyLightDirection( lKeyLightDirection );
+    lpOutputBuffer->SetKeyLightColour( lKeyLightColour );
+    lpOutputBuffer->SetQuadricIrradianceA( lQuadricIrradianceA );
+    lpOutputBuffer->SetQuadricIrradianceB( lQuadricIrradianceB );
+    lpOutputBuffer->SetAverageIrradianceColour( lAverageIrradianceColour );
+    lpOutputBuffer->SetWhiteLevel( lfWhiteLevel );
 }
+
+// (PublishWorldShadingConstantsBringUp RETIRED 2026-08-16, env-manager go-live wave.
+//  Its ten hard-coded shader-constant slots -- 9/10/11/12/13/18/19/27/28/29/33, derived
+//  offline from the shipped noon keyframe ENV_KF_Paradise_ingame_junk_city_1200 -- are a
+//  STRICT SUBSET of what the real console producer publishes, and that producer is now
+//  reconstructed and live: WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410,
+//  called from GenerateDispatchListsBringUp immediately before the 8/3/34 camera-constant
+//  publish. Coverage, slot by slot:
+//     9 KeyLightColour, 10 KeyLightDirection, 11 KeyLightSpecularColour,
+//    12 KeyLightClampedColour, 13 Time, 18/19 IrradianceQuadricA/B, 27 ScattCoeffs,
+//    28 FogColourPlusWhiteLevel, 29 HDRConstants, 33 SkyReflectionColour -- all published,
+//    plus 8 ViewPosition and the engine matrix slots 0..4 the bring-up never wrote.
+//  The bring-up's shadow block was already retired 2026-08-12; the real producer does not
+//  write c14..c17 at all, so that retirement now holds by construction.
+//
+//  EXPECTED VISUAL DELTA, so it is not misread as a regression: the KEY LIGHT DIRECTION
+//  moves. The bring-up chose (0.406, -0.812, 0.419); the real value is
+//  EnvironmentSettings::ComputeKeyLightDirection @0x82678AB0 at the manager's time of day
+//  with the keyframe rig angles (rig 45 deg, tilt 20 deg at horizon / 50 deg at midday) --
+//  (-0.60916963, -0.66981047, +0.42457779) at 12:00 and (-0.42457771, -0.66981045,
+//  +0.60916971) at the Construct default 13:00; 61.7 deg from the bring-up direction at
+//  12:00. The world's shading AND the shadow direction change accordingly, and the sun in
+//  the sky dome only agrees once BrnRendererModule::PublishSkyConstantsBringUp is retired
+//  in favour of gBrnWorldShaderConstantsFrameBringUp.
+//  The other documented delta is IrradianceQuadricB row 3: the bring-up carried (0,0,0,0),
+//  the console writes (0,0,0,1). Nothing consumes that row.)
 
 // =============================================================================
 // [FLAG PC bring-up] GenerateDispatchListsBringUp -- NOT an X360 function.
@@ -5040,6 +5475,72 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     // hpos = pos.x*row0 + pos.y*row1 + pos.z*row2 + row3).
     const Matrix44& lViewProjection = sBringUpCamera.GetViewProjectionMatrix();
 
+    // =========================================================================
+    // THE REAL FRAME SHADING PUBLISH (env-manager go-live wave, 2026-08-16).
+    //
+    // This is the CONSOLE call at the CONSOLE's relative position: in
+    // WorldModule::GenerateDispatchLists (this file, :3707 -- X360 @0x827D20B0)
+    // SetupShaderConstantsBeforeRendering sits immediately after the dispatch camera is
+    // rebuilt and immediately before the 8/3/34 camera-constant publish, because the
+    // function resets engine matrix slots 0..4 (slot 3 == ViewProjection) to the identity.
+    // It REPLACES PublishWorldShadingConstantsBringUp, whose ten hard-coded slots
+    // (9/10/11/12/13/18/19/27/28/29/33) are a strict subset of what this publishes.
+    //
+    // [FLAG PC bring-up] THREE of the six arguments are stand-ins, and only three:
+    //   * the camera TRANSFORM. The console passes the director Camera* (its mTransform is
+    //     the object's first member). This producer never receives that object -- only the
+    //     transform + FOV SetBringUpCameraOverride staged -- so the transform is rebuilt
+    //     from the basis the stand-in graphics camera above was framed with, exactly as the
+    //     shadow arm below rebuilds it (sBringUpCamera.mView's basis COLUMNS are the
+    //     transform's basis ROWS; CgsGraphics::Camera::LookAt @0x827F9510 fills those
+    //     columns, so the two cannot drift).
+    //   * the GAME / SIM times. The console reads them off the dispatch INPUT buffer
+    //     (GetGameTime / GetSimTime), which does not exist here. Passed as 0.0f/0.0f --
+    //     which is EXACTLY what PublishWorldShadingConstantsBringUp published for shader
+    //     slot 13 ("Time" = (0,0,0,0)), so this changes nothing on screen. It is not
+    //     replaced by a host clock: inventing a time base is not a reconstruction.
+    //     DELETE-WHEN BrnGameModule::DoDispatch stages the frame times the way it already
+    //     stages the camera (SetBringUpCameraOverride) -- see the report's follow-ups.
+    //   * the frame + output buffer. See the banner on gBrnWorldShaderConstantsFrameBringUp
+    //     (this file, next to gDispatchCamera).
+    // The KEY LIGHT, the irradiance quadrics, the fog/scattering, the sky gradient, the
+    // cloud set and the white level are now the REAL environment manager's.
+    // =========================================================================
+    {
+        // One-shot lifecycle for the two stand-in buffers. CgsModule::IOBuffer::LockForWrite
+        // asserts eStatusConstructed and BrnShaderConstantsFrame::Construct seeds
+        // mfWhiteLevel = 1.0f / clears the write lock, so both have to be Constructed exactly
+        // once -- on the console that happens in GenerateDispatchLists' CreateIOBuffer and in
+        // BrnRendererModule::Construct respectively.
+        static bool sbBringUpShadingBuffersConstructed = false;
+        if ( !sbBringUpShadingBuffersConstructed )
+        {
+            sbBringUpShadingBuffersConstructed = true;
+            gBrnWorldShaderConstantsFrameBringUp.Construct();
+            gWorldDispatchOutputBringUp.Construct();
+        }
+
+        rw::math::vpu::Matrix44Affine lCameraTransform;
+        const Matrix44&               lrView = sBringUpCamera.mView;
+        lCameraTransform.xAxis = Vector3{ lrView.xAxis.x, lrView.yAxis.x, lrView.zAxis.x, 0.0f };
+        lCameraTransform.yAxis = Vector3{ lrView.xAxis.y, lrView.yAxis.y, lrView.zAxis.y, 0.0f };
+        lCameraTransform.zAxis = Vector3{ lrView.xAxis.z, lrView.yAxis.z, lrView.zAxis.z, 0.0f };
+        lCameraTransform.wAxis = Vector3{ lEye.x, lEye.y, lEye.z, 0.0f };
+
+        // The console does not open either lock inside the producer -- the frame's belongs
+        // to BrnRendererModule::Update and the buffer's to GenerateDispatchLists -- so the
+        // seam opens both around the call, in the console's own order.
+        gBrnWorldShaderConstantsFrameBringUp.LockForWriting();
+        gWorldDispatchOutputBringUp.LockForWrite();
+        SetupShaderConstantsBeforeRendering( lViewProjection, lCameraTransform,
+                                             0.0f, 0.0f,
+                                             &gBrnWorldShaderConstantsFrameBringUp,
+                                             &gWorldDispatchOutputBringUp );
+        gWorldDispatchOutputBringUp.UnlockForWrite();
+        gBrnWorldShaderConstantsFrameBringUp.UnlockForWriting();
+        gbBrnWorldShaderConstantsFrameBringUpValid = true;
+    }
+
     // ---- the camera shader constants the dispatch interpreter reads back -----
     // (the same three ids WorldModule::GenerateDispatchLists publishes: 8 = view
     //  position, 3 = view-projection, 34 = the modified view-projection.)
@@ -5322,12 +5823,14 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     // the main pass is provably unaffected even if a future edit leaks the latch.
     mShadowMap.SetRenderingShadowMap( false );
 
-    // Publishes the bring-up lighting/atmosphere constants. It still runs AFTER
-    // CalculateShadowMapCameras above, but its shadow block is RETIRED (2026-08-12) now
-    // that the real producer is live, so ShadowMap::SetConstants' c14/c15/c16/c17 survive
-    // to the pixel stage instead of being overwritten with the shadows-off configuration.
-    // See the retirement note in its body for the three boot-verified preconditions.
-    PublishWorldShadingConstantsBringUp();
+    // (The bring-up lighting/atmosphere publish used to sit here. It is now the REAL
+    //  WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410, called ABOVE, at the
+    //  console's own position immediately before the 8/3/34 camera-constant publish --
+    //  it has to be there, because it resets engine matrix slot 3 (ViewProjection) to the
+    //  identity. Nothing is published here any more. The shadow constants c14..c17 that
+    //  ShadowMap::SetConstants writes from CalculateShadowMapCameras above are untouched by
+    //  the real producer, so the 2026-08-12 retirement of the bring-up's shadow block still
+    //  holds -- it now holds by construction rather than by ordering.)
 
     // ======================================================================
     // THE WORLD-LAYER EFFECTS PRODUCER (bloom wave 2026-08-15).
@@ -5351,16 +5854,11 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     if ( mapBringUpEffectsFrames[ 0 ] != 0 && mapBringUpEffectsFrames[ 1 ] != 0
       && mapBringUpEffectsFrames[ 2 ] != 0 && mapBringUpEffectsFrames[ 3 ] != 0 )
     {
-        // [FLAG PC bring-up] THE TIME OF DAY: stage the shipped noon keyframe
-        // (ENV_KF_Paradise_ingame_junk_city_1200 -- the SAME one PublishWorldShadingConstantsBringUp
-        // above hard-codes the lighting from) into the manager's blend frame at weight 1, so the
-        // real GenerateEffects below takes its KEYFRAME arm for slot 0 and the world layer carries
-        // the game's own daytime bloom (lum 1.13 / thr 0.56) and vignette instead of the base layer's
-        // fallback asset. On the console Update @0x827D6060 -> SetupBlend/PerformBlend do this from
-        // the streamed timeline every frame; the streamer is an inert gate here.
-        // DELETE-WHEN EnvironmentManager::Prepare/Update stream the timeline (with the leaf).
-        mEnvironmentManager.PCBringUpStageKeyframe(
-            &BrnWorld::EnvironmentSettings::GetBringUpKeyframeCity1200(), 1.0f );
+        // TOMBSTONE (post-fx step 9, group envblend): the noon-keyframe staging that stood
+        // here is DELETED. EnvironmentManager::Update @0x827D6060 -> SetupBlend @0x827D4FE8 ->
+        // SetupTimeOfDayBlend @0x827D35C0 -> PerformBlend now fill mBlendFrame from the
+        // STREAMED timeline every frame, at the live time of day, which is what this call
+        // stood in for. GenerateEffects below is unchanged -- it was always the real body.
 
         // (explicitly qualified: unlike the real GenerateDispatchLists this function has no
         //  `using namespace CgsDev;` in scope)

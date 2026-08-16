@@ -293,12 +293,9 @@ namespace BrnWorld
         void SetBringUpEffectsFrames( BrnEffectsFrame* lpFrame0, BrnEffectsFrame* lpFrame1,
                                       BrnEffectsFrame* lpFrame2, BrnEffectsFrame* lpFrame3 );
 
-        // NOT an X360 function either. Publishes the neutral lighting / atmosphere /
-        // shadow-cascade engine constants the world's REAL vertex+pixel programs read,
-        // because none of the console producers (environment manager, sky dome, shadow
-        // map) is live on this build. See the banner on the definition for how each value
-        // is derived from what the shaders do with it. DELETE with the entry above.
-        void PublishWorldShadingConstantsBringUp();
+        // (PublishWorldShadingConstantsBringUp RETIRED 2026-08-16 -- the real producer
+        // SetupShaderConstantsBeforeRendering @0x827D1410 below publishes a superset of its
+        // slots. See the retirement note in BrnWorldModule.cpp.)
 
         // @0x827DADF8 -- stage this frame's frustum-test queries for the scene
         // manager: the main camera frustum, the six environment-map face frusta
@@ -569,10 +566,38 @@ namespace BrnWorld
             Array<BrnTraffic::VehicleRenderInfo, 64u>& laTrafficRenderInfos );
 
         // @0x827D1410 -- stage the frame's global shader constants before any
-        // dispatch-list generation.
+        // dispatch-list generation. BODIED (post-fx step 9).
+        //
+        // ⭐ SIGNATURE CORRECTED 2026-08-16 (env-manager go-live wave). This used to read
+        // `void SetupShaderConstantsBeforeRendering( BrnShaderConstantsFrame*, f32 lfSimTime,
+        // f32 lfGameTime )` -- THREE arguments short, and the two floats in the WRONG ORDER,
+        // which is why the body it gated could never be written. Hex-Rays renders the X360
+        // function as `int SetupShaderConstantsBeforeRendering()` (zero parameters); the
+        // prologue and the single call site settle it.
+        //   * @0x827D1410-0x827D151C: `mr r24,r4` (the view-projection), `mr r25,r5` (the
+        //     camera transform -- `lvx128 v125, r25, 0x30` later reads its Pos row),
+        //     `stfs f1, var_3D0` / `stfs f2, var_3C0`, `mr r26,r8` (the frame),
+        //     `mr r22,r9` (the dispatch output buffer). r6 and r7 are NEVER touched: on PPC
+        //     a float argument RESERVES its GPR slot without using it, so the two floats are
+        //     parameters 4 and 5 and the two pointers land in r8/r9, not r6/r7.
+        //   * the caller, WorldModule::GenerateDispatchLists @0x827D1CE8, loads them at
+        //     @0x827D2098-0x827D20AC: r4 = a local Matrix44 copied out of gDispatchCamera
+        //     +0x80..0xB0 (== GetViewProjectionMatrix), r5 = the director Camera* (whose
+        //     mTransform is at +0x00, i.e. the Camera* IS the Matrix44Affine&),
+        //     f1 = DispatchInputBuffer::GetGameTime(), f2 = GetSimTime() (`fmr f2,f31`),
+        //     r8 = GetShaderConstantsFrame(), r9 = the output buffer it LockForWrite's.
+        //   * DecFIGS DWARF names all six: GameSource/World/BrnWorldModule.h:677 and
+        //     _compile/BrnWorldUnity.cpp:7634 (source BrnWorldModule.cpp:2436).
+        //
+        // The CALLER owns both locks: every frame setter the console emitted out-of-line
+        // asserts `true == mbLockedForWriting`, and GenerateDispatchLists brackets the call
+        // with the output buffer's IOBuffer::LockForWrite / UnlockForWrite.
         void SetupShaderConstantsBeforeRendering(
-            BrnShaderConstantsFrame* lpShaderConstantsFrame,
-            f32 lfSimTime, f32 lfGameTime );
+            const rw::math::vpu::Matrix44& lCameraViewProjection,
+            const rw::math::vpu::Matrix44Affine& lCameraTransform,
+            f32 lfGameTime, f32 lfSimTime,
+            BrnShaderConstantsFrame* lpOutputShaderConstants,
+            BrnWorldIO::DispatchOutputBuffer* lpOutputBuffer );
 
         // (called between the module dispatch feeds) -- forward the world module's
         // render-side state into the entity modules' dispatch inputs.

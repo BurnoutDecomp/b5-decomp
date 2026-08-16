@@ -92,6 +92,34 @@ namespace GameDataIO
             (s32)sizeof(CgsResource::Events::LoadBundleRequest));
     }
 
+    // -------- UnloadBundle (ADDITIVE 2026-08-16, envstream) --------
+    // No X360 export for any <N> instance (the exporter names every function it has; UnloadBundle
+    // is absent for all of them -- report grep). It is attested only by its CALL SITES, which give
+    // the full signature: EnvironmentManager::StreamOut @0x827D2EB0 passes
+    // (this, &receiverQueue, eventId, poolId 16, fileName) in r3..r7. The event it must build is
+    // CgsResource::Events::UnloadBundleRequest, which the committed CgsResourceIOEvents.h banner
+    // pins as a bare BundleLoaderEvent (the X360 BaseEventQueue<UnloadBundleRequest>::AddEvent
+    // @0x828E9F50 memcpys at stride 0x90 == 144 == exactly the base) -- i.e. LoadBundleRequest
+    // MINUS mbAllowFailiure/mbUseHDCache. Queue tag 3, the same tag GuiResourceModule::UnloadBundle
+    // @0x8285E8C8 posts and the same tag ResourceModule::ProcessResourceRequests routes to the
+    // bundle loader's unload intake (CgsResourceModule.cpp:169).
+    template <s32 N>
+    bool RequestInterface<N>::UnloadBundle(
+            CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+            s32 liEventId, s32 liPoolId, const char* lpcFileName)
+    {
+        CgsResource::Events::UnloadBundleRequest lEvent;
+        lEvent.mpUser              = lpReceiverQueue;        // +0x00
+        lEvent.miEventId           = liEventId;             // +0x04
+        lEvent.SetFileName(lpcFileName);                    // macFileName @ +0x0C
+        lEvent.miPoolId            = liPoolId;              // +0x8C
+        lEvent.mbLiveUpdateReplace = false;                 // +0x08
+
+        return mRequestQueue.AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lEvent), 3,
+            (s32)sizeof(CgsResource::Events::UnloadBundleRequest));
+    }
+
     // -------- LoadTrafficLanes @ 0x827468C0 (<4096>), 0x82256288 (<512>) --------
     template <s32 N>
     bool RequestInterface<N>::LoadTrafficLanes(
