@@ -37,6 +37,7 @@
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"                                               // PhysicsModuleIO::OutputBuffer (walls leg 4)
 #include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"                     // PotentialContactInterface + queue [12] (walls leg 4)
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"                    // PotentialContact (queue [12] events, walls leg 4)
+#include "rw/math/vpu/vector3_operation.h"                                                       // Negate (the `vxor` sign mask, walls leg 12)
 
 namespace BrnPhysics
 {
@@ -310,8 +311,40 @@ namespace Deformation
             // -- the handle always resolves for a queued add). FLAG: the resource-ptr resolution
             // (CreateFromHandle -> StreamedDeformationSpec*) is declare-only cross-TU surface; the
             // COM transform is the homed StreamedDeformationSpec call.
+            //
+            // ⭐⭐⭐ THE ARGUMENT IS NEGATED, AND THAT IS THE WHOLE POINT OF THIS CALL SITE
+            // (walls leg 12, 2026-08-16 -- this line was missing its `vxor` for eleven legs).
+            // X360 @0x82644AF0..0x82644B04, immediately before the `bl`:
+            //     vspltisw v0, -1  ;  vslw v0, v0, v0      -> 0x80000000 in every lane
+            //     lvx128   v13, r0, r11                    -> r11 == &(event copy + 0x20) == mCOMOffset
+            //     vxor     v1, v13, v0                     -> v1 = -mCOMOffset      <-- THE SIGN
+            //     bl       StreamedDeformationSpec::TransformToNewCOMSpace
+            // PS3 @0x76ADE4..0x76AE00 emits the identical five instructions
+            // (`vspltisw v2,-1 / lvx v0,r1,0xC0 / vslw v2,v2,v2 / vxor v2,v2,v0 / bl`), so the
+            // negation is double-witnessed and is not a one-build peculiarity.
+            //
+            // WHY IT MUST BE NEGATED -- TransformToNewCOMSpace itself proves it. That function moves
+            // every geometry point by `+= (new - old)` but pulls `mMeshOffset` by `-= (new - old)`
+            // (X360 0x825E31C0 vs 0x825E31E0; PS3 0x6C9920 vs 0x6C9A14). A frame change can only
+            // move one of those two ways, so the two are consistent ONLY if the incoming value is
+            // already the negated centre of mass. Two independent consumers agree:
+            //   * DeformableObject::GetBoundingBox @0x825E8620 places the handling-body box (which is
+            //     centred on the MODEL origin) at `transform.pos + *(spec+1632)`, and transform.pos
+            //     IS the COM -- so the stored mCurrentCOMOffset has to be -COM to name the model
+            //     origin;
+            //   * SimpleVehiclePhysics::SetAttributes @0x82602828 rebases the WHEELS by
+            //     `position - mCOMOffset`, and mCOMOffset is literally built as the mean of those
+            //     same wheel positions (ProcessCreateEvents @0x82616D2C..), so the wheels land in a
+            //     zero-mean COM frame. The sensors must land in the SAME frame or the two halves of
+            //     the car end up 2*COM apart -- which is exactly the 0.807 m split walls leg 11
+            //     measured, and the 0.764 m hover it produced.
+            // ⛔ The two OTHER callers (VehicleManager::ProcessCreateEvents @0x82616D00,
+            // PhysicalTrafficManager::PreparePhysicsForNewTrafficVehicle @0x82644204) pass their
+            // value UNNEGATED -- checked, no vxor at either -- but they call it with the *authored*
+            // COM tweak BEFORE the four-wheel mean is folded in, which is a different (and, for the
+            // shipped starter car, zero) quantity. Both are reproduced as the consoles have them.
             StreamedDeformationSpec* lpSpec = ResolveDeformationSpec(lrEvent.mModelHandle);
-            lpSpec->TransformToNewCOMSpace(lrEvent.mCOMOffset);
+            lpSpec->TransformToNewCOMSpace(rw::math::vpu::Negate(lrEvent.mCOMOffset));
 
             // CgsBitArray.h:222 bounds tripwire (the X360 SetBit path streams
             // "Index: " << liModelIndex << ", Number of bits: " << 28 into the message buffer

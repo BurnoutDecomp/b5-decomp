@@ -129,13 +129,6 @@ namespace Deformation
 		static const VecFloat KV_POS_X_HIT_DIRECTION = {};   // &unk_82FB82C0
 		static const VecFloat KV_NEG_X_HIT_DIRECTION = {};   // &unk_82FB9F20
 
-		// ⛔ THE SENSOR-SPHERE PLACEMENT GATE (walls leg 11, 2026-08-16). See the measured block in
-		// DeformationSensor::Prepare: the placement arithmetic is reconstructed and correct, and it
-		// is held off by a COM-frame sign disagreement in ANOTHER subsystem. Same file-static shape
-		// as gbDeformationPartsEnabled in BrnDeformableObject_Lifecycle.cpp. Flip to true (or delete
-		// the two `if`s) the moment the sensor offsets and the wheel positions share a frame.
-		static bool gbPlaceSensorSpheres = false;
-
 		// ⭐ REAL 2026-08-15 (walls leg 8). &unk_82FB9560, indexed 16*absorptionSet -- the PS3 exports
 		// name it `AbsorptionTable::savfCompressionLimitFactor` (that is what it scales: the
 		// per-direction compression limit, NOT the absorption). It reads zero in both images because
@@ -377,65 +370,27 @@ namespace Deformation
 			lDisp.y = ( lDisp.y < lOffsetA.y ) ? lDisp.y : lOffsetA.y;
 			lDisp.z = ( lDisp.z < lOffsetA.z ) ? lDisp.z : lOffsetA.z;
 
-			// ⛔⛔ NAMED GATE (walls leg 11, 2026-08-16) -- THE BODY ABOVE IS FAITHFUL AND THE
-			// STORES BELOW ARE HELD OFF BY A **SECOND, INDEPENDENT DEFECT** IN ANOTHER SUBSYSTEM.
-			// Turning the spheres on measured this, in one boot each (BRN_SPHERE_PROBE=1):
-			//   * the spheres become real and distinct (20 spec positions, spec radii) and the
-			//     leg-10 fan-out ENDS;
-			//   * but the car then rests on its BODY, not its wheels: the penetration solver lifts
-			//     it 0.372 m at spawn (it was a measured no-op before), it hovers with a per-frame
-			//     +0.0193 correction exactly cancelling gravity's -1.157 m/s, the wheels never
-			//     reach the ground, and the throttle moves it 1.3 m in 190 s instead of 90 m.
-			// ⭐ WHY, ARITHMETICALLY (all values printed by the probes in run w11D, not inferred):
-			//   authored spec, ONE self-consistent frame -- wheel bottoms level to 0.0002 m and the
-			//   lowest sensor sphere clearing them by 0.043 m, i.e. a car with 4.3 cm of clearance:
-			//     wheel0 authored (-0.829000, -0.409029, 1.342442), radius 0.5*mScale.y = 0.331333
-			//     sensor10 authored y = -0.197255, radius 0.500000
-			//   but the two halves are then rebased into COM space with OPPOSITE SIGNS:
-			//     sensors : StreamedDeformationSpec::TransformToNewCOMSpace  += (new - old COM)
-			//               [X360 0x825E31B0 vsubfp v0,v1,v13 ; 0x825E31E0 vaddfp v13,v13,v0]
-			//     wheels  : SimpleVehiclePhysics::Prepare                    -= mCOMOffset  [vsubfp]
-			//   with mCurrentCOMOffset measured 0 on entry and the COM measured EXACTLY the mean of
-			//   the four authored wheel positions (0.000023, -0.403568, -0.081302 -- all three lanes
-			//   match the mean to 6 digits). The two halves therefore end up 2*COM == 0.807 m apart
-			//   in y, and 0.807 - 0.043 == 0.764 is the hover measured above.
-			// ⚠️ BOTH SIGNS ARE ASM-ATTESTED AS WRITTEN, and AddRaceCarDeformationModel @0x825E9118
-			// hands the COM over UNNEGATED (0x825E935C `lvx128 v1, r21, 0x20` -- no vxor), so the
-			// contradiction is NOT resolvable from the three sites alone: something upstream
-			// (the shipped mCurrentCOMOffset, or the create path's wheel-position capture, which
-			// SimpleVehiclePhysics::SetAttributes captures as `streamed + COM` while
-			// ProcessCreateEvents passes it RAW) must supply the missing sign. ⛔ NOT GUESSED HERE.
-			// ⭐ RETIRE-WHEN: the sensor offsets and the live wheel positions land in the SAME frame.
-			// Then delete this gate (both `if` lines) and nothing else -- the arithmetic is already
-			// right, and the leg-10 fan-out ends the moment it runs.
-			static bool sbLoggedSphereGate = false;
-			if ( !sbLoggedSphereGate )
-			{
-				sbLoggedSphereGate = true;
-				if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-					*CgsDev::Log::gpDebugPrint
-						<< "conductor gate: DeformationSensor::Prepare @0x8260A2E8 -- the sensor "
-						   "sphere placement (centre = spec->mInitialOffset + displacement, radius = "
-						   "spec->mfRadius) is RECONSTRUCTED but HELD OFF: the deformation spec's "
-						   "sensor offsets and the vehicle's wheel positions are rebased into "
-						   "centre-of-mass space with opposite signs (0.807 m apart on the starter "
-						   "car), so real spheres park the car on its belly [FLAG PC boot gate]. "
-						   "Reported once, not per frame\n";
-			}
+			// ⭐⭐⭐ GATE RETIRED, walls leg 12 (2026-08-16). Leg 11 landed this arithmetic behind a
+			// `gbPlaceSensorSpheres = false` because switching it on parked the car on its belly:
+			// the sensor spheres came out 2*COM == 0.807 m below the wheels, hovering the car 0.764 m
+			// with a per-frame correction that exactly cancelled gravity. That was NOT a defect in
+			// this function -- it was ONE MISSING `vxor` in DeformationManager::ProcessAddDeformation
+			// ModelEvents, which must pass TransformToNewCOMSpace the NEGATED centre of mass
+			// (X360 0x82644B00, PS3 0x76ADFC; the full argument is written out at that call site).
+			// With that sign restored the sensors and the wheels are both rebased by -COM, the
+			// authored frame survives intact, and the two `if ( gbPlaceSensorSpheres )` guards are
+			// deleted -- exactly the "two `if`s" leg 11's RETIRE-WHEN promised, and nothing else.
 			// The placed body-local sphere: centre = mInitialOffset + displacement, radius from the
 			// spec (the two `lfs f0, 0x28(spec)` w-lane inserts, one per sphere).
-			if ( gbPlaceSensorSpheres )
-			{
-				lLocalCentre.x = lSpecOffset.x + lDisp.x;
-				lLocalCentre.y = lSpecOffset.y + lDisp.y;
-				lLocalCentre.z = lSpecOffset.z + lDisp.z;
-				lLocalCentre.w = lpSpec->mfRadius;
-			}
+			lLocalCentre.x = lSpecOffset.x + lDisp.x;
+			lLocalCentre.y = lSpecOffset.y + lDisp.y;
+			lLocalCentre.z = lSpecOffset.z + lDisp.z;
+			lLocalCentre.w = lpSpec->mfRadius;
 
 			if ( lpWorldSphere )
 			{
 				Vector4& lWorldCentre = SphereVec(lpWorldSphere);
-				lWorldCentre.w = gbPlaceSensorSpheres ? lpSpec->mfRadius : lLocalCentre.w;
+				lWorldCentre.w = lpSpec->mfRadius;
 
 				const Vector3& lR = lWorldTransform.Right();
 				const Vector3& lU = lWorldTransform.Up();
