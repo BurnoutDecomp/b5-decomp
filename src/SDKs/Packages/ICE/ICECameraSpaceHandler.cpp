@@ -202,6 +202,19 @@ const Matrix44Affine CameraSpaceHandler::GetTransformToWorld(eICESpace leSpace) 
         // null check. So test the pointer as a POINTER. A real handle is 8-byte aligned and
         // lives in the host allocator's range; 0x78160E11 is ODD, so one alignment test is
         // already decisive, and the range test covers the rest of the w-lane family.
+        //
+        // ⛔⛔ WHAT THIS GUARD IS **NOT** (control run, 2026-08-16 -- read this before
+        // citing it). A one-shot "arm REACHED" probe compiled into this exact spot printed
+        // NOTHING across a full boot -> car select -> DRIVING run, and a fault injection that
+        // forced the tested value to 0x78160E11 through that same run never tripped the guard.
+        // So eICE_GAMEPLAY_SPACE IS NEVER ENTERED ON THE BOOT/DRIVE PATH, and this guard is
+        // therefore NOT attested as the public build's faulting read. It was my leading
+        // structural candidate -- +0x1FC sits directly under mpGamePlayCam, and
+        // Camera::GetTransform is the console's own `addi r3, r3, 0x10` -- and the control
+        // DISPROVED it for this path. It is kept because it guards a real dereference that ICE
+        // takes in other game states do reach and it costs two compares, but it is
+        // UNEXERCISED code: do not read a clean boot as evidence it works, and do not close
+        // the AV on it.
         // ⛔ Do NOT "fix" this by forcing wAxis.w to 1.0f at the source: 0x3F800000 is a
         // 16-byte-aligned low address, i.e. that would turn a loud fault into a silent
         // wild read. The value must stay junk; the READ is what must be guarded.
