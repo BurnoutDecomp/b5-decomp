@@ -53,6 +53,14 @@ s32  renderengine::gAspectRatioIndex = 0;
 // re-reading is DELIBERATE and is the reason 1 (not 0) is the "off" value. If the TUB setting's own
 // semantics are ever recovered, this comment and the leaf's mapping are the two places to change.
 s32  renderengine::gAntiAliasing = 0;
+
+// The alpha-to-coverage knob (rung 9). 1 = honour the console's per-material
+// ALPHA_TO_MASK request through the D3D9 vendor hook; 0 = never apply it. Semantics and
+// the reason it is an off-switch rather than a force-switch are on the declaration in
+// device.h. Default 1 because the console's answer IS the request in the shipped
+// material data -- the same principle that makes gAntiAliasing default to "whatever the
+// console did".
+s32  renderengine::gAlphaToCoverage = 1;
 HWND renderengine::hWnd = nullptr;
 
 IDirect3D9*       renderengine::gD3D9 = nullptr;
@@ -81,6 +89,10 @@ bool renderengine::Device::Initialize()
     // this seeding is the console default, not an off switch and not a placeholder. LoadConfig runs
     // after this (BrnMain.cpp:260/:261) and is what a config.ini value overrides it with.
     gAntiAliasing = 0;
+    // Honour the console's alpha-to-mask requests unless config.ini says otherwise.
+    // Seeded here for the same reason gAntiAliasing is: LoadConfig runs after this
+    // (BrnMain.cpp:260/:261) and is what a config.ini value overrides it with.
+    gAlphaToCoverage = 1;
     // TUB seeds fullscreen=true; forced windowed during the PC bring-up.
     gFullscreen = false;
 

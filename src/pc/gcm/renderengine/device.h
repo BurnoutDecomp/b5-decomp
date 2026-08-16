@@ -21,6 +21,15 @@ namespace renderengine
     // pc/gcm/renderengine/Xbox2SurfaceShims.h so the leaf need not pull <Windows.h> in through
     // this header (SAME OBJECT, one definition -- not a second global).
     extern s32 gAntiAliasing;
+    // Whether the PC honours the console's per-material ALPHA-TO-MASK request (rung 9).
+    // 1 = honour it (default, and what the shipped material data asks for); 0 = never apply
+    // the vendor alpha-to-coverage hook, which leaves alpha-tested cut-outs with the hard
+    // edge they had before rung 9. Sourced from config.ini `[Settings] AlphaToCoverage`
+    // (BrnMain.cpp LoadConfig/SaveConfig) and seeded by Device::Initialize, exactly like
+    // gAntiAliasing above it. Consumed by the alpha-to-mask leaves in XenonD3D9Shims.cpp.
+    // It is an OFF SWITCH ONLY: there is no D3D9 way to ask for coverage a material did not
+    // request, so 1 does not mean "force", it means "do what the console did".
+    extern s32 gAlphaToCoverage;
     extern HWND hWnd;
 
     extern IDirect3D9* gD3D9;
