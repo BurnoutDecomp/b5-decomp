@@ -234,7 +234,16 @@ namespace
         {
             const char* lpcName = gCrashMapReader.GetStackEntryName(liIndex);
             if (lpcName)
-                Emitf("    %s\n", lpcName);
+            {
+                // ⭐ Print the OFFSET INTO the function too (2026-08-16). A bare name locates a
+                // crash to a function that can be 7 KB of inlined code; "+ 0xNNN" locates it to
+                // a statement once the matching build's .map is in hand. Also print the frame's
+                // RVA, because a player's report is the only copy of it we ever get.
+                Emitf("    %s + 0x%X    [rva 0x%llX]\n",
+                      lpcName,
+                      static_cast<unsigned>(gCrashMapReader.GetStackEntryOffset(liIndex)),
+                      static_cast<unsigned long long>(lStack.GetStackAddress(liIndex)));
+            }
             else
                 Emitf("    0x%llX\n", static_cast<unsigned long long>(lStack.GetStackAddress(liIndex)));
         }

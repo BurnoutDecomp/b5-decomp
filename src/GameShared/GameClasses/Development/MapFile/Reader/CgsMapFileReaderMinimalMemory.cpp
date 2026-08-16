@@ -33,7 +33,10 @@ namespace MapFile
 
         mbFinished = true;
         for (s32 liResult = 0; liResult < KI_MAX_STACK_RESULTS; ++liResult)
+        {
             maacStackNames[liResult][0] = '\0';
+            maauStackOffsets[liResult]  = 0;
+        }
 
         pFileHandle = std::fopen(lpcMapFileName, "rb");
         if (!pFileHandle)
@@ -116,6 +119,8 @@ namespace MapFile
                     CGS_ASSERT(std::strlen(lpRecord->macName) < static_cast<size_t>(KI_NAME_LENGTH),
                                "map record name is too long");
                     std::strcpy(maacStackNames[liFrame], lpRecord->macName);
+                    maauStackOffsets[liFrame] =
+                        static_cast<u32>(lFrameAddress - lpRecord->mAddress);
                     break;   // one frame resolved per record
                 }
             }
@@ -131,6 +136,15 @@ namespace MapFile
         if (liIndex >= KI_MAX_STACK_RESULTS || maacStackNames[liIndex][0] == '\0')
             return nullptr;
         return maacStackNames[liIndex];
+    }
+
+    // ADDITIVE (2026-08-16, no console counterpart) - the byte offset of frame liIndex inside the
+    // function GetStackEntryName names, or 0 when that frame never resolved.
+    u32 MinimalMemoryReader::GetStackEntryOffset(s32 liIndex) const
+    {
+        if (liIndex < 0 || liIndex >= KI_MAX_STACK_RESULTS || maacStackNames[liIndex][0] == '\0')
+            return 0;
+        return maauStackOffsets[liIndex];
     }
 }
 }
