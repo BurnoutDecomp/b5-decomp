@@ -2883,10 +2883,17 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // UPDATE frame) and EffectsArbitrator::EndOfFrame (SwapBuffers, after Render), all outside this
     // function.
     //
-    // Neither byte is observable on this build in any case: lbClearStencil is not read by the X360
-    // BeginRenderAntiAliased body (see its own note), and the PC scene target's depth surface is
-    // picked by a format ladder whose first candidate is D3DFMT_D24X8 -- no stencil bits -- so the PC
-    // D3DDevice_Resolve strips D3DCLEAR_STENCIL from its clear.
+    // lbClearStencil is not observable: it is not read by the X360 BeginRenderAntiAliased body
+    // (see its own note). luSceneStencilClearValue NOW IS, and that changed with rung 8 -- the
+    // sentence here used to end "the PC scene target's depth surface is picked by a format ladder
+    // whose first candidate is D3DFMT_D24X8 -- no stencil bits -- so the PC D3DDevice_Resolve strips
+    // D3DCLEAR_STENCIL from its clear", which was true only while the target was single-sampled.
+    // A MULTISAMPLED scene target takes the MSAA depth ladder instead, whose first candidate is
+    // D3DFMT_D24S8 (PostFxRenderTargetPCLeaf.cpp KAE_MSAA_DEPTH_FORMATS[0], chosen because the
+    // build's own auto depth-stencil and the RESZ destination are both D24S8 layouts), so the
+    // bound depth DOES carry stencil and TilingClearFlagsForBoundSurfaces keeps D3DCLEAR_STENCIL.
+    // The value is still 0 on this build (no motion-blur event posts one), and clearing stencil to
+    // it is what the console does -- so this is a faithful widening, not a behaviour to undo.
     BrnRendererPostFxFrameBytes lPostFxFrameBytes;
     BrnRendererReadPostFxFrameBytes(
         sbEffectsArbitratorConstructed ? &mEffectsArbitrator : 0, &lPostFxFrameBytes);

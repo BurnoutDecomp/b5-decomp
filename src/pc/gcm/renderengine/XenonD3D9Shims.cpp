@@ -2702,8 +2702,13 @@ void* D3DDevice_BeginVertices(void* /*lpDeviceArg*/, u32 luPrimitiveType,
 // D3DDevice_EndVertices -- close the open run and submit it.
 //
 // STREAM 0, THE DOCUMENTED SIDE EFFECT. DrawPrimitiveUP resets the stream-0 source binding (and
-// its stride) to the user-pointer data it just consumed. This was CHECKED rather than assumed:
-// no TU in b5-decomp/src calls IDirect3DDevice9::SetStreamSource at all. The Xenon
+// its stride) to the user-pointer data it just consumed. When this was written no TU in
+// b5-decomp/src called IDirect3DDevice9::SetStreamSource; SINCE THEN the retained world
+// vertex/index path does (WorldGeometryPCLeaf.cpp:810-817 SetStreamSource / SetIndices /
+// DrawIndexedPrimitive straight on the device) -- and it RE-BINDS stream 0 and the indices on
+// every submit, so a reset here still costs nothing (nothing caches a stream-0 binding across
+// draws; shadowingdevice.cpp's FlushVertexProgramState re-issues every stream source per flush).
+// The rest of the original reasoning still holds: the Xenon
 // D3DDevice_SetStreamSource shim thirty lines above publishes into the WORLD STASH
 // (WorldDraw_SetVertexSourceRaw) and never touches a device stream, every other named
 // SetStreamSource in the tree (shadowingdevice.cpp, MeshHelper.cpp, BrnSkyDomeManager.cpp, the
@@ -4624,9 +4629,14 @@ namespace
     // frame is about to reuse.
     //
     // NOTHING ELSE IS TOUCHED. DrawPrimitiveUP resets the stream-0 binding, which costs nothing
-    // here for the reason the D3DDevice_EndVertices banner establishes: no TU in b5-decomp/src
-    // calls IDirect3DDevice9::SetStreamSource at all and every draw on this backend is a
-    // *PrimitiveUP. The draw needs an OPEN SCENE, and it has one: this runs from ResolveMSAA in
+    // here -- but NOT for the reason the D3DDevice_EndVertices banner gives. That banner's "no TU
+    // in b5-decomp/src calls IDirect3DDevice9::SetStreamSource at all" WENT STALE with the
+    // retained world vertex/index buffers: WorldGeometryPCLeaf.cpp:810-817 calls SetStreamSource /
+    // SetIndices / DrawIndexedPrimitive straight on the device. It costs nothing because NOTHING
+    // CACHES a stream-0 binding across draws -- WorldGeometry_Submit re-binds stream 0 and the
+    // indices on every submit, and shadowingdevice.cpp's FlushVertexProgramState re-issues every
+    // stream source on every flush, both outside any dirty gate.
+    // The draw needs an OPEN SCENE, and it has one: this runs from ResolveMSAA in
     // the middle of the frame, and the colour resolve's EndScene/BeginScene suspend is scoped to
     // its own StretchRect, which happens after this.
     //
@@ -5059,7 +5069,9 @@ void D3DDevice_BeginTiling(void* /*lpDevice*/, u32 /*luFlags*/, u32 luCount,
 // mask. The existing precedent for a legitimately empty D3DDevice_* shim in this file is
 // D3DDevice_Begin/EndConditionalRendering.
 //
-// NOT REACHED ON THIS BUILD (multisampled branches only).
+// REACHED THREE TIMES A FRAME SINCE RUNG 8 (BeginRenderAntiAliased once with mask 0, then once per
+// resolve tile) -- mbMultisampledBackbuffer is the console's constant TRUE, so both bracket bodies
+// take their tiled branch. See "WHICH OF THE FOUR ACTUALLY RUNS ON THIS BUILD" above.
 // ---------------------------------------------------------------------------------------------
 void D3DDevice_SetPredication(void* /*lpDevice*/, u32 /*luPredicationMask*/)
 {
@@ -5081,7 +5093,8 @@ void D3DDevice_SetPredication(void* /*lpDevice*/, u32 /*luPredicationMask*/)
 // rather than guessed because no evidence in this image says what EndTiling's resolve rectangle
 // would be.
 //
-// NOT REACHED ON THIS BUILD (multisampled branch only).
+// REACHED ONCE A FRAME SINCE RUNG 8 (ResolveMSAA's tiled branch closes the pass with every pointer
+// argument null) -- see "WHICH OF THE FOUR ACTUALLY RUNS ON THIS BUILD" above.
 // ---------------------------------------------------------------------------------------------
 int D3DDevice_EndTiling(void* /*lpDevice*/, u32 /*luResolveFlags*/, const void* /*lpResolveRects*/,
                         Texture* /*lpDestTexture*/, const void* /*lpClearColour*/,
@@ -5291,17 +5304,39 @@ int D3DDevice_Resolve(void* /*lpDevice*/, u32 luFlags, const void* lpSourceRect,
                         // over a sub-rectangle -- and the console's MSAA plan hands this function
                         // two half-screen tiles. Rather than assume either way, the console's own
                         // sub-rectangle is tried FIRST and only a refusal on a multisampled source
-                        // falls back to the full-surface resolve, loudly and once. The fallback
-                        // writes the same pixels both tiles together would have written, so the
-                        // other tile's call then becomes redundant rather than wrong. (Nothing is
+                        // falls back to the full-surface resolve, loudly and once. (Nothing is
                         // widened on the single-sampled path: the console's rectangle stands.)
+                        //
+                        // ONLY THE FIRST TILE MAY WIDEN. Section (2) of THIS SAME call clears the
+                        // tile's band of the SOURCE (the 0x300 flags carry colour AND Z), so by
+                        // the time tile 1 arrives rows 0..383 of the multisampled surface are
+                        // already the background colour -- a full-surface resolve for tile 1 would
+                        // copy that cleared band over the good pixels tile 0's widened resolve had
+                        // just written, and leave the TOP HALF OF THE SCREEN flat. Tile 0 already
+                        // wrote every pixel the later tiles own, so once its widened resolve has
+                        // SUCCEEDED their copy is genuinely done and only the clear is still owed;
+                        // if it did not succeed, the failure path below reports it as before.
+                        // (Verify round 2026-08-16: the earlier text claimed the second pass was
+                        // "redundant rather than wrong" -- it was the poisoning the depth half
+                        // already guards against.)
+                        static bool sbMsaaFullSurfaceResolved = false;
                         if (FAILED(lHr) && lbSourceIsMultisampled)
                         {
                             LogOnce("resolve-msaa-fullrect",
                                     "[postfx-resolve] the driver refused a SUB-RECTANGLE MSAA"
-                                    " resolve; falling back to a full-surface resolve per tile.\n");
-                            lHr = lpD3DDevice->StretchRect(lpBoundColour, nullptr,
-                                                           lpDestSurface, nullptr, D3DTEXF_NONE);
+                                    " resolve; falling back to a full-surface resolve on the"
+                                    " FIRST tile of the bracket.\n");
+                            if (lSourceRect.y1 == 0)
+                            {
+                                lHr = lpD3DDevice->StretchRect(lpBoundColour, nullptr,
+                                                               lpDestSurface, nullptr,
+                                                               D3DTEXF_NONE);
+                                sbMsaaFullSurfaceResolved = SUCCEEDED(lHr);
+                            }
+                            else if (sbMsaaFullSurfaceResolved)
+                            {
+                                lHr = S_OK;   // tile 0's widened resolve already copied this band
+                            }
                         }
 
                         if (FAILED(lHr))
