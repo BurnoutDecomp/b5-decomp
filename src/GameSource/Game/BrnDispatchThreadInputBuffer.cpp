@@ -43,6 +43,16 @@ namespace BrnGame
         return &mParticleRenderData;
     }
 
+    // GetParticleRenderData() const @ 0x8227F640 (DWARF h:100; IDA leaves it as sub_8227F640).
+    // Read-lock, return &mParticleRenderData (+0x38A0 == the `a1 + 14496` its body returns). Its
+    // assert quotes source line 100, one below the write twin's 101, which is what identifies the
+    // unnamed body as this overload.
+    const BrnParticle::ParticleModule::ParticleRenderData* DispatchThreadInputBuffer::GetParticleRenderData() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mParticleRenderData;
+    }
+
     // ---- crash-triangle cache --------------------------------------------------------
 
     // GetBufferCrashTriangleCache() const @ 0x8227F790 (DWARF h:103). Read-lock, &member (+0x3B00).
@@ -203,6 +213,16 @@ namespace BrnGame
         CgsModule::IOBuffer::Construct();                 // *(+0) status = constructed
         std::memset(&mParticleData, 0, sizeof(mParticleData));   // +24 = 0 (the particle-frame word; the
                                                           // opaque model zeroes the whole payload)
+        // ⚠ mParticleRenderData IS DELIBERATELY NOT CLEARED HERE, and that is the console
+        // (BrnGame::DispatchThreadInputBuffer::Construct @0x823C5BB8 writes +4, +0, +24, the queue
+        // at +22912 and then only the 39312..39357 tail -- nothing in the +0x38A0 payload). It is
+        // safe there because BrnParticle::ParticleModule::GenerateRenderRequests @0x82281BD8 -- the
+        // sole caller of the write-locked accessor -- fills it every frame before any reader runs.
+        // ON PC IT IS NOT SAFE TO READ: that producer is not reconstructed, so nothing fills it,
+        // and since the 2026-08-15 perf wave CreateIOBuffer<T> no longer zero-fills either -- so
+        // its camera matrices and time step are UNINITIALISED bytes, not zeros. Anything that reads
+        // them must gate on a producer having run; see the [FLAG PC bring-up] note on
+        // BrnRendererUpdatePostFxMotionBlur, which is the only reader in this tree.
         mParticleInterThreadEventQueue.Construct();       // +0x5980
         mbIsRenderingAtFullFrameRate = true;              // +0x99B0 = 1
         mabThreeThreadsOverBudget[0] = false;             // +0x99B1..B3 = 0

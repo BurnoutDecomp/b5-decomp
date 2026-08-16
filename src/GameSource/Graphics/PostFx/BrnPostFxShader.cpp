@@ -11,6 +11,9 @@
 #include "pc/gcm/renderengine/texture.h"                                        // renderengine::Texture
 #include "pc/gcm/renderengine/Xbox2SurfaceShims.h"                              // renderengine::gpD3DDevice
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"         // ResourceAllocatorCreate
+#include "rw/math/vpu/matrix44affine_operation.h"                               // vpu::Inverse(Matrix44Affine) / Mult(affine,affine)
+#include "rw/math/vpu/matrix44_operation.h"                                     // vpu::Mult(Matrix44Affine, Matrix44)
+#include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"        // fpu::Matrix44_64 + Inverse/Mult/Subtract
 
 #include <cmath>   // powf -- the vignette gradient exponent (see KF_VIGNETTE_GRADIENT_POWER)
 
@@ -51,25 +54,22 @@
 //        pc/gcm/renderengine/VertexDescriptor.cpp) are not on the exe build list; and (c)
 //        PostFxProgramsPC.cpp itself, which is not on that list either.
 //
-//   BRN_POSTFX_MOTION_BLUR_REPROJECTION_AVAILABLE -- the four rw::math::fpu::Matrix44Template<double>
-//        calls Render makes to build the camera-reprojection matrix, whose three outputs are
-//        BlurMatrixX / BlurMatrixY / BlurMatrixW. NO rw::math::fpu matrix type and no
-//        Inverse/Mult/Subtract exist anywhere in b5-decomp (vendor/renderware/include/rw/math/fpu/
-//        holds matrix33_operation.h and scalar_operation.h and nothing else).
-//        THIS CANNOT AFFECT PERMUTATION 0, AND THAT IS PROVEN RATHER THAN ASSUMED: permutation 0's
-//        pixel package (X360 0x8203F888) interns exactly BloomColour, GlobalParams, SamplerBloom,
-//        SamplerSource, Tint2dColour, VignetteInnerRgbPlusMul, VignetteOuterRgbPlusAdd -- no
-//        BlurMatrix* at all (DATA_DUMP.md, "slot dword 0"). A name absent from a permutation's
-//        constant table resolves to a handle with register COUNT 0, and SetProgram skips those. So
-//        in permutation 0 those three constants are never uploaded and their value is unread. The
-//        gate leaves them at the zero the console's own zero-fill puts there.
-//        ⚠ WHAT CHANGED WHEN THE EIGHT BLUR PERMUTATIONS GOT PC PROGRAMS (step 5). Slots 4..11 DO
-//        intern BlurMatrixX/Y/W, so selecting one now uploads three ZERO float4s to a shader that
-//        reads them. The consequence is bounded and it is NOT a crash: the pixel program builds its
-//        screen velocity as `(row.xy - row.z * uv) * mask`, which with a zero matrix is exactly
-//        (0,0) -- so both gradients handed to tex2Dgrad are zero and the fetch degenerates to an
-//        ordinary top-mip tap. Motion blur would be SILENTLY ABSENT, not wrong. That is the whole
-//        reason this gate stays 0 and is reported once per boot instead of being quietly ignored.
+//   BRN_POSTFX_MOTION_BLUR_REPROJECTION_AVAILABLE -- ⭐ CLOSED 2026-08-15 (post-fx step-6 producers
+//        wave), now 1. It gated the four out-of-line rw::math::fpu::Matrix44Template<double> calls
+//        Render makes to build the camera-reprojection matrix, whose three outputs are BlurMatrixX /
+//        BlurMatrixY / BlurMatrixW. Those four callees (Inverse @0x82405210, Mult(M,M) @0x82405690,
+//        Subtract @0x82405780, Mult(M,scalar) @0x824058A0) had no home in this tree; the double
+//        4x4 family now lives with the rest of the rw::math::fpu template vocabulary in
+//        GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h (which already homed
+//        Vector2/3/4Template and Matrix33Template -- see that file's ADDITIVE GROW banner for why
+//        it is that file and not a new one).
+//        WHAT THE GATE'S OFF ARM USED TO COST, kept here because it is the shape of the bug the
+//        flip removes: with the block missing, slots 4..11 -- which DO intern BlurMatrixX/Y/W --
+//        uploaded three ZERO float4s, the pixel program's screen velocity `(row.xy - row.z * uv)`
+//        came out exactly (0,0), both tex2Dgrad gradients were zero, and motion blur was SILENTLY
+//        ABSENT rather than wrong. Permutation 0 was never affected either way: its pixel package
+//        (X360 0x8203F888) interns no BlurMatrix* at all (DATA_DUMP.md, "slot dword 0"), so those
+//        handles carry register count 0 and SetProgram skips them.
 //
 //   BRN_POSTFX_COMPOSITE_DRAW_AVAILABLE    -- the whole DEVICE half of Render: the state / texture /
 //        sampler binds and the full-screen quad. Needs (a) BRN_POSTFX_SHADER_PROGRAMS_AVAILABLE to be
@@ -108,7 +108,7 @@
 // ==================================================================================================
 
 #define BRN_POSTFX_SHADER_PROGRAMS_AVAILABLE            1
-#define BRN_POSTFX_MOTION_BLUR_REPROJECTION_AVAILABLE   0
+#define BRN_POSTFX_MOTION_BLUR_REPROJECTION_AVAILABLE   1
 #define BRN_POSTFX_COMPOSITE_DRAW_AVAILABLE             1
 
 namespace renderengine
@@ -311,6 +311,20 @@ namespace
         return (lfLowClamped >= KF_ONE) ? KF_ONE : lfLowClamped;
     }
 
+    // Narrow one COLUMN of the double-precision reprojection matrix into the single-precision
+    // shader constant. The console does exactly this, lane by lane: `lfd` the double, `frsp` it,
+    // `stfs` it into the float4 (0x824095D0-0x82409684, twelve such triples for the three
+    // constants). static_cast<f32> IS frsp -- round the double to single, once.
+    rw::math::vpu::Vector4 NarrowToVector4(const rw::math::fpu::Vector4_64& lrColumn)
+    {
+        rw::math::vpu::Vector4 lResult;
+        lResult.x = static_cast<f32>(lrColumn.X());
+        lResult.y = static_cast<f32>(lrColumn.Y());
+        lResult.z = static_cast<f32>(lrColumn.Z());
+        lResult.w = static_cast<f32>(lrColumn.W());
+        return lResult;
+    }
+
     // Report a disclosed bring-up condition exactly once. A composite that silently does nothing, or
     // silently draws the wrong permutation, is the failure mode this whole file is written to avoid.
     void ReportOnce(bool& lrbAlreadyReported, const char* lpcText)
@@ -494,6 +508,122 @@ void MotionBlurState::Construct()
     mCurrentWVP.SetIdentity();
     mPreviousWVP.SetIdentity();
     meQuality = E_QUALITY_EXPENSIVE;
+}
+
+// ==================================================================================================
+// X360 0x823F8490 -- MotionBlurState::Update  (DWARF BrnPostFxShader.cpp:130)
+//
+// Advance the world-view-projection pair the composite's reprojection block differences. Called
+// once a frame from BrnRendererModule::Render @0x8240BFA8 line 1251 with the read-locked
+// ParticleRenderData's camera view (+0x60), its projection (+0xA0), its time step (+0x0C, in f1)
+// and the base effects frame's mbIsExpensiveMotionBlur as the quality.
+//
+// THE WHOLE FUNCTION IS SINGLE-PRECISION VMX AND CONTAINS NO CALL AT ALL -- the four affine
+// inverses and the three matrix products below are inlined. Its shape was recovered by executing
+// the instruction stream (0x823F8508-0x823F8ACC) over symbolic inputs in a numeric simulator and
+// matching the two stored matrices against candidate formulas; every claim here is that
+// simulation's output, not a reading of the register allocation. The DWARF supplies the LOCAL
+// NAMES (BrnPostFxShader.cpp:145-161) and they line up one-for-one with what the simulation found:
+//   lOriginalViewCurr :145   lOriginalViewPrev :146    lOriginalCamTransCurr :149
+//   lOriginalCamTransPrev :150   lCamTrans :151        lConstructedCamTransPrev :154
+//   lLinearVelocity (Vector3) :157                     lConstructedViewPrev :161
+// and the DWARF's own call tally for this function is FOUR rw::math::vpu::Inverse, TWO
+// rw::math::vpu::operator*, THREE rw::math::vpu::Mult, TWO rw::math::vpu::operator-, ONE
+// Matrix44Affine::SetW, THREE Matrix44Affine::operator= and FOUR Matrix44::operator= -- which is
+// exactly the count of each in the two arms written below (4 inverses; 2 affine products; 3
+// affine*projection products = 2 in the zero-dt arm + 1 in the other; 2 vector subtractions; the
+// wAxis write; the 3-deep cache shift; and 2 + 2 matrix assignments).
+//
+// ⚠ THE BRANCH IS ON A ZERO TIME STEP, AND IT IS THE *ZERO* CASE THAT DOES THE WORK.
+//   `lfs f0, flt_82001CC0 / fcmpu cr6, f31, f0 / bne cr6, loc_823F899C` @0x823F84E4-0x823F8504.
+//   flt_82001CC0 is 0.0f (the same constant this file's KF_ZERO already names, and the one
+//   BrnDirector::Camera::DepthOfField::SetParams @0x821F1AC8 compares its blurriness against).
+//   So a NON-zero step takes the ordinary arm and a ZERO step takes the reconstruction arm. That is
+//   the right way round: a zero step means the simulation did not advance, so shifting the history
+//   would fill it with identical views and kill the blur on every duplicated frame. Instead the
+//   camera's LINEAR VELOCITY is recovered from the two cached views and applied backwards to the
+//   current camera transform, which keeps the blur alive across a duplicate frame.
+//
+// THE ZERO-STEP ARM, as the simulator pinned it (host-order names on the left, the guest
+// addresses the values are read from on the right):
+//   lOriginalViewCurr        = maViewCache[1]                       (this + 0xD0)
+//   lOriginalViewPrev        = maViewCache[2]                       (this + 0x110)
+//   lOriginalCamTransCurr    = Inverse(lOriginalViewCurr)           (det @0x823F85B0)
+//   lOriginalCamTransPrev    = Inverse(lOriginalViewPrev)           (det @0x823F85F4)
+//   lCamTrans                = Inverse(lView)                       (det @0x823F8678)
+//   lConstructedCamTransPrev = lOriginalCamTransPrev * lOriginalViewCurr * lCamTrans
+//   lLinearVelocity          = lOriginalCamTransCurr.W - lOriginalCamTransPrev.W
+//   lConstructedCamTransPrev.SetW(lCamTrans.W - lLinearVelocity)
+//   lConstructedViewPrev     = Inverse(lConstructedCamTransPrev)    (det @0x823F8844)
+//   mCurrentWVP  = lView                * lProjection
+//   mPreviousWVP = lConstructedViewPrev * lProjection
+// The ROTATION half reads as "take the rotation the camera turned through between the two cached
+// frames and re-apply it, backwards, to where the camera is now"; note it uses lOriginalViewCurr
+// directly where Inverse(lOriginalCamTransCurr) would be the same matrix -- which is why there are
+// four inverses and not five.
+//
+// THE NON-ZERO-STEP ARM (asm 0x823F899C-0x823F8ACC) is a plain history shift: the three cache
+// entries move down one, the newest view goes in at [0], the previous WVP becomes what the current
+// one was, and the current one is rebuilt. Note the cache is written but never READ in this arm --
+// it exists only to feed the zero-step arm above.
+//
+// SIMULATION EVIDENCE (scratch/postfx_step6_producers/mbstate/work/vmx_sim.py +
+// validate_maths.py): running the real instruction stream over four randomly-generated
+// NON-orthonormal affines and a perspective projection reproduces both stored matrices to 1e-5
+// against the formulas above; with maViewCache[1] == maViewCache[2] the two outputs collapse to
+// each other, which is the degenerate case the formula predicts.
+// ==================================================================================================
+void MotionBlurState::Update(const rw::math::vpu::Matrix44Affine& lView,
+                             const rw::math::vpu::Matrix44& lProjection,
+                             f32 lfTimeStep,
+                             EQuality leQuality)
+{
+    // 0x823F84B4-0x823F84E0 -- the console's own bounds assert, at the console's source line, with
+    // the console's (deliberately inclusive) upper bound: `cmpwi r28, 0 / blt` then
+    // `cmpwi r28, 2 / ble`, i.e. it fires only for < 0 or > E_QUALITY_COUNT.
+    CGS_ASSERT((leQuality >= 0) && (leQuality <= E_QUALITY_COUNT),
+               "( leQuality >= 0 ) && ( leQuality <= E_QUALITY_COUNT )");   // BrnPostFxShader.cpp:132
+
+    meQuality = leQuality;                                                  // `stw r28, 0x80(r31)`
+
+    if (lfTimeStep == KF_ZERO)
+    {
+        const rw::math::vpu::Matrix44Affine lOriginalViewCurr = maViewCache[1];
+        const rw::math::vpu::Matrix44Affine lOriginalViewPrev = maViewCache[2];
+
+        const rw::math::vpu::Matrix44Affine lOriginalCamTransCurr =
+            rw::math::vpu::Inverse(lOriginalViewCurr);
+        const rw::math::vpu::Matrix44Affine lOriginalCamTransPrev =
+            rw::math::vpu::Inverse(lOriginalViewPrev);
+        const rw::math::vpu::Matrix44Affine lCamTrans = rw::math::vpu::Inverse(lView);
+
+        // The rotation the camera turned through over the cached pair, re-applied to the current
+        // camera transform. Two binary affine products, exactly the DWARF's two operator* calls.
+        rw::math::vpu::Matrix44Affine lConstructedCamTransPrev =
+            (lOriginalCamTransPrev * lOriginalViewCurr) * lCamTrans;
+
+        // The camera's per-frame world-space displacement, and the position it therefore had.
+        // (DWARF spells the write Matrix44Affine::SetW; this vendor type's translation row is the
+        // public wAxis / Pos() lane, so the assignment IS that setter.)
+        const rw::math::vpu::Vector3 lLinearVelocity =
+            lOriginalCamTransCurr.wAxis - lOriginalCamTransPrev.wAxis;
+        lConstructedCamTransPrev.wAxis = lCamTrans.wAxis - lLinearVelocity;
+
+        const rw::math::vpu::Matrix44Affine lConstructedViewPrev =
+            rw::math::vpu::Inverse(lConstructedCamTransPrev);
+
+        mCurrentWVP  = rw::math::vpu::Mult(lView, lProjection);
+        mPreviousWVP = rw::math::vpu::Mult(lConstructedViewPrev, lProjection);
+    }
+    else
+    {
+        maViewCache[2] = maViewCache[1];
+        maViewCache[1] = maViewCache[0];
+        maViewCache[0] = lView;
+
+        mPreviousWVP = mCurrentWVP;
+        mCurrentWVP  = rw::math::vpu::Mult(lView, lProjection);
+    }
 }
 
 // ==================================================================================================
@@ -1474,26 +1604,104 @@ void BrnPostFxShader::Render(f32 lfWhiteLevel,
     // immediately after the vignette merge, and the four rw::math::fpu calls at 0x82409468 /
     // 0x82409478 / 0x824095BC / 0x824095CC are equally unguarded; arg_87 (lbEnableMotionBlur) is not
     // read until 0x824096C8, and then only to build the permutation index and pick the source
-    // sampler. So the DISCLOSURE below is unconditional too: the block is missing whether or not
-    // motion blur was asked for, and gating the report on the flag would have described the
-    // reconstruction as more faithful than it is.
+    // sampler. Reproduced unconditional.
     //
-    // NOT RECONSTRUCTED THIS WAVE, AND THE THREE CONSTANTS ARE LEFT AT ZERO. There is no rw::math::fpu
-    // 4x4 type anywhere in b5-decomp, so the four callees have no home. See the gate's banner for why
-    // this cannot affect permutation 0: that permutation's pixel package does not intern
-    // BlurMatrixX/Y/W at all, so their handles carry register count 0 and SetProgram never uploads
-    // them.
-#if BRN_POSTFX_MOTION_BLUR_REPROJECTION_AVAILABLE
-#error "BRN_POSTFX_MOTION_BLUR_REPROJECTION_AVAILABLE is on but the reprojection block is not reconstructed -- see REPORT.md"
-#else
+    // ---- THE CHAIN, CALL FOR CALL (asm 0x824092EC-0x824095CC) ------------------------------------
+    // Every step below is one of the five `bl`s in that range, with the DWARF's own local name
+    // (BrnPostFxShader.cpp:758-775) and the stack slot the console builds it in:
+    //   var_3D0  lProjectionToScreen       -- built from GetMatrix44_64_Identity with three rows
+    //                                        overwritten: m00 = dbl_82047D60, m11 = dbl_82047D58,
+    //                                        m30 = m31 = dbl_82047D60 (stores @0x82409314 /
+    //                                        0x82409344 / 0x82409318 / 0x8240931C).
+    //   var_350  lScreenToProjection       -- same shape: m00 = dbl_82047D50, m11 = dbl_82047D48,
+    //                                        m30 = dbl_82047D40, m31 = the identity's 1.0.
+    //   var_110  lInverseCurrentWVP        = Inverse((f64)mCurrentWVP, det)          @0x82409468
+    //   var_2B0  lScreenToWorld_Curr       = Mult(lScreenToProjection, lInverseCurrentWVP)
+    //                                                                                @0x82409478
+    //   var_110  lWorldToScreen_Prev       = Mult((f64)mPreviousWVP, lProjectionToScreen)
+    //                                                                                @0x8240950C
+    //   var_190  lScreenCurrentToPrevious  = Mult(lScreenToWorld_Curr, lWorldToScreen_Prev)
+    //                                                                                @0x8240951C
+    //   var_350  lScreenToVelocity         = Subtract(lScreenCurrentToPrevious, Identity)
+    //                                                                                @0x8240956C
+    //   var_190                            = Mult(Identity, lScreenToVelocity[3][3]) @0x824095BC
+    //                                        (the scalar overload; f1 is loaded from var_2D8, which
+    //                                        is element [3][3] of the matrix Subtract just wrote)
+    //   var_3D0  lScreenToVelocityRefined  = Subtract(lScreenToVelocity, that)       @0x824095CC
+    //
+    // ---- THE FIVE CONSTANTS -- RECOVERED (idat dump 2026-08-16: dbl_82047D40 = -1.0, D48 = -2.0,
+    // D50 = 2.0, D58 = -0.5, D60 = 0.5; dbl_82001CA0 = 1.0, dbl_82001CA8 = 0.0), and the argument
+    // that had already pinned them before the dump, kept because it explains WHY: (a) Both matrices
+    // are seeded from GetMatrix44_64_Identity (the DWARF
+    // names that function twice for this function) and only the four listed elements are
+    // overwritten, so every other element is the identity's 0 or 1 -- that is what pins
+    // dbl_82001CA0 == 1.0 and dbl_82001CA8 == 0.0, which are then observed as m22/m33 in both.
+    // (b) The two matrices are NAMED as an inverse pair. The only pair of that shape that IS an
+    // inverse pair is the standard NDC<->uv mapping: u = 0.5x + 0.5, v = -0.5y + 0.5 one way and
+    // x = 2u - 1, y = 1 - 2v the other. That forces D60 = 0.5, D58 = -0.5, D50 = 2.0, D48 = -2.0,
+    // D40 = -1.0, and it forces lScreenToProjection's m31 to be exactly the identity's +1.0 --
+    // which is what the asm stores there (`stfd f30, var_2E8`, f30 being the same register the
+    // identity's diagonal comes from). Any other assignment breaks the inverse relation.
+    // (The dump confirmed every one of the five, and the two identity doubles.)
+    //
+    // ---- WHY THE SHADER GETS *COLUMNS* -----------------------------------------------------------
+    // The console narrows twelve elements back to float (`lfd` + `frsp` + `stfs`, 0x824095D0-
+    // 0x82409684) in exactly this pattern: {m00,m10,m20,m30} -> BlurMatrixX, {m01,m11,m21,m31} ->
+    // BlurMatrixY, {m03,m13,m23,m33} -> BlurMatrixW. Those are COLUMNS 0, 1 and 3 of the refined
+    // matrix, because the pixel program's per-pixel expression is
+    // `dot((u, v, depth, 1), constant)` -- a row-vector times a column. It also explains the one
+    // asymmetry the permutation decode found: BlurMatrixW carries no `.w` term because element
+    // [3][3] of the refined matrix is identically ZERO (the last Subtract removes
+    // lScreenToVelocity[3][3] from the whole diagonal, so [3][3] cancels itself).
+#if !BRN_POSTFX_MOTION_BLUR_REPROJECTION_AVAILABLE
     {
         static bool sbReportedNoReprojection = false;
         ReportOnce(sbReportedNoReprojection,
-                   "[postfx-composite] the camera-motion reprojection block is not reconstructed (no"
-                   " rw::math::fpu::Matrix44Template<double> in this tree); BlurMatrixX/Y/W stay zero."
-                   " The console computes this block on every composite, motion blur or not; it is"
-                   " unread in permutation 0, which does not intern those three constants."
+                   "[postfx-composite] the camera-motion reprojection block is compiled OUT;"
+                   " BlurMatrixX/Y/W stay zero and motion blur is silently absent."
                    " [FLAG PC bring-up: BRN_POSTFX_MOTION_BLUR_REPROJECTION_AVAILABLE]\n");
+    }
+#else
+    {
+        typedef rw::math::fpu::Matrix44_64 Matrix44_64;
+
+        // clip -> uv (BrnPostFxShader.cpp:758).
+        Matrix44_64 lProjectionToScreen = rw::math::fpu::GetMatrix44_64_Identity();
+        lProjectionToScreen.xAxis.Set( 0.5,  0.0, 0.0, 0.0);
+        lProjectionToScreen.yAxis.Set( 0.0, -0.5, 0.0, 0.0);
+        lProjectionToScreen.wAxis.Set( 0.5,  0.5, 0.0, 1.0);
+
+        // uv -> clip (BrnPostFxShader.cpp:763) -- the exact inverse of the above.
+        Matrix44_64 lScreenToProjection = rw::math::fpu::GetMatrix44_64_Identity();
+        lScreenToProjection.xAxis.Set( 2.0,  0.0, 0.0, 0.0);
+        lScreenToProjection.yAxis.Set( 0.0, -2.0, 0.0, 0.0);
+        lScreenToProjection.wAxis.Set(-1.0,  1.0, 0.0, 1.0);
+
+        f64 lfDeterminant = 0.0;
+        const Matrix44_64 lInverseCurrentWVP = rw::math::fpu::Inverse(
+            Matrix44_64(lMotionBlurState.mCurrentWVP), lfDeterminant);
+
+        const Matrix44_64 lScreenToWorld_Curr =
+            rw::math::fpu::Mult(lScreenToProjection, lInverseCurrentWVP);
+        const Matrix44_64 lWorldToScreen_Prev =
+            rw::math::fpu::Mult(Matrix44_64(lMotionBlurState.mPreviousWVP), lProjectionToScreen);
+        const Matrix44_64 lScreenCurrentToPrevious =
+            rw::math::fpu::Mult(lScreenToWorld_Curr, lWorldToScreen_Prev);
+
+        const Matrix44_64 lScreenToVelocity = rw::math::fpu::Subtract(
+            lScreenCurrentToPrevious, rw::math::fpu::GetMatrix44_64_Identity());
+
+        const Matrix44_64 lScreenToVelocityRefined = rw::math::fpu::Subtract(
+            lScreenToVelocity,
+            rw::math::fpu::Mult(rw::math::fpu::GetMatrix44_64_Identity(),
+                                lScreenToVelocity.wAxis.W()));
+
+        laPixelShaderConstants[E_PS_VAR_BLUR_MATRIX_X] =
+            NarrowToVector4(lScreenToVelocityRefined.GetXColumn());
+        laPixelShaderConstants[E_PS_VAR_BLUR_MATRIX_Y] =
+            NarrowToVector4(lScreenToVelocityRefined.GetYColumn());
+        laPixelShaderConstants[E_PS_VAR_BLUR_MATRIX_W] =
+            NarrowToVector4(lScreenToVelocityRefined.GetWColumn());
     }
 #endif
 

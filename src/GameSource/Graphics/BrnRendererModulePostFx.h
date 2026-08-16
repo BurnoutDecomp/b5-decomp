@@ -80,11 +80,18 @@ void BrnRendererEvalPostFxTint2dColour(const BrnGraphics::EffectsArbitrator* lpA
                                        f32* lpafColourXYZW);
 
 // Render @0x8240DD04-0x8240DD4C -- MotionBlurState::Update on BrnPostFx's own motion-blur state.
-// Returns false and does nothing while the call is BLOCKED (see the body's banner: the body of
-// MotionBlurState::Update does not exist in this tree and its two matrix arguments live inside
-// DispatchThreadInputBuffer::ParticleRenderData, which is still an opaque `u8 maStorage[1]`).
-bool BrnRendererUpdatePostFxMotionBlur(const BrnGraphics::EffectsArbitrator* lpArbitrator,
-                                       const void* lpParticleRenderData);
+// Returns true when the console's five-argument call was actually made.
+//
+// THE PARAMETER IS NOW TYPED (it was `const void*` while ParticleRenderData had no layout). It is
+// a NESTED type -- BrnParticle::ParticleModule::ParticleRenderData -- and C++ cannot
+// forward-declare one of those, so this header includes its home. Passing a null pointer -- which
+// BrnRendererModule.cpp still does, because nothing in this tree PRODUCES the render data -- is the
+// honest "no producer" signal, handled by the body with one reported line and not a crash.
+#include "GameSource/Effects/Particles/ParticleModule.h"   // BrnParticle::ParticleModule::ParticleRenderData
+
+bool BrnRendererUpdatePostFxMotionBlur(
+    const BrnGraphics::EffectsArbitrator* lpArbitrator,
+    const BrnParticle::ParticleModule::ParticleRenderData* lpParticleRenderData);
 
 // [FLAG PC bring-up diagnostic] one sampled line proving the chain base frame -> Eval* -> BrnPostFx.
 // Emits at most six lines, one every 500th call. DELETE with the bring-up.

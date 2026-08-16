@@ -89,6 +89,26 @@ void DepthOfField::Construct()
 // stores carry no assert prologue (SetParams' six fcmpu guards are inside SetParams), and
 // adding one here would fire on callers the console lets through.
 // ----------------------------------------------------------------------------
+f32 DepthOfField::GetFocusStartDistanceMeters() const
+{
+    return mfFocusStartDistanceMeters;          // +0x00
+}
+
+f32 DepthOfField::GetPerfectFocusStartDistanceMeters() const
+{
+    return mfPerfectFocusStartDistanceMeters;   // +0x04
+}
+
+f32 DepthOfField::GetPerfectFocusEndDistanceMeters() const
+{
+    return mfPerfectFocusEndDistanceMeters;     // +0x08
+}
+
+f32 DepthOfField::GetFocusEndDistanceMeters() const
+{
+    return mfFocusEndDistanceMeters;            // +0x0C
+}
+
 f32 DepthOfField::GetBlurriness() const
 {
     return mfBlurriness;

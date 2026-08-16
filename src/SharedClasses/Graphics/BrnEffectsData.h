@@ -265,6 +265,33 @@ struct MotionBlurData
 
     void Construct();
     static MotionBlurData Interpolate(const MotionBlurData& lLhs, const MotionBlurData& lRhs, f32 lfT);
+
+    // BrnDirector::Camera::MotionBlurData::Set @0x8220AED8 -- DWARF BrnCameraEffects.h:56,
+    // `void Set(bool, bool, float32_t, float32_t)`: the two flags FIRST, then the two amounts
+    // (a float argument SKIPS its GPR slot on PPC, so the asm's r4/r5 + f1/f2 IS that list).
+    // It has exactly ONE caller in the whole image -- the effects module's base-frame producer,
+    // BrnEffects::EffectsModule::GenerateRenderRequests @0x8227FF10 -- which is why it lands now:
+    //   $ grep -rl '"name": "BrnDirector::Camera::MotionBlurData::Set"' \
+    //         .ida-exports/BURNOUT_X360_ARTIST.XEX/
+    //   .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8227FF10.json   (the call site)
+    //   .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8220AED8.json   (the body)
+    // Body: GameSource/Director/Camera/BrnCameraEffects.cpp (this type's compilation home).
+    void Set(bool lbIsActive, bool lbIsExpensiveMotionBlur,
+             f32 lfCarsBlurAmount, f32 lfWorldBlurAmount);
+
+    // The four DWARF read accessors (BrnCameraEffects.h:59/:62/:65/:68). NONE of them exists as a
+    // standalone X360 function -- the compiler inlined every use:
+    //   $ grep -rlo "MotionBlurData::GetCarsBlendAmount\|MotionBlurData::GetWorldBlendAmount\|\
+    //         MotionBlurData::IsActive\|MotionBlurData::IsExpensiveMotionBlur" \
+    //         .ida-exports/BURNOUT_X360_ARTIST.XEX/
+    //   (no hits)
+    // -- so they are header inlines over the members Construct/Set already pin store-for-store,
+    // exactly like the CameraEffects::GetShakeAmplitude family. They exist so the base-frame
+    // producer reads the camera record BY NAME instead of by displacement.
+    f32  GetCarsBlendAmount() const    { return mfCarsBlurAmount; }
+    f32  GetWorldBlendAmount() const   { return mfWorldBlurAmount; }
+    bool IsActive() const              { return mbIsActive; }
+    bool IsExpensiveMotionBlur() const { return mbIsExpensiveMotionBlur; }
 };
 }
 }

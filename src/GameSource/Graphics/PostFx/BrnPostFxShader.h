@@ -72,8 +72,8 @@ namespace renderengine
 // (BrnPostFxShader.cpp:798), which names both the variable and the enum.
 //
 // ⚠ THIS RETIRES `BrnPostFx::mau8MotionBlurStatePad[0x20]` (BrnPostFx.h:123). The real block is
-// 0x84 bytes before maViewCache and 0x84 + 3 * sizeof(Matrix44Affine) with it -- 0x20 is far too
-// small, so the committed BrnPostFx layout shears everything after it. Fixing that is the post-fx
+// 0x90 bytes before maViewCache and 0x90 + 3 * sizeof(Matrix44Affine) == 0x150 with it -- 0x20 is
+// far too small, so the committed BrnPostFx layout shears everything after it. Fixing that is the post-fx
 // DRIVER's edit (BrnPostFx.h/.cpp), not this file's; it is listed in REPORT.md as a required
 // companion change.
 // --------------------------------------------------------------------------------------------------
@@ -98,12 +98,22 @@ struct MotionBlurState
     // standalone X360 symbol (the compiler inlined it into BrnPostFx::Construct @0x82409F80) and is
     // recovered from that caller's asm; see the banner over its definition.
     //
-    // Update (@0x823F8490 -- a real X360 symbol, unlike Construct) is STILL declaration-only: it
-    // rebuilds the current/previous world-view-projection pair from the view + projection and the
-    // three-entry view cache, through the rw::math::fpu double-precision matrix family that does not
-    // exist in this tree (the same blocker as BRN_POSTFX_MOTION_BLUR_REPROJECTION_AVAILABLE in the
-    // .cpp). It is declared here because the type is this file's, and because Render's parameter
-    // needs the complete layout.
+    // Update (@0x823F8490 -- a real X360 symbol, unlike Construct) IS NOW BODIED, in this file's
+    // .cpp (post-fx step-6 producers wave). It advances the current/previous world-view-projection
+    // pair, and on a ZERO time step it does not advance anything -- it SYNTHESISES a previous view
+    // out of the three-entry view cache instead. The banner over the definition carries the full
+    // derivation; the short version is:
+    //   lfTimeStep != 0 -> maViewCache[2] = [1]; [1] = [0]; [0] = lView;
+    //                      mPreviousWVP = mCurrentWVP; mCurrentWVP = lView * lProjection.
+    //   lfTimeStep == 0 -> the cache does NOT shift. The camera's linear velocity is recovered from
+    //                      the two cached views, applied backwards to the current camera transform,
+    //                      and the result inverted back into a view matrix, so a duplicate frame
+    //                      still carries the motion the last real pair had.
+    // ⚠ EARLIER REVISIONS OF THIS COMMENT SAID Update NEEDS THE rw::math::fpu DOUBLE-PRECISION
+    // MATRIX FAMILY. That was wrong, and it was a guess: this function is pure single-precision VMX
+    // (no `bl` at all, and its only reciprocals are `vrefp` + two Newton steps). It is
+    // BrnPostFxShader::Render's REPROJECTION block, a different piece of code, that calls the fpu
+    // double family out of line.
     void Construct();
     void Update(const rw::math::vpu::Matrix44Affine& lView,
                 const rw::math::vpu::Matrix44& lProjection,
@@ -113,11 +123,18 @@ struct MotionBlurState
     rw::math::vpu::Matrix44       mCurrentWVP;      // +0x00  DWARF :66  (Render reads 16 floats here)
     rw::math::vpu::Matrix44       mPreviousWVP;     // +0x40  DWARF :67  (Render reads 16 floats here)
     EQuality                      meQuality;        // +0x80  DWARF :68  (`lwz r11, 0x80(r30)`)
-    rw::math::vpu::Matrix44Affine maViewCache[3];   // +0x84 on the CONSOLE (DWARF :72; Update only).
-                                                    // HOST: Matrix44Affine is alignas(16) here, so it
-                                                    // pads to +0x90 -- nothing in this build reads it
-                                                    // by offset, and Update (still a stub) is its only
-                                                    // user; do NOT carry 0x84 into any host reader.
+    rw::math::vpu::Matrix44Affine maViewCache[3];   // +0x90 (DWARF :72; Update is its only user).
+                                                    // ⚠ CORRECTED: this used to read "+0x84 on the
+                                                    // CONSOLE ... HOST pads to +0x90". It is +0x90 on
+                                                    // BOTH. The console pads exactly as the host does
+                                                    // -- Update @0x823F8490 addresses the three
+                                                    // entries as `this + 0x90`, `this + 0xD0` and
+                                                    // `this + 0x110` (asm 0x823F84EC / 0x823F851C /
+                                                    // 0x823F89A4), i.e. base 0x90 with a 0x40 stride,
+                                                    // twelve bytes of padding after meQuality at
+                                                    // 0x80. sizeof(MotionBlurState) is therefore
+                                                    // 0x150 on the console too. Nothing reads it by
+                                                    // offset here; the number is documentation only.
 };
 
 // --------------------------------------------------------------------------------------------------

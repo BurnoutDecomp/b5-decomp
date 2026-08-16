@@ -46,6 +46,18 @@ public:
                    f32 lfFocusEndDistanceMeters,
                    f32 lfBlurriness);
 
+    // The four remaining band read accessors (DWARF BrnDepthOfField.h:72/:75/:78/:81). None of
+    // them is a standalone X360 function -- every reader loads the lane inline -- so they are the
+    // de-inlined named form of that read. THE reader that needs them:
+    // BrnEffects::EffectsModule::GenerateRenderRequests @0x8227FF10 copies the whole block out of
+    // its camera input into the base effects frame with a five-iteration word loop
+    // (`v46[0..4] = *(CameraInput + 292..308)` -> `frame+144..160`), and CameraInput + 292 IS this
+    // sub-object (director camera +0x124). Declaration-only, like the pair below; bodies in the .cpp.
+    f32  GetFocusStartDistanceMeters() const;
+    f32  GetPerfectFocusStartDistanceMeters() const;
+    f32  GetPerfectFocusEndDistanceMeters() const;
+    f32  GetFocusEndDistanceMeters() const;
+
     // Read / write just the blurriness lane (mfBlurriness @+0x10). The BrnLooker Zoom path
     // ramps the DOF blurriness toward 0 (un-blur) or up (blur) at a fixed per-second rate.
     // DECLARATION-ONLY here (bodies land with this type's own TU); FLAG: additive accessors
