@@ -219,6 +219,12 @@ namespace renderengine
     void PCSurfaceBracket_Save();
     void PCSurfaceBracket_Restore();
 
+    // Alpha-to-coverage (rung 9): re-derive the vendor A2C state from its inputs. Called by
+    // renderengine::Device::SetState after every render-target bind because the bound colour
+    // target's sample count is one of those inputs (XenonD3D9Shims.cpp, the derivation banner
+    // above AlphaCoverage_Reconcile). Cheap and idempotent. Defined in XenonD3D9Shims.cpp.
+    void PCAlphaCoverage_Reconcile();
+
     // =========================================================================
     // FLAG PC bring-up: THE SCENE-TARGET PRESENT BLIT's device state.
     //

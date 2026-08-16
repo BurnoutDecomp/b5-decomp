@@ -931,6 +931,11 @@ namespace renderengine
         if (lpColour != nullptr)
             lpDevice->SetRenderTarget(0, lpColour);
         lpDevice->SetDepthStencilSurface(lpState->mpDepthSurface);
+
+        // The bound colour target's sample count is an input of the alpha-to-coverage
+        // derivation (XenonD3D9Shims.cpp AlphaCoverage_Reconcile); this is the one writer of
+        // that input, so it reconciles -- LAST, after both surfaces are in place.
+        PCAlphaCoverage_Reconcile();
     }
 
     // =========================================================================
