@@ -560,11 +560,15 @@ namespace Vehicle
             if (siCGenProbe == 1 && CgsDev::Log::gpDebugPrint != nullptr
                 && (lbEdge || (suCGenFrame % 300u) == 0u))
             {
+                // ⚠️ THE LABELS WERE UPDATED WITH THE CODE (swept leg, 2026-08-16). They used to
+                // read "SWEPT(gated kernel)", which was true when the swept worker was a boot
+                // gate and became a LIE the moment it landed. A diagnostic that describes a
+                // state the build has left is this campaign's most repeated bug.
                 *CgsDev::Log::gpDebugPrint
                     << "[cgen] n " << static_cast<s32>(suCGenFrame)
                     << " car " << liRaceCarIndex
                     << (lbEdge ? " EDGE" : "")
-                    << (lbUseSweptSpheres ? " SWEPT(gated kernel)" : " INPLACE(real kernel)")
+                    << (lbUseSweptSpheres ? " SWEPT(real kernel)" : " INPLACE(real kernel)")
                     << " batches " << liNumTriangleBatches << "\n";
             }
         }
