@@ -20,6 +20,7 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer (DoUpdate_Director)
 #include "GameSource/GameState/BrnGameStateModuleIO.h" // GameStateModuleIO::OutputBuffer (BridgeGameStateToDirector)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // DirectorIO::SceneQuery{Input,Output}Buffer
+#include "GameSource/Effects/Particles/ParticleModuleBringUp.h"               // BrnParticle::PCBringUpProduceParticleRenderData (DoDispatch's particle-render-data seam)
 
 // The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- the world-load
 // stand-in below keys its loading-complete report on it.
@@ -1392,6 +1393,60 @@ namespace BrnGame
         {
             mpDirectorOutputBuffer->LockForRead();
             mRenderModule.PCBringUpSetCameraInput(mpDirectorOutputBuffer->GetCameraOutput());
+
+            // ---- stage the DIRECTOR's published camera as the PARTICLE RENDER DATA ------------
+            // The console: BrnEffects::EffectsModule::Update @0x8229EC28 drives
+            // BrnParticle::ParticleModule::Update @0x822817D8 (the virtual at vtable+68) once per
+            // simulation sub-step, and EffectsModule::GenerateDispatchLists @0x82296668 drives
+            // ParticleModule::GenerateRenderRequests @0x82281BD8 once per frame, which memcpy's the
+            // module's record into DispatchThreadInputBuffer::mParticleRenderData. Neither module is
+            // on this build's list, so the record was never written and
+            // BrnRendererUpdatePostFxMotionBlur has been fed a NULL since the rung-7 producers wave.
+            // The named PC stand-in for both is BrnParticle::PCBringUpProduceParticleRenderData.
+            //
+            // THE THREE FLOATS ARE THE CONSOLE'S OWN THREE VIRTUAL-Update ARGUMENTS, read off the
+            // SIM timer exactly as EffectsModule::Update reads them from the effects input buffer's
+            // published TimerStatusInterface (its call site, pseudocode line 399:
+            //     v67 = simStatus.mfTimeStepMultiplier;                       // ts+32
+            //     v68 = simStatus.mbRunning ? (mfBaseTimeStep * mfTimeStepMultiplier) : 0.0f;
+            //     v73 = simStatus.mTime.miSeconds + simStatus.mTime.mfFraction;
+            //     (*(particleModule + 68))(particleModule, v68, v73, v67);
+            // i.e. f1 = the current time step, f2 = the absolute time, f3 = the multiplier).
+            // TimerStatusInterface::StoreTimers @0x828D7518 copies those four fields straight off
+            // CgsSystem::Timer (mfBaseTimeStep <- mfRate, mfTimeStepMultiplier <- mfScaleCurrent,
+            // mTime.miSeconds <- miAccumTicks, mTime.mfFraction <- mfAccumulator), so reading the
+            // LIVE mSimTimer here is the same value -- and it is what the two neighbouring bring-up
+            // seams in this file already do, for the reason spelt out on BridgeTimers: the published
+            // pair is only written once the director module reports prepared.
+            //
+            // THE BUFFER IS THE **WRITE** BUFFER. EngineUpdate's order is UpdateThread() (which runs
+            // GameMain -> the flow state's Render -> this function) -> OnEndOfUpdateFrame() (the
+            // manager Swap, which turns the buffer just written into the read buffer) ->
+            // DispatchThread() -> BrnRendererModule::Render(GetReadBuffer()). So writing
+            // GetWriteBuffer() here is what the renderer read-locks next. Writing GetReadBuffer()
+            // instead would be swapped away unread -- the symptom is `[postfx-mb] update=1` with
+            // wvpDelta exactly 0.
+            //
+            // UNCONDITIONAL, beside PCBringUpSetCameraInput and for the same reason: the console's
+            // producer runs every frame regardless of what the director is doing, and the
+            // mbDirectorCameraLive / origin guards below are world-STREAMER safety, not camera
+            // validity. A static camera simply produces a zero-velocity reprojection.
+            // DELETE-WHEN BrnParticle::ParticleModule + BrnEffects::EffectsModule are on the build
+            // list and EffectsModule::GenerateDispatchLists drives the real pair.
+            {
+                const f32 lfSimTimeStep = mSimTimer.IsRunning()
+                    ? (mSimTimer.GetRate() * mSimTimer.GetScaleCurrent())
+                    : 0.0f;
+                const f32 lfSimTime = static_cast<f32>(mSimTimer.GetAccumTicks())
+                                    + mSimTimer.GetAccumulator();
+                BrnParticle::PCBringUpProduceParticleRenderData(
+                    mDispatchThreadInputBufferManager.GetWriteBuffer(),
+                    mpDirectorOutputBuffer->GetCameraOutput(),
+                    lfSimTimeStep,
+                    lfSimTime,
+                    mSimTimer.GetScaleCurrent());
+            }
+
             mpDirectorOutputBuffer->UnlockForRead();
         }
 

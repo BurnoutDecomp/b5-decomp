@@ -559,28 +559,42 @@ void BrnRendererEvalPostFxTint2dColour(const BrnGraphics::EffectsArbitrator* lpA
 //      and mCgsCamera's projection -- and the console's +0x0C / +0x60 / +0xA0 are three independent
 //      confirmations of that layout rather than three offsets anybody has to cast to.
 //
-// ⚠ WHAT IS STILL MISSING IS THE PRODUCER, AND THE NULL POINTER IS HOW IT SAYS SO. On the console
-// the render data is filled every frame by BrnParticle::ParticleModule::GenerateRenderRequests
+// ⭐ THE THIRD BLOCKER -- THE PRODUCER -- CLOSED 2026-08-16 (post-fx step 9). On the console the
+// render data is filled every frame by BrnParticle::ParticleModule::GenerateRenderRequests
 // @0x82281BD8 -- the ONLY caller of the write-locked accessor:
 //   $ python -c "import json;print(json.load(open('.ida-exports/BURNOUT_X360_ARTIST.XEX/0x8227F6E8.json'))['xrefs_to'])"
 //   [{'address': '0x82281BD8', 'name': 'BrnParticle::ParticleModule::GenerateRenderRequests'}]
-// That module is NOT reconstructed here:
-//   $ grep -rn "ParticleModule::GenerateRenderRequests\|class ParticleModule" --include=*.h --include=*.cpp b5-decomp/src
-//   b5-decomp/src/GameSource/Effects/Props/PropCollisions.h:23:    class ParticleModule;
-// -- one hit, a forward declaration, no definition and no producer. So BrnRendererModule.cpp keeps
-// passing a NULL render-data pointer, this function reports once and returns false, and
-// MotionBlurState keeps the identity/identity pair MotionBlurState::Construct gave it (which makes
-// BrnPostFxShader::Render's reprojection produce an exactly-zero velocity matrix -- correct, and
-// finite).
+// which in turn is only reached from BrnEffects::EffectsModule::GenerateDispatchLists @0x82296668,
+// after BrnParticle::ParticleModule::Update @0x822817D8 (the vtable+68 virtual EffectsModule::Update
+// @0x8229EC28 drives) has refreshed the module's own record at ParticleModule+0x8E00. NEITHER module
+// is on this build's list -- `grep -n "Particle" tools/build/build_game_exe.bat` finds only the LION
+// vendor waveform TU -- so the record was never written and this function was handed a NULL.
 //
-// ⚠ DO NOT "FIX" THIS BY WIRING THE ACCESSOR UP. Passing
-// `lpDispatchThreadInputBuffer->GetParticleRenderData()` without a producer would hand this
-// function UNINITIALISED memory: neither DispatchThreadInputBuffer::Construct (faithfully -- the
-// console does not clear that payload either) nor CreateIOBuffer<T> (since the 2026-08-15 perf
-// wave) zeroes it. A garbage view matrix is almost surely singular or non-finite, and
-// MotionBlurState::Update's zero-time-step arm INVERTS it four times -- the resulting NaN would
-// propagate straight into BlurMatrixX/Y/W and, from there, into a tex2Dgrad gradient. The wiring
-// and the producer must land in the same change.
+// It is now written by the named PC bring-up stand-in for that pair,
+//     BrnParticle::PCBringUpProduceParticleRenderData  (ParticleModuleBringUp.cpp)
+// called from BrnGameModule::DoDispatch with the DIRECTOR's published camera and the SIM timer's
+// step / time / multiplier -- the same three floats the console's EffectsModule::Update reads off
+// the published TimerStatusInterface. BrnRendererModule.cpp now passes the READ-LOCKED
+// `lpDispatchThreadInputBuffer->GetParticleRenderData()`, gated on that producer having run.
+//
+// ⚠ THE OLD WARNING IS KEPT AS HISTORY, BECAUSE THE HAZARD IT NAMES IS STILL REAL: DO NOT WIRE THE
+// ACCESSOR UP WITHOUT A PRODUCER. Passing `lpDispatchThreadInputBuffer->GetParticleRenderData()`
+// unconditionally would hand this function UNINITIALISED memory before the first producer run:
+// neither DispatchThreadInputBuffer::Construct (faithfully -- the console does not clear that
+// payload either) nor CreateIOBuffer<T> (since the 2026-08-15 perf wave) zeroes it. A garbage view
+// matrix is almost surely singular or non-finite, and MotionBlurState::Update's zero-time-step arm
+// INVERTS it four times -- the resulting NaN would propagate straight into BlurMatrixX/Y/W and, from
+// there, into a tex2Dgrad gradient. That is exactly why the call site tests
+// BrnParticle::PCBringUpParticleRenderDataProduced() and not just the buffer pointer. The null arm
+// below stays for the frames before the first DoDispatch, and for any build where the producer is
+// unmounted.
+//
+// ⚠ STENCIL-MASK DEVIATION, LIVE FROM THIS CHANGE ON. The console's composite blurs CARS and WORLD
+// separately behind the stencil mask BrnPostFx writes; this tree's composite has no stencil mask, so
+// a real (non-zero) velocity now blurs the WHOLE frame uniformly instead of only what the mask
+// selects. That is a known, deliberate deviation -- the fix is the stencil mask, not a weakened
+// velocity. Until it lands, expect directional streaking of the world (and of the car with it) in
+// the intro / menu cameras, which is precisely the boot proof this rung is checked against.
 // ==================================================================================================
 #define BRN_POSTFX_MOTION_BLUR_UPDATE_AVAILABLE 1
 
@@ -608,20 +622,29 @@ bool BrnRendererUpdatePostFxMotionBlur(
 #if BRN_POSTFX_MOTION_BLUR_UPDATE_AVAILABLE
     if (lpParticleRenderData == 0)
     {
-        // [FLAG PC bring-up] no producer -- see the banner. DELETE WHEN
-        // BrnParticle::ParticleModule (or a named PC bring-up stand-in for
-        // GenerateRenderRequests) fills DispatchThreadInputBuffer::mParticleRenderData.
+        // [FLAG PC bring-up] the record has not been stamped YET -- see the banner. Since post-fx
+        // step 9 this is no longer "there is no producer at all": the producer is
+        // BrnParticle::PCBringUpProduceParticleRenderData (ParticleModuleBringUp.cpp), driven from
+        // BrnGameModule::DoDispatch, and the call site here gates on
+        // BrnParticle::PCBringUpParticleRenderDataProduced(). So this arm now means one of exactly
+        // three things: (a) the frames before the first DoDispatch (boot / loading, where DoDispatch
+        // is only reached in the IN_GAME flow state), (b) the director output buffer was null so the
+        // producer returned early, or (c) ParticleModuleBringUp.cpp is not on the build list.
+        // DELETE WHEN the real BrnParticle::ParticleModule + BrnEffects::EffectsModule fill
+        // DispatchThreadInputBuffer::mParticleRenderData (then the record is always written before
+        // any reader, as on the console, and no latch is needed).
         static bool sbReportedNoRenderData = false;
         if (!sbReportedNoRenderData)
         {
             sbReportedNoRenderData = true;
             CgsDev::Log::WriteToLog(
-                "[postfx-mb] MotionBlurState::Update NOT called: nothing in this tree produces"
-                " DispatchThreadInputBuffer::mParticleRenderData (the console's producer is"
-                " BrnParticle::ParticleModule::GenerateRenderRequests @0x82281BD8, not"
-                " reconstructed). The WVP pair stays at Construct's identity/identity, so the"
-                " composite's reprojection rows are exactly zero -- correct and finite, just"
-                " motionless. [FLAG PC bring-up: no ParticleRenderData producer]\n");
+                "[postfx-mb] MotionBlurState::Update NOT called: no ParticleRenderData has been"
+                " stamped yet (the console's producer is BrnParticle::ParticleModule::"
+                "GenerateRenderRequests @0x82281BD8, not reconstructed; the PC stand-in is"
+                " BrnParticle::PCBringUpProduceParticleRenderData, driven from"
+                " BrnGameModule::DoDispatch). The WVP pair stays at Construct's identity/identity,"
+                " so the composite's reprojection rows are exactly zero -- correct and finite, just"
+                " motionless. [FLAG PC bring-up: ParticleRenderData not produced yet]\n");
         }
         return false;
     }
