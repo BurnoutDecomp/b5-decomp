@@ -120,9 +120,12 @@ public:
 // already crosses for the camera.
 //
 // It carries the LIVE sky gradient / cloud / key-light / fog set from the environment
-// manager, i.e. exactly the members BrnRendererModule::PublishSkyConstantsBringUp still
-// hard-codes from the noon keyframe. DELETE-WHEN that publisher becomes a copy of this
-// frame and the dispatch IO buffer set is real.
+// manager. Since the step-10 `skyframe` wave BrnRendererModule::PublishSkyConstantsBringUp
+// IS a copy of this frame -- its hard-coded noon-keyframe set is deleted -- so half of the
+// old DELETE-WHEN is already met. What remains is the other half: the dispatch IO buffer set
+// becoming real, at which point BrnRendererModule::Update lends the world its own
+// maShaderConstantsFrames[external] through RendererIO::OutputBuffer::SetShaderConstantsFrame
+// @0x823FB608 exactly as the console does, and both this global and gBrnSkyCameraBringUp go.
 extern BrnShaderConstantsFrame gBrnWorldShaderConstantsFrameBringUp;
 extern bool                    gbBrnWorldShaderConstantsFrameBringUpValid;
 
