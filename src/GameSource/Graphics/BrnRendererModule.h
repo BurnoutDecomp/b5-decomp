@@ -100,6 +100,15 @@ class TextureState;
 // `namespace rw` (:31) / `namespace graphics` (:33) / `namespace postfx` (:35).
 namespace rw { namespace graphics { namespace postfx { class RenderTarget; } } }
 
+// BrnRendererModule::PCBringUpSetCameraInput below takes the director's published camera record
+// by pointer only, so this is the same documented cascade-avoidance forward declaration as the
+// RenderTarget one above rather than an include of Camera.h (which would drag CameraEffects /
+// DepthOfField / CameraState / CgsCamera into every TU that includes this header). Class KEY
+// checked against the definition, not guessed: `struct alignas(16) Camera` at
+// GameSource/Director/Camera/Camera.h:59, inside `namespace BrnDirector` (:45) / `namespace
+// Camera` (:51). The alignas belongs to the definition, so it is correctly absent here.
+namespace BrnDirector { namespace Camera { struct Camera; } }
+
 // BrnRendererMemory is the real type now (GameSource/Graphics/BrnRendererMemory.h): it owns the
 // renderer's render-target pool, and mAllocatedRenderTargets below is embedded BY VALUE, so the
 // shadow pass -- which asks it for GetShadowMapBuffer(0) -- needs the complete layout, not the
@@ -375,6 +384,24 @@ public:
     // as "no effects frame this frame" rather than dereferencing it.
     // DELETE-WHEN the RendererIO buffers are created on PC and Update publishes for real.
     BrnEffectsFrame* GetWorldEffectsFrameBringUp(u8 luSlot);
+
+    // [FLAG PC bring-up] Stage the DIRECTOR'S PUBLISHED CAMERA for the base-frame producer.
+    //
+    // STANDS IN FOR BrnEffects::EffectsIO::DispatchInputBuffer::SetCameraInput @0x823C9988
+    // (DWARF EffectsModuleIO.h:242, `void SetCameraInput(const Camera*)`), whose body is a
+    // "locked for writing" assert followed by one `BrnDirector::Camera::Camera::operator=` into
+    // the buffer's by-value `Camera mCameraInput` member (EffectsModuleIO.h:261, X360 this+0x50).
+    // Its ONE caller in the image is BrnGameModule::DoDispatch @0x823DC458 line 103:
+    //     v20 = BrnDirector::DirectorIO::OutputBuffer::GetCameraOutput(*v11);
+    //     BrnEffects::EffectsIO::DispatchInputBuffer::SetCameraInput(v18, v20);
+    // The record is then read by BrnEffects::EffectsModule::GenerateRenderRequests @0x8227FF10
+    // lines 116-221 to decide, per frame, whether depth-of-field / B4 blur / motion blur are on
+    // and with what parameters. None of the EffectsIO buffers is created on this build, so the
+    // renderer's bring-up producer (PCBringUpProduceBaseEffectsFrame) reads a copy staged here
+    // instead. A null pointer is ignored (the record then keeps its last staged value, or the
+    // director's Camera::Construct defaults if nothing has ever been staged).
+    // DELETE-WHEN the EffectsIO dispatch buffer set is real on PC (this goes with the producer).
+    void PCBringUpSetCameraInput(const BrnDirector::Camera::Camera* lpCamera);
 
 private:
     enum

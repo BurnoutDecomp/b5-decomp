@@ -215,6 +215,58 @@ namespace vpu
         return lInverse;
     }
 
+    // Inverse(m): the GENERAL affine inverse -- the adjugate of the upper 3x3 over its
+    // determinant, plus the inverse translation. Unlike the orthonormal fast path above it does
+    // NOT assume the 3x3 is a rotation, so it survives a scaled or sheared basis.
+    //
+    // ADDITIVE GROW 2026-08-15 (post-fx step-6 producers wave). ATTESTED: MotionBlurState::Update
+    // @0x823F8490 inlines this routine FOUR times in its lfTimeStep == 0 arm -- over
+    // maViewCache[1], maViewCache[2], lView and the constructed camera transform (four
+    // `vmsum3fp128` determinants at 0x823F85B0 / 0x823F85F4 / 0x823F8678 / 0x823F8844, each with
+    // its own `vrefp`) -- and the DWARF hint listing for that function names
+    // `rw::math::vpu::Inverse` exactly four times
+    // (dwarfdump/GameSource/Graphics/PostFx/BrnPostFxShader.cpp, MotionBlurState::Update).
+    // The X360 shape is the classic VMX adjugate: three cross products built with
+    // `vpermwi128 ..., 0x63` (the y,z,x,w swizzle) + `vmulfp128`/`vnmsubfp` pairs, the determinant
+    // as one `vmsum3fp128` dot3 of the first row against cross(row1,row2), its reciprocal as
+    // `vrefp` refined by TWO Newton-Raphson steps (`vnmsubfp`/`vmaddfp` x2), the transpose of the
+    // three crosses assembled with `vmrghw`/`vmrglw`, and the translation negated with a
+    // `vxor` against the 0x80000000 splat (`vslw v30, v0, v0` on the all-ones vector) before the
+    // same broadcast+FMA cascade.
+    //
+    // FLAG (VMX -> portable, this vendor home's standing convention): the vrefp + two-Newton
+    // reciprocal is reconstructed as an exact divide, exactly as Normalize / OrthoNormalize3x3 /
+    // SLerp above already reconstruct vrsqrtefp. Numerically tighter, never a placeholder. There
+    // is NO singular-matrix guard because the console has none.
+    inline Matrix44Affine Inverse(const Matrix44Affine& lrMatrix)
+    {
+        const Vector3 lvCrossYZ = Cross(lrMatrix.yAxis, lrMatrix.zAxis);
+        const Vector3 lvCrossZX = Cross(lrMatrix.zAxis, lrMatrix.xAxis);
+        const Vector3 lvCrossXY = Cross(lrMatrix.xAxis, lrMatrix.yAxis);
+
+        const f32 lfInverseDeterminant = 1.0f / Dot(lrMatrix.xAxis, lvCrossYZ);
+
+        Matrix44Affine lInverse;
+        lInverse.xAxis = Vector3{ lvCrossYZ.x * lfInverseDeterminant,
+                                  lvCrossZX.x * lfInverseDeterminant,
+                                  lvCrossXY.x * lfInverseDeterminant, 0.0f };
+        lInverse.yAxis = Vector3{ lvCrossYZ.y * lfInverseDeterminant,
+                                  lvCrossZX.y * lfInverseDeterminant,
+                                  lvCrossXY.y * lfInverseDeterminant, 0.0f };
+        lInverse.zAxis = Vector3{ lvCrossYZ.z * lfInverseDeterminant,
+                                  lvCrossZX.z * lfInverseDeterminant,
+                                  lvCrossXY.z * lfInverseDeterminant, 0.0f };
+
+        // The inverse translation: -Pos transformed by the inverse rotation just built.
+        const Vector3& lrPos = lrMatrix.wAxis;
+        lInverse.wAxis = Vector3{
+            -(lrPos.x * lInverse.xAxis.x + lrPos.y * lInverse.yAxis.x + lrPos.z * lInverse.zAxis.x),
+            -(lrPos.x * lInverse.xAxis.y + lrPos.y * lInverse.yAxis.y + lrPos.z * lInverse.zAxis.y),
+            -(lrPos.x * lInverse.xAxis.z + lrPos.y * lInverse.yAxis.z + lrPos.z * lInverse.zAxis.z),
+            0.0f };
+        return lInverse;
+    }
+
     // IsValid(Matrix44Affine): the affine is valid when every one of its four rows is
     // valid (no NaN in any x/y/z lane). The console build folds this into a per-row,
     // per-lane vcmpeqfp self-equality cascade (the x==x NaN test broadcast over each

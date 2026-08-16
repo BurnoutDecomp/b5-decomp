@@ -36,6 +36,54 @@ namespace Camera
         mPadA[1] = 0;
     }
 
+    // ------------------------------------------------------------------------
+    // BrnDirector::Camera::MotionBlurData::Set @0x8220AED8
+    //
+    // Store the two flags, then store each amount CLAMPED TO [0,1]. The whole body is 17
+    // instructions and every one of them is accounted for:
+    //   0x8220AED8  fneg  f13, f1                  ; -cars
+    //   0x8220AEE0  fneg  f12, f2                  ; -world
+    //   0x8220AEE4  stb   r4, 8(r3)                ; mbIsActive              <- arg1 (bool)
+    //   0x8220AEE8  stb   r5, 9(r3)                ; mbIsExpensiveMotionBlur <- arg2 (bool)
+    //   0x8220AEEC  lfs   f0, flt_82001CC0         ; 0.0f  (DATA_DUMP.md: flt_82001CC0 == 0.0f;
+    //                                              ;        the same symbol BrnRendererModule.cpp
+    //                                              ;        already cites for its clear colour)
+    //   0x8220AEF4  fsel  f13, f13, f0, f1         ; cars  = (-cars  >= 0) ? 0.0f : cars   (lower clamp)
+    //   0x8220AEF8  fsel  f12, f12, f0, f2         ; world = (-world >= 0) ? 0.0f : world
+    //   0x8220AEFC  lfs   f0, flt_82001C98         ; 1.0f  (0x3F800000 -- the same constant
+    //                                              ;        Camera.cpp already reads as 1.0f)
+    //   0x8220AF00  fsubs f11, f0, f13             ; 1 - cars
+    //   0x8220AF04  fsubs f10, f0, f12             ; 1 - world
+    //   0x8220AF08  fsel  f13, f11, f13, f0        ; cars  = (1-cars  >= 0) ? cars  : 1.0f (upper clamp)
+    //   0x8220AF0C  stfs  f13, 0(r3)               ; mfCarsBlurAmount
+    //   0x8220AF10  fsel  f0,  f10, f12, f0        ; world = (1-world >= 0) ? world : 1.0f
+    //   0x8220AF14  stfs  f0,  4(r3)               ; mfWorldBlurAmount
+    // The store ORDER is the asm's: both bytes first, then cars, then world. Written as the
+    // arithmetic the fsel pair expresses (the strength-reduction rule), NOT as fsel intrinsics --
+    // the one behavioural difference is NaN: fsel takes the "else" arm on an unordered compare,
+    // so a NaN amount would store 1.0f on the console and (with `>` / `<` here) also 1.0f, because
+    // both comparisons against a NaN are false and the ternaries fall to the same arms.
+    //
+    // This is the SAME clamp the committed Camera::SetShowtimeBlurAndBars performs inline (its
+    // caller re-materialises the sequence per lane); the difference is the argument order, which
+    // the FLAG on that function already records. Set is the console's own canonical setter, and
+    // its ONLY caller is EffectsModule::GenerateRenderRequests @0x8227FF10.
+    // ------------------------------------------------------------------------
+    void MotionBlurData::Set(bool lbIsActive, bool lbIsExpensiveMotionBlur,
+                             f32 lfCarsBlurAmount, f32 lfWorldBlurAmount)
+    {
+        mbIsActive              = lbIsActive;                 // stb r4, 8(r3)
+        mbIsExpensiveMotionBlur = lbIsExpensiveMotionBlur;    // stb r5, 9(r3)
+
+        f32 lfCars  = (lfCarsBlurAmount  > 0.0f) ? lfCarsBlurAmount  : 0.0f;   // fsel on -cars
+        f32 lfWorld = (lfWorldBlurAmount > 0.0f) ? lfWorldBlurAmount : 0.0f;   // fsel on -world
+        lfCars  = (lfCars  < 1.0f) ? lfCars  : 1.0f;                           // fsel on 1-cars
+        lfWorld = (lfWorld < 1.0f) ? lfWorld : 1.0f;                           // fsel on 1-world
+
+        mfCarsBlurAmount  = lfCars;    // stfs f13, 0(r3)
+        mfWorldBlurAmount = lfWorld;   // stfs f0,  4(r3)
+    }
+
     MotionBlurData MotionBlurData::Interpolate(const MotionBlurData& lLhs, const MotionBlurData& lRhs, f32 lfT)
     {
         MotionBlurData lResult;
@@ -101,14 +149,8 @@ namespace Camera
         mMotionBlurData.Construct();                    // stfs 0 @+0x44/+0x48, stb 0 @+0x4C/+0x4D
         maReserved78[0]           = 0;                  // stb 0 @+0x78
         maReserved50[0]           = 0;                  // stb 0 @+0x50
-        maReserved84[0x90 - 0x84] = 0;                  // stfs 0 @+0x90 (zeroed float, byte-wise span)
-        maReserved84[0x91 - 0x84] = 0;
-        maReserved84[0x92 - 0x84] = 0;
-        maReserved84[0x93 - 0x84] = 0;
-        maReserved84[0x94 - 0x84] = 0;                  // stfs 0 @+0x94
-        maReserved84[0x95 - 0x84] = 0;
-        maReserved84[0x96 - 0x84] = 0;
-        maReserved84[0x97 - 0x84] = 0;
+        mfBloomThreshold          = 0.0f;               // stfs 0 @+0x90 (carved 2026-08-16 out of
+        mfBloomLuminance          = 0.0f;               // stfs 0 @+0x94  the maReserved84 span)
         mfGameCameraBlend         = 0.0f;               // stfs 0 @+0xA0 (carved from maReservedA0)
         mbSetTimeOfDay            = false;              // stb 0 @+0xB9 (carved from maReservedB9)
         mfCameraLag               = 0.0f;               // stfs 0 @+0xA4

@@ -81,9 +81,24 @@ struct CameraEffects
     //   the earlier +0x9C mis-name is what the mfSimTimeScale reconcile retired).
     f32 mfStartHookNameBlendAmount;               // +0x80
 
-    // +0x84 .. +0x97: the stop-hook counterpart scalars + fade floats (Construct zeroes
-    //   +0x90/+0x94). NOMINAL span.
-    u8  maReserved84[0x98 - 0x84];
+    // +0x84 .. +0x8F: mfRaceEndEffectAmount (+0x84), muFadeColor (+0x88) and meOverlay (+0x8C)
+    //   per the DWARF member order (BrnCameraEffects.h:304/:306/:307). NOT carved here: nothing
+    //   in this wave reads them and Construct does not write them, so they stay a NOMINAL span
+    //   until a consumer attests each one. NOTE the +0x84 mfRaceEndEffectAmount is the REAL
+    //   race-end amount; the member this file already calls mfRaceEndEffectAmount at +0xA8 is
+    //   the DWARF's mfBlackBarAmount (:317) -- see the FLAG on that member.
+    u8  maReserved84[0x90 - 0x84];
+
+    // +0x90 / +0x94: the per-camera BLOOM MODIFIERS (DWARF :309 mfBloomThreshold, :310
+    //   mfBloomLuminance). CARVED 2026-08-16 out of the old maReserved84 span, X360-attested by
+    //   BrnEffects::EffectsModule::GenerateRenderRequests @0x8227FF10, which ADDS them to the
+    //   BloomData it has just built from vault asset 191270 before it writes the base effects
+    //   frame -- `bloom.mfLuminance += camera+0xFC` / `bloom.mfThreshold += camera+0xF8`, i.e.
+    //   effects +0x94 and +0x90. They are ADDITIVE OFFSETS, not replacements, which is why the
+    //   accessor pair below is named ...Modifier (the DWARF's own accessor names, :115/:122).
+    //   Construct zeroes both (the committed byte-wise zeroing of this exact 8-byte range).
+    f32 mfBloomThreshold;                       // +0x90
+    f32 mfBloomLuminance;                       // +0x94
 
     // +0x98: the requested world clock (hours, 0..24). CARVED 2026-07-31 from the DWARF
     //   member order (BrnCameraEffects.h:311 puts mfTimeOfDay immediately before
@@ -211,6 +226,16 @@ struct CameraEffects
         return mStopHookNameString;
     }
     f32 GetCameraLag() const      { return mfCameraLag; }
+
+    // The bloom-modifier accessors (DWARF BrnCameraEffects.h:115/:119/:122/:126). Header inlines:
+    // no standalone X360 body exists for any of the four -- the only reader in the image is
+    // GenerateRenderRequests @0x8227FF10, which loads both floats inline -- so these are the
+    // de-inlined named form of that read, added so the base-frame producer never forms
+    // `camera + 248`.
+    f32  GetBloomThresholdModifier() const      { return mfBloomThreshold; }
+    void SetBloomThresholdModifier(f32 lfValue) { mfBloomThreshold = lfValue; }
+    f32  GetBloomLuminanceModifier() const      { return mfBloomLuminance; }
+    void SetBloomLuminanceModifier(f32 lfValue) { mfBloomLuminance = lfValue; }
 
     // ADDITIVE GROW (MomentPlayerJumping::Update @0x82275AA4..: the moment registers
     // its "Jump_Effect" start hook on the stack camera it is about to adopt with the

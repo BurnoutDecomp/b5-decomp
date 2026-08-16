@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle (calibration texture handle, by value)
 #include "GameSource/Game/BrnLoadingScreenRenderer.h"    // BrnGame::ELoadingScreenCommand (meLoadingScreenCommand)
 #include "BrnCommonTypes.h"                              // Matrix44 (rw::math::vpu::Matrix44, the occlusion view-projection)
+#include "GameSource/Effects/Particles/ParticleModule.h" // BrnParticle::ParticleModule::{DispatchThreadUpdateData,ParticleRenderData}
 
 namespace CgsModule { struct IOBufferStack; }            // the manager Construct's stack (pointer-only here)
 
@@ -34,30 +35,21 @@ namespace CgsModule { struct IOBufferStack; }            // the manager Construc
 // for reference only; the host x64 layout differs (pointers/queues widen) so parity is BY NAMED
 // MEMBER, per the x64-gate rule. When each payload's canonical home lands this file includes it and
 // drops the local opaque model (do NOT fork the type).
-namespace BrnParticle
-{
-namespace ParticleModule
-{
-    // FLAG (ad-hoc opaque): BrnParticle::ParticleModule::DispatchThreadUpdateData is NOT committed
-    // anywhere yet. It is modelled here as a minimal opaque struct ONLY so it can be a complete
-    // member type by value (so mParticleData has a real address and &mParticleData yields the
-    // correct pointer type for GetParticleData's return). The real size/layout is UNKNOWN -- the
-    // 1-byte placeholder storage is a stand-in, NOT the true size. When DispatchThreadUpdateData is
-    // reconstructed in its own home this definition is replaced (and this file includes it instead).
-    struct DispatchThreadUpdateData
-    {
-        u8 maStorage[1];   // FLAG: opaque, true size unknown
-    };
-
-    // FLAG (ad-hoc opaque): ParticleRenderData has no committed home yet (DWARF h:195). Same
-    // by-value opaque model as DispatchThreadUpdateData so &mParticleRenderData yields the correct
-    // pointer type. True size/layout UNKNOWN; replaced when its canonical home lands.
-    struct ParticleRenderData
-    {
-        u8 maStorage[1];   // FLAG: opaque, true size unknown
-    };
-}
-}
+// ⭐ THE FORKED `namespace BrnParticle { namespace ParticleModule { ... } }` THAT USED TO SIT HERE
+// IS RETIRED (2026-08-15, post-fx step-6 producers wave). It defined DispatchThreadUpdateData and
+// ParticleRenderData as members of a NAMESPACE called BrnParticle::ParticleModule -- while
+// GameSource/Effects/Particles/ParticleModule.h models BrnParticle::ParticleModule as a STRUCT,
+// which is what the DWARF says it is and what the two payloads are nested INSIDE
+// (dwarfdump/GameSource/Effects/Particles/ParticleModule.h:565 and :576). Two headers declaring the
+// same name as a namespace and as a struct is a hard `error C2757` in any translation unit that
+// includes both; none did, which is the only reason it had never fired. Both types now live at
+// their DWARF home and this header just includes it -- and ParticleRenderData is a real layout
+// there now, not a 1-byte opaque, which is what makes MotionBlurState::Update callable.
+//
+// Nothing below changed: the member spellings
+// `BrnParticle::ParticleModule::DispatchThreadUpdateData` / `...::ParticleRenderData` and every
+// accessor signature are identical -- they just resolve to nested types instead of namespace
+// members now.
 
 namespace BrnEffects
 {
@@ -100,6 +92,18 @@ namespace BrnGame
 
         // GetParticleRenderData @ 0x8227F6E8 / DWARF h:101 (non-const) -- write-lock, &member.
         BrnParticle::ParticleModule::ParticleRenderData* GetParticleRenderData();               // 0x8227F6E8
+
+        // ADDITIVE (post-fx step-6 producers wave): the READ-LOCKED overload the DWARF declares at
+        // h:100 and this header was missing. IDA leaves it unnamed as sub_8227F640, but it is
+        // unmistakable -- the same `return a1 + 14496` (== +0x38A0 == &mParticleRenderData) as the
+        // write-locked twin, with the read-lock bit ((*a1 >> 4) & 1) and the "Not locked for
+        // reading" message quoting BrnDispatchThreadInputBuffer.h LINE 100 (the write twin quotes
+        // line 101). Its three callers are exactly the three READERS of the payload -- from the
+        // export's own xrefs_to list for 0x8227F640:
+        //   0x82289A98  BrnParticle::ParticleModule::BeginSimulateDebris
+        //   0x8229C5F0  BrnParticle::ParticleModule::DispatchThreadUpdate
+        //   0x8240BFA8  BrnRendererModule::Render      <- the MotionBlurState::Update call site
+        const BrnParticle::ParticleModule::ParticleRenderData* GetParticleRenderData() const;   // 0x8227F640
 
         // ---- crash-triangle cache --------------------------------------------------------
         const BrnEffects::BrnCrashTriangleCache* GetBufferCrashTriangleCache() const;           // 0x8227F790 (h:103, R)

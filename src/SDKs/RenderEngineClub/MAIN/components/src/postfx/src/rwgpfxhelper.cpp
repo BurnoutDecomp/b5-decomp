@@ -18,12 +18,23 @@
 #include "pc/gcm/renderengine/renderstates.h"
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"  // RenderTarget (Blur9 / DownSample)
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"                // shadow::Device::SetState / SetPixelProgram
+#include "pc/gcm/renderengine/Xbox2SurfaceShims.h"                                   // renderengine::gpD3DDevice (RenderQuad's draw)
 
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- open a shader-constant row
 // run for a handle and return the write cursor (X360 r3). The shared decl-only surface every
 // immediate-mode TU declares (CgsIm2dColTex.cpp:91, BrnIm3d.cpp:118, BrnPostFxBloom.cpp:134);
 // DEFINED in the mounted pc/gcm/renderengine/ImmediateModePCLeaf.cpp:543. No header owns it.
 void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
+
+// The Xbox 360 immediate-vertex ring. Declared exactly as CgsIm2dUntex.cpp:102-104,
+// BrnSkidVertex.cpp:103-104, BrnPostFxBloom.cpp:174-176 and BrnPostFxShader.cpp:135-137 declare it;
+// DEFINED in the mounted pc/gcm/renderengine/XenonD3D9Shims.cpp:2520 / :2634, which also owns the
+// Xenos primitive-type translation RenderQuad relies on. There is no header for this seam, which is
+// why each consumer declares it.
+struct D3DDevice;
+extern "C" void* D3DDevice_BeginVertices(D3DDevice* lpDevice, u32 luPrimitiveType,
+                                         u32 luVertexCount, u32 luStride);
+extern "C" void  D3DDevice_EndVertices(D3DDevice* lpDevice);
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   rw::graphics::postfx::PfxHelper::CreateProgram                 @ 0x823FE480
@@ -76,33 +87,60 @@ void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppSh
 // packages and rwgpfxtint.cpp's are still not dumped and still take arm (b).
 #define RW_GPFX_PROGRAM_MICROCODE_AVAILABLE   0
 
-// ---- PC BRING-UP GATE: the full-screen-quad geometry -------------------------------------------
-// The constructor's vertex-descriptor / vertex-buffer / mesh block uploads the quad's vertices from
-// the guest data block at X360 unk_82FAFFF0. FOUR independent things are missing; only the SHAPE of
-// the upload has been recovered since the last wave (see the BLOCKED note at the site):
-//   1. THE VERTEX VALUES. The block is the DWARF's file-scope `rw::graphics::postfx::Vertex` --
-//      `Vector3 Vertex[4]`, rwgpfxhelper.cpp:74 -- i.e. 4 x 16 = the 0x40 bytes the note records.
-//      Its image copy is ALL ZERO because it is CONSTRUCTED AT RUNTIME by a CRT static initialiser
-//      (not in the export set; found with idat, 2026-08-15: 0x82C4F910-0x82C4F9C0 lfs/stfs four
-//      16-byte stack vectors from flt_820037C8 = -1.0 / flt_82001CC0 = 0.0 / flt_82001C98 = 1.0 and
-//      lvx128/stvx128 into unk_82FAFFF0 +0x00/+0x10/+0x20/+0x30). THE VALUES ARE KNOWN:
-//          Vertex[0] = (-1, -1, 0)   Vertex[1] = ( 1, -1, 0)   Vertex[2] = (-1,  1, 0)   Vertex[3] = ( 1,  1, 0)
-//      -- the clip-space unit quad; the console RECTLIST draws Vertex[0..2] with uv (0,1),(1,1),(0,0);
-//      a PC TRIANGLESTRIP needs Vertex[3] with uv (1,0). What is STILL missing is the PC DRAW itself:
-//      Xenos RECTLIST(8) is refused by XenonD3D9Shims::MapPrimitive and D3DDevice_DrawVertices has no
-//      PC definition, so RenderQuad must draw the 4-vertex strip through D3DDevice_BeginVertices/
-//      EndVertices like BrnPostFxBloom::DrawFullScreenQuad -- the follow-up that flips this gate.
-//   2. renderengine::MeshHelper::GetResourceDescriptor has no declaration in this tree (its X360 body
-//      exists @0x82B64070 -- just not in the .ida-exports set; rung-6 verifier), and
-//      MeshHelper::Initialize is declared non-static with one parameter while the console calls it
-//      with (resource, parameters).
-//   3. The draw needs renderengine::MeshHelper::Dispatch<renderengine::Device>, whose only home
-//      (pc/gcm/renderengine/MeshHelper.cpp) is NOT on tools/build/build_game_exe.bat, and
-//      D3DDevice_DrawVertices, which has no definition anywhere in the tree.
-//   4. The primitive is Xenos D3DPT_RECTLIST (8, `li r4, 8` @0x823FE634), which
-//      XenonD3D9Shims.cpp::MapPrimitive refuses by design (XenonD3D9Shims.cpp:2376-2378): D3D9 has
-//      no RECTLIST and expanding one is a rendering decision, not a translation.
-#define RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE 0
+// ---- THE FULL-SCREEN QUAD -- NOW BUILT, AND WHAT THE PC DEVIATION IS ---------------------------
+// [FLAG PC bring-up: RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE] -- NOW ON.
+//
+// THE CONSOLE. PfxHelper::PfxHelper @0x82408380-0x8240855C builds a vertex descriptor (two
+// elements: format 0x2A23B9 FLOAT3 elementType 1 -> POSITION0, format 0x2C23A5 FLOAT2 elementType 6
+// -> TEXCOORD0; asm 0x82408370-A8), then a THREE-vertex VertexBuffer (`li r26, 3` @0x82408404),
+// uploads three 20-byte vertices into it (0x82408494-0x824085B0) and wraps it in a MeshHelper.
+// PfxHelper::RenderQuad @0x823FE530 then Dispatches that mesh and calls
+// `D3DDevice_DrawVertices(gpD3DDevice, 8, 0, 3)` -- Xenos D3DPT_RECTLIST with the rectangle's three
+// corners, the GPU inferring the fourth.
+//
+// THE THREE CORNERS ARE NO LONGER MISSING. The DWARF's file-scope `Vector3 Vertex[4]`
+// (dwarfdump .../postfx/src/rwgpfxhelper.cpp:74, X360 unk_82FAFFF0) is all-zero in the shipped image
+// because a CRT static initialiser writes it at runtime; that initialiser was dumped with idat
+// (0x82C4F910-0x82C4F9C0: lfs/stfs from flt_820037C8 = -1.0, flt_82001CC0 = 0.0, flt_82001C98 = 1.0
+// into four 16-byte stack vectors, then lvx128/stvx128 into unk_82FAFFF0 +0x00/+0x10/+0x20/+0x30):
+//     Vertex[0] = (-1, -1, 0)   Vertex[1] = ( 1, -1, 0)   Vertex[2] = (-1,  1, 0)   Vertex[3] = ( 1,  1, 0)
+// -- the clip-space unit quad. The three UVs the ctor pairs with corners 0..2 are (0,1) (1,1) (0,0),
+// read off the same store sequence.
+//
+// THE PC DEVIATION, AND IT IS EXACTLY ONE: THE DRAW.
+//   * Xenos D3DPT_RECTLIST (8) is refused by XenonD3D9Shims.cpp::MapPrimitive by design
+//     (XenonD3D9Shims.cpp:2376-2378) -- D3D9 has no RECTLIST -- and D3DDevice_DrawVertices has no
+//     definition anywhere in the tree.
+//   * So the quad is drawn as the 4-vertex TRIANGLESTRIP the RECTLIST is equivalent to: the console's
+//     three corners plus Vertex[3] with uv (1,0), pushed through
+//     D3DDevice_BeginVertices/_EndVertices exactly as the sibling BrnPostFxBloom::DrawFullScreenQuad
+//     does (same Xenos primitive code 6, same 4 vertices, same 20-byte FLOAT3+FLOAT2 stride, same
+//     ring). Covering the same rectangle with the same UV mapping is a TRANSLATION of the topology,
+//     not a rendering choice -- the fourth corner is the one the Xenos hardware itself infers, and
+//     its uv is forced by the other three (bilinear in u and v).
+//   * The VertexBuffer and the MeshHelper are therefore NOT built: on this backend the vertices go
+//     into the immediate ring instead, so a buffer and a mesh object would be dead weight -- and
+//     MeshHelper::GetResourceDescriptor still has no declaration here and MeshHelper.cpp is still not
+//     on tools/build/build_game_exe.bat, so building them is not possible either. m_quadVertexBuffer
+//     and m_quadMeshState stay null and Release keeps skipping them. THAT is the residual
+//     [FLAG BLOCKED] of this file: the console's mesh plumbing, not the picture.
+//   * The vertex DESCRIPTOR *is* built now (it is the D3D9 declaration the draw needs, and nothing
+//     in it was ever missing).
+//
+// NO HALF-TEXEL IS ADDED HERE. Unlike BrnPostFxBloom::DrawFullScreenQuad, whose console asm folds a
+// half texel into the UVs, PfxHelper's quad carries the raw UVs and the half texel arrives as the
+// `uvOffset` shader constant RenderQuad pushes (Blur9 passes 0.5/w, 0.5/h; DownSample passes null,
+// for which RenderQuad writes four zeros). Adding one here would apply it twice.
+//
+// WHAT THE GATE IS FOR NOW: a MEASUREMENT SWITCH. Build with
+// /DRW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE=0 and the descriptor is not built and RenderQuad reports
+// and returns, exactly as before this wave -- which is how a quad-caused regression is isolated in
+// one build. It is a `const bool` tested at RUN TIME, not an `#if`, on purpose: everything below is
+// COMPILED and type-checked in BOTH positions (BrnPostFxBloom.cpp:334-338 records why).
+#ifndef RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE
+#define RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE 1
+#endif
+const bool KB_HELPER_QUAD_GEOMETRY_AVAILABLE = (RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE != 0);
 
 // ---- THE FOUR PC PROGRAM IMAGES ----------------------------------------------------------------
 // [FLAG PC-platform leaf: shader programs] The D3D9 counterparts of the four Xenos packages this TU
@@ -149,7 +187,37 @@ namespace
         return lpAllocator->DoAllocate(
             reinterpret_cast<const rw::ResourceDescriptor&>(lrDescriptor), nullptr);
     }
+
+    // ---- the shared full-screen quad -------------------------------------------------------------
+    // The console's own file-scope `Vector3 Vertex[4]` (X360 unk_82FAFFF0, DWARF
+    // .../postfx/src/rwgpfxhelper.cpp:74), written by the CRT static initialiser at 0x82C4F910, and
+    // the UVs the constructor pairs with it (asm 0x82408494-0x824085B0). Corners 0..2 and their
+    // three UVs are the console's RECTLIST; corner 3 and uv (1,0) are the fourth corner the Xenos
+    // hardware infers and D3D9 has to be given -- see the note at the gate.
+    //
+    // Strip order is the console's own corner order (bottom-left, bottom-right, top-left,
+    // top-right), which is already a valid triangle strip and is the same order
+    // BrnPostFxBloom::DrawFullScreenQuad writes; V runs the other way from Y because the render
+    // target's origin is top-left.
+    const rw::graphics::postfx::PfxHelper::Vertex KA_QUAD_STRIP[4] =
+    {
+        { { -1.0f, -1.0f, 0.0f }, { 0.0f, 1.0f } },   // Vertex[0], uv (0,1)  -- console RECTLIST v0
+        { {  1.0f, -1.0f, 0.0f }, { 1.0f, 1.0f } },   // Vertex[1], uv (1,1)  -- console RECTLIST v1
+        { { -1.0f,  1.0f, 0.0f }, { 0.0f, 0.0f } },   // Vertex[2], uv (0,0)  -- console RECTLIST v2
+        { {  1.0f,  1.0f, 0.0f }, { 1.0f, 0.0f } },   // Vertex[3], uv (1,0)  -- the inferred corner
+    };
+
+    // `li r4, 8` @0x823FE634 is Xenos D3DPT_RECTLIST; the PC strip uses Xenos 6 (TRIANGLESTRIP).
+    // 6 IS A XENOS ENUM VALUE and must NOT be pre-translated: on PC D3D9 6 is D3DPT_TRIANGLEFAN and
+    // TRIANGLESTRIP is 5, and XenonD3D9Shims.cpp::MapPrimitive owns that 6 -> strip translation for
+    // every immediate quad in this tree (BrnPostFxBloom.cpp:270-278 records the same trap).
+    const u32 KU_QUAD_PRIMITIVE_TYPE = 6;
+    const u32 KU_QUAD_VERTEX_COUNT   = 4;
+    const u32 KU_QUAD_VERTEX_STRIDE  = 20;
 }
+
+static_assert(sizeof(rw::graphics::postfx::PfxHelper::Vertex) == 20,
+              "the post-fx quad vertex must be the console's 0x14 FLOAT3+FLOAT2 stride");
 
 namespace rw
 {
@@ -554,10 +622,12 @@ namespace postfx
         m_allocator  = lrParameters.allocator;
         gpPfxHelper  = this;
 
-        // Slots the gated blocks would fill. The console leaves nothing uninitialised here (every
-        // one of these is written by a step below), so zeroing them is a PC bring-up consequence of
-        // the gates, not a console behaviour -- but it is the one that makes Release safe and makes
-        // "no program" visible instead of undefined.
+        // Slots a step below fills. The console leaves nothing uninitialised here, so zeroing them is
+        // a PC bring-up consequence, not a console behaviour -- but it is what makes Release safe and
+        // makes "no program" visible instead of undefined. Two of them are never overwritten on this
+        // backend and the zero is their final value: m_quadVertexBuffer and m_quadMeshState (the
+        // console's vertex-buffer + mesh plumbing, which the immediate-ring draw replaces -- see the
+        // note at the quad block).
         // [FLAG PC bring-up: RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE / RW_GPFX_PROGRAM_MICROCODE_AVAILABLE]
         m_quadMeshState          = nullptr;
         m_quadVertexDescriptor   = nullptr;
@@ -580,21 +650,18 @@ namespace postfx
         }
         ClearHandle(m_blur4SamplesHandle);
 
-#if RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE
-#error "RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE is on but the quad block is not reconstructed -- see the BLOCKED note"
-#else
-        // ---- 3. THE FULL-SCREEN QUAD (asm 0x82408380-0x8240855C) -- BLOCKED -----------------------
-        // What the console does, in full, so the shape is on the page:
+        // ---- 3. THE FULL-SCREEN QUAD (asm 0x82408380-0x8240855C) ----------------------------------
+        // What the console does, in full:
         //     renderengine::VertexDescriptor::Parameters  {element0: stream 0, format 0x002A23B9,
-        //                                                  usageIndex 1;
+        //                                                  elementType 1;
         //                                                  element1: stream 0, format 0x002C23A5,
-        //                                                  usageIndex 6}
+        //                                                  elementType 6}
         //       -> GetResourceDescriptor -> m_allocator->DoAllocate -> Initialize -> m_quadVertexDescriptor
         //     renderengine::VertexBufferHelper::Parameters {vertexCount 3, formatCodes {0x002A23B9,
         //                                                   0x002C23A5, -1...}}
         //       -> CalculateBufferSize -> VertexBuffer::GetResourceDescriptor -> DoAllocate
         //       -> CalculateBufferSize -> VertexBuffer::Initialize -> m_quadVertexBuffer
-        //     VertexBufferHelper::Lock -> write the quad's vertices -> Unlock
+        //     VertexBufferHelper::Lock -> write the quad's three vertices -> Unlock
         //     MeshHelper params {…, [1] = m_quadVertexBuffer}
         //       -> MeshHelper::GetResourceDescriptor -> DoAllocate -> Initialize -> m_quadMeshState
         //
@@ -609,33 +676,47 @@ namespace postfx
         //               uv       = (1.0, 1.0)
         //     vertex 2  position = Vertex[2]   (lvx128 at unk_82FAFFF0 + 0x20)
         //               uv       = (0.0, 0.0)
-        // The fourth Vector3 of the array is never read, and the vertex count in the buffer
-        // parameters is 3 (`li r26, 3` @0x82408404), because the draw is Xenos D3DPT_RECTLIST (8):
-        // three corners of a rectangle, the GPU infers the fourth. That corrects the previous note's
-        // reading of "a full-screen TRIANGLE with two out-of-range corners" -- and the three UVs are
-        // the SAME three the sibling BrnPostFxBloom::DrawFullScreenQuad writes for its first three
-        // strip vertices, which is a useful cross-check on the decode but is NOT evidence for the
-        // positions, so none is written here.
+        // The fourth Vector3 is never read and the buffer's vertex count is 3 (`li r26, 3`
+        // @0x82408404) because the draw is Xenos D3DPT_RECTLIST: three corners, the GPU infers the
+        // fourth. All four corners and all four UVs live in KA_QUAD_STRIP above.
         //
-        // [FLAG BLOCKED: FOUR missing items, none guessable -- enumerated at
-        //  RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE above. In short: (1) the three corner POSITIONS,
-        //  which live in the runtime-constructed `Vector3 Vertex[4]` at X360 unk_82FAFFF0 and are
-        //  zero in the shipped image with no writer anywhere in the export set; (2)
-        //  MeshHelper::GetResourceDescriptor has no declaration here; (3) MeshHelper.cpp is not
-        //  mounted and D3DDevice_DrawVertices has no definition in the tree; (4) RECTLIST is refused
-        //  by the PC primitive mapper on purpose.
-        //  CONSEQUENCE: the helper has no quad, so PfxHelper::RenderQuad -- and therefore Blur9 and
-        //  DownSample -- cannot draw. None of them is reachable on this build (BrnPostFx runs
-        //  permutation 0 with every effect bit clear), and the null members make a premature call
-        //  report-and-return rather than draw garbage. The four PROGRAMS are unaffected: they are
-        //  real, adopted, and their constants upload.]
-        static bool sbReportedNoQuad = false;
-        ReportOnce(sbReportedNoQuad,
-                   "[PfxHelper] full-screen-quad geometry not built: the corner positions are known"
-                   " (CRT static initialiser @0x82C4F910: the clip-space unit quad) but the PC draw of"
-                   " the RECTLIST (D3DDevice_DrawVertices) is not reconstructed yet -- RenderQuad/Blur9/"
-                   "DownSample report and return. [FLAG PC bring-up: RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE]\n");
-#endif
+        // THE DESCRIPTOR IS BUILT HERE FOR REAL -- it is the D3D9 vertex declaration the immediate
+        // draw needs, and nothing about it was ever missing.
+        //
+        // [FLAG BLOCKED: the VERTEX BUFFER and the MESH remain unbuilt, and that is now a PC
+        //  consequence rather than a recovery gap -- RenderQuad draws through the immediate ring, so
+        //  there is nothing for a static buffer or a MeshHelper::Dispatch to do. They are also still
+        //  not buildable: renderengine::MeshHelper::GetResourceDescriptor has no declaration in this
+        //  tree (its X360 body exists @0x82B64070, just not in the .ida-exports set) and
+        //  pc/gcm/renderengine/MeshHelper.cpp is not on tools/build/build_game_exe.bat.
+        //  m_quadVertexBuffer / m_quadMeshState therefore stay null and Release's SafeRelease skips
+        //  them, exactly as it does today.]
+        if (KB_HELPER_QUAD_GEOMETRY_AVAILABLE)
+        {
+            renderengine::VertexDescriptor::Parameters lParameters;
+            lParameters.maElements[0].mu16Stream    = 0;                    // sth r30, var_150
+            lParameters.maElements[0].miOffset      = 0x002A23B9;           // stw r28, var_14C (FLOAT3)
+            lParameters.maElements[0].mu8UsageIndex = 1;                    // stb r25, var_145 -> POSITION0
+            lParameters.maElements[1].mu16Stream    = 0;                    // sth r30, var_140
+            lParameters.maElements[1].miOffset      = 0x002C23A5;           // stw r29, var_13C (FLOAT2)
+            lParameters.maElements[1].mu8UsageIndex = 6;                    // stb r11, var_135 -> TEXCOORD0
+
+            rw::BaseResourceDescriptors<5> lDescriptor;
+            renderengine::VertexDescriptor::GetResourceDescriptor(&lDescriptor, &lParameters);
+
+            rw::Resource lResource = AllocateResource(m_allocator, lDescriptor);
+            m_quadVertexDescriptor = renderengine::VertexDescriptor::Initialize(&lResource,
+                                                                                &lParameters);
+        }
+        else
+        {
+            static bool sbReportedNoQuad = false;
+            ReportOnce(sbReportedNoQuad,
+                       "[PfxHelper] full-screen-quad geometry DISABLED by"
+                       " RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE=0 -- RenderQuad/Blur9/DownSample"
+                       " report and draw nothing. [FLAG PC bring-up:"
+                       " RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE]\n");
+        }
 
         // ---- 4. the quad depth/stencil state (asm 0x8240857C-0x82408600) --------------------------
         // Every word is an asm immediate: function 3, both stencil functions 7 (ALWAYS), all four
@@ -800,11 +881,14 @@ namespace postfx
     // stores, one bound-safe run per handle. Blur9's three runs (4 + 4 + 1) already go through three
     // separate handles on the console (`+0x24 / +0x28 / +0x2C`), so it is one-to-one.
     //
-    // On this build all four helper programs are REAL: the PC images published by
-    // PostFxHelperProgramsPC.cpp are adopted in the constructor, so the weight rows below upload
-    // through live handles and SetPixelProgram binds a live program. What is still missing is the
-    // QUAD (RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE 0), so RenderQuad reports once and draws nothing
-    // and neither pass produces pixels. Neither pass is reachable while every effect bit is clear.
+    // On this build all four helper programs are REAL (the PC images published by
+    // PostFxHelperProgramsPC.cpp are adopted in the constructor) AND the quad is real: the weight
+    // rows upload through live handles, SetPixelProgram binds a live program, and RenderQuad draws
+    // the strip through the immediate ring. So both passes produce pixels now -- but NEITHER IS
+    // REACHABLE ON THIS BUILD: their only caller is DepthOfField::DownSampleAndGaussianBlur, which
+    // BrnPostFx::ApplyEffects calls only under `(m_enabledFx & E_FX_DEPTH_OF_FIELD)`
+    // (BrnPostFx.cpp:548-557), and no producer sets that bit yet. The picture is therefore unchanged
+    // by this wave; the first DoF-on frame is what will exercise this path.
     // ============================================================================================
     namespace
     {
@@ -932,27 +1016,68 @@ namespace postfx
     // PrimitiveType 8 is Xenos D3DPT_RECTLIST and VertexCount 3 is the rect's three corners -- the
     // same three the constructor uploads.
     //
-    // [FLAG BLOCKED: RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE] The sequence above is documented rather
-    // than written, for the four reasons enumerated at the gate -- and NOT merely because the corner
-    // values are missing. Even with the values: m_quadMeshState / m_quadVertexDescriptor are null on
-    // this build so Dispatch would dereference null on its first read; MeshHelper.cpp is not on
-    // tools/build/build_game_exe.bat; D3DDevice_DrawVertices has no definition in the tree; and
-    // RECTLIST is refused by XenonD3D9Shims.cpp::MapPrimitive. Writing the calls now would add two
-    // unresolvable externals to the link for a path that cannot execute, and drawing a fabricated
-    // triangle instead would read as a rendering choice. The four PROGRAMS this function would bind
-    // are real and adopted; only the geometry and the draw are missing.
+    // WRITTEN NOW, WITH ONE DISCLOSED DEVIATION: the RECTLIST becomes the 4-vertex TRIANGLESTRIP it
+    // is equivalent to, pushed through the immediate ring instead of a MeshHelper-dispatched vertex
+    // buffer. Both halves of that -- why, and why it is a translation and not a rendering choice --
+    // are argued at the gate above. Everything else in the sequence is the console's, in order.
+    //
+    // MeshHelper::Dispatch has NO counterpart in the PC path and is not called: on the console it
+    // binds the mesh's vertex stream for the DrawVertices that follows, and here the vertex data IS
+    // the BeginVertices run. m_quadMeshState is null on this build and stays unread.
     void PfxHelper::RenderQuad(const f32* lpafUvOffset)
     {
-#if RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE
-#error "RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE is on but the quad draw is not reconstructed -- see the BLOCKED note"
-#else
-        (void)lpafUvOffset;
-        static bool sbReported = false;
-        ReportOnce(sbReported,
-                   "[rwgpfx] PfxHelper::RenderQuad: NO quad geometry on this build -- the pass drew"
-                   " nothing (destination left as it was). [FLAG BLOCKED:"
-                   " RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE]\n");
-#endif
+        if (!KB_HELPER_QUAD_GEOMETRY_AVAILABLE)
+        {
+            (void)lpafUvOffset;
+            static bool sbReported = false;
+            ReportOnce(sbReported,
+                       "[rwgpfx] PfxHelper::RenderQuad: quad geometry disabled"
+                       " (RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE=0) -- the pass drew nothing"
+                       " (destination left as it was).\n");
+            return;
+        }
+
+        shadow::Device::SetState(m_quadDepthStencilState);          // 0x823FE53C-80  (+0x14)
+        // 0x823FE584-A8  MeshHelper::Dispatch<Device>(m_quadMeshState) -- see the banner: no PC
+        //                counterpart; the immediate ring below carries the vertices instead.
+        shadow::Device::SetVertexProgram(m_quadVertexProgram);      // 0x823FE5AC-C4  (+0x18)
+        shadow::Device::SetVertexDescriptor(m_quadVertexDescriptor);// 0x823FE5C8-E0  (+0x08)
+
+        // 0x823FE5E4-EC  BeginShaderStates(&m_uvOffsetHandle, &cursor) -- `addi r3, r29, 0x1C` IS
+        // m_uvOffsetHandle: one run, one constant.
+        // 0x823FE5F0-620 cursor[0..3] = the caller's float4, or four copies of flt_82001CC0 == 0.0f
+        //                when the caller passed null (`lvx128`/`stvx128` vs the zero splat).
+        {
+            void* lpShaderState = nullptr;
+            RenderEngineDeviceBeginShaderStates(&m_uvOffsetHandle, &lpShaderState);
+            if (lpShaderState != nullptr)
+            {
+                f32* const lpfRow = static_cast<f32*>(lpShaderState);
+                lpfRow[0] = (lpafUvOffset != nullptr) ? lpafUvOffset[0] : 0.0f;
+                lpfRow[1] = (lpafUvOffset != nullptr) ? lpafUvOffset[1] : 0.0f;
+                lpfRow[2] = (lpafUvOffset != nullptr) ? lpafUvOffset[2] : 0.0f;
+                lpfRow[3] = (lpafUvOffset != nullptr) ? lpafUvOffset[3] : 0.0f;
+            }
+        }
+
+        shadow::Device::FlushVertexProgramState();                  // 0x823FE624
+
+        // 0x823FE628-3C  D3DDevice_DrawVertices(gpD3DDevice, 8, 0, 3) -- the RECTLIST. Here: the
+        // same rectangle as a 4-vertex strip through the ring. off_83271608 == gpD3DDevice, the same
+        // global every sibling immediate-mode renderer passes; the PC shim ignores it
+        // (XenonD3D9Shims.cpp:2396) and resolves the live device itself.
+        D3DDevice* const lpDevice = reinterpret_cast<D3DDevice*>(renderengine::gpD3DDevice);
+        void* const lpRing = D3DDevice_BeginVertices(lpDevice, KU_QUAD_PRIMITIVE_TYPE,
+                                                     KU_QUAD_VERTEX_COUNT, KU_QUAD_VERTEX_STRIDE);
+        if (lpRing != nullptr)
+        {
+            PfxHelper::Vertex* const lpDst = static_cast<PfxHelper::Vertex*>(lpRing);
+            for (u32 luVertex = 0; luVertex < KU_QUAD_VERTEX_COUNT; ++luVertex)
+            {
+                lpDst[luVertex] = KA_QUAD_STRIP[luVertex];
+            }
+        }
+        D3DDevice_EndVertices(lpDevice);
     }
 }
 }

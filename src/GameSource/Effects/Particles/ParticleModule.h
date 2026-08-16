@@ -5,8 +5,10 @@
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Matrix44Affine
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h" // CgsModule::ModuleSingleBuffered (the base; vtable + the two RWMutexes the ctor constructs inline via its DataBuffers)
 #include "SDKs/Packages/Lion/Final/Allocator/include/CoreAllocator/ITaggedAllocator.h" // EA::Allocator::ITaggedAllocator (IInternalAllocator's base)
+#include "GameShared/GameClasses/Graphics/CgsCamera.h"   // CgsGraphics::Camera (ParticleRenderData::mCgsCamera, BY VALUE)
 
 namespace CgsMemory { class HeapMalloc; }   // GameShared/GameClasses/Memory/CgsHeapMalloc.h (fwd; avoids a cross-module include cycle)
+namespace renderengine { class Texture; }   // ParticleRenderData::mpEnvironmentMap (pointer-only)
 
 // ============================================================================
 // GameSource/Effects/Particles/ParticleModule.h
@@ -161,6 +163,98 @@ namespace BrnParticle
         // GetLionEffect asserts (handle & 0x7F) < this before indexing maPlayingEffects.
         // X360 immediate 0x80 (GetLionEffect 0x82278380 asm: cmplwi r30,0x80).
         static const u32 KU_MAX_PLAYING_EFFECTS = 128;
+
+        // ==============================================================================
+        // THE TWO IO PAYLOADS THIS MODULE EXCHANGES WITH THE DISPATCH THREAD.
+        //
+        // They live HERE because the DWARF nests both inside this struct --
+        // references/DecFIGS/dwarfdump/GameSource/Effects/Particles/ParticleModule.h,
+        // `struct DispatchThreadUpdateData` at ParticleModule.h:565 and
+        // `struct ParticleRenderData` at :576, both inside `struct ParticleModule` -- and
+        // because BrnGame::DispatchThreadInputBuffer's DWARF spells its two members with the
+        // fully-qualified nested names `BrnParticle::ParticleModule::DispatchThreadUpdateData`
+        // and `...::ParticleRenderData`.
+        //
+        // ⚠ THEY USED TO LIVE IN BrnDispatchThreadInputBuffer.h, WHICH DECLARED
+        // `namespace BrnParticle { namespace ParticleModule { ... } }` -- i.e. it modelled
+        // `BrnParticle::ParticleModule` as a NAMESPACE while THIS header models it as a
+        // struct. That is a split-brain, and not a harmless one: it is a hard
+        // `error C2757: a symbol with this name already exists` in any translation unit that
+        // includes both headers. Nothing did yet, which is the only reason it had not fired.
+        // Moving the two types to their DWARF home retires the namespace and the conflict
+        // together (2026-08-15, post-fx step-6 producers wave).
+        // ==============================================================================
+
+        // DWARF ParticleModule.h:565. FLAG (ad-hoc opaque, MOVED VERBATIM, not recovered this
+        // wave): the DWARF gives it mfCurrentTime / mfCurrentTimeStep / muChangedEffects /
+        // Matrix44Affine mViewMatrix / Matrix44 mProjectionMatrix / LionEffect[128]
+        // maChangedLionEffects (:566-571), which sizes to 0x90 + 128 * 0x70 == 0x3890 -- and
+        // that is EXACTLY the console's gap between DispatchThreadInputBuffer's mParticleData
+        // (+0x10) and mParticleRenderData (+0x38A0). So the real layout is known and
+        // corroborated; recovering it is a separate change (LionEffect's own 0x70 stride is
+        // already pinned above), and until then the 1-byte placeholder is kept EXACTLY as it
+        // was so nothing about the enclosing buffer changes by accident.
+        struct DispatchThreadUpdateData
+        {
+            u8 maStorage[1];   // FLAG: opaque, true size is 0x3890 -- see above
+        };
+
+        // DWARF ParticleModule.h:576-606 -- the render-side snapshot this module publishes
+        // once a frame for the dispatch/render thread. RECOVERED 2026-08-15 (post-fx step-6
+        // producers wave); it was an ad-hoc `u8 maStorage[1]` opaque before.
+        //
+        // OFFSET ATTESTATION: BrnRendererModule::Render @0x8240BFA8 reads exactly three of
+        // these off the read-locked buffer (asm 0x8240DD04-0x8240DD0C): `lfs f1, 0xC(r24)` ==
+        // mfCurrentTimeStep, `addi r4, r24, 0x60` == the camera VIEW matrix and
+        // `addi r5, r24, 0xA0` == the camera PROJECTION matrix, handed to
+        // MotionBlurState::Update. All three land on the layout below without a single
+        // adjustment -- +0x0C is the fourth 4-byte scalar, +0x60 is where mCgsCamera starts
+        // once mCameraTransform is 16-aligned at +0x20, and +0xA0 is mCgsCamera's own
+        // m_projectionMatrix at its +0x40 (CgsCamera.h pins that offset with a static_assert).
+        // Three independent offsets agreeing with a layout derived only from the DWARF member
+        // list is the check that this is the right struct.
+        //
+        // FLAG (guest tail): the console places the NEXT member of the enclosing buffer
+        // (mBufferCrashTriangleCache) at +0x3B00 while this layout ends at +0x210 from
+        // +0x38A0 == +0x3AB0. The 0x50-byte gap is NOT accounted for -- either the X360
+        // CgsGraphics::Camera is larger than the 368 bytes the PS3 DWARF and the X360 Camera
+        // copy-constructor attest, or the X360 struct carries members the FIGS DWARF does not.
+        // It changes nothing here (parity is by named member and every offset any code reads
+        // is confirmed above), but it is recorded rather than rounded away.
+        //
+        // FLAG (mpParticleModule's type): the DWARF types it `BrnParticle::ParticleModule*`.
+        // It cannot be spelled that way inside the class itself without the class being
+        // complete, and it is not -- so it is carried as a host `void*` of the same width,
+        // with the name and the slot intact. Re-type it to `ParticleModule*` once this
+        // declaration is moved after the closing brace, or leave it: nothing in this tree
+        // dereferences it.
+        struct ParticleRenderData
+        {
+            // DWARF ParticleModule.h:579-586 -- the muFlags bits.
+            static const u16 eRenderDataFlagCameraSwitched   = 1;
+            static const u16 eRenderDataFlagRenderSparks     = 2;
+            static const u16 eRenderDataFlagRenderDebris     = 4;
+            static const u16 eRenderDataFlagRenderSimple     = 8;
+            static const u16 eRenderDataFlagRenderLion       = 16;
+            static const u16 eRenderDataFlagRenderTrails     = 32;
+            static const u16 eRenderDataFlagReducedFrameRate = 64;
+            static const u16 eRenderDataFlagInSlowMotion     = 128;
+
+            void*                         mpParticleModule;      // DWARF :589 (guest +0x00)
+            u32                           muCurrentFrame;        // DWARF :592 (guest +0x04)
+            f32                           mfCurrentTime;         // DWARF :593 (guest +0x08)
+            f32                           mfCurrentTimeStep;     // DWARF :594 (guest +0x0C) <- Update's f1
+            f32                           mfTimeStepMultiplier;  // DWARF :595 (guest +0x10)
+            rw::math::vpu::Matrix44Affine mCameraTransform;      // DWARF :597 (guest +0x20)
+            CgsGraphics::Camera           mCgsCamera;            // DWARF :598 (guest +0x60;
+                                                                 //   its mView @+0x60, mProjection @+0xA0)
+            rw::math::vpu::Vector3        mvSunDirection;        // DWARF :601 (guest +0x1D0)
+            rw::math::vpu::Vector3        mvSunColour;           // DWARF :602 (guest +0x1E0)
+            rw::math::vpu::Vector3        mvAmbientColour;       // DWARF :603 (guest +0x1F0)
+            u16                           muFlags;               // DWARF :604 (guest +0x200)
+            const renderengine::Texture*  mpEnvironmentMap;      // DWARF :605 (guest +0x204)
+            f32                           mfWhiteLevel;          // DWARF :606 (guest +0x208)
+        };
 
         ParticleModule();
 

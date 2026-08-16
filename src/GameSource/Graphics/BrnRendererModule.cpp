@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // CgsDev::DebugManager (debug HUD overlay)
 #include "GameSource/Gui/BrnGuiModule.h"         // BrnGui::gpActiveGuiModule (the GUI render drive)
 #include "GameSource/Graphics/BrnRendererModulePostFx.h"  // Render's effects-frame -> BrnPostFx apply block
+#include "GameSource/Director/Camera/Camera.h"            // BrnDirector::Camera::Camera -- the staged camera-input record
 
 // ---------------------------------------------------------------------------------------------
 // BRN_SHADOW_MAP_TARGET_AVAILABLE -- the shadow-map RENDER TARGET gate (PC bring-up, 2026-08-12).
@@ -255,6 +256,161 @@ namespace
 
     // The weight the console's producer writes for an effect it enabled (`frame+8 = 1.0` etc.).
     const f32 KF_BASE_FRAME_ENABLED_WEIGHT  = 1.0f;
+
+    // --- [FLAG PC bring-up] the EffectsDebugComponent flags the console's producer gates on ------
+    // The base-frame producer reads six enable flags and four motion-blur "user settings" fields
+    // off BrnEffects::EffectsDebugComponent mDebugComponent (DWARF EffectsModule.h:580), embedded
+    // in BrnEffects::EffectsModule at module +181040. Names come from the DWARF
+    // (BrnEffectsDebugComponent.h:215-224, in this exact order at module +181100..+181116):
+    //   +181100 mbBloom  +181101 mbVignette  +181102 mbDepthOfField  +181103 mbTint
+    //   +181104 mbTint2d +181105 mbMotionBlur +181106 mbMotionBlurEnableUserSettings
+    //   +181108 mfMotionBlurUserAmountCars   +181112 mfMotionBlurUserAmountWorld
+    //   +181116 mbMotionBlurUserHighQuality
+    // and the VALUES are BrnEffects::EffectsDebugComponent::Construct @0x82278C98, verbatim from
+    // the pseudocode (it names them itself):
+    //   mbEnableBloom = 1;  mbEnableVignette = 1;  mbEnableDOF = 1;  mbEnableTint = 1;
+    //   mbEnable2dTint = 1; mbEnableMotionBlur = 1;
+    //   mbEnableMotionBlurUserSettings = 0;   mbEnableMotionBlurUserHighQuality = 1;
+    //   mbEnableMotionBlurUserCars = 0.0;     mbEnableMotionBlurUserWorld = 1.0;
+    // (the last two are Hex-Rays mis-typing the DWARF's two f32 user AMOUNTS as bools -- the
+    //  0.0/1.0 initialisers give them away, and the DWARF names them mfMotionBlurUserAmountCars /
+    //  mfMotionBlurUserAmountWorld). The module does not exist on this build, so the producer reads
+    //  the Construct defaults, which is what a console frame with the debug UI untouched reads too.
+    //  The FOUR always-on ones (bloom/vignette/tint/tint2d) were already spelled as literal `true`
+    //  in the producer before this wave and are left that way.
+    const bool KB_DEBUG_ENABLE_DOF                     = true;    // mbDepthOfField
+    const bool KB_DEBUG_ENABLE_MOTION_BLUR             = true;    // mbMotionBlur
+    const bool KB_DEBUG_ENABLE_MOTION_BLUR_USER_SETTINGS = false; // mbMotionBlurEnableUserSettings
+    const bool KB_DEBUG_MOTION_BLUR_USER_HIGH_QUALITY  = true;    // mbMotionBlurUserHighQuality
+    const f32  KF_DEBUG_MOTION_BLUR_USER_AMOUNT_CARS   = 0.0f;    // mfMotionBlurUserAmountCars
+    const f32  KF_DEBUG_MOTION_BLUR_USER_AMOUNT_WORLD  = 1.0f;    // mfMotionBlurUserAmountWorld
+
+    // --- [FLAG PC bring-up] the B4-BLUR block: POSTFX vault asset "218901" ----------------------
+    // Read data, not chosen numbers, exactly like the bloom five above. The console does
+    // `BlurData::Construct(v51, hash64("218901"))` and memcpy's the 96-byte result into the frame.
+    // BlurData::Construct @0x826781C8 is nine loads, and the asm pins each one:
+    //   lvx data+0x30 -> blur+0x20 mv2BlendAmount     lfs data+0x48 -> blur+0x00 mfOpacity
+    //   lvx data+0x10 -> blur+0x30 mv2BlurAmount      lfs data+0x40 -> blur+0x04 mfVelocity
+    //   lvx data+0x20 -> blur+0x40 mv2BlendCentre     lfs data+0x44 -> blur+0x08 mfSharpness
+    //   lvx data+0x00 -> blur+0x50 mv2BlurCentre      lfs data+0x4C -> blur+0x0C mfNoise
+    //                                                 lfs data+0x50 -> blur+0x10 mfAngle
+    // The 112 decoded bytes of asset 218901 (b4blurasset, class EF9F6F047362D8CF, POSTFXVAULT.BIN
+    // bin+0x1290; conductor extraction, scratch/postfx_step6_producers/WAVE_NOTE.md):
+    //   +0x00 (0.5, 0.5, 0, 0)   +0x10 (1, 1, 0, 0)   +0x20 (0.5, 0, 0, 0)
+    //   +0x30 (1.3, 0.555, 0, 0) +0x40 (2.622951, 0.327869, 0.666, 0.007049)  +0x50 (0, 0, 0, 0)
+    // (the +0x60 row is past everything Construct reads and is therefore not modelled).
+    const f32 KF_BASE_FRAME_BLUR_OPACITY        = 0.666f;      // data +0x48
+    const f32 KF_BASE_FRAME_BLUR_VELOCITY       = 2.622951f;   // data +0x40
+    const f32 KF_BASE_FRAME_BLUR_SHARPNESS      = 0.327869f;   // data +0x44
+    const f32 KF_BASE_FRAME_BLUR_NOISE          = 0.007049f;   // data +0x4C
+    const f32 KF_BASE_FRAME_BLUR_ANGLE          = 0.0f;        // data +0x50
+    const f32 KF_BASE_FRAME_BLUR_BLEND_AMOUNT_X = 1.3f;        // data +0x30 lane 0
+    const f32 KF_BASE_FRAME_BLUR_BLEND_AMOUNT_Y = 0.555f;      // data +0x30 lane 1
+    const f32 KF_BASE_FRAME_BLUR_BLUR_AMOUNT_X  = 1.0f;        // data +0x10 lane 0
+    const f32 KF_BASE_FRAME_BLUR_BLUR_AMOUNT_Y  = 1.0f;        // data +0x10 lane 1
+    const f32 KF_BASE_FRAME_BLUR_BLEND_CENTRE_X = 0.5f;        // data +0x20 lane 0
+    const f32 KF_BASE_FRAME_BLUR_BLEND_CENTRE_Y = 0.0f;        // data +0x20 lane 1
+    const f32 KF_BASE_FRAME_BLUR_BLUR_CENTRE_X  = 0.5f;        // data +0x00 lane 0
+    const f32 KF_BASE_FRAME_BLUR_BLUR_CENTRE_Y  = 0.5f;        // data +0x00 lane 1
+
+    // The camera-state flag index the effects module reads as "this is the racing gameplay camera".
+    // Derivation (see the producer's own note): EffectsModule::Update @0x8229EC28 stores
+    // `(*(CameraInput + 81) & 8) != 0` into the cache's mbIsGameCamera, CameraInput is typed
+    // `_DWORD*` there so +81 words == camera +0x144, the CameraState sub-object is at camera +0x138
+    // and its mCurrentFlags BitArray<30> at state +0x08 == camera +0x140, and BitArray masks with
+    // `(u64)1 << index` -- so on the big-endian console camera +0x144 is that qword's low half and
+    // mask 8 is bit index 3.
+    const u32 KU_CAMERA_STATE_FLAG_IS_RACING_GAMEPLAY = 3u;
+
+    // --- [FLAG PC bring-up] the staged CAMERA INPUT RECORD ---------------------------------------
+    // STANDS IN FOR BrnEffects::EffectsIO::DispatchInputBuffer::mCameraInput (DWARF
+    // EffectsModuleIO.h:261, `Camera mCameraInput`, X360 buffer +0x50): a BY-VALUE copy of the
+    // director's published camera, written once per dispatch by SetCameraInput @0x823C9988 and read
+    // by GenerateRenderRequests @0x8227FF10. None of the EffectsIO buffers is created on this
+    // build, so the copy lives here and BrnRendererModule::PCBringUpSetCameraInput writes it.
+    // A COPY, not a pointer, because the console copies too: DoDispatch holds the director output
+    // buffer's read lock only across its own call, while the producer runs at StartOfFrame.
+    // NOT A SPLIT BRAIN, and the check was made rather than assumed: the owning TYPE *is*
+    // reconstructed (GameSource/Effects/SharedIO/BrnEffectsModuleIO_DispatchInputBuffer.{h,cpp},
+    // with the real SetCameraInput/GetCameraInput bodies and `BrnDirector::Camera::Camera
+    // mCameraInput` as a member) -- but that TU is not on the build list and no instance of it is
+    // ever created:
+    //   $ grep -c "BrnEffectsModuleIO" tools/build/build_game_exe.bat
+    //   0
+    //   $ grep -rn "EffectsIO::DispatchInputBuffer" b5-decomp/src --include=*.cpp \
+    //         | grep -v SharedIO/BrnEffectsModuleIO_DispatchInputBuffer.cpp
+    //   ...BrnEffectsModuleIO_DispatchInputBuffer_IOHelper.cpp:25: (the IOHelper ctor only)
+    // so there is no live storage to share. The signature of PCBringUpSetCameraInput is
+    // DELIBERATELY the buffer's own (`const BrnDirector::Camera::Camera*`), so when the EffectsIO
+    // set is created the swap to the real SetCameraInput/GetCameraInput is one line at each end.
+    // Routing through the real buffer TODAY was considered and rejected for this wave: its
+    // accessors assert on IOBuffer read/write locks, and adding lock discipline to the renderer's
+    // StartOfFrame is exactly the kind of change that costs the wave its "0 asserts" gate.
+    // LAZY Construct: until DoDispatch stages a camera the record must hold the DIRECTOR'S OWN
+    // defaults, which is exactly BrnDirector::Camera::Camera::Construct @0x82255E68 -- the same
+    // thing the console's buffer would hold before the first SetCameraInput. Doing it on first use
+    // keeps BrnRendererModule::Construct untouched.
+    // DELETE-WHEN the EffectsIO dispatch buffer set is real on PC.
+    BrnDirector::Camera::Camera gPCBringUpCameraInput;
+    bool                        gbPCBringUpCameraInputConstructed = false;
+    bool                        gbPCBringUpCameraInputStaged      = false;
+
+    BrnDirector::Camera::Camera& PCBringUpGetCameraInput()
+    {
+        if (!gbPCBringUpCameraInputConstructed)
+        {
+            gbPCBringUpCameraInputConstructed = true;
+            gPCBringUpCameraInput.Construct();
+        }
+        return gPCBringUpCameraInput;
+    }
+
+    // --- [FLAG PC bring-up diagnostic] the line that proves the camera-side producers -------------
+    // CHANGE-LATCHED, not purely periodic: these are event-driven producers (a director state has
+    // to request a blur), so a fixed sample would almost certainly miss the transition. Emits when
+    // any of the five bools flips, and every 900th call besides so a long steady state still shows
+    // its live values; capped at 24 lines so a flapping state cannot flood BrnGame.log.
+    // DELETE with the bring-up.
+    void PCBringUpLogBaseEffectsFrameCameraState(const BrnEffectsFrame& lrFrame,
+                                                 const BrnDirector::Camera::Camera& lrCamera)
+    {
+        static u32 suCalls         = 0u;
+        static u32 suPrints        = 0u;
+        static u32 suLastSignature = 0xFFFFFFFFu;
+
+        const u32 luCall = suCalls++;
+        const BrnDirector::Camera::MotionBlurData& lrBlur = lrFrame.GetMotionBlurData();
+
+        const u32 luSignature =
+              (lrFrame.GetUseDepthOfField()          ?  1u : 0u)
+            | (lrFrame.GetUseBlur()                  ?  2u : 0u)
+            | (lrBlur.IsActive()                     ?  4u : 0u)
+            | (lrBlur.IsExpensiveMotionBlur()        ?  8u : 0u)
+            | (lrFrame.GetIsRacingGameplayCamera()   ? 16u : 0u)
+            | (gbPCBringUpCameraInputStaged          ? 32u : 0u);
+        const bool lbChanged = (luSignature != suLastSignature);
+        suLastSignature = luSignature;
+
+        if ((!lbChanged && (luCall % 900u) != 0u) || suPrints >= 24u)
+            return;
+        if (CgsDev::Log::gpDebugPrint == 0)
+            return;
+        ++suPrints;
+
+        *CgsDev::Log::gpDebugPrint
+            << "[postfx-cam] produce " << static_cast<s32>(luCall)
+            << ": staged=" << (gbPCBringUpCameraInputStaged ? 1 : 0)
+            << " dof=" << (lrFrame.GetUseDepthOfField() ? 1 : 0)
+            << " amount=" << lrCamera.GetDepthOfField().GetBlurriness()
+            << " b4blur=" << (lrFrame.GetUseBlur() ? 1 : 0)
+            << " mb=" << (lrBlur.IsActive() ? 1 : 0)
+            << " hq=" << (lrBlur.IsExpensiveMotionBlur() ? 1 : 0)
+            << " cars=" << lrBlur.GetCarsBlendAmount()
+            << " world=" << lrBlur.GetWorldBlendAmount()
+            << " speed=" << lrFrame.GetSpeedMPH()
+            << " gamecam=" << (lrFrame.GetIsRacingGameplayCamera() ? 1 : 0)
+            << "\n";
+    }
 
     u32  gu32LastMonitorTick = 0;
     bool gbMonitorTickValid  = false;
@@ -734,18 +890,59 @@ void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
     if (lpFrame == 0)
         return;
 
+    // ==============================================================================================
+    // THE CAMERA INPUT RECORD -- GenerateRenderRequests line 39, `CameraInput =
+    // DispatchInputBuffer::GetCameraInput(a2)`. Its type is a BY-VALUE
+    // BrnDirector::Camera::Camera (DWARF EffectsModuleIO.h:261 `Camera mCameraInput`), and that is
+    // not an inference from the name: every raw displacement the producer reads off the record
+    // lands exactly on an existing named member of the tree's Camera (mEffects @+0x68, 0xBC bytes;
+    // mDepthOfField @+0x124, 0x14 bytes):
+    //   CameraInput +172 (0xAC) = mEffects.mMotionBlurData.mfCarsBlurAmount        (effects +0x44)
+    //   CameraInput +176 (0xB0) = mEffects.mMotionBlurData.mfWorldBlurAmount       (effects +0x48)
+    //   CameraInput +180 (0xB4) = mEffects.mMotionBlurData.mbIsActive              (effects +0x4C)
+    //   CameraInput +181 (0xB5) = mEffects.mMotionBlurData.mbIsExpensiveMotionBlur (effects +0x4D)
+    //   CameraInput +248 (0xF8) = mEffects.mfBloomThreshold                        (effects +0x90)
+    //   CameraInput +252 (0xFC) = mEffects.mfBloomLuminance                        (effects +0x94)
+    //   CameraInput +292..+308  = mDepthOfField's five floats, in member order (+0x124..+0x134)
+    // Seven displacements, seven exact member hits, nothing left over -- and SetCameraInput
+    // @0x823C9988 settles it independently: its whole body is one
+    // `BrnDirector::Camera::Camera::operator=(this + 0x50, lpCamera)`.
+    // ==============================================================================================
+    const BrnDirector::Camera::Camera&         lrCamera     = PCBringUpGetCameraInput();
+    const BrnDirector::Camera::CameraEffects&  lrCameraFx   = lrCamera.GetEffects();
+    const BrnDirector::Camera::MotionBlurData& lrCameraBlur = lrCameraFx.mMotionBlurData;
+    const BrnDirector::Camera::DepthOfField&   lrCameraDof  = lrCamera.GetDepthOfField();
+
+    // ---- the six bools (GenerateRenderRequests lines 40-56) --------------------------------------
+    // Four are the debug component's always-on enables; the two CAMERA-DRIVEN ones are:
+    //   v6  = mbMotionBlurEnableUserSettings && mbMotionBlur              (the debug override)
+    //   v9  = camera.mMotionBlurData.mbIsActive | v6      -> frame+3 mbUseBlur
+    //   v12 = (camera.mDepthOfField.mfBlurriness > 0) && mbDepthOfField
+    //                                                     -> frame+2 mbUseDepthOfField
+    // NOTE the asymmetry, and it IS the asm: mbUseBlur (the B4 radial/zoom blur) is gated on the
+    // CAMERA's motion-blur-active flag alone -- `v9 = *(CameraInput + 180) | v6`, no module term.
+    const bool lbMotionBlurUserOverride =
+        KB_DEBUG_ENABLE_MOTION_BLUR_USER_SETTINGS && KB_DEBUG_ENABLE_MOTION_BLUR;
+    const bool lbUseBlur         = lrCameraBlur.IsActive() || lbMotionBlurUserOverride;
+    const bool lbUseDepthOfField = (lrCameraDof.GetBlurriness() > 0.0f) && KB_DEBUG_ENABLE_DOF;
+
     lpFrame->SetUseBloom(true);
     lpFrame->SetUseVignette(true);
-    lpFrame->SetUseDepthOfField(false);
-    lpFrame->SetUseBlur(false);
+    lpFrame->SetUseDepthOfField(lbUseDepthOfField);
+    lpFrame->SetUseBlur(lbUseBlur);
     lpFrame->SetUseTint(true);
     lpFrame->SetUseTint2d(true);
 
-    // ---- bloom: vault asset 191270 -------------------------------------------------------------
+    // ---- bloom: vault asset 191270, plus the camera's two ADDITIVE modifiers --------------------
+    // GenerateRenderRequests, immediately after BloomData::Construct:
+    //   *v47       = *(CameraInput + 252) + *v47;         // mfLuminance += mEffects.mfBloomLuminance
+    //   *(v47 + 1) = *(CameraInput + 248) + *(v47 + 1);   // mfThreshold += mEffects.mfBloomThreshold
+    // Both are 0.0f on a Constructed camera, so nothing changes today; the expression is the
+    // console's, landed so a director state that raises them reaches the frame.
     {
         BrnEffects::BloomData lBloom;
-        lBloom.mfLuminance = KF_BASE_FRAME_BLOOM_LUMINANCE;
-        lBloom.mfThreshold = KF_BASE_FRAME_BLOOM_THRESHOLD;
+        lBloom.mfLuminance = KF_BASE_FRAME_BLOOM_LUMINANCE + lrCameraFx.GetBloomLuminanceModifier();
+        lBloom.mfThreshold = KF_BASE_FRAME_BLOOM_THRESHOLD + lrCameraFx.GetBloomThresholdModifier();
         lBloom.mv4Scale    = Vector4{ KF_BASE_FRAME_BLOOM_SCALE_R, KF_BASE_FRAME_BLOOM_SCALE_G,
                                       KF_BASE_FRAME_BLOOM_SCALE_B, KF_BASE_FRAME_BLOOM_SCALE_A };
         lpFrame->SetBloomData(lBloom, KF_BASE_FRAME_ENABLED_WEIGHT);   // data + weight in one call (DWARF BrnEffectsFrame.h:71)
@@ -803,6 +1000,173 @@ void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
     // BrnEffectsFrame::Construct seeded it (VignetteData::Construct() -> the kv*Def* statics dumped from
     // the CRT initialisers, BrnEffectsData.cpp), so only the weight changes here.
     lpFrame->SetVignetteData(lpFrame->GetVignetteData(), KF_BASE_FRAME_ENABLED_WEIGHT);
+
+    // ---- depth of field: the camera's own focus band, five floats + weight 1.0 -------------------
+    // GenerateRenderRequests lines 132-146: a five-iteration WORD loop copying
+    // `*(CameraInput + 292..308)` into `frame + 144..160`, then `*(frame + 16) = 1.0f`. The source
+    // IS the camera's DepthOfField sub-object in member order; the destination IS
+    // BrnEffectsFrame::mDepthOfFieldData's five floats in member order. Five words only -- the 12
+    // trailing pad bytes of DepthOfFieldData are NOT written, so the local is seeded from the
+    // frame's current block rather than default-constructed.
+    if (lbUseDepthOfField)
+    {
+        BrnEffects::DepthOfFieldData lDof = lpFrame->GetDepthOfFieldData();
+        lDof.mfNearPlane   = lrCameraDof.GetFocusStartDistanceMeters();          // camera +292
+        lDof.mfFocalPlane  = lrCameraDof.GetPerfectFocusStartDistanceMeters();   // camera +296
+        lDof.mfFocalPlane2 = lrCameraDof.GetPerfectFocusEndDistanceMeters();     // camera +300
+        lDof.mfFarPlane    = lrCameraDof.GetFocusEndDistanceMeters();            // camera +304
+        lDof.mfDofAmount   = lrCameraDof.GetBlurriness();                        // camera +308
+        lpFrame->SetDepthOfFieldData(lDof, KF_BASE_FRAME_ENABLED_WEIGHT);
+    }
+
+    // ---- B4 blur: vault asset 218901, the whole 96-byte block + weight 1.0 -----------------------
+    // GenerateRenderRequests lines 160-166: `BlurData::Construct(v51, hash64("218901"))`, then
+    // `memcpy(frame + 176, v51, 96)` (the WHOLE BlurData) and `*(frame + 20) = 1.0f`. The console
+    // constructs the b4blurasset Attrib instance UNCONDITIONALLY one line earlier and destructs it
+    // at the end of the function; only the Construct+copy is inside the `if`. On PC the AttribSys
+    // read is replaced by the shipped values (the same choice the bloom arm already makes) -- see
+    // the KF_BASE_FRAME_BLUR_* block for the byte provenance and the field mapping.
+    if (lbUseBlur)
+    {
+        BrnEffects::BlurData lBlur = lpFrame->GetBlurData();
+        lBlur.mfOpacity        = KF_BASE_FRAME_BLUR_OPACITY;          // data +0x48
+        lBlur.mfVelocity       = KF_BASE_FRAME_BLUR_VELOCITY;         // data +0x40
+        lBlur.mfSharpness      = KF_BASE_FRAME_BLUR_SHARPNESS;        // data +0x44
+        lBlur.mfNoise          = KF_BASE_FRAME_BLUR_NOISE;            // data +0x4C
+        lBlur.mfAngle          = KF_BASE_FRAME_BLUR_ANGLE;            // data +0x50
+        lBlur.mv2BlendAmount.x = KF_BASE_FRAME_BLUR_BLEND_AMOUNT_X;   // data +0x30
+        lBlur.mv2BlendAmount.y = KF_BASE_FRAME_BLUR_BLEND_AMOUNT_Y;
+        lBlur.mv2BlendAmount.z = 0.0f;
+        lBlur.mv2BlendAmount.w = 0.0f;
+        lBlur.mv2BlurAmount.x  = KF_BASE_FRAME_BLUR_BLUR_AMOUNT_X;    // data +0x10
+        lBlur.mv2BlurAmount.y  = KF_BASE_FRAME_BLUR_BLUR_AMOUNT_Y;
+        lBlur.mv2BlurAmount.z  = 0.0f;
+        lBlur.mv2BlurAmount.w  = 0.0f;
+        lBlur.mv2BlendCentre.x = KF_BASE_FRAME_BLUR_BLEND_CENTRE_X;   // data +0x20
+        lBlur.mv2BlendCentre.y = KF_BASE_FRAME_BLUR_BLEND_CENTRE_Y;
+        lBlur.mv2BlendCentre.z = 0.0f;
+        lBlur.mv2BlendCentre.w = 0.0f;
+        lBlur.mv2BlurCentre.x  = KF_BASE_FRAME_BLUR_BLUR_CENTRE_X;    // data +0x00
+        lBlur.mv2BlurCentre.y  = KF_BASE_FRAME_BLUR_BLUR_CENTRE_Y;
+        lBlur.mv2BlurCentre.z  = 0.0f;
+        lBlur.mv2BlurCentre.w  = 0.0f;
+        lpFrame->SetBlurData(lBlur, KF_BASE_FRAME_ENABLED_WEIGHT);
+    }
+
+    // ---- motion blur: UNCONDITIONAL (GenerateRenderRequests lines 168-190) -----------------------
+    // The console builds a stack MotionBlurData with the type's own canonical setter and copies its
+    // three words into frame +0x1D8/+0x1DC/+0x1E0 whether or not anything is active -- so a frame
+    // that has just turned motion blur OFF really does write mbIsActive = false rather than leaving
+    // last frame's value standing. Two arms, selected by the debug override:
+    //   if (mbMotionBlurEnableUserSettings)
+    //       Set(mbMotionBlur, mbMotionBlurUserHighQuality,
+    //           mfMotionBlurUserAmountCars, mfMotionBlurUserAmountWorld)
+    //   else
+    //       Set(mbMotionBlur && camera.mMotionBlurData.mbIsActive,
+    //           camera.mMotionBlurData.mbIsExpensiveMotionBlur,
+    //           camera.mMotionBlurData.mfCarsBlurAmount,
+    //           camera.mMotionBlurData.mfWorldBlurAmount)
+    // MotionBlurData::Set @0x8220AED8 is `void Set(bool, bool, f32, f32)` -- flags first, and it
+    // clamps both amounts to [0,1] internally. This producer is its ONLY caller on the console too.
+    // The local is seeded from the frame so the two pad bytes Set does not write keep the frame's
+    // value instead of stack noise (the console's memcpy takes them off an uninitialised stack
+    // slot; nothing reads them).
+    {
+        BrnDirector::Camera::MotionBlurData lMotionBlur = lpFrame->GetMotionBlurData();
+        if (KB_DEBUG_ENABLE_MOTION_BLUR_USER_SETTINGS)
+        {
+            lMotionBlur.Set(KB_DEBUG_ENABLE_MOTION_BLUR,
+                            KB_DEBUG_MOTION_BLUR_USER_HIGH_QUALITY,
+                            KF_DEBUG_MOTION_BLUR_USER_AMOUNT_CARS,
+                            KF_DEBUG_MOTION_BLUR_USER_AMOUNT_WORLD);
+        }
+        else
+        {
+            lMotionBlur.Set(KB_DEBUG_ENABLE_MOTION_BLUR && lrCameraBlur.IsActive(),
+                            lrCameraBlur.IsExpensiveMotionBlur(),
+                            lrCameraBlur.GetCarsBlendAmount(),
+                            lrCameraBlur.GetWorldBlendAmount());
+        }
+        lpFrame->SetMotionBlurData(lMotionBlur);
+    }
+
+    // ---- the "is this the racing gameplay camera" flag -------------------------------------------
+    // GenerateRenderRequests writes frame +0x1E4 from the effects module's own
+    // TempRaceCarStateCache.mbIsGameCamera (module +181032), and that cache field is filled in
+    // exactly ONE place -- BrnEffects::EffectsModule::Update @0x8229EC28, the player-car arm:
+    //     this->field_2C328 = (*(CameraInput + 81) & 8) != 0;
+    // CameraInput is typed `_DWORD*` at that site, so +81 words == +324 bytes == camera +0x144. The
+    // camera's CameraState is at +0x138 and its mCurrentFlags BitArray<30> at state +0x08 == camera
+    // +0x140; BitArray sets bits with `(u64)1 << index`, so on the big-endian console camera +0x144
+    // is that qword's LOW half and mask 8 is bit index 3. The same word and a sibling bit are read
+    // by BrnGameModule::DoDispatch @0x823DC458 lines 74-75 (`GetCameraOutput(...) + 324` tested
+    // against 8 and 0x8000000), which corroborates both the word and the addressing.
+    // The two-hop module path therefore collapses to a pure function of the record, which makes
+    // this the ONE TempRaceCarStateCache field the PC producer can reproduce faithfully.
+    lpFrame->SetIsRacingGameplayCamera(
+        lrCamera.GetState().IsFlagSet(KU_CAMERA_STATE_FLAG_IS_RACING_GAMEPLAY));
+
+    // ==============================================================================================
+    // [FLAG BLOCKED: no PC source for the effects module's TempRaceCarStateCache]
+    //
+    // GenerateRenderRequests copies SIX more fields into the frame, and none of them comes from the
+    // camera record -- they all come from BrnEffects::EffectsModule::TempRaceCarStateCache
+    // mCarStateCache (DWARF EffectsModule.h:577, module +180864):
+    //     frame +0x130 mCarTransform     <- cache mCarTransform      (module +180864)
+    //     frame +0x170 mCameraTransform  <- cache mCameraTransform   (module +180928)
+    //     frame +0x1B0 mLinearVelocity   <- cache mvLinearVelocity   (module +180992)
+    //     frame +0x1C0 mAngularVelocity  <- cache mvAngularVelocity  (module +181008)
+    //     frame +0x1D0 mfSpeedMPH        <- cache mfSpeedMPH         (module +181024)
+    //     frame +0x1D4 mfSteering        <- cache mfSteering         (module +181028)
+    // The four dynamic ones are filled by EffectsModule::Update @0x8229EC28 from the PLAYER's
+    // ActiveRaceCarState (state +816 linear velocity, +832 angular velocity, +972 speed mph,
+    // +1044 steering), reached through RCEntityActiveRaceCarOutputInterface off the effects INPUT
+    // buffer. Neither the effects module nor that IO buffer exists on this build, so there is no
+    // faithful value and none is invented.
+    // The two TRANSFORMS are a stronger statement -- NOTHING IN THE IMAGE EVER WRITES THEM:
+    //     $ grep -rl "180928" .ida-exports/BURNOUT_X360_ARTIST.XEX/
+    //     .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8227FF10.json     (this producer -- the READ)
+    //     $ grep -rl "180864" .ida-exports/BURNOUT_X360_ARTIST.XEX/
+    //     .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8227FF10.json     (this producer -- the READ)
+    //     .ida-exports/BURNOUT_X360_ARTIST.XEX/0x823BC450.json     (an unrelated BrnNetworkModuleIO
+    //                                                               accessor, `return a1 + 180864`)
+    //     .ida-exports/BURNOUT_X360_ARTIST.XEX/0x825883F0.json     (unrelated)
+    //     .ida-exports/BURNOUT_X360_ARTIST.XEX/0x82593420.json     (unrelated)
+    // and EffectsModule::Construct @0x8228FE98 does not initialise the cache either, so even on
+    // retail those two frame transforms carry whatever the module allocation held.
+    //
+    // WHAT THE FRAME CARRIES INSTEAD, and it is measured rather than chosen: ZERO.
+    // BrnEffectsFrame::Construct @0x822791E8 (and the tree's copy) writes NONE of the seven -- it
+    // stops after the tint2d block and the MotionBlurData::Construct tail -- so the frames keep
+    // their storage's initial bytes, and the storage is inside
+    //     $ grep -rn "static BrnGame::BrnGameModule" b5-decomp/src
+    //     b5-decomp/src/GameSource/Main/BrnMain.cpp:45:static BrnGame::BrnGameModule gGameModule;
+    // i.e. a statically zero-initialised object.
+    // THE ONE CONSUMER THAT CARES, and what zero does to it: the B4-blur arm in
+    // BrnRendererModulePostFx.cpp reads GetSpeedMPH() and GetAngularVelocity().y whenever mbUseBlur
+    // is set. Speed 0 makes its lfSpeedFactor 0, hence m_blurVelocity = mfVelocity * 0 * 0 = 0, and
+    // yaw 0 leaves both blur centres unbiased at the authored (0.5, 0.5) / (0.5, 0). A B4 blur that
+    // turns on today is therefore a still, centred, zero-velocity blur rather than a speed-driven
+    // one -- wrong in DEGREE, not in kind, and it cannot read uninitialised memory.
+    // UNBLOCK by giving the renderer a live player-car speed/velocity/steering source (the world
+    // module's race-car state, or the real EffectsIO::InputBuffer) and writing the four here.
+    // ==============================================================================================
+
+    PCBringUpLogBaseEffectsFrameCameraState(*lpFrame, lrCamera);
+}
+
+// [FLAG PC bring-up] see the declaration in BrnRendererModule.h. The PC stand-in for
+// BrnEffects::EffectsIO::DispatchInputBuffer::SetCameraInput @0x823C9988: one copy-assign of the
+// director's published camera into the staged record the producer reads on its next run. The
+// console's own body is that same single `Camera::operator=` behind a locked-for-writing assert;
+// there is no lock here because there is no IO buffer to lock.
+// DELETE-WHEN the EffectsIO dispatch buffer set is real on PC.
+void BrnRendererModule::PCBringUpSetCameraInput(const BrnDirector::Camera::Camera* lpCamera)
+{
+    if (lpCamera == 0)
+        return;   // [FLAG PC bring-up] the console cannot be handed a null here; DoDispatch can.
+    PCBringUpGetCameraInput() = *lpCamera;
+    gbPCBringUpCameraInputStaged = true;
 }
 
 // [FLAG PC bring-up] see the declaration in BrnRendererModule.h. Hands the world module the

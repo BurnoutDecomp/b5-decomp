@@ -70,8 +70,13 @@ namespace postfx
             Parameters();
         };
 
-        // The post-fx vertex (Position + UV) the full-screen-quad uses; the ctor uploads the quad
-        // into the locked vertex buffer (DWARF rw::graphics::postfx::Vertex[4]).
+        // The post-fx vertex (Position + UV) the full-screen quad uses; on the console the ctor
+        // uploads three of them into the locked vertex buffer (DWARF
+        // rw::graphics::postfx::Vertex[4], the clip-space unit quad written by the CRT initialiser
+        // at X360 0x82C4F910). On this backend RenderQuad pushes FOUR of them straight into the
+        // immediate-vertex ring instead -- the table is KA_QUAD_STRIP in rwgpfxhelper.cpp and the
+        // deviation is argued at the quad gate there. 20 bytes either way, which the .cpp
+        // static_asserts.
         struct Vertex
         {
             f32 maPosition[3];  // +0x00
@@ -152,9 +157,12 @@ namespace postfx
         //
         // The quad is drawn as Xenos D3DPT_RECTLIST with THREE vertices
         // (`D3DDevice_DrawVertices(dev, 8, 0, 3)` @0x823FE62C-3C) -- three corners of a rectangle,
-        // the GPU infers the fourth -- from the vertex buffer the constructor uploads. On this build
-        // the quad has no geometry (RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE 0 -- see the four BLOCKED
-        // items at the gate in rwgpfxhelper.cpp), so the body reports once and draws nothing.
+        // the GPU infers the fourth -- from the vertex buffer the constructor uploads. D3D9 has no
+        // RECTLIST, so on this backend the SAME rectangle is drawn as the equivalent 4-vertex
+        // TRIANGLESTRIP through D3DDevice_BeginVertices/_EndVertices (the fourth corner is the one
+        // the Xenos hardware infers). That is the one deviation, argued in full at the quad gate in
+        // rwgpfxhelper.cpp; the state binds, the uvOffset constant row and their order are the
+        // console's.
         void RenderQuad(const f32* lpafUvOffset);
 
         // rwgpfxhelper.h:176 -- the teardown helper Release calls nine times. TWO instantiations

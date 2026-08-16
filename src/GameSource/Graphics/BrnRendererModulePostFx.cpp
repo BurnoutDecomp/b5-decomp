@@ -3,6 +3,7 @@
 #include "GameSource/Graphics/BrnEffectsArbitrator.h"      // BrnGraphics::EffectsArbitrator
 #include "SharedClasses/Graphics/BrnEffectsData.h"         // BrnEffectsFrame + the five data blocks
 #include "GameSource/Graphics/PostFx/BrnPostFx.h"          // msPostFx + every setter/getter below
+#include "GameSource/Game/BrnDispatchThreadInputBuffer.h"  // ParticleRenderData (the Update arguments)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::WriteToLog (the diag line)
 
 #include <cstdio>    // snprintf (the diag line)
@@ -147,6 +148,48 @@ namespace
         f32  mafBloomColour[3];
     };
     DiagState gDiag = { false, false, false, false, false, 0.0f, 0.0f, { 0.0f, 0.0f, 0.0f } };
+
+    // The motion-blur half of the same sampled diagnostic. mfWvpDelta is the largest absolute
+    // element difference between MotionBlurState's current and previous world-view-projection
+    // matrices: it is ZERO exactly when the reprojection has nothing to say (the pair is still the
+    // identity pair MotionBlurState::Construct left, or the camera has not moved), and non-zero the
+    // instant a real Update lands a moving camera. That single number is the cheapest proof the
+    // consumer chain is alive, because BlurMatrixX/Y/W are built from precisely that difference.
+    struct MotionBlurDiagState
+    {
+        bool mbActive;
+        bool mbUpdateCalled;
+        s32  miQuality;
+        f32  mfCarsBlurAmount;
+        f32  mfWorldBlurAmount;
+        f32  mfWvpDelta;
+    };
+    MotionBlurDiagState gMotionBlurDiag = { false, false, 0, 0.0f, 0.0f, 0.0f };
+
+    // Largest absolute element difference between the two WVP matrices, by named lane.
+    f32 MaxAbsoluteDifference(const rw::math::vpu::Matrix44& lLhs, const rw::math::vpu::Matrix44& lRhs)
+    {
+        const rw::math::vpu::Vector4* const lapLhs[4] =
+            { &lLhs.xAxis, &lLhs.yAxis, &lLhs.zAxis, &lLhs.wAxis };
+        const rw::math::vpu::Vector4* const lapRhs[4] =
+            { &lRhs.xAxis, &lRhs.yAxis, &lRhs.zAxis, &lRhs.wAxis };
+
+        f32 lfWorst = KF_ZERO;
+        for (u32 luRow = 0; luRow < 4u; ++luRow)
+        {
+            const f32 lafDelta[4] = { lapLhs[luRow]->x - lapRhs[luRow]->x,
+                                      lapLhs[luRow]->y - lapRhs[luRow]->y,
+                                      lapLhs[luRow]->z - lapRhs[luRow]->z,
+                                      lapLhs[luRow]->w - lapRhs[luRow]->w };
+            for (u32 luLane = 0; luLane < 4u; ++luLane)
+            {
+                const f32 lfAbs = AbsValue(lafDelta[luLane]);
+                if (lfAbs > lfWorst)
+                    lfWorst = lfAbs;
+            }
+        }
+        return lfWorst;
+    }
 }
 
 // ==================================================================================================
@@ -506,55 +549,123 @@ void BrnRendererEvalPostFxTint2dColour(const BrnGraphics::EffectsArbitrator* lpA
 // returns (`bl sub_8227F640` @0x8240C45C; that function asserts "Not locked for reading" and returns
 // `a1 + 14496` == this + 0x38A0 == &mParticleRenderData, BrnDispatchThreadInputBuffer.h:182).
 //
-// ⚠ BLOCKED, TWICE OVER, AND NEITHER HALF IS THIS GROUP'S TO FIX:
-//   1. MotionBlurState::Update HAS NO BODY IN THIS TREE. It is declaration-only at
-//      BrnPostFxShader.h:108 and its own banner there says why (it needs the rw::math::fpu
-//      double-precision matrix family, the same blocker as
-//      BRN_POSTFX_MOTION_BLUR_REPROJECTION_AVAILABLE in BrnPostFxShader.cpp):
-//        $ grep -rn "MotionBlurState::Update" --include=*.cpp b5-decomp/src
-//        b5-decomp/src/GameSource/Graphics/PostFx/BrnPostFxShader.cpp:398    <- a comment
-//        b5-decomp/src/GameSource/Graphics/PostFx/BrnPostFxShader.cpp:402    <- a comment
-//      Two hits, both inside comments; no definition. Calling it is an LNK2019 for the whole exe.
-//   2. THE TWO MATRIX ARGUMENTS CANNOT BE NAMED. ParticleRenderData is still an ad-hoc opaque in
-//      BrnDispatchThreadInputBuffer.h:55 (`struct ParticleRenderData { u8 maStorage[1]; }`), so
-//      +0x0C / +0x60 / +0xA0 could only be reached by casting raw offsets into a live C++ object --
-//      the offset-hack AGENTS.md forbids, and on a 1-byte type it is also out-of-bounds.
+// ⭐ BOTH BLOCKERS CLOSED 2026-08-15 (post-fx step-6 producers wave), and the gate is now 1:
+//   1. MotionBlurState::Update IS BODIED, in BrnPostFxShader.cpp, where the DWARF puts it. (The
+//      old note here said it needed the rw::math::fpu double-precision matrix family. That was
+//      wrong: Update is pure single-precision VMX with no call in it at all. The fpu double family
+//      is what BrnPostFxShader::Render's REPROJECTION block needs, and that now exists too.)
+//   2. DispatchThreadInputBuffer::ParticleRenderData HAS ITS REAL LAYOUT (DWARF ParticleModule.h:
+//      589-606), so the three arguments are reached BY NAME -- mfCurrentTimeStep, mCgsCamera's view
+//      and mCgsCamera's projection -- and the console's +0x0C / +0x60 / +0xA0 are three independent
+//      confirmations of that layout rather than three offsets anybody has to cast to.
 //
-// So the call is written, in the console's position and with the console's arguments, behind a gate
-// that is 0. TO OPEN IT: body MotionBlurState::Update, recover ParticleRenderData's layout (its
-// +0x0C time step and the two 64-byte matrices at +0x60 / +0xA0), then set the macro to 1.
+// ⚠ WHAT IS STILL MISSING IS THE PRODUCER, AND THE NULL POINTER IS HOW IT SAYS SO. On the console
+// the render data is filled every frame by BrnParticle::ParticleModule::GenerateRenderRequests
+// @0x82281BD8 -- the ONLY caller of the write-locked accessor:
+//   $ python -c "import json;print(json.load(open('.ida-exports/BURNOUT_X360_ARTIST.XEX/0x8227F6E8.json'))['xrefs_to'])"
+//   [{'address': '0x82281BD8', 'name': 'BrnParticle::ParticleModule::GenerateRenderRequests'}]
+// That module is NOT reconstructed here:
+//   $ grep -rn "ParticleModule::GenerateRenderRequests\|class ParticleModule" --include=*.h --include=*.cpp b5-decomp/src
+//   b5-decomp/src/GameSource/Effects/Props/PropCollisions.h:23:    class ParticleModule;
+// -- one hit, a forward declaration, no definition and no producer. So BrnRendererModule.cpp keeps
+// passing a NULL render-data pointer, this function reports once and returns false, and
+// MotionBlurState keeps the identity/identity pair MotionBlurState::Construct gave it (which makes
+// BrnPostFxShader::Render's reprojection produce an exactly-zero velocity matrix -- correct, and
+// finite).
+//
+// ⚠ DO NOT "FIX" THIS BY WIRING THE ACCESSOR UP. Passing
+// `lpDispatchThreadInputBuffer->GetParticleRenderData()` without a producer would hand this
+// function UNINITIALISED memory: neither DispatchThreadInputBuffer::Construct (faithfully -- the
+// console does not clear that payload either) nor CreateIOBuffer<T> (since the 2026-08-15 perf
+// wave) zeroes it. A garbage view matrix is almost surely singular or non-finite, and
+// MotionBlurState::Update's zero-time-step arm INVERTS it four times -- the resulting NaN would
+// propagate straight into BlurMatrixX/Y/W and, from there, into a tex2Dgrad gradient. The wiring
+// and the producer must land in the same change.
 // ==================================================================================================
-#define BRN_POSTFX_MOTION_BLUR_UPDATE_AVAILABLE 0
+#define BRN_POSTFX_MOTION_BLUR_UPDATE_AVAILABLE 1
 
-bool BrnRendererUpdatePostFxMotionBlur(const BrnGraphics::EffectsArbitrator* lpArbitrator,
-                                       const void* lpParticleRenderData)
+bool BrnRendererUpdatePostFxMotionBlur(
+    const BrnGraphics::EffectsArbitrator* lpArbitrator,
+    const BrnParticle::ParticleModule::ParticleRenderData* lpParticleRenderData)
 {
-#if BRN_POSTFX_MOTION_BLUR_UPDATE_AVAILABLE
-    const BrnEffectsFrame* const lpFrame = GetBaseInternalFrame(lpArbitrator);
-    if (lpFrame == 0 || lpParticleRenderData == 0)
-        return false;
+    gMotionBlurDiag.mbUpdateCalled = false;
 
+    const BrnEffectsFrame* const lpFrame = GetBaseInternalFrame(lpArbitrator);
+    if (lpFrame == 0)
+        return false;   // [FLAG PC bring-up] see GetBaseInternalFrame.
+
+    // r7 -- `lbz r11, 0x1E1(r11)` / cntlzw / extrwi / xori @0x8240DD38-0x8240DD48, i.e. plain != 0.
+    const BrnDirector::Camera::MotionBlurData& lrMotionBlur = lpFrame->GetMotionBlurData();
     const MotionBlurState::EQuality leQuality =
-        lpFrame->GetMotionBlurData().mbIsExpensiveMotionBlur ? MotionBlurState::E_QUALITY_EXPENSIVE
-                                                             : MotionBlurState::E_QUALITY_CHEAP;
-    // The three ParticleRenderData reads go here once that type has a layout:
-    //     r4 -> the Matrix44Affine at +0x60, r5 -> the Matrix44 at +0xA0, f1 -> the f32 at +0x0C.
-    // msPostFx.GetMotionBlurState().Update(lrView, lrProjection, lfTimeStep, leQuality);
-    // The flip must NOT pass silently while the call above is a comment (rung-5 verifier): a flipped
-    // build reporting "motion blur updated" without calling Update would be a lie the log cannot see.
-    #error "BRN_POSTFX_MOTION_BLUR_UPDATE_AVAILABLE is on but MotionBlurState::Update has no body and DispatchThreadInputBuffer::ParticleRenderData has no layout -- write the three reads + the call above, then delete this #error"
-    (void)leQuality;
+        lrMotionBlur.mbIsExpensiveMotionBlur ? MotionBlurState::E_QUALITY_EXPENSIVE
+                                             : MotionBlurState::E_QUALITY_CHEAP;
+
+    gMotionBlurDiag.mbActive          = lrMotionBlur.mbIsActive;
+    gMotionBlurDiag.miQuality         = static_cast<s32>(leQuality);
+    gMotionBlurDiag.mfCarsBlurAmount  = lrMotionBlur.mfCarsBlurAmount;
+    gMotionBlurDiag.mfWorldBlurAmount = lrMotionBlur.mfWorldBlurAmount;
+
+#if BRN_POSTFX_MOTION_BLUR_UPDATE_AVAILABLE
+    if (lpParticleRenderData == 0)
+    {
+        // [FLAG PC bring-up] no producer -- see the banner. DELETE WHEN
+        // BrnParticle::ParticleModule (or a named PC bring-up stand-in for
+        // GenerateRenderRequests) fills DispatchThreadInputBuffer::mParticleRenderData.
+        static bool sbReportedNoRenderData = false;
+        if (!sbReportedNoRenderData)
+        {
+            sbReportedNoRenderData = true;
+            CgsDev::Log::WriteToLog(
+                "[postfx-mb] MotionBlurState::Update NOT called: nothing in this tree produces"
+                " DispatchThreadInputBuffer::mParticleRenderData (the console's producer is"
+                " BrnParticle::ParticleModule::GenerateRenderRequests @0x82281BD8, not"
+                " reconstructed). The WVP pair stays at Construct's identity/identity, so the"
+                " composite's reprojection rows are exactly zero -- correct and finite, just"
+                " motionless. [FLAG PC bring-up: no ParticleRenderData producer]\n");
+        }
+        return false;
+    }
+
+    const CgsGraphics::Camera& lrCamera = lpParticleRenderData->mCgsCamera;
+
+    // [FLAG PC type bridge] The DWARF types the camera's view member `Matrix44Affine`
+    // (dwarfdump/GameShared/GameClasses/Graphics/CgsCamera.h:202) and MotionBlurState::Update's
+    // first parameter is a Matrix44Affine; the committed CgsGraphics::Camera models the identical
+    // four 16-byte rows as a Matrix44 (mView @+0x00, pinned by that header's _AssertLayout). Same
+    // bytes, different SDK spelling. Copied lane by lane rather than reinterpret_cast so nothing
+    // silently depends on the two aggregates keeping the same host layout. DELETE-WHEN
+    // CgsGraphics::Camera adopts the DWARF's Matrix44Affine for its view member.
+    rw::math::vpu::Matrix44Affine lCameraView;
+    lCameraView.xAxis = rw::math::vpu::Vector3{ lrCamera.mView.xAxis.x, lrCamera.mView.xAxis.y,
+                                                lrCamera.mView.xAxis.z, lrCamera.mView.xAxis.w };
+    lCameraView.yAxis = rw::math::vpu::Vector3{ lrCamera.mView.yAxis.x, lrCamera.mView.yAxis.y,
+                                                lrCamera.mView.yAxis.z, lrCamera.mView.yAxis.w };
+    lCameraView.zAxis = rw::math::vpu::Vector3{ lrCamera.mView.zAxis.x, lrCamera.mView.zAxis.y,
+                                                lrCamera.mView.zAxis.z, lrCamera.mView.zAxis.w };
+    lCameraView.wAxis = rw::math::vpu::Vector3{ lrCamera.mView.wAxis.x, lrCamera.mView.wAxis.y,
+                                                lrCamera.mView.wAxis.z, lrCamera.mView.wAxis.w };
+
+    // The console's five-argument call, argument for argument (asm 0x8240DD04-0x8240DD4C):
+    //   r3 = &BrnPostFx::mMotionBlurState        r4 = particleRenderData + 0x60  (the view)
+    //   r5 = particleRenderData + 0xA0 (proj)    f1 = *(f32*)(particleRenderData + 0x0C)
+    //   r7 = the quality (the float in f1 CONSUMES its GPR slot -- AGENTS.md's PPC rule 4 -- which
+    //        is why the fifth argument lands in r7 and Hex-Rays prints only four).
+    msPostFx.GetMotionBlurState().Update(lCameraView,
+                                         lrCamera.mProjection,
+                                         lpParticleRenderData->mfCurrentTimeStep,
+                                         leQuality);
+    gMotionBlurDiag.mbUpdateCalled = true;
+    gMotionBlurDiag.mfWvpDelta = MaxAbsoluteDifference(msPostFx.GetMotionBlurState().mCurrentWVP,
+                                                       msPostFx.GetMotionBlurState().mPreviousWVP);
     return true;
 #else
-    (void)lpArbitrator;
     (void)lpParticleRenderData;
     static bool sbReported = false;
     if (!sbReported)
     {
         sbReported = true;
         CgsDev::Log::WriteToLog(
-            "[postfx-fx] MotionBlurState::Update NOT called: its body does not exist in this tree and"
-            " DispatchThreadInputBuffer::ParticleRenderData is still opaque."
+            "[postfx-mb] MotionBlurState::Update compiled OUT."
             " [FLAG PC bring-up: BRN_POSTFX_MOTION_BLUR_UPDATE_AVAILABLE]\n");
     }
     return false;
@@ -594,4 +705,22 @@ void BrnRendererLogPostFxEffectState()
                   gDiag.mbBlur ? 1 : 0,
                   gDiag.mbTint2d ? 1 : 0);
     CgsDev::Log::WriteToLog(lacMsg);
+
+    // The motion-blur consumer line. `updated` is 1 only when the console's five-argument
+    // MotionBlurState::Update actually ran; `wvpDelta` is the largest element difference between
+    // the current and previous world-view-projection matrices, which is what the composite's
+    // reprojection differences into BlurMatrixX/Y/W. With no producer wired, the honest reading is
+    // active=0 updated=0 wvpDelta=0.000 -- and any NON-zero wvpDelta with updated=0 would be a bug.
+    char lacMotionBlurMsg[192];
+    std::snprintf(lacMotionBlurMsg, sizeof(lacMotionBlurMsg),
+                  "[postfx-mb] apply-call %u: active=%d updated=%d quality=%d cars=%.2f world=%.2f"
+                  " wvpDelta=%.4f\n",
+                  static_cast<unsigned>(luFrame),
+                  gMotionBlurDiag.mbActive ? 1 : 0,
+                  gMotionBlurDiag.mbUpdateCalled ? 1 : 0,
+                  static_cast<int>(gMotionBlurDiag.miQuality),
+                  static_cast<double>(gMotionBlurDiag.mfCarsBlurAmount),
+                  static_cast<double>(gMotionBlurDiag.mfWorldBlurAmount),
+                  static_cast<double>(gMotionBlurDiag.mfWvpDelta));
+    CgsDev::Log::WriteToLog(lacMotionBlurMsg);
 }

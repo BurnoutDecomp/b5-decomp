@@ -1377,6 +1377,24 @@ namespace BrnGame
         // ⚠️ "The published eye did not change this frame" is NOT the same as "the camera is
         // stale": with the chase camera live and the car parked, holding still is the correct
         // output. Distinguish the two by what the arbitrator is doing, never by the value.
+        // ---- stage the DIRECTOR's published camera as the EFFECTS CAMERA INPUT ------------
+        // The console: `SetCameraInput(effectsDispatchInput, GetCameraOutput(directorOutput))`
+        // (DoDispatch @0x823DC458 line 103, the ONLY caller of SetCameraInput @0x823C9988).
+        // The record is what BrnEffects::EffectsModule::GenerateRenderRequests @0x8227FF10
+        // reads to decide, per frame, whether depth-of-field / B4 blur / motion blur are on
+        // and with what amounts. The EffectsIO dispatch buffer does not exist on this build,
+        // so the renderer's base-frame bring-up producer takes the copy directly.
+        // UNCONDITIONAL, like the console's call: the mbDirectorCameraLive / origin guards on
+        // the world hand-over below are world-STREAMER safety, and applying them here would
+        // freeze the effects record instead of letting the director turn effects off.
+        // DELETE-WHEN DoDispatch's IO buffer set is real (with the two hand-overs below).
+        if (mpDirectorOutputBuffer != 0)
+        {
+            mpDirectorOutputBuffer->LockForRead();
+            mRenderModule.PCBringUpSetCameraInput(mpDirectorOutputBuffer->GetCameraOutput());
+            mpDirectorOutputBuffer->UnlockForRead();
+        }
+
         if (mpDirectorOutputBuffer != 0 && mbDirectorCameraLive)
         {
             mpDirectorOutputBuffer->LockForRead();
