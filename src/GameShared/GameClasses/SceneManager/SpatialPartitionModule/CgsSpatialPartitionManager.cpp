@@ -145,11 +145,15 @@ bool SpatialPartitionManager::Release()
             meReleaseStage++;   // -> SCENE_GRAPH
             // fall through
         case E_SCENE_GRAPH_RELEASE_SCENE_GRAPH:
-            if (mpSpatialPartition == NULL)
-            {
-                meReleaseStage++;   // nothing to release
-                break;
-            }
+            // ⛔ NO null guard here, and that is FAITHFUL: @0x828AA8BC the console loads
+            // mpSpatialPartition (+0x10), loads its vtable and calls slot +0xC with no test
+            // whatsoever. A `if (mpSpatialPartition == NULL) { meReleaseStage++; break; }`
+            // early-out lived here from cc48d4f2 until 2026-08-16; it was an INVENTED arm,
+            // and because it `break`s out of the switch it also fell off the end of a
+            // bool-returning function -- the ONE C4715 in the whole 1,210-TU build. The
+            // caller (SceneManagerModule::Release @0x828C7220) reads that return as
+            // "partition finished releasing?", so the garbage in `al` decided, per frame and
+            // at random, whether the module advanced past a partition it had not released.
             if (!mpSpatialPartition->Release())
             {
                 mpSpatialPartition->Destruct();
