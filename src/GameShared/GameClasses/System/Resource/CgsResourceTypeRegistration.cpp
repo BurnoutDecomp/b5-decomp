@@ -37,6 +37,9 @@
 #include "SharedClasses/DataLists/WheelListResourceType.h"                     // BrnResource::WheelListResourceType (0x10009)
 #include "SharedClasses/World/BrnVehicleGraphicsSpecResourceType.h"            // BrnVehicle::GraphicsSpecResourceType (0x10006)
 #include "SharedClasses/World/BrnWheelGraphicsSpecResourceType.h"              // BrnWheel::GraphicsSpecResourceType (0x1000A)
+#include "SharedClasses/World/BrnEnvironmentKeyframeResourceType.h"       // EnvironmentSettings::KeyframeResourceType (0x10012)
+#include "SharedClasses/World/BrnEnvironmentTimeLineResourceType.h"       // EnvironmentSettings::TimeLineResourceType (0x10013)
+#include "SharedClasses/World/BrnEnvironmentDictionaryResourceType.h"     // EnvironmentSettings::DictionaryResourceType (0x10014)
 #include "SharedClasses/Graphics/PlayerCarColoursResourceType.h"               // CgsResource::PlayerCarColoursResourceType (0x1001E)
 #include "SharedClasses/Progression/BrnProgressionResourceType.h"              // BrnProgression::ProgressionResourceType (0x1000E)
 #include "SharedClasses/Physics/Deformation/Resources/StreamedDeformationSpecResourceType.h" // BrnResource::StreamedDeformationSpecResourceType (0x1001C)
@@ -283,6 +286,26 @@ namespace CgsResource
         // StreetManager a live-looking record whose table bases are still file offsets.
         static BrnStreetData::StreetDataResourceType  sStreetData;         // 0x10018 (65560)
         TypeRegistry::Register(&sStreetData);
+
+        // ---- the ENVIRONMENT-SETTINGS resource family (env wave, 2026-08-16) ------------------
+        // Keyframe (0x10012), TimeLine (0x10013) and Dictionary (0x10014) -- the three types in
+        // build/game/ENVIRONMENTSETTINGS. All three handler TUs have existed since the post-fx
+        // rung-5 wave and NONE was ever registered, which is why EnvironmentManager::Prepare had
+        // to be stubbed inert: BundleLoader::LoadBundle gates ALL THREE fix-up passes on
+        // `mpResourceType != 0`, so an unregistered type skips FixUp AND ResolveImportsForEntry
+        // (the exact trap the wheel-graphics-spec note above records). For this family that is
+        // fatal twice over: the TimeLine's mpLocationDatii / mpfKeyframeTimes / mppKeyframes and
+        // the Dictionary's mpSeasonDatii / mpLocationDatii stay serialised offsets, and the nine
+        // keyframe imports the timeline carries (MEASURED on the shipped
+        // ENVIRONMENTSETTINGS/PARADISE_INGAME_JUNK.BUNDLE.x360: 9 entries at payload +0x20..+0x40,
+        // one per city_HHMM keyframe) are never resolved, so every mppKeyframes slot stays NULL
+        // and the time-of-day blend has nothing to read.
+        static BrnWorld::EnvironmentSettings::KeyframeResourceType   sEnvKeyframe;   // 0x10012 (65554)
+        TypeRegistry::Register(&sEnvKeyframe);
+        static BrnWorld::EnvironmentSettings::TimeLineResourceType   sEnvTimeLine;   // 0x10013 (65555)
+        TypeRegistry::Register(&sEnvTimeLine);
+        static BrnWorld::EnvironmentSettings::DictionaryResourceType sEnvDictionary; // 0x10014 (65556)
+        TypeRegistry::Register(&sEnvDictionary);
 
         // ---- the world-render resource types (2026-07-27) -------------------------------------
         // The streamed TRK_UNIT bundles carry these; without a registered handler the
