@@ -133,6 +133,11 @@ public:
     void ProcessInputs(const AttribSysIO::InputBuffer* lpInputBuffer);
 
     bool IsSchemaLoaded() const { return sbSchemaLoaded; }
+    // The same flag without needing a module instance. The console's callers all have one
+    // (they reach the module through the scheduler); the PC's gated-interior call sites --
+    // e.g. WorldEntityModule::PrepareSurfaceList -- do not, and the flag is a file-scope
+    // static on both targets. Added 2026-08-16 with boot audit F-P7-20.
+    static bool IsSchemaLoadedStatic() { return sbSchemaLoaded; }
 
     // X360 0x828025E8 -- the live vault array (returned via the module's static pointer).
     const VaultArray* GetVaultArray() const;
