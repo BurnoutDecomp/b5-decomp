@@ -104,6 +104,18 @@ struct BrnRendererMemory
     // sampler 13 unbound for want of GetEnvMapBuffer.
     CgsRenderTarget* GetAntiAliasBuffer()  { return mapRenderTarget[E_RENDER_TARGET_ANTI_ALIAS]; }
     CgsRenderTarget* GetDownSampleBuffer() { return mapRenderTarget[E_RENDER_TARGET_DOWN_SAMPLE]; }
+    // DWARF source BrnRendererMemory.h:242 (dwarfdump file line 141, `CgsRenderTarget* GetEnvMapBuffer()`).
+    // INLINED on the X360 -- no standalone symbol -- but the slot it reads is pinned twice over, by the
+    // two functions whose assert strings SPELL ITS NAME:
+    //     BrnRendererModule::BeginRenderEnvironmentMapFace @0x823F63E0
+    //         "mAllocatedRenderTargets.GetEnvMapBuffer()"                 (assert @0x823F642C)
+    //         "mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()"
+    //     BrnRendererModule::EndRenderEnvironmentMapFace   @0x823FC5E8  (the same two strings)
+    // Both read it as `lwz r11, 0x244(r31)`. mAllocatedRenderTargets sits at renderer+0x238 (the same
+    // base GetParticleBuffer's note below derives from BeginQuarterResBuffer's `lwz r11, 0x25C(r28)`),
+    // so (0x244 - 0x238) / 4 == 3 == E_RENDER_TARGET_ENV_MAP -- the slot CreateEnvmapBuffer @0x823F6C88
+    // writes. The offset arithmetic is documentation only: the slot is reached BY NAME below.
+    CgsRenderTarget* GetEnvMapBuffer()     { return mapRenderTarget[E_RENDER_TARGET_ENV_MAP]; }
     // The four post-fx slots BrnPostFx::PrepareDownSampleBuffers and BrnPostFx::Render index; the
     // displacements they are read from are in the edit note for this hunk.
     CgsRenderTarget* GetBackBuffer()       { return mapRenderTarget[E_RENDER_TARGET_BACK_BUFFER]; }
@@ -147,6 +159,16 @@ struct BrnRendererMemory
     // format and BeginRenderAntiAliased/ResolveMSAA's tiled branch from being set from two different
     // places -- a split that would produce a wrong picture with nothing to log.
     void PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator* lpAllocator, bool lbEnableMSAA);
+
+    // The ENVIRONMENT-MAP target, created lazily on the first frame that has a D3D9 device -- the
+    // same bring-up shape, and for the same two reasons, as the pair above (Construct @0x823FCA38 is
+    // gated out, and it would run before the device exists anyway). It is NOT a re-implementation:
+    // the body calls the real CreateEnvmapBuffer @0x823F6C88, which is already bodied in this file.
+    //
+    // It does NOT clear the pool (PCBringUpCreateShadowMapBufferOnly is the one entry point that
+    // does) and it refuses to run twice, so calling it after the shadow + post-fx slices is safe in
+    // either order. DELETE with the other two, when Construct() can be called.
+    void PCBringUpCreateEnvMapBuffer(rw::IResourceAllocator* lpAllocator);
 
 private:
     // The Create* render-target helpers Construct delegates to. Bodies live in their own (already

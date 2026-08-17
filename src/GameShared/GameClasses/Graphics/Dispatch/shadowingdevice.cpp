@@ -575,6 +575,31 @@ namespace shadow
         return nullptr;
     }
 
+    // The depth/stencil twins of the pair above. INLINED on the X360 -- no standalone symbol --
+    // and recovered from BrnRendererModule::Render @0x8240BFA8's env-map face loop, where the
+    // compiler emitted them with their asserts intact (0x8240CC6C-0x8240CCAC and
+    // 0x8240CCF4-0x8240CD30; the two assert strings are "false == mbDepthStencilStateLocked" at
+    // shadowingdevice.h:1235 and "true == mbDepthStencilStateLocked" at :1240). See the declarations
+    // in the header for the export-set census that establishes the inlining.
+    //
+    // NOTHING ELSE IS DONE, and the omission is the asm's: unlike BeginForceStencilWrite, neither
+    // body nulls mpDepthStencilState. Locking is not a state change -- it is a promise that the
+    // state on the device is the one the caller just applied and must not be replaced -- so
+    // invalidating the shadow here would force a redundant rebind on the next unlocked setter.
+    void* Device::LockDepthStencilState()
+    {
+        CGS_ASSERT(false == mbDepthStencilStateLocked, "false == mbDepthStencilStateLocked");
+        mbDepthStencilStateLocked = true;
+        return nullptr;
+    }
+
+    void* Device::UnlockDepthStencilState()
+    {
+        CGS_ASSERT(true == mbDepthStencilStateLocked, "true == mbDepthStencilStateLocked");
+        mbDepthStencilStateLocked = false;
+        return nullptr;
+    }
+
     // @0x827E7D10: push the low-level blend/colour-write/alpha render-state block through the
     // shadow. When lbWasUnset is true the whole block is force-set; otherwise each render state is
     // bound only when its shadowed value differs.

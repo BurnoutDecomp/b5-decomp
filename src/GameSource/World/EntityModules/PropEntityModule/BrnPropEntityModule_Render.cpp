@@ -889,15 +889,38 @@ PropEntityModule::GenerateDispatchLists(
     // 11 at all, and if not, was the visible-id array empty or was every prop dropped for
     // want of a graphics record? Latched on the (visible, submitted) pair, not on a
     // "printed once" bool, so the line reprints whenever the picture changes.
+    // Reflections step 1: this now runs SEVEN times a frame (main view + six env-map faces),
+    // and a (visible, submitted) latch shared across all seven reprinted on nearly every call
+    // (63k lines in one 200 s boot). The main view keeps its change-latched witness; each
+    // env-map list gets ONE line, the first time it submits anything -- which is the fact a boot
+    // needs ("props reach the face lists"), without a per-frame log.
     if ( CgsDev::Log::gpDebugPrint != 0 )
     {
-        static s32 siLastVisible   = -1;
-        static s32 siLastSubmitted = -1;
-        const s32  liVisible       = static_cast< s32 >( luNumEntities );
-        if ( liVisible != siLastVisible || liSubmitted != siLastSubmitted )
+        static s32  siLastVisible   = -1;
+        static s32  siLastSubmitted = -1;
+        static bool sabEnvMapListWitnessed[ 32 ] = {};
+        const s32   liVisible       = static_cast< s32 >( luNumEntities );
+        bool lbPrint;
+        if ( lbRenderingEnvironmentMap )
         {
-            siLastVisible   = liVisible;
-            siLastSubmitted = liSubmitted;
+            const bool lbKnownList = ( liModelOnlyDisplayList >= 0 && liModelOnlyDisplayList < 32 );
+            lbPrint = lbKnownList && liSubmitted > 0 && !sabEnvMapListWitnessed[ liModelOnlyDisplayList ];
+            if ( lbPrint )
+            {
+                sabEnvMapListWitnessed[ liModelOnlyDisplayList ] = true;
+            }
+        }
+        else
+        {
+            lbPrint = ( liVisible != siLastVisible || liSubmitted != siLastSubmitted );
+        }
+        if ( lbPrint )
+        {
+            if ( !lbRenderingEnvironmentMap )
+            {
+                siLastVisible   = liVisible;
+                siLastSubmitted = liSubmitted;
+            }
             *CgsDev::Log::gpDebugPrint
                 << "[props-gdl] visible=" << liVisible
                 << " submitted=" << liSubmitted

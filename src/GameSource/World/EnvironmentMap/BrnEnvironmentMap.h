@@ -31,7 +31,11 @@ namespace BrnGraphics
     struct EnvironmentMap
     {
         void Construct();
-        // ADDITIVE (WorldModule::Prepare @0x827D53B0 stage 13). Declaration-only.
+        // WorldModule::Prepare @0x827D53B0 stage 13. BODIED in the .cpp (reflections
+        // step 1, 2026-08-17) from X360 @0x827B4188 -- it stamps the four env-map face
+        // constants (aspect / far / near / fov) onto all six face cameras. The inert
+        // WorldLinkStubs.cpp gate that used to serve this symbol is DELETED in the same
+        // change (two definitions of one symbol is LNK2005).
         bool Prepare();
         bool Release();
         void Update(rw::math::vpu::Vector3 lCameraPosition);

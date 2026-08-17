@@ -109,7 +109,21 @@ namespace postfx
         renderengine::Texture*       mpTexture;       // +0x08  AllocateAndInitializeTexture result
         renderengine::TextureState*  mpTextureState;  // +0x0C  TextureState::Initialize result
         renderengine::Texture*       mpHiZTexture;    // +0x10  depth path: hierarchical-Z companion
-        u8                           mu8Format;       // +0x14
+        // ⚠ MISNAMED: THIS BYTE IS THE SECTION COUNT, NOT A SURFACE FORMAT (noted 2026-08-17,
+        // reflections step 1). Its two writers in this class's own TU already store one --
+        // rwgpfxrendertarget.cpp:115 (CreateColor) and :231 (CreateDepth) both do
+        // `mu8Format = lrParams.mu8NumSections;` -- its other reader multiplies by it to get a
+        // texture height (`lrParams.mu8NumSections * lrParams.mu32Height`, :201), and the DecFIGS
+        // DWARF names the same slot outright: rwgpfxrendertarget.h:490 `uint8_t m_numSections;`,
+        // sitting between m_pStencilTexture (:488) and m_bIsShared (:493). The X360 image reads it
+        // with `lbz r11, 0x14(r3)` in Target::Resolve(u32) @0x823F9170 and branches on `<= 1`,
+        // i.e. "one section or an atlas of several", which is a section-count test.
+        // RENAME PENDING to mu8NumSections: the two stores live in rwgpfxrendertarget.cpp, which is
+        // deliberately NOT on tools/build/build_game_exe.bat and is owned by the postfx TU, so the
+        // rename is a one-file follow-up rather than a header-only edit (see the CROSS-GROUP note
+        // in the reflections step-1 cubeleaf report). Until then: silently testing a member called
+        // "Format" against 1 is how the next reader inverts it -- do not.
+        u8                           mu8Format;       // +0x14  == the SECTION COUNT (see above)
         u8                           mau8Pad15[3];    // +0x15
 
         // X360 0x824034D0 -- build a colour surface (PixelBuffer + sampleable texture + sampler state).
@@ -118,6 +132,34 @@ namespace postfx
         void CreateDepth(const Parameters* lpParameters);
         // X360 0x823F9118 -- resolve the surface's tiled EDRAM PixelBuffer out to its texture.
         void Resolve();
+
+        // rwgpfxrendertarget.h:388 (DWARF) `void Resolve(uint32_t);` -- the PER-FACE / per-section
+        // overload, sitting beside :383's `void Resolve();` on this same class. X360 0x823F9170.
+        //
+        // WHAT THE CONSOLE BODY DOES, from the asm (the Hex-Rays rendering under-counts the
+        // arguments -- it prints `Xbox2ResolveTo(*(result + 4), 1.0)`, two of ten):
+        //   0x823F917C  mr   r29, r4          ; r29 = the face/section index, live in BOTH arms
+        //   0x823F9180  lwz  r4, 8(r3)        ; mpTexture -- null means nothing to resolve
+        //   0x823F918C  lbz  r11, 0x14(r3)    ; the SECTION COUNT byte above
+        //   0x823F9198  ble  cr6, loc_823F9220; <= 1 sections -> arm A
+        //  arm A (the ENV MAP's -- CreateEnvmapBuffer leaves the count at the constructor's 1):
+        //   r3=mpPixelBuffer r4=mpTexture r5=Flags 0 r6=DestX 0 r7=DestY 0 r8=DestLevel 0
+        //   0x823F9230  mr r9, r29           ; ***DestSlice = the FACE***
+        //   f1 = 1.0 (ClearZ), r10 = 0 (pClearColor), stack slot 10 = 0 (ClearStencil)
+        //   -> renderengine::PixelBuffer::Xbox2ResolveTo -- i.e. "resolve into FACE `luFace`".
+        //  arm B (> 1 sections -- the SHADOW cascade atlas): D3DDevice_Resolve with
+        //   DestSliceOrFace = 0 (`li r9, 0` @0x823F91B0) and destPoint.y = height * index
+        //   (`extrwi/addi/mullw r11, r11, r29` @0x823F9204-0x823F920C), i.e. a vertical strip.
+        // So the index rides the SLICE for a cube and the Y OFFSET for an atlas; it is NOT
+        // "only used in the >1 arm", which is what an earlier read of the pseudocode concluded.
+        //
+        // PC translation, defined in pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp (the MOUNTED
+        // leaf -- the faithful console sibling rwgpfxrendertarget.cpp is not on the link):
+        // StretchRect the target's scratch colour surface into GetCubeMapSurface(luFace, 0) of its
+        // IDirect3DCubeTexture9. For every NON-cube target it is the same documented no-op
+        // Resolve() is, and for the same reason -- on PC the shadow cascade atlas is rendered
+        // straight into its own texture, so there is nothing to copy out.
+        void Resolve(u32 luFace);
     };
 
     // rwgpfxrendertarget.h:502 (DWARF). The fields are owned by this class's own TU; only the

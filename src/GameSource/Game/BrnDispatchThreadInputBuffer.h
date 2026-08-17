@@ -164,7 +164,26 @@ namespace BrnGame
         // Declaration-only; bodies with this buffer's own TU (the camera block
         // @X360 +39360, the per-face env-map-rendered bytes @+39348).
         void SetCameraViewProjection( const Matrix44& lrViewProjection );
+        // ---- the env-map face-rendered flags (reflections step 1, seam S2) ----------
+        // SetEnvMapFaceRendered is BODIED in the .cpp as of 2026-08-17 (its
+        // WorldLinkStubs.cpp gate is deleted in the same change); GetEnvMapFaceRendered
+        // is the ADDITIVE read side the renderer's six-face loop needs -- the console
+        // reads the byte inline instead (BrnRendererModule::Render @0x8240BFA8 pseudocode
+        // line 654, `v348[v95 + 39348]`), which is &mabEnvMapFaceRender[face].
+        //
+        // ⚠ NAMING (follow-up, deliberately NOT done here): the DecFIGS DWARF
+        // (dwarfdump/GameSource/Game/BrnDispatchThreadInputBuffer.h:141 / :145) names the
+        // pair `SetEnvMapFaceRender(uint32_t, bool)` / `GetEnvMapFaceRender(uint32_t)
+        // const` -- no trailing "ed", and an unsigned index. The committed spelling
+        // (already used by WorldModule::GenerateDispatchLists at BrnWorldModule.cpp:4018)
+        // and the reflections-wave cross-group seam contract both say
+        // Set/GetEnvMapFaceRendered(s32,...), so the two are kept in step here and the
+        // DWARF rename is listed as a one-sweep follow-up rather than split across groups
+        // mid-wave.
         void SetEnvMapFaceRendered( s32 liFace, bool lbRendered );
+        // Inline: the console has no out-of-line getter to be faithful to, and the read is
+        // one byte. Caller-checked index, exactly like the console's raw byte read.
+        bool GetEnvMapFaceRendered( s32 liFace ) const { return mabEnvMapFaceRender[ liFace ]; }
 
         // ---- full-frame-rate flag ----------------------------------------------------------
         // DWARF h:181/h:185; X360 inlined (DoDispatch stores +0x99B0 from the camera flags,

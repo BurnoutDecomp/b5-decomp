@@ -603,6 +603,39 @@ void BrnRendererMemory::PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator
 }
 
 
+// [PC bring-up] Create the ENVIRONMENT-MAP render target. NOT a console function -- the console
+// builds it inside Construct @0x823FCA38 (`bl BrnRendererMemory__CreateEnvmapBuffer`), which is
+// still gated out for the two reasons the BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE banner names.
+// This is the same one-slot bring-up entry point PCBringUpCreatePostFxSceneTargets is, and it does
+// nothing CreateEnvmapBuffer does not do.
+//
+// THREE ORDERING FACTS, all of them checked rather than assumed:
+//  (1) It must run AFTER PCBringUpCreateShadowMapBufferOnly, which NULLS EVERY POOL SLOT. The assert
+//      below is that precondition; the caller (BrnRendererModule::EnsureEnvMapTarget) enforces it by
+//      refusing until the shadow target exists.
+//  (2) It must NOT run twice. CreateEnvmapBuffer `new`s a CgsRenderTarget and publishes it into the
+//      slot BEFORE describing it, so a second call would leak the first target AND hand the renderer
+//      a different object than the one sampler 13 was bound to. The early return is that guard.
+//  (3) It does NOT disturb the shadow-map latch in PostFxRenderTargetPCLeaf.cpp. That leaf picks the
+//      COMPARE depth ladder only for a target whose colour mode is NONE (its own banner, ~:225: "the
+//      SHADOW MAP is the only pool target with colour mode NONE that still resolves its depth to a
+//      texture"). CreateEnvmapBuffer marks colour section 0 in use, so this target's colour mode is
+//      CREATE and it takes the RAW ladder, exactly like the down-sample and particle buffers.
+//
+// DELETE WITH THE BRING-UP, together with its two siblings.
+void BrnRendererMemory::PCBringUpCreateEnvMapBuffer(rw::IResourceAllocator* lpAllocator)
+{
+    CGS_ASSERT(mapRenderTarget[E_RENDER_TARGET_SHADOW_MAP_0] != nullptr,
+               "GetShadowMapBuffer(0) != NULL -- slot-nulling bring-up must run first");
+
+    if (mapRenderTarget[E_RENDER_TARGET_ENV_MAP] != nullptr)
+    {
+        return;
+    }
+
+    CreateEnvmapBuffer(lpAllocator);
+}
+
 // =================================================================================================
 // THE REST OF THE RENDER-TARGET POOL (post-fx spine wave, 2026-08-13).
 //

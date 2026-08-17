@@ -73,6 +73,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstddef>
+#include <cstdlib>   // std::getenv (the BRN_ENVMAP_DEBUG face-colour knob, OFF by default)
 
 // =============================================================================
 // renderengine::RenderTargetState -- the bound-surface object.
@@ -625,9 +626,21 @@ namespace
     // Wrap a created D3D texture in a renderengine::Texture so a sampler bind can consume it.
     // shadow::Device::SetResource -> D3DDevice_SetTexture reads mpD3DTexture straight off this
     // object (XenonD3D9Shims.cpp:1640), which is why the shadow map has to arrive as one.
+    //
+    // TWO TRAILING PARAMETERS ADDED (reflections step 1), both defaulted so every existing caller
+    // is unchanged: the wrapper's DIMENSION and its depth. They matter because the env-map cube is
+    // the first render target whose texture is not 2D, and the renderer's readiness test asks the
+    // wrapper what it is -- BrnRendererModule::EnsureEnvMapTarget refuses the pass unless
+    // renderengine::Texture::GetType(GetTexture(0)) == E_TYPE_CUBE. GetType answers from the raster
+    // header's +0x28 dimension byte (texture.cpp TextureDimension), so the wrapper must carry it;
+    // it also takes IDirect3DBaseTexture9* now, because an IDirect3DCubeTexture9 is not an
+    // IDirect3DTexture9 (both derive from the base, which is what mpD3DTexture already is).
     renderengine::Texture* WrapTexture(rw::IResourceAllocator* lpAllocator,
-                                       IDirect3DTexture9* lpD3DTexture,
-                                       u32 luFormat, u32 luWidth, u32 luHeight)
+                                       IDirect3DBaseTexture9* lpD3DTexture,
+                                       u32 luFormat, u32 luWidth, u32 luHeight,
+                                       renderengine::Texture::Type meDimension
+                                           = renderengine::Texture::E_TYPE_2D,
+                                       u32 luDepth = 1u)
     {
         if (lpD3DTexture == nullptr)
             return nullptr;
@@ -641,10 +654,112 @@ namespace
         lpTexture->miFormat       = static_cast<s32>(luFormat);
         lpTexture->muWidth        = static_cast<u16>(luWidth);
         lpTexture->muHeight       = static_cast<u16>(luHeight);
-        lpTexture->muDepth        = 1;
+        lpTexture->muDepth        = static_cast<u8>(luDepth);
         lpTexture->muNumMipLevels = 1;
+        // Same encoding rule as Texture::Create: 0 spells E_TYPE_2D, and only a dimension that was
+        // really built is recorded.
+        lpTexture->mu8Dimension =
+            (meDimension == renderengine::Texture::E_TYPE_CUBE
+             || meDimension == renderengine::Texture::E_TYPE_VOLUME)
+                ? static_cast<u8>(meDimension) : 0u;
         return lpTexture;
     }
+
+    // =========================================================================================
+    // THE CUBE RENDER-TARGET RECORD  [reflections step 1 -- seam S1]
+    //
+    // WHY A SIDE RECORD RATHER THAN A MEMBER. rw::graphics::postfx::Target::Resolve(u32) is a
+    // method on the Target, and on PC it needs two objects the console's Target does not have a
+    // slot for: the IDirect3DCubeTexture9 that is the resolve DESTINATION, and the face-independent
+    // SCRATCH render-target surface that is the resolve SOURCE. The console's own "the surface that
+    // was rendered into" slot is mpPixelBuffer, a renderengine::PixelBuffer::SurfaceHeader* -- an
+    // EDRAM GPU descriptor. Storing an IDirect3DSurface9* through it would be a type pun on a
+    // member whose real type is declared in the shared header, i.e. exactly the split-brain this
+    // project keeps paying for. So the association is kept beside the object, in the same idiom
+    // this file already uses twice (gaShadowRtLatch, gaDepthTargetRecords), and NOTHING in the
+    // render path reads it except Resolve(face).
+    //
+    // FOUR SLOTS: the pool has exactly one cube target (E_RENDER_TARGET_ENV_MAP), created once.
+    // =========================================================================================
+    struct CubeTargetRecord
+    {
+        const void*            mpTarget;     // &RenderTarget::maColourTargets[0]
+        IDirect3DCubeTexture9* mpCube;       // the resolve destination (RENDERTARGET/DEFAULT)
+        IDirect3DSurface9*     mpScratch;    // the face-independent surface section 0 binds
+        u32                    muEdge;
+    };
+    CubeTargetRecord gaCubeTargetRecords[4] = {};
+
+    void RegisterCubeTarget(const void* lpTarget, IDirect3DCubeTexture9* lpCube,
+                            IDirect3DSurface9* lpScratch, u32 luEdge)
+    {
+        for (u32 lu = 0; lu < 4u; ++lu)
+        {
+            if (gaCubeTargetRecords[lu].mpTarget == lpTarget
+                || gaCubeTargetRecords[lu].mpTarget == nullptr)
+            {
+                gaCubeTargetRecords[lu].mpTarget  = lpTarget;
+                gaCubeTargetRecords[lu].mpCube    = lpCube;
+                gaCubeTargetRecords[lu].mpScratch = lpScratch;
+                gaCubeTargetRecords[lu].muEdge    = luEdge;
+                return;
+            }
+        }
+    }
+
+    const CubeTargetRecord* FindCubeTarget(const void* lpTarget)
+    {
+        for (u32 lu = 0; lu < 4u; ++lu)
+        {
+            if (gaCubeTargetRecords[lu].mpTarget == lpTarget
+                && gaCubeTargetRecords[lu].mpCube != nullptr)
+                return &gaCubeTargetRecords[lu];
+        }
+        return nullptr;
+    }
+
+    // =========================================================================================
+    // BRN_ENVMAP_DEBUG -- the FACE-ORIENTATION probe. OFF by default, environment variable only,
+    // DELETE-WHEN the face orientation has been read off a boot screenshot and written down.
+    //
+    // WHAT IS AND IS NOT SETTLED (seam S4). The face ORDER is settled: the console's face table
+    // (BrnEnvironmentMap.cpp:16-34, KAV_ENV_MAP_LOOK_DIRECTIONS = +X,-X,+Y,-Y,+Z,-Z with ups
+    // +Y,+Y,-Z,+Z,+Y,+Y) is index-for-index D3D9's D3DCUBEMAP_FACE_POSITIVE_X..NEGATIVE_Z
+    // (Windows Kit 10.0.26100.0 shared/d3d9types.h:1680-1690), so face n needs no remap and this
+    // Resolve does none. What is NOT settled from the tree alone is HANDEDNESS: the producer builds
+    // the face camera with Camera::SetPerspectiveProjectionMatrixRightHanded and negated near/far
+    // (envproducer's finding F4), while D3D9's cube lookup is the left-handed convention -- which
+    // shows up as a MIRRORED face, not a wrong one.
+    //
+    // A SYNTHETIC FILL CANNOT SHOW A MIRROR EITHER (verify F2), so the probe is ADDITIVE: the real
+    // resolved face is kept and only its TOP-LEFT QUADRANT (the texel-(0,0) corner) is painted the
+    // face's identity colour. On a screenshot of a car the reflected world itself shows a mirror or
+    // a hemisphere swap against the actual scene, and the coloured corner says WHICH face the paint
+    // sampled and where that face's origin sits.
+    // =========================================================================================
+    bool EnvMapDebugFaceColours()
+    {
+        static int siState = -1;
+        if (siState < 0)
+        {
+            const char* const lpcEnv = std::getenv("BRN_ENVMAP_DEBUG");
+            siState = (lpcEnv != nullptr && lpcEnv[0] != '\0' && lpcEnv[0] != '0') ? 1 : 0;
+        }
+        return siState != 0;
+    }
+
+    // 0:+X red, 1:-X cyan, 2:+Y green, 3:-Y magenta, 4:+Z blue, 5:-Z yellow -- the SAME legend
+    // BrnRendererModule.cpp's EnvMapDebugFaceColours prints at start-up (verify F1, cubeleaf run 2:
+    // the two tables disagreed; complementary hues survive the paint's fresnel attenuation where a
+    // 255-vs-128 channel pair does not).
+    const D3DCOLOR KA_ENVMAP_DEBUG_FACE_COLOURS[6] =
+    {
+        D3DCOLOR_ARGB(255, 255,   0,   0), D3DCOLOR_ARGB(255,   0, 255, 255),
+        D3DCOLOR_ARGB(255,   0, 255,   0), D3DCOLOR_ARGB(255, 255,   0, 255),
+        D3DCOLOR_ARGB(255,   0,   0, 255), D3DCOLOR_ARGB(255, 255, 255,   0)
+    };
+    const char* const KAPC_ENVMAP_DEBUG_FACE_NAMES[6] =
+    { "+X red", "-X cyan", "+Y green", "-Y magenta", "+Z blue", "-Z yellow" };
 
     // ---- the [shadow-rt] diagnostic ---------------------------------------------------------
     // VALUE-latched, not one-shot: a `static bool` fires on the loading screen (before any
@@ -730,6 +845,11 @@ namespace
         case 0u:                             std::snprintf(lpcOut, luSize, "D24S8-surface"); return;
         case static_cast<u32>(D3DFMT_D24X8): std::snprintf(lpcOut, luSize, "D24X8");         return;
         case static_cast<u32>(D3DFMT_D16):   std::snprintf(lpcOut, luSize, "D16");           return;
+        // ADDED (reflections step 1): the MSAA arm has been storing lMultisample.meDepthFormat
+        // here since rung 8, and D3DFMT_D24S8 (75) is not a FOURCC -- so it fell through to the
+        // four-character spelling below and printed control bytes. Same for the cube target's
+        // plain depth-stencil surface, which is created from the same ladder.
+        case static_cast<u32>(D3DFMT_D24S8): std::snprintf(lpcOut, luSize, "D24S8");         return;
         default: break;
         }
         // Anything else on the ladder is a FOURCC (INTZ / DF24 / DF16).
@@ -829,8 +949,40 @@ namespace
                       static_cast<unsigned>(luWidth), static_cast<unsigned>(luHeight),
                       static_cast<unsigned>(luSections), static_cast<unsigned>(luColourMode),
                       static_cast<unsigned>(luDepthStencilMode),
-                      (luSamples > 1u) ? "MSAA" : (lbColourTextureValid ? "OK" : "NULL"),
+                      // ⚠ ORDER CORRECTED (reflections step 1): a VALID texture is reported as OK
+                      // even on a multisampled target. `MSAA` means "multisampled and therefore
+                      // legitimately textureless" (the anti-alias scene target), and the CUBE
+                      // target below is multisampled AND owns a texture -- reporting that as
+                      // `MSAA` would hide the one fact rule 9 wants this line to carry.
+                      lbColourTextureValid ? "OK" : ((luSamples > 1u) ? "MSAA" : "NULL"),
                       static_cast<unsigned>(luSamples));
+        CgsDev::Log::WriteToLog(lacMessage);
+    }
+
+    // The CUBE target's own creation line (reflections step 1). Separate from ReportRenderTarget
+    // because the facts that make a cube target non-degenerate are different ones: the D3D resource
+    // TYPE actually created, the face count, the scratch surface that section 0 binds, and the
+    // depth format -- printed once, at creation, by the side that made the objects. Rule 9 of this
+    // wave: "the frame looks identical" is not a gate for an off-screen target, so print the extent
+    // and the object type and refuse a degenerate one.
+    void ReportCubeRenderTarget(u32 luEdge, u32 luSamples, const void* lpScratch,
+                                u32 luDepthFormat, IDirect3DCubeTexture9* lpCube)
+    {
+        char lacDepth[16];
+        FormatName(luDepthFormat, lacDepth, sizeof(lacDepth));
+
+        // The D3D resource type, read back from the object rather than assumed (D3DRTYPE_CUBETEXTURE
+        // == 4). A creation that silently produced anything else is exactly what this line exists
+        // to expose.
+        const unsigned luD3DType =
+            (lpCube != nullptr) ? static_cast<unsigned>(lpCube->GetType()) : 0u;
+
+        char lacMessage[224];
+        std::snprintf(lacMessage, sizeof(lacMessage),
+                      "[envmap-rt] cube %ux%u faces=6 msaa=%u scratch=%p depth=%s"
+                      " d3dType=%u (4==D3DRTYPE_CUBETEXTURE)\n",
+                      static_cast<unsigned>(luEdge), static_cast<unsigned>(luEdge),
+                      static_cast<unsigned>(luSamples), lpScratch, lacDepth, luD3DType);
         CgsDev::Log::WriteToLog(lacMessage);
     }
 
@@ -1092,6 +1244,40 @@ namespace postfx
             && (lrParameters.mColourMode == static_cast<u32>(eRenderTarget_NONE));
         const bool lbWantRawDepthValue = lbWantsSampleableDepth && !lbIsShadowMapTarget;
 
+        // --- IS THIS A CUBE TARGET? (reflections step 1 -- seam S1) ---------------------------
+        // The discriminator is the one the console itself writes and nothing else in the pool sets:
+        // colour section 0's TEXTURE TYPE. BrnRendererMemory::CreateEnvmapBuffer @0x823F6C88 does
+        // `SetTextureType(0, renderengine::Texture::E_TYPE_CUBE)` (X360 `li r7, 3` -> the colour
+        // record's mu32TextureType @0x823F6D40) and CgsRenderTarget::Construct forwards it verbatim
+        // into the Target::Parameters block (CgsRenderTarget.cpp:173
+        // `lrColour.SetTextureType(lrSurface.mu32TextureType)`). Every other pool target leaves the
+        // constructor's E_TYPE_2D (CgsRenderTarget.cpp:110 `mu32TextureType = 1;`), so this selects
+        // the env map and only the env map -- it is not a size or a format heuristic.
+        const bool lbIsCubeTarget =
+            (lrParameters.mColourMode == static_cast<u32>(eRenderTarget_CREATE))
+            && (lrParameters.maColourTargetParams[0].mTextureType
+                == static_cast<u32>(renderengine::Texture::E_TYPE_CUBE));
+
+        // A cube face is square. REFUSE rather than build a degenerate target that errors nowhere
+        // (this wave's rule 9); the refusal leaves GetTexture(0) null, which is what
+        // BrnRendererModule::EnsureEnvMapTarget tests before it turns the pass on.
+        const bool lbCubeExtentUsable =
+            lbIsCubeTarget && (lrParameters.mu32Width != 0u)
+            && (lrParameters.mu32Width == lrParameters.mu32Height)
+            && (luNumSections == 1u);
+        if (lbIsCubeTarget && !lbCubeExtentUsable)
+        {
+            char lacCubeRefused[192];
+            std::snprintf(lacCubeRefused, sizeof(lacCubeRefused),
+                          "[envmap-rt] REFUSED: a CUBE target must be square with one section,"
+                          " asked for %ux%u sections=%u\n",
+                          static_cast<unsigned>(lrParameters.mu32Width),
+                          static_cast<unsigned>(lrParameters.mu32Height),
+                          static_cast<unsigned>(luNumSections));
+            CgsDev::Log::WriteToLog(lacCubeRefused);
+        }
+        IDirect3DCubeTexture9* lpCubeTexture = nullptr;
+
         // --- DOES THIS TARGET MULTISAMPLE? (rung 8 -- see the MSAA banner above) --------------
         // The word CgsRenderTarget::Construct forwarded into the Target::Parameters blocks. Colour
         // and depth carry the SAME value (both are written from the one
@@ -1141,7 +1327,96 @@ namespace postfx
         // CreateShadowmapBuffer), so this branch is not on the shadow path.
         if (lrParameters.mColourMode == static_cast<u32>(eRenderTarget_CREATE))
         {
-            if (lMultisample.muSamples > 1u)
+            if (lbCubeExtentUsable)
+            {
+                // ============================================================================
+                // THE CUBE COLOUR TARGET -- BOTH objects, and that is the point (seam S1).
+                //
+                // ⚠ THE RUNG-8 MSAA ARM BELOW IS **NOT** THE PRECEDENT TO COPY HERE, even though
+                // this target is the only multisampled one in the pool besides the anti-alias
+                // buffer. That arm deliberately leaves maColourTargets[0].mpTexture NULL, because
+                // the anti-alias target's pixels reach the frame through a resolve into ANOTHER
+                // target's texture. The env map's whole purpose is to BE sampled -- 22 shipped
+                // vehicle pixel shaders declare ReflectionTextureSampler as a samplerCUBE at s13 --
+                // so a null texture here means sampler 13 binds nothing and every car reflects
+                // flat black, with no error and no log line anywhere.
+                //
+                // So the cube target owns TWO D3D objects:
+                //   (1) an IDirect3DCubeTexture9 (RENDERTARGET, DEFAULT pool, single-sampled --
+                //       D3D9 has no multisampled texture of any kind). This is mpTexture, the
+                //       resolve DESTINATION, and what GetTexture(0) hands the sampler-13 bind.
+                //   (2) a face-independent SCRATCH colour render-target surface at the target's
+                //       own multisample type. This is what section 0's RenderTargetState binds,
+                //       and it is why CgsRenderTarget::SetRenderTargetStateInvertDepth binding
+                //       "section 0 regardless of the face argument" (CgsRenderTarget.cpp:336) is
+                //       faithful rather than a shortcut: on Xenos every face renders into the SAME
+                //       EDRAM tile and the face only matters at RESOLVE time. Same here.
+                // Target::Resolve(luFace) then StretchRects (2) into face luFace of (1) -- which on
+                // D3D9 IS the MSAA resolve, the same call rung 8 uses for the scene target.
+                //
+                // The sample count comes from the SHARED ladder (ChooseMultisampleType /
+                // MultisampleSampleCountForConsoleFormat / MultisampleOverrideSampleCount), not a
+                // second one: CreateEnvmapBuffer asks for console multisample format 2, which that
+                // ladder already maps to 4 samples, and gAntiAliasing's 0/1/2/4/8 semantics apply
+                // to this target exactly as they do to the scene target.
+                //
+                // FLAG PC bring-up (device loss): both objects live in D3DPOOL_DEFAULT and would
+                // be lost by an IDirect3DDevice9::Reset. This build never Resets (it recreates the
+                // device or exits -- same standing note as the post-fx pool targets), so no
+                // OnLostDevice/OnResetDevice hook is written here rather than a dead one being
+                // faked. DELETE-WHEN a real Reset path lands.
+                // ============================================================================
+                const u32 luEdge = lrParameters.mu32Width;
+
+                IDirect3DDevice9* const lpDevice = Dev();
+                if (lpDevice != nullptr
+                    && SUCCEEDED(lpDevice->CreateCubeTexture(luEdge, 1u, D3DUSAGE_RENDERTARGET,
+                                                             D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT,
+                                                             &lpCubeTexture, nullptr))
+                    && lpCubeTexture != nullptr)
+                {
+                    lpRenderTarget->maColourTargets[0].mpTexture =
+                        WrapTexture(lpAllocator, lpCubeTexture,
+                                    static_cast<u32>(D3DFMT_A8R8G8B8), luEdge, luEdge,
+                                    renderengine::Texture::E_TYPE_CUBE, 6u);
+                }
+                else
+                {
+                    CgsDev::Log::WriteToLog(
+                        "[envmap-rt] CreateCubeTexture(RENDERTARGET/DEFAULT A8R8G8B8) FAILED --"
+                        " sampler 13 will stay unbound\n");
+                }
+
+                // The scratch surface. CreateMultisampledColourSurface is a plain CreateRenderTarget
+                // and takes D3DMULTISAMPLE_NONE happily, so the single-sampled case (gAntiAliasing
+                // == 1, or a device that refuses 4x) needs no second call site.
+                lpColourSurface = CreateMultisampledColourSurface(luEdge, luEdge,
+                                                                  D3DFMT_A8R8G8B8, lMultisample);
+                if (lpColourSurface == nullptr)
+                {
+                    // Verify F3 (cubeleaf run 2): a cube texture WITHOUT its scratch would pass
+                    // the renderer's usability gate (E_TYPE_CUBE wrapper, non-null object), bind
+                    // at s13, and then Resolve(face) would early-out silently every frame while
+                    // the pass rendered into the null-colour stand-in -- an unwritten DEFAULT-pool
+                    // cube in every car's paint, no log. Refuse the whole target instead.
+                    CgsDev::Log::WriteToLog(
+                        "[envmap-rt] the cube target's SCRATCH colour surface could not be created"
+                        " -- REFUSING the cube target (sampler 13 stays unbound)\n");
+                    if (lpCubeTexture != nullptr)
+                    {
+                        lpCubeTexture->Release();
+                        lpCubeTexture = nullptr;
+                    }
+                    lpRenderTarget->maColourTargets[0].mpTexture = nullptr;
+                }
+
+                if (lpCubeTexture != nullptr && lpColourSurface != nullptr)
+                {
+                    RegisterCubeTarget(&lpRenderTarget->maColourTargets[0], lpCubeTexture,
+                                       lpColourSurface, luEdge);
+                }
+            }
+            else if (lMultisample.muSamples > 1u)
             {
                 // MULTISAMPLED: a render-target SURFACE and NO texture -- D3D9 has no multisampled
                 // texture, and this target does not need one (the resolve's destination is another
@@ -1212,7 +1487,54 @@ namespace postfx
         // --- the depth / stencil surface ----------------------------------------------------
         if (lrParameters.mDepthStencilMode == static_cast<u32>(eRenderTarget_CREATE))
         {
-            if (lMultisample.muSamples > 1u)
+            if (lbCubeExtentUsable)
+            {
+                // ============================================================================
+                // THE CUBE TARGET'S DEPTH: A PLAIN DEPTH-STENCIL SURFACE, DELIBERATELY NOT A
+                // SAMPLEABLE (INTZ) ONE -- and that is a measured decision, not a default.
+                //
+                // CreateEnvmapBuffer calls SetUseDepthStencilAsTexture(true)
+                // (BrnRendererMemory.cpp:864) and the target HAS colour, so the classifier above
+                // computes lbWantRawDepthValue = true and, left alone, the RAW ladder would hand
+                // this target an INTZ depth texture. NOTHING WOULD READ IT. That exact shape --
+                // an INTZ nobody samples -- cost 21 fps of driver stall in post-fx step 11.
+                //
+                // PROVEN, not assumed, both halves:
+                //  (a) NO s13 TECHNIQUE SAMPLES A DEPTH TEXTURE OF THIS TARGET. Every one of the
+                //      22 shipped pixel shaders whose CTAB declares ReflectionTextureSampler as a
+                //      samplerCUBE at s13 was dumped whole
+                //      (scratch/reflections_step1/cubeleaf/work/ctab_s13_sampler_dump.py over
+                //      build/game/SHADERS.BNDL): their sampler sets are Diffuse / Normal /
+                //      Emissive / AoMap / Crumple / Scratch / BlurDiffuse / BlurNormal /
+                //      GlassFracture at s0..s5, s14, the cube at s13, and shadowMapSamplerHighDetail
+                //      at s15 -- which is the SHADOW MAP's depth, a different target entirely. No
+                //      env-map depth sampler exists in any of the 22.
+                //  (b) NOTHING IN THE TREE READS ANY TARGET'S DEPTH TEXTURE BY NAME:
+                //        $ grep -rn "GetDepthStencilTexture\|GetDepthTextureState" b5-decomp/src --include=*.cpp
+                //        GameShared/GameClasses/Graphics/CgsRenderTarget.cpp:285:    return mpRenderTarget->GetDepthStencilTexture();
+                //        pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp:1542 (the definition)
+                //      -- i.e. one forwarder with no callers of its own, and the definition. The
+                //      env-map accessor envface added is GetEnvMapBuffer(); nothing SAMPLES the
+                //      depth (envface's EnsureEnvMapTarget reads GetDepthStencilTexture() only to
+                //      PRINT the pointer on its one-shot log line).
+                //
+                // So: a plain CreateDepthStencilSurface at the SCRATCH's exact sample type and
+                // quality (D3D9 rejects the bind otherwise), no depth texture, and the depth line
+                // below says depthTexture=NONE honestly rather than pointing at an unread INTZ.
+                // DELETE-WHEN a technique that samples the env map's depth is found.
+                // ============================================================================
+                lpDepthSurface = CreateMultisampledDepthSurface(lrParameters.mu32Width,
+                                                                lrParameters.mu32Width,
+                                                                lMultisample);
+                luDepthFormat  = static_cast<u32>(lMultisample.meDepthFormat);
+                if (lpDepthSurface == nullptr)
+                {
+                    CgsDev::Log::WriteToLog(
+                        "[envmap-rt] the cube target's depth-stencil surface could not be created"
+                        " at the scratch's sample count\n");
+                }
+            }
+            else if (lMultisample.muSamples > 1u)
             {
                 // MULTISAMPLED depth: a plain depth-stencil SURFACE at the colour target's exact
                 // sample type and quality (D3D9 rejects the bind otherwise). No depth TEXTURE --
@@ -1426,6 +1748,13 @@ namespace postfx
                                lMultisample.muSamples);
         }
 
+        // The cube target's own line, from the side that made the objects (see ReportCubeRenderTarget).
+        if (lbIsCubeTarget)
+        {
+            ReportCubeRenderTarget(lrParameters.mu32Width, lMultisample.muSamples,
+                                   lpColourSurface, luDepthFormat, lpCubeTexture);
+        }
+
         return lpRenderTarget;
     }
 
@@ -1527,6 +1856,125 @@ namespace postfx
 
     void Target::Resolve()
     {
+    }
+
+    // =========================================================================================
+    // Target::Resolve(u32 luFace)  [X360 0x823F9170 -- seam S1, the ONE thing envface's env-map
+    // pass calls into this leaf: `GetEnvMapBuffer()->GetRenderTarget()->maColourTargets[0]
+    // .Resolve(luFace)`]
+    //
+    // THE CONSOLE BODY, from the ASM (the decode in rwgpfxrendertarget.h has the full listing;
+    // the Hex-Rays rendering prints two of the ten arguments and led an earlier read to conclude
+    // the face was only used in the atlas arm). It has two arms, chosen on the SECTION COUNT byte
+    // at Target+0x14, and the face index is live in BOTH:
+    //   <= 1 section (THE ENV MAP -- CreateEnvmapBuffer never calls SetNumSections, so it keeps
+    //        the CgsRenderTarget constructor's 1): Xbox2ResolveTo(mpPixelBuffer, mpTexture,
+    //        Flags=0, DestX=0, DestY=0, DestLevel=0, DestSlice=**FACE**, clearColour=null,
+    //        clearZ=1.0, clearStencil=0) -- "resolve the tile into FACE luFace, at the origin".
+    //   >  1 section (the SHADOW cascade atlas, reached from EndRenderShadowMap @0x823FD708 with
+    //        the target's mDepthTarget and the cascade index): D3DDevice_Resolve with
+    //        DestSliceOrFace = 0 and destPoint.y = height * index -- a vertical strip.
+    //
+    // THE PC TRANSLATION IS THE FIRST ARM AND ONLY THE FIRST ARM, and the discriminator here is
+    // not the section byte but whether this Target is a REGISTERED CUBE (which is the same
+    // question on this backend: the cube target is the only one whose Initialize built a scratch
+    // surface + a cube destination). For everything else this is the same documented NO-OP that
+    // Resolve() is, and for the same reason: the shadow pass renders straight into its INTZ
+    // cascade atlas, so the pixels the pass wrote already ARE the pixels the sampler reads, and
+    // D3D9 cannot StretchRect a depth surface anyway. Reading the "format" byte to decide would
+    // ALSO have been wrong-looking-right -- see the note on that member in rwgpfxrendertarget.h.
+    //
+    // StretchRect from a multisampled render-target surface to a non-multisampled texture surface
+    // IS the D3D9 MSAA resolve (the rung-8 scene-target precedent), so one call covers both the
+    // 4-sample and the single-sample case. D3DTEXF_NONE because source and destination are the
+    // same size -- a filter on a 1:1 blit is at best ignored and at worst refused.
+    // =========================================================================================
+    void Target::Resolve(u32 luFace)
+    {
+        const CubeTargetRecord* const lpRecord = FindCubeTarget(this);
+        if (lpRecord == nullptr)
+            return;                       // not a cube target: the documented no-op (see above)
+
+        if (luFace >= 6u)
+        {
+            static bool sbReportedBadFace = false;
+            if (!sbReportedBadFace)
+            {
+                sbReportedBadFace = true;
+                char lacFace[128];
+                std::snprintf(lacFace, sizeof(lacFace),
+                              "[envmap-rt] Resolve(face=%u) is out of range -- ignored\n",
+                              static_cast<unsigned>(luFace));
+                CgsDev::Log::WriteToLog(lacFace);
+            }
+            return;
+        }
+
+        IDirect3DDevice9* const lpDevice = Dev();
+        if (lpDevice == nullptr)
+            return;
+
+        IDirect3DSurface9* lpFaceSurface = nullptr;
+        if (FAILED(lpRecord->mpCube->GetCubeMapSurface(static_cast<D3DCUBEMAP_FACES>(luFace), 0u,
+                                                       &lpFaceSurface))
+            || lpFaceSurface == nullptr)
+        {
+            return;
+        }
+
+        // The resolve proper: the face-independent scratch (the EDRAM tile's stand-in) into
+        // face luFace of the cube -- the D3D9 spelling of Xbox2ResolveTo(..., destSlice = face).
+        HRESULT lhr = lpDevice->StretchRect(lpRecord->mpScratch, nullptr, lpFaceSurface, nullptr,
+                                            D3DTEXF_NONE);
+        if (EnvMapDebugFaceColours() && SUCCEEDED(lhr))
+        {
+            // THE ORIENTATION PROBE, ADDITIVE (verify F2, cubeleaf run 2: a synthetic whole-face
+            // fill is identical whatever the producer rendered, so it could show neither the
+            // right-handed-projection MIRROR nor a -look hemisphere SWAP). The REAL resolved face
+            // is kept and only its TOP-LEFT QUADRANT (texel (0,0) corner) is painted the face's
+            // identity colour: one screenshot of a car then shows the reflected world (mirror /
+            // swap visible against the actual scene) AND a corner naming the face + its origin.
+            RECT lQuadrant;
+            lQuadrant.left   = 0;
+            lQuadrant.top    = 0;
+            lQuadrant.right  = static_cast<LONG>(lpRecord->muEdge / 2u);
+            lQuadrant.bottom = static_cast<LONG>(lpRecord->muEdge / 2u);
+            if (lQuadrant.right > 0 && lQuadrant.bottom > 0)
+                lpDevice->ColorFill(lpFaceSurface, &lQuadrant, KA_ENVMAP_DEBUG_FACE_COLOURS[luFace]);
+
+            static bool sabReportedDebugFace[6] = {};
+            if (!sabReportedDebugFace[luFace])
+            {
+                sabReportedDebugFace[luFace] = true;
+                char lacDebug[176];
+                std::snprintf(lacDebug, sizeof(lacDebug),
+                              "[envmap-rt] BRN_ENVMAP_DEBUG: face %u resolved, top-left quadrant"
+                              " painted %s hr=0x%08X\n",
+                              static_cast<unsigned>(luFace),
+                              KAPC_ENVMAP_DEBUG_FACE_NAMES[luFace],
+                              static_cast<unsigned>(lhr));
+                CgsDev::Log::WriteToLog(lacDebug);
+            }
+        }
+
+        if (FAILED(lhr))
+        {
+            static bool sbReportedResolveFailure = false;
+            if (!sbReportedResolveFailure)
+            {
+                sbReportedResolveFailure = true;
+                char lacFail[176];
+                std::snprintf(lacFail, sizeof(lacFail),
+                              "[envmap-rt] face resolve FAILED hr=0x%08X (face=%u scratch=%p"
+                              " edge=%u) -- the cube keeps its previous contents\n",
+                              static_cast<unsigned>(lhr), static_cast<unsigned>(luFace),
+                              static_cast<void*>(lpRecord->mpScratch),
+                              static_cast<unsigned>(lpRecord->muEdge));
+                CgsDev::Log::WriteToLog(lacFail);
+            }
+        }
+
+        lpFaceSurface->Release();          // GetCubeMapSurface AddRefs
     }
 
     // =========================================================================

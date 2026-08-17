@@ -33,6 +33,27 @@ namespace renderengine
                       "geometry block follows the stride word");
     }
 
+    // Pin the SERIALISED raster header (uncalled; the sibling of _AssertLockedLayout above, and the
+    // same idiom as CgsRenderTarget::_AssertLayout). The reflections step-1 wave WIDENED the byte at
+    // +0x28 from a boolean into a dimension byte; these say, at compile time, that it did not move
+    // anything the converter writes. tools/assets/bundles/x360_tex.py:368-380 `engine_header` fills a
+    // 0x30 block and touches EXACTLY these offsets:
+    //     0x1C  s32 format      0x20 u16 width   0x22 u16 height
+    //     0x24  u8  depth       0x25 u8  mips
+    // and the shipped object sizes are 0x30 (26,563) / 0x40 (51) -- so sizeof(Texture) must stay at
+    // 0x30 too (GetResourceDescriptor slot0 publishes it).
+    static void _AssertRasterHeaderLayout()
+    {
+        static_assert(offsetof(Texture, miFormat)       == 0x1C, "raster header: format at +0x1C");
+        static_assert(offsetof(Texture, muWidth)        == 0x20, "raster header: width at +0x20");
+        static_assert(offsetof(Texture, muHeight)       == 0x22, "raster header: height at +0x22");
+        static_assert(offsetof(Texture, muDepth)        == 0x24, "raster header: depth/faces at +0x24");
+        static_assert(offsetof(Texture, muNumMipLevels) == 0x25, "raster header: mip count at +0x25");
+        static_assert(offsetof(Texture, muFlags)        == 0x26, "raster header: flags at +0x26");
+        static_assert(offsetof(Texture, mu8Dimension)   == 0x28, "raster header: dimension at +0x28");
+        static_assert(sizeof(Texture) == 0x30, "the raster object IS the converter's 0x30 image");
+    }
+
     // Compute the storage a texture of these parameters needs (W*H*4 for the 32-bit
     // format), recorded the same way as the other renderengine resource descriptors.
     Texture2D::ResourceDescriptor* Texture2D::GetResourceDescriptor(ResourceDescriptor* lpDescriptorOut,
@@ -98,18 +119,82 @@ namespace renderengine
     // ============================================================================================
     namespace
     {
+        // ==========================================================================================
+        // THE ONE DIMENSION DECISION. Everything that branches on the shape of a texture -- Create,
+        // Lock, Unlock, GetType, GetParameters and therefore GetPixelDataSize/GetResourceDescriptor
+        // -- asks THIS, so there is exactly one place the answer can be wrong.
+        //
+        // RULE 1 (unchanged from the step-10 volume wave): the CREATE-TIME dimension wins. Create
+        // records it in the raster header's +0x28 byte, where 0 spells E_TYPE_2D.
+        //
+        // RULE 2 (added by reflections step 1, and fenced -- see the banner in texture.h): a raster
+        // that has never been through Create carries 0, and every raster in the shipped bundles is
+        // in exactly that state when GetParameters is asked to size it and when FixUp is asked to
+        // realise it. The 234 shipped CUBE rasters therefore have to be recognised from the
+        // serialised header, and the converter's own cube shape is the test: SIX faces, square, and
+        // non-empty. This is NOT the retired `muDepth > 1` volume discriminant -- it cannot produce
+        // a volume, it is three conditions rather than one, and it is MEASURED to select exactly
+        // the 234 cube rasters and nothing else (census re-run 2026-08-17:
+        // scratch/reflections_step1/cubeleaf/work/cube_raster_census.py -- depth histogram over all
+        // 26,614 rasters is {0: 51, 1: 26329, 6: 234}, and 0 of the 234 fail depth==6 && w==h).
+        // ==========================================================================================
+        Texture::Type TextureDimension(const Texture* lpTexture)
+        {
+            if (lpTexture == nullptr)
+            {
+                return Texture::E_TYPE_2D;
+            }
+            if (lpTexture->mu8Dimension != 0u)
+            {
+                return static_cast<Texture::Type>(lpTexture->mu8Dimension);   // rule 1
+            }
+            if (lpTexture->muDepth == 6u && lpTexture->muWidth != 0u
+                && lpTexture->muWidth == lpTexture->muHeight)
+            {
+                return Texture::E_TYPE_CUBE;                                  // rule 2
+            }
+            return Texture::E_TYPE_2D;
+        }
+
         bool TextureIsVolume(const Texture* lpTexture)
         {
-            return lpTexture != nullptr && lpTexture->mu8IsVolumeTexture != 0u;
+            return TextureDimension(lpTexture) == Texture::E_TYPE_VOLUME;
+        }
+
+        bool TextureIsCube(const Texture* lpTexture)
+        {
+            return TextureDimension(lpTexture) == Texture::E_TYPE_CUBE;
         }
     }
 
-    void Texture::Lock(Texture* lpTexture, s32 liLevel, s32 /*liFace*/, s32 liFlags, LockInfo* lpLockInfoOut)
+    void Texture::Lock(Texture* lpTexture, s32 liLevel, s32 liFace, s32 liFlags, LockInfo* lpLockInfoOut)
     {
         lpLockInfoOut->mpBits = nullptr;
         lpLockInfoOut->muPitch = 0u;
         if (lpTexture == nullptr || lpTexture->mpD3DTexture == nullptr)
         {
+            return;
+        }
+
+        // The CUBE arm, and the face argument this leaf had been discarding. X360 Lock @0x82B62B20
+        // dispatches on GetType and hands the face through:
+        //     if ( Type == 3 ) D3DCubeTexture_LockRect(a1, a4 /*FACE*/, a3 /*LEVEL*/, &v20, 0, v10);
+        // (a4 is r6 -- the same slot the ARRAY arm passes as its array index and the 2D/volume arms
+        // ignore). D3D9's IDirect3DCubeTexture9::LockRect takes the same two in the same order.
+        // muSliceStride stays 0 for a cube: the console's LABEL_14 (line/2D/array/cube) writes
+        // `*(a5 + 20) = 0` and only the VOLUME arm publishes a slice pitch.
+        if (TextureIsCube(lpTexture))
+        {
+            IDirect3DCubeTexture9* lpD3DCube =
+                static_cast<IDirect3DCubeTexture9*>(lpTexture->mpD3DTexture);
+            D3DLOCKED_RECT lLockedFace;
+            if (SUCCEEDED(lpD3DCube->LockRect(static_cast<D3DCUBEMAP_FACES>(liFace),
+                                              static_cast<UINT>(liLevel), &lLockedFace, nullptr,
+                                              static_cast<DWORD>(liFlags))))
+            {
+                lpLockInfoOut->mpBits = lLockedFace.pBits;
+                lpLockInfoOut->muPitch = static_cast<u32>(lLockedFace.Pitch);
+            }
             return;
         }
 
@@ -143,6 +228,18 @@ namespace renderengine
         {
             return;
         }
+        if (TextureIsCube(lpTexture))
+        {
+            // ⚠ FACE 0 BECAUSE THIS OVERLOAD CARRIES NO FACE, and that is a property of the
+            // signature, not a guess about the data: LockInfo is {bits, pitch} and nothing else, so
+            // a cube locked through it can only be unlocked at the face the caller must already
+            // know. The Locked* overload below DOES carry one (mu8Index) and uses it. Nothing on
+            // this backend locks a cube through either form today -- Create drives the D3D object
+            // directly -- so this arm exists to keep the pair symmetric, not to serve a caller.
+            static_cast<IDirect3DCubeTexture9*>(lpTexture->mpD3DTexture)
+                ->UnlockRect(D3DCUBEMAP_FACE_POSITIVE_X, 0u);
+            return;
+        }
         if (TextureIsVolume(lpTexture))
         {
             static_cast<IDirect3DVolumeTexture9*>(lpTexture->mpD3DTexture)->UnlockBox(0u);
@@ -152,9 +249,20 @@ namespace renderengine
     }
 
     // The Locked* form of the same X360 entry point (see texture.h). The descriptor is unread on
-    // this backend, exactly as in the LockInfo overload above.
-    void Texture::Unlock(Texture* lpTexture, Locked* /*lpLocked*/)
+    // this backend for the 2D and volume shapes, exactly as in the LockInfo overload above -- but a
+    // CUBE has to be unlocked at the face and level it was locked at, and this descriptor is the
+    // one that carries them (Lock writes mu8Index = face, mu8MipLevel = level; X360 Lock does the
+    // same, `*(a5 + 18) = a3` / `*(a5 + 19) = a4`).
+    void Texture::Unlock(Texture* lpTexture, Locked* lpLocked)
     {
+        if (lpLocked != nullptr && lpTexture != nullptr && lpTexture->mpD3DTexture != nullptr
+            && TextureIsCube(lpTexture))
+        {
+            static_cast<IDirect3DCubeTexture9*>(lpTexture->mpD3DTexture)
+                ->UnlockRect(static_cast<D3DCUBEMAP_FACES>(lpLocked->mu8Index),
+                             static_cast<UINT>(lpLocked->mu8MipLevel));
+            return;
+        }
         Unlock(lpTexture, static_cast<LockInfo*>(nullptr));
     }
 
@@ -209,9 +317,31 @@ namespace renderengine
         }
     }
 
-    u32 Texture::GetPixelDataSize(s32 liFormat, u32 luWidth, u32 luHeight, u32 luDepth, u32 luNumLevels)
+    // The console's own six-argument form (Type, Width, Height, Depth, Format, Levels) -- see the
+    // decode of 0x82B61088 -> `anonymous namespace'::Xbox2SetTextureHeader @0x82B60B98 in texture.h.
+    u32 Texture::GetPixelDataSize(Type meType, u32 luWidth, u32 luHeight, u32 luDepth,
+                                  s32 liFormat, u32 luNumLevels)
     {
         if (luNumLevels == 0u) luNumLevels = 1u;
+
+        // CUBE: the console's arm is XGSetCubeTextureHeader(edge, levels, 0, format, ...) -- ONE
+        // edge, no depth word -- so a cube is SIX faces each carrying the whole 2D mip chain, and
+        // the face count is never halved. That is also exactly the block the converter writes:
+        // tools/assets/bundles/x360_tex.py:349-351 emits `for face: for lvl:` with tight rows, and
+        // :385 `tight_pixel_size` states the same total. MEASURED against the shipped bytes -- all
+        // 234 cube rasters' chunk-1 size equals SUM(mip) * 6, and only 3 (the mips==1 shape, where
+        // the two formulas coincide) equalled the depth-halving loop below.
+        if (meType == E_TYPE_CUBE)
+        {
+            return 6u * GetPixelDataSize(E_TYPE_2D, luWidth, luHeight, 1u, liFormat, luNumLevels);
+        }
+
+        // Everything else keeps the existing chain, whose per-level depth HALVING is the volume
+        // rule (XGSetVolumeTextureHeader's mip chain shrinks in all three axes). For E_TYPE_2D the
+        // depth is 1 and the halving is a no-op, so 2D sizing is bit-identical to before. ARRAY
+        // would need its own arm (array slices do not halve either) -- there is not one shipped
+        // (census: the depth histogram is {0, 1, 6} and every 6 is a cube), so rather than write an
+        // untested arm this leaves array textures on the same path they have always been on.
         u32 luTotal = 0u;
         u32 luW = luWidth, luH = luHeight, luD = (luDepth != 0u ? luDepth : 1u);
         for (u32 luLevel = 0u; luLevel < luNumLevels; ++luLevel)
@@ -268,9 +398,11 @@ namespace renderengine
         lpDescriptorOut[8] = 0u;  lpDescriptorOut[9] = 1u;       // slot4
         if ((lpParams->muSysMem & 1u) == 0u)
         {
-            lpDescriptorOut[4] = GetPixelDataSize(lpParams->miFormat, lpParams->muWidth,
+            // meType is already in hand (the console reads the same word 0), and it is what makes
+            // the six-face block get a six-face size -- see GetPixelDataSize.
+            lpDescriptorOut[4] = GetPixelDataSize(lpParams->meType, lpParams->muWidth,
                                                   lpParams->muHeight, lpParams->muDepth,
-                                                  lpParams->muNumLevels);
+                                                  lpParams->miFormat, lpParams->muNumLevels);
             lpDescriptorOut[5] = 4096u;  // graphics-local page alignment (X360)
         }
     }
@@ -287,12 +419,136 @@ namespace renderengine
         lpTexture->mpD3DTexture = nullptr;
 
         // Record the requested DIMENSION in the raster header -- the single fact every later branch
-        // reads (see the banner above Texture::Lock). Written on BOTH arms, so a reused object
+        // reads (see the banner above Texture::Lock). Written on EVERY arm, so a reused object
         // cannot keep a stale answer, and written NOWHERE else.
-        lpTexture->mu8IsVolumeTexture = (lpParams->meType == E_TYPE_VOLUME) ? 1u : 0u;
+        //
+        // Only the two dimensions this backend can actually BUILD are recorded; anything else
+        // stores 0 (the 2D answer), because claiming a dimension no create path produced is how a
+        // later branch reaches for a D3D object that is not there. E_TYPE_UNKNOWN (-1, the value
+        // CgsRwRasterResourceTypePS3 seeds) must NOT be truncated into this byte.
+        lpTexture->mu8Dimension =
+            (lpParams->meType == E_TYPE_CUBE || lpParams->meType == E_TYPE_VOLUME)
+                ? static_cast<u8>(lpParams->meType) : 0u;
 
         if (gDevice == nullptr || lpParams->miFormat < 0)
         {
+            return;
+        }
+
+        // --- the CUBE case (reflections step 1) ------------------------------------------------
+        // WHY IT HAD TO EXIST: 22 shipped vehicle pixel shaders and 7 shipped world pixel shaders
+        // declare `ReflectionTextureSampler` as a samplerCUBE (CTAB scan of build/game/SHADERS.BNDL:
+        // s13 x22, s2 x6, s0 x1 -- scratch/reflections_step1/cubeleaf/work/ctab_cube_scan.py), and
+        // the 234 shipped 64x64x6 DXT1 rasters that feed the world ones were being created as 2D
+        // textures, uploading face 0 and nothing else. A 2D texture bound to a samplerCUBE slot
+        // does not fail -- it samples undefined, which is what "the building windows reflect black"
+        // looks like.
+        if (lpParams->meType == E_TYPE_CUBE)
+        {
+            // A cube is square and has exactly six faces. REFUSE anything else rather than create a
+            // degenerate object that errors nowhere (this wave's rule 9). MEASURED: 234 of 234
+            // shipped cube rasters are depth==6 with width==height.
+            if (lpParams->muWidth == 0u || lpParams->muWidth != lpParams->muHeight
+                || lpParams->muDepth != 6u)
+            {
+                char lacCubeShape[176];
+                std::snprintf(lacCubeShape, sizeof(lacCubeShape),
+                    "[Texture] REFUSED a CUBE raster with a non-cube shape: %ux%ux%u fmt=%d mips=%u\n",
+                    lpParams->muWidth, lpParams->muHeight, lpParams->muDepth, lpParams->miFormat,
+                    lpParams->muNumLevels);
+                CgsDev::Log::WriteToLog(lacCubeShape);
+                lpTexture->mu8Dimension = 0u;      // it is not a cube; do not let Lock treat it as one
+                return;
+            }
+
+            const UINT luCubeLevels = (lpParams->muNumLevels != 0u) ? lpParams->muNumLevels : 1u;
+            IDirect3DCubeTexture9* lpD3DCube = nullptr;
+            const HRESULT lhrCube = gDevice->CreateCubeTexture(
+                lpParams->muWidth, luCubeLevels, 0,
+                static_cast<D3DFORMAT>(lpParams->miFormat), D3DPOOL_MANAGED, &lpD3DCube, nullptr);
+            if (FAILED(lhrCube))
+            {
+                char lacCube[176];
+                std::snprintf(lacCube, sizeof(lacCube),
+                    "[Texture] CreateCubeTexture(fmt=%d edge=%u mips=%u MANAGED) failed hr=0x%08X\n",
+                    lpParams->miFormat, lpParams->muWidth,
+                    static_cast<unsigned>(luCubeLevels), static_cast<unsigned>(lhrCube));
+                CgsDev::Log::WriteToLog(lacCube);
+                return;
+            }
+            lpTexture->mpD3DTexture = lpD3DCube;
+
+            static bool sbReportedFirstCube = false;
+            if (!sbReportedFirstCube)
+            {
+                sbReportedFirstCube = true;
+                char lacFirst[176];
+                std::snprintf(lacFirst, sizeof(lacFirst),
+                    "[Texture] first CUBE raster: %ux%ux6 fmt=%d mips=%u\n",
+                    lpParams->muWidth, lpParams->muHeight, lpParams->miFormat,
+                    static_cast<unsigned>(luCubeLevels));
+                CgsDev::Log::WriteToLog(lacFirst);
+            }
+
+            if (lpPixelData == nullptr)
+            {
+                return;   // created empty (no shipped cube is, but the render-target path is)
+            }
+
+            // THE UPLOAD ORDER IS FACE-MAJOR, and that is read off the converter rather than
+            // assumed: tools/assets/bundles/x360_tex.py:349-351 is `for face in range(faces): for
+            // lvl in range(mips):`, each level written as tight rows (block rows for DXT). So the
+            // source walks all mips of face 0, then all mips of face 1, and so on -- the opposite
+            // of the level-major order a D3D-shaped loop would reach for.
+            const u8* lpCubeSource = static_cast<const u8*>(lpPixelData);
+            const u32 luCubeBytesPerBlock = lFormatBytesPerBlock(lpParams->miFormat);
+            for (u32 luFace = 0u; luFace < 6u; ++luFace)
+            {
+                u32 luFaceW = lpParams->muWidth, luFaceH = lpParams->muHeight;
+                for (UINT luLevel = 0u; luLevel < luCubeLevels; ++luLevel)
+                {
+                    const u32 luMipBytes =
+                        GetPixelDataSize(E_TYPE_2D, luFaceW, luFaceH, 1u, lpParams->miFormat, 1u);
+
+                    u32 luRowBytes, luNumRows;
+                    if (luCubeBytesPerBlock != 0u)
+                    {
+                        luRowBytes = ((luFaceW + 3u) / 4u) * luCubeBytesPerBlock;
+                        luNumRows  = (luFaceH + 3u) / 4u;
+                    }
+                    else
+                    {
+                        luNumRows  = luFaceH;
+                        luRowBytes = (luNumRows != 0u) ? (luMipBytes / luNumRows) : luMipBytes;
+                    }
+                    if (luRowBytes == 0u) luRowBytes = luMipBytes;
+                    if (luNumRows == 0u) luNumRows = 1u;
+
+                    D3DLOCKED_RECT lLockedFace;
+                    if (SUCCEEDED(lpD3DCube->LockRect(static_cast<D3DCUBEMAP_FACES>(luFace), luLevel,
+                                                      &lLockedFace, nullptr, 0)))
+                    {
+                        u8* lpDestFace = static_cast<u8*>(lLockedFace.pBits);
+                        const u32 luDestPitch = static_cast<u32>(lLockedFace.Pitch);
+                        if (luDestPitch == luRowBytes)
+                        {
+                            memcpy(lpDestFace, lpCubeSource, luMipBytes);
+                        }
+                        else
+                        {
+                            for (u32 luRow = 0u; luRow < luNumRows; ++luRow)
+                            {
+                                memcpy(lpDestFace + luRow * luDestPitch,
+                                       lpCubeSource + luRow * luRowBytes, luRowBytes);
+                            }
+                        }
+                        lpD3DCube->UnlockRect(static_cast<D3DCUBEMAP_FACES>(luFace), luLevel);
+                    }
+                    lpCubeSource += luMipBytes;
+                    luFaceW = (luFaceW > 1u) ? (luFaceW >> 1) : 1u;
+                    luFaceH = (luFaceH > 1u) ? (luFaceH >> 1) : 1u;
+                }
+            }
             return;
         }
 
@@ -395,7 +651,8 @@ namespace renderengine
         u32 luW = lpParams->muWidth, luH = lpParams->muHeight;
         for (UINT luLevel = 0u; luLevel < luLevels; ++luLevel)
         {
-            const u32 luMipBytes = GetPixelDataSize(lpParams->miFormat, luW, luH, 1u, 1u);
+            const u32 luMipBytes =
+                GetPixelDataSize(E_TYPE_2D, luW, luH, 1u, lpParams->miFormat, 1u);
             // Rows of the SOURCE image: block rows for a compressed format, pixel rows otherwise.
             u32 luRowBytes, luNumRows;
             if (luBytesPerBlock != 0u)
@@ -449,15 +706,13 @@ namespace renderengine
 
     // X360 GetType @0x82B60E68 decodes header+0x30 bits 21-22 (line/2D/array/cube/volume) and, for
     // the 2D case, header+0x20 bit 21 (the array flag). The PC raster has no GPU header, so it
-    // reports the dimension Create was ASKED for and recorded in KU_RASTER_FLAG_VOLUME (see the
-    // banner above Texture::Lock -- notably NOT the stored depth, which on a serialised X360 STACK
-    // raster is the cube face count). The remaining three X360 classes (LINE / ARRAY / CUBE) have
-    // no create path on this backend and so cannot be produced -- they stay unreachable rather than
-    // being guessed at; a shipped cube map is created, and reported, as a 2D texture exactly as it
-    // was before the volume path existed.
+    // answers from the create-time dimension byte -- and, for a raster that has not been through
+    // Create yet, from the serialised cube shape. Both rules live in TextureDimension() above, and
+    // its banner is where the fence around the second one is written down. LINE and ARRAY still
+    // have no create path on this backend and so cannot be produced.
     Texture::Type Texture::GetType(const Texture* lpTexture)
     {
-        return TextureIsVolume(lpTexture) ? E_TYPE_VOLUME : E_TYPE_2D;
+        return TextureDimension(lpTexture);
     }
 
     // X360 GetWidth @0x82B60EC8 / GetHeight @0x82B60F38: the X360 spine reads the packed GPU header
@@ -522,7 +777,23 @@ namespace renderengine
 
         if (lpTexture != nullptr && lpTexture->mpD3DTexture != nullptr)
         {
-            if (TextureIsVolume(lpTexture))
+            if (TextureIsCube(lpTexture))
+            {
+                // X360 Lock's `Type == 3` arm: D3DCubeTexture_LockRect(this, FACE, LEVEL, ...).
+                // muSliceStride stays 0 (the console's shared LABEL_14 writes 0 there for every
+                // non-volume shape).
+                IDirect3DCubeTexture9* lpD3DCube =
+                    static_cast<IDirect3DCubeTexture9*>(lpTexture->mpD3DTexture);
+                D3DLOCKED_RECT lLockedFace;
+                if (SUCCEEDED(lpD3DCube->LockRect(static_cast<D3DCUBEMAP_FACES>(liFace),
+                                                  static_cast<UINT>(liLevel), &lLockedFace, nullptr,
+                                                  static_cast<DWORD>(liFlags))))
+                {
+                    lpLockedOut->mpPixelData = lLockedFace.pBits;
+                    lpLockedOut->muStride    = static_cast<u32>(lLockedFace.Pitch);
+                }
+            }
+            else if (TextureIsVolume(lpTexture))
             {
                 // The VOLUME lock, and the reason this overload had to learn one: it is the lock
                 // rw::graphics::postfx::Tint::BeginBlendJob @0x823F8310 takes, and the two words it

@@ -402,41 +402,20 @@ void BrnGame::DispatchThreadInputBuffer::SetCameraViewProjection(struct rw::math
     }
 }
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnGame::DispatchThreadInputBuffer::SetEnvMapFaceRendered(int,bool)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnGame::DispatchThreadInputBuffer::SetEnvMapFaceRendered: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// TOMBSTONE (reflections step 1, 2026-08-17): the
+// BrnGame::DispatchThreadInputBuffer::SetEnvMapFaceRendered boot gate is DELETED. The
+// real body now lives in its own TU, GameSource/Game/BrnDispatchThreadInputBuffer.cpp,
+// which is on tools/build/build_game_exe.bat (line 2257) -- leaving this gate beside it
+// is LNK2005. Do NOT re-add it.
 
 // -------------------------------------------------------------------------
 // BrnGraphics::EnvironmentMap
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnGraphics::EnvironmentMap::Prepare()
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
-    // chain. One-shot log + report success so the scripted load advances toward
-    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
-    // deeper consumers keep their traps. Reconstruct from X360.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "EnvironmentMap::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// TOMBSTONE (reflections step 1, 2026-08-17): the BrnGraphics::EnvironmentMap::Prepare
+// boot gate is DELETED. The real X360 body (@0x827B4188) now lives in its own TU,
+// GameSource/World/EnvironmentMap/BrnEnvironmentMap.cpp, which is on
+// tools/build/build_game_exe.bat (line 351) -- leaving this gate beside it is LNK2005.
+// Do NOT re-add it.
 
 // -------------------------------------------------------------------------
 // BrnMassive::BrnMassive

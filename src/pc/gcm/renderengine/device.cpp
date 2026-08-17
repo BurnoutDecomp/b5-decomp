@@ -62,6 +62,12 @@ s32  renderengine::gAntiAliasing = 0;
 // material data -- the same principle that makes gAntiAliasing default to "whatever the
 // console did".
 s32  renderengine::gAlphaToCoverage = 1;
+// The environment-map (car-reflection) pass knob. 1 = run the console's own six-face pass and bind
+// sampler 13; 0 = neither. Semantics, and why this is a SEED for the console's own
+// RenderSwitches::mbRenderEnvmap rather than a second switch, are on the declaration in device.h.
+// Default 1 because the console's answer is 1 (BrnRendererModule::ConstructRenderSwitches) -- the
+// same principle that makes gAntiAliasing default to "whatever the console did".
+s32  renderengine::gEnvironmentMap = 1;
 // Vertical sync on by default -- see the declaration in device.h.
 s32  renderengine::gVSync = 1;
 HWND renderengine::hWnd = nullptr;
@@ -96,6 +102,10 @@ bool renderengine::Device::Initialize()
     // Seeded here for the same reason gAntiAliasing is: LoadConfig runs after this
     // (BrnMain.cpp:260/:261) and is what a config.ini value overrides it with.
     gAlphaToCoverage = 1;
+    // Run the environment-map pass unless config.ini `[Settings] EnvironmentMap=0`. Seeded here for
+    // the same reason the two above are: LoadConfig runs after this (BrnMain.cpp:260/:261) and is
+    // what a config.ini value overrides it with.
+    gEnvironmentMap = 1;
     // Vertical sync unless config.ini `[Display] VSync=0` (see device.h).
     gVSync = 1;
     // TUB seeds fullscreen=true; forced windowed during the PC bring-up.

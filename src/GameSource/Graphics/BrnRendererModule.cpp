@@ -8,6 +8,7 @@
 #include "GameSource/Graphics/BrnRendererModulePostFx.h"  // Render's effects-frame -> BrnPostFx apply block
 #include "GameSource/Director/Camera/Camera.h"            // BrnDirector::Camera::Camera -- the staged camera-input record
 #include "GameSource/Effects/Particles/ParticleModuleBringUp.h"  // BrnParticle::PCBringUpParticleRenderDataProduced (the motion-blur render-data latch)
+#include "pc/gcm/renderengine/renderstates.h"    // renderengine::TextureState::Parameters (the sampler-13 env-map state)
 
 // ---------------------------------------------------------------------------------------------
 // BRN_SHADOW_MAP_TARGET_AVAILABLE -- the shadow-map RENDER TARGET gate (PC bring-up, 2026-08-12).
@@ -178,6 +179,57 @@ namespace
 #endif  // BRN_POSTFX_COMPOSITE_AVAILABLE
 
 // ---------------------------------------------------------------------------------------------
+// BRN_ENVMAP_PASS_AVAILABLE -- THE ENVIRONMENT-MAP (CAR REFLECTION) PASS (reflections step 1,
+// 2026-08-17).
+//
+// At 1 this file carries BrnRendererModule::BeginRenderEnvironmentMapFace @0x823F63E0,
+// EndRenderEnvironmentMapFace @0x823FC5E8 and Render's own six-face loop
+// (@0x8240BFA8 pseudocode 645-722, asm 0x8240CB64-0x8240CD8C), at the console's own position:
+// after the shadow-map pass and BEFORE BeginRenderAntiAliased. It also unparks the sampler-13
+// bind that has been a documented hole since the shadow wave.
+//
+// WHAT REVERTING TO 0 LEAVES BEHIND, measured rather than claimed. Both positions were
+// preprocessed (cl /P) and diffed against HEAD, ignoring #line/#pragma and blank lines; at 0 this
+// translation unit differs from HEAD by exactly TWO things and nothing else:
+//   * the header DECLARATIONS this wave adds -- GetEnvMapBuffer, PCBringUpCreateEnvMapBuffer,
+//     Begin/EndRenderEnvironmentMapFace, gEnvironmentMap, the third Device::Clear overload,
+//     Target::Resolve(u32), CgsRenderTarget::GetMultisampleFormat, shadow::Device::
+//     Lock/UnlockDepthStencilState. Declarations emit no code and add no link requirement.
+//   * PublishSkyConstantsBringUp's env-map half (the six face matrices + mEnvMapViewPosition),
+//     which is deliberately NOT under this macro: it completes the copy of the world's frame and
+//     is inert with nothing to consume it. Reverting the macro does not revert that, by design.
+// The loop, the two bodies, the pool accessor's USE, the s13 bind and the knob seed are all
+// inside the `#if` and all disappear.
+//
+// ⚠ THIS TEXT HAS NEVER BEEN COMPILED AT 0 IN A SHIPPED TREE. It is authored at 1 and gated so the
+// conductor has a one-character revert, not so it can sit dark: the anti-alias wave's banner above
+// records what happens when a body ships behind a 0 (the per-TU gate, the lint and the reviewer all
+// pass on text nobody compiled). Both positions ARE compiled in this wave's gate.
+//
+// WHAT IT NEEDS THAT THIS TU DOES NOT OWN -- three symbols, all cross-group in the same wave:
+//   (a) rw::graphics::postfx::Target::Resolve(u32 luFace)  -- the PER-FACE overload, X360
+//       0x823F9170, owned by the `cubeleaf` group (rwgpfxrendertarget.h + the D3D9 leaf). On the
+//       Xenos every face renders into the SAME EDRAM tile and the face only matters at resolve
+//       time, which is exactly why CgsRenderTarget::SetRenderTargetStateInvertDepth binds section
+//       0 regardless of its argument (CgsRenderTarget.cpp:336). EndRenderEnvironmentMapFace is
+//       its only caller here.
+//   (b) BrnGame::DispatchThreadInputBuffer::GetEnvMapFaceRendered(s32) const -- owned by the
+//       `envproducer` group. The console reads the same byte inline, WITH a bounds assert: Render
+//       @0x8240CC04 does `cmplwi r29, 6 / blt` else FireAssert("luIndex<6",
+//       "..\GameSource\Game/BrnDispatchThreadInputBuffer.h", 0xF4) -- so the console's own
+//       accessor is an inline header getter at h:244 with that assert, which is what the seam
+//       reproduces. The byte itself is buffer+0x99B4 (`addis r17, r11, 1 / addi r17, r17, -0x664C`
+//       @0x8240CB94/0x8240CBC0, i.e. +0x10000-0x664C), which is mabEnvMapFaceRender[6] --
+//       BrnDispatchThreadInputBuffer.h:194, six bytes ending exactly where mbIsWriteBuffer starts
+//       at +0x99BA.
+//   (c) renderengine::Device::Clear(const ClearColorParameters&, const ClearDepthStencilParameters&,
+//       ETargetId) -- X360 0x82B61E18, DECLARED by this wave in pc/gcm/renderengine/device.h beside
+//       its two already-declared siblings; its PC body belongs beside DeviceClearDepthStencil (the
+//       depth/stencil-only member of the same console family). See CROSS-GROUP in the wave report.
+// A missing (a)/(b)/(c) is an LNK2019, not a wrong picture: `cl /c` cannot see them.
+#define BRN_ENVMAP_PASS_AVAILABLE 1
+
+// ---------------------------------------------------------------------------------------------
 // BRN_GPU_PERFMON_AVAILABLE -- the GPU perf-monitor sub-gate (2026-08-14).
 //
 // CgsDev::PerfMonGpu::StartMonitor / StopMonitor are the last two of the six symbols the bracket
@@ -252,6 +304,41 @@ namespace
     // +0x0000 = 0x00000000 = 0.0f, and only +0x0000 belongs to the symbol (that block runs on into
     // the string "Monitor " at +0x0008, and the assembly addresses no other displacement).
     const f32 KF_QUARTER_RES_CLEAR_COMPONENT = 0.0f;
+
+#if BRN_ENVMAP_PASS_AVAILABLE
+    // --- BrnRendererModule::BeginRenderEnvironmentMapFace @0x823F63E0's four clear constants ------
+    // Each is matched to the DISPLACEMENT the assembly addresses, and each is a value this file
+    // ALREADY attests at that displacement for another consumer, which is why none of them is a
+    // fresh read:
+    //   flt_82004740 +0x00 == 0x3E99999A == 0.300000012f -- addressed by `lfs f0, flt_82004740@l(r11)`
+    //     @0x823F6494 and multiplied by the white level (`fmuls f0, f31, f0` @0x823F649C). The SAME
+    //     displacement is KF_BACKGROUND_COLOUR_GREY below (BeginRenderAntiAliased @0x823FFA44).
+    //   flt_82001CC0 +0x00 == 0.0f -- `lfs f13, flt_82001CC0@l(r11)` @0x823F64B0, stored to the clear
+    //     colour's ALPHA (@0x823F64B8) and to the depth field (@0x823F64C0). Same symbol as
+    //     KF_QUARTER_RES_CLEAR_COMPONENT above.
+    // The depth constant is spelled separately from the alpha one on purpose: they are the same
+    // number today because the console loads one register twice, but they answer two unrelated
+    // questions (what an unwritten reflection texel's alpha is; where the inverted-depth far plane
+    // is), and a later correction to either must not silently move the other. The two EDRAM-era
+    // helpers in this file are commented the same way for the same reason.
+    const f32 KF_ENV_MAP_CLEAR_COLOUR_SCALE = 0.3f;   // flt_82004740 +0x00 -- the SAME .rdata word as
+                                                      // KF_BACKGROUND_COLOUR_GREY below (the env-map
+                                                      // clear IS the background grey x white level);
+                                                      // kept as its own name deliberately so a later
+                                                      // correction to one cannot silently move the
+                                                      // other (verify F13)
+    const f32 KF_ENV_MAP_CLEAR_ALPHA        = 0.0f;   // flt_82001CC0 +0x00
+    const f32 KF_ENV_MAP_CLEAR_DEPTH        = 0.0f;   // flt_82001CC0 +0x00, the INVERTED far plane
+
+    // The XENON D3DCLEAR_* bits. NOT PC Direct3D 9's: the console reserves bits 0..3 for its four
+    // colour targets and puts ZBUFFER at 0x10 / STENCIL at 0x20, which is why the clear word is 0x30
+    // and not 0x6. The same two constants are already modelled twice in this tree -- once in
+    // ShadowPassPCLeaf.h's ClearDepthStencilParameters banner and once in ImmediateModePCLeaf.cpp's
+    // DeviceClearDepthStencil, which translates them -- so these are named here rather than spelled
+    // as a literal 0x30 that a reader would have to re-derive.
+    const u32 KU_XENON_CLEAR_ZBUFFER = 0x10u;
+    const u32 KU_XENON_CLEAR_STENCIL = 0x20u;
+#endif  // BRN_ENVMAP_PASS_AVAILABLE
 
     // --- [FLAG PC bring-up] the LAYER-0 base effects frame's shipped values -----------------------
     // Every one of these is READ DATA, not a chosen number: the bloom five come from POSTFX vault
@@ -334,6 +421,16 @@ namespace
     // `(u64)1 << index` -- so on the big-endian console camera +0x144 is that qword's low half and
     // mask 8 is bit index 3.
     const u32 KU_CAMERA_STATE_FLAG_IS_RACING_GAMEPLAY = 3u;
+
+#if BRN_ENVMAP_PASS_AVAILABLE
+    // The first of the six ENV-MAP mesh lists. Render @0x8240CCA4 forms the list id as
+    // `addi r4, r29, 5` with r29 the face index, i.e. GetList(5 + face) -- lists 5..10. The world
+    // producer fills the same six (WorldModule::GenerateDispatchLists @0x827D1CE8 ->
+    // WorldEntityModule::GenerateDispatchListsForEnvironmentMap into list 5+face). They are the
+    // env-map SHADER-LOD lists, so their materials are the cheap permutations, which is why six
+    // 128x128 faces are affordable at all.
+    const u32 KU_ENV_MAP_FIRST_MESH_LIST = 5u;
+#endif  // BRN_ENVMAP_PASS_AVAILABLE
 
     // --- [FLAG PC bring-up] the staged CAMERA INPUT RECORD ---------------------------------------
     // STANDS IN FOR BrnEffects::EffectsIO::DispatchInputBuffer::mCameraInput (DWARF
@@ -813,6 +910,245 @@ namespace
 #endif
         return lbTargetsReady;
     }
+
+#if BRN_ENVMAP_PASS_AVAILABLE
+    // =============================================================================================
+    // [PC bring-up] THE ENVIRONMENT-MAP RENDER TARGET -- a 128x128 CUBE colour target with its own
+    // multisampled depth, pool slot 3.
+    //
+    // Same lazy shape, and the same DELETE-WHEN, as EnsureShadowMapTarget / EnsurePostFxSceneTargets
+    // above: BrnRendererMemory::Construct @0x823FCA38 builds the whole pool on the console and is
+    // gated out here, and it would run before the D3D9 device exists anyway.
+    //
+    // ⚠ RULE 9 OF THIS WAVE, ENFORCED RATHER THAN LOGGED: "the frame looks identical" is not a gate
+    // (verify F3, envface: the E_TYPE_CUBE test below is renderengine::Texture::GetType, which on this
+    // backend reports the CREATE-TIME dimension the leaf recorded in the raster header -- a metadata
+    // test, not an IDirect3DBaseTexture9::GetType() query. The object's real D3DRTYPE is printed by
+    // the side that created it: PostFxRenderTargetPCLeaf.cpp's `[envmap-rt] cube ...` line. Read
+    // BOTH lines off the boot log; this one alone proves extent + object + requested dimension.)
+    // for an off-screen target. This function REFUSES -- once, loudly, latched so it never retries --
+    // when the leaf hands back anything other than a non-degenerate CUBE colour texture, because a
+    // 0x0 or 2D "cube" would render six faces into nothing and error nowhere. That refusal keeps
+    // sampler 13 unbound and the six-face loop off, which is precisely the build this wave started
+    // from: a regression to the previous behaviour rather than to a wrong picture.
+    //
+    // The latch is the created TARGET (a pointer), never a `static bool tried`: a one-shot set during
+    // the loading screen -- before renderengine::gDevice exists -- would burn the single attempt and
+    // the cube would never be built. That is this project's most repeated bring-up bug and both
+    // neighbours above carry the same note. `gbEnvMapTargetRefused` is a SEPARATE latch and is only
+    // ever set after a real creation attempt has been made and judged.
+    // =============================================================================================
+    CgsRenderTarget* gpEnvMapTarget       = nullptr;
+    bool             gbEnvMapTargetRefused = false;
+
+    bool EnsureEnvMapTarget(BrnRendererMemory& lrRendererMemory)
+    {
+        if (gpEnvMapTarget != nullptr)
+            return true;
+        if (gbEnvMapTargetRefused)
+            return false;
+        if (renderengine::gDevice == 0)
+            return false;              // no device yet -- retry next frame
+        if (gpShadowMapTarget == nullptr)
+            return false;              // the slot-nulling pass has not run yet (see the note above it)
+        if (!EnsureWorldDispatchAllocator())
+            return false;
+
+        lrRendererMemory.PCBringUpCreateEnvMapBuffer(&sWorldDispatchAllocator);
+
+        CgsRenderTarget* const lpTarget = lrRendererMemory.GetEnvMapBuffer();
+        rw::graphics::postfx::RenderTarget* const lpRenderTarget =
+            (lpTarget != nullptr) ? lpTarget->GetRenderTarget() : nullptr;
+        renderengine::Texture* const lpColourTexture =
+            (lpRenderTarget != nullptr) ? lpRenderTarget->GetTexture(0) : nullptr;
+
+        const u32 luWidth  = (lpTarget != nullptr) ? lpTarget->GetWidth()  : 0u;
+        const u32 luHeight = (lpTarget != nullptr) ? lpTarget->GetHeight() : 0u;
+        const s32 lnMultisampleRequested =
+            (lpTarget != nullptr) ? lpTarget->GetMultisampleFormat() : 0;
+        const s32 lnTextureType = (lpColourTexture != nullptr)
+            ? static_cast<s32>(renderengine::Texture::GetType(lpColourTexture))
+            : -1;
+        // The D3D object itself, reported as a pointer rather than as a D3DRTYPE. Reading
+        // IDirect3DBaseTexture9::GetType() here would need <d3d9.h> in the renderer TU -- texture.h
+        // deliberately keeps the type a forward declaration -- and the answer belongs to the side
+        // that CREATED the object: the cube create path logs its own D3DRTYPE at creation (cubeleaf).
+        // What this line owes, and pays, is the OTHER half of rule 9: a non-degenerate EXTENT and a
+        // real object, or a refusal.
+        void* const lpD3DObject =
+            (lpColourTexture != nullptr) ? static_cast<void*>(lpColourTexture->mpD3DTexture) : 0;
+
+        const bool lbUsable = (lpTarget != nullptr) && (lpRenderTarget != nullptr)
+                           && (lpColourTexture != nullptr)
+                           && (lpD3DObject != 0)
+                           && (lnTextureType == static_cast<s32>(renderengine::Texture::E_TYPE_CUBE))
+                           && (luWidth != 0u) && (luHeight != 0u);
+
+        if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[envmap] target " << static_cast<s32>(luWidth) << "x" << static_cast<s32>(luHeight)
+                << " sections=" << static_cast<s32>((lpTarget != nullptr) ? lpTarget->GetNumSections() : 0u)
+                << " msaaReqFormat=" << lnMultisampleRequested << "(console; 2==4x)"
+                << " colourTexture=type" << lnTextureType << " (3==E_TYPE_CUBE, create-time metadata)"
+                << " depthTex=" << static_cast<void*>(
+                       (lpRenderTarget != nullptr) ? lpRenderTarget->GetDepthStencilTexture() : 0)
+                << " d3dObject=" << lpD3DObject
+                << " -> "
+                << (lbUsable ? "USABLE" : "REFUSED -- the env-map pass and sampler 13 stay off")
+                << "\n";
+        }
+
+        if (!lbUsable)
+        {
+            gbEnvMapTargetRefused = true;
+            return false;
+        }
+
+        gpEnvMapTarget = lpTarget;
+        return true;
+    }
+
+    // =============================================================================================
+    // [PC bring-up] THE SAMPLER-13 TEXTURE STATE -- BrnRendererModule::Construct's second
+    // TextureState, deferred exactly like every other Construct step in this file.
+    //
+    // WHAT THE CONSOLE BUILDS, decoded off Construct @0x8240A778 (pseudocode 556-574) rather than
+    // guessed. The three triples the WAVE_NOTE quotes as byte indices resolve, against the committed
+    // member ORDER in BrnRendererModule.h, to exactly this object: taking `mpTextureState` as the
+    // block's origin, mTextureStateParams sits at +4, mTextureStateResource at +80,
+    // mpEnvMapTextureState at +100, mEnvMapTextureStateParams at +104,
+    // mEnvMapTextureStateResource at +180 -- and Hex-Rays' gap15DE[] indices are those numbers plus
+    // 2, which is what makes [102]/[106]/[182] the env-map triple and [2]/[6]/[82] the shadow one.
+    // The identification is CLOSED at both ends: the same arithmetic puts mpGlassFractureTextureState
+    // at [206] (line 597 zeroes it, and the ctor in BrnRendererModule.h zeroes it too) and
+    // mpShadowMapTextureState[0]/[1] at [326]/[330] (lines 554/555) -- and Render's own binds then
+    // read `*(this + 5924)` for s15 and `*(this + 5700)` for s13, whose difference is 224, which is
+    // exactly [326] - [102].
+    //
+    //   mEnvMapTextureStateParams.muAddressU = muAddressV = muAddressW = 2   (lines 559-561)
+    //   mEnvMapTextureStateParams.muMagFilter = muMinFilter = muMipFilter = 1 (lines 556-558)
+    //   mEnvMapTextureStateParams.mpTexture   = GetEnvMapBuffer()->GetTexture(0)  (line 562, and
+    //       `*&v1->gap15DE[178]` == params + 72 == renderengine::TextureState::Parameters::mpTexture)
+    //   mpEnvMapTextureState = TextureState::Initialize(&mEnvMapTextureStateResource,
+    //                                                   &mEnvMapTextureStateParams)  (line 574)
+    // The 2s and 1s are not decoded here from first principles: the tree already decodes this exact
+    // vocabulary twice, against the SAME field order, and both agree -- CLAMP is 2 and LINEAR is 1
+    // (XenonD3D9Shims.cpp ApplyVolumeSamplerState, built from rw::graphics::postfx::Tint::Initialize
+    // @0x82403B48's addressU=V=W=2 / mag=min=1; and PostFxDepthSampler_ApplyState, built from
+    // RenderTarget::CreateStates @0x82403A18's mag=min=0 == POINT). So the env map asks for a
+    // trilinear, clamped cube sampler -- which is what a 128x128 reflection needs and what the 22
+    // shipped vehicle pixel shaders sample at s13.
+    //
+    // TWO DISCLOSED PC DEVIATIONS, both forced and neither hidden:
+    //  1. THE PARAMS AND THE RESOURCE BLOCK LIVE ON THE STACK, not in mEnvMapTextureStateParams /
+    //     mEnvMapTextureStateResource. Those two members exist in BrnRendererModule.h but their types
+    //     are still the file's EMPTY placeholder structs (`struct TextureStateParameters {};` /
+    //     `struct Resource {};`, BrnRendererModule.h:132-138), and retyping them to
+    //     renderengine::TextureState::Parameters / rw::Resource means including renderstates.h from
+    //     BrnRendererModule.h -- a header pulled into the game module and the immediate-mode layer.
+    //     That cascade is its own change. Nothing is lost: on PC TextureState::Initialize
+    //     (pc/gcm/renderengine/texturestate.cpp) IGNORES lpResourceMemory entirely (it `new`s the
+    //     object and memcpy's the leading sampler words out of the params), so the two members are
+    //     dead storage on this backend either way. The OUTPUT -- mpEnvMapTextureState -- is the
+    //     tree's own member, so there is no parallel global and no split brain.
+    //  2. THE SAMPLER WORDS DO NOT REACH D3D9 THROUGH THIS OBJECT. shadow::Device::SetState(const
+    //     TextureState*, u32) applies them through SetSamplerStateLowLevel, which is the documented
+    //     no-op on this backend (XenonD3D9Shims.cpp, the banner over ApplyVolumeSamplerState). The
+    //     tree's answer for the two earlier cases was to key the state off WHAT WAS BOUND inside
+    //     D3DDevice_SetTexture -- a volume texture gets LINEAR/CLAMP, a raw-depth texture gets
+    //     POINT/CLAMP -- and a CUBE texture is the third case of the same shape. That arm is a
+    //     CROSS-GROUP REQUEST to cubeleaf (it also fixes the 234 shipped world cube rasters), and it
+    //     is why this function does NOT declare a new leaf entry point: the seam already exists.
+    //     Until that arm lands, unit 13 keeps whatever filter it last held.
+    //
+    // Built through the REAL TextureState so that the whole-unit shadow key
+    // (shadow::Device::mapTextureState[13]) is what the console's own bind writes -- Render
+    // @0x8240CD?? binds it with `sub_8227D158(*(this + 5700), 13)`, the TextureState overload, not
+    // the bare-resource one.
+    // =============================================================================================
+    bool EnsureEnvMapTextureState(renderengine::TextureState** lppEnvMapTextureState,
+                                 CgsRenderTarget* lpEnvMapTarget)
+    {
+        if (lppEnvMapTextureState == 0)
+            return false;
+        if (*lppEnvMapTextureState != 0)
+            return true;
+        if (lpEnvMapTarget == 0 || lpEnvMapTarget->GetRenderTarget() == 0)
+            return false;
+
+        renderengine::Texture* const lpColourTexture =
+            lpEnvMapTarget->GetRenderTarget()->GetTexture(0);
+        if (lpColourTexture == 0)
+            return false;
+
+        renderengine::TextureState::Parameters lParameters;
+        std::memset(&lParameters, 0, sizeof(lParameters));
+        lParameters.muAddressU  = 2;   // Construct line 559 -- CLAMP
+        lParameters.muAddressV  = 2;   // Construct line 560
+        lParameters.muAddressW  = 2;   // Construct line 561
+        lParameters.muMagFilter = 1;   // Construct line 556 -- LINEAR
+        lParameters.muMinFilter = 1;   // Construct line 557
+        lParameters.muMipFilter = 1;   // Construct line 558
+        lParameters.mpTexture   = lpColourTexture;   // Construct line 562
+
+        // lpResourceMemory: the console passes &mEnvMapTextureStateResource, carved from the
+        // graphics allocator; the PC Initialize ignores the argument (see deviation 1 above).
+        *lppEnvMapTextureState = renderengine::TextureState::Initialize(0, &lParameters);
+        return *lppEnvMapTextureState != 0;
+    }
+
+    // =============================================================================================
+    // [FLAG PC bring-up TEST HOOK -- OFF BY DEFAULT]  BRN_ENVMAP_DEBUG=1
+    //
+    // WHAT IT ANSWERS. D3D9's D3DCUBEMAP_FACE_POSITIVE_X..NEGATIVE_Z are the same 0..5 order as the
+    // console's KAV_ENV_MAP_LOOK_DIRECTIONS (BrnEnvironmentMap.cpp:16-34), so face INDEX needs no
+    // translation -- but face ORIENTATION does not follow from that. The Xenos resolves a face with
+    // its own convention and D3D9 has its own; whether the resolved faces need a flip or a mirror to
+    // sample right is an open cubeleaf question (WAVE_NOTE seam S4) and it is NOT guessable from
+    // this side. This makes it readable off a single screenshot: with the knob on, each face is
+    // cleared to a distinct colour and NOTHING is drawn into it -- no world, no sky -- so a
+    // reflective car paints the cube's raw orientation onto itself. Red on the car's right means
+    // +X samples right; red on its left means the faces need mirroring; red where GREEN should be
+    // means the index order is wrong rather than the orientation.
+    //
+    // The six colours are the standard cube-face debug set, one saturated channel pair per axis,
+    // and they are DELIBERATELY not derived from anything -- they are a test pattern, not data:
+    //   0 +X red      1 -X cyan     2 +Y green    3 -Y magenta   4 +Z blue     5 -Z yellow
+    // Read ONCE: an environment variable cannot change under a running process and this is on the
+    // per-frame render path (same shape as BRN_POSTFX_MASK_TEST above).
+    //
+    // DELETE-WHEN the face orientation is settled and boot-verified.
+    // =============================================================================================
+    const f32 KAF_ENV_MAP_DEBUG_FACE_COLOURS[6][3] =
+    {
+        { 1.0f, 0.0f, 0.0f },   // 0  +X  red
+        { 0.0f, 1.0f, 1.0f },   // 1  -X  cyan
+        { 0.0f, 1.0f, 0.0f },   // 2  +Y  green
+        { 1.0f, 0.0f, 1.0f },   // 3  -Y  magenta
+        { 0.0f, 0.0f, 1.0f },   // 4  +Z  blue
+        { 1.0f, 1.0f, 0.0f },   // 5  -Z  yellow
+    };
+
+    bool EnvMapDebugFaceColours()
+    {
+        static int siDebug = -1;      // -1 = not looked at yet, 0 = off, 1 = on
+        if (siDebug < 0)
+        {
+            char lacValue[16] = { 0 };
+            siDebug = (GetEnvironmentVariableA("BRN_ENVMAP_DEBUG", lacValue, sizeof(lacValue)) > 0
+                       && lacValue[0] != '0') ? 1 : 0;
+            if (siDebug != 0)
+            {
+                CgsDev::Log::WriteToLog(
+                    "[envmap] BRN_ENVMAP_DEBUG=1 -- every cube face is cleared to its own colour and"
+                    " NO world geometry or sky is drawn into it (0 +X red, 1 -X cyan, 2 +Y green,"
+                    " 3 -Y magenta, 4 +Z blue, 5 -Z yellow)\n");
+            }
+        }
+        return siDebug != 0;
+    }
+#endif  // BRN_ENVMAP_PASS_AVAILABLE
 }
 
 void BrnRendererModule::Construct()
@@ -1843,6 +2179,149 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
 #endif  // BRN_SHADOW_MAP_TARGET_AVAILABLE
 }
 
+#if BRN_ENVMAP_PASS_AVAILABLE
+// =================================================================================================
+// THE ENVIRONMENT-MAP FACE BRACKET -- BeginRenderEnvironmentMapFace @0x823F63E0 /
+// EndRenderEnvironmentMapFace @0x823FC5E8.
+//
+// Both were ledger-`reviewed` and ABSENT from this tree until this wave -- the fourth subsystem in
+// which that has been true, so the status is worth nothing and the asm is worth everything.
+//
+// WHAT Begin DOES, in the asm's order (0x823F63E0-0x823F65AC):
+//   1. the two asserts, whose strings ARE the accessor's name (see BrnRendererMemory.h);
+//   2. GetEnvMapBuffer()->SetRenderTargetStateInvertDepth(luFace) -- bind the target's section-0
+//      surface state and set a viewport whose depth range is INVERTED, MinZ=1 / MaxZ=0
+//      (CgsRenderTarget.cpp:336, already in the tree). The face argument is deliberately ignored by
+//      that body, faithfully: on the Xenos every face renders into the SAME EDRAM tile and the face
+//      only selects the RESOLVE destination, which is End's job;
+//   3. ONE combined clear, `sub_82B61E18(&colour, &clearParams, 4)`.
+//   4. the three cached render-state applies.
+//
+// (3) DECODED, value by value, with the displacement each constant is addressed at -- this file
+// already pays for the lesson that a .rdata block runs past its symbol (see the bracket constants
+// further down):
+//   colour.rgb = lfWhiteLevel * flt_82004740 (`lfs f0, flt_82004740@l(r11)` @0x823F6494, `fmuls f0,
+//     f31, f0` @0x823F649C, stored three times @0x823F64A0/A4/AC). flt_82004740 +0x00 is ALREADY
+//     attested in this file as 0.300000012f -- it is KF_BACKGROUND_COLOUR_GREY, the grey-background
+//     channel BeginRenderAntiAliased loads from the same displacement. The env-map face therefore
+//     clears to 30% of the frame's white level in all three channels: a mid-grey stand-in for the
+//     sky wherever neither the world nor the dome covers a texel.
+//   colour.a   = flt_82001CC0 (`stfs f13, ...var_54` @0x823F64B8) == 0.0f, attested in this file
+//     as KF_QUARTER_RES_CLEAR_COMPONENT.
+//   clearParams = { flags 0x30, depth, stencil 0 }: `li r11, 0x30 / stw r11, var_70` @0x823F63F0-
+//     0x823F6404 and `stw r28(0), var_68` @0x823F6410. 0x30 is the XENON D3DCLEAR mask
+//     ZBUFFER(0x10) | STENCIL(0x20) -- the same word, with the same meaning, that the shadow pass
+//     already builds (ShadowPassPCLeaf.h's ClearDepthStencilParameters banner).
+//   depth      = 0.0f, AND THE TWO-STEP IS THE PROOF: the console stores flt_82001C98 == 1.0f into
+//     var_6C at 0x823F6420 -- before the asserts, i.e. the struct's default construction, which is
+//     exactly what the shadow pass's own {0x30, 1.0f, 0} block is -- and then OVERWRITES it with
+//     flt_82001CC0 == 0.0f at 0x823F64C0, immediately before the call. So the value that reaches
+//     the device is 0.0, and the override is the whole point: under the INVERTED depth range set one
+//     step earlier, 0.0 is the FAR plane. Clearing to 1.0 here would clear the face to the NEAR
+//     plane and reject every triangle. The reconstruction writes the settled value once and records
+//     the two-step here rather than replaying a store that is immediately dead.
+//   the `4`    = renderengine::E_TARGETID_COLOUR_ALL, which the helper turns into `flags |= 0xF`
+//     (all four Xenon colour targets). Combined with the 0x30 already in the word, one call clears
+//     colour + depth + stencil. (device.h's ETargetId banner establishes that on X360 the value 4
+//     means ALL COLOUR TARGETS and NOT depth/stencil -- the PS3 DWARF numbers this enum differently
+//     and importing its numbering would turn this into a depth-only clear.)
+//
+// (4) DECODED. The tail is three copies of one pattern:
+//     `v = <a state global>; if (!<its lock byte> && <the shadow slot> != v) { <apply>; <shadow> = v; }`
+// which is character for character shadow::Device::SetState(const DepthStencilState*) @0x82276AD0,
+// (const RasterizerState*) @0x82276B38 and (const BlendMaterialState*) @0x82276A68 -- all three
+// already reconstructed in shadowingdevice.cpp with those exact gates and shadows. The X360
+// compiler INLINED them here, which is why the pseudocode shows the raw globals; un-inlining them
+// is the reconstruction rule, and the DecFIGS DWARF independently confirms it -- BrnGraphicsUnity.cpp
+// :4633 lists this function's body as `ClearDepthStencilParameters lClearZbuffer;` followed by
+// exactly three `shadow::Device::SetState(...)` calls.
+//   dword_8301091C = CgsDepthStencilStateFactory::saDepthStencilStates[4]
+//                    == E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON (CgsDepthStencilStateFactory.h:93)
+//                    -- Z on, Z func GREATER-EQUAL, Z write on. GREATER-EQUAL is the INVERTED-depth
+//                    test, and it is the one state in the whole five-slot table that is: the pass
+//                    clears depth to 0.0 and keeps whatever is nearer, i.e. larger. The clear value,
+//                    the viewport inversion and this slot are three independent witnesses to the same
+//                    fact, which is why none of them is a guess.
+//   dword_83010A3C = CgsRasterizerStateFactory::saRasterizerStates[1]
+//                    == E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT (CgsRasterizerStateFactory.h:148)
+//   dword_83010F70 = CgsBlendStateFactory::saBlendStates[0]
+//                    == E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA (CgsBlendStateFactory.h:148)
+// and the three gate bytes (mbDepthStencilStateLocked, mbRasteriserStateLocked, byte_83010907 ==
+// mbBlendStateLocked) plus the three shadow slots (dword_83010A28 / dword_83010A2C / dword_83010964)
+// are the setters' OWN state, which is why nothing here reads or writes them: calling the setter is
+// how the console's stores happen.
+//
+// ⚠ WHY THIS DOES NOT COPY THE SHADOW PASS'S TAIL. BrnGraphics::ShadowMapRenderManager::
+// BeginRenderShadowMap ends with `ImDeviceSetDepthStencilState(gpShadowDepthStencilState)` -- ONE
+// state, through ImRendererBase::SetState @0x82276AD0's immediate-mode spelling, and its slot is
+// saDepthStencilStates[0] (Z <= ). That is a DIFFERENT console call with a DIFFERENT argument; the
+// env-map face applies all three thirds and picks the GREATER-EQUAL slot. Reusing the shadow pass's
+// line here -- which the brief's "mirror what the tree's shadow pass does" could be read as asking
+// for -- would bind the wrong depth function and reject the whole face.
+// =================================================================================================
+void BrnRendererModule::BeginRenderEnvironmentMapFace(u32 luFace, f32 lfWhiteLevel)
+{
+    CgsRenderTarget* const lpEnvMapBuffer = mAllocatedRenderTargets.GetEnvMapBuffer();
+    CGS_ASSERT(lpEnvMapBuffer != nullptr, "mAllocatedRenderTargets.GetEnvMapBuffer()");
+    CGS_ASSERT(lpEnvMapBuffer != nullptr && lpEnvMapBuffer->GetRenderTarget() != nullptr,
+               "mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()");
+
+    // Bind the cube target's surfaces + an INVERTED-depth viewport (see the banner).
+    lpEnvMapBuffer->SetRenderTargetStateInvertDepth(luFace);
+
+    renderengine::ClearColorParameters lClearColour;
+    lClearColour.mafColourRGBA[0] = lfWhiteLevel * KF_ENV_MAP_CLEAR_COLOUR_SCALE;
+    lClearColour.mafColourRGBA[1] = lClearColour.mafColourRGBA[0];
+    lClearColour.mafColourRGBA[2] = lClearColour.mafColourRGBA[0];
+    lClearColour.mafColourRGBA[3] = KF_ENV_MAP_CLEAR_ALPHA;
+
+    // [FLAG PC bring-up TEST HOOK, OFF BY DEFAULT] BRN_ENVMAP_DEBUG=1 replaces the console's grey
+    // with this face's own colour so the cube's orientation can be read off a screenshot of a
+    // reflective car. See EnvMapDebugFaceColours in this file. The alpha, the depth value and every
+    // state below are UNTOUCHED by the knob -- only the three colour channels move, so the pass
+    // being measured is still the pass that ships.
+    if (EnvMapDebugFaceColours() && luFace < 6u)
+    {
+        lClearColour.mafColourRGBA[0] = KAF_ENV_MAP_DEBUG_FACE_COLOURS[luFace][0];
+        lClearColour.mafColourRGBA[1] = KAF_ENV_MAP_DEBUG_FACE_COLOURS[luFace][1];
+        lClearColour.mafColourRGBA[2] = KAF_ENV_MAP_DEBUG_FACE_COLOURS[luFace][2];
+    }
+
+    renderengine::ClearDepthStencilParameters lClearZbuffer;
+    lClearZbuffer.mu32Flags   = KU_XENON_CLEAR_ZBUFFER | KU_XENON_CLEAR_STENCIL;   // 0x30
+    lClearZbuffer.mfDepth     = KF_ENV_MAP_CLEAR_DEPTH;                            // 0.0 == FAR, inverted
+    lClearZbuffer.mu32Stencil = 0;
+
+    renderengine::Device::Clear(lClearColour, lClearZbuffer, renderengine::E_TARGETID_COLOUR_ALL);
+
+    // The three cached render-state applies (see the banner for each slot's identification).
+    shadow::Device::SetState(CgsDepthStencilStateFactory::GetState(
+                                 E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON));
+    shadow::Device::SetState(CgsRasterizerStateFactory::GetState(
+                                 E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT));
+    shadow::Device::SetState(CgsBlendStateFactory::GetState(
+                                 E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA));
+}
+
+// @0x823FC5E8 -- resolve colour target 0 of the env-map render target into cube face luFace.
+// The console body is the two asserts (same strings, file lines 4204/4205) and one call:
+//     sub_823F9170(GetEnvMapBuffer()->GetRenderTarget() + 0x20, luFace)
+// rt+0x20 IS maColourTargets[0] on the 4-byte-pointer image (rwgpfxrendertarget.h's layout block:
+// mpSection0State at +0x1C, maColourTargets at +0x20), so the call is
+// `maColourTargets[0].Resolve(luFace)` -- the PER-FACE overload of Target::Resolve, whose other
+// xref is BrnGraphics::ShadowMapRenderManager::EndRenderShadowMap. The member is reached BY NAME
+// here; the +0x20 is documentation, and does not survive the x64 widening in any case.
+void BrnRendererModule::EndRenderEnvironmentMapFace(u32 luFace)
+{
+    CgsRenderTarget* const lpEnvMapBuffer = mAllocatedRenderTargets.GetEnvMapBuffer();
+    CGS_ASSERT(lpEnvMapBuffer != nullptr, "mAllocatedRenderTargets.GetEnvMapBuffer()");
+    CGS_ASSERT(lpEnvMapBuffer != nullptr && lpEnvMapBuffer->GetRenderTarget() != nullptr,
+               "mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()");
+
+    lpEnvMapBuffer->GetRenderTarget()->maColourTargets[0].Resolve(luFace);
+}
+#endif  // BRN_ENVMAP_PASS_AVAILABLE
+
 #if BRN_ANTIALIAS_BRACKET_AVAILABLE
 
 #include "pc/gcm/renderengine/Xbox2SurfaceShims.h"   // renderengine::D3DDevice_BeginTiling / EndTiling / Resolve / SetPredication + gpD3DDevice
@@ -2508,7 +2987,8 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
 //   shadow cascades (lists 0,2,1,3,4)  -> LIVE, and no longer here: they run in
 //     RenderShadowMapPasses above, called from Render BEFORE this block, which is the
 //     console's own order (Render:545-640 vs. the world passes at :725+)
-//   env-map faces (lists 5..10)        -> gated OFF on PC (env-map targets)
+//   env-map faces (lists 5..10)        -> LIVE (Render's six-face loop, reflections step 1;
+//                                          runs BEFORE this block, after the shadow pass)
 //   pre-Z (list 21)         -> DispatchAllMeshesZOnly (mbRenderPreZ)
 //   CARS OPAQUE  (list 19)  -> DispatchAllMeshes
 //   WORLD OPAQUE (list 11)  -> DispatchAllMeshes
@@ -2921,9 +3401,22 @@ bool BrnRendererModule::EnsureSkyDomeBringUp()
 // today -- GenerateDispatchListsBringUp passes the same lViewProjection/lEye to the producer
 // at :5535 that it stages at :5554 -- so this is a redundancy, not a divergence.
 // Never written by either side, on the console or here: mCloudLayerRadii (+0x240, which the
-// console's producer does not write either) and the six env-map face matrices +
-// mEnvMapViewPosition (written by WorldModule::GenerateDispatchLists @0x827D1CE8 for
-// BrnSkyDomeManager::RenderToEnvironmentMap, a pass this build does not run).
+// console's producer does not write either).
+//
+// ⭐ CORRECTED 2026-08-17 (reflections step 1). This paragraph used to end "...and the six env-map
+// face matrices + mEnvMapViewPosition (written by WorldModule::GenerateDispatchLists @0x827D1CE8
+// for BrnSkyDomeManager::RenderToEnvironmentMap, a pass this build does not run)". That pass DOES
+// run now -- BrnRendererModule::Render's six-face loop -- and BrnSkyDomeManager::
+// RenderToEnvironmentMap reads BOTH of those members off the frame it is handed
+// (BrnSkyDomeManager.cpp:724-725, GetEnvMapViewProjectionMatrix(leFace) / GetEnvMapViewPosition).
+// So they are COPIED across now, from the same live world frame as everything else. The producer
+// side is WorldModule::GenerateDispatchLists :4014/:4083 (SetEnvMapViewPosition +
+// SetEnvMapViewProjectionMatrix), which the envproducer half of this wave brings live; until it
+// does, the copy carries whatever BrnShaderConstantsFrame::Construct left there, which is what a
+// console frame before the first env-map dispatch carries too. Copying zeroes would put a
+// degenerate view-projection in front of the dome and draw nothing -- visible as a face that has
+// world geometry but no sky, which is exactly what the "[envmap] first face pass: ... sky=1" line
+// plus a black upper hemisphere would report.
 //
 // DELETE-WHEN the dispatch IO buffer set is real: then BrnRendererModule::Update publishes
 // maShaderConstantsFrames[external] through RendererIO::OutputBuffer::SetShaderConstantsFrame,
@@ -2991,6 +3484,23 @@ void BrnRendererModule::PublishSkyConstantsBringUp(BrnShaderConstantsFrame* lpFr
     lpFrame->SetCloudLayerDensity(lrLiveFrame.GetCloudLayerDensity());
     lpFrame->SetCloudLayerInvFeather(lrLiveFrame.GetCloudLayerInvFeather());
     lpFrame->SetCloudDistanceCurve(lrLiveFrame.GetCloudDistanceCurve());
+
+    // the ENV-MAP half (reflections step 1): the six per-face view-projections + the cube's eye.
+    // The console's producer writes them in WorldModule::GenerateDispatchLists @0x827D1CE8 through
+    // the two out-of-line setters whose ONLY caller is that function (SetEnvMapViewProjectionMatrix
+    // @0x827B00A8, SetEnvMapViewPosition @0x827B01E8 -- the call-site census is in this function's
+    // own banner above). Both accessors are lock-asserted: the getters assert the SOURCE frame is
+    // not write-locked (it is not -- the world's seam closes its lock at BrnWorldModule.cpp:5540)
+    // and the setters assert this one IS (it is -- LockForWriting above). Read the loop rather than
+    // six unrolled lines: E_FACE_NUM is the frame's own array bound and the setter asserts it.
+    for (u32 luFace = 0; luFace < static_cast<u32>(BrnGraphics::E_FACE_NUM); ++luFace)
+    {
+        const BrnGraphics::EEnvironmentMapFace leFace =
+            static_cast<BrnGraphics::EEnvironmentMapFace>(luFace);
+        lpFrame->SetEnvMapViewProjectionMatrix(leFace,
+                                               lrLiveFrame.GetEnvMapViewProjectionMatrix(leFace));
+    }
+    lpFrame->SetEnvMapViewPosition(lrLiveFrame.GetEnvMapViewPosition());
 
     lpFrame->UnlockForWriting();
 
@@ -3172,6 +3682,33 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             sbEffectsArbitratorConstructed ? &mEffectsArbitrator : 0, lbTintEffectsAllowed);
     }
 
+#if BRN_ENVMAP_PASS_AVAILABLE
+    // [PC bring-up] SEED THE CONSOLE'S OWN ENV-MAP SWITCH FROM config.ini, once.
+    //
+    // ConstructRenderSwitches (BrnRendererModule.h) sets mRenderSwitches.mbRenderEnvmap true, which
+    // is the console's value -- and it runs from the module's constructor, i.e. at STATIC-INIT time
+    // (the module is reached from `static BrnGame::BrnGameModule gGameModule;`, BrnMain.cpp:45).
+    // renderengine::Device::Initialize and BrnMain's LoadConfig both run later, so seeding the switch
+    // in the constructor would read the value the file has not been consulted for yet. It is
+    // therefore seeded here, on the first Render, from the knob -- and NOT re-applied per frame, so a
+    // debug menu that toggles the switch at run time still wins, exactly as it does on the console.
+    // DELETE-WHEN the debug component owns the switch and the knob can go.
+    {
+        static bool sbEnvMapSwitchSeeded = false;
+        if (!sbEnvMapSwitchSeeded)
+        {
+            sbEnvMapSwitchSeeded = true;
+            mRenderSwitches.mbRenderEnvmap = (renderengine::gEnvironmentMap != 0);
+            if (!mRenderSwitches.mbRenderEnvmap && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[envmap] config.ini [Settings] EnvironmentMap=0 -- the six-face pass and the"
+                       " sampler-13 bind are OFF\n";
+            }
+        }
+    }
+#endif  // BRN_ENVMAP_PASS_AVAILABLE
+
     // ---- X360 Render:536-542 -- the three GLOBAL texture binds. --------------------------
     //
     // THIS IS THE SHADOW RECEIVER'S MISSING HALF. 92 of the 110 pixel shaders in the shipped
@@ -3228,13 +3765,60 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             shadow::Device::SetResource(mpBlobbyShadowTexture, 14u);
         }
 
-        // s13 -- PARKED, no source. The console binds the ENV-MAP target's colour texture
-        // (CgsRenderTarget::GetTexture(mapRenderTarget[E_RENDER_TARGET_ENV_MAP], 0)), but
-        // BrnRendererMemory exposes only GetShadowMapBuffer -- mapRenderTarget is private and
-        // the env-map slot has no accessor, because no X360-attested caller needed one before
-        // now. Binding some other texture here would be an invention, and leaving the unit
-        // unbound is what the build already does. Unpark it with the env-map accessor (that
-        // header is another agent's this wave) once the env-map pass exists to fill the target.
+#if BRN_ENVMAP_PASS_AVAILABLE
+        // s13 -- UNPARKED (reflections step 1, 2026-08-17). The console's bind is
+        //     sub_8227D158(*(this + 5700), 13)          Render @0x8240BFA8 pseudocode line 542
+        // i.e. shadow::Device::SetState(mpEnvMapTextureState, 13) -- the WHOLE-UNIT TextureState
+        // overload, not the bare-resource one the two lines above use. this+5700 is
+        // mpEnvMapTextureState: its sibling at this+5924 is what line 538 binds to s15, the two
+        // differ by 224, and 224 is exactly the distance from mpEnvMapTextureState to
+        // mpShadowMapTextureState[0] in the committed member order (see EnsureEnvMapTextureState).
+        //
+        // THREE DIFFERENCES FROM THE CONSOLE, all of them PC preconditions rather than choices:
+        //   * the console binds UNCONDITIONALLY (no null test at line 542, unlike s14 at 540-541),
+        //     because its pool cannot fail. Here the target is built lazily and can legitimately not
+        //     exist yet -- or be refused outright by EnsureEnvMapTarget -- so the bind is gated on
+        //     the same value-latched gate the pass uses. An unbound unit is what this build already
+        //     ships; binding a non-cube texture to a samplerCUBE is not.
+        //   * it is gated on mRenderSwitches.mbRenderEnvmap as well, so config.ini
+        //     `[Settings] EnvironmentMap=0` really does leave sampler 13 exactly as it is today.
+        //     The console has no such gate because it has no such knob.
+        //   * the TextureState is built HERE, once, rather than in Construct @0x8240A778, for the
+        //     same reason every other Construct step in this file is deferred: the render-target
+        //     pool it samples does not exist until the D3D9 device does.
+        //
+        // POSITION IS THE CONSOLE'S -- before the shadow-map pass, in the same three-bind block --
+        // and it has to be, because the CAR passes that sample s13 (mesh lists 19/20) run much
+        // later, inside RenderWorldPasses. NOTHING BETWEEN THE TWO REBINDS UNIT 13; the check was
+        // made rather than assumed, against the COMMITTED tree (i.e. before this hunk lands):
+        //     $ grep -rn "SetResource(.*13\|SetState(.*, *13\|SetTexture(.*13\|, *13u)"         //           b5-decomp/src --include=*.cpp --include=*.h | grep -v "0x13\|\[13\]"
+        //     (no output)
+        // and the one PC bracket that does park a unit behind the engine's back
+        // (PCSurfaceBracket_Save) parks unit 15 only, by the named constant KU_SHADOW_SAMPLER_UNIT:
+        //     $ grep -rn "KU_SHADOW_SAMPLER_UNIT" b5-decomp/src
+        //     pc/gcm/renderengine/XenonD3D9Shims.cpp:4073: const u32 KU_SHADOW_SAMPLER_UNIT = 15u;
+        //     ...:4107 / :4110 / :4150 / :4151  (GetTexture / SetTexture(null) / restore / ApplyState)
+        // The env-map pass itself renders INTO this texture between the bind and the car passes,
+        // which on this backend means it is bound as a sampler source while it is written -- the
+        // same read-while-written hazard the shadow bracket documents. It is handled where it
+        // belongs, in the loop below, not here.
+        if (mRenderSwitches.mbRenderEnvmap && EnsureEnvMapTarget(mAllocatedRenderTargets)
+            && EnsureEnvMapTextureState(&mpEnvMapTextureState, gpEnvMapTarget))
+        {
+            shadow::Device::SetState(mpEnvMapTextureState, 13u);
+
+            static bool sbLoggedEnvMapBind = false;
+            if (!sbLoggedEnvMapBind && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbLoggedEnvMapBind = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[envmap] s13 bound: cube texture " << mpEnvMapTextureState->mpRaster
+                    << " (TextureState " << mpEnvMapTextureState << ")\n";
+            }
+        }
+#else
+        // s13 -- PARKED. See the BRN_ENVMAP_PASS_AVAILABLE banner at the top of this file.
+#endif  // BRN_ENVMAP_PASS_AVAILABLE
     }
 
     // ---- X360 Render:545-640 -- THE SHADOW-MAP PASS. -------------------------------------
@@ -3252,8 +3836,9 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // env-map face loop, and before every world-pass dispatch: in Render's listing the last
     // BrnGraphics__ShadowMapRenderManager__EndRenderShadowMap is @0x8240CB1C, the env-map loop's
     // BrnRendererModule__EndRenderEnvironmentMapFace is @0x8240CD74, and the call is @0x8240CDB8.
-    // The env-map faces are not reconstructed on this build (see the RenderWorldPasses banner), so
-    // this point between the shadow pass and the world pass IS the console's position.
+    // The env-map faces ARE reconstructed as of reflections step 1 and run immediately above this
+    // bracket (the six-face loop, whose own banner carries the address evidence), so this point
+    // between the env-map loop and the world pass IS the console's position.
     //
     // THE GATE. Neither this body nor ResolveMSAA null-tests the pool -- faithfully; the X360 asm at
     // 0x823FFB08-0x823FFB34 has no null test -- and on PC the pool is built LAZILY, so the call must
@@ -3340,6 +3925,200 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
 
     const bool lbSceneClearStencil      = lPostFxFrameBytes.mbMotionBlurActive;
     const u8   luSceneStencilClearValue = lPostFxFrameBytes.mu8WorldBlurStencil;
+
+#if BRN_ENVMAP_PASS_AVAILABLE
+    // ============================================================================================
+    // ---- X360 Render pseudocode 645-722 (asm 0x8240CB64-0x8240CD8C) -- THE SIX-FACE ENV-MAP PASS.
+    //
+    // POSITION. The console runs this AFTER the shadow-map pass and BEFORE BeginRenderAntiAliased:
+    // the last EndRenderShadowMap is @0x8240CB1C, this loop's EndRenderEnvironmentMapFace is
+    // @0x8240CD74, and the BeginRenderAntiAliased call is @0x8240CDB8. So this is the console's own
+    // position, and the banner that used to stand at the bracket below -- "the env-map faces are not
+    // reconstructed on this build, so this point between the shadow pass and the world pass IS the
+    // console's position" -- is retired by this wave (it is corrected in place, above).
+    //
+    // ⚠ WHY IT SITS INSIDE `#if BRN_ANTIALIAS_BRACKET_AVAILABLE` AND ON lbSceneBracketOpen, which is
+    // a PC precondition with no console counterpart and the single most important line in this block.
+    // Each face BINDS THE 128x128 CUBE TARGET and leaves it bound. On the console the very next thing
+    // Render does is BeginRenderAntiAliased, which rebinds the scene target THROUGH
+    // renderengine::Device::SetState -- so the console needs no bracket and this build must not
+    // invent one. But on PC that call is conditional: it is compiled out at
+    // BRN_ANTIALIAS_BRACKET_AVAILABLE 0 and skipped at run time when lbSceneBracketOpen is false. If
+    // the faces ran and the rebind did not, RenderWorldPasses, the GUI and the 2D tail would all draw
+    // into a 128x128 cube face at a 128x128 viewport -- a black screen with no error anywhere. So the
+    // pass is gated on exactly the condition that guarantees its own rebind.
+    //   * NOT PCSurfaceBracket_Save/Restore, deliberately, even though it is the obvious tool: that
+    //     bracket also raises `sbShadowPassActive` (XenonD3D9Shims.cpp), which changes the cull and
+    //     depth-bias behaviour of WorldDraw_IndexedUP, and it parks sampler 15. Both are shadow-pass
+    //     semantics; borrowing them for the env map would be a fabricated convention.
+    //   * ShadowPassPCLeaf.h's four-part deletion condition for that bracket ends "(4) NOTHING
+    //     BETWEEN THIS PASS AND THAT CALL MAY DRAW WITHOUT BINDING ITS OWN TARGET. On the console the
+    //     env-map pass sits in that gap and binds its own; on PC, verify it." This IS that
+    //     verification: the pass binds its own target, and it only runs when the rebind will follow.
+    // VIEWPORT/gpLastRenderTargetState across the two, stated because a wrong answer here is
+    // invisible: SetRenderTargetStateInvertDepth binds through renderengine::Device::SetState and
+    // WRITES renderengine::gpLastRenderTargetState (CgsRenderTarget.cpp:348-352), so the engine's
+    // "last state installed" shadow stays truthful; BeginRenderAntiAliased then binds the anti-alias
+    // buffer's section-0 state through the same path, the pointers differ, and the bind therefore
+    // happens rather than being skipped. The face leaves a 128x128 viewport (MinZ=1/MaxZ=0) and a
+    // 128x128 scissor rect installed. The VIEWPORT is restored by BeginRenderAntiAliased's
+    // ShadowedSetRenderTargetState -> renderengine::Device::SetState -> IDirect3DDevice9::
+    // SetRenderTarget, which D3D9 documents as resetting the viewport to the full extent of the new
+    // render target (MinZ=0/MaxZ=1) -- XenonD3D9Shims.cpp's PCSurfaceBracket banner settled exactly
+    // this for rung 8; D3DDevice_BeginTiling sets no viewport and only logs a mismatch. The SCISSOR
+    // RECT is NOT restored by anything: it is harmless only because renderengine::Device::
+    // SetWorldPassDefaultStates drives D3DRS_SCISSORTESTENABLE off for the world passes and the
+    // post-fx tail sets its own; a future scissor-enabled pass between here and there would inherit
+    // 128x128 (verify F4, envface -- corrected from the first cut's "tile rects" claim).
+    //
+    // ⚠ READ-WHILE-WRITTEN, and it is REAL on this backend. Sampler 13 was bound to this cube's
+    // colour texture a few hundred lines above, and these faces render INTO it. On the console those
+    // are two different objects (the pass writes an EDRAM tile; the sampler reads the resolved copy),
+    // which is why the console leaves the bind standing. On D3D9 the texture IS the resolve
+    // destination, so unit 13 is parked for the length of the loop and restored after it -- the same
+    // treatment, for the same reason, that PCSurfaceBracket_Save gives unit 15, and the pointer put
+    // back is the one shadow::Device's cache still believes is bound, so the cache stays truthful.
+    //
+    // WHAT IS DROPPED FROM THE CONSOLE BODY, each with its reason (nothing is dropped silently):
+    //   * `D3DDevice_SetShaderGPRAllocation(dev, 0, 0x30, 0x50)` @0x8240CB38 -- a Xenos GPR-partition
+    //     hint with no D3D9 counterpart. This file already drops the other three occurrences in
+    //     Render (0x8240C7F0, 0x8240D6FC, 0x8240DE68); named here so it stays greppable.
+    //   * the PerfMonGpu / PerfMonCpu Start/Stop pairs (miEnvironmentMap gpu +51664, cpu +51528,
+    //     per-face wait +51532) -- the whole of Render carries none of them on this build; see the
+    //     BRN_GPU_PERFMON_AVAILABLE banner.
+    //   * `EA::Jobs::Job::WaitOn(&maEnvmapSortJobs[face], 0, 0, -1)` @0x8240CBF8 -- one per face, a
+    //     rendezvous with the RadixSort job SortDispatchLists kicked off for list 5+face. It has NO
+    //     PC counterpart to write, for exactly the reason the shadow pass's identical note gives:
+    //     SortDispatchLists runs its sorts SYNCHRONOUSLY on this thread, so every list is already
+    //     sorted here and the wait would be a wait on nothing. The maEnvmapSortJobs array is still
+    //     carried in the layout, unused, and the six waits come back with the job scheduler.
+    // ============================================================================================
+    if (mRenderSwitches.mbRenderEnvmap && lbSceneBracketOpen
+        && lpDispatchThreadInputBuffer != 0
+        && EnsureEnvMapTarget(mAllocatedRenderTargets))
+    {
+        // The sky half's own preconditions, evaluated ONCE for the whole loop. On the console the
+        // sky dome's geometry and constants are built in Construct/Prepare and filled by the world;
+        // on PC both are bring-up gates that RenderWorldPasses' main sky pass already carries
+        // (BrnRendererModule.cpp, the mbRenderSky block), and this pass carries the same set so that
+        // the two can never disagree about whether a dome exists.
+        //
+        // THE FRAME. The console copies maShaderConstantsFrames[mu8ShaderConstantsFrameInternal]
+        // (`lbz r11, 0xAD0(r31)` / `mulli r11, r11, 0x320` / `addi r4, r11, 0x490` @0x8240CD34-
+        // 0x8240CD40, the copy constructor at 0x8240CD44) and hands the copy's address to
+        // RenderToEnvironmentMap. On PC the sky's constants come from the bring-up publisher into
+        // the EXTERNAL slot instead -- that is not this wave's choice, it is what the live sky pass
+        // in RenderWorldPasses already does and why (see PublishSkyConstantsBringUp's banner: the
+        // slot this publisher writes BECOMES the internal frame after SwapBuffers). Publishing it
+        // here, before the loop, is what lets the env-map faces read the SIX FACE MATRICES and
+        // mEnvMapViewPosition the world producer wrote this dispatch -- values PublishSkyConstantsBringUp
+        // did not copy until this wave. RenderWorldPasses publishes the same frame again from the
+        // same source a few hundred lines later; the two writes are identical by construction
+        // (nothing writes gBrnWorldShaderConstantsFrameBringUp inside Render).
+        // (BRN_ENVMAP_DEBUG no longer suppresses the world or the sky: the leaf's Resolve(face)
+        //  paints only the top-left quadrant of the REAL resolved face -- verify F2, cubeleaf run 2.)
+        const bool lbDebugFaceColours = EnvMapDebugFaceColours();
+        (void)lbDebugFaceColours;
+        const bool lbSkyReady = mbRenderSky
+                             && gBrnSkyCameraBringUp.mbValid
+                             && gbBrnWorldShaderConstantsFrameBringUpValid
+                             && EnsureSkyDomeBringUp();
+        if (lbSkyReady)
+        {
+            PublishSkyConstantsBringUp(&maShaderConstantsFrames[mu8ShaderConstantsFrameExternal]);
+        }
+
+        // FLAG PC-platform leaf: park the cube off sampler 13 for the length of the pass (see the
+        // READ-WHILE-WRITTEN note above). shadow::Device::SetResource caches on the pointer, so
+        // handing it null and then the texture again is two real D3D9 SetTexture calls and leaves
+        // the TEXTURE shadow holding the texture -- the truth on both sides of the loop.
+        // ⚠ It also clears the WHOLE-UNIT key (mapTextureState[13] = 0, which SetResource does by
+        // design -- a bare-texture bind cannot claim a TextureState is installed), so next frame's
+        // SetState(mpEnvMapTextureState, 13) misses its cache and re-applies. That is CORRECT, not
+        // a leak: the unit really did lose its whole-unit binding, and a cache that claimed
+        // otherwise is exactly the lie that put the shadow cascades in the back buffer.
+        const bool lbUnparkSampler13 = (mpEnvMapTextureState != 0);
+        if (lbUnparkSampler13)
+        {
+            shadow::Device::SetResource(0, 13u);
+        }
+
+        for (u32 luFace = 0; luFace < BrnGraphics::E_FACE_NUM; ++luFace)
+        {
+            // X360 @0x8240CC24: `lbzx r11, r29, r17` where r17 == the READ buffer + 0x99B4, i.e.
+            // mabEnvMapFaceRender[luFace] -- the per-face "the producer filled list 5+face this
+            // dispatch" byte, read through the accessor whose bounds assert the console fires at
+            // 0x8240CC0C ("luIndex<6"). A face the producer did not fill is skipped whole: no
+            // Begin, no dispatch, no sky, no resolve -- which is what makes the console's
+            // three-faces-per-frame alternation (WorldModule::GenerateFrustumQueries :3486-3499)
+            // cost three faces and not six.
+            if (!lpDispatchThreadInputBuffer->GetEnvMapFaceRendered(static_cast<s32>(luFace)))
+                continue;
+
+            BeginRenderEnvironmentMapFace(luFace, lfFrameWhiteLevel);
+
+            // The lock window. The console asserts on entry and exit of BOTH thirds
+            // (shadowingdevice.h:1215/1220/1235/1240 -- the four assert strings are inline in
+            // Render at 0x8240CC54/0x8240CC88/0x8240CCDC/0x8240CD10), which is exactly
+            // Lock/UnlockRasteriserState + Lock/UnlockDepthStencilState. It is what stops the
+            // material walk's per-technique binds from replacing the inverted-depth GREATER-EQUAL
+            // state and the cull-front raster state BeginRenderEnvironmentMapFace just applied.
+            // ⚠ ORDER: rasteriser locks FIRST and unlocks FIRST (0x8240CC40 before 0x8240CC6C;
+            // 0x8240CCCC before 0x8240CCF4) -- it is NOT a nested pair, and reversing it would trip
+            // the asserts rather than merely reorder two writes.
+            shadow::Device::LockRasteriserState();
+            shadow::Device::LockDepthStencilState();
+
+            CgsGraphics::DispatchList* const lpList =
+                mSingleBufferedDispatchFrame.GetList(KU_ENV_MAP_FIRST_MESH_LIST + luFace);
+            const u32 luMeshCount = lpList->GetCount();
+            lpList->DispatchAllMeshes(mpInterpreter, &lDispatchContext, 0, -1);
+
+            shadow::Device::UnlockRasteriserState();
+            shadow::Device::UnlockDepthStencilState();
+
+            if (lbSkyReady)
+            {
+                // The console copies the frame PER FACE (the copy constructor is inside the loop,
+                // @0x8240CD44) and passes the copy's address; RenderToEnvironmentMap takes a
+                // `const BrnShaderConstantsFrame*` (DecFIGS BrnSkyDomeManager.h:71), so the copy is
+                // the compiler materialising a by-value temporary. It is reproduced rather than
+                // hoisted: it is 800 bytes three times a frame, and the literal shape is worth more
+                // than the copy is worth saving.
+                const BrnShaderConstantsFrame lFrame =
+                    maShaderConstantsFrames[mu8ShaderConstantsFrameExternal];
+                mSkyDome.RenderToEnvironmentMap(
+                    static_cast<BrnGraphics::EEnvironmentMapFace>(luFace),
+                    &mIm3dRendererSkyDome,
+                    mpCloudDensity0Texture, mpCloudLighting0Texture,
+                    &lFrame);
+            }
+
+            EndRenderEnvironmentMapFace(luFace);
+
+            // [FLAG PC bring-up probe] the first face that actually ran. LATCHED ON A ONE-SHOT here
+            // and NOT on a value, deliberately and against this file's usual rule: the question it
+            // answers is "did the pass ever run at all", the loop cannot fire on the loading screen
+            // (it needs a dispatch buffer, a world list and a built cube), and the per-frame answer
+            // is already covered by the target line above. DELETE with the bring-up.
+            static bool sbLoggedFirstFace = false;
+            if (!sbLoggedFirstFace && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbLoggedFirstFace = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[envmap] first face pass: face=" << static_cast<s32>(luFace)
+                    << " list=" << static_cast<s32>(KU_ENV_MAP_FIRST_MESH_LIST + luFace)
+                    << " meshes=" << static_cast<s32>(luMeshCount)
+                    << " sky=" << (lbSkyReady ? 1 : 0) << "\n";
+            }
+        }
+
+        if (lbUnparkSampler13)
+        {
+            shadow::Device::SetResource(mpEnvMapTextureState->mpRaster, 13u);
+        }
+    }
+#endif  // BRN_ENVMAP_PASS_AVAILABLE
 
     if (lbSceneBracketOpen)
     {

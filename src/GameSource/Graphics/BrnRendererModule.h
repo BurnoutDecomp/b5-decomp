@@ -558,6 +558,35 @@ private:
     // DEFINITION IS GATED behind BRN_ANTIALIAS_BRACKET_AVAILABLE in BrnRendererModule.cpp.
     void ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue);
 
+    // @ 0x823F63E0 -- open ONE FACE of the environment-map (car-reflection) cube pass: bind the
+    // env-map target's section-0 surface state with an INVERTED viewport depth range, clear its
+    // colour to whiteLevel * 0.3 and its depth to 0.0 (the far value under inverted depth), then
+    // apply the three cached render states the face's geometry walk runs under. Called from
+    // Render @0x8240BFA8 (`bl` @0x8240CC3C), once per rendered face, between the shadow-map pass
+    // and BeginRenderAntiAliased.
+    //
+    // Signature and PARAMETER NAMES from the DecFIGS DWARF: BrnRendererModule.h (dwarfdump file
+    // line 799) declares `void BeginRenderEnvironmentMapFace(uint32_t, float32_t)` and
+    // _compile/BrnGraphicsUnity.cpp:4633 spells the names
+    // `uint32_t luFace, const float32_t lfWhiteLevel`. The X360 prologue attests both positions:
+    // the face rides r4 (`mr r30, r4` @0x823F6400) and the float rides f1 (`fmr f31, f1`
+    // @0x823F63F4) -- a float argument SKIPS its GPR slot, which is why Hex-Rays prints the
+    // parameter list as (int, int, double). Non-static: r3 is `this` (`mr r31, r3` @0x823F63F8,
+    // then `lwz r10, 0x244(r31)` == mAllocatedRenderTargets.GetEnvMapBuffer()).
+    //
+    // DEFINITION IS GATED behind BRN_ENVMAP_PASS_AVAILABLE in BrnRendererModule.cpp; read that
+    // banner before calling this.
+    void BeginRenderEnvironmentMapFace(u32 luFace, f32 lfWhiteLevel);
+
+    // @ 0x823FC5E8 -- close one env-map face: resolve colour target 0 of the env-map render target
+    // into that FACE of its cube texture. The whole body is the two asserts plus
+    //     mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()->maColourTargets[0].Resolve(luFace)
+    // (`addi r3, r11, 0x20` @0x823FC664 -- rt+0x20 IS maColourTargets[0] on the 4-byte-pointer image
+    // -- then `bl sub_823F9170`). DWARF BrnRendererModule.h (dwarfdump file line 802) declares
+    // `void EndRenderEnvironmentMapFace(uint32_t)` and BrnGraphicsUnity.cpp:1445 names the
+    // parameter `luFace`.
+    void EndRenderEnvironmentMapFace(u32 luFace);
+
     // The world/car/sky pass block of Render (@0x8240BFA8 mid-section), split out
     // for readability; runs between the frame begin and the 2D overlay tail.
 public:
