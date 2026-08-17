@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsFunction.h"        // DebugUI::Function::DebugCallbackFunction (RegisterFunction)
 
 // CgsDev::DebugInterface - the lightweight handle the engine passes around to talk to the debug
 // system: it wraps a DebugManager pointer (plus an "is automatic" flag marking stack-scoped uses)
@@ -77,6 +78,17 @@ namespace CgsDev
         // register mirror (X360 0x8282E400 bool / 0x8282E3B8 s32 / RegisterVariable f32)
         // with the range/step tuners (0x8282F910 / 0x8282F9B8). Declarations only --
         // bodies belong to the DebugSystem TU (per-TU compile gate).
+        // ⭐ ADDED 2026-08-17 (boot audit F-P1-14). The argument order is pinned by two
+        // call sites in BrnGameModule::Construct @0x823CAF28/48, which load r4 = the
+        // callback, r5 = the context (the game module), r6 = the path ("Debug/Sim"),
+        // r7 = the name ("Step" / "Play") -- and it matches, argument for argument, the
+        // FunctionManager::RegisterFunction that is already bodied behind it
+        // (CgsFunctionManager.cpp, X360 0x8282E7E0). A thin forwarder, exactly like GetUI().
+        // Out-of-line: the body needs CgsDebugUI.h, whose GetNextWindow() collides with the
+        // Windows.h macro of that name, so it must not be pulled in through this header.
+        void RegisterFunction(DebugUI::Function::DebugCallbackFunction lpfCallback,
+                              void* lpUserData, const char* lpcPath, const char* lpcName);
+
         void RegisterVariable(bool* lpbVariable, const char* lpcPath, const char* lpcName);
         void RegisterVariable(s32* lpiVariable, const char* lpcPath, const char* lpcName);
         void RegisterVariable(f32* lpfVariable, const char* lpcPath, const char* lpcName);
