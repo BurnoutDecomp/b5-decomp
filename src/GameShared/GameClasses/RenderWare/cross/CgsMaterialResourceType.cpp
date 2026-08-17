@@ -260,6 +260,29 @@ namespace CgsResource
                 }
                 else
                 {
+                    // [FLAG PC diagnostic] Name the offender before the console assert fires.
+                    // The one case seen so far was a CONVERTER defect, not a data one: the
+                    // technique's fallback-substituted PC program lacked an internal
+                    // constant the X360 program had (Godray_Additive_Doublesided_Default /
+                    // `illuminance`, TRK_UNIT83_GR). tools/assets/shaders/
+                    // convert_shaders_bundle.py `check` reproduces this offline.
+                    if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    {
+                        // Technique (program-block) name: the rebased serialised word @ +0x94
+                        // (see CgsShaderTechniqueResourceType::FixUp) -- serialised blob,
+                        // the documented raw-offset exception, same as every read above.
+                        const u32 luTechniqueNameSlot = *reinterpret_cast<u32*>(lpProgram + 0x94);   // serialised blob
+                        const char* const lpcTechniqueName =
+                            reinterpret_cast<const char*>(static_cast<uintptr_t>(luTechniqueNameSlot));
+                        *CgsDev::Log::gpDebugPrint
+                            << "MaterialResourceType::PostFixUpShaderConstants: "
+                            << (lbPixelStage ? "pixel" : "vertex")
+                            << " internal constant '" << lpcName << "' (0x"
+                            << CgsDev::E_PRINTMODE_HEXONCE << luConstantId
+                            << ") is not in the program buffer of technique '"
+                            << (lpcTechniqueName ? lpcTechniqueName : "?")
+                            << "' [FLAG PC diagnostic]\n";
+                    }
                     CGS_ASSERT(false, "Tyring to postfixup a constant not present in the programbuffer");
                 }
             }
