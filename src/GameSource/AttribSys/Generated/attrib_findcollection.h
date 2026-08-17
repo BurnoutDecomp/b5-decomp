@@ -47,5 +47,21 @@ namespace Attrib
     // lookup misses. Both keys are 64-bit (the ctors stage a full doubleword in r3; a
     // 32-bit StringToKey result zero-extends into r4).
     Collection* FindCollection(u64 luClassKey, u64 luCollectionKey);
-    Collection* FindCollectionWithDefault(int liKey);
+    // ⚠️ SIGNATURE CORRECTED (2026-08-17, asm-verified at the only call site) -- and it was
+    // the SAME truncation this header already documents fixing for FindCollection above.
+    // Attrib::Gen::surfacelist::ChangeWithDefault @0x8227EFC8 builds a FULL 64-bit key:
+    //     lis  r11, -0x7A4B ; ori r3, r11, 0xC4F4   -> r3   = 0x85B5C4F4
+    //     lis  r11, 0x42C2  ; ori r11, r11, 0x5F49  -> r11  = 0x42C25F49
+    //     insrdi r3, r11, 32, 0                     -> r3   = 0x42C25F49_85B5C4F4
+    //     bl   Attrib::FindCollectionWithDefault
+    // insrdi with width 32 at position 0 sets the HIGH doubleword, so the callee receives
+    // the whole 64-bit class key in r3 -- exactly as FindCollection does.
+    //
+    // The previous `int liKey` (and the note claiming "reads only the low word 0x85B5C4F4")
+    // is not supported by that caller: it deliberately assembles both halves, and deciding
+    // the callee discards one needs the callee's own asm, which is not exported (0x82808400
+    // has no per-function JSON). Declaring it 64-bit costs nothing if the high half is
+    // ignored and is the difference between resolving and silently mis-resolving if it is
+    // not -- which is the exact failure the FindCollection correction above describes.
+    Collection* FindCollectionWithDefault(u64 luClassKey);
 }

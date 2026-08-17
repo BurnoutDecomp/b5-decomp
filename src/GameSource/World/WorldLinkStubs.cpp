@@ -2677,7 +2677,7 @@ struct BrnPhysics::Deformation::WheelPhysicalStates & BrnPhysics::Deformation::W
 // r4/r5 untouched. Real in attribinstance.cpp now; the no-arg spelling is retired.)
 
 // LINK STUB (attrib mount closure): gap G5 sibling (Gen:: ChangeWithDefault edit path).
-Attrib::Collection * Attrib::FindCollectionWithDefault(int)
+Attrib::Collection * Attrib::FindCollectionWithDefault(u64)
 {
     CGS_ASSERT(false, "Attrib::FindCollectionWithDefault: attrib gap G5 -- reconstruct");
     return 0;
