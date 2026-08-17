@@ -253,7 +253,9 @@ bool LoadingScriptedState::LoadWorldCollision(BrnResource::GameDataIO::InputBuff
 // keeps BOTH prepare passes staging onto the SAME queue -- the acquire LoadProgressionData
 // issues has to reach the GameData pump through the identical hop the trigger acquire does.
 // DELETE-WHEN the module's real CreateOutputDataStructure path lands.
-bool LoadingScriptedState::LoadGameState2(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer)
+bool LoadingScriptedState::LoadGameState2(
+        BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+        const BrnResource::GameDataIO::OutputBuffer* /*lpGameDataOutputBuffer*/)
 {
     BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
     if (lpGameModule == 0)
@@ -705,7 +707,7 @@ void LoadingScriptedState::Update()
                 // loaded and OnPlayerCarChange fired "lpProgressionData != NULL"). X360:
                 // `if (!LoadGameState2(this, gameDataIn)) break;`
                 LogScriptedStageOnce(3, "LoadGameState2 -- real");
-                if (!LoadGameState2(&s_GameDataInput))
+                if (!LoadGameState2(&s_GameDataInput, &s_GameDataOutput))
                     break;
                 // fall through
             case 4:
@@ -1443,6 +1445,14 @@ void MainGameFlowStateCompleteLoading::Update()
     // phase completes with the scripted load DONE -- first pass kicks the world-collision
     // stage (dword_82FAE4B0 = 7) and latches, second pass advances to IN_GAME.
     LoadingScriptedState::Update();
+
+    // ⭐ 2026-08-16 (boot audit F-P4-6). The return-to-front-end poll at gm+0x9A0626 is read
+    // in BOTH CompleteLoading::Update and InGame::Update on the console -- in states 0-5 it
+    // is consumed AND DISCARDED. Only InGame carried it here, so a front-end request raised
+    // during COMPLETE_LOADING (the console swallows it) survived on PC and would fire the
+    // instant the flow reached IN_GAME. One clear-and-ignore restores parity.
+    if (BrnGameMainFlowController::gBrnReturnToFrontEndRequested)
+        BrnGameMainFlowController::gBrnReturnToFrontEndRequested = false;
 
     if (!gBrnInitialLoadingComplete)
         return;

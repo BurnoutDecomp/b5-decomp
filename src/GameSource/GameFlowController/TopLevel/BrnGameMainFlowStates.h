@@ -119,7 +119,12 @@ protected:
     // drive GameStateModule::Prepare2 @0x8239ED10 and -- while it reports "still preparing" --
     // forward the module's staged resource requests into the GameData input
     // (AppendRequestInterface<3072>). This is the console's PROGRESSION.DAT load path.
-    bool LoadGameState2(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer);
+    // The second parameter is the GameData OUTPUT buffer. The console passes it and does
+    // not read it (@0x823EF4D8); it had been dropped from our signature entirely, which is
+    // the kind of quiet divergence that makes a later diff against the asm confusing.
+    // Restored 2026-08-16 (boot audit F-P6-15).
+    bool LoadGameState2(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                        const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
 
     // The per-frame world UPDATE leg of the spine (X360 0x823F22D8's `stage > 5` block,
     // inlined there): FreeAll the world frame allocator, drive WorldModule::Update
