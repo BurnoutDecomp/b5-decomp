@@ -2734,11 +2734,24 @@ namespace BrnGame
         // FLAG: ARTIST 0x823CB498 brackets DebugManager::Update with the monitor at
         // mCpuMonitors+0x48 (=miUT_DebugManager), not +0x4C (miUT_RenderAll). Fixed.
         PerfMonCpu::StartMonitor(mCpuMonitors.miUT_DebugManager);
-        // X360 0x823CB498 reads *(gm+10095356) * *(gm+10095360) here -- i.e. the SIM timer's
-        // mfRate * mfScaleCurrent (Timer +0xC and +0x10), which is exactly its current time
-        // step. Now that the timer pair is real this reads the real members; the
-        // mfDebugUpdate* stand-ins it used to read are retired.
-        mDebugManager.Update(mSimTimer.GetRate() * mSimTimer.GetScaleCurrent());
+        // ⭐ TIMER CORRECTED 2026-08-17 (boot audit F-P3-15). The old note said this reads
+        // *(gm+10095356) * *(gm+10095360) -- "the SIM timer's mfRate * mfScaleCurrent" -- and
+        // the code duly read mSimTimer. Both were wrong, by one timer.
+        //
+        // @0x823CB584-98 the console reads the timer based at gm+0x9A0AD4, i.e. +0xC/+0x10 of
+        // it = 0x9A0AE0/0x9A0AE4. And gm+0x9A0AD4 is 10095316, which Construct's own step-9
+        // note names as THE GAME TIMER (the sim timer is 10095344 = 0x9A0AF0). The offsets
+        // that were cited here, 10095356/10095360, are 28 bytes further on -- inside the SIM
+        // timer -- so the comment named one timer, the asm another, and the code followed the
+        // comment.
+        //
+        // It is not cosmetic: the two timers diverge whenever the sim is paused or scaled
+        // (mbSimPaused, the 0x1 update-set bit, and the step/play frame controls all move the
+        // SIM timer and leave the GAME timer running). Reading the sim timer makes the debug
+        // overlay freeze with the simulation instead of continuing to tick -- which is the
+        // opposite of what a debug overlay is for, and exactly the state you are in when you
+        // most want it.
+        mDebugManager.Update(mGameTimer.GetRate() * mGameTimer.GetScaleCurrent());
         UpdateRequestDoStepFrame();
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_DebugManager);
 

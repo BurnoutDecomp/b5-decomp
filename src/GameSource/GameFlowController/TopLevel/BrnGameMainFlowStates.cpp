@@ -1007,9 +1007,15 @@ void MainGameFlowStateInitialLoadingScreen::Update()
     BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
         BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
 
-    // X360 @0x823EF688: the state re-posts the show command onto the dispatch write buffer
-    // every update tick (the one-shot slot is wiped by each end-of-frame swap).
-    GetDispatchWriteBuffer()->ShowLoadingScreen();
+    // ⭐ GATED 2026-08-17 (boot audit F-P5-7). The old note claimed the console "re-posts the
+    // show command every update tick". It does not: the `stw 1 -> +0x9990` lives in the
+    // stage<=2 RENDER leg only (@0x823EFB04), and once the stage machine is past 2 the state
+    // stops posting it -- by then the GUI owns the loading-screen visual through the 19/20
+    // command protocol, and GamePrepare's not-done tail publishes it as well (restored with
+    // F-P2-4). Posting it unconditionally from here on every tick fought both of those for
+    // the slot, on a one-shot word that each end-of-frame swap wipes.
+    if (meLoadingScreenStage <= E_LOADINGSTAGE_GUIMODULE)
+        GetDispatchWriteBuffer()->ShowLoadingScreen();
 
     // The debug manager updates every frame while loading (X360 gates this on stage > Controller).
     if (meLoadingScreenStage > E_LOADINGSTAGE_CONTROLLERMODULE)
