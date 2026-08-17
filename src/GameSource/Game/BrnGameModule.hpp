@@ -610,6 +610,13 @@ namespace BrnGame
         // X360 0x823C0278 -- the soft-reboot flag (reads mHardware.mPad94, the launch-data
         // flag byte at mHardware + 0x94 == game-module + 0x9A1254).
         int HasGameBeenSoftRebooted();
+        // ⭐ 2026-08-16 (boot audit F-P0-10). TUB's WinMain @0x79D580 latches "-skipvideos"
+        // off the command line into the game module right after Construct. The latch had
+        // been gated as "its boot-video consumer is not in this layout yet" -- it is now
+        // (BrnGui::BootVideos short-circuits to DONE the same way it does for a soft
+        // reboot), so the flag is real.
+        void SetSkipVideos(bool lbSkipVideos) { mbSkipVideos = lbSkipVideos; }
+        bool GetSkipVideos() const            { return mbSkipVideos; }
 
         // X360 0x823A9030 -- GameTalk "StopRenderMetrics" receiver: walk the message keys
         // and clear miRenderMetricsRequested on the StopRenderMetrics key. Static (the
@@ -726,6 +733,7 @@ namespace BrnGame
         // ---- the GUI flow-FSM bridge state (X360-attested offsets) -----------------------
         s32  miGuiFsmStage;             // @ +10094148 (1..5 = pending RunFsm post; 6 = idle)
         bool mbGuiPhaseComplete;        // @ +10094152 (command 70 -- the flow-advance flag)
+        bool mbSkipVideos;              // TUB WinMain's "-skipvideos" latch (boot audit F-P0-10)
         bool mbGuiPreAccept;            // @ +10094153 (command 71 -- resume-world-load)
         // FLAG sound stand-in (no console member): a GUI voice-over request (out-event
         // 466) seen by BridgeGuiToGame is answered on the next sub-step -- see the block
