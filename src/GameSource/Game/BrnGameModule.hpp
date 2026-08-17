@@ -508,6 +508,10 @@ namespace BrnGame
         // on the loading path). The PC has no scheduler, so the loading-screen state reaches
         // it by name -- it is the same object at the same place in the module list.
         BrnGui::GuiModule& GetGuiModule() { return mGuiModule; }
+        // gm+0x9A0630 -- the allocator BrnRendererModule::Update lends us each GamePrepare
+        // pass; the loading flow's world drive FreeAll's it and passes it to the world
+        // virtual (boot audit F-P2-4 / F-P6-12). Null until the first not-done pass.
+        CgsMemory::LinearMalloc* GetReusableLoadingScreenAllocator() { return mpReusableLoadingScreenAllocator; }
 
         // ---- replay-output bridge family (GameSource/Unity/../Game/GameBridgeReplayToX.cpp) -------
         // The mirror of the controller bridges: each reads the replay module's pre/post-sim OUTPUT

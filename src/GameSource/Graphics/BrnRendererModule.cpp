@@ -744,6 +744,24 @@ namespace
 void BrnRendererModule::Construct()
 {
     // Double-buffered per-frame shader constants (maShaderConstantsFrames[2]).
+    // ⭐ THE REUSABLE LOADING-SCREEN ALLOCATOR, 2026-08-17 (boot audit F-P2-4/F-P6-12). The
+    // console owns this as an embedded member at renderer+0xC8FC and lends its address to the
+    // game module through RendererIO::OutputBuffer every GamePrepare pass; the loading flow
+    // FreeAll's it once per world drive and hands it to the world virtual. That whole
+    // mechanism -- renderer owns, renderer publishes, game latches, flow recycles -- is now
+    // real, which retires the invented file-static the world drive was using instead.
+    //
+    // [FLAG] the SIZE is still ours. The console's backing carve does not appear in Construct
+    // @0x8240A778 or Prepare @0x82409C20 (no LinearMalloc::Construct call in either), so it
+    // comes from the allocator layer this build does not have. 512 KiB is what the retired
+    // static used, kept so the swap changes ownership and not behaviour; re-source it with the
+    // renderer's real memory carve when the allocator gate lands.
+    static const size_t KN_LOADING_SCREEN_ALLOCATOR_SIZE = 512u * 1024u;
+    static u8 saLoadingScreenAllocatorBacking[KN_LOADING_SCREEN_ALLOCATOR_SIZE];
+    mReusableLoadingScreenAllocator.Construct();
+    mReusableLoadingScreenAllocator.Create(saLoadingScreenAllocatorBacking,
+                                           KN_LOADING_SCREEN_ALLOCATOR_SIZE);
+
     maShaderConstantsFrames[0].Construct();
     maShaderConstantsFrames[1].Construct();
 

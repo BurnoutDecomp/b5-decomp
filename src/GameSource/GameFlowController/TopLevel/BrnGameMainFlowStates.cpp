@@ -367,17 +367,18 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
     CgsModule::IOBufferStack* lpUpdateInputStack  = lpGameModule->GetUpdateInputBufferStack();
     CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
 
-    // FLAG PC-platform leaf (see the note above): the world's per-frame linear allocator.
-    static const size_t KN_WORLD_FRAME_ALLOCATOR_SIZE = 512 * 1024;
-    static CgsMemory::LinearMalloc s_WorldFrameAllocator;
-    static bool s_bFrameAllocatorCreated = false;
-    if (!s_bFrameAllocatorCreated)
-    {
-        s_bFrameAllocatorCreated = true;
-        s_WorldFrameAllocator.Construct();
-        s_WorldFrameAllocator.Create(new u8[KN_WORLD_FRAME_ALLOCATOR_SIZE],
-                                     KN_WORLD_FRAME_ALLOCATOR_SIZE);
-    }
+    // ⭐ THE INVENTED WORLD FRAME ALLOCATOR IS GONE, 2026-08-17 (boot audit F-P6-12). This
+    // used to `new` a 512 KiB LinearMalloc behind a file-static bool, because the console's
+    // allocator -- gm+0x9A0630, which LoadingScriptedState::Update FreeAll's before the world
+    // drive and passes as the world virtual's 7th argument -- was never latched here.
+    // It is now: BrnRendererModule::Update lends it (renderer+0xC8FC) through
+    // RendererIO::OutputBuffer and GamePrepare's tail stores it, so the world drive uses the
+    // renderer's allocator the way the console does.
+    // The null fallback covers the frames before GamePrepare's first not-done pass has run.
+    CgsMemory::LinearMalloc* lpWorldFrameAllocator =
+        lpGameModule->GetReusableLoadingScreenAllocator();
+    if (lpWorldFrameAllocator == 0)
+        return;
 
     BrnWorldIO::UpdateInputBuffer*  lpWorldInput  = 0;
     lpUpdateInputStack->CreateIOBuffer(&lpWorldInput, "World");
@@ -477,7 +478,7 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
 
     // X360: LinearMalloc::FreeAll(gm->mpWorldUpdateFrameAllocator) then the vtable+76
     // dispatch. The loading update set is 0x80 (frustum testing on, nothing else).
-    s_WorldFrameAllocator.FreeAll();
+    lpWorldFrameAllocator->FreeAll();   // @0x823F2858 -- once per world drive, as the console does
     if ((lUpdateSet & 0x20) != 0)
     {
         // The boot-video arm (X360 DoUpdate_World @0x823E8BD0: `(updateSet & 0x20) ?
@@ -500,7 +501,7 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
         lpGameModule->GetWorldModule().Update(lUpdateSet,
                                               lpUpdateInputStack, lpUpdateOutputStack,
                                               lpWorldInput, lpWorldOutput,
-                                              &s_WorldFrameAllocator);
+                                              lpWorldFrameAllocator);
     }
 
     // BridgeWorldToResource @0x823E5300 -- the streamer's request forward.
