@@ -33,6 +33,7 @@
 // `struct`, matching BrnRendererMemory.h:47.
 struct BrnRendererMemory;
 namespace rw { struct IResourceAllocator; }
+namespace renderengine { class Texture; }
 
 // Run BrnPostFx::Construct @0x82409F80 over the file-scope singleton, once. On the console this is
 // BrnRendererModule::Construct @0x8240A778's own call (`addi r3, r11, mPostFxVault@l` @0x8240B774 /
@@ -62,6 +63,10 @@ void PCBringUpConstructPostFx(rw::IResourceAllocator* lpAllocator);
 // mMotionBlurData.mbIsActive byte it reads at 0x8240C2DC. They were hard-coded here (zero / false)
 // while mEffectsArbitrator was never Constructed; the bloom wave Constructs it, so they are
 // parameters now. A null lpafTint2dColourXYZW keeps the previous zero-vector behaviour.
+// lpOverrideSourceTexture is the console's LAST argument to BrnPostFx::Render (`stw r30, var_CD4`
+// @0x8240DE28, read by Render as arg_6C): the calibration ramp texture the renderer derives from the
+// dispatch buffer's calibration handle at 0x8240DD50-0x8240DE08, or null. Non-null replaces the
+// composite's source, forces every effect off and the white level to 1.0 (BrnPostFx.cpp steps 5/8/10).
 // Would PCBringUpRenderPostFxComposite below actually reach BrnPostFx::Render this frame? True when
 // the pool holds every surface the console body dereferences without a test AND
 // PCBringUpConstructPostFx has run. A pure query -- no logging, no side effect.
@@ -80,6 +85,7 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
                                     f32 lfFrameWhiteLevel,
                                     f32 lfAspectCorrection,
                                     const f32* lpafTint2dColourXYZW,
-                                    bool lbMotionBlurEnabled);
+                                    bool lbMotionBlurEnabled,
+                                    renderengine::Texture* lpOverrideSourceTexture);
 
 #endif // BRN_POST_FX_PC_COMPOSITE_H

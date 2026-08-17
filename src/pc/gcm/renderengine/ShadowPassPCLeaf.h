@@ -226,6 +226,34 @@ namespace renderengine
     void PCAlphaCoverage_Reconcile();
 
     // =========================================================================
+    // THE MOTION-BLUR MASK'S PC CARRIER (step 11).
+    //
+    // The console's per-pixel motion-blur mask is the STENCIL BUFFER: the frame's stencil
+    // CLEAR is (u8)(mfWorldBlurAmount*255) and the two car mesh-list windows REPLACE it with
+    // (u8)(mfCarsBlurAmount*255) (BrnRendererModule::Render @0x8240C2C0 / @0x8240CEC4 /
+    // @0x8240D338; both halves are already live on PC). Its consumer, the composite, samples
+    // the depth-stencil as A8R8G8B8 and multiplies the screen velocity by the stencil lane --
+    // and THAT is the step Direct3D 9 cannot express, because a D3D9 depth texture has no
+    // sampleable stencil lane at all.
+    //
+    // This copies the console's own stencil content into the SCENE TARGET'S ALPHA LANE, which
+    // D3D9 can sample, using the one stencil operation D3D9 does have: the TEST. Two
+    // full-screen alpha-only quads (EQUAL carsByte, then NOTEQUAL) write the two bytes as
+    // vertex diffuse alpha, so the value reaches `tex2D(SamplerSource, uv).a` in the eight
+    // blur permutations bit for bit.
+    //
+    // CALL IT after every world pass and BEFORE ResolveMSAA, on frames whose layer-0 effects
+    // frame has mMotionBlurData.mbIsActive -- the same gate the console's own force windows
+    // use. It refuses (and says so once) if the swap chain is bound instead of the scene
+    // target. The full derivation, the arithmetic reason the obvious per-draw blend scheme is
+    // WRONG, and the two honest limits are on the definition in XenonD3D9Shims.cpp.
+    //
+    // NOT a bring-up stand-in: it stands in for no console function. What retires it is a
+    // backend with a stencil SRV (D3D10+), not more reconstruction.
+    // =========================================================================
+    void PCStampMotionBlurMask(u32 luCarsBlurStencil, u32 luWorldBlurStencil);
+
+    // =========================================================================
     // FLAG PC bring-up: THE SCENE-TARGET PRESENT BLIT's device state.
     //
     // ⚠ THIS IS NOT THE POST-FX COMPOSITE. The console's BrnPostFx::Render @0x8240A468 is what

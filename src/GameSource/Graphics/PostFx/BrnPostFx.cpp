@@ -967,7 +967,8 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
                                     f32 lfFrameWhiteLevel,
                                     f32 lfAspectCorrection,
                                     const f32* lpafTint2dColourXYZW,
-                                    bool lbMotionBlurEnabled)
+                                    bool lbMotionBlurEnabled,
+                                    renderengine::Texture* lpOverrideSourceTexture)
 {
     // The console's own source and destination: BrnRendererModule::Render @0x8240BFA8 loads
     // `lwz r27, 0x248(r31)` and `lwz r29, 0x24C(r31)` off mAllocatedRenderTargets at this+0x238,
@@ -1057,7 +1058,8 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
                     lfContrast,
                     lfFrameWhiteLevel,
                     lfAspectCorrection,
-                    0);   // no override source texture (the calibration path)
+                    lpOverrideSourceTexture);   // the calibration ramp, or null (BrnRendererModule
+                                                // derives it at the console's 0x8240DD50-0x8240DE08)
     return true;
 }
 

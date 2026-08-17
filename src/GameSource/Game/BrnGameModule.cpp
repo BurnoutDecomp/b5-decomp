@@ -619,7 +619,7 @@ namespace BrnGame
                                        mColourCalibrationTextureHandle) == 0,
                               "GUI 546 payload: the calibration handle leads (X360 payload +0)");
                 static_assert(offsetof(BrnGui::GuiOptionsBrightnessContrastPostFxControl,
-                                       mbRestoreDefaults)
+                                       mbEnablePostFx)
                                   == sizeof(CgsResource::ResourceHandle),
                               "GUI 546 payload: the post-fx flag follows the handle "
                               "(X360 payload +8; host +16 -- the handle is two pointers)");
@@ -649,14 +649,15 @@ namespace BrnGame
                             reinterpret_cast<
                                 const BrnGui::GuiOptionsBrightnessContrastPostFxControl*>(
                                     lpuCalibPayload);
-                        // mbRestoreDefaults is the console's byte at payload +8 -- false while
+                        // mbEnablePostFx is the console's byte at payload +8 -- false while
                         // the calibration ramp is on screen, true when it hides. The game module
                         // stores it verbatim; BrnRendererModule::Render ANDs
                         // GetCalibrationUnfriendlyEnablePostFx() into every effect's active flag,
                         // so the ramp is graded by nothing while you calibrate against it.
-                        // (DWARF BrnGuiEventTypeDefs.h:6441 names this member mbEnablePostFx --
-                        // see the calib report's cross-group note; polarity is identical.)
-                        mbEnableCalibrationUnfriendlyPostFx = lpControl->mbRestoreDefaults;
+                        // (Renamed from the tree's placeholder mbRestoreDefaults to the DWARF
+                        // name, BrnGuiEventTypeDefs.h:6441 -- step-11 `guiwire`; polarity and
+                        // member order are unchanged.)
+                        mbEnableCalibrationUnfriendlyPostFx = lpControl->mbEnablePostFx;
                         lhCalibrationTextureHandle =
                             lpControl->mColourCalibrationTextureHandle;
                     }

@@ -1,7 +1,7 @@
 #include "GameSource/Gui/BrnGuiColourCalibrationScreen.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
-#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                   // CgsGuiModuleIO::OutputBuffer (AddGuiOutEvent)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"               // CgsDev::Log::WriteToLog ([calib-screen] trace)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"  // CgsResource::Events::AcquireResourceResponse
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                          // GuiOptionsBrightnessContrastPostFxControl
 #include "GameSource/Resource/BrnGameDataModuleIO.h"                     // GameDataIO::InputBuffer / RequestInterface<32768>
@@ -10,11 +10,17 @@
 
 // BrnGui::ColourCalibrationScreen -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// Bodied here (3 ledger functions, DWARF primary file GameSource/Gui/
+// Bodied here (4 ledger functions, DWARF primary file GameSource/Gui/
 // BrnGuiColourCalibrationScreen.cpp):
-//   ColourCalibrationScreen::Destruct  @0x824471C0  (GuiModule::Destruct)
-//   ColourCalibrationScreen::RecvEvent @0x824471D0  (GuiModule::HandleEventsPostBaseModuleUpdate)
-//   ColourCalibrationScreen::Update    @0x8246AA28  (GuiModule::Update)
+//   ColourCalibrationScreen::Construct @0x8244EE78  (GuiModule::Construct  @0x82518B24)
+//   ColourCalibrationScreen::Destruct  @0x824471C0  (GuiModule::Destruct   @0x825076xx)
+//   ColourCalibrationScreen::RecvEvent @0x824471D0  (GuiModule::HandleEventsPostBaseModuleUpdate
+//                                                    @0x825079A8, ids 514/515)
+//   ColourCalibrationScreen::Update    @0x8246AA28  (GuiModule::Update     @0x82529B04)
+//
+// (Construct is attributed to the CgsEventReceiverQueue.h catch-all in the ledger because
+// its whole body is the inlined EventReceiverQueue<1024,16>::Construct; it is homed here,
+// with its own class, and the catch-all is untouched.)
 //
 // RecvEvent (asm walk): assert lpEvent (cpp:252; the X360 streams "invalid event passed
 // through " + the id -- folded static; no early-out), then: id 514 -> assert the state
@@ -34,8 +40,10 @@
 //     cpp:155), build the sampler Parameters (address UVW=2/2/2, filters 0, aniso 13,
 //     field10=1, lod bias 0, trailing flag bytes {0,0,0,1,1}, texture bound), size the
 //     state via TextureState::GetResourceDescriptor, carve mTextureStateResource from the
-//     allocator (the descriptor-carving vtable+16 Allocate -- the same per-TU slice the
-//     reviewed BrnCoronaManager uses) and Initialize the texture state; FALL THROUGH to
+//     allocator (X360 vtable+0x10 with the hidden sret = rw::IResourceAllocator::DoAllocate
+//     by name on the host; the descriptor converted X360-5 -> host-4 exactly as the reviewed
+//     CgsAptRenderHandler.cpp texture-state carve does) and Initialize the texture state;
+//     FALL THROUGH to
 //   PREPARED(3): state = PREPARED and publish
 //     GuiOptionsBrightnessContrastPostFxControl{handle, false} each frame.
 //   PREPARE_TO_HIDE(4): publish {NULLResourceHandle, true} and reset to CONSTRUCTED.
@@ -55,22 +63,38 @@ namespace
     // pool-module request/response tag).
     const s32 KI_EVENT_ACQUIRERESOURCE = 4;
 
-    // The descriptor-carving allocator interface slice (X360 vtable +0x10 Allocate:
-    // (out, this, descriptor, flags)) -- the same per-TU convention as the reviewed
-    // BrnCoronaManager.cpp/rwgcoronarenderer.cpp; the generated rw::IResourceAllocator
-    // models a different (bump-allocator) vtable shape.
-    class ResourceCarvingAllocator
+    // The console publish is CgsGuiModuleIO::OutputBuffer::AddGuiOutEvent<T>; the
+    // instantiation for this exact T is X360 0x82465D98 and its whole body is
+    //     assert(IsBufferLockedForWriting());
+    //     mOutEvents.AddEvent(&event, T::GetEventType() /*546*/, sizeof(T) /*X360 12*/);
+    // FLAG PC-ABI adapter: with no live CgsGuiModuleIO::OutputBuffer on PC the screen is
+    // handed that buffer's mOutEvents stand-in (GuiModule::mGuiOutQueue) directly, so this
+    // helper IS AddGuiOutEvent<T>'s body, minus the lock assert the raw queue has no bit
+    // for. Same AddEvent, same GetEventType() key, same sizeof(T) record.
+    // DELETE-WHEN the GUI module owns a real CgsGuiModuleIO::OutputBuffer.
+    template <class T>
+    void AddGuiOutEvent(CgsModule::VariableEventQueue<18432, 16>* lpQueue, const T& lrEvent)
     {
-    public:
-        virtual void  Reserved00() = 0;   // +0x00 (dtor slot)
-        virtual void  Reserved04() = 0;   // +0x04
-        virtual void  Reserved08() = 0;   // +0x08
-        virtual void  Reserved0C() = 0;   // +0x0C
-        // +0x10: carve a resource for lpDescriptor into lpResourceOut (flags 0 here).
-        virtual void* Allocate(rw::Resource* lpResourceOut, ResourceCarvingAllocator* lpThis,
-                               const u32* lpDescriptor, int liFlags) = 0;
-        virtual void  Free(void* lpBlock) = 0;   // +0x14
-    };
+        CGS_ASSERT(lpQueue != NULL, "lpQueue");
+        if (lpQueue != NULL)
+        {
+            lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrEvent),
+                              lrEvent.GetEventType(), static_cast<s32>(sizeof(T)));
+        }
+    }
+}
+
+// @ 0x8244EE78 -- the console body is exactly two things, in this order: bring the
+// embedded receiver queue up over its own backing buffer (the inlined
+// EventReceiverQueue<1024,16>::Construct -- `stw 0x400, 0x10(queue)` / `stw 0x10,
+// 0x14(queue)` / `stw &queue.maBuffer, 0(queue)` / `bl BaseEventReceiverQueue::Clear`),
+// then seed the state machine (`li r11,0 / stw r11, 0(this)`). NOTHING else is touched:
+// mColourCalibrationTextureHandle, mTextureStateResource and mpTextureState are left
+// alone here -- Update's acquire arm is their only writer, exactly as on the console.
+void ColourCalibrationScreen::Construct()
+{
+    mReceiverQueue.Construct();
+    meState = E_COLOURCALIBRATIONSCREENSTATE_CONSTRUCTED;
 }
 
 // @ 0x824471C0
@@ -90,20 +114,24 @@ void ColourCalibrationScreen::RecvEvent(const CgsModule::Event* lpEvent, s32 liI
         CGS_ASSERT(E_COLOURCALIBRATIONSCREENSTATE_CONSTRUCTED == meState,
                    "E_COLOURCALIBRATIONSCREENSTATE_CONSTRUCTED == meState");
         meState = E_COLOURCALIBRATIONSCREENSTATE_PREPARE_TO_SHOW;
+        // [FLAG PC bring-up diagnostic] edge-triggered by construction (514 is only taken
+        // out of CONSTRUCTED). DELETE-WHEN the calibration card is visible on screen.
+        CgsDev::Log::WriteToLog("[calib-screen] show requested (GUI 514)\n");
     }
     else if (liId == 515)
     {
         meState = E_COLOURCALIBRATIONSCREENSTATE_PREPARE_TO_HIDE;
+        CgsDev::Log::WriteToLog("[calib-screen] hide requested (GUI 515)\n");
     }
 }
 
 // @ 0x8246AA28
 void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDMInput,
                                      const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput,
-                                     CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput,
+                                     CgsModule::VariableEventQueue<18432, 16>* lpGuiOutEvents,
                                      rw::IResourceAllocator* lpAllocator)
 {
-    (void)lpGDMOutput;
+    (void)lpGDMOutput;   // r5: never read by the console body either (see the header note)
 
     switch (meState)
     {
@@ -169,16 +197,60 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
         lTextureStateParameters.mpTexture       = lpColourCalibrationTexture;
 
         // Size + carve the texture-state resource, then initialise the state over it.
+        //
+        // ⚠️ CORRECTED THIS WAVE -- the console's carve is rw::IResourceAllocator::DoAllocate,
+        // NOT a fifth vtable slot. The asm @0x8246ACDC-F8 is
+        //     r11 = *(r25)            ; the allocator's vptr
+        //     r5  = r3                ; the descriptor GetResourceDescriptor just filled
+        //     r6  = 0                 ; the debug NAME argument
+        //     r4  = r25               ; this
+        //     r3  = &var_90           ; the hidden STRUCT-RETURN pointer
+        //     r11 = *(r11 + 0x10) ; bctrl
+        // PowerPC returns a >8-byte struct through an sret pointer in r3, so Hex-Rays'
+        // four-argument `Allocate(out, this, descriptor, flags)` is really the two-argument
+        // `rw::Resource DoAllocate(const ResourceDescriptor&, const char* name)` with the
+        // out-param hoisted in front (AGENTS.md rule 4). The five words the console then
+        // copies into this+0x424 (@0x8246ACFC-AD20) are that returned rw::Resource in its
+        // X360 BaseResourceDescriptors<5> width.
+        // The previous body reached vtable slot +0x10 through a hand-declared interface
+        // slice. That is a GUEST vtable index: the host's rw::IResourceAllocator has FOUR
+        // virtuals (dtor / DoAllocate / Free / DoFree), so index 4 is past the end of the
+        // real vtable and the call would have jumped through whatever follows it. Reaching
+        // DoAllocate BY NAME is both the faithful call and the only safe one, and it is the
+        // same conversion the reviewed CgsAptRenderHandler texture-state carve performs.
         u32 lauDescriptor[10];
         renderengine::TextureState::GetResourceDescriptor(lauDescriptor);
 
-        ResourceCarvingAllocator* lpCarvingAllocator =
-            reinterpret_cast<ResourceCarvingAllocator*>(lpAllocator);
-        lpCarvingAllocator->Allocate(&mTextureStateResource, lpCarvingAllocator,
-                                     lauDescriptor, 0);
+        if (lpAllocator != NULL)
+        {
+            // GetResourceDescriptor writes the X360 5-entry form (10 words); the host's
+            // rw::ResourceDescriptor is the 4-entry one. Slot 0 carries the whole
+            // texture-state object; slots 1..3 are the console's own {0, 1} empties.
+            rw::ResourceDescriptor lAllocDescriptor;
+            lAllocDescriptor.m_baseResourceDescriptors[0].m_size      = lauDescriptor[0];
+            lAllocDescriptor.m_baseResourceDescriptors[0].m_alignment = lauDescriptor[1];
+            for (u32 luSlot = 1; luSlot < 4; ++luSlot)
+            {
+                lAllocDescriptor.m_baseResourceDescriptors[luSlot].m_size      = 0u;
+                lAllocDescriptor.m_baseResourceDescriptors[luSlot].m_alignment = 1u;
+            }
+            mTextureStateResource = lpAllocator->DoAllocate(lAllocDescriptor, NULL);
+        }
+        else
+        {
+            // [FLAG PC bring-up] the console cannot reach here (GuiModule::Prepare caches a
+            // real allocator before any Update runs). On PC the bank-42 allocator can be
+            // absent if GameDataModule::CreateAllocators could not carve it; say so once and
+            // carry on -- the committed PC renderengine::TextureState::Initialize does not
+            // read lpResourceMemory at all (texturestate.cpp: it `new`s the state and keeps
+            // the sampler config), so an uncarved resource costs correctness nothing here.
+            CgsDev::Log::WriteToLog("[calib-screen] FLAG: no RW linear resource allocator "
+                                    "(bank 42) -- texture-state resource not carved\n");
+        }
 
         mpTextureState = renderengine::TextureState::Initialize(&mTextureStateResource,
                                                                 &lTextureStateParameters);
+        CgsDev::Log::WriteToLog("[calib-screen] calibration texture acquired\n");
     }
         // FALLTHROUGH (the X360 case-2 body runs straight into the PREPARED publish).
     case E_COLOURCALIBRATIONSCREENSTATE_PREPARED:
@@ -187,8 +259,8 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
 
         GuiOptionsBrightnessContrastPostFxControl lControl;
         lControl.mColourCalibrationTextureHandle = mColourCalibrationTextureHandle;
-        lControl.mbRestoreDefaults               = false;
-        lpOutput->AddGuiOutEvent(lControl);
+        lControl.mbEnablePostFx                  = false;
+        AddGuiOutEvent(lpGuiOutEvents, lControl);
         break;
     }
 
@@ -196,10 +268,11 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
     {
         GuiOptionsBrightnessContrastPostFxControl lControl;
         lControl.mColourCalibrationTextureHandle = CgsResource::NULLResourceHandle;
-        lControl.mbRestoreDefaults               = true;
-        lpOutput->AddGuiOutEvent(lControl);
+        lControl.mbEnablePostFx                  = true;
+        AddGuiOutEvent(lpGuiOutEvents, lControl);
 
         meState = E_COLOURCALIBRATIONSCREENSTATE_CONSTRUCTED;
+        CgsDev::Log::WriteToLog("[calib-screen] hidden -- post-fx restored\n");
         break;
     }
 

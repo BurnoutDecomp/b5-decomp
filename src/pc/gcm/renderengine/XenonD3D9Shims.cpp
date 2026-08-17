@@ -570,6 +570,86 @@ namespace
     // Read only by the env-gated cull/depth-bias experiment in WorldDraw_IndexedUP.
     bool        sbShadowPassActive = false;
 
+    // True for the length of PCStampMotionBlurMask's full-screen quads (the motion-blur mask's
+    // PC carrier, at the bottom of this file). It is an input to the alpha-to-coverage
+    // derivation for the same reason sbShadowPassActive is, and the reason is sharper here:
+    // those quads' ENTIRE PURPOSE is the alpha they write, and alpha-to-coverage turns a
+    // fragment's alpha into a COVERAGE MASK -- so with a vendor hook live a stamp of
+    // alpha = carsByte/255 would kill (255 - carsByte)/255 of its own samples and the mask
+    // would come out dithered instead of flat. Made impossible by construction for one bool
+    // rather than argued about per vendor, exactly as the shadow pass is.
+    bool        sbMaskStampActive = false;
+
+    // =========================================================================
+    // [FLAG PC bring-up diagnostic] THE DEST-ALPHA CENSUS -- the fidelity question the
+    // motion-blur mask's carrier turns on, answered with a counter instead of an opinion.
+    //
+    // The mask rides the SCENE TARGET'S ALPHA LANE (PCStampMotionBlurMask, at the bottom of
+    // this file). That lane is only genuinely free if no world material BLENDS ITS COLOUR
+    // against it -- i.e. if no shipped BlendState word ever names Xenos factor 8 (DEST_ALPHA)
+    // or 9 (INV_DEST_ALPHA) in any of its four factor fields. The shipped material data is the
+    // only authority on that and it cannot be grepped out of the source, so it is COUNTED at
+    // the one place every blend word arrives -- shadow::Device::Xbox2SetStateLowLevelShadowed
+    // is the SOLE caller of D3DDevice_SetBlendState (grep pasted in the wave report) -- and
+    // reported once the sample is big enough to mean something.
+    //
+    // THE STAMP IS SAFE EITHER WAY, and that is WHY this is a diagnostic and not a gate: the
+    // stamp runs AFTER every world draw, so during the world pass the alpha lane still holds
+    // exactly what it held before this wave and a DEST_ALPHA blend still reads exactly what it
+    // read before. A non-zero count does NOT break the mask; it means the alpha the world
+    // leaves behind was MEANINGFUL to somebody, which is the fact a future wave would need
+    // before moving the stamp earlier or masking the alpha write bit per draw.
+    //
+    // ⚠ WHY IT LIVES **HERE** AND NOT BESIDE THE BLEND DECODE IT SERVES. Its two call sites
+    // (D3DDevice_SetBlendState / D3DDevice_SetRenderState_ColorWriteEnable) and the whole
+    // Xenon*ToD3D9 translation block sit INSIDE this file's `extern "C"` region (opened at the
+    // fast-set surface's banner, closed ~570 lines later), and C language linkage strips the
+    // name mangling from everything declared in it -- which is why `dumpbin /SYMBOLS` shows the
+    // existing `XenonBlendFactorToD3D9` as an UNDECORATED External symbol despite its
+    // anonymous namespace. Adding four counters and two helpers there would have put six more
+    // undecorated, link-visible names into the exe for no reason. Up here they are ordinary
+    // anonymous-namespace statics (`?...@?A0x<hash>@@...`, internal linkage), the same as
+    // every other piece of state this file owns.
+    // DELETE with the mask bring-up: it counts a fact, it does not maintain one.
+    // =========================================================================
+    const u32 KU_BLEND_CENSUS_REPORT_AT = 1000u;
+
+    u32  suBlendCensusCalls     = 0u;
+    u32  suBlendCensusDestAlpha = 0u;
+    u32  suBlendCensusWordMask  = 0u;   // OR of every colour-write word pushed (bit 3 = ALPHA)
+    bool sbBlendCensusReported  = false;
+
+    inline bool XenonBlendFactorIsDestAlpha(u32 luValue)
+    {
+        return luValue == 8u || luValue == 9u;   // DEST_ALPHA / INV_DEST_ALPHA
+    }
+
+    void BlendCensus_Account(u32 luColourSrc, u32 luColourDst, u32 luAlphaSrc, u32 luAlphaDst)
+    {
+        ++suBlendCensusCalls;
+        if (XenonBlendFactorIsDestAlpha(luColourSrc) || XenonBlendFactorIsDestAlpha(luColourDst)
+            || XenonBlendFactorIsDestAlpha(luAlphaSrc) || XenonBlendFactorIsDestAlpha(luAlphaDst))
+        {
+            ++suBlendCensusDestAlpha;
+        }
+        if (!sbBlendCensusReported && suBlendCensusCalls >= KU_BLEND_CENSUS_REPORT_AT)
+        {
+            sbBlendCensusReported = true;
+            char lacMessage[320];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                          "[mask-alpha] blend factors seen: DESTALPHA/INVDESTALPHA used by %u of"
+                          " %u SetBlendState calls, colour-write words seen {%s%s%s%s}"
+                          " (the OR of every word pushed; the A slot is bit 3)\n",
+                          static_cast<unsigned>(suBlendCensusDestAlpha),
+                          static_cast<unsigned>(suBlendCensusCalls),
+                          (suBlendCensusWordMask & 1u) ? "R" : "-",
+                          (suBlendCensusWordMask & 2u) ? "G" : "-",
+                          (suBlendCensusWordMask & 4u) ? "B" : "-",
+                          (suBlendCensusWordMask & 8u) ? "A" : "-");
+            CgsDev::Log::WriteToLog(lacMessage);
+        }
+    }
+
     // =========================================================================
     // [FLAG PC bring-up probe] the CLIP-SPACE TALLY for the shadow pass.
     //
@@ -895,7 +975,10 @@ namespace
                    // single-sampled depth atlas. No vendor DOCUMENT says what its hook does
                    // there, so "A2C cannot touch the shadow map" is made true by construction
                    // for one bool instead of by appeal to one vendor's behaviour.
-                   && !sbShadowPassActive;
+                   && !sbShadowPassActive
+                   // ...and the motion-blur mask stamp, whose quads exist to write one exact
+                   // alpha value (see that flag's own note above).
+                   && !sbMaskStampActive;
 
         if (lbWant && AlphaCoveragePathNeedsAlphaTest(liPath))
         {
@@ -3144,7 +3227,15 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
         IDirect3DBaseTexture9* lpTex0 = nullptr;
         lpDevice->GetRenderTarget(0, &lpRt);
         lpDevice->GetTexture(0, &lpTex0);
-        auto ReadCentre = [&](IDirect3DSurface9* lpSrc, const char* lpcTag, char* lpcOut, size_t luOut)
+        // [DIAG, mask-alpha] lpuCentre / lpuQuarter (either may be null) hand the two sampled
+        // ARGB words back to the caller so the motion-blur MASK can be reported in decoded
+        // form. The mask is the ALPHA byte of the composite's SOURCE texture -- the resolved
+        // down-sample colour -- and `centre` vs `quarter` are two points that differ on a
+        // car-select orbit (frame centre = the car, x = width/4 = the world behind it), which
+        // makes them a cars-vs-world read-back with no capture tool involved. lpbRead says
+        // whether the two words are real (a multisampled or unlockable surface reads nothing).
+        auto ReadCentre = [&](IDirect3DSurface9* lpSrc, const char* lpcTag, char* lpcOut, size_t luOut,
+                              u32* lpuCentre, u32* lpuQuarter, bool* lpbRead)
         {
             std::snprintf(lpcOut, luOut, "%s=n/a", lpcTag);
             if (lpSrc == nullptr) return;
@@ -3175,6 +3266,9 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
                     static_cast<const u8*>(lLock.pBits) + (lDesc.Height / 2u) * lLock.Pitch);
                 const u32 luC = lpRow[lDesc.Width / 2u];
                 const u32 luQ = lpRow[lDesc.Width / 4u];
+                if (lpuCentre  != nullptr) *lpuCentre  = luC;
+                if (lpuQuarter != nullptr) *lpuQuarter = luQ;
+                if (lpbRead    != nullptr) *lpbRead    = true;
                 std::snprintf(lpcOut, luOut, "%s=%ux%u fmt=%u centre=%08X quarter=%08X",
                               lpcTag, (unsigned)lDesc.Width, (unsigned)lDesc.Height, (unsigned)lDesc.Format, luC, luQ);
                 lpSys->UnlockRect();
@@ -3186,11 +3280,14 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
             lpSys->Release();
         };
         char lacRt[160], lacTex[160], lacTex1[160];
-        ReadCentre(lpRt, "rt", lacRt, sizeof(lacRt));
+        u32  luTex0Centre = 0u, luTex0Quarter = 0u;
+        bool lbTex0Read = false;
+        ReadCentre(lpRt, "rt", lacRt, sizeof(lacRt), nullptr, nullptr, nullptr);
         IDirect3DSurface9* lpTexSurf = nullptr;
         if (lpTex0 != nullptr && lpTex0->GetType() == D3DRTYPE_TEXTURE)
             static_cast<IDirect3DTexture9*>(lpTex0)->GetSurfaceLevel(0, &lpTexSurf);
-        ReadCentre(lpTexSurf, "tex0", lacTex, sizeof(lacTex));
+        ReadCentre(lpTexSurf, "tex0", lacTex, sizeof(lacTex),
+                   &luTex0Centre, &luTex0Quarter, &lbTex0Read);
         // [DIAG rung 5, bloom] the stage-1 texture (the composite's SamplerBloom == the bloom pool
         // target after the three bloom passes) and the five pixel constants the composite reads
         // (c0 GlobalParams, c1 BloomColour, c2 VignetteInnerRgbPlusMul, c3 VignetteOuterRgbPlusAdd,
@@ -3201,7 +3298,7 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
         IDirect3DSurface9* lpTex1Surf = nullptr;
         if (lpTex1 != nullptr && lpTex1->GetType() == D3DRTYPE_TEXTURE)
             static_cast<IDirect3DTexture9*>(lpTex1)->GetSurfaceLevel(0, &lpTex1Surf);
-        ReadCentre(lpTex1Surf, "tex1", lacTex1, sizeof(lacTex1));
+        ReadCentre(lpTex1Surf, "tex1", lacTex1, sizeof(lacTex1), nullptr, nullptr, nullptr);
         float lafPs[5][4] = {};
         lpDevice->GetPixelShaderConstantF(0, &lafPs[0][0], 5);
         char lacMsg[900];
@@ -3215,6 +3312,25 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
                       lafPs[3][0], lafPs[3][1], lafPs[3][2], lafPs[3][3],
                       lafPs[4][0], lafPs[4][1], lafPs[4][2], lafPs[4][3]);
         CgsDev::Log::WriteToLog(lacMsg);
+        // [DIAG, mask-alpha] THE MASK, DECODED. tex0 of a stride-20 quad on the composite call
+        // IS SamplerSource (the resolved down-sample colour), so its alpha byte is exactly what
+        // the blur permutations multiply the screen velocity by. Printed as bytes AND as the
+        // amounts they stand for, so a boot log alone answers "did the car and the world get
+        // DIFFERENT blur?" -- with BRN_POSTFX_MASK_TEST=0,1 on the car-select orbit the two
+        // must differ.
+        if (lbTex0Read)
+        {
+            char lacMask[220];
+            std::snprintf(lacMask, sizeof(lacMask),
+                          "[mask-alpha] source alpha run %u: centre=%u (%.3f) quarter=%u (%.3f)"
+                          " -- the motion-blur mask the composite reads at those two pixels\n",
+                          static_cast<unsigned>(suRunTotal),
+                          static_cast<unsigned>((luTex0Centre  >> 24) & 0xFFu),
+                          static_cast<double>((luTex0Centre  >> 24) & 0xFFu) / 255.0,
+                          static_cast<unsigned>((luTex0Quarter >> 24) & 0xFFu),
+                          static_cast<double>((luTex0Quarter >> 24) & 0xFFu) / 255.0);
+            CgsDev::Log::WriteToLog(lacMask);
+        }
         if (lpTex1Surf) lpTex1Surf->Release();
         if (lpTex1)     lpTex1->Release();
         if (lpTexSurf) lpTexSurf->Release();
@@ -3443,6 +3559,10 @@ void D3DDevice_SetBlendState(IDirect3DDevice9*, u32 luRenderTargetIndex, u32 luB
     const u32 luAlphaOp    = (luBlendState >> 21) & 0x07u;
     const u32 luAlphaDst   = (luBlendState >> 24) & 0x1Fu;
 
+    // [FLAG PC bring-up diagnostic] see THE DEST-ALPHA CENSUS above. Counting only; it reads
+    // the four decoded factor fields and changes no state.
+    BlendCensus_Account(luColourSrc, luColourDst, luAlphaSrc, luAlphaDst);
+
     const bool lbColourOpaque = (luColourSrc == 1u && luColourDst == 0u && luColourOp == 0u);
     const bool lbAlphaOpaque  = (luAlphaSrc  == 1u && luAlphaDst  == 0u && luAlphaOp  == 0u);
     const bool lbBlend = !(lbColourOpaque && lbAlphaOpaque);
@@ -3469,6 +3589,13 @@ void D3DDevice_SetBlendState(IDirect3DDevice9*, u32 luRenderTargetIndex, u32 luB
 
 void D3DDevice_SetRenderState_ColorWriteEnable(IDirect3DDevice9*, u32 luValue)
 {
+    // [FLAG PC bring-up diagnostic] the second half of THE DEST-ALPHA CENSUS above: WHICH
+    // colour-write words the shipped material data actually pushes. The ALPHA bit being set on
+    // essentially every world material is what makes the alpha lane's contents "whatever the
+    // last draw wrote" -- the fact the mask stamp is designed around by running AFTER every
+    // world draw, rather than by masking that bit per draw.
+    suBlendCensusWordMask |= (luValue & 0x0Fu);
+
     IDirect3DDevice9* lpDevice = Dev();
     if (lpDevice != nullptr)
         lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE, luValue);
@@ -5972,6 +6099,387 @@ int D3DDevice_Resolve(void* /*lpDevice*/, u32 luFlags, const void* lpSourceRect,
 
     lpBoundColour->Release();   // GetRenderTarget AddRefs
     return 0;                   // unobservable: no attested caller reads it (see the banner)
+}
+
+// =================================================================================================
+// PCStampMotionBlurMask -- THE MOTION-BLUR MASK'S PC CARRIER.
+//
+// WHAT THE CONSOLE DOES, and it is fully recovered (drive-fx wave, step 10): the per-pixel
+// motion-blur mask IS the STENCIL BUFFER. BrnRendererModule::Render quantises the layer-0
+// effects frame at @0x8240C2C0-0x8240C314 into worldByte = (u8)(mfWorldBlurAmount*255) and
+// carsByte = (u8)(mfCarsBlurAmount*255); worldByte is the frame's stencil CLEAR (through
+// D3DDevice_BeginTiling's / D3DDevice_EndTiling's ClearStencil), and carsByte is REPLACED into
+// the stencil over the two car mesh lists by shadow::Device::BeginForceStencilWrite /
+// EndForceStencilWrite (Render @0x8240CEC4 and @0x8240D338; the override itself is
+// shadowingdevice.cpp:746-754, StencilFunc ALWAYS / StencilPass REPLACE / ref = the byte).
+// The composite then samples the depth-stencil as A8R8G8B8 and MULTIPLIES THE SCREEN VELOCITY
+// BY THE STENCIL LANE. Both halves of the producer are already live on PC.
+//
+// THE PC PROBLEM IS THE CONSUMER, AND IT IS ONE SENTENCE: Direct3D 9 cannot SAMPLE the stencil
+// plane of a depth-stencil surface (INTZ / DF24 / DF16 return the depth VALUE in .r and nothing
+// else). It CAN still TEST it. So the mask is MOVED, not reinvented: two full-screen
+// ALPHA-ONLY quads, stencil-TESTED against the same two bytes, copy the console's stencil
+// content into the scene target's ALPHA LANE while that target and its own D24S8 depth-stencil
+// are still bound; the resolve carries all four lanes out (StretchRect), and the eight blur
+// permutations read `tex2D(SamplerSource, uv).a` at the unjittered uv
+// (tools/assets/shaders/brn_postfx_composite.fx). The VALUE the shader multiplies by is
+// bit-for-bit the console's: the quad's diffuse ALPHA BYTE is the stencil byte itself, and an
+// A8R8G8B8 target stores that byte unchanged, so the shader's `.a` is stencil/255 exactly.
+//
+// ⚠ WHY NOT THE OBVIOUS THING -- writing the mask into alpha FROM THE CAR DRAWS THEMSELVES,
+// with D3DRS_SEPARATEALPHABLENDENABLE + SRCBLENDALPHA = BLENDFACTOR and the forced byte in
+// D3DRS_BLENDFACTOR's alpha. IT IS ARITHMETICALLY WRONG, and not marginally. D3D9's alpha
+// blend is A_out = A_src * SrcBlendAlpha + A_dst * DestBlendAlpha, so BLENDFACTOR/ZERO gives
+//     A_out = A_src * carsByte/255
+// -- the SHADER'S OWN alpha output times the byte, not the byte. There is no assignment of
+// D3D9 blend factors that yields a constant independent of A_src and A_dst (every factor is
+// either a constant MULTIPLIER of one of them or zero, and the equation has no constant term).
+// That reduces to the console's REPLACE only where A_src == 1, and one of the two force
+// windows is the CAR TRANSPARENT list (GDL 0x14), drawn by RenderWorldPasses under
+// SetWorldPassDefaultStates(true) -- SRCALPHA/INVSRCALPHA blending, i.e. glass, whose whole
+// point is A_src < 1. The console stamps carsByte on a windscreen regardless of how
+// transparent it is; that scheme would stamp carsByte * glassAlpha. Nothing in the image
+// attests what any car pixel program writes to alpha (the console never reads the scene's
+// alpha lane), so "A_src is 1 for the opaque list" would be an assumption, not a recovery.
+// The stencil test needs no such assumption: it asks the buffer the console actually wrote.
+//
+// TWO MORE THINGS THE STENCIL TEST BUYS, both of which the per-draw scheme costs:
+//   * ZERO CHANGE TO THE WORLD PASS. Nothing about any material's colour-write word, blend
+//     word or blend factor is touched, so a material that blends its colour on DEST_ALPHA
+//     reads exactly what it read before this wave (the census in the blend-state leaf above
+//     counts how many do). The per-draw scheme has to mask the alpha write bit for the whole
+//     world pass, which CHANGES what such a material reads.
+//   * ALPHA-TO-COVERAGE IS UNTOUCHED (rung 9). A2C derives coverage from the fragment's alpha
+//     BEFORE blending, so a scheme that leaves the shader alpha alone is safe -- but only for
+//     the DRAWS. These quads write an authored alpha and would be eaten by their own coverage,
+//     which is what sbMaskStampActive (top of this file) makes impossible.
+//
+// WHAT IT COSTS: two full-screen alpha-only draws with no texture, no depth test and no
+// blending -- ROP traffic and nothing else -- and ONLY on frames where a camera actually
+// requested motion blur (the caller gates on mMotionBlurData.mbIsActive, exactly as the
+// console gates its own force windows). One quad when the two amounts are equal.
+//
+// TWO HONEST LIMITS, both reported rather than hidden:
+//   (1) NO STENCIL, NO DISCRIMINATION. The scene target's depth format is picked by a ladder
+//       (PostFxRenderTargetPCLeaf.cpp): the MULTISAMPLED path takes D3DFMT_D24S8 first, so the
+//       stencil is real; the single-sampled path takes the COMPARE ladder, whose first
+//       candidate D3DFMT_D24X8 has NO stencil bits -- and there the console's force-stencil
+//       write is already a no-op too. When the bound depth carries no stencil this writes the
+//       WORLD byte everywhere in ONE quad and says so once. That is still strictly better than
+//       what the composite did before this wave (a hard-coded 1.0, i.e. every pixel blurred at
+//       FULL strength no matter what the camera asked for), because
+//       BrnPostFxShader::Render never scales BlurMatrixX/Y/W by the amount.
+//   (2) A THIRD STENCIL VALUE would come out as the world amount. The console reads the
+//       stencil BYTE, so any value/255 is a legal mask; this pair of tests can only express
+//       two. On the shipped frame graph there are exactly two -- the clear and the car
+//       replace -- and a material that wrote its own stencil inside a non-force window would
+//       be getting a mask the game never intended anyway, so the world amount is the sane
+//       reading. Named here so nobody has to rediscover it.
+//
+// NOT A "DELETE-WHEN" SEAM. It stands in for no console function: it is the D3D9 realisation
+// of a console mechanism whose original form the API cannot express. What retires it is a
+// BACKEND with a stencil SRV (D3D10+), not more reconstruction.
+// =================================================================================================
+namespace
+{
+    // The stamp's vertex: a pre-transformed screen corner plus a diffuse colour whose ALPHA
+    // byte IS the console's stencil byte. D3DFVF_XYZRHW bypasses vertex processing entirely
+    // (no shader, no transform), which is what makes this a fixed-function draw that cannot
+    // disturb the world's constant file.
+    struct MaskStampVertex
+    {
+        f32      mfX;
+        f32      mfY;
+        f32      mfZ;
+        f32      mfRhw;
+        D3DCOLOR mDiffuse;
+    };
+    const DWORD KU_MASK_STAMP_FVF = D3DFVF_XYZRHW | D3DFVF_DIFFUSE;
+
+    // Every render state the stamp overwrites, saved and put back in one place so the list
+    // cannot drift away from the SetRenderState calls below.
+    const D3DRENDERSTATETYPE KAE_MASK_STAMP_SAVED_STATES[] =
+    {
+        D3DRS_ALPHABLENDENABLE, D3DRS_ALPHATESTENABLE,  D3DRS_ZENABLE,
+        D3DRS_ZWRITEENABLE,     D3DRS_CULLMODE,         D3DRS_SCISSORTESTENABLE,
+        D3DRS_COLORWRITEENABLE, D3DRS_FILLMODE,         D3DRS_SRGBWRITEENABLE,
+        D3DRS_MULTISAMPLEMASK,  D3DRS_STENCILENABLE,    D3DRS_TWOSIDEDSTENCILMODE,
+        D3DRS_STENCILFUNC,      D3DRS_STENCILREF,       D3DRS_STENCILMASK,
+        D3DRS_STENCILWRITEMASK, D3DRS_STENCILFAIL,      D3DRS_STENCILZFAIL,
+        D3DRS_STENCILPASS
+    };
+    const u32 KU_MASK_STAMP_SAVED_STATE_COUNT =
+        static_cast<u32>(sizeof(KAE_MASK_STAMP_SAVED_STATES)
+                         / sizeof(KAE_MASK_STAMP_SAVED_STATES[0]));
+
+    u32 suMaskStampDrawFailures = 0u;
+}
+
+void PCStampMotionBlurMask(u32 luCarsBlurStencil, u32 luWorldBlurStencil)
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr)
+        return;
+
+    u32 luSurfaceWidth  = 0u;
+    u32 luSurfaceHeight = 0u;
+    IDirect3DSurface9* const lpBoundColour =
+        TilingAcquireBoundColour(lpDevice, &luSurfaceWidth, &luSurfaceHeight);
+    if (lpBoundColour == nullptr || luSurfaceWidth == 0u || luSurfaceHeight == 0u)
+    {
+        LogOnce("mask-alpha-nort",
+                "[mask-alpha] no colour render target is bound; the motion-blur mask stamp is"
+                " skipped and the composite reads whatever the alpha lane holds.\n");
+        if (lpBoundColour != nullptr)
+            lpBoundColour->Release();
+        return;
+    }
+
+    // The same misordering tripwire D3DDevice_Resolve carries, for the same reason: this writes
+    // into the surface that is BOUND, so running it after the present blit would stamp the
+    // finished frame's alpha instead of the scene target's.
+    if (TilingBoundColourIsBackBuffer(lpDevice, lpBoundColour))
+    {
+        LogOnce("mask-alpha-backbuffer",
+                "[mask-alpha] the SWAP CHAIN is bound -- refusing to stamp the motion-blur mask"
+                " into the finished frame. Call PCStampMotionBlurMask while the scene target is"
+                " still bound, i.e. immediately before ResolveMSAA.\n");
+        lpBoundColour->Release();
+        return;
+    }
+
+    // Can the bound depth actually TELL THE TWO HALVES APART? Asked of the surface the device
+    // holds right now, through the same predicate the tiling clear uses, so a format ladder
+    // change cannot silently strand this. See LIMIT (1) in the banner.
+    bool lbHaveStencil  = false;
+    u32  luDepthFormat  = 0u;
+    IDirect3DSurface9* lpDepthSurface = nullptr;
+    if (SUCCEEDED(lpDevice->GetDepthStencilSurface(&lpDepthSurface)) && lpDepthSurface != nullptr)
+    {
+        D3DSURFACE_DESC lDepthDesc;
+        std::memset(&lDepthDesc, 0, sizeof(lDepthDesc));
+        if (SUCCEEDED(lpDepthSurface->GetDesc(&lDepthDesc)))
+        {
+            luDepthFormat = static_cast<u32>(lDepthDesc.Format);
+            lbHaveStencil = TilingDepthFormatHasStencil(lDepthDesc.Format);
+        }
+        lpDepthSurface->Release();   // GetDepthStencilSurface AddRefs
+    }
+
+    const u32  luCarsByte  = luCarsBlurStencil  & 0xFFu;
+    const u32  luWorldByte = luWorldBlurStencil & 0xFFu;
+    const bool lbTwoQuads  = lbHaveStencil && (luCarsByte != luWorldByte);
+
+    // ---- SAVE ------------------------------------------------------------------------------
+    // This BORROWS the device in the middle of a frame and its caller has no idea it happened,
+    // so everything it touches is captured here and restored below -- the same contract
+    // PCBringUpClearRenderTargetState and TilingResolveDepthToTexture keep.
+    DWORD lauSavedState[KU_MASK_STAMP_SAVED_STATE_COUNT];
+    for (u32 luState = 0; luState < KU_MASK_STAMP_SAVED_STATE_COUNT; ++luState)
+    {
+        if (FAILED(lpDevice->GetRenderState(KAE_MASK_STAMP_SAVED_STATES[luState],
+                                            &lauSavedState[luState])))
+        {
+            lauSavedState[luState] = 0u;
+        }
+    }
+
+    IDirect3DVertexShader9*      lpSavedVs   = nullptr;
+    IDirect3DPixelShader9*       lpSavedPs   = nullptr;
+    IDirect3DVertexDeclaration9* lpSavedDecl = nullptr;
+    DWORD                        luSavedFvf  = 0u;
+    lpDevice->GetVertexShader(&lpSavedVs);          // AddRefs on success
+    lpDevice->GetPixelShader(&lpSavedPs);           // AddRefs on success
+    lpDevice->GetVertexDeclaration(&lpSavedDecl);   // AddRefs on success
+    lpDevice->GetFVF(&luSavedFvf);
+
+    DWORD luSavedColourOp = 0u, luSavedColourArg1 = 0u;
+    DWORD luSavedAlphaOp  = 0u, luSavedAlphaArg1  = 0u;
+    DWORD luSavedStage1ColourOp = 0u;
+    lpDevice->GetTextureStageState(0u, D3DTSS_COLOROP,   &luSavedColourOp);
+    lpDevice->GetTextureStageState(0u, D3DTSS_COLORARG1, &luSavedColourArg1);
+    lpDevice->GetTextureStageState(0u, D3DTSS_ALPHAOP,   &luSavedAlphaOp);
+    lpDevice->GetTextureStageState(0u, D3DTSS_ALPHAARG1, &luSavedAlphaArg1);
+    lpDevice->GetTextureStageState(1u, D3DTSS_COLOROP,   &luSavedStage1ColourOp);
+
+    D3DVIEWPORT9 lSavedViewport;
+    std::memset(&lSavedViewport, 0, sizeof(lSavedViewport));
+    const bool lbSavedViewport = SUCCEEDED(lpDevice->GetViewport(&lSavedViewport));
+
+    const bool lbA2cWasApplied = sbA2cApplied;
+
+    // ---- SET -------------------------------------------------------------------------------
+    // Alpha-to-coverage OFF first: it is the one piece of state that would consume the very
+    // value these quads exist to write (see sbMaskStampActive's note at the top of this file).
+    sbMaskStampActive = true;
+    AlphaCoverage_Reconcile();
+
+    lpDevice->SetVertexShader(nullptr);
+    lpDevice->SetPixelShader(nullptr);
+    lpDevice->SetFVF(KU_MASK_STAMP_FVF);   // also clears any bound vertex declaration
+
+    lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE,  FALSE);
+    lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE,   FALSE);
+    lpDevice->SetRenderState(D3DRS_ZENABLE,           D3DZB_FALSE);
+    lpDevice->SetRenderState(D3DRS_ZWRITEENABLE,      FALSE);
+    lpDevice->SetRenderState(D3DRS_CULLMODE,          D3DCULL_NONE);
+    lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+    lpDevice->SetRenderState(D3DRS_FILLMODE,          D3DFILL_SOLID);
+    lpDevice->SetRenderState(D3DRS_SRGBWRITEENABLE,   FALSE);
+    // EVERY SAMPLE, NOT SOME. The world's rasteriser states push their own
+    // D3DRS_MULTISAMPLEMASK (shadowingdevice.cpp's rasteriser applier), and a mask left with a
+    // sample switched off would leave that sample's alpha at the world's leftovers -- which the
+    // resolve would then average into the mask. Forced and restored.
+    lpDevice->SetRenderState(D3DRS_MULTISAMPLEMASK,   0xFFFFFFFFu);
+    // THE ALPHA LANE AND NOTHING ELSE. This is what makes the stamp free of side effects: the
+    // scene colour the world just spent the frame producing is untouchable while it runs.
+    lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE,  D3DCOLORWRITEENABLE_ALPHA);
+
+    // Fixed-function, texture-free: alpha comes from the vertex colour and nothing else. Stage
+    // 1 is disabled so a stage the 2D tail left enabled cannot make the draw invalid.
+    lpDevice->SetTextureStageState(0u, D3DTSS_COLOROP,   D3DTOP_SELECTARG1);
+    lpDevice->SetTextureStageState(0u, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+    lpDevice->SetTextureStageState(0u, D3DTSS_ALPHAOP,   D3DTOP_SELECTARG1);
+    lpDevice->SetTextureStageState(0u, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+    lpDevice->SetTextureStageState(1u, D3DTSS_COLOROP,   D3DTOP_DISABLE);
+
+    // The quad is authored in the surface's own pixel coordinates, so the viewport has to be
+    // the whole surface (the world pass may have left a partial one). MinZ/MaxZ are carried
+    // across untouched -- the same rule TilingClearBoundSurfaces follows.
+    bool lbForcedViewport = false;
+    if (lbSavedViewport)
+    {
+        D3DVIEWPORT9 lFullViewport;
+        lFullViewport.X      = 0u;
+        lFullViewport.Y      = 0u;
+        lFullViewport.Width  = static_cast<DWORD>(luSurfaceWidth);
+        lFullViewport.Height = static_cast<DWORD>(luSurfaceHeight);
+        lFullViewport.MinZ   = lSavedViewport.MinZ;
+        lFullViewport.MaxZ   = lSavedViewport.MaxZ;
+        lbForcedViewport = SUCCEEDED(lpDevice->SetViewport(&lFullViewport));
+    }
+
+    // The stencil is READ, never written: every op is KEEP and the write mask is zero, so the
+    // console's own stencil content survives the stamp untouched (the resolve's 0x300 clear is
+    // what resets it, exactly as before).
+    lpDevice->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+    lpDevice->SetRenderState(D3DRS_STENCILFAIL,      D3DSTENCILOP_KEEP);
+    lpDevice->SetRenderState(D3DRS_STENCILZFAIL,     D3DSTENCILOP_KEEP);
+    lpDevice->SetRenderState(D3DRS_STENCILPASS,      D3DSTENCILOP_KEEP);
+    lpDevice->SetRenderState(D3DRS_STENCILWRITEMASK, 0u);
+    lpDevice->SetRenderState(D3DRS_STENCILMASK,      0xFFu);
+    lpDevice->SetRenderState(D3DRS_STENCILREF,       static_cast<DWORD>(luCarsByte));
+
+    // ---- DRAW ------------------------------------------------------------------------------
+    // The half-pixel offset is the D3D9 pre-transformed-vertex rule: a quad from -0.5 to
+    // extent-0.5 covers pixel centres 0..extent-1 exactly, with no edge pixel left out and none
+    // sampled twice.
+    const f32 lfLeft   = -0.5f;
+    const f32 lfTop    = -0.5f;
+    const f32 lfRight  = static_cast<f32>(luSurfaceWidth)  - 0.5f;
+    const f32 lfBottom = static_cast<f32>(luSurfaceHeight) - 0.5f;
+
+    MaskStampVertex laQuad[4];
+    laQuad[0].mfX = lfLeft;   laQuad[0].mfY = lfTop;
+    laQuad[1].mfX = lfRight;  laQuad[1].mfY = lfTop;
+    laQuad[2].mfX = lfLeft;   laQuad[2].mfY = lfBottom;
+    laQuad[3].mfX = lfRight;  laQuad[3].mfY = lfBottom;
+    for (u32 luVertex = 0; luVertex < 4u; ++luVertex)
+    {
+        laQuad[luVertex].mfZ   = 0.0f;
+        laQuad[luVertex].mfRhw = 1.0f;
+    }
+
+    HRESULT lHrDraw = S_OK;
+    u32     luQuads = 0u;
+
+    // Pass 1: the CAR silhouette -- the pixels whose stencil the force windows REPLACED.
+    // Skipped entirely when there is nothing to discriminate (no stencil, or the two amounts
+    // are equal), in which case pass 2 below covers the whole surface with the world value.
+    if (lbTwoQuads)
+    {
+        lpDevice->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+        lpDevice->SetRenderState(D3DRS_STENCILFUNC,   D3DCMP_EQUAL);
+        const D3DCOLOR lCarsColour = D3DCOLOR_ARGB(static_cast<int>(luCarsByte), 0, 0, 0);
+        for (u32 luVertex = 0; luVertex < 4u; ++luVertex)
+            laQuad[luVertex].mDiffuse = lCarsColour;
+        const HRESULT lHr = lpDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2u, laQuad,
+                                                      sizeof(MaskStampVertex));
+        if (FAILED(lHr))
+            lHrDraw = lHr;
+        ++luQuads;
+    }
+
+    // Pass 2: everything else -- the frame's stencil CLEAR value, i.e. the world amount.
+    lpDevice->SetRenderState(D3DRS_STENCILENABLE, lbTwoQuads ? TRUE : FALSE);
+    lpDevice->SetRenderState(D3DRS_STENCILFUNC,   D3DCMP_NOTEQUAL);
+    {
+        const D3DCOLOR lWorldColour = D3DCOLOR_ARGB(static_cast<int>(luWorldByte), 0, 0, 0);
+        for (u32 luVertex = 0; luVertex < 4u; ++luVertex)
+            laQuad[luVertex].mDiffuse = lWorldColour;
+        const HRESULT lHr = lpDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2u, laQuad,
+                                                      sizeof(MaskStampVertex));
+        if (FAILED(lHr))
+            lHrDraw = lHr;
+        ++luQuads;
+    }
+
+    // ---- RESTORE ---------------------------------------------------------------------------
+    if (lbForcedViewport)
+        lpDevice->SetViewport(&lSavedViewport);
+
+    lpDevice->SetTextureStageState(1u, D3DTSS_COLOROP,   luSavedStage1ColourOp);
+    lpDevice->SetTextureStageState(0u, D3DTSS_ALPHAARG1, luSavedAlphaArg1);
+    lpDevice->SetTextureStageState(0u, D3DTSS_ALPHAOP,   luSavedAlphaOp);
+    lpDevice->SetTextureStageState(0u, D3DTSS_COLORARG1, luSavedColourArg1);
+    lpDevice->SetTextureStageState(0u, D3DTSS_COLOROP,   luSavedColourOp);
+
+    if (lpSavedDecl != nullptr)
+        lpDevice->SetVertexDeclaration(lpSavedDecl);
+    else
+        lpDevice->SetFVF(luSavedFvf);       // nothing had a declaration: restore the FVF
+    lpDevice->SetPixelShader(lpSavedPs);
+    lpDevice->SetVertexShader(lpSavedVs);
+
+    for (u32 luState = 0; luState < KU_MASK_STAMP_SAVED_STATE_COUNT; ++luState)
+        lpDevice->SetRenderState(KAE_MASK_STAMP_SAVED_STATES[luState], lauSavedState[luState]);
+
+    sbMaskStampActive = false;
+    AlphaCoverage_Reconcile();   // the inputs are back; follow them
+
+    if (lpSavedDecl != nullptr) lpSavedDecl->Release();
+    if (lpSavedPs   != nullptr) lpSavedPs->Release();
+    if (lpSavedVs   != nullptr) lpSavedVs->Release();
+    lpBoundColour->Release();    // GetRenderTarget AddRefs
+
+    // ---- REPORT ----------------------------------------------------------------------------
+    // ONE line, on the first stamp of the run: it answers the three questions a wrong mask
+    // raises -- which two bytes went in, whether the stencil could discriminate them at all,
+    // and whether alpha-to-coverage was live at the moment they were written.
+    {
+        char lacMessage[384];
+        std::snprintf(lacMessage, sizeof(lacMessage),
+                      "[mask-alpha] stamp: cars=%u world=%u carrier=scene-alpha stencil=%s"
+                      " depthFmt=0x%08X a2c=%s quads=%u target=%ux%u hr=0x%08X\n",
+                      static_cast<unsigned>(luCarsByte),
+                      static_cast<unsigned>(luWorldByte),
+                      lbHaveStencil ? "yes" : "NO (world amount everywhere)",
+                      static_cast<unsigned>(luDepthFormat),
+                      lbA2cWasApplied ? "on (suppressed for the stamp)" : "off",
+                      static_cast<unsigned>(luQuads),
+                      static_cast<unsigned>(luSurfaceWidth),
+                      static_cast<unsigned>(luSurfaceHeight),
+                      static_cast<unsigned>(lHrDraw));
+        LogOnce("mask-alpha-stamp", lacMessage);
+    }
+
+    if (FAILED(lHrDraw))
+    {
+        LogRepeating(suMaskStampDrawFailures,
+                     "[mask-alpha] the mask stamp's DrawPrimitiveUP was REJECTED -- the scene"
+                     " target's alpha lane keeps whatever the world left, so the composite's"
+                     " motion blur is masked by garbage");
+    }
 }
 
 // =============================================================================
