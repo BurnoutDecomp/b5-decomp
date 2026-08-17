@@ -3623,6 +3623,28 @@ void BrnRendererModule::RenderAssert(const AssertData* /*lpAssertData*/)
 {
 }
 
+// The corona manager's published (swap-current) submission interface. Bodied 2026-08-17
+// (boot audit F-P2-4).
+//
+// The header called this "Not X360-attested for this TU" and I left it unpublished when
+// BrnRendererModule::Update first landed rather than guess. That caution expired with the
+// extraction itself: Update @0x824060F0-108 forms the argument as
+//     C = corona; slot = C[0x130]; interface = C + slot*0x70 + 0x50
+// which names every part of it -- an array based at manager+0x50 with a 0x70 stride, indexed
+// by a byte at manager+0x130. This class has exactly one array of that shape,
+// mSubmissionInterface[2], and exactly one index byte beside it, mu8SubmissionSwapIndex. So
+// the expression IS attested -- by its caller, which is where an un-bodied accessor's shape
+// usually lives.
+//
+// Defined from THIS TU rather than BrnCoronaManager.cpp because that file is not on the build
+// list and adding it drags in AddCorona/AddPropCorona, which want BrnEffects::Curves::
+// SmoothStep::Evaluate and rw::RGBA's ctor -- a dependency cascade for one accessor. Move it
+// home when the corona TU is mounted for its own sake.
+BrnCoronaManager::BrnSubmissionInterface* BrnCoronaManager::GetSubmissionInterface()
+{
+    return &mSubmissionInterface[mu8SubmissionSwapIndex];
+}
+
 // ============================================================================================
 // @ 0x82405E28 -- BrnRendererModule::Update.  RECONSTRUCTED 2026-08-17 (boot audit F-P2-4).
 //
@@ -3699,14 +3721,12 @@ void BrnRendererModule::Update(CgsModule::IOBufferStack* /*lpUpdateInputStack*/,
 
     lpOutput->SetShaderConstantsFrame(&maShaderConstantsFrames[mu8ShaderConstantsFrameExternal]);
     lpOutput->SetBlobbyShadowBuffer(mBlobbyShadowManager.GetExternalBuffer());
-    // [FLAG] @0x824060F0-108 publishes the corona submission interface
-    // (`corona + mu8Slot*0x70 + 0x50`). BrnCoronaManager::GetSubmissionInterface is
-    // DECLARED-ONLY and its header says so in as many words -- "Not X360-attested for this
-    // TU". The blobby accessor beside it WAS derivable (maBuffers[mu8External], stride
-    // 0x1010 == sizeof(buffer)); this one is not, because the +0x50 sub-object inside the
-    // 0x70 stride has no committed member to name. Left unpublished rather than guessed;
-    // the output buffer keeps its Construct-time null, which its consumers already tolerate.
-    // Tracked as the remainder of F-P2-4 alongside the 0x2C record below.
+    // @0x824060F0-108 -- the corona submission interface. (I left this unpublished on the
+    // first pass because GetSubmissionInterface was declared-only; re-testing the premise
+    // showed the accessor's shape is fully named by THIS caller -- `C + C[0x130]*0x70 + 0x50`
+    // is mSubmissionInterface[mu8SubmissionSwapIndex], the class's only 0x70-stride array and
+    // its only index byte. Bodied in BrnCoronaManager.cpp.)
+    lpOutput->SetCoronaSubmissionInterface(mCoronaManager.GetSubmissionInterface());
     lpOutput->SetIm3dRenderBufferRacePosition(&mIm3dBufferRacePosition);
     lpOutput->SetIm3dRenderBufferMenusAndHud(&mIm3dBufferMenusAndHud);
     lpOutput->SetRenderSwitches(mRenderSwitches);
