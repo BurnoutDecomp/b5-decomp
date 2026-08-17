@@ -2785,6 +2785,16 @@ namespace BrnGame
                 // the PC's name for that byte.
                 if (!mbSteppingFrames)
                 {
+                // ⭐ CLEAR FIRST, 2026-08-16 (boot audit F-P3-8). DoUpdate_GUI @0x823F0758
+                // opens by clearing BOTH out buffers, then runs its bridges; we cleared the
+                // GUI out-queue at the END of the leg instead. Same net emptiness at every
+                // point that reads it today -- which is why the inversion was masked -- but
+                // "the leg starts with an empty queue" is the invariant the console relies
+                // on, and clearing at the end only holds while nothing outside this leg can
+                // post into the queue.
+                if (mGuiModule.IsPrepared())
+                    mGuiModule.GetGuiOutQueue()->Clear();
+
                 // ---- controller -> GUI input pass (the console per-substep bridge) ---------
                 // Fill the player-0 pad record (InputPadsPC, the PC stand-in for the input
                 // module's own fill), then run the REAL BridgeControllerToGui: it synthesises
@@ -3018,11 +3028,7 @@ namespace BrnGame
                 // Both GUI out-event consumers have now run; retire this frame's records.
                 // (The console's queue lifecycle is the module scheduler's IO-buffer teardown;
                 // on PC the queue is a module member, so it is cleared explicitly.)
-                // The out-queue is Constructed by GuiModule::Prepare -- on the console too
-                // (CgsGui::GuiModule::Prepare @0x82857070 constructs the base queue at
-                // @0x828570F0) -- so before stage 2 there is no queue to clear.
-                if (lbGuiPrepared)
-                    mGuiModule.GetGuiOutQueue()->Clear();
+                // (the retiring Clear moved to the HEAD of this leg -- see F-P3-8 above.)
                 }   // end of the frame-step guard opened above (boot audit F-P3-9)
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_EachUpdate);
 

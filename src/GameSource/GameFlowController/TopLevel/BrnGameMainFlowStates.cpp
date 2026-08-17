@@ -1497,7 +1497,17 @@ void MainGameFlowStateCompleteLoading::Update()
         //  and LoadingScriptedState::Update at the top of this function drives the load.)
     }
 }
-void MainGameFlowStateCompleteLoading::Render() {}
+// ⭐ 2026-08-16 (boot audit F-P6-11). CompleteLoading::Render IS DoDispatch on the console --
+// the same render-dispatch spine MainGameFlowStateInGame::Render drives. Ours was empty, so
+// for the whole compload window (which is now a real hold on stage 7 while the collision
+// streams, not a couple of frames) nothing dispatched a render frame from the flow state and
+// the screen was carried entirely by whatever the previous state left behind.
+void MainGameFlowStateCompleteLoading::Render()
+{
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    if (lpGameModule != 0)
+        lpGameModule->DoDispatch();
+}
 
 MainGameFlowStateInGame::MainGameFlowStateInGame() {}
 // OnEnter/OnLeave/Update/Render are homed in BrnGameMainFlowInGameState.cpp (the DWARF
