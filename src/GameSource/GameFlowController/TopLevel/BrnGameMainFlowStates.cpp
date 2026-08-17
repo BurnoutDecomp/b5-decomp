@@ -810,10 +810,11 @@ bool LoadingScriptedState::LoadSoundModule(BrnResource::GameDataIO::InputBuffer*
     lpUpdateInputStack->CreateIOBuffer<BrnSound::Module::Io::RootInputBuffer>(&lpRootInputBuffer, "Sound");
     lpUpdateOutputStack->CreateIOBuffer<BrnSound::Module::Io::RootOutputBuffer>(&lpRootOutputBuffer, "Sound");
 
-    // [follow-on] The loading state's per-frame GameData IO bracket (the X360 Update creates the
-    // GameData input/output buffers each frame and threads them through every LoadXxxModule) is
-    // not reconstructed yet, so the buffers arrive null here; the allocator list is then null and
-    // Prepare's carve stages stay allocator-gated (see BrnRootSoundModule.cpp).
+    // (The per-frame GameData IO bracket this used to say was "not reconstructed yet, so the
+    // buffers arrive null here" IS reconstructed -- InitialLoadingScreen::Update opens every
+    // frame with the pair and threads it through each LoadXxxModule. Stale note corrected
+    // 2026-08-17. Prepare's carve stages remain allocator-gated for their own reason, the
+    // absent per-bank CreateAllocators, not for want of a buffer.)
     // GetAllocatorList() const now returns const AllocatorList* (the +4 member is a pointer, not an
     // embedded list -- see the OutputBuffer layout fix in BrnGameDataModuleIO.h), so no address-of here.
     const BrnResource::GameDataIO::AllocatorList* lpAllocatorList =
@@ -823,12 +824,24 @@ bool LoadingScriptedState::LoadSoundModule(BrnResource::GameDataIO::InputBuffer*
         lpAllocatorList, lpUpdateInputStack, lpUpdateOutputStack,
         lpRootInputBuffer, lpRootOutputBuffer);
 
-    if (!lbPrepared && lpGameDataInputBuffer)
+    if (!lbPrepared && lpGameDataInputBuffer && lpRootOutputBuffer)
     {
-        // Still preparing: forward the module's resource requests into the GameData input.
-        // [gated] the RootOutputBuffer request interfaces + getters (the X360's
-        // GetAttribSysRequestInterface / GetResourceRequestInterface reads under LockForRead)
-        // are still the minimal Io slice; the forwarding lands when those members do.
+        // [FLAG] the console forwards here -- @0x823E7684/98, the RootOutputBuffer's
+        // AttribSys queue via Append<2048,16> and its resource interface via
+        // AppendRequestInterface<4096>, in the same source-read-lock bracket
+        // LoadDirectorModule above uses. Until it runs, every resource request the sound
+        // module stages during its initial load is dropped: nothing moves it into the
+        // GameData input where the pump can see it (boot audit F-P6-17 / F-P5-10).
+        //
+        // ⚠️ REASON CORRECTED 2026-08-17, and the correction is the useful part. This used
+        // to say the block was waiting on "the RootOutputBuffer request interfaces + getters".
+        // The GETTERS are here and bodied (BrnRootSoundModuleIo.h:433-439) -- I wired the arm
+        // against them and it does not compile, because what is missing is one level down:
+        // BrnSound::Module::Io::RequestInterface<4096> and AttribSysRequestInterface<2048>
+        // are FORWARD DECLARATIONS ONLY (:386-387, "template layouts ... not needed to
+        // satisfy" the minimal slice). The getters return pointers to incomplete types, so
+        // neither queue can be named, let alone appended.
+        // DELETE-WHEN those two templates have definitions.
     }
 
     lpUpdateOutputStack->DestroyIOBuffer<BrnSound::Module::Io::RootOutputBuffer>(&lpRootOutputBuffer);
