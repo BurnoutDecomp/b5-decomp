@@ -62,6 +62,8 @@ s32  renderengine::gAntiAliasing = 0;
 // material data -- the same principle that makes gAntiAliasing default to "whatever the
 // console did".
 s32  renderengine::gAlphaToCoverage = 1;
+// Vertical sync on by default -- see the declaration in device.h.
+s32  renderengine::gVSync = 1;
 HWND renderengine::hWnd = nullptr;
 
 IDirect3D9*       renderengine::gD3D9 = nullptr;
@@ -94,6 +96,8 @@ bool renderengine::Device::Initialize()
     // Seeded here for the same reason gAntiAliasing is: LoadConfig runs after this
     // (BrnMain.cpp:260/:261) and is what a config.ini value overrides it with.
     gAlphaToCoverage = 1;
+    // Vertical sync unless config.ini `[Display] VSync=0` (see device.h).
+    gVSync = 1;
     // TUB seeds fullscreen=true; forced windowed during the PC bring-up.
     gFullscreen = false;
 
@@ -142,7 +146,8 @@ void renderengine::Device::Start()
     lPresentParams.EnableAutoDepthStencil = TRUE;
     lPresentParams.AutoDepthStencilFormat = D3DFMT_D24S8;
     lPresentParams.hDeviceWindow = hWnd;
-    lPresentParams.PresentationInterval = D3DPRESENT_INTERVAL_DEFAULT;
+    lPresentParams.PresentationInterval =
+        (gVSync != 0) ? D3DPRESENT_INTERVAL_DEFAULT : D3DPRESENT_INTERVAL_IMMEDIATE;
 
     if (FAILED(gD3D9->CreateDevice(gAdapterIndex, D3DDEVTYPE_HAL, hWnd, luBehaviorFlags,
                                    &lPresentParams, &gDevice)))

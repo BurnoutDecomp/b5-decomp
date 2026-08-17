@@ -118,6 +118,8 @@ void LoadConfig()
     renderengine::gDisplayWidth  = GetPrivateProfileIntA("Display", "Width",  renderengine::gDisplayWidth,  lacPath);
     renderengine::gDisplayHeight = GetPrivateProfileIntA("Display", "Height", renderengine::gDisplayHeight, lacPath);
     renderengine::gAdapterIndex  = GetPrivateProfileIntA("Display", "AdapterIndex", renderengine::gAdapterIndex, lacPath);
+    // Present sync (device.h gVSync): 1 = vertical sync (default), 0 = immediate presents.
+    renderengine::gVSync = (GetPrivateProfileIntA("Display", "VSync", renderengine::gVSync, lacPath) == 0) ? 0 : 1;
 
     // TUB clamps AntiAliasing to [0,16].
     s32 liAntiAliasing = GetPrivateProfileIntA("Settings", "AntiAliasing", renderengine::gAntiAliasing, lacPath);
@@ -148,6 +150,8 @@ void SaveConfig()
     WritePrivateProfileStringA("Display", "Height", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gAdapterIndex);
     WritePrivateProfileStringA("Display", "AdapterIndex", lacValue, lacPath);
+    std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gVSync);
+    WritePrivateProfileStringA("Display", "VSync", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gAntiAliasing);
     WritePrivateProfileStringA("Settings", "AntiAliasing", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gAlphaToCoverage);

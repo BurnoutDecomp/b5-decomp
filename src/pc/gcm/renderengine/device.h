@@ -30,6 +30,13 @@ namespace renderengine
     // It is an OFF SWITCH ONLY: there is no D3D9 way to ask for coverage a material did not
     // request, so 1 does not mean "force", it means "do what the console did".
     extern s32 gAlphaToCoverage;
+    // Present synchronisation. 1 = D3DPRESENT_INTERVAL_DEFAULT (vertical sync, the behaviour
+    // this build has always had); 0 = D3DPRESENT_INTERVAL_IMMEDIATE (uncapped presents). Sourced
+    // from config.ini `[Display] VSync` (BrnMain.cpp LoadConfig/SaveConfig) and seeded by
+    // Device::Initialize like the settings above. Read ONCE, at CreateDevice; the console's own
+    // per-frame D3DDevice_SetRenderState_PresentInterval writes stay the no-op leaf they are.
+    // 0 exists so a frame-time measurement is not the refresh rate.
+    extern s32 gVSync;
     extern HWND hWnd;
 
     extern IDirect3D9* gD3D9;
