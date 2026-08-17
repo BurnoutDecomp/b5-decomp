@@ -577,14 +577,17 @@ bool LoadingScriptedState::LoadDirectorModule(
     const BrnResource::GameDataIO::AllocatorList* lpAllocatorList =
         lpGameDataOutputBuffer ? lpGameDataOutputBuffer->GetAllocatorList() : 0;
 
-    // FLAG signature debt: DirectorModule::Prepare's 2nd parameter IS the allocator list
-    // (X360 0x823E74C0 `lwz r9,0x44(vtable); r5 = GetAllocatorList(...)`), not an s32 replay
-    // token. Its only consumer -- ICEWrapper::Prepare -- is a DirectorLinkStubs no-op, so the
-    // value is currently unused either way; retype the whole chain
-    // (DirectorModule::Prepare -> MainDirector::Prepare -> ICEWrapper::Prepare) when the ICE
-    // wrapper is bodied.
-    (void)lpAllocatorList;
-    const bool lbPrepared = lpGameModule->GetDirectorModule().Prepare(lpDirectorOutput, 0);
+    // ⭐ SIGNATURE DEBT PAID 2026-08-16 (boot audit F-P6-16). DirectorModule::Prepare's 2nd
+    // parameter IS the allocator list (X360 @0x823E74C0: `lwz r9,0x44(vtable);
+    // r5 = GetAllocatorList(...)`), not an s32 replay token. It had been typed s32 and
+    // called with a literal 0 while the real list sat right here, computed and thrown away
+    // with a `(void)` cast. The whole chain -- DirectorModule::Prepare ->
+    // MainDirector::Prepare -> ICEWrapper::Prepare -- is retyped, so the list now reaches
+    // its consumer. That consumer is still a DirectorLinkStubs no-op, so nothing observable
+    // changes today; what changes is that when the ICE wrapper IS bodied it receives the
+    // console's argument instead of a zero nobody would have questioned.
+    const bool lbPrepared =
+        lpGameModule->GetDirectorModule().Prepare(lpDirectorOutput, lpAllocatorList);
 
     if (!lbPrepared && lpGameDataInputBuffer != 0)
     {

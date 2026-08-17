@@ -15,6 +15,8 @@
 #include "GameSource/Director/Utils/BrnVehicleRef.h"              // BrnDirector::VehicleRef (mVehicleRef + EType)
 #include "GameSource/BurnoutConstants.h"                          // EActiveRaceCarIndex (PlayMovie race car)
 
+namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // DirectorModule::Prepare's 2nd arg (boot audit F-P6-16)
+
 // ============================================================================
 // GameSource/Director/BrnDirectorICEWrapper.h
 //
@@ -122,7 +124,8 @@ public:
     // pumps its own staged ICE-resource acquisition through the request interfaces published
     // in that output buffer. Declared here so the staged Prepare chain has a name to call;
     // the body lands with this wrapper's own TU.
-    bool Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPrepareArg,
+    bool Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
+                 const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
                  const DirectorResourceManager* lpResourceManager);
 
     // Turn the in-game ICE editor ON for the given source take. Disables the debug

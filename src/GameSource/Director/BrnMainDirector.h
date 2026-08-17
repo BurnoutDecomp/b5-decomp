@@ -13,6 +13,8 @@
 #include "GameSource/Director/Camera/Camera.h"                  // BrnDirector::Camera::Camera (mLastCamera)
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h" // BrnDirector::GameState (maGameState)
 
+namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // DirectorModule::Prepare's 2nd arg (boot audit F-P6-16)
+
 // ============================================================================
 // GameSource/Director/BrnMainDirector.h
 //
@@ -101,7 +103,8 @@ namespace BrnDirector
         //     MainDirector::Prepare( this+2816, <director OUTPUT buffer>, <s32 forwarded>,
         //                            <the module's DirectorResourceManager> )
         // -- the last two are handed straight on to ICEWrapper::Prepare.
-        bool Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPrepareArg,
+        bool Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
+                     const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
                      const DirectorResourceManager* lpResourceManager);
 
         // X360 0x82236EB0. Staged Release state machine. Returns true on the final stage.
