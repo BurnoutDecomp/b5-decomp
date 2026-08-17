@@ -21,6 +21,7 @@
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (GamePrepare's request bracket)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // CgsResource::Events::AcquireResourceResponse (GamePrepare's acquire drain)
 #include "rw/rwcore_structs.h"                       // rw::ResourceAllocatorRegistry::GetDefaultAllocator (the debug-font texture state)
+#include "pc/gcm/renderengine/device.h"               // renderengine::GetDisplayRefreshRate (the step-9 timer rate)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer (DoUpdate_Director)
 #include "GameSource/GameState/BrnGameStateModuleIO.h" // GameStateModuleIO::OutputBuffer (BridgeGameStateToDirector)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // DirectorIO::SceneQuery{Input,Output}Buffer
@@ -79,7 +80,6 @@ namespace BrnGame
         , mpGuiOutputBuffer(0)
         , mpDirectorOutputBuffer(0)
         , mpWorldUpdateOutputBuffer(0)
-        , mbGamePrepareReceiverQueueConstructed(false)
         , miInputModuleState(0)
         , miPlayer0ControllerPort(0)
         , miSecondaryControllerPort(0)
@@ -212,33 +212,54 @@ namespace BrnGame
             mCpuMonitors.miUT_SoundUpdate      = AddMonitor("Sound",                         (EPage)14, false,  10.0f, true);
         }
 
-        // X360 step 6: construct EVERY engine module, in the X360 call order (member offsets
-        // confirmed by GameRelease 0x823F03C8's typed per-module IO buffers). Modules whose real
+        // X360 step 6: construct EVERY engine module, in the X360 call order. Modules whose real
         // Construct exists run it; the placeholder modules run the module base's Construct (which
         // is also what makes their Release/Destruct paths well-defined).
-        mSoundModule.Construct();        // +0x8A7F00  RootSoundModule::Construct 0x826AF350 (slot 0)
+        //
+        // ⭐ OFFSETS CORRECTED 2026-08-16 (boot audit F-P1-18): NINE of these ten comments were
+        // wrong. They had been inferred from GameRelease @0x823F03C8's typed IO buffers; the
+        // values below are the MEASURED module bases (`*off_830102D0 + <off>` as the console
+        // itself spells them at each call site). They are documentation only -- every access
+        // here is by member name -- but they are the numbers the next reader will trust when
+        // they cross-check a raw offset out of the disassembly, so a wrong one costs an hour.
+        //
+        // ⭐ AND THE DIRECTOR'S ASPECT IS REAL NOW (boot audit F-P1-3). The console's renderer
+        // Construct hands back an ASPECT RATIO (1.7777778) and a video-mode bool, and passes
+        // the aspect straight into DirectorModule::Construct. We passed a fabricated 0.0f --
+        // an invented value, not a marked deferral. 16:9 is what the console computes for
+        // every mode this build renders.
+        mSoundModule.Construct();        // +0x8A7D00  RootSoundModule::Construct 0x826AF350 (slot 0)
         mRenderModule.Construct();       // +0x004400  BrnRendererModule::Construct (direct call)
-        mGameDataModule.Construct();     // +0x5F4A00  GameDataModule::Construct 0x82671B90 (slot 0, NO args)
+        mGameDataModule.Construct();     // +0x5F4B00  GameDataModule::Construct 0x82671B90 (slot 0, NO args)
         mWorldModule.Construct(mCpuMonitors); // +0x010E80  WorldModule::Construct 0x827CF540
                                          //            (slot +64, const BrnCpuMonitors& -- the
                                          //            handle block filled above). REAL module
                                          //            mounted 2026-07-26 (world-render campaign).
-        mInputModule.Construct();        // +0x6E9430  (slot 0; placeholder -> base)
-        mGuiModule.Construct();          // +0x6EA820  [gated] X360 slot +84 with two sub-objects
+        mInputModule.Construct();        // +0x6E9630  (slot 0; placeholder -> base)
+        mGuiModule.Construct();          // +0x6EAA20  [gated] X360 slot +84 with two sub-objects
                                          //            (+0x65A1D0/+0x65A1F4, inside the GameData
                                          //            module); the movie-hosting slice takes none.
-        mGameStateModule.Construct();    // +0x669380  (slot 0; placeholder -> base)
-        mEffectsModule.Construct();      // +0x878A00  (slot 0; placeholder -> base)
+        mGameStateModule.Construct();    // +0x669500  (slot 0; placeholder -> base)
+        mEffectsModule.Construct();      // +0x878700  (slot 0; placeholder -> base)
         // [FLAG interim bridge] ValidityAccount's static fail-flag mask must be built BEFORE the
         // director module constructs its cameras: CameraState::Construct/Clear (@0x82220950) and
         // BehaviourHelper::Update both assert `sbFailFlagMaskSet`. The console builds it inside
         // CameraState::Construct; until that runs it, the one-time setup happens here.
         // DELETE-WHEN: CameraState::Construct performs the setup itself.
         BrnDirector::Camera::ValidityAccount::SetupFailFlagMask();
-        mDirectorModule.Construct(0.0f); // +0x6B0C90  X360 slot +64 @0x8225C590 (REAL module,
+        mDirectorModule.Construct(1.7777778f); // +0x6B0B10  X360 slot +64 @0x8225C590 (REAL module,
                                          //            mounted 2026-07-29 -- DJ fly-by campaign).
-        mReplayModule.Construct();       // +0x8BD680  (slot 0; ReplayModule -> base)
-        mNetworkModule.Construct();      // +0x8C39C0  [gated] X360 slot +64 with arg 0; placeholder -> base.
+        mReplayModule.Construct();       // +0x8BD300  (slot 0; ReplayModule -> base)
+        mNetworkModule.Construct();      // +0x8C3600  [gated] X360 slot +64 with arg 0; placeholder -> base.
+
+        // ⭐ 2026-08-16 (boot audit F-P1-11 / F-P2-6). The GamePrepare receiver queue is
+        // Constructed HERE on the console -- it is part of step 7-9's queue setup
+        // (gm+0x9A06BC, capacity 1024, align 16) and it already exists by the time
+        // GamePrepare @0x823EFBD0 first runs, which is why that body contains no construct.
+        // We built it lazily on the first GamePrepare call behind a bool. No observable
+        // difference, but the bool was a member the console does not have, and "constructed
+        // before the frame loop" is the invariant the async seam will rely on.
+        mGamePrepareReceiverQueue.Construct();
 
         // [gated] X360 steps 7-9: the DebugComponentPerfMonCpu::SetPageName table (pages 0-23:
         // "General".."Flapt"), the vsync-rate 50/60 M_CGS_PERFMON_CPU_SETGAMEFREQUENCY check, the
@@ -261,12 +282,30 @@ namespace BrnGame
         //     CgsSystem::Timer::Prepare(gm + 10095344, lfRate);  // the SIM timer
         //     *(gm + 10095340) = 1;                              // gameTimer.mbRunning (+24)
         //     *(gm + 10095368) = 1;                              // simTimer.mbRunning  (+24)
-        // FLAG (PC-platform leaf): the console reads the refresh rate out of the display mode
-        // it validated one step earlier (50 or 60, asserting anything else); this build has no
-        // reconstructed mode query, so it takes the 60Hz arm -- the same value the rest of the
-        // PC bring-up already assumes. Everything downstream reads the RATE, not the constant.
+        // ⭐ THE RATE IS READ, NOT ASSUMED, since 2026-08-16 (boot audit F-P1-9). The console
+        // takes the refresh rate out of the display mode it validated one step earlier
+        // (asserting 50 or 60); we hardcoded 1/60, which is right on a 60Hz panel and
+        // silently wrong on anything else -- and the timer rate is the time base every
+        // simulation sub-step, camera advance and streaming budget is derived from.
+        // renderengine::GetDisplayRefreshRate is the PC's mode query. It answers 0 for some
+        // windowed modes (D3D's "whatever the desktop is doing"), and anything outside the
+        // console's own 50/60 range means we are on hardware the console never saw, so both
+        // fall back to 60 -- the value this build assumed unconditionally until now.
+        //
+        // X360 step 10 (the flow controller) is constructed BEFORE this block, not after:
+        // Construct @0x823C9EA8 runs GameMainFlowController::Construct and then the timer
+        // seeds. Both are pure init so the order was not observable, but it was inverted
+        // (boot audit F-P1-12).
+        mMainFlowStateMachine.Construct();
+
         {
-            const f32 lfTimerRate = 1.0f / 60.0f;
+            const u32 luRefreshHz = renderengine::GetDisplayRefreshRate();
+            const u32 luRateHz    = (luRefreshHz >= 50u && luRefreshHz <= 60u) ? luRefreshHz : 60u;
+            const f32 lfTimerRate = 1.0f / static_cast<f32>(luRateHz);
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint
+                    << "[timers] display refresh " << (s32)luRefreshHz
+                    << "Hz -> timer rate 1/" << (s32)luRateHz << "\n";
             mTimerStatusInterface.Clear();
             mGameTimer.Prepare(lfTimerRate);
             mSimTimer.Prepare(lfTimerRate);
@@ -274,10 +313,6 @@ namespace BrnGame
             mSimTimer.SetRunning(true);
         }
 
-        // X360 step 10: the main game flow controller (GameMainFlowController::Construct
-        // @+10094180), then the PC boot enters the initial loading screen (OnEnter raises the
-        // renderer's loading-screen signal).
-        mMainFlowStateMachine.Construct();
         // ⭐ CORRECTED 2026-08-16 (boot audit F-P1-2). Construct already leaves the
         // controller in state 0 by a RAW store (@0x823C6508) and the X360 caller issues no
         // SetState, so the console never runs state 0's OnLeave OR its OnEnter -- SendEvent's
@@ -1919,12 +1954,6 @@ namespace BrnGame
             BrnGameMainFlowController::GetScriptedLoadGameDataInput();
         BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
             BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
-
-        if (!mbGamePrepareReceiverQueueConstructed)
-        {
-            mbGamePrepareReceiverQueueConstructed = true;
-            mGamePrepareReceiverQueue.Construct();
-        }
 
         // FLAG PC-platform leaf (see above): stand in for the X360's already-completed
         // module prepare + its concurrent resource thread.

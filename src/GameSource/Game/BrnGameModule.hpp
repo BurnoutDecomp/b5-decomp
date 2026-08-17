@@ -717,7 +717,6 @@ namespace BrnGame
         // 6 acquire responses, so the same <1024,16> instantiation WorldModule uses
         // covers it with headroom.
         CgsModule::EventReceiverQueue<1024, 16> mGamePrepareReceiverQueue;
-        bool mbGamePrepareReceiverQueueConstructed;
         // [remaining members - omitted]
 
         // ---- controller-bridge inputs (real names; off-path absolute offsets noted) -------------

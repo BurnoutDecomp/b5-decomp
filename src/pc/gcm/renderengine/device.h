@@ -35,6 +35,13 @@ namespace renderengine
     extern IDirect3D9* gD3D9;
     extern IDirect3DDevice9* gDevice;
 
+    // The adapter's current display refresh rate in Hz, or 0 if it cannot be read.
+    // ⭐ 2026-08-16 (boot audit F-P1-9). BrnGameModule::Construct's step 9 seeds both game
+    // timers with 1/<refresh rate>, and the console reads that rate out of the display mode
+    // it validated one step earlier (asserting 50 or 60). We had no mode query at all and
+    // hardcoded 1/60 -- fine on a 60Hz panel, wrong on anything else, and silently so.
+    u32 GetDisplayRefreshRate();
+
     // The bound D3D surface-state object (the colour/depth surfaces + their format/size). On X360
     // this is the GPU D3DSURFACES descriptor renderengine::Device::SetState installs; declared here
     // (forward) so the render-target / immediate-mode layers reference it by name. Layout lives in
