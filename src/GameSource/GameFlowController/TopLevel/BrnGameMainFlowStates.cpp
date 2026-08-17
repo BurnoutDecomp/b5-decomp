@@ -1471,16 +1471,16 @@ void MainGameFlowStateCompleteLoading::Update()
         // whole point: it is the only place the collision load gets its frames (nothing
         // drives LoadingScriptedState::Update() once the flow reaches IN_GAME).
         //
-        // ⚠️ [marked deviation -- anti-wedge bound] the console can hold here forever; a PC
-        // build that fails to stream WORLDCOL.BIN would then never boot. The budget below
-        // releases the flow after KI_MAX_COLLISION_LOAD_FRAMES and logs loudly, so a broken
-        // collision load costs the collision, not the session. It is not hit on a good boot.
-        static const s32 KI_MAX_COLLISION_LOAD_FRAMES = 1800;   // ~30 s at 60 Hz
-        static s32 s_iCollisionLoadFrames = 0;
-
+        // ⭐ THE ANTI-WEDGE BOUND IS GONE, 2026-08-16 (boot audit F-P6-9 / F-P4-10). A PC-only
+        // 1800-frame budget used to release the flow if the collision load had not finished,
+        // "so a broken collision load costs the collision, not the session". There is no
+        // console analogue -- @0x823F2E08 holds here indefinitely -- and its own note said to
+        // delete it once the collision stream was proven. It is: the boot log shows stage 7
+        // loading worldcol.bin (21,793,024 bytes, 792 resources into pool 2) and the player
+        // car placed on track, with the bound never firing. A timeout whose only remaining
+        // effect would be to hide a real streaming failure is worse than the hang it prevents.
         if (gBrnScriptedLoadStage == 8)
         {
-            s_iCollisionLoadFrames = 0;
             if (mbIsCollisionWorldPrepared)
             {
                 if (BrnGameMainFlowController::gpMainGameFlowController != 0)
@@ -1493,16 +1493,8 @@ void MainGameFlowStateCompleteLoading::Update()
                 mbIsCollisionWorldPrepared = true;
             }
         }
-        else if (mbIsCollisionWorldPrepared && ++s_iCollisionLoadFrames > KI_MAX_COLLISION_LOAD_FRAMES)
-        {
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "CompleteLoading: world-collision load did not finish in "
-                    << KI_MAX_COLLISION_LOAD_FRAMES
-                    << " frames (stage " << gBrnScriptedLoadStage
-                    << ") -- releasing the flow [FLAG PC anti-wedge bound]\n";
-            gBrnScriptedLoadStage = 8;
-        }
+        // (no else: while the stage is 7 the state HOLDS, exactly as @0x823F2E34-7C does,
+        //  and LoadingScriptedState::Update at the top of this function drives the load.)
     }
 }
 void MainGameFlowStateCompleteLoading::Render() {}
