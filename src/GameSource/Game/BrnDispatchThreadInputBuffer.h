@@ -164,26 +164,43 @@ namespace BrnGame
         // Declaration-only; bodies with this buffer's own TU (the camera block
         // @X360 +39360, the per-face env-map-rendered bytes @+39348).
         void SetCameraViewProjection( const Matrix44& lrViewProjection );
-        // ---- the env-map face-rendered flags (reflections step 1, seam S2) ----------
-        // SetEnvMapFaceRendered is BODIED in the .cpp as of 2026-08-17 (its
-        // WorldLinkStubs.cpp gate is deleted in the same change); GetEnvMapFaceRendered
-        // is the ADDITIVE read side the renderer's six-face loop needs -- the console
+        // ---- the env-map face-render flags (reflections step 1, seam S2) ------------
+        // SetEnvMapFaceRender is BODIED in the .cpp as of 2026-08-17 (its
+        // WorldLinkStubs.cpp gate was deleted in the same change); GetEnvMapFaceRender
+        // is the ADDITIVE read side the renderer's six-face loop needs -- the X360
         // reads the byte inline instead (BrnRendererModule::Render @0x8240BFA8 pseudocode
         // line 654, `v348[v95 + 39348]`), which is &mabEnvMapFaceRender[face].
         //
-        // ⚠ NAMING (follow-up, deliberately NOT done here): the DecFIGS DWARF
-        // (dwarfdump/GameSource/Game/BrnDispatchThreadInputBuffer.h:141 / :145) names the
-        // pair `SetEnvMapFaceRender(uint32_t, bool)` / `GetEnvMapFaceRender(uint32_t)
-        // const` -- no trailing "ed", and an unsigned index. The committed spelling
-        // (already used by WorldModule::GenerateDispatchLists at BrnWorldModule.cpp:4018)
-        // and the reflections-wave cross-group seam contract both say
-        // Set/GetEnvMapFaceRendered(s32,...), so the two are kept in step here and the
-        // DWARF rename is listed as a one-sweep follow-up rather than split across groups
-        // mid-wave.
-        void SetEnvMapFaceRendered( s32 liFace, bool lbRendered );
-        // Inline: the console has no out-of-line getter to be faithful to, and the read is
+        // ⭐ RENAMED to the DWARF names 2026-08-17 (reflections step 2, envproducer
+        // finding F7). They were Set/GetEnvMapFaceRendered(s32,...) -- an "ed" and a
+        // signed index that no source attests. The DecFIGS DWARF names the pair three
+        // times over, with parameter names:
+        //     dwarfdump/GameSource/Game/BrnDispatchThreadInputBuffer.h:173
+        //         void SetEnvMapFaceRender(uint32_t, bool);            [header decl h:141]
+        //     dwarfdump/GameSource/Game/BrnDispatchThreadInputBuffer.h:176
+        //         bool GetEnvMapFaceRender(uint32_t) const;            [header decl h:145]
+        //     dwarfdump/_compile/BrnWorldUnity.cpp:10926
+        //         SetEnvMapFaceRender(uint32_t luIndex, bool lbRender)
+        //     dwarfdump/_compile/BrnGraphicsUnity.cpp:7748
+        //         GetEnvMapFaceRender(uint32_t luIndex)
+        // The member it fronts is already the DWARF's own `bool[6] mabEnvMapFaceRender`
+        // (h:209 -- no "ed" there either), so the old spelling was the odd one out. The
+        // rename is tree-wide in the same change: BrnWorldModule.cpp (4 call sites) and
+        // BrnRendererModule.cpp (1).
+        //
+        // ⚠ NOT TAKEN (verify finding F9, "the only accessor here with neither a lock nor
+        // a bounds assert"): adding CGS_ASSERT to this inline would mean adding
+        // GameShared/GameClasses/Core/CgsAssert.h to THIS HEADER -- neither it nor
+        // CgsIOBuffer.h pulls it in today -- and this header is included by the renderer,
+        // the world producer, the game module and the particle bring-up. That is a large
+        // include-graph change to guard a one-byte read whose only two callers are
+        // bounds-bound loops (`for luFace < E_FACE_NUM` in Render, `for liFace < 6` in the
+        // producer) and which the console performs as a raw byte load with no check at
+        // all. The setter, which is out-of-line, does carry both asserts.
+        void SetEnvMapFaceRender( u32 luIndex, bool lbRender );
+        // Inline: the X360 has no out-of-line getter to be faithful to, and the read is
         // one byte. Caller-checked index, exactly like the console's raw byte read.
-        bool GetEnvMapFaceRendered( s32 liFace ) const { return mabEnvMapFaceRender[ liFace ]; }
+        bool GetEnvMapFaceRender( u32 luIndex ) const { return mabEnvMapFaceRender[ luIndex ]; }
 
         // ---- full-frame-rate flag ----------------------------------------------------------
         // DWARF h:181/h:185; X360 inlined (DoDispatch stores +0x99B0 from the camera flags,

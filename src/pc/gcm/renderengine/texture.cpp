@@ -171,6 +171,12 @@ namespace renderengine
     {
         lpLockInfoOut->mpBits = nullptr;
         lpLockInfoOut->muPitch = 0u;
+        // Record WHAT WAS LOCKED, before any early-out, so Unlock can undo exactly this lock --
+        // the same two stores the Locked* overload makes and the same two the X360 Lock makes
+        // (`*(a5 + 18) = a3` level / `*(a5 + 19) = a4` face @0x82B62B20). See the LockInfo banner
+        // in texture.h: without them this overload's Unlock had to guess level 0 / face 0.
+        lpLockInfoOut->mu8MipLevel = static_cast<u8>(liLevel);
+        lpLockInfoOut->mu8Index    = static_cast<u8>(liFace);
         if (lpTexture == nullptr || lpTexture->mpD3DTexture == nullptr)
         {
             return;
@@ -222,48 +228,73 @@ namespace renderengine
         }
     }
 
-    void Texture::Unlock(Texture* lpTexture, LockInfo* /*lpLockInfo*/)
+    namespace
     {
-        if (lpTexture == nullptr || lpTexture->mpD3DTexture == nullptr)
+        // ==========================================================================================
+        // THE UNLOCK DISPATCH, shared by both descriptor shapes -- a straight translation of the
+        // console's single Unlock, renderengine::Texture::Unlock @0x82B62CB8. Its whole body is a
+        // switch on GetType with the LEVEL and the FACE / ARRAY INDEX read out of the descriptor:
+        //     0x82B62CC8  bl   renderengine__Texture__GetType
+        //     type 0 line   0x82B62D34  lbz r4, 0x12(r4)  -> D3DLineTexture_UnlockRect(Level)
+        //     type 1 2D     0x82B62D24  lbz r4, 0x12(r4)  -> D3DTexture_UnlockRect(Level)
+        //     type 2 array  0x82B62D10  lbz r5, 0x12 / lbz r4, 0x13 -> D3DArrayTexture_UnlockRect
+        //     type 3 cube   0x82B62CFC  lbz r5, 0x12 / lbz r4, 0x13 -> D3DCubeTexture_UnlockRect
+        //     type 4 volume 0x82B62CEC  lbz r4, 0x12(r4)  -> D3DVolumeTexture_UnlockBox(Level)
+        // +0x12 is Locked::mu8MipLevel and +0x13 is Locked::mu8Index (Lock @0x82B62B20 writes them,
+        // `*(a5 + 18) = a3` / `*(a5 + 19) = a4`). NOTHING here is assumed: every level below comes
+        // from the caller's descriptor, which is the defect this closes (F7 -- Lock honoured the
+        // face, Unlock unlocked face 0, and D3D9 leaves the real face locked for ever, silently).
+        //
+        // THE LINE AND ARRAY ARMS FOLD INTO THE 2D ONE, and they are unreachable rather than
+        // dropped: D3D9 has no line or array texture object, TextureDimension above can only ever
+        // return E_TYPE_2D, E_TYPE_CUBE or E_TYPE_VOLUME, and Create has no LINE/ARRAY arm to
+        // record one either. If either ever gains a create path this switch gains its arm with it.
+        // ==========================================================================================
+        void UnlockSurface(Texture* lpTexture, u32 luLevel, u32 luIndex)
         {
-            return;
+            if (lpTexture == nullptr || lpTexture->mpD3DTexture == nullptr)
+            {
+                return;
+            }
+            if (TextureIsCube(lpTexture))
+            {
+                static_cast<IDirect3DCubeTexture9*>(lpTexture->mpD3DTexture)
+                    ->UnlockRect(static_cast<D3DCUBEMAP_FACES>(luIndex),
+                                 static_cast<UINT>(luLevel));
+                return;
+            }
+            if (TextureIsVolume(lpTexture))
+            {
+                // The console's volume arm passes the LEVEL only -- a volume lock is a whole box,
+                // there is no per-slice index.
+                static_cast<IDirect3DVolumeTexture9*>(lpTexture->mpD3DTexture)
+                    ->UnlockBox(static_cast<UINT>(luLevel));
+                return;
+            }
+            static_cast<IDirect3DTexture9*>(lpTexture->mpD3DTexture)
+                ->UnlockRect(static_cast<UINT>(luLevel));
         }
-        if (TextureIsCube(lpTexture))
-        {
-            // ⚠ FACE 0 BECAUSE THIS OVERLOAD CARRIES NO FACE, and that is a property of the
-            // signature, not a guess about the data: LockInfo is {bits, pitch} and nothing else, so
-            // a cube locked through it can only be unlocked at the face the caller must already
-            // know. The Locked* overload below DOES carry one (mu8Index) and uses it. Nothing on
-            // this backend locks a cube through either form today -- Create drives the D3D object
-            // directly -- so this arm exists to keep the pair symmetric, not to serve a caller.
-            static_cast<IDirect3DCubeTexture9*>(lpTexture->mpD3DTexture)
-                ->UnlockRect(D3DCUBEMAP_FACE_POSITIVE_X, 0u);
-            return;
-        }
-        if (TextureIsVolume(lpTexture))
-        {
-            static_cast<IDirect3DVolumeTexture9*>(lpTexture->mpD3DTexture)->UnlockBox(0u);
-            return;
-        }
-        static_cast<IDirect3DTexture9*>(lpTexture->mpD3DTexture)->UnlockRect(0u);
     }
 
-    // The Locked* form of the same X360 entry point (see texture.h). The descriptor is unread on
-    // this backend for the 2D and volume shapes, exactly as in the LockInfo overload above -- but a
-    // CUBE has to be unlocked at the face and level it was locked at, and this descriptor is the
-    // one that carries them (Lock writes mu8Index = face, mu8MipLevel = level; X360 Lock does the
-    // same, `*(a5 + 18) = a3` / `*(a5 + 19) = a4`).
+    // The lean descriptor's Unlock. It now undoes exactly the lock its Lock made, because LockInfo
+    // carries the level and the face (texture.h banner). A null descriptor is not a console shape
+    // -- the X360 dereferences r4 unconditionally -- so it is treated as "level 0, face 0", the
+    // behaviour this overload had for every caller before the fields existed.
+    void Texture::Unlock(Texture* lpTexture, LockInfo* lpLockInfo)
+    {
+        const u32 luLevel = (lpLockInfo != nullptr) ? lpLockInfo->mu8MipLevel : 0u;
+        const u32 luIndex = (lpLockInfo != nullptr) ? lpLockInfo->mu8Index    : 0u;
+        UnlockSurface(lpTexture, luLevel, luIndex);
+    }
+
+    // The console's own Unlock (X360 @0x82B62CB8, DWARF `void Unlock(const Locked&)`). Same
+    // dispatch, same two descriptor bytes; rw::graphics::postfx::Tint::EndBlendJob reaches it
+    // through BrnPostFx::Render 0x8240A4EC.
     void Texture::Unlock(Texture* lpTexture, Locked* lpLocked)
     {
-        if (lpLocked != nullptr && lpTexture != nullptr && lpTexture->mpD3DTexture != nullptr
-            && TextureIsCube(lpTexture))
-        {
-            static_cast<IDirect3DCubeTexture9*>(lpTexture->mpD3DTexture)
-                ->UnlockRect(static_cast<D3DCUBEMAP_FACES>(lpLocked->mu8Index),
-                             static_cast<UINT>(lpLocked->mu8MipLevel));
-            return;
-        }
-        Unlock(lpTexture, static_cast<LockInfo*>(nullptr));
+        const u32 luLevel = (lpLocked != nullptr) ? lpLocked->mu8MipLevel : 0u;
+        const u32 luIndex = (lpLocked != nullptr) ? lpLocked->mu8Index    : 0u;
+        UnlockSurface(lpTexture, luLevel, luIndex);
     }
 
     namespace

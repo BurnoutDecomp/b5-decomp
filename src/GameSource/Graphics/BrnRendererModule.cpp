@@ -213,7 +213,7 @@ namespace
 //       time, which is exactly why CgsRenderTarget::SetRenderTargetStateInvertDepth binds section
 //       0 regardless of its argument (CgsRenderTarget.cpp:336). EndRenderEnvironmentMapFace is
 //       its only caller here.
-//   (b) BrnGame::DispatchThreadInputBuffer::GetEnvMapFaceRendered(s32) const -- owned by the
+//   (b) BrnGame::DispatchThreadInputBuffer::GetEnvMapFaceRender(u32) const -- owned by the
 //       `envproducer` group. The console reads the same byte inline, WITH a bounds assert: Render
 //       @0x8240CC04 does `cmplwi r29, 6 / blt` else FireAssert("luIndex<6",
 //       "..\GameSource\Game/BrnDispatchThreadInputBuffer.h", 0xF4) -- so the console's own
@@ -4043,6 +4043,27 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             shadow::Device::SetResource(0, 13u);
         }
 
+        // [DIAG envmap-perf, reflections step 2] CPU stage timers for the six-face pass. MEASURED
+        // 2026-08-17 (VSync off, all six faces): loop=1614..1999 us/frame, begin+clear=9,
+        // dispatch=1558..1941, sky=35, end+resolve=11, meshes/frame=883..1130 -- i.e. the pass is
+        // DRAW-BOUND at ~1.7 us/mesh (the D3D9 runtime floor), not a per-face waste; the producer's
+        // own share is ~40 us (gShadowPerf). That measurement is why the PC defaults to the console's
+        // half-per-frame schedule (renderengine::gEnvironmentMap30Hz, device.h). The line prints only
+        // with BRN_ENVMAP_PERF=1 (the two QueryPerformanceCounter calls per face stay -- they are
+        // cheaper than the log gate they feed). DELETE-WHEN a batching draw path lands.
+        struct EnvMapPerf { double mfBegin, mfDispatch, mfSky, mfEnd, mfLoop; u32 muFaces, muMeshes, muFrames; };
+        static EnvMapPerf sEnvMapPerf = {};
+        static s32 siEnvMapPerfLog = -1;
+        if (siEnvMapPerfLog < 0)
+        {
+            char lacPerf[8] = { 0 };
+            siEnvMapPerfLog = (GetEnvironmentVariableA("BRN_ENVMAP_PERF", lacPerf, sizeof(lacPerf)) > 0
+                               && lacPerf[0] != '0') ? 1 : 0;
+        }
+        LARGE_INTEGER lPerfFreq; QueryPerformanceFrequency(&lPerfFreq);
+        const double lfUsPerTick = 1.0e6 / static_cast<double>(lPerfFreq.QuadPart);
+        LARGE_INTEGER lLoopT0; QueryPerformanceCounter(&lLoopT0);
+
         for (u32 luFace = 0; luFace < BrnGraphics::E_FACE_NUM; ++luFace)
         {
             // X360 @0x8240CC24: `lbzx r11, r29, r17` where r17 == the READ buffer + 0x99B4, i.e.
@@ -4052,10 +4073,12 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             // Begin, no dispatch, no sky, no resolve -- which is what makes the console's
             // three-faces-per-frame alternation (WorldModule::GenerateFrustumQueries :3486-3499)
             // cost three faces and not six.
-            if (!lpDispatchThreadInputBuffer->GetEnvMapFaceRendered(static_cast<s32>(luFace)))
+            if (!lpDispatchThreadInputBuffer->GetEnvMapFaceRender(luFace))
                 continue;
 
+            LARGE_INTEGER lT0; QueryPerformanceCounter(&lT0);
             BeginRenderEnvironmentMapFace(luFace, lfFrameWhiteLevel);
+            LARGE_INTEGER lT1; QueryPerformanceCounter(&lT1);
 
             // The lock window. The console asserts on entry and exit of BOTH thirds
             // (shadowingdevice.h:1215/1220/1235/1240 -- the four assert strings are inline in
@@ -4076,6 +4099,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
 
             shadow::Device::UnlockRasteriserState();
             shadow::Device::UnlockDepthStencilState();
+            LARGE_INTEGER lT2; QueryPerformanceCounter(&lT2);
 
             if (lbSkyReady)
             {
@@ -4094,7 +4118,15 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
                     &lFrame);
             }
 
+            LARGE_INTEGER lT3; QueryPerformanceCounter(&lT3);
             EndRenderEnvironmentMapFace(luFace);
+            LARGE_INTEGER lT4; QueryPerformanceCounter(&lT4);
+            sEnvMapPerf.mfBegin    += static_cast<double>(lT1.QuadPart - lT0.QuadPart) * lfUsPerTick;
+            sEnvMapPerf.mfDispatch += static_cast<double>(lT2.QuadPart - lT1.QuadPart) * lfUsPerTick;
+            sEnvMapPerf.mfSky      += static_cast<double>(lT3.QuadPart - lT2.QuadPart) * lfUsPerTick;
+            sEnvMapPerf.mfEnd      += static_cast<double>(lT4.QuadPart - lT3.QuadPart) * lfUsPerTick;
+            sEnvMapPerf.muFaces    += 1u;
+            sEnvMapPerf.muMeshes   += luMeshCount;
 
             // [FLAG PC bring-up probe] the first face that actually ran. LATCHED ON A ONE-SHOT here
             // and NOT on a value, deliberately and against this file's usual rule: the question it
@@ -4116,6 +4148,30 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         if (lbUnparkSampler13)
         {
             shadow::Device::SetResource(mpEnvMapTextureState->mpRaster, 13u);
+        }
+
+        {
+            LARGE_INTEGER lLoopT1; QueryPerformanceCounter(&lLoopT1);
+            sEnvMapPerf.mfLoop += static_cast<double>(lLoopT1.QuadPart - lLoopT0.QuadPart) * lfUsPerTick;
+            if (++sEnvMapPerf.muFrames >= 120u && siEnvMapPerfLog != 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                const double lfN = static_cast<double>(sEnvMapPerf.muFrames);
+                *CgsDev::Log::gpDebugPrint
+                    << "[envmap-perf] us/frame over " << static_cast<s32>(sEnvMapPerf.muFrames)
+                    << " frames: loop=" << static_cast<f32>(sEnvMapPerf.mfLoop / lfN)
+                    << " begin+clear=" << static_cast<f32>(sEnvMapPerf.mfBegin / lfN)
+                    << " dispatch=" << static_cast<f32>(sEnvMapPerf.mfDispatch / lfN)
+                    << " sky=" << static_cast<f32>(sEnvMapPerf.mfSky / lfN)
+                    << " end+resolve=" << static_cast<f32>(sEnvMapPerf.mfEnd / lfN)
+                    << " | faces/frame=" << static_cast<f32>(sEnvMapPerf.muFaces / lfN)
+                    << " meshes/frame=" << static_cast<f32>(sEnvMapPerf.muMeshes / lfN)
+                    << "\n";
+                sEnvMapPerf = EnvMapPerf();
+            }
+            else if (sEnvMapPerf.muFrames >= 120u)
+            {
+                sEnvMapPerf = EnvMapPerf();
+            }
         }
     }
 #endif  // BRN_ENVMAP_PASS_AVAILABLE

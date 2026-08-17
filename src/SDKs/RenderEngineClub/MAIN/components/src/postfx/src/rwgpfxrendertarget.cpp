@@ -111,8 +111,12 @@ namespace postfx
     {
         const Parameters& lrParams = *lpParameters;
 
-        // The format byte is stored on the Target up front (stb 0x14).
-        mu8Format = lrParams.mu8NumSections;
+        // The SECTION COUNT is stored on the Target up front (`lbz r11,0x44(r4)` -> `stb r11,
+        // 0x14(r3)`): the parameters' own mu8NumSections, copied onto the Target so Resolve(u32)
+        // can tell a single-section surface from a multi-section atlas without the parameters.
+        // (The member was called mu8Format until 2026-08-17; renamed with its header -- the two
+        // stores in this TU are exactly the evidence that it is a count. See the header banner.)
+        mu8NumSections = lrParams.mu8NumSections;
 
         // --- the sampleable texture the surface resolves to (AllocateAndInitializeTexture) -----------
         renderengine::Texture::Parameters lTextureParams;
@@ -227,8 +231,9 @@ namespace postfx
             renderengine::Texture::Xbox2CheckPhysicalMemoryFlags(lpHiZ);
         }
 
-        // The format byte is stored after the hi-Z block (lbz 0x44 -> stb 0x14).
-        mu8Format = lrParams.mu8NumSections;
+        // The SECTION COUNT is stored after the hi-Z block (lbz 0x44 -> stb 0x14) -- same store as
+        // CreateColor's, just later in the body. Renamed from mu8Format 2026-08-17.
+        mu8NumSections = lrParams.mu8NumSections;
 
         // --- the GPU depth PixelBuffer surface -------------------------------------------------------
         renderengine::PixelBuffer::Parameters lBufferParams;
@@ -491,14 +496,14 @@ namespace postfx
             lTarget.mpTexture      = nullptr;
             lTarget.mpTextureState = nullptr;
             lTarget.mpHiZTexture   = nullptr;
-            lTarget.mu8Format      = 0;
+            lTarget.mu8NumSections = 0;
         }
         // Zero the depth Target.
         mDepthTarget.mpReserved0    = 0;
         mDepthTarget.mpPixelBuffer  = nullptr;
         mDepthTarget.mpTexture      = nullptr;
         mDepthTarget.mpTextureState = nullptr;
-        mDepthTarget.mu8Format      = 0;
+        mDepthTarget.mu8NumSections = 0;
 
         mpProvidedState       = nullptr;   // a1[34]
         mpColourTextureState  = nullptr;   // a1[35]

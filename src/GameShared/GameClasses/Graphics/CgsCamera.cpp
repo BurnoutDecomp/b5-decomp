@@ -35,8 +35,9 @@
 // their values happened to be right.)
 //
 // THE ZERO ASPECT WAS LOAD-BEARING, and it cost this campaign a full wave.
-// BrnDirector::Camera::Camera::CopyToCgsCamera (Camera.cpp:505) opens with
-// Release() -> Construct(KF_DEFAULT_FOVHORIZONTAL, KF_DEFAULT_ASPECTRATIO, ...),
+// BrnDirector::Camera::Camera::CopyToCgsCamera (Camera.cpp:509) opens with
+// Construct() -> Construct(KF_DEFAULT_FOVHORIZONTAL, KF_DEFAULT_ASPECTRATIO, ...)
+// -- it said Release() until 2026-08-17, see the Construct()/Release() banner below --
 // and nothing else ever writes m_aspectRatio on that camera. SetFovHorizontal then
 // computes 2*atanf((1.0f/0.0f) * tanHalfH) = 2*atanf(inf) = pi EXACTLY, so
 // tanHalfV = tanf(float(pi)*0.5f) = -2.2877e7 and every frame camera became a
@@ -458,14 +459,12 @@ namespace CgsGraphics
     }
 
     // ------------------------------------------------------------------------
-    // CgsGraphics::Camera::Construct() / Release() @0x827F94E8
+    // CgsGraphics::Camera::Construct() @0x827F94E8 (DWARF CgsCamera.h:59)
     //
-    // The no-arg reset pair (DWARF CgsCamera.h:59 / :78). On the X360 both fold
-    // (ICF) to the single body that forwards the camera defaults into the 4-arg
-    // Construct: Construct(KF_DEFAULT_FOVHORIZONTAL, KF_DEFAULT_ASPECTRATIO,
-    // 0.1f, 1000.0f). (The call sites pair it with the empty ICF-folded teardown
-    // stub -- see CgsCollisionGenerator.cpp's BaseCollisionGenerator::Destruct
-    // @0x8284CB38, a single blr -- so the pair's net effect is exactly this reset.)
+    // The no-arg reset: forward the camera defaults into the 4-arg Construct.
+    // The X360 body is a pure tail-forward with the PPC float-arg registers loaded
+    // explicitly (lfs f1 = flt_82F30FD4, f2 = flt_82F30FD8, f3/f4 = flt_820D1704/08
+    // -> `b CgsGraphics__Camera__Construct`).
     // ------------------------------------------------------------------------
     void Camera::Construct()
     {
@@ -473,10 +472,55 @@ namespace CgsGraphics
                   KF_DEFAULT_NEARCLIPPLANE, KF_DEFAULT_FARCLIPPLANE);
     }
 
+    // ------------------------------------------------------------------------
+    // CgsGraphics::Camera::Release() @0x8284CB38 (DWARF CgsCamera.h:78) -- EMPTY.
+    //
+    // ⚠ CORRECTED 2026-08-17 (reflections step 2, envproducer finding F1). This body
+    // used to be a second copy of Construct()'s defaults reset, on the claim that the
+    // no-arg Construct()/Release() pair ICF-folded to the one body @0x827F94E8. The
+    // image says otherwise, and BrnGraphics::EnvironmentMap settles it because it
+    // calls BOTH over the SAME six CgsGraphics::Camera objects at the same 0x170
+    // stride:
+    //     EnvironmentMap::Construct @0x827B40D0  loop body: `bl sub_827F94E8`
+    //         (0x827F94E8 = the KF_DEFAULT_* forward above)
+    //     EnvironmentMap::Release   @0x827B4218  loop body: `bl BaseCollision-
+    //         Generator__Destruct` == 0x8284CB38
+    //     EnvironmentMap::Prepare   @0x827B4188  first call of each iteration: the
+    //         same 0x8284CB38
+    // and 0x8284CB38.json is, in full:
+    //     0x8284CB38  blr
+    //     0x8284CB3C  .long 0
+    // i.e. the identical-code-folding sink every empty body in the image collapsed
+    // into (193 xrefs), which is why the export labels it with an unrelated class's
+    // name. So Release() is the empty teardown and Construct() is the reset.
+    //
+    // WHAT THIS CHANGES AT RUNTIME. Only through call sites, and all of them were
+    // moved in the same change:
+    //   * BrnGraphics::EnvironmentMap::Release / ::Destruct (BrnEnvironmentMap.cpp)
+    //     no longer reset the six face cameras to KF_DEFAULT_*; they now do nothing,
+    //     which is the console. Inert either way -- WorldModule::Prepare re-runs
+    //     EnvironmentMap::Prepare, which re-stamps all four scalars.
+    //   * EnvironmentMap::Prepare's leading per-face Release() likewise becomes the
+    //     no-op it is on the console. Net-neutral: SetAspectRatio re-reads
+    //     m_fovHorizontal, and the trailing SetFovHorizontal(KF_ENVMAP_FOV_HORIZONTAL)
+    //     overwrites it anyway.
+    //   * the three WorldModule cameras (gFrustumQueryCamera, gDispatchCamera,
+    //     sBringUpCamera) and BrnDirector::Camera::Camera::CopyToCgsCamera now call
+    //     Construct(). Those four sites are the ones the X360 shows calling
+    //     sub_827F94E8 -- 0x827F94E8's xrefs_to list is exactly {CopyToCgsCamera
+    //     @0x8220AC48, MainDirector::Construct @0x8225B448, EnvironmentMap::Construct
+    //     @0x827B40D0, WorldModule::GenerateDispatchLists @0x827D1CE8,
+    //     WorldModule::GenerateFrustumQueries @0x827DADF8, three CgsGui Constructs}.
+    //     ⚠ CopyToCgsCamera's is LOAD-BEARING: it is the ONLY writer of m_aspectRatio
+    //     on the frame camera and on every shadow cascade camera, and BrnShadowMap's
+    //     lFrameCamera is a fresh stack object (the default ctor is `Camera() {}`).
+    //     Leaving that one as an empty Release() would hand SetFovHorizontal an
+    //     uninitialised aspect -- the exact 180-degree-tall-camera failure the
+    //     2026-08-12 shadow wave spent a day on. It is fixed in Camera.cpp in the
+    //     same commit; this file must not land without it.
+    // ------------------------------------------------------------------------
     void Camera::Release()
     {
-        Construct(KF_DEFAULT_FOVHORIZONTAL, KF_DEFAULT_ASPECTRATIO,
-                  KF_DEFAULT_NEARCLIPPLANE, KF_DEFAULT_FARCLIPPLANE);
     }
 
     // ------------------------------------------------------------------------
@@ -754,16 +798,14 @@ namespace CgsGraphics
     }
 
     // ------------------------------------------------------------------------
-    // CgsGraphics::Camera::SetFarClip -- inlined on console (no standalone X360
-    // body): the m_farClipPlane store the callers perform (attested by
-    // BrnWorld::ShadowMap::ComputeTSMMatrix's far clamp at camera+0x160 and the
-    // WorldModule env-map face flow, which follows it with the projection
-    // rebuild calls). DWARF name: SetFarClipPlane (CgsCamera.h:103).
+    // CgsGraphics::Camera::SetFarClip -- RETIRED 2026-08-17 (reflections step 2,
+    // envproducer finding F2). It was the m_farClipPlane store WITHOUT the projection
+    // rebuild, and all three of its call sites (BrnEnvironmentMap.cpp:196 and
+    // BrnWorldModule.cpp:4128/:6652) wrote the store and then called
+    // UpdatePerspectiveProjectionMatrix on the next line -- i.e. every one of them was
+    // spelling out the console's inlined Camera::SetFarClipPlane, which is now a real
+    // member (CgsCamera.h, DWARF CgsCamera.h:103). Those three sites call it by name.
     // ------------------------------------------------------------------------
-    void Camera::SetFarClip(f32 lfFarClip)
-    {
-        maProjectionScalars[8] = lfFarClip;   // m_farClipPlane
-    }
 
     // ------------------------------------------------------------------------
     // CgsGraphics::Camera::GetPosition / GetDirection -- PC-additive accessors

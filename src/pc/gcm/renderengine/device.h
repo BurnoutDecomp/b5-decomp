@@ -44,6 +44,23 @@ namespace renderengine
     // it. Adding a parallel per-frame gate here would be the split-brain the campaign keeps paying
     // for; the switch stays the console's.
     extern s32 gEnvironmentMap;
+    // The environment map's REFRESH SCHEDULE. 1 = three faces per frame, alternating halves (the
+    // console's own `WorldModule::mb30hzEnvironmentMap` schedule, GenerateFrustumQueries :3486-3499);
+    // 0 = all six faces every frame (the console's SHIPPED default: Construct seeds that member false
+    // and only the debug menu "Render environment map at 30hz" flips it). Sourced from config.ini
+    // `[Settings] EnvironmentMap30Hz` (BrnMain.cpp), seeded by Device::Initialize.
+    //
+    // ⚠ PC DEFAULT = 1, A DOCUMENTED DEVIATION FOR PERFORMANCE (reflections step 2). Measured with
+    // the [envmap-perf] stage timers: the six-face pass costs 1.6-2.0 ms/frame on this backend and
+    // 97% of it is DispatchAllMeshes for ~900-1100 meshes/frame at the D3D9 runtime's ~1.7 us/draw
+    // floor -- not a per-face waste but the draw count itself, which the console's command buffer
+    // absorbed and D3D9's cannot. The half schedule halves it for a refresh the console itself
+    // shipped as an option. Set 0 to get the console's all-six behaviour.
+    //
+    // Like gEnvironmentMap this SEEDS the console's own member (WorldModule::mb30hzEnvironmentMap)
+    // once, in the bring-up producer, and is not a second per-frame switch; the BRN_ENVMAP_30HZ /
+    // BRN_ENVMAP_ALLFACES env vars keep their override for measuring.
+    extern s32 gEnvironmentMap30Hz;
     // Present synchronisation. 1 = D3DPRESENT_INTERVAL_DEFAULT (vertical sync, the behaviour
     // this build has always had); 0 = D3DPRESENT_INTERVAL_IMMEDIATE (uncapped presents). Sourced
     // from config.ini `[Display] VSync` (BrnMain.cpp LoadConfig/SaveConfig) and seeded by

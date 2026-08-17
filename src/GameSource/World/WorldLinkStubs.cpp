@@ -403,7 +403,8 @@ void BrnGame::DispatchThreadInputBuffer::SetCameraViewProjection(struct rw::math
 }
 
 // TOMBSTONE (reflections step 1, 2026-08-17): the
-// BrnGame::DispatchThreadInputBuffer::SetEnvMapFaceRendered boot gate is DELETED. The
+// BrnGame::DispatchThreadInputBuffer::SetEnvMapFaceRender boot gate is DELETED (it was
+// spelt ...FaceRendered until the step-2 DWARF rename). The
 // real body now lives in its own TU, GameSource/Game/BrnDispatchThreadInputBuffer.cpp,
 // which is on tools/build/build_game_exe.bat (line 2257) -- leaving this gate beside it
 // is LNK2005. Do NOT re-add it.
@@ -1763,11 +1764,15 @@ int CgsDev::PerfMonCpu::AddMonitor(char const * lpcName, int liColour, int liMin
 
 // -------------------------------------------------------------------------
 // CgsGraphics::Camera -- DESTUBBED (2026-07-26 wave): Construct (both overloads,
-// @0x827F0A08 / @0x827F94E8), Release, SetFovHorizontal @0x821F13B0,
+// @0x827F0A08 / @0x827F94E8), Release @0x8284CB38, SetFovHorizontal @0x821F13B0,
 // UpdatePerspectiveProjectionMatrix @0x827EC778,
 // SetPerspectiveProjectionMatrixRightHanded @0x827EC698, LookAt @0x827F9510,
-// Clone @0x827E7018, SetFarClip and the GetPosition/GetDirection additive
-// accessors now live in GameShared/GameClasses/Graphics/CgsCamera.cpp.
+// Clone @0x827E7018 and the GetPosition/GetDirection additive accessors now live in
+// GameShared/GameClasses/Graphics/CgsCamera.cpp. (2026-08-17: the PC-additive
+// SetFarClip is RETIRED in favour of the DWARF Camera::SetFarClipPlane, which -- with
+// SetAspectRatio and SetNearClipPlane -- is now an inline in CgsCamera.h; and the
+// no-arg Construct()/Release() pair is NOT one ICF-folded body, Release() is the empty
+// @0x8284CB38. See the CgsCamera.cpp banner.)
 //
 // DESTUBBED (camera-frustum wave 2026-07-27): the whole frustum-writer family
 // -- GetFrustum(CameraRwFrustum&)/GetFrustumParallel/GetFrustumPerspective

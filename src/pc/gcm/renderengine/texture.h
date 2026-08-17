@@ -74,10 +74,31 @@ namespace renderengine
             E_TYPE_VOLUME = 4     // X360 desc type 0x11
         };
 
+        // renderengine::Texture::LockInfo -- a PC-ONLY LEAN DESCRIPTOR, and this banner exists so
+        // the next reader does not mistake it for a console type. The DecFIGS DWARF declares
+        // exactly ONE lock pair on this class
+        // (references/DecFIGS/dwarfdump/SDKs/EATech/include/ps3/gcm/renderengine/texture.h:271/274)
+        //     bool Lock(uint32_t, uint32_t, uint32_t, renderengine::Texture::Locked &);
+        //     void Unlock(const renderengine::Texture::Locked &);
+        // and the X360 image agrees (Lock @0x82B62B20 / Unlock @0x82B62CB8 both take the 28-byte
+        // Locked below). LockInfo is this tree's own {bits, pitch} shorthand for the three PC
+        // callers that want nothing else (CgsMoviePlayer, BrnLoadingScreenRenderer,
+        // BrnFlaptRenderer); it is a STRICT SUBSET of Locked, field-for-field.
+        //
+        // ⚠ THE TWO TRAILING BYTES ARE NOT NEW STATE -- THEY ARE Locked's OWN (added 2026-08-17,
+        // reflections step 2, closing cubeleaf run-2 F7). Before them, Lock honoured liLevel and
+        // liFace while Unlock unlocked level 0 / D3DCUBEMAP_FACE_POSITIVE_X, because the descriptor
+        // could not carry them: lock face 4 of a cube, unlock face 0, and D3D9 leaves face 4 locked
+        // for ever with no error at either call site. The console has no such hole -- its Unlock
+        // reads `lbz r5, 0x12(r4)` (Level) and `lbz r4, 0x13(r4)` (FaceType/ArrayIndex) straight
+        // off the descriptor, which are Locked::mu8MipLevel and Locked::mu8Index. Same names here,
+        // written by Lock and read by Unlock, so the pair is symmetric BY NAME.
         struct LockInfo
         {
             void* mpBits;
             u32   muPitch;
+            u8    mu8MipLevel;   // == Locked::mu8MipLevel (console descriptor +0x12)
+            u8    mu8Index;      // == Locked::mu8Index     (console descriptor +0x13)
         };
 
         // renderengine::Texture::Locked - the descriptor a Lock fills: where the locked surface's
@@ -111,12 +132,21 @@ namespace renderengine
         // spelled here as liFlags = 0. Reading the console's `li r4, 2` as a LEVEL is what made the
         // tint LUT lock mip 2 of a one-level volume and write nothing at all (step-10 fix round).
         static void Lock(Texture* lpTexture, s32 liLevel, s32 liFace, s32 liFlags, LockInfo* lpLockInfoOut);
+        // Unlocks the level/face the matching Lock recorded in the descriptor -- see the LockInfo
+        // banner. (The lean overload; the console's own entry point is the Locked one below.)
         static void Unlock(Texture* lpTexture, LockInfo* lpLockInfo);
 
-        // ADDITIVE OVERLOAD, the counterpart of the Locked* Lock below. The X360 has ONE Unlock and
-        // both lock descriptors reach it (rw::graphics::postfx::Tint::EndBlendJob passes its
-        // Texture::Locked at BrnPostFx::Render 0x8240A4EC); the PC body ignores the descriptor
-        // entirely and unlocks level 0 off the texture, so this forwards rather than duplicating.
+        // THE CONSOLE'S OWN Unlock -- X360 @0x82B62CB8, DWARF `void Unlock(const Locked&)`
+        // (texture.h:274). It dispatches on GetType and reads the LEVEL and the FACE/ARRAY INDEX
+        // out of the descriptor for every shape:
+        //     GetType 0 line   : D3DLineTexture_UnlockRect  (this, Level=lbz 0x12)
+        //     GetType 1 2D     : D3DTexture_UnlockRect      (this, Level=lbz 0x12)
+        //     GetType 2 array  : D3DArrayTexture_UnlockRect (this, ArrayIndex=lbz 0x13, Level=0x12)
+        //     GetType 3 cube   : D3DCubeTexture_UnlockRect  (this, FaceType=lbz 0x13,   Level=0x12)
+        //     GetType 4 volume : D3DVolumeTexture_UnlockBox (this, Level=lbz 0x12)
+        // +0x12 / +0x13 are Locked::mu8MipLevel / Locked::mu8Index (Lock writes them: `*(a5 + 18)
+        // = a3` / `*(a5 + 19) = a4` @0x82B62B20). rw::graphics::postfx::Tint::EndBlendJob reaches
+        // this form through BrnPostFx::Render 0x8240A4EC.
         static void Unlock(Texture* lpTexture, Locked* lpLocked);
 
         // X360 Lock @0x82B62B20 overload: fill the full Locked descriptor (texture +

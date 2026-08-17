@@ -140,6 +140,12 @@ void LoadConfig()
     const s32 liEnvironmentMap =
         GetPrivateProfileIntA("Settings", "EnvironmentMap", renderengine::gEnvironmentMap, lacPath);
     renderengine::gEnvironmentMap = (liEnvironmentMap == 0) ? 0 : 1;
+
+    // The env-map REFRESH SCHEDULE (reflections step 2): 1 = three faces per frame (PC default, a
+    // documented perf deviation -- see device.h), 0 = the console's all six every frame. 0/1 only.
+    const s32 liEnvironmentMap30Hz =
+        GetPrivateProfileIntA("Settings", "EnvironmentMap30Hz", renderengine::gEnvironmentMap30Hz, lacPath);
+    renderengine::gEnvironmentMap30Hz = (liEnvironmentMap30Hz == 0) ? 0 : 1;
 #endif
 }
 
@@ -166,6 +172,8 @@ void SaveConfig()
     WritePrivateProfileStringA("Settings", "AlphaToCoverage", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gEnvironmentMap);
     WritePrivateProfileStringA("Settings", "EnvironmentMap", lacValue, lacPath);
+    std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gEnvironmentMap30Hz);
+    WritePrivateProfileStringA("Settings", "EnvironmentMap30Hz", lacValue, lacPath);
 #endif
 }
 

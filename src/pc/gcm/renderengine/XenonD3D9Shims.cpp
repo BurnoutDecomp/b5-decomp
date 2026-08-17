@@ -1221,8 +1221,10 @@ namespace renderengine
         //
         // ONE EXCEPTION, ADDED WITH THE CUBE CREATE PATH (reflections step 1): a CUBE raster is
         // addressed by a DIRECTION VECTOR whose face is chosen by the hardware, and WRAP is the
-        // wrong request for it -- the console's own reflection TextureStates ask for CLAMP on all
-        // three coordinates. This matters now because the 234 shipped 64x64x6 rasters that feed
+        // wrong request for it -- the console's own reflection TextureStates ask for CLAMP on U and V
+        // (addrU = addrV = 2, measured over all five cube-backed shipped TextureStates, reflections
+        // step 2); W is 0/WRAP in the data and unused by a cube fetch (addressed by a direction
+        // vector), so clamping it too is inert. This matters now because the 234 shipped 64x64x6 rasters that feed
         // the 7 WORLD techniques declaring `ReflectionTextureSampler` as a samplerCUBE (s2 x6,
         // s0 x1 -- CTAB scan of build/game/SHADERS.BNDL) reach D3D9 through THIS path, not
         // through D3DDevice_SetTexture, and until this wave they arrived as 2D textures carrying
