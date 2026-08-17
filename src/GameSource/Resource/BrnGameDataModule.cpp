@@ -207,7 +207,15 @@ namespace BrnResource
             lOpt.muMaxImports           = static_cast<u32>(lrDef.miMaxImports);
             lOpt.miRefCountThreshold    = 0;
             lOpt.miBankId               = -1;
-            lOpt.mbAllowDefragmentation = lrDef.mbAllowDefrag;
+            // ⭐ 2026-08-16 (boot audit F-P7-13). CreatePools @0x8266DC30-50 does NOT just copy
+            // the memory-map row's flag: it FORCES the request's allow-defragmentation word to
+            // 1 for exactly three pool ids -- 3 (OpenWorldGr), 4 (CarPool), 15 (Traffic) --
+            // and those are precisely the defragmenter's own pools. Our table has all three
+            // rows false and no special case, so even once the relocating defragmenter lands
+            // it would have had nothing to work on. Latent until then, wrong either way.
+            lOpt.mbAllowDefragmentation =
+                (lrDef.miId == 3 || lrDef.miId == 4 || lrDef.miId == 15) ? true
+                                                                        : lrDef.mbAllowDefrag;
 
             // Resolve this pool's import dependencies to the (earlier-created) pools by id. The dependency
             // graph drives cross-pool import resolution (e.g. OpenWorldGr/VFX/Environment import from Global
@@ -504,6 +512,13 @@ namespace BrnResource
     {
         // X360 (every call, before the outstanding-request check): wire the audio-stream
         // allocator row at the module-embedded LinearMalloc (`a1[106765] = a1 + 109814`).
+        // ⭐ 2026-08-16 (boot audit F-P7-22). Construct @0x82671C94-9C runs
+        // CgsMemory::LinearMalloc::Construct on this member (gm-data + 0x6B3D8) before
+        // publishing it. We published the pointer without ever constructing the object --
+        // which only works because the module happens to live in static storage and is
+        // therefore zero-initialised, and stops working the moment it is heap-hosted (which
+        // is what the console does: the boot allocator carves the whole game module).
+        mAudioStreamAllocator.Construct();
         mAllocatorList.mpAudioStreamAllocator = &mAudioStreamAllocator;
 
         static bool s_bAllocatorsCreated = false;
@@ -1496,11 +1511,18 @@ namespace BrnResource
 
         if (lpOutput != 0)
         {
-            // X360: LockForWrite(out); FileSystemStatusInterface::Construct(out+36);
-            // out->mpAllocatorList = 0; SetAllocatorList(out, &mAllocatorList); then the
-            // LiveUpdateIO status copy (SetLiveUpdateStatus from the LiveUpdate output).
-            // The LiveUpdate module + the OutputBuffer's filesystem-status member are
-            // deferred; the allocator-list publish is the live part.
+            // X360 @0x82674818-2C: LockForWrite(out);
+            // FileSystemStatusInterface::Construct(out + 9);  <- ⭐ NINE, corrected
+            // 2026-08-16 (boot audit F-P7-12): the old "out+36" here was a WORD-index
+            // reading of a byte offset, i.e. the same member counted in the wrong unit.
+            // Then out+4 := 0 (the allocator-list slot cleared) and
+            // SetAllocatorList(out, &mAllocatorList), then the LiveUpdateIO status copy
+            // (SetLiveUpdateStatus from the LiveUpdate output).
+            //
+            // [FLAG] we Construct the WHOLE output buffer where the console constructs only
+            // that one member -- wider than the console, and it stays that way until the
+            // OutputBuffer's filesystem-status member is homed. The LiveUpdate module is
+            // deferred (F-P7-4); the allocator-list publish is the live part.
             lpOutput->LockForWrite();
             lpOutput->Construct();
             lpOutput->SetAllocatorList(&mAllocatorList);

@@ -41,6 +41,7 @@
 #include "GameSource/GameState/BrnGameEvents.h"
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModule.h"  // IsSchemaLoadedStatic (the surface-list rebind gate)
 
 #include <cmath>   // sqrtf (the [FLAG PC bring-up] loaded-world bounds helper)
 
@@ -1030,14 +1031,26 @@ WorldEntityModule::PrepareSurfaceList( WorldEntityIO::OutputBuffer_Prepare* lpOu
                                 "liEventId == BrnResource::GameDataIO::EVENT_GET_SURFACE_LIST" );
             }
 
-            // [FLAG PC boot gate] the surface-list attrib rebind + sanity probe read the
-            // LIVE Attrib database (ChangeWithDefault -> FindCollectionWithDefault; the
-            // probe walks surface 0's collection). On PC the AttribSys schema is not yet
-            // loaded (PrepareAttribSysSchemaResource gate: the exe-baked BE schema blobs
-            // need an LE port) so the surfacelist vault was never registered into the DB
-            // (AttribSysModule::RegisterVault gate) -- the reads CANNOT resolve. Skip them
-            // (one-shot log) and advance; remove together with the schema/RegisterVault
-            // gates once the Attrib SDK runtime cluster is committed.
+            // ⭐ REASON CORRECTED 2026-08-16 (boot audit F-P7-20), and the correction was
+            // earned the hard way. This interior sat under `if (false)` with the note "the
+            // AttribSys schema is not yet loaded -- the exe-baked BE schema blobs need an LE
+            // port, so the surfacelist vault was never registered into the DB".
+            //
+            // HALF OF THAT HAS EXPIRED. The ported schema.vlt / schema.bin ship with the
+            // build, PrepareAttribSysSchemaResource registers them, IsSchemaLoaded() is
+            // true, and the boot log shows vaults registering for real ("[ATTRIBSYS LOAD]
+            // Just loaded vault resource ... ref count is 1").
+            //
+            // THE OTHER HALF IS THE ACTUAL BLOCKER, and it is one level down: running this
+            // interior on the live DB faults, because Attrib::FindCollectionWithDefault --
+            // which ChangeWithDefault calls straight into -- is still a LINK STUB
+            // (WorldLinkStubs.cpp:2682, "attrib gap G5 -- reconstruct"). Lifting the gate
+            // produced exactly that assert followed by an access violation. So the skip
+            // stays, but keyed on what is really missing, and it now also states the
+            // condition that IS satisfied so the next reader does not re-port a schema that
+            // is already ported.
+            // DELETE-WHEN: the Attrib SDK runtime cluster (gap G5) is reconstructed. The
+            // schema half of the old precondition is already met.
             {
                 static bool s_bLoggedSurfaceGate = false;
                 if ( !s_bLoggedSurfaceGate )
@@ -1045,8 +1058,10 @@ WorldEntityModule::PrepareSurfaceList( WorldEntityIO::OutputBuffer_Prepare* lpOu
                     s_bLoggedSurfaceGate = true;
                     if ( CgsDev::Message::gxMessageFilterFlags & 1 )
                         *CgsDev::Log::gpDebugPrint
-                            << "WorldEntityModule::PrepareSurfaceList: attrib rebind skipped "
-                               "(schema/DB deferred) [FLAG PC boot gate]\n";
+                            << "WorldEntityModule::PrepareSurfaceList: attrib rebind skipped -- "
+                               "schema IS loaded ("
+                            << (CgsAttribSys::AttribSysModule::IsSchemaLoadedStatic() ? 1 : 0)
+                            << "), blocked on Attrib::FindCollectionWithDefault (gap G5) [FLAG]\n";
                 }
             }
             if ( false )   // the gated X360 interior, kept verbatim:

@@ -82,10 +82,16 @@
 // REGISTRATION ORDER, so this reads as the one monolith the original source was -- minus the
 // three deviations above. The handler .cpp files now only define behaviour, not registration.
 //
-// INCREMENTAL. The game registers ~75 types; only the handlers reconstructed so far are listed.
-// The rest are added here, in their game-order slot, as each handler TU lands. Two of the
-// entries below (EntryList, AptDataHeader) are NOT in GameDataModule::RegisterResourceTypes at
-// all -- the X360 registers those in their owning module's bring-up (GUI / resource subsystem),
+// INCREMENTAL. The game registers SEVENTY-SIX types (⭐ census corrected 2026-08-16, boot audit
+// F-P7-18/F-P7-19: 76 operator-new/InitCachedValues/vtable triples in RegisterResourceTypes
+// @0x82667EA8, 75 distinct name strings); only the handlers reconstructed so far are listed.
+// The rest are added here, in their game-order slot, as each handler TU lands.
+//
+// ⭐ AND THE "NOT IN THE MONOLITH" CLAIM WAS WRONG for three of the four types it named
+// (F-P7-19). AptDataHeader, LuaCode, Language and FlaptFile ARE all in the console's
+// RegisterResourceTypes -- census sequence numbers 13, 18, 30 and 57 -- and treating them as
+// outside it drifted every ordinal after Font by one. Only EntryList and IdList are genuinely
+// registered outside the monolith, in their owning module's bring-up (GUI / resource subsystem),
 // not the game-data module. They are folded in here as a temporary bridge until those modules'
 // registration is reconstructed; see the note at their call sites.
 // ============================================================================================
