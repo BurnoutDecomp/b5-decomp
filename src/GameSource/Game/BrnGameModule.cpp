@@ -437,9 +437,19 @@ namespace BrnGame
         miPlayer0ControllerPort   = 0;
         mbGuiAcceptsControllerInput = true;
 
-        // ---- the GUI flow-FSM bridge state (X360 Construct zeroes the slots; the bridge
-        //      parks the stage at 6 after the first pass) --------------------------------
-        miGuiFsmStage      = 0;
+        // ---- the GUI flow-FSM bridge state ------------------------------------------
+        // ⭐ CORRECTED 2026-08-17 (boot audit F-P1-8). The note said "X360 Construct zeroes
+        // the slots; the bridge parks the stage at 6 after the first pass". It does zero the
+        // neighbouring bytes, but NOT this word: @0x823CAAD0-DC it loads `li r11, 6` and
+        // `stwx r11, r30, r24` with r24 = 0x9A0644 -- the stage slot -- so Construct seeds it
+        // to SIX. Our own header already documents 6 as "idle" (BrnGameModule.hpp:738), so
+        // the two sources agree and only the code disagreed.
+        //
+        // Seeding 0 is not merely untidy: the reset just below is `if (miGuiFsmStage != 6)`,
+        // which from 0 is TRUE on the first pass and clears mbGuiPhaseComplete -- and that
+        // byte is what InitialLoadingScreen's preload latch and CheckDiskSpace::Update both
+        // read since F-P5-4/F-P4-8. Starting idle is the console's initial condition.
+        miGuiFsmStage      = 6;
         mbGuiPhaseComplete = false;
         mbGuiPreAccept     = false;
         mbGuiVoiceOverPending  = false;
