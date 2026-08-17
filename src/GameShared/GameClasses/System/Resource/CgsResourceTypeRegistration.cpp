@@ -103,27 +103,27 @@ namespace CgsResource
 
         // ---- in BrnResource::GameDataModule::RegisterResourceTypes order (0x82667EA8) --------
         static RwRasterResourceType        sRwRaster;          // [game #1]  0x00  Texture / RwRaster
-        TypeRegistry::Register(&sRwRaster);
+        TypeRegistry::Register(&sRwRaster, "RwRaster");
         static RwTextureStateResourceType  sRwTextureState;    // [game #5]  0x0E  TextureState
-        TypeRegistry::Register(&sRwTextureState);
+        TypeRegistry::Register(&sRwTextureState, "RwTextureState");
         static MaterialStateResourceType   sMaterialState;     // [game #6]  0x0F  MaterialState / BlendState
-        TypeRegistry::Register(&sMaterialState);
+        TypeRegistry::Register(&sMaterialState, "MaterialState");
         static FontResourceType            sFont;              // [game #16] 0x21  Font (imports rasters)
-        TypeRegistry::Register(&sFont);
+        TypeRegistry::Register(&sFont, "Font");
         static VoiceHierarchyResourceType  sVoiceHierarchy;    // [game #25] 0x18  VoiceHierarchy (sound)
-        TypeRegistry::Register(&sVoiceHierarchy);
+        TypeRegistry::Register(&sVoiceHierarchy, "VoiceHierarchy");
         static SnrResourceType             sSnr;               // [game #27] 0x19  SNR (streamed audio)
-        TypeRegistry::Register(&sSnr);
+        TypeRegistry::Register(&sSnr, "Snr");
         static VideoDataResourceType       sVideoData;         // [game #30] 0x42  VideoData (movie metadata)
-        TypeRegistry::Register(&sVideoData);
+        TypeRegistry::Register(&sVideoData, "VideoData");
         static CgsGraphics::InstanceListResourceType sInstanceList; // [game #32] 0x23  InstanceList (world instances)
-        TypeRegistry::Register(&sInstanceList);
+        TypeRegistry::Register(&sInstanceList, "InstanceList");
         static AttribSysSchemaResourceType sAttribSysSchema;   // [game #36] 0x1B  AttribSys schema
-        TypeRegistry::Register(&sAttribSysSchema);
+        TypeRegistry::Register(&sAttribSysSchema, "AttribSysSchema");
         static AttribSysVaultResourceType  sAttribSysVault;    // [game #37] 0x1C  AttribSys vault (WORLDVAULT/SURFACELIST)
-        TypeRegistry::Register(&sAttribSysVault);
+        TypeRegistry::Register(&sAttribSysVault, "AttribSysVault");
         static ModelResourceType           sModel;             // [game #38] 0x2A  Model (serialised model)
-        TypeRegistry::Register(&sModel);
+        TypeRegistry::Register(&sModel, "Model");
         // Post-fx colour-cube wave (2026-08-16). The X360 registers this handler in exactly this
         // slot -- BrnResource::GameDataModule::RegisterResourceTypes @0x82667EA8 emits
         // "RwColourCubeResourceType" immediately after "ModelResourceType" and before
@@ -135,16 +135,16 @@ namespace CgsResource
         // stores a NULL mpResourceType for the entry and nothing can acquire it, so the composite's
         // 3D tint has no LUT to blend.
         static RwColourCubeResourceType    sRwColourCube;      // [game #39] 0x2B  ColourCube (3D tint LUT)
-        TypeRegistry::Register(&sRwColourCube);
+        TypeRegistry::Register(&sRwColourCube, "RwColourCube");
         static WorldPainter2DResourceType  sWorldPainter2D;    // [game #40] 0x30  WorldPainter2D (DISTRICTS.DAT map)
-        TypeRegistry::Register(&sWorldPainter2D);
+        TypeRegistry::Register(&sWorldPainter2D, "WorldPainter2D");
         static PolygonSoupListResourceType sPolygonSoupList;   // [game #71] 0x43  PolygonSoupList (collision)
-        TypeRegistry::Register(&sPolygonSoupList);
+        TypeRegistry::Register(&sPolygonSoupList, "PolygonSoupList");
         // PVS wave (2026-07-27): PVS.BNDL's single resource is type 45056 (0xB000). With no
         // registered handler CgsResource::Pool::CreateEntryInSlot stores a NULL mpResourceType
         // and AllocateMemoryForResource null-derefs it (GetCachedCanDefrag).
         static ZoneListResourceType        sZoneList;          // 0xB000 ZoneList (PVS zone grid)
-        TypeRegistry::Register(&sZoneList);
+        TypeRegistry::Register(&sZoneList, "ZoneList");
         // World-collision wave (2026-08-10). WORLDCOL.BIN is 396 PolygonSoupLists (0x43,
         // registered just above) PAIRED with 396 IdLists (0x25) -- the "TRK_CLIL<n>" per-zone
         // lists WorldEntityModule::PrepareZoneCollision acquires. With no handler the loader
@@ -154,7 +154,7 @@ namespace CgsResource
         // just a partial hollow shell (GetTypeID/GetSerialisedResourceDescriptor unbodied) so
         // it could not be instantiated here. Both are bodied now.
         static IdListResourceType          sIdList;            // 0x25 (37) IdList (zone-collision lists)
-        TypeRegistry::Register(&sIdList);
+        TypeRegistry::Register(&sIdList, "IdList");
         // The four world-prop/sound types (X360 GameDataModule::RegisterResourceTypes
         // @0x82667EA8 registers all four, PropPhysics immediately before PropGraphicsList;
         // id-keyed lookup is order-independent).
@@ -168,13 +168,13 @@ namespace CgsResource
         // would stay a raw file offset and PropPhysicsDataHeader::GetType would hand every
         // prop spawn a garbage PropTypeData*. No props exist in the world without this.
         static BrnPhysics::Props::PropPhysicsResourceType      sPropPhysics;      // 0x1000F (65551)
-        TypeRegistry::Register(&sPropPhysics);
+        TypeRegistry::Register(&sPropPhysics, "PropPhysics");
         static BrnPhysics::Props::PropGraphicsListResourceType sPropGraphicsList; // 0x10010 (65552)
-        TypeRegistry::Register(&sPropGraphicsList);
+        TypeRegistry::Register(&sPropGraphicsList, "PropGraphicsList");
         static BrnPhysics::Props::PropInstanceDataResourceType sPropInstanceData; // 0x10011 (65553)
-        TypeRegistry::Register(&sPropInstanceData);
+        TypeRegistry::Register(&sPropInstanceData, "PropInstanceData");
         static BrnSound::World::StaticSoundMapResourceType     sStaticSoundMap;   // 0x10016 (65558)
-        TypeRegistry::Register(&sStaticSoundMap);
+        TypeRegistry::Register(&sStaticSoundMap, "StaticSoundMap");
         // The DIRECTOR/world lane-data types (traffic-lane fetch wave, 2026-07-29). Same
         // reason ZoneList had to be added for the PVS wave: the lane bundles' single
         // resources carry these type ids, and with no registered handler
@@ -189,11 +189,11 @@ namespace CgsResource
         // with 64-bit pointer slots by tools/assets/bundles/lane_transcode.py, so each type's
         // FixUp now relocates real host pointers.
         static BrnAI::AISectionsResourceType          sAISectionsData; // 0x10001 (65537)
-        TypeRegistry::Register(&sAISectionsData);
+        TypeRegistry::Register(&sAISectionsData, "AISectionsData");
         static BrnTrigger::TriggerResourceType        sTriggerData;  // 0x10003 (65539)
-        TypeRegistry::Register(&sTriggerData);
+        TypeRegistry::Register(&sTriggerData, "TriggerData");
         static BrnTraffic::TrafficDataResourceType    sTrafficData;  // 0x10002 (65538)
-        TypeRegistry::Register(&sTrafficData);
+        TypeRegistry::Register(&sTrafficData, "TrafficData");
 
         // ---- the vehicle/wheel LIST types (vehicle-load wave, 2026-07-31) --------------------
         // GameDataModule::Prepare stages 9 and 12 stream Vehicles/VehicleList.bundle and
@@ -205,9 +205,9 @@ namespace CgsResource
         // WHEELLIST.BUNDLE's 0xC2D08298 == HashString("B5WheelList") -- the same names the two
         // Prepare stages hash, so this is the right pair.)
         static BrnResource::VehicleListResourceType   sVehicleList;  // 0x10005 (65541)
-        TypeRegistry::Register(&sVehicleList);
+        TypeRegistry::Register(&sVehicleList, "VehicleList");
         static BrnResource::WheelListResourceType     sWheelList;    // 0x10009 (65545)
-        TypeRegistry::Register(&sWheelList);
+        TypeRegistry::Register(&sWheelList, "WheelList");
         // The per-car graphics bundle's own spec resource. MEASURED over
         // build/game/VEHICLES/VEH_PUSMC01_GR.BIN (275 resources): its type set is
         // {0, 1, 10, 12, 13, 14, 15, 42, 65542}, and every one of those already had a
@@ -216,7 +216,7 @@ namespace CgsResource
         // unregistered, but the shipped TRK_UNIT world bundles carry 7-10 of them each and
         // load fine on the documented null-type path, so it is not a vehicle-specific gap.)
         static BrnVehicle::GraphicsSpecResourceType   sVehicleGraphicsSpec;  // 0x10006 (65542)
-        TypeRegistry::Register(&sVehicleGraphicsSpec);
+        TypeRegistry::Register(&sVehicleGraphicsSpec, "VehicleGraphicsSpec");
         // ---- the streamed DEFORMATION spec (deformation-mount wave, 2026-08-14) --------------
         // StreamedDeformationSpec (0x1001C / 65564), the deformation resource inside each
         // Vehicles\VEH_*_AT.bin. The handler TU has existed since the spec landed; it was NEVER
@@ -230,7 +230,7 @@ namespace CgsResource
         // PlayerCarColours precedents above. (The shipped _AT payload is platform 4 / ported --
         // bnd2 +8 == 04, byte-checked.)
         static BrnResource::StreamedDeformationSpecResourceType sStreamedDeformationSpec; // 0x1001C (65564)
-        TypeRegistry::Register(&sStreamedDeformationSpec);
+        TypeRegistry::Register(&sStreamedDeformationSpec, "StreamedDeformationSpec");
         // The WHEEL graphics spec -- the exact twin of the gap above, and LOAD-BEARING for the
         // same reason the vehicle one was. BundleLoader::LoadBundle gates ALL THREE fix-up
         // passes on `mpResourceType != 0`, so an unregistered type does not merely skip FixUp:
@@ -243,7 +243,7 @@ namespace CgsResource
         // NO relocation (it only asserts the spec version), and the shipped payload's version
         // word reads 1, so registering it is import resolution, not layout risk.
         static BrnWheel::GraphicsSpecResourceType     sWheelGraphicsSpec;    // 0x1000A (65546)
-        TypeRegistry::Register(&sWheelGraphicsSpec);
+        TypeRegistry::Register(&sWheelGraphicsSpec, "WheelGraphicsSpec");
         // ---- the ICE take dictionary (ICE take-runtime wave, 2026-08-01) --------------------
         // GameDataModule::PrepareICEList streams Cameras.bundle into pool 5 and acquires
         // "StandardICETakes" (id 0x0DC0EE8F == HashString("StandardICETakes")), whose type is
@@ -255,7 +255,7 @@ namespace CgsResource
         // dereference offsets as pointers on every single lookup. (Measured on the shipped
         // build/game/CAMERAS.BUNDLE: miNumEntries 549, mpaIndex 0x10, entry[0].mpData 0x3388.)
         static CgsContainers::DictionaryResourceType<ICE::ICETakeData> sICETakeDictionary; // 0x41 (65)
-        TypeRegistry::Register(&sICETakeDictionary);
+        TypeRegistry::Register(&sICETakeDictionary, "ICETakeDictionary");
         // ---- the player-car colour palette (colour-picker wave, 2026-08-02) ------------------
         // PlayerCarColours (0x1001E / 65566), the SECOND resource inside VEHICLELIST.BUNDLE.
         // This registration is the whole reason the car-livery colour picker was empty: with
@@ -270,7 +270,7 @@ namespace CgsResource
         // its GetTypeID is defined, and BOTH pointer columns stay 32-bit serialised slots --
         // see the two-proof banner in SharedClasses/Graphics/BrnGlobalColourPalette.h.
         static PlayerCarColoursResourceType sPlayerCarColours;   // 0x1001E (65566)
-        TypeRegistry::Register(&sPlayerCarColours);
+        TypeRegistry::Register(&sPlayerCarColours, "PlayerCarColours");
         // ---- the offline progression resource (progression-load wave, 2026-08-11) ------------
         // PROGRESSION.DAT / BTTPROGRESSION.DAT carry exactly one resource: id 0x988F38C0 ==
         // HashString("ProgressionData"), type 0x1000E (65550) -- the name+id
@@ -283,7 +283,7 @@ namespace CgsResource
         // all three fix-up passes, and the acquire hands the ProgressionManager a live-looking
         // record whose nine array bases are still file offsets.
         static BrnProgression::ProgressionResourceType sProgressionData;   // 0x1000E (65550)
-        TypeRegistry::Register(&sProgressionData);
+        TypeRegistry::Register(&sProgressionData, "ProgressionData");
 
         // ---- the road / street table (street-data load wave, 2026-08-11) ---------------------
         // STREETDATA.DAT carries exactly one resource: id 0xBC9CC502 == HashString("StreetData"),
@@ -298,7 +298,7 @@ namespace CgsResource
         // mpResourceType, BundleLoader skips the fix-up passes, and the acquire hands the
         // StreetManager a live-looking record whose table bases are still file offsets.
         static BrnStreetData::StreetDataResourceType  sStreetData;         // 0x10018 (65560)
-        TypeRegistry::Register(&sStreetData);
+        TypeRegistry::Register(&sStreetData, "StreetData");
 
         // ---- the ENVIRONMENT-SETTINGS resource family (env wave, 2026-08-16) ------------------
         // Keyframe (0x10012), TimeLine (0x10013) and Dictionary (0x10014) -- the three types in
@@ -314,39 +314,39 @@ namespace CgsResource
         // one per city_HHMM keyframe) are never resolved, so every mppKeyframes slot stays NULL
         // and the time-of-day blend has nothing to read.
         static BrnWorld::EnvironmentSettings::KeyframeResourceType   sEnvKeyframe;   // 0x10012 (65554)
-        TypeRegistry::Register(&sEnvKeyframe);
+        TypeRegistry::Register(&sEnvKeyframe, "EnvKeyframe");
         static BrnWorld::EnvironmentSettings::TimeLineResourceType   sEnvTimeLine;   // 0x10013 (65555)
-        TypeRegistry::Register(&sEnvTimeLine);
+        TypeRegistry::Register(&sEnvTimeLine, "EnvTimeLine");
         static BrnWorld::EnvironmentSettings::DictionaryResourceType sEnvDictionary; // 0x10014 (65556)
-        TypeRegistry::Register(&sEnvDictionary);
+        TypeRegistry::Register(&sEnvDictionary, "EnvDictionary");
 
         // ---- the world-render resource types (2026-07-27) -------------------------------------
         // The streamed TRK_UNIT bundles carry these; without a registered handler the
         // loader cannot FixUp them, so the renderable mesh/material graph is never built
         // (found by the renderer wave: nothing registered Renderable/Material/technique).
         static RwRenderableResourceType    sRwRenderable;      // 0xC   Renderable (mesh graph)
-        TypeRegistry::Register(&sRwRenderable);
+        TypeRegistry::Register(&sRwRenderable, "RwRenderable");
         static MaterialResourceType        sMaterial;          // 0x1   Material (assembly)
-        TypeRegistry::Register(&sMaterial);
+        TypeRegistry::Register(&sMaterial, "Material");
         static MaterialTechniqueResourceType sMaterialTechnique; // 0xD MaterialTechnique
-        TypeRegistry::Register(&sMaterialTechnique);
+        TypeRegistry::Register(&sMaterialTechnique, "MaterialTechnique");
         static ShaderTechniqueResourceType sShaderTechnique;       // 0x32 ShaderTechnique
-        TypeRegistry::Register(&sShaderTechnique);
+        TypeRegistry::Register(&sShaderTechnique, "ShaderTechnique");
         static RwShaderProgramBufferResourceType sShaderProgramBuffer;    // 0x12 vertex/pixel program
-        TypeRegistry::Register(&sShaderProgramBuffer);
+        TypeRegistry::Register(&sShaderProgramBuffer, "ShaderProgramBuffer");
 
         // ---- owning-module registrations (NOT in GameDataModule::RegisterResourceTypes) -------
         // The X360 registers these in their owning subsystem's bring-up, not the game-data module.
         // Folded in here as a temporary bridge until that registration is reconstructed.
         static EntryListResourceType       sEntryList;         // 0x1D  EntryList (resource subsystem)
-        TypeRegistry::Register(&sEntryList);
+        TypeRegistry::Register(&sEntryList, "EntryList");
         static AptDataHeaderType           sAptDataHeader;     // 0x1E  AptData (GUI/Flash movie header)
-        TypeRegistry::Register(&sAptDataHeader);
+        TypeRegistry::Register(&sAptDataHeader, "AptDataHeader");
         static LuaCodeResourceType         sLuaCode;           // 0x22  LuaCode (FSM scripts; loaded by the GUI flow)
-        TypeRegistry::Register(&sLuaCode);
+        TypeRegistry::Register(&sLuaCode, "LuaCode");
         static LanguageResourceType        sLanguage;          // 0x27  Language (localised string table)
-        TypeRegistry::Register(&sLanguage);
+        TypeRegistry::Register(&sLanguage, "Language");
         static BrnFlapt::FlaptFileResourceType sFlaptFile;     // 0x10020 FLApt (GUI-owned vendor movie)
-        TypeRegistry::Register(&sFlaptFile);
+        TypeRegistry::Register(&sFlaptFile, "FlaptFile");
     }
 }
