@@ -256,3 +256,4 @@ void BrnCoronaManager::SetTextureAtlas(const rw::IResourceAllocator& lAllocator,
     gsuCoronaTextureStateFlags = 4;
     gspCoronaVTable = &gsuCoronaVTableTarget;
 }
+
