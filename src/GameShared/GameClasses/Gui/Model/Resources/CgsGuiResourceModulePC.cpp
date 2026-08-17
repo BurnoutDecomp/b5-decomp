@@ -395,12 +395,29 @@ namespace CgsGui
 
         OutputBuffer::GuiResourceRequestQueue* lpRequests = lpOutput->GetResourceRequestQueue();
 
+        // ⭐ THE PER-PASS BUNDLE CAP, 2026-08-17 (boot audit F-P8a-5). The console's model
+        // scheduler services at most FIVE bundles per pass and comes back for the rest next
+        // frame; this drained the WHOLE queue in one call, so a stage that queued twenty
+        // bundles paid for all twenty in a single frame.
+        //
+        // The other half of that finding has EXPIRED and is worth saying so: it reads
+        // "drains whole queue SYNC w/ CRT BundleLoader". The loader is not CRT-backed any
+        // more -- CgsResource::BundleLoader reads through the live async FS engine
+        // (DeviceManager worker + OperationPool + the Win32 device leaf; every boot log line
+        // says "via async-FS"). So the IO layer is already right and the batching was the
+        // real remaining deviation.
+        const s32 KI_MAX_BUNDLES_PER_PASS = 5;
+        s32 liServicedThisPass = 0;
+
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liType = lpRequests->GetFirstEvent(&lpEvent, &liSize);
         bool lbAnyServiced = false;
         while (liType >= 0 && lpEvent != 0)
         {
+            if (liServicedThisPass >= KI_MAX_BUNDLES_PER_PASS)
+                break;
+            ++liServicedThisPass;
             lbAnyServiced = true;
             switch (liType)
             {
@@ -693,10 +710,10 @@ namespace CgsGui
             lpEvent = lpNextEvent;
         }
 
-        // This frame's records are fully serviced -- drop them (the console equivalent is
-        // the transient IO buffer being consumed downstream; the WAIT stage's
-        // HasPendingResourceRequests clears the queue anyway before counting).
-        if (lbAnyServiced)
+        // ⚠️ Only clear when the queue was drained TO THE END. With the per-pass cap above,
+        // hitting the cap leaves records behind that must survive to the next pass -- the
+        // old unconditional Clear() would have thrown exactly the ones the cap deferred.
+        if (lbAnyServiced && (liType < 0 || lpEvent == 0))
             lpRequests->Clear();
     }
 }
