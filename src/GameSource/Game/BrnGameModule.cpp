@@ -22,6 +22,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // CgsResource::Events::AcquireResourceResponse (GamePrepare's acquire drain)
 #include "rw/rwcore_structs.h"                       // rw::ResourceAllocatorRegistry::GetDefaultAllocator (the debug-font texture state)
 #include "pc/gcm/renderengine/device.h"               // renderengine::GetDisplayRefreshRate (the step-9 timer rate)
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // RegisterFunction (the Debug/Sim actions)
 #include "GameSource/Graphics/BrnRendererModuleIO.h"    // RendererIO::InputBuffer/OutputBuffer (GamePrepare's renderer pair)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer (DoUpdate_Director)
 #include "GameSource/GameState/BrnGameStateModuleIO.h" // GameStateModuleIO::OutputBuffer (BridgeGameStateToDirector)
@@ -328,12 +329,21 @@ namespace BrnGame
         // AVAILABLE: RegisterVariable + SetOptions are both on CgsDev::DebugInterface
         // (CgsDebugInterface.h:80-92), and the variable is meFrameRateManagerType -- so the
         // Framerate half needs only its StringList of type names recovered.
-        // [FLAG] MISSING: DebugInterface::RegisterFunction. StepFrameCB and PlayFrameCB are
-        // both bodied here (see below) and have no way to be registered -- the interface
-        // exposes variable registration only. Inventing the callback-registration signature
-        // would be a guess at an API shape, so the two callbacks stay unreachable from the
-        // debug menu until RegisterFunction lands.
+        // ⭐ ...AND THE SIM HALF LANDED TOO, minutes later. I recorded RegisterFunction as
+        // "missing, do not invent the signature" -- then checked what was behind it:
+        // DebugUI::FunctionManager::RegisterFunction is already BODIED (CgsFunctionManager.cpp,
+        // X360 0x8282E7E0) with exactly the argument order the two call sites pin, and
+        // DebugUI::GetFunctionManager + DebugInterface::GetUI both exist. So the "missing API"
+        // was a four-line forwarder over machinery that was already there, and nothing had to
+        // be guessed. Registered below.
         //
+        // @0x823CAEBC-F48 -- the Debug/Sim step + play actions.
+        {
+            CgsDev::DebugInterface lDebugInterface(&mDebugManager);
+            lDebugInterface.RegisterFunction(&BrnGameModule::StepFrameCB, this, "Debug/Sim", "Step");
+            lDebugInterface.RegisterFunction(&BrnGameModule::PlayFrameCB, this, "Debug/Sim", "Play");
+        }
+
         // [gated] the rest of steps 7-9 (pages 0-23 named above:
         // "General".."Flapt"), the vsync-rate 50/60 M_CGS_PERFMON_CPU_SETGAMEFREQUENCY check, the
         // event-receiver queue @+10094268 (capacity 1024, align 16), the update/lookback timers +

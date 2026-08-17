@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"                   // GetUI().GetFunctionManager()
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsFunctionManager.h" // FunctionManager::RegisterFunction
 
 // CgsDev::DebugInterface - the two functions the component-registration path drives:
 // the automatic-acquire constructor and the manager accessor.
@@ -29,4 +31,18 @@ namespace CgsDev
         CGS_ASSERT(mpDebugManager, "mpDebugManager");
         return *mpDebugManager;
     }
+}
+
+// ⭐ 2026-08-17 (boot audit F-P1-14). The forwarder behind DebugInterface::RegisterFunction.
+// Argument order is pinned by BrnGameModule::Construct's two call sites @0x823CAF28/48
+// (r4 = callback, r5 = context, r6 = path, r7 = name) and matches, argument for argument,
+// the FunctionManager::RegisterFunction already bodied at X360 0x8282E7E0.
+//
+// Defined here rather than inline in the header because the body needs CgsDebugUI.h, whose
+// GetNextWindow() collides with the Windows.h macro of the same name -- pulling it through
+// the interface header breaks every TU that includes Windows.h first (BrnMain.cpp did).
+void CgsDev::DebugInterface::RegisterFunction(DebugUI::Function::DebugCallbackFunction lpfCallback,
+                                              void* lpUserData, const char* lpcPath, const char* lpcName)
+{
+    mpDebugManager->GetUI().GetFunctionManager().RegisterFunction(lpfCallback, lpUserData, lpcPath, lpcName);
 }
