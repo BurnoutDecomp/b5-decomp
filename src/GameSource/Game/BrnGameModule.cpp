@@ -1,6 +1,5 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
-#include "GameShared/GameClasses/Development/DebugSystem/CgsDebugFontBringUp.h"   // LoadAndSetDebugFont
 #include "SDKs/EA/GameTalk/GameTalk.h"               // EA::GameTalk::GameTalkMessage (RenderMetricsMessageHandler)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (GUI-out event 201) + GuiEventProgressionProfileData (350)
 #include "GameSource/GameState/Progression/BrnProfile.h" // BrnProgression::Profile (the action-193 payload's first word)
@@ -20,6 +19,8 @@
 #include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (BridgeGuiToGame's command slot)
 #include "GameSource/Director/Camera/BrnCameraValidityAccount.h" // ValidityAccount::SetupFailFlagMask (interim bridge in Construct)
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (GamePrepare's request bracket)
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // CgsResource::Events::AcquireResourceResponse (GamePrepare's acquire drain)
+#include "rw/rwcore_structs.h"                       // rw::ResourceAllocatorRegistry::GetDefaultAllocator (the debug-font texture state)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer (DoUpdate_Director)
 #include "GameSource/GameState/BrnGameStateModuleIO.h" // GameStateModuleIO::OutputBuffer (BridgeGameStateToDirector)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // DirectorIO::SceneQuery{Input,Output}Buffer
@@ -1878,21 +1879,13 @@ namespace BrnGame
     //                      latch the reusable loading-screen allocator, publish
     //                      IsStalled/IsDiskError onto the dispatch input, CheckDiskError.
     //
-    // RECONSTRUCTED HERE: stages 0/1/2 -- the bundle loads and their completion wait. This is
-    // the stage that brings SHADERS.BNDL online, which is what lets every streamed world
-    // Material resolve its ShaderTechnique / ShaderProgramBuffer imports instead of falling
-    // back to the bring-up shader.
-    //
-    // [gated] stages 3 and 4:
-    //   * stage 3's five "gamedb://burnout5/Playground/GlobalTextures/..." acquires feed
-    //     BrnRendererModule::PrepareAgain (blobby shadow, the two cloud textures, the corona
-    //     atlas, the glass fracture) -- PrepareAgain is not reconstructed and none of its four
-    //     consumers (blobby-shadow manager, sky dome, corona manager, damage FX) is live.
-    //   * the id-5 "default" font acquire lands the debug font; the PC already brings that up
-    //     from DispatchThread via CgsDev::LoadAndSetDebugFont (which owns the same
-    //     Font::CreateTextureState + DebugManager::SetDebugFont pair).
-    //   * stage 4's GameStateModule game-prepare rides the GameState module placeholder.
-    // DELETE the gate when PrepareAgain + the GameState game-prepare land.
+    // RECONSTRUCTED HERE: all four stages. Stage 2 brings SHADERS.BNDL online, which is what
+    // lets every streamed world Material resolve its ShaderTechnique / ShaderProgramBuffer
+    // imports instead of falling back to the bring-up shader; stage 3 is the six-acquire
+    // round trip (⭐ 2026-08-16, boot audit F-P2-2/F-P2-3 -- see the stage bodies); stage 4 is
+    // the GameState module's game-prepare. The not-done tail is PARTIAL: its two
+    // dispatch-input publishes are restored, its RendererIO/allocator-latch half is not
+    // (F-P2-4, flagged at the tail).
     //
     // FLAG PC-platform leaf: the X360 services the GameData module on its own resource-update
     // thread (IThreadClass::ResourceUpdateThread) while this stage machine blocks the update
@@ -1924,6 +1917,21 @@ namespace BrnGame
         lpGameDataInput->LockForWrite();
         lpGameDataOutput->LockForRead();
 
+        // The five gamedb paths are the X360's own literals (GamePrepare @0x823EFBD0's
+        // case-2 HashString sites, BrnGameModule.cpp:1751-1755); every one hashes to an
+        // entry present in the converted platform-4 GlobalTextureDictionary.bin that the
+        // bundle stage above loads into pool 10.
+        static const char* const KAPC_GLOBAL_TEXTURE_PATHS[5] =
+        {
+            "gamedb://burnout5/Playground/GlobalTextures/blobbyshadow.TextureConfig2d?ID=240931",
+            "gamedb://burnout5/Playground/GlobalTextures/cloud1density.TextureConfig2d?ID=381388",
+            "gamedb://burnout5/Playground/GlobalTextures/cloud1quadrant.TextureConfig2d?ID=381382",
+            "gamedb://burnout5/Playground/GlobalTextures/corona_atlas.TextureConfig2d?ID=297312",
+            "gamedb://burnout5/Playground/GlobalTextures/glass_fracture.TextureConfig2d?ID=440917"
+        };
+        const s32 KI_GLOBAL_TEXTURE_POOL = 10;   // the pool the bundle stage loaded into
+        const s32 KI_DEBUG_FONT_POOL     = 0;    // "Language\\Fonts\\Default.font" went to pool 0
+
         bool lbDone = false;
         switch (meGamePrepareStage)
         {
@@ -1952,6 +1960,35 @@ namespace BrnGame
                 break;
 
             mGamePrepareReceiverQueue.Clear();
+
+            // ⭐ THE SIX ACQUIRES, restored 2026-08-16 (boot audit F-P2-2/F-P2-3). This
+            // stage's whole job on the console is to turn the three finished bundle loads
+            // into six ASYNC AcquireResource records (@0x823EFD50..0x823EFEA4) -- five
+            // global textures out of pool 10 and, sixth, the debug FONT out of pool 0 --
+            // and then to park stage 3 until the replies come back. The PC used to skip
+            // the round trip entirely and resolve five FindResource calls inline in the
+            // same pass, which (a) deleted the park, so nothing about this phase was ever
+            // paced by I/O, and (b) dropped the font acquire on the floor, which is why
+            // the debug font had to be brought up by an invented parallel loader
+            // (CgsDev::LoadAndSetDebugFont, its own 3x4MB malloc'd pool) off the render
+            // thread instead of out of the bundle this stage already loaded.
+            //
+            // The round trip is entirely real on PC: RequestInterface::AcquireResource
+            // pushes a type-4 record, ResourceModule routes it to the pool as tag 4,
+            // PoolModule::DoAcquireResourceRequest @0x828FCD48 answers it with the
+            // resolved {mpResourceMemory, mpSourceEntry} pair, and
+            // ProcessPoolOutputResponses maps pool tag 6 back to receiver id 4 -- the
+            // console's own numbers, already calibrated against the ARTIST translation
+            // table dword_820F7194.
+            for (s32 liTexture = 0; liTexture < 5; ++liTexture)
+            {
+                lpGameDataInput->GetRequestInterface()->AcquireResource(
+                    &mGamePrepareReceiverQueue, liTexture, KI_GLOBAL_TEXTURE_POOL,
+                    KAPC_GLOBAL_TEXTURE_PATHS[liTexture]);
+            }
+            // @0x823EFE78-A4: id 5, pool 0, HashString("default") -- the debug font.
+            lpGameDataInput->GetRequestInterface()->AcquireResource(
+                &mGamePrepareReceiverQueue, 5, KI_DEBUG_FONT_POOL, "default");
         }
         // fall through
 
@@ -1959,70 +1996,115 @@ namespace BrnGame
         {
             meGamePrepareStage = E_GAMEPREPARESTAGE_WAITACQUIRES;
 
-            // Stage 3: resolve the five global textures and hand them to the renderer.
+            // ⚠️ THE GATE IS FIVE, NOT SIX, and that is an asm fact, not a typo: the stage-3
+            // test is `lwzx r11,[gm+0x9A06C4]; cmpwi cr6,r11,5; blt cr6 -> TAIL`
+            // @0x823EFEB0-B4, even though the stage above posted SIX acquires. So the drain
+            // below has to cope with the sixth reply not having landed yet -- which is
+            // exactly why the console re-reads the queue rather than indexing it.
             //
-            // The five gamedb paths below are the X360's own literals (GamePrepare
-            // @0x823EFBD0, BrnGameModule.cpp:1751-1755) and every one of them hashes to an
-            // entry that IS present in the converted platform-4 GlobalTextureDictionary.bin
-            // -- the bundle stage 2 above just finished loading into pool 10.
-            //
-            // FLAG PC-platform leaf: the console posts five ASYNC AcquireResource events
-            // (ids 0..4) into the GameData request queue and collects the replies here on a
-            // later frame. Its responder, PoolModule::DoAcquireResourceRequest @0x828FCD48,
-            // is exactly `GetPool(poolId)->FindResource(id, checkRefCount, statusMask 2)`
-            // plus the entry's main-memory slot -- so the resolve below calls that same pair
-            // directly. The bundle is already resident (stage 2 waited for it), so there is
-            // nothing to wait for and the round trip would only add a frame. Replace this
-            // with the real acquire events when the GameData RequestInterface grows its
-            // AcquireResource builder.
-            {
-                static const char* const KAPC_GLOBAL_TEXTURE_PATHS[5] =
-                {
-                    "gamedb://burnout5/Playground/GlobalTextures/blobbyshadow.TextureConfig2d?ID=240931",
-                    "gamedb://burnout5/Playground/GlobalTextures/cloud1density.TextureConfig2d?ID=381388",
-                    "gamedb://burnout5/Playground/GlobalTextures/cloud1quadrant.TextureConfig2d?ID=381382",
-                    "gamedb://burnout5/Playground/GlobalTextures/corona_atlas.TextureConfig2d?ID=297312",
-                    "gamedb://burnout5/Playground/GlobalTextures/glass_fracture.TextureConfig2d?ID=440917"
-                };
-                const s32 KI_GLOBAL_TEXTURE_POOL = 10;   // the same pool stage 2 loaded into
+            // THIS `break` IS THE PARK. It drops into the not-done tail, which pumps the
+            // GameData module (and, on the console, renders the loading screen), and the
+            // update thread re-enters this same stage next pass. It is the first place in
+            // the whole boot where a phase actually waits on I/O rather than on a timer.
+            if (mGamePrepareReceiverQueue.GetLength() < 5)
+                break;
 
-                renderengine::Texture* lapTextures[5] = { 0, 0, 0, 0, 0 };
-                CgsResource::Pool* lpPool =
-                    mGameDataModule.GetResourceModule().GetPoolModule().GetPool(KI_GLOBAL_TEXTURE_POOL);
-                if (lpPool != 0)
+            // @0x823EFECC-0x823F003C -- drain the receiver queue. Each element is a type-4
+            // AcquireResource reply; the payload is a CgsResource::Events::PoolEvent whose
+            // miEventId is the 0..5 slot the request was posted under.
+            renderengine::Texture* lapTextures[5] = { 0, 0, 0, 0, 0 };
+            {
+                const CgsModule::Event* lpEvent = 0;
+                s32 liSize = 0;
+                s32 liType = mGamePrepareReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+                while (lpEvent != 0)
                 {
-                    for (s32 liTexture = 0; liTexture < 5; ++liTexture)
+                    // `cmpwi r3, 4` @0x823EFF20 -- the element TYPE, not the event id.
+                    if (liType == 4)
                     {
-                        // The bundle keys every resource by CgsResource::ID::HashString of the
-                        // full lowercased gamedb path (a reflected CRC32, @0x828D84A8), widened
-                        // into the 64-bit id slot.
-                        CgsResource::ID lId;
-                        lId.SetHash(static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
-                            reinterpret_cast<const u8*>(KAPC_GLOBAL_TEXTURE_PATHS[liTexture])))));
-                        s32 liIndex = -1;
-                        CgsResource::Entry* lpEntry = lpPool->FindResource(lId, false, 2, &liIndex);
-                        if (lpEntry != 0)
+                        // reinterpret_cast, not static_cast: CgsResource::Events::Event and
+                        // CgsModule::Event are unrelated roots and the receiver queue hands
+                        // out the module one (same idiom as BrnDirectorWorldMap.cpp:183).
+                        const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                            reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+
+                        switch (lpResponse->miEventId)
                         {
-                            lapTextures[liTexture] = static_cast<renderengine::Texture*>(
-                                lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY]);
+                        case 0:
+                        case 1:
+                        case 2:
+                        case 3:
+                        case 4:
+                            // `ld r11,0x18(r30); lwz rN,0(r11)` -- mpResourceMemory is the
+                            // ADDRESS of the entry's main-memory slot, so the texture is one
+                            // more dereference down. (The console's load is unconditional;
+                            // the null test is ours, because an absent global texture on PC
+                            // must reach the named assert below rather than fault here.)
+                            if (lpResponse->mpResourceMemory != 0)
+                            {
+                                lapTextures[lpResponse->miEventId] =
+                                    *reinterpret_cast<renderengine::Texture* const*>(
+                                        lpResponse->mpResourceMemory);
+                            }
+                            break;
+
+                        case 5:
+                            // @0x823EFFC8-0x823F0000 -- the DEBUG FONT. Latch the handle pair
+                            // into the module member (gm+0x99F150), build its texture state
+                            // against rw's default allocator, and hand THE HANDLE to the
+                            // debug manager.
+                            mDebugFont.mpResourceMemory = lpResponse->mpResourceMemory;
+                            mDebugFont.mpSourceEntry    = lpResponse->mpSourceEntry;
+                            if (mDebugFont.mpResourceMemory != 0 &&
+                                *reinterpret_cast<void* const*>(mDebugFont.mpResourceMemory) != 0)
+                            {
+                                rw::IResourceAllocator* lpFontAllocator =
+                                    rw::ResourceAllocatorRegistry::GetDefaultAllocator();
+                                CgsResource::Font* lpFont = mDebugFont;   // Font::operator* @0x823EFFE8
+                                lpFont->CreateTextureState(lpFontAllocator);
+                                mDebugManager.SetDebugFont(mDebugFont);
+                            }
+                            break;
+
+                        default:
+                            CGS_ASSERT(false, "Unexpected Event Id in BrnGameModule::GamePrepare");
+                            break;
                         }
                     }
-                }
 
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[GamePrepare] global textures: blobby=" << (lapTextures[0] != 0)
-                        << " cloudDensity=" << (lapTextures[1] != 0)
-                        << " cloudLighting=" << (lapTextures[2] != 0)
-                        << " corona=" << (lapTextures[3] != 0)
-                        << " glassFracture=" << (lapTextures[4] != 0) << "\n";
+                    const CgsModule::Event* lpNext = 0;
+                    liType = mGamePrepareReceiverQueue.GetNextEvent(lpEvent, &lpNext, &liSize);
+                    lpEvent = lpNext;
                 }
-
-                // X360 BrnGameModule.cpp:1751-1755 -- the argument ORDER is the console's.
-                mRenderModule.PrepareAgain(lapTextures[0], lapTextures[1], lapTextures[2],
-                                           lapTextures[3], lapTextures[4]);
             }
+
+            // @0x823F0048-0x823F00F0 -- the console's five named asserts. These replaced a
+            // log-only status line: a missing global texture used to sail through silently
+            // and only show up as a wrong-looking frame much later (boot audit F-P2-7).
+            CGS_ASSERT(lapTextures[0] != 0, "lpBlobbyShadow");
+            CGS_ASSERT(lapTextures[1] != 0, "lpCloudDensityTexture");
+            CGS_ASSERT(lapTextures[2] != 0, "lpCloudLightingTexture");
+            CGS_ASSERT(lapTextures[3] != 0, "lpCoronaAtlas != NULL");
+            CGS_ASSERT(lapTextures[4] != 0, "lpGlassFractureTexture != NULL");
+
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[GamePrepare] acquires drained: blobby=" << (lapTextures[0] != 0)
+                    << " cloudDensity=" << (lapTextures[1] != 0)
+                    << " cloudLighting=" << (lapTextures[2] != 0)
+                    << " corona=" << (lapTextures[3] != 0)
+                    << " glassFracture=" << (lapTextures[4] != 0)
+                    << " debugFont=" << (mDebugFont.mpResourceMemory != 0) << "\n";
+            }
+
+            // @0x823F010C -- the argument ORDER is the console's.
+            mRenderModule.PrepareAgain(lapTextures[0], lapTextures[1], lapTextures[2],
+                                       lapTextures[3], lapTextures[4]);
+
+            // @0x823F013C -- the SECOND Clear. Without it the sixth reply (and any that
+            // arrive later) would still be sitting in the queue when the next phase looks.
+            mGamePrepareReceiverQueue.Clear();
         }
         // fall through
 
@@ -2093,14 +2175,57 @@ namespace BrnGame
         }
         }
 
-        lpGameDataOutput->UnlockForRead();
+        // @0x823F01E4/EC (done path) and @0x823F0338/40 (tail) -- the console unlocks the
+        // INPUT (write) first and the OUTPUT (read) second, both times. The PC had the pair
+        // reversed. It is invisible single-threaded, but it is the order the resource seam
+        // needs the moment it goes concurrent (boot audit F-P2-8).
         lpGameDataInput->UnlockForWrite();
+        lpGameDataOutput->UnlockForRead();
 
         if (!lbDone)
         {
-            // FLAG PC-platform leaf (see above): the X360's not-done tail runs the renderer
-            // update + disk-error publication; on PC the piece this stage machine cannot do
-            // without is the GameData pump that services the requests it just queued.
+            // ---- the not-done TAIL (loc_823F021C), run on EVERY not-done pass ------------
+            // ⭐ PARTIALLY RESTORED 2026-08-16 (boot audit F-P2-4); was absent wholesale.
+            //
+            // The console does seven things here: creates the RendererIO buffer pair off the
+            // two update stacks, runs BrnRendererModule::Update @0x82405E28 through them,
+            // latches the allocator that Update publishes (GetReusableLoadingScreenAllocator
+            // -> gm+0x9A0630), tells the dispatch thread to SHOW THE LOADING SCREEN and
+            // republishes the disk-error byte, unlocks the GameData pair, runs
+            // CheckDiskError, and destroys the pair.
+            //
+            // The two DISPATCH-INPUT publishes are what is restored. They matter more now
+            // than they did an hour ago: stage 3 above genuinely parks on its acquires, so
+            // GamePrepare really does span several passes, and this is what holds the
+            // loading screen up across them instead of leaving the last frame on screen.
+            //
+            // [FLAG] STILL ABSENT -- the RendererIO pair, BrnRendererModule::Update, and the
+            // gm+0x9A0630 allocator latch. Update's publication is
+            // `SetReusableLoadingScreenAllocator(lpOutput, this + 51452)` @0x82405EC0: the
+            // renderer module owns that CgsMemory::LinearMalloc as a member, and the game
+            // module reads it back off the output buffer. None of the four dispatch IO
+            // buffers is created on this build (see DoDispatch's banner), so the world frame
+            // allocator stays the invented 512 KiB static in BrnGameMainFlowStates.cpp until
+            // that pair is real. Tracked as boot-audit F-P2-4.
+            // [FLAG] CheckDiskError @0x823BC798 reads the GameData output's filesystem-status
+            // interface, a documented deferral in BrnGameDataModuleIO.h. The byte it would
+            // act on is the one published just below, so nothing is lost but the thread spawn.
+            {
+                BrnGame::DispatchThreadInputBuffer* lpDispatchInput =
+                    mDispatchThreadInputBufferManager.GetWriteBuffer();
+                if (lpDispatchInput != 0)
+                {
+                    lpDispatchInput->LockForWrite();
+                    lpDispatchInput->ShowLoadingScreen();            // +0x9990 := 1 @0x823F031C
+                    lpDispatchInput->SetIsDiskError(mbDiskError);    // @0x823F0328
+                    lpDispatchInput->UnlockForWrite();
+                }
+            }
+
+            // FLAG PC-platform leaf (see above): the X360 pumps the GameData module from its
+            // own resource thread; the single-threaded host has to do it here, and this is
+            // the point in the pass where the locks are free -- the same point the console
+            // reaches after its renderer update.
             mGameDataModule.Update(lpGameDataInput, lpGameDataOutput);
         }
 
@@ -2362,11 +2487,15 @@ namespace BrnGame
         // frame the update side just published via OnEndOfUpdateFrame's swap).
         mRenderModule.Render(mDispatchThreadInputBufferManager.GetReadBuffer());
 
-        // Bring up the resource (bitmap) debug font from the render path, where the D3D device is live
-        // (the atlas raster's FixUp creates a D3D texture). Retried every frame; LoadAndSetDebugFont
-        // bails without latching while gDevice is null and latches once it has loaded + created the
-        // atlas, so this is a single real load and a cheap guard check thereafter.
-        CgsDev::LoadAndSetDebugFont("Language/Fonts/Default.font", mDebugManager);
+        // ⭐ RETIRED 2026-08-16 (boot audit F-P2-3). This used to call
+        // CgsDev::LoadAndSetDebugFont here every render frame -- a PC-invented second font
+        // path that stood up its OWN 3x4MB malloc'd resource pool and loaded
+        // "Language/Fonts/Default.font" a second time, purely because GamePrepare's id-5
+        // acquire had been dropped. GamePrepare now issues that acquire against the pool-0
+        // bundle it already loads, and lands the font through the console's own
+        // Font::CreateTextureState + DebugManager::SetDebugFont pair, so the render thread
+        // has no font work to do -- exactly as on the X360, whose DispatchThread is only the
+        // renderer call above.
     }
 
     // @ BrnGameModule.cpp:3916 - clear the whole game-module object, then stamp each owned

@@ -633,7 +633,12 @@ namespace BrnGame
         // [h:375-379: resource buffer stacks + gamedata module buffers - omitted]
         BrnGame::BrnCpuMonitors mCpuMonitors;                        // h:384
         CgsDev::DebugManager    mDebugManager;                       // h:387
-        // [h:388-404: debug font, map-file reader, juice, mbHasGameTerminated - omitted]
+        // h:388 -- the DEBUG FONT handle, X360 gm+0x99F150 (10482000). GamePrepare's id-5
+        // acquire stores {mpResourceMemory, mpSourceEntry} straight into it (@0x823EFFD4/D8)
+        // and then hands THIS OBJECT to DebugManager::SetDebugFont, so it has to outlive the
+        // pass -- it is the module's member on the console for exactly that reason.
+        CgsResource::SafeResourceHandle<CgsResource::Font> mDebugFont;   // h:388 (gm+0x99F150)
+        // [h:389-404: map-file reader, juice, mbHasGameTerminated - omitted]
         bool mbSimPaused;                                            // h:405
         bool mbDiskError;                                            // h:406
         // [h:407-411: disk-error/controller/game-start/over/prev-stalled flags - omitted]
