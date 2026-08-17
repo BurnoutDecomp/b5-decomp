@@ -54,11 +54,14 @@ namespace
 bool gBrnInitialLoadingComplete = false;
 bool gBrnGuiDrivesLoadingScreen = false;   // set by BrnGui::GuiModule when the BF_LOADING Lua FSM is live
 
-// Defined further down with the CheckDiskSpace state (byte_82FAE28E): the disk-check
-// entered flag DOUBLES as the scripted-load pause flag -- the load spine below skips its
-// stage machine while it is raised, and ResumeLoadingWorld clears it on the title
-// pre-accept.
-extern bool gBrnCheckDiskSpaceEntered;
+// X360 byte_82FAE28E -- the scripted-load PARK flag. Defined further down with the
+// CheckDiskSpace state (its historical home; it is not that state's private flag).
+// ⭐ CORRECTED 2026-08-14 (boot audit F-P4-1): this is not a "CheckDiskSpace entered"
+// marker -- EVERY pre-title OnEnter raises it (LOADING/MARKETING/CHECK_DISK/START each
+// do clear -> assert stage==START -> set), MemoryCard/CompleteLoading enter with it
+// cleared, and the single runtime clear is ResumeLoadingWorld on the title pre-accept.
+// That discipline is what parks the whole world load behind the title on the console.
+extern bool gBrnScriptedLoadPaused;
 
 // --- MainGameFlowState (abstract base) --------------------------------------------------
 MainGameFlowState::MainGameFlowState() {}
@@ -76,7 +79,15 @@ LoadingScriptedState::LoadingScriptedState()
 void LoadingScriptedState::OnEnter() {}
 void LoadingScriptedState::OnLeave() {}
 void LoadingScriptedState::Render() {}
-void LoadingScriptedState::FinishLoading() {}
+// @ 0x823C6AB0 -- the base FinishLoading is a tail-call into the flow controller's
+// SendEvent(STATEEND); it is vtable-only (no static callers on either side). The PC body
+// was empty, so a dispatch through it silently did nothing (boot audit F-P6-19).
+void LoadingScriptedState::FinishLoading()
+{
+    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+        BrnGameMainFlowController::gpMainGameFlowController->SendEvent(
+            BrnGameMainFlowController::E_MGE_STATEEND);
+}
 
 // The scripted world-load stage (X360 dword_82FAE4B0 -- a GLOBAL shared by every flow
 // state, NOT a per-instance member; the ARTIST stage set drifted from the PS3-DWARF
@@ -100,13 +111,14 @@ namespace
 }
 
 // @ 0x823A85B0 -- the title pre-accept resume: assert the scripted load is still parked at
-// START, then clear the pause flag (byte_82FAE28E == gBrnCheckDiskSpaceEntered) so the
-// per-frame spine below starts advancing the stages.
+// START, then clear the park flag (byte_82FAE28E) so the per-frame spine below starts
+// advancing the stages. The body is UNCONDITIONAL on the console; the guard lives at the
+// call site (StartScreen::Update's 0x9A0649 pre-accept latch).
 void LoadingScriptedState::ResumeLoadingWorld()
 {
     CGS_ASSERT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
                "meLoadingStateStage == E_LOADINGSTATESTAGE_START");   // X360 h:209
-    gBrnCheckDiskSpaceEntered = false;
+    gBrnScriptedLoadPaused = false;
 }
 
 // @ 0x823E72F0 -- one frame of the world-module load. Create a scratch BrnWorldIO::
@@ -615,11 +627,12 @@ void LoadingScriptedState::Update()
         s_GameDataInput.LockForWrite();
         s_GameDataOutput.LockForRead();
 
-        // byte_82FAE28E -- the scripted-load pause flag (set by CheckDiskSpace::OnEnter,
-        // cleared by the title pre-accept ResumeLoadingWorld). NOTE the PC flow currently
-        // skips E_MGS_CHECK_DISK_SPACE (initial loading advances straight to marketing),
-        // so the load runs unpaused from the marketing screens.
-        if (!gBrnCheckDiskSpaceEntered)
+        // byte_82FAE28E -- the scripted-load PARK flag. Raised by every pre-title OnEnter
+        // (loading screen, marketing logos, title) and cleared by the title pre-accept's
+        // ResumeLoadingWorld, so the whole world load streams BEHIND the title exactly as
+        // it does on the console. The park skips only this stage ladder; the per-frame
+        // world leg below still runs.
+        if (!gBrnScriptedLoadPaused)
         {
             switch (gBrnScriptedLoadStage)
             {
@@ -777,10 +790,22 @@ MainGameFlowStateInitialLoadingScreen::MainGameFlowStateInitialLoadingScreen()
 {
 }
 
-// @ 0x823AA950 - reset the load stages to START and raise the renderer's loading-screen
-// signal (Option B bridge for the game-module global the X360 writes).
+// @ 0x823AA950 - park the scripted world load, reset the load stages to START and raise
+// the renderer's loading-screen signal (Option B bridge for the game-module global the
+// X360 writes). Store order is the console's: park=0, assert stage==START, park=1,
+// pending-GUI-FSM-stage=0, then the per-instance resets.
 void MainGameFlowStateInitialLoadingScreen::OnEnter()
 {
+    // The pre-title park triplet (@0x823AA96C / assert :0xC3 / @0x823AA9B4).
+    gBrnScriptedLoadPaused = false;
+    CGS_ASSERT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
+               "meLoadingStateStage == E_LOADINGSTATESTAGE_START");
+    gBrnScriptedLoadPaused = true;
+
+    // @0x823AA9C0 -- the pending-GUI-FSM-stage slot (gm+0x9A0644) is stamped 0 here; the
+    // PC models that slot as RequestGuiFsmStage (BrnGameModule.hpp:483).
+    BrnGame::GetMainGameModule()->RequestGuiFsmStage(0);
+
     meLoadingStateStage  = E_LOADINGSTATESTAGE_START;
     meLoadingScreenStage = E_LOADINGSTAGE_START;
     mbGuiPreloadDone     = false;
@@ -1054,10 +1079,18 @@ void MainGameFlowStateInitialLoadingScreen::FinishLoading()
 // --- MainGameFlowStateStartScreen (the legal/title screen phase) -------------------------
 MainGameFlowStateStartScreen::MainGameFlowStateStartScreen() : meLoadingStage(E_STARTSCREEN_START) {}
 
-// @ 0x823AAB18 -- request the BF_LEGAL GUI FSM stage (BrnLegalFsm; the X360 writes the
-// pending-stage byte = 2) and clear the load-stage entered flag.
+// @ 0x823AAB18 -- park the scripted load (the title holds it at START until the player's
+// pre-accept) and request the BF_LEGAL GUI FSM stage (BrnLegalFsm; the X360 writes the
+// pending-stage byte = 2).
 void MainGameFlowStateStartScreen::OnEnter()
 {
+    // The pre-title park triplet (@0x823AAB30 / assert / @0x823AAB7C). This is the raise
+    // that StartScreen::Update's pre-accept latch later clears via ResumeLoadingWorld.
+    gBrnScriptedLoadPaused = false;
+    CGS_ASSERT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
+               "meLoadingStateStage == E_LOADINGSTATESTAGE_START");
+    gBrnScriptedLoadPaused = true;
+
     BrnGame::GetMainGameModule()->RequestGuiFsmStage(2);
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "StartScreen: OnEnter -> GUI FSM stage 2 (BrnLegalFsm)\n";
@@ -1077,13 +1110,15 @@ void MainGameFlowStateStartScreen::Update()
     if (lpGameModule->ConsumeGuiPreAccept())
     {
         // LoadingScriptedState::ResumeLoadingWorld @0x823A85B0 -- unpause the scripted
-        // world load during the accept dwell. Guarded on the pause flag: the PC flow
-        // skips CHECK_DISK_SPACE, so the load usually runs unpaused (calling the
-        // unconditional X360 resume would fire its stage==START assert mid-load).
+        // world load during the accept dwell. UNCONDITIONAL, as on the console: OnEnter
+        // above raised the park, so the assert inside holds by construction.
         if (CgsDev::Message::gxMessageFilterFlags & 1)
             *CgsDev::Log::gpDebugPrint << "StartScreen: pre-accept (71) -> resume world load\n";
-        if (gBrnCheckDiskSpaceEntered)
-            ResumeLoadingWorld();
+        ResumeLoadingWorld();
+
+        // @0x823F2DD0 -- the console RETURNS here: the resume frame never also runs the
+        // phase-complete advance below.
+        return;
     }
     if (lpGameModule->IsGuiPhaseComplete())
     {
@@ -1100,9 +1135,16 @@ void MainGameFlowStateStartScreen::Render() {}
 // for the flow's phase-complete command.
 MainGameFlowStateMarketingScreens::MainGameFlowStateMarketingScreens() {}
 
-// @ 0x823AAA08 -- request the BF_VIDEOS GUI FSM stage (BrnVideoFsm; pending-stage byte = 1).
+// @ 0x823AAA08 -- park the scripted load (the logos play with the world load held at
+// START) and request the BF_VIDEOS GUI FSM stage (BrnVideoFsm; pending-stage byte = 1).
 void MainGameFlowStateMarketingScreens::OnEnter()
 {
+    // The pre-title park triplet (@0x823AAA20 / assert / @0x823AAA6C).
+    gBrnScriptedLoadPaused = false;
+    CGS_ASSERT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
+               "meLoadingStateStage == E_LOADINGSTATESTAGE_START");
+    gBrnScriptedLoadPaused = true;
+
     BrnGame::GetMainGameModule()->RequestGuiFsmStage(1);
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "MarketingScreens: OnEnter -> GUI FSM stage 1 (BrnVideoFsm)\n";
@@ -1128,32 +1170,33 @@ void MainGameFlowStateMarketingScreens::Update()
 void MainGameFlowStateMarketingScreens::Render() {}
 
 // --- MainGameFlowStateCheckDiskSpace ----------------------------------------------------
-// Standalone byte global the X360 OnEnter clears-then-sets (byte_82FAE28E). It is NOT a member
-// (the X360 stores to an absolute .data address, not a `this`-relative slot): it is set to 0 on
-// entry and 1 once OnEnter has finished its stage stamp -- a "disk-check OnEnter has run" flag.
-bool gBrnCheckDiskSpaceEntered = false;
+// The scripted-load PARK flag (X360 byte_82FAE28E) lives here for historical reasons -- it
+// is a shared global, not this state's private flag: every pre-title OnEnter raises it and
+// ResumeLoadingWorld clears it (see the note at the top of this file).
+bool gBrnScriptedLoadPaused = false;
 
 MainGameFlowStateCheckDiskSpace::MainGameFlowStateCheckDiskSpace() {}
 
-// @ 0x823AAA98 - clear the entered-flag, assert we arrived at the START stage, then stamp the
-// game-module load-state slot to 4 and raise the entered-flag. (No disk/storage query is issued
-// here -- the X360 body is just these flag writes + the START-stage assert + the stage stamp.)
+// @ 0x823AAA98 - the same pre-title park triplet the other states run, then stamp the
+// pending-GUI-FSM-stage slot to 4. (No disk/storage query is issued here -- the X360 body
+// is just these flag writes + the START-stage assert + the stage stamp.) NB neither build
+// ever ENTERS this state: SendEvent's transition set never targets it (boot audit P4).
 void MainGameFlowStateCheckDiskSpace::OnEnter()
 {
-    gBrnCheckDiskSpaceEntered = false;
-
-    // X360 gated the assert on the global assert-enabled flag (dword_82FAE4B0); CGS_ASSERT subsumes
-    // that gate. The X360 reports this from BrnGameMainFlowStates.h:195 (the OnEnter decl site).
-    CGS_ASSERT(meLoadingStateStage == E_LOADINGSTATESTAGE_START,
+    // The park triplet (@0x823AAAB0 / assert / @0x823AAAF4).
+    // ⭐ CORRECTED 2026-08-14 (boot audit F-P4-11): the assert tested the per-instance
+    // meLoadingStateStage, which the ctor freezes at START and nothing ever advances --
+    // a vacuous check. The console reads the GLOBAL stage (dword_82FAE4B0), exactly as
+    // ResumeLoadingWorld does.
+    gBrnScriptedLoadPaused = false;
+    CGS_ASSERT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
                "meLoadingStateStage == E_LOADINGSTATESTAGE_START");
+    gBrnScriptedLoadPaused = true;
 
-    gBrnCheckDiskSpaceEntered = true;
-
-    // X360: *(off_830102D0 + 0x9A0644) = 4 -- stamp the value 4 into a game-module-aggregate slot
-    // (the same off_830102D0 base that holds the flow controller at +0x9A0664 and the loading-screen
-    // signal at +0x99FE38). The recovered immediate is 4. [follow-on] that game-module field isn't
-    // mapped in this incremental layout (same status as the +10097260 modules-loaded flag above), so
-    // the stamp has no modelled target yet; the flag writes + assert above are faithful.
+    // @0x823AAB00 -- the pending-GUI-FSM-stage slot (gm+0x9A0644) is stamped 4 here; the
+    // PC models that slot as RequestGuiFsmStage (the same field Marketing/Start/MemoryCard
+    // stamp with 1/2/4).
+    BrnGame::GetMainGameModule()->RequestGuiFsmStage(4);
 }
 void MainGameFlowStateCheckDiskSpace::OnLeave() {}
 // Update @ 0x823F2D28 lives in its DWARF home TU, BrnGameMainFlowCheckDiskSpace.cpp.
@@ -1166,24 +1209,30 @@ MainGameFlowStateMemoryCard::MainGameFlowStateMemoryCard() {}
 // the X360 skips to 5 under the autotest flags -- no autotest on PC).
 void MainGameFlowStateMemoryCard::OnEnter()
 {
+    // @0x823AAC78 -- CLEAR ONLY (no raise): by the profile phase the world load is meant
+    // to be running, so this state never re-parks it.
+    gBrnScriptedLoadPaused = false;
+
     BrnGame::GetMainGameModule()->RequestGuiFsmStage(4);
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "MemoryCard: OnEnter -> GUI FSM stage 4 (BrnBFProFsm)\n";
 }
 void MainGameFlowStateMemoryCard::OnLeave() {}
 
-// @ 0x823F2F98 -- gated on the world-load stage (X360 meLoadingStateStage global == 8);
-// advance when the GUI posts phase-complete (the profile task resolved). [FLAG world
-// gate: the PC initial load completes synchronously; gBrnInitialLoadingComplete is the
-// stand-in for the world-loaded stage.]
+// @ 0x823F2F98 -- gated on the world-load stage (X360 dword_82FAE4B0 == 8); advance when
+// the GUI posts phase-complete (the profile task resolved).
+// ⭐ CORRECTED 2026-08-14 (boot audit F-P4-4 / F-P6-21): the gate was keyed to
+// gBrnInitialLoadingComplete -- the INITIAL-loading-done signal, which the loading screen
+// raises long before the scripted world load starts. With the park chain restored that
+// stand-in is true while the load still sits at stage 0, so the profile phase would
+// advance with the world unloaded. The console condition is the scripted stage itself.
 void MainGameFlowStateMemoryCard::Update()
 {
-    // X360 0x823F2F98 opens with the shared scripted-load spine (its advance gate is the
-    // scripted stage == 8; the PC keeps the gBrnInitialLoadingComplete stand-in gate
-    // below until the world load can really complete).
+    // X360 0x823F2F98 opens with the shared scripted-load spine.
     LoadingScriptedState::Update();
 
-    if (!gBrnInitialLoadingComplete)
+    // @0x823F2FB0 -- the world-loaded gate, tested FIRST.
+    if (gBrnScriptedLoadStage != 8)
         return;
     if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete() &&
         BrnGameMainFlowController::gpMainGameFlowController != 0)
@@ -1201,6 +1250,9 @@ MainGameFlowStateCompleteLoading::MainGameFlowStateCompleteLoading() : mbIsColli
 // byte = 3) and reset the settle latch (X360 this+4 = 0).
 void MainGameFlowStateCompleteLoading::OnEnter()
 {
+    // @0x823AABF0 -- CLEAR ONLY (see MemoryCard::OnEnter).
+    gBrnScriptedLoadPaused = false;
+
     BrnGame::GetMainGameModule()->RequestGuiFsmStage(3);
     mbIsCollisionWorldPrepared = false;
     if (CgsDev::Message::gxMessageFilterFlags & 1)
