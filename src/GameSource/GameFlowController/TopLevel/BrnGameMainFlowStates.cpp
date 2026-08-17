@@ -624,11 +624,20 @@ bool LoadingScriptedState::LoadDirectorModule(
 // X360 spine (the per-module input/sound/network/gamestate/GUI drives + RenderGUI) already
 // runs through BrnGameModule::GameMain's inline hookup on the PC -- running it here too
 // would double-drive those modules, so it is [deferred] to the module-scheduler move.
-// The per-frame GameData IO pair. [PC placement] the X360 keeps these as game-module
-// members (gm+10055440 / +10055444) created by the update spine each frame; the PC reuses
-// one constructed-once pair (the precedent is GameDataModule::Update's own static
-// ResourceIO input). Published through BrnGameMainFlowController::GetScriptedLoadGameData*
-// because BrnGameModule::GamePrepare @0x823EFBD0 brackets the SAME pair on the X360.
+// The GameData IO pair.
+//
+// ⭐ DESCRIPTION CORRECTED 2026-08-17 (boot audit F-P6-10 / F-P5-13). This used to say the
+// X360 pair is "created by the update spine each frame". It is not, and the asm is explicit:
+// they are PERSISTENT game-module members at gm+0x996F10/+0x996F14, LOADED each pass
+// (`lwzx` @0x823F2358/5C) and locked across the whole spine -- only the sixteen scratch IO
+// buffers around them are created and destroyed per frame. Our constructed-once pair is
+// therefore the RIGHT lifetime, not a deviation from a per-frame one; what remains a
+// deviation is only that it is a file-static rather than a member of the game module.
+//
+// The distinction matters because "created each frame" invites someone to "fix" this by
+// carving the pair per pass, which would be a regression away from the console, not toward
+// it. Published through BrnGameMainFlowController::GetScriptedLoadGameData* because
+// BrnGameModule::GamePrepare @0x823EFBD0 brackets the SAME pair on the X360.
 namespace
 {
     BrnResource::GameDataIO::InputBuffer  s_GameDataInput;

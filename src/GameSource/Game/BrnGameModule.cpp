@@ -2769,8 +2769,16 @@ namespace BrnGame
                 // (DirectorModule stage 3 = WorldMap::LoadData) wedges the loading flow.
                 ResourceUpdateThread(0);
                 // ---- the TIMER tick (X360 BrnGameModule::UpdateTimers @0x823BCFD0) --------
-                // Once per sim sub-step, before anything that reads a timestep. The console
-                // runs it from the same per-sub-step spine.
+                // Once per sim sub-step, before anything that reads a timestep.
+                //
+                // ⭐ POSITION STATED 2026-08-17 (boot audit F-P3-13). The old note said only
+                // that "the console runs it from the same per-sub-step spine", which elided
+                // WHERE: the console calls it from inside DoUpdate near the END of the leg
+                // (@0x823F1CFC), not early-mid as here. Every consumer downstream of this
+                // point in our order therefore reads a timestep one leg fresher than its
+                // console counterpart does. Harmless while the legs between are inert, and a
+                // real off-by-a-leg in timestep provenance once DoUpdate's cascade is
+                // restored -- so the position moves with F-P3-1, not before it.
                 UpdateTimers();
                 // ---- the DIRECTOR's pre-GUI passes (X360 module-scheduler order) ----------
                 // PreSceneQueryUpdate + Update. The module publishes its finalised camera into
