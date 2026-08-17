@@ -57,9 +57,17 @@ namespace BrnGame
         , meGamePrepareStage(E_GAMEPREPARESTAGE_START)
         , meGameUpdateStage(E_GAMEUPDATESTAGE_PREPARE)
         , miNumSimFramesRequired(0)
-        , meFrameRateManagerType(CgsSystem::E_FRAMERATEMANAGER_SINGLE)
+        // ⭐ CONSOLE SEEDS RESTORED 2026-08-16 (boot audit F-P1-13). Construct @0x823C9EA8's
+        // frame-rate block stores type 1 (MULTIPLE_CAPPED) at gm+0x9A0B88 and the four step
+        // bytes 1, 3, 1, 1 -- i.e. one simulation step minimum, up to THREE per rendered
+        // frame. We seeded SINGLE/max 1, which is a different machine: capped at one sim
+        // step, a frame that overruns its budget makes the SIMULATION run slow instead of
+        // catching up over the next few frames. Everything downstream that reads
+        // GetCurrentTimeStep -- physics, the director's behaviour advance, the streamer's
+        // per-frame budget -- inherits that.
+        , meFrameRateManagerType(CgsSystem::E_FRAMERATEMANAGER_MULTIPLE_CAPPED)
         , mi8FrameRateMinSteps(1)
-        , mi8FrameRateMaxSteps(1)
+        , mi8FrameRateMaxSteps(3)
         , mi8ActualFrameRateMinStepsThisFrame(1)
         , mi8ActualFrameRateMaxStepsThisFrame(1)
         , mbSteppingFrames(false)
