@@ -305,7 +305,8 @@ namespace BrnDirector
     //   from GameTalk. Nothing in the game path uses them.
     //   DELETE-WHEN: the GameTalk manager is homed.
     // ------------------------------------------------------------------------
-    bool MainDirector::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPrepareArg,
+    bool MainDirector::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
+                               const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
                                const DirectorResourceManager* lpResourceManager)
     {
         switch (miPrepareStage)
@@ -325,7 +326,7 @@ namespace BrnDirector
             miPrepareStage = 2;
             // The wrapper pumps its own ICE resource acquisition through the director output
             // buffer, forwarding the prepare arg and the module's resource manager.
-            if (!mICEWrapper.Prepare(lpOutputBuffer, liPrepareArg, lpResourceManager))
+            if (!mICEWrapper.Prepare(lpOutputBuffer, lpAllocatorList, lpResourceManager))
                 return false;
             // fall through
         case 4:

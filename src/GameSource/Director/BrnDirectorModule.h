@@ -14,6 +14,8 @@
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"                // BrnDirector::WorldMap (mWorldMap)
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"                   // BrnReplays::BaseSerialiser (mDirectorSerialiser)
 
+namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // DirectorModule::Prepare's 2nd arg (boot audit F-P6-16)
+
 // ============================================================================
 // GameSource/Director/BrnDirectorModule.h
 //
@@ -147,7 +149,8 @@ public:
     // X360 0x822712D8. Staged PREPARE state machine: register the debug component, base
     // Prepare, DirectorResourceManager::Prepare, WorldMap::LoadData, MainDirector::Prepare.
     // Write-locks the output buffer for the whole call. BODIED.
-    bool Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPrepareArg);
+    bool Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
+                 const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
 
     // X360 0x8225C768. Pre-scene-query update: latch the replay flag, Clear the per-frame
     // scene-query post office, then run MainDirector::PreSceneQueryUpdate (live leg) or

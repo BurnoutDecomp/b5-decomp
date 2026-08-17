@@ -77,11 +77,12 @@ namespace BrnDirector
     // 2 and 3 (the allocator list and the pointer stored at +0x11B24) belong to the gated
     // ICEMemory leg, so they are untouched here.
     // ------------------------------------------------------------------------
-    bool ICEWrapper::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPrepareArg,
+    bool ICEWrapper::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
+                             const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
                              const DirectorResourceManager* lpResourceManager)
     {
         (void)lpOutputBuffer;
-        (void)liPrepareArg;
+        (void)lpAllocatorList;
         (void)lpResourceManager;
 
         if (miICELoadStateB > 1)

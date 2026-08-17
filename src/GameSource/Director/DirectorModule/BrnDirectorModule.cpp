@@ -217,7 +217,8 @@ void DirectorModule::Destruct()
 // The two extra arguments the X360 threads through (a2 = the output buffer, a3 = a plain
 // s32 forwarded untouched into MainDirector::Prepare) are named for what they are.
 // ----------------------------------------------------------------------------
-bool DirectorModule::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPrepareArg)
+bool DirectorModule::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
+                             const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
 {
     lpOutputBuffer->LockForWrite();
 
@@ -251,7 +252,7 @@ bool DirectorModule::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPre
         // fall through
     case 4:
         mePrepareStage = static_cast<EPrepareStage>(4);
-        if (!mMainDirector.Prepare(lpOutputBuffer, liPrepareArg, &mDirectorResourceManager))
+        if (!mMainDirector.Prepare(lpOutputBuffer, lpAllocatorList, &mDirectorResourceManager))
             break;
         // fall through
     case 5:
