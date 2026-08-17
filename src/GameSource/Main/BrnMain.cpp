@@ -170,6 +170,26 @@ void EnginePrepare()
     // First log line of the run (also guarantees the log file is created on every boot).
     *CgsDev::Log::gpDebugPrint << "==== Burnout Paradise starting ====\n";
 
+    // ⭐ THE STACK TEST, restored 2026-08-17 (boot audit F-P0-11). main @0x827E6100-8C opens
+    // the run with it, guarded on message-filter bit 0 exactly as here:
+    //     "Stack test:" << &<a stack local> << ", " << <that local's value> << "\n"
+    // It prints the ADDRESS of a frame local and then the word already sitting at it -- a
+    // one-line probe of where the stack is and what it came up holding. The value is not
+    // initialised before the print in the console body either; that is the point of it.
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        s32 liStackProbe;                                   // deliberately uninitialised
+        *CgsDev::Log::gpDebugPrint << "Stack test:"
+                                   << static_cast<void*>(&liStackProbe)
+                                   << ", " << liStackProbe << "\n";
+    }
+
+    // [FLAG] the line after it, BrnResource::PrintConsoleMemory("Game startup memory usage")
+    // @0x827E6198, is NOT restored: it walks the memory map's carves to report their usage,
+    // and the memory map is the absent allocator layer (F-P0-1). It is the first consumer to
+    // wire once InitMemoryMap lands, because it is what makes a bad carve visible at boot
+    // rather than as an overflow much later.
+
     // [gated] X360 main 0x827E60D8 / TUB WinMain run the memory-map + allocator bring-up here
     // (Allocators::InitMemoryMap / MemoryMap::FixUp, Allocators::Construct + the global
     // graphics/resource/system/debug carves), then allocate the game module + the five IO
