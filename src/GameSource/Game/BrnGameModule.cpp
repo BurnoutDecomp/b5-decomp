@@ -315,7 +315,26 @@ namespace BrnGame
         };
         (void)KAPC_PERFMON_PAGE_NAMES;
 
-        // [gated] X360 steps 7-9: the remaining debug surface (pages 0-23 named above:
+        // ⭐ THE DEBUG-INTERFACE REGISTRATIONS, PINNED 2026-08-17 (boot audit F-P1-14). The
+        // note used to say only "Debug/Framerate + Debug/Sim (Step/Play via StepFrameCB/
+        // PlayFrameCB) + screenshot registrations". Read off Construct @0x823CAEBC-F48, they
+        // are three calls on a stack DebugInterface, and they do NOT all need the same thing:
+        //
+        //   DebugInterface lIface(&mDebugManager);                       @0x823CAEBC
+        //   lIface.SetOptions(<"Framerate type" under "Debug/Framerate">) @0x823CAF00
+        //   lIface.RegisterFunction("Step", "Debug/Sim", StepFrameCB)    @0x823CAF28
+        //   lIface.RegisterFunction("Play", "Debug/Sim", PlayFrameCB)    @0x823CAF48
+        //
+        // AVAILABLE: RegisterVariable + SetOptions are both on CgsDev::DebugInterface
+        // (CgsDebugInterface.h:80-92), and the variable is meFrameRateManagerType -- so the
+        // Framerate half needs only its StringList of type names recovered.
+        // [FLAG] MISSING: DebugInterface::RegisterFunction. StepFrameCB and PlayFrameCB are
+        // both bodied here (see below) and have no way to be registered -- the interface
+        // exposes variable registration only. Inventing the callback-registration signature
+        // would be a guess at an API shape, so the two callbacks stay unreachable from the
+        // debug menu until RegisterFunction lands.
+        //
+        // [gated] the rest of steps 7-9 (pages 0-23 named above:
         // "General".."Flapt"), the vsync-rate 50/60 M_CGS_PERFMON_CPU_SETGAMEFREQUENCY check, the
         // event-receiver queue @+10094268 (capacity 1024, align 16), the update/lookback timers +
         // CgsSystem::FrameRateManager::Construct, and the Debug/Framerate + Debug/Sim (Step/Play
