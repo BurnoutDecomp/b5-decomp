@@ -94,6 +94,23 @@ namespace BrnGameMainFlowController
         }
     }
 
+    // ---- the three FSM state bytes: gm+0x9A06B8 / +0x9A06B9 / +0x9A06BA ----------------
+    //
+    // CONSUMER MAP (completed 2026-08-17, boot audit F-P4-12). The F-P3-6 map that the F4
+    // byte-wiring was built against listed only the update-set consumer. There are two more
+    // readers in the image, and both were missing from it:
+    //
+    //   0x9A06B8 (saveload)  ConstructUpdateSetFromFsm @0x823BD420  -> update-set bit 0x40
+    //   0x9A06B9 (video)     ConstructUpdateSetFromFsm             -> update-set bit 0x20
+    //                        DoUpdate_GameStatePreWorld @0x823EE0E8 -> read @0x823EE3D8  [+]
+    //   0x9A06BA (ingame)    ConstructUpdateSetFromFsm             -> update-set bit 0x88
+    //                        AutoTestManager::DumpGameState @0x823C04B8 -> read @0x823C04D0 [+]
+    //
+    // [+] Both extra readers sit in surface that is dead on this build -- the DoUpdate ladder
+    // (F-P3-1) and the autotest lane -- so wiring the bytes did not need them and nothing
+    // changed by their absence. They are recorded HERE, beside the setters, because the next
+    // person to change what these bytes mean will look at the writers and needs to know the
+    // full set of things that will start reading them when those two surfaces come back.
     bool GameMainFlowController::IsSaveLoadState() const { return mbSaveLoadState; }
     bool GameMainFlowController::IsVideoState() const    { return mbVideoState; }
     bool GameMainFlowController::IsInGameState() const   { return mbInGameState; }
