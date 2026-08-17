@@ -680,6 +680,27 @@ namespace
     // render path reads it except Resolve(face).
     //
     // FOUR SLOTS: the pool has exactly one cube target (E_RENDER_TARGET_ENV_MAP), created once.
+    //
+    // LIFETIME -- NOTHING RELEASES THESE, AND THERE IS NOWHERE TO PUT A RELEASE (cubeleaf run-2
+    // F9, re-checked 2026-08-17). The rows are never cleared and neither mpCube nor mpScratch is
+    // ever Released, exactly like gaDepthTargetRecords and gaShadowRtLatch beside them. That is
+    // not an oversight in this record: THIS BUILD HAS NO RENDER-TARGET TEARDOWN PATH AT ALL.
+    //   * rw::graphics::postfx::RenderTarget / Target declare no Release/Destroy in the tree --
+    //     the DWARF's `Target::Release()` (rwgpfxrendertarget.h:379) was never reconstructed and
+    //     `git grep -nE "postfx::(RenderTarget|Target)::(Release|Destroy)" -- src` is empty.
+    //   * the owner's destructor is EMPTY ON THE CONSOLE: CgsRenderTarget::Destruct @0x8284CB38 is
+    //     a lone `blr` (ICF-folded), reconstructed as an empty body at CgsRenderTarget.cpp:247.
+    //     The PS3 build has a real teardown there; the X360 target does not.
+    //   * there is no device-lost / Reset path either: the only `OnLostDevice` in the whole tree
+    //     is the word inside Initialize's own comment, and nothing calls IDirect3DDevice9::Reset.
+    // So a release added here would have no caller, and inventing one would be inventing a
+    // lifetime the target build does not have.
+    // DELETE-WHEN a device-lost/Reset path lands: at that point gaCubeTargetRecords needs the same
+    // OnLostDevice/OnResetDevice treatment as every other D3DPOOL_DEFAULT object this leaf makes
+    // (the cube texture, the multisampled scratch, gpNullColourSurface, the depth surfaces), and
+    // the rows must be cleared so a RenderTarget re-created at a different address cannot match a
+    // stale mpCube/mpScratch. RegisterCubeTarget already handles re-creation at the SAME address
+    // (it matches on mpTarget before it takes a free slot).
     // =========================================================================================
     struct CubeTargetRecord
     {
@@ -1790,14 +1811,66 @@ namespace postfx
     // Begin @0x823F9250: pick section luDestSliceOrFace's state (the device-default global when
     // the colour mode is USE_DEVICE_FOR_WRITE), bind it if it is not already bound, then set the
     // full-extent viewport + scissor. Kept store-for-store in shape.
+    //
+    // WHAT THE CONSOLE DOES WITH THE INDEX, read off the asm rather than the pseudocode
+    // (reflections step 2, answering cubeleaf run-2 F5 / step-1 BRIEF B.3):
+    //     0x823F9260  lwz  r11, 0x10(r31)      ; muColourMode
+    //     0x823F9264  cmpwi cr6, r11, 2        ; == USE_DEVICE_FOR_WRITE ?
+    //     0x823F926C  lis/lwz r30, dword_83271614   ; yes -> the engine-default state
+    //     0x823F9278  addi r11, r4, 7          ; no  -> INDEX BY THE ARGUMENT:
+    //     0x823F927C  slwi r11, r11, 2         ;        this + 0x1C + 4*luDestSliceOrFace
+    //     0x823F9280  lwzx r30, r11, r31       ;        == (&mpSection0State)[face]
+    // So the console DOES index the per-section state array by the face/slice, and it applies
+    // NO clamp and NO null test before handing the result to Device::SetState.
+    //
+    // THE ONE PC DEVIATION, and it is a guard, not a behaviour change. A CUBE render target has
+    // ONE section (CreateEnvmapBuffer leaves the constructor's count of 1), so Initialize fills
+    // mapSectionState[0] and leaves [1..4] null. Reaching Begin(face > 0) on it would call
+    // Device::SetState(nullptr) -- a safe no-op on this backend (see Device::SetState below) --
+    // and then store that nullptr into renderengine::gpLastRenderTargetState, which is the SHARED
+    // X360 shadow dword_83010A30, not a private copy. The device would keep whatever was really
+    // bound while the shadow said "nothing", and the next Begin with the true state would compare
+    // equal to nothing and re-bind correctly only by luck. That is the split-brain shape
+    // ShadowPassPCLeaf.h's banner exists to warn about, so clamp to section 0 instead.
+    //
+    // IT IS UNREACHABLE TODAY, which is why a guard is the right size of answer. The env-map pass
+    // never calls Begin on the cube target: BrnRendererModule::BeginRenderEnvironmentMapFace goes
+    // through CgsRenderTarget::SetRenderTargetStateInvertDepth, whose X360 body @0x827E7668 binds
+    // section 0 regardless of the face it is handed (CgsRenderTarget.cpp:336-344) -- faithful,
+    // because on Xenos every face renders into the SAME EDRAM tile and the face only matters at
+    // resolve time. Every Begin call site in the tree passes 0 (grep: git grep -n "Begin(" -- src
+    // --include=*.cpp, all eight postfx RenderTarget::Begin sites pass 0/0u; recorded in
+    // scratch/reflections_step2/verify_polish_leaf/work/).
     // =========================================================================
     void RenderTarget::Begin(u32 luDestSliceOrFace)
     {
         const renderengine::RenderTargetState* lpState;
         if (muColourMode == static_cast<u32>(eRenderTarget_USE_DEVICE_FOR_WRITE))
+        {
             lpState = gpDefaultRenderTargetState;
+        }
         else
+        {
             lpState = GetRenderTargetState(luDestSliceOrFace);
+            // [PC deviation -- see the banner] a one-section target has no state for face > 0; take
+            // section 0's rather than publishing a null into the shared shadow below. Inside the
+            // else arm ONLY (verify F4, step 2): the device-write arm keeps whatever
+            // gpDefaultRenderTargetState is, null included, exactly as the console reads it.
+            if (lpState == nullptr)
+            {
+                // Says so out loud the first time it fires (verify F5): the banner claims this is
+                // unreachable today, and a guard justified by "it never fires" must be able to
+                // contradict that claim.
+                static bool sbLoggedFaceClamp = false;
+                if (!sbLoggedFaceClamp)
+                {
+                    sbLoggedFaceClamp = true;
+                    CgsDev::Log::WriteToLog("[postfx-rt] Begin(face>0) on a one-section target --"
+                                            " clamped to section 0 (see the banner)\n");
+                }
+                lpState = GetRenderTargetState(0);
+            }
+        }
 
         // The SHARED shadow (X360 dword_83010A30), not a private copy -- see ShadowPassPCLeaf.h.
         if (renderengine::gpLastRenderTargetState != lpState)

@@ -68,6 +68,8 @@ s32  renderengine::gAlphaToCoverage = 1;
 // Default 1 because the console's answer is 1 (BrnRendererModule::ConstructRenderSwitches) -- the
 // same principle that makes gAntiAliasing default to "whatever the console did".
 s32  renderengine::gEnvironmentMap = 1;
+// Three faces per frame by default on PC -- the perf deviation is documented on the declaration.
+s32  renderengine::gEnvironmentMap30Hz = 1;
 // Vertical sync on by default -- see the declaration in device.h.
 s32  renderengine::gVSync = 1;
 HWND renderengine::hWnd = nullptr;
@@ -106,6 +108,8 @@ bool renderengine::Device::Initialize()
     // the same reason the two above are: LoadConfig runs after this (BrnMain.cpp:260/:261) and is
     // what a config.ini value overrides it with.
     gEnvironmentMap = 1;
+    // Half-schedule the env-map refresh unless config.ini `[Settings] EnvironmentMap30Hz=0`.
+    gEnvironmentMap30Hz = 1;
     // Vertical sync unless config.ini `[Display] VSync=0` (see device.h).
     gVSync = 1;
     // TUB seeds fullscreen=true; forced windowed during the PC bring-up.

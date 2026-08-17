@@ -100,6 +100,12 @@ namespace BrnGraphics
 
     // X360 (WorldModule::Destruct @0x827BD0F0 tail call target): release the
     // face cameras -- same walk as Release, no return.
+    //
+    // ⚠ Both this walk and Release() below are INERT on the console and, since
+    // 2026-08-17, here: CgsGraphics::Camera::Release() is the empty ICF-folded body
+    // @0x8284CB38 (see the Prepare banner). They are kept because the loop is what
+    // EnvironmentMap::Release @0x827B4218 emits -- six `bl` at the 0x170 Camera stride
+    // -- and because they come alive the day Camera acquires real teardown.
     void EnvironmentMap::Destruct()
     {
         for (u32 luEnvMapFace = 0; luEnvMapFace < E_FACE_NUM; ++luEnvMapFace)
@@ -159,25 +165,28 @@ namespace BrnGraphics
     // CgsCamera.h:215-222 and independently re-derived from SetFovHorizontal
     // @0x821F13B0 (it stores f1 to 0x140 and divides 1.0f by 0x158) and
     // UpdatePerspectiveProjectionMatrix @0x827EC778 (it reads 0x15C as `n` and 0x160 as
-    // `f`). CgsCamera.h has no SetAspectRatio / SetNearClipPlane / SetFarClipPlane
-    // member yet -- CgsCamera.{h,cpp} belongs to no group this wave, so the three
-    // inlines are written out here through the public scalar block, exactly the idiom
-    // the tree already uses at BrnWorldModule.cpp:5440-5443. (CROSS-GROUP REQUEST in
-    // the wave report: add the three DWARF-named setters to CgsCamera.h and fold these
-    // three pairs into them.)
+    // `f`).
+    //
+    // ⭐ 2026-08-17 (reflections step 2): the three setters are REAL MEMBERS now.
+    // CgsCamera.h had no SetAspectRatio / SetNearClipPlane / SetFarClipPlane when this
+    // body first landed, so all three inlines were written out here through the public
+    // scalar block. They were added to CgsCamera.h from the same asm (the store/call
+    // stream above IS their definition, and the Feb-2007 CgsCamera.h:202-227 bodies match
+    // it verbatim), so this body now says what the source said.
     //
     // ⚠ THE LEADING Release() IS AN EMPTY CALL ON THE CONSOLE. 0x8284CB38 is a single
     // `blr` -- the identical-code-folding sink every empty body in the image collapsed
-    // into (its 190-entry xrefs_to list is the whole game's empty destructors), and
-    // BrnGraphics::EnvironmentMap::Release @0x827B4218 loops calling THAT same address,
-    // which is what identifies it as CgsGraphics::Camera::Release(). The committed
-    // CgsCamera.cpp instead gives Camera::Release() the no-arg Construct() body (the
-    // camera-defaults reset @0x827F94E8) -- a divergence flagged in this wave's report,
-    // NOT fixed here (wrong file). It cannot change this function's result: the four
-    // setters below overwrite every scalar the reset touches, and mView (which the reset
-    // also re-identities) is rebuilt by EnvironmentMap::Update before any consumer reads
-    // it. The call is kept because it is what the source says and because it will do the
-    // right thing -- nothing -- once Camera::Release() is corrected.
+    // into (193 xrefs, the whole game's empty destructors, which is why the export
+    // labels it CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct) -- and
+    // BrnGraphics::EnvironmentMap::Release @0x827B4218 loops calling THAT same address
+    // over these same six cameras, while EnvironmentMap::Construct @0x827B40D0 loops
+    // calling the DIFFERENT body sub_827F94E8 (the KF_DEFAULT_* reset). That pair is
+    // what identifies 0x8284CB38 as CgsGraphics::Camera::Release() and 0x827F94E8 as
+    // Camera::Construct(). CgsCamera.cpp used to give Release() the reset body; it was
+    // corrected in this same change, so this call is now the no-op the console runs.
+    // It was net-neutral either way: the four setters below overwrite every scalar the
+    // reset touched, and mView (which the reset also re-identitied) is rebuilt by
+    // EnvironmentMap::Update before any consumer reads it.
     // ------------------------------------------------------------------------
     bool EnvironmentMap::Prepare()
     {
@@ -185,23 +194,12 @@ namespace BrnGraphics
         {
             CgsGraphics::Camera& lrFaceCamera = maEnvMapCameras[luEnvMapFace];
 
-            lrFaceCamera.Release();
+            lrFaceCamera.Release();                                          // 0x827B41B0 (empty)
 
-            // Camera::SetAspectRatio( KF_ENVMAP_ASPECT_RATIO )
-            lrFaceCamera.maProjectionScalars[6] = KF_ENVMAP_ASPECT_RATIO;   // m_aspectRatio
-            lrFaceCamera.SetFovHorizontal(lrFaceCamera.maProjectionScalars[0]);
-            lrFaceCamera.UpdatePerspectiveProjectionMatrix();
-
-            // Camera::SetFarClipPlane( KF_ENVMAP_FAR_CLIP_PLANE )
-            lrFaceCamera.SetFarClip(KF_ENVMAP_FAR_CLIP_PLANE);              // m_farClipPlane
-            lrFaceCamera.UpdatePerspectiveProjectionMatrix();
-
-            // Camera::SetNearClipPlane( KF_ENVMAP_NEAR_CLIP_PLANE )
-            lrFaceCamera.maProjectionScalars[7] = KF_ENVMAP_NEAR_CLIP_PLANE; // m_nearClipPlane
-            lrFaceCamera.UpdatePerspectiveProjectionMatrix();
-
-            // Camera::SetFovHorizontal( KF_ENVMAP_FOV_HORIZONTAL )
-            lrFaceCamera.SetFovHorizontal(KF_ENVMAP_FOV_HORIZONTAL);
+            lrFaceCamera.SetAspectRatio(KF_ENVMAP_ASPECT_RATIO);             // 0x827B41C0-41CC
+            lrFaceCamera.SetFarClipPlane(KF_ENVMAP_FAR_CLIP_PLANE);          // 0x827B41D8-41DC
+            lrFaceCamera.SetNearClipPlane(KF_ENVMAP_NEAR_CLIP_PLANE);        // 0x827B41E8-41EC
+            lrFaceCamera.SetFovHorizontal(KF_ENVMAP_FOV_HORIZONTAL);         // 0x827B41F8
         }
 
         return true;

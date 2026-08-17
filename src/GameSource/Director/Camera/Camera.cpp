@@ -489,8 +489,11 @@ void Camera::Clear()
 //
 // Publish this director camera into a graphics camera:
 //   1. ValidateTransformWithDebugInfo() (NaN / unreasonable-position tripwires);
-//   2. reset the target camera (the @0x827F94E8 defaults reset + the empty
-//      ICF-folded teardown stub) -> lpOutCamera->Release();
+//   2. reset the target camera -> lpOutCamera->Construct(), the @0x827F94E8
+//      defaults forward (CORRECTED 2026-08-17: this said Release(), on the old
+//      claim that Construct()/Release() ICF-folded to that one body. They do not
+//      -- Release() is the EMPTY @0x8284CB38; see the CgsCamera.cpp banner. The
+//      X360 call here is `bl sub_827F94E8`, i.e. Construct());
 //   3. fov: degrees -> radians (0.017453292), clamped to [1 deg, 160 deg]
 //      (2.7925267) with the two fsel arms, then SetFovHorizontal;
 //   4. LookAt(eye = mTransform.Pos() [+0x30], up = mTransform.Up() [+0x10],
@@ -506,7 +509,12 @@ void Camera::CopyToCgsCamera(CgsGraphics::Camera* lpOutCamera) const
 {
     const_cast<Camera*>(this)->ValidateTransformWithDebugInfo();
 
-    lpOutCamera->Release();   // sub_827F94E8 + the empty folded Destruct
+    // ⚠ LOAD-BEARING. This is the ONLY writer of m_aspectRatio on the frame camera and
+    // on the shadow cascade cameras (BrnShadowMap.cpp:1396 hands us a fresh stack
+    // CgsGraphics::Camera whose default ctor initialises nothing), and SetFovHorizontal
+    // below divides by it. It must be Construct() -- the @0x827F94E8 KF_DEFAULT_*
+    // forward -- never Release(), which is the empty ICF-folded body @0x8284CB38.
+    lpOutCamera->Construct();   // sub_827F94E8
 
     // fovRad = clamp(mfFOV * DEG2RAD, 1 deg, 160 deg) -- the two fsel arms.
     f32 lfFovRadians = mfFOV * 0.017453292f;

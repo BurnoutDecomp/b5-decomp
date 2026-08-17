@@ -1902,7 +1902,17 @@ namespace BrnGame
                                    + lrXform.wAxis.z * lrXform.wAxis.z;
                 if (lfDistSq > 1.0f)
                 {
-                    mWorldModule.SetBringUpCameraOverride(lrXform, lpCamera->GetFOV());
+                    // The third argument is the console's junkyard latch input. The real
+                    // GenerateDispatchLists @0x827D1CE8 reads it at BrnWorldModule.cpp:3757
+                    // as `lpDispatchInputBuffer->GetCameraInput()->IsInJunkyard()` -- the
+                    // camera BridgeRendererToWorld @0x823CDD20 put in the world dispatch
+                    // INPUT buffer (`SetCameraInput(a2, RendererIO::OutputBuffer::
+                    // GetBrnCamera(a3))`, its second-to-last call). That buffer set does not
+                    // exist on PC, and this IS that camera
+                    // (mpDirectorOutputBuffer->GetCameraOutput()), so the flag comes across
+                    // beside the transform. DELETE with the rest of this staging block.
+                    mWorldModule.SetBringUpCameraOverride(lrXform, lpCamera->GetFOV(),
+                                                          lpCamera->IsInJunkyard());
 
                     static bool sbLoggedHandover = false;
                     if (!sbLoggedHandover && CgsDev::Log::gpDebugPrint != 0)
@@ -1953,6 +1963,58 @@ namespace BrnGame
         // effects-frame staging above and GenerateDispatchListsBringUp).
         mWorldModule.SetBringUpDispatchThreadInputBuffer(
             mDispatchThreadInputBufferManager.GetWriteBuffer());
+
+        // ---- [FLAG PC bring-up] PARKED: the EFFECTS module's copy of the env-map -------
+        // NOT WIRED, DELIBERATELY, AND NOTHING IS MISSING BECAUSE OF IT. The console hands
+        // the environment-map texture to the particle/effects side one call further down
+        // DoDispatch than the world staging above:
+        //
+        //   BrnGame::BrnGameModule::BridgeRendererToEffects @0x823C1168
+        //       -- called ONCE, from DoDispatch @0x823DC458 (its whole xrefs_to list).
+        //          It copies the dispatch frame + the base/FX-events effects frames out of
+        //          RendererIO::OutputBuffer into the EFFECTS dispatch input buffer and ends
+        //          with the env-map hand-off:
+        //             `SetEnvironmentMap(a2, dword_83011AF4)`
+        //   BrnEffects::EffectsIO::DispatchInputBuffer::SetEnvironmentMap @0x823BAA98
+        //       -- write-lock assert (EffectsModuleIO.h:246) + one word store.
+        //   BrnEffects::EffectsIO::DispatchInputBuffer::GetEnvironmentMap @0x8227DF28
+        //       -- read-lock assert (EffectsModuleIO.h:247) + the matching load; its ONLY
+        //          xref is BrnEffects::EffectsModule::GenerateDispatchLists @0x82296668,
+        //          which forwards it into the particle dispatch input at particleIn+0x40,
+        //          from where ParticleModule::GenerateRenderRequests @0x82281BD8 copies it
+        //          into ParticleRenderData::mpEnvironmentMap (0x82281C38/0x82281C44).
+        //
+        // dword_83011AF4 is not renderer state we would have to invent: BrnRendererModule::
+        // Construct @0x8240A778 seeds it with `CgsRenderTarget::GetTexture(this->+0x244, 0)`
+        // (asm 0x8240BE80-0x8240BE98) -- the env-map render target's texture, i.e. exactly
+        // the object the reflections wave built (renderer pool slot 3).
+        //
+        // WHY IT IS PARKED -- both ends of the wire are absent, verified by grep, not by
+        // assumption:
+        //   $ grep -n "GameSource.Effects" tools/build/build_game_exe.bat
+        //   301:  echo "%SRC%\GameSource\Effects\Particles\ParticleModuleBringUp.cpp"
+        //     -> ParticleModuleBringUp.cpp is the ONLY GameSource\Effects file on the build
+        //        list. EffectsModule.cpp and BrnEffectsModuleIO_DispatchInputBuffer.cpp are
+        //        not on it, so neither the consumer (EffectsModule::GenerateDispatchLists)
+        //        nor the accessors are linked.
+        //   $ grep -rn "BridgeRendererToEffects" b5-decomp/src tools/build/build_game_exe.bat
+        //     -> (no output) -- the bridge itself is not reconstructed at all.
+        // and no BrnEffects::EffectsIO::DispatchInputBuffer is ever created on this build
+        // (the type has a committed header + accessor bodies, no instance) -- the same
+        // finding ParticleModuleBringUp.cpp's "FIVE FIELDS ARE BLOCKED" banner already
+        // records from the consumer end, where mpEnvironmentMap is one of the five and is
+        // read by nobody.
+        //
+        // So the missing item is not a value, it is TWO TRANSLATION UNITS. Writing a
+        // stand-in bridge here would create an effects dispatch input buffer that nothing
+        // reads, which is fabrication, not reconstruction.
+        // DELETE-WHEN: BrnEffects::EffectsModule.cpp + BrnEffectsModuleIO_DispatchInput-
+        // Buffer.cpp are on tools\build\build_game_exe.bat and EffectsModule::Generate-
+        // DispatchLists @0x82296668 drives the particle dispatch input. Then reconstruct
+        // BridgeRendererToEffects @0x823C1168 in full (it is four calls) rather than only
+        // its env-map tail, and retire the five BLOCKED fields in ParticleModuleBringUp.cpp
+        // in the same pass.
+        // --------------------------------------------------------------------------------
 
         CgsGraphics::DispatchFrame* lpDispatchFrame = mRenderModule.GetDispatchFrameForWrite();
         if (lpDispatchFrame != 0)

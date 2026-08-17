@@ -109,22 +109,30 @@ namespace postfx
         renderengine::Texture*       mpTexture;       // +0x08  AllocateAndInitializeTexture result
         renderengine::TextureState*  mpTextureState;  // +0x0C  TextureState::Initialize result
         renderengine::Texture*       mpHiZTexture;    // +0x10  depth path: hierarchical-Z companion
-        // ⚠ MISNAMED: THIS BYTE IS THE SECTION COUNT, NOT A SURFACE FORMAT (noted 2026-08-17,
-        // reflections step 1). Its two writers in this class's own TU already store one --
-        // rwgpfxrendertarget.cpp:115 (CreateColor) and :231 (CreateDepth) both do
-        // `mu8Format = lrParams.mu8NumSections;` -- its other reader multiplies by it to get a
-        // texture height (`lrParams.mu8NumSections * lrParams.mu32Height`, :201), and the DecFIGS
-        // DWARF names the same slot outright: rwgpfxrendertarget.h:490 `uint8_t m_numSections;`,
-        // sitting between m_pStencilTexture (:488) and m_bIsShared (:493). The X360 image reads it
-        // with `lbz r11, 0x14(r3)` in Target::Resolve(u32) @0x823F9170 and branches on `<= 1`,
-        // i.e. "one section or an atlas of several", which is a section-count test.
-        // RENAME PENDING to mu8NumSections: the two stores live in rwgpfxrendertarget.cpp, which is
-        // deliberately NOT on tools/build/build_game_exe.bat and is owned by the postfx TU, so the
-        // rename is a one-file follow-up rather than a header-only edit (see the CROSS-GROUP note
-        // in the reflections step-1 cubeleaf report). Until then: silently testing a member called
-        // "Format" against 1 is how the next reader inverts it -- do not.
-        u8                           mu8Format;       // +0x14  == the SECTION COUNT (see above)
-        u8                           mau8Pad15[3];    // +0x15
+        // THE SECTION COUNT AT +0x14 -- renamed from `mu8Format` 2026-08-17 (reflections step 2,
+        // closing pre-audit F6; the step-1 delivery could only banner it because the two writers
+        // live in the unmounted sibling TU, which this same edit renames).
+        //
+        // WHY IT IS A COUNT AND NOT A FORMAT, three independent attestations:
+        //   * its own TU already stores a count into it -- rwgpfxrendertarget.cpp CreateColor and
+        //     CreateDepth both do `<this byte> = lrParams.mu8NumSections;`, and the sibling reader
+        //     multiplies the SAME parameter by the height to size the texture
+        //     (`lrParams.mu8NumSections * lrParams.mu32Height`, the depth path);
+        //   * the DecFIGS DWARF names the slot outright --
+        //     references/DecFIGS/dwarfdump/SDKs/RenderEngineClub/MAIN/components/include/postfx/
+        //     rwgpfxrendertarget.h:348 `uint8_t m_numSections;` (source line 490), sitting between
+        //     m_pStencilTexture (:345 / source :488) and m_bIsShared (:351 / source :493);
+        //   * the X360 image reads it with `lbz r11, 0x14(r3)` in Target::Resolve(u32) @0x823F9170
+        //     and branches on `<= 1` -- "one section, or an atlas of several", a count test.
+        //
+        // The byte's OFFSET is unchanged: +0x14, immediately after the four widened pointers on
+        // the console's 4-byte-pointer image and after four 8-byte pointers here; every access is
+        // by name, so the console offset is documentation, never arithmetic.
+        // NOTE (not acted on): the DWARF puts `bool m_bIsShared` in the slot this header still
+        // spells `mau8Pad15[3]`. No X360 reader or writer of that byte has been attested, so it
+        // stays padding rather than becoming an unattested member.
+        u8                           mu8NumSections;  // +0x14  the SECTION COUNT (see above)
+        u8                           mau8Pad15[3];    // +0x15  (DWARF: m_bIsShared lives here)
 
         // X360 0x824034D0 -- build a colour surface (PixelBuffer + sampleable texture + sampler state).
         void CreateColor(const Parameters* lpParameters);

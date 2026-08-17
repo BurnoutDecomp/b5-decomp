@@ -92,7 +92,7 @@ namespace renderengine { extern s32 gDisplayWidth; extern s32 gDisplayHeight; }
 // renderer's face pass and this producer's env-map arm (::GenerateDispatchLists :4003) --
 // so the producer reads the same seed the renderer does; verify finding F5 (envproducer):
 // with the knob off, the six queries and dispatch legs must not run either.
-namespace renderengine { extern s32 gEnvironmentMap; }
+namespace renderengine { extern s32 gEnvironmentMap; extern s32 gEnvironmentMap30Hz; }
 
 namespace BrnWorld
 {
@@ -534,9 +534,10 @@ WorldModule::Construct( const BrnGame::BrnCpuMonitors& lrCpuMonitors )
     //   3482:    if ( !mb30hzEnvironmentMap || mbFirstRenderFrame )
     mb30hzEnvironmentMap = false;                   // X360 +6167328
     mbFirstRenderFrame = true;                      // X360 +6167329
-    // [FLAG PC bring-up] the two env-map producer seams (see BrnWorldModule.h).
+    // [FLAG PC bring-up] the env-map producer seams (see BrnWorldModule.h).
     mpBringUpDispatchThreadInputBuffer = 0;
     mbEnvMapCamerasPositionedBringUp   = false;
+    mbBringUpCameraInJunkyardBringUp   = false;
     mbForceOnlyBackdrops = false;                   // X360 +6167330
     mbRenderBackdrops = true;                       // X360 +6167331
     mfCarKeyLightMultiplier = 1.175f;               // X360 +6167332
@@ -3534,7 +3535,10 @@ WorldModule::GenerateFrustumQueries(
     const BrnDirector::Camera::Camera* lpCameraInput = lpDispatchInputBuffer->GetCameraInput();
 
     // The frame's graphics camera (file-static; the X360 rebuilds it in place).
-    gFrustumQueryCamera.Release();
+    // Construct(), NOT Release(): GenerateFrustumQueries @0x827DADF8 is one of the nine
+    // xrefs of sub_827F94E8, the KF_DEFAULT_* reset == Camera::Construct(). Release() is
+    // the EMPTY body @0x8284CB38 (corrected 2026-08-17 -- see the CgsCamera.cpp banner).
+    gFrustumQueryCamera.Construct();
     lpCameraInput->CopyToCgsCamera( &gFrustumQueryCamera );
 
     // ---- shadow-map cascade cameras ---------------------------------------
@@ -3813,7 +3817,10 @@ WorldModule::GenerateDispatchLists(
     // The dispatch camera (X360 file static @0x8300FB40) rebuilt from the frame
     // camera; its view-projection rows also seed the dispatch thread's camera
     // block.
-    gDispatchCamera.Release();
+    // Construct(), NOT Release(): GenerateDispatchLists @0x827D1CE8 is one of the nine
+    // xrefs of sub_827F94E8 == Camera::Construct() (2026-08-17; Release() is the empty
+    // @0x8284CB38 -- see the CgsCamera.cpp banner).
+    gDispatchCamera.Construct();
     lpCameraInput->CopyToCgsCamera( &gDispatchCamera );
     lpDispatchThreadInputBuffer->SetCameraViewProjection(
         gDispatchCamera.GetViewProjectionMatrix() );
@@ -4064,7 +4071,8 @@ WorldModule::GenerateDispatchLists(
 
         for ( s32 liFace = 0; liFace < 6; liFace++ )
         {
-            lpDispatchThreadInputBuffer->SetEnvMapFaceRendered( liFace, mabEnvMapFaceRender[ liFace ] );
+            lpDispatchThreadInputBuffer->SetEnvMapFaceRender(
+                static_cast< u32 >( liFace ), mabEnvMapFaceRender[ liFace ] );
 
             if ( !mabEnvMapFaceRender[ liFace ] )
             {
@@ -4125,8 +4133,7 @@ WorldModule::GenerateDispatchLists(
             // and record its view-projection for the env-map resolve -- ON THE
             // LOCAL COPY (X360 v219): the member maEnvMapCameras[face] is never
             // mutated by the dispatch pass.
-            lFaceCamera.SetFarClip( 10000.0f );
-            lFaceCamera.UpdatePerspectiveProjectionMatrix();
+            lFaceCamera.SetFarClipPlane( 10000.0f );   // the store + the rebuild, one member
             lFaceCamera.SetPerspectiveProjectionMatrixRightHanded();
             lpShaderConstantsFrame->SetEnvMapViewProjectionMatrix(
                 static_cast<BrnGraphics::EEnvironmentMapFace>( liFace ),
@@ -4881,11 +4888,15 @@ WorldModule::SetupShaderConstantsBeforeRendering( const rw::math::vpu::Matrix44&
 // module's published camera; consumed (and cleared) by the next GenerateDispatchListsBringUp.
 void
 WorldModule::SetBringUpCameraOverride( const rw::math::vpu::Matrix44Affine& lrTransform,
-                                       f32 lfFOVDegrees )
+                                       f32 lfFOVDegrees,
+                                       bool lbIsInJunkyard )
 {
     mBringUpCameraOverride       = lrTransform;
     mfBringUpCameraOverrideFOV   = lfFOVDegrees;
     mbBringUpCameraOverrideValid = true;
+    // LEVEL, not one-shot (see the header): the junkyard state is a property of the game,
+    // not of this frame's camera publish, and the console's camera input is never absent.
+    mbBringUpCameraInJunkyardBringUp = lbIsInJunkyard;
 }
 
 // [FLAG PC bring-up] see the header. STANDS IN FOR the four
@@ -5182,6 +5193,72 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     const rw::math::vpu::Matrix44Affine lDirectorTransform  = mBringUpCameraOverride;
     const f32                           lfDirectorFOVDegs   = mfBringUpCameraOverrideFOV;
     mbBringUpCameraOverrideValid = false;
+
+    // ---- junkyard lighting latch (camera flag bit 0x400000) ----------------
+    // ⭐ WIRED 2026-08-17 (reflections step 2, envproducer findings F4 / B3). THIS IS THE
+    // CONSOLE'S OWN BLOCK, at the console's own position in the pass: the real
+    // GenerateDispatchLists @0x827D1CE8 runs it at :3757 -- immediately after the camera
+    // input is read, before the dispatch-thread buffer is locked and before the
+    // update-set bit-7 early-out. X360 pseudocode lines 201-218:
+    //     v15 = *(_R19 + 320);                      // camera->mState_uFlags
+    //     v17 = (v15 & 0x400000) == 0;
+    //     v18 = *(this + 6175808);                  // mbIsInJunkyard
+    //     if ( v17 ) { if ( v18 ) DisableJunkyardLightingSetup(...); *(this+6175808) = 0; }
+    //     else       { if ( !v18 ) EnableJunkyardLightingSetup(...);  *(this+6175808) = 1; }
+    // (this+1994592 is mEnvironmentManager; @0x827B0F98 / @0x827B10E8 are the two setups.)
+    //
+    // [FLAG PC bring-up] ONE THING IS STAND-IN: where the flag comes from. The console
+    // reads `lpDispatchInputBuffer->GetCameraInput()->IsInJunkyard()`, i.e. the camera
+    // BridgeRendererToWorld @0x823CDD20 put in the world dispatch INPUT buffer
+    // (`SetCameraInput(a2, RendererIO::OutputBuffer::GetBrnCamera(a3))`) -- a buffer that
+    // does not exist on this build. Here it is the value BrnGameModule::DoDispatch staged
+    // off the
+    // SAME director camera it already stages the transform and FOV from
+    // (SetBringUpCameraOverride's third argument, itself just
+    // BrnDirector::Camera::Camera::IsInJunkyard() -- Camera.cpp:564, mState_uFlags &
+    // 0x400000, the bit BrnArbStateCarSelect.cpp sets as KI_CAMERA_STATE_JUNKYARD).
+    // The latch logic, the edge triggering and the member are all the console's.
+    // DELETE-WHEN the dispatch INPUT buffer is real (this goes with the whole producer).
+    //
+    // WHAT IT TURNS ON. Two things, both console:
+    //   * `if ( mbIsInJunkyard ) mShadowMap.SetConstantsForEnvmap()` in the env-map arm
+    //     below -- the ONLY gate on it, and until now it could never fire (envproducer
+    //     B3: "mbIsInJunkyard is never set on PC"). Shader constants 15/16 now carry the
+    //     env-map shadow tint/bias while a junkyard face is drawn instead of whatever the
+    //     main pass last staged (BrnShadowMap.cpp:370).
+    //   * the junkyard lighting setup itself: time of day pinned to 18:00 and the key
+    //     light forced to the nearest loaded junkyard rig on entry, restored on exit.
+    //     THAT IS A VISIBLE CHANGE the first time the game enters the junkyard, and it is
+    //     the change the console makes. The two log lines below are the proof.
+    if ( mbBringUpCameraInJunkyardBringUp )
+    {
+        if ( !mbIsInJunkyard )
+        {
+            mEnvironmentManager.EnableJunkyardLightingSetup();
+            if ( CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[junkyard] ENTER -- junkyard lighting setup enabled"
+                       " (camera state flag 0x400000); env-map faces now take"
+                       " ShadowMap::SetConstantsForEnvmap\n";
+            }
+        }
+        mbIsInJunkyard = true;
+    }
+    else
+    {
+        if ( mbIsInJunkyard )
+        {
+            mEnvironmentManager.DisableJunkyardLightingSetup();
+            if ( CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[junkyard] LEAVE -- junkyard lighting setup disabled,"
+                       " time of day restored\n";
+            }
+        }
+        mbIsInJunkyard = false;
+    }
 
     // ---- frame an establishing camera on the loaded world -------------------
     Vector3 lCentre;
@@ -5514,7 +5591,10 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     //
     // Route the stand-in through the real function so the convention cannot drift again.
     static CgsGraphics::Camera sBringUpCamera;
-    sBringUpCamera.Release();                                   // the @0x827F94E8 defaults reset
+    sBringUpCamera.Construct();                                 // the @0x827F94E8 defaults reset
+                                                                // (it said Release() until
+                                                                // 2026-08-17 -- Release() is the
+                                                                // EMPTY @0x8284CB38 body)
     sBringUpCamera.maProjectionScalars[ 6 ] = lfAspect;         // m_aspectRatio
     sBringUpCamera.SetFovHorizontal( lfHorizontalFov );
     sBringUpCamera.maProjectionScalars[ 7 ] = lfNear;           // m_nearClipPlane
@@ -5712,7 +5792,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     if ( mShadowMap.IsEnabled() )
     {
         // The director camera this leg owns. Construct() once for the FOV / aspect /
-        // camera-state defaults; only the transform + FOV move per frame.
+        // camera-state defaults; only the transform + FOV (+ the junkyard flag, step 2) move per frame.
         static BrnDirector::Camera::Camera sShadowRenderCamera;
         static bool                        sbShadowRenderCameraConstructed = false;
         if ( !sbShadowRenderCameraConstructed )
@@ -6094,10 +6174,15 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         // place a silent truncation shows up.
         // ==================================================================
         // The face schedule (::GenerateFrustumQueries :3481-3502, reproduced exactly).
-        // ⚠ With the shipped mb30hzEnvironmentMap == false this ALWAYS selects all six --
-        // see the note in Construct. BRN_ENVMAP_30HZ=1 seeds the console's own 30 Hz
-        // member so the alternate-halves schedule can be measured; BRN_ENVMAP_ALLFACES=1
-        // forces all six back on if it is. Both OFF by default == the console default.
+        // ⚠ The shipped console mb30hzEnvironmentMap == false selects all six every frame
+        // (Construct seeds it false; only the debug menu "Render environment map at 30hz"
+        // flips it). ON PC THE SEED IS config.ini [Settings] EnvironmentMap30Hz
+        // (renderengine::gEnvironmentMap30Hz, DEFAULT 1 -- a documented perf deviation,
+        // reflections step 2: the pass is draw-bound at the D3D9 per-draw floor, ~1.7 ms
+        // for six faces; see device.h). It seeds the CONSOLE'S OWN member once, here, the
+        // same way gEnvironmentMap seeds mbRenderEnvmap. The env vars keep their override
+        // for measuring: BRN_ENVMAP_30HZ=1 forces the half schedule, BRN_ENVMAP_ALLFACES=1
+        // forces all six.
         static s32 siEnvMapAllFaces = -1;
         static s32 siEnvMap30Hz     = -1;
         if ( siEnvMapAllFaces < 0 )
@@ -6106,9 +6191,14 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             siEnvMapAllFaces = ( lpcAll != 0 && lpcAll[0] != '0' ) ? 1 : 0;
             const char* lpc30 = std::getenv( "BRN_ENVMAP_30HZ" );
             siEnvMap30Hz = ( lpc30 != 0 && lpc30[0] != '0' ) ? 1 : 0;
+            mb30hzEnvironmentMap = ( renderengine::gEnvironmentMap30Hz != 0 );
             if ( siEnvMap30Hz != 0 )
             {
                 mb30hzEnvironmentMap = true;
+            }
+            if ( siEnvMapAllFaces != 0 )
+            {
+                mb30hzEnvironmentMap = false;
             }
         }
 
@@ -6493,10 +6583,11 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         gShadowPerf.miEnvMapRecords   = 0;
         if ( liEnvMapFacesStaged > 0 && liResultType >= 0 && lpFrustumTestResult != 0 )
         {
-            // :4007-4010. mbIsInJunkyard is latched by the REAL GenerateDispatchLists'
-            // camera-flag test (:3708-3723), which does not run on this build, so this
-            // never fires here yet -- kept because it is the console line and it comes
-            // alive with the junkyard latch, not with this arm.
+            // :4007-4010. ⭐ LIVE as of 2026-08-17: mbIsInJunkyard is latched at the top of
+            // THIS producer now, by the console's own camera-flag block (see the
+            // "junkyard lighting latch" banner above), off the director camera's
+            // IsInJunkyard() staged through SetBringUpCameraOverride. Until then nothing on
+            // PC ever set it and this line could not fire (envproducer B3).
             if ( mbIsInJunkyard )
             {
                 mShadowMap.SetConstantsForEnvmap();
@@ -6519,8 +6610,8 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 // :4018 -- ALL SIX flags are written every dispatch, false included.
                 if ( lpDispatchThreadInputBuffer != 0 )
                 {
-                    lpDispatchThreadInputBuffer->SetEnvMapFaceRendered(
-                        liFace, mabEnvMapFaceRender[ liFace ] );
+                    lpDispatchThreadInputBuffer->SetEnvMapFaceRender(
+                        static_cast< u32 >( liFace ), mabEnvMapFaceRender[ liFace ] );
                 }
 
                 if ( !labEnvMapFaceStaged[ liFace ] )
@@ -6550,9 +6641,9 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                     // every later one before leaving.
                     if ( lpDispatchThreadInputBuffer != 0 )
                     {
-                        for ( s32 liClear = liFace; liClear < 6; ++liClear )
+                        for ( u32 luClear = static_cast< u32 >( liFace ); luClear < 6u; ++luClear )
                         {
-                            lpDispatchThreadInputBuffer->SetEnvMapFaceRendered( liClear, false );
+                            lpDispatchThreadInputBuffer->SetEnvMapFaceRender( luClear, false );
                         }
                     }
                     break;
@@ -6578,9 +6669,9 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                     }
                     if ( lpDispatchThreadInputBuffer != 0 )
                     {
-                        for ( s32 liClear = liFace; liClear < 6; ++liClear )
+                        for ( u32 luClear = static_cast< u32 >( liFace ); luClear < 6u; ++luClear )
                         {
-                            lpDispatchThreadInputBuffer->SetEnvMapFaceRendered( liClear, false );
+                            lpDispatchThreadInputBuffer->SetEnvMapFaceRender( luClear, false );
                         }
                     }
                     break;
@@ -6649,8 +6740,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 // view-projection and publish it into the frame. SetPerspectiveProjection-
                 // MatrixRightHanded is last, so the published matrix is the RIGHT-HANDED
                 // one (which is why the query above negates).
-                lFaceCamera.SetFarClip( 10000.0f );
-                lFaceCamera.UpdatePerspectiveProjectionMatrix();
+                lFaceCamera.SetFarClipPlane( 10000.0f );   // the store + the rebuild, one member
                 lFaceCamera.SetPerspectiveProjectionMatrixRightHanded();
                 gBrnWorldShaderConstantsFrameBringUp.LockForWriting();
                 gBrnWorldShaderConstantsFrameBringUp.SetEnvMapViewProjectionMatrix(

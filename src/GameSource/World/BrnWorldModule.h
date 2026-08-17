@@ -272,9 +272,20 @@ namespace BrnWorld
         // The override lasts ONE dispatch frame: the producer consumes and clears it, so a
         // frame in which the director publishes nothing falls back to the tour camera
         // rather than freezing on a stale viewpoint.
+        //
+        // lbIsInJunkyard is the SAME camera's BrnDirector::Camera::Camera::IsInJunkyard()
+        // (Camera.cpp:564 -- `mState_uFlags & 0x400000`, the bit BrnArbStateCarSelect.cpp:172
+        // names KI_CAMERA_STATE_JUNKYARD and sets at :587/:592/:620/:867/:885/:922/:959).
+        // ADDED 2026-08-17: it is exactly what the console's GenerateDispatchLists reads at
+        // its :3757 latch -- there off `lpDispatchInputBuffer->GetCameraInput()`, i.e. the
+        // camera BridgeGameToWorld put in the world dispatch input buffer, which is the same
+        // director camera this override carries. It is a SEPARATE value from the transform,
+        // and it does NOT expire with the one-frame override: a frame on which the director
+        // publishes nothing must not be read as "left the junkyard".
         // DELETE with GenerateDispatchListsBringUp itself.
         void SetBringUpCameraOverride( const rw::math::vpu::Matrix44Affine& lrTransform,
-                                       f32 lfFOVDegrees );
+                                       f32 lfFOVDegrees,
+                                       bool lbIsInJunkyard );
 
         // [FLAG PC bring-up] Hand the bring-up producer the renderer's four WORLD-layer
         // effects frames for this frame, so EnvironmentManager::GenerateEffects @0x827BE698
@@ -725,6 +736,14 @@ namespace BrnWorld
         rw::math::vpu::Matrix44Affine mBringUpCameraOverride;
         f32                           mfBringUpCameraOverrideFOV;
         bool                          mbBringUpCameraOverrideValid;
+        // [FLAG PC bring-up] the director camera's junkyard state bit, staged by the same
+        // setter. STANDS IN FOR the console's `lpDispatchInputBuffer->GetCameraInput()->
+        // IsInJunkyard()` at GenerateDispatchLists @0x827D1CE8 (cpp :3757; asm reads
+        // camera+320 == mState_uFlags and tests & 0x400000). Unlike the transform it is
+        // LEVEL, not one-shot -- it keeps its last staged value across frames on which the
+        // director publishes nothing, because the console's camera input is never absent.
+        // DELETE with GenerateDispatchListsBringUp.
+        bool                          mbBringUpCameraInJunkyardBringUp;
         // [FLAG PC bring-up] the four world-layer effects frames staged by
         // SetBringUpEffectsFrames (see the header entry). DELETE with it.
         BrnEffectsFrame*              mapBringUpEffectsFrames[ 4 ];

@@ -1346,51 +1346,64 @@ namespace BrnWorld
             lrDirCamera.ValidateTransformWithDebugInfo();        // bl @0x827DA974
             lrDirCamera.CopyToCgsCamera(&maCgsShadowMapCamera[luMap]);
 
+            // The three inlined CgsGraphics::Camera setters, by name as of 2026-08-17
+            // (reflections step 2): this store/call stream -- stfs 0x158 then
+            // SetFovHorizontal then UpdatePerspectiveProjectionMatrix; stfs 0x160 then
+            // Update; stfs 0x15C then Update -- IS Camera::SetAspectRatio /
+            // SetFarClipPlane / SetNearClipPlane (DWARF CgsCamera.h:97/:103/:100), the
+            // same three the X360 inlines into BrnGraphics::EnvironmentMap::Prepare
+            // @0x827B4188 in the same order. Semantics are unchanged, store for store:
+            // SetAspectRatio re-runs SetFovHorizontal with m_fovHorizontal, which is what
+            // the lfFov temporary was reading out of maProjectionScalars[0].
             CgsGraphics::Camera& lrCgsCamera = maCgsShadowMapCamera[luMap];
-            const f32 lfFov = lrCgsCamera.maProjectionScalars[0];   // lfs 0x140 (m_fovHorizontal)
-            lrCgsCamera.maProjectionScalars[6] = 1.0f;              // stfs 0x158 (m_aspectRatio)
-            lrCgsCamera.SetFovHorizontal(lfFov);
-            lrCgsCamera.UpdatePerspectiveProjectionMatrix();
-            lrCgsCamera.maProjectionScalars[8] = mfShadowMapFarPlane;   // stfs 0x160 <- +0x14D4
-            lrCgsCamera.UpdatePerspectiveProjectionMatrix();
-            lrCgsCamera.maProjectionScalars[7] = mfShadowMapNearPlane;  // stfs 0x15C <- +0x14D0
-            lrCgsCamera.UpdatePerspectiveProjectionMatrix();
+            lrCgsCamera.SetAspectRatio(1.0f);                           // stfs 0x158 @0x827DA98C
+            lrCgsCamera.SetFarClipPlane(mfShadowMapFarPlane);           // stfs 0x160 <- +0x14D4
+            lrCgsCamera.SetNearClipPlane(mfShadowMapNearPlane);         // stfs 0x15C <- +0x14D0
             lrCgsCamera.UpdateOrthogonalProjectionMatrix(mafShadowMapOrthoScale[luConfig]);
         }
 
         // ---- 3. the frame camera in CGS form (stack v73) --------------------
-        // ⚠ ROOT CAUSE OF THE 10^8-METRE CASCADE FIT ([shadow-extent], 2026-08-12)
-        // -- NOT MINE TO FIX. This copy is where the whole bounding-box solve
-        // gets its sub-frustum shape from, and it arrives DEGENERATE:
+        // ⚠ HISTORICAL -- FIXED 2026-08-12, KEPT AS THE DIAGNOSTIC. This copy is where
+        // the whole bounding-box solve gets its sub-frustum shape from, and for one wave
+        // it arrived DEGENERATE:
         //
-        //   CopyToCgsCamera (Camera.cpp:505) begins with lpOutCamera->Release(),
-        //   which resets the camera through Camera::Construct(KF_DEFAULT_FOVHORIZONTAL,
-        //   KF_DEFAULT_ASPECTRATIO, ...). KF_DEFAULT_ASPECTRATIO is still a FLAGGED
-        //   0.0f PLACEHOLDER (CgsCamera.cpp:25, flt_82F30FD8 "value not recovered"),
-        //   and nothing else ever writes m_aspectRatio on this camera. So
-        //   SetFovHorizontal computes fovVertical = 2*atan((1/0) * tanHalfH)
-        //   = 2*atan(+inf) = pi EXACTLY, hence
+        //   CopyToCgsCamera (Camera.cpp:509) opens by resetting the target camera
+        //   through Camera::Construct(KF_DEFAULT_FOVHORIZONTAL, KF_DEFAULT_ASPECTRATIO,
+        //   ...) -- and KF_DEFAULT_ASPECTRATIO was a FLAGGED 0.0f PLACEHOLDER
+        //   ("value not recovered"), with nothing else ever writing m_aspectRatio on
+        //   this camera. So SetFovHorizontal computed fovVertical = 2*atan((1/0) *
+        //   tanHalfH) = 2*atan(+inf) = pi EXACTLY, hence
         //       m_tanHalfFovVertical = tanf(float(pi/2)) = 2.2877e7.
-        //   The frame camera is therefore 180 DEGREES TALL. Clone + the per-slot
-        //   near/far clamps below preserve that, GetFrustumPerspective builds its
-        //   top/bottom planes from it, and CalcVertices duly returns corners
-        //   +/- far*2.29e7 off-axis. ComputeBoundingBoxMatrix then fits a
-        //   perfectly correct minimum-area box around a genuinely astronomical
-        //   point cloud -- which is why nothing reports non-finite and every
-        //   caster triangle lands sub-pixel.
+        //   The frame camera was therefore 180 DEGREES TALL. Clone + the per-slot
+        //   near/far clamps below preserved that, GetFrustumPerspective built its
+        //   top/bottom planes from it, and CalcVertices duly returned corners
+        //   +/- far*2.29e7 off-axis. ComputeBoundingBoxMatrix then fitted a perfectly
+        //   correct minimum-area box around a genuinely astronomical point cloud --
+        //   which is why nothing reported non-finite and every caster triangle landed
+        //   sub-pixel.
         //
-        // RECOVERED 2026-08-12 (this wave, ida_bytes.get_bytes on a scratch copy
-        // of the .i64, big-endian; slot binding proven by the lfs f1/f2 pair in
-        // the @0x827F94E8 reset thunk, PPC float-arg order):
+        // RECOVERED 2026-08-12 (ida_bytes.get_bytes on a scratch copy of the .i64,
+        // big-endian; slot binding proven by the lfs f1/f2 pair in the @0x827F94E8 reset
+        // thunk, PPC float-arg order):
         //     flt_82F30FD4 = 0x3FC90FDB = 1.5707964f  -> KF_DEFAULT_FOVHORIZONTAL (pi/2, 90 deg)
         //     flt_82F30FD8 = 0x3FE38E39 = 1.7777778f  -> KF_DEFAULT_ASPECTRATIO   (16/9)
-        // The fix is those two constants in CgsCamera.cpp; nothing in THIS file
-        // may compensate for them. The console does NOT stamp an aspect ratio on
+        // Both now carry those values in CgsCamera.cpp; nothing in THIS file compensates
+        // for them, and nothing here may. The console does NOT stamp an aspect ratio on
         // the frame camera -- step 2 above writes 1.0 to the CASCADE cameras only
-        // (stfs f31, 0x158(r31) @0x827DA98C, f31 = flt_82001C98 = 1.0), and there
-        // is no matching store for this copy @0x827DA9F0. Adding one here would
-        // be a fabrication that also hid the real defect from every other caller
-        // of Camera::Release().
+        // (stfs f31, 0x158(r31) @0x827DA98C, f31 = flt_82001C98 = 1.0), and there is no
+        // matching store for this copy @0x827DA9F0. Adding one here would be a
+        // fabrication that also hid the real defect from every other caller.
+        //
+        // ⚠ SO THIS LINE STILL DEPENDS ON CopyToCgsCamera RESETTING THE CAMERA.
+        // lFrameCamera is a fresh STACK object and CgsGraphics::Camera's default ctor is
+        // `Camera() {}` -- it initialises nothing. Everything this camera has comes from
+        // CopyToCgsCamera, whose first statement was `lpOutCamera->Release()` until
+        // 2026-08-17 and is `lpOutCamera->Construct()` after it (Camera::Release() is the
+        // EMPTY ICF-folded body @0x8284CB38; the reset is Construct() @0x827F94E8 -- see
+        // the CgsCamera.cpp banner). If that call is ever weakened again, m_aspectRatio
+        // here is uninitialised stack and the 2.2877e7 signature comes straight back.
+        // Diagnostic, unchanged: fitHalfW / slabFar CONSTANT across all cascades, and
+        // that constant == tanf(float(pi/2)).
         CgsGraphics::Camera lFrameCamera;
         lpRenderCamera->CopyToCgsCamera(&lFrameCamera);
 

@@ -128,9 +128,23 @@ namespace CgsGraphics
         // ---- Construct family (X360): the DWARF (CgsCamera.h:59/:66/:78) declares BOTH the
         //      no-arg Construct() and Construct(f32,f32,f32,f32), plus Release(). The 4-arg
         //      body is @0x827F0A08 (aspect/near/far stores + identity view + SetFovHorizontal
-        //      tail call); the no-arg Construct()/Release() pair ICF-fold to one X360 body
-        //      @0x827F94E8 that forwards the KF_DEFAULT_* camera defaults. All bodied in
-        //      CgsCamera.cpp. ----
+        //      tail call); the no-arg Construct() is @0x827F94E8, the body that forwards the
+        //      KF_DEFAULT_* camera defaults. Both bodied in CgsCamera.cpp.
+        //
+        //      ⚠ CORRECTED 2026-08-17 (reflections step 2, envproducer finding F1). The old
+        //      note here claimed Construct() and Release() ICF-FOLD to that one reset body.
+        //      They do not: Release() is the EMPTY body, folded onto @0x8284CB38 (a single
+        //      `blr` + `.long 0` -- the sink every empty body in the image collapsed into, and
+        //      which therefore carries an unrelated name, CgsSceneManager::CgsCollision::
+        //      BaseCollisionGenerator::Destruct, with 193 xrefs). The two are told apart by
+        //      BrnGraphics::EnvironmentMap, which calls BOTH over the SAME six Camera objects
+        //      at the same 0x170 stride:
+        //          EnvironmentMap::Construct @0x827B40D0 : `bl sub_827F94E8`   (the reset)
+        //          EnvironmentMap::Release   @0x827B4218 : `bl BaseCollisionGenerator__Destruct`
+        //          EnvironmentMap::Prepare   @0x827B4188 : `bl BaseCollisionGenerator__Destruct`
+        //      so the loop that RELEASES a camera calls the empty one and the loop that
+        //      CONSTRUCTS it calls the reset. Every PC call site that meant the reset now says
+        //      Construct(); see the CgsCamera.cpp banner for the list. ----
         void Construct();
         // ADDITIVE overload (DWARF CgsCamera.h:66, X360 @0x827F0A08).
         void Construct(f32 lfFovHorizontal, f32 lfAspectRatio, f32 lfNearClipPlane, f32 lfFarClipPlane);
@@ -146,6 +160,46 @@ namespace CgsGraphics
         void SetPerspectiveProjectionMatrixRightHanded();
 
         void SetFovHorizontal(f32 fovHorizontal);
+
+        // ---- the other three DWARF projection setters (CgsCamera.h:97 / :100 / :103) -----
+        // ADDED 2026-08-17 (reflections step 2, envproducer finding F2). All three are
+        // `inline` in the original header and have no standalone X360 body; the DecFIGS DWARF
+        // names them as INLINED SUBROUTINES of BrnGraphics::EnvironmentMap::Prepare
+        // (references/DecFIGS/dwarfdump/GameSource/World/EnvironmentMap/BrnEnvironmentMap.cpp
+        // lists exactly CgsGraphics::Camera::SetFovHorizontal / SetAspectRatio /
+        // SetFarClipPlane / SetNearClipPlane and nothing else of this class), and Prepare
+        // @0x827B4188 gives each one store-for-store and call-for-call:
+        //     SetAspectRatio(A)   0x827B41C0  stfs f0, 0x158(r31)   m_aspectRatio = A
+        //                         0x827B41C4  bl   SetFovHorizontal (f1 = 0x140 = m_fovHorizontal)
+        //                         0x827B41CC  bl   UpdatePerspectiveProjectionMatrix
+        //     SetFarClipPlane(F)  0x827B41D8  stfs f0, 0x160(r31)   m_farClipPlane = F
+        //                         0x827B41DC  bl   UpdatePerspectiveProjectionMatrix
+        //     SetNearClipPlane(N) 0x827B41E8  stfs f0, 0x15C(r31)   m_nearClipPlane = N
+        //                         0x827B41EC  bl   UpdatePerspectiveProjectionMatrix
+        // 0x158 / 0x15C / 0x160 == maProjectionScalars[6] / [7] / [8]. The store ORDER is the
+        // asm's, not a guess: each stfs sits AFTER the preceding `bl`, and a store cannot be
+        // scheduled across a call that may read it. The Feb-2007 CgsCamera.h:202-227 bodies
+        // (rung 3, style only) are these three verbatim, which is the independent check.
+        // SetAspectRatio re-runs SetFovHorizontal because the VERTICAL fov is derived from the
+        // aspect (SetFovHorizontal: fovV = 2*atan(tanHalfH / m_aspectRatio)); the trailing
+        // UpdatePerspectiveProjectionMatrix is redundant with SetFovHorizontal's own tail call
+        // and is kept because the console emits it.
+        void SetAspectRatio(f32 lfAspectRatio)
+        {
+            maProjectionScalars[6] = lfAspectRatio;              // m_aspectRatio
+            SetFovHorizontal(maProjectionScalars[0]);            // m_fovHorizontal
+            UpdatePerspectiveProjectionMatrix();
+        }
+        void SetNearClipPlane(f32 lfNearClipPlane)
+        {
+            maProjectionScalars[7] = lfNearClipPlane;            // m_nearClipPlane
+            UpdatePerspectiveProjectionMatrix();
+        }
+        void SetFarClipPlane(f32 lfFarClipPlane)
+        {
+            maProjectionScalars[8] = lfFarClipPlane;             // m_farClipPlane
+            UpdatePerspectiveProjectionMatrix();
+        }
 
         // CgsGraphics::Camera::UpdateViewProjectionMatrix @0x827E7030 (wave 2) --
         // rebuild mViewProjection = mView (affine) * mProjection. Body in
@@ -197,7 +251,10 @@ namespace CgsGraphics
         // CgsCamera.cpp (camera-frustum wave 2026-07-27) -- the earlier
         // "half-texel adjusted" role note was a guess and is superseded.
         Matrix44 GetViewProjectionMatrixModified() const;
-        void SetFarClip( f32 lfFarClip );
+        // (the PC-additive `void SetFarClip(f32)` -- a bare m_farClipPlane store with no
+        //  projection rebuild -- is RETIRED 2026-08-17: all three of its call sites were the
+        //  console's inlined Camera::SetFarClipPlane, i.e. the store IMMEDIATELY followed by
+        //  UpdatePerspectiveProjectionMatrix, and now say so. See SetFarClipPlane above.)
 
     public:
         // +0x00..0x3F -- view transform (4 Vector4 rows).
