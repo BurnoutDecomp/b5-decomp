@@ -91,13 +91,20 @@ namespace Gen
     }
 
     // X360 @0x8227EFC8: CollectionWithDefault = FindCollectionWithDefault(key); then
-    // this->Change(CollectionWithDefault). The X360 builds the key as the low 32 bits of a
-    // 64-bit immediate (0x42C25F49_85B5C4F4 via insrdi); FindCollectionWithDefault reads
-    // only the low word 0x85B5C4F4 (the same class key the ctor checks). Change() is public
-    // on Attrib::Instance, reachable from surfacelist's members under `private Instance`.
+    // this->Change(CollectionWithDefault). Change() is public on Attrib::Instance, reachable
+    // from surfacelist's members under `private Instance`.
+    //
+    // ⚠️ THE KEY IS 64-BIT (corrected 2026-08-17). The X360 assembles both halves --
+    // `ori r3, r11, 0xC4F4` then `insrdi r3, r11, 32, 0` with r11 = 0x42C25F49 -- so r3
+    // holds 0x42C25F49_85B5C4F4 entering the call. The old note here said the callee "reads
+    // only the low word" and passed the truncated int; that is the same truncation
+    // attrib_findcollection.h records fixing for FindCollection, where it had been silently
+    // mis-resolving every lookup.
+    static const u64 KU_SURFACELIST_CLASS_KEY = 0x42C25F4985B5C4F4ull;   // @0x8227EFD8-EC
+
     inline Collection* surfacelist::ChangeWithDefault()
     {
-        Collection* lpCollectionWithDefault = FindCollectionWithDefault(KI_SURFACELIST_CLASS);
+        Collection* lpCollectionWithDefault = FindCollectionWithDefault(KU_SURFACELIST_CLASS_KEY);
         return Change(lpCollectionWithDefault);
     }
 }
