@@ -155,6 +155,12 @@ void SaveConfig()
 #endif
 }
 
+// The installed locale string TUB's WinMain reads out of the registry (boot audit F-P0-9).
+// Published here rather than kept local so the language select has somewhere to read it from
+// the day its locale->langid mapping lands; empty means "not installed / not readable", which
+// is the state every dev build is in.
+char gacInstalledLocale[64] = { 0 };
+
 void EnginePrepare()
 {
     // First log line of the run (also guarantees the log file is created on every boot).
@@ -268,9 +274,40 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         renderengine::Device::Initialize();
         LoadConfig();
 
-        // [gated] TUB reads the registry locale here (HKLM "SOFTWARE\\EA Games\\Burnout(TM)
-        // Paradise The Ultimate Box\\", value "locale") for the language select; the locale
-        // consumer (the language/font system) is not reconstructed yet.
+        // ⭐ 2026-08-16 (boot audit F-P0-9). TUB's WinMain @0x79D580 reads the installed
+        // locale out of the registry here -- HKLM "SOFTWARE\\EA Games\\Burnout(TM) Paradise
+        // The Ultimate Box\\", value "locale" -- and the language select keys off it. We did
+        // not read it at all.
+        //
+        // [FLAG] the read is restored; the MAPPING from that locale string to a
+        // language-table id is not. The GUI's bundle choice is still the host-static
+        // "LANGUAGE/0002.bundle" (BrnGuiModule.cpp), and the locale->langid table is not
+        // attested in anything I can read -- inventing one would put the wrong strings on
+        // screen in a way nobody would notice until a non-English install. So the value is
+        // read and published for the consumer that will need it, and the gap is named.
+        {
+            HKEY lhKey = 0;
+            if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+                              "SOFTWARE\\EA Games\\Burnout(TM) Paradise The Ultimate Box",
+                              0, KEY_READ, &lhKey) == ERROR_SUCCESS)
+            {
+                char  lacLocale[64] = { 0 };
+                DWORD luType = 0;
+                DWORD luSize = sizeof(lacLocale) - 1;
+                if (RegQueryValueExA(lhKey, "locale", 0, &luType,
+                                     reinterpret_cast<LPBYTE>(lacLocale), &luSize) == ERROR_SUCCESS &&
+                    luType == REG_SZ)
+                {
+                    gacInstalledLocale[0] = 0;
+                    for (DWORD lu = 0; lu < sizeof(gacInstalledLocale) - 1 && lacLocale[lu] != 0; ++lu)
+                    {
+                        gacInstalledLocale[lu]     = lacLocale[lu];
+                        gacInstalledLocale[lu + 1] = 0;
+                    }
+                }
+                RegCloseKey(lhKey);
+            }
+        }
 
         CgsSystem::HardwareInit::InitializeHardware(lpCmdLine);
 
