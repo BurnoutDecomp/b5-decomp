@@ -189,6 +189,16 @@ namespace Io
 
     struct RootInputBuffer : public CgsModule::IOBuffer
     {
+        // ⭐ ADDED 2026-08-17 (boot audit F-P6-7). This struct had no Construct of its own, so
+        // CreateIOBuffer<RootInputBuffer> ran only the IOBuffer base and left the embedded
+        // queues unconstructed -- harmless while every member was opaque storage, immediately
+        // fatal once mGameActionQueue became a real VariableEventQueue (it asserts
+        // "Not Constructed" on the first AddEvent). BrnSound::Module::Io::RootInputBuffer::
+        // Construct exists on the console -- EventQueue_PropBecamePhysicalEvent_20_Construct.cpp
+        // names it as one of the three callers of the shared queue Construct.
+        // Defined inline (below the members it touches) at the end of this struct.
+        void Construct();
+
         // DWARF-named member-interface types (nested so accessor bodies name them
         // RootInputBuffer::X). Sizes are the X360-attested copy widths where available,
         // else nominal (absorbed by pads).
@@ -211,7 +221,15 @@ namespace Io
         // InputBuffer::GameActionQueue typedef (BrnRootSoundModuleIo.h:49). Modelled as
         // correctly-sized opaque storage: its span is +0x3084 .. +0x6494 (internal layout
         // unattested here). Returned by reference from GetGameActionQueue().
-        struct GameActionQueue               { u8 mData[0x6494 - 0x3084]; }; // @ +0x03084 (0x3410 wide)
+        // ⭐ TYPED 2026-08-17 (boot audit F-P6-7). This was "correctly-sized opaque storage,
+        // internal layout unattested here". It is attested, by the one caller that posts to
+        // it: LoadingScriptedState::Update's scripted stage 6 @0x823F2668 calls
+        // `CgsModule::VariableEventQueue<13312,16>::AddEvent` on the pointer this getter
+        // returns -- the queue's template arguments are in the symbol. And the span confirms
+        // it independently: 0x6494-0x3084 = 0x3410 = 13312+16, and VariableEventQueue<N,16>
+        // is exactly N+16 bytes. Same two-source arithmetic that pinned the request
+        // interfaces above.
+        typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueue;   // @ +0x03084 (0x3410 wide)
 
         // ---- read-lock const getters (this wave) ------------------------------------
         // X360 0x82694940 / 0x823B83C8 -- the game event queue @ +0x6494.
@@ -327,6 +345,16 @@ namespace Io
     //     "Not locked for writing", BrnRootSoundModuleIo.h:346) -- copies the source
     //     PreUpdateOutput into mPreUpdateOutput (POD spans by memcpy, the
     //     audio-car-loaded queue by Clear()+Append).
+    // @ BrnSound::Module::Io::RootInputBuffer::Construct -- base, then the embedded queues
+    // that are real types. Only mGameActionQueue is typed today (boot audit F-P6-7); the rest
+    // are still opaque storage and need nothing. Add each to this body as it is typed.
+    inline void RootInputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mGameActionQueue.Construct();
+        mGameActionQueue.Clear();
+    }
+
     struct RootPreUpdateOutputBuffer : public CgsModule::IOBuffer
     {
         // BrnRootSoundModuleIo.h:331 (DWARF; own TU, declared-only here).

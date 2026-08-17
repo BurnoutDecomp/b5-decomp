@@ -725,10 +725,38 @@ void LoadingScriptedState::Update()
                 // fall through
             case 6:
                 gBrnScriptedLoadStage = 6;
-                // X360: post sound event 297 (the "world loaded" cue) into this frame's
-                // Root sound input buffer, then jump straight to DONE (8). [deferred: the
-                // per-frame sound IO bracket is not threaded through this spine yet]
-                LogScriptedStageOnce(6, "sound world-loaded cue [deferred] -> DONE");
+                // ⭐ THE CUE POSTS, 2026-08-17 (boot audit F-P6-7). X360 @0x823F2650-70:
+                //     LockForWrite(rootIn);
+                //     VariableEventQueue<13312,16>::AddEvent(rootIn->GetGameActionQueue(),
+                //                                            &rec, /*id*/ 0x129, /*size*/ 1);
+                //     UnlockForWrite(rootIn);   then stage := 8
+                // This was "[deferred: the per-frame sound IO bracket is not threaded through
+                // this spine yet]" -- but the cue does not need the bracket, it needs a Root
+                // INPUT buffer, and one is carved here the same way LoadSoundModule carves
+                // its pair. The queue is the GameActionQueue: the AddEvent symbol names its
+                // template arguments outright, and the member's attested span 0x3410 is
+                // 13312+16, which is exactly VariableEventQueue<13312,16>.
+                //
+                // The 1-byte payload's stack slot is never written before the call in the
+                // console body either -- the consumer keys on the id, not the content -- so a
+                // zero byte is the faithful record, not a stand-in value.
+                LogScriptedStageOnce(6, "sound world-loaded cue (event 297) -> DONE");
+                {
+                    BrnGame::BrnGameModule* lpGameModuleForCue = BrnGame::GetMainGameModule();
+                    BrnSound::Module::Io::RootInputBuffer* lpRootInForCue = 0;
+                    lpGameModuleForCue->GetUpdateInputBufferStack()
+                        ->CreateIOBuffer<BrnSound::Module::Io::RootInputBuffer>(&lpRootInForCue, "Sound");
+                    if (lpRootInForCue != 0)
+                    {
+                        lpRootInForCue->LockForWrite();
+                        u8 lu8CueRecord = 0;
+                        lpRootInForCue->GetGameActionQueue().AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(&lu8CueRecord), 0x129, 1);
+                        lpRootInForCue->UnlockForWrite();
+                        lpGameModuleForCue->GetUpdateInputBufferStack()
+                            ->DestroyIOBuffer<BrnSound::Module::Io::RootInputBuffer>(&lpRootInForCue);
+                    }
+                }
                 gBrnScriptedLoadStage = 8;
                 break;
             case 7:
