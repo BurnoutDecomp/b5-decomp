@@ -40,8 +40,13 @@ namespace CgsGraphics
     class Im3dRenderBufferUntex;
 }
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer (typedef of Im2d)
-class BrnEffectsFrame;
-class BrnShaderConstantsFrame;
+// ⭐ struct, not class, 2026-08-17 (found while landing BrnRendererModule::Update). Both are
+// declared `struct` at their homes; forward-declaring them as `class` here made this header's
+// setter signatures mangle with PEAV while any TU that included the real headers emitted PEAU,
+// so the two never linked -- the accessors TU compiled fine and simply never got called. Same
+// failure mode as the AllocatorList forward declaration in the director headers.
+struct BrnEffectsFrame;
+struct BrnShaderConstantsFrame;
 // RECONCILED 2026-07-24 (ODR fix): BrnBlobbyShadowBuffer and BrnSubmissionInterface
 // are NESTED classes of the real BrnBlobbyShadowManager / BrnCoronaManager CLASSES.
 // A nested type cannot be forward-declared without (re)declaring its enclosing class,
@@ -92,6 +97,11 @@ namespace RendererIO
         void Construct();   // @ 0x82400190
 
         void SetBrnCamera(const BrnDirector::Camera::Camera& lrCamera);   // @ 0x823C8610 (write-lock)
+        // ⭐ ADDED 2026-08-17 with BrnRendererModule::Update (boot audit F-P2-4). The console
+        // has this getter -- Update @0x82405EA4/EC8/FA8 calls it three times -- and it was the
+        // one piece of the input buffer's surface missing here; only the setter had a
+        // declaration, so nothing could read the camera back out.
+        const BrnDirector::Camera::Camera* GetBrnCamera() const;          // read-lock
 
     private:
         BrnDirector::Camera::Camera mBrnCamera;   // DWARF :150 (camera lands at this+0x10)

@@ -734,6 +734,10 @@ namespace BrnGame
         s32  miGuiFsmStage;             // @ +10094148 (1..5 = pending RunFsm post; 6 = idle)
         bool mbGuiPhaseComplete;        // @ +10094152 (command 70 -- the flow-advance flag)
         bool mbSkipVideos;              // TUB WinMain's "-skipvideos" latch (boot audit F-P0-10)
+        // X360 gm+0x9A0630 -- the reusable loading-screen allocator the renderer lends us
+        // through RendererIO::OutputBuffer each GamePrepare pass (boot audit F-P2-4). Null
+        // until the first pass runs.
+        CgsMemory::LinearMalloc* mpReusableLoadingScreenAllocator;
         bool mbGuiPreAccept;            // @ +10094153 (command 71 -- resume-world-load)
         // FLAG sound stand-in (no console member): a GUI voice-over request (out-event
         // 466) seen by BridgeGuiToGame is answered on the next sub-step -- see the block

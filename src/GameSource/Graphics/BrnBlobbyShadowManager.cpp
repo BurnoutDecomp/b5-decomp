@@ -138,3 +138,13 @@ bool BrnBlobbyShadowManager::BrnBlobbyShadowBuffer::AddShadow(
     ++miNumShadows;   // *this = count + 1
     return true;
 }
+
+// The external (published) half of the double-buffered pair. Bodied 2026-08-17 with
+// BrnRendererModule::Update (boot audit F-P2-4), which is its only caller: the console forms
+// `manager + mu8External * 0x1010` @0x824060C0-EC, i.e. exactly maBuffers[mu8External] --
+// the byte it reads at manager+0x2021 is this member, and the 0x1010 stride is
+// sizeof(BrnBlobbyShadowBuffer). Declared-only until now because nothing published it.
+BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* BrnBlobbyShadowManager::GetExternalBuffer()
+{
+    return &maBuffers[mu8External];
+}

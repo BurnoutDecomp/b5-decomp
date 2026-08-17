@@ -369,6 +369,23 @@ public:
     // as a named accessor so the renderer->world bridge has one seam to bind to.
     CgsGraphics::DispatchFrame* GetDispatchFrameForWrite();
 
+    // ⭐ @0x82405E28 -- BrnRendererModule::Update, RECONSTRUCTED 2026-08-17 (boot audit
+    // F-P2-4). The renderer's per-pass publication into the RendererIO buffer pair: take the
+    // input's camera, lend the output the reusable loading-screen allocator (which is what
+    // BrnGameModule::GamePrepare's tail latches into gm+0x9A0630), then publish every
+    // per-frame buffer the rest of the engine reads back through the output buffer.
+    // Store-for-store map in progress/boot_audit/phases/P2b_renderermodule_update.md.
+    void Update(CgsModule::IOBufferStack* lpUpdateInputStack,
+                CgsModule::IOBufferStack* lpUpdateOutputStack,
+                RendererIO::InputBuffer*  lpInput,
+                RendererIO::OutputBuffer* lpOutput);
+
+    // The reusable loading-screen allocator, X360 renderer+51452 (0xC8FC). Update lends its
+    // ADDRESS to the output buffer (`addis r4,r31,1; addi r4,r4,-0x3704` @0x82405EBC), the
+    // game module latches it, and LoadingScriptedState::Update FreeAll's it before each world
+    // drive. It is an embedded member on the console, not a pointer.
+    CgsMemory::LinearMalloc* GetReusableLoadingScreenAllocator() { return &mReusableLoadingScreenAllocator; }
+
     // [FLAG PC bring-up] Hand a WORLD-layer effects frame to the world module.
     //
     // STANDS IN FOR RendererIO::OutputBuffer::GetWorldEffectsFrame(luSlot) @0x823B3C38, which
@@ -671,6 +688,8 @@ private:
     s32                                 miShowShadowMapIndex;
     f32                                 mfAspectCorrection;
     RendererIO::RenderSwitches          mRenderSwitches;
+    // X360 renderer+0xC8FC -- the allocator Update publishes (see GetReusableLoadingScreenAllocator).
+    CgsMemory::LinearMalloc             mReusableLoadingScreenAllocator;
     bool                                mbRenderPreZ;
     bool                                mbRenderWorldOpaque;
     bool                                mbRenderCarsOpaque;

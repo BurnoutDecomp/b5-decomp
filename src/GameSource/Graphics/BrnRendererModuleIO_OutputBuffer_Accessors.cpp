@@ -330,11 +330,53 @@ void OutputBuffer::SetReusableLoadingScreenAllocator(CgsMemory::LinearMalloc* lp
 
 // ============================== InputBuffer ==============================
 
+// ⭐ @0x82400190 / @0x824001A8 -- the two Construct bodies, added 2026-08-17 with
+// BrnRendererModule::Update (boot audit F-P2-4). CreateIOBuffer<T> calls T::Construct, so
+// without these the buffer pair could not be carved at all. Both are exactly what this
+// header's layout banner already describes them as: set the IOBuffer status byte, then
+// InputBuffer constructs its embedded camera and OutputBuffer nulls every owned pointer
+// member plus the two effects-frame pointer arrays. Nothing here is inferred beyond that
+// description and the member list beside it.
+void InputBuffer::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+    mBrnCamera.Construct();
+}
+
+void OutputBuffer::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+    mpDispatchFrame                = 0;
+    mpIm2dRenderBuffer             = 0;
+    mpIm3dRenderBuffer             = 0;
+    mpIm3dRenderBufferUntex        = 0;
+    mpIm3dDebugRenderBuffer        = 0;
+    mpIm2dDebugRenderBuffer        = 0;
+    mpIm3dRenderBufferRacePosition = 0;
+    mpIm3dRenderBufferMenusAndHud  = 0;
+    mpBaseEffectsFrame             = 0;
+    for (s32 li = 0; li < 4; ++li) mapWorldEffectsFrames[li]    = 0;
+    for (s32 li = 0; li < 2; ++li) mapFXEventsEffectsFrames[li] = 0;
+    mpShaderConstantsFrame           = 0;
+    mpBlobbyShadowBuffer             = 0;
+    mpCoronaSubmissionInteface       = 0;
+    mpReusableLoadingScreenAllocator = 0;
+    mpSnapshotBuffer                 = 0;
+}
+
 // X360 0x823C8610: write-lock copy into the embedded director camera (this+16, Camera::operator=).
 void InputBuffer::SetBrnCamera(const BrnDirector::Camera::Camera& lrCamera)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
     mBrnCamera = lrCamera;
+}
+
+// The read side, added 2026-08-17 with BrnRendererModule::Update (boot audit F-P2-4). Mirrors
+// the OutputBuffer's GetBrnCamera @0x823B3650: read-lock assert, then the embedded camera.
+const BrnDirector::Camera::Camera* InputBuffer::GetBrnCamera() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mBrnCamera;
 }
 
 }   // namespace RendererIO
