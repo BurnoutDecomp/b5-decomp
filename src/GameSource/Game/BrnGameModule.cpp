@@ -269,7 +269,13 @@ namespace BrnGame
         // @+10094180), then the PC boot enters the initial loading screen (OnEnter raises the
         // renderer's loading-screen signal).
         mMainFlowStateMachine.Construct();
-        mMainFlowStateMachine.SetState(BrnGameMainFlowController::E_MGS_INITIAL_LOADING_SCREEN);
+        // ⭐ CORRECTED 2026-08-16 (boot audit F-P1-2). Construct already leaves the
+        // controller in state 0 by a RAW store (@0x823C6508) and the X360 caller issues no
+        // SetState, so the console never runs state 0's OnLeave OR its OnEnter -- SendEvent's
+        // transition set never targets state 0 either. The PC's explicit SetState fired an
+        // OnLeave+OnEnter pair the console never issues; with the state bytes now wired
+        // (F4) that phantom OnEnter would also have raised mbSaveLoadState, making the
+        // initial-load update set 0xC1 instead of the console's 0x80.
 
         // GUI module Prepare (movie-hosting slice): load VIDEOS\VIDEOLIST.BUNDLE (metadata only, no
         // device needed) + publish gpActiveMovieManager so the renderer draws the active movie. The

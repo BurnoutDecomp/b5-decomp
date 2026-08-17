@@ -35,6 +35,9 @@ namespace BrnGameMainFlowController
 void MainGameFlowStateInGame::OnEnter()
 {
     BrnGameMainFlowController::gBrnInGameStateActive = true;
+    // @0x823AAD18 -- mbInGameState = 1 (the update set becomes 0x88).
+    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+        BrnGameMainFlowController::gpMainGameFlowController->SetInGameState(true);
     // Request GUI FSM stage 5 (the +2523537 pending-stage byte): BridgeGameToGui
     // @0x823DCA10 posts GuiEventRunFsm{BrnScreenFsm@LOADING -> SCREEN} +
     // {BrnFBFsm -> HUD} for it -- the front-end/freeburn handoff. [The prior recon
@@ -52,6 +55,9 @@ void MainGameFlowStateInGame::OnEnter()
 void MainGameFlowStateInGame::OnLeave()
 {
     BrnGameMainFlowController::gBrnInGameStateActive = false;
+    // @0x823AAD3C -- mbInGameState = 0.
+    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+        BrnGameMainFlowController::gpMainGameFlowController->SetInGameState(false);
 }
 
 // @ 0x823E79B8 -- in-game render is a straight tail-forward to the game module's render-dispatch
