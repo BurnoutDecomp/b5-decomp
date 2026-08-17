@@ -189,6 +189,19 @@ namespace
     }
 }   // anonymous namespace
 
+// ⭐ 2026-08-16 (boot audit F-P5-11/F7). See the header: this is the same one-shot Init the
+// resolvers run lazily, exposed so the boot can run it AT THE CONSOLE'S POINT --
+// RootSoundModule::Prepare's REGISTRY_LOAD stage, loading-screen stage 4. On the console
+// that stage is RegistryLoad @0x826EBA08 streaming the CSIS/AEMS registries through the
+// playback module, and StreamingStateManager::Prepare @0x826EE680 loading
+// "sound\streams\StreamHeaders.bundle" beside it; both are blocked here on the rw::audio
+// engine. What is NOT blocked is the TIMING of reading the same two files, so that is what
+// this restores. Idempotent.
+void StreamHeadersPC::Preload()
+{
+    Init();
+}
+
 bool StreamHeadersPC::ResolveBySpecName(const char* lpacSpecName,
                                         const u8** lppSnr, u32* lpuSnrLen,
                                         char* lpacSnsFile, u32 luSnsCap)
