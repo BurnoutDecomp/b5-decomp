@@ -1961,7 +1961,9 @@ bool EnvironmentManager::Prepare( BrnWorldIO::UpdateOutputBuffer* lpOutput )
                 if ( !s_bLoggedDefaultCube )
                 {
                     s_bLoggedDefaultCube = true;
-                    char lacLine[128];
+                    // 128 was too small: KAC_DEFAULT_COLOUR_CUBE_RESOURCE is a ~100-char gamedb://
+                    // URI, so the pointer and the newline were cut off and the next log line ran on.
+                    char lacLine[256];
                     std::snprintf( lacLine, sizeof( lacLine ),
                                    "[env] default colour cube acquired and PUBLISHED: %s -> %p\n",
                                    KAC_DEFAULT_COLOUR_CUBE_RESOURCE,
