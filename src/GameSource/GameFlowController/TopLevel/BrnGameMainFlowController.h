@@ -13,6 +13,12 @@
 // (GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h).
 namespace BrnGameMainFlowController
 {
+    // The "return to front end" poll byte, gm+0x9A0626. Defined in
+    // BrnGameMainFlowInGameState.cpp. Declared here 2026-08-16 (boot audit F-P4-6) because
+    // the console reads it from TWO states -- CompleteLoading consumes-and-discards it,
+    // InGame acts on it -- and only one of them could see it before.
+    extern bool gBrnReturnToFrontEndRequested;
+
     enum EMainGameFlowState
     {
         E_MGS_INVALID = -1,

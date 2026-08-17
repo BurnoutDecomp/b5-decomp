@@ -2777,6 +2777,13 @@ namespace BrnGame
                         lpGameStateOutput->UnlockForWrite();
                     }
                 }
+                // ⭐ FRAME-STEP GUARD, 2026-08-16 (boot audit F-P3-9). DoUpdate skips the
+                // whole GUI leg while the frame-stepper is engaged (`lbzx` on gm+0x9A0B98);
+                // ours ran it unconditionally, so single-stepping a frame also advanced the
+                // GUI a frame and the two were never actually in step. mbSteppingFrames is
+                // the PC's name for that byte.
+                if (!mbSteppingFrames)
+                {
                 // ---- controller -> GUI input pass (the console per-substep bridge) ---------
                 // Fill the player-0 pad record (InputPadsPC, the PC stand-in for the input
                 // module's own fill), then run the REAL BridgeControllerToGui: it synthesises
@@ -3015,6 +3022,7 @@ namespace BrnGame
                 // @0x828570F0) -- so before stage 2 there is no queue to clear.
                 if (lbGuiPrepared)
                     mGuiModule.GetGuiOutQueue()->Clear();
+                }   // end of the frame-step guard opened above (boot audit F-P3-9)
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_EachUpdate);
 
                 if (liStep != miNumSimFramesRequired - 1)
