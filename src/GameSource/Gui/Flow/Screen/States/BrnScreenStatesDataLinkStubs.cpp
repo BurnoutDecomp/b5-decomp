@@ -278,10 +278,9 @@ namespace BrnGui
     void CrashNavAccountManagement::OnLeave() {}
     void CrashNavAccountManagement::Update()  {}
 
-    // ---- CrashNavColourCalibrate (BrnCrashNavColourCalibrate.cpp is partial) ----------
-    void CrashNavColourCalibrate::OnEnter() { LogUnreconstructedState("CrashNavColourCalibrate", "OnEnter"); }
-    void CrashNavColourCalibrate::OnLeave() {}
-    void CrashNavColourCalibrate::Update()  {}
+    // ---- CrashNavColourCalibrate: the three lifecycle virtuals moved to the state's own
+    //      TU (BrnCrashNavColourCalibrate.cpp, post-fx step 11). Only its static resource
+    //      table stays here, with the rest of the measured .rdata block above.
 
     // ---- CrashNavEnterOnline variants (Mod TU landed NoTitle only) --------------------
     void CrashNavEnterOnlineFull::OnEnter() { LogUnreconstructedState("CrashNavEnterOnlineFull", "OnEnter"); }

@@ -575,6 +575,47 @@ struct GuiNewBurnoutHudMessageEvent : public CgsGui::GuiEvent<542>
     EActiveRaceCarIndex                            mePreviousOwner;// BrnGuiEventTypeDefs.h:6365
 };
 
+// The colour-calibration SCREEN's show / hide requests: the two events
+// BrnGui::CrashNavColourCalibrate posts and BrnGui::ColourCalibrationScreen::RecvEvent
+// (@0x824471D0) consumes.
+//
+// DWARF (rung 2, BrnGuiEventTypeDefs.h:150 / :163) declares them
+//     struct BrnGui::GuiEventColourCalibrationScreenShow : public GuiEvent<504> {};
+//     struct BrnGui::GuiEventColourCalibrationScreenHide : public GuiEvent<505> {};
+// -- both EMPTY, no payload members. The X360 ids are 514 (0x202) / 515 (0x203), not the
+// PS3 504/505; read off the binary at BOTH ends, producer and consumer:
+//   * BrnGui::ColourCalibrationScreen::RecvEvent @0x82447268 `cmpwi cr6, r27, 0x202`
+//     (-> PREPARE_TO_SHOW) and @0x82447270 `cmpwi cr6, r27, 0x203` (-> PREPARE_TO_HIDE);
+//   * BrnGui::CrashNavColourCalibrate::ShowCalibrationCard @0x824CE7E8 `li r11, 0x202`
+//     and @0x824CE7FC `li r11, 0x203`, baked into the record it queues;
+//   * BrnGui::GuiModule::HandleEventsPostBaseModuleUpdate @0x8250788C dispatches
+//     `r5 - 0x1ED` cases 21/22 (== 514/515) to ColourCalibrationScreen::RecvEvent, and
+//     BrnGame::BrnGameModule::BridgeGuiToDirector @0x823CC6FC/@0x823CC744 turns the same
+//     two ids into SetGotColourCalibration{Shown,Hidden}Event.
+//
+// EMPTY IS ATTESTED, NOT ASSUMED: ShowCalibrationCard queues a channel-40 GuiEventOut
+// record { muHeader0 = 1 (payload BYTE COUNT == sizeof(T)), muEventType = 514/515,
+// muHeader2 = 12 (payload offset) }, 16 bytes total (0x824CE7D8-F0 / 0x824CE7FC-14:
+// `li r11,1 / stw var_30`, `li r11,0xC / stw var_28`, `li r5,0x28 (=channel 40)`,
+// `li r6,0x10 (=16)`). A payload size of 1 is the sizeof of an EMPTY struct; a
+// CgsGui::GuiEvent<N> base (12 bytes) would have made it 12 and the record 24. So, like
+// its GuiOptionsBrightnessContrast siblings below, this is the PAYLOAD, not the record:
+// the 12-byte header is supplied by whichever wire posts it and the type id is carried by
+// GetEventType() alone.
+// PRODUCER NOTE: BrnCrashNavColourCalibrate.cpp posts these as the console's 16-byte channel-40
+// record (its TU-local GuiCommandWire16<514>/<515>, header {1, id, 12} + one unwritten payload
+// byte); the consumer, BrnGui::ColourCalibrationScreen::RecvEvent, keys on the id alone. These
+// two empty types are the DWARF-named payloads for that record.
+struct GuiEventColourCalibrationScreenShow : public CgsModule::Event
+{
+    s32 GetEventType() const { return 514; }
+};
+
+struct GuiEventColourCalibrationScreenHide : public CgsModule::Event
+{
+    s32 GetEventType() const { return 515; }
+};
+
 // The options screen's DISPLAY-CALIBRATION hand-off -- the event that carries the
 // brightness / contrast slider positions from the GUI to the game module.
 //
@@ -615,7 +656,17 @@ struct GuiOptionsBrightnessContrast : public CgsModule::Event
 struct GuiOptionsBrightnessContrastPostFxControl : public CgsModule::Event
 {
     CgsResource::ResourceHandle mColourCalibrationTextureHandle;  // +0x00 (the X360 qword)
-    bool                        mbRestoreDefaults;                // +0x08 (1 = tear the post-fx down)
+    // DWARF BrnGuiEventTypeDefs.h:6441 names this member mbEnablePostFx; the tree carried the
+    // placeholder mbRestoreDefaults until this wave. Polarity is unchanged and was never in
+    // doubt: ColourCalibrationScreen::Update stores FALSE while the ramp is on screen (X360
+    // case 3, `stb r31 (=0)` @0x8246AD3C) and TRUE when it hides (case 4, `li r11,1; stb`
+    // @0x8246AD64-70), and BridgeGuiToGame copies it straight into
+    // mbEnableCalibrationUnfriendlyPostFx. Renamed to the DWARF name (rung 2 is the authority
+    // for member NAMES) -- see the step-10 calib report section 6.
+    // ⚠️ The MEMBER ORDER stays {handle, flag}: DWARF orders it {bool, ResourceHandle} but the
+    // X360 image is {ResourceHandle, bool} (`std r11, var_100` at payload +0, `stb` at +8,
+    // AddEvent(..., 546, 12) @0x82465D98) and the BINARY wins over the DWARF for layout.
+    bool                        mbEnablePostFx;                   // +0x08 (1 = post-fx back on)
 
     s32 GetEventType() const { return 546; }
 };

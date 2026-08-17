@@ -378,6 +378,80 @@ namespace
         return gPCBringUpCameraInput;
     }
 
+    // =============================================================================================
+    // [FLAG PC bring-up TEST HOOK -- OFF BY DEFAULT]  BRN_POSTFX_MASK_TEST=<cars>,<world>
+    //
+    // The cars-vs-world motion-blur MASK is only observable when the two amounts DIFFER, and the
+    // one blur requester reachable in today's boot does not differ: BehaviourRotateAboutVehicle
+    // (the car-select / showcase orbit) asks for RequestMotionBlur(1, 1) -- cars == world == 1.0
+    // (BrnBehaviourRotateAboutVehicle.cpp:509). Nine of the console's seventeen writers DO differ
+    // (0.0/0.2 for the bumper cam, 0.0/1.0 for the road runner, 0.25/1.0 for the tumble and
+    // bystander moments -- the drive-fx wave's enumeration), but every one of them is either
+    // unreconstructed or unmounted.
+    //
+    // So this overrides the STAGED CAMERA RECORD -- the one input
+    // PCBringUpWriteBaseEffectsFrame reads -- with the two amounts, and raises mbIsActive so the
+    // frame is a motion-blur frame even on a camera that asked for none. It writes ONLY the four
+    // members the console's own MotionBlurData::Set writes, through that same setter, so the
+    // clamp and the pad bytes behave exactly as they do on a real request.
+    //
+    // DELETE-WHEN a cars != world writer is reachable in the boot. The three cheapest are
+    // BrnArbStateCrashMode.cpp, BrnMomentTumbling.cpp and BrnMomentBystanderSeesAction.cpp: all
+    // three already carry a correct console-matching request and are simply not on
+    // tools/build/build_game_exe.bat (drive-fx REPORT section 6).
+    // =============================================================================================
+    void PCBringUpApplyMotionBlurMaskTestOverride(BrnDirector::Camera::Camera& lrCamera)
+    {
+        // -1 = not looked at yet, 0 = off, 1 = on. Read once: an environment variable cannot
+        // change under a running process and this is on the per-frame dispatch path.
+        static int  siMaskTest        = -1;
+        static f32  sfMaskTestCars    = 0.0f;
+        static f32  sfMaskTestWorld   = 0.0f;
+
+        if (siMaskTest < 0)
+        {
+            siMaskTest = 0;
+            char lacValue[64] = { 0 };
+            if (GetEnvironmentVariableA("BRN_POSTFX_MASK_TEST", lacValue, sizeof(lacValue)) > 0)
+            {
+                // <cars>,<world>; a semicolon is accepted for the same reason
+                // BRN_POSTFX_CALIBRATION_TEST accepts one (shells that eat commas).
+                for (u32 luChar = 0; luChar < sizeof(lacValue); ++luChar)
+                {
+                    if (lacValue[luChar] == ';')
+                        lacValue[luChar] = ',';
+                }
+                float lfCars  = 0.0f;
+                float lfWorld = 0.0f;
+                if (std::sscanf(lacValue, "%f,%f", &lfCars, &lfWorld) == 2)
+                {
+                    siMaskTest      = 1;
+                    sfMaskTestCars  = lfCars;
+                    sfMaskTestWorld = lfWorld;
+                    char lacMessage[160];
+                    std::snprintf(lacMessage, sizeof(lacMessage),
+                                  "[mask-alpha] BRN_POSTFX_MASK_TEST=%g,%g -> the staged camera"
+                                  " requests motion blur with cars != world\n",
+                                  static_cast<double>(lfCars), static_cast<double>(lfWorld));
+                    CgsDev::Log::WriteToLog(lacMessage);
+                }
+                else
+                {
+                    CgsDev::Log::WriteToLog(
+                        "[mask-alpha] BRN_POSTFX_MASK_TEST set but not parseable as"
+                        " <cars>,<world> -- ignored\n");
+                }
+            }
+        }
+
+        if (siMaskTest != 1)
+            return;
+
+        BrnDirector::Camera::MotionBlurData& lrBlur = lrCamera.GetEffects().mMotionBlurData;
+        lrBlur.Set(/*lbIsActive*/ true, lrBlur.IsExpensiveMotionBlur(),
+                   sfMaskTestCars, sfMaskTestWorld);
+    }
+
     // --- [FLAG PC bring-up] the staged PLAYER RACE-CAR STATE ---------------------------------------
     // The four DYNAMIC fields of the effects module's TempRaceCarStateCache (module +180992 /
     // +181008 / +181024 / +181028), staged by BrnRendererModule::PCBringUpSetRaceCarStateCache off
@@ -824,6 +898,29 @@ void BrnRendererModule::Construct()
 
     // The loading-screen renderer (creates its textures + scratch buffer, picks language).
     mLoadingScreenRenderer.Construct();
+
+    // X360 Construct @0x8240BF74-0x8240BF88: `ld r11, qword_82FAFF20` (CgsResource::NULLResourceHandle)
+    // / `stdx r11, r31, 0xC920` -- the calibration ramp texture handle Render latches (see the
+    // composite call below) starts null. Follows LoadingScreenRenderer::Construct @0x8240BF70 as
+    // on the console.
+    mCalibrationTextureHandle = CgsResource::NULLResourceHandle;
+
+    // [FLAG PC diagnostic] BRN_RENDER_POSTFX=0 clears mbRenderPostFX -- the console's own "Render
+    // PostFX" debug-menu toggle (BrnGraphics::DebugComponent::OnActivate @0x823F7B98 registers
+    // this+0xC41C), which the PC build has no debug menu to reach. With it off Render skips the
+    // effects apply, the tint blend and the composite and presents through the bring-up blit
+    // (both gates test the same byte, as on the console). Exists for the post-fx fps A/B; the
+    // default is the header's `true`.
+    {
+        char lacRenderPostFx[8] = { 0 };
+        if (GetEnvironmentVariableA("BRN_RENDER_POSTFX", lacRenderPostFx, sizeof(lacRenderPostFx)) > 0
+            && lacRenderPostFx[0] == '0')
+        {
+            mbRenderPostFX = false;
+            CgsDev::Log::WriteToLog("[postfx] BRN_RENDER_POSTFX=0 -> mbRenderPostFX cleared "
+                                    "(effects apply, tint blend and composite skipped)\n");
+        }
+    }
 }
 
 // @ 0x82405E28 (BrnRendererModule::Update, the SetDispatchFrame expression)
@@ -1244,6 +1341,10 @@ void BrnRendererModule::PCBringUpSetCameraInput(const BrnDirector::Camera::Camer
     if (lpCamera == 0)
         return;   // [FLAG PC bring-up] the console cannot be handed a null here; DoDispatch can.
     PCBringUpGetCameraInput() = *lpCamera;
+    // [FLAG PC bring-up TEST HOOK -- OFF BY DEFAULT] BRN_POSTFX_MASK_TEST -- see the banner on
+    // the definition. AFTER the copy, so it overrides whatever the director published; it is a
+    // no-op (one `int` test) when the variable is unset.
+    PCBringUpApplyMotionBlurMaskTestOverride(PCBringUpGetCameraInput());
     gbPCBringUpCameraInputStaged = true;
 }
 
@@ -3257,6 +3358,29 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
 #if BRN_ANTIALIAS_BRACKET_AVAILABLE
     if (lbSceneBracketOpen)
     {
+        // ---- THE CARS-vs-WORLD MOTION-BLUR MASK, CARRIED OUT OF THE STENCIL (step 11) -------
+        // The console's mask IS the stencil buffer, and both halves of the producer are already
+        // live on PC: BeginRenderAntiAliased clears stencil to mu8WorldBlurStencil and
+        // RenderWorldPasses' two force-stencil windows REPLACE it with mu8CarsBlurStencil over
+        // the car mesh lists (see the block in RenderWorldPasses above). Its CONSUMER cannot be:
+        // D3D9 has no way to sample a depth-stencil surface's stencil plane, which is why the
+        // composite used a hard-coded 1.0 until this wave.
+        //
+        // So the mask is COPIED into the scene target's ALPHA LANE here -- with the scene target
+        // and its own D24S8 depth-stencil still bound, using the stencil operation D3D9 DOES
+        // have (the TEST) -- and the composite reads `tex2D(SamplerSource, uv).a`. The resolve
+        // below carries all four lanes out, so this must run BEFORE it, and after every world
+        // pass, which is exactly where the console's own stencil content is final.
+        //
+        // GATED ON mMotionBlurData.mbIsActive, the same bool the console's force windows are
+        // gated on: on a frame with no blur request the composite picks a non-blur permutation,
+        // never samples the lane, and this costs nothing at all.
+        if (lPostFxFrameBytes.mbMotionBlurActive)
+        {
+            renderengine::PCStampMotionBlurMask(lPostFxFrameBytes.mu8CarsBlurStencil,
+                                                lPostFxFrameBytes.mu8WorldBlurStencil);
+        }
+
         // ---- X360 Render:725+ -- CLOSE THE SCENE PASS (call @0x8240D5BC). --------------------
         // Resolve the scene out of the anti-alias buffer into the down-sample buffer AND clear the
         // anti-alias buffer behind the copy. That clear is the whole reason this call cannot be
@@ -3432,18 +3556,56 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             ? lpDispatchThreadInputBuffer->GetContrast()
             : KI_DEFAULT_CALIBRATION_SETTING;
 
-        // The last two arguments are the console's own effects-frame pair, which the seam used to
-        // hard-code (zero tint / motion blur false) while mEffectsArbitrator was never Constructed:
-        // v1 == the tint vector evaluated just above, r7 == the layer-0 internal frame's
-        // mMotionBlurData.mbIsActive read at the top of the bracket (lPostFxFrameBytes).
+        // The tint / motion-blur arguments are the console's own effects-frame pair: v1 == the tint
+        // vector evaluated just above, r7 == the layer-0 internal frame's mMotionBlurData.mbIsActive
+        // read at the top of the bracket (lPostFxFrameBytes). (All twelve composite permutations
+        // adopt since rung 6, so a true motion-blur byte selects a REAL program.)
         //
-        // mbMotionBlurActive REACHING true SELECTS A PERMUTATION WITH NO PC PROGRAM:
-        // BrnPostFxShader::Render builds `leShader = 4*(quality+1 if motion blur) | 2*dof | tint3d`
-        // and hard-returns without drawing on anything but slot 0 (BrnPostFxShader.cpp:1389-1397), so
-        // the frame would present un-composited. It cannot happen on this build -- the layer-0
-        // producer posts no motion-blur event, so the byte is false -- and it is passed through
-        // rather than pinned to false because pinning it would hide the transition the day an event
-        // is posted.
+        // ---- X360 Render @0x8240DD50-0x8240DE08 -- the CALIBRATION RAMP as the composite's override
+        // source. `mr r30, r18` (r18 == 0 since @0x8240CEE8) seeds the Texture* null; then, ONLY when
+        // GetCalibrationUnfriendlyEnablePostFx() is FALSE (`lbz r25, var_CC8` == the byte read at
+        // 0x8240C41C; `bne` skips everything when the post-fx are allowed -- i.e. the ramp is on
+        // screen exactly when the calibration screen has switched the effects off):
+        //   * `bl GetCalibrationTextureHandle` into var_CB0; if it != NULLResourceHandle
+        //     (qword_82FAFF20, both words) -> `stdx r9, r31, 0xC920`: LATCH it into
+        //     mCalibrationTextureHandle (DWARF BrnRendererModule.h:692, this+0xC920);
+        //   * if mCalibrationTextureHandle != NULLResourceHandle -> `lwz r11, 0(r10)` /
+        //     `lwz r30, 0(r11)`: the SmallResource double-deref (handle.mpResourceMemory's first word
+        //     is the main-memory Texture*, the same idiom ColourCalibrationScreen::Update uses).
+        // The latch is why the card survives a frame the screen did not re-post on: the member is
+        // never cleared while the effects stay disabled, and it is simply not consulted once they
+        // are re-enabled. `stw r30, var_CD4` @0x8240DE28 is the stack argument BrnPostFx::Render
+        // reads as its override source (BrnPostFx.cpp step 5).
+        // (`mCalibrationTextureHandle` is seeded null in Construct, as @0x8240BF74-BF88.)
+        renderengine::Texture* lpCalibrationTexture = 0;
+        if (!lbEffectsAllowed && lpDispatchThreadInputBuffer != 0)
+        {
+            const CgsResource::ResourceHandle lhCalibrationTexture =
+                lpDispatchThreadInputBuffer->GetCalibrationTextureHandle();
+            if (lhCalibrationTexture != CgsResource::NULLResourceHandle)
+            {
+                mCalibrationTextureHandle = lhCalibrationTexture;
+            }
+            if (mCalibrationTextureHandle != CgsResource::NULLResourceHandle)
+            {
+                lpCalibrationTexture = *reinterpret_cast<renderengine::Texture* const*>(
+                    mCalibrationTextureHandle.mpResourceMemory);
+            }
+        }
+
+        // [FLAG PC bring-up diagnostic] the override source is observable: one line per transition.
+        {
+            static bool sbCalibrationOverrideOn = false;
+            const bool lbOn = (lpCalibrationTexture != 0);
+            if (lbOn != sbCalibrationOverrideOn)
+            {
+                sbCalibrationOverrideOn = lbOn;
+                CgsDev::Log::WriteToLog(lbOn
+                    ? "[calib] composite override source ON (calibration ramp texture)\n"
+                    : "[calib] composite override source OFF\n");
+            }
+        }
+
         const bool lbComposited =
             mbRenderPostFX &&
             PCBringUpRenderPostFxComposite(
@@ -3455,7 +3617,8 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
                 lfFrameWhiteLevel,
                 mfAspectCorrection,
                 lafTint2dColour,
-                lPostFxFrameBytes.mbMotionBlurActive);
+                lPostFxFrameBytes.mbMotionBlurActive,
+                lpCalibrationTexture);
 
         if (lbComposited)
         {

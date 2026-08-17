@@ -24,6 +24,9 @@
 #include "GameShared/GameClasses/System/PC/CgsGuiSoundPC.h"               // CgsSystem::GuiSoundPC (the GUI presentation blips)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash (event-155 keys)
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                // FLApt live-instance allocator
+#include "GameSource/Resource/BrnGameDataModuleIO.h"                      // BrnResource::GameDataIO::Input/OutputBuffer (the colour-calibration screen's IO)
+#include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"        // AllocatorList::GetRWLinearResourceAllocator (mGuiConfig.mpTextureAllocator)
+#include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h" // GetScriptedLoadGameData{Input,Output} (the PC stand-in for the scheduler's GameData IO pair)
 
 // DecFIGS types GuiModule::Construct's alternate-text palette as const RGBA*.
 // ARTIST's eight packed words at 0x82F27F84 are the complete table.
@@ -969,6 +972,10 @@ namespace BrnGui
         mViewModule.GetFlaptManager()->SetSoundTriggerHandler(
             &GuiModule::FlaptSoundTriggerCallback, this);
         mMovieManager.Construct();
+        // X360 GuiModule::Construct @0x82518B18-24: MovieManager::Construct is immediately
+        // followed by ColourCalibrationScreen::Construct (gm+301600 then gm+306752), with
+        // EffectsArbitrator::Construct just ahead of the pair.
+        mColourCalibrationScreen.Construct();
         mAlwaysAvailableComponentsManager.Construct();
 
         // X360 GuiModule::GuiModule @0x827E5B28 constructs the custom-renderer manager as a
@@ -981,6 +988,7 @@ namespace BrnGui
 
         mpGuiEventInputBuffer = 0;
         mpOutputBuffer = 0;
+        mpTextureAllocator = 0;   // filled by Prepare (X360 GuiModule::Prepare @0x82518DE0)
 
         // The flow-controller chain (the X360 Construct's flow set): the cache Construct
         // (the watcher reset @0x82505860 -> 0x824FD978), then the profile manager (X360
@@ -1045,6 +1053,42 @@ namespace BrnGui
 
     bool GuiModule::Prepare()
     {
+        // ---- X360 GuiModule::Prepare @0x82518D68, STAGE 1 (the mGuiConfig fill) -----------
+        // The console's stage 1 reads seven pool ids and seven allocators out of the GameData
+        // OUTPUT buffer's AllocatorList. The ONE row this build needs is
+        //     *(gm + 311932) = AllocatorList::GetRWLinearResourceAllocator(list, 42)
+        // (0x82518DE0's `ori r21, r11, 0xC27C`), the allocator ColourCalibrationScreen::Update
+        // carves its texture-state resource from. Bank 42 is "Network Image Allocator" and is
+        // a real RW-LINEAR bank on this build (BrnMemoryMapData.h:109), created by
+        // GameDataModule::CreateAllocators.
+        // FLAG PC drive point: the console's module scheduler hands GuiModule::Prepare the
+        // GameData IO pair; on PC the pair is the one the whole scripted load already uses.
+        // The ordering that makes this safe is proven, not assumed: BrnGameModule::GamePrepare
+        // runs `mGameDataModule.Prepare(0,0)` to completion (returning false until done) and
+        // the loading flow -- which is what calls GuiModule::Prepare -- only runs once
+        // GamePrepare has returned done, so CreateAllocators has already registered bank 42.
+        // Read once here, exactly as the console reads it once in Prepare.
+        // NO LOCK PAIR OF ITS OWN (step-11 verifier catch): the only caller,
+        // InitialLoadingScreen's stage-2 leg in BrnGameMainFlowStates.cpp (:691 LockForRead ..
+        // :1073 Prepare() .. :789 UnlockForRead), already holds this buffer's read lock, and
+        // CgsModule::IOBuffer's lock is a single status BIT (CgsIOBuffer.h:26/:42), not a count --
+        // an inner Unlock would clear the caller's lock and its own UnlockForRead would then assert
+        // "Not locked for read". GetAllocatorList's read assert is satisfied by the caller's bracket.
+        mpTextureAllocator = 0;
+        {
+            BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
+                BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
+            if (lpGameDataOutput != 0)
+            {
+                // (IsBufferLockedForReading is protected; GetAllocatorList's own read assert
+                // is the check.)
+                const BrnResource::GameDataIO::AllocatorList* lpAllocators =
+                    lpGameDataOutput->GetAllocatorList();
+                if (lpAllocators != 0)
+                    mpTextureAllocator = lpAllocators->GetRWLinearResourceAllocator(42);
+            }
+        }
+
         // Load VIDEOS\VIDEOLIST.BUNDLE synchronously (English; see MovieManager::Prepare) and
         // publish the manager so the renderer draws the active movie each frame (interim render
         // bridge; the X360 renders it through the GUI's own ViewIO ImRenderers).
@@ -1093,9 +1137,11 @@ namespace BrnGui
         // mAptAux.mRenderHandler and AptAux::Construct clears that same slot to 0.
         //
         // FLAG (allocators): the console passes the GUI module's rw general-resource and
-        // rw-linear-resource allocators (AllocatorList slots 31 / 42). This build has no
-        // AllocatorList; the same null the other GUI Prepare calls above already pass is
-        // used. The one component currently embedded (NetworkPlayerImageRenderer) uses them
+        // rw-linear-resource allocators (AllocatorList slots 31 / 42). The scripted-load
+        // GameData OUTPUT's AllocatorList IS reachable now (stage 1 above reads slot 42 out
+        // of it into mpTextureAllocator, post-fx step 11); this call still passes the null
+        // the other GUI Prepare calls above pass -- widening it to slots 31/42 is the
+        // custom-renderer layer's own follow-up, not this wave's. The one component currently embedded (NetworkPlayerImageRenderer) uses them
         // to create its triple-buffered avatar textures, so with nulls its Prepare cannot
         // complete -- see the FLAG in BrnCustomRendererManager.h. It is wired, reachable and
         // honest about not being fed; it is NOT faked into reporting success.
@@ -1421,6 +1467,9 @@ namespace BrnGui
     void GuiModule::Destruct()
     {
         mMovieManager.Destruct();
+        // X360 GuiModule::Destruct @0x82507690: ColourCalibrationScreen::Destruct is the LAST
+        // sub-object destruct, immediately before the base CgsGui::GuiModule::Destruct.
+        mColourCalibrationScreen.Destruct();
     }
 
     // Post one event into each subscribing observer's in-queue (the EventInterpreterModule
@@ -1976,6 +2025,29 @@ namespace BrnGui
                     mMovieManager.GetReceiverQueue()->AddEvent(lpEvent, liId, liSize);
                     break;
 
+                case 514:   // colour-calibration screen SHOW
+                case 515:   // colour-calibration screen HIDE
+                    // X360 GuiModule::HandleEventsPostBaseModuleUpdate @0x82507800 -- the
+                    // function that runs immediately after the base module update
+                    // (@0x8252A330) and walks the module OUT-event queue, dispatching
+                    // 493 -> the collision-world latches, 508/509 -> MovieManager::RecvEvent
+                    // and 514/515 -> ColourCalibrationScreen::RecvEvent
+                    // (`bl 0x824471D0` @0x825079A8, with r5 still holding the event id).
+                    // THIS DRAIN IS THE PC STAND-IN FOR THAT FUNCTION -- it already carries
+                    // its 508/509 arm -- so the calibration arm belongs here, at the same
+                    // point in the frame (after the flows have ticked and posted).
+                    // This is the RE-KEYED form: the console's base module rewraps each
+                    // channel-40 GuiEventOut record by its inner event type before the
+                    // out-queue is walked, so HandleEventsPostBaseModuleUpdate sees 514/515
+                    // directly. The PC queue does not re-key, so the CHANNEL-40 form is
+                    // handled in `case 40` below; both are the same console wire.
+                    mColourCalibrationScreen.RecvEvent(lpEvent, liId);
+                    // The console does NOT consume it: BridgeGuiToDirector @0x823CBF70 walks
+                    // the SAME out-event queue afterwards and turns 514/515 into
+                    // SetGotColourCalibration{Shown,Hidden}Event. Forward it on.
+                    mGuiOutQueue.AddEvent(lpEvent, liId, liSize);
+                    break;
+
                 case 40:   // channel 40: GuiEventOut command records -> the game bridge
                 {
                     // Command 507 = "refresh the player name" (the {1, 507, 12} record
@@ -1993,6 +2065,39 @@ namespace BrnGui
                     {
                         UpdatePlayerName();
                         break;   // consumed, exactly as the console's Update arm consumes it
+                    }
+
+                    // Commands 514 / 515 -- the colour-calibration screen show/hide requests.
+                    // BrnGui::CrashNavColourCalibrate::ShowCalibrationCard @0x824CE7A8 posts
+                    // them on CHANNEL 40 as { muHeader0 = 1, muEventType = 514/515,
+                    // muHeader2 = 12 } 16-byte records (`li r5,0x28` = channel 40,
+                    // `li r6,0x10` = 16, `li r11,0x202`/`0x203`), NOT as type-keyed events.
+                    // On the console the base module's out-event rewrap turns them into
+                    // plain 514/515 before HandleEventsPostBaseModuleUpdate @0x82507800 sees
+                    // them; the PC queue keeps them on their channel, so the arm is applied
+                    // here too. NOT consumed -- BridgeGuiToDirector decodes the same record
+                    // out of mGuiOutQueue (BrnGameModule.cpp `case 514:` / `case 515:`), so
+                    // it must still be forwarded below.
+                    if (liSize >= 8)
+                    {
+                        const u32 luCalibrationCommand =
+                            reinterpret_cast<const u32*>(lpEvent)[1];
+                        if (luCalibrationCommand == 514u || luCalibrationCommand == 515u)
+                        {
+                            const CgsModule::Event* lpCalibrationPayload = lpEvent;
+                            if (liSize >= 12)
+                            {
+                                const u32 luOffset = reinterpret_cast<const u32*>(lpEvent)[2];
+                                if (luOffset >= 12u && static_cast<s32>(luOffset) < liSize)
+                                {
+                                    lpCalibrationPayload =
+                                        reinterpret_cast<const CgsModule::Event*>(
+                                            reinterpret_cast<const u8*>(lpEvent) + luOffset);
+                                }
+                            }
+                            mColourCalibrationScreen.RecvEvent(
+                                lpCalibrationPayload, static_cast<s32>(luCalibrationCommand));
+                        }
                     }
                     mGuiOutQueue.AddEvent(lpEvent, liId, liSize);
                     break;
@@ -2176,6 +2281,72 @@ namespace BrnGui
         mAlwaysAvailableComponentsManager.Prepare(&s_GuiAccessPointers);
         mAlwaysAvailableComponentsManager.Update();
         mAlwaysAvailInQueue.Clear();
+
+        // ---- 3c. the colour-calibration screen (X360 GuiModule::Update @0x82529B04) -----
+        // The console ticks it here: after the profile/overlay pumps and BEFORE the base
+        // module update ticks the flows, with the module's GUI OUT buffer held write-locked
+        // across the whole update. Its four arguments are recovered in the header note; on PC
+        // the GameData IO pair is the scripted-load pair (the one place it is live and
+        // pumped, the same source BrnGameModule::ResourceUpdateThread reads) and the GUI OUT
+        // buffer's mOutEvents stand-in is mGuiOutQueue.
+        // FLAG PC bring-up (argument sourcing only -- the screen body is the real
+        // reconstruction): DELETE-WHEN a module scheduler hands GuiModule::Update its IO set.
+        // [FLAG PC bring-up TEST HOOK -- OFF BY DEFAULT] BRN_POSTFX_CALIB_SCREEN_TEST=<n>: 300
+        // updates before the n-th GuiModule::Update ensure the CN_COLOUR state's two APT resources
+        // are loaded (the same GuiCache::EnsureResourcesAreLoaded call BrnBaseFlow::UpdateStreaming
+        // makes on state entry, over the same {143 APT, 34 APT} list CrashNavColourCalibrate::
+        // maResourcesToLoad carries -- 143 = BRNCRASHNAVCOLOURCALIBRATE, the bundle that holds the
+        // calibration card raster the screen acquires from pool 9), on the n-th feed the screen a
+        // 514 (show), and 600 updates later a 515 (hide). Stands in for the flow entering CN_COLOUR
+        // + CrashNavColourCalibrate::SetupComponents / OnLeave, all reconstructed but UNREACHABLE on
+        // this build (the FSM's only inbound edge to CN_COLOUR is "TO_COLOUR", posted by
+        // CrashNavSettings, which has no TU). Exercises the whole chain: APT load -> screen acquire
+        // -> 546 -> BridgeGuiToGame -> dispatch buffer -> the composite's calibration ramp override.
+        // Without the resource load the acquire returns the null handle and the screen's own
+        // "!= NULLResourceHandle" assert (cpp:147) fires -- measured. DELETE-WHEN CrashNavSettings lands.
+        {
+            static s32  siTestShowAt = -2;   // -2 = not read yet, -1 = knob absent
+            static u32  suUpdates    = 0u;
+            if (siTestShowAt == -2)
+            {
+                const char* lpcEnv = std::getenv("BRN_POSTFX_CALIB_SCREEN_TEST");
+                siTestShowAt = (lpcEnv != 0 && lpcEnv[0] != '\0') ? std::atoi(lpcEnv) : -1;
+                if (siTestShowAt >= 0)
+                    CgsDev::Log::WriteToLog("[calib-screen] TEST HOOK armed: load APT at N-300, show at update N, hide at N+600\n");
+            }
+            ++suUpdates;
+            if (siTestShowAt >= 300)
+            {
+                CgsModule::Event lEvent;
+                if (suUpdates == static_cast<u32>(siTestShowAt) - 300u)
+                {
+                    static const CgsGui::sResourceTuple kaCalibrateResources[] =
+                        { { 143u, CgsGui::E_GUI_RESOURCETYPE_APT }, { 34u, CgsGui::E_GUI_RESOURCETYPE_APT } };
+                    mGuiCache.EnsureResourcesAreLoaded(kaCalibrateResources, 2u);
+                    CgsDev::Log::WriteToLog("[calib-screen] TEST HOOK: CN_COLOUR APT resources {143,34} requested\n");
+                }
+                else if (suUpdates == static_cast<u32>(siTestShowAt))
+                    mColourCalibrationScreen.RecvEvent(&lEvent, 514);
+                else if (suUpdates == static_cast<u32>(siTestShowAt) + 600u)
+                    mColourCalibrationScreen.RecvEvent(&lEvent, 515);
+            }
+        }
+        {
+            BrnResource::GameDataIO::InputBuffer* lpGameDataInput =
+                BrnGameMainFlowController::GetScriptedLoadGameDataInput();
+            BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
+                BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
+            if (lpGameDataInput != 0)
+            {
+                // The screen's PREPARE_TO_SHOW arm pushes an AcquireResourceRequest onto the
+                // request interface, which asserts the buffer is locked for WRITING -- the
+                // same bracket PrepareWorldData is driven under.
+                lpGameDataInput->LockForWrite();
+                mColourCalibrationScreen.Update(lpGameDataInput, lpGameDataOutput,
+                                                &mGuiOutQueue, mpTextureAllocator);
+                lpGameDataInput->UnlockForWrite();
+            }
+        }
 
         // ---- 4. the flow ticks (each current state's PreUpdate/Update/PostUpdate) -----
         mScreenFlow.Update();

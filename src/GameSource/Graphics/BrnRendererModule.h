@@ -180,9 +180,12 @@ struct OcclusionJobData
 
 // LoadingScreenRenderer is the real type (BrnGame::LoadingScreenRenderer).
 
-struct ResourceHandle
-{
-};
+// mCalibrationTextureHandle is the real CgsResource::ResourceHandle (DWARF BrnRendererModule.h:692;
+// the console's Render latches DispatchThreadInputBuffer::GetCalibrationTextureHandle() into it at
+// 0x8240DDB8 and Construct seeds it from NULLResourceHandle at 0x8240BF74). The empty global-namespace
+// `struct ResourceHandle {}` that used to stand here was the ShadowMapRenderManager class of
+// placeholder: a DIFFERENT type that silently shadowed the real one and occupied one byte.
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
 
 // BrnGraphics::ShadowMapRenderManager is the real type now
 // (GameSource/Graphics/BrnShadowMapRenderManager.h) -- mShadowMapRenderManager below is embedded
@@ -743,7 +746,7 @@ private:
     s32                                 miFrameStallCountdown;
     CgsGraphics::OcclusionCullManager   mOcclusionCullManager;
     BrnGame::LoadingScreenRenderer      mLoadingScreenRenderer;
-    ResourceHandle                      mCalibrationTextureHandle;
+    CgsResource::ResourceHandle         mCalibrationTextureHandle;   // X360 +0xC920
     BrnCpuMonitors                      mCpuMonitors;
     BrnGpuMonitors                      mGpuMonitors;
     BrnGpuHwCounters                    mGpuHwMonitors;
