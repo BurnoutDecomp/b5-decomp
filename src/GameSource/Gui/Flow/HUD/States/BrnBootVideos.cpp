@@ -86,15 +86,21 @@ namespace BrnGui
             if (lpStateInterface == 0)
                 return;
             BrnGui::GuiEventPlayVideo lPlayEvent;
-            lPlayEvent.muVideoResourceId =
-                static_cast<u32>(CgsResource::ID::HashString(reinterpret_cast<const u8*>(lpcName)));
+            // ⚠️ ZERO-extend, never sign-extend: the console's HashString ends
+            // `clrldi r3,r11,32`, so the 64-bit id's top half is always 0. Our hasher
+            // returns s32, and letting that widen directly turns every hash with bit 31 set
+            // into 0xFFFFFFFF........ -- which matches nothing in the pool. (EAFranchise,
+            // 0xF4DE3E5C, is exactly such a hash.)
+            lPlayEvent.muVideoResourceId = static_cast<u64>(static_cast<u32>(
+                CgsResource::ID::HashString(reinterpret_cast<const u8*>(lpcName))));
             lPlayEvent.muSoundStreamName  = static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpcName));
             lPlayEvent.mbKeepMemoryWhenFinished = lbKeepMemoryWhenFinished;
             {
                 char lac[128];
                 std::snprintf(lac, sizeof(lac),
-                              "[BootVideos] play '%s' (id=0x%08X sound=0x%08X keep=%d)\n",
-                              lpcName, lPlayEvent.muVideoResourceId,
+                              "[BootVideos] play '%s' (id=0x%016llX sound=0x%08X keep=%d)\n",
+                              lpcName,
+                              static_cast<unsigned long long>(lPlayEvent.muVideoResourceId),
                               lPlayEvent.muSoundStreamName, (int)lbKeepMemoryWhenFinished);
                 CgsDev::Log::WriteToLog(lac);
             }

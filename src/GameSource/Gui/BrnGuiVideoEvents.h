@@ -24,7 +24,10 @@ namespace BrnGui
     // queued movie (DecFIGS BrnGui::GuiEventPlayVideo).
     struct GuiEventPlayVideo : public CgsGui::GuiEvent<KI_GUIEVENT_PLAY_VIDEO>
     {
-        u32  muVideoResourceId;            // VideoDataResource id to load + play
+        // ⭐ WIDENED 2026-08-16 (boot audit F-P8b-5/F-P8b-6): the producers store this with
+        // `std` at VideoDefinition+0x10 -- it is one 64-bit CgsResource::ID, and the PC was
+        // truncating it to u32 on the way in and back out again.
+        u64  muVideoResourceId;            // +0x10 VideoDataResource id to load + play
         f32  mafRectangle[4];              // left, top, right, bottom (logical 1280x720) -- X360 Vector4
         s32  miCrossfadeInFrames;
         s32  miCrossfadeOutFrames;

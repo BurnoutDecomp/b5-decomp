@@ -155,6 +155,12 @@ namespace BrnGui
     // @ 0x82473A60 -- unregister the observed set.
     void BootPreload::OnLeave()
     {
+        // ⭐ 2026-08-16 (boot audit F-P8b-12): the console's OnLeave opens by asserting the
+        // cache pointer. Trivial as a line of code, not trivial as a tripwire -- leaving
+        // BF_PRELOAD without a cache means the whole preload ladder above ran against
+        // nothing, and this is the one place that would say so.
+        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+
         if (mpStateInterface != 0)
             mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
     }

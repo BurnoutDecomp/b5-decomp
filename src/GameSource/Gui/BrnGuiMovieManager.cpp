@@ -57,6 +57,13 @@ namespace BrnGui
         // The PC movie/stream audio player (single movie at a time -> file-static, no header churn).
         CgsSystem::MovieAudioPC g_movieAudio;
         char                    g_acSoundStreamPath[260] = { 0 };
+
+        // dword_830082A8 -- the .data DEFAULT VIDEO SOUND NAME that VideoDefinition::Prepare
+        // seeds +0x18 from (`lwz r10, dword_830082A8; stw r10, 0x18(r31)` @0x824729C8/D8).
+        // Its image initialiser is 0x0233B6D5, read out of the decrypted XEX. Kept as a
+        // named mutable global rather than folded into Prepare because the console's is
+        // mutable .data -- if a writer turns up, this is its home.
+        u32 gsuDefaultVideoSoundName = 0x0233B6D5u;
     }
 
     // ---- VideoDefinition -----------------------------------------------------------------------------
@@ -67,18 +74,22 @@ namespace BrnGui
     //   std r3   -> +0x10 : CgsResource::ID::HashString(&unk_820046A7) -- a default video-name hash.
     //                       The literal string at 0x820046A7 is not in the export (address only), so the
     //                       hash argument is an honest placeholder; the call structure is faithful.
-    //   stw      -> +0x18 : miCrossfadeInFrames = dword_830082A8 (a .data crossfade-default global)
+    //   stw      -> +0x18 : mSoundStreamName = dword_830082A8 (the .data default sound name)
     //   stw 0    -> +0x1C, +0x20 ; stb 0 -> +0x24, +0x25, +0x26
+    //
+    // ⭐ FIELD ATTRIBUTION CORRECTED 2026-08-16 (boot audit F-P8b-6). +0x10 is ONE 8-byte id
+    // (`std r3`), not an id plus a sound name; the dword_830082A8 seed at +0x18 IS the sound
+    // name; and the two crossfades are +0x1C/+0x20. See the header for the full store list.
     void MovieManager::VideoDefinition::Prepare()
     {
         mafRectangle[0] = 0.0f; mafRectangle[1] = 0.0f;
         mafRectangle[2] = 1.0f; mafRectangle[3] = 1.0f;
-        mVideoResourceId = static_cast<u32>(CgsResource::ID::HashString(
-            reinterpret_cast<const u8*>("")));   // [unrecoverable: literal @0x820046A7]
-        mSoundStreamName = 0;                     // high dword of the +0x10 std (32-bit hasher -> 0)
-        miCrossfadeInFrames = 0;                  // dword_830082A8 default (.data; value not in export)
+        // zero-extended, matching the console's `clrldi r3,r11,32` tail (see BrnBootVideos).
+        mVideoResourceId = static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
+            reinterpret_cast<const u8*>(""))));   // the "" literal @0x820046A7
+        mSoundStreamName = gsuDefaultVideoSoundName;
+        miCrossfadeInFrames = 0;
         miCrossfadeOutFrames = 0;
-        muField20 = 0;
         mbPreload = false;
         mbKeepMemoryWhenFinished = false;
         mbDisableCustomSoundtracks = false;
@@ -101,7 +112,6 @@ namespace BrnGui
         mSoundStreamName = lpOther->mSoundStreamName;
         miCrossfadeInFrames = lpOther->miCrossfadeInFrames;
         miCrossfadeOutFrames = lpOther->miCrossfadeOutFrames;
-        muField20 = lpOther->muField20;
         mbPreload = lpOther->mbPreload;
         mbKeepMemoryWhenFinished = lpOther->mbKeepMemoryWhenFinished;
         mbDisableCustomSoundtracks = lpOther->mbDisableCustomSoundtracks;
@@ -218,9 +228,17 @@ namespace BrnGui
     }
 
     // [PC IO] Resolve the VideoDataResource for luResId out of the loaded bundle (the X360 waits for the
-    // async EVENT_ACQUIRERESOURCE; the PC port looks it up in the pool synchronously). Falls back to the
-    // first VideoData resource if the id lookup misses (single-video bundle / id-scheme mismatch).
-    bool MovieManager::AcquireVideoDataResource(u32 luResId)
+    // async EVENT_ACQUIRERESOURCE; the PC port looks it up in the pool synchronously).
+    //
+    // ⭐ THE TYPE-SCAN FALLBACK IS GONE, 2026-08-16 (boot audit F-P8b-3). This used to fall
+    // back to `FindFirstResourceOfType(E_RESOURCETYPE_VIDEODATA)` when the id lookup missed.
+    // There is no console analogue -- the acquire is strictly BY HANDLE: the queued 64-bit
+    // hash comes back from PendingVideoDataResourceRequest @0x824F7808 (which asserts
+    // IsMovieQueued) and goes straight into CreateFromHandle @0x82507DD4; no type scan
+    // exists anywhere in the image. The fallback did not make a miss survivable, it made it
+    // INVISIBLE: an id-scheme mismatch silently bound and played the WRONG video, which is
+    // exactly the class of bug the boot-video work kept chasing. A miss now fails, loudly.
+    bool MovieManager::AcquireVideoDataResource(u64 luResId)
     {
         if (!mbBundleLoaded)
             return false;
@@ -229,12 +247,11 @@ namespace BrnGui
         CgsResource::ID lId;
         lId.SetHash(luResId);
         CgsResource::Entry* lpEntry = mMoviePool.FindResource(lId, false, static_cast<u16>(0xFFFF), &liIndex);
-        if (lpEntry == 0)
-            lpEntry = mMoviePool.FindFirstResourceOfType(CgsResource::E_RESOURCETYPE_VIDEODATA, &liIndex);
         {
             char lac[96];
-            std::snprintf(lac, sizeof(lac), "[MovieManager] acquire id=0x%08X entry=%s idx=%d\n",
-                          luResId, (lpEntry ? "found" : "NOT FOUND"), liIndex);
+            std::snprintf(lac, sizeof(lac), "[MovieManager] acquire id=0x%016llX entry=%s idx=%d\n",
+                          static_cast<unsigned long long>(luResId),
+                          (lpEntry ? "found" : "NOT FOUND"), liIndex);
             CgsDev::Log::WriteToLog(lac);
         }
         if (lpEntry == 0)
@@ -318,6 +335,10 @@ namespace BrnGui
         mQueuedMovie.mafRectangle[2] = lpEv->mafRectangle[2];
         mQueuedMovie.mafRectangle[3] = lpEv->mafRectangle[3];
         mQueuedMovie.mVideoResourceId = lpEv->muVideoResourceId;
+        // ⭐ the sound name rides across with the id (boot audit F-P8b-5/F-P8b-6): the
+        // producer fills it, so the queued definition has to carry it or the whole point of
+        // filling it is lost at the first copy.
+        mQueuedMovie.mSoundStreamName = lpEv->muSoundStreamName;
         mQueuedMovie.miCrossfadeInFrames = lpEv->miCrossfadeInFrames;
         mQueuedMovie.miCrossfadeOutFrames = lpEv->miCrossfadeOutFrames;
         mQueuedMovie.mbPreload = lpEv->mbPreload;
