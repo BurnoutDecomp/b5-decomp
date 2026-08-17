@@ -383,8 +383,34 @@ namespace Io
     // Return-type name tags for the accessors (DWARF typedefs; full template layouts land
     // with the request-interface TUs). Incomplete forward declarations suffice: the accessors
     // only hand out a pointer to embedded storage.
-    template <int N> struct RequestInterface;          // RequestInterface<4096>
-    template <int N> struct AttribSysRequestInterface; // AttribSysRequestInterface<2048>
+    // ⭐ DEFINED 2026-08-17 (boot audit F-P6-17 / F-P5-10). These were forward declarations
+    // only -- "full template layouts land with the request-interface TUs" -- which meant the
+    // accessors below returned pointers to INCOMPLETE types and LoadSoundModule's forwarding
+    // arm could not be written at all: the sound module's initial-load resource requests had
+    // nowhere to go.
+    //
+    // The layout is derived, not guessed, and three sources agree:
+    //   1. the sibling interfaces (GameDataIO::RequestInterface<N>,
+    //      AttribSysIO::AttribSysRequestInterface<N>) each hold their queue -- a
+    //      VariableEventQueue<N,16> -- at offset 0, and nothing else;
+    //   2. the X360 spans measured from this buffer's own accessor return tails:
+    //      RequestInterface<4096> = 0x1014-0x04 = 0x1010, AttribSysRequestInterface<2048>
+    //      = 0x1824-0x1014 = 0x810. VariableEventQueue<BUFSIZE,16> is BUFSIZE+16 bytes by
+    //      its documented layout (+0 bool, +1 macData[BUFSIZE], +BUFSIZE+4/+8/+12 the three
+    //      s32s), so 4096+16 == 0x1010 and 2048+16 == 0x810 exactly;
+    //   3. RootOutputBuffer::Construct in this very header already reinterpret_casts the two
+    //      storage blocks to VariableEventQueue<4096,16> and VariableEventQueue<2048,16>.
+    //
+    // The opaque *Storage members stay exactly where they are, so no offset moves; these
+    // types are the typed view the accessors hand out.
+    template <int N> struct RequestInterface
+    {
+        CgsModule::VariableEventQueue<N, 16> mRequestQueue;   // offset 0, per the siblings
+    };
+    template <int N> struct AttribSysRequestInterface
+    {
+        CgsModule::VariableEventQueue<N, 16> mRequestQueue;   // offset 0, per the siblings
+    };
 
     struct RootOutputBuffer : public CgsModule::IOBuffer
     {
