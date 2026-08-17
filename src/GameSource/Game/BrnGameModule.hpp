@@ -503,6 +503,11 @@ namespace BrnGame
         // This sub-step's GUI module INPUT buffer (live between CreateStaticIOBuffers /
         // DestroyStaticIOBuffers; the flow states' initial-FSM post reaches it here).
         CgsGui::CgsGuiModuleIO::InputBuffer* GetGuiInputBuffer() { return mpGuiInputBuffer; }
+        // The console reaches the GUI module through the module scheduler (`*off_830102D0 +
+        // 0x6EAA20`, the raw member address, in LoadGUIModule @0x823EF310 and everywhere else
+        // on the loading path). The PC has no scheduler, so the loading-screen state reaches
+        // it by name -- it is the same object at the same place in the module list.
+        BrnGui::GuiModule& GetGuiModule() { return mGuiModule; }
 
         // ---- replay-output bridge family (GameSource/Unity/../Game/GameBridgeReplayToX.cpp) -------
         // The mirror of the controller bridges: each reads the replay module's pre/post-sim OUTPUT

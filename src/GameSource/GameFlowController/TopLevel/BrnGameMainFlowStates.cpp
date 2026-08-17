@@ -969,13 +969,44 @@ void MainGameFlowStateInitialLoadingScreen::Update()
             AdvanceLoadingStage(E_LOADINGSTAGE_GUIMODULE);
         break;
     case E_LOADINGSTAGE_GUIMODULE:
-        // X360: LoadGUIModule (0x823EF310) -- the GUI module load stage ALSO posts the
-        // initial flow FSMs: GuiEventRunFsm{BrnBFPreFsm -> HUD} (BF_PRELOAD, the first
-        // boot state) and GuiEventRunFsm{BrnOverlay -> OVERLAY} (the popup overlay flow,
-        // record {fsmId, stateId 0, flow 2} @0x823EF3A0). The GUI module itself is
-        // prepared by BrnGameModule's inline hookup; the RunFsm posts are the real kick.
+        // ⭐ THIS IS WHERE THE GUI IS BUILT, 2026-08-16 (boot audit F-P1-1/F-P5-2). X360
+        // LoadGUIModule @0x823EF310:
+        //
+        //     prepared = (gui->vtable+0x58)(gui, ...);          // GuiModule::Prepare
+        //     if (!prepared) {
+        //         (gui->vtable+0x60)(gui, 0x40, updIn, updOut, ...);   // the GUI update leg
+        //         LockForRead(both); BridgeGuiToResource(gm, ...); UnlockForRead(both);
+        //         return 0;                                    // stay in this stage
+        //     }
+        //     LockForWrite(guiIn);
+        //     AddEvent({CgsIDCompress("BrnBFPreFsm"), 0, flow 1}, 0x90, 0x18);
+        //     AddEvent({CgsIDCompress("BrnOverlay"),  0, flow 2}, 0x90, 0x18);
+        //     UnlockForWrite(guiIn); return 1;
+        //
+        // The two RunFsm posts were already here and already carry the console's payloads
+        // (id 0x90, size 0x18, flow words 1 and 2). What was missing was everything they
+        // are supposed to be GATED ON: this stage posted them immediately and advanced,
+        // because the GUI had already been prepared back in BrnGameModule::Construct.
+        //
+        // [FLAG] The retry leg is not reproduced, and does not need to be YET: this build's
+        // GuiModule::Prepare is the one-shot synchronous collapse of the console's 16-stage
+        // resumable ladder (@0x82518D68), so it answers true on the first pump and there is
+        // no not-done pass to service. That makes stage 2 one long frame with the loading
+        // screen up rather than N frames of a live GUI -- the right ORDER, not yet the right
+        // PACING. Adopting the real ladder (and with it this retry leg, the vtable+0x60
+        // update-set-0x40 pump and the BridgeGuiToResource forward) is boot-audit F-P8a-1.
         {
             BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+
+            if (!lpGameModule->GetGuiModule().IsPrepared())
+            {
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint
+                        << "InitialLoadingScreen: loading stage 2 (GUIModule) -- preparing\n";
+                lpGameModule->GetGuiModule().Prepare();
+                break;   // do NOT post or advance until it reports done
+            }
+
             CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput = lpGameModule->GetGuiInputBuffer();
             if (lpGuiInput != 0)
             {
