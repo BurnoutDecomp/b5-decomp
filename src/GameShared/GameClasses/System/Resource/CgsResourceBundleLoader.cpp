@@ -149,6 +149,27 @@ namespace CgsResource
             ++liShared;
         }
 
+        // ⭐ ON THE MISSING "ENTRY-LIST LEG" (boot audit F-P7-21), resolved 2026-08-17.
+        //
+        // The console's CheckListDependencies closes with
+        // `mbCreateEntryListResource = CheckEntryListDependency()` @0x828FF460-70, and this
+        // mirror has no equivalent -- which the audit recorded as "no per-bundle EntryList
+        // validation on PC".
+        //
+        // It is a mis-scope, not a gap. CheckEntryListDependency asks whether THE LIST'S OWN
+        // entry-list resource is resident (`FindResource(mListId, ...)`), and mListId exists
+        // only when a resource LIST is being allocated. This function loads a BUNDLE: it has
+        // no list id and creates no entry-list resource, so there is nothing for that leg to
+        // validate. Grep confirms it -- not one list-id or entry-list symbol appears in this
+        // file.
+        //
+        // The leg IS present where it belongs: AllocatePoolModuleState carries
+        // mbCreateEntryListResource and calls CheckEntryListDependency / CreateEntryListResource
+        // (CgsAllocatePoolModuleState.cpp:133/:169/:221). What this mirror borrows from
+        // CheckListDependencies is only the per-entry dependency pass above, which is the part
+        // a bundle load needs.
+        // Recorded here so the finding is not re-opened against this function.
+
         // ---- pass 1: create + allocate + copy each resource ---------------------------
         s32 liLoaded = 0;
         for (u32 luIndex = 0; luIndex < luEntryCount; ++luIndex)
