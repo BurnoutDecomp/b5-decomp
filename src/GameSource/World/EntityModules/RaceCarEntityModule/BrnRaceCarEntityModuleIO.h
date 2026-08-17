@@ -406,9 +406,13 @@ namespace RaceCarEntityModuleIO
             // PRE-SCENE copy of the interface) but it is the same fifteen un-Constructed
             // queues, so it is made here rather than left as a latent trap.
             mVehicleInputInterface.Construct();               // X360 +16
-            // [FLAG] the console's InSceneUpdateInterface::Construct(+142192) on
-            // mSceneInputInterface is still not emitted -- that interface's Construct belongs to
-            // the CgsSceneManager IO TU and has no body in this tree yet.
+            // The console's InSceneUpdateInterface::Construct(+142192) on mSceneInputInterface.
+            // Emitted as of cars step 1c (2026-08-17): the body exists (CgsSceneManagerIO_SceneUpdate
+            // .cpp:276, X360 0x822E6550, 25 queue Constructs) and the ghost-car fix's
+            // ActiveRaceCar::RemoveFromScene now posts into this very copy of the interface --
+            // the first boot without this line died on "mpEvents != NULL" /
+            // "mRemoveVolumeInstanceQueue too small" (never-Constructed queue, the IO-buffer trap).
+            mSceneInputInterface.Construct();                 // X360 +142192
             // ---- the four Clears, in the console's order (0x822EA4E0) ----
             mActiveRaceCarOutputInterface.Clear();            // X360 +960960
             mGlobalRaceCarOutputInterface.Clear();            // X360 +971440

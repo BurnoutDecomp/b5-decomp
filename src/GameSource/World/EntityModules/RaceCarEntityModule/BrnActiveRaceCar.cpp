@@ -38,7 +38,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "rw/math/vpu/matrix44affine_operation.h"    // rw::math::vpu::Mult
 #include "GameSource/Math/BrnMathUtils.h"                // BrnMath::IsNormal
-#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h" // VehicleInputInterface::CreateRaceCar
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h" // VehicleInputInterface::CreateRaceCar / RemoveRaceCar
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface (the Detach chain's four Remove* posts)
 #include "GameSource/World/BrnEntityTypes.h"              // BrnWorld::E_ENTITYTYPE_RACECAR (the Attach seed)
 #include "SharedClasses/World/BrnCollisionTag.h"          // BrnWorld::KU_COLLISION_FLAG_FATAL (IsWrecked)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint / gxMessageFilterFlags ([engine-diag])
@@ -362,6 +363,273 @@ void ActiveRaceCar::Attach(RaceCar* lpRaceCar, bool lbCarSelectDontStreamAudio)
     mfTimeInWater      = 0.0f;                                     // 0x784
     mbIsWrecked        = false;                                    // 0x782
     mbCrashedIntoWater = false;                                    // 0x783
+}
+
+// ============================================================================
+// Detach @ 0x822EB578   (ghost-car wave 2026-08-17)  -- THE INVERSE OF Attach.
+//
+// The only caller is RaceCarEntityModule::DetachActiveRaceCar @0x822FEDF8. Everything
+// below is the asm read store-for-store (0x822EB578..0x822EB6AC); the two arguments are
+// DWARF-declared (BrnActiveRaceCar.h:670 `void Detach(VehicleInputInterface *,
+// OutputBuffer_PreScene::SceneInputInterface *)`) and match the asm's r4 / r5.
+//
+//   0x822EB590  IsAttached()                       assert BrnActiveRaceCar.cpp:0x3AF == :943
+//   0x822EB5C8  lwz r11,0x6F0 -> mpRaceCar != NULL  assert :0x3B0 == :944
+//   0x822EB5F4  IsActive() -> the teardown pair    RemoveHandlingModel(r4=vehicle),
+//                                                  RemoveFromScene(r4=scene, r5=vehicle)
+//                                                  (note the SWAP: Detach's own r5 becomes
+//                                                   RemoveFromScene's r4)
+//   0x822EB624  IsAttached()                       assert BrnActiveRaceCar.h:0x441 == :1089
+//   0x822EB654  RaceCar::RemoveActiveRaceCar(mpRaceCar)  -- clears the BACK pointer first,
+//                                                  which is what lets RemoveRaceCar's
+//                                                  RaceCar::RemoveFromWorld assert
+//                                                  "mpActiveRaceCar == NULL" pass.
+//   0x822EB670..0x822EB694  the ten field stores, in asm order:
+//        stw 1  0x744  meOnlineState = E_ONLINE_STATE_NORMAL   (Attach seeds the same value)
+//        stb 1  0x79D  mbRenderThisFrame = true
+//        stw 0  0x6F0  mpRaceCar = 0
+//        stb 0  0x740  muState   = E_STATE_INACTIVE   <-- the ghost-car fix
+//        stb 0  0x799  mbIsDisconnectedFromNetwork
+//        stb 0  0x79A  mbIsInCarSelectOnline
+//        stb 0  0x79B  mbCarSelectOnlineStateChanged
+//        stb 0  0x79C  mbReceivedNetworkDriverControls
+//        stw 0  0x794  miFlashFrequency
+//        stb 0  0x781  mbAIToBeActivated
+//   0x822EB698 / 0x822EB6A4  BaseResourcePtr::CreateFromHandle(this+0x1C90, &dword_82FAD960)
+//                            and (this+0x1CB0, ...) -- `slot = NULLResourcePtr`
+//                            (dword_82FAD960 IS NULLResourcePtr+0x14, the sentinel's
+//                            {mpThis,muThreadId} pair; see CgsResourcePtr.h:169). Reproduced
+//                            as the HANDLE half only, which is the half this class models
+//                            (maPad1C90a + the two named ResourceHandles).
+//                            [FLAG] the alias-list half of CreateFromHandle is not reproduced
+//                            ANYWHERE in this tree -- OnResourcesLoaded's banner records the
+//                            same gap for the write side.
+//
+// NOT cleared by the console: meActiveRaceCarIndex (+0x748). The slot keeps its own index for
+// life (Construct is its only writer) -- DetachActiveRaceCar reads it BEFORE calling this, and
+// RaceCar::RemoveActiveRaceCar decides separately whether the GLOBAL car forgets it.
+// ============================================================================
+void ActiveRaceCar::Detach( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
+                            CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface )
+{
+    CGS_ASSERT(IsAttached(), "IsAttached()");            // X360 BrnActiveRaceCar.cpp:943
+    CGS_ASSERT(mpRaceCar != 0, "mpRaceCar != NULL");     // :944
+    if (mpRaceCar == 0)
+    {
+        return;
+    }
+
+    if (IsActive())
+    {
+        RemoveHandlingModel(lpVehicleInterface);
+        RemoveFromScene(lpSceneInterface, lpVehicleInterface);
+    }
+
+    CGS_ASSERT(IsAttached(), "IsAttached()");            // BrnActiveRaceCar.h:1089
+
+    mpRaceCar->RemoveActiveRaceCar();
+
+    meOnlineState                   = E_ONLINE_STATE_NORMAL;   // 0x744 = 1
+    mbRenderThisFrame               = true;                    // 0x79D = 1
+    mpRaceCar                       = 0;                       // 0x6F0 = 0
+    muState                         = E_STATE_INACTIVE;        // 0x740 = 0
+    mbIsDisconnectedFromNetwork     = false;                   // 0x799
+    mbIsInCarSelectOnline           = false;                   // 0x79A
+    mbCarSelectOnlineStateChanged   = false;                   // 0x79B
+    mbReceivedNetworkDriverControls = false;                   // 0x79C
+    miFlashFrequency                = 0;                       // 0x794
+    mbAIToBeActivated               = false;                   // 0x781
+
+    // `slot = CgsResource::NULLResourcePtr` x2 (see the banner). The wrappers themselves are
+    // this class's two opaque ResourcePtr spans; what it models -- and what AddHandlingModel
+    // reads back -- is the handle each stores at its own +0x14, so the pair is dropped to the
+    // null handle by name.
+    mDeformationModelHandle = CgsResource::NULLResourceHandle;   // this+0x1C90 (+0x14)
+    mGraphicsModelHandle    = CgsResource::NULLResourceHandle;   // this+0x1CB0 (+0x14)
+
+    // ⚠️ FLAG PC quality-of-life (verify F2, ghostcar): NOT a console store. The render-pose
+    // interpolator (mBodyPoseTrack / maWheelPoseTracks, PC-only, reset in Construct) keeps the
+    // OLD car's pose across a slot re-use; a re-spawn into this slot at another location would
+    // blend old->new for one frame (a one-frame streak). Reset the history with the slot.
+    mBodyPoseTrack.Reset();
+    for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
+        maWheelPoseTracks[luWheel].Reset();
+}
+
+// ----------------------------------------------------------------------------
+// RemoveHandlingModel @ 0x822D4070   (ghost-car wave 2026-08-17) -- the exact inverse of
+// AddHandlingModel below: tell the physics vehicle manager to destroy this car's body.
+// Only caller: Detach's IsActive() arm. DWARF BrnActiveRaceCar.h:1013
+// (`void RemoveHandlingModel(VehicleInputInterface *)`), which matches the asm's r4.
+//
+//   0x822D4084  IsActive()                    assert BrnActiveRaceCar.cpp:0x4A2 == :1186
+//   0x822D40B8  lpVehicleInterface != NULL    assert :0x4A3 == :1187
+//   0x822D40DC  ld r11, 0xD0(this)            mHandlingBodyVolumeId (the 64-bit handle)
+//   0x822D40E0  addis r3,r29,2 ; addi r3,r3,-0x6D0   == lpVehicleInterface + 129328
+//                                             == &mRemoveRaceCarEventQueue (the seat
+//                                             BrnVehicleInputInterface.h:151 already pins)
+//   0x822D40F0  bl BaseEventQueue<RemoveRaceCarEvent>::AddEvent
+//
+// The console INLINED VehicleInputInterface::RemoveRaceCar here -- it has no standalone symbol
+// in the XEX and is therefore absent from the ledger -- but the DWARF declares it
+// (BrnVehicleInputInterface.h:126 `int32_t RemoveRaceCar(VolumeInstanceId)`) and those five
+// instructions ARE its body. It is homed as a header inline on the interface (same shape as
+// AddLineTestResult) so this class posts through the owner instead of reaching a private queue
+// by offset. Its return value is discarded here, exactly as the console discards it (the
+// caller tail-returns r3 and nothing reads it).
+//
+// RUNTIME SCOPE ON THIS BUILD: VehicleManager::ProcessRemoveEvents @0x826160C8 is not
+// reconstructed, so the posted event is dropped with the frame's IO buffer and the physics body
+// actually survives the detach. That is a MOUNT gap, not a reconstruction gap: the producer
+// side is now correct and complete, and the day the drain lands the hull goes with the car.
+// ----------------------------------------------------------------------------
+void ActiveRaceCar::RemoveHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface )
+{
+    CGS_ASSERT(IsActive(), "IsActive()");                              // X360 :1186
+    CGS_ASSERT(lpVehicleInterface != 0, "lpVehicleInterface != NULL"); // :1187
+    if (lpVehicleInterface == 0)
+    {
+        return;
+    }
+
+    lpVehicleInterface->RemoveRaceCar(mHandlingBodyVolumeId);
+}
+
+// ----------------------------------------------------------------------------
+// RemoveFromScene @ 0x822D4100   (ghost-car wave 2026-08-17) -- drop the car's scene presence:
+// its volume instance, its volume, its collision registration (conditionally) and its entity.
+// Only caller: Detach's IsActive() arm. DWARF BrnActiveRaceCar.h:1031
+// `void RemoveFromScene(SceneInputInterface *, VehicleInputInterface *)` -- and note the
+// argument ORDER against Detach's own: Detach passes (r4 = its SCENE pointer, r5 = its VEHICLE
+// pointer), i.e. the pair is swapped (asm 0x822EB610..0x822EB618).
+//
+//   0x822D4118  IsActive()                     assert BrnActiveRaceCar.cpp:0x51A == :1306
+//   0x822D414C  lpSceneInterface != NULL       assert :0x51B == :1307
+//   0x822D4174  ld r4,0xD0(this) -> InSceneUpdateInterface::RemoveVolumeInstance(id64)
+//   0x822D4190  the same id via a stack qword  -> InSceneUpdateInterface::RemoveVolume(id64)
+//   0x822D4194  lwz r11,0x744 == meOnlineState
+//               `if ((meOnlineState != 0 && meOnlineState != 3) || mbAddedForCollision)`
+//                  -> RemoveFromCollision(scene, vehicle)
+//               (0 == E_ONLINE_STATE_CONNECTING, 3 == E_ONLINE_STATE_DISCONNECTED: a car that
+//                never finished connecting, or has already dropped, was never put in the
+//                collision set unless mbAddedForCollision says otherwise.)
+//   0x822D41C4  ld ; srdi 32 -> the EMBEDDED 32-BIT ENTITY WORD -> RemoveEntity(entity, 1)
+//   0x822D41E0  stb 0, 0x78A                   mbAddedToScene = false
+//
+// ID WIDTH -- READ THIS BEFORE "SIMPLIFYING" THE THREE CALLS. The console passes the FULL
+// 64-bit mHandlingBodyVolumeId to RemoveVolumeInstance / RemoveVolume / RemoveForCollision (a
+// bare `ld` into r4) and only the HIGH dword to RemoveEntity. The committed
+// InSceneUpdateInterface declared the first three as taking a 32-bit `EntityId`, which was
+// fitted to their one previous caller (PhysicalBodyPart::RemoveFromScene, whose ids really are
+// 32-bit words) and which the DecFIGS DWARF contradicts:
+//     CgsSceneManagerIO_SceneUpdate.h:393  void RemoveVolumeInstance(VolumeInstanceId)
+//     CgsSceneManagerIO_SceneUpdate.h:378  void RemoveVolume(VolumeId)
+//     CgsSceneManagerIO_SceneUpdate.h:423  void RemoveForCollision(VolumeInstanceId)
+//     CgsSceneManagerIO_SceneUpdate.h:340  void RemoveEntity(EntityId, bool)  <- 32-bit, as committed
+// Narrowing a race-car id to 32 bits would move the entity word from the HIGH dword to the LOW
+// one and post a DIFFERENT handle. The DWARF-declared 64-bit overloads were therefore added
+// alongside the committed 32-bit ones (additive, header-only inlines) and are what this calls.
+//
+// RUNTIME SCOPE ON THIS BUILD: race cars are never REGISTERED with the scene manager in the
+// first place (ActiveRaceCar::AddToScene @0x822EB768 is not reconstructed -- which is exactly
+// why CalculateVehicleLODs gets an empty race-car id list and needs the world module's
+// stand-in), and of the four queues this posts to only mRemoveEntityQueue is drained
+// (SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules, which skips ids the
+// EntityManager does not know: `if (liIndex < 0) continue;`). So all four posts are inert
+// today. They are reproduced rather than parked because the producer side must be correct the
+// day AddToScene lands, and because posting nothing is indistinguishable from a leak once it does.
+// ----------------------------------------------------------------------------
+void ActiveRaceCar::RemoveFromScene( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
+                                     BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface )
+{
+    CGS_ASSERT(IsActive(), "IsActive()");                           // X360 :1306
+    CGS_ASSERT(lpSceneInterface != 0, "lpSceneInterface != NULL");   // :1307
+    if (lpSceneInterface == 0)
+    {
+        return;
+    }
+
+    lpSceneInterface->RemoveVolumeInstance(mHandlingBodyVolumeId);
+    lpSceneInterface->RemoveVolume(CgsSceneManager::VolumeId(mHandlingBodyVolumeId.muId));
+
+    if ((meOnlineState != E_ONLINE_STATE_CONNECTING && meOnlineState != E_ONLINE_STATE_DISCONNECTED)
+        || mbAddedForCollision)
+    {
+        RemoveFromCollision(lpSceneInterface, lpVehicleInterface);
+    }
+
+    // The console hands RemoveEntity only the embedded 32-bit entity word (`srdi r11,r11,32`)
+    // and the option word 1.
+    lpSceneInterface->RemoveEntity(
+        CgsSceneManager::EntityId(static_cast<u32>(mHandlingBodyVolumeId.muId >> 32)), 1u);
+
+    mbAddedToScene = false;                                         // 0x78A
+}
+
+// ----------------------------------------------------------------------------
+// RemoveFromCollision @ 0x822BF668   (ghost-car wave 2026-08-17) -- take the car's body out of
+// the scene collision set and arm the "collision state changed" flag the next physics publish
+// reads. Only caller: RemoveFromScene's online-state gate. DWARF BrnActiveRaceCar.h:1044
+// `void RemoveFromCollision(SceneInputInterface *, VehicleInputInterface *)` -- TWO parameters,
+// and the asm agrees that only the FIRST is read (`mr r31,r3 ; mr r28,r4`; r5 is passed by
+// RemoveFromScene and never touched). The second is kept because the console's call site passes
+// it and the DWARF declares it.
+//
+//   0x822BF67C  IsActive()                     assert BrnActiveRaceCar.cpp:0x5DC == :1500
+//   0x822BF6B8  stb 1, 0x78D                   mbChangeCollisionState     = true
+//   0x822BF6C0  stb 0, 0x78E                   mbCollisionStateToChangeTo = false
+//   0x822BF6C4  stb 0, 0x78B                   mbAddedForCollision        = false
+//   0x822BF6D4  the gxMessageFilterFlags & 1 debug line ("Removing for collision: " id "\n")
+//   0x822BF738  InSceneUpdateInterface::RemoveForCollision(id64)   <- the FULL 8-byte handle
+//   0x822BF748  stw 0xFFFF, 0x7D0              mCurrentCullingGroup = 0xFFFF
+//   0x822BF74C  IsAttached()                   assert BrnActiveRaceCar.h:0x441 == :1089
+//   0x822BF77C  lbz 0xA4(mpRaceCar) == 2       the NETWORK-car re-add arm -- see BLOCKED
+//
+// [FLAG BLOCKED] the network-car arm (`mpRaceCar->GetType() == E_RACE_CAR_TYPE_NETWORK`). It
+// fires the console's "Trying to add/remove race car more than <max> times in a frame" tripwire
+// and then posts a {mHandlingBodyVolumeId, mbAdded = false}
+// BrnPhysics::Vehicle::VehicleAddedForCollisionEvent onto THIS OBJECT'S OWN queue --
+// `bl VehicleAddedForCollisionEvent_::AddEvent` with r3 still == this, i.e. the queue at
+// ActiveRaceCar +0x000, which the DWARF names mAddRemoveNetworkCarForCollisionQueue
+// (EventQueue<VehicleAddedForCollisionEvent, 8>; the tripwire's `lwz 8(this)` / `lwz 4(this)`
+// are that queue's miLength / miMaxLength).
+// EXACT MISSING ITEM: that member is still `u8 maPad0000[144]` in this header (144 == the
+// 16-byte queue header + 8 * sizeof(VehicleAddedForCollisionEvent), so it does fit exactly).
+// It is deliberately NOT modelled in this wave: naming it would put a live mpEvents pointer at
+// offset 0 of a class whose only construction path (Construct/Prepare/Attach) never calls
+// EventQueue::Construct on it, which is precisely the "mpEvents != NULL / Reached Max length"
+// pair that cost the drivable wave a day on VehicleInputInterface. The arm is UNREACHABLE on
+// this build (E_RACE_CAR_TYPE_NETWORK requires an online session; the only spawn paths that run
+// are the player and the AI rivals).
+// DELETE-WHEN mAddRemoveNetworkCarForCollisionQueue is named AND ActiveRaceCar::Construct
+// constructs it.
+// ----------------------------------------------------------------------------
+void ActiveRaceCar::RemoveFromCollision( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
+                                         BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface )
+{
+    CGS_ASSERT(IsActive(), "IsActive()");                           // X360 :1500
+    (void)lpVehicleInterface;   // passed by the console's call site; never read by the callee
+
+    mbChangeCollisionState     = true;    // 0x78D
+    mbCollisionStateToChangeTo = false;   // 0x78E
+    mbAddedForCollision        = false;   // 0x78B
+
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "Removing for collision: "
+                                   << mHandlingBodyVolumeId.muId << "\n";
+    }
+
+    if (lpSceneInterface != 0)
+    {
+        lpSceneInterface->RemoveForCollision(mHandlingBodyVolumeId);
+    }
+
+    mCurrentCullingGroup = 0xFFFF;        // 0x7D0
+
+    CGS_ASSERT(IsAttached(), "IsAttached()");                       // BrnActiveRaceCar.h:1089
+
+    // [FLAG BLOCKED] the E_RACE_CAR_TYPE_NETWORK re-add post -- see the banner.
 }
 
 // ----------------------------------------------------------------------------
