@@ -129,10 +129,16 @@ namespace BrnGame
         // when it happens). Doubled to 0x1000000 each; the console ratio is documented above.
         static u8 saUpdateInputMem[0x1000000];
         static u8 saUpdateOutputMem[0x1000000];
+        // ⭐ ALIGNMENT CORRECTED 2026-08-16 (boot audit F-P0-5). main @0x827E60D8 prepares ALL
+        // FIVE of its IOBufferStacks with alignment 0x80; this pair passed 16 while the
+        // dispatch stack below already passed 128. Latent -- nothing in the current buffer
+        // set needs more than 16 -- but it is the console's value, and an under-aligned
+        // stack is the kind of thing that only shows up when a vector-typed member lands in
+        // a buffer somewhere downstream.
         sUpdateInputStack.Construct("UpdateInput");
-        sUpdateInputStack.Prepare(saUpdateInputMem, sizeof(saUpdateInputMem), 16);
+        sUpdateInputStack.Prepare(saUpdateInputMem, sizeof(saUpdateInputMem), 128);
         sUpdateOutputStack.Construct("UpdateOutput");
-        sUpdateOutputStack.Prepare(saUpdateOutputMem, sizeof(saUpdateOutputMem), 16);
+        sUpdateOutputStack.Prepare(saUpdateOutputMem, sizeof(saUpdateOutputMem), 128);
         mpUpdateInputBufferStack = &sUpdateInputStack;
         mpUpdateOutputBufferStack = &sUpdateOutputStack;
 
