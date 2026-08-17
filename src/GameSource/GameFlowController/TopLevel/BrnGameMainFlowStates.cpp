@@ -895,12 +895,19 @@ void MainGameFlowStateInitialLoadingScreen::OnEnter()
 // in which case BootLoading::OnLeave -> StopLoadingScreen drops it).
 void MainGameFlowStateInitialLoadingScreen::OnLeave()
 {
-    // @0x823AA9FC -- mbSaveLoadState = 0 (the console body is this ONE store).
+    // @0x823AA9FC -- mbSaveLoadState = 0. The console body is this ONE store and nothing
+    // else; it never posts a loading-screen show or hide from OnEnter or OnLeave.
+    //
+    // ⭐ THE PC-ONLY HIDE IS GONE, 2026-08-17 (boot audit F-P4-9). This used to follow the
+    // store with a `if (!gBrnGuiDrivesLoadingScreen) HideLoadingScreen()`, from the era when
+    // nothing else could dismiss the screen. Something else does now: the GUI owns the
+    // loading-screen visual through the real 19/20 command protocol, and since the GUI hoist
+    // (79950026) it is always prepared by the time this state is left -- so the branch was
+    // dead as well as unfaithful. The screen lifecycle belongs to the dispatch-input
+    // publishes (GamePrepare's tail shows it, BridgeGuiToGame's 19/20 hide it), not to the
+    // flow state's transitions.
     if (BrnGameMainFlowController::gpMainGameFlowController != 0)
         BrnGameMainFlowController::gpMainGameFlowController->SetSaveLoadState(false);
-
-    if (!gBrnGuiDrivesLoadingScreen)
-        GetDispatchWriteBuffer()->HideLoadingScreen();
 }
 
 // @ 0x823EF688 - the scripted module-by-module load. The X360 body loads one module per stage
