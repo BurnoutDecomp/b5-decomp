@@ -826,22 +826,26 @@ bool LoadingScriptedState::LoadSoundModule(BrnResource::GameDataIO::InputBuffer*
 
     if (!lbPrepared && lpGameDataInputBuffer && lpRootOutputBuffer)
     {
-        // [FLAG] the console forwards here -- @0x823E7684/98, the RootOutputBuffer's
-        // AttribSys queue via Append<2048,16> and its resource interface via
-        // AppendRequestInterface<4096>, in the same source-read-lock bracket
-        // LoadDirectorModule above uses. Until it runs, every resource request the sound
-        // module stages during its initial load is dropped: nothing moves it into the
-        // GameData input where the pump can see it (boot audit F-P6-17 / F-P5-10).
+        // ⭐ THE FORWARDING ARM IS LIVE, 2026-08-17 (boot audit F-P6-17 / F-P5-10). X360
+        // @0x823E7684/98, same source-read-lock bracket LoadDirectorModule above uses -- the
+        // destination's write lock is held by the caller for the whole stage switch.
         //
-        // ⚠️ REASON CORRECTED 2026-08-17, and the correction is the useful part. This used
-        // to say the block was waiting on "the RootOutputBuffer request interfaces + getters".
-        // The GETTERS are here and bodied (BrnRootSoundModuleIo.h:433-439) -- I wired the arm
-        // against them and it does not compile, because what is missing is one level down:
-        // BrnSound::Module::Io::RequestInterface<4096> and AttribSysRequestInterface<2048>
-        // are FORWARD DECLARATIONS ONLY (:386-387, "template layouts ... not needed to
-        // satisfy" the minimal slice). The getters return pointers to incomplete types, so
-        // neither queue can be named, let alone appended.
-        // DELETE-WHEN those two templates have definitions.
+        // This took two passes. It was gated on "the RootOutputBuffer request interfaces +
+        // getters"; the getters were already here, so the first attempt wired against them
+        // and failed to compile -- what was actually missing was one level down, the
+        // RequestInterface<4096> / AttribSysRequestInterface<2048> template DEFINITIONS.
+        // Those are now defined (BrnRootSoundModuleIo.h), so this can finally run. Until it
+        // did, every resource request the sound module staged during its initial load was
+        // dropped: nothing moved it into the GameData input where the pump could see it.
+        lpRootOutputBuffer->LockForRead();
+        {
+            const BrnSound::Module::Io::RootOutputBuffer* lpRootOutputRead = lpRootOutputBuffer;
+            lpGameDataInputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
+                lpRootOutputRead->GetAttribSysRequestInterface()->mRequestQueue);
+            lpGameDataInputBuffer->GetRequestInterface()->mRequestQueue.Append(
+                lpRootOutputRead->GetResourceRequestInterface()->mRequestQueue);
+        }
+        lpRootOutputBuffer->UnlockForRead();
     }
 
     lpUpdateOutputStack->DestroyIOBuffer<BrnSound::Module::Io::RootOutputBuffer>(&lpRootOutputBuffer);
