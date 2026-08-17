@@ -313,6 +313,12 @@ namespace BrnGame
             return &mTimerStatusInterface;
         }
 
+        // @0x823BD420. Public because the console calls it from FOUR sites, and one of them
+        // is outside this class: LoadingScriptedState::Update's spine (@0x823F26D8) derives
+        // the frame's update set from the flow state before deciding whether to drive the
+        // world at all (the others are DoDispatch, ConstructUpdateSet and DoUpdate).
+        BrnUpdateSet ConstructUpdateSetFromFsm();
+
     private:
         // @ BrnGameModule.cpp:1845 - the per-frame update spine: latch frame-rate stepping,
         // begin the frame-rate frame, tick the debug manager, then run the active flow
@@ -325,7 +331,6 @@ namespace BrnGame
         void         UpdateRequestDoStepFrame();   // @ BrnGameModule.cpp:4048
         void         CreateStaticIOBuffers();      // @ BrnGameModule.cpp:2497
         void         DestroyStaticIOBuffers();     // @ BrnGameModule.cpp:2515
-        BrnUpdateSet ConstructUpdateSetFromFsm();  // @ BrnGameModule.cpp:3542
 
         // Debug step/play-frame callbacks (registered with the debug menu; the void* is the
         // game-module instance).

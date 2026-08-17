@@ -309,7 +309,35 @@ bool LoadingScriptedState::LoadGameState2(BrnResource::GameDataIO::InputBuffer* 
 //     pair LoadWorldModule runs during the prepare stages, now running per frame.
 void LoadingScriptedState::UpdateWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer)
 {
-    DriveWorldUpdateFrame(lpGameDataInputBuffer, KU_LOADING_UPDATE_SET);
+    // ⭐ CORRECTED 2026-08-16 (boot audit F-P3-5 / F-P6-13). The update set was the
+    // hard-coded constant KU_LOADING_UPDATE_SET (0x80) for the whole boot. The console
+    // derives it per frame from the flow state (ConstructUpdateSetFromFsm @0x823BD420 --
+    // one of its four call sites is this very spine, @0x823F26D8) and then GUARDS the world
+    // leg on it: @0x823F282C-44 tests !(set & 0x20) && !(set & 0x40), i.e. the world module
+    // is NOT driven at all while a video phase or the save-load phase is up. The boot
+    // progression is 0x80 (initial load) -> 0xA0 (marketing/title) -> 0xE1 (memory card)
+    // -> 0xA0 (complete loading) -> 0x88 (in game).
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    const BrnUpdateSet lUpdateSet = lpGameModule->ConstructUpdateSetFromFsm();
+
+    // Dev trace: one line per distinct set the boot walks through. The console progression
+    // is 0x80 -> 0xA0 -> 0xE1 -> 0xA0 -> 0x88; seeing it here is the proof that the flow
+    // states' save-load/video/in-game bytes are being written at all.
+    {
+        static u32 s_uLastUpdateSet = 0xFFFFFFFFu;
+        if ((u32)lUpdateSet != s_uLastUpdateSet)
+        {
+            s_uLastUpdateSet = (u32)lUpdateSet;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "[flow] update set -> "
+                                           << CgsDev::E_PRINTMODE_HEXONCE << (u32)lUpdateSet << "\n";
+        }
+    }
+
+    if ((lUpdateSet & 0x20) != 0 || (lUpdateSet & 0x40) != 0)
+        return;
+
+    DriveWorldUpdateFrame(lpGameDataInputBuffer, lUpdateSet);
 }
 
 // The same leg, callable from ANY flow state.
@@ -448,10 +476,30 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
     // X360: LinearMalloc::FreeAll(gm->mpWorldUpdateFrameAllocator) then the vtable+76
     // dispatch. The loading update set is 0x80 (frustum testing on, nothing else).
     s_WorldFrameAllocator.FreeAll();
-    lpGameModule->GetWorldModule().Update(lUpdateSet,
-                                          lpUpdateInputStack, lpUpdateOutputStack,
-                                          lpWorldInput, lpWorldOutput,
-                                          &s_WorldFrameAllocator);
+    if ((lUpdateSet & 0x20) != 0)
+    {
+        // The boot-video arm (X360 DoUpdate_World @0x823E8BD0: `(updateSet & 0x20) ?
+        // UpdateForBootUpVideo(...)`). Reachable for the first time now that the flow
+        // states write the video byte -- the reconstruction has existed unreached.
+        static bool s_bLoggedBootUpVideoArm = false;
+        if (!s_bLoggedBootUpVideoArm)
+        {
+            s_bLoggedBootUpVideoArm = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint
+                    << "[world] update set has the video bit -- UpdateForBootUpVideo arm entered\n";
+        }
+        lpGameModule->GetWorldModule().UpdateForBootUpVideo(lUpdateSet,
+                                                           lpUpdateInputStack, lpUpdateOutputStack,
+                                                           lpWorldInput, lpWorldOutput);
+    }
+    else
+    {
+        lpGameModule->GetWorldModule().Update(lUpdateSet,
+                                              lpUpdateInputStack, lpUpdateOutputStack,
+                                              lpWorldInput, lpWorldOutput,
+                                              &s_WorldFrameAllocator);
+    }
 
     // BridgeWorldToResource @0x823E5300 -- the streamer's request forward.
     if (lpGameDataInputBuffer != 0)
@@ -810,6 +858,13 @@ void MainGameFlowStateInitialLoadingScreen::OnEnter()
     meLoadingScreenStage = E_LOADINGSTAGE_START;
     mbGuiPreloadDone     = false;
     gBrnInitialLoadingComplete = false;
+
+    // @0x823AA9D8 -- mbSaveLoadState = 1. NB the console never EXECUTES this body (SendEvent
+    // never targets state 0; Construct seeds it raw), so the initial-load update set stays
+    // 0x80 there. The PC no longer calls OnEnter at boot either -- see the removed SetState
+    // in BrnGameModule::Construct -- but the body is reproduced faithfully for re-entry.
+    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+        BrnGameMainFlowController::gpMainGameFlowController->SetSaveLoadState(true);
     // The show command posts from Update each tick (the X360 writes the dispatch write
     // buffer's command every Update @0x823EF688; Update runs this same frame).
 
@@ -821,6 +876,10 @@ void MainGameFlowStateInitialLoadingScreen::OnEnter()
 // in which case BootLoading::OnLeave -> StopLoadingScreen drops it).
 void MainGameFlowStateInitialLoadingScreen::OnLeave()
 {
+    // @0x823AA9FC -- mbSaveLoadState = 0 (the console body is this ONE store).
+    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+        BrnGameMainFlowController::gpMainGameFlowController->SetSaveLoadState(false);
+
     if (!gBrnGuiDrivesLoadingScreen)
         GetDispatchWriteBuffer()->HideLoadingScreen();
 }
@@ -1092,6 +1151,11 @@ void MainGameFlowStateStartScreen::OnEnter()
     gBrnScriptedLoadPaused = true;
 
     BrnGame::GetMainGameModule()->RequestGuiFsmStage(2);
+
+    // @0x823AAB94 -- mbVideoState = 1 (the title is still a video-state phase; OnLeave
+    // writes none on the console).
+    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+        BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(true);
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "StartScreen: OnEnter -> GUI FSM stage 2 (BrnLegalFsm)\n";
 }
@@ -1146,11 +1210,19 @@ void MainGameFlowStateMarketingScreens::OnEnter()
     gBrnScriptedLoadPaused = true;
 
     BrnGame::GetMainGameModule()->RequestGuiFsmStage(1);
+
+    // @0x823AAA80 -- mbVideoState = 1: the logos run with the world on the boot-video arm.
+    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+        BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(true);
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "MarketingScreens: OnEnter -> GUI FSM stage 1 (BrnVideoFsm)\n";
 }
 
-void MainGameFlowStateMarketingScreens::OnLeave() {}
+void MainGameFlowStateMarketingScreens::OnLeave() {
+    // @0x823AABC4 -- mbVideoState = 0.
+    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+        BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(false);
+}
 
 // @ 0x823F2CD8 -- advance when the GUI posts phase-complete (command 70: the Criterion
 // logo finished).
@@ -1197,6 +1269,14 @@ void MainGameFlowStateCheckDiskSpace::OnEnter()
     // PC models that slot as RequestGuiFsmStage (the same field Marketing/Start/MemoryCard
     // stamp with 1/2/4).
     BrnGame::GetMainGameModule()->RequestGuiFsmStage(4);
+
+    // @0x823AAC84 / @0x823AAC8C -- mbSaveLoadState = 1, mbVideoState = 1 (the profile phase
+    // is the sim-paused save-load window: update set 0xE1).
+    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+    {
+        BrnGameMainFlowController::gpMainGameFlowController->SetSaveLoadState(true);
+        BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(true);
+    }
 }
 void MainGameFlowStateCheckDiskSpace::OnLeave() {}
 // Update @ 0x823F2D28 lives in its DWARF home TU, BrnGameMainFlowCheckDiskSpace.cpp.
@@ -1217,7 +1297,15 @@ void MainGameFlowStateMemoryCard::OnEnter()
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "MemoryCard: OnEnter -> GUI FSM stage 4 (BrnBFProFsm)\n";
 }
-void MainGameFlowStateMemoryCard::OnLeave() {}
+// @ 0x823AACC8 -- clear the save-load + video bytes on the way out.
+void MainGameFlowStateMemoryCard::OnLeave()
+{
+    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+    {
+        BrnGameMainFlowController::gpMainGameFlowController->SetSaveLoadState(false);   // @0x823AACE4
+        BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(false);      // @0x823AACEC
+    }
+}
 
 // @ 0x823F2F98 -- gated on the world-load stage (X360 dword_82FAE4B0 == 8); advance when
 // the GUI posts phase-complete (the profile task resolved).
@@ -1255,10 +1343,21 @@ void MainGameFlowStateCompleteLoading::OnEnter()
 
     BrnGame::GetMainGameModule()->RequestGuiFsmStage(3);
     mbIsCollisionWorldPrepared = false;
+
+    // @0x823AAC04 -- mbVideoState = 1 (the post-title intro is a video phase).
+    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+        BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(true);
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "CompleteLoading: OnEnter -> GUI FSM stage 3 (BrnCmpLdFsm)\n";
 }
-void MainGameFlowStateCompleteLoading::OnLeave() {}
+// @ 0x823AAC18 -- clear the video byte. (The console also clears an unmapped byte at
+// gm+0x70A65D here; its consumer is not recovered, so it stays unmodelled -- boot audit
+// F-P4-5 carries it as an unmapped-store TODO rather than a fabricated home.)
+void MainGameFlowStateCompleteLoading::OnLeave()
+{
+    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+        BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(false);      // @0x823AAC34
+}
 
 // @ 0x823F2E08 -- when the GUI posts phase-complete (the post-title intro finished) and
 // the world is loaded: first pass stamps the load-state + latches (X360 sets the global
