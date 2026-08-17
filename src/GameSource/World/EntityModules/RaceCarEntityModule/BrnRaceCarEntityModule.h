@@ -386,6 +386,18 @@ public:
     // X360 0x822A34A8 -- &maActiveRaceCars[leActiveRaceCarIndex], in-range checked.
     inline ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex);
 
+    // The module's OWN player slot, +0x182F8 (99064) -- the word WorldModule::CalculateVehicleLODs
+    // @0x827C3778 reads straight off this object (`lwzx r4, r3, r11`, r3 == WorldModule+0x280 ==
+    // mRaceCarEntityModule, r11 == 0x182F8) to force the player's car to LOD 0. DWARF names no
+    // accessor (the console reaches the private member directly); this inline is that read given a
+    // name, for that one reader. It is NOT the WorldModule mirror meLocalPlayerActiveRaceCarIndex:
+    // the mirror is published only for an ATTACHED slot (UpdateOutputInterfaces gate,
+    // BrnRaceCarEntityModule.cpp ~:2171), so on the Car Select / junkyard screen -- player car
+    // created (mePlayerActiveRaceCarIndex valid, :1699) but not attached to physics -- the mirror
+    // was INVALID, nothing lifted RenderParams::mLOD off Reset's 4, and the wheels drew their
+    // authored LOD-4 box proxy (car+lights step 1b, boot-verified).
+    EActiveRaceCarIndex GetPlayerActiveRaceCarIndex() const { return mePlayerActiveRaceCarIndex; }
+
     // X360 0x822A3568 -- &maRaceCars[leGlobalRaceCarIndex], in-range checked.
     inline RaceCar* GetGlobalRaceCar(EGlobalRaceCarIndex leGlobalRaceCarIndex);
 

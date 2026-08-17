@@ -250,8 +250,70 @@ namespace
         bool                         mbHasTexcoord0;
         // Every {usage, usageIndex} the declaration supplies, as the bit set above.
         u64                          muUsageMask;
+        // ---- [DIAG wheels] WHAT THE DESCRIPTOR RESOLVED TO ---------------------------
+        // The POSITION0 element as the D3D9 declaration ended up describing it, plus a
+        // printable rendering of the whole element list. Recorded once per descriptor image
+        // and reported by the [wheel-decode] one-shot in WorldDraw_IndexedUP, which is what
+        // separates "the leaf decodes the position stream through the wrong D3DDECLTYPE"
+        // from "this mesh IS that shape in the shipped data" without a frame capture.
+        // mu8PositionType is D3DDECLTYPE_UNUSED when the descriptor declares no POSITION0.
+        u8                           mu8PositionType;
+        u16                          mu16PositionSourceOffset;
+        u16                          mu16PositionExpandedOffset;
+        // "POSITION0:FLOAT3@0->0 NORMAL0:DEC3N@12->12 ..." (source offset -> expanded offset).
+        char                         macElements[224];
     };
     std::unordered_map<const void*, Vd32Cached> sVdCache;
+
+    // [DIAG] D3DDECLTYPE / D3DDECLUSAGE -> their D3D9 spelling, for the [wheel-decode] line.
+    // Names only; nothing behavioural reads these.
+    const char* DeclTypeName(u8 lu8Type)
+    {
+        switch (lu8Type)
+        {
+        case D3DDECLTYPE_FLOAT1:    return "FLOAT1";
+        case D3DDECLTYPE_FLOAT2:    return "FLOAT2";
+        case D3DDECLTYPE_FLOAT3:    return "FLOAT3";
+        case D3DDECLTYPE_FLOAT4:    return "FLOAT4";
+        case D3DDECLTYPE_D3DCOLOR:  return "D3DCOLOR";
+        case D3DDECLTYPE_UBYTE4:    return "UBYTE4";
+        case D3DDECLTYPE_SHORT2:    return "SHORT2";
+        case D3DDECLTYPE_SHORT4:    return "SHORT4";
+        case D3DDECLTYPE_UBYTE4N:   return "UBYTE4N";
+        case D3DDECLTYPE_SHORT2N:   return "SHORT2N";
+        case D3DDECLTYPE_SHORT4N:   return "SHORT4N";
+        case D3DDECLTYPE_USHORT2N:  return "USHORT2N";
+        case D3DDECLTYPE_USHORT4N:  return "USHORT4N";
+        case D3DDECLTYPE_UDEC3:     return "UDEC3";
+        case D3DDECLTYPE_DEC3N:     return "DEC3N";
+        case D3DDECLTYPE_FLOAT16_2: return "FLOAT16_2";
+        case D3DDECLTYPE_FLOAT16_4: return "FLOAT16_4";
+        case D3DDECLTYPE_UNUSED:    return "UNUSED";
+        default:                    return "?";
+        }
+    }
+
+    const char* DeclUsageName(u8 lu8Usage)
+    {
+        switch (lu8Usage)
+        {
+        case D3DDECLUSAGE_POSITION:     return "POSITION";
+        case D3DDECLUSAGE_BLENDWEIGHT:  return "BLENDWEIGHT";
+        case D3DDECLUSAGE_BLENDINDICES: return "BLENDINDICES";
+        case D3DDECLUSAGE_NORMAL:       return "NORMAL";
+        case D3DDECLUSAGE_PSIZE:        return "PSIZE";
+        case D3DDECLUSAGE_TEXCOORD:     return "TEXCOORD";
+        case D3DDECLUSAGE_TANGENT:      return "TANGENT";
+        case D3DDECLUSAGE_BINORMAL:     return "BINORMAL";
+        case D3DDECLUSAGE_TESSFACTOR:   return "TESSFACTOR";
+        case D3DDECLUSAGE_POSITIONT:    return "POSITIONT";
+        case D3DDECLUSAGE_COLOR:        return "COLOR";
+        case D3DDECLUSAGE_FOG:          return "FOG";
+        case D3DDECLUSAGE_DEPTH:        return "DEPTH";
+        case D3DDECLUSAGE_SAMPLE:       return "SAMPLE";
+        default:                        return "?";
+        }
+    }
 
     // Xenon GPU vertex-format dword -> D3D9 D3DDECLTYPE.
     bool MapXenonDeclType(u32 luXenon, u8* lpu8Type)
@@ -409,6 +471,15 @@ namespace
     u32                     suLastDeclSourceStride = 0;
     u32                     suLastDeclDec3nCount = 0;
     u16                     sau16LastDeclDec3nOffsets[16] = {};
+    // The same three POSITION0 facts + the element text, for the descriptor of the mesh
+    // currently being bound (see Vd32Cached's banner). spLastDeclElements points at the
+    // CACHED entry's buffer, never at a local: std::unordered_map is node-based, so a
+    // pointer to a mapped value stays valid for the life of that entry, and entries are
+    // only ever added.
+    u8                      su8LastDeclPositionType = D3DDECLTYPE_UNUSED;
+    u32                     suLastDeclPositionSourceOffset = 0;
+    u32                     suLastDeclPositionExpandedOffset = 0;
+    const char*             spLastDeclElements = nullptr;
     // Set by WorldFallbackShader_MarkInstancedMesh (see its banner further down): the next
     // mesh is CONSOLE-INSTANCED. WorldFallbackShader_SelectForMesh turns that into a fallback
     // only when the technique's vertex program cannot be fed a `world` matrix.
@@ -1576,10 +1647,16 @@ namespace renderengine
             suLastDeclDec3nCount   = lIt->second.muDec3nCount;
             std::memcpy(sau16LastDeclDec3nOffsets, lIt->second.mau16Dec3nOffsets,
                         sizeof(sau16LastDeclDec3nOffsets));
+            su8LastDeclPositionType          = lIt->second.mu8PositionType;
+            suLastDeclPositionSourceOffset   = lIt->second.mu16PositionSourceOffset;
+            suLastDeclPositionExpandedOffset = lIt->second.mu16PositionExpandedOffset;
+            spLastDeclElements               = lIt->second.macElements;
             return lIt->second.mpDeclaration;
         }
 
         Vd32Cached lEntry = {};
+        // Zero would read as D3DDECLTYPE_FLOAT1; "no POSITION0 resolved" is UNUSED.
+        lEntry.mu8PositionType = D3DDECLTYPE_UNUSED;
         const u8* lpImage = static_cast<const u8*>(lpVdImage);
         u16 lu16NumElements;
         std::memcpy(&lu16NumElements, lpImage + 0x08, 2);
@@ -1696,6 +1773,44 @@ namespace renderengine
             const D3DVERTEXELEMENT9 lEnd = D3DDECL_END();
             laElements[lu16NumElements] = lEnd;
 
+            // [DIAG wheels] the resolved-declaration record (see Vd32Cached's banner). This
+            // is the only point where the SOURCE offsets (lau16OriginalOffsets, the bundle's
+            // own byte offsets) and the EXPANDED ones (laElements, after the DEC3N widening)
+            // are both in hand, so both are captured here. Nothing below reads them.
+            if (lbOk)
+            {
+                int liWritten = 0;
+                for (u32 lu = 0; lu < lu16NumElements; ++lu)
+                {
+                    if (laElements[lu].Usage == D3DDECLUSAGE_POSITION
+                        && laElements[lu].UsageIndex == 0)
+                    {
+                        lEntry.mu8PositionType            = laElements[lu].Type;
+                        lEntry.mu16PositionSourceOffset   = lau16OriginalOffsets[lu];
+                        lEntry.mu16PositionExpandedOffset = laElements[lu].Offset;
+                    }
+                    if (liWritten >= 0
+                        && static_cast<size_t>(liWritten) < sizeof(lEntry.macElements))
+                    {
+                        const int liOne = std::snprintf(
+                            lEntry.macElements + liWritten,
+                            sizeof(lEntry.macElements) - static_cast<size_t>(liWritten),
+                            "%s%s%u:%s@%u->%u",
+                            (lu != 0) ? " " : "",
+                            DeclUsageName(laElements[lu].Usage),
+                            static_cast<unsigned>(laElements[lu].UsageIndex),
+                            DeclTypeName(laElements[lu].Type),
+                            static_cast<unsigned>(lau16OriginalOffsets[lu]),
+                            static_cast<unsigned>(laElements[lu].Offset));
+                        if (liOne < 0)
+                        {
+                            break;      // encoding error: keep what is already there
+                        }
+                        liWritten += liOne;   // may exceed the buffer; the guard above stops
+                    }
+                }
+            }
+
             if (lbOk && lpDevice != nullptr)
             {
                 const HRESULT lhr =
@@ -1768,14 +1883,20 @@ namespace renderengine
                 CgsDev::Log::WriteToLog(lacMsg);
             }
         }
-        sVdCache[lpVdImage] = lEntry;
-        *lpuStride = lEntry.muStride;
-        sbLastDeclHasTexcoord0 = lEntry.mbHasTexcoord0;
-        suLastDeclUsageMask    = lEntry.muUsageMask;
-        suLastDeclSourceStride = lEntry.muSourceStride;
-        suLastDeclDec3nCount   = lEntry.muDec3nCount;
-        std::memcpy(sau16LastDeclDec3nOffsets, lEntry.mau16Dec3nOffsets,
+        // Bind to the STORED entry, not the local: spLastDeclElements below has to point at
+        // the cache's own buffer (the cache-hit path hands out the same pointer).
+        const Vd32Cached& lrStored = (sVdCache[lpVdImage] = lEntry);
+        *lpuStride = lrStored.muStride;
+        sbLastDeclHasTexcoord0 = lrStored.mbHasTexcoord0;
+        suLastDeclUsageMask    = lrStored.muUsageMask;
+        suLastDeclSourceStride = lrStored.muSourceStride;
+        suLastDeclDec3nCount   = lrStored.muDec3nCount;
+        std::memcpy(sau16LastDeclDec3nOffsets, lrStored.mau16Dec3nOffsets,
                     sizeof(sau16LastDeclDec3nOffsets));
+        su8LastDeclPositionType          = lrStored.mu8PositionType;
+        suLastDeclPositionSourceOffset   = lrStored.mu16PositionSourceOffset;
+        suLastDeclPositionExpandedOffset = lrStored.mu16PositionExpandedOffset;
+        spLastDeclElements               = lrStored.macElements;
         if (lEntry.muDec3nCount != 0 && lEntry.mpDeclaration != nullptr)
             LogOnce("vd32dec3n", "[WorldVd32] driver lacks DEC3N; packed normals expanded to FLOAT3\n");
         return lEntry.mpDeclaration;
@@ -2702,6 +2823,155 @@ namespace renderengine
 
         if (lbZDefeated)
             lpDevice->SetRenderState(D3DRS_ZFUNC, luSavedZFunc);
+
+        // ====================================================================================
+        // [DIAG wheels] WHICH GEOMETRY IS THIS, AND HOW WAS ITS STREAM DECODED?
+        //
+        // One line per DISTINCT console-instanced mesh signature -- NOT sampled -- so a single
+        // boot log enumerates every wheel mesh that reached the device, in both the colour and
+        // the z-only/shadow pass (cw distinguishes them).
+        //
+        // WHY IT EXISTS. "The tyre draws as a box" has exactly two possible causes, and the
+        // frame cannot tell them apart: either the leaf decodes the POSITION stream through
+        // the wrong D3DDECLTYPE, or the mesh IS a box in the shipped data. This line answers
+        // both at once -- `pos=` and `decl=` are the resolved declaration (a mis-mapped
+        // position type is visible as a type name that is not FLOAT3, or a source offset that
+        // is not 0), and `bbox=`/`corners=`/`boxProxy=` are a census of the SOURCE vertex
+        // bytes, which is independent of every decode decision except POSITION's own type.
+        //
+        // For the record, MEASURED OFFLINE from the shipped bundles (X360 retail
+        // WHEELS/WHE_51916650_GR.BNDL and our converted build/game/Wheels/WHE_51916650_GR.bndl
+        // -- 24 of 24 meshes byte-identical in positions and indices): the wheel model carries
+        // five LOD states, and state 4 -- the coarsest -- ships a 24-vertex axis-aligned CUBE
+        // as its tyre mesh (renderable 04F87E17 mesh 1, material 68B809B4 =
+        // Vehicle_1Bit_Tyre_Textured_*, six quads at (+-0.4906, +-0.5, +-0.5) with per-face
+        // normals). So `boxProxy=1` on a 24-vertex mesh is the DATA saying "coarsest LOD", not
+        // a decode fault -- and the fix for a box on screen is then the LOD choice, not this
+        // leaf. See the wheels2 report.
+        //
+        // COST: the bbox/corner scan runs once per distinct signature, at most
+        // KU_WHEEL_DECODE_SLOTS times in a whole run and all at boot; every later draw of an
+        // already-reported mesh costs one linear scan of that small table.
+        // DELETE with the rest of the [wheel-*] diagnostics.
+        // ====================================================================================
+        if (lbInstancedDiag)
+        {
+            struct WheelDecodeSignature
+            {
+                u32 muVbSize;
+                u32 muNumVertices;
+                u32 muSourceStride;
+                u32 muExpandedStride;
+                u32 muIndexCount;
+                u32 muStartIndex;
+                u32 muColourWrite;
+            };
+            const u32 KU_WHEEL_DECODE_SLOTS = 32u;
+            static WheelDecodeSignature saWheelDecodeSeen[KU_WHEEL_DECODE_SLOTS];
+            static u32                  suWheelDecodeCount = 0u;
+
+            DWORD luColourWriteState = 0;
+            lpDevice->GetRenderState(D3DRS_COLORWRITEENABLE, &luColourWriteState);
+
+            WheelDecodeSignature lSignature;
+            std::memset(&lSignature, 0, sizeof(lSignature));
+            lSignature.muVbSize         = spVertexSource->muSize;
+            lSignature.muNumVertices    = luNumVertices;
+            lSignature.muSourceStride   = suVertexSourceStride;
+            lSignature.muExpandedStride = suVertexStride;
+            lSignature.muIndexCount     = luIndexCount;
+            lSignature.muStartIndex     = luStartIndex;
+            lSignature.muColourWrite    = static_cast<u32>(luColourWriteState);
+
+            bool lbAlreadyReported = false;
+            for (u32 luSlot = 0; luSlot < suWheelDecodeCount; ++luSlot)
+            {
+                if (std::memcmp(&saWheelDecodeSeen[luSlot], &lSignature,
+                                sizeof(lSignature)) == 0)
+                {
+                    lbAlreadyReported = true;
+                    break;
+                }
+            }
+
+            if (!lbAlreadyReported && suWheelDecodeCount < KU_WHEEL_DECODE_SLOTS)
+            {
+                saWheelDecodeSeen[suWheelDecodeCount++] = lSignature;
+
+                // The source-byte census. POSITION is read ONLY when the resolved declaration
+                // really says FLOAT3 at a source offset the stride contains -- otherwise the
+                // line reports the type and prints no numbers rather than inventing them.
+                char lacShape[224];
+                lacShape[0] = '\0';
+                if (su8LastDeclPositionType == D3DDECLTYPE_FLOAT3
+                    && suLastDeclPositionSourceOffset + 12u <= suVertexSourceStride
+                    && luNumVertices != 0u)
+                {
+                    const u8* const lpPositions = static_cast<const u8*>(lpVertexData)
+                                                + suLastDeclPositionSourceOffset;
+                    f32 lafMin[3];
+                    f32 lafMax[3];
+                    std::memcpy(lafMin, lpPositions, sizeof(lafMin));
+                    std::memcpy(lafMax, lpPositions, sizeof(lafMax));
+                    for (u32 luVertex = 1u; luVertex < luNumVertices; ++luVertex)
+                    {
+                        f32 lafPosition[3];
+                        std::memcpy(lafPosition, lpPositions + luVertex * suVertexSourceStride,
+                                    sizeof(lafPosition));
+                        for (u32 luComponent = 0; luComponent < 3u; ++luComponent)
+                        {
+                            if (lafPosition[luComponent] < lafMin[luComponent])
+                                lafMin[luComponent] = lafPosition[luComponent];
+                            if (lafPosition[luComponent] > lafMax[luComponent])
+                                lafMax[luComponent] = lafPosition[luComponent];
+                        }
+                    }
+                    // A vertex is on a CORNER of that box when all three components sit at an
+                    // extreme. An axis-aligned box proxy scores numVertices/numVertices; a
+                    // tyre, a rim, or any curved surface scores 0.
+                    u32 luCorners = 0u;
+                    for (u32 luVertex = 0u; luVertex < luNumVertices; ++luVertex)
+                    {
+                        f32 lafPosition[3];
+                        std::memcpy(lafPosition, lpPositions + luVertex * suVertexSourceStride,
+                                    sizeof(lafPosition));
+                        u32 luExtremes = 0u;
+                        for (u32 luComponent = 0; luComponent < 3u; ++luComponent)
+                        {
+                            if (lafPosition[luComponent] == lafMin[luComponent]
+                                || lafPosition[luComponent] == lafMax[luComponent])
+                                ++luExtremes;
+                        }
+                        if (luExtremes == 3u)
+                            ++luCorners;
+                    }
+                    std::snprintf(lacShape, sizeof(lacShape),
+                                  " bbox=(%.4f,%.4f,%.4f)..(%.4f,%.4f,%.4f) corners=%u/%u"
+                                  " boxProxy=%d",
+                                  lafMin[0], lafMin[1], lafMin[2],
+                                  lafMax[0], lafMax[1], lafMax[2],
+                                  (unsigned)luCorners, (unsigned)luNumVertices,
+                                  (luCorners == luNumVertices) ? 1 : 0);
+                }
+
+                char lacDecodeMsg[640];
+                std::snprintf(lacDecodeMsg, sizeof(lacDecodeMsg),
+                              "[wheel-decode] verts=%u vbSize=%u srcStride=%u expStride=%u"
+                              " dec3n=%u pos=%s@%u->%u decl=[%s] start=%u count=%u prim=%u"
+                              " cw=%u%s\n",
+                              (unsigned)luNumVertices, (unsigned)spVertexSource->muSize,
+                              (unsigned)suVertexSourceStride, (unsigned)suVertexStride,
+                              (unsigned)suVertexDec3nCount,
+                              DeclTypeName(su8LastDeclPositionType),
+                              (unsigned)suLastDeclPositionSourceOffset,
+                              (unsigned)suLastDeclPositionExpandedOffset,
+                              (spLastDeclElements != nullptr) ? spLastDeclElements : "?",
+                              (unsigned)luStartIndex, (unsigned)luIndexCount,
+                              (unsigned)luPrimTypeXenon, (unsigned)luColourWriteState,
+                              lacShape);
+                CgsDev::Log::WriteToLog(lacDecodeMsg);
+            }
+        }
 
         // [DIAG wheels] one line per instanced draw, SAMPLED across the run (the first draws
         // of a run are from the boot cameras, not the chase camera). DELETE with the wheels.

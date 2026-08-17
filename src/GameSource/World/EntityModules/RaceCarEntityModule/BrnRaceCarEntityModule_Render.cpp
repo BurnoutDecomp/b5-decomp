@@ -468,6 +468,21 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
 
         const CgsGraphics::Model::State leLOD = lpRenderParams->GetLOD();
 
+        // [DIAG racecar-lod] value-latched on the LOD (re-added per the LOD-system memory note):
+        // the wheels drew their LOD-4 box proxy on Car Select because nothing lifted mLOD off
+        // Reset's 4 there -- this line says what LOD each RenderRaceCar walk actually sees.
+        {
+            static s32 siLastLoggedLod = -1;
+            if ( static_cast< s32 >( leLOD ) != siLastLoggedLod && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                siLastLoggedLod = static_cast< s32 >( leLOD );
+                *CgsDev::Log::gpDebugPrint << "[racecar-lod] RenderRaceCar sees mLOD "
+                                            << static_cast< s32 >( leLOD )
+                                            << " parts " << static_cast< s32 >( lpCarGraphicsSpec->muPartsCount )
+                                            << "\n";
+            }
+        }
+
         for ( u32 luPartIdx = 0; luPartIdx < lpCarGraphicsSpec->muPartsCount; ++luPartIdx )
         {
             if ( !lpRenderParams->IsPartVisible( static_cast< u8 >( luPartIdx ) ) )

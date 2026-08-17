@@ -3451,12 +3451,18 @@ WorldModule::CalculateVehicleLODs(
         // lpPlayerSlot->IsAttached() at BrnRaceCarEntityModule.cpp:2171, not merely on
         // IsPlayerCarActive(), and there is a PreScene->Dispatch phase gap. So a
         // VALID-BUT-UNATTACHED player slot leaves this mirror INVALID where the
-        // console would still force LOD 0. Low impact today; the swap below removes it.
-        // SWAP THIS to mRaceCarEntityModule.GetPlayerActiveRaceCarIndex() the moment
-        // BrnRaceCarEntityModule.h grows that accessor.
-        if ( meLocalPlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 )
+        // console would still force LOD 0.
+        // ✅ SWAPPED (car+lights step 1b, 2026-08-17): the accessor exists now and this
+        // reads the RACE CAR MODULE's own mePlayerActiveRaceCarIndex, exactly the word the
+        // console reads. It was NOT low impact: on the Car Select / junkyard screen the
+        // player car is created but not attached, the mirror sat INVALID, RenderParams::mLOD
+        // stayed at Reset's 4, and the wheels drew their authored LOD-4 BOX proxy (the
+        // "rectangle wheels" -- wheels2 REPORT.md: renderable 04F87E17 mesh 1 is a 24-vertex
+        // cube in the shipped data; the leaf's decode was correct throughout).
+        const EActiveRaceCarIndex lePlayerIndex = mRaceCarEntityModule.GetPlayerActiveRaceCarIndex();
+        if ( lePlayerIndex >= E_ACTIVE_RACE_CAR_INDEX_0 )
         {
-            mRaceCarEntityModule.GetActiveRaceCar( meLocalPlayerActiveRaceCarIndex )
+            mRaceCarEntityModule.GetActiveRaceCar( lePlayerIndex )
                 ->GetRenderParams()->SetLOD( CgsGraphics::Model::E_STATE_LOD_0 );
         }
 
@@ -6515,17 +6521,79 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         // filter produced, so the per-car distance banding only reaches cars the
         // scene manager actually registered as race-car entities (owner 1 / 0x21).
         // The PLAYER-car force-to-LOD-0 leg inside the function does NOT depend on
-        // that array -- it keys off meLocalPlayerActiveRaceCarIndex -- so the player
-        // car comes off LOD 4 regardless.
+        // that array -- it keys off the race-car module's own player index -- so the
+        // player car comes off LOD 4 regardless.
+        //
+        // ⭐ [FLAG PC bring-up] THE OTHER CARS (car+lights step 1b, 2026-08-17). On this
+        // build race cars are NOT registered as scene entities, so the frustum filter
+        // hands CalculateVehicleLODs an EMPTY race-car id list and every non-player car
+        // keeps Reset's E_STATE_LOD_4 for ever. That was the "rectangle wheels": Car
+        // Select shows a SECOND active race car (the previewed slot, not the player-index
+        // one) whose wheels drew their authored LOD-4 box proxy from four metres away
+        // ([racecar-lod] alternated "mLOD 0" / "mLOD 4" per RenderRaceCar walk).
+        // The console's frustum query would return every active race car in view; the
+        // honest stand-in for that result is the set of ACTIVE slots -- banding a car that
+        // is out of view is harmless (nothing draws it), and the distance classifier is
+        // the real one. Encoded exactly as FilterFrustumTestResults expects (owner 1,
+        // entity index = the active-race-car index, part 0 -- :3156-3160).
+        // DELETE-WHEN race cars are registered with the scene manager (then the frustum
+        // result is non-empty and this stand-in never engages).
         // [DIAG shadow-perf] the main-view race-car leg (LOD policy + dispatch). The SAME
         // race-car dispatch runs again in every cascade below with no near-only gate
         // (ShadowMap::Construct leaves mbRenderRaceCarsNearOnly false), so this number is
         // the per-cascade FIXED cost of the car -- the one that does not move with the
         // world caster count.
         const ShadowPerfClock::time_point lMainCarStart = ShadowPerfNow();
+        Array< CgsSceneManager::EntityId, 32u >* lpRaceCarLodIds = &sFilteredEntityData.maRaceCarEntityIds;
+        static Array< CgsSceneManager::EntityId, 32u > sRaceCarLodIdsBringUp;
+        if ( sFilteredEntityData.maRaceCarEntityIds.GetLength() == 0u )
+        {
+            sRaceCarLodIdsBringUp.Clear();
+            for ( u32 luSlot = 0; luSlot < static_cast< u32 >( E_ACTIVE_RACE_CAR_INDEX_COUNT ); ++luSlot )
+            {
+                const ActiveRaceCar* lpSlot = mRaceCarEntityModule.GetActiveRaceCar(
+                    static_cast< EActiveRaceCarIndex >( luSlot ) );
+                if ( lpSlot != 0 && lpSlot->IsActive() )
+                {
+                    CgsSceneManager::EntityId lId;
+                    lId.Set( 1u, luSlot, 0u );          // owner 1 == race car (:3116)
+                    sRaceCarLodIdsBringUp.Append( lId );
+                }
+            }
+            lpRaceCarLodIds = &sRaceCarLodIdsBringUp;
+        }
         CalculateVehicleLODs( lEye, lfLodZoomFactor,
-                              sFilteredEntityData.maRaceCarEntityIds,
+                              *lpRaceCarLodIds,
                               GetTrafficRenderInfosBringUp( 0 ) );
+        // [DIAG racecar-lod] value-latched: which slots were banded, from where, to what.
+        {
+            static u32 suLastKey = 0xFFFFFFFFu;
+            u32 luKey = static_cast< u32 >( lpRaceCarLodIds->GetLength() ) << 24;
+            for ( u32 luI = 0; luI < lpRaceCarLodIds->GetLength() && luI < 8u; ++luI )
+            {
+                const ActiveRaceCar* lpCar = mRaceCarEntityModule.GetActiveRaceCar(
+                    static_cast< EActiveRaceCarIndex >( ( *lpRaceCarLodIds )[ luI ].GetEntityIndex() ) );
+                luKey ^= static_cast< u32 >( lpCar->GetRenderParams()->GetLOD() ) << ( 3u * luI );
+            }
+            if ( luKey != suLastKey && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                suLastKey = luKey;
+                *CgsDev::Log::gpDebugPrint << "[racecar-lod] banded " << static_cast< s32 >( lpRaceCarLodIds->GetLength() )
+                                            << " cars from eye (" << lEye.x << "," << lEye.y << "," << lEye.z << ") zoom "
+                                            << lfLodZoomFactor << ":";
+                for ( u32 luI = 0; luI < lpRaceCarLodIds->GetLength() && luI < 8u; ++luI )
+                {
+                    const u32 luSlot = ( *lpRaceCarLodIds )[ luI ].GetEntityIndex();
+                    const ActiveRaceCar* lpCar = mRaceCarEntityModule.GetActiveRaceCar(
+                        static_cast< EActiveRaceCarIndex >( luSlot ) );
+                    const Vector3 lPos = lpCar->GetRenderParams()->GetBodyTransform().Pos();
+                    *CgsDev::Log::gpDebugPrint << " slot" << static_cast< s32 >( luSlot )
+                                                << " at (" << lPos.x << "," << lPos.y << "," << lPos.z << ") lod "
+                                                << static_cast< s32 >( lpCar->GetRenderParams()->GetLOD() );
+                }
+                *CgsDev::Log::gpDebugPrint << " player " << static_cast< s32 >( mRaceCarEntityModule.GetPlayerActiveRaceCarIndex() ) << "\n";
+            }
+        }
 
         {
             sRaceCarDispatchInput.LockForWrite();
