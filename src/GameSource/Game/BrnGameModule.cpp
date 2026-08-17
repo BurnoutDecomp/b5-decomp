@@ -270,7 +270,52 @@ namespace BrnGame
         // before the frame loop" is the invariant the async seam will rely on.
         mGamePrepareReceiverQueue.Construct();
 
-        // [gated] X360 steps 7-9: the DebugComponentPerfMonCpu::SetPageName table (pages 0-23:
+        // ⭐ THE PAGE-NAME TABLE, RECOVERED 2026-08-17 (boot audit F-P1-10). Construct
+        // @0x823C9EA8 calls DebugComponentPerfMonCpu::SetPageName twenty-four times; the
+        // names are read out of that body in call order and are reproduced here exactly,
+        // including the two the console repeats (pages 10/11 both "Graphics", 13/14 both
+        // "Director" -- not a transcription slip).
+        //
+        // [FLAG] the CALLS are not made, because SetPageName is declared-only
+        // (CgsDebugComponentPerfMonCpu.h:27) with no storage member behind it, and the
+        // console's array shape is not attested anywhere I can read. Inventing a
+        // `const char* [24]` would be a guess about layout in a class this build already
+        // models loosely. So the DATA lands -- it did not exist in the tree at all before,
+        // and recovering it is the part that needed the disassembly -- and the wiring waits
+        // for the member.
+        // DELETE-WHEN DebugComponentPerfMonCpu grows its page-name storage: then this table
+        // feeds a plain 24-iteration SetPageName loop, and the component instance
+        // (file-static gDebugComponentPerfMonCpu in CgsDebugManager.cpp) needs an accessor.
+        static const char* const KAPC_PERFMON_PAGE_NAMES[24] =
+        {
+            "General",              // 0
+            "Resource",             // 1
+            "Traffic",              // 2
+            "Gui",                  // 3
+            "World",                // 4
+            "GameState",            // 5
+            "Physics",              // 6
+            "AI",                   // 7
+            "Network",              // 8
+            "Network Detail",       // 9
+            "Graphics",             // 10
+            "Graphics",             // 11  (repeated on the console)
+            "Race Car",             // 12
+            "Director",             // 13
+            "Director",             // 14  (repeated on the console)
+            "Deformation",          // 15
+            "SceneManager ContactGen", // 16
+            "SceneManager",         // 17
+            "More Network Detail",  // 18
+            "Sound: Aems Detail",   // 19
+            "Particles",            // 20
+            "Lion",                 // 21
+            "Video",                // 22
+            "Flapt",                // 23
+        };
+        (void)KAPC_PERFMON_PAGE_NAMES;
+
+        // [gated] X360 steps 7-9: the remaining debug surface (pages 0-23 named above:
         // "General".."Flapt"), the vsync-rate 50/60 M_CGS_PERFMON_CPU_SETGAMEFREQUENCY check, the
         // event-receiver queue @+10094268 (capacity 1024, align 16), the update/lookback timers +
         // CgsSystem::FrameRateManager::Construct, and the Debug/Framerate + Debug/Sim (Step/Play
