@@ -119,18 +119,24 @@ namespace renderengine
     // Pick the fallback pair (flat vs textured) for the mesh whose declaration was just
     // resolved -- see the note on Vd32Cached::mbHasTexcoord0 in the shim TU.
     void WorldFallbackShader_SelectForMesh();
-    // [FLAG PC data gap] Make the next WorldFallbackShader_SelectForMesh choose the fallback
-    // pair even when the technique's real programs are bound and the declaration is complete.
-    // Used for console-instanced meshes, whose recompiled `*_Instanced` program has no
-    // InstancingMatrixArray -- see the banner in XenonD3D9Shims.cpp.
-    void WorldFallbackShader_ForceForNextMesh();
+    // Tell the next WorldFallbackShader_SelectForMesh that this mesh is CONSOLE-INSTANCED.
+    // The leaf decides from there: it keeps the technique's real programs when their vertex
+    // program takes a `world` matrix (the expansion publishes the per-instance one through the
+    // technique's own constant channel) and drops to the flagged fallback pair only when it
+    // does not -- see the banner in XenonD3D9Shims.cpp.
+    void WorldFallbackShader_MarkInstancedMesh();
     // Resolve + cache a D3D9 vertex declaration and the stream-0 stride from the 32-bit
     // serialised VertexDescriptor image the converted world data carries.
     void* WorldVd32_GetDeclaration(const void* lpVdImage, u32* lpuStride);
     // ---- the REAL per-technique shader path ----
     // Create-once + bind the technique's two D3D9 programs (each argument is a
     // ProgramBufferData + 0x14 payload). False = nothing bound, keep the fallback.
-    bool  WorldPrograms_Bind(const void* lpVertexPayload, const void* lpPixelPayload);
+    // lpcTechniqueName is the ShaderTechnique blob's own name (+148), used only by the leaf's
+    // per-technique fallback survey; it may be null.
+    bool  WorldPrograms_Bind(const void* lpVertexPayload, const void* lpPixelPayload,
+                             const char* lpcTechniqueName);
+    // [DIAG] Record in that survey that a technique had no program pair at all.
+    void  WorldShader_ReportTechniqueHasNoPrograms(const char* lpcTechniqueName);
     // Forget the real programs (the fallback pair owns the device again).
     void  WorldShader_ClearRealPrograms();
     // Whether the last technique bind left the real programs on the device.
@@ -1292,12 +1298,27 @@ namespace shadow
         // ---- programs ------------------------------------------------------------------
         // The program payload is ProgramBufferData + 0x14 (VertexProgramState::
         // GetD3DVertexShader / SetPixelProgram use the same expression).
+        // [DIAG] the technique NAME (ShaderTechnique blob +148, a console u32 slot -> char*),
+        // for the leaf's per-technique fallback survey. NOTE that
+        // CgsResource::ShaderTechniqueResourceType::PostFixUp overwrites this string's FIRST
+        // character with the shader-profile digit -- the console's own behaviour -- so a
+        // logged name reads "0ehicle_1Bit_Tyre_Textured_Default".
+        const char* const lpcTechniqueName = (lpST != 0)
+            ? reinterpret_cast<const char*>(
+                  static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpST + 148)))   // serialised blob
+            : 0;
+
         bool lbRealBound = false;
         if (lpVertexProgram != 0 && lpPixelProgram != 0)
         {
             lbRealBound = renderengine::WorldPrograms_Bind(
                 reinterpret_cast<const u8*>(lpVertexProgram) + 0x14,
-                reinterpret_cast<const u8*>(lpPixelProgram) + 0x14);
+                reinterpret_cast<const u8*>(lpPixelProgram) + 0x14,
+                lpcTechniqueName);
+        }
+        else
+        {
+            renderengine::WorldShader_ReportTechniqueHasNoPrograms(lpcTechniqueName);
         }
         const bool lbVertexProgramChanged = SetVertexProgram(lpVertexProgram);
         const bool lbPixelProgramChanged  = SetPixelProgram(lpPixelProgram);
@@ -1503,15 +1524,17 @@ namespace shadow
         renderengine::WorldDraw_SetIndexSource(lppBuffers[0]);
         renderengine::WorldDraw_SetVertexSource(luNumVb != 0 ? lppBuffers[1] : 0, luStride);
 
-        // [FLAG PC data gap] A console-instanced mesh's own `*_Instanced` technique program
-        // cannot draw it on this build -- the recompiled PC program (from the Remaster's
-        // reworked `_Instanced.fx`) declares neither InstancingMatrixArray nor
-        // InstancingIndexArray, so it never receives the per-instance world matrices and
-        // collapses the geometry. The flagged fallback pair transforms POSITION by the
-        // per-instance WVP SetObjectTransformPC just published, which is exactly right for
-        // the unrolled single-instance commands. See the banner in XenonD3D9Shims.cpp.
+        // A console-instanced mesh needs a per-instance object matrix its technique's own
+        // program can read. The recompiled PC programs declare neither InstancingMatrixArray
+        // nor InstancingIndexArray -- they are the NON-instanced twins and take the same two
+        // data as `world` / `g_wheelConstants` -- so the publish is rerouted onto those
+        // registers (CgsShaderConstants.cpp's substitute table) and the expansion points the
+        // two console constants at this draw's own entry (DrawRenderable::Interpret). All this
+        // mark does is tell the leaf to CHECK: it keeps the real programs when the bound
+        // vertex program declares `world`, and only then falls back to the flagged pair (whose
+        // c240..c243 WVP SetObjectTransformPC just published) when it does not.
         if (lpMesh->mu8InstanceCount > 1u)
-            renderengine::WorldFallbackShader_ForceForNextMesh();
+            renderengine::WorldFallbackShader_MarkInstancedMesh();
 
         // [PC bring-up shim] The fallback pair can only be chosen once this mesh's
         // declaration is known (a vs_3_0 input the declaration does not supply makes the

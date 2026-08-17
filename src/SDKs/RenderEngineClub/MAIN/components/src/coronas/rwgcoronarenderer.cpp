@@ -9,11 +9,30 @@
 // during BrnCoronaManager::Construct (rwgcoronabuffer.h). It builds three render resources from
 // the supplied rw resource allocator and parks each created handle in a file-scope global the
 // later corona draw path reads:
-//   * a vertex ProgramBuffer  (shader function &gCoronaVertexShader, shaderType 1)  -> gpCoronaVertexProgram
-//   * a pixel  ProgramBuffer  (shader function &gCoronaPixelShader,  shaderType 0)  -> gpCoronaPixelProgram,
-//       then three named shader-constant handles are looked up out of it
+//   * a PIXEL  ProgramBuffer  (shader function &gCoronaPixelShader,  shaderType 1)  -> gpCoronaPixelProgram
+//   * a VERTEX ProgramBuffer  (shader function &gCoronaVertexShader, shaderType 0)  -> gpCoronaVertexProgram,
+//       then three named shader-constant handles are looked up out of THE VERTEX PROGRAM
 //       (viewProjectionMatrix / cameraPositionPlusBrightness / viewXyScale)
 //   * a VertexDescriptor describing the four-element corona vertex stream         -> gpCoronaVertexDecl
+//
+// *** VERTEX/PIXEL WERE INVERTED IN THE FIRST RECONSTRUCTION -- CORRECTED 2026-08-17 (carlights
+// step 1, group `coronas`). Three independent proofs, all pointing the same way:
+//   (a) programbuffer.h:73 `u32 muShaderType;  // +0x00 != 0 -> pixel, == 0 -> vertex` (the real
+//       committed ProgramBufferData home), and pc/gcm ProgramBufferPC_Adopt's third argument uses
+//       the same encoding (CgsIm3dSkyDome.cpp:159/162 pass 0u for the vertex program, 1u for the
+//       pixel one). So the FIRST program built here (shaderType 1) is the PIXEL program.
+//   (b) renderengine::CoronaRenderer::Begin<shadow::Device> @0x823FF2C0 -- the only consumer of
+//       these globals -- does `shadow::Device::SetPixelProgram(dword_82FAB6B0)` and
+//       `shadow::Device::SetVertexProgramInternal(dword_82FAB6B4)`. dword_82FAB6B0 is the FIRST
+//       program's Initialize result, dword_82FAB6B4 the SECOND's.
+//   (c) all three GetVariableHandleByName calls @0x822851xx take dword_82FAB6B4 (the SECOND,
+//       vertex program) as their program -- which is where viewProjectionMatrix /
+//       cameraPositionPlusBrightness / viewXyScale belong: Begin publishes them from a
+//       RenderParameters block (view-projection matrix, camera position + brightness, view xy
+//       scale), i.e. the billboard-expansion inputs of a VERTEX shader.
+// A reader of the previous naming would have bound the 228-byte pixel program as the vertex
+// program. Names/handle-array names/comments corrected; the STORES are unchanged (the asm's own
+// order is preserved) and no behaviour moved. ***
 //
 // For each resource the pattern is identical and follows the X360 asm exactly:
 //   1. <Type>::GetResourceDescriptor(localDescriptor, params)   -> a rw::BaseResourceDescriptors<5>
@@ -35,6 +54,48 @@
 // format word at element+0x04), so the local Parameters slice below matches the 16-byte form. The
 // 12-byte renderstates.h Parameters should be reconciled to the 16-byte X360 layout by GROWING it,
 // not retyped here.
+//
+// =============================================================================================
+// [FLAG BLOCKED -- THIS TU CANNOT BE MOUNTED] (carlights step 1, group `coronas`, 2026-08-17)
+// Recorded here so the next wave does not discover it at link time. THREE separate blockers:
+//
+// 1. SIX PHANTOM EXTERNALS. The local ProgramBuffer / VertexDescriptor slices below do NOT have
+//    the mangled names of the committed homes, so mounting this file is six guaranteed LNK2019.
+//    Measured (cl /c + dumpbin /SYMBOLS on the unmodified file, 2026-08-17) -- local slice vs the
+//    real committed declaration:
+//      ProgramBuffer::GetResourceDescriptor(ResourceDescriptorTable5*, const ProgramBufferParameters*)
+//        REAL: states/programbuffer.h:107  (rw::BaseResourceDescriptors<5>*, const ProgramBufferParameters*)
+//      ProgramBuffer::Initialize(ProgramBufferData**, const ProgramBufferParameters*)
+//        REAL: states/programbuffer.h:111  (ProgramResourceLayout*, const ProgramBufferParameters*)
+//      ProgramBuffer::GetVariableHandleByName(ProgramBufferData*, const u8*, ProgramVariableHandle*)
+//        REAL: states/programbuffer.h:109  (const ProgramBufferData*, const u8*, ProgramVariableHandle*)
+//      VertexDescriptor::Parameters::Parameters()
+//        REAL: pc/gcm/renderengine/VertexDescriptor.h:78 (same spelling -- resolves once the local
+//              class is deleted and the real header is included)
+//      VertexDescriptor::GetResourceDescriptor(ResourceDescriptorTable5*, const Parameters*)
+//        REAL: VertexDescriptor.h:81  static void GetResourceDescriptor(void*, const Parameters*)
+//      VertexDescriptor::Initialize(ProgramBufferData**, const Parameters*)
+//        REAL: VertexDescriptor.h:83  static VertexDescriptorData* Initialize(rw::Resource*, const Parameters*)
+//    states/programbuffer.cpp IS on tools/build/build_game_exe.bat (line 629) and
+//    pc/gcm/renderengine/VertexDescriptor.cpp is on it too, so the fix is to delete the local
+//    slices and include the real headers -- deliberately NOT done in this pass, because it would
+//    change which overloads the console argument shapes bind to and this TU is dead until (2)/(3)
+//    are closed anyway.
+//
+// 2. THE MICROCODE WALL. gCoronaPixelShader / gCoronaVertexShader stand in for the two Xenos
+//    microcode blobs embedded in the guest image: X360 &unk_8200F1B8 (the PIXEL program, 228 bytes
+//    -- the value the console writes to ProgramBufferParameters +0x08) and &unk_8200F2A0 (the
+//    VERTEX program, 788 bytes). They are NOT in SHADERS.BNDL (the corona pair is executable-
+//    embedded, exactly like the sky dome's -- see pc/gcm/renderengine/SkyDomeProgramsPC.cpp), and
+//    the placeholders here are ONE BYTE each: any real GetResourceDescriptor would run
+//    XGGetMicrocodeShaderParts off the end of them. A PC pair has to be authored/recovered the way
+//    the sky dome's and Godray's were (see the report for the two candidate sources).
+//
+// 3. muFunction IS A GUEST POINTER WORD. The X360 stores the blob's guest address in a u32; the
+//    casts below truncate a HOST pointer into it (AGENTS.md rule 1). Harmless only because the TU
+//    is dead. On PC the whole GetResourceDescriptor/Initialize route is replaced by
+//    renderengine::ProgramBufferPC_Adopt(blob, size, shaderType) -- programbuffer.h:123.
+// =============================================================================================
 
 namespace renderengine
 {
@@ -66,15 +127,20 @@ namespace renderengine
 
     // ---- renderengine::ProgramBuffer (committed home: states/programbuffer.cpp). Minimal slice.
     //      ProgramBufferParameters here is the corona-built unpack block: a compiled-shader function
-    //      pointer at +0x00, a vertex/pixel shader-type flag at +0x04 and a size/blob word at +0x08
-    //      (the X360 stores 228 / 788 there for the two shaders), the rest zero. GetResourceDescriptor
-    //      takes the muFunction != 0 path (XGGetMicrocodeShaderParts), so only muFunction is read at
-    //      sizing time; Initialize consumes the full block.
+    //      pointer at +0x00, a vertex/pixel shader-type flag at +0x04 and the blob's byte size at
+    //      +0x08 (the X360 stores 228 for the pixel shader / 788 for the vertex shader), the rest
+    //      zero. GetResourceDescriptor takes the muFunction != 0 path (XGGetMicrocodeShaderParts),
+    //      so only muFunction is read at sizing time; Initialize consumes the full block.
+    //      NOTE (2026-08-17): the committed real home spells +0x08 `muReserved8` and NEITHER
+    //      GetResourceDescriptor NOR Initialize reads it (states/programbuffer.cpp:137/182 -- the
+    //      microcode size comes from XGGetMicrocodeShaderParts, not from this word). It is kept
+    //      named here only because it is this TU's record of the two blob sizes, which is what a
+    //      dump request needs.
     struct ProgramBufferParameters
     {
         u32 muFunction;    // +0x00 compiled-shader function pointer
         u32 muShaderType;  // +0x04 1 -> pixel, 0 -> vertex (copied to the runtime object)
-        u32 muBlobSize;    // +0x08 microcode/constant-table blob size for this shader
+        u32 muBlobSize;    // +0x08 the microcode blob's byte size (real home: muReserved8, unread)
         u32 muReserved0C;  // +0x0C
         u32 muReserved10;  // +0x10
         u32 muReserved14;  // +0x14
@@ -156,15 +222,18 @@ namespace renderengine
 
 namespace
 {
-    // The corona shader function blobs in the X360 image (&unk_8200F1B8 = vertex, &unk_8200F2A0 =
-    // pixel). HONEST PLACEHOLDER: compiled-microcode data the renderengine links against; declared as
-    // opaque externs so the parameter blocks can name them. Their addresses are the muFunction values.
-    extern const u8 gCoronaVertexShader;   // X360 &unk_8200F1B8
-    extern const u8 gCoronaPixelShader;    // X360 &unk_8200F2A0
-    const u8 gCoronaVertexShader = 0;
+    // The corona shader function blobs in the X360 image (&unk_8200F1B8 = the PIXEL program,
+    // 228 bytes; &unk_8200F2A0 = the VERTEX program, 788 bytes -- see blocker (2) in the banner).
+    // HONEST PLACEHOLDER: compiled Xenos microcode the renderengine links against; declared as
+    // opaque externs so the parameter blocks can name them. Their addresses are the muFunction
+    // values. ONE BYTE EACH -- this TU must not be mounted while that is true.
+    extern const u8 gCoronaPixelShader;    // X360 &unk_8200F1B8, 228 bytes
+    extern const u8 gCoronaVertexShader;   // X360 &unk_8200F2A0, 788 bytes
     const u8 gCoronaPixelShader  = 0;
+    const u8 gCoronaVertexShader = 0;
 
-    // The named shader constants the pixel program exposes (X360 string literals at the call sites).
+    // The named shader constants the VERTEX program exposes (X360 string literals at the call
+    // sites; all three GetVariableHandleByName calls take the vertex program -- see the banner).
     const u8 gszViewProjectionMatrix[]         = "viewProjectionMatrix";
     const u8 gszCameraPositionPlusBrightness[] = "cameraPositionPlusBrightness";
     const u8 gszViewXyScale[]                  = "viewXyScale";
@@ -172,12 +241,14 @@ namespace
     // File-scope globals the later corona draw path reads (X360 dword_82FAB6B0/B4/AC and the handle
     // arrays at dword_82FAB850 / dword_82FAC1CC / dword_82FAC1B8). The built objects live in these
     // five-pointer handle slots; the *Program / *Decl pointers are the Initialize return values.
-    renderengine::ProgramBufferData* gapCoronaVertexProgramHandles[5];  // X360 dword_82FAB850
-    renderengine::ProgramBufferData* gapCoronaPixelProgramHandles[5];   // X360 dword_82FAC1CC
+    // Which is which is fixed by CoronaRenderer::Begin @0x823FF2C0: SetPixelProgram(dword_82FAB6B0),
+    // SetVertexProgramInternal(dword_82FAB6B4).
+    renderengine::ProgramBufferData* gapCoronaPixelProgramHandles[5];   // X360 dword_82FAB850
+    renderengine::ProgramBufferData* gapCoronaVertexProgramHandles[5];  // X360 dword_82FAC1CC
     renderengine::ProgramBufferData* gapCoronaVertexDeclHandles[5];     // X360 dword_82FAC1B8
 
-    renderengine::ProgramBufferData* gpCoronaVertexProgram;             // X360 dword_82FAB6B0
-    renderengine::ProgramBufferData* gpCoronaPixelProgram;              // X360 dword_82FAB6B4
+    renderengine::ProgramBufferData* gpCoronaPixelProgram;              // X360 dword_82FAB6B0
+    renderengine::ProgramBufferData* gpCoronaVertexProgram;             // X360 dword_82FAB6B4
     renderengine::ProgramBufferData* gpCoronaVertexDecl;                // X360 dword_82FAB6AC
 
     renderengine::ProgramVariableHandle gCoronaViewProjectionHandle;            // X360 byte_82FAB61C
@@ -194,34 +265,36 @@ namespace renderengine
         ResourceDescriptorTable5 lDescriptor;
         ProgramBufferData* lapHandles[5];
 
-        // --- vertex program -------------------------------------------------------------------------
-        ProgramBufferParameters lVertexParams = {};
-        lVertexParams.muFunction   = static_cast<u32>(reinterpret_cast<usize>(&gCoronaVertexShader));  // &unk_8200F1B8
-        lVertexParams.muShaderType = 1;                                            // var_21C = 1
-        lVertexParams.muBlobSize   = 228;                                          // var_218 = 0xE4
-
-        ProgramBuffer::GetResourceDescriptor(&lDescriptor, &lVertexParams);
-        lpAllocator->Allocate(lapHandles, lpAllocator, &lDescriptor, 0);
-        std::memcpy(gapCoronaVertexProgramHandles, lapHandles, sizeof(lapHandles));  // copy 5 words
-        gpCoronaVertexProgram = ProgramBuffer::Initialize(gapCoronaVertexProgramHandles, &lVertexParams);
-
-        // --- pixel program --------------------------------------------------------------------------
+        // --- pixel program (built FIRST -- shaderType 1) ----------------------------------------------
         ProgramBufferParameters lPixelParams = {};
-        lPixelParams.muFunction   = static_cast<u32>(reinterpret_cast<usize>(&gCoronaPixelShader));   // &unk_8200F2A0
-        lPixelParams.muShaderType = 0;                                            // var_21C = 0
-        lPixelParams.muBlobSize   = 788;                                          // var_218 = 0x314
+        lPixelParams.muFunction   = static_cast<u32>(reinterpret_cast<usize>(&gCoronaPixelShader));  // &unk_8200F1B8
+        lPixelParams.muShaderType = 1;                                            // var_21C = 1 -> pixel
+        lPixelParams.muBlobSize   = 228;                                          // var_218 = 0xE4
 
         ProgramBuffer::GetResourceDescriptor(&lDescriptor, &lPixelParams);
         lpAllocator->Allocate(lapHandles, lpAllocator, &lDescriptor, 0);
         std::memcpy(gapCoronaPixelProgramHandles, lapHandles, sizeof(lapHandles));  // copy 5 words
         gpCoronaPixelProgram = ProgramBuffer::Initialize(gapCoronaPixelProgramHandles, &lPixelParams);
 
-        // Pull the three named shader-constant handles out of the pixel program.
-        ProgramBuffer::GetVariableHandleByName(gpCoronaPixelProgram, gszViewProjectionMatrix,
+        // --- vertex program (built SECOND -- shaderType 0) --------------------------------------------
+        ProgramBufferParameters lVertexParams = {};
+        lVertexParams.muFunction   = static_cast<u32>(reinterpret_cast<usize>(&gCoronaVertexShader)); // &unk_8200F2A0
+        lVertexParams.muShaderType = 0;                                           // var_21C = 0 -> vertex
+        lVertexParams.muBlobSize   = 788;                                         // var_218 = 0x314
+
+        ProgramBuffer::GetResourceDescriptor(&lDescriptor, &lVertexParams);
+        lpAllocator->Allocate(lapHandles, lpAllocator, &lDescriptor, 0);
+        std::memcpy(gapCoronaVertexProgramHandles, lapHandles, sizeof(lapHandles));  // copy 5 words
+        gpCoronaVertexProgram = ProgramBuffer::Initialize(gapCoronaVertexProgramHandles, &lVertexParams);
+
+        // Pull the three named shader-constant handles out of the VERTEX program (the X360 calls
+        // @0x82285250 / 0x82285268 / 0x82285280 all take dword_82FAB6B4, the SECOND Initialize's
+        // result -- `stw r3, dword_82FAB6B4(r30)` @0x8228524C, reloaded before calls 2 and 3).
+        ProgramBuffer::GetVariableHandleByName(gpCoronaVertexProgram, gszViewProjectionMatrix,
                                                &gCoronaViewProjectionHandle);
-        ProgramBuffer::GetVariableHandleByName(gpCoronaPixelProgram, gszCameraPositionPlusBrightness,
+        ProgramBuffer::GetVariableHandleByName(gpCoronaVertexProgram, gszCameraPositionPlusBrightness,
                                                &gCoronaCameraPositionPlusBrightness);
-        ProgramBuffer::GetVariableHandleByName(gpCoronaPixelProgram, gszViewXyScale,
+        ProgramBuffer::GetVariableHandleByName(gpCoronaVertexProgram, gszViewXyScale,
                                                &gCoronaViewXyScaleHandle);
 
         // --- vertex declaration ---------------------------------------------------------------------

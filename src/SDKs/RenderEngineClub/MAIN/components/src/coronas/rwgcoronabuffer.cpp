@@ -1,55 +1,76 @@
-#include "types.hpp"
+#include "SDKs/RenderEngineClub/MAIN/components/include/coronas/rwgcoronabuffer.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   renderengine::CoronaBuffer::GetResourceDescriptor @ 0x8228D6C0
 //   renderengine::CoronaBuffer::Initialize            @ 0x822850D8
 //
-// GetResourceDescriptor fills a five-entry rw resource descriptor table. Each
-// entry's size is liStride = (count << 6) + 16, where `count` is the first word
-// of the parameter block. The counts are {16, 1, 1, 1, 1}. The first pair is
-// written by a single 64-bit store (size in the high word, 16 in the low word).
+// REWRITTEN 2026-08-17 (carlights step 1, group `coronas`). Three corrections, all from the ASM
+// (which overrides the Hex-Rays pseudocode -- AGENTS.md "Verify calling conventions against the
+// ASSEMBLY"):
 //
-// Initialize lays out the buffer header: it copies the descriptor's leading word
-// into the buffer, then stores a 16-byte-aligned data pointer just past the
-// 8-byte header ((base + 8) rounded up to 16 == (base + 23) & ~15).
+// 1. THE DECLARATIONS DID NOT MATCH THE HEADER. This file used to declare its own local
+//    `class CoronaBuffer` with NON-STATIC `void* GetResourceDescriptor(void*, const u32*)` and
+//    `void* Initialize(void**, const u32*)`, while the committed header
+//    (coronas/rwgcoronabuffer.h:83-84) declares them STATIC with typed parameters. Different
+//    mangled names -> mounting this file would have left BrnCoronaManager::Construct's two calls
+//    unresolved (LNK2019 x2). Measured at HEAD with dumpbin /SYMBOLS:
+//      ?GetResourceDescriptor@CoronaBuffer@renderengine@@QEAAPEAXPEAXPEBI@Z   (defined here, Q = non-static)
+//      ?Initialize@CoronaBuffer@renderengine@@QEAAPEAXPEAPEAXPEBI@Z           (defined here)
+//    It now includes the header and defines exactly what the header declares.
+//
+// 2. GetResourceDescriptor SIZES ONLY SLOT 0. The pseudocode reads
+//      result[2] = v2; result[4] = v2; result[6] = v2; result[8] = v2;
+//    -- i.e. all five slots sized at the stride -- but the asm stores r10, and `li r10, 0` two
+//    instructions earlier:
+//      0x8228D6D0  li   r10, 0
+//      0x8228D6F8  stw  r10, 0(r3)     0x8228D6FC  stw r10, 8(r3)     0x8228D700  stw r10, 0x10(r3)
+//      0x8228D704  stw  r10, 0x18(r3)  0x8228D708  stw r10, 0x20(r3)
+//    and only THEN does the 64-bit `std r11, 0(r3)` (assembled at 0x8228D6EC-F4 from
+//    {stride, 16}) put the stride + alignment 16 into slot 0. So the table is
+//      { {stride, 16}, {0,1}, {0,1}, {0,1}, {0,1} }
+//    and the old form asked the allocator for FIVE blocks of 32784 bytes instead of one.
+//
+// 3. THE SECOND Initialize ARGUMENT IS THE PARAMETERS, NOT A DESCRIPTOR. Its caller
+//    BrnCoronaManager::Construct @0x823FCE38/0x823FCE44 passes the same `v33` block it handed
+//    GetResourceDescriptor, whose first word is the corona count (512) -- so `*result = *a2` is
+//    `muNumCoronas = params.miNumCoronas`, not a descriptor copy. The parameter was named
+//    `pDescriptor`.
 
 namespace renderengine
 {
-    class CoronaBuffer
+    // X360 0x8228D6C0. The buffer is one block: a header followed by `count` 64-byte records.
+    ResourceDescriptor5* CoronaBuffer::GetResourceDescriptor(ResourceDescriptor5* pDescriptor,
+                                                             Parameters* pParameters)
     {
-    public:
-        void* GetResourceDescriptor(void* pOut, const u32* pParams);
-        void* Initialize(void** ppBuffer, const u32* pDescriptor);
-    };
+        // `slwi r9,r9,6 ; addi r9,r9,0x10` -- 64 bytes per Corona plus the 16-byte header lane.
+        const u32 luBlockSize = (static_cast<u32>(pParameters->miNumCoronas) << 6) + 16u;
 
-    void* CoronaBuffer::GetResourceDescriptor(void* pOut, const u32* pParams)
-    {
-        int* lpOut = reinterpret_cast<int*>(pOut);
-        const int liStride = (static_cast<int>(*pParams) << 6) + 16;
+        for (int liSlot = 0; liSlot < 5; ++liSlot)
+        {
+            pDescriptor->maEntries[liSlot].muSize      = 0u;
+            pDescriptor->maEntries[liSlot].muAlignment = 1u;
+        }
 
-        lpOut[2] = liStride;
-        lpOut[3] = 1;
-        lpOut[4] = liStride;
-        lpOut[5] = 1;
-        lpOut[6] = liStride;
-        lpOut[7] = 1;
-        lpOut[8] = liStride;
-        lpOut[9] = 1;
-
-        // 64-bit store: high word = stride, low word = 16.
-        lpOut[0] = liStride;
-        lpOut[1] = 16;
-
-        return pOut;
+        pDescriptor->maEntries[0].muSize      = luBlockSize;
+        pDescriptor->maEntries[0].muAlignment = 16u;
+        return pDescriptor;
     }
 
-    void* CoronaBuffer::Initialize(void** ppBuffer, const u32* pDescriptor)
+    // X360 0x822850D8. Lay the header down in the carved block and point mpData at the first
+    // 16-byte-aligned address past it.
+    CoronaBuffer* CoronaBuffer::Initialize(CoronaBuffer** ppBuffer, Parameters* pParameters)
     {
-        u32* lpBuffer = reinterpret_cast<u32*>(*ppBuffer);
+        CoronaBuffer* lpBuffer = *ppBuffer;
 
-        lpBuffer[0] = *pDescriptor;
-        lpBuffer[1] = static_cast<u32>(
-            (reinterpret_cast<uintptr_t>(lpBuffer) + 23) & ~static_cast<uintptr_t>(0xF));
+        lpBuffer->muNumCoronas = static_cast<u32>(pParameters->miNumCoronas);
+
+        // `addi r10,r3,0x17 ; clrrwi r11,r10,4` == (base + 8 + 15) & ~15, i.e. "align 16 past an
+        // 8-byte console header". sizeof(CoronaBuffer) is 8 on the console and 16 here (a u32 and
+        // a 64-bit pointer), so the host form has to round past the HOST header, not the guest
+        // one -- and because the block is 16-aligned by the descriptor above, both land on
+        // base+16 and the GetResourceDescriptor size (16 + count*64) still fits exactly.
+        const usize luBase = reinterpret_cast<usize>(lpBuffer);
+        lpBuffer->mpData = reinterpret_cast<Corona*>((luBase + sizeof(CoronaBuffer) + 15u) & ~static_cast<usize>(15u));
 
         return lpBuffer;
     }

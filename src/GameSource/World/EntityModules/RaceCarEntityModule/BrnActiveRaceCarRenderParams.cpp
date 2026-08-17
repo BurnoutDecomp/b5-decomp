@@ -293,6 +293,15 @@ void ActiveRaceCar::RenderParams::Reset()
         maVerletOffsets[luVerlet].SetZero();
     }
 
+    // [FLAG PC bring-up, car+lights step 1] NOT a console store -- on the console the
+    // deformation system owns mfDeformationSquared (ActiveRaceCar::UpdateDeformationState
+    // @0x822D4A58, parked on this build: BrnGame.log "[physics-readback] PARKED deformation
+    // legs"). RenderRaceCar's constant-24 lights-out gate (`mfDeformationSquared >= 0.25` =>
+    // lamps off) is the FIRST reader of the member on PC and it had no writer and no
+    // initialiser -- it was 0.0f only by accident of storage class (verify F3, lights).
+    // Zero = an undamaged car = lamps allowed. DELETE-WHEN the deformation leg lands.
+    mfDeformationSquared = 0.0f;
+
     // Identity wheel transforms + scale matrices (console unrolls this 6-iteration
     // loop; re-rolled here).
     for (u32 luWheel = 0; luWheel < 6; ++luWheel)

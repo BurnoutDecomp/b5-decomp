@@ -653,6 +653,54 @@ private:
     bool mbRenderRaceCarCoronas;    // X360 +0x1834F (99151)
 
     // ========================================================================
+    // MODELLED members (car-lights wave 2026-08-17): the SEVEN DEBUG DAMAGE /
+    // SELF-ILLUMINATION overrides RenderRaceCar @0x822CF6A0 reads at its top
+    // (@0x822CFAB4..0x822CFBA4), i.e. the DWARF run that sits IMMEDIATELY BEFORE the
+    // paint block below. Same additive rule as every block in this header: the console
+    // offset is recorded per member, the x64 offset is not load-bearing.
+    //
+    // NAMES: the DecFIGS DWARF's own, in its own declaration order
+    // (references/DecFIGS/dwarfdump/.../BrnRaceCarEntityModule.h entries :378..:396):
+    //     :378 bool      DEBUG_mbOverrideDamage
+    //     :381 float32_t DEBUG_mfVehicleScratchAmount
+    //     :384 float32_t DEBUG_mfVehicleDustAmount
+    //     :387 float32_t DEBUG_mfVehicleCrumpleAmount
+    //     :390 float32_t DEBUG_mfSelfIlluminationR
+    //     :393 float32_t DEBUG_mfSelfIlluminationG
+    //     :396 float32_t DEBUG_mfSelfIlluminationB
+    // and :399 is DEBUG_mbOverrideCarColor, which THIS HEADER ALREADY PINS at +100244.
+    //
+    // OFFSETS: a SEVEN-POINT ASM FIT, every one an address RenderRaceCar bakes in as a
+    // literal, and the run closes exactly onto the already-pinned +100244:
+    //     0x822CFAB4  addis r29, r20, 2 ; addi r29, r29, -0x7888 ; lbz r11, 0(r29)
+    //                                     -> module + 0x18778 == +100216  the bool
+    //     0x822CFAEC  ori r9,  r11, 0x877C -> +0x1877C == +100220  scratch  (the
+    //                                        RenderParams::DEBUG_OverrideScratchAmount arg)
+    //     0x822CFAE0  ori r10, r11, 0x8780 -> +0x18780 == +100224  dust     (lane Z of c23)
+    //     0x822CFADC  ori r11, r11, 0x8784 -> +0x18784 == +100228  crumple  (lane X of c23)
+    //     0x822CFB74  ori r10, r11, 0x8788 -> +0x18788 == +100232  selfIllumination R
+    //     0x822CFB7C  ori r9,  r11, 0x878C -> +0x1878C == +100236  selfIllumination G
+    //     0x822CFB88  ori r8,  r11, 0x8790 -> +0x18790 == +100240  selfIllumination B
+    //     (next member) DEBUG_mbOverrideCarColor       +0x18794 == +100244  ALREADY PINNED
+    // The bool->float alignment pad (100216 + 1 + 3 == 100220) falls exactly where the
+    // console offsets say it must, which is what makes this a fit and not a placement.
+    //
+    // Like the paint overrides below they are dev switches with NO writer on this build
+    // (only the debug menu ever set them on the console), so both console branches that
+    // read them are inert at retail -- DEBUG_mbOverrideDamage false means the max() in the
+    // self-illumination vector is a no-op and the scratch override never runs. They are
+    // MODELLED rather than dropped so RenderRaceCar's constant-24 block is the console's
+    // whole block, not a slice.
+    // ========================================================================
+    bool DEBUG_mbOverrideDamage       = false;  // +0x18778 (100216)
+    f32  DEBUG_mfVehicleScratchAmount = 0.0f;   // +0x1877C (100220)
+    f32  DEBUG_mfVehicleDustAmount    = 0.0f;   // +0x18780 (100224)
+    f32  DEBUG_mfVehicleCrumpleAmount = 0.0f;   // +0x18784 (100228)
+    f32  DEBUG_mfSelfIlluminationR    = 0.0f;   // +0x18788 (100232)
+    f32  DEBUG_mfSelfIlluminationG    = 0.0f;   // +0x1878C (100236)
+    f32  DEBUG_mfSelfIlluminationB    = 0.0f;   // +0x18790 (100240)
+
+    // ========================================================================
     // MODELLED members (paint wave 2026-08-02): the two DEBUG COLOUR OVERRIDES
     // UpdateActiveRaceCarColours reads. Every one is NAMED BY THE DWARF
     // (references/DecFIGS/.../BrnRaceCarEntityModule.h entries :480..:489) and every one

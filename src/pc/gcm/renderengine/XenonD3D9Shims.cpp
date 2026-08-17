@@ -409,9 +409,9 @@ namespace
     u32                     suLastDeclSourceStride = 0;
     u32                     suLastDeclDec3nCount = 0;
     u16                     sau16LastDeclDec3nOffsets[16] = {};
-    // [FLAG PC data gap] Set by WorldFallbackShader_ForceForNextMesh (see its banner further
-    // down): the next mesh must use the fallback pair even when the technique's real programs
-    // are bound and usable. Console-instanced meshes only.
+    // Set by WorldFallbackShader_MarkInstancedMesh (see its banner further down): the next
+    // mesh is CONSOLE-INSTANCED. WorldFallbackShader_SelectForMesh turns that into a fallback
+    // only when the technique's vertex program cannot be fed a `world` matrix.
     bool                    sbForceFallbackNextMesh = false;
 
     D3DCompileProc GetD3DCompile()
@@ -549,6 +549,153 @@ namespace
         return luMask;
     }
 
+    // ---- the named-constant surface of a compiled D3D9 program ----------------------
+    // ONE question has to be answered at BIND time: does this technique's vertex program
+    // take a `world` matrix? It decides whether a console-instanced mesh can use its own
+    // programs at all (see WorldFallbackShader_MarkInstancedMesh).
+    //
+    // The dispatch side answers the same class of question through the ShaderProgramBuffer's
+    // descriptor table (ShaderConstantsExternal::FixUp -> ProgramBuffer::
+    // GetVariableHandleByName). This TU cannot include programbuffer.h -- that header must
+    // not precede <d3d9.h> here, see the note by the XG* leaf at the bottom of the file -- so
+    // it reads the program's OWN CTAB. It is the same data: the converter BUILDS that
+    // descriptor table out of this very CTAB (tools/assets/shaders/FORMAT_MAP.md section 5).
+    //
+    // Layout (D3DXSHADER_CONSTANTTABLE, the standard fxc comment block, little-endian): a
+    // comment token (opcode 0xFFFE, dword length in bits 16..30) whose first payload dword is
+    // 'CTAB'; the table header starts at the dword AFTER that FourCC and every offset in the
+    // block is relative to the header's own first byte:
+    //     +0x00 u32 Size (28)     +0x04 u32 Creator      +0x08 u32 Version
+    //     +0x0C u32 Constants     +0x10 u32 ConstantInfo
+    //     +0x14 u32 Flags         +0x18 u32 Target
+    // D3DXSHADER_CONSTANTINFO, 20-byte stride:
+    //     +0x00 u32 Name (offset) +0x04 u16 RegisterSet  +0x06 u16 RegisterIndex
+    //     +0x08 u16 RegisterCount +0x0A u16 Reserved     +0x0C u32 TypeInfo
+    //     +0x10 u32 DefaultValue
+    // RegisterSet 2 == D3DXRS_FLOAT4, the only set this asks about.
+    //
+    // MEASURED against the shipped bundle: the four wheel vertex programs
+    // (build/game/SHADERS.BNDL resources AB4DE44C / EB89C988 / 9CFA74B1 / DC3E5975) each
+    // report `world` at register 20 count 4 -- the same answer `fxc /dumpbin` prints.
+    bool ProgramDeclaresFloat4Constant(const void* lpShader, const char* lpcName)
+    {
+        if (lpShader == nullptr || lpcName == nullptr)
+            return false;
+
+        const u32* const lpToken = static_cast<const u32*>(lpShader);
+        u32 luWord = 1;                                    // [0] is the version token
+        for (u32 luGuard = 0; luGuard < 65536u; ++luGuard)
+        {
+            const u32 luInstruction = lpToken[luWord];
+            if (luInstruction == 0x0000FFFFu)               // D3DSIO_END
+                break;
+            const u32 luOpcode = luInstruction & 0x0000FFFFu;
+            u32 luLength;
+            if (luOpcode == 0x0000FFFEu)                    // comment block
+            {
+                luLength = (luInstruction >> 16) & 0x7FFFu;
+                if (luLength >= 8u && lpToken[luWord + 1] == 0x42415443u)   // 'CTAB'
+                {
+                    // Everything below is bounded by the comment block the token declares:
+                    // its payload is luLength dwords, the first of which is the FourCC.
+                    const u8* const lpTable = reinterpret_cast<const u8*>(&lpToken[luWord + 2]);
+                    const u32 luTableBytes = 4u * (luLength - 1u);
+                    u32 luNumConstants = 0, luConstantInfo = 0;
+                    std::memcpy(&luNumConstants, lpTable + 0x0C, 4);
+                    std::memcpy(&luConstantInfo, lpTable + 0x10, 4);
+                    if (luConstantInfo > luTableBytes
+                        || luNumConstants > (luTableBytes - luConstantInfo) / 20u)
+                    {
+                        LogOnce("ctabrange", "[WorldShader] a program's CTAB constant table is"
+                                             " out of range - constant lookup skipped\n");
+                        return false;
+                    }
+                    for (u32 luConstant = 0; luConstant < luNumConstants; ++luConstant)
+                    {
+                        const u8* const lpInfo = lpTable + luConstantInfo + 20u * luConstant;
+                        u32 luNameOffset = 0;
+                        u16 lu16RegisterSet = 0;
+                        std::memcpy(&luNameOffset,    lpInfo + 0x00, 4);
+                        std::memcpy(&lu16RegisterSet, lpInfo + 0x04, 2);
+                        if (lu16RegisterSet != 2u || luNameOffset >= luTableBytes)
+                            continue;
+                        if (std::strcmp(reinterpret_cast<const char*>(lpTable + luNameOffset),
+                                        lpcName) == 0)
+                            return true;
+                    }
+                    return false;
+                }
+            }
+            else
+            {
+                luLength = (luInstruction >> 24) & 0x0Fu;
+            }
+            luWord += luLength + 1u;
+        }
+        return false;
+    }
+
+    // Cached per vertex-program payload: the bind runs on every technique CHANGE and the
+    // answer cannot change for a given payload.
+    std::unordered_map<const void*, bool> sVsHasWorldCache;
+
+    bool VertexProgramHasWorldMatrix(const void* lpShader)
+    {
+        std::unordered_map<const void*, bool>::iterator lIt = sVsHasWorldCache.find(lpShader);
+        if (lIt != sVsHasWorldCache.end())
+            return lIt->second;
+        const bool lbHasWorld = ProgramDeclaresFloat4Constant(lpShader, "world");
+        sVsHasWorldCache[lpShader] = lbHasWorld;
+        return lbHasWorld;
+    }
+
+    // ---- [DIAG] THE PER-TECHNIQUE FALLBACK SURVEY -----------------------------------
+    // One line per (technique, reason) the FIRST time a technique fails to draw with its own
+    // programs, so one boot log lists every "shader that is not applying" instead of the
+    // single LogOnce line the first failure used to swallow.
+    //
+    // Keyed on the technique NAME POINTER: that string lives in the streamed ShaderTechnique
+    // blob (+148), is unique per technique and costs nothing to hash.
+    // WARNING when reading the log: the first CHARACTER of every technique name is the
+    // shader-PROFILE digit CgsResource::ShaderTechniqueResourceType::PostFixUp stamps over it
+    // ('0' + code) -- the console does exactly the same -- so a line reads
+    // "0ehicle_1Bit_Tyre_Textured_Default", not "Vehicle_...".
+    // DELETE-WHEN the boot log's survey is empty (or only names techniques with no PC source).
+    enum EWorldFallbackReason
+    {
+        E_WORLD_FALLBACK_NO_PROGRAM         = 0,
+        E_WORLD_FALLBACK_NOT_D3D9_BYTECODE  = 1,
+        E_WORLD_FALLBACK_CREATE_FAILED      = 2,
+        E_WORLD_FALLBACK_INSTANCED_NO_WORLD = 3,
+        E_WORLD_FALLBACK_DECLARATION_SHORT  = 4,
+        E_WORLD_FALLBACK_REASON_COUNT       = 5,
+    };
+    const char* const KapcWorldFallbackReasons[E_WORLD_FALLBACK_REASON_COUNT] =
+    {
+        "no usable program pair (missing import or null payload)",
+        "program payload is not D3D9 bytecode",
+        "Create{Vertex,Pixel}Shader failed",
+        "console-instanced mesh and the technique vertex program declares no `world`",
+        "mesh declaration lacks an input the technique vertex program reads",
+    };
+    std::unordered_map<const void*, u32> sFallbackSurvey;   // name pointer -> reasons reported
+
+    void WorldShader_ReportFallback(const char* lpcTechniqueName, u32 luReason)
+    {
+        if (luReason >= static_cast<u32>(E_WORLD_FALLBACK_REASON_COUNT))
+            return;
+        u32& lruReported = sFallbackSurvey[lpcTechniqueName];
+        if ((lruReported & (1u << luReason)) != 0u)
+            return;
+        lruReported |= (1u << luReason);
+
+        char lacMsg[320];
+        std::snprintf(lacMsg, sizeof(lacMsg), "[WorldShader] FALLBACK %s reason=%s\n",
+                      (lpcTechniqueName != nullptr) ? lpcTechniqueName : "<unnamed technique>",
+                      KapcWorldFallbackReasons[luReason]);
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+
     // The fallback shader's WVP register base (see the KPC_FALLBACK_VS note).
     const u32 KU_FALLBACK_WVP_REGISTER = 240u;
 
@@ -557,6 +704,13 @@ namespace
     IDirect3DPixelShader9*  spRealPs = nullptr;
     u64         suRealVsInputMask = 0;
     bool        sbRealProgramsBound = false;
+    // Whether the bound technique's VERTEX program declares a `world` matrix. That single
+    // fact decides whether a CONSOLE-INSTANCED mesh can be drawn with its own programs --
+    // see the banner on WorldFallbackShader_MarkInstancedMesh.
+    bool        sbRealVsHasWorld = false;
+    // The technique the last program bind considered, for the per-technique fallback survey.
+    // Points into the streamed ShaderTechnique blob (+148), so it outlives the bind.
+    const char* spCurrentTechniqueName = nullptr;
     // The most recent per-object WVP (the fallback shader's c0..c3). Kept so a mesh that
     // has to drop back to the fallback can restore it after a real-constant upload.
     f32         safLastWvp[16] = { 0 };
@@ -1120,19 +1274,27 @@ namespace renderengine
     //
     // Returns false (leaving nothing bound) when either payload is not D3D9 bytecode or
     // the object cannot be created; the caller then keeps the flagged fallback pair.
-    bool WorldPrograms_Bind(const void* lpVertexPayload, const void* lpPixelPayload)
+    bool WorldPrograms_Bind(const void* lpVertexPayload, const void* lpPixelPayload,
+                            const char* lpcTechniqueName)
     {
         IDirect3DDevice9* lpDevice = Dev();
         sbRealProgramsBound = false;
+        sbRealVsHasWorld    = false;
+        // The technique this bind is for, kept for the fallback survey and the wheel diag.
+        spCurrentTechniqueName = lpcTechniqueName;
         // Per-technique sampler record: see the two pointers' banner. Reset HERE, before
         // SetMeshTechniquePC's own BindTechniqueSamplers tail fills it in.
         spTechniqueUnit0Texture = nullptr;
         spTechniqueFirstTexture = nullptr;
         if (lpDevice == nullptr || lpVertexPayload == nullptr || lpPixelPayload == nullptr)
+        {
+            WorldShader_ReportFallback(lpcTechniqueName, E_WORLD_FALLBACK_NO_PROGRAM);
             return false;
+        }
         if (!LooksLikeD3D9Bytecode(lpVertexPayload, false) || !LooksLikeD3D9Bytecode(lpPixelPayload, true))
         {
             LogOnce("realbc", "[WorldShader] technique program is not D3D9 bytecode - fallback kept\n");
+            WorldShader_ReportFallback(lpcTechniqueName, E_WORLD_FALLBACK_NOT_D3D9_BYTECODE);
             return false;
         }
 
@@ -1145,6 +1307,7 @@ namespace renderengine
         if (lrpVs == nullptr || lrpPs == nullptr)
         {
             LogOnce("realcr", "[WorldShader] Create{Vertex,Pixel}Shader FAILED for a technique - fallback kept\n");
+            WorldShader_ReportFallback(lpcTechniqueName, E_WORLD_FALLBACK_CREATE_FAILED);
             return false;
         }
 
@@ -1153,14 +1316,24 @@ namespace renderengine
         spRealVs            = lrpVs;
         spRealPs            = lrpPs;
         suRealVsInputMask   = VertexShaderInputMask(lpVertexPayload);
+        sbRealVsHasWorld    = VertexProgramHasWorldMatrix(lpVertexPayload);
         sbRealProgramsBound = true;
         LogOnce("realok", "[WorldShader] REAL per-technique programs bound (SHADERS.BNDL)\n");
         return true;
     }
 
+    // The exported face of the fallback survey, for the ONE caller that knows a technique has
+    // no program pair at all before the bind is even attempted (shadow::Device::
+    // SetMeshTechniquePC's null-import arm).
+    void WorldShader_ReportTechniqueHasNoPrograms(const char* lpcTechniqueName)
+    {
+        WorldShader_ReportFallback(lpcTechniqueName, E_WORLD_FALLBACK_NO_PROGRAM);
+    }
+
     void WorldShader_ClearRealPrograms()
     {
         sbRealProgramsBound = false;
+        sbRealVsHasWorld    = false;
         spRealVs            = nullptr;
         spRealPs            = nullptr;
         suRealVsInputMask   = 0;
@@ -1620,14 +1793,18 @@ namespace renderengine
             return;
         }
 
-        const bool lbForceFallback = sbForceFallbackNextMesh;
+        // ⭐ THE DECISION MOVED HERE (2026-08-17, wheels). sbForceFallbackNextMesh no longer
+        // means "force" -- it means "this mesh is CONSOLE-INSTANCED", and the leaf decides,
+        // because only the leaf knows what the technique's programs turned out to be. See the
+        // banner on WorldFallbackShader_MarkInstancedMesh for why the old unconditional force
+        // was wrong for the wheels.
+        const bool lbInstancedMesh = sbForceFallbackNextMesh;
         sbForceFallbackNextMesh = false;
+        const bool lbForceFallback = lbInstancedMesh && !sbRealVsHasWorld;
         if (lbForceFallback)
         {
-            LogOnce("forcefb",
-                    "[WorldShader] console-instanced mesh forced onto the flagged fallback pair:"
-                    " its *_Instanced technique program has no InstancingMatrixArray"
-                    " [FLAG PC data gap]\n");
+            WorldShader_ReportFallback(spCurrentTechniqueName,
+                                       E_WORLD_FALLBACK_INSTANCED_NO_WORLD);
         }
 
         // The technique's REAL programs are bound and this mesh's declaration supplies every
@@ -1680,6 +1857,35 @@ namespace renderengine
             // fallback pair.
             lpDevice->SetVertexShader(spRealVs);
             lpDevice->SetPixelShader(spRealPs);
+
+            // ---- [DIAG wheels] a CONSOLE-INSTANCED mesh drawing with its OWN programs.
+            // Latched on the outcome BITS, never on a "printed once" bool: the wheel renderable
+            // has seven meshes with seven materials, and a run where one of them is untextured
+            // and the rest are must not be reported as "the wheels are textured".
+            // ⛔ DELETE-WHEN the wheels are confirmed textured on a booted run.
+            if (lbInstancedMesh)
+            {
+                const u32 luOutcome = (sbLastDeclHasTexcoord0 ? 1u : 0u)
+                                    | (spTechniqueUnit0Texture != nullptr ? 2u : 0u)
+                                    | (spTechniqueFirstTexture != nullptr ? 4u : 0u);
+                static u32 suSeenRealOutcomes = 0u;
+                if ((suSeenRealOutcomes & (1u << luOutcome)) == 0u)
+                {
+                    suSeenRealOutcomes |= (1u << luOutcome);
+                    char lacMsg[288];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                        "[wheel-shade] realProgram=1 technique=%s declUv0=%d techUnit0=%d"
+                        " techFirst=%d stride=%u declMask=0x%llX vsInputs=0x%llX\n",
+                        (spCurrentTechniqueName != nullptr) ? spCurrentTechniqueName
+                                                            : "<unnamed technique>",
+                        (int)sbLastDeclHasTexcoord0,
+                        spTechniqueUnit0Texture != nullptr, spTechniqueFirstTexture != nullptr,
+                        (unsigned)suLastDeclSourceStride,
+                        (unsigned long long)suLastDeclUsageMask,
+                        (unsigned long long)suRealVsInputMask);
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+            }
             return;
         }
         if (sbRealProgramsBound)
@@ -1687,6 +1893,8 @@ namespace renderengine
             LogOnce("realdecl",
                     "[WorldShader] mesh declaration lacks an input the technique's vertex program"
                     " declares - flagged fallback used for it\n");
+            WorldShader_ReportFallback(spCurrentTechniqueName,
+                                       E_WORLD_FALLBACK_DECLARATION_SHORT);
         }
 
         if (!CompileFallbackShaders(lpDevice))
@@ -1739,7 +1947,7 @@ namespace renderengine
         // Latched on the outcome BITS, never on a "printed once" bool: the wheel renderable has
         // seven meshes with seven materials, and a run where one of them has no UVs and the rest
         // do must not be reported as "the wheels are textured".
-        if (lbForceFallback)
+        if (lbInstancedMesh)
         {
             const u32 luOutcome = (lbTextured ? 1u : 0u)
                                 | (sbLastDeclHasTexcoord0 ? 2u : 0u)
@@ -1750,14 +1958,19 @@ namespace renderengine
             if ((suSeenForcedOutcomes & (1u << luOutcome)) == 0u)
             {
                 suSeenForcedOutcomes |= (1u << luOutcome);
-                char lacMsg[224];
+                char lacMsg[320];
                 std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[wheel-shade] forced-fallback mesh: textured=%d declUv0=%d haveDiffuse=%d"
-                    " techUnit0=%d techFirst=%d bringUpFlag=%d stride=%u declMask=0x%llX\n",
+                    "[wheel-shade] realProgram=0 technique=%s vsHasWorld=%d textured=%d"
+                    " declUv0=%d haveDiffuse=%d techUnit0=%d techFirst=%d bringUpFlag=%d"
+                    " stride=%u declMask=0x%llX vsInputs=0x%llX\n",
+                    (spCurrentTechniqueName != nullptr) ? spCurrentTechniqueName
+                                                        : "<unnamed technique>",
+                    (int)sbRealVsHasWorld,
                     (int)lbTextured, (int)sbLastDeclHasTexcoord0, (int)lbHaveDiffuse,
                     spTechniqueUnit0Texture != nullptr, spTechniqueFirstTexture != nullptr,
                     (int)sbMaterialTextureBound, (unsigned)suLastDeclSourceStride,
-                    (unsigned long long)suLastDeclUsageMask);
+                    (unsigned long long)suLastDeclUsageMask,
+                    (unsigned long long)suRealVsInputMask);
                 CgsDev::Log::WriteToLog(lacMsg);
             }
         }
@@ -1785,37 +1998,57 @@ namespace renderengine
     }
 
     // ========================================================================
-    // FLAG PC-platform leaf (DATA gap): CONSOLE-INSTANCED MESHES CANNOT USE THEIR OWN
-    // TECHNIQUE PROGRAM ON THIS BUILD.
+    // CONSOLE-INSTANCED MESHES: WHY THIS IS A MARK AND NOT A FORCE.
     //
     // A mesh with mu8InstanceCount > 1 carries geometry the Xenos instancing shader decodes
     // by hand: one copy of the vertices, an index buffer of N slices, and the instance number
-    // in the HIGH BITS of every index (index = (instance << 12) | vertexIndex). The shader
-    // fetches with (index & 0xFFF) and selects its world matrix out of "InstancingMatrixArray"
-    // (shader constant 6) with (index >> 12).
+    // in the HIGH BITS of every index (index = (instance << 12) | vertexIndex). DECODED from
+    // the console wheel vertex program (X360 SHADERS.BNDL resource AB4DE44C, disassembled with
+    // tools/assets/shaders/xenos.py), the shader does, per vertex:
+    //     instance = trunc((index + 0.5) * 1/4096)          [slots 7..9, c254 = {1/4096, .5, ..}]
+    //     a0       = instance                               [slot 10  maxas]
+    //     row      = trunc(InstancingIndexArray[a0].w) * 4  [slots 11..12, c255.x = 4]
+    //     vertex   = index - instance * 4096                [slot 13, c255.y = 4096]
+    //     a0       = row                                    [slot 18  maxas]
+    //     worldPos = pos.x*c[a0+4] + pos.y*c[a0+5] + pos.z*c[a0+6] + c[a0+7]   [slots 19..21]
+    // i.e. InstancingMatrixArray (c4, 5 x 4 registers) IS the per-draw object matrix and the
+    // .w lane of InstancingIndexArray (c24) is which entry to take (0,1,2,3,4 -- CgsModel.cpp
+    // gaTheFirstFewIntegersAsVectors, so the indirection is the identity). Slot 28 also
+    // exports InstancingIndexArray[instance].x on interpolator 2 lane z -- the per-wheel value
+    // RenderRaceCar puts there, its SPIN BLUR FACTOR.
     //
-    // The PC technique programs for that set do not implement it. As CgsShaderConstants.cpp
-    // (":Missing shader constant from table") already records, the 19 `*_Instanced` techniques
-    // are recompiled from the REMASTER's `_Instanced.fx`, whose instancing was reworked and
-    // which never declares InstancingMatrixArray or InstancingIndexArray at all -- so the
-    // constants Model::SetupShaderConstantsForInstancing publishes are dropped on the floor
-    // and the program transforms every vertex by whatever is left in those registers. MEASURED
-    // (task #133): every wheel draw reached the device with S_OK, an in-range index run and
-    // 240 triangles, and produced EXACTLY ZERO pixels.
+    // ⛔ WHAT THE PREVIOUS VERSION OF THIS BANNER GOT WRONG. It said the PC programs "do not
+    // implement it" and forced EVERY console-instanced mesh onto the flagged fallback pair.
+    // The premise does not hold for the four VEHICLE WHEEL techniques (nor for the 15 other
+    // instancing consumers): their recompiled PC vertex programs are the NON-INSTANCED twins,
+    // which take exactly the same two data through their own names --
+    //     `world` (c20, 4 registers)  and  `g_wheelConstants` (c31, 1 register, read as
+    //     `mov o3.z, c31.x`, the same interpolator lane the console exports).
+    // Nothing published them, which is why binding the real program produced zero pixels
+    // (task #133) -- not a missing feature, a missing PUBLISH. CgsShaderConstants.cpp's
+    // instancing substitute table now binds the technique's own two constants to those two
+    // registers, and DrawRenderable::Interpret points them at the expanded draw's own entry.
     //
-    // The flagged fallback pair CAN draw it: DrawRenderable::Interpret already unrolls the
-    // N-instance object command into N single-instance mesh commands each carrying instance
-    // i's own world-view-projection, Device::SetObjectTransformPC has already published that
-    // WVP at c240..c243, and Device::DrawIndexedMeshPC submits slice 0, whose index values are
-    // in range of the single vertex copy. So the fallback draws instance i's geometry at
-    // instance i's place -- which is exactly the frame the console's shader produces, minus
-    // the technique's own shading.
+    // So this function only MARKS the mesh; WorldFallbackShader_SelectForMesh keeps the real
+    // programs whenever the bound vertex program declares `world`, and drops to the fallback
+    // pair only when it does not -- in which case nothing can transform the geometry and the
+    // fallback's own c240..c243 WVP (published by Device::SetObjectTransformPC, which the
+    // expansion already fills per instance) is the only way to draw it at all.
     //
-    // DELETE when the PC `*_Instanced` programs are recompiled from sources that implement the
-    // console scheme (they need manual vertex fetch, i.e. not D3D9 SM3).
+    // RESIDUAL (verify F3, car+lights step 1): the "keep the real programs" branch assumes the
+    // per-instance `world` WAS published for this mesh, i.e. that its object command carried
+    // constant 6 (InstancingMatrixArray) and Interpret pointed the expanded draw at entry i. A
+    // console-instanced mesh whose object has NO constant 6 would keep its real programs and
+    // draw with whatever c20..c23 the previous draw left. Not reachable today --
+    // Model::SetupShaderConstantsForInstancing always publishes 6 and 7 before an instanced
+    // submit -- so the flag is not plumbed; if a new instanced producer ever skips the
+    // publish, carry a `lbPerInstanceWorldPublished` bool from Interpret and force the
+    // fallback when it is false.
+    //
+    // DELETE the mark when a real instanced draw path exists on the D3D9 back end.
     // (the flag itself lives with the other per-mesh selection state, above)
     // ========================================================================
-    void WorldFallbackShader_ForceForNextMesh()
+    void WorldFallbackShader_MarkInstancedMesh()
     {
         sbForceFallbackNextMesh = true;
     }

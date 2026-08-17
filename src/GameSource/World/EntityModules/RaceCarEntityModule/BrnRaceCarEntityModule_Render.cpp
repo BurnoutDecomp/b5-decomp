@@ -35,11 +35,25 @@
 //    (BrnBlobbyShadowManager::BrnBlobbyShadowBuffer::AddShadow), ShadowMap::CalcOptimisedLod
 //    and RaceCarEntityModule::SubmitCoronasForRaceCar -- none of which exist in the tree.
 //    It is a later wave, not a stub: no empty branch is written for it here.
-// 2. RenderRaceCar's CRACKED-GLASS loop and its shader constant 24. The glass loop
-//    needs the spec's shattered-glass part table plus two .rodata constant vectors the
-//    function-only IDA export does not carry; constant 24 (the brake/reverse light
-//    emission vector) additionally needs three module debug floats at +100232..+100240
-//    that are not named in this header's layout yet.
+// 2. RenderRaceCar's CRACKED-GLASS loop. It walks the spec's shattered-glass part table
+//    and calls BrnWorld::SetGlassFractureConstants per pane before its own AddToBin /
+//    Submit, and it needs two .rodata constant vectors the function-only IDA export does
+//    not carry.
+//    ⚠️ The console ALSO calls SetGlassFractureConstants(0.0f, 1.0f, {0,0}, {0,0,0,0})
+//    ONCE per car @0x822CFC08, immediately before shader constants 20/21 -- the "no
+//    fracture" reset for the whole car. It is NOT reproduced here for a link reason, not
+//    a knowledge one: the only definition of BrnWorld::SetGlassFractureConstants lives in
+//    BrnRaceCarEntityModule_GlassFracture.cpp, and that TU is NOT on
+//    tools/build/build_game_exe.bat (grepped: no `GlassFracture` line in the file), so
+//    calling it would leave an unresolved external at link. The consequence is real and
+//    named: shader constants 30/31/32 are never published by anything on this build, and
+//    an unset external constant is SKIPPED rather than zeroed (shadowingdevice.cpp:847),
+//    so the glass programs that declare them read the previous draw's registers -- the
+//    same failure mode the verlet block below documents. DELETE-WHEN the GlassFracture TU
+//    is mounted.
+//    ⭐ Shader constant 24 -- the head/brake/reverse emission vector -- IS reconstructed
+//    as of 2026-08-17 (car-lights wave); its three module debug floats at +100232..+100240
+//    are now named + offset-pinned in BrnRaceCarEntityModule.h.
 // 3. The IsNormal3x3 / IsOrthogonal3x3 / IsValid dev-assert blocks (~73% of the
 //    function's 2008 instructions is assert scaffolding), including the wheel loop's
 //    own rw::math::IsValid(lWheelMatrix).
@@ -105,6 +119,47 @@ Vector4 gvWheelBlurConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
 // variable's upper bound.
 static const s32 KU_WHEELS_TO_RENDER_MAX = 4;
 
+// ============================================================================
+// The three constants shader constant 24 (`g_selfIlluminationMask`) is built from.
+// All three were READ OUT OF THE SHIPPED IMAGE, not guessed: the wave decrypted and
+// decompressed BURNOUT_X360_ARTIST.XEX's basefile (XEX2, encryption type 1 with the
+// all-zero DEVKIT key, "basic" compression, load address 0x82000000) and dumped the
+// addresses the asm names. Both of the conductor's control values pass on that image
+// -- flt_82001C98 reads 0x3F800000 == 1.0f and dword_82F24240's first lane reads
+// 0x00000500 == 1280 -- so the mapping is proven before anything below is read.
+// The extractor is this wave's work/xex_extract.py.
+// ============================================================================
+
+// unk_82FAD990, the vmulfp128 factor (`lvx128 v13, r0, unk_82FAD990 ; vmulfp128 v118,
+// v0, v13` @0x822CFB90..0x822CFBC4). It is .data, all-zero in the image, and written
+// ONCE by the CRT static initialiser at 0x82C4BC30..0x82C4BC54:
+//     lfs f0, flt_82004C88(r11) ; stfs f0, -0x10(r1) ; lvlx v0, r0, r10
+//     vspltw v0, v0, 0          ; stvx128 v0, r0, unk_82FAD990
+// i.e. splat(flt_82004C88) into all four lanes, and flt_82004C88 reads 0x41000000 ==
+// 8.0f (dumped: DATA_DUMP.md, and re-read independently from the extracted image).
+// Because it is a four-lane SPLAT the vector multiply is a scalar multiply, so it is
+// homed as the scalar the source must have written rather than as a fake Vector4.
+// The whole XEX holds exactly TWO references to it -- RenderRaceCar's read at
+// 0x822CFB9C and that initialiser at 0x82C4BC48 (IDA xrefs_to, DATA_DUMP.md) -- which
+// is why it is file-static here instead of a shared global.
+static const f32 KF_SELF_ILLUMINATION_INTENSITY = 8.0f;
+
+// The BASE light-state vector, `lvx128 v0, r0, r22` @0x822CFB34 with r22 = the .rodata
+// constant unk_82181510 (set up @0x822CF8F8..0x822CF900 and never reassigned before the
+// read). MEASURED (0, 1, 0, 0) -- and the address identifies itself: the extracted image
+// holds the four rw::math::vpu::detail unit vectors back to back,
+//   0x82181500 (1,0,0,0) = gIVector   0x82181510 (0,1,0,0) = gJVector
+//   0x82181520 (0,0,1,0) = gKVector   0x82181530 (0,0,0,1)
+// (the same gIVector the surrounding orthogonality asserts load by name @0x822CF904), so
+// the compiler folded the source's own {0,1,0,0} literal onto the shared J vector.
+// Lane meaning comes from the CONSUMER, not from the name -- see RenderRaceCar's banner.
+static const f32 KF_LIGHT_CHANNEL_G_ALWAYS_ON = 1.0f;
+
+// flt_82003F40, the `lfs f13, 0xD9C(r16) ; fcmpu ; bge -> vspltisw v0, 0` cut-off
+// @0x822CFB1C..0x822CFB2C. MEASURED 0x3E800000 == 0.25f. Past this much squared
+// deformation the car's lights are dead.
+static const f32 KF_LIGHTS_OUT_DEFORMATION_SQUARED = 0.25f;
+
 namespace BrnWorld
 {
 
@@ -154,6 +209,115 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // `BrnVehicle::GraphicsSpec_::operat(v56)` calls); it is hoisted once here.
     const BrnVehicle::GraphicsSpec* lpCarGraphicsSpec = lpCarGraphics->operator->();
 
+    // ---- the DEBUG damage overrides (@0x822CFAB4..0x822CFB0C) ---------------
+    // `if (DEBUG_mbOverrideDamage) { v119 = {crumple, 0, dust, 0};
+    //    RenderParams::DEBUG_OverrideScratchAmount(DEBUG_mfVehicleScratchAmount); }`
+    // v119 is the vector the console later uploads as shader constant 23
+    // (`vmr128 v1, v119 ; SetShaderConstantData(23)` @0x822CFE64..0x822CFE70).
+    //
+    // ⚠️ ONE DELIBERATE DIFFERENCE, and it removes a console defect rather than adding a
+    // PC one: on the console v119 is left UNINITIALISED when the debug bool is false, so
+    // constant 23 is uploaded from whatever VMX register 119 held. Seeding it to zero here
+    // is exactly what the existing constant-23 upload below already did before this wave,
+    // so no shipped value changes; what changes is that the debug arm now has a real home.
+    Vector4 lv4DamageConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
+    if ( DEBUG_mbOverrideDamage )
+    {
+        // `stfs module+0x18784 -> var_510 (lane X)` / `stfs module+0x18780 -> var_508
+        // (lane Z)`, with f31 (== flt_82001CC0 == 0.0f) in lanes Y and W.
+        lv4DamageConstants.x = DEBUG_mfVehicleCrumpleAmount;
+        lv4DamageConstants.z = DEBUG_mfVehicleDustAmount;
+        lpRenderParams->DEBUG_OverrideScratchAmount( DEBUG_mfVehicleScratchAmount );
+    }
+
+    // ========================================================================
+    // ⭐ SHADER CONSTANT 24 -- `g_selfIlluminationMask` (@0x822CFB10..0x822CFBC4).
+    // THE HEAD / BRAKE / REVERSE LIGHT EMISSION VECTOR. This is the block the file's
+    // banner used to list as "not reconstructed".
+    //
+    // ---- WHAT THE CONSOLE DOES, instruction for instruction --------------------------
+    //   0x822CFB10  lbz  r11, 0x1406(r16)        mRenderParams.mbIsEngineOff
+    //   0x822CFB18  bne  -> 0x822CFB68                 -> vspltisw v0, 0   (lights out)
+    //   0x822CFB20  lfs  f13, 0xD9C(r16)         mRenderParams.mfDeformationSquared
+    //   0x822CFB24  lfs  f0,  flt_82003F40       0.25f
+    //   0x822CFB2C  bge  -> 0x822CFB68                 -> vspltisw v0, 0   (lights out)
+    //   0x822CFB34  lvx128 v0, r0, r22           v0 = unk_82181510 == (0, 1, 0, 0)
+    //   0x822CFB30  lbz  r11, 0x1407(r16)        mRenderParams.mbIsBraking
+    //   0x822CFB48    vrlimi128 v0, 1.0f, 8, 0        -> lane X = 1
+    //   0x822CFB4C  lbz  r11, 0x1408(r16)        mRenderParams.mbIsReversing
+    //   0x822CFB60    vrlimi128 v0, 1.0f, 2, 0        -> lane Z = 1
+    //   0x822CFB84  lfsx module+0x18788/0x1878C/0x18790 -> var_510/50C/508, var_504 = 0.0f
+    //                                            v12 = DEBUG selfIllumination (R, G, B, 0)
+    //   0x822CFBB8  vmaxfp    v0, v12, v0        componentwise max
+    //   0x822CFBC4  vmulfp128 v118, v0, v13      * splat(8.0f)
+    // The vrlimi128 MASK->LANE mapping is this file's own, already recorded on the wheel
+    // block below: mask 8 == lane X, mask 1 == lane W, so mask 2 == lane Z.
+    //
+    // ---- WHAT THE LANES MEAN -- READ OFF THE CONSUMER, NOT GUESSED -------------------
+    // Exactly two PC programs declare `g_selfIlluminationMask`, both at PS c5, and both
+    // belong to `Vehicle_GreyScale_Light_Textured_EnvMapped` (_Default and _Damaged) --
+    // the technique the car's LIGHT-GLASS parts use. Its pixel shader (disassembled from
+    // build/game/SHADERS.BNDL this wave, work/ps_vehicle_light_disasm.txt) does:
+    //     texld r4, v2, s3          ; r4 = EmissiveTextureSampler.Sample(uv0)   -- a MASK
+    //     dp4   r1.x, r4, c5        ; illumination = dot4(emissiveMask, g_selfIlluminationMask)
+    //     mul   r1.x, r1.x, c1.w    ; * FogColourPlusWhiteLevel.w  (the HDR white level)
+    //     max   r4.xyz, r1.xxxx, r2 ; the emission REPLACES the lit term where it is brighter
+    //     mul   r3.xyz, r4, r5      ; ... and is then modulated by the paint-blended albedo
+    // So the emissive texture is a FOUR-CHANNEL SELECTOR: each channel tags one light
+    // group on the car's light lens, and constant 24 says how bright each group is. With
+    // the measured base vector that makes the mapping
+    //     lane X (mask R) = BRAKE          0 -> 8 while mbIsBraking
+    //     lane Y (mask G) = ALWAYS-ON      8 whenever the lights are alive (head lamps +
+    //                                      tail-light glow: the base vector's only 1.0f)
+    //     lane Z (mask B) = REVERSE        0 -> 8 while mbIsReversing
+    //     lane W (mask A) = never written by this build (base 0, no vrlimi touches it)
+    // and the whole vector collapses to zero when the engine is off or the car is
+    // deformed past 0.25 -- i.e. a dead or wrecked car has dead lights.
+    //
+    // ⚠️ WHAT A WRONG LANE ORDER WOULD LOOK LIKE, so a boot can falsify this: X<->Z
+    // swapped puts the REVERSE lamps on under braking and the brake lamps on in reverse;
+    // Y in the wrong lane means the head/tail lamps never come on while the brake lamps
+    // still work; the whole vector one lane out (or the base vector taken as (1,0,0,0))
+    // lights the WRONG lens colour, e.g. white reverse lamps glowing when the car is
+    // simply driving forward.
+    //
+    // NOTHING HERE IS INVENTED: every branch is an ARTIST instruction, every scalar was
+    // read out of the shipped image (see the three constants at the top of this file),
+    // and every RenderParams member is one this header already names and pins.
+    // ========================================================================
+    Vector4 lv4LightState = { 0.0f, 0.0f, 0.0f, 0.0f };
+    if ( !lpRenderParams->IsEngineOff()
+         && lpRenderParams->GetDeformationSquared() < KF_LIGHTS_OUT_DEFORMATION_SQUARED )
+    {
+        // unk_82181510 == (0, 1, 0, 0): the always-on channel, and only that one.
+        lv4LightState.y = KF_LIGHT_CHANNEL_G_ALWAYS_ON;
+
+        if ( lpRenderParams->IsBraking() )
+        {
+            lv4LightState.x = 1.0f;     // vrlimi128 mask 8 -> lane X
+        }
+        if ( lpRenderParams->IsReversing() )
+        {
+            lv4LightState.z = 1.0f;     // vrlimi128 mask 2 -> lane Z
+        }
+    }
+
+    // vmaxfp against the three debug floats (all zero at retail, so a no-op), then the
+    // splat multiply, de-optimised back to the scalar it is.
+    const Vector4 lv4DebugIllumination = { DEBUG_mfSelfIlluminationR,
+                                           DEBUG_mfSelfIlluminationG,
+                                           DEBUG_mfSelfIlluminationB,
+                                           0.0f };
+    const Vector4 lv4SelfIlluminationMask = {
+        ( lv4DebugIllumination.x > lv4LightState.x ? lv4DebugIllumination.x : lv4LightState.x )
+            * KF_SELF_ILLUMINATION_INTENSITY,
+        ( lv4DebugIllumination.y > lv4LightState.y ? lv4DebugIllumination.y : lv4LightState.y )
+            * KF_SELF_ILLUMINATION_INTENSITY,
+        ( lv4DebugIllumination.z > lv4LightState.z ? lv4DebugIllumination.z : lv4LightState.z )
+            * KF_SELF_ILLUMINATION_INTENSITY,
+        ( lv4DebugIllumination.w > lv4LightState.w ? lv4DebugIllumination.w : lv4LightState.w )
+            * KF_SELF_ILLUMINATION_INTENSITY };
+
     // ---- the shadow-pass selector ------------------------------------------
     // v320 = (shadowMap[0] && shadowMap[1]): the two LEADING ShadowMap bytes the asm reads
     // as `lbz r11, 0(a40)` / `lbz r11, 1(a40)` -- the same pair
@@ -168,6 +332,15 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // (`lvx128 v1, r16, 2944` / `..., 2960`).
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 20, lpRenderParams->GetPaintColour() );
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 21, lpRenderParams->GetPearlescentColour() );
+
+    // 24: the self-illumination mask, published here (`vmr128 v1, v118 ; li r4, 0x18 ; bl
+    // SetShaderConstantData` @0x822CFC40..0x822CFC4C -- the very next call after 21) and
+    // then LATCHED. The body-part loop toggles the register between this vector and zero
+    // as it walks attached and detached parts, and the latch is what stops it re-uploading
+    // the same value for every part: `li r11, 1 ; stb r11, var_51F(r1)` @0x822CFC88 arms it
+    // to "the emission vector is currently in the register".
+    CgsGraphics::mShaderConstantTable.SetShaderConstantData( 24, lv4SelfIlluminationMask );
+    bool lbSelfIlluminationArmed = true;
 
     // [PC diagnostic] print the value at the CONSUMING end. UpdateActiveRaceCarColours
     // prints the same two vectors where it writes them; this prints what actually reaches
@@ -275,7 +448,11 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
         // unset purely so the register carries a deterministic value instead of whatever the
         // previous draw's PS c5 held.
         // DELETE-WHEN the deformation debug component's scale has a real source.
-        const Vector4 lv4DamageConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
+        // ⭐ 2026-08-17: the vector is now BUILT at the console's own position, from the
+        // DEBUG_mbOverrideDamage arm at the top of this function (crumple -> lane X,
+        // dust -> lane Z). At retail that arm never runs, so this still uploads the same
+        // zeros it did before; what changed is that the console's own producer is present
+        // instead of an unconditional literal.
         CgsGraphics::mShaderConstantTable.SetShaderConstantData( 23, lv4DamageConstants );
     }
 
@@ -334,11 +511,43 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
             // An ATTACHED part is drawn only when the caller asked for the attached geometry
             // (the same bool that gates the glass and the wheels). A DETACHED part is always
             // drawn. Both paths converge on the submission below; what differs is the state of
-            // shader constant 24, which the console arms for attached parts and zeroes for
-            // detached ones (not reconstructed -- see the banner).
-            if ( lbIsAttached && !lbRenderAttachedGeometry )
+            // shader constant 24.
+            //
+            // ⭐ THE CONSTANT-24 TOGGLE (@0x822D02B4..0x822D0318) -- LANDED 2026-08-17.
+            // The console's shape, branch for branch:
+            //     0x822D02B4  clrlwi r11, r28, 24 ; cmplwi ; beq -> 0x822D02F8
+            //                   r28 == DetachedPartRenderEvent+0x44 == mbIsAttached,
+            //                   seeded 1 for a part with no queue entry
+            //     0x822D02F8    (DETACHED)  if (latch) { SetShaderConstantData(24, ZERO);
+            //                               latch = 0; }
+            //     0x822D02C4  (ATTACHED)  lbz arg_8F ; beq -> 0x822D094C   the `continue`
+            //     0x822D02D0              if (!latch) { SetShaderConstantData(24, emission);
+            //                                          latch = 1; }
+            // A knocked-off panel therefore draws with its lamps DEAD -- which is the
+            // console's own rule, and the reason the register has to be toggled at all
+            // rather than published once per car.
+            if ( !lbIsAttached )
             {
-                continue;
+                if ( lbSelfIlluminationArmed )
+                {
+                    const Vector4 lv4NoSelfIllumination = { 0.0f, 0.0f, 0.0f, 0.0f };
+                    CgsGraphics::mShaderConstantTable.SetShaderConstantData(
+                        24, lv4NoSelfIllumination );
+                    lbSelfIlluminationArmed = false;
+                }
+            }
+            else
+            {
+                if ( !lbRenderAttachedGeometry )
+                {
+                    continue;
+                }
+                if ( !lbSelfIlluminationArmed )
+                {
+                    CgsGraphics::mShaderConstantTable.SetShaderConstantData(
+                        24, lv4SelfIlluminationMask );
+                    lbSelfIlluminationArmed = true;
+                }
             }
 
             // Technique index. Two bits: bit 0 == "not damaged", bit 1 == "shadow pass".
@@ -388,6 +597,40 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
             }
 
             lpDispatchList->Submit( 0, lpDispatchFrame->GetBin().EndPacket() );
+        }
+    }
+
+    // ---- [DIAG car-lights wave 2026-08-17] THE LIGHT-STATE WITNESS -------------
+    // ⛔ DELETE-WHEN the head/brake/reverse lamps are confirmed on a booted run.
+    // Latched on the STATE, not on a "printed once" bool: a car that never brakes and a car
+    // that brakes print different lines, and every transition reprints exactly once. It is
+    // also the only thing that can tell the three ways this block produces a black lamp
+    // apart -- engine off, deformed past the cut-off, or simply not braking -- and it prints
+    // mfDeformationSquared verbatim because that member has NO writer on this build (its
+    // console producer, ActiveRaceCar::UpdateDeformationState @0x822D4A58, is the parked leg
+    // BrnGame.log already reports), so a non-zero reading here is itself the finding.
+    {
+        const u32 luLightState =
+            ( lpRenderParams->IsEngineOff()  ? 1u : 0u )
+          | ( lpRenderParams->IsBraking()    ? 2u : 0u )
+          | ( lpRenderParams->IsReversing()  ? 4u : 0u )
+          | ( lpRenderParams->GetDeformationSquared() >= KF_LIGHTS_OUT_DEFORMATION_SQUARED
+                                             ? 8u : 0u );
+        static u32 suSeenLightStates = 0u;
+        const u32  luBit = 1u << luLightState;
+        if ( ( suSeenLightStates & luBit ) == 0u && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            suSeenLightStates |= luBit;
+            *CgsDev::Log::gpDebugPrint
+                << "[racecar-lights] shader constant 24 g_selfIlluminationMask ("
+                << lv4SelfIlluminationMask.x << ", " << lv4SelfIlluminationMask.y << ", "
+                << lv4SelfIlluminationMask.z << ", " << lv4SelfIlluminationMask.w
+                << ")  [x=brake y=alwaysOn z=reverse]  engineOff "
+                << ( lpRenderParams->IsEngineOff() ? 1 : 0 )
+                << " braking " << ( lpRenderParams->IsBraking() ? 1 : 0 )
+                << " reversing " << ( lpRenderParams->IsReversing() ? 1 : 0 )
+                << " deformation^2 " << lpRenderParams->GetDeformationSquared()
+                << " (lights out at " << KF_LIGHTS_OUT_DEFORMATION_SQUARED << ")\n";
         }
     }
 
