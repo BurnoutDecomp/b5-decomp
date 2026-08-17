@@ -30,6 +30,20 @@ namespace renderengine
     // It is an OFF SWITCH ONLY: there is no D3D9 way to ask for coverage a material did not
     // request, so 1 does not mean "force", it means "do what the console did".
     extern s32 gAlphaToCoverage;
+    // Whether the ENVIRONMENT-MAP (car-reflection cube) pass runs. 1 = run it (default, and what the
+    // console does -- BrnRendererModule::ConstructRenderSwitches seeds mRenderSwitches.mbRenderEnvmap
+    // true); 0 = the six-face pass never runs AND sampler 13 stays unbound, i.e. exactly the build
+    // this project had before the reflections wave. Sourced from config.ini `[Settings]
+    // EnvironmentMap` (BrnMain.cpp LoadConfig/SaveConfig) and seeded by Device::Initialize, exactly
+    // like gAntiAliasing / gAlphaToCoverage above it.
+    //
+    // ⚠ IT IS NOT A SECOND SWITCH. The console already owns this state as
+    // RendererIO::RenderSwitches::mbRenderEnvmap; this global only SEEDS that member once, on the
+    // first frame of BrnRendererModule::Render, because the module's constructor runs at static-init
+    // time -- before Device::Initialize and before LoadConfig have read the file. Nothing else reads
+    // it. Adding a parallel per-frame gate here would be the split-brain the campaign keeps paying
+    // for; the switch stays the console's.
+    extern s32 gEnvironmentMap;
     // Present synchronisation. 1 = D3DPRESENT_INTERVAL_DEFAULT (vertical sync, the behaviour
     // this build has always had); 0 = D3DPRESENT_INTERVAL_IMMEDIATE (uncapped presents). Sourced
     // from config.ini `[Display] VSync` (BrnMain.cpp LoadConfig/SaveConfig) and seeded by
@@ -70,6 +84,14 @@ namespace renderengine
     {
         f32 mafColourRGBA[4];
     };
+
+    // The depth/stencil clear parameter block the third Clear overload below takes by reference.
+    // It has ONE definition in this tree and it is not here: renderengine::ClearDepthStencilParameters
+    // in pc/gcm/renderengine/ShadowPassPCLeaf.h, where it was hoisted to namespace scope so that
+    // DeviceClearDepthStencil could have a satisfiable decorated name. Reference-only use here, so a
+    // forward declaration is the documented cascade-avoidance exception rather than an include (this
+    // header is pulled in by ~20 TUs; ShadowPassPCLeaf.h is not).
+    struct ClearDepthStencilParameters;
 
     // Which colour target(s) Clear touches. DWARF nests this as
     // renderengine::RenderTargetState::TargetID (source
@@ -146,5 +168,42 @@ namespace renderengine
         // machinery. Declaration-only, and NOTHING IN THE LINKED SOURCE LIST CALLS IT today (see
         // REPORT.md section 2), so it costs the link nothing until a caller lands.
         static void Clear(const ClearColorParameters& lrClearColour, ETargetId leTarget);
+
+        // X360 0x82B61E18 -- the COMBINED colour + depth/stencil clear, and the third member of the
+        // overload set the DWARF declares. DecFIGS dwarfdump
+        // SDKs/EATech/include/ps3/gcm/renderengine/device.h line 1141 (and again at 2399-2405 for the
+        // second device class):
+        //     void Clear(const ClearColorParameters &, const ClearDepthStencilParameters &,
+        //                renderengine::RenderTargetState::TargetID);
+        // beside the two already modelled here (line 1135 = the colour-only overload above, line 1138
+        // = the depth/stencil-only one, whose PC counterpart is DeviceClearDepthStencil).
+        //
+        // THE ASM AGREES, ARGUMENT FOR ARGUMENT (0x82B61E18-0x82B61F00). Two callers in the image:
+        // BrnRendererModule::BeginRenderEnvironmentMapFace @0x823F63E0 (the only one on this build)
+        // and CgsDev::Assert::Manager::DisplayAssertScreen @0x82820210, whose PC counterpart
+        // (CgsAssertManager.cpp) does not route its clear through this overload today -- if it ever
+        // does, its target id and flags word are its own (verify F7, envface):
+        //     r3 = the colour block          -> `mr r27, r3` then `mr r6, r27 # pColor`  @0x82B61EE8
+        //     r4 = the depth/stencil block   -> `mr r31, r4`, then
+        //                                       flags   = `lwz r4, 0(r31)`               @0x82B61E90
+        //                                       Z       = `lfs f1, 4(r31)`               @0x82B61EEC
+        //                                       stencil = `lwz r8, 8(r31)`               @0x82B61EE4
+        //                                       -- i.e. EXACTLY ClearDepthStencilParameters' three
+        //                                       fields, in its order.
+        //     r5 = the target id             -> `mr r28, r5`, then the same five-way ladder the
+        //                                       colour-only overload uses (0x82B61E94-0x82B61EDC):
+        //                                       4 -> |= 0xF, 0 -> |= 1, 1 -> |= 2, 2 -> |= 4,
+        //                                       3 -> |= 8, OR-ed INTO the flags word rather than
+        //                                       replacing it -- which is what lets one call clear
+        //                                       colour AND depth AND stencil.
+        // So E_TARGETID_COLOUR_ALL + a 0x30 (Xenon ZBUFFER|STENCIL) flags word == "clear everything",
+        // which is what the env-map face pass asks for.
+        //
+        // Same object-free shape as its sibling: no `this` anywhere in the body, the device comes from
+        // the file-scope off_83271608. Its PC BODY lives beside DeviceClearDepthStencil (the other
+        // half of the same console clear family); this header only declares it.
+        static void Clear(const ClearColorParameters& lrClearColour,
+                          const ClearDepthStencilParameters& lrClearDepthStencil,
+                          ETargetId leTarget);
     };
 }

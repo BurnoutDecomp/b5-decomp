@@ -86,6 +86,13 @@ namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }
 // here rather than included: that header pulls <windows.h>/<d3d9.h>, which must not enter
 // this TU. Only the aspect ratio of the bring-up dispatch camera reads them.
 namespace renderengine { extern s32 gDisplayWidth; extern s32 gDisplayHeight; }
+// [FLAG PC bring-up] the config.ini [Settings] EnvironmentMap knob (pc/gcm/renderengine/
+// device.h, reflections step 1). Declared for the same <windows.h> reason. It is the PC seed
+// of the console's RendererIO::RenderSwitches::mbRenderEnvironmentMap, which gates BOTH the
+// renderer's face pass and this producer's env-map arm (::GenerateDispatchLists :4003) --
+// so the producer reads the same seed the renderer does; verify finding F5 (envproducer):
+// with the knob off, the six queries and dispatch legs must not run either.
+namespace renderengine { extern s32 gEnvironmentMap; }
 
 namespace BrnWorld
 {
@@ -517,8 +524,19 @@ WorldModule::Construct( const BrnGame::BrnCpuMonitors& lrCpuMonitors )
     mnDEBUGKBToStoreEachFrame = 32;                 // X360 +6167316
     mbStoreKBEachFrame = false;                     // X360 +6167320
     mbRenderFirstEnvMapFaces = true;                // X360 +6167327
+    // ⚠ READ THIS BEFORE COSTING THE ENV-MAP PASS. mb30hzEnvironmentMap ships FALSE and
+    // NOTHING else in the image writes it (grep below), so GenerateFrustumQueries'
+    // schedule at :3482 takes the `!mb30hzEnvironmentMap` arm EVERY frame and all SIX
+    // faces refresh every frame -- the "three faces per frame at 30 Hz" half-schedule is
+    // the OFF-by-default debug path, not the shipped one.
+    //   $ grep -n "mb30hzEnvironmentMap" b5-decomp/src/GameSource/World/BrnWorldModule.cpp
+    //   520:    mb30hzEnvironmentMap = false;                   // X360 +6167328
+    //   3482:    if ( !mb30hzEnvironmentMap || mbFirstRenderFrame )
     mb30hzEnvironmentMap = false;                   // X360 +6167328
     mbFirstRenderFrame = true;                      // X360 +6167329
+    // [FLAG PC bring-up] the two env-map producer seams (see BrnWorldModule.h).
+    mpBringUpDispatchThreadInputBuffer = 0;
+    mbEnvMapCamerasPositionedBringUp   = false;
     mbForceOnlyBackdrops = false;                   // X360 +6167330
     mbRenderBackdrops = true;                       // X360 +6167331
     mfCarKeyLightMultiplier = 1.175f;               // X360 +6167332
@@ -3044,6 +3062,11 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
 
             // Env-map refresh around the player car; latch its position.
             mEnvironmentMap.Update( lpPlayerState->mTransform.Pos() );
+            // [FLAG PC bring-up] ...and record that the six face cameras now carry a real
+            // LookAt basis, which is the gate GenerateDispatchListsBringUp's env-map arm
+            // uses in place of the dispatch input buffer's RenderSwitches (see
+            // BrnWorldModule.h). Not a console store. DELETE with that producer.
+            mbEnvMapCamerasPositionedBringUp = true;
             const Vector3 lPlayerPosition = lpPlayerState->mTransform.Pos();
             mPlayerCarPosition =
                 Vector4{ lPlayerPosition.x, lPlayerPosition.y, lPlayerPosition.z, 0.0f };
@@ -3572,14 +3595,40 @@ WorldModule::GenerateFrustumQueries(
             lFaceCamera.Clone( &lProjectedCamera );
             lProjectedCamera.UpdatePerspectiveProjectionMatrix();
 
-            const CgsGeometric::Frustum& lrFaceFrustum =
-                mEnvironmentMap.maEnvMapCameras[ liFace ].GetFrustumPerspective();
+            // ⭐ CORRECTED 2026-08-17 (reflections step 1): lbNegateNearFar is TRUE for the
+            // env-map faces. This leg used to call the no-arg PC bridge
+            // Camera::GetFrustumPerspective(), which hard-codes `false` -- but the X360
+            // sets r5 = 1 here and r5 = 0 for the main view, thirty instructions apart in
+            // the same function:
+            //     0x827DB010  li  r5, 0        <- the MAIN-VIEW query, a few lines above
+            //     0x827DB014  addi r4, r1, var_620
+            //     0x827DB018  mr  r3, r31
+            //     0x827DB01C  bl  CgsGraphics__Camera__GetFrustumPerspective
+            //     ...
+            //     0x827DB100  li  r5, 1        <- THIS leg, once per rendered face
+            //     0x827DB104  mr  r4, r29
+            //     0x827DB108  mr  r3, r28
+            //     0x827DB10C  bl  CgsGraphics__Camera__GetFrustumPerspective
+            // It is not a decompiler artifact and it is not cosmetic: the negate path fnegs
+            // both clip planes on entry and negates all six result planes on exit
+            // (CgsCamera.cpp:281-285 + the exit loop), which is what makes the volume the
+            // one the face camera can actually SEE. The env-map face cameras are the only
+            // RIGHT-HANDED cameras in the frame -- EnvironmentMap::Update ends each face on
+            // SetPerspectiveProjectionMatrixRightHanded @0x827EC698, whose z row carries
+            // w = -1 (CgsCamera.cpp:658-663), i.e. clip.w = -view.z, i.e. the visible half
+            // space is at NEGATIVE distance along the LookAt direction. Without the negate
+            // the query culls against the volume BEHIND each face and every face list comes
+            // back with the wrong half of the world in it.
+            CgsGraphics::CameraRwFrustum lFaceRwFrustum;
+            mEnvironmentMap.maEnvMapCameras[ liFace ].GetFrustumPerspective( lFaceRwFrustum, true );
+            CgsGeometric::Frustum lFaceFrustum;
+            lFaceFrustum.SetFromRwFrustum( lFaceRwFrustum );
 
             CgsSceneManager::SceneManagerIO::InEventFrustumTestVp lEvent;
             lEvent.mViewProjection = lProjectedCamera.GetViewProjectionMatrix();
             for ( s32 liPlane = 0; liPlane < 8; liPlane++ )
             {
-                lEvent.maFrustumPlanes[ liPlane ] = lrFaceFrustum.maSwizzledPlanes[ liPlane ];
+                lEvent.maFrustumPlanes[ liPlane ] = lFaceFrustum.maSwizzledPlanes[ liPlane ];
             }
             lEvent.mQueryId             = KA_FRUSTUM_QUERY_IDS[ 2 + liFace ];
             lEvent.mx32EntityTypeFlags  = 1024u;    // asm: event+0xC4 = 1024
@@ -4049,11 +4098,10 @@ WorldModule::GenerateDispatchLists(
             lpWorldDispatchInput->SetDispatchFrame( lpDispatchInputBuffer->GetDispatchFrame() );
             lpWorldDispatchInput->UnlockForWrite();
 
-            // (X360 id-8 payload: the vector member at module+6170304 -- the
-            //  env-map view position the frame constants were stamped with a
-            //  moment ago, i.e. this camera position. FLAG: read through the
-            //  camera here until that EnvironmentMap member is named.)
-            CgsGraphics::mShaderConstantTable.SetShaderConstantData( 8, gDispatchCamera.GetPosition() );
+            // X360 id-8 payload: `lvx128 v1, r30, r20`, r20 = 6170304 == WorldModule +
+            //  6168096 (maEnvMapCameras[6] end) == mEnvironmentMap.mCameraPosition -- the
+            //  cube centre EnvironmentMap::Update was handed, NOT the dispatch camera.
+            CgsGraphics::mShaderConstantTable.SetShaderConstantData( 8, mEnvironmentMap.mCameraPosition );
             CgsGraphics::mShaderConstantTable.SetShaderConstantData( 3, lFaceCamera.GetViewProjectionMatrix() );
             CgsGraphics::mShaderConstantTable.SetShaderConstantData( 34, lFaceCamera.GetViewProjectionMatrixModified() );
 
@@ -4859,6 +4907,18 @@ WorldModule::SetBringUpEffectsFrames( BrnEffectsFrame* lpFrame0, BrnEffectsFrame
     mapBringUpEffectsFrames[ 3 ] = lpFrame3;
 }
 
+// [FLAG PC bring-up] see the header. STANDS IN FOR
+// BrnWorldIO::DispatchInputBuffer::SetDispatchThreadInputBuffer @0x823B5408, which
+// BrnGameModule::DoDispatch @0x823DC458 calls on the world dispatch input buffer; the real
+// GenerateDispatchLists reads it back at :3725 and writes the six env-map face-rendered
+// flags through it at :4018. Overwritten every frame, never consumed.
+// DELETE-WHEN DoDispatch's IO buffer set is real.
+void
+WorldModule::SetBringUpDispatchThreadInputBuffer( BrnGame::DispatchThreadInputBuffer* lpBuffer )
+{
+    mpBringUpDispatchThreadInputBuffer = lpBuffer;
+}
+
 // =============================================================================
 // ⭐ [DIAG shadow-perf wave 2026-08-12] THE PRODUCER PHASE TIMERS.
 //
@@ -4942,6 +5002,11 @@ namespace
         f64 mfCascadeFilterUs;  // ...of which: the three per-cascade filters + seeding
         f64 mfCascadeCarUs;     // ...of which: the three per-cascade race-car legs
         f64 mfCascadeWorldUs;   // ...of which: the three per-cascade world legs
+        // [reflections step 1] PART 3, the environment-map faces. Query STAGING for the
+        // faces rides mfStageUs and their octree walks ride mfQueryUs (they are submitted
+        // in the same batch as the main view and the cascades); this bucket is the arm
+        // itself -- the per-face filter, the world leg and the prop leg.
+        f64 mfEnvMapUs;
 
         f64 mfFramePeriodUs;    // producer entry -> next producer entry (the WHOLE frame), so
                                 // the producer's share of it is readable off one line
@@ -4953,7 +5018,14 @@ namespace
         s32 maiCascadeCarRecords[ 3 ];    // split out: the race car is a FIXED per-cascade cost
         s32 maiCascadeWorldRecords[ 3 ];  // ...so it must not be confused with caster work
         s32 maiCascadePadPlanes[ 3 ];     // ComputeOptimalViewVolume clear-plane sentinels
+        s32 miEnvMapFaces;      // env-map faces STAGED this frame (0 / 3 / 6)
+        s32 miEnvMapWorldEnts;  // world entities the staged face filters produced, summed
+        s32 miEnvMapRecords;    // records the face legs added to lists 5..10, summed
         s32 miPoolResults;      // sum of every result batch's miNumResults this frame
+        s32 maiPoolPerJob[ 4 ]; // ...and per JOB (batch i -> job i/4), reflections step 1:
+                                // with 10 queries the batches no longer all land in job 0,
+                                // and the 8192 cap is PER JOB (verify F4, envproducer)
+        s32 miPoolMaxJob;       // the fullest job's count this frame -- the value to compare
         s32 miPoolBatches;
         s32 miArmed;
 
@@ -4966,18 +5038,22 @@ namespace
             mfPropCacheUs = 0.0;
             mfCascadeUs = 0.0; mfCascadeFilterUs = 0.0; mfCascadeCarUs = 0.0;
             mfCascadeWorldUs = 0.0; mfFramePeriodUs = 0.0;
+            mfEnvMapUs = 0.0;
             miFrames = 0;
         }
     };
 
     ShadowPerfAccumulator gShadowPerf = {};
 
-    // The job-result pool the four queries SHARE. LooseOctree::KU_JOB_RESULT_BUFFER_SIZE is
-    // 8192 u16 entries and muCurrentWriteOffset is per-JOB cumulative, and every query lands
-    // in job 0 on this build (SceneManagerModule's jobIndex map is q*4/16 == q/4), so the
-    // headroom question is "does main + the three cascades fit in 8192 together". Reported
-    // as the summed batch result counts, which is exactly what was written into the pool
-    // (PushCoarseResult drops SILENTLY past the cap, so a sum pinned at 8192 == truncation).
+    // The job-result pools the queries SHARE. LooseOctree::KU_JOB_RESULT_BUFFER_SIZE is
+    // 8192 u16 entries and muCurrentWriteOffset is per-JOB cumulative; SceneManagerModule's
+    // jobIndex map is q*4/16 == q/4, so with the FOUR pre-reflections queries everything
+    // landed in job 0 and the headroom question was "main + three cascades in 8192". Since
+    // reflections step 1 stages up to TEN (main, six env-map faces, three cascades):
+    // main+face0..2 -> job 0, face3..5+cascade0 -> job 1, cascade1..2 -> job 2, so the
+    // cap is compared PER JOB (maiPoolPerJob / miPoolMaxJob), keyed by batch index / 4
+    // (batch order == submission order). PushCoarseResult drops SILENTLY past the cap, so a
+    // per-job count pinned at 8192 == truncation of that job's queries.
     const s32 KI_SHADOW_PERF_POOL_CAPACITY = 8192;
 
     // ---- the CLEAR-PLANE SENTINEL CENSUS ------------------------------------------
@@ -5988,6 +6064,129 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 lFrustum.maSwizzledPlanes, lViewProjection, 0u );
         }
 
+        // ==================================================================
+        // ⭐ [FLAG PC bring-up] ENVIRONMENT-MAP PRODUCER, PART 1 -- the six face queries.
+        //
+        // MIRRORS the console leg in WorldModule::GenerateFrustumQueries @0x827DADF8
+        // (this file, :3481-3502 for the face schedule and :3560-3590 for the events).
+        // That function is bodied, compiled AND linked, and has ZERO callers on this
+        // build -- DoDispatch runs this producer instead -- which is why mesh lists
+        // 5..10 have never once been non-empty.
+        //
+        // ORDER IS THE CONTRACT. SceneManagerModule::ProcessFrustumTestJobRequests
+        // stamps each result batch with its query's id and the octree drains jobs in
+        // index order and each job's queries in submission order, so the result stream
+        // comes back in SUBMISSION order (CgsSceneManagerModule.cpp:952-965). These
+        // events therefore go in between the main view and the cascades, exactly where
+        // the console puts them, and PART 2 below walks the cursor past them before the
+        // cascade arm reads. KA_FRUSTUM_QUERY_IDS is still all-zero on PC (it is
+        // declared at :93 with no writer -- the X360 table lives at data 0x82F30DC4 and
+        // has not been dumped), so the ids do NOT discriminate the batches today; order
+        // does, on both arms.
+        //
+        // The four-jobs map is `(queryIndex * 4) / 16 == queryIndex / 4`
+        // (CgsSceneManagerModule.cpp:1016) with KU_MAX_FRUSTUM_TEST_JOB_QUERIES == 16,
+        // so growing from 4 to at most 10 staged queries stays inside the cap and stays
+        // non-decreasing: main + 3 faces in job 0, the other 3 faces + cascade 0 in job
+        // 1, cascades 1/2 in job 2. Each job owns its own 8192-entry result pool, so
+        // spreading them RAISES headroom rather than lowering it -- watch the existing
+        // jobPool= field in the [shadow-perf] line anyway, because that is the only
+        // place a silent truncation shows up.
+        // ==================================================================
+        // The face schedule (::GenerateFrustumQueries :3481-3502, reproduced exactly).
+        // ⚠ With the shipped mb30hzEnvironmentMap == false this ALWAYS selects all six --
+        // see the note in Construct. BRN_ENVMAP_30HZ=1 seeds the console's own 30 Hz
+        // member so the alternate-halves schedule can be measured; BRN_ENVMAP_ALLFACES=1
+        // forces all six back on if it is. Both OFF by default == the console default.
+        static s32 siEnvMapAllFaces = -1;
+        static s32 siEnvMap30Hz     = -1;
+        if ( siEnvMapAllFaces < 0 )
+        {
+            const char* lpcAll = std::getenv( "BRN_ENVMAP_ALLFACES" );
+            siEnvMapAllFaces = ( lpcAll != 0 && lpcAll[0] != '0' ) ? 1 : 0;
+            const char* lpc30 = std::getenv( "BRN_ENVMAP_30HZ" );
+            siEnvMap30Hz = ( lpc30 != 0 && lpc30[0] != '0' ) ? 1 : 0;
+            if ( siEnvMap30Hz != 0 )
+            {
+                mb30hzEnvironmentMap = true;
+            }
+        }
+
+        // [FLAG PC bring-up] the gate. The console reads
+        // lpDispatchInputBuffer->GetRenderSwitches()->mbRenderEnvironmentMap; this
+        // producer owns no dispatch input buffer, so the honest gate is "the six face
+        // cameras have been positioned at least once" -- see the member's banner in
+        // BrnWorldModule.h. (CROSS-GROUP REQUEST in the report: once the renderer
+        // exposes its own RendererIO::RenderSwitches, that switch becomes the outer
+        // gate and this latch stays only as the not-yet-positioned guard.)
+        // OUTER GATE (verify F5): renderengine::gEnvironmentMap -- the config.ini seed of
+        // the console's mbRenderEnvironmentMap switch, the same word the renderer seeds
+        // mRenderSwitches.mbRenderEnvmap from. Off => no queries, no legs, no flags.
+        const bool lbEnvMapArmLive =
+            ( renderengine::gEnvironmentMap != 0 ) && mbEnvMapCamerasPositionedBringUp;
+
+        bool labEnvMapFaceStaged[ 6 ] = { false, false, false, false, false, false };
+        s32  liEnvMapFacesStaged      = 0;
+        if ( lbEnvMapArmLive )
+        {
+            if ( !mb30hzEnvironmentMap || mbFirstRenderFrame || siEnvMapAllFaces != 0 )
+            {
+                for ( s32 liFace = 0; liFace < 6; liFace++ )
+                {
+                    mabEnvMapFaceRender[ liFace ] = true;
+                }
+            }
+            else
+            {
+                const bool lbFirstHalf = mbRenderFirstEnvMapFaces;
+
+                mabEnvMapFaceRender[ 0 ] = lbFirstHalf;
+                mabEnvMapFaceRender[ 1 ] = lbFirstHalf;
+                mabEnvMapFaceRender[ 2 ] = lbFirstHalf;
+                mabEnvMapFaceRender[ 3 ] = !lbFirstHalf;
+                mabEnvMapFaceRender[ 4 ] = !lbFirstHalf;
+                mabEnvMapFaceRender[ 5 ] = !lbFirstHalf;
+
+                mbRenderFirstEnvMapFaces = !lbFirstHalf;
+            }
+            mbFirstRenderFrame = false;
+
+            for ( s32 liFace = 0; liFace < 6; liFace++ )
+            {
+                if ( !mabEnvMapFaceRender[ liFace ] )
+                {
+                    continue;
+                }
+
+                CgsGraphics::Camera lFaceCamera = mEnvironmentMap.maEnvMapCameras[ liFace ];
+                CgsGraphics::Camera lProjectedCamera;
+                lFaceCamera.Clone( &lProjectedCamera );
+                lProjectedCamera.UpdatePerspectiveProjectionMatrix();
+
+                // negate = TRUE: the face cameras are right-handed. See the full asm
+                // derivation on the same call in ::GenerateFrustumQueries above.
+                CgsGraphics::CameraRwFrustum lFaceRwFrustum;
+                mEnvironmentMap.maEnvMapCameras[ liFace ].GetFrustumPerspective( lFaceRwFrustum, true );
+                CgsGeometric::Frustum lFaceFrustum;
+                lFaceFrustum.SetFromRwFrustum( lFaceRwFrustum );
+
+                CgsSceneManager::SceneManagerIO::InEventFrustumTestVp lEvent;
+                lEvent.mViewProjection = lProjectedCamera.GetViewProjectionMatrix();
+                for ( s32 liPlane = 0; liPlane < 8; liPlane++ )
+                {
+                    lEvent.maFrustumPlanes[ liPlane ] = lFaceFrustum.maSwizzledPlanes[ liPlane ];
+                }
+                lEvent.mQueryId            = KA_FRUSTUM_QUERY_IDS[ 2 + liFace ];
+                lEvent.mx32EntityTypeFlags = 1024u;   // asm @0x827DB1{..}: `v66 = 1024` (event+0xC4)
+                lEvent.mxQueryFlags        = 0u;      // asm: `v67 = 0` (event+0xC8)
+
+                sQueryInput.GetInCoarseQueryQueue()->AddEvent( &lEvent, 4, sizeof( lEvent ) );
+                labEnvMapFaceStaged[ liFace ] = true;
+                ++liEnvMapFacesStaged;
+            }
+        }
+        gShadowPerf.miEnvMapFaces = liEnvMapFacesStaged;
+
         // ---- stage the three shadow cascades (the same three events
         //      WorldModule::GenerateFrustumQueries @0x827DADF8 emits for
         //      FrustumQuery_Shadowmap0..2 -- this file, :3615-3636) ----
@@ -6073,16 +6272,29 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             s32 liPoolProbeType = lpResultsQueue->GetFirstEvent( &lpPoolProbe, &liPoolProbeSize );
             s32 liPoolTotal   = 0;
             s32 liPoolBatches = 0;
+            s32 laiPoolPerJob[ 4 ] = { 0, 0, 0, 0 };
             while ( liPoolProbeType >= 0 && lpPoolProbe != 0 && liPoolBatches < 16 )
             {
-                liPoolTotal += static_cast< const CgsSceneManager::SceneManagerIO::OutCoarseQueryResult* >(
-                                   lpPoolProbe )->miNumResults;
+                const s32 liBatchResults =
+                    static_cast< const CgsSceneManager::SceneManagerIO::OutCoarseQueryResult* >(
+                        lpPoolProbe )->miNumResults;
+                liPoolTotal += liBatchResults;
+                laiPoolPerJob[ liPoolBatches / 4 ] += liBatchResults;   // batch i -> job i/4
                 ++liPoolBatches;
                 liPoolProbeType =
                     lpResultsQueue->GetNextEvent( lpPoolProbe, &lpPoolProbe, &liPoolProbeSize );
             }
             gShadowPerf.miPoolResults = liPoolTotal;
             gShadowPerf.miPoolBatches = liPoolBatches;
+            gShadowPerf.miPoolMaxJob  = 0;
+            for ( s32 liJob = 0; liJob < 4; ++liJob )
+            {
+                gShadowPerf.maiPoolPerJob[ liJob ] = laiPoolPerJob[ liJob ];
+                if ( laiPoolPerJob[ liJob ] > gShadowPerf.miPoolMaxJob )
+                {
+                    gShadowPerf.miPoolMaxJob = laiPoolPerJob[ liJob ];
+                }
+            }
         }
 
         const CgsModule::Event* lpFrustumTestResult = 0;
@@ -6239,6 +6451,256 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         }
 
         // ==================================================================
+        // ⭐ [FLAG PC bring-up] ENVIRONMENT-MAP PRODUCER, PART 2 -- the six face
+        //    dispatch legs (mesh lists 5..10).
+        //
+        // MIRRORS WorldModule::GenerateDispatchLists @0x827D1CE8's env-map block (this
+        // file, :4002-4092) at the CONSOLE'S OWN POSITION: after the main-view world /
+        // race-car / prop legs, before the shadow cascades. That ordering is load-bearing
+        // for the shader-constant table, which is a DELTA channel -- SetShaderConstantData
+        // allocates a FRESH copy of the value in the dispatch bin and records the pointer
+        // (CgsShaderConstantTable.cpp:148-165), DrawRenderable::AddToBin drains the dirty
+        // list of pointers into each record as it is emitted
+        // (CgsDispatcherCommands.cpp:517-518), and DrawRenderable::Interpret restores them
+        // into the object context at replay (CgsDispatcherCommands.cpp:891-899). So the
+        // main-view records already carry the main-view camera before this leg republishes
+        // slots 8/3/34, and each face's FIRST record carries that face's view-projection.
+        //
+        // WHAT IS STAND-IN HERE, and only this:
+        //   * the shader-constants FRAME. The console writes the env-map view position and
+        //     the six face view-projections into lpDispatchInputBuffer->
+        //     GetShaderConstantsFrame(); this producer writes them into
+        //     gBrnWorldShaderConstantsFrameBringUp, the same frame the main publish above
+        //     already fills, which is the frame the renderer reads on PC.
+        //   * the dispatch-thread input buffer, staged by
+        //     SetBringUpDispatchThreadInputBuffer (see the header). The console gets it
+        //     off the dispatch input buffer at :3725 and holds ONE write lock across the
+        //     whole of GenerateDispatchLists; here the arm brackets its own, exactly as
+        //     BrnParticle::PCBringUpProduceParticleRenderData does
+        //     (ParticleModuleBringUp.cpp:445-447).
+        //   * TRAFFIC and RACE CARS are not in this block on the console either -- the
+        //     env-map face renders the WORLD and the PROPS only (:4061 and :4068).
+        // ==================================================================
+        // The walking result cursor. The main-view legs above consumed
+        // lpFrustumTestResult; every staged env-map face consumes exactly one more, and
+        // the cascade arm below then walks on from wherever this leaves it.
+        const CgsModule::Event* lpEnvMapResultCursor = lpFrustumTestResult;
+        s32                     liEnvMapCursorSize   = liResultSize;
+        s32                     liEnvMapCursorType   = liResultType;
+
+        const ShadowPerfClock::time_point lEnvMapStart = ShadowPerfNow();
+        gShadowPerf.miEnvMapWorldEnts = 0;
+        gShadowPerf.miEnvMapRecords   = 0;
+        if ( liEnvMapFacesStaged > 0 && liResultType >= 0 && lpFrustumTestResult != 0 )
+        {
+            // :4007-4010. mbIsInJunkyard is latched by the REAL GenerateDispatchLists'
+            // camera-flag test (:3708-3723), which does not run on this build, so this
+            // never fires here yet -- kept because it is the console line and it comes
+            // alive with the junkyard latch, not with this arm.
+            if ( mbIsInJunkyard )
+            {
+                mShadowMap.SetConstantsForEnvmap();
+            }
+
+            // :4014 -- the env-map view POSITION, published once for all six faces.
+            gBrnWorldShaderConstantsFrameBringUp.LockForWriting();
+            gBrnWorldShaderConstantsFrameBringUp.SetEnvMapViewPosition( lEye );
+            gBrnWorldShaderConstantsFrameBringUp.UnlockForWriting();
+
+            BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer =
+                mpBringUpDispatchThreadInputBuffer;
+            if ( lpDispatchThreadInputBuffer != 0 )
+            {
+                lpDispatchThreadInputBuffer->LockForWrite();
+            }
+
+            for ( s32 liFace = 0; liFace < 6; liFace++ )
+            {
+                // :4018 -- ALL SIX flags are written every dispatch, false included.
+                if ( lpDispatchThreadInputBuffer != 0 )
+                {
+                    lpDispatchThreadInputBuffer->SetEnvMapFaceRendered(
+                        liFace, mabEnvMapFaceRender[ liFace ] );
+                }
+
+                if ( !labEnvMapFaceStaged[ liFace ] )
+                {
+                    continue;
+                }
+
+                // :3883 + :4087 -- the console consumes the MAIN-VIEW batch before this
+                // block (GetNextEvent at :3883) and one batch per face inside it. This
+                // producer's main-view legs do NOT advance (lpFrustumTestResult is
+                // const-seeded at the GetFirstEvent above), so the step to the next batch
+                // happens HERE, BEFORE the face is served: face f consumes batch[1+f]
+                // (batch[0] is the main view; the faces are staged between the main view
+                // and the cascades, and batch order is submission order --
+                // CgsSceneManagerModule.cpp's i/4 job map is non-decreasing). Verify
+                // finding F1 (reflections step 1): the first cut advanced at the BOTTOM
+                // of the loop, so face 0 was served the whole MAIN-VIEW entity set and
+                // every other face its neighbour's -- the cube rotated by one face and
+                // list 5 carried thousands of extra records, with no log line.
+                liEnvMapCursorType = lpResultsQueue->GetNextEvent(
+                    lpEnvMapResultCursor, &lpEnvMapResultCursor, &liEnvMapCursorSize );
+                if ( liEnvMapCursorType < 0 || lpEnvMapResultCursor == 0 )
+                {
+                    // Verify F3: a face flagged RENDERED with no records would make the
+                    // renderer run a full clear/dispatch-nothing/sky/resolve on it -- the
+                    // console cannot reach this state (it asserts). Un-flag this face and
+                    // every later one before leaving.
+                    if ( lpDispatchThreadInputBuffer != 0 )
+                    {
+                        for ( s32 liClear = liFace; liClear < 6; ++liClear )
+                        {
+                            lpDispatchThreadInputBuffer->SetEnvMapFaceRendered( liClear, false );
+                        }
+                    }
+                    break;
+                }
+
+                // The console asserts the result id here (:4025-4028). A hard assert
+                // would storm the log on a bring-up mis-order, and the id table is
+                // all-zero on PC anyway, so this is the cascade arm's soft, value-latched
+                // park instead.
+                const u32 luResultId =
+                    reinterpret_cast< const CgsSceneManager::SceneQueryId* >( lpEnvMapResultCursor )->mId;
+                if ( luResultId != KA_FRUSTUM_QUERY_IDS[ 2 + liFace ].mId )
+                {
+                    static u32 suLastEnvMismatchId = 0xFFFFFFFFu;
+                    if ( luResultId != suLastEnvMismatchId && CgsDev::Log::gpDebugPrint != 0 )
+                    {
+                        suLastEnvMismatchId = luResultId;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[envmap-prod] PARKED: face " << liFace
+                            << " result carries query id " << static_cast< s32 >( luResultId )
+                            << ", expected " << static_cast< s32 >( KA_FRUSTUM_QUERY_IDS[ 2 + liFace ].mId )
+                            << " -- the env-map queries did not come back in submission order\n";
+                    }
+                    if ( lpDispatchThreadInputBuffer != 0 )
+                    {
+                        for ( s32 liClear = liFace; liClear < 6; ++liClear )
+                        {
+                            lpDispatchThreadInputBuffer->SetEnvMapFaceRendered( liClear, false );
+                        }
+                    }
+                    break;
+                }
+
+                sFilteredEntityData.Clear();
+
+                // :4032 -- the LOCAL COPY. The member camera is never mutated by the
+                // dispatch pass (the far-clip push at the bottom lands on this copy).
+                CgsGraphics::Camera lFaceCamera = mEnvironmentMap.maEnvMapCameras[ liFace ];
+
+                FilterFrustumTestResults( lpEnvMapResultCursor,
+                                          &sFilteredEntityData.maWorldEntityIds,
+                                          &sFilteredEntityData.maRaceCarEntityIds,
+                                          &sFilteredEntityData.maTrafficEntityIds,
+                                          &sFilteredEntityData.maPropEntityIds );
+
+                sWorldDispatchInput.LockForWrite();
+                sWorldDispatchInput.GetSceneResultQueue()->Clear();
+                sWorldDispatchInput.GetSceneResultQueue()->AddEvent(
+                    lpEnvMapResultCursor, liEnvMapCursorType, liEnvMapCursorSize );
+                sWorldDispatchInput.SetDispatchFrame( lpDispatchFrame );
+                sWorldDispatchInput.SetShadowMap( &mShadowMap );
+                sWorldDispatchInput.UnlockForWrite();
+
+                // :4056-4058 -- the per-face camera constants. Slot 8: X360 0x827D2BC4
+                // `lvx128 v1, r30, r20` with r20 = 6170304 == WorldModule + 6168096
+                // (maEnvMapCameras[6] end) == mEnvironmentMap.mCameraPosition -- the CUBE
+                // CENTRE, i.e. the player-car position EnvironmentMap::Update was handed
+                // (:3046), NOT the director camera. The other three eye arguments in this
+                // block are v127 == the director camera position (0x827D2048, r19+0x30)
+                // and stay `lEye`. (Verify finding F2: the first cut passed lEye here --
+                // wrong by the chase-camera offset, swinging as the camera orbits.)
+                // 3 is the face view-projection, 34 its modified form.
+                CgsGraphics::mShaderConstantTable.SetShaderConstantData( 8, mEnvironmentMap.mCameraPosition );
+                CgsGraphics::mShaderConstantTable.SetShaderConstantData(
+                    3, lFaceCamera.GetViewProjectionMatrix() );
+                CgsGraphics::mShaderConstantTable.SetShaderConstantData(
+                    34, lFaceCamera.GetViewProjectionMatrixModified() );
+
+                const s32 liFaceList        = 5 + liFace;
+                const s32 liRecordsBefore   = static_cast< s32 >(
+                    lpDispatchFrame->GetList( liFaceList )->GetCount() );
+
+                // :4061 -- the world leg. NOT ::GenerateDispatchLists: the env-map feed is
+                // its own console entry point (fixed LOD miEnvironmentMapLOD, the shader
+                // LOD info's env-map technique), BrnWorldEntityModule.cpp:1959.
+                mWorldEntityModule.GenerateDispatchListsForEnvironmentMap(
+                    &sWorldDispatchInput, sFilteredEntityData.maWorldEntityIds,
+                    lFaceCamera.GetViewProjectionMatrix(), lEye,
+                    &mShaderLodInfo, liFaceList, liFaceList, liFaceList );
+
+                // :4068 -- the prop leg, with the console's own trailing pair
+                // (lbRenderingEnvironmentMap = true, lbRenderCoronas = false) and its
+                // hard-coded 1.0f zoom factor.
+                sPropDispatchInput.LockForWrite();
+                sPropDispatchInput.SetDispatchFrame( lpDispatchFrame );
+                sPropDispatchInput.SetShadowMap( &mShadowMap );
+                sPropDispatchInput.UnlockForWrite();
+                mPropEntityModule.GenerateDispatchLists(
+                    &sPropDispatchInput, sFilteredEntityData.maPropEntityIds,
+                    lFaceCamera.GetViewProjectionMatrix(), lEye,
+                    1.0f, &mShaderLodInfo, liFaceList, liFaceList, liFaceList, true, false );
+
+                // :4080-4085 -- push the far clip out for the RENDERER's copy of the face
+                // view-projection and publish it into the frame. SetPerspectiveProjection-
+                // MatrixRightHanded is last, so the published matrix is the RIGHT-HANDED
+                // one (which is why the query above negates).
+                lFaceCamera.SetFarClip( 10000.0f );
+                lFaceCamera.UpdatePerspectiveProjectionMatrix();
+                lFaceCamera.SetPerspectiveProjectionMatrixRightHanded();
+                gBrnWorldShaderConstantsFrameBringUp.LockForWriting();
+                gBrnWorldShaderConstantsFrameBringUp.SetEnvMapViewProjectionMatrix(
+                    static_cast< BrnGraphics::EEnvironmentMapFace >( liFace ),
+                    lFaceCamera.GetViewProjectionMatrix() );
+                gBrnWorldShaderConstantsFrameBringUp.UnlockForWriting();
+
+                gShadowPerf.miEnvMapWorldEnts +=
+                    static_cast< s32 >( sFilteredEntityData.maWorldEntityIds.GetLength() );
+                gShadowPerf.miEnvMapRecords +=
+                    static_cast< s32 >( lpDispatchFrame->GetList( liFaceList )->GetCount() )
+                    - liRecordsBefore;
+                // (the cursor already advanced at the top of this iteration -- see the
+                //  F1 note there; the post-loop cursor is the last CONSUMED face batch,
+                //  which is what the cascade arm's GetNextEvent seed below relies on.)
+            }
+
+            if ( lpDispatchThreadInputBuffer != 0 )
+            {
+                lpDispatchThreadInputBuffer->UnlockForWrite();
+            }
+
+            // Re-publish the MAIN-VIEW camera constants, the same belt-and-braces guard
+            // the cascade arm below uses: not console behaviour (the console leaves the
+            // last face's constants staged because its renderer republishes per pass), but
+            // it makes this arm provably invisible to every consumer downstream.
+            CgsGraphics::mShaderConstantTable.SetShaderConstantData( 8, lEye );
+            CgsGraphics::mShaderConstantTable.SetShaderConstantData( 3, lViewProjection );
+            CgsGraphics::mShaderConstantTable.SetShaderConstantData( 34, lViewProjectionModified );
+
+            // ONE line, the first time a face is actually produced, so the conductor can
+            // see the arm go live without a per-frame log. Value-latched on the record
+            // count, never a bare `static bool` (this producer runs on the loading screen
+            // long before the world exists -- the project has learned that three times).
+            static s32 siEnvMapLoggedRecords = -1;
+            if ( gShadowPerf.miEnvMapRecords > 0 && siEnvMapLoggedRecords < 0
+                 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                siEnvMapLoggedRecords = gShadowPerf.miEnvMapRecords;
+                *CgsDev::Log::gpDebugPrint
+                    << "[envmap-prod] first faces produced: staged=" << liEnvMapFacesStaged
+                    << " lists=5.." << ( 5 + 5 )
+                    << " worldEnts=" << gShadowPerf.miEnvMapWorldEnts
+                    << " records=" << gShadowPerf.miEnvMapRecords
+                    << " eye=(" << lEye.x << "," << lEye.y << "," << lEye.z << ")\n";
+            }
+        }
+        gShadowPerf.mfEnvMapUs += ShadowPerfUsSince( lEnvMapStart );
+
+        // ==================================================================
         // ⭐ [FLAG PC bring-up] SHADOW PRODUCER, PART 2 -- the cascade dispatch legs.
         //
         // MIRRORS WorldModule::GenerateShadowMapDispatchLists @0x827C96D8 (this file,
@@ -6274,11 +6736,17 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         {
             const u32 luNumCascades = mShadowMap.GetRenderMultipleShadowMaps() ? 3u : 1u;
 
-            // Walk on from the main-view result the legs above consumed.
+            // Walk on from the LAST RESULT THE LEGS ABOVE CONSUMED. That is the
+            // main-view result when no env-map face was staged, and the last staged
+            // face's otherwise -- lpEnvMapResultCursor is seeded from
+            // lpFrustumTestResult and advanced once per produced face, so this one
+            // expression covers both. (Before the env-map arm landed this read
+            // lpFrustumTestResult directly, which is the same thing when the arm is
+            // parked and WRONG the moment it is not.)
             const CgsModule::Event* lpCascadeResult = 0;
             s32 liCascadeSize = 0;
             s32 liCascadeType =
-                lpResultsQueue->GetNextEvent( lpFrustumTestResult, &lpCascadeResult, &liCascadeSize );
+                lpResultsQueue->GetNextEvent( lpEnvMapResultCursor, &lpCascadeResult, &liCascadeSize );
 
             for ( u32 luCascade = 0; luCascade < luNumCascades; luCascade++ )
             {
@@ -6558,6 +7026,10 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                         << " cascFilter=" << static_cast< f32 >( gShadowPerf.mfCascadeFilterUs * lfInvFrames )
                         << " cascCar=" << static_cast< f32 >( gShadowPerf.mfCascadeCarUs * lfInvFrames )
                         << " cascWorld=" << static_cast< f32 >( gShadowPerf.mfCascadeWorldUs * lfInvFrames )
+                        << " envmap=" << static_cast< f32 >( gShadowPerf.mfEnvMapUs * lfInvFrames )
+                        << " | envFaces=" << gShadowPerf.miEnvMapFaces
+                        << " envEnt=" << gShadowPerf.miEnvMapWorldEnts
+                        << " envRec=" << gShadowPerf.miEnvMapRecords
                         << " | mainEnt=" << gShadowPerf.miMainWorldEnts
                         << " mainRec=" << gShadowPerf.miMainWorldRecords
                         << " cascEnt=" << gShadowPerf.maiCascadeWorldEnts[ 0 ]
@@ -6573,12 +7045,16 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                         << "/" << gShadowPerf.maiCascadePadPlanes[ 1 ]
                         << "/" << gShadowPerf.maiCascadePadPlanes[ 2 ]
                         << " | jobPool=" << gShadowPerf.miPoolResults
-                        << "/" << KI_SHADOW_PERF_POOL_CAPACITY
+                        << " perJob=" << gShadowPerf.maiPoolPerJob[ 0 ]
+                        << "/" << gShadowPerf.maiPoolPerJob[ 1 ]
+                        << "/" << gShadowPerf.maiPoolPerJob[ 2 ]
+                        << "/" << gShadowPerf.maiPoolPerJob[ 3 ]
+                        << " cap=" << KI_SHADOW_PERF_POOL_CAPACITY
                         << " batches=" << gShadowPerf.miPoolBatches
-                        << ( gShadowPerf.miPoolResults >= KI_SHADOW_PERF_POOL_CAPACITY
-                                 ? "  [WARN: the shared job-result pool is FULL --"
+                        << ( gShadowPerf.miPoolMaxJob >= KI_SHADOW_PERF_POOL_CAPACITY
+                                 ? "  [WARN: a job's result pool is FULL --"
                                    " LooseOctree::PushCoarseResult is dropping results silently,"
-                                   " so a cascade's caster set is truncated]"
+                                   " so that job's query results (main/face/cascade) are truncated]"
                                  : "" )
                         // ⚠ THE NEVER-CULLING CASCADE. ComputeOptimalViewVolume pads any
                         // unused plane slot with its sbClearPlanes defaults {N, D=-1e6},

@@ -293,6 +293,21 @@ namespace BrnWorld
         void SetBringUpEffectsFrames( BrnEffectsFrame* lpFrame0, BrnEffectsFrame* lpFrame1,
                                       BrnEffectsFrame* lpFrame2, BrnEffectsFrame* lpFrame3 );
 
+        // [FLAG PC bring-up] Hand the bring-up producer the DISPATCH-THREAD input buffer
+        // so its env-map arm can publish the six per-face rendered flags the renderer's
+        // six-face loop reads back (seam S2 of the reflections wave).
+        // STANDS IN FOR: BrnWorldIO::DispatchInputBuffer::SetDispatchThreadInputBuffer
+        // @0x823B5408, which BrnGameModule::DoDispatch @0x823DC458 calls on the world
+        // dispatch INPUT buffer; the real WorldModule::GenerateDispatchLists then reads it
+        // back with GetDispatchThreadInputBuffer() (this file's :244 entry, cpp :3725) and
+        // writes the flags at cpp:4018. None of that IO buffer set is created on PC, so
+        // the pointer comes straight across from BrnGameModule instead -- the same
+        // stand-in shape as SetBringUpEffectsFrames above, and staged from the same place
+        // (BrnGameModule.cpp, immediately before GenerateDispatchListsBringUp).
+        // NOT one-shot: DoDispatch re-stages it every frame and the producer only reads it.
+        // DELETE-WHEN the RendererIO/BrnWorldIO dispatch buffer set is real on PC.
+        void SetBringUpDispatchThreadInputBuffer( BrnGame::DispatchThreadInputBuffer* lpBuffer );
+
         // (PublishWorldShadingConstantsBringUp RETIRED 2026-08-16 -- the real producer
         // SetupShaderConstantsBeforeRendering @0x827D1410 below publishes a superset of its
         // slots. See the retirement note in BrnWorldModule.cpp.)
@@ -713,6 +728,21 @@ namespace BrnWorld
         // [FLAG PC bring-up] the four world-layer effects frames staged by
         // SetBringUpEffectsFrames (see the header entry). DELETE with it.
         BrnEffectsFrame*              mapBringUpEffectsFrames[ 4 ];
+        // [FLAG PC bring-up] the dispatch-thread input buffer staged by
+        // SetBringUpDispatchThreadInputBuffer (see the header entry). DELETE with it.
+        BrnGame::DispatchThreadInputBuffer* mpBringUpDispatchThreadInputBuffer;
+        // [FLAG PC bring-up] THE ENV-MAP ARM'S HONEST GATE. Raised by WorldModule::Update
+        // @0x827D63E8 at the exact line that drives the console's own env-map camera
+        // refresh (`mEnvironmentMap.Update( lpPlayerState->mTransform.Pos() )`, cpp :3046),
+        // i.e. the first frame on which a PLAYER CAR is active. Until then
+        // EnvironmentMap::Construct/Prepare have left all six face cameras on the identity
+        // view -- all six would render the same view from world origin -- so producing
+        // face lists before this point is six pointless world dispatches, not a
+        // reconstruction of anything. The console needs no such flag because its gate is
+        // RenderSwitches.mbRenderEnvironmentMap off the dispatch INPUT buffer, which this
+        // producer has not got (see SetBringUpDispatchThreadInputBuffer). DELETE with
+        // GenerateDispatchListsBringUp.
+        bool                          mbEnvMapCamerasPositionedBringUp;
 
         BrnDirector::Camera::Camera mLastCameraInput;
 

@@ -24,9 +24,11 @@ namespace renderengine
         // and rw::graphics::postfx::Tint::Initialize @0x82403B48 writes 4 into that word by hand
         // (`li r10, 4` @0x82403B68 -> `stw r10, 0x1A0+var_C0(r1)` @0x82403BB0).
         //
-        // The PC backend CREATES two of them: E_TYPE_2D (IDirect3DTexture9) and, since the post-fx
-        // step-10 tint wave, E_TYPE_VOLUME (IDirect3DVolumeTexture9 -- the muSize^3 colour-lookup
-        // cube). LINE / ARRAY / CUBE have no create path here.
+        // The PC backend CREATES three of them: E_TYPE_2D (IDirect3DTexture9); E_TYPE_VOLUME
+        // (IDirect3DVolumeTexture9 -- the muSize^3 colour-lookup cube), since the post-fx step-10
+        // tint wave; and E_TYPE_CUBE (IDirect3DCubeTexture9), since the reflections step-1 wave --
+        // both the 234 shipped 64x64x6 world reflection rasters and the env-map RENDER target the
+        // 22 vehicle pixel shaders sample at s13. LINE / ARRAY still have no create path here.
         //
         // ⚠ THE DIMENSION IS *CARRIED*, NEVER DERIVED (fix round, 2026-08-16). The first cut of the
         // volume path used `Parameters::muDepth > 1` as the discriminant. On this data that is
@@ -38,7 +40,26 @@ namespace renderengine
         // that byte > 1 -- every track unit's DXT1 64x64x6 cube map among them -- and 0 are volumes
         // (scratch/postfx_step10_finish/tintfix/work/raster_dimension_census.py). So Create, Lock,
         // Unlock and GetType all branch on the CREATE-TIME dimension (Parameters::meType, recorded
-        // in the raster header's mu8IsVolumeTexture byte); nothing branches on muDepth.
+        // in the raster header's mu8Dimension byte); nothing branches on muDepth ALONE.
+        //
+        // ⚠ ONE NARROW EXCEPTION, ADDED 2026-08-17 (reflections step 1) AND FENCED: a raster that
+        // has NEVER been through Create carries mu8Dimension == 0, and the shipped bundles are
+        // exactly that -- so the 234 CUBE rasters have to be recognised from the SERIALISED header
+        // or they keep uploading face 0 as a 2D texture into a samplerCUBE slot (garbage/black
+        // window and river reflections). The single classifier `TextureDimension()` in texture.cpp
+        // therefore falls back, ONLY when mu8Dimension is 0, to the exact shape the converter
+        // writes for a GPUDIMENSION_CUBEMAP: muDepth == 6 AND muWidth == muHeight != 0. This is
+        // NOT the retired `muDepth > 1` volume test: it is a three-part test for a CUBE, it is the
+        // ONLY dimension it can produce, and it is MEASURED to select exactly the 234 and nothing
+        // else -- re-run census (scratch/reflections_step1/cubeleaf/work/cube_raster_census.py):
+        //     depth histogram over all 26,614 rasters : {0: 51, 1: 26329, 6: 234}
+        //     of the 234, NOT (depth==6 and width==height) : 0
+        // and the converter only ever writes a depth above 1 for the cube dimension
+        // (tools/assets/bundles/x360_tex.py:128-140, `if t == 3: d += (size_packed >> 26) & 0x3F`,
+        // t == 3 == GPUDIMENSION_CUBEMAP; :378 writes it verbatim).
+        // DELETE-WHEN the converter writes an explicit dimension byte at +0x28 (it is free -- the
+        // byte is zero in 26,614 of 26,614 shipped rasters); see the CROSS-GROUP note in the
+        // reflections step-1 cubeleaf report.
         //
         // The fixed signed underlying type is not decoration: GetParameters' unknown-type arm is
         // `li r11, -1` and CgsRwRasterResourceTypePS3.cpp seeds that same -1, which for a plain
@@ -151,7 +172,30 @@ namespace renderengine
         // u32* so this header need not pull in the rw resource-descriptor template.
         static void GetParameters(const Texture* lpTexture, Parameters* lpParamsOut);
         static void GetResourceDescriptor(u32* lpDescriptorOut, const Parameters* lpParams);
-        static u32  GetPixelDataSize(s32 liFormat, u32 luWidth, u32 luHeight, u32 luDepth, u32 luNumLevels);
+
+        // ⚠ SIGNATURE CORRECTED 2026-08-17 (reflections step 1) -- THE DIMENSION IS THE FIRST
+        // ARGUMENT, AND IT IS RECOVERED, NOT ADDED FOR CONVENIENCE. X360 GetPixelDataSize
+        // @0x82B61088 is a six-argument forwarder into an anonymous-namespace helper:
+        //     Xbox2SetTextureHeader(0, a2, a3, a4, a6, a5, a1, &out);   // pseudocode
+        //     0x82B6109C  mr r11, r7 ; 0x82B610A0  mr r9, r3            // r9 == a7 == a1
+        // and that helper (`anonymous namespace'::Xbox2SetTextureHeader @0x82B60B98) SWITCHES ON
+        // ITS 7th ARGUMENT -- i.e. on GetPixelDataSize's FIRST:
+        //     case 3: XGSetCubeTextureHeader(a2, a5, 0, a6, 0, 0, -1, a1)     // CUBE
+        //     case 4: XGSetVolumeTextureHeader(a2, a3, a4, a5, 0, a6, 0, 0)   // VOLUME
+        //     case 2: XGSetArrayTextureHeader (a2, a3, a4, a5, 0, a6, 0, 0)   // ARRAY
+        //     default: a7 ? XGSetTextureHeader(...) : XGSetLineTextureHeader(...)
+        // The remaining two positions fall out of the same call: the helper's Levels slot is fed
+        // GetPixelDataSize's a6 and its Format slot its a5, so the console order is
+        // (Type, Width, Height, Depth, Format, Levels) -- which is what this declaration now is.
+        // The old PC spelling (liFormat, w, h, depth, levels) had no dimension at all and so sized
+        // every CUBE with the VOLUME rule (depth halved per level): 14,008 bytes for a 64x64x6
+        // mips=7 raster whose shipped pixel block is 16,464 -- 2,456 short, on the number
+        // GetResourceDescriptor puts in slot 2. MEASURED: 234/234 shipped cube rasters match
+        // SUM(2D mip chain) * 6; 3/234 matched the old formula (the mips==1 shape, where the two
+        // coincide). Note XGSetCubeTextureHeader takes ONE edge + levels + format and no depth --
+        // six faces, each carrying the whole 2D chain, the face count never halved.
+        static u32  GetPixelDataSize(Type meType, u32 luWidth, u32 luHeight, u32 luDepth,
+                                     s32 liFormat, u32 luNumLevels);
 
         // Dimension accessors (X360 GetType @0x82B60E68, GetWidth @0x82B60EC8, GetHeight @0x82B60F38,
         // GetDepth @0x82B60FA8): the X360 spine decodes the GPU texture-fetch-constant header; the PC
@@ -208,9 +252,21 @@ namespace renderengine
         u16      muFlags;                            // wiki +0x1A
 
         // THE CREATE-TIME DIMENSION -- the one fact Lock / Unlock / GetType ask. Create writes it
-        // from Parameters::meType on BOTH of its arms and nothing else ever writes it, so 0 (the
+        // from Parameters::meType on EVERY arm and nothing else ever writes it, so 0 (the
         // 2D answer) is also the right answer for a texture that never went through Create
         // (Texture2D::Initialize makes its D3D texture directly).
+        //
+        // ⚠ WIDENED FROM A BOOLEAN TO A DIMENSION 2026-08-17 (reflections step 1), same byte, same
+        // offset, no new storage: it used to be `mu8IsVolumeTexture` (1 == volume). Now it holds
+        // the renderengine::Texture::Type VALUE, with the one encoding rule that 0 means E_TYPE_2D
+        // -- which is what the serialised image and every never-Create'd object already contain,
+        // and is why the widening costs nothing. So: 0 = 2D, 3 = E_TYPE_CUBE, 4 = E_TYPE_VOLUME.
+        // (E_TYPE_LINE is also 0 and E_TYPE_ARRAY is 2, but neither has a create path, so neither
+        // can be recorded; Create stores 0 for anything it did not itself create as cube/volume,
+        // rather than storing a dimension it did not build.) A second boolean would have worked
+        // too and was rejected: two flags for one mutually-exclusive fact is how the next
+        // dimension gets a third, and the branch `if (isVolume) ... else if (isCube) ...` is
+        // exactly the shape whose ordering can be got wrong silently.
         //
         // WHY ITS OWN FIELD RATHER THAN A BIT IN muFlags -- two measured reasons. (1) muFlags is
         // not spare in the CODE: the console's depth/hi-Z path writes the EDRAM TILE word through
@@ -228,7 +284,7 @@ namespace renderengine
         // (scratch/postfx_step10_finish/tintfix/work/raster_dimension_census.py). So every bundle
         // raster keeps the 2D path by construction, which is exactly the property the depth-derived
         // discriminant did not have.
-        u8       mu8IsVolumeTexture;                 // +0x28  1 => created with CreateVolumeTexture
+        u8       mu8Dimension;                       // +0x28  0 => 2D, 3 => CUBE, 4 => VOLUME
     };
 
     class Texture2D : public Texture

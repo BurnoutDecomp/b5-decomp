@@ -1936,6 +1936,24 @@ namespace BrnGame
                                              mRenderModule.GetWorldEffectsFrameBringUp(2),
                                              mRenderModule.GetWorldEffectsFrameBringUp(3));
 
+        // ---- stage the DISPATCH-THREAD input buffer for the world's env-map arm ----------
+        // [FLAG PC bring-up] STANDS IN FOR BrnWorldIO::DispatchInputBuffer::
+        // SetDispatchThreadInputBuffer @0x823B5408, which the console's DoDispatch calls on
+        // the world dispatch input buffer; WorldModule::GenerateDispatchLists @0x827D1CE8
+        // reads it back (BrnWorldModule.cpp:3725) and writes the six per-face env-map
+        // rendered flags through it (:4018) for BrnRendererModule::Render's six-face loop.
+        // That IO buffer set does not exist on PC, so the pointer comes straight across.
+        //
+        // THE **WRITE** BUFFER, for exactly the reason spelt out on
+        // PCBringUpProduceParticleRenderData above: EngineUpdate runs UpdateThread() (this
+        // function) -> OnEndOfUpdateFrame() (the manager Swap, which turns the buffer just
+        // written into the read buffer) -> BrnRendererModule::Render(GetReadBuffer()). The
+        // producer's flags must land on the buffer the renderer read-locks NEXT.
+        // DELETE-WHEN: DoDispatch's IO buffer set is real (this goes with the camera and
+        // effects-frame staging above and GenerateDispatchListsBringUp).
+        mWorldModule.SetBringUpDispatchThreadInputBuffer(
+            mDispatchThreadInputBufferManager.GetWriteBuffer());
+
         CgsGraphics::DispatchFrame* lpDispatchFrame = mRenderModule.GetDispatchFrameForWrite();
         if (lpDispatchFrame != 0)
         {

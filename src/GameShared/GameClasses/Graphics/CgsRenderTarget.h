@@ -177,6 +177,13 @@ public:
     u32 GetWidth()  const { return mu32MaxWidth; }
     u32 GetHeight() const { return mu32MaxHeight; }
     u32 GetNumSections() const { return mu8NumSections; }
+    // DWARF CgsRenderTarget.h (dwarfdump file line 239) -- `int32_t GetMultisampleFormat()`, the read
+    // sibling of the SetMultisampleFormat already above. INLINED on the console (no standalone symbol,
+    // exactly like GetWidth / GetHeight / GetNumSections beside it), so this is a NAMED READ of a
+    // member this class already owns, not new state. Its only caller is the env-map target's
+    // "[envmap] target ..." bring-up log line, which reports the format the POOL REQUESTED -- the
+    // sample count the D3D9 leaf actually got is the leaf's own to report.
+    s32 GetMultisampleFormat() const { return mn32MultiSampleFormat; }
 
 public:
     // The number of COLOUR surface records the X360 build carries (the depth/stencil record is

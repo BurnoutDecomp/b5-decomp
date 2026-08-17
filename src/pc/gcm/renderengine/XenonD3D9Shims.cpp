@@ -1218,8 +1218,27 @@ namespace renderengine
         // FLAG PC-platform leaf: the real sampler descriptor comes from the TextureState's
         // 32-byte sampler block (renderengine::SamplerState); until that unpack lands, the
         // world's standard trilinear/wrap set stands.
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+        //
+        // ONE EXCEPTION, ADDED WITH THE CUBE CREATE PATH (reflections step 1): a CUBE raster is
+        // addressed by a DIRECTION VECTOR whose face is chosen by the hardware, and WRAP is the
+        // wrong request for it -- the console's own reflection TextureStates ask for CLAMP on all
+        // three coordinates. This matters now because the 234 shipped 64x64x6 rasters that feed
+        // the 7 WORLD techniques declaring `ReflectionTextureSampler` as a samplerCUBE (s2 x6,
+        // s0 x1 -- CTAB scan of build/game/SHADERS.BNDL) reach D3D9 through THIS path, not
+        // through D3DDevice_SetTexture, and until this wave they arrived as 2D textures carrying
+        // face 0 only.
+        //
+        // THE TEST IS A HEADER BYTE, NOT A COM CALL: renderengine::Texture::GetType reads the
+        // raster's own create-time dimension (texture.cpp TextureDimension), so this costs a load
+        // and a compare on a path that has already issued six device calls -- not an
+        // IDirect3DBaseTexture9::GetType() per bind.
+        const bool lbCubeRaster = (Texture::GetType(lpTexture) == Texture::E_TYPE_CUBE);
+        const DWORD luAddressMode =
+            lbCubeRaster ? (DWORD)D3DTADDRESS_CLAMP : (DWORD)D3DTADDRESS_WRAP;
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU, luAddressMode);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV, luAddressMode);
+        if (lbCubeRaster)
+            lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW, D3DTADDRESS_CLAMP);
         lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
         lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
         lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
@@ -2899,6 +2918,45 @@ namespace
         lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
     }
 
+    // =========================================================================================
+    // [FLAG PC-platform leaf] THE CUBE SAMPLER SEAM -- reflections step 1. The third case of the
+    // shape the two seams above already established, and it exists for the same reason: a
+    // TextureState's sampler words never reach D3D9 on this backend (SetSamplerStateLowLevel is
+    // the documented no-op below), so a unit keeps whatever the last user left on it, and D3D9's
+    // own default for an untouched unit is POINT/POINT/NONE with ADDRESS = WRAP.
+    //
+    // WHAT THE CONSOLE ASKS FOR, and it is the tree's own decode, not a new one:
+    // BrnRendererModule::Construct @0x8240A778 builds the env map's TextureState with
+    // addressU = addressV = addressW = 2 and magFilter = minFilter = mipFilter = 1 (lines 556-561
+    // of its pseudocode; the same 2 == CLAMP / 1 == LINEAR vocabulary the volume seam above was
+    // built from). So: trilinear, clamped -- which is what a 128x128 reflection cube needs and
+    // what the 22 shipped vehicle pixel shaders sample at s13.
+    //
+    // WHY IT HOOKS THE BIND RATHER THAN A UNIT NUMBER: identical argument to the two seams above.
+    // "Unit 13 is the reflection sampler" is a guess that has to be re-guessed for every future
+    // consumer (and would be wrong for the 7 WORLD techniques, which declare the same sampler on
+    // s0 / s2); "a cube texture is a cube texture" cannot be wrong, and the type is read from the
+    // D3D object itself.
+    // DELETE WHEN SetSamplerStateLowLevel really applies a TextureState's sampler block.
+    // =========================================================================================
+    void ApplyCubeSamplerState(IDirect3DDevice9* lpDevice, u32 luUnit)
+    {
+        if (lpDevice == nullptr || luUnit >= KU_RAW_DEPTH_MAX_SAMPLER_UNITS)
+            return;
+
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER,     D3DTEXF_LINEAR);  // X360 minFilter = 1
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER,     D3DTEXF_LINEAR);  // X360 magFilter = 1
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_LINEAR);  // X360 mipFilter = 1
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_CLAMP);  // X360 addressU = 2
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_CLAMP);  // X360 addressV = 2
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_CLAMP);  // X360 addressW = 2
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
+        // 1, not the console's 13 -- same reasoning as ApplyVolumeSamplerState above: D3D9 consults
+        // MAXANISOTROPY only while a filter is D3DTEXF_ANISOTROPIC, and neither is.
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
+    }
+
     void ApplyRawDepthSamplerState(IDirect3DDevice9* lpDevice, u32 luUnit)
     {
         if (lpDevice == nullptr || luUnit >= KU_RAW_DEPTH_MAX_SAMPLER_UNITS)
@@ -2953,6 +3011,28 @@ unsigned int D3DDevice_SetTexture(IDirect3DDevice9* /*lpDeviceArg*/, u32 luSampl
             std::snprintf(lacMsg, sizeof(lacMsg),
                           "[postfx-tint] unit %u bound a VOLUME texture"
                           " -- sampler forced LINEAR/CLAMP (the colour-cube LUT)\n",
+                          (unsigned)luSampler);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
+
+    // A CUBE texture is the environment map (unit 13) or a shipped world reflection raster, and
+    // needs LINEAR/CLAMP on its unit -- the third case of the same shape (see ApplyCubeSamplerState).
+    // This is envface's CROSS-GROUP REQUEST to cubeleaf, answered here.
+    if (luSampler < KU_RAW_DEPTH_MAX_SAMPLER_UNITS &&
+        SUCCEEDED(lhr) && lpD3DTexture != nullptr &&
+        lpD3DTexture->GetType() == D3DRTYPE_CUBETEXTURE)
+    {
+        ApplyCubeSamplerState(lpDevice, luSampler);
+
+        static bool sabCubeReported[KU_RAW_DEPTH_MAX_SAMPLER_UNITS] = {};
+        if (!sabCubeReported[luSampler])
+        {
+            sabCubeReported[luSampler] = true;
+            char lacMsg[176];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[envmap] unit %u bound a CUBE texture"
+                          " -- sampler forced LINEAR/CLAMP (the reflection cube)\n",
                           (unsigned)luSampler);
             CgsDev::Log::WriteToLog(lacMsg);
         }

@@ -95,6 +95,29 @@ namespace shadow
         static void* LockRasteriserState();
         static void* UnlockRasteriserState();
 
+        // Depth/stencil-state lock window. DWARF-declared beside the rasteriser pair
+        // (shadowingdevice.h:556/557, dwarfdump file lines 363/366:
+        // `void LockDepthStencilState(); void UnlockDepthStencilState();`) and INLINED by the X360
+        // compiler at every call site, so unlike the rasteriser pair neither carries a standalone
+        // symbol -- the census is the whole export set:
+        //     $ python -c "...select name from func where name like 'shadow::Device::%Lock%'"
+        //     ('shadow::Device::LockRasteriserState',   'class:shadow::Device', '0x823F3190')
+        //     ('shadow::Device::UnlockRasteriserState', 'class:shadow::Device', '0x823F31F0')
+        // The bodies are recovered from the CALLER instead, BrnRendererModule::Render @0x8240BFA8's
+        // env-map face loop, where the compiler emitted them inline with their asserts:
+        //     Lock    0x8240CC6C-0x8240CCAC  `lbz mbDepthStencilStateLocked` / assert
+        //                                    "false == mbDepthStencilStateLocked"
+        //                                    (shadowingdevice.h:1235) / `stb 1`
+        //     Unlock  0x8240CCF4-0x8240CD30  `lbz` / assert "true == mbDepthStencilStateLocked"
+        //                                    (shadowingdevice.h:1240) / `stb 0`
+        // i.e. exactly the rasteriser pair's shape against the sibling bool. Their return type is
+        // taken as the siblings' `void*` (the X360 leaves r3 dead in both, and no caller reads it);
+        // DWARF says `void` for all four, and the tree already carries `void*` on the two that have
+        // symbols, so the pair below matches its own neighbours rather than introducing a second
+        // convention. RETIRE the `void*` on all four together if it is ever corrected.
+        static void* LockDepthStencilState();
+        static void* UnlockDepthStencilState();
+
         // (FlushDepthStencilState / FlushRasterizerState DELETED -- they were INVENTED.) Neither
         // name exists in the X360 export set: scanning all 30,095 exported function names for a
         // shadow::Device name containing "Flush" returns exactly ONE symbol,
@@ -281,7 +304,8 @@ namespace shadow
         static u32 mauLowLevelStateShadow[18];    // dword_83010730 .. dword_83010774
 
         // The depth/stencil lock window DispatchAllMeshes tests alongside
-        // mbRasteriserStateLocked (its own Lock/Unlock pair is not reconstructed yet).
+        // mbRasteriserStateLocked (its Lock/UnlockDepthStencilState pair @0x823F3250/@0x823F32B0
+        // is reconstructed below, reflections step 1).
         static bool mbDepthStencilStateLocked;
 
         // (mpLastBlendState / mpLastDepthStencilState / mpLastRasterizerState DELETED.)

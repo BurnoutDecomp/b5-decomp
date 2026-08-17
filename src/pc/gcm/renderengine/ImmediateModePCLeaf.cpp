@@ -596,6 +596,125 @@ void DeviceClearDepthStencil(const renderengine::ClearDepthStencilParameters* lp
 }
 
 // =============================================================================
+// X360 0x82B61E18 -- renderengine::Device::Clear(colour, depthStencil, targetId): the COMBINED
+// colour + depth/stencil clear. Its one caller in the image is
+// BrnRendererModule::BeginRenderEnvironmentMapFace @0x823F63E0, which asks for
+// E_TARGETID_COLOUR_ALL with a { 0x30, 0.0f, 0 } depth/stencil block -- i.e. "clear colour, depth
+// AND stencil", which is what an env-map cube face needs at the top of its pass.
+//
+// THE CONSOLE BODY, argument by argument (0x82B61E18-0x82B61F00):
+//     r3 = the colour block   -> `mr r27, r3`,  `mr r6, r27 # pColor`      @0x82B61EE8
+//     r4 = the depth/stencil block -> `mr r31, r4`, then
+//              flags   `lwz r4, 0(r31)`   @0x82B61E90
+//              Z       `lfs f1, 4(r31)`   @0x82B61EEC
+//              stencil `lwz r8, 8(r31)`   @0x82B61EE4
+//     r5 = the target id      -> `mr r28, r5` + the five-way ladder @0x82B61E94-0x82B61EDC:
+//              4 -> |= 0xF, 0 -> |= 1, 1 -> |= 2, 2 -> |= 4, 3 -> |= 8
+//     tail: D3DDevice_ClearF(pDevice, Flags, pRect=0, pColor, Z, Stencil)  @0x82B61EF8
+// The ladder ORs INTO the flags word rather than replacing it -- that is the ONE structural
+// difference from the colour-only sibling @0x82B61C88 (which starts the word at 0 and hard-codes
+// Z = 1.0), and it is what lets one call clear all three planes.
+//
+// THE TILING FAST PATH IS DROPPED, exactly as it is in every other clear translation in this
+// build: `if (dword_83271620 && !dword_8327161C && Device::UsingGlobalRasters())
+// D3DDevice_BeginTiling(...)` is the Xenos predicated-tiling entry, and PC D3D9 has no tile
+// replay. The PC bracket's own tiling shims already cover the one place the console really needed
+// it (BrnRendererModule::BeginRenderAntiAliased); an env-map face is a single untiled pass.
+//
+// THREE PC TRANSLATIONS, each stated because a silent one would be a defect:
+//  1. THE FLAGS WORD. The Xenon mask reserves bits 0..3 for its four colour targets and puts
+//     ZBUFFER at 0x10 / STENCIL at 0x20; PC D3D9 uses TARGET 0x1 / ZBUFFER 0x2 / STENCIL 0x4. Same
+//     translation, same three lines, as DeviceClearDepthStencil above.
+//  2. THE COLOUR. The Xenos takes four floats (D3DDevice_ClearF); D3D9's Clear takes a packed
+//     D3DCOLOR. The four channels are clamped to [0,1] and scaled by 255 with rounding -- the
+//     console's own float path has no clamp because the GPU does it, so the clamp is a PC
+//     necessity and not a behaviour change (BeginRenderEnvironmentMapFace's whiteLevel*0.3 is in
+//     range for any white level up to 3.33).
+//  3. THE D3DCLEAR_STENCIL RETRY. D3D9 rejects the WHOLE Clear with D3DERR_INVALIDCALL when
+//     stencil is asked for on a depth surface that has no stencil channel. Rather than lose the
+//     colour and depth clears with it, the stencil bit is dropped and the clear retried -- the
+//     same policy, for the same reason, as the sibling above.
+// =============================================================================
+void renderengine::Device::Clear(const renderengine::ClearColorParameters& lrClearColour,
+                                 const renderengine::ClearDepthStencilParameters& lrClearDepthStencil,
+                                 renderengine::ETargetId leTarget)
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr)
+        return;
+
+    // The target-select ladder, OR-ed INTO the depth/stencil flags word (the console's own order).
+    u32 luXenonFlags = lrClearDepthStencil.mu32Flags;
+    switch (leTarget)
+    {
+        case renderengine::E_TARGETID_COLOUR_ALL: luXenonFlags |= 0x0Fu; break;   // `ori r4, r4, 0xF`
+        case renderengine::E_TARGETID_COLOUR0:    luXenonFlags |= 0x01u; break;   // `ori r4, r4, 1`
+        case renderengine::E_TARGETID_COLOUR1:    luXenonFlags |= 0x02u; break;   // `ori r4, r4, 2`
+        case renderengine::E_TARGETID_COLOUR2:    luXenonFlags |= 0x04u; break;   // `ori r4, r4, 4`
+        case renderengine::E_TARGETID_COLOUR3:    luXenonFlags |= 0x08u; break;   // `ori r4, r4, 8`
+        default: break;                                                           // no case 5 exists
+    }
+
+    DWORD luFlags = 0;
+    if ((luXenonFlags & 0x0Fu) != 0u) luFlags |= D3DCLEAR_TARGET;    // Xenon TARGET0..3
+    if ((luXenonFlags & 0x10u) != 0u) luFlags |= D3DCLEAR_ZBUFFER;
+    if ((luXenonFlags & 0x20u) != 0u) luFlags |= D3DCLEAR_STENCIL;
+    if (luFlags == 0)
+        return;
+
+    // Four floats -> one packed D3DCOLOR (see translation 2 above).
+    u32 lauChannel[4];
+    for (u32 luLane = 0; luLane < 4u; ++luLane)
+    {
+        f32 lfValue = lrClearColour.mafColourRGBA[luLane];
+        if (!(lfValue > 0.0f)) lfValue = 0.0f;      // also catches NaN
+        if (lfValue > 1.0f)    lfValue = 1.0f;
+        lauChannel[luLane] = static_cast<u32>(lfValue * 255.0f + 0.5f);
+    }
+    const D3DCOLOR lColour = D3DCOLOR_ARGB(lauChannel[3], lauChannel[0],
+                                           lauChannel[1], lauChannel[2]);
+
+    HRESULT lhr = lpDevice->Clear(0, nullptr, luFlags, lColour,
+                                  lrClearDepthStencil.mfDepth, lrClearDepthStencil.mu32Stencil);
+    bool lbDroppedStencil = false;
+    if (FAILED(lhr) && (luFlags & D3DCLEAR_STENCIL) != 0)
+    {
+        luFlags &= ~static_cast<DWORD>(D3DCLEAR_STENCIL);
+        lbDroppedStencil = true;
+        lhr = lpDevice->Clear(0, nullptr, luFlags, lColour,
+                              lrClearDepthStencil.mfDepth, lrClearDepthStencil.mu32Stencil);
+    }
+
+    // VALUE-LATCHED, not a `static bool` one-shot -- the same reason spelled out on the sibling:
+    // this runs three times a frame and the question that matters is whether the clear is STILL
+    // happening, and still to the same Z. The env-map face's Z is 0.0 (the INVERTED far plane); a
+    // line reading z=1.000 here would mean the depth range and the clear have gone out of step,
+    // which shows on screen as a cube face with nothing in it.
+    {
+        struct ClearLatch { DWORD muFlags; HRESULT mhr; u32 muDropped; f32 mfDepth; D3DCOLOR mColour; };
+        static ClearLatch sLast = { 0xFFFFFFFFu, 0x7FFFFFFF, 0xFFFFFFFFu, -1.0e30f, 0xFFFFFFFFu };
+        const ClearLatch  lNow  = { luFlags, lhr, lbDroppedStencil ? 1u : 0u,
+                                    lrClearDepthStencil.mfDepth, lColour };
+        if (lNow.muFlags != sLast.muFlags || lNow.mhr != sLast.mhr
+            || lNow.muDropped != sLast.muDropped || lNow.mfDepth != sLast.mfDepth
+            || lNow.mColour != sLast.mColour)
+        {
+            sLast = lNow;
+            char lacMessage[224];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                          "[envmap] combined clear: xenonFlags=0x%X d3dFlags=0x%X argb=0x%08X"
+                          " z=%.3f stencil=%u stencilDropped=%d hr=0x%08X %s\n",
+                          (unsigned)luXenonFlags, (unsigned)luFlags, (unsigned)lColour,
+                          (double)lrClearDepthStencil.mfDepth,
+                          (unsigned)lrClearDepthStencil.mu32Stencil,
+                          lbDroppedStencil ? 1 : 0, (unsigned)lhr,
+                          SUCCEEDED(lhr) ? "OK" : "FAILED");
+            LogLine(lacMessage);
+        }
+    }
+}
+
+// =============================================================================
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- open one
 // shader-constant row and return the write cursor (X360 r3).
 //

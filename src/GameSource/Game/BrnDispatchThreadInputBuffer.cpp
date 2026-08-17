@@ -198,6 +198,26 @@ namespace BrnGame
         return &mSnapShotRequest;
     }
 
+    // ---- env-map face-rendered flags -------------------------------------------------
+
+    // SetEnvMapFaceRendered (DWARF h:141 -- see the naming FLAG on the declaration).
+    // INLINED on the console: there is no standalone X360 body, and the ONE writer,
+    // WorldModule::GenerateDispatchLists @0x827D1CE8, emits the byte store directly at
+    // buffer + 39348 + face. 39348 == 0x99B4 == &mabEnvMapFaceRender[0], which is pinned
+    // from the other side by Construct @0x823C5BB8: that body stores 0x99B0/0x99B1/0x99B2/
+    // 0x99B3 (mbIsRenderingAtFullFrameRate + mabThreeThreadsOverBudget[3]) and then jumps
+    // straight to 0x99BB, skipping 0x99B4..0x99B9 -- exactly the six bytes of this array.
+    //
+    // The write-lock assert is the sibling convention in this file, not an attested part
+    // of this store (the console's inline sits inside GenerateDispatchLists' own
+    // LockForWrite/UnlockForWrite bracket, so the invariant it checks is the console's).
+    void DispatchThreadInputBuffer::SetEnvMapFaceRendered( s32 liFace, bool lbRendered )
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(liFace >= 0 && liFace < 6, "liFace < BrnGraphics::E_FACE_NUM");
+        mabEnvMapFaceRender[ liFace ] = lbRendered;
+    }
+
     // ---- lifecycle -------------------------------------------------------------------
 
     // Construct @ 0x823C5BB8. The X360 body, store-for-store by named member: the IOBuffer
@@ -228,6 +248,22 @@ namespace BrnGame
         mabThreeThreadsOverBudget[0] = false;             // +0x99B1..B3 = 0
         mabThreeThreadsOverBudget[1] = false;
         mabThreeThreadsOverBudget[2] = false;
+        // ⚠ [FLAG PC deviation, reflections step 1 2026-08-17] THE CONSOLE DOES NOT WRITE
+        // THESE SIX BYTES HERE. Construct @0x823C5BB8 stores +0x99B0..+0x99B3 and then
+        // goes straight to +0x99AC / +0x99BB / +0x9994 / +0x9998 / +0x99BD / +0x9990 --
+        // 0x99B4..0x99B9 (mabEnvMapFaceRender) is skipped, because on the console the
+        // producer writes all six every dispatch (GenerateDispatchLists @0x827D1CE8, this
+        // tree's BrnWorldModule.cpp:4018) and the IO-buffer pool memory started zeroed.
+        // NEITHER holds on PC: the live producer is GenerateDispatchListsBringUp, whose
+        // env-map arm parks until the face cameras have been positioned, and since the
+        // 2026-08-15 perf wave CreateIOBuffer<T> no longer zero-fills -- so without this
+        // the renderer's new six-face loop would read UNINITIALISED bytes and try to draw
+        // faces whose mesh lists nobody filled. Seeded to the state the console's memory
+        // always had. DELETE-WHEN the real GenerateDispatchLists is the live producer.
+        for ( s32 liFace = 0; liFace < 6; ++liFace )
+        {
+            mabEnvMapFaceRender[ liFace ] = false;
+        }
         std::memset(&mSnapShotRequest, 0, sizeof(mSnapShotRequest));  // the take flag (+0x99AC) = 0
         mbCalibrationUnfriendlyEnablePostFx = true;       // +0x99BB = 1
         mhCalibrationTextureHandle.Clear();               // +0x9994/+0x9998 = 0 (ResourceHandle::Clear)
