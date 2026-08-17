@@ -178,7 +178,41 @@ namespace BrnGame
         // ConstructRenderer is the PC bring-up of the 2D debug renderer so the overlay draws over
         // the loading screen. [gated] the "Force Quit to Start Menu" debug toggle + the FOPEN
         // "%sMAP_ARTIST.BIN" memory-map name globals that follow on the X360.
-        mDebugManager.Construct(&CgsDev::DebugManagerConstructParameters::DEFAULT);
+        // ⭐ THE REAL CONSTRUCT PARAMS, RECOVERED 2026-08-17 (boot audit F-P1-7). We passed
+        // DebugManagerConstructParameters::DEFAULT straight through. The console does NOT:
+        // @0x823C9F44-84 it copies DEFAULT onto the stack (the bdnz word loop) and then
+        // OVERRIDES six fields before calling Construct. Read off the stores, with the struct
+        // offsets from the declaration:
+        //
+        //   sth 0x300 -> +0    miPerfMonCpuCount          = 768
+        //   stw 0     -> +4    miPerfMonLogBufferSize     = 0
+        //   sth 0x78  -> +12   miFunctionPoolSize         = 120
+        //   sth 0x190 -> +14   miVariablePoolSize         = 400
+        //   sth 0x1F4 -> +16   miVariableMetadataPoolSize = 500
+        //   stb 0xF   -> +18   miConsoleLineCount         = 15
+        //   stw <alloc> -> +20 mpRwAllocator (Allocators::mpInternalDebugAllocator, asserted
+        //                      non-null @0x823C9F8C -- still the allocator follow-on here)
+        //
+        // miMenuWindowPoolSize / miMenuPoolSize are the only two it leaves at DEFAULT.
+        //
+        // The perfmon count is the one that mattered: DEFAULT carried 256, which had already
+        // been raised 64 -> 256 once when the world module's ~60 extra monitors overflowed it
+        // and AddMonitor started returning -1. The console's own figure is 768 -- three times
+        // that headroom -- so the ceiling this build kept bumping into was never the console's.
+        {
+            CgsDev::DebugManagerConstructParameters lParams =
+                CgsDev::DebugManagerConstructParameters::DEFAULT;
+            lParams.miPerfMonCpuCount          = 768;   // 0x300
+            lParams.miPerfMonLogBufferSize     = 0;
+            lParams.miFunctionPoolSize         = 120;   // 0x78
+            lParams.miVariablePoolSize         = 400;   // 0x190
+            lParams.miVariableMetadataPoolSize = 500;   // 0x1F4
+            lParams.miConsoleLineCount         = 15;    // 0xF
+            // [FLAG] mpRwAllocator stays null: Allocators::mpInternalDebugAllocator is the
+            // absent allocator layer (F-P0-1), and the debug pools' backing still comes from
+            // the global heap, which ignores it.
+            mDebugManager.Construct(&lParams);
+        }
         mDebugManager.ConstructRenderer();
 
         // X360 step 5: sentinel-fill the CPU monitor handle block (BrnCpuMonitors::Construct
