@@ -56,6 +56,21 @@ namespace Vehicle
                            BrnPhysics::Deformation::DeformationResetType leBaseDeformationType,
                            bool lbDisablePhysicsStateReset, s32 liCarStrengthStat);
 
+        // @ INLINED (no standalone X360 symbol; body recovered from its only caller,
+        // ActiveRaceCar::RemoveHandlingModel @0x822D4070). DWARF
+        // BrnVehicleInputInterface.h:126 `int32_t RemoveRaceCar(VolumeInstanceId)`.
+        // Enqueue a destroy-race-car request for a body previously created by CreateRaceCar.
+        // Header-only inline, same shape as AddLineTestResult above -- it emits no out-of-line
+        // symbol, so nothing new reaches the link.
+        // [FLAG] the returned value is AddEvent's success flag widened to the DWARF's int32_t;
+        // nothing reads it (the console's caller tail-returns r3 and discards it).
+        s32 RemoveRaceCar(VolumeInstanceId lVolumeInstanceId)
+        {
+            RemoveRaceCarEvent lEvent;
+            lEvent.mVolumeInstanceID = lVolumeInstanceId;
+            return mRemoveRaceCarEventQueue.AddEvent(lEvent) ? 1 : 0;
+        }
+
         // @0x822CC2A0: enqueue a reset-vehicle request.
         void ResetRaceCar(u32 luRaceCarIndex, Matrix44Affine lInitialTransform,
                           Vector3 lInitialVelocity, Vector3 lAngularVelocity, u8 lu8ResetTransform,

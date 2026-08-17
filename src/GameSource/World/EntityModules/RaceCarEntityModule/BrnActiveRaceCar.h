@@ -71,6 +71,10 @@
 
 namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface; } }
 namespace CgsWorld { struct WorldMap2D; }   // UpdatePhysicsState forwards it to RaceCar::UpdatePositioningData
+// Detach / RemoveFromScene / RemoveFromCollision take it by pointer only (the .cpp includes
+// the owning header). DWARF spells it OutputBuffer_PreScene::SceneInputInterface, which is a
+// typedef for this type (BrnRaceCarEntityModuleIO.h:379).
+namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInterface; } }
 
 namespace BrnWorld
 {
@@ -112,6 +116,13 @@ public:
     // X360 0x822A1FB8: muState == E_STATE_ACTIVE (the asm compares against 3, and
     // asserts muState < E_STATE_COUNT (4) and "Active ActiveRaceCar without a RaceCar").
     bool IsActive() const;
+
+    // DWARF BrnActiveRaceCar.h:725 `bool IsInactive() const`. X360 INLINED -- the one site
+    // this build reaches is RaceCarEntityModule::DetachActiveRaceCar @0x822FEF98
+    // (`lbz r11, 0x740(r29) ; cmplwi r11, 0 ; beq -> skip the AI deactivate`), i.e. the
+    // console tests muState against E_STATE_INACTIVE directly. Named here so that gate reads
+    // BY NAME instead of poking another class's state byte.
+    bool IsInactive() const { return muState == E_STATE_INACTIVE; }
 
     // X360 inlined -- muState == E_STATE_ATTACHED, i.e. attached but still waiting for its
     // resources. UpdateStreaming @0x822FEFE0 tests it (`*(car + 1856) == 1`) and
@@ -516,6 +527,43 @@ public:
     // mbRenderThisFrame. lbCarSelectDontStreamAudio is the module's
     // mbCarSelectDontStreamAudio, forwarded by AttachActiveRaceCar (asm r5).
     void Attach(RaceCar* lpRaceCar, bool lbCarSelectDontStreamAudio);
+
+    // ========================================================================
+    // THE DETACH CHAIN (ghost-car wave 2026-08-17) -- the exact inverse of Attach.
+    // Reached only from RaceCarEntityModule::DetachActiveRaceCar @0x822FEDF8, which is
+    // reached only from RemoveRaceCar @0x82304440 / UpdateInAndOutOfRangeCars @0x822FF8F8.
+    // Every signature below is the DecFIGS DWARF's own, and matches the ARTIST asm's
+    // register use:
+    //     BrnActiveRaceCar.h:670   void Detach(VehicleInputInterface*, SceneInputInterface*)
+    //     BrnActiveRaceCar.h:1013  void RemoveHandlingModel(VehicleInputInterface*)
+    //     BrnActiveRaceCar.h:1031  void RemoveFromScene(SceneInputInterface*, VehicleInputInterface*)
+    //     BrnActiveRaceCar.h:1044  void RemoveFromCollision(SceneInputInterface*, VehicleInputInterface*)
+    // ⚠️ NOTE THE SWAPPED PAIR: Detach takes (vehicle, scene); the two it calls take
+    // (scene, vehicle). That is the console's own order (asm 0x822EB604..0x822EB61C), not a
+    // transcription slip.
+    // ========================================================================
+
+    // X360 0x822EB578. Unbind this slot from its global RaceCar: tear down the physics body
+    // and the scene registration if the slot is ACTIVE, clear the pairing, and return
+    // muState to E_STATE_INACTIVE (which is what stops GenerateDispatchLists drawing it).
+    void Detach( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
+                 CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface );
+
+    // X360 0x822D4070. The inverse of AddHandlingModel: post the vehicle manager's
+    // RemoveRaceCarEvent for this car's mHandlingBodyVolumeId.
+    void RemoveHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface );
+
+    // X360 0x822D4100. Drop the car's volume instance, its volume, (conditionally) its
+    // collision registration and its scene entity; clears mbAddedToScene.
+    void RemoveFromScene( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
+                          BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface );
+
+    // X360 0x822BF668. Take the body out of the scene collision set and arm the
+    // "collision state changed" flag. PARTIAL -- the E_RACE_CAR_TYPE_NETWORK re-add arm is
+    // [FLAG BLOCKED] on mAddRemoveNetworkCarForCollisionQueue still being maPad0000; see the
+    // .cpp banner.
+    void RemoveFromCollision( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
+                              BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface );
 
     // X360 0x822B8828: the render body transform,
     // `Mult(mCentreOfMassTransform, mPhysicsState.mTransform)`. The console's only caller

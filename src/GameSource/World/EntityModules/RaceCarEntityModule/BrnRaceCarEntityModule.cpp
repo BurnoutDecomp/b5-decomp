@@ -1442,6 +1442,192 @@ EActiveRaceCarIndex RaceCarEntityModule::AttachActiveRaceCar(
 }
 
 // ============================================================================
+// DetachActiveRaceCar  @ 0x822FEDF8   (ghost-car wave 2026-08-17)
+//
+// The exact inverse of AttachActiveRaceCar above: release the slot's streamed assets, tell
+// the AI module the car is no longer simulated, and Detach the slot itself. Two console
+// callers -- RemoveRaceCar (below) and UpdateInAndOutOfRangeCars @0x822FF8F8 (the rival
+// in/out-of-range sweep, not reconstructed).
+//
+// SIGNATURE: DWARF BrnRaceCarEntityModule.h:725
+//   void DetachActiveRaceCar(RaceCar*, OutputBuffer_PreScene::VehicleInputInterface*,
+//                            OutputBuffer_PreScene::RaceCarAIInterface*,
+//                            OutputBuffer_PreScene::SceneInputInterface*)
+// which is exactly the asm's r4/r5/r6/r7 (0x822FEE04..0x822FEE18). Hex-Rays gets it right
+// here for once, INCLUDING the parameter names -- they are the console's own assert strings.
+//
+// ASM WALK (0x822FEDF8..0x822FEFDC):
+//   0x822FEE24  lpRaceCar != NULL                assert BrnRaceCarEntityModule.cpp:0x9A4 == :2468
+//   0x822FEE48  lpVehicleInputInterface != NULL  assert :0x9A5 == :2469
+//   0x822FEE6C  lpRaceCarAIInterface != NULL     assert :0x9A6 == :2470
+//   0x822FEE90  lpSceneInputInterface != NULL    assert :0x9A7 == :2471
+//   0x822FEEB4  lpActiveRaceCar = RaceCar::GetActiveRaceCar(lpRaceCar); != NULL  assert :2474
+//   0x822FEEE4  lpActiveRaceCar->IsAttached()    assert BrnActiveRaceCar.h:0x441 == :1089
+//   0x822FEF14  lwz 0x6F0 -> GetGlobalRaceCar() == lpRaceCar                     assert :2475
+//   0x822FEF3C  lwz 0x748 -> leActiveRaceCarIndex; >= 0 assert :2478, < 8 assert :2479
+//   0x822FEF88  addis r3,r27,1 ; addi r3,r3,0x1100  == this + 69888 == &mRaceCarStreamer
+//               -> RaceCarStreamer::RemoveVehicleData(leActiveRaceCarIndex)
+//   0x822FEF98  lbz 0x740 -> `if (!lpActiveRaceCar->IsInactive())`
+//               -> RaceCarAIInterface::DeactivateRaceCar(lpRaceCar->GetGlobalRaceCarIndex(),
+//                                                        lpRaceCar->IsInCurrentGameMode())
+//               NOTE the asm EVALUATES IsInCurrentGameMode first (into r31) and
+//               GetGlobalRaceCarIndex second, then passes r4 = index, r5 = flag.
+//   0x822FEFD4  ActiveRaceCar::Detach(lpVehicleInputInterface, lpSceneInputInterface)
+//
+// Nothing else is torn down here. In particular the slot's meActiveRaceCarIndex survives
+// (Construct owns it) and the GLOBAL car stays in the world -- RemoveRaceCar is what calls
+// RaceCar::RemoveFromWorld afterwards.
+// ============================================================================
+void RaceCarEntityModule::DetachActiveRaceCar(
+        RaceCar* lpRaceCar,
+        BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInputInterface,
+        BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface,
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInputInterface )
+{
+    CGS_ASSERT( lpRaceCar != 0, "lpRaceCar != NULL" );                               // X360 :2468
+    CGS_ASSERT( lpVehicleInputInterface != 0, "lpVehicleInputInterface != NULL" );    // :2469
+    CGS_ASSERT( lpRaceCarAIInterface != 0, "lpRaceCarAIInterface != NULL" );          // :2470
+    CGS_ASSERT( lpSceneInputInterface != 0, "lpSceneInputInterface != NULL" );        // :2471
+
+    // PC deviation, narrowed (verify F3): the console has no null tests here. A null car
+    // cannot proceed; a null AI interface must NOT skip the streamer release and the state
+    // transition below (that is the ghost fix itself) -- only the AI deactivate is gated on it.
+    if( lpRaceCar == 0 )
+    {
+        return;
+    }
+
+    ActiveRaceCar* lpActiveRaceCar = lpRaceCar->GetActiveRaceCar();
+    CGS_ASSERT( lpActiveRaceCar != 0, "lpActiveRaceCar != NULL" );                    // :2474
+    if( lpActiveRaceCar == 0 )
+    {
+        return;
+    }
+
+    CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );                      // BrnActiveRaceCar.h:1089
+    CGS_ASSERT( lpActiveRaceCar->GetGlobalRaceCar() == lpRaceCar,
+                "lpActiveRaceCar->GetGlobalRaceCar() == lpRaceCar" );                 // :2475
+
+    const EActiveRaceCarIndex leActiveRaceCarIndex = lpActiveRaceCar->GetActiveRaceCarIndex();
+    CGS_ASSERT( leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0" );                // :2478
+    CGS_ASSERT( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" );             // :2479
+
+    mRaceCarStreamer.RemoveVehicleData( static_cast<s32>( leActiveRaceCarIndex ) );
+
+    if( !lpActiveRaceCar->IsInactive() && lpRaceCarAIInterface != 0 )
+    {
+        const bool lbIsInAMode = lpRaceCar->IsInCurrentGameMode();
+        lpRaceCarAIInterface->DeactivateRaceCar( lpRaceCar->GetGlobalRaceCarIndex(), lbIsInAMode );
+    }
+
+    lpActiveRaceCar->Detach( lpVehicleInputInterface, lpSceneInputInterface );
+}
+
+// ============================================================================
+// RemoveRaceCar  @ 0x82304440   (ghost-car wave 2026-08-17)
+//
+// THIS IS THE FUNCTION THAT DELETES THE GHOST. Car Select re-spawns the player's car on every
+// model change; without this call the PREVIOUS ActiveRaceCar slot stayed E_STATE_ACTIVE at the
+// same world position, rendered every frame on top of the new car (its coarser-LOD wheel
+// proxies over the real ones -- the "rectangle wheels") and was left behind in the junkyard
+// when the player drove off. MEASURED before:
+//   `[racecar-lod] banded 2 cars ... slot0 at (2986.75,-3.54,-2011.51) lod 1..4
+//                                   slot1 at (2986.75,-3.54,-2011.51) lod 0 player 1`
+//
+// SIGNATURE: DWARF BrnRaceCarEntityModule.h:707
+//   void RemoveRaceCar(EGlobalRaceCarIndex, OutputBuffer_PreScene*)
+// == the asm's r4 (straight into GetGlobalRaceCar and into DetachAIControl) and r5 (the buffer
+// whose three write-locked interface accessors it calls).
+//
+// ASM WALK (0x82304440..0x8230457C):
+//   0x82304458  lpRaceCar = GetGlobalRaceCar(leGlobalRaceCarIndex)
+//   0x82304464  lbz 0xA4 < 4        assert "muType < E_RACE_CAR_TYPE_COUNT"  BrnRaceCar.h:547
+//   0x8230448C  lbz 0xA4 == 3       assert "lpRaceCar->IsInWorld()"          :2046
+//                                   (muType == E_RACE_CAR_TYPE_INACTIVE is what FIRES it,
+//                                    i.e. the predicate is IsInWorld())
+//   0x823044C0  RaceCar::HasActiveRaceCar()  -- everything below is inside this branch
+//   0x823044D8  addis r30,r28,2 ; addi r30,r30,-0x7D08  == this + 99064
+//               == &mePlayerActiveRaceCarIndex, compared against
+//               GetActiveRaceCar()->meActiveRaceCarIndex (lwz 0x748)
+//   0x823044F4    if equal: assert lpRaceCar->IsPlayerDriven()               :2056
+//   0x82304524              mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID
+//   0x8230452C  the THREE write-locked accessors, in this evaluation order:
+//                 r30 = OutputBuffer_PreScene::GetSceneInputInterface()      (IO.h:286)
+//                 r29 = OutputBuffer_PreScene::GetRaceCarAIInterface()       (IO.h:301)
+//                 r5  = OutputBuffer_PreScene::GetVehicleInputInterface()    (IO.h:283)
+//               (IDA prints these as the truncated `...::Output`,
+//                `...::OutputBuffer_PreScene::G` and `...::OutputBuffer_PreSce`; the addresses
+//                0x822B4F78 / 0x822B52C0 / 0x822B4ED0 and the baked assert lines 286/301/283
+//                identify them exactly, and they line up one-for-one with
+//                DetachActiveRaceCar's own parameter names.)
+//               -> DetachActiveRaceCar(lpRaceCar, vehicle, ai, scene)
+//   0x82304564  RaceCarAIInterface::DetachAIControl(leGlobalRaceCarIndex)  -- OUTSIDE the
+//               HasActiveRaceCar branch: a car with no active slot still had AI control
+//               attached (SpawnRaceCar posts AttachAIControlEvent before any Attach).
+//   0x82304574  RaceCar::RemoveFromWorld()  -- asserts mpActiveRaceCar == NULL, which is why
+//               the Detach chain above has to run first.
+//
+// The evaluation order of the three accessors is preserved because each fires its own
+// "Not locked for writing" tripwire; re-ordering them would change which assert a mis-locked
+// buffer reports.
+//
+// THE OTHER SEVEN CONSOLE CALLERS (xrefs_to) and whether they are live on PC:
+//   0x82304580 RemoveAllRaceCars              not reconstructed -- DEAD
+//   0x82305688 HandleSetupNetworkCarAction    not reconstructed -- DEAD (game action 5)
+//   0x823058F8 SetUpPlayerCarForMode          not reconstructed -- DEAD
+//   0x82305E00 RemoveRivals                   not reconstructed -- DEAD
+//   0x82305F28 RemoveAllRivalsFromWorld       not reconstructed -- DEAD
+//   0x82306028 RemoveAllNetworkCarsFromWorld  not reconstructed -- DEAD
+//   0x8230BE08 HandleGameActions              PRESENT but a partial slice: only cases 0 and 79
+//                                             are reproduced, and case 0 reaches RemoveRaceCar
+//                                             only through HandleResetPlayerCarAction below.
+// So HandleResetPlayerCarAction is the ONE live caller on this build.
+// ============================================================================
+void RaceCarEntityModule::RemoveRaceCar(
+        EGlobalRaceCarIndex leGlobalRaceCarIndex,
+        RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput )
+{
+    RaceCar* lpRaceCar = GetGlobalRaceCar( leGlobalRaceCarIndex );
+    CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
+                "muType < E_RACE_CAR_TYPE_COUNT" );                       // BrnRaceCar.h:547
+    CGS_ASSERT( lpRaceCar->IsInWorld(), "lpRaceCar->IsInWorld()" );       // X360 :2046
+
+    // PC deviation (verify F3): the console never null-tests the buffer (r27 is dereferenced
+    // unconditionally and RemoveFromWorld is always reached @0x82304574). Assert first so a
+    // null here is loud, then early out rather than dereference.
+    CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );
+    if( lpOutput == 0 )
+    {
+        return;
+    }
+
+    if( lpRaceCar->HasActiveRaceCar() )
+    {
+        if( mePlayerActiveRaceCarIndex == lpRaceCar->GetActiveRaceCar()->GetActiveRaceCarIndex() )
+        {
+            CGS_ASSERT( lpRaceCar->IsPlayerDriven(), "lpRaceCar->IsPlayerDriven()" );   // :2056
+            mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        }
+
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInputInterface =
+            lpOutput->GetSceneInputInterface();
+        BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface =
+            lpOutput->GetRaceCarAIInterface();
+        BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInputInterface =
+            lpOutput->GetVehicleInputInterface();
+
+        DetachActiveRaceCar( lpRaceCar, lpVehicleInputInterface,
+                             lpRaceCarAIInterface, lpSceneInputInterface );
+    }
+
+    lpOutput->GetRaceCarAIInterface()->DetachAIControl( leGlobalRaceCarIndex );
+
+    lpRaceCar->RemoveFromWorld();
+}
+
+// ============================================================================
 // SpawnRaceCar  @ 0x822FE5D8
 //
 // Take the first INACTIVE global race-car slot, reset it, put it in the world at
@@ -1670,13 +1856,19 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
         {
             ActiveRaceCar* lpOldSlot = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
             RaceCar* lpOldCar = lpOldSlot->GetGlobalRaceCar();
-            // [FLAG] the console gates the game-mode carry-over on the module bool at
-            // +99141 -- the byte immediately after mbIsInGameMode(+99140) in the DWARF bool
-            // run BrnRaceCarEntityModule.h:370.., whose NAME this header has not fitted (only
-            // :370/:377/:378/:381 are pinned). Left as false rather than guessed onto a
-            // neighbour; it only matters when a car ALREADY in a game mode is re-spawned,
-            // which the start-of-game path this build drives never does.
-            (void)lbWasInGameMode;
+            // ⛔ STALE BANNER CORRECTED 2026-08-17 (ghost-car wave). The old text said the
+            // module bool at +99141 "has not been fitted"; it HAS been, since the player-input
+            // wave (2026-08-11): BrnRaceCarEntityModule.h names it mbIsInOnlineGameMode (DWARF
+            // :371, +0x18345 == 99141), pinned by ProcessPlayerVehicleInput @0x822FF318's
+            // `lbzx r10, r31, 0x18345`. The console reads exactly that byte here
+            // (`if (*(v6 + 99141)) v31 = RaceCar::IsInCurrentGameMode(lpOldCar) != 0;`), so the
+            // gate is reproduced by name. It is FALSE on this build (nothing sets it -- there
+            // is no online session), so the arm stays inert; what changes is that it is now
+            // the console's condition instead of a hard-coded false.
+            if( mbIsInOnlineGameMode )
+            {
+                lbWasInGameMode = lpOldCar->IsInCurrentGameMode();
+            }
             // The console carries the OLD car's colour across ONLY when the model is unchanged.
             if( lpOldCar->GetModelId() == lpAction->mCarModelId )
             {
@@ -1685,11 +1877,21 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
                 CGS_ASSERT( liColourPalette < 4, "Invalid Number of Palettes: " );   // :7535
                 CGS_ASSERT( liColourIndex >= 0, "Invalid car colour: " );            // :7536
             }
-            // [FLAG PC] RemoveRaceCar @ (this TU) is not reconstructed -- it walks the
-            // streamer's per-slot release plus DetachActiveRaceCar, both of which reach the
-            // un-homed manager interiors. UNREACHED on the start-of-game path, which is the
-            // only path this build drives: mePlayerActiveRaceCarIndex is still INVALID there.
-            // DELETE-WHEN RemoveRaceCar lands.
+            // ⭐ THE GHOST-CAR FIX (2026-08-17). The console removes the OLD player car here,
+            // and this is the call the "[FLAG PC] RemoveRaceCar is not reconstructed" banner
+            // used to stand in for. Asm at the call site:
+            //     0x823052FC  mr r3, r28                 ; r28 == lpOldCar
+            //     0x82305300  bl RaceCar::GetGlobalRaceCarIndex
+            //     0x82305304  mr r4, r3                  ; the returned global index
+            //     0x82305308  mr r3, r22                 ; this
+            //     0x8230530C  mr r5, r25                 ; lpOutput (the pre-scene OUTPUT buffer)
+            //     0x82305310  bl RaceCarEntityModule::RemoveRaceCar
+            // The old banner's premise ("UNREACHED on the start-of-game path -- 
+            // mePlayerActiveRaceCarIndex is still INVALID there") was true for the FIRST
+            // record only. Car Select posts a fresh ResetPlayerCarAction on every car change,
+            // and from the second one onwards the index IS valid, so this branch runs and the
+            // previous slot has to be released here or it stays E_STATE_ACTIVE for ever.
+            RemoveRaceCar( lpOldCar->GetGlobalRaceCarIndex(), lpOutput );
         }
 
         BrnAI::AIModuleIO::RaceCarAIInterface* lpAIInterface =

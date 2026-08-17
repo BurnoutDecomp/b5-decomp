@@ -61,6 +61,10 @@ namespace BrnResource { struct VehicleList; class WheelList; }
 namespace BrnGameState { namespace GameStateModuleIO { struct ResetPlayerCarAction; } }
 namespace BrnAI       { namespace AIModuleIO         { struct RaceCarAIInterface;   } }
 namespace BrnPhysics  { namespace Vehicle            { struct VehicleInputInterface; } }
+// DetachActiveRaceCar's fourth argument (DWARF spells it
+// OutputBuffer_PreScene::SceneInputInterface, a typedef for this type). Pointer-only here;
+// the .cpp reaches it through BrnRaceCarEntityModuleIO.h.
+namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInterface; } }
 
 namespace BrnWorld
 {
@@ -280,6 +284,33 @@ public:
         // body contains no vector instruction at all.
         EActiveRaceCarIndex AttachActiveRaceCar( RaceCar* lpRaceCar,
                                                  EActiveRaceCarIndex leActiveRaceCarIndex );
+
+        // ====================================================================
+        // THE REMOVE / DETACH PAIR (ghost-car wave 2026-08-17). Both were ledger-`reviewed`
+        // and ABSENT from the tree, which is why Car Select's re-spawn left the PREVIOUS
+        // player car E_STATE_ACTIVE at the same position (two cars in the
+        // `[racecar-lod] banded` probe, coarse-LOD wheel proxies drawing over the real ones,
+        // and a ghost left in the junkyard when the player drove off).
+        // Signatures are the DecFIGS DWARF's own (BrnRaceCarEntityModule.h:707 / :725) and
+        // match the ARTIST asm's register use exactly.
+        // ====================================================================
+
+        // X360 0x82304440. Take a global race car out of the world: clear the module's player
+        // slot if this WAS the player's car, detach its active slot (if it has one), detach AI
+        // control, and RaceCar::RemoveFromWorld it. Eight console callers; only
+        // HandleResetPlayerCarAction is live on this build (see the .cpp banner).
+        void RemoveRaceCar( EGlobalRaceCarIndex leGlobalRaceCarIndex,
+                            RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
+
+        // X360 0x822FEDF8. The inverse of AttachActiveRaceCar: release the slot's streamed
+        // assets (RaceCarStreamer::RemoveVehicleData), tell the AI module the car is no longer
+        // simulated, and ActiveRaceCar::Detach the slot -- which is what returns muState to
+        // E_STATE_INACTIVE and stops GenerateDispatchLists drawing it.
+        void DetachActiveRaceCar(
+                RaceCar* lpRaceCar,
+                BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInputInterface,
+                BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface,
+                CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInputInterface );
 
         // ====================================================================
         // THE GAME-ACTION CONSUMER (reset-player-car wave 2026-08-01).

@@ -135,6 +135,46 @@ namespace SceneManagerIO
         void RemoveForCollision(CgsSceneManager::EntityId lEntityId);
         void RemoveVolumeInstance(CgsSceneManager::EntityId lEntityId);
         void RemoveVolume(CgsSceneManager::EntityId lEntityId);
+
+        // ---- the DWARF's own 64-bit forms of the three producers above -----------------
+        // ADDITIVE GROW (ghost-car wave 2026-08-17). The three committed declarations take a
+        // 32-bit EntityId, which was fitted to their one caller
+        // (BrnPhysics::Deformation::PhysicalBodyPart::RemoveFromScene, whose ids really are
+        // 32-bit words) and which the DecFIGS DWARF contradicts (:393 VolumeInstanceId, :378
+        // VolumeId, :423 VolumeInstanceId) -- the X360 producers store a whole 64-bit r4.
+        // ActiveRaceCar::RemoveFromScene @0x822D4100 passes the FULL mHandlingBodyVolumeId,
+        // whose entity word lives in the HIGH dword; routing it through the 32-bit form would
+        // move that word to the LOW dword and post a different handle. Both forms are kept so
+        // no committed call site changes meaning. Header-only inlines: no new link symbol.
+        void RemoveForCollision(CgsSceneManager::VolumeInstanceId lVolumeInstanceId)
+        {
+            InEventRemoveForCollision lEvent;
+            lEvent.muCollisionId = lVolumeInstanceId.muId;   // std r4 @+0x00 (the whole qword)
+
+            CGS_ASSERT(mRemoveForCollisionQueue.GetLength() < mRemoveForCollisionQueue.GetMaxLength(),
+                       "SceneManager.mRemoveForCollisionQueue too small, increase value in SceneManagerConstants.h");
+            mRemoveForCollisionQueue.AddEvent(lEvent);
+        }
+
+        void RemoveVolumeInstance(CgsSceneManager::VolumeInstanceId lVolumeInstanceId)
+        {
+            InEventRemoveVolumeInstance lEvent;
+            lEvent.mVolumeInstanceId = lVolumeInstanceId;    // std r4 @+0x00
+
+            CGS_ASSERT(mRemoveVolumeInstanceQueue.GetLength() < mRemoveVolumeInstanceQueue.GetMaxLength(),
+                       "SceneManager.mRemoveVolumeInstanceQueue too small, increase value in SceneManagerConstants.h");
+            mRemoveVolumeInstanceQueue.AddEvent(lEvent);
+        }
+
+        void RemoveVolume(CgsSceneManager::VolumeId lVolumeId)
+        {
+            InEventRemoveVolume lEvent;
+            lEvent.mVolumeId = lVolumeId;                    // std r4 @+0x00
+
+            CGS_ASSERT(mRemoveVolumeQueue.GetLength() < mRemoveVolumeQueue.GetMaxLength(),
+                       "SceneManager.mRemoveVolumeQueue too small, increase value in SceneManagerConstants.h");
+            mRemoveVolumeQueue.AddEvent(lEvent);
+        }
         void SetVolumeInstanceTransform(CgsSceneManager::EntityId lEntityId, const Matrix44Affine& lrTransform);
 
         // ADDITIVE GROW: bodies emitted by this TU (X360 producers) -- these were not
