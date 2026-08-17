@@ -52,6 +52,7 @@ namespace BrnGame
         , mpUpdateOutputBufferStack(0)
         , mbSimPaused(false)
         , mbDiskError(false)
+        , mbSkipVideos(false)
         , mbStalled(false)
         , mbRequestDoStepFrame(false)
         , mbRequestDoPlayFrame(false)

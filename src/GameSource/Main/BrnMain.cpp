@@ -278,11 +278,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         // real audio source -- the boot-movie sound streams (BrnGui::MovieManager ->
         // CgsSystem::MovieAudioPC).
 
-        // [gated] TUB latches "-skipvideos" from lpCmdLine into the game module
-        // (gpBurnoutGame->mbSkipVideos) right after Construct; the mbSkipVideos member and
-        // its boot-video consumer are not in this layout yet.
-
         EnginePrepare();
+
+        // ⭐ 2026-08-16 (boot audit F-P0-10). TUB's WinMain @0x79D580 latches "-skipvideos"
+        // off lpCmdLine into the game module right after Construct. This was gated on "the
+        // mbSkipVideos member and its boot-video consumer are not in this layout yet" -- both
+        // exist now, so the latch is real: BrnGui::BootVideos short-circuits to DONE and
+        // posts the phase-complete command, the same exit it already takes for a soft reboot.
+        // Placed after EnginePrepare because that is what runs Construct on this build.
+        if (lpCmdLine != 0)
+        {
+            for (const char* lpc = lpCmdLine; *lpc != 0; ++lpc)
+            {
+                if (_strnicmp(lpc, "-skipvideos", 11) == 0)
+                {
+                    gGameModule.SetSkipVideos(true);
+                    break;
+                }
+            }
+        }
         EngineUpdate();
         EngineRelease();
         GameRelease();
